@@ -9,7 +9,9 @@ import {
   CardContent,
   CardHeader,
   PageHeader,
+  PilotDataTable,
   Skeleton,
+  type PilotTableColumn,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -28,6 +30,153 @@ import { PurchaseInvoiceCancelForm } from "./purchase-invoice-cancel-form";
 
 function formatMoney(value: string, currency: string): string {
   return `${Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 })} ${currency}`;
+}
+
+type PurchaseLine = PurchaseInvoiceDetail["lines"][number];
+
+export const PURCHASE_LINE_TABLE_MIN_WIDTH = 1120;
+
+/** The UNAS sync badge text of a line. */
+export function purchaseSyncLabel(status: PurchaseLine["syncStatus"]): string {
+  if (status === "OK") return "OK";
+  if (status === "FAILED") return "Hiba";
+  if (status === "NOT_LINKED") return "Nincs szinkronizálva";
+  if (status === "NOT_APPLICABLE") return "Nem UNAS-termék";
+  return "Függőben";
+}
+
+/*
+  A SZÁMLA TÉTELEI A KÖZÖS TÁBLÁN (UI-áttekintés, 3. csomag, 2026-11-03). Telefonon a tábla
+  kártyalistává alakul: a cikkszám a kártya címe, a többi oszlop a felirata mellett áll. A
+  pénznem a számláról jön, ezért az oszlopok függvényből épülnek. A "Termék" az egyetlen
+  rugalmas oszlop, a minimum a többi összege + 200 px.
+*/
+export function purchaseLineColumns(
+  currency: string,
+): PilotTableColumn<PurchaseLine>[] {
+  return [
+    {
+      id: "sku",
+      header: "Cikkszám",
+      width: "110px",
+      cell: (line) => (
+        <span className="font-mono text-xs text-dusk-700">
+          {line.sku ?? "—"}
+        </span>
+      ),
+    },
+    {
+      id: "product",
+      header: "Termék",
+      cell: (line) =>
+        line.variantId ? (
+          <span className="text-sm text-dusk-600">
+            {line.productName}
+            {line.sourceDescription ? (
+              <span className="block text-xs text-dusk-400">
+                Számlán: {line.sourceDescription}
+              </span>
+            ) : null}
+          </span>
+        ) : (
+          <span className="flex flex-wrap items-center gap-2 text-sm text-dusk-600">
+            <span>{line.sourceDescription ?? "—"}</span>
+            <Badge variant="warning">Nincs terméktörzsben</Badge>
+          </span>
+        ),
+    },
+    {
+      id: "ordered",
+      header: "Rendelt",
+      width: "90px",
+      align: "right",
+      cell: (line) => `${line.orderedQuantity} ${line.unit}`,
+    },
+    {
+      id: "actual",
+      header: "Tényleges",
+      width: "90px",
+      align: "right",
+      cell: (line) => `${line.actualQuantity} ${line.unit}`,
+    },
+    {
+      id: "allocations",
+      header: "Projektkészlet",
+      width: "190px",
+      cell: (line) =>
+        line.projectAllocations.length > 0 ? (
+          <div className="space-y-1 text-sm text-dusk-600">
+            {line.projectAllocations.map((allocation) => (
+              <div key={allocation.id}>
+                <span className="font-medium text-dusk-800">
+                  {allocation.projectNumber} · {allocation.projectName}
+                </span>
+                <span className="ml-1 text-xs text-dusk-500">
+                  {allocation.quantity} {line.unit}
+                </span>
+              </div>
+            ))}
+            <p className="text-xs text-dusk-400">
+              Raktári: {line.warehouseQuantity} {line.unit}
+            </p>
+          </div>
+        ) : (
+          <span className="text-dusk-400">
+            Raktári: {line.warehouseQuantity} {line.unit}
+          </span>
+        ),
+    },
+    {
+      id: "unitNet",
+      header: "Egységár",
+      width: "100px",
+      align: "right",
+      nowrap: true,
+      cell: (line) => formatMoney(line.unitNet, currency),
+    },
+    {
+      id: "discount",
+      header: "Kedvezmény",
+      width: "90px",
+      align: "right",
+      cell: (line) => (line.discountPercent ? `${line.discountPercent}%` : "—"),
+    },
+    {
+      id: "lineNet",
+      header: "Nettó sorérték",
+      width: "110px",
+      align: "right",
+      nowrap: true,
+      cell: (line) => (
+        <span className="font-semibold text-dusk-900">
+          {formatMoney(line.lineNet, currency)}
+        </span>
+      ),
+    },
+    {
+      id: "sync",
+      header: "UNAS szinkron",
+      width: "140px",
+      cell: (line) => (
+        <div>
+          <Badge
+            variant={
+              line.syncStatus === "OK"
+                ? "success"
+                : line.syncStatus === "FAILED"
+                  ? "danger"
+                  : "neutral"
+            }
+          >
+            {purchaseSyncLabel(line.syncStatus)}
+          </Badge>
+          {line.syncError ? (
+            <p className="mt-1 text-xs text-rose-600">{line.syncError}</p>
+          ) : null}
+        </div>
+      ),
+    },
+  ];
 }
 
 export function PurchaseInvoiceDetailPage({
@@ -250,118 +399,13 @@ export function PurchaseInvoiceDetailPage({
                 {detail.lines.length.toLocaleString("hu-HU")} tétel
               </span>
             </CardHeader>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1040px] border-collapse text-left">
-                <thead className="bg-dusk-50 text-[11px] font-bold uppercase tracking-wide text-dusk-500">
-                  <tr>
-                    <th className="px-5 py-3">Cikkszám</th>
-                    <th className="px-4 py-3">Termék</th>
-                    <th className="px-4 py-3 text-right">Rendelt</th>
-                    <th className="px-4 py-3 text-right">Tényleges</th>
-                    <th className="px-4 py-3">Projektkészlet</th>
-                    <th className="px-4 py-3 text-right">Egységár</th>
-                    <th className="px-4 py-3 text-right">Kedvezmény</th>
-                    <th className="px-4 py-3 text-right">Nettó sorérték</th>
-                    <th className="px-5 py-3">UNAS szinkron</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-dusk-100 bg-white">
-                  {detail.lines.map((line) => (
-                    <tr key={line.id}>
-                      <td className="px-5 py-3 font-mono text-xs text-dusk-700">
-                        {line.sku ?? "—"}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-dusk-600">
-                        {line.variantId ? (
-                          <>
-                            {line.productName}
-                            {line.sourceDescription ? (
-                              <div className="text-xs text-dusk-400">
-                                Számlán: {line.sourceDescription}
-                              </div>
-                            ) : null}
-                          </>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <span>{line.sourceDescription ?? "—"}</span>
-                            <Badge variant="warning">
-                              Nincs terméktörzsben
-                            </Badge>
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right text-sm text-dusk-600">
-                        {line.orderedQuantity} {line.unit}
-                      </td>
-                      <td className="px-4 py-3 text-right text-sm text-dusk-600">
-                        {line.actualQuantity} {line.unit}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-dusk-600">
-                        {line.projectAllocations.length > 0 ? (
-                          <div className="space-y-1">
-                            {line.projectAllocations.map((allocation) => (
-                              <div key={allocation.id}>
-                                <span className="font-medium text-dusk-800">
-                                  {allocation.projectNumber} ·{" "}
-                                  {allocation.projectName}
-                                </span>
-                                <span className="ml-1 text-xs text-dusk-500">
-                                  {allocation.quantity} {line.unit}
-                                </span>
-                              </div>
-                            ))}
-                            <p className="text-xs text-dusk-400">
-                              Raktári: {line.warehouseQuantity} {line.unit}
-                            </p>
-                          </div>
-                        ) : (
-                          <span className="text-dusk-400">
-                            Raktári: {line.warehouseQuantity} {line.unit}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right text-sm text-dusk-600">
-                        {formatMoney(line.unitNet, detail.currency)}
-                      </td>
-                      <td className="px-4 py-3 text-right text-sm text-dusk-600">
-                        {line.discountPercent
-                          ? `${line.discountPercent}%`
-                          : "—"}
-                      </td>
-                      <td className="px-4 py-3 text-right text-sm font-semibold text-dusk-900">
-                        {formatMoney(line.lineNet, detail.currency)}
-                      </td>
-                      <td className="px-5 py-3">
-                        <Badge
-                          variant={
-                            line.syncStatus === "OK"
-                              ? "success"
-                              : line.syncStatus === "FAILED"
-                                ? "danger"
-                                : "neutral"
-                          }
-                        >
-                          {line.syncStatus === "OK"
-                            ? "OK"
-                            : line.syncStatus === "FAILED"
-                              ? "Hiba"
-                              : line.syncStatus === "NOT_LINKED"
-                                ? "Nincs szinkronizálva"
-                                : line.syncStatus === "NOT_APPLICABLE"
-                                  ? "Nem UNAS-termék"
-                                  : "Függőben"}
-                        </Badge>
-                        {line.syncError ? (
-                          <p className="mt-1 text-xs text-rose-600">
-                            {line.syncError}
-                          </p>
-                        ) : null}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <PilotDataTable
+              columns={purchaseLineColumns(detail.currency)}
+              rows={detail.lines}
+              rowKey={(line) => line.id}
+              rowTestId="purchase-line-row"
+              minWidth={PURCHASE_LINE_TABLE_MIN_WIDTH}
+            />
           </Card>
           <PurchaseInvoiceScans
             token={token}
