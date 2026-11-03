@@ -28,6 +28,18 @@ const LEVEL_LABEL: Record<PermissionLevel, string> = {
 
 const OWNER_ONLY = new Set<Permission>(OWNER_GRANTED_PERMISSIONS);
 
+/*
+  A JOGOSULTSÁG-TÁBLA TELEFONON (UI-áttekintés, 3. csomag, 2026-11-03). Három oszlop (terület, szint,
+  sablon) egy 390 px-es sávban összenyomta a területek nevét. Telefonon a sor blokká válik: a terület
+  neve a teljes szélességen, alatta a szint-választó és a "Sablon: ..." felirat egy sorban (a felirat
+  a cella `data-label`-éből jön, mint a közös táblán). Az összes cella DOM-ban marad, a fejléc
+  képernyőolvasónak.
+*/
+export const PHONE_ROW =
+  "max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-1 max-md:py-2";
+export const PHONE_TEMPLATE_CELL =
+  "max-md:p-0 max-md:before:mr-1 max-md:before:content-[attr(data-label)_':']";
+
 /**
  * A FELHASZNÁLÓ JOGAI, TERÜLETENKÉNT (3. lépés; Balázs döntése 2026-10-06:
  * szerepkör-sablon + egyéni eltérés; acrobot 27194).
@@ -145,15 +157,15 @@ export function UserPermissionTable({
         ) : null}
       </div>
 
-      <table className="w-full border-collapse text-sm">
-        <thead>
+      <table className="w-full border-collapse text-sm max-md:block">
+        <thead className="max-md:sr-only">
           <tr className="border-b border-dusk-100 text-left text-xs uppercase tracking-wide text-dusk-500">
             <th className="py-2 pr-3 font-medium">Terület</th>
             <th className="py-2 pr-3 font-medium">Szint</th>
             <th className="py-2 font-medium">Sablon</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody className="max-md:block">
           {PERMISSION_AREAS.map((area) => (
             <AreaRows
               key={area.key}
@@ -231,10 +243,10 @@ function AreaRows({
   return (
     <>
       <tr
-        className={`border-b border-dusk-50 ${differs ? "bg-amber-50" : ""}`}
+        className={`border-b border-dusk-50 ${PHONE_ROW} ${differs ? "bg-amber-50" : ""}`}
         data-testid={`terulet-${area.key}`}
       >
-        <td className="py-2 pr-3 font-medium text-dusk-800">
+        <td className="py-2 pr-3 font-medium text-dusk-800 max-md:w-full max-md:p-0">
           {area.label}
           {ownerOnly ? <OwnerOnlyMark /> : null}
           {differs ? (
@@ -243,7 +255,7 @@ function AreaRows({
             </span>
           ) : null}
         </td>
-        <td className="py-2 pr-3">
+        <td className="py-2 pr-3 max-md:p-0">
           <div
             role="radiogroup"
             aria-label={`${area.label} szintje`}
@@ -268,7 +280,10 @@ function AreaRows({
             ))}
           </div>
         </td>
-        <td className="py-2 text-xs text-dusk-400">
+        <td
+          data-label="Sablon"
+          className={`py-2 text-xs text-dusk-400 ${PHONE_TEMPLATE_CELL}`}
+        >
           {LEVEL_LABEL[templateLevel]}
         </td>
       </tr>
@@ -278,9 +293,12 @@ function AreaRows({
         return (
           <tr
             key={extra.permission}
-            className={`border-b border-dusk-50 ${extraDiffers ? "bg-amber-50" : ""}`}
+            className={`border-b border-dusk-50 ${PHONE_ROW} ${extraDiffers ? "bg-amber-50" : ""}`}
           >
-            <td className="py-1.5 pl-5 pr-3 text-dusk-600" colSpan={2}>
+            <td
+              className="py-1.5 pl-5 pr-3 text-dusk-600 max-md:w-full max-md:p-0"
+              colSpan={2}
+            >
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
@@ -302,7 +320,10 @@ function AreaRows({
                 ) : null}
               </label>
             </td>
-            <td className="py-1.5 text-xs text-dusk-400">
+            <td
+              data-label="Sablon"
+              className={`py-1.5 text-xs text-dusk-400 ${PHONE_TEMPLATE_CELL}`}
+            >
               {template.has(extra.permission) ? "Igen" : "Nem"}
             </td>
           </tr>
