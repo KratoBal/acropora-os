@@ -47,6 +47,12 @@ export const TILE_ENTRY = {
    * ugyanaz a minta, mint az `AI` kodnal fent.
    */
   PI: "service-drafts",
+  /**
+   * A `billing` tetel 2026-11-03-IG CSAK web feluletu volt; a telefonos Szamlak (csak olvaso lista es adatlap,
+   * kartya 050e138b) adta hozza a `mobile` feluletet -- ugyanaz a minta, mint az `AI` kodnal fent. A lathatosag
+   * a forrasban `billing.view`, tehat a szerelo nem kapja meg.
+   */
+  SZ: "billing",
 } as const;
 
 export type TileCode = keyof typeof TILE_ENTRY;

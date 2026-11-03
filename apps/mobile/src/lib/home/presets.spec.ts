@@ -129,8 +129,10 @@ describe("a nézet sorrendet ad, láthatóságot nem", () => {
       label: "teszt",
       modules: ["PA", "RE", "AK", "ES", "AI", "MU", "HJ", "PI", "BE", "TE"],
     };
-    // a BE és a TE képernyő nélküli. Ma PONTOSAN nyolc modulnak van
-    // képernyője, tehát a korlát csak egy kilencedik képernyős modulnál vág
+    // a BE és a TE képernyő nélküli. A korlát (nyolc) ebben a nézetben nem vág,
+    // mert csak nyolc képernyős modult hoz; a képernyős modulok száma 2026-11-03
+    // óta kilenc (a Számlák, kártya 050e138b), tehát a tulajdonosi nézet nyolc
+    // helye mellett egy modul a Modulok alatt marad
     assert.deepEqual(homeModules(long, ALL_SERVED), [
       "PA",
       "RE",
@@ -145,7 +147,7 @@ describe("a nézet sorrendet ad, láthatóságot nem", () => {
       (Object.keys(HOME_MODULES) as TileCode[]).filter(
         (c) => HOME_MODULES[c].route !== null,
       ).length,
-      8,
+      9,
     );
     assert.equal(HOME_MODULE_LIMIT, 8);
   });

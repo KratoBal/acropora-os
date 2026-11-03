@@ -4,6 +4,7 @@ import { Directory, File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 
 import { authSessionStore } from "@/lib/auth/token-store";
+import { DOWNLOAD_DIRECTORIES } from "@/lib/offline/download-directories";
 
 import type { OpenAttachmentDeps } from "./open-attachment";
 import {
@@ -41,7 +42,7 @@ export function copyText(text: string): Promise<boolean> {
   return Clipboard.setStringAsync(text);
 }
 
-const DIRECTORY = "uzenet-csatolmanyok";
+const DIRECTORY = DOWNLOAD_DIRECTORIES.attachments;
 
 export const openAttachmentDeps: OpenAttachmentDeps = {
   token: () => authSessionStore.getToken(),

@@ -1,5 +1,6 @@
 import { forgetOfflineAssets } from "./asset-cache";
 import { forgetAssetFormCache } from "./asset-form-cache";
+import { forgetDownloadedFiles } from "./forget-downloaded-files";
 import { forgetOfflineServiceJobs } from "./service-job-cache";
 import { forgetCachedWorksheets } from "./worksheet-cache";
 import { forgetWorksheetDepartments } from "./worksheet-department-cache";
@@ -32,4 +33,6 @@ export async function forgetOfflineData(): Promise<void> {
   await forgetCachedWorksheets();
   await forgetWorksheetDepartments();
   await forgetAssetFormCache();
+  // the downloaded files too (invoice PDFs, attachments, document pictures): copies of the same kind (barracuda, #2086)
+  await forgetDownloadedFiles();
 }
