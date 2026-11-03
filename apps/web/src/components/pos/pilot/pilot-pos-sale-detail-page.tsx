@@ -77,7 +77,9 @@ export const SALE_LINE_COLUMNS: PilotTableColumn<SaleLine>[] = [
   {
     id: "product",
     header: "Termék",
-    cell: (line) => <span className="font-medium">{line.productName}</span>,
+    cell: (line) => (
+      <span className="break-words font-medium">{line.productName}</span>
+    ),
   },
   {
     id: "quantity",

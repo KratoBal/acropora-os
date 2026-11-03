@@ -61,10 +61,24 @@ describe("SALE_LINE_COLUMNS", () => {
     expect(screen.getByText("—")).toBeTruthy();
   });
 
-  it("keeps the fixed widths inside the table minimum", () => {
+  it("leaves the flexible product column at least 180 px at the table minimum", () => {
     const sum = SALE_LINE_COLUMNS.map((column) =>
       Number.parseInt(column.width ?? "0", 10),
     ).reduce((a, b) => a + b, 0);
-    expect(sum).toBeLessThanOrEqual(SALE_LINE_TABLE_MIN_WIDTH);
+    // The product name is the one flexible column: at the minimum it still needs room.
+    expect(sum + 180).toBeLessThanOrEqual(SALE_LINE_TABLE_MIN_WIDTH);
+  });
+
+  it("lets a long product name wrap inside its column", () => {
+    render(
+      <PilotDataTable
+        columns={SALE_LINE_COLUMNS}
+        rows={[{ ...line, productName: "Hosszú".repeat(30) }]}
+        rowKey={(row) => row.id}
+        minWidth={SALE_LINE_TABLE_MIN_WIDTH}
+      />,
+    );
+    const name = screen.getByText("Hosszú".repeat(30));
+    expect(name.classList.contains("break-words")).toBe(true);
   });
 });
