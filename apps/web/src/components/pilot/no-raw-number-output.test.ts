@@ -20,8 +20,6 @@ const ROOT = join(process.cwd(), "src");
 
 type Szabaly = "toFixed" | "nyers-penznem" | "huf-felirat" | "helyi-formazo";
 
-const POS =
-  "POS: helyi formatHuf; kiváltás a POS-szeletben (a szám-bemenete viselkedés-változás)";
 const WEBSHOP = "webshop: helyi formatHuf; kiváltás a webshop-szeletben";
 const BESZERZES = "beszerzés: helyi formazó; kiváltás a beszerzés-szeletben";
 const PENZUGY = "pénzügy: helyi formatAmount; kiváltás a pénzügy-szeletben";
@@ -29,11 +27,6 @@ const SZAMLAZAS = "számlázás: helyi formázó; kiváltás a számlázás-szel
 
 /** `szabály:fájl` -> miért áll még itt. Csak fogyhat. */
 const KIVETELEK = new Map<string, string>([
-  ["helyi-formazo:components/pos/pos-sale-detail-page.tsx", POS],
-  ["helyi-formazo:components/pos/pos-terminal-page.tsx", POS],
-  ["helyi-formazo:components/pos/pilot/pilot-pos-sale-detail-page.tsx", POS],
-  ["helyi-formazo:components/pos/pilot/pilot-pos-summary-page.tsx", POS],
-  ["helyi-formazo:components/pos/pilot/pilot-pos-terminal-page.tsx", POS],
   ["helyi-formazo:components/webshop/webshop-order-detail-page.tsx", WEBSHOP],
   ["helyi-formazo:components/webshop/webshop-orders-page.tsx", WEBSHOP],
   ["helyi-formazo:components/webshop/webshop-product-list-page.tsx", WEBSHOP],

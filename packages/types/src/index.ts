@@ -7,6 +7,7 @@ export {
   formatQuantity,
   MISSING_VALUE_TEXT,
 } from "./number-format.js";
+export type { FormatMoneyOptions } from "./number-format.js";
 export { SEARCH_GROUPS } from "./search.js";
 export type {
   SearchGroup,

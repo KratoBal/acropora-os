@@ -9,6 +9,7 @@ import {
   PilotDateField,
 } from "@acropora/ui";
 import {
+  formatMoney,
   hasPermission,
   PERMISSIONS,
   type PosPaymentSummaryCell,
@@ -54,10 +55,6 @@ function shiftDay(day: string, delta: number): string {
   return shifted.toISOString().slice(0, 10);
 }
 
-function formatHuf(value: string): string {
-  return `${Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 0 })} Ft`;
-}
-
 /*
   A NAPI ÖSSZESÍTŐ KERESZTTÁBLA (nap x fizetési mód), ezért telefonon vízszintesen görgethető marad
   (UI-áttekintés, 3. csomag, 2026-11-03): a kártya-forma egy kereszttáblánál az oszlopok összevetését
@@ -74,7 +71,7 @@ function Cell({ cell }: { cell: PosPaymentSummaryCell | undefined }) {
   return (
     <span className="block">
       <span className="block font-semibold tabular-nums text-pilot-grey-900">
-        {formatHuf(cell.totalGross)}
+        {formatMoney(cell.totalGross, "HUF")}
       </span>
       <span className="block text-[10px] tabular-nums text-pilot-grey-500">
         {cell.count} db

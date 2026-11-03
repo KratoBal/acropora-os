@@ -13,6 +13,7 @@ import {
   Skeleton,
 } from "@acropora/ui";
 import {
+  formatMoney,
   hasPermission,
   PERMISSIONS,
   type PosPaymentMethod,
@@ -43,10 +44,6 @@ const PAYMENT_METHOD_LABEL: Record<PosPaymentMethod, string> = {
   TRANSFER: "Utalás",
   CASH_DESK: "Kassza",
 };
-
-function formatHuf(value: number): string {
-  return `${value.toLocaleString("hu-HU", { maximumFractionDigits: 2 })} Ft`;
-}
 
 function localDayRange(now = new Date()): {
   createdFrom: string;
@@ -314,7 +311,7 @@ export function PosTerminalPage() {
                   <div className="text-right">
                     <p className="text-sm font-semibold text-dusk-900">
                       {product.grossPrice
-                        ? formatHuf(Number(product.grossPrice))
+                        ? formatMoney(product.grossPrice, "HUF")
                         : "Nincs ár"}
                     </p>
                     <p className="text-xs text-dusk-500">
@@ -359,7 +356,7 @@ export function PosTerminalPage() {
                     </p>
                   </div>
                   <p className="font-semibold text-dusk-900">
-                    {formatHuf(Number(sale.totalGross))}
+                    {formatMoney(sale.totalGross, "HUF")}
                   </p>
                 </button>
               ))}
@@ -457,10 +454,11 @@ export function PosTerminalPage() {
                         </label>
                       </div>
                       <p className="mt-2 text-right text-sm font-semibold text-dusk-900">
-                        {formatHuf(
+                        {formatMoney(
                           line.unitGross *
                             line.quantity *
                             (1 - line.discountPercent / 100),
+                          "HUF",
                         )}
                       </p>
                     </div>
@@ -489,7 +487,7 @@ export function PosTerminalPage() {
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-dusk-500">Fizetendő</span>
                   <span className="text-lg font-bold text-dusk-900">
-                    {formatHuf(totalGross)}
+                    {formatMoney(totalGross, "HUF")}
                   </span>
                 </div>
               </div>

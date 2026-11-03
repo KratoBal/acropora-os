@@ -136,6 +136,28 @@ describe("PilotPosSaleDetailPage", () => {
   });
 
   /**
+   * T1.5 (acrobot 41593): the gross is whole forint; the net unit price and the net and VAT
+   * parts keep their fillér with two decimals, so net + VAT still reads as the gross. MI
+   * PIROSÍT: a fillér lekerekítve (787 Ft), vagy a bruttó tizedesekkel (1000,00 Ft).
+   */
+  it("a nettó és az ÁFA fillérrel, a bruttó egész forinttal", async () => {
+    api.getSale.mockResolvedValue({
+      ...saleDetail,
+      totalNet: "787.4",
+      totalTax: "212.6",
+      totalGross: "1000",
+      lines: [{ ...saleDetail.lines[0]!, unitNet: "787.4", lineGross: "1000" }],
+    });
+
+    render(createElement(PilotPosSaleDetailPage, { saleId: "sale-1" }));
+
+    expect(await screen.findByText("Red Sea ReefMat 500")).toBeInTheDocument();
+    expect(screen.getAllByText("787,40 Ft")).toHaveLength(2);
+    expect(screen.getByText("212,60 Ft")).toBeInTheDocument();
+    expect(screen.getAllByText("1000 Ft")).toHaveLength(2);
+  });
+
+  /**
    * TASK pos-penztargep-kassza: a CASH eladás felirata "Pénztárgép" (a régi
    * "Készpénz" már nem jelenhet meg), a CASH_DESK-é "Kassza". MI PIROSÍT: ha a
    * címketérkép nem ismerné a CASH_DESK-et (üres felirat), vagy a CASH

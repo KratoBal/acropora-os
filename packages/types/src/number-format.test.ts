@@ -27,6 +27,19 @@ describe("formatMoney", () => {
     assert.equal(formatMoney("0", "HUF"), "0 Ft");
   });
 
+  it("writes a total, a gross and a payable amount as whole forint", () => {
+    assert.equal(formatMoney("127000.4", "HUF"), `127${NBSP}000 Ft`);
+    assert.equal(formatMoney("999.5", "HUF"), `1000 Ft`);
+  });
+
+  it("keeps a net unit price's stored fillér, at most two (#2079: 6141,73 Ft)", () => {
+    const unit = { fractionDigits: 2 };
+    assert.equal(formatMoney("6141.7323", "HUF", unit), "6141,73 Ft");
+    assert.equal(formatMoney("787.4", "HUF", unit), "787,40 Ft");
+    assert.equal(formatMoney("12700", "HUF", unit), `12${NBSP}700 Ft`);
+    assert.equal(formatMoney(null, "HUF", unit), MISSING_VALUE_TEXT);
+  });
+
   it("writes another currency with two decimals and its code", () => {
     assert.equal(formatMoney("100.5", "EUR"), "100,50 EUR");
     assert.equal(formatMoney(12500, " usd "), `12${NBSP}500,00 USD`);
