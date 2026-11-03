@@ -10,6 +10,7 @@ import {
   type PilotTableColumn,
 } from "@acropora/ui";
 import {
+  formatMoney,
   hasPermission,
   PERMISSIONS,
   type SimplePayLineError,
@@ -45,11 +46,6 @@ import {
   SettlementTableCard,
 } from "./settlement-pilot";
 import { SettlementTabs } from "./settlement-tabs";
-
-function formatAmount(value?: string): string {
-  if (value === undefined) return "—";
-  return `${Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 })} Ft`;
-}
 
 function formatDate(value?: string): string {
   return value
@@ -349,7 +345,7 @@ export function SimplePaySettlementsPage() {
         width: "10%",
         cell: (line) => (
           <span className="font-semibold text-pilot-grey-900">
-            {formatAmount(line.amount)}
+            {formatMoney(line.amount, "HUF", { fractionDigits: 2 })}
           </span>
         ),
       },
@@ -358,7 +354,8 @@ export function SimplePaySettlementsPage() {
         header: "Jutalék",
         align: "right",
         width: "8%",
-        cell: (line) => formatAmount(line.commission),
+        cell: (line) =>
+          formatMoney(line.commission, "HUF", { fractionDigits: 2 }),
       },
       {
         id: "order",
@@ -369,7 +366,8 @@ export function SimplePaySettlementsPage() {
             {line.orderNumber ?? "—"}
             {line.errorCode === "AMOUNT_MISMATCH" && line.orderTotal ? (
               <p className="mt-1 text-xs text-pilot-grey-500">
-                végösszege {formatAmount(line.orderTotal)}
+                végösszege{" "}
+                {formatMoney(line.orderTotal, "HUF", { fractionDigits: 2 })}
               </p>
             ) : null}
           </div>
@@ -444,9 +442,24 @@ export function SimplePaySettlementsPage() {
         {alerts}
         <SettlementStats
           items={[
-            { label: "Összesen", value: formatAmount(selected.amountTotal) },
-            { label: "Jutalék", value: formatAmount(selected.commissionTotal) },
-            { label: "Utalt", value: formatAmount(selected.netTotal) },
+            {
+              label: "Összesen",
+              value: formatMoney(selected.amountTotal, "HUF", {
+                fractionDigits: 2,
+              }),
+            },
+            {
+              label: "Jutalék",
+              value: formatMoney(selected.commissionTotal, "HUF", {
+                fractionDigits: 2,
+              }),
+            },
+            {
+              label: "Utalt",
+              value: formatMoney(selected.netTotal, "HUF", {
+                fractionDigits: 2,
+              }),
+            },
             {
               label: "Párosítva",
               value: `${selected.resolvedLineCount} / ${selected.lineCount}`,
@@ -496,7 +509,8 @@ export function SimplePaySettlementsPage() {
       id: "total",
       header: "Összesen",
       width: "16%",
-      cell: (item) => formatAmount(item.amountTotal),
+      cell: (item) =>
+        formatMoney(item.amountTotal, "HUF", { fractionDigits: 2 }),
     },
     {
       id: "commission",
@@ -504,7 +518,7 @@ export function SimplePaySettlementsPage() {
       width: "14%",
       cell: (item) => (
         <span className="font-semibold text-pilot-grey-900">
-          {formatAmount(item.commissionTotal)}
+          {formatMoney(item.commissionTotal, "HUF", { fractionDigits: 2 })}
         </span>
       ),
     },
@@ -514,7 +528,7 @@ export function SimplePaySettlementsPage() {
       width: "16%",
       cell: (item) => (
         <span className="font-semibold text-pilot-grey-900">
-          {formatAmount(item.netTotal)}
+          {formatMoney(item.netTotal, "HUF", { fractionDigits: 2 })}
         </span>
       ),
     },
@@ -544,8 +558,10 @@ export function SimplePaySettlementsPage() {
     (item.periodEnd ?? item.reportDate ?? "").startsWith(reportMonth),
   );
   const sum = (pick: (item: SimplePayReportSummary) => string) =>
-    formatAmount(
+    formatMoney(
       String(inMonth.reduce((total, item) => total + Number(pick(item)), 0)),
+      "HUF",
+      { fractionDigits: 2 },
     );
 
   return (
