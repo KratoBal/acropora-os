@@ -24,6 +24,28 @@ describe("plainText", () => {
     expect(plainText("pH < 8 és > 7")).toBe("pH < 8 és > 7");
   });
 
+  // A tag pattern wants a LETTER right after "<": a text like "a<b ... >" counts as a tag, and what
+  // is between disappears. Rare in publication titles; this pins what happens to it.
+  it("treats a letter right after the less-than sign as a tag (known limit)", () => {
+    expect(plainText("a<b és c>d")).toBe("ad");
+    expect(plainText("a < b és c > d")).toBe("a < b és c > d");
+  });
+
+  it("drops control and direction-changing characters written as numeric entities", () => {
+    expect(plainText("a&#8238;b")).toBe("ab");
+    expect(plainText("a&#x2066;b&#x2069;c")).toBe("abc");
+    expect(plainText("a&#7;b")).toBe("ab");
+    expect(plainText("a&#x85;b")).toBe("ab");
+    // an ordinary letter, written numerically, still decodes
+    expect(plainText("&#233;")).toBe("é");
+  });
+
+  it("puts a space where a line break or a block tag separated two pieces", () => {
+    expect(plainText("sor1<br>sor2")).toBe("sor1 sor2");
+    expect(plainText("<p>egy</p><p>kettő</p>")).toBe("egy kettő");
+    expect(plainText("<i>Acropora</i>millepora")).toBe("Acroporamillepora");
+  });
+
   it("leaves an unknown entity as it is", () => {
     expect(plainText("a &valami; b")).toBe("a &valami; b");
   });
