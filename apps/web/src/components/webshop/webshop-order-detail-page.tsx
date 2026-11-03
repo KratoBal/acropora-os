@@ -11,6 +11,7 @@ import {
   Skeleton,
 } from "@acropora/ui";
 import {
+  formatMoney,
   hasPermission,
   PERMISSIONS,
   type UnasOrderDetail,
@@ -21,10 +22,6 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useReturnTo } from "@/components/navigation-history";
 import { unasOrdersApi } from "@/lib/api/unas-orders";
-
-function formatHuf(value: string): string {
-  return `${Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 })} Ft`;
-}
 
 const STATUS_LABEL: Record<string, string> = {
   DRAFT: "Piszkozat",
@@ -325,19 +322,21 @@ export function WebshopOrderDetailPage({ orderId }: { orderId: string }) {
                 <div className="text-right">
                   <p className="text-dusk-400">Nettó</p>
                   <p className="font-semibold text-dusk-700">
-                    {formatHuf(detail.totalNet)}
+                    {formatMoney(detail.totalNet, "HUF", { fractionDigits: 2 })}
                   </p>
                 </div>
                 <div className="text-right">
                   <p className="text-dusk-400">ÁFA</p>
                   <p className="font-semibold text-dusk-700">
-                    {formatHuf(detail.totalTax)}
+                    {formatMoney(detail.totalTax, "HUF", { fractionDigits: 2 })}
                   </p>
                 </div>
                 <div className="text-right">
                   <p className="text-dusk-400">Bruttó</p>
                   <p className="text-lg font-bold text-dusk-900">
-                    {formatHuf(detail.totalGross)}
+                    {formatMoney(detail.totalGross, "HUF", {
+                      fractionDigits: 2,
+                    })}
                   </p>
                 </div>
               </div>
@@ -441,13 +440,17 @@ export function WebshopOrderDetailPage({ orderId }: { orderId: string }) {
                         {line.quantity} {line.unit}
                       </td>
                       <td className="px-4 py-3 text-right text-sm text-dusk-600">
-                        {formatHuf(line.unitNet)}
+                        {formatMoney(line.unitNet, "HUF", {
+                          fractionDigits: 2,
+                        })}
                       </td>
                       <td className="px-4 py-3 text-right text-sm text-dusk-600">
                         {line.taxRate}%
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-semibold text-dusk-900">
-                        {formatHuf(line.lineGross)}
+                        {formatMoney(line.lineGross, "HUF", {
+                          fractionDigits: 2,
+                        })}
                       </td>
                       <td className="px-5 py-3">
                         {line.unasRemovedAt ? (

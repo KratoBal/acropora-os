@@ -194,6 +194,15 @@ describe("WebshopOrdersListPage", () => {
     ).toBeTruthy();
   });
 
+  // T1.5: an order total is the amount charged; a discount can leave fillér in it, and that
+  // fillér shows ("999,50 Ft"), while a whole total stays whole ("24 900 Ft" above).
+  it("an order total with fillér reads with two decimals, not rounded", async () => {
+    api.list.mockResolvedValue(response([order({ total: 999.5 })]));
+    render(createElement(WebshopOrdersListPage));
+    const only = await row(/#38 megnyitása$/);
+    expect(within(only).getByText("999,50 Ft")).toBeTruthy();
+  });
+
   it("a received transfer says Kifizetve instead of an expired proforma (bb3a6bd5)", async () => {
     api.list.mockResolvedValue(
       response([order({ transferReceived: true, proformaExpired: false })]),

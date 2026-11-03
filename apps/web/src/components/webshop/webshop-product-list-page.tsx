@@ -13,6 +13,7 @@ import {
   type PilotTableColumn,
 } from "@acropora/ui";
 import {
+  formatMoney,
   hasPermission,
   PERMISSIONS,
   type ProductListResponse,
@@ -25,11 +26,6 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { productApi } from "@/lib/api/products";
 
 const PAGE_SIZE = 25;
-
-function formatHuf(value: string | null): string {
-  if (value === null) return "—";
-  return `${Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 })} Ft`;
-}
 
 function formatStock(value: string | null): string {
   if (value === null) return "—";
@@ -83,10 +79,12 @@ export const PRODUCT_COLUMNS: PilotTableColumn<ProductRow>[] = [
     nowrap: true,
     cell: (item) => (
       <>
-        {formatHuf(item.saleGrossPrice ?? item.grossPrice)}
+        {formatMoney(item.saleGrossPrice ?? item.grossPrice, "HUF", {
+          fractionDigits: 2,
+        })}
         {item.saleGrossPrice ? (
           <span className="ml-2 text-xs text-dusk-400 line-through">
-            {formatHuf(item.grossPrice)}
+            {formatMoney(item.grossPrice, "HUF", { fractionDigits: 2 })}
           </span>
         ) : null}
       </>
