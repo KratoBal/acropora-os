@@ -28,6 +28,11 @@ import { ApiError } from "@/lib/api/client";
 import { brandsApi } from "@/lib/api/brands";
 import { homepageContentApi } from "@/lib/api/homepage-content";
 
+/** The alias source in words: the stored values are `MANUAL` and `UNAS`, any other value shows as it is. */
+export function aliasSourceLabel(source: string): string {
+  return source === "MANUAL" ? "Kézi" : source;
+}
+
 export function BrandEditorPage({ brandId }: { brandId?: string }) {
   const { session } = useAuth();
   const router = useRouter();
@@ -383,8 +388,8 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
                 value={aliasSource}
                 onChange={(event) => setAliasSource(event.target.value)}
               >
-                <option>MANUAL</option>
-                <option>UNAS</option>
+                <option value="MANUAL">{aliasSourceLabel("MANUAL")}</option>
+                <option value="UNAS">{aliasSourceLabel("UNAS")}</option>
               </Select>
               <Button
                 disabled={busy || !alias.trim()}
@@ -400,7 +405,8 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
                   className="flex items-center justify-between rounded-lg border p-3"
                 >
                   <div>
-                    <strong>{item.alias}</strong> <Badge>{item.source}</Badge>
+                    <strong>{item.alias}</strong>{" "}
+                    <Badge>{aliasSourceLabel(item.source)}</Badge>
                   </div>
                   <Button
                     variant="ghost"
