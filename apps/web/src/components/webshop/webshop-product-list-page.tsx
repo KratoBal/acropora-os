@@ -8,7 +8,9 @@ import {
   EmptyState,
   Input,
   PageHeader,
+  PilotDataTable,
   Skeleton,
+  type PilotTableColumn,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -48,6 +50,98 @@ function formatStock(value: string | null): string {
  * This is not the catalogue editor. /products keeps that job, with the barcode
  * editor and the filters that go with it.
  */
+type ProductRow = ProductListResponse["items"][number];
+
+export const PRODUCT_TABLE_MIN_WIDTH = 880;
+
+/*
+  A WEBSHOP-TERMÉKLISTA OSZLOPAI A KÖZÖS TÁBLÁN (UI-áttekintés, 3. csomag, 2026-11-03). Telefonon a tábla
+  kártyalistává alakul: a terméknév a kártya címe, a többi oszlop a felirata mellett (az ár, a készlet
+  és a webshop-állapot nem tűnik el). A név oszlop rugalmas, a többi fix.
+
+  A webshop státusza NYERSEN áll, szándékosan: a bolt státusz-kódjainak nincs megállapodott jelentése
+  ebben a repóban, és a termékoldal ugyanazt az értéket ugyanígy mutatja. Egy itt kitalált felirat
+  tényként olvasódna.
+*/
+export const PRODUCT_COLUMNS: PilotTableColumn<ProductRow>[] = [
+  {
+    id: "name",
+    header: "Név",
+    cell: (item) => (
+      <span className="font-semibold text-dusk-900">
+        <Link href={`/products/${item.id}`} className="hover:underline">
+          {item.name}
+        </Link>
+        {item.isActive ? null : (
+          <Badge className="ml-2" variant="warning">
+            Inaktív
+          </Badge>
+        )}
+      </span>
+    ),
+  },
+  {
+    id: "sku",
+    header: "Cikkszám",
+    width: "150px",
+    cell: (item) => (
+      <span className="font-mono text-xs text-dusk-600">
+        {item.primarySku ?? "—"}
+      </span>
+    ),
+  },
+  {
+    id: "price",
+    header: "Bruttó ár",
+    width: "170px",
+    nowrap: true,
+    cell: (item) => (
+      <>
+        {formatHuf(item.saleGrossPrice ?? item.grossPrice)}
+        {item.saleGrossPrice ? (
+          <span className="ml-2 text-xs text-dusk-400 line-through">
+            {formatHuf(item.grossPrice)}
+          </span>
+        ) : null}
+      </>
+    ),
+  },
+  {
+    id: "stock",
+    header: "Készlet",
+    width: "110px",
+    cell: (item) => formatStock(item.stockOnHand),
+  },
+  {
+    id: "status",
+    header: "Webshop státusz",
+    width: "150px",
+    cell: (item) => (
+      <span className="font-mono text-xs text-dusk-600">
+        {item.unasListing?.externalStatus ?? "—"}
+      </span>
+    ),
+  },
+  {
+    id: "open",
+    header: "Megnyitás",
+    width: "120px",
+    cell: (item) =>
+      item.unasListing?.productUrl ? (
+        <a
+          href={item.unasListing.productUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="text-brand-700 hover:underline"
+        >
+          Webshopban
+        </a>
+      ) : (
+        "—"
+      ),
+  },
+];
+
 export function WebshopProductListPage() {
   const { session } = useAuth();
   const router = useRouter();
@@ -162,73 +256,14 @@ export function WebshopProductListPage() {
           </Card>
 
           {data.items.length ? (
-            <Card className="overflow-x-auto">
-              <table className="w-full min-w-[800px] text-left text-sm">
-                <thead className="border-b bg-dusk-50 text-xs uppercase text-dusk-500">
-                  <tr>
-                    <th className="p-3">Név</th>
-                    <th>Cikkszám</th>
-                    <th>Bruttó ár</th>
-                    <th>Készlet</th>
-                    <th>Webshop státusz</th>
-                    <th>Megnyitás</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.items.map((item) => (
-                    <tr key={item.id} className="border-b last:border-0">
-                      <td className="p-3 font-semibold text-dusk-900">
-                        <Link
-                          href={`/products/${item.id}`}
-                          className="hover:underline"
-                        >
-                          {item.name}
-                        </Link>
-                        {item.isActive ? null : (
-                          <Badge className="ml-2" variant="warning">
-                            Inaktív
-                          </Badge>
-                        )}
-                      </td>
-                      <td className="font-mono text-xs text-dusk-600">
-                        {item.primarySku ?? "—"}
-                      </td>
-                      <td>
-                        {formatHuf(item.saleGrossPrice ?? item.grossPrice)}
-                        {item.saleGrossPrice ? (
-                          <span className="ml-2 text-xs text-dusk-400 line-through">
-                            {formatHuf(item.grossPrice)}
-                          </span>
-                        ) : null}
-                      </td>
-                      <td>{formatStock(item.stockOnHand)}</td>
-                      {/*
-                        Raw, on purpose: the shop's status codes have no
-                        agreed meaning in this repository, and the product
-                        page shows the same value the same way. A label
-                        invented here would read as fact.
-                      */}
-                      <td className="font-mono text-xs text-dusk-600">
-                        {item.unasListing?.externalStatus ?? "—"}
-                      </td>
-                      <td>
-                        {item.unasListing?.productUrl ? (
-                          <a
-                            href={item.unasListing.productUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-brand-700 hover:underline"
-                          >
-                            Webshopban
-                          </a>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <Card>
+              <PilotDataTable
+                columns={PRODUCT_COLUMNS}
+                rows={data.items}
+                rowKey={(item) => item.id}
+                rowTestId="webshop-product-row"
+                minWidth={PRODUCT_TABLE_MIN_WIDTH}
+              />
             </Card>
           ) : (
             /*

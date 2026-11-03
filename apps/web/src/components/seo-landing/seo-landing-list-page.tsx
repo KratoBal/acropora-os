@@ -6,7 +6,9 @@ import {
   Card,
   EmptyState,
   PageHeader,
+  PilotDataTable,
   Skeleton,
+  type PilotTableColumn,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -25,6 +27,53 @@ export const SEO_LANDING_LIST_PATH = "/admin/valogatasok";
  * `/hu/valogatas/{slug}` in the shop. The list shows the address and whether
  * it is published; editing is on the page itself.
  */
+export const SEO_LANDING_TABLE_MIN_WIDTH = 640;
+
+/*
+  A VÁLOGATÁS-LISTA OSZLOPAI A KÖZÖS TÁBLÁN (UI-áttekintés, 3. csomag, 2026-11-03). Telefonon a tábla
+  kártyalistává alakul: a válogatás címe (a szerkesztőre mutató link) a kártya címe, a többi oszlop a
+  felirata mellett. A cím oszlop rugalmas, a többi fix; a frissítés dátuma nem törhet sorba.
+*/
+export const SEO_LANDING_COLUMNS: PilotTableColumn<SeoLandingPage>[] = [
+  {
+    id: "title",
+    header: "Válogatás",
+    cell: (page) => (
+      <Link
+        className="font-semibold text-brand-700"
+        href={`${SEO_LANDING_LIST_PATH}/${page.id}`}
+      >
+        {page.title}
+      </Link>
+    ),
+  },
+  {
+    id: "slug",
+    header: "Cím a webshopban",
+    width: "240px",
+    cell: (page) => (
+      <span className="break-all text-dusk-600">/hu/valogatas/{page.slug}</span>
+    ),
+  },
+  {
+    id: "status",
+    header: "Állapot",
+    width: "130px",
+    cell: (page) => (
+      <Badge variant={page.isPublished ? "success" : "neutral"}>
+        {page.isPublished ? "Közzétéve" : "Vázlat"}
+      </Badge>
+    ),
+  },
+  {
+    id: "updated",
+    header: "Frissítve",
+    width: "130px",
+    nowrap: true,
+    cell: (page) => new Date(page.updatedAt).toLocaleDateString("hu-HU"),
+  },
+];
+
 export function SeoLandingListPage() {
   const { session } = useAuth();
   const token = session?.token ?? "";
@@ -91,40 +140,14 @@ export function SeoLandingListPage() {
         />
       ) : null}
       {pages && pages.length ? (
-        <Card className="overflow-x-auto">
-          <table className="w-full min-w-[640px] text-left text-sm">
-            <thead className="border-b bg-dusk-50 text-xs uppercase text-dusk-500">
-              <tr>
-                <th className="p-3">Válogatás</th>
-                <th>Cím a webshopban</th>
-                <th>Állapot</th>
-                <th>Frissítve</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pages.map((page) => (
-                <tr key={page.id} className="border-b last:border-0">
-                  <td className="p-3">
-                    <Link
-                      className="font-semibold text-brand-700"
-                      href={`${SEO_LANDING_LIST_PATH}/${page.id}`}
-                    >
-                      {page.title}
-                    </Link>
-                  </td>
-                  <td className="text-dusk-600">/hu/valogatas/{page.slug}</td>
-                  <td>
-                    <Badge variant={page.isPublished ? "success" : "neutral"}>
-                      {page.isPublished ? "Közzétéve" : "Vázlat"}
-                    </Badge>
-                  </td>
-                  <td>
-                    {new Date(page.updatedAt).toLocaleDateString("hu-HU")}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <Card>
+          <PilotDataTable
+            columns={SEO_LANDING_COLUMNS}
+            rows={pages}
+            rowKey={(page) => page.id}
+            rowTestId="seo-landing-row"
+            minWidth={SEO_LANDING_TABLE_MIN_WIDTH}
+          />
         </Card>
       ) : null}
     </div>
