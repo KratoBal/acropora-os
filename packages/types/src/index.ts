@@ -1236,6 +1236,7 @@ export type {
   DashboardMaintenanceCalendarWidgetData,
   DashboardMaterialRequestsWidgetData,
   DashboardMissingInvoicesWidgetData,
+  DashboardWebshopOrdersWidgetData,
   DashboardOverdueInvoicesWidgetData,
   DashboardServiceTicketsWidgetData,
   DashboardSettlementsWidgetData,

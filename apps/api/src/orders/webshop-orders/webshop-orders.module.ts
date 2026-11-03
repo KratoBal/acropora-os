@@ -41,5 +41,7 @@ import { WebshopMailOutboxService } from "./webshop-mail-outbox.service.js";
     WebshopOrderShippingMethodService,
     WebshopOrderTransferService,
   ],
+  // the dashboard's order queue card reads the list's own counters
+  exports: [WebshopOrdersService],
 })
 export class WebshopOrdersModule {}

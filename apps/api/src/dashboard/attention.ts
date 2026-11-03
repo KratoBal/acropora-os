@@ -10,6 +10,7 @@ import type {
   DashboardStockReconciliationWidgetData,
   DashboardStockSyncOutboxWidgetData,
   DashboardWidgetId,
+  DashboardWebshopOrdersWidgetData,
   DashboardWorksheetsWidgetData,
 } from "@acropora/types";
 
@@ -19,9 +20,11 @@ import type {
  * permission check) as its own card.
  *
  * Deliberately NOT here: `supplier-matching` and the JEV shadow runs (a shadow
- * measurement is never a task), and the frozen webshop.
+ * measurement is never a task). The webshop order queue is here since T2.1
+ * (the commerce freeze is lifted since 2026-11-01, acrobot 41616).
  */
 export const ATTENTION_SOURCES = [
+  "webshop-orders",
   "overdue-invoices",
   "missing-invoices",
   "incoming-invoices",
@@ -95,6 +98,26 @@ function itemsOf(widgetId: AttentionSource, data: unknown): Item[] {
           count: d.overdue.count,
           href: "/penzugy/szamlazas",
           tone: "danger",
+        },
+      ];
+    }
+    case "webshop-orders": {
+      const d = data as DashboardWebshopOrdersWidgetData;
+      // the list's own stage filter behind each line
+      return [
+        {
+          key: "stale",
+          label: "Elavult webshop rendelés",
+          count: d.counters.stale,
+          href: "/webshop/rendelesek?stage=stale",
+          tone: "danger",
+        },
+        {
+          key: "processing",
+          label: "Feldolgozásra váró webshop rendelés",
+          count: d.counters.processing,
+          href: "/webshop/rendelesek?stage=processing",
+          tone: "warning",
         },
       ];
     }

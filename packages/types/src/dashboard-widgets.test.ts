@@ -54,9 +54,24 @@ describe("the registry", () => {
     }
   });
 
-  it("keeps the frozen webshop / commerce widgets and the shadow JEV pairing out of reach of every role", () => {
+  // T2.1 (acrobot 41616): the commerce freeze is lifted since 2026-11-01, and the order queue
+  // is the OS's own work list. It reaches who may see orders, and nobody else.
+  it("offers the webshop order queue to whoever may see orders, and to nobody else", () => {
+    assert.equal(dashboardWidget("webshop-orders").availability, "active");
+    for (const role of USER_ROLES) {
+      const offered = availableDashboardWidgets(viewer(role)).some(
+        (w) => w.id === "webshop-orders",
+      );
+      assert.equal(
+        offered,
+        hasAllPermissions({ role }, [PERMISSIONS.ORDERS_VIEW]),
+        role,
+      );
+    }
+  });
+
+  it("keeps the still planned POS and product widgets and the shadow JEV pairing out of reach of every role", () => {
     for (const id of [
-      "webshop-orders",
       "pos-today",
       "product-data-quality",
       "supplier-matching",
@@ -250,11 +265,11 @@ describe("the user's own layout", () => {
     const resolved = resolveDashboardLayout(viewer("SERVICE"), [
       { widgetId: "expected-arrivals", enabled: true, order: 0 }, // no purchasing.view
       { widgetId: "nope", enabled: true, order: 1 },
-      { widgetId: "webshop-orders", enabled: true, order: 2 },
+      { widgetId: "pos-today", enabled: true, order: 2 },
       { widgetId: "tasks", enabled: true, order: 3 },
     ]);
     assert.deepEqual(ids(resolved.widgets), ["tasks"]);
-    for (const dropped of ["expected-arrivals", "nope", "webshop-orders"])
+    for (const dropped of ["expected-arrivals", "nope", "pos-today"])
       assert.ok(!resolved.widgets.some((e) => e.widgetId === dropped), dropped);
     assert.deepEqual(
       resolved.widgets.map((e) => e.order),
@@ -332,7 +347,7 @@ describe("write validation", () => {
 
   it("refuses planned, unknown, duplicate and malformed entries", () => {
     const r = sanitizeDashboardLayoutInput(viewer("OWNER"), [
-      { widgetId: "webshop-orders", enabled: true, order: 0 },
+      { widgetId: "pos-today", enabled: true, order: 0 },
       { widgetId: "nope", enabled: true, order: 0 },
       { widgetId: "tasks", enabled: true, order: 0 },
       { widgetId: "tasks", enabled: true, order: 1 },
@@ -342,7 +357,7 @@ describe("write validation", () => {
     assert.equal(r.ok, false);
     const text = r.ok ? "" : r.errors.join("\n");
     for (const needle of [
-      'widgets[0]: a(z) "webshop-orders" widget nem érhető el',
+      'widgets[0]: a(z) "pos-today" widget nem érhető el',
       "widgets[1]: ismeretlen widget",
       'widgets[3]: a(z) "tasks" kétszer szerepel',
       "widgets[4].enabled",
