@@ -79,19 +79,12 @@ export const QUOTE_BLOCK_LABEL: Record<QuoteBlockKindValue, string> = {
   PAGE_BREAK: "Oldaltörés",
 };
 
-/** Pénz: forint egészre, más pénznem két tizedesre (a számlázás szabálya). */
-export function formatQuoteMoney(
-  value: string | null,
-  currency: string,
-): string {
-  if (value === null) return "—";
-  const digits = currency === "HUF" ? 0 : 2;
-  const formatted = new Intl.NumberFormat("hu-HU", {
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  }).format(Number(value));
-  return currency === "HUF" ? `${formatted} Ft` : `${formatted} ${currency}`;
-}
+/**
+ * Pénz: forint egészre, más pénznem két tizedesre (a számlázás szabálya), hiányzó érték "—".
+ * A közös formázó (`@acropora/types`, T1.5) a megszokott néven; egy egységár (nettó egységár,
+ * egységköltség, javasolt ár) `{ fractionDigits: 2 }`-vel hívja, mert ott a fillér valódi adat.
+ */
+export { formatMoney as formatQuoteMoney } from "@acropora/types";
 
 /** `2026-11-06` → `2026. 11. 06.` (the one list date format, see `lib/format/date.ts`). */
 export function formatQuoteDay(value: string | null): string {
@@ -99,13 +92,8 @@ export function formatQuoteDay(value: string | null): string {
   return formatDayHu(value.slice(0, 10));
 }
 
-/** Egy decimális szöveg emberi alakja (tizedesvessző, felesleges nullák nélkül). */
-export function formatQuantity(value: string): string {
-  const n = Number(value);
-  return Number.isFinite(n)
-    ? new Intl.NumberFormat("hu-HU", { maximumFractionDigits: 6 }).format(n)
-    : value;
-}
+/** Egy decimális szöveg emberi alakja (tizedesvessző, felesleges nullák nélkül): a közös formázó. */
+export { formatQuantity } from "@acropora/types";
 
 /** A mai nap után `days` nappal, `YYYY-MM-DD` alakban (Budapest szerint). */
 export function dayAfter(days: number, now = new Date()): string {

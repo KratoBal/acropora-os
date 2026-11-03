@@ -50,47 +50,6 @@ export function worksheetLabelOrDraft(label: string | null): string {
   return label ?? "Még nincs száma";
 }
 
-const forintFormat = new Intl.NumberFormat("hu-HU", {
-  style: "currency",
-  currency: "HUF",
-  maximumFractionDigits: 0,
-});
-
-/**
- * Az összegek szövegként jönnek az API-ból (a Decimal pontossága nem fér
- * el egy JavaScript számban). A megjelenítéshez számmá alakítjuk, de csak
- * itt, egyetlen helyen - és ha az érték nem értelmezhető, inkább kiírjuk
- * nyersen, mint hogy "NaN Ft" jelenjen meg a lapon.
- */
-/**
- * A HIÁNYZÓ ÁR JELE, egy helyen. Nem üres cella: az üres hely a táblázatban
- * megkülönböztethetetlen egy elcsúszott oszloptól, és a nulla forint egy
- * elvégzett, ingyenes munkát jelentene.
- */
-export const MISSING_AMOUNT = "—";
-
-export function formatAmount(value: string | null, currency = "HUF"): string {
-  // A `null` NEM formázási hiba, hanem a rendszer egy állapota: a helyszínen
-  // rögzített tételen az árat az iroda adja meg később.
-  if (value === null) return MISSING_AMOUNT;
-  const amount = Number(value);
-  if (!Number.isFinite(amount)) return value;
-  if (currency === "HUF") return forintFormat.format(amount);
-  return `${new Intl.NumberFormat("hu-HU").format(amount)} ${currency}`;
-}
-
-/**
- * A PENZNEM ROVID JELE, egy helyen.
- *
- * A `formatAmount` mar tudja, hogy a HUF magyarul "Ft" -- ez a fuggveny
- * ugyanabbol a tudasbol adja a JELET, hogy a szerkeszto mezo melle is ki
- * lehessen irni anelkul, hogy a "HUF -> Ft" megfeleltetes MASODSZOR is le
- * lenne irva valahol. Ket helyen allo megfeleltetes elcsuszasa nema.
- */
-export function currencySuffix(currency = "HUF"): string {
-  return currency === "HUF" ? "Ft" : currency;
-}
-
 export function formatDate(value: string | null): string {
   if (!value) return "—";
   return value.slice(0, 10);
