@@ -14,11 +14,11 @@ import {
   pairingNumberKey,
   pairingNumberKeys,
   pairingTaxKey,
-  supplierTaxBase,
   paymentStateOf,
   toIncomingDetail,
   toIncomingListItem,
 } from "./incoming-billing-documents.js";
+import { supplierTaxBase } from "./billing-duplicates.js";
 
 const D = (value: string | number) => new Prisma.Decimal(value);
 const day = (value: string) => new Date(`${value}T00:00:00Z`);

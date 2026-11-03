@@ -18,7 +18,7 @@ import {
   otherDocumentFileName,
   reminderFileName,
 } from "./collection/invoice-text.js";
-import { supplierTaxBase } from "../billing/incoming-billing-documents.js";
+import { supplierTaxBase } from "../billing/billing-duplicates.js";
 import type { CandidateDocument, Payee } from "./missing-invoice-matching.js";
 import type { StoredReading } from "../billing/foreign-invoice/reading-values.js";
 
@@ -172,14 +172,6 @@ export function withoutNotBookable(
 }
 
 /**
- * UGYANAZ A SZÁMLA TÖBB FORRÁSBÓL EGY JELÖLT (acrobot 25322). A NAV-sor az
- * azonosság és az összeg, a postafiók PDF-je az eredeti. Összevonás nélkül egy
- * számla két terhelést is vihetne: egyszer NAV-sorként, egyszer PDF-ként.
- *
- * A NAV adja a bruttót és a vevőt (definíció szerint a Kft), az eredeti a
- * forrást, amit a felület mutat. Szám nélküli dokumentum nem vonható össze.
- */
-/**
  * AZ ÖSSZEVONT CSOPORT SZÁLLÍTÓJÁNAK ADÓSZÁMA (barracuda, #2093 review). A NAV-sor adószáma
  * az elsődleges, mert az nem kiolvasás; ha nincs ilyen, akkor a kiolvasottak egyetlen közös
  * törzse; ha a tagok két különböző törzset hoznak, vagy egyik sem használható (a saját
@@ -200,6 +192,14 @@ export function mergedSupplierTaxNumber(
   return bases.size === 1 ? (usable[0]!.supplierTaxNumber ?? null) : null;
 }
 
+/**
+ * UGYANAZ A SZÁMLA TÖBB FORRÁSBÓL EGY JELÖLT (acrobot 25322). A NAV-sor az
+ * azonosság és az összeg, a postafiók PDF-je az eredeti. Összevonás nélkül egy
+ * számla két terhelést is vihetne: egyszer NAV-sorként, egyszer PDF-ként.
+ *
+ * A NAV adja a bruttót és a vevőt (definíció szerint a Kft), az eredeti a
+ * forrást, amit a felület mutat. Szám nélküli dokumentum nem vonható össze.
+ */
 export function mergeSameInvoice(
   documents: readonly CandidateDocument[],
   given: ReadonlyMap<string, string>,
