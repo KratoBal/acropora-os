@@ -516,6 +516,7 @@ export function FoxpostSettlementsPage() {
     {
       id: "date",
       header: "Kelte",
+      nowrap: true,
       width: "16%",
       cell: (item) => formatDate(item.invoiceIssueDate),
     },

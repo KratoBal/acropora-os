@@ -336,6 +336,7 @@ export function GlsSettlementsPage() {
     {
       id: "date",
       header: "Kelte",
+      nowrap: true,
       width: "18%",
       cell: (invoice) => formatDate(invoice.invoiceDate),
     },

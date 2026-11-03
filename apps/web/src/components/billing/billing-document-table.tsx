@@ -110,6 +110,7 @@ export const BILLING_DOCUMENT_COLUMNS: readonly PilotTableColumn<BillingDocument
     {
       id: "dueDate",
       header: "Határidő",
+      nowrap: true,
       width: "120px",
       cell: (item) => formatDay(item.dueDate),
     },

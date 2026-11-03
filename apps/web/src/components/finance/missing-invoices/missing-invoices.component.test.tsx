@@ -379,7 +379,10 @@ describe("MissingInvoicesMonthDetail", () => {
     expect(widthOf("Partner")).toBe("");
     for (const header of ["Összeg", "Számla", "Forrás", "Állapot", "Dátum"])
       expect(widthOf(header)).not.toBe("");
-    expect(parseInt(table.style.minWidth, 10)).toBeLessThanOrEqual(968);
+    // The table's minimum width is the CSS variable the shared table sets (`md:min-w-[...]`).
+    expect(
+      parseInt(table.style.getPropertyValue("--pilot-table-min"), 10),
+    ).toBeLessThanOrEqual(968);
     const longName = screen.getByText(/^von Wussow Importe GmbH/);
     expect(longName).toHaveClass("truncate");
     expect(longName).toHaveAttribute("title", longName.textContent!);

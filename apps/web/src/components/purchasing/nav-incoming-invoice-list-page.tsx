@@ -205,6 +205,7 @@ export function NavIncomingInvoiceListPage() {
     {
       id: "issued",
       header: "Kelte",
+      nowrap: true,
       width: "12%",
       cell: (item) => (
         <span className="text-pilot-grey-600">
@@ -215,6 +216,7 @@ export function NavIncomingInvoiceListPage() {
     {
       id: "delivered",
       header: "Teljesítés",
+      nowrap: true,
       width: "12%",
       cell: (item) => (
         <span className="text-pilot-grey-600">
