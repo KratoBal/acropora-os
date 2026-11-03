@@ -36,6 +36,14 @@ import { useThemePreference } from "./use-theme-preference";
  */
 
 /**
+ * A LAP TELJES SZÉLESSÉGŰ HÁTTERE: a keret (`apps/web/src/components/app-shell.tsx` `<main>`) belső margójával pontosan
+ * egyező negatív margó, minden töréspontra (UI 1. csomag, 2026-11-03). A lapok eddig kézzel `-m-6`-ot adtak, ami
+ * telefonon 8 px-szel több volt a keret 16 px-énél: a lap 398 px széles lett 390-en (mérve a stage-en 15 lapon). Ha a
+ * keret margója változik, EZ is változzon.
+ */
+export const PILOT_SHELL_BLEED = "-mx-4 -my-6 sm:-mx-6 lg:-mx-8 lg:-my-8";
+
+/**
  * A PILOT OLDALAK GYÖKERE -- EZ TESZI RÁ A `data-theme`-ET, ÉS CSAK EZ.
  *
  * Balázs döntése (2026-09-24 18:00 UTC): a világos/sötét választó a
@@ -62,10 +70,13 @@ export function PilotThemeRoot({
   className = "",
   fontClassName = "",
   theme,
+  bleed = false,
 }: {
   children?: ReactNode;
   className?: string;
   fontClassName?: string;
+  /** A keret széléig érő háttér (`PILOT_SHELL_BLEED`), a kézi `-m-6` helyett. */
+  bleed?: boolean;
   /**
    * A MÓD RÖGZÍTÉSE, HA A TERVNEK CSAK EGY MÓDJA VAN. A Direction F OS
    * oldalai (Termékek, 2026-09-30) csak világos értéket adnak a saját
@@ -80,7 +91,7 @@ export function PilotThemeRoot({
   return (
     <div
       data-theme={theme ?? effectiveTheme}
-      className={`${fontClassName} ${className}`}
+      className={`${fontClassName} ${bleed ? `${PILOT_SHELL_BLEED} ` : ""}${className}`}
     >
       {children}
     </div>
@@ -645,45 +656,56 @@ export function PilotDrawer({
         }`}
         onClick={onClose}
       />
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        aria-hidden={!open}
-        inert={!open}
-        className={`fixed right-0 top-0 z-50 flex h-full w-full ${
-          DRAWER_WIDTHS[width]
-        } flex-col bg-white shadow-2xl transition-transform duration-250 ease-in-out ${
-          open ? "translate-x-0" : "translate-x-full"
-        }`}
-      >
-        <div className="flex items-start justify-between gap-3 border-b border-pilot-grey-100 px-6 py-4">
-          <div className="min-w-0">
-            <h2
-              id={titleId}
-              className="text-base font-semibold text-pilot-grey-900"
+      {/*
+        A ZÁRT FIÓK NEM LÁTSZIK, ÉS SEMMI NEM LÓG KI BELŐLE (UI 1. csomag, 2026-11-03, a stage-képeken a jobb szélen
+        szürke csík): a képernyőn kívülre csúsztatott panel árnyéka (shadow-2xl) eddig visszanyúlt a lapra. Most a
+        panel egy képernyőt kitöltő, vágó tárolóban áll, és csukva `invisible`: a láthatóság a csúszás végén vált,
+        tehát a kinyitás és a becsukás animációja megmarad. Mérve böngészőben: a jobb szél pixele 226 helyett a
+        háttér 246-a.
+      */}
+      <div className="pointer-events-none fixed inset-0 z-50 overflow-hidden">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
+          aria-hidden={!open}
+          inert={!open}
+          className={`pointer-events-auto absolute right-0 top-0 flex h-full w-full ${
+            DRAWER_WIDTHS[width]
+          } flex-col bg-white transition-[transform,visibility,box-shadow] duration-250 ease-in-out ${
+            open
+              ? "visible translate-x-0 shadow-2xl"
+              : "invisible translate-x-full shadow-none"
+          }`}
+        >
+          <div className="flex items-start justify-between gap-3 border-b border-pilot-grey-100 px-6 py-4">
+            <div className="min-w-0">
+              <h2
+                id={titleId}
+                className="text-base font-semibold text-pilot-grey-900"
+              >
+                {title}
+              </h2>
+              {subtitle ? (
+                <p className="mt-0.5 text-xs text-pilot-grey-500">{subtitle}</p>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Bezárás"
+              className="shrink-0 cursor-pointer rounded-md p-1.5 text-pilot-grey-400 transition hover:bg-pilot-grey-100 hover:text-pilot-grey-700"
             >
-              {title}
-            </h2>
-            {subtitle ? (
-              <p className="mt-0.5 text-xs text-pilot-grey-500">{subtitle}</p>
-            ) : null}
+              <Icon name="x" size={16} />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Bezárás"
-            className="shrink-0 cursor-pointer rounded-md p-1.5 text-pilot-grey-400 transition hover:bg-pilot-grey-100 hover:text-pilot-grey-700"
-          >
-            <Icon name="x" size={16} />
-          </button>
+          {children}
+          {footer ? (
+            <div className="border-t border-pilot-grey-100 px-6 py-4">
+              {footer}
+            </div>
+          ) : null}
         </div>
-        {children}
-        {footer ? (
-          <div className="border-t border-pilot-grey-100 px-6 py-4">
-            {footer}
-          </div>
-        ) : null}
       </div>
     </>
   );

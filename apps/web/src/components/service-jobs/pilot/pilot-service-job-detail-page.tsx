@@ -580,7 +580,7 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
 
   if (loading && !job)
     return (
-      <PilotThemeRoot className="-m-6 min-h-screen bg-pilot-grey-50 p-8">
+      <PilotThemeRoot bleed className="min-h-screen bg-pilot-grey-50 p-8">
         {offlineSav}
         <div className="space-y-3" aria-label="Hibajegy betöltése">
           <Skeleton className="h-16" />
@@ -591,7 +591,7 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
 
   if (error && !job)
     return (
-      <PilotThemeRoot className="-m-6 min-h-screen bg-pilot-grey-50 p-8">
+      <PilotThemeRoot bleed className="min-h-screen bg-pilot-grey-50 p-8">
         {offlineSav}
         <Alert
           variant="danger"
@@ -626,7 +626,10 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
   const names = assigneeNames(job.assignees);
 
   return (
-    <PilotThemeRoot className="-m-6 flex min-h-screen flex-col gap-6 bg-pilot-grey-50 px-8 py-8">
+    <PilotThemeRoot
+      bleed
+      className="flex min-h-screen flex-col gap-6 bg-pilot-grey-50 px-8 py-8"
+    >
       {offlineSav}
       {/*
         THE HEADER OF THE SERVICE REDESIGN (Figma 423:234): back to the list

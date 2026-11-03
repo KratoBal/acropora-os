@@ -453,7 +453,10 @@ export function PilotAquariumEditorPage({
     );
 
   return (
-    <PilotThemeRoot className="-m-6 flex min-h-screen flex-col bg-pilot-grey-50">
+    <PilotThemeRoot
+      bleed
+      className="flex min-h-screen flex-col bg-pilot-grey-50"
+    >
       <div className="border-b border-pilot-grey-200 bg-white px-8 py-5">
         <Link
           href={isEdit ? `/akvariumok/${aquariumId}` : "/akvariumok"}

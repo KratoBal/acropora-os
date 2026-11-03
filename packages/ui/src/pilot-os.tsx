@@ -264,7 +264,10 @@ export function PilotDataTable<Row>({
     }
   };
   return (
-    <div className="overflow-x-auto">
+    // `relative`: a gördülő tároló legyen a tartalmazó blokk. Nélküle egy fejléc-cella abszolút `sr-only` felirata a
+    // vágás alól kilép, és a keret gyökeréig nyújtja a lapot (UI 1. csomag, 2026-11-03: a hiányzó számlák listája
+    // 896 px volt 390-en; a stage-ről kimentett lapon elemenként kivágva mérve)
+    <div className="relative overflow-x-auto">
       <table
         style={{ minWidth }}
         className="w-full table-fixed border-collapse text-left"

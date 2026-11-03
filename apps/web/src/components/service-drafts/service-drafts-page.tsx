@@ -371,7 +371,10 @@ export function ServiceDraftsPage() {
       </Alert>
     );
   return (
-    <PilotThemeRoot className="-m-6 min-h-screen bg-pilot-grey-50 px-8 py-8 space-y-6 [&_h1]:!font-[inherit] [&_h2]:!font-[inherit]">
+    <PilotThemeRoot
+      bleed
+      className="min-h-screen bg-pilot-grey-50 px-8 py-8 space-y-6 [&_h1]:!font-[inherit] [&_h2]:!font-[inherit]"
+    >
       <header className="space-y-3">
         <p className="text-xs text-pilot-grey-500">Szerviz / Piszkozatok</p>
         <h1 className="text-[28px] font-semibold leading-[34px] text-pilot-grey-900">

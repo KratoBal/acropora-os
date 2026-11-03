@@ -289,7 +289,10 @@ export function PilotWorksheetListPage() {
   const hasFilters = Boolean(search || params.get("customerId"));
 
   return (
-    <PilotThemeRoot className="-m-6 flex min-h-screen flex-col gap-6 bg-pilot-grey-50 px-8 py-8">
+    <PilotThemeRoot
+      bleed
+      className="flex min-h-screen flex-col gap-6 bg-pilot-grey-50 px-8 py-8"
+    >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-pilot-aqua-700">
@@ -448,7 +451,7 @@ export function PilotWorksheetListPage() {
         </div>
       ) : data?.items.length ? (
         <PilotCard className="overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="relative overflow-x-auto">
             <table className="w-full min-w-[980px] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-pilot-grey-100">

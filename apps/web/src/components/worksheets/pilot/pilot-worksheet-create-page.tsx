@@ -320,7 +320,7 @@ export function PilotWorksheetCreatePage() {
 
   if (!canManage)
     return (
-      <PilotThemeRoot className="-m-6 min-h-screen bg-pilot-grey-50 p-8">
+      <PilotThemeRoot bleed className="min-h-screen bg-pilot-grey-50 p-8">
         <Alert
           variant="danger"
           title="Nincs jogosultságod munkalapot írni"
@@ -347,7 +347,7 @@ export function PilotWorksheetCreatePage() {
   const canSubmit = missing.length === 0;
 
   return (
-    <PilotThemeRoot className="-m-6 min-h-screen bg-pilot-grey-50">
+    <PilotThemeRoot bleed className="min-h-screen bg-pilot-grey-50">
       <div className="border-b border-pilot-grey-200 bg-white px-8 py-5">
         <Link
           href={backToList.href}

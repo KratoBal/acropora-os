@@ -78,7 +78,10 @@ export function PilotPosSaleDetailPage({ saleId }: { saleId: string }) {
 
   if (!canView) {
     return (
-      <PilotThemeRoot className="-m-6 flex min-h-screen flex-col bg-pilot-grey-50 lg:-m-8 [&_h1]:![font-family:inherit] [&_h2]:![font-family:inherit] [&_h3]:![font-family:inherit]">
+      <PilotThemeRoot
+        bleed
+        className="flex min-h-screen flex-col bg-pilot-grey-50 [&_h1]:![font-family:inherit] [&_h2]:![font-family:inherit] [&_h3]:![font-family:inherit]"
+      >
         <div className="p-8">
           <Alert
             variant="danger"
@@ -101,7 +104,10 @@ export function PilotPosSaleDetailPage({ saleId }: { saleId: string }) {
   );
 
   return (
-    <PilotThemeRoot className="-m-6 flex min-h-screen flex-col bg-pilot-grey-50 lg:-m-8 [&_h1]:![font-family:inherit] [&_h2]:![font-family:inherit] [&_h3]:![font-family:inherit]">
+    <PilotThemeRoot
+      bleed
+      className="flex min-h-screen flex-col bg-pilot-grey-50 [&_h1]:![font-family:inherit] [&_h2]:![font-family:inherit] [&_h3]:![font-family:inherit]"
+    >
       <div className="px-8 pb-5 pt-6">
         <button
           type="button"

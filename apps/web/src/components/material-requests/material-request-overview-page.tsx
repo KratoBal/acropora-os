@@ -144,7 +144,7 @@ export function MaterialRequestOverviewPage() {
   };
 
   return (
-    <PilotThemeRoot className="-m-6 min-h-screen bg-pilot-grey-50">
+    <PilotThemeRoot bleed className="min-h-screen bg-pilot-grey-50">
       <div className="border-b border-pilot-grey-200 bg-white px-4 py-5 sm:px-8">
         <p className="mb-1 text-xs text-pilot-grey-400">
           Szerviz / Anyagigények
@@ -265,7 +265,7 @@ export function MaterialRequestOverviewPage() {
 /** Figma 404:221: the detail page, with the worksheet link in its header. */
 export function MaterialRequestDetailPage({ id }: { id: string }) {
   return (
-    <PilotThemeRoot className="-m-6 min-h-screen bg-pilot-grey-50">
+    <PilotThemeRoot bleed className="min-h-screen bg-pilot-grey-50">
       <div className="border-b border-pilot-grey-200 bg-white px-4 py-5 sm:px-8">
         <p className="mb-1 text-xs text-pilot-grey-400">
           Szerviz / Anyagigények

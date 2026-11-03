@@ -149,7 +149,10 @@ export function PilotAquariumListPage() {
     );
 
   return (
-    <PilotThemeRoot className="-m-6 flex min-h-screen flex-col bg-pilot-grey-50">
+    <PilotThemeRoot
+      bleed
+      className="flex min-h-screen flex-col bg-pilot-grey-50"
+    >
       <div className="flex items-center justify-between border-b border-pilot-grey-200 bg-white px-8 py-5">
         <div>
           <h1 className="text-xl font-semibold text-pilot-grey-900">

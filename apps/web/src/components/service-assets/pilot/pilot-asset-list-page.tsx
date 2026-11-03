@@ -337,7 +337,7 @@ export function PilotAssetListPage() {
           aria-label="Eszköztípus"
           value={params.get("kind") ?? ""}
           onChange={(event) => filter("kind", event.target.value)}
-          className="cursor-pointer rounded-md py-1.5 pl-2.5 pr-6 text-sm text-pilot-grey-700 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+          className="max-w-full cursor-pointer truncate rounded-md py-1.5 pl-2.5 pr-6 text-sm text-pilot-grey-700 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
         >
           <option value="">Minden típus</option>
           {Object.entries(assetKindLabel).map(([value, label]) => (
@@ -350,7 +350,7 @@ export function PilotAssetListPage() {
           aria-label="Kategória"
           value={categoryFilterValue}
           onChange={(event) => setCategoryFilter(event.target.value)}
-          className="cursor-pointer rounded-md py-1.5 pl-2.5 pr-6 text-sm text-pilot-grey-700 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+          className="max-w-full cursor-pointer truncate rounded-md py-1.5 pl-2.5 pr-6 text-sm text-pilot-grey-700 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
         >
           <option value="">Minden kategória</option>
           {categories.map((category) => (
@@ -366,7 +366,7 @@ export function PilotAssetListPage() {
           aria-label="Kézikönyv"
           value={manualFilterValue}
           onChange={(event) => setManualFilter(event.target.value)}
-          className="cursor-pointer rounded-md py-1.5 pl-2.5 pr-6 text-sm text-pilot-grey-700 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+          className="max-w-full cursor-pointer truncate rounded-md py-1.5 pl-2.5 pr-6 text-sm text-pilot-grey-700 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
         >
           <option value="">Kézikönyv: mind</option>
           <option value="with">Van kézikönyve</option>
@@ -376,7 +376,7 @@ export function PilotAssetListPage() {
           aria-label="Hány eszköz egy oldalon"
           value={params.get("pageSize") ?? DEFAULT_PAGE_SIZE}
           onChange={(event) => filter("pageSize", event.target.value)}
-          className="cursor-pointer rounded-md py-1.5 pl-2.5 pr-6 text-sm text-pilot-grey-700 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+          className="max-w-full cursor-pointer truncate rounded-md py-1.5 pl-2.5 pr-6 text-sm text-pilot-grey-700 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
         >
           {PAGE_SIZES.map((size) => (
             <option key={size} value={String(size)}>
@@ -539,7 +539,10 @@ export function PilotAssetListPage() {
   );
 
   return (
-    <PilotThemeRoot className="-m-6 flex min-h-screen flex-col bg-pilot-grey-50">
+    <PilotThemeRoot
+      bleed
+      className="flex min-h-screen flex-col bg-pilot-grey-50"
+    >
       <div className="flex items-center justify-between border-b border-pilot-grey-200 bg-white px-8 py-5">
         <div>
           <p className="mb-1 text-xs text-pilot-grey-400">

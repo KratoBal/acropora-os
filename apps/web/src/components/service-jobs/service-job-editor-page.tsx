@@ -438,7 +438,7 @@ export function ServiceJobEditorPage({
         ami itt tartalmi kerdes. A jobb hasab ezert csak ELMONDJA, mi kovetkezik
         -- nem kertez.
       */}
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-6">
           <ServiceJobStepCard number="01" title="Partner és helyszín">
             <div className="space-y-1">

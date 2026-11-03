@@ -381,13 +381,13 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
     );
   if (loading && !asset)
     return (
-      <PilotThemeRoot className="-m-6 min-h-screen bg-pilot-grey-50 p-8">
+      <PilotThemeRoot bleed className="min-h-screen bg-pilot-grey-50 p-8">
         <Skeleton className="h-72" />
       </PilotThemeRoot>
     );
 
   return (
-    <PilotThemeRoot className="-m-6 min-h-screen bg-pilot-grey-50">
+    <PilotThemeRoot bleed className="min-h-screen bg-pilot-grey-50">
       {deleted ? (
         <div className="p-8">
           <PilotCard>

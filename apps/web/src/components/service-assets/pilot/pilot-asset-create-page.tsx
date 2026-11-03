@@ -524,7 +524,7 @@ export function PilotAssetCreatePage() {
   };
 
   return (
-    <PilotThemeRoot className="-m-6 min-h-screen bg-pilot-grey-50">
+    <PilotThemeRoot bleed className="min-h-screen bg-pilot-grey-50">
       <div className="border-b border-pilot-grey-200 bg-white px-8 py-5">
         <Link
           href={backToList.href}
