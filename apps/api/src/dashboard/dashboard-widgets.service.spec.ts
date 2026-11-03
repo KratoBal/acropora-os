@@ -184,6 +184,7 @@ describe("the layout", () => {
     assert.deepEqual(
       r.widgets.filter((w) => w.enabled).map((w) => w.widgetId),
       [
+        "attention",
         "tasks",
         "expected-arrivals",
         "stock-reconciliation",

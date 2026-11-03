@@ -10,6 +10,7 @@ import type {
   DashboardSettlementsWidgetData,
   DashboardStockReconciliationWidgetData,
   DashboardStockSyncOutboxWidgetData,
+  DashboardTasksWidgetData,
   DashboardWidgetId,
   DashboardWebshopOrdersWidgetData,
   DashboardWorksheetsWidgetData,
@@ -27,6 +28,7 @@ import type {
 export const ATTENTION_SOURCES = [
   "webshop-orders",
   "messages",
+  "tasks",
   "overdue-invoices",
   "missing-invoices",
   "incoming-invoices",
@@ -133,6 +135,18 @@ function itemsOf(widgetId: AttentionSource, data: unknown): Item[] {
           label: "Olvasatlan üzenet",
           count: d.total,
           href: "/uzenetek",
+          tone: "info",
+        },
+      ];
+    }
+    case "tasks": {
+      const d = data as DashboardTasksWidgetData;
+      return [
+        {
+          key: "open",
+          label: "Nyitott feladatom",
+          count: d.openCount,
+          href: "/feladataim",
           tone: "info",
         },
       ];
