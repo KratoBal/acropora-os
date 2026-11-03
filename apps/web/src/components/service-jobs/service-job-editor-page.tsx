@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Button, Input } from "@acropora/ui";
+import { Alert, Button, Input, PilotFileInput } from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
@@ -610,9 +610,8 @@ export function ServiceJobEditorPage({
                   bongeszo sajat fajlvalasztojat, es azzal a billentyuzetes
                   utat is. */}
               <div className="rounded-xl border border-dashed border-brand-200 bg-brand-50/40 px-4 py-5">
-                <input
+                <PilotFileInput
                   id="hibajegy-fajlok"
-                  type="file"
                   multiple
                   accept="image/jpeg,image/png,application/pdf"
                   className="text-sm"

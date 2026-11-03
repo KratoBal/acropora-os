@@ -11,6 +11,7 @@ import {
   Select,
   Skeleton,
   Textarea,
+  PilotFileInput,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -295,8 +296,7 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
               {canUpload ? (
                 <label className="text-sm">
                   <span className="sr-only">Logó feltöltése</span>
-                  <input
-                    type="file"
+                  <PilotFileInput
                     accept="image/png,image/jpeg,image/webp"
                     aria-label="Logó feltöltése"
                     disabled={uploading}
