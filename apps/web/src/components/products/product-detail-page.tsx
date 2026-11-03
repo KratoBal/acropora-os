@@ -13,6 +13,8 @@ import {
   Textarea,
 } from "@acropora/ui";
 import {
+  formatMoney,
+  formatPercent,
   hasPermission,
   PERMISSIONS,
   type ProductDetail,
@@ -54,21 +56,6 @@ const flag = (candidate: boolean | null | undefined) =>
     : candidate
       ? "Igen"
       : "Nem";
-// Same money-formatting convention used across the app's detail/list pages
-// (see e.g. product-list-page.tsx's formatHuf/formatStock, and the
-// formatMoney helpers in the purchasing pages): hu-HU grouped digits via
-// Intl/toLocaleString, currency as a plain trailing code. No standalone
-// currency is ever shown without an amount.
-const formatMoney = (
-  amount: string | null | undefined,
-  currency: string | null | undefined,
-): string => {
-  if (!amount) return "—";
-  const formatted = Number(amount).toLocaleString("hu-HU", {
-    maximumFractionDigits: 2,
-  });
-  return currency ? `${formatted} ${currencyLabel(currency)}` : formatted;
-};
 // Matches product-list-page.tsx's formatStock exactly, so the same
 // on-hand quantity reads identically on the list and detail pages.
 const formatStock = (candidate: string | null | undefined): string =>
@@ -436,7 +423,7 @@ function ProductExtensionEditor({
                 <div className="text-xs font-medium text-dusk-600">
                   <span>Bruttó ár</span>
                   <p className="mt-1 rounded-lg border border-dusk-100 bg-dusk-50 px-3 py-2 text-sm text-dusk-700">
-                    {formGrossPrice ?? "—"} Ft
+                    {formatMoney(formGrossPrice, "HUF", { fractionDigits: 2 })}
                   </p>
                 </div>
               </>
@@ -522,7 +509,9 @@ function ProductExtensionEditor({
             <div>
               <dt className="text-dusk-400">Beszerzési deviza</dt>
               <dd className="mt-1 text-dusk-700">
-                {value(extension?.defaultPurchaseCurrency)}
+                {extension?.defaultPurchaseCurrency
+                  ? currencyLabel(extension.defaultPurchaseCurrency)
+                  : "—"}
               </dd>
             </div>
             {isHufCurrency(extension?.defaultPurchaseCurrency) ? (
@@ -530,39 +519,40 @@ function ProductExtensionEditor({
                 <div>
                   <dt className="text-dusk-400">Utolsó beszerzési nettó ár</dt>
                   <dd className="mt-1 text-dusk-700">
-                    {value(extension?.lastPurchaseNetPrice)}
+                    {formatMoney(extension?.lastPurchaseNetPrice, "HUF", {
+                      fractionDigits: 2,
+                    })}
                   </dd>
                 </div>
                 <div>
                   <dt className="text-dusk-400">Utolsó beszerzési ÁFA</dt>
                   <dd className="mt-1 text-dusk-700">
-                    {extension?.lastPurchaseVatRate
-                      ? `${extension.lastPurchaseVatRate}%`
-                      : "—"}
+                    {formatPercent(extension?.lastPurchaseVatRate)}
                   </dd>
                 </div>
                 <div>
                   <dt className="text-dusk-400">Utolsó beszerzési bruttó ár</dt>
                   <dd className="mt-1 text-dusk-700">
-                    {value(
+                    {formatMoney(
                       computeGrossPrice(
                         extension?.lastPurchaseNetPrice,
                         extension?.lastPurchaseVatRate,
                       ),
+                      "HUF",
+                      { fractionDigits: 2 },
                     )}
                   </dd>
                 </div>
               </>
             ) : (
               <div>
-                <dt className="text-dusk-400">
-                  Utolsó beszerzési ár
-                  {extension?.defaultPurchaseCurrency
-                    ? ` (${extension.defaultPurchaseCurrency})`
-                    : ""}
-                </dt>
+                <dt className="text-dusk-400">Utolsó beszerzési ár</dt>
                 <dd className="mt-1 text-dusk-700">
-                  {value(extension?.lastPurchaseNetPrice)}
+                  {formatMoney(
+                    extension?.lastPurchaseNetPrice,
+                    extension?.defaultPurchaseCurrency,
+                    { fractionDigits: 2 },
+                  )}
                 </dd>
               </div>
             )}
@@ -801,6 +791,7 @@ export function ProductDetailPage({ productId }: { productId: string }) {
               {formatMoney(
                 primaryPurchaseExtension.lastPurchaseNetPrice,
                 primaryPurchaseExtension.defaultPurchaseCurrency,
+                { fractionDigits: 2 },
               )}
             </PilotDataItem>
             <PilotDataItem label="Minimum">
@@ -935,18 +926,21 @@ export function ProductDetailPage({ productId }: { productId: string }) {
           {formatMoney(
             product.unasMirror.netPrice,
             product.unasMirror.currency,
+            { fractionDigits: 2 },
           )}
         </PilotDataItem>
         <PilotDataItem label="Bruttó ár">
           {formatMoney(
             product.unasMirror.grossPrice,
             product.unasMirror.currency,
+            { fractionDigits: 2 },
           )}
         </PilotDataItem>
         <PilotDataItem label="Akciós bruttó ár">
           {formatMoney(
             product.unasMirror.saleGrossPrice,
             product.unasMirror.currency,
+            { fractionDigits: 2 },
           )}
         </PilotDataItem>
         <PilotDataItem
@@ -971,6 +965,7 @@ export function ProductDetailPage({ productId }: { productId: string }) {
           {formatMoney(
             primaryPurchaseExtension?.lastPurchaseNetPrice,
             primaryPurchaseExtension?.defaultPurchaseCurrency,
+            { fractionDigits: 2 },
           )}
         </PilotDataItem>
         {/*
