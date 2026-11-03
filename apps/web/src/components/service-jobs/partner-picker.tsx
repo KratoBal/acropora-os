@@ -73,7 +73,9 @@ export function PartnerPicker({
   /**
    * A KÉPERNYŐ STÍLUSA. A közös választót rajzolja mindkettő (nyíllal, a lap többi mezőjével
    * egyező kerettel), nem natív `<select>`: a `pilot` a Pilot-oldalak mezőit követi, a `dusk`
-   * az űrlap-oldalakét. Az alapérték a régi (`dusk`), tehát a meglévő hívók nem változnak.
+   * az űrlap-oldalakét. Az alapérték `dusk`: a meglévő hívók a közös form-mezőt kapják, a régi,
+   * kicsi natív select helyett (h-10, teljes szélességű, saját nyíl), tehát a kinézetük és a
+   * szélességük VÁLTOZIK (a felhasználó-szerkesztő és a két régi hibajegy-lap mezője).
    */
   variant?: "dusk" | "pilot";
 }) {
