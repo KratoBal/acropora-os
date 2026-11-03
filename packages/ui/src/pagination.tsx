@@ -67,6 +67,10 @@ export function Pagination({
       aria-label={position === "top" ? "Lapozás, felül" : "Lapozás, alul"}
       className={cn(
         "flex items-center gap-1",
+        // A SZÁMOZOTT változatok MINDEN oldalszámot kiírnak (16 oldal = 16 gomb): keskeny
+        // képernyőn sorba törnek, különben a lap szélesebb lesz a telefonnál (613 px a 390 helyett).
+        (variant === "numberedGrey" || variant === "numberedTeal") &&
+          "flex-wrap",
         position === "bottom"
           ? variant === "directionF"
             ? "justify-end gap-2"
