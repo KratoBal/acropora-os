@@ -311,7 +311,9 @@ export function PosTerminalPage() {
                   <div className="text-right">
                     <p className="text-sm font-semibold text-dusk-900">
                       {product.grossPrice
-                        ? formatMoney(product.grossPrice, "HUF")
+                        ? formatMoney(product.grossPrice, "HUF", {
+                            fractionDigits: 2,
+                          })
                         : "Nincs ár"}
                     </p>
                     <p className="text-xs text-dusk-500">
@@ -356,7 +358,7 @@ export function PosTerminalPage() {
                     </p>
                   </div>
                   <p className="font-semibold text-dusk-900">
-                    {formatMoney(sale.totalGross, "HUF")}
+                    {formatMoney(sale.totalGross, "HUF", { fractionDigits: 2 })}
                   </p>
                 </button>
               ))}
@@ -459,6 +461,7 @@ export function PosTerminalPage() {
                             line.quantity *
                             (1 - line.discountPercent / 100),
                           "HUF",
+                          { fractionDigits: 2 },
                         )}
                       </p>
                     </div>
@@ -487,7 +490,7 @@ export function PosTerminalPage() {
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-dusk-500">Fizetendő</span>
                   <span className="text-lg font-bold text-dusk-900">
-                    {formatMoney(totalGross, "HUF")}
+                    {formatMoney(totalGross, "HUF", { fractionDigits: 2 })}
                   </span>
                 </div>
               </div>

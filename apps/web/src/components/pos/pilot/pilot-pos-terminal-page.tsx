@@ -808,7 +808,9 @@ export function PilotPosTerminalPage() {
                   <span className="shrink-0 whitespace-nowrap text-right">
                     <span className="block text-[13px] font-semibold tabular-nums text-pilot-grey-900">
                       {product.grossPrice
-                        ? formatMoney(product.grossPrice, "HUF")
+                        ? formatMoney(product.grossPrice, "HUF", {
+                            fractionDigits: 2,
+                          })
                         : "Nincs ár"}
                     </span>
                     <span
@@ -871,7 +873,9 @@ export function PilotPosTerminalPage() {
                       </span>
                     </span>
                     <span className="whitespace-nowrap text-xs font-semibold tabular-nums text-pilot-grey-900">
-                      {formatMoney(sale.totalGross, "HUF")}
+                      {formatMoney(sale.totalGross, "HUF", {
+                        fractionDigits: 2,
+                      })}
                     </span>
                     <span aria-hidden="true" className="text-pilot-grey-600">
                       ›
@@ -971,6 +975,7 @@ export function PilotPosTerminalPage() {
                             line.quantity *
                             (1 - line.discountPercent / 100),
                           "HUF",
+                          { fractionDigits: 2 },
                         )}
                       </p>
                     </div>
@@ -995,14 +1000,14 @@ export function PilotPosTerminalPage() {
                 <div className="flex items-center justify-end gap-2 text-[11px]">
                   <span className="text-pilot-grey-600">Részösszeg</span>
                   <span className="whitespace-nowrap font-medium tabular-nums text-pilot-grey-900">
-                    {formatMoney(subtotalGross, "HUF")}
+                    {formatMoney(subtotalGross, "HUF", { fractionDigits: 2 })}
                   </span>
                 </div>
               </div>
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs text-pilot-grey-600">Fizetendő</span>
                 <p className="text-[26px] font-semibold leading-tight tabular-nums text-pilot-grey-900">
-                  {formatMoney(payableGross, "HUF")}
+                  {formatMoney(payableGross, "HUF", { fractionDigits: 2 })}
                 </p>
               </div>
               <div>
@@ -1067,7 +1072,7 @@ export function PilotPosTerminalPage() {
                     onClick={sendToInvoice}
                     disabled={cart.length === 0 || missingVat.length > 0}
                   >
-                    {`Tovább a számlához · ${formatMoney(payableGross, "HUF")}`}
+                    {`Tovább a számlához · ${formatMoney(payableGross, "HUF", { fractionDigits: 2 })}`}
                   </PilotButton>
                 </div>
               ) : !invoicing && canManage ? (
@@ -1083,7 +1088,7 @@ export function PilotPosTerminalPage() {
                   >
                     {checkingOut
                       ? "Fizetés folyamatban…"
-                      : `Fizetés · ${formatMoney(totalGross, "HUF")}`}
+                      : `Fizetés · ${formatMoney(totalGross, "HUF", { fractionDigits: 2 })}`}
                   </PilotButton>
                 </div>
               ) : null}
