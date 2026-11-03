@@ -133,7 +133,7 @@ describe("countLineColumns", () => {
     expect(screen.getByText("-3")).toBeTruthy();
   });
 
-  it("keeps the fixed widths inside the table minimum", () => {
+  it("leaves the flexible product column at least 200 px at the table minimum", () => {
     for (const status of ["UPLOADED", "CORRECTED"] as const) {
       const sum = countLineColumns({
         status,
@@ -145,7 +145,8 @@ describe("countLineColumns", () => {
       })
         .map((column) => Number.parseInt(column.width ?? "0", 10))
         .reduce((a, b) => a + b, 0);
-      expect(sum).toBeLessThanOrEqual(COUNT_LINE_TABLE_MIN_WIDTH);
+      // The product name is the one flexible column: at the minimum it still needs room.
+      expect(sum + 200).toBeLessThanOrEqual(COUNT_LINE_TABLE_MIN_WIDTH);
     }
   });
 });

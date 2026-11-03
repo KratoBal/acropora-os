@@ -375,6 +375,11 @@ export function PilotDataTable<Row>({
             const active = Boolean(
               onRowActivate && (rowCanActivate?.(row) ?? true),
             );
+            // A row class that sets its own background replaces the default white: `cn` is a plain
+            // join, so two background classes on one row would be settled by the stylesheet order.
+            // (A `!bg-...` or a `hover:bg-...` class is not a plain background and does not count.)
+            const extraClass = rowClassName?.(row) ?? "";
+            const bg = /(^|\s)bg-/.test(extraClass) ? "" : "bg-white";
             return (
               <tr
                 key={rowKey(row)}
@@ -385,11 +390,11 @@ export function PilotDataTable<Row>({
                 onKeyDown={active ? onKeyDown(row) : undefined}
                 className={`${
                   active
-                    ? "cursor-pointer bg-white transition-colors hover:bg-pilot-grey-50 focus:bg-pilot-grey-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pilot-aqua-600"
+                    ? `cursor-pointer ${bg} transition-colors hover:bg-pilot-grey-50 focus:bg-pilot-grey-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pilot-aqua-600`
                     : onRowActivate
-                      ? "bg-white text-pilot-grey-500"
-                      : "bg-white"
-                } md:h-[72px] max-md:block max-md:rounded-lg max-md:border max-md:border-pilot-grey-200 max-md:p-4 ${rowClassName?.(row) ?? ""}`}
+                      ? `${bg} text-pilot-grey-500`
+                      : bg
+                } md:h-[72px] max-md:block max-md:rounded-lg max-md:border max-md:border-pilot-grey-200 max-md:p-4 ${extraClass}`}
               >
                 {columns.map((column) => (
                   <td

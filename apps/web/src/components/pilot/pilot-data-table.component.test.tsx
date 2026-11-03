@@ -163,3 +163,56 @@ describe("a PilotDataTable sor billentyű-aktiválása", () => {
     expect(nemTiltott).toBe(true);
   });
 });
+
+/*
+  A SOR SAJÁT HÁTTERE FELÜLÍRJA A FEHÉRET (2040, barracuda észrevétele). A `bg-white` és a hívó
+  `bg-amber-50` osztálya egy soron kettő lenne, és a nyertest a generált CSS sorrendje döntené.
+  MI PIROSÍT: ha a kiemelt sor osztálylistájában ott marad a `bg-white`, vagy ha a kiemelés nélküli
+  sor elveszíti. A `!bg-...` (felülíró) és a `hover:bg-...` nem sima háttér, azok mellett a fehér marad.
+*/
+describe("PilotDataTable row background", () => {
+  const sorok: Sor[] = [
+    { id: "a", szam: "SZ-1", datum: "d", osszeg: "o" },
+    { id: "b", szam: "SZ-2", datum: "d", osszeg: "o" },
+  ];
+  const osztalyok = (
+    rowClassName: (r: Sor) => string,
+    onRowActivate?: (r: Sor) => void,
+  ) => {
+    const { container } = render(
+      <PilotDataTable
+        columns={[SZAM]}
+        rows={sorok}
+        rowKey={(r) => r.id}
+        rowClassName={rowClassName}
+        onRowActivate={onRowActivate}
+      />,
+    );
+    return [...container.querySelectorAll("tbody tr")].map((tr) =>
+      tr.className.split(/\s+/),
+    );
+  };
+
+  it("drops the default white on a row that sets its own background", () => {
+    const [kiemelt, sima] = osztalyok((r) =>
+      r.id === "a" ? "bg-amber-50" : "",
+    );
+    expect(kiemelt).toContain("bg-amber-50");
+    expect(kiemelt).not.toContain("bg-white");
+    expect(sima).toContain("bg-white");
+  });
+
+  it("does the same on a clickable row", () => {
+    const [kiemelt, sima] = osztalyok(
+      (r) => (r.id === "a" ? "bg-amber-50" : ""),
+      () => undefined,
+    );
+    expect(kiemelt).not.toContain("bg-white");
+    expect(sima).toContain("bg-white");
+  });
+
+  it("keeps the white next to an important or variant background", () => {
+    const [kiemelt] = osztalyok(() => "!bg-pilot-amber-50 hover:bg-red-50");
+    expect(kiemelt).toContain("bg-white");
+  });
+});

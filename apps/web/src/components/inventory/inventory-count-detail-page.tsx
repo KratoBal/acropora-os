@@ -42,7 +42,7 @@ const STATUS_BADGE: Record<
 
 type CountLine = InventoryCountDetail["lines"][number];
 
-export const COUNT_LINE_TABLE_MIN_WIDTH = 760;
+export const COUNT_LINE_TABLE_MIN_WIDTH = 960;
 
 /** A line the count has not reached yet: only an uploaded or corrected count has them. */
 export function isPendingLine(
