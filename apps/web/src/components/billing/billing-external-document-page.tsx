@@ -27,7 +27,11 @@ import { billingDocumentsApi } from "@/lib/api/billing-documents";
 import { BILLING_LIST_PATH, formatDay } from "./billing-document-table";
 import { formatMoney, trimDecimal } from "./billing-editor-state";
 import { OWN_MARK_SOURCE_LABELS, PaymentBadge } from "./billing-payment";
-import { PaperOriginalControl } from "./billing-paper-original";
+import { BillingDetailHeader } from "./billing-detail-header";
+import {
+  PaperOriginalButton,
+  PaperOriginalPill,
+} from "./billing-paper-original";
 import { pdfMissingText } from "./billing-pdf-state";
 
 /** Az áfakulcs, ahogy a számlán áll: szám mellé %, a jelölés (AAM, TAM) magában. */
@@ -151,39 +155,41 @@ export function BillingExternalDocumentPage({
         Vissza a listához
       </Link>
 
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0">
-          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.05em] text-pilot-accent-warm-text">
+      <BillingDetailHeader
+        eyebrow={
+          <>
             {detail.kindLabel} · {INVOICE_FORMAT_LABELS[detail.invoiceFormat]}
-          </p>
-          <h1 className="text-[28px] font-semibold leading-[34px] text-pilot-grey-900">
-            {detail.documentNumber}
-          </h1>
-          <p className="mt-2 text-sm text-pilot-grey-600">
-            {detail.customer.name}
-          </p>
-        </div>
-        <div className="flex flex-col items-start gap-2 lg:items-end">
-          <ExternalBadge source={detail.source} />
-          {detail.cancelled ? (
-            <span className="rounded-full bg-pilot-red-50 px-2.5 py-1 text-xs font-semibold text-pilot-red-700">
-              Sztornózott
-            </span>
-          ) : null}
-          <PaperOriginalControl
-            marked={detail.paperOriginal}
-            canManage={canManageFinance}
-            onToggle={(marked) =>
-              billingDocumentsApi.setExternalPaperOriginal(
-                token,
-                documentId,
-                marked,
-              )
-            }
-            onSaved={setDetail}
-          />
-        </div>
-      </header>
+          </>
+        }
+        title={detail.documentNumber}
+        subtitle={detail.customer.name}
+        status={
+          <>
+            <ExternalBadge source={detail.source} />
+            {detail.cancelled ? (
+              <span className="rounded-full bg-pilot-red-50 px-2.5 py-1 text-xs font-semibold text-pilot-red-700">
+                Sztornózott
+              </span>
+            ) : null}
+            <PaperOriginalPill marked={detail.paperOriginal} />
+          </>
+        }
+        actions={
+          canManageFinance ? (
+            <PaperOriginalButton
+              marked={detail.paperOriginal}
+              onToggle={(marked) =>
+                billingDocumentsApi.setExternalPaperOriginal(
+                  token,
+                  documentId,
+                  marked,
+                )
+              }
+              onSaved={setDetail}
+            />
+          ) : null
+        }
+      />
 
       <Alert
         variant="info"

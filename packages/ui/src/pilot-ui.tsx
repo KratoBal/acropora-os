@@ -260,6 +260,8 @@ export function PilotButton({
   size = "md",
   "aria-label": ariaLabel,
   "aria-pressed": ariaPressed,
+  "aria-expanded": ariaExpanded,
+  "aria-controls": ariaControls,
   title,
 }: {
   children: ReactNode;
@@ -282,6 +284,9 @@ export function PilotButton({
    * gomb attribútum nélkül marad, mint eddig.
    */
   "aria-pressed"?: boolean;
+  /** ADDITÍV: a lenyitó gombhoz (pl. „Továbbiak”), és hogy mit nyit. Elhagyva a gomb attribútum nélkül marad. */
+  "aria-expanded"?: boolean;
+  "aria-controls"?: string;
 }) {
   const base = `inline-flex items-center justify-center gap-1.5 rounded-md transition-all duration-100 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${fullWidth ? "w-full" : ""}`;
   /*
@@ -331,6 +336,8 @@ export function PilotButton({
       disabled={disabled}
       aria-label={ariaLabel}
       aria-pressed={ariaPressed}
+      aria-expanded={ariaExpanded}
+      aria-controls={ariaControls}
       title={title}
     >
       {children}
