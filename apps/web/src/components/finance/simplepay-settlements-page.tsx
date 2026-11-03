@@ -100,10 +100,10 @@ function lineResolution(line: SimplePayTransactionLine) {
 
 /** Why the Gmail pull does not run, said on the page (the Foxpost lesson). */
 const SYNC_OFF: Record<Exclude<SimplePaySyncState, "ENABLED">, string> = {
-  DISABLED_NOT_SET: "a kapcsoló (GMAIL_SIMPLEPAY_SYNC_ENABLED) nincs beállítva",
-  DISABLED_OFF: "a kapcsoló (GMAIL_SIMPLEPAY_SYNC_ENABLED) értéke false",
+  DISABLED_NOT_SET: "a Gmail-feldolgozás kapcsolója nincs beállítva",
+  DISABLED_OFF: "a Gmail-feldolgozás kapcsolója értéke false",
   DISABLED_UNRECOGNISED:
-    "a kapcsoló (GMAIL_SIMPLEPAY_SYNC_ENABLED) értéke se nem true, se nem false",
+    "a Gmail-feldolgozás kapcsolója értéke se nem true, se nem false",
   NO_KEY: "be van kapcsolva, de nincs Gmail-kulcs",
 };
 

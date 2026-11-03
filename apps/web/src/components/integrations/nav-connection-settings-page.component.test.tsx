@@ -71,6 +71,25 @@ describe("NavConnectionSettingsPage", () => {
     expect(api.get).toHaveBeenCalledWith("token-OWNER", expect.anything());
   });
 
+  it("shows a failed verification as a sentence, with the raw code only in the tooltip", async () => {
+    api.get.mockResolvedValue({
+      ...configuredView,
+      verification: {
+        status: "FAILED",
+        checkedAt: "2026-07-30T10:00:00.000Z",
+        code: "NAV_CONNECTION_AUTH_REJECTED",
+      },
+    });
+    render(<NavConnectionSettingsPage />);
+    const sentence = await screen.findByText(
+      "A NAV elutasította a bejelentkezést. Ellenőrizd a hozzáférési adatokat.",
+    );
+    expect(sentence.getAttribute("title")).toBe("NAV_CONNECTION_AUTH_REJECTED");
+    expect(
+      screen.queryByText("NAV_CONNECTION_AUTH_REJECTED"),
+    ).not.toBeInTheDocument();
+  });
+
   it("saves the full credential set and clears every field", async () => {
     api.replaceCredential.mockResolvedValue(configuredView);
     render(<NavConnectionSettingsPage />);

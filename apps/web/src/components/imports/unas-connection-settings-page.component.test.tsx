@@ -70,6 +70,27 @@ describe("UnasConnectionSettingsPage", () => {
     expect(api.get).toHaveBeenCalledWith("token-OWNER", expect.anything());
   });
 
+  it("shows a failed verification as a sentence, with the raw code only in the tooltip", async () => {
+    api.get.mockResolvedValue({
+      ...configuredView,
+      verification: {
+        status: "STALE",
+        checkedAt: "2026-07-20T10:00:00.000Z",
+        code: "UNAS_CONNECTION_VERIFICATION_STALE",
+      },
+    });
+    render(<UnasConnectionSettingsPage />);
+    const sentence = await screen.findByText(
+      "Az utolsó ellenőrzés régi (több mint egy napja). Tesztelj újra.",
+    );
+    expect(sentence.getAttribute("title")).toBe(
+      "UNAS_CONNECTION_VERIFICATION_STALE",
+    );
+    expect(
+      screen.queryByText("UNAS_CONNECTION_VERIFICATION_STALE"),
+    ).not.toBeInTheDocument();
+  });
+
   it("saves a new API key and shows the updated status", async () => {
     api.get.mockResolvedValue(notConfiguredView);
     api.replaceCredential.mockResolvedValue(configuredView);
