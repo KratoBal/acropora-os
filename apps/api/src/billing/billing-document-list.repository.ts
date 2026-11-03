@@ -328,21 +328,29 @@ export async function orderBuyerNamesByOrderNumber(
 }
 
 /**
- * A keresőszóra illeszkedő vevőnevű webshop-rendelések számai, `UNAS-` előtag nélkül: ahogy a külső
- * számla `orderNumber`-je áll (`orderBuyerNamesByOrderNumber` fordítottja). Keresőszó nélkül üres.
+ * A keresőszóra illeszkedő vevőnevű webshop-rendelések számai, `UNAS-` előtag nélkül, ahogy a külső számla
+ * `orderNumber`-je áll (`orderBuyerNamesByOrderNumber` fordítottja), CSAK azok, amelyekhez van külső számla.
+ * Keresőszó nélkül üres.
+ *
+ * MIÉRT EGY ADATBÁZIS-OLDALI ÖSSZEKAPCSOLÁS, ÉS NEM A RENDELÉSEK LISTÁJA (barracuda a #2019-en, mérve 2026-11-03
+ * egy helyi adatbázison 60 000 rendeléssel): a Prisma 6 az `in` lista minden elemét külön paraméterként küldi, és
+ * egy rövid keresőszóra a rendelések nagy része illeszkedik. Az első változat így `too many bind variables in
+ * prepared statement, expected maximum of 32767` hibát adott. Az összekapcsolás után a lista legfeljebb a
+ * rendelésszámos külső számlák száma (élesen ma 128 külső sor van összesen). Csonkítás nincs: az néma hiány lenne.
  */
 export async function orderNumbersByBuyerName(
-  database: typeof prisma,
+  database: Pick<typeof prisma, "$queryRaw">,
   q: string | undefined,
 ): Promise<string[]> {
   const text = q?.trim();
   if (!text) return [];
-  const orders = await database.salesOrder.findMany({
-    where: {
-      orderNumber: { startsWith: "UNAS-" },
-      buyerName: { contains: text, mode: "insensitive" },
-    },
-    select: { orderNumber: true },
-  });
-  return orders.map((order) => order.orderNumber.slice("UNAS-".length));
+  // a `contains` szöveg, nem minta: a % és a _ is betű szerint illeszkedjen
+  const pattern = `%${text.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+  const rows = await database.$queryRaw<{ orderNumber: string }[]>`
+    SELECT DISTINCT e."orderNumber"
+      FROM "ExternalBillingDocument" e
+      JOIN "SalesOrder" o ON o."orderNumber" = 'UNAS-' || e."orderNumber"
+     WHERE e."orderNumber" IS NOT NULL
+       AND o."buyerName" ILIKE ${pattern}`;
+  return rows.map((row) => row.orderNumber);
 }

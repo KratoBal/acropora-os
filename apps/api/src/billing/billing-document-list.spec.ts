@@ -1097,31 +1097,33 @@ describe("the search finds an external invoice by the name the list shows", () =
     );
   });
 
-  it("the order lookup strips the UNAS- prefix, and asks nothing without a query", async () => {
-    const asked: unknown[] = [];
+  it("the order lookup is one joined query with the text as a literal pattern, and asks nothing without a query", async () => {
+    const asked: { sql: string; values: unknown[] }[] = [];
     const database = {
-      salesOrder: {
-        findMany: async (args: unknown) => {
-          asked.push(args);
-          return [{ orderNumber: "UNAS-47679-558779" }];
-        },
+      $queryRaw: async (
+        strings: TemplateStringsArray,
+        ...values: unknown[]
+      ) => {
+        asked.push({ sql: strings.join("?"), values });
+        return [{ orderNumber: "47679-558779" }];
       },
     } as never;
     assert.deepEqual(await orderNumbersByBuyerName(database, "  zaubek "), [
       "47679-558779",
     ]);
-    assert.deepEqual(asked, [
-      {
-        where: {
-          orderNumber: { startsWith: "UNAS-" },
-          buyerName: { contains: "zaubek", mode: "insensitive" },
-        },
-        select: { orderNumber: true },
-      },
-    ]);
+    assert.deepEqual(asked[0]!.values, ["%zaubek%"]);
+    // the join to the external invoices bounds the list (barracuda on #2019: an IN of every order hit the
+    // 32 767 bind-variable limit on 60 000 orders, measured)
+    assert.match(
+      asked[0]!.sql,
+      /JOIN "SalesOrder" o ON o\."orderNumber" = 'UNAS-' \|\| e\."orderNumber"/,
+    );
+    // a % or _ in the search is a character, not a wildcard
+    await orderNumbersByBuyerName(database, "50%_x");
+    assert.deepEqual(asked[1]!.values, ["%50\\%\\_x%"]);
     assert.deepEqual(await orderNumbersByBuyerName(database, "   "), []);
     assert.deepEqual(await orderNumbersByBuyerName(database, undefined), []);
-    assert.equal(asked.length, 1);
+    assert.equal(asked.length, 2);
   });
 
   it("the list passes the order numbers of the query to the external filter", async () => {
@@ -1139,10 +1141,8 @@ describe("the search finds an external invoice by the name the list shows", () =
       },
       simplePayTransactionLine: { findMany: async () => [] },
       outgoingPaymentMark: { findMany: async () => [] },
-      salesOrder: {
-        findMany: async (args: { where?: { buyerName?: unknown } }) =>
-          args.where?.buyerName ? [{ orderNumber: "UNAS-47679-558779" }] : [],
-      },
+      salesOrder: { findMany: async () => [] },
+      $queryRaw: async () => [{ orderNumber: "47679-558779" }],
     };
     await repository.list({ page: 1, pageSize: 25, q: "zaubek" });
     assert.ok(
