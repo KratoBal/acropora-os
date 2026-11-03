@@ -116,7 +116,7 @@ import {
 type WorksheetVersionRow = WorksheetDetail["versions"][number];
 
 export const WORKSHEET_LINE_TABLE_MIN_WIDTH = 640;
-export const WORKSHEET_VERSION_TABLE_MIN_WIDTH = 860;
+export const WORKSHEET_VERSION_TABLE_MIN_WIDTH = 920;
 
 /*
   A MUNKALAP TÁBLÁI A KÖZÖS TÁBLÁN (UI-áttekintés, 3. csomag, 2026-11-03). A munkalapot a szerelő
