@@ -1,6 +1,13 @@
 "use client";
 
-import { Alert, Button, Card, CardContent, CardHeader } from "@acropora/ui";
+import {
+  Alert,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  PilotDateField,
+} from "@acropora/ui";
 import type {
   PurchaseInvoiceDetail,
   UpdatePurchaseInvoiceInput,
@@ -97,10 +104,8 @@ export function PurchaseInvoiceEditForm({
           </label>
           <label className="text-xs text-dusk-500">
             Kelte
-            <input
-              type="date"
+            <PilotDateField
               aria-label="Kelte"
-              className={FIELD}
               value={invoiceDate}
               disabled={foreign}
               title={
@@ -108,7 +113,7 @@ export function PurchaseInvoiceEditForm({
                   ? "Devizás számla kelte nem módosítható: az árfolyam ebből készült."
                   : undefined
               }
-              onChange={(e) => setInvoiceDate(e.target.value)}
+              onChange={(nextValue) => setInvoiceDate(nextValue)}
             />
             {!foreign && invoiceDate !== dayOf(detail.invoiceDate) ? (
               <span className="mt-1 block text-amber-700">
@@ -119,11 +124,9 @@ export function PurchaseInvoiceEditForm({
           </label>
           <label className="text-xs text-dusk-500">
             Fizetési határidő
-            <input
-              type="date"
-              className={FIELD}
+            <PilotDateField
               value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
+              onChange={(nextValue) => setDueDate(nextValue)}
             />
           </label>
           <div className="flex items-end gap-3">
@@ -138,11 +141,9 @@ export function PurchaseInvoiceEditForm({
             {isPaid ? (
               <label className="flex-1 text-xs text-dusk-500">
                 Fizetés napja
-                <input
-                  type="date"
-                  className={FIELD}
+                <PilotDateField
                   value={paidAt}
-                  onChange={(e) => setPaidAt(e.target.value)}
+                  onChange={(nextValue) => setPaidAt(nextValue)}
                 />
               </label>
             ) : null}

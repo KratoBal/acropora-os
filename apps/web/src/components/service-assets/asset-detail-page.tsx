@@ -12,6 +12,7 @@ import {
   Select,
   Skeleton,
   Textarea,
+  PilotDateField,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -873,13 +874,10 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                       </Select>
                     </FormField>
                     <FormField label="Következő karbantartás">
-                      <Input
-                        type="date"
+                      <PilotDateField
                         aria-label="Következő karbantartás"
                         value={nextServiceAt}
-                        onChange={(event) =>
-                          setNextServiceAt(event.target.value)
-                        }
+                        onChange={(nextValue) => setNextServiceAt(nextValue)}
                       />
                     </FormField>
                     <FormField label="Belső megjegyzés">
