@@ -2200,10 +2200,10 @@ describe("the proforma on the Fizetés card", () => {
     );
     const dialog = screen.getByRole("dialog", { name: "Utalás beérkezett" });
     expect(dialog.textContent).toMatch(/20\s?840/);
-    const day = within(dialog).getByLabelText(
-      "A jóváírás napja",
-    ) as HTMLInputElement;
-    expect(day.value).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    const day = within(dialog).getByRole("textbox", {
+      name: "A jóváírás napja",
+    }) as HTMLInputElement;
+    expect(day.value).toMatch(/^\d{4}\. \d{2}\. \d{2}\.$/);
     const save = within(dialog).getByRole("button", { name: "Mentés" });
     expect((save as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(within(dialog).getByLabelText("Banki hivatkozás"), {
@@ -2214,7 +2214,14 @@ describe("the proforma on the Fizetés card", () => {
     expect(api.recordTransferReceived).toHaveBeenCalledWith(
       "token",
       "order_38",
-      { receivedOn: day.value, reference: "OTP 0013" },
+      {
+        // The field shows the Hungarian form; the API gets the ISO day.
+        receivedOn: day.value.replace(
+          /^(\d{4})\. (\d{2})\. (\d{2})\.$/,
+          "$1-$2-$3",
+        ),
+        reference: "OTP 0013",
+      },
     );
   });
 
