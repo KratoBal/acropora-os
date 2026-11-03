@@ -368,7 +368,7 @@ describe("ProductDetailPage mirror ownership", () => {
       .closest("section") as HTMLElement;
     const field = (label: string) =>
       within(stockCard).getByText(label).parentElement?.textContent;
-    expect(field("Beszerzár")).toBe("Beszerzár10 EUR");
+    expect(field("Beszerzár")).toBe("Beszerzár10,00 EUR");
     expect(field("Minimum")).toBe("Minimum2");
     expect(field("Optimális")).toBe("Optimális8");
     expect(field("Újrarendelési pont")).toBe("Újrarendelési pont3");
@@ -645,8 +645,11 @@ describe("ProductDetailPage mirror ownership", () => {
     render(<ProductDetailPage productId="product-1" />);
     await screen.findByText("UNAS terméktükör");
 
-    expect(screen.getByText("Utolsó beszerzési ár (EUR)")).toBeInTheDocument();
-    expect(screen.getByText("10")).toBeInTheDocument();
+    // the currency rides on the amount now, not on the label (T1.5)
+    expect(screen.getByText("Utolsó beszerzési ár")).toBeInTheDocument();
+    expect(
+      screen.getByText("Utolsó beszerzési ár").nextElementSibling?.textContent,
+    ).toBe("10,00 EUR");
     expect(
       screen.queryByText("Utolsó beszerzési nettó ár"),
     ).not.toBeInTheDocument();
@@ -658,11 +661,18 @@ describe("ProductDetailPage mirror ownership", () => {
     await screen.findByText("UNAS terméktükör");
 
     expect(screen.getByText("Utolsó beszerzési nettó ár")).toBeInTheDocument();
-    expect(screen.getByText("1000")).toBeInTheDocument();
+    expect(
+      screen.getByText("Utolsó beszerzési nettó ár").nextElementSibling
+        ?.textContent,
+    ).toBe("1000 Ft");
     expect(screen.getByText("Utolsó beszerzési ÁFA")).toBeInTheDocument();
     expect(screen.getByText("27%")).toBeInTheDocument();
     expect(screen.getByText("Utolsó beszerzési bruttó ár")).toBeInTheDocument();
-    expect(screen.getByText("1270.00")).toBeInTheDocument();
+    // was the raw "1270.00" (T1.5): the computed gross goes through the formatter
+    expect(
+      screen.getByText("Utolsó beszerzési bruttó ár").nextElementSibling
+        ?.textContent,
+    ).toBe("1270 Ft");
   });
 
   it("nem forintos devizánál egy mezőként menti az utolsó beszerzési árat", async () => {
@@ -704,7 +714,16 @@ describe("ProductDetailPage mirror ownership", () => {
     fireEvent.change(screen.getByLabelText("Utolsó beszerzési ÁFA"), {
       target: { value: "27" },
     });
-    expect(await screen.findByText("1270.00 Ft")).toBeInTheDocument();
+    await waitFor(() =>
+      // the edit form's computed gross (its label is a <span>), not the UNAS mirror's own
+      // "Bruttó ár", which can show the same amount and would make this a decoy
+      expect(
+        screen
+          .getAllByText("Bruttó ár")
+          .filter((label) => label.tagName === "SPAN")
+          .map((label) => label.nextElementSibling?.textContent),
+      ).toEqual(["1270 Ft"]),
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Mentés" }));
 
@@ -736,7 +755,7 @@ describe("ProductDetailPage mirror ownership", () => {
     // detail fixture: primarySku "SALT-1" variant extension has
     // lastPurchaseNetPrice "10" / defaultPurchaseCurrency "EUR".
     const field = findMirrorField("Utolsó beszerár");
-    expect(field.getByText("10 EUR")).toBeInTheDocument();
+    expect(field.getByText("10,00 EUR")).toBeInTheDocument();
   });
 
   it("az UNAS terméktükörben megjeleníti az Acropora OS készletet", async () => {

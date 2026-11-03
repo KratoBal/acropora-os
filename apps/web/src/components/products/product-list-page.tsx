@@ -14,6 +14,7 @@ import {
   type PilotTableColumn,
 } from "@acropora/ui";
 import {
+  formatMoney,
   hasPermission,
   PERMISSIONS,
   type CatalogOption,
@@ -44,11 +45,6 @@ import {
   type ProductActiveFilter,
   type ProductListUrlState,
 } from "@/lib/products/list-state";
-
-function formatHuf(value: string | null): string {
-  if (value === null) return "—";
-  return `${Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 })} Ft`;
-}
 
 /** "1–25 / 2 438": a látható sorok és az összes (Figma "Footer Count"). */
 function pageRange(pagination: ProductListResponse["pagination"]): string {
@@ -338,7 +334,7 @@ export function ProductListPage() {
       align: "right",
       cell: (product) => (
         <span className="text-pilot-grey-600">
-          {formatHuf(product.grossPrice)}
+          {formatMoney(product.grossPrice, "HUF", { fractionDigits: 2 })}
         </span>
       ),
     },
@@ -350,7 +346,7 @@ export function ProductListPage() {
       cell: (product) =>
         product.saleGrossPrice ? (
           <span className="font-semibold text-pilot-red-700">
-            {formatHuf(product.saleGrossPrice)}
+            {formatMoney(product.saleGrossPrice, "HUF", { fractionDigits: 2 })}
           </span>
         ) : (
           <span className="text-pilot-grey-400">—</span>

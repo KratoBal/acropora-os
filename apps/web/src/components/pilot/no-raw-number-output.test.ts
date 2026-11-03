@@ -55,14 +55,6 @@ const KIVETELEK = new Map<string, string>([
     "a vezérlőpult pénzügyi kártyái; kiváltás a számlázás-szeletben",
   ],
   [
-    "helyi-formazo:components/products/product-list-page.tsx",
-    "terméklista: helyi formatHuf; kiváltás a termék-szeletben",
-  ],
-  [
-    "helyi-formazo:components/products/product-detail-page.tsx",
-    "termék-adatlap: a #2079 helyi formatMoney-ja (forintot két tizedesre ír); kiváltás a termék-szeletben",
-  ],
-  [
     "helyi-formazo:components/quotes/quote-format.ts",
     "árajánlat: formatQuoteMoney és formatQuantity; kiváltás az árajánlat-szeletben",
   ],
@@ -72,7 +64,7 @@ const KIVETELEK = new Map<string, string>([
   ],
   [
     "toFixed:components/products/product-detail-page.tsx",
-    "termék-adatlap: a bruttó ár számolt szövege; a termék-szeletben",
+    "a bruttó beszerzési ár számolt értéke; a kiírás formatMoney-n át megy: marad",
   ],
   [
     "toFixed:components/purchasing/nav-incoming-invoice-list-page.tsx",
