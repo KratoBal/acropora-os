@@ -11,6 +11,7 @@ import {
   Skeleton,
 } from "@acropora/ui";
 import {
+  formatMoney,
   hasPermission,
   PERMISSIONS,
   type PosPaymentMethod,
@@ -28,10 +29,6 @@ const PAYMENT_METHOD_LABEL: Record<PosPaymentMethod, string> = {
   TRANSFER: "Utalás",
   CASH_DESK: "Kassza",
 };
-
-function formatHuf(value: string): string {
-  return `${Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 })} Ft`;
-}
 
 export function PosSaleDetailPage({ saleId }: { saleId: string }) {
   const { session } = useAuth();
@@ -144,19 +141,19 @@ export function PosSaleDetailPage({ saleId }: { saleId: string }) {
                 <div className="text-right">
                   <p className="text-dusk-400">Nettó</p>
                   <p className="font-semibold text-dusk-700">
-                    {formatHuf(detail.totalNet)}
+                    {formatMoney(detail.totalNet, "HUF", { fractionDigits: 2 })}
                   </p>
                 </div>
                 <div className="text-right">
                   <p className="text-dusk-400">ÁFA</p>
                   <p className="font-semibold text-dusk-700">
-                    {formatHuf(detail.totalTax)}
+                    {formatMoney(detail.totalTax, "HUF", { fractionDigits: 2 })}
                   </p>
                 </div>
                 <div className="text-right">
                   <p className="text-dusk-400">Bruttó</p>
                   <p className="text-lg font-bold text-dusk-900">
-                    {formatHuf(detail.totalGross)}
+                    {formatMoney(detail.totalGross, "HUF")}
                   </p>
                 </div>
               </div>
@@ -197,7 +194,9 @@ export function PosSaleDetailPage({ saleId }: { saleId: string }) {
                         {line.quantity} {line.unit}
                       </td>
                       <td className="px-4 py-3 text-right text-sm text-dusk-600">
-                        {formatHuf(line.unitNet)}
+                        {formatMoney(line.unitNet, "HUF", {
+                          fractionDigits: 2,
+                        })}
                       </td>
                       <td className="px-4 py-3 text-right text-sm text-dusk-600">
                         {line.taxRate}%
@@ -208,7 +207,7 @@ export function PosSaleDetailPage({ saleId }: { saleId: string }) {
                           : "—"}
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-semibold text-dusk-900">
-                        {formatHuf(line.lineGross)}
+                        {formatMoney(line.lineGross, "HUF")}
                       </td>
                       <td className="px-5 py-3">
                         <Badge

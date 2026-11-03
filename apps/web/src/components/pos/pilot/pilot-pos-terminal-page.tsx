@@ -2,6 +2,7 @@
 
 import { Alert, Icon, PageHeader, Skeleton, PilotSelect } from "@acropora/ui";
 import {
+  formatMoney,
   hasPermission,
   PERMISSIONS,
   POS_MANUAL_LINE_SKU,
@@ -146,10 +147,6 @@ const CASH_DESK_OPTION: { label: string; value: CheckoutChoice } = {
   label: "Kassza",
   value: "CASH_DESK",
 };
-
-function formatHuf(value: number): string {
-  return `${value.toLocaleString("hu-HU", { maximumFractionDigits: 2 })} Ft`;
-}
 
 function localDayRange(now = new Date()): {
   createdFrom: string;
@@ -811,7 +808,7 @@ export function PilotPosTerminalPage() {
                   <span className="shrink-0 whitespace-nowrap text-right">
                     <span className="block text-[13px] font-semibold tabular-nums text-pilot-grey-900">
                       {product.grossPrice
-                        ? formatHuf(Number(product.grossPrice))
+                        ? formatMoney(product.grossPrice, "HUF")
                         : "Nincs ár"}
                     </span>
                     <span
@@ -874,7 +871,7 @@ export function PilotPosTerminalPage() {
                       </span>
                     </span>
                     <span className="whitespace-nowrap text-xs font-semibold tabular-nums text-pilot-grey-900">
-                      {formatHuf(Number(sale.totalGross))}
+                      {formatMoney(sale.totalGross, "HUF")}
                     </span>
                     <span aria-hidden="true" className="text-pilot-grey-600">
                       ›
@@ -969,10 +966,11 @@ export function PilotPosTerminalPage() {
                         />
                       </div>
                       <p className="mt-1 text-right text-xs font-semibold leading-4 tabular-nums text-pilot-grey-900">
-                        {formatHuf(
+                        {formatMoney(
                           line.unitGross *
                             line.quantity *
                             (1 - line.discountPercent / 100),
+                          "HUF",
                         )}
                       </p>
                     </div>
@@ -997,14 +995,14 @@ export function PilotPosTerminalPage() {
                 <div className="flex items-center justify-end gap-2 text-[11px]">
                   <span className="text-pilot-grey-600">Részösszeg</span>
                   <span className="whitespace-nowrap font-medium tabular-nums text-pilot-grey-900">
-                    {formatHuf(subtotalGross)}
+                    {formatMoney(subtotalGross, "HUF")}
                   </span>
                 </div>
               </div>
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs text-pilot-grey-600">Fizetendő</span>
                 <p className="text-[26px] font-semibold leading-tight tabular-nums text-pilot-grey-900">
-                  {formatHuf(payableGross)}
+                  {formatMoney(payableGross, "HUF")}
                 </p>
               </div>
               <div>
@@ -1069,7 +1067,7 @@ export function PilotPosTerminalPage() {
                     onClick={sendToInvoice}
                     disabled={cart.length === 0 || missingVat.length > 0}
                   >
-                    {`Tovább a számlához · ${formatHuf(payableGross)}`}
+                    {`Tovább a számlához · ${formatMoney(payableGross, "HUF")}`}
                   </PilotButton>
                 </div>
               ) : !invoicing && canManage ? (
@@ -1085,7 +1083,7 @@ export function PilotPosTerminalPage() {
                   >
                     {checkingOut
                       ? "Fizetés folyamatban…"
-                      : `Fizetés · ${formatHuf(totalGross)}`}
+                      : `Fizetés · ${formatMoney(totalGross, "HUF")}`}
                   </PilotButton>
                 </div>
               ) : null}

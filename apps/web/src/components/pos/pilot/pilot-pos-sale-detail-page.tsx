@@ -9,6 +9,7 @@ import {
   type PilotTableColumn,
 } from "@acropora/ui";
 import {
+  formatMoney,
   hasPermission,
   PERMISSIONS,
   type PosPaymentMethod,
@@ -35,10 +36,6 @@ const PAYMENT_METHOD_LABEL: Record<PosPaymentMethod, string> = {
   TRANSFER: "Utalás",
   CASH_DESK: "Kassza",
 };
-
-function formatHuf(value: string): string {
-  return `${Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 })} Ft`;
-}
 
 function syncBadgeVariant(
   status: "OK" | "FAILED" | "PENDING",
@@ -100,7 +97,9 @@ export const SALE_LINE_COLUMNS: PilotTableColumn<SaleLine>[] = [
     align: "right",
     nowrap: true,
     cell: (line) => (
-      <span className="tabular-nums">{formatHuf(line.unitNet)}</span>
+      <span className="tabular-nums">
+        {formatMoney(line.unitNet, "HUF", { fractionDigits: 2 })}
+      </span>
     ),
   },
   {
@@ -130,7 +129,7 @@ export const SALE_LINE_COLUMNS: PilotTableColumn<SaleLine>[] = [
     nowrap: true,
     cell: (line) => (
       <span className="font-semibold tabular-nums">
-        {formatHuf(line.lineGross)}
+        {formatMoney(line.lineGross, "HUF")}
       </span>
     ),
   },
@@ -301,19 +300,23 @@ export function PilotPosSaleDetailPage({ saleId }: { saleId: string }) {
                   <div className="flex justify-between gap-3">
                     <dt className="text-pilot-grey-500">Nettó</dt>
                     <dd className="text-pilot-grey-900">
-                      {formatHuf(detail.totalNet)}
+                      {formatMoney(detail.totalNet, "HUF", {
+                        fractionDigits: 2,
+                      })}
                     </dd>
                   </div>
                   <div className="flex justify-between gap-3">
                     <dt className="text-pilot-grey-500">ÁFA</dt>
                     <dd className="text-pilot-grey-900">
-                      {formatHuf(detail.totalTax)}
+                      {formatMoney(detail.totalTax, "HUF", {
+                        fractionDigits: 2,
+                      })}
                     </dd>
                   </div>
                   <div className="flex items-center justify-between gap-3 border-t border-pilot-grey-200 pt-3">
                     <dt className="text-pilot-grey-600">Bruttó</dt>
                     <dd className="text-[22px] font-semibold text-pilot-grey-900">
-                      {formatHuf(detail.totalGross)}
+                      {formatMoney(detail.totalGross, "HUF")}
                     </dd>
                   </div>
                 </dl>
