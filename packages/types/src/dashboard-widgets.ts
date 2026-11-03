@@ -558,10 +558,9 @@ export const DASHBOARD_WIDGETS: readonly DashboardWidgetDefinition[] = [
 /**
  * ROLE PRESETS (Figma 392:3 "Ajánlott alapértelmezett dashboardok").
  * Defaults only; the user's own layout wins. Filtered through the
- * permissions on every use. Feladataim heads every preset of a role with
+ * permissions on every use. Feladataim is in every preset of a role with
  * `tasks.view` ("Recommended roles: Mindenki" in the library).
- */
-/**
+ *
  * "Figyelmet igényel" heads every role's preset (T2.1, acrobot 41656): the
  * home page answers "what needs me now" first, whatever the role. A preset is
  * the layout of a user WITHOUT a saved one (and after Visszaállítás); a saved
