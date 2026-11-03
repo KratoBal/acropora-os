@@ -167,6 +167,28 @@ describe("service-job list state in the URL", () => {
     expect(navigation.replace).not.toHaveBeenCalled();
   });
 
+  // The list is the shared table: on the phone every row is a card, each cell labelled with its
+  // column, so the partner, the state and the date do not disappear at 390 px.
+  it("labels every cell with its column for the phone card view", async () => {
+    renderAt("");
+    await screen.findByText("Jegy 3");
+    const row = screen.getAllByTestId("service-job-row")[0]!;
+    const labels = [...row.querySelectorAll("td")].map((td) =>
+      td.getAttribute("data-label"),
+    );
+    expect(labels).toEqual([
+      "Hibajegy",
+      "Partner / helyszín",
+      "Felelős",
+      "Állapot",
+      "Munkalap",
+      "Létrehozva",
+      null,
+    ]);
+    // the row opens the ticket on click and on the keyboard (shared table behaviour)
+    expect(row.getAttribute("aria-label")).toContain("megnyitása");
+  });
+
   it("writes a filter change back to the URL", async () => {
     renderAt("tab=closed");
     await screen.findByText("Jegy 1");

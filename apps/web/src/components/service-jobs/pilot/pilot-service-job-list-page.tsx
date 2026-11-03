@@ -1,5 +1,12 @@
 "use client";
-import { Alert, Icon, Skeleton, PilotSelect } from "@acropora/ui";
+import {
+  Alert,
+  Icon,
+  Skeleton,
+  PilotDataTable,
+  PilotSelect,
+  type PilotTableColumn,
+} from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
@@ -136,6 +143,122 @@ export function serviceJobListQuery(state: {
   if (state.location !== ALL_LOCATIONS) query.set("location", state.location);
   return query.toString();
 }
+
+type JobRow = ServiceJobListResponse["items"][number];
+
+/*
+  A HIBAJEGYLISTA OSZLOPAI A KÖZÖS TÁBLÁN (UI-áttekintés, 3. csomag, 2026-11-03). Telefonon a
+  tábla kártyalistává alakul (a hibajegy címe a kártya címe); a sor végi nyíl csak asztali jelzés.
+  A cím tördelődik, a hibajegy száma alatta áll (a terv kétsoros címet rajzol, itt a hosszú cím a
+  számot lejjebb tolja, nem fedi el).
+*/
+const JOB_COLUMNS: PilotTableColumn<JobRow>[] = [
+  {
+    id: "job",
+    header: "Hibajegy",
+    width: "300px",
+    cell: (item) => (
+      <>
+        <p className="break-words font-semibold text-pilot-grey-900">
+          {item.title}
+        </p>
+        <p className="mt-1 font-mono text-xs text-pilot-grey-500">
+          {item.jobNumber}
+        </p>
+        {item.reporterPersonName && item.reporterName ? (
+          <p className="mt-1 text-xs text-pilot-grey-600">
+            Bejelentő: {item.reporterName}
+          </p>
+        ) : null}
+        {item.hidden ? (
+          <span className="mt-1 inline-block">
+            <PilotBadge variant="amber">Rejtett</PilotBadge>
+          </span>
+        ) : null}
+      </>
+    ),
+  },
+  {
+    id: "customer",
+    header: "Partner / helyszín",
+    width: "260px",
+    cell: (item) => (
+      <>
+        <p className="break-words text-pilot-grey-900">
+          {item.customerName ?? "Nincs megadva"}
+        </p>
+        <p className="mt-1 break-words text-xs text-pilot-grey-500">
+          {item.departmentPath?.length ? item.departmentPath.join(" / ") : "—"}
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "assignees",
+    header: "Felelős",
+    width: "150px",
+    cell: (item) => {
+      const names = assigneeNames(item.assignees ?? []);
+      return names ? (
+        <span className="text-pilot-grey-900">{names}</span>
+      ) : (
+        <span className="text-xs text-pilot-grey-400">{NO_ASSIGNEE}</span>
+      );
+    },
+  },
+  // THE PARTNER'S STATUS STAYS UNDER THE INTERNAL ONE, as a separate fact (the brief, point 1).
+  {
+    id: "status",
+    header: "Állapot",
+    width: "210px",
+    cell: (item) => (
+      <>
+        <PilotBadge variant={STATUS_BADGE_VARIANT[item.status]}>
+          {serviceJobStatusLabel[item.status]}
+        </PilotBadge>
+        <p className="mt-2 text-xs text-pilot-grey-500">
+          A partner ezt látja: {item.partnerStatusLabel}
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "worksheets",
+    header: "Munkalap",
+    width: "120px",
+    nowrap: true,
+    cell: (item) => (
+      <span className="rounded-full bg-pilot-grey-100 px-3 py-1 text-xs text-pilot-grey-700">
+        {item.worksheetCount} munkalap
+      </span>
+    ),
+  },
+  {
+    id: "createdAt",
+    header: "Létrehozva",
+    width: "140px",
+    nowrap: true,
+    cell: (item) => (
+      <span className="text-xs text-pilot-grey-600">
+        {formatDateTime(item.createdAt)}
+      </span>
+    ),
+  },
+  {
+    id: "open",
+    header: "",
+    width: "40px",
+    phone: "hide",
+    cell: () => (
+      <Icon
+        name="chevron-left"
+        size={16}
+        className="rotate-180 text-pilot-grey-500"
+        aria-hidden="true"
+      />
+    ),
+  },
+];
 
 export function PilotServiceJobListPage() {
   const { session } = useAuth();
@@ -494,118 +617,18 @@ export function PilotServiceJobListPage() {
 
       {data && filtered.length > 0 ? (
         <PilotCard className="overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-pilot-grey-100">
-                  {[
-                    "Hibajegy",
-                    "Partner / helyszín",
-                    "Felelős",
-                    "Állapot",
-                    "Munkalap",
-                    "Létrehozva",
-                  ].map((col) => (
-                    <th
-                      key={col}
-                      className="whitespace-nowrap px-4 py-4 text-left text-xs font-medium uppercase tracking-wide text-pilot-grey-500"
-                    >
-                      {col}
-                    </th>
-                  ))}
-                  <th className="w-10" aria-hidden="true" />
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((item) => {
-                  const names = assigneeNames(item.assignees ?? []);
-                  return (
-                    <tr
-                      key={item.id}
-                      onClick={() =>
-                        router.push(`/szerviz/hibajegyek/${item.id}`)
-                      }
-                      className={`group cursor-pointer border-b border-pilot-grey-100 align-top transition-colors last:border-0 hover:bg-pilot-aqua-50/40 ${
-                        item.hidden ? "opacity-50" : ""
-                      }`}
-                    >
-                      {/*
-                        THE TITLE WRAPS AND THE NUMBER STANDS UNDER IT. The
-                        design draws a two-line title over the number; here
-                        each is its own line, so a long title pushes the
-                        number down instead of covering it.
-                      */}
-                      <td className="max-w-[280px] px-4 py-5">
-                        <p className="break-words font-semibold text-pilot-grey-900 transition-colors group-hover:text-pilot-aqua-700">
-                          {item.title}
-                        </p>
-                        <p className="mt-1 font-mono text-xs text-pilot-grey-500">
-                          {item.jobNumber}
-                        </p>
-                        {item.reporterPersonName && item.reporterName ? (
-                          <p className="mt-1 text-xs text-pilot-grey-600">
-                            Bejelentő: {item.reporterName}
-                          </p>
-                        ) : null}
-                        {item.hidden ? (
-                          <span className="mt-1 inline-block">
-                            <PilotBadge variant="amber">Rejtett</PilotBadge>
-                          </span>
-                        ) : null}
-                      </td>
-                      <td className="max-w-[280px] px-4 py-5">
-                        <p className="break-words text-pilot-grey-900">
-                          {item.customerName ?? "Nincs megadva"}
-                        </p>
-                        <p className="mt-1 break-words text-xs text-pilot-grey-500">
-                          {item.departmentPath?.length
-                            ? item.departmentPath.join(" / ")
-                            : "—"}
-                        </p>
-                      </td>
-                      <td className="px-4 py-5">
-                        {names ? (
-                          <span className="text-pilot-grey-900">{names}</span>
-                        ) : (
-                          <span className="text-xs text-pilot-grey-400">
-                            {NO_ASSIGNEE}
-                          </span>
-                        )}
-                      </td>
-                      {/*
-                        THE PARTNER'S STATUS STAYS UNDER THE INTERNAL ONE, as
-                        a separate fact (the brief, point 1).
-                      */}
-                      <td className="px-4 py-5">
-                        <PilotBadge variant={STATUS_BADGE_VARIANT[item.status]}>
-                          {serviceJobStatusLabel[item.status]}
-                        </PilotBadge>
-                        <p className="mt-2 text-xs text-pilot-grey-500">
-                          A partner ezt látja: {item.partnerStatusLabel}
-                        </p>
-                      </td>
-                      <td className="px-4 py-5">
-                        <span className="whitespace-nowrap rounded-full bg-pilot-grey-100 px-3 py-1 text-xs text-pilot-grey-700">
-                          {item.worksheetCount} munkalap
-                        </span>
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-5 text-xs text-pilot-grey-600">
-                        {formatDateTime(item.createdAt)}
-                      </td>
-                      <td className="px-2 py-5 text-pilot-grey-500">
-                        <Icon
-                          name="chevron-left"
-                          size={16}
-                          className="rotate-180"
-                          aria-hidden="true"
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <PilotDataTable
+            columns={JOB_COLUMNS}
+            rows={filtered}
+            rowKey={(item) => item.id}
+            rowTestId="service-job-row"
+            minWidth={1180}
+            onRowActivate={(item) =>
+              router.push(`/szerviz/hibajegyek/${item.id}`)
+            }
+            rowLabel={(item) => `${item.jobNumber} ${item.title} megnyitása`}
+            rowClassName={(item) => (item.hidden ? "opacity-50" : "")}
+          />
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-pilot-grey-100 px-4 py-3 text-xs text-pilot-grey-500">
             <span>
               {filtered.length} / {counts ? counts[tab] : filtered.length}{" "}

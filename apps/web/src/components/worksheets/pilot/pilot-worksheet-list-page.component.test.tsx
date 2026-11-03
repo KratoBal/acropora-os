@@ -118,6 +118,27 @@ describe("PilotWorksheetListPage -- redesign", () => {
     expect(screen.getByText("Nincs kiosztva")).toBeTruthy();
   });
 
+  // The list is the shared table: on the phone every row is a card, each cell labelled with its
+  // column, and the service job link still does not open the row.
+  it("labels every cell with its column for the phone card view", async () => {
+    api.list.mockResolvedValue(response([row()]));
+    render(<PilotWorksheetListPage />);
+    await screen.findAllByTestId("worksheet-row");
+    const tableRow = screen.getAllByTestId("worksheet-row")[0]!;
+    const labels = [...tableRow.querySelectorAll("td")].map((td) =>
+      td.getAttribute("data-label"),
+    );
+    expect(labels).toEqual([
+      "Munkalap",
+      "Partner / helyszín",
+      "Felelős",
+      "Állapot",
+      "Munkaóra",
+      "Hibajegy",
+      null,
+    ]);
+  });
+
   it("shows the hours and links the service job without opening the row", async () => {
     api.list.mockResolvedValue(
       response([
