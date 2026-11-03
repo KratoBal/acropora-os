@@ -1,0 +1,248 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+
+import {
+  hostOfDatabaseUrl,
+  runDemoData,
+  type DemoCounts,
+  type DemoStore,
+} from "./demo-data.cli.js";
+import { DEMO_PREFIX, demoPlan, plusDays } from "./demo-data.plan.js";
+
+/*
+  WHAT TURNS THIS RED (card c958804d, T6.3). A plan row without the DEMO- prefix (it would
+  not be found again, and `--remove` would leave it); a quote that points at a customer the
+  plan does not carry; an amount that does not add up (the list and the editor would show a
+  number that is wrong by construction); a write that happens without the host being named
+  or with a host that is not the DATABASE_URL's; a plan run that touches the store; a second
+  run that claims to have written.
+*/
+
+const DAY = "2026-11-04";
+const URL = "postgresql://u:p@db-stage.internal:5432/acropora";
+
+function fakeStore(counts: Partial<DemoCounts> = {}) {
+  const calls: string[] = [];
+  const full: DemoCounts = {
+    customers: 0,
+    quotes: 0,
+    incomingInvoices: 0,
+    ...counts,
+  };
+  const store: DemoStore = {
+    apply: async () => {
+      calls.push("apply");
+      return full;
+    },
+    remove: async () => {
+      calls.push("remove");
+      return full;
+    },
+  };
+  return { calls, store };
+}
+
+async function run(
+  argv: string[],
+  opts: { url?: string | undefined; counts?: Partial<DemoCounts> } = {},
+) {
+  const { calls, store } = fakeStore(opts.counts);
+  const out: string[] = [];
+  const err: string[] = [];
+  const code = await runDemoData(
+    argv,
+    { stdout: (t) => out.push(t), stderr: (t) => err.push(t) },
+    {
+      databaseUrl: "url" in opts ? opts.url : URL,
+      today: DAY,
+      store: () => store,
+    },
+  );
+  return { code, calls, out: out.join(""), err: err.join("") };
+}
+
+describe("the demo plan", () => {
+  const plan = demoPlan(DAY);
+
+  it("carries the DEMO- marker on every business key it will be found by", () => {
+    for (const c of plan.customers)
+      assert.ok(c.customerNumber.startsWith(DEMO_PREFIX), c.customerNumber);
+    for (const q of plan.quotes)
+      assert.ok(q.quoteNumber.startsWith(DEMO_PREFIX), q.quoteNumber);
+    for (const i of plan.incomingInvoices) {
+      assert.ok(i.externalId.startsWith(DEMO_PREFIX), i.externalId);
+      assert.ok(i.documentNumber.startsWith(DEMO_PREFIX), i.documentNumber);
+    }
+  });
+
+  it("has unique keys, and every quote names a customer of the plan", () => {
+    const customers = plan.customers.map((c) => c.customerNumber);
+    assert.equal(new Set(customers).size, customers.length);
+    const quotes = plan.quotes.map((q) => q.quoteNumber);
+    assert.equal(new Set(quotes).size, quotes.length);
+    const externals = plan.incomingInvoices.map((i) => i.externalId);
+    assert.equal(new Set(externals).size, externals.length);
+    for (const q of plan.quotes)
+      assert.ok(customers.includes(q.customerNumber), q.customerNumber);
+  });
+
+  it("is the same for the same day and moves with the day", () => {
+    assert.deepEqual(demoPlan(DAY), plan);
+    assert.notDeepEqual(demoPlan("2026-12-01"), plan);
+    for (const q of plan.quotes) assert.ok(q.validUntil > DAY, q.quoteNumber);
+  });
+
+  it("keeps the amounts consistent: line = summary = total, paid = gross", () => {
+    for (const i of plan.incomingInvoices) {
+      const lines = i.lines as unknown as { grossAmount: string }[];
+      const summary = i.vatSummary as unknown as {
+        netAmount: string;
+        vatAmount: string;
+        grossAmount: string;
+      }[];
+      const net = Number(i.netAmount);
+      const vat = Number(i.vatAmount);
+      assert.equal(Number(i.grossAmount), net + vat, i.documentNumber);
+      assert.equal(Number(lines[0]!.grossAmount), net + vat, i.documentNumber);
+      assert.equal(Number(summary[0]!.netAmount), net, i.documentNumber);
+      const payments = i.payments as unknown as { amount: string }[];
+      if (Number(i.paidAmount) > 0) {
+        assert.equal(Number(i.paidAmount), net + vat, i.documentNumber);
+        assert.equal(payments.length, 1, i.documentNumber);
+      } else {
+        assert.equal(payments.length, 0, i.documentNumber);
+      }
+    }
+  });
+
+  it("covers the states worth trying: paid, unpaid, overdue, foreign, payments unknown", () => {
+    const rows = plan.incomingInvoices;
+    const due = (r: (typeof rows)[number]) =>
+      (r.dueDate as Date).toISOString().slice(0, 10);
+    assert.ok(
+      rows.some((r) => Number(r.paidAmount) > 0),
+      "paid",
+    );
+    assert.ok(
+      rows.some(
+        (r) => Number(r.paidAmount) === 0 && r.paymentsKnown && due(r) > DAY,
+      ),
+      "unpaid, not due",
+    );
+    assert.ok(
+      rows.some(
+        (r) => Number(r.paidAmount) === 0 && r.paymentsKnown && due(r) < DAY,
+      ),
+      "overdue",
+    );
+    assert.ok(
+      rows.some((r) => r.currency === "EUR"),
+      "foreign",
+    );
+    assert.ok(
+      rows.some((r) => r.paymentsKnown === false),
+      "payments unknown",
+    );
+  });
+
+  it("has milestones that add up to 100 percent where a quote has any", () => {
+    const withMilestones = plan.quotes.filter((q) => q.milestones.length > 0);
+    assert.ok(withMilestones.length > 0);
+    for (const q of withMilestones)
+      assert.equal(
+        q.milestones.reduce((sum, m) => sum + Number(m.percent), 0),
+        100,
+        q.quoteNumber,
+      );
+  });
+
+  it("adds days on the calendar, not on the clock", () => {
+    assert.equal(plusDays("2026-10-30", 3), "2026-11-02");
+    assert.equal(plusDays("2026-03-01", -1), "2026-02-28");
+  });
+});
+
+describe("the host of a database URL", () => {
+  it("reads the host, lower-cased, and nothing else", () => {
+    assert.equal(hostOfDatabaseUrl(URL), "db-stage.internal");
+    assert.equal(
+      hostOfDatabaseUrl("postgresql://u:p@DB-Stage.Internal/x"),
+      "db-stage.internal",
+    );
+  });
+  it("is null when there is nothing to read", () => {
+    assert.equal(hostOfDatabaseUrl(undefined), null);
+    assert.equal(hostOfDatabaseUrl(""), null);
+    assert.equal(hostOfDatabaseUrl("nem url"), null);
+  });
+});
+
+describe("the command", () => {
+  it("prints the plan and never touches the store without --apply or --remove", async () => {
+    const r = await run([]);
+    assert.equal(r.code, 0);
+    assert.deepEqual(r.calls, []);
+    assert.match(r.out, /nem ír semmit/);
+    assert.match(r.out, /DEMO-AJ-001/);
+  });
+
+  it("refuses a write without --db-host, and names the host it would need", async () => {
+    for (const mode of ["--apply", "--remove"]) {
+      const r = await run([mode]);
+      assert.equal(r.code, 1, mode);
+      assert.deepEqual(r.calls, [], mode);
+      assert.match(r.err, /meg kell adni a --db-host/, mode);
+      assert.match(r.err, /db-stage\.internal/, mode);
+    }
+  });
+
+  it("refuses a host that is not the DATABASE_URL's", async () => {
+    for (const mode of ["--apply", "--remove"]) {
+      const r = await run([mode, "--db-host", "db-prod.internal"]);
+      assert.equal(r.code, 1, mode);
+      assert.deepEqual(r.calls, [], mode);
+      assert.match(r.err, /nem egyezik/, mode);
+    }
+  });
+
+  it("refuses a write when the DATABASE_URL is missing or unreadable", async () => {
+    for (const url of [undefined, "nem url"]) {
+      const r = await run(["--apply", "--db-host", "x"], { url });
+      assert.equal(r.code, 1);
+      assert.deepEqual(r.calls, []);
+    }
+  });
+
+  it("applies once the named host matches (case does not matter)", async () => {
+    const r = await run(["--apply", "--db-host", "DB-STAGE.internal"], {
+      counts: { customers: 3, quotes: 3, incomingInvoices: 5 },
+    });
+    assert.equal(r.code, 0);
+    assert.deepEqual(r.calls, ["apply"]);
+    assert.match(r.out, /3 ügyfél, 3 ajánlat, 5 bejövő számla/);
+  });
+
+  it("says so when everything was already there, and removes on --remove", async () => {
+    const again = await run(["--apply", "--db-host", "db-stage.internal"]);
+    assert.match(again.out, /Mind megvan már/);
+    const gone = await run(["--remove", "--db-host", "db-stage.internal"], {
+      counts: { customers: 3, quotes: 3, incomingInvoices: 5 },
+    });
+    assert.deepEqual(gone.calls, ["remove"]);
+    assert.match(gone.out, /Törölve: 3 ügyfél/);
+  });
+
+  it("refuses --apply with --remove, and an unknown argument", async () => {
+    const both = await run([
+      "--apply",
+      "--remove",
+      "--db-host",
+      "db-stage.internal",
+    ]);
+    assert.equal(both.code, 1);
+    assert.deepEqual(both.calls, []);
+    const typo = await run(["--aply", "--db-host", "db-stage.internal"]);
+    assert.equal(typo.code, 1);
+    assert.deepEqual(typo.calls, []);
+  });
+});
