@@ -11,6 +11,7 @@ import {
   PilotPageHeader,
   PilotSelect,
   Skeleton,
+  PilotDateField,
 } from "@acropora/ui";
 import { RichTextEditor } from "@acropora/ui/rich-text-editor";
 import {
@@ -346,17 +347,16 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
           <Fact label="Verzió" value={`v${v.versionNumber} · piszkozat`} />
           <div>
             <p className="text-xs text-pilot-grey-600">Érvényes</p>
-            <input
-              type="date"
+            <PilotDateField
               aria-label="Érvényesség"
-              className="mt-1 rounded-md border border-pilot-grey-200 px-2 py-1 text-sm font-semibold"
+              className="mt-1"
               value={v.validUntil}
               disabled={busy}
-              onChange={(event) =>
-                event.target.value &&
+              onChange={(nextValue) =>
+                nextValue &&
                 void write(() =>
                   quotesApi.updateVersion(token, quote.id, v.id, {
-                    validUntil: event.target.value,
+                    validUntil: nextValue,
                   }),
                 )
               }
