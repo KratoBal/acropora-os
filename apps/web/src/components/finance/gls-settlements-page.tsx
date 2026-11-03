@@ -10,6 +10,7 @@ import {
   type PilotTableColumn,
 } from "@acropora/ui";
 import {
+  formatMoney,
   hasPermission,
   PERMISSIONS,
   type GlsCodLineError,
@@ -46,11 +47,6 @@ import {
   SettlementTableCard,
 } from "./settlement-pilot";
 import { SettlementTabs } from "./settlement-tabs";
-
-function formatAmount(value?: string): string {
-  if (value === undefined) return "—";
-  return `${Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 })} Ft`;
-}
 
 function formatDate(value?: string): string {
   return value
@@ -352,14 +348,16 @@ export function GlsSettlementsPage() {
       header: "Díj",
       align: "right",
       width: "21%",
-      cell: (invoice) => formatAmount(invoice.feeTotal),
+      cell: (invoice) =>
+        formatMoney(invoice.feeTotal, "HUF", { fractionDigits: 2 }),
     },
     {
       id: "card",
       header: "Kártyadíj",
       align: "right",
       width: "21%",
-      cell: (invoice) => formatAmount(invoice.cardFeeTotal),
+      cell: (invoice) =>
+        formatMoney(invoice.cardFeeTotal, "HUF", { fractionDigits: 2 }),
     },
   ];
 
@@ -398,7 +396,7 @@ export function GlsSettlementsPage() {
         width: "11%",
         cell: (line) => (
           <span className="font-semibold text-pilot-grey-900">
-            {formatAmount(line.amount)}
+            {formatMoney(line.amount, "HUF", { fractionDigits: 2 })}
           </span>
         ),
       },
@@ -471,7 +469,10 @@ export function GlsSettlementsPage() {
         {alerts}
         <SettlementStats
           items={[
-            { label: "Összeg", value: formatAmount(selected.total) },
+            {
+              label: "Összeg",
+              value: formatMoney(selected.total, "HUF", { fractionDigits: 2 }),
+            },
             { label: "Csomag", value: selected.lineCount },
             {
               label: "Párosítva",
@@ -543,7 +544,7 @@ export function GlsSettlementsPage() {
       width: "17%",
       cell: (item) => (
         <span className="font-semibold text-pilot-grey-900">
-          {formatAmount(item.total)}
+          {formatMoney(item.total, "HUF", { fractionDigits: 2 })}
         </span>
       ),
     },

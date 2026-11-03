@@ -1,6 +1,6 @@
 "use client";
 
-import type { BankStatementImportResult } from "@acropora/types";
+import { currencyLabel, type BankStatementImportResult } from "@acropora/types";
 import { PilotButton } from "@acropora/ui";
 import Link from "next/link";
 
@@ -129,7 +129,10 @@ export function MissingInvoicesImportResult({
         <p className="text-xs text-pilot-grey-600">
           Bankszámlák a fájlban:{" "}
           {result.accounts
-            .map((account) => `${account.accountNumber} (${account.currency})`)
+            .map(
+              (account) =>
+                `${account.accountNumber} (${currencyLabel(account.currency)})`,
+            )
             .join(", ")}
         </p>
       ) : null}

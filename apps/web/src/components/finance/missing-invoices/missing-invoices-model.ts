@@ -301,12 +301,8 @@ export function formatDay(day: string): string {
   return `${year}. ${month}. ${date}.`;
 }
 
-/** Forint egészre, más deviza két tizedesre, a magyar számformával. */
-export function formatAmount(value: string, currency: string): string {
-  const huf = currency.toUpperCase() === "HUF";
-  const formatted = new Intl.NumberFormat("hu-HU", {
-    minimumFractionDigits: huf ? 0 : 2,
-    maximumFractionDigits: huf ? 0 : 2,
-  }).format(Number(value));
-  return huf ? `${formatted} Ft` : `${formatted} ${currency.toUpperCase()}`;
-}
+/**
+ * Forint egészre, más deviza két tizedesre, a magyar számformával: a közös formázó
+ * (`@acropora/types`, T1.5), a lap hívói a megszokott néven érik el.
+ */
+export { formatMoney as formatAmount } from "@acropora/types";

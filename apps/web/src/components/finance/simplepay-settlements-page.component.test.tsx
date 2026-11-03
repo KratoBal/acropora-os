@@ -171,6 +171,27 @@ describe("SimplePaySettlementsPage", () => {
     ).toBeInTheDocument();
   });
 
+  // T1.5: a settlement amount reads as stored. The commission is part of a total and its fillér
+  // is what the bank reconciliation checks: "216,50 Ft", not a rounded "217 Ft".
+  it("keeps a commission's fillér and leaves a whole amount whole", async () => {
+    api.list.mockResolvedValue({
+      ...reports,
+      items: [
+        {
+          ...reports.items[0]!,
+          amountTotal: "8330",
+          commissionTotal: "216.5",
+          netTotal: "8113.5",
+        },
+      ],
+    });
+    render(createElement(SimplePaySettlementsPage));
+    const [row] = await screen.findAllByTestId("simplepay-kimutatas");
+    expect(row).toHaveTextContent(/8330 Ft/);
+    expect(row).toHaveTextContent("216,50 Ft");
+    expect(row).toHaveTextContent(/8113,50 Ft/);
+  });
+
   it("shows each payment's order and invoice, and why a payment waits", async () => {
     render(createElement(SimplePaySettlementsPage));
     fireEvent.click((await screen.findAllByTestId("simplepay-kimutatas"))[0]!);

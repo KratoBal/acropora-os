@@ -10,6 +10,7 @@ import {
   type PilotTableColumn,
 } from "@acropora/ui";
 import {
+  formatMoney,
   hasPermission,
   PERMISSIONS,
   type FoxpostMonthlyReportSummary,
@@ -43,11 +44,6 @@ import {
   SettlementTableCard,
 } from "./settlement-pilot";
 import { SettlementTabs } from "./settlement-tabs";
-
-function formatAmount(value?: string): string {
-  if (value === undefined) return "—";
-  return `${Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 })} Ft`;
-}
 
 function formatDate(value?: string): string {
   return value
@@ -376,7 +372,7 @@ export function FoxpostSettlementsPage() {
         width: "11%",
         cell: (line) => (
           <span className="font-semibold text-pilot-grey-900">
-            {formatAmount(line.collectedAmount)}
+            {formatMoney(line.collectedAmount, "HUF", { fractionDigits: 2 })}
           </span>
         ),
       },
@@ -455,17 +451,21 @@ export function FoxpostSettlementsPage() {
           items={[
             {
               label: "Beszedett",
-              value: formatAmount(selected.collectedAmount),
+              value: formatMoney(selected.collectedAmount, "HUF", {
+                fractionDigits: 2,
+              }),
             },
             {
               label: "Foxpost számla",
-              value: `${formatAmount(selected.invoiceGrossAmount)}${
+              value: `${formatMoney(selected.invoiceGrossAmount, "HUF", { fractionDigits: 2 })}${
                 selected.invoiceNumber ? ` (${selected.invoiceNumber})` : ""
               }`,
             },
             {
               label: "Utalt",
-              value: formatAmount(selected.transferredAmount),
+              value: formatMoney(selected.transferredAmount, "HUF", {
+                fractionDigits: 2,
+              }),
             },
             {
               label: "Párosítva",
@@ -532,7 +532,7 @@ export function FoxpostSettlementsPage() {
       width: "17%",
       cell: (item) => (
         <span className="font-semibold text-pilot-grey-900">
-          {formatAmount(item.collectedAmount)}
+          {formatMoney(item.collectedAmount, "HUF", { fractionDigits: 2 })}
         </span>
       ),
     },
@@ -542,7 +542,7 @@ export function FoxpostSettlementsPage() {
       width: "17%",
       cell: (item) => (
         <span className="font-semibold text-pilot-grey-900">
-          {formatAmount(item.transferredAmount)}
+          {formatMoney(item.transferredAmount, "HUF", { fractionDigits: 2 })}
         </span>
       ),
     },
@@ -619,9 +619,17 @@ export function FoxpostSettlementsPage() {
             <>
               {selectedReport.settlementCount} hét /{" "}
               {selectedReport.invoiceCount} számla · Beszedett{" "}
-              {formatAmount(selectedReport.collectedAmount)} · Foxpost számla{" "}
-              {formatAmount(selectedReport.invoiceGrossAmount)} · Utalt{" "}
-              {formatAmount(selectedReport.transferredAmount)}
+              {formatMoney(selectedReport.collectedAmount, "HUF", {
+                fractionDigits: 2,
+              })}{" "}
+              · Foxpost számla{" "}
+              {formatMoney(selectedReport.invoiceGrossAmount, "HUF", {
+                fractionDigits: 2,
+              })}{" "}
+              · Utalt{" "}
+              {formatMoney(selectedReport.transferredAmount, "HUF", {
+                fractionDigits: 2,
+              })}
               {selectedReport.unresolvedLineCount > 0 ? (
                 <span className="text-amber-700">
                   {" "}

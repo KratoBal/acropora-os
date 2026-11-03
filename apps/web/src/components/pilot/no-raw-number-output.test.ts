@@ -22,7 +22,6 @@ type Szabaly = "toFixed" | "nyers-penznem" | "huf-felirat" | "helyi-formazo";
 
 const WEBSHOP = "webshop: helyi formatHuf; kiváltás a webshop-szeletben";
 const BESZERZES = "beszerzés: helyi formazó; kiváltás a beszerzés-szeletben";
-const PENZUGY = "pénzügy: helyi formatAmount; kiváltás a pénzügy-szeletben";
 const SZAMLAZAS = "számlázás: helyi formázó; kiváltás a számlázás-szeletben";
 
 /** `szabály:fájl` -> miért áll még itt. Csak fogyhat. */
@@ -57,13 +56,6 @@ const KIVETELEK = new Map<string, string>([
   [
     "helyi-formazo:components/purchasing/purchase-invoice-list-page.tsx",
     BESZERZES,
-  ],
-  ["helyi-formazo:components/finance/foxpost-settlements-page.tsx", PENZUGY],
-  ["helyi-formazo:components/finance/gls-settlements-page.tsx", PENZUGY],
-  ["helyi-formazo:components/finance/simplepay-settlements-page.tsx", PENZUGY],
-  [
-    "helyi-formazo:components/finance/missing-invoices/missing-invoices-model.ts",
-    PENZUGY,
   ],
   ["helyi-formazo:components/billing/billing-editor-state.ts", SZAMLAZAS],
   [
@@ -141,10 +133,6 @@ const KIVETELEK = new Map<string, string>([
   [
     "nyers-penznem:components/billing/billing-incoming-list.tsx",
     "Deviza oszlop: a kód; " + SZAMLAZAS,
-  ],
-  [
-    "nyers-penznem:components/finance/missing-invoices/missing-invoices-import-result.tsx",
-    "bankszámla pénzneme a kóddal; " + PENZUGY,
   ],
   [
     "nyers-penznem:components/products/product-supplier-prices-card.tsx",
