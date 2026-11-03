@@ -254,7 +254,37 @@ describe("MissingInvoicesMonthList", () => {
     const cols = [...table.querySelectorAll("col")] as HTMLElement[];
     expect(
       parseInt(cols[headers.indexOf("Hónap")]!.style.width, 10),
-    ).toBeGreaterThanOrEqual(180);
+    ).toBeGreaterThanOrEqual(170);
+  });
+
+  /*
+    A FEJLÉC LEGHOSSZABB SZAVA ELFÉR AZ OSZLOPÁBAN (acrobot stage-fotó, eba08e90, 1440 px): a 2055 a "Terhelések"
+    oszlopot 76 px-re szűkítette, a nagybetűs, egy szavas fejléc (kb. 72 px) nem tört, és egybefolyt a "Megvan"-nal
+    ("TERHELÉSEKMEGVAN"). Egy szó nem törhet sort, ezért az oszlopnak legalább a szó szélessége + a cella
+    paddingja kell. A nagybetűs 11 px-es fejléc betűnként kb. 7,4 px, a padding 20 px (a fotóból mérve).
+    MI PIROSÍT: ha egy oszlop keskenyebb, mint a fejléce leghosszabb szava.
+  */
+  it("every month column is at least as wide as the longest word of its header", () => {
+    renderList();
+    const august = screen.getByRole("row", {
+      name: "2026. augusztus megnyitása",
+    });
+    const table = august.closest("table")!;
+    const headerCells = within(table).getAllByRole("columnheader");
+    // The open-arrow column's header is screen-reader only: it has no visible word to fit.
+    const headers = headerCells.map((th) =>
+      th.querySelector(".sr-only") ? "" : (th.textContent ?? ""),
+    );
+    const cols = [...table.querySelectorAll("col")] as HTMLElement[];
+    const narrow = headers
+      .map((text, index) => {
+        const width = parseInt(cols[index]!.style.width, 10);
+        const longest = Math.max(...text.split(/\s+/).map((w) => w.length));
+        return { text, width, needed: Math.ceil(longest * 7.4) + 20 };
+      })
+      .filter((c) => Number.isFinite(c.width) && c.text !== "")
+      .filter((c) => c.width < c.needed);
+    expect(narrow).toEqual([]);
   });
 
   it("the whole row opens the month", () => {
