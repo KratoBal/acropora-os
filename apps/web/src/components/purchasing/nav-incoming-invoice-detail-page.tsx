@@ -25,12 +25,13 @@ import {
   type PilotBadgeVariant,
 } from "@/components/pilot/pilot-ui";
 import { navIncomingInvoicesApi } from "@/lib/api/nav-incoming-invoices";
+import { currencyLabel } from "@/lib/format/currency";
 
 import { navGross } from "./nav-incoming-invoice-list-page";
 
 function formatAmount(value: string | undefined, currency: string): string {
   if (!value) return "—";
-  return `${Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 })} ${currency}`;
+  return `${Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 })} ${currencyLabel(currency)}`;
 }
 
 const day = (value: string | undefined) =>

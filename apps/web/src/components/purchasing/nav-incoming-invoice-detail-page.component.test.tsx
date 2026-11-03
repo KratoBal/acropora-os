@@ -92,7 +92,7 @@ describe("NavIncomingInvoiceDetailPage (Figma 614:1369)", () => {
     expect(await screen.findAllByTestId("nav-szamlasor")).toHaveLength(1);
     expect(screen.getByText("NAV adatkapcsolat")).toBeInTheDocument();
     expect(screen.getByText("Adószám egyezik")).toBeInTheDocument();
-    expect(screen.getByText(/^25\s400 HUF$/)).toBeInTheDocument();
+    expect(screen.getByText(/^25\s400 Ft$/)).toBeInTheDocument();
     expect(screen.getByText(/szállítói cikkszám KS-11/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Megnyitás" }));

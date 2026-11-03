@@ -165,6 +165,24 @@ describe("a változat beszállítói beszerzési árai", () => {
     expect(screen.queryByText("legolcsóbb")).toBeNull();
   });
 
+  it("writes a forint supplier price as Ft, not as the ISO code", () => {
+    const { container } = render(
+      <SupplierPricesTable
+        prices={prices([
+          row({
+            currency: "HUF",
+            unitPrice: "30000.00",
+            purchaseHuf: "30000.00",
+            fxRate: null,
+            fxDate: null,
+          }),
+        ])}
+      />,
+    );
+    expect(container.textContent).toMatch(/30\s?000 Ft/);
+    expect(container.textContent).not.toMatch(/HUF/);
+  });
+
   it("compares prices in different currencies in forints, and says that they were converted", () => {
     render(
       <SupplierPricesTable
