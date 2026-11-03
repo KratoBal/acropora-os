@@ -301,6 +301,27 @@ describe("BillingDocumentDetailPage", () => {
     );
   });
 
+  // T1.5 (acrobot 41593): a line's net unit price and gross keep their stored fillér (the
+  // Számlázz.hu rule rounds per line, so a line can carry it); the totals stay whole forint.
+  it("a line's unit price and gross keep their fillér; a whole one stays whole", async () => {
+    const base = detail();
+    api.detail.mockResolvedValue(
+      detail({
+        lines: [
+          { ...base.lines[0]!, unitNet: "787.4000", grossAmount: "999.9000" },
+          ...base.lines.slice(1),
+        ],
+      }),
+    );
+    render(<BillingDocumentDetailPage documentId="doc-1" />);
+    expect(
+      await screen.findByText("Megjegyzés: Szeptember havi átalány"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/787,40\sFt/)).toBeInTheDocument();
+    expect(screen.getByText(/999,90\sFt/)).toBeInTheDocument();
+    expect(screen.queryByText(/^787\sFt/)).toBeNull();
+  });
+
   /*
     A NYOMTATÁS A HIVATALOS PDF (brief 12. pont). MI PIROSÍT: ha a lap DOM-ját
     nyomtatná (window.print), vagy a PDF nélkül nyitna ablakot.

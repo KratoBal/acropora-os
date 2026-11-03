@@ -20,15 +20,8 @@ const ROOT = join(process.cwd(), "src");
 
 type Szabaly = "toFixed" | "nyers-penznem" | "huf-felirat" | "helyi-formazo";
 
-const SZAMLAZAS = "számlázás: helyi formázó; kiváltás a számlázás-szeletben";
-
 /** `szabály:fájl` -> miért áll még itt. Csak fogyhat. */
 const KIVETELEK = new Map<string, string>([
-  ["helyi-formazo:components/billing/billing-editor-state.ts", SZAMLAZAS],
-  [
-    "helyi-formazo:components/dashboard/widgets/finance-format.ts",
-    "a vezérlőpult pénzügyi kártyái; kiváltás a számlázás-szeletben",
-  ],
   [
     "helyi-formazo:components/products/product-list-page.tsx",
     "terméklista: helyi formatHuf; kiváltás a termék-szeletben",
@@ -74,28 +67,8 @@ const KIVETELEK = new Map<string, string>([
     "az API-nak küldött pontos érték, nem kiírás: marad",
   ],
   [
-    "nyers-penznem:components/billing/billing-document-detail-page.tsx",
-    "Pénznem mező: a kód; " + SZAMLAZAS,
-  ],
-  [
-    "nyers-penznem:components/billing/billing-external-document-page.tsx",
-    "Pénznem mező: a kód; " + SZAMLAZAS,
-  ],
-  [
-    "nyers-penznem:components/billing/billing-incoming-document-page.tsx",
-    "Pénznem mező: a kód; " + SZAMLAZAS,
-  ],
-  [
-    "nyers-penznem:components/billing/billing-incoming-list.tsx",
-    "Deviza oszlop: a kód; " + SZAMLAZAS,
-  ],
-  [
     "nyers-penznem:components/products/product-supplier-prices-card.tsx",
     "árfolyam-felirat (Ft/EUR), csak devizás sornál jelenik meg: marad",
-  ],
-  [
-    "huf-felirat:components/billing/billing-receipts-view.tsx",
-    '"NAV OPG · … · HUF" felirat; ' + SZAMLAZAS,
   ],
 ]);
 

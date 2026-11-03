@@ -12,6 +12,7 @@ import {
   Skeleton,
 } from "@acropora/ui";
 import {
+  currencyLabel,
   hasPermission,
   INVOICE_FORMAT_LABELS,
   PERMISSIONS,
@@ -246,7 +247,9 @@ export function BillingExternalDocumentPage({
               <PilotDataItem label="Határidő">
                 {formatDay(detail.dueDate)}
               </PilotDataItem>
-              <PilotDataItem label="Pénznem">{detail.currency}</PilotDataItem>
+              <PilotDataItem label="Pénznem">
+                {currencyLabel(detail.currency)}
+              </PilotDataItem>
             </PilotDataGrid>
           </PilotSection>
 
@@ -263,12 +266,16 @@ export function BillingExternalDocumentPage({
                     </p>
                     <p className="text-xs text-pilot-grey-500">
                       {trimDecimal(line.quantity)} {line.unit} ×{" "}
-                      {formatMoney(line.unitNet, detail.currency)} · ÁFA{" "}
-                      {vatRateText(line.vatRate)}
+                      {formatMoney(line.unitNet, detail.currency, {
+                        fractionDigits: 2,
+                      })}{" "}
+                      · ÁFA {vatRateText(line.vatRate)}
                     </p>
                   </div>
                   <p className="shrink-0 text-sm font-semibold tabular-nums text-pilot-grey-900">
-                    {formatMoney(line.grossAmount, detail.currency)}
+                    {formatMoney(line.grossAmount, detail.currency, {
+                      fractionDigits: 2,
+                    })}
                   </p>
                 </li>
               ))}
