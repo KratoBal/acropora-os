@@ -283,7 +283,7 @@ describe("AttributeSetAdminService.setProductAttributeSet", () => {
     });
     assert.deepEqual(calls.updates, [
       {
-        where: { id: "p1", updatedAt: T1 },
+        where: { id: "p1", updatedAt: T1, attributeSetId: null },
         data: { attributeSetId: "set-1", updatedAt: T1 },
       },
     ]);
@@ -429,5 +429,94 @@ describe("AttributeSetAdminService.setProductAttributeSet", () => {
     );
     assert.equal(calls.transactionOf.update, calls.transactionOf.audit);
     assert.ok(calls.transactionOf.audit! > 0);
+  });
+
+  /*
+    DUPLA KÖTÉS UGYANARRÓL AZ ÁLLAPOTRÓL (barracuda, #2109): a kötés NEM lépteti az `updatedAt`-et,
+    tehát egy másik kötés nem változtatja meg a feltétel értékét. Ha a feltételben csak az
+    `updatedAt` állt, A és B ugyanarról a látott állapotról (X, T) indulva MINDKETTEN nyertek, és a
+    második audit sor hamis `from`-ot írt (X helyett Y). MI PIROSÍT: a feltétel `attributeSetId` nélkül.
+    A dupla állapotot tart, a feltételt ki is értékeli, és a két olvasás között elzár, hogy
+    mindkét hívás a régi állapotot lássa.
+  */
+  it("two bindings from the same seen state: one wins, the other re-reads, and the audit chain is X to Y to Z", async () => {
+    const state = { attributeSetId: "X" as string | null, updatedAt: T1 };
+    const audits: Array<{ from: unknown; to: unknown; userId: unknown }> = [];
+    let reads = 0;
+    let release!: () => void;
+    const bothRead = new Promise<void>((resolve) => (release = resolve));
+    const tx = {
+      product: {
+        updateMany: async ({
+          where,
+          data,
+        }: {
+          where: {
+            id: string;
+            updatedAt: Date;
+            attributeSetId?: string | null;
+          };
+          data: { attributeSetId: string | null };
+        }) => {
+          const matches =
+            where.updatedAt === state.updatedAt &&
+            (!("attributeSetId" in where) ||
+              where.attributeSetId === state.attributeSetId);
+          if (!matches) return { count: 0 };
+          state.attributeSetId = data.attributeSetId;
+          return { count: 1 };
+        },
+      },
+      auditLog: {
+        create: async ({
+          data,
+        }: {
+          data: { userId: unknown; metadata: { from: unknown; to: unknown } };
+        }) => {
+          audits.push({ ...data.metadata, userId: data.userId });
+          return {};
+        },
+      },
+    };
+    const admin = new AttributeSetAdminService();
+    Object.defineProperty(admin, "database", {
+      value: {
+        attributeSet: {
+          findUnique: async ({ where }: { where: { id: string } }) => ({
+            id: where.id,
+            isActive: true,
+          }),
+        },
+        product: {
+          findUnique: async () => {
+            reads += 1;
+            // the first two reads (one per caller) both see the ORIGINAL state
+            if (reads <= 2) {
+              const seen = { id: "p1", ...state };
+              if (reads === 2) release();
+              await bothRead;
+              return seen;
+            }
+            return { id: "p1", ...state };
+          },
+        },
+        $transaction: async (work: (client: typeof tx) => Promise<unknown>) =>
+          work(tx),
+      },
+    });
+    const results = await Promise.all([
+      admin.setProductAttributeSet("p1", "Y", "user-a"),
+      admin.setProductAttributeSet("p1", "Z", "user-b"),
+    ]);
+    assert.deepEqual(
+      results.map((r) => r.changed),
+      [true, true],
+    );
+    assert.equal(state.attributeSetId, "Z");
+    // the chain is continuous: X to Y, then Y to Z, never X to Z twice
+    assert.deepEqual(audits, [
+      { from: "X", to: "Y", userId: "user-a" },
+      { from: "Y", to: "Z", userId: "user-b" },
+    ]);
   });
 });
