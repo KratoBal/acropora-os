@@ -12,6 +12,7 @@ import {
   Skeleton,
   Textarea,
   PilotSelect,
+  PilotFileInput,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -962,9 +963,8 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                 egy egyesevel valaszto urlap ugyanazt a kort futtatna otször.
                 A szerver egy keresben legfeljebb tizet fogad.
               */}
-                    <input
+                    <PilotFileInput
                       id="hibajegy-csatolmany"
-                      type="file"
                       multiple
                       accept="image/jpeg,image/png,application/pdf"
                       className="text-sm"

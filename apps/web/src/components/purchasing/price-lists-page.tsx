@@ -7,6 +7,7 @@ import {
   PilotPageHeader,
   Skeleton,
   type PilotTableColumn,
+  PilotFileInput,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -462,10 +463,9 @@ export function PriceListsPage() {
               <label htmlFor="pl-file" className={FIELD_LABEL}>
                 Fájl
               </label>
-              <input
+              <PilotFileInput
                 key={fileKey}
                 id="pl-file"
-                type="file"
                 accept=".csv,.txt,text/csv,text/plain"
                 className="text-sm"
                 onChange={(event) => setFile(event.target.files?.[0] ?? null)}

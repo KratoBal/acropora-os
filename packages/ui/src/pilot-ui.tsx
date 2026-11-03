@@ -1,5 +1,5 @@
 "use client";
-import type { InputHTMLAttributes, ReactNode } from "react";
+import type { InputHTMLAttributes, ReactNode, Ref } from "react";
 import { useEffect, useId, useRef, useState } from "react";
 
 import { Icon } from "./icon";
@@ -937,5 +937,85 @@ export function PilotTimeline({
         </div>
       ))}
     </div>
+  );
+}
+
+/**
+ * A MAGYAR FÁJLMEZŐ (UI-áttekintés, 3. csomag): a natív `<input type="file">` a böngésző nyelvén
+ * ír ("Choose File  No file chosen"). Ez egy gomb ("Fájl kiválasztása") és a választott fájl
+ * neve, a valódi mező mögötte rejtett. DROP-IN: a natív mező tulajdonságait veszi át
+ * (`accept`, `multiple`, `disabled`, `onChange`, `aria-label`, `ref`...), a hívó ugyanúgy
+ * `event.target.files`-ból olvas. A mező a billentyűzetnek a GOMB (a rejtett mező kimarad a
+ * tab-sorból), a felolvasónak "<felirat>: fájl kiválasztása".
+ */
+export function PilotFileInput({
+  className,
+  onChange,
+  multiple,
+  disabled,
+  "aria-label": ariaLabel,
+  ref,
+  ...rest
+}: Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "children"> & {
+  /** A hívó elérheti a valódi mezőt (`ref.current.files`, `ref.current.value = ""`). */
+  ref?: Ref<HTMLInputElement>;
+}) {
+  const field = useRef<HTMLInputElement | null>(null);
+  const [names, setNames] = useState<string[]>([]);
+  // A hívó a mezőt programmal is kiürítheti (`ref.current.value = ""`), esemény nélkül: minden
+  // renderelés után a valódi mezőhöz igazodik a kiírt név, és csak eltérésnél állít állapotot.
+  useEffect(() => {
+    const actual = Array.from(field.current?.files ?? []).map((f) => f.name);
+    setNames((current) =>
+      current.join("\n") === actual.join("\n") ? current : actual,
+    );
+  });
+  const label = multiple ? "Fájlok kiválasztása" : "Fájl kiválasztása";
+  const shown =
+    names.length === 0
+      ? "Nincs kiválasztott fájl"
+      : names.length <= 2
+        ? names.join(", ")
+        : `${names.length} fájl`;
+  return (
+    <span
+      className={`inline-flex max-w-full min-w-0 items-center gap-2 align-middle ${className ?? ""}`}
+    >
+      <input
+        {...rest}
+        ref={(node) => {
+          field.current = node;
+          if (typeof ref === "function") ref(node);
+          else if (ref) ref.current = node;
+        }}
+        type="file"
+        multiple={multiple}
+        disabled={disabled}
+        aria-label={ariaLabel}
+        tabIndex={-1}
+        className="sr-only"
+        onChange={(event) => {
+          const chosen = Array.from(event.target.files ?? []).map(
+            (f) => f.name,
+          );
+          onChange?.(event);
+          // A hívó a fogyasztott fájl után gyakran kiüríti a mezőt (`value = ""`): ilyenkor
+          // nincs mit mutatni, nem marad ott a már feltöltött fájl neve.
+          setNames(event.target.value === "" ? [] : chosen);
+        }}
+      />
+      <button
+        type="button"
+        disabled={disabled}
+        aria-label={
+          ariaLabel ? `${ariaLabel}: ${label.toLowerCase()}` : undefined
+        }
+        onClick={() => field.current?.click()}
+        className="inline-flex h-8 shrink-0 items-center rounded-md bg-white px-3 text-sm font-medium text-pilot-grey-800 ring-1 ring-pilot-grey-200 hover:bg-pilot-grey-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-pilot-aqua-500 disabled:cursor-not-allowed disabled:text-pilot-grey-400"
+      >
+        {label}
+      </button>
+      <span className="truncate text-xs text-pilot-grey-500">{shown}</span>
+    </span>
   );
 }

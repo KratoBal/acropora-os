@@ -10,6 +10,7 @@ import {
   PilotSection,
   PilotTotals,
   Skeleton,
+  PilotFileInput,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -696,8 +697,7 @@ export function BillingIncomingDocumentPage({
               <div className="mt-4 space-y-2">
                 <label className="block text-xs text-pilot-grey-600">
                   PDF csatolása, ha a számlát máshonnan megkaptad
-                  <input
-                    type="file"
+                  <PilotFileInput
                     accept="application/pdf,.pdf"
                     className="mt-1 block text-xs"
                     disabled={attachBusy}

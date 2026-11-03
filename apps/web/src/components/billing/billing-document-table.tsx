@@ -38,6 +38,10 @@ export function formatDay(value: string | null | undefined): string {
   return `${value.replaceAll("-", ". ")}.`;
 }
 
+/** The table's minimum width, and the least the flexible customer column may get of it. */
+export const BILLING_TABLE_MIN_WIDTH = 1180;
+export const BILLING_CUSTOMER_MIN_WIDTH = 150;
+
 /**
  * AZ OSZLOP-DEFINÍCIÓ EGY HELYEN (brief 6. pont): a fejléc és a sorok UGYANEBBŐL
  * rajzolnak (`PilotDataTable`), ugyanúgy, mint a Termékeknél és a
@@ -49,7 +53,7 @@ export const BILLING_DOCUMENT_COLUMNS: readonly PilotTableColumn<BillingDocument
     {
       id: "document",
       header: "Dokumentum",
-      width: "140px",
+      width: "120px",
       cell: (item) => (
         <span className="flex flex-col">
           <span className="font-semibold text-pilot-grey-900">
@@ -67,7 +71,7 @@ export const BILLING_DOCUMENT_COLUMNS: readonly PilotTableColumn<BillingDocument
     {
       id: "number",
       header: "Bizonylatszám",
-      width: "160px",
+      width: "150px",
       cell: (item) => (
         <span className="flex flex-col items-start gap-1">
           <span className="font-semibold text-pilot-grey-900">
@@ -86,6 +90,9 @@ export const BILLING_DOCUMENT_COLUMNS: readonly PilotTableColumn<BillingDocument
         </span>
       ),
     },
+    // The customer column takes what the fixed ones leave (at least ~150 px at the table's
+    // minimum width): with their old widths summing to more than the card, it collapsed to
+    // nothing and its header ran into "Kiállítás" (stage photo, 2026-11-03).
     {
       id: "customer",
       header: "Vevő",
@@ -104,6 +111,7 @@ export const BILLING_DOCUMENT_COLUMNS: readonly PilotTableColumn<BillingDocument
     {
       id: "issueDate",
       header: "Kiállítás",
+      nowrap: true,
       width: "120px",
       cell: (item) => formatDay(item.issueDate),
     },
@@ -117,7 +125,7 @@ export const BILLING_DOCUMENT_COLUMNS: readonly PilotTableColumn<BillingDocument
     {
       id: "gross",
       header: "Bruttó",
-      width: "140px",
+      width: "120px",
       align: "right",
       cell: (item) => (
         <span className="whitespace-nowrap font-semibold tabular-nums text-pilot-grey-900">
@@ -128,7 +136,7 @@ export const BILLING_DOCUMENT_COLUMNS: readonly PilotTableColumn<BillingDocument
     {
       id: "payment",
       header: "Kifizetés",
-      width: "120px",
+      width: "110px",
       cell: (item) => (
         <PaymentBadge
           paymentState={item.paymentState}
@@ -143,13 +151,13 @@ export const BILLING_DOCUMENT_COLUMNS: readonly PilotTableColumn<BillingDocument
       // megvan-e a PDF, és ha nincs, miért (Balázs, 2026-10-21); ugyanaz, amit a havi csomag lát
       id: "pdf",
       header: "PDF",
-      width: "180px",
+      width: "110px",
       cell: (item) => <PdfStateBadge item={item} />,
     },
     {
       id: "status",
       header: "Állapot",
-      width: "170px",
+      width: "130px",
       cell: (item) => (
         <BillingDocumentStatus
           status={item.status}
@@ -192,7 +200,7 @@ export function BillingDocumentTable({
           item.cancelled ? " (sztornózott)" : ""
         }, ${item.customerName} megnyitása`
       }
-      minWidth={1140}
+      minWidth={BILLING_TABLE_MIN_WIDTH}
     />
   );
 }

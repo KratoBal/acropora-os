@@ -1,6 +1,6 @@
 "use client";
 
-import { PilotBadge } from "@acropora/ui";
+import { PilotBadge, PilotFileInput } from "@acropora/ui";
 import { RichTextEditor, SHORT_TOOLBAR } from "@acropora/ui/rich-text-editor";
 import { HOMEPAGE_LIMITS, type HomepageTextField } from "@acropora/types";
 import { useState } from "react";
@@ -183,8 +183,7 @@ export function ImageUpload({
   return (
     <label className="mt-1 block text-xs text-pilot-grey-600">
       {busy ? "Feltöltés..." : "Kép feltöltése"}
-      <input
-        type="file"
+      <PilotFileInput
         accept="image/jpeg,image/png,image/webp"
         aria-label={label}
         disabled={busy}

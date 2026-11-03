@@ -1,6 +1,13 @@
 "use client";
 
-import { Alert, Button, Card, CardContent, CardHeader } from "@acropora/ui";
+import {
+  Alert,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  PilotFileInput,
+} from "@acropora/ui";
 import type { PurchaseInvoiceScan } from "@acropora/types";
 import { useState } from "react";
 
@@ -98,8 +105,7 @@ export function PurchaseInvoiceScans({
             <span className="font-medium">
               {busy ? "Csatolás…" : "Számlakép csatolása (PDF, JPEG vagy PNG)"}
             </span>
-            <input
-              type="file"
+            <PilotFileInput
               aria-label="Számlakép csatolása"
               accept="application/pdf,image/jpeg,image/png"
               disabled={busy}
