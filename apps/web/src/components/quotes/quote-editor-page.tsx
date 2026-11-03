@@ -884,13 +884,17 @@ function MilestonesCard({
       <PilotCardHeader title="Fizetési ütemezés" />
       <div className="space-y-3 p-5">
         {rows.map((row, index) => (
-          <div key={index} className="flex flex-wrap items-center gap-2">
+          <div key={index} className="flex items-center gap-2">
+            {/* Egy sorban: a név kapja a maradékot, a százalék rögzített szélességű (két w-full
+                mező telefonon külön sorba esett, a % és a törlés gomb is lejjebb). */}
             <PilotInput
+              className="min-w-0 flex-1"
               aria-label={`${index + 1}. mérföldkő neve`}
               value={row.label}
               onChange={(value) => set(index, "label", value)}
             />
             <PilotInput
+              className="w-20 shrink-0"
               aria-label={`${index + 1}. mérföldkő százaléka`}
               inputMode="decimal"
               value={row.percent}

@@ -243,22 +243,27 @@ export function QuoteSnippetsPage() {
                 Mérföldkövek (összesen 100%)
               </p>
               {draft.milestones.map((m, index) => (
-                <div key={index} className="flex flex-wrap gap-2">
-                  <Input
-                    aria-label={`${index + 1}. mérföldkő neve`}
-                    value={m.label}
-                    onChange={(event) =>
-                      setMilestone(index, "label", event.target.value)
-                    }
-                  />
-                  <Input
-                    aria-label={`${index + 1}. mérföldkő százaléka`}
-                    inputMode="decimal"
-                    value={m.percent}
-                    onChange={(event) =>
-                      setMilestone(index, "percent", event.target.value)
-                    }
-                  />
+                <div key={index} className="flex items-center gap-2">
+                  {/* A dusk Input a className-et a belső mezőre teszi, a szélességet a burkoló adja. */}
+                  <div className="min-w-0 flex-1">
+                    <Input
+                      aria-label={`${index + 1}. mérföldkő neve`}
+                      value={m.label}
+                      onChange={(event) =>
+                        setMilestone(index, "label", event.target.value)
+                      }
+                    />
+                  </div>
+                  <div className="w-20 shrink-0">
+                    <Input
+                      aria-label={`${index + 1}. mérföldkő százaléka`}
+                      inputMode="decimal"
+                      value={m.percent}
+                      onChange={(event) =>
+                        setMilestone(index, "percent", event.target.value)
+                      }
+                    />
+                  </div>
                   <Button
                     variant="ghost"
                     aria-label={`${index + 1}. mérföldkő törlése`}
