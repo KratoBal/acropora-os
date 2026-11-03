@@ -38,16 +38,16 @@ export function formatDay(value: string | null | undefined): string {
   return `${value.replaceAll("-", ". ")}.`;
 }
 
+/** The table's minimum width, and the least the flexible customer column may get of it. */
+export const BILLING_TABLE_MIN_WIDTH = 1180;
+export const BILLING_CUSTOMER_MIN_WIDTH = 150;
+
 /**
  * AZ OSZLOP-DEFINÍCIÓ EGY HELYEN (brief 6. pont): a fejléc és a sorok UGYANEBBŐL
  * rajzolnak (`PilotDataTable`), ugyanúgy, mint a Termékeknél és a
  * Beszerzésnél. A vevő oszlopa vág, nem tol: egy hosszú név nem csúsztatja el
  * az összeget az állapotba.
  */
-/** The table's minimum width, and the least the flexible customer column may get of it. */
-export const BILLING_TABLE_MIN_WIDTH = 1180;
-export const BILLING_CUSTOMER_MIN_WIDTH = 150;
-
 export const BILLING_DOCUMENT_COLUMNS: readonly PilotTableColumn<BillingDocumentListItem>[] =
   [
     {
