@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { Prisma } from "@acropora/database";
 
 import {
+  UNAS_STOCK_SYNC_OUTBOX_LIST_SELECT,
   UnasStockSyncOutboxRepository,
   type UnasStockSyncOutboxDatabase,
   type UnasStockSyncOutboxTransaction,
@@ -15,6 +16,20 @@ interface FakeRow {
   sequence: bigint;
   status: string;
 }
+
+const FULL_ROW_DEFAULTS = {
+  sku: "SKU-1",
+  targetOnHand: new Prisma.Decimal("3"),
+  attempts: 0,
+  nextAttemptAt: new Date("2026-11-03T10:00:00.000Z"),
+  lastError: null,
+  resolutionNote: null,
+  sourceProcess: "POS_SALE",
+  sourceRecordId: "order-1",
+  createdAt: new Date("2026-11-03T09:00:00.000Z"),
+  updatedAt: new Date("2026-11-03T09:00:00.000Z"),
+  processedAt: null,
+};
 
 function buildFakeDatabase(options: {
   queryRawImpl?: (values: unknown[]) => unknown;
@@ -42,8 +57,26 @@ function buildFakeDatabase(options: {
         const found = rows.find((r) => r.id === where.id);
         return found ? { id: found.id, status: found.status as never } : null;
       },
-      async findMany() {
-        return [];
+      // Behaves like Prisma: without `select` the WHOLE stored row comes back (BigInt `sequence`
+      // included), with `select` only the named columns do.
+      async findMany(args) {
+        const { where, select } = (args ?? {}) as {
+          where?: { id?: string };
+          select?: Record<string, true>;
+        };
+        const stored = rows
+          .filter((r) => where?.id === undefined || r.id === where.id)
+          .map((r) => ({ ...FULL_ROW_DEFAULTS, ...r }));
+        return stored.map((row) =>
+          select
+            ? Object.fromEntries(
+                Object.keys(select).map((key) => [
+                  key,
+                  (row as Record<string, unknown>)[key],
+                ]),
+              )
+            : row,
+        ) as never;
       },
       async update(args) {
         updateCalls.push(args);
@@ -342,5 +375,52 @@ describe("UnasStockSyncOutboxRepository mark* methods", () => {
     };
     assert.equal(call.data.status, "DEAD_LETTER");
     assert.equal(call.data.lastError, "REQUEST_INVALID");
+  });
+});
+
+/*
+  THE LIST RESPONSE MUST SURVIVE JSON.stringify (2026-11-03, stage: "A tételek betöltése nem
+  sikerült" on /keszlet-kimenosor). WHAT TURNS IT RED: a `findMany` without `select` returns the
+  stored `sequence` (BigInt), and the HTTP layer serialises with JSON.stringify, which throws
+  "Do not know how to serialize a BigInt". The fake above hands back the whole row when no
+  `select` is given, exactly like Prisma, so the old code fails here for the same reason it did on
+  stage.
+*/
+describe("UnasStockSyncOutboxRepository.list and findById responses", () => {
+  const stored: FakeRow[] = [
+    {
+      id: "outbox-1",
+      variantId: "variant-1",
+      warehouseId: "warehouse-1",
+      sequence: 7n,
+      status: "FAILED",
+    },
+  ];
+
+  it("returns rows that JSON.stringify can serialise, without the internal sequence", async () => {
+    const { database } = buildFakeDatabase({ outboxRows: stored });
+    const repository = new UnasStockSyncOutboxRepository(database);
+
+    const result = await repository.list({ limit: 50 });
+
+    assert.equal(result.length, 1);
+    assert.doesNotThrow(() => JSON.stringify(result));
+    assert.equal("sequence" in result[0]!, false);
+    assert.equal(result[0]!.id, "outbox-1");
+  });
+
+  it("returns a single row that JSON.stringify can serialise, without the internal sequence", async () => {
+    const { database } = buildFakeDatabase({ outboxRows: stored });
+    const repository = new UnasStockSyncOutboxRepository(database);
+
+    const row = await repository.findById("outbox-1");
+
+    assert.ok(row);
+    assert.doesNotThrow(() => JSON.stringify(row));
+    assert.equal("sequence" in row, false);
+  });
+
+  it("never selects the BigInt sequence column", () => {
+    assert.equal("sequence" in UNAS_STOCK_SYNC_OUTBOX_LIST_SELECT, false);
   });
 });
