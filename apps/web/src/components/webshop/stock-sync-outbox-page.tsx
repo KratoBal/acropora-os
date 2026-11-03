@@ -456,7 +456,7 @@ export function StockSyncOutboxPage() {
               <p className="font-medium text-dusk-900">Nincs találat.</p>
               <p className="text-xs">
                 {status
-                  ? `A szűrő: ${STATUS_LABELS[status]} állapotú tételek, a legutóbbi 50. Más állapotban lehetnek tételek — válts az "összes" nézetre.`
+                  ? `A szűrő: ${STATUS_LABELS[status]} állapotú tételek, a legutóbbi 50. Más állapotban lehetnek tételek. Válts az "összes" nézetre.`
                   : "A szűrő: minden állapot, a legutóbbi 50 tétel. Ez azt jelenti, hogy a sor üres, nem azt, hogy a lekérdezés nem talált rá."}
               </p>
             </div>

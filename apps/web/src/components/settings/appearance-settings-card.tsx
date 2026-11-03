@@ -52,7 +52,7 @@ export function AppearanceSettingsCard() {
       <CardContent className="space-y-3">
         <p className="text-xs text-dusk-500">
           Egyelőre csak az új, Figma-alapú felületeket érinti (ahol a képernyő
-          már a friss tervet követi) -- a többi felület a mai kinézeten marad,
+          már a friss tervet követi), a többi felület a mai kinézeten marad,
           amíg át nem kerül.
         </p>
         <div className="inline-flex gap-1 rounded-md bg-dusk-100 p-1">

@@ -30,7 +30,7 @@ export const AQUARIUM_MEASUREMENT_RESULT = "AQUARIUM_MEASUREMENT_RESULT";
  * valtozatlanul, csak sablon-valtozokkal.
  */
 export const DEFAULT_AQUARIUM_MEASUREMENT_RESULT_TEMPLATE = {
-  subject: "Vízmérés eredménye -- {{akvarium_neve}}",
+  subject: "Vízmérés eredménye: {{akvarium_neve}}",
   body: [
     "Kedves {{cimzett}}!",
     "",

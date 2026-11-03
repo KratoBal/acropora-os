@@ -383,7 +383,7 @@ function StaleSummary({ items }: { items: ContentListItem[] | null }) {
         {oldest.stale ? (
           <strong className="font-semibold"> régóta</strong>
         ) : null}
-        {" -- a legrégebbi "}
+        {", a legrégebbi "}
         {oldest.text}
       </p>
     </Card>

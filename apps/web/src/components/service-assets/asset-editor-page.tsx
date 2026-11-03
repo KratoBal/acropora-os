@@ -1069,7 +1069,7 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
                 {performanceUnitOptions(performanceUnits, currentUnit).map(
                   (unit) => (
                     <option key={unit.id} value={unit.id}>
-                      {unit.code} -- {unit.name}
+                      {unit.code}: {unit.name}
                     </option>
                   ),
                 )}
@@ -1322,7 +1322,7 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
               {nameDuplicates.map((item) => (
                 <li key={item.id}>
                   {item.owner.displayName}
-                  {item.unit ? ` — ${item.unit.path.join(" / ")}` : ""}
+                  {item.unit ? ` (${item.unit.path.join(" / ")})` : ""}
                 </li>
               ))}
             </ul>

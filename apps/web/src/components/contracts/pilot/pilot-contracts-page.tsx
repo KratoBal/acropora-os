@@ -451,7 +451,7 @@ export function PilotContractsPage() {
                   </PilotFormField>
                   <PilotFormField
                     label="Érvényesség vége"
-                    help="Opcionális -- üresen hagyva határozatlan idejű."
+                    help="Opcionális: üresen hagyva határozatlan idejű."
                   >
                     <PilotInput
                       aria-label="Érvényesség vége"
@@ -815,7 +815,7 @@ export function PilotContractsPage() {
                   {contract.items.map((item) =>
                     contract.kind === "PURCHASE" ? (
                       <li key={item.id}>
-                        {item.position}. {item.description} — {item.quantity}{" "}
+                        {item.position}. {item.description}: {item.quantity}{" "}
                         {item.unitOfMeasure?.code ?? ""} × {money(item.unitNet)}{" "}
                         Ft ={" "}
                         {money(

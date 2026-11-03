@@ -610,7 +610,7 @@ export function PilotWorksheetDetailPage({
                 "Alegység",
                 worksheet.department.path?.length
                   ? worksheet.department.path.join(" / ")
-                  : `${worksheet.department.code} — ${current.unitName ?? "—"}`,
+                  : `${worksheet.department.code} / ${current.unitName ?? "—"}`,
               )}
               {fieldRow(
                 "Hibajegy",

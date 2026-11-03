@@ -200,8 +200,8 @@ export function UnitsOfMeasurePage() {
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-xs text-dusk-500">
-            A fajta azt mondja meg, MIT mér az egység -- nem azt, hol
-            választható. Három külön lista.
+            A fajta azt mondja meg, MIT mér az egység, nem azt, hol választható.
+            Három külön lista.
           </p>
           <FormField label="Fajta" htmlFor="unit-kind">
             <Select
@@ -342,7 +342,7 @@ export function UnitsOfMeasurePage() {
         open={torlendo !== null}
         title={`Törlöd a(z) „${torlendo?.code ?? ""}" mértékegységet?`}
         consequence="A mértékegység eltűnik a listából, és nem lesz többé választható. Ha bármelyik eszközön már szerepel, a törlést a rendszer elutasítja."
-        recovery="Nincs visszaút: a törölt mértékegységet újra fel kell vinni. Ha csak azt szeretnéd, hogy ne legyen választható, vezesd ki helyette -- akkor a meglévő értékek mellett olvasható marad."
+        recovery="Nincs visszaút: a törölt mértékegységet újra fel kell vinni. Ha csak azt szeretnéd, hogy ne legyen választható, vezesd ki helyette: akkor a meglévő értékek mellett olvasható marad."
         confirmLabel="Végleges törlés"
         busy={busyId !== null}
         onConfirm={() => {
