@@ -975,6 +975,27 @@ describe("WebshopOrderDetailPage", () => {
     ],
   };
 
+  // Stage photo 2026-11-03, 1440 px: the line total "10 500 Ft" broke after "10 500". The amount
+  // columns and the SKU never wrap, the product title (the first cell) takes the remaining width.
+  it("keeps the SKU, quantity, unit price and total on one line, and lets the title wrap", async () => {
+    api.detail.mockResolvedValue(twoLines);
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const items = await screen.findByRole("region", { name: "Tételek" });
+    const row = items.querySelector("tbody tr") as HTMLElement;
+    const cells = [...row.querySelectorAll("td")];
+    expect(cells[0]!.className).not.toContain("whitespace-nowrap");
+    for (const cell of cells.slice(1, 5))
+      expect(cell.className).toContain("whitespace-nowrap");
+    const headers = [...items.querySelectorAll("thead th")].slice(2, 5);
+    expect(headers.map((th) => th.textContent)).toEqual([
+      "Menny.",
+      "Egységár",
+      "Összesen",
+    ]);
+    for (const th of headers)
+      expect(th.className).toContain("whitespace-nowrap");
+  });
+
   it("a quantity goes to the chosen line with the new value", async () => {
     api.detail.mockResolvedValue(twoLines);
     api.editLine.mockResolvedValue(twoLines);
