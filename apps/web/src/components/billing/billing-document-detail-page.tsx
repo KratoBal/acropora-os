@@ -324,85 +324,95 @@ export function BillingDocumentDetailPage({
               .join(" · ")}
           </p>
         </div>
-        <div className="flex flex-col items-start gap-3 lg:max-w-[360px] lg:items-end">
+        <div className="flex flex-col items-start gap-3 lg:items-end">
           <BillingDocumentStatus
             status={detail.status}
             emailStatus={detail.delivery?.status ?? detail.emailStatus}
           />
-          <BillingDocumentActions
-            pdfAvailable={pdfAvailable}
-            pdfReason={pdfReason}
-            onPrint={() => pdf.print(detail.id)}
-            onDownload={() => pdf.download(detail.id, title)}
-            busy={pdf.busy}
-            resend={
-              delivery === "NONE"
-                ? null
-                : {
-                    label: MODE_LABELS[mode ?? "RESEND"],
-                    enabled:
-                      canResend &&
-                      mode !== null &&
-                      (detail.delivery?.canResend ?? false),
-                    reason: !canResend
-                      ? "Nincs jogosultságod e-mailt küldeni."
-                      : mode === null
-                        ? "Épp fut egy küldés, vagy a bizonylat még nincs kiállítva."
-                        : "A kiküldéshez a hivatalos PDF kell, és az még nincs meg.",
-                    onClick: openDrawer,
-                  }
-            }
-          />
-          {canCreate &&
-          detail.status === "ISSUED" &&
-          (BILLING_NEW_DOCUMENT_TYPES as readonly string[]).includes(
-            detail.documentType,
-          ) ? (
-            <PilotButton
-              variant="secondary"
-              size="action"
-              disabled={copyBusy}
-              title="Új vázlat ugyanezekkel a beállításokkal és tételekkel; a dátumokat te adod meg, számot nem kap."
-              onClick={async () => {
-                setCopyBusy(true);
-                setCopyError(null);
-                try {
-                  const copy = await billingDocumentsApi.copy(token, detail.id);
-                  router.push(`${BILLING_LIST_PATH}/${copy.id}/szerkesztes`);
-                } catch (cause) {
-                  setCopyError(
-                    cause instanceof Error
-                      ? cause.message
-                      : "A bizonylat nem másolható.",
-                  );
-                } finally {
-                  setCopyBusy(false);
-                }
-              }}
-            >
-              {copyBusy ? "Másolás…" : "Másolás új vázlatba"}
-            </PilotButton>
-          ) : null}
-          {canIssue && stornoOffered(detail) ? (
-            <BillingStornoButton
-              disabled={storno.busy}
-              onClick={() => storno.setOpen(true)}
-            />
-          ) : null}
-          {detail.status === "ISSUED" ? (
-            <PaperOriginalControl
-              marked={detail.paperOriginal ?? false}
-              canManage={canManageFinance}
-              onToggle={(marked) =>
-                billingDocumentsApi.setOwnPaperOriginal(
-                  token,
-                  detail.id,
-                  marked,
-                )
+          {/*
+            EGY SORBAN, TÖRDELVE, mint a bejövő számla adatlapján (Balázs, 2026-11-03 08:42 UTC, élő képernyőkép:
+            a gombok egymás alatt, lépcsőzetesen). A 360 px-es oszlop és az egymás alá rakott blokkok helyett
+            minden művelet egy tördelődő sor eleme.
+          */}
+          <div className="flex flex-wrap items-start gap-2 lg:justify-end">
+            <BillingDocumentActions
+              pdfAvailable={pdfAvailable}
+              pdfReason={pdfReason}
+              onPrint={() => pdf.print(detail.id)}
+              onDownload={() => pdf.download(detail.id, title)}
+              busy={pdf.busy}
+              resend={
+                delivery === "NONE"
+                  ? null
+                  : {
+                      label: MODE_LABELS[mode ?? "RESEND"],
+                      enabled:
+                        canResend &&
+                        mode !== null &&
+                        (detail.delivery?.canResend ?? false),
+                      reason: !canResend
+                        ? "Nincs jogosultságod e-mailt küldeni."
+                        : mode === null
+                          ? "Épp fut egy küldés, vagy a bizonylat még nincs kiállítva."
+                          : "A kiküldéshez a hivatalos PDF kell, és az még nincs meg.",
+                      onClick: openDrawer,
+                    }
               }
-              onSaved={setDetail}
             />
-          ) : null}
+            {canCreate &&
+            detail.status === "ISSUED" &&
+            (BILLING_NEW_DOCUMENT_TYPES as readonly string[]).includes(
+              detail.documentType,
+            ) ? (
+              <PilotButton
+                variant="secondary"
+                size="action"
+                disabled={copyBusy}
+                title="Új vázlat ugyanezekkel a beállításokkal és tételekkel; a dátumokat te adod meg, számot nem kap."
+                onClick={async () => {
+                  setCopyBusy(true);
+                  setCopyError(null);
+                  try {
+                    const copy = await billingDocumentsApi.copy(
+                      token,
+                      detail.id,
+                    );
+                    router.push(`${BILLING_LIST_PATH}/${copy.id}/szerkesztes`);
+                  } catch (cause) {
+                    setCopyError(
+                      cause instanceof Error
+                        ? cause.message
+                        : "A bizonylat nem másolható.",
+                    );
+                  } finally {
+                    setCopyBusy(false);
+                  }
+                }}
+              >
+                {copyBusy ? "Másolás…" : "Másolás új vázlatba"}
+              </PilotButton>
+            ) : null}
+            {canIssue && stornoOffered(detail) ? (
+              <BillingStornoButton
+                disabled={storno.busy}
+                onClick={() => storno.setOpen(true)}
+              />
+            ) : null}
+            {detail.status === "ISSUED" ? (
+              <PaperOriginalControl
+                marked={detail.paperOriginal ?? false}
+                canManage={canManageFinance}
+                onToggle={(marked) =>
+                  billingDocumentsApi.setOwnPaperOriginal(
+                    token,
+                    detail.id,
+                    marked,
+                  )
+                }
+                onSaved={setDetail}
+              />
+            ) : null}
+          </div>
         </div>
       </header>
 
