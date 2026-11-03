@@ -371,6 +371,34 @@ describe("the English words", () => {
     assert.match(JSON.stringify(hungarian), HUNGARIAN_LETTER);
   });
 
+  /*
+    EVERY ENGLISH WORD, NOT ONLY THE ONES A SAMPLE REACHES. The check above
+    follows the sample facts, and a sample has no tracking link, no pickup
+    half, no live-animal split, no refund history: a Hungarian word left in
+    those places passed it (calibration 2026-11-03: "Track your parcel" put
+    back to Hungarian stayed green). So the dictionary itself is walked, every
+    text and every function called with sample arguments, and no Hungarian
+    letter may be in any of them.
+  */
+  it("the English dictionary has no Hungarian letter in any of its words", () => {
+    const words = (value: unknown): string[] =>
+      typeof value === "string"
+        ? [value]
+        : typeof value === "function"
+          ? words((value as (...a: string[]) => unknown)("12", "34"))
+          : value && typeof value === "object"
+            ? Object.values(value).flatMap(words)
+            : [];
+    const english = words(webshopMailText("en"));
+    assert.ok(english.length > 40, `walked ${english.length} words`);
+    for (const word of english)
+      assert.doesNotMatch(word, HUNGARIAN_LETTER, word);
+    /* the walk sees the Hungarian ones too: the same check on them must find letters */
+    assert.ok(
+      words(webshopMailText("hu")).some((w) => HUNGARIAN_LETTER.test(w)),
+    );
+  });
+
   it("the two dictionaries have the same words", () => {
     const shape = (t: object): string[] =>
       Object.entries(t)
