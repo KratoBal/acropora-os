@@ -294,6 +294,10 @@ export function PilotDataTable<Row>({
   };
   const onKeyDown = (row: Row) => (event: KeyboardEvent) => {
     if (!onRowActivate) return;
+    // Csak akkor aktivál, ha a SOR maga van fókuszban: egy sorban álló link vagy gomb a saját
+    // Enter/Szóköz-viselkedését tartja (különben a sor elnyelné a link aktiválását, és a
+    // sor nyílna meg a link helyett).
+    if (event.target !== event.currentTarget) return;
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       onRowActivate(row);
