@@ -8,6 +8,10 @@ import { Prisma, prisma } from "@acropora/database";
 import type { UpdatePurchaseInvoiceInput } from "@acropora/types";
 
 import { followPurchaseEdit } from "../billing/purchase-incoming.js";
+import {
+  assertFresh,
+  expectedUpdatedAtOf,
+} from "../common/optimistic-write.js";
 
 /**
  * CORRECTING A RECORDED INVOICE, WITHOUT TOUCHING STOCK (Luca, 2026-10-08:
@@ -47,6 +51,13 @@ export class PurchaseInvoiceEditService {
       throw new NotFoundException("A beszerzési számla nem található.");
     if (invoice.status === "CANCELLED")
       throw new ConflictException("Visszavont számla nem módosítható.");
+
+    // THE STATE THE EDITOR SAW (card 0d73f1b8): parsed here (a bad value is a 400 before any work),
+    // compared under the row lock below. Internal callers may omit it; the HTTP DTO requires it.
+    const expectedUpdatedAt =
+      input.expectedUpdatedAt === undefined
+        ? undefined
+        : expectedUpdatedAtOf(input.expectedUpdatedAt);
 
     const data: Prisma.PurchaseInvoiceUpdateManyMutationInput = {};
     if (input.supplierInvoiceNumber !== undefined) {
@@ -119,6 +130,7 @@ export class PurchaseInvoiceEditService {
           where: { id },
           select: {
             status: true,
+            updatedAt: true,
             supplierId: true,
             supplierInvoiceNumber: true,
             invoiceDate: true,
@@ -129,6 +141,12 @@ export class PurchaseInvoiceEditService {
         });
         if (!before || before.status !== "POSTED")
           throw new ConflictException("Visszavont számla nem módosítható.");
+        // UNDER THE ROW LOCK, so the comparison is exact: if somebody saved since the editor loaded
+        // the invoice, this write would silently put the editor's stale values over theirs. Only the
+        // header is protected here: the lines' names are written in the same request and the same
+        // transaction, so the invoice's own `updatedAt` covers them (there is no separate line endpoint).
+        if (expectedUpdatedAt)
+          assertFresh(before.updatedAt, expectedUpdatedAt, "A számla");
         if (paidAt !== undefined && (input.isPaid ?? before.isPaid))
           data.paidAt = paidAt;
         // ONLY A PAID DATE, ON AN INVOICE NOT PAID UNDER THE LOCK: nothing

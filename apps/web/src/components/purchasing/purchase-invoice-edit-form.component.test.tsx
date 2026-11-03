@@ -71,6 +71,8 @@ describe("A rögzített számla javítása (Luca, 2026-10-08)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Javítás mentése" }));
     await waitFor(() => expect(api.update).toHaveBeenCalled());
     expect(api.update.mock.calls[0]![2]).toEqual({
+      // a betöltött állapot: erre a verzióra ír, különben a szerver 409-et ad
+      expectedUpdatedAt: "2026-10-08T00:00:00.000Z",
       supplierInvoiceNumber: "SK-17",
       invoiceDate: "2026-10-08",
       dueDate: null,
@@ -98,6 +100,37 @@ describe("A rögzített számla javítása (Luca, 2026-10-08)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Javítás mentése" }));
     await waitFor(() => expect(api.update).toHaveBeenCalled());
     expect(api.update.mock.calls[0]![2]).not.toHaveProperty("invoiceDate");
+  });
+
+  /*
+    AZ ELAVULT ÁLLAPOT (kártya 0d73f1b8): ha közben más mentett, a szerver 409-et ad a közös
+    üzenettel, és az űrlap kiírja; nem mutat sikert, és nem hívja az onSaved-et. MI PIROSÍT: ha a
+    form nem küldené az expectedUpdatedAt-et (a szerver 400-at adna, vagy védtelen lenne); ha a
+    409 üzenetét elnyelné; ha sikerként kezelné.
+  */
+  it("ha közben más mentett (409), kiírja a közös üzenetet, és nem jelez sikert", async () => {
+    api.update.mockImplementation(() =>
+      Promise.reject(
+        new Error(
+          "A számla közben megváltozott. Töltsd újra, és próbáld újra.",
+        ),
+      ),
+    );
+    const onSaved = vi.fn();
+    render(
+      <PurchaseInvoiceEditForm
+        token="t"
+        detail={detail()}
+        onSaved={onSaved}
+        onCancel={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Javítás mentése" }));
+    expect(await screen.findByText(/közben megváltozott/)).toBeTruthy();
+    expect(api.update.mock.calls[0]![2]).toMatchObject({
+      expectedUpdatedAt: "2026-10-08T00:00:00.000Z",
+    });
+    expect(onSaved).not.toHaveBeenCalled();
   });
 
   it("a szerver elutasítását kiírja", async () => {

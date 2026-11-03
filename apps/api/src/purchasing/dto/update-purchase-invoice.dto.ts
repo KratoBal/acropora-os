@@ -18,6 +18,8 @@ class UpdatePurchaseInvoiceLineDto {
 
 /** The shape; the meaning (HUF-only date, names on manual lines) is the service's. */
 export class UpdatePurchaseInvoiceDto implements UpdatePurchaseInvoiceInput {
+  /** Required over HTTP: an edit that does not say which state it saw cannot be protected. */
+  @IsISO8601() expectedUpdatedAt!: string;
   @IsOptional() @IsString() @MaxLength(100) supplierInvoiceNumber?: string;
   @IsOptional() @IsISO8601() invoiceDate?: string;
   @IsOptional() @IsISO8601() dueDate?: string | null;
