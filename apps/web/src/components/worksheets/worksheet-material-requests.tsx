@@ -379,7 +379,7 @@ export function WorksheetMaterialRequests({
               <ul className="mt-2 space-y-0.5 text-sm text-dusk-800">
                 {request.items.map((item) => (
                   <li key={item.id}>
-                    {item.name} — {item.quantity} {item.unit}
+                    {item.name}: {item.quantity} {item.unit}
                   </li>
                 ))}
               </ul>

@@ -748,7 +748,7 @@ export function PilotContractDetailPage({
                 </PilotFormField>
                 <PilotFormField
                   label="Érvényesség vége"
-                  help="Opcionális -- üresen hagyva határozatlan idejű."
+                  help="Opcionális: üresen hagyva határozatlan idejű."
                 >
                   <PilotInput
                     aria-label="Érvényesség vége"
@@ -884,8 +884,8 @@ export function PilotContractDetailPage({
                     <div className="flex items-start justify-between gap-3">
                       <p className="text-pilot-grey-900">
                         {purchase
-                          ? `${index + 1}. ${item.description} — ${item.unitNet} Ft × ${item.quantity} ${item.unitOfMeasure?.code ?? ""}, ${item.vatRatePercent}% ÁFA`
-                          : `${index + 1}. ${item.description} — ${item.unitNet} Ft × ${item.quantity} db × ${item.occasionsPerYear ?? "?"} alkalom / év, ${item.vatRatePercent}% ÁFA`}
+                          ? `${index + 1}. ${item.description}: ${item.unitNet} Ft × ${item.quantity} ${item.unitOfMeasure?.code ?? ""}, ${item.vatRatePercent}% ÁFA`
+                          : `${index + 1}. ${item.description}: ${item.unitNet} Ft × ${item.quantity} db × ${item.occasionsPerYear ?? "?"} alkalom / év, ${item.vatRatePercent}% ÁFA`}
                       </p>
                       {contract.items.length > 1 ? (
                         <PilotButton
@@ -1130,7 +1130,7 @@ export function PilotContractDetailPage({
                             </span>
                             {item.departmentId ? null : (
                               <span className="text-xs text-red-600">
-                                (nincs helyszín megadva -- nem állítható ki
+                                (nincs helyszín megadva, nem állítható ki
                                 belőle)
                               </span>
                             )}

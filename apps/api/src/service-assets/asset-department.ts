@@ -98,7 +98,7 @@ export function assetDepartmentPresenceRefusal(input: {
 }
 
 export const ASSET_DEPARTMENT_PRESENCE_REFUSAL_MESSAGE =
-  "Az eszköz alegysége kötelező szerviz partner tulajdonosnál -- a mező " +
+  "Az eszköz alegysége kötelező szerviz partner tulajdonosnál, a mező " +
   "nem hagyható el létrehozáskor, és meglévő eszközön nem törölhető.";
 
 export const ASSET_DEPARTMENT_REFUSAL_MESSAGES: Record<
@@ -107,7 +107,7 @@ export const ASSET_DEPARTMENT_REFUSAL_MESSAGES: Record<
 > = {
   CUSTOMER_OWNER:
     "Az eszköz alegysége kötelező, vevő tulajdonában lévő eszköznek viszont " +
-    "nem lehet alegysége -- nála a cím a pontosítás. Emiatt vevő tulajdonába " +
+    "nem lehet alegysége, nála a cím a pontosítás. Emiatt vevő tulajdonába " +
     "eszköz nem hozható létre, és meglévő eszköz nem váltható vevő tulajdonába.",
   NOT_FOUND: "A kiválasztott alegység nem található.",
   OTHER_PARTNER: "A kiválasztott alegység nem ehhez a partnerhez tartozik.",

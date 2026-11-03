@@ -513,7 +513,7 @@ function ProductExtensionEditor({
         <>
           {!extension ? (
             <p className="mt-2 text-xs text-dusk-500">
-              Ehhez a változathoz még nincs mentett saját beállítás — az alábbi
+              Ehhez a változathoz még nincs mentett saját beállítás, az alábbi
               mezők üresek.
             </p>
           ) : null}

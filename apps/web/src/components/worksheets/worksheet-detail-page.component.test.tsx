@@ -806,7 +806,7 @@ describe("WorksheetDetailPage alegység-útja", () => {
 
     render(<WorksheetDetailPage worksheetId="worksheet-1" />);
 
-    expect(await screen.findByText(/BIO —/)).toBeTruthy();
+    expect(await screen.findByText(/BIO:/)).toBeTruthy();
   });
 });
 

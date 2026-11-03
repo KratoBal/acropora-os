@@ -40,7 +40,7 @@ describe("a JEV- és rendszer-csempék", () => {
         }}
       />,
     );
-    expect(screen.getByText("Árnyékmérés — nem javaslat")).toBeTruthy();
+    expect(screen.getByText("Árnyékmérés (nem javaslat)")).toBeTruthy();
     expect(screen.getByText("Hiányzó számla párosítás")).toBeTruthy();
     expect(screen.getByText("9 egyezik · 2 eltér")).toBeTruthy();
     expect(container.textContent ?? "").not.toMatch(
