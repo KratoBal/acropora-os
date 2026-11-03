@@ -93,6 +93,24 @@ describe("BrandListPage paging", () => {
     api.sync.mockReset().mockResolvedValue({});
   });
 
+  // The list is the shared table: on the phone a row is a card, each cell labelled.
+  it("labels every cell with its column for the phone card view", async () => {
+    render(<BrandListPage />);
+    await screen.findByText("Tropic Marin");
+    const row = screen.getAllByTestId("brand-row")[0]!;
+    const labels = [...row.querySelectorAll("td")].map((td) =>
+      td.getAttribute("data-label"),
+    );
+    expect(labels).toEqual([
+      "Márka",
+      "Státusz",
+      "Aliasok",
+      "Termékek",
+      "UNAS",
+      "Frissítve",
+    ]);
+  });
+
   it("moves to the next page instead of returning to the first", async () => {
     render(<BrandListPage />);
     await screen.findByText("Tropic Marin");
