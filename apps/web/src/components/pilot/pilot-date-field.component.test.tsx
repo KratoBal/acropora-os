@@ -115,6 +115,27 @@ describe("a magyar dátummező", () => {
     expect(ertek()).toBe("2026-12-24");
   });
 
+  it("showPicker nélkül (vagy ha megtagadja) a fókusz a szöveges mezőben marad", () => {
+    const { container } = render(<Tarolo />);
+    const natív = container.querySelector(
+      'input[type="date"]',
+    ) as HTMLInputElement;
+    natív.showPicker = undefined as never;
+    fireEvent.click(screen.getByRole("button", { name: "Naptár megnyitása" }));
+    expect(document.activeElement).toBe(mezo());
+    cleanup();
+
+    const { container: masik } = render(<Tarolo />);
+    const natív2 = masik.querySelector(
+      'input[type="date"]',
+    ) as HTMLInputElement;
+    natív2.showPicker = () => {
+      throw new DOMException("megtagadva", "NotAllowedError");
+    };
+    fireEvent.click(screen.getByRole("button", { name: "Naptár megnyitása" }));
+    expect(document.activeElement).toBe(mezo());
+  });
+
   it("olvasásra szánt vagy tiltott mezőn nincs naptár-gomb", () => {
     const { rerender } = render(
       <PilotDateField aria-label="Nap" value="2026-11-03" readOnly />,

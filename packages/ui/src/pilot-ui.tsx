@@ -442,6 +442,7 @@ export function PilotDateField({
 }) {
   const [text, setText] = useState(() => isoToHu(value));
   const picker = useRef<HTMLInputElement>(null);
+  const typed = useRef<HTMLInputElement>(null);
   // A kívülről érkező érték (betöltés, nullázás) átírja a szöveget; a félig beírt szöveg
   // értéke ugyanaz az üres, mint amit már kiadtunk, tehát azt nem bántja.
   // A hívónak minden TELJES, létező nap kimegy, a tartományon kívüli is (a natív mező is ezt
@@ -460,6 +461,7 @@ export function PilotDateField({
   return (
     <span className="relative block w-full">
       <input
+        ref={typed}
         id={id}
         type="text"
         inputMode="numeric"
@@ -483,18 +485,25 @@ export function PilotDateField({
       {readOnly || disabled ? null : (
         <>
           {/*
-            A NAPTÁR-GOMB KÉT ÚTON NYÍLIK: egérrel/érintéssel a gomb FÖLÖTT álló, átlátszó natív
-            mezőre kattintanak (minden böngészőben megnyitja a saját naptárát, `showPicker` nélkül
-            is), billentyűvel a gomb `showPicker`-t hív, ahol van.
+            A NAPTÁR A GOMBRA NYÍLIK (`showPicker`), a rejtett natív mező csak a választást adja.
+            Az átlátszó natív mező a gomb FÖLÖTT nem jó: az asztali Chrome a date mezőre
+            kattintva csak a saját ikonján nyit naptárat, máshol a szegmensbe teszi a fókuszt.
+            Ahol nincs `showPicker`, a fókusz a szöveges mezőben marad, ott a nap beírható.
           */}
           <button
             type="button"
             aria-label="Naptár megnyitása"
             onClick={() => {
               const native = picker.current;
-              if (!native) return;
-              if (typeof native.showPicker === "function") native.showPicker();
-              else native.click();
+              if (native && typeof native.showPicker === "function") {
+                try {
+                  native.showPicker();
+                  return;
+                } catch {
+                  // A böngésző megtagadta (pl. nincs felhasználói művelet): marad a beírás.
+                }
+              }
+              typed.current?.focus();
             }}
             className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-pilot-grey-500 hover:text-pilot-grey-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-pilot-aqua-500"
           >
@@ -512,7 +521,7 @@ export function PilotDateField({
               setText(isoToHu(event.target.value));
               onChange?.(event.target.value);
             }}
-            className="absolute inset-y-0 right-0 w-9 cursor-pointer opacity-0"
+            className="pointer-events-none absolute bottom-0 right-0 h-px w-px opacity-0"
           />
         </>
       )}
