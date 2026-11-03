@@ -8,7 +8,9 @@ import {
   CardHeader,
   PageHeader,
   Skeleton,
+  PilotDataTable,
   PilotSelect,
+  type PilotTableColumn,
 } from "@acropora/ui";
 import { hasPermission, PERMISSIONS } from "@acropora/types";
 import { useCallback, useEffect, useState } from "react";
@@ -135,6 +137,94 @@ function describeRun(result: StockSyncOutboxRunResult): {
     title: "A köteg lefutott",
     description: `Elvéve: ${result.claimed}. Kiment: ${result.succeeded}. Elavult (újabb érték írta felül): ${result.superseded}. Újrapróbálásra ütemezve: ${result.retried}. Feladva: ${result.deadLettered}.`,
   };
+}
+
+export const OUTBOX_TABLE_MIN_WIDTH = 1000;
+
+/*
+  A KIMENŐSOR OSZLOPAI A KÖZÖS TÁBLÁN (UI-áttekintés, 3. csomag, 2026-11-03). Telefonon a tábla
+  kártyalistává alakul: a cikkszám a kártya címe, a többi oszlop a felirata mellett. A "Művelet"
+  oszlop CSAK a kezelőnek áll ott (`canManage`), ezért az oszlopok függvényből jönnek, nem állandóból.
+
+  A HIBA SZÖVEGE TELJES EGÉSZÉBEN LÁTSZIK, nem levágva: egy csonkolt UNAS-hibaüzenetből nem lehet
+  eldönteni, ugyanaz a hiba ismétlődik-e, vagy egy másik jött. A hiba oszlop az egyetlen rugalmas.
+
+  A GOMB CSAK OTT ÁLL, AHOL A SZERVER IS ENGEDI: a `manualRetry` kizárólag FAILED és DEAD_LETTER
+  sort vesz vissza; bármi máson `retried: false` jönne, tehát egy mindenhol kirakott gomb olyan
+  műveletet ígérne, ami sosem történik meg.
+*/
+export function outboxColumns({
+  canManage,
+  pendingAction,
+  retryRow,
+}: {
+  canManage: boolean;
+  pendingAction: string | null;
+  retryRow: (row: StockSyncOutboxRow) => void | Promise<void>;
+}): PilotTableColumn<StockSyncOutboxRow>[] {
+  const columns: PilotTableColumn<StockSyncOutboxRow>[] = [
+    {
+      id: "sku",
+      header: "Cikkszám",
+      width: "160px",
+      cell: (row) => (
+        <span className="font-medium text-dusk-900">{row.sku}</span>
+      ),
+    },
+    {
+      id: "status",
+      header: "Állapot",
+      width: "130px",
+      cell: (row) => STATUS_LABELS[row.status],
+    },
+    {
+      id: "target",
+      header: "Cél készlet",
+      width: "110px",
+      cell: (row) => row.targetOnHand,
+    },
+    {
+      id: "attempts",
+      header: "Próbálkozás",
+      width: "110px",
+      cell: (row) => row.attempts,
+    },
+    {
+      id: "next",
+      header: "Következő",
+      width: "170px",
+      nowrap: true,
+      cell: (row) => new Date(row.nextAttemptAt).toLocaleString("hu-HU"),
+    },
+    {
+      id: "error",
+      header: "Hiba",
+      cell: (row) => (
+        <span className="text-dusk-600">{row.lastError ?? "-"}</span>
+      ),
+    },
+  ];
+  if (canManage) {
+    columns.push({
+      id: "action",
+      header: "Művelet",
+      width: "110px",
+      cell: (row) =>
+        row.status === "FAILED" || row.status === "DEAD_LETTER" ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={pendingAction !== null}
+            onClick={() => void retryRow(row)}
+          >
+            {pendingAction === `retry:${row.id}` ? "Küldés…" : "Újra"}
+          </Button>
+        ) : (
+          <span className="text-dusk-400">-</span>
+        ),
+    });
+  }
+  return columns;
 }
 
 export function StockSyncOutboxPage() {
@@ -462,70 +552,13 @@ export function StockSyncOutboxPage() {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="text-dusk-500">
-                  <tr>
-                    <th className="py-1 pr-3">Cikkszám</th>
-                    <th className="py-1 pr-3">Állapot</th>
-                    <th className="py-1 pr-3">Cél készlet</th>
-                    <th className="py-1 pr-3">Próbálkozás</th>
-                    <th className="py-1 pr-3">Következő</th>
-                    <th className="py-1 pr-3">Hiba</th>
-                    {canManage ? <th className="py-1">Művelet</th> : null}
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row) => (
-                    <tr key={row.id} className="border-t">
-                      <td className="py-1 pr-3 font-medium text-dusk-900">
-                        {row.sku}
-                      </td>
-                      <td className="py-1 pr-3">{STATUS_LABELS[row.status]}</td>
-                      <td className="py-1 pr-3">{row.targetOnHand}</td>
-                      <td className="py-1 pr-3">{row.attempts}</td>
-                      <td className="py-1 pr-3">
-                        {new Date(row.nextAttemptAt).toLocaleString("hu-HU")}
-                      </td>
-                      {/*
-                        A HIBA SZOVEGE TELJES EGESZEBEN LATSZIK, nem levagva: egy
-                        csonkolt UNAS-hibauzenetbol nem lehet eldonteni, ugyanaz
-                        a hiba ismetlodik-e, vagy egy masik jott.
-                      */}
-                      <td className="py-1 pr-3 text-dusk-600">
-                        {row.lastError ?? "-"}
-                      </td>
-                      {canManage ? (
-                        <td className="py-1">
-                          {/*
-                            A GOMB CSAK OTT ALL, AHOL A SZERVER IS ENGEDI.
-                            A `manualRetry` kizarolag FAILED es DEAD_LETTER
-                            sort vesz vissza; barmi mason `retried: false`
-                            jonne, tehat egy mindenhol kirakott gomb olyan
-                            muveletet igerne, ami sosem tortenik meg.
-                          */}
-                          {row.status === "FAILED" ||
-                          row.status === "DEAD_LETTER" ? (
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              disabled={pendingAction !== null}
-                              onClick={() => void retryRow(row)}
-                            >
-                              {pendingAction === `retry:${row.id}`
-                                ? "Küldés…"
-                                : "Újra"}
-                            </Button>
-                          ) : (
-                            <span className="text-dusk-400">-</span>
-                          )}
-                        </td>
-                      ) : null}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <PilotDataTable
+              columns={outboxColumns({ canManage, pendingAction, retryRow })}
+              rows={rows}
+              rowKey={(row) => row.id}
+              rowTestId="outbox-row"
+              minWidth={OUTBOX_TABLE_MIN_WIDTH}
+            />
           )}
         </CardContent>
       </Card>
