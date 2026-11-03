@@ -56,6 +56,11 @@ export interface OutgoingCandidate {
   /** A tárolt PDF helye, vagy `null`, és akkor a `missingReason`. */
   pdfKey: string | null;
   missingReason: string | null;
+  /**
+   * „PAPÍRON MEGVAN” (Balázs, 2026-11-03): a PDF nem kerül a csomagba, a borítón „papíron megvan”
+   * áll, és nem számít PDF nélkülinek. A bejövő csomag `PAPER` kimenetének párja (#2000, #2006).
+   */
+  paperOriginal?: boolean;
 }
 
 const SOURCE_ORDER: Record<OutgoingSource, number> = {
@@ -104,10 +109,12 @@ export function externalNotInvoice(kindCode: string): boolean {
   return type === "PROFORMA" || type === "DELIVERY_NOTE";
 }
 
-export type OutgoingOutcome = "ATTACHED" | "NO_FILE" | "NOT_PDF" | "UNREADABLE";
+export type OutgoingOutcome =
+  "ATTACHED" | "PAPER" | "NO_FILE" | "NOT_PDF" | "UNREADABLE";
 
 const NOTE: Record<OutgoingOutcome, string> = {
   ATTACHED: "csatolva",
+  PAPER: "papíron megvan",
   NO_FILE: "nincs PDF",
   NOT_PDF: "nem PDF, nincs benne",
   UNREADABLE: "a PDF nem olvasható, nincs benne",
@@ -232,7 +239,10 @@ function renderCover(input: {
           .text(
             `${OUTGOING_SOURCE_LABEL[total.source]}: ${total.count} db, ${amountText(total.gross, total.currency)}`,
           );
-      const missing = input.lines.filter((l) => l.outcome !== "ATTACHED");
+      // a papíron meglévő számla nem PDF nélküli: megvan, csak nem ebben a csomagban
+      const missing = input.lines.filter(
+        (l) => l.outcome !== "ATTACHED" && l.outcome !== "PAPER",
+      );
       doc.moveDown().fontSize(11).text(`PDF nélkül: ${missing.length} db`);
       for (const { row, outcome } of missing)
         doc
@@ -260,7 +270,8 @@ export async function buildOutgoingPackage(input: {
     [];
   for (const line of input.lines) {
     let outcome: OutgoingOutcome = "NO_FILE";
-    if (line.file) {
+    if (line.row.paperOriginal) outcome = "PAPER";
+    else if (line.file) {
       const attached = await attachablePdf(line.file);
       outcome = attached.outcome;
       if (attached.pdf) loaded.push(attached.pdf);

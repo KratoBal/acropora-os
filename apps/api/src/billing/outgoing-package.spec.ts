@@ -207,6 +207,46 @@ describe("a csomag", () => {
   });
 });
 
+/**
+ * „PAPÍRON MEGVAN” (Balázs, 2026-11-03). MI PIROSÍT: a jelölt számla PDF-je bekerül a csomagba; a borítóról
+ * kiesik; a „PDF nélkül” blokk PDF nélkülinek számolja; a fájlját a szolgáltatás lekéri.
+ */
+describe("a papíron meglévő számla", () => {
+  it("a borítón „papíron megvan”, a PDF-je nincs a csomagban, és nem számít PDF nélkülinek", async () => {
+    const rows = outgoingPackageRows("2026-09", [
+      jelolt({ number: "A" }),
+      jelolt({ number: "P", paperOriginal: true }),
+      jelolt({ number: "N", missingReason: "SZAMLAZZ_PDF_REJECTED_7" }),
+    ]);
+    const files: Record<string, Uint8Array | null> = {
+      A: await pdf(1),
+      // a papíros számlának VAN tárolt PDF-je: a jelölés dönt, nem a fájl hiánya
+      P: await pdf(3),
+      N: null,
+    };
+    const out = await buildOutgoingPackage({
+      month: "2026-09",
+      company: { name: "Acropora Kft.", taxNumber: "12345678" },
+      lines: rows.map((row) => ({ row, file: files[row.number]! })),
+    });
+    // a tételek szám szerint: A, N, P
+    assert.deepEqual(out.outcomes, ["ATTACHED", "NO_FILE", "PAPER"]);
+    // borító + az A egy lapja; a P három lapja nincs benne
+    assert.equal((await PDFDocument.load(out.pdf)).getPageCount(), 2);
+    const sorok = (await readPdfTextLines(out.pdf)).map((l) => l.text);
+    for (const vart of [
+      "Számlázz.hu; átutalás; papíron megvan",
+      "PDF nélkül: 1 db",
+      "N (Számlázz.hu): nincs PDF, SZAMLAZZ_PDF_REJECTED_7",
+    ])
+      assert.ok(sorok.includes(vart), `hiányzik: ${vart}\n${sorok.join("\n")}`);
+    assert.ok(
+      !sorok.some((l) => l.startsWith("P (")),
+      `a papíros számla nem lehet a PDF nélküliek között\n${sorok.join("\n")}`,
+    );
+  });
+});
+
 describe("a csomag adatai", () => {
   it("az OS díjbekérője és a feed díjbekérője kimarad, a PDF a saját kulcsáról jön, és egy olvashatatlan tár nem állítja meg", async () => {
     const kert: string[] = [];
@@ -280,6 +320,13 @@ describe("a csomag adatai", () => {
             source: "EBIZ",
             pdfStorageKey: "external-invoices/x2/ebiz.pdf",
           }),
+          // papíron megvan (2026-11-03): a tárolt PDF-jét le sem kérjük
+          kulso({
+            id: "x6",
+            documentNumber: "ACRW-2026/00514",
+            pdfStorageKey: "external-invoices/x6/szamlazz.pdf",
+            paperOriginalAt: new Date("2026-11-03T08:00:00Z"),
+          }),
         ],
       },
     };
@@ -294,11 +341,15 @@ describe("a csomag adatai", () => {
       "external-invoice/x1/szamlazz.pdf",
       "external-invoice/x2/ebiz.pdf",
     ]);
-    // borító + a két megjött PDF; az eBIZ-é a tár hibája miatt nincs benne
+    // borító + a két megjött PDF; az eBIZ-é a tár hibája miatt nincs benne, a papírosé (x6) nincs is lekérve
     assert.equal((await PDFDocument.load(content)).getPageCount(), 3);
     const borito = (await readPdfTextLines(content)).map((l) => l.text);
     assert.ok(
       borito.some((l) => l.startsWith("Sztornó számla, Számlázz.hu")),
+      borito.join("\n"),
+    );
+    assert.ok(
+      borito.some((l) => l.endsWith("papíron megvan")),
       borito.join("\n"),
     );
   });

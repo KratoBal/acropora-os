@@ -1034,3 +1034,31 @@ describe("the cancelled own invoice on the list", () => {
     );
   });
 });
+
+/**
+ * „PAPÍRON MEGVAN” A LISTÁN (Balázs, 2026-11-03). MI PIROSÍT: a jelölés a listaelemről elveszik (a PDF
+ * oszlop a csomag döntését mutatja); a jelöletlen soron is megjelenik.
+ */
+describe("the paper-original mark on the list", () => {
+  it("own and external rows carry it only when marked", () => {
+    const at = new Date("2026-11-03T08:00:00Z");
+    assert.equal(
+      toListItem(row({ status: "ISSUED", paperOriginalAt: at })).paperOriginal,
+      true,
+    );
+    assert.equal(
+      "paperOriginal" in
+        toListItem(row({ status: "ISSUED", paperOriginalAt: null })),
+      false,
+    );
+    assert.equal(
+      toExternalListItem(external({ paperOriginalAt: at })).paperOriginal,
+      true,
+    );
+    assert.equal(
+      "paperOriginal" in
+        toExternalListItem(external({ paperOriginalAt: null })),
+      false,
+    );
+  });
+});

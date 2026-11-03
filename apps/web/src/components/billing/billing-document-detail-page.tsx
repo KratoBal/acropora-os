@@ -52,6 +52,7 @@ import {
   stornoOffered,
   useBillingStorno,
 } from "./billing-document-storno";
+import { PaperOriginalControl } from "./billing-paper-original";
 import { BillingDocumentRelated } from "./billing-document-related";
 import { BILLING_LIST_PATH, formatDay } from "./billing-document-table";
 import { formatMoney, trimDecimal } from "./billing-editor-state";
@@ -386,6 +387,20 @@ export function BillingDocumentDetailPage({
             <BillingStornoButton
               disabled={storno.busy}
               onClick={() => storno.setOpen(true)}
+            />
+          ) : null}
+          {detail.status === "ISSUED" ? (
+            <PaperOriginalControl
+              marked={detail.paperOriginal ?? false}
+              canManage={canManageFinance}
+              onToggle={(marked) =>
+                billingDocumentsApi.setOwnPaperOriginal(
+                  token,
+                  detail.id,
+                  marked,
+                )
+              }
+              onSaved={setDetail}
             />
           ) : null}
         </div>

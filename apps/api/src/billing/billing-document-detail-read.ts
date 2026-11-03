@@ -84,6 +84,7 @@ export function withIssueAndDelivery(
       documentUrl: status === "ISSUED" ? row.externalUrl : null,
     },
     pdf: { available: pdfAvailable },
+    paperOriginal: Boolean(row.paperOriginalAt),
     delivery: {
       status: row.emailStatus as BillingEmailStatus | null,
       lastAttempt: last

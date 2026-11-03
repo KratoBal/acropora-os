@@ -1,20 +1,30 @@
 import {
+  Body,
   Controller,
   Get,
   Header,
+  HttpCode,
   Inject,
   NotFoundException,
   Param,
+  Post,
   StreamableFile,
 } from "@nestjs/common";
 import { Prisma, prisma } from "@acropora/database";
 import {
   PERMISSIONS,
+  type AuthenticatedUser,
   type BillingExternalDocumentDetail,
   type BillingExternalDocumentLine,
 } from "@acropora/types";
 
+import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
+import { OutgoingPaperOriginalDto } from "./dto/outgoing-paper-original.dto.js";
+import {
+  OutgoingDocumentNotFoundError,
+  setOutgoingPaperOriginal,
+} from "./outgoing-paper-original.js";
 import {
   externalCustomerName,
   externalKindLabel,
@@ -76,6 +86,7 @@ export class ExternalBillingDocumentsController {
       source: row.source === "EBIZ" ? "EBIZ" : "SZAMLAZZ",
       pdfAvailable: row.pdfStorageKey !== null,
       pdfMissingReason: row.pdfStorageKey ? null : row.pdfMissingReason,
+      paperOriginal: Boolean(row.paperOriginalAt),
       kindCode: row.kindCode,
       kindLabel: externalKindLabel(row.kindCode),
       documentNumber: row.documentNumber,
@@ -141,6 +152,33 @@ export class ExternalBillingDocumentsController {
    * already stored; it never calls eBIZ, so it has no side effect (no entry
    * in `assistant-readonly.policy.ts`). No PDF: 404.
    */
+  /**
+   * „PAPÍRON MEGVAN” be- vagy kikapcsolása (Balázs, 2026-11-03): a PDF nem kerül a havi kimenő csomagba.
+   * A jog a bejövő számla jelöléséé (`finance.manage`), plusz a lap olvasása; lásd `setOutgoingPaperOriginal`.
+   */
+  @Post(":id/paper-original")
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.BILLING_VIEW, PERMISSIONS.FINANCE_MANAGE)
+  async setPaperOriginal(
+    @Param("id") id: string,
+    @Body() input: OutgoingPaperOriginalDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<BillingExternalDocumentDetail> {
+    try {
+      await setOutgoingPaperOriginal(this.database, {
+        origin: "EXTERNAL",
+        id,
+        marked: input.marked,
+        userId: user.id,
+      });
+    } catch (error) {
+      if (error instanceof OutgoingDocumentNotFoundError)
+        throw new NotFoundException(error.message);
+      throw error;
+    }
+    return this.detail(id);
+  }
+
   @Get(":id/pdf")
   @Header("Cache-Control", "private, no-store")
   async pdf(@Param("id") id: string): Promise<StreamableFile> {

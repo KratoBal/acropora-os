@@ -251,6 +251,8 @@ export interface BillingDocumentDetail {
   issueDate?: string | null;
   szamlazz?: BillingDocumentSzamlazzInfo;
   pdf?: BillingDocumentPdfInfo;
+  /** „Papíron megvan” (Balázs, 2026-11-03): a PDF nem kerül a havi kimenő csomagba. */
+  paperOriginal?: boolean;
   delivery?: BillingDocumentDeliveryInfo;
   /** A számla sztornója, ha van; `null`: nincs sztornózva. */
   cancellation?: BillingDocumentCancellation | null;

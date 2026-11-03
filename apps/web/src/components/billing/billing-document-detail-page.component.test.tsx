@@ -38,6 +38,7 @@ const api = vi.hoisted(() => ({
   stornoPdf: vi.fn(),
   issuingCheck: vi.fn(),
   issuingResolve: vi.fn(),
+  setOwnPaperOriginal: vi.fn(),
 }));
 vi.mock("@/lib/api/billing-documents", () => ({ billingDocumentsApi: api }));
 /*
@@ -643,6 +644,61 @@ describe("BillingDocumentDetailPage", () => {
   ellenőrzésre vár, elutasított) összemosódnak; ha a sztornó PDF-je helyett a
   számláé jön.
 */
+/**
+ * „PAPÍRON MEGVAN” A SAJÁT KIÁLLÍTOTT SZÁMLÁN (Balázs, 2026-11-03). MI PIROSÍT: a gomb nem a saját számla
+ * végpontját hívja; a válasz után a lap nem mutatja a jelölést; vázlaton is van gomb; a `finance.manage`
+ * nélküli szerep is lát gombot.
+ */
+describe("paper original", () => {
+  it("an issued invoice is marked and unmarked with one button", async () => {
+    api.setOwnPaperOriginal
+      .mockReset()
+      .mockResolvedValueOnce(detail({ paperOriginal: true }));
+    render(<BillingDocumentDetailPage documentId="doc-1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Papíron megvan" }),
+    );
+    expect(
+      await screen.findByTestId("paper-original-pill"),
+    ).toBeInTheDocument();
+    expect(api.setOwnPaperOriginal).toHaveBeenCalledWith(
+      "token-1",
+      "doc-1",
+      true,
+    );
+    api.setOwnPaperOriginal.mockResolvedValueOnce(
+      detail({ paperOriginal: false }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Mégsem papíron" }));
+    await waitFor(() =>
+      expect(screen.queryByTestId("paper-original-pill")).toBeNull(),
+    );
+    expect(api.setOwnPaperOriginal).toHaveBeenLastCalledWith(
+      "token-1",
+      "doc-1",
+      false,
+    );
+  });
+
+  it("no button on a draft, and none without finance.manage", async () => {
+    api.detail.mockResolvedValue(detail({ status: "DRAFT" }));
+    const { unmount } = render(
+      <BillingDocumentDetailPage documentId="doc-1" />,
+    );
+    await screen.findByRole("heading", { level: 1 });
+    expect(screen.queryByRole("button", { name: /papíron/i })).toBeNull();
+    unmount();
+
+    auth.role = "SALES";
+    api.detail.mockResolvedValue(detail({ paperOriginal: true }));
+    render(<BillingDocumentDetailPage documentId="doc-1" />);
+    expect(
+      await screen.findByTestId("paper-original-pill"),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /papíron/i })).toBeNull();
+  });
+});
+
 describe("storno", () => {
   const done = {
     source: "OS" as const,

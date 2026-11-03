@@ -37,6 +37,7 @@ export const LIST_SELECT = {
   createdAt: true,
   // a PDF megléte a listán (Balázs, 2026-10-21), ugyanaz a mező, amit a havi csomag olvas
   pdfStorageKey: true,
+  paperOriginalAt: true,
   customer: { select: { companyName: true, displayName: true } },
   // a kiállított sztornó (számlázási brief, 1. pont)
   correctionInvoices: {
@@ -80,6 +81,7 @@ export const EXTERNAL_LIST_SELECT = {
   payments: true,
   source: true,
   pdfStorageKey: true,
+  paperOriginalAt: true,
   pdfMissingReason: true,
 } satisfies Prisma.ExternalBillingDocumentSelect;
 

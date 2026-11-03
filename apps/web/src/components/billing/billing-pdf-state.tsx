@@ -44,9 +44,22 @@ export function pdfMissingText(
 export function PdfStateBadge({
   item,
 }: {
-  item: Pick<BillingDocumentListItem, "pdf" | "origin" | "externalSource">;
+  item: Pick<
+    BillingDocumentListItem,
+    "pdf" | "origin" | "externalSource" | "paperOriginal"
+  >;
 }) {
   if (item.pdf === null) return <span className="text-pilot-grey-400">—</span>;
+  // „Papíron megvan” (Balázs, 2026-11-03): a csomag sem csatolja, és nem hiányzónak számolja
+  if (item.paperOriginal)
+    return (
+      <span
+        data-testid="paper-original-badge"
+        className="inline-flex items-center rounded-full bg-pilot-grey-100 px-2 py-0.5 text-xs font-semibold text-pilot-grey-700"
+      >
+        Papíron megvan
+      </span>
+    );
   if (item.pdf.available)
     return (
       <span className="inline-flex items-center rounded-full bg-pilot-aqua-50 px-2 py-0.5 text-xs font-semibold text-pilot-aqua-700">

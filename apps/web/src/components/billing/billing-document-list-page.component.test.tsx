@@ -329,6 +329,43 @@ describe("BillingDocumentListPage", () => {
     expect(rows[6]).toHaveTextContent("A Számlázz.hu nem adta ki (HTTP 503).");
   });
 
+  // „Papíron megvan” (Balázs, 2026-11-03). MI PIROSÍT: a jelölt sor a PDF állapotát mutatja (a csomag a
+  // jelölést nézi, nem a fájlt); a jelölés a fájl nélküli soron elveszik; a jelöletlen sor jelölést mutat.
+  it("a row kept on paper says so in the PDF column, with or without a stored file", async () => {
+    api.list.mockResolvedValue(
+      response([
+        item({
+          id: "p1",
+          documentNumber: "AC-2026-001251",
+          paperOriginal: true,
+        }),
+        item({
+          id: "p2",
+          documentNumber: "ACRW-2026/00604",
+          opens: "EXTERNAL_DETAIL",
+          origin: "EXTERNAL",
+          externalKindLabel: "Számla",
+          externalSource: "SZAMLAZZ",
+          pdf: { available: false, missingReason: null },
+          paperOriginal: true,
+        }),
+        item({ id: "p3", documentNumber: "AC-2026-001252" }),
+      ]),
+    );
+    render(<BillingDocumentListPage />);
+    const rows = await screen.findAllByRole("row", { name: /megnyitása$/ });
+    expect(
+      within(rows[0]!).getByTestId("paper-original-badge"),
+    ).toHaveTextContent("Papíron megvan");
+    expect(within(rows[0]!).queryByText("Megvan")).toBeNull();
+    expect(
+      within(rows[1]!).getByTestId("paper-original-badge"),
+    ).toBeInTheDocument();
+    expect(within(rows[1]!).queryByText("Nincs")).toBeNull();
+    expect(within(rows[2]!).queryByTestId("paper-original-badge")).toBeNull();
+    expect(within(rows[2]!).getByText("Megvan")).toBeInTheDocument();
+  });
+
   it("the source filter goes to the request, and back from the URL", async () => {
     urlNavigation.reset("/penzugy/szamlazas", "origin=EXTERNAL");
     render(<BillingDocumentListPage />);
