@@ -18,7 +18,7 @@ export const PAGE_HEADER_CLASSES = {
   eyebrow:
     "mb-1.5 text-[11px] font-semibold uppercase leading-4 tracking-[0.05em] text-pilot-accent-warm-text",
   title:
-    "text-[28px] font-semibold leading-[34px] tracking-[-0.3px] text-pilot-grey-900",
+    "break-words text-[28px] font-semibold leading-[34px] tracking-[-0.3px] text-pilot-grey-900",
   description: "mt-2 max-w-2xl text-sm leading-5 text-pilot-grey-600",
   meta: "mt-2 flex flex-wrap items-center gap-2",
   // tördel, hogy egy több gombos sor telefonon se lógjon ki (UI 1. csomag: az UNAS termékszinkron 443 px volt 390-en)

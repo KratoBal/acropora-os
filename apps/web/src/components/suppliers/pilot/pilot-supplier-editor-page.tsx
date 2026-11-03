@@ -1,5 +1,11 @@
 "use client";
-import { Alert, Badge, ConfirmDialog, Skeleton } from "@acropora/ui";
+import {
+  Alert,
+  Badge,
+  ConfirmDialog,
+  PageHeader,
+  Skeleton,
+} from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
@@ -466,36 +472,32 @@ export function PilotSupplierEditorPage({
   return (
     <PilotThemeRoot>
       <div className="flex min-h-full flex-col">
-        <div className="flex items-center justify-between border-b border-pilot-grey-200 bg-white px-8 py-5">
-          <div>
-            <p className="mb-0.5 text-xs text-pilot-grey-400">Partnerek</p>
-            <h1 className="text-xl font-semibold text-pilot-grey-900">
-              {supplier ? supplier.name : "Új felvitele"}
-            </h1>
-            <p className="mt-0.5 text-sm text-pilot-grey-400">
-              Törzsadatok, bankszámla és kapcsolattartó a beszerzési számlák
-              rögzítéséhez.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            {supplier ? (
+        <PageHeader
+          className="px-8 pt-6"
+          eyebrow="Partnerek"
+          title={supplier ? supplier.name : "Új felvitele"}
+          description="Törzsadatok, bankszámla és kapcsolattartó a beszerzési számlák rögzítéséhez."
+          meta={
+            supplier ? (
               <Badge variant={supplier.isActive ? "success" : "neutral"}>
                 {supplier.isActive ? "Aktív" : "Inaktív"}
               </Badge>
-            ) : null}
-            {/*
+            ) : null
+          }
+          actions={
+            /*
               Oda vissza, ahonnan a kolléga jött - egy partner adatlapjára a
               munkalap felől is be lehet lépni, és onnan a partner-lista nem
               "vissza", hanem egy harmadik hely. Ha nincs honnan jönni
               (közvetlen cím, újratöltés), a lista a tartalék, ahogy eddig.
-            */}
+            */
             <Link href={backToList.href}>
               <PilotButton type="button" variant="secondary">
                 {backToList.fromWithinApp ? "Vissza" : "Vissza a listához"}
               </PilotButton>
             </Link>
-          </div>
-        </div>
+          }
+        />
 
         <div className="flex flex-1 flex-col gap-4 px-8 py-6">
           {error ? (

@@ -4,6 +4,7 @@ import type {
   MaterialRequestStatusCounts,
   MaterialRequestSummary,
 } from "@acropora/types";
+import { PageHeader } from "@acropora/ui";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -145,17 +146,12 @@ export function MaterialRequestOverviewPage() {
 
   return (
     <PilotThemeRoot bleed className="min-h-screen bg-pilot-grey-50">
-      <div className="border-b border-pilot-grey-200 bg-white px-4 py-5 sm:px-8">
-        <p className="mb-1 text-xs text-pilot-grey-400">
-          Szerviz / Anyagigények
-        </p>
-        <h1 className="text-xl font-semibold text-pilot-grey-900">
-          Anyagigények
-        </h1>
-        <p className="text-xs text-pilot-grey-500">
-          Áttekintés és beszerzési állapotok
-        </p>
-      </div>
+      <PageHeader
+        className="mx-auto max-w-[1320px] px-4 pt-6 sm:px-8"
+        eyebrow="Szerviz"
+        title="Anyagigények"
+        description="Áttekintés és beszerzési állapotok"
+      />
       <div className="mx-auto flex max-w-[1320px] flex-col gap-4 px-4 py-6 sm:px-8">
         <StatusMetrics counts={counts} />
         <div className="flex flex-wrap items-center gap-2 rounded-[14px] border border-pilot-grey-200 bg-white p-4 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
@@ -266,17 +262,12 @@ export function MaterialRequestOverviewPage() {
 export function MaterialRequestDetailPage({ id }: { id: string }) {
   return (
     <PilotThemeRoot bleed className="min-h-screen bg-pilot-grey-50">
-      <div className="border-b border-pilot-grey-200 bg-white px-4 py-5 sm:px-8">
-        <p className="mb-1 text-xs text-pilot-grey-400">
-          Szerviz / Anyagigények
-        </p>
-        <h1 className="text-xl font-semibold text-pilot-grey-900">
-          Anyagigény részletei
-        </h1>
-        <p className="text-xs text-pilot-grey-500">
-          Beszerzési felelős és státuszkövetés
-        </p>
-      </div>
+      <PageHeader
+        className="mx-auto max-w-[1320px] px-4 pt-6 sm:px-8"
+        eyebrow="Szerviz"
+        title="Anyagigény részletei"
+        description="Beszerzési felelős és státuszkövetés"
+      />
       <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-8">
         <MaterialRequestDetail id={id} variant="page" />
       </div>

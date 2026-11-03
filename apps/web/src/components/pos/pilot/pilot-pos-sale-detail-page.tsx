@@ -3,6 +3,7 @@
 import {
   Alert,
   Icon,
+  PageHeader,
   PilotDataTable,
   Skeleton,
   type PilotTableColumn,
@@ -226,21 +227,17 @@ export function PilotPosSaleDetailPage({ saleId }: { saleId: string }) {
           <Icon name="chevron-left" size={12} />
           {backTo.fromWithinApp ? "Vissza" : "Vissza a pénztárhoz"}
         </button>
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-[28px] font-semibold leading-tight text-pilot-grey-900">
-              {detail ? detail.orderNumber : "Eladás"}
-            </h1>
-            <p className="mt-1.5 text-xs text-pilot-grey-600">
-              POS eladás részletei
-            </p>
-          </div>
-          {detail?.paymentMethod ? (
-            <PilotBadge variant="teal">
-              {PAYMENT_METHOD_LABEL[detail.paymentMethod]}
-            </PilotBadge>
-          ) : null}
-        </div>
+        <PageHeader
+          title={detail ? detail.orderNumber : "Eladás"}
+          description="POS eladás részletei"
+          meta={
+            detail?.paymentMethod ? (
+              <PilotBadge variant="teal">
+                {PAYMENT_METHOD_LABEL[detail.paymentMethod]}
+              </PilotBadge>
+            ) : undefined
+          }
+        />
       </div>
       <div className="flex min-w-0 flex-col gap-5 px-8 pb-8">
         {loading ? (

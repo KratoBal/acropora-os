@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert } from "@acropora/ui";
+import { Alert, PageHeader } from "@acropora/ui";
 import {
   CONTRACT_KIND_LABELS,
   hasPermission,
@@ -365,25 +365,21 @@ export function PilotContractsPage() {
   return (
     <PilotThemeRoot>
       <div className="flex min-h-full flex-col">
-        <div className="flex items-center justify-between border-b border-pilot-grey-200 bg-white px-8 py-5">
-          <div>
-            <p className="mb-0.5 text-xs text-pilot-grey-400">Partnerek</p>
-            <h1 className="text-xl font-semibold text-pilot-grey-900">
-              Szerződések
-            </h1>
-            <p className="mt-0.5 text-sm text-pilot-grey-400">
-              Az éves díj a tétel egységárából, darabszámából és alkalomszámából
-              számolódik.
-            </p>
-          </div>
-          <PilotButton
-            type="button"
-            variant={creating ? "secondary" : "primary"}
-            onClick={() => setCreating((value) => !value)}
-          >
-            {creating ? "Űrlap bezárása" : "Új szerződés"}
-          </PilotButton>
-        </div>
+        <PageHeader
+          className="px-8 pt-6"
+          eyebrow="Partnerek"
+          title="Szerződések"
+          description="Az éves díj a tétel egységárából, darabszámából és alkalomszámából számolódik."
+          actions={
+            <PilotButton
+              type="button"
+              variant={creating ? "secondary" : "primary"}
+              onClick={() => setCreating((value) => !value)}
+            >
+              {creating ? "Űrlap bezárása" : "Új szerződés"}
+            </PilotButton>
+          }
+        />
 
         <div className="flex flex-1 flex-col gap-4 px-8 py-6">
           {error ? (

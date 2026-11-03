@@ -2,6 +2,7 @@
 import {
   Alert,
   Icon,
+  PageHeader,
   Skeleton,
   PilotDataTable,
   PilotSelect,
@@ -438,28 +439,21 @@ export function PilotServiceJobListPage() {
         THE HEADER OF THE SERVICE REDESIGN (Figma 423:20): eyebrow, title, one
         sentence on what the list is for, and the primary action at the right.
       */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-pilot-aqua-700">
-            Szerviz / Munkatér
-          </p>
-          <h1 className="text-3xl font-semibold text-pilot-grey-900">
-            Hibajegyek
-          </h1>
-          <p className="mt-2 text-sm text-pilot-grey-500">
-            Minden bejelentésnek legyen következő lépése. A hibajegy a lánc első
-            eleme; mögötte állnak a munkalapok.
-          </p>
-        </div>
-        {canManage ? (
-          <Link href="/szerviz/hibajegyek/uj">
-            <PilotButton variant="primary" size="regular">
-              <Icon name="plus" size={14} />
-              Új hibajegy
-            </PilotButton>
-          </Link>
-        ) : null}
-      </div>
+      <PageHeader
+        eyebrow="Szerviz / Munkatér"
+        title="Hibajegyek"
+        description="Minden bejelentésnek legyen következő lépése. A hibajegy a lánc első eleme; mögötte állnak a munkalapok."
+        actions={
+          canManage ? (
+            <Link href="/szerviz/hibajegyek/uj">
+              <PilotButton variant="primary" size="regular">
+                <Icon name="plus" size={14} />
+                Új hibajegy
+              </PilotButton>
+            </Link>
+          ) : undefined
+        }
+      />
 
       {/*
         THE STAT TILES come back (the redesign brief keeps them), from the

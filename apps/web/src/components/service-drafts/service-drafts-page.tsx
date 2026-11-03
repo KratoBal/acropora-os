@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Alert, Skeleton } from "@acropora/ui";
+import { Alert, PageHeader, Skeleton } from "@acropora/ui";
 import type {
   ServiceDraftItem,
   ServiceDraftListResponse,
@@ -375,16 +375,11 @@ export function ServiceDraftsPage() {
       bleed
       className="min-h-screen bg-pilot-grey-50 px-8 py-8 space-y-6 [&_h1]:!font-[inherit] [&_h2]:!font-[inherit]"
     >
-      <header className="space-y-3">
-        <p className="text-xs text-pilot-grey-500">Szerviz / Piszkozatok</p>
-        <h1 className="text-[28px] font-semibold leading-[34px] text-pilot-grey-900">
-          Piszkozatok
-        </h1>
-        <p className="text-sm text-pilot-grey-600">
-          A napi jelentőből kiemelt kérések. Hibajegy csak az elfogadás után jön
-          létre.
-        </p>
-      </header>
+      <PageHeader
+        eyebrow="Szerviz"
+        title="Piszkozatok"
+        description="A napi jelentőből kiemelt kérések. Hibajegy csak az elfogadás után jön létre."
+      />
       {sync && (
         <details className="text-xs text-pilot-grey-500">
           <summary className="cursor-pointer">

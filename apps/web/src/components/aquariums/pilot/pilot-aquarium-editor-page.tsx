@@ -1,6 +1,6 @@
 "use client";
 import { useAssistantEntity } from "@/components/assistant/page-context";
-import { Alert, ConfirmDialog, Icon } from "@acropora/ui";
+import { Alert, ConfirmDialog, Icon, PageHeader } from "@acropora/ui";
 import {
   AQUARIUM_MEASUREMENT_TARGET_RANGE,
   hasPermission,
@@ -457,20 +457,18 @@ export function PilotAquariumEditorPage({
       bleed
       className="flex min-h-screen flex-col bg-pilot-grey-50"
     >
-      <div className="border-b border-pilot-grey-200 bg-white px-8 py-5">
+      <div className="px-8 pt-6">
         <Link
           href={isEdit ? `/akvariumok/${aquariumId}` : "/akvariumok"}
           className="mb-3 flex items-center gap-1.5 text-xs text-pilot-grey-400 transition-colors hover:text-pilot-grey-700"
         >
           <Icon name="chevron-left" size={12} /> Akváriumok
         </Link>
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-pilot-grey-900">
-              {isEdit ? name || "Akvárium szerkesztése" : "Új akvárium"}
-            </h1>
-            {isEdit ? (
-              <div className="mt-2 flex items-center gap-2">
+        <PageHeader
+          title={isEdit ? name || "Akvárium szerkesztése" : "Új akvárium"}
+          meta={
+            isEdit ? (
+              <>
                 <PilotBadge variant="grey">
                   {OWNERSHIP_LABEL[ownershipType]}
                 </PilotBadge>
@@ -482,10 +480,10 @@ export function PilotAquariumEditorPage({
                     {WATER_TYPE_LABEL[waterType]}
                   </PilotBadge>
                 ) : null}
-              </div>
-            ) : null}
-          </div>
-        </div>
+              </>
+            ) : undefined
+          }
+        />
       </div>
 
       {error ? (

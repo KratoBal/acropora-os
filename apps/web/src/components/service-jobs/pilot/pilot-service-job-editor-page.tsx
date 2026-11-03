@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, PilotSelect } from "@acropora/ui";
+import { Alert, PageHeader, PilotSelect } from "@acropora/ui";
 import type {
   WorksheetDepartmentSummary,
   WorksheetSelectablePartner,
@@ -226,7 +226,7 @@ export function PilotServiceJobEditorPage() {
       bleed
       className="flex min-h-screen flex-col bg-pilot-grey-50"
     >
-      <div className="border-b border-pilot-grey-200 bg-white px-8 py-5">
+      <div className="px-8 pt-6">
         <nav className="mb-3 flex items-center gap-1.5 text-xs text-pilot-grey-400">
           <button
             type="button"
@@ -246,9 +246,7 @@ export function PilotServiceJobEditorPage() {
           <span>/</span>
           <span className="font-medium text-pilot-grey-700">Új hibajegy</span>
         </nav>
-        <h1 className="text-xl font-semibold text-pilot-grey-900">
-          Új hibajegy
-        </h1>
+        <PageHeader title="Új hibajegy" />
       </div>
 
       <div className="flex-1 px-8 py-6">

@@ -2,6 +2,7 @@
 import {
   Alert,
   Icon,
+  PageHeader,
   Pagination,
   PilotDataTable,
   Skeleton,
@@ -281,24 +282,23 @@ export function PilotAquariumListPage() {
       bleed
       className="flex min-h-screen flex-col bg-pilot-grey-50"
     >
-      <div className="flex items-center justify-between border-b border-pilot-grey-200 bg-white px-8 py-5">
-        <div>
-          <h1 className="text-xl font-semibold text-pilot-grey-900">
-            Akváriumok
-          </h1>
-          <p className="mt-0.5 text-sm text-pilot-grey-400">
-            {data ? `${data.pagination.totalItems} bejegyzés összesen` : " "}
-          </p>
-        </div>
-        {canManage ? (
-          <Link href="/akvariumok/uj">
-            <PilotButton variant="primary">
-              <Icon name="plus" size={14} />
-              Új akvárium
-            </PilotButton>
-          </Link>
-        ) : null}
-      </div>
+      <PageHeader
+        className="px-8 pb-5 pt-6"
+        title="Akváriumok"
+        description={
+          data ? `${data.pagination.totalItems} bejegyzés összesen` : " "
+        }
+        actions={
+          canManage ? (
+            <Link href="/akvariumok/uj">
+              <PilotButton variant="primary">
+                <Icon name="plus" size={14} />
+                Új akvárium
+              </PilotButton>
+            </Link>
+          ) : undefined
+        }
+      />
 
       <div className="flex flex-wrap items-center gap-4 border-b border-pilot-grey-100 bg-white px-8 py-4">
         <div className="relative">

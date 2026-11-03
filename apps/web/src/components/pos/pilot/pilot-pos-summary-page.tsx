@@ -1,7 +1,13 @@
 "use client";
 
 import { formatDayHu } from "@/lib/format/date";
-import { Alert, Icon, Skeleton, PilotDateField } from "@acropora/ui";
+import {
+  Alert,
+  Icon,
+  PageHeader,
+  Skeleton,
+  PilotDateField,
+} from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
@@ -162,13 +168,10 @@ export function PilotPosSummaryPage() {
           <Icon name="chevron-left" size={12} />
           {backTo.fromWithinApp ? "Vissza" : "Vissza a pénztárhoz"}
         </button>
-        <h1 className="text-[28px] font-semibold leading-tight text-pilot-grey-900">
-          Eladások összesítője
-        </h1>
-        <p className="mt-1.5 text-xs text-pilot-grey-600">
-          Napi bontás fizetési módonként. Csak a lezárt eladások számítanak, a
-          bruttó végösszeggel.
-        </p>
+        <PageHeader
+          title="Eladások összesítője"
+          description="Napi bontás fizetési módonként. Csak a lezárt eladások számítanak, a bruttó végösszeggel."
+        />
       </div>
 
       <div className="mx-8 mb-5 flex flex-wrap items-end gap-3">

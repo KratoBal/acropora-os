@@ -5,6 +5,7 @@ import {
   CardContent,
   CardHeader,
   Icon,
+  PageHeader,
   type IconName,
 } from "@acropora/ui";
 import {
@@ -308,13 +309,10 @@ export function SettingsAreaGrid({
 export function SettingsOverviewPage() {
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-dusk-900">Beállítások</h1>
-        <p className="mt-1 text-sm text-dusk-600">
-          A rendszer beállítható területei. Minden hivatkozás egy meglévő
-          oldalra visz.
-        </p>
-      </div>
+      <PageHeader
+        title="Beállítások"
+        description="A rendszer beállítható területei. Minden hivatkozás egy meglévő oldalra visz."
+      />
 
       <AppearanceSettingsCard />
 

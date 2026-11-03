@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Icon } from "@acropora/ui";
+import { Alert, Icon, PageHeader } from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
@@ -348,7 +348,7 @@ export function PilotWorksheetCreatePage() {
 
   return (
     <PilotThemeRoot bleed className="min-h-screen bg-pilot-grey-50">
-      <div className="border-b border-pilot-grey-200 bg-white px-8 py-5">
+      <div className="px-8 pt-6">
         <Link
           href={backToList.href}
           className="mb-3 flex items-center gap-1.5 text-xs text-pilot-grey-400 transition-colors hover:text-pilot-grey-700"
@@ -356,9 +356,7 @@ export function PilotWorksheetCreatePage() {
           <Icon name="chevron-left" size={12} />
           {backToList.fromWithinApp ? "Vissza" : "Munkalapok"}
         </Link>
-        <h1 className="text-xl font-semibold text-pilot-grey-900">
-          Új munkalap
-        </h1>
+        <PageHeader title="Új munkalap" />
       </div>
 
       <div className="flex max-w-3xl flex-col gap-5 px-8 py-6">

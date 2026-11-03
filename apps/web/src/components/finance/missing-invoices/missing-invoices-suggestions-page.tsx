@@ -3,6 +3,7 @@
 import {
   Alert,
   Icon,
+  PageHeader,
   PilotButton,
   PilotDataTable,
   type PilotTableColumn,
@@ -257,21 +258,10 @@ export function MissingInvoicesSuggestionsPage() {
         <Icon name="chevron-left" size={14} />
         Vissza a Hiányzó számlákhoz
       </Link>
-      <header>
-        <h1 className="text-[28px] font-semibold leading-[34px] text-pilot-grey-900">
-          Javasolt számlák
-        </h1>
-        <p className="mt-2 max-w-3xl text-sm text-pilot-grey-600">
-          A begyűjtés olyan PDF-jei, amelyeket semmi nem kötött egy számlához
-          vagy terheléshez, de számlának látszanak: vagy a Jev látta bejövő
-          számlának (van bizonyossága), vagy nem párosodtak (a fájlnév, a tárgy
-          vagy a szöveg szerint számla, de a szám, a szállító vagy a fizetés nem
-          egyezik semmivel). Amíg nem döntesz róluk, nem kerülnek a párosítás
-          jelöltjei közé, de a PDF megvan. Elfogadva jelöltek lesznek, elvetve
-          törlődnek. Ha később összekötheti őket egy új adat, a begyűjtés maga
-          köti.
-        </p>
-      </header>
+      <PageHeader
+        title="Javasolt számlák"
+        description="A begyűjtés olyan PDF-jei, amelyeket semmi nem kötött egy számlához vagy terheléshez, de számlának látszanak: vagy a Jev látta bejövő számlának (van bizonyossága), vagy nem párosodtak (a fájlnév, a tárgy vagy a szöveg szerint számla, de a szám, a szállító vagy a fizetés nem egyezik semmivel). Amíg nem döntesz róluk, nem kerülnek a párosítás jelöltjei közé, de a PDF megvan. Elfogadva jelöltek lesznek, elvetve törlődnek. Ha később összekötheti őket egy új adat, a begyűjtés maga köti."
+      />
       {items && items.some((item) => item.stale) ? (
         <Alert
           variant="info"

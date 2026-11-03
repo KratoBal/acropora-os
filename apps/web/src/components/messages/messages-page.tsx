@@ -1,7 +1,7 @@
 "use client";
 
 import type { ConversationListItem } from "@acropora/types";
-import { Icon, Input } from "@acropora/ui";
+import { Icon, Input, PageHeader } from "@acropora/ui";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 
@@ -103,7 +103,7 @@ export function MessagesPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-3xl font-semibold text-pilot-grey-900">Üzenetek</h1>
+      <PageHeader title="Üzenetek" />
       <div className="flex min-h-[600px] flex-col gap-6 lg:h-[calc(100vh-12rem)] lg:flex-row">
         <section
           aria-label="Beszélgetések"

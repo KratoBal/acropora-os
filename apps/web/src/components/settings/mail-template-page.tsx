@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Skeleton } from "@acropora/ui";
+import { Alert, PageHeader, Skeleton } from "@acropora/ui";
 import {
   PilotBadge,
   PilotButton,
@@ -267,15 +267,10 @@ export function MailTemplatePage() {
 
   return (
     <PilotThemeRoot className="space-y-6">
-      <header>
-        <h1 className="text-[28px] font-semibold leading-9 text-pilot-grey-900">
-          Levélsablonok
-        </h1>
-        <p className="mt-1 text-sm text-pilot-grey-600">
-          Automatikus rendszerlevelek tartalma és előnézete egy helyen. A
-          küldési szabályok nem változnak.
-        </p>
-      </header>
+      <PageHeader
+        title="Levélsablonok"
+        description="Automatikus rendszerlevelek tartalma és előnézete egy helyen. A küldési szabályok nem változnak."
+      />
 
       <div
         role="tablist"

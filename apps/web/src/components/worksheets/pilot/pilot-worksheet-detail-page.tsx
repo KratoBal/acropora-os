@@ -3,6 +3,7 @@
 import {
   Alert,
   Icon,
+  PageHeader,
   PilotDataTable,
   Skeleton,
   type PilotTableColumn,
@@ -398,94 +399,100 @@ export function PilotWorksheetDetailPage({
         work is. Hiding and continuing stay here; handing over and closing
         moved to the "Helyszíni lezárás" panel, where the design puts them.
       */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          <Link
-            href={backToList.href}
-            className="text-sm text-pilot-aqua-700 transition-colors hover:text-pilot-aqua-800"
-          >
-            <span aria-hidden="true">← </span>
-            {backToList.fromWithinApp ? "Vissza" : "Munkalapok"}
-          </Link>
-          <p className="mt-4 font-mono text-sm text-pilot-grey-500">
-            {current.label ?? "Piszkozat"}
-          </p>
-          <h1 className="mt-1 break-words text-3xl font-semibold text-pilot-grey-900">
-            {current.subject}
-          </h1>
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <PilotBadge
-              variant={worksheetDisplayPilotVariant(
-                current.status,
-                current.lines.length,
-              )}
-            >
-              {worksheetDisplayLabel(current.status, current.lines.length)}
-            </PilotBadge>
-            <span className="break-words text-sm text-pilot-grey-500">
-              {worksheet.customer.displayName}
-              {worksheet.department.path?.length
-                ? ` · ${worksheet.department.path.join(" / ")}`
-                : ""}
-              {current.sentForSignatureAt
-                ? ` · kiküldve aláírásra${
-                    current.sentForSignatureToName
-                      ? `: ${current.sentForSignatureToName}`
-                      : ""
-                  }`
-                : ""}
-            </span>
-            {worksheet.hidden ? (
-              <PilotBadge variant="amber">Rejtett</PilotBadge>
-            ) : null}
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <ContextConversationButton kind="worksheet" objectId={worksheet.id} />
-          {canHide ? (
-            <PilotButton
-              variant="secondary"
-              disabled={busy}
-              onClick={() =>
-                void run(() =>
-                  worksheetsApi.setHidden(
-                    token,
-                    worksheet.id,
-                    !worksheet.hidden,
-                  ),
-                )
-              }
-            >
-              {worksheet.hidden ? "Visszaállítás" : "Elrejtés"}
-            </PilotButton>
-          ) : null}
-          {canManage && isDraft ? (
-            <Link href={`/szerviz/munkalapok/${worksheet.id}/szerkesztes`}>
-              <PilotButton variant="primary">
-                <Icon name="pencil" size={12} />
-                Szerkesztés
-              </PilotButton>
-            </Link>
-          ) : null}
-          {canManage && isSigned ? (
-            <PilotButton
-              variant="primary"
-              disabled={busy}
-              onClick={() =>
-                void run(async () => {
-                  const created = await worksheetsApi.continueFrom(
-                    token,
-                    worksheet.id,
-                  );
-                  router.push(`/szerviz/munkalapok/${created.id}/szerkesztes`);
-                  return created;
-                })
-              }
-            >
-              Folytatás új munkalapon
-            </PilotButton>
-          ) : null}
-        </div>
+      <div>
+        <Link
+          href={backToList.href}
+          className="text-sm text-pilot-aqua-700 transition-colors hover:text-pilot-aqua-800"
+        >
+          <span aria-hidden="true">← </span>
+          {backToList.fromWithinApp ? "Vissza" : "Munkalapok"}
+        </Link>
+        <PageHeader
+          className="mt-4"
+          eyebrow={current.label ?? "Piszkozat"}
+          title={current.subject}
+          meta={
+            <>
+              <PilotBadge
+                variant={worksheetDisplayPilotVariant(
+                  current.status,
+                  current.lines.length,
+                )}
+              >
+                {worksheetDisplayLabel(current.status, current.lines.length)}
+              </PilotBadge>
+              <span className="break-words text-sm text-pilot-grey-500">
+                {worksheet.customer.displayName}
+                {worksheet.department.path?.length
+                  ? ` · ${worksheet.department.path.join(" / ")}`
+                  : ""}
+                {current.sentForSignatureAt
+                  ? ` · kiküldve aláírásra${
+                      current.sentForSignatureToName
+                        ? `: ${current.sentForSignatureToName}`
+                        : ""
+                    }`
+                  : ""}
+              </span>
+              {worksheet.hidden ? (
+                <PilotBadge variant="amber">Rejtett</PilotBadge>
+              ) : null}
+            </>
+          }
+          actions={
+            <>
+              <ContextConversationButton
+                kind="worksheet"
+                objectId={worksheet.id}
+              />
+              {canHide ? (
+                <PilotButton
+                  variant="secondary"
+                  disabled={busy}
+                  onClick={() =>
+                    void run(() =>
+                      worksheetsApi.setHidden(
+                        token,
+                        worksheet.id,
+                        !worksheet.hidden,
+                      ),
+                    )
+                  }
+                >
+                  {worksheet.hidden ? "Visszaállítás" : "Elrejtés"}
+                </PilotButton>
+              ) : null}
+              {canManage && isDraft ? (
+                <Link href={`/szerviz/munkalapok/${worksheet.id}/szerkesztes`}>
+                  <PilotButton variant="primary">
+                    <Icon name="pencil" size={12} />
+                    Szerkesztés
+                  </PilotButton>
+                </Link>
+              ) : null}
+              {canManage && isSigned ? (
+                <PilotButton
+                  variant="primary"
+                  disabled={busy}
+                  onClick={() =>
+                    void run(async () => {
+                      const created = await worksheetsApi.continueFrom(
+                        token,
+                        worksheet.id,
+                      );
+                      router.push(
+                        `/szerviz/munkalapok/${created.id}/szerkesztes`,
+                      );
+                      return created;
+                    })
+                  }
+                >
+                  Folytatás új munkalapon
+                </PilotButton>
+              ) : null}
+            </>
+          }
+        />
       </div>
 
       <ServiceOfflineNotice

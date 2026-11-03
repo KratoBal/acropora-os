@@ -6,6 +6,7 @@ import {
   ConfirmDialog,
   FormField,
   Icon,
+  PageHeader,
   PilotFileInput,
   Select,
   Skeleton,
@@ -408,7 +409,7 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
         </div>
       ) : asset ? (
         <>
-          <div className="border-b border-pilot-grey-200 bg-white px-8 py-5">
+          <div className="px-8 pt-6">
             <div className="mb-3 flex items-center justify-between gap-4">
               <Link
                 href={backToList.href}
@@ -423,53 +424,48 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
                 position="top"
               />
             </div>
-            <div className="flex items-start justify-between">
-              <div className="flex items-start gap-4">
-                <div>
-                  <div className="mb-1.5 flex items-center gap-2.5">
-                    <h1 className="text-xl font-semibold text-pilot-grey-900">
-                      {asset.name}
-                    </h1>
-                    <PilotBadge variant={assetStatusPilotVariant(asset.status)}>
-                      {assetStatusLabel[asset.status]}
-                    </PilotBadge>
-                  </div>
-                  <p className="text-sm text-pilot-grey-500">
-                    {asset.owner.displayName}
-                    {asset.unit ? ` · ${asset.unit.path.join(" / ")}` : ""}
-                  </p>
-                  <p className="mt-0.5 font-mono text-xs text-pilot-grey-400">
+            <PageHeader
+              title={asset.name}
+              description={`${asset.owner.displayName}${asset.unit ? ` · ${asset.unit.path.join(" / ")}` : ""}`}
+              meta={
+                <>
+                  <PilotBadge variant={assetStatusPilotVariant(asset.status)}>
+                    {assetStatusLabel[asset.status]}
+                  </PilotBadge>
+                  <p className="font-mono text-xs text-pilot-grey-400">
                     {asset.assetNumber}
                     {asset.partnerInternalCode
                       ? ` · ${asset.partnerInternalCode}`
                       : ""}
                   </p>
-                </div>
-              </div>
-              {canManage ? (
-                <div className="flex items-center gap-2">
-                  {/*
-                    "UJ ESZKOZ" GOMB -- a terv szerint (EszközScreen.tsx:524-528)
-                    az adatlap fejleceben IS ott all, nem csak a listan.
-                    Masodlagos stilus (ellentetben az "Eszkoz modositasa"
-                    elsodleges gombjaval), ugyanaz a jogosultsagi felteteles
-                    ag, mint a listaoldalon.
-                  */}
-                  <Link href="/szerviz/eszkozok/uj">
-                    <PilotButton variant="secondary">
-                      <Icon name="plus" size={12} />
-                      Új eszköz
-                    </PilotButton>
-                  </Link>
-                  <Link href={`/szerviz/eszkozok/${asset.id}/szerkesztes`}>
-                    <PilotButton variant="primary">
-                      <Icon name="pencil" size={12} />
-                      Eszköz módosítása
-                    </PilotButton>
-                  </Link>
-                </div>
-              ) : null}
-            </div>
+                </>
+              }
+              actions={
+                canManage ? (
+                  <>
+                    {/*
+                      "UJ ESZKOZ" GOMB -- a terv szerint (EszközScreen.tsx:524-528)
+                      az adatlap fejleceben IS ott all, nem csak a listan.
+                      Masodlagos stilus (ellentetben az "Eszkoz modositasa"
+                      elsodleges gombjaval), ugyanaz a jogosultsagi felteteles
+                      ag, mint a listaoldalon.
+                    */}
+                    <Link href="/szerviz/eszkozok/uj">
+                      <PilotButton variant="secondary">
+                        <Icon name="plus" size={12} />
+                        Új eszköz
+                      </PilotButton>
+                    </Link>
+                    <Link href={`/szerviz/eszkozok/${asset.id}/szerkesztes`}>
+                      <PilotButton variant="primary">
+                        <Icon name="pencil" size={12} />
+                        Eszköz módosítása
+                      </PilotButton>
+                    </Link>
+                  </>
+                ) : undefined
+              }
+            />
           </div>
 
           {error ? (

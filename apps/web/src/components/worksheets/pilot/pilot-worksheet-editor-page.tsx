@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Icon, Skeleton } from "@acropora/ui";
+import { Alert, Icon, PageHeader, Skeleton } from "@acropora/ui";
 import { hasPermission, PERMISSIONS } from "@acropora/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -210,7 +210,7 @@ export function PilotWorksheetEditorPage({
 
   return (
     <PilotThemeRoot bleed className="min-h-screen bg-pilot-grey-50">
-      <div className="border-b border-pilot-grey-200 bg-white px-8 py-5">
+      <div className="px-8 pt-6">
         <Link
           href={`/szerviz/munkalapok/${worksheetId}`}
           className="mb-3 flex items-center gap-1.5 text-xs text-pilot-grey-400 transition-colors hover:text-pilot-grey-700"
@@ -218,12 +218,10 @@ export function PilotWorksheetEditorPage({
           <Icon name="chevron-left" size={12} />
           Vissza a munkalapra
         </Link>
-        <h1 className="text-xl font-semibold text-pilot-grey-900">
-          Munkalap szerkesztése
-        </h1>
-        <p className="mt-1 text-sm text-pilot-grey-400">
-          A piszkozat teljes tartalma cserélődik a mentéskor.
-        </p>
+        <PageHeader
+          title="Munkalap szerkesztése"
+          description="A piszkozat teljes tartalma cserélődik a mentéskor."
+        />
       </div>
 
       <div className="flex max-w-3xl flex-col gap-5 px-8 py-6">
