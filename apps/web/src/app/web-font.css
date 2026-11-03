@@ -1,0 +1,16 @@
+/*
+  A WEBES APP BETUTIPUSA INTER (UI-attekintes, 2026-11-03).
+
+  A kozos `packages/ui/src/theme.css` a torzset es a cimeket a
+  `--font-dm-sans` / `--font-manrope` valtozon at allitja be: az `apps/partner`
+  es az `apps/reefclub` ott tolti be a sajat betutipusat. A webes app ezeket a
+  ket valtozot az Inter valtozojara iranyitja, igy a torzs, a `h1`-`h3`, a
+  `font-sans` es a `font-display` mind Inter, a partner portal pedig valtozatlan.
+
+  A `--font-pilot-inter` a `<html>` elemen all (lasd `layout.tsx`), es a
+  `:root` ugyanaz az elem: ezert itt feloldhato.
+*/
+:root {
+  --font-dm-sans: var(--font-pilot-inter);
+  --font-manrope: var(--font-pilot-inter);
+}
