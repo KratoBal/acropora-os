@@ -20,6 +20,6 @@ export class ProductAttributeSetController {
   @Put()
   @RequirePermissions(PERMISSIONS.PRODUCTS_ATTRIBUTE_SET_MANAGE)
   set(@Param("id") id: string, @Body() input: SetProductAttributeSetDto) {
-    return this.admin.setProductAttributeSet(id, input.attributeSetId ?? null);
+    return this.admin.setProductAttributeSet(id, input.attributeSetId);
   }
 }

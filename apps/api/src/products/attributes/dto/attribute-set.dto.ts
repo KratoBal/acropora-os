@@ -3,6 +3,7 @@ import {
   ArrayMaxSize,
   IsArray,
   IsBoolean,
+  IsDefined,
   IsInt,
   IsOptional,
   IsString,
@@ -10,6 +11,7 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateIf,
   ValidateNested,
 } from "class-validator";
 
@@ -37,7 +39,15 @@ export class CreateAttributeSetDto {
   attributes!: AttributeSetAttributeDto[];
 }
 
-/** A termék készlete; `null` leveszi a kötést. */
+/**
+ * A termék készlete; a `null` leveszi a kötést. A kulcs KÖTELEZŐ (barracuda, #2100 review): egy
+ * üres törzs vagy egy elgépelt kulcs (`attributeSetID`) nem lehet csendben a kötés levétele, mert egy
+ * kliens-hiba így adatot törölne, és sikert jelezne. Levenni csak kifejezett `null`-lal lehet.
+ */
 export class SetProductAttributeSetDto {
-  @IsOptional() @IsString() @MaxLength(100) attributeSetId!: string | null;
+  @IsDefined()
+  @ValidateIf((o: SetProductAttributeSetDto) => o.attributeSetId !== null)
+  @IsString()
+  @MaxLength(100)
+  attributeSetId!: string | null;
 }
