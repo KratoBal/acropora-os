@@ -630,20 +630,27 @@ export function WebshopOrdersListPage() {
               className="h-10"
             />
           </div>
-          <PilotInput
-            aria-label="Dátum -tól"
-            type="date"
-            value={params.get("from") ?? ""}
-            onChange={(value) => setParam("from", value)}
-            className="h-10 w-[150px]"
-          />
-          <PilotInput
-            aria-label="Dátum -ig"
-            type="date"
-            value={params.get("to") ?? ""}
-            onChange={(value) => setParam("to", value)}
-            className="h-10 w-[150px]"
-          />
+          {/* A két dátumszűrőnek látható felirata van: a "tól" és az "ig" mező egymás mellett máskülönben nem megkülönböztethető. */}
+          <label className="flex items-center gap-2 text-xs text-pilot-grey-500">
+            <span>Tól</span>
+            <PilotInput
+              aria-label="Dátum -tól"
+              type="date"
+              value={params.get("from") ?? ""}
+              onChange={(value) => setParam("from", value)}
+              className="h-10 w-[150px]"
+            />
+          </label>
+          <label className="flex items-center gap-2 text-xs text-pilot-grey-500">
+            <span>Ig</span>
+            <PilotInput
+              aria-label="Dátum -ig"
+              type="date"
+              value={params.get("to") ?? ""}
+              onChange={(value) => setParam("to", value)}
+              className="h-10 w-[150px]"
+            />
+          </label>
           <PilotSelect
             chevron
             aria-label="Státusz"
