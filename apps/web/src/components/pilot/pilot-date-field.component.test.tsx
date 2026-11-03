@@ -70,19 +70,19 @@ describe("a magyar dátummező", () => {
     expect(mezo().hasAttribute("aria-invalid")).toBe(false);
   });
 
-  it("a max feletti dátumot nem adja ki", () => {
+  it("a max feletti létező nap kimegy a hívónak (az írja rá a saját üzenetét), de a mező jelölt", () => {
     render(<Tarolo max="2026-11-03" />);
     gepel("20261104");
-    expect(ertek()).toBe("");
+    expect(ertek()).toBe("2026-11-04");
     expect(mezo().getAttribute("aria-invalid")).toBe("true");
     gepel("20261103");
     expect(ertek()).toBe("2026-11-03");
+    expect(mezo().hasAttribute("aria-invalid")).toBe(false);
   });
 
-  it("a max feletti szöveg a mezőben marad és jelölt, akkor is, ha az érték épp érvényesről üresre vált", () => {
+  it("a max feletti szöveg a mezőben marad, akkor is, ha a hívó értéke vált", () => {
     render(<Tarolo kezdet="2026-11-03" max="2026-11-03" />);
     gepel("20261104");
-    expect(ertek()).toBe("");
     expect(mezo().value).toBe("2026. 11. 04.");
     expect(mezo().getAttribute("aria-invalid")).toBe("true");
   });

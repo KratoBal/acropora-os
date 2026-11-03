@@ -409,8 +409,9 @@ export function PilotFormField({
  * A MAGYAR DÁTUMMEZŐ (UI-áttekintés, 3. csomag): a natív `type="date"` a böngésző nyelvén ír
  * (`mm/dd/yyyy`), ezért a szöveget mi rajzoljuk (`2026. 11. 03.`, gépelés közben formázva),
  * a naptár pedig egy rejtett natív mező, amit a gomb nyit meg. KIFELÉ az ISO alak megy
- * (`2026-11-03`), tehát a hívók és a mentett adat nem változik. Hiányos vagy érvénytelen
- * beírásra a hívó üres értéket kap (a mező `aria-invalid`), nem egy csonka dátumot.
+ * (`2026-11-03`), tehát a hívók és a mentett adat nem változik. Hiányos vagy nem létező
+ * beírásra a hívó üres értéket kap, nem egy csonka dátumot; a `min`/`max`-on kívüli, de létező
+ * nap kimegy (a hívó írja rá az üzenetét), a mező viszont `aria-invalid`.
  */
 export function PilotDateField({
   id,
@@ -443,10 +444,9 @@ export function PilotDateField({
   const picker = useRef<HTMLInputElement>(null);
   // A kívülről érkező érték (betöltés, nullázás) átírja a szöveget; a félig beírt szöveg
   // értéke ugyanaz az üres, mint amit már kiadtunk, tehát azt nem bántja.
-  const emitted = (shown: string) => {
-    const iso = huToIso(shown);
-    return iso !== null && inRange(iso, min, max) ? iso : "";
-  };
+  // A hívónak minden TELJES, létező nap kimegy, a tartományon kívüli is (a natív mező is ezt
+  // tette): a hívó a saját üzenetét írja rá ("nem lehet a jövőben"). A mező ettől még jelölt.
+  const emitted = (shown: string) => huToIso(shown) ?? "";
   // Az átírás RENDER KÖZBEN történik (nem effektben): a hívó új értékével ugyanabban a
   // renderben a szöveg is kész, tehát nincs egy kirajzolt, elavult köztes állapot.
   const [seen, setSeen] = useState(value);
@@ -454,7 +454,9 @@ export function PilotDateField({
     setSeen(value);
     if ((value ?? "") !== emitted(text)) setText(isoToHu(value));
   }
-  const invalid = text !== "" && emitted(text) === "";
+  const shownIso = emitted(text);
+  const invalid =
+    text !== "" && (shownIso === "" || !inRange(shownIso, min, max));
   return (
     <span className="relative block w-full">
       <input
@@ -480,6 +482,11 @@ export function PilotDateField({
       />
       {readOnly || disabled ? null : (
         <>
+          {/*
+            A NAPTÁR-GOMB KÉT ÚTON NYÍLIK: egérrel/érintéssel a gomb FÖLÖTT álló, átlátszó natív
+            mezőre kattintanak (minden böngészőben megnyitja a saját naptárát, `showPicker` nélkül
+            is), billentyűvel a gomb `showPicker`-t hív, ahol van.
+          */}
           <button
             type="button"
             aria-label="Naptár megnyitása"
@@ -505,7 +512,7 @@ export function PilotDateField({
               setText(isoToHu(event.target.value));
               onChange?.(event.target.value);
             }}
-            className="pointer-events-none absolute bottom-0 right-0 h-0 w-0 opacity-0"
+            className="absolute inset-y-0 right-0 w-9 cursor-pointer opacity-0"
           />
         </>
       )}
