@@ -470,10 +470,10 @@ export function PilotSupplierEditorPage({
   };
 
   return (
-    <PilotThemeRoot>
+    <PilotThemeRoot bleed>
       <div className="flex min-h-full flex-col">
         <PageHeader
-          className="px-8 pt-6"
+          className="px-4 sm:px-8 pt-6"
           eyebrow="Partnerek"
           title={supplier ? supplier.name : "Új felvitele"}
           description="Törzsadatok, bankszámla és kapcsolattartó a beszerzési számlák rögzítéséhez."
@@ -499,7 +499,7 @@ export function PilotSupplierEditorPage({
           }
         />
 
-        <div className="flex flex-1 flex-col gap-4 px-8 py-6">
+        <div className="flex flex-1 flex-col gap-4 px-4 sm:px-8 py-6">
           {error ? (
             <Alert
               variant="danger"

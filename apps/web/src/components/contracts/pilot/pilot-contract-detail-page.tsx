@@ -674,9 +674,9 @@ export function PilotContractDetailPage({
       </PilotThemeRoot>
     );
   return (
-    <PilotThemeRoot>
+    <PilotThemeRoot bleed>
       <div className="flex min-h-full flex-col">
-        <div className="px-8 pt-6">
+        <div className="px-4 sm:px-8 pt-6">
           <Link
             href="/partnerek/szerzodesek"
             className="mb-0.5 block text-xs text-pilot-grey-400 hover:text-pilot-grey-700"
@@ -696,7 +696,7 @@ export function PilotContractDetailPage({
           />
         </div>
 
-        <div className="flex flex-1 flex-col gap-4 px-8 py-6">
+        <div className="flex flex-1 flex-col gap-4 px-4 sm:px-8 py-6">
           {error ? (
             <Alert variant="danger" title="Mentési hiba" description={error} />
           ) : null}
