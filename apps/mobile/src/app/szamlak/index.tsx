@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Redirect, useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -48,18 +48,24 @@ export default function BillingScreen() {
   const canView = user ? getBillingCapabilities(user).billingView : false;
   const [direction, setDirection] = useState<Direction>("outgoing");
   const [search, setSearch] = useState("");
+  // the request waits for a pause in typing, as on the Üzenetek pickers (barracuda, #2086: one request per keystroke before)
+  const [debounced, setDebounced] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(search.trim()), 250);
+    return () => clearTimeout(timer);
+  }, [search]);
   const [page, setPage] = useState(1);
 
   const enabled = canView && status === "authenticated";
   const outgoing = useQuery({
-    queryKey: ["billing-outgoing", { page, search }],
-    queryFn: () => listOutgoingDocuments(page, PAGE_SIZE, search),
+    queryKey: ["billing-outgoing", { page, search: debounced }],
+    queryFn: () => listOutgoingDocuments(page, PAGE_SIZE, debounced),
     enabled: enabled && direction === "outgoing",
     placeholderData: keepPreviousData,
   });
   const incoming = useQuery({
-    queryKey: ["billing-incoming", { page, search }],
-    queryFn: () => listIncomingDocuments(page, PAGE_SIZE, search),
+    queryKey: ["billing-incoming", { page, search: debounced }],
+    queryFn: () => listIncomingDocuments(page, PAGE_SIZE, debounced),
     enabled: enabled && direction === "incoming",
     placeholderData: keepPreviousData,
   });
