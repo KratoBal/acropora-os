@@ -1,6 +1,7 @@
 import { Directory, File, Paths } from "expo-file-system";
 
 import { authSessionStore } from "@/lib/auth/token-store";
+import { DOWNLOAD_DIRECTORIES } from "@/lib/offline/download-directories";
 
 import type { KepLetoltesFuggosegek } from "./document-image-file";
 
@@ -22,7 +23,7 @@ import type { KepLetoltesFuggosegek } from "./document-image-file";
  * nem azert, mert ma elavulhat, hanem mert egy kesobbi token-forgatas a
  * 401-et CSENDBEN visszahozna.
  */
-const KONYVTAR_NEVE = "dokumentum-kepek";
+const KONYVTAR_NEVE = DOWNLOAD_DIRECTORIES.documentImages;
 
 export const kepFajlFuggosegek: KepLetoltesFuggosegek = {
   token: () => authSessionStore.getToken(),
