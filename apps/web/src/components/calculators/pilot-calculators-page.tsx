@@ -142,7 +142,10 @@ export function PilotCalculatorsPage() {
     );
 
   return (
-    <PilotThemeRoot bleed className="min-h-screen bg-pilot-grey-50 px-8 py-6">
+    <PilotThemeRoot
+      bleed
+      className="min-h-screen bg-pilot-grey-50 px-4 sm:px-8 py-6"
+    >
       <PageHeader
         className="mb-5"
         title="Kalkulátorok"

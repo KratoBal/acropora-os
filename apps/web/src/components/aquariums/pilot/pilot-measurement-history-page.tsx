@@ -323,7 +323,7 @@ export function PilotMeasurementHistoryPage({
       bleed
       className="flex min-h-screen flex-col bg-pilot-grey-50"
     >
-      <div className="px-8 pt-6">
+      <div className="px-4 sm:px-8 pt-6">
         <nav className="mb-3 flex items-center gap-1.5 text-xs text-pilot-grey-400">
           <Link
             href="/akvariumok"
@@ -361,7 +361,7 @@ export function PilotMeasurementHistoryPage({
         />
       </div>
 
-      <div className="flex flex-1 flex-col gap-5 px-8 py-6">
+      <div className="flex flex-1 flex-col gap-5 px-4 sm:px-8 py-6">
         {error ? (
           <Alert variant="danger" title="Hiba" description={error} />
         ) : null}
