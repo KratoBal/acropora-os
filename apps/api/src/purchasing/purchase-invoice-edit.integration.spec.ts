@@ -123,7 +123,7 @@ describe(
     });
 
     it("two edits at once on the same seen state: exactly one wins, the other is the 409", async () => {
-      const row = await invoice("race");
+      const row = await invoice("seen-race");
       const seen = row.updatedAt.toISOString();
       const results = await Promise.allSettled([
         edits.update(row.id, { note: "A", expectedUpdatedAt: seen }, userId),
