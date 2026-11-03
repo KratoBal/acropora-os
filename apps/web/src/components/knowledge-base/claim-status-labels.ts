@@ -6,6 +6,8 @@
 export type ClaimStatus =
   "VERIFIED" | "CANDIDATE" | "WITHDRAWN" | "DISPUTED" | "SUPERSEDED";
 
+export const UNKNOWN_CLAIM_STATUS = "Ismeretlen állapot";
+
 export const CLAIM_STATUS_LABELS: Record<ClaimStatus, string> = {
   VERIFIED: "Ellenőrzött",
   CANDIDATE: "Ellenőrzésre vár",
@@ -14,7 +16,10 @@ export const CLAIM_STATUS_LABELS: Record<ClaimStatus, string> = {
   SUPERSEDED: "Felülírva",
 };
 
-/** Az állapot szava; egy ismeretlen értéket (újabb szerver) változatlanul ad, nem találgat. */
+/** Az állapot szava; egy ismeretlen értéket (a webnél újabb szerver) szóval jelöl, nem nyers kóddal. */
 export function claimStatusLabel(status: string): string {
-  return (CLAIM_STATUS_LABELS as Record<string, string>)[status] ?? status;
+  return (
+    (CLAIM_STATUS_LABELS as Record<string, string>)[status] ??
+    UNKNOWN_CLAIM_STATUS
+  );
 }

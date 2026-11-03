@@ -42,9 +42,9 @@ describe("claim status labels", () => {
     );
   });
 
-  it("says VERIFIED as Ellenőrzött and returns an unknown value unchanged", () => {
+  it("says VERIFIED as Ellenőrzött and says an unknown value in words, not as the raw code", () => {
     expect(claimStatusLabel("VERIFIED")).toBe("Ellenőrzött");
     expect(claimStatusLabel("DISPUTED")).toBe("Vitatott");
-    expect(claimStatusLabel("SOMETHING_NEW")).toBe("SOMETHING_NEW");
+    expect(claimStatusLabel("SOMETHING_NEW")).toBe("Ismeretlen állapot");
   });
 });
