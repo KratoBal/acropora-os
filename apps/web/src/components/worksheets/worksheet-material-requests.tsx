@@ -7,6 +7,7 @@ import {
   EmptyState,
   Input,
   Skeleton,
+  PilotSelect,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -286,15 +287,15 @@ export function WorksheetMaterialRequests({
                 </label>
                 <label className="flex flex-col gap-1 text-xs text-dusk-500">
                   Prioritás (nem kötelező)
-                  <select
+                  <PilotSelect
                     aria-label="Prioritás"
                     value={priority}
-                    onChange={(event) =>
+                    onChange={(nextValue) =>
                       setPriority(
-                        event.target.value as MaterialRequestPriorityValue | "",
+                        nextValue as MaterialRequestPriorityValue | "",
                       )
                     }
-                    className="h-9 rounded border border-dusk-200 px-2 text-sm text-dusk-800"
+                    chevron
                   >
                     <option value="">—</option>
                     {MATERIAL_REQUEST_PRIORITIES.map((value) => (
@@ -302,7 +303,7 @@ export function WorksheetMaterialRequests({
                         {PRIORITY_OPTION_LABEL[value]}
                       </option>
                     ))}
-                  </select>
+                  </PilotSelect>
                 </label>
               </div>
               <label className="flex flex-col gap-1 text-xs text-dusk-500">

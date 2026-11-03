@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert } from "@acropora/ui";
+import { Alert, PilotSelect } from "@acropora/ui";
 import type {
   WorksheetDepartmentSummary,
   WorksheetSelectablePartner,
@@ -312,11 +312,12 @@ export function PilotServiceJobEditorPage() {
                 nyitható jegy rá. Vegyél fel egyet a partner lapján.
               </p>
             ) : (
-              <select
+              <PilotSelect
                 id="pilot-hibajegy-helyszin"
                 value={departmentId}
-                onChange={(event) => setDepartmentId(event.target.value)}
-                className="w-full cursor-pointer appearance-none rounded-md px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+                onChange={(nextValue) => setDepartmentId(nextValue)}
+                className="w-full"
+                chevron
               >
                 <option value="">Válassz helyszínt…</option>
                 {departmentOptions.map((option) => (
@@ -324,7 +325,7 @@ export function PilotServiceJobEditorPage() {
                     {option.label}
                   </option>
                 ))}
-              </select>
+              </PilotSelect>
             )}
           </div>
 

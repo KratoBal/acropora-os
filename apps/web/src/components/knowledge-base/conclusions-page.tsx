@@ -8,6 +8,7 @@ import {
   PilotCard,
   PilotPageHeader,
   Skeleton,
+  PilotSelect,
 } from "@acropora/ui";
 import { hasPermission, PERMISSIONS } from "@acropora/types";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -278,11 +279,11 @@ export function ConclusionsPage() {
               </label>
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
-                  <select
+                  <PilotSelect
                     aria-label="Állítás beszúrása"
-                    className="rounded-lg border border-pilot-grey-300 px-2 py-1 text-sm"
                     value={pick}
-                    onChange={(e) => setPick(e.target.value)}
+                    onChange={(nextValue) => setPick(nextValue)}
+                    chevron
                   >
                     <option value="">+ Állítás beszúrása</option>
                     {claims
@@ -292,7 +293,7 @@ export function ConclusionsPage() {
                           {c.title}
                         </option>
                       ))}
-                  </select>
+                  </PilotSelect>
                   <PilotButton
                     variant="secondary"
                     size="action"

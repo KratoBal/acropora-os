@@ -11,6 +11,7 @@ import {
   Input,
   Skeleton,
   Textarea,
+  PilotSelect,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -1158,11 +1159,11 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                   ) : null}
                   {attachable.length ? (
                     <div className="flex flex-wrap gap-2">
-                      <select
+                      <PilotSelect
                         id="csatolando-munkalap"
-                        className="rounded border px-2 py-1 text-sm"
                         value={chosenSheet}
-                        onChange={(event) => setChosenSheet(event.target.value)}
+                        onChange={(nextValue) => setChosenSheet(nextValue)}
+                        chevron
                       >
                         <option value="">Válassz munkalapot</option>
                         {attachable.map((sheet) => (
@@ -1171,7 +1172,7 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                             - {sheet.subject}
                           </option>
                         ))}
-                      </select>
+                      </PilotSelect>
                       <Button
                         variant="secondary"
                         disabled={!chosenSheet || attaching}

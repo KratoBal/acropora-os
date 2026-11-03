@@ -7,6 +7,7 @@ import {
   ConfirmDialog,
   EmptyState,
   Skeleton,
+  PilotSelect,
 } from "@acropora/ui";
 import { hasPermission, PERMISSIONS, type UserRole } from "@acropora/types";
 import { useCallback, useEffect, useState } from "react";
@@ -229,11 +230,11 @@ export function UserVisibleUnits({
 
       {valaszthato.length ? (
         <div className="flex flex-wrap items-center gap-2">
-          <select
+          <PilotSelect
             aria-label="Alegység hozzáadása"
-            className="rounded border px-2 py-1 text-sm"
             value={chosen}
-            onChange={(event) => setChosen(event.target.value)}
+            onChange={(nextValue) => setChosen(nextValue)}
+            chevron
           >
             <option value="">Válassz alegységet</option>
             {valaszthato.map((unit) => (
@@ -241,7 +242,7 @@ export function UserVisibleUnits({
                 {unit.code} - {unit.name}
               </option>
             ))}
-          </select>
+          </PilotSelect>
           <Button
             variant="secondary"
             disabled={!chosen || busy}

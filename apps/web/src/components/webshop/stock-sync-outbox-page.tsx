@@ -8,6 +8,7 @@ import {
   CardHeader,
   PageHeader,
   Skeleton,
+  PilotSelect,
 } from "@acropora/ui";
 import { hasPermission, PERMISSIONS } from "@acropora/types";
 import { useCallback, useEffect, useState } from "react";
@@ -416,13 +417,13 @@ export function StockSyncOutboxPage() {
           <h2 className="text-sm font-semibold text-dusk-900">A sor tételei</h2>
           <label className="text-xs text-dusk-500">
             Állapot:{" "}
-            <select
+            <PilotSelect
               aria-label="Állapot szűrő"
-              className="rounded border px-2 py-1 text-xs"
               value={status}
-              onChange={(event) =>
-                setStatus(event.target.value as StockSyncOutboxStatus | "")
+              onChange={(nextValue) =>
+                setStatus(nextValue as StockSyncOutboxStatus | "")
               }
+              chevron
             >
               <option value="">összes</option>
               {STATUS_ORDER.map((value) => (
@@ -430,7 +431,7 @@ export function StockSyncOutboxPage() {
                   {STATUS_LABELS[value]}
                 </option>
               ))}
-            </select>
+            </PilotSelect>
           </label>
         </CardHeader>
         <CardContent>

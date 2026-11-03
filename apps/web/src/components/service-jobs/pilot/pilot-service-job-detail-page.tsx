@@ -1,6 +1,13 @@
 "use client";
 
-import { Alert, ConfirmDialog, EmptyState, Icon, Skeleton } from "@acropora/ui";
+import {
+  Alert,
+  ConfirmDialog,
+  EmptyState,
+  Icon,
+  Skeleton,
+  PilotSelect,
+} from "@acropora/ui";
 import {
   hasPermission,
   isFinishedServiceJob,
@@ -951,11 +958,11 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
                 ) : null}
                 {attachable.length ? (
                   <div className="flex flex-wrap gap-2">
-                    <select
+                    <PilotSelect
                       id="pilot-csatolando-munkalap"
-                      className="cursor-pointer appearance-none rounded-md px-2.5 py-1.5 text-sm text-pilot-grey-700 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
                       value={chosenSheet}
-                      onChange={(event) => setChosenSheet(event.target.value)}
+                      onChange={(nextValue) => setChosenSheet(nextValue)}
+                      chevron
                     >
                       <option value="">Válassz munkalapot</option>
                       {attachable.map((sheet) => (
@@ -964,7 +971,7 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
                           {sheet.subject}
                         </option>
                       ))}
-                    </select>
+                    </PilotSelect>
                     <PilotButton
                       variant="secondary"
                       disabled={!chosenSheet || attaching}
