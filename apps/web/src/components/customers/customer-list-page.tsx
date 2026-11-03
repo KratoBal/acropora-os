@@ -1,4 +1,5 @@
 "use client";
+import { plainText } from "@/lib/format/plain-text";
 import {
   Alert,
   Badge,
@@ -52,7 +53,11 @@ const columns: PilotTableColumn<CustomerRow>[] = [
       </span>
     ),
   },
-  { id: "address", header: "Cím", cell: (item) => item.address ?? "—" },
+  {
+    id: "address",
+    header: "Cím",
+    cell: (item) => plainText(item.address) || "—",
+  },
   {
     id: "source",
     header: "Forrás",
