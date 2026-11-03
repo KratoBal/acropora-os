@@ -313,6 +313,26 @@ describe("WebshopOrdersListPage", () => {
     expect(screen.getByText("GLS házhoz")).toBeTruthy();
   });
 
+  /*
+    A KÉT DÁTUMSZŰRŐNEK LÁTHATÓ FELIRATA VAN (hibak-ac P2): az előző kép két egyforma "ÉÉÉÉ. HH. NN." mezőt mutatott egymás
+    alatt, nem derült ki, melyik a "-tól" és melyik az "-ig". Most "Tól" és "Ig" áll mellettük, a mező aria-címkéje marad. A
+    szélességük 150 px (a PilotInput szélesség-javítása után). MI PIROSÍT: ha a látható felirat eltűnik, vagy a felirat nem a
+    saját mezőjét fogja közre.
+  */
+  it("the two date filters carry a visible Tól and Ig label around their own field", async () => {
+    api.list.mockResolvedValue(response([order()]));
+    render(createElement(WebshopOrdersListPage));
+    await screen.findByText(/Számlára vár/);
+
+    for (const [text, aria] of [
+      ["Tól", "Dátum -tól"],
+      ["Ig", "Dátum -ig"],
+    ] as const) {
+      const label = screen.getByText(text).closest("label")!;
+      expect(label.querySelector(`input[aria-label="${aria}"]`)).not.toBeNull();
+    }
+  });
+
   it("a counter filters, and the same counter clicked again clears it", async () => {
     api.list.mockResolvedValue(response([order()]));
     const { rerender } = render(createElement(WebshopOrdersListPage));
