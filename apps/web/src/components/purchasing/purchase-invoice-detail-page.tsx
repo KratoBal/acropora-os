@@ -234,7 +234,7 @@ export function PurchaseInvoiceDetailPage({
         title={detail ? detail.documentNumber : "Beszerzési számla"}
         description="Beérkezett beszállítói számla részletei"
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {detail && canManage && detail.status !== "CANCELLED" ? (
               <>
                 <Button

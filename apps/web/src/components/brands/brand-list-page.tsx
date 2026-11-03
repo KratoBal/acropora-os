@@ -175,7 +175,7 @@ export function BrandListPage() {
         title="Márkák"
         description="Kanonikus márkaadatok, aliasok és UNAS megfeleltetések."
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Link href="/admin/brands/import-assistant">
               <Button variant="secondary">Import asszisztens</Button>
             </Link>

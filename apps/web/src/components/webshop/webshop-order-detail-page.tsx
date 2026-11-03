@@ -165,7 +165,7 @@ export function WebshopOrderDetailPage({ orderId }: { orderId: string }) {
         title={detail ? detail.orderNumber : "Rendelés"}
         description="Webshop (UNAS) rendelés részletei"
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {canManage && detail ? (
               <Button
                 variant="primary"
