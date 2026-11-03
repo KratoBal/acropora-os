@@ -442,6 +442,17 @@ describe("ProductDetailPage mirror ownership", () => {
     expect(screen.queryByText(/6141\.7323/)).not.toBeInTheDocument();
   });
 
+  it("a változat saját beállításai telefonon két oszlopban állnak, nem egy hosszú listában", async () => {
+    render(<ProductDetailPage productId="product-1" />);
+
+    await screen.findByText("UNAS terméktükör");
+    const list = screen
+      .getAllByText("Beszerzési deviza")[0]!
+      .closest("dl") as HTMLElement;
+    expect(list.className).toContain("grid-cols-2");
+    expect(list.className).toContain("sm:grid-cols-3");
+  });
+
   it("separates the read-only UNAS mirror from Acropora extension data", async () => {
     render(<ProductDetailPage productId="product-1" />);
 
