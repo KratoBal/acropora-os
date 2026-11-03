@@ -18,6 +18,7 @@ import {
   normalizeName,
   shownNumber,
 } from "../missing-invoices/missing-invoice-matching.js";
+import { taxBase } from "./billing-duplicates.js";
 import { externalKindLabel as feedKindLabel } from "./billing-document-list.js";
 
 /**
@@ -294,6 +295,44 @@ export function pairingNumberKey(
 }
 
 /**
+ * A SZÁM ÉS A SZÁLLÍTÓ ADÓSZÁMA SZERINTI KULCS (kártya 9ccd7769, Balázs 2026-11-03).
+ * A név-kulcs elgépeléskor, „Kft.” elhagyásakor vagy névváltozáskor nem találja meg
+ * ugyanazt a szállítót (és ilyenkor a „papíron megvan” jelölés nem megy át, a PDF a
+ * csomagban marad). Az adószám törzse (az első nyolc számjegy) a szállító maga, és a
+ * szám az ő számlái között egyedi (`incomingKey` ugyanezt mondja), tehát ez a kulcs
+ * pontosabb a névnél: ugyanaz a szám + ugyanaz az adóalany = ugyanaz a számla,
+ * akárhogy írják a nevét. Üres, ha nincs szám vagy nincs adószám-törzs.
+ */
+export function pairingTaxKey(
+  documentNumber: string,
+  supplierTaxNumber: string | null | undefined,
+): string | null {
+  const compact = compactNumber(documentNumber);
+  const base = taxBase(supplierTaxNumber);
+  return compact && base
+    ? `${PAIRING_NUMBER_PREFIX}${compact}|tax:${base}`
+    : null;
+}
+
+/**
+ * EGY SZÁMLA ÖSSZES SZÁM SZERINTI KULCSA, a pontosabbtól a régi felé: az adószámos, aztán
+ * a nevet. A párosítások térképébe MINDET beírjuk, a keresés sorban próbálja. A név-kulcs
+ * azért marad, mert az egyik oldalon nincs mindig adószám (a postafiókos PDF-ből nem
+ * mindig olvasható ki); az adószámos kulcs csak TÖBB egyezést ad, kevesebbet soha, tehát
+ * ami eddig megtalálta, azt ezután is.
+ */
+export function pairingNumberKeys(
+  documentNumber: string,
+  supplierName: string,
+  supplierTaxNumber?: string | null,
+): string[] {
+  return [
+    pairingTaxKey(documentNumber, supplierTaxNumber),
+    pairingNumberKey(documentNumber, supplierName),
+  ].filter((key): key is string => key !== null);
+}
+
+/**
  * „PAPÍRON MEGVAN” EGY BEJÖVŐ SZÁMLA-SORRA: a soron tett jelölés VAGY a
  * párosított terhelésen tett (a sor forrás-dokumentuma szerint, ennek
  * hiányában a szám ÉS a szállító neve szerint). A lista és a könyvelői csomag
@@ -303,15 +342,22 @@ export function pairingNumberKey(
 export function paperOriginalOfRow(
   row: Pick<
     IncomingBillingDocument,
-    "paperOriginalAt" | "sourceDocumentId" | "documentNumber" | "supplierName"
+    | "paperOriginalAt"
+    | "sourceDocumentId"
+    | "documentNumber"
+    | "supplierName"
+    | "supplierTaxNumber"
   >,
   pairings: ReadonlyMap<string, Pick<DocumentPairing, "paperOriginal">>,
 ): boolean {
   if (row.paperOriginalAt !== null) return true;
   if (row.sourceDocumentId && pairings.get(row.sourceDocumentId)?.paperOriginal)
     return true;
-  const key = pairingNumberKey(row.documentNumber, row.supplierName);
-  return key ? (pairings.get(key)?.paperOriginal ?? false) : false;
+  return pairingNumberKeys(
+    row.documentNumber,
+    row.supplierName,
+    row.supplierTaxNumber,
+  ).some((key) => pairings.get(key)?.paperOriginal ?? false);
 }
 
 /**

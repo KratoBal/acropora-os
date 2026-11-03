@@ -255,6 +255,9 @@ export function mergeSameInvoice(
       ...(group.some((d) => d.paperMarked) ? { paperMarked: true } : {}),
       ...(group.some((d) => d.cardPaid) ? { cardPaid: true } : {}),
       supplierAccounts: [...new Set(group.flatMap((d) => d.supplierAccounts))],
+      // az összevont dokumentum az első ismert adószámot viszi (a NAV-sor mindig tud egyet)
+      supplierTaxNumber:
+        group.find((d) => d.supplierTaxNumber)?.supplierTaxNumber ?? null,
       identities: [
         ...new Set(group.flatMap((d) => identified(d).identities ?? [])),
       ],
@@ -706,6 +709,7 @@ export class MissingInvoicesRepository {
         gross: navGross(invoice.invoiceNetAmount, invoice.invoiceVatAmount),
         currency: invoice.currency,
         supplierName: invoice.supplierName,
+        supplierTaxNumber: invoice.supplierTaxNumber,
         supplierAccounts: [
           ...(accountsByTaxBase.get(taxBase(invoice.supplierTaxNumber)) ?? []),
           normalizeAccount(parsed?.supplierBankAccountNumber),
@@ -861,6 +865,11 @@ export class MissingInvoicesRepository {
           reading?.supplierName ??
           card?.partner ??
           "",
+        supplierTaxNumber:
+          linked?.supplier.taxNumber ??
+          result?.supplier.vatId ??
+          reading?.supplierTaxNumber ??
+          null,
         supplierAccounts:
           accountsByTaxBase.get(
             taxBase(
