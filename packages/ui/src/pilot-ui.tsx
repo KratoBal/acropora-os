@@ -472,8 +472,9 @@ export function PilotDateField({
   const shownIso = emitted(text);
   const invalid =
     text !== "" && (shownIso === "" || !inRange(shownIso, min, max));
+  const classes = splitWidthClasses(className);
   return (
-    <span className="relative block w-full">
+    <span className={`relative block ${classes.widthClass}`}>
       <input
         ref={typed}
         id={id}
@@ -494,7 +495,7 @@ export function PilotDateField({
         }}
         className={`w-full rounded-md py-1.5 pl-3 pr-9 text-sm tabular-nums text-pilot-grey-900 ring-1 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500 disabled:cursor-not-allowed disabled:bg-pilot-grey-50 disabled:text-pilot-grey-400 ${
           invalid ? "ring-red-400" : "ring-pilot-grey-200"
-        } ${readOnly ? "bg-pilot-grey-50 text-pilot-grey-400" : "bg-white"} ${className ?? ""}`}
+        } ${readOnly ? "bg-pilot-grey-50 text-pilot-grey-400" : "bg-white"} ${classes.rest}`}
       />
       {readOnly || disabled ? null : (
         <>
@@ -603,6 +604,7 @@ export function PilotInput({
       />
     );
   }
+  const classes = splitWidthClasses(className);
   const input = (
     <input
       id={id}
@@ -617,14 +619,14 @@ export function PilotInput({
       min={min}
       max={max}
       onChange={(event) => onChange?.(event.target.value)}
-      className={`w-full rounded-md px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500 disabled:cursor-not-allowed disabled:bg-pilot-grey-50 disabled:text-pilot-grey-400 ${
+      className={`${leadingIcon ? "w-full" : classes.widthClass} rounded-md px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500 disabled:cursor-not-allowed disabled:bg-pilot-grey-50 disabled:text-pilot-grey-400 ${
         readOnly ? "bg-pilot-grey-50 text-pilot-grey-400" : "bg-white"
-      } ${leadingIcon ? "pl-9" : ""} ${className ?? ""}`}
+      } ${leadingIcon ? "pl-9" : ""} ${classes.rest}`}
     />
   );
   if (!leadingIcon) return input;
   return (
-    <div className="relative w-full">
+    <div className={`relative ${classes.widthClass}`}>
       <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-pilot-grey-500">
         {leadingIcon}
       </span>
@@ -1109,4 +1111,35 @@ export function PilotMonthField({
       </PilotSelect>
     </div>
   );
+}
+
+/**
+ * A HÍVÓ SZÉLESSÉGE FELÜLÍRJA AZ ALAP `w-full`-T (UI-áttekintés, 2026-11-03). A beviteli mező `w-full`-t visel, és a hívó
+ * `className`-je ugyanarra az elemre kerül: ha az is szélességet ad (`w-20`, `w-[150px]`), a kettő közül a CSS
+ * sorrendje dönt, nem az osztályok sorrendje (a `cn` itt sima összefűzés). Az eredmény: a "Tól / Ig" mezők soronként
+ * más szélességűek lettek, a dátumszűrők teljes szélességűek maradtak. A szélesség-osztályokat (`w-*`, változattal is;
+ * a `min-w-*` és `max-w-*` nem) ezért külön vesszük: ahol van VÁLTOZAT NÉLKÜLI szélesség, ott nincs alap `w-full`; egy
+ * csak változatos (`md:w-40`) mellett marad, hogy a mező telefonon teljes szélességű legyen. A szélesség az ikonos
+ * mező burkolójára kerül (az input kitölti).
+ */
+export function splitWidthClasses(className: string | undefined): {
+  /** A szélesség-osztályok (változatosak is). */
+  width: string;
+  /** A többi osztály. */
+  rest: string;
+  /** Van-e változat NÉLKÜLI szélesség (`w-20`): csak az váltja ki az alap `w-full`-t. */
+  hasBase: boolean;
+  /** A szélesség-osztályok az alap `w-full`-lal, ha nincs változat nélküli szélesség (a `md:w-40` telefonon nem veszi el a teljes szélességet). */
+  widthClass: string;
+} {
+  const tokens = (className ?? "").split(/\s+/).filter(Boolean);
+  const isWidth = (token: string) => /^(?:[\w-]+:)*w-/.test(token);
+  const width = tokens.filter(isWidth).join(" ");
+  const hasBase = tokens.some((token) => /^w-/.test(token));
+  return {
+    width,
+    rest: tokens.filter((token) => !isWidth(token)).join(" "),
+    hasBase,
+    widthClass: hasBase ? width : `w-full ${width}`.trim(),
+  };
 }
