@@ -48,5 +48,7 @@ import { PartnerConversationController } from "./partner-conversation.controller
     SutyerakInbox,
     ServiceTokenRepository,
   ],
+  // the dashboard's unread card reads the menu badge's own count
+  exports: [MessagesService],
 })
 export class MessagesModule {}

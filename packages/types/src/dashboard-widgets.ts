@@ -51,6 +51,7 @@ export type DashboardWidgetAvailability = "active" | "planned" | "experimental";
 export const DASHBOARD_WIDGET_IDS = [
   "attention",
   "tasks",
+  "messages",
   "service-tickets",
   "worksheets",
   "material-requests",
@@ -157,6 +158,26 @@ export const DASHBOARD_WIDGETS: readonly DashboardWidgetDefinition[] = [
     priority: 10,
     dataSource:
       "Task: assigneeId = me, status OPEN (no due date in the model).",
+  }),
+  widget({
+    id: "messages",
+    title: "Olvasatlan üzenetek",
+    description: "Üzenetek",
+    category: "tasks",
+    requiredPermissions: [P.MESSAGES_USE],
+    recommendedRoles: [
+      "OWNER",
+      "ADMIN",
+      "MANAGER",
+      "SALES",
+      "WAREHOUSE",
+      "SERVICE",
+      "VIEWER",
+    ],
+    availability: "active",
+    priority: 11,
+    dataSource:
+      "MessagesService.unread(), the same count as the Üzenetek menu badge (called, not modified).",
   }),
   // --- service ---
   widget({
@@ -1140,6 +1161,14 @@ export interface DashboardWebshopOrdersWidgetData {
   counters: Record<WebshopOrderStage, number>;
   /** The webshop holds more orders than the OS reads in one pass: the counts are a floor. */
   truncated: boolean;
+}
+
+/** Olvasatlan üzenetek: the user's own unread messages, the menu badge's numbers. */
+export interface DashboardMessagesWidgetData {
+  /** Unread messages in all. */
+  total: number;
+  /** Conversations with at least one unread message. */
+  conversations: number;
 }
 
 /** Bejövő számlák: only what needs someone (NAV invoices and mailbox documents). */

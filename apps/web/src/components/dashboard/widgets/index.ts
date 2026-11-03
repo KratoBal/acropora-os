@@ -8,6 +8,7 @@ import { incomingInvoicesWidget } from "./incoming-invoices-widget";
 import { jevIntelligenceWidget } from "./jev-intelligence-widget";
 import { maintenanceCalendarWidget } from "./maintenance-calendar-widget";
 import { materialRequestsWidget } from "./material-requests-widget";
+import { messagesWidget } from "./messages-widget";
 import { missingInvoicesWidget } from "./missing-invoices-widget";
 import { overdueInvoicesWidget } from "./overdue-invoices-widget";
 import { webshopOrdersWidget } from "./webshop-orders-widget";
@@ -30,6 +31,7 @@ export const DASHBOARD_WIDGET_VIEWS: Partial<
   Record<DashboardWidgetId, DashboardWidgetView<any>>
 > = {
   tasks: tasksWidget,
+  messages: messagesWidget,
   "expected-arrivals": expectedArrivalsWidget,
   "service-tickets": serviceTicketsWidget,
   worksheets: worksheetsWidget,
