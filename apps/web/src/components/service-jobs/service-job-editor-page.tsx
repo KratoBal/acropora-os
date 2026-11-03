@@ -80,6 +80,9 @@ export function ServiceJobEditorPage({
 }) {
   const { session } = useAuth();
   const router = useRouter();
+  // Where the way out leads: the list this form was opened from (the tickets, or the maintenance sheets).
+  const listHref =
+    kind === "MAINTENANCE" ? "/szerviz/karbantartas" : "/szerviz/hibajegyek";
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [customer, setCustomer] = useState<WorksheetSelectablePartner | null>(
@@ -414,11 +417,17 @@ export function ServiceJobEditorPage({
         KISZÁMÍTHATÓNAK kell lennie: ugyanaz a link ugyanoda vigyen, ne attól
         függjön, honnan érkeztél. A hibajegy ADATLAPJA is így áll.
       */}
-      <ServiceBackLink href="/szerviz/hibajegyek">Hibajegyek</ServiceBackLink>
+      <ServiceBackLink href={listHref}>
+        {kind === "MAINTENANCE" ? "Karbantartás" : "Hibajegyek"}
+      </ServiceBackLink>
       <ServiceListHeader
         eyebrow="Új bejegyzés"
-        title="Új hibajegy"
-        lead="A hibajegy a lánc első eleme. A munkalapokat utólag lehet alá csatolni - a lap keletkezhet előbb is, mint a jegy."
+        title={kind === "MAINTENANCE" ? "Új karbantartási lap" : "Új hibajegy"}
+        lead={
+          kind === "MAINTENANCE"
+            ? "A karbantartási lap is a lánc első eleme. A munkalapokat utólag lehet alá csatolni - a lap keletkezhet előbb is, mint a jegy."
+            : "A hibajegy a lánc első eleme. A munkalapokat utólag lehet alá csatolni - a lap keletkezhet előbb is, mint a jegy."
+        }
       />
       {error ? (
         <Alert variant="danger" title="Nem sikerült" description={error} />
@@ -686,7 +695,7 @@ export function ServiceJobEditorPage({
               elhagyható.
             </p>
             <div className="flex items-center gap-2">
-              <Link href="/szerviz/hibajegyek">
+              <Link href={listHref}>
                 <Button variant="secondary">Mégsem</Button>
               </Link>
               <Button
