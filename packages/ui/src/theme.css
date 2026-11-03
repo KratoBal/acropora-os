@@ -92,6 +92,13 @@
   --color-dusk-900: #2f2b40;
   --color-dusk-950: #26233b;
 
+  /* ---- A BIRTOKOLT AKCIO-SZIN (UI-attekintes, 2026-11-03). A kozos `Button` elsodleges valtozata ezeken a neveken at
+     szinez, hogy EGY helyen valtozzon: az alapertek a regi (dusk) szin, tehat a partner portal valtozatlan; az
+     `apps/web` a sajat globals.css-eben a teal-ra irja at (egy elsodleges gombszin az OS-ben). */
+  --color-action: #2f2b40;
+  --color-action-hover: #373347;
+  --color-action-ring: #7a68cc;
+
   /* ---- AZ ALLAPOT-SZINEK. A prototipus part ad mindegyikhez (hatter es
      szoveg); a kozbenso fokozatok azokbol szarmaznak. Csak a TENYLEG
      HASZNALT fokozatok allnak itt: egy kitalalt teljes rampa olyasmit

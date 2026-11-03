@@ -754,14 +754,13 @@ function SourceItem(props: {
           <div className="flex items-center gap-2">
             {pending ? (
               <>
-                <button
-                  type="button"
+                <PilotButton
+                  size="action"
                   disabled={props.busy}
                   onClick={props.onInclude}
-                  className="h-9 rounded-md bg-pilot-accent-warm px-5 text-sm font-semibold text-white hover:bg-pilot-accent-warm-text disabled:opacity-50"
                 >
                   Befogad
-                </button>
+                </PilotButton>
                 <PilotButton
                   variant="secondary"
                   size="action"
