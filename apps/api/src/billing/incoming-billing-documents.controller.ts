@@ -54,10 +54,8 @@ import {
   mailboxOnlyPaidItems,
   mailboxPdfCandidates,
 } from "./incoming-billing-documents.js";
-import {
-  collectedPdfIds,
-  loadCollectedPdfIndex,
-} from "./incoming-collected-pdf.js";
+import { loadCollectedPdfIndex } from "./incoming-collected-pdf.js";
+import { incomingHasPdf, incomingPdfIds } from "./incoming-pdf-state.js";
 import {
   incomingListItems,
   loadManualPurchasePayments,
@@ -114,8 +112,7 @@ export class IncomingBillingDocumentsController {
       incomingListItems({
         rows,
         pairings,
-        hasCollectedPdf: (row) =>
-          attached.has(row.id) || collectedPdfIds(row, collected).length > 0,
+        hasCollectedPdf: (row) => incomingHasPdf(row, { attached, collected }),
         readings,
         purchases,
         manualPaid,
@@ -183,7 +180,7 @@ export class IncomingBillingDocumentsController {
     return toIncomingDetail(
       row,
       pairings,
-      attached.has(row.id) || collectedPdfIds(row, collected).length > 0,
+      incomingHasPdf(row, { attached, collected }),
       manualPaid.get(row.externalId) ?? null,
       related,
     );
@@ -234,11 +231,12 @@ export class IncomingBillingDocumentsController {
     });
     if (!row) throw new NotFoundException("Nincs ilyen bejövő számla.");
     // the feed's own PDF first, then the one a person attached to this row, then the collected one
-    const content = await this.firstPdf([
-      ...(row.sourceDocumentId ? [row.sourceDocumentId] : []),
-      ...((await attachedPdfIds(this.database, [row.id])).get(row.id) ?? []),
-      ...collectedPdfIds(row, await this.collectedIndex()),
-    ]);
+    const content = await this.firstPdf(
+      incomingPdfIds(row, {
+        attached: await attachedPdfIds(this.database, [row.id]),
+        collected: await this.collectedIndex(),
+      }),
+    );
     return pdfFile(content, row.documentNumber);
   }
 
@@ -281,10 +279,7 @@ export class IncomingBillingDocumentsController {
       rowId: row.id,
       file,
       userId: user.id,
-      hasPdf:
-        row.hasPdf ||
-        attached.has(row.id) ||
-        collectedPdfIds(row, collected).length > 0,
+      hasPdf: incomingHasPdf(row, { attached, collected }),
     });
     return this.detail(row.id);
   }
@@ -321,10 +316,7 @@ export class IncomingBillingDocumentsController {
       rowId: row.id,
       documentId: input.documentId,
       userId: user.id,
-      hasPdf:
-        row.hasPdf ||
-        attached.has(row.id) ||
-        collectedPdfIds(row, collected).length > 0,
+      hasPdf: incomingHasPdf(row, { attached, collected }),
     });
     return this.detail(row.id);
   }

@@ -32,6 +32,9 @@ import {
   readingDocumentIds,
   toIncomingListItem,
 } from "../incoming-billing-documents.js";
+import { loadCollectedPdfIndex } from "../incoming-collected-pdf.js";
+import { attachedPdfIds } from "../incoming-pdf-attach.js";
+import { incomingHasPdf } from "../incoming-pdf-state.js";
 import {
   isEuNotHungarian,
   readForeignInvoice,
@@ -984,12 +987,18 @@ export class IncomingReviewService {
       const manualPaid = await loadManualPurchasePayments(this.database, [
         approved,
       ]);
+      // ugyanaz a PDF-szabály, mint a listán és az adatlapon (`incoming-pdf-state.ts`): a csatolt és a
+      // begyűjtött PDF is számít, nem csak a tárolt jel (eddig fixen `false` volt)
+      const hasPdf = incomingHasPdf(approved, {
+        attached: await attachedPdfIds(this.database, [approved.id]),
+        collected: await loadCollectedPdfIndex(this.database),
+      });
       return this.purchaseView(
         {
           ...toIncomingListItem(
             approved,
             new Map(),
-            false,
+            hasPdf,
             manualPaid.get(approved.externalId) ?? null,
           ),
           review: "VERIFIED",

@@ -1,8 +1,6 @@
-import {
-  collectedPdfIds,
-  loadCollectedPdfIndex,
-} from "../billing/incoming-collected-pdf.js";
+import { loadCollectedPdfIndex } from "../billing/incoming-collected-pdf.js";
 import { attachedPdfIds } from "../billing/incoming-pdf-attach.js";
+import { incomingPdfIds } from "../billing/incoming-pdf-state.js";
 import { postedPurchaseForArrival } from "../billing/purchase-incoming.js";
 import { InvoiceCollectionRepository } from "./collection/invoice-collection.repository.js";
 import type {
@@ -1071,13 +1069,7 @@ export class MissingInvoicesRepository {
       refs,
       rows: rows.map((row) => ({
         ...row,
-        pdfIds: [
-          ...new Set([
-            ...(row.sourceDocumentId ? [row.sourceDocumentId] : []),
-            ...(attached.get(row.id) ?? []),
-            ...collectedPdfIds(row, collected),
-          ]),
-        ],
+        pdfIds: incomingPdfIds(row, { attached, collected }),
       })),
     };
   }
