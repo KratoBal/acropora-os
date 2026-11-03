@@ -21,6 +21,7 @@ import {
   Input,
   Skeleton,
   Textarea,
+  PilotFileInput,
 } from "@acropora/ui";
 import {
   RichTextEditor,
@@ -564,8 +565,7 @@ export function ArticleEditorPage({ contentId }: { contentId: string }) {
               >
                 <label className="block text-sm">
                   <span className="text-pilot-grey-700">Kép feltöltése</span>
-                  <input
-                    type="file"
+                  <PilotFileInput
                     accept="image/png,image/jpeg,image/webp"
                     aria-label="Kép feltöltése"
                     disabled={uploading !== null}
@@ -681,8 +681,7 @@ export function ArticleEditorPage({ contentId }: { contentId: string }) {
           {readOnly ? null : (
             <label className="block text-sm">
               <span className="text-pilot-grey-700">Borítókép feltöltése</span>
-              <input
-                type="file"
+              <PilotFileInput
                 accept="image/png,image/jpeg,image/webp"
                 aria-label="Borítókép feltöltése"
                 disabled={uploading !== null}
