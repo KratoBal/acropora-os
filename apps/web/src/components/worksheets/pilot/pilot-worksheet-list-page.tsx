@@ -185,7 +185,9 @@ type WorksheetRow = WorksheetListResponse["items"][number];
   végi nyíl csak asztali jelzés. A fő sor a munkalap TÁRGYA, alatta a szám (Balázs, 2026-10-26
   12:48 UTC, OS szál, msg 1564259312728150148): mindenhol egyformán.
 */
-const WORKSHEET_COLUMNS: PilotTableColumn<WorksheetRow>[] = [
+export const WORKSHEET_TABLE_MIN_WIDTH = 1080;
+
+export const WORKSHEET_COLUMNS: PilotTableColumn<WorksheetRow>[] = [
   {
     id: "worksheet",
     header: "Munkalap",
@@ -590,7 +592,7 @@ export function PilotWorksheetListPage() {
             rows={data.items}
             rowKey={(worksheet) => worksheet.id}
             rowTestId="worksheet-row"
-            minWidth={1060}
+            minWidth={WORKSHEET_TABLE_MIN_WIDTH}
             onRowActivate={(worksheet) =>
               router.push(`/szerviz/munkalapok/${worksheet.id}`)
             }

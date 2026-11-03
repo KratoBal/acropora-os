@@ -15,6 +15,8 @@ import { StrictMode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  JOB_COLUMNS,
+  JOB_TABLE_MIN_WIDTH,
   PilotServiceJobListPage,
   serviceJobListQuery,
   serviceJobListStateFromUrl,
@@ -165,6 +167,14 @@ describe("service-job list state in the URL", () => {
     expect(screen.queryByText("Jegy 1")).toBeNull();
     // nothing was reset, so there is nothing to write back
     expect(navigation.replace).not.toHaveBeenCalled();
+  });
+
+  it("the fixed column widths fit the table minimum", () => {
+    const sum = JOB_COLUMNS.reduce(
+      (acc, c) => acc + Number(/^(\d+)px$/.exec(c.width ?? "")?.[1]),
+      0,
+    );
+    expect(sum).toBeLessThanOrEqual(JOB_TABLE_MIN_WIDTH);
   });
 
   // The list is the shared table: on the phone every row is a card, each cell labelled with its

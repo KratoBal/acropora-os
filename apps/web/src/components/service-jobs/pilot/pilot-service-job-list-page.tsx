@@ -152,7 +152,9 @@ type JobRow = ServiceJobListResponse["items"][number];
   A cím tördelődik, a hibajegy száma alatta áll (a terv kétsoros címet rajzol, itt a hosszú cím a
   számot lejjebb tolja, nem fedi el).
 */
-const JOB_COLUMNS: PilotTableColumn<JobRow>[] = [
+export const JOB_TABLE_MIN_WIDTH = 1220;
+
+export const JOB_COLUMNS: PilotTableColumn<JobRow>[] = [
   {
     id: "job",
     header: "Hibajegy",
@@ -622,7 +624,7 @@ export function PilotServiceJobListPage() {
             rows={filtered}
             rowKey={(item) => item.id}
             rowTestId="service-job-row"
-            minWidth={1180}
+            minWidth={JOB_TABLE_MIN_WIDTH}
             onRowActivate={(item) =>
               router.push(`/szerviz/hibajegyek/${item.id}`)
             }

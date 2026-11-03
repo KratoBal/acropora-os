@@ -8,6 +8,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   PilotWorksheetListPage,
+  WORKSHEET_COLUMNS,
+  WORKSHEET_TABLE_MIN_WIDTH,
   worksheetHoursCell,
 } from "./pilot-worksheet-list-page";
 
@@ -161,6 +163,31 @@ describe("PilotWorksheetListPage -- redesign", () => {
     expect(navigation.push).not.toHaveBeenCalledWith(
       "/szerviz/munkalapok/ws-1",
     );
+  });
+
+  // KEYBOARD: Enter on the service job link must not open the worksheet (the shared table's row
+  // handler used to swallow it), Enter on the focused row itself opens it.
+  it("Enter on the service job link does not open the worksheet, Enter on the row does", async () => {
+    api.list.mockResolvedValue(response([row()]));
+    render(<PilotWorksheetListPage />);
+    const link = await screen.findByRole("link", { name: "HJ-2026-0142" });
+    const notPrevented = fireEvent.keyDown(link, { key: "Enter" });
+    expect(notPrevented).toBe(true);
+    expect(navigation.push).not.toHaveBeenCalledWith(
+      "/szerviz/munkalapok/ws-1",
+    );
+    fireEvent.keyDown(screen.getAllByTestId("worksheet-row")[0]!, {
+      key: "Enter",
+    });
+    expect(navigation.push).toHaveBeenCalledWith("/szerviz/munkalapok/ws-1");
+  });
+
+  it("the fixed column widths fit the table minimum", () => {
+    const sum = WORKSHEET_COLUMNS.reduce(
+      (acc, c) => acc + Number(/^(\d+)px$/.exec(c.width ?? "")?.[1]),
+      0,
+    );
+    expect(sum).toBeLessThanOrEqual(WORKSHEET_TABLE_MIN_WIDTH);
   });
 
   /*
