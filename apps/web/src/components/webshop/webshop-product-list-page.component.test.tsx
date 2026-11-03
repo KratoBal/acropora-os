@@ -112,11 +112,6 @@ describe("WebshopProductListPage", () => {
     );
   });
 
-  /**
-   * An empty screen has to say which emptiness it is. A search that matched
-   * nothing is the reader's to fix; a shop with nothing synchronised is not,
-   * and retyping the search would never help.
-   */
   // The list is the shared table: on the phone every row is a card, each cell labelled with its
   // column, so the price, the stock and the channel status do not disappear at 390 px.
   it("labels every cell with its column for the phone card view", async () => {
@@ -137,6 +132,11 @@ describe("WebshopProductListPage", () => {
     ]);
   });
 
+  /**
+   * An empty screen has to say which emptiness it is. A search that matched
+   * nothing is the reader's to fix; a shop with nothing synchronised is not,
+   * and retyping the search would never help.
+   */
   it("says the sync may not have run when nothing is listed at all", async () => {
     api.list.mockResolvedValue(response([]));
 
