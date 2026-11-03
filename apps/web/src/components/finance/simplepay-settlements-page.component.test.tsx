@@ -7,6 +7,8 @@ import type {
 import { createElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { pickMonth } from "@/test/month-field";
+
 import { SimplePaySettlementsPage } from "./simplepay-settlements-page";
 
 const api = vi.hoisted(() => ({
@@ -206,9 +208,7 @@ describe("SimplePaySettlementsPage", () => {
     api.downloadMonthly.mockReset().mockResolvedValue(undefined);
     render(createElement(SimplePaySettlementsPage));
     await screen.findAllByTestId("simplepay-kimutatas");
-    fireEvent.change(screen.getByLabelText("A havi fájl hónapja"), {
-      target: { value: "2026-08" },
-    });
+    pickMonth("A havi fájl hónapja", "2026-08");
     fireEvent.click(screen.getByRole("button", { name: "XLSX letöltése" }));
     await waitFor(() =>
       expect(api.downloadMonthly).toHaveBeenCalledWith("token-OWNER", 2026, 8),
@@ -241,17 +241,14 @@ describe("SimplePaySettlementsPage", () => {
 
   it("SP-MONTH-SUMMARY: the month's weekly reports and their totals, from the loaded list", async () => {
     render(createElement(SimplePaySettlementsPage));
-    fireEvent.change(await screen.findByLabelText("A havi fájl hónapja"), {
-      target: { value: "2026-07" },
-    });
+    await screen.findByLabelText("A havi fájl hónapja, év");
+    pickMonth("A havi fájl hónapja", "2026-07");
     expect(
       await screen.findByText(
         /^1 heti kimutatás · Összesen 167\s923 Ft · Jutalék 4120 Ft · Utalt 163\s803 Ft$/,
       ),
     ).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("A havi fájl hónapja"), {
-      target: { value: "2026-06" },
-    });
+    pickMonth("A havi fájl hónapja", "2026-06");
     expect(
       screen.getByText(/^0 heti kimutatás · Összesen 0 Ft/),
     ).toBeInTheDocument();
@@ -263,18 +260,15 @@ describe("SimplePaySettlementsPage", () => {
       pagination: { ...reports.pagination, totalItems: 120 },
     });
     render(createElement(SimplePaySettlementsPage));
-    fireEvent.change(await screen.findByLabelText("A havi fájl hónapja"), {
-      target: { value: "2026-07" },
-    });
+    await screen.findByLabelText("A havi fájl hónapja, év");
+    pickMonth("A havi fájl hónapja", "2026-07");
     expect(
       await screen.findByText(
         /^A legutóbbi 1 kimutatásból, a hónap régebbi kimutatásai nélkül: 1 heti kimutatás/,
       ),
     ).toBeInTheDocument();
     // the window's oldest report (2026-08-05) is before September's start
-    fireEvent.change(screen.getByLabelText("A havi fájl hónapja"), {
-      target: { value: "2026-09" },
-    });
+    pickMonth("A havi fájl hónapja", "2026-09");
     expect(screen.getByText(/^0 heti kimutatás/)).toBeInTheDocument();
   });
 });

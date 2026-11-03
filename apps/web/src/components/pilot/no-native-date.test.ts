@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 /*
   NINCS ÚJ NATÍV DÁTUMMEZŐ (UI-áttekintés, 3. csomag, 2026-11-03). A natív `type="date"`
-  mező a böngésző nyelvén ír (`mm/dd/yyyy`). A dátumot a `PilotInput type="date"` vagy a
+  és `type="month"` mező a böngésző nyelvén ír (`mm/dd/yyyy`, "August 2026"). A dátumot a `PilotInput type="date"` vagy a
   `PilotDateField` rajzolja magyarul; ez az őrző azt védi, hogy egy új natív dátummező
   csendben vissza ne csússzon. MI PIROSÍT: ha egy komponens-fájlban `<input>` vagy `<Input>`
   (nem `PilotInput`) áll `type="date"`-tel a kivételek listáján kívül; ha egy kivétel
@@ -36,7 +36,7 @@ function kod(forras: string): string {
 
 /** Az a címke, amelyik a `type="date"`-et viseli: a legutolsó `<Név` előtte. */
 function nativDatumHely(forras: string): boolean {
-  for (const m of forras.matchAll(/type="date"/g)) {
+  for (const m of forras.matchAll(/type="(?:date|month)"/g)) {
     const elozo = forras.lastIndexOf("<", m.index);
     const nev = /^<(\w+)/.exec(forras.slice(elozo))?.[1];
     if (nev === "input" || nev === "Input") return true;
@@ -52,6 +52,7 @@ describe("natív dátummező a komponensekben", () => {
   it("a mérő felismeri a natív és a közös alakot (önteszt)", () => {
     expect(nativDatumHely('<input\n type="date"\n />')).toBe(true);
     expect(nativDatumHely('<Input type="date" />')).toBe(true);
+    expect(nativDatumHely('<input type="month" />')).toBe(true);
     expect(nativDatumHely('<PilotInput type="date" />')).toBe(false);
     expect(nativDatumHely('<PilotDateField value="" />')).toBe(false);
   });

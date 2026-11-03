@@ -13,6 +13,8 @@ import type {
 import { createElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { pickMonth } from "@/test/month-field";
+
 import { GlsSettlementsPage } from "./gls-settlements-page";
 
 const api = vi.hoisted(() => ({
@@ -253,9 +255,7 @@ describe("GlsSettlementsPage", () => {
   it("downloads the chosen month's accountant file", async () => {
     api.downloadReport.mockReset().mockResolvedValue(undefined);
     render(createElement(GlsSettlementsPage));
-    fireEvent.change(screen.getByLabelText("A riport hónapja"), {
-      target: { value: "2026-08" },
-    });
+    pickMonth("A riport hónapja", "2026-08");
     fireEvent.click(screen.getByRole("button", { name: "XLSX letöltése" }));
     await waitFor(() =>
       expect(api.downloadReport).toHaveBeenCalledWith("token-OWNER", 2026, 8),
@@ -374,15 +374,11 @@ describe("GlsSettlementsPage", () => {
       },
     ]);
     render(createElement(GlsSettlementsPage));
-    fireEvent.change(await screen.findByLabelText("A riport hónapja"), {
-      target: { value: "2026-09" },
-    });
+    pickMonth("A riport hónapja", "2026-09");
     expect(
       await screen.findByText("1 utánvét-utalás · 2 csomag · 1 GLS díjszámla"),
     ).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("A riport hónapja"), {
-      target: { value: "2026-08" },
-    });
+    pickMonth("A riport hónapja", "2026-08");
     expect(
       screen.getByText("0 utánvét-utalás · 0 csomag · 0 GLS díjszámla"),
     ).toBeInTheDocument();
@@ -422,14 +418,14 @@ describe("GlsSettlementsPage", () => {
       }),
     );
     render(createElement(GlsSettlementsPage));
-    const month = await screen.findByLabelText("A riport hónapja");
+    await screen.findByLabelText("A riport hónapja, év");
     // the loaded window reaches back to 2026-08-17: September is whole
-    fireEvent.change(month, { target: { value: "2026-09" } });
+    pickMonth("A riport hónapja", "2026-09");
     expect(
       await screen.findByText(/^30 utánvét-utalás · 60 csomag/),
     ).toBeInTheDocument();
     // August starts before the window: the summary says it is partial
-    fireEvent.change(month, { target: { value: "2026-08" } });
+    pickMonth("A riport hónapja", "2026-08");
     expect(
       screen.getByText(
         /^A legutóbbi 50 utalásból, a hónap régebbi utalásai nélkül: 15 utánvét-utalás/,
