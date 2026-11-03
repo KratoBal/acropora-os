@@ -1401,9 +1401,12 @@ export async function runProjectionCli(
      */
     /*
       A TERMEKISMERET CSAK A KAPCSOLOVAL MEGY KI (`MEDUSA_PROJECT_KNOWLEDGE`, alapbol KI):
-      kikapcsolva a rows-lekerdezes sem fut, a leiras es a SEO-szoveg pontosan a mai
-      (a termekismeret elotti) marad, es az ismeret-vegpontra semmi nem megy. Ami a boltban
-      mar all, ott marad: a kikapcsolt allapot nem torol.
+      kikapcsolva a rows-lekerdezes sem fut, es az ismeret-vegpontra semmi nem megy (ami ott
+      all, ott marad). DE A LEIRAS ES A SEO-SZOVEG NEM MARAD MEG: `tudasSzoveg` null, tehat
+      az OS szovegebol allnak ossze, es egy boltbeli, termekismeretbol szarmazo leiras vagy
+      SEO-szoveg a termek kovetkezo vetitesi korben visszaall az OS-eredetire (barracuda,
+      #2095). Ezert a kikapcsolas azokban a kornyezetekben, ahol ilyen leiras all a boltban,
+      a bolt leirasanak irasa: elotte meg kell szamolni az ilyen termekeket.
     */
     const tudasBekapcsolva = projectKnowledgeEnabled(env);
     const tudas = tudasBekapcsolva

@@ -30,8 +30,15 @@ import {
  * WHAT IT GATES: the facts and the copy blocks the runner projects (`PUT
  * /admin/product-knowledge`), the approved text that replaces the description and the SEO
  * text, and the scheduler's "a fact changed" reason (native-field facts, weight and
- * dimensions, are not knowledge and keep their own reason). OFF touches nothing in the shop:
- * what is already there stays there.
+ * dimensions, are not knowledge and keep their own reason).
+ *
+ * WHAT OFF DOES AND DOES NOT DO (barracuda, #2095 review): nothing goes to the product_knowledge
+ * endpoint (what is there stays), and no fact starts a round. It does NOT leave the description
+ * and the SEO text alone: they are built from the OS text, so a shop description or SEO text
+ * that came from the product knowledge goes back to the OS text at that product's next round.
+ * Before OFF goes to an environment where such descriptions stand in the shop (the test Medusa
+ * has them from the KZ Amino slice), count those products: there, turning it off is a write to
+ * the shop's descriptions.
  */
 export const projectKnowledgeEnabled = (
   env: NodeJS.ProcessEnv | Record<string, string | undefined>,
