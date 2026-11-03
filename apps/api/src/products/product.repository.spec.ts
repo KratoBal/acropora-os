@@ -1,3 +1,4 @@
+import type { ArKep } from "../imports/unas/unas-ar-tortenet.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
@@ -187,6 +188,10 @@ const product = {
  */
 function createDatabase({
   authorityUpdateCount = 1,
+  /** rows the conditional variant price copy touches (0: a price was typed in between) */
+  variantCopyCount = 1,
+  /** the variant's last own-price history row, if any */
+  lastOwnPriceRow = null as ArKep | null,
   mirror = {
     grossPrice: new Prisma.Decimal("12990"),
     currency: null,
@@ -249,7 +254,17 @@ function createDatabase({
       },
       updateMany: async (args: unknown) => {
         calls.push({ operation: "variantUpdateMany", args });
-        return { count: 1 };
+        return { count: variantCopyCount };
+      },
+    },
+    productPriceHistory: {
+      findFirst: async (args: unknown) => {
+        calls.push({ operation: "historyFind", args });
+        return lastOwnPriceRow;
+      },
+      create: async (args: unknown) => {
+        calls.push({ operation: "historyCreate", args });
+        return {};
       },
     },
     aiProductSearchDocument: {
@@ -366,6 +381,9 @@ describe("ProductRepository", () => {
         "mirrorFind",
         "variantFindMany",
         "variantUpdateMany",
+        // the own price's history starts with the copy, inside the transaction (T4.1-D2)
+        "historyFind",
+        "historyCreate",
         "event",
         "transactionFind",
       ],
@@ -376,7 +394,7 @@ describe("ProductRepository", () => {
     };
     assert.equal(updateArgs.where.catalogAuthority, "UNAS");
     assert.equal(updateArgs.data.catalogAuthority, "ACROPORA");
-    const eventArgs = calls[4]?.args as {
+    const eventArgs = calls[6]?.args as {
       data: { eventType: string; actorUserId: string; payload: unknown };
     };
     assert.equal(
@@ -450,6 +468,46 @@ describe("ProductRepository", () => {
     assert.deepEqual(write.where, { id: "variant-1", sellingGrossPrice: null });
     assert.equal(write.data.sellingGrossPrice.toFixed(4), "14490.0000");
     assert.equal(write.data.sellingPriceCurrency, "HUF");
+
+    // THE HISTORY STARTS WITH THE COPY (T4.1-D2): one OWN row for the copied variant, written
+    // after the copy and in the same transaction (the fake shares one call list)
+    const history = byOperation("historyCreate");
+    assert.equal(history.length, 1);
+    const row = (
+      history[0]?.args as {
+        data: {
+          productId: string;
+          variantId: string;
+          source: string;
+          currency: string;
+          grossPrice: Prisma.Decimal;
+        };
+      }
+    ).data;
+    assert.equal(row.productId, "product-1");
+    assert.equal(row.variantId, "variant-1");
+    assert.equal(row.source, "OWN");
+    assert.equal(row.currency, "HUF");
+    assert.equal(row.grossPrice.toFixed(4), "14490.0000");
+    assert.ok(
+      calls.findIndex((c) => c.operation === "variantUpdateMany") <
+        calls.findIndex((c) => c.operation === "historyCreate"),
+    );
+  });
+
+  // MI PIROSÍT: ha a másolás nem írt semmit (közben beírtak árat), mégis sor keletkezne az
+  // előzményben: egy ár, amit nem mi másoltunk, nem a mi „első saját árunk".
+  it("writes no history row for a variant whose price was typed in before the copy", async () => {
+    const { database, calls } = createDatabase({ variantCopyCount: 0 });
+    await new ProductRepository(database).takeCatalogAuthority(
+      "product-1",
+      "user-1",
+    );
+    assert.equal(
+      calls.filter((c) => c.operation === "historyCreate").length,
+      0,
+    );
+    assert.equal(calls.filter((c) => c.operation === "historyFind").length, 0);
   });
 
   /**

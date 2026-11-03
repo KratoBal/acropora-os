@@ -8,6 +8,7 @@ import {
 import { Prisma, Repository, prisma } from "@acropora/database";
 import { applyUnasShippingFlags } from "../../products/shipping-profile-sources.js";
 import { kellUjArSor } from "./unas-ar-tortenet.js";
+import { utolsoTukorArSor } from "./unas-ar-tortenet-olvaso.js";
 import type {
   CanonicalUnasProduct,
   UnasApiCategory,
@@ -895,17 +896,8 @@ export class UnasProductSyncRepository extends Repository {
             saleNetPrice: diff.product.saleNetPrice,
             saleGrossPrice: diff.product.saleGrossPrice,
           };
-          const utolsoArSor = await transaction.productPriceHistory.findFirst({
-            where: { productId: product.id },
-            orderBy: [{ observedAt: "desc" }, { createdAt: "desc" }],
-            select: {
-              currency: true,
-              netPrice: true,
-              grossPrice: true,
-              saleNetPrice: true,
-              saleGrossPrice: true,
-            },
-          });
+          // CSAK A TUKOR-SOROK: egy OWN (sajat ar) sor nem "utolso tukor-ar"
+          const utolsoArSor = await utolsoTukorArSor(transaction, product.id);
           if (kellUjArSor(utolsoArSor, arKep)) {
             await transaction.productPriceHistory.create({
               data: {

@@ -3,6 +3,7 @@ import { pathToFileURL } from "node:url";
 import { Prisma, prisma } from "@acropora/database";
 
 import { kezdoSorIdopontja } from "./unas-ar-tortenet.js";
+import { TUKOR_SOR } from "./unas-ar-tortenet-olvaso.js";
 
 /**
  * A KEZDO AR-SOROK FELVETELE -- EGYSZER, MINDEN TERMEKRE.
@@ -294,7 +295,7 @@ if (
     {
       jeloltek: () =>
         prisma.product.findMany({
-          where: { priceHistory: { none: {} } },
+          where: { priceHistory: { none: TUKOR_SOR } },
           select: {
             id: true,
             unasSnapshot: {
@@ -311,7 +312,7 @@ if (
         }),
       vanMarSora: async (productId) =>
         (await prisma.productPriceHistory.count({
-          where: { productId },
+          where: { productId, ...TUKOR_SOR },
           take: 1,
         })) > 0,
       ir: async (sor) => {
