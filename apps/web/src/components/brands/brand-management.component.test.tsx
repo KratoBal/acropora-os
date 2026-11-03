@@ -304,6 +304,46 @@ describe("Brand management UI", () => {
       expect(api.removeAlias).toHaveBeenCalledWith("token", "b1", "a1"),
     );
   });
+  it("says the alias source in words: Kézi for MANUAL, UNAS stays, the stored value is unchanged", async () => {
+    api.detail.mockResolvedValue({
+      ...brand,
+      aliases: [
+        ...brand.aliases,
+        {
+          ...brand.aliases[0]!,
+          id: "a2",
+          alias: "Oase kézi",
+          source: "MANUAL",
+        },
+      ],
+    });
+    render(<BrandEditorPage brandId="b1" />);
+    await screen.findByText("Oase GmbH");
+
+    const select = screen.getByLabelText("Alias forrása") as HTMLSelectElement;
+    expect([...select.options].map((o) => [o.value, o.textContent])).toEqual([
+      ["MANUAL", "Kézi"],
+      ["UNAS", "UNAS"],
+    ]);
+    expect(select.value).toBe("MANUAL");
+    const row = (alias: string) => screen.getByText(alias).parentElement!;
+    expect(row("Oase kézi")).toHaveTextContent("Kézi");
+    expect(row("Oase GmbH")).toHaveTextContent("UNAS");
+    expect(screen.queryByText("MANUAL")).toBeNull();
+
+    fireEvent.change(screen.getByLabelText("Új alias"), {
+      target: { value: "Oase Europe" },
+    });
+    fireEvent.click(screen.getByText("Alias hozzáadása"));
+    await waitFor(() =>
+      expect(api.addAlias).toHaveBeenCalledWith(
+        "token",
+        "b1",
+        expect.objectContaining({ alias: "Oase Europe", source: "MANUAL" }),
+      ),
+    );
+  });
+
   it("warns about product usage before archive", async () => {
     render(<BrandEditorPage brandId="b1" />);
     await screen.findByText("Archiválás");
