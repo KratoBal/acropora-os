@@ -22,6 +22,7 @@ import {
   INCOMING_REVIEW_LABELS,
   INCOMING_REVIEW_STATES,
   INVOICE_FORMAT_LABELS,
+  incomingDocumentPath,
   type IncomingDocumentListItem,
   type IncomingDocumentListResponse,
 } from "@acropora/types";
@@ -34,14 +35,13 @@ import {
   urlPage,
   useUrlQuery,
 } from "@/lib/navigation/use-url-query";
-import { BILLING_LIST_PATH, formatDay } from "./billing-document-table";
+import { formatDay } from "./billing-document-table";
 import { incomingReviewHref } from "./billing-incoming-review-page";
 import { PAYMENT_STATE_TONE, PaymentBadge } from "./billing-payment";
 
 const PAGE_SIZE = String(BILLING_DOCUMENT_LIST_PAGE_SIZE.default);
 
-export const incomingDocumentHref = (id: string) =>
-  `${BILLING_LIST_PATH}/bejovo/${id}`;
+export const incomingDocumentHref = (id: string) => incomingDocumentPath(id);
 
 /** Összeg a pénznem tizedeseivel, pénznem-jel nélkül (a DEVIZA oszlop mondja). */
 export function incomingAmount(value: string | null, currency: string): string {

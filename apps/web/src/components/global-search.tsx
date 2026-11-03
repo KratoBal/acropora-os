@@ -17,6 +17,7 @@ const GROUP_LABEL: Record<(typeof SEARCH_GROUPS)[number], string> = {
   assets: "Eszközök",
   partners: "Partnerek",
   aquariums: "Akváriumok",
+  invoices: "Számlák",
 };
 
 type FlattenedResult = SearchResultItem & {

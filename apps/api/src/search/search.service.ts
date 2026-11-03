@@ -1,11 +1,17 @@
 import {
   isNavigationEntryVisible,
   type AuthenticatedUser,
+  type SearchGroup,
   type SearchResponse,
 } from "@acropora/types";
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable, Optional } from "@nestjs/common";
 
+import {
+  NAVIGATION_ENV,
+  navigationFeatures,
+} from "../auth/navigation-features.js";
 import { partnerScopeOf } from "../auth/partner-scope.util.js";
+import { InvoiceSearchService } from "../billing/invoice-search.service.js";
 import { AquariumsService } from "../aquariums/aquariums.service.js";
 import { ServiceAssetsService } from "../service-assets/service-assets.service.js";
 import { ServiceJobsService } from "../service-jobs/service-jobs.service.js";
@@ -13,6 +19,21 @@ import { SuppliersService } from "../suppliers/suppliers.service.js";
 import { WorksheetsService } from "../worksheets/worksheets.service.js";
 
 const LIMIT = 5;
+
+/**
+ * MELYIK MENÜPONT LÁTHATÓSÁGA KAPUZZA AZ EGYES CSOPORTOT (T2.2). Egy csoport akkor jelenik meg, ha a
+ * felhasználó a menüpontot látja: ugyanazzal a szabállyal, amivel a lista oldalát. A tábla külön
+ * áll, hogy egy teszt egybevethesse a lista vezérlőjének `@RequirePermissions` jogával (a keresés
+ * nem mutathat olyat, amit a lista 403-mal adna, és nem rejthet olyat, amit a lista megad).
+ */
+export const SEARCH_GROUP_NAVIGATION: Record<SearchGroup, string> = {
+  tickets: "service-jobs",
+  worksheets: "worksheets",
+  assets: "service-assets",
+  partners: "partners",
+  aquariums: "aquariums",
+  invoices: "billing",
+};
 
 const subtitle = (...parts: Array<string | null | undefined>) =>
   parts.filter((part): part is string => Boolean(part)).join(" · ");
@@ -25,36 +46,50 @@ export class SearchService {
     private readonly assets: ServiceAssetsService,
     private readonly suppliers: SuppliersService,
     private readonly aquariums: AquariumsService,
+    private readonly invoices: InvoiceSearchService,
+    /**
+     * A menü szerver-oldali kapcsolói (`navigationFeatures`): a feature-höz kötött menüpont
+     * (például az ajánlat) feature NÉLKÜL MINDENKINEK rejtett, tehát a keresőnek a
+     * felhasználó kiszolgált feature-jeit kell átadnia.
+     */
+    @Optional()
+    @Inject(NAVIGATION_ENV)
+    private readonly environment: NodeJS.ProcessEnv = process.env,
   ) {}
 
   async search(input: string | undefined, user: AuthenticatedUser) {
     const query = input?.trim();
     if (!query || query.length < 2) return {} satisfies SearchResponse;
 
-    const canSee = (entryId: string) => isNavigationEntryVisible(entryId, user);
+    const features = navigationFeatures(this.environment, user.id);
+    const canSee = (entryId: string) =>
+      isNavigationEntryVisible(entryId, user, features);
 
-    const [tickets, worksheets, assets, partners, aquariums] =
+    const [tickets, worksheets, assets, partners, aquariums, invoices] =
       await Promise.all([
-        canSee("service-jobs")
+        canSee(SEARCH_GROUP_NAVIGATION.tickets)
           ? this.serviceJobs.list({ search: query }, user)
           : undefined,
-        canSee("worksheets")
+        canSee(SEARCH_GROUP_NAVIGATION.worksheets)
           ? this.worksheets.list({ page: 1, pageSize: 10, search: query }, user)
           : undefined,
-        canSee("service-assets")
+        canSee(SEARCH_GROUP_NAVIGATION.assets)
           ? this.assets.list(
               { page: 1, pageSize: 10, search: query, status: "ACTIVE" },
               user,
             )
           : undefined,
-        canSee("partners")
+        canSee(SEARCH_GROUP_NAVIGATION.partners)
           ? this.suppliers.list(
               { page: 1, pageSize: LIMIT, search: query, status: "ACTIVE" },
               partnerScopeOf(user),
             )
           : undefined,
-        canSee("aquariums")
+        canSee(SEARCH_GROUP_NAVIGATION.aquariums)
           ? this.aquariums.list({ page: 1, pageSize: 10, search: query }, user)
+          : undefined,
+        canSee(SEARCH_GROUP_NAVIGATION.invoices)
+          ? this.invoices.search(query)
           : undefined,
       ]);
 
@@ -126,6 +161,7 @@ export class SearchService {
               path: `/akvariumok/${aquarium.id}`,
             })),
           }),
+      ...(invoices === undefined ? {} : { invoices }),
     } satisfies SearchResponse;
   }
 }

@@ -21,6 +21,7 @@ import { BillingDocumentPreviewService } from "./billing-document-preview.servic
 import { BillingIssuingResolutionRepository } from "./billing-issuing-resolution.repository.js";
 import { BillingIssuingResolutionService } from "./billing-issuing-resolution.service.js";
 import { BillingDocumentListRepository } from "./billing-document-list.repository.js";
+import { InvoiceSearchService } from "./invoice-search.service.js";
 import { BillingDocumentPdfService } from "./billing-document-pdf.service.js";
 import { BillingDocumentReadController } from "./billing-document-read.controller.js";
 import { BillingDocumentStockRepository } from "./billing-document-stock.repository.js";
@@ -68,6 +69,7 @@ import { ExternalInvoicePdfScheduler } from "./external-invoice-pdf.scheduler.js
     BillingDocumentStornoPdfService,
     BillingDocumentStockRepository,
     BillingDocumentListRepository,
+    InvoiceSearchService,
     BillingDocumentPdfService,
     BillingDocumentEmailRepository,
     BillingDocumentEmailService,
@@ -84,6 +86,8 @@ import { ExternalInvoicePdfScheduler } from "./external-invoice-pdf.scheduler.js
     // a webshop díjbekérője ugyanazon az úton megy ki (bb3a6bd5)
     BillingDocumentEmailService,
     BillingDocumentEmailDraftService,
+    // a globális keresés számla-csoportja (T2.2)
+    InvoiceSearchService,
   ],
 })
 export class BillingModule {}

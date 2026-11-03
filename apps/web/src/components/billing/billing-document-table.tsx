@@ -2,6 +2,8 @@
 
 import { Icon, PilotDataTable, type PilotTableColumn } from "@acropora/ui";
 import {
+  BILLING_LIST_PATH as SHARED_BILLING_LIST_PATH,
+  billingDocumentPath,
   getDocumentCapabilities,
   INVOICE_FORMAT_LABELS,
   type BillingDocumentListItem,
@@ -13,7 +15,7 @@ import { ExternalBadge } from "./billing-external-document-page";
 import { PaymentBadge } from "./billing-payment";
 import { PdfStateBadge } from "./billing-pdf-state";
 
-export const BILLING_LIST_PATH = "/penzugy/szamlazas";
+export const BILLING_LIST_PATH = SHARED_BILLING_LIST_PATH;
 
 /**
  * A SOR CÉLJA (brief 24. pont): a vázlat a szerkesztőbe nyílik (ott folytatható),
@@ -24,12 +26,8 @@ export function billingDocumentHref(item: {
   id: string;
   opens: BillingDocumentListItem["opens"];
 }): string {
-  if (item.opens === "EDITOR")
-    return `${BILLING_LIST_PATH}/${item.id}/szerkesztes`;
-  // a Számlázz.hu-ból kapott külső bizonylat: csak olvasható adatlap (acrobot 25812)
-  if (item.opens === "EXTERNAL_DETAIL")
-    return `${BILLING_LIST_PATH}/kulso/${item.id}`;
-  return `${BILLING_LIST_PATH}/${item.id}`;
+  // egy szabály a listának és a globális keresésnek (`@acropora/types`, T2.2)
+  return billingDocumentPath(item);
 }
 
 /** `YYYY-MM-DD` -> "2026. 09. 30.", hiányzó dátumnál "—" (a Figma jele). */

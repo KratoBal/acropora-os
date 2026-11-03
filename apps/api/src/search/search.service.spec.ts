@@ -1,8 +1,15 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { AuthenticatedUser, UserRole } from "@acropora/types";
+import {
+  hasPermission,
+  PERMISSIONS,
+  USER_ROLES,
+  type AuthenticatedUser,
+  type UserRole,
+} from "@acropora/types";
 
 import type { AquariumsService } from "../aquariums/aquariums.service.js";
+import type { InvoiceSearchService } from "../billing/invoice-search.service.js";
 import type { ServiceAssetsService } from "../service-assets/service-assets.service.js";
 import type { ServiceJobsService } from "../service-jobs/service-jobs.service.js";
 import type { SuppliersService } from "../suppliers/suppliers.service.js";
@@ -21,7 +28,13 @@ const user = (
   supplierId: null,
 });
 
-const search = (overrides: Record<string, unknown> = {}) =>
+/** how many times the invoice search ran: a group the user may not see must not even be queried */
+let invoiceCalls = 0;
+
+const search = (
+  overrides: Record<string, unknown> = {},
+  environment: NodeJS.ProcessEnv = {},
+) =>
   new SearchService(
     {
       list: async () => ({
@@ -80,11 +93,28 @@ const search = (overrides: Record<string, unknown> = {}) =>
         ],
       }),
     } as unknown as AquariumsService,
+    {
+      search: async () => {
+        invoiceCalls += 1;
+        return [
+          {
+            id: "document:inv-1",
+            title: "SZ-2026/1",
+            subtitle: "Kimenő számla · Vevő Kft. · 12 700 Ft",
+            path: "/penzugy/szamlazas/inv-1",
+          },
+        ];
+      },
+    } as unknown as InvoiceSearchService,
+    environment,
   );
 
 describe("SearchService", () => {
   for (const [role, expectedGroups] of [
-    ["OWNER", ["aquariums", "assets", "partners", "tickets", "worksheets"]],
+    [
+      "OWNER",
+      ["aquariums", "assets", "invoices", "partners", "tickets", "worksheets"],
+    ],
     ["SERVICE", ["aquariums", "assets", "partners", "tickets", "worksheets"]],
     ["PARTNER_SERVICE", ["aquariums", "assets", "tickets", "worksheets"]],
   ] as const) {
@@ -132,6 +162,31 @@ describe("SearchService", () => {
       result.tickets?.some((item) => item.id === "ticket-other"),
       false,
       "a partner nem látja a másik partner hibajegysorát",
+    );
+  });
+
+  /*
+    A SZÁMLA-CSOPORT KAPUJA (T2.2, 1. szelet). MI PIROSÍT: ha a csoport egy `billing.view` nélküli
+    szerepnek is megjelenne; ha a számla-keresés LEFUTNA a csoportot nem látó felhasználónál (a
+    találat nem látszana, de a lekérdezés és a darabszám igen: a kapu a lekérdezés előtt áll); ha
+    egy szerepnél a csoport és a jog elválna.
+  */
+  it("the invoices group is present for exactly the roles that hold billing.view, and its search never runs for the others", async () => {
+    for (const role of USER_ROLES) {
+      invoiceCalls = 0;
+      const subject = user(role);
+      const result = await search().search("számla", subject);
+      const allowed = hasPermission(subject, PERMISSIONS.BILLING_VIEW);
+      assert.equal("invoices" in result, allowed, role);
+      assert.equal(invoiceCalls, allowed ? 1 : 0, role);
+    }
+  });
+
+  it("returns the invoice items as the invoice search gave them", async () => {
+    const result = await search().search("számla", user("OWNER"));
+    assert.deepEqual(
+      result.invoices?.map((i) => i.id),
+      ["document:inv-1"],
     );
   });
 });
