@@ -18,8 +18,8 @@ import { DEMO_PREFIX, demoPlan, type DemoPlan } from "./demo-data.plan.js";
  *     `.env.example` and `.env.production.example` carry it EMPTY (a spec pins both). Nothing
  *     in the repo tells the stage from production otherwise (no `APP_ENV`, both run with
  *     `NODE_ENV=production`), and the anonymisation chain (card 07b56a1f) leaves no trace in
- *     the database yet. A copied `.env` could carry the signal over: that is the weakness, and
- *     it is why the second part exists.
+ *     the database yet. The weakness: the stage's `.env` copied onto production would carry the
+ *     signal there, and that is why the second part exists.
  *  2. `--db-host <host>`, equal to the host in `DATABASE_URL`: the operator names the database
  *     on purpose. A hostname alone cannot separate the environments (a container deployment
  *     names the database service the same on both), so this part is a deliberate act, not a
