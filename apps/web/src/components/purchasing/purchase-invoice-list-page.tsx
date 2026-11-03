@@ -195,6 +195,7 @@ export function PurchaseInvoiceListPage() {
     {
       id: "date",
       header: "Kelte",
+      nowrap: true,
       width: "120px",
       cell: (item) => (
         <span className="text-pilot-grey-600">

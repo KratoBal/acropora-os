@@ -336,6 +336,7 @@ function ExpectedArrivalView(props: {
     {
       id: "arrived",
       header: "Érkezett",
+      nowrap: true,
       width: "12%",
       cell: (item) => (
         <span className="text-pilot-grey-600">

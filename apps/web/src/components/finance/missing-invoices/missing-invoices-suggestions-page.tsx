@@ -153,6 +153,7 @@ export function MissingInvoicesSuggestionsPage() {
     {
       id: "received",
       header: "Érkezett",
+      nowrap: true,
       width: "120px",
       cell: (item) =>
         item.receivedAt ? formatDay(item.receivedAt.slice(0, 10)) : "—",

@@ -311,6 +311,7 @@ export function PriceListsPage() {
     {
       id: "date",
       header: "A lista dátuma",
+      nowrap: true,
       width: "130px",
       cell: (list) => formatListDate(list.listDate),
     },
