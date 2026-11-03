@@ -47,6 +47,12 @@ export interface CandidateDocument {
   gross: Prisma.Decimal | null;
   currency: string;
   supplierName: string;
+  /**
+   * A szállító adószáma, ahol a forrás ismeri (a NAV-sor mindig, a postafiókos
+   * PDF-nél ha kiolvasható): a „papíron megvan” számkulcsa ezzel pontosabb a
+   * névnél (`pairingNumberKeys`, kártya 9ccd7769). Hiányzó: csak a név.
+   */
+  supplierTaxNumber?: string | null;
   /** A szállító ismert bankszámlái, kötőjel és szóköz nélkül. */
   supplierAccounts: readonly string[];
   kind: "INVOICE" | "PROFORMA" | "PREMIUM_NOTICE";

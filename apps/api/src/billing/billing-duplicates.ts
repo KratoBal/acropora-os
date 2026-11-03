@@ -1,3 +1,6 @@
+import { ACROPORA_COMPANY } from "@acropora/types";
+import { hungarianTaxBase } from "../purchasing/nav-incoming-invoices/nav-incoming-invoice.types.js";
+
 import { invoiceNumberKey } from "./external-billing-one-row.js";
 
 /**
@@ -11,6 +14,23 @@ import { invoiceNumberKey } from "./external-billing-one-row.js";
 /** The first eight digits of a Hungarian tax number: the taxpayer itself. */
 export const taxBase = (value: string | null | undefined): string =>
   (value ?? "").replace(/\D/g, "").slice(0, 8);
+
+/**
+ * A SZÁLLÍTÓ ADÓSZÁM-TÖRZSE, AMIT KULCSNAK SZABAD HASZNÁLNI (barracuda, #2093 review).
+ * Két eset NEM szállítói azonosító, és a kulcs ilyenkor hallgat (marad a név-kulcs):
+ *   - a SAJÁT adószámunk (a vevő): egy számlán mindig ott áll, és ha a kiolvasás egyszer
+ *     azt veszi szállítóénak, két különböző szállító azonos számú számlája ugyanazt a
+ *     kulcsot kapná, és az egyik „papíron megvan” jelölése a másikra menne át;
+ *   - egy nem magyar azonosító (DE123456789, ATU12345678): a `taxBase` minden számjegyet
+ *     összeszedne, és két külföldi cég ugyanarra a nyolc számjegyre eshetne. Csak a 8 vagy
+ *     11 jegyű magyar alak (`hungarianTaxBase`) kulcs.
+ */
+export function supplierTaxBase(
+  supplierTaxNumber: string | null | undefined,
+): string | null {
+  const base = hungarianTaxBase(supplierTaxNumber);
+  return base && base !== ACROPORA_COMPANY.taxNumberBase ? base : null;
+}
 
 /** A group of rows that are one invoice, with the key that made them one. */
 export interface DuplicateGroup<T> {

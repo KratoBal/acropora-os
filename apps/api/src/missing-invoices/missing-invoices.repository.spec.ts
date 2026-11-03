@@ -5,6 +5,7 @@ import { Prisma } from "@acropora/database";
 
 import type { CandidateDocument } from "./missing-invoice-matching.js";
 import {
+  mergedSupplierTaxNumber,
   mergeSameInvoice,
   normalizeAccount,
   withoutNotBookable,
@@ -475,5 +476,76 @@ describe("withoutNotBookable", () => {
       left.map((d) => d.id),
       ["nav-2"],
     );
+  });
+});
+
+/*
+  AZ ÖSSZEVONT CSOPORT ADÓSZÁMA (barracuda, #2093 review). MI PIROSÍT: ha a NAV-sor adószáma
+  nem az elsődleges; ha két, eltérő törzsű kiolvasás közül az „első” nyerne (véletlenül az
+  egyik adóalany kulcsát kapná a másik); ha a saját adószámunk (a vevő) vagy egy külföldi
+  azonosító szállítói adószámmá válna.
+*/
+describe("mergedSupplierTaxNumber", () => {
+  const mail = (id: string, tax: string | null) =>
+    doc({ id, source: "MAILBOX", supplierTaxNumber: tax });
+
+  it("the NAV row's number comes first, even against a differing reading", () => {
+    const nav = doc({
+      id: "nav",
+      source: "NAV",
+      supplierTaxNumber: "12345678-2-41",
+    });
+    assert.equal(
+      mergedSupplierTaxNumber([mail("m", "87654321-2-41"), nav]),
+      "12345678-2-41",
+    );
+  });
+
+  it("without a NAV row: the one common base of the readings; two different bases give none", () => {
+    assert.equal(
+      mergedSupplierTaxNumber([
+        mail("a", "12345678-2-41"),
+        mail("b", "12345678"),
+      ]),
+      "12345678-2-41",
+    );
+    assert.equal(
+      mergedSupplierTaxNumber([
+        mail("a", "12345678-2-41"),
+        mail("b", "87654321-2-41"),
+      ]),
+      null,
+    );
+    assert.equal(
+      mergedSupplierTaxNumber([mail("a", null), mail("b", null)]),
+      null,
+    );
+  });
+
+  it("our own number and a foreign identifier are never the supplier's", () => {
+    const ours = "23916229-2-42";
+    assert.equal(
+      mergedSupplierTaxNumber([mail("a", ours), mail("b", ours)]),
+      null,
+    );
+    assert.equal(mergedSupplierTaxNumber([mail("a", "DE123456789")]), null);
+    // a NAV-sor sem lehet a mi számunk: ilyenkor a kiolvasott egyetlen használható törzs marad
+    const navOurs = doc({ id: "nav", source: "NAV", supplierTaxNumber: ours });
+    assert.equal(
+      mergedSupplierTaxNumber([navOurs, mail("m", "12345678-2-41")]),
+      "12345678-2-41",
+    );
+  });
+
+  it("a merged document gets no tax number when its members disagree", () => {
+    const merged = mergeSameInvoice(
+      [mail("a", "12345678-2-41"), mail("b", "87654321-2-41")],
+      new Map([
+        ["a", "sz-1|12345678"],
+        ["b", "sz-1|12345678"],
+      ]),
+    );
+    assert.equal(merged.length, 1);
+    assert.equal(merged[0]!.supplierTaxNumber, null);
   });
 });

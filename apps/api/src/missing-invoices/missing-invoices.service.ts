@@ -62,7 +62,7 @@ import {
   inFeedTest,
   notInFeedTest,
   paperOriginalOfRow,
-  pairingNumberKey,
+  pairingNumberKeys,
 } from "../billing/incoming-billing-documents.js";
 import {
   packageDataNote,
@@ -442,16 +442,18 @@ export class MissingInvoicesService {
     // (paperOriginalOfRow); ha egy kulcshoz két párosítás tartozik, a JELÖLT nyer
     // (a csomag is minden jelöltet beír, a két felület nem mondhat mást)
     for (const pairing of new Set(result.values())) {
-      const numberKey = pairing.document.number
-        ? pairingNumberKey(
+      const numberKeys = pairing.document.number
+        ? pairingNumberKeys(
             pairing.document.number,
             pairing.document.supplierName,
+            pairing.document.supplierTaxNumber,
           )
-        : null;
-      if (!numberKey) continue;
-      const existing = result.get(numberKey);
-      if (!existing || (pairing.paperOriginal && !existing.paperOriginal))
-        result.set(numberKey, pairing);
+        : [];
+      for (const numberKey of numberKeys) {
+        const existing = result.get(numberKey);
+        if (!existing || (pairing.paperOriginal && !existing.paperOriginal))
+          result.set(numberKey, pairing);
+      }
     }
     return result;
   }
@@ -1022,10 +1024,14 @@ export class MissingInvoicesService {
     const paperPairings = new Map<string, { paperOriginal: boolean }>();
     for (const item of computed.items.filter((i) => i.paperOriginal))
       for (const paperDocument of documentsOfItem(item.id)) {
-        const numberKey = paperDocument.number
-          ? pairingNumberKey(paperDocument.number, paperDocument.supplierName)
-          : null;
-        for (const key of [...idsOf(paperDocument), numberKey])
+        const numberKeys = paperDocument.number
+          ? pairingNumberKeys(
+              paperDocument.number,
+              paperDocument.supplierName,
+              paperDocument.supplierTaxNumber,
+            )
+          : [];
+        for (const key of [...idsOf(paperDocument), ...numberKeys])
           if (key) paperPairings.set(key, { paperOriginal: true });
       }
 
@@ -1086,10 +1092,14 @@ export class MissingInvoicesService {
     for (const item of computed.items)
       if (item.state === "FOUND")
         for (const document of documentsOfItem(item.id)) {
-          const numberKey = document.number
-            ? pairingNumberKey(document.number, document.supplierName)
-            : null;
-          for (const key of [...idsOf(document), numberKey])
+          const numberKeys = document.number
+            ? pairingNumberKeys(
+                document.number,
+                document.supplierName,
+                document.supplierTaxNumber,
+              )
+            : [];
+          for (const key of [...idsOf(document), ...numberKeys])
             if (key && !itemOfDocument.has(key))
               itemOfDocument.set(key, item.id);
         }
@@ -1097,13 +1107,18 @@ export class MissingInvoicesService {
       sourceDocumentId: string | null;
       documentNumber: string;
       supplierName: string;
+      supplierTaxNumber: string | null;
     }) => {
-      const numberKey = pairingNumberKey(row.documentNumber, row.supplierName);
+      const numberKeys = pairingNumberKeys(
+        row.documentNumber,
+        row.supplierName,
+        row.supplierTaxNumber,
+      );
       return (
         (row.sourceDocumentId
           ? itemOfDocument.get(row.sourceDocumentId)
           : undefined) ??
-        (numberKey ? itemOfDocument.get(numberKey) : undefined)
+        numberKeys.map((key) => itemOfDocument.get(key)).find(Boolean)
       );
     };
 

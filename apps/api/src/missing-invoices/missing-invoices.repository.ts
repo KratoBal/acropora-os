@@ -18,6 +18,7 @@ import {
   otherDocumentFileName,
   reminderFileName,
 } from "./collection/invoice-text.js";
+import { supplierTaxBase } from "../billing/billing-duplicates.js";
 import type { CandidateDocument, Payee } from "./missing-invoice-matching.js";
 import type { StoredReading } from "../billing/foreign-invoice/reading-values.js";
 
@@ -171,6 +172,27 @@ export function withoutNotBookable(
 }
 
 /**
+ * AZ ÖSSZEVONT CSOPORT SZÁLLÍTÓJÁNAK ADÓSZÁMA (barracuda, #2093 review). A NAV-sor adószáma
+ * az elsődleges, mert az nem kiolvasás; ha nincs ilyen, akkor a kiolvasottak egyetlen közös
+ * törzse; ha a tagok két különböző törzset hoznak, vagy egyik sem használható (a saját
+ * adószámunk, nem magyar azonosító), NINCS adószám, és csak a név-kulcs dolgozik: egy
+ * „első ismert” véletlenül az egyik adóalany kulcsát adná a másiknak.
+ */
+export function mergedSupplierTaxNumber(
+  group: readonly CandidateDocument[],
+): string | null {
+  const nav = group.find(
+    (d) => d.source === "NAV" && supplierTaxBase(d.supplierTaxNumber),
+  );
+  if (nav) return nav.supplierTaxNumber ?? null;
+  const usable = group.filter((d) => supplierTaxBase(d.supplierTaxNumber));
+  const bases = new Set(
+    usable.map((d) => supplierTaxBase(d.supplierTaxNumber)),
+  );
+  return bases.size === 1 ? (usable[0]!.supplierTaxNumber ?? null) : null;
+}
+
+/**
  * UGYANAZ A SZÁMLA TÖBB FORRÁSBÓL EGY JELÖLT (acrobot 25322). A NAV-sor az
  * azonosság és az összeg, a postafiók PDF-je az eredeti. Összevonás nélkül egy
  * számla két terhelést is vihetne: egyszer NAV-sorként, egyszer PDF-ként.
@@ -255,6 +277,7 @@ export function mergeSameInvoice(
       ...(group.some((d) => d.paperMarked) ? { paperMarked: true } : {}),
       ...(group.some((d) => d.cardPaid) ? { cardPaid: true } : {}),
       supplierAccounts: [...new Set(group.flatMap((d) => d.supplierAccounts))],
+      supplierTaxNumber: mergedSupplierTaxNumber(group),
       identities: [
         ...new Set(group.flatMap((d) => identified(d).identities ?? [])),
       ],
@@ -706,6 +729,7 @@ export class MissingInvoicesRepository {
         gross: navGross(invoice.invoiceNetAmount, invoice.invoiceVatAmount),
         currency: invoice.currency,
         supplierName: invoice.supplierName,
+        supplierTaxNumber: invoice.supplierTaxNumber,
         supplierAccounts: [
           ...(accountsByTaxBase.get(taxBase(invoice.supplierTaxNumber)) ?? []),
           normalizeAccount(parsed?.supplierBankAccountNumber),
@@ -861,6 +885,11 @@ export class MissingInvoicesRepository {
           reading?.supplierName ??
           card?.partner ??
           "",
+        supplierTaxNumber:
+          linked?.supplier.taxNumber ??
+          result?.supplier.vatId ??
+          reading?.supplierTaxNumber ??
+          null,
         supplierAccounts:
           accountsByTaxBase.get(
             taxBase(

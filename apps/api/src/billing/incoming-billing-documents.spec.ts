@@ -12,10 +12,13 @@ import {
   incomingPaymentOf,
   mailboxOnlyPaidItems,
   pairingNumberKey,
+  pairingNumberKeys,
+  pairingTaxKey,
   paymentStateOf,
   toIncomingDetail,
   toIncomingListItem,
 } from "./incoming-billing-documents.js";
+import { supplierTaxBase } from "./billing-duplicates.js";
 
 const D = (value: string | number) => new Prisma.Decimal(value);
 const day = (value: string) => new Date(`${value}T00:00:00Z`);
@@ -278,6 +281,150 @@ describe("bankMatchOf", () => {
     assert.equal(
       toIncomingListItem(row(), byNumber(true)).paperOriginalMarkedHere,
       false,
+    );
+  });
+
+  /*
+    A SZÁM ÉS AZ ADÓSZÁM SZERINTI KULCS (kártya 9ccd7769, Balázs 2026-11-03). A név-kulcs
+    nem találja meg ugyanazt a szállítót elgépelt vagy megváltozott névvel; az adószám
+    törzse igen. MI PIROSÍT: ha az adószámos kulcs nem működne név nélkül (más név, ugyanaz
+    az adószám és szám: a jelölés átmegy); ha a régi név-kulcs elveszne (adószám nélküli
+    oldal, ugyanaz a név: átmegy, mint eddig); ha egy MÁS adóalany ugyanazon tömörített
+    számú és MÁS nevű számlájának jelölése átszivárogna (a #2013 eset marad zárva); ha az
+    adószám formátuma (kötőjelek, szóköz) számítana; ha a szám formátuma számítana.
+  */
+  it("paper-original by number AND tax number: the same taxpayer under another spelling of its name still gets the mark", () => {
+    const marks = (number: string, supplier: string, tax: string | null) =>
+      new Map(
+        pairingNumberKeys(number, supplier, tax).map((key) => [
+          key,
+          pairing({ paperOriginal: true }),
+        ]),
+      );
+    const rowOf = (over: Partial<IncomingBillingDocument>) =>
+      toIncomingListItem(
+        row({ sourceDocumentId: null, ...over }),
+        marks("KI 2026/77", "Korall Import", "12345678-2-41"),
+      ).paperOriginal;
+    // a név máshogy van írva (a „Kft.” elmaradt), az adószám és a szám ugyanaz: átmegy
+    assert.equal(
+      rowOf({
+        supplierName: "Korall Import Kft.",
+        supplierTaxNumber: "12345678-2-41",
+      }),
+      true,
+    );
+    // az adószám formátuma nem számít (törzs, kötőjel nélkül, szóközzel)
+    assert.equal(
+      rowOf({
+        supplierName: "Korall Imp.",
+        supplierTaxNumber: "12345678 2 41",
+      }),
+      true,
+    );
+    // ugyanaz a név, de a sor adószáma nincs: a régi név-kulcs viszi át, mint eddig
+    assert.equal(
+      rowOf({ supplierName: "Korall Import", supplierTaxNumber: null }),
+      true,
+    );
+    // MÁS adóalany, más név, ugyanaz a tömörített szám (2026/77 és 2026-77): NEM megy át
+    assert.equal(
+      rowOf({
+        documentNumber: "KI-2026-77",
+        supplierName: "Másik Kft.",
+        supplierTaxNumber: "87654321-2-41",
+      }),
+      false,
+      "another taxpayer's invoice with the same compacted number does not carry the mark",
+    );
+    // ugyanaz az adószám, MÁS számlaszám: NEM megy át
+    assert.equal(
+      rowOf({
+        documentNumber: "KI 2026/78",
+        supplierName: "Korall Import",
+        supplierTaxNumber: "12345678-2-41",
+      }),
+      false,
+    );
+  });
+
+  /*
+    A SAJÁT ADÓSZÁMUNK ÉS A KÜLFÖLDI AZONOSÍTÓ NEM SZÁLLÍTÓI KULCS (barracuda, #2093 review;
+    ugyanaz a hibacsalád, mint a #2013: egy hamis „papíron megvan” elrejt egy hiányzó
+    számlát). MI PIROSÍT: ha a vevő (mi) adószáma szállítói kulccsá válna (a kiolvasás egy
+    számlán a vevőét is látja); ha két külföldi cég azonos nyolc számjegye ugyanazt a kulcsot
+    adná (DE123456789 és ATU12345678); ha a magyar alak (8 vagy 11 jegy, HU előtaggal) nem
+    menne át.
+  */
+  it("our own tax number and a foreign identifier are not a supplier key", () => {
+    assert.equal(
+      supplierTaxBase("23916229-2-42"),
+      null,
+      "the buyer's own number",
+    );
+    assert.equal(supplierTaxBase("23916229"), null);
+    assert.equal(supplierTaxBase("DE123456789"), null);
+    assert.equal(supplierTaxBase("ATU12345678"), null);
+    assert.equal(supplierTaxBase("12345678"), "12345678");
+    assert.equal(supplierTaxBase("12345678-2-41"), "12345678");
+    assert.equal(supplierTaxBase("HU12345678"), "12345678");
+    assert.equal(supplierTaxBase(null), null);
+    assert.equal(pairingTaxKey("KI 1", "23916229-2-42"), null);
+    assert.equal(pairingTaxKey("KI 1", "DE123456789"), null);
+  });
+
+  it("two different suppliers with the same number, both read with OUR tax number, do not share a mark", () => {
+    const marks = new Map(
+      pairingNumberKeys("KI 2026/77", "Első Kft.", "23916229-2-42").map(
+        (key) => [key, pairing({ paperOriginal: true })],
+      ),
+    );
+    const second = toIncomingListItem(
+      row({
+        sourceDocumentId: null,
+        documentNumber: "KI-2026-77",
+        supplierName: "Második Kft.",
+        supplierTaxNumber: "23916229-2-42",
+      }),
+      marks,
+    );
+    assert.equal(second.paperOriginal, false);
+    // ugyanaz a szállító (a név egyezik) a nev-kulcson továbbra is megtalálja
+    const same = toIncomingListItem(
+      row({
+        sourceDocumentId: null,
+        documentNumber: "KI-2026-77",
+        supplierName: "Első Kft.",
+        supplierTaxNumber: "23916229-2-42",
+      }),
+      marks,
+    );
+    assert.equal(same.paperOriginal, true);
+  });
+
+  it("the keys: the tax-number key first, the name key after, only what the data allows", () => {
+    assert.deepEqual(
+      pairingNumberKeys("KI 2026/77", "Korall Import Kft.", "12345678-2-41"),
+      [
+        "number:ki202677|tax:12345678",
+        pairingNumberKey("KI 2026/77", "Korall Import Kft.")!,
+      ],
+    );
+    // adószám nélkül csak a név-kulcs (a régi viselkedés)
+    assert.deepEqual(
+      pairingNumberKeys("KI 2026/77", "Korall Import Kft.", null),
+      [pairingNumberKey("KI 2026/77", "Korall Import Kft.")!],
+    );
+    // szám nélkül egyik sem; név nélkül csak az adószámos
+    assert.deepEqual(pairingNumberKeys("", "Korall", "12345678"), []);
+    assert.deepEqual(pairingNumberKeys("KI 1", "", "12345678"), [
+      "number:ki1|tax:12345678",
+    ]);
+    assert.equal(pairingTaxKey("KI 1", "nem szám"), null);
+    // a tömörített szám formátum-független: 2026/0001 és 2026-0001 ugyanaz, szállítónként
+    assert.equal(
+      pairingTaxKey("2026/0001", "12345678-2-41"),
+      pairingTaxKey("2026-0001", "12345678"),
     );
   });
 
