@@ -14,7 +14,10 @@ export async function forgetDownloadedFiles(): Promise<void> {
       const directory = new Directory(Paths.cache, name);
       if (directory.exists) directory.delete();
     } catch (error) {
-      console.warn(`A letöltött fájlok könyvtára nem törölhető: ${name}`, error);
+      console.warn(
+        `A letöltött fájlok könyvtára nem törölhető: ${name}`,
+        error,
+      );
     }
   }
 }
