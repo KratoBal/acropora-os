@@ -249,14 +249,15 @@ export function ServiceJobListPage({
   );
   const summary = data ? listSummary(data.counts) : null;
 
+  // What this list holds, in words: the maintenance list used to say "hibajegy" everywhere.
+  const thing = kind === "MAINTENANCE" ? "karbantartási lap" : "hibajegy";
+
   /**
    * A HÁROM CSEMPE SZÁMA A TELJES HALMAZBÓL JÖN, nem a betöltött lapból - ezért
    * ad a szerver állapotonkénti darabszámot. Amíg nincs válasz, `null` áll
    * bennük: egy nulla azt állítaná, hogy nincs ilyen jegy, és aki ezt látja,
    * nem keres tovább.
    */
-  // What this list holds, in words: the maintenance list used to say "hibajegy" everywhere.
-  const thing = kind === "MAINTENANCE" ? "karbantartási lap" : "hibajegy";
   const tiles: ServiceStatTile[] = [
     {
       key: "open",
