@@ -28,11 +28,12 @@ import { forgetWorksheetDepartments } from "./worksheet-department-cache";
  * és nem ennek a függvénynek a csendes bővítése.
  */
 export async function forgetOfflineData(): Promise<void> {
+  // FIRST, not last (barracuda, #2088): it never throws, and a failing step below (an SQLite error) would otherwise leave the
+  // downloaded invoice PDFs, attachments and pictures on the phone
+  await forgetDownloadedFiles();
   await forgetOfflineAssets();
   await forgetOfflineServiceJobs();
   await forgetCachedWorksheets();
   await forgetWorksheetDepartments();
   await forgetAssetFormCache();
-  // the downloaded files too (invoice PDFs, attachments, document pictures): copies of the same kind (barracuda, #2086)
-  await forgetDownloadedFiles();
 }
