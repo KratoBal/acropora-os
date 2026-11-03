@@ -16,6 +16,7 @@ import {
   PilotSelect,
 } from "@acropora/ui";
 import {
+  formatMoney,
   hasPermission,
   PERMISSIONS,
   type CatalogOption,
@@ -46,7 +47,6 @@ import { inferCountryFromTaxNumber } from "@/components/customers/country-option
 import { expectedArrivalsApi } from "@/lib/api/expected-arrivals";
 import { navIncomingInvoicesApi } from "@/lib/api/nav-incoming-invoices";
 import { productApi } from "@/lib/api/products";
-import { currencyLabel } from "@/lib/format/currency";
 import { purchasingApi } from "@/lib/api/purchasing";
 import { suppliersApi } from "@/lib/api/suppliers";
 import { viesVatApi } from "@/lib/api/vies-vat";
@@ -170,10 +170,6 @@ export function submitSummary(
     0,
   );
   return `${lines.length} számlasor · ${local} helyi termék · ${reservations} projektfoglalás`;
-}
-
-function formatMoney(value: number, currency: string): string {
-  return `${value.toLocaleString("hu-HU", { maximumFractionDigits: 2 })} ${currencyLabel(currency)}`;
 }
 
 function todayIso(): string {
@@ -1699,7 +1695,7 @@ export function PurchaseInvoiceEuEditorPage() {
                   />
                 </FormField>
               ) : (
-                <FormField label="MNB árfolyam (HUF)">
+                <FormField label="MNB árfolyam (Ft)">
                   <Input
                     aria-label="Árfolyam"
                     type="number"
@@ -2365,7 +2361,9 @@ export function PurchaseInvoiceEuEditorPage() {
                         <span className="text-xs font-normal text-pilot-grey-500 lg:sr-only">
                           Sorösszeg:{" "}
                         </span>
-                        {formatMoney(lineNet(line), effectiveCurrency)}
+                        {formatMoney(lineNet(line), effectiveCurrency, {
+                          fractionDigits: 2,
+                        })}
                       </p>
                     </div>
                     {line.variantId || line.createLocalProduct ? (
@@ -2475,7 +2473,9 @@ export function PurchaseInvoiceEuEditorPage() {
             <div className="text-right">
               <p className="text-xs text-pilot-grey-500">Nettó összeg</p>
               <p className="text-[28px] font-semibold leading-[34px] tracking-[-0.3px] text-pilot-grey-900">
-                {formatMoney(totalNet, effectiveCurrency)}
+                {formatMoney(totalNet, effectiveCurrency, {
+                  fractionDigits: 2,
+                })}
               </p>
             </div>
           </div>

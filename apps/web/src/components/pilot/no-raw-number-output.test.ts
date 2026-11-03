@@ -20,35 +20,10 @@ const ROOT = join(process.cwd(), "src");
 
 type Szabaly = "toFixed" | "nyers-penznem" | "huf-felirat" | "helyi-formazo";
 
-const BESZERZES = "beszerzés: helyi formazó; kiváltás a beszerzés-szeletben";
 const SZAMLAZAS = "számlázás: helyi formázó; kiváltás a számlázás-szeletben";
 
 /** `szabály:fájl` -> miért áll még itt. Csak fogyhat. */
 const KIVETELEK = new Map<string, string>([
-  [
-    "helyi-formazo:components/purchasing/expected-arrival-list-page.tsx",
-    BESZERZES,
-  ],
-  [
-    "helyi-formazo:components/purchasing/nav-incoming-invoice-detail-page.tsx",
-    BESZERZES,
-  ],
-  [
-    "helyi-formazo:components/purchasing/nav-incoming-invoice-list-page.tsx",
-    BESZERZES,
-  ],
-  [
-    "helyi-formazo:components/purchasing/purchase-invoice-detail-page.tsx",
-    BESZERZES,
-  ],
-  [
-    "helyi-formazo:components/purchasing/purchase-invoice-eu-editor-page.tsx",
-    BESZERZES,
-  ],
-  [
-    "helyi-formazo:components/purchasing/purchase-invoice-list-page.tsx",
-    BESZERZES,
-  ],
   ["helyi-formazo:components/billing/billing-editor-state.ts", SZAMLAZAS],
   [
     "helyi-formazo:components/dashboard/widgets/finance-format.ts",
@@ -76,7 +51,7 @@ const KIVETELEK = new Map<string, string>([
   ],
   [
     "toFixed:components/purchasing/nav-incoming-invoice-list-page.tsx",
-    BESZERZES,
+    "a bruttó (nettó + ÁFA) számolt értéke; a kiírás formatMoney-n át megy: marad",
   ],
   [
     "toFixed:components/ai-test/ai-test-page.tsx",
@@ -97,18 +72,6 @@ const KIVETELEK = new Map<string, string>([
   [
     "toFixed:components/billing/pos-invoice-handoff.ts",
     "az API-nak küldött pontos érték, nem kiírás: marad",
-  ],
-  [
-    "nyers-penznem:components/purchasing/price-list-suggestions-page.tsx",
-    "árlista-javaslat: nyers egységár és pénznem; " + BESZERZES,
-  ],
-  [
-    "nyers-penznem:components/purchasing/purchase-invoice-detail-page.tsx",
-    "Pénznem mező: a kód; " + BESZERZES,
-  ],
-  [
-    "nyers-penznem:components/purchasing/nav-incoming-invoice-detail-page.tsx",
-    "Pénznem mező: a kód; " + BESZERZES,
   ],
   [
     "nyers-penznem:components/billing/billing-document-detail-page.tsx",
@@ -133,10 +96,6 @@ const KIVETELEK = new Map<string, string>([
   [
     "huf-felirat:components/billing/billing-receipts-view.tsx",
     '"NAV OPG · … · HUF" felirat; ' + SZAMLAZAS,
-  ],
-  [
-    "huf-felirat:components/purchasing/purchase-invoice-eu-editor-page.tsx",
-    '"MNB árfolyam (HUF)" mezőcímke; ' + BESZERZES,
   ],
 ]);
 
