@@ -373,7 +373,7 @@ export function ServiceDraftsPage() {
   return (
     <PilotThemeRoot
       bleed
-      className="min-h-screen bg-pilot-grey-50 px-8 py-8 space-y-6 [&_h1]:!font-[inherit] [&_h2]:!font-[inherit]"
+      className="min-h-screen bg-pilot-grey-50 px-4 sm:px-8 py-8 space-y-6 [&_h1]:!font-[inherit] [&_h2]:!font-[inherit]"
     >
       <PageHeader
         eyebrow="Szerviz"

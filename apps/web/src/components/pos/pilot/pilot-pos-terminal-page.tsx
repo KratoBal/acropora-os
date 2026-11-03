@@ -585,7 +585,7 @@ export function PilotPosTerminalPage() {
       bleed
       className="flex min-h-screen flex-col bg-pilot-grey-50 [&_h1]:![font-family:inherit] [&_h2]:![font-family:inherit] [&_h3]:![font-family:inherit]"
     >
-      <div className="px-8 pb-5 pt-6">
+      <div className="px-4 sm:px-8 pb-5 pt-6">
         <PageHeader
           eyebrow="Pénztár"
           title="Bolti eladás"
@@ -603,7 +603,7 @@ export function PilotPosTerminalPage() {
       </div>
 
       {lastResult ? (
-        <div className="mx-8 mb-5">
+        <div className="mx-4 mb-5 sm:mx-8">
           <Alert
             variant="info"
             className={
@@ -630,7 +630,7 @@ export function PilotPosTerminalPage() {
         </div>
       ) : null}
 
-      <div className="grid flex-1 grid-cols-1 items-start gap-6 px-8 pb-8 lg:grid-cols-[minmax(0,1fr)_424px]">
+      <div className="grid flex-1 grid-cols-1 items-start gap-6 px-4 sm:px-8 pb-8 lg:grid-cols-[minmax(0,1fr)_424px]">
         <div className="flex min-w-0 flex-col gap-5">
           <PilotCard className="px-5 py-6">
             <div className="mb-3 flex items-center justify-between gap-3">

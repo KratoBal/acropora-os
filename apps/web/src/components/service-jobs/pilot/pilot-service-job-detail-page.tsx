@@ -636,7 +636,7 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
   return (
     <PilotThemeRoot
       bleed
-      className="flex min-h-screen flex-col gap-6 bg-pilot-grey-50 px-8 py-8"
+      className="flex min-h-screen flex-col gap-6 bg-pilot-grey-50 px-4 sm:px-8 py-8"
     >
       {offlineSav}
       {/*

@@ -525,7 +525,7 @@ export function PilotAssetCreatePage() {
 
   return (
     <PilotThemeRoot bleed className="min-h-screen bg-pilot-grey-50">
-      <div className="px-8 pt-6">
+      <div className="px-4 sm:px-8 pt-6">
         <Link
           href={backToList.href}
           className="mb-3 flex items-center gap-1.5 text-xs text-pilot-grey-400 transition-colors hover:text-pilot-grey-700"
@@ -539,7 +539,7 @@ export function PilotAssetCreatePage() {
         />
       </div>
 
-      <div className="flex max-w-3xl flex-col gap-5 px-8 py-6">
+      <div className="flex max-w-3xl flex-col gap-5 px-4 sm:px-8 py-6">
         <ServiceOfflineNotice state={{ kind: "form" }} pilot />
         {error ? (
           <Alert
