@@ -9,12 +9,14 @@ import {
   WEBSHOP_MAIL_KEYS,
   WEBSHOP_MAIL_SAMPLE_FACTS,
   hungarianDay,
+  mailDay,
   mailForint,
   parseWebshopMailFacts,
   webshopMailContent,
   webshopMailKey,
   webshopMailLocaleOf,
   webshopMailTemplateOf,
+  webshopMailText,
   type WebshopMailFacts,
   type WebshopMailOrder,
 } from "./webshop-mail.js";
@@ -325,6 +327,135 @@ describe("the derived content", () => {
     assert.equal(
       refund(null, 3000).eddigi_visszaterites_mondat,
       "Erről a rendelésről eddig összesen 3 000 Ft visszatérítés ment.",
+    );
+  });
+});
+
+/*
+  THE ENGLISH WORDS ARE COMPLETE (card d5c6befd, second step). The facts'
+  own strings (names, titles, addresses) are the webshop's data and stay as
+  they are; everything the CODE adds around them comes from the dictionary.
+  So the test strips the accents from every string of the facts, builds the mail
+  in English, and asks that no Hungarian letter is left anywhere: a Hungarian
+  word the code still says would carry one. (A word with no accent in it, such
+  as "Szallitas", is caught by the dictionary's shape instead: the English
+  table has the same keys as the Hungarian one, so none is missing.)
+*/
+describe("the English words", () => {
+  const plain = (value: unknown): unknown =>
+    typeof value === "string"
+      ? value.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      : Array.isArray(value)
+        ? value.map(plain)
+        : value && typeof value === "object"
+          ? Object.fromEntries(
+              Object.entries(value).map(([k, v]) => [k, plain(v)]),
+            )
+          : value;
+  const HUNGARIAN_LETTER = /[áéíóöőúüűÁÉÍÓÖŐÚÜŰ]/;
+
+  it("no template builds a Hungarian letter in English, and the Hungarian one still does", () => {
+    for (const [template, facts] of Object.entries(WEBSHOP_MAIL_SAMPLE_FACTS)) {
+      const english = webshopMailContent({
+        ...(plain(facts) as WebshopMailFacts),
+        locale: "en",
+      });
+      const text = JSON.stringify(english);
+      assert.doesNotMatch(text, HUNGARIAN_LETTER, `${template} (en)`);
+      assert.ok(text.length > 20, template);
+    }
+    const hungarian = webshopMailContent({
+      ...(plain(WEBSHOP_MAIL_SAMPLE_FACTS["order-placed"]) as WebshopMailFacts),
+      locale: "hu",
+    });
+    assert.match(JSON.stringify(hungarian), HUNGARIAN_LETTER);
+  });
+
+  /*
+    EVERY ENGLISH WORD, NOT ONLY THE ONES A SAMPLE REACHES. The check above
+    follows the sample facts, and a sample has no tracking link, no pickup
+    half, no live-animal split, no refund history: a Hungarian word left in
+    those places passed it (calibration 2026-11-03: "Track your parcel" put
+    back to Hungarian stayed green). So the dictionary itself is walked, every
+    text and every function called with sample arguments, and no Hungarian
+    letter may be in any of them.
+  */
+  it("the English dictionary has no Hungarian letter in any of its words", () => {
+    const words = (value: unknown): string[] =>
+      typeof value === "string"
+        ? [value]
+        : typeof value === "function"
+          ? words((value as (...a: string[]) => unknown)("12", "34"))
+          : value && typeof value === "object"
+            ? Object.values(value).flatMap(words)
+            : [];
+    const english = words(webshopMailText("en"));
+    assert.ok(english.length > 40, `walked ${english.length} words`);
+    for (const word of english)
+      assert.doesNotMatch(word, HUNGARIAN_LETTER, word);
+    /* the walk sees the Hungarian ones too: the same check on them must find letters */
+    assert.ok(
+      words(webshopMailText("hu")).some((w) => HUNGARIAN_LETTER.test(w)),
+    );
+  });
+
+  it("the two dictionaries have the same words", () => {
+    const shape = (t: object): string[] =>
+      Object.entries(t)
+        .flatMap(([k, v]) =>
+          v && typeof v === "object"
+            ? [k, ...shape(v).map((x) => `${k}.${x}`)]
+            : [k],
+        )
+        .sort();
+    assert.deepEqual(
+      shape(webshopMailText("en")),
+      shape(webshopMailText("hu")),
+    );
+  });
+
+  it("the amount box says 'at pickup' for a store pickup and 'on delivery' for a courier, in English", () => {
+    const base = WEBSHOP_MAIL_SAMPLE_FACTS["order-status-ready_for_pickup"];
+    assert.equal(base.template, "order-status-ready_for_pickup");
+    const box = (facts: WebshopMailFacts) =>
+      webshopMailContent(facts).blocks.fizetendo_doboz?.text ?? "";
+    assert.match(
+      box({
+        ...base,
+        locale: "en",
+        order: { ...base.order, payment: "PAY_AT_STORE" },
+      } as WebshopMailFacts),
+      /^TO PAY AT PICKUP:/,
+    );
+    const out = WEBSHOP_MAIL_SAMPLE_FACTS["order-status-out_for_delivery"];
+    assert.equal(out.template, "order-status-out_for_delivery");
+    assert.match(
+      box({
+        ...out,
+        locale: "en",
+        order: { ...out.order, payment: "COD" },
+      } as WebshopMailFacts),
+      /^TO PAY ON DELIVERY:/,
+    );
+    assert.match(
+      box({
+        ...out,
+        locale: "hu",
+        order: { ...out.order, payment: "COD" },
+      } as WebshopMailFacts),
+      /^ÁTVÉTELKOR FIZETENDŐ:/,
+    );
+  });
+
+  it("the day is written the way the language writes it", () => {
+    assert.equal(
+      mailDay("2026-10-11T22:30:00.000Z", "hu"),
+      "2026. október 12.",
+    );
+    assert.equal(mailDay("2026-10-11T22:30:00.000Z", "en"), "12 October 2026");
+    assert.equal(
+      mailDay("2026-10-11T22:30:00.000Z", undefined),
+      "2026. október 12.",
     );
   });
 });

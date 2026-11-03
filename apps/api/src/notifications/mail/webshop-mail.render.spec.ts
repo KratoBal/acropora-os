@@ -120,6 +120,48 @@ describe("renderWebshopMail", () => {
     }
   });
 
+  /*
+    THE WHOLE ENGLISH MAIL, END TO END (card d5c6befd, second step): the
+    English default text AND the words the code builds around it. The facts'
+    own strings are the webshop's data, so their accents are stripped first;
+    no Hungarian letter may be left in the subject, the text or the html.
+    The order confirmation's legal part is the renderer's own and stays
+    Hungarian (decision, below), so that mail is rendered without a version.
+  */
+  it("every English mail is English from the subject to the last line", () => {
+    const plain = (value: unknown): unknown =>
+      typeof value === "string"
+        ? value.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        : Array.isArray(value)
+          ? value.map(plain)
+          : value && typeof value === "object"
+            ? Object.fromEntries(
+                Object.entries(value).map(([k, v]) => [k, plain(v)]),
+              )
+            : value;
+    for (const [name, key] of Object.entries(WEBSHOP_MAIL_KEYS)) {
+      const sample = WEBSHOP_MAIL_SAMPLE_FACTS[
+        name as keyof typeof WEBSHOP_MAIL_KEYS
+      ] as WebshopMailFacts;
+      const facts = {
+        ...(plain(sample) as WebshopMailFacts),
+        locale: "en",
+        ...(name === "order-placed" ? { legal_version: undefined } : {}),
+      } as WebshopMailFacts;
+      const mail = renderWebshopMail(
+        webshopDefaultTemplate(`${key}_EN`)!,
+        facts,
+      );
+      assert.equal(mail.ok, true, `${key}_EN: ${mail.ok ? "" : mail.reason}`);
+      if (!mail.ok) continue;
+      assert.doesNotMatch(
+        `${mail.subject}\n${mail.text}\n${mail.html}`,
+        /[áéíóöőúüűÁÉÍÓÖŐÚÜŰ]/,
+        key,
+      );
+    }
+  });
+
   it("the English subjects and headings are the drafted wording", () => {
     const subject = (name: keyof typeof WEBSHOP_MAIL_KEYS) => {
       const mail = renderWebshopMail(
