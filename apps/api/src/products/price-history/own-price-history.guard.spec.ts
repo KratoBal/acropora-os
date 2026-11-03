@@ -67,6 +67,27 @@ export function writesOwnPrice(text: string): boolean {
   return new RegExp(`SET[^;]*"?${FIELD}"?`, "i").test(body);
 }
 
+const READ_CALL =
+  /productPriceHistory\.(findFirst|findMany|findUnique|count|aggregate|groupBy)\(/g;
+const RELATION_FILTER = /priceHistory:\s*\{\s*(none|some|every):/g;
+/** A reader names which kind of row it asks for: `variantId` itself or the shared mirror filter. */
+const KIND_TOKENS = ["variantId", "TUKOR_SOR"];
+
+/** The reads of the history that do not say which kind of row they want. */
+export function unspecifiedReads(text: string): number {
+  const body = code(text);
+  let bad = 0;
+  for (const match of body.matchAll(READ_CALL)) {
+    const arg = argumentOf(body, match.index! + match[0].length - 1);
+    if (!KIND_TOKENS.some((t) => arg.includes(t))) bad++;
+  }
+  for (const match of body.matchAll(RELATION_FILTER)) {
+    const arg = body.slice(match.index!, match.index! + 120);
+    if (!KIND_TOKENS.some((t) => arg.includes(t))) bad++;
+  }
+  return bad;
+}
+
 export function callsWriter(text: string): boolean {
   return /\brecordOwnPrice\(/.test(code(text));
 }
@@ -105,6 +126,44 @@ describe("the own-price history writer", () => {
     assert.equal(
       writesOwnPrice(`// tx.productVariant.update({ data: { ${FIELD}: 1 } })`),
       false,
+    );
+  });
+
+  it("has every reader of the history say which kind of row it asks for (mirror or own)", () => {
+    const loose = files.filter((f) => unspecifiedReads(f.text) > 0);
+    assert.deepEqual(
+      loose.map((f) => f.path),
+      [],
+      "these files read the price history without variantId / TUKOR_SOR (unas-ar-tortenet-olvaso.ts)",
+    );
+  });
+
+  it("finds the readers it should (positive control) and is blind to a reader that says which kind", () => {
+    const readers = files.filter((f) =>
+      /productPriceHistory\.(findFirst|count)\(|priceHistory:\s*\{\s*none:/.test(
+        code(f.text),
+      ),
+    );
+    assert.ok(
+      readers.some((f) => f.path === "imports/unas/unas-kezdo-ar-sorok.cli.ts"),
+      `readers found: ${readers.map((f) => f.path).join(", ")}`,
+    );
+    assert.equal(
+      unspecifiedReads(
+        "await prisma.productPriceHistory.count({ where: { productId } });",
+      ),
+      1,
+    );
+    assert.equal(
+      unspecifiedReads(
+        "await prisma.productPriceHistory.count({ where: { productId, ...TUKOR_SOR } });",
+      ),
+      0,
+    );
+    assert.equal(unspecifiedReads("where: { priceHistory: { none: {} } },"), 1);
+    assert.equal(
+      unspecifiedReads("where: { priceHistory: { none: TUKOR_SOR } },"),
+      0,
     );
   });
 

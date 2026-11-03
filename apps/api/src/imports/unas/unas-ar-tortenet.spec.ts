@@ -145,7 +145,8 @@ describe("az ar-tortenet bekotese", () => {
   it("a kezdo sorokat kulon parancs adja, a sor nelkuli termekekre", async () => {
     const forras = await readFile(CLI, "utf-8");
 
-    assert.equal(forras.includes("priceHistory: { none: {} }"), true);
+    // "no row yet" means no MIRROR row: an own-price (OWN) row does not count (T4.1-D2)
+    assert.equal(forras.includes("priceHistory: { none: TUKOR_SOR }"), true);
     assert.equal(forras.includes('source: "INITIAL",'), true);
     /* A tukor ideje, ha van -- nem egysegesen "most". */
     assert.equal(forras.includes("kezdoSorIdopontja(tukor, most)"), true);
