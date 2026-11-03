@@ -1,4 +1,12 @@
 export { magyarSzamErteke } from "./magyar-szam.js";
+export {
+  currencyLabel,
+  formatMoney,
+  formatNumber,
+  formatPercent,
+  formatQuantity,
+  MISSING_VALUE_TEXT,
+} from "./number-format.js";
 export { SEARCH_GROUPS } from "./search.js";
 export type {
   SearchGroup,
