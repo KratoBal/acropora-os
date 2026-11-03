@@ -16,6 +16,28 @@ import {
 } from "../../products/attributes/public-fields.js";
 
 /**
+ * THE PRODUCT KNOWLEDGE LEAVES THE OS ONLY WHEN THIS SWITCH SAYS SO (card 8639ac2a, acrobot
+ * 41560; Balazs 2026-11-03: the approved JEV values may be written into the OS product master,
+ * and nothing goes toward the webshop). `MEDUSA_PROJECT_KNOWLEDGE=true`, EXACTLY that, OFF
+ * by default, like the other round switches (`MEDUSA_PROJECT_REDIRECTS`).
+ *
+ * WHY A SWITCH OF ITS OWN: the knowledge rode on the product projection with no gate of
+ * its own, and the scheduler counts a person-accepted fact as a reason for a round, so with
+ * the scheduler on, writing an approved fact would have sent it to whichever Medusa the stored
+ * credentials point at within one round. The environment could not be measured reliably, so
+ * the structure answers instead: the knowledge is off unless someone turns it on.
+ *
+ * WHAT IT GATES: the facts and the copy blocks the runner projects (`PUT
+ * /admin/product-knowledge`), the approved text that replaces the description and the SEO
+ * text, and the scheduler's "a fact changed" reason (native-field facts, weight and
+ * dimensions, are not knowledge and keep their own reason). OFF touches nothing in the shop:
+ * what is already there stays there.
+ */
+export const projectKnowledgeEnabled = (
+  env: NodeJS.ProcessEnv | Record<string, string | undefined>,
+): boolean => env.MEDUSA_PROJECT_KNOWLEDGE === "true";
+
+/**
  * THE PRODUCT KNOWLEDGE PROJECTION, OS -> MEDUSA (KZ Amino slice, #1431).
  *
  * The OS holds the canonical knowledge; the shop gets a read model through

@@ -108,6 +108,7 @@ import { projectedCopy } from "../../products/knowledge/knowledge.policy.js";
 import {
   MedusaProductKnowledgeService,
   knowledgeRowsFor,
+  projectKnowledgeEnabled,
 } from "./medusa-product-knowledge.service.js";
 import { copyProductImages } from "./product-image-copier.js";
 import { publishProductImages } from "./product-image-publisher.js";
@@ -1398,12 +1399,19 @@ export async function runProjectionCli(
      * es a SEO helyere, de CSAK a mi torzsadatunkon (ACROPORA). Ha nincs mit
      * mondania, `null`, es a leiras pontosan a mai marad.
      */
-    const tudas = await knowledgeRowsFor(db, product.id);
-    const tudasSzoveg = projectedCopy(
-      tudas.copy,
-      tudas.facts,
-      product.catalogAuthority,
-    );
+    /*
+      A TERMEKISMERET CSAK A KAPCSOLOVAL MEGY KI (`MEDUSA_PROJECT_KNOWLEDGE`, alapbol KI):
+      kikapcsolva a rows-lekerdezes sem fut, a leiras es a SEO-szoveg pontosan a mai
+      (a termekismeret elotti) marad, es az ismeret-vegpontra semmi nem megy. Ami a boltban
+      mar all, ott marad: a kikapcsolt allapot nem torol.
+    */
+    const tudasBekapcsolva = projectKnowledgeEnabled(env);
+    const tudas = tudasBekapcsolva
+      ? await knowledgeRowsFor(db, product.id)
+      : { facts: [], copy: [] };
+    const tudasSzoveg = tudasBekapcsolva
+      ? projectedCopy(tudas.copy, tudas.facts, product.catalogAuthority)
+      : null;
     const outcome = await service!.project(
       {
         id: product.id,
@@ -1582,12 +1590,14 @@ export async function runProjectionCli(
      * futas hibakoddal zarul, hogy ne latszodjon zoldnek.
      */
     try {
-      const tudasKimenet = await knowledge!.project(
-        product.id,
-        tudas,
-        true,
-        outcome.medusaProductId,
-      );
+      const tudasKimenet = tudasBekapcsolva
+        ? await knowledge!.project(
+            product.id,
+            tudas,
+            true,
+            outcome.medusaProductId,
+          )
+        : ({ action: "skipped", reason: "switch-off" } as const);
       if (tudasKimenet.action !== "skipped")
         out.stdout(
           `      termékismeret: ${

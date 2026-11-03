@@ -17,6 +17,8 @@ import {
   recordPriceAttempt,
   type PriceSyncDatabase,
 } from "./medusa-price-sync.js";
+import { nativeFieldKeys } from "../../products/attributes/public-fields.js";
+import { projectKnowledgeEnabled } from "./medusa-product-knowledge.service.js";
 import { runProjectionCli } from "./medusa-projection.runner.js";
 import {
   medusaClientForProjection,
@@ -148,6 +150,8 @@ export type ProjectionSchedulerDatabase = Pick<
   | "unasProductSnapshot"
   /** A tények változása (SEO P0 PR 8): a tény-írás a terméket nem érinti. */
   | "productKnowledgeFact"
+  /** A natív célú kulcsok (tömeg, méret): azok akkor is esedékessé tesznek, ha a termékismeret ki van kapcsolva. */
+  | "attributeDefinition"
   /** A márka változása (t11): az átnevezés és a SEO-mezők a terméket nem érintik. */
   | "brand"
   /** A kezdőlap kapcsolója (az admin szerkesztő-oldali kapcsolója, egy sor). */
@@ -587,11 +591,23 @@ export class MedusaProjectionScheduler
    */
   private async tenyValtozasAzonositok(): Promise<string[]> {
     const most = this.now();
+    /*
+      A TERMEKISMERET KAPCSOLOJA (`MEDUSA_PROJECT_KNOWLEDGE`, alapbol KI; acrobot 41560): ha ki
+      van kapcsolva, a termekismeret tenye nem tesz esedekessze, mert a vetites ugysem vinne ki
+      oket, es egy jovahagyott S1-teny irasa igy nem indit koret. A NATIV CELU tenyek (tomeg,
+      meret: a Medusa valtozat-mezoibe mennek, nem a termekismeretbe) a mai szabaly szerint
+      maradnak esedekesseget okozok. Natív kulcs nelkul nincs mit nezni.
+    */
+    const nativ = projectKnowledgeEnabled(this.environment)
+      ? null
+      : await nativeFieldKeys(this.db);
+    if (nativ && nativ.size === 0) return [];
     const sorok = await this.db.productKnowledgeFact.findMany({
       where: {
         updatedAt: { gt: new Date(most.getTime() - AKCIO_ABLAK_MS), lte: most },
         // egy automatikus tény nem megy ki, tehát vetítést sem indít
         acceptedByRule: null,
+        ...(nativ ? { field: { in: [...nativ] } } : {}),
       },
       select: { productId: true, updatedAt: true },
     });
