@@ -7,6 +7,7 @@ import {
   Pagination,
   Skeleton,
   sv,
+  PilotSelect,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -333,11 +334,11 @@ export function PilotAssetListPage() {
             className="w-full rounded-md py-1.5 pl-8 pr-3 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
           />
         </div>
-        <select
+        <PilotSelect
           aria-label="Eszköztípus"
           value={params.get("kind") ?? ""}
-          onChange={(event) => filter("kind", event.target.value)}
-          className="cursor-pointer rounded-md py-1.5 pl-2.5 pr-6 text-sm text-pilot-grey-700 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+          onChange={(nextValue) => filter("kind", nextValue)}
+          chevron
         >
           <option value="">Minden típus</option>
           {Object.entries(assetKindLabel).map(([value, label]) => (
@@ -345,12 +346,12 @@ export function PilotAssetListPage() {
               {label}
             </option>
           ))}
-        </select>
-        <select
+        </PilotSelect>
+        <PilotSelect
           aria-label="Kategória"
           value={categoryFilterValue}
-          onChange={(event) => setCategoryFilter(event.target.value)}
-          className="cursor-pointer rounded-md py-1.5 pl-2.5 pr-6 text-sm text-pilot-grey-700 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+          onChange={(nextValue) => setCategoryFilter(nextValue)}
+          chevron
         >
           <option value="">Minden kategória</option>
           {categories.map((category) => (
@@ -361,29 +362,29 @@ export function PilotAssetListPage() {
             </option>
           ))}
           <option value={NINCS_KATEGORIA}>Nincs kategória</option>
-        </select>
-        <select
+        </PilotSelect>
+        <PilotSelect
           aria-label="Kézikönyv"
           value={manualFilterValue}
-          onChange={(event) => setManualFilter(event.target.value)}
-          className="cursor-pointer rounded-md py-1.5 pl-2.5 pr-6 text-sm text-pilot-grey-700 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+          onChange={(nextValue) => setManualFilter(nextValue)}
+          chevron
         >
           <option value="">Kézikönyv: mind</option>
           <option value="with">Van kézikönyve</option>
           <option value="without">Nincs kézikönyve</option>
-        </select>
-        <select
+        </PilotSelect>
+        <PilotSelect
           aria-label="Hány eszköz egy oldalon"
           value={params.get("pageSize") ?? DEFAULT_PAGE_SIZE}
-          onChange={(event) => filter("pageSize", event.target.value)}
-          className="cursor-pointer rounded-md py-1.5 pl-2.5 pr-6 text-sm text-pilot-grey-700 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+          onChange={(nextValue) => filter("pageSize", nextValue)}
+          chevron
         >
           {PAGE_SIZES.map((size) => (
             <option key={size} value={String(size)}>
               {size} / oldal
             </option>
           ))}
-        </select>
+        </PilotSelect>
         <PilotButton variant="secondary" onClick={printList}>
           Nyomtatás
         </PilotButton>

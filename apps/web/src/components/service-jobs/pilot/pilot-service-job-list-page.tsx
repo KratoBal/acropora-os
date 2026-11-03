@@ -1,5 +1,5 @@
 "use client";
-import { Alert, Icon, Skeleton } from "@acropora/ui";
+import { Alert, Icon, Skeleton, PilotSelect } from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
@@ -398,11 +398,12 @@ export function PilotServiceJobListPage() {
           THE PARTNER AND LOCATION FILTERS are not in the design, but they
           exist today and stay (the brief: nothing working is lost).
         */}
-        <select
+        <PilotSelect
           aria-label="Partner szűrő"
           value={partner}
-          onChange={(event) => setPartner(event.target.value)}
-          className="max-w-[240px] cursor-pointer rounded-md bg-white px-3 py-2.5 text-sm text-pilot-grey-700 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+          onChange={(nextValue) => setPartner(nextValue)}
+          className="max-w-[240px]"
+          chevron
         >
           <option value={ALL_PARTNERS}>Minden partner</option>
           {partnerOptions.map((name) => (
@@ -410,12 +411,13 @@ export function PilotServiceJobListPage() {
               {name}
             </option>
           ))}
-        </select>
-        <select
+        </PilotSelect>
+        <PilotSelect
           aria-label="Helyszín szűrő"
           value={location}
-          onChange={(event) => setLocation(event.target.value)}
-          className="max-w-[240px] cursor-pointer rounded-md bg-white px-3 py-2.5 text-sm text-pilot-grey-700 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+          onChange={(nextValue) => setLocation(nextValue)}
+          className="max-w-[240px]"
+          chevron
         >
           <option value={ALL_LOCATIONS}>Minden helyszín</option>
           {locationOptions.map(([key, label]) => (
@@ -423,7 +425,7 @@ export function PilotServiceJobListPage() {
               {label}
             </option>
           ))}
-        </select>
+        </PilotSelect>
         {/* A JELÖLŐ CSAK ANNAK LÁTSZIK, aki vissza is tudja állítani a
             rejtett jegyeket -- ugyanaz a szabály, mint a mai listán. */}
         {canHide ? (

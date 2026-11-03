@@ -1,5 +1,6 @@
 "use client";
 
+import { PilotSelect } from "@acropora/ui";
 import { useEffect, useState } from "react";
 
 import { contractsApi, type ContractSummary } from "@/lib/api/contracts";
@@ -116,12 +117,13 @@ export function ContractJobPicker({
       ) : contracts === null ? (
         <p className="text-sm text-dusk-500">Szerződések betöltése...</p>
       ) : (
-        <select
+        <PilotSelect
           id="karbantartas-szerzodes"
-          className="w-full rounded border px-2 py-1 text-sm"
+          className="w-full"
           value={value?.contract.id ?? ""}
           disabled={locked}
-          onChange={(event) => pick(event.target.value)}
+          onChange={(nextValue) => pick(nextValue)}
+          chevron
         >
           <option value="">Szerződés nélkül</option>
           {contracts.map((contract) => (
@@ -129,7 +131,7 @@ export function ContractJobPicker({
               {contract.number} · {contract.title}
             </option>
           ))}
-        </select>
+        </PilotSelect>
       )}
       {contracts !== null && contracts.length === 0 ? (
         <p className="text-xs text-dusk-500">
