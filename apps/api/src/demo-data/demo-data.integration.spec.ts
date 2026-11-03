@@ -45,6 +45,7 @@ describe(
     };
 
     before(async () => {
+      if (gate.mode === "refuse") throw new Error(gate.reason);
       await store.remove();
       await prisma.customer.deleteMany({
         where: { customerNumber: KEEP_CUSTOMER },
