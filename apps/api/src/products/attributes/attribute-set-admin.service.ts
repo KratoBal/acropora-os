@@ -109,6 +109,8 @@ export class AttributeSetAdminService {
   async setProductAttributeSet(
     productId: string,
     attributeSetId: string | null,
+    /** the authenticated user: the audit row says WHO bound or unbound */
+    actorUserId: string,
   ): Promise<{
     productId: string;
     attributeSetId: string | null;
@@ -130,12 +132,41 @@ export class AttributeSetAdminService {
       if (!product) throw new NotFoundException("A termék nem található.");
       if (product.attributeSetId === attributeSetId)
         return { productId, attributeSetId, changed: false };
-      const written = await this.database.product.updateMany({
-        where: { id: productId, updatedAt: product.updatedAt },
-        data: { attributeSetId, updatedAt: product.updatedAt },
+      /*
+        A KÖTÉS ÉS AZ AUDIT SOR EGY TRANZAKCIÓBAN (acrobot 41724): az S1 476 terméket köt, és később
+        kérdés lesz, ki mit kötött. A sor csak VALÓDI változásról készül (a változatlan érték fent
+        már visszatért, az elvesztett versenyen a `count` 0). A visszavétel (`null`) is ír, más
+        névvel, hogy a „ki kötötte” és a „ki vette le” külön lekérdezhető legyen. Ha az audit írása
+        elbukik, a kötés is visszagördül: kötés nyom nélkül nincs.
+      */
+      const bound = await this.database.$transaction(async (transaction) => {
+        const written = await transaction.product.updateMany({
+          // `attributeSetId` is in the condition too: a binding does not move `updatedAt`, so
+          // two bindings from the same seen state would otherwise BOTH win, and the second
+          // audit row would claim the wrong `from` (barracuda, #2109 review)
+          where: {
+            id: productId,
+            updatedAt: product.updatedAt,
+            attributeSetId: product.attributeSetId,
+          },
+          data: { attributeSetId, updatedAt: product.updatedAt },
+        });
+        if (written.count !== 1) return false;
+        await transaction.auditLog.create({
+          data: {
+            userId: actorUserId,
+            action:
+              attributeSetId === null
+                ? "product.attribute-set.unbound"
+                : "product.attribute-set.bound",
+            entityType: "Product",
+            entityId: productId,
+            metadata: { from: product.attributeSetId, to: attributeSetId },
+          },
+        });
+        return true;
       });
-      if (written.count === 1)
-        return { productId, attributeSetId, changed: true };
+      if (bound) return { productId, attributeSetId, changed: true };
     }
     throw new ConflictException(
       "A termék közben többször megváltozott, próbáld újra.",
