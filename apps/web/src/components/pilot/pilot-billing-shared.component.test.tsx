@@ -154,10 +154,6 @@ describe("PilotDrawer", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  // A SZÉLESSÉG PARAMÉTER, NEM ÚJ ALAPÉRTELMEZÉS (acrobot 25226): a számlázás
-  // szélesebb panelt kér, a partner-portál vízértékei a régi 448 pixelen
-  // maradnak. MI PIROSÍT: ha az alapértelmezés elmozdul, vagy az új szélesség
-  // nem a kért osztályt adja.
   // A ZÁRT FIÓK SEMMIT NEM VET KI A LAPRA (UI 1. csomag, barracuda #2023): a képernyőn kívüli panel árnyéka a stage-en
   // szürke csíkot hagyott a jobb szélen, és a panel 896 px-re nyújtotta a lapot. MI PIROSÍT: ha a csukott panel látható
   // marad vagy árnyékot visz; ha a vágó tároló elveszti az overflow-hidden-t; ha a nyitott panel nem kap árnyékot.
@@ -191,6 +187,10 @@ describe("PilotDrawer", () => {
     expect(open.panel).not.toContain("invisible");
   });
 
+  // A SZÉLESSÉG PARAMÉTER, NEM ÚJ ALAPÉRTELMEZÉS (acrobot 25226): a számlázás
+  // szélesebb panelt kér, a partner-portál vízértékei a régi 448 pixelen
+  // maradnak. MI PIROSÍT: ha az alapértelmezés elmozdul, vagy az új szélesség
+  // nem a kért osztályt adja.
   it("width: md stays the default, lg and xl are opt-in", () => {
     const widthOf = (width?: "md" | "lg" | "xl") => {
       const { unmount } = render(

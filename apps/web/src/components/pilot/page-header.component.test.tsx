@@ -71,6 +71,7 @@ describe("az egyetlen oldalfejléc", () => {
       render(rajzol());
       const cim = screen.getByRole("heading", { level: 1, name: "Számlázás" });
       expect(cim.className).toBe(PAGE_HEADER_CLASSES.title);
+      expect(cim.parentElement?.className).toBe(PAGE_HEADER_CLASSES.main);
       expect(cim.previousElementSibling?.className).toBe(
         PAGE_HEADER_CLASSES.eyebrow,
       );
@@ -88,6 +89,19 @@ describe("az egyetlen oldalfejléc", () => {
     expect(PAGE_HEADER_CLASSES.title).toContain("text-[28px]");
     expect(PAGE_HEADER_CLASSES.title).toContain("leading-[34px]");
     expect(PAGE_HEADER_CLASSES.actions).toContain("flex-wrap");
+  });
+
+  // A GOMBSOR A CÍM ALÁ TÖR, HA NEM FÉR MELLÉ (barracuda, #2073): sortörés nélkül a sok gombos adatlapon a gombsor a saját
+  // egysoros szélességét vette fel, és a cím oszloppá szorult. MI PIROSÍT: ha a fejléc nem tördel; ha a címnek nincs
+  // alapszélessége (akkor a gombsor mindig mellé fér, és a cím szorul); ha a gombsor újra nem zsugorodhat (a saját sorában
+  // akkor kilóg, és a belső tördelése nem működik).
+  it("a fejléc tördel, a címnek 16 rem alapja van, a gombsor zsugorodhat", () => {
+    expect(PAGE_HEADER_CLASSES.root.split(" ")).toContain("sm:flex-wrap");
+    expect(PAGE_HEADER_CLASSES.main.split(" ")).toEqual(
+      expect.arrayContaining(["min-w-0", "sm:grow", "sm:basis-64"]),
+    );
+    expect(PAGE_HEADER_CLASSES.actions.split(" ")).not.toContain("shrink-0");
+    expect(PAGE_HEADER_CLASSES.actions.split(" ")).toContain("min-w-0");
   });
 
   it("a leírás a PageHeader és a szerviz-lista fejlécén ugyanaz az elem", () => {

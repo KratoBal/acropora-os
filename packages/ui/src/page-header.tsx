@@ -14,15 +14,20 @@ import { cn } from "./utils";
  * eltérni attól, hogy másik komponenst választ.
  */
 export const PAGE_HEADER_CLASSES = {
-  root: "flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between",
+  // sm-től egy sorban, de TÖRHET: a gombsor csak akkor áll a cím mellé, ha mellette legalább 16 rem marad a címnek
+  // (a `main` alapja), különben a cím alá kerül. Sortörés nélkül a sok gombos adatlapokon (munkalap, hibajegy) a gombsor
+  // a saját egysoros szélességét vette fel, és a 28 px-es cím néhány szavas oszlopba szorult (barracuda, #2073).
+  root: "flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between",
+  main: "min-w-0 sm:grow sm:basis-64",
   eyebrow:
     "mb-1.5 text-[11px] font-semibold uppercase leading-4 tracking-[0.05em] text-pilot-accent-warm-text",
   title:
     "break-words text-[28px] font-semibold leading-[34px] tracking-[-0.3px] text-pilot-grey-900",
   description: "mt-2 max-w-2xl text-sm leading-5 text-pilot-grey-600",
   meta: "mt-2 flex flex-wrap items-center gap-2",
-  // tördel, hogy egy több gombos sor telefonon se lógjon ki (UI 1. csomag: az UNAS termékszinkron 443 px volt 390-en)
-  actions: "flex shrink-0 flex-wrap items-center gap-2",
+  // tördel, hogy egy több gombos sor telefonon se lógjon ki (UI 1. csomag: az UNAS termékszinkron 443 px volt 390-en);
+  // shrink-0 nélkül, mert a saját sorában csak így kapja meg a sor szélességét, és csak így tör belül
+  actions: "flex min-w-0 flex-wrap items-center gap-2",
 } as const;
 
 export interface PageHeaderProps extends Omit<
@@ -48,7 +53,7 @@ export function PageHeader({
 }: PageHeaderProps) {
   return (
     <header className={cn(PAGE_HEADER_CLASSES.root, className)} {...props}>
-      <div className="min-w-0">
+      <div className={PAGE_HEADER_CLASSES.main}>
         {eyebrow ? (
           <p className={PAGE_HEADER_CLASSES.eyebrow}>{eyebrow}</p>
         ) : null}
