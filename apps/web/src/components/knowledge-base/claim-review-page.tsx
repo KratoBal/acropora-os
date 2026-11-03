@@ -575,14 +575,13 @@ export function ClaimReviewPage() {
                     >
                       Állítás elvetése
                     </PilotButton>
-                    <button
-                      type="button"
+                    <PilotButton
+                      size="regular"
                       disabled={!canSave}
                       onClick={() => void save()}
-                      className="h-10 rounded-md bg-pilot-accent-warm px-5 text-sm font-semibold text-white hover:bg-pilot-accent-warm-text disabled:opacity-50"
                     >
                       Állítás mentése
-                    </button>
+                    </PilotButton>
                   </div>
                   {pendingCount > 0 ? (
                     <p className="text-right text-sm text-pilot-grey-600">
