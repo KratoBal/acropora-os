@@ -641,7 +641,7 @@ export function PilotSelect({
   "aria-label": ariaLabel,
   id,
   className,
-  chevron = false,
+  chevron,
 }: {
   children: ReactNode;
   value?: string;
@@ -653,12 +653,14 @@ export function PilotSelect({
   /** ADDITÍV: méret a hívó sorához (pl. a lapméret-választó szélessége). */
   className?: string;
   /**
-   * ADDITÍV: a lenyíló nyíl. A régi hívók nélküle rajzolnak (`appearance-
-   * none` mellett a böngésző nyila sem látszik), és ez nem változik; a
-   * Direction F terv minden választóján nyíl áll.
+   * A LENYÍLÓ NYÍL. ALAPBÓL KIRAJZOLJA (UI-áttekintés, 2026-11-03): a `appearance-none` elrejti a böngésző
+   * nyilát, és nyíl nélkül a választó beviteli mezőnek látszott (a /szerviz/eszkozok/uj hat választója). Az
+   * alap ilyenkor a teljes szélességet tölti (`w-full`, mint a régi nyíl nélküli alak). `chevron` kifejezetten
+   * `true`: a régi nyilas alak, burkoló szélesség nélkül (a hívó méretezi); `false`: nyíl nélkül.
    */
   chevron?: boolean;
 }) {
+  const drawArrow = chevron !== false;
   const select = (
     <select
       id={id}
@@ -667,15 +669,17 @@ export function PilotSelect({
       aria-label={ariaLabel}
       onChange={(event) => onChange?.(event.target.value)}
       className={`w-full cursor-pointer appearance-none rounded-md bg-white px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500 disabled:cursor-not-allowed disabled:bg-pilot-grey-50 disabled:text-pilot-grey-400 ${
-        chevron ? "pr-9" : (className ?? "")
+        drawArrow ? "pr-9" : (className ?? "")
       }`}
     >
       {children}
     </select>
   );
-  if (!chevron) return select;
+  if (!drawArrow) return select;
   return (
-    <div className={`relative ${className ?? ""}`}>
+    <div
+      className={`relative ${className ?? (chevron === undefined ? "w-full" : "")}`}
+    >
       {select}
       <Icon
         name="chevron-down"
