@@ -548,6 +548,7 @@ export function QuoteTemplateEditorPage({
                 {draft.milestones.map((m, index) => (
                   <div key={index} className="flex gap-2">
                     <PilotInput
+                      className="min-w-0 flex-1"
                       aria-label={`${index + 1}. mérföldkő neve`}
                       readOnly={readOnly}
                       value={m.label}
@@ -561,7 +562,7 @@ export function QuoteTemplateEditorPage({
                     />
                     <PilotInput
                       aria-label={`${index + 1}. mérföldkő százaléka`}
-                      className="w-20"
+                      className="w-20 shrink-0"
                       inputMode="decimal"
                       readOnly={readOnly}
                       value={m.percent}
