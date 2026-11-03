@@ -70,7 +70,7 @@ export function purchaseLineColumns(
       header: "Termék",
       cell: (line) =>
         line.variantId ? (
-          <span className="text-sm text-dusk-600">
+          <span className="break-words text-sm text-dusk-600">
             {line.productName}
             {line.sourceDescription ? (
               <span className="block text-xs text-dusk-400">

@@ -41,6 +41,10 @@ const line = {
   syncError: null,
 } as unknown as Line;
 
+function withLine(overrides: Record<string, unknown>): Line {
+  return { ...line, ...overrides } as unknown as Line;
+}
+
 function renderLines(lines: Line[], currency = "HUF") {
   return render(
     <PilotDataTable
@@ -81,20 +85,26 @@ describe("purchaseLineColumns", () => {
 
   it("flags a line that is not in the product master", () => {
     renderLines([
-      {
-        ...line,
+      withLine({
         variantId: null,
         sku: null,
         sourceDescription: "Ismeretlen áru",
-      } as Line,
+      }),
     ]);
     expect(screen.getByText("Nincs terméktörzsben")).toBeTruthy();
     expect(screen.getByText("Ismeretlen áru")).toBeTruthy();
   });
 
+  it("lets a long product name wrap inside its column", () => {
+    renderLines([withLine({ productName: "Hosszú".repeat(30) })]);
+    expect(
+      screen.getByText("Hosszú".repeat(30)).classList.contains("break-words"),
+    ).toBe(true);
+  });
+
   it("shows the sync error under the badge", () => {
     renderLines([
-      { ...line, syncStatus: "FAILED", syncError: "UNAS nem elérhető" } as Line,
+      withLine({ syncStatus: "FAILED", syncError: "UNAS nem elérhető" }),
     ]);
     expect(screen.getByText("Hiba")).toBeTruthy();
     expect(screen.getByText("UNAS nem elérhető")).toBeTruthy();
