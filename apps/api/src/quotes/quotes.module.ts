@@ -62,5 +62,7 @@ import { QuotePublicService } from "./public/quote-public.service.js";
     // the quote PDFs' store; a spec may give it its own root (QUOTE_DOCUMENT_ENV)
     documentStoreProviderFrom(QUOTE_DOCUMENT_ENV),
   ],
+  // a globális keresés ajánlat-csoportja a lista szolgáltatását hívja (T2.2)
+  exports: [QuotesService],
 })
 export class QuotesModule {}
