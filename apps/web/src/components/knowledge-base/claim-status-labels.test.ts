@@ -8,8 +8,8 @@ import { CLAIM_STATUS_LABELS, claimStatusLabel } from "./claim-status-labels";
 /*
   AZ ÁLLÍTÁS ÁLLAPOTA SZAVAKKAL, EGY HELYEN (UI-áttekintés, 4. csomag, 2026-11-03). MI PIROSÍT: ha a Prisma
   `KnowledgeClaimStatus` felsorolásába új érték kerül, és a térképben nincs felirata (a lap akkor nyers kódot
-  írna); ha a térképben olyan kulcs marad, ami a sémából kikerült; ha egy ismeretlen érték nem változatlanul jön
-  vissza. A séma szövegét olvassuk, mert az adatbázis-csomag típusát a web nem importálja.
+  írna); ha a térképben olyan kulcs marad, ami a sémából kikerült; ha egy ismeretlen érték nem az "Ismeretlen
+  állapot" szót kapja (hanem nyers kódot). A séma szövegét olvassuk, mert az adatbázis-csomag típusát a web nem importálja.
 */
 function schemaValues(): string[] {
   const schema = readFileSync(

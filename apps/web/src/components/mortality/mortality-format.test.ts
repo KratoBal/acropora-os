@@ -96,7 +96,7 @@ describe("feliratok", () => {
     ).toBe("Helyi tenyésztő");
   });
 
-  it("az időpontok Budapest szerint, a Figma alakjában", () => {
+  it("az időpontok Budapest szerint, a közös listaalakban", () => {
     expect(shortDateTime("2026-10-06T07:42:00Z")).toBe("2026. 10. 06. 09:42");
     expect(longDateTime("2026-10-06T07:42:00Z")).toBe(
       "2026. október 6. · 09:42",
