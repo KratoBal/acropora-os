@@ -234,6 +234,29 @@ describe("MissingInvoicesMonthList", () => {
     expect(968 - fixed).toBeGreaterThanOrEqual(150);
   });
 
+  /*
+    A HÓNAP OSZLOP EGY SORBAN (acrobot, 2026-11-03: az "2026. augusztus" 1440-en két sorra tört). MI PIROSÍT: ha a Hónap
+    cella újra törhet (`nowrap`), vagy az oszlop a leghosszabb hónapnévnél keskenyebb lesz; a fix oszlopok összege
+    a 1280-as mércén (968 px) továbbra is hagy helyet az állapotnak (a fenti teszt).
+  */
+  it("keeps the month on one line, in a column wide enough for the longest month name", () => {
+    renderList();
+    const august = screen.getByRole("row", {
+      name: "2026. augusztus megnyitása",
+    });
+    const table = august.closest("table")!;
+    const headers = within(table)
+      .getAllByRole("columnheader")
+      .map((th) => th.textContent);
+    const monthCell =
+      within(august).getAllByRole("cell")[headers.indexOf("Hónap")]!;
+    expect(monthCell.className).toContain("whitespace-nowrap");
+    const cols = [...table.querySelectorAll("col")] as HTMLElement[];
+    expect(
+      parseInt(cols[headers.indexOf("Hónap")]!.style.width, 10),
+    ).toBeGreaterThanOrEqual(180);
+  });
+
   it("the whole row opens the month", () => {
     const { onOpen } = renderList();
     fireEvent.click(
