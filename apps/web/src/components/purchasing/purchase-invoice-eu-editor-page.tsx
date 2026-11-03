@@ -12,6 +12,7 @@ import {
   PilotPageHeader,
   PilotSection,
   Skeleton,
+  PilotDateField,
   PilotSelect,
 } from "@acropora/ui";
 import {
@@ -1723,19 +1724,17 @@ export function PurchaseInvoiceEuEditorPage() {
                 </FormField>
               )}
               <FormField label="Számla kelte">
-                <Input
+                <PilotDateField
                   aria-label="Számla kelte"
-                  type="date"
                   value={invoiceDate}
-                  onChange={(event) => setInvoiceDate(event.target.value)}
+                  onChange={(nextValue) => setInvoiceDate(nextValue)}
                 />
               </FormField>
               <FormField label="Fizetési határidő">
-                <Input
+                <PilotDateField
                   aria-label="Fizetési határidő"
-                  type="date"
                   value={dueDate}
-                  onChange={(event) => setDueDate(event.target.value)}
+                  onChange={(nextValue) => setDueDate(nextValue)}
                 />
               </FormField>
               <FormField label="Megjegyzés">
@@ -1757,11 +1756,10 @@ export function PurchaseInvoiceEuEditorPage() {
               </label>
               {isPaid ? (
                 <FormField label="Fizetés dátuma">
-                  <Input
+                  <PilotDateField
                     aria-label="Fizetés dátuma"
-                    type="date"
                     value={paidAt}
-                    onChange={(event) => setPaidAt(event.target.value)}
+                    onChange={(nextValue) => setPaidAt(nextValue)}
                   />
                 </FormField>
               ) : null}

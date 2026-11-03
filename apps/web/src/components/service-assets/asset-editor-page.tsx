@@ -8,6 +8,7 @@ import {
   Input,
   Select,
   Textarea,
+  PilotDateField,
 } from "@acropora/ui";
 import {
   assetLabelCreateProblem,
@@ -1243,19 +1244,17 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
           <h2 className="text-[16px] font-bold text-ink">Karbantartás</h2>
           <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <FormField label="Telepítés dátuma">
-              <Input
-                type="date"
+              <PilotDateField
                 aria-label="Telepítés dátuma"
                 value={installedAt}
-                onChange={(event) => setInstalledAt(event.target.value)}
+                onChange={(nextValue) => setInstalledAt(nextValue)}
               />
             </FormField>
             <FormField label="Garancia lejárata">
-              <Input
-                type="date"
+              <PilotDateField
                 aria-label="Garancia lejárata"
                 value={warrantyExpiresAt}
-                onChange={(event) => setWarrantyExpiresAt(event.target.value)}
+                onChange={(nextValue) => setWarrantyExpiresAt(nextValue)}
               />
             </FormField>
             <FormField label="Intervallum (nap)">
@@ -1269,11 +1268,10 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
               />
             </FormField>
             <FormField label="Következő karbantartás">
-              <Input
-                type="date"
+              <PilotDateField
                 aria-label="Következő karbantartás"
                 value={nextServiceAt}
-                onChange={(event) => setNextServiceAt(event.target.value)}
+                onChange={(nextValue) => setNextServiceAt(nextValue)}
               />
             </FormField>
           </div>
