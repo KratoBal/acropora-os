@@ -730,7 +730,7 @@ export default function DashboardPage() {
   const greeting = getGreeting(new Date().getHours());
 
   return (
-    <PilotThemeRoot className="-m-6 min-h-screen bg-pilot-grey-50 p-6 lg:-m-8 lg:p-8">
+    <PilotThemeRoot bleed className="min-h-screen bg-pilot-grey-50 p-6 lg:p-8">
       {/*
         A TARTALOM KOZEPRE IGAZITVA, SZELESSEG-KORLATTAL, A TERV SZERINT
         (`DashboardScreen.tsx:530`, `max-w-6xl mx-auto w-full`) -- korabban

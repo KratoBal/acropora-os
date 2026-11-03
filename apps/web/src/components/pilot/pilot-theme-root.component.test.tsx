@@ -1,6 +1,8 @@
 import { render } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { PILOT_SHELL_BLEED } from "@acropora/ui";
+
 import { PilotThemeRoot } from "./pilot-ui";
 
 const theme = vi.hoisted(() => ({
@@ -91,5 +93,34 @@ describe("PilotThemeRoot", () => {
       </PilotThemeRoot>,
     );
     expect(document.documentElement.getAttribute("data-theme")).toBeNull();
+  });
+
+  /*
+    A KERET SZÉLÉIG ÉRŐ HÁTTÉR (UI 1. csomag, 2026-11-03). MI PIROSÍT: a `bleed` nem a keret margóját veszi vissza
+    (a kézi `-m-6` telefonon 8 px-szel többet vett vissza, és a lap 398 px lett 390-en); a `bleed` nélküli gyökér
+    is megkapja.
+  */
+  it("bleed: pontosan a keret margóját veszi vissza minden töréspontra; nélküle semmit", () => {
+    const { container, rerender } = render(
+      <PilotThemeRoot bleed className="min-h-screen">
+        <p>tartalom</p>
+      </PilotThemeRoot>,
+    );
+    const root = container.firstElementChild!;
+    expect(root.className).toContain(PILOT_SHELL_BLEED);
+    expect(root.className).toContain("min-h-screen");
+    expect(PILOT_SHELL_BLEED.split(" ")).toEqual([
+      "-mx-4",
+      "-my-6",
+      "sm:-mx-6",
+      "lg:-mx-8",
+      "lg:-my-8",
+    ]);
+    rerender(
+      <PilotThemeRoot className="min-h-screen">
+        <p>tartalom</p>
+      </PilotThemeRoot>,
+    );
+    expect(container.firstElementChild!.className).not.toContain("-mx-4");
   });
 });

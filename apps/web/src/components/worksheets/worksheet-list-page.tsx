@@ -358,7 +358,7 @@ export function WorksheetListPage() {
                 onPageChange={goToPage}
               />
             </div>
-            <div className="overflow-x-auto">
+            <div className="relative overflow-x-auto">
               <table className="w-full min-w-[980px] border-collapse text-left">
                 <thead>
                   <tr>

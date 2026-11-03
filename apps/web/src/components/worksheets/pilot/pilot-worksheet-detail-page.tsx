@@ -361,14 +361,14 @@ export function PilotWorksheetDetailPage({
 
   if (loading && !worksheet)
     return (
-      <PilotThemeRoot className="-m-6 min-h-screen bg-pilot-grey-50 p-8">
+      <PilotThemeRoot bleed className="min-h-screen bg-pilot-grey-50 p-8">
         <Skeleton className="h-72" />
       </PilotThemeRoot>
     );
 
   if (!worksheet)
     return (
-      <PilotThemeRoot className="-m-6 min-h-screen bg-pilot-grey-50 p-8">
+      <PilotThemeRoot bleed className="min-h-screen bg-pilot-grey-50 p-8">
         <ServiceOfflineNotice state={{ kind: "empty" }} pilot />
         <Alert
           variant="danger"
@@ -388,7 +388,10 @@ export function PilotWorksheetDetailPage({
   );
 
   return (
-    <PilotThemeRoot className="-m-6 flex min-h-screen flex-col gap-6 bg-pilot-grey-50 px-8 py-8">
+    <PilotThemeRoot
+      bleed
+      className="flex min-h-screen flex-col gap-6 bg-pilot-grey-50 px-8 py-8"
+    >
       {/*
         THE HEADER OF THE SERVICE REDESIGN (Figma 423:662): back, the sheet's
         number, the subject as the title, the display status and where the

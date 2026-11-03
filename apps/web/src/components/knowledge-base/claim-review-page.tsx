@@ -431,7 +431,7 @@ export function ClaimReviewPage() {
             </div>
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <SourcePanel review={review} selected={selectedField} />
 
             <PilotCard className="space-y-4 p-5">

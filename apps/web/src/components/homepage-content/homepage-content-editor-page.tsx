@@ -431,7 +431,7 @@ export function HomepageContentEditorPage() {
       ) : null}
       {!dirty && status ? <Alert variant="info" title={status} /> : null}
 
-      <div className="grid items-start gap-4 xl:grid-cols-[280px_minmax(0,1fr)_minmax(0,380px)]">
+      <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[280px_minmax(0,1fr)_minmax(0,380px)]">
         <HomepageBlockList
           blocks={draft.blocks}
           selected={selected}

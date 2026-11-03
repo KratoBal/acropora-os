@@ -197,7 +197,7 @@ export function PilotWorksheetEditorPage({
 
   if (!canManage)
     return (
-      <PilotThemeRoot className="-m-6 min-h-screen bg-pilot-grey-50 p-8">
+      <PilotThemeRoot bleed className="min-h-screen bg-pilot-grey-50 p-8">
         <Alert
           variant="danger"
           title="Nincs jogosultságod munkalapot írni"
@@ -209,7 +209,7 @@ export function PilotWorksheetEditorPage({
   const canSubmit = Boolean(header.subject.trim()) && !saving;
 
   return (
-    <PilotThemeRoot className="-m-6 min-h-screen bg-pilot-grey-50">
+    <PilotThemeRoot bleed className="min-h-screen bg-pilot-grey-50">
       <div className="border-b border-pilot-grey-200 bg-white px-8 py-5">
         <Link
           href={`/szerviz/munkalapok/${worksheetId}`}
