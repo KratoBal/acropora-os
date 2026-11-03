@@ -95,6 +95,16 @@ describe("UserMenu kompakt fejléc-sor", () => {
     expect(within(trigger).queryByLabelText(/Kitaláltné/)).toBeNull();
   });
 
+  it("a megnyitott menü a szerepkör magyar nevét mutatja, nem a kódját", () => {
+    render(
+      <UserMenu preference="system" onPreferenceChange={() => undefined} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Felhasználói menü" }));
+
+    expect(screen.getByText("Tulajdonos")).toBeInTheDocument();
+    expect(screen.queryByText("OWNER")).toBeNull();
+  });
+
   it("a menü, a beállítások és a kijelentkezés ugyanúgy működik", () => {
     render(
       <UserMenu preference="system" onPreferenceChange={() => undefined} />,

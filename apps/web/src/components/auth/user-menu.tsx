@@ -11,6 +11,7 @@ import { isNavigationEntryVisible, personDisplayName } from "@acropora/types";
 import { useState } from "react";
 
 import { ProfileMonogram } from "../shell-profile";
+import { ROLE_LABELS } from "../users/role-labels";
 import { useAuth } from "./auth-provider";
 
 const themeOptions: { label: string; value: ThemePreference }[] = [
@@ -76,7 +77,7 @@ export function UserMenu({
                 {user.email}
               </p>
               <Badge className="mt-2" variant="info">
-                {user.role}
+                {ROLE_LABELS[user.role]}
               </Badge>
             </div>
           </div>
