@@ -13,6 +13,12 @@ import { BadRequestException, ConflictException } from "@nestjs/common";
  * `updatedAt`-je más, a találat nulla, az írás NEM történik meg, a kliens pedig 409-et kap, és
  * újratöltheti a friss állapotot.
  *
+ * AZ IDŐ PONTOSSÁGA ELLENŐRZENDŐ AZ ELSŐ MODELLNÉL: a Prisma `DateTime` alapból `timestamp(3)`
+ * (ezredmásodperc), és a JSON is ennyit hoz vissza, tehát az egyezés pontos. Egy `@db.Timestamp(6)`
+ * (mikroszekundum) oszlopnál a visszaadott érték kerekített, a `where updatedAt: expected`
+ * SOHA nem egyezne, és minden írás 409 lenne. Az első valódi író valódi adatbázisos tesztje
+ * ezt méri (egy ISO sztringen átment `updatedAt` megtalálja a sort).
+ *
  * MIKOR NEM KELL: ahol az utolsó írás nyer a szándék (egy beállítás, egy értesítési kapcsoló),
  * és ahol az írás a sor saját állapotgépe szerint egyirányú (ott az állapot a feltétel, nem az
  * idő). Aki új író végpontot ír, a döntést kimondja a kódban; a tesztje a
@@ -58,6 +64,23 @@ export function expectedUpdatedAtOf(
 }
 
 /**
+ * A SOR ÁLLAPOTA A KLIENS LÁTTA-E, EGY ZÁRAT TARTÓ ÍRÓNAK. Ahol az író már zárolta a sort
+ * (`SELECT ... FOR UPDATE`) és a tranzakcióban olvasta az aktuális `updatedAt`-et, nem kell
+ * még egy `updateMany`: elég összevetni, és elavultnál ugyanazt a 409-et adni. Zár alatt az
+ * összevetés pontos (nincs újraellenőrzés a READ COMMITTED alatt), és az író a saját `updatedAt`-
+ * léptetését a megszokott módon végzi.
+ */
+export function assertFresh(
+  currentUpdatedAt: Date,
+  expectedUpdatedAt: string | Date | null | undefined,
+  subject?: string,
+): void {
+  const expected = expectedUpdatedAtOf(expectedUpdatedAt);
+  if (currentUpdatedAt.getTime() !== expected.getTime())
+    throw new StaleWriteException(subject);
+}
+
+/**
  * AZ ÍRÁS, CSAK A LÁTOTT ÁLLAPOTRA. `extraWhere` a sor további feltételei (például az állapot,
  * amiben szerkeszthető). A találat pontosan egy sor kell legyen: nulla = valaki közben írt (vagy
  * a sor megszűnt, vagy az extra feltétel nem áll), és az írás nem történt meg; ennél több nem
@@ -74,6 +97,10 @@ export async function writeIfUnchanged(
   },
   data: Record<string, unknown>,
 ): Promise<void> {
+  // az `updatedAt`-et a Prisma `@updatedAt`-je lépteti az `updateMany`-n is; egy kézzel adott érték
+  // felülírná (és az üzenet-nélküli „másik idő” csendben megtörné a következő író feltételét)
+  if ("updatedAt" in data)
+    throw new Error("writeIfUnchanged: a data nem tartalmazhat updatedAt-et");
   const expected = expectedUpdatedAtOf(input.expectedUpdatedAt);
   const written = await model.updateMany({
     where: { id: input.id, ...(input.extraWhere ?? {}), updatedAt: expected },

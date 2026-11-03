@@ -5,6 +5,7 @@ import { after, before, describe, it } from "node:test";
 import { prisma } from "@acropora/database";
 
 import { integrationDatabaseGate } from "../common/integration-database.js";
+import { StaleWriteException } from "../common/optimistic-write.js";
 import {
   PurchaseInvoiceEditService,
   receiptKey,
@@ -68,6 +69,77 @@ describe(
           data: { code: `EDIT-${suffix}`, name: "Edit warehouse" },
         })
       ).id;
+    });
+
+    /*
+      A LÁTOTT ÁLLAPOT (kártya 0d73f1b8; barracuda: a READ COMMITTED újraellenőrzését csak a
+      valódi adatbázis méri). MI PIROSÍT: ha egy elavult `expectedUpdatedAt` átmenne (a másik
+      szerkesztő módosítása csendben felülíródna); ha az elutasított írás mégis változtatna; ha
+      az `updatedAt` JSON-oda-vissza (ISO sztring) nem találná meg a sort (az oszlop pontossága:
+      a tárolt idő és az ISO sztring egyezése); ha két egyidejű írás közül mindkettő nyerne.
+    */
+    it("an edit that saw an older state is refused with the common 409 and writes nothing", async () => {
+      const row = await invoice("stale");
+      const seen = row.updatedAt.toISOString();
+      await edits.update(
+        row.id,
+        { note: "Első", expectedUpdatedAt: seen },
+        userId,
+      );
+      await assert.rejects(
+        edits.update(
+          row.id,
+          { note: "Második", expectedUpdatedAt: seen },
+          userId,
+        ),
+        (error: unknown) => error instanceof StaleWriteException,
+      );
+      const after = await prisma.purchaseInvoice.findUniqueOrThrow({
+        where: { id: row.id },
+      });
+      assert.equal(after.note, "Első");
+    });
+
+    it("the stored updatedAt, as an ISO string, finds the row again (the column keeps what the JSON carries)", async () => {
+      const row = await invoice("precision");
+      await edits.update(
+        row.id,
+        { note: "Egy", expectedUpdatedAt: row.updatedAt.toISOString() },
+        userId,
+      );
+      const reloaded = await prisma.purchaseInvoice.findUniqueOrThrow({
+        where: { id: row.id },
+      });
+      assert.notEqual(reloaded.updatedAt.getTime(), row.updatedAt.getTime());
+      await edits.update(
+        row.id,
+        { note: "Kettő", expectedUpdatedAt: reloaded.updatedAt.toISOString() },
+        userId,
+      );
+      const after = await prisma.purchaseInvoice.findUniqueOrThrow({
+        where: { id: row.id },
+      });
+      assert.equal(after.note, "Kettő");
+    });
+
+    it("two edits at once on the same seen state: exactly one wins, the other is the 409", async () => {
+      const row = await invoice("race");
+      const seen = row.updatedAt.toISOString();
+      const results = await Promise.allSettled([
+        edits.update(row.id, { note: "A", expectedUpdatedAt: seen }, userId),
+        edits.update(row.id, { note: "B", expectedUpdatedAt: seen }, userId),
+      ]);
+      const fulfilled = results.filter((r) => r.status === "fulfilled");
+      const rejected = results.filter(
+        (r): r is PromiseRejectedResult => r.status === "rejected",
+      );
+      assert.equal(fulfilled.length, 1);
+      assert.equal(rejected.length, 1);
+      assert.ok(rejected[0]!.reason instanceof StaleWriteException);
+      const after = await prisma.purchaseInvoice.findUniqueOrThrow({
+        where: { id: row.id },
+      });
+      assert.ok(after.note === "A" || after.note === "B");
     });
 
     it("the number, dates, payment, note and a line's name are saved; quantities stay", async () => {

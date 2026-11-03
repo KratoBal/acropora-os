@@ -58,6 +58,9 @@ export function PurchaseInvoiceEditForm({
     setBusy(true);
     setError(null);
     const input: UpdatePurchaseInvoiceInput = {
+      // az állapot, amit betöltöttünk: ha közben valaki mentett, a szerver 409-et ad (STALE_WRITE),
+      // és nem írja felül az ő módosítását (kártya 0d73f1b8)
+      expectedUpdatedAt: detail.updatedAt,
       supplierInvoiceNumber: number.trim(),
       ...(foreign ? {} : { invoiceDate }),
       dueDate: dueDate || null,

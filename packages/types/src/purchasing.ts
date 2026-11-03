@@ -92,6 +92,12 @@ export interface UpdatePurchaseInvoiceInput {
   note?: string | null;
   /** the name on the invoice, per line */
   lines?: Array<{ id: string; sourceDescription: string | null }>;
+  /**
+   * The `updatedAt` of the invoice the editor loaded (ISO). The write goes only onto that state:
+   * if somebody saved in between, it is a 409 STALE_WRITE and nothing is written (card 0d73f1b8).
+   * The web editor always sends it, and the HTTP endpoint requires it.
+   */
+  expectedUpdatedAt?: string;
 }
 
 export interface PurchaseInvoiceDetail extends PurchaseInvoiceSummary {

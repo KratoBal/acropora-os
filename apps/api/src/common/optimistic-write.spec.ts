@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import { BadRequestException, ConflictException } from "@nestjs/common";
 
 import {
+  assertFresh,
   expectedUpdatedAtOf,
   StaleWriteException,
   STALE_WRITE_CODE,
@@ -129,5 +130,41 @@ describe("writeIfUnchanged", () => {
       writeIfUnchanged(odd, { id: "r1", expectedUpdatedAt: new Date() }, {}),
       (e: unknown) => e instanceof Error && !(e instanceof ConflictException),
     );
+  });
+});
+
+describe("assertFresh (the writer that already holds the row lock)", () => {
+  const stored = new Date("2026-11-03T10:00:00.000Z");
+
+  it("passes on the same instant, in any form, and refuses another one with the common 409", () => {
+    assert.doesNotThrow(() =>
+      assertFresh(stored, "2026-11-03T10:00:00.000Z", "A számla"),
+    );
+    assert.doesNotThrow(() =>
+      assertFresh(stored, new Date(stored.getTime()), "A számla"),
+    );
+    assert.throws(
+      () => assertFresh(stored, "2026-11-03T09:59:59.999Z", "A számla"),
+      (e: unknown) =>
+        e instanceof StaleWriteException &&
+        (e.getResponse() as { message: string }).message ===
+          "A számla közben megváltozott. Töltsd újra, és próbáld újra.",
+    );
+    assert.throws(() => assertFresh(stored, undefined), BadRequestException);
+  });
+});
+
+describe("writeIfUnchanged and the updatedAt column", () => {
+  it("refuses a hand-given updatedAt in the data (the ORM steps it; a manual value breaks the next writer's condition)", async () => {
+    const table = fakeVersionedTable({ id: "r1", name: "régi" });
+    await assert.rejects(
+      writeIfUnchanged(
+        table,
+        { id: "r1", expectedUpdatedAt: table.row().updatedAt },
+        { name: "új", updatedAt: new Date() },
+      ),
+      /updatedAt/,
+    );
+    assert.equal(table.writes(), 0);
   });
 });
