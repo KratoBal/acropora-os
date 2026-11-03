@@ -729,6 +729,29 @@ describe("PilotPosTerminalPage", () => {
    * ha a hozzáadás csendben menne (nincs állapotsor, nincs kiemelés), vagy a
    * fókusz a találat-gombon maradna.
    */
+  /*
+    AZ ÜRES MENTA DOBOZ (acropora 2. söprés, /pos 390 px): a kereső alatti visszajelző sor a hely lefoglalása
+    miatt mindig ott áll, de a menta háttér eddig üresen is látszott, és kósza elemnek tűnt. A háttér most csak
+    akkor jelenik meg, ha van mit mondani (hozzáadás után). MI PIROSÍT: ha az üres sor újra színes hátteret kap,
+    vagy a hozzáadás után a háttér elmarad.
+  */
+  it("a visszajelző sor menta háttere csak hozzáadás után látszik, az üres sor átlátszó", async () => {
+    api.searchProducts.mockResolvedValue([searchResult]);
+    render(createElement(PilotPosTerminalPage));
+    expect(screen.getByRole("status").className).not.toContain(
+      "bg-pilot-aqua-50",
+    );
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Termék keresése" }), {
+      target: { value: "reef" },
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    });
+    fireEvent.click(await screen.findByText("Red Sea ReefMat 500"));
+    expect(screen.getByRole("status").className).toContain("bg-pilot-aqua-50");
+  });
+
   it("azonos termék kétszer: egy sor 2 db, látható visszajelzés, kiemelt sor, fókusz a keresőn", async () => {
     api.searchProducts.mockResolvedValue([searchResult]);
 
