@@ -148,11 +148,6 @@ export class ExternalBillingDocumentsController {
   }
 
   /**
-   * THE STORED PDF, AS IT CAME FROM THE SOURCE. Only reads what the sync
-   * already stored; it never calls eBIZ, so it has no side effect (no entry
-   * in `assistant-readonly.policy.ts`). No PDF: 404.
-   */
-  /**
    * „PAPÍRON MEGVAN” be- vagy kikapcsolása (Balázs, 2026-11-03): a PDF nem kerül a havi kimenő csomagba.
    * A jog a bejövő számla jelöléséé (`finance.manage`), plusz a lap olvasása; lásd `setOutgoingPaperOriginal`.
    */
@@ -179,6 +174,11 @@ export class ExternalBillingDocumentsController {
     return this.detail(id);
   }
 
+  /**
+   * THE STORED PDF, AS IT CAME FROM THE SOURCE. Only reads what the sync
+   * already stored; it never calls eBIZ, so it has no side effect (no entry
+   * in `assistant-readonly.policy.ts`). No PDF: 404.
+   */
   @Get(":id/pdf")
   @Header("Cache-Control", "private, no-store")
   async pdf(@Param("id") id: string): Promise<StreamableFile> {
