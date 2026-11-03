@@ -48,15 +48,19 @@ export function PilotThemeRoot({
   children,
   className = "",
   theme,
+  bleed = false,
 }: {
   children?: ReactNode;
   className?: string;
   /** Lásd a megosztott komponens `theme` mezőjét: csak világos terv esetén. */
   theme?: "light";
+  /** Lásd a megosztott komponens `bleed` mezőjét. */
+  bleed?: boolean;
 }) {
   return (
     <SharedPilotThemeRoot
       className={className}
+      bleed={bleed}
       fontClassName={pilotInter.className}
       theme={theme}
     >

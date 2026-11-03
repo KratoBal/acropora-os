@@ -146,7 +146,7 @@ export function QuoteNewPage() {
         title="Új árajánlat"
         description="Az alapadatok és a kiinduló sablon megadása után nyílik meg az ajánlatszerkesztő."
         actions={
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
             <PilotButton
               variant="secondary"
               size="regular"

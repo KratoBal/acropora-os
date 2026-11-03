@@ -161,7 +161,7 @@ export function OrderLinesTable({
   const editable = canManage && order.lineEdit.allowed;
   return (
     <>
-      <div className="overflow-x-auto">
+      <div className="relative overflow-x-auto">
         <table className="w-full min-w-[640px] text-left text-sm">
           <thead>
             <tr className="border-b border-pilot-grey-200 text-[11px] uppercase tracking-[0.05em] text-pilot-grey-500">

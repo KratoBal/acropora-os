@@ -309,11 +309,14 @@ export function PilotMeasurementHistoryPage({
     );
   if (loading || !aquarium)
     return (
-      <PilotThemeRoot className="-m-6 h-96 animate-pulse bg-pilot-grey-100" />
+      <PilotThemeRoot bleed className="h-96 animate-pulse bg-pilot-grey-100" />
     );
 
   return (
-    <PilotThemeRoot className="-m-6 flex min-h-screen flex-col bg-pilot-grey-50">
+    <PilotThemeRoot
+      bleed
+      className="flex min-h-screen flex-col bg-pilot-grey-50"
+    >
       <div className="border-b border-pilot-grey-200 bg-white px-8 py-5">
         <nav className="mb-3 flex items-center gap-1.5 text-xs text-pilot-grey-400">
           <Link

@@ -135,11 +135,11 @@ export function PilotPosSummaryPage() {
   }, [canView, from, to, token]);
 
   const shell =
-    "-m-6 flex min-h-screen flex-col bg-pilot-grey-50 lg:-m-8 [&_h1]:![font-family:inherit] [&_h2]:![font-family:inherit] [&_h3]:![font-family:inherit]";
+    "flex min-h-screen flex-col bg-pilot-grey-50 [&_h1]:![font-family:inherit] [&_h2]:![font-family:inherit] [&_h3]:![font-family:inherit]";
 
   if (!canView) {
     return (
-      <PilotThemeRoot className={shell}>
+      <PilotThemeRoot bleed className={shell}>
         <div className="p-8">
           <Alert
             variant="danger"
@@ -152,7 +152,7 @@ export function PilotPosSummaryPage() {
   }
 
   return (
-    <PilotThemeRoot className={shell}>
+    <PilotThemeRoot bleed className={shell}>
       <div className="px-8 pb-5 pt-6">
         <button
           type="button"

@@ -220,7 +220,7 @@ export function BillingDocumentLineEditor({
           Még nincs tétel. Adj hozzá terméket vagy egyedi tételt.
         </p>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="relative overflow-x-auto">
           <table className="w-full min-w-[760px] text-sm">
             <thead>
               <tr className="bg-pilot-grey-50 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-pilot-grey-500">

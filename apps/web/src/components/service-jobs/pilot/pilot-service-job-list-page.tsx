@@ -430,7 +430,10 @@ export function PilotServiceJobListPage() {
     );
 
   return (
-    <PilotThemeRoot className="-m-6 flex min-h-screen flex-col gap-6 bg-pilot-grey-50 px-8 py-8">
+    <PilotThemeRoot
+      bleed
+      className="flex min-h-screen flex-col gap-6 bg-pilot-grey-50 px-8 py-8"
+    >
       {/*
         THE HEADER OF THE SERVICE REDESIGN (Figma 423:20): eyebrow, title, one
         sentence on what the list is for, and the primary action at the right.

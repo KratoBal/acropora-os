@@ -90,6 +90,7 @@ export {
   PilotDialog,
   PilotDataRow,
   PilotTimeline,
+  PILOT_SHELL_BLEED,
 } from "./pilot-ui";
 export type { PilotBadgeVariant } from "./pilot-ui";
 export { CalculatorCard } from "./calculator-card";

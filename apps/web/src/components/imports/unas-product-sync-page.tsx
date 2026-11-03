@@ -144,7 +144,7 @@ export function UnasProductSyncPage() {
         title="UNAS termékszinkron"
         description="Az UNAS Product Master read-only tükrének futásai. A szinkron nem módosítja az Acropora készlet-ledgert vagy a beszerzési adatokat."
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {canManageConnection ? (
               <Button
                 variant="secondary"
