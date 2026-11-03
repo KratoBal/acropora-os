@@ -379,7 +379,7 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
               }. Ha a levél nem érkezett meg, küldd ki újra: új levél megy, az aláírás állapota nem változik.`
             : "A lap ki van állítva, de még nem küldtük ki. Amíg nem megy ki, az ügyfél a partnerportálon sem tudja aláírni."}
         </p>
-        <div className="grid gap-3 md:grid-cols-[2fr_auto]">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-[2fr_auto]">
           <FormField label="Kinek küldjük ki">
             <Select
               aria-label="Kinek küldjük ki"
@@ -438,7 +438,7 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
           Ez a belső rögzítés. Az e-mailes aláírás-lánc külön szelet, itt most
           az ügyfél döntését jegyezzük fel.
         </p>
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <FormField label="Döntés">
             <Select
               aria-label="Döntés"

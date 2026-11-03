@@ -732,7 +732,7 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
       <form className="space-y-6" onSubmit={submit}>
         <Card className="p-6">
           <h2 className="text-[16px] font-bold text-ink">Hozzárendelés</h2>
-          <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
             <FormField label="Partner">
               <Select
                 required
@@ -897,7 +897,7 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
 
         <Card className="p-6">
           <h2 className="text-[16px] font-bold text-ink">Azonosítás</h2>
-          <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
             <FormField label="Eszköz neve">
               <Input
                 required
@@ -1242,7 +1242,7 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
 
         <Card className="p-6">
           <h2 className="text-[16px] font-bold text-ink">Karbantartás</h2>
-          <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             <FormField label="Telepítés dátuma">
               <PilotDateField
                 aria-label="Telepítés dátuma"

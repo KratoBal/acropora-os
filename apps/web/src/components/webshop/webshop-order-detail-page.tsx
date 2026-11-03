@@ -280,7 +280,7 @@ export function WebshopOrderDetailPage({ orderId }: { orderId: string }) {
               </div>
             </CardHeader>
             <CardContent>
-              <dl className="grid gap-3 text-xs sm:grid-cols-3 lg:grid-cols-6">
+              <dl className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-3 lg:grid-cols-6">
                 <div>
                   <dt className="text-dusk-400">Vevő</dt>
                   <dd className="mt-1 text-dusk-700">

@@ -147,7 +147,7 @@ export function CustomerPicker({
           </FormField>
         )
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {/* Luca (os-ugyfel-akvarium-hianyos): a helyszínen nincs mindig minden adat */}
           <p
             className="text-xs text-dusk-500 sm:col-span-2"

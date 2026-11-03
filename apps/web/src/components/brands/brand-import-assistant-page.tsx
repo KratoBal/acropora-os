@@ -270,7 +270,7 @@ export function BrandImportAssistantPage() {
           description={`${bulkResult.summary.CREATED} márka létrehozva, ${bulkResult.summary.ALREADY_RESOLVED} már időközben egyezett, ${bulkResult.summary.CONFLICT} ütközés, ${bulkResult.summary.SKIPPED} kihagyva, ${bulkResult.summary.FAILED} sikertelen.`}
         />
       ) : null}
-      <Card className="grid gap-3 p-4 sm:grid-cols-3">
+      <Card className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
         <Select
           aria-label="Import batch"
           value={batchId}
@@ -312,7 +312,7 @@ export function BrandImportAssistantPage() {
       ) : null}
       {data ? (
         <>
-          <div className="grid gap-3 sm:grid-cols-4 lg:grid-cols-7">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-4 lg:grid-cols-7">
             {classes.map((item) => (
               <button
                 key={item}

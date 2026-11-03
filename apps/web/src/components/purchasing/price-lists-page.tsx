@@ -393,7 +393,7 @@ export function PriceListsPage() {
           <h2 className="text-base font-semibold text-pilot-grey-900">
             Árlista feltöltése
           </h2>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-1">
               <label htmlFor="pl-supplier" className={FIELD_LABEL}>
                 Beszállító

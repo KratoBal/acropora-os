@@ -1416,7 +1416,7 @@ export function PurchaseInvoiceEuEditorPage() {
           A BESZÁLLÍTÓ ÉS A SZÁMLA ADATAI EGYMÁS MELLETT (Figma 302:64), közös
           kezdőponttal; szűkebb képernyőn egymás alá törnek.
         */}
-        <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
+        <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
           <PilotSection
             title="Beszállító"
             subtitle={
@@ -1488,7 +1488,7 @@ export function PurchaseInvoiceEuEditorPage() {
                   </PilotButton>
                 ) : (
                   <div className="space-y-3 rounded-lg border border-dusk-200 p-3">
-                    <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <FormField label="Név">
                         <Input
                           aria-label="Beszállító neve"
@@ -1637,7 +1637,7 @@ export function PurchaseInvoiceEuEditorPage() {
             title="Számla adatai"
             subtitle="A rögzített adatok a beszerzés és a készletmozgás alapjai."
           >
-            <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-3">
               <FormField
                 label="Számlaszám"
                 error={
@@ -2043,7 +2043,7 @@ export function PurchaseInvoiceEuEditorPage() {
                     ) : null}
                     {line.createLocalProduct ? (
                       <div className="mt-3 rounded-lg bg-pilot-grey-50 p-3 ring-1 ring-pilot-grey-200">
-                        <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                           <label className="text-xs text-dusk-600">
                             Terméknév
                             <input
@@ -2085,7 +2085,7 @@ export function PurchaseInvoiceEuEditorPage() {
                             </PilotSelect>
                           </label>
                         </div>
-                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                           <label className="text-xs text-dusk-600">
                             Márka (opcionális)
                             <PilotSelect
@@ -2402,7 +2402,7 @@ export function PurchaseInvoiceEuEditorPage() {
                             {line.projectAllocations.map((allocation) => (
                               <div
                                 key={allocation.key}
-                                className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_10rem_auto]"
+                                className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_10rem_auto]"
                               >
                                 <PilotSelect
                                   aria-label="Projekt"

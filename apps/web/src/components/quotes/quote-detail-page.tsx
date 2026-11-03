@@ -356,7 +356,7 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
       ) : null}
 
       <PilotCard>
-        <div className="grid gap-5 p-5 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 p-5 sm:grid-cols-3">
           <Fact label="Partner" value={quote.customerName ?? "—"} />
           <Fact
             label="Ajánlat összege (nettó)"

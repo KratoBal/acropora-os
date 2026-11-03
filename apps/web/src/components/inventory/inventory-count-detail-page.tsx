@@ -410,7 +410,7 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
               </Badge>
             </CardHeader>
             <CardContent className="space-y-4">
-              <dl className="grid gap-3 text-xs sm:grid-cols-3">
+              <dl className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-3">
                 <div>
                   <dt className="text-dusk-400">Indította</dt>
                   <dd className="mt-1 text-dusk-700">

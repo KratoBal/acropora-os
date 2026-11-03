@@ -234,7 +234,7 @@ export function UnasConnectionSettingsPage() {
             </Badge>
           </CardHeader>
           <CardContent className="space-y-4">
-            <dl className="grid gap-4 sm:grid-cols-2">
+            <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <dt className="text-xs font-semibold uppercase text-dusk-500">
                   API-kulcs

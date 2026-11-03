@@ -209,7 +209,7 @@ export function BrandListPage() {
       {data ? (
         <>
           <Card className="p-4">
-            <div className="grid gap-3 sm:grid-cols-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
               <Input
                 aria-label="Márka keresése"
                 value={search}

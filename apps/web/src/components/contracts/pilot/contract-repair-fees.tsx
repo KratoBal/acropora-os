@@ -23,7 +23,7 @@ export function ContractRepairFees({
       <legend className="text-xs font-medium text-pilot-grey-500">
         Javítási díjak (nem kötelező)
       </legend>
-      <div className="grid gap-2 md:grid-cols-5">
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-5">
         {REPAIR_FEE_FIELDS.map(({ key, label }) => (
           <PilotFormField key={key} label={label}>
             <PilotInput

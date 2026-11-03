@@ -710,7 +710,7 @@ export function PilotContractDetailPage({
           <PilotCard>
             <PilotCardHeader title="Szerződés adatai" />
             <div className="flex flex-col gap-4 p-5">
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <PilotFormField
                   label="Szerződésszám"
                   required
@@ -797,7 +797,7 @@ export function PilotContractDetailPage({
                 vevőre vár. Lásd
                 exchange/nautilus-megrendelolap-lekepezesi-terv-2026-09-24.md.
               */}
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <PilotFormField label="Vevő szervezeti egysége (megrendelőlapon)">
                   <PilotInput
                     aria-label="Vevő szervezeti egysége (megrendelőlapon)"
@@ -1013,7 +1013,7 @@ export function PilotContractDetailPage({
                       />
                     )}
                     {!purchase && departmentOptions.length > 0 ? (
-                      <div className="grid gap-2 md:grid-cols-2">
+                      <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                         <PilotFormField label="Helyszín">
                           <PilotSelect
                             aria-label="Helyszín"

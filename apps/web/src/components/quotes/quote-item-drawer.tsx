@@ -300,7 +300,7 @@ export function QuoteItemDrawer({
           </section>
         ) : null}
 
-        <div className="grid gap-4 sm:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
           <PilotFormField label="Mennyiség" required>
             <PilotInput
               aria-label="Mennyiség"

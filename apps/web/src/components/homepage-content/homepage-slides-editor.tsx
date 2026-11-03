@@ -337,7 +337,7 @@ function SlideFields({
           onUploaded={(url) => onChange({ imageUrl: url })}
         />
       </div>
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {field("kép leírása", "imageAlt", HOMEPAGE_LIMITS.imageAlt)}
         {field("felirat", "eyebrow", HOMEPAGE_LIMITS.eyebrow)}
         {field("főcím", "title", HOMEPAGE_LIMITS.title)}

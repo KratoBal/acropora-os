@@ -267,7 +267,7 @@ export function BillingIncomingReviewPage({ itemId }: { itemId: string }) {
       ) : null}
       {notice ? <Alert title={notice} /> : null}
 
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="flex min-w-0 flex-col gap-6">
           {GROUPS.map((group) => (
             <PilotSection
@@ -279,7 +279,7 @@ export function BillingIncomingReviewPage({ itemId }: { itemId: string }) {
                   : undefined
               }
             >
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {group.fields.map((field) => {
                   const label = `${INCOMING_READING_FIELD_LABELS[field]}${
                     REQUIRED.has(field) ? " *" : ""

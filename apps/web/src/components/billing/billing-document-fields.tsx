@@ -50,7 +50,7 @@ export function BillingDocumentFields({
       title={`${capabilities.label} adatai`}
       subtitle="A kiállítás dátuma automatikusan a tényleges kiállítás napja."
     >
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <PilotFormField label="Teljesítés dátuma">
           <PilotInput
             aria-label="Teljesítés dátuma"

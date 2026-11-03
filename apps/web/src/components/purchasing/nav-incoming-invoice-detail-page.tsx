@@ -260,7 +260,7 @@ export function NavIncomingInvoiceDetailPage({
             />
           ) : null}
 
-          <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
+          <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
             <PilotSection
               title="Beszállító"
               subtitle={

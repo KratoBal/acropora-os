@@ -50,7 +50,7 @@ export function ServiceListStats({
 }) {
   return (
     <div
-      className="mb-6 grid gap-3.5 sm:grid-cols-3"
+      className="mb-6 grid grid-cols-1 gap-3.5 sm:grid-cols-3"
       role="group"
       aria-label={label}
     >

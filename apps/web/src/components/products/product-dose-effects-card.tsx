@@ -385,7 +385,7 @@ export function ProductDoseEffectsCard({
               kell ellenőriznie.
             </p>
           ) : null}
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <label className="space-y-1">
               <span className="text-xs text-dusk-500">Paraméter</span>
               <Select

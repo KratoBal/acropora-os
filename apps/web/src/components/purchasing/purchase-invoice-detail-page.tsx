@@ -319,7 +319,7 @@ export function PurchaseInvoiceDetailPage({
               </Badge>
             </CardHeader>
             <CardContent>
-              <dl className="grid gap-3 text-xs sm:grid-cols-4">
+              <dl className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-4">
                 <div>
                   <dt className="text-dusk-400">Beszállító</dt>
                   <dd className="mt-1 text-dusk-700">{detail.supplierName}</dd>

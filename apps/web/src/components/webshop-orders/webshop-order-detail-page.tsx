@@ -1934,7 +1934,7 @@ function OrderBody({
 
       <Card title="Feldolgozás">
         <ol
-          className="grid gap-3 md:grid-cols-5"
+          className="grid grid-cols-1 gap-3 md:grid-cols-5"
           aria-label="Feldolgozási lépések"
         >
           {order.steps.map((step, index) => (
@@ -2037,10 +2037,10 @@ function OrderBody({
         </div>
       ) : null}
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="min-w-0 space-y-6">
           <Card title="Vevő">
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <Field
                 label="Név"
                 action={
@@ -2124,7 +2124,7 @@ function OrderBody({
           </Card>
 
           <Card title="Számlázási és szállítási adatok">
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field
                 label="Számlázási cím"
                 action={

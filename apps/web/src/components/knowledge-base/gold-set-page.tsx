@@ -347,7 +347,7 @@ function ScoreCard({ score, sources }: { score: GoldScore; sources: number }) {
               : "Folyamatban"}
         </PilotBadge>
       </div>
-      <dl className="grid gap-4 sm:grid-cols-3">
+      <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div>
           <dt className="text-sm text-pilot-grey-600">Pontosság</dt>
           <dd className="mt-1 text-2xl font-semibold text-pilot-grey-900">

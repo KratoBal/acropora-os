@@ -252,7 +252,7 @@ export function NavConnectionSettingsPage() {
             </Badge>
           </CardHeader>
           <CardContent className="space-y-4">
-            <dl className="grid gap-4 sm:grid-cols-2">
+            <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <dt className="text-xs font-semibold uppercase text-dusk-500">
                   Hitelesítőadat-csomag
@@ -337,7 +337,7 @@ export function NavConnectionSettingsPage() {
               void handleSave();
             }}
           >
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <FormField
                 label="Technikai felhasználó login"
                 htmlFor="nav-technical-login"
@@ -389,7 +389,7 @@ export function NavConnectionSettingsPage() {
               </FormField>
             </div>
 
-            <div className="grid gap-4 border-t border-dusk-100 pt-6 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 border-t border-dusk-100 pt-6 md:grid-cols-2">
               <FormField
                 label="Szoftverazonosító"
                 htmlFor="nav-software-id"

@@ -391,7 +391,7 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
         <Alert variant="info" title="Mentve" description={notice} />
       ) : null}
       {loading && !asset ? (
-        <div className="grid gap-4 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <Skeleton className="h-72 lg:col-span-2" />
           <Skeleton className="h-72" />
         </div>
@@ -409,7 +409,7 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
       */}
       {asset && !deleted ? (
         <>
-          <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_288px]">
+          <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_288px]">
             <div className="space-y-6">
               <Card className="p-6">
                 {/* AZ ALLAPOT A FEJLECBE KERULT, ES ITT NEM MARAD MEG.
@@ -422,7 +422,7 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                   <Badge variant="info">{assetKindLabel[asset.kind]}</Badge>
                   <Badge>{assetCriticalityLabel[asset.criticality]}</Badge>
                 </div>
-                <dl className="mt-6 grid gap-x-8 gap-y-5 sm:grid-cols-2">
+                <dl className="mt-6 grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2">
                   <Data label="Tulajdonos" value={asset.owner.displayName} />
                   <Data label="Partnerkód" value={asset.owner.code} />
                   {/* AZ ALEGYSEG A VALASZTOTT HELY, A CIM A VISSZAESES.
@@ -739,7 +739,7 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                   />
                 </div>
                 {canManage ? (
-                  <div className="mt-5 grid gap-3 border-t pt-5 md:grid-cols-[180px_minmax(0,1fr)_auto] md:items-end">
+                  <div className="mt-5 grid grid-cols-1 gap-3 border-t pt-5 md:grid-cols-[180px_minmax(0,1fr)_auto] md:items-end">
                     <FormField label="Dokumentumtípus">
                       <Select
                         aria-label="Dokumentumtípus"

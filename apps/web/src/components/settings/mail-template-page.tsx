@@ -312,7 +312,7 @@ export function MailTemplatePage() {
         />
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-[192px_minmax(0,1fr)] xl:grid-cols-[264px_minmax(0,1fr)_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-[192px_minmax(0,1fr)] xl:grid-cols-[264px_minmax(0,1fr)_minmax(0,1fr)]">
         <PilotCard className="p-4 md:row-span-2 xl:row-span-1">
           <h2 className="text-base font-semibold text-pilot-grey-900">
             {group === "WEBSHOP" ? "Webshop levelek" : "Szerviz levelek"}

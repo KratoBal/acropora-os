@@ -203,7 +203,7 @@ export function UnasProductSyncPage() {
 
       {runs ? (
         <>
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <StatCard
               label="Legutóbbi állapot"
               value={latest ? STATUS_LABEL[latest.status] : "Nincs futás"}

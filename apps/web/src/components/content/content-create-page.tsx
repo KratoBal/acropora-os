@@ -144,7 +144,7 @@ export function ContentCreatePage() {
         description="Egy ötlet feljegyzése vagy egy teljes tartalom felvitele."
       />
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {MODES.map((option) => {
           const selected = option.mode === mode;
           return (

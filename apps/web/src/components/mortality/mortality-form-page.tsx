@@ -348,7 +348,7 @@ export function MortalityFormPage({ recordId }: { recordId?: string }) {
         }
       />
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
         <form
           className="space-y-5 rounded-2xl border border-pilot-grey-200 bg-white p-6"
           onSubmit={(event) => {
@@ -372,7 +372,7 @@ export function MortalityFormPage({ recordId }: { recordId?: string }) {
             />
           </PilotFormField>
 
-          <div className="grid gap-5 sm:grid-cols-[140px_180px]">
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-[140px_180px]">
             <PilotFormField label="Példányszám" required>
               <PilotInput
                 aria-label="Példányszám"
@@ -402,7 +402,7 @@ export function MortalityFormPage({ recordId }: { recordId?: string }) {
 
           {/* a helyszín: akvárium VAGY halas rack, legalább az egyik (a halas
               rack nem akvárium); amelyik ki van töltve, a másikat elhagyhatóvá teszi */}
-          <div className="grid gap-5 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <PilotFormField
               label="Akvárium"
               required={!state.locationId}
