@@ -10,6 +10,7 @@ import {
 import {
   MedusaProductKnowledgeService,
   knowledgeRowsFor,
+  projectKnowledgeEnabled,
 } from "./medusa-product-knowledge.service.js";
 
 /** Invented ids and values only. */
@@ -424,5 +425,35 @@ describe("the knowledge rows the runner reads", () => {
       knowledgeProjection(rows.facts, []).facts[0]!.source_type,
       "MANUFACTURER_PAGE",
     );
+  });
+});
+
+/**
+ * A KAPCSOLO (`MEDUSA_PROJECT_KNOWLEDGE`, alapbol KI; kartya 8639ac2a). MI PIROSIT: ha a
+ * "true"-tol eltero ertek bekapcsolna (egy elgepelt vagy "True" ertek egy jovahagyott S1
+ * tenyt kiengedne a boltba); ha az alapertelmezes (nincs beallitva) BE lenne.
+ */
+describe("the product knowledge switch", () => {
+  it("is on only for exactly 'true', and off when unset", () => {
+    assert.equal(
+      projectKnowledgeEnabled({ MEDUSA_PROJECT_KNOWLEDGE: "true" }),
+      true,
+    );
+    for (const value of [
+      "True",
+      "TRUE",
+      "1",
+      "on",
+      "yes",
+      "",
+      " true",
+      "false",
+    ])
+      assert.equal(
+        projectKnowledgeEnabled({ MEDUSA_PROJECT_KNOWLEDGE: value }),
+        false,
+        JSON.stringify(value),
+      );
+    assert.equal(projectKnowledgeEnabled({}), false);
   });
 });

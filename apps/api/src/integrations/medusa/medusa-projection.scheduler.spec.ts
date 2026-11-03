@@ -64,6 +64,8 @@ function adatbazis(
   tenySorok: { productId: string; updatedAt: Date }[] = [],
   /** A márkák változásának sorai (`Brand`, t11). Alapból üres. */
   markaSorok: { id: string; updatedAt: Date }[] = [],
+  /** A natív célú tény-kulcsok (tömeg, méret): a termékismeret kikapcsolt ágán ezek számítanak. */
+  nativKulcsok: string[] = [],
 ) {
   const hivasok: { metodus: string; args: unknown }[] = [];
   const db = {
@@ -100,6 +102,12 @@ function adatbazis(
       findMany: async (args: unknown) => {
         hivasok.push({ metodus: "productKnowledgeFact.findMany", args });
         return tenySorok;
+      },
+    },
+    attributeDefinition: {
+      findMany: async (args: unknown) => {
+        hivasok.push({ metodus: "attributeDefinition.findMany", args });
+        return nativKulcsok.map((key) => ({ key }));
       },
     },
     brand: {
@@ -156,6 +164,12 @@ function arFuttato(kod = 0) {
 
 const BEKAPCSOLVA = {
   MEDUSA_PROJECTION_SCHEDULE_ENABLED: "true",
+} as NodeJS.ProcessEnv;
+
+/** A termékismeret vetítése is be van kapcsolva (`MEDUSA_PROJECT_KNOWLEDGE`, alapból KI). */
+const ISMERETTEL = {
+  ...BEKAPCSOLVA,
+  MEDUSA_PROJECT_KNOWLEDGE: "true",
 } as NodeJS.ProcessEnv;
 
 describe("medusaProjectionScheduleConfig", () => {
@@ -501,6 +515,7 @@ describe("MedusaProjectionScheduler ures kor naploja", () => {
       },
       unasProductSnapshot: { findMany: async () => [] },
       productKnowledgeFact: { findMany: async () => [] },
+      attributeDefinition: { findMany: async () => [] },
       brand: { findMany: async () => [] },
       homepageContent: { findUnique: async () => null },
     } as unknown as ProjectionSchedulerDatabase;
@@ -1081,7 +1096,7 @@ describe("a tény-változás is esedékessé tesz (SEO P0 PR 8)", () => {
         db,
         runProjection: run,
         runPricing: arFuttato().run,
-        environment: BEKAPCSOLVA,
+        environment: ISMERETTEL,
         logger: naplo().logger,
         now: () => new Date(MOST.getTime() + 1_000),
       });
@@ -1107,7 +1122,7 @@ describe("a tény-változás is esedékessé tesz (SEO P0 PR 8)", () => {
       db,
       runProjection: futtato(0).run,
       runPricing: arFuttato().run,
-      environment: BEKAPCSOLVA,
+      environment: ISMERETTEL,
       logger: naplo().logger,
       now: () => new Date(MOST.getTime() + 1_000),
     });
@@ -1119,6 +1134,88 @@ describe("a tény-változás is esedékessé tesz (SEO P0 PR 8)", () => {
     const where = (kerdes.args as { where: Record<string, unknown> }).where;
     assert.ok("acceptedByRule" in where, JSON.stringify(where));
     assert.equal(where.acceptedByRule, null);
+  });
+});
+
+/**
+ * A TERMEKISMERET KAPCSOLOJA AZ UTEMEZOBEN (`MEDUSA_PROJECT_KNOWLEDGE`, alapbol KI; kartya
+ * 8639ac2a, acrobot 41560). MI PIROSIT: ha kikapcsolt kapcsolonal egy jovahagyott
+ * termekismereti teny (nem natív kulcs) vetitesi kort inditana (pont ez engedne ki egy S1
+ * erteket a boltba); ha a NATIV celu teny (tomeg, meret) ezzel egyutt elveszitene a sajat
+ * esedekesseg-okat (azok nem termekismeret); ha bekapcsolva a szuro megmaradna (a mai
+ * viselkedes a BEKAPCSOLT ag, valtozatlanul).
+ */
+describe("a termékismeret kapcsolója az ütemezőben", () => {
+  const kotes = [
+    { entityId: "prod-1", lastSyncedAt: new Date(MOST.getTime() - 60_000) },
+  ];
+  const kor = async (environment: NodeJS.ProcessEnv, nativ: string[]) => {
+    const { run, kapott } = futtato(0);
+    const { db, hivasok } = adatbazis(
+      [termek({ updatedAt: REGEN })],
+      kotes,
+      undefined,
+      [],
+      [],
+      [{ productId: "prod-1", updatedAt: MOST }],
+      [],
+      nativ,
+    );
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: run,
+      runPricing: arFuttato().run,
+      environment,
+      logger: naplo().logger,
+      now: () => new Date(MOST.getTime() + 1_000),
+    });
+    await scheduler.runOnce();
+    const tenyLekerdezes = hivasok.find(
+      (h) => h.metodus === "productKnowledgeFact.findMany",
+    );
+    return { kapott, tenyLekerdezes };
+  };
+
+  it("kikapcsolva és natív kulcs nélkül: a tény-táblát meg sem kérdezi, a tény nem tesz esedékessé", async () => {
+    const { kapott, tenyLekerdezes } = await kor(BEKAPCSOLVA, []);
+    assert.equal(tenyLekerdezes, undefined);
+    assert.deepEqual(kapott, []);
+  });
+
+  it("kikapcsolva: csak a natív célú kulcsok tényei tesznek esedékessé (a szűrő a lekérdezésben áll)", async () => {
+    const { kapott, tenyLekerdezes } = await kor(BEKAPCSOLVA, [
+      "weight",
+      "lengthMm",
+    ]);
+    assert.ok(tenyLekerdezes, "a natív tényt kérdezni kell");
+    const where = (tenyLekerdezes.args as { where: Record<string, unknown> })
+      .where;
+    assert.deepEqual(where.field, { in: ["weight", "lengthMm"] });
+    assert.equal(where.acceptedByRule, null);
+    // a dupla a megadott sort adja vissza: a natív tény esedékessé tesz, mint eddig
+    assert.deepEqual(kapott, [["prod-1"]]);
+  });
+
+  it("bekapcsolva: nincs kulcs-szűrő, minden elfogadott tény számít, mint eddig", async () => {
+    const { kapott, tenyLekerdezes } = await kor(ISMERETTEL, []);
+    assert.ok(tenyLekerdezes);
+    const where = (tenyLekerdezes.args as { where: Record<string, unknown> })
+      .where;
+    assert.equal("field" in where, false, JSON.stringify(where));
+    assert.deepEqual(kapott, [["prod-1"]]);
+  });
+
+  it("csak a pontos 'true' kapcsol be", async () => {
+    for (const ertek of ["True", "1", "on", "", "false"]) {
+      const { tenyLekerdezes } = await kor(
+        {
+          ...BEKAPCSOLVA,
+          MEDUSA_PROJECT_KNOWLEDGE: ertek,
+        } as NodeJS.ProcessEnv,
+        [],
+      );
+      assert.equal(tenyLekerdezes, undefined, JSON.stringify(ertek));
+    }
   });
 });
 

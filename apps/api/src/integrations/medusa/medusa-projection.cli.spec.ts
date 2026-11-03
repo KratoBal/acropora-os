@@ -1744,7 +1744,7 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
         ["prod-1"],
         out,
         provider(environmentSetting),
-        boltiKornyezet,
+        { ...boltiKornyezet, MEDUSA_PROJECT_KNOWLEDGE: "true" },
         db,
         boltiFetchTorzzsel(keresek),
       ),
@@ -1799,7 +1799,7 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
         ["prod-1"],
         out,
         provider(environmentSetting),
-        boltiKornyezet,
+        { ...boltiKornyezet, MEDUSA_PROJECT_KNOWLEDGE: "true" },
         db,
         boltiFetchTorzzsel(keresek),
       ),
@@ -1820,6 +1820,53 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
       ),
     );
   });
+
+  /**
+   * A TERMEKISMERET KAPCSOLOJA (`MEDUSA_PROJECT_KNOWLEDGE`, alapbol KI; kartya 8639ac2a,
+   * acrobot 41560). MI PIROSITJA: ha kapcsolo nelkul az ismeret-vegpontra barmi menne
+   * (sem GET, sem PUT); ha a jovahagyott szoveg kapcsolo nelkul a leirasba kerulne; ha a
+   * "true"-tol eltero ertek ("True", "1", "on", ures) bekapcsolna; ha a kikapcsolt allapot
+   * a termek vetiteset magat elvinne (a termek kimegy, az ismeret nem).
+   */
+  for (const ertek of [undefined, "", "false", "True", "1", "on"]) {
+    it(`termekismeret: a kapcsolo ${JSON.stringify(ertek)} mellett semmi nem megy az ismeret-vegpontra, a leiras a mai marad`, async () => {
+      const { out, stdout, stderr } = collector();
+      const { db } = tudasAdatbazis("ACROPORA");
+      const keresek: { url: string; method: string; body: unknown }[] = [];
+      const kornyezet =
+        ertek === undefined
+          ? boltiKornyezet
+          : { ...boltiKornyezet, MEDUSA_PROJECT_KNOWLEDGE: ertek };
+
+      const code = await boltiKorben(() =>
+        runProjectionCli(
+          ["prod-1"],
+          out,
+          provider(environmentSetting),
+          kornyezet,
+          db,
+          boltiFetchTorzzsel(keresek),
+        ),
+      );
+
+      assert.equal(code, 0, stderr.join("") + stdout.join(""));
+      const letrehozas = keresek.find(
+        (k) => k.url.endsWith("/admin/products") && k.method === "POST",
+      );
+      assert.ok(letrehozas, "a termek kimegy");
+      assert.equal(
+        (letrehozas.body as { description?: string | null }).description,
+        null,
+        "a jovahagyott szoveg nem kerul a leirasba",
+      );
+      assert.deepEqual(
+        keresek.filter((k) => k.url.includes("/admin/product-knowledge/")),
+        [],
+        "az ismeret-vegpontra semmi nem megy",
+      );
+      assert.doesNotMatch(stdout.join(""), /termékismeret/);
+    });
+  }
 
   /**
    * A MARKA KET HELYRE MEGY, ATMENETILEG (SEO P0 PR 11, C7).
