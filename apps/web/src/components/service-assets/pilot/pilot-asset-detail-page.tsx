@@ -23,7 +23,7 @@ import {
   withAssetUnit,
 } from "@acropora/types";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { useReturnTo, useStepTo } from "@/components/navigation-history";
@@ -165,6 +165,8 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
   const [documentType, setDocumentType] =
     useState<AssetDocumentType>("INVOICE");
   const [documentFile, setDocumentFile] = useState<File | null>(null);
+  // The real file field: emptied after an upload, or it would keep showing the uploaded file's name.
+  const documentInput = useRef<HTMLInputElement>(null);
   const neighbors = useAssetNeighbors(token, assetId, canView && !deleted);
   const stepTo = useStepTo();
   const step = (id: string) => {
@@ -318,6 +320,7 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
         documentFile,
       );
       setDocumentFile(null);
+      if (documentInput.current) documentInput.current.value = "";
       await load();
       setNotice("A dokumentum feltöltve.");
     } catch (cause) {
@@ -689,6 +692,7 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
                       </FormField>
                       <FormField label="Fénykép vagy PDF">
                         <PilotFileInput
+                          ref={documentInput}
                           accept="image/jpeg,image/png,application/pdf"
                           aria-label="Fénykép vagy PDF"
                           onChange={(event) =>
