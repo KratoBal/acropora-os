@@ -13,6 +13,7 @@ import type { ExpectedArrivalService } from "../purchasing/expected-arrivals/exp
 import type { StockReconciliationService } from "../inventory/stock-reconciliation.service.js";
 import type { UnasStockSyncOutboxRepository } from "../inventory/unas-stock-sync-outbox.repository.js";
 import type { MissingInvoicesService } from "../missing-invoices/missing-invoices.service.js";
+import type { WebshopOrdersService } from "../orders/webshop-orders/webshop-orders.service.js";
 import type { DashboardAquariumWidgetsRepository } from "./dashboard-aquarium-widgets.repository.js";
 import type { DashboardFinanceWidgetsRepository } from "./dashboard-finance-widgets.repository.js";
 import type { DashboardLayoutRepository } from "./dashboard-layout.repository.js";
@@ -42,7 +43,8 @@ function service(
   options: {
     stored?: unknown;
     capabilities?: ServiceCapabilityValue[];
-    loaders?: ConstructorParameters<typeof DashboardWidgetsService>[9];
+    loaders?: ConstructorParameters<typeof DashboardWidgetsService>[10];
+    webshopOrders?: Partial<WebshopOrdersService>;
   } = {},
 ) {
   const store: Store = {
@@ -87,6 +89,7 @@ function service(
       {} as StockReconciliationService,
       {} as UnasStockSyncOutboxRepository,
       {} as DashboardSystemWidgetsRepository,
+      (options.webshopOrders ?? {}) as WebshopOrdersService,
       options.loaders,
     ),
   };
@@ -213,11 +216,8 @@ describe("the widget data endpoint (server-side authorization)", () => {
 
   it("a planned widget is unavailable, not data", async () => {
     const { svc } = service();
-    const r = await svc.widgets(user("OWNER"), [
-      "webshop-orders",
-      "today-service",
-    ]);
-    assert.deepEqual(r.results["webshop-orders"], { status: "unavailable" });
+    const r = await svc.widgets(user("OWNER"), ["pos-today", "today-service"]);
+    assert.deepEqual(r.results["pos-today"], { status: "unavailable" });
     assert.deepEqual(r.results["today-service"], { status: "unavailable" });
   });
 
@@ -291,6 +291,47 @@ describe("the widget data endpoint (server-side authorization)", () => {
         ],
       },
     });
+  });
+});
+
+describe("Webshop rendelési sor", () => {
+  const counters = {
+    processing: 4,
+    invoice: 7,
+    dispatch: 2,
+    pickup: 1,
+    stale: 53,
+  };
+
+  it("shows the order list's own open-view counters, read once for five minutes", async () => {
+    const queries: unknown[] = [];
+    const { svc } = service({
+      webshopOrders: {
+        list: async (query: unknown) => {
+          queries.push(query);
+          return { counters, truncated: false } as never;
+        },
+      },
+    });
+    const first = await svc.widgets(user("OWNER"), ["webshop-orders"]);
+    assert.deepEqual(first.results["webshop-orders"], {
+      status: "ok",
+      data: { counters, truncated: false },
+    });
+    await svc.widgets(user("OWNER"), ["webshop-orders"]);
+    assert.deepEqual(queries, [{ view: "open", pageSize: 1 }]);
+  });
+
+  it("an unreachable webshop is an error on the card, never a zero", async () => {
+    const { svc } = service({
+      webshopOrders: {
+        list: async () => {
+          throw new Error("A webshop kapcsolata nincs beállítva.");
+        },
+      },
+    });
+    const r = await svc.widgets(user("OWNER"), ["webshop-orders"]);
+    assert.equal(r.results["webshop-orders"]?.status, "error");
   });
 });
 

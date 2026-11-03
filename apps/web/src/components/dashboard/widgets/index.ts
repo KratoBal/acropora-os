@@ -10,6 +10,7 @@ import { maintenanceCalendarWidget } from "./maintenance-calendar-widget";
 import { materialRequestsWidget } from "./material-requests-widget";
 import { missingInvoicesWidget } from "./missing-invoices-widget";
 import { overdueInvoicesWidget } from "./overdue-invoices-widget";
+import { webshopOrdersWidget } from "./webshop-orders-widget";
 import { serviceTicketsWidget } from "./service-tickets-widget";
 import { settlementsWidget } from "./settlements-widget";
 import { stockReconciliationWidget } from "./stock-reconciliation-widget";
@@ -39,6 +40,7 @@ export const DASHBOARD_WIDGET_VIEWS: Partial<
   "aquarium-equipment": aquariumEquipmentWidget,
   "overdue-invoices": overdueInvoicesWidget,
   "missing-invoices": missingInvoicesWidget,
+  "webshop-orders": webshopOrdersWidget,
   "incoming-invoices": incomingInvoicesWidget,
   settlements: settlementsWidget,
   "stock-reconciliation": stockReconciliationWidget,

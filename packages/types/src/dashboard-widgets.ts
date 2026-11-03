@@ -29,6 +29,7 @@ import {
   type UserRole,
 } from "./auth.js";
 import type { ServiceCapabilityValue } from "./service-capabilities.js";
+import type { WebshopOrderStage } from "./webshop-orders.js";
 
 export const DASHBOARD_WIDGET_SIZES = ["sm", "md", "lg"] as const;
 /** sm = a third of the desktop row, md = two thirds, lg = the full row. */
@@ -389,9 +390,12 @@ export const DASHBOARD_WIDGETS: readonly DashboardWidgetDefinition[] = [
     category: "webshop",
     requiredPermissions: [P.ORDERS_VIEW],
     recommendedRoles: MANAGERS,
-    availability: "planned",
+    // T2.1 (Balázs top 5, acrobot 41616): the commerce freeze is lifted since 2026-11-01, and
+    // this is the OS's own order queue, not the storefront.
+    availability: "active",
     priority: 50,
-    plannedReason: FROZEN,
+    dataSource:
+      "WebshopOrdersService.list({ view: 'open' }).counters, the list page's own counters (called, not modified), cached 5 minutes.",
   }),
   widget({
     id: "pos-today",
@@ -1125,6 +1129,17 @@ export interface DashboardMissingInvoicesWidgetData {
     missingAmountHuf: string;
     status: string;
   }[];
+}
+
+/**
+ * Webshop rendelési sor: the open orders per stage, the same counters the order list shows
+ * (`/webshop/rendelesek`), so the card and the list can never disagree. `stale` is the list's
+ * "Elavult": an order past its status's threshold (Beállítások).
+ */
+export interface DashboardWebshopOrdersWidgetData {
+  counters: Record<WebshopOrderStage, number>;
+  /** The webshop holds more orders than the OS reads in one pass: the counts are a floor. */
+  truncated: boolean;
 }
 
 /** Bejövő számlák: only what needs someone (NAV invoices and mailbox documents). */

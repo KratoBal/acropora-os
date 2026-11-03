@@ -8,17 +8,50 @@ import {
 } from "./attention.js";
 
 describe("Figyelmet igényel: the figures", () => {
-  it("never reads a shadow measurement or the frozen webshop", () => {
-    for (const id of [
-      "supplier-matching",
-      "jev-intelligence",
-      "webshop-orders",
-      "pos-today",
-    ])
+  it("never reads a shadow measurement or a still planned widget", () => {
+    for (const id of ["supplier-matching", "jev-intelligence", "pos-today"])
       assert.ok(
         !(ATTENTION_SOURCES as readonly string[]).includes(id),
         `${id} must not feed the attention list`,
       );
+  });
+
+  // T2.1: the "53 stale orders nobody hears about" of the idea list. Only the stale and the
+  // waiting-for-processing figures are tasks; invoice, dispatch and pickup have their own pages.
+  it("takes the stale and the waiting webshop orders, each to its own list filter", () => {
+    assert.ok(
+      (ATTENTION_SOURCES as readonly string[]).includes("webshop-orders"),
+    );
+    assert.deepEqual(
+      attentionItemsOf("webshop-orders", {
+        counters: {
+          processing: 4,
+          invoice: 7,
+          dispatch: 2,
+          pickup: 1,
+          stale: 53,
+        },
+        truncated: false,
+      }).map((i) => [i.key, i.count, i.tone, i.href]),
+      [
+        ["stale", 53, "danger", "/webshop/rendelesek?stage=stale"],
+        ["processing", 4, "warning", "/webshop/rendelesek?stage=processing"],
+      ],
+    );
+    assert.deepEqual(
+      attentionItemsOf("webshop-orders", {
+        counters: {
+          processing: 0,
+          invoice: 3,
+          dispatch: 0,
+          pickup: 0,
+          stale: 0,
+        },
+        truncated: false,
+      }),
+      [],
+      "nothing stale and nothing waiting is no line, not a zero",
+    );
   });
 
   it("takes only the actionable figure of each widget, and drops zeros", () => {

@@ -17,6 +17,7 @@ import {
   type AuthenticatedUser,
   type DashboardAttentionWidgetData,
   type DashboardExpectedArrivalsWidgetData,
+  type DashboardWebshopOrdersWidgetData,
   type DashboardLayoutResponse,
   type DashboardViewer,
   type DashboardWidgetId,
@@ -28,6 +29,7 @@ import { partnerScopeOf } from "../auth/partner-scope.util.js";
 import { StockReconciliationService } from "../inventory/stock-reconciliation.service.js";
 import { UnasStockSyncOutboxRepository } from "../inventory/unas-stock-sync-outbox.repository.js";
 import { MissingInvoicesService } from "../missing-invoices/missing-invoices.service.js";
+import { WebshopOrdersService } from "../orders/webshop-orders/webshop-orders.service.js";
 import { ExpectedArrivalService } from "../purchasing/expected-arrivals/expected-arrival.service.js";
 import { assignedUnitIdsFor } from "../service-jobs/assigned-units.query.js";
 import { aquariumFindings } from "./aquarium-findings.js";
@@ -41,6 +43,11 @@ import { DashboardFinanceWidgetsRepository } from "./dashboard-finance-widgets.r
 import { DashboardLayoutRepository } from "./dashboard-layout.repository.js";
 import { DashboardSystemWidgetsRepository } from "./dashboard-system-widgets.repository.js";
 import { MissingInvoicesSummaryCache } from "./missing-invoices-summary.js";
+import { SharedRunCache } from "./shared-run-cache.js";
+import {
+  toWebshopOrdersWidgetData,
+  WEBSHOP_ORDERS_CACHE_MS,
+} from "./webshop-orders-summary.js";
 import { summarizeOverdueInvoices } from "./overdue-invoices.js";
 import { stockDiscrepancies, stockSyncOutboxState } from "./stock-widgets.js";
 import {
@@ -89,6 +96,7 @@ export class DashboardWidgetsService {
   private readonly logger = new Logger(DashboardWidgetsService.name);
   private readonly loaders: Partial<Record<DashboardWidgetId, WidgetLoader>>;
   private readonly missingInvoicesCache: MissingInvoicesSummaryCache;
+  private readonly webshopOrdersCache: SharedRunCache<DashboardWebshopOrdersWidgetData>;
 
   constructor(
     private readonly repository: DashboardLayoutRepository,
@@ -100,12 +108,20 @@ export class DashboardWidgetsService {
     private readonly reconciliation: StockReconciliationService,
     private readonly outbox: UnasStockSyncOutboxRepository,
     private readonly systemWidgets: DashboardSystemWidgetsRepository,
+    webshopOrders: WebshopOrdersService,
     @Optional()
     @Inject(DASHBOARD_WIDGET_LOADERS)
     loaders?: Partial<Record<DashboardWidgetId, WidgetLoader>>,
   ) {
     this.missingInvoicesCache = new MissingInvoicesSummaryCache(() =>
       missingInvoices.months(),
+    );
+    this.webshopOrdersCache = new SharedRunCache(
+      () =>
+        webshopOrders
+          .list({ view: "open", pageSize: 1 })
+          .then(toWebshopOrdersWidgetData),
+      WEBSHOP_ORDERS_CACHE_MS,
     );
     this.loaders = loaders ?? this.defaultLoaders();
   }
@@ -259,6 +275,7 @@ export class DashboardWidgetsService {
         );
       },
       "missing-invoices": () => this.missingInvoicesCache.summary(),
+      "webshop-orders": () => this.webshopOrdersCache.get(),
       "incoming-invoices": () => this.financeWidgets.incomingInvoices(),
       settlements: () => this.financeWidgets.settlements(),
       "stock-reconciliation": () => stockDiscrepancies(this.reconciliation),

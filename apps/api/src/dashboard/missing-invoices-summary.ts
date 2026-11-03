@@ -3,6 +3,8 @@ import type {
   MissingInvoiceMonthsResponse,
 } from "@acropora/types";
 
+import { SharedRunCache } from "./shared-run-cache.js";
+
 /** Owner decision (PR #1379, 2026-10-02): a 5-minute in-process cache is fine. */
 export const MISSING_INVOICES_CACHE_MS = 5 * 60 * 1000;
 const MONTHS_SHOWN = 2;
@@ -14,36 +16,20 @@ const MONTHS_SHOWN = 2;
  * debit, so a dashboard that called it on every page load would cost the
  * same as opening the missing-invoices page each time. The result is kept
  * for 5 minutes, in this process only. Concurrent loads share ONE run, and a
- * failure is never cached: the next load tries again.
+ * failure is never cached: the next load tries again (`SharedRunCache`).
  */
 export class MissingInvoicesSummaryCache {
-  private cached: { at: number; value: MissingInvoiceMonthsResponse } | null =
-    null;
-  private inFlight: Promise<MissingInvoiceMonthsResponse> | null = null;
+  private readonly cache: SharedRunCache<MissingInvoiceMonthsResponse>;
 
   constructor(
-    private readonly load: () => Promise<MissingInvoiceMonthsResponse>,
-    private readonly clock: () => number = Date.now,
-  ) {}
-
-  async summary(): Promise<DashboardMissingInvoicesWidgetData> {
-    return toWidgetData(await this.months());
+    load: () => Promise<MissingInvoiceMonthsResponse>,
+    clock: () => number = Date.now,
+  ) {
+    this.cache = new SharedRunCache(load, MISSING_INVOICES_CACHE_MS, clock);
   }
 
-  private async months(): Promise<MissingInvoiceMonthsResponse> {
-    const now = this.clock();
-    if (this.cached && now - this.cached.at < MISSING_INVOICES_CACHE_MS)
-      return this.cached.value;
-    if (!this.inFlight)
-      this.inFlight = this.load()
-        .then((value) => {
-          this.cached = { at: this.clock(), value };
-          return value;
-        })
-        .finally(() => {
-          this.inFlight = null;
-        });
-    return this.inFlight;
+  async summary(): Promise<DashboardMissingInvoicesWidgetData> {
+    return toWidgetData(await this.cache.get());
   }
 }
 
