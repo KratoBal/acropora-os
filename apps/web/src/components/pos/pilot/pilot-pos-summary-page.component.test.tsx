@@ -118,6 +118,31 @@ describe("PilotPosSummaryPage", () => {
     expect(totalRow).toHaveTextContent("42 500 Ft");
   });
 
+  /*
+    A KERESZTTÁBLA TELEFONON GÖRGETHETŐ MARAD, A NAP OSZLOP A HELYÉN (UI-áttekintés, 2026-11-03). A
+    happy-dom nem számol CSS-t: az állítás az osztályokra szól. MI PIROSÍT: ha a "Nap" oszlop (fejléc,
+    napi sor, összesítő sor) elveszti a rögzítést, vagy ha a görgetés-jelzés eltűnik / asztalon is látszana.
+  */
+  it("keeps the Nap column in place while scrolling and says that the table scrolls", async () => {
+    render(createElement(PilotPosSummaryPage));
+    const table = await screen.findByRole("table");
+
+    const dayHeader = within(table).getByRole("columnheader", { name: "Nap" });
+    expect(dayHeader.className).toContain("sticky");
+    const bodyRows = within(table)
+      .getAllByRole("row")
+      .filter((row) => !/^Összesen/.test(row.textContent ?? ""));
+    const firstDayCell = bodyRows[1]!.querySelector("td")!;
+    expect(firstDayCell.className).toContain("sticky");
+    const totalLabel = within(table).getByRole("rowheader", {
+      name: "Összesen",
+    });
+    expect(totalLabel.className).toContain("sticky");
+
+    const hint = screen.getByText(/Görgess oldalra/);
+    expect(hint.className).toContain("md:hidden");
+  });
+
   it("the 7-day button asks for the last seven days ending today", async () => {
     const user = userEvent.setup();
     render(createElement(PilotPosSummaryPage));
