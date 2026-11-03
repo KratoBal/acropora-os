@@ -1,5 +1,5 @@
 "use client";
-import { Alert, Icon } from "@acropora/ui";
+import { Alert, Icon, PilotSelect } from "@acropora/ui";
 import {
   aquariumEffectiveMeasurementTargetRange,
   isOutsideMeasurementRange,
@@ -538,33 +538,33 @@ export function PilotMeasurementHistoryPage({
                       <span className="text-xs text-pilot-grey-500">
                         Ettől:
                       </span>
-                      <select
+                      <PilotSelect
                         value={compFrom}
-                        onChange={(e) => setCompFrom(e.target.value)}
-                        className="cursor-pointer rounded-md px-2.5 py-1.5 text-xs text-pilot-grey-700 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+                        onChange={(nextValue) => setCompFrom(nextValue)}
+                        chevron
                       >
                         {occasions.map((o) => (
                           <option key={o.id} value={o.id}>
                             {formatDate(o.measuredAt)}
                           </option>
                         ))}
-                      </select>
+                      </PilotSelect>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-pilot-grey-500">
                         Eddig:
                       </span>
-                      <select
+                      <PilotSelect
                         value={compTo}
-                        onChange={(e) => setCompTo(e.target.value)}
-                        className="cursor-pointer rounded-md px-2.5 py-1.5 text-xs text-pilot-grey-700 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+                        onChange={(nextValue) => setCompTo(nextValue)}
+                        chevron
                       >
                         {occasions.map((o) => (
                           <option key={o.id} value={o.id}>
                             {formatDate(o.measuredAt)}
                           </option>
                         ))}
-                      </select>
+                      </PilotSelect>
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-3">

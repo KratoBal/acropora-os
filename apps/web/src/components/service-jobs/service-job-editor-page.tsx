@@ -1,6 +1,12 @@
 "use client";
 
-import { Alert, Button, Input, PilotFileInput } from "@acropora/ui";
+import {
+  Alert,
+  Button,
+  Input,
+  PilotFileInput,
+  PilotSelect,
+} from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
@@ -521,11 +527,12 @@ export function ServiceJobEditorPage({
                     nem nyitható jegy rá. Vegyél fel egyet a partner lapján.
                   </p>
                 ) : (
-                  <select
+                  <PilotSelect
                     id="hibajegy-helyszin"
-                    className="w-full rounded border px-2 py-1 text-sm"
+                    className="w-full"
                     value={departmentId}
-                    onChange={(event) => setDepartmentId(event.target.value)}
+                    onChange={(nextValue) => setDepartmentId(nextValue)}
+                    chevron
                   >
                     <option value="">Válassz helyszínt</option>
                     {departmentOptions.map((option) => (
@@ -533,7 +540,7 @@ export function ServiceJobEditorPage({
                         {option.label}
                       </option>
                     ))}
-                  </select>
+                  </PilotSelect>
                 )}
               </div>
             )}
