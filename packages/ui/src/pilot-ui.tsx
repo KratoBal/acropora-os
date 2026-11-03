@@ -1,8 +1,9 @@
 "use client";
-import type { InputHTMLAttributes, ReactNode } from "react";
-import { useEffect, useId } from "react";
+import type { InputHTMLAttributes, ReactNode, Ref } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { Icon } from "./icon";
+import { huToIso, inRange, isoToHu, nextText } from "./hu-date";
 import { useThemePreference } from "./use-theme-preference";
 
 /**
@@ -271,6 +272,8 @@ export function PilotButton({
   size = "md",
   "aria-label": ariaLabel,
   "aria-pressed": ariaPressed,
+  "aria-expanded": ariaExpanded,
+  "aria-controls": ariaControls,
   title,
 }: {
   children: ReactNode;
@@ -293,6 +296,9 @@ export function PilotButton({
    * gomb attribútum nélkül marad, mint eddig.
    */
   "aria-pressed"?: boolean;
+  /** ADDITÍV: a lenyitó gombhoz (pl. „Továbbiak”), és hogy mit nyit. Elhagyva a gomb attribútum nélkül marad. */
+  "aria-expanded"?: boolean;
+  "aria-controls"?: string;
 }) {
   const base = `inline-flex items-center justify-center gap-1.5 rounded-md transition-all duration-100 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${fullWidth ? "w-full" : ""}`;
   /*
@@ -342,6 +348,8 @@ export function PilotButton({
       disabled={disabled}
       aria-label={ariaLabel}
       aria-pressed={ariaPressed}
+      aria-expanded={ariaExpanded}
+      aria-controls={ariaControls}
       title={title}
     >
       {children}
@@ -415,6 +423,130 @@ export function PilotFormField({
   );
 }
 
+/**
+ * A MAGYAR DÁTUMMEZŐ (UI-áttekintés, 3. csomag): a natív `type="date"` a böngésző nyelvén ír
+ * (`mm/dd/yyyy`), ezért a szöveget mi rajzoljuk (`2026. 11. 03.`, gépelés közben formázva),
+ * a naptár pedig egy rejtett natív mező, amit a gomb nyit meg. KIFELÉ az ISO alak megy
+ * (`2026-11-03`), tehát a hívók és a mentett adat nem változik. Hiányos vagy nem létező
+ * beírásra a hívó üres értéket kap, nem egy csonka dátumot; a `min`/`max`-on kívüli, de létező
+ * nap kimegy (a hívó írja rá az üzenetét), a mező viszont `aria-invalid`.
+ */
+export function PilotDateField({
+  id,
+  value,
+  onChange,
+  placeholder = "ÉÉÉÉ. HH. NN.",
+  readOnly,
+  disabled,
+  className,
+  "aria-label": ariaLabel,
+  title,
+  min,
+  max,
+}: {
+  id?: string;
+  /** ISO dátum (`2026-11-03`) vagy üres. */
+  value?: string;
+  onChange?: (value: string) => void;
+  placeholder?: string;
+  readOnly?: boolean;
+  disabled?: boolean;
+  className?: string;
+  "aria-label"?: string;
+  title?: string;
+  /** ISO korlátok; a naptár is, a beírás is ezeken belül marad. */
+  min?: string;
+  max?: string;
+}) {
+  const [text, setText] = useState(() => isoToHu(value));
+  const picker = useRef<HTMLInputElement>(null);
+  const typed = useRef<HTMLInputElement>(null);
+  // A kívülről érkező érték (betöltés, nullázás) átírja a szöveget; a félig beírt szöveg
+  // értéke ugyanaz az üres, mint amit már kiadtunk, tehát azt nem bántja.
+  // A hívónak minden TELJES, létező nap kimegy, a tartományon kívüli is (a natív mező is ezt
+  // tette): a hívó a saját üzenetét írja rá ("nem lehet a jövőben"). A mező ettől még jelölt.
+  const emitted = (shown: string) => huToIso(shown) ?? "";
+  // Az átírás RENDER KÖZBEN történik (nem effektben): a hívó új értékével ugyanabban a
+  // renderben a szöveg is kész, tehát nincs egy kirajzolt, elavult köztes állapot.
+  const [seen, setSeen] = useState(value);
+  if (value !== seen) {
+    setSeen(value);
+    if ((value ?? "") !== emitted(text)) setText(isoToHu(value));
+  }
+  const shownIso = emitted(text);
+  const invalid =
+    text !== "" && (shownIso === "" || !inRange(shownIso, min, max));
+  return (
+    <span className="relative block w-full">
+      <input
+        ref={typed}
+        id={id}
+        type="text"
+        inputMode="numeric"
+        autoComplete="off"
+        placeholder={placeholder}
+        value={text}
+        readOnly={readOnly}
+        disabled={disabled}
+        aria-label={ariaLabel}
+        aria-invalid={invalid || undefined}
+        title={title}
+        onChange={(event) => {
+          const next = nextText(text, event.target.value);
+          setText(next);
+          onChange?.(emitted(next));
+        }}
+        className={`w-full rounded-md py-1.5 pl-3 pr-9 text-sm tabular-nums text-pilot-grey-900 ring-1 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500 disabled:cursor-not-allowed disabled:bg-pilot-grey-50 disabled:text-pilot-grey-400 ${
+          invalid ? "ring-red-400" : "ring-pilot-grey-200"
+        } ${readOnly ? "bg-pilot-grey-50 text-pilot-grey-400" : "bg-white"} ${className ?? ""}`}
+      />
+      {readOnly || disabled ? null : (
+        <>
+          {/*
+            A NAPTÁR A GOMBRA NYÍLIK (`showPicker`), a rejtett natív mező csak a választást adja.
+            Az átlátszó natív mező a gomb FÖLÖTT nem jó: az asztali Chrome a date mezőre
+            kattintva csak a saját ikonján nyit naptárat, máshol a szegmensbe teszi a fókuszt.
+            Ahol nincs `showPicker`, a fókusz a szöveges mezőben marad, ott a nap beírható.
+          */}
+          <button
+            type="button"
+            aria-label="Naptár megnyitása"
+            onClick={() => {
+              const native = picker.current;
+              if (native && typeof native.showPicker === "function") {
+                try {
+                  native.showPicker();
+                  return;
+                } catch {
+                  // A böngésző megtagadta (pl. nincs felhasználói művelet): marad a beírás.
+                }
+              }
+              typed.current?.focus();
+            }}
+            className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-pilot-grey-500 hover:text-pilot-grey-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-pilot-aqua-500"
+          >
+            <Icon name="calendar" size={16} />
+          </button>
+          <input
+            ref={picker}
+            type="date"
+            tabIndex={-1}
+            aria-hidden="true"
+            value={value ?? ""}
+            min={min}
+            max={max}
+            onChange={(event) => {
+              setText(isoToHu(event.target.value));
+              onChange?.(event.target.value);
+            }}
+            className="pointer-events-none absolute bottom-0 right-0 h-px w-px opacity-0"
+          />
+        </>
+      )}
+    </span>
+  );
+}
+
 export function PilotInput({
   id,
   leadingIcon,
@@ -457,6 +589,24 @@ export function PilotInput({
   /** ADDITÍV: ikon a mező elején (a terv keresőmezője). */
   leadingIcon?: ReactNode;
 }) {
+  // A dátummező magyar alakban jelenik meg (a natív mező a böngésző nyelvén írna).
+  if (type === "date" && !leadingIcon) {
+    return (
+      <PilotDateField
+        id={id}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        readOnly={readOnly}
+        disabled={disabled}
+        className={className}
+        aria-label={ariaLabel}
+        title={title}
+        min={typeof min === "string" ? min : undefined}
+        max={typeof max === "string" ? max : undefined}
+      />
+    );
+  }
   const input = (
     <input
       id={id}
@@ -809,5 +959,85 @@ export function PilotTimeline({
         </div>
       ))}
     </div>
+  );
+}
+
+/**
+ * A MAGYAR FÁJLMEZŐ (UI-áttekintés, 3. csomag): a natív `<input type="file">` a böngésző nyelvén
+ * ír ("Choose File  No file chosen"). Ez egy gomb ("Fájl kiválasztása") és a választott fájl
+ * neve, a valódi mező mögötte rejtett. DROP-IN: a natív mező tulajdonságait veszi át
+ * (`accept`, `multiple`, `disabled`, `onChange`, `aria-label`, `ref`...), a hívó ugyanúgy
+ * `event.target.files`-ból olvas. A mező a billentyűzetnek a GOMB (a rejtett mező kimarad a
+ * tab-sorból), a felolvasónak "<felirat>: fájl kiválasztása".
+ */
+export function PilotFileInput({
+  className,
+  onChange,
+  multiple,
+  disabled,
+  "aria-label": ariaLabel,
+  ref,
+  ...rest
+}: Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "children"> & {
+  /** A hívó elérheti a valódi mezőt (`ref.current.files`, `ref.current.value = ""`). */
+  ref?: Ref<HTMLInputElement>;
+}) {
+  const field = useRef<HTMLInputElement | null>(null);
+  const [names, setNames] = useState<string[]>([]);
+  // A hívó a mezőt programmal is kiürítheti (`ref.current.value = ""`), esemény nélkül: minden
+  // renderelés után a valódi mezőhöz igazodik a kiírt név, és csak eltérésnél állít állapotot.
+  useEffect(() => {
+    const actual = Array.from(field.current?.files ?? []).map((f) => f.name);
+    setNames((current) =>
+      current.join("\n") === actual.join("\n") ? current : actual,
+    );
+  });
+  const label = multiple ? "Fájlok kiválasztása" : "Fájl kiválasztása";
+  const shown =
+    names.length === 0
+      ? "Nincs kiválasztott fájl"
+      : names.length <= 2
+        ? names.join(", ")
+        : `${names.length} fájl`;
+  return (
+    <span
+      className={`inline-flex max-w-full min-w-0 items-center gap-2 align-middle ${className ?? ""}`}
+    >
+      <input
+        {...rest}
+        ref={(node) => {
+          field.current = node;
+          if (typeof ref === "function") ref(node);
+          else if (ref) ref.current = node;
+        }}
+        type="file"
+        multiple={multiple}
+        disabled={disabled}
+        aria-label={ariaLabel}
+        tabIndex={-1}
+        className="sr-only"
+        onChange={(event) => {
+          const chosen = Array.from(event.target.files ?? []).map(
+            (f) => f.name,
+          );
+          onChange?.(event);
+          // A hívó a fogyasztott fájl után gyakran kiüríti a mezőt (`value = ""`): ilyenkor
+          // nincs mit mutatni, nem marad ott a már feltöltött fájl neve.
+          setNames(event.target.value === "" ? [] : chosen);
+        }}
+      />
+      <button
+        type="button"
+        disabled={disabled}
+        aria-label={
+          ariaLabel ? `${ariaLabel}: ${label.toLowerCase()}` : undefined
+        }
+        onClick={() => field.current?.click()}
+        className="inline-flex h-8 shrink-0 items-center rounded-md bg-white px-3 text-sm font-medium text-pilot-grey-800 ring-1 ring-pilot-grey-200 hover:bg-pilot-grey-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-pilot-aqua-500 disabled:cursor-not-allowed disabled:text-pilot-grey-400"
+      >
+        {label}
+      </button>
+      <span className="truncate text-xs text-pilot-grey-500">{shown}</span>
+    </span>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Icon, Skeleton } from "@acropora/ui";
+import { Alert, Icon, Skeleton, PilotSelect } from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
@@ -697,23 +697,24 @@ export function PilotPosTerminalPage() {
                   <span className="text-[10px] font-medium text-pilot-grey-500">
                     ÁFA
                   </span>
-                  <select
+                  <PilotSelect
                     value={manualDraft.vatRatePercent}
-                    onChange={(event) =>
+                    onChange={(nextValue) =>
                       setManualDraft((current) =>
                         current
-                          ? { ...current, vatRatePercent: event.target.value }
+                          ? { ...current, vatRatePercent: nextValue }
                           : current,
                       )
                     }
-                    className="h-[38px] w-full min-w-0 rounded-lg bg-white px-2 text-xs text-pilot-grey-900 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+                    className="w-full min-w-0"
+                    chevron
                   >
                     {POS_MANUAL_VAT_RATES.map((rate) => (
                       <option key={rate} value={String(rate)}>
                         {rate}%
                       </option>
                     ))}
-                  </select>
+                  </PilotSelect>
                 </label>
                 <p className="text-[10px] text-pilot-grey-600 sm:col-span-4">
                   Készletet nem von le; a végösszegben és a számlán benne van.

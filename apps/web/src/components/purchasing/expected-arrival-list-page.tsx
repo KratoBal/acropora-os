@@ -1,4 +1,5 @@
 "use client";
+import { currencyLabel } from "@/lib/format/currency";
 import {
   Alert,
   Button,
@@ -64,7 +65,7 @@ function matches(item: ExpectedArrivalListItem, search: string): boolean {
 
 function formatAmount(value: number | null, currency: string | null): string {
   if (value === null) return "—";
-  return `${value.toLocaleString("hu-HU", { maximumFractionDigits: 2 })} ${currency ?? ""}`.trim();
+  return `${value.toLocaleString("hu-HU", { maximumFractionDigits: 2 })} ${currencyLabel(currency)}`.trim();
 }
 
 /** A kézi ellenőrzés eredménye egy mondatban. */
@@ -336,6 +337,7 @@ function ExpectedArrivalView(props: {
     {
       id: "arrived",
       header: "Érkezett",
+      nowrap: true,
       width: "12%",
       cell: (item) => (
         <span className="text-pilot-grey-600">

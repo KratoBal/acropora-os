@@ -1,6 +1,13 @@
 "use client";
 
-import { Alert, Button, ConfirmDialog, Input, Skeleton } from "@acropora/ui";
+import {
+  Alert,
+  Button,
+  ConfirmDialog,
+  Input,
+  Skeleton,
+  PilotSelect,
+} from "@acropora/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -367,24 +374,24 @@ export function ArticleCitationsPanel({
             ) : null}
             {writable && draft?.sentence === s.sentence ? (
               <div className="flex flex-wrap items-center gap-2 pl-2">
-                <select
+                <PilotSelect
                   aria-label="A hivatkozás fajtája"
-                  className="rounded border border-pilot-grey-300 px-2 py-1 text-sm"
                   value={draft.kind}
-                  onChange={(event) =>
+                  onChange={(nextValue) =>
                     setDraft({
                       ...draft,
-                      kind: event.target.value as CitationKind,
+                      kind: nextValue as CitationKind,
                       targetId: "",
                     })
                   }
+                  chevron
                 >
                   {(Object.keys(KIND_LABELS) as CitationKind[]).map((k) => (
                     <option key={k} value={k}>
                       {KIND_LABELS[k]}
                     </option>
                   ))}
-                </select>
+                </PilotSelect>
                 {draft.kind === "NOT_TECHNICAL" ? (
                   <Input
                     aria-label="Miért nem szakmai a mondat"
@@ -394,17 +401,18 @@ export function ArticleCitationsPanel({
                     }
                   />
                 ) : (
-                  <select
+                  <PilotSelect
                     aria-label={
                       draft.kind === "CLAIM"
                         ? "VERIFIED állítás"
                         : "Jóváhagyott következtetés"
                     }
-                    className="max-w-md rounded border border-pilot-grey-300 px-2 py-1 text-sm"
+                    className="max-w-md"
                     value={draft.targetId}
-                    onChange={(event) =>
-                      setDraft({ ...draft, targetId: event.target.value })
+                    onChange={(nextValue) =>
+                      setDraft({ ...draft, targetId: nextValue })
                     }
+                    chevron
                   >
                     <option value="">Válassz…</option>
                     {(draft.kind === "CLAIM"
@@ -415,7 +423,7 @@ export function ArticleCitationsPanel({
                         {o.label}
                       </option>
                     ))}
-                  </select>
+                  </PilotSelect>
                 )}
                 <Button
                   type="button"

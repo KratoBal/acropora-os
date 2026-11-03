@@ -1,5 +1,6 @@
 "use client";
 
+import { plainText } from "@/lib/format/plain-text";
 import {
   Alert,
   PilotBadge,
@@ -648,10 +649,10 @@ function SourcePanel({
               rel="noreferrer"
               className="hover:underline"
             >
-              {review.source.title}
+              {plainText(review.source.title)}
             </a>
           ) : (
-            review.source.title
+            plainText(review.source.title)
           )}
         </p>
         <div className="flex flex-wrap gap-2">

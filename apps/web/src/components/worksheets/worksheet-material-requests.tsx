@@ -7,6 +7,8 @@ import {
   EmptyState,
   Input,
   Skeleton,
+  PilotDateField,
+  PilotSelect,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -276,25 +278,24 @@ export function WorksheetMaterialRequests({
               <div className="flex flex-wrap items-end gap-2">
                 <label className="flex flex-col gap-1 text-xs text-dusk-500">
                   Szükséges (nem kötelező)
-                  <Input
-                    type="date"
+                  <PilotDateField
                     aria-label="Szükséges"
                     value={neededBy}
-                    onChange={(event) => setNeededBy(event.target.value)}
+                    onChange={(nextValue) => setNeededBy(nextValue)}
                     className="w-40"
                   />
                 </label>
                 <label className="flex flex-col gap-1 text-xs text-dusk-500">
                   Prioritás (nem kötelező)
-                  <select
+                  <PilotSelect
                     aria-label="Prioritás"
                     value={priority}
-                    onChange={(event) =>
+                    onChange={(nextValue) =>
                       setPriority(
-                        event.target.value as MaterialRequestPriorityValue | "",
+                        nextValue as MaterialRequestPriorityValue | "",
                       )
                     }
-                    className="h-9 rounded border border-dusk-200 px-2 text-sm text-dusk-800"
+                    chevron
                   >
                     <option value="">—</option>
                     {MATERIAL_REQUEST_PRIORITIES.map((value) => (
@@ -302,7 +303,7 @@ export function WorksheetMaterialRequests({
                         {PRIORITY_OPTION_LABEL[value]}
                       </option>
                     ))}
-                  </select>
+                  </PilotSelect>
                 </label>
               </div>
               <label className="flex flex-col gap-1 text-xs text-dusk-500">
@@ -378,7 +379,7 @@ export function WorksheetMaterialRequests({
               <ul className="mt-2 space-y-0.5 text-sm text-dusk-800">
                 {request.items.map((item) => (
                   <li key={item.id}>
-                    {item.name} — {item.quantity} {item.unit}
+                    {item.name}: {item.quantity} {item.unit}
                   </li>
                 ))}
               </ul>

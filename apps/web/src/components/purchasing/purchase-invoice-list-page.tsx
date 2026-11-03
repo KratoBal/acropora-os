@@ -1,4 +1,5 @@
 "use client";
+import { currencyLabel } from "@/lib/format/currency";
 import {
   Alert,
   Button,
@@ -34,7 +35,7 @@ import {
 } from "./purchasing-pilot-shell";
 
 function formatMoney(value: string, currency: string): string {
-  return `${Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 })} ${currency}`;
+  return `${Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 })} ${currencyLabel(currency)}`;
 }
 
 const SOURCE_LABEL: Record<PurchaseInvoiceSummary["source"], string> = {
@@ -195,6 +196,7 @@ export function PurchaseInvoiceListPage() {
     {
       id: "date",
       header: "Kelte",
+      nowrap: true,
       width: "120px",
       cell: (item) => (
         <span className="text-pilot-grey-600">

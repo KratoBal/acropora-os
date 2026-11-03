@@ -8,7 +8,11 @@ import {
 } from "@/components/service/service-offline-notice.testing";
 import { urlNavigation } from "@/test/url-navigation";
 
-import { ServiceJobListPage } from "./service-job-list-page";
+import {
+  MAINTENANCE_JOB_COLUMNS,
+  MAINTENANCE_JOB_TABLE_MIN_WIDTH,
+  ServiceJobListPage,
+} from "./service-job-list-page";
 
 const api = vi.hoisted(() => ({ list: vi.fn() }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
@@ -103,6 +107,23 @@ describe("ServiceJobListPage", () => {
     expect(
       screen.getByText("A partner ezt látja: Feldolgozás alatt"),
     ).toBeTruthy();
+  });
+
+  // A lista a közös tábla: telefonon minden sor kártya, a cellák a saját oszlopuk feliratát viselik.
+  it("minden cella a saját oszlopa feliratát viseli, és az oszlopok belefér a minimumba", async () => {
+    render(<ServiceJobListPage />);
+    await screen.findAllByTestId("maintenance-job-row");
+    const row = screen.getAllByTestId("maintenance-job-row")[0]!;
+    expect(
+      [...row.querySelectorAll("td")].map((td) =>
+        td.getAttribute("data-label"),
+      ),
+    ).toEqual(["Hibajegy", "Partner", "Állapot", "Munkalap", "Létrehozva"]);
+    const sum = MAINTENANCE_JOB_COLUMNS.reduce(
+      (acc, c) => acc + Number(/^(\d+)px$/.exec(c.width ?? "")?.[1]),
+      0,
+    );
+    expect(sum).toBeLessThanOrEqual(MAINTENANCE_JOB_TABLE_MIN_WIDTH);
   });
 
   /**

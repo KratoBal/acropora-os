@@ -94,10 +94,10 @@ function lineResolution(line: FoxpostSettlementLine) {
  * itself in seven weeks (every run was a manual one), and nothing showed it.
  */
 const SYNC_OFF: Record<Exclude<FoxpostSyncState, "ENABLED">, string> = {
-  DISABLED_NOT_SET: "a kapcsoló (GMAIL_FOXPOST_SYNC_ENABLED) nincs beállítva",
-  DISABLED_OFF: "a kapcsoló (GMAIL_FOXPOST_SYNC_ENABLED) értéke false",
+  DISABLED_NOT_SET: "a Gmail-feldolgozás kapcsolója nincs beállítva",
+  DISABLED_OFF: "a Gmail-feldolgozás kapcsolója értéke false",
   DISABLED_UNRECOGNISED:
-    "a kapcsoló (GMAIL_FOXPOST_SYNC_ENABLED) értéke se nem true, se nem false",
+    "a Gmail-feldolgozás kapcsolója értéke se nem true, se nem false",
   NO_KEY: "be van kapcsolva, de nincs Gmail-kulcs",
 };
 
@@ -516,6 +516,7 @@ export function FoxpostSettlementsPage() {
     {
       id: "date",
       header: "Kelte",
+      nowrap: true,
       width: "16%",
       cell: (item) => formatDate(item.invoiceIssueDate),
     },

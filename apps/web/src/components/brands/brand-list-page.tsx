@@ -8,6 +8,8 @@ import {
   Input,
   PageHeader,
   Pagination,
+  PilotDataTable,
+  type PilotTableColumn,
   Select,
   Skeleton,
 } from "@acropora/ui";
@@ -22,6 +24,63 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { brandsApi } from "@/lib/api/brands";
 import { CatalogActionsPanel } from "./catalog-actions-panel";
+
+type BrandRow = BrandListResponse["items"][number];
+
+// The shared table: on the phone every row is a card with the brand as its title.
+const columns: PilotTableColumn<BrandRow>[] = [
+  {
+    id: "name",
+    header: "Márka",
+    cell: (brand) => (
+      <>
+        <Link
+          className="font-semibold text-brand-700"
+          href={`/admin/brands/${brand.id}`}
+        >
+          {brand.name}
+        </Link>
+        <span className="block text-xs font-normal text-dusk-500">
+          {brand.slug}
+        </span>
+      </>
+    ),
+  },
+  {
+    id: "status",
+    header: "Státusz",
+    cell: (brand) => (
+      <Badge variant={brand.isActive ? "success" : "neutral"}>
+        {brand.isActive ? "Aktív" : "Archivált"}
+      </Badge>
+    ),
+  },
+  {
+    id: "aliases",
+    header: "Aliasok",
+    cell: (brand) =>
+      brand.aliases.map((alias) => alias.alias).join(", ") || "—",
+  },
+  {
+    id: "products",
+    header: "Termékek",
+    cell: (brand) => brand.usage.productCount,
+  },
+  {
+    id: "unas",
+    header: "UNAS",
+    cell: (brand) =>
+      brand.externalMappings.some((mapping) => mapping.system === "UNAS")
+        ? "Kapcsolva"
+        : "—",
+  },
+  {
+    id: "updated",
+    header: "Frissítve",
+    nowrap: true,
+    cell: (brand) => new Date(brand.updatedAt).toLocaleDateString("hu-HU"),
+  },
+];
 
 export function BrandListPage() {
   const { session } = useAuth();
@@ -196,55 +255,13 @@ export function BrandListPage() {
                   onPageChange={goToPage}
                 />
               </div>
-              <table className="w-full min-w-[800px] text-left text-sm">
-                <thead className="border-b bg-dusk-50 text-xs uppercase text-dusk-500">
-                  <tr>
-                    <th className="p-3">Márka</th>
-                    <th>Státusz</th>
-                    <th>Aliasok</th>
-                    <th>Termékek</th>
-                    <th>UNAS</th>
-                    <th>Frissítve</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.items.map((brand) => (
-                    <tr key={brand.id} className="border-b last:border-0">
-                      <td className="p-3">
-                        <Link
-                          className="font-semibold text-brand-700"
-                          href={`/admin/brands/${brand.id}`}
-                        >
-                          {brand.name}
-                        </Link>
-                        <div className="text-xs text-dusk-500">
-                          {brand.slug}
-                        </div>
-                      </td>
-                      <td>
-                        <Badge variant={brand.isActive ? "success" : "neutral"}>
-                          {brand.isActive ? "Aktív" : "Archivált"}
-                        </Badge>
-                      </td>
-                      <td>
-                        {brand.aliases.map((alias) => alias.alias).join(", ") ||
-                          "—"}
-                      </td>
-                      <td>{brand.usage.productCount}</td>
-                      <td>
-                        {brand.externalMappings.some(
-                          (mapping) => mapping.system === "UNAS",
-                        )
-                          ? "Kapcsolva"
-                          : "—"}
-                      </td>
-                      <td>
-                        {new Date(brand.updatedAt).toLocaleDateString("hu-HU")}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <PilotDataTable
+                columns={columns}
+                rows={data.items}
+                rowKey={(brand) => brand.id}
+                rowTestId="brand-row"
+                minWidth={800}
+              />
             </Card>
           ) : (
             <EmptyState

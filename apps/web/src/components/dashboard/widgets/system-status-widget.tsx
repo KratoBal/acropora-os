@@ -46,9 +46,7 @@ export const systemStatusWidget: DashboardWidgetView<DashboardSystemStatusWidget
         {data.sources.map((s) => (
           <WidgetRow
             key={s.source}
-            label={
-              s.detail ? `${NAME[s.source]} — ${s.detail}` : NAME[s.source]
-            }
+            label={s.detail ? `${NAME[s.source]}: ${s.detail}` : NAME[s.source]}
             value={SYSTEM_STATE_LABEL[s.state]}
             tone={TONE[s.state]}
           />

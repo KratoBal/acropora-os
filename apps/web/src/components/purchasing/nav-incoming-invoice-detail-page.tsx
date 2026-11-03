@@ -242,7 +242,7 @@ export function NavIncomingInvoiceDetailPage({
             title="NAV adatkapcsolat"
             description={[
               `Lekérve: ${new Date(detail.insDate).toLocaleString("hu-HU")}`,
-              `invoiceOperation: ${detail.invoiceOperation}`,
+              `művelet: ${OPERATION[detail.invoiceOperation].label}`,
               detail.originalInvoiceNumber
                 ? `eredeti számla: ${detail.originalInvoiceNumber}`
                 : null,

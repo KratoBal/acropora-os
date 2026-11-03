@@ -1,4 +1,5 @@
 "use client";
+import { currencyLabel } from "@/lib/format/currency";
 import {
   Alert,
   ConfirmDialog,
@@ -7,6 +8,7 @@ import {
   PilotPageHeader,
   Skeleton,
   type PilotTableColumn,
+  PilotFileInput,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -311,6 +313,7 @@ export function PriceListsPage() {
     {
       id: "date",
       header: "A lista dátuma",
+      nowrap: true,
       width: "130px",
       cell: (list) => formatListDate(list.listDate),
     },
@@ -318,7 +321,7 @@ export function PriceListsPage() {
       id: "currency",
       header: "Pénznem",
       width: "90px",
-      cell: (list) => list.currency,
+      cell: (list) => currencyLabel(list.currency),
     },
     {
       id: "rows",
@@ -461,10 +464,9 @@ export function PriceListsPage() {
               <label htmlFor="pl-file" className={FIELD_LABEL}>
                 Fájl
               </label>
-              <input
+              <PilotFileInput
                 key={fileKey}
                 id="pl-file"
-                type="file"
                 accept=".csv,.txt,text/csv,text/plain"
                 className="text-sm"
                 onChange={(event) => setFile(event.target.files?.[0] ?? null)}

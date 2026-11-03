@@ -1,5 +1,6 @@
 "use client";
 
+import { connectionErrorText } from "@/lib/integrations/connection-error-text";
 import {
   Alert,
   Badge,
@@ -270,8 +271,11 @@ export function UnasConnectionSettingsPage() {
               </div>
             </dl>
             {view.verification.code ? (
-              <p className="font-mono text-xs text-rose-700">
-                {view.verification.code}
+              <p
+                className="text-xs text-rose-700"
+                title={view.verification.code}
+              >
+                {connectionErrorText(view.verification.code, "UNAS")}
               </p>
             ) : null}
             <div className="flex flex-wrap gap-2 border-t border-dusk-100 pt-4">

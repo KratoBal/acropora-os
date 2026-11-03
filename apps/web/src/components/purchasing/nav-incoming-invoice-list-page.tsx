@@ -1,4 +1,5 @@
 "use client";
+import { currencyLabel } from "@/lib/format/currency";
 import {
   Alert,
   Button,
@@ -36,7 +37,7 @@ import {
 
 function formatAmount(value: string | undefined, currency: string): string {
   if (!value) return "—";
-  return `${Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 })} ${currency}`;
+  return `${Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 })} ${currencyLabel(currency)}`;
 }
 
 /** A bruttó a nettó és az ÁFA összege; ÁFA nélkül nincs bruttó. */
@@ -205,6 +206,7 @@ export function NavIncomingInvoiceListPage() {
     {
       id: "issued",
       header: "Kelte",
+      nowrap: true,
       width: "12%",
       cell: (item) => (
         <span className="text-pilot-grey-600">
@@ -215,6 +217,7 @@ export function NavIncomingInvoiceListPage() {
     {
       id: "delivered",
       header: "Teljesítés",
+      nowrap: true,
       width: "12%",
       cell: (item) => (
         <span className="text-pilot-grey-600">

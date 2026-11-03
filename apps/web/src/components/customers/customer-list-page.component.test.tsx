@@ -96,6 +96,29 @@ describe("CustomerListPage paging", () => {
     expect(await screen.findByText("Webshop vásárlók")).toBeTruthy();
   });
 
+  // The list is the shared table, so on the phone every row is a card whose cells carry
+  // their column's name: address and source do not vanish from the 390 px view.
+  // The UNAS delivers addresses with HTML entities ("Dunaharaszti&nbsp;"): they must not reach
+  // the screen raw.
+  it("shows an address without its HTML entities", async () => {
+    const data = response(2);
+    data.items[0]!.address = "2330 Dunaharaszti&nbsp;Fő út 1.";
+    api.list.mockResolvedValue(data);
+    render(<CustomerListPage />);
+    expect(await screen.findByText("2330 Dunaharaszti Fő út 1.")).toBeTruthy();
+    expect(screen.queryByText(/&nbsp;/)).toBeNull();
+  });
+
+  it("labels every cell with its column for the phone card view", async () => {
+    render(<CustomerListPage />);
+    await screen.findByText("Fővárosi Állat- És Növénykert");
+    const row = screen.getAllByTestId("customer-row")[0]!;
+    const labels = [...row.querySelectorAll("td")].map((td) =>
+      td.getAttribute("data-label"),
+    );
+    expect(labels).toEqual(["Név", "Partnerkód", "Cím", "Forrás"]);
+  });
+
   it("moves to the next page instead of returning to the first", async () => {
     render(<CustomerListPage />);
     await screen.findByText("Fővárosi Állat- És Növénykert");

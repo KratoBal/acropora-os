@@ -1602,8 +1602,12 @@ describe("BillingDocumentEditor", () => {
       date.setUTCDate(date.getUTCDate() + days);
       return date.toISOString().slice(0, 10);
     };
+    // A date field shows the Hungarian form; the tests below compare ISO days.
     const value = (label: string) =>
-      (screen.getByLabelText(label) as HTMLInputElement).value;
+      (screen.getByLabelText(label) as HTMLInputElement).value.replace(
+        /^(\d{4})\. (\d{2})\. (\d{2})\.$/,
+        "$1-$2-$3",
+      );
 
     it("picking a 30-day customer moves the due date to 30 days after fulfillment", async () => {
       customers.detail.mockResolvedValue({

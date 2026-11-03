@@ -1,7 +1,11 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { StockSyncOutboxPage } from "./stock-sync-outbox-page";
+import {
+  StockSyncOutboxPage,
+  OUTBOX_TABLE_MIN_WIDTH,
+  outboxColumns,
+} from "./stock-sync-outbox-page";
 
 const api = vi.hoisted(() => ({
   summary: vi.fn(),
@@ -384,5 +388,57 @@ describe("készlet-kimenősor oldal", () => {
     );
     await waitFor(() => expect(api.summary).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(api.list).toHaveBeenCalledTimes(2));
+  });
+});
+
+/*
+  A KIMENŐSOR OSZLOPAI A KÖZÖS TÁBLÁN (UI-áttekintés, 3. csomag, 2026-11-03). MI PIROSÍT: ha egy
+  fejléc elvész (a telefonos kártya felirata abból jön); ha a "Művelet" oszlop a nem kezelőnek is
+  megjelenik (vagy a kezelőnek eltűnik); ha a fix szélességek nagyobbak a tábla minimumánál; ha a
+  Hiba oszlop fix szélességet kap (az az egyetlen rugalmas: a hibaszöveg teljes egészében látszik).
+*/
+describe("outboxColumns", () => {
+  const columns = (canManage: boolean) =>
+    outboxColumns({
+      canManage,
+      pendingAction: null,
+      retryRow: () => undefined,
+    });
+  const fixedSum = (canManage: boolean) =>
+    columns(canManage)
+      .filter((c) => c.width !== undefined)
+      .reduce((acc, c) => acc + Number(/^(\d+)px$/.exec(c.width!)?.[1]), 0);
+
+  it("a kezelőnek hét, másnak hat oszlopa van, a fejlécek a régiek", () => {
+    expect(columns(true).map((c) => c.header)).toEqual([
+      "Cikkszám",
+      "Állapot",
+      "Cél készlet",
+      "Próbálkozás",
+      "Következő",
+      "Hiba",
+      "Művelet",
+    ]);
+    expect(columns(false).map((c) => c.header)).toEqual([
+      "Cikkszám",
+      "Állapot",
+      "Cél készlet",
+      "Próbálkozás",
+      "Következő",
+      "Hiba",
+    ]);
+  });
+
+  it("a rögzített oszlopok mellett a Hibának legalább 200 px marad, és a Hiba az egyetlen rugalmas", () => {
+    expect(fixedSum(true) + 200).toBeLessThanOrEqual(OUTBOX_TABLE_MIN_WIDTH);
+    expect(
+      columns(true).find((c) => c.header === "Hiba")!.width,
+    ).toBeUndefined();
+  });
+
+  it("a Következő időpont nem törik sorba", () => {
+    expect(columns(false).find((c) => c.header === "Következő")!.nowrap).toBe(
+      true,
+    );
   });
 });

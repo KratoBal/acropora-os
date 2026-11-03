@@ -1,4 +1,5 @@
 "use client";
+import { formatDateTimeHu } from "@/lib/format/date";
 import Link from "next/link";
 import {
   Alert,
@@ -87,15 +88,8 @@ export function formatMoney(total: number, currency: string): string {
   return currency === "HUF" ? `${amount} Ft` : `${amount} ${currency}`;
 }
 
-const ORDER_DATE = new Intl.DateTimeFormat("hu-HU", {
-  timeZone: "Europe/Budapest",
-  month: "short",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-});
-export const formatOrderDate = (iso: string) =>
-  ORDER_DATE.format(new Date(iso));
+/** A rendelés ideje a közös lista-alakban: `2026. 11. 03. 14:20` (lib/format/date). */
+export const formatOrderDate = (iso: string) => formatDateTimeHu(iso);
 
 export function paymentText(item: WebshopOrderListItem): string {
   const state = item.payment.state

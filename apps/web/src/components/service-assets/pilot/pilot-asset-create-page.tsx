@@ -1045,7 +1045,7 @@ export function PilotAssetCreatePage() {
                 {nameDuplicates.map((item) => (
                   <li key={item.id}>
                     {item.owner.displayName}
-                    {item.unit ? ` — ${item.unit.path.join(" / ")}` : ""}
+                    {item.unit ? ` (${item.unit.path.join(" / ")})` : ""}
                   </li>
                 ))}
               </ul>

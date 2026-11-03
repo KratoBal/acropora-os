@@ -1,6 +1,13 @@
 "use client";
 
-import { Alert, Button, EmptyState, Pagination, Skeleton } from "@acropora/ui";
+import {
+  Alert,
+  Button,
+  EmptyState,
+  Pagination,
+  Skeleton,
+  PilotSelect,
+} from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
@@ -462,10 +469,10 @@ export function AssetListPage() {
         <div className="flex flex-wrap items-center gap-2.5">
           <label>
             <span className="sr-only">Eszköztípus</span>
-            <select
-              className={sv.select}
+            <PilotSelect
               value={params.get("kind") ?? ""}
-              onChange={(event) => filter("kind", event.target.value)}
+              onChange={(nextValue) => filter("kind", nextValue)}
+              chevron
             >
               <option value="">Minden típus</option>
               {Object.entries(assetKindLabel).map(([value, label]) => (
@@ -473,14 +480,14 @@ export function AssetListPage() {
                   {label}
                 </option>
               ))}
-            </select>
+            </PilotSelect>
           </label>
           <label>
             <span className="sr-only">Kategória</span>
-            <select
-              className={sv.select}
+            <PilotSelect
               value={categoryFilterValue}
-              onChange={(event) => setCategoryFilter(event.target.value)}
+              onChange={(nextValue) => setCategoryFilter(nextValue)}
+              chevron
             >
               <option value="">Minden kategória</option>
               {categories.map((category) => (
@@ -493,7 +500,7 @@ export function AssetListPage() {
               {/* A SOR ALUL ALL, ES A TOBBITOL ELKULONULVE OLVASODIK: nem egy
                   kategoria, hanem a HIANYUK. Feliratban is ezt mondja. */}
               <option value={NINCS_KATEGORIA}>Nincs kategória</option>
-            </select>
+            </PilotSelect>
           </label>
           {/* HANY ESZKOZ EGY OLDALON.
 
@@ -507,17 +514,17 @@ export function AssetListPage() {
               frissiteskor megmarad. Ez nem uj minta, a mai kod is igy tarolja. */}
           <label>
             <span className="sr-only">Hány eszköz egy oldalon</span>
-            <select
-              className={sv.select}
+            <PilotSelect
               value={params.get("pageSize") ?? DEFAULT_PAGE_SIZE}
-              onChange={(event) => filter("pageSize", event.target.value)}
+              onChange={(nextValue) => filter("pageSize", nextValue)}
+              chevron
             >
               {PAGE_SIZES.map((size) => (
                 <option key={size} value={String(size)}>
                   {size} / oldal
                 </option>
               ))}
-            </select>
+            </PilotSelect>
           </label>
           {data ? (
             <Pagination

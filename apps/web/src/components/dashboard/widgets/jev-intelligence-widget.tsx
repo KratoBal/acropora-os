@@ -59,7 +59,7 @@ export const jevIntelligenceWidget: DashboardWidgetView<DashboardJevIntelligence
           {shadow.length ? (
             <div className="mt-1 flex flex-col gap-[5px] border-t border-pilot-grey-200 pt-2">
               <p className="text-xs font-medium leading-4 text-pilot-grey-600">
-                Árnyékmérés — nem javaslat
+                Árnyékmérés (nem javaslat)
               </p>
               <WidgetRows>
                 {shadow.map((p) => (

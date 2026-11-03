@@ -592,7 +592,7 @@ describe("ProductDetailPage mirror ownership", () => {
 
     expect(
       screen.getByText(
-        "Ehhez a változathoz még nincs mentett saját beállítás — az alábbi mezők üresek.",
+        "Ehhez a változathoz még nincs mentett saját beállítás, az alábbi mezők üresek.",
       ),
     ).toBeInTheDocument();
     expect(screen.getByText("Beszerzési deviza")).toBeInTheDocument();
@@ -662,7 +662,7 @@ describe("ProductDetailPage mirror ownership", () => {
     fireEvent.change(screen.getByLabelText("Utolsó beszerzési ÁFA"), {
       target: { value: "27" },
     });
-    expect(await screen.findByText("1270.00 HUF")).toBeInTheDocument();
+    expect(await screen.findByText("1270.00 Ft")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Mentés" }));
 

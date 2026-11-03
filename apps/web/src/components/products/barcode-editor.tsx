@@ -174,7 +174,7 @@ export function BarcodeEditor({
             ? "Ez az ELSŐDLEGES vonalkód: a törlés után a beolvasása nem találja meg ezt a változatot, és a nyomtatott címkéken lévő kód sem fog működni."
             : "A törlés után a beolvasása nem találja meg ezt a változatot."
         }
-        recovery="Nem vonható vissza. Újra felvinni csak akkor lehet, ha a kód megvan valahol -- a terméken vagy egy korábbi címkén."
+        recovery="Nem vonható vissza. Újra felvinni csak akkor lehet, ha a kód megvan valahol, például a terméken vagy egy korábbi címkén."
         confirmLabel="Végleges törlés"
         busy={busy}
         onConfirm={() => void removePending()}

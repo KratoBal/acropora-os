@@ -1,5 +1,6 @@
 "use client";
 
+import { plainText } from "@/lib/format/plain-text";
 import {
   Alert,
   Pagination,
@@ -10,6 +11,7 @@ import {
   PilotPageHeader,
   PilotSelect,
   Skeleton,
+  PilotFileInput,
 } from "@acropora/ui";
 import { hasPermission, PERMISSIONS } from "@acropora/types";
 import {
@@ -514,8 +516,7 @@ function ManualPdfUpload({
     >
       <label className="text-[13px] font-semibold text-pilot-grey-700">
         Kézi PDF a kiolvasáshoz
-        <input
-          type="file"
+        <PilotFileInput
           accept="application/pdf"
           className="ml-2 text-[13px]"
           disabled={state.kind === "busy" || state.kind === "ok"}
@@ -686,10 +687,10 @@ function SourceItem(props: {
                 rel="noreferrer noopener"
                 className="hover:underline"
               >
-                {row.title}
+                {plainText(row.title)}
               </a>
             ) : (
-              row.title
+              plainText(row.title)
             )}
           </p>
           <p className="text-[13px] text-pilot-grey-600">{sourceMeta(row)}</p>

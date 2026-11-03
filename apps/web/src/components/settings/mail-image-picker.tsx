@@ -5,7 +5,7 @@ import {
   RICH_TEXT_IMAGE_SCHEME,
   richImageId,
 } from "@acropora/rich-text";
-import { Button } from "@acropora/ui";
+import { Button, PilotFileInput } from "@acropora/ui";
 import type { RichTextImage } from "@acropora/ui/rich-text-editor";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -193,9 +193,8 @@ export function MailImagePicker(props: {
         <div className="flex flex-wrap items-center gap-3">
           <label className="text-sm font-medium text-dusk-700">
             Új kép feltöltése
-            <input
+            <PilotFileInput
               aria-label="Kép feltöltése"
-              type="file"
               accept="image/png,image/jpeg,image/gif,image/webp"
               disabled={feltoltes}
               onChange={(event) => void feltolt(event.target.files?.[0])}

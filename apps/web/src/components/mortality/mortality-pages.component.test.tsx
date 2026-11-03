@@ -433,6 +433,10 @@ describe("űrlap", () => {
     ).toMatchObject({ input: { locationId: "r2" } });
   });
 
+  // The date field shows the Hungarian form of an ISO day.
+  const hu = (iso: string) =>
+    iso.replace(/^(\d{4})-(\d{2})-(\d{2})$/, "$1. $2. $3.");
+
   it("új bejegyzésnél a nap a mai, a rack választható, és mindkettő elmegy", async () => {
     api.productOptions.mockResolvedValue([
       { id: "p1", name: "Zebrasoma flavescens", commonName: null },
@@ -443,8 +447,14 @@ describe("űrlap", () => {
       "Elhullás napja",
     )) as HTMLInputElement;
     const today = budapestDay(new Date());
-    expect(day.value).toBe(today);
-    expect(day.max).toBe(today);
+    expect(day.value).toBe(hu(today));
+    // The field refuses a day after today: the value goes out empty and the field is flagged.
+    const tomorrow = new Date(`${today}T00:00:00.000Z`);
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    fireEvent.change(day, {
+      target: { value: tomorrow.toISOString().slice(0, 10) },
+    });
+    expect(day.getAttribute("aria-invalid")).toBe("true");
     fireEvent.change(day, { target: { value: "2026-10-01" } });
     await screen.findByRole("option", { name: "JOBB 1. oszlop" });
     fireEvent.change(screen.getByRole("combobox", { name: "Halas rack" }), {
@@ -479,7 +489,7 @@ describe("űrlap", () => {
     const day = (await screen.findByLabelText(
       "Elhullás napja",
     )) as HTMLInputElement;
-    expect(day.value).toBe("2026-10-05");
+    expect(day.value).toBe("2026. 10. 05.");
     const rack = screen.getByRole("combobox", {
       name: "Halas rack",
     }) as HTMLSelectElement;

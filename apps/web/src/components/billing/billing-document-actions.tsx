@@ -39,11 +39,13 @@ export function BillingDocumentActions({
     <div
       role="group"
       aria-label="Bizonylat műveletei"
-      className="flex max-w-full flex-wrap justify-end gap-2"
+      // the buttons are items of the shared header's row (BillingDetailHeader): the group keeps its role and
+      // name for assistive technology, but adds no box of its own
+      className="contents"
     >
       <PilotButton
         variant="secondary"
-        size="action"
+        size="regular"
         onClick={onPrint}
         disabled={!pdfAvailable || busy}
         title={pdfAvailable ? undefined : pdfReason}
@@ -52,7 +54,7 @@ export function BillingDocumentActions({
       </PilotButton>
       <PilotButton
         variant="secondary"
-        size="action"
+        size="regular"
         onClick={onDownload}
         disabled={!pdfAvailable || busy}
         title={pdfAvailable ? undefined : pdfReason}
@@ -62,7 +64,7 @@ export function BillingDocumentActions({
       {resend ? (
         <PilotButton
           variant="secondary"
-          size="action"
+          size="regular"
           onClick={resend.onClick}
           disabled={!resend.enabled || busy}
           title={resend.enabled ? undefined : resend.reason}

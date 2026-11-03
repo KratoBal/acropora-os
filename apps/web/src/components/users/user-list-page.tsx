@@ -8,6 +8,8 @@ import {
   Input,
   PageHeader,
   Pagination,
+  PilotDataTable,
+  type PilotTableColumn,
   Select,
   Skeleton,
 } from "@acropora/ui";
@@ -23,6 +25,44 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { usersApi } from "@/lib/api/users";
 import { ROLE_LABELS, ROLE_OPTIONS } from "./role-labels";
 import { personDisplayName } from "@acropora/types";
+
+type UserRow = UserListResponse["items"][number];
+
+// The shared table: on the phone every row is a card with the name as its title.
+const columns: PilotTableColumn<UserRow>[] = [
+  {
+    id: "name",
+    header: "Név",
+    cell: (item) => (
+      <Link
+        className="font-semibold text-brand-700"
+        href={`/admin/users/${item.id}`}
+      >
+        {personDisplayName(item)}
+      </Link>
+    ),
+  },
+  { id: "email", header: "E-mail", cell: (item) => item.email },
+  {
+    id: "role",
+    header: "Szerepkör",
+    cell: (item) => <Badge>{ROLE_LABELS[item.role]}</Badge>,
+  },
+  {
+    id: "status",
+    header: "Státusz",
+    cell: (item) => (
+      <Badge variant={item.isActive ? "success" : "neutral"}>
+        {item.isActive ? "Aktív" : "Inaktív"}
+      </Badge>
+    ),
+  },
+  {
+    id: "password",
+    header: "Jelszó",
+    cell: (item) => (item.hasPassword ? "Beállítva" : "—"),
+  },
+];
 
 export function UserListPage() {
   const { session } = useAuth();
@@ -176,41 +216,13 @@ export function UserListPage() {
                   onPageChange={goToPage}
                 />
               </div>
-              <table className="w-full min-w-[700px] text-left text-sm">
-                <thead className="border-b bg-dusk-50 text-xs uppercase text-dusk-500">
-                  <tr>
-                    <th className="p-3">Név</th>
-                    <th>E-mail</th>
-                    <th>Szerepkör</th>
-                    <th>Státusz</th>
-                    <th>Jelszó</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.items.map((item) => (
-                    <tr key={item.id} className="border-b last:border-0">
-                      <td className="p-3">
-                        <Link
-                          className="font-semibold text-brand-700"
-                          href={`/admin/users/${item.id}`}
-                        >
-                          {personDisplayName(item)}
-                        </Link>
-                      </td>
-                      <td>{item.email}</td>
-                      <td>
-                        <Badge>{ROLE_LABELS[item.role]}</Badge>
-                      </td>
-                      <td>
-                        <Badge variant={item.isActive ? "success" : "neutral"}>
-                          {item.isActive ? "Aktív" : "Inaktív"}
-                        </Badge>
-                      </td>
-                      <td>{item.hasPassword ? "Beállítva" : "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <PilotDataTable
+                columns={columns}
+                rows={data.items}
+                rowKey={(item) => item.id}
+                rowTestId="user-row"
+                minWidth={700}
+              />
             </Card>
           ) : (
             <EmptyState

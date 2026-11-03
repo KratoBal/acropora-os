@@ -165,7 +165,7 @@ describe("SimplePaySettlementsPage", () => {
     expect(row).toHaveTextContent(/163\s803 Ft/);
     expect(row).toHaveTextContent("1 / 2");
     expect(
-      screen.getByText(/GMAIL_SIMPLEPAY_SYNC_ENABLED\) nincs beállítva/),
+      screen.getByText(/Gmail-feldolgozás kapcsolója nincs beállítva/),
     ).toBeInTheDocument();
   });
 

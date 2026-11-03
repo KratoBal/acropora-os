@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, ConfirmDialog } from "@acropora/ui";
+import { Button, ConfirmDialog, PilotSelect } from "@acropora/ui";
 import type {
   ServiceJobAssetLink,
   ServiceJobDetail,
@@ -291,11 +291,12 @@ export function ServiceJobPlacementEditor({
                 >
                   Helyszín
                 </label>
-                <select
+                <PilotSelect
                   id="jegy-helyszin-modositas"
-                  className="w-full rounded border px-2 py-1 text-sm"
+                  className="w-full"
                   value={unit}
-                  onChange={(event) => setUnit(event.target.value)}
+                  onChange={(nextValue) => setUnit(nextValue)}
+                  chevron
                 >
                   {/*
                     AZ URES OPCIO CSAK AKKOR ALL ITT, HA A JEGYNEK MA SINCS
@@ -311,7 +312,7 @@ export function ServiceJobPlacementEditor({
                       {option.label}
                     </option>
                   ))}
-                </select>
+                </PilotSelect>
               </div>
               <div className="space-y-1">
                 <span className="text-sm font-semibold">Érintett eszközök</span>

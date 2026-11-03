@@ -1,6 +1,15 @@
 "use client";
 
-import { Alert, EmptyState, Icon, Pagination, Skeleton } from "@acropora/ui";
+import {
+  Alert,
+  EmptyState,
+  Icon,
+  Pagination,
+  Skeleton,
+  PilotDataTable,
+  PilotSelect,
+  type PilotTableColumn,
+} from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
@@ -168,6 +177,135 @@ function worksheetRowDetail(worksheet: {
     .join(" · ");
 }
 
+type WorksheetRow = WorksheetListResponse["items"][number];
+
+/*
+  A MUNKALAPLISTA OSZLOPAI A KÖZÖS TÁBLÁN (UI-áttekintés, 3. csomag, 2026-11-03). Telefonon a tábla
+  kártyalistává alakul: a munkalap tárgya a kártya címe, a többi oszlop a felirata mellett; a sor
+  végi nyíl csak asztali jelzés. A fő sor a munkalap TÁRGYA, alatta a szám (Balázs, 2026-10-26
+  12:48 UTC, OS szál, msg 1564259312728150148): mindenhol egyformán.
+*/
+export const WORKSHEET_TABLE_MIN_WIDTH = 1080;
+
+export const WORKSHEET_COLUMNS: PilotTableColumn<WorksheetRow>[] = [
+  {
+    id: "worksheet",
+    header: "Munkalap",
+    width: "280px",
+    cell: (worksheet) => (
+      <>
+        <p className="break-words text-sm font-semibold text-pilot-grey-900">
+          {worksheetListLines(worksheet).main}
+        </p>
+        {worksheetRowDetail(worksheet) ? (
+          <p
+            className={`mt-1 text-xs ${
+              worksheet.number && worksheetListLines(worksheet).detail
+                ? "font-mono text-pilot-grey-600"
+                : "text-pilot-grey-500"
+            }`}
+          >
+            {worksheetRowDetail(worksheet)}
+          </p>
+        ) : null}
+        {worksheet.hidden ? (
+          <span className="mt-1 inline-block">
+            <PilotBadge variant="amber">Rejtett</PilotBadge>
+          </span>
+        ) : null}
+      </>
+    ),
+  },
+  {
+    id: "customer",
+    header: "Partner / helyszín",
+    width: "240px",
+    cell: (worksheet) => (
+      <>
+        <p className="break-words text-pilot-grey-900">
+          {worksheet.customerName}
+        </p>
+        <p className="mt-1 break-words text-xs text-pilot-grey-500">
+          {worksheet.departmentPath?.length
+            ? worksheet.departmentPath.join(" / ")
+            : worksheet.departmentCode}
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "assignees",
+    header: "Felelős",
+    width: "150px",
+    cell: (worksheet) =>
+      worksheet.assigneeNames.length > 0 ? (
+        <span className="text-pilot-grey-900">
+          {worksheet.assigneeNames.join(", ")}
+        </span>
+      ) : (
+        <span className="text-xs text-pilot-grey-400">Nincs kiosztva</span>
+      ),
+  },
+  {
+    id: "status",
+    header: "Állapot",
+    width: "140px",
+    cell: (worksheet) => (
+      <PilotBadge
+        variant={worksheetDisplayPilotVariant(
+          worksheet.status,
+          worksheet.lineCount ?? 0,
+        )}
+      >
+        {worksheetDisplayLabel(worksheet.status, worksheet.lineCount ?? 0)}
+      </PilotBadge>
+    ),
+  },
+  {
+    id: "hours",
+    header: "Munkaóra",
+    width: "110px",
+    nowrap: true,
+    cell: (worksheet) => (
+      <span className="text-pilot-grey-900">
+        {worksheetHoursCell(worksheet)}
+      </span>
+    ),
+  },
+  {
+    id: "serviceJob",
+    header: "Hibajegy",
+    width: "120px",
+    nowrap: true,
+    cell: (worksheet) =>
+      worksheet.serviceJob ? (
+        <Link
+          href={`/szerviz/hibajegyek/${worksheet.serviceJob.id}`}
+          onClick={(event) => event.stopPropagation()}
+          className="font-mono text-xs text-pilot-aqua-700 hover:text-pilot-aqua-800"
+        >
+          {worksheet.serviceJob.jobNumber}
+        </Link>
+      ) : (
+        <span className="text-pilot-grey-400">—</span>
+      ),
+  },
+  {
+    id: "open",
+    header: "",
+    width: "40px",
+    phone: "hide",
+    cell: () => (
+      <Icon
+        name="chevron-left"
+        size={16}
+        className="rotate-180 text-pilot-grey-500"
+        aria-hidden="true"
+      />
+    ),
+  },
+];
+
 export function PilotWorksheetListPage() {
   const { session } = useAuth();
   const router = useRouter();
@@ -289,10 +427,7 @@ export function PilotWorksheetListPage() {
   const hasFilters = Boolean(search || params.get("customerId"));
 
   return (
-    <PilotThemeRoot
-      bleed
-      className="flex min-h-screen flex-col gap-6 bg-pilot-grey-50 px-8 py-8"
-    >
+    <PilotThemeRoot className="-m-6 flex min-h-screen flex-col gap-6 bg-pilot-grey-50 px-8 py-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-pilot-aqua-700">
@@ -399,10 +534,11 @@ export function PilotWorksheetListPage() {
         {partners.length ? (
           <label>
             <span className="sr-only">Partner szűrő</span>
-            <select
+            <PilotSelect
               value={params.get("customerId") ?? ""}
-              onChange={(event) => filter("customerId", event.target.value)}
-              className="max-w-[240px] cursor-pointer rounded-md bg-white px-3 py-2.5 text-sm text-pilot-grey-700 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+              onChange={(nextValue) => filter("customerId", nextValue)}
+              className="max-w-[240px]"
+              chevron
             >
               <option value="">Minden partner</option>
               {partners.map((partner) => (
@@ -410,7 +546,7 @@ export function PilotWorksheetListPage() {
                   {partner.name}
                 </option>
               ))}
-            </select>
+            </PilotSelect>
           </label>
         ) : null}
         <PilotButton
@@ -451,130 +587,20 @@ export function PilotWorksheetListPage() {
         </div>
       ) : data?.items.length ? (
         <PilotCard className="overflow-hidden">
-          <div className="relative overflow-x-auto">
-            <table className="w-full min-w-[980px] border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-pilot-grey-100">
-                  {[
-                    "Munkalap",
-                    "Partner / helyszín",
-                    "Felelős",
-                    "Állapot",
-                    "Munkaóra",
-                    "Hibajegy",
-                  ].map((col) => (
-                    <th
-                      key={col}
-                      className="whitespace-nowrap px-4 py-4 text-left text-xs font-medium uppercase tracking-wide text-pilot-grey-500"
-                    >
-                      {col}
-                    </th>
-                  ))}
-                  <th className="w-10" aria-hidden="true" />
-                </tr>
-              </thead>
-              <tbody>
-                {data.items.map((worksheet) => (
-                  <tr
-                    key={worksheet.id}
-                    onClick={() =>
-                      router.push(`/szerviz/munkalapok/${worksheet.id}`)
-                    }
-                    className={`group cursor-pointer border-b border-pilot-grey-100 align-top transition-colors last:border-0 hover:bg-pilot-aqua-50/40 ${
-                      worksheet.hidden ? "opacity-50" : ""
-                    }`}
-                  >
-                    <td className="max-w-[280px] px-4 py-5">
-                      {/*
-                        A FŐ SOR A MUNKALAP TÁRGYA, ALATTA A SZÁM (Balázs,
-                        2026-10-26 12:48 UTC, OS szál, msg 1564259312728150148):
-                        mindenhol egyformán, a hibajegy munkalap-listájában,
-                        a mobilon és a partnerportálon is.
-                      */}
-                      <p className="break-words text-sm font-semibold text-pilot-grey-900 transition-colors group-hover:text-pilot-aqua-700">
-                        {worksheetListLines(worksheet).main}
-                      </p>
-                      {worksheetRowDetail(worksheet) ? (
-                        <p
-                          className={`mt-1 text-xs ${
-                            worksheet.number &&
-                            worksheetListLines(worksheet).detail
-                              ? "font-mono text-pilot-grey-600"
-                              : "text-pilot-grey-500"
-                          }`}
-                        >
-                          {worksheetRowDetail(worksheet)}
-                        </p>
-                      ) : null}
-                      {worksheet.hidden ? (
-                        <span className="mt-1 inline-block">
-                          <PilotBadge variant="amber">Rejtett</PilotBadge>
-                        </span>
-                      ) : null}
-                    </td>
-                    <td className="max-w-[280px] px-4 py-5">
-                      <p className="break-words text-pilot-grey-900">
-                        {worksheet.customerName}
-                      </p>
-                      <p className="mt-1 break-words text-xs text-pilot-grey-500">
-                        {worksheet.departmentPath?.length
-                          ? worksheet.departmentPath.join(" / ")
-                          : worksheet.departmentCode}
-                      </p>
-                    </td>
-                    <td className="px-4 py-5">
-                      {worksheet.assigneeNames.length > 0 ? (
-                        <span className="text-pilot-grey-900">
-                          {worksheet.assigneeNames.join(", ")}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-pilot-grey-400">
-                          Nincs kiosztva
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-5">
-                      <PilotBadge
-                        variant={worksheetDisplayPilotVariant(
-                          worksheet.status,
-                          worksheet.lineCount ?? 0,
-                        )}
-                      >
-                        {worksheetDisplayLabel(
-                          worksheet.status,
-                          worksheet.lineCount ?? 0,
-                        )}
-                      </PilotBadge>
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-5 text-pilot-grey-900">
-                      {worksheetHoursCell(worksheet)}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-5">
-                      {worksheet.serviceJob ? (
-                        <Link
-                          href={`/szerviz/hibajegyek/${worksheet.serviceJob.id}`}
-                          onClick={(event) => event.stopPropagation()}
-                          className="font-mono text-xs text-pilot-aqua-700 hover:text-pilot-aqua-800"
-                        >
-                          {worksheet.serviceJob.jobNumber}
-                        </Link>
-                      ) : (
-                        <span className="text-pilot-grey-400">—</span>
-                      )}
-                    </td>
-                    <td className="px-2 py-5 text-pilot-grey-500">
-                      <Icon
-                        name="chevron-left"
-                        size={16}
-                        className="rotate-180"
-                        aria-hidden="true"
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <PilotDataTable
+            columns={WORKSHEET_COLUMNS}
+            rows={data.items}
+            rowKey={(worksheet) => worksheet.id}
+            rowTestId="worksheet-row"
+            minWidth={WORKSHEET_TABLE_MIN_WIDTH}
+            onRowActivate={(worksheet) =>
+              router.push(`/szerviz/munkalapok/${worksheet.id}`)
+            }
+            rowLabel={(worksheet) =>
+              `${worksheetListLines(worksheet).main} megnyitása`
+            }
+            rowClassName={(worksheet) => (worksheet.hidden ? "opacity-50" : "")}
+          />
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-pilot-grey-100 px-4 py-3 text-xs text-pilot-grey-500">
             <span>
               {data.items.length} / {data.pagination.totalItems} munkalap

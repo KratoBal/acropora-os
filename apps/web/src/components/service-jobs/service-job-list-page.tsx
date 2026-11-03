@@ -1,6 +1,11 @@
 "use client";
 
-import { Alert, Button } from "@acropora/ui";
+import {
+  Alert,
+  Button,
+  PilotDataTable,
+  type PilotTableColumn,
+} from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
@@ -41,6 +46,91 @@ import {
   tabDefinition,
   totalForTab,
 } from "./service-job-list-view";
+
+type JobRow = ServiceJobListResponse["items"][number];
+
+export const MAINTENANCE_JOB_TABLE_MIN_WIDTH = 1040;
+
+/*
+  A KARBANTARTÁS-LISTA OSZLOPAI A KÖZÖS TÁBLÁN (UI-áttekintés, 3. csomag, 2026-11-03). Telefonon a tábla
+  kártyalistává alakul: a hibajegy címe (a link) a kártya címe, a többi oszlop a felirata mellett.
+
+  A HELYSZÍN TELJES ÚTJA A PARTNER ALATT (Balázs 2026-09-16, a munkalap-listával együtt kérte): enélkül
+  ugyanannál a partnernél két jegy megkülönböztethetetlen volt azon a képernyőn, ahol választani kell
+  közülük. NINCS SOR, HA NINCS ÚT: egy "Nincs helyszín" felirat többet állítana, mint amit tudunk,
+  mert a jegynek lehet helyszíne úgy is, hogy az utat nem tudjuk felépíteni.
+  A PARTNER MÁST LÁT, és ez itt is látszik: a belső állapot a jelvényen, a partneré alatta. Enélkül
+  a kezelő nem tudja, mit olvas a másik fél.
+*/
+export const MAINTENANCE_JOB_COLUMNS: PilotTableColumn<JobRow>[] = [
+  {
+    id: "job",
+    header: "Hibajegy",
+    width: "280px",
+    cell: (job) => (
+      <>
+        <Link href={`/szerviz/hibajegyek/${job.id}`} className={sv.rowTitle}>
+          {job.title}
+        </Link>
+        <div className={sv.rowMeta}>{job.jobNumber}</div>
+        {job.hidden ? (
+          <span className="mt-1 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
+            Rejtett
+          </span>
+        ) : null}
+      </>
+    ),
+  },
+  {
+    id: "customer",
+    header: "Partner",
+    width: "240px",
+    cell: (job) => (
+      <>
+        <div>{job.customerName ?? "Nincs megadva"}</div>
+        {job.departmentPath?.length ? (
+          <div className={sv.rowMeta}>{job.departmentPath.join(" / ")}</div>
+        ) : null}
+      </>
+    ),
+  },
+  {
+    id: "status",
+    header: "Állapot",
+    width: "220px",
+    cell: (job) => (
+      <>
+        <ServiceStatusBadge tone={serviceJobStatusTone(job.status)}>
+          {serviceJobStatusLabel[job.status]}
+        </ServiceStatusBadge>
+        <div className={`mt-1 ${sv.rowMeta}`}>
+          A partner ezt látja: {job.partnerStatusLabel}
+        </div>
+      </>
+    ),
+  },
+  {
+    id: "worksheets",
+    header: "Munkalap",
+    width: "130px",
+    nowrap: true,
+    cell: (job) => (
+      <span className={sv.tag}>
+        <ServiceIcon name="sheet" className="size-[13px] shrink-0" />
+        {job.worksheetCount} munkalap
+      </span>
+    ),
+  },
+  {
+    id: "createdAt",
+    header: "Létrehozva",
+    width: "170px",
+    nowrap: true,
+    cell: (job) => (
+      <span className={sv.rowMeta}>{formatDateTime(job.createdAt)}</span>
+    ),
+  },
+];
 
 /**
  * A HIBAJEGYEK LISTÁJA, A KÖZÖS SZERVIZ-KÜLSŐVEL.
@@ -302,88 +392,13 @@ export function ServiceJobListPage({
         ) : null}
         {data && items.length ? (
           <>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[860px] text-left">
-                <thead>
-                  <tr>
-                    <th className={sv.tableHead}>Hibajegy</th>
-                    <th className={sv.tableHead}>Partner</th>
-                    <th className={sv.tableHead}>Állapot</th>
-                    <th className={sv.tableHead}>Munkalap</th>
-                    <th className={sv.tableHead}>Létrehozva</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((job) => (
-                    <tr key={job.id} className={sv.tableRow}>
-                      <td className={sv.tableCell}>
-                        <Link
-                          href={`/szerviz/hibajegyek/${job.id}`}
-                          className={sv.rowTitle}
-                        >
-                          {job.title}
-                        </Link>
-                        <div className={sv.rowMeta}>{job.jobNumber}</div>
-                        {job.hidden ? (
-                          <span className="mt-1 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
-                            Rejtett
-                          </span>
-                        ) : null}
-                      </td>
-                      <td className={sv.tableCell}>
-                        <div>{job.customerName ?? "Nincs megadva"}</div>
-                        {/*
-                          A HELYSZIN TELJES UTJA A PARTNER ALA.
-
-                          Ez a lista eddig SEMMIT nem mondott a helyszinrol.
-                          Ugyanannal a partnernel ket jegy tehat
-                          megkulonboztethetetlen volt pont azon a kepernyon,
-                          ahol valasztani kell kozuluk. Balazs 2026-09-16-an a
-                          munkalap-listara kerte a teljes utat, es ugyanabban a
-                          mondatban ide is.
-
-                          NINCS SOR, HA NINCS UT. Egy "Nincs helyszin" felirat
-                          tobbet allitana, mint amit tudunk: a jegynek lehet
-                          helyszine ugy is, hogy az utat nem tudjuk felepiteni.
-                        */}
-                        {job.departmentPath?.length ? (
-                          <div className={sv.rowMeta}>
-                            {job.departmentPath.join(" / ")}
-                          </div>
-                        ) : null}
-                      </td>
-                      <td className={sv.tableCell}>
-                        <ServiceStatusBadge
-                          tone={serviceJobStatusTone(job.status)}
-                        >
-                          {serviceJobStatusLabel[job.status]}
-                        </ServiceStatusBadge>
-                        {/* A PARTNER MÁST LÁT, és ez itt is látszik: a belső
-                            állapot a jelvényen, a partneré alatta. Enélkül a
-                            kezelő nem tudja, mit olvas a másik fél. */}
-                        <div className={`mt-1 ${sv.rowMeta}`}>
-                          A partner ezt látja: {job.partnerStatusLabel}
-                        </div>
-                      </td>
-                      <td className={sv.tableCell}>
-                        <span className={sv.tag}>
-                          <ServiceIcon
-                            name="sheet"
-                            className="size-[13px] shrink-0"
-                          />
-                          {job.worksheetCount} munkalap
-                        </span>
-                      </td>
-                      <td className={sv.tableCell}>
-                        <span className={sv.rowMeta}>
-                          {formatDateTime(job.createdAt)}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <PilotDataTable
+              columns={MAINTENANCE_JOB_COLUMNS}
+              rows={items}
+              rowKey={(job) => job.id}
+              rowTestId="maintenance-job-row"
+              minWidth={MAINTENANCE_JOB_TABLE_MIN_WIDTH}
+            />
             {/*
               NEM LAPOZO LISTA: a szerver egy hataron belul ad sorokat, es a
               `truncated` mondja meg, ha van tobb. Korabban ide ket ertelmetlen

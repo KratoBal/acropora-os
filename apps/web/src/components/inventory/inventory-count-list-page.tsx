@@ -9,8 +9,10 @@ import {
   Icon,
   PageHeader,
   Pagination,
+  PilotDataTable,
   Select,
   Skeleton,
+  type PilotTableColumn,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -62,6 +64,96 @@ function InventoryCountTableSkeleton() {
     </Card>
   );
 }
+
+type CountRow = InventoryCountListResponse["items"][number];
+
+export const INVENTORY_TABLE_MIN_WIDTH = 950;
+
+/*
+  A LELTÁRLISTA OSZLOPAI A KÖZÖS TÁBLÁN (UI-áttekintés, 3. csomag, 2026-11-03). Telefonon a tábla
+  kártyalistává alakul: a leltárszám a kártya címe, a többi oszlop a felirata mellett; a sor végi
+  "Megnyitás" gomb telefonon kimarad (a kártya maga nyílik). A létrehozás ideje nem törhet sorba.
+*/
+export const countColumns = (
+  open: (href: string) => void,
+): PilotTableColumn<CountRow>[] => [
+  {
+    id: "number",
+    header: "Leltárszám",
+    width: "150px",
+    cell: (count) => (
+      <span className="font-mono text-xs text-dusk-700">
+        {count.countNumber}
+      </span>
+    ),
+  },
+  {
+    id: "warehouse",
+    header: "Raktár",
+    width: "150px",
+    cell: (count) => (
+      <span className="text-dusk-600">{count.warehouseName}</span>
+    ),
+  },
+  {
+    id: "startedBy",
+    header: "Indította",
+    width: "150px",
+    cell: (count) => (
+      <span className="text-dusk-600">{count.startedByName ?? "—"}</span>
+    ),
+  },
+  {
+    id: "createdAt",
+    header: "Létrehozva",
+    width: "170px",
+    nowrap: true,
+    cell: (count) => (
+      <span className="text-dusk-600">
+        {new Date(count.createdAt).toLocaleString("hu-HU")}
+      </span>
+    ),
+  },
+  {
+    id: "lines",
+    header: "Tételek",
+    width: "90px",
+    cell: (count) => (
+      <span className="text-dusk-600">
+        {count.lineCount.toLocaleString("hu-HU")}
+      </span>
+    ),
+  },
+  {
+    id: "status",
+    header: "Állapot",
+    width: "130px",
+    cell: (count) => (
+      <Badge variant={STATUS_BADGE[count.status]}>
+        {STATUS_LABEL[count.status]}
+      </Badge>
+    ),
+  },
+  {
+    id: "open",
+    header: "Művelet",
+    width: "110px",
+    align: "right",
+    phone: "hide",
+    cell: (count) => (
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={(event) => {
+          event.stopPropagation();
+          open(`/raktar/${count.id}`);
+        }}
+      >
+        Megnyitás
+      </Button>
+    ),
+  },
+];
 
 export function InventoryCountListPage() {
   const { session } = useAuth();
@@ -221,70 +313,15 @@ export function InventoryCountListPage() {
               onPageChange={setPage}
             />
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[800px] border-collapse text-left">
-              <thead className="bg-dusk-50 text-[11px] font-bold uppercase tracking-wide text-dusk-500">
-                <tr>
-                  <th className="px-5 py-3">Leltárszám</th>
-                  <th className="px-4 py-3">Raktár</th>
-                  <th className="px-4 py-3">Indította</th>
-                  <th className="px-4 py-3">Létrehozva</th>
-                  <th className="px-4 py-3">Tételek</th>
-                  <th className="px-4 py-3">Állapot</th>
-                  <th className="px-5 py-3 text-right">Művelet</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-dusk-100 bg-white">
-                {data.items.map((count) => (
-                  <tr
-                    key={count.id}
-                    tabIndex={0}
-                    className="cursor-pointer transition hover:bg-dusk-50 focus:bg-dusk-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-500"
-                    onClick={() => router.push(`/raktar/${count.id}`)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        router.push(`/raktar/${count.id}`);
-                      }
-                    }}
-                  >
-                    <td className="px-5 py-3.5 font-mono text-xs text-dusk-700">
-                      {count.countNumber}
-                    </td>
-                    <td className="px-4 py-3.5 text-sm text-dusk-600">
-                      {count.warehouseName}
-                    </td>
-                    <td className="px-4 py-3.5 text-sm text-dusk-600">
-                      {count.startedByName ?? "—"}
-                    </td>
-                    <td className="px-4 py-3.5 text-sm text-dusk-600">
-                      {new Date(count.createdAt).toLocaleString("hu-HU")}
-                    </td>
-                    <td className="px-4 py-3.5 text-sm text-dusk-600">
-                      {count.lineCount.toLocaleString("hu-HU")}
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <Badge variant={STATUS_BADGE[count.status]}>
-                        {STATUS_LABEL[count.status]}
-                      </Badge>
-                    </td>
-                    <td className="px-5 py-3.5 text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          router.push(`/raktar/${count.id}`);
-                        }}
-                      >
-                        Megnyitás
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <PilotDataTable
+            columns={countColumns(router.push)}
+            rows={data.items}
+            rowKey={(count) => count.id}
+            rowTestId="inventory-count-row"
+            minWidth={INVENTORY_TABLE_MIN_WIDTH}
+            onRowActivate={(count) => router.push(`/raktar/${count.id}`)}
+            rowLabel={(count) => `${count.countNumber} megnyitása`}
+          />
 
           <Pagination
             position="bottom"

@@ -9,6 +9,9 @@ import {
   CardHeader,
   PageHeader,
   Skeleton,
+  PilotDataTable,
+  PilotFileInput,
+  type PilotTableColumn,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -37,6 +40,183 @@ const STATUS_BADGE: Record<
   CORRECTED: "success",
 };
 
+type CountLine = InventoryCountDetail["lines"][number];
+
+export const COUNT_LINE_TABLE_MIN_WIDTH = 960;
+
+/** A line the count has not reached yet: only an uploaded or corrected count has them. */
+export function isPendingLine(
+  status: InventoryCountStatus,
+  line: CountLine,
+): boolean {
+  return status !== "DRAFT" && line.countedQty === null;
+}
+
+/**
+ * The difference shown for a line. While the counter types into a pending line the figure
+ * follows the draft, before it is saved; otherwise it is the stored difference.
+ */
+export function lineDifference(
+  line: CountLine,
+  draft: string | undefined,
+  pending: boolean,
+): { label: string; value: number } {
+  const draftNumber =
+    pending && draft !== undefined && draft.trim() !== ""
+      ? Number(draft)
+      : null;
+  if (draftNumber !== null && Number.isFinite(draftNumber)) {
+    const value = draftNumber - Number(line.expectedQty);
+    return { label: String(value), value };
+  }
+  return {
+    label: line.differenceQty ?? "—",
+    value: line.differenceQty ? Number(line.differenceQty) : 0,
+  };
+}
+
+/*
+  A TÉTELEK OSZLOPAI A KÖZÖS TÁBLÁN (UI-áttekintés, 3. csomag, 2026-11-03). Telefonon a tábla
+  kártyalistává alakul: a cikkszám a kártya címe, a "Nincs megszámolva" jelzés mellette áll
+  (külön "Figyelem" oszlop nem kell, a sor háttere is jelzi). A "UNAS szinkron" oszlop csak a
+  korrigált leltárnál van, ezért az oszlopok függvényből jönnek.
+*/
+export function countLineColumns({
+  status,
+  canManage,
+  lineDrafts,
+  savingLineId,
+  setDraft,
+  saveLineCount,
+}: {
+  status: InventoryCountStatus;
+  canManage: boolean;
+  lineDrafts: Record<string, string>;
+  savingLineId: string | null;
+  setDraft: (lineId: string, value: string) => void;
+  saveLineCount: (lineId: string, rawValue: string) => void;
+}): PilotTableColumn<CountLine>[] {
+  const columns: PilotTableColumn<CountLine>[] = [
+    {
+      id: "sku",
+      header: "Cikkszám",
+      width: "200px",
+      cell: (line) => (
+        <span className="flex flex-wrap items-center gap-2">
+          <span className="font-mono text-xs text-dusk-700">{line.sku}</span>
+          {isPendingLine(status, line) ? (
+            <Badge variant="warning">Nincs megszámolva</Badge>
+          ) : null}
+        </span>
+      ),
+    },
+    {
+      id: "product",
+      header: "Termék",
+      cell: (line) => (
+        <span className="text-sm text-dusk-600">{line.productName}</span>
+      ),
+    },
+    {
+      id: "expected",
+      header: "Jelenlegi",
+      width: "110px",
+      align: "right",
+      cell: (line) => line.expectedQty,
+    },
+    {
+      id: "counted",
+      header: "Leltározott",
+      width: "150px",
+      align: "right",
+      cell: (line) => {
+        if (!(isPendingLine(status, line) && canManage)) {
+          return line.countedQty ?? "—";
+        }
+        return (
+          <div className="flex flex-col items-end gap-1">
+            <input
+              type="number"
+              inputMode="decimal"
+              step="any"
+              aria-label={`Leltározott mennyiség – ${line.sku}`}
+              className="w-24 rounded border border-dusk-300 px-2 py-1 text-right text-sm"
+              value={lineDrafts[line.id] ?? ""}
+              disabled={savingLineId === line.id}
+              onChange={(event) => setDraft(line.id, event.target.value)}
+              onBlur={(event) => saveLineCount(line.id, event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.currentTarget.blur();
+                }
+              }}
+            />
+            {savingLineId === line.id ? (
+              <span className="text-[11px] text-dusk-400">Mentés…</span>
+            ) : null}
+          </div>
+        );
+      },
+    },
+    {
+      id: "difference",
+      header: "Eltérés",
+      width: "110px",
+      align: "right",
+      cell: (line) => {
+        const { label, value } = lineDifference(
+          line,
+          lineDrafts[line.id],
+          isPendingLine(status, line),
+        );
+        return (
+          <span
+            className={`font-semibold ${
+              value > 0
+                ? "text-emerald-600"
+                : value < 0
+                  ? "text-rose-600"
+                  : "text-dusk-400"
+            }`}
+          >
+            {label}
+          </span>
+        );
+      },
+    },
+  ];
+  if (status === "CORRECTED") {
+    columns.push({
+      id: "sync",
+      header: "UNAS szinkron",
+      width: "180px",
+      cell: (line) => (
+        <div>
+          <Badge
+            variant={
+              line.syncStatus === "OK"
+                ? "success"
+                : line.syncStatus === "FAILED"
+                  ? "danger"
+                  : "neutral"
+            }
+          >
+            {line.syncStatus === "OK"
+              ? "OK"
+              : line.syncStatus === "FAILED"
+                ? "Hiba"
+                : "Függőben"}
+          </Badge>
+          {line.syncError ? (
+            <p className="mt-1 text-xs text-rose-600">{line.syncError}</p>
+          ) : null}
+        </div>
+      ),
+    });
+  }
+  return columns;
+}
+
 export function InventoryCountDetailPage({ countId }: { countId: string }) {
   const { session } = useAuth();
   const backToList = useReturnTo("/raktar");
@@ -62,7 +242,6 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
     successCount: number;
     failedCount: number;
   } | null>(null);
-  const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [lineDrafts, setLineDrafts] = useState<Record<string, string>>({});
   const [savingLineId, setSavingLineId] = useState<string | null>(null);
@@ -130,7 +309,6 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
       .then((result) => {
         setDetail(result.detail);
         setUnmatchedRows(result.unmatchedRows);
-        setSelectedFileName(null);
         if (fileInputRef.current) fileInputRef.current.value = "";
       })
       .catch((cause: unknown) =>
@@ -281,23 +459,12 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
                       {downloading ? "Letöltés…" : "Sablon letöltése"}
                     </Button>
                     <div className="flex flex-col gap-1">
-                      <input
+                      <PilotFileInput
                         ref={fileInputRef}
-                        type="file"
                         accept=".xlsx"
                         aria-label="Kitöltött leltár feltöltése"
                         className="text-xs"
-                        onChange={(event) =>
-                          setSelectedFileName(
-                            event.target.files?.[0]?.name ?? null,
-                          )
-                        }
                       />
-                      {selectedFileName ? (
-                        <span className="text-xs text-dusk-500">
-                          Kiválasztva: {selectedFileName}
-                        </span>
-                      ) : null}
                     </div>
                     <Button size="sm" onClick={uploadFile} disabled={uploading}>
                       {uploading ? "Feltöltés…" : "Feltöltés"}
@@ -321,7 +488,7 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
                 <Alert
                   variant="danger"
                   title="Vannak még meg nem számolt tételek"
-                  description={`${detail.lines.filter((line) => line.countedQty === null).length} tétel Leltározott mennyisége üres — ezek a lista tetején, sárgával vannak kiemelve. A mennyiség közvetlenül itt is beírható, az eltérés azonnal kiszámolódik. A korrekció csak akkor indítható, ha mindegyiknél meg van adva az érték.`}
+                  description={`${detail.lines.filter((line) => line.countedQty === null).length} tétel Leltározott mennyisége üres, ezek a lista tetején, sárgával vannak kiemelve. A mennyiség közvetlenül itt is beírható, az eltérés azonnal kiszámolódik. A korrekció csak akkor indítható, ha mindegyiknél meg van adva az érték.`}
                 />
               ) : null}
 
@@ -350,142 +517,27 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
                 {detail.lines.length.toLocaleString("hu-HU")} tétel
               </span>
             </CardHeader>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] border-collapse text-left">
-                <thead className="bg-dusk-50 text-[11px] font-bold uppercase tracking-wide text-dusk-500">
-                  <tr>
-                    {detail.status !== "DRAFT" ? (
-                      <th className="px-5 py-3">Figyelem</th>
-                    ) : null}
-                    <th className="px-5 py-3">Cikkszám</th>
-                    <th className="px-4 py-3">Termék</th>
-                    <th className="px-4 py-3 text-right">Jelenlegi</th>
-                    <th className="px-4 py-3 text-right">Leltározott</th>
-                    <th className="px-4 py-3 text-right">Eltérés</th>
-                    {detail.status === "CORRECTED" ? (
-                      <th className="px-5 py-3">UNAS szinkron</th>
-                    ) : null}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-dusk-100 bg-white">
-                  {detail.lines.map((line) => {
-                    const pending =
-                      detail.status !== "DRAFT" && line.countedQty === null;
-                    const draft = pending ? lineDrafts[line.id] : undefined;
-                    const draftNumber =
-                      draft !== undefined && draft.trim() !== ""
-                        ? Number(draft)
-                        : null;
-                    const hasLiveDraft =
-                      pending &&
-                      draftNumber !== null &&
-                      Number.isFinite(draftNumber);
-                    const differenceLabel = hasLiveDraft
-                      ? String(draftNumber! - Number(line.expectedQty))
-                      : (line.differenceQty ?? "—");
-                    const difference = hasLiveDraft
-                      ? draftNumber! - Number(line.expectedQty)
-                      : line.differenceQty
-                        ? Number(line.differenceQty)
-                        : 0;
-                    return (
-                      <tr
-                        key={line.id}
-                        className={pending ? "bg-amber-50" : undefined}
-                      >
-                        {detail.status !== "DRAFT" ? (
-                          <td className="px-5 py-3">
-                            {pending ? (
-                              <Badge variant="warning">Nincs megszámolva</Badge>
-                            ) : null}
-                          </td>
-                        ) : null}
-                        <td className="px-5 py-3 font-mono text-xs text-dusk-700">
-                          {line.sku}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-dusk-600">
-                          {line.productName}
-                        </td>
-                        <td className="px-4 py-3 text-right text-sm text-dusk-600">
-                          {line.expectedQty}
-                        </td>
-                        <td className="px-4 py-3 text-right text-sm text-dusk-600">
-                          {pending && canManage ? (
-                            <div className="flex flex-col items-end gap-1">
-                              <input
-                                type="number"
-                                inputMode="decimal"
-                                step="any"
-                                aria-label={`Leltározott mennyiség – ${line.sku}`}
-                                className="w-24 rounded border border-dusk-300 px-2 py-1 text-right text-sm"
-                                value={draft ?? ""}
-                                disabled={savingLineId === line.id}
-                                onChange={(event) =>
-                                  setLineDrafts((previous) => ({
-                                    ...previous,
-                                    [line.id]: event.target.value,
-                                  }))
-                                }
-                                onBlur={(event) =>
-                                  saveLineCount(line.id, event.target.value)
-                                }
-                                onKeyDown={(event) => {
-                                  if (event.key === "Enter") {
-                                    event.currentTarget.blur();
-                                  }
-                                }}
-                              />
-                              {savingLineId === line.id ? (
-                                <span className="text-[11px] text-dusk-400">
-                                  Mentés…
-                                </span>
-                              ) : null}
-                            </div>
-                          ) : (
-                            (line.countedQty ?? "—")
-                          )}
-                        </td>
-                        <td
-                          className={`px-4 py-3 text-right text-sm font-semibold ${
-                            difference > 0
-                              ? "text-emerald-600"
-                              : difference < 0
-                                ? "text-rose-600"
-                                : "text-dusk-400"
-                          }`}
-                        >
-                          {differenceLabel}
-                        </td>
-                        {detail.status === "CORRECTED" ? (
-                          <td className="px-5 py-3">
-                            <Badge
-                              variant={
-                                line.syncStatus === "OK"
-                                  ? "success"
-                                  : line.syncStatus === "FAILED"
-                                    ? "danger"
-                                    : "neutral"
-                              }
-                            >
-                              {line.syncStatus === "OK"
-                                ? "OK"
-                                : line.syncStatus === "FAILED"
-                                  ? "Hiba"
-                                  : "Függőben"}
-                            </Badge>
-                            {line.syncError ? (
-                              <p className="mt-1 text-xs text-rose-600">
-                                {line.syncError}
-                              </p>
-                            ) : null}
-                          </td>
-                        ) : null}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <PilotDataTable
+              columns={countLineColumns({
+                status: detail.status,
+                canManage,
+                lineDrafts,
+                savingLineId,
+                setDraft: (lineId, value) =>
+                  setLineDrafts((previous) => ({
+                    ...previous,
+                    [lineId]: value,
+                  })),
+                saveLineCount,
+              })}
+              rows={detail.lines}
+              rowKey={(line) => line.id}
+              rowTestId="count-line-row"
+              rowClassName={(line) =>
+                isPendingLine(detail.status, line) ? "bg-amber-50" : ""
+              }
+              minWidth={COUNT_LINE_TABLE_MIN_WIDTH}
+            />
           </Card>
         </>
       ) : null}

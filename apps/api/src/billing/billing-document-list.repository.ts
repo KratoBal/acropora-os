@@ -112,7 +112,13 @@ export class BillingDocumentListRepository {
         select: { invoiceNumber: true },
       })
     ).flatMap((row) => (row.invoiceNumber ? [row.invoiceNumber] : []));
-    const external = withoutOwnTwins(externalWhere(query), ownNumbers);
+    const external = withoutOwnTwins(
+      externalWhere(
+        query,
+        await orderNumbersByBuyerName(this.database, query.q),
+      ),
+      ownNumbers,
+    );
     const offset = (query.page - 1) * query.pageSize;
     const both = own !== null && external !== null;
     const [ownRows, ownCount, externalRows, externalCount] =
@@ -319,4 +325,32 @@ export async function orderBuyerNamesByOrderNumber(
     if (order.buyerName?.trim())
       out.set(order.orderNumber.slice("UNAS-".length), order.buyerName.trim());
   return out;
+}
+
+/**
+ * A keresőszóra illeszkedő vevőnevű webshop-rendelések számai, `UNAS-` előtag nélkül, ahogy a külső számla
+ * `orderNumber`-je áll (`orderBuyerNamesByOrderNumber` fordítottja), CSAK azok, amelyekhez van külső számla.
+ * Keresőszó nélkül üres.
+ *
+ * MIÉRT EGY ADATBÁZIS-OLDALI ÖSSZEKAPCSOLÁS, ÉS NEM A RENDELÉSEK LISTÁJA (barracuda a #2019-en, mérve 2026-11-03
+ * egy helyi adatbázison 60 000 rendeléssel): a Prisma 6 az `in` lista minden elemét külön paraméterként küldi, és
+ * egy rövid keresőszóra a rendelések nagy része illeszkedik. Az első változat így `too many bind variables in
+ * prepared statement, expected maximum of 32767` hibát adott. Az összekapcsolás után a lista legfeljebb a
+ * rendelésszámos külső számlák száma (élesen ma 128 külső sor van összesen). Csonkítás nincs: az néma hiány lenne.
+ */
+export async function orderNumbersByBuyerName(
+  database: Pick<typeof prisma, "$queryRaw">,
+  q: string | undefined,
+): Promise<string[]> {
+  const text = q?.trim();
+  if (!text) return [];
+  // a `contains` szöveg, nem minta: a % és a _ is betű szerint illeszkedjen
+  const pattern = `%${text.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+  const rows = await database.$queryRaw<{ orderNumber: string }[]>`
+    SELECT DISTINCT e."orderNumber"
+      FROM "ExternalBillingDocument" e
+      JOIN "SalesOrder" o ON o."orderNumber" = 'UNAS-' || e."orderNumber"
+     WHERE e."orderNumber" IS NOT NULL
+       AND o."buyerName" ILIKE ${pattern}`;
+  return rows.map((row) => row.orderNumber);
 }

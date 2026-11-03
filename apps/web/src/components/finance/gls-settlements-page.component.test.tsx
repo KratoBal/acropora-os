@@ -271,7 +271,7 @@ describe("GlsSettlementsPage", () => {
     render(createElement(GlsSettlementsPage));
     expect(
       await screen.findByText(
-        "Ok: a kapcsoló (GMAIL_GLS_SYNC_ENABLED) értéke se nem true, se nem false. A GLS-fájlokat addig kézzel töltsd fel.",
+        "Ok: a Gmail-feldolgozás kapcsolója értéke se nem true, se nem false. A GLS-fájlokat addig kézzel töltsd fel.",
       ),
     ).toBeTruthy();
   });

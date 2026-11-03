@@ -192,6 +192,17 @@ export interface PilotTableColumn<Row> {
   /** Számoszlop: jobbra zárva a fejléc ÉS az adat is. */
   align?: "left" | "right";
   /**
+   * A cella nem törhet sorba (dátum, bizonylatszám): a "2026. 08." és a "09." nem kerülhet
+   * két sorba. A telefonos kártyán is egy sorban marad.
+   */
+  nowrap?: boolean;
+  /**
+   * Telefonon (a `md` alatt) a tábla kártyalistává alakul, soronként egy kártyával. Az oszlop
+   * ott `"title"` (a kártya címe, felirat nélkül; alapból az első oszlop) vagy `"hide"`
+   * (kimarad, mert a címből vagy egy másik oszlopból kiolvasható).
+   */
+  phone?: "title" | "hide";
+  /**
    * Az oszlop fejlécére kattintva rendezhető (a tábla `sort` és `onSort` tulajdonságával):
    * a fejléc gombbá válik, és jelzi az állapotát (nyíl, `aria-sort`).
    */
@@ -215,6 +226,13 @@ export interface PilotTableSort {
  * celláknak is, tehát a kettő nem tud elcsúszni egymáshoz képest. A Figma
  * rácsa abszolút pozíciókból áll; ezt szándékosan nem követi, csak a
  * méreteit.
+ */
+/**
+ * TELEFONON KÁRTYALISTA (a brief szerint: az oszlopok nem tűnhetnek el). Ugyanaz a `<table>`,
+ * csak a `md` alatt blokk-elrendezésre vált: a sor kártya, a cella egy "FELIRAT  érték" sor,
+ * a feliratot a fejléc szövege adja (`data-label`). EGY DOM-fa van, nincs külön telefonos
+ * másolat, tehát a sorok száma, a kattintás és a billentyű-kezelés ugyanaz, mint asztalon.
+ * A fejléc a képernyőolvasónak megmarad (`sr-only`). A rendezés gombjai telefonon nem látszanak.
  */
 export function PilotDataTable<Row>({
   columns,
@@ -256,8 +274,30 @@ export function PilotDataTable<Row>({
 }) {
   const alignClass = (align: PilotTableColumn<Row>["align"]) =>
     align === "right" ? "text-right" : "text-left";
+  // The card's title: the column marked `title`, else the first one that is not hidden.
+  const titleId = (
+    columns.find((c) => c.phone === "title") ??
+    columns.find((c) => c.phone !== "hide")
+  )?.id;
+  const phoneCellClass = (column: PilotTableColumn<Row>) => {
+    if (column.phone === "hide") return "max-md:hidden";
+    const base =
+      "max-md:flex max-md:items-baseline max-md:justify-between max-md:gap-4 max-md:px-0 max-md:py-1.5 max-md:text-right max-md:first:pl-0 max-md:last:pr-0";
+    if (column.id === titleId) {
+      return `${base} max-md:justify-start max-md:pb-2 max-md:text-left max-md:font-semibold max-md:before:hidden`;
+    }
+    return `${base} max-md:before:shrink-0 max-md:before:text-left max-md:before:text-[11px] max-md:before:font-semibold max-md:before:uppercase max-md:before:tracking-[0.05em] max-md:before:text-pilot-grey-500 max-md:before:content-[attr(data-label)]${
+      typeof column.header === "string" && column.header
+        ? ""
+        : " max-md:before:hidden"
+    }`;
+  };
   const onKeyDown = (row: Row) => (event: KeyboardEvent) => {
     if (!onRowActivate) return;
+    // Csak akkor aktivál, ha a SOR maga van fókuszban: egy sorban álló link vagy gomb a saját
+    // Enter/Szóköz-viselkedését tartja (különben a sor elnyelné a link aktiválását, és a
+    // sor nyílna meg a link helyett).
+    if (event.target !== event.currentTarget) return;
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       onRowActivate(row);
@@ -266,11 +306,11 @@ export function PilotDataTable<Row>({
   return (
     // `relative`: a gördülő tároló legyen a tartalmazó blokk. Nélküle egy fejléc-cella abszolút `sr-only` felirata a
     // vágás alól kilép, és a keret gyökeréig nyújtja a lapot (UI 1. csomag, 2026-11-03: a hiányzó számlák listája
-    // 896 px volt 390-en; a stage-ről kimentett lapon elemenként kivágva mérve)
-    <div className="relative overflow-x-auto">
+    // 896 px volt 390-en; a stage-ről kimentett lapon elemenként kivágva mérve). Telefonon a 3. csomag kártyalistája áll.
+    <div className="relative md:overflow-x-auto">
       <table
-        style={{ minWidth }}
-        className="w-full table-fixed border-collapse text-left"
+        style={{ ["--pilot-table-min" as string]: `${minWidth}px` }}
+        className="w-full table-fixed border-collapse text-left max-md:block md:min-w-[var(--pilot-table-min)]"
       >
         <colgroup>
           {columns.map((column) => (
@@ -280,7 +320,7 @@ export function PilotDataTable<Row>({
             />
           ))}
         </colgroup>
-        <thead>
+        <thead className="max-md:sr-only">
           <tr className="bg-pilot-grey-100">
             {columns.map((column) => (
               <th
@@ -333,11 +373,16 @@ export function PilotDataTable<Row>({
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-pilot-grey-200">
+        <tbody className="max-md:block max-md:space-y-3 md:divide-y md:divide-pilot-grey-200">
           {rows.map((row) => {
             const active = Boolean(
               onRowActivate && (rowCanActivate?.(row) ?? true),
             );
+            // A row class that sets its own background replaces the default white: `cn` is a plain
+            // join, so two background classes on one row would be settled by the stylesheet order.
+            // (A `!bg-...` or a `hover:bg-...` class is not a plain background and does not count.)
+            const extraClass = rowClassName?.(row) ?? "";
+            const bg = /(^|\s)bg-/.test(extraClass) ? "" : "bg-white";
             return (
               <tr
                 key={rowKey(row)}
@@ -348,16 +393,21 @@ export function PilotDataTable<Row>({
                 onKeyDown={active ? onKeyDown(row) : undefined}
                 className={`${
                   active
-                    ? "h-[72px] cursor-pointer bg-white transition-colors hover:bg-pilot-grey-50 focus:bg-pilot-grey-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pilot-aqua-600"
+                    ? `cursor-pointer ${bg} transition-colors hover:bg-pilot-grey-50 focus:bg-pilot-grey-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pilot-aqua-600`
                     : onRowActivate
-                      ? "h-[72px] bg-white text-pilot-grey-500"
-                      : "h-[72px] bg-white"
-                } ${rowClassName?.(row) ?? ""}`}
+                      ? `${bg} text-pilot-grey-500`
+                      : bg
+                } md:h-[72px] max-md:block max-md:rounded-lg max-md:border max-md:border-pilot-grey-200 max-md:p-4 ${extraClass}`}
               >
                 {columns.map((column) => (
                   <td
                     key={column.id}
-                    className={`px-4 py-3 align-middle text-sm first:pl-5 last:pr-5 ${alignClass(column.align)}`}
+                    data-label={
+                      typeof column.header === "string" && column.header
+                        ? column.header
+                        : undefined
+                    }
+                    className={`px-4 py-3 align-middle text-sm first:pl-5 last:pr-5 ${alignClass(column.align)}${column.nowrap ? " whitespace-nowrap" : ""} ${phoneCellClass(column)}`}
                   >
                     {column.cell(row)}
                   </td>

@@ -7,6 +7,7 @@ import {
   EmptyState,
   Pagination,
   Skeleton,
+  PilotSelect,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -302,10 +303,10 @@ export function WorksheetListPage() {
             {partners.length ? (
               <label>
                 <span className="sr-only">Partner szűrő</span>
-                <select
-                  className={sv.select}
+                <PilotSelect
                   value={params.get("customerId") ?? ""}
-                  onChange={(event) => filter("customerId", event.target.value)}
+                  onChange={(nextValue) => filter("customerId", nextValue)}
+                  chevron
                 >
                   <option value="">Minden partner</option>
                   {partners.map((partner) => (
@@ -313,7 +314,7 @@ export function WorksheetListPage() {
                       {partner.name}
                     </option>
                   ))}
-                </select>
+                </PilotSelect>
               </label>
             ) : null}
             <Button

@@ -7,6 +7,9 @@ import {
   Pagination,
   Skeleton,
   sv,
+  PilotDataTable,
+  PilotSelect,
+  type PilotTableColumn,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -86,6 +89,114 @@ import {
  */
 
 const NINCS_KATEGORIA = "__NINCS__";
+
+type AssetRow = AssetListResponse["items"][number];
+
+/*
+  AZ ESZKÖZLISTA OSZLOPAI A KÖZÖS TÁBLÁN (UI-áttekintés, 3. csomag, 2026-11-03). Az Eszköz oszlop
+  széles, hogy a hosszú azonosító (ESZK-...-FAN-...) ne törjön 6-8 sorra (stage-fotó), telefonon
+  pedig kártya: az eszköz neve a cím, a többi oszlop a felirata mellett.
+*/
+export const ASSET_TABLE_MIN_WIDTH = 1220;
+
+export const ASSET_COLUMNS: PilotTableColumn<AssetRow>[] = [
+  {
+    id: "asset",
+    header: "Eszköz",
+    width: "300px",
+    cell: (asset) => (
+      <>
+        <p className="text-sm font-medium text-pilot-grey-900">{asset.name}</p>
+        <p className="mt-0.5 break-all font-mono text-[11px] text-pilot-grey-400">
+          {asset.assetNumber}
+          {asset.partnerInternalCode ? ` · ${asset.partnerInternalCode}` : ""}
+        </p>
+        {asset.labelCode ? (
+          <p className="mt-0.5 text-[11px] text-pilot-grey-400">
+            Matricakód: <span className="font-mono">{asset.labelCode}</span>
+          </p>
+        ) : null}
+      </>
+    ),
+  },
+  {
+    id: "partner",
+    header: "Partner",
+    width: "160px",
+    cell: (asset) => (
+      <span className="text-xs text-pilot-grey-600">
+        {asset.owner.displayName}
+      </span>
+    ),
+  },
+  {
+    id: "unit",
+    header: "Alegység",
+    width: "200px",
+    cell: (asset) => (
+      <span className="text-xs text-pilot-grey-500">
+        {asset.unit
+          ? `${asset.unit.path.join(" / ")} (${asset.unit.code})`
+          : asset.owner.type === "SUPPLIER"
+            ? asset.address?.formatted
+              ? `Nincs pontosítva. ${asset.address.formatted}`
+              : "Nincs pontosítva."
+            : (asset.address?.formatted ?? "Nincs pontosítva.")}
+      </span>
+    ),
+  },
+  {
+    id: "category",
+    header: "Kategória",
+    width: "130px",
+    cell: (asset) => (
+      <span className="text-xs text-pilot-grey-600">
+        {asset.category ?? "—"}
+      </span>
+    ),
+  },
+  {
+    id: "manufacturer",
+    header: "Gyártó és modell",
+    width: "170px",
+    cell: (asset) => (
+      <>
+        <p className="text-xs text-pilot-grey-700">
+          {asset.manufacturer ?? "—"}
+        </p>
+        <p className="text-xs text-pilot-grey-400">{asset.model ?? "—"}</p>
+      </>
+    ),
+  },
+  {
+    id: "hierarchy",
+    header: "Hierarchia",
+    width: "150px",
+    cell: (asset) => (
+      <span className="text-xs text-pilot-grey-500">
+        {asset.parent ? (
+          <>
+            Része: <span className="font-medium">{asset.parent.name}</span>
+          </>
+        ) : asset.childCount ? (
+          `${asset.childCount} részegység`
+        ) : (
+          "Önálló eszköz"
+        )}
+      </span>
+    ),
+  },
+  {
+    id: "status",
+    header: "Státusz",
+    width: "110px",
+    cell: (asset) => (
+      <PilotBadge variant={assetStatusPilotVariant(asset.status)}>
+        {assetStatusLabel[asset.status]}
+      </PilotBadge>
+    ),
+  },
+];
 
 export function PilotAssetListPage() {
   const { session } = useAuth();
@@ -333,11 +444,11 @@ export function PilotAssetListPage() {
             className="w-full rounded-md py-1.5 pl-8 pr-3 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
           />
         </div>
-        <select
+        <PilotSelect
           aria-label="Eszköztípus"
           value={params.get("kind") ?? ""}
-          onChange={(event) => filter("kind", event.target.value)}
-          className="max-w-full cursor-pointer truncate rounded-md py-1.5 pl-2.5 pr-6 text-sm text-pilot-grey-700 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+          onChange={(nextValue) => filter("kind", nextValue)}
+          chevron
         >
           <option value="">Minden típus</option>
           {Object.entries(assetKindLabel).map(([value, label]) => (
@@ -345,12 +456,12 @@ export function PilotAssetListPage() {
               {label}
             </option>
           ))}
-        </select>
-        <select
+        </PilotSelect>
+        <PilotSelect
           aria-label="Kategória"
           value={categoryFilterValue}
-          onChange={(event) => setCategoryFilter(event.target.value)}
-          className="max-w-full cursor-pointer truncate rounded-md py-1.5 pl-2.5 pr-6 text-sm text-pilot-grey-700 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+          onChange={(nextValue) => setCategoryFilter(nextValue)}
+          chevron
         >
           <option value="">Minden kategória</option>
           {categories.map((category) => (
@@ -361,29 +472,29 @@ export function PilotAssetListPage() {
             </option>
           ))}
           <option value={NINCS_KATEGORIA}>Nincs kategória</option>
-        </select>
-        <select
+        </PilotSelect>
+        <PilotSelect
           aria-label="Kézikönyv"
           value={manualFilterValue}
-          onChange={(event) => setManualFilter(event.target.value)}
-          className="max-w-full cursor-pointer truncate rounded-md py-1.5 pl-2.5 pr-6 text-sm text-pilot-grey-700 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+          onChange={(nextValue) => setManualFilter(nextValue)}
+          chevron
         >
           <option value="">Kézikönyv: mind</option>
           <option value="with">Van kézikönyve</option>
           <option value="without">Nincs kézikönyve</option>
-        </select>
-        <select
+        </PilotSelect>
+        <PilotSelect
           aria-label="Hány eszköz egy oldalon"
           value={params.get("pageSize") ?? DEFAULT_PAGE_SIZE}
-          onChange={(event) => filter("pageSize", event.target.value)}
-          className="max-w-full cursor-pointer truncate rounded-md py-1.5 pl-2.5 pr-6 text-sm text-pilot-grey-700 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+          onChange={(nextValue) => filter("pageSize", nextValue)}
+          chevron
         >
           {PAGE_SIZES.map((size) => (
             <option key={size} value={String(size)}>
               {size} / oldal
             </option>
           ))}
-        </select>
+        </PilotSelect>
         <PilotButton variant="secondary" onClick={printList}>
           Nyomtatás
         </PilotButton>
@@ -410,103 +521,17 @@ export function PilotAssetListPage() {
 
       {data?.items.length ? (
         <>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1080px] border-collapse text-left text-sm">
-              <thead>
-                <tr className="border-b border-pilot-grey-100 bg-white">
-                  {[
-                    "Eszköz",
-                    "Partner",
-                    "Alegység",
-                    "Kategória",
-                    "Gyártó és modell",
-                    "Hierarchia",
-                    "Státusz",
-                  ].map((col) => (
-                    <th
-                      key={col}
-                      className="whitespace-nowrap px-4 py-3 text-xs font-medium uppercase tracking-wide text-pilot-grey-400"
-                    >
-                      {col}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {data.items.map((asset, index) => (
-                  <tr
-                    key={asset.id}
-                    onClick={() => router.push(`/szerviz/eszkozok/${asset.id}`)}
-                    className={`group cursor-pointer border-b border-pilot-grey-100 transition-colors hover:bg-pilot-aqua-50/40 ${
-                      index % 2 === 0 ? "bg-white" : "bg-pilot-grey-50/50"
-                    }`}
-                  >
-                    <td className="px-4 py-3">
-                      <p className="text-sm font-medium text-pilot-grey-900 transition-colors group-hover:text-pilot-aqua-700">
-                        {asset.name}
-                      </p>
-                      <p className="mt-0.5 font-mono text-[11px] text-pilot-grey-400">
-                        {asset.assetNumber}
-                        {asset.partnerInternalCode
-                          ? ` · ${asset.partnerInternalCode}`
-                          : ""}
-                      </p>
-                      {asset.labelCode ? (
-                        <p className="mt-0.5 text-[11px] text-pilot-grey-400">
-                          Matricakód:{" "}
-                          <span className="font-mono">{asset.labelCode}</span>
-                        </p>
-                      ) : null}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-xs text-pilot-grey-600">
-                      {asset.owner.displayName}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-xs text-pilot-grey-500">
-                      {asset.unit
-                        ? `${asset.unit.path.join(" / ")} (${asset.unit.code})`
-                        : asset.owner.type === "SUPPLIER"
-                          ? asset.address?.formatted
-                            ? `Nincs pontosítva. ${asset.address.formatted}`
-                            : "Nincs pontosítva."
-                          : (asset.address?.formatted ?? "Nincs pontosítva.")}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-xs text-pilot-grey-600">
-                      {asset.category ?? "—"}
-                    </td>
-                    <td className="px-4 py-3 text-xs">
-                      <p className="text-pilot-grey-700">
-                        {asset.manufacturer ?? "—"}
-                      </p>
-                      <p className="text-pilot-grey-400">
-                        {asset.model ?? "—"}
-                      </p>
-                    </td>
-                    <td className="max-w-[180px] truncate px-4 py-3 text-xs text-pilot-grey-500">
-                      {asset.parent ? (
-                        <>
-                          Része:{" "}
-                          <span className="font-medium">
-                            {asset.parent.name}
-                          </span>
-                        </>
-                      ) : asset.childCount ? (
-                        `${asset.childCount} részegység`
-                      ) : (
-                        "Önálló eszköz"
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <PilotBadge
-                        variant={assetStatusPilotVariant(asset.status)}
-                      >
-                        {assetStatusLabel[asset.status]}
-                      </PilotBadge>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <PilotDataTable
+            columns={ASSET_COLUMNS}
+            rows={data.items}
+            rowKey={(asset) => asset.id}
+            rowTestId="asset-row"
+            minWidth={ASSET_TABLE_MIN_WIDTH}
+            onRowActivate={(asset) =>
+              router.push(`/szerviz/eszkozok/${asset.id}`)
+            }
+            rowLabel={(asset) => `${asset.name} megnyitása`}
+          />
           <div className="flex items-center justify-between border-t border-pilot-grey-100 bg-white px-8 py-3">
             <p className="text-xs text-pilot-grey-400">
               {data.items.length} / {data.pagination.totalItems} eszköz
@@ -539,10 +564,7 @@ export function PilotAssetListPage() {
   );
 
   return (
-    <PilotThemeRoot
-      bleed
-      className="flex min-h-screen flex-col bg-pilot-grey-50"
-    >
+    <PilotThemeRoot className="-m-6 flex min-h-screen flex-col bg-pilot-grey-50">
       <div className="flex items-center justify-between border-b border-pilot-grey-200 bg-white px-8 py-5">
         <div>
           <p className="mb-1 text-xs text-pilot-grey-400">

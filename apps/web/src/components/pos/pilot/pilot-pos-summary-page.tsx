@@ -1,6 +1,7 @@
 "use client";
 
-import { Alert, Icon, Skeleton } from "@acropora/ui";
+import { formatDayHu } from "@/lib/format/date";
+import { Alert, Icon, Skeleton, PilotDateField } from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
@@ -141,9 +142,6 @@ export function PilotPosSummaryPage() {
     );
   }
 
-  const dateInput =
-    "h-9 rounded-lg bg-white px-2 text-xs text-pilot-grey-900 ring-1 ring-pilot-grey-200";
-
   return (
     <PilotThemeRoot bleed className={shell}>
       <div className="px-8 pb-5 pt-6">
@@ -183,22 +181,18 @@ export function PilotPosSummaryPage() {
         </div>
         <label className="flex flex-col gap-1 text-[10px] font-medium text-pilot-grey-500">
           Kezdő nap
-          <input
-            type="date"
-            className={dateInput}
+          <PilotDateField
             value={from}
             max={to}
-            onChange={(event) => setFrom(event.target.value)}
+            onChange={(nextValue) => setFrom(nextValue)}
           />
         </label>
         <label className="flex flex-col gap-1 text-[10px] font-medium text-pilot-grey-500">
           Záró nap
-          <input
-            type="date"
-            className={dateInput}
+          <PilotDateField
             value={to}
             min={from}
-            onChange={(event) => setTo(event.target.value)}
+            onChange={(nextValue) => setTo(nextValue)}
           />
         </label>
       </div>
@@ -244,7 +238,7 @@ export function PilotPosSummaryPage() {
                       className="border-b border-pilot-grey-100 last:border-0"
                     >
                       <td className="py-3 pr-3 tabular-nums text-pilot-grey-900">
-                        {day.date}
+                        {formatDayHu(day.date)}
                       </td>
                       {data.methods.map((method) => (
                         <td key={method} className="px-3 py-3 text-right">

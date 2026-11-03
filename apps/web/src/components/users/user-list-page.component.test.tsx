@@ -88,6 +88,17 @@ describe("UserListPage paging", () => {
     api.sync.mockReset().mockResolvedValue({});
   });
 
+  // The list is the shared table: on the phone a row is a card, each cell labelled.
+  it("labels every cell with its column for the phone card view", async () => {
+    render(<UserListPage />);
+    await screen.findByText("Szerelő Sándor");
+    const row = screen.getAllByTestId("user-row")[0]!;
+    const labels = [...row.querySelectorAll("td")].map((td) =>
+      td.getAttribute("data-label"),
+    );
+    expect(labels).toEqual(["Név", "E-mail", "Szerepkör", "Státusz", "Jelszó"]);
+  });
+
   it("moves to the next page instead of returning to the first", async () => {
     render(<UserListPage />);
     await screen.findByText("Szerelő Sándor");
