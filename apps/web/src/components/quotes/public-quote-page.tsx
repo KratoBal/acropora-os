@@ -1,8 +1,19 @@
 "use client";
 
-import { PilotButton, PilotInput } from "@acropora/ui";
+import {
+  PilotButton,
+  PilotDataTable,
+  PilotInput,
+  type PilotTableColumn,
+} from "@acropora/ui";
 import type { PublicQuoteDto } from "@acropora/types";
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 
 import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
 import { publicQuotesApi } from "@/lib/api/public-quotes";
@@ -22,6 +33,92 @@ async function failure(response: Response, fallback: string): Promise<string> {
     // not JSON: the fallback says it
   }
   return fallback;
+}
+
+type QuoteItem = PublicQuoteDto["items"][number];
+
+export const QUOTE_ITEM_TABLE_MIN_WIDTH = 640;
+
+/*
+  AZ AJÁNLAT TÉTELEI A KÖZÖS TÁBLÁN (UI-áttekintés, 3. csomag, 2026-11-03). Az ügyfél telefonon nyitja
+  meg a linket, ott a tétel egy kártya: a megnevezés (és az opcionális tétel jelölőnégyzete) a címe,
+  a többi oszlop a felirata mellett áll. Az opcionális tétel jelölőnégyzete csak nyitott ajánlatnál
+  kapcsolható (`canChoose`), ezért az oszlopok függvényből jönnek.
+*/
+export function quoteItemColumns({
+  currency,
+  canChoose,
+  chosen,
+  setChosen,
+}: {
+  currency: string;
+  canChoose: boolean;
+  chosen: string[];
+  setChosen: Dispatch<SetStateAction<string[]>>;
+}): PilotTableColumn<QuoteItem>[] {
+  return [
+    {
+      id: "name",
+      header: "Tétel",
+      cell: (item) => (
+        <span className="text-pilot-grey-900">
+          {item.isOptional && item.id && canChoose ? (
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={chosen.includes(item.id)}
+                onChange={(event) => {
+                  // Read before the updater runs: a controlled checkbox is put back to its
+                  // state value, so a lazily run updater would see the old `checked`.
+                  const checked = event.target.checked;
+                  setChosen((current) =>
+                    checked
+                      ? [...current, item.id!]
+                      : current.filter((id) => id !== item.id),
+                  );
+                }}
+              />
+              {item.name}
+              <span className="text-xs text-pilot-grey-500">(opcionális)</span>
+            </label>
+          ) : (
+            <>
+              {item.name}
+              {item.isOptional ? (
+                <span className="ml-2 text-xs text-pilot-grey-500">
+                  (opcionális)
+                </span>
+              ) : null}
+            </>
+          )}
+        </span>
+      ),
+    },
+    {
+      id: "quantity",
+      header: "Mennyiség",
+      width: "120px",
+      align: "right",
+      nowrap: true,
+      cell: (item) => `${formatQuantity(item.quantity)} ${item.unit}`,
+    },
+    {
+      id: "unitNet",
+      header: "Nettó egységár",
+      width: "150px",
+      align: "right",
+      nowrap: true,
+      cell: (item) => formatQuoteMoney(item.unitNetPrice, currency),
+    },
+    {
+      id: "netTotal",
+      header: "Nettó",
+      width: "130px",
+      align: "right",
+      nowrap: true,
+      cell: (item) => formatQuoteMoney(item.netTotal, currency),
+    },
+  ];
 }
 
 /**
@@ -117,62 +214,21 @@ export function PublicQuotePage({ token }: { token: string }) {
             </a>
           </header>
 
-          <section className="overflow-x-auto rounded-xl bg-white ring-1 ring-pilot-grey-200">
-            <table className="w-full min-w-[560px] text-sm">
-              <thead className="bg-pilot-grey-50 text-left text-xs text-pilot-grey-600">
-                <tr>
-                  <th className="px-4 py-2">Tétel</th>
-                  <th className="px-4 py-2 text-right">Mennyiség</th>
-                  <th className="px-4 py-2 text-right">Nettó egységár</th>
-                  <th className="px-4 py-2 text-right">Nettó</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-pilot-grey-100">
-                {quote.items.map((item, index) => (
-                  <tr key={`${index}-${item.name}`}>
-                    <td className="px-4 py-2 text-pilot-grey-900">
-                      {item.isOptional && item.id && quote.state === "OPEN" ? (
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={chosen.includes(item.id)}
-                            onChange={(event) =>
-                              setChosen((current) =>
-                                event.target.checked
-                                  ? [...current, item.id!]
-                                  : current.filter((id) => id !== item.id),
-                              )
-                            }
-                          />
-                          {item.name}
-                          <span className="text-xs text-pilot-grey-500">
-                            (opcionális)
-                          </span>
-                        </label>
-                      ) : (
-                        <>
-                          {item.name}
-                          {item.isOptional ? (
-                            <span className="ml-2 text-xs text-pilot-grey-500">
-                              (opcionális)
-                            </span>
-                          ) : null}
-                        </>
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-right text-pilot-grey-700">
-                      {formatQuantity(item.quantity)} {item.unit}
-                    </td>
-                    <td className="px-4 py-2 text-right text-pilot-grey-700">
-                      {formatQuoteMoney(item.unitNetPrice, quote.currency)}
-                    </td>
-                    <td className="px-4 py-2 text-right text-pilot-grey-900">
-                      {formatQuoteMoney(item.netTotal, quote.currency)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <section className="rounded-xl bg-white ring-1 ring-pilot-grey-200">
+            <PilotDataTable
+              columns={quoteItemColumns({
+                currency: quote.currency,
+                canChoose: quote.state === "OPEN",
+                chosen,
+                setChosen,
+              })}
+              rows={quote.items}
+              rowKey={(item) =>
+                item.id ?? `${quote.items.indexOf(item)}-${item.name}`
+              }
+              rowTestId="quote-item-row"
+              minWidth={QUOTE_ITEM_TABLE_MIN_WIDTH}
+            />
             <div className="space-y-1 border-t border-pilot-grey-100 px-4 py-3 text-right text-sm">
               <p className="font-semibold text-pilot-grey-900">
                 Nettó összesen:{" "}
