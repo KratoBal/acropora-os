@@ -720,15 +720,6 @@ describe("PilotPosTerminalPage", () => {
     expect(paymentGrid?.className).toContain("grid-cols-3");
   });
 
-  /**
-   * KÁRTYA 18c5f3a3 (Balázs, 2026-10-02): több tételnél az új sor a lista
-   * ALJÁRA került, nem látszott, hogy a kattintás hatott, és a kolléga újra
-   * kattintott. Ez az állítás a látható visszajelzést méri: azonos termék
-   * kétszer -> EGY sor 2 darabbal, a kereső alatti állapotsor kiírja a
-   * darabszámot, a sor kiemelt, és a fókusz a keresőn marad. MI PIROSÍT:
-   * ha a hozzáadás csendben menne (nincs állapotsor, nincs kiemelés), vagy a
-   * fókusz a találat-gombon maradna.
-   */
   /*
     AZ ÜRES MENTA DOBOZ (acropora 2. söprés, /pos 390 px): a kereső alatti visszajelző sor a hely lefoglalása
     miatt mindig ott áll, de a menta háttér eddig üresen is látszott, és kósza elemnek tűnt. A háttér most csak
@@ -752,6 +743,15 @@ describe("PilotPosTerminalPage", () => {
     expect(screen.getByRole("status").className).toContain("bg-pilot-aqua-50");
   });
 
+  /**
+   * KÁRTYA 18c5f3a3 (Balázs, 2026-10-02): több tételnél az új sor a lista
+   * ALJÁRA került, nem látszott, hogy a kattintás hatott, és a kolléga újra
+   * kattintott. Ez az állítás a látható visszajelzést méri: azonos termék
+   * kétszer -> EGY sor 2 darabbal, a kereső alatti állapotsor kiírja a
+   * darabszámot, a sor kiemelt, és a fókusz a keresőn marad. MI PIROSÍT:
+   * ha a hozzáadás csendben menne (nincs állapotsor, nincs kiemelés), vagy a
+   * fókusz a találat-gombon maradna.
+   */
   it("azonos termék kétszer: egy sor 2 db, látható visszajelzés, kiemelt sor, fókusz a keresőn", async () => {
     api.searchProducts.mockResolvedValue([searchResult]);
 
