@@ -290,10 +290,7 @@ function RootNavigator() {
         options={{ title: "Partner adatlap" }}
       />
       <Stack.Screen name="szamlak/index" options={{ title: "Számlák" }} />
-      <Stack.Screen
-        name="szamlak/[id]"
-        options={{ title: "Számla adatlap" }}
-      />
+      <Stack.Screen name="szamlak/[id]" options={{ title: "Számla adatlap" }} />
       <Stack.Screen name="aquariums/index" options={{ title: "Akváriumok" }} />
       <Stack.Screen name="aquariums/new" options={{ title: "Új akvárium" }} />
       {/*
