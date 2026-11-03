@@ -9,6 +9,7 @@ import {
 import { Prisma } from "@acropora/database";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 
+import { documentPairing } from "../../testing/billing-documents.fixture.js";
 import type { DocumentPairing } from "../../missing-invoices/missing-invoices.service.js";
 import {
   filterIncoming,
@@ -59,28 +60,22 @@ const INVOICE = [
 const pairing = (
   document: Partial<DocumentPairing["document"]> = {},
   over: Partial<DocumentPairing> = {},
-): DocumentPairing => ({
-  payee: "COMPANY",
-  kind: "INVOICE",
-  debits: [{ bookingDate: "2026-10-05", amount: "81.30", currency: "EUR" }],
-  paidInFull: true,
-  paperOriginal: false,
-  document: {
-    id: "mail-1",
-    source: "MAILBOX",
-    number: "KIT-2026-0042",
-    date: "2026-10-03",
-    gross: null,
-    currency: "EUR",
-    supplierName: "Kitalált Előfizetés Inc.",
-    supplierAccounts: [],
-    kind: "INVOICE",
-    payee: "COMPANY",
-    hasOriginal: true,
-    ...document,
-  },
-  ...over,
-});
+): DocumentPairing =>
+  documentPairing({
+    debits: [{ bookingDate: "2026-10-05", amount: "81.30", currency: "EUR" }],
+    document: {
+      id: "mail-1",
+      source: "MAILBOX",
+      number: "KIT-2026-0042",
+      date: "2026-10-03",
+      gross: null,
+      currency: "EUR",
+      supplierName: "Kitalált Előfizetés Inc.",
+      hasOriginal: true,
+      ...document,
+    },
+    ...over,
+  });
 
 type Row = Record<string, unknown>;
 

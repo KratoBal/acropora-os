@@ -6,6 +6,7 @@ import { describe, it } from "node:test";
 import { Prisma } from "@acropora/database";
 import type { AuthenticatedUser } from "@acropora/types";
 
+import { candidateDocument } from "../testing/billing-documents.fixture.js";
 import type { CandidateDocument } from "./missing-invoice-matching.js";
 import type { MissingInvoiceJevService } from "./missing-invoice-jev.service.js";
 import type { MissingInvoicesRepository } from "./missing-invoices.repository.js";
@@ -41,19 +42,16 @@ function setup(enabled = true) {
     gross: string,
     supplierName: string,
     date: string,
-  ): CandidateDocument => ({
-    id,
-    source: "NAV",
-    number: `INV-${id}`,
-    date,
-    gross: new Prisma.Decimal(gross),
-    currency: "EUR",
-    supplierName,
-    supplierAccounts: [],
-    kind: "INVOICE",
-    payee: "COMPANY",
-    hasOriginal: true,
-  });
+  ): CandidateDocument =>
+    candidateDocument({
+      id,
+      number: `INV-${id}`,
+      date,
+      gross: new Prisma.Decimal(gross),
+      currency: "EUR",
+      supplierName,
+      hasOriginal: true,
+    });
   const documents = [
     doc("d-exact", "99.7", "Teljesen Más Ltd", "2026-05-03"),
     doc("d-close", "98.9", "Harmadik GmbH", "2026-05-01"),

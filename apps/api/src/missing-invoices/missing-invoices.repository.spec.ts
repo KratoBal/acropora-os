@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import { Prisma } from "@acropora/database";
 
+import { candidateDocument } from "../testing/billing-documents.fixture.js";
 import type { CandidateDocument } from "./missing-invoice-matching.js";
 import {
   mergedSupplierTaxNumber,
@@ -11,20 +12,8 @@ import {
   withoutNotBookable,
 } from "./missing-invoices.repository.js";
 
-const doc = (overrides: Partial<CandidateDocument>): CandidateDocument => ({
-  id: "x",
-  source: "NAV",
-  number: "SZ-1",
-  date: "2026-08-01",
-  gross: new Prisma.Decimal(12700),
-  currency: "HUF",
-  supplierName: "Szállító Kft.",
-  supplierAccounts: [],
-  kind: "INVOICE",
-  payee: "COMPANY",
-  hasOriginal: false,
-  ...overrides,
-});
+const doc = (overrides: Partial<CandidateDocument>): CandidateDocument =>
+  candidateDocument({ id: "x", number: "SZ-1", ...overrides });
 
 describe("mergeSameInvoice", () => {
   it("makes one invoice of the NAV row and its mailbox PDF: NAV gross and payee, the PDF as the original", () => {

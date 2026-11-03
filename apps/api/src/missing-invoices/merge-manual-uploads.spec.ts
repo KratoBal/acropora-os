@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import { Prisma } from "@acropora/database";
 
+import { candidateDocument } from "../testing/billing-documents.fixture.js";
 import {
   matchMonth,
   mergeManualUploads,
@@ -43,21 +44,18 @@ const debit = (
 const feed = (
   id: string,
   overrides: Partial<CandidateDocument> = {},
-): CandidateDocument => ({
-  id,
-  source: "SZAMLAZZ",
-  number: "4042V0000011711",
-  date: "2026-09-10",
-  gross: D(4400),
-  currency: "HUF",
-  supplierName: "Tesla Hungary Kft.",
-  supplierAccounts: [],
-  kind: "INVOICE",
-  payee: "COMPANY",
-  hasOriginal: true,
-  identities: ["sha:feed", "inv:4042v0000011711|tesla hungary kft."],
-  ...overrides,
-});
+): CandidateDocument =>
+  candidateDocument({
+    id,
+    source: "SZAMLAZZ",
+    number: "4042V0000011711",
+    date: "2026-09-10",
+    gross: D(4400),
+    supplierName: "Tesla Hungary Kft.",
+    hasOriginal: true,
+    identities: ["sha:feed", "inv:4042v0000011711|tesla hungary kft."],
+    ...overrides,
+  });
 
 /**
  * Olvashatatlan feltöltés: szám nélkül, a fájlneve külön mezőben (kártya
@@ -67,22 +65,20 @@ const upload = (
   id: string,
   fileName: string,
   overrides: Partial<CandidateDocument> = {},
-): CandidateDocument => ({
-  id,
-  source: "UPLOAD",
-  number: "",
-  fileName,
-  date: "2026-09-14",
-  gross: null,
-  currency: "HUF",
-  supplierName: "",
-  supplierAccounts: [],
-  kind: "INVOICE",
-  payee: "UNKNOWN",
-  hasOriginal: true,
-  identities: [`sha:${id}`],
-  ...overrides,
-});
+): CandidateDocument =>
+  candidateDocument({
+    id,
+    source: "UPLOAD",
+    number: "",
+    fileName,
+    date: "2026-09-14",
+    gross: null,
+    supplierName: "",
+    payee: "UNKNOWN",
+    hasOriginal: true,
+    identities: [`sha:${id}`],
+    ...overrides,
+  });
 
 const TESLA_UPLOAD = "tesla_invoice4f06695c-8ac5-4358-9265-54171c226486 2.pdf";
 

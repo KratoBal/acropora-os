@@ -7,6 +7,7 @@ import { Prisma } from "@acropora/database";
 import ExcelJS from "exceljs";
 import { PDFDocument } from "pdf-lib";
 
+import { candidateDocument } from "../testing/billing-documents.fixture.js";
 import type { SupplierInvoiceImportService } from "../purchasing/supplier-invoice-import/supplier-invoice-import.service.js";
 import type { CandidateDocument } from "./missing-invoice-matching.js";
 import { pdfTextLines } from "../purchasing/supplier-invoice-import/pdf-text-lines.js";
@@ -52,19 +53,13 @@ const debit = (date: string, amount: number, name: string, overrides = {}) => ({
 
 const document = (
   overrides: Partial<CandidateDocument> & { id: string },
-): CandidateDocument => ({
-  source: "MAILBOX",
-  number: `SZ-${overrides.id}`,
-  date: "2026-08-01",
-  gross: D(1000),
-  currency: "HUF",
-  supplierName: "Szállító Kft.",
-  supplierAccounts: [],
-  kind: "INVOICE",
-  payee: "COMPANY",
-  hasOriginal: true,
-  ...overrides,
-});
+): CandidateDocument =>
+  candidateDocument({
+    source: "MAILBOX",
+    gross: D(1000),
+    hasOriginal: true,
+    ...overrides,
+  });
 
 function service(input: {
   debits: ReturnType<typeof debit>[];
