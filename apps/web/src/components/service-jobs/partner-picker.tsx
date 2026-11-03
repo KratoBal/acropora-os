@@ -1,5 +1,6 @@
 "use client";
 
+import { PilotSelect, Select } from "@acropora/ui";
 import type { WorksheetSelectablePartner } from "@acropora/types";
 import { useEffect, useState } from "react";
 
@@ -37,6 +38,7 @@ export function PartnerPicker({
   onPick,
   onClear,
   emptyLabel = "Válassz partnert",
+  variant = "dusk",
 }: {
   id: string;
   /**
@@ -68,6 +70,12 @@ export function PartnerPicker({
    */
   onClear?: () => void;
   emptyLabel?: string;
+  /**
+   * A KÉPERNYŐ STÍLUSA. A közös választót rajzolja mindkettő (nyíllal, a lap többi mezőjével
+   * egyező kerettel), nem natív `<select>`: a `pilot` a Pilot-oldalak mezőit követi, a `dusk`
+   * az űrlap-oldalakét. Az alapérték a régi (`dusk`), tehát a meglévő hívók nem változnak.
+   */
+  variant?: "dusk" | "pilot";
 }) {
   const { session } = useAuth();
   const token = session?.token ?? "";
@@ -103,25 +111,38 @@ export function PartnerPicker({
     );
   }
 
-  return (
-    <select
-      id={id}
-      className="rounded border px-2 py-1 text-sm"
-      {...(value === undefined ? { defaultValue: "" } : { value })}
-      onChange={(event) => {
-        const picked = partners.find(
-          (partner) => partner.customerId === event.target.value,
-        );
-        if (picked) onPick(picked);
-        else onClear?.();
-      }}
-    >
+  const handleChange = (selected: string) => {
+    const picked = partners.find((partner) => partner.customerId === selected);
+    if (picked) onPick(picked);
+    else onClear?.();
+  };
+  const options = (
+    <>
       <option value="">{emptyLabel}</option>
       {partners.map((partner) => (
         <option key={partner.customerId} value={partner.customerId}>
           {partner.name} ({partner.partnerCode})
         </option>
       ))}
-    </select>
+    </>
+  );
+
+  if (variant === "pilot") {
+    // Without a `value` the select stays uncontrolled and starts on the empty option,
+    // the same as the old `defaultValue=""`.
+    return (
+      <PilotSelect chevron id={id} value={value} onChange={handleChange}>
+        {options}
+      </PilotSelect>
+    );
+  }
+  return (
+    <Select
+      id={id}
+      {...(value === undefined ? { defaultValue: "" } : { value })}
+      onChange={(event) => handleChange(event.target.value)}
+    >
+      {options}
+    </Select>
   );
 }

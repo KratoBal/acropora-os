@@ -20,10 +20,6 @@ const KIVETELEK = new Map<string, string>([
     "content/content-create-form.tsx",
     "`required` mezőt használ, amit a közös választó nem ad át (külön döntés kell hozzá)",
   ],
-  [
-    "service-jobs/partner-picker.tsx",
-    "nem vezérelt (`defaultValue`) is lehet, a közös választó csak vezérelt",
-  ],
 ]);
 
 function fajlok(mappa: string): string[] {

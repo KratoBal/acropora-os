@@ -274,11 +274,8 @@ export function PilotServiceJobEditorPage() {
               </div>
             ) : (
               <>
-                {/*
-                  A `PartnerPicker` REGI STILUSBAN marad -- lasd a
-                  fejlec varrat-szakaszat.
-                */}
                 <PartnerPicker
+                  variant="pilot"
                   id="pilot-hibajegy-partner"
                   onPick={setCustomer}
                 />
