@@ -4,6 +4,13 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import { Icon } from "./icon";
 import { huToIso, inRange, isoToHu, nextText } from "./hu-date";
+import {
+  HU_MONTHS,
+  joinMonth,
+  monthName,
+  monthParts,
+  monthYears,
+} from "./hu-month";
 import { useThemePreference } from "./use-theme-preference";
 
 /**
@@ -1017,5 +1024,85 @@ export function PilotFileInput({
       </button>
       <span className="truncate text-xs text-pilot-grey-500">{shown}</span>
     </span>
+  );
+}
+
+/**
+ * A MAGYAR HÓNAPVÁLASZTÓ (UI-áttekintés, 3. csomag, 2026-11-03). A natív `<input type="month">`
+ * a böngésző nyelvén ír ("August 2026"), ezért két választó adja: az év és a hónap magyar neve.
+ * Kifelé az `ÉÉÉÉ-HH` érték megy (mint a natív mezőnél), tehát a hívók értéke nem változik.
+ *
+ * FÉLKÉSZ VÁLASZTÁS NEM MEGY KI: ha csak az év vagy csak a hónap van kiválasztva, a hívó üres
+ * értéket kap, a mező viszont megtartja a kiválasztott felet, hogy a másik is megadható legyen.
+ * A két választó neve `<címke>, év` és `<címke>, hónap`, a csoporté a címke.
+ */
+export function PilotMonthField({
+  value,
+  onChange,
+  "aria-label": ariaLabel = "Hónap",
+  className,
+  now,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  "aria-label"?: string;
+  className?: string;
+  /** Csak a tesztnek: az "idei év" forrása. */
+  now?: Date;
+}) {
+  const parts = monthParts(value);
+  const [pending, setPending] = useState({ year: "", month: "" });
+  // Egy érvényes érték vezérel; üres értéknél csak a FÉLIG kiválasztott fél marad meg. Egy teljes
+  // pending üres érték mellett azt jelenti, hogy a hívó kívülről törölte az értéket (például egy
+  // szűrő-alaphelyzet): azt nem mutatjuk, különben a mező mást mondana, mint az érték.
+  const half =
+    joinMonth(pending.year, pending.month) === ""
+      ? pending
+      : { year: "", month: "" };
+  const year = value ? parts.year : half.year;
+  const month = value ? parts.month : half.month;
+  const years = monthYears((now ?? new Date()).getFullYear(), year);
+  const pick = (nextYear: string, nextMonth: string) => {
+    setPending({ year: nextYear, month: nextMonth });
+    onChange(joinMonth(nextYear, nextMonth));
+  };
+  return (
+    <div
+      role="group"
+      aria-label={ariaLabel}
+      className={`flex items-center gap-2 ${className ?? ""}`}
+    >
+      <PilotSelect
+        chevron
+        aria-label={`${ariaLabel}, év`}
+        className="w-28"
+        value={year}
+        onChange={(next) => pick(next, month)}
+      >
+        <option value="">Év</option>
+        {years.map((y) => (
+          <option key={y} value={y}>
+            {y}
+          </option>
+        ))}
+      </PilotSelect>
+      <PilotSelect
+        chevron
+        aria-label={`${ariaLabel}, hónap`}
+        className="w-40"
+        value={month}
+        onChange={(next) => pick(year, next)}
+      >
+        <option value="">Hónap</option>
+        {HU_MONTHS.map((_, index) => {
+          const number = String(index + 1).padStart(2, "0");
+          return (
+            <option key={number} value={number}>
+              {monthName(number)}
+            </option>
+          );
+        })}
+      </PilotSelect>
+    </div>
   );
 }
