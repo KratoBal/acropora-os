@@ -296,7 +296,7 @@ function AreaRows({
             className={`border-b border-dusk-50 ${PHONE_ROW} ${extraDiffers ? "bg-amber-50" : ""}`}
           >
             <td
-              className="py-1.5 pl-5 pr-3 text-dusk-600 max-md:w-full max-md:p-0"
+              className="py-1.5 pl-5 pr-3 text-dusk-600 max-md:w-full max-md:p-0 max-md:pl-4"
               colSpan={2}
             >
               <label className="flex items-center gap-2">

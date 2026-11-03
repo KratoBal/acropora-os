@@ -88,6 +88,15 @@ describe("UserPermissionTable on the phone", () => {
     }
   });
 
+  it("keeps the extra permissions indented under their area on the phone", async () => {
+    const { container } = await renderTable();
+    const extraCells = [...container.querySelectorAll("td[colspan='2']")];
+    expect(extraCells.length).toBeGreaterThan(0);
+    for (const cell of extraCells) {
+      expect(cell.classList.contains("max-md:pl-4")).toBe(true);
+    }
+  });
+
   it("labels every template cell, so the phone shows Sablon: next to the level", async () => {
     const { container } = await renderTable();
     const rows = [...container.querySelectorAll("tbody tr")];
