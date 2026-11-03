@@ -435,7 +435,7 @@ function ProductExtensionEditor({
                 <div className="text-xs font-medium text-dusk-600">
                   <span>Bruttó ár</span>
                   <p className="mt-1 rounded-lg border border-dusk-100 bg-dusk-50 px-3 py-2 text-sm text-dusk-700">
-                    {formGrossPrice ?? "—"} HUF
+                    {formGrossPrice ?? "—"} Ft
                   </p>
                 </div>
               </>

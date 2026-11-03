@@ -1,4 +1,5 @@
 "use client";
+import { currencyLabel } from "@/lib/format/currency";
 import {
   Alert,
   ConfirmDialog,
@@ -320,7 +321,7 @@ export function PriceListsPage() {
       id: "currency",
       header: "Pénznem",
       width: "90px",
-      cell: (list) => list.currency,
+      cell: (list) => currencyLabel(list.currency),
     },
     {
       id: "rows",

@@ -99,6 +99,14 @@ describe("PurchaseInvoiceListPage paging", () => {
     api.sync.mockReset().mockResolvedValue({});
   });
 
+  // The forint is "Ft" everywhere else in the app (billing, webshop, POS): not the ISO code "HUF".
+  it("writes a forint total with Ft, not with the ISO code", async () => {
+    render(<PurchaseInvoiceListPage />);
+    await screen.findByText("BESZ-2026-001");
+    expect(screen.getByText("10 000 Ft")).toBeTruthy();
+    expect(screen.queryByText(/HUF/)).toBeNull();
+  });
+
   it("moves to the next page instead of returning to the first", async () => {
     render(<PurchaseInvoiceListPage />);
     await screen.findByText("BESZ-2026-001");
