@@ -15,19 +15,25 @@ vi.mock("next/font/local", () => ({
 */
 describe("splitWidthClasses", () => {
   it("takes the width classes, with variants, and leaves min/max widths and the rest", () => {
-    expect(splitWidthClasses("w-20 text-right text-xs")).toEqual({
+    expect(splitWidthClasses("w-20 text-right text-xs")).toMatchObject({
       width: "w-20",
       rest: "text-right text-xs",
     });
-    expect(splitWidthClasses("h-10 w-[150px] md:w-40")).toEqual({
+    expect(splitWidthClasses("h-10 w-[150px] md:w-40")).toMatchObject({
       width: "w-[150px] md:w-40",
       rest: "h-10",
     });
-    expect(splitWidthClasses("min-w-[220px] max-w-md flex-1")).toEqual({
+    expect(splitWidthClasses("min-w-[220px] max-w-md flex-1")).toMatchObject({
       width: "",
       rest: "min-w-[220px] max-w-md flex-1",
     });
-    expect(splitWidthClasses(undefined)).toEqual({ width: "", rest: "" });
+    expect(splitWidthClasses(undefined)).toMatchObject({
+      width: "",
+      rest: "",
+      hasBase: false,
+    });
+    expect(splitWidthClasses("md:w-40").hasBase).toBe(false);
+    expect(splitWidthClasses("w-20 md:w-40").hasBase).toBe(true);
   });
 });
 
@@ -73,5 +79,31 @@ describe("PilotInput width", () => {
     const input = container.querySelector("input")!;
     expect(input.classList.contains("w-[150px]")).toBe(false);
     expect(input.classList.contains("h-10")).toBe(true);
+  });
+
+  it("keeps w-full next to a variant-only width, so the phone stays full width", () => {
+    const { container } = render(
+      <PilotInput value="" aria-label="a" className="md:w-40" />,
+    );
+    const input = container.querySelector("input")!;
+    expect(input.classList.contains("w-full")).toBe(true);
+    expect(input.classList.contains("md:w-40")).toBe(true);
+  });
+
+  it("puts the caller's width on the wrapper of an icon field, and the input fills it", () => {
+    const { container } = render(
+      <PilotInput
+        value=""
+        aria-label="a"
+        leadingIcon={<i />}
+        className="w-48"
+      />,
+    );
+    const wrapper = container.firstElementChild!;
+    expect(wrapper.classList.contains("w-48")).toBe(true);
+    expect(wrapper.classList.contains("w-full")).toBe(false);
+    const input = container.querySelector("input")!;
+    expect(input.classList.contains("w-full")).toBe(true);
+    expect(input.classList.contains("w-48")).toBe(false);
   });
 });
