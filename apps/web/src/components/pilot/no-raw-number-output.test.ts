@@ -31,18 +31,6 @@ const KIVETELEK = new Map<string, string>([
     "a bruttó (nettó + ÁFA) számolt értéke; a kiírás formatMoney-n át megy: marad",
   ],
   [
-    "toFixed:components/ai-test/ai-test-page.tsx",
-    'AI-teszt lap: "1.5 mp" ponttal; kiváltás formatNumber-re',
-  ],
-  [
-    "toFixed:components/messages/outbox.ts",
-    "üzenet-melléklet mérete, kézi vesszőcserével; kiváltás formatNumber-re",
-  ],
-  [
-    "toFixed:lib/format/file-size.ts",
-    'fájlméret "1.5 MB" ponttal; kiváltás formatNumber-re',
-  ],
-  [
     "toFixed:components/aquariums/pilot/pilot-aquarium-water-values.tsx",
     "SVG-koordináta, nem kiírás: marad",
   ],

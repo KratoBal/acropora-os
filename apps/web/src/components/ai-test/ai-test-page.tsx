@@ -11,6 +11,7 @@ import {
 } from "@acropora/ui";
 import {
   AI_ACCURACY_RATINGS,
+  formatNumber,
   hasPermission,
   PERMISSIONS,
   type AiAccuracyRating,
@@ -64,7 +65,7 @@ const MODE_LABELS: Record<string, string> = {
 
 function formatMs(value: number | null): string {
   if (value === null) return "-";
-  return `${(value / 1000).toFixed(1)} mp (${value} ms)`;
+  return `${formatNumber(value / 1000, 1)} mp (${formatNumber(value, 0)} ms)`;
 }
 
 export function AiTestPage() {

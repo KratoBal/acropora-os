@@ -1,3 +1,5 @@
+import { formatNumber } from "@acropora/types";
+
 /**
  * EGY FAJL MERETE, EMBERI ALAKBAN.
  *
@@ -20,5 +22,5 @@
 export function formatFileSize(bytes: number): string {
   return bytes < 1024 * 1024
     ? `${Math.max(1, Math.round(bytes / 1024))} kB`
-    : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+    : `${formatNumber(bytes / 1024 / 1024, 1)} MB`;
 }
