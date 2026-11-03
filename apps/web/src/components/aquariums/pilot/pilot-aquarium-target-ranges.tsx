@@ -72,7 +72,7 @@ export function PilotAquariumTargetRanges({
                 invalid ? "rounded-md bg-red-50" : ""
               }`}
             >
-              <span className="flex-1 text-pilot-grey-600">
+              <span className="min-w-0 flex-1 text-pilot-grey-600">
                 {param.label}
                 <span className="ml-1 text-xs text-pilot-grey-300">
                   ({param.unit})
@@ -83,7 +83,7 @@ export function PilotAquariumTargetRanges({
                 placeholder="Tól"
                 value={row.min}
                 onChange={(value) => setBound(param.code, "min", value)}
-                className="w-20 text-right text-xs"
+                className="w-20 shrink-0 text-right text-xs"
               />
               <span className="text-pilot-grey-300">–</span>
               <PilotInput
@@ -91,7 +91,7 @@ export function PilotAquariumTargetRanges({
                 placeholder="Ig"
                 value={row.max}
                 onChange={(value) => setBound(param.code, "max", value)}
-                className="w-20 text-right text-xs"
+                className="w-20 shrink-0 text-right text-xs"
               />
             </div>
           );
