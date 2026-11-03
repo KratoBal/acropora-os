@@ -6,6 +6,8 @@ import {
   type MortalitySummary,
 } from "@acropora/types";
 
+import { formatDayHu } from "@/lib/format/date";
+
 /**
  * AZ ELHULLÁSI NAPLÓ FELIRATAI ÉS IDŐSZAKAI (kártya 115c9740), tiszta
  * függvényekben: a lista, a részlet és az űrlap ugyanezt használja.
@@ -181,10 +183,10 @@ function parts(instant: Date) {
   return values as Record<"year" | "month" | "day" | "hour" | "minute", string>;
 }
 
-/** A lista időpontja: „2026.10.06. 09:42”. */
+/** A lista időpontja, a közös listaalakban: „2026. 10. 06. 09:42” (budapesti idő). */
 export function shortDateTime(iso: string): string {
   const p = parts(new Date(iso));
-  return `${p.year}.${p.month}.${p.day}. ${p.hour}:${p.minute}`;
+  return `${formatDayHu(`${p.year}-${p.month}-${p.day}`)} ${p.hour}:${p.minute}`;
 }
 
 const MONTH_NAMES = [
@@ -202,9 +204,9 @@ const MONTH_NAMES = [
   "december",
 ] as const;
 
-/** Az elhullás napja a listában: „2026.10.06.” (a nap `ÉÉÉÉ-HH-NN`, zóna nélkül). */
+/** Az elhullás napja a listában, a közös listaalakban: „2026. 10. 06.” (a nap `ÉÉÉÉ-HH-NN`, zóna nélkül). */
 export function shortDay(day: string): string {
-  return `${day.replaceAll("-", ".")}.`;
+  return formatDayHu(day);
 }
 
 /** Az elhullás napja a részleten: „2026. október 6.”. */

@@ -12,15 +12,14 @@ import { formatDayHu } from "./date";
   "2026.11.07."-et írt (szóközök nélkül), minden más lista "2026. 11. 07."-et. Az őrző a forrásban keresi a
   szóköz nélküli, pontokkal összefűzött dátum-sablont (`${év}.${hó}.${nap}.`). MI PIROSÍT: ha egy új formázó megint
   így fűzi össze a dátumot a kivételek listáján kívül. A kivételeknek oka van, és a lista nem avulhat el.
+  HATÁRA: a minta csak az egyszerű azonosítót és az egy pontos tagot (`y`, `p.year`) fogja; az indexelt (`${m[1]}`), a
+  függvényhívásos (`${pad(d)}`) és a `join(".")` alakot nem. A zöld tehát azt jelenti, hogy EZ az alak nincs a forrásban,
+  nem azt, hogy nincs tömör dátum.
 */
 const ROOT = join(process.cwd(), "src");
 
-const KIVETELEK = new Map<string, string>([
-  [
-    "components/mortality/mortality-format.ts",
-    "az elhullás-nézet a Figma szerinti tömör alakot írja (`2026.10.06.`); külön döntés kell az egységesítéséhez",
-  ],
-]);
+// Nincs kivétel: az elhullás-nézet is a közös listaalakot írja (acrobot, 2026-11-03).
+const KIVETELEK = new Map<string, string>();
 
 function fajlok(mappa: string): string[] {
   return readdirSync(mappa).flatMap((nev) => {
