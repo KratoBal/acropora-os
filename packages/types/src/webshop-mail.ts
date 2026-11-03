@@ -221,6 +221,23 @@ export function hungarianDay(iso: string): string {
   }).format(new Date(iso));
 }
 
+/**
+ * The shop's own calendar day in a language: "2026. október 11." in
+ * Hungarian, "11 October 2026" in English (en-GB, the order day first).
+ */
+export function mailDay(
+  iso: string,
+  locale: WebshopMailLocale | undefined,
+): string {
+  if (locale !== "en") return hungarianDay(iso);
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Budapest",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  }).format(new Date(iso));
+}
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
@@ -241,13 +258,6 @@ function webAddress(url: string | null, httpsOnly = false): string | null {
     return null;
   }
 }
-
-const PAYMENT_LABEL: Record<WebshopPaymentRole, string> = {
-  ONLINE_CARD: "Bankkártya",
-  COD: "Utánvét",
-  PAY_AT_STORE: "Fizetés a boltban",
-  BANK_TRANSFER: "Előre utalás",
-};
 
 const H2 = 'style="font-size:16px;margin:20px 0 8px;"';
 const UL = 'style="padding-left:18px;margin:0;"';
@@ -299,44 +309,209 @@ function amountBox(label: string, amount: number): MailBlock {
   };
 }
 
-const priced = (order: WebshopMailOrder) => [
+/**
+ * THE WORDS THE CODE BUILDS AROUND THE TEMPLATE'S TEXT, PER LANGUAGE (card
+ * d5c6befd, second step). Hungarian is exactly what the code said before; the
+ * English wording is the drafted one (acrobot 41435). One dictionary per
+ * language, same shape: a missing English word is a compile error, not a
+ * Hungarian word in an English mail.
+ *
+ * The amount box has one label per situation (pickup at the store, delivery,
+ * a payment link) because English says "at pickup" and "on delivery"
+ * differently, where Hungarian has used one word for the first two
+ * (acrobot 41435). The Hungarian labels are unchanged.
+ */
+export interface WebshopMailText {
+  readonly and: string;
+  readonly total: string;
+  readonly finalTotal: string;
+  readonly toPay: string;
+  readonly payment: string;
+  readonly shipping: string;
+  readonly paymentLabel: Record<WebshopPaymentRole, string>;
+  readonly paymentSentence: Record<WebshopPaymentRole, string>;
+  readonly splitPayment: Record<WebshopSplitPayment, string>;
+  readonly dueAtPickupBox: string;
+  readonly dueOnDeliveryBox: string;
+  readonly dueBox: string;
+  readonly yourOrder: string;
+  readonly inYourParcel: string;
+  readonly yourOrderNumbered: (id: number | string) => string;
+  readonly yourPickupOrderNumbered: (id: number | string) => string;
+  readonly shippingNow: (id: number | string) => string;
+  readonly arrivingLater: (id: number | string) => string;
+  readonly orderSection: (id: number | string, pickup: boolean) => string;
+  readonly mixedOrders: string;
+  readonly mixedOneCardPayment: string;
+  readonly nextShipped: string;
+  readonly nextPickup: string;
+  readonly glsPoint: string;
+  readonly glsHome: string;
+  readonly glsLogoLocker: string;
+  readonly glsLogoPoint: string;
+  readonly trackingNumber: string;
+  readonly trackParcel: string;
+  readonly pickupInPaymentLink: (id: number | string) => string;
+  readonly delayedPickupReleased: (id: number | string) => string;
+  readonly refundCardLast4: (last4: string) => string;
+  readonly refundCardGeneric: string;
+  readonly refundedSoFar: (total: string) => string;
+}
+
+const HU_TEXT: WebshopMailText = {
+  and: "és",
+  total: "Összesen",
+  finalTotal: "Végösszeg",
+  toPay: "Fizetendő",
+  payment: "Fizetés",
+  shipping: "Szállítás",
+  paymentLabel: {
+    ONLINE_CARD: "Bankkártya",
+    COD: "Utánvét",
+    PAY_AT_STORE: "Fizetés a boltban",
+    BANK_TRANSFER: "Előre utalás",
+  },
+  paymentSentence: {
+    ONLINE_CARD:
+      "A kártyádon most zároltuk az összeget; a terhelés akkor történik, amikor a rendelést teljesítjük.",
+    COD: "Az összeget a csomag átvételekor fizeted.",
+    PAY_AT_STORE: "Az összeget a boltban, átvételkor fizeted.",
+    // bb3a6bd5: the commerce wording (#506), letter for letter
+    BANK_TRANSFER:
+      "Az összeget előre, banki átutalással fizeted: a díjbekérőt emailben küldjük, 8 napos fizetési határidővel. A rendelést a befizetés beérkezése után teljesítjük.",
+  },
+  splitPayment: {
+    card: "A kártyádról az első részért csak annak az összegét vonjuk le, amikor a csomag elindul. A második részhez, amikor készen áll a szállításra, emailben fizetési linket küldünk.",
+    cod: "Mindkét részt a csomag átvételekor fizeted, a saját összegét. Külön utánvét-díjat nem számolunk fel.",
+    store: "Mindkét részt a boltban fizeted, átvételkor.",
+    transfer:
+      "Mindkét részt előre, banki átutalással fizeted, mindegyiket a saját összegével. A második részhez külön díjbekérőt küldünk.",
+  },
+  dueAtPickupBox: "ÁTVÉTELKOR FIZETENDŐ",
+  dueOnDeliveryBox: "ÁTVÉTELKOR FIZETENDŐ",
+  dueBox: "FIZETENDŐ",
+  yourOrder: "A rendelésed",
+  inYourParcel: "A csomagban",
+  yourOrderNumbered: (id) => `A rendelésed (#${id})`,
+  yourPickupOrderNumbered: (id) => `Bolti átvételes rendelésed (#${id})`,
+  shippingNow: (id) => `Most indul (#${id})`,
+  arrivingLater: (id) => `Később érkezik (#${id})`,
+  orderSection: (id, pickup) =>
+    `Rendelés #${id}${pickup ? " (átvétel a boltban)" : ""}`,
+  mixedOrders:
+    "Az élő állat miatt két rendelés lett belőle: a kiszállítandó tételeké, és a boltban átvehetőké.",
+  mixedOneCardPayment:
+    "A kártyás fizetés a kettőre együtt, egy lépésben történt.",
+  nextShipped:
+    "Összekészítjük a rendelésedet. Követési szám csak a csomag feladása után lesz.",
+  nextPickup: "Az élő állatos rendelést a boltban veszed át.",
+  glsPoint: "GLS csomagpont",
+  glsHome: "GLS házhozszállítás",
+  glsLogoLocker: "GLS Automata",
+  glsLogoPoint: "GLS Csomagpont",
+  trackingNumber: "Követési szám",
+  trackParcel: "Csomag követése",
+  pickupInPaymentLink: (id) =>
+    `A fizetés a bolti átvételes #${id} rendelésedet is tartalmazza, egy összegben.`,
+  delayedPickupReleased: (id) =>
+    `A bolti átvételes #${id} rendelésed ugyanazzal a kártyás fizetéssel készült, ezért a zárolását is feloldottuk. A fizetési link mindkét rendelést fizeti.`,
+  refundCardLast4: (last4) => `a ${last4} végű kártyádra`,
+  refundCardGeneric: "a kártyádra, amellyel fizettél",
+  refundedSoFar: (total) =>
+    `Erről a rendelésről eddig összesen ${total} visszatérítés ment.`,
+};
+
+const EN_TEXT: WebshopMailText = {
+  and: "and",
+  total: "Grand total",
+  finalTotal: "Total",
+  toPay: "To pay",
+  payment: "Payment",
+  shipping: "Shipping",
+  paymentLabel: {
+    ONLINE_CARD: "Card payment",
+    COD: "Cash on delivery",
+    PAY_AT_STORE: "Pay at the store",
+    BANK_TRANSFER: "Bank transfer in advance",
+  },
+  paymentSentence: {
+    ONLINE_CARD:
+      "We have placed a hold on the amount on your card; the charge is made when we fulfil the order.",
+    COD: "You pay the amount when you receive the parcel.",
+    PAY_AT_STORE:
+      "You pay the amount at the store, when you pick up your order.",
+    BANK_TRANSFER:
+      "You pay the amount in advance by bank transfer: we will email you the proforma invoice, with a payment deadline of 8 days. We fulfil the order once the payment has arrived.",
+  },
+  splitPayment: {
+    card: "From your card we charge only the amount of the first part, when its parcel starts. For the second part, when it is ready to ship, we will email you a payment link.",
+    cod: "You pay each part when you receive its parcel, its own amount. We do not charge a separate cash-on-delivery fee.",
+    store: "You pay both parts at the store, when you pick them up.",
+    transfer:
+      "You pay both parts in advance by bank transfer, each for its own amount. For the second part we will send a separate proforma invoice.",
+  },
+  dueAtPickupBox: "TO PAY AT PICKUP",
+  dueOnDeliveryBox: "TO PAY ON DELIVERY",
+  dueBox: "TO PAY",
+  yourOrder: "Your order",
+  inYourParcel: "In your parcel",
+  yourOrderNumbered: (id) => `Your order (#${id})`,
+  yourPickupOrderNumbered: (id) => `Your pickup order (#${id})`,
+  shippingNow: (id) => `Shipping now (#${id})`,
+  arrivingLater: (id) => `Arriving later (#${id})`,
+  orderSection: (id, pickup) =>
+    `Order #${id}${pickup ? " (pickup at the store)" : ""}`,
+  mixedOrders:
+    "Because of the live animals, this became two orders: the items to be shipped, and the ones you pick up at the store.",
+  mixedOneCardPayment: "The card payment covered both in one step.",
+  nextShipped:
+    "We are getting your order ready. You will get a tracking number only once the parcel has been shipped.",
+  nextPickup: "You pick up the live-animal order at the store.",
+  glsPoint: "GLS parcel point",
+  glsHome: "GLS home delivery",
+  glsLogoLocker: "GLS Parcel Locker",
+  glsLogoPoint: "GLS Parcel Point",
+  trackingNumber: "Tracking number",
+  trackParcel: "Track your parcel",
+  pickupInPaymentLink: (id) =>
+    `The payment also covers your pickup order #${id}, in one amount.`,
+  delayedPickupReleased: (id) =>
+    `Your pickup order #${id} was placed with the same card payment, so we have released its hold too. The payment link pays for both orders.`,
+  refundCardLast4: (last4) => `to your card ending in ${last4}`,
+  refundCardGeneric: "to the card you paid with",
+  refundedSoFar: (total) =>
+    `So far we have refunded ${total} in total for this order.`,
+};
+
+const MAIL_TEXT: Record<WebshopMailLocale, WebshopMailText> = {
+  hu: HU_TEXT,
+  en: EN_TEXT,
+};
+
+/** The words of a language; a missing language is Hungarian. */
+export const webshopMailText = (
+  locale: WebshopMailLocale | undefined,
+): WebshopMailText => MAIL_TEXT[locale ?? "hu"];
+
+const priced = (order: WebshopMailOrder, t: WebshopMailText) => [
   ...order.items.map(
     (i) => `${i.title} × ${i.quantity}: ${mailForint(i.total)}`,
   ),
-  ...order.shipping.map((m) => `Szállítás: ${m.name}, ${mailForint(m.amount)}`),
+  ...order.shipping.map(
+    (m) => `${t.shipping}: ${m.name}, ${mailForint(m.amount)}`,
+  ),
 ];
 
-const paymentSentence = (role: WebshopPaymentRole | null): string | null => {
-  switch (role) {
-    case "ONLINE_CARD":
-      return "A kártyádon most zároltuk az összeget; a terhelés akkor történik, amikor a rendelést teljesítjük.";
-    case "COD":
-      return "Az összeget a csomag átvételekor fizeted.";
-    case "PAY_AT_STORE":
-      return "Az összeget a boltban, átvételkor fizeted.";
-    // bb3a6bd5: the commerce wording (#506), letter for letter
-    case "BANK_TRANSFER":
-      return "Az összeget előre, banki átutalással fizeted: a díjbekérőt emailben küldjük, 8 napos fizetési határidővel. A rendelést a befizetés beérkezése után teljesítjük.";
-    default:
-      return null;
-  }
-};
+const paymentSentence = (
+  role: WebshopPaymentRole | null,
+  t: WebshopMailText,
+): string | null => (role === null ? null : t.paymentSentence[role]);
 
-/**
- * A split order's two parts, paid the original way. A card is charged when
- * each part's parcel starts (not at the split), and the later part gets its
- * own payment link when it is ready to ship (acrobot 26652).
- */
-const SPLIT_PAYMENT_SENTENCE: Record<WebshopSplitPayment, string> = {
-  card: "A kártyádról az első részért csak annak az összegét vonjuk le, amikor a csomag elindul. A második részhez, amikor készen áll a szállításra, emailben fizetési linket küldünk.",
-  cod: "Mindkét részt a csomag átvételekor fizeted, a saját összegét. Külön utánvét-díjat nem számolunk fel.",
-  store: "Mindkét részt a boltban fizeted, átvételkor.",
-  transfer:
-    "Mindkét részt előre, banki átutalással fizeted, mindegyiket a saját összegével. A második részhez külön díjbekérőt küldünk.",
-};
-
-const ordersLabel = (id: number | string, other: number | string | null) =>
-  other === null ? `#${id}` : `#${id} és #${other}`;
+const ordersLabel = (
+  id: number | string,
+  other: number | string | null,
+  t: WebshopMailText,
+) => (other === null ? `#${id}` : `#${id} ${t.and} #${other}`);
 
 export interface WebshopMailContent {
   readonly values: MailTemplateValues;
@@ -351,20 +526,25 @@ export interface WebshopMailContent {
 export function webshopMailContent(
   facts: WebshopMailFacts,
 ): WebshopMailContent {
-  const own = templateContent(facts);
+  const t = webshopMailText(facts.locale);
+  const own = templateContent(facts, t, facts.locale);
   return {
     values: {
       ...own.values,
       ugyfel_neve: facts.customer_name ?? "",
       rendeles_datum: facts.order_created_at
-        ? hungarianDay(facts.order_created_at)
+        ? mailDay(facts.order_created_at, facts.locale)
         : "",
     },
     blocks: own.blocks,
   };
 }
 
-function templateContent(facts: WebshopTemplateFacts): WebshopMailContent {
+function templateContent(
+  facts: WebshopTemplateFacts,
+  t: WebshopMailText,
+  locale: WebshopMailLocale | undefined,
+): WebshopMailContent {
   switch (facts.template) {
     case "order-placed": {
       const orders = facts.orders;
@@ -374,37 +554,33 @@ function templateContent(facts: WebshopTemplateFacts): WebshopMailContent {
       const mixed = orders.length > 1;
       const mixedLine = mixed
         ? [
-            "Az élő állat miatt két rendelés lett belőle: a kiszállítandó tételeké, és a boltban átvehetőké.",
+            t.mixedOrders,
             ...(orders.every((o) => o.payment === "ONLINE_CARD")
-              ? ["A kártyás fizetés a kettőre együtt, egy lépésben történt."]
+              ? [t.mixedOneCardPayment]
               : []),
           ].join(" ")
         : "";
       const sections = orders.map((o) => ({
-        title: `Rendelés #${o.display_id}${o.pickup ? " (átvétel a boltban)" : ""}`,
+        title: t.orderSection(o.display_id, o.pickup),
         lines: [
-          ...priced(o),
-          `Fizetendő: ${mailForint(o.total)}`,
-          ...(o.payment ? [`Fizetés: ${PAYMENT_LABEL[o.payment]}`] : []),
+          ...priced(o, t),
+          `${t.toPay}: ${mailForint(o.total)}`,
+          ...(o.payment ? [`${t.payment}: ${t.paymentLabel[o.payment]}`] : []),
         ],
-        after: paymentSentence(o.payment),
+        after: paymentSentence(o.payment, t),
       }));
       const items = listBlock(sections, false);
       const total = orders.reduce((sum, o) => sum + o.total, 0);
       const next = [
-        ...(orders.some((o) => !o.pickup)
-          ? [
-              "Összekészítjük a rendelésedet. Követési szám csak a csomag feladása után lesz.",
-            ]
-          : []),
-        ...(orders.some((o) => o.pickup)
-          ? ["Az élő állatos rendelést a boltban veszed át."]
-          : []),
+        ...(orders.some((o) => !o.pickup) ? [t.nextShipped] : []),
+        ...(orders.some((o) => o.pickup) ? [t.nextPickup] : []),
       ].join("\n");
       return {
         values: {
           rendeles_szam: String(first.display_id),
-          rendeles_szamok: orders.map((o) => `#${o.display_id}`).join(" és "),
+          rendeles_szamok: orders
+            .map((o) => `#${o.display_id}`)
+            .join(` ${t.and} `),
           vegyes_kosar_mondat: mixedLine,
           osszesen: mailForint(total),
           kovetkezo_lepes: next,
@@ -412,8 +588,8 @@ function templateContent(facts: WebshopTemplateFacts): WebshopMailContent {
         blocks: {
           rendeles_tetelek: mixed
             ? {
-                html: `${items.html}<p>${escapeHtml(`Összesen: ${mailForint(total)}`)}</p>`,
-                text: `${items.text}\n\nÖsszesen: ${mailForint(total)}`,
+                html: `${items.html}<p>${escapeHtml(`${t.total}: ${mailForint(total)}`)}</p>`,
+                text: `${items.text}\n\n${t.total}: ${mailForint(total)}`,
               }
             : items,
         },
@@ -426,13 +602,13 @@ function templateContent(facts: WebshopTemplateFacts): WebshopMailContent {
     case "order-status-closed": {
       const o = facts.order;
       const method = o.shipping.map((m) => m.name).filter(Boolean)[0] ?? "";
-      const due =
-        (facts.template === "order-status-out_for_delivery" &&
-          o.payment === "COD") ||
-        (facts.template === "order-status-ready_for_pickup" &&
-          o.payment === "PAY_AT_STORE")
-          ? o.total
-          : null;
+      const dueOnDelivery =
+        facts.template === "order-status-out_for_delivery" &&
+        o.payment === "COD";
+      const dueAtPickup =
+        facts.template === "order-status-ready_for_pickup" &&
+        o.payment === "PAY_AT_STORE";
+      const due = dueOnDelivery || dueAtPickup ? o.total : null;
       return {
         values: {
           rendeles_szam: String(o.display_id),
@@ -441,14 +617,21 @@ function templateContent(facts: WebshopTemplateFacts): WebshopMailContent {
         },
         blocks: {
           fizetendo_doboz:
-            due === null ? null : amountBox("ÁTVÉTELKOR FIZETENDŐ", due),
+            due === null
+              ? null
+              : amountBox(
+                  dueAtPickup ? t.dueAtPickupBox : t.dueOnDeliveryBox,
+                  due,
+                ),
           rendeles_tetelek: listBlock([
             {
-              title: "A rendelésed",
+              title: t.yourOrder,
               lines: [
-                ...priced(o),
-                `Végösszeg: ${mailForint(o.total)}`,
-                ...(o.payment ? [`Fizetés: ${PAYMENT_LABEL[o.payment]}`] : []),
+                ...priced(o, t),
+                `${t.finalTotal}: ${mailForint(o.total)}`,
+                ...(o.payment
+                  ? [`${t.payment}: ${t.paymentLabel[o.payment]}`]
+                  : []),
               ],
             },
           ]),
@@ -462,8 +645,8 @@ function templateContent(facts: WebshopTemplateFacts): WebshopMailContent {
         s.carrier === "foxpost"
           ? "FOXPOST – Packeta Group"
           : s.gls_point
-            ? "GLS csomagpont"
-            : "GLS házhozszállítás";
+            ? t.glsPoint
+            : t.glsHome;
       const destination = [s.destination_title, s.destination_address]
         .filter((part) => part && part !== carrier)
         .join(" · ");
@@ -484,8 +667,8 @@ function templateContent(facts: WebshopTemplateFacts): WebshopMailContent {
           : !s.gls_point
             ? "GLS"
             : s.gls_point_type === "parcel-locker"
-              ? "GLS Automata"
-              : "GLS Csomagpont";
+              ? t.glsLogoLocker
+              : t.glsLogoPoint;
       const logoWidth = s.carrier === "gls" && !s.gls_point ? 64 : 140;
       const box: MailBlock = {
         html:
@@ -497,17 +680,17 @@ function templateContent(facts: WebshopTemplateFacts): WebshopMailContent {
           (destination
             ? `<p style="margin:8px 0 0;color:#6b7280;font-size:13px;">${escapeHtml(destination)}</p>`
             : "") +
-          `<p style="margin:12px 0 0;color:#6b7280;font-size:11px;">Követési szám</p>` +
+          `<p style="margin:12px 0 0;color:#6b7280;font-size:11px;">${escapeHtml(t.trackingNumber)}</p>` +
           `<p style="margin:2px 0 0;font-size:18px;font-weight:bold;">${escapeHtml(s.tracking_number)}</p>` +
           (tracking
-            ? `<p style="margin:16px 0 0;"><a href="${escapeHtml(tracking)}" style="display:block;background:#0f1720;color:#ffffff;text-align:center;padding:12px 16px;text-decoration:none;font-weight:bold;">Csomag követése</a></p>`
+            ? `<p style="margin:16px 0 0;"><a href="${escapeHtml(tracking)}" style="display:block;background:#0f1720;color:#ffffff;text-align:center;padding:12px 16px;text-decoration:none;font-weight:bold;">${escapeHtml(t.trackParcel)}</a></p>`
             : "") +
           `</div>`,
         text: [
           carrier,
           destination,
-          `Követési szám: ${s.tracking_number}`,
-          ...(tracking ? [`Csomag követése: ${tracking}`] : []),
+          `${t.trackingNumber}: ${s.tracking_number}`,
+          ...(tracking ? [`${t.trackParcel}: ${tracking}`] : []),
         ]
           .filter(Boolean)
           .join("\n"),
@@ -524,10 +707,10 @@ function templateContent(facts: WebshopTemplateFacts): WebshopMailContent {
           fizetendo_doboz:
             s.cod_amount === null
               ? null
-              : amountBox("ÁTVÉTELKOR FIZETENDŐ", s.cod_amount),
+              : amountBox(t.dueOnDeliveryBox, s.cod_amount),
           csomag_tartalma: listBlock([
             {
-              title: "A csomagban",
+              title: t.inYourParcel,
               lines: s.items.map((i) => `${i.title} × ${i.quantity}`),
             },
           ]),
@@ -540,18 +723,25 @@ function templateContent(facts: WebshopTemplateFacts): WebshopMailContent {
       return {
         values: {
           rendeles_szam: String(o.display_id),
-          rendeles_szamok: ordersLabel(o.display_id, facts.pickup_display_id),
+          rendeles_szamok: ordersLabel(
+            o.display_id,
+            facts.pickup_display_id,
+            t,
+          ),
           zarolt_osszeg: mailForint(facts.amount),
           bolti_rendeles_mondat:
             facts.pickup_display_id === null
               ? ""
-              : `A bolti átvételes #${facts.pickup_display_id} rendelésed ugyanazzal a kártyás fizetéssel készült, ezért a zárolását is feloldottuk. A fizetési link mindkét rendelést fizeti.`,
+              : t.delayedPickupReleased(facts.pickup_display_id),
         },
         blocks: {
           rendeles_tetelek: listBlock([
             {
-              title: `A rendelésed (#${o.display_id})`,
-              lines: [...priced(o), `Végösszeg: ${mailForint(o.total)}`],
+              title: t.yourOrderNumbered(o.display_id),
+              lines: [
+                ...priced(o, t),
+                `${t.finalTotal}: ${mailForint(o.total)}`,
+              ],
             },
           ]),
         },
@@ -565,26 +755,34 @@ function templateContent(facts: WebshopTemplateFacts): WebshopMailContent {
       return {
         values: {
           rendeles_szam: String(o.display_id),
-          rendeles_szamok: ordersLabel(o.display_id, p ? p.display_id : null),
+          rendeles_szamok: ordersLabel(
+            o.display_id,
+            p ? p.display_id : null,
+            t,
+          ),
           fizetesi_link: webAddress(facts.url) ?? "",
           fizetendo: mailForint(facts.amount),
-          link_lejarat: hungarianDay(facts.expires_at),
-          bolti_rendeles_mondat: p
-            ? `A fizetés a bolti átvételes #${p.display_id} rendelésedet is tartalmazza, egy összegben.`
-            : "",
+          link_lejarat: mailDay(facts.expires_at, locale),
+          bolti_rendeles_mondat: p ? t.pickupInPaymentLink(p.display_id) : "",
         },
         blocks: {
-          fizetendo_doboz: amountBox("FIZETENDŐ", facts.amount),
+          fizetendo_doboz: amountBox(t.dueBox, facts.amount),
           rendeles_tetelek: listBlock([
             {
-              title: `A rendelésed (#${o.display_id})`,
-              lines: [...priced(o), `Végösszeg: ${mailForint(o.total)}`],
+              title: t.yourOrderNumbered(o.display_id),
+              lines: [
+                ...priced(o, t),
+                `${t.finalTotal}: ${mailForint(o.total)}`,
+              ],
             },
             ...(p
               ? [
                   {
-                    title: `Bolti átvételes rendelésed (#${p.display_id})`,
-                    lines: [...priced(p), `Végösszeg: ${mailForint(p.total)}`],
+                    title: t.yourPickupOrderNumbered(p.display_id),
+                    lines: [
+                      ...priced(p, t),
+                      `${t.finalTotal}: ${mailForint(p.total)}`,
+                    ],
                   },
                 ]
               : []),
@@ -599,19 +797,25 @@ function templateContent(facts: WebshopTemplateFacts): WebshopMailContent {
       return {
         values: {
           rendeles_szam: String(a.display_id),
-          rendeles_szamok: ordersLabel(a.display_id, b.display_id),
+          rendeles_szamok: ordersLabel(a.display_id, b.display_id, t),
           masodik_resz_szam: `#${b.display_id}`,
-          reszek_fizetese_mondat: SPLIT_PAYMENT_SENTENCE[facts.payment],
+          reszek_fizetese_mondat: t.splitPayment[facts.payment],
         },
         blocks: {
           rendeles_tetelek: listBlock([
             {
-              title: `Most indul (#${a.display_id})`,
-              lines: [...priced(a), `Végösszeg: ${mailForint(a.total)}`],
+              title: t.shippingNow(a.display_id),
+              lines: [
+                ...priced(a, t),
+                `${t.finalTotal}: ${mailForint(a.total)}`,
+              ],
             },
             {
-              title: `Később érkezik (#${b.display_id})`,
-              lines: [...priced(b), `Végösszeg: ${mailForint(b.total)}`],
+              title: t.arrivingLater(b.display_id),
+              lines: [
+                ...priced(b, t),
+                `${t.finalTotal}: ${mailForint(b.total)}`,
+              ],
             },
           ]),
         },
@@ -625,11 +829,11 @@ function templateContent(facts: WebshopTemplateFacts): WebshopMailContent {
           rendeles_szam: String(r.display_id),
           visszaterites_osszege: mailForint(r.amount),
           kartya_megnevezes: r.last4
-            ? `a ${r.last4} végű kártyádra`
-            : "a kártyádra, amellyel fizettél",
+            ? t.refundCardLast4(r.last4)
+            : t.refundCardGeneric,
           eddigi_visszaterites_mondat:
             r.refunded_total > r.amount
-              ? `Erről a rendelésről eddig összesen ${mailForint(r.refunded_total)} visszatérítés ment.`
+              ? t.refundedSoFar(mailForint(r.refunded_total))
               : "",
         },
         blocks: {},

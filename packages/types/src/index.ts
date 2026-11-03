@@ -206,6 +206,7 @@ export {
   WEBSHOP_SPLIT_PAYMENTS,
   WEBSHOP_STATUS_TEMPLATES,
   mailForint,
+  mailDay,
   hungarianDay,
   isWebshopMailTemplate,
   parseWebshopMailFacts,
@@ -213,6 +214,7 @@ export {
   webshopMailKey,
   webshopMailLocaleOf,
   webshopMailTemplateOf,
+  webshopMailText,
 } from "./webshop-mail.js";
 export {
   renderWebshopMail,
@@ -243,6 +245,7 @@ export type {
   WebshopMailFacts,
   WebshopMailLine,
   WebshopMailLocale,
+  WebshopMailText,
   WebshopMailOrder,
   WebshopMailTemplate,
   WebshopPaymentRole,
