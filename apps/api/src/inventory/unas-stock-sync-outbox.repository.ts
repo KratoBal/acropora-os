@@ -40,6 +40,33 @@ export interface UnasStockSyncOutboxListItem {
   processedAt: Date | null;
 }
 
+/**
+ * THE COLUMNS THE LIST AND DETAIL ENDPOINTS RETURN. Explicit on purpose: a bare `findMany` returns
+ * the whole row, including `sequence`, a BigInt column, and the response is serialised with
+ * `JSON.stringify`, which throws "Do not know how to serialize a BigInt". Every non-empty outbox
+ * answered with a 500 (the "Tételek betöltése nem sikerült" panel on /keszlet-kimenosor). The
+ * `sequence` is an internal ordering key: the list sorts by it but the response type has no such
+ * field. Keep this in step with `UnasStockSyncOutboxListItem`; a new BigInt column must not be added
+ * here.
+ */
+export const UNAS_STOCK_SYNC_OUTBOX_LIST_SELECT = {
+  id: true,
+  variantId: true,
+  warehouseId: true,
+  sku: true,
+  targetOnHand: true,
+  status: true,
+  attempts: true,
+  nextAttemptAt: true,
+  lastError: true,
+  resolutionNote: true,
+  sourceProcess: true,
+  sourceRecordId: true,
+  createdAt: true,
+  updatedAt: true,
+  processedAt: true,
+} as const;
+
 export interface UnasStockSyncOutboxDatabase {
   $transaction<T>(
     callback: (transaction: UnasStockSyncOutboxTransaction) => Promise<T>,
@@ -407,6 +434,7 @@ export class UnasStockSyncOutboxRepository extends Repository {
   }): Promise<UnasStockSyncOutboxListItem[]> {
     return this.outboxDatabase.unasStockSyncOutbox.findMany({
       where: params.status ? { status: params.status } : {},
+      select: UNAS_STOCK_SYNC_OUTBOX_LIST_SELECT,
       orderBy: { sequence: "desc" },
       take: params.limit,
     });
@@ -415,6 +443,7 @@ export class UnasStockSyncOutboxRepository extends Repository {
   async findById(id: string): Promise<UnasStockSyncOutboxListItem | null> {
     const [row] = await this.outboxDatabase.unasStockSyncOutbox.findMany({
       where: { id },
+      select: UNAS_STOCK_SYNC_OUTBOX_LIST_SELECT,
       take: 1,
     });
     return row ?? null;
