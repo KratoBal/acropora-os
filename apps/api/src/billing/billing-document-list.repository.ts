@@ -112,7 +112,13 @@ export class BillingDocumentListRepository {
         select: { invoiceNumber: true },
       })
     ).flatMap((row) => (row.invoiceNumber ? [row.invoiceNumber] : []));
-    const external = withoutOwnTwins(externalWhere(query), ownNumbers);
+    const external = withoutOwnTwins(
+      externalWhere(
+        query,
+        await orderNumbersByBuyerName(this.database, query.q),
+      ),
+      ownNumbers,
+    );
     const offset = (query.page - 1) * query.pageSize;
     const both = own !== null && external !== null;
     const [ownRows, ownCount, externalRows, externalCount] =
@@ -319,4 +325,24 @@ export async function orderBuyerNamesByOrderNumber(
     if (order.buyerName?.trim())
       out.set(order.orderNumber.slice("UNAS-".length), order.buyerName.trim());
   return out;
+}
+
+/**
+ * A keresőszóra illeszkedő vevőnevű webshop-rendelések számai, `UNAS-` előtag nélkül: ahogy a külső
+ * számla `orderNumber`-je áll (`orderBuyerNamesByOrderNumber` fordítottja). Keresőszó nélkül üres.
+ */
+export async function orderNumbersByBuyerName(
+  database: typeof prisma,
+  q: string | undefined,
+): Promise<string[]> {
+  const text = q?.trim();
+  if (!text) return [];
+  const orders = await database.salesOrder.findMany({
+    where: {
+      orderNumber: { startsWith: "UNAS-" },
+      buyerName: { contains: text, mode: "insensitive" },
+    },
+    select: { orderNumber: true },
+  });
+  return orders.map((order) => order.orderNumber.slice("UNAS-".length));
 }

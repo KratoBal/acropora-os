@@ -22,6 +22,7 @@ import {
 } from "./billing-document-list.js";
 import {
   BillingDocumentListRepository,
+  orderNumbersByBuyerName,
   type BillingDocumentListRow,
 } from "./billing-document-list.repository.js";
 
@@ -1059,6 +1060,96 @@ describe("the paper-original mark on the list", () => {
       "paperOriginal" in
         toExternalListItem(external({ paperOriginalAt: null })),
       false,
+    );
+  });
+});
+
+/**
+ * A VEVŐNÉVRE KERESÉS A KÜLSŐ SZÁMLÁN (Balázs, 2026-11-03 08:56 UTC: a „zaubek” nem adta ki az
+ * ACRW-2026/00515-öt, a számra keresve megvolt). A magánszemély nevét a NAV elrejti, a lista a webshop-
+ * rendelés vevőnevét mutatja, a keresés eddig csak a számla saját (elrejtett) nevét nézte. MI PIROSÍT: a
+ * rendelés vevőnevére illeszkedő rendelésszám nem kerül a külső szűrőbe; az `UNAS-` előtag rajta marad
+ * (a számla rendelésszáma nélküle áll); keresőszó nélkül is lekérdez; az adószám nem kereshető.
+ */
+describe("the search finds an external invoice by the name the list shows", () => {
+  it("the external filter takes the matching order numbers, and the tax number", () => {
+    const or = externalWhere({ q: "zaubek" }, ["47679-558779"])?.OR ?? [];
+    assert.ok(
+      or.some(
+        (c) =>
+          JSON.stringify(c) ===
+          JSON.stringify({ orderNumber: { in: ["47679-558779"] } }),
+      ),
+      JSON.stringify(or),
+    );
+    assert.ok(or.some((c) => "customerTaxNumber" in c));
+    // no matching order: no empty `in` clause
+    const none = externalWhere({ q: "zaubek" }, [])?.OR ?? [];
+    assert.ok(
+      !none.some((c) => JSON.stringify(c).includes('"in"')),
+      JSON.stringify(none),
+    );
+    // the own rows: the tax number too
+    assert.ok(
+      (listWhere({ q: "12345678" }).OR ?? []).some(
+        (c) => "partnerTaxNumber" in c,
+      ),
+    );
+  });
+
+  it("the order lookup strips the UNAS- prefix, and asks nothing without a query", async () => {
+    const asked: unknown[] = [];
+    const database = {
+      salesOrder: {
+        findMany: async (args: unknown) => {
+          asked.push(args);
+          return [{ orderNumber: "UNAS-47679-558779" }];
+        },
+      },
+    } as never;
+    assert.deepEqual(await orderNumbersByBuyerName(database, "  zaubek "), [
+      "47679-558779",
+    ]);
+    assert.deepEqual(asked, [
+      {
+        where: {
+          orderNumber: { startsWith: "UNAS-" },
+          buyerName: { contains: "zaubek", mode: "insensitive" },
+        },
+        select: { orderNumber: true },
+      },
+    ]);
+    assert.deepEqual(await orderNumbersByBuyerName(database, "   "), []);
+    assert.deepEqual(await orderNumbersByBuyerName(database, undefined), []);
+    assert.equal(asked.length, 1);
+  });
+
+  it("the list passes the order numbers of the query to the external filter", async () => {
+    let externalWhereSeen: unknown;
+    const repository = new BillingDocumentListRepository();
+    (repository as unknown as { database: unknown }).database = {
+      $transaction: (queries: Promise<unknown>[]) => Promise.all(queries),
+      invoice: { findMany: async () => [], count: async () => 0 },
+      externalBillingDocument: {
+        findMany: async (args: { where: unknown }) => {
+          externalWhereSeen ??= args.where;
+          return [];
+        },
+        count: async () => 0,
+      },
+      simplePayTransactionLine: { findMany: async () => [] },
+      outgoingPaymentMark: { findMany: async () => [] },
+      salesOrder: {
+        findMany: async (args: { where?: { buyerName?: unknown } }) =>
+          args.where?.buyerName ? [{ orderNumber: "UNAS-47679-558779" }] : [],
+      },
+    };
+    await repository.list({ page: 1, pageSize: 25, q: "zaubek" });
+    assert.ok(
+      JSON.stringify(externalWhereSeen).includes(
+        '{"orderNumber":{"in":["47679-558779"]}}',
+      ),
+      JSON.stringify(externalWhereSeen),
     );
   });
 });

@@ -54,6 +54,8 @@ export function listWhere(
       { customer: { is: { displayName: contains } } },
       { reference: contains },
       { id: contains },
+      // a vevő adószáma is (Balázs, 2026-11-03, acrobot 40783)
+      { partnerTaxNumber: contains },
     ];
   }
   return where;
@@ -201,6 +203,12 @@ export const externalKindLabel = (kindCode: string): string =>
  */
 export function externalWhere(
   query: BillingDocumentListQuery,
+  /**
+   * A keresőszóra illeszkedő vevőnevű webshop-rendelések számai, `UNAS-` előtag nélkül
+   * (`orderNumbersByBuyerName`). A magánszemélyes számla nevét a lista a rendelésből mutatja
+   * (`externalCustomerName`), tehát a keresésnek is ott kell néznie.
+   */
+  buyerOrderNumbers: readonly string[] = [],
 ): Prisma.ExternalBillingDocumentWhereInput | null {
   if (query.origin === "OWN") return null;
   if (query.status && query.status !== "ISSUED") return null;
@@ -231,6 +239,16 @@ export function externalWhere(
       { externalId: contains },
       // a webshop rendelésszáma (`alap.rendelesszam`) is megtalálja
       { orderNumber: contains },
+      // a vevő adószáma is (Balázs, 2026-11-03, acrobot 40783)
+      { customerTaxNumber: contains },
+      /*
+        A VEVŐ NEVE, AHOGY A LISTA MUTATJA (Balázs, 2026-11-03 08:56 UTC: a „zaubek” keresés nem adta ki az
+        ACRW-2026/00515-öt, a számra keresve megvolt). A magánszemély nevét a NAV elrejti, a feed egy
+        általános nevet ad, a lista a rendelés vevőnevét mutatja: a `customerName` arra nem illeszkedik.
+      */
+      ...(buyerOrderNumbers.length
+        ? [{ orderNumber: { in: [...buyerOrderNumbers] } }]
+        : []),
     ];
   }
   return where;
