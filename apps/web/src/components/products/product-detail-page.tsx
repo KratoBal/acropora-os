@@ -932,16 +932,22 @@ export function ProductDetailPage({ productId }: { productId: string }) {
           {dateTime(product.unasMirror.lastSyncedAt)}
         </PilotDataItem>
         <PilotDataItem label="Nettó ár">
-          {value(product.unasMirror.netPrice)}{" "}
-          {product.unasMirror.currency ?? ""}
+          {formatMoney(
+            product.unasMirror.netPrice,
+            product.unasMirror.currency,
+          )}
         </PilotDataItem>
         <PilotDataItem label="Bruttó ár">
-          {value(product.unasMirror.grossPrice)}{" "}
-          {product.unasMirror.currency ?? ""}
+          {formatMoney(
+            product.unasMirror.grossPrice,
+            product.unasMirror.currency,
+          )}
         </PilotDataItem>
         <PilotDataItem label="Akciós bruttó ár">
-          {value(product.unasMirror.saleGrossPrice)}{" "}
-          {product.unasMirror.currency ?? ""}
+          {formatMoney(
+            product.unasMirror.saleGrossPrice,
+            product.unasMirror.currency,
+          )}
         </PilotDataItem>
         <PilotDataItem
           label={

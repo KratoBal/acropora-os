@@ -423,6 +423,25 @@ describe("ProductDetailPage mirror ownership", () => {
     }
   });
 
+  it("az UNAS terméktükör árai Ft-tal és tizedes kerekítéssel jelennek meg, nem nyers számként", async () => {
+    api.detail.mockResolvedValue({
+      ...detail,
+      unasMirror: {
+        ...detail.unasMirror!,
+        netPrice: "6141.7323",
+        grossPrice: "7800",
+        saleGrossPrice: "3500",
+      },
+    });
+    render(<ProductDetailPage productId="product-1" />);
+
+    await screen.findByText("UNAS terméktükör");
+    expect(screen.getByText("6141,73 Ft")).toBeInTheDocument();
+    expect(screen.getByText("7800 Ft")).toBeInTheDocument();
+    expect(screen.getByText("3500 Ft")).toBeInTheDocument();
+    expect(screen.queryByText(/6141\.7323/)).not.toBeInTheDocument();
+  });
+
   it("separates the read-only UNAS mirror from Acropora extension data", async () => {
     render(<ProductDetailPage productId="product-1" />);
 
@@ -432,7 +451,7 @@ describe("ProductDetailPage mirror ownership", () => {
       screen.getByText("Product Master adatok · csak olvasható"),
     ).toBeInTheDocument();
     expect(screen.getByText("159850145")).toBeInTheDocument();
-    expect(screen.getByText("1270 HUF")).toBeInTheDocument();
+    expect(screen.getByText("1270 Ft")).toBeInTheDocument();
     expect(
       screen.getByText("Összehasonlító adat, nem az Acropora készlet."),
     ).toBeInTheDocument();
