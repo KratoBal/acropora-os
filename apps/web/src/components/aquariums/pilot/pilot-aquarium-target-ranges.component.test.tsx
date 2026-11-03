@@ -16,7 +16,7 @@ vi.mock("next/font/local", () => ({
 */
 describe("PilotAquariumTargetRanges rows", () => {
   it("keeps the Tól / Ig fields from shrinking, and lets the label shrink instead", () => {
-    const { container } = render(
+    render(
       <PilotAquariumTargetRanges
         waterType="TENGERI"
         draft={{}}
