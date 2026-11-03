@@ -425,7 +425,7 @@ export function ServiceJobEditorPage({
         title={kind === "MAINTENANCE" ? "Új karbantartási lap" : "Új hibajegy"}
         lead={
           kind === "MAINTENANCE"
-            ? "A karbantartási lap is a lánc első eleme. A munkalapokat utólag lehet alá csatolni - a lap keletkezhet előbb is, mint a jegy."
+            ? "A karbantartási lap is a lánc első eleme. A munkalapokat utólag lehet alá csatolni - a munkalap keletkezhet előbb is, mint a karbantartási lap."
             : "A hibajegy a lánc első eleme. A munkalapokat utólag lehet alá csatolni - a lap keletkezhet előbb is, mint a jegy."
         }
       />
