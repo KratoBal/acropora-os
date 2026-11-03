@@ -167,9 +167,15 @@ export function OrderLinesTable({
             <tr className="border-b border-pilot-grey-200 text-[11px] uppercase tracking-[0.05em] text-pilot-grey-500">
               <th className="py-2 pr-3 font-semibold">Termék</th>
               <th className="py-2 pr-3 font-semibold">Cikkszám</th>
-              <th className="py-2 pr-3 text-right font-semibold">Menny.</th>
-              <th className="py-2 pr-3 text-right font-semibold">Egységár</th>
-              <th className="py-2 pr-3 text-right font-semibold">Összesen</th>
+              <th className="whitespace-nowrap py-2 pr-3 text-right font-semibold">
+                Menny.
+              </th>
+              <th className="whitespace-nowrap py-2 pr-3 text-right font-semibold">
+                Egységár
+              </th>
+              <th className="whitespace-nowrap py-2 pr-3 text-right font-semibold">
+                Összesen
+              </th>
               {canManage ? (
                 <th className="py-2">
                   <span className="sr-only">Kijelölés és műveletek</span>
@@ -188,14 +194,16 @@ export function OrderLinesTable({
                     </span>
                   ) : null}
                 </td>
-                <td className="py-3 pr-3 text-xs text-pilot-grey-600">
+                <td className="whitespace-nowrap py-3 pr-3 text-xs text-pilot-grey-600">
                   {line.sku ?? "—"}
                 </td>
-                <td className="py-3 pr-3 text-right">{line.quantity}</td>
-                <td className="py-3 pr-3 text-right">
+                <td className="whitespace-nowrap py-3 pr-3 text-right">
+                  {line.quantity}
+                </td>
+                <td className="whitespace-nowrap py-3 pr-3 text-right">
                   {money(line.unitPrice)}
                 </td>
-                <td className="py-3 pr-3 text-right font-semibold">
+                <td className="whitespace-nowrap py-3 pr-3 text-right font-semibold">
                   {money(line.total)}
                 </td>
                 {canManage ? (
