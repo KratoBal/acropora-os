@@ -1,5 +1,6 @@
 "use client";
 
+import { plainText } from "@/lib/format/plain-text";
 import {
   Alert,
   Pagination,
@@ -686,10 +687,10 @@ function SourceItem(props: {
                 rel="noreferrer noopener"
                 className="hover:underline"
               >
-                {row.title}
+                {plainText(row.title)}
               </a>
             ) : (
-              row.title
+              plainText(row.title)
             )}
           </p>
           <p className="text-[13px] text-pilot-grey-600">{sourceMeta(row)}</p>
