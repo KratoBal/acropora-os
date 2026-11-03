@@ -93,7 +93,7 @@ export function PurchaseInvoiceEditForm({
         {error ? (
           <Alert variant="danger" title="Hiba történt" description={error} />
         ) : null}
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="text-xs text-dusk-500">
             Szállítói számlaszám
             <input

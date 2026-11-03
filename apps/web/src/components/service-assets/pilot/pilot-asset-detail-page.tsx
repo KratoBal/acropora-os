@@ -487,7 +487,7 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
             </div>
           ) : null}
 
-          <div className="grid items-start gap-6 px-8 py-6 lg:grid-cols-[1fr_320px]">
+          <div className="grid grid-cols-1 items-start gap-6 px-8 py-6 lg:grid-cols-[1fr_320px]">
             <div className="flex flex-col gap-5">
               <PilotCard>
                 <PilotCardHeader title="Azonosítás" />
@@ -670,7 +670,7 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
                     emptyText="Ehhez az eszközhöz még nincs dokumentum feltöltve."
                   />
                   {canManage ? (
-                    <div className="mt-5 grid gap-3 border-t border-pilot-grey-100 pt-5 md:grid-cols-[180px_minmax(0,1fr)_auto] md:items-end">
+                    <div className="mt-5 grid grid-cols-1 gap-3 border-t border-pilot-grey-100 pt-5 md:grid-cols-[180px_minmax(0,1fr)_auto] md:items-end">
                       <FormField label="Dokumentumtípus">
                         <Select
                           aria-label="Dokumentumtípus"

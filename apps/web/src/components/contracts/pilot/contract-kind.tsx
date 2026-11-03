@@ -147,7 +147,7 @@ export function QuantityUnitSelect({
  * Az új szerződés űrlapja és az adatlap ugyanezt használja.
  */
 export const CONTRACT_ITEM_GRID =
-  "grid gap-2 md:grid-cols-[minmax(0,3fr)_repeat(4,minmax(0,1fr))]";
+  "grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,3fr)_repeat(4,minmax(0,1fr))]";
 
 /**
  * A TÉTEL LEÍRÁSA, A TARTALOMHOZ NÖVŐ MEZŐBEN (t19, Balázs: „a tétel leírása

@@ -177,7 +177,7 @@ export function QuoteTemplatesPage() {
       {templates === null ? (
         <Skeleton className="h-64 w-full" />
       ) : shown.length ? (
-        <ul className="grid gap-4 md:grid-cols-2">
+        <ul className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {shown.map((template) => (
             <li key={template.id}>
               <PilotCard>
@@ -240,7 +240,7 @@ export function QuoteTemplatesPage() {
             <p className="text-xs text-pilot-grey-600">
               Ezek teljes sablonon kívül is beszúrhatók bármely ajánlatba.
             </p>
-            <ul className="grid gap-3 sm:grid-cols-3">
+            <ul className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               {snippets.map((snippet) => (
                 <li key={snippet.id}>
                   <Link

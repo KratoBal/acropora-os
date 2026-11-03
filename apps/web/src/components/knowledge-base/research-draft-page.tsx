@@ -414,7 +414,7 @@ export function ResearchDraftPage() {
         />
       ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,320px)_1fr]">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,320px)_1fr]">
         <PilotCard className="space-y-3 p-5">
           <h2 className="text-lg font-semibold text-pilot-grey-900">
             Korábbi kutatások

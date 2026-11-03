@@ -366,7 +366,7 @@ export function QuoteBomDrawer({
               />
             </PilotFormField>
           )}
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <PilotFormField label="Mennyiség (a teljes sorra)" required>
               <PilotInput
                 aria-label="BOM mennyiség"

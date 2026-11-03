@@ -132,7 +132,7 @@ export function KnowledgeOverviewPage() {
             >
               Rád vár
             </h2>
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <WaitingCard
                 label="Forrás szűrésre"
                 value={overview.waiting.sourcesToScreen}
@@ -168,7 +168,7 @@ export function KnowledgeOverviewPage() {
               <p className="text-[15px] text-pilot-grey-800">
                 {STAGE_SENTENCES[overview.project.stage]}
               </p>
-              <dl className="grid gap-4 border-t border-pilot-grey-200 pt-4 sm:grid-cols-4">
+              <dl className="grid grid-cols-1 gap-4 border-t border-pilot-grey-200 pt-4 sm:grid-cols-4">
                 <Figure label="Források" value={overview.project.sources} />
                 <Figure label="Befogadva" value={overview.project.included} />
                 <Figure

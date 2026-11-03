@@ -32,7 +32,7 @@ export function SettlementTabs() {
   if (tabs.length === 0) return null;
   return (
     <nav aria-label="Elszámolások">
-      <ul className="grid gap-4 sm:grid-cols-3">
+      <ul className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {tabs.map((tab) => {
           const active =
             pathname === tab.href || pathname.startsWith(`${tab.href}/`);

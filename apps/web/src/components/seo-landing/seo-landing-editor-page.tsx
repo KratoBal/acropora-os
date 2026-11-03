@@ -213,7 +213,7 @@ export function SeoLandingEditorPage({ landingId }: { landingId?: string }) {
       <form className="space-y-6" onSubmit={submit}>
         <Card className="p-6">
           <h2 className="font-semibold">Cím és szövegek</h2>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
             <FormField label="Cím">
               <Input
                 aria-label="Cím"
@@ -270,7 +270,7 @@ export function SeoLandingEditorPage({ landingId }: { landingId?: string }) {
             és a kiválasztott márkák bármelyikéből. Ha az egyik oldalon nincs
             kiválasztás, az nem szűr. Legalább egy kategória vagy márka kell.
           </p>
-          <div className="mt-4 grid gap-6 lg:grid-cols-2">
+          <div className="mt-4 grid grid-cols-1 gap-6 lg:grid-cols-2">
             <ChoiceList
               label="Kategóriák"
               search={categorySearch}

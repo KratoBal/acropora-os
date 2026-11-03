@@ -372,7 +372,7 @@ function ProductExtensionEditor({
 
       {editing ? (
         <form className="mt-4 space-y-4" onSubmit={submit}>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
             {[
               ["defaultPurchaseCurrency", "Beszerzési deviza", "EUR"],
               ["minimumStock", "Minimumkészlet", "0"],
@@ -401,7 +401,7 @@ function ProductExtensionEditor({
             ))}
           </div>
 
-          <div className="grid gap-3 rounded-lg border border-dusk-200 bg-white p-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 rounded-lg border border-dusk-200 bg-white p-3 sm:grid-cols-2 lg:grid-cols-4">
             <p className="text-xs font-bold uppercase tracking-wide text-dusk-500 sm:col-span-2 lg:col-span-4">
               Utolsó beszerzés
             </p>
@@ -462,7 +462,7 @@ function ProductExtensionEditor({
             )}
           </div>
 
-          <div className="grid gap-2 text-xs text-dusk-700 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-2 text-xs text-dusk-700 sm:grid-cols-2">
             {[
               ["stockTrackingEnabled", "Készletkövetés engedélyezve"],
               ["autoReorderEnabled", "Automatikus újrarendelés"],
@@ -518,7 +518,7 @@ function ProductExtensionEditor({
               mezők üresek.
             </p>
           ) : null}
-          <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-3">
+          <dl className="mt-3 grid grid-cols-1 gap-3 text-xs sm:grid-cols-3">
             <div>
               <dt className="text-dusk-400">Beszerzési deviza</dt>
               <dd className="mt-1 text-dusk-700">
@@ -1000,7 +1000,7 @@ export function ProductDetailPage({ productId }: { productId: string }) {
             A csomag készletét az UNAS az összetevők elérhető mennyiségéből
             számítja; a csomaghoz nem tartozik önálló Acropora OS készlet.
           </p>
-          <ul className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+          <ul className="mt-3 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
             {product.unasMirror.packageComponents.map((component) => (
               <li
                 key={`${component.sku}:${component.qty}`}

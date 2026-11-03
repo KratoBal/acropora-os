@@ -763,7 +763,7 @@ export function AssetListPage() {
         </p>
       ) : null}
       {unitRows.length > 0 ? (
-        <div className="grid gap-[18px] lg:grid-cols-[190px_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-[18px] lg:grid-cols-[190px_minmax(0,1fr)]">
           {/* A HELYSZINFA TOBBSZOROS VALASZTAST ENGED, es ez nem a design
               egyszerusitese: Balazs dontese szerint egy emberhez TOBB
               csomopont is rendelheto, tehat egy egy-ertekű valaszto kesobb

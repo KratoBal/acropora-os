@@ -78,7 +78,7 @@ function AddressFields({
 
   return (
     <>
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <FormField label="Ország">
           <Select
             aria-label={`${idPrefix} ország`}
@@ -113,7 +113,7 @@ function AddressFields({
           />
         </FormField>
       </div>
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <FormField label="Utca, házszám">
           <Input
             aria-label={`${idPrefix} utca, házszám`}
@@ -321,7 +321,7 @@ export function CustomerEditorPage() {
       <form className="space-y-6" onSubmit={submit}>
         <Card className="p-6">
           <h2 className="font-semibold">Alapadatok</h2>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
             <FormField label="Típus">
               <Select
                 aria-label="Típus"

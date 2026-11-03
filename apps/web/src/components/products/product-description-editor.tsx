@@ -170,7 +170,7 @@ export function ProductDescriptionEditor({
           description={`A leírásban olyan formázás vagy kép is van, amit a mentés nem tart meg (${elveszo.join(", ")}). Kép csak a saját képtárhelyről maradhat. Ha a leírást módosítod és mented, ezek elvesznek; a szöveg megmarad.`}
         />
       ) : null}
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <div className="space-y-2">
           <RichTextEditor
             ref={szerkeszto}

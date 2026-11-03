@@ -231,7 +231,7 @@ export function ClaimStorePage() {
               {data.claims.map((claim) => (
                 <li
                   key={claim.id}
-                  className="grid gap-3 py-4 sm:grid-cols-[180px_1fr]"
+                  className="grid grid-cols-1 gap-3 py-4 sm:grid-cols-[180px_1fr]"
                 >
                   <div>
                     <LayerBadge layer={claim.layer} />
@@ -353,7 +353,7 @@ export function ClaimDetailPage({ claimId }: { claimId: string }) {
               ) : null}
               <PilotBadge variant="grey">{data.revision}. változat</PilotBadge>
             </div>
-            <dl className="grid gap-4 sm:grid-cols-3">
+            <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <Fact label="Hatás" value={data.effect?.label ?? "Nincs"} />
               <Fact label="Mennyiség" value={data.quantity ?? "Nem közölt"} />
               <Fact
@@ -433,7 +433,7 @@ export function ClaimDetailPage({ claimId }: { claimId: string }) {
                   </footer>
                 </blockquote>
                 {e.uncertainty || e.conditions || e.applicability ? (
-                  <dl className="grid gap-3 sm:grid-cols-3">
+                  <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     {e.uncertainty ? (
                       <Fact label="Bizonytalanság" value={e.uncertainty} />
                     ) : null}

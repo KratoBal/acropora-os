@@ -321,7 +321,7 @@ export function HomepageContentEditorPage() {
   const fieldsOf = (group: string) => (
     <div key={group} className="space-y-3">
       <h3 className="text-sm font-semibold text-pilot-grey-900">{group}</h3>
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {(groups.get(group) ?? []).map((field) => (
           <TextField
             key={field.key}

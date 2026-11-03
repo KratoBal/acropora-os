@@ -276,7 +276,7 @@ export function UserEditorPage({ userId }: { userId?: string }) {
       <form className="space-y-6" onSubmit={submit}>
         <Card className="p-6">
           <h2 className="font-semibold">Alapadatok</h2>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
             <FormField label="Vezetéknév">
               <Input
                 aria-label="Vezetéknév"

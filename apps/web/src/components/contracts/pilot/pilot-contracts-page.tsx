@@ -400,7 +400,7 @@ export function PilotContractsPage() {
               */}
               <PilotCardHeader title="Új szerződés rögzítése" />
               <div className="flex flex-col gap-4 p-5">
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <PilotFormField label="Partner" required>
                     <PilotSelect
                       aria-label="Partner"
@@ -628,7 +628,7 @@ export function PilotContractsPage() {
                             Ehhez a partnerhez nincs felvéve helyszín.
                           </p>
                         ) : (
-                          <div className="grid gap-2 md:grid-cols-2">
+                          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                             <PilotFormField
                               label={index === 0 ? "Helyszín" : ""}
                             >

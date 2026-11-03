@@ -557,7 +557,10 @@ function MortalitySummaryCards({
       ]
     : null;
   return (
-    <div className="grid gap-4 sm:grid-cols-3" aria-label="Összesítő">
+    <div
+      className="grid grid-cols-1 gap-4 sm:grid-cols-3"
+      aria-label="Összesítő"
+    >
       {cards
         ? cards.map((card) => (
             <section

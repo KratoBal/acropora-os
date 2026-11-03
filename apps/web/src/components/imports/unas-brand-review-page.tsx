@@ -237,7 +237,7 @@ export function UnasBrandReviewPage({ batchId }: { batchId: string }) {
       ) : null}
       {data ? (
         <>
-          <div className="grid gap-4 sm:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
             <StatCard
               label="Összes review"
               value={String(data.summary.total)}
@@ -276,7 +276,7 @@ export function UnasBrandReviewPage({ batchId }: { batchId: string }) {
             </div>
           </Card>
           <Card className="p-4">
-            <div className="grid gap-3 md:grid-cols-5">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
               <Input
                 aria-label="Keresés"
                 placeholder="SKU, terméknév vagy márka"
@@ -648,7 +648,7 @@ function EvidenceDialog({
             Bezárás
           </Button>
         </div>
-        <dl className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
+        <dl className="mt-4 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
           <div>
             <dt className="font-semibold">Explicit brand</dt>
             <dd>{item.sourceFacts.explicitBrand ?? "—"}</dd>

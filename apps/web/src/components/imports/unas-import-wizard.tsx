@@ -245,7 +245,7 @@ export function UnasImportWizard() {
       ) : null}
 
       {step === 1 && !loading ? (
-        <div className="grid gap-5 lg:grid-cols-[1.5fr_1fr]">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.5fr_1fr]">
           <Card className="p-6">
             <div
               onDragEnter={(event) => {
@@ -322,7 +322,7 @@ export function UnasImportWizard() {
 
       {step === 2 && report && !loading ? (
         <div className="space-y-5">
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             <StatCard
               label="Létrehozandó termékek"
               value={String(report.summary.productsToCreate)}

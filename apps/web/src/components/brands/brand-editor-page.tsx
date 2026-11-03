@@ -240,7 +240,7 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
       <form className="space-y-6" onSubmit={submit}>
         <Card className="p-6">
           <h2 className="font-semibold">Identitás</h2>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
             <FormField label="Kanonikus név">
               <Input
                 aria-label="Kanonikus név"
@@ -274,7 +274,7 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
                 onChange={(event) => setDescription(event.target.value)}
               />
             </FormField>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <FormField label="Weboldal URL">
                 <Input
                   type="url"

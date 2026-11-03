@@ -516,7 +516,7 @@ export function PilotSupplierEditorPage({
           <form className="flex flex-col gap-4" onSubmit={submit}>
             <PilotCard>
               <PilotCardHeader title="Alapadatok" />
-              <div className="grid gap-4 p-5 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2">
                 <PilotFormField label="Név">
                   <PilotInput
                     aria-label="Név"
@@ -821,7 +821,7 @@ export function PilotSupplierEditorPage({
                     Ehhez a partnerhez még nincs alegység.
                   </p>
                 )}
-                <div className="grid gap-4 border-t border-pilot-grey-100 p-5 sm:grid-cols-[12rem_8rem_1fr_auto]">
+                <div className="grid grid-cols-1 gap-4 border-t border-pilot-grey-100 p-5 sm:grid-cols-[12rem_8rem_1fr_auto]">
                   <PilotFormField label="Hova kerül">
                     {/* A gyoker az ELSO es alapertelmezett valasztas: a mai
                         helyszinek mind ilyenek, es egy uj partnernel is ez a
@@ -920,7 +920,7 @@ export function PilotSupplierEditorPage({
                       : "Belföldi beszállítónál a hazai formátumú bankszámlaszám."}
                   </p>
                 </div>
-                <div className="grid gap-4 p-5 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2">
                   {isEu ? (
                     <>
                       <PilotFormField label="IBAN">
@@ -955,7 +955,7 @@ export function PilotSupplierEditorPage({
             ) : null}
             <PilotCard>
               <PilotCardHeader title="Cím" />
-              <div className="grid gap-4 p-5 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2">
                 <PilotFormField label="Irányítószám">
                   <PilotInput
                     aria-label="Irányítószám"
@@ -992,7 +992,7 @@ export function PilotSupplierEditorPage({
             </PilotCard>
             <PilotCard>
               <PilotCardHeader title="Ügyintéző" />
-              <div className="grid gap-4 p-5 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2">
                 <div className="sm:col-span-2">
                   <PilotFormField label="Ügyintéző neve">
                     <PilotInput

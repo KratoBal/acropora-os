@@ -70,7 +70,7 @@ export function BillingViewTiles({
     <div
       role="tablist"
       aria-label="Számlázási nézet"
-      className="grid gap-4 md:grid-cols-3"
+      className="grid grid-cols-1 gap-4 md:grid-cols-3"
     >
       {BILLING_VIEWS.map((view, index) => {
         const selected = view === active;

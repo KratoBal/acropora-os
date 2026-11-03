@@ -170,11 +170,11 @@ export function QuoteNewPage() {
         <Alert variant="danger" title="Hiba történt" description={error} />
       ) : null}
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="space-y-6">
           <PilotCard>
             <PilotCardHeader title="Ajánlat alapadatai" />
-            <div className="grid gap-4 p-5 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2">
               <PilotFormField
                 label="Partner"
                 required

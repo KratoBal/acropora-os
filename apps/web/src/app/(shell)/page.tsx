@@ -167,7 +167,7 @@ function DashboardCard({
 function DashboardLoading() {
   return (
     <div
-      className="grid gap-5 lg:grid-cols-2"
+      className="grid grid-cols-1 gap-5 lg:grid-cols-2"
       aria-label="Irányítópult betöltése"
     >
       {["one", "two", "three", "four"].map((key) => (
@@ -237,7 +237,7 @@ function ManagerTiles({
 
   return (
     <section
-      className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+      className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"
       aria-label="Szerviz áttekintés"
     >
       {tiles.map((tile) => {
@@ -280,8 +280,8 @@ export function DashboardCards({ summary }: { summary: DashboardSummary }) {
         elrendezese (ket oszlop `lg:`-tol) valtozatlan, csak az Activity
         kartya kerult ki sajat oszlopba.
       */}
-      <div className="grid gap-5 xl:grid-cols-[1fr_340px] xl:items-start">
-        <section className="grid gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_340px] xl:items-start">
+        <section className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           {summary.myWorksheets ? (
             <DashboardCard
               title="Saját munkalapjaim"
