@@ -61,6 +61,31 @@ export type BillingDocumentListTarget =
   /** A külső bizonylat csak olvasható adatlapja (acrobot 25812). */
   | "EXTERNAL_DETAIL";
 
+/**
+ * A SZÁMLÁZÁS LISTA ÚTVONALAI, EGY HELYEN (T2.2): a lista soraira és a globális keresés találataira
+ * ugyanaz a szabály vezet. Eddig a webes lista és a kereső két külön helyen írta volna le; egy új
+ * állapot (`opens`) ott dőlne el, ahol éppen nézik. A szerver mondja meg, mire nyílik a sor
+ * (`opens`), az útvonal ebből következik.
+ */
+export const BILLING_LIST_PATH = "/penzugy/szamlazas";
+
+export function billingDocumentPath(item: {
+  id: string;
+  opens: BillingDocumentListTarget;
+}): string {
+  if (item.opens === "EDITOR")
+    return `${BILLING_LIST_PATH}/${item.id}/szerkesztes`;
+  // a Számlázz.hu-ból kapott külső bizonylat: csak olvasható adatlap (acrobot 25812)
+  if (item.opens === "EXTERNAL_DETAIL")
+    return `${BILLING_LIST_PATH}/kulso/${item.id}`;
+  return `${BILLING_LIST_PATH}/${item.id}`;
+}
+
+/** A bejövő számla adatlapja (a lista sorának azonosítója, `IncomingBillingDocument.id`). */
+export function incomingDocumentPath(id: string): string {
+  return `${BILLING_LIST_PATH}/bejovo/${id}`;
+}
+
 export interface BillingDocumentListItem {
   /** Az `Invoice.id`, a megnyitás kulcsa. */
   id: string;

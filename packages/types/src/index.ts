@@ -110,7 +110,10 @@ export {
   BILLING_DOCUMENT_ORIGINS,
   BILLING_EMAIL_MODES,
   BILLING_LINE_STOCK_OUTCOMES,
+  BILLING_LIST_PATH,
+  billingDocumentPath,
   billingEmailModeFor,
+  incomingDocumentPath,
 } from "./billing-document-read.js";
 export type {
   BillingCustomerSource,
