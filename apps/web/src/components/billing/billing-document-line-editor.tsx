@@ -15,7 +15,6 @@ import { productApi } from "@/lib/api/products";
 import {
   emptyLine,
   formatMoney,
-  formatMoneyExact,
   grossInputMismatch,
   trimDecimal,
   variantOptionsOf,
@@ -354,7 +353,9 @@ export function BillingDocumentLineEditor({
                       />
                       {computed && line.unitNet.trim() ? (
                         <p className="mt-1 text-right text-xs font-semibold tabular-nums text-pilot-grey-900">
-                          {formatMoney(computed.item.grossAmount, currency)}
+                          {formatMoney(computed.item.grossAmount, currency, {
+                            fractionDigits: 2,
+                          })}
                         </p>
                       ) : null}
                     </td>
@@ -390,13 +391,18 @@ export function BillingDocumentLineEditor({
                       >
                         <span role="status">
                           A beírt bruttó (
-                          {formatMoneyExact(
+                          {formatMoney(
                             line.grossInput!.trim().replace(",", "."),
                             currency,
+                            { fractionDigits: 2, exact: true },
                           )}
                           ) ennél az ÁFA-kulcsnál pontosan nem jön ki: a számlán
                           a tétel bruttója{" "}
-                          {formatMoneyExact(mismatch, currency)} lesz.
+                          {formatMoney(mismatch, currency, {
+                            fractionDigits: 2,
+                            exact: true,
+                          })}{" "}
+                          lesz.
                         </span>
                       </td>
                     </tr>

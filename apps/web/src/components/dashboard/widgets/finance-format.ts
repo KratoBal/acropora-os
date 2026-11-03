@@ -1,16 +1,5 @@
-const HUF = new Intl.NumberFormat("hu-HU", { maximumFractionDigits: 0 });
-const OTHER = new Intl.NumberFormat("hu-HU", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-
-/** "12 700 Ft", "100,50 EUR": the amount as the billing pages write it. */
-export function formatMoney(amount: string, currency: string): string {
-  const value = Number(amount);
-  return currency === "HUF"
-    ? `${HUF.format(value)} Ft`
-    : `${OTHER.format(value)} ${currency}`;
-}
+/** "12 700 Ft", "100,50 EUR": the shared formatter (`@acropora/types`, T1.5). */
+export { formatMoney } from "@acropora/types";
 
 const MONTH = new Intl.DateTimeFormat("hu-HU", {
   month: "long",

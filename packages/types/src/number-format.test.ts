@@ -40,6 +40,16 @@ describe("formatMoney", () => {
     assert.equal(formatMoney(null, "HUF", unit), MISSING_VALUE_TEXT);
   });
 
+  it("with exact, keeps every decimal of a whole amount too, for a side-by-side comparison", () => {
+    const exact = { fractionDigits: 2, exact: true };
+    assert.equal(formatMoney("10000", "HUF", exact), `10${NBSP}000,00 Ft`);
+    assert.equal(formatMoney("10000.01", "HUF", exact), `10${NBSP}000,01 Ft`);
+    assert.equal(
+      formatMoney("10000", "HUF", { fractionDigits: 2 }),
+      `10${NBSP}000 Ft`,
+    );
+  });
+
   it("writes another currency with two decimals and its code", () => {
     assert.equal(formatMoney("100.5", "EUR"), "100,50 EUR");
     assert.equal(formatMoney(12500, " usd "), `12${NBSP}500,00 USD`);

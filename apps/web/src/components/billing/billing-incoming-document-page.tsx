@@ -13,6 +13,7 @@ import {
   PilotFileInput,
 } from "@acropora/ui";
 import {
+  currencyLabel,
   hasPermission,
   INCOMING_BANK_MATCH_LABELS,
   INCOMING_NOT_TO_PAIR_REASON_LABELS,
@@ -421,7 +422,9 @@ export function BillingIncomingDocumentPage({
               <PilotDataItem label="Határidő">
                 {formatDay(detail.dueDate)}
               </PilotDataItem>
-              <PilotDataItem label="Pénznem">{detail.currency}</PilotDataItem>
+              <PilotDataItem label="Pénznem">
+                {currencyLabel(detail.currency)}
+              </PilotDataItem>
               <PilotDataItem label="Árfolyam">
                 {detail.exchangeRate
                   ? `${trimDecimal(detail.exchangeRate)}${detail.exchangeBank ? ` (${detail.exchangeBank})` : ""}`

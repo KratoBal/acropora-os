@@ -13,6 +13,7 @@ import {
   Skeleton,
 } from "@acropora/ui";
 import {
+  currencyLabel,
   BILLING_DOCUMENT_STATUS_LABELS,
   BILLING_NEW_DOCUMENT_TYPES,
   BILLING_EMAIL_STATUS_LABELS,
@@ -591,7 +592,9 @@ export function BillingDocumentDetailPage({
                   </PilotDataItem>
                 </>
               ) : null}
-              <PilotDataItem label="Pénznem">{detail.currency}</PilotDataItem>
+              <PilotDataItem label="Pénznem">
+                {currencyLabel(detail.currency)}
+              </PilotDataItem>
               {detail.deductedAdvance ? (
                 <PilotDataItem label="Levont előleg">
                   <Link
@@ -641,8 +644,10 @@ export function BillingDocumentDetailPage({
                     {line.kind === "ITEM" ? (
                       <p className="text-xs text-pilot-grey-500">
                         {trimDecimal(line.quantity)} {line.unit ?? ""} ×{" "}
-                        {formatMoney(line.unitNet, detail.currency)} · ÁFA{" "}
-                        {trimDecimal(line.vatRatePercent)}%
+                        {formatMoney(line.unitNet, detail.currency, {
+                          fractionDigits: 2,
+                        })}{" "}
+                        · ÁFA {trimDecimal(line.vatRatePercent)}%
                       </p>
                     ) : null}
                     {line.comment ? (
@@ -652,7 +657,9 @@ export function BillingDocumentDetailPage({
                     ) : null}
                   </div>
                   <p className="shrink-0 text-sm font-semibold tabular-nums text-pilot-grey-900">
-                    {formatMoney(line.grossAmount, detail.currency)}
+                    {formatMoney(line.grossAmount, detail.currency, {
+                      fractionDigits: 2,
+                    })}
                   </p>
                 </li>
               ))}

@@ -14,6 +14,7 @@ import {
   type PilotTableColumn,
 } from "@acropora/ui";
 import {
+  currencyLabel,
   BILLING_DOCUMENT_LIST_PAGE_SIZE,
   INCOMING_BANK_MATCH_LABELS,
   INCOMING_BANK_MATCH_STATES,
@@ -190,7 +191,7 @@ export const INCOMING_COLUMNS: readonly PilotTableColumn<IncomingDocumentListIte
       cell: (item) => (
         <span className="flex flex-col gap-0.5">
           <span className="font-semibold text-pilot-grey-900">
-            {item.currency}
+            {currencyLabel(item.currency)}
           </span>
           <span className="text-xs tabular-nums text-pilot-grey-500">
             {item.currency === "HUF" ? "—" : rateText(item.exchangeRate)}

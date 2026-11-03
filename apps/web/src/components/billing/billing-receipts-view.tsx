@@ -268,7 +268,7 @@ function CashRegisterReceiptsView({ token }: { token: string }) {
           />
         </label>
         <p className="text-xs text-pilot-grey-600">
-          NAV OPG · magyar idő szerint · HUF
+          NAV OPG · magyar idő szerint · Ft
         </p>
       </div>
       {error ? (

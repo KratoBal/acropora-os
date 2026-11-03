@@ -51,6 +51,12 @@ export interface FormatMoneyOptions {
    * the #2079 product page was approved as "6141,73 Ft" (acrobot's decision, msg 41593).
    */
   fractionDigits?: number;
+  /**
+   * Every one of the `fractionDigits` decimals, a whole amount too ("10 000,00 Ft"). For two
+   * amounts set side by side that may differ by a fillér (the billing editor's "the invoice will
+   * show 10 000,01 Ft" against the typed 10 000,00 Ft), where the zeros make the difference visible.
+   */
+  exact?: boolean;
 }
 
 /**
@@ -70,7 +76,8 @@ export function formatMoney(
   if (label !== "Ft") return `${hu(value, 2, 2)} ${label}`;
   const digits = options.fractionDigits ?? 0;
   // With fillér, all the decimals asked for ("787,40 Ft"); a whole amount stays whole.
-  const shown = digits > 0 && Number.isInteger(value) ? 0 : digits;
+  const shown =
+    digits > 0 && Number.isInteger(value) && !options.exact ? 0 : digits;
   return `${hu(value, shown, digits)} Ft`;
 }
 

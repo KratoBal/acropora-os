@@ -468,16 +468,13 @@ export function missingForSave(state: EditorState): string[] {
   ];
 }
 
-/** Pénz megjelenítése: forint egészre, más pénznem két tizedesre. */
-export function formatMoney(value: string, currency: string): string {
-  const number = Number(value);
-  const digits = currency === "HUF" ? 0 : 2;
-  const formatted = new Intl.NumberFormat("hu-HU", {
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  }).format(number);
-  return currency === "HUF" ? `${formatted} Ft` : `${formatted} ${currency}`;
-}
+/**
+ * Pénz megjelenítése: forint egészre, más pénznem két tizedesre. A közös formázó
+ * (`@acropora/types`, T1.5); a számlázás lapjai a megszokott helyről érik el. Egy tétel-szintű
+ * összeg (nettó egységár, tétel bruttó) `{ fractionDigits: 2 }`-vel hívja, mert ott a fillér
+ * valódi adat lehet (a Számlázz.hu szabálya tételenként kerekít, a végösszeg egész).
+ */
+export { formatMoney } from "@acropora/types";
 
 /**
  * EGY SOR KITÖLTÉSE BRUTTÓBÓL. A nettó egységár a Számlázz.hu szabályával
@@ -517,15 +514,6 @@ export function grossInputMismatch(
     currency,
   });
   return result.ok && !result.exact ? result.grossAmount : null;
-}
-
-/** Pénz két tizedesen, pénznemtől függetlenül: az eltérés fillérben látszik. */
-export function formatMoneyExact(value: string, currency: string): string {
-  const formatted = new Intl.NumberFormat("hu-HU", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(Number(value));
-  return currency === "HUF" ? `${formatted} Ft` : `${formatted} ${currency}`;
 }
 
 /**
