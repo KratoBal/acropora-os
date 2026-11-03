@@ -1,0 +1,10 @@
+DM Sans and Manrope are licensed under the SIL Open Font License, Version 1.1.
+
+DM Sans: Copyright 2014 The DM Sans Project Authors
+  (https://github.com/googlefonts/dm-fonts)
+Manrope: Copyright 2018 The Manrope Project Authors
+  (https://github.com/googlefonts/manrope)
+
+Source: https://github.com/google/fonts (ofl/dmsans, ofl/manrope), converted
+to WOFF2 without modification to the glyph data. Full license text:
+https://openfontlicense.org
