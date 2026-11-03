@@ -1388,20 +1388,21 @@ describe("UNAS Product Sync database integration", { skip: !enabled }, () => {
   });
 
   /**
-   * AHOL A GYUJTES MA MEGALL: AZ ATVETT TERMEKNEK NEM KESZUL TOBB SOR.
+   * AZ ATVETT TERMEK UNAS-ARA NEM KERUL BE A TUKOR-TORTENETBE, A SAJAT ARA IGEN.
    *
-   * Ez nem hiba, hanem a kihagyas KOVETKEZMENYE: a kulonbseg-ciklus a sajat
-   * gondozasunkba vett termekeket a legelejen atugorja, es az ar-tortenet sora
-   * azon a ponton TUL van. Amint egy termek katalogus-gazdaja `ACROPORA` lesz,
-   * a UNAS-bol jovo ar-tortenete befagy.
+   * A kulonbseg-ciklus a sajat gondozasunkba vett termekeket a legelejen
+   * atugorja, tehat a UNAS-bol jovo ar valtozasa (itt 1270 -> 2413) NEM kerul a
+   * tukor-sorok (`variantId` null) koze: a tukor-tortenet az atvetelnel befagy.
    *
-   * MIERT ALL ITT ALLITASKENT, HOLOTT MA HELYES: mert az Omnibus-ablak
-   * szempontjabol ez EGY HIANYZO FORRAS, es a potlasa (a sajat arunk taplalja
-   * a tortenetet) meg nincs megirva. Ha valaki egyszer megirja, ennek az
-   * allitasnak KI KELL pirosodnia -- akkor kell ide a masodik ut, nem egy
-   * csendes szamnovekedes.
+   * EZ AZ ALLITAS EDDIG A HIANYT RAGZITETTE ("az atvett termek ara nem kerul be a
+   * tortenetbe"), es kimondta, hogy ha valaki megirja a potlast, ennek ki kell
+   * pirosodnia. T4.1-D2 megirta: az atvetel az elso SAJAT ar sorat (`OWN`,
+   * valtozatonkent) a masolassal egy tranzakcioban irja. Ezert most ket kulon
+   * szamot allitunk: a tukor-sorok szama valtozatlan (1), az OWN sor pontosan
+   * egy, es az ara a MASOLT lista-ar (1270), nem a kozben a UNAS-ban megvaltozott
+   * 2413.
    */
-  it("az atvett termek ara nem kerul be a tortenetbe", async () => {
+  it("az atvett termek UNAS-ara nem kerul a tukor-tortenetbe, a sajat ara OWN sorkent igen", async () => {
     await cleanup();
     deletedProducts = [];
     categoryPage = [category];
@@ -1442,12 +1443,21 @@ describe("UNAS Product Sync database integration", { skip: !enabled }, () => {
     // amelyik eszre sem vette a termeket (pl. mert ki sem toltottuk).
     assert.equal(atvett.skippedCount, 1);
     assert.equal(atvett.skippedSourceChangedCount, 1);
+    // a TUKOR-sorok (variantId null) szama a takeover elotti: a UNAS 2413-as ara nem kerult be
     assert.equal(
       await prisma.productPriceHistory.count({
-        where: { productId: valtozat.productId },
+        where: { productId: valtozat.productId, variantId: null },
       }),
       1,
     );
+    // az OWN sor: pontosan egy, a masolt lista-arral (nem a kozben valtozott 2413-mal)
+    const own = await prisma.productPriceHistory.findMany({
+      where: { productId: valtozat.productId, source: "OWN" },
+      select: { variantId: true, grossPrice: true },
+    });
+    assert.equal(own.length, 1);
+    assert.notEqual(own[0]!.variantId, null);
+    assert.equal(Number(own[0]!.grossPrice), 1270);
     assert.equal(
       await prisma.productPriceHistory.count({
         where: { productId: valtozat.productId, source: "UNAS_SYNC" },
