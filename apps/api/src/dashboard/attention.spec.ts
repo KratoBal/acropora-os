@@ -87,6 +87,22 @@ describe("Figyelmet igényel: the figures", () => {
     );
   });
 
+  it("takes my open tasks as one line to Feladataim, and nothing when there are none", () => {
+    assert.deepEqual(
+      attentionItemsOf("tasks", { openCount: 3, latest: [] }).map((i) => [
+        i.key,
+        i.count,
+        i.tone,
+        i.href,
+      ]),
+      [["open", 3, "info", "/feladataim"]],
+    );
+    assert.deepEqual(
+      attentionItemsOf("tasks", { openCount: 0, latest: [] }),
+      [],
+    );
+  });
+
   it("takes only the actionable figure of each widget, and drops zeros", () => {
     assert.deepEqual(
       attentionItemsOf("overdue-invoices", {

@@ -54,6 +54,22 @@ describe("the registry", () => {
     }
   });
 
+  // T2.1 (acrobot 41656): "Figyelmet igényel" heads every role's preset, and every role may have it.
+  it("puts Figyelmet igényel first in every role's preset", () => {
+    for (const role of USER_ROLES) {
+      const preset = DASHBOARD_ROLE_PRESETS[role];
+      if (!preset) continue;
+      assert.equal(preset[0], "attention", role);
+      assert.equal(
+        presetDashboardLayout(viewer(role))[0]?.widgetId,
+        "attention",
+        role,
+      );
+    }
+    for (const role of ["SERVICE", "WAREHOUSE", "SALES"] as const)
+      assert.ok(DASHBOARD_ROLE_PRESETS[role], role);
+  });
+
   // T2.1 (acrobot 41616): the commerce freeze is lifted since 2026-11-01, and the order queue
   // is the OS's own work list. It reaches who may see orders, and nobody else.
   it("offers the webshop order queue to whoever may see orders, and to nobody else", () => {
@@ -196,6 +212,7 @@ describe("role presets", () => {
     const warehouse = presetDashboardLayout(viewer("WAREHOUSE"));
     // Készletfigyelő stays planned: no reliable stock threshold
     assert.deepEqual(ids(warehouse), [
+      "attention",
       "tasks",
       "expected-arrivals",
       "stock-reconciliation",
@@ -204,6 +221,7 @@ describe("role presets", () => {
     const service = presetDashboardLayout(viewer("SERVICE"));
     // Mai szerviz is planned; material requests need the capability
     assert.deepEqual(ids(service), [
+      "attention",
       "service-tickets",
       "worksheets",
       "tasks",
@@ -213,6 +231,7 @@ describe("role presets", () => {
       viewer("SERVICE", ["MATERIAL_REQUEST_MARK_RECEIVED"]),
     );
     assert.deepEqual(ids(capable), [
+      "attention",
       "service-tickets",
       "worksheets",
       "material-requests",
