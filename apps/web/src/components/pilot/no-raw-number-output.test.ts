@@ -20,19 +20,11 @@ const ROOT = join(process.cwd(), "src");
 
 type Szabaly = "toFixed" | "nyers-penznem" | "huf-felirat" | "helyi-formazo";
 
-const WEBSHOP = "webshop: helyi formatHuf; kiváltás a webshop-szeletben";
 const BESZERZES = "beszerzés: helyi formazó; kiváltás a beszerzés-szeletben";
 const SZAMLAZAS = "számlázás: helyi formázó; kiváltás a számlázás-szeletben";
 
 /** `szabály:fájl` -> miért áll még itt. Csak fogyhat. */
 const KIVETELEK = new Map<string, string>([
-  ["helyi-formazo:components/webshop/webshop-order-detail-page.tsx", WEBSHOP],
-  ["helyi-formazo:components/webshop/webshop-orders-page.tsx", WEBSHOP],
-  ["helyi-formazo:components/webshop/webshop-product-list-page.tsx", WEBSHOP],
-  [
-    "helyi-formazo:components/webshop-orders/webshop-orders-list-page.tsx",
-    WEBSHOP,
-  ],
   [
     "helyi-formazo:components/purchasing/expected-arrival-list-page.tsx",
     BESZERZES,

@@ -1,6 +1,6 @@
 "use client";
 import { Icon } from "@acropora/ui";
-import { foxpostPointType } from "@acropora/types";
+import { formatMoney, foxpostPointType } from "@acropora/types";
 import type {
   WebshopOrderAddressInput,
   WebshopOrderMethodInput,
@@ -13,7 +13,6 @@ import {
   PilotDialog,
   PilotInput,
 } from "@/components/pilot/pilot-ui";
-import { formatMoney } from "./webshop-orders-list-page";
 
 /**
  * AZ ADATLAP CERUZÁI (Figma 494:386; acrobot 26502): a cím (számlázási és
@@ -587,7 +586,7 @@ export function MethodDialog({
                 </span>
               </span>
               <span className="text-pilot-grey-700">
-                {formatMoney(option.amount, "HUF")}
+                {formatMoney(option.amount, "HUF", { fractionDigits: 2 })}
               </span>
             </label>
           ))}
@@ -610,8 +609,8 @@ export function MethodDialog({
       {difference !== null && difference !== 0 ? (
         <p className="text-xs text-pilot-grey-600">
           {difference > 0
-            ? `A szállítási díj ${formatMoney(difference, "HUF")} összeggel nő. Kártyás fizetésnél a vevő fizetési linket kap a különbözetről, és a csomag a fizetés után adható fel.`
-            : `A szállítási díj ${formatMoney(-difference, "HUF")} összeggel csökken. Új fizetés nem kell: a levonás a kisebb összeget veszi.`}
+            ? `A szállítási díj ${formatMoney(difference, "HUF", { fractionDigits: 2 })} összeggel nő. Kártyás fizetésnél a vevő fizetési linket kap a különbözetről, és a csomag a fizetés után adható fel.`
+            : `A szállítási díj ${formatMoney(-difference, "HUF", { fractionDigits: 2 })} összeggel csökken. Új fizetés nem kell: a levonás a kisebb összeget veszi.`}
         </p>
       ) : null}
     </Shell>

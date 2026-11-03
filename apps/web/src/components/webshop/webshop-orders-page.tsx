@@ -12,6 +12,7 @@ import {
   PilotSelect,
 } from "@acropora/ui";
 import {
+  formatMoney,
   hasPermission,
   PERMISSIONS,
   type UnasOrderDeletionReconciliationStatus,
@@ -22,10 +23,6 @@ import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { unasOrdersApi } from "@/lib/api/unas-orders";
-
-function formatHuf(value: string): string {
-  return `${Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 })} Ft`;
-}
 
 const DETAILED_STATUS = {
   "Feldolgozásra vár": { icon: "●", row: "bg-rose-50", closed: false },
@@ -340,7 +337,9 @@ export function WebshopOrdersPage() {
                           {order.shippingName ? ` · ${order.shippingName}` : ""}
                         </td>
                         <td className="px-4 py-3 text-right text-sm font-semibold text-dusk-900">
-                          {formatHuf(order.totalGross)}
+                          {formatMoney(order.totalGross, "HUF", {
+                            fractionDigits: 2,
+                          })}
                         </td>
                         <td className="px-5 py-3">
                           <Badge variant={statusVariant(order)}>

@@ -13,6 +13,7 @@ import {
   type PilotTableColumn,
 } from "@acropora/ui";
 import {
+  formatMoney,
   hasPermission,
   PERMISSIONS,
   WEBSHOP_ORDER_PAYMENT_STATE_LABELS,
@@ -82,11 +83,6 @@ export const STATUS_TILE: Record<
 
 /** A webshop sorszáma; egyedi rendelésszám (ACR-…) még nincs döntve. */
 export const orderNumber = (displayId: number) => `#${displayId}`;
-
-export function formatMoney(total: number, currency: string): string {
-  const amount = total.toLocaleString("hu-HU", { maximumFractionDigits: 2 });
-  return currency === "HUF" ? `${amount} Ft` : `${amount} ${currency}`;
-}
 
 /** A rendelés ideje a közös lista-alakban: `2026. 11. 03. 14:20` (lib/format/date). */
 export const formatOrderDate = (iso: string) => formatDateTimeHu(iso);
@@ -196,7 +192,7 @@ function OrderCard({
             <CustomerMarkers item={item} />
           </span>
           <span className="font-semibold text-pilot-grey-900">
-            {formatMoney(item.total, item.currency)}
+            {formatMoney(item.total, item.currency, { fractionDigits: 2 })}
           </span>
           <span className="text-[13px] text-pilot-grey-700">
             {shippingText(item)}
@@ -483,7 +479,7 @@ export function WebshopOrdersListPage() {
       width: "112px",
       cell: (item) => (
         <span className="font-semibold text-pilot-grey-900">
-          {formatMoney(item.total, item.currency)}
+          {formatMoney(item.total, item.currency, { fractionDigits: 2 })}
         </span>
       ),
     },

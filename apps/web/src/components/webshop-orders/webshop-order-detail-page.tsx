@@ -8,6 +8,7 @@ import {
   Skeleton,
 } from "@acropora/ui";
 import {
+  formatMoney,
   hasPermission,
   PERMISSIONS,
   WEBSHOP_ORDER_PAYMENT_STATE_LABELS,
@@ -65,11 +66,7 @@ import {
   ScissorsIcon,
   SplitDialog,
 } from "./webshop-order-lines";
-import {
-  STATUS_TILE,
-  formatMoney,
-  orderNumber,
-} from "./webshop-orders-list-page";
+import { STATUS_TILE, orderNumber } from "./webshop-orders-list-page";
 
 /**
  * A WEBSHOP RENDELÉS ADATLAPJA (Balázs, 2026-10-05; Figma 494:386, 494:649,
@@ -902,7 +899,9 @@ function ProformaSection({
         <div className="grid grid-cols-2 gap-4">
           <Field label="Beérkezett">{receipt.receivedOn}</Field>
           <Field label="Összeg">
-            {formatMoney(Number(receipt.amount), receipt.currency)}
+            {formatMoney(Number(receipt.amount), receipt.currency, {
+              fractionDigits: 2,
+            })}
           </Field>
           <Field label="Hivatkozás">
             <span className="break-all">{receipt.reference}</span>
@@ -971,7 +970,9 @@ function ProformaSection({
           today={today}
           amount={
             proforma.grossAmount
-              ? formatMoney(Number(proforma.grossAmount), order.currency)
+              ? formatMoney(Number(proforma.grossAmount), order.currency, {
+                  fractionDigits: 2,
+                })
               : "—"
           }
           onClose={() => setRecording(false)}
@@ -1172,7 +1173,9 @@ export function methodChangeText(
   change: WebshopOrderMethodResult["change"],
 ): string {
   if (!change.changed) return "A szállítási mód nem változott.";
-  const amount = formatMoney(Math.abs(change.difference), "HUF");
+  const amount = formatMoney(Math.abs(change.difference), "HUF", {
+    fractionDigits: 2,
+  });
   if (change.difference <= 0)
     return change.difference < 0
       ? `A szállítási mód cserélve, a végösszeg ${amount} összeggel csökkent. Új fizetés nem kell.`
@@ -1638,7 +1641,9 @@ function ParcelSection({
             ) : null}
           </Field>
           {parcel.codHuf ? (
-            <Field label="Utánvét">{formatMoney(parcel.codHuf, "HUF")}</Field>
+            <Field label="Utánvét">
+              {formatMoney(parcel.codHuf, "HUF", { fractionDigits: 2 })}
+            </Field>
           ) : null}
           <ParcelTrackingField
             trackingUrl={parcel.trackingUrl}
@@ -1730,7 +1735,7 @@ function ParcelSection({
             <p className="w-full text-sm text-pilot-grey-700">
               Utánvét a csomagon:{" "}
               <span className="font-semibold">
-                {formatMoney(codDue, "HUF")}
+                {formatMoney(codDue, "HUF", { fractionDigits: 2 })}
               </span>
             </p>
           ) : null}
@@ -1862,7 +1867,8 @@ function OrderBody({
   const selection = useLineSelection(order.lines.map((line) => line.id));
   const terminal = !!order.status.code && TERMINAL.includes(order.status.code);
   const tile = order.status.code ? STATUS_TILE[order.status.code] : null;
-  const money = (value: number) => formatMoney(value, order.currency);
+  const money = (value: number) =>
+    formatMoney(value, order.currency, { fractionDigits: 2 });
   const payment = order.payment;
   return (
     <>
