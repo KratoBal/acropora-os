@@ -19,6 +19,7 @@ import {
   Button,
   FormField,
   Input,
+  PageHeader,
   Skeleton,
   Textarea,
   PilotFileInput,
@@ -438,33 +439,34 @@ export function ArticleEditorPage({ contentId }: { contentId: string }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <Link href="/tartalom" className="text-xs text-pilot-grey-600">
-            ← Tartalom
-          </Link>
-          <h1 className="text-xl font-semibold text-dusk-900">{item.title}</h1>
-          <p className="mt-1 text-sm text-dusk-600">
-            Cikk · {CONTENT_STATE_LABELS[item.state]}
-            {article?.publishedAt
+      <div>
+        <Link href="/tartalom" className="text-xs text-pilot-grey-600">
+          ← Tartalom
+        </Link>
+        <PageHeader
+          title={item.title}
+          description={`Cikk · ${CONTENT_STATE_LABELS[item.state]}${
+            article?.publishedAt
               ? ` · közzétéve ${dateTime(article.publishedAt)}`
-              : ""}
-          </p>
-        </div>
-        {canManage && editable ? (
-          <div className="flex items-center gap-3">
-            {saved ? (
-              <span className="text-sm text-pilot-grey-600">Mentve</span>
-            ) : dirty ? (
-              <span className="text-sm text-pilot-grey-600">
-                Nem mentett változás
-              </span>
-            ) : null}
-            <Button onClick={() => void save()} disabled={saving || !dirty}>
-              {saving ? "Mentés…" : "Mentés"}
-            </Button>
-          </div>
-        ) : null}
+              : ""
+          }`}
+          actions={
+            canManage && editable ? (
+              <div className="flex items-center gap-3">
+                {saved ? (
+                  <span className="text-sm text-pilot-grey-600">Mentve</span>
+                ) : dirty ? (
+                  <span className="text-sm text-pilot-grey-600">
+                    Nem mentett változás
+                  </span>
+                ) : null}
+                <Button onClick={() => void save()} disabled={saving || !dirty}>
+                  {saving ? "Mentés…" : "Mentés"}
+                </Button>
+              </div>
+            ) : undefined
+          }
+        />
       </div>
 
       {!editable ? (

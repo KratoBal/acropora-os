@@ -1,5 +1,12 @@
 "use client";
-import { Alert, Button, ConfirmDialog, Icon, Skeleton } from "@acropora/ui";
+import {
+  Alert,
+  Button,
+  ConfirmDialog,
+  Icon,
+  PageHeader,
+  Skeleton,
+} from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
@@ -1859,12 +1866,10 @@ function OrderBody({
   const payment = order.payment;
   return (
     <>
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-[28px] font-semibold leading-[34px] text-pilot-grey-900">
-              {orderNumber(order.displayId)}
-            </h1>
+      <PageHeader
+        title={orderNumber(order.displayId)}
+        meta={
+          <>
             <CopyButton
               value={String(order.displayId)}
               label="Rendelésszám másolása"
@@ -1878,39 +1883,44 @@ function OrderBody({
             ) : (
               <span className="text-xs text-pilot-grey-500">Nincs státusz</span>
             )}
-          </div>
-          <p className="text-sm text-pilot-grey-600">
-            Leadva: {LONG_DATE.format(new Date(order.createdAt))}
-            {order.status.changedAt ? (
-              <>
-                {" · "}
-                <span
-                  className={
-                    order.status.stale ? "font-medium text-pilot-amber-700" : ""
-                  }
-                >
-                  ebben a státuszban:{" "}
-                  {formatStatusAge(order.status.changedAt, now)}
-                  {order.status.stale ? " (elavult)" : ""}
-                </span>
-              </>
-            ) : null}
-          </p>
-        </div>
-        {terminal ? (
-          <span className="text-sm font-medium text-pilot-grey-600">
-            Végállapot
-          </span>
-        ) : canManage && order.nextStatuses.length ? (
-          <PilotButton
-            size="regular"
-            variant="secondary"
-            onClick={() => setStatusOpen(true)}
-          >
-            Státusz módosítása
-          </PilotButton>
-        ) : null}
-      </header>
+            {/* a teljes szélesség új sorba tördeli a leadás idejét a jelvények alá */}
+            <p className="w-full text-sm text-pilot-grey-600">
+              Leadva: {LONG_DATE.format(new Date(order.createdAt))}
+              {order.status.changedAt ? (
+                <>
+                  {" · "}
+                  <span
+                    className={
+                      order.status.stale
+                        ? "font-medium text-pilot-amber-700"
+                        : ""
+                    }
+                  >
+                    ebben a státuszban:{" "}
+                    {formatStatusAge(order.status.changedAt, now)}
+                    {order.status.stale ? " (elavult)" : ""}
+                  </span>
+                </>
+              ) : null}
+            </p>
+          </>
+        }
+        actions={
+          terminal ? (
+            <span className="text-sm font-medium text-pilot-grey-600">
+              Végállapot
+            </span>
+          ) : canManage && order.nextStatuses.length ? (
+            <PilotButton
+              size="regular"
+              variant="secondary"
+              onClick={() => setStatusOpen(true)}
+            >
+              Státusz módosítása
+            </PilotButton>
+          ) : null
+        }
+      />
       {/* csak nyitva van a DOM-ban: a PilotDialog zárva is renderel, és egy
           láthatatlan párbeszéd a képernyőolvasónak ott maradna */}
       {canManage && !terminal && statusOpen ? (

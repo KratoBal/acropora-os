@@ -1,6 +1,7 @@
 "use client";
 import {
   Alert,
+  PageHeader,
   PilotButton,
   PilotCard,
   PilotDialog,
@@ -354,15 +355,11 @@ export function HomepageContentEditorPage() {
 
   return (
     <PilotThemeRoot className="space-y-6">
-      <header>
-        <p className="text-xs text-pilot-grey-500">Beállítások / Kezdőlap</p>
-        <h1 className="mt-1 text-[28px] font-semibold leading-9 text-pilot-grey-900">
-          Kezdőlap
-        </h1>
-        <p className="mt-1 text-sm text-pilot-grey-600">
-          A webshop kezdőlapjának tartalma és megjelenése.
-        </p>
-      </header>
+      <PageHeader
+        eyebrow="Beállítások"
+        title="Kezdőlap"
+        description="A webshop kezdőlapjának tartalma és megjelenése."
+      />
 
       <PilotCard className="flex flex-wrap items-center gap-4 p-4">
         <div className="min-w-60 flex-1">

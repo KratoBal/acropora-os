@@ -5,6 +5,7 @@ import {
   ConfirmDialog,
   EmptyState,
   Icon,
+  PageHeader,
   Skeleton,
   PilotSelect,
 } from "@acropora/ui";
@@ -643,64 +644,65 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
         (with its last filters), the number, the title, and the internal and
         the partner's status as two separate badges (the brief, point 3).
       */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          <Link
-            href={listHref}
-            className="text-sm text-pilot-aqua-700 transition-colors hover:text-pilot-aqua-800"
-          >
-            <span aria-hidden="true">← </span>
-            Hibajegyek
-          </Link>
-          <p className="mt-4 font-mono text-sm text-pilot-grey-500">
-            {job.jobNumber}
-          </p>
-          <h1 className="mt-1 break-words text-3xl font-semibold text-pilot-grey-900">
-            {job.title}
-          </h1>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <PilotBadge variant={STATUS_BADGE_VARIANT[job.status]}>
-              {serviceJobStatusLabel[job.status]}
-            </PilotBadge>
-            <PilotBadge variant="blue">
-              Partner: {job.partnerStatusLabel}
-            </PilotBadge>
-            {job.hidden ? (
-              <PilotBadge variant="amber">Rejtett</PilotBadge>
-            ) : null}
-          </div>
-        </div>
-        <div className="flex flex-wrap items-start gap-2">
-          <ContextConversationButton kind="service-job" objectId={job.id} />
-          <ContextConversationButton
-            kind="service-job"
-            objectId={job.id}
-            partner
-          />
-          {job.partnerStatus === "COMPLETED" ? (
-            <div className="flex flex-wrap gap-2">
-              <PilotButton
-                variant="secondary"
-                size="regular"
-                onClick={() => void downloadPackage()}
-                disabled={downloadingPackage}
-              >
-                {downloadingPackage
-                  ? "Dokumentumcsomag letöltése…"
-                  : "Csomag letöltése (.zip)"}
-              </PilotButton>
-              {canManage ? (
-                <PilotButton
-                  variant="primary"
-                  size="regular"
-                  onClick={() => void openHandoverMail()}
-                >
-                  Küldés e-mailben
-                </PilotButton>
+      <div>
+        <Link
+          href={listHref}
+          className="text-sm text-pilot-aqua-700 transition-colors hover:text-pilot-aqua-800"
+        >
+          <span aria-hidden="true">← </span>
+          Hibajegyek
+        </Link>
+        <PageHeader
+          className="mt-4"
+          eyebrow={job.jobNumber}
+          title={job.title}
+          meta={
+            <>
+              <PilotBadge variant={STATUS_BADGE_VARIANT[job.status]}>
+                {serviceJobStatusLabel[job.status]}
+              </PilotBadge>
+              <PilotBadge variant="blue">
+                Partner: {job.partnerStatusLabel}
+              </PilotBadge>
+              {job.hidden ? (
+                <PilotBadge variant="amber">Rejtett</PilotBadge>
               ) : null}
-            </div>
-          ) : null}
-        </div>
+            </>
+          }
+          actions={
+            <>
+              <ContextConversationButton kind="service-job" objectId={job.id} />
+              <ContextConversationButton
+                kind="service-job"
+                objectId={job.id}
+                partner
+              />
+              {job.partnerStatus === "COMPLETED" ? (
+                <div className="flex flex-wrap gap-2">
+                  <PilotButton
+                    variant="secondary"
+                    size="regular"
+                    onClick={() => void downloadPackage()}
+                    disabled={downloadingPackage}
+                  >
+                    {downloadingPackage
+                      ? "Dokumentumcsomag letöltése…"
+                      : "Csomag letöltése (.zip)"}
+                  </PilotButton>
+                  {canManage ? (
+                    <PilotButton
+                      variant="primary"
+                      size="regular"
+                      onClick={() => void openHandoverMail()}
+                    >
+                      Küldés e-mailben
+                    </PilotButton>
+                  ) : null}
+                </div>
+              ) : null}
+            </>
+          }
+        />
       </div>
 
       {packageError ? (

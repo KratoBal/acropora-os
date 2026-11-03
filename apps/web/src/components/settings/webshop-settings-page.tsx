@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader } from "@acropora/ui";
+
 import {
   SettingsAreaGrid,
   WEBSHOP_SETTINGS_AREAS,
@@ -15,14 +17,10 @@ import {
 export function WebshopSettingsPage() {
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-dusk-900">
-          Webshop beállítások
-        </h1>
-        <p className="mt-1 text-sm text-dusk-600">
-          A webshop kapcsolatai, szinkronja, levelei és kezdőlapja egy helyen.
-        </p>
-      </div>
+      <PageHeader
+        title="Webshop beállítások"
+        description="A webshop kapcsolatai, szinkronja, levelei és kezdőlapja egy helyen."
+      />
       <SettingsAreaGrid areas={WEBSHOP_SETTINGS_AREAS} />
     </div>
   );

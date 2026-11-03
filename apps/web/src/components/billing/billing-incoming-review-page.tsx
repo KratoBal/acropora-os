@@ -4,6 +4,7 @@ import {
   Alert,
   Button,
   Icon,
+  PageHeader,
   PilotButton,
   PilotInput,
   PilotSection,
@@ -221,39 +222,35 @@ export function BillingIncomingReviewPage({ itemId }: { itemId: string }) {
         Vissza a listához
       </Link>
 
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0">
-          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.05em] text-pilot-accent-warm-text">
-            Bejövő számla ·{" "}
-            {item.origin === "PURCHASE" ? "Beszerzésből" : "Postafiókból"}
-          </p>
-          <h1 className="text-[28px] font-semibold leading-[34px] text-pilot-grey-900">
-            {review.values.documentNumber ?? item.documentNumber}
-          </h1>
-          <p className="mt-2 text-sm text-pilot-grey-600">
-            {review.values.supplierName ??
-              (item.supplierName || "(név nélkül)")}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-start gap-2 lg:justify-end">
-          <span
-            className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-              verified
-                ? "bg-pilot-aqua-50 text-pilot-aqua-700"
-                : "bg-pilot-accent-warm-soft text-pilot-accent-warm-text"
-            }`}
-          >
-            {INCOMING_REVIEW_LABELS[review.state]}
-          </span>
-          <PilotButton
-            size="regular"
-            variant="secondary"
-            onClick={() => void openPdf()}
-          >
-            PDF megnyitása
-          </PilotButton>
-        </div>
-      </header>
+      <PageHeader
+        eyebrow={`Bejövő számla · ${
+          item.origin === "PURCHASE" ? "Beszerzésből" : "Postafiókból"
+        }`}
+        title={review.values.documentNumber ?? item.documentNumber}
+        description={
+          review.values.supplierName ?? (item.supplierName || "(név nélkül)")
+        }
+        actions={
+          <>
+            <span
+              className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                verified
+                  ? "bg-pilot-aqua-50 text-pilot-aqua-700"
+                  : "bg-pilot-accent-warm-soft text-pilot-accent-warm-text"
+              }`}
+            >
+              {INCOMING_REVIEW_LABELS[review.state]}
+            </span>
+            <PilotButton
+              size="regular"
+              variant="secondary"
+              onClick={() => void openPdf()}
+            >
+              PDF megnyitása
+            </PilotButton>
+          </>
+        }
+      />
 
       {review.warnings.length ? (
         <Alert

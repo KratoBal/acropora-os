@@ -3,6 +3,7 @@ import {
   Alert,
   EmptyState,
   Icon,
+  PageHeader,
   Pagination,
   PilotDataTable,
   Skeleton,
@@ -245,25 +246,21 @@ export function PilotSupplierListPage() {
   return (
     <PilotThemeRoot>
       <div className="flex min-h-full flex-col">
-        <div className="flex items-center justify-between border-b border-pilot-grey-200 bg-white px-8 py-5">
-          <div>
-            <h1 className="text-xl font-semibold text-pilot-grey-900">
-              Partnerek
-            </h1>
-            <p className="mt-0.5 text-sm text-pilot-grey-400">
-              Beszállítói törzsadatok: elérhetőség, bankszámla és
-              kapcsolattartó.
-            </p>
-          </div>
-          {canManage ? (
-            <Link href="/partnerek/uj">
-              <PilotButton type="button" variant="primary">
-                <Icon name="plus" size={14} />
-                Új felvitele
-              </PilotButton>
-            </Link>
-          ) : null}
-        </div>
+        <PageHeader
+          className="px-8 pt-6"
+          title="Partnerek"
+          description="Beszállítói törzsadatok: elérhetőség, bankszámla és kapcsolattartó."
+          actions={
+            canManage ? (
+              <Link href="/partnerek/uj">
+                <PilotButton type="button" variant="primary">
+                  <Icon name="plus" size={14} />
+                  Új felvitele
+                </PilotButton>
+              </Link>
+            ) : null
+          }
+        />
 
         <div className="flex flex-1 flex-col gap-4 px-8 py-6">
           <PilotCard>

@@ -551,7 +551,9 @@ describe("WebshopOrderDetailPage", () => {
       createElement(WebshopOrderDetailPage, { id: "order_38" }),
     );
     expect(
-      await screen.findByText("Végállapot", { selector: "header > span" }),
+      await screen.findByText("Végállapot", {
+        selector: "header > div > span",
+      }),
     ).toBeTruthy();
     expect(
       screen.queryByRole("button", { name: "Státusz módosítása" }),

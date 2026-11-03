@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert } from "@acropora/ui";
+import { Alert, PageHeader } from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
@@ -676,26 +676,24 @@ export function PilotContractDetailPage({
   return (
     <PilotThemeRoot>
       <div className="flex min-h-full flex-col">
-        <div className="flex items-center justify-between border-b border-pilot-grey-200 bg-white px-8 py-5">
-          <div>
-            <Link
-              href="/partnerek/szerzodesek"
-              className="mb-0.5 block text-xs text-pilot-grey-400 hover:text-pilot-grey-700"
-            >
-              ← Szerződések
-            </Link>
-            <p className="text-xs text-pilot-grey-400">
-              {contract.customer.displayName}
-            </p>
-            <h1 className="text-xl font-semibold text-pilot-grey-900">
-              {contract.number}
-            </h1>
-          </div>
-          <Link href="/partnerek/szerzodesek">
-            <PilotButton type="button" variant="secondary">
-              ← Vissza
-            </PilotButton>
+        <div className="px-8 pt-6">
+          <Link
+            href="/partnerek/szerzodesek"
+            className="mb-0.5 block text-xs text-pilot-grey-400 hover:text-pilot-grey-700"
+          >
+            ← Szerződések
           </Link>
+          <PageHeader
+            title={contract.number}
+            description={contract.customer.displayName}
+            actions={
+              <Link href="/partnerek/szerzodesek">
+                <PilotButton type="button" variant="secondary">
+                  ← Vissza
+                </PilotButton>
+              </Link>
+            }
+          />
         </div>
 
         <div className="flex flex-1 flex-col gap-4 px-8 py-6">

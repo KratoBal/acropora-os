@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Icon } from "@acropora/ui";
+import { Alert, Icon, PageHeader } from "@acropora/ui";
 import {
   assetLabelCreateProblem,
   hasPermission,
@@ -525,7 +525,7 @@ export function PilotAssetCreatePage() {
 
   return (
     <PilotThemeRoot bleed className="min-h-screen bg-pilot-grey-50">
-      <div className="border-b border-pilot-grey-200 bg-white px-8 py-5">
+      <div className="px-8 pt-6">
         <Link
           href={backToList.href}
           className="mb-3 flex items-center gap-1.5 text-xs text-pilot-grey-400 transition-colors hover:text-pilot-grey-700"
@@ -533,10 +533,10 @@ export function PilotAssetCreatePage() {
           <Icon name="chevron-left" size={12} />
           {backToList.fromWithinApp ? "Vissza" : "Eszköznyilvántartás"}
         </Link>
-        <h1 className="text-xl font-semibold text-pilot-grey-900">Új eszköz</h1>
-        <p className="mt-0.5 text-sm text-pilot-grey-500">
-          Önálló berendezés vagy egy meglévő rendszer részegységének rögzítése.
-        </p>
+        <PageHeader
+          title="Új eszköz"
+          description="Önálló berendezés vagy egy meglévő rendszer részegységének rögzítése."
+        />
       </div>
 
       <div className="flex max-w-3xl flex-col gap-5 px-8 py-6">

@@ -1,5 +1,11 @@
 "use client";
-import { Alert, Icon, PilotDateField, PilotSelect } from "@acropora/ui";
+import {
+  Alert,
+  Icon,
+  PageHeader,
+  PilotDateField,
+  PilotSelect,
+} from "@acropora/ui";
 import {
   aquariumEffectiveMeasurementTargetRange,
   isOutsideMeasurementRange,
@@ -317,7 +323,7 @@ export function PilotMeasurementHistoryPage({
       bleed
       className="flex min-h-screen flex-col bg-pilot-grey-50"
     >
-      <div className="border-b border-pilot-grey-200 bg-white px-8 py-5">
+      <div className="px-8 pt-6">
         <nav className="mb-3 flex items-center gap-1.5 text-xs text-pilot-grey-400">
           <Link
             href="/akvariumok"
@@ -337,12 +343,10 @@ export function PilotMeasurementHistoryPage({
             Mérési előzmények
           </span>
         </nav>
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-pilot-grey-900">
-              {aquarium.name}
-            </h1>
-            <div className="mt-2 flex items-center gap-2">
+        <PageHeader
+          title={aquarium.name}
+          meta={
+            <>
               {aquarium.waterType ? (
                 <PilotBadge variant="teal">
                   {WATER_TYPE_LABEL[aquarium.waterType]}
@@ -352,9 +356,9 @@ export function PilotMeasurementHistoryPage({
               <PilotBadge variant="grey">
                 {WATER_BODY_LABEL[aquarium.waterBodyType]}
               </PilotBadge>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        />
       </div>
 
       <div className="flex flex-1 flex-col gap-5 px-8 py-6">

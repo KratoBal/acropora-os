@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Icon, Skeleton, PilotSelect } from "@acropora/ui";
+import { Alert, Icon, PageHeader, Skeleton, PilotSelect } from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
@@ -586,16 +586,11 @@ export function PilotPosTerminalPage() {
       className="flex min-h-screen flex-col bg-pilot-grey-50 [&_h1]:![font-family:inherit] [&_h2]:![font-family:inherit] [&_h3]:![font-family:inherit]"
     >
       <div className="px-8 pb-5 pt-6">
-        <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-pilot-aqua-700">
-          Pénztár
-        </p>
-        <h1 className="text-[28px] font-semibold leading-tight text-pilot-grey-900">
-          Bolti eladás
-        </h1>
-        <p className="mt-1.5 text-xs text-pilot-grey-600">
-          Keresés, kosár és fizetés egy képernyőn. A készlet az Acropora OS-ből
-          jön.
-        </p>
+        <PageHeader
+          eyebrow="Pénztár"
+          title="Bolti eladás"
+          description="Keresés, kosár és fizetés egy képernyőn. A készlet az Acropora OS-ből jön."
+        />
         {canView ? (
           <button
             type="button"

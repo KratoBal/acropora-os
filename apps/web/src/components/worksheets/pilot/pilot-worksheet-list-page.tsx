@@ -4,6 +4,7 @@ import {
   Alert,
   EmptyState,
   Icon,
+  PageHeader,
   Pagination,
   Skeleton,
   PilotDataTable,
@@ -431,28 +432,21 @@ export function PilotWorksheetListPage() {
       bleed
       className="flex min-h-screen flex-col gap-6 bg-pilot-grey-50 px-8 py-8"
     >
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-pilot-aqua-700">
-            Szerviz / Munkatér
-          </p>
-          <h1 className="text-3xl font-semibold text-pilot-grey-900">
-            Munkalapok
-          </h1>
-          <p className="mt-2 text-sm text-pilot-grey-500">
-            A helyszíni munka teljes életútja: kiosztás, tételek, napló, átadás
-            és aláírás.
-          </p>
-        </div>
-        {canManage ? (
-          <Link href="/szerviz/munkalapok/uj">
-            <PilotButton variant="primary" size="regular">
-              <Icon name="plus" size={13} />
-              Új munkalap
-            </PilotButton>
-          </Link>
-        ) : null}
-      </div>
+      <PageHeader
+        eyebrow="Szerviz / Munkatér"
+        title="Munkalapok"
+        description="A helyszíni munka teljes életútja: kiosztás, tételek, napló, átadás és aláírás."
+        actions={
+          canManage ? (
+            <Link href="/szerviz/munkalapok/uj">
+              <PilotButton variant="primary" size="regular">
+                <Icon name="plus" size={13} />
+                Új munkalap
+              </PilotButton>
+            </Link>
+          ) : null
+        }
+      />
 
       <ServiceOfflineNotice
         state={data ? { kind: "loaded" } : { kind: "empty" }}

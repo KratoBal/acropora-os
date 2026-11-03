@@ -154,6 +154,39 @@ describe("PilotDrawer", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  // A ZÁRT FIÓK SEMMIT NEM VET KI A LAPRA (UI 1. csomag, barracuda #2023): a képernyőn kívüli panel árnyéka a stage-en
+  // szürke csíkot hagyott a jobb szélen, és a panel 896 px-re nyújtotta a lapot. MI PIROSÍT: ha a csukott panel látható
+  // marad vagy árnyékot visz; ha a vágó tároló elveszti az overflow-hidden-t; ha a nyitott panel nem kap árnyékot.
+  it("closed: invisible, no shadow, inside a clipping layer; open: visible with the shadow", () => {
+    const panelOf = (open: boolean) => {
+      const { container, unmount } = render(
+        <PilotDrawer open={open} onClose={() => {}} title="Panel">
+          <p>Tartalom</p>
+        </PilotDrawer>,
+      );
+      const panel = container.querySelector('[role="dialog"]');
+      const result = {
+        panel: panel?.className.split(/\s+/) ?? [],
+        layer: panel?.parentElement?.className.split(/\s+/) ?? [],
+      };
+      unmount();
+      return result;
+    };
+    const closed = panelOf(false);
+    expect(closed.panel).toEqual(
+      expect.arrayContaining(["invisible", "translate-x-full", "shadow-none"]),
+    );
+    expect(closed.panel).not.toContain("shadow-2xl");
+    expect(closed.layer).toEqual(
+      expect.arrayContaining(["fixed", "inset-0", "overflow-hidden"]),
+    );
+    const open = panelOf(true);
+    expect(open.panel).toEqual(
+      expect.arrayContaining(["visible", "translate-x-0", "shadow-2xl"]),
+    );
+    expect(open.panel).not.toContain("invisible");
+  });
+
   // A SZÉLESSÉG PARAMÉTER, NEM ÚJ ALAPÉRTELMEZÉS (acrobot 25226): a számlázás
   // szélesebb panelt kér, a partner-portál vízértékei a régi 448 pixelen
   // maradnak. MI PIROSÍT: ha az alapértelmezés elmozdul, vagy az új szélesség

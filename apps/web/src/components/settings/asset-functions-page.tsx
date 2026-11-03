@@ -7,6 +7,7 @@ import {
   CardContent,
   CardHeader,
   Input,
+  PageHeader,
 } from "@acropora/ui";
 import {
   normalizeAssetFunctionName,
@@ -98,14 +99,10 @@ export function AssetFunctionsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-dusk-900">Eszköz-funkciók</h1>
-        <p className="mt-1 text-sm text-dusk-600">
-          Ez a lista áll az eszköz-felvitel legördülő menüjében. Kivezetni
-          lehet, törölni nem: a már felvitt eszközök mellett a név olvasható
-          marad.
-        </p>
-      </div>
+      <PageHeader
+        title="Eszköz-funkciók"
+        description="Ez a lista áll az eszköz-felvitel legördülő menüjében. Kivezetni lehet, törölni nem: a már felvitt eszközök mellett a név olvasható marad."
+      />
 
       {error ? (
         <Alert variant="danger" title="Hiba" description={error} />

@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 
+import { PageHeader } from "./page-header";
 import { sv, serviceToneClass, type ServiceTone } from "./service-theme";
 
 /**
@@ -152,15 +153,15 @@ export function ServiceListHeader({
   lead: string;
   action?: ReactNode;
 }) {
+  // 2026-11-03 óta a közös fejléc rajzolja (page-header.tsx), nem saját méret és szín
   return (
-    <header className="mb-6 flex flex-col items-start justify-between gap-5 sm:flex-row sm:items-center">
-      <div>
-        <p className={sv.eyebrow}>{eyebrow}</p>
-        <h1 className={sv.pageTitle}>{title}</h1>
-        <p className={sv.pageLead}>{lead}</p>
-      </div>
-      {action ?? null}
-    </header>
+    <PageHeader
+      className="mb-6"
+      eyebrow={eyebrow}
+      title={title}
+      description={lead}
+      actions={action}
+    />
   );
 }
 

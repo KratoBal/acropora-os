@@ -9,6 +9,7 @@ import {
 import {
   Alert,
   CalculatorCard,
+  PageHeader,
   PilotThemeRoot,
   type CalculatorAquariumOption,
   type CalculatorSuggestedCurrent,
@@ -142,14 +143,11 @@ export function PilotCalculatorsPage() {
 
   return (
     <PilotThemeRoot bleed className="min-h-screen bg-pilot-grey-50 px-8 py-6">
-      <div className="mb-5">
-        <h1 className="text-xl font-semibold text-pilot-grey-900">
-          Kalkulátorok
-        </h1>
-        <p className="mt-0.5 text-sm text-pilot-grey-400">
-          Vízkezelési segédszámítások, tiszta vegyszerekre.
-        </p>
-      </div>
+      <PageHeader
+        className="mb-5"
+        title="Kalkulátorok"
+        description="Vízkezelési segédszámítások, tiszta vegyszerekre."
+      />
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <CalculatorCard

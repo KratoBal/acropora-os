@@ -8,7 +8,7 @@ import {
   type DashboardWidgetSize,
   type UserRole,
 } from "@acropora/types";
-import { Alert, ConfirmDialog } from "@acropora/ui";
+import { Alert, ConfirmDialog, PageHeader } from "@acropora/ui";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -161,34 +161,30 @@ export function DashboardHome() {
 
   return (
     <div className="flex flex-col gap-[18px]">
-      <header className="flex flex-wrap items-center justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="text-[28px] font-semibold leading-[34px] tracking-[-0.3px] text-pilot-grey-900">
-            Vezérlőpult
-          </h1>
-          <p className="mt-[3px] text-xs leading-4 text-pilot-grey-500">
-            {subtitle}
-          </p>
-        </div>
-        {layout ? (
-          <div className="flex items-center gap-2.5">
-            <span className="rounded-full bg-pilot-aqua-50 px-2.5 py-1.5 text-xs font-medium leading-4 text-pilot-aqua-700">
-              {enabledIds.length} AKTÍV WIDGET
-            </span>
-            <button
-              type="button"
-              onClick={() => setCustomizing(true)}
-              className="flex items-center gap-2 rounded-[9px] border border-pilot-grey-300 bg-white px-3.5 py-[9px] text-sm font-semibold leading-5 text-pilot-grey-900 hover:bg-pilot-grey-50"
-            >
-              <span
-                aria-hidden="true"
-                className="size-2 rounded-full bg-pilot-aqua-500"
-              />
-              Vezérlőpult testreszabása
-            </button>
-          </div>
-        ) : null}
-      </header>
+      <PageHeader
+        title="Vezérlőpult"
+        description={subtitle}
+        actions={
+          layout ? (
+            <div className="flex items-center gap-2.5">
+              <span className="rounded-full bg-pilot-aqua-50 px-2.5 py-1.5 text-xs font-medium leading-4 text-pilot-aqua-700">
+                {enabledIds.length} AKTÍV WIDGET
+              </span>
+              <button
+                type="button"
+                onClick={() => setCustomizing(true)}
+                className="flex items-center gap-2 rounded-[9px] border border-pilot-grey-300 bg-white px-3.5 py-[9px] text-sm font-semibold leading-5 text-pilot-grey-900 hover:bg-pilot-grey-50"
+              >
+                <span
+                  aria-hidden="true"
+                  className="size-2 rounded-full bg-pilot-aqua-500"
+                />
+                Vezérlőpult testreszabása
+              </button>
+            </div>
+          ) : undefined
+        }
+      />
 
       {layoutError ? (
         <Alert

@@ -4,6 +4,7 @@ import {
   Alert,
   EmptyState,
   Icon,
+  PageHeader,
   Pagination,
   Skeleton,
   sv,
@@ -568,27 +569,21 @@ export function PilotAssetListPage() {
       bleed
       className="flex min-h-screen flex-col bg-pilot-grey-50"
     >
-      <div className="flex items-center justify-between border-b border-pilot-grey-200 bg-white px-8 py-5">
-        <div>
-          <p className="mb-1 text-xs text-pilot-grey-400">
-            Szerviz /{" "}
-            <span className="font-medium text-pilot-grey-700">
-              Eszköznyilvántartás
-            </span>
-          </p>
-          <h1 className="text-xl font-semibold text-pilot-grey-900">
-            Eszköznyilvántartás
-          </h1>
-        </div>
-        {canManage ? (
-          <Link href="/szerviz/eszkozok/uj">
-            <PilotButton variant="primary">
-              <Icon name="plus" size={14} />
-              Új eszköz
-            </PilotButton>
-          </Link>
-        ) : null}
-      </div>
+      <PageHeader
+        className="px-8 pb-5 pt-6"
+        eyebrow="Szerviz"
+        title="Eszköznyilvántartás"
+        actions={
+          canManage ? (
+            <Link href="/szerviz/eszkozok/uj">
+              <PilotButton variant="primary">
+                <Icon name="plus" size={14} />
+                Új eszköz
+              </PilotButton>
+            </Link>
+          ) : undefined
+        }
+      />
 
       {error ? (
         <div className="px-8 pt-4">
