@@ -144,14 +144,21 @@ describe("Levélsablonok: Szerviz és Webshop", () => {
     ).toBe("true");
     await webshopFul();
     const lista = screen.getByRole("list", { name: "Sablonok" });
-    expect(within(lista).getAllByRole("button")).toHaveLength(11);
+    /* eleven Hungarian mails, and the eleven English twins next to them (card d5c6befd) */
+    expect(within(lista).getAllByRole("button")).toHaveLength(22);
+    const angol = within(lista).getByRole("button", {
+      name: /Csomag átadva a szállítónak \(angol\)/,
+    });
+    expect(within(angol).getByText("Alapértelmezett")).toBeTruthy();
     const feladtuk = within(lista).getByRole("button", {
-      name: /Csomag átadva a szállítónak/,
+      name: /Csomag átadva a szállítónak(?! \(angol\))/,
     });
     expect(within(feladtuk).getByText("Szerkesztett")).toBeTruthy();
     expect(
       within(
-        within(lista).getByRole("button", { name: /Rendelés leadva/ }),
+        within(lista).getByRole("button", {
+          name: /Rendelés leadva(?! \(angol\))/,
+        }),
       ).getByText("Alapértelmezett"),
     ).toBeTruthy();
   });
@@ -160,7 +167,9 @@ describe("Levélsablonok: Szerviz és Webshop", () => {
     await megjelenit();
     await webshopFul();
     fireEvent.click(
-      screen.getByRole("button", { name: /Csomag átadva a szállítónak/ }),
+      screen.getByRole("button", {
+        name: /Csomag átadva a szállítónak(?! \(angol\))/,
+      }),
     );
     await waitFor(() =>
       expect(api.read).toHaveBeenLastCalledWith(
@@ -175,7 +184,9 @@ describe("Levélsablonok: Szerviz és Webshop", () => {
     await megjelenit();
     await webshopFul();
     await torzsBeir("<p>Átírva</p>");
-    fireEvent.click(screen.getByRole("button", { name: /Szállítási csúszás/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /Szállítási csúszás(?! \(angol\))/ }),
+    );
     expect(screen.getByText("Nem mentett módosításaid vannak.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Maradok" }));
     expect(szerkeszto().getHTML()).toContain("Átírva");
@@ -185,7 +196,9 @@ describe("Levélsablonok: Szerviz és Webshop", () => {
       expect.anything(),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Szállítási csúszás/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /Szállítási csúszás(?! \(angol\))/ }),
+    );
     fireEvent.click(
       screen.getByRole("button", { name: "Kilépés mentés nélkül" }),
     );
@@ -202,7 +215,9 @@ describe("Levélsablonok: Szerviz és Webshop", () => {
     await megjelenit();
     await webshopFul();
     // control: an untouched template switches without a question
-    fireEvent.click(screen.getByRole("button", { name: /Visszatérítés/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /Visszatérítés(?! \(angol\))/ }),
+    );
     expect(screen.queryByText("Nem mentett módosításaid vannak.")).toBeNull();
     await waitFor(() => expect(screen.getByLabelText("Törzs")).toBeTruthy());
     await torzsBeir("<p>Átírva</p>");
@@ -288,7 +303,9 @@ describe("Levélsablonok: Szerviz és Webshop", () => {
     await megjelenit();
     await webshopFul();
     fireEvent.click(
-      screen.getByRole("button", { name: /Csomag átadva a szállítónak/ }),
+      screen.getByRole("button", {
+        name: /Csomag átadva a szállítónak(?! \(angol\))/,
+      }),
     );
     await waitFor(() =>
       expect(api.read).toHaveBeenLastCalledWith(
@@ -313,6 +330,36 @@ describe("Levélsablonok: Szerviz és Webshop", () => {
     expect(document.querySelector("pre")?.textContent).toContain(
       "A csomagban:\n- Hanna HI780-25 pH reagens × 1",
     );
+  });
+
+  /*
+    THE ENGLISH TWIN PREVIEWS AS ENGLISH (card d5c6befd): opening it reads the
+    twin's own key, and the preview's document carries the language, so the
+    page language and the words agree. (The fixture serves the same text for
+    every key; what is under test is the key and the language.)
+  */
+  it("an English twin loads under its own key and previews as an English mail", async () => {
+    await megjelenit();
+    await webshopFul();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Csomag átadva a szállítónak \(angol\)/,
+      }),
+    );
+    await waitFor(() =>
+      expect(api.read).toHaveBeenLastCalledWith(
+        "token-1",
+        "WEBSHOP_ORDER_SHIPPED_EN",
+        expect.anything(),
+      ),
+    );
+    await waitFor(() =>
+      expect(screen.getByTitle("A levél formázott előnézete")).toBeTruthy(),
+    );
+    const iframe = screen.getByTitle(
+      "A levél formázott előnézete",
+    ) as HTMLIFrameElement;
+    expect(iframe.getAttribute("srcdoc") ?? "").toContain('<html lang="en">');
   });
 
   /*
@@ -355,7 +402,9 @@ describe("Levélsablonok: Szerviz és Webshop", () => {
     await megjelenit();
     await webshopFul();
     fireEvent.click(
-      screen.getByRole("button", { name: /Csomag átadva a szállítónak/ }),
+      screen.getByRole("button", {
+        name: /Csomag átadva a szállítónak(?! \(angol\))/,
+      }),
     );
     expect(
       await screen.findByText(/^Utoljára mentve (ma )?.*\d\d:\d\d$/),

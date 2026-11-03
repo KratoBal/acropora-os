@@ -23,6 +23,7 @@ import {
   renderWebshopMail,
   splitTemplateVariables,
   unknownTemplateVariables,
+  webshopMailLocaleOf,
   webshopMailTemplateOf,
   type MailTemplateGroup,
   type MailTemplateVariable,
@@ -539,7 +540,11 @@ function TemplateEditor({
     if (webshopSablon) {
       const mail = renderWebshopMail(
         { subject, body: szovegesTorzs, bodyHtml: body },
-        WEBSHOP_MAIL_SAMPLE_FACTS[webshopSablon],
+        /* an English twin previews with the English facts: the page language and the words agree */
+        {
+          ...WEBSHOP_MAIL_SAMPLE_FACTS[webshopSablon],
+          locale: webshopMailLocaleOf(esemenyId),
+        },
         WEBSHOP_STEPS,
       );
       return mail.ok

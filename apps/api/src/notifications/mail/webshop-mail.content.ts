@@ -17,14 +17,37 @@ import { richHtmlToText } from "@acropora/rich-text";
 import {
   MAIL_TEMPLATE_VARIABLES,
   SHOP_CONTACT,
+  WEBSHOP_ENGLISH_KEY_SUFFIX,
   WEBSHOP_MAIL_KEYS,
 } from "@acropora/types";
 
 const v = (name: string) => `<span data-variable="${name}">{{${name}}}</span>`;
 const own = (name: string) => `<p>${v(name)}</p>`;
-const top = (eyebrow: string, title: string, orders: string) =>
-  `<p><strong>${eyebrow}</strong></p><h2>${title}</h2><p>Rendelés: ${orders}</p>`;
-const contact = `<p>Kérdésed van? Írj nekünk: ${SHOP_CONTACT}</p>`;
+
+/**
+ * THE WORDS AROUND THE TEXT, PER LANGUAGE. Hungarian is the default of every
+ * helper below, so the Hungarian mails are exactly what they were; the English
+ * twins (`<KEY>_EN`, card d5c6befd) pass `EN`.
+ */
+interface Copy {
+  readonly order: string;
+  readonly contact: string;
+  readonly pay: string;
+}
+const HU: Copy = {
+  order: "Rendelés",
+  contact: `<p>Kérdésed van? Írj nekünk: ${SHOP_CONTACT}</p>`,
+  pay: "Fizetés",
+};
+const EN: Copy = {
+  order: "Order",
+  contact: `<p>Any questions? Write to us: ${SHOP_CONTACT}</p>`,
+  pay: "Pay",
+};
+
+const top = (eyebrow: string, title: string, orders: string, copy: Copy = HU) =>
+  `<p><strong>${eyebrow}</strong></p><h2>${title}</h2><p>${copy.order}: ${orders}</p>`;
+const contact = HU.contact;
 
 const LINK_NAMES = MAIL_TEMPLATE_VARIABLES.filter((x) => x.kind === "link").map(
   (x) => x.name,
@@ -43,28 +66,38 @@ const status = (
   subject: string,
   lead: readonly string[],
   due: boolean,
+  copy: Copy = HU,
 ) => ({
   subject,
   bodyHtml: [
-    top(eyebrow, title, `#${v("rendeles_szam")}`),
+    top(eyebrow, title, `#${v("rendeles_szam")}`, copy),
     ...lead.map((line) => `<p>${line}</p>`),
     ...(due ? [own("fizetendo_doboz")] : []),
     own("rendeles_tetelek"),
-    contact,
+    copy.contact,
   ].join(""),
 });
 
-const paymentLink = (eyebrow: string, title: string, subject: string) => ({
+const paymentLink = (
+  eyebrow: string,
+  title: string,
+  subject: string,
+  copy: Copy = HU,
+) => ({
   subject,
   bodyHtml: [
-    top(eyebrow, title, v("rendeles_szamok")),
-    "<p>A rendelésed készen áll. Most fizetheted ki a lenti gombbal; a csomagot a fizetés után indítjuk.</p>",
+    top(eyebrow, title, v("rendeles_szamok"), copy),
+    copy === EN
+      ? "<p>Your order is ready. You can pay now with the button below; we ship the parcel after payment.</p>"
+      : "<p>A rendelésed készen áll. Most fizetheted ki a lenti gombbal; a csomagot a fizetés után indítjuk.</p>",
     own("bolti_rendeles_mondat"),
-    `<p>A link ${v("link_lejarat")} végéig érvényes. Ha addig nem érkezik fizetés, a rendelést lezárjuk.</p>`,
+    copy === EN
+      ? `<p>The link is valid until ${v("link_lejarat")}. If no payment arrives by then, we will close the order.</p>`
+      : `<p>A link ${v("link_lejarat")} végéig érvényes. Ha addig nem érkezik fizetés, a rendelést lezárjuk.</p>`,
     own("fizetendo_doboz"),
-    `<p data-cta=""><a href="{{fizetesi_link}}">Fizetés</a></p>`,
+    `<p data-cta=""><a href="{{fizetesi_link}}">${copy.pay}</a></p>`,
     own("rendeles_tetelek"),
-    contact,
+    copy.contact,
   ].join(""),
 });
 
@@ -174,13 +207,144 @@ const RAW: Readonly<
   },
 };
 
-/** The default of a webshop key, or `null` for any other key. */
+/**
+ * THE ENGLISH DEFAULTS (card d5c6befd; wording: exchange-ready draft v1,
+ * acrobot 41435: friendly and short, as the Hungarian is). Only the editable
+ * part: the sentences and labels the code builds around it (payment lines,
+ * block titles, the amount box) are the second step, and the LEGAL part of the
+ * order confirmation stays the renderer's own, in Hungarian, until the English
+ * documents exist (`webshop-legal.ts`; Balazs's question, acrobot 41439).
+ */
+const RAW_EN: typeof RAW = {
+  WEBSHOP_ORDER_PLACED: {
+    subject: "Your order confirmation ({{rendeles_szamok}})",
+    bodyHtml: [
+      `<p>Thank you for your order! ${v("vegyes_kosar_mondat")}</p>`,
+      own("rendeles_tetelek"),
+      own("kovetkezo_lepes"),
+    ].join(""),
+  },
+  WEBSHOP_ORDER_CONFIRMED: status(
+    "ORDER CONFIRMED",
+    "We have confirmed your order",
+    "We have confirmed your order (#{{rendeles_szam}})",
+    ["We have reviewed and confirmed your order. We are getting it ready now."],
+    false,
+    EN,
+  ),
+  WEBSHOP_ORDER_OUT_FOR_DELIVERY: status(
+    "OUT FOR DELIVERY",
+    "Your order is on its way",
+    "Your order is on its way (#{{rendeles_szam}})",
+    [
+      "We have handed your order to the carrier.",
+      `Delivery method: ${v("szallitasi_mod")}`,
+    ],
+    true,
+    EN,
+  ),
+  WEBSHOP_ORDER_READY_FOR_PICKUP: status(
+    "READY FOR PICKUP",
+    "Your order is ready for pickup",
+    "Your order is ready for pickup (#{{rendeles_szam}})",
+    [
+      "Your order is ready, you can pick it up.",
+      `Pickup: ${v("szallitasi_mod")}`,
+    ],
+    true,
+    EN,
+  ),
+  WEBSHOP_ORDER_CLOSED: status(
+    "ORDER CLOSED",
+    "Thank you for your purchase!",
+    "Thank you for your purchase (#{{rendeles_szam}})",
+    ["Your order is now closed. Thank you for shopping with us!"],
+    false,
+    EN,
+  ),
+  WEBSHOP_ORDER_SHIPPED: {
+    subject: "We have shipped your parcel (#{{rendeles_szam}})",
+    bodyHtml: [
+      top(
+        "PARCEL SHIPPED",
+        "We have shipped your parcel",
+        `#${v("rendeles_szam")}`,
+        EN,
+      ),
+      "<p>We have handed your parcel to the carrier. You can track it with the details below.</p>",
+      own("szallitas_doboz"),
+      own("fizetendo_doboz"),
+      own("csomag_tartalma"),
+      EN.contact,
+    ].join(""),
+  },
+  WEBSHOP_ORDER_SPLIT: {
+    subject: "Your order arrives in two parts ({{rendeles_szamok}})",
+    bodyHtml: [
+      top(
+        "ORDER IN TWO PARTS",
+        "Your order arrives in two parts",
+        v("rendeles_szamok"),
+        EN,
+      ),
+      `<p>Some items of your order have not reached us yet. So that you do not have to wait for the rest, we have split the order in two: we are sending what we already have, and the rest will follow in order ${v("masodik_resz_szam")} as soon as it arrives.</p>`,
+      own("reszek_fizetese_mondat"),
+      own("rendeles_tetelek"),
+      EN.contact,
+    ].join(""),
+  },
+  WEBSHOP_SHIPPING_DELAYED: {
+    subject: "Your order's delivery is delayed (#{{rendeles_szam}})",
+    bodyHtml: [
+      top(
+        "SHIPPING DELAY",
+        "Your order's delivery is delayed",
+        v("rendeles_szamok"),
+        EN,
+      ),
+      "<p>Your order can be shipped later than expected, because not every item has reached us yet.</p>",
+      `<p>We have NOT charged your card. The ${v("zarolt_osszeg")} hold placed when you ordered has been released; when this shows on your statement depends on your bank.</p>`,
+      "<p>As soon as your order is ready, we will email you a payment link. We ship the parcel after payment.</p>",
+      own("bolti_rendeles_mondat"),
+      own("rendeles_tetelek"),
+      EN.contact,
+    ].join(""),
+  },
+  WEBSHOP_PAYMENT_LINK: paymentLink(
+    "PAYMENT",
+    "You can pay for your order now",
+    "You can pay for your order now (#{{rendeles_szam}})",
+    EN,
+  ),
+  WEBSHOP_PAYMENT_REMINDER: paymentLink(
+    "REMINDER",
+    "You can still pay for your order",
+    "Reminder: you can still pay for your order (#{{rendeles_szam}})",
+    EN,
+  ),
+  WEBSHOP_REFUND: {
+    subject: "Refund for your order #{{rendeles_szam}}",
+    bodyHtml: [
+      `<p>We have refunded ${v("visszaterites_osszege")} ${v("kartya_megnevezes")} for your order #${v("rendeles_szam")}.</p>`,
+      own("eddigi_visszaterites_mondat"),
+      "<p>The time the refund takes to show up depends on your bank.</p>",
+    ].join(""),
+  },
+};
+
+/**
+ * The default of a webshop key, or `null` for any other key. An English twin
+ * (`<KEY>_EN`) gets the English default.
+ */
 export function webshopDefaultTemplate(
   id: string,
 ): WebshopDefaultTemplate | null {
-  const raw = (
-    RAW as Readonly<Record<string, { subject: string; bodyHtml: string }>>
-  )[id];
+  const english = id.endsWith(WEBSHOP_ENGLISH_KEY_SUFFIX);
+  const table = (english ? RAW_EN : RAW) as Readonly<
+    Record<string, { subject: string; bodyHtml: string }>
+  >;
+  const raw =
+    table[english ? id.slice(0, -WEBSHOP_ENGLISH_KEY_SUFFIX.length) : id];
   if (!raw) return null;
   return {
     subject: raw.subject,

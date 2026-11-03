@@ -90,6 +90,82 @@ describe("renderWebshopMail", () => {
   });
 
   /*
+    THE ENGLISH TWINS (card d5c6befd): every English default renders with its
+    sample facts in English, as the same event (same variables), and the
+    document says so (`lang="en"`). Only the editable text is English at this
+    step: the sentences the code builds around it are the next step, so this
+    does not assert them.
+  */
+  it("every English default renders with its sample facts, in English", () => {
+    for (const [name, key] of Object.entries(WEBSHOP_MAIL_KEYS)) {
+      const english = webshopDefaultTemplate(`${key}_EN`);
+      assert.ok(english, `${key}_EN has no default`);
+      const mail = renderWebshopMail(english, {
+        ...WEBSHOP_MAIL_SAMPLE_FACTS[name as keyof typeof WEBSHOP_MAIL_KEYS],
+        locale: "en",
+      });
+      assert.equal(mail.ok, true, `${key}_EN: ${mail.ok ? "" : mail.reason}`);
+      if (!mail.ok) continue;
+      assert.match(mail.html, /<html lang="en">/, key);
+      assert.doesNotMatch(mail.html + mail.text, /ACROPORABLOCK|\{\{/, key);
+      assert.notEqual(
+        mail.subject,
+        renderWebshopMail(
+          template(key),
+          WEBSHOP_MAIL_SAMPLE_FACTS[name as keyof typeof WEBSHOP_MAIL_KEYS],
+        ).ok
+          ? ""
+          : "unreachable",
+      );
+    }
+  });
+
+  it("the English subjects and headings are the drafted wording", () => {
+    const subject = (name: keyof typeof WEBSHOP_MAIL_KEYS) => {
+      const mail = renderWebshopMail(
+        webshopDefaultTemplate(`${WEBSHOP_MAIL_KEYS[name]}_EN`)!,
+        { ...WEBSHOP_MAIL_SAMPLE_FACTS[name], locale: "en" },
+      );
+      return mail.ok ? mail.subject : mail.reason;
+    };
+    assert.equal(subject("order-shipped"), "We have shipped your parcel (#38)");
+    assert.equal(
+      subject("order-status-ready_for_pickup"),
+      "Your order is ready for pickup (#38)",
+    );
+    assert.equal(subject("payment-refunded"), "Refund for your order #38");
+  });
+
+  it("the Hungarian default is untouched by the English twin", () => {
+    const hu = webshopDefaultTemplate("WEBSHOP_ORDER_SHIPPED");
+    assert.equal(hu?.subject, "Feladtuk a csomagodat (#{{rendeles_szam}})");
+    assert.match(hu?.bodyHtml ?? "", /Kérdésed van\? Írj nekünk/);
+    assert.doesNotMatch(hu?.bodyHtml ?? "", /Any questions/);
+  });
+
+  it("a service key has no English twin", () => {
+    assert.equal(webshopDefaultTemplate("QUOTE_SEND_EN"), null);
+    assert.equal(webshopDefaultTemplate("WEBSHOP_NINCS_EN"), null);
+  });
+
+  /*
+    THE LEGAL PART STAYS HUNGARIAN IN THE ENGLISH MAIL, ON PURPOSE: the English
+    documents (terms, withdrawal information, company data) do not exist, and
+    the storefront records only the Hungarian terms (`language_unsupported`).
+    This pins what is, so a change to it is a decision (Balazs, via acrobot
+    41439), not a side effect.
+  */
+  it("the English order confirmation carries the Hungarian legal part, as today", () => {
+    const sample = WEBSHOP_MAIL_SAMPLE_FACTS["order-placed"];
+    const mail = renderWebshopMail(
+      webshopDefaultTemplate("WEBSHOP_ORDER_PLACED_EN")!,
+      { ...sample, locale: "en" },
+    );
+    assert.equal(mail.ok, true);
+    if (mail.ok) assert.match(mail.html, /Jogi tájékoztatók/);
+  });
+
+  /*
     The payment link is a value that goes into an `href`; it reaches the
     customer through the sanitizer like any other link, as a button.
   */
