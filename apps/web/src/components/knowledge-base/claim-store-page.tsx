@@ -1,5 +1,6 @@
 "use client";
 
+import { plainText } from "@/lib/format/plain-text";
 import {
   Alert,
   PilotBadge,
@@ -252,7 +253,9 @@ export function ClaimStorePage() {
                       {[
                         claim.species.map((s) => s.label).join(", "),
                         ...claim.sources.map((s) =>
-                          [s.title, s.year].filter(Boolean).join(", "),
+                          [plainText(s.title), s.year]
+                            .filter(Boolean)
+                            .join(", "),
                         ),
                       ]
                         .filter(Boolean)
@@ -399,7 +402,9 @@ export function ClaimDetailPage({ claimId }: { claimId: string }) {
                     {STANCE_LABELS[e.stance] ?? e.stance}
                   </PilotBadge>
                   <span className="font-semibold text-pilot-grey-900">
-                    {[e.source.title, e.source.year].filter(Boolean).join(", ")}
+                    {[plainText(e.source.title), e.source.year]
+                      .filter(Boolean)
+                      .join(", ")}
                   </span>
                   {e.source.retracted ? (
                     <PilotBadge variant="amber">Visszavont forrás</PilotBadge>
