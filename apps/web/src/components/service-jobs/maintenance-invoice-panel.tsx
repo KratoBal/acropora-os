@@ -2,6 +2,7 @@
 
 import { Alert, Button, ConfirmDialog } from "@acropora/ui";
 import {
+  formatMoney,
   hasPermission,
   PERMISSIONS,
   type MaintenanceInvoiceSummary,
@@ -190,9 +191,7 @@ export function MaintenanceInvoicePanel({
           <dl className="grid gap-2 text-sm">
             <div className="flex justify-between gap-4">
               <dt className="text-muted">Bruttó összeg</dt>
-              <dd>
-                {invoice.grossAmount} {invoice.currency}
-              </dd>
+              <dd>{formatMoney(invoice.grossAmount, invoice.currency)}</dd>
             </div>
             {invoice.status === "ISSUED" ? (
               <div className="flex justify-between gap-4">
@@ -252,7 +251,7 @@ export function MaintenanceInvoicePanel({
           </div>
           <ConfirmDialog
             open={confirmIssue}
-            title={`Kiállítod a számlát (${invoice.grossAmount} ${invoice.currency})?`}
+            title={`Kiállítod a számlát (${formatMoney(invoice.grossAmount, invoice.currency)})?`}
             consequence="Valódi, a NAV-nak bejelentett számla készül a Számlázz.hu-n, pontosan a piszkozat tételeivel és összegével."
             recovery="Nem vonható vissza: egy kiállított számla csak sztornó számlával javítható."
             confirmLabel="Számla kiállítása"

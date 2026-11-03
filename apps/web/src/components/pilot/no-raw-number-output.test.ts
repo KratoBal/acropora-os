@@ -122,10 +122,6 @@ const KIVETELEK = new Map<string, string>([
     "az API-nak küldött pontos érték, nem kiírás: marad",
   ],
   [
-    "nyers-penznem:components/service-jobs/maintenance-invoice-panel.tsx",
-    'karbantartási számla: nyers összeg és "HUF" (a #2079 alakja); a következő szeletben',
-  ],
-  [
     "nyers-penznem:components/purchasing/price-list-suggestions-page.tsx",
     "árlista-javaslat: nyers egységár és pénznem; " + BESZERZES,
   ],

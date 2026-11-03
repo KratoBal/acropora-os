@@ -125,7 +125,7 @@ describe("MaintenanceInvoicePanel", () => {
     await waitFor(() =>
       expect(invoiceApi.draft).toHaveBeenCalledWith("dev-token", "cert-1"),
     );
-    await screen.findByText("127000 HUF");
+    await screen.findByText("127 000 Ft");
   });
 
   it("shows the amount, a download button and a disabled, labelled Kiállítás button when a draft exists", async () => {
@@ -134,7 +134,7 @@ describe("MaintenanceInvoicePanel", () => {
 
     render(<MaintenanceInvoicePanel serviceJobId="job-1" />);
 
-    await screen.findByText("127000 HUF");
+    await screen.findByText("127 000 Ft");
     const issueButton = screen.getByRole("button", { name: "Kiállítás" });
     expect(issueButton).toBeDisabled();
     expect(screen.getByText("A kiállítás még nincs bekapcsolva.")).toBeTruthy();
@@ -163,6 +163,8 @@ describe("MaintenanceInvoicePanel", () => {
     // A kattintás még NEM hív: előbb a megerősítés, a következménnyel.
     expect(invoiceApi.issue).not.toHaveBeenCalled();
     expect(screen.getByText(/NAV-nak bejelentett számla készül/)).toBeTruthy();
+    // The amount in the question reads as money, not as the stored "127000 HUF".
+    expect(screen.getByText("Kiállítod a számlát (127 000 Ft)?")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Számla kiállítása" }));
 
     await waitFor(() =>
