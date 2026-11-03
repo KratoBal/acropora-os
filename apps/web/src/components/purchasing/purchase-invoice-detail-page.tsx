@@ -23,13 +23,14 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useReturnTo } from "@/components/navigation-history";
 import { purchasingApi } from "@/lib/api/purchasing";
+import { currencyLabel } from "@/lib/format/currency";
 
 import { PurchaseInvoiceScans } from "./purchase-invoice-scans";
 import { PurchaseInvoiceEditForm } from "./purchase-invoice-edit-form";
 import { PurchaseInvoiceCancelForm } from "./purchase-invoice-cancel-form";
 
 function formatMoney(value: string, currency: string): string {
-  return `${Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 })} ${currency}`;
+  return `${Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 })} ${currencyLabel(currency)}`;
 }
 
 type PurchaseLine = PurchaseInvoiceDetail["lines"][number];
