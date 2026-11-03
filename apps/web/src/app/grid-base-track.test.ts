@@ -17,20 +17,62 @@ import { describe, expect, it } from "vitest";
 const SRC = join(process.cwd(), "src");
 const LITERAL = /"([^"\n]*)"|`([^`]*)`/g;
 
-function responsiveGridsWithoutBase(source: string): string[] {
-  const code = source
-    .replace(/\/\*[\s\S]*?\*\//g, "")
+/** Kommentek nelkul: a blokk-komment csak sor elejen, szokozt vagy `{`/`(` utan kezdodik, igy egy
+ * `accept="image/*"` alaku literal nem nyel el a fajlbol semmit. */
+function stripComments(source: string): string {
+  return source
+    .replace(/(^|[\s{(;])\/\*[\s\S]*?\*\//gm, "$1")
     .replace(/^\s*\/\/.*$/gm, "");
+}
+
+function violates(bodies: string[]): boolean {
+  const tokens = bodies.flatMap((body) => body.split(/\s+/));
+  const responsive = tokens.some((t) =>
+    /^(sm|md|lg|xl|2xl):grid-cols-/.test(t),
+  );
+  const base = tokens.some((t) => /^grid-cols-/.test(t));
+  return tokens.includes("grid") && responsive && !base;
+}
+
+/** A `cn(`/`clsx(` hivas torzse: a zarojelig, a szoveg-literalokat ugorva. */
+function classCalls(code: string): string[] {
+  const spans: string[] = [];
+  for (const start of code.matchAll(/\b(?:cn|clsx|twMerge)\(/g)) {
+    let depth = 1;
+    let i = start.index + start[0].length;
+    const from = i;
+    let quote = "";
+    for (; i < code.length && depth > 0; i += 1) {
+      const ch = code[i]!;
+      if (quote) {
+        if (ch === "\\") i += 1;
+        else if (ch === quote) quote = "";
+      } else if (ch === '"' || ch === "`") quote = ch;
+      else if (ch === "(") depth += 1;
+      else if (ch === ")") depth -= 1;
+    }
+    spans.push(code.slice(from, i));
+  }
+  return spans;
+}
+
+function bodiesOf(code: string): string[] {
+  return [...code.matchAll(LITERAL)].map((m) => m[1] ?? m[2] ?? "");
+}
+
+function responsiveGridsWithoutBase(source: string): string[] {
+  const code = stripComments(source);
   const found: string[] = [];
-  for (const match of code.matchAll(LITERAL)) {
-    const body = match[1] ?? match[2] ?? "";
-    const tokens = body.split(/\s+/);
-    if (!tokens.includes("grid")) continue;
-    const responsive = tokens.some((t) =>
-      /^(sm|md|lg|xl|2xl):grid-cols-/.test(t),
-    );
-    const base = tokens.some((t) => /^grid-cols-/.test(t));
-    if (responsive && !base) found.push(body);
+  for (const body of bodiesOf(code)) if (violates([body])) found.push(body);
+  for (const span of classCalls(code)) {
+    const bodies = bodiesOf(span);
+    // a hivas egyetlen literalja mar fent szamolt; itt csak az OSSZEADOTT osztalylista uj talalat
+    if (
+      bodies.length > 1 &&
+      violates(bodies) &&
+      !bodies.some((b) => violates([b]))
+    )
+      found.push(bodies.join(" | "));
   }
   return found;
 }
@@ -60,6 +102,19 @@ describe("a reszponziv racsoknak telefonon meghatarozott savjuk van", () => {
     expect(
       responsiveGridsWithoutBase('// "grid sm:grid-cols-2" regi\nconst a = 1;'),
     ).toHaveLength(0);
+    // a tobb argumentumra bontott cn(): a ket literal egyutt hianyos
+    expect(
+      responsiveGridsWithoutBase('cn("grid gap-3", cond && "sm:grid-cols-2")'),
+    ).toHaveLength(1);
+    expect(
+      responsiveGridsWithoutBase('cn("grid grid-cols-1", "sm:grid-cols-2")'),
+    ).toHaveLength(0);
+    // egy `image/*` literal nem kezd kommentet, a mogotte allo racs is latszik
+    expect(
+      responsiveGridsWithoutBase(
+        '<input accept="image/*" />\n<div className="grid sm:grid-cols-2">{/* x */}',
+      ),
+    ).toHaveLength(1);
   });
 
   it("a webes app egyetlen szoveg-literaljaban sincs alap sav nelkuli reszponziv racs", () => {
