@@ -594,7 +594,7 @@ describe("Az ajánlat kimenetele (P4a)", () => {
       }),
     );
     expect(await screen.findByText("Opcionális fedőlap")).toBeTruthy();
-    expect(screen.getByText(/v1 · 2026\.10\.08\. · Telefonon/)).toBeTruthy();
+    expect(screen.getByText(/v1 · 2026\. 10\. 08\. · Telefonon/)).toBeTruthy();
   });
 
   it("lejárt verziónál figyelmeztet, de engedi rögzíteni", async () => {
