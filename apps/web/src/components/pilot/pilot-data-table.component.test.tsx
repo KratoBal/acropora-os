@@ -1,6 +1,6 @@
 import { PilotDataTable, type PilotTableColumn } from "@acropora/ui";
-import { cleanup, render } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 afterEach(() => cleanup());
 
@@ -115,5 +115,51 @@ describe("a PilotDataTable telefonos kártyanézete", () => {
     expect(tabla.style.getPropertyValue("--pilot-table-min")).toBe("960px");
     expect(tabla.className).toContain("md:min-w-[var(--pilot-table-min)]");
     expect(tabla.style.minWidth).toBe("");
+  });
+});
+
+/*
+  A SOR BILLENTYŰ-AKTIVÁLÁSA (barracuda, #2031): a sor Enter / Szóköz hatására megnyílik, DE csak
+  akkor, ha a sor maga van fókuszban. Egy sorban álló link vagy gomb a saját Enter / Szóköz
+  viselkedését tartja: különben a sor elnyelné a link aktiválását (preventDefault), és a sor
+  nyílna meg a link helyett.
+*/
+describe("a PilotDataTable sor billentyű-aktiválása", () => {
+  const linkes: PilotTableColumn<Sor>[] = [
+    SZAM,
+    {
+      id: "link",
+      header: "Link",
+      cell: () => <a href="/masik">megnyitás másik helyen</a>,
+    },
+  ];
+  const rajzol = (onRowActivate: (row: Sor) => void) =>
+    render(
+      <PilotDataTable
+        columns={linkes}
+        rows={SOROK}
+        rowKey={(r) => r.id}
+        onRowActivate={onRowActivate}
+        rowLabel={(r) => `${r.szam} megnyitása`}
+      />,
+    );
+
+  it("a fókuszált soron az Enter és a Szóköz aktivál", () => {
+    const aktival = vi.fn();
+    rajzol(aktival);
+    const sor = screen.getByRole("row", { name: "SZ-1 megnyitása" });
+    fireEvent.keyDown(sor, { key: "Enter" });
+    fireEvent.keyDown(sor, { key: " " });
+    expect(aktival).toHaveBeenCalledTimes(2);
+  });
+
+  it("a sorban álló linken az Enter nem aktiválja a sort, és a link alapértelmezett műveletét nem nyeli el", () => {
+    const aktival = vi.fn();
+    rajzol(aktival);
+    const link = screen.getByRole("link", { name: "megnyitás másik helyen" });
+    // `fireEvent` false-t ad vissza, ha valaki preventDefault-ot hívott.
+    const nemTiltott = fireEvent.keyDown(link, { key: "Enter" });
+    expect(aktival).not.toHaveBeenCalled();
+    expect(nemTiltott).toBe(true);
   });
 });

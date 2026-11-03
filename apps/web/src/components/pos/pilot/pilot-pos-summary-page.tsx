@@ -1,5 +1,6 @@
 "use client";
 
+import { formatDayHu } from "@/lib/format/date";
 import { Alert, Icon, Skeleton, PilotDateField } from "@acropora/ui";
 import {
   hasPermission,
@@ -237,7 +238,7 @@ export function PilotPosSummaryPage() {
                       className="border-b border-pilot-grey-100 last:border-0"
                     >
                       <td className="py-3 pr-3 tabular-nums text-pilot-grey-900">
-                        {day.date}
+                        {formatDayHu(day.date)}
                       </td>
                       {data.methods.map((method) => (
                         <td key={method} className="px-3 py-3 text-right">
