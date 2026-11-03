@@ -4,7 +4,7 @@ import type {
   IncomingPayment,
   IncomingVatSummary,
 } from "../billing/incoming-szamlazz-invoice.js";
-import type { IncomingDocumentLine } from "@acropora/types";
+import type { IncomingDocumentLine, PosPaymentMethod } from "@acropora/types";
 
 /**
  * THE DEMO ROWS FOR THE STAGE, AS DATA (card c958804d, T6.3 part 1).
@@ -52,9 +52,37 @@ export interface DemoQuote {
   blocks: { title: string; items: DemoQuoteItem[] }[];
 }
 
+/**
+ * A POS SALE OF MANUAL LINES ONLY, written the way the real service writes such a sale
+ * (`PosSaleService.createSale`, a line with `description` and no `variantId`): channel POS,
+ * COMPLETED, line SKU `KÉZI`, no product behind it, so NO inventory movement and NO UNAS
+ * stock-sync row. That is the reason the demo sale is not made of products: a product line
+ * posts a stock movement and queues a stock push toward UNAS, which a stage must not start.
+ */
+export interface DemoPosSale {
+  orderNumber: string;
+  /** the `customerNumber` of a demo customer, or `null` for a walk-in sale */
+  customerNumber: string | null;
+  paymentMethod: PosPaymentMethod;
+  discountPercent: string | null;
+  /** `YYYY-MM-DDT10:00:00Z`: the sale's day is an offset from the run day */
+  completedAt: string;
+  lines: {
+    description: string;
+    quantity: string;
+    unitGross: string;
+    vatRate: 27 | 18 | 5;
+    discountPercent: string | null;
+  }[];
+  totalNet: string;
+  totalTax: string;
+  totalGross: string;
+}
+
 export interface DemoPlan {
   customers: Prisma.CustomerUncheckedCreateInput[];
   quotes: DemoQuote[];
+  posSales: DemoPosSale[];
   incomingInvoices: Prisma.IncomingBillingDocumentUncheckedCreateInput[];
 }
 
@@ -174,6 +202,141 @@ function invoiceRow(
     paperOriginalAt: null,
   };
 }
+
+interface PosSaleSeed {
+  n: number;
+  customerNumber: string | null;
+  paymentMethod: PosPaymentMethod;
+  discountPercent: number | null;
+  daysAgo: number;
+  lines: {
+    description: string;
+    quantity: number;
+    unitGross: number;
+    vatRate: 27 | 18 | 5;
+    discountPercent?: number;
+  }[];
+}
+
+/** The totals the way the service sums them: per line, gross minus the line discount. */
+function posSaleRow(today: string, seed: PosSaleSeed): DemoPosSale {
+  let net = 0;
+  let gross = 0;
+  const lines = seed.lines.map((line) => {
+    const factor = 1 - (line.discountPercent ?? 0) / 100;
+    const lineGross = line.unitGross * line.quantity * factor;
+    gross += lineGross;
+    net += lineGross / (1 + line.vatRate / 100);
+    return {
+      description: line.description,
+      quantity: String(line.quantity),
+      unitGross: String(line.unitGross),
+      vatRate: line.vatRate,
+      discountPercent:
+        line.discountPercent === undefined
+          ? null
+          : line.discountPercent.toFixed(2),
+    };
+  });
+  // the order discount applies to all three totals, as in the service
+  const orderFactor = 1 - (seed.discountPercent ?? 0) / 100;
+  net *= orderFactor;
+  gross *= orderFactor;
+  return {
+    orderNumber: `${DEMO_PREFIX}POS-${String(seed.n).padStart(3, "0")}`,
+    customerNumber: seed.customerNumber,
+    paymentMethod: seed.paymentMethod,
+    discountPercent:
+      seed.discountPercent === null ? null : seed.discountPercent.toFixed(2),
+    completedAt: `${plusDays(today, -seed.daysAgo)}T10:00:00Z`,
+    lines,
+    totalNet: net.toFixed(4),
+    totalTax: (gross - net).toFixed(4),
+    totalGross: gross.toFixed(4),
+  };
+}
+
+const POS_SEEDS: PosSaleSeed[] = [
+  {
+    n: 1,
+    customerNumber: null,
+    paymentMethod: "CASH",
+    discountPercent: null,
+    daysAgo: 0,
+    lines: [
+      {
+        description: "Tengeri só, 25 kg-os zsák",
+        quantity: 1,
+        unitGross: 18900,
+        vatRate: 27,
+      },
+      {
+        description: "Refraktométer kalibráló oldat",
+        quantity: 2,
+        unitGross: 2490,
+        vatRate: 27,
+      },
+    ],
+  },
+  {
+    n: 2,
+    customerNumber: null,
+    paymentMethod: "CARD",
+    discountPercent: null,
+    daysAgo: 1,
+    lines: [
+      {
+        description: "Szűrőszivacs, 3 db",
+        quantity: 1,
+        unitGross: 4990,
+        vatRate: 27,
+      },
+      {
+        description: "Vízteszt készlet",
+        quantity: 1,
+        unitGross: 8900,
+        vatRate: 27,
+        discountPercent: 10,
+      },
+      {
+        description: "Etetőcsipesz",
+        quantity: 1,
+        unitGross: 1990,
+        vatRate: 27,
+      },
+    ],
+  },
+  {
+    n: 3,
+    customerNumber: `${DEMO_PREFIX}C-002`,
+    paymentMethod: "TRANSFER",
+    discountPercent: 5,
+    daysAgo: 3,
+    lines: [
+      {
+        description: "Szerviz kiszállás, órabér",
+        quantity: 3,
+        unitGross: 12700,
+        vatRate: 27,
+      },
+    ],
+  },
+  {
+    n: 4,
+    customerNumber: null,
+    paymentMethod: "CASH_DESK",
+    discountPercent: null,
+    daysAgo: 6,
+    lines: [
+      {
+        description: "Akvarisztikai kiadvány",
+        quantity: 2,
+        unitGross: 3990,
+        vatRate: 5,
+      },
+    ],
+  },
+];
 
 const SEEDS: InvoiceSeed[] = [
   {
@@ -375,6 +538,7 @@ export function demoPlan(today: string): DemoPlan {
   return {
     customers,
     quotes,
+    posSales: POS_SEEDS.map((seed) => posSaleRow(today, seed)),
     incomingInvoices: SEEDS.map((seed) => invoiceRow(today, seed)),
   };
 }

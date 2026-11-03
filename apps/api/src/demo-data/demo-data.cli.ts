@@ -1,6 +1,7 @@
 import { pathToFileURL } from "node:url";
 
 import { type Prisma, prisma } from "@acropora/database";
+import { POS_MANUAL_LINE_SKU } from "@acropora/types";
 
 import { DEMO_PREFIX, demoPlan, type DemoPlan } from "./demo-data.plan.js";
 
@@ -32,6 +33,7 @@ import { DEMO_PREFIX, demoPlan, type DemoPlan } from "./demo-data.plan.js";
 export interface DemoCounts {
   customers: number;
   quotes: number;
+  posSales: number;
   incomingInvoices: number;
 }
 
@@ -72,7 +74,7 @@ export function hostOfDatabaseUrl(url: string | undefined): string | null {
 }
 
 const describe = (counts: DemoCounts) =>
-  `${counts.customers} ügyfél, ${counts.quotes} ajánlat, ${counts.incomingInvoices} bejövő számla`;
+  `${counts.customers} ügyfél, ${counts.quotes} ajánlat, ${counts.posSales} POS eladás, ${counts.incomingInvoices} bejövő számla`;
 
 export async function runDemoData(
   argv: readonly string[],
@@ -101,12 +103,14 @@ export async function runDemoData(
       `Terv (nem ír semmit): ${describe({
         customers: plan.customers.length,
         quotes: plan.quotes.length,
+        posSales: plan.posSales.length,
         incomingInvoices: plan.incomingInvoices.length,
       })}.\n`,
     );
     for (const c of plan.customers)
       out.stdout(`  ügyfél   ${c.customerNumber}\n`);
     for (const q of plan.quotes) out.stdout(`  ajánlat  ${q.quoteNumber}\n`);
+    for (const p of plan.posSales) out.stdout(`  POS      ${p.orderNumber}\n`);
     for (const i of plan.incomingInvoices)
       out.stdout(`  számla   ${i.documentNumber}\n`);
     out.stdout("Íráshoz: --apply --db-host <az adatbázis gépneve>.\n");
@@ -145,7 +149,11 @@ export async function runDemoData(
   }
   const created = await store.apply(plan);
   const nothing =
-    created.customers + created.quotes + created.incomingInvoices === 0;
+    created.customers +
+      created.quotes +
+      created.posSales +
+      created.incomingInvoices ===
+    0;
   out.stdout(
     nothing
       ? "Mind megvan már, nem írtam semmit.\n"
@@ -165,6 +173,7 @@ export function prismaDemoStore(db: typeof prisma): DemoStore {
         const counts: DemoCounts = {
           customers: 0,
           quotes: 0,
+          posSales: 0,
           incomingInvoices: 0,
         };
 
@@ -261,6 +270,64 @@ export function prismaDemoStore(db: typeof prisma): DemoStore {
           counts.quotes++;
         }
 
+        const orderNumbers = new Set(
+          (
+            await tx.salesOrder.findMany({
+              where: { orderNumber: prefix },
+              select: { orderNumber: true },
+            })
+          ).map((o) => o.orderNumber),
+        );
+        for (const sale of plan.posSales) {
+          if (orderNumbers.has(sale.orderNumber)) continue;
+          const customerId = sale.customerNumber
+            ? customerIds.get(sale.customerNumber)
+            : null;
+          if (sale.customerNumber && !customerId)
+            throw new Error(`Nincs ilyen demo ügyfél: ${sale.customerNumber}`);
+          const at = new Date(sale.completedAt);
+          await tx.salesOrder.create({
+            data: {
+              orderNumber: sale.orderNumber,
+              channel: "POS",
+              status: "COMPLETED",
+              customerId: customerId ?? null,
+              paymentMethod: sale.paymentMethod,
+              currency: "HUF",
+              totalNet: sale.totalNet,
+              totalTax: sale.totalTax,
+              totalGross: sale.totalGross,
+              discountPercent: sale.discountPercent,
+              orderedAt: at,
+              confirmedAt: at,
+              completedAt: at,
+              lines: {
+                create: sale.lines.map((line) => ({
+                  variantId: null,
+                  sku: POS_MANUAL_LINE_SKU,
+                  description: line.description,
+                  quantity: line.quantity,
+                  unit: "db",
+                  unitNet: (
+                    Number(line.unitGross) /
+                    (1 + line.vatRate / 100)
+                  ).toFixed(4),
+                  taxRate: String(line.vatRate),
+                  lineGross: (
+                    Number(line.unitGross) *
+                    Number(line.quantity) *
+                    (1 - Number(line.discountPercent ?? 0) / 100)
+                  ).toFixed(4),
+                  discountPercent: line.discountPercent,
+                  // no stock behind a manual line, so nothing is ever pushed to UNAS
+                  syncStatus: "OK" as const,
+                })),
+              },
+            },
+          });
+          counts.posSales++;
+        }
+
         const externalIds = new Set(
           (
             await tx.incomingBillingDocument.findMany({
@@ -304,6 +371,9 @@ export function prismaDemoStore(db: typeof prisma): DemoStore {
         });
         await tx.quoteVersion.deleteMany({ where: { id: { in: versionIds } } });
         await tx.quote.deleteMany({ where: { id: { in: quoteIds } } });
+        const sales = await tx.salesOrder.deleteMany({
+          where: { orderNumber: prefix },
+        });
         const invoices = await tx.incomingBillingDocument.deleteMany({
           where: { externalId: prefix },
         });
@@ -313,6 +383,7 @@ export function prismaDemoStore(db: typeof prisma): DemoStore {
         return {
           customers: customers.count,
           quotes: quoteIds.length,
+          posSales: sales.count,
           incomingInvoices: invoices.count,
         };
       });

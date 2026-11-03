@@ -26,6 +26,9 @@ async function counts() {
     quotes: await prisma.quote.count({
       where: { quoteNumber: { startsWith: DEMO_PREFIX } },
     }),
+    posSales: await prisma.salesOrder.count({
+      where: { orderNumber: { startsWith: DEMO_PREFIX } },
+    }),
     incomingInvoices: await prisma.incomingBillingDocument.count({
       where: { externalId: { startsWith: DEMO_PREFIX } },
     }),
@@ -41,6 +44,7 @@ describe(
     const planned = {
       customers: plan.customers.length,
       quotes: plan.quotes.length,
+      posSales: plan.posSales.length,
       incomingInvoices: plan.incomingInvoices.length,
     };
 
@@ -68,6 +72,7 @@ describe(
       nincsMaradek([
         { nev: "DEMO ügyfelek", darab: left.customers },
         { nev: "DEMO ajánlatok", darab: left.quotes },
+        { nev: "DEMO POS eladások", darab: left.posSales },
         { nev: "DEMO bejövő számlák", darab: left.incomingInvoices },
         {
           nev: "a kontroll ügyfél",
@@ -84,6 +89,7 @@ describe(
       assert.deepEqual(await store.apply(plan), {
         customers: 0,
         quotes: 0,
+        posSales: 0,
         incomingInvoices: 0,
       });
       assert.deepEqual(await counts(), planned);
@@ -120,11 +126,43 @@ describe(
       }
     });
 
+    it("writes the POS sales as manual-line sales: no stock movement, no UNAS outbox row", async () => {
+      const orders = await prisma.salesOrder.findMany({
+        where: { orderNumber: { startsWith: DEMO_PREFIX } },
+        include: { lines: true },
+      });
+      assert.equal(orders.length, plan.posSales.length);
+      const ids = orders.map((o) => o.id);
+      for (const order of orders) {
+        assert.equal(order.channel, "POS", order.orderNumber);
+        assert.equal(order.status, "COMPLETED", order.orderNumber);
+        assert.ok(order.lines.length > 0, order.orderNumber);
+        for (const line of order.lines) {
+          assert.equal(line.variantId, null, order.orderNumber);
+          assert.equal(line.sku, "KÉZI", order.orderNumber);
+          assert.equal(line.syncStatus, "OK", order.orderNumber);
+        }
+      }
+      assert.equal(
+        await prisma.stockMovement.count({
+          where: { referenceType: "SalesOrder", referenceId: { in: ids } },
+        }),
+        0,
+      );
+      assert.equal(
+        await prisma.unasStockSyncOutbox.count({
+          where: { sourceRecordId: { in: ids } },
+        }),
+        0,
+      );
+    });
+
     it("removes exactly the DEMO- rows and not a row without the prefix", async () => {
       assert.deepEqual(await store.remove(), planned);
       assert.deepEqual(await counts(), {
         customers: 0,
         quotes: 0,
+        posSales: 0,
         incomingInvoices: 0,
       });
       assert.equal(
