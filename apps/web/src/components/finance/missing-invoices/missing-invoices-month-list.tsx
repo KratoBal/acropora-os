@@ -85,14 +85,14 @@ export function MissingInvoicesMonthList({
     {
       id: "unmatched",
       header: "Nem párosodott",
-      width: "104px",
+      width: "100px",
       cell: (row) =>
         count(row, "notMatched", "font-semibold text-pilot-amber-700"),
     },
     {
       id: "noInvoice",
       header: "Nincs számla",
-      width: "88px",
+      width: "80px",
       cell: (row) =>
         count(row, "noInvoice", "font-semibold text-pilot-red-700"),
     },
@@ -100,14 +100,15 @@ export function MissingInvoicesMonthList({
       // A FIGMÁBAN NINCS (acrobot 25328): csak NAV-adat, eredeti nincs.
       id: "originalMissing",
       header: "Eredeti hiányzik",
-      width: "96px",
+      width: "88px",
       cell: (row) =>
         count(row, "originalMissing", "font-semibold text-pilot-amber-700"),
     },
     {
       id: "missingAmount",
       header: "Hiányzó összeg",
-      width: "112px",
+      width: "132px",
+      nowrap: true,
       cell: (row) => (
         <span className="font-semibold tabular-nums text-pilot-grey-900">
           {unknown(row) ? "—" : formatAmount(row.missingAmountHuf, "HUF")}
