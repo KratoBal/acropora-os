@@ -9,7 +9,8 @@
     "start": "next start --port 3000",
     "test": "rm -rf test-dist && tsc -p tsconfig.test.json && tests=$(find test-dist -name '*.test.js') && { [ -n \"$tests\" ] || { echo 'Nem talaltam teszt fajlt - nem jelentek sikert.' >&2; exit 1; }; } && node --test $tests && vitest run",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf .next"
+    "clean": "rm -rf .next",
+    "ui:screens": "playwright test -c e2e-screens/playwright.config.ts"
   },
   "dependencies": {
     "@acropora/aquarium-calc": "workspace:*",
@@ -30,6 +31,7 @@
   },
   "devDependencies": {
     "@acropora/config": "workspace:*",
+    "@playwright/test": "1.64.1",
     "@rolldown/binding-darwin-arm64": "1.1.5",
     "@tailwindcss/postcss": "^4.3.3",
     "@testing-library/dom": "10.4.1",

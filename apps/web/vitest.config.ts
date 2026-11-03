@@ -32,6 +32,7 @@ export default defineConfig({
       "src/lib/release-info.test.ts",
       "src/app/**/*.test.ts",
       "src/lib/navigation/**/*.test.ts",
+      "src/lib/ui-screens/**/*.test.ts",
       "src/lib/partners/**/*.test.ts",
       "src/lib/theme/**/*.test.ts",
       "src/lib/aquariums/**/*.test.ts",
