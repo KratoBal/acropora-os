@@ -1,4 +1,5 @@
 import type { PilotBadgeVariant } from "@acropora/ui";
+import { formatDayHu } from "@/lib/format/date";
 import type {
   QuoteAcceptanceSourceValue,
   QuoteAcceptanceRecordedSource,
@@ -92,11 +93,10 @@ export function formatQuoteMoney(
   return currency === "HUF" ? `${formatted} Ft` : `${formatted} ${currency}`;
 }
 
-/** `2026-11-06` → `2026.11.06.` */
+/** `2026-11-06` → `2026. 11. 06.` (the one list date format, see `lib/format/date.ts`). */
 export function formatQuoteDay(value: string | null): string {
   if (!value) return "—";
-  const [y, m, d] = value.slice(0, 10).split("-");
-  return `${y}.${m}.${d}.`;
+  return formatDayHu(value.slice(0, 10));
 }
 
 /** Egy decimális szöveg emberi alakja (tizedesvessző, felesleges nullák nélkül). */
