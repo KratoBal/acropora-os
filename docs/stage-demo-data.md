@@ -20,7 +20,16 @@ node dist/demo-data/demo-data.cli.js --remove --db-host <gépnév> # minden DEMO
 
 ## Az őrző, és a határa
 
-Íráshoz meg kell adni az adatbázis gépnevét (`--db-host`), és az egyeznie kell a `DATABASE_URL` gépével. A repóban nincs környezet-jelölő (a stage és az éles is `NODE_ENV=production`), ezért az őrző nem érzékelő, hanem szándékos lépés: egy rossz adatbázisra mutató futást csak az állítaná meg, hogy a gépnevet ott is be kell gépelni. Éles adatbázison ezt nem futtatjuk.
+Íráshoz (`--apply`, `--remove`) két dolog kell, és az első az, ami a stage-et az éles környezettől elválasztja:
+
+1. A környezetben `DEMO_DATA_ALLOWED=stage`. Ezt csak a stage állítja be (`.env.staging.example`); a `.env.example` és a `.env.production.example` üresen tartja, és egy spec ezt rögzíti. Jel nélkül a parancs akkor sem ír, ha a második feltétel teljesül.
+2. A `--db-host <gépnév>` az adatbázis gépneve a `DATABASE_URL`-ből. Egy konténeres telepítésben a gépnév gyakran a szolgáltatás neve (`postgres`, `db`), ami a stage-en és élesen azonos lehet, ezért ez nem érzékelő, hanem szándékos lépés: az üzemeltető kiírja, melyik adatbázisra fut.
+
+**A jel gyengesége:** a `.env` másolható, tehát egy átmásolt éles környezet magával vihetné. Erősebb jel lenne az anonimizálási lánc (kártya 07b56a1f) nyoma az adatbázisban (futás-sor, jelző tábla), de ma ilyen nincs; ha lesz, az őrző arra cserélhető. Éles adatbázison ezt nem futtatjuk.
+
+## A `--remove` mindent vagy semmit
+
+A törlés egy tranzakció, és csak `DEMO-` előtagú sorokat érint. Ha egy DEMO ügyfélre közben valaki valódi sort kötött (munkalap, nem DEMO-s ajánlat), az ügyfél törlése idegenkulcs-hibával elhasal, és az egész tranzakció visszagördül: **ilyenkor a `--remove` semmit nem töröl.** Ez szándékos és biztonságos: egy félig törölt demo-készlet (ajánlat ügyfél nélkül, számla az ügyfelek maradtával) rosszabb, mint egy érintetlen. Megoldás: a hozzákötött sort előbb le kell választani vagy törölni, aztán a parancs újrafuttatható.
 
 ## Mi van benne
 

@@ -25,6 +25,12 @@ import type { IncomingDocumentLine } from "@acropora/types";
 
 export const DEMO_PREFIX = "DEMO-";
 
+/*
+  THE TAX NUMBERS ARE `0000000N-2-4N` ON PURPOSE: a real Hungarian tax number does not start
+  with a zero, so none of these can equal (or share the 8-digit base of) a supplier or a
+  customer already on the stage, which the invoice collection and the pairing look up by base.
+*/
+
 export interface DemoQuoteItem {
   name: string;
   quantity: string;
@@ -173,7 +179,7 @@ const SEEDS: InvoiceSeed[] = [
   {
     n: 1,
     supplier: "DEMO Akvarisztikai Nagykereskedés Kft.",
-    taxNumber: "12345678-2-41",
+    taxNumber: "00000001-2-41",
     issueOffset: -3,
     dueOffset: 11,
     net: 184000,
@@ -182,7 +188,7 @@ const SEEDS: InvoiceSeed[] = [
   {
     n: 2,
     supplier: "DEMO Csomagoló Eszközök Zrt.",
-    taxNumber: "23456789-2-42",
+    taxNumber: "00000002-2-42",
     issueOffset: -21,
     dueOffset: -7,
     net: 62500,
@@ -192,7 +198,7 @@ const SEEDS: InvoiceSeed[] = [
   {
     n: 3,
     supplier: "DEMO Világítástechnika Bt.",
-    taxNumber: "34567890-2-43",
+    taxNumber: "00000003-2-43",
     issueOffset: -40,
     dueOffset: -10,
     net: 310000,
@@ -211,7 +217,7 @@ const SEEDS: InvoiceSeed[] = [
   {
     n: 5,
     supplier: "DEMO Szállítmányozó Kft.",
-    taxNumber: "45678901-2-44",
+    taxNumber: "00000004-2-44",
     issueOffset: -1,
     dueOffset: 29,
     net: 27800,
@@ -239,7 +245,7 @@ export function demoPlan(today: string): DemoPlan {
       type: "COMPANY",
       displayName: "DEMO Tengeri Akvárium Kft.",
       companyName: "DEMO Tengeri Akvárium Kft.",
-      taxNumber: "56789012-2-45",
+      taxNumber: "00000005-2-45",
       email: "demo.iroda@example.invalid",
       phone: "+36 1 000 0002",
       paymentDueDays: 15,
@@ -249,7 +255,7 @@ export function demoPlan(today: string): DemoPlan {
       type: "COMPANY",
       displayName: "DEMO Állatkert Fejlesztő Nonprofit Kft.",
       companyName: "DEMO Állatkert Fejlesztő Nonprofit Kft.",
-      taxNumber: "67890123-2-46",
+      taxNumber: "00000006-2-46",
       email: "demo.beszerzes@example.invalid",
       paymentDueDays: 30,
     },

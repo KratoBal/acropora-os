@@ -11,12 +11,19 @@ import { DEMO_PREFIX, demoPlan, type DemoPlan } from "./demo-data.plan.js";
  *   node dist/demo-data/demo-data.cli.js --apply  --db-host <host>    # loads the missing rows
  *   node dist/demo-data/demo-data.cli.js --remove --db-host <host>    # removes every DEMO- row
  *
- * WHY `--db-host`: there is no environment marker that tells the stage from production (the
- * repo has no `APP_ENV`, and both run with `NODE_ENV=production`), so the guard cannot be a
- * detector. It is a DELIBERATE ACT instead: a write needs the operator to type the database
- * host, and it must equal the host in `DATABASE_URL`. A run that points at the wrong database
- * is refused unless someone types that wrong database's name on purpose. Nobody runs this on
- * production; the guard makes sure it cannot happen by a stale environment alone.
+ * THE GUARD IS TWO THINGS, AND THE FIRST ONE IS THE ONE THAT SEPARATES THE ENVIRONMENTS
+ * (barracuda, #2104 review):
+ *
+ *  1. `DEMO_DATA_ALLOWED=stage` in the environment. It is set in the stage's environment only;
+ *     `.env.example` and `.env.production.example` carry it EMPTY (a spec pins both). Nothing
+ *     in the repo tells the stage from production otherwise (no `APP_ENV`, both run with
+ *     `NODE_ENV=production`), and the anonymisation chain (card 07b56a1f) leaves no trace in
+ *     the database yet. A copied `.env` could carry the signal over: that is the weakness, and
+ *     it is why the second part exists.
+ *  2. `--db-host <host>`, equal to the host in `DATABASE_URL`: the operator names the database
+ *     on purpose. A hostname alone cannot separate the environments (a container deployment
+ *     names the database service the same on both), so this part is a deliberate act, not a
+ *     detector.
  *
  * IDEMPOTENT: a row whose business key exists is left alone, so a second `--apply` writes
  * nothing and says so. `--remove` deletes the `DEMO-` rows and nothing else.
@@ -42,6 +49,12 @@ export interface DemoOutput {
 
 export interface DemoDeps {
   databaseUrl: string | undefined;
+  /**
+   * `DEMO_DATA_ALLOWED`: the stage-only signal. A write needs it to be exactly `stage`. It is
+   * set in the stage's environment and left empty in `.env.example` and
+   * `.env.production.example`, so a production environment does not carry it.
+   */
+  allowed: string | undefined;
   /** the Budapest calendar day, `YYYY-MM-DD` */
   today: string;
   store: () => DemoStore;
@@ -103,6 +116,12 @@ export async function runDemoData(
   const actual = hostOfDatabaseUrl(deps.databaseUrl);
   if (!actual) {
     out.stderr("A DATABASE_URL hiányzik vagy nem olvasható: nem írok.\n");
+    return 1;
+  }
+  if (deps.allowed !== "stage") {
+    out.stderr(
+      "A DEMO_DATA_ALLOWED=stage jel hiányzik a környezetből: nem írok. Ezt csak a stage környezete állítja be.\n",
+    );
     return 1;
   }
   if (!given) {
@@ -320,6 +339,7 @@ async function main(): Promise<void> {
     },
     {
       databaseUrl: process.env.DATABASE_URL,
+      allowed: process.env.DEMO_DATA_ALLOWED,
       today: budapestDay(),
       store: () => prismaDemoStore(prisma),
     },

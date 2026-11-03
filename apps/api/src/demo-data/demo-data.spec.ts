@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 import {
@@ -19,7 +20,10 @@ import { DEMO_PREFIX, demoPlan, plusDays } from "./demo-data.plan.js";
 */
 
 const DAY = "2026-11-04";
-const URL = "postgresql://u:p@db-stage.internal:5432/acropora";
+/** A repo gyokere: a forditott spec a `test-dist/demo-data/` alatt fut. */
+const REPO = new globalThis.URL("../../../../", import.meta.url).pathname;
+const template = (name: string) => readFileSync(`${REPO}${name}`, "utf8");
+const DB_URL = "postgresql://u:p@db-stage.internal:5432/acropora";
 
 function fakeStore(counts: Partial<DemoCounts> = {}) {
   const calls: string[] = [];
@@ -44,7 +48,11 @@ function fakeStore(counts: Partial<DemoCounts> = {}) {
 
 async function run(
   argv: string[],
-  opts: { url?: string | undefined; counts?: Partial<DemoCounts> } = {},
+  opts: {
+    url?: string | undefined;
+    allowed?: string | undefined;
+    counts?: Partial<DemoCounts>;
+  } = {},
 ) {
   const { calls, store } = fakeStore(opts.counts);
   const out: string[] = [];
@@ -53,7 +61,8 @@ async function run(
     argv,
     { stdout: (t) => out.push(t), stderr: (t) => err.push(t) },
     {
-      databaseUrl: "url" in opts ? opts.url : URL,
+      databaseUrl: "url" in opts ? opts.url : DB_URL,
+      allowed: "allowed" in opts ? opts.allowed : "stage",
       today: DAY,
       store: () => store,
     },
@@ -164,7 +173,7 @@ describe("the demo plan", () => {
 
 describe("the host of a database URL", () => {
   it("reads the host, lower-cased, and nothing else", () => {
-    assert.equal(hostOfDatabaseUrl(URL), "db-stage.internal");
+    assert.equal(hostOfDatabaseUrl(DB_URL), "db-stage.internal");
     assert.equal(
       hostOfDatabaseUrl("postgresql://u:p@DB-Stage.Internal/x"),
       "db-stage.internal",
@@ -194,6 +203,25 @@ describe("the command", () => {
       assert.match(r.err, /meg kell adni a --db-host/, mode);
       assert.match(r.err, /db-stage\.internal/, mode);
     }
+  });
+
+  it("refuses a write without the stage signal, EVEN WHEN --db-host matches", async () => {
+    for (const mode of ["--apply", "--remove"]) {
+      for (const allowed of [undefined, "", "production", "STAGE", " stage"]) {
+        const r = await run([mode, "--db-host", "db-stage.internal"], {
+          allowed,
+        });
+        assert.equal(r.code, 1, `${mode} ${JSON.stringify(allowed)}`);
+        assert.deepEqual(r.calls, [], `${mode} ${JSON.stringify(allowed)}`);
+        assert.match(r.err, /DEMO_DATA_ALLOWED=stage/);
+      }
+    }
+  });
+
+  it("still prints the plan without the signal: the plan writes nothing", async () => {
+    const r = await run([], { allowed: undefined });
+    assert.equal(r.code, 0);
+    assert.deepEqual(r.calls, []);
   });
 
   it("refuses a host that is not the DATABASE_URL's", async () => {
@@ -244,5 +272,16 @@ describe("the command", () => {
     const typo = await run(["--aply", "--db-host", "db-stage.internal"]);
     assert.equal(typo.code, 1);
     assert.deepEqual(typo.calls, []);
+  });
+});
+
+describe("the stage signal in the environment templates", () => {
+  const value = (file: string) =>
+    template(file).match(/^DEMO_DATA_ALLOWED=(.*)$/m)?.[1];
+
+  it("is empty in the development and the production template, and `stage` only in the staging one", () => {
+    assert.equal(value(".env.example"), "");
+    assert.equal(value(".env.production.example"), "");
+    assert.equal(value(".env.staging.example"), "stage");
   });
 });
