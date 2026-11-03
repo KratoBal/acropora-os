@@ -1,7 +1,7 @@
 "use client";
 
 import type { ConversationListItem } from "@acropora/types";
-import { Icon, Input } from "@acropora/ui";
+import { Icon, Input, PilotButton } from "@acropora/ui";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 
@@ -115,14 +115,10 @@ export function MessagesPage() {
             <h2 className="text-sm font-semibold text-pilot-grey-900">
               Beszélgetések
             </h2>
-            <button
-              type="button"
-              onClick={() => setDialogOpen(true)}
-              className="flex items-center gap-1 bg-pilot-accent-warm px-4 py-2 text-sm font-medium text-white hover:bg-pilot-accent-warm-text"
-            >
+            <PilotButton size="regular" onClick={() => setDialogOpen(true)}>
               <Icon name="plus" size={16} />
               Új üzenet
-            </button>
+            </PilotButton>
           </div>
           <label className="relative mb-3 block">
             <span className="sr-only">Keresés beszélgetésekben</span>
