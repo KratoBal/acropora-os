@@ -258,6 +258,28 @@ describe("MissingInvoicesMonthList", () => {
   });
 
   /*
+    A HIÁNYZÓ ÖSSZEG EGY SORBAN (acrobot stage-fotó, a82c6ad0, 1440 px): a "2 561 732 Ft" a 112 px-es oszlopban a
+    "Ft"-nál két sorra tört. Az összeg nem törhet (`nowrap`), az oszlop pedig elég széles a hétjegyű összeghez
+    (kb. 8,2 px/karakter félkövéren, 12 karakter + 20 px padding). MI PIROSÍT: ha az összeg-cella újra törhet,
+    vagy az oszlop 130 px alá szűkül.
+  */
+  it("keeps the missing amount on one line, in a column wide enough for a seven-digit sum", () => {
+    renderList();
+    const august = screen.getByRole("row", {
+      name: "2026. augusztus megnyitása",
+    });
+    const table = august.closest("table")!;
+    const headers = within(table)
+      .getAllByRole("columnheader")
+      .map((th) => th.textContent ?? "");
+    const index = headers.indexOf("Hiányzó összeg");
+    const cell = within(august).getAllByRole("cell")[index]!;
+    expect(cell.className).toContain("whitespace-nowrap");
+    const cols = [...table.querySelectorAll("col")] as HTMLElement[];
+    expect(parseInt(cols[index]!.style.width, 10)).toBeGreaterThanOrEqual(130);
+  });
+
+  /*
     A FEJLÉC LEGHOSSZABB SZAVA ELFÉR AZ OSZLOPÁBAN (acrobot stage-fotó, eba08e90, 1440 px): a 2055 a "Terhelések"
     oszlopot 76 px-re szűkítette, a nagybetűs, egy szavas fejléc (kb. 72 px) nem tört, és egybefolyt a "Megvan"-nal
     ("TERHELÉSEKMEGVAN"). Egy szó nem törhet sort, ezért az oszlopnak legalább a szó szélessége + a cella
