@@ -278,6 +278,12 @@ export const PERMISSIONS = {
   /// és jóváhagyott, az a webshop termékoldalára vetül, tehát a vevő olvassa.
   /// Csak OWNER/ADMIN, a MANAGER sem (lásd ROLE_PERMISSIONS lent).
   PRODUCTS_KNOWLEDGE_APPROVE: "products.knowledge.approve",
+  /// Az attribútum-készletek létrehozása és a termékek hozzájuk kötése (S1, kártya
+  /// 8639ac2a; acrobot 41628/41631). KÜLÖN a PRODUCTS_MANAGE-től: a készlet a tények
+  /// kötelező kulcsait és a kitöltöttségi mérést határozza meg minden termékre, és a
+  /// kötés a UNAS-gazdájú termékeken is megy (az `attributeSetId` OS-oldali metaadat), tehát
+  /// az őr a végponton áll, nem a mezőn. Csak OWNER/ADMIN, a MANAGER sem (lásd ROLE_PERMISSIONS).
+  PRODUCTS_ATTRIBUTE_SET_MANAGE: "products.attribute-set.manage",
   /// A KÉZI WEBSHOP-ÁTIRÁNYÍTÁS (SEO P0 PR 6, D2). Szándékosan KÜLÖN a
   /// PRODUCTS_MANAGE-től: egy rossz átirányítás a bolt egy élő címét viheti el,
   /// és a vevő nem hibát lát, hanem egy másik oldalt. Csak OWNER/ADMIN, a MANAGER
@@ -368,6 +374,7 @@ const BASE_ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>> =
         permission !== PERMISSIONS.SERVICE_VISIBILITY_ASSIGN &&
         permission !== PERMISSIONS.PRODUCTS_CATALOG_AUTHORITY_TRANSFER &&
         permission !== PERMISSIONS.PRODUCTS_KNOWLEDGE_APPROVE &&
+        permission !== PERMISSIONS.PRODUCTS_ATTRIBUTE_SET_MANAGE &&
         permission !== PERMISSIONS.SEO_REDIRECTS_MANAGE &&
         // MÁS BESZÉLGETÉSÉNEK TÖRLÉSE AZ ADMINÉ (fecbb1fe): egy MANAGER, aki
         // bármit törölhet, mások beszélgetését is eltüntethetné a listájukról.
