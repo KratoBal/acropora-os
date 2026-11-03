@@ -37,6 +37,7 @@ import { ProductSupplierPricesCard } from "@/components/products/product-supplie
 import { ProductBasicsEditor } from "@/components/products/product-basics-editor";
 import { JevProductCard } from "@/components/jev-product-intelligence/jev-product-card";
 import { productApi } from "@/lib/api/products";
+import { currencyLabel } from "@/lib/format/currency";
 import { BarcodeEditor } from "./barcode-editor";
 
 const value = (candidate: string | null | undefined) => candidate || "—";
@@ -66,7 +67,7 @@ const formatMoney = (
   const formatted = Number(amount).toLocaleString("hu-HU", {
     maximumFractionDigits: 2,
   });
-  return currency ? `${formatted} ${currency}` : formatted;
+  return currency ? `${formatted} ${currencyLabel(currency)}` : formatted;
 };
 // Matches product-list-page.tsx's formatStock exactly, so the same
 // on-hand quantity reads identically on the list and detail pages.

@@ -342,6 +342,18 @@ describe("ProductDetailPage mirror ownership", () => {
     expect(screen.getByText("UNAS terméktükör")).toBeTruthy();
   });
 
+  it("a forintos beszerzési árat Ft-ként írja, a devizásét a kódjával", async () => {
+    api.detail.mockResolvedValue(hufDetail);
+    render(<ProductDetailPage productId="product-1" />);
+    await screen.findByText("UNAS terméktükör");
+    const stockCard = screen
+      .getByRole("heading", { name: "Készlet és beszerzés" })
+      .closest("section") as HTMLElement;
+    expect(
+      within(stockCard).getByText("Beszerzár").parentElement?.textContent,
+    ).toBe("Beszerzár1000 Ft");
+  });
+
   it("egyváltozatos terméknél a belső megjegyzés egyszer áll, a meleg kártyában, és a készlet-kártya a változat értékeit mutatja", async () => {
     render(<ProductDetailPage productId="product-1" />);
     await screen.findByText("UNAS terméktükör");

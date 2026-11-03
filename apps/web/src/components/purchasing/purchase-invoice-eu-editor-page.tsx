@@ -46,6 +46,7 @@ import { inferCountryFromTaxNumber } from "@/components/customers/country-option
 import { expectedArrivalsApi } from "@/lib/api/expected-arrivals";
 import { navIncomingInvoicesApi } from "@/lib/api/nav-incoming-invoices";
 import { productApi } from "@/lib/api/products";
+import { currencyLabel } from "@/lib/format/currency";
 import { purchasingApi } from "@/lib/api/purchasing";
 import { suppliersApi } from "@/lib/api/suppliers";
 import { viesVatApi } from "@/lib/api/vies-vat";
@@ -172,7 +173,7 @@ export function submitSummary(
 }
 
 function formatMoney(value: number, currency: string): string {
-  return `${value.toLocaleString("hu-HU", { maximumFractionDigits: 2 })} ${currency}`;
+  return `${value.toLocaleString("hu-HU", { maximumFractionDigits: 2 })} ${currencyLabel(currency)}`;
 }
 
 function todayIso(): string {
