@@ -251,6 +251,15 @@ describe("PurchaseInvoiceEuEditorPage NAV bevételezés", () => {
     expect(currency).toBeDisabled();
   });
 
+  it("a nettó végösszeget forintnál Ft-ként írja", async () => {
+    render(createElement(PurchaseInvoiceEuEditorPage));
+    await screen.findByRole("textbox", { name: "Pénznem" });
+
+    expect(
+      screen.getByText("Nettó összeg").nextElementSibling?.textContent,
+    ).toMatch(/^10\s?000 Ft$/);
+  });
+
   it("a rögzítési kérésben is HUF pénznemet küld", async () => {
     render(createElement(PurchaseInvoiceEuEditorPage));
 
