@@ -8,7 +8,7 @@ import {
   Card,
   ConfirmDialog,
   FormField,
-  Input,
+  PilotFileInput,
   Select,
   Skeleton,
   Textarea,
@@ -780,8 +780,7 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                       sor csendben szukebb marad.
                     */}
                     <FormField label="Fénykép vagy PDF">
-                      <Input
-                        type="file"
+                      <PilotFileInput
                         accept="image/jpeg,image/png,application/pdf"
                         aria-label="Fénykép vagy PDF"
                         onChange={(event) =>

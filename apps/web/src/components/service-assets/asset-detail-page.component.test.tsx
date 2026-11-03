@@ -568,6 +568,27 @@ describe("az eszköz matricakódja az adatlapon", () => {
  * kerés bovites volt, nem csere.
  */
 describe("AssetDetailPage csatolmány-feltöltés", () => {
+  /*
+    A MEZŐ MAGYARUL ÍR (UI-áttekintés, 3. csomag, 2026-11-03): a "Fénykép vagy PDF" mező natív `<input type="file">`
+    volt, a böngésző nyelvén ("Choose File  No file chosen"). Most a közös magyar fájlmező rajzolja. MI PIROSÍT: ha a mező
+    újra natív (a felirat nem magyar), vagy a kiválasztott fájl neve nem jelenik meg.
+  */
+  it("a fájlmező magyar felirattal áll, és kiírja a kiválasztott fájl nevét", async () => {
+    render(<AssetDetailPage assetId="asset-1" />);
+
+    const mezo = await screen.findByLabelText("Fénykép vagy PDF");
+    expect(screen.getByText("Fájl kiválasztása")).toBeTruthy();
+    expect(screen.getByText("Nincs kiválasztott fájl")).toBeTruthy();
+
+    fireEvent.change(mezo, {
+      target: {
+        files: [new File(["bajtok"], "medence.jpg", { type: "image/jpeg" })],
+      },
+    });
+    expect(await screen.findByText("medence.jpg")).toBeTruthy();
+    expect(screen.queryByText("Nincs kiválasztott fájl")).toBeNull();
+  });
+
   it("a fájlmező a képeket is elfogadja", async () => {
     render(<AssetDetailPage assetId="asset-1" />);
 

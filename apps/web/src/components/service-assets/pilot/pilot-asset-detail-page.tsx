@@ -6,7 +6,7 @@ import {
   ConfirmDialog,
   FormField,
   Icon,
-  Input,
+  PilotFileInput,
   Select,
   Skeleton,
 } from "@acropora/ui";
@@ -688,8 +688,7 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
                         </Select>
                       </FormField>
                       <FormField label="Fénykép vagy PDF">
-                        <Input
-                          type="file"
+                        <PilotFileInput
                           accept="image/jpeg,image/png,application/pdf"
                           aria-label="Fénykép vagy PDF"
                           onChange={(event) =>
