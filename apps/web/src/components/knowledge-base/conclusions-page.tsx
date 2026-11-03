@@ -43,6 +43,15 @@ const STATUS_LABELS: Record<KnowledgeConclusion["status"], string> = {
   WITHDRAWN: "Visszavonva",
 };
 
+/** The state of a cited claim, said in words (the raw enum used to show in the line). */
+const CLAIM_STATUS_LABELS: Record<string, string> = {
+  VERIFIED: "Ellenőrzött",
+  CANDIDATE: "Ellenőrzésre vár",
+  WITHDRAWN: "Visszavonva",
+  DISPUTED: "Vitatott",
+  SUPERSEDED: "Felülírva",
+};
+
 const STATUS_VARIANTS = {
   DRAFT: "default",
   APPROVED: "success",
@@ -382,7 +391,7 @@ export function ConclusionsPage() {
                       {titles.get(c.id) ?? c.id}
                       {c.status === "VERIFIED"
                         ? ""
-                        : ` (már nem VERIFIED: ${c.status})`}
+                        : ` (már nem ellenőrzött: ${CLAIM_STATUS_LABELS[c.status] ?? c.status})`}
                     </li>
                   ))}
                 </ul>

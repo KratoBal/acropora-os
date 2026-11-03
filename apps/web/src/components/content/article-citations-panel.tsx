@@ -46,11 +46,11 @@ const STATUS_CLASSES: Record<SentenceStatus, string> = {
 
 const PROBLEM_LABELS: Record<string, string> = {
   CLAIM_MISSING: "Az állítás nem létezik.",
-  CLAIM_NOT_VERIFIED: "Az állítás már nem VERIFIED.",
+  CLAIM_NOT_VERIFIED: "Az állítás már nem ellenőrzött.",
   CONCLUSION_MISSING: "A következtetés nem létezik.",
   CONCLUSION_NOT_APPROVED: "A következtetés nincs jóváhagyva.",
   CONCLUSION_CLAIM_NOT_VERIFIED:
-    "A következtetés egyik állítása már nem VERIFIED.",
+    "A következtetés egyik állítása már nem ellenőrzött.",
   NOT_TECHNICAL_WITH_CITATION:
     "Nem szakmainak jelölt mondat nem hivatkozhat állításra.",
 };
