@@ -36,13 +36,9 @@ export function BillingDocumentActions({
   busy: boolean;
 }) {
   return (
-    <div
-      role="group"
-      aria-label="Bizonylat műveletei"
-      // the buttons are items of the shared header's row (BillingDetailHeader): the group keeps its role and
-      // name for assistive technology, but adds no box of its own
-      className="contents"
-    >
+    // the buttons are items of the shared header's row (BillingDetailHeader), and that row carries the group role
+    // and name: a display:contents wrapper loses both in older browsers (Safari before 16, Chrome before 89)
+    <>
       <PilotButton
         variant="secondary"
         size="regular"
@@ -72,6 +68,6 @@ export function BillingDocumentActions({
           {resend.label}
         </PilotButton>
       ) : null}
-    </div>
+    </>
   );
 }

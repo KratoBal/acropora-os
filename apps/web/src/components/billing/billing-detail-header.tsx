@@ -1,6 +1,6 @@
 "use client";
 
-import { PilotButton } from "@acropora/ui";
+import { PAGE_HEADER_CLASSES, PilotButton } from "@acropora/ui";
 import { useId, useState, type ReactNode } from "react";
 
 /**
@@ -14,6 +14,9 @@ import { useId, useState, type ReactNode } from "react";
  * - A ritkábban kellő műveletek (`more`) a „Továbbiak” gomb mögött, egy második sorban nyílnak le, hogy a fő sor ne
  *   tördeljen le egyetlen árva gombot (a stage 1440 px-es képén a hatodik gomb egyedül csúszott a következő sorba).
  * - A hívók a gombokat `size="regular"`-ral adják: egy sorban mind egyforma magas (a Sztornó eddig magasabb volt).
+ * - A felirat, a cím és az alcím a közös `PageHeader` osztályait viseli (UI 2. csomag), csak az elrendezés saját.
+ * - A gombsor a csoport (`actionsLabel`), mert valódi doboza van; a csukott „Továbbiak” sor `hidden`-nel a DOM-ban
+ *   marad, hogy az `aria-controls` élő azonosítóra mutasson (barracuda, #2020).
  */
 export function BillingDetailHeader({
   eyebrow,
@@ -22,6 +25,7 @@ export function BillingDetailHeader({
   status,
   actions,
   more,
+  actionsLabel = "Bizonylat műveletei",
 }: {
   eyebrow: ReactNode;
   title: ReactNode;
@@ -32,6 +36,8 @@ export function BillingDetailHeader({
   actions?: ReactNode;
   /** A ritkább műveletek; ha üres, nincs „Továbbiak” gomb. */
   more?: ReactNode;
+  /** A fő gombsor csoportjának neve a kisegítő technológiáknak. */
+  actionsLabel?: string;
 }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const moreId = useId();
@@ -41,14 +47,10 @@ export function BillingDetailHeader({
   return (
     <header className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
       <div className="min-w-0">
-        <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.05em] text-pilot-accent-warm-text">
-          {eyebrow}
-        </p>
-        <h1 className="text-[28px] font-semibold leading-[34px] text-pilot-grey-900">
-          {title}
-        </h1>
+        <p className={PAGE_HEADER_CLASSES.eyebrow}>{eyebrow}</p>
+        <h1 className={PAGE_HEADER_CLASSES.title}>{title}</h1>
         {subtitle ? (
-          <p className="mt-2 text-sm text-pilot-grey-600">{subtitle}</p>
+          <p className={PAGE_HEADER_CLASSES.description}>{subtitle}</p>
         ) : null}
       </div>
       <div className="flex w-full flex-col items-start gap-3 xl:w-auto xl:items-end">
@@ -58,7 +60,7 @@ export function BillingDetailHeader({
           </div>
         ) : null}
         {actions || more ? (
-          <div className={row}>
+          <div role="group" aria-label={actionsLabel} className={row}>
             {actions}
             {more ? (
               <PilotButton
@@ -73,11 +75,12 @@ export function BillingDetailHeader({
             ) : null}
           </div>
         ) : null}
-        {more && moreOpen ? (
+        {more ? (
           <div
             id={moreId}
             role="group"
             aria-label="További műveletek"
+            hidden={!moreOpen}
             className={row}
           >
             {more}

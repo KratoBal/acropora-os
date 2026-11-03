@@ -661,6 +661,15 @@ describe("the shared header", () => {
     render(<BillingDocumentDetailPage documentId="doc-1" />);
     const more = await screen.findByRole("button", { name: "Továbbiak" });
     expect(more).toHaveAttribute("aria-expanded", "false");
+    // a csukott sor is a DOM-ban áll, rejtve: az aria-controls élő azonosítóra mutat (barracuda, #2020)
+    const controlled = document.getElementById(
+      more.getAttribute("aria-controls") ?? "",
+    );
+    expect(controlled).not.toBeNull();
+    expect(controlled).toHaveAttribute("hidden");
+    // a csoport a gombsor valódi doboza, nem egy display:contents burkoló (a régebbi böngészők elejtik a nevét)
+    expect(actions()).not.toHaveClass("contents");
+    expect(actions()).toContainElement(more);
     expect(
       within(actions()).getByRole("button", { name: "Nyomtatás" }),
     ).toBeInTheDocument();

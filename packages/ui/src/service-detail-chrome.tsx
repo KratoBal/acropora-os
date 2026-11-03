@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 
+import { PageHeader } from "./page-header";
 import { ServiceIcon, type ServiceIconName } from "./service-list-chrome";
 import { sv } from "./service-theme";
 
@@ -40,20 +41,24 @@ export function ServiceDetailHeader({
   sub?: ReactNode;
   actions?: ReactNode;
 }) {
+  // 2026-11-03 óta a közös fejléc rajzolja (page-header.tsx), nem saját méret és szín
   return (
-    <header className="mb-6 flex flex-col items-start justify-between gap-5 sm:flex-row sm:items-start">
-      <div className="min-w-0">
-        <p className={sv.eyebrow}>{eyebrow}</p>
-        <h1 className={sv.detailTitle}>{title}</h1>
-        {badge || sub ? (
-          <div className="mt-3 flex flex-wrap items-center gap-3">
+    <PageHeader
+      className="mb-6"
+      eyebrow={eyebrow}
+      title={title}
+      meta={
+        badge || sub ? (
+          <>
             {badge}
-            {sub ? <span className="text-xs text-muted">{sub}</span> : null}
-          </div>
-        ) : null}
-      </div>
-      {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
-    </header>
+            {sub ? (
+              <span className="text-xs text-pilot-grey-600">{sub}</span>
+            ) : null}
+          </>
+        ) : undefined
+      }
+      actions={actions}
+    />
   );
 }
 

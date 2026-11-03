@@ -17,7 +17,7 @@ export { FormField } from "./form-field";
 export type { FormFieldProps } from "./form-field";
 export { NavItem } from "./nav-item";
 export type { NavItemProps } from "./nav-item";
-export { PageHeader } from "./page-header";
+export { PAGE_HEADER_CLASSES, PageHeader } from "./page-header";
 export type { PageHeaderProps } from "./page-header";
 export { Pagination } from "./pagination";
 export type { PaginationProps } from "./pagination";
