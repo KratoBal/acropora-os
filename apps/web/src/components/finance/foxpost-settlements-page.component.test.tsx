@@ -3,6 +3,8 @@ import type { FoxpostSettlementListResponse, Session } from "@acropora/types";
 import { createElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { expectMonth, pickMonth } from "@/test/month-field";
+
 import { FoxpostSettlementsPage } from "./foxpost-settlements-page";
 
 const api = vi.hoisted(() => ({
@@ -233,20 +235,20 @@ describe("FoxpostSettlementsPage", () => {
     ]);
     render(createElement(FoxpostSettlementsPage));
 
-    const month = await screen.findByLabelText("A riport hónapja");
+    await screen.findByLabelText("A riport hónapja, év");
     // The picker opens on the latest report, not on the calendar month.
-    expect(month).toHaveValue("2026-08");
+    expectMonth("A riport hónapja", "2026-08");
     const download = screen.getByRole("button", { name: "XLSX letöltése" });
     expect(download).toBeEnabled();
     expect(screen.getByText(/Utalt 280 000 Ft/)).toBeInTheDocument();
 
-    fireEvent.change(month, { target: { value: "2026-07" } });
+    pickMonth("A riport hónapja", "2026-07");
     expect(download).toBeDisabled();
     expect(
       screen.getByText("Erre a hónapra még nincs feldolgozott Foxpost riport."),
     ).toBeInTheDocument();
 
-    fireEvent.change(month, { target: { value: "2026-08" } });
+    pickMonth("A riport hónapja", "2026-08");
     fireEvent.click(download);
     expect(api.downloadReport).toHaveBeenCalledWith(
       "token-owner",

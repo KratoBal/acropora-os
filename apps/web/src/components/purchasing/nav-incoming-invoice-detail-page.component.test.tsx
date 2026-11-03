@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { NavIncomingInvoiceDetail, Session } from "@acropora/types";
 import { createElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -85,6 +85,26 @@ beforeEach(() => {
 });
 
 describe("NavIncomingInvoiceDetailPage (Figma 614:1369)", () => {
+  /*
+    A NAV-SOR MEZŐI OLVASHATÓK, NEM SZERKESZTHETŐK (hibak-aa P2, 2026-11-03): a mennyiség címkéje "Számla" volt, és a
+    csak olvasható értékek fehér, keretes dobozban álltak, szerkeszthető mezőnek látszva. Most "Mennyiség" a címke, és az
+    érték a halvány szürke, keret nélküli sávban áll. MI PIROSÍT: ha a mennyiség címkéje újra "Számla", vagy ha egy
+    csak olvasható érték újra keretes, fehér "beviteli mező" kinézetet kap.
+  */
+  it("a számlasor mennyisége Mennyiség címkével áll, és az értékek nem látszanak beviteli mezőnek", async () => {
+    render(
+      createElement(NavIncomingInvoiceDetailPage, { navInvoiceId: "nav-1" }),
+    );
+    const sor = await screen.findByTestId("nav-szamlasor");
+    expect(within(sor).getByText("Mennyiség")).toBeInTheDocument();
+    expect(within(sor).queryByText("Számla")).toBeNull();
+    for (const felirat of ["Mennyiség", "Egység", "Nettó egységár", "ÁFA"]) {
+      const ertek = within(sor).getByText(felirat).nextElementSibling!;
+      expect(ertek.className).not.toMatch(/\bborder\b/);
+      expect(ertek.className).not.toMatch(/\bbg-white\b/);
+    }
+  });
+
   it("NAV-DETAIL: the supplier, the invoice data, the line cards, the net total and the booking action", async () => {
     render(
       createElement(NavIncomingInvoiceDetailPage, { navInvoiceId: "nav-1" }),
@@ -92,7 +112,7 @@ describe("NavIncomingInvoiceDetailPage (Figma 614:1369)", () => {
     expect(await screen.findAllByTestId("nav-szamlasor")).toHaveLength(1);
     expect(screen.getByText("NAV adatkapcsolat")).toBeInTheDocument();
     expect(screen.getByText("Adószám egyezik")).toBeInTheDocument();
-    expect(screen.getByText(/^25\s400 HUF$/)).toBeInTheDocument();
+    expect(screen.getByText(/^25\s400 Ft$/)).toBeInTheDocument();
     expect(screen.getByText(/szállítói cikkszám KS-11/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Megnyitás" }));

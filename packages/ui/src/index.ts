@@ -79,6 +79,8 @@ export {
   PilotSegmentedControl,
   PilotFormField,
   PilotDateField,
+  PilotMonthField,
+  splitWidthClasses,
   PilotFileInput,
   PilotInput,
   PilotSelect,

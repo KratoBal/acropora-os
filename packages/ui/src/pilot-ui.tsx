@@ -4,6 +4,13 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import { Icon } from "./icon";
 import { huToIso, inRange, isoToHu, nextText } from "./hu-date";
+import {
+  HU_MONTHS,
+  joinMonth,
+  monthName,
+  monthParts,
+  monthYears,
+} from "./hu-month";
 import { useThemePreference } from "./use-theme-preference";
 
 /**
@@ -476,8 +483,9 @@ export function PilotDateField({
   const shownIso = emitted(text);
   const invalid =
     text !== "" && (shownIso === "" || !inRange(shownIso, min, max));
+  const classes = splitWidthClasses(className);
   return (
-    <span className="relative block w-full">
+    <span className={`relative block ${classes.widthClass}`}>
       <input
         ref={typed}
         id={id}
@@ -498,7 +506,7 @@ export function PilotDateField({
         }}
         className={`w-full rounded-md py-1.5 pl-3 pr-9 text-sm tabular-nums text-pilot-grey-900 ring-1 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500 disabled:cursor-not-allowed disabled:bg-pilot-grey-50 disabled:text-pilot-grey-400 ${
           invalid ? "ring-red-400" : "ring-pilot-grey-200"
-        } ${readOnly ? "bg-pilot-grey-50 text-pilot-grey-400" : "bg-white"} ${className ?? ""}`}
+        } ${readOnly ? "bg-pilot-grey-50 text-pilot-grey-400" : "bg-white"} ${classes.rest}`}
       />
       {readOnly || disabled ? null : (
         <>
@@ -607,6 +615,7 @@ export function PilotInput({
       />
     );
   }
+  const classes = splitWidthClasses(className);
   const input = (
     <input
       id={id}
@@ -621,14 +630,14 @@ export function PilotInput({
       min={min}
       max={max}
       onChange={(event) => onChange?.(event.target.value)}
-      className={`w-full rounded-md px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500 disabled:cursor-not-allowed disabled:bg-pilot-grey-50 disabled:text-pilot-grey-400 ${
+      className={`${leadingIcon ? "w-full" : classes.widthClass} rounded-md px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500 disabled:cursor-not-allowed disabled:bg-pilot-grey-50 disabled:text-pilot-grey-400 ${
         readOnly ? "bg-pilot-grey-50 text-pilot-grey-400" : "bg-white"
-      } ${leadingIcon ? "pl-9" : ""} ${className ?? ""}`}
+      } ${leadingIcon ? "pl-9" : ""} ${classes.rest}`}
     />
   );
   if (!leadingIcon) return input;
   return (
-    <div className="relative w-full">
+    <div className={`relative ${classes.widthClass}`}>
       <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-pilot-grey-500">
         {leadingIcon}
       </span>
@@ -645,7 +654,7 @@ export function PilotSelect({
   "aria-label": ariaLabel,
   id,
   className,
-  chevron = false,
+  chevron,
 }: {
   children: ReactNode;
   value?: string;
@@ -657,12 +666,14 @@ export function PilotSelect({
   /** ADDITÍV: méret a hívó sorához (pl. a lapméret-választó szélessége). */
   className?: string;
   /**
-   * ADDITÍV: a lenyíló nyíl. A régi hívók nélküle rajzolnak (`appearance-
-   * none` mellett a böngésző nyila sem látszik), és ez nem változik; a
-   * Direction F terv minden választóján nyíl áll.
+   * A LENYÍLÓ NYÍL. ALAPBÓL KIRAJZOLJA (UI-áttekintés, 2026-11-03): a `appearance-none` elrejti a böngésző
+   * nyilát, és nyíl nélkül a választó beviteli mezőnek látszott (a /szerviz/eszkozok/uj hat választója). Az
+   * alap ilyenkor a teljes szélességet tölti (`w-full`, mint a régi nyíl nélküli alak). `chevron` kifejezetten
+   * `true`: a régi nyilas alak, burkoló szélesség nélkül (a hívó méretezi); `false`: nyíl nélkül.
    */
   chevron?: boolean;
 }) {
+  const drawArrow = chevron !== false;
   const select = (
     <select
       id={id}
@@ -671,15 +682,17 @@ export function PilotSelect({
       aria-label={ariaLabel}
       onChange={(event) => onChange?.(event.target.value)}
       className={`w-full cursor-pointer appearance-none rounded-md bg-white px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500 disabled:cursor-not-allowed disabled:bg-pilot-grey-50 disabled:text-pilot-grey-400 ${
-        chevron ? "pr-9" : (className ?? "")
+        drawArrow ? "pr-9" : (className ?? "")
       }`}
     >
       {children}
     </select>
   );
-  if (!chevron) return select;
+  if (!drawArrow) return select;
   return (
-    <div className={`relative ${className ?? ""}`}>
+    <div
+      className={`relative ${className ?? (chevron === undefined ? "w-full" : "")}`}
+    >
       {select}
       <Icon
         name="chevron-down"
@@ -1040,4 +1053,115 @@ export function PilotFileInput({
       <span className="truncate text-xs text-pilot-grey-500">{shown}</span>
     </span>
   );
+}
+
+/**
+ * A MAGYAR HÓNAPVÁLASZTÓ (UI-áttekintés, 3. csomag, 2026-11-03). A natív `<input type="month">`
+ * a böngésző nyelvén ír ("August 2026"), ezért két választó adja: az év és a hónap magyar neve.
+ * Kifelé az `ÉÉÉÉ-HH` érték megy (mint a natív mezőnél), tehát a hívók értéke nem változik.
+ *
+ * FÉLKÉSZ VÁLASZTÁS NEM MEGY KI: ha csak az év vagy csak a hónap van kiválasztva, a hívó üres
+ * értéket kap, a mező viszont megtartja a kiválasztott felet, hogy a másik is megadható legyen.
+ * A két választó neve `<címke>, év` és `<címke>, hónap`, a csoporté a címke.
+ */
+export function PilotMonthField({
+  value,
+  onChange,
+  "aria-label": ariaLabel = "Hónap",
+  className,
+  now,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  "aria-label"?: string;
+  className?: string;
+  /** Csak a tesztnek: az "idei év" forrása. */
+  now?: Date;
+}) {
+  const parts = monthParts(value);
+  const [pending, setPending] = useState({ year: "", month: "" });
+  // Egy érvényes érték vezérel; üres értéknél csak a FÉLIG kiválasztott fél marad meg. Egy teljes
+  // pending üres érték mellett azt jelenti, hogy a hívó kívülről törölte az értéket (például egy
+  // szűrő-alaphelyzet): azt nem mutatjuk, különben a mező mást mondana, mint az érték.
+  const half =
+    joinMonth(pending.year, pending.month) === ""
+      ? pending
+      : { year: "", month: "" };
+  const year = value ? parts.year : half.year;
+  const month = value ? parts.month : half.month;
+  const years = monthYears((now ?? new Date()).getFullYear(), year);
+  const pick = (nextYear: string, nextMonth: string) => {
+    setPending({ year: nextYear, month: nextMonth });
+    onChange(joinMonth(nextYear, nextMonth));
+  };
+  return (
+    <div
+      role="group"
+      aria-label={ariaLabel}
+      className={`flex items-center gap-2 ${className ?? ""}`}
+    >
+      <PilotSelect
+        chevron
+        aria-label={`${ariaLabel}, év`}
+        className="w-28"
+        value={year}
+        onChange={(next) => pick(next, month)}
+      >
+        <option value="">Év</option>
+        {years.map((y) => (
+          <option key={y} value={y}>
+            {y}
+          </option>
+        ))}
+      </PilotSelect>
+      <PilotSelect
+        chevron
+        aria-label={`${ariaLabel}, hónap`}
+        className="w-40"
+        value={month}
+        onChange={(next) => pick(year, next)}
+      >
+        <option value="">Hónap</option>
+        {HU_MONTHS.map((_, index) => {
+          const number = String(index + 1).padStart(2, "0");
+          return (
+            <option key={number} value={number}>
+              {monthName(number)}
+            </option>
+          );
+        })}
+      </PilotSelect>
+    </div>
+  );
+}
+
+/**
+ * A HÍVÓ SZÉLESSÉGE FELÜLÍRJA AZ ALAP `w-full`-T (UI-áttekintés, 2026-11-03). A beviteli mező `w-full`-t visel, és a hívó
+ * `className`-je ugyanarra az elemre kerül: ha az is szélességet ad (`w-20`, `w-[150px]`), a kettő közül a CSS
+ * sorrendje dönt, nem az osztályok sorrendje (a `cn` itt sima összefűzés). Az eredmény: a "Tól / Ig" mezők soronként
+ * más szélességűek lettek, a dátumszűrők teljes szélességűek maradtak. A szélesség-osztályokat (`w-*`, változattal is;
+ * a `min-w-*` és `max-w-*` nem) ezért külön vesszük: ahol van VÁLTOZAT NÉLKÜLI szélesség, ott nincs alap `w-full`; egy
+ * csak változatos (`md:w-40`) mellett marad, hogy a mező telefonon teljes szélességű legyen. A szélesség az ikonos
+ * mező burkolójára kerül (az input kitölti).
+ */
+export function splitWidthClasses(className: string | undefined): {
+  /** A szélesség-osztályok (változatosak is). */
+  width: string;
+  /** A többi osztály. */
+  rest: string;
+  /** Van-e változat NÉLKÜLI szélesség (`w-20`): csak az váltja ki az alap `w-full`-t. */
+  hasBase: boolean;
+  /** A szélesség-osztályok az alap `w-full`-lal, ha nincs változat nélküli szélesség (a `md:w-40` telefonon nem veszi el a teljes szélességet). */
+  widthClass: string;
+} {
+  const tokens = (className ?? "").split(/\s+/).filter(Boolean);
+  const isWidth = (token: string) => /^(?:[\w-]+:)*w-/.test(token);
+  const width = tokens.filter(isWidth).join(" ");
+  const hasBase = tokens.some((token) => /^w-/.test(token));
+  return {
+    width,
+    rest: tokens.filter((token) => !isWidth(token)).join(" "),
+    hasBase,
+    widthClass: hasBase ? width : `w-full ${width}`.trim(),
+  };
 }

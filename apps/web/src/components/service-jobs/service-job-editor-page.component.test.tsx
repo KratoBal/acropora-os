@@ -161,6 +161,38 @@ describe("ServiceJobEditorPage", () => {
     expect(fentre).not.toBe(megsem);
   });
 
+  /*
+    A KARBANTARTÁSI LAP ŰRLAPJA SAJÁT NEVÉN ÁLL (UI-áttekintés, Single-page P1, 2026-11-03): a
+    /szerviz/karbantartas/uj eddig az "Új hibajegy" címet és a hibajegy-listára vivő kiutakat mutatta.
+    MI PIROSÍT: ha a karbantartási űrlap címe újra "Új hibajegy", vagy ha a kilépés (fent és a láblécben)
+    a hibajegy-listára vezet; és ha a hibajegy-űrlap megváltozna.
+  */
+  it("a karbantartási űrlap a saját nevét és a saját listáját mutatja", async () => {
+    render(<ServiceJobEditorPage kind="MAINTENANCE" />);
+    await screen.findByText("Partner és helyszín");
+
+    expect(
+      screen.getByRole("heading", { name: "Új karbantartási lap" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Új hibajegy" })).toBeNull();
+    expect(
+      screen.getByRole("link", { name: "Karbantartás" }).getAttribute("href"),
+    ).toBe("/szerviz/karbantartas");
+    expect(
+      screen.getByRole("link", { name: "Mégsem" }).getAttribute("href"),
+    ).toBe("/szerviz/karbantartas");
+  });
+
+  it("a hibajegy-űrlap a hibajegy nevét és listáját mutatja", async () => {
+    render(<ServiceJobEditorPage />);
+    await screen.findByText("Partner és helyszín");
+
+    expect(screen.getByRole("heading", { name: "Új hibajegy" })).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Mégsem" }).getAttribute("href"),
+    ).toBe("/szerviz/hibajegyek");
+  });
+
   /**
    * A PARTNER ÉS A HELYSZÍN KÖTELEZŐ (Balázs döntése, 2026-09-23): a gomb
    * TILTOTT marad, amíg mindkettő hiányzik, és a felvitel nem hívódik meg.

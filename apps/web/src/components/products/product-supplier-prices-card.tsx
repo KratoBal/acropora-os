@@ -11,6 +11,7 @@ import type { SupplierPriceRow, VariantSupplierPrices } from "@acropora/types";
 import { useEffect, useState } from "react";
 
 import { priceListsApi } from "@/lib/api/price-lists";
+import { currencyLabel } from "@/lib/format/currency";
 
 /**
  * A VÁLTOZAT BESZERZÉSI ÁRAI BESZÁLLÍTÓNKÉNT ÉS A HASZON (task beszallitoi-arlistak-4).
@@ -160,7 +161,7 @@ export function SupplierPricesTable({
                     : undefined
               }
             >
-              {money(row.unitPrice, row.currency)}
+              {money(row.unitPrice, currencyLabel(row.currency))}
             </span>
             {rank ? (
               <PilotBadge variant={rank === "cheapest" ? "success" : "danger"}>

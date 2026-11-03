@@ -8,7 +8,7 @@ import {
   Card,
   ConfirmDialog,
   FormField,
-  Input,
+  PilotFileInput,
   Select,
   Skeleton,
   Textarea,
@@ -27,7 +27,7 @@ import {
   withAssetUnit,
 } from "@acropora/types";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { useReturnTo } from "@/components/navigation-history";
@@ -109,6 +109,8 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
   const [documentType, setDocumentType] =
     useState<AssetDocumentType>("INVOICE");
   const [documentFile, setDocumentFile] = useState<File | null>(null);
+  // The real file field: emptied after an upload, or it would keep showing the uploaded file's name.
+  const documentInput = useRef<HTMLInputElement>(null);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -275,6 +277,7 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
         documentFile,
       );
       setDocumentFile(null);
+      if (documentInput.current) documentInput.current.value = "";
       await load();
       setNotice("A dokumentum feltöltve.");
     } catch (cause) {
@@ -780,8 +783,8 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                       sor csendben szukebb marad.
                     */}
                     <FormField label="Fénykép vagy PDF">
-                      <Input
-                        type="file"
+                      <PilotFileInput
+                        ref={documentInput}
                         accept="image/jpeg,image/png,application/pdf"
                         aria-label="Fénykép vagy PDF"
                         onChange={(event) =>

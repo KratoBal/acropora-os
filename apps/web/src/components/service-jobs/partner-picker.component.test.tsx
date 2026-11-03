@@ -124,3 +124,36 @@ describe("a partner-választó vezérelt alakja", () => {
     );
   });
 });
+
+/*
+  A VÁLASZTÓ A KÖZÖS MEZŐT RAJZOLJA (UI-áttekintés, 3. csomag, 2026-11-03). Az új hibajegy űrlapján a
+  Partner mező nyers, natív select volt (fekete keret, a böngésző nyila). MI PIROSÍT: ha a
+  `pilot` vagy a `dusk` alak elveszíti a saját nyilát (a nyilat a közös elem rajzolja), vagy ha
+  a választás nem jut el az `onPick`-ig. (Az üres opción induló állapotot ez a teszt rögzíti, de nem
+  pirosítja: egy nem létező kezdőérték a betöltés előtt amúgy is az első opcióra esik.)
+*/
+describe.each(["dusk", "pilot"] as const)(
+  "a partner-választó közös mezője (%s)",
+  (variant) => {
+    it("rajzol nyilat, és az üres opción indul", async () => {
+      const { container } = render(
+        <PartnerPicker id="p" variant={variant} onPick={() => undefined} />,
+      );
+      await waitFor(() => screen.getByRole("option", { name: /Korallpark/ }));
+      expect(container.querySelector("svg")).not.toBeNull();
+      expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe(
+        "",
+      );
+    });
+
+    it("a választás az onPick-et hívja a partnerrel", async () => {
+      const onPick = vi.fn();
+      render(<PartnerPicker id="p" variant={variant} onPick={onPick} />);
+      await waitFor(() => screen.getByRole("option", { name: /Korallpark/ }));
+      fireEvent.change(screen.getByRole("combobox"), {
+        target: { value: "customer-2" },
+      });
+      expect(onPick).toHaveBeenCalledWith(partners[1]);
+    });
+  },
+);

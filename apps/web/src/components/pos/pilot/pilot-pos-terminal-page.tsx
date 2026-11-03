@@ -758,11 +758,17 @@ export function PilotPosTerminalPage() {
                 className="h-[50px] w-full min-w-0 rounded-lg bg-white pl-10 pr-3 text-xs text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-500 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
               />
             </div>
-            {/* Reserve feedback space so result buttons never move on add. */}
+            {/*
+              Reserve feedback space so result buttons never move on add. The mint
+              background shows only while there is something to say: an empty tinted
+              box under the search field read as a stray element (stage photo, 390 px).
+            */}
             <p
               role="status"
               aria-live="polite"
-              className="mt-3 flex h-[50px] items-center rounded-lg bg-pilot-aqua-50 px-3 text-[11px] text-pilot-aqua-700"
+              className={`mt-3 flex h-[50px] items-center rounded-lg px-3 text-[11px] text-pilot-aqua-700 ${
+                lastAdded ? "bg-pilot-aqua-50" : ""
+              }`}
             >
               <span className="truncate" title={lastAdded?.productName}>
                 {lastAdded

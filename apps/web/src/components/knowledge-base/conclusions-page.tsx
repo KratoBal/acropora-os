@@ -22,6 +22,7 @@ import {
   type KnowledgeConclusion,
 } from "@/lib/api/knowledge-base";
 import { KnowledgeBaseTabs, KnowledgeLayerLegend } from "./knowledge-base-tabs";
+import { claimStatusLabel } from "./claim-status-labels";
 import { ModelFlagBadge } from "./model-flag-badge";
 
 /**
@@ -382,7 +383,7 @@ export function ConclusionsPage() {
                       {titles.get(c.id) ?? c.id}
                       {c.status === "VERIFIED"
                         ? ""
-                        : ` (már nem VERIFIED: ${c.status})`}
+                        : ` (már nem ellenőrzött: ${claimStatusLabel(c.status)})`}
                     </li>
                   ))}
                 </ul>

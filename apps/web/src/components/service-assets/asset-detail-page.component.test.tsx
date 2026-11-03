@@ -568,6 +568,27 @@ describe("az eszköz matricakódja az adatlapon", () => {
  * kerés bovites volt, nem csere.
  */
 describe("AssetDetailPage csatolmány-feltöltés", () => {
+  /*
+    A MEZŐ MAGYARUL ÍR (UI-áttekintés, 3. csomag, 2026-11-03): a "Fénykép vagy PDF" mező natív `<input type="file">`
+    volt, a böngésző nyelvén ("Choose File  No file chosen"). Most a közös magyar fájlmező rajzolja. MI PIROSÍT: ha a mező
+    újra natív (a felirat nem magyar), vagy a kiválasztott fájl neve nem jelenik meg.
+  */
+  it("a fájlmező magyar felirattal áll, és kiírja a kiválasztott fájl nevét", async () => {
+    render(<AssetDetailPage assetId="asset-1" />);
+
+    const mezo = await screen.findByLabelText("Fénykép vagy PDF");
+    expect(screen.getByText("Fájl kiválasztása")).toBeTruthy();
+    expect(screen.getByText("Nincs kiválasztott fájl")).toBeTruthy();
+
+    fireEvent.change(mezo, {
+      target: {
+        files: [new File(["bajtok"], "medence.jpg", { type: "image/jpeg" })],
+      },
+    });
+    expect(await screen.findByText("medence.jpg")).toBeTruthy();
+    expect(screen.queryByText("Nincs kiválasztott fájl")).toBeNull();
+  });
+
   it("a fájlmező a képeket is elfogadja", async () => {
     render(<AssetDetailPage assetId="asset-1" />);
 
@@ -603,6 +624,41 @@ describe("AssetDetailPage csatolmány-feltöltés", () => {
 
     await waitFor(() => expect(api.uploadDocument).toHaveBeenCalledTimes(1));
     expect(api.uploadDocument.mock.calls[0]?.[3]).toBe(kep);
+  });
+
+  /*
+    A MEZŐ A SIKERES FELTÖLTÉS UTÁN ÜRES (barracuda, 2063: régi viselkedés): az oldal a fájl-állapotot kiürítette, a
+    valódi mezőt nem, így az tovább a feltöltött fájl nevét mutatta, és ugyanannak a fájlnak az újraválasztása nem
+    váltott ki change eseményt. A happy-dom a fireEvent-tel beállított `files`-t megtartja, ezért itt az állítás a
+    mező `value`-jának kiürítésére szól (egy böngészőben ez üríti a fájllistát). MI PIROSÍT: ha a mező a feltöltés után
+    nem kap üres értéket, vagy ha ez egy SIKERTELEN feltöltés után is megtörténne (a fájl ott marad az újrapróbához).
+  */
+  it("a sikeres feltöltés után kiüríti a fájlmezőt, a sikertelen után nem", async () => {
+    const beirasok: string[] = [];
+    const figyel = (mezo: HTMLElement) =>
+      Object.defineProperty(mezo, "value", {
+        configurable: true,
+        get: () => "",
+        set: (v: string) => {
+          beirasok.push(v);
+        },
+      });
+
+    api.uploadDocument.mockRejectedValueOnce(new Error("Nem sikerült"));
+    render(<AssetDetailPage assetId="asset-1" />);
+    const mezo = await screen.findByLabelText("Fénykép vagy PDF");
+    figyel(mezo);
+    const kep = new File(["bajtok"], "medence.jpg", { type: "image/jpeg" });
+    fireEvent.change(mezo, { target: { files: [kep] } });
+    fireEvent.click(screen.getByRole("button", { name: "Feltöltés" }));
+    await waitFor(() => expect(api.uploadDocument).toHaveBeenCalledTimes(1));
+    await screen.findByText("Nem sikerült");
+    expect(beirasok).toEqual([]);
+
+    api.uploadDocument.mockResolvedValueOnce([]);
+    fireEvent.click(screen.getByRole("button", { name: "Feltöltés" }));
+    await waitFor(() => expect(api.uploadDocument).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(beirasok).toEqual([""]));
   });
 });
 

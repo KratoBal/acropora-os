@@ -25,12 +25,13 @@ import {
   type PilotBadgeVariant,
 } from "@/components/pilot/pilot-ui";
 import { navIncomingInvoicesApi } from "@/lib/api/nav-incoming-invoices";
+import { currencyLabel } from "@/lib/format/currency";
 
 import { navGross } from "./nav-incoming-invoice-list-page";
 
 function formatAmount(value: string | undefined, currency: string): string {
   if (!value) return "—";
-  return `${Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 })} ${currency}`;
+  return `${Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 })} ${currencyLabel(currency)}`;
 }
 
 const day = (value: string | undefined) =>
@@ -69,7 +70,7 @@ function ReadonlyField({
     <div className="min-w-0">
       <p className="text-xs leading-4 text-pilot-grey-500">{label}</p>
       <p
-        className={`mt-1.5 truncate rounded-lg border border-pilot-grey-200 bg-white px-3 py-2 text-sm text-pilot-grey-700 ${
+        className={`mt-1.5 truncate rounded-lg bg-pilot-grey-50 px-3 py-2 text-sm text-pilot-grey-700 ${
           align === "right" ? "text-right" : ""
         }`}
       >
@@ -113,7 +114,7 @@ function NavLineCard({
         {line.isCharge ? <PilotBadge variant="grey">Díjsor</PilotBadge> : null}
       </div>
       <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-[repeat(4,minmax(0,1fr))_minmax(0,1.2fr)]">
-        <ReadonlyField label="Számla" align="right">
+        <ReadonlyField label="Mennyiség" align="right">
           {line.quantity}
         </ReadonlyField>
         <ReadonlyField label="Egység">{line.unit}</ReadonlyField>

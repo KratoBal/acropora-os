@@ -249,6 +249,9 @@ export function ServiceJobListPage({
   );
   const summary = data ? listSummary(data.counts) : null;
 
+  // What this list holds, in words: the maintenance list used to say "hibajegy" everywhere.
+  const thing = kind === "MAINTENANCE" ? "karbantartási lap" : "hibajegy";
+
   /**
    * A HÁROM CSEMPE SZÁMA A TELJES HALMAZBÓL JÖN, nem a betöltött lapból - ezért
    * ad a szerver állapotonkénti darabszámot. Amíg nincs válasz, `null` áll
@@ -260,7 +263,7 @@ export function ServiceJobListPage({
       key: "open",
       icon: "wrench",
       tone: "purple",
-      label: "Nyitott hibajegy",
+      label: `Nyitott ${thing}`,
       count: summary?.open ?? null,
     },
     {
@@ -416,10 +419,10 @@ export function ServiceJobListPage({
         {data && !items.length ? (
           <p className="px-5 py-10 text-center text-xs text-muted">
             {appliedSearch
-              ? "Erre a keresésre nincs hibajegy ezen a fülön."
+              ? `Erre a keresésre nincs ${thing} ezen a fülön.`
               : tab === "open"
-                ? "Nyitott hibajegy jelenleg nincs. A lezártakat a fenti füleken nézheted meg."
-                : "Ezen a fülön most nincs hibajegy."}
+                ? `Nyitott ${thing} jelenleg nincs. A lezártakat a fenti füleken nézheted meg.`
+                : `Ezen a fülön most nincs ${thing}.`}
           </p>
         ) : null}
       </div>

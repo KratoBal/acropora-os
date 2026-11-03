@@ -83,6 +83,12 @@ describe("purchaseLineColumns", () => {
     expect(screen.getByText("—")).toBeTruthy();
   });
 
+  it("writes a forint amount as Ft, not as the ISO code", () => {
+    const { container } = renderLines([line], "HUF");
+    expect(container.textContent).toMatch(/4\s?800\s+Ft/);
+    expect(container.textContent).not.toMatch(/HUF/);
+  });
+
   it("flags a line that is not in the product master", () => {
     renderLines([
       withLine({

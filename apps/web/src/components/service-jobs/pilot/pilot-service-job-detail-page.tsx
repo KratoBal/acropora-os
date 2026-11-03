@@ -1322,6 +1322,7 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
                       />
                     ) : null}
                     <PartnerPicker
+                      variant="pilot"
                       id="pilot-jegy-partner"
                       onPick={(picked) => void setPartner(picked.customerId)}
                     />

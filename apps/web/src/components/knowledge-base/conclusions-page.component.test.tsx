@@ -143,6 +143,18 @@ describe("ConclusionsPage", () => {
     expect(line.textContent).not.toContain("Elavult");
   });
 
+  it("names the state of a cited claim that is no longer verified, in words", async () => {
+    api.conclusions.mockResolvedValue([
+      conclusion({ claims: [{ id: "c1", status: "DISPUTED" }] }),
+    ]);
+    render(<ConclusionsPage />);
+    fireEvent.click(await screen.findByText(/foszfátigénye/));
+    expect(
+      await screen.findByText(/már nem ellenőrzött: Vitatott/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/VERIFIED|DISPUTED/)).toBeNull();
+  });
+
   it("approves a draft with knowledge.approve", async () => {
     api.approveConclusion.mockResolvedValue(conclusion({ status: "APPROVED" }));
     render(<ConclusionsPage />);

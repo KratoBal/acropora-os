@@ -52,6 +52,15 @@ function formatHuf(value: string): string {
   return `${Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 0 })} Ft`;
 }
 
+/*
+  A NAPI ÖSSZESÍTŐ KERESZTTÁBLA (nap x fizetési mód), ezért telefonon vízszintesen görgethető marad
+  (UI-áttekintés, 3. csomag, 2026-11-03): a kártya-forma egy kereszttáblánál az oszlopok összevetését
+  venné el. A "Nap" oszlop görgetés közben a helyén marad (`sticky`), és egy sor szöveg jelzi, hogy van
+  még oldalra tartalom (csak telefonon, `md:hidden`).
+*/
+export const SCROLL_HINT = "Görgess oldalra a további fizetési módokért.";
+export const STICKY_FIRST_CELL = "sticky left-0 z-10 bg-white";
+
 function Cell({ cell }: { cell: PosPaymentSummaryCell | undefined }) {
   if (!cell || cell.count === 0) {
     return <span className="text-pilot-grey-400">–</span>;
@@ -213,60 +222,74 @@ export function PilotPosSummaryPage() {
               <Skeleton className="h-4 w-1/3" />
             </div>
           ) : data ? (
-            <div className="overflow-x-auto px-4 pb-4">
-              <table className="w-full min-w-[560px] text-left text-xs">
-                <thead>
-                  <tr className="border-b border-pilot-grey-100 text-[10px] uppercase tracking-wide text-pilot-grey-500">
-                    <th className="py-3 pr-3 font-semibold">Nap</th>
-                    {data.methods.map((method) => (
+            <div className="px-4 pb-4">
+              <p className="pb-2 text-[11px] text-pilot-grey-500 md:hidden">
+                {SCROLL_HINT}
+              </p>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[560px] text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-pilot-grey-100 text-[10px] uppercase tracking-wide text-pilot-grey-500">
                       <th
-                        key={method}
-                        className="px-3 py-3 text-right font-semibold"
+                        className={`py-3 pr-3 font-semibold ${STICKY_FIRST_CELL}`}
                       >
-                        {METHOD_LABEL[method]}
+                        Nap
                       </th>
+                      {data.methods.map((method) => (
+                        <th
+                          key={method}
+                          className="px-3 py-3 text-right font-semibold"
+                        >
+                          {METHOD_LABEL[method]}
+                        </th>
+                      ))}
+                      <th className="py-3 pl-3 text-right font-semibold">
+                        Összesen
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...data.days].reverse().map((day) => (
+                      <tr
+                        key={day.date}
+                        className="border-b border-pilot-grey-100 last:border-0"
+                      >
+                        <td
+                          className={`py-3 pr-3 tabular-nums text-pilot-grey-900 ${STICKY_FIRST_CELL}`}
+                        >
+                          {formatDayHu(day.date)}
+                        </td>
+                        {data.methods.map((method) => (
+                          <td key={method} className="px-3 py-3 text-right">
+                            <Cell cell={day.byMethod[method]} />
+                          </td>
+                        ))}
+                        <td className="py-3 pl-3 text-right">
+                          <Cell cell={day.total} />
+                        </td>
+                      </tr>
                     ))}
-                    <th className="py-3 pl-3 text-right font-semibold">
-                      Összesen
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...data.days].reverse().map((day) => (
-                    <tr
-                      key={day.date}
-                      className="border-b border-pilot-grey-100 last:border-0"
-                    >
-                      <td className="py-3 pr-3 tabular-nums text-pilot-grey-900">
-                        {formatDayHu(day.date)}
-                      </td>
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 border-pilot-grey-200">
+                      <th
+                        scope="row"
+                        className={`py-3 pr-3 font-semibold ${STICKY_FIRST_CELL}`}
+                      >
+                        Összesen
+                      </th>
                       {data.methods.map((method) => (
                         <td key={method} className="px-3 py-3 text-right">
-                          <Cell cell={day.byMethod[method]} />
+                          <Cell cell={data.totals.byMethod[method]} />
                         </td>
                       ))}
                       <td className="py-3 pl-3 text-right">
-                        <Cell cell={day.total} />
+                        <Cell cell={data.totals.total} />
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="border-t-2 border-pilot-grey-200">
-                    <th scope="row" className="py-3 pr-3 font-semibold">
-                      Összesen
-                    </th>
-                    {data.methods.map((method) => (
-                      <td key={method} className="px-3 py-3 text-right">
-                        <Cell cell={data.totals.byMethod[method]} />
-                      </td>
-                    ))}
-                    <td className="py-3 pl-3 text-right">
-                      <Cell cell={data.totals.total} />
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
+                  </tfoot>
+                </table>
+              </div>
             </div>
           ) : null}
         </PilotCard>

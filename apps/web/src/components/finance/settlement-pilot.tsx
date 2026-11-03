@@ -1,5 +1,5 @@
 "use client";
-import { Pagination } from "@acropora/ui";
+import { Pagination, PilotMonthField } from "@acropora/ui";
 import type { ReactNode } from "react";
 
 /**
@@ -83,7 +83,7 @@ export function SettlementMonthCard({
   );
 }
 
-/** A hónap-választó a havi kártyán, a terv mezőjének alakjában. */
+/** A hónap-választó a havi kártyán: a közös magyar hónapválasztó (év és a hónap neve), `ÉÉÉÉ-HH` értékkel. */
 export function SettlementMonthInput({
   value,
   onChange,
@@ -94,13 +94,7 @@ export function SettlementMonthInput({
   label?: string;
 }) {
   return (
-    <input
-      type="month"
-      aria-label={label}
-      className="h-10 rounded-lg border border-pilot-grey-200 bg-white px-3 text-sm text-pilot-grey-900"
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-    />
+    <PilotMonthField value={value} onChange={onChange} aria-label={label} />
   );
 }
 

@@ -53,7 +53,7 @@ export function PilotSection({
         tone === "warm" ? "bg-pilot-accent-warm-soft" : "bg-white"
       } ${className}`}
     >
-      <header className="relative flex items-start justify-between gap-3 border-b border-pilot-grey-200 px-5 pb-4 pt-[18px]">
+      <header className="relative flex items-start justify-between gap-3 max-md:flex-wrap border-b border-pilot-grey-200 px-5 pb-4 pt-[18px]">
         {accent ? (
           <span
             aria-hidden="true"
