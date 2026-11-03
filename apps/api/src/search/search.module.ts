@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 
 import { AquariumsModule } from "../aquariums/aquariums.module.js";
 import { BillingModule } from "../billing/billing.module.js";
+import { QuotesModule } from "../quotes/quotes.module.js";
 import { ServiceAssetsModule } from "../service-assets/service-assets.module.js";
 import { ServiceJobsModule } from "../service-jobs/service-jobs.module.js";
 import { SuppliersModule } from "../suppliers/suppliers.module.js";
@@ -13,6 +14,7 @@ import { SearchService } from "./search.service.js";
   imports: [
     AquariumsModule,
     BillingModule,
+    QuotesModule,
     ServiceAssetsModule,
     ServiceJobsModule,
     SuppliersModule,
