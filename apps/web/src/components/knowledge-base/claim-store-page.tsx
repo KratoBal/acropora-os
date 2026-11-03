@@ -31,6 +31,7 @@ import {
   KnowledgeBaseTabs,
   KnowledgeLayerLegend,
 } from "./knowledge-base-tabs";
+import { claimStatusLabel } from "./claim-status-labels";
 import { ModelFlagBadge } from "./model-flag-badge";
 import { STUDY_LABELS } from "./source-screening-page";
 
@@ -49,13 +50,6 @@ export const EVIDENCE_LEVEL_LABELS: Record<EvidenceLevel, string> = {
   OBSERVATIONAL: "Megfigyelés",
   SINGLE_EXPERIMENT: "Kontrollált kísérlet",
   CONSISTENT_EXPERIMENTS: "Egybehangzó kísérletek",
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  CANDIDATE: "Ellenőrzésre vár",
-  WITHDRAWN: "Visszavonva",
-  DISPUTED: "Vitatott",
-  SUPERSEDED: "Felülírva",
 };
 
 const STANCE_LABELS: Record<string, string> = {
@@ -354,7 +348,7 @@ export function ClaimDetailPage({ claimId }: { claimId: string }) {
               <LayerBadge layer={data.layer} />
               {data.status !== "VERIFIED" ? (
                 <PilotBadge variant="amber">
-                  {STATUS_LABELS[data.status] ?? "Nem ellenőrzött"}
+                  {claimStatusLabel(data.status)}
                 </PilotBadge>
               ) : null}
               <PilotBadge variant="grey">{data.revision}. változat</PilotBadge>

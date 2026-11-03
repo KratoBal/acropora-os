@@ -22,6 +22,7 @@ import {
   type KnowledgeConclusion,
 } from "@/lib/api/knowledge-base";
 import { KnowledgeBaseTabs, KnowledgeLayerLegend } from "./knowledge-base-tabs";
+import { claimStatusLabel } from "./claim-status-labels";
 import { ModelFlagBadge } from "./model-flag-badge";
 
 /**
@@ -41,15 +42,6 @@ const STATUS_LABELS: Record<KnowledgeConclusion["status"], string> = {
   DRAFT: "Tervezet",
   APPROVED: "Jóváhagyva",
   WITHDRAWN: "Visszavonva",
-};
-
-/** The state of a cited claim, said in words (the raw enum used to show in the line). */
-const CLAIM_STATUS_LABELS: Record<string, string> = {
-  VERIFIED: "Ellenőrzött",
-  CANDIDATE: "Ellenőrzésre vár",
-  WITHDRAWN: "Visszavonva",
-  DISPUTED: "Vitatott",
-  SUPERSEDED: "Felülírva",
 };
 
 const STATUS_VARIANTS = {
@@ -391,7 +383,7 @@ export function ConclusionsPage() {
                       {titles.get(c.id) ?? c.id}
                       {c.status === "VERIFIED"
                         ? ""
-                        : ` (már nem ellenőrzött: ${CLAIM_STATUS_LABELS[c.status] ?? c.status})`}
+                        : ` (már nem ellenőrzött: ${claimStatusLabel(c.status)})`}
                     </li>
                   ))}
                 </ul>
