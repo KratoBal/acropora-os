@@ -495,7 +495,7 @@ export function PilotAquariumEditorPage({
       ) : null}
 
       <form onSubmit={handleSubmit} className="flex-1 px-8 py-6">
-        <div className="grid items-start gap-6 lg:grid-cols-[1fr_340px]">
+        <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
           <div className="flex flex-col gap-5">
             {/*
               NÉGY KÜLÖN KÁRTYA, A TERV SZAKASZOLÁSA SZERINT (2026-09-25,
@@ -574,7 +574,7 @@ export function PilotAquariumEditorPage({
             <PilotCard>
               <PilotCardHeader title="Akvárium" />
               <div className="flex flex-col gap-4 p-5">
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <PilotFormField label="Név">
                     <PilotInput value={name} onChange={setName} />
                   </PilotFormField>
@@ -588,7 +588,7 @@ export function PilotAquariumEditorPage({
                     />
                   </PilotFormField>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <PilotFormField label="Víztípus">
                     <PilotSelect
                       value={waterType || undefined}
@@ -695,7 +695,7 @@ export function PilotAquariumEditorPage({
                   equipment.map((row) => (
                     <div
                       key={row.id}
-                      className="grid grid-cols-[130px_1fr_auto] items-center gap-4 py-2.5"
+                      className="grid grid-cols-[130px_minmax(0,1fr)_auto] items-center gap-4 py-2.5"
                     >
                       <span className="text-xs font-medium text-pilot-grey-400">
                         {EQUIPMENT_KIND_LABEL[row.kind]}
@@ -727,7 +727,7 @@ export function PilotAquariumEditorPage({
                   </p>
                 )}
               </div>
-              <div className="grid gap-3 px-5 pb-4 sm:grid-cols-5">
+              <div className="grid grid-cols-1 gap-3 px-5 pb-4 sm:grid-cols-5">
                 <PilotFormField label="Fajta">
                   <PilotSelect
                     value={newEquipment.kind}
