@@ -1,10 +1,17 @@
 "use client";
 
-import { Alert, Icon, Skeleton } from "@acropora/ui";
+import {
+  Alert,
+  Icon,
+  PilotDataTable,
+  Skeleton,
+  type PilotTableColumn,
+} from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
   type WorksheetDetail,
+  type WorksheetLineDetail,
   type WorksheetSignatureDecision,
   type WorksheetSignerListResponse,
 } from "@acropora/types";
@@ -42,6 +49,157 @@ import {
   PilotSelect,
   PilotThemeRoot,
 } from "@/components/pilot/pilot-ui";
+
+type WorksheetVersionRow = WorksheetDetail["versions"][number];
+
+export const WORKSHEET_LINE_TABLE_MIN_WIDTH = 640;
+export const WORKSHEET_VERSION_TABLE_MIN_WIDTH = 920;
+
+/*
+  A MUNKALAP TÁBLÁI A KÖZÖS TÁBLÁN (UI-áttekintés, 3. csomag, 2026-11-03). A munkalapot a szerelő
+  telefonon nyitja, a két tábla ott kártyalista: a tétel címe a megnevezés (a hozzá tartozó
+  eszköz- és partnerkód alatta), a verzióé a verzió neve. A tétel "#" oszlopa a kártyán nem kell
+  (a sorrend a lista sorrendje), ezért ott rejtett. A "Megnevezés" és az "Indoklás" a rugalmas oszlop.
+*/
+export const WORKSHEET_LINE_COLUMNS: PilotTableColumn<WorksheetLineDetail>[] = [
+  {
+    id: "position",
+    header: "#",
+    width: "50px",
+    phone: "hide",
+    cell: (line) => (
+      <span className="text-xs text-pilot-grey-400">{line.position}</span>
+    ),
+  },
+  {
+    id: "description",
+    header: "Megnevezés",
+    phone: "title",
+    cell: (line) => (
+      <div className="text-pilot-grey-900">
+        <div className="break-words font-semibold">{line.description}</div>
+        {line.detail ? (
+          <div className="text-xs text-pilot-grey-500">{line.detail}</div>
+        ) : null}
+        {line.assetNumber ? (
+          <div className="font-mono text-xs text-pilot-grey-500">
+            {line.assetNumber}
+          </div>
+        ) : null}
+        {line.partnerInternalCode ? (
+          <div className="text-xs text-pilot-grey-500">
+            Partner belső kódja:{" "}
+            <span className="font-mono">{line.partnerInternalCode}</span>
+          </div>
+        ) : null}
+      </div>
+    ),
+  },
+  {
+    id: "quantity",
+    header: "Mennyiség",
+    width: "120px",
+    nowrap: true,
+    cell: (line) => `${formatLaborHours(line.quantity)} ${line.unit}`,
+  },
+  {
+    id: "workers",
+    header: "Hányan",
+    width: "100px",
+    nowrap: true,
+    cell: (line) => (line.kind === "LABOR" ? `${line.workerCount} fő` : "–"),
+  },
+  {
+    id: "laborHours",
+    header: "Munkaóra",
+    width: "130px",
+    nowrap: true,
+    cell: (line) =>
+      line.kind === "LABOR"
+        ? `${formatLaborHours(line.laborHours)} munkaóra`
+        : "–",
+  },
+];
+
+export const WORKSHEET_VERSION_COLUMNS: PilotTableColumn<WorksheetVersionRow>[] =
+  [
+    {
+      id: "version",
+      header: "Verzió",
+      width: "120px",
+      cell: (version) => version.label ?? `${version.version}. verzió`,
+    },
+    {
+      id: "status",
+      header: "Állapot",
+      width: "130px",
+      cell: (version) => (
+        <PilotBadge variant={worksheetStatusPilotVariant(version.status)}>
+          {worksheetStatusLabel[version.status]}
+        </PilotBadge>
+      ),
+    },
+    {
+      id: "createdBy",
+      header: "Készítette",
+      width: "150px",
+      cell: (version) => (
+        <span className="text-xs text-pilot-grey-600">
+          {version.createdByName ?? "—"}
+          <span className="block text-pilot-grey-400">
+            {formatDateTime(version.createdAt)}
+          </span>
+        </span>
+      ),
+    },
+    {
+      id: "closedBy",
+      header: "Lezárta",
+      width: "150px",
+      cell: (version) => (
+        <span className="text-xs text-pilot-grey-600">
+          {version.closedByName ?? "—"}
+          <span className="block text-pilot-grey-400">
+            {formatDateTime(version.closedAt)}
+          </span>
+        </span>
+      ),
+    },
+    {
+      id: "reason",
+      header: "Indoklás",
+      cell: (version) => (
+        <span className="break-words text-xs text-pilot-grey-500">
+          {version.changeReason ?? "—"}
+        </span>
+      ),
+    },
+    {
+      id: "signature",
+      header: "Aláírás",
+      width: "220px",
+      cell: (version) => (
+        <span className="text-xs text-pilot-grey-600">
+          {version.signature ? (
+            <>
+              {`${version.signature.signerName} (${
+                version.signature.decision === "ACCEPTED"
+                  ? "elfogadta"
+                  : "elutasította"
+              })`}
+              {version.signature.signerNotice ? (
+                <span className="mt-0.5 block text-pilot-grey-400">
+                  {version.signature.signerNotice}
+                </span>
+              ) : null}
+            </>
+          ) : (
+            "—"
+          )}
+        </span>
+      ),
+    },
+  ];
 
 /**
  * A FIGMA MAKE TERV ÁTÜLTETÉSE -- MUNKALAP ADATLAP (8. kör, 2/3 rész).
@@ -403,76 +561,13 @@ export function PilotWorksheetDetailPage({
                 Nincs tétel. Tétel nélküli munkalap nem zárható le.
               </p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[640px] border-collapse text-sm">
-                  <thead>
-                    <tr className="border-b border-pilot-grey-100">
-                      {[
-                        "#",
-                        "Megnevezés",
-                        "Mennyiség",
-                        "Hányan",
-                        "Munkaóra",
-                      ].map((col) => (
-                        <th
-                          key={col}
-                          className="px-5 py-2.5 text-left text-xs font-medium text-pilot-grey-500"
-                        >
-                          {col}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {current.lines.map((line) => (
-                      <tr
-                        key={line.id}
-                        className="border-b border-pilot-grey-50"
-                      >
-                        <td className="px-5 py-3 text-xs text-pilot-grey-400">
-                          {line.position}
-                        </td>
-                        <td className="px-5 py-3 text-pilot-grey-900">
-                          <div className="break-words font-semibold">
-                            {line.description}
-                          </div>
-                          {line.detail ? (
-                            <div className="text-xs text-pilot-grey-500">
-                              {line.detail}
-                            </div>
-                          ) : null}
-                          {line.assetNumber ? (
-                            <div className="font-mono text-xs text-pilot-grey-500">
-                              {line.assetNumber}
-                            </div>
-                          ) : null}
-                          {line.partnerInternalCode ? (
-                            <div className="text-xs text-pilot-grey-500">
-                              Partner belső kódja:{" "}
-                              <span className="font-mono">
-                                {line.partnerInternalCode}
-                              </span>
-                            </div>
-                          ) : null}
-                        </td>
-                        <td className="whitespace-nowrap px-5 py-3 text-pilot-grey-700">
-                          {formatLaborHours(line.quantity)} {line.unit}
-                        </td>
-                        <td className="whitespace-nowrap px-5 py-3 text-pilot-grey-700">
-                          {line.kind === "LABOR"
-                            ? `${line.workerCount} fő`
-                            : "–"}
-                        </td>
-                        <td className="whitespace-nowrap px-5 py-3 text-pilot-grey-700">
-                          {line.kind === "LABOR"
-                            ? `${formatLaborHours(line.laborHours)} munkaóra`
-                            : "–"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <PilotDataTable
+                columns={WORKSHEET_LINE_COLUMNS}
+                rows={current.lines}
+                rowKey={(line) => line.id}
+                rowTestId="worksheet-line-row"
+                minWidth={WORKSHEET_LINE_TABLE_MIN_WIDTH}
+              />
             )}
             <div className="flex items-baseline justify-between border-t border-pilot-grey-100 px-5 py-3">
               <span className="text-xs text-pilot-grey-600">
@@ -505,81 +600,13 @@ export function PilotWorksheetDetailPage({
 
           <PilotCard>
             <PilotCardHeader title="Verziók" />
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] border-collapse text-sm">
-                <thead>
-                  <tr className="border-b border-pilot-grey-100">
-                    {[
-                      "Verzió",
-                      "Állapot",
-                      "Készítette",
-                      "Lezárta",
-                      "Indoklás",
-                      "Aláírás",
-                    ].map((col) => (
-                      <th
-                        key={col}
-                        className="px-5 py-2.5 text-left text-xs font-medium text-pilot-grey-400"
-                      >
-                        {col}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {worksheet.versions.map((version) => (
-                    <tr
-                      key={version.id}
-                      className="border-b border-pilot-grey-50"
-                    >
-                      <td className="px-5 py-2.5 text-pilot-grey-800">
-                        {version.label ?? `${version.version}. verzió`}
-                      </td>
-                      <td className="px-5 py-2.5">
-                        <PilotBadge
-                          variant={worksheetStatusPilotVariant(version.status)}
-                        >
-                          {worksheetStatusLabel[version.status]}
-                        </PilotBadge>
-                      </td>
-                      <td className="px-5 py-2.5 text-xs text-pilot-grey-600">
-                        {version.createdByName ?? "—"}
-                        <div className="text-pilot-grey-400">
-                          {formatDateTime(version.createdAt)}
-                        </div>
-                      </td>
-                      <td className="px-5 py-2.5 text-xs text-pilot-grey-600">
-                        {version.closedByName ?? "—"}
-                        <div className="text-pilot-grey-400">
-                          {formatDateTime(version.closedAt)}
-                        </div>
-                      </td>
-                      <td className="max-w-[160px] truncate px-5 py-2.5 text-xs text-pilot-grey-500">
-                        {version.changeReason ?? "—"}
-                      </td>
-                      <td className="px-5 py-2.5 text-xs text-pilot-grey-600">
-                        {version.signature ? (
-                          <>
-                            {`${version.signature.signerName} (${
-                              version.signature.decision === "ACCEPTED"
-                                ? "elfogadta"
-                                : "elutasította"
-                            })`}
-                            {version.signature.signerNotice ? (
-                              <span className="mt-0.5 block text-pilot-grey-400">
-                                {version.signature.signerNotice}
-                              </span>
-                            ) : null}
-                          </>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <PilotDataTable
+              columns={WORKSHEET_VERSION_COLUMNS}
+              rows={worksheet.versions}
+              rowKey={(version) => version.id}
+              rowTestId="worksheet-version-row"
+              minWidth={WORKSHEET_VERSION_TABLE_MIN_WIDTH}
+            />
           </PilotCard>
         </div>
 
