@@ -300,6 +300,18 @@ describe("the command", () => {
   it("says so when everything was already there, and removes on --remove", async () => {
     const again = await run(["--apply", "--db-host", "db-stage.internal"]);
     assert.match(again.out, /Mind megvan már/);
+    // a run that created only one kind of row still says it wrote
+    for (const only of [
+      { customers: 1 },
+      { quotes: 1 },
+      { posSales: 1 },
+      { incomingInvoices: 1 },
+    ]) {
+      const partial = await run(["--apply", "--db-host", "db-stage.internal"], {
+        counts: only,
+      });
+      assert.match(partial.out, /Létrehozva/, JSON.stringify(only));
+    }
     const gone = await run(["--remove", "--db-host", "db-stage.internal"], {
       counts: { customers: 3, quotes: 3, posSales: 4, incomingInvoices: 5 },
     });
