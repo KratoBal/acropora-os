@@ -92,3 +92,5 @@ acropora-pre-m1.sql
 
 # the screen check's pictures and summary (apps/web/e2e-screens)
 apps/web/test-results/
+# the screen check's login session, outside the pictures (apps/web/e2e-screens/paths.ts)
+apps/web/.auth/

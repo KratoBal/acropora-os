@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+import { AUTH_STATE, OUT } from "./paths";
+
 /**
  * KÉPERNYŐKÉP-ELLENŐRZÉS (kártya 4cb013c3, T1.1): a web minden statikus lapja 390, 1024 és 1440 px-en; a lap nem lehet
  * szélesebb a képernyőnél, és minden lapról kép készül. Egy futó példány ellen megy (stage vagy egy CI-ben indított
@@ -10,9 +12,10 @@ import { defineConfig, devices } from "@playwright/test";
  *   UI_SCREENS_PASSWORD_FILE  a jelszót tartalmazó fájl útja (a jelszó így nem kerül a parancssorba)
  *   UI_SCREENS_OUT            a képek és az összesítő helye (alapból test-results/ui-screens)
  *
- * Futtatás: `pnpm --filter @acropora/web ui:screens`.
+ * Futtatás: `pnpm --filter @acropora/web ui:screens`. A lapnézés nem írhat: minden nem olvasó kérést a böngésző
+ * megszakít (`write-guard.ts`), és ennek az öntesztje (`onteszt` projekt) fut elsőként; a munkamenet-fájl az OUT-on
+ * kívül áll, és a futás végén törlődik (`paths.ts`, `global-teardown.ts`).
  */
-const OUT = process.env.UI_SCREENS_OUT ?? "test-results/ui-screens";
 
 export default defineConfig({
   testDir: ".",
@@ -23,14 +26,22 @@ export default defineConfig({
   retries: 0,
   timeout: 60_000,
   reporter: [["list"]],
+  globalTeardown: "./global-teardown.ts",
   use: {
     baseURL: process.env.UI_SCREENS_BASE_URL,
     timezoneId: "Europe/Budapest",
     locale: "hu-HU",
     trace: "off",
+    // a service worker kérései a kontextus szűrőjén kívül mennének (write-guard.ts)
+    serviceWorkers: "block",
   },
   projects: [
-    { name: "login", testMatch: /login\.setup\.pw\.ts$/ },
+    { name: "onteszt", testMatch: /write-guard\.selftest\.pw\.ts$/ },
+    {
+      name: "login",
+      testMatch: /login\.setup\.pw\.ts$/,
+      dependencies: ["onteszt"],
+    },
     {
       name: "telefon-390",
       testMatch: /screens\.pw\.ts$/,
@@ -38,7 +49,7 @@ export default defineConfig({
       use: {
         ...devices["Pixel 7"],
         viewport: { width: 390, height: 844 },
-        storageState: `${OUT}/.login.json`,
+        storageState: AUTH_STATE,
       },
     },
     {
@@ -48,7 +59,7 @@ export default defineConfig({
       use: {
         ...devices["Desktop Chrome"],
         viewport: { width: 1024, height: 768 },
-        storageState: `${OUT}/.login.json`,
+        storageState: AUTH_STATE,
       },
     },
     {
@@ -58,7 +69,7 @@ export default defineConfig({
       use: {
         ...devices["Desktop Chrome"],
         viewport: { width: 1440, height: 900 },
-        storageState: `${OUT}/.login.json`,
+        storageState: AUTH_STATE,
       },
     },
   ],

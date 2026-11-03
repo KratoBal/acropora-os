@@ -8,14 +8,17 @@ import {
   screenFileName,
   shellRoutes,
 } from "../src/lib/ui-screens/shell-routes";
+import { OUT } from "./paths";
+import { blockedCell, blockWrites } from "./write-guard";
 
 /*
   MINDEN STATIKUS LAP, A HÁROM SZÉLESSÉGEN (kártya 4cb013c3, T1.1). MI PIROSÍT: ha egy lap szélesebb a képernyőnél (a
   2026-11-03-i söprés 398, 443 és 896 px-es lapokat talált 390-en, a beolvadás UTÁN). A kép minden lapról elkészül, a
   pirostól függetlenül; az összesítő (summary.tsv) soronként: projekt, út, a lap és a képernyő szélessége, az állapot.
-  A belépőre visszadobott lap nem piros, hanem "nincs-jog" (a fiók jogai döntenek, nem a lap).
+  A belépőre visszadobott lap nem piros, hanem "nincs-jog" (a fiók jogai döntenek, nem a lap). A LAPNÉZÉS NEM ÍR: minden
+  nem olvasó kérést a böngésző megszakít (write-guard.ts), és az összesítő utolsó oszlopa megnevezi, melyik lap mit
+  próbált küldeni (barracuda, #2091). Ez lelet, nem piros: a lap képe és szélessége akkor is mérhető.
 */
-const OUT = process.env.UI_SCREENS_OUT ?? "test-results/ui-screens";
 // the web package is ESM, so the folder comes from import.meta.url
 const HERE = dirname(fileURLToPath(import.meta.url));
 const APP = join(HERE, "..", "src", "app");
@@ -35,7 +38,8 @@ test("POZITÍV KONTROLL: a lapok listája nem üres", () => {
 });
 
 for (const route of routes) {
-  test(route, async ({ page }, info) => {
+  test(route, async ({ context, page }, info) => {
+    const blocked = await blockWrites(context);
     const response = await page.goto(route, { waitUntil: "domcontentloaded" });
     // a lap adatai kliensoldalon töltődnek: a hálózat elcsendesedésére várunk, de egy beragadt kérés ne állítsa meg a sort
     await page
@@ -60,7 +64,7 @@ for (const route of routes) {
         : "ok";
     appendFileSync(
       join(OUT, "summary.tsv"),
-      `${info.project.name}\t${route}\t${scrollWidth}\t${innerWidth}\t${response?.status() ?? "-"}\t${state}\n`,
+      `${info.project.name}\t${route}\t${scrollWidth}\t${innerWidth}\t${response?.status() ?? "-"}\t${state}\t${blockedCell(blocked)}\n`,
     );
     if (!noAccess)
       expect(
