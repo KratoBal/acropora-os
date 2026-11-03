@@ -14,6 +14,7 @@ import {
   pairingNumberKey,
   pairingNumberKeys,
   pairingTaxKey,
+  supplierTaxBase,
   paymentStateOf,
   toIncomingDetail,
   toIncomingListItem,
@@ -345,6 +346,60 @@ describe("bankMatchOf", () => {
       }),
       false,
     );
+  });
+
+  /*
+    A SAJÁT ADÓSZÁMUNK ÉS A KÜLFÖLDI AZONOSÍTÓ NEM SZÁLLÍTÓI KULCS (barracuda, #2093 review;
+    ugyanaz a hibacsalád, mint a #2013: egy hamis „papíron megvan” elrejt egy hiányzó
+    számlát). MI PIROSÍT: ha a vevő (mi) adószáma szállítói kulccsá válna (a kiolvasás egy
+    számlán a vevőét is látja); ha két külföldi cég azonos nyolc számjegye ugyanazt a kulcsot
+    adná (DE123456789 és ATU12345678); ha a magyar alak (8 vagy 11 jegy, HU előtaggal) nem
+    menne át.
+  */
+  it("our own tax number and a foreign identifier are not a supplier key", () => {
+    assert.equal(
+      supplierTaxBase("23916229-2-42"),
+      null,
+      "the buyer's own number",
+    );
+    assert.equal(supplierTaxBase("23916229"), null);
+    assert.equal(supplierTaxBase("DE123456789"), null);
+    assert.equal(supplierTaxBase("ATU12345678"), null);
+    assert.equal(supplierTaxBase("12345678"), "12345678");
+    assert.equal(supplierTaxBase("12345678-2-41"), "12345678");
+    assert.equal(supplierTaxBase("HU12345678"), "12345678");
+    assert.equal(supplierTaxBase(null), null);
+    assert.equal(pairingTaxKey("KI 1", "23916229-2-42"), null);
+    assert.equal(pairingTaxKey("KI 1", "DE123456789"), null);
+  });
+
+  it("two different suppliers with the same number, both read with OUR tax number, do not share a mark", () => {
+    const marks = new Map(
+      pairingNumberKeys("KI 2026/77", "Első Kft.", "23916229-2-42").map(
+        (key) => [key, pairing({ paperOriginal: true })],
+      ),
+    );
+    const second = toIncomingListItem(
+      row({
+        sourceDocumentId: null,
+        documentNumber: "KI-2026-77",
+        supplierName: "Második Kft.",
+        supplierTaxNumber: "23916229-2-42",
+      }),
+      marks,
+    );
+    assert.equal(second.paperOriginal, false);
+    // ugyanaz a szállító (a név egyezik) a nev-kulcson továbbra is megtalálja
+    const same = toIncomingListItem(
+      row({
+        sourceDocumentId: null,
+        documentNumber: "KI-2026-77",
+        supplierName: "Első Kft.",
+        supplierTaxNumber: "23916229-2-42",
+      }),
+      marks,
+    );
+    assert.equal(same.paperOriginal, true);
   });
 
   it("the keys: the tax-number key first, the name key after, only what the data allows", () => {

@@ -11,14 +11,17 @@ import type {
   IncomingReadingValues,
   IncomingRelatedDocument,
 } from "@acropora/types";
-import { paymentStateOf as sharedPaymentStateOf } from "@acropora/types";
+import {
+  ACROPORA_COMPANY,
+  paymentStateOf as sharedPaymentStateOf,
+} from "@acropora/types";
 
 import type { DocumentPairing } from "../missing-invoices/missing-invoices.service.js";
 import {
   normalizeName,
   shownNumber,
 } from "../missing-invoices/missing-invoice-matching.js";
-import { taxBase } from "./billing-duplicates.js";
+import { hungarianTaxBase } from "../purchasing/nav-incoming-invoices/nav-incoming-invoice.types.js";
 import { externalKindLabel as feedKindLabel } from "./billing-document-list.js";
 
 /**
@@ -308,10 +311,27 @@ export function pairingTaxKey(
   supplierTaxNumber: string | null | undefined,
 ): string | null {
   const compact = compactNumber(documentNumber);
-  const base = taxBase(supplierTaxNumber);
+  const base = supplierTaxBase(supplierTaxNumber);
   return compact && base
     ? `${PAIRING_NUMBER_PREFIX}${compact}|tax:${base}`
     : null;
+}
+
+/**
+ * A SZÁLLÍTÓ ADÓSZÁM-TÖRZSE, AMIT KULCSNAK SZABAD HASZNÁLNI (barracuda, #2093 review).
+ * Két eset NEM szállítói azonosító, és a kulcs ilyenkor hallgat (marad a név-kulcs):
+ *   - a SAJÁT adószámunk (a vevő): egy számlán mindig ott áll, és ha a kiolvasás egyszer
+ *     azt veszi szállítóénak, két különböző szállító azonos számú számlája ugyanazt a
+ *     kulcsot kapná, és az egyik „papíron megvan” jelölése a másikra menne át;
+ *   - egy nem magyar azonosító (DE123456789, ATU12345678): a `taxBase` minden számjegyet
+ *     összeszedne, és két külföldi cég ugyanarra a nyolc számjegyre eshetne. Csak a 8 vagy
+ *     11 jegyű magyar alak (`hungarianTaxBase`) kulcs.
+ */
+export function supplierTaxBase(
+  supplierTaxNumber: string | null | undefined,
+): string | null {
+  const base = hungarianTaxBase(supplierTaxNumber);
+  return base && base !== ACROPORA_COMPANY.taxNumberBase ? base : null;
 }
 
 /**
