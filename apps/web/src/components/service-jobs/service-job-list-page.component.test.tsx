@@ -204,6 +204,31 @@ describe("ServiceJobListPage", () => {
     expect(await screen.findByText(/van több/)).toBeTruthy();
   });
 
+  /*
+    A KARBANTARTÁSI LISTA A SAJÁT SZAVAIT HASZNÁLJA (acrobot 2. söprés, hibak-aa): az első csempe "Nyitott
+    hibajegy" volt a karbantartási lapok listáján is. MI PIROSÍT: ha a karbantartási lista csempéje vagy üres
+    üzenete újra "hibajegy", vagy a hibajegy-lista szavai megváltoznak.
+  */
+  it("a karbantartási lista nyitott csempéje és üres üzenete karbantartási lapot mond", async () => {
+    api.list.mockResolvedValue(response({ items: [] }));
+    render(<ServiceJobListPage kind="MAINTENANCE" />);
+
+    expect(
+      await screen.findByText(
+        "Nyitott karbantartási lap jelenleg nincs. A lezártakat a fenti füleken nézheted meg.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText("Nyitott karbantartási lap")).toBeTruthy();
+    expect(screen.queryByText("Nyitott hibajegy")).toBeNull();
+  });
+
+  it("a hibajegy-lista csempéje Nyitott hibajegy marad", async () => {
+    api.list.mockResolvedValue(response({ items: [] }));
+    render(<ServiceJobListPage />);
+
+    expect(await screen.findByText("Nyitott hibajegy")).toBeTruthy();
+  });
+
   it("üres listán megmondja, hogy a lezártak külön kérhetők", async () => {
     api.list.mockResolvedValue(response({ items: [] }));
     render(<ServiceJobListPage />);
