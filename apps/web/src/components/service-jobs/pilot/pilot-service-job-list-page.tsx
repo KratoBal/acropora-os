@@ -152,7 +152,7 @@ type JobRow = ServiceJobListResponse["items"][number];
   A cím tördelődik, a hibajegy száma alatta áll (a terv kétsoros címet rajzol, itt a hosszú cím a
   számot lejjebb tolja, nem fedi el).
 
-  A TÁBLA 1440 PX-EN IS BELEFÉRT A KÁRTYÁBA (acrobot képe, 2026-11-03, stage 6f221c3d: az utolsó
+  A TÁBLA 1440 PX-EN NEM FÉRT BELE A KÁRTYÁBA, MOSTANTÓL BELEFÉR (acrobot képe, 2026-11-03, stage 6f221c3d: az utolsó
   oszlop levágva, belső görgetéssel). A rögzített szélességek összege 1220 volt, a kártya 1440 px-en
   1152 (1440 - 224 oldalsáv - 2 x 32 lapszél), tehát a betűtípustól függetlenül görgetett. Mostantól
   a Hibajegy és a Partner oszlop kapja a maradékot (nincs rögzített szélességük), a rögzítettek
