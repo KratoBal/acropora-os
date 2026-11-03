@@ -1,5 +1,4 @@
 "use client";
-import { currencyLabel } from "@/lib/format/currency";
 import {
   Alert,
   Button,
@@ -11,6 +10,7 @@ import {
   type PilotTableColumn,
 } from "@acropora/ui";
 import {
+  formatMoney,
   hasPermission,
   PERMISSIONS,
   type ExpectedArrivalListItem,
@@ -61,11 +61,6 @@ function matches(item: ExpectedArrivalListItem, search: string): boolean {
   return [item.supplierName, item.orderReference, item.invoiceNumber].some(
     (value) => value?.toLowerCase().includes(needle),
   );
-}
-
-function formatAmount(value: number | null, currency: string | null): string {
-  if (value === null) return "—";
-  return `${value.toLocaleString("hu-HU", { maximumFractionDigits: 2 })} ${currencyLabel(currency)}`.trim();
 }
 
 /** A kézi ellenőrzés eredménye egy mondatban. */
@@ -352,7 +347,7 @@ function ExpectedArrivalView(props: {
       width: "14%",
       cell: (item) => (
         <span className="font-semibold text-pilot-grey-900">
-          {formatAmount(item.netTotal, item.currency)}
+          {formatMoney(item.netTotal, item.currency, { fractionDigits: 2 })}
         </span>
       ),
     },
@@ -569,7 +564,10 @@ function ExpectedArrivalView(props: {
                     <span className="text-xs text-pilot-grey-600">
                       {item.invoiceNumber ?? item.orderReference ?? "—"}
                     </span>{" "}
-                    · {formatAmount(item.netTotal, item.currency)}
+                    ·{" "}
+                    {formatMoney(item.netTotal, item.currency, {
+                      fractionDigits: 2,
+                    })}
                   </span>
                   {canManage ? (
                     <PilotButton

@@ -1,6 +1,7 @@
 "use client";
 import { Alert, EmptyState, PilotPageHeader, Skeleton } from "@acropora/ui";
 import {
+  formatMoney,
   hasPermission,
   PERMISSIONS,
   type SupplierPriceSuggestionItem,
@@ -295,7 +296,9 @@ export function PriceListSuggestionsPage() {
                       head.listedBrand,
                       head.gtin ? `vonalkód ${head.gtin}` : "nincs vonalkód",
                       head.unitPrice
-                        ? `${head.unitPrice} ${head.currency ?? ""}`.trim()
+                        ? formatMoney(head.unitPrice, head.currency, {
+                            fractionDigits: 2,
+                          })
                         : null,
                     ]
                       .filter(Boolean)

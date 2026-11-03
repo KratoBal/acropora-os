@@ -14,6 +14,7 @@ import {
   type PilotTableColumn,
 } from "@acropora/ui";
 import {
+  formatMoney,
   hasPermission,
   PERMISSIONS,
   type PurchaseInvoiceDetail,
@@ -28,10 +29,6 @@ import { currencyLabel } from "@/lib/format/currency";
 import { PurchaseInvoiceScans } from "./purchase-invoice-scans";
 import { PurchaseInvoiceEditForm } from "./purchase-invoice-edit-form";
 import { PurchaseInvoiceCancelForm } from "./purchase-invoice-cancel-form";
-
-function formatMoney(value: string, currency: string): string {
-  return `${Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 })} ${currencyLabel(currency)}`;
-}
 
 type PurchaseLine = PurchaseInvoiceDetail["lines"][number];
 
@@ -133,7 +130,8 @@ export function purchaseLineColumns(
       width: "100px",
       align: "right",
       nowrap: true,
-      cell: (line) => formatMoney(line.unitNet, currency),
+      cell: (line) =>
+        formatMoney(line.unitNet, currency, { fractionDigits: 2 }),
     },
     {
       id: "discount",
@@ -150,7 +148,7 @@ export function purchaseLineColumns(
       nowrap: true,
       cell: (line) => (
         <span className="font-semibold text-dusk-900">
-          {formatMoney(line.lineNet, currency)}
+          {formatMoney(line.lineNet, currency, { fractionDigits: 2 })}
         </span>
       ),
     },
@@ -346,7 +344,9 @@ export function PurchaseInvoiceDetailPage({
                 </div>
                 <div>
                   <dt className="text-dusk-400">Pénznem</dt>
-                  <dd className="mt-1 text-dusk-700">{detail.currency}</dd>
+                  <dd className="mt-1 text-dusk-700">
+                    {currencyLabel(detail.currency)}
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-dusk-400">MNB árfolyam</dt>
@@ -386,7 +386,9 @@ export function PurchaseInvoiceDetailPage({
                 <div className="text-right">
                   <p className="text-dusk-400">Nettó összeg</p>
                   <p className="text-lg font-bold text-dusk-900">
-                    {formatMoney(detail.totalNet, detail.currency)}
+                    {formatMoney(detail.totalNet, detail.currency, {
+                      fractionDigits: 2,
+                    })}
                   </p>
                 </div>
               </div>

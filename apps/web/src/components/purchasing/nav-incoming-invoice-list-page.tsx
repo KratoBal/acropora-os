@@ -1,5 +1,4 @@
 "use client";
-import { currencyLabel } from "@/lib/format/currency";
 import {
   Alert,
   Button,
@@ -10,6 +9,7 @@ import {
   type PilotTableColumn,
 } from "@acropora/ui";
 import {
+  formatMoney,
   hasPermission,
   PERMISSIONS,
   type NavIncomingInvoiceListResponse,
@@ -34,11 +34,6 @@ import {
   PilotListCard,
   PurchasingTabs,
 } from "./purchasing-pilot-shell";
-
-function formatAmount(value: string | undefined, currency: string): string {
-  if (!value) return "—";
-  return `${Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 })} ${currencyLabel(currency)}`;
-}
 
 /** A bruttó a nettó és az ÁFA összege; ÁFA nélkül nincs bruttó. */
 export function navGross(
@@ -232,7 +227,7 @@ export function NavIncomingInvoiceListPage() {
       width: "14%",
       cell: (item) => (
         <span className="font-semibold text-pilot-grey-900">
-          {formatAmount(navGross(item), item.currency)}
+          {formatMoney(navGross(item), item.currency, { fractionDigits: 2 })}
         </span>
       ),
     },

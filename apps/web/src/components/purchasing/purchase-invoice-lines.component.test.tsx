@@ -79,8 +79,20 @@ describe("purchaseLineColumns", () => {
 
   it("shows the invoice currency and a dash for no discount", () => {
     renderLines([line], "EUR");
-    expect(screen.getByText(/4\s?800\s+EUR/)).toBeTruthy();
+    // another currency has two decimals and its code (the shared rule, T1.5)
+    expect(screen.getByText(/4\s?800,00\s+EUR/)).toBeTruthy();
     expect(screen.getByText("—")).toBeTruthy();
+  });
+
+  // T1.5 (acrobot 41593): a net unit price keeps its stored fillér, with two decimals
+  it("keeps a net unit price's fillér: 1234,50 Ft, not a rounded 1235 Ft", () => {
+    const { container } = renderLines(
+      [{ ...line, unitNet: "1234.5", lineNet: "2469" }],
+      "HUF",
+    );
+    expect(container.textContent).toMatch(/1234,50\s+Ft/);
+    expect(container.textContent).toMatch(/2469\s+Ft/);
+    expect(container.textContent).not.toMatch(/1235\s+Ft/);
   });
 
   it("writes a forint amount as Ft, not as the ISO code", () => {

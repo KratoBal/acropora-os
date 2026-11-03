@@ -8,6 +8,7 @@ import {
   Skeleton,
 } from "@acropora/ui";
 import {
+  formatMoney,
   hasPermission,
   PERMISSIONS,
   type NavIncomingInvoiceDetail,
@@ -28,11 +29,6 @@ import { navIncomingInvoicesApi } from "@/lib/api/nav-incoming-invoices";
 import { currencyLabel } from "@/lib/format/currency";
 
 import { navGross } from "./nav-incoming-invoice-list-page";
-
-function formatAmount(value: string | undefined, currency: string): string {
-  if (!value) return "—";
-  return `${Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 })} ${currencyLabel(currency)}`;
-}
 
 const day = (value: string | undefined) =>
   value ? new Date(value).toLocaleDateString("hu-HU") : "—";
@@ -119,14 +115,16 @@ function NavLineCard({
         </ReadonlyField>
         <ReadonlyField label="Egység">{line.unit}</ReadonlyField>
         <ReadonlyField label="Nettó egységár" align="right">
-          {line.unitPrice ? formatAmount(line.unitPrice, currency) : "—"}
+          {line.unitPrice
+            ? formatMoney(line.unitPrice, currency, { fractionDigits: 2 })
+            : "—"}
         </ReadonlyField>
         <ReadonlyField label="ÁFA" align="right">
           {line.vatRatePercent ? `${line.vatRatePercent}%` : "—"}
         </ReadonlyField>
         <div className="col-span-2 flex items-end justify-end sm:col-span-1">
           <p className="pb-2 text-sm font-semibold text-pilot-grey-900">
-            {formatAmount(line.lineNetAmount, currency)}
+            {formatMoney(line.lineNetAmount, currency, { fractionDigits: 2 })}
           </p>
         </div>
       </div>
@@ -311,7 +309,9 @@ export function NavIncomingInvoiceDetailPage({
                 <ReadonlyField label="Számlaszám">
                   {detail.navInvoiceNumber}
                 </ReadonlyField>
-                <ReadonlyField label="Pénznem">{detail.currency}</ReadonlyField>
+                <ReadonlyField label="Pénznem">
+                  {currencyLabel(detail.currency)}
+                </ReadonlyField>
                 <ReadonlyField label="Teljesítés">
                   {day(detail.invoiceDeliveryDate)}
                 </ReadonlyField>
@@ -322,13 +322,19 @@ export function NavIncomingInvoiceDetailPage({
                   {day(detail.paymentDate)}
                 </ReadonlyField>
                 <ReadonlyField label="Nettó összeg" align="right">
-                  {formatAmount(detail.invoiceNetAmount, detail.currency)}
+                  {formatMoney(detail.invoiceNetAmount, detail.currency, {
+                    fractionDigits: 2,
+                  })}
                 </ReadonlyField>
                 <ReadonlyField label="ÁFA" align="right">
-                  {formatAmount(detail.invoiceVatAmount, detail.currency)}
+                  {formatMoney(detail.invoiceVatAmount, detail.currency, {
+                    fractionDigits: 2,
+                  })}
                 </ReadonlyField>
                 <ReadonlyField label="Bruttó" align="right">
-                  {formatAmount(navGross(detail), detail.currency)}
+                  {formatMoney(navGross(detail), detail.currency, {
+                    fractionDigits: 2,
+                  })}
                 </ReadonlyField>
                 {detail.supplierBankAccountNumber ? (
                   <div className="col-span-2">
@@ -365,7 +371,9 @@ export function NavIncomingInvoiceDetailPage({
                   <div className="text-right">
                     <p className="text-xs text-pilot-grey-500">Nettó összeg</p>
                     <p className="mt-1 text-[28px] font-semibold leading-[34px] text-pilot-grey-900">
-                      {formatAmount(detail.invoiceNetAmount, detail.currency)}
+                      {formatMoney(detail.invoiceNetAmount, detail.currency, {
+                        fractionDigits: 2,
+                      })}
                     </p>
                   </div>
                 </div>
