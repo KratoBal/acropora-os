@@ -1,5 +1,5 @@
 "use client";
-import { Alert, Icon } from "@acropora/ui";
+import { Alert, Icon, PilotDateField } from "@acropora/ui";
 import {
   aquariumEffectiveMeasurementTargetRange,
   isOutsideMeasurementRange,
@@ -396,18 +396,14 @@ export function PilotMeasurementHistoryPage({
                   </div>
                   {timeRange === "egyeni" ? (
                     <div className="mt-1 flex items-center gap-2">
-                      <input
-                        type="date"
+                      <PilotDateField
                         value={customFrom}
-                        onChange={(e) => setCustomFrom(e.target.value)}
-                        className="rounded-md px-2.5 py-1 text-xs text-pilot-grey-700 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+                        onChange={(nextValue) => setCustomFrom(nextValue)}
                       />
                       <span className="text-xs text-pilot-grey-400">–</span>
-                      <input
-                        type="date"
+                      <PilotDateField
                         value={customTo}
-                        onChange={(e) => setCustomTo(e.target.value)}
-                        className="rounded-md px-2.5 py-1 text-xs text-pilot-grey-700 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+                        onChange={(nextValue) => setCustomTo(nextValue)}
                       />
                     </div>
                   ) : null}

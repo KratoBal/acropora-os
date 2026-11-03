@@ -1,5 +1,6 @@
 "use client";
 
+import { PilotDateField } from "@acropora/ui";
 import { useState } from "react";
 import type { ContentChannel } from "@acropora/types";
 
@@ -151,11 +152,10 @@ export function ContentCreateForm({
           </label>
 
           <label htmlFor="content-planned-for">Tervezett nap</label>
-          <input
+          <PilotDateField
             id="content-planned-for"
-            type="date"
             value={plannedFor}
-            onChange={(e) => setPlannedFor(e.target.value)}
+            onChange={(nextValue) => setPlannedFor(nextValue)}
           />
         </>
       )}

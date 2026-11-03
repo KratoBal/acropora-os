@@ -7,6 +7,7 @@ import {
   EmptyState,
   Input,
   Skeleton,
+  PilotDateField,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -276,11 +277,10 @@ export function WorksheetMaterialRequests({
               <div className="flex flex-wrap items-end gap-2">
                 <label className="flex flex-col gap-1 text-xs text-dusk-500">
                   Szükséges (nem kötelező)
-                  <Input
-                    type="date"
+                  <PilotDateField
                     aria-label="Szükséges"
                     value={neededBy}
-                    onChange={(event) => setNeededBy(event.target.value)}
+                    onChange={(nextValue) => setNeededBy(nextValue)}
                     className="w-40"
                   />
                 </label>

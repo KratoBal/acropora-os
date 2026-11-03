@@ -10,6 +10,7 @@ import {
   PageHeader,
   Select,
   Textarea,
+  PilotDateField,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -239,11 +240,10 @@ export function ContentCreatePage() {
                 </label>
 
                 <FormField label="Tervezett nap">
-                  <Input
+                  <PilotDateField
                     aria-label="Tervezett nap"
-                    type="date"
                     value={plannedFor}
-                    onChange={(event) => setPlannedFor(event.target.value)}
+                    onChange={(nextValue) => setPlannedFor(nextValue)}
                   />
                 </FormField>
               </>
