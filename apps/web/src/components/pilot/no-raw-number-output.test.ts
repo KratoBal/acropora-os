@@ -23,14 +23,6 @@ type Szabaly = "toFixed" | "nyers-penznem" | "huf-felirat" | "helyi-formazo";
 /** `szabály:fájl` -> miért áll még itt. Csak fogyhat. */
 const KIVETELEK = new Map<string, string>([
   [
-    "helyi-formazo:components/quotes/quote-format.ts",
-    "árajánlat: formatQuoteMoney és formatQuantity; kiváltás az árajánlat-szeletben",
-  ],
-  [
-    "helyi-formazo:components/worksheets/worksheet-labels.ts",
-    "munkalap: formatAmount; kiváltás a munkalap-szeletben",
-  ],
-  [
     "toFixed:components/products/product-detail-page.tsx",
     "a bruttó beszerzési ár számolt értéke; a kiírás formatMoney-n át megy: marad",
   ],

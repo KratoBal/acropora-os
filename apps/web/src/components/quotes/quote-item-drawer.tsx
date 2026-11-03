@@ -9,6 +9,7 @@ import {
 } from "@acropora/ui";
 import { RichTextEditor } from "@acropora/ui/rich-text-editor";
 import {
+  formatPercent,
   EMPTY_QUOTE_RICH_TEXT,
   type QuoteCostingLineDto,
   type QuoteDetailDto,
@@ -266,18 +267,22 @@ export function QuoteItemDrawer({
                   ? `Javasolt egységár (${SUGGESTION_SOURCE[costing.suggestedPriceSource]}${costing.suggestedPriceComplete ? "" : ", hiányos"})`
                   : "Javasolt egységár"
               }
-              value={formatQuoteMoney(costing.suggestedUnitPrice, currency)}
+              value={formatQuoteMoney(costing.suggestedUnitPrice, currency, {
+                fractionDigits: 2,
+              })}
             />
             <Row
               label="Ajánlati egységár (nettó)"
-              value={formatQuoteMoney(costing.unitNetPrice, currency)}
+              value={formatQuoteMoney(costing.unitNetPrice, currency, {
+                fractionDigits: 2,
+              })}
             />
             <Row
               label="Tényleges fedezet"
               value={
                 costing.marginAmount === null
                   ? "—"
-                  : `${formatQuoteMoney(costing.marginAmount, currency)} · ${costing.marginPercent ?? "—"}%`
+                  : `${formatQuoteMoney(costing.marginAmount, currency)} · ${formatPercent(costing.marginPercent, 2)}`
               }
             />
             {costing.warnings.map((w) => (

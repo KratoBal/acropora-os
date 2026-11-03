@@ -108,7 +108,8 @@ export function quoteItemColumns({
       width: "150px",
       align: "right",
       nowrap: true,
-      cell: (item) => formatQuoteMoney(item.unitNetPrice, currency),
+      cell: (item) =>
+        formatQuoteMoney(item.unitNetPrice, currency, { fractionDigits: 2 }),
     },
     {
       id: "netTotal",

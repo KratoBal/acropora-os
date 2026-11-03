@@ -1179,7 +1179,7 @@ describe("Ajánlat szerkesztő (569:171)", () => {
     api.detail.mockResolvedValue(quote([version()]));
     const { unmount } = render(<QuoteEditorPage quoteId="q1" />);
     expect(await screen.findByText("Belső kalkuláció")).toBeTruthy();
-    expect(await screen.findByText(/33\s000 Ft · 62.26%/)).toBeTruthy();
+    expect(await screen.findByText(/33\s000 Ft · 62,26%/)).toBeTruthy();
     unmount();
 
     vi.clearAllMocks();

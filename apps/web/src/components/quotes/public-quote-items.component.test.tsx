@@ -108,4 +108,19 @@ describe("quoteItemColumns", () => {
       .reduce((a, b) => a + b, 0);
     expect(sum + 200).toBeLessThanOrEqual(QUOTE_ITEM_TABLE_MIN_WIDTH);
   });
+
+  // T1.5 (acrobot 41593): the unit price is where the fillér is real; the line total is whole
+  it("a unit price keeps its fillér, the line total stays whole forint", () => {
+    const { container } = renderItems([
+      {
+        ...fixed,
+        quantity: "10",
+        unitNetPrice: "787.4",
+        netTotal: "7874",
+      } as Item,
+    ]);
+    expect(container.textContent).toMatch(/787,40\s+Ft/);
+    expect(container.textContent).toMatch(/7874\s+Ft/);
+    expect(container.textContent).not.toMatch(/787\s+Ft/);
+  });
 });

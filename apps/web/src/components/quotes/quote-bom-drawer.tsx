@@ -11,13 +11,14 @@ import {
   PilotSelect,
   type PilotBadgeVariant,
 } from "@acropora/ui";
-import type {
-  QuoteBomItemDto,
-  QuoteBomKindValue,
-  QuoteBomLineDto,
-  QuoteCostingLineDto,
-  QuoteDetailDto,
-  QuoteInternalBlock,
+import {
+  formatPercent,
+  type QuoteBomItemDto,
+  type QuoteBomKindValue,
+  type QuoteBomLineDto,
+  type QuoteCostingLineDto,
+  type QuoteDetailDto,
+  type QuoteInternalBlock,
 } from "@acropora/types";
 import { useState } from "react";
 
@@ -56,7 +57,7 @@ export function costSourceText(row: QuoteBomItemDto, currency: string): string {
     return row.costCurrency && row.costCurrency !== "HUF"
       ? `Nincs költség: ${row.costCurrency} ár árfolyam nélkül.`
       : "Nincs költség.";
-  const unitCost = `${formatQuoteMoney(row.unitCost, currency)}/${row.unit}`;
+  const unitCost = `${formatQuoteMoney(row.unitCost, currency, { fractionDigits: 2 })}/${row.unit}`;
   if (row.costSource === "MANUAL") return `${unitCost} · kézi ár`;
   if (!row.sourcePurchaseInvoiceLineId)
     return `${unitCost} · tartalék (utolsó beszerzési ár)`;
@@ -198,7 +199,7 @@ export function QuoteBomDrawer({
               value={
                 costing.marginAmount === null
                   ? "—"
-                  : `${formatQuoteMoney(costing.marginAmount, currency)} · ${costing.marginPercent ?? "—"}%`
+                  : `${formatQuoteMoney(costing.marginAmount, currency)} · ${formatPercent(costing.marginPercent, 2)}`
               }
             />
             <Fact

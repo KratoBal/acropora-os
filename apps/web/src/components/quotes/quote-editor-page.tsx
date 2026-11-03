@@ -15,6 +15,7 @@ import {
 } from "@acropora/ui";
 import { RichTextEditor } from "@acropora/ui/rich-text-editor";
 import {
+  formatPercent,
   EMPTY_QUOTE_RICH_TEXT,
   hasPermission,
   PERMISSIONS,
@@ -558,7 +559,7 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
                       value={
                         costing.totals.marginAmount === null
                           ? "—"
-                          : `${formatQuoteMoney(costing.totals.marginAmount, v.currency)} · ${costing.totals.marginPercent ?? "—"}%`
+                          : `${formatQuoteMoney(costing.totals.marginAmount, v.currency)} · ${formatPercent(costing.totals.marginPercent, 2)}`
                       }
                     />
                     {costing.warnings.map((w) => (
@@ -801,7 +802,9 @@ function BlockCard({
                   <p className="font-semibold">
                     {item.isOptional ? "+ " : ""}
                     {formatQuantity(item.quantity)} {item.unit} ×{" "}
-                    {formatQuoteMoney(item.unitNetPrice, currency)}
+                    {formatQuoteMoney(item.unitNetPrice, currency, {
+                      fractionDigits: 2,
+                    })}
                   </p>
                   <div className="mt-2 flex flex-wrap justify-end gap-1">
                     <PilotButton
