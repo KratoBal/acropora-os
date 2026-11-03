@@ -26,7 +26,7 @@ import type { MedusaOrderOverviewRow } from "../../integrations/medusa/medusa-ad
 export const STORE_PICKUP_METHOD = "Bolti átvétel";
 
 /**
- * A FIZETÉSI SZOLGÁLTATÓ NEVE. Csak a két biztos azonosító kap nevet: a
+ * A FIZETÉSI SZOLGÁLTATÓ NEVE. Csak a biztosan ismert azonosítók kapnak nevet: a
  * szolgáltatók szerepét a webshop környezeti változói osztják ki, az OS nem
  * látja, tehát a többit nem találgatjuk, hanem kiírjuk.
  */
@@ -36,6 +36,9 @@ export function paymentMethodLabel(providerId: string | null): string | null {
   if (providerId === "pp_acropora_cod") return "Utánvét";
   // bb3a6bd5: előre utalás (commerce #506)
   if (providerId === "pp_acropora_transfer") return "Előre utalás";
+  // A bolt saját "Fizetés átvételkor" módja: a commerce kirakat ugyanezen az azonosítón
+  // nevezi (`lib/constants.tsx`, `pp_system_default`), tehát ez nem találgatás.
+  if (providerId === "pp_system_default") return "Fizetés átvételkor";
   return `Egyéb (${providerId})`;
 }
 

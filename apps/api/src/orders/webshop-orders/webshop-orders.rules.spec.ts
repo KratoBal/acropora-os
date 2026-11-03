@@ -109,6 +109,12 @@ describe("the order's payment provider (bb3a6bd5)", () => {
   it("prepayment by bank transfer has a name", () => {
     assert.equal(paymentMethodLabel("pp_acropora_transfer"), "Előre utalás");
   });
+
+  // The shop's own pay-at-pickup method: the storefront names this id the same way, and the
+  // list used to print it raw ("Egyéb (pp_system_default)").
+  it("pay at pickup has a name", () => {
+    assert.equal(paymentMethodLabel("pp_system_default"), "Fizetés átvételkor");
+  });
 });
 
 describe("payment", () => {
@@ -159,10 +165,10 @@ describe("payment", () => {
       [
         paymentMethodLabel("pp_stripe_stripe"),
         paymentMethodLabel("pp_acropora_cod"),
-        paymentMethodLabel("pp_system_default"),
+        paymentMethodLabel("pp_valami_uj"),
         paymentMethodLabel(null),
       ],
-      ["Stripe", "Utánvét", "Egyéb (pp_system_default)", null],
+      ["Stripe", "Utánvét", "Egyéb (pp_valami_uj)", null],
     );
   });
 });
