@@ -1,6 +1,12 @@
 "use client";
 
-import { Alert, Button, Skeleton } from "@acropora/ui";
+import {
+  Alert,
+  Button,
+  PilotDataTable,
+  Skeleton,
+  type PilotTableColumn,
+} from "@acropora/ui";
 import type {
   ReceiptsResponse,
   CashRegisterReceiptListResponse,
@@ -132,6 +138,84 @@ function paymentLabel(value: string) {
     .map((v) => PAYMENT_LABELS[v] ?? v)
     .join(" + ");
 }
+type Receipt = CashRegisterReceiptListResponse["items"][number];
+
+export const RECEIPT_TABLE_MIN_WIDTH = 840;
+
+export function receiptStatusLabel(r: Pick<Receipt, "cancelled" | "kind">) {
+  if (r.cancelled) return "Törölt";
+  if (r.kind === "STORNO") return "Sztornó";
+  if (r.kind === "RETURN") return "Visszáru";
+  return "Eladás";
+}
+
+/*
+  A NYUGTÁK A KÖZÖS TÁBLÁN (UI-áttekintés, 3. csomag, 2026-11-03). Telefonon a nyugta egy kártya: a
+  nyugtaszám (a sorai lenyithatók) a címe, a többi oszlop a felirata mellett áll. A "Kelt" nem törhet
+  sorba (`nowrap`). A "Nyugtaszám / AP" az egyetlen rugalmas oszlop.
+*/
+export const RECEIPT_COLUMNS: PilotTableColumn<Receipt>[] = [
+  {
+    id: "number",
+    header: "Nyugtaszám / AP",
+    cell: (r) => (
+      <details>
+        <summary className="cursor-pointer font-medium">
+          {r.receiptNumber}
+        </summary>
+        <p className="mt-1 text-xs text-pilot-grey-600">{r.apNumber}</p>
+        <ul className="mt-2 space-y-1">
+          {r.lines.map((l, i) => (
+            <li key={i}>
+              {l.quantity} × {l.name} · {amount(l.sum)} · {l.vatCode}
+            </li>
+          ))}
+        </ul>
+      </details>
+    ),
+  },
+  {
+    id: "issuedAt",
+    header: "Kelt",
+    width: "160px",
+    nowrap: true,
+    cell: (r) =>
+      new Intl.DateTimeFormat("hu-HU", {
+        timeZone: "Europe/Budapest",
+        dateStyle: "short",
+        timeStyle: "short",
+      }).format(new Date(r.issuedAt)),
+  },
+  {
+    id: "payment",
+    header: "Fizetési mód",
+    width: "170px",
+    cell: (r) => paymentLabel(r.paymentMeans),
+  },
+  {
+    id: "total",
+    header: "Végösszeg",
+    width: "140px",
+    nowrap: true,
+    cell: (r) => <span className="font-medium">{amount(r.total)}</span>,
+  },
+  {
+    id: "status",
+    header: "Állapot",
+    width: "150px",
+    cell: (r) => (
+      <>
+        {receiptStatusLabel(r)}
+        {r.validationCode === "WARN" && (
+          <span className="block text-xs text-pilot-accent-warm-text">
+            NAV figyelmeztetés
+          </span>
+        )}
+      </>
+    ),
+  },
+];
+
 function CashRegisterReceiptsView({ token }: { token: string }) {
   const [day, setDay] = useState(() =>
     new Intl.DateTimeFormat("en-CA", {
@@ -256,74 +340,13 @@ function CashRegisterReceiptsView({ token }: { token: string }) {
             </div>
           </section>
           <section className="overflow-x-auto rounded-2xl border border-pilot-grey-200 bg-white">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-pilot-grey-100 text-xs text-pilot-grey-600">
-                <tr>
-                  {[
-                    "Nyugtaszám / AP",
-                    "Kelt",
-                    "Fizetési mód",
-                    "Végösszeg",
-                    "Állapot",
-                  ].map((v) => (
-                    <th key={v} className="px-4 py-3">
-                      {v}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {data.items.map((r) => (
-                  <tr key={r.id} className="border-t border-pilot-grey-200">
-                    <td className="px-4 py-4">
-                      <details>
-                        <summary className="cursor-pointer font-medium">
-                          {r.receiptNumber}
-                        </summary>
-                        <p className="mt-1 text-xs text-pilot-grey-600">
-                          {r.apNumber}
-                        </p>
-                        <ul className="mt-2 space-y-1">
-                          {r.lines.map((l, i) => (
-                            <li key={i}>
-                              {l.quantity} × {l.name} · {amount(l.sum)} ·{" "}
-                              {l.vatCode}
-                            </li>
-                          ))}
-                        </ul>
-                      </details>
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-4">
-                      {new Intl.DateTimeFormat("hu-HU", {
-                        timeZone: "Europe/Budapest",
-                        dateStyle: "short",
-                        timeStyle: "short",
-                      }).format(new Date(r.issuedAt))}
-                    </td>
-                    <td className="px-4 py-4">
-                      {paymentLabel(r.paymentMeans)}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-4 font-medium">
-                      {amount(r.total)}
-                    </td>
-                    <td className="px-4 py-4">
-                      {r.cancelled
-                        ? "Törölt"
-                        : r.kind === "STORNO"
-                          ? "Sztornó"
-                          : r.kind === "RETURN"
-                            ? "Visszáru"
-                            : "Eladás"}
-                      {r.validationCode === "WARN" && (
-                        <span className="block text-xs text-pilot-accent-warm-text">
-                          NAV figyelmeztetés
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <PilotDataTable
+              columns={RECEIPT_COLUMNS}
+              rows={data.items}
+              rowKey={(r) => r.id}
+              rowTestId="receipt-row"
+              minWidth={RECEIPT_TABLE_MIN_WIDTH}
+            />
             {data.items.length === 0 && (
               <p className="px-5 py-14 text-center text-pilot-grey-600">
                 Ezen a napon nincs eltárolt pénztárgépes nyugta.
