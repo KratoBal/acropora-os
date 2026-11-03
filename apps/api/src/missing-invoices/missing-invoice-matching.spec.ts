@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import { Prisma } from "@acropora/database";
 
+import { candidateDocument } from "../testing/billing-documents.fixture.js";
 import {
   inWindow,
   matchMonth,
@@ -31,20 +32,15 @@ const debit = (overrides: Partial<MatchableDebit>): MatchableDebit => ({
   ...overrides,
 });
 
-const doc = (overrides: Partial<CandidateDocument>): CandidateDocument => ({
-  id: `c${++n}`,
-  source: "NAV",
-  number: `SZ-2026-${n}`,
-  date: "2026-08-05",
-  gross: D(1000),
-  currency: "HUF",
-  supplierName: "Szállító Kft.",
-  supplierAccounts: [],
-  kind: "INVOICE",
-  payee: "COMPANY",
-  hasOriginal: true,
-  ...overrides,
-});
+const doc = (overrides: Partial<CandidateDocument>): CandidateDocument =>
+  candidateDocument({
+    id: `c${++n}`,
+    number: `SZ-2026-${n}`,
+    date: "2026-08-05",
+    gross: D(1000),
+    hasOriginal: true,
+    ...overrides,
+  });
 
 const run = (
   debits: MatchableDebit[],

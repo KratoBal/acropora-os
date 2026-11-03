@@ -8,6 +8,7 @@ import {
 } from "@nestjs/common";
 import { Prisma } from "@acropora/database";
 
+import { documentPairing } from "../testing/billing-documents.fixture.js";
 import type { DocumentPairing } from "../missing-invoices/missing-invoices.service.js";
 import { IncomingBillingDocumentsController } from "./incoming-billing-documents.controller.js";
 import { mailboxPdfCandidates } from "./incoming-billing-documents.js";
@@ -28,28 +29,22 @@ const PNG = Buffer.from("\x89PNG kitalalt");
 const pairing = (
   document: Partial<DocumentPairing["document"]> = {},
   over: Partial<DocumentPairing> = {},
-): DocumentPairing => ({
-  payee: "COMPANY",
-  kind: "INVOICE",
-  debits: [{ bookingDate: "2026-09-12", amount: "8890", currency: "HUF" }],
-  paidInFull: true,
-  paperOriginal: false,
-  document: {
-    id: "mail-1",
-    source: "MAILBOX",
-    number: "Invoice-TT8KITALALT",
-    date: "2026-09-10",
-    gross: new Prisma.Decimal("20"),
-    currency: "USD",
-    supplierName: "Kitalált Előfizetés Inc.",
-    supplierAccounts: [],
-    kind: "INVOICE",
-    payee: "COMPANY",
-    hasOriginal: true,
-    ...document,
-  },
-  ...over,
-});
+): DocumentPairing =>
+  documentPairing({
+    debits: [{ bookingDate: "2026-09-12", amount: "8890", currency: "HUF" }],
+    document: {
+      id: "mail-1",
+      source: "MAILBOX",
+      number: "Invoice-TT8KITALALT",
+      date: "2026-09-10",
+      gross: new Prisma.Decimal("20"),
+      currency: "USD",
+      supplierName: "Kitalált Előfizetés Inc.",
+      hasOriginal: true,
+      ...document,
+    },
+    ...over,
+  });
 
 /** A vezérlő a saját `prisma` mezőjén olvas; a teszt ezt cseréli. */
 function controller(input: {

@@ -3,6 +3,10 @@ import { after, before, describe, it } from "node:test";
 
 import { Prisma, prisma } from "@acropora/database";
 
+import {
+  candidateDocument,
+  documentPairing,
+} from "../../testing/billing-documents.fixture.js";
 import { integrationDatabaseGate } from "../../common/integration-database.js";
 import type { DocumentPairing } from "../../missing-invoices/missing-invoices.service.js";
 import { IncomingReviewService } from "./incoming-review.service.js";
@@ -45,33 +49,28 @@ async function removeLeftovers() {
 }
 
 const document = (id: string, number: string, gross: string) =>
-  ({
+  candidateDocument({
     id,
     source: "MAILBOX",
     number,
     date: "2026-09-19",
     gross: new Prisma.Decimal(gross),
-    currency: "HUF",
     supplierName: "Kitalált",
-    supplierAccounts: [],
-    kind: "INVOICE",
-    payee: "COMPANY",
     hasOriginal: true,
-  }) as DocumentPairing["document"];
+  });
 
 const pairing = (
   id: string,
   number: string,
   gross: string,
   debit: string,
-): DocumentPairing => ({
-  payee: "COMPANY",
-  kind: "INVOICE",
-  paidInFull: true,
-  paperOriginal: false,
-  debits: [{ bookingDate: "2026-09-22", amount: `-${debit}`, currency: "HUF" }],
-  document: document(id, number, gross),
-});
+): DocumentPairing =>
+  documentPairing({
+    debits: [
+      { bookingDate: "2026-09-22", amount: `-${debit}`, currency: "HUF" },
+    ],
+    document: document(id, number, gross),
+  });
 
 describe(
   "az automatikus jóváhagyás az adatbázisban",

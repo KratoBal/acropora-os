@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import { Prisma } from "@acropora/database";
 
+import { candidateDocument } from "../testing/billing-documents.fixture.js";
 import { mergeSameInvoice } from "../missing-invoices/missing-invoices.repository.js";
 import type { CandidateDocument } from "../missing-invoices/missing-invoice-matching.js";
 import {
@@ -86,19 +87,16 @@ describe("one invoice, one row: the duplicate rules", () => {
       id: string,
       source: CandidateDocument["source"],
       hasOriginal: boolean,
-    ): CandidateDocument => ({
-      id,
-      source,
-      number: "A-1",
-      date: "2026-09-10",
-      gross: new Prisma.Decimal("1270"),
-      currency: "HUF",
-      supplierName: "Teszt Kft.",
-      supplierAccounts: [],
-      kind: "INVOICE",
-      payee: "COMPANY",
-      hasOriginal,
-    });
+    ): CandidateDocument =>
+      candidateDocument({
+        id,
+        source,
+        number: "A-1",
+        date: "2026-09-10",
+        gross: new Prisma.Decimal("1270"),
+        supplierName: "Teszt Kft.",
+        hasOriginal,
+      });
     const nav = candidate("nav", "NAV", false);
     const feed = candidate("feed", "SZAMLAZZ", true);
     const keys = new Map([

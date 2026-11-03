@@ -6,6 +6,7 @@ import { describe, it } from "node:test";
 import { Prisma } from "@acropora/database";
 import type { FetchLike, KnownRow } from "@acropora/jev";
 
+import { candidateDocument } from "../testing/billing-documents.fixture.js";
 import type { CandidateDocument } from "./missing-invoice-matching.js";
 import type {
   MissingInvoiceJevRepository,
@@ -29,19 +30,14 @@ const doc = (
   id: string,
   gross: number,
   supplierName: string,
-): CandidateDocument => ({
-  id,
-  source: "NAV",
-  number: `SZ-${id}`,
-  date: "2026-05-02",
-  gross: D(gross),
-  currency: "HUF",
-  supplierName,
-  supplierAccounts: [],
-  kind: "INVOICE",
-  payee: "COMPANY",
-  hasOriginal: true,
-});
+): CandidateDocument =>
+  candidateDocument({
+    id,
+    date: "2026-05-02",
+    gross: D(gross),
+    supplierName,
+    hasOriginal: true,
+  });
 const JELOLTEK = [
   doc("docA", 38000, "Valaki Más Kft."),
   doc("docB", 38488, "Magyar Telekom Nyrt."),

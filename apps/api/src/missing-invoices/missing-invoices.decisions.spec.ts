@@ -11,6 +11,7 @@ import {
 import { Prisma } from "@acropora/database";
 import type { AuthenticatedUser } from "@acropora/types";
 
+import { candidateDocument } from "../testing/billing-documents.fixture.js";
 import type { CandidateDocument } from "./missing-invoice-matching.js";
 import type { MissingInvoicesRepository } from "./missing-invoices.repository.js";
 import { MissingInvoicesService } from "./missing-invoices.service.js";
@@ -46,20 +47,13 @@ function setup(env: NodeJS.ProcessEnv = {}, extra: CandidateDocument[] = []) {
     categoryOverride: null as string | null,
     paperOriginalAt: null as Date | null,
   };
-  const nav: CandidateDocument = {
+  const nav: CandidateDocument = candidateDocument({
     id: "nav-1",
-    source: "NAV",
     number: "SZ-1",
     date: "2026-08-05",
     gross: new Prisma.Decimal(99999),
-    currency: "HUF",
-    supplierName: "Szállító Kft.",
-    supplierAccounts: [],
-    kind: "INVOICE",
-    payee: "COMPANY",
-    hasOriginal: false,
     aliasIds: ["mb-1"],
-  };
+  });
   const matches = new Map<string, string[]>();
   const audit: string[] = [];
   const marked: string[][] = [];
@@ -127,19 +121,17 @@ function setup(env: NodeJS.ProcessEnv = {}, extra: CandidateDocument[] = []) {
 /** Egy feltöltött, beszkennelt (szöveg nélküli) számla: a vevője nem olvasható. */
 const scanned = (
   payee: CandidateDocument["payee"] = "UNKNOWN",
-): CandidateDocument => ({
-  id: "up-1",
-  source: "UPLOAD",
-  number: "KB-2855/2026",
-  date: "2026-08-10",
-  gross: null,
-  currency: "HUF",
-  supplierName: "Sopro Hungária Kft.",
-  supplierAccounts: [],
-  kind: "INVOICE",
-  payee,
-  hasOriginal: true,
-});
+): CandidateDocument =>
+  candidateDocument({
+    id: "up-1",
+    source: "UPLOAD",
+    number: "KB-2855/2026",
+    date: "2026-08-10",
+    gross: null,
+    supplierName: "Sopro Hungária Kft.",
+    payee,
+    hasOriginal: true,
+  });
 
 describe("the decisions on a debit", () => {
   it("pairs by hand with the id of either source, and keeps the invoice for one debit", async () => {

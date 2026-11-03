@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import { Prisma } from "@acropora/database";
 
+import { candidateDocument } from "../testing/billing-documents.fixture.js";
 import {
   freeDocuments,
   jevPairInput,
@@ -20,20 +21,16 @@ const doc = (
   gross: number | null,
   supplierName: string,
   extra: Partial<CandidateDocument> = {},
-): CandidateDocument => ({
-  id: `doc${String(++n).padStart(3, "0")}`,
-  source: "NAV",
-  number: `SZ-${n}`,
-  date,
-  gross: gross === null ? null : D(gross),
-  currency: "HUF",
-  supplierName,
-  supplierAccounts: [],
-  kind: "INVOICE",
-  payee: "COMPANY",
-  hasOriginal: true,
-  ...extra,
-});
+): CandidateDocument =>
+  candidateDocument({
+    id: `doc${String(++n).padStart(3, "0")}`,
+    number: `SZ-${n}`,
+    date,
+    gross: gross === null ? null : D(gross),
+    supplierName,
+    hasOriginal: true,
+    ...extra,
+  });
 const debit = (
   amount: number,
   name: string,

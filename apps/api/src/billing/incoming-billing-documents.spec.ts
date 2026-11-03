@@ -4,6 +4,11 @@ import { describe, it } from "node:test";
 import { Prisma, type IncomingBillingDocument } from "@acropora/database";
 import type { IncomingDocumentListItem } from "@acropora/types";
 
+import {
+  candidateDocument,
+  documentPairing,
+  incomingBillingDocument,
+} from "../testing/billing-documents.fixture.js";
 import type { DocumentPairing } from "../missing-invoices/missing-invoices.service.js";
 import {
   bankMatchOf,
@@ -25,80 +30,29 @@ const day = (value: string) => new Date(`${value}T00:00:00Z`);
 
 const row = (
   over: Partial<IncomingBillingDocument> = {},
-): IncomingBillingDocument => ({
-  id: "in-1",
-  source: "SZAMLAZZ",
-  externalId: "5150",
-  feedMessageId: "msg-1",
-  feedReceivedAt: new Date("2026-10-01T08:00:00Z"),
-  versionCount: 2,
-  kindCode: "SZ",
-  documentNumber: "KI-2026/77",
-  electronic: true,
-  issueDate: day("2026-09-28"),
-  fulfillmentDate: day("2026-09-25"),
-  dueDate: day("2026-10-12"),
-  paymentMethod: "Átutalás",
-  currency: "HUF",
-  exchangeRate: null,
-  exchangeBank: null,
-  supplierName: "Korall Import Kft.",
-  supplierTaxNumber: "12345678-2-41",
-  supplierEuTaxNumber: null,
-  supplierAddress: "1010 Budapest, Minta utca 1.",
-  supplierBankAccount: null,
-  buyerName: "Acropora Kft.",
-  buyerTaxNumber: "23916229-2-42",
-  netAmount: D(10000),
-  vatAmount: D(2700),
-  grossAmount: D(12700),
-  lines: [],
-  vatSummary: [],
-  paymentsKnown: true,
-  payments: [],
-  paidAmount: D(0),
-  lastPaymentDate: null,
-  note: null,
-  orderNumber: null,
-  referencedInvoiceNumber: null,
-  referencedProformaNumber: null,
-  cancelled: false,
-  sourceDocumentId: "doc-1",
-  hasPdf: false,
-  notBookable: false,
-  notBookableAt: null,
-  paperOriginalAt: null,
-  createdAt: new Date("2026-10-01T08:00:00Z"),
-  updatedAt: new Date("2026-10-01T08:00:00Z"),
-  ...over,
-});
+): IncomingBillingDocument =>
+  incomingBillingDocument({
+    versionCount: 2,
+    documentNumber: "KI-2026/77",
+    supplierName: "Korall Import Kft.",
+    ...over,
+  });
 
 const debit = { bookingDate: "2026-09-30", amount: "12700", currency: "HUF" };
 const candidate = (
   over: Partial<DocumentPairing["document"]> = {},
-): DocumentPairing["document"] => ({
-  id: "doc-1",
-  source: "NAV",
-  number: "KI-2026/77",
-  date: "2026-09-28",
-  gross: D(12700),
-  currency: "HUF",
-  supplierName: "Korall Import Kft.",
-  supplierAccounts: [],
-  kind: "INVOICE",
-  payee: "COMPANY",
-  hasOriginal: true,
-  ...over,
-});
-const pairing = (over: Partial<DocumentPairing> = {}): DocumentPairing => ({
-  payee: "COMPANY",
-  kind: "INVOICE",
-  debits: [debit],
-  paidInFull: true,
-  paperOriginal: false,
-  document: candidate(),
-  ...over,
-});
+): DocumentPairing["document"] =>
+  candidateDocument({
+    id: "doc-1",
+    source: "NAV",
+    number: "KI-2026/77",
+    date: "2026-09-28",
+    supplierName: "Korall Import Kft.",
+    hasOriginal: true,
+    ...over,
+  });
+const pairing = (over: Partial<DocumentPairing> = {}): DocumentPairing =>
+  documentPairing({ document: candidate(), ...over });
 
 // MI PIROSÍT: ha a hiányzó kifizetés-adat „nincs fizetve” lenne; ha a kerekítés
 // egy forint alatti maradékkal részlegesnek, vagy egy cent hiánnyal fizetettnek

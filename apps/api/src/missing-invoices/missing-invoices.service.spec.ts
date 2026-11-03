@@ -5,6 +5,7 @@ import { describe, it } from "node:test";
 
 import { Prisma } from "@acropora/database";
 
+import { candidateDocument } from "../testing/billing-documents.fixture.js";
 import type { CandidateDocument } from "./missing-invoice-matching.js";
 import type { MissingInvoicesRepository } from "./missing-invoices.repository.js";
 import { MissingInvoicesService } from "./missing-invoices.service.js";
@@ -90,19 +91,15 @@ const nav = (
   date: string,
   gross: number,
   supplierName: string,
-): CandidateDocument => ({
-  id: `c${++n}`,
-  source: "NAV",
-  number: `NAV-${n}`,
-  date,
-  gross: D(gross),
-  currency: "HUF",
-  supplierName,
-  supplierAccounts: [],
-  kind: "INVOICE",
-  payee: "COMPANY",
-  hasOriginal: true,
-});
+): CandidateDocument =>
+  candidateDocument({
+    id: `c${++n}`,
+    number: `NAV-${n}`,
+    date,
+    gross: D(gross),
+    supplierName,
+    hasOriginal: true,
+  });
 
 describe("MissingInvoicesService candidate range", () => {
   it("loads documents from 12 months before the first statement month", async () => {
