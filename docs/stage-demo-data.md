@@ -33,4 +33,6 @@ A törlés egy tranzakció, és csak `DEMO-` előtagú sorokat érint. Ha egy DE
 
 ## Mi van benne
 
-3 ügyfél, 3 ajánlat (piszkozat, egy részletfizetéssel), 5 bejövő számla. A POS eladás külön szelet, mert készletmozgást és számozást érint, ezért a meglévő szolgáltatáson át megy.
+3 ügyfél, 3 ajánlat (piszkozat, egy részletfizetéssel), 4 POS eladás (mind a négy fizetési mód, egy ügyfeles, egy kedvezményes), 5 bejövő számla.
+
+A POS eladások csak KÉZI tételekből állnak, ahogy a valódi szolgáltatás (`PosSaleService.createSale`) is írja az ilyen eladást: csatorna POS, kész, `KÉZI` cikkszám, termék nélkül. Ezért nincs mögöttük készletmozgás és nincs UNAS készlet-szinkron sor. A termékes sor mindkettőt írná, és a stage-ről UNAS felé induló írást nem indítunk. A demo eladások tehát a POS listát és az adatlapot próbálják ki, a készletet nem.

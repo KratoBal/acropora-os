@@ -8,6 +8,8 @@ import {
   type DemoCounts,
   type DemoStore,
 } from "./demo-data.cli.js";
+import { POS_MANUAL_VAT_RATES } from "@acropora/types";
+
 import { DEMO_PREFIX, demoPlan, plusDays } from "./demo-data.plan.js";
 
 /*
@@ -30,6 +32,7 @@ function fakeStore(counts: Partial<DemoCounts> = {}) {
   const full: DemoCounts = {
     customers: 0,
     quotes: 0,
+    posSales: 0,
     incomingInvoices: 0,
     ...counts,
   };
@@ -78,6 +81,8 @@ describe("the demo plan", () => {
       assert.ok(c.customerNumber.startsWith(DEMO_PREFIX), c.customerNumber);
     for (const q of plan.quotes)
       assert.ok(q.quoteNumber.startsWith(DEMO_PREFIX), q.quoteNumber);
+    for (const p of plan.posSales)
+      assert.ok(p.orderNumber.startsWith(DEMO_PREFIX), p.orderNumber);
     for (const i of plan.incomingInvoices) {
       assert.ok(i.externalId.startsWith(DEMO_PREFIX), i.externalId);
       assert.ok(i.documentNumber.startsWith(DEMO_PREFIX), i.documentNumber);
@@ -93,6 +98,11 @@ describe("the demo plan", () => {
     assert.equal(new Set(externals).size, externals.length);
     for (const q of plan.quotes)
       assert.ok(customers.includes(q.customerNumber), q.customerNumber);
+    const orders = plan.posSales.map((p) => p.orderNumber);
+    assert.equal(new Set(orders).size, orders.length);
+    for (const p of plan.posSales)
+      if (p.customerNumber !== null)
+        assert.ok(customers.includes(p.customerNumber), p.orderNumber);
   });
 
   it("is the same for the same day and moves with the day", () => {
@@ -152,6 +162,43 @@ describe("the demo plan", () => {
       rows.some((r) => r.paymentsKnown === false),
       "payments unknown",
     );
+  });
+
+  it("keeps the POS totals consistent and the lines manual-only with a rate the POS allows", () => {
+    for (const p of plan.posSales) {
+      const orderFactor = 1 - Number(p.discountPercent ?? 0) / 100;
+      const gross =
+        p.lines.reduce(
+          (sum, l) =>
+            sum +
+            Number(l.unitGross) *
+              Number(l.quantity) *
+              (1 - Number(l.discountPercent ?? 0) / 100),
+          0,
+        ) * orderFactor;
+      assert.ok(Math.abs(Number(p.totalGross) - gross) < 0.001, p.orderNumber);
+      assert.ok(
+        Math.abs(
+          Number(p.totalNet) + Number(p.totalTax) - Number(p.totalGross),
+        ) < 0.001,
+        p.orderNumber,
+      );
+      assert.ok(Number(p.totalNet) < Number(p.totalGross), p.orderNumber);
+      for (const l of p.lines)
+        assert.ok(
+          (POS_MANUAL_VAT_RATES as readonly number[]).includes(l.vatRate),
+          `${p.orderNumber} ${l.description}`,
+        );
+      assert.ok(p.completedAt.slice(0, 10) <= DAY, p.orderNumber);
+    }
+  });
+
+  it("covers every payment method, a customer sale and a discounted order", () => {
+    const methods = new Set(plan.posSales.map((p) => p.paymentMethod));
+    for (const m of ["CASH", "CARD", "TRANSFER", "CASH_DESK"])
+      assert.ok(methods.has(m as never), m);
+    assert.ok(plan.posSales.some((p) => p.customerNumber !== null));
+    assert.ok(plan.posSales.some((p) => p.discountPercent !== null));
   });
 
   it("has milestones that add up to 100 percent where a quote has any", () => {
@@ -243,18 +290,18 @@ describe("the command", () => {
 
   it("applies once the named host matches (case does not matter)", async () => {
     const r = await run(["--apply", "--db-host", "DB-STAGE.internal"], {
-      counts: { customers: 3, quotes: 3, incomingInvoices: 5 },
+      counts: { customers: 3, quotes: 3, posSales: 4, incomingInvoices: 5 },
     });
     assert.equal(r.code, 0);
     assert.deepEqual(r.calls, ["apply"]);
-    assert.match(r.out, /3 ügyfél, 3 ajánlat, 5 bejövő számla/);
+    assert.match(r.out, /3 ügyfél, 3 ajánlat, 4 POS eladás, 5 bejövő számla/);
   });
 
   it("says so when everything was already there, and removes on --remove", async () => {
     const again = await run(["--apply", "--db-host", "db-stage.internal"]);
     assert.match(again.out, /Mind megvan már/);
     const gone = await run(["--remove", "--db-host", "db-stage.internal"], {
-      counts: { customers: 3, quotes: 3, incomingInvoices: 5 },
+      counts: { customers: 3, quotes: 3, posSales: 4, incomingInvoices: 5 },
     });
     assert.deepEqual(gone.calls, ["remove"]);
     assert.match(gone.out, /Törölve: 3 ügyfél/);
