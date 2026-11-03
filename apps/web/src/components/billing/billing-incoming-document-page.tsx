@@ -26,6 +26,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
 import { billingDocumentsApi } from "@/lib/api/billing-documents";
+import { BillingDetailHeader } from "./billing-detail-header";
 import { BILLING_LIST_PATH, formatDay } from "./billing-document-table";
 import { formatMoney, trimDecimal } from "./billing-editor-state";
 import { PaymentBadge } from "./billing-payment";
@@ -240,90 +241,94 @@ export function BillingIncomingDocumentPage({
         Vissza a listához
       </Link>
 
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0">
-          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.05em] text-pilot-accent-warm-text">
+      <BillingDetailHeader
+        eyebrow={
+          <>
             Bejövő {detail.kindLabel.toLowerCase()} · {formatText}
-          </p>
-          <h1 className="text-[28px] font-semibold leading-[34px] text-pilot-grey-900">
-            {detail.documentNumber}
-          </h1>
-          <p className="mt-2 text-sm text-pilot-grey-600">
-            {detail.supplier.name}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-start gap-2 lg:justify-end">
-          {detail.notBookable ? (
+          </>
+        }
+        title={detail.documentNumber}
+        subtitle={detail.supplier.name}
+        status={
+          <>
+            {detail.notBookable ? (
+              <span
+                data-testid="not-bookable-pill"
+                className="rounded-full bg-pilot-grey-100 px-2.5 py-1 text-xs font-semibold text-pilot-grey-700"
+              >
+                Nem könyvelendő
+              </span>
+            ) : (
+              <PaymentBadge
+                paymentState={detail.paymentState}
+                paidAmount={detail.paidAmount}
+                lastPaymentDate={detail.lastPaymentDate}
+                paymentSource={detail.paymentSource}
+                paymentConflict={detail.paymentConflict}
+                currency={detail.currency}
+              />
+            )}
             <span
-              data-testid="not-bookable-pill"
-              className="rounded-full bg-pilot-grey-100 px-2.5 py-1 text-xs font-semibold text-pilot-grey-700"
+              className={`rounded-full px-2.5 py-1 text-xs font-semibold ${bankPillTone(bank.state)}`}
             >
-              Nem könyvelendő
+              {INCOMING_BANK_MATCH_LABELS[bank.state]}
             </span>
-          ) : (
-            <PaymentBadge
-              paymentState={detail.paymentState}
-              paidAmount={detail.paidAmount}
-              lastPaymentDate={detail.lastPaymentDate}
-              paymentSource={detail.paymentSource}
-              paymentConflict={detail.paymentConflict}
-              currency={detail.currency}
-            />
-          )}
-          <span
-            className={`rounded-full px-2.5 py-1 text-xs font-semibold ${bankPillTone(bank.state)}`}
-          >
-            {INCOMING_BANK_MATCH_LABELS[bank.state]}
-          </span>
-          {detail.cancelled ? (
-            <span className="rounded-full bg-pilot-red-50 px-2.5 py-1 text-xs font-semibold text-pilot-red-700">
-              Sztornózott
-            </span>
-          ) : null}
-          {detail.paperOriginal ? (
-            <span
-              data-testid="paper-original-pill"
-              title={
-                detail.paperOriginalMarkedHere
-                  ? undefined
-                  : "A jelölés a párosított terhelésen áll: a Hiányzó számlák között vonható vissza."
-              }
-              className="rounded-full bg-pilot-grey-100 px-2.5 py-1 text-xs font-semibold text-pilot-grey-700"
-            >
-              Papíron megvan
-            </span>
-          ) : null}
-          {canAttach &&
-          (detail.paperOriginalMarkedHere || !detail.paperOriginal) ? (
-            <PilotButton
-              size="regular"
-              variant="secondary"
-              disabled={markBusy}
-              onClick={() =>
-                void setPaperOriginal(!detail.paperOriginalMarkedHere)
-              }
-            >
-              {detail.paperOriginalMarkedHere
-                ? "Mégsem papíron"
-                : "Papíron megvan"}
-            </PilotButton>
-          ) : null}
-          {canAttach ? (
-            <PilotButton
-              size="regular"
-              variant="secondary"
-              disabled={markBusy}
-              onClick={() =>
-                detail.notBookable
-                  ? void setNotBookable(false)
-                  : setConfirmingMark(true)
-              }
-            >
-              {detail.notBookable ? "Mégis könyvelendő" : "Nem könyvelendő"}
-            </PilotButton>
-          ) : null}
-        </div>
-      </header>
+            {detail.cancelled ? (
+              <span className="rounded-full bg-pilot-red-50 px-2.5 py-1 text-xs font-semibold text-pilot-red-700">
+                Sztornózott
+              </span>
+            ) : null}
+            {detail.paperOriginal ? (
+              <span
+                data-testid="paper-original-pill"
+                title={
+                  detail.paperOriginalMarkedHere
+                    ? undefined
+                    : "A jelölés a párosított terhelésen áll: a Hiányzó számlák között vonható vissza."
+                }
+                className="rounded-full bg-pilot-grey-100 px-2.5 py-1 text-xs font-semibold text-pilot-grey-700"
+              >
+                Papíron megvan
+              </span>
+            ) : null}
+          </>
+        }
+        actions={
+          canAttach ? (
+            <>
+              {canAttach &&
+              (detail.paperOriginalMarkedHere || !detail.paperOriginal) ? (
+                <PilotButton
+                  size="regular"
+                  variant="secondary"
+                  disabled={markBusy}
+                  onClick={() =>
+                    void setPaperOriginal(!detail.paperOriginalMarkedHere)
+                  }
+                >
+                  {detail.paperOriginalMarkedHere
+                    ? "Mégsem papíron"
+                    : "Papíron megvan"}
+                </PilotButton>
+              ) : null}
+              {canAttach ? (
+                <PilotButton
+                  size="regular"
+                  variant="secondary"
+                  disabled={markBusy}
+                  onClick={() =>
+                    detail.notBookable
+                      ? void setNotBookable(false)
+                      : setConfirmingMark(true)
+                  }
+                >
+                  {detail.notBookable ? "Mégis könyvelendő" : "Nem könyvelendő"}
+                </PilotButton>
+              ) : null}
+            </>
+          ) : null
+        }
+      />
 
       {confirmingMark && !detail.notBookable ? (
         <div

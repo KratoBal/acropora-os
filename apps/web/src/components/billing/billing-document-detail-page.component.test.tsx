@@ -234,6 +234,17 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
+/**
+ * „TOVÁBBIAK” (acrobot 40796): a ritkább műveletek (Másolás, Papíron megvan, Sztornó) egy második sorban nyílnak le.
+ * Egy NEGATÍV állítás („nincs Sztornó”) előtt is le kell nyitni, különben csukott menü mellett, rossz okból igaz.
+ */
+async function openMore() {
+  await screen.findByRole("heading", { level: 1 });
+  const more = screen.queryByRole("button", { name: "Továbbiak" });
+  if (more && more.getAttribute("aria-expanded") !== "true")
+    fireEvent.click(more);
+}
+
 const actions = () =>
   screen.getByRole("group", { name: "Bizonylat műveletei" });
 
@@ -641,12 +652,53 @@ describe("BillingDocumentDetailPage", () => {
  * végpontját hívja; a válasz után a lap nem mutatja a jelölést; vázlaton is van gomb; a `finance.manage`
  * nélküli szerep is lát gombot.
  */
+/**
+ * A KÖZÖS FEJLÉC (acrobot 40796, a stage-képek után). MI PIROSÍT: a ritkább műveletek a fő sorban állnak (az árva gomb
+ * oka); a „Továbbiak” nem mondja meg, hogy nyitva van-e; a fő sorból kiesik a nyomtatás, a letöltés vagy a kiküldés.
+ */
+describe("the shared header", () => {
+  it("the main row holds print, download and send; the rarer actions open under Továbbiak", async () => {
+    render(<BillingDocumentDetailPage documentId="doc-1" />);
+    const more = await screen.findByRole("button", { name: "Továbbiak" });
+    expect(more).toHaveAttribute("aria-expanded", "false");
+    expect(
+      within(actions()).getByRole("button", { name: "Nyomtatás" }),
+    ).toBeInTheDocument();
+    expect(
+      within(actions()).getByRole("button", { name: "PDF letöltése" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Másolás új vázlatba" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("group", { name: "További műveletek" }),
+    ).toBeNull();
+    fireEvent.click(more);
+    expect(more).toHaveAttribute("aria-expanded", "true");
+    const row = screen.getByRole("group", { name: "További műveletek" });
+    expect(
+      within(row).getByRole("button", { name: "Másolás új vázlatba" }),
+    ).toBeInTheDocument();
+    expect(
+      within(row).getByRole("button", { name: "Sztornó" }),
+    ).toBeInTheDocument();
+    expect(
+      within(row).getByRole("button", { name: "Papíron megvan" }),
+    ).toBeInTheDocument();
+    fireEvent.click(more);
+    expect(
+      screen.queryByRole("group", { name: "További műveletek" }),
+    ).toBeNull();
+  });
+});
+
 describe("paper original", () => {
   it("an issued invoice is marked and unmarked with one button", async () => {
     api.setOwnPaperOriginal
       .mockReset()
       .mockResolvedValueOnce(detail({ paperOriginal: true }));
     render(<BillingDocumentDetailPage documentId="doc-1" />);
+    await openMore();
     fireEvent.click(
       await screen.findByRole("button", { name: "Papíron megvan" }),
     );
@@ -661,6 +713,7 @@ describe("paper original", () => {
     api.setOwnPaperOriginal.mockResolvedValueOnce(
       detail({ paperOriginal: false }),
     );
+    await openMore();
     fireEvent.click(screen.getByRole("button", { name: "Mégsem papíron" }));
     await waitFor(() =>
       expect(screen.queryByTestId("paper-original-pill")).toBeNull(),
@@ -678,6 +731,7 @@ describe("paper original", () => {
       <BillingDocumentDetailPage documentId="doc-1" />,
     );
     await screen.findByRole("heading", { level: 1 });
+    await openMore();
     expect(screen.queryByRole("button", { name: /papíron/i })).toBeNull();
     unmount();
 
@@ -687,6 +741,7 @@ describe("paper original", () => {
     expect(
       await screen.findByTestId("paper-original-pill"),
     ).toBeInTheDocument();
+    await openMore();
     expect(screen.queryByRole("button", { name: /papíron/i })).toBeNull();
   });
 });
@@ -713,6 +768,7 @@ describe("storno", () => {
   it("an issued invoice: the button, the brief's dialog, then the storno shown", async () => {
     api.storno.mockResolvedValue(detail({ cancellation: done }));
     render(<BillingDocumentDetailPage documentId="doc-1" />);
+    await openMore();
     fireEvent.click(await screen.findByRole("button", { name: "Sztornó" }));
     const dialog = screen.getByRole("dialog", { name: question });
     expect(within(dialog).getByText(question)).toBeInTheDocument();
@@ -727,11 +783,13 @@ describe("storno", () => {
     expect(
       screen.getByText("A sztornó bizonylat kelte: 2026. 10. 12."),
     ).toBeInTheDocument();
+    await openMore();
     expect(screen.queryByRole("button", { name: "Sztornó" })).toBeNull();
   });
 
   it("Mégsem closes the dialog and sends nothing", async () => {
     render(<BillingDocumentDetailPage documentId="doc-1" />);
+    await openMore();
     fireEvent.click(await screen.findByRole("button", { name: "Sztornó" }));
     fireEvent.click(
       within(screen.getByRole("dialog", { name: question })).getByRole(
@@ -753,6 +811,7 @@ describe("storno", () => {
       detail({ documentType: "ADVANCE_INVOICE", finalInvoice: null }),
     );
     render(<BillingDocumentDetailPage documentId="doc-1" />);
+    await openMore();
     fireEvent.click(await screen.findByRole("button", { name: "Sztornó" }));
     fireEvent.click(
       within(screen.getByRole("dialog", { name: question })).getByRole(
@@ -763,6 +822,7 @@ describe("storno", () => {
     expect(
       await screen.findByText(/előbb a végszámlát sztornózd/),
     ).toBeInTheDocument();
+    await openMore();
     expect(screen.getByRole("button", { name: "Sztornó" })).toBeEnabled();
   });
 
@@ -770,6 +830,7 @@ describe("storno", () => {
     auth.role = "VIEWER" as UserRole;
     render(<BillingDocumentDetailPage documentId="doc-1" />);
     await screen.findByRole("heading", { level: 1, name: "AC-2026-001248" });
+    await openMore();
     expect(screen.queryByRole("button", { name: "Sztornó" })).toBeNull();
   });
 
@@ -792,6 +853,7 @@ describe("storno", () => {
     api.detail.mockResolvedValue(detail(over));
     render(<BillingDocumentDetailPage documentId="doc-1" />);
     await screen.findByRole("heading", { level: 1 });
+    await openMore();
     expect(screen.queryByRole("button", { name: "Sztornó" })).toBeNull();
   });
 
@@ -830,6 +892,7 @@ describe("storno", () => {
         "A Számlázz.hu elutasította: a számla már sztornózva van.",
       ),
     ).toBeInTheDocument();
+    await openMore();
     expect(screen.getByRole("button", { name: "Sztornó" })).toBeEnabled();
   });
 
@@ -849,6 +912,7 @@ describe("storno", () => {
       new Error("A Számlázz.hu elutasította a sztornót (57): friss ok"),
     );
     render(<BillingDocumentDetailPage documentId="doc-1" />);
+    await openMore();
     fireEvent.click(await screen.findByRole("button", { name: "Sztornó" }));
     fireEvent.click(
       within(screen.getByRole("dialog", { name: question })).getByRole(
@@ -881,6 +945,7 @@ describe("storno", () => {
     expect(
       screen.queryByRole("button", { name: "Sztornó PDF letöltése" }),
     ).toBeNull();
+    await openMore();
     expect(screen.queryByRole("button", { name: "Sztornó" })).toBeNull();
   });
 
@@ -1128,6 +1193,7 @@ describe("copying an issued document into a new draft", () => {
     api.detail.mockResolvedValue(detail());
     api.copy.mockResolvedValue(detail({ id: "doc-copy", status: "DRAFT" }));
     render(<BillingDocumentDetailPage documentId="doc-1" />);
+    await openMore();
     fireEvent.click(
       await screen.findByRole("button", { name: "Másolás új vázlatba" }),
     );
@@ -1145,6 +1211,7 @@ describe("copying an issued document into a new draft", () => {
     );
     const first = render(<BillingDocumentDetailPage documentId="doc-1" />);
     await screen.findByText(/még nincs hivatalos száma/);
+    await openMore();
     expect(
       screen.queryByRole("button", { name: "Másolás új vázlatba" }),
     ).toBeNull();
@@ -1153,6 +1220,7 @@ describe("copying an issued document into a new draft", () => {
     api.detail.mockResolvedValue(detail({ documentType: "FINAL_INVOICE" }));
     render(<BillingDocumentDetailPage documentId="doc-1" />);
     await screen.findByRole("button", { name: "PDF letöltése" });
+    await openMore();
     expect(
       screen.queryByRole("button", { name: "Másolás új vázlatba" }),
     ).toBeNull();
@@ -1162,6 +1230,7 @@ describe("copying an issued document into a new draft", () => {
     api.detail.mockResolvedValue(detail());
     api.copy.mockRejectedValue(new Error("A bizonylatnak nincs partnere."));
     render(<BillingDocumentDetailPage documentId="doc-1" />);
+    await openMore();
     fireEvent.click(
       await screen.findByRole("button", { name: "Másolás új vázlatba" }),
     );
