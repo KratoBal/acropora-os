@@ -68,6 +68,10 @@ export const PERMISSION_AREAS: readonly PermissionArea[] = [
         label: "Termék-tudás jóváhagyása",
       },
       {
+        permission: P.PRODUCTS_ATTRIBUTE_SET_MANAGE,
+        label: "Attribútum-készletek és termékek kötése",
+      },
+      {
         permission: P.SEO_REDIRECTS_MANAGE,
         label: "Webshop-átirányítások kezelése",
       },

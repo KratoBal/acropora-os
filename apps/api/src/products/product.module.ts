@@ -24,6 +24,8 @@ import {
 } from "./knowledge/knowledge.repository.js";
 import { ProductKnowledgeController } from "./knowledge/knowledge.controller.js";
 import { AttributeController } from "./attributes/attribute.controller.js";
+import { AttributeSetAdminService } from "./attributes/attribute-set-admin.service.js";
+import { ProductAttributeSetController } from "./attributes/product-attribute-set.controller.js";
 import { ProductKnowledgeService } from "./knowledge/knowledge.service.js";
 import { ProductController } from "./product.controller.js";
 import { ProductRepository } from "./product.repository.js";
@@ -61,11 +63,13 @@ import { DoseProjectionService } from "./dose-effects/dose-projection.service.js
     ProductEnrichmentQueueController,
     ProductKnowledgeController,
     AttributeController,
+    ProductAttributeSetController,
     WebshopSlugController,
     UrlRedirectController,
     CategoryRedirectBackfillController,
   ],
   providers: [
+    AttributeSetAdminService,
     DoseEffectsService,
     DoseProjectionService,
     ProductRepository,
