@@ -15,6 +15,8 @@ import {
   type TakeoverPriceMirror,
   type TakeoverPriceVariant,
 } from "./takeover-price.js";
+import { recordOwnPrice } from "./price-history/own-price-history.js";
+import type { ArKep } from "../imports/unas/unas-ar-tortenet.js";
 import type { CreateProductDto } from "./dto/create-product.dto.js";
 import type { ProductListQueryDto } from "./dto/product-list-query.dto.js";
 import type { UpdateProductDto } from "./dto/update-product.dto.js";
@@ -111,6 +113,11 @@ interface ProductTransaction {
   productVariant: {
     findMany(args: unknown): Promise<TakeoverPriceVariant[]>;
     updateMany(args: unknown): Promise<{ count: number }>;
+  };
+  /** A másolt saját ár előzményének kezdő sora (T4.1-D2), ugyanabban a tranzakcióban. */
+  productPriceHistory: {
+    findFirst(args: unknown): Promise<ArKep | null>;
+    create(args: unknown): Promise<unknown>;
   };
   /**
    * A keresési dokumentum írója ezt az egy táblát használja a hívó
@@ -448,15 +455,28 @@ export class ProductRepository extends Repository {
             }),
           ]);
           const steps = takeoverPriceSteps(variants, mirror);
+          const takenAt = new Date();
           for (const step of steps)
-            if (step.kind === "copy")
-              await transaction.productVariant.updateMany({
+            if (step.kind === "copy") {
+              const copied = await transaction.productVariant.updateMany({
                 where: { id: step.variantId, sellingGrossPrice: null },
                 data: {
                   sellingGrossPrice: step.sellingGrossPrice,
                   sellingPriceCurrency: step.sellingPriceCurrency,
                 },
               });
+              // the copy is the variant's FIRST own price: its history starts here, in the same
+              // transaction (`own-price-history.ts`); a variant that got a price in the
+              // meantime (count 0) was not copied, so it gets no row from this step
+              if (copied.count > 0)
+                await recordOwnPrice(transaction, {
+                  productId: id,
+                  variantId: step.variantId,
+                  currency: step.sellingPriceCurrency,
+                  grossPrice: step.sellingGrossPrice,
+                  observedAt: takenAt,
+                });
+            }
           priceSeed = takeoverPriceLog(steps);
         }
 
