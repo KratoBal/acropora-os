@@ -136,6 +136,22 @@ describe("Forrásszűrés", () => {
     expect(api.sources.mock.calls[0]?.[1].get("status")).toBe("PENDING");
   });
 
+  /*
+    A CÍM NEM TÖRHET SZAVANKÉNT 390 PX-EN (UI-áttekintés, Single-page P1, 2026-11-03). A sor szövegblokkja
+    `flex-1` volt (0 alapméret), a döntés-gombok mellette osztoztak a 358 px-en, és a cím ~150 px-re szorult:
+    szavanként tört, az oldal ~11 000 px magas lett. A szövegblokk most 18 rem alapméretű (`flex-[1_1_18rem]`), a
+    gombok alatta sorba törnek, ha nem férnek mellé. A happy-dom nem számol elrendezést: az állítás az osztályra szól.
+    MI PIROSÍT: ha a szövegblokk újra 0 alapméretű (`flex-1`), vagy a sor elveszti a `flex-wrap`-ot.
+  */
+  it("a forrás szövegblokkja saját alapmérettel áll, a gombok mellőle sorba törnek", async () => {
+    render(<SourceScreeningPage />);
+    const title = await screen.findByText("Kitalált cikk s1");
+    const textBlock = title.closest("div.min-w-0")!;
+    expect(textBlock.className).toContain("flex-[1_1_18rem]");
+    expect(textBlock.className).not.toMatch(/(^|\s)flex-1(\s|$)/);
+    expect(textBlock.parentElement!.classList.contains("flex-wrap")).toBe(true);
+  });
+
   it("Befogad: a döntés elmegy, a lista újratölt", async () => {
     render(<SourceScreeningPage />);
     const row = (await screen.findByText("Kitalált cikk s1")).closest(
