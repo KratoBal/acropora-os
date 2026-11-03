@@ -180,6 +180,11 @@ export function UnasImportWizard() {
         description="XLSX validáció, staging és dry-run áttekintés. A varázsló nem módosít termékadatot."
       />
 
+      {/*
+        TELEFONON CSAK A SZÁM (UI 1. kör, 2026-11-03: 390 px-en az öt felirat egymásra csúszott, egy oszlop kb. 65 px).
+        A felirat sm alatt csak a képernyőolvasónak szól (a gomb neve marad), alatta kiírva áll az aktuális lépés neve.
+        A gomb `relative`, hogy a rejtett felirat ne lógjon ki a lapból (UI 1. csomag, az sr-only elem esete).
+      */}
       <nav aria-label="Import lépései" className="grid grid-cols-5 gap-2">
         {STEPS.map((label, index) => {
           const number = index + 1;
@@ -189,18 +194,22 @@ export function UnasImportWizard() {
               type="button"
               disabled={number > 1 && !report}
               onClick={() => setStep(number)}
-              className={`rounded-lg border px-3 py-3 text-left text-xs font-semibold transition ${
+              aria-current={step === number ? "step" : undefined}
+              className={`relative min-w-0 rounded-lg border px-2 py-3 text-center text-xs font-semibold transition sm:px-3 sm:text-left ${
                 step === number
-                  ? "border-brand-500 bg-brand-50 text-brand-800"
+                  ? "border-pilot-aqua-600 bg-pilot-aqua-50 text-pilot-aqua-700"
                   : "border-dusk-200 bg-white text-dusk-500 hover:bg-dusk-50"
               } disabled:cursor-not-allowed disabled:opacity-50`}
             >
-              <span className="mr-2 text-dusk-400">{number}.</span>
-              {label}
+              <span className="text-dusk-400 sm:mr-2">{number}.</span>
+              <span className="sr-only sm:not-sr-only">{label}</span>
             </button>
           );
         })}
       </nav>
+      <p className="-mt-3 text-xs font-semibold text-pilot-aqua-700 sm:hidden">
+        {step}. {STEPS[step - 1]}
+      </p>
 
       {error ? (
         <Alert

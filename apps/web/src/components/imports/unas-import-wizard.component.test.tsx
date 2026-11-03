@@ -272,3 +272,26 @@ describe("UnasImportWizard", () => {
     ).toBeInTheDocument();
   });
 });
+
+/*
+  A LÉPÉSJELZŐ TELEFONON (UI 1. kör, 2026-11-03: 390 px-en az öt felirat egymásra csúszott). MI PIROSÍT: ha a felirat
+  sm alatt is látszik (újra egymásra csúszik); ha a gomb elveszti a nevét (a képernyőolvasó csak számot hallana); ha a
+  rejtett felirat nem pozicionált gombban áll (kilóghat a lapból); ha az aktuális lépés neve nem áll a sor alatt.
+*/
+describe("az import lépései telefonon", () => {
+  it("a gomb a számot mutatja, a neve a teljes felirat, és alatta az aktuális lépés áll", () => {
+    render(createElement(UnasImportWizard));
+    const nav = screen.getByRole("navigation", { name: "Import lépései" });
+    const first = screen.getByRole("button", { name: "1. Feltöltés" });
+    expect(nav).toContainElement(first);
+    expect(first).toHaveAttribute("aria-current", "step");
+    expect(first).toHaveClass("relative");
+    const label = Array.from(first.querySelectorAll("span")).find(
+      (span) => span.textContent === "Feltöltés",
+    );
+    expect(label).toHaveClass("sr-only", "sm:not-sr-only");
+    expect(screen.getByText("1. Feltöltés", { selector: "p" })).toHaveClass(
+      "sm:hidden",
+    );
+  });
+});
