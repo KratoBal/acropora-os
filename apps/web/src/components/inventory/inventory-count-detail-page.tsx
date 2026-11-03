@@ -9,6 +9,7 @@ import {
   CardHeader,
   PageHeader,
   Skeleton,
+  PilotFileInput,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -62,7 +63,6 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
     successCount: number;
     failedCount: number;
   } | null>(null);
-  const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [lineDrafts, setLineDrafts] = useState<Record<string, string>>({});
   const [savingLineId, setSavingLineId] = useState<string | null>(null);
@@ -130,7 +130,6 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
       .then((result) => {
         setDetail(result.detail);
         setUnmatchedRows(result.unmatchedRows);
-        setSelectedFileName(null);
         if (fileInputRef.current) fileInputRef.current.value = "";
       })
       .catch((cause: unknown) =>
@@ -281,23 +280,12 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
                       {downloading ? "Letöltés…" : "Sablon letöltése"}
                     </Button>
                     <div className="flex flex-col gap-1">
-                      <input
+                      <PilotFileInput
                         ref={fileInputRef}
-                        type="file"
                         accept=".xlsx"
                         aria-label="Kitöltött leltár feltöltése"
                         className="text-xs"
-                        onChange={(event) =>
-                          setSelectedFileName(
-                            event.target.files?.[0]?.name ?? null,
-                          )
-                        }
                       />
-                      {selectedFileName ? (
-                        <span className="text-xs text-dusk-500">
-                          Kiválasztva: {selectedFileName}
-                        </span>
-                      ) : null}
                     </div>
                     <Button size="sm" onClick={uploadFile} disabled={uploading}>
                       {uploading ? "Feltöltés…" : "Feltöltés"}

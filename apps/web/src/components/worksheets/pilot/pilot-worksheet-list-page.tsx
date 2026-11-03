@@ -1,6 +1,13 @@
 "use client";
 
-import { Alert, EmptyState, Icon, Pagination, Skeleton } from "@acropora/ui";
+import {
+  Alert,
+  EmptyState,
+  Icon,
+  Pagination,
+  Skeleton,
+  PilotSelect,
+} from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
@@ -396,10 +403,11 @@ export function PilotWorksheetListPage() {
         {partners.length ? (
           <label>
             <span className="sr-only">Partner szűrő</span>
-            <select
+            <PilotSelect
               value={params.get("customerId") ?? ""}
-              onChange={(event) => filter("customerId", event.target.value)}
-              className="max-w-[240px] cursor-pointer rounded-md bg-white px-3 py-2.5 text-sm text-pilot-grey-700 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+              onChange={(nextValue) => filter("customerId", nextValue)}
+              className="max-w-[240px]"
+              chevron
             >
               <option value="">Minden partner</option>
               {partners.map((partner) => (
@@ -407,7 +415,7 @@ export function PilotWorksheetListPage() {
                   {partner.name}
                 </option>
               ))}
-            </select>
+            </PilotSelect>
           </label>
         ) : null}
         <PilotButton

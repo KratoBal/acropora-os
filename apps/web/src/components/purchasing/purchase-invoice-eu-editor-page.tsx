@@ -13,6 +13,7 @@ import {
   PilotSection,
   Skeleton,
   PilotDateField,
+  PilotSelect,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -2060,18 +2061,19 @@ export function PurchaseInvoiceEuEditorPage() {
                           </label>
                           <label className="text-xs text-dusk-600">
                             Kategória (opcionális)
-                            <select
+                            <PilotSelect
                               aria-label="Új helyi termék kategóriája"
                               value={line.createLocalProduct.primaryCategoryId}
-                              onChange={(event) =>
+                              onChange={(nextValue) =>
                                 updateLine(line.key, {
                                   createLocalProduct: {
                                     ...line.createLocalProduct!,
-                                    primaryCategoryId: event.target.value,
+                                    primaryCategoryId: nextValue,
                                   },
                                 })
                               }
-                              className="mt-1 h-9 w-full rounded-lg border border-dusk-200 bg-white px-2 text-sm"
+                              className="mt-1 w-full"
+                              chevron
                             >
                               <option value="">Nincs kategória</option>
                               {categoryOptions.map((option) => (
@@ -2079,24 +2081,25 @@ export function PurchaseInvoiceEuEditorPage() {
                                   {option.label}
                                 </option>
                               ))}
-                            </select>
+                            </PilotSelect>
                           </label>
                         </div>
                         <div className="mt-3 grid gap-3 sm:grid-cols-2">
                           <label className="text-xs text-dusk-600">
                             Márka (opcionális)
-                            <select
+                            <PilotSelect
                               aria-label="Új helyi termék márkája"
                               value={line.createLocalProduct.brandId}
-                              onChange={(event) =>
+                              onChange={(nextValue) =>
                                 updateLine(line.key, {
                                   createLocalProduct: {
                                     ...line.createLocalProduct!,
-                                    brandId: event.target.value,
+                                    brandId: nextValue,
                                   },
                                 })
                               }
-                              className="mt-1 h-9 w-full rounded-lg border border-dusk-200 bg-white px-2 text-sm"
+                              className="mt-1 w-full"
+                              chevron
                             >
                               <option value="">Nincs márka</option>
                               {brandOptions.map((option) => (
@@ -2104,7 +2107,7 @@ export function PurchaseInvoiceEuEditorPage() {
                                   {option.label}
                                 </option>
                               ))}
-                            </select>
+                            </PilotSelect>
                           </label>
                           <label className="text-xs text-dusk-600">
                             ÁFA-kulcs (%)
@@ -2400,17 +2403,17 @@ export function PurchaseInvoiceEuEditorPage() {
                                 key={allocation.key}
                                 className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_10rem_auto]"
                               >
-                                <select
+                                <PilotSelect
                                   aria-label="Projekt"
                                   value={allocation.projectId}
-                                  onChange={(event) =>
+                                  onChange={(nextValue) =>
                                     updateProjectAllocation(
                                       line,
                                       allocation.key,
-                                      { projectId: event.target.value },
+                                      { projectId: nextValue },
                                     )
                                   }
-                                  className="h-9 rounded-md bg-white px-2 text-sm ring-1 ring-pilot-grey-200"
+                                  chevron
                                 >
                                   <option value="">Válassz projektet</option>
                                   {projects.map((project) => (
@@ -2426,7 +2429,7 @@ export function PurchaseInvoiceEuEditorPage() {
                                       {project.projectNumber} · {project.name}
                                     </option>
                                   ))}
-                                </select>
+                                </PilotSelect>
                                 <input
                                   aria-label="Projekthez rendelt mennyiség"
                                   type="number"

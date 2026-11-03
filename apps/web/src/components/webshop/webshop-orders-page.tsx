@@ -9,6 +9,7 @@ import {
   CardHeader,
   PageHeader,
   Skeleton,
+  PilotSelect,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -256,16 +257,17 @@ export function WebshopOrdersPage() {
           <h2 className="text-sm font-semibold text-dusk-900">Rendelések</h2>
           <label className="text-xs text-dusk-500">
             Nézet{" "}
-            <select
+            <PilotSelect
               aria-label="Rendelések nézete"
               value={view}
-              onChange={(event) =>
-                setView(event.target.value === "all" ? "all" : "open")
+              onChange={(nextValue) =>
+                setView(nextValue === "all" ? "all" : "open")
               }
+              chevron
             >
               <option value="open">Nyitott</option>
               <option value="all">Összes</option>
-            </select>
+            </PilotSelect>
             {" · "}
             {visibleOrders.length.toLocaleString("hu-HU")} rendelés
           </label>

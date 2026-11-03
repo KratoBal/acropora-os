@@ -79,6 +79,7 @@ export {
   PilotSegmentedControl,
   PilotFormField,
   PilotDateField,
+  PilotFileInput,
   PilotInput,
   PilotSelect,
   PilotCard,
