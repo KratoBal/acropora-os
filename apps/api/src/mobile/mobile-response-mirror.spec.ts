@@ -313,3 +313,94 @@ describe("a menü-számlálók mobil típusa a közös csomaghoz mérve", () => 
     assert.deepEqual([...mobil].sort(), [...NAVIGATION_COUNTER_IDS].sort());
   });
 });
+
+/*
+  THE INVOICES' MIRROR (card 050e138b, 2026-11-03): the phone's billing types are a SUBSET of the shared ones, on purpose
+  (a read-only list and detail need a handful of fields of a large detail). So the check is one way: every field the
+  phone reads must exist in the shared type. A field misspelt or renamed on the server would be `undefined` on the
+  screen, and nothing else would say so (the failure this spec was written for, 2026-09-16). An `extends` is folded in.
+*/
+const KOZOS_SZAMLA_OLVASO = "../../packages/types/src/billing-document-read.ts";
+const KOZOS_SZAMLA_VAZLAT =
+  "../../packages/types/src/billing-document-draft.ts";
+const KOZOS_SZAMLA_OSSZEG =
+  "../../packages/types/src/billing-document-amounts.ts";
+const KOZOS_SZAMLA_BEJOVO = "../../packages/types/src/billing-incoming.ts";
+const MOBIL_SZAMLA = "../mobile/src/lib/billing/types.ts";
+
+describe("a számlák mobil típusai a közös csomag részhalmazai", () => {
+  const kozos = (fajl: string, ...nevek: string[]) =>
+    new Set(nevek.flatMap((nev) => [...mezok(forras(fajl), nev)]));
+  const parok: [string, () => Set<string>][] = [
+    [
+      "OutgoingDocumentListItem",
+      () => kozos(KOZOS_SZAMLA_OLVASO, "BillingDocumentListItem"),
+    ],
+    [
+      "OutgoingDocumentListResponse",
+      () => kozos(KOZOS_SZAMLA_OLVASO, "BillingDocumentListResponse"),
+    ],
+    [
+      "OwnDocumentDetail",
+      () => kozos(KOZOS_SZAMLA_VAZLAT, "BillingDocumentDetail"),
+    ],
+    [
+      "OwnDocumentLine",
+      () =>
+        new Set([
+          ...kozos(KOZOS_SZAMLA_VAZLAT, "BillingDocumentLine"),
+          ...kozos(KOZOS_SZAMLA_OSSZEG, "BillingAmounts"),
+        ]),
+    ],
+    [
+      "OwnDocumentCustomer",
+      () => kozos(KOZOS_SZAMLA_VAZLAT, "BillingDocumentCustomer"),
+    ],
+    [
+      "ExternalDocumentDetail",
+      () => kozos(KOZOS_SZAMLA_OLVASO, "BillingExternalDocumentDetail"),
+    ],
+    [
+      "ExternalDocumentLine",
+      () => kozos(KOZOS_SZAMLA_OLVASO, "BillingExternalDocumentLine"),
+    ],
+    [
+      "IncomingDocumentListItem",
+      () => kozos(KOZOS_SZAMLA_BEJOVO, "IncomingDocumentListItem"),
+    ],
+    [
+      "IncomingDocumentListResponse",
+      () => kozos(KOZOS_SZAMLA_BEJOVO, "IncomingDocumentListResponse"),
+    ],
+    [
+      "IncomingDocumentDetail",
+      () =>
+        kozos(
+          KOZOS_SZAMLA_BEJOVO,
+          "IncomingDocumentDetail",
+          "IncomingDocumentListItem",
+        ),
+    ],
+    [
+      "IncomingDocumentLine",
+      () => kozos(KOZOS_SZAMLA_BEJOVO, "IncomingDocumentLine"),
+    ],
+  ];
+
+  for (const [mobilNev, kozosMezok] of parok)
+    it(`a telefon ${mobilNev} minden mezője létezik a szerver típusában`, () => {
+      const mobilMezok = mezok(forras(MOBIL_SZAMLA), mobilNev);
+      // POZITIV KONTROLL: egy üres halmaz minden részhalmaz-állítást zölden adna.
+      assert.ok(mobilMezok.size >= 2, `gyanúsan kevés mező: ${mobilNev}`);
+      const kozosHalmaz = kozosMezok();
+      assert.ok(
+        kozosHalmaz.size >= 2,
+        `gyanúsan kevés közös mező: ${mobilNev}`,
+      );
+      assert.deepEqual(
+        [...mobilMezok].filter((mezo) => !kozosHalmaz.has(mezo)),
+        [],
+        `a telefon ${mobilNev} olyan mezőt olvas, ami a szerveren nincs`,
+      );
+    });
+});

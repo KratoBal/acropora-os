@@ -58,6 +58,8 @@ const SERVER_PAIR: Record<string, string | null> = {
   // (2026-09-24, murena).
   aquariumsView: PERMISSIONS.AQUARIUMS_VIEW,
   aquariumsManage: PERMISSIONS.AQUARIUMS_MANAGE,
+  // A Számlák csak olvasó csempéje (2026-11-03, kártya 050e138b).
+  billingView: PERMISSIONS.BILLING_VIEW,
 };
 
 const ROLE_MIRROR = "../mobile/src/lib/auth/types.ts";
@@ -76,6 +78,7 @@ function mirrorKeys(): string[] {
   const blocks = [
     /export interface WebshopCapabilities \{([\s\S]*?)\n\}/,
     /export interface ServiceCapabilities \{([\s\S]*?)\n\}/,
+    /export interface BillingCapabilities \{([\s\S]*?)\n\}/,
   ].map((pattern) => {
     const match = pattern.exec(source);
     assert.ok(match, `Nem találtam a tükör egyik interfészét: ${pattern}`);

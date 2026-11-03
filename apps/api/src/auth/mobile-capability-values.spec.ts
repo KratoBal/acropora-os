@@ -69,6 +69,7 @@ interface MirrorSubject {
 interface Mirror {
   getWebshopCapabilities(subject: MirrorSubject): Record<string, boolean>;
   getServiceCapabilities(subject: MirrorSubject): Record<string, boolean>;
+  getBillingCapabilities(subject: MirrorSubject): Record<string, boolean>;
 }
 
 /**
@@ -136,6 +137,7 @@ function comparisons(mirror: Mirror, path: "table" | "list" = "table") {
     const capabilities = {
       ...mirror.getWebshopCapabilities(subjectFor(role as UserRole, path)),
       ...mirror.getServiceCapabilities(subjectFor(role as UserRole, path)),
+      ...mirror.getBillingCapabilities(subjectFor(role as UserRole, path)),
     };
     for (const [key, client] of Object.entries(capabilities)) {
       const permission = SERVER_PAIR[key];
@@ -223,6 +225,11 @@ describe("a mobil tükör ÉRTÉKEI", () => {
         mirror.getServiceCapabilities({ role }),
         `${role} szerviz`,
       );
+      assert.deepEqual(
+        mirror.getBillingCapabilities(list),
+        mirror.getBillingCapabilities({ role }),
+        `${role} számlák`,
+      );
     }
   });
 
@@ -258,6 +265,8 @@ describe("a mobil tükör ÉRTÉKEI", () => {
     const lying: Mirror = {
       getServiceCapabilities: (subject) =>
         mirror.getServiceCapabilities(subject),
+      getBillingCapabilities: (subject) =>
+        mirror.getBillingCapabilities(subject),
       getWebshopCapabilities: (subject) => ({
         ...mirror.getWebshopCapabilities(subject),
         // A SALES szerepnek a szerver nem ad purchasing.view jogot.
@@ -300,6 +309,7 @@ const TILE_ENTRY: Record<string, string> = {
   purchasingView: "purchasing",
   productsView: "products",
   partnersView: "partners",
+  billingView: "billing",
 };
 
 /**
@@ -331,7 +341,12 @@ describe("a mobil csempek es a kozos menu-forras", () => {
       const forras = new Set(navigationIdsFor({ role: role }, "mobile"));
       const webshop = mirror.getWebshopCapabilities({ role });
       const service = mirror.getServiceCapabilities({ role });
-      const telefon: Record<string, boolean> = { ...webshop, ...service };
+      const billing = mirror.getBillingCapabilities({ role });
+      const telefon: Record<string, boolean> = {
+        ...webshop,
+        ...service,
+        ...billing,
+      };
 
       for (const [key, entryId] of Object.entries(TILE_ENTRY)) {
         osszevetes += 1;

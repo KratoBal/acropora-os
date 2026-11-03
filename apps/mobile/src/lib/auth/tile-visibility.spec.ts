@@ -80,9 +80,11 @@ describe("a csempék a kiadott menüt követik", () => {
     // 13:01-i dontese utan (mobil felvitel is kell).
     // 2026-10-06: tizrol tizenegyre nott a piszkozat-csempevel (`PI`), kartya
     // 49210cdd (a Capasuli ertesites a telefonos listara visz).
-    // Mind a negy alkalommal ez az allitas ELSULT, es ez a helyes viselkedes --
+    // 2026-11-03: tizenegyrol tizenkettore nott a szamla-csempevel (`SZ`),
+    // kartya 050e138b (csak olvaso lista es adatlap, billing.view).
+    // Mind az ot alkalommal ez az allitas ELSULT, es ez a helyes viselkedes --
     // egy uj belepesi pont ne csusszon be szo nelkul.
-    assert.equal(kodok.length, 11);
+    assert.equal(kodok.length, 12);
     assert.deepEqual([...new Set(tetelek)].sort(), [...tetelek].sort());
   });
 });
