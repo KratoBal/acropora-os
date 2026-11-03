@@ -656,22 +656,23 @@ export function PilotAssetCreatePage() {
                     placeholder="pl. 500"
                     aria-label="Teljesítmény"
                   />
-                  <div className="w-28">
-                    <PilotSelect
-                      value={performanceUnitId}
-                      onChange={setPerformanceUnitId}
-                      aria-label="Mértékegység"
-                    >
-                      <option value="">Nincs megadva</option>
-                      {performanceUnitOptions(performanceUnits, undefined).map(
-                        (unit) => (
-                          <option key={unit.id} value={unit.id}>
-                            {unit.code}
-                          </option>
-                        ),
-                      )}
-                    </PilotSelect>
-                  </div>
+                  {/* 160 px, nyíllal: a 112 px-es választó az első opciót ("Nincs megadva") "Nincs m"-re vágta. */}
+                  <PilotSelect
+                    chevron
+                    className="w-40 shrink-0"
+                    value={performanceUnitId}
+                    onChange={setPerformanceUnitId}
+                    aria-label="Mértékegység"
+                  >
+                    <option value="">Nincs megadva</option>
+                    {performanceUnitOptions(performanceUnits, undefined).map(
+                      (unit) => (
+                        <option key={unit.id} value={unit.id}>
+                          {unit.code}
+                        </option>
+                      ),
+                    )}
+                  </PilotSelect>
                 </div>
                 {performanceUnitsFailed ? (
                   <p className="text-xs text-pilot-grey-400">

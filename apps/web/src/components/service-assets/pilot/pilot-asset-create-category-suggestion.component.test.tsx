@@ -364,4 +364,22 @@ describe("a létrehozó űrlap: a szülőeszköz keresése", () => {
     await waitFor(() => expect(utolsoKeres().get("search")).toBe("szűrő"));
     expect(utolsoKeres().get("departmentId")).toBe("dep-biodom");
   });
+
+  /*
+    A MÉRTÉKEGYSÉG-VÁLASZTÓ NEM VÁGJA LE A SAJÁT ELSŐ OPCIÓJÁT (hibak-aa/ac P2, 1440 és 390 px): a Teljesítmény
+    melletti választó 112 px-es (`w-28`) volt, a "Nincs megadva" felirat "Nincs m"-re csonkult, nyíl sem
+    jelezte, hogy választó. Most 160 px és nyíllal rajzol. A happy-dom nem számol szélességet: az állítás az osztályra
+    és a nyílra szól. MI PIROSÍT: ha a választó újra a keskeny (`w-28`) burkolóban áll, vagy elveszti a nyilát.
+  */
+  it("a mértékegység-választó elég széles a Nincs megadva felirathoz, és nyíllal rajzol", async () => {
+    await megjelenit();
+    const valaszto = screen.getByLabelText("Mértékegység");
+    const burkolo = valaszto.parentElement!;
+    expect(burkolo.className).toContain("w-40");
+    expect(burkolo.className).not.toContain("w-28");
+    expect(burkolo.querySelector("svg")).not.toBeNull();
+    expect(
+      [...(valaszto as HTMLSelectElement).options].map((o) => o.textContent),
+    ).toContain("Nincs megadva");
+  });
 });
