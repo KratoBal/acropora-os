@@ -9,7 +9,11 @@ import type { SupplierListResponse, Session } from "@acropora/types";
 import { useSyncExternalStore } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PilotSupplierListPage } from "./pilot-supplier-list-page";
+import {
+  PilotSupplierListPage,
+  SUPPLIER_COLUMNS,
+  SUPPLIER_TABLE_MIN_WIDTH,
+} from "./pilot-supplier-list-page";
 
 /**
  * A `next/font/local` HÍVÁSA A NEXT.JS FORDÍTÓI MAKRÓJA -- vitest alatt,
@@ -118,6 +122,28 @@ describe("PilotSupplierListPage paging", () => {
   /** The list holds two kinds now, and which one a row is has to be readable
    * without opening it. Both labels are asserted on one row that carries both,
    * because that is the case a single-label design would get wrong. */
+  // The list is the shared table: on the phone every row is a card, each cell labelled with its
+  // column (the partner's name is the card title), and the row still opens the partner.
+  it("labels every cell with its column for the phone card view", async () => {
+    render(<PilotSupplierListPage />);
+    await screen.findAllByTestId("supplier-row");
+    const row = screen.getAllByTestId("supplier-row")[0]!;
+    expect(
+      [...row.querySelectorAll("td")].map((td) =>
+        td.getAttribute("data-label"),
+      ),
+    ).toEqual(["Név", "Kód", "Ország", "Ügyintéző", "Elérhetőség", "Státusz"]);
+    expect(row.getAttribute("aria-label")).toContain("megnyitása");
+  });
+
+  it("the fixed column widths fit the table minimum", () => {
+    const sum = SUPPLIER_COLUMNS.reduce(
+      (acc, c) => acc + Number(/^(\d+)px$/.exec(c.width ?? "")?.[1]),
+      0,
+    );
+    expect(sum).toBeLessThanOrEqual(SUPPLIER_TABLE_MIN_WIDTH);
+  });
+
   it("labels each partner with the kinds it actually is", async () => {
     api.list.mockResolvedValue({
       items: [
