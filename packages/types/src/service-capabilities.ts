@@ -50,7 +50,7 @@ export const SERVICE_CAPABILITIES: readonly ServiceCapabilityInfo[] = [
     */
     label: "Anyagbeszerzés intézése",
     description:
-      "Elvállalhatja az anyagigények beszerzését („Én intézem a beszerzést”), és a vállalt igényt megrendeltként, részben vagy teljesen beérkezettként jelölheti. Ez csak a beszerzés joga -- attól függetlenül állítható, hogy kap-e értesítést az új igényekről.",
+      "Elvállalhatja az anyagigények beszerzését („Én intézem a beszerzést”), és a vállalt igényt megrendeltként, részben vagy teljesen beérkezettként jelölheti. Ez csak a beszerzés joga, attól függetlenül állítható, hogy kap-e értesítést az új igényekről.",
     audience: "internal",
   },
   /**

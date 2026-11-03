@@ -725,7 +725,7 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
         */}
         {worksheet.department.path?.length
           ? worksheet.department.path.join(" / ")
-          : `${worksheet.department.code} — ${current.unitName ?? "—"}`}
+          : `${worksheet.department.code}: ${current.unitName ?? "—"}`}
       </ServiceContextRow>
       <ServiceContextRow icon="ticket" label="Hibajegy">
         {/*

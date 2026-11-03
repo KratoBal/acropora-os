@@ -125,7 +125,7 @@ export class CompletionCertificatesService {
     const missingAddress = address ? missingAddressParts(address) : [];
     if (missingAddress.length > 0)
       throw new BadRequestException(
-        `A vevő címe hiányos (hiányzik: ${missingAddress.join(", ")}) -- egészítsd ki a partnernél, teljesítési igazolás enélkül nem állítható ki.`,
+        `A vevő címe hiányos (hiányzik: ${missingAddress.join(", ")}). Egészítsd ki a partnernél, teljesítési igazolás enélkül nem állítható ki.`,
       );
     const firstWorksheet = job.worksheets[0] ?? null;
 

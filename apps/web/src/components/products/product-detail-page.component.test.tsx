@@ -592,7 +592,7 @@ describe("ProductDetailPage mirror ownership", () => {
 
     expect(
       screen.getByText(
-        "Ehhez a változathoz még nincs mentett saját beállítás — az alábbi mezők üresek.",
+        "Ehhez a változathoz még nincs mentett saját beállítás, az alábbi mezők üresek.",
       ),
     ).toBeInTheDocument();
     expect(screen.getByText("Beszerzési deviza")).toBeInTheDocument();

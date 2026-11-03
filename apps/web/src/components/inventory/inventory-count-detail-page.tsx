@@ -309,7 +309,7 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
                 <Alert
                   variant="danger"
                   title="Vannak még meg nem számolt tételek"
-                  description={`${detail.lines.filter((line) => line.countedQty === null).length} tétel Leltározott mennyisége üres — ezek a lista tetején, sárgával vannak kiemelve. A mennyiség közvetlenül itt is beírható, az eltérés azonnal kiszámolódik. A korrekció csak akkor indítható, ha mindegyiknél meg van adva az érték.`}
+                  description={`${detail.lines.filter((line) => line.countedQty === null).length} tétel Leltározott mennyisége üres, ezek a lista tetején, sárgával vannak kiemelve. A mennyiség közvetlenül itt is beírható, az eltérés azonnal kiszámolódik. A korrekció csak akkor indítható, ha mindegyiknél meg van adva az érték.`}
                 />
               ) : null}
 

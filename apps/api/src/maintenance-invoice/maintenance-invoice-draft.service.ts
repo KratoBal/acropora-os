@@ -228,13 +228,13 @@ export class MaintenanceInvoiceDraftService {
     );
     if (!signed)
       throw new ConflictException(
-        "A teljesítési igazolás aláírt példánya hiányzik -- piszkozat-számla enélkül nem készíthető.",
+        "A teljesítési igazolás aláírt példánya hiányzik, piszkozat-számla enélkül nem készíthető.",
       );
 
     const customer = certificate.serviceJob.customer;
     if (!customer)
       throw new BadRequestException(
-        "A karbantartási laphoz nincs vevő rendelve -- piszkozat-számla enélkül nem készíthető.",
+        "A karbantartási laphoz nincs vevő rendelve, piszkozat-számla enélkül nem készíthető.",
       );
 
     let mapped;
@@ -249,10 +249,10 @@ export class MaintenanceInvoiceDraftService {
       if (error instanceof MaintenanceInvoiceInputError)
         throw new BadRequestException(
           error.code === "NO_BILLING_ADDRESS"
-            ? "A vevőnek nincs alapértelmezett számlázási címe -- piszkozat-számla enélkül nem készíthető."
+            ? "A vevőnek nincs alapértelmezett számlázási címe, piszkozat-számla enélkül nem készíthető."
             : error.code === "BILLING_ADDRESS_INCOMPLETE"
-              ? `A vevő számlázási címe hiányos (hiányzik: ${error.missing.join(", ")}) -- egészítsd ki a partnernél, piszkozat-számla enélkül nem készíthető.`
-              : "A teljesítési igazolásnak nincs tétele -- piszkozat-számla enélkül nem készíthető.",
+              ? `A vevő számlázási címe hiányos (hiányzik: ${error.missing.join(", ")}). Egészítsd ki a partnernél, piszkozat-számla enélkül nem készíthető.`
+              : "A teljesítési igazolásnak nincs tétele, piszkozat-számla enélkül nem készíthető.",
         );
       throw error;
     }
@@ -265,7 +265,7 @@ export class MaintenanceInvoiceDraftService {
     } catch (error) {
       if (error instanceof SzamlazzConnectionError)
         throw new ServiceUnavailableException(
-          "A Számlázz.hu kapcsolat nincs beállítva -- add meg az Agent Key-t a Beállítások oldalon.",
+          "A Számlázz.hu kapcsolat nincs beállítva. Add meg az Agent Key-t a Beállítások oldalon.",
         );
       throw error;
     }

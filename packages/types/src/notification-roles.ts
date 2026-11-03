@@ -32,7 +32,7 @@ export const NOTIFICATION_ROLES: readonly NotificationRoleInfo[] = [
     value: "MATERIAL_REQUEST_CREATED",
     label: "Anyagigény-felelős",
     description:
-      "Push és e-mail értesítést kap, amikor egy szervizes anyagigényt küld a munkalapról. Ez csak az értesülés szerepe -- a beérkezés jelölése külön jogosultság, ettől a jelölőtől függetlenül állítható.",
+      "Push és e-mail értesítést kap, amikor egy szervizes anyagigényt küld a munkalapról. Ez csak az értesülés szerepe, a beérkezés jelölése külön jogosultság, ettől a jelölőtől függetlenül állítható.",
   },
   {
     value: "WEBSHOP_TRANSFER_RECEIVED",

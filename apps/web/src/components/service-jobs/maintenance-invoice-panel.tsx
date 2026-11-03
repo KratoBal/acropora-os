@@ -173,12 +173,12 @@ export function MaintenanceInvoicePanel({
         <p className="text-sm text-muted">Betöltés…</p>
       ) : certificateId === null ? (
         <p className="text-sm text-muted">
-          Nincs kiállítva teljesítési igazolás -- piszkozat-számla enélkül nem
+          Nincs kiállítva teljesítési igazolás, piszkozat-számla enélkül nem
           készíthető.
         </p>
       ) : !signed ? (
         <p className="text-sm text-muted">
-          A teljesítési igazolás aláírt példánya hiányzik -- piszkozat-számla
+          A teljesítési igazolás aláírt példánya hiányzik, piszkozat-számla
           enélkül nem készíthető.
         </p>
       ) : invoice === null ? (

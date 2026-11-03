@@ -310,7 +310,7 @@ export function SutyerakPanel({ session }: { session: Session }) {
         aria-label="Sutyerák megnyitása"
         aria-expanded={open}
         aria-controls="sutyerak-panel"
-        title="Sutyerák — húzható"
+        title="Sutyerák (húzható)"
         className="fixed z-50 touch-none cursor-grab rounded-full focus-visible:outline-2 focus-visible:outline-pilot-aqua-600"
         style={{
           left: position.x,

@@ -268,9 +268,9 @@ export function AiTestPage() {
                 <strong>{exchange.reply.errorCode ?? "ismeretlen"}</strong>
                 {exchange.reply.providerWaitedMs !== null ? (
                   <>
-                    {" "}
-                    — az AI {formatMs(exchange.reply.providerWaitedMs)} után
-                    adta fel.
+                    {". "}
+                    Az AI {formatMs(exchange.reply.providerWaitedMs)} után adta
+                    fel.
                   </>
                 ) : null}
               </Alert>

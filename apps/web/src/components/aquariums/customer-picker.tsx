@@ -139,7 +139,7 @@ export function CustomerPicker({
                     }}
                   >
                     {customer.displayName}
-                    {customer.phone ? ` — ${customer.phone}` : ""}
+                    {customer.phone ? ` (${customer.phone})` : ""}
                   </button>
                 ))}
               </Card>

@@ -364,7 +364,7 @@ export function ServiceDocumentGallery<T extends ServiceDocumentGalleryItem>({
                 ) : (
                   <div className="flex h-32 w-full items-center justify-center bg-dusk-100 px-2 text-center text-xs text-dusk-500">
                     {allapot.allapot === "hiba"
-                      ? "Ez a kép nem tölthető le. A fájl megvan, csak megjeleníteni nem tudjuk -- töltsd le."
+                      ? "Ez a kép nem tölthető le. A fájl megvan, csak megjeleníteni nem tudjuk. Töltsd le."
                       : "Betöltés…"}
                   </div>
                 )}

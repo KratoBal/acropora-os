@@ -116,7 +116,7 @@ export class MaintenanceOrdersService {
     const missingAddress = address ? missingAddressParts(address) : [];
     if (missingAddress.length > 0)
       throw new BadRequestException(
-        `A vevő címe hiányos (hiányzik: ${missingAddress.join(", ")}) -- egészítsd ki a partnernél, megrendelőlap enélkül nem állítható ki.`,
+        `A vevő címe hiányos (hiányzik: ${missingAddress.join(", ")}). Egészítsd ki a partnernél, megrendelőlap enélkül nem állítható ki.`,
       );
     const orderFormInput: MaintenanceOrderFormInput = {
       customer: {
