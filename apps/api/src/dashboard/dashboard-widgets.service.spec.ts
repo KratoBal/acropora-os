@@ -12,6 +12,7 @@ import {
 import type { ExpectedArrivalService } from "../purchasing/expected-arrivals/expected-arrival.service.js";
 import type { StockReconciliationService } from "../inventory/stock-reconciliation.service.js";
 import type { UnasStockSyncOutboxRepository } from "../inventory/unas-stock-sync-outbox.repository.js";
+import type { MessagesService } from "../messages/messages.service.js";
 import type { MissingInvoicesService } from "../missing-invoices/missing-invoices.service.js";
 import type { WebshopOrdersService } from "../orders/webshop-orders/webshop-orders.service.js";
 import type { DashboardAquariumWidgetsRepository } from "./dashboard-aquarium-widgets.repository.js";
@@ -43,8 +44,9 @@ function service(
   options: {
     stored?: unknown;
     capabilities?: ServiceCapabilityValue[];
-    loaders?: ConstructorParameters<typeof DashboardWidgetsService>[10];
+    loaders?: ConstructorParameters<typeof DashboardWidgetsService>[11];
     webshopOrders?: Partial<WebshopOrdersService>;
+    messages?: Partial<MessagesService>;
   } = {},
 ) {
   const store: Store = {
@@ -90,6 +92,7 @@ function service(
       {} as UnasStockSyncOutboxRepository,
       {} as DashboardSystemWidgetsRepository,
       (options.webshopOrders ?? {}) as WebshopOrdersService,
+      (options.messages ?? {}) as MessagesService,
       options.loaders,
     ),
   };
@@ -109,6 +112,7 @@ describe("the layout", () => {
       [
         "attention",
         "tasks",
+        "messages",
         "service-tickets",
         "worksheets",
         "maintenance-calendar",
@@ -332,6 +336,27 @@ describe("Webshop rendelési sor", () => {
     });
     const r = await svc.widgets(user("OWNER"), ["webshop-orders"]);
     assert.equal(r.results["webshop-orders"]?.status, "error");
+  });
+});
+
+describe("Olvasatlan üzenetek", () => {
+  it("reads the menu badge's own count for the asking user, every time", async () => {
+    const asked: string[] = [];
+    const { svc } = service({
+      messages: {
+        unread: async (who: { id: string }) => {
+          asked.push(who.id);
+          return { total: 5, conversations: 2 };
+        },
+      } as never,
+    });
+    const r = await svc.widgets(user("SERVICE"), ["messages"]);
+    assert.deepEqual(r.results.messages, {
+      status: "ok",
+      data: { total: 5, conversations: 2 },
+    });
+    await svc.widgets(user("SERVICE"), ["messages"]);
+    assert.equal(asked.length, 2, "a per-user count is never cached");
   });
 });
 

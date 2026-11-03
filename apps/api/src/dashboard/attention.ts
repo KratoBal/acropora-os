@@ -3,6 +3,7 @@ import type {
   DashboardAttentionItem,
   DashboardIncomingInvoicesWidgetData,
   DashboardMaterialRequestsWidgetData,
+  DashboardMessagesWidgetData,
   DashboardMissingInvoicesWidgetData,
   DashboardOverdueInvoicesWidgetData,
   DashboardServiceTicketsWidgetData,
@@ -25,6 +26,7 @@ import type {
  */
 export const ATTENTION_SOURCES = [
   "webshop-orders",
+  "messages",
   "overdue-invoices",
   "missing-invoices",
   "incoming-invoices",
@@ -103,21 +105,35 @@ function itemsOf(widgetId: AttentionSource, data: unknown): Item[] {
     }
     case "webshop-orders": {
       const d = data as DashboardWebshopOrdersWidgetData;
-      // the list's own stage filter behind each line
+      // the list's own stage filter behind each line; a truncated read is a floor, and the
+      // line says so (barracuda, #2105 review)
+      const floor = d.truncated ? " (legalább)" : "";
       return [
         {
           key: "stale",
-          label: "Elavult webshop rendelés",
+          label: `Elavult webshop rendelés${floor}`,
           count: d.counters.stale,
           href: "/webshop/rendelesek?stage=stale",
           tone: "danger",
         },
         {
           key: "processing",
-          label: "Feldolgozásra váró webshop rendelés",
+          label: `Feldolgozásra váró webshop rendelés${floor}`,
           count: d.counters.processing,
           href: "/webshop/rendelesek?stage=processing",
           tone: "warning",
+        },
+      ];
+    }
+    case "messages": {
+      const d = data as DashboardMessagesWidgetData;
+      return [
+        {
+          key: "unread",
+          label: "Olvasatlan üzenet",
+          count: d.total,
+          href: "/uzenetek",
+          tone: "info",
         },
       ];
     }

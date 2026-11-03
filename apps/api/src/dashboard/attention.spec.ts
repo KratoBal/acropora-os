@@ -41,6 +41,23 @@ describe("Figyelmet igényel: the figures", () => {
     assert.deepEqual(
       attentionItemsOf("webshop-orders", {
         counters: {
+          processing: 2,
+          invoice: 0,
+          dispatch: 0,
+          pickup: 0,
+          stale: 9,
+        },
+        truncated: true,
+      }).map((i) => i.label),
+      [
+        "Elavult webshop rendelés (legalább)",
+        "Feldolgozásra váró webshop rendelés (legalább)",
+      ],
+      "a truncated read is a floor, and the line says so",
+    );
+    assert.deepEqual(
+      attentionItemsOf("webshop-orders", {
+        counters: {
           processing: 0,
           invoice: 3,
           dispatch: 0,
@@ -51,6 +68,22 @@ describe("Figyelmet igényel: the figures", () => {
       }),
       [],
       "nothing stale and nothing waiting is no line, not a zero",
+    );
+  });
+
+  it("takes the unread messages as one line to the inbox, and nothing when all are read", () => {
+    assert.deepEqual(
+      attentionItemsOf("messages", { total: 5, conversations: 2 }).map((i) => [
+        i.key,
+        i.count,
+        i.tone,
+        i.href,
+      ]),
+      [["unread", 5, "info", "/uzenetek"]],
+    );
+    assert.deepEqual(
+      attentionItemsOf("messages", { total: 0, conversations: 0 }),
+      [],
     );
   });
 

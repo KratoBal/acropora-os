@@ -28,6 +28,7 @@ import {
 import { partnerScopeOf } from "../auth/partner-scope.util.js";
 import { StockReconciliationService } from "../inventory/stock-reconciliation.service.js";
 import { UnasStockSyncOutboxRepository } from "../inventory/unas-stock-sync-outbox.repository.js";
+import { MessagesService } from "../messages/messages.service.js";
 import { MissingInvoicesService } from "../missing-invoices/missing-invoices.service.js";
 import { WebshopOrdersService } from "../orders/webshop-orders/webshop-orders.service.js";
 import { ExpectedArrivalService } from "../purchasing/expected-arrivals/expected-arrival.service.js";
@@ -109,6 +110,7 @@ export class DashboardWidgetsService {
     private readonly outbox: UnasStockSyncOutboxRepository,
     private readonly systemWidgets: DashboardSystemWidgetsRepository,
     webshopOrders: WebshopOrdersService,
+    private readonly messages: MessagesService,
     @Optional()
     @Inject(DASHBOARD_WIDGET_LOADERS)
     loaders?: Partial<Record<DashboardWidgetId, WidgetLoader>>,
@@ -276,6 +278,8 @@ export class DashboardWidgetsService {
       },
       "missing-invoices": () => this.missingInvoicesCache.summary(),
       "webshop-orders": () => this.webshopOrdersCache.get(),
+      // per user and one query: not cached
+      messages: (user) => this.messages.unread(user),
       "incoming-invoices": () => this.financeWidgets.incomingInvoices(),
       settlements: () => this.financeWidgets.settlements(),
       "stock-reconciliation": () => stockDiscrepancies(this.reconciliation),
