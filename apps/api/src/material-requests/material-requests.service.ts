@@ -945,7 +945,7 @@ export class MaterialRequestsService {
       );
     if (before.status === "DRAFT")
       throw new ConflictException(
-        "Az anyagigény még piszkozat, nincs elküldve, nincs mit beérkezettnek jelölni.",
+        "Az anyagigény még piszkozat, nincs elküldve, ezért nincs mit beérkezettnek jelölni.",
       );
     const canHandle = await this.repository.hasMarkReceivedCapability(actor.id);
     const implicitClaim = before.status === "OPEN";

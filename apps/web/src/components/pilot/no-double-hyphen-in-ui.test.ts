@@ -6,12 +6,13 @@ import { describe, expect, it } from "vitest";
 /*
   NINCS DUPLA KÖTŐJEL A FELÜLETI SZÖVEGBEN (UI-áttekintés, 4. csomag, 2026-11-03). A " -- "
   gondolatjel-pótlék a képernyőn hibának látszik; kettőspont, vessző, zárójel vagy új mondat áll
-  a helyén. MI PIROSÍT: ha egy komponens-fájl kódjában (megjegyzés nélkül) szóközök közt álló
+  a helyén. MI PIROSÍT: ha egy fájl kódjában a `src` alatt (megjegyzés nélkül) szóközök közt álló
   `--` jelenik meg: JSX-szövegben, sztringben, sablonban. A megjegyzések kivágva: ott a magyarázó
   szövegben a jelölés megengedett, nem látszik a felületen. A CSS-változók (`--pilot-...`)
   nem szóközzel körülvéve állnak, azok nem találatok.
 */
-const ROOT = join(process.cwd(), "src", "components");
+// A KÖNYVTÁR AZ EGÉSZ `src`: a komponensek mellett az oldalak (`app`) és a segédek (`lib`) szövege is a képernyőre kerül.
+const ROOT = join(process.cwd(), "src");
 
 function fajlok(mappa: string): string[] {
   return readdirSync(mappa).flatMap((nev) => {
@@ -32,7 +33,8 @@ function kod(forras: string): string {
     );
 }
 
-const DUPLA = /(^|\s)--(\s|$)/;
+// A dupla kötőjel és a szóközök közti gondolatjel; az üres érték "—" jelölője nem (nem szóközök közt áll).
+const DUPLA = /(^|\s)--(\s|$)|\s—\s/;
 
 function talalatok(forras: string): number[] {
   return kod(forras)
@@ -40,7 +42,7 @@ function talalatok(forras: string): number[] {
     .flatMap((sor, i) => (DUPLA.test(sor) ? [i + 1] : []));
 }
 
-describe("dupla kötőjel a komponensek kódjában", () => {
+describe("dupla kötőjel és gondolatjel a webes kódban", () => {
   it("a mérő olvasható fájlokat talál (pozitív kontroll)", () => {
     expect(fajlok(ROOT).length).toBeGreaterThan(100);
   });
@@ -49,6 +51,9 @@ describe("dupla kötőjel a komponensek kódjában", () => {
     expect(talalatok("<p>Ez -- az</p>")).toEqual([1]);
     expect(talalatok('const a = "ez -- az";')).toEqual([1]);
     expect(talalatok("const a = `${x} -- ${y}`;")).toEqual([1]);
+    expect(talalatok("<p>Ez — az</p>")).toEqual([1]);
+    expect(talalatok('const a = "ez — az";')).toEqual([1]);
+    expect(talalatok('const a = x ?? "—";')).toEqual([]);
     expect(talalatok("// ez -- megjegyzés")).toEqual([]);
     expect(talalatok("/* ez\n -- megjegyzés */\nconst a = 1;")).toEqual([]);
     expect(talalatok("style={{ ['--pilot-table-min' as string]: 1 }}")).toEqual(
@@ -56,7 +61,7 @@ describe("dupla kötőjel a komponensek kódjában", () => {
     );
   });
 
-  it("nincs dupla kötőjel a felületi szövegben", () => {
+  it("nincs dupla kötőjel és szóközös gondolatjel a felületi szövegben", () => {
     const talalat = fajlok(ROOT).flatMap((ut) =>
       talalatok(readFileSync(ut, "utf8")).map(
         (sor) => `${relative(ROOT, ut).replaceAll("\\", "/")}:${sor}`,

@@ -265,7 +265,7 @@ export class MaintenanceInvoiceDraftService {
     } catch (error) {
       if (error instanceof SzamlazzConnectionError)
         throw new ServiceUnavailableException(
-          "A Számlázz.hu kapcsolat nincs beállítva, add meg az Agent Key-t a Beállítások oldalon.",
+          "A Számlázz.hu kapcsolat nincs beállítva. Add meg az Agent Key-t a Beállítások oldalon.",
         );
       throw error;
     }

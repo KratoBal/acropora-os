@@ -268,7 +268,7 @@ export function AiTestPage() {
                 <strong>{exchange.reply.errorCode ?? "ismeretlen"}</strong>
                 {exchange.reply.providerWaitedMs !== null ? (
                   <>
-                    {" "}
+                    {". "}
                     Az AI {formatMs(exchange.reply.providerWaitedMs)} után adta
                     fel.
                   </>
