@@ -24,6 +24,7 @@ vi.mock("next/navigation", () => ({
 const api = vi.hoisted(() => ({
   externalDetail: vi.fn(),
   externalPdf: vi.fn(),
+  setExternalPaperOriginal: vi.fn(),
 }));
 vi.mock("@/lib/api/billing-documents", () => ({ billingDocumentsApi: api }));
 
@@ -53,6 +54,7 @@ const detail = (
   source: "SZAMLAZZ",
   pdfAvailable: false,
   pdfMissingReason: null,
+  paperOriginal: false,
   kindCode: "SZ",
   kindLabel: "Számla",
   documentNumber: "ACRW-2026/00508",
@@ -129,8 +131,11 @@ describe("BillingExternalDocumentPage", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/nem adja/)).toBeNull();
-    // a KONTROLL a gombokra: a lapon csak a „Vissza a listához” link van
-    expect(screen.queryAllByRole("button")).toEqual([]);
+    // a KONTROLL a gombokra: a „Vissza a listához” link mellett egyetlen gomb, a „Papíron megvan”
+    // (Balázs, 2026-11-03); szerkesztés, sztornó, újraküldés nincs
+    expect(
+      screen.getAllByRole("button").map((button) => button.textContent),
+    ).toEqual(["Papíron megvan"]);
     expect(
       screen.queryByText(/Szerkesztés|Sztornó|Újraküldés|Nyomtatás|Letöltés/),
     ).toBeNull();
@@ -248,6 +253,54 @@ describe("BillingExternalDocumentPage", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "PDF megnyitása" })).toBeNull();
+  });
+
+  /**
+   * „PAPÍRON MEGVAN” (Balázs, 2026-11-03). MI PIROSÍT: a gomb nem a külső számla végpontját hívja; a
+   * válasz után a lap nem mutatja a jelölést; a visszavonás nem hamisat küld; a `finance.manage` nélküli
+   * szerep is lát gombot; a jelölt számlán a pirula csak a gombbal együtt látszik.
+   */
+  it("marks it as kept on paper, and takes the mark back", async () => {
+    api.externalDetail.mockResolvedValue(detail());
+    api.setExternalPaperOriginal.mockResolvedValueOnce(
+      detail({ paperOriginal: true }),
+    );
+    render(<BillingExternalDocumentPage documentId="ext-1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Papíron megvan" }),
+    );
+    expect(await screen.findByTestId("paper-original-pill")).toHaveTextContent(
+      "Papíron megvan",
+    );
+    expect(api.setExternalPaperOriginal).toHaveBeenCalledWith(
+      "token-1",
+      "ext-1",
+      true,
+    );
+    api.setExternalPaperOriginal.mockResolvedValueOnce(detail());
+    fireEvent.click(screen.getByRole("button", { name: "Mégsem papíron" }));
+    await waitFor(() =>
+      expect(screen.queryByTestId("paper-original-pill")).toBeNull(),
+    );
+    expect(api.setExternalPaperOriginal).toHaveBeenLastCalledWith(
+      "token-1",
+      "ext-1",
+      false,
+    );
+  });
+
+  it("without finance.manage: no button, but a marked invoice still says so", async () => {
+    auth.role = "VIEWER";
+    try {
+      api.externalDetail.mockResolvedValue(detail({ paperOriginal: true }));
+      render(<BillingExternalDocumentPage documentId="ext-1" />);
+      expect(
+        await screen.findByTestId("paper-original-pill"),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /papíron/i })).toBeNull();
+    } finally {
+      auth.role = "OWNER";
+    }
   });
 
   it("says when Számlázz.hu marks it cancelled", async () => {

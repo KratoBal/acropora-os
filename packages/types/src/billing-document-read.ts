@@ -126,6 +126,11 @@ export interface BillingDocumentListItem {
    * letöltés vagy az eBIZ szinkron tölti). `null`: nem kiállított bizonylat, PDF nem várható.
    */
   pdf: BillingDocumentPdfState | null;
+  /**
+   * „PAPÍRON MEGVAN” (Balázs, 2026-11-03): a számla papíron is megvan, ezért a PDF-je nem kerül a havi
+   * kimenő csomagba. Kézzel jelölt, visszavonható; csak `true`-ként áll.
+   */
+  paperOriginal?: boolean;
 }
 
 export interface BillingDocumentPdfState {
@@ -194,6 +199,8 @@ export interface BillingExternalDocumentDetail {
   pdfAvailable: boolean;
   /** Ha a letöltés megpróbálta és nem sikerült: a hibakód; különben `null`. */
   pdfMissingReason: string | null;
+  /** „Papíron megvan” (Balázs, 2026-11-03): a PDF nem kerül a havi kimenő csomagba. */
+  paperOriginal: boolean;
   kindCode: string;
   kindLabel: string;
   documentNumber: string;

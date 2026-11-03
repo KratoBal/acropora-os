@@ -3702,6 +3702,10 @@ model Invoice {
   /// kiállított bizonylatnál EZT mutatják, soha nem a partner mai adatát.
   /// Vázlatnál NULL.
   buyerSnapshot           Json?
+  /// „PAPÍRON MEGVAN” A KIMENŐ SZÁMLÁN (Balázs, Acropora OS szál, 2026-11-03): a számla papíron is
+  /// megvan, ezért a PDF-je nem kerül a havi kimenő csomagba, a borítón „papíron megvan” áll.
+  /// Kézzel, egyenként jelölt, visszavonható; ki és mikor: az auditnaplóban.
+  paperOriginalAt         DateTime?
   createdAt               DateTime            @default(now())
   updatedAt               DateTime            @updatedAt
 
@@ -8742,6 +8746,9 @@ model ExternalBillingDocument {
   /// jött. Ezen találja meg a következő eBIZ-szinkron, hogy ne hozzon létre
   /// második sort. `null`: az eBIZ nem hozta, vagy a sor maga EBIZ forrású.
   ebizExternalId        String?   @unique
+  /// „PAPÍRON MEGVAN” (Balázs, 2026-11-03), ugyanaz, mint az `Invoice.paperOriginalAt`: a PDF nem
+  /// kerül a havi kimenő csomagba. Kézzel jelölt, visszavonható; ki és mikor: az auditnaplóban.
+  paperOriginalAt       DateTime?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 

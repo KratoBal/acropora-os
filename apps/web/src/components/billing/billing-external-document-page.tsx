@@ -27,6 +27,7 @@ import { billingDocumentsApi } from "@/lib/api/billing-documents";
 import { BILLING_LIST_PATH, formatDay } from "./billing-document-table";
 import { formatMoney, trimDecimal } from "./billing-editor-state";
 import { OWN_MARK_SOURCE_LABELS, PaymentBadge } from "./billing-payment";
+import { PaperOriginalControl } from "./billing-paper-original";
 import { pdfMissingText } from "./billing-pdf-state";
 
 /** Az áfakulcs, ahogy a számlán áll: szám mellé %, a jelölés (AAM, TAM) magában. */
@@ -56,6 +57,9 @@ export function BillingExternalDocumentPage({
   const token = session?.token ?? "";
   const canView = Boolean(
     session && hasPermission(session.user, PERMISSIONS.BILLING_VIEW),
+  );
+  const canManageFinance = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.FINANCE_MANAGE),
   );
   const [detail, setDetail] = useState<BillingExternalDocumentDetail | null>(
     null,
@@ -166,6 +170,18 @@ export function BillingExternalDocumentPage({
               Sztornózott
             </span>
           ) : null}
+          <PaperOriginalControl
+            marked={detail.paperOriginal}
+            canManage={canManageFinance}
+            onToggle={(marked) =>
+              billingDocumentsApi.setExternalPaperOriginal(
+                token,
+                documentId,
+                marked,
+              )
+            }
+            onSaved={setDetail}
+          />
         </div>
       </header>
 

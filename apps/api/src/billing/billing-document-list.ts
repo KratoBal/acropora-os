@@ -139,6 +139,7 @@ export function toListItem(
     paymentSource: null,
     cancelled: (row.correctionInvoices?.length ?? 0) > 0,
     pdf: ownPdfState(row),
+    ...(row.paperOriginalAt ? { paperOriginal: true } : {}),
   };
 }
 
@@ -309,6 +310,8 @@ export interface ExternalListRow {
   source: string;
   pdfStorageKey: string | null;
   pdfMissingReason: string | null;
+  /** „Papíron megvan” (2026-11-03); a régi tesztsorokon hiányozhat. */
+  paperOriginalAt?: Date | null;
 }
 
 /**
@@ -623,6 +626,7 @@ export function toExternalListItem(
     pdf: row.pdfStorageKey
       ? { available: true, missingReason: null }
       : { available: false, missingReason: row.pdfMissingReason },
+    ...(row.paperOriginalAt ? { paperOriginal: true } : {}),
   };
 }
 

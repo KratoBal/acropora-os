@@ -66,6 +66,7 @@ export class OutgoingPackageService {
           grossAmount: true,
           currency: true,
           pdfStorageKey: true,
+          paperOriginalAt: true,
         },
       }),
       this.database.externalBillingDocument.findMany({
@@ -83,6 +84,7 @@ export class OutgoingPackageService {
           currency: true,
           cancelled: true,
           pdfStorageKey: true,
+          paperOriginalAt: true,
           pdfMissingReason: true,
         },
       }),
@@ -106,6 +108,7 @@ export class OutgoingPackageService {
           row.documentType === "DELIVERY_NOTE",
         pdfKey: row.pdfStorageKey,
         missingReason: row.pdfStorageKey ? null : "nincs tárolt PDF",
+        paperOriginal: Boolean(row.paperOriginalAt),
         load: () =>
           row.pdfStorageKey
             ? this.documents.get({
@@ -132,6 +135,7 @@ export class OutgoingPackageService {
         notInvoice: externalNotInvoice(row.kindCode),
         pdfKey: row.pdfStorageKey,
         missingReason: row.pdfStorageKey ? null : row.pdfMissingReason,
+        paperOriginal: Boolean(row.paperOriginalAt),
         load: () =>
           row.pdfStorageKey
             ? this.documents.get({
@@ -145,8 +149,11 @@ export class OutgoingPackageService {
     const rows = outgoingPackageRows(month, candidates);
     const lines = [];
     for (const row of rows) {
-      // egy olvashatatlan tárolt fájl a borítón „nincs PDF”, nem az egész csomag hibája
-      const file = await row.load().catch(() => null);
+      // egy olvashatatlan tárolt fájl a borítón „nincs PDF”, nem az egész csomag hibája; a papíron
+      // meglévő számla fájlját nem is kérjük le: nem kerül a csomagba
+      const file = row.paperOriginal
+        ? null
+        : await row.load().catch(() => null);
       lines.push({ row, file });
     }
     const { pdf } = await buildOutgoingPackage({

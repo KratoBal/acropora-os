@@ -279,6 +279,33 @@ export const billingDocumentsApi = {
     );
     return pdfBlob(response, "A számla PDF-je nem tölthető le.");
   },
+  /**
+   * „PAPÍRON MEGVAN” be- vagy kikapcsolása a külső kimenő számlán (Balázs, 2026-11-03); a válasz a
+   * frissített adatlap.
+   */
+  setExternalPaperOriginal(token: string, id: string, marked: boolean) {
+    return apiRequest<BillingExternalDocumentDetail>(
+      `/billing/external-documents/${encodeURIComponent(id)}/paper-original`,
+      token,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ marked }),
+      },
+    );
+  },
+  /** Ugyanez a saját kiállított számlán (vázlaton 409). */
+  setOwnPaperOriginal(token: string, id: string, marked: boolean) {
+    return apiRequest<BillingDocumentDetail>(
+      `/billing/documents/${encodeURIComponent(id)}/paper-original`,
+      token,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ marked }),
+      },
+    );
+  },
   /** A Számlázz.hu-ból kapott külső bizonylat, csak olvasásra (acrobot 25812). */
   externalDetail(token: string, id: string, signal?: AbortSignal) {
     return apiRequest<BillingExternalDocumentDetail>(
