@@ -116,8 +116,8 @@ describe("PilotWorksheetEditorPage", () => {
     expect(screen.getByRole("textbox", { name: "Tárgy" })).toHaveValue(
       "Szivattyú csere",
     );
-    expect(screen.getByLabelText("Keltezés")).toHaveValue("2026-09-20");
-    expect(screen.getByLabelText("Határidő")).toHaveValue("2026-09-30");
+    expect(screen.getByLabelText("Keltezés")).toHaveValue("2026. 09. 20.");
+    expect(screen.getByLabelText("Határidő")).toHaveValue("2026. 09. 30.");
     expect(screen.getByRole("textbox", { name: "Megjegyzés" })).toHaveValue(
       "Zajos lett a szivattyú.",
     );
