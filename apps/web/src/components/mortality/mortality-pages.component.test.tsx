@@ -145,8 +145,8 @@ describe("lista", () => {
     expect(screen.getByText("Sárga doktorhal")).toBeTruthy();
     expect(screen.getByText("De Jong Marinelife")).toBeTruthy();
     // az elhullás napja áll elöl, a rögzítés ideje a második sorban
-    expect(screen.getByText("2026.10.05.")).toBeTruthy();
-    expect(screen.getByText("rögzítve 2026.10.06. 09:42")).toBeTruthy();
+    expect(screen.getByText("2026. 10. 05.")).toBeTruthy();
+    expect(screen.getByText("rögzítve 2026. 10. 06. 09:42")).toBeTruthy();
     expect(await screen.findByText("18 példány")).toBeTruthy();
     expect(screen.getByText("3 akváriumban")).toBeTruthy();
     expect(
