@@ -84,6 +84,24 @@ export function ownIssueRange(
 }
 
 /**
+ * A KIFIZETETTSÉG SZŰRŐJE EGY SORRA (Balázs, 2026-11-04). A fizetési állapot SZÁMOLT érték (a feed, a saját jelölések, a
+ * SimplePay-sorok és a fizetési mód együtt dönt), nem tárolt oszlop, ezért a szűrés a kész soron fut, nem az adatbázisban.
+ * `PAID`: fizetve. `UNPAID`: nincs fizetve, ide esik a részben fizetett is. Az `UNKNOWN` és a `null` (a saját számla
+ * forrás nélkül) egyikbe sem.
+ */
+export function matchesPaymentFilter(
+  item: Pick<BillingDocumentListItem, "paymentState">,
+  filter: BillingDocumentListQuery["paymentState"],
+): boolean {
+  if (!filter) return true;
+  if (filter === "PAID") return item.paymentState === "PAID";
+  return item.paymentState === "UNPAID" || item.paymentState === "PARTIAL";
+}
+
+/** A fizetés-szűrővel egyszerre betölthető sorok felső határa forrásonként: e fölött a szűrő szűkítést kér, nem csonkít. */
+export const PAYMENT_FILTER_ROW_LIMIT = 5000;
+
+/**
  * A LEGÚJABB ELÖL. A szerződés a kiállítás napját, vázlatnál a létrehozást
  * kéri; a Prisma egy oszlopra rendez, nem kettő közül az elsőre, ezért a
  * vázlatok (kiállítás napja nélkül) állnak felül, alattuk a kiállítottak a

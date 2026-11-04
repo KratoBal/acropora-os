@@ -36,6 +36,10 @@ import {
   useUrlQuery,
 } from "@/lib/navigation/use-url-query";
 import { listAmount } from "./billing-amount-format";
+import {
+  BillingFilterGrid,
+  FILTER_GRID_SEARCH_CLASS,
+} from "./billing-filter-grid";
 import { formatDay } from "./billing-document-table";
 import { incomingReviewHref } from "./billing-incoming-review-page";
 import { PAYMENT_STATE_TONE, PaymentBadge } from "./billing-payment";
@@ -405,125 +409,123 @@ export function BillingIncomingList({ token }: { token: string }) {
 
   return (
     <>
-      <section className="rounded-2xl border border-pilot-grey-200 bg-white p-5">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="min-w-[240px] flex-[2_1_320px]">
-            <PilotInput
-              aria-label="Szállító keresése"
-              value={search}
-              onChange={setSearch}
-              leadingIcon={<Icon name="search" size={17} />}
-              placeholder="Szállító neve vagy adószáma…"
-              className="h-10"
-            />
-          </div>
-          <PilotSelect
-            chevron
-            aria-label="Időszak"
-            value={period}
-            onChange={(value) => setFilter("idoszak", value)}
-            className="min-w-[200px] flex-[1_1_210px] [&_select]:h-10"
-          >
-            <option value="">Időszak: mind</option>
-            {months.map((month) => (
-              <option key={month.value} value={month.value}>
-                Időszak: {month.label}
-              </option>
-            ))}
-          </PilotSelect>
-          <PilotSelect
-            chevron
-            aria-label="Dátum alapja"
-            value={dateBasis}
-            onChange={(value) =>
-              setFilter("datum", value === "kelt" ? "" : value)
-            }
-            className="min-w-[160px] flex-[1_1_170px] [&_select]:h-10"
-          >
-            <option value="kelt">Dátum: kelt</option>
-            <option value="teljesites">Dátum: teljesítés</option>
-          </PilotSelect>
-          <PilotSelect
-            chevron
-            aria-label="Fizetés"
-            value={paymentState}
-            onChange={(value) => setFilter("fizetes", value)}
-            className="min-w-[160px] flex-[1_1_170px] [&_select]:h-10"
-          >
-            <option value="">Fizetve / nincs</option>
-            {INCOMING_PAYMENT_STATES.map((state) => (
-              <option key={state} value={state}>
-                {INCOMING_PAYMENT_STATE_LABELS[state]}
-              </option>
-            ))}
-          </PilotSelect>
-          <PilotSelect
-            chevron
-            aria-label="Típus"
-            value={kindCode}
-            onChange={(value) => setFilter("tipus", value)}
-            className="min-w-[160px] flex-[1_1_170px] [&_select]:h-10"
-          >
-            <option value="">Minden típus</option>
-            {(data?.facets.kindCodes ?? []).map((kind) => (
-              <option key={kind.code} value={kind.code}>
-                {kind.label}
-              </option>
-            ))}
-          </PilotSelect>
-          <PilotSelect
-            chevron
-            aria-label="Pénznem"
-            value={currency}
-            onChange={(value) => setFilter("penznem", value)}
-            className="min-w-[150px] flex-[1_1_160px] [&_select]:h-10"
-          >
-            <option value="">Minden pénznem</option>
-            {(data?.facets.currencies ?? []).map((code) => (
-              <option key={code} value={code}>
-                {code}
-              </option>
-            ))}
-          </PilotSelect>
-          <PilotSelect
-            chevron
-            aria-label="Banki párosítás"
-            value={bankMatch}
-            onChange={(value) => setFilter("bank", value)}
-            className="min-w-[200px] flex-[1_1_210px] [&_select]:h-10"
-          >
-            <option value="">Bankkal párosodott / nem</option>
-            {INCOMING_BANK_MATCH_STATES.map((state) => (
-              <option key={state} value={state}>
-                {INCOMING_BANK_MATCH_LABELS[state]}
-              </option>
-            ))}
-          </PilotSelect>
-          <PilotSelect
-            chevron
-            aria-label="Ellenőrzés"
-            value={review}
-            onChange={(value) => setFilter("ellenorzes", value)}
-            className="min-w-[180px] flex-[1_1_190px] [&_select]:h-10"
-          >
-            <option value="">Ellenőrzés: mind</option>
-            {INCOMING_REVIEW_STATES.map((state) => (
-              <option key={state} value={state}>
-                {INCOMING_REVIEW_LABELS[state]}
-              </option>
-            ))}
-          </PilotSelect>
-          {hasFilters ? (
-            <button
-              type="button"
-              onClick={clearFilters}
-              className="ml-auto cursor-pointer whitespace-nowrap text-xs text-pilot-accent-warm-text hover:underline"
-            >
-              Szűrők törlése
-            </button>
-          ) : null}
+      <BillingFilterGrid>
+        <div className={FILTER_GRID_SEARCH_CLASS}>
+          <PilotInput
+            aria-label="Szállító keresése"
+            value={search}
+            onChange={setSearch}
+            leadingIcon={<Icon name="search" size={17} />}
+            placeholder="Szállító neve vagy adószáma…"
+            className="h-10"
+          />
         </div>
-      </section>
+        <PilotSelect
+          chevron
+          aria-label="Időszak"
+          value={period}
+          onChange={(value) => setFilter("idoszak", value)}
+          className="[&_select]:h-10"
+        >
+          <option value="">Időszak: mind</option>
+          {months.map((month) => (
+            <option key={month.value} value={month.value}>
+              Időszak: {month.label}
+            </option>
+          ))}
+        </PilotSelect>
+        <PilotSelect
+          chevron
+          aria-label="Dátum alapja"
+          value={dateBasis}
+          onChange={(value) =>
+            setFilter("datum", value === "kelt" ? "" : value)
+          }
+          className="[&_select]:h-10"
+        >
+          <option value="kelt">Dátum: kelt</option>
+          <option value="teljesites">Dátum: teljesítés</option>
+        </PilotSelect>
+        <PilotSelect
+          chevron
+          aria-label="Fizetés"
+          value={paymentState}
+          onChange={(value) => setFilter("fizetes", value)}
+          className="[&_select]:h-10"
+        >
+          <option value="">Fizetés: mind</option>
+          {INCOMING_PAYMENT_STATES.map((state) => (
+            <option key={state} value={state}>
+              {INCOMING_PAYMENT_STATE_LABELS[state]}
+            </option>
+          ))}
+        </PilotSelect>
+        <PilotSelect
+          chevron
+          aria-label="Típus"
+          value={kindCode}
+          onChange={(value) => setFilter("tipus", value)}
+          className="[&_select]:h-10"
+        >
+          <option value="">Minden típus</option>
+          {(data?.facets.kindCodes ?? []).map((kind) => (
+            <option key={kind.code} value={kind.code}>
+              {kind.label}
+            </option>
+          ))}
+        </PilotSelect>
+        <PilotSelect
+          chevron
+          aria-label="Pénznem"
+          value={currency}
+          onChange={(value) => setFilter("penznem", value)}
+          className="[&_select]:h-10"
+        >
+          <option value="">Minden pénznem</option>
+          {(data?.facets.currencies ?? []).map((code) => (
+            <option key={code} value={code}>
+              {code}
+            </option>
+          ))}
+        </PilotSelect>
+        <PilotSelect
+          chevron
+          aria-label="Banki párosítás"
+          value={bankMatch}
+          onChange={(value) => setFilter("bank", value)}
+          className="[&_select]:h-10"
+        >
+          <option value="">Bankkal párosodott / nem</option>
+          {INCOMING_BANK_MATCH_STATES.map((state) => (
+            <option key={state} value={state}>
+              {INCOMING_BANK_MATCH_LABELS[state]}
+            </option>
+          ))}
+        </PilotSelect>
+        <PilotSelect
+          chevron
+          aria-label="Ellenőrzés"
+          value={review}
+          onChange={(value) => setFilter("ellenorzes", value)}
+          className="[&_select]:h-10"
+        >
+          <option value="">Ellenőrzés: mind</option>
+          {INCOMING_REVIEW_STATES.map((state) => (
+            <option key={state} value={state}>
+              {INCOMING_REVIEW_LABELS[state]}
+            </option>
+          ))}
+        </PilotSelect>
+        {hasFilters ? (
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="cursor-pointer justify-self-start whitespace-nowrap text-xs text-pilot-accent-warm-text hover:underline"
+          >
+            Szűrők törlése
+          </button>
+        ) : null}
+      </BillingFilterGrid>
 
       {error ? (
         <Alert

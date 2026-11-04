@@ -466,6 +466,71 @@ describe("BillingDocumentListPage", () => {
     await waitFor(() => expect(urlNavigation.search).toBe(""));
   });
 
+  /*
+    FIZETVE / NINCS FIZETVE (Balázs, 2026-11-04). MI PIROSÍT: ha a három állás nem a kérésbe és az URL-be megy; ha a
+    szűrő nem nullázza a lapot; ha a „Szűrők törlése” nem viszi vissza.
+  */
+  it("the payment filter goes to the request and the URL, resets the page, and the clear button takes it away", async () => {
+    urlNavigation.reset("/penzugy/szamlazas", "fizetes=UNPAID&page=3");
+    render(<BillingDocumentListPage />);
+    await waitFor(() => expect(api.list).toHaveBeenCalled());
+    expect(lastQuery()).toEqual({
+      page: "3",
+      pageSize: "25",
+      paymentState: "UNPAID",
+    });
+    const select = (await screen.findByLabelText(
+      "Fizetés",
+    )) as HTMLSelectElement;
+    expect([...select.options].map((option) => option.textContent)).toEqual([
+      "Fizetés: mind",
+      "Fizetve",
+      "Nincs fizetve",
+    ]);
+    fireEvent.change(select, { target: { value: "PAID" } });
+    await waitFor(() =>
+      expect(new URLSearchParams(urlNavigation.search).get("fizetes")).toBe(
+        "PAID",
+      ),
+    );
+    expect(new URLSearchParams(urlNavigation.search).get("page")).toBeNull();
+    fireEvent.click(
+      (await screen.findAllByRole("button", { name: "Szűrők törlése" }))[0]!,
+    );
+    await waitFor(() => expect(urlNavigation.search).toBe(""));
+  });
+
+  it("ignores a payment value it does not know", async () => {
+    urlNavigation.reset("/penzugy/szamlazas", "fizetes=PARTIAL");
+    render(<BillingDocumentListPage />);
+    await waitFor(() => expect(api.list).toHaveBeenCalled());
+    expect(lastQuery()).toEqual({ page: "1", pageSize: "25" });
+  });
+
+  /*
+    A SZŰRŐSOR RÁCSA (Balázs, 2026-11-04, széles monitor: a hetedik szűrő egyedül maradt a második sorban, és az egész
+    szélességre nyúlt). MI PIROSÍT: ha a szűrősor ismét nyújtó (flex-grow) alakú; ha egy szűrő saját nyújtó méretet kap;
+    ha a rács nem kitöltő oszlopokból áll (az `auto-fit` az üres sávokat összeomlasztja, és a magában maradt elem kitölti a
+    sort); ha nincs alap sávja telefonon. A böngészőben látott szélességeket a stage-képek mutatják.
+  */
+  it("the filter row is a fixed-column fill grid, not a stretching flex row", async () => {
+    render(<BillingDocumentListPage />);
+    const search = await screen.findByLabelText("Bizonylat keresése");
+    const grid = search.closest("div[class*='grid']") as HTMLElement;
+    expect(grid.className).toContain("grid-cols-1");
+    expect(grid.className).toContain(
+      "sm:grid-cols-[repeat(auto-fill,minmax(190px,1fr))]",
+    );
+    expect(grid.className).not.toMatch(/flex|auto-fit/);
+    // minden szűrő egy cella: egyiknek sincs nyújtó vagy minimum-szélesség osztálya
+    for (const child of grid.children)
+      expect((child as HTMLElement).className).not.toMatch(
+        /flex-\[|min-w-\[|flex-grow|\bgrow\b/,
+      );
+    // nyolc vezérlő a keresővel együtt: kereső, négy régi szűrő, időszak, fizetés, fizetési mód
+    expect(grid.querySelectorAll("select").length).toBe(7);
+  });
+
   it("the source filter goes to the request, and back from the URL", async () => {
     urlNavigation.reset("/penzugy/szamlazas", "origin=EXTERNAL");
     render(<BillingDocumentListPage />);
