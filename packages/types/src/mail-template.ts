@@ -318,6 +318,11 @@ export const MAIL_TEMPLATE_VARIABLES: readonly MailTemplateVariable[] = [
       "Vegyes kosárnál a mondat a bolti átvételes rendelésről. Egyébként üres.",
   },
   {
+    name: "ugy_azonosito",
+    description:
+      "A problémabejelentés azonosítója, amit a vevő a bejelentéskor kapott, például ordprb_01ABC.",
+  },
+  {
     name: "masodik_resz_szam",
     description:
       "Szétbontott rendelésnél a később érkező rész száma #-tel, például #39.",
@@ -715,6 +720,19 @@ const HUNGARIAN_MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
       "masodik_resz_szam",
       "reszek_fizetese_mondat",
       "rendeles_tetelek",
+    ],
+  },
+  {
+    id: "WEBSHOP_PROBLEM_REPORT_RECEIVED",
+    group: "WEBSHOP",
+    name: "Bejelentés megérkezett",
+    description:
+      "Amikor a vevő problémát jelent be egy szállítmányról, és a bejelentés beérkezett.",
+    variables: [
+      "rendeles_szam",
+      "ugyfel_neve",
+      "rendeles_datum",
+      "ugy_azonosito",
     ],
   },
   {
