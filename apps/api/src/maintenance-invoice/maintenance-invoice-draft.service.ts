@@ -232,12 +232,16 @@ export class MaintenanceInvoiceDraftService {
         "A teljesítési igazolás aláírt példánya hiányzik, piszkozat-számla enélkül nem készíthető.",
       );
 
-    // a megrendeléses TIG (Megrendelések S2) vevője a megrendelésen áll; a
-    // számlázása az S3-ban jön, addig a vevő-hiány hibáját adja
-    const customer = certificate.serviceJob?.customer ?? null;
+    // a vevő a TIG forrásáé: a karbantartási lapé, vagy a megrendelésé (Megrendelések S3)
+    const customer =
+      certificate.serviceJob?.customer ??
+      certificate.partnerOrder?.customer ??
+      null;
     if (!customer)
       throw new BadRequestException(
-        "A karbantartási laphoz nincs vevő rendelve, piszkozat-számla enélkül nem készíthető.",
+        certificate.partnerOrder
+          ? "A megrendeléshez nincs vevő rendelve, piszkozat-számla enélkül nem készíthető."
+          : "A karbantartási laphoz nincs vevő rendelve, piszkozat-számla enélkül nem készíthető.",
       );
     const taxProblem = customerTaxNumberProblem(customer);
     if (taxProblem) throw new BadRequestException(taxProblem);
@@ -249,6 +253,13 @@ export class MaintenanceInvoiceDraftService {
         issuedAt: certificate.issuedAt,
         serviceJob: { customer },
         items: certificate.items,
+        // a megrendeléses TIG számlája nem karbantartási: a megjegyzés a megrendelést nevezi
+        // meg (barracuda, #2158 review); a karbantartási TIG-é az alapmondat marad
+        ...(certificate.serviceJob === null && certificate.partnerOrder
+          ? {
+              comment: `Teljesítési igazolás: ${certificate.number}, megrendelés ${certificate.partnerOrder.orderNumber}`,
+            }
+          : {}),
       });
     } catch (error) {
       if (error instanceof MaintenanceInvoiceInputError)

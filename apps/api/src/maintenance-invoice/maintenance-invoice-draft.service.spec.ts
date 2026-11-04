@@ -122,9 +122,11 @@ function service(options: {
   } as unknown as DocumentStore;
 
   let clientCalls = 0;
+  const sentXml: string[] = [];
   const client = {
-    generateInvoice: async () => {
+    generateInvoice: async (xml: string) => {
       clientCalls += 1;
+      sentXml.push(xml);
       if (options.clientError) throw options.clientError;
       return options.clientResponse ?? SUCCESS_RESPONSE;
     },
@@ -134,6 +136,7 @@ function service(options: {
     created,
     stored,
     clientCalls: () => clientCalls,
+    sentXml,
     service: new MaintenanceInvoiceDraftService(
       certificates,
       repository,
@@ -359,6 +362,61 @@ describe("MaintenanceInvoiceDraftService.draftFor", () => {
     assert.equal(input.completionCertificateId, "cert-1");
     assert.equal(input.customerId, "customer-1");
     assert.equal(input.totals.netAmount.toNumber(), 100000);
+  });
+});
+
+describe("MaintenanceInvoiceDraftService.draftFor, a megrendelés TIG-je (Megrendelések S3)", () => {
+  // MI PIROSÍT: ha a megrendeléses TIG vevőjét nem a megrendelésről veszi (nincs munkalapja)
+  const fromOrder = (customer: unknown) =>
+    ({
+      ...baseCertificate,
+      serviceJob: null,
+      partnerOrder: { orderNumber: "MR-2026-0042", customer },
+    }) as never;
+
+  it("a vevő a megrendelésé, és a piszkozat erre a vevőre készül", async () => {
+    const {
+      service: subject,
+      created,
+      sentXml,
+    } = service({
+      certificate: fromOrder({
+        ...baseCertificate.serviceJob.customer,
+        id: "customer-po",
+      }),
+    });
+    await subject.draftFor("cert-1");
+    assert.equal(
+      (created[0] as { customerId: string }).customerId,
+      "customer-po",
+    );
+    // a külső bizonylat megjegyzése a megrendelést nevezi meg, nem karbantartást (barracuda, #2158)
+    assert.match(
+      sentXml[0]!,
+      /<megjegyzes>Teljesítési igazolás: TIG-2026-0007, megrendelés MR-2026-0042<\/megjegyzes>/,
+    );
+  });
+
+  it("a karbantartási TIG számlája a karbantartási mondatot viseli", async () => {
+    const { service: subject, sentXml } = service({});
+    await subject.draftFor("cert-1");
+    assert.match(
+      sentXml[0]!,
+      /<megjegyzes>Karbantartási teljesítési igazolás: TIG-2026-0007<\/megjegyzes>/,
+    );
+  });
+
+  it("vevő nélküli megrendelésnél a megrendelést nevezi meg, és nem hív Számlázz.hu-t", async () => {
+    const { service: subject, clientCalls } = service({
+      certificate: fromOrder(null),
+    });
+    await assert.rejects(
+      () => subject.draftFor("cert-1"),
+      (error: unknown) =>
+        error instanceof BadRequestException &&
+        (error as Error).message.startsWith("A megrendeléshez nincs vevő"),
+    );
+    assert.equal(clientCalls(), 0);
   });
 });
 

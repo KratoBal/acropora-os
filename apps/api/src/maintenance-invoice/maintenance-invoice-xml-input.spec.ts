@@ -188,3 +188,115 @@ describe("maintenanceInvoiceXmlInputFrom", () => {
     assert.equal(xmlInput.paymentDueDate, "2026-09-24");
   });
 });
+
+/**
+ * A MEGRENDELÉSES TIG SORA A SZÁMLÁN (Megrendelések S3, acrobot 42206, B). MI
+ * PIROSÍT: ha a pontosan szorozható sor nem a valódi mennyiséggel és egységgel
+ * megy; ha a nem pontos sor nem "1 db" a sorösszeggel, a mennyiséggel a nevében;
+ * ha a szervizes (egység nélküli) sor alakja megváltozik; ha bármelyik sornál
+ * az egységár × mennyiség nem a nettó.
+ */
+describe("a megrendeléses TIG sora a számlán", () => {
+  const D = (v: string | number) => new Prisma.Decimal(v);
+  const sorok = (items: MaintenanceInvoiceCertificateSource["items"]) =>
+    maintenanceInvoiceXmlInputFrom({ ...baseCertificate, items }).xmlInput
+      .items;
+
+  it("pontos szorzatnál a valódi mennyiség és egység megy", () => {
+    const [sor] = sorok([
+      {
+        description: "Üvegtisztítás",
+        quantity: D("2.5"),
+        unitNet: D("2000"),
+        vatRatePercent: D(27),
+        quantityUnit: "m2",
+      },
+    ]);
+    assert.deepEqual(
+      [sor!.name, sor!.quantity, sor!.unit, sor!.netUnitPrice, sor!.netAmount],
+      ["Üvegtisztítás", 2.5, "m2", 2000, 5000],
+    );
+  });
+
+  it("nem pontos szorzatnál 1 db a sorösszeggel, a mennyiség a névben", () => {
+    const [sor] = sorok([
+      {
+        description: "Üvegtisztítás",
+        quantity: D("3"),
+        unitNet: D("3333.3333"),
+        vatRatePercent: D(27),
+        quantityUnit: "m2",
+      },
+    ]);
+    assert.deepEqual(
+      [sor!.name, sor!.quantity, sor!.unit, sor!.netUnitPrice, sor!.netAmount],
+      ["Üvegtisztítás, 3 m2", 1, "db", 10000, 10000],
+    );
+  });
+
+  it("a szervizes sor (egység nélkül) változatlanul 1 db", () => {
+    const [sor] = sorok([
+      {
+        description: "Akvárium karbantartás",
+        quantity: D(1),
+        unitNet: D("15000"),
+        vatRatePercent: D(27),
+      },
+    ]);
+    assert.deepEqual(
+      [sor!.name, sor!.quantity, sor!.unit],
+      ["Akvárium karbantartás", 1, "db"],
+    );
+  });
+
+  it("minden sorban az egységár × mennyiség a nettó (a Számlázz.hu azonossága)", () => {
+    for (const sor of sorok([
+      {
+        description: "A",
+        quantity: D("2.5"),
+        unitNet: D("2000"),
+        vatRatePercent: D(27),
+        quantityUnit: "m2",
+      },
+      {
+        description: "B",
+        quantity: D("7"),
+        unitNet: D("1428.5714"),
+        vatRatePercent: D(27),
+        quantityUnit: "db",
+      },
+      {
+        description: "C",
+        quantity: D("0.125"),
+        unitNet: D("8000"),
+        vatRatePercent: D(5),
+        quantityUnit: "kg",
+      },
+      {
+        description: "D",
+        quantity: D(1),
+        unitNet: D("15000.4"),
+        vatRatePercent: D(27),
+      },
+    ]))
+      assert.equal(
+        D(sor.netUnitPrice).times(sor.quantity).toString(),
+        D(sor.netAmount).toString(),
+        sor.name,
+      );
+  });
+
+  it("a megjegyzés a forrásé, alapból a karbantartási mondat", () => {
+    assert.equal(
+      maintenanceInvoiceXmlInputFrom(baseCertificate).xmlInput.comment,
+      "Karbantartási teljesítési igazolás: TIG-2026-0007",
+    );
+    assert.equal(
+      maintenanceInvoiceXmlInputFrom({
+        ...baseCertificate,
+        comment: "Teljesítési igazolás: TI-2026-008, megrendelés M-2026-001",
+      }).xmlInput.comment,
+      "Teljesítési igazolás: TI-2026-008, megrendelés M-2026-001",
+    );
+  });
+});

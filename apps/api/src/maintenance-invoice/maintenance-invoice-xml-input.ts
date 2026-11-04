@@ -5,6 +5,7 @@ import {
   wholeForintCertificateAmounts,
   type CertificateAmounts,
 } from "../completion-certificates/completion-certificate-amounts.js";
+import { formatQuantity } from "../completion-certificates/completion-certificate-content.js";
 import { missingAddressParts } from "../customers/address-parts.js";
 import type { SzamlazzAgentInvoiceInput } from "../integrations/szamlazz/szamlazz-agent-xml.js";
 
@@ -39,7 +40,11 @@ export interface MaintenanceInvoiceCertificateSource {
     quantity: Prisma.Decimal;
     unitNet: Prisma.Decimal;
     vatRatePercent: Prisma.Decimal;
+    /** Megrendelések S2: a megrendeléses TIG sorának egysége; a szervizes soron nincs */
+    quantityUnit?: string | null;
   }[];
+  /** a számla megjegyzése; alapból a karbantartási TIG mondata */
+  comment?: string;
 }
 
 export class MaintenanceInvoiceInputError extends Error {
@@ -76,6 +81,7 @@ function mapItem(item: {
   quantity: Prisma.Decimal;
   unitNet: Prisma.Decimal;
   vatRatePercent: Prisma.Decimal;
+  quantityUnit?: string | null;
 }): {
   line: SzamlazzAgentInvoiceInput["items"][number];
   amounts: CertificateAmounts;
@@ -88,6 +94,41 @@ function mapItem(item: {
     }),
     item.vatRatePercent,
   );
+  const totals = {
+    vatRatePercent: item.vatRatePercent.toString(),
+    netAmount: amounts.netAmount.toNumber(),
+    vatAmount: amounts.vatAmount.toNumber(),
+    grossAmount: amounts.grossAmount.toNumber(),
+  };
+  /*
+    A MEGRENDELÉSES SOR (acrobot döntése, 42206, B): a valódi mennyiség és egység
+    külön mezőben, ahol az egységár × mennyiség PONTOSAN a kerekített sorösszeg
+    (akkor a Számlázz.hu azonossága is áll); ahol nem, "1 db" a sorösszeggel, és
+    a mennyiség a tétel nevében. A szervizes sor (egység nélkül) változatlan.
+  */
+  if (item.quantityUnit) {
+    if (item.quantity.times(item.unitNet).equals(amounts.netAmount))
+      return {
+        amounts,
+        line: {
+          name: item.description,
+          quantity: item.quantity.toNumber(),
+          unit: item.quantityUnit,
+          netUnitPrice: item.unitNet.toNumber(),
+          ...totals,
+        },
+      };
+    return {
+      amounts,
+      line: {
+        name: `${item.description}, ${formatQuantity(item.quantity)} ${item.quantityUnit}`,
+        quantity: 1,
+        unit: "db",
+        netUnitPrice: amounts.netAmount.toNumber(),
+        ...totals,
+      },
+    };
+  }
   return {
     amounts,
     line: {
@@ -173,7 +214,9 @@ export function maintenanceInvoiceXmlInputFrom(
       paymentMethod: "Átutalás",
       currency: "HUF",
       orderNumber: certificate.number,
-      comment: `Karbantartási teljesítési igazolás: ${certificate.number}`,
+      comment:
+        certificate.comment ??
+        `Karbantartási teljesítési igazolás: ${certificate.number}`,
       seller: {},
       buyer: {
         name: certificate.serviceJob.customer.displayName,
