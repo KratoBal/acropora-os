@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 
 import { Prisma } from "@acropora/database";
 
+import { buildSzamlazzAgentInvoiceXml } from "../integrations/szamlazz/szamlazz-agent-xml.js";
+
 import {
   maintenanceInvoiceXmlInputFrom,
   MaintenanceInvoiceInputError,
@@ -298,5 +300,64 @@ describe("a megrendeléses TIG sora a számlán", () => {
       }).xmlInput.comment,
       "Teljesítési igazolás: TI-2026-008, megrendelés M-2026-001",
     );
+  });
+});
+
+/*
+  AN EU BUYER'S COUNTRY, IN HUNGARIAN (barracuda #2157, 3rd point; card e7806491). WHAT TURNS THIS RED: an EU buyer's
+  invoice without its country, or with the ISO code in place of the Hungarian name; the country taken from the tax
+  number when the address names an EU country; a Hungarian buyer's invoice carrying a country; the <orszag> tag missing
+  from the XML Számlázz.hu gets.
+*/
+describe("an EU buyer's country", () => {
+  const eu = (country: string | undefined, euTaxNumber = "DE123456789") =>
+    maintenanceInvoiceXmlInputFrom({
+      ...baseCertificate,
+      serviceJob: {
+        customer: {
+          ...baseCertificate.serviceJob.customer,
+          taxNumber: null,
+          euTaxNumber,
+          addresses: [
+            {
+              ...baseCertificate.serviceJob.customer.addresses[0]!,
+              ...(country === undefined ? {} : { country }),
+            },
+          ],
+        },
+      },
+    }).xmlInput.buyer;
+
+  it("goes by the address's EU country, in Hungarian", () => {
+    assert.equal(eu("AT").country, "Ausztria");
+    // the address wins over the tax number's prefix
+    assert.equal(eu("AT", "DE123456789").country, "Ausztria");
+  });
+
+  it("without an EU country on the address, the EU tax number's prefix names it (EL is Greece)", () => {
+    assert.equal(eu(undefined, "SK2020123456").country, "Szlovákia");
+    assert.equal(eu("US", "EL123456789").country, "Görögország");
+  });
+
+  it("a Hungarian buyer gets no country", () => {
+    const { xmlInput } = maintenanceInvoiceXmlInputFrom(baseCertificate);
+    assert.equal("country" in xmlInput.buyer, false);
+  });
+
+  it("reaches Számlázz.hu as <orszag>", () => {
+    const xml = buildSzamlazzAgentInvoiceXml({
+      ...maintenanceInvoiceXmlInputFrom({
+        ...baseCertificate,
+        serviceJob: {
+          customer: {
+            ...baseCertificate.serviceJob.customer,
+            taxNumber: null,
+            euTaxNumber: "DE123456789",
+          },
+        },
+      }).xmlInput,
+      agentKey: "k",
+    });
+    assert.match(xml, /<orszag>Németország<\/orszag>/);
   });
 });
