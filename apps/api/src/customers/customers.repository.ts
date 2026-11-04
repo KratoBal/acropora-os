@@ -240,7 +240,8 @@ export class CustomersRepository extends Repository {
           : partnerTaxNumberFor(
               customer,
               await prisma.supplier.findMany({
-                where: { taxNumber: { not: null } },
+                // a deleted partner is no source (barracuda, #2161)
+                where: { taxNumber: { not: null }, deletedAt: null },
                 select: { name: true, taxNumber: true },
               }),
             ),
@@ -248,7 +249,7 @@ export class CustomersRepository extends Repository {
     if (detail.paymentDueDays !== null) return detail;
     // a sor maga üres: ugyanez a cég a Partnerek oldalon viselhet napot
     const partners = await prisma.supplier.findMany({
-      where: { paymentDueDays: { not: null } },
+      where: { paymentDueDays: { not: null }, deletedAt: null },
       select: { name: true, taxNumber: true, paymentDueDays: true },
     });
     return {
