@@ -40,6 +40,8 @@ export interface UnasInvoiceTaxCounts {
   invoicesWithHuTaxNumber: number;
   customersUnambiguous: number;
   customersContradictory: number;
+  /** contradictory by the eight-digit base: a changed VAT code (the middle digit) of one company is not counted */
+  customersContradictoryByBase: number;
   customersWithoutHuTaxNumber: number;
 }
 
@@ -88,6 +90,9 @@ export function unasInvoiceTaxCounts(
     }
   }
   const sizes = [...numbersByCustomer.values()].map((set) => set.size);
+  const baseSizes = [...numbersByCustomer.values()].map(
+    (set) => new Set([...set].map((number) => number.slice(0, 8))).size,
+  );
   return {
     unasCustomers: unas.size,
     customersWithInvoice: numbersByCustomer.size,
@@ -96,6 +101,7 @@ export function unasInvoiceTaxCounts(
     invoicesWithHuTaxNumber: withHu,
     customersUnambiguous: sizes.filter((size) => size === 1).length,
     customersContradictory: sizes.filter((size) => size > 1).length,
+    customersContradictoryByBase: baseSizes.filter((size) => size > 1).length,
     customersWithoutHuTaxNumber: sizes.filter((size) => size === 0).length,
   };
 }
@@ -116,6 +122,7 @@ export function unasInvoiceTaxLines(
     `magyar_adoszamos_szamla=${c.invoicesWithHuTaxNumber}`,
     `egyertelmu_vevo=${c.customersUnambiguous}`,
     `ellentmondo_vevo=${c.customersContradictory}`,
+    `ellentmondo_vevo_torzsszam=${c.customersContradictoryByBase}`,
     `adoszam_nelkuli_vevo=${c.customersWithoutHuTaxNumber}`,
   ].map((part) => `${head} ${part}`);
 }
