@@ -686,6 +686,8 @@ export class ProductRepository extends Repository {
     variantId: string,
     grossPrice: Prisma.Decimal,
     actorUserId?: string,
+    /** a „most" kívülről: a rendes ár őre csak a még nem lejárt akciót nézi */
+    now: Date = new Date(),
   ): Promise<ProductDetail | null> {
     // két egyidejű mentésből a Serializable tranzakció az egyiket P2034-gyel bontja: az
     // újrapróbál, és a második mentés a frissebb előtte-képpel fut le (barracuda, #2130)
@@ -695,6 +697,7 @@ export class ProductRepository extends Repository {
         variantId,
         grossPrice,
         actorUserId,
+        now,
       ),
     );
   }
@@ -703,7 +706,8 @@ export class ProductRepository extends Repository {
     productId: string,
     variantId: string,
     grossPrice: Prisma.Decimal,
-    actorUserId?: string,
+    actorUserId: string | undefined,
+    now: Date,
   ): Promise<ProductDetail | null> {
     return this.productDatabase.$transaction(
       async (transaction) => {
@@ -712,9 +716,12 @@ export class ProductRepository extends Repository {
           select: VARIANT_PRICE_BEFORE_SELECT,
         });
         if (!before) return null;
-        // a beállított (futó vagy jövőbeli) akció alá a rendes ár nem mehet
+        // a futó vagy jövőbeli akció alá a rendes ár nem mehet; a lejárt akció
+        // mezői a helyükön maradnak (törlést semmi nem végez), az már nem köt (barracuda, #2147)
         if (
           before.sellingSaleGrossPrice &&
+          before.sellingSaleEndsAt &&
+          before.sellingSaleEndsAt > now &&
           !before.sellingSaleGrossPrice.lessThan(grossPrice)
         )
           throw new VariantSaleConflict(
@@ -730,7 +737,6 @@ export class ProductRepository extends Repository {
             sellingPriceCurrency: currency,
           },
         });
-        const now = new Date();
         const history = await recordOwnPrice(transaction, {
           productId,
           variantId,

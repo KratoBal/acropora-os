@@ -906,35 +906,59 @@ describe("ProductRepository", () => {
     );
   });
 
-  it("refuses a regular price at or below the set sale", async () => {
-    for (const price of ["7990", "7000"]) {
-      const { database, calls } = createDatabase({
-        variantBefore: {
-          sellingGrossPrice: new Prisma.Decimal("9990"),
-          sellingPriceCurrency: "HUF",
-          sellingSaleGrossPrice: SALE.grossPrice,
-          sellingSaleStartsAt: SALE.startsAt,
-          sellingSaleEndsAt: SALE.endsAt,
-        },
-      });
-      await assert.rejects(
-        () =>
+  it("refuses a regular price at or below a running or a future sale, and lets it under an expired one (barracuda, #2147)", async () => {
+    const most = new Date("2026-11-12T00:00:00.000Z");
+    const windows = {
+      running: { startsAt: SALE.startsAt, endsAt: SALE.endsAt },
+      future: {
+        startsAt: new Date("2026-11-20T00:00:00.000Z"),
+        endsAt: new Date("2026-11-27T00:00:00.000Z"),
+      },
+      expired: {
+        startsAt: new Date("2026-10-01T00:00:00.000Z"),
+        endsAt: new Date("2026-10-08T00:00:00.000Z"),
+      },
+    };
+    for (const [name, window] of Object.entries(windows))
+      for (const price of ["7990", "7000"]) {
+        const { database, calls } = createDatabase({
+          variantBefore: {
+            sellingGrossPrice: new Prisma.Decimal("9990"),
+            sellingPriceCurrency: "HUF",
+            sellingSaleGrossPrice: SALE.grossPrice,
+            sellingSaleStartsAt: window.startsAt,
+            sellingSaleEndsAt: window.endsAt,
+          },
+        });
+        const save = () =>
           new ProductRepository(database).setVariantSellingPrice(
             "product-1",
             "variant-1",
             new Prisma.Decimal(price),
-          ),
-        (error: unknown) =>
-          error instanceof VariantSaleConflict &&
-          error.code === "sale-not-lower",
-        price,
-      );
-      assert.deepEqual(
-        calls.map((call) => call.operation),
-        ["variantFindFirst"],
-        price,
-      );
-    }
+            undefined,
+            most,
+          );
+        if (name === "expired") {
+          assert.ok(await save(), `${name} ${price}`);
+          assert.ok(
+            calls.some((call) => call.operation === "variantUpdateMany"),
+            `${name} ${price}`,
+          );
+        } else {
+          await assert.rejects(
+            save,
+            (error: unknown) =>
+              error instanceof VariantSaleConflict &&
+              error.code === "sale-not-lower",
+            `${name} ${price}`,
+          );
+          assert.deepEqual(
+            calls.map((call) => call.operation),
+            ["variantFindFirst"],
+            `${name} ${price}`,
+          );
+        }
+      }
   });
 
   it("starts a first own price in forint and still writes no duplicate history", async () => {

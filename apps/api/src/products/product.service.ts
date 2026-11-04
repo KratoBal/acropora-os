@@ -146,6 +146,7 @@ export class ProductService {
     variantId: string,
     input: SetVariantPriceDto,
     actorUserId?: string,
+    now: Date = new Date(),
   ) {
     const product = await this.requireProduct(id);
     this.assertLocallyManaged(product);
@@ -155,6 +156,7 @@ export class ProductService {
         variantId,
         new Prisma.Decimal(input.grossPrice),
         actorUserId,
+        now,
       )
       .catch(saleConflictToHttp);
     if (!updated)
