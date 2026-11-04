@@ -648,6 +648,8 @@ export type {
   CustomerAddressType,
   CustomerDetail,
   CustomerListResponse,
+  CustomerListRole,
+  CustomerPartnerRole,
   CustomerSource,
   CustomerStatusFilter,
   CustomerSummary,
@@ -655,7 +657,11 @@ export type {
   UpdateCustomerAddressInput,
   UpdateCustomerInput,
 } from "./customer-management.js";
-export { CUSTOMER_LIST_PAGE_SIZE } from "./customer-management.js";
+export {
+  CUSTOMER_LIST_PAGE_SIZE,
+  CUSTOMER_LIST_ROLES,
+  CUSTOMER_PARTNER_ROLES,
+} from "./customer-management.js";
 export type {
   AcroporaDomainEvent,
   CatalogImportApplied,

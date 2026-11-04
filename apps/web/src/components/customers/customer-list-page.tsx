@@ -15,9 +15,11 @@ import {
   PilotButton,
 } from "@acropora/ui";
 import {
+  CUSTOMER_LIST_ROLES,
   hasPermission,
   PERMISSIONS,
   type CustomerListResponse,
+  type CustomerPartnerRole,
 } from "@acropora/types";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -26,6 +28,22 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { customersApi } from "@/lib/api/customers";
 
 type CustomerRow = CustomerListResponse["items"][number];
+
+/** A szerep jelvénye a soron (egy partnertörzs): a Supplier-kötésből származtatva, külön oszlop nélkül. */
+const ROLE_BADGE: Record<CustomerPartnerRole, string> = {
+  SUPPLIER: "Beszállító",
+  SERVICE: "Szerviz-partner",
+};
+
+/** A szerep-szűrő választéka, a lista a `role` URL-kulcson át szűr (hiányzó: mindenki). */
+const ROLE_FILTER_LABEL: Record<(typeof CUSTOMER_LIST_ROLES)[number], string> =
+  {
+    ALL: "Minden szerep",
+    BUYER: "Csak vevők",
+    PARTNER: "Minden partner",
+    SUPPLIER: "Beszállítók",
+    SERVICE: "Szerviz-partnerek",
+  };
 
 // The shared table: on the phone every row is a card with the name as its title.
 const columns: PilotTableColumn<CustomerRow>[] = [
@@ -38,6 +56,20 @@ const columns: PilotTableColumn<CustomerRow>[] = [
         {item.companyName ? (
           <span className="block text-xs font-normal text-dusk-500">
             {item.companyName}
+          </span>
+        ) : null}
+        {item.partnerMirror ? (
+          <span className="mt-1 flex flex-wrap gap-1" data-testid="role-badges">
+            {(item.partnerRoles?.length ? item.partnerRoles : []).map(
+              (role) => (
+                <Badge key={role} variant="info">
+                  {ROLE_BADGE[role]}
+                </Badge>
+              ),
+            )}
+            {item.partnerRoles?.length ? null : (
+              <Badge variant="info">Partner</Badge>
+            )}
           </span>
         ) : null}
       </span>
@@ -88,6 +120,8 @@ export function CustomerListPage() {
   const token = session?.token ?? "";
   const query = useMemo(() => {
     const q = new URLSearchParams(params.toString());
+    // egy lista a vevőkkel és a partnerekkel: szerep nélkül mindenki jön (a szerep-szűrő szűkít)
+    if (!q.has("role")) q.set("role", "ALL");
     if (!q.has("page")) q.set("page", "1");
     if (!q.has("pageSize")) q.set("pageSize", "25");
     return q;
@@ -156,8 +190,8 @@ export function CustomerListPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Webshop vásárlók"
-        description="A UNAS webshopból szinkronizált és a kézzel rögzített vásárlók. A beszállítók és a szerviz partnerek a Partnerek menüpontban vannak."
+        title="Vevők és partnerek"
+        description="Egy lista: a UNAS webshopból szinkronizált és a kézzel rögzített vevők, és a partnerek (beszállítók, szerviz-partnerek), a szerep jelvénye a soron. Szűrhető szerepre."
         actions={
           canManage ? (
             <Link href="/vevok/uj">
@@ -187,13 +221,27 @@ export function CustomerListPage() {
       {data ? (
         <>
           <Card className="p-4">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
               <Input
                 aria-label="Vevő keresése"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Név, cégnév, email, partnerkód"
               />
+              <Select
+                aria-label="Szerep"
+                value={params.get("role") ?? ""}
+                onChange={(event) => filter("role", event.target.value)}
+              >
+                <option value="">{ROLE_FILTER_LABEL.ALL}</option>
+                {CUSTOMER_LIST_ROLES.filter((role) => role !== "ALL").map(
+                  (role) => (
+                    <option key={role} value={role}>
+                      {ROLE_FILTER_LABEL[role]}
+                    </option>
+                  ),
+                )}
+              </Select>
               <Select
                 aria-label="Forrás"
                 value={params.get("source") ?? ""}
