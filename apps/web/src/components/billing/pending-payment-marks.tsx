@@ -103,22 +103,33 @@ export function PendingPaymentMarks({
                   {formatDay(mark.date)} · {sourceLabel(mark.source)} ·{" "}
                   {formatMoney(mark.amount, currency)}
                 </span>
-                <div className="flex flex-wrap gap-2">
-                  <PilotButton
-                    variant="secondary"
-                    size="action"
-                    onClick={() => setAsking({ mark, outcome: "WRITTEN" })}
+                {mark.inFlight ? (
+                  // the call may still be running: a "not in" now could stand beside a payment still going out
+                  <p
+                    className="text-xs text-pilot-grey-500"
+                    data-testid={`mark-in-flight-${mark.id}`}
                   >
-                    Bekerült a Számlázz.hu-ba
-                  </PilotButton>
-                  <PilotButton
-                    variant="secondary"
-                    size="action"
-                    onClick={() => setAsking({ mark, outcome: "FAILED" })}
-                  >
-                    Nem került be
-                  </PilotButton>
-                </div>
+                    Folyamatban: a Számlázz.hu-hívás még tarthat (legfeljebb 10
+                    perc). Utána itt lezárható.
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    <PilotButton
+                      variant="secondary"
+                      size="action"
+                      onClick={() => setAsking({ mark, outcome: "WRITTEN" })}
+                    >
+                      Bekerült a Számlázz.hu-ba
+                    </PilotButton>
+                    <PilotButton
+                      variant="secondary"
+                      size="action"
+                      onClick={() => setAsking({ mark, outcome: "FAILED" })}
+                    >
+                      Nem került be
+                    </PilotButton>
+                  </div>
+                )}
               </li>
             ))}
           </ul>

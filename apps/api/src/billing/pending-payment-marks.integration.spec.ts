@@ -4,7 +4,10 @@ import { after, before, describe, it } from "node:test";
 import { Prisma, prisma } from "@acropora/database";
 
 import { integrationDatabaseGate } from "../common/integration-database.js";
-import { PendingPaymentMarkRepository } from "./manual-outgoing-payment.service.js";
+import {
+  PLANNED_IN_FLIGHT_MS,
+  PendingPaymentMarkRepository,
+} from "./manual-outgoing-payment.service.js";
 
 /**
  * A BERAGADT KIFIZETÉS-JELÖLÉS LEZÁRÁSA (barracuda, #2168 review), valódi Postgresen. MI PIROSÍT: ha a
@@ -43,10 +46,13 @@ describe("the pending payment marks", { skip: gate.mode === "skip" }, () => {
         select: { id: true },
       })
     ).id;
-    for (const [key, state] of [
-      ["planned", "PLANNED"],
-      ["unknown", "UNKNOWN"],
-      ["written", "WRITTEN"],
+    // "planned" settled long ago (a stopped process); "fresh" may still be inside its call
+    const settled = new Date(Date.now() - 2 * PLANNED_IN_FLIGHT_MS);
+    for (const [key, state, createdAt] of [
+      ["planned", "PLANNED", settled],
+      ["unknown", "UNKNOWN", settled],
+      ["written", "WRITTEN", settled],
+      ["fresh", "PLANNED", new Date()],
     ] as const)
       ids[key] = (
         await prisma.outgoingPaymentMark.create({
@@ -57,6 +63,7 @@ describe("the pending payment marks", { skip: gate.mode === "skip" }, () => {
             amount: new Prisma.Decimal(127000),
             sourceRef: `${PREFIX}-${key}`,
             state,
+            createdAt,
           },
           select: { id: true },
         })
@@ -69,15 +76,25 @@ describe("the pending payment marks", { skip: gate.mode === "skip" }, () => {
 
   it("lists only the pending ones, and resolves each once, with an audit row", async () => {
     assert.deepEqual(
-      (await repository.pending(NUMBER)).map((mark) => [mark.id, mark.state]),
+      (await repository.pending(NUMBER)).map((mark) => [
+        mark.id,
+        mark.state,
+        mark.inFlight,
+      ]),
       [
-        [ids.planned, "PLANNED"],
-        [ids.unknown, "UNKNOWN"],
+        [ids.planned, "PLANNED", false],
+        [ids.unknown, "UNKNOWN", false],
+        [ids.fresh, "PLANNED", true],
       ],
+    );
+    // a call that may still run is not closed by hand (barracuda, #2168 v3)
+    assert.equal(
+      await repository.resolve({ id: ids.fresh!, outcome: "FAILED", userId }),
+      "IN_FLIGHT",
     );
     assert.equal(
       await repository.resolve({ id: ids.planned!, outcome: "FAILED", userId }),
-      true,
+      "RESOLVED",
     );
     assert.equal(
       await repository.resolve({
@@ -85,7 +102,7 @@ describe("the pending payment marks", { skip: gate.mode === "skip" }, () => {
         outcome: "WRITTEN",
         userId,
       }),
-      true,
+      "RESOLVED",
     );
     // a closed one, and a written one, are not pending: no second change
     assert.equal(
@@ -94,11 +111,11 @@ describe("the pending payment marks", { skip: gate.mode === "skip" }, () => {
         outcome: "WRITTEN",
         userId,
       }),
-      false,
+      "NOT_PENDING",
     );
     assert.equal(
       await repository.resolve({ id: ids.written!, outcome: "FAILED", userId }),
-      false,
+      "NOT_PENDING",
     );
     const states = await prisma.outgoingPaymentMark.findMany({
       where: { invoiceNumber: NUMBER },
@@ -110,9 +127,13 @@ describe("the pending payment marks", { skip: gate.mode === "skip" }, () => {
         [ids.planned!]: "FAILED",
         [ids.unknown!]: "WRITTEN",
         [ids.written!]: "WRITTEN",
+        [ids.fresh!]: "PLANNED",
       },
     );
-    assert.deepEqual(await repository.pending(NUMBER), []);
+    assert.deepEqual(
+      (await repository.pending(NUMBER)).map((mark) => mark.id),
+      [ids.fresh],
+    );
     const audits = await prisma.auditLog.findMany({
       where: {
         entityId: NUMBER,

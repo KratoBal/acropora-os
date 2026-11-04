@@ -63,12 +63,16 @@ export class ManualOutgoingPaymentController {
     @Body() dto: ResolvePaymentMarkDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    const done = await this.marks.resolve({
+    const result = await this.marks.resolve({
       id,
       outcome: dto.outcome,
       userId: user.id,
     });
-    if (!done)
+    if (result === "IN_FLIGHT")
+      throw new ConflictException(
+        "Ez a kifizetés még folyamatban lehet (a Számlázz.hu-hívás legfeljebb 10 percig tart). Várd meg, és nézd meg újra.",
+      );
+    if (result === "NOT_PENDING")
       throw new ConflictException(
         "Ez a jelölés már nem függő (közben lezárták vagy befejeződött).",
       );

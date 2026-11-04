@@ -26,6 +26,7 @@ const mark = {
   amount: "127000.00",
   createdAt: "2026-11-04T17:00:00.000Z",
   responseMessage: "TimeoutError",
+  inFlight: false,
 };
 
 beforeEach(() => {
@@ -73,5 +74,27 @@ describe("PendingPaymentMarks", () => {
     );
     await waitFor(() => expect(onResolved).toHaveBeenCalled());
     expect(api.pendingPaymentMarks).toHaveBeenCalledTimes(2);
+  });
+
+  it("egy még futó hívás jelölését folyamatban mutatja, lezáró gomb nélkül (barracuda, #2168 v3)", async () => {
+    api.pendingPaymentMarks.mockResolvedValue([
+      { ...mark, state: "PLANNED", inFlight: true, responseMessage: null },
+    ]);
+    render(
+      <PendingPaymentMarks
+        token="t"
+        invoiceNumber="ACRW-2026/00084"
+        currency="HUF"
+      />,
+    );
+    expect(await screen.findByTestId("mark-in-flight-m1")).toHaveTextContent(
+      "Folyamatban",
+    );
+    expect(
+      screen.queryByRole("button", { name: "Nem került be" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Bekerült a Számlázz.hu-ba" }),
+    ).not.toBeInTheDocument();
   });
 });

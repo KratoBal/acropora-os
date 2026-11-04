@@ -127,7 +127,20 @@ export interface PendingPaymentMark {
   amount: string;
   createdAt: string;
   responseMessage: string | null;
+  /** a PLANNED that may still be inside its Számlázz.hu call: not closable yet */
+  inFlight: boolean;
 }
+
+/**
+ * HOW LONG A PLANNED MARK MAY STILL BE A CALL IN FLIGHT (barracuda, #2168 v3). The mark is planned under the invoice
+ * lock and the Számlázz.hu call runs after it; the agent client's `fetch` sets no limit of its own, so Node's
+ * defaults bound it (undici: 300 s for the headers, 300 s for the body). Within that, "it is not in" closed by hand,
+ * and a second payment recorded at once, would go out beside the first one still running. An UNKNOWN is born after
+ * the call, so it is closable at once.
+ */
+export const PLANNED_IN_FLIGHT_MS = 10 * 60_000;
+
+export type ResolvePaymentMarkResult = "RESOLVED" | "NOT_PENDING" | "IN_FLIGHT";
 
 /**
  * A FÜGGŐ JELÖLÉSEK ÉS A LEZÁRÁSUK (barracuda, #2168 review): egy folyamat-leállás után ott maradt PLANNED
@@ -141,7 +154,10 @@ export class PendingPaymentMarkRepository extends Repository {
     super(prisma);
   }
 
-  async pending(invoiceNumber: string): Promise<PendingPaymentMark[]> {
+  async pending(
+    invoiceNumber: string,
+    now: Date = new Date(),
+  ): Promise<PendingPaymentMark[]> {
     const rows = await this.database.outgoingPaymentMark.findMany({
       where: { invoiceNumber, state: { in: ["PLANNED", "UNKNOWN"] } },
       orderBy: { createdAt: "asc" },
@@ -163,22 +179,46 @@ export class PendingPaymentMarkRepository extends Repository {
       amount: row.amount.toFixed(2),
       createdAt: row.createdAt.toISOString(),
       responseMessage: row.responseMessage,
+      inFlight:
+        row.state === "PLANNED" &&
+        now.getTime() - row.createdAt.getTime() < PLANNED_IN_FLIGHT_MS,
     }));
   }
 
-  /** `false`: a jelölés közben már nem függő (vagy nincs ilyen); csak függőt zár le. */
-  async resolve(input: {
-    id: string;
-    outcome: "WRITTEN" | "FAILED";
-    userId: string;
-  }): Promise<boolean> {
+  /**
+   * Csak függőt zár le: `NOT_PENDING`, ha közben már nem az (vagy nincs ilyen); `IN_FLIGHT`, ha egy PLANNED még a
+   * hívásán belül lehet.
+   */
+  async resolve(
+    input: {
+      id: string;
+      outcome: "WRITTEN" | "FAILED";
+      userId: string;
+    },
+    now: Date = new Date(),
+  ): Promise<ResolvePaymentMarkResult> {
+    const settled = new Date(now.getTime() - PLANNED_IN_FLIGHT_MS);
     return this.database.$transaction(async (transaction) => {
       const row = await transaction.outgoingPaymentMark.findUnique({
         where: { id: input.id },
-        select: { invoiceNumber: true, state: true, source: true },
+        select: {
+          invoiceNumber: true,
+          state: true,
+          source: true,
+          createdAt: true,
+        },
       });
+      if (row?.state === "PLANNED" && row.createdAt >= settled)
+        return "IN_FLIGHT";
+      // the condition again in the write: a PLANNED only once settled, never a mark that left the pending states
       const changed = await transaction.outgoingPaymentMark.updateMany({
-        where: { id: input.id, state: { in: ["PLANNED", "UNKNOWN"] } },
+        where: {
+          id: input.id,
+          OR: [
+            { state: "UNKNOWN" },
+            { state: "PLANNED", createdAt: { lt: settled } },
+          ],
+        },
         data: {
           state: input.outcome,
           responseMessage:
@@ -187,7 +227,7 @@ export class PendingPaymentMarkRepository extends Repository {
               : "kézzel lezárva: a Számlázz.hu-n nem került be",
         },
       });
-      if (changed.count === 0 || !row) return false;
+      if (changed.count === 0 || !row) return "NOT_PENDING";
       await transaction.auditLog.create({
         data: {
           userId: input.userId,
@@ -202,7 +242,7 @@ export class PendingPaymentMarkRepository extends Repository {
           },
         },
       });
-      return true;
+      return "RESOLVED";
     });
   }
 }

@@ -86,6 +86,8 @@ export type PendingPaymentMark = {
   amount: string;
   createdAt: string;
   responseMessage: string | null;
+  /** a PLANNED that may still be inside its Számlázz.hu call: not closable yet */
+  inFlight: boolean;
 };
 
 export const billingDocumentsApi = {
