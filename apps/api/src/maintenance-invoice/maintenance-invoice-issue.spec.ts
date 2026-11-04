@@ -87,6 +87,7 @@ function harness(options: {
   clientError?: Error;
   clientDelayMs?: number;
   putError?: Error;
+  certificate?: unknown;
 }) {
   const row: Row = {
     id: "invoice-1",
@@ -160,7 +161,7 @@ function harness(options: {
   } as unknown as DocumentStore;
   const service = new MaintenanceInvoiceDraftService(
     {
-      detail: async () => certificate,
+      detail: async () => options.certificate ?? certificate,
     } as unknown as CompletionCertificatesRepository,
     repository,
     {
@@ -200,6 +201,32 @@ describe("maintenanceInvoiceIssueEnabled", () => {
 });
 
 describe("MaintenanceInvoiceDraftService.issue", () => {
+  // the order TIG's draft was confirmed without a signed copy (draftFor): the issue does not
+  // ask again; a worksheet TIG still needs its signed copy (Balázs, 2026-11-04 17:38 UTC)
+  it("issues an unsigned order TIG's draft; refuses an unsigned worksheet TIG", async () => {
+    const order = harness({
+      certificate: {
+        ...certificate,
+        serviceJob: null,
+        partnerOrder: {
+          orderNumber: "MR-2026-0042",
+          customer: certificate.serviceJob.customer,
+        },
+        documents: [],
+      },
+    });
+    await order.service.issue("invoice-1");
+    assert.equal(order.sent.length, 1);
+    const worksheet = harness({
+      certificate: { ...certificate, documents: [] },
+    });
+    await assert.rejects(
+      () => worksheet.service.issue("invoice-1"),
+      ConflictException,
+    );
+    assert.equal(worksheet.sent.length, 0);
+  });
+
   it("with the switch OFF it refuses before any Számlázz.hu call, and the draft stays", async () => {
     const { service, row, sent } = harness({ environment: {} });
     await assert.rejects(() => service.issue("invoice-1"), ConflictException);

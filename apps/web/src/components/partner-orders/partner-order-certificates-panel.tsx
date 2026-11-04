@@ -8,6 +8,7 @@ import {
   completionCertificatesApi,
   type CompletionCertificateSummary,
 } from "@/lib/api/completion-certificates";
+import { PartnerOrderCertificateInvoice } from "./partner-order-certificate-invoice";
 
 /** A megrendelés egy tétele, amennyi a TIG-hez kell (a megrendelés oldala adja). */
 export type PartnerOrderCertificateItem = {
@@ -285,6 +286,13 @@ export function PartnerOrderCertificatesPanel({
                     </li>
                   ))}
                 </ul>
+                <PartnerOrderCertificateInvoice
+                  certificateId={certificate.id}
+                  certificateNumber={certificate.number}
+                  signed={certificate.documents.some(
+                    (documentSummary) => documentSummary.type === "SIGNED_FORM",
+                  )}
+                />
               </div>
             ))}
           </>

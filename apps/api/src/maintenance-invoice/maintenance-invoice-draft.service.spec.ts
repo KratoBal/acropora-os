@@ -406,6 +406,39 @@ describe("MaintenanceInvoiceDraftService.draftFor, a megrendelés TIG-je (Megren
     );
   });
 
+  // Balázs, 2026-11-04 17:38 UTC: aláírt TIG nélkül is számlázható, de csak megerősítéssel
+  it("aláírt példány nélkül megerősítést kér, megerősítéssel elkészül", async () => {
+    const unsigned = () =>
+      ({
+        ...(fromOrder(baseCertificate.serviceJob.customer) as object),
+        documents: [],
+      }) as never;
+    const first = service({ certificate: unsigned() });
+    await assert.rejects(
+      () => first.service.draftFor("cert-1"),
+      (error: unknown) =>
+        error instanceof ConflictException &&
+        error.message.includes("meg kell erősíteni"),
+    );
+    assert.equal(first.clientCalls(), 0);
+    const confirmed = service({ certificate: unsigned() });
+    await confirmed.service.draftFor("cert-1", { acknowledgeUnsigned: true });
+    assert.equal(confirmed.created.length, 1);
+  });
+
+  it("a munkalapos TIG szabálya marad: aláírt példány nélkül megerősítéssel sincs piszkozat", async () => {
+    const { service: subject, clientCalls } = service({
+      certificate: { ...baseCertificate, documents: [] },
+    });
+    await assert.rejects(
+      () => subject.draftFor("cert-1", { acknowledgeUnsigned: true }),
+      (error: unknown) =>
+        error instanceof ConflictException &&
+        error.message.includes("piszkozat-számla enélkül nem készíthető"),
+    );
+    assert.equal(clientCalls(), 0);
+  });
+
   it("vevő nélküli megrendelésnél a megrendelést nevezi meg, és nem hív Számlázz.hu-t", async () => {
     const { service: subject, clientCalls } = service({
       certificate: fromOrder(null),

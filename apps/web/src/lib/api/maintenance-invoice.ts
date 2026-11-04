@@ -12,11 +12,25 @@ export const maintenanceInvoiceApi = {
       token,
     );
   },
-  draft(token: string, certificateId: string) {
+  /**
+   * `acknowledgeUnsigned`: a megrendeléses TIG aláírt példány nélkül, a kezelő megerősítésével
+   * (Balázs, 2026-11-04 17:38 UTC); a munkalapos TIG-nél a szerver ezt nem fogadja el.
+   */
+  draft(
+    token: string,
+    certificateId: string,
+    options: { acknowledgeUnsigned?: boolean } = {},
+  ) {
     return apiRequest<MaintenanceInvoiceSummary>(
       `${base}/${encodeURIComponent(certificateId)}/draft`,
       token,
-      { method: "POST" },
+      options.acknowledgeUnsigned
+        ? {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ acknowledgeUnsigned: true }),
+          }
+        : { method: "POST" },
     );
   },
   /** A VALÓDI kiállítás (146ccc61): a szerver csak bekapcsolt kapcsolóval engedi. */

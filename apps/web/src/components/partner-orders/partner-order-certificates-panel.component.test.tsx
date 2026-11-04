@@ -10,6 +10,15 @@ const api = vi.hoisted(() => ({
 vi.mock("@/lib/api/completion-certificates", () => ({
   completionCertificatesApi: api,
 }));
+const invoices = vi.hoisted(() => ({
+  byCertificate: vi.fn(),
+  draft: vi.fn(),
+  issue: vi.fn(),
+  downloadPdf: vi.fn(),
+}));
+vi.mock("@/lib/api/maintenance-invoice", () => ({
+  maintenanceInvoiceApi: invoices,
+}));
 vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({ session: { token: "token-1" } }),
 }));
@@ -45,6 +54,7 @@ const tig = (lines: { quoteItemId: string; quantity: string }[]) => ({
 });
 
 beforeEach(() => {
+  invoices.byCertificate.mockReset().mockResolvedValue(null);
   for (const f of Object.values(api)) f.mockReset();
   api.issueForPartnerOrder.mockResolvedValue({});
 });
