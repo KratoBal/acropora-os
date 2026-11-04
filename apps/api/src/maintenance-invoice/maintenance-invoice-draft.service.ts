@@ -231,7 +231,9 @@ export class MaintenanceInvoiceDraftService {
         "A teljesítési igazolás aláírt példánya hiányzik, piszkozat-számla enélkül nem készíthető.",
       );
 
-    const customer = certificate.serviceJob.customer;
+    // a megrendeléses TIG (Megrendelések S2) vevője a megrendelésen áll; a
+    // számlázása az S3-ban jön, addig a vevő-hiány hibáját adja
+    const customer = certificate.serviceJob?.customer ?? null;
     if (!customer)
       throw new BadRequestException(
         "A karbantartási laphoz nincs vevő rendelve, piszkozat-számla enélkül nem készíthető.",

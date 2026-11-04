@@ -701,6 +701,7 @@ export const ANONYMIZATION_REGISTER: Readonly<
   },
   CompletionCertificateLineItem: {
     description: "freeText",
+    quantityUnit: "business",
   },
   CompletionCertificateDocument: {
     fileName: "freeText",
