@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   normalizePriceInput,
+  priceInputOf,
   VariantPriceEditor,
 } from "./variant-price-editor";
 
@@ -48,7 +49,8 @@ function renderEditor({
 describe("VariantPriceEditor", () => {
   it("normalizes the Hungarian input and refuses what the server would refuse", () => {
     expect(normalizePriceInput("12 990")).toBe("12990");
-    expect(normalizePriceInput("12 990")).toBe("12990");
+    // nem törő szóköz az ezresek között (a vágólapról így jön)
+    expect(normalizePriceInput("12\u00a0990")).toBe("12990");
     // egész forint: a tizedes elutasítva, mert a felület egész forintot mutatna
     expect(normalizePriceInput("12990,50")).toBeNull();
     expect(normalizePriceInput("12990.50")).toBeNull();
@@ -78,6 +80,18 @@ describe("VariantPriceEditor", () => {
       ),
     );
     await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+  });
+
+  it("fills the field with the stored price as whole forints (barracuda, #2135)", () => {
+    expect(priceInputOf("9990.0000")).toBe("9990");
+    expect(priceInputOf("9990")).toBe("9990");
+    expect(priceInputOf("12990.5000")).toBe("");
+    expect(priceInputOf(null)).toBe("");
+    renderEditor();
+    fireEvent.click(screen.getByRole("button", { name: "Ár módosítása" }));
+    expect(screen.getByLabelText("Saját bruttó eladási ár")).toHaveValue(
+      "9990",
+    );
   });
 
   it("does not send an invalid price", () => {

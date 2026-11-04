@@ -21,6 +21,18 @@ export function normalizePriceInput(text: string): string | null {
   return /^[1-9]\d{0,8}$/.test(value) ? value : null;
 }
 
+/**
+ * A szerkesztő előtöltése a tárolt árból (barracuda, #2135). A tárolt alak
+ * `9990.0000`: ha a tizedes rész csupa nulla, az egész rész kerül a mezőbe; ha
+ * valódi tizedes van benne (egész forint előtti régi érték), a mező üres, mert
+ * az egész-forint szabály úgyis elutasítaná.
+ */
+export function priceInputOf(stored: string | null): string {
+  const m = /^(\d+)(?:\.(\d+))?$/.exec(stored ?? "");
+  if (!m || (m[2] && /[1-9]/.test(m[2]))) return "";
+  return m[1]!;
+}
+
 export function VariantPriceEditor({
   productId,
   variantId,
@@ -114,7 +126,7 @@ export function VariantPriceEditor({
             <PilotButton
               variant="secondary"
               onClick={() => {
-                setText(sellingGrossPrice ?? "");
+                setText(priceInputOf(sellingGrossPrice));
                 setEditing(true);
               }}
             >
