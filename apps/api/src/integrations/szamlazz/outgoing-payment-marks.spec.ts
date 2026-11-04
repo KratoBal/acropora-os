@@ -216,6 +216,49 @@ describe("applyPaidMarks", () => {
     );
   });
 
+  it("allowPartial (the manual entry): a partly paid invoice takes a mark up to its open amount, never more", async () => {
+    // 00485: gross 27600, 100 already paid, so 27500 is open
+    const { store, events } = fakeStore({
+      invoices: { "ACRW-2026/00485": { paidAmount: "100" } },
+    });
+    const { client } = fakeClient(() => ok(), events);
+    const run = (amount: string) =>
+      applyPaidMarks({
+        source: "MANUAL",
+        marks: [{ ...MARKS[2]!, amount, sourceRef: `req-${amount}` }],
+        approved: new Set(["ACRW-2026/00485"]),
+        agentKey: "k",
+        client,
+        store,
+        allowPartial: true,
+      });
+    assert.deepEqual(
+      (await run("27503")).map((l) => l.outcome),
+      [{ kind: "OVER_OPEN", open: "27500.00" }],
+      "more than the open amount (beyond the 2 Ft tolerance)",
+    );
+    assert.deepEqual(events, [], "no log, no call for an over-open mark");
+    assert.deepEqual(
+      (await run("27500")).map((l) => l.outcome),
+      [{ kind: "WRITTEN", outstanding: 0 }],
+    );
+    // the automatic sources keep the old rule: a partly paid invoice is skipped
+    const auto = await applyPaidMarks({
+      source: "GLS_COD",
+      marks: [MARKS[2]!],
+      approved: new Set(["ACRW-2026/00485"]),
+      agentKey: "k",
+      client,
+      store: fakeStore({
+        invoices: { "ACRW-2026/00485": { paidAmount: "100" } },
+      }).store,
+    });
+    assert.deepEqual(
+      auto.map((l) => l.outcome),
+      [{ kind: "NOT_UNPAID", state: "PARTIAL" }],
+    );
+  });
+
   it("a second run: WRITTEN and ALREADY_PAID are done, UNKNOWN and PLANNED wait for a person, FAILED is retried", async () => {
     const { store, events } = fakeStore({
       rows: {

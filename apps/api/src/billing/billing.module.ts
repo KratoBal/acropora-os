@@ -38,6 +38,11 @@ import {
   BuyerTaxCheckRepository,
   BuyerTaxCheckScheduler,
 } from "./buyer-tax-check.scheduler.js";
+import { ManualOutgoingPaymentController } from "./manual-outgoing-payment.controller.js";
+import {
+  ManualOutgoingPaymentService,
+  ManualPaymentAuditRepository,
+} from "./manual-outgoing-payment.service.js";
 
 /**
  * A SZÁMLÁZÁS MODUL: a vázlat (murena), a kiállítás, a lista, a PDF és a kiküldés (nautilus). A
@@ -60,6 +65,7 @@ import {
     BillingDocumentReadController,
     BillingDocumentEmailController,
     BillingEmailDraftController,
+    ManualOutgoingPaymentController,
   ],
   providers: [
     BillingDocumentsRepository,
@@ -83,6 +89,8 @@ import {
     ExternalInvoiceMailPdfScheduler,
     BuyerTaxCheckRepository,
     BuyerTaxCheckScheduler,
+    ManualOutgoingPaymentService,
+    ManualPaymentAuditRepository,
     documentStoreProvider,
   ],
   // a webshop rendelés számlája ugyanazon a vázlaton és kiállításon megy

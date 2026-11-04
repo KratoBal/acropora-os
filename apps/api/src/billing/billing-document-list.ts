@@ -338,7 +338,7 @@ export interface ExternalListRow {
  * Foxpost.
  */
 export interface OwnPaymentMark {
-  source: "GLS_COD" | "SIMPLEPAY" | "FOXPOST";
+  source: "GLS_COD" | "SIMPLEPAY" | "FOXPOST" | "MANUAL";
   markDate: Date;
   amount: Prisma.Decimal;
 }

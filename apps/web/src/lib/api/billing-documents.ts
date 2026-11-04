@@ -61,7 +61,34 @@ export async function pdfBlob(
   return response.blob();
 }
 
+/** A kimenő számla kézi kifizetése (a Számlázz.hu-ba ír, `POST /billing/outgoing-payments`). */
+export type ManualOutgoingPaymentInput = {
+  invoiceNumber: string;
+  /** ÉÉÉÉ-HH-NN */
+  date: string;
+  amount: string;
+  note?: string;
+  requestId: string;
+};
+
+export type ManualOutgoingPaymentResult = {
+  state: "WRITTEN" | "ALREADY_RECORDED";
+  outstanding: number | null;
+  message: string;
+};
+
 export const billingDocumentsApi = {
+  recordOutgoingPayment(token: string, input: ManualOutgoingPaymentInput) {
+    return apiRequest<ManualOutgoingPaymentResult>(
+      "/billing/outgoing-payments",
+      token,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      },
+    );
+  },
   cashRegisterReceipts(
     token: string,
     day: string,

@@ -35,6 +35,7 @@ import { useMailImages } from "@/components/settings/mail-image-picker";
 import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
 import { billingDocumentsApi } from "@/lib/api/billing-documents";
 import { BillingDocumentActions } from "./billing-document-actions";
+import { ManualPaymentForm } from "./manual-payment-form";
 import {
   BillingDocumentEmailDrawer,
   defaultBillingEmail,
@@ -612,6 +613,25 @@ export function BillingDocumentDetailPage({
               </PilotDataItem>
             </PilotDataGrid>
           </PilotSection>
+
+          {canIssue &&
+          detail.status === "ISSUED" &&
+          !detail.cancellation &&
+          detail.documentNumber &&
+          capabilities.showsPaymentFields ? (
+            <PilotSection
+              title="Kifizetés"
+              subtitle="A kifizetettséget a Számlázz.hu tartja nyilván; az állapota a számlalistán látszik."
+            >
+              <ManualPaymentForm
+                token={token}
+                invoiceNumber={detail.documentNumber}
+                defaultAmount={Math.abs(
+                  Number(detail.totals.grossAmount),
+                ).toFixed(detail.currency.toUpperCase() === "HUF" ? 0 : 2)}
+              />
+            </PilotSection>
+          ) : null}
 
           <BillingDocumentRelated
             documents={detail.relatedDocuments ?? []}

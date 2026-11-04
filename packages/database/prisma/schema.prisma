@@ -201,6 +201,10 @@ enum OutgoingPaymentMarkSource {
   GLS_COD
   SIMPLEPAY
   FOXPOST
+  /// a kimenő számla oldalán kézzel rögzített kifizetés (kártya 2026/00083-86, Balázs
+  /// 2026-11-04 16:40 UTC); a `sourceRef` a kérés azonosítója, hogy egy dupla kattintás ne
+  /// legyen két kifizetés
+  MANUAL
 }
 
 enum GlsSyncRunStatus {

@@ -29,6 +29,7 @@ import { billingDocumentsApi } from "@/lib/api/billing-documents";
 import { BILLING_LIST_PATH, formatDay } from "./billing-document-table";
 import { formatMoney, trimDecimal } from "./billing-editor-state";
 import { OWN_MARK_SOURCE_LABELS, PaymentBadge } from "./billing-payment";
+import { ManualPaymentForm } from "./manual-payment-form";
 import { BillingDetailHeader } from "./billing-detail-header";
 import {
   PaperOriginalButton,
@@ -46,10 +47,20 @@ export const EXTERNAL_SOURCE_NAME: Record<ExternalBillingSource, string> = {
   EBIZ: "OTP eBIZ",
 };
 
+/** a nyitott összeg (bruttó mínusz a kifizetett), a kézi kifizetés alapértéke */
+function openAmount(detail: BillingExternalDocumentDetail): string {
+  const decimals = detail.currency.toUpperCase() === "HUF" ? 0 : 2;
+  const open =
+    Math.abs(Number(detail.totals.grossAmount)) -
+    Math.abs(Number(detail.paidAmount ?? "0"));
+  return Math.max(open, 0).toFixed(decimals);
+}
+
 /** Miért nincs PDF, egy mondatban (a hibakód a lap alján marad). */
 /**
  * A KÜLSŐ KIMENŐ SZÁMLA ADATLAPJA (acrobot 25812): ugyanaz a kinézet, mint a
- * mieinké, CSAK OLVASÁSRA. Nincs szerkesztés, sztornó, újraküldés. A
+ * mieinké, CSAK OLVASÁSRA. Nincs szerkesztés, sztornó, újraküldés; egy nyitott
+ * számlára kézi kifizetés rögzíthető, az is a Számlázz.hu-ba (2026-11-04). A
  * Számlázz.hu-ból jött számla PDF-jét a feed nem adja; a Számlázz.hu-s letöltés
  * hozza (#1658, kézzel indított parancs), az OTP eBIZ-ből jötthöz a napi
  * szinkron (2026-10-02). Ha nincs, a `pdfMissingText` mondja meg, miért.
@@ -66,6 +77,10 @@ export function BillingExternalDocumentPage({
   );
   const canManageFinance = Boolean(
     session && hasPermission(session.user, PERMISSIONS.FINANCE_MANAGE),
+  );
+  // the manual payment writes to Számlázz.hu: the issuing permission, as on the server
+  const canRecordPayment = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.BILLING_ISSUE),
   );
   const [detail, setDetail] = useState<BillingExternalDocumentDetail | null>(
     null,
@@ -369,6 +384,19 @@ export function BillingExternalDocumentPage({
                   ))}
                 </ul>
               </div>
+            ) : null}
+            {canRecordPayment &&
+            !ebiz &&
+            !detail.cancelled &&
+            detail.documentNumber &&
+            (detail.paymentState === "UNPAID" ||
+              detail.paymentState === "PARTIAL") ? (
+              <ManualPaymentForm
+                token={token}
+                invoiceNumber={detail.documentNumber}
+                defaultAmount={openAmount(detail)}
+                onRecorded={() => void load()}
+              />
             ) : null}
           </PilotSection>
           <PilotSection

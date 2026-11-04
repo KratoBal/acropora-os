@@ -29,7 +29,7 @@ import type { SzamlazzAgentPaymentClient } from "./szamlazz-agent.client.js";
  *      read-back; a business rejection is FAILED; a thrown error (network,
  *      timeout, HTTP, unreadable answer) is UNKNOWN.
  */
-export type PaymentMarkSource = "GLS_COD" | "SIMPLEPAY" | "FOXPOST";
+export type PaymentMarkSource = "GLS_COD" | "SIMPLEPAY" | "FOXPOST" | "MANUAL";
 
 export type PaymentMarkState =
   "PLANNED" | "WRITTEN" | "ALREADY_PAID" | "FAILED" | "UNKNOWN";
@@ -90,7 +90,9 @@ export type PaymentMarkOutcome =
   | { kind: "UNKNOWN"; error: string }
   | { kind: "LOGGED_BEFORE"; state: PaymentMarkState }
   | { kind: "UNCERTAIN_BEFORE"; state: PaymentMarkState | "TAKEN" }
-  | { kind: "NOT_UNPAID"; state: string };
+  | { kind: "NOT_UNPAID"; state: string }
+  /** `allowPartial`: the mark is more than the invoice's open amount */
+  | { kind: "OVER_OPEN"; open: string };
 
 export interface PaymentMarkLine {
   invoiceNumber: string;
@@ -110,6 +112,12 @@ export async function applyPaidMarks(input: {
   agentKey: string;
   client: SzamlazzAgentPaymentClient;
   store: PaymentMarkStore;
+  /**
+   * A partly paid invoice may take the mark too, up to its open amount (the manual
+   * entry: a customer may pay in parts). The automatic sources write only on a provably
+   * unpaid invoice, as before.
+   */
+  allowPartial?: boolean;
 }): Promise<PaymentMarkLine[]> {
   const { source, store } = input;
   const lines: PaymentMarkLine[] = [];
@@ -157,9 +165,20 @@ export async function applyPaidMarks(input: {
       line({ kind: "ALREADY_PAID" });
       continue;
     }
-    if (state !== "UNPAID") {
+    const partialAllowed = input.allowPartial === true && state === "PARTIAL";
+    if (state !== "UNPAID" && !partialAllowed) {
       line({ kind: "NOT_UNPAID", state });
       continue;
+    }
+    if (input.allowPartial && invoice) {
+      // the open amount, measured right before the write (2 Ft tolerance, as PAID)
+      const open = new Prisma.Decimal(invoice.grossAmount)
+        .abs()
+        .minus(new Prisma.Decimal(invoice.paidAmount).abs());
+      if (new Prisma.Decimal(mark.amount).greaterThan(open.plus(2))) {
+        line({ kind: "OVER_OPEN", open: open.toFixed(2) });
+        continue;
+      }
     }
 
     const payment = {
@@ -266,6 +285,8 @@ export function paidMarksReport(
         return `kimarad: egy korábbi futás állapota ${o.state}, kézi ellenőrzés kell`;
       case "NOT_UNPAID":
         return `kimarad: a számla állapota ${o.state}, nem bizonyíthatóan fizetetlen`;
+      case "OVER_OPEN":
+        return `kimarad: több, mint a nyitott összeg (${o.open})`;
     }
   };
   for (const l of lines)
