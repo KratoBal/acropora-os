@@ -123,7 +123,24 @@ export interface CreateCustomerInput {
   addresses?: CreateCustomerAddressInput[];
 }
 
+/**
+ * A cím szerkesztése: `id` nélkül új cím jön létre, `id`-val a vevő SAJÁT meglévő címe módosul (más vevő címét az API
+ * elutasítja). Törlés nincs: egy címre eszköz vagy dokumentum hivatkozhat.
+ */
+export interface UpdateCustomerAddressInput {
+  id?: string;
+  type: CustomerAddressType;
+  name?: string | null;
+  country?: string;
+  postalCode: string;
+  city: string;
+  line1: string;
+  line2?: string | null;
+}
+
 export interface UpdateCustomerInput {
+  /** Cég vagy magánszemély. */
+  type?: "PERSON" | "COMPANY";
   displayName?: string;
   companyName?: string | null;
   taxNumber?: string | null;
@@ -133,5 +150,7 @@ export interface UpdateCustomerInput {
   phone?: string | null;
   marketingEmailConsent?: boolean;
   marketingSmsConsent?: boolean;
+  /** A megadott címek módosulnak vagy létrejönnek; a többi cím érintetlen marad. */
+  addresses?: UpdateCustomerAddressInput[];
   expectedUpdatedAt: string;
 }

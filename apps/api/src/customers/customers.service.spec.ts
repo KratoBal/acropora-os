@@ -9,8 +9,11 @@ import type {
 } from "./dto/customer.dto.js";
 
 /** A repository that only remembers what it was given. */
-function service() {
-  const seen: Array<{ euTaxNumber?: string | null }> = [];
+function service(existing: Record<string, unknown> = {}) {
+  const seen: Array<{
+    euTaxNumber?: string | null;
+    taxNumber?: string | null;
+  }> = [];
   const repository = {
     create: async (input: CreateCustomerDto) => {
       seen.push(input);
@@ -18,9 +21,10 @@ function service() {
     },
     update: async (_id: string, input: UpdateCustomerDto) => {
       seen.push(input);
+      if (existing.failWith) throw new Error(String(existing.failWith));
       return { id: "c1" };
     },
-    detail: async () => ({ id: "c1" }),
+    detail: async () => ({ id: "c1", ...existing }),
   } as unknown as CustomersRepository;
   return { customers: new CustomersService(repository), seen };
 }
@@ -68,6 +72,98 @@ describe("CustomersService: the community tax number", () => {
       [refused, seen.length],
       ["Magyar cégnél az adószám mezőt töltsd ki.", 0],
       "CUSTOMER-EU-TAX-HU",
+    );
+  });
+});
+
+describe("CustomersService: editing an existing customer (acrobot 42510)", () => {
+  const edit = (input: Record<string, unknown>) =>
+    ({ expectedUpdatedAt: "x", ...input }) as unknown as UpdateCustomerDto;
+
+  it("stores the Hungarian tax number in the dotted shape and clears it when empty", async () => {
+    const { customers, seen } = service();
+    await customers.update("c1", edit({ taxNumber: "12345678142" }), "u1");
+    await customers.update("c1", edit({ taxNumber: "" }), "u1");
+    await customers.update("c1", edit({}), "u1");
+    assert.deepEqual(
+      seen.map((input) => input.taxNumber),
+      ["12345678-1-42", null, undefined],
+    );
+  });
+
+  it("refuses a Hungarian tax number of another shape, with the sentence", async () => {
+    const { customers, seen } = service();
+    for (const typed of ["1234", "SK2020123456", "12345678"])
+      await assert.rejects(
+        customers.update("c1", edit({ taxNumber: typed }), "u1"),
+        (error: Error) =>
+          error.constructor.name === "BadRequestException" &&
+          /közösségi adószám/.test(error.message),
+        typed,
+      );
+    assert.equal(seen.length, 0, "nothing reached the repository");
+  });
+
+  it("lets an old, oddly typed number that is already stored stay, so saving another field is not blocked", async () => {
+    const { customers, seen } = service({ taxNumber: "12 34 56 78-1-42x" });
+    await customers.update(
+      "c1",
+      edit({ taxNumber: "12 34 56 78-1-42x", phone: "+36 1" }),
+      "u1",
+    );
+    assert.equal(
+      seen[0]!.taxNumber,
+      undefined,
+      "the stored value is not rewritten",
+    );
+  });
+
+  it("refuses an edit of a partner's customer mirror, naming where to do it", async () => {
+    const { customers, seen } = service({ partnerMirror: true });
+    await assert.rejects(
+      customers.update("c1", edit({ phone: "+36 1" }), "u1"),
+      (error: Error) =>
+        error.constructor.name === "ConflictException" &&
+        /Partnerek képernyőn/.test(error.message),
+    );
+    assert.equal(seen.length, 0);
+  });
+
+  it("passes the type and the addresses to the repository", async () => {
+    const { customers, seen } = service();
+    const addresses = [
+      {
+        type: "BILLING",
+        postalCode: "1146",
+        city: "Budapest",
+        line1: "Állatkerti krt. 6",
+      },
+    ];
+    await customers.update("c1", edit({ type: "COMPANY", addresses }), "u1");
+    assert.deepEqual(
+      [
+        (seen[0] as { type?: string }).type,
+        (seen[0] as { addresses?: unknown }).addresses,
+      ],
+      ["COMPANY", addresses],
+    );
+  });
+
+  it("says so in a sentence when an address does not belong to the customer", async () => {
+    const { customers } = service({ failWith: "ADDRESS_NOT_OWNED" });
+    await assert.rejects(
+      customers.update("c1", edit({ addresses: [{ id: "a-other" }] }), "u1"),
+      (error: Error) =>
+        error.constructor.name === "BadRequestException" &&
+        /nem ehhez a vevőhöz tartozik/.test(error.message),
+    );
+  });
+
+  it("keeps the stale-edit sentence for a customer changed by someone else", async () => {
+    const { customers } = service({ failWith: "STALE_UPDATE" });
+    await assert.rejects(
+      customers.update("c1", edit({ phone: "+36 1" }), "u1"),
+      (error: Error) => error.constructor.name === "ConflictException",
     );
   });
 });

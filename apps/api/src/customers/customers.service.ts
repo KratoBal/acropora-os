@@ -5,7 +5,11 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma } from "@acropora/database";
-import { normalizeEuTaxNumber } from "@acropora/types";
+import {
+  HU_TAX_NUMBER_PROBLEM,
+  normalizeEuTaxNumber,
+  normalizeHuTaxNumber,
+} from "@acropora/types";
 
 import { CustomersRepository } from "./customers.repository.js";
 import type {
@@ -41,12 +45,19 @@ export class CustomersService {
   }
 
   async update(id: string, input: UpdateCustomerDto, actorId: string) {
-    await this.detail(id);
+    const existing = await this.detail(id);
+    // A partner's customer mirror is written from the Partnerek screen on every save (`syncWorksheetMirror`): an
+    // edit here would be overwritten silently at the partner's next save, so it is refused with the way to do it.
+    if (existing.partnerMirror)
+      throw new ConflictException(
+        "Ez a vevő egy partner vevő-tükre: a Partnerek képernyőn szerkeszthető, onnan másolódik ide.",
+      );
     const euTaxNumber = euTax(input.euTaxNumber);
+    const taxNumber = huTax(input.taxNumber, existing.taxNumber);
     try {
       return await this.repository.update(
         id,
-        { ...input, euTaxNumber },
+        { ...input, taxNumber, euTaxNumber },
         actorId,
       );
     } catch (error) {
@@ -55,6 +66,10 @@ export class CustomersService {
   }
 
   private map(error: unknown): never {
+    if (error instanceof Error && error.message === "ADDRESS_NOT_OWNED")
+      throw new BadRequestException(
+        "A megadott cím nem ehhez a vevőhöz tartozik.",
+      );
     if (error instanceof Error && error.message === "STALE_UPDATE")
       throw new ConflictException(
         "A vevőt másik felhasználó módosította. Frissítsd az oldalt.",
@@ -93,5 +108,23 @@ function euTax(value: string | null | undefined): string | null | undefined {
   // an HU community number here would make it look like an EU buyer
   if (normalized.startsWith("HU"))
     throw new BadRequestException("Magyar cégnél az adószám mezőt töltsd ki.");
+  return normalized;
+}
+
+/**
+ * The Hungarian tax number in its one stored shape (`normalizeHuTaxNumber`, the rule the form shows as well).
+ * `undefined` keeps the field, an empty one clears it, and a changed value that is not that shape is refused with
+ * a sentence. A value that is the one already stored passes untouched even when it is an old, oddly typed number:
+ * saving another field of a customer must not be blocked by a number somebody typed years ago.
+ */
+function huTax(
+  value: string | null | undefined,
+  stored: string | null | undefined,
+): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || !value.trim()) return null;
+  if (stored && value.trim() === stored.trim()) return undefined;
+  const normalized = normalizeHuTaxNumber(value);
+  if (!normalized) throw new BadRequestException(HU_TAX_NUMBER_PROBLEM);
   return normalized;
 }
