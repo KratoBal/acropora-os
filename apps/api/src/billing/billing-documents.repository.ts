@@ -248,7 +248,7 @@ export class BillingDocumentsRepository {
     if (!customer) return null;
     if (customer.paymentDueDays !== null) return customer.paymentDueDays;
     const partners = await this.database.supplier.findMany({
-      where: { paymentDueDays: { not: null } },
+      where: { paymentDueDays: { not: null }, deletedAt: null },
       select: { name: true, taxNumber: true, paymentDueDays: true },
     });
     return (
@@ -276,7 +276,8 @@ export class BillingDocumentsRepository {
   }): Promise<PartnerTaxHint | null> {
     if (customer.taxNumber?.trim() || customer.euTaxNumber?.trim()) return null;
     const partners = await this.database.supplier.findMany({
-      where: { taxNumber: { not: null } },
+      // a deleted partner is no source (barracuda, #2161)
+      where: { taxNumber: { not: null }, deletedAt: null },
       select: { name: true, taxNumber: true },
     });
     return partnerTaxNumberFor(customer, partners);
