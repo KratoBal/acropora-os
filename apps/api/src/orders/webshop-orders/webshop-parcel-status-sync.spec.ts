@@ -78,21 +78,23 @@ describe("syncParcelStatuses", () => {
     const deps = fake({
       o1: [event("05", "Delivered"), event("01", "Picked up")],
       o2: [event("05", "Delivered")],
+      o3: [event("05", "Delivered")],
     });
     const report = await syncParcelStatuses(deps, {}, NOW);
     assert.deepEqual(deps.transitions, []);
     assert.deepEqual(deps.asked, []);
-    assert.equal(report.waiting, 2);
+    assert.equal(report.waiting, 3);
     assert.deepEqual(
       report.observed.map((o) => [o.code, o.description, o.parcels]),
       [
-        ["05", "Delivered", 2],
-        ["01", "Picked up", 1],
+        ["05", "Delivered", 3],
+        ["01", "", 1],
       ],
     );
     const text = describeSyncReport(report);
     assert.match(text, /OBSERVE MODE/);
-    assert.match(text, /05 "Delivered" \(2\)/);
+    assert.match(text, /05 "Delivered" \(3\)/);
+    assert.match(text, /01 \(1\)/);
   });
 
   it("a delivered parcel closes an order the shop lets close", async () => {
@@ -226,23 +228,75 @@ describe("the batch and the observed text", () => {
     assert.doesNotMatch(describeSyncReport(report), /NOT checked/);
   });
 
-  it("the observed description is short and has no control characters (it may be a free field)", async () => {
-    const long = "Átvette: Kovács Anna Budapest Fő utca 12. aláírás\nxx";
-    const deps = fake({ o1: [event("07", long)] });
+  it("a description that carries a name is unique to its parcel: it never reaches the report, short or not", async () => {
+    const deps = fake({
+      o1: [event("07", "Átvette: Kovács Anna")],
+      o2: [event("07", "Átvette: Nagy Béla")],
+      o3: [event("07", "Átvette: Kovács Anna Budapest Fő utca 12.")],
+    });
     const report = await syncParcelStatuses(deps, {}, NOW);
-    const text = report.observed[0]!.description;
-    assert.ok(text.length <= 40, text);
-    assert.doesNotMatch(text, /[\u0000-\u001f]/);
-    assert.doesNotMatch(describeSyncReport(report), /aláírás/);
+    const text = JSON.stringify(report) + describeSyncReport(report);
+    for (const secret of [
+      "Kovács",
+      "Nagy",
+      "Béla",
+      "Anna",
+      "Budapest",
+      "Fő utca",
+    ])
+      assert.doesNotMatch(text, new RegExp(secret));
+    assert.deepEqual(
+      report.observed.map((o) => [o.code, o.description, o.parcels]),
+      [["07", "", 3]],
+    );
   });
 
-  it("control characters inside a short description become spaces (a log line must stay one line)", async () => {
-    const deps = fake({ o1: [event("08", "Kézbesítve\nHamis sor\t\u0007")] });
-    const report = await syncParcelStatuses(deps, {}, NOW);
-    assert.doesNotMatch(
-      report.observed[0]!.description,
-      /[\u0000-\u001f\u007f]/,
+  it("a general description repeated on three different parcels is reported, on two it is not", async () => {
+    const three = await syncParcelStatuses(
+      fake({
+        o1: [event("08", "Kézbesítve")],
+        o2: [event("08", "Kézbesítve")],
+        o3: [event("08", "Kézbesítve")],
+      }),
+      {},
+      NOW,
     );
+    assert.equal(three.observed[0]!.description, "Kézbesítve");
+    const two = await syncParcelStatuses(
+      fake({
+        o1: [event("08", "Kézbesítve")],
+        o2: [event("08", "Kézbesítve")],
+      }),
+      {},
+      NOW,
+    );
+    assert.equal(two.observed[0]!.description, "");
+    assert.equal(two.observed[0]!.parcels, 2);
+  });
+
+  it("the same parcel repeating a description does not count three times", async () => {
+    const report = await syncParcelStatuses(
+      fake({
+        o1: [event("09", "Név"), event("09", "Név"), event("09", "Név")],
+      }),
+      {},
+      NOW,
+    );
+    assert.equal(report.observed[0]!.description, "");
+  });
+
+  it("a shown description is short and has no control characters (a log line stays one line)", async () => {
+    const text =
+      "Kézbesítve\nHamis sor\t\u0007 és még egy nagyon hosszú szöveg a végén";
+    const ids = {
+      o1: [event("08", text)],
+      o2: [event("08", text)],
+      o3: [event("08", text)],
+    };
+    const report = await syncParcelStatuses(fake(ids), {}, NOW);
+    const description = report.observed[0]!.description;
+    assert.ok(description.length > 0 && description.length <= 40, description);
+    assert.doesNotMatch(description, /[\u0000-\u001f\u007f]/);
     assert.doesNotMatch(describeSyncReport(report), /^Hamis sor/m);
   });
 });

@@ -31,6 +31,13 @@ export const SYNC_BATCH = 200;
  * or a signature) is not verified, so the observe mode keeps only what identifies a status.
  */
 export const OBSERVED_DESCRIPTION_MAX = 40;
+/**
+ * A DESCRIPTION IS REPORTED ONLY WHEN IT REPEATS ON THIS MANY DIFFERENT PARCELS (barracuda, #2136 review).
+ * A general description ("delivered") repeats on many parcels; a text carrying a recipient's name or an
+ * address is unique to its parcel, so it never reaches the log, however short it is. The code is always
+ * reported; the parcels whose description did not repeat are counted together under their code, with no text.
+ */
+export const OBSERVED_DESCRIPTION_MIN_PARCELS = 3;
 
 const shortDescription = (text: string): string =>
   text
@@ -161,7 +168,15 @@ export async function syncParcelStatuses(
       report.failed.push({ orderId, error: errorCode(error) });
     }
   }
-  report.observed = [...seen.values()].sort(
+  const shown: ParcelStatusSyncReport["observed"] = [];
+  const hidden = new Map<string, number>();
+  for (const entry of seen.values()) {
+    if (entry.parcels >= OBSERVED_DESCRIPTION_MIN_PARCELS) shown.push(entry);
+    else hidden.set(entry.code, (hidden.get(entry.code) ?? 0) + entry.parcels);
+  }
+  for (const [code, parcels] of hidden)
+    shown.push({ code, description: "", parcels });
+  report.observed = shown.sort(
     (a, b) => b.parcels - a.parcels || a.code.localeCompare(b.code),
   );
   return report;
@@ -177,7 +192,10 @@ export function describeSyncReport(report: ParcelStatusSyncReport): string {
     lines.push(
       `OBSERVE MODE: ${GLS_DELIVERED_CODES_ENV} is empty, no order was moved. Statuses seen: ` +
         (report.observed
-          .map((o) => `${o.code} "${o.description}" (${o.parcels})`)
+          .map(
+            (o) =>
+              `${o.code}${o.description ? ` "${o.description}"` : ""} (${o.parcels})`,
+          )
           .join("; ") || "none") +
         ".",
     );
