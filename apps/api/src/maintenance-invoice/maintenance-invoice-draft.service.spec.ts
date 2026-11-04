@@ -133,6 +133,12 @@ function service(options: {
   } as unknown as SzamlazzAgentClient;
 
   return {
+    // the audit goes with the draft, in its transaction (barracuda, #2176)
+    audits: () =>
+      created.flatMap((input) => {
+        const audit = (input as { unsignedAudit?: unknown }).unsignedAudit;
+        return audit ? [audit] : [];
+      }),
     created,
     stored,
     clientCalls: () => clientCalls,
@@ -422,8 +428,22 @@ describe("MaintenanceInvoiceDraftService.draftFor, a megrendelés TIG-je (Megren
     );
     assert.equal(first.clientCalls(), 0);
     const confirmed = service({ certificate: unsigned() });
-    await confirmed.service.draftFor("cert-1", { acknowledgeUnsigned: true });
+    await confirmed.service.draftFor("cert-1", {
+      acknowledgeUnsigned: true,
+      actor: { id: "user-luca" },
+    });
     assert.equal(confirmed.created.length, 1);
+    // barracuda (#2172): who confirmed, which certificate, which draft
+    assert.deepEqual(confirmed.audits(), [
+      { userId: "user-luca", certificateNumber: "TIG-2026-0007" },
+    ]);
+  });
+
+  it("aláírt példánnyal nincs auditsor", async () => {
+    const { service: subject, audits, created } = service({});
+    await subject.draftFor("cert-1", { actor: { id: "user-luca" } });
+    assert.equal(created.length, 1);
+    assert.deepEqual(audits(), []);
   });
 
   it("a munkalapos TIG szabálya marad: aláírt példány nélkül megerősítéssel sincs piszkozat", async () => {
