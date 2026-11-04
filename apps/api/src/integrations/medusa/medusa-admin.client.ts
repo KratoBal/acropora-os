@@ -888,6 +888,13 @@ export interface MedusaVariantMeasureRow {
   height: number | null;
 }
 
+/** Egy változat metaadata a boltban (V0.2 Omnibus): csak a saját kulcsunk érdekel. */
+export interface MedusaVariantMetadataRow {
+  id: string;
+  sku: string | null;
+  metadata: Record<string, unknown> | null;
+}
+
 /** A `null` ürít: csak az OS saját, nyilvántartott értékére (SEO P0 PR 8 utáni árva-kezelés). */
 export type MedusaVariantMeasurePatch = Partial<
   Record<"weight" | "length" | "width" | "height", number | null>
@@ -1377,6 +1384,20 @@ export interface MedusaAdminClient {
   ): Promise<void>;
   /** A termék változatai a tömegükkel és méreteikkel (SEO P0 PR 8). */
   listVariantMeasures(productId: string): Promise<MedusaVariantMeasureRow[]>;
+  /**
+   * A termék változatainak metaadata (a megadott kulcsok nyomon követéséhez). Csak olvas.
+   */
+  listVariantMetadata(productId: string): Promise<MedusaVariantMetadataRow[]>;
+  /**
+   * Egy változat metaadatának KULCSONKÉNTI frissítése: a Medusa 2.20.1 `mergeMetadata`-ja a
+   * megadott kulcsokat írja, a többit békén hagyja, és az üres szöveg TÖRLI a kulcsot. EZ IR A
+   * BOLTI OLDALRA; a hívó csak a saját kulcsát adja meg.
+   */
+  updateVariantMetadata(
+    productId: string,
+    variantId: string,
+    metadata: Record<string, string>,
+  ): Promise<void>;
   /**
    * Egy változat tömege és méretei. Csak a megadott kulcs íródik; a `null`
    * üríti, de a vetítés csak azt az értéket üríti, amit maga írt ki, és ami
@@ -2756,6 +2777,31 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
       `/admin/products/${encodeURIComponent(productId)}` +
         `/variants/${encodeURIComponent(variantId)}`,
       { method: "POST", body: JSON.stringify(patch) },
+    );
+  }
+
+  async listVariantMetadata(
+    productId: string,
+  ): Promise<MedusaVariantMetadataRow[]> {
+    const params = new URLSearchParams({
+      fields: "id,sku,metadata",
+      limit: String(VARIANT_LOOKUP_LIMIT),
+    });
+    const body = await this.request<{ variants?: MedusaVariantMetadataRow[] }>(
+      `/admin/products/${encodeURIComponent(productId)}/variants?${params.toString()}`,
+    );
+    return body.variants ?? [];
+  }
+
+  async updateVariantMetadata(
+    productId: string,
+    variantId: string,
+    metadata: Record<string, string>,
+  ): Promise<void> {
+    await this.request<unknown>(
+      `/admin/products/${encodeURIComponent(productId)}` +
+        `/variants/${encodeURIComponent(variantId)}`,
+      { method: "POST", body: JSON.stringify({ metadata }) },
     );
   }
 
