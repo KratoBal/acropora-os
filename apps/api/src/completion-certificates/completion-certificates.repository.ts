@@ -44,7 +44,9 @@ const certificateInclude = {
     },
   },
   // Megrendelések S3: a megrendeléses TIG vevője a megrendelésen áll
-  partnerOrder: { select: { customer: certificateCustomerArgs } },
+  partnerOrder: {
+    select: { orderNumber: true, customer: certificateCustomerArgs },
+  },
   items: true,
   documents: {
     orderBy: { createdAt: "desc" as const },

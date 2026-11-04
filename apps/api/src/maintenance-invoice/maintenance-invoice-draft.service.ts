@@ -253,6 +253,13 @@ export class MaintenanceInvoiceDraftService {
         issuedAt: certificate.issuedAt,
         serviceJob: { customer },
         items: certificate.items,
+        // a megrendeléses TIG számlája nem karbantartási: a megjegyzés a megrendelést nevezi
+        // meg (barracuda, #2158 review); a karbantartási TIG-é az alapmondat marad
+        ...(certificate.serviceJob === null && certificate.partnerOrder
+          ? {
+              comment: `Teljesítési igazolás: ${certificate.number}, megrendelés ${certificate.partnerOrder.orderNumber}`,
+            }
+          : {}),
       });
     } catch (error) {
       if (error instanceof MaintenanceInvoiceInputError)
