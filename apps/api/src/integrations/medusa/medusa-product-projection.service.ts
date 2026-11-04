@@ -24,6 +24,7 @@ import {
 } from "./medusa-product-link.repository.js";
 import {
   decidePublication,
+  isDiscontinued,
   PUBLICATION_REASON_TEXT,
   type ProductPublicationState,
   type PublicationDecision,
@@ -47,6 +48,7 @@ import {
   relationIdsMetadataValue,
 } from "./medusa-relations.policy.js";
 import {
+  DISCONTINUED_KEY,
   mergeProductMetadata,
   PRIMARY_CATEGORY_KEY,
   UNIQUE_PIECE_KEY,
@@ -822,6 +824,9 @@ export class MedusaProductProjectionService {
        * OSSZEFESULES veszi le a kulcsot (`medusa-metadata-merge.ts`).
        */
       ...(product.uniquePiece ? { [UNIQUE_PIECE_KEY]: "true" } : {}),
+      ...(isDiscontinued(publication.reason, product.unasProductUrl)
+        ? { [DISCONTINUED_KEY]: "true" }
+        : {}),
       ...(product.primaryMedusaCategoryId
         ? { [PRIMARY_CATEGORY_KEY]: product.primaryMedusaCategoryId }
         : {}),
