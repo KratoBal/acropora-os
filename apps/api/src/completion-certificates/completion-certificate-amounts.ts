@@ -79,11 +79,16 @@ export function wholeForintCertificateAmounts(
 ): CertificateAmounts {
   const round = (value: Prisma.Decimal) =>
     value.toDecimalPlaces(0, Prisma.Decimal.ROUND_HALF_UP);
-  return {
-    netAmount: round(amounts.netAmount),
-    vatAmount: round(amounts.vatAmount),
-    grossAmount: round(amounts.grossAmount),
-  };
+  /*
+    A BRUTTÓ A KEREKÍTETT NETTÓ + A KEREKÍTETT ÁFA, nem a 4 tizedes bruttó külön
+    kerekítése (murena, Megrendelések S1-S2). A kettő soronként 1 Ft-tal eltérhet:
+    1 × 10,5 nettó 27%-kal: nettó 11, ÁFA 2,835 -> 3, de a bruttó 13,335 -> 13.
+    A lapon és a számlán a sor bruttója a két mellette álló szám összege kell
+    legyen, és a Számlázz.hu is így ellenőriz (bruttó = nettó + ÁFA).
+  */
+  const netAmount = round(amounts.netAmount);
+  const vatAmount = round(amounts.vatAmount);
+  return { netAmount, vatAmount, grossAmount: netAmount.plus(vatAmount) };
 }
 
 /**

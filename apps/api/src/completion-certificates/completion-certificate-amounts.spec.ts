@@ -6,6 +6,7 @@ import { Prisma } from "@acropora/database";
 import {
   computeCertificateLineAmounts,
   sumCertificateAmounts,
+  wholeForintCertificateAmounts,
 } from "./completion-certificate-amounts.js";
 
 describe("computeCertificateLineAmounts", () => {
@@ -91,6 +92,50 @@ describe("computeCertificateLineAmounts", () => {
       "2.7001",
       "a nyers szorzatból (2.7000405) 2.7 jönne ki, nem 2.7001",
     );
+  });
+});
+
+describe("wholeForintCertificateAmounts", () => {
+  /**
+   * A BRUTTÓ A KÉT KEREKÍTETT SZÁM ÖSSZEGE (murena, Megrendelések). MI PIROSÍT:
+   * ha a bruttó a 4 tizedes bruttó külön kerekítése, mert akkor egy sor nettó +
+   * ÁFA nem a bruttó (11 + 3 != 13).
+   */
+  it("a bruttó a kerekített nettó + a kerekített ÁFA", () => {
+    const amounts = wholeForintCertificateAmounts(
+      computeCertificateLineAmounts({
+        quantity: 1,
+        unitPrice: "10.5",
+        vatRatePercent: 27,
+      }),
+    );
+    assert.deepEqual(
+      [
+        amounts.netAmount.toString(),
+        amounts.vatAmount.toString(),
+        amounts.grossAmount.toString(),
+      ],
+      ["11", "3", "14"],
+    );
+    const esetek: [string, string, string][] = [
+      ["3", "233333.3333", "27"],
+      ["2.5", "4999.5", "5"],
+      ["7", "1428.5714", "18"],
+    ];
+    for (const [q, u, v] of esetek) {
+      const a = wholeForintCertificateAmounts(
+        computeCertificateLineAmounts({
+          quantity: q,
+          unitPrice: u,
+          vatRatePercent: v,
+        }),
+      );
+      assert.equal(
+        a.grossAmount.toString(),
+        a.netAmount.plus(a.vatAmount).toString(),
+        `${q} x ${u}`,
+      );
+    }
   });
 });
 
