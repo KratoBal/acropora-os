@@ -57,6 +57,17 @@ export function taxNumberSearchKey(search: string): string | null {
 }
 
 /**
+ * A SOR EGY PARTNER VEVŐ-TÜKRE, ha él a partnere: a törölt partner (Supplier.deletedAt) sora ismét sima vevő-sor, nem kap partner
+ * jelvényt, és a szerkesztése nem tiltott (a Partnerek képernyőn a törölt partner nem szerkeszthető, tehát a tiltás zsákutca
+ * volna; barracuda, #2184 review).
+ */
+export function isPartnerMirror(
+  partner: { deletedAt?: Date | null } | null,
+): boolean {
+  return partner !== null && !partner.deletedAt;
+}
+
+/**
  * A SZEREPEK A SUPPLIER-KÖTÉSBŐL (egy partnertörzs): a vevő-sor szerepei jelölésként, külön oszlop nélkül. Csak a partner-sornál
  * van (a vevőnél a mező hiányzik).
  */
@@ -498,7 +509,7 @@ export class CustomersRepository extends Repository {
       archivedAt: customer.archivedAt?.toISOString(),
       address: formatAddress(customer.addresses),
       taxNumber: customer.taxNumber ?? undefined,
-      partnerMirror: Boolean(customer.partner),
+      partnerMirror: isPartnerMirror(customer.partner),
       ...partnerRolesOf(customer.partner),
       createdAt: customer.createdAt.toISOString(),
       updatedAt: customer.updatedAt.toISOString(),
@@ -514,7 +525,7 @@ export class CustomersRepository extends Repository {
       taxNumber: customer.taxNumber ?? undefined,
       euTaxNumber: customer.euTaxNumber ?? undefined,
       paymentDueDays: customer.paymentDueDays ?? null,
-      partnerMirror: Boolean(customer.partner),
+      partnerMirror: isPartnerMirror(customer.partner),
       marketingEmailConsent: customer.marketingEmailConsent,
       marketingSmsConsent: customer.marketingSmsConsent,
       addresses: customer.addresses.map(toAddress),
