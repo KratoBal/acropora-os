@@ -35,7 +35,7 @@ import { useMailImages } from "@/components/settings/mail-image-picker";
 import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
 import { billingDocumentsApi } from "@/lib/api/billing-documents";
 import { BillingDocumentActions } from "./billing-document-actions";
-import { ManualPaymentForm } from "./manual-payment-form";
+import { ManualPaymentForm, openAmountInput } from "./manual-payment-form";
 import {
   BillingDocumentEmailDrawer,
   defaultBillingEmail,
@@ -626,9 +626,11 @@ export function BillingDocumentDetailPage({
               <ManualPaymentForm
                 token={token}
                 invoiceNumber={detail.documentNumber}
-                defaultAmount={Math.abs(
-                  Number(detail.totals.grossAmount),
-                ).toFixed(detail.currency.toUpperCase() === "HUF" ? 0 : 2)}
+                defaultAmount={openAmountInput(
+                  detail.totals.grossAmount,
+                  null,
+                  detail.currency,
+                )}
               />
             </PilotSection>
           ) : null}

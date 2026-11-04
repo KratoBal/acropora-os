@@ -18,6 +18,21 @@ function budapestToday(now: Date = new Date()): string {
   }).format(now);
 }
 
+/**
+ * A KÉZI KIFIZETÉS ALAPÖSSZEGE gépi szövegként (a beviteli mezőbe, nem kiírásra): a bruttó
+ * mínusz a kifizetett, forintnál egészre, más pénznemnél két tizedesre kerekítve.
+ */
+export function openAmountInput(
+  grossAmount: string,
+  paidAmount: string | null,
+  currency: string,
+): string {
+  const scale = currency.toUpperCase() === "HUF" ? 1 : 100;
+  const open =
+    Math.abs(Number(grossAmount)) - Math.abs(Number(paidAmount ?? "0"));
+  return String(Math.round(Math.max(open, 0) * scale) / scale);
+}
+
 /** a felületi korlát, egy mondatban (acrobot 42564) */
 export const MANUAL_PAYMENT_UNDO_NOTE =
   "A kifizetés a Számlázz.hu-ba kerül. Egy hibásan rögzített kifizetést a Számlázz.hu felületén lehet törölni, innen nem.";

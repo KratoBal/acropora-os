@@ -29,7 +29,7 @@ import { billingDocumentsApi } from "@/lib/api/billing-documents";
 import { BILLING_LIST_PATH, formatDay } from "./billing-document-table";
 import { formatMoney, trimDecimal } from "./billing-editor-state";
 import { OWN_MARK_SOURCE_LABELS, PaymentBadge } from "./billing-payment";
-import { ManualPaymentForm } from "./manual-payment-form";
+import { ManualPaymentForm, openAmountInput } from "./manual-payment-form";
 import { BillingDetailHeader } from "./billing-detail-header";
 import {
   PaperOriginalButton,
@@ -46,15 +46,6 @@ export const EXTERNAL_SOURCE_NAME: Record<ExternalBillingSource, string> = {
   SZAMLAZZ: "Számlázz.hu",
   EBIZ: "OTP eBIZ",
 };
-
-/** a nyitott összeg (bruttó mínusz a kifizetett), a kézi kifizetés alapértéke */
-function openAmount(detail: BillingExternalDocumentDetail): string {
-  const decimals = detail.currency.toUpperCase() === "HUF" ? 0 : 2;
-  const open =
-    Math.abs(Number(detail.totals.grossAmount)) -
-    Math.abs(Number(detail.paidAmount ?? "0"));
-  return Math.max(open, 0).toFixed(decimals);
-}
 
 /** Miért nincs PDF, egy mondatban (a hibakód a lap alján marad). */
 /**
@@ -394,7 +385,11 @@ export function BillingExternalDocumentPage({
               <ManualPaymentForm
                 token={token}
                 invoiceNumber={detail.documentNumber}
-                defaultAmount={openAmount(detail)}
+                defaultAmount={openAmountInput(
+                  detail.totals.grossAmount,
+                  detail.paidAmount,
+                  detail.currency,
+                )}
                 onRecorded={() => void load()}
               />
             ) : null}
