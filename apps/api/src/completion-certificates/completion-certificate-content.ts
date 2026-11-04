@@ -67,6 +67,17 @@ export function formatHuf(amount: Prisma.Decimal): string {
   return `${negative ? "-" : ""}${grouped}`;
 }
 
+/**
+ * A MENNYISÉG MAGYAR TIZEDESVESSZŐVEL ("2,5"), a `Decimal` saját szövegéből,
+ * ezres tagolás nélkül. A szervizes TIG egész mennyiséget visz ("1 alkalom"),
+ * ott nincs mit cserélni; a megrendelés részteljesítése tört mennyiséget is
+ * igazolhat ("2,5 m2"), és a `toString()` pontja egy aláírandó magyar lapon
+ * idegen alak (Megrendelések S2).
+ */
+export function formatQuantity(quantity: Prisma.Decimal): string {
+  return quantity.toString().replace(".", ",");
+}
+
 export interface CompletionCertificateLine {
   description: string;
   detail: string | null;
@@ -133,7 +144,7 @@ export function completionCertificateContent(
       description: item.description,
       detail: item.detail ?? null,
       contractNumber: item.contractNumber ?? null,
-      quantityLabel: `${quantity.toString()} ${item.quantityUnit}`,
+      quantityLabel: `${formatQuantity(quantity)} ${item.quantityUnit}`,
       unitPriceLabel: formatHuf(new Prisma.Decimal(item.unitPrice)),
       vatRateLabel: `${vatRatePercent.toString()}%`,
       netLabel: formatHuf(amounts.netAmount),
