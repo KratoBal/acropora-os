@@ -25,6 +25,18 @@ export const GLS_DELIVERED_CODES_ENV = "GLS_DELIVERED_STATUS_CODES";
 export const SYNC_WINDOW_DAYS = 30;
 /** At most this many parcels per run. */
 export const SYNC_BATCH = 200;
+/**
+ * The carrier's description is logged SHORT and without control characters: which MyGLS field the text is
+ * (the general description of the status, or a free additional field that could carry a recipient's name
+ * or a signature) is not verified, so the observe mode keeps only what identifies a status.
+ */
+export const OBSERVED_DESCRIPTION_MAX = 40;
+
+const shortDescription = (text: string): string =>
+  text
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .trim()
+    .slice(0, OBSERVED_DESCRIPTION_MAX);
 
 /** The delivered codes the environment names: trimmed, empty entries dropped, compared as written by the carrier. */
 export const deliveredCodes = (env: NodeJS.ProcessEnv): ReadonlySet<string> =>
@@ -64,6 +76,8 @@ export interface ParcelStatusSyncReport {
   observed: { code: string; description: string; parcels: number }[];
   /** the delivered codes configured (empty: the run only observes) */
   configuredCodes: string[];
+  /** there were more parcels in the window than one run takes: the oldest beyond the batch were NOT checked */
+  truncated: boolean;
 }
 
 const errorCode = (error: unknown): string => {
@@ -85,7 +99,10 @@ export async function syncParcelStatuses(
   const since = new Date(
     now.getTime() - SYNC_WINDOW_DAYS * 24 * 60 * 60 * 1000,
   );
-  const orderIds = await deps.parcelOrderIds(since, SYNC_BATCH);
+  // one more than the batch is asked for, only to know whether the batch cut something off
+  const found = await deps.parcelOrderIds(since, SYNC_BATCH + 1);
+  const truncated = found.length > SYNC_BATCH;
+  const orderIds = found.slice(0, SYNC_BATCH);
   const report: ParcelStatusSyncReport = {
     checked: 0,
     closed: [],
@@ -95,6 +112,7 @@ export async function syncParcelStatuses(
     failed: [],
     observed: [],
     configuredCodes: [...codes],
+    truncated,
   };
   const seen = new Map<
     string,
@@ -106,12 +124,13 @@ export async function syncParcelStatuses(
       const events = await deps.tracking(orderId);
       const pairs = new Set<string>();
       for (const event of events) {
-        const key = `${event.status}\u0000${event.statusText}`;
+        const description = shortDescription(event.statusText);
+        const key = `${event.status}\u0000${description}`;
         if (pairs.has(key)) continue;
         pairs.add(key);
         const entry = seen.get(key) ?? {
           code: event.status,
-          description: event.statusText,
+          description,
           parcels: 0,
         };
         entry.parcels += 1;
@@ -167,6 +186,10 @@ export function describeSyncReport(report: ParcelStatusSyncReport): string {
       `Delivered but the shop does not offer "closed" from the order's state (a person decides): ${report.skipped
         .map((s) => `${s.orderId} (${s.status})`)
         .join(", ")}.`,
+    );
+  if (report.truncated)
+    lines.push(
+      `More than ${SYNC_BATCH} parcels are in the ${SYNC_WINDOW_DAYS}-day window: the oldest beyond the batch were NOT checked in this run.`,
     );
   if (report.failed.length)
     lines.push(

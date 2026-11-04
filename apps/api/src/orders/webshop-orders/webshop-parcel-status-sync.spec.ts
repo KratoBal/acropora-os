@@ -189,12 +189,51 @@ describe("syncParcelStatuses", () => {
       return [];
     };
     await syncParcelStatuses(deps, env, NOW);
-    assert.equal(asked!.limit, 200);
+    assert.equal(asked!.limit, 201); // one more than the batch, to know whether it cut something off
     assert.equal(asked!.since.toISOString(), "2026-10-05T10:00:00.000Z");
     assert.equal(
       describeSyncReport(await syncParcelStatuses(deps, env, NOW)),
       "",
     );
+  });
+});
+
+describe("the batch and the observed text", () => {
+  const env = { GLS_DELIVERED_STATUS_CODES: "05" };
+
+  it("more parcels than the batch: only the batch is checked, and the report says so", async () => {
+    const deps = fake({});
+    deps.parcelOrderIds = async () =>
+      Array.from({ length: 201 }, (_, i) => `o${i}`);
+    let checked = 0;
+    deps.tracking = async () => {
+      checked += 1;
+      return [];
+    };
+    const report = await syncParcelStatuses(deps, env, NOW);
+    assert.equal(checked, 200);
+    assert.equal(report.truncated, true);
+    assert.match(describeSyncReport(report), /NOT checked/);
+  });
+
+  it("exactly the batch is not a cut", async () => {
+    const deps = fake({});
+    deps.parcelOrderIds = async () =>
+      Array.from({ length: 200 }, (_, i) => `o${i}`);
+    deps.tracking = async () => [];
+    const report = await syncParcelStatuses(deps, env, NOW);
+    assert.equal(report.truncated, false);
+    assert.doesNotMatch(describeSyncReport(report), /NOT checked/);
+  });
+
+  it("the observed description is short and has no control characters (it may be a free field)", async () => {
+    const long = "Átvette: Kovács Anna Budapest Fő utca 12. aláírás\nxx";
+    const deps = fake({ o1: [event("07", long)] });
+    const report = await syncParcelStatuses(deps, {}, NOW);
+    const text = report.observed[0]!.description;
+    assert.ok(text.length <= 40, text);
+    assert.doesNotMatch(text, /[\u0000-\u001f]/);
+    assert.doesNotMatch(describeSyncReport(report), /aláírás/);
   });
 });
 
@@ -251,6 +290,7 @@ describe("the schedule", () => {
       failed: [],
       observed: [],
       configuredCodes: [],
+      truncated: false,
     };
     const service = {
       run: () => {
