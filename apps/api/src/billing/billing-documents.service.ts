@@ -51,6 +51,11 @@ export class BillingDocumentsService {
     const row = await this.repository.find(id);
     if (!row) throw new NotFoundException("A bizonylat nem található.");
     const detail = toBillingDocumentDetail(row);
+    // the issue button's reason names a same-named partner's tax number (card aaf4f09d)
+    if (detail.customer && row.customer)
+      detail.customer.partnerTaxHint = await this.repository.partnerTaxHint(
+        row.customer,
+      );
     // a Számlázz.hu felületén sztornózott saját számla: a feed ikre mondja meg
     // (számlázási brief, 1. pont); az OS-ben kiállított sztornó elsőbb
     const siteCancelled =

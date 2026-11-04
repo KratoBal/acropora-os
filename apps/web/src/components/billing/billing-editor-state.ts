@@ -471,6 +471,7 @@ export function companyTaxNumberReason(
     partnerMirror: customer.partnerMirror ?? false,
     taxNumber: customer.taxNumber,
     euTaxNumber: customer.euTaxNumber,
+    partnerHint: customer.partnerTaxHint,
   });
 }
 

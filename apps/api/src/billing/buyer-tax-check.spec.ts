@@ -12,6 +12,7 @@ import {
 import {
   BuyerTaxCheckScheduler,
   buyerTaxCheckEnabled,
+  catchUpOnStart,
   delayUntilNextRun,
   type BuyerTaxCheckRepository,
 } from "./buyer-tax-check.scheduler.js";
@@ -161,6 +162,13 @@ describe("a napi futás", () => {
       line,
       "ADOSZAM-ELLENORZES datum=2026-11-03 HIBA ok=RangeError",
     );
+  });
+
+  it("hat után induló API egyszer pótolja az előző napot (barracuda, #2159)", () => {
+    // 05:59 and 06:00 Budapest in November (UTC+1)
+    assert.equal(catchUpOnStart(new Date("2026-11-04T04:59:00.000Z")), false);
+    assert.equal(catchUpOnStart(new Date("2026-11-04T05:00:00.000Z")), true);
+    assert.equal(catchUpOnStart(new Date("2026-11-04T22:30:00.000Z")), true);
   });
 
   it("budapesti reggel hatkor indul, alapból bekapcsolva", () => {

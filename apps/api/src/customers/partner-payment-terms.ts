@@ -50,3 +50,30 @@ export function partnerTermsFor(
     partnerName: matches[0]!.name,
   };
 }
+
+/**
+ * A NÉVVEL EGYEZŐ PARTNER ADÓSZÁMA, HA A VEVŐ-SORNAK NINCS (kártya aaf4f09d; Luca,
+ * 2026-11-04 13:53 UTC). Ugyanaz az eset, mint fent: a számlán a régi vevő-sort
+ * választják (a tükör a Vevők listáján nem szerepel), a sor adószám nélkül áll, a
+ * partnerénél pedig megvan. A párosítás itt CSAK név szerint megy (a vevőnek nincs
+ * adószáma, amihez mérni lehetne); ha több partner egyezik és más-más adószám-alapot
+ * mondanak, nem döntünk. Csak tipp a kapu okához: az adatot semmi nem írja át.
+ */
+export function partnerTaxNumberFor(
+  customer: { displayName: string; companyName: string | null },
+  partners: readonly { name: string; taxNumber: string | null }[],
+): { partnerName: string; taxNumber: string } | null {
+  const names = new Set(
+    [customer.companyName, customer.displayName].map(nameKey).filter(Boolean),
+  );
+  const matches = partners.filter(
+    (partner) =>
+      Boolean(partner.taxNumber?.trim()) && names.has(nameKey(partner.name)),
+  );
+  const bases = new Set(matches.map((partner) => taxBase(partner.taxNumber)));
+  if (matches.length === 0 || bases.size !== 1) return null;
+  return {
+    partnerName: matches[0]!.name,
+    taxNumber: matches[0]!.taxNumber!.trim(),
+  };
+}

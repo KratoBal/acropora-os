@@ -160,9 +160,12 @@ export async function assertPartnerCodeFreeForCustomer(
  * nullázzuk egy üres mezővel; az adószám eltávolítása a partneren tehát nem jut át
  * (ritka, és a hiánya veszélyesebb, mint a maradása).
  *
- * ÜRES ORSZÁG (barracuda, #2157 review): az ország nélküli partner adószámát az
- * alakja dönti el. Országkóddal kezdődő érték (`DE123456789`, `HU12345678`) közösségi
- * adószám, és nem kerülhet a magyar `<adoszam>` mezőbe; minden más belföldinek számít.
+ * ÜRES ORSZÁG (barracuda, #2157 és #2159 review): az ország nélküli partner adószámát
+ * az alakja dönti el. Külföldi országkóddal kezdődő érték (`DE123456789`) közösségi
+ * adószám. A `HU` előtagú érték (`HU12345678`) egyik mezőbe SEM megy: a magyar
+ * `<adoszam>` mezőbe nem való, közösségiként pedig a számla EU-vevőnek küldené a magyar
+ * céget, és a kapu sem állna meg; így a kapu megáll, és a kezelő a helyes alakot írja
+ * be. Minden más belföldinek számít.
  */
 export function mirroredTaxNumber(supplier: {
   taxNumber?: string | null;
@@ -171,10 +174,12 @@ export function mirroredTaxNumber(supplier: {
   const value = supplier.taxNumber?.trim();
   if (!value) return {};
   const country = supplier.country?.trim().toUpperCase();
-  if (!country)
+  if (!country) {
+    if (/^HU/i.test(value)) return {};
     return /^[A-Z]{2}/i.test(value)
       ? { euTaxNumber: value }
       : { taxNumber: value };
+  }
   return country === "HU" ? { taxNumber: value } : { euTaxNumber: value };
 }
 

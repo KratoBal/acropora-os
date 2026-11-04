@@ -1,3 +1,5 @@
+import type { PartnerTaxHint } from "./buyer-tax-number.js";
+
 export type CustomerType = "PERSON" | "COMPANY";
 export type CustomerStatusFilter = "ACTIVE" | "ARCHIVED" | "ALL";
 
@@ -67,6 +69,12 @@ export interface CustomerDetail extends CustomerSummary {
    * nincs ilyen, vagy több partner más-más napot mondana.
    */
   partnerTerms?: { paymentDueDays: number; partnerName: string } | null;
+  /**
+   * HA A SORNAK NINCS ADÓSZÁMA, de egy névvel egyező partner a Partnerek oldalon visel
+   * egyet: a partner neve és adószáma (kártya aaf4f09d). Csak tipp a számla kapujának
+   * okához; `null` vagy hiányzik: nincs ilyen, vagy több partner más-más adószámot mondana.
+   */
+  partnerTaxHint?: PartnerTaxHint | null;
   marketingEmailConsent: boolean;
   marketingSmsConsent: boolean;
   addresses: CustomerAddress[];

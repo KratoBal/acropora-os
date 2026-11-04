@@ -71,16 +71,17 @@ describe("the partner's tax number on the mirror", () => {
       );
   });
 
-  it("without a country, a value that starts with a country code is a community tax number", () => {
+  it("without a country, a foreign country code makes a community tax number, a HU prefix makes none", () => {
     for (const country of [null, undefined, "", "  "]) {
       assert.deepEqual(
         mirroredTaxNumber({ taxNumber: "DE123456789", country }),
         { euTaxNumber: "DE123456789" },
         String(country),
       );
+      // a HU-prefixed value fits neither field: the gate stops and names the reason
       assert.deepEqual(
         mirroredTaxNumber({ taxNumber: "hu12345678", country }),
-        { euTaxNumber: "hu12345678" },
+        {},
         String(country),
       );
       assert.deepEqual(

@@ -30,6 +30,18 @@ export interface BuyerTaxSubject {
   partnerMirror: boolean;
   taxNumber?: string | null;
   euTaxNumber?: string | null;
+  /**
+   * A névvel egyező partner adószáma (Partnerek oldal), ha a vevő-sornak nincs: honnan
+   * másolja a kezelő. Csak tipp az okban, az adatot semmi nem írja át (kártya aaf4f09d;
+   * Luca, 2026-11-04 13:53 UTC: a régi vevő-sort választotta, a tükör nem választható).
+   */
+  partnerHint?: PartnerTaxHint | null;
+}
+
+/** A névvel egyező partner, akinél az adószám megvan. */
+export interface PartnerTaxHint {
+  partnerName: string;
+  taxNumber: string;
 }
 
 /**
@@ -81,5 +93,8 @@ export function buyerTaxNumberProblem(buyer: BuyerTaxSubject): string | null {
     : buyer.type === "PERSON"
       ? "a neve cégformát visel"
       : "nincs magánszemélynek jelölve";
-  return `A vevőnek nincs adószáma: ${buyer.name} (${why}), de sem magyar, sem közösségi adószám nincs megadva. Egészítsd ki a partnernél vagy a vevőnél; adószám nélkül csak kifejezetten magánszemélynek jelölt vevőnek állítunk ki számlát.`;
+  const base = `A vevőnek nincs adószáma: ${buyer.name} (${why}), de sem magyar, sem közösségi adószám nincs megadva. Egészítsd ki a partnernél vagy a vevőnél; adószám nélkül csak kifejezetten magánszemélynek jelölt vevőnek állítunk ki számlát.`;
+  return buyer.partnerHint
+    ? `${base} A Partnerek között ${buyer.partnerHint.partnerName} a(z) ${buyer.partnerHint.taxNumber} adószámmal szerepel: ha ez ugyanaz a cég, írd be a vevő adatlapján.`
+    : base;
 }
