@@ -101,6 +101,25 @@ describe("wholeForintCertificateAmounts", () => {
    * ha a bruttó a 4 tizedes bruttó külön kerekítése, mert akkor egy sor nettó +
    * ÁFA nem a bruttó (11 + 3 != 13).
    */
+  it("az ÁFA a kiírt (kerekített) nettóból jön (barracuda, #2154)", () => {
+    const amounts = wholeForintCertificateAmounts(
+      computeCertificateLineAmounts({
+        quantity: 1,
+        unitPrice: "1.5",
+        vatRatePercent: 27,
+      }),
+      27,
+    );
+    assert.deepEqual(
+      [
+        amounts.netAmount.toString(),
+        amounts.vatAmount.toString(),
+        amounts.grossAmount.toString(),
+      ],
+      ["2", "1", "3"],
+    );
+  });
+
   it("a bruttó a kerekített nettó + a kerekített ÁFA", () => {
     const amounts = wholeForintCertificateAmounts(
       computeCertificateLineAmounts({
@@ -108,6 +127,7 @@ describe("wholeForintCertificateAmounts", () => {
         unitPrice: "10.5",
         vatRatePercent: 27,
       }),
+      27,
     );
     assert.deepEqual(
       [
@@ -129,6 +149,7 @@ describe("wholeForintCertificateAmounts", () => {
           unitPrice: u,
           vatRatePercent: v,
         }),
+        v,
       );
       assert.equal(
         a.grossAmount.toString(),

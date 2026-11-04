@@ -76,18 +76,26 @@ export function computeCertificateLineAmounts(input: {
  */
 export function wholeForintCertificateAmounts(
   amounts: CertificateAmounts,
+  vatRatePercent: DecimalInput,
 ): CertificateAmounts {
   const round = (value: Prisma.Decimal) =>
     value.toDecimalPlaces(0, Prisma.Decimal.ROUND_HALF_UP);
   /*
-    A BRUTTÓ A KEREKÍTETT NETTÓ + A KEREKÍTETT ÁFA, nem a 4 tizedes bruttó külön
-    kerekítése (murena, Megrendelések S1-S2). A kettő soronként 1 Ft-tal eltérhet:
-    1 × 10,5 nettó 27%-kal: nettó 11, ÁFA 2,835 -> 3, de a bruttó 13,335 -> 13.
-    A lapon és a számlán a sor bruttója a két mellette álló szám összege kell
-    legyen, és a Számlázz.hu is így ellenőriz (bruttó = nettó + ÁFA).
+    A SOR HÁROM SZÁMA ÚGY, AHOGY A LAPON ÉS A SZÁMLÁN EGYMÁS MELLETT ÁLL:
+
+    - a nettó a pontos nettó egész forintra kerekítve;
+    - az ÁFA a KEREKÍTETT nettóból számolt és kerekített (barracuda, #2154): a lapon
+      álló nettó a kerekített, és az ÁFA-nak abból kell kijönnie. A nyers nettóból
+      egy kis sornál más jönne ki: 1 × 1,5 Ft 27%-kal a nettó 2, a nyers ÁFA 0,405
+      -> 0, a kiírt nettóé 0,54 -> 1;
+    - a bruttó a kerekített nettó + a kerekített ÁFA, nem a 4 tizedes bruttó külön
+      kerekítése (murena, Megrendelések): 1 × 10,5 27%-kal a nettó 11, az ÁFA 3, a
+      bruttó 14, nem 13. A Számlázz.hu is soronként bruttó = nettó + ÁFA-t vár.
   */
   const netAmount = round(amounts.netAmount);
-  const vatAmount = round(amounts.vatAmount);
+  const vatAmount = round(
+    netAmount.mul(new Prisma.Decimal(vatRatePercent)).div(100),
+  );
   return { netAmount, vatAmount, grossAmount: netAmount.plus(vatAmount) };
 }
 
