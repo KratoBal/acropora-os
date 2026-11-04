@@ -153,4 +153,38 @@ describe("withSystemDocuments", () => {
       "the uploaded chain is not changed in place",
     );
   });
+
+  // acrobot 42859: listed with the storno's number, but the chain stands as if it had no invoice
+  it("a sztornózott számla nem számít a láncban, de látható marad", () => {
+    const docs = systemDocumentsOf(
+      source({
+        certificates: [
+          {
+            id: "cert-1",
+            number: "TI-2026-008",
+            documents: [],
+            invoices: [
+              {
+                id: "inv-1",
+                status: "ISSUED",
+                invoiceNumber: "ACRS-2026-12",
+                issueDate: new Date("2026-11-04T13:00:00.000Z"),
+                correctionInvoices: [{ invoiceNumber: "ACRS-2026-13" }],
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    const invoice = docs.find((d) => d.kind === "INVOICE_PDF")!;
+    assert.equal(
+      invoice.label,
+      "Számla ACRS-2026-12 · Sztornózva (ACRS-2026-13)",
+    );
+    assert.equal(
+      invoice.kind === "INVOICE_PDF" && invoice.stornoInvoiceNumber,
+      "ACRS-2026-13",
+    );
+    assert.equal(withSystemDocuments(emptyChain(), docs).INVOICE, 0);
+  });
 });
