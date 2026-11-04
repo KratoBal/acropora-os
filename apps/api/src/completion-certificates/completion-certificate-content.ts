@@ -137,7 +137,10 @@ export function completionCertificateContent(
       unitPrice: item.unitPrice,
       vatRatePercent: item.vatRatePercent,
     });
-    const amounts = wholeForintCertificateAmounts(preciseAmounts);
+    const amounts = wholeForintCertificateAmounts(
+      preciseAmounts,
+      item.vatRatePercent,
+    );
     const quantity = new Prisma.Decimal(item.quantity);
     const vatRatePercent = new Prisma.Decimal(item.vatRatePercent);
     return {
