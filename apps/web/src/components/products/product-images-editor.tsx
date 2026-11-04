@@ -1,10 +1,18 @@
 "use client";
 
-import { Alert, PilotButton, PilotFormField, PilotInput } from "@acropora/ui";
+import {
+  Alert,
+  ConfirmDialog,
+  PilotButton,
+  PilotFormField,
+  PilotInput,
+} from "@acropora/ui";
 import type { ProductImageSummary } from "@acropora/types";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { productApi } from "@/lib/api/products";
+
+import { ProductImage } from "./product-image-source";
 
 /**
  * A KÉPEK ALT-SZÖVEGE ÉS SORRENDJE (T4.1-D3, 4. szelet). Csak OS-gazdájú terméknél
@@ -13,7 +21,10 @@ import { productApi } from "@/lib/api/products";
  * alapérték). A sorrend a fel/le gombra azonnal mentődik, mert a szerver csak a
  * teljes, pontos sorrendet fogadja el.
  *
- * Feltöltés és törlés ebben a szeletben nincs.
+ * FELTÖLTÉS ÉS TÖRLÉS (6. szelet): a feltöltött kép a lista végére kerül, a
+ * szerver a tartalmából ismeri fel (JPEG, PNG, GIF, WebP). A törlés előtt a közös
+ * megerősítés kérdez, mert nem visszavonható: a fájl is megy, és a boltból a
+ * következő vetítés veszi ki.
  */
 export function ProductImagesEditor({
   productId,
@@ -33,6 +44,8 @@ export function ProductImagesEditor({
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   const run = async (action: () => Promise<unknown>) => {
     setBusy(true);
@@ -56,6 +69,17 @@ export function ProductImagesEditor({
     void run(() => productApi.setImageOrder(token, productId, ids));
   };
 
+  const upload = (file: File | undefined) => {
+    if (!file) return;
+    void run(async () => {
+      try {
+        await productApi.uploadImage(token, productId, file);
+      } finally {
+        if (fileInput.current) fileInput.current.value = "";
+      }
+    });
+  };
+
   return (
     <div className="space-y-4">
       {error ? (
@@ -74,8 +98,10 @@ export function ProductImagesEditor({
               key={image.id}
               className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)]"
             >
-              <img
-                src={image.url}
+              <ProductImage
+                token={token}
+                productId={productId}
+                image={image}
                 alt={image.altText ?? productName}
                 className="aspect-[156/112] w-full rounded-lg border border-pilot-grey-200 object-cover"
               />
@@ -121,12 +147,60 @@ export function ProductImagesEditor({
                   >
                     Hátrébb
                   </PilotButton>
+                  <PilotButton
+                    variant="ghost"
+                    disabled={busy}
+                    aria-label={`${index + 1}. kép törlése`}
+                    onClick={() => setConfirmingDelete(image.id)}
+                  >
+                    Törlés
+                  </PilotButton>
                 </div>
               </div>
             </li>
           );
         })}
       </ol>
+      <ConfirmDialog
+        open={confirmingDelete !== null}
+        title="Törlöd a képet?"
+        consequence="A kép és a tárolt fájlja törlődik; a boltból a következő vetítés veszi ki."
+        recovery="Nem vonható vissza: a képet újra fel kell tölteni."
+        confirmLabel="Kép törlése"
+        busy={busy}
+        onCancel={() => setConfirmingDelete(null)}
+        onConfirm={() => {
+          const imageId = confirmingDelete;
+          if (!imageId) return;
+          void run(async () => {
+            await productApi.deleteImage(token, productId, imageId);
+            setConfirmingDelete(null);
+          });
+        }}
+      />
+      {images.length === 0 ? (
+        <p className="text-sm text-pilot-grey-500">Nincs termékkép.</p>
+      ) : null}
+      <div className="flex flex-wrap items-center gap-3">
+        <input
+          ref={fileInput}
+          type="file"
+          accept="image/jpeg,image/png,image/gif,image/webp"
+          className="sr-only"
+          aria-label="Kép feltöltése"
+          onChange={(event) => upload(event.target.files?.[0])}
+        />
+        <PilotButton
+          variant="secondary"
+          disabled={busy}
+          onClick={() => fileInput.current?.click()}
+        >
+          Kép feltöltése
+        </PilotButton>
+        <p className="text-xs text-pilot-grey-500">
+          JPEG, PNG, GIF vagy WebP, legfeljebb 10 MB. A lista végére kerül.
+        </p>
+      </div>
     </div>
   );
 }

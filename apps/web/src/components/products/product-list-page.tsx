@@ -12,6 +12,7 @@ import {
   Skeleton,
   thumbnailFallback,
   type PilotTableColumn,
+  type ThumbnailFallback,
 } from "@acropora/ui";
 import {
   formatMoney,
@@ -32,6 +33,7 @@ import {
   PilotSelect,
   PilotThemeRoot,
 } from "@/components/pilot/pilot-ui";
+import { useProductImageSrc } from "@/components/products/product-image-source";
 import { productApi } from "@/lib/api/products";
 import {
   changeProductFilters,
@@ -80,6 +82,26 @@ function provenance(origin: "UNAS" | "LOCAL" | null): {
 }
 
 /** A kártya felső élén a vékony meleg sáv (Figma "Warm Top Accent"). */
+/** A sor bélyegképe; a feltöltött kép fájlja a tárolóból jön (T4.1-D3, 6. szelet). */
+function ProductListThumbnail({
+  token,
+  product,
+  fallback,
+}: {
+  token: string;
+  product: ProductListItem;
+  fallback: ThumbnailFallback;
+}) {
+  const src = useProductImageSrc(token, product.id, product.thumbnail);
+  return (
+    <PilotThumbnail
+      src={src}
+      alt={product.thumbnail?.altText ?? ""}
+      fallback={fallback}
+    />
+  );
+}
+
 function WarmTopAccent() {
   return (
     <span
@@ -289,9 +311,9 @@ export function ProductListPage() {
         const origin = provenance(product.origin);
         return (
           <div className="flex min-w-0 items-center gap-3">
-            <PilotThumbnail
-              src={product.thumbnail?.url}
-              alt={product.thumbnail?.altText ?? ""}
+            <ProductListThumbnail
+              token={token}
+              product={product}
               fallback={thumbnailFallback({
                 categoryPath: product.primaryCategory?.path,
                 brandName: product.brand?.name,
