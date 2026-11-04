@@ -218,8 +218,11 @@ function fakeTx(seed: {
   usage?: Record<string, number>;
   /** a további hivatkozó táblák használata: tábla -> vevő-sor -> darab */
   moreUsage?: Record<string, Record<string, number>>;
+  /** a sor visszavont összevonás-naplói (a törlés előtt egy eseménybe kerülnek) */
+  undoneLogs?: Record<string, unknown>[];
 }) {
   const deletedLogs: Record<string, unknown>[] = [];
+  const undoneLogs = seed.undoneLogs ?? [];
   const suppliers = new Map(
     seed.suppliers.map((s) => [s.id, { customerId: null, ...s }]),
   );
@@ -331,6 +334,7 @@ function fakeTx(seed: {
         args.where.undoneAt === null
           ? await moreOf("customerMergeLog", "log")(args)
           : 99,
+      findMany: async () => undoneLogs,
       deleteMany: async (args: { where: Record<string, unknown> }) => {
         deletedLogs.push(args.where);
         return { count: 1 };
@@ -559,6 +563,19 @@ describe("applyOperations and restoreRegistered", () => {
     const world = fakeTx({
       suppliers: [{ id: "s-NEW", code: "NEW" }],
       customers: [],
+      undoneLogs: [
+        {
+          id: "log1",
+          keptId: "new-s-NEW",
+          mergedId: "free",
+          actorUserId: "u7",
+          reason: "állatkert",
+          movedRefs: [{ table: "Quote", id: "q1", field: "customerId" }],
+          fieldChanges: { fills: [], mergedWasActive: true },
+          createdAt: new Date("2026-11-04T21:00:00.000Z"),
+          undoneAt: new Date("2026-11-04T22:00:00.000Z"),
+        },
+      ],
     });
     await applyOperations(
       world.tx,
@@ -572,6 +589,12 @@ describe("applyOperations and restoreRegistered", () => {
       ["RESTORED"],
     );
     assert.deepEqual(world.deletedLogs, [], "the dry run deletes nothing");
+    assert.equal(
+      world.events.filter((e) => e.eventType === "customer.merge-log-removed")
+        .length,
+      0,
+      "the dry run records nothing",
+    );
     const outcomes = await restoreRegistered(world.tx, null);
     assert.deepEqual(
       outcomes.map((o) => o.result),
@@ -579,6 +602,24 @@ describe("applyOperations and restoreRegistered", () => {
     );
     assert.equal(world.customers.has("new-s-NEW"), false);
     assert.equal(world.deletedLogs.length, 1);
+    // the log's content survives as an event before the delete
+    const kept = world.events.filter(
+      (e) => e.eventType === "customer.merge-log-removed",
+    );
+    assert.equal(kept.length, 1);
+    assert.deepEqual(kept[0]!.payload, {
+      logId: "log1",
+      keptId: "new-s-NEW",
+      mergedId: "free",
+      mergeActorUserId: "u7",
+      reason: "állatkert",
+      movedRefs: [{ table: "Quote", id: "q1", field: "customerId" }],
+      fieldChanges: { fills: [], mergedWasActive: true },
+      createdAt: "2026-11-04T21:00:00.000Z",
+      undoneAt: "2026-11-04T22:00:00.000Z",
+      removedBy: "partner.restore",
+    });
+    assert.equal(kept[0]!.aggregateId, "new-s-NEW");
     // a live log can never be deleted: the filter names the undone ones
     assert.deepEqual(world.deletedLogs[0], {
       OR: [{ keptId: "new-s-NEW" }, { mergedId: "new-s-NEW" }],
