@@ -9,7 +9,8 @@
  * - `-86` is a range: 00083-86 -> 00083, 00084, 00085, 00086 (at most RANGE_LIMIT numbers, else not read);
  * - a full number after a comma (`,00086`) is the same year's.
  * A shortened part longer than the base number, or a range running backwards, is not read: guessing a number
- * would pair a transfer with someone else's invoice.
+ * would pair a transfer with someone else's invoice. Nor is a number behind ANOTHER prefix (`SZ-2026/00012`, a
+ * quote's or a proforma's): only ours, or none, is a reference to our invoices.
  */
 export interface RemittanceInvoiceRef {
   /** the series prefix as written (upper case, ARCW kept), or null when the text gives only year/number */
@@ -23,7 +24,7 @@ export const RANGE_LIMIT = 20;
 // "és" has no ASCII word boundary (`\b` is ASCII in JavaScript), so it stands as a plain separator
 const SEPARATOR = String.raw`\s*(?:[,;+&-]|és)\s*`;
 const REFERENCE = new RegExp(
-  String.raw`(?:\b(A(?:CR|RC)[A-Z])[-\s]?|\b)(20\d{2})\s*\/\s*(\d{3,6})((?:${SEPARATOR}\d{1,6}(?![\d/]|\s*\/))*)`,
+  String.raw`(?:\b(A(?:CR|RC)[A-Z])[-\s]?|(?<![A-Za-z]-?)\b)(20\d{2})\s*\/\s*(\d{3,6})((?:${SEPARATOR}\d{1,6}(?![\d/]|\s*\/))*)`,
   "giu",
 );
 const CONTINUATION = /\s*([,;+&-]|és)\s*(\d{1,6})/gu;

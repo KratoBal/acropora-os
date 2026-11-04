@@ -205,6 +205,9 @@ enum OutgoingPaymentMarkSource {
   /// 2026-11-04 16:40 UTC); a `sourceRef` a kérés azonosítója, hogy egy dupla kattintás ne
   /// legyen két kifizetés
   MANUAL
+  /// egy banki jóváírás, amelynek közleménye több saját számlát nevez meg (kártya aeddb2c3, Balázs
+  /// 2026-11-04 16:36 UTC: „2026/00083,86,85,84”); a `sourceRef` a jóváírás (`BankTransaction.id`)
+  BANK_TRANSFER
 }
 
 enum GlsSyncRunStatus {

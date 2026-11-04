@@ -63,6 +63,10 @@ describe("the invoice numbers a remittance names", () => {
     ]);
     assert.deepEqual(numbers("2026/00083, 127000 Ft"), ["2026/00083"]);
     assert.deepEqual(numbers("rendelés 12345, nincs szám"), []);
+    // another series' number is not ours, even with a bare one beside it
+    assert.deepEqual(numbers("SZ-2026/00012 és D2026/00013, 2026/00083"), [
+      "2026/00083",
+    ]);
   });
 });
 

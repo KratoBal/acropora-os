@@ -22,6 +22,7 @@ import {
   glsPaidMarkPlan,
   simplePayPaidMarkPlan,
 } from "./paid-marks-sources.js";
+import { bankTransferPaidMarkPlan } from "../bank-transfer-paid-marks.js";
 
 /** The sources, their switches and their dry-run plans. */
 export const PAID_MARK_SOURCES: readonly {
@@ -39,6 +40,12 @@ export const PAID_MARK_SOURCES: readonly {
     source: "SIMPLEPAY",
     switchName: "SIMPLEPAY_MARK_PAID",
     plan: simplePayPaidMarkPlan,
+  },
+  // one transfer, several of our invoices (card aeddb2c3): automatic only on one customer and an exact amount
+  {
+    source: "BANK_TRANSFER",
+    switchName: "BANK_TRANSFER_MARK_PAID",
+    plan: bankTransferPaidMarkPlan,
   },
 ];
 
