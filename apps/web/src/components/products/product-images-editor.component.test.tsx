@@ -7,6 +7,9 @@ import { ProductImagesEditor } from "./product-images-editor";
 const api = vi.hoisted(() => ({
   setImageAlt: vi.fn(),
   setImageOrder: vi.fn(),
+  uploadImage: vi.fn(),
+  deleteImage: vi.fn(),
+  downloadImage: vi.fn(),
 }));
 
 vi.mock("@/lib/api/products", () => ({ productApi: api }));
@@ -45,6 +48,9 @@ function renderEditor() {
 beforeEach(() => {
   api.setImageAlt.mockReset().mockResolvedValue({});
   api.setImageOrder.mockReset().mockResolvedValue({});
+  api.uploadImage.mockReset().mockResolvedValue({});
+  api.deleteImage.mockReset().mockResolvedValue({});
+  api.downloadImage.mockReset().mockResolvedValue(new Blob(["x"]));
 });
 
 describe("ProductImagesEditor", () => {
@@ -88,5 +94,94 @@ describe("ProductImagesEditor", () => {
     expect(
       screen.getByRole("button", { name: "3. kép hátrébb" }),
     ).toBeDisabled();
+  });
+
+  /*
+    FELTÖLTÉS ÉS TÖRLÉS (6. szelet). MI PIROSÍT: ha a feltöltés nem a kiválasztott fájlt küldi, vagy utána nem kér
+    újratöltést; ha a törlés egy kattintásra, megerősítés nélkül indul, vagy nem a kép saját azonosítójával; ha a
+    feltöltött kép (`os-upload:`) a nyers címet kapja `src`-nek a tároló fájlja helyett.
+  */
+  it("uploads the chosen file and reloads", async () => {
+    const onSaved = renderEditor();
+    const file = new File(["kep"], "kek.jpg", { type: "image/jpeg" });
+    fireEvent.change(screen.getByLabelText("Kép feltöltése"), {
+      target: { files: [file] },
+    });
+    await waitFor(() =>
+      expect(api.uploadImage).toHaveBeenCalledWith(
+        "token-1",
+        "product-1",
+        file,
+      ),
+    );
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+  });
+
+  it("deletes an image only after the second click", async () => {
+    const onSaved = renderEditor();
+    fireEvent.click(screen.getByRole("button", { name: "2. kép törlése" }));
+    expect(api.deleteImage).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Kép törlése" }));
+    await waitFor(() =>
+      expect(api.deleteImage).toHaveBeenCalledWith(
+        "token-1",
+        "product-1",
+        "img-2",
+      ),
+    );
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+  });
+
+  it("cancels a delete without a request", () => {
+    renderEditor();
+    fireEvent.click(screen.getByRole("button", { name: "1. kép törlése" }));
+    fireEvent.click(screen.getByRole("button", { name: "Mégsem" }));
+    expect(api.deleteImage).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("button", { name: "1. kép törlése" }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows an uploaded image from the store, not from its hash", async () => {
+    const createObjectURL = vi.fn(() => "blob:kep-1");
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal(
+      "URL",
+      Object.assign(URL, { createObjectURL, revokeObjectURL }),
+    );
+    render(
+      <ProductImagesEditor
+        productId="product-1"
+        productName="Acropora millepora"
+        images={[
+          {
+            id: "img-up",
+            url: "os-upload:abc",
+            sortOrder: 0,
+            altText: null,
+            title: null,
+          },
+        ]}
+        token="token-1"
+        onSaved={vi.fn()}
+      />,
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("img", { name: "Acropora millepora" }),
+      ).toHaveAttribute("src", "blob:kep-1"),
+    );
+    expect(api.downloadImage).toHaveBeenCalledWith(
+      "token-1",
+      "product-1",
+      "img-up",
+    );
+    vi.unstubAllGlobals();
+  });
+
+  it("shows a web image from its url, without a download", () => {
+    renderEditor();
+    expect(screen.getAllByRole("img")[0]).toHaveAttribute("src", "/a.jpg");
+    expect(api.downloadImage).not.toHaveBeenCalled();
   });
 });

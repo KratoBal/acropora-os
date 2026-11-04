@@ -262,3 +262,40 @@ describe("TaskBoardPage: due dates (#1582 P8)", () => {
     ).toEqual([true, true, 2, 2, null]);
   });
 });
+
+describe("TaskBoardPage: a webshop problem report (V1.2)", () => {
+  beforeEach(() => {
+    auth.session = session("ADMIN");
+    api.assignees.mockReset().mockResolvedValue({ items: [] });
+  });
+
+  it("shows its own source badge and opens the order in the same tab", async () => {
+    api.listMine.mockReset().mockResolvedValue(
+      board({
+        items: [
+          {
+            id: "t-complaint",
+            title: "Webshop bejelentés, rendelés #1042: Az állat elpusztult",
+            description: "Ok: Az állat elpusztult",
+            status: "OPEN" as const,
+            linkUrl: "/webshop/rendelesek/order_1",
+            source: "WEBSHOP_COMPLAINT" as const,
+            assignee: { id: "user-balazs", displayName: "Balázs" },
+            createdAt: "2026-11-04T10:00:00.000Z",
+          },
+        ],
+        openCount: 1,
+      }),
+    );
+    render(<TaskBoardPage />);
+    await screen.findByText(/Webshop bejelentés, rendelés #1042/);
+    expect(screen.getAllByText("Webshop bejelentés").length).toBeGreaterThan(0);
+    const open = screen.getByRole("link", { name: "Rendelés megnyitása" });
+    expect(open.getAttribute("href")).toBe("/webshop/rendelesek/order_1");
+    expect(open.getAttribute("target")).toBeNull();
+    const title = screen.getByRole("link", {
+      name: /Webshop bejelentés, rendelés #1042/,
+    });
+    expect(title.getAttribute("target")).toBeNull();
+  });
+});

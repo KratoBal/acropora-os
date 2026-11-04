@@ -648,3 +648,38 @@ describe("a kérés fejléce és törzse valódi fetch-csel", () => {
     );
   });
 });
+
+describe("the problem report calls (V1.2)", () => {
+  function recorder(body: unknown) {
+    const calls: { url: string; method?: string }[] = [];
+    const fetchImpl = (async (url: string, init?: RequestInit) => {
+      calls.push({ url: String(url), method: init?.method });
+      return { ok: true, json: async () => body } as unknown as Response;
+    }) as unknown as typeof fetch;
+    return { calls, fetchImpl };
+  }
+  const make = (fetchImpl: typeof fetch) =>
+    new HttpMedusaAdminClient(
+      { baseUrl: "https://shop.example", apiKey: "k" },
+      fetchImpl,
+    );
+
+  it("lists by status and limit, and answers an empty list when the body has none", async () => {
+    const { calls, fetchImpl } = recorder({});
+    assert.deepEqual(await make(fetchImpl).listProblemReports("new", 50), []);
+    assert.equal(
+      calls[0]!.url,
+      "https://shop.example/admin/order-problem-reports?status=new&limit=50",
+    );
+  });
+
+  it("marks a report pulled on its own address, with the id encoded", async () => {
+    const { calls, fetchImpl } = recorder({ status: "pulled" });
+    await make(fetchImpl).markProblemReportPulled("ordprb/1");
+    assert.equal(
+      calls[0]!.url,
+      "https://shop.example/admin/order-problem-reports/ordprb%2F1/pulled",
+    );
+    assert.equal(calls[0]!.method, "POST");
+  });
+});

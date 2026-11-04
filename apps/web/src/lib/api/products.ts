@@ -18,7 +18,8 @@ import type {
   ProductUpdateInput,
 } from "@acropora/types";
 
-import { apiRequest } from "./client";
+import { API_PREFIX } from "./api-prefix";
+import { apiAuthHeaders, apiRequest } from "./client";
 
 function productQueryString(query: ProductListApiQuery): string {
   const params = new URLSearchParams();
@@ -188,6 +189,33 @@ export const productApi = {
       token,
       { method: "PUT", body: JSON.stringify({ imageIds }) },
     );
+  },
+  /** Egy kép feltöltése a lista végére (T4.1-D3); a mező neve `file`, mint a szerveren. */
+  uploadImage(token: string, id: string, file: File) {
+    const body = new FormData();
+    body.append("file", file);
+    return apiRequest<ProductDetail>(
+      `/products/${encodeURIComponent(id)}/images`,
+      token,
+      { method: "POST", body },
+    );
+  },
+  /** Egy kép törlése (T4.1-D3); a fájlt a szerver a sor után viszi el. */
+  deleteImage(token: string, id: string, imageId: string) {
+    return apiRequest<ProductDetail>(
+      `/products/${encodeURIComponent(id)}/images/${encodeURIComponent(imageId)}`,
+      token,
+      { method: "DELETE" },
+    );
+  },
+  /** A tárolt kép fájlja: a feltöltött képnek nincs webcíme, a lap innen mutatja. */
+  async downloadImage(token: string, id: string, imageId: string) {
+    const response = await fetch(
+      `${API_PREFIX}/products/${encodeURIComponent(id)}/images/${encodeURIComponent(imageId)}/file`,
+      { credentials: "same-origin", headers: apiAuthHeaders(token) },
+    );
+    if (!response.ok) throw new Error("A kép nem tölthető be.");
+    return response.blob();
   },
   takeCatalogAuthority(token: string, id: string) {
     return apiRequest<ProductDetail>(

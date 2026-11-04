@@ -187,7 +187,7 @@ export interface ProductDatabase {
   };
   $transaction<T>(
     operation: (transaction: ProductTransaction) => Promise<T>,
-    options?: { isolationLevel: "Serializable" },
+    options?: { isolationLevel?: "Serializable"; timeout?: number },
   ): Promise<T>;
 }
 
@@ -214,6 +214,9 @@ export interface UploadedProductImage {
   storageKey: string;
   fileName: string;
 }
+
+/** A feltöltés tranzakciójának felső határa: a fájl-írás a termék zárja alatt fut. */
+export const UPLOAD_TRANSACTION_TIMEOUT_MS = 30_000;
 
 /** A felületről feltöltött kép forrása; a UNAS-írók csak a `UNAS` sorokat cserélik. */
 export const UPLOADED_IMAGE_SOURCE = "OS";
@@ -786,29 +789,34 @@ export class ProductRepository extends Repository {
     storeFile: () => Promise<void>,
     actorUserId?: string,
   ): Promise<ProductDetail> {
-    return this.productDatabase.$transaction(async (transaction) => {
-      await lockProduct(transaction, productId);
-      await storeFile();
-      const last = await transaction.productImage.aggregate({
-        where: { productId },
-        _max: { sortOrder: true },
-      });
-      const created = await transaction.productImage.create({
-        data: {
-          productId,
-          url: image.url,
-          storageKey: image.storageKey,
-          fileName: image.fileName,
-          sortOrder: (last._max.sortOrder ?? -1) + 1,
-          source: UPLOADED_IMAGE_SOURCE,
-        },
-        select: { id: true },
-      });
-      return this.touchAndRead(transaction, productId, actorUserId, {
-        eventType: "product.image.uploaded",
-        payload: { imageId: created.id, fileName: image.fileName },
-      });
-    });
+    return this.productDatabase.$transaction(
+      async (transaction) => {
+        await lockProduct(transaction, productId);
+        await storeFile();
+        const last = await transaction.productImage.aggregate({
+          where: { productId },
+          _max: { sortOrder: true },
+        });
+        const created = await transaction.productImage.create({
+          data: {
+            productId,
+            url: image.url,
+            storageKey: image.storageKey,
+            fileName: image.fileName,
+            sortOrder: (last._max.sortOrder ?? -1) + 1,
+            source: UPLOADED_IMAGE_SOURCE,
+          },
+          select: { id: true },
+        });
+        return this.touchAndRead(transaction, productId, actorUserId, {
+          eventType: "product.image.uploaded",
+          payload: { imageId: created.id, fileName: image.fileName },
+        });
+      },
+      // a fájl-írás a zár alatt fut: egy 10 MB-os kép lassú lemezre írva elérheti a
+      // Prisma 5 mp-es alapértelmezését (barracuda, #2145)
+      { timeout: UPLOAD_TRANSACTION_TIMEOUT_MS },
+    );
   }
 
   /**

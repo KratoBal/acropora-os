@@ -5,6 +5,7 @@ import { describe, it } from "node:test";
 
 import {
   decidePublication,
+  isDiscontinued,
   type ProductPublicationState,
 } from "./medusa-publication.policy.js";
 
@@ -279,5 +280,26 @@ describe("a nem-termék kapu be van kötve a futtatóba", () => {
       .replace(/(^|[^:])\/\/.*$/gm, "$1 ");
 
     assert.match(kod, /variantSkus:\s*product\.variants\.map\(/);
+  });
+});
+
+describe("a kifutott termek (V4.2)", () => {
+  it("csak az inaktiv vagy nem webshopos, UNAS-lapos termek kifutott", () => {
+    const url = "https://bolt.test/regi-lap";
+    assert.equal(isDiscontinued("product-inactive", url), true);
+    assert.equal(isDiscontinued("not-webshop-sellable", url), true);
+    for (const reason of [
+      "sellable",
+      "unknown-authority",
+      "no-active-variant",
+      "not-a-product",
+    ] as const)
+      assert.equal(isDiscontinued(reason, url), false, reason);
+    for (const nincs of [null, undefined, "", "  "])
+      assert.equal(
+        isDiscontinued("product-inactive", nincs),
+        false,
+        String(nincs),
+      );
   });
 });
