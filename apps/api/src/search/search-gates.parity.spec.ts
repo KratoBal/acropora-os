@@ -18,6 +18,7 @@ import { IncomingBillingDocumentsController } from "../billing/incoming-billing-
 import { ServiceAssetsController } from "../service-assets/service-assets.controller.js";
 import { ServiceJobsController } from "../service-jobs/service-jobs.controller.js";
 import { WebshopOrdersController } from "../orders/webshop-orders/webshop-orders.controller.js";
+import { ProductController } from "../products/product.controller.js";
 import { QuotesController } from "../quotes/quotes.controller.js";
 import { SuppliersController } from "../suppliers/suppliers.controller.js";
 import { WorksheetsController } from "../worksheets/worksheets.controller.js";
@@ -54,6 +55,8 @@ const LISTS: Record<
   quotes: [{ controller: QuotesController, handler: "list" }],
   // a Medusa-rendelések listája (a UNAS-lista `webshop-orders` menüpontja nem kereshető)
   orders: [{ controller: WebshopOrdersController, handler: "list" }],
+  // a termékkatalógus lista kezelője `listProducts`
+  products: [{ controller: ProductController, handler: "listProducts" }],
 };
 
 function requiredFor(controller: Function, handler: string) {
