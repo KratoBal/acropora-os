@@ -268,6 +268,28 @@ describe("PartnerMergeService.preview", () => {
     assert.equal((await lone.service.preview("k", "m")).canExecute, true);
   });
 
+  it("blocks up front on a department code that both rows have under the same parent (a unique key), instead of a raw database error", async () => {
+    const w = zoo();
+    w.add("worksheetDepartment", {
+      id: "d1",
+      customerId: "k",
+      parentId: "p1",
+      code: "A1",
+    });
+    w.add("worksheetDepartment", {
+      id: "d2",
+      customerId: "m",
+      parentId: "p1",
+      code: "A1",
+    });
+    const preview = await w.service.preview("k", "m");
+    assert.equal(preview.canExecute, false);
+    assert.ok(preview.blockers.some((b) => /munkalap-osztály \(A1\)/.test(b)));
+    // a department under another parent is no clash
+    w.of("worksheetDepartment")[1]!.parentId = "p2";
+    assert.equal((await w.service.preview("k", "m")).canExecute, true);
+  });
+
   it("blocks and suggests the swap when the row to be merged is the partner mirror", async () => {
     const preview = await zoo().service.preview("m", "k");
     assert.equal(preview.canExecute, false);
@@ -359,6 +381,22 @@ describe("PartnerMergeService.execute", () => {
     assert.equal(w.customers.get("m")!.archivedAt, null);
   });
 
+  it("one order leaving the merged row and another arriving keeps the count, and still refuses the stale fingerprint", async () => {
+    const w = zoo();
+    const { fingerprint } = await w.service.preview("k", "m");
+    w.of("salesOrder").find((r) => r.id === "o1")!.customerId = "somebody";
+    w.add("salesOrder", { id: "o9", customerId: "m" });
+    assert.equal(
+      w.of("salesOrder").filter((r) => r.customerId === "m").length,
+      2,
+    );
+    await assert.rejects(
+      w.service.execute({ keptId: "k", mergedId: "m", fingerprint }, "u1"),
+      /Az előnézet óta változott/,
+    );
+    assert.equal(w.logs.length, 0);
+  });
+
   it("moves the unique worksheet code off the merged row first", async () => {
     const w = world();
     w.addCustomer("k", { partner: { id: "sup" } });
@@ -441,6 +479,57 @@ describe("PartnerMergeService.undo", () => {
     );
     assert.equal(w.customers.get("k")!.phone, "+36 1 555 (kézzel átírva)");
     assert.equal(w.customers.get("k")!.email, null);
+  });
+
+  it("puts the moved service code back only while the kept row still carries it", async () => {
+    const make = async () => {
+      const w = world();
+      w.addCustomer("k", { partner: { id: "sup" } });
+      w.addCustomer("m", { worksheetPartnerCode: "FANK" });
+      const { fingerprint } = await w.service.preview("k", "m");
+      const entry = await w.service.execute(
+        { keptId: "k", mergedId: "m", fingerprint },
+        "u1",
+      );
+      return { w, entry };
+    };
+    const plain = await make();
+    await plain.w.service.undo(plain.entry.id, "u1");
+    assert.deepEqual(
+      [
+        plain.w.customers.get("k")!.worksheetPartnerCode,
+        plain.w.customers.get("m")!.worksheetPartnerCode,
+      ],
+      [null, "FANK"],
+    );
+    // edited by hand since: not moved back, and nothing is overwritten
+    const edited = await make();
+    edited.w.customers.get("k")!.worksheetPartnerCode = "UJ";
+    await edited.w.service.undo(edited.entry.id, "u1");
+    assert.deepEqual(
+      [
+        edited.w.customers.get("k")!.worksheetPartnerCode,
+        edited.w.customers.get("m")!.worksheetPartnerCode,
+      ],
+      ["UJ", null],
+    );
+  });
+
+  it("says so in the result when the UNAS reference went back, and is silent otherwise", async () => {
+    const { w, entry } = await merged();
+    const result = await w.service.undo(entry.id, "u1");
+    assert.equal(result.notes.length, 1);
+    assert.match(result.notes[0]!, /UNAS/);
+    const bare = world();
+    bare.addCustomer("k", { partner: { id: "sup" } });
+    bare.addCustomer("m");
+    bare.add("salesOrder", { id: "o1", customerId: "m" });
+    const { fingerprint } = await bare.service.preview("k", "m");
+    const done = await bare.service.execute(
+      { keptId: "k", mergedId: "m", fingerprint },
+      "u1",
+    );
+    assert.deepEqual((await bare.service.undo(done.id, "u1")).notes, []);
   });
 
   it("refuses a second undo, an unknown log, and an undo after the kept row was merged elsewhere", async () => {

@@ -83,6 +83,21 @@ function taxConflicts(kept: MergeFacts, merged: MergeFacts): string[] {
   };
   check("magyar adószám", kept.taxNumber, merged.taxNumber, huBase);
   check("közösségi adószám", kept.euTaxNumber, merged.euTaxNumber, euKey);
+  // KERESZTBE IS: a HU kezdetű közösségi adószám első 8 jegye a magyar alap (barracuda, #2187 review): ha az egyik soron csak magyar,
+  // a másikon csak közösségi adószám áll, a két mező nem ütközik egymással, a mögöttes cég viszont más lehet
+  const crossCheck = (huValue: string | null, euValue: string | null) => {
+    if (blank(huValue) || blank(euValue)) return;
+    const base = huBase(huValue);
+    const eu = euKey(euValue);
+    if (!base || !eu || !eu.startsWith("HU")) return;
+    const euBase = eu.slice(2, 10);
+    if (/^[0-9]{8}$/.test(euBase) && euBase !== base)
+      blockers.push(
+        "A magyar adószám és a másik sor HU közösségi adószáma nem ugyanazt a törzsszámot hordozza (két különböző cég): az összevonás megáll.",
+      );
+  };
+  crossCheck(kept.taxNumber, merged.euTaxNumber);
+  crossCheck(merged.taxNumber, kept.euTaxNumber);
   return blockers;
 }
 
@@ -233,8 +248,55 @@ export function planRowBlockers(
   return { blockers, suggestSwap };
 }
 
+/** Egy munkalap-osztály a kulcsához: az (ügyfél, szülő, kód) hármas egyedi az adatbázisban. */
+export interface DepartmentKey {
+  customerId: string;
+  parentId: string | null;
+  code: string;
+}
+
 /**
- * AZ ELŐNÉZET LENYOMATA: a két azonosító, a hivatkozások táblánkénti száma és a mezők kitöltése. A végrehajtás ezt kéri
+ * AZ EGYEDI KULCS-ÜTKÖZÉS: a `WorksheetDepartment` (customerId, parentId, code) egyedi, tehát ha a megszűnő soron és a megmaradón is
+ * van azonos szülő alatt azonos kódú osztály, az áthelyezés az adatbázison bukna (nyers 500). Előre akadályként nevezzük meg.
+ * Szülő nélküli osztálynál az adatbázis a NULL-t különbözőnek veszi, ott nincs ütközés.
+ */
+export function departmentConflicts(
+  departments: readonly DepartmentKey[],
+  ids: { keptId: string; mergedId: string },
+): string[] {
+  const keptKeys = new Set(
+    departments
+      .filter((d) => d.customerId === ids.keptId && d.parentId !== null)
+      .map((d) => `${d.parentId}|${d.code}`),
+  );
+  const clashing = departments.filter(
+    (d) =>
+      d.customerId === ids.mergedId &&
+      d.parentId !== null &&
+      keptKeys.has(`${d.parentId}|${d.code}`),
+  );
+  return clashing.length
+    ? [
+        `Mindkét soron van azonos szülő alatt azonos kódú munkalap-osztály (${[
+          ...new Set(clashing.map((d) => d.code)),
+        ]
+          .sort()
+          .join(
+            ", ",
+          )}): az áthelyezés az adatbázis egyedisége miatt nem menne, előbb rendezni kell.`,
+      ]
+    : [];
+}
+
+/** Azonosítók lenyomata, sorrendtől függetlenül. */
+export const idsDigest = (ids: readonly string[]): string =>
+  createHash("sha256")
+    .update(JSON.stringify([...ids].sort()))
+    .digest("hex");
+
+/**
+ * AZ ELŐNÉZET LENYOMATA: a két azonosító, a megszűnő sor hivatkozásainak táblánkénti száma ÉS azonosítóik lenyomata (egy sor
+ * elmozdulása és egy másik érkezése ugyanazt a számot adja, a lenyomat viszont eltér: barracuda, #2187 review) és a mezők kitöltése. A végrehajtás ezt kéri
  * vissza, és a tranzakcióban újraszámolja: ha közben bármi változott (új számla, új rendelés a megszűnő sorra), a lenyomat
  * eltér, és az összevonás megáll, nem hajt végre mást, mint amit az ember látott.
  */
@@ -242,6 +304,8 @@ export function previewFingerprint(input: {
   keptId: string;
   mergedId: string;
   willMove: Partial<Record<PartnerMergeReferenceTable, number>>;
+  /** a megszűnő sor hivatkozó sorainak azonosítói táblánként */
+  movedIds: Partial<Record<PartnerMergeReferenceTable, readonly string[]>>;
   fieldFills: PartnerMergeFieldFill[];
 }): string {
   const ordered = Object.entries(input.willMove).sort(([a], [b]) =>
@@ -253,6 +317,9 @@ export function previewFingerprint(input: {
         input.keptId,
         input.mergedId,
         ordered,
+        Object.entries(input.movedIds)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([table, ids]) => [table, idsDigest(ids ?? [])]),
         input.fieldFills.map((f) => [f.field, f.kind, f.into]),
       ]),
     )

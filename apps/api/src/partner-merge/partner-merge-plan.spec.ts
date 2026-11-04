@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  departmentConflicts,
   planFieldMerge,
   planRowBlockers,
   previewFingerprint,
@@ -233,6 +234,10 @@ describe("previewFingerprint", () => {
     keptId: "k",
     mergedId: "m",
     willMove: { Invoice: 2, SalesOrder: 5 },
+    movedIds: {
+      Invoice: ["i1", "i2"],
+      SalesOrder: ["o1", "o2", "o3", "o4", "o5"],
+    },
     fieldFills: [],
   };
   it("is stable for the same input, whatever the key order, and changes with a count, an id or a fill", () => {
@@ -254,5 +259,96 @@ describe("previewFingerprint", () => {
       fp,
     );
     assert.match(fp, /^[0-9a-f]{64}$/);
+  });
+
+  it("follows the ids, not just the counts: one order leaving and another arriving keeps the count and changes the fingerprint", () => {
+    const fp = previewFingerprint(base);
+    // the same ids in another order: the same fingerprint
+    assert.equal(
+      previewFingerprint({
+        ...base,
+        movedIds: {
+          SalesOrder: ["o5", "o4", "o3", "o2", "o1"],
+          Invoice: ["i2", "i1"],
+        },
+      }),
+      fp,
+    );
+    // o5 replaced by o9: the count is still 5
+    assert.notEqual(
+      previewFingerprint({
+        ...base,
+        movedIds: {
+          Invoice: ["i1", "i2"],
+          SalesOrder: ["o1", "o2", "o3", "o4", "o9"],
+        },
+      }),
+      fp,
+    );
+  });
+});
+
+describe("planFieldMerge: the Hungarian base against the other row's HU community key", () => {
+  it("blocks when only one row has a Hungarian number and the other only a HU community key of another base", () => {
+    const keptHu = planFieldMerge(
+      facts({ id: "k", taxNumber: "11111111-2-42" }),
+      facts({ id: "m", euTaxNumber: "HU22222222" }),
+    );
+    assert.equal(keptHu.blockers.length, 1);
+    const mergedHu = planFieldMerge(
+      facts({ id: "k", euTaxNumber: "HU22222222" }),
+      facts({ id: "m", taxNumber: "11111111-2-42" }),
+    );
+    assert.equal(mergedHu.blockers.length, 1);
+  });
+
+  it("does not block the same base, nor a non-HU community key", () => {
+    assert.deepEqual(
+      planFieldMerge(
+        facts({ id: "k", taxNumber: "11111111-2-42" }),
+        facts({ id: "m", euTaxNumber: "HU11111111" }),
+      ).blockers,
+      [],
+    );
+    assert.deepEqual(
+      planFieldMerge(
+        facts({ id: "k", taxNumber: "11111111-2-42" }),
+        facts({ id: "m", euTaxNumber: "DE123456789" }),
+      ).blockers,
+      [],
+    );
+  });
+});
+
+describe("departmentConflicts", () => {
+  const ids = { keptId: "k", mergedId: "m" };
+  it("names a department code that both rows have under the same parent", () => {
+    const blockers = departmentConflicts(
+      [
+        { customerId: "k", parentId: "p1", code: "A1" },
+        { customerId: "m", parentId: "p1", code: "A1" },
+        { customerId: "m", parentId: "p1", code: "B2" },
+      ],
+      ids,
+    );
+    assert.equal(blockers.length, 1);
+    assert.match(blockers[0]!, /A1/);
+    assert.doesNotMatch(blockers[0]!, /B2/);
+  });
+
+  it("is quiet for another parent, another code, and parentless departments (the database treats NULL as distinct)", () => {
+    assert.deepEqual(
+      departmentConflicts(
+        [
+          { customerId: "k", parentId: "p1", code: "A1" },
+          { customerId: "m", parentId: "p2", code: "A1" },
+          { customerId: "m", parentId: "p1", code: "A2" },
+          { customerId: "k", parentId: null, code: "Z" },
+          { customerId: "m", parentId: null, code: "Z" },
+        ],
+        ids,
+      ),
+      [],
+    );
   });
 });
