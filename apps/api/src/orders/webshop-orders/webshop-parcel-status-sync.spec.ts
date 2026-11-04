@@ -243,7 +243,7 @@ describe("the batch and the observed text", () => {
       report.observed[0]!.description,
       /[\u0000-\u001f\u007f]/,
     );
-    assert.doesNotMatch(describeSyncReport(report), /\n.*Hamis sor/);
+    assert.doesNotMatch(describeSyncReport(report), /^Hamis sor/m);
   });
 });
 
