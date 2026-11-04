@@ -536,6 +536,20 @@ export const ANONYMIZATION_REGISTER: Readonly<
     email: "email",
     billingEmail: "email",
     phone: "phone",
+    // generated from the two tax number columns above (partner register, step 2): recomputed by the database
+    huTaxBase: "derived",
+    euTaxKey: "derived",
+  },
+  CustomerAlias: {
+    // an old customer number or row id: an identifier, kept so references keep matching
+    value: "identifier",
+  },
+  CustomerMergeLog: {
+    actorUserId: "identifier",
+    reason: "freeText",
+    // table, row id and field names only, never values
+    movedRefs: "json",
+    fieldChanges: "json",
   },
   CustomerAddress: {
     name: "partyName",
