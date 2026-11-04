@@ -1,7 +1,7 @@
 import { ConflictException, Injectable } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
 
-import { describeTarget } from "../partner-migration/partner-migration.cli.js";
+import { describeTarget } from "../common/database-target.js";
 import {
   applyShippingFill,
   planShippingFill,
@@ -34,17 +34,32 @@ export class ShippingProfileFillRepository extends Repository {
     super(prisma);
   }
 
-  async record(input: {
+  /** The row BEFORE the write (barracuda, #2203 b: a write that fails half-way is not left without its row). */
+  async start(input: {
     userId: string;
     metadata: Record<string, unknown>;
-  }): Promise<void> {
-    await this.database.auditLog.create({
+  }): Promise<string> {
+    const row = await this.database.auditLog.create({
       data: {
         userId: input.userId,
         action: "product_shipping_profile.filled",
         entityType: "ProductShippingProfile",
         entityId: null,
-        metadata: input.metadata as Prisma.InputJsonValue,
+        metadata: {
+          state: "started",
+          ...input.metadata,
+        } as Prisma.InputJsonValue,
+      },
+      select: { id: true },
+    });
+    return row.id;
+  }
+
+  async finish(id: string, metadata: Record<string, unknown>): Promise<void> {
+    await this.database.auditLog.update({
+      where: { id },
+      data: {
+        metadata: { state: "done", ...metadata } as Prisma.InputJsonValue,
       },
     });
   }
@@ -83,17 +98,19 @@ export class ShippingProfileFillService {
       throw new ConflictException(
         "A terv közben változott (vagy a lenyomat nem ehhez a próbához tartozik): nézd meg újra a próbát.",
       );
-    await applyShippingFill(changes);
-    await this.repository.record({
+    const metadata = {
+      target: this.target(),
+      fingerprint,
+      created: report.create,
+      updated: report.update,
+      updatedFlags: report.updatedFlags,
+    };
+    const auditId = await this.repository.start({
       userId: actorUserId,
-      metadata: {
-        target: this.target(),
-        fingerprint,
-        created: report.create,
-        updated: report.update,
-        updatedFlags: report.updatedFlags,
-      },
+      metadata,
     });
+    await applyShippingFill(changes);
+    await this.repository.finish(auditId, metadata);
     return {
       target: this.target(),
       created: report.create,

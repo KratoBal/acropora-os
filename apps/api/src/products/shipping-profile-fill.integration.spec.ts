@@ -124,15 +124,13 @@ describe(
           [true, true, "UNAS"],
         ].sort(),
       );
-      assert.equal(
-        await prisma.auditLog.count({
-          where: {
-            userId: ids.user,
-            action: "product_shipping_profile.filled",
-          },
-        }),
-        1,
-      );
+      const audits = await prisma.auditLog.findMany({
+        where: { userId: ids.user, action: "product_shipping_profile.filled" },
+        select: { metadata: true },
+      });
+      // one row, written before the write and completed after it (barracuda, #2203 b)
+      assert.equal(audits.length, 1);
+      assert.equal((audits[0]!.metadata as { state: string }).state, "done");
       const again = await service().preview();
       assert.equal(again.report.create, 0);
     });
