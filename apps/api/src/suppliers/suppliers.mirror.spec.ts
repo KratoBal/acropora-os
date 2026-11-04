@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   assertPartnerCodeFree,
+  mirroredTaxNumber,
   syncWorksheetMirror,
 } from "./suppliers.repository.js";
 
@@ -38,6 +39,81 @@ function stubTransaction(calls: Call[], createdId = "customer-new") {
     },
   } as never;
 }
+
+/**
+ * A PARTNER ADÓSZÁMA A TÜKÖRBEN (kártya aaf4f09d; Balázs, 2026-11-04: az állatkert
+ * minden számlája adószám nélkül ment ki). MI PIROSÍT: ha a mentés nem viszi át
+ * az adószámot (sem frissítéskor, sem létrehozáskor); ha a külföldi partner
+ * adószáma a magyar mezőbe kerül; ha egy üres partner-adószám törli a tükörét.
+ */
+describe("the partner's tax number on the mirror", () => {
+  it("goes to taxNumber for a Hungarian partner and to euTaxNumber for a foreign one", () => {
+    assert.deepEqual(
+      mirroredTaxNumber({ taxNumber: " 15490658-2-42 ", country: "HU" }),
+      {
+        taxNumber: "15490658-2-42",
+      },
+    );
+    assert.deepEqual(mirroredTaxNumber({ taxNumber: "15490658-2-42" }), {
+      taxNumber: "15490658-2-42",
+    });
+    assert.deepEqual(
+      mirroredTaxNumber({ taxNumber: "DE123456789", country: "de" }),
+      {
+        euTaxNumber: "DE123456789",
+      },
+    );
+    for (const empty of [null, undefined, "", "   "])
+      assert.deepEqual(
+        mirroredTaxNumber({ taxNumber: empty, country: "HU" }),
+        {},
+        String(empty),
+      );
+  });
+
+  it("is carried on every save, on update and on create", async () => {
+    const calls: Call[] = [];
+    await syncWorksheetMirror(stubTransaction(calls), {
+      id: "supplier-1",
+      name: "Fővárosi Állat- és Növénykert",
+      isService: true,
+      customerId: "customer-7",
+      taxNumber: "15490658-2-42",
+      country: "HU",
+    });
+    await syncWorksheetMirror(stubTransaction(calls), {
+      id: "supplier-2",
+      name: "Zoo GmbH",
+      isService: true,
+      customerId: null,
+      taxNumber: "DE123456789",
+      country: "DE",
+    });
+    const update = calls.find(
+      (c) => c.action === "update" && c.table === "customer",
+    )!.args.data as Record<string, unknown>;
+    assert.equal(update.taxNumber, "15490658-2-42");
+    assert.equal("euTaxNumber" in update, false);
+    const create = calls.find((c) => c.action === "create")!.args
+      .data as Record<string, unknown>;
+    assert.equal(create.euTaxNumber, "DE123456789");
+    assert.equal("taxNumber" in create, false);
+  });
+
+  it("an empty partner tax number does not clear the mirror's", async () => {
+    const calls: Call[] = [];
+    await syncWorksheetMirror(stubTransaction(calls), {
+      id: "supplier-1",
+      name: "X Kft.",
+      isService: true,
+      customerId: "customer-7",
+      taxNumber: null,
+    });
+    const data = calls[0]!.args.data as Record<string, unknown>;
+    assert.equal("taxNumber" in data, false);
+    assert.equal("euTaxNumber" in data, false);
+  });
+});
 
 describe("the service partner's mirror customer", () => {
   /**

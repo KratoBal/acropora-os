@@ -418,6 +418,51 @@ describe("BillingDocumentIssueService", () => {
     assert.equal((await issue(plain.service)).status, "ISSUED");
   });
 
+  /*
+    CÉGNEK ADÓSZÁM NÉLKÜL NINCS SZÁMLA (kártya aaf4f09d; Balázs, 2026-11-04). MI
+    PIROSÍT: ha a céges, adószám nélküli vevő számlája foglal vagy Számlázz.hu-t
+    hív; ha a magánszemély, a magyar vagy a közösségi adószámos cég elakad.
+  */
+  it("TAX-GATE: a company buyer without a tax number is refused before the claim, naming the buyer", async () => {
+    const base = row().customer;
+    const { service, calls } = setup({
+      over: {
+        customer: {
+          ...base,
+          type: "COMPANY",
+          taxNumber: null,
+          euTaxNumber: null,
+        },
+      },
+    });
+    await assert.rejects(
+      () => issue(service),
+      (error: unknown) =>
+        error instanceof BadRequestException &&
+        /A vevőnek nincs adószáma: Kitalált Kft\./.test(error.message),
+    );
+    assert.deepEqual([calls.claim, calls.generate], [0, 0]);
+  });
+
+  it("TAX-GATE: a person, or a company with a Hungarian or an EU tax number, goes out", async () => {
+    const base = row().customer;
+    for (const customer of [
+      { ...base, type: "PERSON", taxNumber: null, euTaxNumber: null },
+      {
+        ...base,
+        type: "COMPANY",
+        taxNumber: "12345678-2-42",
+        euTaxNumber: null,
+      },
+      { ...base, type: "COMPANY", taxNumber: null, euTaxNumber: "DE123456789" },
+    ]) {
+      const { service, calls } = setup({ over: { customer } });
+      const detail = await issue(service);
+      assert.equal(detail.status, "ISSUED", JSON.stringify(customer));
+      assert.equal(calls.generate, 1, JSON.stringify(customer));
+    }
+  });
+
   it("does not call Számlázz.hu while the switch is off", async () => {
     const { service, calls } = setup({ env: {} });
     await assert.rejects(() => issue(service), ConflictException);

@@ -55,6 +55,7 @@ import {
   formatMoney,
   fromDetail,
   hiddenFilledFields,
+  companyTaxNumberReason,
   missingForSave,
   newEditorState,
   toDraftInput,
@@ -600,7 +601,7 @@ export function BillingDocumentEditor({
           : delivery === "REQUIRED" &&
               splitAddresses(emailDraft.to).length === 0
             ? "Add meg a kiküldési e-mail címzettjét."
-            : null;
+            : companyTaxNumberReason(state.customer);
 
   const grossLabel = preview
     ? formatMoney(preview.totals.grossAmount, state.currency)

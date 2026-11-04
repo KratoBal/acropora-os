@@ -2,6 +2,7 @@ import type { BillingDocumentDetail } from "@acropora/types";
 import { describe, expect, it } from "vitest";
 
 import {
+  companyTaxNumberReason,
   billingPreview,
   effectiveFormat,
   emptyLine,
@@ -356,5 +357,52 @@ describe("withCustomer", () => {
   it("without a fulfillment day it does not invent one", () => {
     const blank = { ...fresh(), fulfillmentDate: "" };
     expect(withCustomer(blank, partner, 30).dueDate).toBe(blank.dueDate);
+  });
+});
+
+/*
+  CÉGNEK ADÓSZÁM NÉLKÜL NINCS SZÁMLA (kártya aaf4f09d). MI PIROSÍT: ha a céges,
+  adószám nélküli vevőnél nincs ok (a gomb kiállítható maradna); ha a
+  magánszemély, az ismeretlen típusú vagy az adószámos cég tiltást kap.
+*/
+describe("companyTaxNumberReason", () => {
+  const vevo = {
+    id: "c-1",
+    name: "Fővárosi Állat- és Növénykert",
+    address: "1146 Budapest, Állatkerti krt. 6-12.",
+    taxNumber: null,
+    euTaxNumber: null,
+    contactName: null,
+    email: null,
+    internalCode: "PARTNER-1",
+  };
+
+  it("a céges, adószám nélküli vevőnél megnevezi a vevőt", () => {
+    expect(companyTaxNumberReason({ ...vevo, isCompany: true })).toBe(
+      "A vevőnek nincs adószáma: Fővárosi Állat- és Növénykert cég. Egészítsd ki a partnernél, cégnek adószám nélkül nem állítunk ki számlát.",
+    );
+  });
+
+  it("a magánszemély, az ismeretlen és az adószámos cég nem kap tiltást", () => {
+    expect(companyTaxNumberReason({ ...vevo, isCompany: false })).toBeNull();
+    expect(companyTaxNumberReason(vevo)).toBeNull();
+    expect(companyTaxNumberReason(null)).toBeNull();
+    expect(
+      companyTaxNumberReason({
+        ...vevo,
+        isCompany: true,
+        taxNumber: "15490658-2-42",
+      }),
+    ).toBeNull();
+    expect(
+      companyTaxNumberReason({
+        ...vevo,
+        isCompany: true,
+        euTaxNumber: "DE123456789",
+      }),
+    ).toBeNull();
+    expect(
+      companyTaxNumberReason({ ...vevo, isCompany: true, taxNumber: "  " }),
+    ).not.toBeNull();
   });
 });

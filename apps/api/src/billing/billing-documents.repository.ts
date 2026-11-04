@@ -63,6 +63,8 @@ const DETAIL_INCLUDE = {
     select: {
       id: true,
       customerNumber: true,
+      // a céges vevő adószám-kapujához (`companyBuyerTaxNumberProblem`)
+      type: true,
       displayName: true,
       companyName: true,
       taxNumber: true,

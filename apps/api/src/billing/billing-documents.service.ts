@@ -514,6 +514,7 @@ function draftDetail(row: BillingDocumentRow): BillingDocumentDetail {
           address: addressOf(row),
           taxNumber: row.customer.taxNumber,
           euTaxNumber: row.customer.euTaxNumber,
+          isCompany: row.customer.type === "COMPANY",
           contactName: null,
           // the recipient of the invoice: the billing address, else the ordering one (Balázs, 2026-10-26)
           email: row.customer.billingEmail?.trim() || row.customer.email,

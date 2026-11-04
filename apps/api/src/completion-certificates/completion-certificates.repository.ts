@@ -11,8 +11,12 @@ const certificateInclude = {
       customer: {
         select: {
           id: true,
+          // a céges vevő adószám-kapujához (`companyBuyerTaxNumberProblem`)
+          type: true,
           displayName: true,
+          companyName: true,
           taxNumber: true,
+          euTaxNumber: true,
           paymentDueDays: true,
           addresses: {
             where: { isDefault: true },

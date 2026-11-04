@@ -184,6 +184,56 @@ describe("MaintenanceInvoiceDraftService.draftFor", () => {
     await assert.rejects(() => subject.draftFor("cert-1"), BadRequestException);
   });
 
+  /*
+    CÉGNEK ADÓSZÁM NÉLKÜL NINCS KARBANTARTÁSI SZÁMLA (kártya aaf4f09d). MI PIROSÍT:
+    ha a céges, adószám nélküli vevő piszkozata vagy kiállítása Számlázz.hu-t hív;
+    ha a magánszemély vagy a közösségi adószámos cég elakad.
+  */
+  it("TAX-GATE: a company customer without a tax number gets no draft, and Számlázz.hu is not called", async () => {
+    const { service: subject, clientCalls } = service({
+      certificate: {
+        ...baseCertificate,
+        serviceJob: {
+          customer: {
+            ...baseCertificate.serviceJob.customer,
+            type: "COMPANY",
+            taxNumber: null,
+            euTaxNumber: null,
+          } as unknown as typeof baseCertificate.serviceJob.customer,
+        },
+      },
+    });
+    await assert.rejects(
+      () => subject.draftFor("cert-1"),
+      (error: unknown) =>
+        error instanceof BadRequestException &&
+        error.message.startsWith("A vevőnek nincs adószáma:"),
+    );
+    assert.equal(clientCalls(), 0);
+  });
+
+  it("TAX-GATE: a person, or a company with an EU tax number, gets its draft", async () => {
+    for (const extra of [
+      { type: "PERSON", taxNumber: null, euTaxNumber: null },
+      { type: "COMPANY", taxNumber: null, euTaxNumber: "DE123456789" },
+      { type: "COMPANY", taxNumber: "12345678-2-42", euTaxNumber: null },
+    ]) {
+      const { service: subject, clientCalls } = service({
+        certificate: {
+          ...baseCertificate,
+          serviceJob: {
+            customer: {
+              ...baseCertificate.serviceJob.customer,
+              ...extra,
+            } as unknown as typeof baseCertificate.serviceJob.customer,
+          },
+        },
+      });
+      await subject.draftFor("cert-1");
+      assert.equal(clientCalls(), 1, JSON.stringify(extra));
+    }
+  });
+
   it("throws BadRequestException when the customer has no billing address", async () => {
     const { service: subject } = service({
       certificate: {

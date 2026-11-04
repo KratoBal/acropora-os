@@ -159,6 +159,28 @@ export async function assertPartnerCodeFreeForCustomer(
  * colleague reads on the worksheet: a partner renamed on the partner screen and
  * left alone here would put the old name on every sheet written afterwards.
  */
+/**
+ * A PARTNER ADÓSZÁMA A VEVŐ-TÜKÖRBE (Balázs, 2026-11-04 11:43 UTC: az állatkert
+ * minden számlája adószám nélkül ment ki; kártya aaf4f09d). A karbantartási és a
+ * TIG-számla a tükör sorából olvassa a vevőt, a tükör pedig eddig csak a nevet, a
+ * határidőt és az e-mailt kapta. Belföldi (HU) partnernél a magyar adószám mezőbe,
+ * külföldinél a közösségi adószámba megy, mert a számla a kettőt külön mezőben
+ * küldi (`<adoszam>` és `<adoszamEU>`).
+ *
+ * ÜRES PARTNER-ADÓSZÁM NEM TÖRÖL: a tükör egy korábbi, kézzel beírt értékét nem
+ * nullázzuk egy üres mezővel; az adószám eltávolítása a partneren tehát nem jut át
+ * (ritka, és a hiánya veszélyesebb, mint a maradása).
+ */
+export function mirroredTaxNumber(supplier: {
+  taxNumber?: string | null;
+  country?: string | null;
+}): { taxNumber?: string; euTaxNumber?: string } {
+  const value = supplier.taxNumber?.trim();
+  if (!value) return {};
+  const country = (supplier.country ?? "HU").trim().toUpperCase();
+  return country === "HU" ? { taxNumber: value } : { euTaxNumber: value };
+}
+
 export async function syncWorksheetMirror(
   tx: Prisma.TransactionClient,
   supplier: {
@@ -169,6 +191,8 @@ export async function syncWorksheetMirror(
     worksheetPartnerCode?: string | null;
     paymentDueDays?: number | null;
     email?: string | null;
+    taxNumber?: string | null;
+    country?: string | null;
   },
 ) {
   if (!supplier.isService) {
@@ -190,6 +214,7 @@ export async function syncWorksheetMirror(
     // Balázs, 2026-10-26: one record, two addresses. The partner screen has ONE e-mail field and it is the
     // partner's billing address, so it travels to the record the invoice is written to, on every save.
     billingEmail: supplier.email?.trim() || null,
+    ...mirroredTaxNumber(supplier),
   };
   if (supplier.customerId) {
     await tx.customer.update({
@@ -665,6 +690,8 @@ export class SuppliersRepository extends Repository {
               worksheetPartnerCode: supplier.worksheetPartnerCode,
               paymentDueDays: supplier.paymentDueDays,
               email: supplier.email,
+              taxNumber: supplier.taxNumber,
+              country: supplier.country,
             });
             await tx.domainEvent.create({
               data: {
@@ -793,6 +820,8 @@ export class SuppliersRepository extends Repository {
               worksheetPartnerCode: true,
               paymentDueDays: true,
               email: true,
+              taxNumber: true,
+              country: true,
             },
           });
           await syncWorksheetMirror(tx, saved);
