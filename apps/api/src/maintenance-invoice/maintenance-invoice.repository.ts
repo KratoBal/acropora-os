@@ -14,31 +14,6 @@ export class MaintenanceInvoiceRepository {
    * (ADR-014): ha erre a certificate-re már áll piszkozat, ÚJ Számlázz.hu-
    * hívás nem indul, a meglévő sor jön vissza.
    */
-  /**
-   * AZ ALÁÍRT PÉLDÁNY NÉLKÜLI SZÁMLÁZÁS MEGERŐSÍTÉSE, NAPLÓZVA (barracuda, #2172 review): ki, mikor, melyik
-   * TIG-re. Csak a megrendeléses TIG juthat ide (a `prepare` a munkalapost aláírás nélkül nem engedi).
-   */
-  async recordUnsignedDraft(input: {
-    userId: string | null;
-    certificateId: string;
-    certificateNumber: string;
-    invoiceId: string;
-  }): Promise<void> {
-    await this.database.auditLog.create({
-      data: {
-        userId: input.userId,
-        action: "maintenance-invoice.draft-without-signed-certificate",
-        entityType: "CompletionCertificate",
-        entityId: input.certificateId,
-        metadata: {
-          certificateNumber: input.certificateNumber,
-          invoiceId: input.invoiceId,
-          acknowledged: true,
-        },
-      },
-    });
-  }
-
   existingInvoice(certificateId: string) {
     return this.database.invoice.findUnique({
       where: { completionCertificateId: certificateId },
@@ -132,7 +107,12 @@ export class MaintenanceInvoiceRepository {
    * tároló kulcsa ehhez az azonosítóhoz kötődik -- tehát az azonosítónak
    * MÁR MEG KELL LENNIE az írás előtt.
    */
-  createDraft(input: {
+  /**
+   * The draft row. With `unsignedAudit`, the confirmation of invoicing without a signed certificate is logged IN THE
+   * SAME TRANSACTION (barracuda, #2172 and #2176 review): who, which certificate, which draft. A failed audit write
+   * leaves no draft behind, so a retry cannot return an existing draft that was never logged.
+   */
+  async createDraft(input: {
     id: string;
     completionCertificateId: string;
     customerId: string;
@@ -150,8 +130,10 @@ export class MaintenanceInvoiceRepository {
       vatAmount: Prisma.Decimal;
       grossAmount: Prisma.Decimal;
     }[];
+    /** only the order's certificate can get here (`prepare` refuses a worksheet one without a signature) */
+    unsignedAudit?: { userId: string | null; certificateNumber: string };
   }) {
-    return this.database.invoice.create({
+    const create = this.database.invoice.create({
       data: {
         id: input.id,
         direction: "OUTBOUND",
@@ -184,5 +166,23 @@ export class MaintenanceInvoiceRepository {
       },
       include: { lines: true },
     });
+    if (!input.unsignedAudit) return create;
+    const [invoice] = await this.database.$transaction([
+      create,
+      this.database.auditLog.create({
+        data: {
+          userId: input.unsignedAudit.userId,
+          action: "maintenance-invoice.draft-without-signed-certificate",
+          entityType: "CompletionCertificate",
+          entityId: input.completionCertificateId,
+          metadata: {
+            certificateNumber: input.unsignedAudit.certificateNumber,
+            invoiceId: input.id,
+            acknowledged: true,
+          },
+        },
+      }),
+    ]);
+    return invoice;
   }
 }

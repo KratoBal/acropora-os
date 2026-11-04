@@ -367,6 +367,9 @@ export class MaintenanceInvoiceDraftService {
     };
     await this.documentStore.put(documentKey, response.pdf);
 
+    const signed = certificate.documents.some(
+      (document) => document.type === "SIGNED_FORM",
+    );
     const created = await this.repository.createDraft({
       id: invoiceId,
       completionCertificateId: certificateId,
@@ -388,17 +391,15 @@ export class MaintenanceInvoiceDraftService {
           grossAmount: amounts.grossAmount,
         };
       }),
+      ...(signed
+        ? {}
+        : {
+            unsignedAudit: {
+              userId: options.actor?.id ?? null,
+              certificateNumber: certificate.number,
+            },
+          }),
     });
-    const signed = certificate.documents.some(
-      (document) => document.type === "SIGNED_FORM",
-    );
-    if (!signed)
-      await this.repository.recordUnsignedDraft({
-        userId: options.actor?.id ?? null,
-        certificateId,
-        certificateNumber: certificate.number,
-        invoiceId: created.id,
-      });
     return this.summary(created);
   }
 

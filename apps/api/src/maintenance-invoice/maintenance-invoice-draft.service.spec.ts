@@ -80,11 +80,7 @@ function service(options: {
       options.certificate === undefined ? baseCertificate : options.certificate,
   } as unknown as CompletionCertificatesRepository;
 
-  const audits: unknown[] = [];
   const repository = {
-    recordUnsignedDraft: async (row: unknown) => {
-      audits.push(row);
-    },
     existingInvoice: async () => options.existingInvoice ?? null,
     createDraft: async (input: unknown) => {
       created.push(input);
@@ -137,7 +133,12 @@ function service(options: {
   } as unknown as SzamlazzAgentClient;
 
   return {
-    audits,
+    // the audit goes with the draft, in its transaction (barracuda, #2176)
+    audits: () =>
+      created.flatMap((input) => {
+        const audit = (input as { unsignedAudit?: unknown }).unsignedAudit;
+        return audit ? [audit] : [];
+      }),
     created,
     stored,
     clientCalls: () => clientCalls,
@@ -433,14 +434,8 @@ describe("MaintenanceInvoiceDraftService.draftFor, a megrendelés TIG-je (Megren
     });
     assert.equal(confirmed.created.length, 1);
     // barracuda (#2172): who confirmed, which certificate, which draft
-    assert.deepEqual(confirmed.audits, [
-      {
-        userId: "user-luca",
-        certificateId: "cert-1",
-        certificateNumber: "TIG-2026-0007",
-        // the created row's id, as the repository returned it
-        invoiceId: "invoice-1",
-      },
+    assert.deepEqual(confirmed.audits(), [
+      { userId: "user-luca", certificateNumber: "TIG-2026-0007" },
     ]);
   });
 
@@ -448,7 +443,7 @@ describe("MaintenanceInvoiceDraftService.draftFor, a megrendelés TIG-je (Megren
     const { service: subject, audits, created } = service({});
     await subject.draftFor("cert-1", { actor: { id: "user-luca" } });
     assert.equal(created.length, 1);
-    assert.deepEqual(audits, []);
+    assert.deepEqual(audits(), []);
   });
 
   it("a munkalapos TIG szabálya marad: aláírt példány nélkül megerősítéssel sincs piszkozat", async () => {
