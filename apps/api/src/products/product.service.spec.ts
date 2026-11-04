@@ -35,6 +35,15 @@ function repositoryWith(
         calls.push("archive");
         return { id: "archived" };
       },
+      setVariantSellingPrice: async (
+        _id: string,
+        variantId: string,
+        price: { toString(): string },
+      ) => {
+        calls.push("setVariantSellingPrice");
+        inputs.push(price.toString());
+        return variantId === "variant-1" ? { id: "priced" } : null;
+      },
       takeCatalogAuthority: async () => {
         calls.push("takeCatalogAuthority");
         return {
@@ -250,5 +259,55 @@ describe("ProductService", () => {
         error.message === "PRODUCT_CATALOG_AUTHORITY_UNRESOLVED",
     );
     assert.deepEqual(calls, []);
+  });
+
+  /**
+   * THE OWN PRICE IS EDITED ONLY WHERE IT IS THE SHOP'S PRICE (T4.1-D3). Under
+   * UNAS authority the mirror price holds and the own price never reaches the
+   * shop, so a number typed in there would only mislead: 409 like every other
+   * master-data write. A variant id from another product is a 404, not a write.
+   */
+  it("sets an own price only on a product the OS owns", async () => {
+    const own = repositoryWith({
+      id: "product-1",
+      catalogAuthority: "ACROPORA",
+    });
+    const result = await new ProductService(own.repository).setVariantPrice(
+      "product-1",
+      "variant-1",
+      { grossPrice: "12990.50" },
+      "user-1",
+    );
+    assert.deepEqual(result, { id: "priced" });
+    assert.deepEqual(own.calls, ["setVariantSellingPrice"]);
+    assert.deepEqual(own.inputs, ["12990.5"]);
+
+    const unas = repositoryWith({ id: "product-1", catalogAuthority: "UNAS" });
+    await assert.rejects(
+      () =>
+        new ProductService(unas.repository).setVariantPrice(
+          "product-1",
+          "variant-1",
+          { grossPrice: "12990" },
+        ),
+      ConflictException,
+    );
+    assert.deepEqual(unas.calls, []);
+  });
+
+  it("answers 404 for a variant of another product", async () => {
+    const own = repositoryWith({
+      id: "product-1",
+      catalogAuthority: "ACROPORA",
+    });
+    await assert.rejects(
+      () =>
+        new ProductService(own.repository).setVariantPrice(
+          "product-1",
+          "variant-of-another",
+          { grossPrice: "100" },
+        ),
+      NotFoundException,
+    );
   });
 });
