@@ -1767,3 +1767,13 @@ export type {
   PartnerMigrationPlan,
   PartnerMigrationRow,
 } from "./partner-migration.js";
+export { PARTNER_MERGE_REFERENCE_TABLES } from "./partner-merge.js";
+export type {
+  PartnerMergeExecuteInput,
+  PartnerMergeFieldFill,
+  PartnerMergeLogEntry,
+  PartnerMergePreview,
+  PartnerMergeReferenceTable,
+  PartnerMergeSide,
+  PartnerMergeUndoResult,
+} from "./partner-merge.js";
