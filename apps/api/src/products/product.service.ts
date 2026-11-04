@@ -5,11 +5,13 @@ import {
   NotFoundException,
   Optional,
 } from "@nestjs/common";
+import { Prisma } from "@acropora/database";
 import { sanitizeRichHtml } from "@acropora/rich-text";
 import type { ProductCatalogAuthority } from "@acropora/types";
 
 import type { CreateProductDto } from "./dto/create-product.dto.js";
 import type { ProductListQueryDto } from "./dto/product-list-query.dto.js";
+import type { SetVariantPriceDto } from "./dto/set-variant-price.dto.js";
 import type { UpdateProductDto } from "./dto/update-product.dto.js";
 import { richTextImageHosts } from "../homepage-content/homepage-content.service.js";
 import { ProductRepository } from "./product.repository.js";
@@ -76,6 +78,34 @@ export class ProductService {
       id,
       withSanitizedDescription(input, richTextImageHosts(this.environment)),
     );
+  }
+
+  /**
+   * A változat saját eladási ára (T4.1-D3). Csak az OS-gazdájú terméknél:
+   * UNAS-gazdánál az árat a tükör adja, és a saját ár ott nem kerül a boltba,
+   * tehát egy itt beírt szám csak megtévesztene (409, ugyanaz, mint a többi
+   * törzsadat-írásnál).
+   */
+  async setVariantPrice(
+    id: string,
+    variantId: string,
+    input: SetVariantPriceDto,
+    actorUserId?: string,
+  ) {
+    const product = await this.requireProduct(id);
+    this.assertLocallyManaged(product);
+    const updated = await this.products.setVariantSellingPrice(
+      id,
+      variantId,
+      new Prisma.Decimal(input.grossPrice),
+      actorUserId,
+    );
+    if (!updated)
+      throw new NotFoundException({
+        code: "PRODUCT_VARIANT_NOT_FOUND",
+        message: "A változat nem ehhez a termékhez tartozik.",
+      });
+    return updated;
   }
 
   async archiveProduct(id: string) {

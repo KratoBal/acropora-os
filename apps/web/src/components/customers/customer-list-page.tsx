@@ -13,6 +13,7 @@ import {
   type PilotTableColumn,
   Select,
   Skeleton,
+  PilotButton,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -172,9 +173,9 @@ export function CustomerListPage() {
           title="Betöltési hiba"
           description={error}
           action={
-            <Button variant="secondary" onClick={() => void load()}>
+            <PilotButton variant="secondary" onClick={() => void load()}>
               Újrapróbálás
-            </Button>
+            </PilotButton>
           }
         />
       ) : null}

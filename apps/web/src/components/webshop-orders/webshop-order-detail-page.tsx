@@ -2281,7 +2281,7 @@ function OrderBody({
                   </>
                 ) : null}
               </div>
-              <dl className="grid min-w-[240px] grid-cols-[1fr_auto] gap-x-6 gap-y-1 text-sm">
+              <dl className="grid min-w-[240px] grid-cols-[minmax(0,1fr)_auto] gap-x-6 gap-y-1 text-sm">
                 <dt className="text-pilot-grey-500">Részösszeg</dt>
                 <dd className="text-right">{money(order.totals.subtotal)}</dd>
                 <dt className="text-pilot-grey-500">Kedvezmény</dt>

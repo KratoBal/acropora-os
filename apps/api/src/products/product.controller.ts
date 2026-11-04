@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
 } from "@nestjs/common";
 import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
@@ -14,6 +15,7 @@ import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
 import { CreateProductDto } from "./dto/create-product.dto.js";
 import { ProductListQueryDto } from "./dto/product-list-query.dto.js";
+import { SetVariantPriceDto } from "./dto/set-variant-price.dto.js";
 import { UpdateProductDto } from "./dto/update-product.dto.js";
 import { ProductService } from "./product.service.js";
 
@@ -46,6 +48,17 @@ export class ProductController {
   @RequirePermissions(PERMISSIONS.PRODUCTS_MANAGE)
   updateProduct(@Param("id") id: string, @Body() input: UpdateProductDto) {
     return this.products.updateProduct(id, input);
+  }
+
+  @Put(":id/variants/:variantId/price")
+  @RequirePermissions(PERMISSIONS.PRODUCTS_MANAGE)
+  setVariantPrice(
+    @Param("id") id: string,
+    @Param("variantId") variantId: string,
+    @Body() input: SetVariantPriceDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.products.setVariantPrice(id, variantId, input, user.id);
   }
 
   @Delete(":id")

@@ -3,7 +3,6 @@ import { useAssistantEntity } from "@/components/assistant/page-context";
 
 import {
   Alert,
-  Button,
   Icon,
   PilotButton,
   PilotDataGrid,
@@ -189,9 +188,9 @@ export function BillingDocumentDetailPage({
         title="A bizonylat nem tölthető be"
         description={error}
         action={
-          <Button variant="secondary" onClick={() => void load()}>
+          <PilotButton variant="secondary" onClick={() => void load()}>
             Újrapróbálás
-          </Button>
+          </PilotButton>
         }
       />
     );

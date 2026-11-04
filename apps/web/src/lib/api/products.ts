@@ -160,6 +160,19 @@ export const productApi = {
       { method: "PUT", body: JSON.stringify(input) },
     );
   },
+  /** A változat saját bruttó ára (T4.1-D3); csak OS-gazdájú terméknél, a szerver 409-cel utasítja el a többit. */
+  setVariantPrice(
+    token: string,
+    id: string,
+    variantId: string,
+    grossPrice: string,
+  ) {
+    return apiRequest<ProductDetail>(
+      `/products/${encodeURIComponent(id)}/variants/${encodeURIComponent(variantId)}/price`,
+      token,
+      { method: "PUT", body: JSON.stringify({ grossPrice }) },
+    );
+  },
   takeCatalogAuthority(token: string, id: string) {
     return apiRequest<ProductDetail>(
       `/products/${encodeURIComponent(id)}/catalog-authority/acropora`,

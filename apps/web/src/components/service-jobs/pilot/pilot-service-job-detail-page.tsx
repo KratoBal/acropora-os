@@ -740,7 +740,7 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
         onCancel={() => setMailOpen(false)}
       />
 
-      <div className="grid flex-1 grid-cols-1 items-start gap-6 lg:grid-cols-[1fr_368px]">
+      <div className="grid flex-1 grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_368px]">
         <div className="flex min-w-0 flex-col gap-5">
           <PilotCard>
             <PilotCardHeader

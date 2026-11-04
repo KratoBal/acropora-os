@@ -11,6 +11,7 @@ import {
 import type { AquariumsService } from "../aquariums/aquariums.service.js";
 import type { InvoiceSearchService } from "../billing/invoice-search.service.js";
 import type { WebshopOrdersService } from "../orders/webshop-orders/webshop-orders.service.js";
+import type { ProductService } from "../products/product.service.js";
 import type { QuotesService } from "../quotes/quotes.service.js";
 import type { ServiceAssetsService } from "../service-assets/service-assets.service.js";
 import type { ServiceJobsService } from "../service-jobs/service-jobs.service.js";
@@ -36,6 +37,23 @@ let invoiceCalls = 0;
 let quoteCalls = 0;
 /** the Medusa order list: how often it ran, and what it does */
 let orderCalls = 0;
+/** the product list: how often it ran */
+let productCalls = 0;
+/*
+  THE MOCKS RECORD THEIR QUERY AND NEVER ASSERT INSIDE (barracuda, #2123 review): the orders call runs
+  behind `isolated()`, which swallows ANY exception as a webshop failure, so an assert thrown in the mock
+  silently dropped the group and the role test saw an "absent" group where the assert had failed. The
+  test checks the recorded query AFTER the search, outside.
+*/
+const recorded: {
+  order?: { q?: string; page?: number; pageSize?: number };
+  product?: { search?: string; page?: number; pageSize?: number };
+} = {};
+/** (a function, not an assignment in the test: an assignment would narrow the property to `never`) */
+const forgetRecorded = () => {
+  recorded.order = undefined;
+  recorded.product = undefined;
+};
 let orderList: () => Promise<unknown> = async () => ({
   items: [
     {
@@ -165,10 +183,36 @@ const search = (
     {
       list: async (query: { q?: string; page?: number; pageSize?: number }) => {
         orderCalls += 1;
-        assert.deepEqual(query, { q: "rendelés", page: 1, pageSize: 5 });
+        recorded.order = query;
         return orderList();
       },
     } as unknown as WebshopOrdersService,
+    {
+      listProducts: async (query: {
+        search?: string;
+        page?: number;
+        pageSize?: number;
+      }) => {
+        productCalls += 1;
+        recorded.product = query;
+        return {
+          items: [
+            {
+              id: "prod/1",
+              name: "Aquaforest Reef Salt 25 kg",
+              primarySku: "AF-SALT-25",
+              brand: { id: "b1", name: "Aquaforest" },
+            },
+            {
+              id: "prod-2",
+              name: "Névtelen termék",
+              primarySku: null,
+              brand: null,
+            },
+          ],
+        };
+      },
+    } as unknown as ProductService,
     environment,
   );
 
@@ -176,7 +220,16 @@ describe("SearchService", () => {
   for (const [role, expectedGroups] of [
     [
       "OWNER",
-      ["aquariums", "assets", "invoices", "partners", "tickets", "worksheets"],
+      [
+        "aquariums",
+        "assets",
+        "invoices",
+        "orders",
+        "partners",
+        "products",
+        "tickets",
+        "worksheets",
+      ],
     ],
     ["SERVICE", ["aquariums", "assets", "partners", "tickets", "worksheets"]],
     ["PARTNER_SERVICE", ["aquariums", "assets", "tickets", "worksheets"]],
@@ -345,11 +398,18 @@ describe("SearchService", () => {
   it("orders are present for exactly the roles that hold orders.view, and the list never runs for the others", async () => {
     for (const role of USER_ROLES) {
       orderCalls = 0;
+      forgetRecorded();
       const subject = user(role);
       const result = await search().search("rendelés", subject);
       const allowed = hasPermission(subject, PERMISSIONS.ORDERS_VIEW);
       assert.equal("orders" in result, allowed, role);
       assert.equal(orderCalls, allowed ? 1 : 0, role);
+      if (allowed)
+        assert.deepEqual(
+          recorded.order,
+          { q: "rendelés", page: 1, pageSize: 5 },
+          role,
+        );
     }
   });
 
@@ -430,6 +490,50 @@ describe("SearchService", () => {
     assert.match(
       result.orders![1]!.subtitle,
       /^guest@example\.invalid · 5\s?090,50\sFt$/,
+    );
+  });
+
+  /*
+    A TERMÉK-CSOPORT (T2.2, 4. szelet): a belső termékkatalógus listája, `products.view` kapuval. MI
+    PIROSÍT: ha a csoport a jog nélküli szerepnek is megjelenne, vagy a lista lefutna nekik; ha a lista
+    nem 5 elemű, első oldalas lekérdezést kapna; ha a találat útvonalában a termék azonosítója nem
+    kódolt; ha a cikkszám vagy a márka hiánya "null" feliratot írna a sorba.
+  */
+  it("products are present for exactly the roles that hold products.view, and the list never runs for the others", async () => {
+    for (const role of USER_ROLES) {
+      productCalls = 0;
+      forgetRecorded();
+      const subject = user(role);
+      const result = await search().search("só", subject);
+      const allowed = hasPermission(subject, PERMISSIONS.PRODUCTS_VIEW);
+      assert.equal("products" in result, allowed, role);
+      assert.equal(productCalls, allowed ? 1 : 0, role);
+      if (allowed)
+        assert.deepEqual(
+          {
+            search: recorded.product?.search,
+            page: recorded.product?.page,
+            pageSize: recorded.product?.pageSize,
+          },
+          { search: "só", page: 1, pageSize: 5 },
+          role,
+        );
+    }
+  });
+
+  it("maps a product to its name, SKU and brand, and opens it on its page (id encoded); missing parts leave nothing behind", async () => {
+    const result = await search().search("só", user("OWNER"));
+    assert.deepEqual(
+      result.products?.map((p) => [p.id, p.title, p.subtitle, p.path]),
+      [
+        [
+          "prod/1",
+          "Aquaforest Reef Salt 25 kg",
+          "AF-SALT-25 · Aquaforest",
+          "/products/prod%2F1",
+        ],
+        ["prod-2", "Névtelen termék", "", "/products/prod-2"],
+      ],
     );
   });
 });

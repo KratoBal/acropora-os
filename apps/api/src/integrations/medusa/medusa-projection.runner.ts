@@ -40,7 +40,12 @@ import {
   barcodesFromProductBarcode,
   decideVariantBarcodes,
 } from "./medusa-variant-barcode.js";
-import type { VariantBarcodeSyncReport } from "./medusa-product-projection.service.js";
+import type {
+  VariantBarcodeSyncReport,
+  VariantOmnibusSyncReport,
+} from "./medusa-product-projection.service.js";
+import type { LowestPriceDatabase } from "../../products/price-history/lowest-price.reader.js";
+import { omnibusInputsFor } from "./medusa-variant-omnibus.js";
 import {
   betoltTiltoLista,
   tiltottKodBarmelyikValtozaton,
@@ -408,6 +413,25 @@ export function describeVariantBarcodes(r: VariantBarcodeSyncReport): string {
       : "",
   ].filter(Boolean);
   return reszek.length ? `      vonalkód: ${reszek.join("; ")}\n` : "";
+}
+
+/**
+ * AZ OMNIBUS HIVATKOZÁSI ÁR ÍRÁSA (V0.2, 2. szelet), csak ha volt mit mondani: írt, ürített,
+ * nem talált, vagy elbukott. A „mind egyezett” csend.
+ */
+export function describeVariantOmnibus(r: VariantOmnibusSyncReport): string {
+  const reszek = [
+    r.written.length ? `${r.written.length} írva` : "",
+    r.cleared.length ? `${r.cleared.length} ürítve` : "",
+    r.gaps.length
+      ? `rés az ablakban (nincs érték, akció indítása előtt nézd meg): ${r.gaps.join(", ")}`
+      : "",
+    r.missing.length ? `nincs a boltban: ${r.missing.join(", ")}` : "",
+    r.failed.length
+      ? `HIBA: ${r.failed.map((f) => `${f.sku} (${f.error})`).join("; ")}`
+      : "",
+  ].filter(Boolean);
+  return reszek.length ? `      omnibus: ${reszek.join("; ")}\n` : "";
 }
 
 export function describeForgottenLink(
@@ -1415,6 +1439,17 @@ export async function runProjectionCli(
     const tudasSzoveg = tudasBekapcsolva
       ? projectedCopy(tudas.copy, tudas.facts, product.catalogAuthority)
       : null;
+    /*
+      AZ OMNIBUS HIVATKOZÁSI ÁR CSAK A KAPCSOLÓVAL MEGY KI (`MEDUSA_PROJECT_OMNIBUS`, alapból KI):
+      kikapcsolva az előzmény-lekérdezés sem fut, és a változatok kulcsához a vetítés nem nyúl
+      (ami ott áll, ott marad). Bekapcsolva MINDEN változatra értéket számol: ahol nem fut
+      árcsökkentés, az érték "", és a vetítés üríti a saját kulcsát.
+    */
+    const omnibus = await omnibusInputsFor(
+      db as unknown as LowestPriceDatabase,
+      product.variants,
+      env,
+    );
     const outcome = await service!.project(
       {
         id: product.id,
@@ -1455,6 +1490,7 @@ export async function runProjectionCli(
           ? { field: vonalkod.field, value: vonalkod.value }
           : null,
         variantMeasures: mertekek.measures,
+        ...(omnibus ? { variantOmnibus: omnibus } : {}),
         writtenMeasures: kiirtMertekek,
         variantBarcodes: valtozatVonalkodok.flatMap((v) =>
           v.decision.field
@@ -1579,6 +1615,9 @@ export async function runProjectionCli(
         outcome.action === "updated" ||
         outcome.action === "relinked"
           ? describeVariantMeasures(outcome.measures, mertekek.skipped)
+          : "") +
+        (outcome.action !== "created" && outcome.omnibus
+          ? describeVariantOmnibus(outcome.omnibus)
           : "") +
         (outcome.action === "created" && outcome.shipping
           ? `      szállítás: ${outcome.shipping}\n`

@@ -2,7 +2,6 @@
 
 import {
   Alert,
-  Button,
   EmptyState,
   PilotDataTable,
   PilotPageHeader,
@@ -309,9 +308,9 @@ export function GlsSettlementsPage() {
           title="Hiba történt"
           description={error}
           action={
-            <Button variant="secondary" onClick={() => void load()}>
+            <PilotButton variant="secondary" onClick={() => void load()}>
               Újrapróbálás
-            </Button>
+            </PilotButton>
           }
         />
       ) : null}

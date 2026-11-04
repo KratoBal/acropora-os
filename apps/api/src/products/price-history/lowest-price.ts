@@ -72,6 +72,12 @@ export interface LowestPrice {
   reductionStart: Date;
   /** every moment of the window has a known price */
   complete: boolean;
+  /**
+   * an unknown-price stretch reaches into the window (a GAP). `complete` is false for a gap AND
+   * for a history younger than the window; this tells them apart: a young history is a shorter
+   * but honest window, a gap is time in which the price may have been lower.
+   */
+  unknownInWindow: boolean;
   /** the first point with a known price; the window is shorter than 30 days when it is later than `windowStart` */
   historyBegins: Date;
 }
@@ -126,12 +132,14 @@ export function lowestPriceInWindow(
         windowStart,
         reductionStart,
         complete: false,
+        unknownInWindow: false,
         historyBegins: firstPriced.at,
       };
   }
   if (best === null || currencies.size > 1) return null;
   return {
     ...best,
+    unknownInWindow,
     complete:
       !unknownInWindow && best.historyBegins.getTime() <= windowStart.getTime(),
   };
@@ -183,3 +191,26 @@ export function seriesOfVariant(
 const byTime = (a: HistoryRow, b: HistoryRow) =>
   a.observedAt.getTime() - b.observedAt.getTime() ||
   a.createdAt.getTime() - b.createdAt.getTime();
+
+/**
+ * WHEN THE REDUCTION THAT RUNS NOW BEGAN, from the UNAS mirror rows of the variant's product, or null
+ * when no reduction runs. A reduction is a run of mirror rows that carry a sale price; its start is
+ * the first row of the run that is in force now (a deeper second cut inside the run does not move
+ * it: the reference is measured from the FIRST cut). A taken-over variant (it has OWN rows) has no
+ * sale concept, so no reduction: null.
+ */
+export function currentReductionStart(
+  rows: readonly HistoryRow[],
+  variantId: string,
+): Date | null {
+  if (rows.some((row) => row.variantId === variantId)) return null;
+  const mirror = rows.filter((row) => row.variantId === null).sort(byTime);
+  const last = mirror[mirror.length - 1];
+  if (!last || last.saleGrossPrice === null) return null;
+  let start = last.observedAt;
+  for (let i = mirror.length - 2; i >= 0; i -= 1) {
+    if (mirror[i]!.saleGrossPrice === null) break;
+    start = mirror[i]!.observedAt;
+  }
+  return start;
+}

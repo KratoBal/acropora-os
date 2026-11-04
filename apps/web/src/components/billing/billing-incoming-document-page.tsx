@@ -2,7 +2,6 @@
 
 import {
   Alert,
-  Button,
   Icon,
   PilotButton,
   PilotDataGrid,
@@ -207,9 +206,9 @@ export function BillingIncomingDocumentPage({
         title="A számla nem tölthető be"
         description={error}
         action={
-          <Button variant="secondary" onClick={() => void load()}>
+          <PilotButton variant="secondary" onClick={() => void load()}>
             Újrapróbálás
-          </Button>
+          </PilotButton>
         }
       />
     );

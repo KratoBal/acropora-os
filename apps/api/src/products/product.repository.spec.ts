@@ -192,6 +192,14 @@ function createDatabase({
   variantCopyCount = 1,
   /** the variant's last own-price history row, if any */
   lastOwnPriceRow = null as ArKep | null,
+  /** the variant before a price edit (null: not a variant of this product) */
+  variantBefore = {
+    sellingGrossPrice: new Prisma.Decimal("9990"),
+    sellingPriceCurrency: "HUF",
+  } as {
+    sellingGrossPrice: Prisma.Decimal | null;
+    sellingPriceCurrency: string | null;
+  } | null,
   /** the product's shipping-flag sources (null: no profile row) */
   shippingSources = null as Record<string, "UNAS" | "MANUAL"> | null,
   mirror = {
@@ -253,6 +261,10 @@ function createDatabase({
       findMany: async (args: unknown) => {
         calls.push({ operation: "variantFindMany", args });
         return variants;
+      },
+      findFirst: async (args: unknown) => {
+        calls.push({ operation: "variantFindFirst", args });
+        return variantBefore;
       },
       updateMany: async (args: unknown) => {
         calls.push({ operation: "variantUpdateMany", args });
@@ -575,6 +587,107 @@ describe("ProductRepository", () => {
    * not write a second event. A log that reports one decision twice is worse
    * than no log, because it invents a history nobody lived.
    */
+  /**
+   * THE OWN-PRICE EDITOR (T4.1-D3, slice 2). One transaction: the price only on
+   * a variant of THIS product, the history row through `recordOwnPrice`, the
+   * product's `updatedAt` stepped (the Medusa projection's due query reads the
+   * product row's time), and an event with the old and the new price.
+   */
+  it("sets a variant's own price with its history, and makes the product due", async () => {
+    const { database, calls } = createDatabase();
+    const result = await new ProductRepository(database).setVariantSellingPrice(
+      "product-1",
+      "variant-1",
+      new Prisma.Decimal("12990"),
+      "user-1",
+    );
+
+    assert.ok(result);
+    assert.deepEqual(
+      calls.map((call) => call.operation),
+      [
+        "variantFindFirst",
+        "variantUpdateMany",
+        "historyFind",
+        "historyCreate",
+        "transactionUpdate",
+        "event",
+        "transactionFind",
+      ],
+    );
+    const write = calls[1]?.args as {
+      where: { id: string; productId: string };
+      data: { sellingGrossPrice: Prisma.Decimal; sellingPriceCurrency: string };
+    };
+    assert.deepEqual(write.where, { id: "variant-1", productId: "product-1" });
+    assert.equal(write.data.sellingGrossPrice.toString(), "12990");
+    assert.equal(write.data.sellingPriceCurrency, "HUF");
+    const touch = calls[4]?.args as {
+      where: { id: string };
+      data: { updatedAt: Date };
+    };
+    assert.equal(touch.where.id, "product-1");
+    assert.ok(touch.data.updatedAt instanceof Date);
+    const event = calls[5]?.args as {
+      data: { eventType: string; actorUserId: string; payload: unknown };
+    };
+    assert.equal(event.data.eventType, "product.variant.selling-price.set");
+    assert.equal(event.data.actorUserId, "user-1");
+    assert.deepEqual(event.data.payload, {
+      variantId: "variant-1",
+      from: "9990",
+      to: "12990",
+      currency: "HUF",
+      history: "written",
+    });
+  });
+
+  it("writes nothing for a variant id that is not this product's", async () => {
+    const { database, calls } = createDatabase({ variantBefore: null });
+    const result = await new ProductRepository(database).setVariantSellingPrice(
+      "product-1",
+      "variant-x",
+      new Prisma.Decimal("12990"),
+    );
+
+    assert.equal(result, null);
+    assert.deepEqual(
+      calls.map((call) => call.operation),
+      ["variantFindFirst"],
+    );
+  });
+
+  it("starts a first own price in forint and still writes no duplicate history", async () => {
+    const { database, calls } = createDatabase({
+      variantBefore: { sellingGrossPrice: null, sellingPriceCurrency: null },
+      lastOwnPriceRow: {
+        currency: "HUF",
+        netPrice: null,
+        grossPrice: new Prisma.Decimal("12990"),
+        saleNetPrice: null,
+        saleGrossPrice: null,
+      } as ArKep,
+    });
+    await new ProductRepository(database).setVariantSellingPrice(
+      "product-1",
+      "variant-1",
+      new Prisma.Decimal("12990"),
+    );
+
+    const write = calls.find((call) => call.operation === "variantUpdateMany")
+      ?.args as { data: { sellingPriceCurrency: string } };
+    assert.equal(write.data.sellingPriceCurrency, "HUF");
+    assert.equal(
+      calls.some((call) => call.operation === "historyCreate"),
+      false,
+    );
+    const event = calls.find((call) => call.operation === "event")?.args as {
+      data: { payload: { from: string | null; history: string } };
+    };
+    assert.equal(event.data.payload.from, null);
+    assert.equal(event.data.payload.history, "unchanged");
+  });
+
   /**
    * THE UNAS-FOLLOWING SHIPPING FLAGS BECOME MANUAL (T4.1-D3, card af14c36e).
    * After the takeover the sync skips the product, so a flag whose source says

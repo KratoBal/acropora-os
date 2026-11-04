@@ -1,7 +1,6 @@
 "use client";
 import {
   Alert,
-  Button,
   EmptyState,
   Icon,
   PilotDataTable,
@@ -451,9 +450,9 @@ function ExpectedArrivalView(props: {
           title="Hiba történt"
           description={props.error}
           action={
-            <Button variant="secondary" onClick={props.onReload}>
+            <PilotButton variant="secondary" onClick={props.onReload}>
               Újrapróbálás
-            </Button>
+            </PilotButton>
           }
         />
       ) : null}

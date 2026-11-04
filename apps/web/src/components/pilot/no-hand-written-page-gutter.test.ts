@@ -20,23 +20,33 @@ function fajlok(mappa: string): string[] {
   });
 }
 
+/** Blokk-komment csak sor elején vagy szóköz, `{`, `(`, `;` után kezdődik (a `grid-base-track.test.ts` mintája), így
+ * egy `"src/**\/*.ts"` alakú szöveg nem nyeli el a fájlt a következő `*\/`-ig (barracuda, #2121). */
 function kod(forras: string): string {
   return forras
-    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/(^|[\s{(;])\/\*[\s\S]*?\*\//gm, "$1 ")
     .replace(/(^|[^:])\/\/.*$/gm, "$1 ");
 }
 
 const SZOVEG = /"([^"\n]*)"|`([^`]*)`/g;
 
-/** Egy osztálysor kézzel írt lapmargó: a 16 px-es alap és egy töréspontos vízszintes pár ugyanabban a sorban. */
+/**
+ * Egy osztálysor kézzel írt lapmargó: a 16 px-es alap és egy töréspontos vízszintes pár ugyanabban a sorban; VAGY a
+ * közös konstans mellett egy töréspontos felülírás ugyanazon a tengelyen (`${PAGE_GUTTER_X} sm:px-8`: a konstans
+ * ott van, a hiba mégis visszajön; barracuda, #2121).
+ */
 function kezziLapmargo(osztaly: string): boolean {
   const tokenek = osztaly.split(/\s+/);
-  return (["px", "mx", "-mx"] as const).some(
-    (fajta) =>
-      tokenek.includes(`${fajta}-4`) &&
-      tokenek.some((t) =>
-        new RegExp(`^(?:sm|md|lg|xl|2xl):${fajta}-\\S+$`).test(t),
-      ),
+  const toresponti = (fajta: string) =>
+    tokenek.some((t) =>
+      new RegExp(`^(?:sm|md|lg|xl|2xl):${fajta}-\\S+$`).test(t),
+    );
+  return (
+    (["px", "mx", "-mx"] as const).some(
+      (fajta) => tokenek.includes(`${fajta}-4`) && toresponti(fajta),
+    ) ||
+    (osztaly.includes("${PAGE_GUTTER_X}") && toresponti("px")) ||
+    (osztaly.includes("${PAGE_GUTTER_MX}") && toresponti("mx"))
   );
 }
 
@@ -58,6 +68,12 @@ describe("kézzel írt lapmargó", () => {
     expect(kezziLapmargo("px-2 py-3 sm:px-3")).toBe(false);
     expect(kezziLapmargo("px-4 py-2")).toBe(false);
     expect(kezziLapmargo("lg:px-8")).toBe(false);
+    expect(kezziLapmargo("$" + "{PAGE_GUTTER_X} pt-6 sm:px-8")).toBe(true);
+    expect(kezziLapmargo("$" + "{PAGE_GUTTER_MX} lg:mx-10")).toBe(true);
+    expect(kezziLapmargo("$" + "{PAGE_GUTTER_X} pt-6 sm:py-8")).toBe(false);
+    expect(
+      kod('const glob = "src/**/*.ts";\nconst c = "px-4 sm:px-8";'),
+    ).toContain("px-4 sm:px-8");
   });
 
   it("a mérő látja a konstanst használó sávokat (pozitív kontroll)", () => {
@@ -68,6 +84,11 @@ describe("kézzel írt lapmargó", () => {
   });
 
   it("egy lap sem írja kézzel a lapmargót", () => {
-    expect(talalatok()).toEqual([]);
+    expect(
+      talalatok(),
+      "A lapmargó a PAGE_GUTTER_X / PAGE_GUTTER_MX konstansból jön (@acropora/ui, page-frame.ts). Ha a talált sor NEM " +
+        "lapmargó, hanem egy elem belső paddingja (párbeszédablak, kártya-lábléc), ne 16 px-es alappal írd (px-5, px-3), " +
+        "vagy ha az a helyes érték, emeld ki egy nevesített konstansba, és a sort írd le ebben a tesztben indokkal.",
+    ).toEqual([]);
   });
 });
