@@ -225,12 +225,23 @@ Minden végpont hitelesítést igényel.
 | `PATCH`  | `/products/:id` | `products.manage` | részleges módosítás        |
 | `DELETE` | `/products/:id` | `products.manage` | soft archive               |
 
-| Metódus | Útvonal                                    | Jogosultság                           | Művelet                       |
-| ------- | ------------------------------------------ | ------------------------------------- | ----------------------------- |
-| `POST`  | `/products/:id/catalog-authority/acropora` | `products.catalog-authority.transfer` | törzsadat átvétele a UNAS-tól |
-| `PUT`   | `/products/:id/variants/:variantId/price`  | `products.manage`                     | saját ár és árelőzmény        |
-| `PATCH` | `/products/:id/images/:imageId`            | `products.manage`                     | kép alt-szövege               |
-| `PUT`   | `/products/:id/images/order`               | `products.manage`                     | képek sorrendje               |
+| Metódus  | Útvonal                                    | Jogosultság                           | Művelet                       |
+| -------- | ------------------------------------------ | ------------------------------------- | ----------------------------- |
+| `POST`   | `/products/:id/catalog-authority/acropora` | `products.catalog-authority.transfer` | törzsadat átvétele a UNAS-tól |
+| `PUT`    | `/products/:id/variants/:variantId/price`  | `products.manage`                     | saját ár és árelőzmény        |
+| `PATCH`  | `/products/:id/images/:imageId`            | `products.manage`                     | kép alt-szövege               |
+| `PUT`    | `/products/:id/images/order`               | `products.manage`                     | képek sorrendje               |
+| `POST`   | `/products/:id/images`                     | `products.manage`                     | kép feltöltése (`file` mező)  |
+| `DELETE` | `/products/:id/images/:imageId`            | `products.manage`                     | kép törlése                   |
+| `GET`    | `/products/:id/images/:imageId/file`       | `products.view`                       | a kép fájlja a tárolóból      |
+
+A feltöltött kép (T4.1-D3, 6. szelet) a dokumentum-tárolóba kerül, onnan tölti fel
+a vetítés a boltba; a sora `source: "OS"`, a `url` mezője `os-upload:<sha256>`
+(a tartalom lenyomata, nem webcím, ezért a felület a `GET .../file` útról
+mutatja). Csak JPEG, PNG, GIF és WebP, legfeljebb 10 MB; ugyanaz a kép másodszor
+`409 PRODUCT_IMAGE_DUPLICATE`. A feltöltés, a törlés és a sorrend-írás a termék
+sorának zárolása alatt fut. A tároló gyökere (`DOCUMENT_STORE_ROOT`) nélkül a
+feltöltés `503`.
 
 UNAS authority rekordra a `PATCH`, a `DELETE` és az ár `PUT` végpontja
 `409 PRODUCT_MANAGED_BY_UNAS` választ ad. Az ár útja a változat saját árát és

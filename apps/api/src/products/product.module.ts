@@ -30,6 +30,7 @@ import { ProductKnowledgeService } from "./knowledge/knowledge.service.js";
 import { ProductController } from "./product.controller.js";
 import { ProductRepository } from "./product.repository.js";
 import { PRODUCT_ENVIRONMENT, ProductService } from "./product.service.js";
+import { documentStoreProvider } from "../service-assets/document-store/document-store.provider.js";
 
 import { CategoryRedirectBackfillController } from "./redirect/category-redirect-backfill.controller.js";
 import {
@@ -75,6 +76,7 @@ import { DoseProjectionService } from "./dose-effects/dose-projection.service.js
     ProductRepository,
     ProductService,
     { provide: PRODUCT_ENVIRONMENT, useValue: process.env },
+    documentStoreProvider,
     ProductBarcodeRepository,
     ProductBarcodeService,
     ProductExtensionRepository,
