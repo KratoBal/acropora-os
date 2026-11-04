@@ -1,11 +1,8 @@
 import { Controller, Get } from "@nestjs/common";
-import { PERMISSIONS } from "@acropora/types";
+import { PERMISSIONS, type PartnerDuplicateResponse } from "@acropora/types";
 
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
-import {
-  PartnerDuplicateReportService,
-  type PartnerDuplicateResponse,
-} from "./partner-duplicate-report.service.js";
+import { PartnerDuplicateReportService } from "./partner-duplicate-report.service.js";
 
 /**
  * A PARTNER-DUPLIKÁTUMOK LISTÁJA (egy partnertörzs, 1. lépés), CSAK OLVASÁS, `settings.manage` joggal. A lista neveket és
