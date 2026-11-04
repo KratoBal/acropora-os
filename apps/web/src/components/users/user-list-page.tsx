@@ -1,7 +1,6 @@
 "use client";
 import {
   Alert,
-  Button,
   Card,
   EmptyState,
   Input,
@@ -152,7 +151,7 @@ export function UserListPage() {
         description="Munkatársak adatai, szerepkörök és jogosultságok kezelése."
         actions={
           <Link href="/admin/users/new">
-            <Button>Új felhasználó</Button>
+            <PilotButton>Új felhasználó</PilotButton>
           </Link>
         }
       />
@@ -235,12 +234,12 @@ export function UserListPage() {
               description="Módosítsd a szűrőket vagy hozz létre új felhasználót."
               action={
                 data.pagination.totalItems ? (
-                  <Button
+                  <PilotButton
                     variant="secondary"
                     onClick={() => router.replace(pathname)}
                   >
                     Szűrők törlése
-                  </Button>
+                  </PilotButton>
                 ) : undefined
               }
             />

@@ -378,14 +378,14 @@ export function WorksheetLineEditor({
     <Card className="space-y-3 p-4">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-dusk-800">Tételek</h2>
-        <Button
+        <PilotButton
           type="button"
           variant="secondary"
           disabled={disabled}
           onClick={() => onChange([...lines, emptyLine()])}
         >
           Új tétel
-        </Button>
+        </PilotButton>
       </div>
       {lines.length === 0 ? (
         <p className="text-sm text-dusk-500">

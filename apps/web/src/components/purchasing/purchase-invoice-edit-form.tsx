@@ -2,11 +2,11 @@
 
 import {
   Alert,
-  Button,
   Card,
   CardContent,
   CardHeader,
   PilotDateField,
+  PilotButton,
 } from "@acropora/ui";
 import type {
   PurchaseInvoiceDetail,
@@ -179,12 +179,15 @@ export function PurchaseInvoiceEditForm({
           ))}
         </div>
         <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={onCancel}>
+          <PilotButton variant="ghost" onClick={onCancel}>
             Mégse
-          </Button>
-          <Button disabled={busy || !number.trim()} onClick={() => void save()}>
+          </PilotButton>
+          <PilotButton
+            disabled={busy || !number.trim()}
+            onClick={() => void save()}
+          >
             Javítás mentése
-          </Button>
+          </PilotButton>
         </div>
       </CardContent>
     </Card>

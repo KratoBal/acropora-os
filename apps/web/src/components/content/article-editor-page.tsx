@@ -23,6 +23,7 @@ import {
   Skeleton,
   Textarea,
   PilotFileInput,
+  PilotButton,
 } from "@acropora/ui";
 import {
   RichTextEditor,
@@ -460,9 +461,12 @@ export function ArticleEditorPage({ contentId }: { contentId: string }) {
                     Nem mentett változás
                   </span>
                 ) : null}
-                <Button onClick={() => void save()} disabled={saving || !dirty}>
+                <PilotButton
+                  onClick={() => void save()}
+                  disabled={saving || !dirty}
+                >
                   {saving ? "Mentés…" : "Mentés"}
-                </Button>
+                </PilotButton>
               </div>
             ) : undefined
           }

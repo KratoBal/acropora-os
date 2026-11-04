@@ -359,23 +359,23 @@ function CashRegisterReceiptsView({ token }: { token: string }) {
           </section>
           {data.total > data.pageSize && (
             <div className="flex items-center justify-end gap-3">
-              <Button
+              <PilotButton
                 variant="secondary"
                 disabled={page <= 1}
                 onClick={() => setPage((v) => v - 1)}
               >
                 Előző
-              </Button>
+              </PilotButton>
               <span className="text-sm">
                 {page} / {Math.ceil(data.total / data.pageSize)}
               </span>
-              <Button
+              <PilotButton
                 variant="secondary"
                 disabled={page * data.pageSize >= data.total}
                 onClick={() => setPage((v) => v + 1)}
               >
                 Következő
-              </Button>
+              </PilotButton>
             </div>
           )}
           <p className="text-xs text-pilot-grey-600">

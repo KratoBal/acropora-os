@@ -3,7 +3,6 @@ import { plainText } from "@/lib/format/plain-text";
 import {
   Alert,
   Badge,
-  Button,
   Card,
   EmptyState,
   Input,
@@ -162,7 +161,7 @@ export function CustomerListPage() {
         actions={
           canManage ? (
             <Link href="/vevok/uj">
-              <Button>Új vevő</Button>
+              <PilotButton>Új vevő</PilotButton>
             </Link>
           ) : undefined
         }
@@ -241,12 +240,12 @@ export function CustomerListPage() {
               description="Módosítsd a szűrőket vagy rögzíts új vevőt."
               action={
                 data.pagination.totalItems ? (
-                  <Button
+                  <PilotButton
                     variant="secondary"
                     onClick={() => router.replace(pathname)}
                   >
                     Szűrők törlése
-                  </Button>
+                  </PilotButton>
                 ) : undefined
               }
             />

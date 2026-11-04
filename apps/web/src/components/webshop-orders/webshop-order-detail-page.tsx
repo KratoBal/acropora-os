@@ -1,12 +1,5 @@
 "use client";
-import {
-  Alert,
-  Button,
-  ConfirmDialog,
-  Icon,
-  PageHeader,
-  Skeleton,
-} from "@acropora/ui";
+import { Alert, ConfirmDialog, Icon, PageHeader, Skeleton } from "@acropora/ui";
 import {
   formatMoney,
   hasPermission,
@@ -550,9 +543,9 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
           title="A rendelés nem töltődött be"
           description={error}
           action={
-            <Button variant="secondary" onClick={() => void load()}>
+            <PilotButton variant="secondary" onClick={() => void load()}>
               Újra
-            </Button>
+            </PilotButton>
           }
         />
       ) : null}

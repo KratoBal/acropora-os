@@ -1,7 +1,6 @@
 "use client";
 import {
   Alert,
-  Button,
   Card,
   EmptyState,
   Input,
@@ -178,11 +177,11 @@ export function BrandListPage() {
         actions={
           <div className="flex flex-wrap gap-2">
             <Link href="/admin/brands/import-assistant">
-              <Button variant="secondary">Import asszisztens</Button>
+              <PilotButton variant="secondary">Import asszisztens</PilotButton>
             </Link>
             {canManage ? (
               <Link href="/admin/brands/new">
-                <Button>Új márka</Button>
+                <PilotButton>Új márka</PilotButton>
               </Link>
             ) : null}
           </div>
@@ -274,12 +273,12 @@ export function BrandListPage() {
               description="Módosítsd a szűrőket vagy hozz létre új márkát."
               action={
                 data.pagination.totalItems ? (
-                  <Button
+                  <PilotButton
                     variant="secondary"
                     onClick={() => router.replace(pathname)}
                   >
                     Szűrők törlése
-                  </Button>
+                  </PilotButton>
                 ) : undefined
               }
             />

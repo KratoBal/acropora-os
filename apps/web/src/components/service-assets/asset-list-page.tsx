@@ -2,7 +2,6 @@
 
 import {
   Alert,
-  Button,
   EmptyState,
   Pagination,
   Skeleton,
@@ -725,10 +724,10 @@ export function AssetListPage() {
         action={
           canManage ? (
             <Link href="/szerviz/eszkozok/uj">
-              <Button>
+              <PilotButton>
                 <ServiceIcon name="plus" className="mr-1.5 size-[17px]" />
                 Új eszköz
-              </Button>
+              </PilotButton>
             </Link>
           ) : undefined
         }

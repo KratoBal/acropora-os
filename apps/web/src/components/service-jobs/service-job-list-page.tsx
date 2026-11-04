@@ -2,7 +2,6 @@
 
 import {
   Alert,
-  Button,
   PilotDataTable,
   type PilotTableColumn,
   PilotButton,
@@ -314,12 +313,12 @@ export function ServiceJobListPage({
                   : "/szerviz/hibajegyek/uj"
               }
             >
-              <Button>
+              <PilotButton>
                 <ServiceIcon name="plus" className="mr-1.5 size-[17px]" />
                 {kind === "MAINTENANCE"
                   ? "Új karbantartási lap"
                   : "Új hibajegy"}
-              </Button>
+              </PilotButton>
             </Link>
           ) : undefined
         }
@@ -381,12 +380,12 @@ export function ServiceJobListPage({
               rejtett jegyeket: egy nezo szamara a hosszabb lista magyarazat
               nelkul maradna. */}
           {canHide ? (
-            <Button
+            <PilotButton
               variant={includeHidden ? "primary" : "secondary"}
               onClick={() => update({ hidden: includeHidden ? null : "1" })}
             >
               {includeHidden ? "Rejtettek nélkül" : "Rejtettek is"}
-            </Button>
+            </PilotButton>
           ) : null}
         </div>
         {loading && !data ? (

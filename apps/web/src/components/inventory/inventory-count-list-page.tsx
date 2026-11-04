@@ -13,6 +13,7 @@ import {
   Select,
   Skeleton,
   type PilotTableColumn,
+  PilotButton,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -251,9 +252,9 @@ export function InventoryCountListPage() {
         description="Készletleltárak indítása, nyomon követése és korrekciója."
         actions={
           canManage ? (
-            <Button onClick={startNewCount} disabled={creating}>
+            <PilotButton onClick={startNewCount} disabled={creating}>
               {creating ? "Indítás…" : "Új leltár"}
-            </Button>
+            </PilotButton>
           ) : undefined
         }
       />

@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@acropora/ui";
+import { PilotButton } from "@acropora/ui";
 import type { WorksheetAssetLink, WorksheetDetail } from "@acropora/types";
 import { useEffect, useState } from "react";
 
@@ -141,14 +141,14 @@ export function WorksheetAssetEditor({
             {error ? (
               <p className="text-xs font-medium text-rose-600">{error}</p>
             ) : null}
-            <Button
+            <PilotButton
               type="button"
               variant="secondary"
               disabled={!changed || saving}
               onClick={() => void save()}
             >
               {saving ? "Mentés..." : "Eszközök mentése"}
-            </Button>
+            </PilotButton>
           </>
         ) : null}
       </div>

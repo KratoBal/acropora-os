@@ -2,10 +2,10 @@
 
 import {
   Alert,
-  Button,
   Input,
   PilotFileInput,
   PilotSelect,
+  PilotButton,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -696,9 +696,9 @@ export function ServiceJobEditorPage({
             </p>
             <div className="flex items-center gap-2">
               <Link href={listHref}>
-                <Button variant="secondary">Mégsem</Button>
+                <PilotButton variant="secondary">Mégsem</PilotButton>
               </Link>
-              <Button
+              <PilotButton
                 disabled={!canSubmit || saving}
                 onClick={() => void submit()}
               >
@@ -709,7 +709,7 @@ export function ServiceJobEditorPage({
                   : contractChoice
                     ? "Karbantartási lap megnyitása"
                     : "Hibajegy megnyitása"}
-              </Button>
+              </PilotButton>
             </div>
           </div>
         </div>

@@ -482,7 +482,7 @@ function ProductExtensionEditor({
             />
           </label>
           <div className="flex justify-end gap-2">
-            <Button
+            <PilotButton
               disabled={saving}
               variant="secondary"
               onClick={() => {
@@ -492,10 +492,10 @@ function ProductExtensionEditor({
               }}
             >
               Mégse
-            </Button>
-            <Button type="submit" disabled={saving}>
+            </PilotButton>
+            <PilotButton type="submit" disabled={saving}>
               {saving ? "Mentés…" : "Mentés"}
-            </Button>
+            </PilotButton>
           </div>
         </form>
       ) : (

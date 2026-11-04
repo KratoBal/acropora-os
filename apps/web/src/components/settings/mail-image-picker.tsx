@@ -5,7 +5,7 @@ import {
   RICH_TEXT_IMAGE_SCHEME,
   richImageId,
 } from "@acropora/rich-text";
-import { Button, PilotFileInput } from "@acropora/ui";
+import { Button, PilotFileInput, PilotButton } from "@acropora/ui";
 import type { RichTextImage } from "@acropora/ui/rich-text-editor";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -298,9 +298,9 @@ export function MailImagePicker(props: {
         >
           Beszúrás
         </Button>
-        <Button variant="secondary" onClick={onClose}>
+        <PilotButton variant="secondary" onClick={onClose}>
           Mégse
-        </Button>
+        </PilotButton>
       </div>
     </div>
   );

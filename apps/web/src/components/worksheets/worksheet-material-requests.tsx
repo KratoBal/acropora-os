@@ -9,6 +9,7 @@ import {
   Skeleton,
   PilotDateField,
   PilotSelect,
+  PilotButton,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -265,13 +266,13 @@ export function WorksheetMaterialRequests({
                     className="w-20"
                   />
                   {rows.length > 1 ? (
-                    <Button
+                    <PilotButton
                       variant="secondary"
                       onClick={() => removeRow(index)}
                       aria-label="Tétel törlése"
                     >
                       Törlés
-                    </Button>
+                    </PilotButton>
                   ) : null}
                 </div>
               ))}
@@ -319,12 +320,12 @@ export function WorksheetMaterialRequests({
                 />
               </label>
               <div className="flex items-center gap-2">
-                <Button variant="secondary" onClick={addRow}>
+                <PilotButton variant="secondary" onClick={addRow}>
                   Új tétel
-                </Button>
-                <Button disabled={busy} onClick={() => void sendNew()}>
+                </PilotButton>
+                <PilotButton disabled={busy} onClick={() => void sendNew()}>
                   {busy ? "Küldés…" : "Küldés"}
-                </Button>
+                </PilotButton>
                 <Button
                   variant="secondary"
                   disabled={busy}
@@ -342,9 +343,9 @@ export function WorksheetMaterialRequests({
               </div>
             </div>
           ) : (
-            <Button variant="secondary" onClick={() => setFormOpen(true)}>
+            <PilotButton variant="secondary" onClick={() => setFormOpen(true)}>
               Anyagigénylés
-            </Button>
+            </PilotButton>
           )
         ) : null}
 
