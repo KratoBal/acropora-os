@@ -164,7 +164,7 @@ export function HomepageFooterEditor({
             {column.links.map((link, linkIndex) => (
               <div
                 key={linkIndex}
-                className="grid grid-cols-[1fr_1fr_auto] gap-2"
+                className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2"
               >
                 <input
                   aria-label={`${index + 1}. oszlop, ${linkIndex + 1}. sor: felirat`}

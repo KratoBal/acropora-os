@@ -231,7 +231,7 @@ export function ClaimStorePage() {
               {data.claims.map((claim) => (
                 <li
                   key={claim.id}
-                  className="grid grid-cols-1 gap-3 py-4 sm:grid-cols-[180px_1fr]"
+                  className="grid grid-cols-1 gap-3 py-4 sm:grid-cols-[180px_minmax(0,1fr)]"
                 >
                   <div>
                     <LayerBadge layer={claim.layer} />

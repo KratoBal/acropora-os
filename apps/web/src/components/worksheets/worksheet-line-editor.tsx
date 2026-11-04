@@ -195,7 +195,8 @@ const MEZO_FEJLECEK = [
   "Hányan",
 ] as const;
 
-const COLUMNS = "md:grid-cols-[2fr_1fr_1fr_auto_1fr_auto]";
+const COLUMNS =
+  "md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto_minmax(0,1fr)_auto]";
 
 /** A keskeny nézet felirata. Széles nézetben a fejlécsor mondja ugyanezt. */
 function NarrowLabel({ children }: { children: string }) {

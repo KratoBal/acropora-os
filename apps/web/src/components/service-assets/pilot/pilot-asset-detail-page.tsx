@@ -485,7 +485,7 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
           ) : null}
 
           <div
-            className={`grid grid-cols-1 items-start gap-6 ${PAGE_GUTTER_X} py-6 lg:grid-cols-[1fr_320px]`}
+            className={`grid grid-cols-1 items-start gap-6 ${PAGE_GUTTER_X} py-6 lg:grid-cols-[minmax(0,1fr)_320px]`}
           >
             <div className="flex flex-col gap-5">
               <PilotCard>

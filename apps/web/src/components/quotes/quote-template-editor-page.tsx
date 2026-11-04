@@ -351,7 +351,7 @@ export function QuoteTemplateEditorPage({
         </div>
       </PilotCard>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_22rem]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <PilotCard>
           <PilotCardHeader title="Sablon blokkjai" />
           <div className="space-y-3 p-5">
