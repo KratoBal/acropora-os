@@ -15,7 +15,11 @@ import {
 } from "./lowest-price.reader.js";
 
 /*
-  WHAT TURNS THIS RED (V0.2, slice 1). The price in force at the START of the window ignored (a price
+  WHAT TURNS THIS RED (V0.2, slice 1; reference = the 30 days BEFORE the reduction, #2120 review). The
+  sale price itself (a point that begins AT the reduction start) becoming the answer; a segment that
+  ends exactly at the window start counting (zero length); `complete` true while an unknown stretch
+  reaches into the window (a leading, a middle or a trailing gap); two currencies in one window
+  giving an answer. The price in force at the START of the window ignored (a price
   that did not move for 40 days must count); a segment that ended before the window counted; a
   window shorter than 30 days reported as complete (the shop would claim 30 days it does not have);
   the lowest taken from rows outside the window; an unknown price counted as zero; the later of two
@@ -25,7 +29,8 @@ import {
 */
 const D = (v: string | number) => new Prisma.Decimal(v);
 const day = (n: number) => new Date(Date.UTC(2026, 9, 1 + n)); // 2026-10-01 + n days
-const NOW = day(40); // 2026-11-10; the window starts 2026-10-11 (day 10)
+// the reduction begins 2026-11-10 (day 40); the window is [2026-10-11, 2026-11-10) (day 10 to day 40)
+const NOW = day(40);
 
 const point = (
   at: Date,
@@ -79,18 +84,90 @@ describe("lowestPriceInWindow", () => {
     assert.equal(result.historyBegins.getTime(), day(30).getTime());
   });
 
-  it("is null without a point at or before asOf, and without any known price", () => {
+  it("is null without a point before the reduction start, and without any known price", () => {
     assert.equal(lowestPriceInWindow([], NOW), null);
     assert.equal(lowestPriceInWindow([point(day(50), "1000")], NOW), null);
     assert.equal(lowestPriceInWindow([point(day(0), null)], NOW), null);
   });
 
-  it("an unknown price is a gap, never zero: the lowest known price still wins", () => {
+  it("an unknown price is a gap, never zero: the lowest known price still wins, but the answer is NOT complete", () => {
     const result = lowestPriceInWindow(
       [point(day(0), "1000"), point(day(20), null), point(day(30), "1300")],
       NOW,
     )!;
     assert.equal(result.amount.toString(), "1000");
+    assert.equal(result.complete, false, "day 20 to 30 is unknown");
+  });
+
+  it("a leading unknown stretch that reaches into the window is not complete, though the history 'begins' before it", () => {
+    const result = lowestPriceInWindow(
+      [point(day(0), null), point(day(20), "1200")],
+      NOW,
+    )!;
+    assert.equal(result.amount.toString(), "1200");
+    assert.equal(result.complete, false, "day 10 to 20 is unknown");
+    assert.equal(result.historyBegins.getTime(), day(20).getTime());
+  });
+
+  it("a trailing unknown stretch is not complete either", () => {
+    const result = lowestPriceInWindow(
+      [point(day(0), "1000"), point(day(35), null)],
+      NOW,
+    )!;
+    assert.equal(result.amount.toString(), "1000");
+    assert.equal(result.complete, false);
+  });
+
+  it("an unknown stretch that ended before the window began does not spoil completeness", () => {
+    const result = lowestPriceInWindow(
+      [point(day(0), null), point(day(5), "1200")],
+      NOW,
+    )!;
+    assert.equal(result.complete, true);
+    assert.equal(result.historyBegins.getTime(), day(5).getTime());
+  });
+
+  it("the sale price that begins AT the reduction start is not its own reference", () => {
+    const reductionStart = day(38);
+    const result = lowestPriceInWindow(
+      [point(day(0), "1500"), point(day(38), "1000")],
+      reductionStart,
+    )!;
+    assert.equal(result.amount.toString(), "1500");
+    assert.equal(result.complete, true);
+    assert.equal(result.reductionStart.getTime(), reductionStart.getTime());
+    // and with nothing but the sale point there is nothing to name
+    assert.equal(
+      lowestPriceInWindow([point(day(38), "1000")], reductionStart),
+      null,
+    );
+  });
+
+  it("a price that ended exactly when the window began is not in the window", () => {
+    const result = lowestPriceInWindow(
+      [point(day(0), "900"), point(day(10), "1500")],
+      NOW,
+    )!;
+    assert.equal(result.amount.toString(), "1500");
+    assert.equal(result.since.getTime(), day(10).getTime());
+  });
+
+  it("two currencies in the window have no answer", () => {
+    assert.equal(
+      lowestPriceInWindow(
+        [point(day(0), "1000", "HUF"), point(day(20), "3", "EUR")],
+        NOW,
+      ),
+      null,
+    );
+    // a currency from before the window does not count
+    assert.equal(
+      lowestPriceInWindow(
+        [point(day(0), "3", "EUR"), point(day(5), "1000", "HUF")],
+        NOW,
+      )!.amount.toString(),
+      "1000",
+    );
   });
 
   it("two rows at the same instant: the later one in the input wins", () => {

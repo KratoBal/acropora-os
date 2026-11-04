@@ -8,7 +8,9 @@ import {
 } from "./lowest-price.js";
 
 /**
- * THE LOWEST PRICE OF ONE VARIANT, READ FROM THE DATABASE (V0.2, slice 1). Nothing calls it yet.
+ * THE LOWEST PRICE OF ONE VARIANT IN THE 30 DAYS BEFORE A REDUCTION, READ FROM THE DATABASE (V0.2,
+ * slice 1). `reductionStart` is REQUIRED: the caller says when the reduction began, nothing here
+ * assumes "now" (the running sale price would be its own reference). Nothing calls it yet.
  *
  * It asks the history for BOTH kinds of row of the variant's product, and says so in the query
  * (the guard in `own-price-history.guard.spec.ts` requires every reader to name the kind): the
@@ -30,7 +32,7 @@ export interface LowestPriceDatabase {
 export async function lowestPriceForVariant(
   database: LowestPriceDatabase,
   variantId: string,
-  asOf: Date = new Date(),
+  reductionStart: Date,
 ): Promise<LowestPrice | null> {
   const variant = await database.productVariant.findUnique({
     where: { id: variantId },
@@ -54,6 +56,6 @@ export async function lowestPriceForVariant(
   });
   return lowestPriceInWindow(
     seriesOfVariant(rows, variantId, variant.unasVariantExtraGrossPrice),
-    asOf,
+    reductionStart,
   );
 }
