@@ -206,7 +206,7 @@ describe("PilotContractsPage -- új szerződés, duplikált szerződésszám (40
     });
   }
 
-  it("a szerződésszám mező alatt mutatja a 409 üzenetét, nem egy általános dobozban", async () => {
+  it("a 409 üzenete a szerződésszám mező alatt ÉS a mentés gomb mellett is látszik, nem az oldal tetején", async () => {
     api.create.mockRejectedValue(
       new ApiError("Ez a szerződésszám már létezik (SZ2026/0000019).", 409),
     );
@@ -217,8 +217,79 @@ describe("PilotContractsPage -- új szerződés, duplikált szerződésszám (40
 
     fireEvent.click(screen.getByText("Szerződés mentése"));
 
-    await screen.findByText("Ez a szerződésszám már létezik (SZ2026/0000019).");
+    const near = await screen.findByTestId("contract-save-error");
+    expect(near.textContent).toContain(
+      "A szerződés nem mentődött: Ez a szerződésszám már létezik (SZ2026/0000019).",
+    );
+    expect(near.getAttribute("role")).toBe("alert");
+    // a mező alatti súgó is megmarad: két helyen áll
+    expect(
+      screen.getAllByText(
+        /Ez a szerződésszám már létezik \(SZ2026\/0000019\)\./,
+      ),
+    ).toHaveLength(2);
     expect(screen.queryByText("Műveleti hiba")).toBeNull();
+  });
+
+  it("minden más mentési hiba is a gomb mellett áll (nem az oldal tetején), és odagörgetődik", async () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    api.create.mockRejectedValue(
+      new ApiError("A megadott partner nem található.", 400),
+    );
+
+    render(<PilotContractsPage />);
+    await screen.findByText("Új szerződés");
+    fillMinimalForm();
+
+    fireEvent.click(screen.getByText("Szerződés mentése"));
+
+    const near = await screen.findByTestId("contract-save-error");
+    expect(near.textContent).toBe(
+      "A szerződés nem mentődött: A megadott partner nem található.",
+    );
+    expect(screen.queryByText("Műveleti hiba")).toBeNull();
+    expect(scroll).toHaveBeenCalledWith({ block: "nearest" });
+  });
+
+  it("egy üzenet nélküli hiba is mond valamit, és az űrlap marad", async () => {
+    api.create.mockRejectedValue(new Error(""));
+
+    render(<PilotContractsPage />);
+    await screen.findByText("Új szerződés");
+    fillMinimalForm();
+
+    fireEvent.click(screen.getByText("Szerződés mentése"));
+
+    expect((await screen.findByTestId("contract-save-error")).textContent).toBe(
+      "A szerződés nem mentődött: A szerződés nem menthető.",
+    );
+    expect(screen.getByText("Szerződés mentése")).toBeTruthy();
+  });
+
+  it("a következő mentési kísérlet törli a régi hibát, a bezárás is", async () => {
+    api.create.mockRejectedValueOnce(new ApiError("Első hiba.", 400));
+    render(<PilotContractsPage />);
+    await screen.findByText("Új szerződés");
+    fillMinimalForm();
+    fireEvent.click(screen.getByText("Szerződés mentése"));
+    await screen.findByTestId("contract-save-error");
+
+    let fail: (error: Error) => void = () => undefined;
+    api.create.mockReturnValueOnce(
+      new Promise((_, reject) => {
+        fail = reject;
+      }),
+    );
+    fireEvent.click(screen.getByText("Szerződés mentése"));
+    await waitFor(() =>
+      expect(screen.queryByTestId("contract-save-error")).toBeNull(),
+    );
+    fail(new ApiError("Második hiba.", 400));
+    await screen.findByText(/Második hiba\./);
+    fireEvent.click(screen.getByText("Mégsem"));
+    fireEvent.click(screen.getByText("Új szerződés"));
+    expect(screen.queryByTestId("contract-save-error")).toBeNull();
   });
 });
 

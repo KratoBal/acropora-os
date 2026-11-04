@@ -9,7 +9,7 @@ import {
 } from "@acropora/types";
 import type { WorksheetDepartmentSummary } from "@acropora/types";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { JobAssetPicker } from "@/components/service-jobs/job-asset-picker";
@@ -153,6 +153,16 @@ export function PilotContractsPage() {
   >([]);
   const [error, setError] = useState<string | null>(null);
   const [numberError, setNumberError] = useState<string | null>(null);
+  /**
+   * A MENTÉS HIBÁJA A GOMB MELLETT ÁLL (Ág Luca bejelentése, 2026-11-04 10:25 UTC: az éles OS-ben a
+   * "Szerződés mentése" gombra kattintva "nem történik semmi"). A felirat egy pillanatra "Mentés…"
+   * lett, majd visszaállt, hibadoboz nem látszott: a szerződésszám-ütközés (409) csak a SZÁM mező
+   * alatti kis súgóban állt az űrlap tetején, minden más hiba pedig az OLDAL TETEJÉN, a "Műveleti
+   * hiba" dobozban, ami egy hosszú űrlapnál a gomb mellől nem látszik. A hiba ezért ide kerül, a
+   * gomb alá, pirosan, és a nézet odagörgetődik.
+   */
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const saveErrorRef = useRef<HTMLParagraphElement | null>(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -195,6 +205,16 @@ export function PilotContractsPage() {
       setLoading(false);
     }
   };
+  // a bezárt űrlap hibáját nem hozza vissza a következő megnyitás
+  useEffect(() => {
+    if (!creating) setSaveError(null);
+  }, [creating]);
+
+  // a mentés hibája a gomb mellett látszik: ha az űrlap hosszú, odagörgetünk
+  useEffect(() => {
+    if (saveError) saveErrorRef.current?.scrollIntoView?.({ block: "nearest" });
+  }, [saveError]);
+
   useEffect(() => {
     void load();
   }, [canManage, token]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -260,6 +280,7 @@ export function PilotContractsPage() {
   const create = async () => {
     setSaving(true);
     setError(null);
+    setSaveError(null);
     setNumberError(null);
     try {
       await contractsApi.create(token, {
@@ -312,10 +333,14 @@ export function PilotContractsPage() {
       */
       if (cause instanceof ApiError && cause.status === 409) {
         setNumberError(cause.message);
+        // a számmező az űrlap tetején van: a gomb mellett is megmondjuk, miért nem mentett
+        setSaveError(cause.message);
         return;
       }
-      setError(
-        cause instanceof Error ? cause.message : "A szerződés nem menthető.",
+      setSaveError(
+        cause instanceof Error && cause.message
+          ? cause.message
+          : "A szerződés nem menthető.",
       );
     } finally {
       setSaving(false);
@@ -743,6 +768,16 @@ export function PilotContractsPage() {
                   {missing.length > 0 ? (
                     <p className="text-right text-xs font-medium text-red-600">
                       Hiányzik: {missing.join(", ")}.
+                    </p>
+                  ) : null}
+                  {saveError ? (
+                    <p
+                      ref={saveErrorRef}
+                      role="alert"
+                      data-testid="contract-save-error"
+                      className="text-right text-sm font-medium text-red-600"
+                    >
+                      A szerződés nem mentődött: {saveError}
                     </p>
                   ) : null}
                 </div>
