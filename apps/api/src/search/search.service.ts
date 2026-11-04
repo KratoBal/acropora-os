@@ -15,6 +15,8 @@ import { partnerScopeOf } from "../auth/partner-scope.util.js";
 import { InvoiceSearchService } from "../billing/invoice-search.service.js";
 import { QuotesService } from "../quotes/quotes.service.js";
 import { WebshopOrdersService } from "../orders/webshop-orders/webshop-orders.service.js";
+import { ProductListQueryDto } from "../products/dto/product-list-query.dto.js";
+import { ProductService } from "../products/product.service.js";
 import { AquariumsService } from "../aquariums/aquariums.service.js";
 import { ServiceAssetsService } from "../service-assets/service-assets.service.js";
 import { ServiceJobsService } from "../service-jobs/service-jobs.service.js";
@@ -40,6 +42,8 @@ export const SEARCH_GROUP_NAVIGATION: Record<SearchGroup, string> = {
   quotes: "quotes",
   // az új (Medusa) webshop rendelései: a `/webshop/rendelesek` lista; a UNAS-lista (`webshop-orders`) nem kereshető
   orders: "webshop-medusa-orders",
+  // a belső termékkatalógus (`/products`); a webshop termékek menüpontja (`webshop-products`) ugyanazt a jogot kéri
+  products: "products",
 };
 
 const subtitle = (...parts: Array<string | null | undefined>) =>
@@ -58,6 +62,7 @@ export class SearchService {
     private readonly invoices: InvoiceSearchService,
     private readonly quotes: QuotesService,
     private readonly orders: WebshopOrdersService,
+    private readonly products: ProductService,
     /**
      * A menü szerver-oldali kapcsolói (`navigationFeatures`): a feature-höz kötött menüpont
      * (például az ajánlat) feature NÉLKÜL MINDENKINEK rejtett, tehát a keresőnek a
@@ -105,6 +110,7 @@ export class SearchService {
       invoices,
       quotes,
       orders,
+      products,
     ] = await Promise.all([
       canSee(SEARCH_GROUP_NAVIGATION.tickets)
         ? this.serviceJobs.list({ search: query }, user)
@@ -136,6 +142,15 @@ export class SearchService {
       canSee(SEARCH_GROUP_NAVIGATION.orders)
         ? this.isolated("orders", () =>
             this.orders.list({ q: query, page: 1, pageSize: LIMIT }),
+          )
+        : undefined,
+      canSee(SEARCH_GROUP_NAVIGATION.products)
+        ? this.products.listProducts(
+            Object.assign(new ProductListQueryDto(), {
+              search: query,
+              page: 1,
+              pageSize: LIMIT,
+            }),
           )
         : undefined,
     ]);
@@ -209,6 +224,16 @@ export class SearchService {
             })),
           }),
       ...(invoices === undefined ? {} : { invoices }),
+      ...(products === undefined
+        ? {}
+        : {
+            products: products.items.slice(0, LIMIT).map((product) => ({
+              id: product.id,
+              title: product.name,
+              subtitle: subtitle(product.primarySku, product.brand?.name),
+              path: `/products/${encodeURIComponent(product.id)}`,
+            })),
+          }),
       ...(orders === undefined
         ? {}
         : {
