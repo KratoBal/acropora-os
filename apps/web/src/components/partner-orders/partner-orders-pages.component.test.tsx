@@ -264,6 +264,34 @@ describe("egy megrendelés", () => {
     ajánlat PDF-je, a TIG vagy a számla nem a saját lépésében jelenik meg; ha a lépés darabszáma nem
     számolja őket; ha a letöltés nem a fajtája végpontján megy; ha törölhetőnek látszanak.
   */
+  // acrobot 42859: a storno'd invoice stays listed with its mark, and the step does not count it
+  it("shows a storno'd invoice marked, and does not count it as the chain's invoice", async () => {
+    api.detail.mockResolvedValue(
+      detail({
+        systemDocuments: [
+          {
+            kind: "INVOICE_PDF",
+            step: "INVOICE",
+            label: "Számla ACRS-2026-12 · Sztornózva (ACRS-2026-13)",
+            invoiceId: "inv-1",
+            invoiceNumber: "ACRS-2026-12",
+            createdAt: "2026-11-04T13:00:00Z",
+            stornoInvoiceNumber: "ACRS-2026-13",
+          },
+        ],
+      }),
+    );
+    render(<PartnerOrderDetailPage orderId="o1" />);
+    const item = (
+      await screen.findByRole("button", {
+        name: "Számla ACRS-2026-12 · Sztornózva (ACRS-2026-13)",
+      })
+    ).closest("li")!;
+    expect(within(item).getByText("Sztornózva")).toBeInTheDocument();
+    const step = item.closest("section")!;
+    expect(within(step).queryByText(/\d+ db/)).not.toBeInTheDocument();
+  });
+
   it("shows the system-made documents in their steps, counted, downloadable, not deletable", async () => {
     api.detail.mockResolvedValue(
       detail({
@@ -292,6 +320,7 @@ describe("egy megrendelés", () => {
             invoiceId: "inv-1",
             invoiceNumber: "ACRS-2026-12",
             createdAt: "2026-11-04T13:00:00Z",
+            stornoInvoiceNumber: null,
           },
         ],
       }),

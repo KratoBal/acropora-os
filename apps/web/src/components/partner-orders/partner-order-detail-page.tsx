@@ -457,7 +457,12 @@ export function PartnerOrderDetailPage({ orderId }: { orderId: string }) {
             const systemDocuments = (order.systemDocuments ?? []).filter(
               (d) => d.step === step,
             );
-            const count = documents.length + systemDocuments.length;
+            // a storno'd invoice stays listed, but it is not an invoice of the chain (acrobot 42859)
+            const count =
+              documents.length +
+              systemDocuments.filter(
+                (d) => !(d.kind === "INVOICE_PDF" && d.stornoInvoiceNumber),
+              ).length;
             return (
               <section key={step} className="px-5 py-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -514,6 +519,10 @@ export function PartnerOrderDetailPage({ orderId }: { orderId: string }) {
                         >
                           {document_.label}
                         </button>
+                        {document_.kind === "INVOICE_PDF" &&
+                        document_.stornoInvoiceNumber ? (
+                          <PilotBadge variant="amber">Sztornózva</PilotBadge>
+                        ) : null}
                         <span className="text-xs text-pilot-grey-600">
                           automatikus
                           {document_.createdAt

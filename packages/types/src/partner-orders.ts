@@ -66,6 +66,8 @@ export type PartnerOrderSystemDocumentDto =
       invoiceId: string;
       invoiceNumber: string;
       createdAt: string | null;
+      /** the issued storno's number: the invoice stays visible, but the chain counts it as no invoice */
+      stornoInvoiceNumber: string | null;
     };
 
 /** Where the chain stands: the documents per step, uploaded and system-made together. */

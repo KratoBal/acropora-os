@@ -59,3 +59,68 @@ export interface PartnerMigrationPlan {
   byAction: Partial<Record<PartnerMigrationAction, number>>;
   rows: PartnerMigrationRow[];
 }
+
+/**
+ * AZ ÁTVEZETÉS FUTTATÁSA AZ OLDALRÓL (ugyanaz a mag, mint a `partner:migrate` parancs): `POST /admin/partner-migration/preview`
+ * (próba, nem ír), `.../apply` (a próba lenyomatával), `.../restore/preview` és `.../restore/apply` (a naplózott eseményekből).
+ */
+export interface PartnerMigrationRunOperation {
+  kind: "CREATE" | "BIND" | "SKIP";
+  supplierId: string;
+  code: string;
+  /** csak a BIND-nál: a vevő-sor, amihez a partner kötődik */
+  customerId?: string;
+  /** csak a SKIP-nél: miért marad ki */
+  reason?: string;
+}
+
+export interface PartnerMigrationRunPreview {
+  /** a célzott adatbázis, jelszó nélkül (host:port/adatbázis): látszik, hogy stage vagy éles */
+  target: string;
+  operations: PartnerMigrationRunOperation[];
+  /** a döntések hibái: ha van, az írás nem indul */
+  problems: string[];
+  counts: { create: number; bind: number; skip: number };
+  /** a lenyomat: az `apply` ezt kéri vissza, így csak az hajtódik végre, amit az ember látott */
+  fingerprint: string;
+}
+
+export interface PartnerMigrationApplyInput {
+  fingerprint: string;
+  /** kifejezett kötési döntések: partner-kód -> vevő-sor azonosító (ugyanaz, mint a próbánál) */
+  binds?: Record<string, string>;
+}
+
+export interface PartnerMigrationApplyOutcome {
+  code: string;
+  mode: "CREATED" | "BOUND" | "SKIPPED";
+  customerId?: string;
+  detail?: string;
+}
+
+export interface PartnerMigrationApplyResult {
+  target: string;
+  outcomes: PartnerMigrationApplyOutcome[];
+}
+
+export interface PartnerMigrationRestoreOutcome {
+  supplierId: string;
+  customerId: string;
+  result: "RESTORED" | "KEPT";
+  detail?: string;
+}
+
+export interface PartnerMigrationRestorePreview {
+  target: string;
+  outcomes: PartnerMigrationRestoreOutcome[];
+  fingerprint: string;
+}
+
+export interface PartnerMigrationRestoreInput {
+  fingerprint: string;
+}
+
+export interface PartnerMigrationRestoreResult {
+  target: string;
+  outcomes: PartnerMigrationRestoreOutcome[];
+}

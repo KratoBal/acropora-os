@@ -86,6 +86,38 @@ export interface OrderListFilter {
  */
 export const MAX_DOCUMENTS_PER_ORDER = 60;
 
+/**
+ * The certificates' part of the chain's system documents: their documents, their issued invoices and an issued
+ * storno of each (acrobot 42859). A constant, so a real-Postgres test runs THIS select: a Prisma select with a
+ * made-up field compiles (measured), and only the database says no.
+ */
+export const CERTIFICATE_SYSTEM_DOCUMENTS = {
+  orderBy: [{ issuedAt: "asc" }, { id: "asc" }],
+  select: {
+    id: true,
+    number: true,
+    documents: {
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: { id: true, type: true, fileName: true, createdAt: true },
+    },
+    invoices: {
+      select: {
+        id: true,
+        status: true,
+        invoiceNumber: true,
+        issueDate: true,
+        // an issued storno of it (acrobot 42859): shown beside it, not counted
+        correctionInvoices: {
+          where: { documentType: "STORNO", status: "ISSUED" },
+          orderBy: [{ issueDate: "asc" }, { id: "asc" }],
+          take: 1,
+          select: { invoiceNumber: true },
+        },
+      },
+    },
+  },
+} satisfies Prisma.CompletionCertificateFindManyArgs;
+
 @Injectable()
 export class PartnerOrdersRepository {
   async list(page: number, pageSize: number, filter: OrderListFilter) {
@@ -183,25 +215,7 @@ export class PartnerOrdersRepository {
             publishedAt: true,
           },
         },
-        completionCertificates: {
-          orderBy: [{ issuedAt: "asc" }, { id: "asc" }],
-          select: {
-            id: true,
-            number: true,
-            documents: {
-              orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-              select: { id: true, type: true, fileName: true, createdAt: true },
-            },
-            invoices: {
-              select: {
-                id: true,
-                status: true,
-                invoiceNumber: true,
-                issueDate: true,
-              },
-            },
-          },
-        },
+        completionCertificates: CERTIFICATE_SYSTEM_DOCUMENTS,
       },
     });
     return new Map(

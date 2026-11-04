@@ -1764,9 +1764,18 @@ export type {
 export { PARTNER_MIGRATION_ACTIONS } from "./partner-migration.js";
 export type {
   PartnerMigrationAction,
+  PartnerMigrationApplyInput,
+  PartnerMigrationApplyOutcome,
+  PartnerMigrationApplyResult,
   PartnerMigrationCustomer,
   PartnerMigrationPlan,
+  PartnerMigrationRestoreInput,
+  PartnerMigrationRestoreOutcome,
+  PartnerMigrationRestorePreview,
+  PartnerMigrationRestoreResult,
   PartnerMigrationRow,
+  PartnerMigrationRunOperation,
+  PartnerMigrationRunPreview,
 } from "./partner-migration.js";
 export { PARTNER_MERGE_REFERENCE_TABLES } from "./partner-merge.js";
 export type {
