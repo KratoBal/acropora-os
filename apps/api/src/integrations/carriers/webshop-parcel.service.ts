@@ -197,6 +197,23 @@ export class WebshopParcelService {
     if (!released) throw new CarrierError("UNCONFIRMED", carrier);
   }
 
+  /**
+   * A kesz ACTIVE csomagok rendelesazonositoi (a statusz-szinkronhoz): az adott
+   * fuvarozo, az adott datum ota, legfeljebb `limit` darab, a legujabbtol.
+   */
+  async confirmedParcelOrderIds(
+    carrier: CarrierCode,
+    since: Date,
+    limit: number,
+  ): Promise<string[]> {
+    const rows = await this.repository.findConfirmedActiveSince(
+      carrier,
+      since,
+      limit,
+    );
+    return rows.map((row) => row.commerceOrderId);
+  }
+
   /** A lista oldal: az ACTIVE csomag rendelesenkent, egy lekerdezessel. */
   async activeParcelsFor(
     commerceOrderIds: string[],
