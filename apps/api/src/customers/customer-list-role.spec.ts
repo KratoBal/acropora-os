@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { partnerFilter, partnerRolesOf } from "./customers.repository.js";
+import {
+  isPartnerMirror,
+  partnerFilter,
+  partnerRolesOf,
+} from "./customers.repository.js";
 
 /**
  * A VEVŐK LISTA SZEREP-SZŰRŐJE (egy partnertörzs). MI PIROSÍT: ha szerep nélkül a partner-sorok megjelennének a választókban (a
@@ -59,5 +63,14 @@ describe("partnerRolesOf", () => {
       }),
       {},
     );
+  });
+});
+
+describe("isPartnerMirror", () => {
+  it("is true only for a live partner: a buyer is not, and a deleted partner's row is an ordinary customer row again", () => {
+    assert.equal(isPartnerMirror(null), false);
+    assert.equal(isPartnerMirror({ deletedAt: null }), true);
+    assert.equal(isPartnerMirror({}), true);
+    assert.equal(isPartnerMirror({ deletedAt: new Date() }), false);
   });
 });
