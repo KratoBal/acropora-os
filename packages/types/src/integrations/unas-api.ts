@@ -342,6 +342,8 @@ export interface UnasApiCustomerAddress {
   country: string | null;
   countryCode: string | null;
   taxNumber: string | null;
+  /** The community (EU) tax number, `EUTaxNumber`. */
+  euTaxNumber: string | null;
   customerType:
     "private" | "company" | "other_customer_without_tax_number" | null;
 }

@@ -7,6 +7,7 @@ import {
 } from "@nestjs/common";
 
 import { UnasAuthService } from "../../imports/unas/unas-auth.service.js";
+import { unasTaxBackfillLine } from "./unas-customer-fill.js";
 import { UnasCustomerSyncService } from "./unas-customer-sync.service.js";
 
 export interface UnasCustomerSyncScheduleConfig {
@@ -65,6 +66,7 @@ export class UnasCustomerSyncScheduler
   private readonly logger = new Logger(UnasCustomerSyncScheduler.name);
   private timer: NodeJS.Timeout | null = null;
   private stopped = false;
+  private backfillTried = false;
 
   constructor(
     private readonly auth: UnasAuthService,
@@ -90,6 +92,7 @@ export class UnasCustomerSyncScheduler
     try {
       const token = await this.auth.getToken();
       await this.sync.runIncremental(token);
+      await this.backfillOnce(token);
       return "APPLIED";
     } catch (error) {
       if (
@@ -105,6 +108,36 @@ export class UnasCustomerSyncScheduler
           : "UNAS_CUSTOMER_SYNC_SCHEDULED_FAILED";
       this.logger.error(`Scheduled UNAS customer sync failed: ${errorCode}`);
       return "FAILED";
+    }
+  }
+
+  /**
+   * The tax-field backfill once per process, after the first applied sync (acrobot 42670); its marker event keeps it
+   * at one run across restarts. Always one log line; a failure does not fail the sync, and is retried at the next start.
+   */
+  async backfillOnce(token: string): Promise<string | null> {
+    if (this.backfillTried) return null;
+    this.backfillTried = true;
+    try {
+      const counts = await this.sync.runTaxBackfill(token);
+      const line = unasTaxBackfillLine(
+        counts ? { ok: true, counts } : { ok: true, alreadyRan: true },
+      );
+      this.logger.log(line);
+      return line;
+    } catch (error) {
+      const line = unasTaxBackfillLine({
+        ok: false,
+        // the sync's own rule: a code-shaped message, or the error's type, never free text
+        reason:
+          error instanceof Error && /^[A-Z0-9_:.-]+$/.test(error.message)
+            ? error.message.slice(0, 200)
+            : error instanceof Error
+              ? error.constructor.name
+              : "ismeretlen",
+      });
+      this.logger.error(line);
+      return line;
     }
   }
 
