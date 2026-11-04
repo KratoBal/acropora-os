@@ -1743,6 +1743,7 @@ export type {
   PartnerOrderChain,
   PartnerOrderDetailDto,
   PartnerOrderDocumentDto,
+  PartnerOrderSystemDocumentDto,
   PartnerOrderDocumentStepValue,
   PartnerOrderLineDto,
   PartnerOrderListItemDto,

@@ -44,6 +44,16 @@ vi.mock("@/lib/api/partner-orders", () => ({ partnerOrdersApi: api }));
 const certificates = vi.hoisted(() => ({
   listForPartnerOrder: vi.fn(),
   issueForPartnerOrder: vi.fn(),
+  downloadDocument: vi.fn(),
+}));
+const quotes = vi.hoisted(() => ({ pdf: vi.fn() }));
+vi.mock("@/lib/api/quotes", () => ({ quotesApi: quotes }));
+const invoices = vi.hoisted(() => ({
+  byCertificate: vi.fn(),
+  downloadPdf: vi.fn(),
+}));
+vi.mock("@/lib/api/maintenance-invoice", () => ({
+  maintenanceInvoiceApi: invoices,
 }));
 vi.mock("@/lib/api/completion-certificates", () => ({
   completionCertificatesApi: certificates,
@@ -174,6 +184,7 @@ function detail(
         createdAt: "2026-11-04T11:00:00Z",
       },
     ],
+    systemDocuments: [],
     createdAt: "2026-11-04T10:00:00Z",
     createdByName: "Luca",
     ...over,
@@ -246,6 +257,79 @@ describe("egy megrendelés", () => {
     // the certificate panel stays loading: its table repeats the line names, and a
     // list that resolves before the assertions would make them ambiguous (CI #2158)
     certificates.listForPartnerOrder.mockReturnValue(new Promise(() => {}));
+  });
+
+  /*
+    A LÁNC RENDSZER-DOKUMENTUMAI (kártya 88649353; Balázs 17:40 UTC; acrobot 42589). MI PIROSÍT: ha az
+    ajánlat PDF-je, a TIG vagy a számla nem a saját lépésében jelenik meg; ha a lépés darabszáma nem
+    számolja őket; ha a letöltés nem a fajtája végpontján megy; ha törölhetőnek látszanak.
+  */
+  it("shows the system-made documents in their steps, counted, downloadable, not deletable", async () => {
+    api.detail.mockResolvedValue(
+      detail({
+        systemDocuments: [
+          {
+            kind: "QUOTE_PDF",
+            step: "QUOTE",
+            label: "Ajánlat AJ-2026-0042 · 2. verzió",
+            quoteId: "q1",
+            versionId: "v2",
+            createdAt: "2026-11-01T09:00:00Z",
+          },
+          {
+            kind: "CERTIFICATE_DOCUMENT",
+            step: "COMPLETION",
+            label: "Teljesítési igazolás TI-2026-008",
+            certificateId: "cert-1",
+            documentId: "d9",
+            fileName: "TI-2026-008.pdf",
+            createdAt: "2026-11-04T12:00:00Z",
+          },
+          {
+            kind: "INVOICE_PDF",
+            step: "INVOICE",
+            label: "Számla ACRS-2026-12",
+            invoiceId: "inv-1",
+            invoiceNumber: "ACRS-2026-12",
+            createdAt: "2026-11-04T13:00:00Z",
+          },
+        ],
+      }),
+    );
+    quotes.pdf.mockResolvedValue(new Blob(["%PDF"]));
+    invoices.downloadPdf.mockResolvedValue(new Blob(["%PDF"]));
+    certificates.downloadDocument.mockResolvedValue(new Blob(["%PDF"]));
+    URL.createObjectURL = vi.fn(() => "blob:x");
+    URL.revokeObjectURL = vi.fn();
+    render(<PartnerOrderDetailPage orderId="o1" />);
+    const quoteButton = await screen.findByRole("button", {
+      name: "Ajánlat AJ-2026-0042 · 2. verzió",
+    });
+    expect(
+      quoteButton.closest("section")!.querySelector("h4"),
+    ).toHaveTextContent("1 db");
+    fireEvent.click(quoteButton);
+    await waitFor(() =>
+      expect(quotes.pdf).toHaveBeenCalledWith("token-1", "q1", "v2"),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Teljesítési igazolás TI-2026-008" }),
+    );
+    await waitFor(() =>
+      expect(certificates.downloadDocument).toHaveBeenCalledWith(
+        "token-1",
+        "cert-1",
+        "d9",
+      ),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Számla ACRS-2026-12" }),
+    );
+    await waitFor(() =>
+      expect(invoices.downloadPdf).toHaveBeenCalledWith("token-1", "inv-1"),
+    );
+    // only the uploaded file has a delete button
+    expect(screen.getAllByRole("button", { name: "Törlés" })).toHaveLength(1);
   });
 
   it("offers the completion certificate on a forint order, with the order's lines", async () => {

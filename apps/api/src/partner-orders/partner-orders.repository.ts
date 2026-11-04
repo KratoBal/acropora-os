@@ -5,6 +5,7 @@ import {
   type PartnerOrderDocumentStep,
   type PartnerOrderStatus,
 } from "@acropora/database";
+import type { SystemDocumentSource } from "./partner-order-system-documents.js";
 
 /** What an order's lines and totals are computed from: the accepted version and the customer's optional choices. */
 const ACCEPTED_VERSION_SELECT = {
@@ -162,6 +163,58 @@ export class PartnerOrdersRepository {
         },
       },
     });
+  }
+
+  /** The chain's system-made documents of these orders (`systemDocumentsOf`), keyed by order id. */
+  async systemDocumentSources(
+    orderIds: readonly string[],
+  ): Promise<Map<string, SystemDocumentSource>> {
+    if (orderIds.length === 0) return new Map();
+    const rows = await prisma.partnerOrder.findMany({
+      where: { id: { in: [...orderIds] } },
+      select: {
+        id: true,
+        quote: { select: { id: true, quoteNumber: true } },
+        quoteVersion: {
+          select: {
+            id: true,
+            versionNumber: true,
+            pdfStorageKey: true,
+            publishedAt: true,
+          },
+        },
+        completionCertificates: {
+          orderBy: [{ issuedAt: "asc" }, { id: "asc" }],
+          select: {
+            id: true,
+            number: true,
+            documents: {
+              orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+              select: { id: true, type: true, fileName: true, createdAt: true },
+            },
+            invoices: {
+              select: {
+                id: true,
+                status: true,
+                invoiceNumber: true,
+                issueDate: true,
+              },
+            },
+          },
+        },
+      },
+    });
+    return new Map(
+      rows.map((row) => [
+        row.id,
+        {
+          quoteId: row.quote.id,
+          quoteNumber: row.quote.quoteNumber,
+          version: row.quoteVersion,
+          certificates: row.completionCertificates,
+        },
+      ]),
+    );
   }
 
   /** Accepted quotes that have no order yet: the ones the page offers to carry on. */

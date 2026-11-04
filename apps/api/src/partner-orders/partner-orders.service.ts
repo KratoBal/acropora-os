@@ -33,6 +33,10 @@ import {
   type OrderDocumentRow,
   type OrderContentRow,
 } from "./partner-orders.repository.js";
+import {
+  systemDocumentsOf,
+  withSystemDocuments,
+} from "./partner-order-system-documents.js";
 
 /** `AJ-2026-0042` becomes `MR-2026-0042`: one order per quote, so the quote's number is the order's. */
 export function orderNumberFor(quoteNumber: string): string {
@@ -142,6 +146,18 @@ export class PartnerOrdersService {
       current[entry.step] = entry._count._all;
       chains.set(entry.orderId, current);
     }
+    // the system-made documents count too: the list sees where the chain stands (acrobot 42589)
+    const sources = await this.repository.systemDocumentSources(
+      rows.map((row) => row.id),
+    );
+    for (const [orderId, source] of sources)
+      chains.set(
+        orderId,
+        withSystemDocuments(
+          chains.get(orderId) ?? emptyChain(),
+          systemDocumentsOf(source),
+        ),
+      );
     return {
       page,
       pageSize,
@@ -203,6 +219,9 @@ export class PartnerOrdersService {
       lines: body.lines,
       totals: body.totals,
       documents: row.documents.map(documentDto),
+      systemDocuments: systemDocumentsOf(
+        (await this.repository.systemDocumentSources([row.id])).get(row.id)!,
+      ),
       createdAt: row.createdAt.toISOString(),
       createdByName: row.createdBy?.displayName ?? null,
     };
