@@ -89,6 +89,11 @@ export interface PartnerOrderLineDto {
   vatRatePercent: string;
   /** quantity × unit net price, exact. */
   netAmount: string;
+  /**
+   * The line's net, VAT and gross as the completion certificate and the invoice state them (whole forints in
+   * HUF, the VAT from the rounded net, the gross their sum). The page shows these, never its own arithmetic.
+   */
+  rounded: { net: string; vat: string; gross: string };
   /** The line was optional on the quote and the customer chose it. */
   wasOptional: boolean;
 }

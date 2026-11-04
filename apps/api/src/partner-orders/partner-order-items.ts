@@ -1,5 +1,8 @@
 import { Prisma } from "@acropora/database";
-import { computeCertificateLineAmounts } from "../completion-certificates/completion-certificate-amounts.js";
+import {
+  computeCertificateLineAmounts,
+  wholeForintCertificateAmounts,
+} from "../completion-certificates/completion-certificate-amounts.js";
 import type {
   PartnerOrderLineDto,
   PartnerOrderTotalsDto,
@@ -21,37 +24,6 @@ export interface QuoteItemSource {
   isOptional: boolean;
 }
 
-/**
- * The lines of an order: every non-optional line of the accepted version, plus the optional lines the
- * customer chose (`QuoteAcceptance.selectedOptionalItemIds`). The same rule as the project handoff
- * (`quote-handoff.service.ts`) and the proforma (`quote-proforma.ts`), kept in one place for the order
- * and for the completion certificate and invoicing slices that read the same lines.
- */
-export function selectOrderItems(
-  items: readonly QuoteItemSource[],
-  selectedOptionalIds: readonly string[],
-): PartnerOrderLineDto[] {
-  const selected = new Set(selectedOptionalIds);
-  return items
-    .filter((item) => !item.isOptional || selected.has(item.id))
-    .slice()
-    .sort(
-      (a, b) => a.blockPosition - b.blockPosition || a.position - b.position,
-    )
-    .map((item, index) => ({
-      quoteItemId: item.id,
-      position: index + 1,
-      name: item.name,
-      description: item.description,
-      quantity: item.quantity.toString(),
-      unit: item.unit,
-      unitNetPrice: item.unitNetPrice.toString(),
-      vatRatePercent: item.vatRatePercent.toString(),
-      netAmount: item.quantity.times(item.unitNetPrice).toString(),
-      wasOptional: item.isOptional,
-    }));
-}
-
 const ZERO = new Prisma.Decimal(0);
 
 /** HUF has no minor unit on invoices; everything else rounds to two decimals. */
@@ -59,24 +31,97 @@ function currencyDecimals(currency: string): number {
   return currency === "HUF" ? 0 : 2;
 }
 
+interface PricedLine {
+  quantity: string | Prisma.Decimal;
+  unitNetPrice: string | Prisma.Decimal;
+  vatRatePercent: string | Prisma.Decimal;
+}
+
 /**
- * Net, VAT and gross, summed per VAT rate, ROUNDED PER LINE and then added: the invoice is the measure
- * (ADR-014, and Számlázz.hu rounds the same way), so the page, the completion certificates and the invoice
- * give the same forint total. A line's net comes from the raw product, its VAT from that net (both to four
- * decimals, as the certificate does), and net and VAT are rounded to the currency's decimals before the lines
- * are added up. Adding the exact
- * values and rounding the sum can differ by 1 Ft over several lines.
+ * ONE LINE'S NET, VAT AND GROSS, AS THE COMPLETION CERTIFICATE AND THE INVOICE STATE THEM. In HUF this is the
+ * certificate's own `wholeForintCertificateAmounts` (net rounded to whole forints, the VAT from that ROUNDED net,
+ * the gross their sum), so the order page, the certificate and the invoice give the same forints. Other currencies
+ * follow the same order of steps with two decimals: round the net, take the VAT of the rounded net, add.
+ */
+export function roundedLineAmounts(
+  line: PricedLine,
+  currency: string,
+): { net: Prisma.Decimal; vat: Prisma.Decimal; gross: Prisma.Decimal } {
+  const exact = computeCertificateLineAmounts({
+    quantity: line.quantity,
+    unitPrice: line.unitNetPrice,
+    vatRatePercent: line.vatRatePercent,
+  });
+  if (currency === "HUF") {
+    const whole = wholeForintCertificateAmounts(exact, line.vatRatePercent);
+    return {
+      net: whole.netAmount,
+      vat: whole.vatAmount,
+      gross: whole.grossAmount,
+    };
+  }
+  const round = (value: Prisma.Decimal) =>
+    value.toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+  const net = round(exact.netAmount);
+  const vat = round(
+    net.times(new Prisma.Decimal(line.vatRatePercent)).div(100),
+  );
+  return { net, vat, gross: net.plus(vat) };
+}
+
+/**
+ * The lines of an order: every non-optional line of the accepted version, plus the optional lines the
+ * customer chose (`QuoteAcceptance.selectedOptionalItemIds`). The same rule as the project handoff
+ * (`quote-handoff.service.ts`) and the proforma (`quote-proforma.ts`), kept in one place for the order
+ * and for the completion certificate and invoicing slices that read the same lines. Each line carries
+ * its rounded amounts, so a page never has to recompute them.
+ */
+export function selectOrderItems(
+  items: readonly QuoteItemSource[],
+  selectedOptionalIds: readonly string[],
+  currency: string,
+): PartnerOrderLineDto[] {
+  const selected = new Set(selectedOptionalIds);
+  const decimals = currencyDecimals(currency);
+  return items
+    .filter((item) => !item.isOptional || selected.has(item.id))
+    .slice()
+    .sort(
+      (a, b) => a.blockPosition - b.blockPosition || a.position - b.position,
+    )
+    .map((item, index) => {
+      const rounded = roundedLineAmounts(item, currency);
+      return {
+        quoteItemId: item.id,
+        position: index + 1,
+        name: item.name,
+        description: item.description,
+        quantity: item.quantity.toString(),
+        unit: item.unit,
+        unitNetPrice: item.unitNetPrice.toString(),
+        vatRatePercent: item.vatRatePercent.toString(),
+        netAmount: item.quantity.times(item.unitNetPrice).toString(),
+        rounded: {
+          net: rounded.net.toFixed(decimals),
+          vat: rounded.vat.toFixed(decimals),
+          gross: rounded.gross.toFixed(decimals),
+        },
+        wasOptional: item.isOptional,
+      };
+    });
+}
+
+/**
+ * Net, VAT and gross, summed per VAT rate from the lines' ROUNDED amounts: the invoice is the measure (ADR-014),
+ * and the lines are rounded exactly as the certificate rounds them (`roundedLineAmounts`), so the page, the
+ * certificates and the invoice give the same forint total. Adding the exact values and rounding the sum can
+ * differ by 1 Ft over several lines.
  */
 export function orderTotals(
-  lines: readonly Pick<
-    PartnerOrderLineDto,
-    "quantity" | "unitNetPrice" | "vatRatePercent"
-  >[],
+  lines: readonly PricedLine[],
   currency: string,
 ): PartnerOrderTotalsDto {
   const decimals = currencyDecimals(currency);
-  const round = (value: Prisma.Decimal) =>
-    value.toDecimalPlaces(decimals, Prisma.Decimal.ROUND_HALF_UP);
   const rates = new Map<
     string,
     {
@@ -87,23 +132,15 @@ export function orderTotals(
     }
   >();
   for (const line of lines) {
-    const exact = computeCertificateLineAmounts({
-      quantity: line.quantity,
-      unitPrice: line.unitNetPrice,
-      vatRatePercent: line.vatRatePercent,
-    });
+    const amounts = roundedLineAmounts(line, currency);
     const rate = new Prisma.Decimal(line.vatRatePercent);
     const key = rate.toString();
     const seen = rates.get(key);
-    // The line's gross is its rounded net plus its rounded VAT, so the three printed numbers of a line
-    // always add up (rounding the exact gross separately can leave a line 1 Ft short of net + VAT).
-    const net = round(exact.netAmount);
-    const vat = round(exact.vatAmount);
     rates.set(key, {
       rate,
-      net: (seen?.net ?? ZERO).plus(net),
-      vat: (seen?.vat ?? ZERO).plus(vat),
-      gross: (seen?.gross ?? ZERO).plus(net).plus(vat),
+      net: (seen?.net ?? ZERO).plus(amounts.net),
+      vat: (seen?.vat ?? ZERO).plus(amounts.vat),
+      gross: (seen?.gross ?? ZERO).plus(amounts.gross),
     });
   }
   const byRate = [...rates.values()]

@@ -333,8 +333,8 @@ export function PartnerOrderDetailPage({ orderId }: { orderId: string }) {
                     <td className="px-3 py-1 text-right font-semibold">
                       {money(
                         shownMode === "GROSS"
-                          ? grossOf(line.netAmount, line.vatRatePercent)
-                          : line.netAmount,
+                          ? line.rounded.gross
+                          : line.rounded.net,
                       )}
                     </td>
                   </tr>

@@ -130,6 +130,7 @@ function detail(
         unitNetPrice: "10000",
         vatRatePercent: "27",
         netAmount: "20000",
+        rounded: { net: "20000", vat: "5400", gross: "25400" },
         wasOptional: false,
       },
       {
@@ -142,6 +143,7 @@ function detail(
         unitNetPrice: "5000",
         vatRatePercent: "27",
         netAmount: "5000",
+        rounded: { net: "5000", vat: "1350", gross: "6350" },
         wasOptional: true,
       },
     ],
@@ -252,13 +254,34 @@ describe("egy megrendelés", () => {
     const first = (await screen.findByText("Szűrő csere")).closest("tr")!;
     expect(within(first).getByText("10 000 Ft")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Bruttó" }));
-    // 10 000 net at 27% = 12 700 gross; the line 20 000 net = 25 400 gross
+    // the unit price is 10 000 net at 27% = 12 700 gross; the line amount is the server's rounded gross, 25 400
     expect(within(first).getByText("12 700 Ft")).toBeInTheDocument();
     expect(within(first).getByText("25 400 Ft")).toBeInTheDocument();
     // the totals block stays exact, from the server
     expect(screen.getByText("Bruttó összesen").parentElement).toHaveTextContent(
       "31 750 Ft",
     );
+  });
+
+  it("shows a line's amount as the server rounded it, never its own arithmetic", async () => {
+    const base = detail();
+    api.detail.mockResolvedValue(
+      detail({
+        lines: base.lines.map((line, index) =>
+          index === 0
+            ? {
+                ...line,
+                rounded: { net: "20001", vat: "5400", gross: "25401" },
+              }
+            : line,
+        ),
+      }),
+    );
+    render(<PartnerOrderDetailPage orderId="o1" />);
+    const first = (await screen.findByText("Szűrő csere")).closest("tr")!;
+    expect(within(first).getByText("20 001 Ft")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Bruttó" }));
+    expect(within(first).getByText("25 401 Ft")).toBeInTheDocument();
   });
 
   it("warns that the acceptance changed, and still shows the signed lines", async () => {

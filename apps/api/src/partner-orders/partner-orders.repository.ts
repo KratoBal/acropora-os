@@ -78,7 +78,11 @@ export interface OrderListFilter {
   status?: PartnerOrderStatus;
 }
 
-/** Hard cap on documents per order: a runaway client cannot fill the shared volume through one order. */
+/**
+ * Cap on documents per order, so a runaway client cannot fill the shared volume through one order. It is a SOFT cap
+ * on purpose: the count and the insert are not one transaction, so two parallel uploads at the edge can pass it by
+ * a few files. The surface is internal (quotes.manage only) and the shared storage quota is checked on every upload.
+ */
 export const MAX_DOCUMENTS_PER_ORDER = 60;
 
 @Injectable()

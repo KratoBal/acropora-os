@@ -36,6 +36,7 @@ describe("selectOrderItems", () => {
         item("c", { isOptional: true, position: 3 }),
       ],
       ["c"],
+      "HUF",
     );
     assert.deepEqual(
       lines.map((l) => l.quoteItemId),
@@ -53,6 +54,7 @@ describe("selectOrderItems", () => {
         item("first", { blockPosition: 1, position: 1 }),
       ],
       [],
+      "HUF",
     );
     assert.deepEqual(
       lines.map((l) => [l.quoteItemId, l.position]),
@@ -74,14 +76,39 @@ describe("selectOrderItems", () => {
         }),
       ],
       [],
+      "HUF",
     );
     assert.equal(line!.quantity, "2.5");
     assert.equal(line!.unit, "alkalom");
     assert.equal(line!.netAmount, "3086.4");
+    // 3086.4 net -> 3086; VAT of 3086 at 27% = 833.22 -> 833; gross 3919
+    assert.deepEqual(line!.rounded, { net: "3086", vat: "833", gross: "3919" });
+  });
+
+  it("carries the certificate's rounded amounts on the line, the VAT from the rounded net", () => {
+    const [line] = selectOrderItems(
+      [item("a", { unitNetPrice: new Prisma.Decimal("1.5") })],
+      [],
+      "HUF",
+    );
+    assert.deepEqual(line!.rounded, { net: "2", vat: "1", gross: "3" });
+  });
+
+  it("states the rounded amounts with two decimals in another currency", () => {
+    const [line] = selectOrderItems(
+      [item("a", { unitNetPrice: new Prisma.Decimal("10.005") })],
+      [],
+      "EUR",
+    );
+    assert.deepEqual(line!.rounded, {
+      net: "10.01",
+      vat: "2.70",
+      gross: "12.71",
+    });
   });
 
   it("ignores an optional id that is not an optional line of the version", () => {
-    const lines = selectOrderItems([item("a")], ["not-there"]);
+    const lines = selectOrderItems([item("a")], ["not-there"], "HUF");
     assert.deepEqual(
       lines.map((l) => l.quoteItemId),
       ["a"],
@@ -126,8 +153,16 @@ describe("orderTotals", () => {
     assert.notEqual(totals.net, "32");
   });
 
+  it("takes a line's VAT from its ROUNDED net, the way the certificate does", () => {
+    // 1 x 1.5 Ft at 27%: net 2; the VAT of the printed net 2 is 0.54 -> 1 (the raw net would give 0.405 -> 0); gross 3
+    const totals = orderTotals([line("1", "1.5", "27")], "HUF");
+    assert.equal(totals.net, "2");
+    assert.equal(totals.vat, "1");
+    assert.equal(totals.gross, "3");
+  });
+
   it("adds a line's gross as its rounded net plus its rounded VAT", () => {
-    // 3 x 3.5 = 10.5 -> net 11 (half up); VAT 2.835 -> 3; gross 14, although the exact gross 13.335 rounds to 13
+    // 3 x 3.5 = 10.5 -> net 11 (half up); VAT of 11 = 2.97 -> 3; gross 14, although the exact gross 13.335 rounds to 13
     const totals = orderTotals([line("3", "3.5", "27")], "HUF");
     assert.equal(totals.net, "11");
     assert.equal(totals.vat, "3");

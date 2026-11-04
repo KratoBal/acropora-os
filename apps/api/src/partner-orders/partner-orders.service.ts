@@ -70,6 +70,7 @@ export function orderBody(order: OrderContentRow) {
       })),
     ),
     order.acceptance.selectedOptionalItemIds,
+    version.currency,
   );
   return {
     accepted:
