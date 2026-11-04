@@ -2,6 +2,8 @@ import { pathToFileURL } from "node:url";
 
 import { Prisma, prisma } from "@acropora/database";
 
+import { describeTarget } from "../common/database-target.js";
+
 import { PartnerDuplicateRepository } from "../partner-duplicates/partner-duplicate-report.service.js";
 import {
   applyOperations,
@@ -36,20 +38,6 @@ import {
  * --apply és --restore (ez fogja meg a többszöri átvezetést). Az ÉLES futás Balázs jelenlétében, a próba lenyomatával történik; a
  * futás célját minden kimenet első sora mondja ki.
  */
-/**
- * A CÉL-ADATBÁZIS, JELSZÓ NÉLKÜL (barracuda, #2185 review): a stage-próba és az éles futás ugyanaz a parancs, csak más `.env`-vel, és
- * a lenyomat nem árulja el a célt. Minden kimenet első sora ezt mondja ki.
- */
-export function describeTarget(databaseUrl: string | undefined): string {
-  if (!databaseUrl) return "ismeretlen (nincs DATABASE_URL)";
-  try {
-    const url = new URL(databaseUrl);
-    return `${url.hostname}${url.port ? `:${url.port}` : ""}/${url.pathname.replace(/^\//, "")}`;
-  } catch {
-    return "ismeretlen (a DATABASE_URL nem értelmezhető)";
-  }
-}
-
 export interface CliOutput {
   stdout(value: string): void;
   stderr(value: string): void;
