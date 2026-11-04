@@ -7,9 +7,6 @@ import type {
 
 import { apiRequest } from "./client";
 
-const post = <T>(path: string, token: string, body: unknown) =>
-  apiRequest<T>(path, token, { method: "POST", body: JSON.stringify(body) });
-
 /** Két vevő-sor összevonása a partnertörzsben: előnézet, végrehajtás a lenyomattal, napló, visszavonás. */
 export const partnerMergeApi = {
   list(token: string, signal?: AbortSignal) {
@@ -18,23 +15,36 @@ export const partnerMergeApi = {
     });
   },
   preview(token: string, keptId: string, mergedId: string) {
-    return post<PartnerMergePreview>("/admin/partner-merges/preview", token, {
-      keptId,
-      mergedId,
-    });
+    return apiRequest<PartnerMergePreview>(
+      "/admin/partner-merges/preview",
+      token,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          keptId,
+          mergedId,
+        }),
+      },
+    );
   },
   execute(token: string, input: PartnerMergeExecuteInput) {
-    return post<PartnerMergeLogEntry>(
+    return apiRequest<PartnerMergeLogEntry>(
       "/admin/partner-merges/execute",
       token,
-      input,
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
     );
   },
   undo(token: string, logId: string) {
-    return post<PartnerMergeUndoResult>(
+    return apiRequest<PartnerMergeUndoResult>(
       `/admin/partner-merges/${encodeURIComponent(logId)}/undo`,
       token,
-      {},
+      {
+        method: "POST",
+        body: JSON.stringify({}),
+      },
     );
   },
 };

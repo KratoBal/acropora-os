@@ -19,6 +19,7 @@ import { describeTarget } from "./partner-migration.cli.js";
 import {
   applyOperations,
   restoreRegistered,
+  StalePlanError,
   type RestoreOutcome,
 } from "./partner-migration.executor.js";
 import {
@@ -56,6 +57,22 @@ export class PartnerMigrationRunRepository extends Repository {
       maxWait: 30_000,
     });
   }
+}
+
+/**
+ * AMI KIMEGY A KLIENSNEK: csak az író saját, várt hibája (elavult terv) és a szerializációs ütközés egy "próbáld újra" mondattal. A
+ * többi hiba (Prisma, kényszer: tábla- és mezőnevekkel) 500 marad.
+ */
+export function translateWriteError(error: unknown): unknown {
+  if (error instanceof StalePlanError || error instanceof ConflictException)
+    return error instanceof ConflictException
+      ? error
+      : new ConflictException(error.message);
+  if ((error as { code?: unknown } | null)?.code === "P2034")
+    return new ConflictException(
+      "A művelet ütközött egy másik írással: próbáld újra.",
+    );
+  return error;
 }
 
 /** A kötési döntések: csak szöveg-szöveg párok, felső korláttal (a törzs nem megbízható). */
@@ -152,10 +169,7 @@ export class PartnerMigrationRunService {
       );
       return { target: this.target(), outcomes };
     } catch (error) {
-      // az író kivételei (elavult terv: már kötött partner, archivált vagy másnak kötött sor) érthető 409-et kapnak
-      if (error instanceof Error && !(error instanceof ConflictException))
-        throw new ConflictException(error.message);
-      throw error;
+      throw translateWriteError(error);
     }
   }
 
@@ -175,15 +189,19 @@ export class PartnerMigrationRunService {
     fingerprint: string,
     actorUserId: string,
   ): Promise<PartnerMigrationRestoreResult> {
-    const outcomes = await this.repository.transaction(async (tx) => {
-      // ugyanabban a tranzakcióban újraszámoljuk a próbát: csak azt állítjuk vissza, amit az ember látott
-      const dry = await this.steps.restore(tx, actorUserId, true);
-      if (restoreFingerprint(dry) !== fingerprint)
-        throw new ConflictException(
-          "A visszaállítandó partnerek közben változtak: nézd meg újra a próbát.",
-        );
-      return this.steps.restore(tx, actorUserId, false);
-    });
+    const outcomes = await this.repository
+      .transaction(async (tx) => {
+        // ugyanabban a tranzakcióban újraszámoljuk a próbát: csak azt állítjuk vissza, amit az ember látott
+        const dry = await this.steps.restore(tx, actorUserId, true);
+        if (restoreFingerprint(dry) !== fingerprint)
+          throw new ConflictException(
+            "A visszaállítandó partnerek közben változtak: nézd meg újra a próbát.",
+          );
+        return this.steps.restore(tx, actorUserId, false);
+      })
+      .catch((error: unknown) => {
+        throw translateWriteError(error);
+      });
     return { target: this.target(), outcomes };
   }
 }

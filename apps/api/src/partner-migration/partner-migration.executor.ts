@@ -16,6 +16,12 @@ import type { MigrationOperation } from "./partner-migration-run.js";
  */
 export type Tx = Prisma.TransactionClient;
 
+/**
+ * A TERV ELAVULT: az írás közben kiderül, hogy a próba óta változott valami (a partner már kötött, a vevő-sor eltűnt vagy másé lett).
+ * Csak ez a hiba megy ki a kliensnek érthető üzenettel (409); minden más hiba (adatbázis, kényszer) nem.
+ */
+export class StalePlanError extends Error {}
+
 export interface RegisterOutcome {
   code: string;
   mode: "CREATED" | "BOUND" | "SKIPPED";
@@ -59,9 +65,10 @@ export async function applyOperations(
       continue;
     }
     const supplier = await loadSupplier(tx, op.supplierId);
-    if (!supplier) throw new Error(`A partner nem található: ${op.code}.`);
+    if (!supplier)
+      throw new StalePlanError(`A partner nem található: ${op.code}.`);
     if (supplier.customerId)
-      throw new Error(
+      throw new StalePlanError(
         `A(z) ${op.code} partnernek már van kötött vevő-sora: a terv elavult, nézd meg újra a próbafuttatást.`,
       );
 
@@ -80,11 +87,11 @@ export async function applyOperations(
       select: { id: true, archivedAt: true, partner: { select: { id: true } } },
     });
     if (!customer || customer.archivedAt)
-      throw new Error(
+      throw new StalePlanError(
         `A(z) ${op.code} jelölt vevő-sora nem található vagy archivált.`,
       );
     if (customer.partner)
-      throw new Error(
+      throw new StalePlanError(
         `A(z) ${op.code} jelölt vevő-sora már egy másik partnerhez kötött.`,
       );
     await tx.supplier.update({

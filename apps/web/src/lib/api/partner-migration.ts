@@ -10,9 +10,6 @@ import type {
 
 import { apiRequest } from "./client";
 
-const post = <T>(path: string, token: string, body: unknown) =>
-  apiRequest<T>(path, token, { method: "POST", body: JSON.stringify(body) });
-
 /**
  * A partnerek átvezetése (egyszeri átvezetés). A terv és a két próba csak olvas; az írás (`apply`, `restoreApply`) a próba
  * lenyomatát kéri vissza, ahogy a `partner:migrate` parancs is.
@@ -24,31 +21,43 @@ export const partnerMigrationApi = {
     });
   },
   preview(token: string, binds: Record<string, string>) {
-    return post<PartnerMigrationRunPreview>(
+    return apiRequest<PartnerMigrationRunPreview>(
       "/admin/partner-migration/preview",
       token,
-      { binds },
+      {
+        method: "POST",
+        body: JSON.stringify({ binds }),
+      },
     );
   },
   apply(token: string, input: PartnerMigrationApplyInput) {
-    return post<PartnerMigrationApplyResult>(
+    return apiRequest<PartnerMigrationApplyResult>(
       "/admin/partner-migration/apply",
       token,
-      input,
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
     );
   },
   restorePreview(token: string) {
-    return post<PartnerMigrationRestorePreview>(
+    return apiRequest<PartnerMigrationRestorePreview>(
       "/admin/partner-migration/restore/preview",
       token,
-      {},
+      {
+        method: "POST",
+        body: JSON.stringify({}),
+      },
     );
   },
   restoreApply(token: string, input: PartnerMigrationRestoreInput) {
-    return post<PartnerMigrationRestoreResult>(
+    return apiRequest<PartnerMigrationRestoreResult>(
       "/admin/partner-migration/restore/apply",
       token,
-      input,
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
     );
   },
 };
