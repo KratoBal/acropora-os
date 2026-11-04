@@ -22,10 +22,14 @@ import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { partnerMigrationApi } from "@/lib/api/partner-migration";
 
+import { PartnerMergeSection } from "./partner-merge-section";
+import { PartnerMigrationRunSection } from "./partner-migration-run-section";
+
 /**
- * A PARTNEREK ÁTVEZETÉSÉNEK TERVE (egy partnertörzs, egyszeri átvezetés). CSAK OLVAS: semmi nem íródik innen. Minden partner
+ * A PARTNEREK ÁTVEZETÉSÉNEK TERVE (egy partnertörzs, egyszeri átvezetés). Minden partner
  * (beszállító, szerviz-partner) egyetlen vevő-törzs sor lesz, a szerep jelölésként rajta; ez a lista soronként megmondja, mi
- * történne, és mi alapján (az adószám párosít, a név nem). Balázs ebből a listából dönt, mielőtt bármi ír.
+ * történne, és mi alapján (az adószám párosít, a név nem). A lista maga CSAK OLVAS; az írás a lista alatti szakaszokból megy
+ * (próba, lenyomat, megerősítés), Balázs jelenlétében.
  */
 export const ACTION_LABEL: Record<PartnerMigrationAction, string> = {
   SKIP_OWN: "Kimarad: saját cég",
@@ -201,7 +205,7 @@ export function PartnerMigrationPage() {
     <div className="space-y-6">
       <PageHeader
         title="Partner-átvezetés"
-        description="Minden partner (beszállító, szerviz-partner) egyetlen vevő-törzs sor lesz, a szerep jelölésként rajta. A lista csak olvasható: soronként megmondja, mi történne, és mi alapján (az adószám párosít, a név nem)."
+        description="Minden partner (beszállító, szerviz-partner) egyetlen vevő-törzs sor lesz, a szerep jelölésként rajta. A lista soronként megmondja, mi történne, és mi alapján (az adószám párosít, a név nem); alatta futtatható a próba, az átvezetés és a visszaállítás."
         actions={
           <PilotButton variant="secondary" onClick={() => void load()}>
             Frissítés
@@ -242,6 +246,16 @@ export function PartnerMigrationPage() {
               </p>
             </PilotCard>
           </div>
+          <PartnerMigrationRunSection
+            token={token}
+            plan={data}
+            onChanged={() => void load()}
+          />
+          <PartnerMergeSection
+            token={token}
+            plan={data}
+            onChanged={() => void load()}
+          />
           {data.rows.length ? (
             <div className="space-y-3">
               {data.rows.map((row) => (

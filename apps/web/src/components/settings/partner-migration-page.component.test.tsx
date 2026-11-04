@@ -10,6 +10,9 @@ vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({ session: auth.session }),
 }));
 vi.mock("@/lib/api/partner-migration", () => ({ partnerMigrationApi: api }));
+vi.mock("@/lib/api/partner-merge", () => ({
+  partnerMergeApi: { list: vi.fn().mockResolvedValue([]) },
+}));
 
 const session: Session = {
   id: "s1",
