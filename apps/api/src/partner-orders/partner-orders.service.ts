@@ -33,7 +33,6 @@ import {
   type OrderDocumentRow,
   type OrderContentRow,
 } from "./partner-orders.repository.js";
-import { partnerTaxNumberFor } from "../customers/partner-payment-terms.js";
 
 /** `AJ-2026-0042` becomes `MR-2026-0042`: one order per quote, so the quote's number is the order's. */
 export function orderNumberFor(quoteNumber: string): string {
@@ -183,11 +182,6 @@ export class PartnerOrdersService {
     const row = await this.repository.detail(id);
     if (!row) throw new NotFoundException("A megrendelés nem található.");
     const body = orderBody(row);
-    const name =
-      row.customer?.displayName ?? snapshotText(body.snapshot, "name");
-    const taxNumber =
-      row.customer?.taxNumber?.trim() ||
-      snapshotText(body.snapshot, "taxNumber");
     return {
       id: row.id,
       orderNumber: row.orderNumber,
@@ -201,15 +195,9 @@ export class PartnerOrdersService {
       priceDisplay: body.priceDisplay,
       customer: {
         id: row.customerId,
-        name,
-        taxNumber,
-        partnerTaxHint:
-          taxNumber || !name
-            ? null
-            : partnerTaxNumberFor(
-                { displayName: name, companyName: null },
-                await this.repository.partnersWithTaxNumber(),
-              ),
+        name: row.customer?.displayName ?? snapshotText(body.snapshot, "name"),
+        taxNumber:
+          row.customer?.taxNumber ?? snapshotText(body.snapshot, "taxNumber"),
         address: snapshotAddress(body.snapshot),
       },
       lines: body.lines,

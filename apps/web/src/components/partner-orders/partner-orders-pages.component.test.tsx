@@ -266,28 +266,6 @@ describe("egy megrendelés", () => {
     expect(certificates.listForPartnerOrder).not.toHaveBeenCalled();
   });
 
-  // Balázs's picture (18:48 UTC): the order's customer row had no tax number, the partner had one
-  it("without the customer's tax number it names the same-named partner's, where to copy it from", async () => {
-    api.detail.mockResolvedValue(
-      detail({
-        customer: {
-          id: "c1",
-          name: "Fővárosi Állat- és Növénykert",
-          taxNumber: null,
-          partnerTaxHint: {
-            partnerName: "Fővárosi Állat- és Növénykert",
-            taxNumber: "15490658-2-42",
-          },
-          address: "1146 Budapest, Állatkerti krt. 6",
-        },
-      }),
-    );
-    render(<PartnerOrderDetailPage orderId="o1" />);
-    expect(await screen.findByTestId("adoszam-tipp")).toHaveTextContent(
-      "A Partnereknél: 15490658-2-42",
-    );
-  });
-
   it("shows the lines with quantity, unit, unit price and the totals per rate", async () => {
     render(<PartnerOrderDetailPage orderId="o1" />);
     expect(await screen.findByText("Szűrő csere")).toBeInTheDocument();
