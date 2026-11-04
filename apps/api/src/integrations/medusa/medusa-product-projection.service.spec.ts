@@ -9,6 +9,7 @@ import type {
   MedusaProductRow,
 } from "./medusa-admin.client.js";
 import {
+  DISCONTINUED_KEY,
   isOwnedMetadataKey,
   UNIQUE_PIECE_KEY,
 } from "./medusa-metadata-merge.js";
@@ -2777,5 +2778,60 @@ describe("MedusaProductProjectionService -- az Omnibus hivatkozasi ar a valtozat
     if (outcome.action !== "updated") return;
     assert.deepEqual(outcome.omnibus?.gaps, ["A"]);
     assert.deepEqual(outcome.omnibus?.written, []);
+  });
+});
+
+/**
+ * A KIFUTOTT JELOLO (V4.2, kartya 9d0523fa). MI PIROSIT: ha egy inaktiv vagy nem
+ * webshopos, UNAS-lapos termek NEM kapja meg; ha egy UNAS-lap nelkuli (keszulo
+ * OS-) termek, egy ertekesitheto termek vagy egy mas okbol visszatartott termek
+ * megkapja.
+ */
+describe("a kifutott termek jeloloje a metaadatban", () => {
+  const now = new Date("2026-11-04T12:00:00Z");
+  async function metaadat(
+    overrides: Partial<ProjectableProduct>,
+  ): Promise<Record<string, unknown>> {
+    const f = fakes({ link: null, found: [] });
+    await f.service.project({ ...product, ...overrides }, now);
+    const torzs = f.createdWith[0];
+    assert.ok(torzs, "a create nem futott le");
+    return (torzs.metadata ?? {}) as Record<string, unknown>;
+  }
+  const lap = { unasProductUrl: "https://bolt.test/regi-lap" };
+
+  it("az inaktiv es a nem webshopos, UNAS-lapos termek kifutott", async () => {
+    for (const publication of [
+      { ...product.publication, isActive: false },
+      { ...product.publication, webshopSellable: false },
+    ]) {
+      const m = await metaadat({ ...lap, publication });
+      assert.equal(m[DISCONTINUED_KEY], "true", JSON.stringify(publication));
+    }
+  });
+
+  it("a UNAS-lap nelkuli, az ertekesitheto es a mas okbol visszatartott termek nem", async () => {
+    for (const [nev, overrides] of [
+      [
+        "UNAS-lap nelkul",
+        { publication: { ...product.publication, webshopSellable: false } },
+      ],
+      ["ertekesitheto", { ...lap }],
+      [
+        "nincs aktiv valtozat",
+        {
+          ...lap,
+          publication: { ...product.publication, activeVariantCount: 0 },
+        },
+      ],
+    ] as const) {
+      const m = await metaadat(overrides as Partial<ProjectableProduct>);
+      assert.equal(DISCONTINUED_KEY in m, false, nev);
+    }
+  });
+
+  it("a kulcs a mienk: a termek visszaterese utan az osszefesules leveszi", () => {
+    assert.equal(isOwnedMetadataKey(DISCONTINUED_KEY), true);
+    assert.equal(DISCONTINUED_KEY, "discontinued");
   });
 });
