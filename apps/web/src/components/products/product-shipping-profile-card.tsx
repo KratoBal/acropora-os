@@ -57,7 +57,31 @@ const JELZOK = [
     label: "Fagyasztott",
     hint: "Nem szállítható, üzleti átvételként viselkedik.",
   },
+  {
+    // a82ed229: a UNAS nem ismeri, tehát mindig kézi
+    key: "lockerUnsuitable" as const,
+    label: "Csomagautomatába nem fér",
+    hint: "Foxpost nem ajánlható, GLS csomagponton csak bolt választható.",
+  },
 ];
+
+/**
+ * JELZŐNKÉNT A FORRÁS (a82ed229, #1654): a négy régi jelzőt a UNAS-szinkron tölti, és amit valaki kézzel átír, az
+ * onnantól kézi, a szinkron nem írja felül. Az új jelzőt a UNAS nem ismeri, az mindig kézi. Ha egy válasz még nem
+ * hozza a forrást (régi szerver), a kártya nem talál ki semmit, egyszerűen nem írja ki.
+ */
+function sourceText(
+  profile: ProductShippingProfileDetail,
+  key: (typeof JELZOK)[number]["key"],
+): string | null {
+  if (key === "lockerUnsuitable") return "kézzel";
+  const source = profile.sources?.[key];
+  return source === "UNAS"
+    ? "UNAS szerint"
+    : source === "MANUAL"
+      ? "kézzel"
+      : null;
+}
 
 export function ProductShippingProfileCard({
   token,
@@ -115,12 +139,14 @@ export function ProductShippingProfileCard({
             foxpostForbidden: profile.foxpostForbidden,
             isHeavy: profile.isHeavy,
             isFrozen: profile.isFrozen,
+            lockerUnsuitable: profile.lockerUnsuitable ?? false,
           }
         : {
             pickupOnly: false,
             foxpostForbidden: false,
             isHeavy: false,
             isFrozen: false,
+            lockerUnsuitable: false,
           },
     );
 
@@ -145,7 +171,7 @@ export function ProductShippingProfileCard({
   return (
     <PilotSection
       title="Szállítási jellemzők"
-      subtitle="Kézzel gondozott, UNAS-szinkrontól független törzsadatok"
+      subtitle="A UNAS-ból töltődik; amit kézzel átírsz, azt a szinkron többé nem írja felül"
       action={
         canManage && !draft && loaded ? (
           <Button variant="secondary" size="sm" onClick={szerkesztesKezdese}>
@@ -171,7 +197,7 @@ export function ProductShippingProfileCard({
               <input
                 type="checkbox"
                 className="mt-1"
-                checked={draft[jelzo.key]}
+                checked={draft[jelzo.key] ?? false}
                 onChange={(event) =>
                   setDraft({ ...draft, [jelzo.key]: event.target.checked })
                 }
@@ -199,11 +225,19 @@ export function ProductShippingProfileCard({
         </div>
       ) : profile ? (
         <PilotDataGrid columns={4}>
-          {JELZOK.map((jelzo) => (
-            <PilotDataItem key={jelzo.key} label={jelzo.label}>
-              {profile[jelzo.key] ? "Igen" : "Nem"}
-            </PilotDataItem>
-          ))}
+          {JELZOK.map((jelzo) => {
+            const source = sourceText(profile, jelzo.key);
+            return (
+              <PilotDataItem key={jelzo.key} label={jelzo.label}>
+                {profile[jelzo.key] ? "Igen" : "Nem"}
+                {source ? (
+                  <span className="ml-1 text-xs text-pilot-grey-500">
+                    · {source}
+                  </span>
+                ) : null}
+              </PilotDataItem>
+            );
+          })}
         </PilotDataGrid>
       ) : (
         /*

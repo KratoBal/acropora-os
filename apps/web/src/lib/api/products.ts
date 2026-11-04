@@ -39,11 +39,23 @@ export interface ProductShippingProfileInput {
   foxpostForbidden: boolean;
   isHeavy: boolean;
   isFrozen: boolean;
+  /** Csomagautomatába nem fér (a82ed229): csak kézi, a UNAS nem ismeri. */
+  lockerUnsuitable?: boolean;
 }
+
+/** Egy jelző forrása: a UNAS-szinkroné, vagy kézzel írt (a #1654 óta). */
+export type ShippingFlagSource = "UNAS" | "MANUAL";
 
 export interface ProductShippingProfileDetail extends ProductShippingProfileInput {
   productId: string;
   updatedAt: string;
+  lockerUnsuitable?: boolean;
+  sources?: Partial<
+    Record<
+      "pickupOnly" | "foxpostForbidden" | "isHeavy" | "isFrozen",
+      ShippingFlagSource
+    >
+  >;
 }
 
 export const productApi = {
