@@ -4,9 +4,11 @@ import { describe, it } from "node:test";
 import {
   bankTransferPlanFrom,
   decideBankTransfer,
+  runBankTransferMarks,
   type BankCredit,
   type FeedInvoice,
 } from "./bank-transfer-paid-marks.js";
+import { PAID_MARK_SOURCES } from "./paid-marks/paid-marks-auto.scheduler.js";
 
 /*
   WHAT TURNS THIS RED (card aeddb2c3; Balázs 16:36 UTC; acrobot 42868). Balázs's transfer not marked automatically;
@@ -263,5 +265,12 @@ describe("the plan for the daily run", () => {
         ["ALREADY_PAID", false],
       ],
     );
+  });
+});
+
+describe("the daily run's writer (barracuda, #2192 v2)", () => {
+  it("BANK_TRANSFER writes its own way: one credit at a time, under its lock", () => {
+    const source = PAID_MARK_SOURCES.find((s) => s.source === "BANK_TRANSFER");
+    assert.equal(source?.run, runBankTransferMarks);
   });
 });

@@ -1,9 +1,18 @@
 import { Prisma, prisma } from "@acropora/database";
 
-import type { PaymentMarkInput } from "../integrations/szamlazz/outgoing-payment-marks.js";
-import type {
-  PaidMarkException,
-  PaidMarkPlan,
+import {
+  callPlannedMarks,
+  planPaidMarks,
+  type PaymentMarkInput,
+  type PaymentMarkLine,
+  type PaymentMarkStore,
+} from "../integrations/szamlazz/outgoing-payment-marks.js";
+import type { SzamlazzAgentPaymentClient } from "../integrations/szamlazz/szamlazz-agent.client.js";
+import {
+  paidMarksRunResult,
+  type PaidMarkException,
+  type PaidMarkPlan,
+  type PaidMarksRunResult,
 } from "./paid-marks/paid-marks-auto.js";
 import {
   moneyCents,
@@ -424,4 +433,137 @@ export async function bankTransferPaidMarkPlan(
   return bankTransferPlanFrom(
     credits.map((credit) => decideBankTransfer(credit, invoices)),
   );
+}
+
+/** The decision for one pairable credit and the typed (or its own) text; null when there is no such credit. */
+export async function decideBankCredit(
+  creditId: string,
+  text: string,
+): Promise<BankTransferDecision | null> {
+  const credit = await loadBankCredit(creditId);
+  if (!credit) return null;
+  return decideBankTransfer(
+    { ...credit, narrative: text },
+    await loadFeedInvoicesFor([text]),
+  );
+}
+
+export type BankCreditPairing =
+  | { found: false }
+  | { found: true; decision: BankTransferDecision; lines: PaymentMarkLine[] };
+
+/**
+ * ONE CREDIT, PAIRED ONCE (barracuda, #2192), the page's and the daily run's one way. Two phases:
+ *
+ * 1. Under the credit's advisory lock, in a short transaction: the decision (it reads the credit's standing marks),
+ *    the audit row (`started`, so no write is ever without it), and the PLANNED rows of the marks. They are written
+ *    through the store's own connections, so they stand before the lock is released: a second pairing of the same
+ *    credit, waiting on the lock, decides on them and is refused (CREDIT_USED), or, for the same invoices, finds them
+ *    PLANNED and does not call again.
+ * 2. Outside the lock: the Számlázz.hu calls (the #2168 bound: up to ten minutes), then the audit row gets the
+ *    outcomes. No transaction outlives a call, so a slow answer rolls nothing back.
+ */
+export async function pairBankCredit(input: {
+  creditId: string;
+  text: string;
+  agentKey: string;
+  client: SzamlazzAgentPaymentClient;
+  store: PaymentMarkStore;
+  /** the person on the page; null for the daily run */
+  userId: string | null;
+  mode: string;
+}): Promise<BankCreditPairing> {
+  const first = await prisma.$transaction(
+    async (transaction) => {
+      await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`bank-credit:${input.creditId}`}))`;
+      const decision = await decideBankCredit(input.creditId, input.text);
+      if (!decision || !decision.markable)
+        return { decision, auditId: null, lines: [], planned: [] };
+      const audit = await transaction.auditLog.create({
+        data: {
+          userId: input.userId,
+          action: "billing.bank-transfer.paired",
+          entityType: "BankTransaction",
+          entityId: input.creditId,
+          metadata: {
+            state: "started",
+            text: input.text,
+            mode: input.mode,
+            decided: decision.marks.map((m) => [m.invoiceNumber, m.amount]),
+          },
+        },
+        select: { id: true },
+      });
+      const { lines, planned } = await planPaidMarks({
+        source: "BANK_TRANSFER",
+        marks: decision.marks,
+        approved: new Set(decision.marks.map((m) => m.invoiceNumber)),
+        store: input.store,
+      });
+      return { decision, auditId: audit.id, lines, planned };
+    },
+    { maxWait: 30_000, timeout: 60_000 },
+  );
+  if (!first.decision) return { found: false };
+  if (!first.decision.markable)
+    return { found: true, decision: first.decision, lines: [] };
+  const lines = [
+    ...first.lines,
+    ...(await callPlannedMarks({
+      planned: first.planned,
+      agentKey: input.agentKey,
+      client: input.client,
+      store: input.store,
+    })),
+  ];
+  await prisma.auditLog.update({
+    where: { id: first.auditId! },
+    data: {
+      metadata: {
+        state: "done",
+        text: input.text,
+        mode: input.mode,
+        lines: lines.map((l) => [l.invoiceNumber, l.outcome.kind]),
+      },
+    },
+  });
+  return { found: true, decision: first.decision, lines };
+}
+
+/**
+ * THE DAILY RUN'S BANK-TRANSFER WRITER (barracuda, #2192: the run takes the credit's lock and decides again under
+ * it, as the page does). The plan only picks the credits; each markable one goes through `pairBankCredit` with its
+ * own text, and a credit refused on the second look is listed with its reason.
+ */
+export async function runBankTransferMarks(
+  from: string,
+  context: {
+    agentKey: string;
+    client: SzamlazzAgentPaymentClient;
+    store: PaymentMarkStore;
+  },
+): Promise<PaidMarksRunResult> {
+  const { credits, invoices } = await loadBankTransfers(from);
+  const decisions = credits.map((credit) =>
+    decideBankTransfer(credit, invoices),
+  );
+  const plan = bankTransferPlanFrom(decisions);
+  const exceptions = [...plan.exceptions];
+  const lines: PaymentMarkLine[] = [];
+  for (const [index, decision] of decisions.entries()) {
+    if (!decision.markable) continue;
+    const credit = credits[index]!;
+    const pairing = await pairBankCredit({
+      creditId: credit.id,
+      text: credit.narrative,
+      ...context,
+      userId: null,
+      mode: "auto",
+    });
+    if (!pairing.found) continue;
+    if (pairing.decision.markable) lines.push(...pairing.lines);
+    else
+      exceptions.push(...bankTransferPlanFrom([pairing.decision]).exceptions);
+  }
+  return paidMarksRunResult("BANK_TRANSFER", lines, exceptions);
 }

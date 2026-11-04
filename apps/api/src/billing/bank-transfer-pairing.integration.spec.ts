@@ -8,6 +8,10 @@ import type { AuthenticatedUser } from "@acropora/types";
 import { integrationDatabaseGate } from "../common/integration-database.js";
 import { prismaPaymentMarkStore } from "../integrations/szamlazz/outgoing-payment-marks.js";
 import {
+  pairBankCredit,
+  runBankTransferMarks,
+} from "./bank-transfer-paid-marks.js";
+import {
   BankTransferPairingRepository,
   BankTransferPairingService,
 } from "./bank-transfer-pairing.service.js";
@@ -32,7 +36,9 @@ async function removeLeftovers() {
   await prisma.auditLog.deleteMany({
     where: {
       action: "billing.bank-transfer.paired",
-      entityId: { in: [ids.credit ?? "", ids.race ?? ""] },
+      entityId: {
+        in: [ids.credit ?? "", ids.race ?? "", ids.slow ?? "", ids.auto ?? ""],
+      },
     },
   });
   await prisma.bankTransaction.deleteMany({
@@ -175,6 +181,25 @@ describe(
       await document("00091", 100000);
       await document("00092", 100000);
       await document("00093", 100000);
+      // the call-time check and the daily run, each on its own credit and invoice
+      await document("00094", 100000);
+      await document("00095", 100000);
+      ids.slow = await credit("slow");
+      ids.auto = (
+        await prisma.bankTransaction.create({
+          data: {
+            bankAccountId: account.id,
+            importId: imported.id,
+            direction: "CREDIT",
+            amount: D(100000),
+            currency: "HUF",
+            bookingDate: new Date(`${DAY}T00:00:00Z`),
+            narrative: "Számla 2099/00095",
+            transactionKey: `${MARK}-auto`,
+          },
+          select: { id: true },
+        })
+      ).id;
     });
 
     after(async () => {
@@ -291,6 +316,67 @@ describe(
         () => service().pair(ids.matched!, "2099/00091", user),
         NotFoundException,
       );
+    });
+
+    it("the audit row and the PLANNED rows stand BEFORE the Számlázz.hu call, outside the lock (barracuda, #2192 v2)", async () => {
+      const seen: { audits: number; planned: number }[] = [];
+      const pairing = await pairBankCredit({
+        creditId: ids.slow!,
+        text: "2099/00094",
+        agentKey: "unused",
+        client: {
+          registerPayment: async () => {
+            // what another connection sees while the call is running: committed rows only
+            seen.push({
+              audits: await prisma.auditLog.count({
+                where: {
+                  action: "billing.bank-transfer.paired",
+                  entityId: ids.slow!,
+                },
+              }),
+              planned: await prisma.outgoingPaymentMark.count({
+                where: { sourceRef: ids.slow!, state: "PLANNED" },
+              }),
+            });
+            return { successful: true };
+          },
+        } as never,
+        store: prismaPaymentMarkStore,
+        userId: user.id,
+        mode: "stub",
+      });
+      assert.deepEqual(seen, [{ audits: 1, planned: 1 }]);
+      assert.equal(pairing.found && pairing.lines[0]?.outcome.kind, "WRITTEN");
+      const audit = await prisma.auditLog.findFirstOrThrow({
+        where: { action: "billing.bank-transfer.paired", entityId: ids.slow! },
+        select: { metadata: true },
+      });
+      assert.equal((audit.metadata as { state: string }).state, "done");
+    });
+
+    it("the daily run writes through the same pairing, with an audit row of no person", async () => {
+      const result = await runBankTransferMarks("2099-04-10", {
+        agentKey: "unused",
+        client: {
+          registerPayment: async () => ({ successful: true }),
+        } as never,
+        store: prismaPaymentMarkStore,
+      });
+      assert.equal(result.source, "BANK_TRANSFER");
+      assert.equal(
+        (
+          await prisma.outgoingPaymentMark.findFirstOrThrow({
+            where: { sourceRef: ids.auto!, invoiceNumber: "ACRW-2099/00095" },
+            select: { state: true },
+          })
+        ).state,
+        "WRITTEN",
+      );
+      const audit = await prisma.auditLog.findFirstOrThrow({
+        where: { action: "billing.bank-transfer.paired", entityId: ids.auto! },
+        select: { userId: true },
+      });
+      assert.equal(audit.userId, null);
     });
   },
 );
