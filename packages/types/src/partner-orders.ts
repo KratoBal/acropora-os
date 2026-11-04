@@ -36,7 +36,39 @@ export interface PartnerOrderDocumentDto {
   createdAt: string;
 }
 
-/** Where the chain stands: which steps have at least one document. */
+/**
+ * A DOCUMENT THE SYSTEM MADE, shown in the chain without an upload (Balázs, 2026-11-04 17:40 UTC: „a
+ * kapcsolódó ajánlat automatikusan kerüljön be”; acrobot 42589: the issued completion certificate and the
+ * issued invoice too). Each kind downloads through its own endpoint; nothing here can be deleted.
+ */
+export type PartnerOrderSystemDocumentDto =
+  | {
+      kind: "QUOTE_PDF";
+      step: "QUOTE";
+      label: string;
+      quoteId: string;
+      versionId: string;
+      createdAt: string | null;
+    }
+  | {
+      kind: "CERTIFICATE_DOCUMENT";
+      step: "COMPLETION" | "SIGNED_COMPLETION";
+      label: string;
+      certificateId: string;
+      documentId: string;
+      fileName: string;
+      createdAt: string;
+    }
+  | {
+      kind: "INVOICE_PDF";
+      step: "INVOICE";
+      label: string;
+      invoiceId: string;
+      invoiceNumber: string;
+      createdAt: string | null;
+    };
+
+/** Where the chain stands: the documents per step, uploaded and system-made together. */
 export type PartnerOrderChain = Record<PartnerOrderDocumentStepValue, number>;
 
 export interface PartnerOrderListItemDto {
@@ -138,6 +170,8 @@ export interface PartnerOrderDetailDto {
   lines: PartnerOrderLineDto[];
   totals: PartnerOrderTotalsDto;
   documents: PartnerOrderDocumentDto[];
+  /** the system-made documents of the chain (the quote's PDF, the certificates, the issued invoices) */
+  systemDocuments: PartnerOrderSystemDocumentDto[];
   createdAt: string;
   createdByName: string | null;
 }
