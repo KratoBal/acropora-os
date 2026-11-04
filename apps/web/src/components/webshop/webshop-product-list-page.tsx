@@ -2,7 +2,6 @@
 
 import {
   Alert,
-  Button,
   Card,
   EmptyState,
   Input,
@@ -285,7 +284,7 @@ export function WebshopProductListPage() {
               }
               action={
                 searchParam ? (
-                  <Button
+                  <PilotButton
                     variant="secondary"
                     onClick={() => {
                       setSearch("");
@@ -293,30 +292,30 @@ export function WebshopProductListPage() {
                     }}
                   >
                     Keresés törlése
-                  </Button>
+                  </PilotButton>
                 ) : undefined
               }
             />
           )}
 
           <div className="flex justify-end gap-2">
-            <Button
+            <PilotButton
               variant="secondary"
               disabled={data.pagination.page <= 1}
               onClick={() => goToPage(data.pagination.page - 1)}
             >
               Előző
-            </Button>
+            </PilotButton>
             <span className="self-center text-sm">
               {data.pagination.page} / {Math.max(1, data.pagination.totalPages)}
             </span>
-            <Button
+            <PilotButton
               variant="secondary"
               disabled={data.pagination.page >= data.pagination.totalPages}
               onClick={() => goToPage(data.pagination.page + 1)}
             >
               Következő
-            </Button>
+            </PilotButton>
           </div>
         </>
       ) : null}

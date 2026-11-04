@@ -713,7 +713,7 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
         actions={
           job.partnerStatus === "COMPLETED" ? (
             <div className="flex flex-wrap gap-2">
-              <Button
+              <PilotButton
                 variant="secondary"
                 disabled={downloadingPackage}
                 onClick={() => void downloadPackage()}
@@ -721,7 +721,7 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                 {downloadingPackage
                   ? "Dokumentumcsomag letöltése…"
                   : "Dokumentumcsomag letöltése"}
-              </Button>
+              </PilotButton>
               {/*
                 KET FELTETEL, ES A KETTO MAST MOND.
 
@@ -738,9 +738,9 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                 fut.
               */}
               {canManage ? (
-                <Button onClick={() => void openHandoverMail()}>
+                <PilotButton onClick={() => void openHandoverMail()}>
                   Kiküldés e-mailben
-                </Button>
+                </PilotButton>
               ) : null}
             </div>
           ) : null
@@ -996,14 +996,14 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                       placeholder="Mit látunk a képeken?"
                     />
                   </div>
-                  <Button
+                  <PilotButton
                     disabled={documentFiles.length === 0 || uploading}
                     onClick={() => void uploadDocuments()}
                   >
                     {documentFiles.length > 1
                       ? `Feltöltés (${documentFiles.length} fájl)`
                       : "Feltöltés"}
-                  </Button>
+                  </PilotButton>
                 </div>
               ) : null}
             </ServicePanel>
@@ -1112,9 +1112,9 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                   <Link
                     href={`/szerviz/munkalapok/uj?hibajegy=${encodeURIComponent(jobId)}`}
                   >
-                    <Button variant="secondary">
+                    <PilotButton variant="secondary">
                       Új munkalap nyitása a jegy alá
-                    </Button>
+                    </PilotButton>
                   </Link>
                 </div>
               ) : null}
@@ -1126,7 +1126,7 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                   kitalalni, es a kovetkezmenye a lapokon latszana. */}
               {canHide ? (
                 <div className="space-y-2 border-t pt-3">
-                  <Button
+                  <PilotButton
                     variant="secondary"
                     onClick={() =>
                       void serviceJobsApi
@@ -1135,7 +1135,7 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                     }
                   >
                     {job.hidden ? "Visszaállítás" : "Elrejtés"}
-                  </Button>
+                  </PilotButton>
                   <p className="text-xs text-muted">
                     {job.hidden
                       ? "Ez a jegy nincs benne a listákban. A visszaállítás után újra megjelenik."
@@ -1174,13 +1174,13 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                           </option>
                         ))}
                       </PilotSelect>
-                      <Button
+                      <PilotButton
                         variant="secondary"
                         disabled={!chosenSheet || attaching}
                         onClick={() => void attach()}
                       >
                         Csatolás
-                      </Button>
+                      </PilotButton>
                     </div>
                   ) : (
                     /* A HIANY IS ALLITAS: egy eltunt valaszto ugy nezne ki, mint egy

@@ -3,13 +3,13 @@
 import {
   Alert,
   Badge,
-  Button,
   Card,
   CardContent,
   CardHeader,
   PageHeader,
   Skeleton,
   PilotSelect,
+  PilotButton,
 } from "@acropora/ui";
 import {
   formatMoney,
@@ -220,9 +220,9 @@ export function WebshopOrdersPage() {
         description="A UNAS-ból automatikusan (5 percenként) szinkronizált rendelések"
         actions={
           canManage ? (
-            <Button onClick={runSync} disabled={syncing}>
+            <PilotButton onClick={runSync} disabled={syncing}>
               {syncing ? "Szinkronizálás…" : "Szinkronizálás most"}
-            </Button>
+            </PilotButton>
           ) : undefined
         }
       />

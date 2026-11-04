@@ -6,6 +6,7 @@ import {
   PilotDataGrid,
   PilotDataItem,
   PilotSection,
+  PilotButton,
 } from "@acropora/ui";
 import { useEffect, useState } from "react";
 
@@ -184,16 +185,16 @@ export function ProductShippingProfileCard({
             </label>
           ))}
           <div className="flex gap-2 pt-1">
-            <Button disabled={busy} onClick={() => void mentes()}>
+            <PilotButton disabled={busy} onClick={() => void mentes()}>
               Mentés
-            </Button>
-            <Button
+            </PilotButton>
+            <PilotButton
               variant="secondary"
               disabled={busy}
               onClick={() => setDraft(null)}
             >
               Mégsem
-            </Button>
+            </PilotButton>
           </div>
         </div>
       ) : profile ? (

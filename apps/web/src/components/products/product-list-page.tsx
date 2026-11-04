@@ -541,9 +541,9 @@ export function ProductListPage() {
           title="Nincs találat"
           description="A megadott keresésre és szűrőkre nem található termék."
           action={
-            <Button variant="secondary" onClick={resetFilters}>
+            <PilotButton variant="secondary" onClick={resetFilters}>
               Szűrők törlése
-            </Button>
+            </PilotButton>
           }
         />
       ) : null}

@@ -13,6 +13,7 @@ import {
   PilotFileInput,
   type PilotTableColumn,
   PilotBadge,
+  PilotButton,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -385,9 +386,9 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
         title={detail ? detail.countNumber : "Leltár"}
         description={detail ? `Raktár: ${detail.warehouseName}` : undefined}
         actions={
-          <Button variant="secondary" onClick={backToList.goBack}>
+          <PilotButton variant="secondary" onClick={backToList.goBack}>
             {backToList.fromWithinApp ? "Vissza" : "Vissza a listához"}
-          </Button>
+          </PilotButton>
         }
       />
 
@@ -503,9 +504,9 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
 
               {detail.status === "UPLOADED" && canManage ? (
                 <div className="flex justify-end">
-                  <Button onClick={applyCorrection} disabled={applying}>
+                  <PilotButton onClick={applyCorrection} disabled={applying}>
                     {applying ? "Korrekció folyamatban…" : "Korrekció indítása"}
-                  </Button>
+                  </PilotButton>
                 </div>
               ) : null}
             </CardContent>

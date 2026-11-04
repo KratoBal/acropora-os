@@ -12,6 +12,7 @@ import {
   Textarea,
   PilotFileInput,
   PilotBadge,
+  PilotButton,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -224,9 +225,9 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
         description="Kanonikus identitás, megjelenés, aliasok és forráskapcsolatok."
         actions={
           <Link href={backToList.href}>
-            <Button variant="secondary">
+            <PilotButton variant="secondary">
               {backToList.fromWithinApp ? "Vissza" : "Vissza a listához"}
-            </Button>
+            </PilotButton>
           </Link>
         }
       />
@@ -367,9 +368,9 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
           </Card>
         ) : null}
         <div className="flex justify-end">
-          <Button type="submit" disabled={busy}>
+          <PilotButton type="submit" disabled={busy}>
             {busy ? "Mentés…" : "Változások mentése"}
-          </Button>
+          </PilotButton>
         </div>
       </form>
       {brand ? (
@@ -391,12 +392,12 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
                 <option value="MANUAL">{aliasSourceLabel("MANUAL")}</option>
                 <option value="UNAS">{aliasSourceLabel("UNAS")}</option>
               </Select>
-              <Button
+              <PilotButton
                 disabled={busy || !alias.trim()}
                 onClick={() => void addAlias()}
               >
                 Alias hozzáadása
-              </Button>
+              </PilotButton>
             </div>
             <div className="mt-4 space-y-2">
               {brand.aliases.map((item) => (
@@ -473,19 +474,19 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
               automatikus új hozzárendelés nem történhet.
             </p>
             <div className="mt-5 flex justify-end gap-2">
-              <Button
+              <PilotButton
                 variant="secondary"
                 onClick={() => setConfirmArchive(false)}
               >
                 Mégse
-              </Button>
-              <Button
+              </PilotButton>
+              <PilotButton
                 variant="danger"
                 disabled={busy}
                 onClick={() => void archive()}
               >
                 Archiválás megerősítése
-              </Button>
+              </PilotButton>
             </div>
           </Card>
         </div>

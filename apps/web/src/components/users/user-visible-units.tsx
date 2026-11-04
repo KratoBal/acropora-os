@@ -2,12 +2,12 @@
 
 import {
   Alert,
-  Button,
   Card,
   ConfirmDialog,
   EmptyState,
   Skeleton,
   PilotSelect,
+  PilotButton,
 } from "@acropora/ui";
 import { hasPermission, PERMISSIONS, type UserRole } from "@acropora/types";
 import { useCallback, useEffect, useState } from "react";
@@ -190,13 +190,13 @@ export function UserVisibleUnits({
               <span className="font-medium">
                 {row.department.code} - {row.department.name}
               </span>
-              <Button
+              <PilotButton
                 variant="secondary"
                 disabled={busy}
                 onClick={() => setToRemove(row)}
               >
                 Levétel
-              </Button>
+              </PilotButton>
             </li>
           ))}
         </ul>
@@ -243,13 +243,13 @@ export function UserVisibleUnits({
               </option>
             ))}
           </PilotSelect>
-          <Button
+          <PilotButton
             variant="secondary"
             disabled={!chosen || busy}
             onClick={() => void assign()}
           >
             Hozzáadás
-          </Button>
+          </PilotButton>
         </div>
       ) : null}
 

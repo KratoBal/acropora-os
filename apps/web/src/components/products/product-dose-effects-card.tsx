@@ -9,6 +9,7 @@ import {
   Select,
   Textarea,
   PilotBadge,
+  PilotButton,
 } from "@acropora/ui";
 import {
   AQUARIUM_MEASUREMENT_PARAMETERS,
@@ -505,16 +506,16 @@ export function ProductDoseEffectsCard({
             />
           </label>
           <div className="flex gap-2 pt-1">
-            <Button disabled={busy} onClick={save}>
+            <PilotButton disabled={busy} onClick={save}>
               Mentés
-            </Button>
-            <Button
+            </PilotButton>
+            <PilotButton
               variant="secondary"
               disabled={busy}
               onClick={() => setDraft(null)}
             >
               Mégsem
-            </Button>
+            </PilotButton>
           </div>
         </div>
       ) : null}

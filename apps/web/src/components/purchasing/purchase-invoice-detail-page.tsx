@@ -4,7 +4,6 @@ import { useAssistantEntity } from "../assistant/page-context";
 import {
   Alert,
   Badge,
-  Button,
   Card,
   CardContent,
   CardHeader,
@@ -13,6 +12,7 @@ import {
   Skeleton,
   type PilotTableColumn,
   PilotBadge,
+  PilotButton,
 } from "@acropora/ui";
 import {
   formatMoney,
@@ -237,7 +237,7 @@ export function PurchaseInvoiceDetailPage({
           <div className="flex flex-wrap gap-2">
             {detail && canManage && detail.status !== "CANCELLED" ? (
               <>
-                <Button
+                <PilotButton
                   variant="secondary"
                   onClick={() => {
                     setCancelling(false);
@@ -245,8 +245,8 @@ export function PurchaseInvoiceDetailPage({
                   }}
                 >
                   Adatok javítása
-                </Button>
-                <Button
+                </PilotButton>
+                <PilotButton
                   variant="secondary"
                   onClick={() => {
                     setEditing(false);
@@ -254,12 +254,12 @@ export function PurchaseInvoiceDetailPage({
                   }}
                 >
                   Sztornó
-                </Button>
+                </PilotButton>
               </>
             ) : null}
-            <Button variant="secondary" onClick={backToList.goBack}>
+            <PilotButton variant="secondary" onClick={backToList.goBack}>
               {backToList.fromWithinApp ? "Vissza" : "Vissza a listához"}
-            </Button>
+            </PilotButton>
           </div>
         }
       />

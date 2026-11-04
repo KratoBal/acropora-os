@@ -2,7 +2,6 @@
 
 import {
   Alert,
-  Button,
   Card,
   CardContent,
   FormField,
@@ -11,6 +10,7 @@ import {
   Select,
   Textarea,
   PilotDateField,
+  PilotButton,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -250,16 +250,16 @@ export function ContentCreatePage() {
             ) : null}
 
             <div className="flex flex-wrap gap-2 pt-2">
-              <Button type="submit" disabled={!kuldheto || saving}>
+              <PilotButton type="submit" disabled={!kuldheto || saving}>
                 {saving ? "Mentés…" : "Mentés"}
-              </Button>
-              <Button
+              </PilotButton>
+              <PilotButton
                 type="button"
                 variant="secondary"
                 onClick={() => router.push("/tartalom")}
               >
                 Mégse
-              </Button>
+              </PilotButton>
             </div>
           </form>
         </CardContent>

@@ -1,6 +1,12 @@
 "use client";
 
-import { Alert, Button, EmptyState, Skeleton, Textarea } from "@acropora/ui";
+import {
+  Alert,
+  EmptyState,
+  Skeleton,
+  Textarea,
+  PilotButton,
+} from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
@@ -121,9 +127,9 @@ export function WorksheetEntries({
 
         {canWrite ? (
           draft === null ? (
-            <Button variant="secondary" onClick={() => setDraft("")}>
+            <PilotButton variant="secondary" onClick={() => setDraft("")}>
               Bejegyzés
-            </Button>
+            </PilotButton>
           ) : (
             <div className="space-y-2">
               <Textarea
@@ -133,9 +139,9 @@ export function WorksheetEntries({
                 onChange={(event) => setDraft(event.target.value)}
                 placeholder="Például: szivattyú csere, a régi ment a szervizbe"
               />
-              <Button disabled={busy} onClick={() => void save()}>
+              <PilotButton disabled={busy} onClick={() => void save()}>
                 {busy ? "Mentés…" : "Rögzítés"}
-              </Button>
+              </PilotButton>
             </div>
           )
         ) : null}

@@ -1,7 +1,6 @@
 "use client";
 import {
   Alert,
-  Button,
   Card,
   EmptyState,
   PageHeader,
@@ -9,6 +8,7 @@ import {
   Skeleton,
   type PilotTableColumn,
   PilotBadge,
+  PilotButton,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -120,7 +120,7 @@ export function SeoLandingListPage() {
         actions={
           canManage ? (
             <Link href={`${SEO_LANDING_LIST_PATH}/new`}>
-              <Button>Új válogatás</Button>
+              <PilotButton>Új válogatás</PilotButton>
             </Link>
           ) : null
         }

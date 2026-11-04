@@ -2,7 +2,6 @@
 
 import {
   Alert,
-  Button,
   Icon,
   Pagination,
   PilotBadge,
@@ -267,9 +266,9 @@ export function QuoteListPage() {
           title="Hiba történt"
           description={error}
           action={
-            <Button variant="secondary" onClick={() => void load()}>
+            <PilotButton variant="secondary" onClick={() => void load()}>
               Újra
-            </Button>
+            </PilotButton>
           }
         />
       ) : loading && !data ? (

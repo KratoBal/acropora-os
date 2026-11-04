@@ -39,10 +39,7 @@ const HATRA = new Map<string, string[]>([
     "components/brands/brand-editor-page.tsx",
     ["Button", "Card", "FormField", "Input", "Select"],
   ],
-  [
-    "components/brands/brand-list-page.tsx",
-    ["Button", "Card", "Input", "Select"],
-  ],
+  ["components/brands/brand-list-page.tsx", ["Card", "Input", "Select"]],
   ["components/content/article-citations-panel.tsx", ["Button", "Input"]],
   [
     "components/content/article-editor-page.tsx",
@@ -50,11 +47,11 @@ const HATRA = new Map<string, string[]>([
   ],
   [
     "components/content/content-create-page.tsx",
-    ["Button", "Card", "CardContent", "FormField", "Input", "Select"],
+    ["Card", "CardContent", "FormField", "Input", "Select"],
   ],
   [
     "components/customers/customer-list-page.tsx",
-    ["Badge", "Button", "Card", "Input", "Select"],
+    ["Badge", "Card", "Input", "Select"],
   ],
   [
     "components/inventory/inventory-count-detail-page.tsx",
@@ -65,7 +62,6 @@ const HATRA = new Map<string, string[]>([
     ["Badge", "Button", "Card", "Select"],
   ],
   ["components/messages/messages-page.tsx", ["Input"]],
-  ["components/products/product-authority-card.tsx", ["Button"]],
   ["components/products/product-detail-page.tsx", ["Button", "Input"]],
   [
     "components/products/product-dose-effects-card.tsx",
@@ -75,71 +71,57 @@ const HATRA = new Map<string, string[]>([
   ["components/products/product-shipping-profile-card.tsx", ["Button"]],
   [
     "components/purchasing/purchase-invoice-detail-page.tsx",
-    ["Badge", "Button", "Card", "CardContent", "CardHeader"],
+    ["Badge", "Card", "CardContent", "CardHeader"],
   ],
   [
     "components/purchasing/purchase-invoice-edit-form.tsx",
-    ["Button", "Card", "CardContent", "CardHeader"],
+    ["Card", "CardContent", "CardHeader"],
   ],
   [
     "components/purchasing/purchase-invoice-eu-editor-page.tsx",
-    ["Badge", "Button", "Card", "FormField", "Input"],
+    ["Badge", "Card", "FormField", "Input"],
   ],
   [
     "components/purchasing/purchase-invoice-scans.tsx",
     ["Button", "Card", "CardContent", "CardHeader"],
   ],
-  ["components/quotes/quote-list-page.tsx", ["Button"]],
-  ["components/seo-landing/seo-landing-list-page.tsx", ["Button", "Card"]],
+  ["components/seo-landing/seo-landing-list-page.tsx", ["Card"]],
   [
     "components/service-assets/asset-detail-page.tsx",
     ["Button", "Card", "FormField", "Select"],
   ],
   [
     "components/service-assets/asset-editor-page.tsx",
-    ["Button", "Card", "FormField", "Input", "Select"],
+    ["Card", "FormField", "Input", "Select"],
   ],
-  ["components/service-assets/asset-list-page.tsx", ["Button"]],
   [
     "components/service-assets/pilot/pilot-asset-detail-page.tsx",
-    ["Button", "FormField", "Select"],
+    ["FormField", "Select"],
   ],
   ["components/service-jobs/partner-picker.tsx", ["Select"]],
   [
     "components/service-jobs/service-job-detail-page.tsx",
     ["Badge", "Button", "FormField", "Input"],
   ],
-  ["components/service-jobs/service-job-editor-page.tsx", ["Button", "Input"]],
-  ["components/service-jobs/service-job-list-page.tsx", ["Button"]],
+  ["components/service-jobs/service-job-editor-page.tsx", ["Input"]],
   ["components/service-jobs/service-job-placement-editor.tsx", ["Button"]],
   ["components/settings/mail-image-picker.tsx", ["Button"]],
-  [
-    "components/users/user-list-page.tsx",
-    ["Button", "Card", "Input", "Select"],
-  ],
-  ["components/users/user-visible-units.tsx", ["Button", "Card"]],
-  ["components/webshop-orders/webshop-order-detail-page.tsx", ["Button"]],
-  ["components/webshop-orders/webshop-orders-list-page.tsx", ["Button"]],
+  ["components/users/user-list-page.tsx", ["Card", "Input", "Select"]],
+  ["components/users/user-visible-units.tsx", ["Card"]],
   [
     "components/webshop/stock-sync-outbox-page.tsx",
     ["Button", "Card", "CardContent", "CardHeader"],
   ],
   [
     "components/webshop/webshop-orders-page.tsx",
-    ["Badge", "Button", "Card", "CardContent", "CardHeader"],
+    ["Badge", "Card", "CardContent", "CardHeader"],
   ],
-  [
-    "components/webshop/webshop-product-list-page.tsx",
-    ["Button", "Card", "Input"],
-  ],
-  ["components/worksheets/worksheet-asset-editor.tsx", ["Button"]],
-  ["components/worksheets/worksheet-assignee-editor.tsx", ["Button"]],
-  ["components/worksheets/worksheet-entries.tsx", ["Button"]],
+  ["components/webshop/webshop-product-list-page.tsx", ["Card", "Input"]],
   [
     "components/worksheets/worksheet-line-editor.tsx",
     ["Button", "Card", "Input"],
   ],
-  ["components/worksheets/worksheet-list-page.tsx", ["Avatar", "Button"]],
+  ["components/worksheets/worksheet-list-page.tsx", ["Avatar"]],
   [
     "components/worksheets/worksheet-material-requests.tsx",
     ["Badge", "Button", "Input"],
@@ -149,10 +131,10 @@ const HATRA = new Map<string, string[]>([
 /*
   A SZÁMLÁLÓK (barracuda, #2125): a pontos egyezés megfogja az új vegyes fájlt, de ha valaki ugyanabban a PR-ban a
   sorát is felveszi a listára, a teszt zöld maradna. A két szám ezért külön áll: a lista bővítése két helyen kér
-  módosítást, és a reviewban látszik. Fogyáskor a számot is le kell írni (a lista története: 59 / 141 a #2125-ben, 47 / 129 a #2134-ben).
+  módosítást, és a reviewban látszik. Fogyáskor a számot is le kell írni (a lista története: 59 / 141 a #2125-ben, 47 / 129 a #2134-ben, 45 / 120 a #2137-ben).
 */
-const HATRA_MERET = 45;
-const HATRA_IKREK = 120;
+const HATRA_MERET = 36;
+const HATRA_IKREK = 96;
 
 /*
   A GYEREK-LISTA (barracuda, #2125): egy pilot fájl által importált, CSAK duskot használó .tsx (relatív vagy `@/`

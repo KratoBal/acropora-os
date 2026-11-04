@@ -3,7 +3,6 @@ import { formatDateTimeHu } from "@/lib/format/date";
 import Link from "next/link";
 import {
   Alert,
-  Button,
   EmptyState,
   Icon,
   Pagination,
@@ -770,9 +769,9 @@ export function WebshopOrdersListPage() {
           title="A rendelések nem töltődtek be"
           description={error}
           action={
-            <Button variant="secondary" onClick={() => void load()}>
+            <PilotButton variant="secondary" onClick={() => void load()}>
               Újra
-            </Button>
+            </PilotButton>
           }
         />
       ) : null}

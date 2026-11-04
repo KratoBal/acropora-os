@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Button, PilotBadge, PilotSection } from "@acropora/ui";
+import { Alert, PilotBadge, PilotSection, PilotButton } from "@acropora/ui";
 import type { ProductDetail } from "@acropora/types";
 import { useState } from "react";
 
@@ -166,26 +166,26 @@ export function ProductAuthorityCard({
               Visszaadni egyelőre nem lehet.
             </p>
             <div className="flex gap-2">
-              <Button
+              <PilotButton
                 variant="danger"
                 onClick={() => void take()}
                 disabled={busy}
               >
                 Átvesszük a törzsadatot
-              </Button>
-              <Button
+              </PilotButton>
+              <PilotButton
                 variant="secondary"
                 onClick={() => setConfirming(false)}
                 disabled={busy}
               >
                 Mégsem
-              </Button>
+              </PilotButton>
             </div>
           </div>
         ) : (
-          <Button variant="secondary" onClick={() => setConfirming(true)}>
+          <PilotButton variant="secondary" onClick={() => setConfirming(true)}>
             Törzsadat átvétele
-          </Button>
+          </PilotButton>
         )
       ) : null}
     </PilotSection>

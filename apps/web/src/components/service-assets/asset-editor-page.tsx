@@ -2,13 +2,13 @@
 
 import {
   Alert,
-  Button,
   Card,
   FormField,
   Input,
   Select,
   Textarea,
   PilotDateField,
+  PilotButton,
 } from "@acropora/ui";
 import {
   assetLabelCreateProblem,
@@ -1298,21 +1298,21 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
             title="Már létezik ilyen nevű eszköz"
             action={
               <div className="flex shrink-0 gap-2">
-                <Button
+                <PilotButton
                   type="button"
                   variant="secondary"
                   onClick={() => setNameDuplicates(null)}
                   disabled={busy}
                 >
                   Mégsem
-                </Button>
-                <Button
+                </PilotButton>
+                <PilotButton
                   type="button"
                   onClick={confirmDespiteDuplicateName}
                   disabled={busy}
                 >
                   Mentés mégis
-                </Button>
+                </PilotButton>
               </div>
             }
           >
@@ -1332,17 +1332,17 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
             a masodik helyen, ahol szukseg van ra. */}
         <div className="flex justify-end gap-2">
           <Link href={backToList.href}>
-            <Button type="button" variant="secondary" disabled={busy}>
+            <PilotButton type="button" variant="secondary" disabled={busy}>
               Mégsem
-            </Button>
+            </PilotButton>
           </Link>
-          <Button type="submit" disabled={busy || loadingOptions}>
+          <PilotButton type="submit" disabled={busy || loadingOptions}>
             {busy
               ? "Mentés…"
               : assetId
                 ? "Módosítások mentése"
                 : "Eszköz létrehozása"}
-          </Button>
+          </PilotButton>
         </div>
       </form>
     </div>

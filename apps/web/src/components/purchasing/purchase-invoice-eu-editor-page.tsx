@@ -3,7 +3,6 @@
 import {
   Alert,
   Badge,
-  Button,
   Card,
   FormField,
   Icon,
@@ -1365,12 +1364,12 @@ export function PurchaseInvoiceEuEditorPage() {
               : ""
           }`}
           action={
-            <Button
+            <PilotButton
               variant="secondary"
               onClick={() => router.push(`/beszerzes/${lastResult.detail.id}`)}
             >
               Számla megnyitása
-            </Button>
+            </PilotButton>
           }
         />
       ) : null}
@@ -1519,7 +1518,7 @@ export function PurchaseInvoiceEuEditorPage() {
                             }
                           />
                           {!isDomestic ? (
-                            <Button
+                            <PilotButton
                               type="button"
                               variant="secondary"
                               disabled={
@@ -1528,7 +1527,7 @@ export function PurchaseInvoiceEuEditorPage() {
                               onClick={() => void checkVies()}
                             >
                               {viesBusy ? "Ellenőrzés…" : "VIES"}
-                            </Button>
+                            </PilotButton>
                           ) : null}
                         </div>
                         {!isDomestic && viesResult ? (
@@ -1602,14 +1601,14 @@ export function PurchaseInvoiceEuEditorPage() {
                       </FormField>
                     </div>
                     <div className="flex justify-end gap-2">
-                      <Button
+                      <PilotButton
                         type="button"
                         variant="secondary"
                         onClick={() => setShowNewSupplier(false)}
                       >
                         Mégse
-                      </Button>
-                      <Button
+                      </PilotButton>
+                      <PilotButton
                         type="button"
                         disabled={
                           !newSupplierName.trim() ||
@@ -1621,7 +1620,7 @@ export function PurchaseInvoiceEuEditorPage() {
                         {creatingSupplier
                           ? "Létrehozás…"
                           : "Beszállító létrehozása"}
-                      </Button>
+                      </PilotButton>
                     </div>
                   </div>
                 )}

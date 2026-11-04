@@ -3,7 +3,6 @@
 import {
   Alert,
   Avatar,
-  Button,
   EmptyState,
   Pagination,
   Skeleton,
@@ -259,10 +258,10 @@ export function WorksheetListPage() {
         action={
           canManage ? (
             <Link href="/szerviz/munkalapok/uj">
-              <Button>
+              <PilotButton>
                 <ServiceIcon name="plus" className="mr-1.5 size-[17px]" />
                 Új munkalap
-              </Button>
+              </PilotButton>
             </Link>
           ) : undefined
         }
@@ -318,13 +317,13 @@ export function WorksheetListPage() {
                 </PilotSelect>
               </label>
             ) : null}
-            <Button
+            <PilotButton
               variant={mineOnly ? "primary" : "secondary"}
               disabled={!userId}
               onClick={() => filter("assigneeId", mineOnly ? "" : userId)}
             >
               {mineOnly ? "Minden munkalap" : "Csak amit rám osztottak"}
-            </Button>
+            </PilotButton>
             {/* A REJTETTEK CSAK KERESRE JONNEK, ES A JELOLO CSAK ANNAK LATSZIK,
                 AKI VISSZA IS TUDJA ALLITANI OKET.
 
@@ -332,14 +331,14 @@ export function WorksheetListPage() {
                 valtoztatni, csak annyit lat, hogy a lista neha hosszabb --
                 es nem erti, miert. */}
             {canHide ? (
-              <Button
+              <PilotButton
                 variant={includeHidden ? "primary" : "secondary"}
                 onClick={() =>
                   filter("includeHidden", includeHidden ? "" : "true")
                 }
               >
                 {includeHidden ? "Rejtettek nélkül" : "Rejtettek is"}
-              </Button>
+              </PilotButton>
             ) : null}
           </div>
         </div>

@@ -2,7 +2,6 @@
 
 import {
   Alert,
-  Button,
   ConfirmDialog,
   FormField,
   Icon,
@@ -699,12 +698,12 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
                           }
                         />
                       </FormField>
-                      <Button
+                      <PilotButton
                         disabled={!documentFile || busy}
                         onClick={() => void uploadDocument()}
                       >
                         Feltöltés
-                      </Button>
+                      </PilotButton>
                     </div>
                   ) : null}
                 </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@acropora/ui";
+import { PilotButton } from "@acropora/ui";
 import type { WorksheetAssignee, WorksheetDetail } from "@acropora/types";
 import { useEffect, useState } from "react";
 
@@ -107,14 +107,14 @@ export function WorksheetAssigneeEditor({
                 {error ?? candidatesError}
               </p>
             ) : null}
-            <Button
+            <PilotButton
               type="button"
               variant="secondary"
               disabled={!changed || saving}
               onClick={() => void save()}
             >
               {saving ? "Mentés..." : "Felelősök mentése"}
-            </Button>
+            </PilotButton>
           </>
         ) : null}
       </div>

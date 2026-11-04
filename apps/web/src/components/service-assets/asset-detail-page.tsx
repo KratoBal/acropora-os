@@ -369,7 +369,7 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
         actions={
           canManage && asset && !deleted ? (
             <Link href={`/szerviz/eszkozok/${asset.id}/szerkesztes`}>
-              <Button>Eszköz módosítása</Button>
+              <PilotButton>Eszköz módosítása</PilotButton>
             </Link>
           ) : undefined
         }
@@ -797,12 +797,12 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                         }
                       />
                     </FormField>
-                    <Button
+                    <PilotButton
                       disabled={!documentFile || busy}
                       onClick={() => void uploadDocument()}
                     >
                       Feltöltés
-                    </Button>
+                    </PilotButton>
                   </div>
                 ) : null}
               </Card>
@@ -843,15 +843,17 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                       dangerouslySetInnerHTML={{ __html: qr.svg }}
                     />
                     <div className="mt-4 grid gap-2">
-                      <Button onClick={downloadQr}>QR letöltése (SVG)</Button>
+                      <PilotButton onClick={downloadQr}>
+                        QR letöltése (SVG)
+                      </PilotButton>
                       {canManage ? (
-                        <Button
+                        <PilotButton
                           variant="secondary"
                           disabled={busy}
                           onClick={() => setPending({ kind: "rotate-qr" })}
                         >
                           QR-kód lecserélése
-                        </Button>
+                        </PilotButton>
                       ) : null}
                     </div>
                   </div>
@@ -896,9 +898,9 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                         onChange={(event) => setNotes(event.target.value)}
                       />
                     </FormField>
-                    <Button disabled={busy} onClick={() => void save()}>
+                    <PilotButton disabled={busy} onClick={() => void save()}>
                       {busy ? "Mentés…" : "Állapot mentése"}
-                    </Button>
+                    </PilotButton>
                   </div>
                 </Card>
               ) : null}
