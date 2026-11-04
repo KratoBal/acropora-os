@@ -32,6 +32,7 @@ async function removeLeftovers() {
   await prisma.salesOrder.deleteMany({
     where: { orderNumber: { startsWith: PREFIX } },
   });
+  await prisma.supplier.deleteMany({ where: { code: { startsWith: PREFIX } } });
   await prisma.customer.deleteMany({
     where: { customerNumber: { startsWith: PREFIX } },
   });
@@ -48,11 +49,15 @@ describe(
     before(async () => {
       if (gate.mode === "refuse") throw new Error(gate.reason);
       await removeLeftovers();
-      const customer = async (key: string, taxNumber?: string) => {
+      const customer = async (
+        key: string,
+        taxNumber?: string,
+        type: "COMPANY" | "PERSON" = "COMPANY",
+      ) => {
         const row = await prisma.customer.create({
           data: {
             customerNumber: `${PREFIX}${key}-${n}`,
-            type: "COMPANY",
+            type,
             displayName: `${PREFIX}${key}`,
             ...(taxNumber ? { taxNumber } : {}),
           },
@@ -75,6 +80,15 @@ describe(
       await customer("foreign");
       await customer("kept", "11111111-1-11");
       await customer("none");
+      await customer("person", undefined, "PERSON");
+      await customer("mirror");
+      await prisma.supplier.create({
+        data: {
+          code: `${PREFIX}sup-${n}`,
+          name: `${PREFIX}mirror`,
+          customerId: ids.mirror!,
+        },
+      });
       // the same number twice, in two forms: one number; the latest form goes in
       await order("one", "15490658242", "2026-09-01");
       await order("one", " 15490658-2-42 ", "2026-10-01");
@@ -82,6 +96,9 @@ describe(
       await order("conflict", "22222222-2-22", "2026-10-01");
       await order("foreign", "DE123456789", "2026-10-01");
       await order("kept", "33333333-3-33", "2026-10-01");
+      // a person who once ordered on a company invoice, and a partner's mirror (barracuda, #2163)
+      await order("person", "44444444-4-44", "2026-10-01");
+      await order("mirror", "55555555-5-55", "2026-10-01");
     });
 
     after(removeLeftovers);
@@ -101,6 +118,8 @@ describe(
             foreign: tax.get(ids.foreign!),
             kept: tax.get(ids.kept!),
             none: tax.get(ids.none!),
+            person: tax.get(ids.person!),
+            mirror: tax.get(ids.mirror!),
           },
           {
             one: "15490658-2-42",
@@ -108,6 +127,8 @@ describe(
             foreign: null,
             kept: "11111111-1-11",
             none: null,
+            person: null,
+            mirror: null,
           },
           `round ${round}`,
         );
@@ -122,7 +143,18 @@ describe(
           select: { eventType: true, payload: true },
         });
         assert.equal(event?.eventType, "customer.tax-number-backfilled");
-        const counts = event!.payload as Record<string, number>;
+        const counts = event!.payload as Record<string, number> & {
+          filledIds: string[];
+        };
+        // the ids make a wrong fill reversible: ours is in, the skipped ones are not
+        assert.ok(counts.filledIds.includes(ids.one!), `round ${round}: one`);
+        for (const key of ["conflict", "foreign", "kept", "person", "mirror"])
+          assert.ok(
+            !counts.filledIds.includes(ids[key]!),
+            `round ${round}: ${key}`,
+          );
+        assert.equal(counts.filled, counts.filledIds.length, `round ${round}`);
+        assert.ok(counts.persons! >= 1, `round ${round}: persons`);
         assert.ok(counts.filled! >= 1, `round ${round}: filled`);
         assert.ok(counts.conflicting! >= 1, `round ${round}: conflicting`);
         assert.ok(counts.notHungarian! >= 1, `round ${round}: notHungarian`);

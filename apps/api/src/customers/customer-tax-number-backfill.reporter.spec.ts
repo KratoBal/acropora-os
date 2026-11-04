@@ -14,7 +14,13 @@ import {
  * után is ír; ha egy olvasási hiba megállítja az indulást.
  */
 const event = (over: Partial<BackfillEvent> = {}): BackfillEvent => ({
-  payload: { filled: 12, conflicting: 2, notHungarian: 1 },
+  payload: {
+    filled: 12,
+    conflicting: 2,
+    notHungarian: 1,
+    persons: 4,
+    filledIds: ["c1"],
+  },
   occurredAt: new Date("2026-11-04T16:00:00.000Z"),
   ...over,
 });
@@ -23,7 +29,7 @@ describe("a visszatöltés naplósora", () => {
   it("a számokat a flotta által keresett alakban írja", () => {
     assert.equal(
       backfillReportLine(event(), new Date("2026-11-04T16:05:00.000Z")),
-      "VEVO-ADOSZAM-VISSZATOLTES kitoltve=12 kimaradt_ellentmondas=2 kimaradt_nem_magyar=1",
+      "VEVO-ADOSZAM-VISSZATOLTES kitoltve=12 kimaradt_ellentmondas=2 kimaradt_nem_magyar=1 kimaradt_maganszemely=4",
     );
   });
 
@@ -38,7 +44,7 @@ describe("a visszatöltés naplósora", () => {
         event({ payload: { filled: 3 } }),
         new Date("2026-11-04T16:05:00.000Z"),
       ),
-      "VEVO-ADOSZAM-VISSZATOLTES kitoltve=3 kimaradt_ellentmondas=? kimaradt_nem_magyar=?",
+      "VEVO-ADOSZAM-VISSZATOLTES kitoltve=3 kimaradt_ellentmondas=? kimaradt_nem_magyar=? kimaradt_maganszemely=?",
     );
   });
 

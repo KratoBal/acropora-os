@@ -8,7 +8,7 @@ import { Prisma, Repository, prisma } from "@acropora/database";
  * sorba írja, mert a `prisma migrate deploy` a Postgres üzeneteit nem írja ki (mérve
  * 2026-11-04), a flotta pedig csak az API naplóját olvassa. Az API induláskor ezt a sort
  * kiolvassa, és a telepítés után TIZENNÉGY NAPIG minden induláskor egy sort ír:
- *   VEVO-ADOSZAM-VISSZATOLTES kitoltve=N kimaradt_ellentmondas=M kimaradt_nem_magyar=K
+ *   VEVO-ADOSZAM-VISSZATOLTES kitoltve=N kimaradt_ellentmondas=M kimaradt_nem_magyar=K kimaradt_maganszemely=P
  * Ha a sor hiányzik (a migráció még nem futott), nem ír semmit. A hiba nem állítja meg
  * az indulást.
  */
@@ -38,7 +38,7 @@ export function backfillReportLine(
     BACKFILL_REPORT_DAYS * 86_400_000
   )
     return null;
-  return `VEVO-ADOSZAM-VISSZATOLTES kitoltve=${count(event.payload, "filled")} kimaradt_ellentmondas=${count(event.payload, "conflicting")} kimaradt_nem_magyar=${count(event.payload, "notHungarian")}`;
+  return `VEVO-ADOSZAM-VISSZATOLTES kitoltve=${count(event.payload, "filled")} kimaradt_ellentmondas=${count(event.payload, "conflicting")} kimaradt_nem_magyar=${count(event.payload, "notHungarian")} kimaradt_maganszemely=${count(event.payload, "persons")}`;
 }
 
 @Injectable()
