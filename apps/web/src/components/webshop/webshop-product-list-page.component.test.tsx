@@ -21,6 +21,10 @@ vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({ session: auth.session, isLoading: false }),
 }));
 vi.mock("@/lib/api/products", () => ({ productApi: api }));
+// the shipping column's badge reaches the pilot font (next/font/local), which only Next resolves (CI #2200)
+vi.mock("next/font/local", () => ({
+  default: () => ({ className: "pilot-inter-stub" }),
+}));
 
 const ownerSession: Session = {
   id: "session-owner",
