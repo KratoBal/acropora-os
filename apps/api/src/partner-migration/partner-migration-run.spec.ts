@@ -219,6 +219,7 @@ function fakeTx(seed: {
   /** a további hivatkozó táblák használata: tábla -> vevő-sor -> darab */
   moreUsage?: Record<string, Record<string, number>>;
 }) {
+  const deletedLogs: Record<string, unknown>[] = [];
   const suppliers = new Map(
     seed.suppliers.map((s) => [s.id, { customerId: null, ...s }]),
   );
@@ -324,7 +325,17 @@ function fakeTx(seed: {
     reefClubCustomerLink: {
       count: moreOf("reefClubCustomerLink", "customerId"),
     },
-    customerMergeLog: { count: moreOf("customerMergeLog", "log") },
+    customerMergeLog: {
+      // a fake csak az ÉLŐ naplókat számolja (a `moreUsage.customerMergeLog` az élők száma); a szűrő megléte a tesztek tárgya
+      count: async (args: { where: Record<string, unknown> }) =>
+        args.where.undoneAt === null
+          ? await moreOf("customerMergeLog", "log")(args)
+          : 99,
+      deleteMany: async (args: { where: Record<string, unknown> }) => {
+        deletedLogs.push(args.where);
+        return { count: 1 };
+      },
+    },
     customerAlias: { count: moreOf("customerAlias", "customerId") },
   } as unknown as Tx;
   const createRow = async (_tx: Tx, supplier: { id: string }) => {
@@ -333,7 +344,15 @@ function fakeTx(seed: {
     suppliers.get(supplier.id)!.customerId = id;
     return id;
   };
-  return { tx, suppliers, customers, references, events, createRow };
+  return {
+    tx,
+    suppliers,
+    customers,
+    references,
+    events,
+    createRow,
+    deletedLogs,
+  };
 }
 
 describe("applyOperations and restoreRegistered", () => {
@@ -533,6 +552,38 @@ describe("applyOperations and restoreRegistered", () => {
       );
       assert.equal(world.customers.has("new-s-NEW"), true, table);
     }
+  });
+
+  it("a created row whose merge was undone is restorable: the undone log does not hold it, and only undone logs are deleted with it", async () => {
+    // the only log of the row is an undone one (the live count is zero)
+    const world = fakeTx({
+      suppliers: [{ id: "s-NEW", code: "NEW" }],
+      customers: [],
+    });
+    await applyOperations(
+      world.tx,
+      [{ kind: "CREATE", supplierId: "s-NEW", code: "NEW" }],
+      null,
+      world.createRow,
+    );
+    const dry = await restoreRegistered(world.tx, null, true);
+    assert.deepEqual(
+      dry.map((o) => o.result),
+      ["RESTORED"],
+    );
+    assert.deepEqual(world.deletedLogs, [], "the dry run deletes nothing");
+    const outcomes = await restoreRegistered(world.tx, null);
+    assert.deepEqual(
+      outcomes.map((o) => o.result),
+      ["RESTORED"],
+    );
+    assert.equal(world.customers.has("new-s-NEW"), false);
+    assert.equal(world.deletedLogs.length, 1);
+    // a live log can never be deleted: the filter names the undone ones
+    assert.deepEqual(world.deletedLogs[0], {
+      OR: [{ keptId: "new-s-NEW" }, { mergedId: "new-s-NEW" }],
+      undoneAt: { not: null },
+    });
   });
 
   it("the dry-run restore writes nothing", async () => {

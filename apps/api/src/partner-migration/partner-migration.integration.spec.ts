@@ -38,18 +38,30 @@ async function removeLeftovers() {
     select: { id: true, customerId: true },
   });
   await prisma.supplier.deleteMany({ where: { code: { startsWith: PREFIX } } });
-  await prisma.customer.deleteMany({
+  const customerWhere = {
+    OR: [
+      { customerNumber: { startsWith: PREFIX } },
+      {
+        id: {
+          in: suppliers.flatMap((s) => (s.customerId ? [s.customerId] : [])),
+        },
+      },
+    ],
+  };
+  const rows = await prisma.customer.findMany({
+    where: customerWhere,
+    select: { id: true },
+  });
+  // a merge log's keys are Restrict: the logs of the leftover rows go first
+  await prisma.customerMergeLog.deleteMany({
     where: {
       OR: [
-        { customerNumber: { startsWith: PREFIX } },
-        {
-          id: {
-            in: suppliers.flatMap((s) => (s.customerId ? [s.customerId] : [])),
-          },
-        },
+        { keptId: { in: rows.map((r) => r.id) } },
+        { mergedId: { in: rows.map((r) => r.id) } },
       ],
     },
   });
+  await prisma.customer.deleteMany({ where: customerWhere });
 }
 
 describe(
@@ -196,6 +208,59 @@ describe(
       assert.equal(
         again.filter((o) => [ids.new, ids.bound].includes(o.supplierId)).length,
         0,
+      );
+    });
+
+    it("a created row whose merge was undone is restored (its undone log goes with it); a live merge log keeps the row", async () => {
+      const create = () =>
+        run((tx) =>
+          applyOperations(
+            tx,
+            [{ kind: "CREATE", supplierId: ids.new!, code: "new" }],
+            null,
+          ),
+        );
+      await create();
+      const created = await prisma.supplier.findUniqueOrThrow({
+        where: { id: ids.new! },
+        select: { customerId: true },
+      });
+      const rowId = created.customerId!;
+      // the Restrict keys on the log are the reason a plain delete would fail: the undone log must be removed with the row
+      const undone = await prisma.customerMergeLog.create({
+        data: {
+          keptId: rowId,
+          mergedId: ids.free!,
+          movedRefs: [],
+          undoneAt: new Date(),
+        },
+      });
+      const restored = await run((tx) => restoreRegistered(tx, null));
+      assert.equal(
+        restored.find((o) => o.supplierId === ids.new)?.result,
+        "RESTORED",
+      );
+      assert.equal(
+        await prisma.customer.findUnique({ where: { id: rowId } }),
+        null,
+      );
+      assert.equal(
+        await prisma.customerMergeLog.findUnique({ where: { id: undone.id } }),
+        null,
+      );
+      // a live (not undone) log keeps the row
+      await create();
+      const again = await prisma.supplier.findUniqueOrThrow({
+        where: { id: ids.new! },
+        select: { customerId: true },
+      });
+      const live = await prisma.customerMergeLog.create({
+        data: { keptId: again.customerId!, mergedId: ids.free!, movedRefs: [] },
+      });
+      const kept = await run((tx) => restoreRegistered(tx, null));
+      assert.equal(kept.find((o) => o.supplierId === ids.new)?.result, "KEPT");
+      assert.ok(
+        await prisma.customerMergeLog.findUnique({ where: { id: live.id } }),
       );
     });
   },
