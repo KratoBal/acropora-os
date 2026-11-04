@@ -2,7 +2,14 @@
 
 import { SutyerakWidget } from "./assistant/sutyerak-widget";
 import { AssistantPageProvider } from "./assistant/page-context";
-import { Badge, Button, Icon, useThemePreference } from "@acropora/ui";
+import {
+  Badge,
+  Button,
+  Icon,
+  PAGE_GUTTER_X,
+  PAGE_GUTTER_Y,
+  useThemePreference,
+} from "@acropora/ui";
 import {
   isNavigationEntryVisible,
   servedNavigationFeatures,
@@ -428,7 +435,7 @@ export function AppShell({
         */}
           <header
             data-theme={effectiveTheme}
-            className="sticky top-0 z-20 flex h-12 items-center border-b border-pilot-grey-200 bg-white/95 px-4 font-sans backdrop-blur sm:px-6 lg:px-8"
+            className={`sticky top-0 z-20 flex h-12 items-center border-b border-pilot-grey-200 bg-white/95 ${PAGE_GUTTER_X} font-sans backdrop-blur`}
           >
             <div className="flex items-center gap-3 lg:hidden">
               <Button
@@ -473,7 +480,9 @@ export function AppShell({
             </div>
           </header>
 
-          <main className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+          <main
+            className={`mx-auto w-full max-w-[1600px] ${PAGE_GUTTER_X} ${PAGE_GUTTER_Y}`}
+          >
             {children}
           </main>
         </div>
