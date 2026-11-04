@@ -1,4 +1,5 @@
 import { QuotesModule } from "./quotes/quotes.module.js";
+import { PartnerOrdersModule } from "./partner-orders/partner-orders.module.js";
 import { CashRegisterModule } from "./cash-registers/cash-register.module.js";
 import {
   Module,
@@ -76,6 +77,7 @@ import { MortalityModule } from "./mortality/mortality.module.js";
 @Module({
   imports: [
     QuotesModule,
+    PartnerOrdersModule,
     AssistantModule,
     AssetCategoriesModule,
     AssetFunctionsModule,

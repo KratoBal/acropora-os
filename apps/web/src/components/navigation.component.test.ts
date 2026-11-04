@@ -173,7 +173,10 @@ describe("navigation", () => {
         "Akvarisztika",
         ["Akváriumok", "Kalkulátorok", "ICP", "Elhullási napló"],
       ],
-      ["Értékesítés", ["POS", "Árajánlatok", "Partnerek", "Szerződések"]],
+      [
+        "Értékesítés",
+        ["POS", "Árajánlatok", "Megrendelések", "Partnerek", "Szerződések"],
+      ],
       [
         "Pénzügy",
         ["Számlázás", "NAV számla lekérés", "Hiányzó számlák", "Elszámolások"],
@@ -416,6 +419,7 @@ describe("navigation", () => {
     ["/beszerzes/arlistak", "price-lists", "Beszállítói árlisták"],
     ["/penzugy/szamlazas", "billing", "Számlázás"],
     ["/ajanlatok", "quotes", "Árajánlatok"],
+    ["/megrendelesek", "partner-orders", "Megrendelések"],
     ["/penzugy/elszamolasok", "settlements", "Elszámolások"],
     ["/penzugy/hianyzo-szamlak", "missing-invoices", "Hiányzó számlák"],
     ["/raktar", "inventory", "Leltár"],
@@ -753,6 +757,8 @@ describe("navigation", () => {
     // Az Árajánlatok (#1582 P1) a bevezetés UTÁN jött; a jog a forrásé
     // (`quotes.view`), a menüpontot ezen felül a `quotes` kapcsoló rejti.
     "/ajanlatok": "quotes.view",
+    // Megrendelések (2026-11-04): ugyanaz a jog és kapcsoló, mint az ajánlatoké.
+    "/megrendelesek": "quotes.view",
     "/penzugy/elszamolasok": "finance.view",
     // A Hiányzó számlák 2026-09-30-án jött, a bevezetés UTÁN; a jog az
     // Elszámolásoké (`finance.view`).

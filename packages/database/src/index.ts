@@ -20,6 +20,8 @@ export type {
   MeretDimenzio,
   MeretKategoria,
   OriginScope,
+  PartnerOrderDocumentStep,
+  PartnerOrderStatus,
   CustomerAddress,
   DomainEvent,
   ExternalReference,

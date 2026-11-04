@@ -1713,3 +1713,20 @@ export type {
   SupplierPriceRow,
   VariantSupplierPrices,
 } from "./supplier-price-lists.js";
+export {
+  PARTNER_ORDER_DOCUMENT_STEPS,
+  PARTNER_ORDER_STATUSES,
+} from "./partner-orders.js";
+export type {
+  PartnerOrderCandidateDto,
+  PartnerOrderChain,
+  PartnerOrderDetailDto,
+  PartnerOrderDocumentDto,
+  PartnerOrderDocumentStepValue,
+  PartnerOrderLineDto,
+  PartnerOrderListItemDto,
+  PartnerOrderListResponse,
+  PartnerOrderStatusValue,
+  PartnerOrderTotalsDto,
+  PartnerOrderVatBreakdownDto,
+} from "./partner-orders.js";
