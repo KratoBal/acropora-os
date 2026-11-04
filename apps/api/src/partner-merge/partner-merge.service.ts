@@ -17,6 +17,7 @@ import {
 } from "@acropora/types";
 
 import {
+  departmentConflicts,
   planFieldMerge,
   planRowBlockers,
   previewFingerprint,
@@ -114,6 +115,8 @@ interface FieldChangeLog {
     kind: string;
     into: string;
     before?: string | null;
+    /** csak a `move` fajtánál: az ÁTVITT érték (a visszavonás csak akkor mozgat, ha a megmaradón még ez áll) */
+    value?: string | null;
   }>;
   mergedWasActive: boolean;
 }
@@ -175,6 +178,29 @@ async function countReferences(
   return counts;
 }
 
+/** A megszűnő sor hivatkozó sorainak azonosítói táblánként (a lenyomat ezekből készül, nem csak a számból). */
+async function referenceIds(
+  tx: Tx,
+  customerId: string,
+): Promise<Partial<Record<PartnerMergeReferenceTable, string[]>>> {
+  const ids: Partial<Record<PartnerMergeReferenceTable, string[]>> = {};
+  for (const spec of REFERENCE_SPECS) {
+    const rows = await delegateOf(tx, spec).findMany({
+      where: { [spec.field]: customerId, ...spec.where },
+      select: { id: true },
+    });
+    if (rows.length > 0) ids[spec.table] = rows.map((row) => row.id);
+  }
+  return ids;
+}
+
+const countsOf = (
+  ids: Partial<Record<PartnerMergeReferenceTable, string[]>>,
+): Partial<Record<PartnerMergeReferenceTable, number>> =>
+  Object.fromEntries(
+    Object.entries(ids).map(([table, list]) => [table, list.length]),
+  );
+
 const sideOf = (
   row: CustomerRow | null,
   references: Partial<Record<PartnerMergeReferenceTable, number>>,
@@ -221,10 +247,11 @@ export async function buildPreview(
     kept && merged
       ? planFieldMerge(kept, merged)
       : { keptData: {}, clearOnMerged: [], fills: [], notes: [], blockers: [] };
-  const [keptRefs, mergedRefs] = await Promise.all([
+  const [keptRefs, mergedIds] = await Promise.all([
     keptRow ? countReferences(tx, keptId) : Promise.resolve({}),
-    mergedRow ? countReferences(tx, mergedId) : Promise.resolve({}),
+    mergedRow ? referenceIds(tx, mergedId) : Promise.resolve({}),
   ]);
+  const mergedRefs = countsOf(mergedIds);
   // EGY VEVŐ-SORON MA EGY UNAS-FIÓK ÁLLHAT (az ExternalReference entitás-kulcsa egyedi): ha mindkét sornak van, az áthelyezés az
   // adatbázis egyediségén bukna, ezért előre megáll, és megnevezi az okot. A több fiókot engedő sémaváltozás külön lépés.
   if (
@@ -233,6 +260,21 @@ export async function buildPreview(
   )
     fields.blockers.push(
       "Mindkét sornak van UNAS-hivatkozása: egy vevő-soron ma egy UNAS-fiók állhat (a több fiókot engedő sémaváltozás külön lépés).",
+    );
+  // az egyedi kulcs, amiben a vevő szerepel (WorksheetDepartment: ügyfél + szülő + kód): az ütközést előre megnevezzük
+  if (
+    keptRow &&
+    mergedRow &&
+    (mergedRefs as Record<string, number>).WorksheetDepartment
+  )
+    fields.blockers.push(
+      ...departmentConflicts(
+        await tx.worksheetDepartment.findMany({
+          where: { customerId: { in: [keptId, mergedId] } },
+          select: { customerId: true, parentId: true, code: true },
+        }),
+        { keptId, mergedId },
+      ),
     );
   const blockers = [...rows.blockers, ...fields.blockers];
   const preview: PartnerMergePreview = {
@@ -250,6 +292,7 @@ export async function buildPreview(
       keptId,
       mergedId,
       willMove: mergedRefs,
+      movedIds: mergedIds,
       fieldFills: fields.fills,
     }),
   };
@@ -400,6 +443,12 @@ export class PartnerMergeService {
         fills: built.preview.fieldFills.map((fill) => ({
           ...fill,
           ...(fill.kind === "type" ? { before: keptRow.type } : {}),
+          ...(fill.kind === "move"
+            ? {
+                value:
+                  (built.keptData[fill.into] as string | undefined) ?? null,
+              }
+            : {}),
         })),
         mergedWasActive: mergedRow.isActive,
       };
@@ -571,7 +620,12 @@ export class PartnerMergeService {
         if (fill.kind === "type") {
           if (kept.type === "COMPANY") keptUpdate.type = fill.before ?? null;
         } else if (fill.kind === "move") {
-          if (keptValue !== null && keptValue !== undefined) {
+          // csak akkor, ha a megmaradón még az átvitt kód áll (egy azóta kézzel átírt kódot nem viszünk vissza); a régi naplóbejegyzés
+          // az átvitt értéket nem tárolta, ott marad a korábbi viselkedés
+          const unchanged =
+            fill.value === undefined ||
+            (typeof keptValue === "string" && keptValue.trim() === fill.value);
+          if (keptValue !== null && keptValue !== undefined && unchanged) {
             mergedUpdate[fill.field] = keptValue as string;
             keptUpdate[fill.into] = null;
           }
@@ -609,7 +663,12 @@ export class PartnerMergeService {
           schemaVersion: 1,
         },
       });
-      return { logId: log.id, restored, skipped };
+      const notes: string[] = [];
+      if (restored.ExternalReference)
+        notes.push(
+          "A UNAS-hivatkozás visszakerült a megszűnő sorra. Ha az összevonás óta új UNAS-rendelés vagy más rekord érkezett rajta, az a megmaradó soron maradt: ellenőrizd, melyik sorhoz tartozzon.",
+        );
+      return { logId: log.id, restored, skipped, notes };
     });
   }
 

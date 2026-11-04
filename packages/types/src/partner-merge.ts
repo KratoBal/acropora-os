@@ -100,4 +100,6 @@ export interface PartnerMergeUndoResult {
   restored: Partial<Record<PartnerMergeReferenceTable, number>>;
   /** táblánként azok, amik közben máshová kerültek, ezért nem mozdultak */
   skipped: Partial<Record<PartnerMergeReferenceTable, number>>;
+  /** a kezelőnek szánt megjegyzések (például: a visszavont UNAS-hivatkozáson az összevonás óta érkezett rekord a megmaradó soron maradt) */
+  notes: string[];
 }
