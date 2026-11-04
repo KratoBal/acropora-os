@@ -1085,6 +1085,8 @@ model User {
   dashboardLayout                     UserDashboardLayout?
   ownedQuotes                         Quote[]                             @relation("QuoteOwner")
   createdQuotes                       Quote[]                             @relation("QuoteCreator")
+  partnerOrdersCreated                PartnerOrder[]                      @relation("PartnerOrderCreator")
+  partnerOrderDocumentsUploaded       PartnerOrderDocument[]              @relation("PartnerOrderDocumentUploader")
   publishedQuoteVersions              QuoteVersion[]                      @relation("QuotePublisher")
   createdQuoteTemplates               QuoteTemplate[]                     @relation("QuoteTemplateCreator")
   updatedQuoteTemplates               QuoteTemplate[]                     @relation("QuoteTemplateUpdater")
@@ -3067,6 +3069,7 @@ model Customer {
   /// A fiokok, amik ENNEK a vevonek a neveben lepnek be. Nem a mi kollegaink.
   portalUsers          User[]                 @relation("CustomerPortalUser")
   quotes               Quote[]
+  partnerOrders        PartnerOrder[]         @relation("PartnerOrderCustomer")
   /// ReefClub 5. szelet: a vevo bolti osszerendelesei es a neki kiadott kodok.
   reefClubLinks        ReefClubCustomerLink[]
   reefClubLinkCodes    ReefClubLinkCode[]
@@ -9923,6 +9926,7 @@ model Quote {
   /// #1582 P6
   project           Project?              @relation("ProjectSourceQuote")
   handoff           QuoteProjectHandoff?
+  partnerOrder      PartnerOrder?
 
   @@index([status, updatedAt])
   @@index([customerId])
@@ -11408,4 +11412,70 @@ model UserFavorite {
 
   @@unique([userId, href])
   @@index([userId, createdAt])
+}
+
+/// MEGRENDELÉS (Értékesítés > Megrendelések; Ág Luca kérése, 2026-11-04 10:58 UTC). Az állatkerti
+/// megrendelés lánca: ajánlatkérés, ajánlat, ALÁÍRT megrendelőlap (az állatkert küldi), munka kész,
+/// teljesítésigazolás (TIG), aláírt TIG, számla. Egy megrendelés EGY ELFOGADOTT ajánlatból indul
+/// (`quoteId` egyedi), és az ajánlat ELFOGADOTT VERZIÓJÁRA mutat: a tételek és az összeg nem másolódnak,
+/// tehát egy az egyben ugyanazok, mint az ajánlaton. A lánc további lépései (TIG, számla) külön szeletek,
+/// ezért itt még csak a dokumentumok vannak.
+enum PartnerOrderStatus {
+  /// Fut: a munka még nincs kész vagy nincs teljesen igazolva.
+  OPEN
+  /// Minden tétel teljesítve (a TIG-ek lefedik).
+  COMPLETED
+  /// Minden teljesítésről számla készült.
+  INVOICED
+  CANCELLED
+}
+
+/// A LÁNC MELY LÉPÉSÉHEZ TARTOZIK A DOKUMENTUM. Szabad csatolás: a lépés a megjelenítést és a lánc-jelzést
+/// vezérli (mi van meg), nem a sorrendet kényszeríti.
+enum PartnerOrderDocumentStep {
+  INQUIRY
+  QUOTE
+  SIGNED_ORDER_FORM
+  COMPLETION
+  SIGNED_COMPLETION
+  INVOICE
+  OTHER
+}
+
+model PartnerOrder {
+  id          String             @id @default(cuid())
+  orderNumber String             @unique
+  quoteId     String             @unique
+  customerId  String?
+  status      PartnerOrderStatus @default(OPEN)
+  createdById String?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  quote     Quote                  @relation(fields: [quoteId], references: [id], onDelete: Restrict)
+  customer  Customer?              @relation("PartnerOrderCustomer", fields: [customerId], references: [id], onDelete: SetNull)
+  createdBy User?                  @relation("PartnerOrderCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  documents PartnerOrderDocument[]
+
+  @@index([status, createdAt])
+  @@index([customerId])
+}
+
+model PartnerOrderDocument {
+  id           String                   @id @default(cuid())
+  orderId      String
+  step         PartnerOrderDocumentStep
+  fileName     String
+  contentType  String
+  sizeBytes    Int
+  /// Same two-way storage as the other document tables: inline bytes or a document-store key.
+  content      Bytes?
+  storageKey   String?
+  uploadedById String?
+  createdAt    DateTime                 @default(now())
+
+  order      PartnerOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  uploadedBy User?        @relation("PartnerOrderDocumentUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([orderId, step])
 }
