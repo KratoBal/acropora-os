@@ -1,4 +1,5 @@
 import {
+  formatMoney,
   isNavigationEntryVisible,
   type AuthenticatedUser,
   type SearchGroup,
@@ -12,6 +13,7 @@ import {
 } from "../auth/navigation-features.js";
 import { partnerScopeOf } from "../auth/partner-scope.util.js";
 import { InvoiceSearchService } from "../billing/invoice-search.service.js";
+import { QuotesService } from "../quotes/quotes.service.js";
 import { AquariumsService } from "../aquariums/aquariums.service.js";
 import { ServiceAssetsService } from "../service-assets/service-assets.service.js";
 import { ServiceJobsService } from "../service-jobs/service-jobs.service.js";
@@ -33,6 +35,8 @@ export const SEARCH_GROUP_NAVIGATION: Record<SearchGroup, string> = {
   partners: "partners",
   aquariums: "aquariums",
   invoices: "billing",
+  // a menüpont feature-höz kötött (`QUOTES_ENABLED`): a keresés a felhasználó feature-jeivel kapuz
+  quotes: "quotes",
 };
 
 const subtitle = (...parts: Array<string | null | undefined>) =>
@@ -47,6 +51,7 @@ export class SearchService {
     private readonly suppliers: SuppliersService,
     private readonly aquariums: AquariumsService,
     private readonly invoices: InvoiceSearchService,
+    private readonly quotes: QuotesService,
     /**
      * A menü szerver-oldali kapcsolói (`navigationFeatures`): a feature-höz kötött menüpont
      * (például az ajánlat) feature NÉLKÜL MINDENKINEK rejtett, tehát a keresőnek a
@@ -65,7 +70,7 @@ export class SearchService {
     const canSee = (entryId: string) =>
       isNavigationEntryVisible(entryId, user, features);
 
-    const [tickets, worksheets, assets, partners, aquariums, invoices] =
+    const [tickets, worksheets, assets, partners, aquariums, invoices, quotes] =
       await Promise.all([
         canSee(SEARCH_GROUP_NAVIGATION.tickets)
           ? this.serviceJobs.list({ search: query }, user)
@@ -90,6 +95,9 @@ export class SearchService {
           : undefined,
         canSee(SEARCH_GROUP_NAVIGATION.invoices)
           ? this.invoices.search(query)
+          : undefined,
+        canSee(SEARCH_GROUP_NAVIGATION.quotes)
+          ? this.quotes.list(user, 1, LIMIT, { q: query })
           : undefined,
       ]);
 
@@ -162,6 +170,25 @@ export class SearchService {
             })),
           }),
       ...(invoices === undefined ? {} : { invoices }),
+      ...(quotes === undefined
+        ? {}
+        : {
+            quotes: quotes.items.map((quote) => ({
+              id: quote.id,
+              title: quote.title,
+              subtitle: subtitle(
+                quote.quoteNumber,
+                quote.customerName,
+                quote.latestVersion
+                  ? formatMoney(
+                      quote.latestVersion.netTotal,
+                      quote.latestVersion.currency,
+                    )
+                  : null,
+              ),
+              path: `/ajanlatok/${quote.id}`,
+            })),
+          }),
     } satisfies SearchResponse;
   }
 }
