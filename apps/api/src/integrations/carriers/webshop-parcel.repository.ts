@@ -59,6 +59,28 @@ export class WebshopParcelRepository {
     });
   }
 
+  /**
+   * A fuvarozo kesz (szamot kapott) ACTIVE csomagjai az adott datum ota, a
+   * legujabbal kezdve: a statusz-szinkron ezeket kerdezi vegig. A hatar a
+   * sokat regi, mar lezart rendelesek folosleges lekerdezeset kerulik.
+   */
+  findConfirmedActiveSince(
+    carrier: CarrierCode,
+    since: Date,
+    limit: number,
+  ): Promise<WebshopParcel[]> {
+    return prisma.webshopParcel.findMany({
+      where: {
+        carrier,
+        status: "ACTIVE",
+        parcelNumber: { not: null },
+        createdAt: { gte: since },
+      },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+    });
+  }
+
   /** Egy lekerdezes a teljes listara (a Rendelesek oldal hasParcel oszlopa). */
   findActiveMany(commerceOrderIds: string[]): Promise<WebshopParcel[]> {
     if (!commerceOrderIds.length) return Promise.resolve([]);

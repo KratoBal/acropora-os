@@ -43,6 +43,7 @@ function repositoryWith(
     catalogAuthority: "UNAS" | "ACROPORA" | null;
     unasMirror?: { source: "UNAS" } | null;
   } | null,
+  options: { rowStillThere?: boolean } = {},
 ) {
   const calls: string[] = [];
   const inputs: unknown[] = [];
@@ -88,9 +89,14 @@ function repositoryWith(
         calls.push("setImageOrder");
         return imageIds.length === 2 ? { id: "ordered" } : null;
       },
-      addUploadedImage: async (_id: string, image: UploadedProductImage) => {
+      addUploadedImage: async (
+        _id: string,
+        image: UploadedProductImage,
+        storeFile: () => Promise<void>,
+      ) => {
         calls.push("addUploadedImage");
         inputs.push(image);
+        await storeFile();
         if (image.fileName.startsWith("dupla"))
           throw new Prisma.PrismaClientKnownRequestError("duplicate", {
             code: "P2002",
@@ -107,6 +113,16 @@ function repositoryWith(
       },
       findImage: async (id: string, imageId: string) =>
         imageId === "img-1" ? storedImage(id) : null,
+      /** `rowStillThere`: a takarítás idején ugyanezzel a címmel újra van sor */
+      releaseImageFileIfUnused: async (
+        _id: string,
+        _url: string,
+        releaseFile: () => Promise<void>,
+      ) => {
+        if (options.rowStillThere) return false;
+        await releaseFile();
+        return true;
+      },
       takeCatalogAuthority: async () => {
         calls.push("takeCatalogAuthority");
         return {
@@ -550,6 +566,22 @@ describe("ProductService", () => {
       () => service.deleteImage("product-1", "img-x"),
       NotFoundException,
     );
+  });
+
+  it("keeps the file when the same image was uploaded again meanwhile (barracuda, #2142)", async () => {
+    const own = repositoryWith(
+      { id: "product-1", catalogAuthority: "ACROPORA" },
+      { rowStillThere: true },
+    );
+    const store = new InMemoryDocumentStore();
+    const key = keyOf("product-1", uploadedImageUrl(JPEG));
+    await store.put(key, JPEG);
+
+    await new ProductService(own.repository, FILE_ENV, store).deleteImage(
+      "product-1",
+      "img-1",
+    );
+    assert.ok(await store.get(key), "a re-uploaded row lost its file");
   });
 
   it("serves the stored file with the type of its content", async () => {
