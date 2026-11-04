@@ -15,7 +15,7 @@ import type {
   PartnerMigrationRunPreview,
 } from "@acropora/types";
 
-import { describeTarget } from "./partner-migration.cli.js";
+import { describeTarget } from "../common/database-target.js";
 import {
   applyOperations,
   restoreRegistered,

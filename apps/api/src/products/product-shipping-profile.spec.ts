@@ -37,7 +37,10 @@ const profil = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-function fixture(existing: ReturnType<typeof profil> | null) {
+function fixture(
+  existing: ReturnType<typeof profil> | null,
+  snapshot: { rawPayload: unknown } | null = null,
+) {
   const hivasok: Array<{ muvelet: string; args: unknown }> = [];
   const transaction = {
     productShippingProfile: {
@@ -47,6 +50,7 @@ function fixture(existing: ReturnType<typeof profil> | null) {
         return profil();
       },
     },
+    unasProductSnapshot: { findUnique: async () => snapshot },
     auditLog: {
       create: async (args: unknown) => {
         hivasok.push({ muvelet: "audit", args });
@@ -239,5 +243,85 @@ describe("a kézi írás csak a megváltozott jelzőt teszi kézivé", () => {
       isFrozen: "UNAS",
     });
     assert.equal(detail?.lockerUnsuitable, false);
+  });
+});
+
+/*
+  AZ ELSŐ ÍRÁS NEM FAGYASZTJA BE A UNAS-JELZŐKET (barracuda, #2198 a). MI PIROSÍT: ha egy sor nélküli termék első
+  mentése (például csak a csomagautomata-jelző bekapcsolása) mind a négy jelzőt kézire állítja, holott a termék
+  UNAS-adata megvan: onnantól a szinkron sosem frissítené őket. Ha a terméknek nincs UNAS-adata, minden jelző kézi.
+*/
+describe("az első írás a UNAS-adathoz mér", () => {
+  const sima = {
+    pickupOnly: false,
+    foxpostForbidden: false,
+    isHeavy: false,
+    isFrozen: false,
+  };
+
+  it("a UNAS-szal egyező jelző UNAS marad, csak az eltérő lesz kézi", () => {
+    // a UNAS szerint Foxpost tiltva; a kezelő nem nyúlt hozzá, csak a nehezet kapcsolta be
+    assert.deepEqual(
+      manualShippingWrite(
+        null,
+        { ...sima, foxpostForbidden: true, isHeavy: true },
+        { unas: { ...sima, foxpostForbidden: true } },
+      ),
+      {
+        pickupOnly: false,
+        pickupOnlySource: "UNAS",
+        foxpostForbidden: true,
+        foxpostForbiddenSource: "UNAS",
+        isHeavy: true,
+        isHeavySource: "MANUAL",
+        isFrozen: false,
+        isFrozenSource: "UNAS",
+      },
+    );
+  });
+
+  it("felülírás nélküli UNAS-termék (unas: null) mércéje a csupa hamis", () => {
+    const data = manualShippingWrite(
+      null,
+      { ...sima, lockerUnsuitable: true },
+      { unas: null },
+    );
+    assert.deepEqual(
+      [
+        data.pickupOnlySource,
+        data.foxpostForbiddenSource,
+        data.isHeavySource,
+        data.isFrozenSource,
+      ],
+      ["UNAS", "UNAS", "UNAS", "UNAS"],
+    );
+    assert.equal(data.lockerUnsuitable, true);
+  });
+
+  it("UNAS-adat nélkül (csak OS-termék) minden jelző kézi", () => {
+    const data = manualShippingWrite(null, { ...sima }, null);
+    assert.equal(data.pickupOnlySource, "MANUAL");
+    assert.equal(data.isFrozenSource, "MANUAL");
+  });
+
+  it("a tároló a termék UNAS-adatát olvassa az első íráshoz", async () => {
+    const { repository, hivasok } = fixture(null, {
+      rawPayload: {
+        ShippingMethods: {
+          Denied: { Method: [{ Name: "Foxpost csomagautomaták" }] },
+        },
+      },
+    });
+    await repository.upsert(
+      "product-1",
+      { ...sima, foxpostForbidden: true, lockerUnsuitable: true },
+      "user-1",
+    );
+    const upsert = hivasok.find((h) => h.muvelet === "upsert")?.args as {
+      create: Record<string, unknown>;
+    };
+    assert.equal(upsert.create.foxpostForbiddenSource, "UNAS");
+    assert.equal(upsert.create.pickupOnlySource, "UNAS");
+    assert.equal(upsert.create.lockerUnsuitable, true);
   });
 });

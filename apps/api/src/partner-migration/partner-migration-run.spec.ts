@@ -6,11 +6,7 @@ import type {
   PartnerMigrationRow,
 } from "@acropora/types";
 
-import {
-  describeDecisions,
-  describeTarget,
-  parseArgs,
-} from "./partner-migration.cli.js";
+import { describeDecisions, parseArgs } from "./partner-migration.cli.js";
 import {
   applyOperations,
   restoreRegistered,
@@ -141,27 +137,6 @@ describe("decideOperations", () => {
       assert.ok(text.includes(code), code);
     assert.match(text, /HIBA/);
     assert.match(text, /LENYOMAT: [0-9a-f]{64}/);
-  });
-});
-
-describe("describeTarget", () => {
-  it("names the host, the port and the database, and never the password", () => {
-    assert.equal(
-      describeTarget(
-        "postgresql://user:geheim@db.example.hu:5433/acropora_stage?schema=public",
-      ),
-      "db.example.hu:5433/acropora_stage",
-    );
-    assert.equal(
-      describeTarget("postgresql://u:p@localhost/acropora"),
-      "localhost/acropora",
-    );
-    assert.doesNotMatch(
-      describeTarget("postgresql://user:geheim@db/x"),
-      /geheim|user/,
-    );
-    assert.match(describeTarget(undefined), /nincs DATABASE_URL/);
-    assert.match(describeTarget("nem url"), /nem értelmezhető/);
   });
 });
 
