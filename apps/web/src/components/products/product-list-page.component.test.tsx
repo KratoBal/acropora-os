@@ -325,6 +325,53 @@ describe("ProductListPage", () => {
     ).toBe("icon");
   });
 
+  /*
+    a82ed229, 2b: A SZÁLLÍTÁS OSZLOP ÉS SZŰRŐ. MI PIROSÍT: ha a még nem vizsgált termék ugyanúgy néz ki, mint a
+    megvizsgált, korlát nélküli; ha a jelzők nem látszanak; ha a szűrő nem jut el az API-ig.
+  */
+  it("a Szállítás oszlop: nincs vizsgálva, nincs korlát, és a jelzők rövid neve", async () => {
+    const [first] = populatedResponse.items;
+    api.list.mockResolvedValue({
+      ...populatedResponse,
+      items: [
+        { ...first!, id: "p-never", shippingFlags: null },
+        { ...first!, id: "p-none", shippingFlags: [] },
+        {
+          ...first!,
+          id: "p-heavy",
+          shippingFlags: ["isHeavy", "lockerUnsuitable"],
+        },
+      ],
+    });
+    render(createElement(ProductListPage));
+    // in the table: the filter's options carry the same short names
+    const table = await screen.findByRole("table");
+    expect(within(table).getByText("nincs vizsgálva")).toBeInTheDocument();
+    expect(within(table).getByText("nincs korlát")).toBeInTheDocument();
+    expect(within(table).getByText("Nehéz")).toBeInTheDocument();
+    expect(within(table).getByText("Automatába nem fér")).toBeInTheDocument();
+  });
+
+  it("a Szállítás szűrő az URL-be kerül, és az URL-ből az API-ig jut", async () => {
+    navigation.params = new URLSearchParams("szallitas=isHeavy");
+    api.list.mockResolvedValue(populatedResponse);
+    render(createElement(ProductListPage));
+    await screen.findByRole("table");
+    expect(api.list).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ shipping: "isHeavy" }),
+    );
+    fireEvent.change(screen.getByLabelText("Szállítás"), {
+      target: { value: "lockerUnsuitable" },
+    });
+    await waitFor(() =>
+      expect(navigation.replace).toHaveBeenCalledWith(
+        expect.stringContaining("szallitas=lockerUnsuitable"),
+        expect.anything(),
+      ),
+    );
+  });
+
   it("a fejléc és a sor ugyanabból az oszlopból igazodik: a számoszlop mindkettőben jobbra zár", async () => {
     api.list.mockResolvedValue(populatedResponse);
     render(createElement(ProductListPage));
@@ -339,6 +386,7 @@ describe("ProductListPage", () => {
       "Bruttó ár",
       "Akciós ár",
       "Készlet",
+      "Szállítás",
       "Állapot",
       "Művelet",
     ]);
@@ -351,6 +399,7 @@ describe("ProductListPage", () => {
       true,
       true,
       true,
+      false,
       false,
       true,
     ]);
