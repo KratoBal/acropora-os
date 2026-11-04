@@ -35,6 +35,8 @@ import { useMailImages } from "@/components/settings/mail-image-picker";
 import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
 import { billingDocumentsApi } from "@/lib/api/billing-documents";
 import { BillingDocumentActions } from "./billing-document-actions";
+import { ManualPaymentForm, openAmountInput } from "./manual-payment-form";
+import { PendingPaymentMarks } from "./pending-payment-marks";
 import {
   BillingDocumentEmailDrawer,
   defaultBillingEmail,
@@ -118,6 +120,7 @@ export function BillingDocumentDetailPage({
   const [finalBusy, setFinalBusy] = useState(false);
   const [finalError, setFinalError] = useState<string | null>(null);
   const [copyBusy, setCopyBusy] = useState(false);
+  const [paymentAttempts, setPaymentAttempts] = useState(0);
   const [copyError, setCopyError] = useState<string | null>(null);
 
   const [detail, setDetail] = useState<BillingDocumentDetail | null>(null);
@@ -612,6 +615,34 @@ export function BillingDocumentDetailPage({
               </PilotDataItem>
             </PilotDataGrid>
           </PilotSection>
+
+          {canIssue &&
+          detail.status === "ISSUED" &&
+          !detail.cancellation &&
+          detail.documentNumber &&
+          capabilities.showsPaymentFields ? (
+            <PilotSection
+              title="Kifizetés"
+              subtitle="A kifizetettséget a Számlázz.hu tartja nyilván; az állapota a számlalistán látszik."
+            >
+              <PendingPaymentMarks
+                token={token}
+                invoiceNumber={detail.documentNumber}
+                currency={detail.currency}
+                refreshKey={paymentAttempts}
+              />
+              <ManualPaymentForm
+                onAttempted={() => setPaymentAttempts((n) => n + 1)}
+                token={token}
+                invoiceNumber={detail.documentNumber}
+                defaultAmount={openAmountInput(
+                  detail.totals.grossAmount,
+                  null,
+                  detail.currency,
+                )}
+              />
+            </PilotSection>
+          ) : null}
 
           <BillingDocumentRelated
             documents={detail.relatedDocuments ?? []}

@@ -1,22 +1,51 @@
 import type { MaintenanceInvoiceSummary } from "@acropora/types";
 
-import { apiAuthHeaders, apiRequest } from "./client";
+import { ApiError, apiAuthHeaders, apiRequest } from "./client";
 import { API_PREFIX } from "./api-prefix";
 
 const base = "/partners/maintenance-invoice";
 
 export const maintenanceInvoiceApi = {
-  byCertificate(token: string, certificateId: string) {
-    return apiRequest<MaintenanceInvoiceSummary | null>(
-      `${base}/by-certificate/${encodeURIComponent(certificateId)}`,
-      token,
-    );
+  /**
+   * `null`: erre a TIG-re még nincs számla. A szerver ilyenkor `null`-t ad, amit a Nest ÜRES törzzsel küld, és
+   * az `apiRequest` üres törzsre `undefined`-ot ad vissza; egy 404 ugyanezt jelenti. Mindkettő `null` lesz, hogy a
+   * hívó ne maradjon „betöltés” állapotban (Balázs képe, 2026-11-04 18:48 UTC, MR-2026-0008).
+   */
+  async byCertificate(
+    token: string,
+    certificateId: string,
+  ): Promise<MaintenanceInvoiceSummary | null> {
+    try {
+      return (
+        (await apiRequest<MaintenanceInvoiceSummary | null>(
+          `${base}/by-certificate/${encodeURIComponent(certificateId)}`,
+          token,
+        )) ?? null
+      );
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.status === 404) return null;
+      throw cause;
+    }
   },
-  draft(token: string, certificateId: string) {
+  /**
+   * `acknowledgeUnsigned`: a megrendeléses TIG aláírt példány nélkül, a kezelő megerősítésével
+   * (Balázs, 2026-11-04 17:38 UTC); a munkalapos TIG-nél a szerver ezt nem fogadja el.
+   */
+  draft(
+    token: string,
+    certificateId: string,
+    options: { acknowledgeUnsigned?: boolean } = {},
+  ) {
     return apiRequest<MaintenanceInvoiceSummary>(
       `${base}/${encodeURIComponent(certificateId)}/draft`,
       token,
-      { method: "POST" },
+      options.acknowledgeUnsigned
+        ? {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ acknowledgeUnsigned: true }),
+          }
+        : { method: "POST" },
     );
   },
   /** A VALÓDI kiállítás (146ccc61): a szerver csak bekapcsolt kapcsolóval engedi. */

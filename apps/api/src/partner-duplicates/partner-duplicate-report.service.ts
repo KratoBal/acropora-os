@@ -1,12 +1,12 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { Repository, prisma } from "@acropora/database";
+import type { PartnerDuplicateResponse } from "@acropora/types";
 
 import {
   duplicateReportLine,
   findDuplicates,
   type CustomerGroup,
   type CustomerRow,
-  type DuplicateReport,
   type SupplierRow,
   type UnlinkedPair,
 } from "./partner-duplicate-groups.js";
@@ -31,16 +31,6 @@ export interface ReportGroup extends Omit<CustomerGroup, "customers"> {
 
 export interface ReportPair extends Omit<UnlinkedPair, "customer"> {
   customer: ReportCustomer;
-}
-
-export interface PartnerDuplicateResponse {
-  generatedAt: string;
-  /** a naplósor ugyanezekkel a számokkal */
-  summary: string;
-  strong: ReportGroup[];
-  weakGroupTax: ReportGroup[];
-  unlinked: ReportPair[];
-  unas: DuplicateReport["unas"];
 }
 
 /** A tárolt sorok, CSAK OLVASVA (az API saját adatbázis-jogával; a flotta csak olvasó szerepének nincs joga ezekre a táblákra). */

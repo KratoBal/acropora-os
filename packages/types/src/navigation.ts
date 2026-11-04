@@ -640,6 +640,15 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
   },
   {
     /**
+     * A PARTNEREK ÁTVEZETÉSÉNEK TERVE (egy partnertörzs, egyszeri átvezetés; Balázs a listából dönt). CSAK OLVAS. Ugyanaz a
+     * jog, mint a végponté (`settings.manage`): a lista neveket és adószámokat mutat.
+     */
+    id: "partner-migration",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.SETTINGS_MANAGE),
+  },
+  {
+    /**
      * AZ AJÁNLATI SZÖVEGRÉSZLETEK KEZELŐJE (#1582 P1). Ugyanaz a jog, ami a
      * végpontok írását védi (`quotes.templates.manage`), és ugyanaz a
      * kapcsoló, mint az Árajánlatok menüponté.

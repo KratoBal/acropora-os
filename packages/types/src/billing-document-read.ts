@@ -41,7 +41,29 @@ export interface BillingDocumentListQuery {
    * (EXTERNAL); hiányzó: mind (Balázs szűrője, acrobot 25812).
    */
   origin?: BillingDocumentOrigin;
+  /**
+   * A KIÁLLÍTÁS NAPJA (kelt) `YYYY-MM-DD`, mindkét vég benne, budapesti naptári napokkal (Luca, 2026-11-04: a
+   * bejövő listához hasonló szűrő). A vázlatnak nincs kiállítási napja, ezért dátum-szűrővel nem jelenik meg.
+   */
+  from?: string;
+  to?: string;
+  /**
+   * A fizetési mód szövege, ahogy a bizonylaton áll („Átutalás”); kis- és nagybetű mindegy, pontos egyezés. A
+   * választék a válasz `facets.paymentMethods` listája.
+   */
+  paymentMethod?: string;
+  /**
+   * A KIFIZETETTSÉG SZŰRŐJE (Balázs, 2026-11-04: „Fizetve, Nincs fizetve szűrés”): `PAID` a fizetett sorok, `UNPAID` a
+   * nem fizetettek, ide ESIK A RÉSZBEN FIZETETT is (a lista külön jelöli, de a kérdés „kifizették-e”). Amiről nincs adat
+   * (`UNKNOWN`, vagy a saját számla forrás nélkül: `null`), egyik szűrőbe sem kerül, a „mind” mutatja.
+   */
+  paymentState?: BillingListPaymentFilter;
 }
+
+/** A kimenő lista fizetés-szűrőjének két értéke; hiányzó: mind. */
+export const BILLING_LIST_PAYMENT_FILTERS = ["PAID", "UNPAID"] as const;
+export type BillingListPaymentFilter =
+  (typeof BILLING_LIST_PAYMENT_FILTERS)[number];
 
 /**
  * A BIZONYLAT EREDETE. A külső a Számlázz.hu-ból kapott kimenő számla (egy
@@ -108,6 +130,14 @@ export interface BillingDocumentListItem {
   dueDate: string | null;
   /** Tizedes szöveg; HUF-nál a Számlázz.hu egész forintja. */
   grossAmount: DecimalText;
+  /**
+   * A NETTÓ ÉS AZ ÁFA A BRUTTÓ MELLETT (Luca, 2026-11-04): a bejövő listával azonos hármas. Kiállított sornál a
+   * tárolt érték, vázlatnál a tételekből a bruttóval azonos szabállyal számolt; `null`, ha nem számolható.
+   */
+  netAmount: DecimalText | null;
+  vatAmount: DecimalText | null;
+  /** A fizetési mód szövege, ahogy a bizonylaton áll; `null`, ha nincs megadva. */
+  paymentMethod: string | null;
   currency: string;
   status: BillingDocumentStatus;
   emailStatus: BillingEmailStatus | null;
@@ -189,6 +219,8 @@ export type BillingPaymentSource =
   | "MARK_GLS_COD"
   | "MARK_SIMPLEPAY"
   | "MARK_FOXPOST"
+  /** a kimenő számla oldalán kézzel rögzített kifizetés (2026-11-04) */
+  | "MARK_MANUAL"
   /** Bejövő számla: a Hiányzó számlák banki párosítása (acrobot 25988). */
   | "BANK_PAIRING";
 
@@ -197,7 +229,7 @@ export type BillingPaymentSource =
  * Az adatlap mindig mutatja; ha a feed már kifizetettet mond, kiegészítő adat.
  */
 export interface BillingOwnPaymentMark {
-  source: "GLS_COD" | "SIMPLEPAY" | "FOXPOST";
+  source: "GLS_COD" | "SIMPLEPAY" | "FOXPOST" | "MANUAL";
   /** `YYYY-MM-DD`, a kifizetés napja, ahogy a Számlázz.hu-ba került. */
   date: string;
   amount: DecimalText;
@@ -284,6 +316,11 @@ export interface BillingDocumentListResponse {
     totalItems: number;
     totalPages: number;
   };
+  /**
+   * A szűrő választéka: a mieink és a külsők fizetési módjai együtt, egyszer (kis- és nagybetű szerint
+   * összevonva), ábécében.
+   */
+  facets: { paymentMethods: string[] };
 }
 
 /**

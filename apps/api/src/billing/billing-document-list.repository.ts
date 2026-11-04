@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import { prisma, Prisma } from "@acropora/database";
 import type {
   BillingDocumentListQuery,
@@ -9,7 +9,9 @@ import {
   EXTERNAL_LIST_ORDER_BY,
   LIST_ORDER_BY,
   externalWhere,
+  matchesPaymentFilter,
   mergeListRows,
+  PAYMENT_FILTER_ROW_LIMIT,
   ownWhere,
   simplePayOrderKey,
   toExternalListItem,
@@ -31,6 +33,10 @@ export const LIST_SELECT = {
   issueDate: true,
   dueDate: true,
   grossAmount: true,
+  // a nettó és az ÁFA a bruttó mellett (Luca, 2026-11-04), és a fizetési mód
+  netAmount: true,
+  vatAmount: true,
+  paymentMethod: true,
   currency: true,
   status: true,
   emailStatus: true,
@@ -68,6 +74,8 @@ export const EXTERNAL_LIST_SELECT = {
   issueDate: true,
   dueDate: true,
   grossAmount: true,
+  netAmount: true,
+  vatAmount: true,
   currency: true,
   createdAt: true,
   paidAmount: true,
@@ -121,33 +129,45 @@ export class BillingDocumentListRepository {
     );
     const offset = (query.page - 1) * query.pageSize;
     const both = own !== null && external !== null;
+    // A kifizetettség számolt érték: a szűrőnél minden találat sora betöltődik, és a kész soron szűrünk, majd lapozunk.
+    const byPayment = query.paymentState !== undefined;
+    const rowTake = byPayment ? PAYMENT_FILTER_ROW_LIMIT + 1 : undefined;
     const [ownRows, ownCount, externalRows, externalCount] =
       await this.database.$transaction([
         this.database.invoice.findMany({
           where: own ?? { id: { in: [] } },
           select: LIST_SELECT,
           orderBy: LIST_ORDER_BY,
-          skip: both ? 0 : offset,
+          skip: both || byPayment ? 0 : offset,
           take:
-            own === null ? 0 : both ? offset + query.pageSize : query.pageSize,
+            own === null
+              ? 0
+              : (rowTake ?? (both ? offset + query.pageSize : query.pageSize)),
         }),
         this.database.invoice.count({ where: own ?? { id: { in: [] } } }),
         this.database.externalBillingDocument.findMany({
           where: external ?? { id: { in: [] } },
           select: EXTERNAL_LIST_SELECT,
           orderBy: EXTERNAL_LIST_ORDER_BY,
-          skip: both ? 0 : offset,
+          skip: both || byPayment ? 0 : offset,
           take:
             external === null
               ? 0
-              : both
-                ? offset + query.pageSize
-                : query.pageSize,
+              : (rowTake ?? (both ? offset + query.pageSize : query.pageSize)),
         }),
         this.database.externalBillingDocument.count({
           where: external ?? { id: { in: [] } },
         }),
       ]);
+    // a fizetés szerinti szűrés a találatok mindegyikét betölti: a határ fölött szűkítést kér, nem csonkít
+    if (
+      byPayment &&
+      (ownRows.length > PAYMENT_FILTER_ROW_LIMIT ||
+        externalRows.length > PAYMENT_FILTER_ROW_LIMIT)
+    )
+      throw new BadRequestException(
+        "Túl sok a találat a fizetés szerinti szűréshez: szűkítsd az időszakot vagy a keresést.",
+      );
     // a kártyás külső számlák SimplePay-sorai, egy lekérdezéssel a lapra
     const simplePay = await simplePayLinesByOrder(
       this.database,
@@ -209,8 +229,11 @@ export class BillingDocumentListRepository {
       // a Számlázz.hu felületén sztornózott saját számla: a jel az ikertől jön
       return twin.cancelled ? { ...item, cancelled: true } : item;
     };
-    const totalItems = ownCount + externalCount;
-    const items = both
+    // Fizetés-szűrőnél a teljes találati halmaz kell (a lapot a szűrt sorokból vágjuk), egyébként az összefésülés lapja.
+    const window = byPayment
+      ? { offset: 0, size: ownRows.length + externalRows.length }
+      : { offset, size: query.pageSize };
+    const merged = both
       ? mergeListRows(
           ownRows.map((row) => ({
             issueDate: row.issueDate,
@@ -224,12 +247,19 @@ export class BillingDocumentListRepository {
             id: row.id,
             item: toExternal(row),
           })),
-          offset,
-          query.pageSize,
+          window.offset,
+          window.size,
         )
       : own !== null
         ? ownRows.map(toOwn)
         : externalRows.map((row) => toExternal(row));
+    const matching = byPayment
+      ? merged.filter((item) => matchesPaymentFilter(item, query.paymentState))
+      : merged;
+    const totalItems = byPayment ? matching.length : ownCount + externalCount;
+    const items = byPayment
+      ? matching.slice(offset, offset + query.pageSize)
+      : matching;
     return {
       items,
       pagination: {
@@ -238,8 +268,44 @@ export class BillingDocumentListRepository {
         totalItems,
         totalPages: Math.ceil(totalItems / query.pageSize),
       },
+      facets: { paymentMethods: await this.paymentMethodFacets() },
     };
   }
+
+  /**
+   * A FIZETÉSI MÓDOK VÁLASZTÉKA A SZŰRŐHÖZ: a mieink és a külsők szövegei együtt, a kis- és nagybetű szerint
+   * egyszer, ábécében. Minden szűrőtől független, hogy a választék ne szűküljön a már választott érték mellé.
+   */
+  private async paymentMethodFacets(): Promise<string[]> {
+    const [own, external] = await Promise.all([
+      this.database.invoice.findMany({
+        where: { ...OWN_ROWS, paymentMethod: { not: null } },
+        distinct: ["paymentMethod"],
+        select: { paymentMethod: true },
+      }),
+      this.database.externalBillingDocument.findMany({
+        where: { paymentMethod: { not: null } },
+        distinct: ["paymentMethod"],
+        select: { paymentMethod: true },
+      }),
+    ]);
+    return paymentMethodChoices(
+      [...own, ...external].map((row) => row.paymentMethod),
+    );
+  }
+}
+
+/** A szövegek egyszer (kis- és nagybetű nélkül), a legelső alakkal, ábécében; az üres kimarad. */
+export function paymentMethodChoices(
+  values: readonly (string | null)[],
+): string[] {
+  const seen = new Map<string, string>();
+  for (const value of values) {
+    const text = value?.trim();
+    if (text && !seen.has(text.toLowerCase()))
+      seen.set(text.toLowerCase(), text);
+  }
+  return [...seen.values()].sort((a, b) => a.localeCompare(b, "hu"));
 }
 
 /**

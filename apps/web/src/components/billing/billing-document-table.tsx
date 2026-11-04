@@ -4,12 +4,13 @@ import { Icon, PilotDataTable, type PilotTableColumn } from "@acropora/ui";
 import {
   BILLING_LIST_PATH as SHARED_BILLING_LIST_PATH,
   billingDocumentPath,
+  currencyLabel,
   getDocumentCapabilities,
   INVOICE_FORMAT_LABELS,
   type BillingDocumentListItem,
 } from "@acropora/types";
 
-import { formatMoney } from "./billing-editor-state";
+import { listAmount } from "./billing-amount-format";
 import { BillingDocumentStatus } from "./billing-document-status";
 import { ExternalBadge } from "./billing-external-document-page";
 import { PaymentBadge } from "./billing-payment";
@@ -37,7 +38,7 @@ export function formatDay(value: string | null | undefined): string {
 }
 
 /** The table's minimum width, and the least the flexible customer column may get of it. */
-export const BILLING_TABLE_MIN_WIDTH = 1180;
+export const BILLING_TABLE_MIN_WIDTH = 1330;
 export const BILLING_CUSTOMER_MIN_WIDTH = 150;
 
 /**
@@ -121,28 +122,54 @@ export const BILLING_DOCUMENT_COLUMNS: readonly PilotTableColumn<BillingDocument
       cell: (item) => formatDay(item.dueDate),
     },
     {
-      id: "gross",
-      header: "Bruttó",
-      width: "120px",
-      align: "right",
+      // a bejövő lista oszlopa és számformátuma (Luca, 2026-11-04): a pénznem-jelet a Deviza oszlop adja
+      id: "currency",
+      header: "Deviza",
+      width: "80px",
       cell: (item) => (
-        <span className="whitespace-nowrap font-semibold tabular-nums text-pilot-grey-900">
-          {formatMoney(item.grossAmount, item.currency)}
+        <span className="font-semibold text-pilot-grey-900">
+          {currencyLabel(item.currency)}
         </span>
       ),
     },
     {
-      id: "payment",
-      header: "Kifizetés",
-      width: "110px",
+      // együtt látszik a nettó, az ÁFA és a bruttó, ugyanabban a sorrendben és formában, mint a bejövőn
+      id: "totals",
+      header: "Összegek",
+      width: "170px",
+      align: "right",
       cell: (item) => (
-        <PaymentBadge
-          paymentState={item.paymentState}
-          paidAmount={item.paidAmount}
-          lastPaymentDate={item.lastPaymentDate}
-          paymentSource={item.paymentSource}
-          currency={item.currency}
-        />
+        <span className="flex flex-col items-end gap-0.5 whitespace-nowrap tabular-nums">
+          <span className="text-xs text-pilot-grey-600">
+            Nettó {listAmount(item.netAmount, item.currency)}
+          </span>
+          <span className="text-xs text-pilot-grey-600">
+            ÁFA {listAmount(item.vatAmount, item.currency)}
+          </span>
+          <span className="font-semibold text-pilot-grey-900">
+            Bruttó {listAmount(item.grossAmount, item.currency)}
+          </span>
+        </span>
+      ),
+    },
+    {
+      // a fizetési mód és alatta a kifizetés jelzése, ahogy a bejövő listán
+      id: "payment",
+      header: "Fizetés",
+      width: "130px",
+      cell: (item) => (
+        <span className="flex flex-col gap-0.5">
+          <span className="text-pilot-grey-900">
+            {item.paymentMethod ?? "—"}
+          </span>
+          <PaymentBadge
+            paymentState={item.paymentState}
+            paidAmount={item.paidAmount}
+            lastPaymentDate={item.lastPaymentDate}
+            paymentSource={item.paymentSource}
+            currency={item.currency}
+          />
+        </span>
       ),
     },
     {

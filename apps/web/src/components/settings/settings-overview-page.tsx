@@ -206,6 +206,13 @@ export const SETTINGS_AREAS: SettingsArea[] = [
         href: "/beallitasok/partner-duplikatumok",
         entryId: "partner-duplicates",
       },
+      {
+        label: "Partner-átvezetés",
+        description:
+          "A partnerek (beszállítók, szerviz-partnerek) terve: melyik vevő-sorra kerül, melyikhez kötődik, melyikből készül új. Csak olvasható.",
+        href: "/beallitasok/partner-atvezetes",
+        entryId: "partner-migration",
+      },
     ],
   },
   {

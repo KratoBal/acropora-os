@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import type { UnasApiCustomer, UnasCustomerSyncSummary } from "@acropora/types";
 
 import { UnasApiClient } from "../../imports/unas/unas-api.client.js";
+import type { UnasTaxBackfillCounts } from "./unas-customer-fill.js";
 import { UnasCustomerSyncRepository } from "./unas-customer-sync.repository.js";
 
 // Mirrors UnasOrderSyncService's overlap window: re-checks a small slice
@@ -44,6 +45,19 @@ export class UnasCustomerSyncService {
       await this.repository.markFailed(runId, errorCode);
       throw error;
     }
+  }
+
+  /**
+   * The one-time backfill of the tax fields (acrobot 42670): a full UNAS pull, read only, then the fill-if-empty rule
+   * on the existing rows. Null when it already ran.
+   */
+  async runTaxBackfill(
+    token: string,
+    now = new Date(),
+    pageSize = DEFAULT_PAGE_SIZE,
+  ): Promise<UnasTaxBackfillCounts | null> {
+    const customers = await this.downloadCustomers(token, null, now, pageSize);
+    return this.repository.backfillTaxFields(customers, now);
   }
 
   private async downloadCustomers(

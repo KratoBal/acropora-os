@@ -13,7 +13,11 @@ import {
   ValidateNested,
 } from "class-validator";
 
-import { CUSTOMER_LIST_PAGE_SIZE } from "@acropora/types";
+import {
+  CUSTOMER_LIST_PAGE_SIZE,
+  CUSTOMER_LIST_ROLES,
+  type CustomerListRole,
+} from "@acropora/types";
 
 export class CreateCustomerAddressDto {
   @IsIn(["BILLING", "SHIPPING", "OTHER"]) type!:
@@ -95,4 +99,9 @@ export class CustomerListQueryDto {
    */
   @IsIn(["true", "false"]) @IsOptional() includePartnerMirrors?:
     "true" | "false";
+  /**
+   * A SZEREP-SZŰRŐ (egy partnertörzs: egy lista, szerep-szűrővel). Hiányzik: a régi viselkedés (a partner-sorok nélkül, vagy az
+   * `includePartnerMirrors` szerint). Jelen van: a lista a partnereket is mutatja, a szerep szerint szűkítve.
+   */
+  @IsIn(CUSTOMER_LIST_ROLES) @IsOptional() role?: CustomerListRole;
 }

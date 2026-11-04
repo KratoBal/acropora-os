@@ -115,6 +115,7 @@ export {
   BILLING_DELIVERY_OUTCOMES,
   BILLING_DOCUMENT_LIST_PAGE_SIZE,
   BILLING_DOCUMENT_ORIGINS,
+  BILLING_LIST_PAYMENT_FILTERS,
   BILLING_EMAIL_MODES,
   BILLING_LINE_STOCK_OUTCOMES,
   BILLING_LIST_PATH,
@@ -132,6 +133,7 @@ export type {
   BillingDocumentListResponse,
   BillingDocumentListTarget,
   BillingDocumentOrigin,
+  BillingListPaymentFilter,
   BillingDocumentPdfInfo,
   BillingDocumentPdfState,
   BillingOwnPaymentMark,
@@ -646,6 +648,8 @@ export type {
   CustomerAddressType,
   CustomerDetail,
   CustomerListResponse,
+  CustomerListRole,
+  CustomerPartnerRole,
   CustomerSource,
   CustomerStatusFilter,
   CustomerSummary,
@@ -653,7 +657,11 @@ export type {
   UpdateCustomerAddressInput,
   UpdateCustomerInput,
 } from "./customer-management.js";
-export { CUSTOMER_LIST_PAGE_SIZE } from "./customer-management.js";
+export {
+  CUSTOMER_LIST_PAGE_SIZE,
+  CUSTOMER_LIST_ROLES,
+  CUSTOMER_PARTNER_ROLES,
+} from "./customer-management.js";
 export type {
   AcroporaDomainEvent,
   CatalogImportApplied,
@@ -1753,3 +1761,20 @@ export type {
   PartnerDuplicateResponse,
   PartnerDuplicateSupplier,
 } from "./partner-duplicates.js";
+export { PARTNER_MIGRATION_ACTIONS } from "./partner-migration.js";
+export type {
+  PartnerMigrationAction,
+  PartnerMigrationCustomer,
+  PartnerMigrationPlan,
+  PartnerMigrationRow,
+} from "./partner-migration.js";
+export { PARTNER_MERGE_REFERENCE_TABLES } from "./partner-merge.js";
+export type {
+  PartnerMergeExecuteInput,
+  PartnerMergeFieldFill,
+  PartnerMergeLogEntry,
+  PartnerMergePreview,
+  PartnerMergeReferenceTable,
+  PartnerMergeSide,
+  PartnerMergeUndoResult,
+} from "./partner-merge.js";

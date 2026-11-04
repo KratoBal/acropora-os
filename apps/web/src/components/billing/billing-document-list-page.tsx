@@ -17,6 +17,7 @@ import {
   BILLING_DOCUMENT_STATUS_LABELS,
   BILLING_DOCUMENT_STATUSES,
   BILLING_DOCUMENT_TYPES,
+  BILLING_LIST_PAYMENT_FILTERS,
   getDocumentCapabilities,
   hasPermission,
   INVOICE_FORMAT_LABELS,
@@ -41,7 +42,15 @@ import {
   BillingDocumentTable,
   billingDocumentHref,
 } from "./billing-document-table";
-import { BillingIncomingList } from "./billing-incoming-list";
+import {
+  BillingFilterGrid,
+  FILTER_GRID_SEARCH_CLASS,
+} from "./billing-filter-grid";
+import {
+  BillingIncomingList,
+  monthOptions,
+  monthRange,
+} from "./billing-incoming-list";
 import { BillingReceiptsView } from "./billing-receipts-view";
 import {
   BILLING_VIEWS,
@@ -190,11 +199,34 @@ function OutgoingList({
     ["", ...BILLING_DOCUMENT_ORIGINS],
     "",
   );
+  // az időszak a kelt szerint, a bejövő lista hónap-választékával (Luca, 2026-11-04); a fizetési mód a bizonylaton álló szöveg
+  const months = useMemo(() => monthOptions(), []);
+  const period = urlChoice(
+    params,
+    "idoszak",
+    ["", ...months.map((m) => m.value)],
+    "",
+  );
+  const paymentMethod = params.get("fizmod") ?? "";
+  // Fizetve / Nincs fizetve (Balázs, 2026-11-04); a részben fizetett a Nincs fizetve alá esik
+  const paymentState = urlChoice(
+    params,
+    "fizetes",
+    ["", ...BILLING_LIST_PAYMENT_FILTERS],
+    "",
+  );
   const page = urlPage(params);
   const appliedSearch = params.get("q") ?? "";
   const [search, setSearch] = useState(appliedSearch);
   const hasFilters = Boolean(
-    appliedSearch || documentType || status || invoiceFormat || origin,
+    appliedSearch ||
+    documentType ||
+    status ||
+    invoiceFormat ||
+    origin ||
+    period ||
+    paymentMethod ||
+    paymentState,
   );
 
   const [data, setData] = useState<BillingDocumentListResponse | null>(null);
@@ -222,8 +254,25 @@ function OutgoingList({
     if (status) value.set("status", status);
     if (invoiceFormat) value.set("invoiceFormat", invoiceFormat);
     if (origin) value.set("origin", origin);
+    if (period) {
+      const range = monthRange(period);
+      value.set("from", range.from);
+      value.set("to", range.to);
+    }
+    if (paymentMethod) value.set("paymentMethod", paymentMethod);
+    if (paymentState) value.set("paymentState", paymentState);
     return value;
-  }, [appliedSearch, documentType, invoiceFormat, origin, page, status]);
+  }, [
+    appliedSearch,
+    documentType,
+    invoiceFormat,
+    origin,
+    page,
+    paymentMethod,
+    paymentState,
+    period,
+    status,
+  ]);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -261,6 +310,9 @@ function OutgoingList({
       status: null,
       invoiceFormat: null,
       origin: null,
+      idoszak: null,
+      fizmod: null,
+      fizetes: null,
       page: null,
     });
   };
@@ -271,82 +323,125 @@ function OutgoingList({
 
   return (
     <>
-      <section className="rounded-2xl border border-pilot-grey-200 bg-white p-5">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="min-w-[240px] flex-[2_1_360px]">
-            <PilotInput
-              aria-label="Bizonylat keresése"
-              value={search}
-              onChange={setSearch}
-              leadingIcon={<Icon name="search" size={17} />}
-              placeholder="Bizonylatszám, partner, hivatkozás…"
-              className="h-10"
-            />
-          </div>
-          <PilotSelect
-            chevron
-            aria-label="Dokumentumtípus"
-            value={documentType}
-            onChange={(value) => setFilter("documentType", value)}
-            className="min-w-[190px] flex-[1_1_200px] [&_select]:h-10"
-          >
-            <option value="">Minden dokumentumtípus</option>
-            {BILLING_DOCUMENT_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {getDocumentCapabilities(type).label}
-              </option>
-            ))}
-          </PilotSelect>
-          <PilotSelect
-            chevron
-            aria-label="Állapot"
-            value={status}
-            onChange={(value) => setFilter("status", value)}
-            className="min-w-[170px] flex-[1_1_180px] [&_select]:h-10"
-          >
-            <option value="">Minden állapot</option>
-            {BILLING_DOCUMENT_STATUSES.map((value) => (
-              <option key={value} value={value}>
-                {BILLING_DOCUMENT_STATUS_LABELS[value]}
-              </option>
-            ))}
-          </PilotSelect>
-          <PilotSelect
-            chevron
-            aria-label="Formátum"
-            value={invoiceFormat}
-            onChange={(value) => setFilter("invoiceFormat", value)}
-            className="min-w-[160px] flex-[1_1_170px] [&_select]:h-10"
-          >
-            <option value="">Minden formátum</option>
-            {INVOICE_FORMATS.map((value) => (
-              <option key={value} value={value}>
-                {INVOICE_FORMAT_LABELS[value]}
-              </option>
-            ))}
-          </PilotSelect>
-          <PilotSelect
-            chevron
-            aria-label="Forrás"
-            value={origin}
-            onChange={(value) => setFilter("origin", value)}
-            className="min-w-[170px] flex-[1_1_180px] [&_select]:h-10"
-          >
-            <option value="">Minden forrás</option>
-            <option value="OWN">Csak a mieink</option>
-            <option value="EXTERNAL">Csak a külsők</option>
-          </PilotSelect>
-          {hasFilters ? (
-            <button
-              type="button"
-              onClick={clearFilters}
-              className="ml-auto cursor-pointer whitespace-nowrap text-xs text-pilot-accent-warm-text hover:underline"
-            >
-              Szűrők törlése
-            </button>
-          ) : null}
+      <BillingFilterGrid>
+        <div className={FILTER_GRID_SEARCH_CLASS}>
+          <PilotInput
+            aria-label="Bizonylat keresése"
+            value={search}
+            onChange={setSearch}
+            leadingIcon={<Icon name="search" size={17} />}
+            placeholder="Bizonylatszám, partner, hivatkozás…"
+            className="h-10"
+          />
         </div>
-      </section>
+        <PilotSelect
+          chevron
+          aria-label="Dokumentumtípus"
+          value={documentType}
+          onChange={(value) => setFilter("documentType", value)}
+          className="[&_select]:h-10"
+        >
+          <option value="">Minden dokumentumtípus</option>
+          {BILLING_DOCUMENT_TYPES.map((type) => (
+            <option key={type} value={type}>
+              {getDocumentCapabilities(type).label}
+            </option>
+          ))}
+        </PilotSelect>
+        <PilotSelect
+          chevron
+          aria-label="Állapot"
+          value={status}
+          onChange={(value) => setFilter("status", value)}
+          className="[&_select]:h-10"
+        >
+          <option value="">Minden állapot</option>
+          {BILLING_DOCUMENT_STATUSES.map((value) => (
+            <option key={value} value={value}>
+              {BILLING_DOCUMENT_STATUS_LABELS[value]}
+            </option>
+          ))}
+        </PilotSelect>
+        <PilotSelect
+          chevron
+          aria-label="Formátum"
+          value={invoiceFormat}
+          onChange={(value) => setFilter("invoiceFormat", value)}
+          className="[&_select]:h-10"
+        >
+          <option value="">Minden formátum</option>
+          {INVOICE_FORMATS.map((value) => (
+            <option key={value} value={value}>
+              {INVOICE_FORMAT_LABELS[value]}
+            </option>
+          ))}
+        </PilotSelect>
+        <PilotSelect
+          chevron
+          aria-label="Forrás"
+          value={origin}
+          onChange={(value) => setFilter("origin", value)}
+          className="[&_select]:h-10"
+        >
+          <option value="">Minden forrás</option>
+          <option value="OWN">Csak a mieink</option>
+          <option value="EXTERNAL">Csak a külsők</option>
+        </PilotSelect>
+        <PilotSelect
+          chevron
+          aria-label="Időszak"
+          value={period}
+          onChange={(value) => setFilter("idoszak", value)}
+          className="[&_select]:h-10"
+        >
+          <option value="">Időszak: mind</option>
+          {months.map((month) => (
+            <option key={month.value} value={month.value}>
+              Időszak: {month.label}
+            </option>
+          ))}
+        </PilotSelect>
+        <PilotSelect
+          chevron
+          aria-label="Fizetés"
+          value={paymentState}
+          onChange={(value) => setFilter("fizetes", value)}
+          className="[&_select]:h-10"
+        >
+          <option value="">Fizetés: mind</option>
+          <option value="PAID">Fizetve</option>
+          <option value="UNPAID">Nincs fizetve</option>
+        </PilotSelect>
+        <PilotSelect
+          chevron
+          aria-label="Fizetési mód"
+          value={paymentMethod}
+          onChange={(value) => setFilter("fizmod", value)}
+          className="[&_select]:h-10"
+        >
+          <option value="">Minden fizetési mód</option>
+          {/* a választott érték akkor is áll, ha a választék még nem jött meg */}
+          {[
+            ...new Set([
+              ...(data?.facets?.paymentMethods ?? []),
+              ...(paymentMethod ? [paymentMethod] : []),
+            ]),
+          ].map((method) => (
+            <option key={method} value={method}>
+              {method}
+            </option>
+          ))}
+        </PilotSelect>
+        {hasFilters ? (
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="cursor-pointer justify-self-start whitespace-nowrap text-xs text-pilot-accent-warm-text hover:underline"
+          >
+            Szűrők törlése
+          </button>
+        ) : null}
+      </BillingFilterGrid>
 
       {error ? (
         <Alert

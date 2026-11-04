@@ -231,6 +231,7 @@ describe("navigation", () => {
           "Eszköz-kategóriák",
           "Eszköz-funkciók",
           "Partner-duplikátumok",
+          "Partner-átvezetés",
           "Ajánlat szövegrészletek",
           "Ajánlatsablonok",
         ],
@@ -379,6 +380,7 @@ describe("navigation", () => {
       ["Törzsadatok", "asset-categories"],
       ["Törzsadatok", "asset-functions"],
       ["Törzsadatok", "partner-duplicates"],
+      ["Törzsadatok", "partner-migration"],
       ["Árajánlat", "quote-snippets"],
       ["Árajánlat", "quote-templates"],
     ]);
@@ -456,6 +458,11 @@ describe("navigation", () => {
       "/beallitasok/partner-duplikatumok",
       "partner-duplicates",
       "Partner-duplikátumok",
+    ],
+    [
+      "/beallitasok/partner-atvezetes",
+      "partner-migration",
+      "Partner-átvezetés",
     ],
     [
       "/beallitasok/ajanlat-szovegreszletek",
@@ -797,6 +804,7 @@ describe("navigation", () => {
     "/beallitasok/mertekegysegek": "settings.manage",
     // Egy partnertörzs, 1. lépés: ugyanaz a jog, mint a végponté
     "/beallitasok/partner-duplikatumok": "settings.manage",
+    "/beallitasok/partner-atvezetes": "settings.manage",
     // AZ ESZKOZ-KATEGORIAK UGYANAZ A FAJTA TETEL, es ugyanaz a bontas: a
     // szerelo HASZNALJA a listat (az eszkoz-szerkeszto legordulojet
     // `service.view` olvassa), de nem IRJA. Ha az iras is `service.view`

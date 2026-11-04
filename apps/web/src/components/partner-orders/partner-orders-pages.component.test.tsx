@@ -336,9 +336,12 @@ describe("egy megrendelés", () => {
     certificates.listForPartnerOrder.mockResolvedValue([]);
     render(<PartnerOrderDetailPage orderId="o1" />);
     expect(await screen.findByText("Teljesítési igazolás")).toBeInTheDocument();
-    expect(certificates.listForPartnerOrder).toHaveBeenCalledWith(
-      "token-1",
-      "o1",
+    // the panel asks in its own effect, after the heading is on the page (CI #2168, a loaded runner)
+    await waitFor(() =>
+      expect(certificates.listForPartnerOrder).toHaveBeenCalledWith(
+        "token-1",
+        "o1",
+      ),
     );
   });
 

@@ -219,7 +219,16 @@ export class MaintenanceInvoiceDraftService {
    * UGYANEZT használja, így a kiállításkor újraszámolt összeg a piszkozatéval
    * összevethető.
    */
-  private async prepare(certificateId: string) {
+  /**
+   * `acknowledgeUnsigned`: a MEGRENDELÉSES (munkalap nélküli) TIG aláírt példány nélkül is
+   * számlázható, ha a kezelő kifejezetten megerősítette (Balázs, 2026-11-04 17:38 UTC: „ne
+   * kelljen hozzá feltölteni aláírt tig-et”, de figyelmeztetés legyen). A munkalapos TIG
+   * szabálya változatlan: aláírt példány nélkül nincs piszkozat.
+   */
+  private async prepare(
+    certificateId: string,
+    { acknowledgeUnsigned = false }: { acknowledgeUnsigned?: boolean } = {},
+  ) {
     const certificate = await this.certificates.detail(certificateId);
     if (!certificate)
       throw new NotFoundException("A teljesítési igazolás nem található.");
@@ -227,9 +236,13 @@ export class MaintenanceInvoiceDraftService {
     const signed = certificate.documents.some(
       (document) => document.type === "SIGNED_FORM",
     );
-    if (!signed)
+    const fromOrder =
+      certificate.serviceJob === null && certificate.partnerOrder;
+    if (!signed && !(fromOrder && acknowledgeUnsigned))
       throw new ConflictException(
-        "A teljesítési igazolás aláírt példánya hiányzik, piszkozat-számla enélkül nem készíthető.",
+        fromOrder
+          ? "A teljesítési igazolás aláírt példánya hiányzik: a számlázást meg kell erősíteni."
+          : "A teljesítési igazolás aláírt példánya hiányzik, piszkozat-számla enélkül nem készíthető.",
       );
 
     // a vevő a TIG forrásáé: a karbantartási lapé, vagy a megrendelésé (Megrendelések S3)
@@ -287,11 +300,17 @@ export class MaintenanceInvoiceDraftService {
     }
   }
 
-  async draftFor(certificateId: string): Promise<MaintenanceInvoiceSummary> {
+  async draftFor(
+    certificateId: string,
+    options: { acknowledgeUnsigned?: boolean } = {},
+  ): Promise<MaintenanceInvoiceSummary> {
     const existing = await this.repository.existingInvoice(certificateId);
     if (existing) return this.summary(existing);
 
-    const { certificate, customer, mapped } = await this.prepare(certificateId);
+    const { certificate, customer, mapped } = await this.prepare(
+      certificateId,
+      options,
+    );
     const agentKey = await this.agentKey();
 
     const xml = buildSzamlazzAgentInvoiceXml({
@@ -402,7 +421,10 @@ export class MaintenanceInvoiceDraftService {
         "A számla nem teljesítési igazolásból készült, itt nem állítható ki.",
       );
 
-    const { mapped } = await this.prepare(invoice.completionCertificateId);
+    // the draft of an order TIG was made with the confirmation already (draftFor): no second ask
+    const { mapped } = await this.prepare(invoice.completionCertificateId, {
+      acknowledgeUnsigned: true,
+    });
     if (!sameAmounts(invoice, mapped.totals))
       throw new ConflictException(
         "A teljesítési igazolás a piszkozat óta megváltozott: az összeg már nem egyezik. Készíts új piszkozatot.",

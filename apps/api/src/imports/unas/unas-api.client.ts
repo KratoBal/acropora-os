@@ -1027,6 +1027,7 @@ function customerAddress(
     country: value(node, "Country") ?? null,
     countryCode: value(node, "CountryCode") ?? null,
     taxNumber: value(node, "TaxNumber") ?? null,
+    euTaxNumber: value(node, "EUTaxNumber") ?? null,
     customerType:
       customerType === "private" ||
       customerType === "company" ||
