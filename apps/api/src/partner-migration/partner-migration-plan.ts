@@ -34,8 +34,9 @@ export interface MigrationCustomer extends CustomerRow {
   references: number;
 }
 
+// a kétbetűs, szóként is előforduló alakok (sa, ag, ev) NEM jogi formák itt: egy "SA Trading" vagy "Ev Kft" név üresre normalizálódna
 const LEGAL_FORMS =
-  /\b(kft|bt|zrt|nyrt|rt|kkt|e\.?v|ev|gmbh|ltd|llc|s\.?r\.?o|spa|bv|sa|ag)\b\.?/g;
+  /\b(kft|bt|zrt|nyrt|rt|kkt|e\.v|gmbh|ltd|llc|s\.r\.o|spa|bv)\b\.?/g;
 
 /** A név összehasonlításra: kisbetű, jogi forma és írásjel nélkül. */
 export function normalizedName(value: string | null | undefined): string {
@@ -65,12 +66,19 @@ export function buildMigrationPlan(
   suppliers: readonly MigrationSupplier[],
   customers: readonly MigrationCustomer[],
   now: Date = new Date(),
+  /**
+   * A TÖRÖLT partnerek vevő-sorai (Supplier.deletedAt): a sor továbbra is egy partnerhez kötött (a `customerId` egyedi), tehát nem
+   * szabad, és egy élő partner jelöltjeként sem jelenhet meg (barracuda, #2181 review: az átvezetés nem köthet át egy törölt
+   * partner sorát).
+   */
+  deletedPartnerCustomerIds: ReadonlySet<string> = new Set(),
 ): PartnerMigrationPlan {
-  const linkedIds = new Set(
-    suppliers.flatMap((supplier) =>
+  const linkedIds = new Set([
+    ...suppliers.flatMap((supplier) =>
       supplier.customerId ? [supplier.customerId] : [],
     ),
-  );
+    ...deletedPartnerCustomerIds,
+  ]);
   const byId = new Map(customers.map((customer) => [customer.id, customer]));
   // szabad: nem kötött egyetlen partnerhez sem (a kötött sort egy másik partner viszi)
   const free = customers.filter((customer) => !linkedIds.has(customer.id));
@@ -117,7 +125,9 @@ export function buildMigrationPlan(
     let action: PartnerMigrationAction;
     if (isOwnCompanyName(supplier.name)) {
       action = "SKIP_OWN";
-      notes.push("A neve alapján a saját cégünk: kimarad, Balázs dönt.");
+      notes.push(
+        "A neve alapján a saját cégünk (javaslat, nem végleges döntés): kimarad, Balázs dönt.",
+      );
     } else if (linked)
       action = candidates.length ? "MERGE_CANDIDATES" : "MARK_ONLY";
     else if (candidates.length === 1) action = "BIND_EXISTING";

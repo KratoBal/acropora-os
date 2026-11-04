@@ -36,6 +36,17 @@ export class PartnerMigrationSuppliers extends Repository {
       },
     });
   }
+
+  /** A TÖRÖLT partnerek vevő-sorai: továbbra is kötöttek, tehát nem szabad jelöltek (barracuda, #2181 review). */
+  async deletedPartnerCustomerIds(): Promise<Set<string>> {
+    const rows = await this.database.supplier.findMany({
+      where: { deletedAt: { not: null }, customerId: { not: null } },
+      select: { customerId: true },
+    });
+    return new Set(
+      rows.flatMap((row) => (row.customerId ? [row.customerId] : [])),
+    );
+  }
 }
 
 const total = (counts: CustomerReferenceCounts | undefined): number =>
@@ -60,16 +71,17 @@ export class PartnerMigrationPlanService {
   ) {}
 
   async build(): Promise<PartnerMigrationPlan> {
-    const [suppliers, customers] = await Promise.all([
+    const [suppliers, customers, deleted] = await Promise.all([
       this.suppliers.list(),
       this.duplicates.customers(),
+      this.suppliers.deletedPartnerCustomerIds(),
     ]);
     const bare: MigrationCustomer[] = customers.map((customer) => ({
       ...customer,
       references: 0,
     }));
     // a hivatkozás-számok csak a tervben szereplő sorokra kellenek: előbb a terv, aztán a számok
-    const first = buildMigrationPlan(suppliers, bare);
+    const first = buildMigrationPlan(suppliers, bare, new Date(), deleted);
     const ids = new Set<string>();
     for (const row of first.rows) {
       if (row.linkedCustomer) ids.add(row.linkedCustomer.id);

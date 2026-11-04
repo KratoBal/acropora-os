@@ -243,13 +243,20 @@ export async function syncWorksheetMirror(
     addressLine1?: string | null;
     addressLine2?: string | null;
   },
+  /**
+   * `register`: a partner EGYSZERI ÁTVEZETÉSE a törzsbe (partnertörzs): a nem szerviz-partnernek is készül vevő-sor (a
+   * szerepek jelölésként rajta, a `Supplier` kötésből származtatva). Az átvezetésen kívül SOHA nem igaz.
+   */
+  options: { register?: boolean } = {},
 ) {
-  if (!supplier.isService) {
-    // Un-ticking "Szerviz" does not drop the row: worksheets may already point
-    // at it, and `onDelete: Restrict` would refuse anyway. It stays, unlisted,
-    // and is reused if the partner becomes a service partner again.
+  if (!supplier.isService && !options.register && !supplier.customerId) {
+    // No customer row yet, and this is neither a service partner nor the one-off register migration: nothing to create.
     return supplier.customerId;
   }
+  // A partner that HAS a customer row keeps it in step whatever its service flag (barracuda, #2185 review): un-ticking "Szerviz"
+  // does not drop the row (worksheets may point at it, `onDelete: Restrict`), and a row made by the register migration for a
+  // supplier-only partner is edited on the partner screen, so the partner's save has to reach it. Only CREATING a row needs the
+  // service flag or the register option.
   // The code travels with the name: the worksheet number is built from the
   // customer row's copy, so a code left behind here would number new sheets
   // after the partner's old abbreviation.

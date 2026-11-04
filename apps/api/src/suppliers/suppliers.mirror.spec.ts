@@ -273,7 +273,7 @@ describe("the service partner's mirror customer", () => {
    * assert it here is that the tempting cleanup would look tidy and would take
    * a partner's history with it.
    */
-  it("leaves an existing mirror alone when the partner is no longer service", async () => {
+  it("keeps an existing mirror, in step with the partner, when the partner is no longer service", async () => {
     const calls: Call[] = [];
 
     const kept = await syncWorksheetMirror(stubTransaction(calls), {
@@ -283,8 +283,17 @@ describe("the service partner's mirror customer", () => {
       customerId: "customer-7",
     });
 
-    assert.deepEqual(calls, []);
+    // the row stays (nothing is dropped or created, the partner is not re-linked) and is still copied to: a partner
+    // with a customer row is edited on the partner screen whatever its service flag (barracuda, #2185)
     assert.equal(kept, "customer-7");
+    assert.deepEqual(
+      calls.map((c) => [c.table, c.action]),
+      [["customer", "update"]],
+    );
+    assert.equal(
+      (calls[0]!.args.data as { displayName: string }).displayName,
+      "Csak Beszállító Kft.",
+    );
   });
 
   /**
@@ -489,5 +498,82 @@ describe("the partner's address on the mirror", () => {
         false,
       );
     }
+  });
+});
+
+/**
+ * A PARTNER EGYSZERI ÁTVEZETÉSE A TÖRZSBE (partnertörzs): a `register` kapcsolóval a nem szerviz-partnernek is készül vevő-sor.
+ * MI PIROSÍT: ha kapcsoló nélkül egy nem szerviz-partnerhez sor készül (a szerviz-tükör szabálya törne); ha a kapcsolóval nem
+ * készül; ha az új sor nem PARTNER- számú, nem COMPANY, vagy nem viszi a nevet, az adószámot és a címet; ha a partner nem kapja meg a
+ * kötést.
+ */
+describe("the register option of syncWorksheetMirror", () => {
+  const partner = {
+    id: "supplier-9",
+    name: "Beszállító Kft.",
+    isService: false,
+    customerId: null,
+    taxNumber: "11111111-2-42",
+    country: "HU",
+    email: "szamla@beszallito.example",
+    postalCode: "1146",
+    city: "Budapest",
+    addressLine1: "Fő út 1.",
+  };
+
+  it("does nothing for a non-service partner without the option, as before", async () => {
+    const calls: Call[] = [];
+    assert.equal(
+      await syncWorksheetMirror(stubTransaction(calls), partner),
+      null,
+    );
+    assert.deepEqual(calls, []);
+  });
+
+  it("creates a PARTNER- company row with the partner's name, tax number and address, and links the partner, with the option", async () => {
+    const calls: Call[] = [];
+    const id = await syncWorksheetMirror(
+      stubTransaction(calls, "customer-reg"),
+      partner,
+      {
+        register: true,
+      },
+    );
+    assert.equal(id, "customer-reg");
+    const create = calls.find(
+      (c) => c.table === "customer" && c.action === "create",
+    )!.args.data as Record<string, unknown>;
+    assert.match(String(create.customerNumber), /^PARTNER-/);
+    assert.equal(create.type, "COMPANY");
+    assert.equal(create.displayName, "Beszállító Kft.");
+    assert.equal(create.taxNumber, "11111111-2-42");
+    assert.equal(create.billingEmail, "szamla@beszallito.example");
+    assert.ok("addresses" in create);
+    const link = calls.find(
+      (c) => c.table === "supplier" && c.action === "update",
+    )!;
+    assert.deepEqual(link.args.data, { customerId: "customer-reg" });
+  });
+
+  it("a partner that already has a row keeps it in step on every save, whatever its service flag (barracuda, #2185)", async () => {
+    const calls: Call[] = [];
+    const id = await syncWorksheetMirror(stubTransaction(calls), {
+      ...partner,
+      customerId: "customer-reg",
+      name: "Átnevezett Kft.",
+    });
+    assert.equal(id, "customer-reg");
+    const update = calls.find(
+      (c) => c.table === "customer" && c.action === "update",
+    )!;
+    assert.equal(
+      (update.args.data as { displayName: string }).displayName,
+      "Átnevezett Kft.",
+    );
+    // and still no ROW is created for a non-service partner without the option
+    assert.equal(
+      calls.some((c) => c.action === "create" && c.table === "customer"),
+      false,
+    );
   });
 });

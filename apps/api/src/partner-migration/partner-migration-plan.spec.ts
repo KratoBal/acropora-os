@@ -209,6 +209,37 @@ describe("buildMigrationPlan: the action of each partner", () => {
     assert.ok(row.notes.some((note) => /4-gyel/.test(note)));
   });
 
+  it("the mirror row of a DELETED partner is bound, so it is never a candidate of a live partner (barracuda, #2181)", () => {
+    const plan = buildMigrationPlan(
+      [supplier({ id: "a", taxNumber: "11111111-2-42" })],
+      [
+        customer({
+          id: "dead-mirror",
+          taxNumber: "11111111-2-42",
+          partnerMirror: true,
+        }),
+      ],
+      new Date(),
+      new Set(["dead-mirror"]),
+    );
+    assert.equal(plan.rows[0]!.action, "CREATE_NEW");
+    assert.deepEqual(plan.rows[0]!.candidates, []);
+    // without the deleted set it WOULD have been a candidate: the guard is what keeps the CLI from rebinding it
+    assert.equal(
+      buildMigrationPlan(
+        [supplier({ id: "a", taxNumber: "11111111-2-42" })],
+        [
+          customer({
+            id: "dead-mirror",
+            taxNumber: "11111111-2-42",
+            partnerMirror: true,
+          }),
+        ],
+      ).rows[0]!.action,
+      "BIND_EXISTING",
+    );
+  });
+
   it("roles come from the flags, and the plan counts the actions", () => {
     const plan = buildMigrationPlan(
       [
@@ -243,6 +274,10 @@ describe("normalizedName", () => {
       "fovarosiallatesnovenykert",
     );
     assert.equal(normalizedName(null), "");
+    // two-letter words that are also legal forms elsewhere stay in the name (barracuda, #2181)
+    assert.equal(normalizedName("SA Trading"), "satrading");
+    assert.equal(normalizedName("Ev Kft"), "ev");
+    assert.equal(normalizedName("Alma AG"), "almaag");
     assert.equal(
       normalizedName("Korall Kert Bt."),
       normalizedName("KORALL-KERT"),
