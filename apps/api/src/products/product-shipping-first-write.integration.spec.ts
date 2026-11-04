@@ -101,5 +101,27 @@ describe(
         isFrozen: "MANUAL",
       });
     });
+
+    it("an existing profile: one flag changed is saved, and only that one becomes MANUAL (the upsert's create part failed here)", async () => {
+      const repository = new ProductShippingProfileRepository();
+      // after the first test the UNAS product has its row: change only the heavy flag
+      const detail = await repository.upsert(
+        ids.unas!,
+        {
+          ...flags,
+          foxpostForbidden: true,
+          isHeavy: true,
+          lockerUnsuitable: true,
+        },
+        ids.user!,
+      );
+      assert.equal(detail.isHeavy, true);
+      assert.deepEqual(detail.sources, {
+        pickupOnly: "UNAS",
+        foxpostForbidden: "UNAS",
+        isHeavy: "MANUAL",
+        isFrozen: "UNAS",
+      });
+    });
   },
 );

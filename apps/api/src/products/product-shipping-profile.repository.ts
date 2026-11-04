@@ -18,7 +18,8 @@ type ProfileRecord = NonNullable<
 interface ProfileTransaction {
   productShippingProfile: {
     findUnique(args: unknown): Promise<ProfileRecord | null>;
-    upsert(args: unknown): Promise<ProfileRecord>;
+    create(args: unknown): Promise<ProfileRecord>;
+    update(args: unknown): Promise<ProfileRecord>;
   };
   /** the product's UNAS data, for the first write's baseline (barracuda, #2198 a) */
   unasProductSnapshot: {
@@ -176,11 +177,20 @@ export class ProductShippingProfileRepository extends Repository {
           input,
           snapshot ? { unas: unasShippingProfile(snapshot.rawPayload) } : null,
         );
-        const profile = await transaction.productShippingProfile.upsert({
-          where: { productId },
-          update: data,
-          create: { productId, ...data },
-        });
+        /*
+          AN EXPLICIT UPDATE OR CREATE, NOT AN UPSERT: Prisma checks an upsert's `create` part even when the row
+          exists, and for an existing row `data` holds only the changed flags, so a save that changed less than all
+          four failed (found by the bulk edit's database test, a82ed229 2c). The read above is in the same
+          serializable transaction, so the branch is the row's real state.
+        */
+        const profile = existing
+          ? await transaction.productShippingProfile.update({
+              where: { productId },
+              data,
+            })
+          : await transaction.productShippingProfile.create({
+              data: { productId, ...data },
+            });
         const action = existing
           ? "product_shipping_profile.updated"
           : "product_shipping_profile.created";

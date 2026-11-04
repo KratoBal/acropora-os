@@ -45,8 +45,13 @@ function fixture(
   const transaction = {
     productShippingProfile: {
       findUnique: async () => existing,
-      upsert: async (args: unknown) => {
-        hivasok.push({ muvelet: "upsert", args });
+      // the write as the old upsert's shape, so the assertions read one form: { create } or { update }
+      create: async (args: { data: unknown }) => {
+        hivasok.push({ muvelet: "upsert", args: { create: args.data } });
+        return profil();
+      },
+      update: async (args: { data: unknown }) => {
+        hivasok.push({ muvelet: "upsert", args: { update: args.data } });
         return profil();
       },
     },
