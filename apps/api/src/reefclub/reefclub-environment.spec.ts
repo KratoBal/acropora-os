@@ -102,6 +102,8 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   "RICH_TEXT_IMAGE_HOSTS",
   "RUN_BRAND_INTEGRATION",
   "RUN_DB_INTEGRATION",
+  // the global search's time limit for an external group, in milliseconds: a number, not a secret
+  "SEARCH_EXTERNAL_GROUP_TIMEOUT_MS",
   "VIES_API_URL",
   "WEB_URL",
 ]);

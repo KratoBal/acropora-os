@@ -16,6 +16,11 @@ import {
   type TakeoverPriceVariant,
 } from "./takeover-price.js";
 import { recordOwnPrice } from "./price-history/own-price-history.js";
+import {
+  pinUnasShippingFlags,
+  type ShippingFlag,
+  type ShippingFlagSource,
+} from "./shipping-profile-sources.js";
 import type { ArKep } from "../imports/unas/unas-ar-tortenet.js";
 import type { CreateProductDto } from "./dto/create-product.dto.js";
 import type { ProductListQueryDto } from "./dto/product-list-query.dto.js";
@@ -117,6 +122,13 @@ interface ProductTransaction {
       sellingGrossPrice: Prisma.Decimal | null;
       sellingPriceCurrency: string | null;
     } | null>;
+    updateMany(args: unknown): Promise<{ count: number }>;
+  };
+  /** Átvételkor a UNAS-forrású szállítási jelzők kézire billennek (T4.1-D3). */
+  productShippingProfile: {
+    findUnique(
+      args: unknown,
+    ): Promise<Record<`${ShippingFlag}Source`, ShippingFlagSource> | null>;
     updateMany(args: unknown): Promise<{ count: number }>;
   };
   /** A másolt saját ár előzményének kezdő sora (T4.1-D2), ugyanabban a tranzakcióban. */
@@ -485,6 +497,33 @@ export class ProductRepository extends Repository {
           priceSeed = takeoverPriceLog(steps);
         }
 
+        /*
+          A UNAS-KÖVETŐ SZÁLLÍTÁSI JELZŐK KÉZIRE (T4.1-D3, `pinUnasShippingFlags`):
+          a szinkron ezután nem frissíti őket, tehát a forrásuk se állítsa, hogy
+          a UNAS követi. Az érték marad, a gazda a szállítási szerkesztő lesz.
+        */
+        let shippingFlagsPinned: ShippingFlag[] = [];
+        if (result.count > 0) {
+          const pin = pinUnasShippingFlags(
+            await transaction.productShippingProfile.findUnique({
+              where: { productId: id },
+              select: {
+                pickupOnlySource: true,
+                foxpostForbiddenSource: true,
+                isHeavySource: true,
+                isFrozenSource: true,
+              },
+            }),
+          );
+          if (pin.data) {
+            await transaction.productShippingProfile.updateMany({
+              where: { productId: id },
+              data: pin.data,
+            });
+            shippingFlagsPinned = pin.flags;
+          }
+        }
+
         if (result.count > 0)
           await transaction.domainEvent.create({
             data: {
@@ -499,6 +538,7 @@ export class ProductRepository extends Repository {
                 from: "UNAS",
                 to: "ACROPORA",
                 ...(priceSeed ? { priceSeed } : {}),
+                ...(shippingFlagsPinned.length ? { shippingFlagsPinned } : {}),
               } satisfies Prisma.JsonObject,
             },
           });

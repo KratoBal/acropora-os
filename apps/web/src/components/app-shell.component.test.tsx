@@ -940,18 +940,26 @@ describe("AppShell favourites", () => {
     fireEvent.click(star);
   };
 
-  it("has the star on every menu page, labelled Kedvencekbe", () => {
-    for (const page of allNavigationPages.filter((item) =>
-      isNavigationEntryVisible(item.entryId, ownerSession.user),
-    )) {
-      navigation.pathname = page.href;
-      const { unmount } = render(<AppShell>Oldaltartalom</AppShell>);
-      expect(
-        screen.getByRole("button", { name: "Kedvencekbe" }),
-        page.href,
-      ).toHaveAttribute("aria-pressed", "false");
-      unmount();
-    }
+  /*
+    EGY ESET LAPONKÉNT (kártya de57947d). Korábban egyetlen eset rajzolta ki a teljes héjat minden menüpontra egymás
+    után, így az ideje a menü méretével nőtt, és terhelés alatt átlépte az 5 mp-es keretet (1,5 / 2,8 / 3,1 / 5,5 mp
+    négy CI-futásban). Laponként minden eset a saját keretét kapja, és a bukás a lapot nevezi meg.
+  */
+  const starPages = allNavigationPages
+    .filter((item) => isNavigationEntryVisible(item.entryId, ownerSession.user))
+    .map((item) => item.href);
+
+  it("finds the menu pages to check (positive control)", () => {
+    expect(starPages.length).toBeGreaterThan(20);
+  });
+
+  it.each(starPages)("has the star on %s, labelled Kedvencekbe", (href) => {
+    navigation.pathname = href;
+    render(<AppShell>Oldaltartalom</AppShell>);
+    expect(screen.getByRole("button", { name: "Kedvencekbe" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
   });
 
   it("has no star on a page that is not a menu page", () => {

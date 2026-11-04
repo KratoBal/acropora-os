@@ -17,6 +17,7 @@ import { BillingDocumentReadController } from "../billing/billing-document-read.
 import { IncomingBillingDocumentsController } from "../billing/incoming-billing-documents.controller.js";
 import { ServiceAssetsController } from "../service-assets/service-assets.controller.js";
 import { ServiceJobsController } from "../service-jobs/service-jobs.controller.js";
+import { WebshopOrdersController } from "../orders/webshop-orders/webshop-orders.controller.js";
 import { QuotesController } from "../quotes/quotes.controller.js";
 import { SuppliersController } from "../suppliers/suppliers.controller.js";
 import { WorksheetsController } from "../worksheets/worksheets.controller.js";
@@ -51,6 +52,8 @@ const LISTS: Record<
   ],
   // az ajánlat menüpontja feature-höz kötött is (QUOTES_ENABLED), de a JOG ugyanaz, mint a lista kontrolleréé
   quotes: [{ controller: QuotesController, handler: "list" }],
+  // a Medusa-rendelések listája (a UNAS-lista `webshop-orders` menüpontja nem kereshető)
+  orders: [{ controller: WebshopOrdersController, handler: "list" }],
 };
 
 function requiredFor(controller: Function, handler: string) {

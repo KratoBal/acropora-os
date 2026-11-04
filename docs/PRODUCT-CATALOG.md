@@ -67,9 +67,33 @@ Amit a művelet tesz:
 
 ### Mely mezők tartoznak az átvett termékhez
 
-Az átvétel után a `name`, a `description` **és a kategória** az Acropora OS
-tulajdona: a termék-szinkron termékszinten kihagyja a rekordot, és a kihagyást a
-`UnasProductSyncRun.skippedCount` mezőben számolja.
+**Az átvétel az EGÉSZ terméket kiveszi a szinkronból, nem csak a nevet, a
+leírást és a kategóriát** (T4.1-D1, polip adatgazda-táblázata 2026-11-03,
+acrobot döntése: a dokumentumot igazítjuk a kódhoz). A termék-szinkron az átvett
+terméket a ciklus elején hagyja ki (`unas-product-sync.repository.ts`, a
+`skippedProductIds` őrző), és minden további írása utána jön; a kihagyást a
+`UnasProductSyncRun.skippedCount` mezőben számolja. Ez a lista eddig szűkebbet
+ígért, mint ami történik.
+
+Az átvétel után **itt szerkeszthető** (`UpdateProductDto`): név, rövid leírás,
+terméktípus, márka, kategória, vásárolható a webshopban jelző.
+
+**Befagy az átvételkori UNAS-értéken, és ma nincs rá OS-oldali szerkesztő:**
+hosszú leírás; keresőoptimalizálási mezők (SEO cím, leírás, kulcsszó); képek és
+alt-szövegek; hasonló és kiegészítő termékek; gyártói cikkszám; mértékegység és
+másodlagos egység; ÁFA-kulcs; a UNAS-ból jövő szállítási jelzők. Ezek közül a
+szerkesztőket a T4.1-D3 hozza (ár és akció, képek és alt, szállítási jelzők).
+
+**Nem érinti** (ezeknek ma sem a szinkron a gazdája): készlet, vonalkódok,
+beszállító és raktárhely, a kézzel állított szállítási jelzők.
+
+Az **eladási ár** nem befagy, hanem egyszer átmásolódik: az átvétel napján a
+UNAS listaárából indul, ha a saját ár még üres (`takeover-price.ts`). Ha akció
+fut, az az átvétellel megszűnik, mert az OS-nek ma nincs saját akciós ára.
+
+A felületen ugyanez a lista áll az átvételi megerősítésben és az átvett termék
+kártyáján (`apps/web/src/components/products/takeover-scope.ts`); a
+`takeover-scope.test.ts` piros, ha a kettő elválik.
 
 A kategória külön említést érdemel, mert a szinkron MÁS ÚTON írja, mint a nevet
 és a leírást. A név és a leírás magával a termék-sorral megy be; a kategória
@@ -86,7 +110,7 @@ mert a három írás bármelyike elcsúszhatna a másik kettőtől.
 hanem magáról a tükörről: ha ezeket is átvennénk, a tükör többé nem tudná leírni
 a saját állapotát.
 
-Készlet és árazás NEM része az átvételnek, azok külön domainek.
+A készlet NEM része az átvételnek, az külön domain; az árról lásd fent.
 
 ### A szerver oldali írási határ
 
@@ -96,7 +120,7 @@ van:
 | Réteg                          | Mit tesz                                                                                                                               |
 | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
 | `ValidationPipe` (main.ts)     | `whitelist` és `forbidNonWhitelisted`, tehát egy ismeretlen mező már a kontroller előtt 400-at kap                                     |
-| `UpdateProductDto`             | hat mezőt ismer: `name`, `description`, `productType`, `brandId`, `primaryCategoryId` és a deprecated `categoryId`                     |
+| `UpdateProductDto`             | tíz mezőt ismer: a fenti hat, és `webshopSellable`, `advisorKind`, `fenyIgeny`, `aramlasIgeny` (`update-product.dto.ts`)               |
 | `ProductController`            | `products.manage` jogosultság                                                                                                          |
 | `ProductService.updateProduct` | `assertLocallyManaged`: `UNAS` gazdánál `409 PRODUCT_MANAGED_BY_UNAS`, feloldatlan gazdánál `409 PRODUCT_CATALOG_AUTHORITY_UNRESOLVED` |
 | `ProductRepository.update`     | NÉV SZERINT sorolja fel, mit ír, tehát ismeretlen mező akkor sem íródna, ha idáig eljutna                                              |

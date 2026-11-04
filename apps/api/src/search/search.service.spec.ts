@@ -10,12 +10,13 @@ import {
 
 import type { AquariumsService } from "../aquariums/aquariums.service.js";
 import type { InvoiceSearchService } from "../billing/invoice-search.service.js";
+import type { WebshopOrdersService } from "../orders/webshop-orders/webshop-orders.service.js";
 import type { QuotesService } from "../quotes/quotes.service.js";
 import type { ServiceAssetsService } from "../service-assets/service-assets.service.js";
 import type { ServiceJobsService } from "../service-jobs/service-jobs.service.js";
 import type { SuppliersService } from "../suppliers/suppliers.service.js";
 import type { WorksheetsService } from "../worksheets/worksheets.service.js";
-import { SearchService } from "./search.service.js";
+import { externalGroupTimeoutMs, SearchService } from "./search.service.js";
 
 const user = (
   role: UserRole,
@@ -33,6 +34,28 @@ const user = (
 let invoiceCalls = 0;
 /** how many times the quote list ran, and for which users */
 let quoteCalls = 0;
+/** the Medusa order list: how often it ran, and what it does */
+let orderCalls = 0;
+let orderList: () => Promise<unknown> = async () => ({
+  items: [
+    {
+      id: "order/1",
+      displayId: 1042,
+      customer: { name: "Kovács Anna", email: "anna@example.invalid" },
+      total: 18900,
+      currency: "HUF",
+      invoiceNumber: "KI-2026/9",
+    },
+    {
+      id: "order-2",
+      displayId: 1043,
+      customer: { name: null, email: "guest@example.invalid" },
+      total: 5090.5,
+      currency: "HUF",
+      invoiceNumber: null,
+    },
+  ],
+});
 
 const search = (
   overrides: Record<string, unknown> = {},
@@ -139,6 +162,13 @@ const search = (
         };
       },
     } as unknown as QuotesService,
+    {
+      list: async (query: { q?: string; page?: number; pageSize?: number }) => {
+        orderCalls += 1;
+        assert.deepEqual(query, { q: "rendelés", page: 1, pageSize: 5 });
+        return orderList();
+      },
+    } as unknown as WebshopOrdersService,
     environment,
   );
 
@@ -303,5 +333,103 @@ describe("SearchService", () => {
     );
     // no customer and no version: the number alone
     assert.equal(result.quotes![1]!.subtitle, "AJ-2026-0002");
+  });
+
+  /*
+    A RENDELÉS-CSOPORT (T2.2, 3. szelet): a Medusa-rendelések listája, `orders.view` kapuval, és KÜLSŐ
+    forrásból olvas. MI PIROSÍT: ha a csoport a jog nélküli szerepnek is megjelenne, vagy a
+    lista lefutna nekik; ha a webshop hibája (elérhetetlen) az egész keresést elvinné; ha a
+    hibás csoport helyett üres tömb jelenne meg (a „nincs találat” és a „nem ért el” két külön
+    állítás); ha a találat a rendelés azonosítóját nem kódolva tenné az útvonalba.
+  */
+  it("orders are present for exactly the roles that hold orders.view, and the list never runs for the others", async () => {
+    for (const role of USER_ROLES) {
+      orderCalls = 0;
+      const subject = user(role);
+      const result = await search().search("rendelés", subject);
+      const allowed = hasPermission(subject, PERMISSIONS.ORDERS_VIEW);
+      assert.equal("orders" in result, allowed, role);
+      assert.equal(orderCalls, allowed ? 1 : 0, role);
+    }
+  });
+
+  it("a webshop that cannot be reached drops ONLY the orders group: the other groups still come, and the group is absent, not empty", async () => {
+    const original = orderList;
+    orderList = async () => {
+      throw new Error("A webshop nem adta ki a rendeléseket (HTTP 503).");
+    };
+    try {
+      const result = await search().search("rendelés", user("OWNER"));
+      assert.equal("orders" in result, false);
+      assert.ok(result.invoices?.length, "the other groups are intact");
+      assert.ok(result.tickets?.length, "the other groups are intact");
+    } finally {
+      orderList = original;
+    }
+  });
+
+  /*
+    A LÓGÓ WEBSHOP IS KIHAGYÁS (barracuda, #2123): a Medusa-kliensnek nincs kérés-időkorlátja, a `Promise.all`
+    pedig a leglassabb tagra vár. MI PIROSÍT: ha egy soha fel nem oldó rendelés-lista a keresést is
+    lógatja; ha a lejárat a többi csoportot is elvinné; ha a csoport üresen, nem hiányzóan jönne;
+    ha az időkorlát nem a beállított érték (a futás hossza is korlátos itt: a lejárat 30 ms).
+  */
+  it("a webshop that never answers drops ONLY the orders group after the time limit; the search itself is bounded", async () => {
+    const original = orderList;
+    orderList = () => new Promise(() => undefined);
+    try {
+      const started = Date.now();
+      const result = await search(
+        {},
+        { SEARCH_EXTERNAL_GROUP_TIMEOUT_MS: "30" },
+      ).search("rendelés", user("OWNER"));
+      const took = Date.now() - started;
+      assert.equal("orders" in result, false);
+      assert.ok(result.invoices?.length, "the other groups are intact");
+      assert.ok(result.tickets?.length, "the other groups are intact");
+      assert.ok(took >= 25, `the limit was waited for (${took} ms)`);
+      assert.ok(took < 2000, `the search is bounded (${took} ms)`);
+    } finally {
+      orderList = original;
+    }
+  });
+
+  it("a fast answer is not cut by the limit, and the limit setting falls back to 4000 for anything but a positive integer", async () => {
+    const result = await search(
+      {},
+      { SEARCH_EXTERNAL_GROUP_TIMEOUT_MS: "30" },
+    ).search("rendelés", user("OWNER"));
+    assert.ok(result.orders?.length, "an immediate answer arrives");
+    assert.equal(externalGroupTimeoutMs({}), 4000);
+    for (const value of ["", "0", "-5", "1.5", "abc", "30 ms"])
+      assert.equal(
+        externalGroupTimeoutMs({ SEARCH_EXTERNAL_GROUP_TIMEOUT_MS: value }),
+        4000,
+        value,
+      );
+    assert.equal(
+      externalGroupTimeoutMs({ SEARCH_EXTERNAL_GROUP_TIMEOUT_MS: "250" }),
+      250,
+    );
+  });
+
+  it("maps an order to its number, customer, total and invoice, and opens it on its page (id encoded)", async () => {
+    const result = await search().search("rendelés", user("OWNER"));
+    assert.deepEqual(
+      result.orders?.map((o) => [o.id, o.title, o.path]),
+      [
+        ["order/1", "Rendelés #1042", "/webshop/rendelesek/order%2F1"],
+        ["order-2", "Rendelés #1043", "/webshop/rendelesek/order-2"],
+      ],
+    );
+    assert.match(
+      result.orders![0]!.subtitle,
+      /^Kovács Anna · 18\s900\sFt · KI-2026\/9$/,
+    );
+    // a guest without a name shows the e-mail; no invoice number leaves the part out
+    assert.match(
+      result.orders![1]!.subtitle,
+      /^guest@example\.invalid · 5\s?090,50\sFt$/,
+    );
   });
 });
