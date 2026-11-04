@@ -5,7 +5,6 @@ import type { MedusaProblemReport } from "../../integrations/medusa/medusa-admin
 import {
   complaintTask,
   describePullReport,
-  PULL_BATCH,
   pullProblemReports,
   type ComplaintTaskData,
   type ProblemPullDeps,
@@ -227,7 +226,7 @@ describe("pullProblemReports", () => {
       },
     });
     await pullProblemReports(deps, env);
-    assert.equal(asked, PULL_BATCH);
+    assert.equal(asked, 50); // a deliberate number: raising it is a decision, not a refactor
   });
 });
 
