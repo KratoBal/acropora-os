@@ -15,7 +15,10 @@
 --     partnerétől kapja, #2157).
 -- Idempotens: második futásra már nincs üres cél.
 --
--- A DARABSZÁM A POSTGRES SZERVER-NAPLÓJÁBA: egy WARNING-sor
+-- A DARABSZÁM AZ API NAPLÓJÁBA (acrobot 42502): a migráció egy `DomainEvent` sort ír
+-- (`id` = `customer-tax-number-backfill-20261104`, `eventType` = `customer.tax-number-backfilled`),
+-- és az API induláskor kiírja (`customer-tax-number-backfill.reporter.ts`). Mellette marad
+-- egy WARNING-sor a Postgres szerver-naplójába:
 --   VEVO-ADOSZAM-VISSZATOLTES kitoltve=N kimaradt_ellentmondas=M kimaradt_nem_magyar=K
 -- Mérve 2026-11-04 (helyi Postgres): a `prisma migrate deploy` sem a NOTICE-t, sem a
 -- WARNING-ot nem írja ki, és a NOTICE a szerver-naplóba sem kerül (log_min_messages
@@ -66,6 +69,16 @@ BEGIN
     (SELECT count(DISTINCT customer_id) FROM order_tax
       WHERE customer_id NOT IN (SELECT customer_id FROM hungarian))
   INTO filled, conflicting, not_hungarian;
+  INSERT INTO "DomainEvent" ("id", "eventType", "aggregateType", "aggregateId", "payload", "occurredAt")
+  VALUES (
+    'customer-tax-number-backfill-20261104',
+    'customer.tax-number-backfilled',
+    'Customer',
+    'tax-number-backfill-20261104',
+    jsonb_build_object('filled', filled, 'conflicting', conflicting, 'notHungarian', not_hungarian),
+    now()
+  )
+  ON CONFLICT ("id") DO NOTHING;
   RAISE WARNING 'VEVO-ADOSZAM-VISSZATOLTES kitoltve=% kimaradt_ellentmondas=% kimaradt_nem_magyar=%',
     filled, conflicting, not_hungarian;
 END $$;

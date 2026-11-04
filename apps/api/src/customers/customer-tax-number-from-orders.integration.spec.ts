@@ -24,7 +24,11 @@ const SQL = readFileSync(
   "utf8",
 );
 
+const EVENT_ID = "customer-tax-number-backfill-20261104";
+
 async function removeLeftovers() {
+  // the deploy of the test database already ran the migration once: its event goes too
+  await prisma.domainEvent.deleteMany({ where: { id: EVENT_ID } });
   await prisma.salesOrder.deleteMany({
     where: { orderNumber: { startsWith: PREFIX } },
   });
@@ -111,6 +115,17 @@ describe(
           rows.every((row) => row.euTaxNumber === null),
           `round ${round}: the EU field is never touched`,
         );
+        // the counts for the API log: the first run's, kept on the second (ON CONFLICT);
+        // other rows of a shared test database may add to them, so at least ours
+        const event = await prisma.domainEvent.findUnique({
+          where: { id: EVENT_ID },
+          select: { eventType: true, payload: true },
+        });
+        assert.equal(event?.eventType, "customer.tax-number-backfilled");
+        const counts = event!.payload as Record<string, number>;
+        assert.ok(counts.filled! >= 1, `round ${round}: filled`);
+        assert.ok(counts.conflicting! >= 1, `round ${round}: conflicting`);
+        assert.ok(counts.notHungarian! >= 1, `round ${round}: notHungarian`);
       }
     });
   },
