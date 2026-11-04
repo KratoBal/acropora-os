@@ -1,16 +1,31 @@
 import type { MaintenanceInvoiceSummary } from "@acropora/types";
 
-import { apiAuthHeaders, apiRequest } from "./client";
+import { ApiError, apiAuthHeaders, apiRequest } from "./client";
 import { API_PREFIX } from "./api-prefix";
 
 const base = "/partners/maintenance-invoice";
 
 export const maintenanceInvoiceApi = {
-  byCertificate(token: string, certificateId: string) {
-    return apiRequest<MaintenanceInvoiceSummary | null>(
-      `${base}/by-certificate/${encodeURIComponent(certificateId)}`,
-      token,
-    );
+  /**
+   * `null`: erre a TIG-re még nincs számla. A szerver ilyenkor `null`-t ad, amit a Nest ÜRES törzzsel küld, és
+   * az `apiRequest` üres törzsre `undefined`-ot ad vissza; egy 404 ugyanezt jelenti. Mindkettő `null` lesz, hogy a
+   * hívó ne maradjon „betöltés” állapotban (Balázs képe, 2026-11-04 18:48 UTC, MR-2026-0008).
+   */
+  async byCertificate(
+    token: string,
+    certificateId: string,
+  ): Promise<MaintenanceInvoiceSummary | null> {
+    try {
+      return (
+        (await apiRequest<MaintenanceInvoiceSummary | null>(
+          `${base}/by-certificate/${encodeURIComponent(certificateId)}`,
+          token,
+        )) ?? null
+      );
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.status === 404) return null;
+      throw cause;
+    }
   },
   /**
    * `acknowledgeUnsigned`: a megrendeléses TIG aláírt példány nélkül, a kezelő megerősítésével
