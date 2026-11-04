@@ -192,6 +192,8 @@ function createDatabase({
   variantCopyCount = 1,
   /** the variant's last own-price history row, if any */
   lastOwnPriceRow = null as ArKep | null,
+  /** the product's shipping-flag sources (null: no profile row) */
+  shippingSources = null as Record<string, "UNAS" | "MANUAL"> | null,
   mirror = {
     grossPrice: new Prisma.Decimal("12990"),
     currency: null,
@@ -255,6 +257,16 @@ function createDatabase({
       updateMany: async (args: unknown) => {
         calls.push({ operation: "variantUpdateMany", args });
         return { count: variantCopyCount };
+      },
+    },
+    productShippingProfile: {
+      findUnique: async (args: unknown) => {
+        calls.push({ operation: "shippingFind", args });
+        return shippingSources;
+      },
+      updateMany: async (args: unknown) => {
+        calls.push({ operation: "shippingPin", args });
+        return { count: 1 };
       },
     },
     productPriceHistory: {
@@ -384,6 +396,8 @@ describe("ProductRepository", () => {
         // the own price's history starts with the copy, inside the transaction (T4.1-D2)
         "historyFind",
         "historyCreate",
+        // no profile row: nothing to pin (T4.1-D3)
+        "shippingFind",
         "event",
         "transactionFind",
       ],
@@ -394,7 +408,7 @@ describe("ProductRepository", () => {
     };
     assert.equal(updateArgs.where.catalogAuthority, "UNAS");
     assert.equal(updateArgs.data.catalogAuthority, "ACROPORA");
-    const eventArgs = calls[6]?.args as {
+    const eventArgs = calls[7]?.args as {
       data: { eventType: string; actorUserId: string; payload: unknown };
     };
     assert.equal(
@@ -561,6 +575,67 @@ describe("ProductRepository", () => {
    * not write a second event. A log that reports one decision twice is worse
    * than no log, because it invents a history nobody lived.
    */
+  /**
+   * THE UNAS-FOLLOWING SHIPPING FLAGS BECOME MANUAL (T4.1-D3, card af14c36e).
+   * After the takeover the sync skips the product, so a flag whose source says
+   * UNAS would never be refreshed again while still claiming to follow UNAS.
+   * Only the UNAS-sourced flags move, the value is not written, and the event
+   * names which flags moved.
+   */
+  it("turns the UNAS-sourced shipping flags manual, and names them in the event", async () => {
+    const { database, calls } = createDatabase({
+      shippingSources: {
+        pickupOnlySource: "UNAS",
+        foxpostForbiddenSource: "MANUAL",
+        isHeavySource: "UNAS",
+        isFrozenSource: "MANUAL",
+      },
+    });
+
+    await new ProductRepository(database).takeCatalogAuthority(
+      "product-1",
+      "user-1",
+    );
+
+    const pin = calls.find((call) => call.operation === "shippingPin");
+    assert.deepEqual(pin?.args, {
+      where: { productId: "product-1" },
+      data: { pickupOnlySource: "MANUAL", isHeavySource: "MANUAL" },
+    });
+    const event = calls.find((call) => call.operation === "event")?.args as {
+      data: { payload: { shippingFlagsPinned?: string[] } };
+    };
+    assert.deepEqual(event.data.payload.shippingFlagsPinned, [
+      "pickupOnly",
+      "isHeavy",
+    ]);
+  });
+
+  it("writes no shipping row when every flag is already manual", async () => {
+    const { database, calls } = createDatabase({
+      shippingSources: {
+        pickupOnlySource: "MANUAL",
+        foxpostForbiddenSource: "MANUAL",
+        isHeavySource: "MANUAL",
+        isFrozenSource: "MANUAL",
+      },
+    });
+
+    await new ProductRepository(database).takeCatalogAuthority(
+      "product-1",
+      "user-1",
+    );
+
+    assert.equal(
+      calls.some((call) => call.operation === "shippingPin"),
+      false,
+    );
+    const event = calls.find((call) => call.operation === "event")?.args as {
+      data: { payload: Record<string, unknown> };
+    };
+    assert.equal("shippingFlagsPinned" in event.data.payload, false);
+  });
+
   it("writes no event when the product was already ours", async () => {
     const { database, calls } = createDatabase({ authorityUpdateCount: 0 });
     const repository = new ProductRepository(database);

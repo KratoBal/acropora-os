@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import { main } from "./shipping-profile-fill.cli.js";
 import {
   applyUnasShippingFlags,
+  pinUnasShippingFlags,
   planUnasShippingFlags,
   type StoredShippingProfile,
 } from "./shipping-profile-sources.js";
@@ -243,6 +244,36 @@ describe("a szinkron és a közbeíró kézi írás", () => {
     assert.deepEqual(
       [t.allapot.row!.foxpostForbidden, t.allapot.row!.foxpostForbiddenSource],
       [false, "MANUAL"],
+    );
+  });
+});
+
+describe("az átvétel kézire billenti a UNAS-követő jelzőket (T4.1-D3)", () => {
+  it("csak a UNAS-forrású jelzők billennek, az érték nincs az írásban", () => {
+    assert.deepEqual(
+      pinUnasShippingFlags({
+        pickupOnlySource: "MANUAL",
+        foxpostForbiddenSource: "UNAS",
+        isHeavySource: "MANUAL",
+        isFrozenSource: "UNAS",
+      }),
+      {
+        flags: ["foxpostForbidden", "isFrozen"],
+        data: { foxpostForbiddenSource: "MANUAL", isFrozenSource: "MANUAL" },
+      },
+    );
+  });
+
+  it("profil-sor nélkül és csupa kézi jelzőnél nincs írás", () => {
+    assert.deepEqual(pinUnasShippingFlags(null), { flags: [], data: null });
+    assert.deepEqual(
+      pinUnasShippingFlags({
+        pickupOnlySource: "MANUAL",
+        foxpostForbiddenSource: "MANUAL",
+        isHeavySource: "MANUAL",
+        isFrozenSource: "MANUAL",
+      }),
+      { flags: [], data: null },
     );
   });
 });

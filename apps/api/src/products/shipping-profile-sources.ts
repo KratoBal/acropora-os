@@ -121,3 +121,31 @@ export async function applyUnasShippingFlags(
       });
   return plan;
 }
+
+/**
+ * AZ ÁTVÉTEL KÉZIRE BILLENTI A UNAS-KÖVETŐ JELZŐKET (T4.1-D3, kártya af14c36e;
+ * polip D3 javaslata, acrobot döntése 2026-11-03). Átvétel után a szinkron a
+ * terméket kihagyja, tehát egy `UNAS` forrású jelző többé nem frissül, miközben
+ * a forrása azt állítja, hogy a UNAS követi. A jelző ÉRTÉKE nem változik, csak
+ * a gazdája: onnantól a szállítási szerkesztő írja.
+ *
+ * Visszaadja a billentendő jelzőket és az írást (`null`, ha nincs mit írni:
+ * nincs profil-sor, vagy minden jelző már kézi).
+ */
+export function pinUnasShippingFlags(
+  existing: Pick<StoredShippingProfile, `${ShippingFlag}Source`> | null,
+): {
+  flags: ShippingFlag[];
+  data: Partial<Record<`${ShippingFlag}Source`, ShippingFlagSource>> | null;
+} {
+  const flags = existing
+    ? SHIPPING_FLAGS.filter((flag) => existing[`${flag}Source`] === "UNAS")
+    : [];
+  if (!flags.length) return { flags, data: null };
+  return {
+    flags,
+    data: Object.fromEntries(
+      flags.map((flag) => [`${flag}Source`, "MANUAL"] as const),
+    ),
+  };
+}
