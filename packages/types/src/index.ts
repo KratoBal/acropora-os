@@ -1794,3 +1794,13 @@ export type {
   BankTransferPairResult,
   BankTransferRefusalValue,
 } from "./bank-transfer-pairing.js";
+export {
+  isShippingFilterValue,
+  SHIPPING_FILTER_VALUES,
+  SHIPPING_FLAG_KEYS,
+  SHIPPING_FLAG_SHORT_LABELS,
+} from "./product-catalog.js";
+export type {
+  ShippingFilterValue,
+  ShippingFlagKey,
+} from "./product-catalog.js";

@@ -15,6 +15,7 @@ import {
 import {
   formatMoney,
   hasPermission,
+  isShippingFilterValue,
   PERMISSIONS,
   type ProductListResponse,
 } from "@acropora/types";
@@ -23,6 +24,10 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import {
+  ShippingFilterSelect,
+  ShippingFlagsCell,
+} from "@/components/products/shipping-flags";
 import { productApi } from "@/lib/api/products";
 
 const PAGE_SIZE = 25;
@@ -97,6 +102,12 @@ export const PRODUCT_COLUMNS: PilotTableColumn<ProductRow>[] = [
     cell: (item) => formatStock(item.stockOnHand),
   },
   {
+    // a82ed229: the shipping flags; "nincs vizsgálva" is not "nincs korlát"
+    id: "shipping",
+    header: "Szállítás",
+    cell: (product) => <ShippingFlagsCell flags={product.shippingFlags} />,
+  },
+  {
     id: "status",
     header: "Webshop státusz",
     width: "150px",
@@ -156,6 +167,8 @@ export function WebshopProductListPage() {
   const token = session?.token ?? "";
   const page = Number(params.get("page") ?? "1") || 1;
   const searchParam = params.get("search") ?? "";
+  const shippingParam = params.get("szallitas");
+  const shipping = isShippingFilterValue(shippingParam) ? shippingParam : "";
 
   const query = useMemo(
     () => ({
@@ -163,8 +176,9 @@ export function WebshopProductListPage() {
       page,
       pageSize: PAGE_SIZE,
       ...(searchParam ? { search: searchParam } : {}),
+      ...(shipping ? { shipping } : {}),
     }),
-    [page, searchParam],
+    [page, searchParam, shipping],
   );
 
   const load = useCallback(async () => {
@@ -244,12 +258,25 @@ export function WebshopProductListPage() {
 
       {data ? (
         <>
-          <Card className="p-4">
-            <Input
-              aria-label="Termék keresése"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Terméknév vagy cikkszám"
+          <Card className="flex flex-wrap items-center gap-3 p-4">
+            <div className="min-w-[240px] flex-[2_1_320px]">
+              <Input
+                aria-label="Termék keresése"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Terméknév vagy cikkszám"
+              />
+            </div>
+            <ShippingFilterSelect
+              value={shipping}
+              onChange={(value) => {
+                const next = new URLSearchParams(params.toString());
+                if (value) next.set("szallitas", value);
+                else next.delete("szallitas");
+                next.set("page", "1");
+                router.replace(`${pathname}?${next}`);
+              }}
+              className="min-w-[160px] flex-[1_1_180px]"
             />
           </Card>
 

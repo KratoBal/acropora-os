@@ -1,9 +1,10 @@
 import { Prisma } from "@acropora/database";
-import type {
-  ProductChannelListingSummary,
-  ProductDetail,
-  ProductImageSummary,
-  ProductListItem,
+import {
+  SHIPPING_FLAG_KEYS,
+  type ProductChannelListingSummary,
+  type ProductDetail,
+  type ProductImageSummary,
+  type ProductListItem,
 } from "@acropora/types";
 
 import { parseStoredUnasVariantValues } from "../common/unas-variant.util.js";
@@ -19,6 +20,15 @@ export type ProductWithRelations = Prisma.ProductGetPayload<{
     images: true;
     unasSnapshot: true;
     datasheet: { select: { fenyIgeny: true; aramlasIgeny: true } };
+    shippingProfile: {
+      select: {
+        pickupOnly: true;
+        foxpostForbidden: true;
+        isHeavy: true;
+        isFrozen: true;
+        lockerUnsuitable: true;
+      };
+    };
   };
 }>;
 
@@ -146,6 +156,10 @@ export function toProductListItem(
       : null,
     primarySku: primaryVariant?.unasBaseSku ?? primaryVariant?.sku ?? null,
     thumbnail: product.images[0] ? imageSummary(product.images[0]) : null,
+    // null: nobody has looked at it (no profile); [] : looked at, none applies (a82ed229)
+    shippingFlags: product.shippingProfile
+      ? SHIPPING_FLAG_KEYS.filter((key) => product.shippingProfile![key])
+      : null,
     unasListing: unasListing ? channelSummary(unasListing) : null,
     grossPrice: product.unasSnapshot?.grossPrice?.toString() ?? null,
     saleGrossPrice: product.unasSnapshot?.saleGrossPrice?.toString() ?? null,

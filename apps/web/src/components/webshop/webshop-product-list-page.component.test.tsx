@@ -106,6 +106,19 @@ describe("WebshopProductListPage", () => {
    * the product page shows the same value unmapped. A label invented on this
    * screen would read as fact.
    */
+  // a82ed229, 2b: the shipping filter from the URL reaches the API; the column tells "never looked at" apart
+  it("passes the shipping filter from the URL, and shows the shipping column", async () => {
+    search.params = new URLSearchParams("szallitas=none");
+    api.list.mockResolvedValue(
+      response([{ ...reefSalt, shippingFlags: null }]),
+    );
+    render(<WebshopProductListPage />);
+    expect(await screen.findByText("nincs vizsgálva")).toBeInTheDocument();
+    const query = api.list.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(query.shipping).toBe("none");
+    search.params = new URLSearchParams();
+  });
+
   it("shows the channel status as it arrives, without inventing a meaning", async () => {
     render(<WebshopProductListPage />);
 

@@ -28,6 +28,7 @@ function productQueryString(query: ProductListApiQuery): string {
   if (query.search) params.set("search", query.search);
   if (query.active !== undefined) params.set("active", String(query.active));
   if (query.categoryId) params.set("categoryId", query.categoryId);
+  if (query.shipping) params.set("shipping", query.shipping);
   if (query.brandId) params.set("brandId", query.brandId);
   if (query.listedOn) params.set("listedOn", query.listedOn);
   return params.toString();
