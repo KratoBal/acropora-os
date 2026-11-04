@@ -7,7 +7,9 @@ import {
   externalCustomerName,
   externalWhere,
   listWhere,
+  matchesPaymentFilter,
   ownIssueRange,
+  PAYMENT_FILTER_ROW_LIMIT,
   mergeListRows,
   ownWhere,
   externalPaymentFields,
@@ -1141,6 +1143,168 @@ describe("the own invoice and its Számlázz.hu twin (N2)", () => {
       ],
     );
     assert.equal(list.pagination.totalItems, 2);
+  });
+});
+
+/*
+  A FIZETÉS SZERINTI SZŰRŐ (Balázs, 2026-11-04: „Fizetve, Nincs fizetve szűrés”). MI PIROSÍT: ha a részben fizetett nem a
+  „Nincs fizetve” alá esik; ha az ismeretlen vagy a forrás nélküli saját sor valamelyik szűrőbe kerül; ha a lap és a
+  darabszám nem a SZŰRT halmazra vonatkozik (az első lap az összes sorból vágna, a darabszám a szűretlen volna); ha a
+  szűrő nélküli lista változik; ha a határ fölött csonkít a hibaüzenet helyett.
+*/
+describe("the payment filter of the outgoing list", () => {
+  const states = ["PAID", "UNPAID", "PARTIAL", "UNKNOWN", null] as const;
+
+  it("PAID is only paid; UNPAID is unpaid and partly paid; unknown and no-source are in neither; no filter is everything", () => {
+    const hits = (filter: "PAID" | "UNPAID" | undefined) =>
+      states.filter((paymentState) =>
+        matchesPaymentFilter({ paymentState }, filter),
+      );
+    assert.deepEqual(hits("PAID"), ["PAID"]);
+    assert.deepEqual(hits("UNPAID"), ["UNPAID", "PARTIAL"]);
+    assert.deepEqual(hits(undefined), [...states]);
+  });
+
+  const fakeRepository = (
+    externals: ExternalListRow[],
+    own: BillingDocumentListRow[],
+  ) => {
+    const repository = new BillingDocumentListRepository();
+    (repository as unknown as { database: unknown }).database = {
+      $transaction: (queries: Promise<unknown>[]) => Promise.all(queries),
+      invoice: {
+        findMany: async (args: {
+          select: Record<string, unknown>;
+          take?: number;
+        }) =>
+          "lines" in args.select ? own.slice(0, args.take ?? own.length) : [],
+        count: async () => own.length,
+      },
+      externalBillingDocument: {
+        findMany: async (args: {
+          take?: number;
+          select: Record<string, unknown>;
+        }) =>
+          "documentNumber" in args.select
+            ? externals.slice(0, args.take ?? externals.length)
+            : [],
+        count: async () => externals.length,
+      },
+      simplePayTransactionLine: { findMany: async () => [] },
+      outgoingPaymentMark: { findMany: async () => [] },
+      salesOrder: { findMany: async () => [] },
+      $queryRaw: async () => [],
+    };
+    return repository;
+  };
+  // five external rows, newest first: paid, unpaid, partly paid, unknown, unpaid again
+  const rows = [
+    external({
+      id: "e1",
+      documentNumber: "E-1",
+      issueDate: new Date("2026-10-05"),
+      paymentsKnown: true,
+      paidAmount: D("29210"),
+    }),
+    external({
+      id: "e2",
+      documentNumber: "E-2",
+      issueDate: new Date("2026-10-04"),
+      paymentsKnown: true,
+      paidAmount: D("0"),
+    }),
+    external({
+      id: "e3",
+      documentNumber: "E-3",
+      issueDate: new Date("2026-10-03"),
+      paymentsKnown: true,
+      paidAmount: D("10000"),
+    }),
+    external({
+      id: "e4",
+      documentNumber: "E-4",
+      issueDate: new Date("2026-10-02"),
+      paymentsKnown: null,
+    }),
+    external({
+      id: "e5",
+      documentNumber: "E-5",
+      issueDate: new Date("2026-10-01"),
+      paymentsKnown: true,
+      paidAmount: D("0"),
+    }),
+  ];
+  // an own invoice with no twin: no source of its payment, so no state
+  const ownRow = row({
+    id: "own-1",
+    status: "ISSUED",
+    invoiceNumber: "OWN-1",
+    issueDate: new Date("2026-10-06T08:00:00Z"),
+  });
+
+  it("filters the whole set first: the count is the filtered one and the pages cut the filtered rows", async () => {
+    const repository = fakeRepository(rows, [ownRow]);
+    const first = await repository.list({
+      page: 1,
+      pageSize: 2,
+      paymentState: "UNPAID",
+    });
+    assert.deepEqual(
+      first.items.map((i) => i.documentNumber),
+      ["E-2", "E-3"],
+    );
+    assert.deepEqual(
+      first.items.map((i) => i.paymentState),
+      ["UNPAID", "PARTIAL"],
+    );
+    assert.deepEqual(
+      [first.pagination.totalItems, first.pagination.totalPages],
+      [3, 2],
+    );
+    const second = await repository.list({
+      page: 2,
+      pageSize: 2,
+      paymentState: "UNPAID",
+    });
+    assert.deepEqual(
+      second.items.map((i) => i.documentNumber),
+      ["E-5"],
+    );
+    const paid = await repository.list({
+      page: 1,
+      pageSize: 25,
+      paymentState: "PAID",
+    });
+    assert.deepEqual(
+      paid.items.map((i) => i.documentNumber),
+      ["E-1"],
+    );
+    assert.equal(paid.pagination.totalItems, 1);
+  });
+
+  it("without the filter nothing changes: every row, the own one included, paged in the database", async () => {
+    const repository = fakeRepository(rows, [ownRow]);
+    const all = await repository.list({ page: 1, pageSize: 25 });
+    assert.equal(all.items.length, 6);
+    assert.equal(all.pagination.totalItems, 6);
+  });
+
+  it("over the row limit it asks for a narrower search instead of cutting the set", async () => {
+    const many = Array.from({ length: PAYMENT_FILTER_ROW_LIMIT + 1 }, (_, i) =>
+      external({ id: `x${i}`, documentNumber: `X-${i}` }),
+    );
+    await assert.rejects(
+      fakeRepository(many, []).list({
+        page: 1,
+        pageSize: 25,
+        paymentState: "PAID",
+      }),
+      (error: Error) => /szűkítsd/.test(error.message),
+    );
+    // the same set without the filter is fine: only the payment filter loads everything
+    await assert.doesNotReject(
+      fakeRepository(many, []).list({ page: 1, pageSize: 25 }),
+    );
   });
 });
 
