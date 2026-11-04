@@ -16,7 +16,7 @@ import {
   type PartnerMergeUndoResult,
 } from "@acropora/types";
 
-import { describeTarget } from "../partner-migration/partner-migration.cli.js";
+import { describeTarget } from "../common/database-target.js";
 import {
   departmentConflicts,
   planFieldMerge,
