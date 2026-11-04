@@ -16,15 +16,21 @@ describe("partnerFilter", () => {
 
   it("with a role the list shows partners too, narrowed by the role", () => {
     assert.deepEqual(partnerFilter("ALL", false), {});
-    assert.deepEqual(partnerFilter("BUYER", true), { partner: null });
+    // a törölt partner (Supplier.deletedAt) nem partner: a sora vevő, és egyik partner-szűrőben sem szerepel
+    assert.deepEqual(partnerFilter("BUYER", true), {
+      OR: [
+        { partner: null },
+        { partner: { is: { deletedAt: { not: null } } } },
+      ],
+    });
     assert.deepEqual(partnerFilter("PARTNER", false), {
-      partner: { isNot: null },
+      partner: { is: { deletedAt: null } },
     });
     assert.deepEqual(partnerFilter("SUPPLIER", false), {
-      partner: { is: { isSupplier: true } },
+      partner: { is: { isSupplier: true, deletedAt: null } },
     });
     assert.deepEqual(partnerFilter("SERVICE", false), {
-      partner: { is: { isService: true } },
+      partner: { is: { isService: true, deletedAt: null } },
     });
   });
 });
@@ -44,5 +50,14 @@ describe("partnerRolesOf", () => {
     assert.deepEqual(partnerRolesOf({ isSupplier: false, isService: false }), {
       partnerRoles: [],
     });
+    // a törölt partner sora nem kap szerepet
+    assert.deepEqual(
+      partnerRolesOf({
+        isSupplier: true,
+        isService: true,
+        deletedAt: new Date(),
+      }),
+      {},
+    );
   });
 });
