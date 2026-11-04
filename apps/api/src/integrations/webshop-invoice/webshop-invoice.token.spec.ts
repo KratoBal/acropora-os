@@ -19,6 +19,15 @@ const SECRET = "x".repeat(40);
 const OTHER = "y".repeat(40);
 const NOW = 1_800_000_000;
 
+describe("the signature the webshop backend computes", () => {
+  it("is pinned by a fixed vector the commerce spec holds too (both sides must keep it)", () => {
+    assert.equal(
+      signLinkRequest("s".repeat(40), "order_1", 1_800_000_000),
+      "54bMT1ZRIkVEDtKczpDZi-4LrMkVaUfqYrgn90XcxUw",
+    );
+  });
+});
+
 describe("link request", () => {
   const request = (over: Record<string, unknown> = {}) => ({
     orderId: "order_1",
