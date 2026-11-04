@@ -119,11 +119,8 @@ interface ProductTransaction {
   };
   productVariant: {
     findMany(args: unknown): Promise<TakeoverPriceVariant[]>;
-    /** az ár-szerkesztő előtte-képéhez (T4.1-D3) */
-    findFirst(args: unknown): Promise<{
-      sellingGrossPrice: Prisma.Decimal | null;
-      sellingPriceCurrency: string | null;
-    } | null>;
+    /** az ár- és az akció-szerkesztő előtte-képéhez (T4.1-D3) */
+    findFirst(args: unknown): Promise<VariantPriceBefore | null>;
     updateMany(args: unknown): Promise<{ count: number }>;
   };
   /** A képek alt-szövege és sorrendje (4. szelet), feltöltése és törlése (6. szelet). */
@@ -193,6 +190,46 @@ export interface ProductDatabase {
 
 export const PRODUCT_DATABASE = Symbol("PRODUCT_DATABASE");
 
+/** A változat ár-képe írás előtt: a saját ár és a saját akció (T4.1-D3). */
+export interface VariantPriceBefore {
+  sellingGrossPrice: Prisma.Decimal | null;
+  sellingPriceCurrency: string | null;
+  sellingSaleGrossPrice: Prisma.Decimal | null;
+  sellingSaleStartsAt: Date | null;
+  sellingSaleEndsAt: Date | null;
+}
+
+const VARIANT_PRICE_BEFORE_SELECT = {
+  sellingGrossPrice: true,
+  sellingPriceCurrency: true,
+  sellingSaleGrossPrice: true,
+  sellingSaleStartsAt: true,
+  sellingSaleEndsAt: true,
+} as const;
+
+/** A saját akció: ár és félig nyitott ablak (`[startsAt, endsAt)`). */
+export interface VariantSale {
+  grossPrice: Prisma.Decimal;
+  startsAt: Date;
+  endsAt: Date;
+}
+
+/**
+ * AZ AKCIÓ ÉS A RENDES ÁR ÜTKÖZÉSE (T4.1-D3). Az akció csak a saját eladási árnál
+ * olcsóbb lehet, különben a bolt hamis kedvezményt mutatna; ugyanez fordítva: a
+ * rendes ár nem csökkenhet a beállított akció alá. A tranzakcióban dobjuk, tehát
+ * semmi nem íródik; a szolgáltatás 409-re fordítja.
+ */
+export class VariantSaleConflict extends Error {
+  constructor(
+    readonly code: "own-price-missing" | "sale-not-lower",
+    readonly sellingGrossPrice: string | null,
+    readonly saleGrossPrice: string | null,
+  ) {
+    super(code);
+  }
+}
+
 /** Egy kép sora, amennyi a fájljához kell. */
 export interface StoredProductImage {
   id: string;
@@ -217,6 +254,20 @@ export interface UploadedProductImage {
 
 /** A felületről feltöltött kép forrása; a UNAS-írók csak a `UNAS` sorokat cserélik. */
 export const UPLOADED_IMAGE_SOURCE = "OS";
+
+function saleImage(before: VariantPriceBefore): Prisma.JsonObject | null {
+  if (
+    !before.sellingSaleGrossPrice ||
+    !before.sellingSaleStartsAt ||
+    !before.sellingSaleEndsAt
+  )
+    return null;
+  return {
+    grossPrice: before.sellingSaleGrossPrice.toString(),
+    startsAt: before.sellingSaleStartsAt.toISOString(),
+    endsAt: before.sellingSaleEndsAt.toISOString(),
+  };
+}
 
 async function lockProduct(
   transaction: ProductTransaction,
@@ -655,9 +706,19 @@ export class ProductRepository extends Repository {
       async (transaction) => {
         const before = await transaction.productVariant.findFirst({
           where: { id: variantId, productId },
-          select: { sellingGrossPrice: true, sellingPriceCurrency: true },
+          select: VARIANT_PRICE_BEFORE_SELECT,
         });
         if (!before) return null;
+        // a beállított (futó vagy jövőbeli) akció alá a rendes ár nem mehet
+        if (
+          before.sellingSaleGrossPrice &&
+          !before.sellingSaleGrossPrice.lessThan(grossPrice)
+        )
+          throw new VariantSaleConflict(
+            "sale-not-lower",
+            grossPrice.toString(),
+            before.sellingSaleGrossPrice.toString(),
+          );
         const currency = before.sellingPriceCurrency ?? "HUF";
         await transaction.productVariant.updateMany({
           where: { id: variantId, productId },
@@ -704,6 +765,74 @@ export class ProductRepository extends Repository {
         return toProductDetail(product);
       },
       { isolationLevel: "Serializable" },
+    );
+  }
+
+  /**
+   * A VÁLTOZAT SAJÁT AKCIÓJA (T4.1-D3, akciós ár 1. szelet): beállítás vagy, `null`
+   * akcióval, törlés. Az akció a saját eladási árnál olcsóbb kell legyen
+   * (`VariantSaleConflict`). A termék `updatedAt`-je lép, és esemény íródik, mint
+   * az árnál.
+   *
+   * AMIT EZ A SZELET SZÁNDÉKOSAN NEM CSINÁL: az akció sem a boltba (vetítés), sem
+   * az árelőzménybe nem kerül. A kettő együtt jön a következő szeletben, a
+   * határidős esedékességgel, hogy az előzmény mindig azt rögzítse, amit a vevő
+   * a boltban látott: egy most írt akció-sor egy olyan árat állítana, amit a bolt
+   * még nem mutat.
+   */
+  async setVariantSale(
+    productId: string,
+    variantId: string,
+    sale: VariantSale | null,
+    actorUserId?: string,
+  ): Promise<ProductDetail | null> {
+    return retryOnSerializationConflict(() =>
+      this.productDatabase.$transaction(
+        async (transaction) => {
+          const before = await transaction.productVariant.findFirst({
+            where: { id: variantId, productId },
+            select: VARIANT_PRICE_BEFORE_SELECT,
+          });
+          if (!before) return null;
+          if (sale && !before.sellingGrossPrice)
+            throw new VariantSaleConflict(
+              "own-price-missing",
+              null,
+              sale.grossPrice.toString(),
+            );
+          if (sale && !sale.grossPrice.lessThan(before.sellingGrossPrice!))
+            throw new VariantSaleConflict(
+              "sale-not-lower",
+              before.sellingGrossPrice!.toString(),
+              sale.grossPrice.toString(),
+            );
+          await transaction.productVariant.updateMany({
+            where: { id: variantId, productId },
+            data: {
+              sellingSaleGrossPrice: sale?.grossPrice ?? null,
+              sellingSaleStartsAt: sale?.startsAt ?? null,
+              sellingSaleEndsAt: sale?.endsAt ?? null,
+            },
+          });
+          return this.touchAndRead(transaction, productId, actorUserId, {
+            eventType: sale
+              ? "product.variant.sale.set"
+              : "product.variant.sale.cleared",
+            payload: {
+              variantId,
+              from: saleImage(before),
+              to: sale
+                ? {
+                    grossPrice: sale.grossPrice.toString(),
+                    startsAt: sale.startsAt.toISOString(),
+                    endsAt: sale.endsAt.toISOString(),
+                  }
+                : null,
+            },
+          });
+        },
+        { isolationLevel: "Serializable" },
+      ),
     );
   }
 

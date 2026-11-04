@@ -1531,6 +1531,15 @@ model ProductVariant {
   /// merheto. A brief 12. pontja epp ezt keri falszifikaciokent, es egy olyan
   /// teszt, ami nem tud elbukni, nem kapu.
   sellingPriceCurrency       String?   @db.VarChar(3)
+  /// A SAJAT AKCIOS AR (T4.1-D3), brutto, a `sellingPriceCurrency` penznemeben.
+  /// A ket idoponttal EGYUTT ervenyes (CHECK): a kezdet az elso pillanat, amikor
+  /// mar, a veg az elso, amikor mar NEM ervenyes (felig nyitott ablak), es a veg
+  /// kotelezo: egy vegtelen akcio nem akcio, hanem uj ar. Ures harmas: nincs
+  /// akcio. Az OS-gazdaju termeknel ez az akcio; a UNAS-gazdanal a tukor
+  /// `saleGrossPrice`-a, ez a mezo ott ures.
+  sellingSaleGrossPrice      Decimal?  @db.Decimal(19, 4)
+  sellingSaleStartsAt        DateTime?
+  sellingSaleEndsAt          DateTime?
   manufacturerPartNumber     String?
   secondaryUnit              String?
   secondaryUnitFactor        Decimal?  @db.Decimal(19, 6)

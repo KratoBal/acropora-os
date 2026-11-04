@@ -11,10 +11,12 @@ import { Prisma } from "@acropora/database";
 
 import { productImageDocumentId } from "../integrations/medusa/product-image-storage-key.js";
 import { InMemoryDocumentStore } from "../service-assets/document-store/in-memory-document-store.js";
-import type {
-  ProductRepository,
-  StoredProductImage,
-  UploadedProductImage,
+import {
+  VariantSaleConflict,
+  type ProductRepository,
+  type StoredProductImage,
+  type UploadedProductImage,
+  type VariantSale,
 } from "./product.repository.js";
 import { ProductService, uploadedImageUrl } from "./product.service.js";
 
@@ -87,6 +89,17 @@ function repositoryWith(
       setImageOrder: async (_id: string, imageIds: string[]) => {
         calls.push("setImageOrder");
         return imageIds.length === 2 ? { id: "ordered" } : null;
+      },
+      setVariantSale: async (
+        _id: string,
+        variantId: string,
+        sale: VariantSale | null,
+      ) => {
+        calls.push(sale ? "setVariantSale" : "clearVariantSale");
+        inputs.push(sale);
+        if (sale?.grossPrice.toString() === "99999")
+          throw new VariantSaleConflict("sale-not-lower", "9990", "99999");
+        return variantId === "variant-1" ? { id: "sale-set" } : null;
       },
       addUploadedImage: async (_id: string, image: UploadedProductImage) => {
         calls.push("addUploadedImage");
@@ -565,6 +578,112 @@ describe("ProductService", () => {
     await assert.rejects(
       () => service.imageFile("product-1", "img-x"),
       NotFoundException,
+    );
+  });
+
+  /**
+   * THE OWN SALE (T4.1-D3, sale slice 1). MI PIROSÍT: ha UNAS-gazdájú terméken,
+   * üres vagy lejárt ablakkal bármi íródik; ha az ütközés nem 409; ha az idegen
+   * változat nem 404.
+   */
+  it("sets a sale only on an OS product, with a non-empty window in the future", async () => {
+    const own = repositoryWith({
+      id: "product-1",
+      catalogAuthority: "ACROPORA",
+    });
+    const service = new ProductService(own.repository);
+    const now = new Date("2026-11-04T12:00:00Z");
+    const sale = {
+      grossPrice: "7990",
+      startsAt: "2026-11-10T00:00:00+01:00",
+      endsAt: "2026-11-17T00:00:00+01:00",
+    };
+
+    assert.deepEqual(
+      await service.setVariantSale("product-1", "variant-1", sale, "u", now),
+      { id: "sale-set" },
+    );
+    const written = own.inputs[0] as VariantSale;
+    assert.equal(written.grossPrice.toString(), "7990");
+    assert.equal(written.startsAt.toISOString(), "2026-11-09T23:00:00.000Z");
+    assert.equal(written.endsAt.toISOString(), "2026-11-16T23:00:00.000Z");
+
+    for (const rossz of [
+      { ...sale, endsAt: sale.startsAt },
+      { ...sale, startsAt: sale.endsAt, endsAt: sale.startsAt },
+      {
+        ...sale,
+        startsAt: "2026-10-01T00:00:00Z",
+        endsAt: "2026-11-04T12:00:00Z",
+      },
+    ])
+      await assert.rejects(
+        () => service.setVariantSale("product-1", "variant-1", rossz, "u", now),
+        BadRequestException,
+        JSON.stringify(rossz),
+      );
+    await assert.rejects(
+      () =>
+        service.setVariantSale(
+          "product-1",
+          "variant-1",
+          { ...sale, grossPrice: "99999" },
+          "u",
+          now,
+        ),
+      ConflictException,
+    );
+    await assert.rejects(
+      () => service.setVariantSale("product-1", "variant-x", sale, "u", now),
+      NotFoundException,
+    );
+    assert.deepEqual(await service.clearVariantSale("product-1", "variant-1"), {
+      id: "sale-set",
+    });
+    assert.deepEqual(own.calls, [
+      "setVariantSale",
+      "setVariantSale",
+      "setVariantSale",
+      "clearVariantSale",
+    ]);
+
+    const unas = repositoryWith({ id: "product-1", catalogAuthority: "UNAS" });
+    const unasService = new ProductService(unas.repository);
+    await assert.rejects(
+      () =>
+        unasService.setVariantSale("product-1", "variant-1", sale, "u", now),
+      ConflictException,
+    );
+    await assert.rejects(
+      () => unasService.clearVariantSale("product-1", "variant-1"),
+      ConflictException,
+    );
+    assert.deepEqual(unas.calls, []);
+  });
+
+  it("answers 409 when a regular price would not stay above the sale", async () => {
+    const own = repositoryWith({
+      id: "product-1",
+      catalogAuthority: "ACROPORA",
+    });
+    (
+      own.repository as unknown as {
+        setVariantSellingPrice: () => Promise<never>;
+      }
+    ).setVariantSellingPrice = async () => {
+      throw new VariantSaleConflict("sale-not-lower", "7000", "7990");
+    };
+    await assert.rejects(
+      () =>
+        new ProductService(own.repository).setVariantPrice(
+          "product-1",
+          "variant-1",
+          { grossPrice: "7000" },
+        ),
+      (error: unknown) =>
+        error instanceof ConflictException &&
+        (error.getResponse() as { code: string }).code ===
+          "PRODUCT_SALE_NOT_LOWER",
     );
   });
 });

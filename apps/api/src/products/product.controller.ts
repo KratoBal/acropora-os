@@ -27,6 +27,7 @@ import {
 } from "./dto/product-image.dto.js";
 import { ProductListQueryDto } from "./dto/product-list-query.dto.js";
 import { SetVariantPriceDto } from "./dto/set-variant-price.dto.js";
+import { SetVariantSaleDto } from "./dto/set-variant-sale.dto.js";
 import { UpdateProductDto } from "./dto/update-product.dto.js";
 import { ProductService } from "./product.service.js";
 
@@ -70,6 +71,28 @@ export class ProductController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.products.setVariantPrice(id, variantId, input, user.id);
+  }
+
+  /** A változat saját akciója (T4.1-D3); csak OS-gazdájú terméknél. */
+  @Put(":id/variants/:variantId/sale")
+  @RequirePermissions(PERMISSIONS.PRODUCTS_MANAGE)
+  setVariantSale(
+    @Param("id") id: string,
+    @Param("variantId") variantId: string,
+    @Body() input: SetVariantSaleDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.products.setVariantSale(id, variantId, input, user.id);
+  }
+
+  @Delete(":id/variants/:variantId/sale")
+  @RequirePermissions(PERMISSIONS.PRODUCTS_MANAGE)
+  clearVariantSale(
+    @Param("id") id: string,
+    @Param("variantId") variantId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.products.clearVariantSale(id, variantId, user.id);
   }
 
   @Patch(":id/images/:imageId")
