@@ -1,7 +1,6 @@
 "use client";
 import {
   Alert,
-  Badge,
   Button,
   Card,
   ConfirmDialog,
@@ -12,6 +11,7 @@ import {
   Skeleton,
   Textarea,
   PilotFileInput,
+  PilotBadge,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -254,9 +254,9 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
           </div>
           {brand ? (
             <div className="mt-4 flex items-center gap-2">
-              <Badge variant={brand.isActive ? "success" : "neutral"}>
+              <PilotBadge variant={brand.isActive ? "success" : "grey"}>
                 {brand.isActive ? "Aktív" : "Archivált"}
-              </Badge>
+              </PilotBadge>
               <span className="text-xs text-dusk-500">
                 Normalizált kulcs: {brand.normalizedName}
               </span>
@@ -406,7 +406,7 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
                 >
                   <div>
                     <strong>{item.alias}</strong>{" "}
-                    <Badge>{aliasSourceLabel(item.source)}</Badge>
+                    <PilotBadge>{aliasSourceLabel(item.source)}</PilotBadge>
                   </div>
                   <Button
                     variant="ghost"
@@ -429,9 +429,9 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
             </p>
             <div className="mt-3">
               {brand.externalMappings.map((mapping) => (
-                <Badge key={mapping.id}>
+                <PilotBadge key={mapping.id}>
                   {mapping.system}: {mapping.externalId}
-                </Badge>
+                </PilotBadge>
               ))}
             </div>
           </Card>

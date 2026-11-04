@@ -2,7 +2,6 @@
 
 import {
   Alert,
-  Badge,
   Button,
   Card,
   EmptyState,
@@ -12,6 +11,7 @@ import {
   Skeleton,
   type PilotTableColumn,
   PilotButton,
+  PilotBadge,
 } from "@acropora/ui";
 import {
   formatMoney,
@@ -56,9 +56,9 @@ export const PRODUCT_COLUMNS: PilotTableColumn<ProductRow>[] = [
           {item.name}
         </Link>
         {item.isActive ? null : (
-          <Badge className="ml-2" variant="warning">
-            Inaktív
-          </Badge>
+          <span className="ml-2">
+            <PilotBadge variant="amber">Inaktív</PilotBadge>
+          </span>
         )}
       </span>
     ),

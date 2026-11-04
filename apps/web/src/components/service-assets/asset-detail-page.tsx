@@ -3,7 +3,6 @@ import { useAssistantEntity } from "@/components/assistant/page-context";
 
 import {
   Alert,
-  Badge,
   Button,
   Card,
   ConfirmDialog,
@@ -14,6 +13,7 @@ import {
   Textarea,
   PilotDateField,
   PilotButton,
+  PilotBadge,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -420,8 +420,12 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                     igaz. A FAJTA es a KRITIKUSSAG marad, mert azok nem
                     szerepelnek a fejlecben. */}
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="info">{assetKindLabel[asset.kind]}</Badge>
-                  <Badge>{assetCriticalityLabel[asset.criticality]}</Badge>
+                  <PilotBadge variant="blue">
+                    {assetKindLabel[asset.kind]}
+                  </PilotBadge>
+                  <PilotBadge>
+                    {assetCriticalityLabel[asset.criticality]}
+                  </PilotBadge>
                 </div>
                 <dl className="mt-6 grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2">
                   <Data label="Tulajdonos" value={asset.owner.displayName} />

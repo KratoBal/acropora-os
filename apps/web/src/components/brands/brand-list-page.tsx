@@ -1,7 +1,6 @@
 "use client";
 import {
   Alert,
-  Badge,
   Button,
   Card,
   EmptyState,
@@ -13,6 +12,7 @@ import {
   Select,
   Skeleton,
   PilotButton,
+  PilotBadge,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -51,9 +51,9 @@ const columns: PilotTableColumn<BrandRow>[] = [
     id: "status",
     header: "Státusz",
     cell: (brand) => (
-      <Badge variant={brand.isActive ? "success" : "neutral"}>
+      <PilotBadge variant={brand.isActive ? "success" : "grey"}>
         {brand.isActive ? "Aktív" : "Archivált"}
-      </Badge>
+      </PilotBadge>
     ),
   },
   {
