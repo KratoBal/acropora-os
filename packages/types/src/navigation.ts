@@ -384,6 +384,17 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
   },
   {
     /**
+     * MEGRENDELÉSEK (Luca kérése, Balázs prioritása, 2026-11-04): az Értékesítés alatt, az Árajánlatok
+     * mellett. Ugyanaz a jog és ugyanaz a kapcsoló, mint az ajánlatoké: a megrendelés az elfogadott
+     * ajánlatból indul, és ugyanazokat a tételeket mutatja.
+     */
+    id: "partner-orders",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.QUOTES_VIEW),
+    feature: "quotes",
+  },
+  {
+    /**
      * ELSZÁMOLÁSOK (Balázs, 2026-09-30 15:06 UTC): egy menüpont a Pénzügy
      * alatt, fülekkel a Foxpost, a GLS és a SimplePay elszámolásra. A menüpont
      * annak látszik, akinek legalább egy fülhöz van joga; ma mindhárom

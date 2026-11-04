@@ -246,6 +246,14 @@ const mainNavigationGroups: AppNavigationGroup[] = [
         entryId: "quotes",
       },
       {
+        // Megrendelések (Luca kérése, 2026-11-04): az elfogadott ajánlat folytatása; ugyanaz a
+        // kapcsoló és jog, mint az Árajánlatoké.
+        href: "/megrendelesek",
+        label: "Megrendelések",
+        icon: "clipboard",
+        entryId: "partner-orders",
+      },
+      {
         href: "/partnerek",
         label: "Partnerek",
         icon: "truck",
