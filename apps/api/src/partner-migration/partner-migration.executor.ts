@@ -153,10 +153,12 @@ export interface RestoreOutcome {
 }
 
 /**
- * A VISSZAÁLLÍTÁS: minden `partner.registered` eseményre, amihez még nincs `partner.unregistered`. A LÉTREHOZOTT sor csak akkor
- * törlődik, ha azóta semmi nem hivatkozik rá (se számla, se rendelés, se szerződés, se munkalap, se árajánlat, se szerviz-munka);
+ * A VISSZAÁLLÍTÁS: minden partnerre, amelynek LEGUTOLSÓ eseménye a `partner.registered` (egy partner többször is átvezethető és
+ * visszaállítható). A LÉTREHOZOTT sor csak akkor törlődik, ha azóta semmi nem hivatkozik rá (se számla, se rendelés, se szerződés,
+ * se munkalap, se árajánlat, se szerviz-munka, se Reef Club kötés vagy kód, se összevonás-napló, se alias, se UNAS-hivatkozás);
  * különben marad, és a partner kötése sem oldódik (kimondva az eredményben). A KÖTÖTT sornál a kötés oldódik és a jelölés
- * (`mergedFrom`) törlődik; a vevő-sor megmarad, ahogy volt.
+ * (`mergedFrom`) törlődik; a vevő-sor megmarad, de a partner közbeni mentései már a partner adatait másolták rá (név, adószám,
+ * e-mail, cím, fizetési nap): a kötés előtti mezőket a visszaállítás nem állítja vissza.
  */
 export async function restoreRegistered(
   tx: Tx,
@@ -164,22 +166,23 @@ export async function restoreRegistered(
   /** igaz: csak azt számolja ki, mit állítana vissza, semmit nem ír */
   dryRun = false,
 ): Promise<RestoreOutcome[]> {
-  const registered = await tx.domainEvent.findMany({
-    where: { eventType: "partner.registered", aggregateType: "Supplier" },
+  // PARTNERENKÉNT A LEGUTOLSÓ ESEMÉNY DÖNT (barracuda, #2185 review): egy partner többször is átvezethető és visszaállítható
+  // (stage-próba: apply, restore, apply, restore), és a visszaállítandó az, amelyiknél a legutolsó esemény a `registered`.
+  const events = await tx.domainEvent.findMany({
+    where: {
+      eventType: { in: ["partner.registered", "partner.unregistered"] },
+      aggregateType: "Supplier",
+    },
     orderBy: [{ occurredAt: "asc" }, { id: "asc" }],
-    select: { aggregateId: true, payload: true },
+    select: { aggregateId: true, eventType: true, payload: true },
   });
-  const undone = new Set(
-    (
-      await tx.domainEvent.findMany({
-        where: { eventType: "partner.unregistered", aggregateType: "Supplier" },
-        select: { aggregateId: true },
-      })
-    ).map((event) => event.aggregateId),
+  const lastBySupplier = new Map<string, (typeof events)[number]>();
+  for (const event of events) lastBySupplier.set(event.aggregateId, event);
+  const registered = [...lastBySupplier.values()].filter(
+    (event) => event.eventType === "partner.registered",
   );
   const outcomes: RestoreOutcome[] = [];
   for (const event of registered) {
-    if (undone.has(event.aggregateId)) continue;
     const payload = event.payload as {
       customerId: string;
       mode: "CREATED" | "BOUND";
@@ -278,6 +281,19 @@ async function referencesOf(tx: Tx, customerId: string): Promise<number> {
     tx.worksheetDepartment.count({ where }),
     tx.partnerOrder.count({ where }),
     tx.user.count({ where }),
+    // a Cascade-os hivatkozók (a törlés CSENDBEN törölné őket) és a Restrict-esek (a törlés hibát dobna, és az egész visszaállítás
+    // visszagördülne egyetlen sor miatt): barracuda, #2185 review
+    tx.reefClubLinkCode.count({ where }),
+    tx.reefClubCustomerLink.count({ where }),
+    tx.customerMergeLog.count({
+      where: { OR: [{ keptId: customerId }, { mergedId: customerId }] },
+    }),
+    tx.customer.count({ where: { mergedIntoId: customerId } }),
+    // nem FK, törlés után árván maradna
+    tx.externalReference.count({
+      where: { entityType: "Customer", entityId: customerId },
+    }),
+    tx.customerAlias.count({ where }),
   ]);
   return counts.reduce((a, b) => a + b, 0);
 }

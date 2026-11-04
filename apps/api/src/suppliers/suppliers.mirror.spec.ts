@@ -273,7 +273,7 @@ describe("the service partner's mirror customer", () => {
    * assert it here is that the tempting cleanup would look tidy and would take
    * a partner's history with it.
    */
-  it("leaves an existing mirror alone when the partner is no longer service", async () => {
+  it("keeps an existing mirror, in step with the partner, when the partner is no longer service", async () => {
     const calls: Call[] = [];
 
     const kept = await syncWorksheetMirror(stubTransaction(calls), {
@@ -283,8 +283,17 @@ describe("the service partner's mirror customer", () => {
       customerId: "customer-7",
     });
 
-    assert.deepEqual(calls, []);
+    // the row stays (nothing is dropped or created, the partner is not re-linked) and is still copied to: a partner
+    // with a customer row is edited on the partner screen whatever its service flag (barracuda, #2185)
     assert.equal(kept, "customer-7");
+    assert.deepEqual(
+      calls.map((c) => [c.table, c.action]),
+      [["customer", "update"]],
+    );
+    assert.equal(
+      (calls[0]!.args.data as { displayName: string }).displayName,
+      "Csak Beszállító Kft.",
+    );
   });
 
   /**
@@ -544,5 +553,27 @@ describe("the register option of syncWorksheetMirror", () => {
       (c) => c.table === "supplier" && c.action === "update",
     )!;
     assert.deepEqual(link.args.data, { customerId: "customer-reg" });
+  });
+
+  it("a partner that already has a row keeps it in step on every save, whatever its service flag (barracuda, #2185)", async () => {
+    const calls: Call[] = [];
+    const id = await syncWorksheetMirror(stubTransaction(calls), {
+      ...partner,
+      customerId: "customer-reg",
+      name: "Átnevezett Kft.",
+    });
+    assert.equal(id, "customer-reg");
+    const update = calls.find(
+      (c) => c.table === "customer" && c.action === "update",
+    )!;
+    assert.equal(
+      (update.args.data as { displayName: string }).displayName,
+      "Átnevezett Kft.",
+    );
+    // and still no ROW is created for a non-service partner without the option
+    assert.equal(
+      calls.some((c) => c.action === "create" && c.table === "customer"),
+      false,
+    );
   });
 });

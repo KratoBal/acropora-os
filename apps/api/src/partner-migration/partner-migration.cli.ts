@@ -31,8 +31,25 @@ import {
  * (és amit a lista alapján jóváhagytak). Ha közben egy partner vagy egy vevő-sor változott, a lenyomat más, és az írás megáll.
  * Egy tranzakcióban fut: vagy minden partner átvezetődik, vagy semmi.
  *
- * A visszaállítás a `partner.registered` eseményekből dolgozik; a létrehozott sor csak akkor törlődik, ha azóta semmi nem hivatkozik rá.
+ * A visszaállítás a `partner.registered` eseményekből dolgozik (partnerenként a legutolsó esemény dönt); a létrehozott sor csak akkor
+ * törlődik, ha azóta semmi nem hivatkozik rá. A STAGE-PRÓBA SORRENDJE: próba, --apply, --restore (próba), --restore --apply, majd újra
+ * --apply és --restore (ez fogja meg a többszöri átvezetést). Az ÉLES futás Balázs jelenlétében, a próba lenyomatával történik; a
+ * futás célját minden kimenet első sora mondja ki.
  */
+/**
+ * A CÉL-ADATBÁZIS, JELSZÓ NÉLKÜL (barracuda, #2185 review): a stage-próba és az éles futás ugyanaz a parancs, csak más `.env`-vel, és
+ * a lenyomat nem árulja el a célt. Minden kimenet első sora ezt mondja ki.
+ */
+export function describeTarget(databaseUrl: string | undefined): string {
+  if (!databaseUrl) return "ismeretlen (nincs DATABASE_URL)";
+  try {
+    const url = new URL(databaseUrl);
+    return `${url.hostname}${url.port ? `:${url.port}` : ""}/${url.pathname.replace(/^\//, "")}`;
+  } catch {
+    return "ismeretlen (a DATABASE_URL nem értelmezhető)";
+  }
+}
+
 export interface CliOutput {
   stdout(value: string): void;
   stderr(value: string): void;
@@ -117,6 +134,7 @@ export async function runPartnerMigrationCli(
     out.stderr(`${options.error}\n`);
     return 2;
   }
+  out.stdout(`CÉL-ADATBÁZIS: ${describeTarget(process.env.DATABASE_URL)}\n`);
   const transaction = <T>(work: (tx: Prisma.TransactionClient) => Promise<T>) =>
     prisma.$transaction(work, {
       isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
@@ -169,6 +187,10 @@ export async function runPartnerMigrationCli(
     out.stdout(
       `  ${outcome.code}: ${outcome.mode} ${outcome.customerId ?? ""}\n`,
     );
+  out.stdout(
+    "Visszaállítás (próba, nem ír): pnpm --filter @acropora/api partner:migrate --restore\n" +
+      "Visszaállítás (az írás):       pnpm --filter @acropora/api partner:migrate --restore --apply\n",
+  );
   return 0;
 }
 

@@ -6,7 +6,11 @@ import type {
   PartnerMigrationRow,
 } from "@acropora/types";
 
-import { describeDecisions, parseArgs } from "./partner-migration.cli.js";
+import {
+  describeDecisions,
+  describeTarget,
+  parseArgs,
+} from "./partner-migration.cli.js";
 import {
   applyOperations,
   restoreRegistered,
@@ -140,6 +144,27 @@ describe("decideOperations", () => {
   });
 });
 
+describe("describeTarget", () => {
+  it("names the host, the port and the database, and never the password", () => {
+    assert.equal(
+      describeTarget(
+        "postgresql://user:geheim@db.example.hu:5433/acropora_stage?schema=public",
+      ),
+      "db.example.hu:5433/acropora_stage",
+    );
+    assert.equal(
+      describeTarget("postgresql://u:p@localhost/acropora"),
+      "localhost/acropora",
+    );
+    assert.doesNotMatch(
+      describeTarget("postgresql://user:geheim@db/x"),
+      /geheim|user/,
+    );
+    assert.match(describeTarget(undefined), /nincs DATABASE_URL/);
+    assert.match(describeTarget("nem url"), /nem értelmezhető/);
+  });
+});
+
 describe("parseArgs", () => {
   it("defaults to a dry run", () => {
     assert.deepEqual(parseArgs([]), {
@@ -191,6 +216,8 @@ function fakeTx(seed: {
     metadata: Record<string, unknown> | null;
   }[];
   usage?: Record<string, number>;
+  /** a további hivatkozó táblák használata: tábla -> vevő-sor -> darab */
+  moreUsage?: Record<string, Record<string, number>>;
 }) {
   const suppliers = new Map(
     seed.suppliers.map((s) => [s.id, { customerId: null, ...s }]),
@@ -210,6 +237,16 @@ function fakeTx(seed: {
   const usage = seed.usage ?? {};
   const countOf = async (args: { where: { customerId: string } }) =>
     usage[args.where.customerId] ?? 0;
+  const more = seed.moreUsage ?? {};
+  const moreOf =
+    (table: string, key: "customerId" | "entityId" | "mergedIntoId" | "log") =>
+    async (args: { where: Record<string, unknown> }) => {
+      const id =
+        key === "log"
+          ? (args.where.OR as { keptId: string }[])[0]!.keptId
+          : (args.where[key] as string);
+      return more[table]?.[id] ?? 0;
+    };
   const tx = {
     supplier: {
       findUnique: async (args: { where: { id: string } }) =>
@@ -222,6 +259,7 @@ function fakeTx(seed: {
       },
     },
     customer: {
+      count: moreOf("customerMergedInto", "mergedIntoId"),
       findUnique: async (args: { where: { id: string } }) => {
         const found = customers.get(args.where.id);
         if (!found) return null;
@@ -235,6 +273,8 @@ function fakeTx(seed: {
       },
     },
     externalReference: {
+      count: async (args: { where: { entityId: string } }) =>
+        more.externalReference?.[args.where.entityId] ?? 0,
       findMany: async (args: { where: { entityId: string } }) =>
         references.filter((r) => r.entityId === args.where.entityId),
       update: async (args: {
@@ -259,8 +299,14 @@ function fakeTx(seed: {
           occurredAt: new Date(2026, 10, 4, 20, 0, seq++),
         });
       },
-      findMany: async (args: { where: { eventType: string } }) =>
-        events.filter((e) => e.eventType === args.where.eventType),
+      findMany: async (args: {
+        where: { eventType: string | { in: string[] } };
+      }) =>
+        events.filter((e) =>
+          typeof args.where.eventType === "string"
+            ? e.eventType === args.where.eventType
+            : args.where.eventType.in.includes(e.eventType),
+        ),
     },
     invoice: { count: countOf },
     salesOrder: { count: async () => 0 },
@@ -274,6 +320,12 @@ function fakeTx(seed: {
     worksheetDepartment: { count: async () => 0 },
     partnerOrder: { count: async () => 0 },
     user: { count: async () => 0 },
+    reefClubLinkCode: { count: moreOf("reefClubLinkCode", "customerId") },
+    reefClubCustomerLink: {
+      count: moreOf("reefClubCustomerLink", "customerId"),
+    },
+    customerMergeLog: { count: moreOf("customerMergeLog", "log") },
+    customerAlias: { count: moreOf("customerAlias", "customerId") },
   } as unknown as Tx;
   const createRow = async (_tx: Tx, supplier: { id: string }) => {
     const id = `new-${supplier.id}`;
@@ -424,6 +476,63 @@ describe("applyOperations and restoreRegistered", () => {
     assert.match(outcomes[0]!.detail ?? "", /2 hivatkozás/);
     assert.equal(world.suppliers.get("s-NEW")!.customerId, "new-s-NEW");
     assert.equal(world.customers.has("new-s-NEW"), true);
+  });
+
+  it("the same partner can be registered and restored more than once: the LAST event decides (barracuda, #2185)", async () => {
+    const world = fakeTx({
+      suppliers: [{ id: "s-NEW", code: "NEW" }],
+      customers: [],
+    });
+    const create = [
+      { kind: "CREATE", supplierId: "s-NEW", code: "NEW" },
+    ] as const;
+    await applyOperations(world.tx, create, null, world.createRow);
+    assert.deepEqual(
+      (await restoreRegistered(world.tx, null)).map((o) => o.result),
+      ["RESTORED"],
+    );
+    await applyOperations(world.tx, create, null, world.createRow);
+    assert.equal(world.suppliers.get("s-NEW")!.customerId, "new-s-NEW");
+    // two registered and one unregistered event: the second registration is still restorable
+    const second = await restoreRegistered(world.tx, null);
+    assert.deepEqual(
+      second.map((o) => o.result),
+      ["RESTORED"],
+    );
+    assert.equal(world.suppliers.get("s-NEW")!.customerId, null);
+    assert.equal(world.customers.has("new-s-NEW"), false);
+    assert.deepEqual(await restoreRegistered(world.tx, null), []);
+  });
+
+  it("keeps a created row that any referencing table still points at, including the cascading and the restricting ones", async () => {
+    const tables = [
+      "reefClubLinkCode",
+      "reefClubCustomerLink",
+      "customerMergeLog",
+      "customerMergedInto",
+      "externalReference",
+      "customerAlias",
+    ];
+    for (const table of tables) {
+      const world = fakeTx({
+        suppliers: [{ id: "s-NEW", code: "NEW" }],
+        customers: [],
+        moreUsage: { [table]: { "new-s-NEW": 1 } },
+      });
+      await applyOperations(
+        world.tx,
+        [{ kind: "CREATE", supplierId: "s-NEW", code: "NEW" }],
+        null,
+        world.createRow,
+      );
+      const outcomes = await restoreRegistered(world.tx, null);
+      assert.deepEqual(
+        outcomes.map((o) => o.result),
+        ["KEPT"],
+        table,
+      );
+      assert.equal(world.customers.has("new-s-NEW"), true, table);
+    }
   });
 
   it("the dry-run restore writes nothing", async () => {
