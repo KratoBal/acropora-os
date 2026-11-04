@@ -62,6 +62,9 @@ function item(
     issueDate: "2026-09-30",
     dueDate: "2026-10-08",
     grossAmount: "485140",
+    netAmount: "382000",
+    vatAmount: "103140",
+    paymentMethod: "Átutalás",
     currency: "HUF",
     status: "ISSUED",
     emailStatus: "SENT",
@@ -90,6 +93,7 @@ function response(
       totalPages: 1,
       ...pagination,
     },
+    facets: { paymentMethods: ["Átutalás", "Bankkártya", "Készpénz"] },
   };
 }
 
@@ -364,6 +368,102 @@ describe("BillingDocumentListPage", () => {
     expect(within(rows[1]!).queryByText("Nincs")).toBeNull();
     expect(within(rows[2]!).queryByTestId("paper-original-badge")).toBeNull();
     expect(within(rows[2]!).getByText("Megvan")).toBeInTheDocument();
+  });
+
+  /*
+    A NETTÓ, AZ ÁFA ÉS A BRUTTÓ EGYÜTT, A BEJÖVŐ LISTA FORMÁJÁBAN (Luca, 2026-11-04; kártya 6110d89b). MI PIROSÍT: ha a
+    három összeg nem a bejövő lista sorrendjében és formázásával áll; ha egy nem számolható (vázlat) összeg 0-nak
+    látszik a „—” helyett; ha a fizetési mód nem a kifizetés jelzése fölött áll.
+  */
+  it("shows the net, the VAT and the gross together, as the incoming list does, and the payment method above the payment mark", async () => {
+    api.list.mockResolvedValue(
+      response([
+        item({ paymentMethod: "Bankkártya" }),
+        item({
+          id: "draft-2",
+          documentNumber: null,
+          issueDate: null,
+          status: "DRAFT",
+          opens: "EDITOR",
+          netAmount: null,
+          vatAmount: null,
+          paymentMethod: null,
+          grossAmount: "0",
+        }),
+        item({
+          id: "eur-1",
+          currency: "EUR",
+          netAmount: "100",
+          vatAmount: "0",
+          grossAmount: "100",
+        }),
+      ]),
+    );
+    render(<BillingDocumentListPage />);
+    const rows = await screen.findAllByRole("row", { name: /megnyitása$/ });
+    const text = (row: HTMLElement) => row.textContent?.replace(/\s/g, " ");
+    expect(text(rows[0]!)).toMatch(/Nettó 382 000ÁFA 103 140Bruttó 485 140/);
+    expect(within(rows[0]!).getByText("Bankkártya")).toBeInTheDocument();
+    // a nem számolható nettó és ÁFA „—”, nem 0
+    expect(text(rows[1]!)).toMatch(/Nettó —ÁFA —Bruttó 0/);
+    // pénznem-jel nincs az összegben, a Deviza oszlop adja; a nem forint két tizedessel
+    expect(text(rows[2]!)).toMatch(/Nettó 100,00ÁFA 0,00Bruttó 100,00/);
+  });
+
+  it("sends the period (the month's first and last day) and the payment method, with the choices from the answer", async () => {
+    const month = new Date().toISOString().slice(0, 7);
+    const [year, index] = month.split("-").map(Number) as [number, number];
+    const last = String(new Date(Date.UTC(year, index, 0)).getUTCDate());
+    urlNavigation.reset(
+      "/penzugy/szamlazas",
+      `idoszak=${month}&fizmod=${encodeURIComponent("Bankkártya")}`,
+    );
+    render(<BillingDocumentListPage />);
+    await waitFor(() => expect(api.list).toHaveBeenCalled());
+    expect(lastQuery()).toEqual({
+      page: "1",
+      pageSize: "25",
+      from: `${month}-01`,
+      to: `${month}-${last}`,
+      paymentMethod: "Bankkártya",
+    });
+    const select = (await screen.findByLabelText(
+      "Fizetési mód",
+    )) as HTMLSelectElement;
+    expect([...select.options].map((option) => option.value)).toEqual([
+      "",
+      "Átutalás",
+      "Bankkártya",
+      "Készpénz",
+    ]);
+    fireEvent.change(select, { target: { value: "Készpénz" } });
+    await waitFor(() =>
+      expect(new URLSearchParams(urlNavigation.search).get("fizmod")).toBe(
+        "Készpénz",
+      ),
+    );
+    expect(new URLSearchParams(urlNavigation.search).get("page")).toBeNull();
+  });
+
+  it("a filter change on the period or the payment method goes back to page one, and 'Szűrők törlése' clears both", async () => {
+    urlNavigation.reset(
+      "/penzugy/szamlazas",
+      "fizmod=K%C3%A9szp%C3%A9nz&page=3",
+    );
+    render(<BillingDocumentListPage />);
+    fireEvent.change(await screen.findByLabelText("Időszak"), {
+      target: { value: new Date().toISOString().slice(0, 7) },
+    });
+    await waitFor(() =>
+      expect(
+        new URLSearchParams(urlNavigation.search).get("idoszak"),
+      ).not.toBeNull(),
+    );
+    expect(new URLSearchParams(urlNavigation.search).get("page")).toBeNull();
+    fireEvent.click(
+      (await screen.findAllByRole("button", { name: "Szűrők törlése" }))[0]!,
+    );
+    await waitFor(() => expect(urlNavigation.search).toBe(""));
   });
 
   it("the source filter goes to the request, and back from the URL", async () => {

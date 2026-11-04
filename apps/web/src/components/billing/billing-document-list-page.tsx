@@ -41,7 +41,11 @@ import {
   BillingDocumentTable,
   billingDocumentHref,
 } from "./billing-document-table";
-import { BillingIncomingList } from "./billing-incoming-list";
+import {
+  BillingIncomingList,
+  monthOptions,
+  monthRange,
+} from "./billing-incoming-list";
 import { BillingReceiptsView } from "./billing-receipts-view";
 import {
   BILLING_VIEWS,
@@ -190,11 +194,26 @@ function OutgoingList({
     ["", ...BILLING_DOCUMENT_ORIGINS],
     "",
   );
+  // az időszak a kelt szerint, a bejövő lista hónap-választékával (Luca, 2026-11-04); a fizetési mód a bizonylaton álló szöveg
+  const months = useMemo(() => monthOptions(), []);
+  const period = urlChoice(
+    params,
+    "idoszak",
+    ["", ...months.map((m) => m.value)],
+    "",
+  );
+  const paymentMethod = params.get("fizmod") ?? "";
   const page = urlPage(params);
   const appliedSearch = params.get("q") ?? "";
   const [search, setSearch] = useState(appliedSearch);
   const hasFilters = Boolean(
-    appliedSearch || documentType || status || invoiceFormat || origin,
+    appliedSearch ||
+    documentType ||
+    status ||
+    invoiceFormat ||
+    origin ||
+    period ||
+    paymentMethod,
   );
 
   const [data, setData] = useState<BillingDocumentListResponse | null>(null);
@@ -222,8 +241,23 @@ function OutgoingList({
     if (status) value.set("status", status);
     if (invoiceFormat) value.set("invoiceFormat", invoiceFormat);
     if (origin) value.set("origin", origin);
+    if (period) {
+      const range = monthRange(period);
+      value.set("from", range.from);
+      value.set("to", range.to);
+    }
+    if (paymentMethod) value.set("paymentMethod", paymentMethod);
     return value;
-  }, [appliedSearch, documentType, invoiceFormat, origin, page, status]);
+  }, [
+    appliedSearch,
+    documentType,
+    invoiceFormat,
+    origin,
+    page,
+    paymentMethod,
+    period,
+    status,
+  ]);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -261,6 +295,8 @@ function OutgoingList({
       status: null,
       invoiceFormat: null,
       origin: null,
+      idoszak: null,
+      fizmod: null,
       page: null,
     });
   };
@@ -335,6 +371,40 @@ function OutgoingList({
             <option value="">Minden forrás</option>
             <option value="OWN">Csak a mieink</option>
             <option value="EXTERNAL">Csak a külsők</option>
+          </PilotSelect>
+          <PilotSelect
+            chevron
+            aria-label="Időszak"
+            value={period}
+            onChange={(value) => setFilter("idoszak", value)}
+            className="min-w-[200px] flex-[1_1_210px] [&_select]:h-10"
+          >
+            <option value="">Időszak: mind</option>
+            {months.map((month) => (
+              <option key={month.value} value={month.value}>
+                Időszak: {month.label}
+              </option>
+            ))}
+          </PilotSelect>
+          <PilotSelect
+            chevron
+            aria-label="Fizetési mód"
+            value={paymentMethod}
+            onChange={(value) => setFilter("fizmod", value)}
+            className="min-w-[170px] flex-[1_1_180px] [&_select]:h-10"
+          >
+            <option value="">Minden fizetési mód</option>
+            {/* a választott érték akkor is áll, ha a választék még nem jött meg */}
+            {[
+              ...new Set([
+                ...(data?.facets?.paymentMethods ?? []),
+                ...(paymentMethod ? [paymentMethod] : []),
+              ]),
+            ].map((method) => (
+              <option key={method} value={method}>
+                {method}
+              </option>
+            ))}
           </PilotSelect>
           {hasFilters ? (
             <button

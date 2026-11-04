@@ -41,6 +41,17 @@ export interface BillingDocumentListQuery {
    * (EXTERNAL); hiányzó: mind (Balázs szűrője, acrobot 25812).
    */
   origin?: BillingDocumentOrigin;
+  /**
+   * A KIÁLLÍTÁS NAPJA (kelt) `YYYY-MM-DD`, mindkét vég benne, budapesti naptári napokkal (Luca, 2026-11-04: a
+   * bejövő listához hasonló szűrő). A vázlatnak nincs kiállítási napja, ezért dátum-szűrővel nem jelenik meg.
+   */
+  from?: string;
+  to?: string;
+  /**
+   * A fizetési mód szövege, ahogy a bizonylaton áll („Átutalás”); kis- és nagybetű mindegy, pontos egyezés. A
+   * választék a válasz `facets.paymentMethods` listája.
+   */
+  paymentMethod?: string;
 }
 
 /**
@@ -108,6 +119,14 @@ export interface BillingDocumentListItem {
   dueDate: string | null;
   /** Tizedes szöveg; HUF-nál a Számlázz.hu egész forintja. */
   grossAmount: DecimalText;
+  /**
+   * A NETTÓ ÉS AZ ÁFA A BRUTTÓ MELLETT (Luca, 2026-11-04): a bejövő listával azonos hármas. Kiállított sornál a
+   * tárolt érték, vázlatnál a tételekből a bruttóval azonos szabállyal számolt; `null`, ha nem számolható.
+   */
+  netAmount: DecimalText | null;
+  vatAmount: DecimalText | null;
+  /** A fizetési mód szövege, ahogy a bizonylaton áll; `null`, ha nincs megadva. */
+  paymentMethod: string | null;
   currency: string;
   status: BillingDocumentStatus;
   emailStatus: BillingEmailStatus | null;
@@ -284,6 +303,11 @@ export interface BillingDocumentListResponse {
     totalItems: number;
     totalPages: number;
   };
+  /**
+   * A szűrő választéka: a mieink és a külsők fizetési módjai együtt, egyszer (kis- és nagybetű szerint
+   * összevonva), ábécében.
+   */
+  facets: { paymentMethods: string[] };
 }
 
 /**
