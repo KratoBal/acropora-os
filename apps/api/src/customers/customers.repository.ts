@@ -222,14 +222,10 @@ export class CustomersRepository extends Repository {
       include,
     });
     if (!customer) return null;
-    const reference = await prisma.externalReference.findUnique({
-      where: {
-        system_entityType_entityId: {
-          system: "UNAS",
-          entityType: EXTERNAL_ENTITY_TYPE,
-          entityId: id,
-        },
-      },
+    // egy összevont cégnek több UNAS-fiókja lehet (partnertörzs, 3.4): a legrégebbi a megjelenített, determinisztikusan
+    const reference = await prisma.externalReference.findFirst({
+      where: { system: "UNAS", entityType: EXTERNAL_ENTITY_TYPE, entityId: id },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     });
     const detail = {
       ...this.toDetail(customer, reference?.externalId ?? null),
@@ -394,14 +390,13 @@ export class CustomersRepository extends Repository {
           where: { id },
           include,
         });
-        const reference = await tx.externalReference.findUnique({
+        const reference = await tx.externalReference.findFirst({
           where: {
-            system_entityType_entityId: {
-              system: "UNAS",
-              entityType: EXTERNAL_ENTITY_TYPE,
-              entityId: id,
-            },
+            system: "UNAS",
+            entityType: EXTERNAL_ENTITY_TYPE,
+            entityId: id,
           },
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         });
         return this.toDetail(customer, reference?.externalId ?? null);
       },
@@ -419,10 +414,14 @@ export class CustomersRepository extends Repository {
         entityType: EXTERNAL_ENTITY_TYPE,
         entityId: { in: customerIds },
       },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     });
-    return new Map(
-      references.map((reference) => [reference.entityId, reference.externalId]),
-    );
+    // több UNAS-fiókos (összevont) cégnél a legrégebbi marad a mutatott azonosító
+    const byCustomer = new Map<string, string>();
+    for (const reference of references)
+      if (!byCustomer.has(reference.entityId))
+        byCustomer.set(reference.entityId, reference.externalId);
+    return byCustomer;
   }
 
   private toSummary(
