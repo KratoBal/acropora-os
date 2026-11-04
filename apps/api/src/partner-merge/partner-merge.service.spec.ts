@@ -233,6 +233,9 @@ describe("PartnerMergeService.preview", () => {
       ["phone", "email"],
     );
     assert.equal(preview.kept?.partnerMirror, true);
+    // the target database is named, without a password
+    assert.equal(typeof preview.target, "string");
+    assert.doesNotMatch(preview.target, /@|password/i);
     assert.match(preview.fingerprint, /^[0-9a-f]{64}$/);
     // the Product-type reference of the same entity id is not a customer reference
     assert.equal(preview.willMove.ExternalReference, 1);

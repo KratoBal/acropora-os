@@ -16,6 +16,12 @@ import type { MigrationOperation } from "./partner-migration-run.js";
  */
 export type Tx = Prisma.TransactionClient;
 
+/**
+ * A TERV ELAVULT: az írás közben kiderül, hogy a próba óta változott valami (a partner már kötött, a vevő-sor eltűnt vagy másé lett).
+ * Csak ez a hiba megy ki a kliensnek érthető üzenettel (409); minden más hiba (adatbázis, kényszer) nem.
+ */
+export class StalePlanError extends Error {}
+
 export interface RegisterOutcome {
   code: string;
   mode: "CREATED" | "BOUND" | "SKIPPED";
@@ -59,9 +65,10 @@ export async function applyOperations(
       continue;
     }
     const supplier = await loadSupplier(tx, op.supplierId);
-    if (!supplier) throw new Error(`A partner nem található: ${op.code}.`);
+    if (!supplier)
+      throw new StalePlanError(`A partner nem található: ${op.code}.`);
     if (supplier.customerId)
-      throw new Error(
+      throw new StalePlanError(
         `A(z) ${op.code} partnernek már van kötött vevő-sora: a terv elavult, nézd meg újra a próbafuttatást.`,
       );
 
@@ -80,11 +87,11 @@ export async function applyOperations(
       select: { id: true, archivedAt: true, partner: { select: { id: true } } },
     });
     if (!customer || customer.archivedAt)
-      throw new Error(
+      throw new StalePlanError(
         `A(z) ${op.code} jelölt vevő-sora nem található vagy archivált.`,
       );
     if (customer.partner)
-      throw new Error(
+      throw new StalePlanError(
         `A(z) ${op.code} jelölt vevő-sora már egy másik partnerhez kötött.`,
       );
     await tx.supplier.update({
@@ -219,15 +226,54 @@ export async function restoreRegistered(
         // a VISSZAVONT összevonások naplója nem tartja vissza a sort (a `Restrict` kulcs viszont a törlést tartaná): a napló sorai
         // törlődnek, a történet a `customer.merged` és `customer.unmerged` eseményekben marad. Az ÉLŐ összevonás naplóját a számlálás
         // már megfogta, ide csak visszavont napló jut; a szűrő ezt itt is kimondja, hogy egy élő napló sosem törlődhet.
-        await tx.customerMergeLog.deleteMany({
-          where: {
-            OR: [
-              { keptId: payload.customerId },
-              { mergedId: payload.customerId },
-            ],
-            undoneAt: { not: null },
+        const removable = {
+          OR: [
+            { keptId: payload.customerId },
+            { mergedId: payload.customerId },
+          ],
+          undoneAt: { not: null },
+        };
+        // az összevonás naplózása ígéret: a napló törlése előtt a TARTALMA egy eseménybe kerül (csak azonosítók és mezőnevek, ahogy a
+        // napló maga is), így a részlet a sor törlése után is visszakereshető (barracuda, #2196 review)
+        const logs = await tx.customerMergeLog.findMany({
+          where: removable,
+          select: {
+            id: true,
+            keptId: true,
+            mergedId: true,
+            actorUserId: true,
+            reason: true,
+            movedRefs: true,
+            fieldChanges: true,
+            createdAt: true,
+            undoneAt: true,
           },
         });
+        for (const log of logs)
+          await tx.domainEvent.create({
+            data: {
+              id: randomUUID(),
+              eventType: "customer.merge-log-removed",
+              aggregateType: "Customer",
+              aggregateId: payload.customerId,
+              actorUserId,
+              payload: {
+                logId: log.id,
+                keptId: log.keptId,
+                mergedId: log.mergedId,
+                mergeActorUserId: log.actorUserId,
+                reason: log.reason,
+                movedRefs: log.movedRefs,
+                fieldChanges: log.fieldChanges,
+                createdAt: log.createdAt.toISOString(),
+                undoneAt: log.undoneAt?.toISOString() ?? null,
+                removedBy: "partner.restore",
+              } as Prisma.InputJsonValue,
+              occurredAt: new Date(),
+              schemaVersion: 1,
+            },
+          });
+        await tx.customerMergeLog.deleteMany({ where: removable });
         await tx.customer.delete({ where: { id: payload.customerId } });
       }
     } else if (!dryRun) {
