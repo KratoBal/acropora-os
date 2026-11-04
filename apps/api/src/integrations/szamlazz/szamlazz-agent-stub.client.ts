@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import type {
   SzamlazzAgentClient,
+  SzamlazzAgentPaymentClient,
   SzamlazzAgentStornoClient,
 } from "./szamlazz-agent.client.js";
 import type { SzamlazzAgentResponse } from "./szamlazz-agent-xml.js";
@@ -53,7 +54,10 @@ function stubPdf(text: string): Buffer {
 }
 
 export class StubSzamlazzAgentClient
-  implements SzamlazzAgentClient, SzamlazzAgentStornoClient
+  implements
+    SzamlazzAgentClient,
+    SzamlazzAgentStornoClient,
+    SzamlazzAgentPaymentClient
 {
   constructor(private readonly now: () => Date = () => new Date()) {}
 
@@ -70,6 +74,11 @@ export class StubSzamlazzAgentClient
       invoiceNumber: number,
       pdf: stubPdf(`TESZT SZAMLA, NEM VALODI: ${number}`),
     };
+  }
+
+  /** A kézi kifizetés-rögzítés is végigkattintható a teszt-szerveren: nem ír sehova. */
+  async registerPayment(): Promise<SzamlazzAgentResponse> {
+    return { successful: true };
   }
 
   /** A sztornó is végigkattintható a teszt-szerveren (számlázási brief, 1. pont). */

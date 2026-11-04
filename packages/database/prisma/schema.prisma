@@ -201,6 +201,10 @@ enum OutgoingPaymentMarkSource {
   GLS_COD
   SIMPLEPAY
   FOXPOST
+  /// a kimenő számla oldalán kézzel rögzített kifizetés (kártya 2026/00083-86, Balázs
+  /// 2026-11-04 16:40 UTC); a `sourceRef` a kérés azonosítója, hogy egy dupla kattintás ne
+  /// legyen két kifizetés
+  MANUAL
 }
 
 enum GlsSyncRunStatus {
@@ -3062,6 +3066,32 @@ model Customer {
   createdAt             DateTime     @default(now())
   updatedAt             DateTime     @updatedAt
 
+  /// EGY PARTNERTÖRZS, 2. LÉPÉS (terv: exchange/otletek-2026-11-04/egy-partnertorzs-terv-2026-11-04.md, 2.2; Balázs igent
+  /// mondott 2026-11-04 14:57 UTC). A KÉT KULCS GENERÁLT OSZLOP, és SEMMI nem olvassa még: a csak olvasó mérés
+  /// (`partner-duplicates`) ugyanezt a szabályt TypeScriptben számolja, az integrációs teszt a kettőt egymással veti össze.
+  ///
+  /// `huTaxBase`: a magyar adószám első nyolc számjegye, csak magyar adószám ALAKÚ értékből (nyolc számjegy, opcionális HU
+  /// előtag, opcionális -x-yy vég), különben NULL. `euTaxKey`: a közösségi adószám országkóddal együtt, nagybetűvel, csak
+  /// betű és számjegy, különben NULL. KÉT KÜLÖN KULCS, nem egy közös oszlop: egy `DE123456789` és egy magyar, ugyanazzal a
+  /// nyolc jeggyel kezdődő szám soha nem lehet egy csoportban.
+  ///
+  /// A Prismának nincs generált-oszlop típusa: a mező `@default(dbgenerated())`, a KIFEJEZÉST a migráció tartja
+  /// (`GENERATED ALWAYS ... STORED`), és az oszlop kliensből NEM írható (az adatbázis elutasítja). Egy `prisma migrate dev`
+  /// ezt a generálást levenné: azt a javaslatot el kell dobni (a `partner-register-schema-guard.spec.ts` bukik, ha a
+  /// migráció és a séma elválik).
+  huTaxBase String? @default(dbgenerated()) @db.Text
+  euTaxKey  String? @default(dbgenerated()) @db.Text
+
+  /// Az összevonásnál megszűnt sor nem törlődik: `archivedAt` és ez a hivatkozás a megmaradó sorra (3.3). Visszavonáskor
+  /// ez törlődik. SEMMI nem olvassa még.
+  mergedIntoId String?
+  mergedInto   Customer?  @relation("CustomerMerge", fields: [mergedIntoId], references: [id], onDelete: Restrict)
+  mergedFrom   Customer[] @relation("CustomerMerge")
+  /// A régi azonosítók, hogy egy régi VEVO- vagy PARTNER- szám továbbra is megtalálja a cég egyetlen sorát.
+  aliases           CustomerAlias[]
+  mergeLogsAsKept   CustomerMergeLog[] @relation("CustomerMergeKept")
+  mergeLogsAsMerged CustomerMergeLog[] @relation("CustomerMergeMerged")
+
   addresses            CustomerAddress[]
   salesOrders          SalesOrder[]
   aquariums            Aquarium[]
@@ -3085,6 +3115,64 @@ model Customer {
 
   @@index([displayName])
   @@index([email])
+  @@index([mergedIntoId])
+  @@index([huTaxBase])
+  @@index([euTaxKey])
+}
+
+/// EGY PARTNERTÖRZS, 2. LÉPÉS: egy megszűnt (összevont) vevő-sor régi azonosítója a megmaradó soron, hogy a keresés, a
+/// levelek és a külső hivatkozások a régi számmal is megtalálják a céget (terv 2.2). Additív: SEMMI nem olvassa még.
+model CustomerAlias {
+  id         String            @id @default(cuid())
+  customerId String
+  /// A régi azonosító szövege (például egy régi `VEVO-...` vagy `PARTNER-...` szám, vagy a megszűnt sor azonosítója).
+  value      String            @unique
+  kind       CustomerAliasKind
+  /// Melyik összevonás hozta létre (a visszavonás ezt törli); NULL, ha kézzel vették fel.
+  mergeLogId String?
+  createdAt  DateTime          @default(now())
+
+  customer Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  mergeLog CustomerMergeLog? @relation(fields: [mergeLogId], references: [id], onDelete: SetNull)
+
+  @@index([customerId])
+  @@index([mergeLogId])
+}
+
+enum CustomerAliasKind {
+  /// egy régi `Customer.customerNumber`
+  CUSTOMER_NUMBER
+  /// a megszűnt sor `Customer.id`-ja
+  ROW_ID
+}
+
+/// EGY PARTNERTÖRZS, 2. LÉPÉS: összevonásonként egy sor (melyik maradt, melyik szűnt meg, és minden áthelyezett hivatkozás
+/// tábla- és sorazonosítóval), ebből a visszavonás kiolvasható (terv 2.2, 3.3). A sorok nem törlődnek. Additív: SEMMI nem
+/// olvassa még.
+model CustomerMergeLog {
+  id            String    @id @default(cuid())
+  /// A megmaradó sor.
+  keptId        String
+  /// A megszűnt (archivált) sor.
+  mergedId      String
+  /// Ki döntött: a felhasználó azonosítója (nem kapcsolat: a felhasználó törlése nem érintheti a naplót).
+  actorUserId   String?
+  /// Szabad szöveg: miért, vagy honnan a javaslat ("Balázs, 2026-11-05, állatkert").
+  reason        String?
+  /// Az áthelyezett hivatkozások: `[{ "table": "Invoice", "id": "...", "field": "customerId" }, ...]`, csak azonosítók.
+  movedRefs     Json
+  /// A kitöltött és az ütköző mezők, azonosítókkal és mezőnevekkel (nem értékekkel), a visszavonáshoz.
+  fieldChanges  Json?
+  createdAt     DateTime  @default(now())
+  /// Ha az összevonást visszavonták, mikor.
+  undoneAt      DateTime?
+
+  kept    Customer        @relation("CustomerMergeKept", fields: [keptId], references: [id], onDelete: Restrict)
+  merged  Customer        @relation("CustomerMergeMerged", fields: [mergedId], references: [id], onDelete: Restrict)
+  aliases CustomerAlias[]
+
+  @@index([keptId])
+  @@index([mergedId])
 }
 
 model CustomerAddress {

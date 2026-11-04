@@ -25,6 +25,7 @@ const api = vi.hoisted(() => ({
   externalDetail: vi.fn(),
   externalPdf: vi.fn(),
   setExternalPaperOriginal: vi.fn(),
+  recordOutgoingPayment: vi.fn(),
 }));
 vi.mock("@/lib/api/billing-documents", () => ({ billingDocumentsApi: api }));
 
@@ -298,6 +299,87 @@ describe("BillingExternalDocumentPage", () => {
         await screen.findByTestId("paper-original-pill"),
       ).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: /papíron/i })).toBeNull();
+    } finally {
+      auth.role = "OWNER";
+    }
+  });
+
+  /*
+    KÉZI KIFIZETÉS (kártya 2026/00083-86; Balázs, 2026-11-04 16:40 UTC). MI PIROSÍT: ha a
+    gomb nem jelenik meg egy nyitott számlán; ha nem a nyitott összeget kínálja; ha a kérés
+    nem a számla számát és egy kérés-azonosítót viszi; ha a visszavonás korlátja nem áll a
+    gomb mellett; ha kifizetett számlán vagy a kiállítás joga nélkül is megjelenik.
+  */
+  it("an open invoice takes a manual payment, up to its open amount, with the undo limit beside it", async () => {
+    api.externalDetail.mockReset().mockResolvedValue(
+      detail({
+        paymentState: "PARTIAL",
+        paidAmount: "10000",
+        paymentsKnown: true,
+      }),
+    );
+    api.recordOutgoingPayment.mockResolvedValue({
+      state: "WRITTEN",
+      outstanding: 0,
+      message: "A kifizetés a Számlázz.hu-ban rögzítve.",
+    });
+    render(<BillingExternalDocumentPage documentId="ext-1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Kifizetés rögzítése" }),
+    );
+    expect(screen.getByLabelText("Összeg")).toHaveValue("15400");
+    expect(
+      screen.getByText(/a Számlázz.hu felületén lehet törölni, innen nem/),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Rögzítés a Számlázz.hu-ban" }),
+    );
+    await waitFor(() => expect(api.recordOutgoingPayment).toHaveBeenCalled());
+    const [token, body] = api.recordOutgoingPayment.mock.calls[0]!;
+    expect(token).toBe("token-1");
+    expect(body).toMatchObject({
+      invoiceNumber: "ACRW-2026/00508",
+      amount: "15400",
+    });
+    expect(body.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(body.requestId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(
+      await screen.findByText("A kifizetés a Számlázz.hu-ban rögzítve."),
+    ).toBeInTheDocument();
+    // the page reloads, so the new state shows
+    await waitFor(() => expect(api.externalDetail).toHaveBeenCalledTimes(2));
+  });
+
+  it("no manual payment on a paid invoice, or without the issuing permission", async () => {
+    api.externalDetail.mockResolvedValue(
+      detail({
+        paymentState: "PAID",
+        paidAmount: "25400",
+        paymentsKnown: true,
+      }),
+    );
+    const { unmount } = render(
+      <BillingExternalDocumentPage documentId="ext-1" />,
+    );
+    expect(
+      await screen.findByRole("heading", { name: "ACRW-2026/00508" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Kifizetés rögzítése" }),
+    ).toBeNull();
+    unmount();
+    auth.role = "VIEWER";
+    try {
+      api.externalDetail.mockResolvedValue(
+        detail({ paymentState: "UNPAID", paymentsKnown: true }),
+      );
+      render(<BillingExternalDocumentPage documentId="ext-1" />);
+      expect(
+        await screen.findByRole("heading", { name: "ACRW-2026/00508" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Kifizetés rögzítése" }),
+      ).toBeNull();
     } finally {
       auth.role = "OWNER";
     }

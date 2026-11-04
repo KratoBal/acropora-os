@@ -1,8 +1,8 @@
 /**
  * EGY PARTNERTÖRZS, 1. LÉPÉS: A DUPLIKÁTUM-MÉRÉS VÁLASZA (`GET /admin/partner-duplicates`, settings.manage). A válasz a
  * felületnek szól: nevet és adószámot tartalmaz, ezért csak jogosult felhasználónak jelenik meg. A naplósor (a flottának)
- * ugyanezeket a számokat adja, név nélkül. Az API saját típusa ezzel szerkezetre azonos (az API-ág beolvadása után az API
- * innen veszi át).
+ * ugyanezeket a számokat adja, név nélkül. Az API ezt a típust adja vissza (a fordító egyezteti a két oldalt), nincs
+ * külön másolata.
  */
 export type PartnerDuplicateKeyKind = "HU" | "EU" | "HU4";
 

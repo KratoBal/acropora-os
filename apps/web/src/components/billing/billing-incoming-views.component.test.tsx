@@ -420,6 +420,28 @@ describe("the incoming list", () => {
     fireEvent.click(screen.getByRole("button", { name: "Szűrők törlése" }));
     expect(urlNavigation.search).toBe("nezet=bejovo");
   });
+
+  // A SZŰRŐSOR RÁCSA, ugyanaz, mint a kimenő listán (Balázs, 2026-11-04): MI PIROSÍT: ha a bejövő szűrősor ismét nyújtó
+  // (flex-grow) alakú, vagy egy szűrő saját nyújtó méretet kap; ha a fizetés szűrője nem „mind”-del kezdődik.
+  it("the filter row is the same fixed-column fill grid as on the outgoing list, and the payment filter starts at 'all'", async () => {
+    urlNavigation.reset("/penzugy/szamlazas", "nezet=bejovo");
+    render(<BillingDocumentListPage />);
+    const search = await screen.findByLabelText("Szállító keresése");
+    const grid = search.closest("div[class*='grid']") as HTMLElement;
+    expect(grid.className).toContain("grid-cols-1");
+    expect(grid.className).toContain(
+      "sm:grid-cols-[repeat(auto-fill,minmax(190px,1fr))]",
+    );
+    expect(grid.className).not.toMatch(/flex|auto-fit/);
+    for (const child of grid.children)
+      expect((child as HTMLElement).className).not.toMatch(
+        /flex-\[|min-w-\[|flex-grow|\bgrow\b/,
+      );
+    const payment = screen.getByRole("combobox", {
+      name: "Fizetés",
+    }) as HTMLSelectElement;
+    expect(payment.options[0]!.textContent).toBe("Fizetés: mind");
+  });
 });
 
 // MI PIROSÍT: ha a beérkezett, de még nem auditált nyugták üres listának
