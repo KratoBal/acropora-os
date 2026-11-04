@@ -59,7 +59,7 @@ function row(status = "DRAFT", over: Record<string, unknown> = {}) {
       customerNumber: "C-1",
       displayName: "Kitalált Kft.",
       companyName: null,
-      taxNumber: null,
+      taxNumber: "12345678-2-42",
       email: "vevo@example.com",
       addresses: [
         {

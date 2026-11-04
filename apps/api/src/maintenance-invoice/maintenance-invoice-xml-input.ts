@@ -20,6 +20,10 @@ export interface MaintenanceInvoiceCertificateSource {
       id: string;
       displayName: string;
       taxNumber: string | null;
+      /** a vevő típusa és partner-tükre: az adószám-kapuhoz (kártya aaf4f09d) */
+      type?: string | null;
+      euTaxNumber?: string | null;
+      partner?: { id: string } | null;
       /** Napban; `null` = az alapérték (`DEFAULT_PAYMENT_DUE_DAYS`). */
       paymentDueDays: number | null;
       addresses: readonly {
@@ -179,6 +183,18 @@ export function maintenanceInvoiceXmlInputFrom(
           .filter((part): part is string => Boolean(part))
           .join(", "),
         taxNumber: certificate.serviceJob.customer.taxNumber ?? undefined,
+        // a külföldi partner tükre a közösségi adószámot viseli (`mirroredTaxNumber`)
+        ...(!certificate.serviceJob.customer.taxNumber?.trim() &&
+        certificate.serviceJob.customer.euTaxNumber?.trim()
+          ? {
+              euTaxNumber: certificate.serviceJob.customer.euTaxNumber.trim(),
+              vatSubject: 6,
+            }
+          : {}),
+        taxSubject: {
+          type: certificate.serviceJob.customer.type ?? null,
+          partnerMirror: Boolean(certificate.serviceJob.customer.partner),
+        },
       },
       items: mapped.map((item) => item.line),
     },

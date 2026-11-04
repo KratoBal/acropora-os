@@ -1,3 +1,7 @@
+import {
+  buyerTaxNumberProblem,
+  SzamlazzBuyerTaxNumberError,
+} from "./szamlazz-buyer-tax.js";
 import { SaxesParser } from "saxes";
 
 /**
@@ -55,6 +59,13 @@ export interface SzamlazzAgentBuyer {
   euTaxNumber?: string;
   phone?: string;
   comment?: string;
+  /**
+   * A VEVŐ ADÓSZÁM-KÖTELEZETTSÉGÉHEZ (kártya aaf4f09d): a típusa és hogy partner-tükör-e.
+   * KÖTELEZŐ, hogy minden hívónak ki kelljen mondania; az építő ebből dönt
+   * (`buyerTaxNumberProblem`), és adószám nélkül nem épít XML-t olyan vevőnek, aki
+   * nincs kifejezetten magánszemélynek jelölve. Az XML-be nem kerül.
+   */
+  taxSubject: { type: string | null; partnerMirror: boolean };
 }
 
 export interface SzamlazzAgentItem {
@@ -164,6 +175,15 @@ const DOCUMENT_FLAG: Record<SzamlazzDocumentType, string | null> = {
 export function buildSzamlazzAgentInvoiceXml(
   input: SzamlazzAgentInvoiceInput,
 ): string {
+  // A VÉGSŐ KAPU (kártya aaf4f09d): minden számla ezen az építőn megy a Számlázz.hu felé
+  const taxProblem = buyerTaxNumberProblem({
+    name: input.buyer.name,
+    type: input.buyer.taxSubject.type,
+    partnerMirror: input.buyer.taxSubject.partnerMirror,
+    taxNumber: input.buyer.taxNumber,
+    euTaxNumber: input.buyer.euTaxNumber,
+  });
+  if (taxProblem) throw new SzamlazzBuyerTaxNumberError(taxProblem);
   const settings =
     tag("szamlaagentkulcs", input.agentKey) +
     tag("eszamla", input.electronic ?? true) +

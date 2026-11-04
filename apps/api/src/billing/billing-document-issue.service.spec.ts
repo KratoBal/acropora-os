@@ -63,7 +63,7 @@ function row(status = "DRAFT", invoiceFormat = "ELECTRONIC") {
       customerNumber: "C-1",
       displayName: "Kitalált Kft.",
       companyName: null,
-      taxNumber: null,
+      taxNumber: "12345678-2-42",
       email: "vevo@example.com",
       addresses: [
         {
@@ -423,38 +423,66 @@ describe("BillingDocumentIssueService", () => {
     PIROSÍT: ha a céges, adószám nélküli vevő számlája foglal vagy Számlázz.hu-t
     hív; ha a magánszemély, a magyar vagy a közösségi adószámos cég elakad.
   */
-  it("TAX-GATE: a company buyer without a tax number is refused before the claim, naming the buyer", async () => {
+  it("TAX-GATE: without a tax number only an explicitly marked person goes out; the rest is refused before the claim", async () => {
     const base = row().customer;
-    const { service, calls } = setup({
-      over: {
-        customer: {
+    const nincsAdo = { taxNumber: null, euTaxNumber: null };
+    for (const [nev, customer] of [
+      ["cég", { ...base, ...nincsAdo, type: "COMPANY", partner: null }],
+      [
+        "ismeretlen típus",
+        { ...base, ...nincsAdo, type: undefined, partner: null },
+      ],
+      [
+        "partner-tükör magánszemély típussal",
+        {
           ...base,
-          type: "COMPANY",
-          taxNumber: null,
-          euTaxNumber: null,
+          ...nincsAdo,
+          displayName: "Fővárosi Állat- és Növénykert",
+          type: "PERSON",
+          partner: { id: "supplier-zoo" },
         },
-      },
-    });
-    await assert.rejects(
-      () => issue(service),
-      (error: unknown) =>
-        error instanceof BadRequestException &&
-        /A vevőnek nincs adószáma: Kitalált Kft\./.test(error.message),
-    );
-    assert.deepEqual([calls.claim, calls.generate], [0, 0]);
+      ],
+      [
+        "magánszemély cégformájú névvel",
+        { ...base, ...nincsAdo, type: "PERSON", partner: null },
+      ],
+    ] as const) {
+      const { service, calls } = setup({ over: { customer } });
+      await assert.rejects(
+        () => issue(service),
+        (error: unknown) =>
+          error instanceof BadRequestException &&
+          error.message.startsWith("A vevőnek nincs adószáma:"),
+        nev,
+      );
+      assert.deepEqual([calls.claim, calls.generate], [0, 0], nev);
+    }
   });
 
-  it("TAX-GATE: a person, or a company with a Hungarian or an EU tax number, goes out", async () => {
+  it("TAX-GATE: an explicitly marked person, or a buyer with a Hungarian or an EU tax number, goes out", async () => {
     const base = row().customer;
     for (const customer of [
-      { ...base, type: "PERSON", taxNumber: null, euTaxNumber: null },
+      {
+        ...base,
+        displayName: "Kovács Anna",
+        type: "PERSON",
+        taxNumber: null,
+        euTaxNumber: null,
+        partner: null,
+      },
       {
         ...base,
         type: "COMPANY",
         taxNumber: "12345678-2-42",
         euTaxNumber: null,
       },
-      { ...base, type: "COMPANY", taxNumber: null, euTaxNumber: "DE123456789" },
+      {
+        ...base,
+        type: "COMPANY",
+        taxNumber: null,
+        euTaxNumber: "DE123456789",
+        partner: { id: "supplier-1" },
+      },
     ]) {
       const { service, calls } = setup({ over: { customer } });
       const detail = await issue(service);

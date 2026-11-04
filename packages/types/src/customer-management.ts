@@ -61,6 +61,11 @@ export interface CustomerDetail extends CustomerSummary {
    * nincs ilyen, vagy több partner más-más napot mondana.
    */
   partnerTerms?: { paymentDueDays: number; partnerName: string } | null;
+  /**
+   * Ez a sor egy partner vevő-tükre (`Supplier.customerId`): a számla kapuja
+   * (kártya aaf4f09d) partnernek mindig adószámot kér, a típustól függetlenül.
+   */
+  partnerMirror?: boolean;
   marketingEmailConsent: boolean;
   marketingSmsConsent: boolean;
   addresses: CustomerAddress[];

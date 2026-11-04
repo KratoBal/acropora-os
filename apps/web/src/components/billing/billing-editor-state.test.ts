@@ -361,9 +361,10 @@ describe("withCustomer", () => {
 });
 
 /*
-  CÉGNEK ADÓSZÁM NÉLKÜL NINCS SZÁMLA (kártya aaf4f09d). MI PIROSÍT: ha a céges,
-  adószám nélküli vevőnél nincs ok (a gomb kiállítható maradna); ha a
-  magánszemély, az ismeretlen típusú vagy az adószámos cég tiltást kap.
+  ADÓSZÁM NÉLKÜL CSAK A KIFEJEZETTEN MAGÁNSZEMÉLYNEK (kártya aaf4f09d). MI PIROSÍT:
+  ha a céges, az ismeretlen típusú vagy a partner-tükör vevőnél adószám nélkül
+  nincs ok (a gomb kiállítható maradna); ha a magánszemély vagy az adószámos
+  vevő tiltást kap.
 */
 describe("companyTaxNumberReason", () => {
   const vevo = {
@@ -377,32 +378,38 @@ describe("companyTaxNumberReason", () => {
     internalCode: "PARTNER-1",
   };
 
-  it("a céges, adószám nélküli vevőnél megnevezi a vevőt", () => {
-    expect(companyTaxNumberReason({ ...vevo, isCompany: true })).toBe(
-      "A vevőnek nincs adószáma: Fővárosi Állat- és Növénykert cég. Egészítsd ki a partnernél, cégnek adószám nélkül nem állítunk ki számlát.",
+  it("a nem magánszemélynek jelölt, adószám nélküli vevőnél megnevezi a vevőt", () => {
+    expect(companyTaxNumberReason({ ...vevo, type: "COMPANY" })).toBe(
+      "A vevőnek nincs adószáma: Fővárosi Állat- és Növénykert (nincs magánszemélynek jelölve), de sem magyar, sem közösségi adószám nincs megadva. Egészítsd ki a partnernél vagy a vevőnél; adószám nélkül csak kifejezetten magánszemélynek jelölt vevőnek állítunk ki számlát.",
     );
   });
 
-  it("a magánszemély, az ismeretlen és az adószámos cég nem kap tiltást", () => {
-    expect(companyTaxNumberReason({ ...vevo, isCompany: false })).toBeNull();
-    expect(companyTaxNumberReason(vevo)).toBeNull();
+  it("az ismeretlen típus és a partner-tükör tiltást kap, a magánszemély és az adószámos nem", () => {
+    // the zoo case: a partner mirror, whatever its type says
+    expect(
+      companyTaxNumberReason({ ...vevo, type: "PERSON", partnerMirror: true }),
+    ).not.toBeNull();
+    expect(companyTaxNumberReason(vevo)).not.toBeNull();
+    expect(
+      companyTaxNumberReason({ ...vevo, type: "PERSON", name: "Kovács Anna" }),
+    ).toBeNull();
     expect(companyTaxNumberReason(null)).toBeNull();
     expect(
       companyTaxNumberReason({
         ...vevo,
-        isCompany: true,
+        partnerMirror: true,
         taxNumber: "15490658-2-42",
       }),
     ).toBeNull();
     expect(
       companyTaxNumberReason({
         ...vevo,
-        isCompany: true,
+        type: "COMPANY",
         euTaxNumber: "DE123456789",
       }),
     ).toBeNull();
     expect(
-      companyTaxNumberReason({ ...vevo, isCompany: true, taxNumber: "  " }),
+      companyTaxNumberReason({ ...vevo, type: "COMPANY", taxNumber: "  " }),
     ).not.toBeNull();
   });
 });

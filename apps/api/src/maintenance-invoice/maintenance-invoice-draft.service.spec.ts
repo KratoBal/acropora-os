@@ -189,32 +189,43 @@ describe("MaintenanceInvoiceDraftService.draftFor", () => {
     ha a céges, adószám nélküli vevő piszkozata vagy kiállítása Számlázz.hu-t hív;
     ha a magánszemély vagy a közösségi adószámos cég elakad.
   */
-  it("TAX-GATE: a company customer without a tax number gets no draft, and Számlázz.hu is not called", async () => {
-    const { service: subject, clientCalls } = service({
-      certificate: {
-        ...baseCertificate,
-        serviceJob: {
-          customer: {
-            ...baseCertificate.serviceJob.customer,
-            type: "COMPANY",
-            taxNumber: null,
-            euTaxNumber: null,
-          } as unknown as typeof baseCertificate.serviceJob.customer,
-        },
+  it("TAX-GATE: a company, an unknown type or a partner mirror without a tax number gets no draft, and Számlázz.hu is not called", async () => {
+    for (const extra of [
+      { type: "COMPANY", taxNumber: null, euTaxNumber: null, partner: null },
+      { type: undefined, taxNumber: null, euTaxNumber: null, partner: null },
+      // az állatkert esete: partner-tükör, a típusa itt nem számít (acrobot 42297)
+      {
+        type: "PERSON",
+        taxNumber: null,
+        euTaxNumber: null,
+        partner: { id: "supplier-zoo" },
       },
-    });
-    await assert.rejects(
-      () => subject.draftFor("cert-1"),
-      (error: unknown) =>
-        error instanceof BadRequestException &&
-        error.message.startsWith("A vevőnek nincs adószáma:"),
-    );
-    assert.equal(clientCalls(), 0);
+    ]) {
+      const { service: subject, clientCalls } = service({
+        certificate: {
+          ...baseCertificate,
+          serviceJob: {
+            customer: {
+              ...baseCertificate.serviceJob.customer,
+              ...extra,
+            } as unknown as typeof baseCertificate.serviceJob.customer,
+          },
+        },
+      });
+      await assert.rejects(
+        () => subject.draftFor("cert-1"),
+        (error: unknown) =>
+          error instanceof BadRequestException &&
+          error.message.startsWith("A vevőnek nincs adószáma:"),
+        JSON.stringify(extra),
+      );
+      assert.equal(clientCalls(), 0, JSON.stringify(extra));
+    }
   });
 
   it("TAX-GATE: a person, or a company with an EU tax number, gets its draft", async () => {
     for (const extra of [
-      { type: "PERSON", taxNumber: null, euTaxNumber: null },
+      { type: "PERSON", taxNumber: null, euTaxNumber: null, partner: null },
       { type: "COMPANY", taxNumber: null, euTaxNumber: "DE123456789" },
       { type: "COMPANY", taxNumber: "12345678-2-42", euTaxNumber: null },
     ]) {

@@ -284,6 +284,10 @@ export function buildIssueInput(row: BillingDocumentRow): IssueInput {
         email: buyer.email,
         taxNumber: buyer.taxNumber,
         euTaxNumber: buyer.euTaxNumber,
+        taxSubject: {
+          type: customer.type ?? null,
+          partnerMirror: Boolean(customer.partner),
+        },
       },
       lines: forIssue,
     },

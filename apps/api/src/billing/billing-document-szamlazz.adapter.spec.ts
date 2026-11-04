@@ -64,6 +64,7 @@ const base: BillingDocumentForIssue = {
     taxNumber: "12345678-1-42",
     euTaxNumber: null,
     vatSubject: null,
+    taxSubject: { type: "COMPANY", partnerMirror: false },
   },
   lines: [item, discount],
 };

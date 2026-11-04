@@ -94,11 +94,13 @@ export interface BillingDocumentCustomer {
    */
   euTaxNumber: string | null;
   /**
-   * Céges vevő-e (Customer.type = COMPANY). A kiállítás kapuja (kártya aaf4f09d):
-   * cégnek adószám nélkül nem állítunk ki számlát, és a felület ezt a gomb mellett
-   * előre kiírja. Hiányzó érték: ismeretlen, a felület nem tilt (a szerver igen).
+   * A vevő típusa (`PERSON` | `COMPANY`) és hogy egy partner vevő-tükre-e: a
+   * kiállítás kapuja (kártya aaf4f09d, `buyerTaxNumberProblem`) ebből dönti el, kell-e
+   * adószám, és a felület a gomb mellett előre kiírja. Hiányzó típus: nem
+   * magánszemély, tehát adószám kell (ugyanúgy, mint a szerveren).
    */
-  isCompany?: boolean;
+  type?: string | null;
+  partnerMirror?: boolean;
   contactName: string | null;
   email: string | null;
   /** A belső partner-azonosító (`customerNumber`). */

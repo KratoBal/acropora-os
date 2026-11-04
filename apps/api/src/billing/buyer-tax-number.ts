@@ -1,30 +1,31 @@
+import { buyerTaxNumberProblem } from "../integrations/szamlazz/szamlazz-buyer-tax.js";
+
 /**
- * CÉGNEK ADÓSZÁM NÉLKÜL NEM ÁLLÍTUNK KI SZÁMLÁT (Balázs, 2026-11-04 11:43-11:46
- * UTC: „Az összes számlánk, ami az állatkertnek ment ki a rendszerből, adószám
- * nélkül ment ki", és „azt se értem, egy számlánál miért nem ellenőrizzük ezt le").
- *
- * A Számlázz.hu az adószám nélküli céges vevőt is elfogadja (az XML az
- * `<adoszam>`-ot csak akkor írja, ha van), tehát a hiány a kiállításig néma, és
- * utána a NAV-jelentésben magánszemélynek látszó cég áll. A kapu ezért a
- * kiállítás ELŐTT áll, minden úton, ami a vevő rekordjából számláz: a
- * bizonylat-kiállítás és -előnézet (`billing-document-issue.service.ts`,
- * `billing-document-preview.service.ts`) és a karbantartási számla
- * (`maintenance-invoice-draft.service.ts`). A magánszemély vevő (PERSON)
- * változatlanul adószám nélkül megy.
+ * A VEVŐ ADÓSZÁM-KAPUJA A SZOLGÁLTATÁSOKBAN (kártya aaf4f09d): a bizonylat-kiállítás
+ * és -előnézet (`billing-document-issue.service.ts`, `billing-document-preview.service.ts`)
+ * és a karbantartási számla (`maintenance-invoice-draft.service.ts`) ezzel áll meg a
+ * foglalás és a Számlázz.hu-hívás ELŐTT, érthető hibával. A szabály egy helyen áll
+ * (`integrations/szamlazz/szamlazz-buyer-tax.ts`), és az XML-építő ugyanazzal a végső
+ * kapu, ha egy út itt nem állna meg.
  *
  * A már elindított, beragadt kiállítás feloldása (`billing-issuing-resolution`)
  * SZÁNDÉKOSAN nem kapuz: ott a bizonylat a Számlázz.hu-n már létezhet, és a
  * feladat a rögzítése, nem egy új kiállítás.
  */
-export function companyBuyerTaxNumberProblem(customer: {
-  type: string;
+export function customerTaxNumberProblem(customer: {
+  type?: string | null;
   displayName: string;
   companyName?: string | null;
   taxNumber?: string | null;
   euTaxNumber?: string | null;
+  /** a partner, akinek ez a vevő-tükre (`Supplier.customerId`), vagy `null` */
+  partner?: { id: string } | null;
 }): string | null {
-  if (customer.type !== "COMPANY") return null;
-  if (customer.taxNumber?.trim() || customer.euTaxNumber?.trim()) return null;
-  const name = customer.companyName?.trim() || customer.displayName;
-  return `A vevőnek nincs adószáma: ${name} cég, de sem magyar, sem közösségi adószám nincs megadva. Egészítsd ki a partnernél, cégnek adószám nélkül nem állítunk ki számlát.`;
+  return buyerTaxNumberProblem({
+    name: customer.companyName?.trim() || customer.displayName,
+    type: customer.type,
+    partnerMirror: Boolean(customer.partner),
+    taxNumber: customer.taxNumber,
+    euTaxNumber: customer.euTaxNumber,
+  });
 }

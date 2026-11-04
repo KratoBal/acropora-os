@@ -33,7 +33,7 @@ import {
   buildIssueInput,
   finalInvoiceIssueProblem,
 } from "./billing-document-issue.js";
-import { companyBuyerTaxNumberProblem } from "./buyer-tax-number.js";
+import { customerTaxNumberProblem } from "./buyer-tax-number.js";
 import { BillingDocumentIssueRepository } from "./billing-document-issue.repository.js";
 import {
   BillingDocumentAdapterError,
@@ -191,7 +191,7 @@ export class BillingDocumentIssueService {
     const input = buildIssueInput(row);
     if (!input.ok) throw new BadRequestException(input.message);
     const taxProblem = row.customer
-      ? companyBuyerTaxNumberProblem(row.customer)
+      ? customerTaxNumberProblem(row.customer)
       : null;
     if (taxProblem) throw new BadRequestException(taxProblem);
     // a végszámla előlege közben sztornózható; a felületi sztornót a feed hozza

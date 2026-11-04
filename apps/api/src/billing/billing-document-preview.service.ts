@@ -19,7 +19,7 @@ import { buildSzamlazzAgentInvoiceXml } from "../integrations/szamlazz/szamlazz-
 import { SzamlazzConnectionError } from "../integrations/szamlazz/szamlazz-connection.types.js";
 import { SzamlazzCredentialProvider } from "../integrations/szamlazz/szamlazz-credential.provider.js";
 import { buildIssueInput } from "./billing-document-issue.js";
-import { companyBuyerTaxNumberProblem } from "./buyer-tax-number.js";
+import { customerTaxNumberProblem } from "./buyer-tax-number.js";
 import { BillingDocumentIssueRepository } from "./billing-document-issue.repository.js";
 import {
   BILLING_ISSUE_ENV,
@@ -107,7 +107,7 @@ export class BillingDocumentPreviewService {
     const input = buildIssueInput(row);
     if (!input.ok) throw new BadRequestException(input.message);
     const taxProblem = row.customer
-      ? companyBuyerTaxNumberProblem(row.customer)
+      ? customerTaxNumberProblem(row.customer)
       : null;
     if (taxProblem) throw new BadRequestException(taxProblem);
 

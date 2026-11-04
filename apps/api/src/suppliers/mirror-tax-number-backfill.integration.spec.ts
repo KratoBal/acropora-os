@@ -16,7 +16,7 @@ const gate = integrationDatabaseGate(process.env);
 const PREFIX = "TAXMIRROR-";
 const SQL = readFileSync(
   new URL(
-    "../../../../../packages/database/prisma/migrations/20261104150000_mirror_tax_number_backfill/migration.sql",
+    "../../../../packages/database/prisma/migrations/20261104150000_mirror_tax_number_backfill/migration.sql",
     import.meta.url,
   ),
   "utf8",
