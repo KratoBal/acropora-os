@@ -29,7 +29,8 @@ import type { SzamlazzAgentPaymentClient } from "./szamlazz-agent.client.js";
  *      read-back; a business rejection is FAILED; a thrown error (network,
  *      timeout, HTTP, unreadable answer) is UNKNOWN.
  */
-export type PaymentMarkSource = "GLS_COD" | "SIMPLEPAY" | "FOXPOST" | "MANUAL";
+export type PaymentMarkSource =
+  "GLS_COD" | "SIMPLEPAY" | "FOXPOST" | "MANUAL" | "BANK_TRANSFER";
 
 export type PaymentMarkState =
   "PLANNED" | "WRITTEN" | "ALREADY_PAID" | "FAILED" | "UNKNOWN";
