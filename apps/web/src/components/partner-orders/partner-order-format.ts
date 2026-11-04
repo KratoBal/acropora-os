@@ -1,4 +1,5 @@
 import type { PilotBadgeVariant } from "@acropora/ui";
+import { formatNumber } from "@acropora/types";
 import type {
   PartnerOrderDocumentStepValue,
   PartnerOrderStatusValue,
@@ -88,5 +89,5 @@ export function grossOf(net: string, vatRatePercent: string): number {
 export function fileSizeText(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} kB`;
-  return `${(bytes / 1024 / 1024).toFixed(1).replace(".", ",")} MB`;
+  return `${formatNumber(bytes / 1024 / 1024, 1)} MB`;
 }

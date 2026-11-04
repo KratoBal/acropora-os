@@ -210,7 +210,7 @@ export function PartnerOrderDetailPage({ orderId }: { orderId: string }) {
 
       <PilotCard>
         <PilotCardHeader title="Partner és ajánlat" />
-        <dl className="grid gap-x-8 gap-y-1 px-5 py-3 text-sm sm:grid-cols-2">
+        <dl className="grid grid-cols-1 gap-x-8 gap-y-1 px-5 py-3 text-sm sm:grid-cols-2">
           <div>
             <dt className="text-xs text-pilot-grey-600">Partner</dt>
             <dd className="font-semibold">{order.customer.name ?? "—"}</dd>
