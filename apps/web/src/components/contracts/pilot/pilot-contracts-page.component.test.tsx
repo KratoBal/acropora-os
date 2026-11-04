@@ -233,23 +233,32 @@ describe("PilotContractsPage -- új szerződés, duplikált szerződésszám (40
 
   it("minden más mentési hiba is a gomb mellett áll (nem az oldal tetején), és odagörgetődik", async () => {
     const scroll = vi.fn();
+    // the mock is put back afterwards: it must not leak into the tests that run after this one
+    const original = Element.prototype.scrollIntoView;
     Element.prototype.scrollIntoView = scroll;
-    api.create.mockRejectedValue(
-      new ApiError("A megadott partner nem található.", 400),
-    );
+    try {
+      api.create.mockRejectedValue(
+        new ApiError("A megadott partner nem található.", 400),
+      );
 
-    render(<PilotContractsPage />);
-    await screen.findByText("Új szerződés");
-    fillMinimalForm();
+      render(<PilotContractsPage />);
+      await screen.findByText("Új szerződés");
+      fillMinimalForm();
 
-    fireEvent.click(screen.getByText("Szerződés mentése"));
+      fireEvent.click(screen.getByText("Szerződés mentése"));
 
-    const near = await screen.findByTestId("contract-save-error");
-    expect(near.textContent).toBe(
-      "A szerződés nem mentődött: A megadott partner nem található.",
-    );
-    expect(screen.queryByText("Műveleti hiba")).toBeNull();
-    expect(scroll).toHaveBeenCalledWith({ block: "nearest" });
+      const near = await screen.findByTestId("contract-save-error");
+      expect(near.textContent).toBe(
+        "A szerződés nem mentődött: A megadott partner nem található.",
+      );
+      expect(screen.queryByText("Műveleti hiba")).toBeNull();
+      expect(scroll).toHaveBeenCalledWith({ block: "nearest" });
+    } finally {
+      if (original) Element.prototype.scrollIntoView = original;
+      else
+        delete (Element.prototype as { scrollIntoView?: unknown })
+          .scrollIntoView;
+    }
   });
 
   it("egy üzenet nélküli hiba is mond valamit, és az űrlap marad", async () => {
