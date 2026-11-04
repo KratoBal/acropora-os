@@ -16,6 +16,7 @@ import {
   type PartnerMergeUndoResult,
 } from "@acropora/types";
 
+import { describeTarget } from "../common/database-target.js";
 import {
   departmentConflicts,
   planFieldMerge,
@@ -278,6 +279,7 @@ export async function buildPreview(
     );
   const blockers = [...rows.blockers, ...fields.blockers];
   const preview: PartnerMergePreview = {
+    target: describeTarget(process.env.DATABASE_URL),
     keptId,
     mergedId,
     kept: sideOf(keptRow, keptRefs),

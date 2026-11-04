@@ -4,6 +4,8 @@ import { Inject, Injectable, Optional } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
 
 import type { UpsertProductShippingProfileDto } from "./dto/upsert-product-shipping-profile.dto.js";
+import type { OsShippingProfile } from "../integrations/medusa/medusa-shipping-attributes.policy.js";
+import { unasShippingProfile } from "../integrations/medusa/medusa-unas-shipping.policy.js";
 import type {
   ShippingFlag,
   ShippingFlagSource,
@@ -17,6 +19,10 @@ interface ProfileTransaction {
   productShippingProfile: {
     findUnique(args: unknown): Promise<ProfileRecord | null>;
     upsert(args: unknown): Promise<ProfileRecord>;
+  };
+  /** the product's UNAS data, for the first write's baseline (barracuda, #2198 a) */
+  unasProductSnapshot: {
+    findUnique(args: unknown): Promise<{ rawPayload: unknown } | null>;
   };
   auditLog: { create(args: unknown): Promise<unknown> };
   domainEvent: { create(args: unknown): Promise<unknown> };
@@ -85,18 +91,32 @@ function toDetail(profile: ProfileRecord): ProductShippingProfileDetail {
 /**
  * A KÉZI ÍRÁS (a82ed229): csak a megváltozott jelző lesz kézi. A kártya mind a
  * négyet elküldi, és ha mindet kézire állítanánk, egy javítás a többi, UNAS-ból
- * jövő jelzőt is lefagyasztaná. Új sornál minden jelző kézi: azt valaki kitöltötte.
+ * jövő jelzőt is lefagyasztaná.
+ *
+ * AZ ELSŐ ÍRÁS (még nincs sor; barracuda, #2198 a): a szinkron csak az általa érintett terméknek hoz létre sort, és
+ * a feltöltő még nem futott, tehát sok terméknek nincs. Ilyenkor a „változás” mércéje a termék UNAS-adata
+ * (`unasBaseline`): ami azzal egyezik, az `UNAS` marad (a szinkron tovább követi), csak az eltérő lesz kézi. Ha a
+ * terméknek nincs UNAS-adata (csak az OS-ben él), nincs mit követni: minden jelző kézi, ahogy eddig.
  */
 export function manualShippingWrite(
   existing: ProfileRecord | null,
   input: UpsertProductShippingProfileDto,
+  unasBaseline: { unas: OsShippingProfile | null } | null = null,
 ): Record<string, boolean | ShippingFlagSource> {
   const data: Record<string, boolean | ShippingFlagSource> = {};
-  for (const flag of FLAGS)
-    if (!existing || existing[flag] !== input[flag]) {
+  for (const flag of FLAGS) {
+    if (existing) {
+      if (existing[flag] === input[flag]) continue;
       data[flag] = input[flag];
       data[`${flag}Source`] = "MANUAL";
+      continue;
     }
+    data[flag] = input[flag];
+    data[`${flag}Source`] =
+      unasBaseline && input[flag] === (unasBaseline.unas?.[flag] ?? false)
+        ? "UNAS"
+        : "MANUAL";
+  }
   if (input.lockerUnsuitable !== undefined)
     data.lockerUnsuitable = input.lockerUnsuitable;
   return data;
@@ -145,7 +165,17 @@ export class ProductShippingProfileRepository extends Repository {
         const existing = await transaction.productShippingProfile.findUnique({
           where: { productId },
         });
-        const data = manualShippingWrite(existing, input);
+        const snapshot = existing
+          ? null
+          : await transaction.unasProductSnapshot.findUnique({
+              where: { productId },
+              select: { rawPayload: true },
+            });
+        const data = manualShippingWrite(
+          existing,
+          input,
+          snapshot ? { unas: unasShippingProfile(snapshot.rawPayload) } : null,
+        );
         const profile = await transaction.productShippingProfile.upsert({
           where: { productId },
           update: data,

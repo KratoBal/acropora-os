@@ -56,6 +56,8 @@ export interface PartnerMergeFieldFill {
 }
 
 export interface PartnerMergePreview {
+  /** a célzott adatbázis, jelszó nélkül (host:port/adatbázis): látszik, hogy stage vagy éles */
+  target: string;
   keptId: string;
   mergedId: string;
   kept: PartnerMergeSide | null;

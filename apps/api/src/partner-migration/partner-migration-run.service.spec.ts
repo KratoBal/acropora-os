@@ -6,11 +6,15 @@ import type {
   PartnerMigrationRow,
 } from "@acropora/types";
 
-import type { RestoreOutcome } from "./partner-migration.executor.js";
+import {
+  StalePlanError,
+  type RestoreOutcome,
+} from "./partner-migration.executor.js";
 import {
   cleanBinds,
   PartnerMigrationRunService,
   restoreFingerprint,
+  translateWriteError,
   type MigrationSteps,
   type PartnerMigrationRunRepository,
 } from "./partner-migration-run.service.js";
@@ -171,7 +175,9 @@ describe("PartnerMigrationRunService.apply", () => {
       } as never,
       {
         apply: async () => {
-          throw new Error("A(z) P1 partnernek már van kötött vevő-sora.");
+          throw new StalePlanError(
+            "A(z) P1 partnernek már van kötött vevő-sora.",
+          );
         },
         restore: async () => [],
       } as never,
@@ -221,6 +227,31 @@ describe("PartnerMigrationRunService restore", () => {
       /közben változtak/,
     );
     assert.deepEqual(w.calls, ["begin", "restore:dry:u1", "end"]);
+  });
+});
+
+describe("translateWriteError", () => {
+  it("only the writer's own stale-plan error and a serialization conflict reach the client; anything else stays an unexpected error", () => {
+    const stale = translateWriteError(new StalePlanError("elavult"));
+    assert.equal(
+      stale instanceof Error && stale.constructor.name,
+      "ConflictException",
+    );
+    const conflict = translateWriteError(
+      Object.assign(new Error("Transaction failed (tábla: Customer)"), {
+        code: "P2034",
+      }),
+    ) as Error;
+    assert.equal(conflict.constructor.name, "ConflictException");
+    assert.match(conflict.message, /próbáld újra/);
+    assert.doesNotMatch(conflict.message, /Customer/);
+    const constraint = Object.assign(
+      new Error("Unique constraint failed on the fields: (`customerId`)"),
+      { code: "P2002" },
+    );
+    assert.equal(translateWriteError(constraint), constraint);
+    const plain = new Error("boom");
+    assert.equal(translateWriteError(plain), plain);
   });
 });
 
