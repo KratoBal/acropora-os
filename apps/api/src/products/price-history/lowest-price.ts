@@ -183,3 +183,26 @@ export function seriesOfVariant(
 const byTime = (a: HistoryRow, b: HistoryRow) =>
   a.observedAt.getTime() - b.observedAt.getTime() ||
   a.createdAt.getTime() - b.createdAt.getTime();
+
+/**
+ * WHEN THE REDUCTION THAT RUNS NOW BEGAN, from the UNAS mirror rows of the variant's product, or null
+ * when no reduction runs. A reduction is a run of mirror rows that carry a sale price; its start is
+ * the first row of the run that is in force now (a deeper second cut inside the run does not move
+ * it: the reference is measured from the FIRST cut). A taken-over variant (it has OWN rows) has no
+ * sale concept, so no reduction: null.
+ */
+export function currentReductionStart(
+  rows: readonly HistoryRow[],
+  variantId: string,
+): Date | null {
+  if (rows.some((row) => row.variantId === variantId)) return null;
+  const mirror = rows.filter((row) => row.variantId === null).sort(byTime);
+  const last = mirror[mirror.length - 1];
+  if (!last || last.saleGrossPrice === null) return null;
+  let start = last.observedAt;
+  for (let i = mirror.length - 2; i >= 0; i -= 1) {
+    if (mirror[i]!.saleGrossPrice === null) break;
+    start = mirror[i]!.observedAt;
+  }
+  return start;
+}
