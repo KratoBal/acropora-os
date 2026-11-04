@@ -14,6 +14,31 @@ export class MaintenanceInvoiceRepository {
    * (ADR-014): ha erre a certificate-re már áll piszkozat, ÚJ Számlázz.hu-
    * hívás nem indul, a meglévő sor jön vissza.
    */
+  /**
+   * AZ ALÁÍRT PÉLDÁNY NÉLKÜLI SZÁMLÁZÁS MEGERŐSÍTÉSE, NAPLÓZVA (barracuda, #2172 review): ki, mikor, melyik
+   * TIG-re. Csak a megrendeléses TIG juthat ide (a `prepare` a munkalapost aláírás nélkül nem engedi).
+   */
+  async recordUnsignedDraft(input: {
+    userId: string | null;
+    certificateId: string;
+    certificateNumber: string;
+    invoiceId: string;
+  }): Promise<void> {
+    await this.database.auditLog.create({
+      data: {
+        userId: input.userId,
+        action: "maintenance-invoice.draft-without-signed-certificate",
+        entityType: "CompletionCertificate",
+        entityId: input.certificateId,
+        metadata: {
+          certificateNumber: input.certificateNumber,
+          invoiceId: input.invoiceId,
+          acknowledged: true,
+        },
+      },
+    });
+  }
+
   existingInvoice(certificateId: string) {
     return this.database.invoice.findUnique({
       where: { completionCertificateId: certificateId },

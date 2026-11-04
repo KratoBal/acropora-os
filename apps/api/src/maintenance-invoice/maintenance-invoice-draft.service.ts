@@ -300,9 +300,17 @@ export class MaintenanceInvoiceDraftService {
     }
   }
 
+  /**
+   * `actor`: aki a piszkozatot kéri. Ha a megrendeléses TIG aláírt példány nélkül, megerősítéssel
+   * számlázódik, az auditnaplóba kerül, ki és mikor döntött így (barracuda, #2172 review): egy aláírt
+   * teljesítésigazolás nélkül kimenő számla utólag kérdés lehet.
+   */
   async draftFor(
     certificateId: string,
-    options: { acknowledgeUnsigned?: boolean } = {},
+    options: {
+      acknowledgeUnsigned?: boolean;
+      actor?: { id: string } | null;
+    } = {},
   ): Promise<MaintenanceInvoiceSummary> {
     const existing = await this.repository.existingInvoice(certificateId);
     if (existing) return this.summary(existing);
@@ -381,6 +389,16 @@ export class MaintenanceInvoiceDraftService {
         };
       }),
     });
+    const signed = certificate.documents.some(
+      (document) => document.type === "SIGNED_FORM",
+    );
+    if (!signed)
+      await this.repository.recordUnsignedDraft({
+        userId: options.actor?.id ?? null,
+        certificateId,
+        certificateNumber: certificate.number,
+        invoiceId: created.id,
+      });
     return this.summary(created);
   }
 
