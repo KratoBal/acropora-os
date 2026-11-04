@@ -6,6 +6,8 @@ import type {
   CustomerAddress,
   CustomerDetail,
   CustomerListResponse,
+  CustomerListRole,
+  CustomerPartnerRole,
   CustomerSummary,
 } from "@acropora/types";
 
@@ -54,13 +56,52 @@ export function taxNumberSearchKey(search: string): string | null {
   return key.length >= 4 && /\d/.test(key) ? key : null;
 }
 
+/**
+ * A SZEREPEK A SUPPLIER-KÖTÉSBŐL (egy partnertörzs): a vevő-sor szerepei jelölésként, külön oszlop nélkül. Csak a partner-sornál
+ * van (a vevőnél a mező hiányzik).
+ */
+export function partnerRolesOf(
+  partner: { isSupplier: boolean; isService: boolean } | null,
+): { partnerRoles?: CustomerPartnerRole[] } {
+  if (!partner) return {};
+  const roles: CustomerPartnerRole[] = [];
+  if (partner.isSupplier) roles.push("SUPPLIER");
+  if (partner.isService) roles.push("SERVICE");
+  return { partnerRoles: roles };
+}
+
+/**
+ * A VEVŐ-LISTA SZEREP-SZŰRŐJE A `where`-BEN. Szerep nélkül a régi viselkedés (a partner vevő-tükrei kimaradnak, hacsak a hívó
+ * nem kéri őket: a számla vevőválasztója). Szereppel a lista a partnereket is mutatja: `BUYER` csak a vevőket (partner nélkül),
+ * `PARTNER` minden partnert, `SUPPLIER` a beszállítókat, `SERVICE` a szerviz-partnereket, `ALL` mindenkit.
+ */
+export function partnerFilter(
+  role: CustomerListRole | undefined,
+  includeMirrors: boolean,
+): Prisma.CustomerWhereInput {
+  switch (role) {
+    case undefined:
+      return includeMirrors ? {} : { partner: null };
+    case "ALL":
+      return {};
+    case "BUYER":
+      return { partner: null };
+    case "PARTNER":
+      return { partner: { isNot: null } };
+    case "SUPPLIER":
+      return { partner: { is: { isSupplier: true } } };
+    case "SERVICE":
+      return { partner: { is: { isService: true } } };
+  }
+}
+
 const addressesInclude = {
   orderBy: [{ isDefault: "desc" as const }, { createdAt: "asc" as const }],
 };
 const include = {
   addresses: addressesInclude,
-  // the invoice tax gate asks a partner mirror for a tax number (card aaf4f09d)
-  partner: { select: { id: true } },
+  // the invoice tax gate asks a partner mirror for a tax number (card aaf4f09d); the roles are derived from the flags
+  partner: { select: { id: true, isSupplier: true, isService: true } },
 } satisfies Prisma.CustomerInclude;
 
 type CustomerWithAddresses = Prisma.CustomerGetPayload<{
@@ -143,7 +184,7 @@ export class CustomersRepository extends Repository {
        * mirror IS the right buyer, it carries the partner's tax number, term and
        * billing e-mail. The summary marks it, so the picker can tell the two apart.
        */
-      ...(query.includePartnerMirrors === "true" ? {} : { partner: null }),
+      ...partnerFilter(query.role, query.includePartnerMirrors === "true"),
       ...(query.status === "ALL"
         ? {}
         : { isActive: query.status === "ACTIVE" }),
@@ -445,6 +486,7 @@ export class CustomersRepository extends Repository {
       address: formatAddress(customer.addresses),
       taxNumber: customer.taxNumber ?? undefined,
       partnerMirror: Boolean(customer.partner),
+      ...partnerRolesOf(customer.partner),
       createdAt: customer.createdAt.toISOString(),
       updatedAt: customer.updatedAt.toISOString(),
     };

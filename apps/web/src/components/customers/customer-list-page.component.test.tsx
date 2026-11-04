@@ -87,13 +87,69 @@ describe("CustomerListPage paging", () => {
     api.sync.mockReset().mockResolvedValue({});
   });
 
-  /** These are webshop buyers; the partners we work for are a different screen
-   * now. The menu label carries the same name and is asserted in its own spec:
-   * renaming one and leaving the other is the half-finished state. */
+  /** One list for the buyers and the partners (one partner register): the title says so, and the
+   * partners carry their role as a badge. The menu label is "Vevők" and is asserted in its own spec. */
   it("calls the screen what it holds", async () => {
     render(<CustomerListPage />);
 
-    expect(await screen.findByText("Webshop vásárlók")).toBeTruthy();
+    expect(await screen.findByText("Vevők és partnerek")).toBeTruthy();
+  });
+
+  // MI PIROSÍT: ha a lista szerep nélkül nem kéri a partnereket (role=ALL), ha a szerep-szűrő nem a `role` kulcson megy, vagy ha a
+  // partner-sor szerep-jelvény nélkül áll, a vevő pedig jelvényt kap.
+  it("asks for everyone by default, filters by role through the role key, and badges the partner rows only", async () => {
+    const data = response(1);
+    data.items = [
+      {
+        ...data.items[0]!,
+        id: "p1",
+        displayName: "Beszállító Kft.",
+        partnerMirror: true,
+        partnerRoles: ["SUPPLIER", "SERVICE"],
+      },
+      {
+        ...data.items[0]!,
+        id: "p2",
+        displayName: "Csak Partner Kft.",
+        partnerMirror: true,
+        partnerRoles: [],
+      },
+      {
+        ...data.items[0]!,
+        id: "b1",
+        displayName: "Vevő Bt.",
+        partnerMirror: false,
+      },
+    ];
+    api.list.mockResolvedValue(data);
+    navigation.params = new URLSearchParams();
+    render(<CustomerListPage />);
+    await screen.findByText("Beszállító Kft.");
+    expect(
+      Object.fromEntries(api.list.mock.calls.at(-1)![1] as URLSearchParams),
+    ).toMatchObject({
+      role: "ALL",
+    });
+    const rows = screen.getAllByTestId("customer-row");
+    expect(within(rows[0]!).getByText("Beszállító")).toBeTruthy();
+    expect(within(rows[0]!).getByText("Szerviz-partner")).toBeTruthy();
+    expect(within(rows[1]!).getByText("Partner")).toBeTruthy();
+    expect(within(rows[2]!).queryByTestId("role-badges")).toBeNull();
+
+    const select = screen.getByLabelText("Szerep") as HTMLSelectElement;
+    expect([...select.options].map((option) => option.value)).toEqual([
+      "",
+      "BUYER",
+      "PARTNER",
+      "SUPPLIER",
+      "SERVICE",
+    ]);
+    fireEvent.change(select, { target: { value: "SUPPLIER" } });
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalled());
+    const target = String(navigation.replace.mock.calls.at(-1)?.[0]);
+    expect(new URLSearchParams(target.split("?")[1]).get("role")).toBe(
+      "SUPPLIER",
+    );
   });
 
   // The list is the shared table, so on the phone every row is a card whose cells carry
