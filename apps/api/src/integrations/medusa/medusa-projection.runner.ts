@@ -92,6 +92,7 @@ import {
   imageBlockUpdate,
   NO_IMAGE_ROW_BLOCK,
 } from "./medusa-image-block.js";
+import { isAcroporaMasteredProduct } from "../../products/catalog-authority.js";
 import { createDocumentStore } from "../../service-assets/document-store/document-store.provider.js";
 import { MedusaImageLinkRepository } from "./medusa-image-link.repository.js";
 import {
@@ -1347,7 +1348,7 @@ export async function runProjectionCli(
      * UNAS-gazdanal a nulla atmeneti lehet (az import torol-es-ujrair), ott nem.
      */
     const kepekToroltek =
-      kepek.length === 0 && product.catalogAuthority === "ACROPORA";
+      kepek.length === 0 && isAcroporaMasteredProduct(product);
 
     /**
      * A GONDOZOTT "HASONLO" KAPCSOLATOK -> MEDUSA AZONOSITOK.
