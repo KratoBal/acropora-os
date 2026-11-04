@@ -13,10 +13,22 @@ import type {
 
 import { generateCode } from "../../common/code-generator.util.js";
 import { retryOnTakenCode } from "../../common/unique-code.util.js";
+import {
+  emptyBackfillCounts,
+  fillIfEmpty,
+  mergedFrom,
+  unasCustomerFill,
+  unasTaxBackfillBucket,
+  type UnasCustomerFill,
+  type UnasTaxBackfillCounts,
+} from "./unas-customer-fill.js";
 
 const ACTIVE_SYNC_KEY = "UNAS_CUSTOMERS";
 const EXTERNAL_ENTITY_TYPE = "Customer";
 const STALE_RUN_AFTER_MS = 15 * 60_000;
+
+/** The one-time backfill's marker: its counts and the filled ids (a wrong fill stays reversible). */
+export const UNAS_TAX_BACKFILL_EVENT_ID = "unas-customer-tax-backfill-20261104";
 
 const json = (value: unknown) =>
   JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -103,7 +115,7 @@ function toAddressInput(
 /**
  * WHAT A UNAS UPDATE WRITES ON AN EXISTING CUSTOMER ROW, and nothing else. The tax numbers, the company name, the
  * billing e-mail and the consents are NOT here: a colleague's edit of those on the customer page (acrobot 42510) must
- * survive a sync. A spec pins the five keys, so a field added to this write is a red test, not a silent overwrite.
+ * survive a sync. (The tax numbers and the company name are only FILLED where the row has none: `unasCustomerFill`.) A spec pins the five keys, so a field added to this write is a red test, not a silent overwrite.
  * (The type, the name, the e-mail, the phone and the BILLING/SHIPPING addresses ARE overwritten when UNAS changes
  * the record; the customer page says so on a UNAS customer.)
  */
@@ -131,6 +143,26 @@ function toCanonical(customer: UnasApiCustomer): CanonicalCustomer {
     billing: toAddressInput("BILLING", customer.invoiceAddress),
     shipping: toAddressInput("SHIPPING", customer.shippingAddress),
   };
+}
+
+/**
+ * Writes the UNAS values onto the row's EMPTY tax fields only; the fields written, none when the row already has them
+ * (or the reference points at no row).
+ */
+async function fillEmptyFields(
+  tx: Prisma.TransactionClient,
+  customerId: string,
+  fill: UnasCustomerFill,
+): Promise<Partial<UnasCustomerFill> | null> {
+  const row = await tx.customer.findUnique({
+    where: { id: customerId },
+    select: { taxNumber: true, euTaxNumber: true, companyName: true },
+  });
+  if (!row) return null;
+  const data = fillIfEmpty(row, fill);
+  if (Object.keys(data).length === 0) return null;
+  await tx.customer.update({ where: { id: customerId }, data });
+  return data;
 }
 
 export interface UnasCustomerSyncApplyResult extends UnasCustomerSyncSummary {}
@@ -279,6 +311,7 @@ export class UnasCustomerSyncRepository extends Repository {
                   displayName: canonical.displayName,
                   email: canonical.email,
                   phone: canonical.phone,
+                  ...unasCustomerFill(customer),
                   addresses: {
                     create: [canonical.billing, canonical.shipping]
                       .filter((address): address is AddressInput =>
@@ -310,6 +343,22 @@ export class UnasCustomerSyncRepository extends Repository {
               continue;
             }
 
+            // a partner merge moved this reference: the row is the partner register's (murena 42674)
+            if (mergedFrom(reference.metadata)) {
+              await tx.externalReference.update({
+                where: { id: reference.id },
+                data: { lastSyncedAt: windowEnd },
+              });
+              unchangedCount += 1;
+              continue;
+            }
+
+            // outside the hash: an unchanged UNAS record still fills an empty tax field once
+            const filled = await fillEmptyFields(
+              tx,
+              reference.entityId,
+              unasCustomerFill(customer),
+            );
             const previousHash = (
               reference.metadata as { hash?: string } | null
             )?.hash;
@@ -318,7 +367,8 @@ export class UnasCustomerSyncRepository extends Repository {
                 where: { id: reference.id },
                 data: { lastSyncedAt: windowEnd },
               });
-              unchangedCount += 1;
+              if (filled) updatedCount += 1;
+              else unchangedCount += 1;
               continue;
             }
 
@@ -398,6 +448,81 @@ export class UnasCustomerSyncRepository extends Repository {
           timeout: 60_000,
         },
       ),
+    );
+  }
+
+  /**
+   * THE ONE-TIME BACKFILL of the existing rows from a full UNAS pull (acrobot 42670), with the sync's own
+   * fill-if-empty rule, in one transaction with its marker event. Null when it already ran. Writes nothing but the
+   * empty tax fields and the company name; a merged reference is skipped as in the sync.
+   */
+  async backfillTaxFields(
+    customers: readonly UnasApiCustomer[],
+    now: Date = new Date(),
+  ): Promise<UnasTaxBackfillCounts | null> {
+    return prisma.$transaction(
+      async (tx) => {
+        const ran = await tx.domainEvent.findUnique({
+          where: { id: UNAS_TAX_BACKFILL_EVENT_ID },
+          select: { id: true },
+        });
+        if (ran) return null;
+        const counts = emptyBackfillCounts();
+        const filled: { customerId: string; fields: string[] }[] = [];
+        for (const customer of customers) {
+          counts.customers += 1;
+          const reference = await tx.externalReference.findUnique({
+            where: {
+              system_entityType_externalId: {
+                system: "UNAS",
+                entityType: EXTERNAL_ENTITY_TYPE,
+                externalId: customer.externalId,
+              },
+            },
+            select: { entityId: true, metadata: true },
+          });
+          if (!reference) {
+            counts.noOsRow += 1;
+            continue;
+          }
+          if (mergedFrom(reference.metadata)) {
+            counts.merged += 1;
+            continue;
+          }
+          const fill = unasCustomerFill(customer);
+          const exists = await tx.customer.count({
+            where: { id: reference.entityId },
+          });
+          if (exists === 0) {
+            counts.noOsRow += 1;
+            continue;
+          }
+          const written =
+            (await fillEmptyFields(tx, reference.entityId, fill)) ?? {};
+          counts[unasTaxBackfillBucket(customer, fill, written)] += 1;
+          if (written.companyName) counts.companyNameFilled += 1;
+          if (Object.keys(written).length > 0)
+            filled.push({
+              customerId: reference.entityId,
+              fields: Object.keys(written).sort(),
+            });
+        }
+        await tx.domainEvent.create({
+          data: {
+            id: UNAS_TAX_BACKFILL_EVENT_ID,
+            eventType: "customer.unas-tax-fields-backfilled",
+            aggregateType: "Customer",
+            aggregateId: "UNAS",
+            payload: json({ ...counts, filled }),
+            occurredAt: now,
+          },
+        });
+        return counts;
+      },
+      {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        timeout: 120_000,
+      },
     );
   }
 }

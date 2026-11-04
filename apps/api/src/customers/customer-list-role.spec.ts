@@ -1,0 +1,76 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+
+import {
+  isPartnerMirror,
+  partnerFilter,
+  partnerRolesOf,
+} from "./customers.repository.js";
+
+/**
+ * A VEVŐK LISTA SZEREP-SZŰRŐJE (egy partnertörzs). MI PIROSÍT: ha szerep nélkül a partner-sorok megjelennének a választókban (a
+ * régi viselkedés törne: a számla vevőválasztója és az akvárium-választó ettől függ); ha a szerep szűrője más sorokat enged át; ha a
+ * szerepek nem a Supplier jelzőiből jönnek, vagy a vevő-sor szerepet kap.
+ */
+describe("partnerFilter", () => {
+  it("without a role keeps the old behaviour: partner mirrors only when the caller asks for them", () => {
+    assert.deepEqual(partnerFilter(undefined, false), { partner: null });
+    assert.deepEqual(partnerFilter(undefined, true), {});
+  });
+
+  it("with a role the list shows partners too, narrowed by the role", () => {
+    assert.deepEqual(partnerFilter("ALL", false), {});
+    // a törölt partner (Supplier.deletedAt) nem partner: a sora vevő, és egyik partner-szűrőben sem szerepel
+    assert.deepEqual(partnerFilter("BUYER", true), {
+      OR: [
+        { partner: null },
+        { partner: { is: { deletedAt: { not: null } } } },
+      ],
+    });
+    assert.deepEqual(partnerFilter("PARTNER", false), {
+      partner: { is: { deletedAt: null } },
+    });
+    assert.deepEqual(partnerFilter("SUPPLIER", false), {
+      partner: { is: { isSupplier: true, deletedAt: null } },
+    });
+    assert.deepEqual(partnerFilter("SERVICE", false), {
+      partner: { is: { isService: true, deletedAt: null } },
+    });
+  });
+});
+
+describe("partnerRolesOf", () => {
+  it("derives the roles from the flags, and gives a buyer none", () => {
+    assert.deepEqual(partnerRolesOf(null), {});
+    assert.deepEqual(partnerRolesOf({ isSupplier: true, isService: false }), {
+      partnerRoles: ["SUPPLIER"],
+    });
+    assert.deepEqual(partnerRolesOf({ isSupplier: false, isService: true }), {
+      partnerRoles: ["SERVICE"],
+    });
+    assert.deepEqual(partnerRolesOf({ isSupplier: true, isService: true }), {
+      partnerRoles: ["SUPPLIER", "SERVICE"],
+    });
+    assert.deepEqual(partnerRolesOf({ isSupplier: false, isService: false }), {
+      partnerRoles: [],
+    });
+    // a törölt partner sora nem kap szerepet
+    assert.deepEqual(
+      partnerRolesOf({
+        isSupplier: true,
+        isService: true,
+        deletedAt: new Date(),
+      }),
+      {},
+    );
+  });
+});
+
+describe("isPartnerMirror", () => {
+  it("is true only for a live partner: a buyer is not, and a deleted partner's row is an ordinary customer row again", () => {
+    assert.equal(isPartnerMirror(null), false);
+    assert.equal(isPartnerMirror({ deletedAt: null }), true);
+    assert.equal(isPartnerMirror({}), true);
+    assert.equal(isPartnerMirror({ deletedAt: new Date() }), false);
+  });
+});
