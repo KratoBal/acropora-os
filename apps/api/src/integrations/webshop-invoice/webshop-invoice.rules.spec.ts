@@ -23,18 +23,19 @@ const row = (
 });
 
 describe("guestInvoicesOf", () => {
-  it("lets through the issued outgoing invoice, advance invoice and final invoice with a PDF", () => {
+  it("lets through the issued outgoing invoice, advance invoice, final invoice and correction invoice with a PDF", () => {
     const out = guestInvoicesOf(
       [
         row({ id: "a", documentType: "INVOICE" }),
         row({ id: "b", documentType: "ADVANCE_INVOICE" }),
         row({ id: "c", documentType: "FINAL_INVOICE" }),
+        row({ id: "d", documentType: "CORRECTION" }),
       ],
       new Set(),
     );
     assert.deepEqual(
       out.map((i) => i.id),
-      ["a", "b", "c"],
+      ["a", "b", "c", "d"],
     );
     assert.equal(out[0]!.issueDate, "2026-11-01T10:00:00.000Z");
   });
@@ -44,7 +45,6 @@ describe("guestInvoicesOf", () => {
       { documentType: "PROFORMA" },
       { documentType: "DELIVERY_NOTE" },
       { documentType: "STORNO" },
-      { documentType: "CORRECTION" },
       { direction: "INBOUND" },
       { status: "DRAFT" },
       { status: "ISSUING" },

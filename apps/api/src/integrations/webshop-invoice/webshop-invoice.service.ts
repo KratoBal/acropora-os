@@ -52,6 +52,11 @@ export class WebshopInvoiceService {
   async link(
     request: { order_id?: unknown; ts?: unknown; sig?: unknown },
     nowMs: number = Date.now(),
+    /**
+     * Called once the signature has proved authentic and BEFORE the database is read: the controller counts the request
+     * toward its rate limit here, so garbage cannot spend the ceiling (barracuda, #2201 review). It may throw (429).
+     */
+    onAuthentic: () => void = () => undefined,
   ): Promise<{ documents: GuestInvoiceLink[] } | null> {
     const secret = webshopInvoiceSecret(this.environment);
     const base = webshopInvoicePublicBase(this.environment);
@@ -65,6 +70,7 @@ export class WebshopInvoiceService {
       )
     )
       return null;
+    onAuthentic();
     const orderId = request.order_id as string;
     const candidates = await this.repository.candidatesOf(orderId);
     const stornoed = await this.repository.stornoedAmong(
@@ -90,11 +96,14 @@ export class WebshopInvoiceService {
   async download(
     token: unknown,
     nowMs: number = Date.now(),
+    /** see `link`: called after the token's signature and expiry hold, before any database read */
+    onAuthentic: () => void = () => undefined,
   ): Promise<{ bytes: Uint8Array; filename: string } | null> {
     const secret = webshopInvoiceSecret(this.environment);
     if (!secret) return null;
     const claims = verifyDownloadToken(secret, token, Math.floor(nowMs / 1000));
     if (!claims) return null;
+    onAuthentic();
     // a számla ma is a vendég számlája? (a token kiadása óta sztornózhatták, vagy a PDF eltűnhetett)
     const row = await this.repository.candidate(
       claims.invoiceId,

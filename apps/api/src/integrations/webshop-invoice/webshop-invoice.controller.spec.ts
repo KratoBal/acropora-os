@@ -8,7 +8,8 @@ import {
 } from "@nestjs/common";
 
 import { WebshopInvoiceController } from "./webshop-invoice.controller.js";
-import type { WebshopInvoiceService } from "./webshop-invoice.service.js";
+import { signLinkRequest } from "./webshop-invoice.token.js";
+import { WebshopInvoiceService } from "./webshop-invoice.service.js";
 
 /**
  * A SZÁMLA-LETÖLTÉS VÉGPONTJAI. MI PIROSÍT: ha egy hiba nem EGYFORMA 404 (a végpont megmondaná, mi létezik); ha a PDF nem
@@ -77,8 +78,14 @@ describe("WebshopInvoiceController", () => {
     assert.match(byName["Content-Security-Policy"] ?? "", /sandbox/);
   });
 
-  it("the download limit is per address: the 21st request of one address is refused with 429, another address is not", async () => {
-    const service = controller({ download: async () => null });
+  it("the download limit is per address and counts only AUTHENTIC tokens: the 21st authentic request of one address is refused with 429, another address is not", async () => {
+    // the stub plays the service: an authentic token calls the counter, then finds nothing
+    const service = controller({
+      download: async (_token, _now, onAuthentic) => {
+        onAuthentic?.();
+        return null;
+      },
+    });
     const flood = callerOf("10.0.2.1");
     for (let i = 0; i < 20; i += 1)
       await assert.rejects(service.download("t", flood), NotFoundException);
@@ -90,6 +97,73 @@ describe("WebshopInvoiceController", () => {
     await assert.rejects(
       service.download("t", callerOf("10.0.2.2")),
       NotFoundException,
+    );
+  });
+
+  it("garbage never reaches the counter: a thousand forged tokens and link requests leave the limits untouched (the REAL service verifies first)", async () => {
+    const real = new WebshopInvoiceService(
+      {} as never,
+      {} as never,
+      {
+        WEBSHOP_INVOICE_SECRET: "k".repeat(40),
+        WEBSHOP_INVOICE_PUBLIC_BASE_URL: "https://api.example.test",
+      } as NodeJS.ProcessEnv,
+    );
+    const service = new WebshopInvoiceController(real);
+    const attacker = callerOf("10.0.3.1");
+    for (let i = 0; i < 1000; i += 1) {
+      await assert.rejects(
+        service.download(`forged-${i}`, attacker),
+        NotFoundException,
+      );
+      await assert.rejects(
+        service.link(
+          { order_id: "o", ts: Math.floor(Date.now() / 1000), sig: "AAAA" },
+          attacker,
+        ),
+        NotFoundException,
+      );
+    }
+    // the same address still gets the plain 404 (not 429), and the shared ceiling is intact for another caller
+    await assert.rejects(
+      service.download("forged", attacker),
+      NotFoundException,
+    );
+    assert.equal(WebshopInvoiceController.downloads.hit("10.0.3.9"), true);
+    assert.equal(WebshopInvoiceController.links.hit("10.0.3.9"), true);
+  });
+
+  it("an AUTHENTIC link request does count (the REAL service calls the counter): the 121st from one address is a 429", async () => {
+    const secret = "k".repeat(40);
+    const real = new WebshopInvoiceService(
+      {
+        candidatesOf: async () => [],
+        stornoedAmong: async () => new Set(),
+      } as never,
+      {} as never,
+      {
+        WEBSHOP_INVOICE_SECRET: secret,
+        WEBSHOP_INVOICE_PUBLIC_BASE_URL: "https://api.example.test",
+      } as NodeJS.ProcessEnv,
+    );
+    const service = new WebshopInvoiceController(real);
+    const commerce = callerOf("10.0.4.1");
+    const signed = () => {
+      const ts = Math.floor(Date.now() / 1000);
+      return {
+        order_id: "order_1",
+        ts,
+        sig: signLinkRequest(secret, "order_1", ts),
+      };
+    };
+    for (let i = 0; i < 120; i += 1)
+      assert.deepEqual(await service.link(signed(), commerce), {
+        documents: [],
+      });
+    await assert.rejects(
+      service.link(signed(), commerce),
+      (error: unknown) =>
+        error instanceof HttpException && error.getStatus() === 429,
     );
   });
 });

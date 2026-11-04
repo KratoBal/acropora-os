@@ -3,7 +3,8 @@
  *
  * A vendég a SAJÁT rendelésének számláját kapja, és csak azt, ami valódi, kiállított számla:
  *  - kimenő (a bejövő a beszállítóké), kiállítva (`ISSUED`), van tárolt PDF-je;
- *  - típusa számla, előlegszámla vagy végszámla (a díjbekérő, a szállítólevél, a sztornó és a helyesbítő nem számla a vevőnek);
+ *  - típusa számla, előlegszámla, végszámla vagy helyesbítő számla (a vevőnek jogilag az utóbbi is számla, amit meg kell kapnia:
+ *    barracuda, #2201 review; a díjbekérő, a szállítólevél és a sztornó nem);
  *  - a sztornózott számla kimarad: egy érvénytelenített számla letöltése félrevezetne.
  * A sorrend a kiállítás ideje, a legrégebbi elöl.
  */
@@ -11,6 +12,7 @@ export const GUEST_INVOICE_TYPES = [
   "INVOICE",
   "ADVANCE_INVOICE",
   "FINAL_INVOICE",
+  "CORRECTION",
 ] as const;
 
 export interface InvoiceCandidate {

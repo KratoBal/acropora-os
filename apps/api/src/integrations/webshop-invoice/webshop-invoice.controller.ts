@@ -27,7 +27,12 @@ interface CallerRequest {
  *  - `GET download/:token`: a vendég böngészője a hivatkozással; PDF vagy EGYFORMA 404.
  * Az üzenetek közös tulajdonsága: minden hiba (titok nélküli beállítás, rossz aláírás, lejárt vagy használt token, nincs számla)
  * ugyanaz a 404, tehát a végpont nem használható arra, hogy megtudjuk, melyik rendelés létezik. A kérésszám-korlát cím szerinti és
- * összesített; az 429 nem árul el semmit.
+ * összesített, de CSAK az érvényes aláírású kéréseket számolja (az aláírás-ellenőrzés olcsó): a hamis kérések nem fogyasztják a
+ * plafont, így nem lehet vele kizárni a commerce szerver valódi kéréseit. A 429 nem árul el semmit.
+ *
+ * A TOKEN AZ ÚTVONALBAN VAN, tehát a proxy és az API hozzáférési naplójába is bekerül (barracuda, #2201 review). Ezt az egyszer
+ * használat és a 14 perc semlegesíti: a naplót olvasó a lejárat előtt, a vendég letöltése nélkül használhatna fel egy tokent. Az
+ * útvonal maszkolása a naplózásban üzemeltetési kérdés, nem ennek a PR-nak a tárgya.
  */
 @Controller("integrations/webshop-invoice")
 export class WebshopInvoiceController {
@@ -42,12 +47,15 @@ export class WebshopInvoiceController {
   @Post("link")
   @HttpCode(200)
   async link(@Body() body: unknown, @Req() request: CallerRequest) {
-    WebshopInvoiceController.links.check(callerAddress(request));
     const input =
       typeof body === "object" && body !== null
         ? (body as Record<string, unknown>)
         : {};
-    const result = await this.service.link(input);
+    // a kérés CSAK az aláírás-ellenőrzés UTÁN számít a korlátba: a szemét (hamis aláírás, lejárt ts) nem tudja elfogyasztani az
+    // összesített plafont, amit a commerce szerver valódi kérései használnak (barracuda, #2201 review)
+    const result = await this.service.link(input, Date.now(), () =>
+      WebshopInvoiceController.links.check(callerAddress(request)),
+    );
     if (!result) throw new NotFoundException();
     return result;
   }
@@ -61,8 +69,10 @@ export class WebshopInvoiceController {
     @Param("token") token: string,
     @Req() request: CallerRequest,
   ): Promise<StreamableFile> {
-    WebshopInvoiceController.downloads.check(callerAddress(request));
-    const result = await this.service.download(token);
+    // ugyanígy: csak az érvényes aláírású, nem lejárt token számít a korlátba
+    const result = await this.service.download(token, Date.now(), () =>
+      WebshopInvoiceController.downloads.check(callerAddress(request)),
+    );
     if (!result) throw new NotFoundException();
     return new StreamableFile(Buffer.from(result.bytes), {
       type: "application/pdf",
