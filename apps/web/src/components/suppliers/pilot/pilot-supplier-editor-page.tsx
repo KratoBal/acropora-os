@@ -824,7 +824,7 @@ export function PilotSupplierEditorPage({
                     Ehhez a partnerhez még nincs alegység.
                   </p>
                 )}
-                <div className="grid grid-cols-1 gap-4 border-t border-pilot-grey-100 p-5 sm:grid-cols-[12rem_8rem_1fr_auto]">
+                <div className="grid grid-cols-1 gap-4 border-t border-pilot-grey-100 p-5 sm:grid-cols-[12rem_8rem_minmax(0,1fr)_auto]">
                   <PilotFormField label="Hova kerül">
                     {/* A gyoker az ELSO es alapertelmezett valasztas: a mai
                         helyszinek mind ilyenek, es egy uj partnernel is ez a

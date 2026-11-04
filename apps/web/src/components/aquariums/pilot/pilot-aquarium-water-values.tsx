@@ -371,7 +371,7 @@ export function PilotAquariumWaterValues({
             {occasions.map((occasion) => (
               <div
                 key={occasion.id}
-                className="group grid grid-cols-[1fr_auto_auto] items-center gap-3 border-t border-pilot-grey-50 px-5 py-2.5 first:border-t-0 hover:bg-pilot-grey-50"
+                className="group grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 border-t border-pilot-grey-50 px-5 py-2.5 first:border-t-0 hover:bg-pilot-grey-50"
               >
                 <div>
                   <span className="text-xs text-pilot-grey-600">

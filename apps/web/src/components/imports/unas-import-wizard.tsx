@@ -245,7 +245,7 @@ export function UnasImportWizard() {
       ) : null}
 
       {step === 1 && !loading ? (
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.5fr_1fr]">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
           <Card className="p-6">
             <div
               onDragEnter={(event) => {

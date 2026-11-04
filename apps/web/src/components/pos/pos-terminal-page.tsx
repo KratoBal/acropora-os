@@ -268,7 +268,7 @@ export function PosTerminalPage() {
         />
       ) : null}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.3fr_1fr]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
         <div className="space-y-4">
           <Card className="p-4">
             <Input
