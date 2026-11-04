@@ -1847,6 +1847,44 @@ describe("MedusaProductProjectionService -- a termek kepei", () => {
     assert.ok(!("thumbnail" in torzs), "fo kep ment ki lista nelkul");
   });
 
+  /**
+   * A KIFEJEZETT TORLES (T4.1-D3, a kepek torlese): az OS-gazdaju termek utolso
+   * kepenek torlese csak igy jut el a boltba. MI PIROSIT: ha a jelzo mellett a
+   * lista vagy a fo kep nem urul ki; ha a jelzo egy nem ures listat felulir.
+   */
+  it("a kifejezett torles-jelzo ures listat es fo kep nelkuli termeket kuld", async () => {
+    const f = fakes({
+      link: { productId: product.id, medusaProductId: "prod_medusa_1" },
+      found: [],
+    });
+
+    await f.service.project(
+      { ...product, images: null, imagesCleared: true },
+      now,
+    );
+
+    const torzs = f.updatedWith[0];
+    assert.ok(torzs, "az update nem futott le");
+    assert.deepEqual(torzs.images, []);
+    assert.equal(torzs.thumbnail, null);
+  });
+
+  it("a torles-jelzo a nem ures listat nem irja felul", async () => {
+    const f = fakes({
+      link: { productId: product.id, medusaProductId: "prod_medusa_1" },
+      found: [],
+    });
+
+    await f.service.project(
+      { ...product, images: ["https://kep/a.jpg"], imagesCleared: true },
+      now,
+    );
+
+    const torzs = f.updatedWith[0];
+    assert.deepEqual(torzs?.images, [{ url: "https://kep/a.jpg" }]);
+    assert.equal(torzs?.thumbnail, "https://kep/a.jpg");
+  });
+
   it("az URES lista ugyanugy nem kerul ki, mint a hianyzo", async () => {
     const f = fakes({
       link: { productId: product.id, medusaProductId: "prod_medusa_1" },
