@@ -6,10 +6,12 @@ import { Prisma } from "@acropora/database";
 import type {
   ProductDatabase,
   StoredProductImage,
+  VariantPriceBefore,
 } from "./product.repository.js";
 import {
   ProductRepository,
   UPLOAD_TRANSACTION_TIMEOUT_MS,
+  VariantSaleConflict,
 } from "./product.repository.js";
 import type { ProductWithRelations } from "./product.types.js";
 import type {
@@ -192,6 +194,18 @@ const product = {
  * different behaviours, not different data: one row means this call performed
  * the transfer, zero means somebody (or something) got there first.
  */
+const NO_SALE = {
+  sellingSaleGrossPrice: null,
+  sellingSaleStartsAt: null,
+  sellingSaleEndsAt: null,
+};
+
+const SALE = {
+  grossPrice: new Prisma.Decimal("7990"),
+  startsAt: new Date("2026-11-10T00:00:00.000Z"),
+  endsAt: new Date("2026-11-17T00:00:00.000Z"),
+};
+
 function createDatabase({
   authorityUpdateCount = 1,
   /** rows the conditional variant price copy touches (0: a price was typed in between) */
@@ -202,10 +216,8 @@ function createDatabase({
   variantBefore = {
     sellingGrossPrice: new Prisma.Decimal("9990"),
     sellingPriceCurrency: "HUF",
-  } as {
-    sellingGrossPrice: Prisma.Decimal | null;
-    sellingPriceCurrency: string | null;
-  } | null,
+    ...NO_SALE,
+  } as VariantPriceBefore | null,
   /** the product's own images (id only), and how many rows an image write touches */
   ownImages = [{ id: "img-1" }, { id: "img-2" }, { id: "img-3" }],
   imageWriteCount = 1,
@@ -751,9 +763,211 @@ describe("ProductRepository", () => {
     );
   });
 
+  /**
+   * THE OWN SALE (T4.1-D3, sale slice 1): only below the own price, only on a
+   * variant of this product; a clear writes three nulls; the regular price cannot
+   * drop to the sale. MI PIROSÍT: ha egy nem olcsóbb akció vagy egy akció alá
+   * csökkenő rendes ár átmegy; ha az akció a történetbe íródik (ez a szelet még
+   * nem vetít).
+   */
+  it("sets a sale below the own price, makes the product due, and writes no history yet", async () => {
+    const { database, calls } = createDatabase();
+    const result = await new ProductRepository(database).setVariantSale(
+      "product-1",
+      "variant-1",
+      SALE,
+      "user-1",
+    );
+    assert.ok(result);
+    assert.deepEqual(
+      calls.map((call) => call.operation),
+      [
+        "variantFindFirst",
+        "variantUpdateMany",
+        "transactionUpdate",
+        "event",
+        "transactionFind",
+      ],
+    );
+    const write = calls[1]?.args as {
+      where: unknown;
+      data: Record<string, unknown>;
+    };
+    assert.deepEqual(write.where, { id: "variant-1", productId: "product-1" });
+    assert.deepEqual(write.data, {
+      sellingSaleGrossPrice: SALE.grossPrice,
+      sellingSaleStartsAt: SALE.startsAt,
+      sellingSaleEndsAt: SALE.endsAt,
+    });
+    const event = calls[3]?.args as {
+      data: { eventType: string; payload: unknown };
+    };
+    assert.equal(event.data.eventType, "product.variant.sale.set");
+    assert.deepEqual(event.data.payload, {
+      variantId: "variant-1",
+      from: null,
+      to: {
+        grossPrice: "7990",
+        startsAt: "2026-11-10T00:00:00.000Z",
+        endsAt: "2026-11-17T00:00:00.000Z",
+      },
+    });
+  });
+
+  it("refuses a sale that is not below the own price, or with no own price", async () => {
+    for (const [grossPrice, code] of [
+      ["9990", "sale-not-lower"],
+      ["12000", "sale-not-lower"],
+    ] as const) {
+      const { database, calls } = createDatabase();
+      await assert.rejects(
+        () =>
+          new ProductRepository(database).setVariantSale(
+            "product-1",
+            "variant-1",
+            { ...SALE, grossPrice: new Prisma.Decimal(grossPrice) },
+          ),
+        (error: unknown) =>
+          error instanceof VariantSaleConflict && error.code === code,
+      );
+      assert.deepEqual(
+        calls.map((call) => call.operation),
+        ["variantFindFirst"],
+        grossPrice,
+      );
+    }
+    const unpriced = createDatabase({
+      variantBefore: {
+        sellingGrossPrice: null,
+        sellingPriceCurrency: null,
+        ...NO_SALE,
+      },
+    });
+    await assert.rejects(
+      () =>
+        new ProductRepository(unpriced.database).setVariantSale(
+          "product-1",
+          "variant-1",
+          SALE,
+        ),
+      (error: unknown) =>
+        error instanceof VariantSaleConflict &&
+        error.code === "own-price-missing",
+    );
+  });
+
+  it("clears a sale to three nulls, and names the old one in the event", async () => {
+    const { database, calls } = createDatabase({
+      variantBefore: {
+        sellingGrossPrice: new Prisma.Decimal("9990"),
+        sellingPriceCurrency: "HUF",
+        sellingSaleGrossPrice: SALE.grossPrice,
+        sellingSaleStartsAt: SALE.startsAt,
+        sellingSaleEndsAt: SALE.endsAt,
+      },
+    });
+    await new ProductRepository(database).setVariantSale(
+      "product-1",
+      "variant-1",
+      null,
+    );
+    const write = calls.find((call) => call.operation === "variantUpdateMany")
+      ?.args as { data: Record<string, unknown> };
+    assert.deepEqual(write.data, {
+      sellingSaleGrossPrice: null,
+      sellingSaleStartsAt: null,
+      sellingSaleEndsAt: null,
+    });
+    const event = calls.find((call) => call.operation === "event")?.args as {
+      data: { eventType: string; payload: { from: unknown; to: unknown } };
+    };
+    assert.equal(event.data.eventType, "product.variant.sale.cleared");
+    assert.deepEqual(event.data.payload.from, {
+      grossPrice: "7990",
+      startsAt: "2026-11-10T00:00:00.000Z",
+      endsAt: "2026-11-17T00:00:00.000Z",
+    });
+    assert.equal(event.data.payload.to, null);
+  });
+
+  it("writes no sale on a variant of another product", async () => {
+    const { database, calls } = createDatabase({ variantBefore: null });
+    assert.equal(
+      await new ProductRepository(database).setVariantSale(
+        "product-1",
+        "variant-x",
+        SALE,
+      ),
+      null,
+    );
+    assert.deepEqual(
+      calls.map((call) => call.operation),
+      ["variantFindFirst"],
+    );
+  });
+
+  it("refuses a regular price at or below a running or a future sale, and lets it under an expired one (barracuda, #2147)", async () => {
+    const most = new Date("2026-11-12T00:00:00.000Z");
+    const windows = {
+      running: { startsAt: SALE.startsAt, endsAt: SALE.endsAt },
+      future: {
+        startsAt: new Date("2026-11-20T00:00:00.000Z"),
+        endsAt: new Date("2026-11-27T00:00:00.000Z"),
+      },
+      expired: {
+        startsAt: new Date("2026-10-01T00:00:00.000Z"),
+        endsAt: new Date("2026-10-08T00:00:00.000Z"),
+      },
+    };
+    for (const [name, window] of Object.entries(windows))
+      for (const price of ["7990", "7000"]) {
+        const { database, calls } = createDatabase({
+          variantBefore: {
+            sellingGrossPrice: new Prisma.Decimal("9990"),
+            sellingPriceCurrency: "HUF",
+            sellingSaleGrossPrice: SALE.grossPrice,
+            sellingSaleStartsAt: window.startsAt,
+            sellingSaleEndsAt: window.endsAt,
+          },
+        });
+        const save = () =>
+          new ProductRepository(database).setVariantSellingPrice(
+            "product-1",
+            "variant-1",
+            new Prisma.Decimal(price),
+            undefined,
+            most,
+          );
+        if (name === "expired") {
+          assert.ok(await save(), `${name} ${price}`);
+          assert.ok(
+            calls.some((call) => call.operation === "variantUpdateMany"),
+            `${name} ${price}`,
+          );
+        } else {
+          await assert.rejects(
+            save,
+            (error: unknown) =>
+              error instanceof VariantSaleConflict &&
+              error.code === "sale-not-lower",
+            `${name} ${price}`,
+          );
+          assert.deepEqual(
+            calls.map((call) => call.operation),
+            ["variantFindFirst"],
+            `${name} ${price}`,
+          );
+        }
+      }
+  });
+
   it("starts a first own price in forint and still writes no duplicate history", async () => {
     const { database, calls } = createDatabase({
-      variantBefore: { sellingGrossPrice: null, sellingPriceCurrency: null },
+      variantBefore: {
+        sellingGrossPrice: null,
+        sellingPriceCurrency: null,
+        ...NO_SALE,
+      },
       lastOwnPriceRow: {
         currency: "HUF",
         netPrice: null,
