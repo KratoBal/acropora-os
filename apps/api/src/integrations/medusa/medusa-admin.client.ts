@@ -734,6 +734,21 @@ export interface MedusaOrderAddressRow {
  * PaymentIntent, benne a `client_secret` is -- ebből az OS CSAK az
  * azonosítót veszi ki, a többit nem adja tovább.
  */
+/** Egy vevői probléma-bejelentés a boltból (V1.2): a vevő e-mailje szándékosan NINCS benne, a rendelésről olvasható. */
+export interface MedusaProblemReport {
+  id: string;
+  order_id: string;
+  kind: string;
+  item_ids: string[];
+  received_at: string | null;
+  description: string;
+  phone: string | null;
+  status: string;
+  created_at: string;
+  pulled_at: string | null;
+  photos: { id: string; url: string; mime_type: string; size_bytes: number }[];
+}
+
 export interface MedusaOrderDetailRow {
   id: string;
   display_id: number;
@@ -978,6 +993,16 @@ export interface MedusaAdminClient {
    * /admin/order-attention`). Csak olvasás.
    */
   orderAttention(): Promise<MedusaOrderAttention>;
+  /**
+   * A VEVŐK PROBLÉMA-BEJELENTÉSEI (V1.2; `GET /admin/order-problem-reports`): a boltban tárolt, az OS által
+   * még le nem húzott bejelentések, a legrégebbivel kezdve, a fotók címével.
+   */
+  listProblemReports(
+    status: "new" | "pulled",
+    limit: number,
+  ): Promise<MedusaProblemReport[]>;
+  /** A bejelentés lehúzva (`POST .../:id/pulled`); idempotens. */
+  markProblemReportPulled(id: string): Promise<void>;
   /** Egy rendelés részlete; nem létező azonosítóra `null`. */
   order(id: string): Promise<MedusaOrderDetailRow | null>;
   /** A rendelés üzleti státusza a történettel; ha nincs, `null`. */
@@ -1961,6 +1986,24 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
 
   async orderAttention(): Promise<MedusaOrderAttention> {
     return this.request<MedusaOrderAttention>("/admin/order-attention");
+  }
+
+  async listProblemReports(
+    status: "new" | "pulled",
+    limit: number,
+  ): Promise<MedusaProblemReport[]> {
+    const params = new URLSearchParams({ status, limit: String(limit) });
+    const body = await this.request<{ reports?: MedusaProblemReport[] }>(
+      `/admin/order-problem-reports?${params.toString()}`,
+    );
+    return body.reports ?? [];
+  }
+
+  async markProblemReportPulled(id: string): Promise<void> {
+    await this.request<unknown>(
+      `/admin/order-problem-reports/${encodeURIComponent(id)}/pulled`,
+      { method: "POST", body: JSON.stringify({}) },
+    );
   }
 
   async order(id: string): Promise<MedusaOrderDetailRow | null> {

@@ -7477,6 +7477,8 @@ enum TaskSource {
   AGENT
   /// #1582 P8: a quote's follow-up (`sourceRef` = quote:<id>:<kind>)
   QUOTE
+  /// V1.2: a customer's shipment-problem report from the webshop (`sourceRef` = report:<report id>)
+  WEBSHOP_COMPLAINT
 }
 
 /// Személyes feladat- és kérdéslista. Nem projektmenedzsment: egyetlen

@@ -18,6 +18,8 @@ import { WebshopOrdersRepository } from "./webshop-orders.repository.js";
 import { WebshopOrdersService } from "./webshop-orders.service.js";
 import { WebshopParcelStatusScheduler } from "./webshop-parcel-status.scheduler.js";
 import { WebshopParcelStatusService } from "./webshop-parcel-status.service.js";
+import { WebshopProblemReportPullScheduler } from "./webshop-problem-report-pull.scheduler.js";
+import { WebshopProblemReportPullService } from "./webshop-problem-report-pull.service.js";
 
 import { WebshopMailOutboxController } from "./webshop-mail-outbox.controller.js";
 import { WebshopMailOutboxService } from "./webshop-mail-outbox.service.js";
@@ -34,6 +36,8 @@ import { WebshopMailOutboxService } from "./webshop-mail-outbox.service.js";
     WebshopOrdersService,
     WebshopParcelStatusService,
     WebshopParcelStatusScheduler,
+    WebshopProblemReportPullService,
+    WebshopProblemReportPullScheduler,
     WebshopOrdersRepository,
     WebshopOrderInvoiceService,
     WebshopOrderParcelService,
