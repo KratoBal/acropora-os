@@ -82,6 +82,7 @@ function mapItem(item: {
       unitPrice: item.unitNet,
       vatRatePercent: item.vatRatePercent,
     }),
+    item.vatRatePercent,
   );
   return {
     amounts,
