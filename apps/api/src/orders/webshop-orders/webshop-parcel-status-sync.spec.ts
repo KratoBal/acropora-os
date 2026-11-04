@@ -142,10 +142,16 @@ describe("syncParcelStatuses", () => {
     assert.equal(report.waiting, 1);
   });
 
-  it("the code is matched, not the description: a delivered-sounding text with another code does not close", async () => {
+  it("the code is matched, not the description: another code never closes, even when its text equals a configured code", async () => {
     const deps = fake(
-      { o1: [event("07", "Delivered to recipient")] },
-      { o1: { status: "out_for_delivery", next: ["closed"] } },
+      {
+        o1: [event("07", "Delivered to recipient")],
+        o2: [event("99", "05")],
+      },
+      {
+        o1: { status: "out_for_delivery", next: ["closed"] },
+        o2: { status: "out_for_delivery", next: ["closed"] },
+      },
     );
     await syncParcelStatuses(deps, env, NOW);
     assert.deepEqual(deps.transitions, []);
@@ -236,22 +242,26 @@ describe("the schedule", () => {
   it("a run that is still going is not started twice", async () => {
     let calls = 0;
     let release: () => void = () => undefined;
+    const empty = {
+      checked: 0,
+      closed: [],
+      alreadyClosed: 0,
+      waiting: 0,
+      skipped: [],
+      failed: [],
+      observed: [],
+      configuredCodes: [],
+    };
     const service = {
-      run: () =>
-        new Promise((resolve) => {
-          calls += 1;
-          release = () =>
-            resolve({
-              checked: 0,
-              closed: [],
-              alreadyClosed: 0,
-              waiting: 0,
-              skipped: [],
-              failed: [],
-              observed: [],
-              configuredCodes: [],
-            });
-        }),
+      run: () => {
+        calls += 1;
+        // only the first run is slow; a second one (the bug) would finish at once and show in `calls`
+        return calls === 1
+          ? new Promise((resolve) => {
+              release = () => resolve(empty);
+            })
+          : Promise.resolve(empty);
+      },
     };
     const scheduler = new WebshopParcelStatusScheduler(service as never);
     const first = scheduler.runOnce();
