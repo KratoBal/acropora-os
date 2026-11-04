@@ -33,6 +33,7 @@ import {
 } from "@/components/pilot/pilot-ui";
 import { ProductAuthorityCard } from "@/components/products/product-authority-card";
 import { ProductHomepageCard } from "@/components/products/product-homepage-card";
+import { ProductImage } from "@/components/products/product-image-source";
 import { ProductDoseEffectsCard } from "@/components/products/product-dose-effects-card";
 import { ProductShippingProfileCard } from "@/components/products/product-shipping-profile-card";
 import { ProductSupplierPricesCard } from "@/components/products/product-supplier-prices-card";
@@ -1135,9 +1136,8 @@ export function ProductDetailPage({ productId }: { productId: string }) {
 
   const images = (
     <PilotSection title="Képek">
-      {product.images.length &&
-      product.catalogAuthority === "ACROPORA" &&
-      canManage ? (
+      {/* az OS-gazdájú terméknél a szerkesztő kép nélkül is áll: abban van a feltöltés */}
+      {product.catalogAuthority === "ACROPORA" && canManage ? (
         <ProductImagesEditor
           key={product.images
             .map((image) => `${image.id}:${image.altText ?? ""}`)
@@ -1152,8 +1152,10 @@ export function ProductDetailPage({ productId }: { productId: string }) {
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {product.images.map((image) => (
             <figure key={image.id}>
-              <img
-                src={image.url}
+              <ProductImage
+                token={token}
+                productId={product.id}
+                image={image}
                 alt={image.altText ?? product.name}
                 className="aspect-[156/112] w-full rounded-lg border border-pilot-grey-200 object-cover"
               />
