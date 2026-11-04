@@ -9725,6 +9725,20 @@ model WebshopOrderStaleThreshold {
   updatedAt       DateTime         @updatedAt
 }
 
+/// A VENDÉG SZÁMLA-LETÖLTÉSÉNEK EGYSZER HASZNÁLATOS TOKENJE (V1.1, Balázs jóváhagyta acrobot útján, 2026-11-05).
+/// A letöltő hivatkozás az OS-től jön, HMAC-aláírt, legfeljebb 15 perces, és egyetlen számlára szól; ez a tábla
+/// teszi egyszer használatossá: a token azonosítója (`jti`) a SIKERES letöltéskor kerül ide, egyedi kulccsal, tehát
+/// a második használat ütközik. Egyben a letöltés naplója is (melyik rendelés, melyik számla, mikor). Nincs név,
+/// e-mail vagy cím benne. Nincs idegen kulcs: egy törölt számla sora ne akassza meg a naplót.
+model WebshopInvoiceDownload {
+  jti        String   @id @db.VarChar(64)
+  orderId    String   @db.VarChar(64)
+  invoiceId  String
+  redeemedAt DateTime @default(now())
+
+  @@index([orderId, redeemedAt])
+}
+
 /// A WEBSHOP RENDELÉS BELSŐ MEGJEGYZÉSE (a Figma 494:386 Megjegyzések kártyája).
 /// Csak az OS-é: a webshopnak és a vevőnek nem kell tudnia róla. Rendelésenként
 /// egy szöveg; a webshop rendelés-azonosítója a kulcs.
