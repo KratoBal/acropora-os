@@ -155,7 +155,15 @@ export class CompletionCertificatesPortalService {
   private async departmentNames(
     rows: readonly PortalCompletionCertificateRow[],
   ): Promise<Map<string, string>> {
-    const ids = [...new Set(rows.map((row) => row.serviceJob.departmentId))];
+    // a portál a karbantartási lapon át szűr (`serviceJobVisibilityWhere`), tehát
+    // a látható soron a lap mindig megvan; a megrendeléses TIG itt nem jelenik meg
+    const ids = [
+      ...new Set(
+        rows.flatMap((row) =>
+          row.serviceJob ? [row.serviceJob.departmentId] : [],
+        ),
+      ),
+    ];
     return this.repository.departmentNames(ids);
   }
 
@@ -168,7 +176,9 @@ export class CompletionCertificatesPortalService {
       number: row.number,
       issuedAt: row.issuedAt.toISOString(),
       issuedByName: row.issuedByName,
-      departmentName: departmentNames.get(row.serviceJob.departmentId) ?? "—",
+      departmentName:
+        (row.serviceJob && departmentNames.get(row.serviceJob.departmentId)) ??
+        "—",
       hasSignedDocument: row.documents.some(
         (document) => document.type === "SIGNED_FORM",
       ),
