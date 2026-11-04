@@ -127,6 +127,15 @@ describe("supplierKey: az ország nélküli szállítónál az alak dönt, ahogy
     }
   });
 
+  it("a szóközzel írt HU előtag (HU 12345678) sem közösségi kulcs (barracuda, #2167 review)", () => {
+    for (const taxNumber of ["HU 12345678", "hu  12345678-1-42", "HU12345678"])
+      assert.equal(
+        supplierKey(supplier({ id: "a", taxNumber, country: null }))?.kind,
+        "HU",
+        taxNumber,
+      );
+  });
+
   it("a kisbetűs hu előtagú magyar szám ország nélkül is magyar, nem közösségi", () => {
     assert.deepEqual(
       supplierKey(

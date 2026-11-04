@@ -7,6 +7,7 @@ import {
   externalCustomerName,
   externalWhere,
   listWhere,
+  ownIssueRange,
   mergeListRows,
   ownWhere,
   externalPaymentFields,
@@ -23,6 +24,7 @@ import {
 import {
   BillingDocumentListRepository,
   orderNumbersByBuyerName,
+  paymentMethodChoices,
   type BillingDocumentListRow,
 } from "./billing-document-list.repository.js";
 
@@ -48,6 +50,9 @@ function row(
     issueDate: null,
     dueDate: new Date("2026-10-08T00:00:00.000Z"),
     grossAmount: D("2985.0017"),
+    netAmount: D("2350.0000"),
+    vatAmount: D("635.0000"),
+    paymentMethod: "Átutalás",
     currency: "HUF",
     status: "DRAFT",
     emailStatus: "PENDING",
@@ -122,6 +127,168 @@ describe("toListItem", () => {
   });
 });
 
+/*
+  A NETTÓ, AZ ÁFA ÉS A FIZETÉSI MÓD A KIMENŐ LISTÁN, ÉS A DÁTUM- ÉS FIZETÉSIMÓD-SZŰRŐ (Luca, 2026-11-04; kártya
+  6110d89b). MI PIROSÍT: ha a három összeg nem adja ki a bruttót; ha a vázlat nettója más szabállyal készül, mint a
+  bruttója; ha a kelt szűrő a budapesti napot UTC-nek veszi (az éjfél körüli számla rossz napra esik); ha a saját és a
+  külső sor másképp szűrődik; ha a fizetési mód kis- és nagybetűre érzékeny; ha a választék kétszer sorolja ugyanazt.
+*/
+describe("the net, VAT and payment method on the list", () => {
+  it("an issued own row carries the stored net and VAT in whole forints, and its payment method", () => {
+    const item = toListItem(
+      row({
+        status: "ISSUED",
+        invoiceNumber: "E-1",
+        grossAmount: D("2985.0000"),
+        netAmount: D("2350.0000"),
+        vatAmount: D("635.0000"),
+        paymentMethod: " Készpénz ",
+      }),
+    );
+    assert.deepEqual(
+      [item.netAmount, item.vatAmount, item.grossAmount, item.paymentMethod],
+      ["2350", "635", "2985", "Készpénz"],
+    );
+    assert.equal(
+      Number(item.netAmount) + Number(item.vatAmount),
+      Number(item.grossAmount),
+    );
+  });
+
+  it("a draft's net and VAT come from the lines by the rule of its gross, so the three agree", () => {
+    // three 0.40 net lines at 27%: the lines' grosses round to 1 each, the gross is 3 (see the gross test above)
+    const item = toListItem(
+      row({
+        grossAmount: D("1.5240"),
+        lines: [line("0.40"), line("0.40"), line("0.40")],
+      }),
+    );
+    assert.equal(item.grossAmount, "3");
+    assert.equal(Number(item.netAmount) + Number(item.vatAmount), 3);
+  });
+
+  it("an unset stored net or VAT, a draft with no lines, and a blank payment method are null, not zero", () => {
+    const issued = toListItem(
+      row({
+        status: "ISSUED",
+        netAmount: null,
+        vatAmount: null,
+        paymentMethod: "  ",
+      }),
+    );
+    assert.deepEqual(
+      [issued.netAmount, issued.vatAmount, issued.paymentMethod],
+      [null, null, null],
+    );
+    assert.equal(toListItem(row({ lines: [] })).netAmount, null);
+  });
+
+  it("an external row carries its net, VAT and payment method, two decimals outside HUF", () => {
+    const item = toExternalListItem(external({ paymentMethod: "Bankkártya" }));
+    assert.deepEqual(
+      [item.netAmount, item.vatAmount, item.grossAmount, item.paymentMethod],
+      ["23000", "6210", "29210", "Bankkártya"],
+    );
+    const eur = toExternalListItem(
+      external({
+        currency: "EUR",
+        netAmount: D("10"),
+        vatAmount: D("2.7"),
+        grossAmount: D("12.7"),
+      }),
+    );
+    assert.deepEqual([eur.netAmount, eur.vatAmount], ["10.00", "2.70"]);
+    assert.equal(
+      toExternalListItem(external({ paymentMethod: null })).paymentMethod,
+      null,
+    );
+  });
+});
+
+describe("the date and payment method filters of the outgoing list", () => {
+  it("no date, no range", () => {
+    assert.equal(ownIssueRange({}), null);
+    assert.equal(listWhere({}).issueDate, undefined);
+    assert.equal(externalWhere({})?.issueDate, undefined);
+  });
+
+  it("an own row's range is the Budapest days: from the start of its first day to the start of the day after its last", () => {
+    // summer (CEST, +2): 1 October 00:00 Budapest is 30 September 22:00 UTC
+    const summer = ownIssueRange({ from: "2026-10-01", to: "2026-10-31" });
+    assert.deepEqual(summer, {
+      gte: new Date("2026-09-30T22:00:00.000Z"),
+      // 1 November 00:00 Budapest: the clocks went back on 25 October, so CET (+1)
+      lt: new Date("2026-10-31T23:00:00.000Z"),
+    });
+    // winter (CET, +1)
+    assert.deepEqual(ownIssueRange({ from: "2026-01-15" }), {
+      gte: new Date("2026-01-14T23:00:00.000Z"),
+    });
+    assert.deepEqual(ownIssueRange({ to: "2026-01-15" }), {
+      lt: new Date("2026-01-15T23:00:00.000Z"),
+    });
+  });
+
+  it("an invoice issued 00:30 Budapest time on the 1st is in October, not September (the UTC trap)", () => {
+    const range = ownIssueRange({ from: "2026-10-01", to: "2026-10-01" })!;
+    const issuedAt = new Date("2026-09-30T22:30:00.000Z"); // 2026-10-01 00:30 CEST
+    assert.ok(issuedAt >= (range.gte as Date) && issuedAt < (range.lt as Date));
+    const september = ownIssueRange({ from: "2026-09-01", to: "2026-09-30" })!;
+    assert.ok(!(issuedAt < (september.lt as Date)));
+  });
+
+  it("an external row's range is the stored calendar days, both ends in", () => {
+    assert.deepEqual(
+      externalWhere({ from: "2026-10-01", to: "2026-10-31" })?.issueDate,
+      {
+        gte: new Date("2026-10-01T00:00:00.000Z"),
+        lte: new Date("2026-10-31T00:00:00.000Z"),
+      },
+    );
+  });
+
+  it("the payment method matches the text exactly but not by case, on both sources, and a blank one filters nothing", () => {
+    const insensitive = { equals: "Átutalás", mode: "insensitive" };
+    assert.deepEqual(
+      listWhere({ paymentMethod: " Átutalás " }).paymentMethod,
+      insensitive,
+    );
+    assert.deepEqual(
+      externalWhere({ paymentMethod: "Átutalás" })?.paymentMethod,
+      insensitive,
+    );
+    assert.equal(listWhere({ paymentMethod: "  " }).paymentMethod, undefined);
+    assert.equal(
+      externalWhere({ paymentMethod: "" })?.paymentMethod,
+      undefined,
+    );
+  });
+
+  it("the filters respect the source filter: a source the query excludes has no where at all", () => {
+    assert.equal(ownWhere({ origin: "EXTERNAL", from: "2026-10-01" }), null);
+    assert.equal(
+      externalWhere({ origin: "OWN", paymentMethod: "Átutalás" }),
+      null,
+    );
+  });
+
+  it("the choices list each payment method once, whatever its case, in alphabetical order, without blanks", () => {
+    assert.deepEqual(
+      paymentMethodChoices([
+        "Átutalás",
+        "átutalás",
+        null,
+        " ",
+        "Készpénz",
+        "Bankkártya",
+        "Átutalás ",
+      ]),
+      ["Átutalás", "Bankkártya", "Készpénz"],
+    );
+    assert.deepEqual(paymentMethodChoices([]), []);
+  });
+});
+
 describe("listWhere", () => {
   it("always keeps the detail's own-rows scope, with or without filters", () => {
     for (const where of [
@@ -167,6 +334,8 @@ const external = (
   issueDate: new Date("2026-09-30T00:00:00.000Z"),
   dueDate: new Date("2026-10-08T00:00:00.000Z"),
   grossAmount: D("29210"),
+  netAmount: D("23000"),
+  vatAmount: D("6210"),
   currency: "HUF",
   createdAt: new Date("2026-10-01T15:00:00.000Z"),
   paidAmount: D("0"),
@@ -490,6 +659,9 @@ describe("the external documents on the list", () => {
       issueDate: "2026-09-30",
       dueDate: "2026-10-08",
       grossAmount: "29210",
+      netAmount: "23000",
+      vatAmount: "6210",
+      paymentMethod: "Átutalás",
       currency: "HUF",
       status: "ISSUED",
       emailStatus: null,

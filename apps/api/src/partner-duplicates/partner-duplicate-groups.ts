@@ -81,7 +81,8 @@ export function supplierKey(supplier: SupplierRow): Key | null {
   const value = supplier.taxNumber?.trim();
   if (!value) return null;
   const country = supplier.country?.trim().toUpperCase() || null;
-  const looksEu = /^[A-Za-z]{2}/.test(value) && !/^HU\d/i.test(value);
+  // the HU prefix may be followed by a space ("HU 12345678"): that is still a Hungarian number, not a community key
+  const looksEu = /^[A-Za-z]{2}/.test(value) && !/^HU\s*\d/i.test(value);
   const euLike = country ? country !== "HU" : looksEu;
   if (euLike) {
     const eu = euKey(value);

@@ -35,6 +35,7 @@ import {
   urlPage,
   useUrlQuery,
 } from "@/lib/navigation/use-url-query";
+import { listAmount } from "./billing-amount-format";
 import { formatDay } from "./billing-document-table";
 import { incomingReviewHref } from "./billing-incoming-review-page";
 import { PAYMENT_STATE_TONE, PaymentBadge } from "./billing-payment";
@@ -43,16 +44,8 @@ const PAGE_SIZE = String(BILLING_DOCUMENT_LIST_PAGE_SIZE.default);
 
 export const incomingDocumentHref = (id: string) => incomingDocumentPath(id);
 
-/** Összeg a pénznem tizedeseivel, pénznem-jel nélkül (a DEVIZA oszlop mondja). */
-export function incomingAmount(value: string | null, currency: string): string {
-  // a csak postafiókos sornál a nettó és az ÁFA nem ismert (096607af)
-  if (value === null) return "—";
-  const digits = currency === "HUF" ? 0 : 2;
-  return new Intl.NumberFormat("hu-HU", {
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  }).format(Number(value));
-}
+/** Összeg a pénznem tizedeseivel, pénznem-jel nélkül; a kimenő listával közös (`listAmount`). */
+export const incomingAmount = listAmount;
 
 const rateText = (value: string | null) =>
   value
@@ -239,7 +232,9 @@ export const INCOMING_COLUMNS: readonly PilotTableColumn<IncomingDocumentListIte
   ];
 
 /** Az időszak választéka: az elmúlt két év hónapjai, a legújabb elöl. */
-function monthOptions(today = new Date()): { value: string; label: string }[] {
+export function monthOptions(
+  today = new Date(),
+): { value: string; label: string }[] {
   const names = new Intl.DateTimeFormat("hu-HU", {
     year: "numeric",
     month: "long",

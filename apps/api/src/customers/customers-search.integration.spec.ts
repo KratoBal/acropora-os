@@ -198,6 +198,27 @@ describe(
       );
     });
 
+    // A TÖRÖLT PARTNER NEM FORRÁS (barracuda, #2161): sem az adószám-tipphez, sem a napokhoz
+    it("a deleted partner gives no tax number hint, a live one does", async () => {
+      const partner = await prisma.supplier.create({
+        data: {
+          code: `${CUSTOMER_PREFIX}del-${suffix}`,
+          name: `Arvizturo 1000 Kft ${suffix}`,
+          taxNumber: "44444444-4-44",
+          deletedAt: new Date(),
+        },
+      });
+      assert.equal((await repository.detail(ids.plain))?.partnerTaxHint, null);
+      await prisma.supplier.update({
+        where: { id: partner.id },
+        data: { deletedAt: null },
+      });
+      assert.deepEqual((await repository.detail(ids.plain))?.partnerTaxHint, {
+        partnerName: `Arvizturo 1000 Kft ${suffix}`,
+        taxNumber: "44444444-4-44",
+      });
+    });
+
     // A SZÁMLA HATÁRIDEJE EBBŐL JÖN (Balázs, 2026-10-06 08:27 UTC): a
     // részletlap adja a vevő fizetési napjait, nap nélkül null (az alapérték)
     it("the detail carries the customer's payment days, null when it has none", async () => {
