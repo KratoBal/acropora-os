@@ -290,7 +290,7 @@ export class PartnerMergeService {
 
   async execute(
     input: PartnerMergeExecuteInput,
-    actorUserId: string,
+    actorUserId: string | null,
   ): Promise<PartnerMergeLogEntry> {
     return this.repository.transaction(async (tx) => {
       const built = await buildPreview(tx, input.keptId, input.mergedId);
@@ -475,7 +475,7 @@ export class PartnerMergeService {
 
   async undo(
     logId: string,
-    actorUserId: string,
+    actorUserId: string | null,
   ): Promise<PartnerMergeUndoResult> {
     return this.repository.transaction(async (tx) => {
       const log = await tx.customerMergeLog.findUnique({
