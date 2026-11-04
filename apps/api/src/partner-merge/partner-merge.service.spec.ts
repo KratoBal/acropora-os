@@ -238,6 +238,36 @@ describe("PartnerMergeService.preview", () => {
     assert.equal(preview.willMove.ExternalReference, 1);
   });
 
+  it("blocks up front when both rows already carry a UNAS account (the entity key is unique), instead of failing in the database", async () => {
+    const w = zoo();
+    w.add("externalReference", {
+      id: "r9",
+      entityId: "k",
+      entityType: "Customer",
+      metadata: null,
+    });
+    const preview = await w.service.preview("k", "m");
+    assert.equal(preview.canExecute, false);
+    assert.ok(preview.blockers.some((b) => /UNAS-hivatkozása/.test(b)));
+    await assert.rejects(
+      w.service.execute(
+        { keptId: "k", mergedId: "m", fingerprint: preview.fingerprint },
+        "u1",
+      ),
+      /UNAS-hivatkozása/,
+    );
+    // the kept row alone having one is fine: the merged row's reference moves
+    const lone = zoo();
+    lone.of("externalReference").splice(0, 1);
+    lone.add("externalReference", {
+      id: "r9",
+      entityId: "k",
+      entityType: "Customer",
+      metadata: null,
+    });
+    assert.equal((await lone.service.preview("k", "m")).canExecute, true);
+  });
+
   it("blocks and suggests the swap when the row to be merged is the partner mirror", async () => {
     const preview = await zoo().service.preview("m", "k");
     assert.equal(preview.canExecute, false);

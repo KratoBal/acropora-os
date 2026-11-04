@@ -225,6 +225,15 @@ export async function buildPreview(
     keptRow ? countReferences(tx, keptId) : Promise.resolve({}),
     mergedRow ? countReferences(tx, mergedId) : Promise.resolve({}),
   ]);
+  // EGY VEVŐ-SORON MA EGY UNAS-FIÓK ÁLLHAT (az ExternalReference entitás-kulcsa egyedi): ha mindkét sornak van, az áthelyezés az
+  // adatbázis egyediségén bukna, ezért előre megáll, és megnevezi az okot. A több fiókot engedő sémaváltozás külön lépés.
+  if (
+    (keptRefs as Record<string, number>).ExternalReference &&
+    (mergedRefs as Record<string, number>).ExternalReference
+  )
+    fields.blockers.push(
+      "Mindkét sornak van UNAS-hivatkozása: egy vevő-soron ma egy UNAS-fiók állhat (a több fiókot engedő sémaváltozás külön lépés).",
+    );
   const blockers = [...rows.blockers, ...fields.blockers];
   const preview: PartnerMergePreview = {
     keptId,
