@@ -16,8 +16,10 @@ import {
   type TakeoverPriceVariant,
 } from "./takeover-price.js";
 import { recordOwnPrice } from "./price-history/own-price-history.js";
+import { retryOnSerializationConflict } from "../common/transaction-retry.util.js";
 import {
   pinUnasShippingFlags,
+  SHIPPING_FLAGS,
   type ShippingFlag,
   type ShippingFlagSource,
 } from "./shipping-profile-sources.js";
@@ -501,18 +503,21 @@ export class ProductRepository extends Repository {
           A UNAS-KÖVETŐ SZÁLLÍTÁSI JELZŐK KÉZIRE (T4.1-D3, `pinUnasShippingFlags`):
           a szinkron ezután nem frissíti őket, tehát a forrásuk se állítsa, hogy
           a UNAS követi. Az érték marad, a gazda a szállítási szerkesztő lesz.
+          Egy átvételkor ÉPPEN FUTÓ szinkron-kört is megfog: annak a kihagyás-halmaza a
+          kör elején készült, de a jelző-írása (`applyUnasShippingFlags`) csak a még
+          `UNAS` forrású jelzőt írja (`updateMany` a forrásra szűrve), tehát a kézire
+          billentettet nem írja vissza.
         */
         let shippingFlagsPinned: ShippingFlag[] = [];
         if (result.count > 0) {
           const pin = pinUnasShippingFlags(
             await transaction.productShippingProfile.findUnique({
               where: { productId: id },
-              select: {
-                pickupOnlySource: true,
-                foxpostForbiddenSource: true,
-                isHeavySource: true,
-                isFrozenSource: true,
-              },
+              // a forrás-mezők a SHIPPING_FLAGS-ból: egy ötödik jelző kézzel írt listából kimaradna, és
+              // csendben nem billenne (barracuda, #2129)
+              select: Object.fromEntries(
+                SHIPPING_FLAGS.map((flag) => [`${flag}Source`, true]),
+              ),
             }),
           );
           if (pin.data) {
@@ -573,6 +578,24 @@ export class ProductRepository extends Repository {
    * termékhez tartozik.
    */
   async setVariantSellingPrice(
+    productId: string,
+    variantId: string,
+    grossPrice: Prisma.Decimal,
+    actorUserId?: string,
+  ): Promise<ProductDetail | null> {
+    // két egyidejű mentésből a Serializable tranzakció az egyiket P2034-gyel bontja: az
+    // újrapróbál, és a második mentés a frissebb előtte-képpel fut le (barracuda, #2130)
+    return retryOnSerializationConflict(() =>
+      this.setVariantSellingPriceOnce(
+        productId,
+        variantId,
+        grossPrice,
+        actorUserId,
+      ),
+    );
+  }
+
+  private setVariantSellingPriceOnce(
     productId: string,
     variantId: string,
     grossPrice: Prisma.Decimal,

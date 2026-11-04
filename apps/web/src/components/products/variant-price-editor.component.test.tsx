@@ -48,8 +48,10 @@ function renderEditor({
 describe("VariantPriceEditor", () => {
   it("normalizes the Hungarian input and refuses what the server would refuse", () => {
     expect(normalizePriceInput("12 990")).toBe("12990");
-    expect(normalizePriceInput("12 990,5")).toBe("12990.5");
-    expect(normalizePriceInput("12990.50")).toBe("12990.50");
+    expect(normalizePriceInput("12 990")).toBe("12990");
+    // egész forint: a tizedes elutasítva, mert a felület egész forintot mutatna
+    expect(normalizePriceInput("12990,50")).toBeNull();
+    expect(normalizePriceInput("12990.50")).toBeNull();
     expect(normalizePriceInput("0")).toBeNull();
     expect(normalizePriceInput("0,00")).toBeNull();
     expect(normalizePriceInput("-5")).toBeNull();
@@ -63,7 +65,7 @@ describe("VariantPriceEditor", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Ár módosítása" }));
     fireEvent.change(screen.getByLabelText("Saját bruttó eladási ár"), {
-      target: { value: "12 990,50" },
+      target: { value: "12 990" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Ár mentése" }));
 
@@ -72,7 +74,7 @@ describe("VariantPriceEditor", () => {
         "token-1",
         "product-1",
         "variant-1",
-        "12990.50",
+        "12990",
       ),
     );
     await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));

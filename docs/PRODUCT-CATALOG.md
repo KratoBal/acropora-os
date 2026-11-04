@@ -75,17 +75,20 @@ terméket a ciklus elején hagyja ki (`unas-product-sync.repository.ts`, a
 `UnasProductSyncRun.skippedCount` mezőben számolja. Ez a lista eddig szűkebbet
 ígért, mint ami történik.
 
-Az átvétel után **itt szerkeszthető** (`UpdateProductDto`): név, rövid leírás,
-terméktípus, márka, kategória, vásárolható a webshopban jelző.
+Az átvétel után **itt szerkeszthető**: név, rövid leírás, terméktípus, márka,
+kategória, vásárolható a webshopban jelző (`UpdateProductDto`); saját eladási ár,
+változatonként (az ár-szerkesztő, árelőzménnyel); szállítási jelzők (a szállítási
+szerkesztő; az átvétel a UNAS-forrású jelzőket kézire billenti, T4.1-D3).
 
 **Befagy az átvételkori UNAS-értéken, és ma nincs rá OS-oldali szerkesztő:**
 hosszú leírás; keresőoptimalizálási mezők (SEO cím, leírás, kulcsszó); képek és
 alt-szövegek; hasonló és kiegészítő termékek; gyártói cikkszám; mértékegység és
-másodlagos egység; ÁFA-kulcs; a UNAS-ból jövő szállítási jelzők. Ezek közül a
-szerkesztőket a T4.1-D3 hozza (ár és akció, képek és alt, szállítási jelzők).
+másodlagos egység; ÁFA-kulcs. A képek és az alt szerkesztőjét, valamint a saját
+akciós árat a T4.1-D3 következő szeletei hozzák.
 
 **Nem érinti** (ezeknek ma sem a szinkron a gazdája): készlet, vonalkódok,
-beszállító és raktárhely, a kézzel állított szállítási jelzők.
+beszállító és raktárhely, a tanácsadó- és adatlap-jelzők (elhelyezés, fény- és
+áramlásigény).
 
 Az **eladási ár** nem befagy, hanem egyszer átmásolódik: az átvétel napján a
 UNAS listaárából indul, ha a saját ár még üres (`takeover-price.ts`). Ha akció

@@ -13,12 +13,12 @@ import { productApi } from "@/lib/api/products";
  * egy tranzakcióban írja az árat és az árelőzményt (Omnibus 30 nap), és a
  * terméket esedékessé teszi a vetítésnek.
  *
- * A beírt szöveg magyar alakot is elfogad (szóköz az ezresek között, vessző
- * tizedesjel); a szerver pont tizedesjelet és legfeljebb két tizedesjegyet kap.
+ * A beírt szöveg magyar alakot is elfogad (szóköz az ezresek között); a szerver
+ * egész forintot kap, mert a felület is egész forintot mutat (barracuda, #2130).
  */
 export function normalizePriceInput(text: string): string | null {
-  const value = text.replace(/[\s ]/g, "").replace(",", ".");
-  return /^(?!0+(\.0+)?$)\d{1,9}(\.\d{1,2})?$/.test(value) ? value : null;
+  const value = text.replace(/[\s ]/g, "");
+  return /^[1-9]\d{0,8}$/.test(value) ? value : null;
 }
 
 export function VariantPriceEditor({
@@ -50,9 +50,7 @@ export function VariantPriceEditor({
   const save = async () => {
     const value = normalizePriceInput(text);
     if (!value) {
-      setError(
-        "Az ár pozitív szám legyen, legfeljebb két tizedesjeggyel (például 12 990 vagy 12990,50).",
-      );
+      setError("Az ár pozitív egész forint legyen (például 12 990).");
       return;
     }
     setBusy(true);

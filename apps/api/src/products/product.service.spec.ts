@@ -275,12 +275,12 @@ describe("ProductService", () => {
     const result = await new ProductService(own.repository).setVariantPrice(
       "product-1",
       "variant-1",
-      { grossPrice: "12990.50" },
+      { grossPrice: "12990" },
       "user-1",
     );
     assert.deepEqual(result, { id: "priced" });
     assert.deepEqual(own.calls, ["setVariantSellingPrice"]);
-    assert.deepEqual(own.inputs, ["12990.5"]);
+    assert.deepEqual(own.inputs, ["12990"]);
 
     const unas = repositoryWith({ id: "product-1", catalogAuthority: "UNAS" });
     await assert.rejects(

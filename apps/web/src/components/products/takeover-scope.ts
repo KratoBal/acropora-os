@@ -15,7 +15,7 @@
  * `takeover-scope.test.ts` a kettő egyezését méri.
  */
 
-/** Az átvétel után az OS termékszerkesztőjében szerkeszthető (`UpdateProductDto`). */
+/** Az átvétel után az OS-ben szerkeszthető: a termékszerkesztő (`UpdateProductDto`), az ár-szerkesztő és a szállítási szerkesztő (T4.1-D3). */
 export const TAKEOVER_EDITABLE = [
   "név",
   "rövid leírás",
@@ -23,6 +23,8 @@ export const TAKEOVER_EDITABLE = [
   "márka",
   "kategória",
   "vásárolható a webshopban jelző",
+  "saját eladási ár, változatonként",
+  "szállítási jelzők",
 ] as const;
 
 /** Az átvétel után az utolsó UNAS-értéken áll, és ma nincs rá OS-oldali szerkesztő. */
@@ -34,7 +36,6 @@ export const TAKEOVER_FROZEN = [
   "gyártói cikkszám",
   "mértékegység és másodlagos egység",
   "ÁFA-kulcs",
-  "a UNAS-ból jövő szállítási jelzők",
 ] as const;
 
 /** Az átvétel nem érinti: ezeknek ma sem a szinkron a gazdája. */
@@ -42,7 +43,7 @@ export const TAKEOVER_UNTOUCHED = [
   "készlet",
   "vonalkódok",
   "beszállító és raktárhely",
-  "a kézzel állított szállítási jelzők",
+  "a tanácsadó- és adatlap-jelzők (elhelyezés, fény- és áramlásigény)",
 ] as const;
 
 /** Az ár külön mondat, mert nem befagy, hanem egyszer átmásolódik (`takeover-price.ts`). */
