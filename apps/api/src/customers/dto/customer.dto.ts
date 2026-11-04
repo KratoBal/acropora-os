@@ -45,7 +45,20 @@ export class CreateCustomerDto {
   addresses: CreateCustomerAddressDto[] = [];
 }
 
+export class UpdateCustomerAddressDto {
+  @IsString() @IsOptional() id?: string;
+  @IsIn(["BILLING", "SHIPPING", "OTHER"]) type!:
+    "BILLING" | "SHIPPING" | "OTHER";
+  @IsString() @IsOptional() name?: string | null;
+  @IsString() @IsOptional() country?: string;
+  @IsString() @MinLength(1) postalCode!: string;
+  @IsString() @MinLength(1) city!: string;
+  @IsString() @MinLength(1) line1!: string;
+  @IsString() @IsOptional() line2?: string | null;
+}
+
 export class UpdateCustomerDto {
+  @IsIn(["PERSON", "COMPANY"]) @IsOptional() type?: "PERSON" | "COMPANY";
   @IsString() @MinLength(1) @IsOptional() displayName?: string;
   @IsString() @IsOptional() companyName?: string | null;
   @IsString() @IsOptional() taxNumber?: string | null;
@@ -55,6 +68,11 @@ export class UpdateCustomerDto {
   @IsString() @IsOptional() phone?: string | null;
   @IsBoolean() @IsOptional() marketingEmailConsent?: boolean;
   @IsBoolean() @IsOptional() marketingSmsConsent?: boolean;
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => UpdateCustomerAddressDto)
+  @IsOptional()
+  addresses?: UpdateCustomerAddressDto[];
   @IsString() expectedUpdatedAt!: string;
 }
 

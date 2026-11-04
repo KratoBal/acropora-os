@@ -109,6 +109,13 @@ describe("CustomerListPage paging", () => {
     expect(screen.queryByText(/&nbsp;/)).toBeNull();
   });
 
+  it("opens the customer's page when a row is activated (acrobot 42510: an existing customer could not be edited)", async () => {
+    render(<CustomerListPage />);
+    const row = (await screen.findAllByTestId("customer-row"))[0]!;
+    fireEvent.click(row);
+    expect(navigation.push).toHaveBeenCalledWith("/vevok/customer-1");
+  });
+
   it("labels every cell with its column for the phone card view", async () => {
     render(<CustomerListPage />);
     await screen.findByText("Fővárosi Állat- És Növénykert");

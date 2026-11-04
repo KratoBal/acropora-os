@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   assertPartnerCodeFree,
+  mirroredBillingAddress,
   mirroredTaxNumber,
   syncWorksheetMirror,
 } from "./suppliers.repository.js";
@@ -19,8 +20,29 @@ interface Call {
  * what is asserted here is the decision rather than the write: which call is
  * made, and with what.
  */
-function stubTransaction(calls: Call[], createdId = "customer-new") {
+function stubTransaction(
+  calls: Call[],
+  createdId = "customer-new",
+  /** the billing address the mirror already has (null: none), and how many addresses it holds */
+  existingAddress: { id: string } | null = null,
+  addressCount = 0,
+) {
   return {
+    customerAddress: {
+      findFirst: async (args: Record<string, unknown>) => {
+        calls.push({ table: "customerAddress", action: "findFirst", args });
+        return existingAddress;
+      },
+      update: async (args: Record<string, unknown>) => {
+        calls.push({ table: "customerAddress", action: "update", args });
+        return {};
+      },
+      create: async (args: Record<string, unknown>) => {
+        calls.push({ table: "customerAddress", action: "create", args });
+        return {};
+      },
+      count: async () => addressCount,
+    },
     customer: {
       update: async (args: Record<string, unknown>) => {
         calls.push({ table: "customer", action: "update", args });
@@ -317,5 +339,155 @@ describe("the service partner's mirror customer", () => {
 
     assert.deepEqual(calls, []);
     assert.equal(none, null);
+  });
+});
+
+/**
+ * A PARTNER CÍME A TÜKÖRBEN (acrobot, #2164 review: az állatkert számlája cím nélkül nem állhat meg). MI PIROSÍT: ha a
+ * mentés nem viszi át a teljes címet (létrehozáskor a tükörrel együtt, frissítéskor a meglévő számlázási címre, vagy ha
+ * nincs, új sorként); ha egy részleges vagy üres partner-cím ír félkész sort vagy törli a tükörét; ha az ország
+ * üresen nem HU.
+ */
+describe("the partner's address on the mirror", () => {
+  const full = {
+    postalCode: " 1146 ",
+    city: "Budapest",
+    addressLine1: "Állatkerti krt. 6-12.",
+    addressLine2: " ",
+    country: "hu",
+  };
+  const partner = {
+    id: "supplier-1",
+    name: "Fővárosi Állat- és Növénykert",
+    isService: true,
+  };
+
+  it("is the one billing address, trimmed, with an empty line 2 as null and the country upper case", () => {
+    assert.deepEqual(mirroredBillingAddress(full), {
+      country: "HU",
+      postalCode: "1146",
+      city: "Budapest",
+      line1: "Állatkerti krt. 6-12.",
+      line2: null,
+    });
+    assert.equal(
+      mirroredBillingAddress({ ...full, country: "" })!.country,
+      "HU",
+    );
+  });
+
+  it("is nothing when the postal code, the city or the street is missing", () => {
+    for (const missing of ["postalCode", "city", "addressLine1"])
+      for (const empty of [null, undefined, "", "  "])
+        assert.equal(
+          mirroredBillingAddress({ ...full, [missing]: empty }),
+          null,
+          `${missing}=${String(empty)}`,
+        );
+  });
+
+  it("is created together with a new mirror, as its default billing address", async () => {
+    const calls: Call[] = [];
+    await syncWorksheetMirror(stubTransaction(calls), {
+      ...partner,
+      customerId: null,
+      ...full,
+    });
+    const data = calls.find(
+      (c) => c.table === "customer" && c.action === "create",
+    )!.args.data as { addresses: { create: Record<string, unknown>[] } };
+    assert.deepEqual(data.addresses.create, [
+      {
+        country: "HU",
+        postalCode: "1146",
+        city: "Budapest",
+        line1: "Állatkerti krt. 6-12.",
+        line2: null,
+        type: "BILLING",
+        isDefault: true,
+      },
+    ]);
+  });
+
+  it("rewrites the mirror's existing billing address in place on every save", async () => {
+    const calls: Call[] = [];
+    await syncWorksheetMirror(stubTransaction(calls, "x", { id: "addr-1" }), {
+      ...partner,
+      customerId: "customer-7",
+      ...full,
+    });
+    const update = calls.find(
+      (c) => c.table === "customerAddress" && c.action === "update",
+    )!;
+    assert.deepEqual(update.args.where, { id: "addr-1" });
+    assert.equal((update.args.data as { city: string }).city, "Budapest");
+    assert.equal(
+      calls.some((c) => c.table === "customerAddress" && c.action === "create"),
+      false,
+    );
+  });
+
+  it("gives a mirror without a billing address one (the default only when it holds none)", async () => {
+    for (const [count, isDefault] of [
+      [0, true],
+      [2, false],
+    ] as const) {
+      const calls: Call[] = [];
+      await syncWorksheetMirror(stubTransaction(calls, "x", null, count), {
+        ...partner,
+        customerId: "customer-7",
+        ...full,
+      });
+      const create = calls.find(
+        (c) => c.table === "customerAddress" && c.action === "create",
+      )!;
+      assert.equal(
+        (
+          create.args.data as {
+            isDefault: boolean;
+            type: string;
+            customerId: string;
+          }
+        ).isDefault,
+        isDefault,
+      );
+      assert.equal((create.args.data as { type: string }).type, "BILLING");
+      assert.equal(
+        (create.args.data as { customerId: string }).customerId,
+        "customer-7",
+      );
+    }
+  });
+
+  it("an empty or partial partner address leaves the mirror's address alone", async () => {
+    for (const address of [
+      {},
+      { postalCode: "1146", city: "Budapest" },
+      { city: "Budapest", addressLine1: "Fő út 1." },
+    ]) {
+      const calls: Call[] = [];
+      await syncWorksheetMirror(stubTransaction(calls, "x", { id: "addr-1" }), {
+        ...partner,
+        customerId: "customer-7",
+        ...address,
+      });
+      assert.equal(
+        calls.some((c) => c.table === "customerAddress"),
+        false,
+        JSON.stringify(address),
+      );
+      const created: Call[] = [];
+      await syncWorksheetMirror(stubTransaction(created), {
+        ...partner,
+        customerId: null,
+        ...address,
+      });
+      assert.equal(
+        "addresses" in
+          (created.find((c) => c.table === "customer" && c.action === "create")!
+            .args.data as Record<string, unknown>),
+        false,
+      );
+    }
   });
 });

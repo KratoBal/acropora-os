@@ -229,6 +229,8 @@ export function CustomerListPage() {
                 rows={data.items}
                 rowKey={(item) => item.id}
                 rowTestId="customer-row"
+                rowLabel={(item) => `${item.displayName} megnyitása`}
+                onRowActivate={(item) => router.push(`/vevok/${item.id}`)}
                 minWidth={720}
               />
             </Card>
