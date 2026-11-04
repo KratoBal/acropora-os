@@ -7,7 +7,10 @@ import type {
   ProductDatabase,
   StoredProductImage,
 } from "./product.repository.js";
-import { ProductRepository } from "./product.repository.js";
+import {
+  ProductRepository,
+  UPLOAD_TRANSACTION_TIMEOUT_MS,
+} from "./product.repository.js";
 import type { ProductWithRelations } from "./product.types.js";
 import type {
   TakeoverPriceMirror,
@@ -231,6 +234,7 @@ function createDatabase({
   ] as TakeoverPriceVariant[],
 } = {}) {
   const calls: Array<{ operation: string; args: unknown }> = [];
+  const txOptions: unknown[] = [];
   const transaction = {
     product: {
       create: async (args: unknown) => {
@@ -380,9 +384,12 @@ function createDatabase({
         return foundImage;
       },
     },
-    $transaction: (operation) => operation(transaction),
+    $transaction: (operation, options) => {
+      txOptions.push(options);
+      return operation(transaction);
+    },
   };
-  return { database, calls };
+  return { database, calls, txOptions };
 }
 
 describe("ProductRepository", () => {
@@ -982,6 +989,21 @@ describe("ProductRepository", () => {
       imageId: "img-new",
       fileName: "kek.jpg",
     });
+  });
+
+  it("gives the upload transaction a timeout above Prisma's 5 s default (barracuda, #2145)", async () => {
+    const { database, txOptions } = createDatabase();
+    await new ProductRepository(database).addUploadedImage(
+      "product-1",
+      {
+        url: "os-upload:abc",
+        storageKey: "products/product-1/doc-1",
+        fileName: "kek.jpg",
+      },
+      async () => {},
+    );
+    assert.deepEqual(txOptions, [{ timeout: UPLOAD_TRANSACTION_TIMEOUT_MS }]);
+    assert.ok(UPLOAD_TRANSACTION_TIMEOUT_MS > 5_000);
   });
 
   it("gives the first uploaded image sortOrder 0", async () => {
