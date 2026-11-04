@@ -491,3 +491,58 @@ describe("the partner's address on the mirror", () => {
     }
   });
 });
+
+/**
+ * A PARTNER EGYSZERI ÁTVEZETÉSE A TÖRZSBE (partnertörzs): a `register` kapcsolóval a nem szerviz-partnernek is készül vevő-sor.
+ * MI PIROSÍT: ha kapcsoló nélkül egy nem szerviz-partnerhez sor készül (a szerviz-tükör szabálya törne); ha a kapcsolóval nem
+ * készül; ha az új sor nem PARTNER- számú, nem COMPANY, vagy nem viszi a nevet, az adószámot és a címet; ha a partner nem kapja meg a
+ * kötést.
+ */
+describe("the register option of syncWorksheetMirror", () => {
+  const partner = {
+    id: "supplier-9",
+    name: "Beszállító Kft.",
+    isService: false,
+    customerId: null,
+    taxNumber: "11111111-2-42",
+    country: "HU",
+    email: "szamla@beszallito.example",
+    postalCode: "1146",
+    city: "Budapest",
+    addressLine1: "Fő út 1.",
+  };
+
+  it("does nothing for a non-service partner without the option, as before", async () => {
+    const calls: Call[] = [];
+    assert.equal(
+      await syncWorksheetMirror(stubTransaction(calls), partner),
+      null,
+    );
+    assert.deepEqual(calls, []);
+  });
+
+  it("creates a PARTNER- company row with the partner's name, tax number and address, and links the partner, with the option", async () => {
+    const calls: Call[] = [];
+    const id = await syncWorksheetMirror(
+      stubTransaction(calls, "customer-reg"),
+      partner,
+      {
+        register: true,
+      },
+    );
+    assert.equal(id, "customer-reg");
+    const create = calls.find(
+      (c) => c.table === "customer" && c.action === "create",
+    )!.args.data as Record<string, unknown>;
+    assert.match(String(create.customerNumber), /^PARTNER-/);
+    assert.equal(create.type, "COMPANY");
+    assert.equal(create.displayName, "Beszállító Kft.");
+    assert.equal(create.taxNumber, "11111111-2-42");
+    assert.equal(create.billingEmail, "szamla@beszallito.example");
+    assert.ok("addresses" in create);
+    const link = calls.find(
+      (c) => c.table === "supplier" && c.action === "update",
+    )!;
+    assert.deepEqual(link.args.data, { customerId: "customer-reg" });
+  });
+});

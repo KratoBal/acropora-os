@@ -243,8 +243,13 @@ export async function syncWorksheetMirror(
     addressLine1?: string | null;
     addressLine2?: string | null;
   },
+  /**
+   * `register`: a partner EGYSZERI ÁTVEZETÉSE a törzsbe (partnertörzs): a nem szerviz-partnernek is készül vevő-sor (a
+   * szerepek jelölésként rajta, a `Supplier` kötésből származtatva). Az átvezetésen kívül SOHA nem igaz.
+   */
+  options: { register?: boolean } = {},
 ) {
-  if (!supplier.isService) {
+  if (!supplier.isService && !options.register) {
     // Un-ticking "Szerviz" does not drop the row: worksheets may already point
     // at it, and `onDelete: Restrict` would refuse anyway. It stays, unlisted,
     // and is reused if the partner becomes a service partner again.
