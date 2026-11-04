@@ -151,6 +151,31 @@ describe("BankTransfersPage", () => {
     expect(api.list).toHaveBeenCalledTimes(2);
   });
 
+  it("an uncertain write points to the invoice's pending-mark closer (#2192 c)", async () => {
+    api.list.mockResolvedValue([credit()]);
+    api.check.mockResolvedValue({
+      markable: true,
+      marks: [{ invoiceNumber: "ACRW-2026/00084", amount: "100000.00" }],
+      paidBefore: [],
+    });
+    api.pair.mockResolvedValue({
+      lines: [{ invoiceNumber: "ACRW-2026/00084", outcome: "UNKNOWN" }],
+    });
+    render(<BankTransfersPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Párosítás" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ellenőrzés" }));
+    await screen.findByTestId("bank-transfer-marks");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Beírás a Számlázz.hu-ba" }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Lezárom" }));
+    expect(
+      await screen.findByText(
+        /zárd le a függő jelölést a számla Kifizetés panelén/,
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("a refused check says why, and offers no write", async () => {
     api.list.mockResolvedValue([credit()]);
     api.check.mockResolvedValue({

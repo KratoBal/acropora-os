@@ -10,7 +10,8 @@ export type BankTransferRefusalValue =
   | "PAYMENTS_UNKNOWN"
   | "DIFFERENT_CUSTOMERS"
   | "AMOUNT_MISMATCH"
-  | "ALREADY_PAID";
+  | "ALREADY_PAID"
+  | "CREDIT_USED";
 
 /** What the invoice numbers decide against the credit. */
 export type BankTransferDecisionView =
@@ -61,4 +62,6 @@ export const BANK_TRANSFER_REFUSAL_TEXT: Readonly<
   AMOUNT_MISMATCH:
     "Az összeg nem egyezik a számlák nyitott összegével, ezért nem írom be.",
   ALREADY_PAID: "Mindegyik számla már ki van fizetve.",
+  CREDIT_USED:
+    "Ezt a jóváírást már más számla kifizetéseként beírtuk; egy utalás pénze nem zárhat le két számlát.",
 };

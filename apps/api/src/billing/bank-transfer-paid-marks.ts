@@ -33,6 +33,16 @@ export interface BankCredit {
   bookingDate: string;
   valueDate: string | null;
   narrative: string;
+  /**
+   * The marks already standing on this credit, from ANY source (`sourceRef` = the credit), FAILED left out (barracuda,
+   * #2192: one credit's money must not close two sets of invoices). A GLS or Foxpost transfer's credit carries its
+   * own source's marks the same way.
+   */
+  existingMarks?: readonly {
+    source: string;
+    invoiceNumber: string;
+    state: string;
+  }[];
 }
 
 export interface FeedInvoice {
@@ -46,7 +56,14 @@ export interface FeedInvoice {
   paidAmount: string;
   /** null: the feed row has no payments yet, so nothing is provably open */
   paymentsKnown: boolean | null;
-  payments: readonly { date: string; amount: string }[];
+  payments: readonly {
+    date: string;
+    amount: string;
+    /** the jogcím as written (átutalás, készpénz, ...) */
+    title?: string;
+    /** Számlázz.hu's own bank pairing, when the payment came from it */
+    bankTransactionId?: string | null;
+  }[];
 }
 
 /** The kinds a customer pays: an invoice, a final invoice, an advance invoice. */
@@ -59,7 +76,8 @@ export type BankTransferRefusal =
   | "PAYMENTS_UNKNOWN"
   | "DIFFERENT_CUSTOMERS"
   | "AMOUNT_MISMATCH"
-  | "ALREADY_PAID";
+  | "ALREADY_PAID"
+  | "CREDIT_USED";
 
 export type BankTransferDecision =
   | {
@@ -107,6 +125,15 @@ export function decideBankTransfer(
     refusal,
     detail,
   });
+  const used = (credit.existingMarks ?? []).filter(
+    (mark) => mark.state !== "FAILED",
+  );
+  const otherSource = used.find((mark) => mark.source !== "BANK_TRANSFER");
+  if (otherSource)
+    return refuse(
+      "CREDIT_USED",
+      `${otherSource.source}: ${otherSource.invoiceNumber}`,
+    );
   const refs = remittanceInvoiceRefs(credit.narrative);
   if (refs.length === 0) return refuse("NO_REFERENCE", "");
 
@@ -143,7 +170,14 @@ export function decideBankTransfer(
     const gross = moneyCents(invoice.grossAmount);
     const paid = moneyCents(invoice.paidAmount);
     const thatDay = invoice.payments
-      .filter((payment) => payment.date === day)
+      // this transfer's: that day, and a transfer (Számlázz.hu's own pairing, or an átutalás title); a cash or card
+      // payment the same day is not this credit, and must not hide an overpayment (barracuda, #2192 a)
+      .filter(
+        (payment) =>
+          payment.date === day &&
+          (Boolean(payment.bankTransactionId) ||
+            /átutal/i.test(payment.title ?? "")),
+      )
       .reduce<bigint | null>((sum, payment) => {
         const cents = moneyCents(payment.amount);
         return sum === null || cents === null ? null : sum + cents;
@@ -159,6 +193,14 @@ export function decideBankTransfer(
     return refuse(
       "AMOUNT_MISMATCH",
       `${numbers}: utalt ${fillerText(amount!)}, várt ${fillerText(expected)}`,
+    );
+  // a retry for the same invoices is idempotent; a credit already used for OTHER invoices is not used again
+  const covered = new Set(named.map((invoice) => invoice.documentNumber));
+  const elsewhere = used.find((mark) => !covered.has(mark.invoiceNumber));
+  if (elsewhere)
+    return refuse(
+      "CREDIT_USED",
+      `${elsewhere.source}: ${elsewhere.invoiceNumber}`,
     );
   if (open.length === 0) return refuse("ALREADY_PAID", numbers);
   return {
@@ -216,7 +258,32 @@ const PAIRABLE_CREDIT = {
   direction: "CREDIT",
   duplicateOfId: null,
   duplicateMarkedAt: null,
+  // a credit tied to another document (Hiányzó számlák) is not a customer's payment of ours
+  matches: { none: {} },
 } as const;
+
+/** The marks standing on these credits, any source, FAILED left out. */
+async function existingMarksFor(
+  creditIds: readonly string[],
+): Promise<Map<string, NonNullable<BankCredit["existingMarks"]>>> {
+  if (creditIds.length === 0) return new Map();
+  const rows = await prisma.outgoingPaymentMark.findMany({
+    where: { sourceRef: { in: [...creditIds] }, state: { not: "FAILED" } },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: { sourceRef: true, source: true, invoiceNumber: true, state: true },
+  });
+  const out = new Map<string, NonNullable<BankCredit["existingMarks"]>>();
+  for (const row of rows)
+    out.set(row.sourceRef, [
+      ...(out.get(row.sourceRef) ?? []),
+      {
+        source: row.source,
+        invoiceNumber: row.invoiceNumber,
+        state: row.state,
+      },
+    ]);
+  return out;
+}
 
 function toCredit(row: {
   id: string;
@@ -246,7 +313,11 @@ export async function loadBankCredit(
     where: { id, ...PAIRABLE_CREDIT },
     select: CREDIT_SELECT,
   });
-  return row ? toCredit(row) : null;
+  if (!row) return null;
+  return {
+    ...toCredit(row),
+    existingMarks: (await existingMarksFor([row.id])).get(row.id) ?? [],
+  };
 }
 
 /** Every Számlázz.hu invoice the texts could name: the latest feed version of each number. Read only. */
@@ -297,8 +368,22 @@ export async function loadFeedInvoicesFor(
     payments: Array.isArray(row.payments)
       ? row.payments.flatMap((payment) => {
           const p = payment as { date?: unknown; amount?: unknown };
+          const q = payment as {
+            title?: unknown;
+            bankTransactionId?: unknown;
+          };
           return typeof p.date === "string" && p.amount != null
-            ? [{ date: p.date.slice(0, 10), amount: String(p.amount) }]
+            ? [
+                {
+                  date: p.date.slice(0, 10),
+                  amount: String(p.amount),
+                  title: typeof q.title === "string" ? q.title : "",
+                  bankTransactionId:
+                    typeof q.bankTransactionId === "string"
+                      ? q.bankTransactionId
+                      : null,
+                },
+              ]
             : [];
         })
       : [],
@@ -321,7 +406,11 @@ export async function loadBankTransfers(from: string): Promise<{
     orderBy: [{ bookingDate: "asc" }, { id: "asc" }],
     select: CREDIT_SELECT,
   });
-  const credits = rows.map(toCredit);
+  const marks = await existingMarksFor(rows.map((row) => row.id));
+  const credits = rows.map((row) => ({
+    ...toCredit(row),
+    existingMarks: marks.get(row.id) ?? [],
+  }));
   return {
     credits,
     invoices: await loadFeedInvoicesFor(credits.map((c) => c.narrative)),

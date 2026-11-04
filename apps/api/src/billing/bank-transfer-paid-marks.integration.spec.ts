@@ -113,7 +113,14 @@ describe(
       // Számlázz.hu paired the transfer with 00083 by itself
       await document("00083", 10000, {
         paidAmount: D(10000),
-        payments: [{ date: DAY, amount: "10000", method: "átutalás" }],
+        payments: [
+          {
+            date: DAY,
+            amount: "10000",
+            title: "átutalás",
+            bankTransactionId: "szhu-1",
+          },
+        ],
       });
       await document("00084", 20000);
       // an older feed version of 00084 with another gross: the latest one counts

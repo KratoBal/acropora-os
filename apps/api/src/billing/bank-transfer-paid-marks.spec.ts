@@ -45,7 +45,14 @@ const invoice = (
 const balazs = () => [
   invoice("00083", "10000.00", {
     paidAmount: "10000.00",
-    payments: [{ date: DAY, amount: "10000" }],
+    payments: [
+      {
+        date: DAY,
+        amount: "10000",
+        title: "átutalás",
+        bankTransactionId: "szhu-1",
+      },
+    ],
   }),
   invoice("00084", "20000.00"),
   invoice("00085", "30000.00"),
@@ -91,7 +98,14 @@ describe("one transfer for several of our invoices", () => {
     const earlier = balazs();
     earlier[0] = invoice("00083", "10000.00", {
       paidAmount: "10000.00",
-      payments: [{ date: "2026-10-30", amount: "10000" }],
+      payments: [
+        {
+          date: "2026-10-30",
+          amount: "10000",
+          title: "átutalás",
+          bankTransactionId: "szhu-0",
+        },
+      ],
     });
     // 00083 was paid before, by another transfer: this one is 10 000 Ft more than the open three
     const other = decideBankTransfer(credit(), earlier);
@@ -139,10 +153,86 @@ describe("one transfer for several of our invoices", () => {
     const paid = balazs().map((i) => ({
       ...i,
       paidAmount: i.grossAmount,
-      payments: [{ date: DAY, amount: i.grossAmount }],
+      payments: [{ date: DAY, amount: i.grossAmount, title: "átutalás" }],
     }));
     const decision = decideBankTransfer(credit(), paid);
     assert.equal(!decision.markable && decision.refusal, "ALREADY_PAID");
+  });
+});
+
+describe("a credit already used (barracuda, #2192)", () => {
+  it("another source's mark on the credit: not used again", () => {
+    const decision = decideBankTransfer(
+      credit({
+        existingMarks: [
+          // on one of the named invoices: the "other invoices" check would let it through
+          {
+            source: "GLS_COD",
+            invoiceNumber: "ACRW-2026/00084",
+            state: "WRITTEN",
+          },
+        ],
+      }),
+      balazs(),
+    );
+    assert.equal(!decision.markable && decision.refusal, "CREDIT_USED");
+  });
+
+  it("its own marks on the same invoices: a retry, allowed; on other invoices: refused; a FAILED one does not count", () => {
+    const retry = decideBankTransfer(
+      credit({
+        existingMarks: [
+          {
+            source: "BANK_TRANSFER",
+            invoiceNumber: "ACRW-2026/00084",
+            state: "WRITTEN",
+          },
+          {
+            source: "BANK_TRANSFER",
+            invoiceNumber: "ACRW-2026/00085",
+            state: "PLANNED",
+          },
+        ],
+      }),
+      balazs(),
+    );
+    assert.equal(retry.markable, true);
+    const other = decideBankTransfer(
+      credit({
+        existingMarks: [
+          {
+            source: "BANK_TRANSFER",
+            invoiceNumber: "ACRW-2026/00090",
+            state: "WRITTEN",
+          },
+        ],
+      }),
+      balazs(),
+    );
+    assert.equal(!other.markable && other.refusal, "CREDIT_USED");
+    const failed = decideBankTransfer(
+      credit({
+        existingMarks: [
+          {
+            source: "GLS_COD",
+            invoiceNumber: "ACRW-2026/00090",
+            state: "FAILED",
+          },
+        ],
+      }),
+      balazs(),
+    );
+    assert.equal(failed.markable, true);
+  });
+
+  it("a cash payment the same day is not this credit's (#2192 a)", () => {
+    const cash = balazs();
+    cash[0] = invoice("00083", "10000.00", {
+      paidAmount: "10000.00",
+      payments: [{ date: DAY, amount: "10000", title: "készpénz" }],
+    });
+    const decision = decideBankTransfer(credit(), cash);
+    assert.equal(!decision.markable && decision.refusal, "AMOUNT_MISMATCH");
   });
 });
 
@@ -160,7 +250,7 @@ describe("the plan for the daily run", () => {
         balazs().map((i) => ({
           ...i,
           paidAmount: i.grossAmount,
-          payments: [{ date: DAY, amount: i.grossAmount }],
+          payments: [{ date: DAY, amount: i.grossAmount, title: "átutalás" }],
         })),
       ),
     ]);

@@ -117,11 +117,19 @@ function PairingPanel({
         .filter((line) => line.outcome === "WRITTEN")
         .map((line) => line.invoiceNumber);
       const other = result.lines.filter((line) => line.outcome !== "WRITTEN");
+      // an uncertain write: the invoice's Kifizetés panel closes it (#2168), after a look at Számlázz.hu (#2192 c)
+      const uncertain = other.some(
+        (line) =>
+          line.outcome === "UNKNOWN" || line.outcome === "UNCERTAIN_BEFORE",
+      );
       onPaired(
         [
           written.length > 0 ? `Beírva: ${written.join(", ")}.` : "",
           other.length > 0
             ? `Nem írtam be: ${other.map((l) => `${l.invoiceNumber} (${l.outcome})`).join(", ")}.`
+            : "",
+          uncertain
+            ? "Bizonytalan válasz: nézd meg a számlát a Számlázz.hu felületén, és zárd le a függő jelölést a számla Kifizetés panelén."
             : "",
         ]
           .filter(Boolean)

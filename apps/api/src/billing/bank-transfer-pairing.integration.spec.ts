@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 
-import { ConflictException } from "@nestjs/common";
+import { ConflictException, NotFoundException } from "@nestjs/common";
 import { Prisma, prisma } from "@acropora/database";
 import type { AuthenticatedUser } from "@acropora/types";
 
@@ -27,15 +27,12 @@ let user: AuthenticatedUser;
 
 async function removeLeftovers() {
   await prisma.outgoingPaymentMark.deleteMany({
-    where: {
-      invoiceNumber: { startsWith: "ACRW-2099/" },
-      source: "BANK_TRANSFER",
-    },
+    where: { invoiceNumber: { startsWith: "ACRW-2099/" } },
   });
   await prisma.auditLog.deleteMany({
     where: {
       action: "billing.bank-transfer.paired",
-      entityId: ids.credit ?? "",
+      entityId: { in: [ids.credit ?? "", ids.race ?? ""] },
     },
   });
   await prisma.bankTransaction.deleteMany({
@@ -93,23 +90,48 @@ describe(
           rejectedCount: 0,
         },
       });
+      const credit = async (key: string) =>
+        (
+          await prisma.bankTransaction.create({
+            data: {
+              bankAccountId: account.id,
+              importId: imported.id,
+              direction: "CREDIT",
+              amount: D(100000),
+              currency: "HUF",
+              bookingDate: new Date(`${DAY}T00:00:00Z`),
+              counterpartyName: "Állatkert",
+              narrative: "szla 83 84 85 86",
+              transactionKey: `${MARK}-${key}`,
+            },
+            select: { id: true },
+          })
+        ).id;
       // the bank wrote the remittance in a way the reader does not know: a person types the numbers
-      ids.credit = (
-        await prisma.bankTransaction.create({
-          data: {
-            bankAccountId: account.id,
-            importId: imported.id,
-            direction: "CREDIT",
-            amount: D(100000),
-            currency: "HUF",
-            bookingDate: new Date(`${DAY}T00:00:00Z`),
-            counterpartyName: "Állatkert",
-            narrative: "szla 83 84 85 86",
-            transactionKey: `${MARK}-credit`,
-          },
-          select: { id: true },
-        })
-      ).id;
+      ids.credit = await credit("credit");
+      // a GLS transfer's credit: its own source already marked it (barracuda, #2192)
+      ids.gls = await credit("gls");
+      await prisma.outgoingPaymentMark.create({
+        data: {
+          source: "GLS_COD",
+          invoiceNumber: "ACRW-2099/00500",
+          markDate: new Date(`${DAY}T00:00:00Z`),
+          amount: D(100000),
+          sourceRef: ids.gls,
+          state: "WRITTEN",
+        },
+      });
+      // two people pair this one at once, to two invoices
+      ids.race = await credit("race");
+      // tied to an incoming document on the Hiányzó számlák page: not a payment of ours
+      ids.matched = await credit("matched");
+      await prisma.bankTransactionMatch.create({
+        data: {
+          bankTransactionId: ids.matched,
+          documentSource: "BTPP",
+          documentId: MARK,
+        },
+      });
       const document = (
         number: string,
         gross: number,
@@ -137,11 +159,22 @@ describe(
         });
       await document("00083", 10000, {
         paidAmount: D(10000),
-        payments: [{ date: DAY, amount: "10000" }],
+        payments: [
+          {
+            date: DAY,
+            amount: "10000",
+            title: "átutalás",
+            bankTransactionId: "szhu-1",
+          },
+        ],
       });
       await document("00084", 20000);
       await document("00085", 30000);
       await document("00086", 40000);
+      // three more invoices of the same customer, each the credit's full amount
+      await document("00091", 100000);
+      await document("00092", 100000);
+      await document("00093", 100000);
     });
 
     after(async () => {
@@ -209,6 +242,55 @@ describe(
         "ACRW-2099/00085",
         "ACRW-2099/00086",
       ]);
+    });
+
+    it("a credit used for other invoices, or by another source, is not paired again (barracuda, #2192)", async () => {
+      // after the 83-86 pairing above: the same credit, another invoice of the same amount
+      await assert.rejects(
+        () => service().pair(ids.credit!, "2099/00091", user),
+        (error: unknown) =>
+          error instanceof ConflictException &&
+          /már más számla kifizetéseként/.test(error.message),
+      );
+      await assert.rejects(
+        () => service().pair(ids.gls!, "2099/00091", user),
+        ConflictException,
+      );
+      assert.equal(
+        await prisma.outgoingPaymentMark.count({
+          where: { invoiceNumber: "ACRW-2099/00091" },
+        }),
+        0,
+      );
+    });
+
+    it("two pairings of one credit at once: one goes in, the other is refused", async () => {
+      const results = await Promise.allSettled([
+        service().pair(ids.race!, "2099/00092", user),
+        service().pair(ids.race!, "2099/00093", user),
+      ]);
+      assert.deepEqual(results.map((r) => r.status).sort(), [
+        "fulfilled",
+        "rejected",
+      ]);
+      assert.equal(
+        await prisma.outgoingPaymentMark.count({
+          where: { sourceRef: ids.race!, state: { not: "FAILED" } },
+        }),
+        1,
+      );
+    });
+
+    it("a credit tied to another document is not listed and not paired", async () => {
+      const listed = await service().list("2099-04-10", true);
+      assert.equal(
+        listed.some((credit) => credit.id === ids.matched),
+        false,
+      );
+      await assert.rejects(
+        () => service().pair(ids.matched!, "2099/00091", user),
+        NotFoundException,
+      );
     });
   },
 );
