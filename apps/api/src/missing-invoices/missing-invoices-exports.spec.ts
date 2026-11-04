@@ -67,7 +67,7 @@ function service(input: {
   files: Record<string, Uint8Array>;
   feed?: { sourceDocumentId: string | null; documentNumber: string }[];
   readings?: Map<string, StoredReading>;
-  /** a bejövő számlák sorai (a könyvelői csomag a teljesítés napja szerint) */
+  /** a bejövő számlák sorai (a könyvelői csomag a számla kelte szerint) */
   billing?: PackageBillingRow[];
   /** minden bejövő számla-sor hivatkozása, a sztornózott és a nem könyvelendő is */
   refs?: { sourceDocumentId: string | null; documentNumber: string }[];
@@ -638,8 +638,8 @@ describe("the month list is sorted before it is paged", () => {
 });
 
 /*
-  A KÖNYVELŐI CSOMAG A TELJESÍTÉS HÓNAPJA SZERINT (Balázs, 2026-11-02 20:12
-  UTC): a hónap MINDEN bejövő számlája benne van, kifizetve vagy sem, és egy
+  A KÖNYVELŐI CSOMAG A SZÁMLA KELTE SZERINT (Balázs, 2026-11-02 20:12 UTC,
+  a kelte 2026-11-04 07:11 UTC óta): a hónap MINDEN bejövő számlája benne van, kifizetve vagy sem, és egy
   számla pontosan egy hónapban.
 
   MI PIROSÍT: ha a kifizetetlen számla (a Fluidra KS26/12407 alakja: kiállítva
@@ -649,7 +649,7 @@ describe("the month list is sorted before it is paged", () => {
   bekerülne, vagy „PDF hiányzik”-ot kapna; ha a sorok által már hordott
   dokumentum a banki oldalról másodszor is megjelenne.
 */
-describe("the accountant package by fulfilment month", () => {
+describe("the accountant package by invoice date", () => {
   const billingRow = (
     overrides: Partial<PackageBillingRow> & { id: string },
   ): PackageBillingRow => ({
@@ -660,7 +660,6 @@ describe("the accountant package by fulfilment month", () => {
     grossAmount: D(56420),
     currency: "HUF",
     issueDate: new Date("2026-10-22T00:00:00Z"),
-    fulfillmentDate: new Date("2026-10-22T00:00:00Z"),
     paperOriginalAt: null,
     pdfIds: [`src-${overrides.id}`],
     ...overrides,
@@ -780,7 +779,7 @@ describe("the accountant package by fulfilment month", () => {
     });
     assert.equal(pages, 2);
     assert.equal(cover.split("56 420 HUF").length - 1, 1, cover);
-    assert.ok(cover.includes("teljesítés napja"), cover);
+    assert.ok(cover.includes("számla kelte"), cover);
   });
 
   it("the mailbox-only invoice stays, in the month of its OWN date, not the payment's", async () => {
@@ -924,7 +923,7 @@ describe("the accountant package by fulfilment month", () => {
     );
   });
 
-  it("a cancelled purchase's original fulfilled in September and refunded in October is in the October refund row only", async () => {
+  it("a cancelled purchase's original dated in September and refunded in October is in the October refund row only", async () => {
     const input = {
       debits: [
         debit("2026-10-21", 85000, "Tesla Inc", {
@@ -957,7 +956,6 @@ describe("the accountant package by fulfilment month", () => {
           grossAmount: D(0),
           supplierName: "Tesla Hungary Kft.",
           issueDate: new Date("2026-09-30T00:00:00Z"),
-          fulfillmentDate: new Date("2026-09-30T00:00:00Z"),
         }),
       ],
       files: { cr: await pdfOfPages(1) },
@@ -1027,10 +1025,10 @@ describe("the accountant package by fulfilment month", () => {
       "2026-10",
     );
     assert.ok(cover.includes("sztornózott vásárlás"), cover);
-    // a sor saját példánya (szállítóval, „teljesítés napja” jelöléssel) nincs
+    // a sor saját példánya (szállítóval, „számla kelte” jelöléssel) nincs
     // ott: csak a sztornózott vásárlás sora
     assert.ok(!cover.includes("| Tesla Hungary Kft."), cover);
-    assert.ok(!cover.includes("teljesítés napja"), cover);
+    assert.ok(!cover.includes("számla kelte"), cover);
     assert.equal(pages, 2);
   });
 

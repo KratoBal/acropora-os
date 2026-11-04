@@ -144,8 +144,8 @@ export function PackageCheckBanner({
 }
 
 /**
- * A HÓNAP KI NEM FIZETETT BEJÖVŐ SZÁMLÁI: a csomagban szerepelnek (a teljesítés
- * napja szerint), de a banki terhelésük még nincs, ezért a Terhelések listán
+ * A HÓNAP KI NEM FIZETETT BEJÖVŐ SZÁMLÁI: a csomagban szerepelnek (a számla
+ * kelte szerint), de a banki terhelésük még nincs, ezért a Terhelések listán
  * nem látszanak. A PDF-státuszuk a csomagé; a hiányzó PDF innen csatolható.
  */
 export function PackageUnpaidBlock({
@@ -171,7 +171,7 @@ export function PackageUnpaidBlock({
         </h2>
         <p className="mt-1 text-xs text-pilot-grey-500">
           A hónap számlái, amelyekhez még nincs banki terhelés. A könyvelői
-          csomagban a teljesítés napja szerint szerepelnek.
+          csomagban a számla kelte szerint szerepelnek.
         </p>
       </div>
       <PilotDataTable
