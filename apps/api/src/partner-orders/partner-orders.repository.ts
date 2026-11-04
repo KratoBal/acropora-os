@@ -164,6 +164,14 @@ export class PartnerOrdersRepository {
     });
   }
 
+  /** The partners with a tax number, for the name-matched hint (`partnerTaxNumberFor`); deleted ones are no source. */
+  partnersWithTaxNumber() {
+    return prisma.supplier.findMany({
+      where: { taxNumber: { not: null }, deletedAt: null },
+      select: { name: true, taxNumber: true },
+    });
+  }
+
   /** Accepted quotes that have no order yet: the ones the page offers to carry on. */
   candidates() {
     return prisma.quote.findMany({

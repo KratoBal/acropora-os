@@ -48,7 +48,8 @@ export function PartnerOrderCertificateInvoice({
     let live = true;
     maintenanceInvoiceApi
       .byCertificate(token, certificateId)
-      .then((found) => live && setInvoice(found))
+      // `?? null`: an empty answer is "no invoice yet", never an endless loading
+      .then((found) => live && setInvoice(found ?? null))
       .catch((cause: unknown) => {
         if (!live) return;
         setInvoice(null);

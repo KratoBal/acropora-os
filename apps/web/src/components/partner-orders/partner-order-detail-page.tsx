@@ -222,7 +222,18 @@ export function PartnerOrderDetailPage({ orderId }: { orderId: string }) {
           </div>
           <div>
             <dt className="text-xs text-pilot-grey-600">Adószám</dt>
-            <dd>{order.customer.taxNumber ?? "—"}</dd>
+            <dd>
+              {order.customer.taxNumber ?? "—"}
+              {!order.customer.taxNumber && order.customer.partnerTaxHint ? (
+                <span
+                  className="block text-xs text-pilot-grey-600"
+                  data-testid="adoszam-tipp"
+                >
+                  A Partnereknél: {order.customer.partnerTaxHint.taxNumber}. A
+                  számlához a vevő adatlapján add meg.
+                </span>
+              ) : null}
+            </dd>
           </div>
           <div>
             <dt className="text-xs text-pilot-grey-600">Cím</dt>

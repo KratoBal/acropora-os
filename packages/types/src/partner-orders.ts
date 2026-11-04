@@ -1,3 +1,5 @@
+import type { PartnerTaxHint } from "./buyer-tax-number.js";
+
 /**
  * Értékesítés > Megrendelések (S1). An order starts from an ACCEPTED quote and points at its accepted
  * version: the lines and amounts are the quote's own, nothing is copied. Decimal values travel as text.
@@ -132,6 +134,11 @@ export interface PartnerOrderDetailDto {
     id: string | null;
     name: string | null;
     taxNumber: string | null;
+    /**
+     * When the order's customer row has no tax number but a same-named partner has one: where to copy it from
+     * (the invoice gate needs it on the customer row; Balázs's picture, 2026-11-04 18:48 UTC). Display only.
+     */
+    partnerTaxHint?: PartnerTaxHint | null;
     /** The address of the quote version's customer snapshot, the same on every document. */
     address: string | null;
   };

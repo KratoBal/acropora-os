@@ -101,6 +101,39 @@ describe("PartnerOrderCertificateInvoice", () => {
     );
   });
 
+  // Balázs képe (18:48 UTC): üres válasznál örökre „Számla: betöltés…” állt
+  it("üres válasznál (még nincs számla) a Számlázás gomb jelenik meg, nem a betöltés", async () => {
+    invoices.byCertificate.mockResolvedValue(undefined);
+    render(
+      <PartnerOrderCertificateInvoice
+        certificateId="cert-1"
+        certificateNumber="TI-2026-001"
+        signed={false}
+      />,
+    );
+    expect(
+      await screen.findByRole("button", { name: "Számlázás" }),
+    ).toBeEnabled();
+    expect(screen.queryByText(/betöltés/)).toBeNull();
+  });
+
+  it("betöltési hibánál a hiba látszik, és nem marad betöltés", async () => {
+    invoices.byCertificate.mockRejectedValue(
+      new Error("Nincs jogosultságod ehhez a művelethez."),
+    );
+    render(
+      <PartnerOrderCertificateInvoice
+        certificateId="cert-1"
+        certificateNumber="TI-2026-001"
+        signed={false}
+      />,
+    );
+    expect(
+      await screen.findByText("Nincs jogosultságod ehhez a művelethez."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/betöltés/)).toBeNull();
+  });
+
   it("a kiállított számlát letölthetőként mutatja, új számlázás nélkül", async () => {
     invoices.byCertificate.mockResolvedValue({
       ...draftSummary,
