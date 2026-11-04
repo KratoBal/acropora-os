@@ -103,6 +103,7 @@ export class ShippingProfileFillService {
       fingerprint,
       created: report.create,
       updated: report.update,
+      createdFlags: report.createdFlags,
       updatedFlags: report.updatedFlags,
     };
     const auditId = await this.repository.start({

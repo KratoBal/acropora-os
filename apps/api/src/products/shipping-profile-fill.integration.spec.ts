@@ -80,9 +80,14 @@ describe(
         },
       });
 
-    it("the preview writes nothing, and names the target", async () => {
+    it("the preview writes nothing, names the target, and counts the new rows' true flags", async () => {
       const preview = await service().preview();
       assert.ok(preview.report.create >= 2);
+      // both products deny Foxpost in UNAS: the new rows carry it (acrobot 43066)
+      assert.ok(preview.report.createdFlags.foxpostForbidden >= 2);
+      assert.ok(
+        preview.report.createdFlags.foxpostForbidden <= preview.report.create,
+      );
       assert.match(preview.fingerprint, /^[0-9a-f]{64}$/);
       assert.ok(preview.target.length > 0);
       assert.deepEqual(await ours(), []);
