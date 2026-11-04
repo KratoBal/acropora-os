@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Get,
   Header,
@@ -7,9 +8,18 @@ import {
   StreamableFile,
 } from "@nestjs/common";
 import { PERMISSIONS } from "@acropora/types";
+import { IsBoolean, IsOptional } from "class-validator";
 
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
 import { MaintenanceInvoiceDraftService } from "./maintenance-invoice-draft.service.js";
+
+/**
+ * A piszkozat kérése: a megrendeléses (munkalap nélküli) TIG aláírt példány nélkül csak a
+ * kezelő kifejezett megerősítésével számlázható (Balázs, 2026-11-04 17:38 UTC).
+ */
+export class MaintenanceInvoiceDraftDto {
+  @IsOptional() @IsBoolean() acknowledgeUnsigned?: boolean;
+}
 
 /**
  * A KARBANTARTÁSI PISZKOZAT-SZÁMLA (ADR-014, 4. szelet).
@@ -38,8 +48,13 @@ export class MaintenanceInvoiceController {
    * áll piszkozat, ez a hívás nem hoz létre újat, a meglévőt adja vissza.
    */
   @Post(":certificateId/draft")
-  draft(@Param("certificateId") certificateId: string) {
-    return this.draftService.draftFor(certificateId);
+  draft(
+    @Param("certificateId") certificateId: string,
+    @Body() body: MaintenanceInvoiceDraftDto = {},
+  ) {
+    return this.draftService.draftFor(certificateId, {
+      acknowledgeUnsigned: body.acknowledgeUnsigned === true,
+    });
   }
 
   /**
