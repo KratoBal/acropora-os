@@ -642,6 +642,42 @@ describe("ProductRepository", () => {
     });
   });
 
+  /**
+   * TWO SIMULTANEOUS SAVES (barracuda, #2130): Serializable aborts one of them with
+   * P2034. The editor retries the whole transaction instead of answering 500, and the
+   * retry reads the fresher before-image.
+   */
+  it("retries the price transaction once Postgres reports a serialization conflict", async () => {
+    const { database, calls } = createDatabase();
+    let attempts = 0;
+    const flaky: ProductDatabase = {
+      ...database,
+      $transaction: (operation, options) => {
+        attempts += 1;
+        if (attempts === 1)
+          return Promise.reject(
+            Object.assign(new Error("serialization failure"), {
+              code: "P2034",
+            }),
+          );
+        return database.$transaction(operation, options);
+      },
+    };
+
+    const result = await new ProductRepository(flaky).setVariantSellingPrice(
+      "product-1",
+      "variant-1",
+      new Prisma.Decimal("12990"),
+    );
+
+    assert.ok(result);
+    assert.equal(attempts, 2);
+    assert.equal(
+      calls.filter((call) => call.operation === "variantUpdateMany").length,
+      1,
+    );
+  });
+
   it("writes nothing for a variant id that is not this product's", async () => {
     const { database, calls } = createDatabase({ variantBefore: null });
     const result = await new ProductRepository(database).setVariantSellingPrice(
