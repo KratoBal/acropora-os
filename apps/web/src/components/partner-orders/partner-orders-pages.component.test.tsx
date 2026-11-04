@@ -243,10 +243,13 @@ describe("a megrendelések listája", () => {
 describe("egy megrendelés", () => {
   beforeEach(() => {
     api.detail.mockResolvedValue(detail());
-    certificates.listForPartnerOrder.mockResolvedValue([]);
+    // the certificate panel stays loading: its table repeats the line names, and a
+    // list that resolves before the assertions would make them ambiguous (CI #2158)
+    certificates.listForPartnerOrder.mockReturnValue(new Promise(() => {}));
   });
 
   it("offers the completion certificate on a forint order, with the order's lines", async () => {
+    certificates.listForPartnerOrder.mockResolvedValue([]);
     render(<PartnerOrderDetailPage orderId="o1" />);
     expect(await screen.findByText("Teljesítési igazolás")).toBeInTheDocument();
     expect(certificates.listForPartnerOrder).toHaveBeenCalledWith(
