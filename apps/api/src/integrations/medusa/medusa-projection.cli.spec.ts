@@ -2278,6 +2278,47 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
     }
   });
 
+  /**
+   * A KEPSOR NELKULI OS-TERMEK KEPEI TOROLNI SZANDEKOZNAK (T4.1-D3, a kepek
+   * torlese): az utolso kep torlese utan a boltban nem maradhat kint a regi. MI
+   * PIROSIT: ha az OS-gazdaju, nulla kepsoros termek torzse nem urit; ha a
+   * UNAS-gazdaju (ahol a nulla atmeneti lehet) torzse urit.
+   */
+  it("a kepsor nelkuli OS-termek ures kep-listat kuld, a UNAS-termek nem", async () => {
+    for (const [catalogAuthority, urit] of [
+      ["ACROPORA", true],
+      ["UNAS", false],
+    ] as const) {
+      const { out, stdout, stderr } = collector();
+      const { db } = adatbazis(termek({ catalogAuthority }));
+      const keresek: { url: string; method: string; body: unknown }[] = [];
+
+      const code = await boltiKorben(() =>
+        runProjectionCli(
+          ["prod-1"],
+          out,
+          provider(environmentSetting),
+          boltiKornyezet,
+          db,
+          boltiFetchTorzzsel(keresek),
+        ),
+      );
+
+      assert.equal(code, 0, stderr.join("") + stdout.join(""));
+      const letrehozas = keresek.find(
+        (k) => k.method === "POST" && k.url.endsWith("/admin/products"),
+      )?.body as Record<string, unknown> | undefined;
+      assert.ok(letrehozas, `${catalogAuthority}: nem jott letre termek`);
+      if (urit) {
+        assert.deepEqual(letrehozas.images, [], catalogAuthority);
+        assert.equal(letrehozas.thumbnail, null, catalogAuthority);
+      } else {
+        assert.equal("images" in letrehozas, false, catalogAuthority);
+        assert.equal("thumbnail" in letrehozas, false, catalogAuthority);
+      }
+    }
+  });
+
   it("a fo ut: egy termek kimegy, es a lekepezes sora megszuletik", async () => {
     const { out, stdout, stderr } = collector();
     const { db, hivasok } = adatbazis();

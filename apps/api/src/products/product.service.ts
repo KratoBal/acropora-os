@@ -271,9 +271,10 @@ export class ProductService {
    * KÉP FELTÖLTÉSE (T4.1-D3, 6. szelet). Csak OS-gazdájú terméknél, és csak a
    * tartalmából felismert képet (JPEG, PNG, GIF, WebP: amit a vetítés is
    * felismer). A sorrend nem cserélhető: előbb a TÁROLÓ, aztán a SOR, mert a sor
-   * azt állítja, hogy a fájl megvan (a másoló mintája). Ha a sor nem jön létre,
-   * a fájl is megy, kivéve ha ugyanez a kép már a termék képe: akkor az a sor
-   * használja ugyanazt a fájlt.
+   * azt állítja, hogy a fájl megvan (a másoló mintája), és mindkettő a termék
+   * zárja alatt fut. Ha a sor nem jön létre, a fájl takarítása is a zár alatt
+   * fut, és csak akkor töröl, ha nincs rá sor: ha ugyanez a kép már a termék
+   * képe, az a sor használja ugyanazt a fájlt.
    */
   async uploadImage(
     id: string,
@@ -296,7 +297,6 @@ export class ProductService {
     const store = this.imageStore();
     const url = uploadedImageUrl(file.buffer);
     const key = imageKey(id, url);
-    await store.put(key, file.buffer);
     try {
       return await this.products.addUploadedImage(
         id,
@@ -308,6 +308,7 @@ export class ProductService {
             contentType,
           ),
         },
+        () => store.put(key, file.buffer),
         actorUserId,
       );
     } catch (error) {
@@ -319,7 +320,7 @@ export class ProductService {
           code: "PRODUCT_IMAGE_DUPLICATE",
           message: "Ez a kép már a termék képei között van.",
         });
-      await this.discardImageFile(key);
+      await this.discardImageFile(id, url);
       throw error;
     }
   }
@@ -341,7 +342,7 @@ export class ProductService {
     // csak a sor saját fájlja megy: ha a tárolt kulcs nem a számított, nem találgatunk
     const key = imageKey(id, result.removed.url);
     if (result.removed.storageKey === storageKeyFor(key))
-      await this.discardImageFile(key);
+      await this.discardImageFile(id, result.removed.url);
     return result.product;
   }
 
@@ -391,9 +392,13 @@ export class ProductService {
     return this.documentStore;
   }
 
-  private async discardImageFile(key: DocumentKey) {
+  /** A fájl takarítása a termék zárja alatt, és csak ha már nincs rá sor. */
+  private async discardImageFile(productId: string, url: string) {
+    const key = imageKey(productId, url);
     try {
-      await this.documentStore?.delete(key);
+      await this.products.releaseImageFileIfUnused(productId, url, async () => {
+        await this.documentStore?.delete(key);
+      });
     } catch (error) {
       this.logger.warn(
         `A termékkép fájlja nem törlődött (${storageKeyFor(key)}): ${String(error)}`,

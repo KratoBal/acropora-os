@@ -79,13 +79,13 @@ Az átvétel után **itt szerkeszthető**: név, rövid leírás, terméktípus,
 kategória, vásárolható a webshopban jelző (`UpdateProductDto`); saját eladási ár,
 változatonként (az ár-szerkesztő, árelőzménnyel); szállítási jelzők (a szállítási
 szerkesztő; az átvétel a UNAS-forrású jelzőket kézire billenti, T4.1-D3);
-képek alt-szövege és sorrendje (a képszerkesztő, T4.1-D3).
+képek alt-szövege és sorrendje, képek feltöltése és törlése (a képszerkesztő,
+T4.1-D3).
 
 **Befagy az átvételkori UNAS-értéken, és ma nincs rá OS-oldali szerkesztő:**
-hosszú leírás; keresőoptimalizálási mezők (SEO cím, leírás, kulcsszó); képek
-feltöltése és törlése; hasonló és kiegészítő termékek; gyártói cikkszám;
-mértékegység és másodlagos egység; ÁFA-kulcs. A képfeltöltést és a saját akciós
-árat a T4.1-D3 következő szeletei hozzák.
+hosszú leírás; keresőoptimalizálási mezők (SEO cím, leírás, kulcsszó); hasonló
+és kiegészítő termékek; gyártói cikkszám; mértékegység és másodlagos egység;
+ÁFA-kulcs. A saját akciós árat a T4.1-D3 következő szelete hozza.
 
 **Nem érinti** (ezeknek ma sem a szinkron a gazdája): készlet, vonalkódok,
 beszállító és raktárhely, a tanácsadó- és adatlap-jelzők (elhelyezés, fény- és

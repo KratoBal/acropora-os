@@ -105,6 +105,11 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   // the global search's time limit for an external group, in milliseconds: a number, not a secret
   "SEARCH_EXTERNAL_GROUP_TIMEOUT_MS",
   "VIES_API_URL",
+  // the webshop problem report pull (V1.2): a switch, two minute counts and a user id: not secrets
+  "WEBSHOP_COMPLAINT_ASSIGNEE_ID",
+  "WEBSHOP_COMPLAINT_PULL_ENABLED",
+  "WEBSHOP_COMPLAINT_PULL_INTERVAL_MINUTES",
+  "WEBSHOP_COMPLAINT_PULL_STARTUP_DELAY_MINUTES",
   "WEB_URL",
 ]);
 

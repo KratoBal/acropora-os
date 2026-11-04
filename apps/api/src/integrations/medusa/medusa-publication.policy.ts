@@ -189,6 +189,24 @@ export function decidePublication(
   };
 }
 
+/**
+ * KIFUTOTT-E A TERMEK (V4.2, kartya 9d0523fa): nem ertekesitheto, mert inaktiv
+ * vagy nincs webshopos ertekesitesre jelolve, ES volt publikus UNAS-lapja. A
+ * tobbi visszatartasi ok (ismeretlen gazda, nincs aktiv valtozat, nem termek)
+ * nem kifutas, hanem adathiba vagy segedsor, es arrol a vevonek nincs lapja.
+ * A UNAS-lap nelkuli termek (egy keszulo OS-termek) sem kifutott: annak meg
+ * soha nem volt publikus lapja.
+ */
+export function isDiscontinued(
+  reason: PublicationReason,
+  unasProductUrl: string | null | undefined,
+): boolean {
+  return (
+    (reason === "product-inactive" || reason === "not-webshop-sellable") &&
+    Boolean(unasProductUrl?.trim())
+  );
+}
+
 /** Egy sor a jelentesbe, emberi olvasasra. */
 export const PUBLICATION_REASON_TEXT: Record<PublicationReason, string> = {
   sellable: "értékesíthető a webshopban",

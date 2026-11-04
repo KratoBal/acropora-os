@@ -10,6 +10,7 @@ import type {
 } from "./product.repository.js";
 import {
   ProductRepository,
+  UPLOAD_TRANSACTION_TIMEOUT_MS,
   VariantSaleConflict,
 } from "./product.repository.js";
 import type { ProductWithRelations } from "./product.types.js";
@@ -245,6 +246,7 @@ function createDatabase({
   ] as TakeoverPriceVariant[],
 } = {}) {
   const calls: Array<{ operation: string; args: unknown }> = [];
+  const txOptions: unknown[] = [];
   const transaction = {
     product: {
       create: async (args: unknown) => {
@@ -394,9 +396,12 @@ function createDatabase({
         return foundImage;
       },
     },
-    $transaction: (operation) => operation(transaction),
+    $transaction: (operation, options) => {
+      txOptions.push(options);
+      return operation(transaction);
+    },
   };
-  return { database, calls };
+  return { database, calls, txOptions };
 }
 
 describe("ProductRepository", () => {
@@ -1134,6 +1139,9 @@ describe("ProductRepository", () => {
         storageKey: "products/product-1/doc-1",
         fileName: "kek.jpg",
       },
+      async () => {
+        calls.push({ operation: "storeFile", args: null });
+      },
       "user-1",
     );
     assert.ok(result);
@@ -1141,6 +1149,7 @@ describe("ProductRepository", () => {
       calls.map((call) => call.operation),
       [
         "lock",
+        "storeFile",
         "imageAggregate",
         "imageCreate",
         "transactionUpdate",
@@ -1172,13 +1181,32 @@ describe("ProductRepository", () => {
     });
   });
 
+  it("gives the upload transaction a timeout above Prisma's 5 s default (barracuda, #2145)", async () => {
+    const { database, txOptions } = createDatabase();
+    await new ProductRepository(database).addUploadedImage(
+      "product-1",
+      {
+        url: "os-upload:abc",
+        storageKey: "products/product-1/doc-1",
+        fileName: "kek.jpg",
+      },
+      async () => {},
+    );
+    assert.deepEqual(txOptions, [{ timeout: UPLOAD_TRANSACTION_TIMEOUT_MS }]);
+    assert.ok(UPLOAD_TRANSACTION_TIMEOUT_MS > 5_000);
+  });
+
   it("gives the first uploaded image sortOrder 0", async () => {
     const { database, calls } = createDatabase({ maxSortOrder: null });
-    await new ProductRepository(database).addUploadedImage("product-1", {
-      url: "os-upload:abc",
-      storageKey: "products/product-1/doc-1",
-      fileName: "kek.jpg",
-    });
+    await new ProductRepository(database).addUploadedImage(
+      "product-1",
+      {
+        url: "os-upload:abc",
+        storageKey: "products/product-1/doc-1",
+        fileName: "kek.jpg",
+      },
+      async () => {},
+    );
     const create = calls.find((call) => call.operation === "imageCreate")
       ?.args as { data: { sortOrder: number } };
     assert.equal(create.data.sortOrder, 0);
@@ -1220,6 +1248,44 @@ describe("ProductRepository", () => {
       calls.map((call) => call.operation),
       ["lock", "imageFindFirst"],
     );
+  });
+
+  it("releases an image file only under the lock, and only with no row left (barracuda, #2142)", async () => {
+    const free = createDatabase({ foundImage: null });
+    let released = 0;
+    assert.equal(
+      await new ProductRepository(free.database).releaseImageFileIfUnused(
+        "product-1",
+        "os-upload:abc",
+        async () => {
+          free.calls.push({ operation: "releaseFile", args: null });
+          released += 1;
+        },
+      ),
+      true,
+    );
+    assert.deepEqual(
+      free.calls.map((call) => call.operation),
+      ["lock", "imageFindFirst", "releaseFile"],
+    );
+    assert.deepEqual((free.calls[1]?.args as { where: unknown }).where, {
+      productId: "product-1",
+      url: "os-upload:abc",
+    });
+
+    // egy közben újra feltöltött sor a fájlt megtartja
+    const used = createDatabase();
+    assert.equal(
+      await new ProductRepository(used.database).releaseImageFileIfUnused(
+        "product-1",
+        "os-upload:abc",
+        async () => {
+          released += 1;
+        },
+      ),
+      false,
+    );
+    assert.equal(released, 1);
   });
 
   it("reads an image row only within the product", async () => {

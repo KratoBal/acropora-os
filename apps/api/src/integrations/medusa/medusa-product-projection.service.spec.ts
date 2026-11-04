@@ -9,6 +9,7 @@ import type {
   MedusaProductRow,
 } from "./medusa-admin.client.js";
 import {
+  DISCONTINUED_KEY,
   isOwnedMetadataKey,
   UNIQUE_PIECE_KEY,
 } from "./medusa-metadata-merge.js";
@@ -1847,6 +1848,44 @@ describe("MedusaProductProjectionService -- a termek kepei", () => {
     assert.ok(!("thumbnail" in torzs), "fo kep ment ki lista nelkul");
   });
 
+  /**
+   * A KIFEJEZETT TORLES (T4.1-D3, a kepek torlese): az OS-gazdaju termek utolso
+   * kepenek torlese csak igy jut el a boltba. MI PIROSIT: ha a jelzo mellett a
+   * lista vagy a fo kep nem urul ki; ha a jelzo egy nem ures listat felulir.
+   */
+  it("a kifejezett torles-jelzo ures listat es fo kep nelkuli termeket kuld", async () => {
+    const f = fakes({
+      link: { productId: product.id, medusaProductId: "prod_medusa_1" },
+      found: [],
+    });
+
+    await f.service.project(
+      { ...product, images: null, imagesCleared: true },
+      now,
+    );
+
+    const torzs = f.updatedWith[0];
+    assert.ok(torzs, "az update nem futott le");
+    assert.deepEqual(torzs.images, []);
+    assert.equal(torzs.thumbnail, null);
+  });
+
+  it("a torles-jelzo a nem ures listat nem irja felul", async () => {
+    const f = fakes({
+      link: { productId: product.id, medusaProductId: "prod_medusa_1" },
+      found: [],
+    });
+
+    await f.service.project(
+      { ...product, images: ["https://kep/a.jpg"], imagesCleared: true },
+      now,
+    );
+
+    const torzs = f.updatedWith[0];
+    assert.deepEqual(torzs?.images, [{ url: "https://kep/a.jpg" }]);
+    assert.equal(torzs?.thumbnail, "https://kep/a.jpg");
+  });
+
   it("az URES lista ugyanugy nem kerul ki, mint a hianyzo", async () => {
     const f = fakes({
       link: { productId: product.id, medusaProductId: "prod_medusa_1" },
@@ -2777,5 +2816,60 @@ describe("MedusaProductProjectionService -- az Omnibus hivatkozasi ar a valtozat
     if (outcome.action !== "updated") return;
     assert.deepEqual(outcome.omnibus?.gaps, ["A"]);
     assert.deepEqual(outcome.omnibus?.written, []);
+  });
+});
+
+/**
+ * A KIFUTOTT JELOLO (V4.2, kartya 9d0523fa). MI PIROSIT: ha egy inaktiv vagy nem
+ * webshopos, UNAS-lapos termek NEM kapja meg; ha egy UNAS-lap nelkuli (keszulo
+ * OS-) termek, egy ertekesitheto termek vagy egy mas okbol visszatartott termek
+ * megkapja.
+ */
+describe("a kifutott termek jeloloje a metaadatban", () => {
+  const now = new Date("2026-11-04T12:00:00Z");
+  async function metaadat(
+    overrides: Partial<ProjectableProduct>,
+  ): Promise<Record<string, unknown>> {
+    const f = fakes({ link: null, found: [] });
+    await f.service.project({ ...product, ...overrides }, now);
+    const torzs = f.createdWith[0];
+    assert.ok(torzs, "a create nem futott le");
+    return (torzs.metadata ?? {}) as Record<string, unknown>;
+  }
+  const lap = { unasProductUrl: "https://bolt.test/regi-lap" };
+
+  it("az inaktiv es a nem webshopos, UNAS-lapos termek kifutott", async () => {
+    for (const publication of [
+      { ...product.publication, isActive: false },
+      { ...product.publication, webshopSellable: false },
+    ]) {
+      const m = await metaadat({ ...lap, publication });
+      assert.equal(m[DISCONTINUED_KEY], "true", JSON.stringify(publication));
+    }
+  });
+
+  it("a UNAS-lap nelkuli, az ertekesitheto es a mas okbol visszatartott termek nem", async () => {
+    for (const [nev, overrides] of [
+      [
+        "UNAS-lap nelkul",
+        { publication: { ...product.publication, webshopSellable: false } },
+      ],
+      ["ertekesitheto", { ...lap }],
+      [
+        "nincs aktiv valtozat",
+        {
+          ...lap,
+          publication: { ...product.publication, activeVariantCount: 0 },
+        },
+      ],
+    ] as const) {
+      const m = await metaadat(overrides as Partial<ProjectableProduct>);
+      assert.equal(DISCONTINUED_KEY in m, false, nev);
+    }
+  });
+
+  it("a kulcs a mienk: a termek visszaterese utan az osszefesules leveszi", () => {
+    assert.equal(isOwnedMetadataKey(DISCONTINUED_KEY), true);
+    assert.equal(DISCONTINUED_KEY, "discontinued");
   });
 });

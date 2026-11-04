@@ -9,6 +9,7 @@ export const TASK_SOURCE_LABELS: Record<TaskSource, string> = {
   MANUAL: "Kézi felvitel",
   AGENT: "Flotta",
   QUOTE: "Árajánlat",
+  WEBSHOP_COMPLAINT: "Webshop bejelentés",
 };
 
 const budapestDay = new Intl.DateTimeFormat("en-CA", {

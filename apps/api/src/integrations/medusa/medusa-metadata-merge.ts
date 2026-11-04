@@ -113,10 +113,25 @@ export const ACROPORA_IMAGES_KEY = "acropora_images";
  */
 export const PRIMARY_CATEGORY_KEY = "primary_category_id";
 
+/**
+ * A KIFUTOTT TERMEK JELOLOJE (V4.2, kartya 9d0523fa). `"true"`, ha a termek nem
+ * ertekesitheto, mert inaktiv vagy nincs webshopos ertekesitesre jelolve, ES volt
+ * publikus UNAS-lapja (`unas_product_url`). A kirakat "nem kaphato" lapja csak
+ * ilyen termekre valaszol: egy keszulo, meg soha nem publikus OS-termek neve a
+ * handle-jebol ne legyen kiolvashato. A hianya a "nem kifutott"; az
+ * osszefesules veszi le, ha a termek visszater.
+ *
+ * PAR: acropora-commerce apps/backend/src/api/store/nem-kaphato/jeloltek.ts
+ *      `KIFUTOTT_KULCS`. Ket repo, kozos csomag nelkul: ha a ket sztring elter,
+ *      a lap csendben 404 marad.
+ */
+export const DISCONTINUED_KEY = "discontinued";
+
 export const OWNED_METADATA_KEYS = [
   UNIQUE_PIECE_KEY,
   ACROPORA_IMAGES_KEY,
   PRIMARY_CATEGORY_KEY,
+  DISCONTINUED_KEY,
 ] as const;
 
 /**

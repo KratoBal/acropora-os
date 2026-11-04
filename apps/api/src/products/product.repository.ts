@@ -184,7 +184,7 @@ export interface ProductDatabase {
   };
   $transaction<T>(
     operation: (transaction: ProductTransaction) => Promise<T>,
-    options?: { isolationLevel: "Serializable" },
+    options?: { isolationLevel?: "Serializable"; timeout?: number },
   ): Promise<T>;
 }
 
@@ -251,6 +251,9 @@ export interface UploadedProductImage {
   storageKey: string;
   fileName: string;
 }
+
+/** A feltöltés tranzakciójának felső határa: a fájl-írás a termék zárja alatt fut. */
+export const UPLOAD_TRANSACTION_TIMEOUT_MS = 30_000;
 
 /** A felületről feltöltött kép forrása; a UNAS-írók csak a `UNAS` sorokat cserélik. */
 export const UPLOADED_IMAGE_SOURCE = "OS";
@@ -899,39 +902,50 @@ export class ProductRepository extends Repository {
   }
 
   /**
-   * EGY FELTÖLTÖTT KÉP A LISTA VÉGÉRE (T4.1-D3, 6. szelet). A fájl ekkor már a
-   * tárolóban áll (a sor csak létező fájlra mutathat, a másoló mintája). A termék
-   * sora zárolva: két egyidejű feltöltés ne kapja ugyanazt a sorszámot, és egy
+   * EGY FELTÖLTÖTT KÉP A LISTA VÉGÉRE (T4.1-D3, 6. szelet). A termék sora
+   * zárolva: két egyidejű feltöltés ne kapja ugyanazt a sorszámot, és egy
    * sorrend-írás ne hagyja ki az újat. A `[productId, url]` egyedi kulcs ütközése
    * (ugyanaz a kép másodszor) P2002-vel dob; a hívó dönt róla.
+   *
+   * A FÁJLT A HÍVÓ A ZÁR ALATT ÍRJA (`storeFile`), a sor előtt (a sor csak létező
+   * fájlra mutathat, a másoló mintája). A zár előtt írva egy egyidejű törlés
+   * takarítása a sor létrejötte előtt elvihette volna (barracuda, #2142): a
+   * takarítás ugyanezt a zárat veszi fel (`releaseImageFileIfUnused`).
    */
   async addUploadedImage(
     productId: string,
     image: UploadedProductImage,
+    storeFile: () => Promise<void>,
     actorUserId?: string,
   ): Promise<ProductDetail> {
-    return this.productDatabase.$transaction(async (transaction) => {
-      await lockProduct(transaction, productId);
-      const last = await transaction.productImage.aggregate({
-        where: { productId },
-        _max: { sortOrder: true },
-      });
-      const created = await transaction.productImage.create({
-        data: {
-          productId,
-          url: image.url,
-          storageKey: image.storageKey,
-          fileName: image.fileName,
-          sortOrder: (last._max.sortOrder ?? -1) + 1,
-          source: UPLOADED_IMAGE_SOURCE,
-        },
-        select: { id: true },
-      });
-      return this.touchAndRead(transaction, productId, actorUserId, {
-        eventType: "product.image.uploaded",
-        payload: { imageId: created.id, fileName: image.fileName },
-      });
-    });
+    return this.productDatabase.$transaction(
+      async (transaction) => {
+        await lockProduct(transaction, productId);
+        await storeFile();
+        const last = await transaction.productImage.aggregate({
+          where: { productId },
+          _max: { sortOrder: true },
+        });
+        const created = await transaction.productImage.create({
+          data: {
+            productId,
+            url: image.url,
+            storageKey: image.storageKey,
+            fileName: image.fileName,
+            sortOrder: (last._max.sortOrder ?? -1) + 1,
+            source: UPLOADED_IMAGE_SOURCE,
+          },
+          select: { id: true },
+        });
+        return this.touchAndRead(transaction, productId, actorUserId, {
+          eventType: "product.image.uploaded",
+          payload: { imageId: created.id, fileName: image.fileName },
+        });
+      },
+      // a fájl-írás a zár alatt fut: egy 10 MB-os kép lassú lemezre írva elérheti a
+      // Prisma 5 mp-es alapértelmezését (barracuda, #2145)
+      { timeout: UPLOAD_TRANSACTION_TIMEOUT_MS },
+    );
   }
 
   /**
@@ -965,6 +979,29 @@ export class ProductRepository extends Repository {
         },
       );
       return { product, removed };
+    });
+  }
+
+  /**
+   * EGY KÉP FÁJLJÁNAK TAKARÍTÁSA, CSAK HA MÁR NINCS RÁ SOR (barracuda, #2142). A
+   * termék zárja alatt: egy közben futó újrafeltöltés vagy előtte írta a sort
+   * (akkor a fájl marad), vagy utána írja a fájlt (akkor újra felteszi). `true`,
+   * ha a fájl ment.
+   */
+  async releaseImageFileIfUnused(
+    productId: string,
+    url: string,
+    releaseFile: () => Promise<void>,
+  ): Promise<boolean> {
+    return this.productDatabase.$transaction(async (transaction) => {
+      await lockProduct(transaction, productId);
+      const still = await transaction.productImage.findFirst({
+        where: { productId, url },
+        select: STORED_IMAGE_SELECT,
+      });
+      if (still) return false;
+      await releaseFile();
+      return true;
     });
   }
 
