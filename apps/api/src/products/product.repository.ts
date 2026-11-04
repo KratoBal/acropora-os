@@ -126,11 +126,20 @@ interface ProductTransaction {
     } | null>;
     updateMany(args: unknown): Promise<{ count: number }>;
   };
-  /** A képek alt-szövege és sorrendje (T4.1-D3, 4. szelet). */
+  /** A képek alt-szövege és sorrendje (4. szelet), feltöltése és törlése (6. szelet). */
   productImage: {
     findMany(args: unknown): Promise<Array<{ id: string }>>;
+    findFirst(args: unknown): Promise<StoredProductImage | null>;
+    aggregate(args: unknown): Promise<{ _max: { sortOrder: number | null } }>;
+    create(args: unknown): Promise<{ id: string }>;
+    deleteMany(args: unknown): Promise<{ count: number }>;
     updateMany(args: unknown): Promise<{ count: number }>;
   };
+  /** A termék sorának zárolása a képlista-írásokhoz (`SELECT ... FOR UPDATE`). */
+  $queryRaw(
+    query: TemplateStringsArray,
+    ...values: unknown[]
+  ): Promise<unknown>;
   /** Átvételkor a UNAS-forrású szállítási jelzők kézire billennek (T4.1-D3). */
   productShippingProfile: {
     findUnique(
@@ -172,6 +181,10 @@ export interface ProductDatabase {
   externalReference: {
     findFirst(args: unknown): Promise<{ externalId: string } | null>;
   };
+  /** a feltöltött kép kiolvasásához (T4.1-D3, 6. szelet) */
+  productImage: {
+    findFirst(args: unknown): Promise<StoredProductImage | null>;
+  };
   $transaction<T>(
     operation: (transaction: ProductTransaction) => Promise<T>,
     options?: { isolationLevel: "Serializable" },
@@ -179,6 +192,38 @@ export interface ProductDatabase {
 }
 
 export const PRODUCT_DATABASE = Symbol("PRODUCT_DATABASE");
+
+/** Egy kép sora, amennyi a fájljához kell. */
+export interface StoredProductImage {
+  id: string;
+  url: string;
+  storageKey: string | null;
+  fileName: string | null;
+}
+
+const STORED_IMAGE_SELECT = {
+  id: true,
+  url: true,
+  storageKey: true,
+  fileName: true,
+} as const;
+
+/** Egy feltöltött kép, amit a tároló már őriz. */
+export interface UploadedProductImage {
+  url: string;
+  storageKey: string;
+  fileName: string;
+}
+
+/** A felületről feltöltött kép forrása; a UNAS-írók csak a `UNAS` sorokat cserélik. */
+export const UPLOADED_IMAGE_SOURCE = "OS";
+
+async function lockProduct(
+  transaction: ProductTransaction,
+  productId: string,
+): Promise<void> {
+  await transaction.$queryRaw`SELECT "id" FROM "Product" WHERE "id" = ${productId} FOR UPDATE`;
+}
 
 @Injectable()
 export class ProductRepository extends Repository {
@@ -699,6 +744,8 @@ export class ProductRepository extends Repository {
     actorUserId?: string,
   ): Promise<ProductDetail | null> {
     return this.productDatabase.$transaction(async (transaction) => {
+      // egy közben feltöltött vagy törölt kép ne csússzon a beolvasás és az írás közé (barracuda, #2139)
+      await lockProduct(transaction, productId);
       const own = await transaction.productImage.findMany({
         where: { productId },
         select: { id: true },
@@ -719,6 +766,87 @@ export class ProductRepository extends Repository {
         eventType: "product.image.order.set",
         payload: { imageIds },
       });
+    });
+  }
+
+  /**
+   * EGY FELTÖLTÖTT KÉP A LISTA VÉGÉRE (T4.1-D3, 6. szelet). A fájl ekkor már a
+   * tárolóban áll (a sor csak létező fájlra mutathat, a másoló mintája). A termék
+   * sora zárolva: két egyidejű feltöltés ne kapja ugyanazt a sorszámot, és egy
+   * sorrend-írás ne hagyja ki az újat. A `[productId, url]` egyedi kulcs ütközése
+   * (ugyanaz a kép másodszor) P2002-vel dob; a hívó dönt róla.
+   */
+  async addUploadedImage(
+    productId: string,
+    image: UploadedProductImage,
+    actorUserId?: string,
+  ): Promise<ProductDetail> {
+    return this.productDatabase.$transaction(async (transaction) => {
+      await lockProduct(transaction, productId);
+      const last = await transaction.productImage.aggregate({
+        where: { productId },
+        _max: { sortOrder: true },
+      });
+      const created = await transaction.productImage.create({
+        data: {
+          productId,
+          url: image.url,
+          storageKey: image.storageKey,
+          fileName: image.fileName,
+          sortOrder: (last._max.sortOrder ?? -1) + 1,
+          source: UPLOADED_IMAGE_SOURCE,
+        },
+        select: { id: true },
+      });
+      return this.touchAndRead(transaction, productId, actorUserId, {
+        eventType: "product.image.uploaded",
+        payload: { imageId: created.id, fileName: image.fileName },
+      });
+    });
+  }
+
+  /**
+   * EGY KÉP TÖRLÉSE (T4.1-D3, 6. szelet). Csak ennek a terméknek a képe; idegen
+   * vagy nem létező azonosítóra `null`, és semmi nem íródik. A törölt sort
+   * visszaadja, mert a fájlt a hívó a tranzakció UTÁN viszi el: egy visszagörgetett
+   * törlés után a sor megmarad, és a fájljának is meg kell maradnia.
+   */
+  async removeImage(
+    productId: string,
+    imageId: string,
+    actorUserId?: string,
+  ): Promise<{ product: ProductDetail; removed: StoredProductImage } | null> {
+    return this.productDatabase.$transaction(async (transaction) => {
+      await lockProduct(transaction, productId);
+      const removed = await transaction.productImage.findFirst({
+        where: { id: imageId, productId },
+        select: STORED_IMAGE_SELECT,
+      });
+      if (!removed) return null;
+      await transaction.productImage.deleteMany({
+        where: { id: imageId, productId },
+      });
+      const product = await this.touchAndRead(
+        transaction,
+        productId,
+        actorUserId,
+        {
+          eventType: "product.image.removed",
+          payload: { imageId, url: removed.url },
+        },
+      );
+      return { product, removed };
+    });
+  }
+
+  /** Egy kép sora a fájl kiolvasásához; csak ennek a terméknek a képe. */
+  findImage(
+    productId: string,
+    imageId: string,
+  ): Promise<StoredProductImage | null> {
+    return this.productDatabase.productImage.findFirst({
+      where: { id: imageId, productId },
+      select: STORED_IMAGE_SELECT,
     });
   }
 

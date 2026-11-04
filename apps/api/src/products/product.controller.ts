@@ -3,15 +3,22 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   Param,
   Patch,
   Post,
   Put,
   Query,
+  StreamableFile,
+  UploadedFile,
+  UseInterceptors,
 } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
+import { memoryStorage } from "multer";
 import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
+import { DOCUMENT_UPLOAD_LIMITS } from "../documents/document-upload-limits.js";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
 import { CreateProductDto } from "./dto/create-product.dto.js";
 import {
@@ -74,6 +81,46 @@ export class ProductController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.products.setImageAlt(id, imageId, input, user.id);
+  }
+
+  /** Egy kép feltöltése a lista végére (T4.1-D3, 6. szelet); a mező neve `file`. */
+  @Post(":id/images")
+  @RequirePermissions(PERMISSIONS.PRODUCTS_MANAGE)
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: memoryStorage(),
+      limits: { fileSize: DOCUMENT_UPLOAD_LIMITS.fileSizeBytes },
+    }),
+  )
+  uploadImage(
+    @Param("id") id: string,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.products.uploadImage(id, file, user.id);
+  }
+
+  @Delete(":id/images/:imageId")
+  @RequirePermissions(PERMISSIONS.PRODUCTS_MANAGE)
+  deleteImage(
+    @Param("id") id: string,
+    @Param("imageId") imageId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.products.deleteImage(id, imageId, user.id);
+  }
+
+  /** A kép fájlja a tárolóból; a feltöltött képnek nincs webcíme. */
+  @Get(":id/images/:imageId/file")
+  @RequirePermissions(PERMISSIONS.PRODUCTS_VIEW)
+  @Header("Cache-Control", "private, no-store")
+  async imageFile(@Param("id") id: string, @Param("imageId") imageId: string) {
+    const image = await this.products.imageFile(id, imageId);
+    return new StreamableFile(image.bytes, {
+      type: image.contentType,
+      length: image.bytes.length,
+      disposition: `inline; filename*=UTF-8''${encodeURIComponent(image.fileName)}`,
+    });
   }
 
   @Put(":id/images/order")

@@ -1,10 +1,14 @@
+import { createHash } from "node:crypto";
+
 import {
   BadRequestException,
   ConflictException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   Optional,
+  ServiceUnavailableException,
 } from "@nestjs/common";
 import { Prisma } from "@acropora/database";
 import { sanitizeRichHtml } from "@acropora/rich-text";
@@ -19,7 +23,44 @@ import type {
 import type { SetVariantPriceDto } from "./dto/set-variant-price.dto.js";
 import type { UpdateProductDto } from "./dto/update-product.dto.js";
 import { richTextImageHosts } from "../homepage-content/homepage-content.service.js";
+import {
+  detectImageContentType,
+  imageFileNameFor,
+} from "../integrations/medusa/image-content-type.js";
+import { productImageDocumentId } from "../integrations/medusa/product-image-storage-key.js";
+import {
+  assertStorageKeyMatches,
+  storageKeyFor,
+} from "../service-assets/document-store/document-storage-key.js";
+import {
+  documentUnavailableMessage,
+  type DocumentKey,
+  type DocumentStore,
+} from "../service-assets/document-store/document-store.js";
+import {
+  DOCUMENT_STORE,
+  documentStoreEnabled,
+} from "../service-assets/document-store/document-store.provider.js";
 import { ProductRepository } from "./product.repository.js";
+
+/**
+ * A FELTÖLTÖTT KÉP AZONOSÍTÓJA A `url` MEZŐBEN (T4.1-D3, 6. szelet). A tárolókulcs
+ * a `url` lenyomatából jön (`productImageDocumentId`), és a vetítés a tárolóból
+ * tölti fel a képet a boltba, tehát a mező nem webcím, hanem a tartalom
+ * lenyomata. Ugyanaz a fájl másodszor ugyanazt az azonosítót kapja, és a
+ * `[productId, url]` egyedi kulcs megfogja.
+ */
+export const UPLOADED_IMAGE_URL_PREFIX = "os-upload:";
+
+export function uploadedImageUrl(bytes: Uint8Array): string {
+  return `${UPLOADED_IMAGE_URL_PREFIX}${createHash("sha256").update(bytes).digest("hex")}`;
+}
+
+/** A feltöltés fájlja, amennyi belőle kell (a multer `File`-ja ennél több). */
+export interface ProductImageUpload {
+  originalname: string;
+  buffer: Buffer;
+}
 
 /** The environment the description's image hosts come from (`RICH_TEXT_IMAGE_HOSTS`). */
 export const PRODUCT_ENVIRONMENT = Symbol("PRODUCT_ENVIRONMENT");
@@ -62,11 +103,16 @@ function withSanitizedDescription<T extends { description?: string | null }>(
 
 @Injectable()
 export class ProductService {
+  private readonly logger = new Logger(ProductService.name);
+
   constructor(
     private readonly products: ProductRepository,
     @Optional()
     @Inject(PRODUCT_ENVIRONMENT)
     private readonly environment: NodeJS.ProcessEnv = process.env,
+    @Optional()
+    @Inject(DOCUMENT_STORE)
+    private readonly documentStore?: DocumentStore,
   ) {}
 
   createProduct(input: CreateProductDto, actorUserId?: string) {
@@ -162,6 +208,140 @@ export class ProductService {
     return updated;
   }
 
+  /**
+   * KÉP FELTÖLTÉSE (T4.1-D3, 6. szelet). Csak OS-gazdájú terméknél, és csak a
+   * tartalmából felismert képet (JPEG, PNG, GIF, WebP: amit a vetítés is
+   * felismer). A sorrend nem cserélhető: előbb a TÁROLÓ, aztán a SOR, mert a sor
+   * azt állítja, hogy a fájl megvan (a másoló mintája). Ha a sor nem jön létre,
+   * a fájl is megy, kivéve ha ugyanez a kép már a termék képe: akkor az a sor
+   * használja ugyanazt a fájlt.
+   */
+  async uploadImage(
+    id: string,
+    file: ProductImageUpload | undefined,
+    actorUserId?: string,
+  ) {
+    if (!file?.buffer?.length)
+      throw new BadRequestException({
+        code: "PRODUCT_IMAGE_FILE_REQUIRED",
+        message: "A feltöltendő kép kötelező.",
+      });
+    const product = await this.requireProduct(id);
+    this.assertLocallyManaged(product);
+    const contentType = detectImageContentType(file.buffer);
+    if (!contentType)
+      throw new BadRequestException({
+        code: "PRODUCT_IMAGE_NOT_AN_IMAGE",
+        message: "Csak JPEG, PNG, GIF vagy WebP kép tölthető fel.",
+      });
+    const store = this.imageStore();
+    const url = uploadedImageUrl(file.buffer);
+    const key = imageKey(id, url);
+    await store.put(key, file.buffer);
+    try {
+      return await this.products.addUploadedImage(
+        id,
+        {
+          url,
+          storageKey: storageKeyFor(key),
+          fileName: imageFileNameFor(
+            safeFileName(file.originalname),
+            contentType,
+          ),
+        },
+        actorUserId,
+      );
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      )
+        throw new ConflictException({
+          code: "PRODUCT_IMAGE_DUPLICATE",
+          message: "Ez a kép már a termék képei között van.",
+        });
+      await this.discardImageFile(key);
+      throw error;
+    }
+  }
+
+  /**
+   * KÉP TÖRLÉSE (T4.1-D3, 6. szelet). A sor a tranzakcióban megy, a fájl utána:
+   * egy elhasaló fájltörlés árva fájlt hagy (az egyeztetés megtalálja), nem
+   * fájl nélküli sort. A boltból a következő vetítés veszi ki.
+   */
+  async deleteImage(id: string, imageId: string, actorUserId?: string) {
+    const product = await this.requireProduct(id);
+    this.assertLocallyManaged(product);
+    const result = await this.products.removeImage(id, imageId, actorUserId);
+    if (!result)
+      throw new NotFoundException({
+        code: "PRODUCT_IMAGE_NOT_FOUND",
+        message: "A kép nem ehhez a termékhez tartozik.",
+      });
+    // csak a sor saját fájlja megy: ha a tárolt kulcs nem a számított, nem találgatunk
+    const key = imageKey(id, result.removed.url);
+    if (result.removed.storageKey === storageKeyFor(key))
+      await this.discardImageFile(key);
+    return result.product;
+  }
+
+  /**
+   * EGY KÉP FÁJLJA A TÁROLÓBÓL (a feltöltött képnek nincs webcíme, a felület
+   * innen mutatja). Bármelyik gazdájú terméknél olvasható, ha a fájl megvan.
+   */
+  async imageFile(id: string, imageId: string) {
+    const image = await this.products.findImage(id, imageId);
+    if (!image)
+      throw new NotFoundException({
+        code: "PRODUCT_IMAGE_NOT_FOUND",
+        message: "A kép nem ehhez a termékhez tartozik.",
+      });
+    if (!image.storageKey)
+      throw new NotFoundException({
+        code: "PRODUCT_IMAGE_NOT_STORED",
+        message: "A kép még nincs a tárolóban.",
+      });
+    const key = imageKey(id, image.url);
+    assertStorageKeyMatches(image.storageKey, key);
+    const bytes = await this.imageStore().get(key);
+    if (!bytes)
+      throw new ServiceUnavailableException(documentUnavailableMessage());
+    const contentType = detectImageContentType(bytes);
+    if (!contentType)
+      throw new ServiceUnavailableException(
+        "A tárolt fájl tartalma nem ismerhető fel képként.",
+      );
+    return {
+      bytes: Buffer.from(bytes),
+      contentType,
+      fileName: image.fileName ?? imageFileNameFor("kep", contentType),
+    };
+  }
+
+  /**
+   * A tároló, ha valóban be van állítva. A memóriabeli tároló `ready`, de egy
+   * újraindulás elvinné a bájtjait (`documentStoreEnabled`), tehát éles képet
+   * nem tehetünk bele.
+   */
+  private imageStore(): DocumentStore {
+    if (!this.documentStore || !documentStoreEnabled(this.environment))
+      throw new ServiceUnavailableException(
+        "A dokumentum-tároló nincs beállítva ebben a példányban.",
+      );
+    return this.documentStore;
+  }
+
+  private async discardImageFile(key: DocumentKey) {
+    try {
+      await this.documentStore?.delete(key);
+    } catch (error) {
+      this.logger.warn(
+        `A termékkép fájlja nem törlődött (${storageKeyFor(key)}): ${String(error)}`,
+      );
+    }
+  }
+
   async archiveProduct(id: string) {
     const product = await this.requireProduct(id);
     this.assertLocallyManaged(product);
@@ -232,4 +412,22 @@ export class ProductService {
     if (product.catalogAuthority !== "ACROPORA")
       throw new ConflictException("PRODUCT_CATALOG_AUTHORITY_UNRESOLVED");
   }
+}
+
+function imageKey(productId: string, url: string): DocumentKey {
+  return {
+    owner: "product",
+    ownerId: productId,
+    documentId: productImageDocumentId(url),
+  };
+}
+
+/** A feltöltött fájl neve tárolható alakban (a dokumentum-felvétel szabálya). */
+function safeFileName(name: string): string {
+  const safe = name
+    .normalize("NFKC")
+    .replace(/[\\/\u0000-\u001f\u007f]/g, "-")
+    .slice(0, 180)
+    .trim();
+  return safe || "kep";
 }

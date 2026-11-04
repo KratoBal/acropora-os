@@ -3,7 +3,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { Prisma } from "@acropora/database";
-import type { ProductDatabase } from "./product.repository.js";
+import type {
+  ProductDatabase,
+  StoredProductImage,
+} from "./product.repository.js";
 import { ProductRepository } from "./product.repository.js";
 import type { ProductWithRelations } from "./product.types.js";
 import type {
@@ -203,6 +206,15 @@ function createDatabase({
   /** the product's own images (id only), and how many rows an image write touches */
   ownImages = [{ id: "img-1" }, { id: "img-2" }, { id: "img-3" }],
   imageWriteCount = 1,
+  /** the image a delete or a file read finds (null: not this product's image) */
+  foundImage = {
+    id: "img-2",
+    url: "os-upload:abc",
+    storageKey: "products/product-1/doc-2",
+    fileName: "kek.jpg",
+  } as StoredProductImage | null,
+  /** the highest sortOrder before an upload (null: no image yet) */
+  maxSortOrder = 4 as number | null,
   /** the product's shipping-flag sources (null: no profile row) */
   shippingSources = null as Record<string, "UNAS" | "MANUAL"> | null,
   mirror = {
@@ -279,10 +291,30 @@ function createDatabase({
         calls.push({ operation: "imageFindMany", args });
         return ownImages;
       },
+      findFirst: async (args: unknown) => {
+        calls.push({ operation: "imageFindFirst", args });
+        return foundImage;
+      },
+      aggregate: async (args: unknown) => {
+        calls.push({ operation: "imageAggregate", args });
+        return { _max: { sortOrder: maxSortOrder } };
+      },
+      create: async (args: unknown) => {
+        calls.push({ operation: "imageCreate", args });
+        return { id: "img-new" };
+      },
+      deleteMany: async (args: unknown) => {
+        calls.push({ operation: "imageDeleteMany", args });
+        return { count: 1 };
+      },
       updateMany: async (args: unknown) => {
         calls.push({ operation: "imageUpdateMany", args });
         return { count: imageWriteCount };
       },
+    },
+    $queryRaw: async (query: TemplateStringsArray, ...values: unknown[]) => {
+      calls.push({ operation: "lock", args: { sql: query.join("?"), values } });
+      return [];
     },
     productShippingProfile: {
       findUnique: async (args: unknown) => {
@@ -341,6 +373,12 @@ function createDatabase({
     },
     externalReference: {
       findFirst: async () => ({ externalId: "159850145" }),
+    },
+    productImage: {
+      findFirst: async (args) => {
+        calls.push({ operation: "imageRead", args });
+        return foundImage;
+      },
     },
     $transaction: (operation) => operation(transaction),
   };
@@ -874,6 +912,137 @@ describe("ProductRepository", () => {
     assert.ok(calls.some((call) => call.operation === "transactionUpdate"));
   });
 
+  it("locks the product row before it reads the images it orders (barracuda, #2139)", async () => {
+    const { database, calls } = createDatabase();
+    await new ProductRepository(database).setImageOrder("product-1", [
+      "img-1",
+      "img-2",
+      "img-3",
+    ]);
+    assert.deepEqual(calls[0], {
+      operation: "lock",
+      args: {
+        sql: 'SELECT "id" FROM "Product" WHERE "id" = ? FOR UPDATE',
+        values: ["product-1"],
+      },
+    });
+  });
+
+  /**
+   * UPLOAD AND DELETE (T4.1-D3, slice 6): both under the product row's lock, an
+   * upload at the end of the list as an OS-sourced row, a delete only of this
+   * product's image, and both make the product due with an event.
+   */
+  it("adds an uploaded image at the end of the list, under the product lock", async () => {
+    const { database, calls } = createDatabase();
+    const result = await new ProductRepository(database).addUploadedImage(
+      "product-1",
+      {
+        url: "os-upload:abc",
+        storageKey: "products/product-1/doc-1",
+        fileName: "kek.jpg",
+      },
+      "user-1",
+    );
+    assert.ok(result);
+    assert.deepEqual(
+      calls.map((call) => call.operation),
+      [
+        "lock",
+        "imageAggregate",
+        "imageCreate",
+        "transactionUpdate",
+        "event",
+        "transactionFind",
+      ],
+    );
+    assert.deepEqual(
+      calls.find((call) => call.operation === "imageCreate")?.args,
+      {
+        data: {
+          productId: "product-1",
+          url: "os-upload:abc",
+          storageKey: "products/product-1/doc-1",
+          fileName: "kek.jpg",
+          sortOrder: 5,
+          source: "OS",
+        },
+        select: { id: true },
+      },
+    );
+    const event = calls.find((call) => call.operation === "event")?.args as {
+      data: { eventType: string; payload: unknown };
+    };
+    assert.equal(event.data.eventType, "product.image.uploaded");
+    assert.deepEqual(event.data.payload, {
+      imageId: "img-new",
+      fileName: "kek.jpg",
+    });
+  });
+
+  it("gives the first uploaded image sortOrder 0", async () => {
+    const { database, calls } = createDatabase({ maxSortOrder: null });
+    await new ProductRepository(database).addUploadedImage("product-1", {
+      url: "os-upload:abc",
+      storageKey: "products/product-1/doc-1",
+      fileName: "kek.jpg",
+    });
+    const create = calls.find((call) => call.operation === "imageCreate")
+      ?.args as { data: { sortOrder: number } };
+    assert.equal(create.data.sortOrder, 0);
+  });
+
+  it("removes this product's image and returns the removed row", async () => {
+    const { database, calls } = createDatabase();
+    const result = await new ProductRepository(database).removeImage(
+      "product-1",
+      "img-2",
+      "user-1",
+    );
+    assert.equal(result?.removed.url, "os-upload:abc");
+    assert.deepEqual(
+      calls.map((call) => call.operation),
+      [
+        "lock",
+        "imageFindFirst",
+        "imageDeleteMany",
+        "transactionUpdate",
+        "event",
+        "transactionFind",
+      ],
+    );
+    assert.deepEqual(
+      calls.find((call) => call.operation === "imageDeleteMany")?.args,
+      { where: { id: "img-2", productId: "product-1" } },
+    );
+  });
+
+  it("removes nothing for an image of another product", async () => {
+    const { database, calls } = createDatabase({ foundImage: null });
+    const result = await new ProductRepository(database).removeImage(
+      "product-1",
+      "img-x",
+    );
+    assert.equal(result, null);
+    assert.deepEqual(
+      calls.map((call) => call.operation),
+      ["lock", "imageFindFirst"],
+    );
+  });
+
+  it("reads an image row only within the product", async () => {
+    const { database, calls } = createDatabase();
+    await new ProductRepository(database).findImage("product-1", "img-2");
+    assert.deepEqual(
+      (
+        calls.find((call) => call.operation === "imageRead")?.args as {
+          where: unknown;
+        }
+      ).where,
+      { id: "img-2", productId: "product-1" },
+    );
+  });
+
   it("writes no order unless every own image is there exactly once", async () => {
     for (const ids of [
       ["img-1", "img-2"],
@@ -889,7 +1058,7 @@ describe("ProductRepository", () => {
       assert.equal(result, null, ids.join(","));
       assert.deepEqual(
         calls.map((call) => call.operation),
-        ["imageFindMany"],
+        ["lock", "imageFindMany"],
         ids.join(","),
       );
     }

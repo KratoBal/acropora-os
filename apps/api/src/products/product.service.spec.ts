@@ -5,10 +5,37 @@ import {
   BadRequestException,
   ConflictException,
   NotFoundException,
+  ServiceUnavailableException,
 } from "@nestjs/common";
+import { Prisma } from "@acropora/database";
 
-import type { ProductRepository } from "./product.repository.js";
-import { ProductService } from "./product.service.js";
+import { productImageDocumentId } from "../integrations/medusa/product-image-storage-key.js";
+import { InMemoryDocumentStore } from "../service-assets/document-store/in-memory-document-store.js";
+import type {
+  ProductRepository,
+  StoredProductImage,
+  UploadedProductImage,
+} from "./product.repository.js";
+import { ProductService, uploadedImageUrl } from "./product.service.js";
+
+const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]);
+const FILE_ENV = { DOCUMENT_STORE_ROOT: "/var/docs" } as NodeJS.ProcessEnv;
+const keyOf = (productId: string, url: string) => ({
+  owner: "product" as const,
+  ownerId: productId,
+  documentId: productImageDocumentId(url),
+});
+
+/** The stored row of the uploaded JPEG on `productId`. */
+function storedImage(productId: string): StoredProductImage {
+  const url = uploadedImageUrl(JPEG);
+  return {
+    id: "img-1",
+    url,
+    storageKey: `products/${productId}/${productImageDocumentId(url)}`,
+    fileName: "kek.jpg",
+  };
+}
 
 function repositoryWith(
   product: {
@@ -61,6 +88,25 @@ function repositoryWith(
         calls.push("setImageOrder");
         return imageIds.length === 2 ? { id: "ordered" } : null;
       },
+      addUploadedImage: async (_id: string, image: UploadedProductImage) => {
+        calls.push("addUploadedImage");
+        inputs.push(image);
+        if (image.fileName.startsWith("dupla"))
+          throw new Prisma.PrismaClientKnownRequestError("duplicate", {
+            code: "P2002",
+            clientVersion: "test",
+          });
+        if (image.fileName.startsWith("elhasal")) throw new Error("db down");
+        return { id: "uploaded" };
+      },
+      removeImage: async (id: string, imageId: string) => {
+        calls.push("removeImage");
+        return imageId === "img-1"
+          ? { product: { id: "removed" }, removed: storedImage(id) }
+          : null;
+      },
+      findImage: async (id: string, imageId: string) =>
+        imageId === "img-1" ? storedImage(id) : null,
       takeCatalogAuthority: async () => {
         calls.push("takeCatalogAuthority");
         return {
@@ -365,5 +411,160 @@ describe("ProductService", () => {
       ConflictException,
     );
     assert.deepEqual(unas.calls, []);
+  });
+
+  /**
+   * UPLOAD, DELETE AND FILE (T4.1-D3, slice 6). MI PIROSÍT: ha a fájl a sor
+   * NÉLKÜL marad a tárolóban (elhasaló sor), vagy egy ismétlés törli a meglévő
+   * sor fájlját; ha nem kép, UNAS-gazdájú termék vagy be nem állított tároló
+   * mellett bármi íródik; ha a törlés után a fájl megmarad.
+   */
+  it("uploads an image: the file first, then the row; a non-image is refused", async () => {
+    const own = repositoryWith({
+      id: "product-1",
+      catalogAuthority: "ACROPORA",
+    });
+    const store = new InMemoryDocumentStore();
+    const service = new ProductService(own.repository, FILE_ENV, store);
+    const url = uploadedImageUrl(JPEG);
+
+    assert.deepEqual(
+      await service.uploadImage(
+        "product-1",
+        { originalname: "kék korall.png", buffer: JPEG },
+        "user-1",
+      ),
+      { id: "uploaded" },
+    );
+    assert.deepEqual(own.inputs[0], {
+      url,
+      storageKey: `products/product-1/${productImageDocumentId(url)}`,
+      // a kiterjesztés a tartalomé, nem a névé
+      fileName: "kék korall.jpg",
+    });
+    assert.ok(await store.get(keyOf("product-1", url)));
+
+    await assert.rejects(
+      () =>
+        service.uploadImage("product-1", {
+          originalname: "level.pdf",
+          buffer: Buffer.from("%PDF-1.7"),
+        }),
+      BadRequestException,
+    );
+    await assert.rejects(
+      () => service.uploadImage("product-1", undefined),
+      BadRequestException,
+    );
+    assert.deepEqual(own.calls, ["addUploadedImage"]);
+  });
+
+  it("keeps the file of an image already there, and drops it when the row fails", async () => {
+    const own = repositoryWith({
+      id: "product-1",
+      catalogAuthority: "ACROPORA",
+    });
+    const store = new InMemoryDocumentStore();
+    const service = new ProductService(own.repository, FILE_ENV, store);
+    const key = keyOf("product-1", uploadedImageUrl(JPEG));
+
+    await assert.rejects(
+      () =>
+        service.uploadImage("product-1", {
+          originalname: "dupla.jpg",
+          buffer: JPEG,
+        }),
+      ConflictException,
+    );
+    assert.ok(await store.get(key), "the existing row's file stays");
+
+    await assert.rejects(
+      () =>
+        service.uploadImage("product-1", {
+          originalname: "elhasal.jpg",
+          buffer: JPEG,
+        }),
+      /db down/,
+    );
+    assert.equal(await store.get(key), null, "no file without a row");
+  });
+
+  it("writes nothing on a UNAS product or without a configured store", async () => {
+    const unas = repositoryWith({ id: "product-1", catalogAuthority: "UNAS" });
+    const store = new InMemoryDocumentStore();
+    await assert.rejects(
+      () =>
+        new ProductService(unas.repository, FILE_ENV, store).uploadImage(
+          "product-1",
+          { originalname: "kek.jpg", buffer: JPEG },
+        ),
+      ConflictException,
+    );
+    await assert.rejects(
+      () =>
+        new ProductService(unas.repository, FILE_ENV, store).deleteImage(
+          "product-1",
+          "img-1",
+        ),
+      ConflictException,
+    );
+
+    const own = repositoryWith({
+      id: "product-1",
+      catalogAuthority: "ACROPORA",
+    });
+    // a memóriabeli tároló újraindulásnál elviszi a bájtokat: gyökér nélkül nem írunk bele
+    await assert.rejects(
+      () =>
+        new ProductService(own.repository, {}, store).uploadImage("product-1", {
+          originalname: "kek.jpg",
+          buffer: JPEG,
+        }),
+      ServiceUnavailableException,
+    );
+    assert.deepEqual([...unas.calls, ...own.calls], []);
+    assert.equal(
+      await store.get(keyOf("product-1", uploadedImageUrl(JPEG))),
+      null,
+    );
+  });
+
+  it("deletes the row, then its file; another product's image is a 404", async () => {
+    const own = repositoryWith({
+      id: "product-1",
+      catalogAuthority: "ACROPORA",
+    });
+    const store = new InMemoryDocumentStore();
+    const key = keyOf("product-1", uploadedImageUrl(JPEG));
+    await store.put(key, JPEG);
+    const service = new ProductService(own.repository, FILE_ENV, store);
+
+    assert.deepEqual(
+      await service.deleteImage("product-1", "img-1", "user-1"),
+      {
+        id: "removed",
+      },
+    );
+    assert.equal(await store.get(key), null);
+    await assert.rejects(
+      () => service.deleteImage("product-1", "img-x"),
+      NotFoundException,
+    );
+  });
+
+  it("serves the stored file with the type of its content", async () => {
+    const own = repositoryWith({ id: "product-1", catalogAuthority: "UNAS" });
+    const store = new InMemoryDocumentStore();
+    await store.put(keyOf("product-1", uploadedImageUrl(JPEG)), JPEG);
+    const service = new ProductService(own.repository, FILE_ENV, store);
+
+    const file = await service.imageFile("product-1", "img-1");
+    assert.equal(file.contentType, "image/jpeg");
+    assert.equal(file.fileName, "kek.jpg");
+    assert.deepEqual([...file.bytes], [...JPEG]);
+    await assert.rejects(
+      () => service.imageFile("product-1", "img-x"),
+      NotFoundException,
+    );
   });
 });
