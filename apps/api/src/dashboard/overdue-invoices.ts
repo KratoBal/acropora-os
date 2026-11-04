@@ -52,7 +52,7 @@ const WEEK_DAYS = 7;
 export function summarizeOverdueInvoices(
   rows: readonly OverdueInvoiceRow[],
   now: Date,
-): DashboardOverdueInvoicesWidgetData {
+): Omit<DashboardOverdueInvoicesWidgetData, "withoutBuyerTaxNumber"> {
   const today = budapestDayKey(now);
   const weekEnd = addDays(today, WEEK_DAYS);
   const open = new Map<string, Prisma.Decimal>();

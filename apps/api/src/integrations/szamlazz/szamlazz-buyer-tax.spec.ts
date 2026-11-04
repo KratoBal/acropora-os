@@ -215,5 +215,7 @@ describe("minden számla a kapun megy át", () => {
     assert.match(sql, /c\."type" IS DISTINCT FROM 'PERSON'/);
     assert.match(sql, /s\."id" IS NOT NULL\s*\n\s*OR/);
     assert.match(sql, /i\."status" = 'ISSUED'/);
+    // the same scope as the daily check in the API (buyerTaxCheckWhere)
+    assert.match(sql, /i\."customerId" IS NOT NULL/);
   });
 });

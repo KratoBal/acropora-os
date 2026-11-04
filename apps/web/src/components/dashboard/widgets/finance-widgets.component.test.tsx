@@ -19,6 +19,7 @@ describe("a pénzügyi widgetek", () => {
           dueToday: 1,
           dueWithinWeek: 3,
           noPaymentDataPastDue: 4,
+          withoutBuyerTaxNumber: 0,
         }}
       />,
     );

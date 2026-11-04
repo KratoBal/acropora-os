@@ -34,6 +34,10 @@ import { OutgoingPackageController } from "./outgoing-package.controller.js";
 import { OutgoingPackageService } from "./outgoing-package.service.js";
 import { ExternalInvoiceMailPdfScheduler } from "./external-invoice-mail-pdf.scheduler.js";
 import { ExternalInvoicePdfScheduler } from "./external-invoice-pdf.scheduler.js";
+import {
+  BuyerTaxCheckRepository,
+  BuyerTaxCheckScheduler,
+} from "./buyer-tax-check.scheduler.js";
 
 /**
  * A SZÁMLÁZÁS MODUL: a vázlat (murena), a kiállítás, a lista, a PDF és a kiküldés (nautilus). A
@@ -77,6 +81,8 @@ import { ExternalInvoicePdfScheduler } from "./external-invoice-pdf.scheduler.js
     OutgoingPackageService,
     ExternalInvoicePdfScheduler,
     ExternalInvoiceMailPdfScheduler,
+    BuyerTaxCheckRepository,
+    BuyerTaxCheckScheduler,
     documentStoreProvider,
   ],
   // a webshop rendelés számlája ugyanazon a vázlaton és kiállításon megy

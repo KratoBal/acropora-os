@@ -1151,6 +1151,12 @@ export interface DashboardOverdueInvoicesWidgetData {
   dueWithinWeek: number;
   /** Past due, but the feed has no payment data: shown, never counted as overdue. */
   noPaymentDataPastDue: number;
+  /**
+   * Invoices issued yesterday or today (Budapest) whose buyer needed a tax number and had none
+   * (`buyerTaxNumberProblem`, card aaf4f09d). The issue gate stops these; a non-zero count means
+   * one got past it.
+   */
+  withoutBuyerTaxNumber: number;
 }
 
 /** Hiányzó számlák: the two newest months of the existing missing-invoice check. */

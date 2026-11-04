@@ -103,6 +103,13 @@ function itemsOf(widgetId: AttentionSource, data: unknown): Item[] {
           href: "/penzugy/szamlazas",
           tone: "danger",
         },
+        {
+          key: "without-buyer-tax-number",
+          label: "Kiállított számla adószám nélkül",
+          count: d.withoutBuyerTaxNumber,
+          href: "/penzugy/szamlazas",
+          tone: "danger",
+        },
       ];
     }
     case "webshop-orders": {

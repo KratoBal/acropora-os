@@ -71,6 +71,26 @@ describe("the partner's tax number on the mirror", () => {
       );
   });
 
+  it("without a country, a value that starts with a country code is a community tax number", () => {
+    for (const country of [null, undefined, "", "  "]) {
+      assert.deepEqual(
+        mirroredTaxNumber({ taxNumber: "DE123456789", country }),
+        { euTaxNumber: "DE123456789" },
+        String(country),
+      );
+      assert.deepEqual(
+        mirroredTaxNumber({ taxNumber: "hu12345678", country }),
+        { euTaxNumber: "hu12345678" },
+        String(country),
+      );
+      assert.deepEqual(
+        mirroredTaxNumber({ taxNumber: "15490658-2-42", country }),
+        { taxNumber: "15490658-2-42" },
+        String(country),
+      );
+    }
+  });
+
   it("is carried on every save, on update and on create", async () => {
     const calls: Call[] = [];
     await syncWorksheetMirror(stubTransaction(calls), {

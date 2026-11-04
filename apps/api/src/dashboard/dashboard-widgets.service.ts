@@ -50,6 +50,8 @@ import {
   WEBSHOP_ORDERS_CACHE_MS,
 } from "./webshop-orders-summary.js";
 import { summarizeOverdueInvoices } from "./overdue-invoices.js";
+import { startOfBudapestDay } from "./budapest-day.js";
+import { invoicesWithoutBuyerTaxNumber } from "../billing/buyer-tax-check.js";
 import { stockDiscrepancies, stockSyncOutboxState } from "./stock-widgets.js";
 import {
   DashboardServiceWidgetsRepository,
@@ -271,10 +273,18 @@ export class DashboardWidgetsService {
         this.aquariumWidgets.equipment(await serviceViewer(user), new Date()),
       "overdue-invoices": async () => {
         const now = new Date();
-        return summarizeOverdueInvoices(
-          await this.financeWidgets.overdueInvoiceRows(now, 7),
-          now,
-        );
+        const [rows, issued] = await Promise.all([
+          this.financeWidgets.overdueInvoiceRows(now, 7),
+          // the issue gate's own rule on yesterday's and today's invoices (card aaf4f09d)
+          this.financeWidgets.issuedForBuyerTaxCheck(
+            startOfBudapestDay(now, -1),
+            now,
+          ),
+        ]);
+        return {
+          ...summarizeOverdueInvoices(rows, now),
+          withoutBuyerTaxNumber: invoicesWithoutBuyerTaxNumber(issued).length,
+        };
       },
       "missing-invoices": () => this.missingInvoicesCache.summary(),
       "webshop-orders": () => this.webshopOrdersCache.get(),

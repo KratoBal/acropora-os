@@ -10,6 +10,9 @@
 -- Az adószám a KIKÜLDÖTT pillanatképből (`buyerSnapshot`), ha nincs, a bizonylat partner-adószámából (a Számlázz.hu
 -- feedből jött, nem az OS-ből kiállított számláknál). Így az OS-en kívül kiállított számlát is látja.
 --
+-- Ugyanezt futtatja naponta az API (`apps/api/src/billing/buyer-tax-check.ts`, naplósor:
+-- „ADOSZAM-ELLENORZES datum=... talalat=N”); ez a fájl kézi eszköz.
+--
 -- Kimenet: számlaszám, kiállítás napja, vevő neve, vevő-típus, partnerhez kötött-e.
 SELECT
   i."invoiceNumber" AS szamlaszam,
@@ -21,6 +24,9 @@ FROM "Invoice" AS i
 LEFT JOIN "Customer" AS c ON c."id" = i."customerId"
 LEFT JOIN "Supplier" AS s ON s."customerId" = i."customerId"
 WHERE i."status" = 'ISSUED'
+  -- csak az OS-vevőhöz kötött számla: a vevő nélküli tükör-sor típusa ismeretlen, és a
+  -- szabály az ismeretlent cégnek veszi (minden lakossági webshop-számla jelezne)
+  AND i."customerId" IS NOT NULL
   AND (i."issueDate" AT TIME ZONE 'Europe/Budapest')::date = (now() AT TIME ZONE 'Europe/Budapest')::date - 1
   -- a sztornó az eredeti vevőjét ismétli: az eredeti számla már jelez
   AND i."documentType"::text <> 'STORNO'

@@ -47,6 +47,7 @@ function service(
     loaders?: ConstructorParameters<typeof DashboardWidgetsService>[11];
     webshopOrders?: Partial<WebshopOrdersService>;
     messages?: Partial<MessagesService>;
+    financeWidgets?: Partial<DashboardFinanceWidgetsRepository>;
   } = {},
 ) {
   const store: Store = {
@@ -86,7 +87,7 @@ function service(
       expectedArrivals,
       {} as DashboardServiceWidgetsRepository,
       {} as DashboardAquariumWidgetsRepository,
-      {} as DashboardFinanceWidgetsRepository,
+      (options.financeWidgets ?? {}) as DashboardFinanceWidgetsRepository,
       {} as MissingInvoicesService,
       {} as StockReconciliationService,
       {} as UnasStockSyncOutboxRepository,
@@ -361,12 +362,56 @@ describe("Olvasatlan üzenetek", () => {
   });
 });
 
+describe("lejáró számlák: az adószám nélkül kiállított számla (kártya aaf4f09d)", () => {
+  // MI PIROSÍT: ha a widget nem a kapu szabályával számolja a tegnapi és mai számlákat
+  it("a tegnap és ma kiállított, adószám nélküli céges számlákat számolja", async () => {
+    const asked: Date[] = [];
+    const { svc } = service({
+      financeWidgets: {
+        overdueInvoiceRows: async () => [],
+        issuedForBuyerTaxCheck: async (from: Date) => {
+          asked.push(from);
+          return [
+            {
+              invoiceNumber: "ACRW-2026/00510",
+              issueDate: new Date(),
+              partnerName: "Fővárosi Állat- és Növénykert",
+              partnerTaxNumber: null,
+              buyerSnapshot: null,
+              customer: { type: "PERSON", partner: { id: "s-1" } },
+            },
+            {
+              invoiceNumber: "ACRW-2026/00511",
+              issueDate: new Date(),
+              partnerName: "Kovács Anna",
+              partnerTaxNumber: null,
+              buyerSnapshot: null,
+              customer: { type: "PERSON", partner: null },
+            },
+          ];
+        },
+      },
+    });
+    const r = await svc.widgets(user("OWNER"), ["overdue-invoices"]);
+    const result = r.results["overdue-invoices"] as {
+      status: string;
+      data: { withoutBuyerTaxNumber: number };
+    };
+    assert.equal(result.status, "ok");
+    assert.equal(result.data.withoutBuyerTaxNumber, 1);
+    assert.equal(asked.length, 1);
+    assert.ok(Date.now() - asked[0]!.getTime() <= 2 * 86_400_000);
+    assert.ok(Date.now() - asked[0]!.getTime() >= 86_400_000 - 2 * 3_600_000);
+  });
+});
+
 describe("Figyelmet igényel", () => {
   const overdue = {
     overdue: { count: 2, openAmounts: [] },
     dueToday: 0,
     dueWithinWeek: 0,
     noPaymentDataPastDue: 0,
+    withoutBuyerTaxNumber: 0,
   };
   const tickets = { openCount: 3, byStatus: { NEW: 3 }, oldestOpenAt: null };
 
