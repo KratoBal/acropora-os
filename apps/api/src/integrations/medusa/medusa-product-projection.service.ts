@@ -1046,7 +1046,8 @@ export class MedusaProductProjectionService {
               return r.written.length ||
                 r.cleared.length ||
                 r.missing.length ||
-                r.failed.length
+                r.failed.length ||
+                r.gaps.length
                 ? { omnibus: r }
                 : {};
             })()
@@ -1401,6 +1402,7 @@ export class MedusaProductProjectionService {
       unchanged: 0,
       missing: [],
       failed: [],
+      gaps: wanted.filter((w) => w.gap).map((w) => w.sku),
     };
     let rows: Awaited<ReturnType<MedusaAdminClient["listVariantMetadata"]>>;
     try {
@@ -1538,6 +1540,8 @@ export interface VariantOmnibusSyncReport {
   unchanged: number;
   missing: string[];
   failed: { sku: string; error: string }[];
+  /** A cikkszámok, amiknek az ablakában ismeretlen árú rés van: értéket nem kaptak (a kulcsuk üres). */
+  gaps: string[];
 }
 
 /** A frissítés-ág vonalkód-írásának jelentése (SEO P0 PR 4). */

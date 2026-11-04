@@ -98,6 +98,7 @@ describe("lowestPriceInWindow", () => {
     )!;
     assert.equal(result.amount.toString(), "1000");
     assert.equal(result.complete, false, "day 20 to 30 is unknown");
+    assert.equal(result.unknownInWindow, true);
   });
 
   it("a leading unknown stretch that reaches into the window is not complete, though the history 'begins' before it", () => {
@@ -107,6 +108,7 @@ describe("lowestPriceInWindow", () => {
     )!;
     assert.equal(result.amount.toString(), "1200");
     assert.equal(result.complete, false, "day 10 to 20 is unknown");
+    assert.equal(result.unknownInWindow, true);
     assert.equal(result.historyBegins.getTime(), day(20).getTime());
   });
 
@@ -126,6 +128,18 @@ describe("lowestPriceInWindow", () => {
     )!;
     assert.equal(result.complete, true);
     assert.equal(result.historyBegins.getTime(), day(5).getTime());
+  });
+
+  it("a young history is NOT complete but has NO gap: the two false cases are told apart", () => {
+    const young = lowestPriceInWindow(
+      [point(day(30), "1400"), point(day(35), "1300")],
+      NOW,
+    )!;
+    assert.equal(young.complete, false);
+    assert.equal(young.unknownInWindow, false);
+    const full = lowestPriceInWindow([point(day(0), "1000")], NOW)!;
+    assert.equal(full.complete, true);
+    assert.equal(full.unknownInWindow, false);
   });
 
   it("the sale price that begins AT the reduction start is not its own reference", () => {

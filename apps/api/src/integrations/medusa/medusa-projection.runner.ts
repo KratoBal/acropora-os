@@ -423,6 +423,9 @@ export function describeVariantOmnibus(r: VariantOmnibusSyncReport): string {
   const reszek = [
     r.written.length ? `${r.written.length} írva` : "",
     r.cleared.length ? `${r.cleared.length} ürítve` : "",
+    r.gaps.length
+      ? `rés az ablakban (nincs érték, akció indítása előtt nézd meg): ${r.gaps.join(", ")}`
+      : "",
     r.missing.length ? `nincs a boltban: ${r.missing.join(", ")}` : "",
     r.failed.length
       ? `HIBA: ${r.failed.map((f) => `${f.sku} (${f.error})`).join("; ")}`

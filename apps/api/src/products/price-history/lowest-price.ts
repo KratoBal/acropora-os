@@ -72,6 +72,12 @@ export interface LowestPrice {
   reductionStart: Date;
   /** every moment of the window has a known price */
   complete: boolean;
+  /**
+   * an unknown-price stretch reaches into the window (a GAP). `complete` is false for a gap AND
+   * for a history younger than the window; this tells them apart: a young history is a shorter
+   * but honest window, a gap is time in which the price may have been lower.
+   */
+  unknownInWindow: boolean;
   /** the first point with a known price; the window is shorter than 30 days when it is later than `windowStart` */
   historyBegins: Date;
 }
@@ -126,12 +132,14 @@ export function lowestPriceInWindow(
         windowStart,
         reductionStart,
         complete: false,
+        unknownInWindow: false,
         historyBegins: firstPriced.at,
       };
   }
   if (best === null || currencies.size > 1) return null;
   return {
     ...best,
+    unknownInWindow,
     complete:
       !unknownInWindow && best.historyBegins.getTime() <= windowStart.getTime(),
   };

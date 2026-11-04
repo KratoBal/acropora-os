@@ -9,9 +9,11 @@ import {
   OMNIBUS_METADATA_KEY,
   omnibusInputsFor,
   omnibusMetadataValue,
+  day as budapestDay,
   omnibusProjectionEnabled,
   planOmnibusWrite,
 } from "./medusa-variant-omnibus.js";
+import { describeVariantOmnibus } from "./medusa-projection.runner.js";
 
 /*
   WHAT TURNS THIS RED (V0.2, slice 2). The switch turning on for anything but exactly "true"; the
@@ -154,5 +156,82 @@ describe("omnibusMetadataValue and planOmnibusWrite", () => {
       planOmnibusWrite({ [OMNIBUS_METADATA_KEY]: value }, ""),
       "write",
     );
+  });
+});
+
+describe("a gap in the window gets no value", () => {
+  it("an unknown-price stretch before the reduction: the value is empty, the input is marked, the key is cleared", async () => {
+    const fake = database([
+      row({ observedAt: day(0), grossPrice: D(1500) }),
+      row({ observedAt: day(20), grossPrice: null }),
+      row({ observedAt: day(30), grossPrice: D(1400) }),
+      row({
+        observedAt: day(38),
+        grossPrice: D(1400),
+        saleGrossPrice: D(1000),
+      }),
+    ]);
+    const result = await omnibusInputsFor(
+      fake.database,
+      [{ id: "v1", sku: "A" }],
+      { MEDUSA_PROJECT_OMNIBUS: "true" },
+    );
+    assert.deepEqual(result, [{ sku: "A", value: "", gap: true }]);
+  });
+
+  it("a young history without a gap IS written, as incomplete, naming the first price day", async () => {
+    const fake = database([
+      row({ observedAt: day(30), grossPrice: D(1500) }),
+      row({
+        observedAt: day(38),
+        grossPrice: D(1500),
+        saleGrossPrice: D(1000),
+      }),
+    ]);
+    const result = await omnibusInputsFor(
+      fake.database,
+      [{ id: "v1", sku: "A" }],
+      { MEDUSA_PROJECT_OMNIBUS: "true" },
+    );
+    const parsed = JSON.parse(result![0]!.value) as Record<string, unknown>;
+    assert.equal(parsed.complete, false);
+    assert.equal(parsed.history_begins, "2026-10-31");
+    assert.equal(result![0]!.gap, undefined);
+  });
+
+  it("the report names the gap variants", () => {
+    const text = describeVariantOmnibus({
+      written: [],
+      cleared: [],
+      unchanged: 0,
+      missing: [],
+      failed: [],
+      gaps: ["A-1", "B-2"],
+    });
+    assert.match(text, /rés az ablakban/);
+    assert.match(text, /A-1, B-2/);
+    assert.equal(
+      describeVariantOmnibus({
+        written: [],
+        cleared: [],
+        unchanged: 3,
+        missing: [],
+        failed: [],
+        gaps: [],
+      }),
+      "",
+    );
+  });
+});
+
+describe("the day in the metadata is the Budapest day", () => {
+  it("23:30 UTC (summer) is already the next day in Budapest", () => {
+    assert.equal(budapestDay(new Date("2026-10-24T22:30:00Z")), "2026-10-25");
+    assert.equal(budapestDay(new Date("2026-10-24T21:30:00Z")), "2026-10-24");
+  });
+
+  it("in winter the day changes at 23:00 UTC", () => {
+    assert.equal(budapestDay(new Date("2026-11-10T22:59:00Z")), "2026-11-10");
+    assert.equal(budapestDay(new Date("2026-11-10T23:00:00Z")), "2026-11-11");
   });
 });

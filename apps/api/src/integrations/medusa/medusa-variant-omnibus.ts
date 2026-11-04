@@ -15,8 +15,10 @@ import {
  * THE TEXT CARRIES WHAT THE STOREFRONT MUST KNOW TO STAY TRUE, AND NOTHING THAT CHANGES DAILY:
  *   amount, currency       the lowest price of the 30 days BEFORE the running reduction began (the
  *                          Omnibus reference; the sale price itself is never its own reference)
- *   history_begins         the first day we have a price for (YYYY-MM-DD): a variant younger than
- *                          30 days is named by it, the storefront decides what the line says then
+ *   history_begins         the first day we have a price for (YYYY-MM-DD, BUDAPEST day): a variant
+ *                          younger than 30 days is named by it, the storefront decides what the line
+ *                          says then (it is the first KNOWN PRICE in our history, not the day the
+ *                          product became available)
  *   complete               the history reaches back 30 days
  *   reduction_start        YYYY-MM-DD: the day the running reduction began
  * A `computed_at` is deliberately NOT here: it would change every run, and every run would write
@@ -24,6 +26,17 @@ import {
  * cleared when the reduction ends: the reference is tied to the reduction, so it does not age on
  * its own (a stale value would need a reduction that has no end, and then the shop still sells the
  * reduced price and the line is still true).
+ *
+ * A GAP IN THE WINDOW GETS NO VALUE (acrobot's decision, 2026-11-04): when the window holds a stretch
+ * with an unknown price, the key is cleared and the round's report names the variant ("omnibus: rés
+ * az ablakban"), so a person sees it BEFORE a reduction is started. A false or misleading reference
+ * price is worse than none. Whether a reduction may be announced then is a business and legal
+ * decision (on the list for Balázs before going live); on the test shop this is the behaviour.
+ *
+ * OPEN BOUNDARY, named: a variant taken over by the OS (it has OWN rows) has no sale concept in the
+ * history, so its value is always "" (the key is cleared). If a Medusa PRICE-LIST reduction runs on
+ * such a variant, the shop shows a reduction WITHOUT an Omnibus line. Today this probably does not
+ * occur (the OS creates no price lists); it must be solved before one does.
  *
  * OFF BY DEFAULT: `MEDUSA_PROJECT_OMNIBUS=true`, EXACTLY that (the knowledge switch's pattern).
  * Nothing in this file writes; the projection service does, and only with the switch.
@@ -34,11 +47,15 @@ export const omnibusProjectionEnabled = (
   env: Record<string, string | undefined>,
 ): boolean => env.MEDUSA_PROJECT_OMNIBUS === "true";
 
-const day = (at: Date) => at.toISOString().slice(0, 10);
+/** The BUDAPEST calendar day (YYYY-MM-DD): a row seen at 23:30 UTC is already the next day for the shopper. */
+const dayFormat = new Intl.DateTimeFormat("sv-SE", {
+  timeZone: "Europe/Budapest",
+});
+export const day = (at: Date) => dayFormat.format(at);
 
 /** The key's value for one variant: the JSON text, or "" (the key is cleared) when no reduction runs or there is no price to name. */
 export function omnibusMetadataValue(lowest: LowestPrice | null): string {
-  if (lowest === null) return "";
+  if (lowest === null || lowest.unknownInWindow) return "";
   return JSON.stringify({
     amount: lowest.amount.toString(),
     currency: lowest.currency ?? MEDUSA_CURRENCY_CODE,
@@ -52,6 +69,8 @@ export interface VariantOmnibusInput {
   sku: string;
   /** "" clears the key */
   value: string;
+  /** an unknown-price stretch in the window: no value (cleared), and the report names the variant */
+  gap?: boolean;
 }
 
 /** What to do for one shop variant, given its current metadata. */
@@ -77,11 +96,16 @@ export async function omnibusInputsFor(
 ): Promise<VariantOmnibusInput[] | undefined> {
   if (!omnibusProjectionEnabled(env)) return undefined;
   return Promise.all(
-    variants.map(async (variant) => ({
-      sku: variant.sku,
-      value: omnibusMetadataValue(
-        await lowestPriceBeforeCurrentReduction(database, variant.id),
-      ),
-    })),
+    variants.map(async (variant) => {
+      const lowest = await lowestPriceBeforeCurrentReduction(
+        database,
+        variant.id,
+      );
+      return {
+        sku: variant.sku,
+        value: omnibusMetadataValue(lowest),
+        ...(lowest?.unknownInWindow ? { gap: true } : {}),
+      };
+    }),
   );
 }

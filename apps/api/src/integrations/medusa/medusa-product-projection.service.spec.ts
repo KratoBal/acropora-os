@@ -2742,6 +2742,7 @@ describe("MedusaProductProjectionService -- az Omnibus hivatkozasi ar a valtozat
       ],
       [["B"], ["C"], 2, ["X"], ["D"]],
     );
+    assert.deepEqual(outcome.omnibus?.gaps, []);
   });
 
   it("ha a valtozat-lista lekerdezese elbukik, a termek akkor is frissul, es a jelentes megmondja", async () => {
@@ -2758,5 +2759,23 @@ describe("MedusaProductProjectionService -- az Omnibus hivatkozasi ar a valtozat
     assert.equal(outcome.action, "updated");
     if (outcome.action !== "updated") return;
     assert.equal(outcome.omnibus?.failed[0]?.sku, "*");
+  });
+
+  it("a gap variant is reported by name even when nothing else happens (its key is already empty)", async () => {
+    const f = fakes({ link, found: [] });
+    Object.assign(f.medusa, {
+      listVariantMetadata: async () => [{ id: "v_a", sku: "A", metadata: {} }],
+      updateVariantMetadata: async () => {
+        throw new Error("nothing should be written");
+      },
+    });
+    const outcome = await f.service.project(
+      { ...product, variantOmnibus: [{ sku: "A", value: "", gap: true }] },
+      now,
+    );
+    assert.equal(outcome.action, "updated");
+    if (outcome.action !== "updated") return;
+    assert.deepEqual(outcome.omnibus?.gaps, ["A"]);
+    assert.deepEqual(outcome.omnibus?.written, []);
   });
 });
