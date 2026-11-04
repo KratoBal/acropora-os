@@ -73,6 +73,15 @@ export async function runPaidMarksAuto(input: {
     client: input.client,
     store: input.store,
   });
+  return paidMarksRunResult(plan.source, lines, plan.exceptions);
+}
+
+/** A run's summary from the writer's lines and the plan's exceptions (a source with its own writer uses it too). */
+export function paidMarksRunResult(
+  source: PaymentMarkSource,
+  lines: readonly PaymentMarkLine[],
+  exceptions: readonly PaidMarkException[],
+): PaidMarksRunResult {
   const summary: Record<string, number> = {};
   const count = (key: string) => (summary[key] = (summary[key] ?? 0) + 1);
   const attention: { reference: string; reason: string; detail?: string }[] =
@@ -86,7 +95,7 @@ export async function runPaidMarksAuto(input: {
         detail: outcomeDetail(line.outcome),
       });
   }
-  for (const exception of plan.exceptions) {
+  for (const exception of exceptions) {
     count(exception.reason);
     if (exception.attention)
       attention.push({
@@ -96,7 +105,7 @@ export async function runPaidMarksAuto(input: {
       });
   }
   return {
-    source: plan.source,
+    source,
     writtenCount: summary.WRITTEN ?? 0,
     failedCount:
       (summary.FAILED ?? 0) +

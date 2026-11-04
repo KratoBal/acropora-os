@@ -135,13 +135,18 @@ type PaymentRequest = Omit<
 const sha256 = (text: string) =>
   createHash("sha256").update(text).digest("hex");
 
-export async function applyPaidMarks(input: {
+/** A mark planned under its invoice's lock (a PLANNED row stands), and its request. */
+export interface PlannedPaymentMark {
+  id: string;
+  payment: PaymentRequest;
+  mark: PaymentMarkInput;
+}
+
+type PaidMarksPlanInput = {
   source: PaymentMarkSource;
   marks: readonly PaymentMarkInput[];
   /** The invoice numbers Balázs approved; every other mark is left alone. */
   approved: ReadonlySet<string>;
-  agentKey: string;
-  client: SzamlazzAgentPaymentClient;
   store: PaymentMarkStore;
   /**
    * A partly paid invoice may take the mark too, up to its open amount (the manual
@@ -149,9 +154,19 @@ export async function applyPaidMarks(input: {
    * unpaid invoice, as before.
    */
   allowPartial?: boolean;
-}): Promise<PaymentMarkLine[]> {
+};
+
+/**
+ * THE FIRST HALF OF THE WRITE: every mark checked and its PLANNED row written, under its invoice's lock; no call. A
+ * caller that must hold its own lock over the decision (one bank credit, barracuda #2192) plans under that lock and
+ * calls after releasing it: the PLANNED rows already stand, so a second decision sees them.
+ */
+export async function planPaidMarks(
+  input: PaidMarksPlanInput,
+): Promise<{ lines: PaymentMarkLine[]; planned: PlannedPaymentMark[] }> {
   const { source, store } = input;
   const lines: PaymentMarkLine[] = [];
+  const planned: PlannedPaymentMark[] = [];
   for (const mark of input.marks) {
     if (!input.approved.has(mark.invoiceNumber)) continue;
     const line = (outcome: PaymentMarkOutcome) =>
@@ -271,8 +286,28 @@ export async function applyPaidMarks(input: {
     const ready = store.withInvoiceLock
       ? await store.withInvoiceLock(mark.invoiceNumber, plan)
       : await plan(store);
-    if (!ready) continue;
-    const { id, payment } = ready;
+    if (ready) planned.push({ ...ready, mark });
+  }
+  return { lines, planned };
+}
+
+/** THE SECOND HALF: the Számlázz.hu calls of the planned marks, each row closed by its answer. */
+export async function callPlannedMarks(input: {
+  planned: readonly PlannedPaymentMark[];
+  agentKey: string;
+  client: SzamlazzAgentPaymentClient;
+  store: PaymentMarkStore;
+}): Promise<PaymentMarkLine[]> {
+  const { store } = input;
+  const lines: PaymentMarkLine[] = [];
+  for (const { id, payment, mark } of input.planned) {
+    const line = (outcome: PaymentMarkOutcome) =>
+      lines.push({
+        invoiceNumber: mark.invoiceNumber,
+        date: mark.date,
+        amount: mark.amount,
+        outcome,
+      });
 
     let response;
     try {
@@ -310,6 +345,41 @@ export async function applyPaidMarks(input: {
           : String(response.outstanding),
     });
     line({ kind: "WRITTEN", outstanding: response.outstanding ?? null });
+  }
+  return lines;
+}
+
+export async function applyPaidMarks(input: {
+  source: PaymentMarkSource;
+  marks: readonly PaymentMarkInput[];
+  /** The invoice numbers Balázs approved; every other mark is left alone. */
+  approved: ReadonlySet<string>;
+  agentKey: string;
+  client: SzamlazzAgentPaymentClient;
+  store: PaymentMarkStore;
+  /**
+   * A partly paid invoice may take the mark too, up to its open amount (the manual
+   * entry: a customer may pay in parts). The automatic sources write only on a provably
+   * unpaid invoice, as before.
+   */
+  allowPartial?: boolean;
+}): Promise<PaymentMarkLine[]> {
+  // one mark at a time: planned and called before the next one is planned, as always
+  const lines: PaymentMarkLine[] = [];
+  for (const mark of input.marks) {
+    const { lines: planLines, planned } = await planPaidMarks({
+      ...input,
+      marks: [mark],
+    });
+    lines.push(...planLines);
+    lines.push(
+      ...(await callPlannedMarks({
+        planned,
+        agentKey: input.agentKey,
+        client: input.client,
+        store: input.store,
+      })),
+    );
   }
   return lines;
 }

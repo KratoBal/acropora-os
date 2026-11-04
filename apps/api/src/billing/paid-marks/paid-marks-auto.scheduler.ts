@@ -6,8 +6,14 @@ import {
 } from "@nestjs/common";
 
 import { prismaPaymentMarkStore } from "../../integrations/szamlazz/outgoing-payment-marks.js";
-import type { PaymentMarkSource } from "../../integrations/szamlazz/outgoing-payment-marks.js";
-import { HttpSzamlazzAgentClient } from "../../integrations/szamlazz/szamlazz-agent.client.js";
+import type {
+  PaymentMarkSource,
+  PaymentMarkStore,
+} from "../../integrations/szamlazz/outgoing-payment-marks.js";
+import {
+  HttpSzamlazzAgentClient,
+  type SzamlazzAgentPaymentClient,
+} from "../../integrations/szamlazz/szamlazz-agent.client.js";
 import { SzamlazzCredentialProvider } from "../../integrations/szamlazz/szamlazz-credential.provider.js";
 import {
   paidMarksMode,
@@ -15,6 +21,7 @@ import {
   runPaidMarksAuto,
   type PaidMarkPlan,
   type PaidMarksMode,
+  type PaidMarksRunResult,
 } from "./paid-marks-auto.js";
 import { PaidMarkRunRepository } from "./paid-mark-run.repository.js";
 import {
@@ -22,13 +29,25 @@ import {
   glsPaidMarkPlan,
   simplePayPaidMarkPlan,
 } from "./paid-marks-sources.js";
-import { bankTransferPaidMarkPlan } from "../bank-transfer-paid-marks.js";
+import {
+  bankTransferPaidMarkPlan,
+  runBankTransferMarks,
+} from "../bank-transfer-paid-marks.js";
 
 /** The sources, their switches and their dry-run plans. */
 export const PAID_MARK_SOURCES: readonly {
   source: PaymentMarkSource;
   switchName: string;
   plan: (from: string) => Promise<PaidMarkPlan>;
+  /** a source that writes its own way (one bank credit under its lock, #2192); else the shared writer */
+  run?: (
+    from: string,
+    context: {
+      agentKey: string;
+      client: SzamlazzAgentPaymentClient;
+      store: PaymentMarkStore;
+    },
+  ) => Promise<PaidMarksRunResult>;
 }[] = [
   { source: "GLS_COD", switchName: "GLS_COD_MARK_PAID", plan: glsPaidMarkPlan },
   {
@@ -46,6 +65,7 @@ export const PAID_MARK_SOURCES: readonly {
     source: "BANK_TRANSFER",
     switchName: "BANK_TRANSFER_MARK_PAID",
     plan: bankTransferPaidMarkPlan,
+    run: runBankTransferMarks,
   },
 ];
 
@@ -158,12 +178,18 @@ export class PaidMarksAutoScheduler implements OnModuleInit, OnModuleDestroy {
     const client = new HttpSzamlazzAgentClient();
     for (const s of sources) {
       try {
-        const result = await runPaidMarksAuto({
-          plan: await s.plan(from),
-          agentKey,
-          client,
-          store: prismaPaymentMarkStore,
-        });
+        const result = s.run
+          ? await s.run(from, {
+              agentKey,
+              client,
+              store: prismaPaymentMarkStore,
+            })
+          : await runPaidMarksAuto({
+              plan: await s.plan(from),
+              agentKey,
+              client,
+              store: prismaPaymentMarkStore,
+            });
         await this.runs.save(result);
         this.logger.log(paidMarksRunLine(result));
       } catch (error) {

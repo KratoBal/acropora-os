@@ -6,7 +6,7 @@ import {
   Optional,
   ServiceUnavailableException,
 } from "@nestjs/common";
-import { Prisma, Repository, prisma } from "@acropora/database";
+import { Repository, prisma } from "@acropora/database";
 import {
   BANK_TRANSFER_REFUSAL_TEXT,
   type AuthenticatedUser,
@@ -17,7 +17,6 @@ import {
 
 import { SzamlazzCredentialProvider } from "../integrations/szamlazz/szamlazz-credential.provider.js";
 import {
-  applyPaidMarks,
   prismaPaymentMarkStore,
   type PaymentMarkStore,
 } from "../integrations/szamlazz/outgoing-payment-marks.js";
@@ -27,10 +26,10 @@ import {
 } from "../integrations/szamlazz/szamlazz-agent.client.js";
 import { StubSzamlazzAgentClient } from "../integrations/szamlazz/szamlazz-agent-stub.client.js";
 import {
+  decideBankCredit,
   decideBankTransfer,
-  loadBankCredit,
   loadBankTransfers,
-  loadFeedInvoicesFor,
+  pairBankCredit,
   type BankTransferDecision,
 } from "./bank-transfer-paid-marks.js";
 import { billingIssueMode } from "./billing-issue.config.js";
@@ -87,40 +86,6 @@ export class BankTransferPairingRepository extends Repository {
         row.invoiceNumber,
       ]);
     return out;
-  }
-
-  /** The pairing's audit row, before the write, in the credit lock's transaction; its id. */
-  async record(
-    transaction: Prisma.TransactionClient,
-    input: {
-      userId: string;
-      creditId: string;
-      metadata: Record<string, unknown>;
-    },
-  ): Promise<string> {
-    const row = await transaction.auditLog.create({
-      data: {
-        userId: input.userId,
-        action: "billing.bank-transfer.paired",
-        entityType: "BankTransaction",
-        entityId: input.creditId,
-        metadata: input.metadata as Prisma.InputJsonValue,
-      },
-      select: { id: true },
-    });
-    return row.id;
-  }
-
-  /** The writer's outcomes onto the same row. */
-  async complete(
-    transaction: Prisma.TransactionClient,
-    auditId: string,
-    metadata: Record<string, unknown>,
-  ): Promise<void> {
-    await transaction.auditLog.update({
-      where: { id: auditId },
-      data: { metadata: metadata as Prisma.InputJsonValue },
-    });
   }
 }
 
@@ -204,63 +169,35 @@ export class BankTransferPairingService {
           "Nincs Számlázz.hu-kulcs beállítva, a kifizetés nem rögzíthető.",
         );
       }
-    /*
-      ONE PAIRING OF A CREDIT AT A TIME (barracuda, #2192): the decision reads the credit's standing marks, so two
-      people pairing the same credit to two invoice sets at once must not both pass it. The credit's lock is held
-      from the decision to the end of the writes; the audit row is written BEFORE the write, so no write is left
-      without its row (#2192 b).
-    */
-    return prisma.$transaction(
-      async (transaction) => {
-        await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`bank-credit:${creditId}`}))`;
-        const decision = await this.decide(creditId, text);
-        if (!decision.markable)
-          throw new ConflictException(
-            `${BANK_TRANSFER_REFUSAL_TEXT[decision.refusal]}${decision.detail ? ` (${decision.detail})` : ""}`,
-          );
-        const auditId = await this.repository.record(transaction, {
-          userId: user.id,
-          creditId,
-          metadata: {
-            text,
-            mode,
-            decided: decision.marks.map((m) => [m.invoiceNumber, m.amount]),
-          },
-        });
-        const lines = await applyPaidMarks({
-          source: "BANK_TRANSFER",
-          marks: decision.marks,
-          approved: new Set(decision.marks.map((m) => m.invoiceNumber)),
-          agentKey,
-          client: mode === "stub" ? new StubSzamlazzAgentClient() : this.client,
-          store: this.store,
-        });
-        const result = {
-          lines: lines.map((line) => ({
-            invoiceNumber: line.invoiceNumber,
-            outcome: line.outcome.kind,
-          })),
-        };
-        await this.repository.complete(transaction, auditId, {
-          text,
-          mode,
-          lines: result.lines,
-        });
-        return result;
-      },
-      { maxWait: 30_000, timeout: 120_000 },
-    );
+    const pairing = await pairBankCredit({
+      creditId,
+      text,
+      agentKey,
+      client: mode === "stub" ? new StubSzamlazzAgentClient() : this.client,
+      store: this.store,
+      userId: user.id,
+      mode,
+    });
+    if (!pairing.found)
+      throw new NotFoundException("Nincs ilyen banki jóváírás.");
+    if (!pairing.decision.markable)
+      throw new ConflictException(
+        `${BANK_TRANSFER_REFUSAL_TEXT[pairing.decision.refusal]}${pairing.decision.detail ? ` (${pairing.decision.detail})` : ""}`,
+      );
+    return {
+      lines: pairing.lines.map((line) => ({
+        invoiceNumber: line.invoiceNumber,
+        outcome: line.outcome.kind,
+      })),
+    };
   }
 
   private async decide(
     creditId: string,
     text: string,
   ): Promise<BankTransferDecision> {
-    const credit = await loadBankCredit(creditId);
-    if (!credit) throw new NotFoundException("Nincs ilyen banki jóváírás.");
-    return decideBankTransfer(
-      { ...credit, narrative: text },
-      await loadFeedInvoicesFor([text]),
-    );
+    const decision = await decideBankCredit(creditId, text);
+    if (!decision) throw new NotFoundException("Nincs ilyen banki jóváírás.");
+    return decision;
   }
 }
