@@ -356,6 +356,16 @@ export interface ProjectableProduct {
    */
   images: string[] | null;
   /**
+   * A KÉPEK TÖRLÉSE, KIFEJEZETT SZÁNDÉKKAL (T4.1-D3, a képtörlés). Az üres vagy
+   * hiányzó `images` szándékosan nem töröl (lásd lent), ezért egy OS-gazdájú
+   * termék UTOLSÓ képének törlése eddig nem jutott el a boltba: nulla képsornál
+   * a kiadó meg sem hívódik, a mező kimarad, és a régi kép kint marad. Ez a jelző
+   * mondja ki, hogy a nulla kép tény, nem hiányzó tudás: csak a vetítő állítja,
+   * és csak akkor, ha a terméknek nincs képsora ÉS az OS a gazdája (a UNAS-gazdájú
+   * termék képsorát az import írja, ott a nulla lehet átmeneti).
+   */
+  imagesCleared?: boolean;
+  /**
    * A KÉPEK ALT SZÖVEGE a kiadott URL-ekkel (SEO P0 PR 9), vagy `null`.
    *
    * A `null` itt is "most nem tudunk listát adni": a bolt oldalán álló érték
@@ -873,7 +883,8 @@ export class MedusaProductProjectionService {
      *
      * URES LISTA SOSEM MEGY: sem a `null`, sem az ures tomb nem kerul a
      * torzsbe, mert az update-agon a mezo csere-szemantikaju, es az ures lista
-     * letorolne a termek meglevo kepeit.
+     * letorolne a termek meglevo kepeit. Kivetel a kifejezett `imagesCleared`:
+     * akkor a torles a szandek, es a fo kep is lekerul.
      */
     const imagePatch =
       product.images && product.images.length > 0
@@ -881,7 +892,9 @@ export class MedusaProductProjectionService {
             images: product.images.map((url) => ({ url })),
             thumbnail: product.images[0],
           }
-        : {};
+        : product.imagesCleared
+          ? { images: [], thumbnail: null }
+          : {};
 
     /**
      * THE WRITE TO A PRODUCT WE ARE LINKED TO, used by the `updated` AND the

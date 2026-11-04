@@ -179,7 +179,8 @@ export interface MedusaProductInput {
    * futástól update-el, tehát a visszaesésre hagyatkozni annyi lenne, mint
    * csak az első futásra megírni a szabályt.
    */
-  thumbnail?: string;
+  /** `null`: a fo kep lekerul (a kepek kifejezett torlesekor). */
+  thumbnail?: string | null;
   options: { title: string; values: string[] }[];
   variants: {
     title: string;
