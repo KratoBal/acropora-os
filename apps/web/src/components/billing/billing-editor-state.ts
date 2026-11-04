@@ -1,4 +1,5 @@
 import {
+  buyerTaxNumberProblem,
   computeBillingDocumentAmounts,
   getDocumentCapabilities,
   szamlazzDocumentTotals,
@@ -452,6 +453,25 @@ export function billingPreview(state: EditorState): BillingPreview | null {
       ),
     ],
   };
+}
+
+/**
+ * ADÓSZÁM NÉLKÜL CSAK A KIFEJEZETTEN MAGÁNSZEMÉLYNEK VAN SZÁMLA (kártya aaf4f09d;
+ * Balázs, 2026-11-04). Ugyanaz a szabály, mint a szerveren (`buyerTaxNumberProblem`):
+ * a felület a kiállítás gombja mellett előre kiírja, hogy ne a kattintás után,
+ * egy mentési hibaként derüljön ki.
+ */
+export function companyTaxNumberReason(
+  customer: BillingDocumentCustomer | null,
+): string | null {
+  if (!customer) return null;
+  return buyerTaxNumberProblem({
+    name: customer.name,
+    type: customer.type,
+    partnerMirror: customer.partnerMirror ?? false,
+    taxNumber: customer.taxNumber,
+    euTaxNumber: customer.euTaxNumber,
+  });
 }
 
 /** Mi hiányzik a mentéshez; üres lista: menthető. */

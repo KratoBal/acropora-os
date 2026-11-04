@@ -93,6 +93,14 @@ export interface BillingDocumentCustomer {
    * mondja ki, ne egy kitalált értéket.
    */
   euTaxNumber: string | null;
+  /**
+   * A vevő típusa (`PERSON` | `COMPANY`) és hogy egy partner vevő-tükre-e: a
+   * kiállítás kapuja (kártya aaf4f09d, `buyerTaxNumberProblem`) ebből dönti el, kell-e
+   * adószám, és a felület a gomb mellett előre kiírja. Hiányzó típus: nem
+   * magánszemély, tehát adószám kell (ugyanúgy, mint a szerveren).
+   */
+  type?: string | null;
+  partnerMirror?: boolean;
   contactName: string | null;
   email: string | null;
   /** A belső partner-azonosító (`customerNumber`). */

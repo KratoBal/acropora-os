@@ -179,6 +179,8 @@ describe(
             customerNumber: `${PREFIX}-C1`,
             type: "COMPANY",
             displayName: `${PREFIX} partner`,
+            // cégnek adószám nélkül nincs számla (kártya aaf4f09d)
+            taxNumber: "12345678-2-42",
             addresses: {
               create: {
                 type: "BILLING",

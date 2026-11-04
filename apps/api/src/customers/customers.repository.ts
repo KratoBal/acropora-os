@@ -56,6 +56,8 @@ const addressesInclude = {
 };
 const include = {
   addresses: addressesInclude,
+  // the invoice tax gate asks a partner mirror for a tax number (card aaf4f09d)
+  partner: { select: { id: true } },
 } satisfies Prisma.CustomerInclude;
 
 type CustomerWithAddresses = Prisma.CustomerGetPayload<{
@@ -397,6 +399,7 @@ export class CustomersRepository extends Repository {
       taxNumber: customer.taxNumber ?? undefined,
       euTaxNumber: customer.euTaxNumber ?? undefined,
       paymentDueDays: customer.paymentDueDays ?? null,
+      partnerMirror: Boolean(customer.partner),
       marketingEmailConsent: customer.marketingEmailConsent,
       marketingSmsConsent: customer.marketingSmsConsent,
       addresses: customer.addresses.map(toAddress),

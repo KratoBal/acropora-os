@@ -63,7 +63,7 @@ function row(status = "DRAFT", invoiceFormat = "ELECTRONIC") {
       customerNumber: "C-1",
       displayName: "Kitalált Kft.",
       companyName: null,
-      taxNumber: null,
+      taxNumber: "12345678-2-42",
       email: "vevo@example.com",
       addresses: [
         {
@@ -416,6 +416,79 @@ describe("BillingDocumentIssueService", () => {
     // nem végszámlán a visszaolvasás nem állít meg semmit
     const plain = setup({ stornoAfterClaim: "OS" });
     assert.equal((await issue(plain.service)).status, "ISSUED");
+  });
+
+  /*
+    CÉGNEK ADÓSZÁM NÉLKÜL NINCS SZÁMLA (kártya aaf4f09d; Balázs, 2026-11-04). MI
+    PIROSÍT: ha a céges, adószám nélküli vevő számlája foglal vagy Számlázz.hu-t
+    hív; ha a magánszemély, a magyar vagy a közösségi adószámos cég elakad.
+  */
+  it("TAX-GATE: without a tax number only an explicitly marked person goes out; the rest is refused before the claim", async () => {
+    const base = row().customer;
+    const nincsAdo = { taxNumber: null, euTaxNumber: null };
+    for (const [nev, customer] of [
+      ["cég", { ...base, ...nincsAdo, type: "COMPANY", partner: null }],
+      [
+        "ismeretlen típus",
+        { ...base, ...nincsAdo, type: undefined, partner: null },
+      ],
+      [
+        "partner-tükör magánszemély típussal",
+        {
+          ...base,
+          ...nincsAdo,
+          displayName: "Fővárosi Állat- és Növénykert",
+          type: "PERSON",
+          partner: { id: "supplier-zoo" },
+        },
+      ],
+      [
+        "magánszemély cégformájú névvel",
+        { ...base, ...nincsAdo, type: "PERSON", partner: null },
+      ],
+    ] as const) {
+      const { service, calls } = setup({ over: { customer } });
+      await assert.rejects(
+        () => issue(service),
+        (error: unknown) =>
+          error instanceof BadRequestException &&
+          error.message.startsWith("A vevőnek nincs adószáma:"),
+        nev,
+      );
+      assert.deepEqual([calls.claim, calls.generate], [0, 0], nev);
+    }
+  });
+
+  it("TAX-GATE: an explicitly marked person, or a buyer with a Hungarian or an EU tax number, goes out", async () => {
+    const base = row().customer;
+    for (const customer of [
+      {
+        ...base,
+        displayName: "Kovács Anna",
+        type: "PERSON",
+        taxNumber: null,
+        euTaxNumber: null,
+        partner: null,
+      },
+      {
+        ...base,
+        type: "COMPANY",
+        taxNumber: "12345678-2-42",
+        euTaxNumber: null,
+      },
+      {
+        ...base,
+        type: "COMPANY",
+        taxNumber: null,
+        euTaxNumber: "DE123456789",
+        partner: { id: "supplier-1" },
+      },
+    ]) {
+      const { service, calls } = setup({ over: { customer } });
+      const detail = await issue(service);
+      assert.equal(detail.status, "ISSUED", JSON.stringify(customer));
+      assert.equal(calls.generate, 1, JSON.stringify(customer));
+    }
   });
 
   it("does not call Számlázz.hu while the switch is off", async () => {

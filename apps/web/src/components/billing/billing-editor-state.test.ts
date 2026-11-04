@@ -2,6 +2,7 @@ import type { BillingDocumentDetail } from "@acropora/types";
 import { describe, expect, it } from "vitest";
 
 import {
+  companyTaxNumberReason,
   billingPreview,
   effectiveFormat,
   emptyLine,
@@ -356,5 +357,59 @@ describe("withCustomer", () => {
   it("without a fulfillment day it does not invent one", () => {
     const blank = { ...fresh(), fulfillmentDate: "" };
     expect(withCustomer(blank, partner, 30).dueDate).toBe(blank.dueDate);
+  });
+});
+
+/*
+  ADÓSZÁM NÉLKÜL CSAK A KIFEJEZETTEN MAGÁNSZEMÉLYNEK (kártya aaf4f09d). MI PIROSÍT:
+  ha a céges, az ismeretlen típusú vagy a partner-tükör vevőnél adószám nélkül
+  nincs ok (a gomb kiállítható maradna); ha a magánszemély vagy az adószámos
+  vevő tiltást kap.
+*/
+describe("companyTaxNumberReason", () => {
+  const vevo = {
+    id: "c-1",
+    name: "Fővárosi Állat- és Növénykert",
+    address: "1146 Budapest, Állatkerti krt. 6-12.",
+    taxNumber: null,
+    euTaxNumber: null,
+    contactName: null,
+    email: null,
+    internalCode: "PARTNER-1",
+  };
+
+  it("a nem magánszemélynek jelölt, adószám nélküli vevőnél megnevezi a vevőt", () => {
+    expect(companyTaxNumberReason({ ...vevo, type: "COMPANY" })).toBe(
+      "A vevőnek nincs adószáma: Fővárosi Állat- és Növénykert (nincs magánszemélynek jelölve), de sem magyar, sem közösségi adószám nincs megadva. Egészítsd ki a partnernél vagy a vevőnél; adószám nélkül csak kifejezetten magánszemélynek jelölt vevőnek állítunk ki számlát.",
+    );
+  });
+
+  it("az ismeretlen típus és a partner-tükör tiltást kap, a magánszemély és az adószámos nem", () => {
+    // the zoo case: a partner mirror, whatever its type says
+    expect(
+      companyTaxNumberReason({ ...vevo, type: "PERSON", partnerMirror: true }),
+    ).not.toBeNull();
+    expect(companyTaxNumberReason(vevo)).not.toBeNull();
+    expect(
+      companyTaxNumberReason({ ...vevo, type: "PERSON", name: "Kovács Anna" }),
+    ).toBeNull();
+    expect(companyTaxNumberReason(null)).toBeNull();
+    expect(
+      companyTaxNumberReason({
+        ...vevo,
+        partnerMirror: true,
+        taxNumber: "15490658-2-42",
+      }),
+    ).toBeNull();
+    expect(
+      companyTaxNumberReason({
+        ...vevo,
+        type: "COMPANY",
+        euTaxNumber: "DE123456789",
+      }),
+    ).toBeNull();
+    expect(
+      companyTaxNumberReason({ ...vevo, type: "COMPANY", taxNumber: "  " }),
+    ).not.toBeNull();
   });
 });

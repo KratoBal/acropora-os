@@ -25,6 +25,7 @@ const baseInput: SzamlazzAgentInvoiceInput = {
     city: "Budapest",
     address: "Fő utca 1.",
     taxNumber: "12345678-1-42",
+    taxSubject: { type: "COMPANY", partnerMirror: false },
   },
   items: [
     {

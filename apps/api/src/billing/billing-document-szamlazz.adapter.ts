@@ -73,6 +73,8 @@ export interface BillingDocumentForIssue {
     euTaxNumber: string | null;
     /** `adoalany`: 6 for an EU buyer, otherwise not sent (null) */
     vatSubject: 6 | null;
+    /** a vevő adószám-kötelezettségéhez (kártya aaf4f09d); az XML-építő ebből dönt */
+    taxSubject: { type: string | null; partnerMirror: boolean };
   };
   lines: readonly BillingDocumentLineForIssue[];
 }
@@ -202,6 +204,7 @@ export function toSzamlazzAgentInput(
       ...(document.buyer.vatSubject !== null
         ? { vatSubject: document.buyer.vatSubject }
         : {}),
+      taxSubject: document.buyer.taxSubject,
     },
     items: orderedLines(document.lines).map((line) => ({
       name: line.description,

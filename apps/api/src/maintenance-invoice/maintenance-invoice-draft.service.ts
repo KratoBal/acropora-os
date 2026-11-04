@@ -31,6 +31,7 @@ import {
   maintenanceInvoiceXmlInputFrom,
   MaintenanceInvoiceInputError,
 } from "./maintenance-invoice-xml-input.js";
+import { customerTaxNumberProblem } from "../billing/buyer-tax-number.js";
 import { maintenanceInvoiceIssueEnabled } from "./maintenance-invoice-issue.config.js";
 import { MaintenanceInvoiceRepository } from "./maintenance-invoice.repository.js";
 
@@ -238,6 +239,8 @@ export class MaintenanceInvoiceDraftService {
       throw new BadRequestException(
         "A karbantartási laphoz nincs vevő rendelve, piszkozat-számla enélkül nem készíthető.",
       );
+    const taxProblem = customerTaxNumberProblem(customer);
+    if (taxProblem) throw new BadRequestException(taxProblem);
 
     let mapped;
     try {

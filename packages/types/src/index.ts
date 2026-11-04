@@ -104,6 +104,13 @@ export type {
   BillingDocumentLineInput,
 } from "./billing-document-draft.js";
 export {
+  buyerNeedsTaxNumber,
+  buyerTaxNumberProblem,
+  looksLikeOrganization,
+  ORGANIZATION_NAME_MARKERS,
+} from "./buyer-tax-number.js";
+export type { BuyerTaxSubject } from "./buyer-tax-number.js";
+export {
   BILLING_CUSTOMER_SOURCES,
   BILLING_DELIVERY_OUTCOMES,
   BILLING_DOCUMENT_LIST_PAGE_SIZE,
