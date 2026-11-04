@@ -219,15 +219,54 @@ export async function restoreRegistered(
         // a VISSZAVONT összevonások naplója nem tartja vissza a sort (a `Restrict` kulcs viszont a törlést tartaná): a napló sorai
         // törlődnek, a történet a `customer.merged` és `customer.unmerged` eseményekben marad. Az ÉLŐ összevonás naplóját a számlálás
         // már megfogta, ide csak visszavont napló jut; a szűrő ezt itt is kimondja, hogy egy élő napló sosem törlődhet.
-        await tx.customerMergeLog.deleteMany({
-          where: {
-            OR: [
-              { keptId: payload.customerId },
-              { mergedId: payload.customerId },
-            ],
-            undoneAt: { not: null },
+        const removable = {
+          OR: [
+            { keptId: payload.customerId },
+            { mergedId: payload.customerId },
+          ],
+          undoneAt: { not: null },
+        };
+        // az összevonás naplózása ígéret: a napló törlése előtt a TARTALMA egy eseménybe kerül (csak azonosítók és mezőnevek, ahogy a
+        // napló maga is), így a részlet a sor törlése után is visszakereshető (barracuda, #2196 review)
+        const logs = await tx.customerMergeLog.findMany({
+          where: removable,
+          select: {
+            id: true,
+            keptId: true,
+            mergedId: true,
+            actorUserId: true,
+            reason: true,
+            movedRefs: true,
+            fieldChanges: true,
+            createdAt: true,
+            undoneAt: true,
           },
         });
+        for (const log of logs)
+          await tx.domainEvent.create({
+            data: {
+              id: randomUUID(),
+              eventType: "customer.merge-log-removed",
+              aggregateType: "Customer",
+              aggregateId: payload.customerId,
+              actorUserId,
+              payload: {
+                logId: log.id,
+                keptId: log.keptId,
+                mergedId: log.mergedId,
+                mergeActorUserId: log.actorUserId,
+                reason: log.reason,
+                movedRefs: log.movedRefs,
+                fieldChanges: log.fieldChanges,
+                createdAt: log.createdAt.toISOString(),
+                undoneAt: log.undoneAt?.toISOString() ?? null,
+                removedBy: "partner.restore",
+              } as Prisma.InputJsonValue,
+              occurredAt: new Date(),
+              schemaVersion: 1,
+            },
+          });
+        await tx.customerMergeLog.deleteMany({ where: removable });
         await tx.customer.delete({ where: { id: payload.customerId } });
       }
     } else if (!dryRun) {

@@ -248,6 +248,15 @@ describe(
         await prisma.customerMergeLog.findUnique({ where: { id: undone.id } }),
         null,
       );
+      // the history survives the delete as an event
+      const removed = await prisma.domainEvent.findMany({
+        where: { eventType: "customer.merge-log-removed", aggregateId: rowId },
+      });
+      assert.equal(removed.length, 1);
+      assert.equal((removed[0]!.payload as { logId: string }).logId, undone.id);
+      await prisma.domainEvent.deleteMany({
+        where: { id: { in: removed.map((e) => e.id) } },
+      });
       // a live (not undone) log keeps the row
       await create();
       const again = await prisma.supplier.findUniqueOrThrow({
