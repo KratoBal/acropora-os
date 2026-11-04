@@ -425,7 +425,9 @@ export function ComponentCatalogPage() {
               <PilotButton onClick={() => setFiok(false)}>Kész</PilotButton>
             }
           >
-            <p className="text-sm text-pilot-grey-700">A fiók tartalma.</p>
+            <div className="flex-1 overflow-y-auto px-6 py-5">
+              <p className="text-sm text-pilot-grey-700">A fiók tartalma.</p>
+            </div>
           </PilotDrawer>
         </div>
       </PilotSection>
