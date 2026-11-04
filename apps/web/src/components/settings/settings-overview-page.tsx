@@ -199,6 +199,13 @@ export const SETTINGS_AREAS: SettingsArea[] = [
         href: "/beallitasok/eszkoz-funkciok",
         entryId: "asset-functions",
       },
+      {
+        label: "Partner-duplikátumok",
+        description:
+          "Ugyanaz a cég vevőként, szállítóként vagy webshopos vásárlóként: csak olvasható lista a döntéshez.",
+        href: "/beallitasok/partner-duplikatumok",
+        entryId: "partner-duplicates",
+      },
     ],
   },
   {

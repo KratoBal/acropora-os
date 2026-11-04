@@ -230,6 +230,7 @@ describe("navigation", () => {
           "Mértékegységek",
           "Eszköz-kategóriák",
           "Eszköz-funkciók",
+          "Partner-duplikátumok",
           "Ajánlat szövegrészletek",
           "Ajánlatsablonok",
         ],
@@ -377,6 +378,7 @@ describe("navigation", () => {
       ["Törzsadatok", "units-of-measure"],
       ["Törzsadatok", "asset-categories"],
       ["Törzsadatok", "asset-functions"],
+      ["Törzsadatok", "partner-duplicates"],
       ["Árajánlat", "quote-snippets"],
       ["Árajánlat", "quote-templates"],
     ]);
@@ -450,6 +452,11 @@ describe("navigation", () => {
     ["/beallitasok/mertekegysegek", "units-of-measure", "Mértékegységek"],
     ["/beallitasok/eszkoz-kategoriak", "asset-categories", "Eszköz-kategóriák"],
     ["/beallitasok/eszkoz-funkciok", "asset-functions", "Eszköz-funkciók"],
+    [
+      "/beallitasok/partner-duplikatumok",
+      "partner-duplicates",
+      "Partner-duplikátumok",
+    ],
     [
       "/beallitasok/ajanlat-szovegreszletek",
       "quote-snippets",
@@ -788,6 +795,8 @@ describe("navigation", () => {
     // A mertekegyseg-torzsadat ugyanoda tartozik: a szerelo HASZNALJA a listat
     // (az eszkoz-szerkeszto legordulojet `service.view` olvassa), de nem IRJA.
     "/beallitasok/mertekegysegek": "settings.manage",
+    // Egy partnertörzs, 1. lépés: ugyanaz a jog, mint a végponté
+    "/beallitasok/partner-duplikatumok": "settings.manage",
     // AZ ESZKOZ-KATEGORIAK UGYANAZ A FAJTA TETEL, es ugyanaz a bontas: a
     // szerelo HASZNALJA a listat (az eszkoz-szerkeszto legordulojet
     // `service.view` olvassa), de nem IRJA. Ha az iras is `service.view`
