@@ -16,7 +16,14 @@ const certificateCustomerArgs = {
     addresses: {
       where: { isDefault: true },
       take: 1,
-      select: { line1: true, line2: true, postalCode: true, city: true },
+      // the country: an EU buyer's invoice names it in Hungarian (barracuda #2157, card e7806491)
+      select: {
+        line1: true,
+        line2: true,
+        postalCode: true,
+        city: true,
+        country: true,
+      },
     },
   },
 } satisfies Prisma.CustomerDefaultArgs;

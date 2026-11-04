@@ -223,6 +223,18 @@ export async function restoreRegistered(
           where: { id: supplier.id },
           data: { customerId: null },
         });
+        // a VISSZAVONT összevonások naplója nem tartja vissza a sort (a `Restrict` kulcs viszont a törlést tartaná): a napló sorai
+        // törlődnek, a történet a `customer.merged` és `customer.unmerged` eseményekben marad. Az ÉLŐ összevonás naplóját a számlálás
+        // már megfogta, ide csak visszavont napló jut; a szűrő ezt itt is kimondja, hogy egy élő napló sosem törlődhet.
+        await tx.customerMergeLog.deleteMany({
+          where: {
+            OR: [
+              { keptId: payload.customerId },
+              { mergedId: payload.customerId },
+            ],
+            undoneAt: { not: null },
+          },
+        });
         await tx.customer.delete({ where: { id: payload.customerId } });
       }
     } else if (!dryRun) {
@@ -292,8 +304,13 @@ async function referencesOf(tx: Tx, customerId: string): Promise<number> {
     // visszagördülne egyetlen sor miatt): barracuda, #2185 review
     tx.reefClubLinkCode.count({ where }),
     tx.reefClubCustomerLink.count({ where }),
+    // csak az ÉLŐ (nem visszavont) összevonás naplója: egy visszavont összevonás a sort már nem köti (stage-próba, 2026-11-04:
+    // átvezetés, összevonás, visszavonás után a visszaállítás a visszavont napló miatt örökre KEPT maradt)
     tx.customerMergeLog.count({
-      where: { OR: [{ keptId: customerId }, { mergedId: customerId }] },
+      where: {
+        OR: [{ keptId: customerId }, { mergedId: customerId }],
+        undoneAt: null,
+      },
     }),
     tx.customer.count({ where: { mergedIntoId: customerId } }),
     // nem FK, törlés után árván maradna
