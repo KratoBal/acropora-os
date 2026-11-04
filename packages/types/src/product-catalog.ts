@@ -47,6 +47,14 @@ export interface ProductVariantSummary {
    */
   sellingGrossPrice: string | null;
   sellingPriceCurrency: string | null;
+  /**
+   * OUR OWN sale (T4.1-D3): the price and its half-open window `[startsAt,
+   * endsAt)`, ISO timestamps; all three null or all three set. Only on an
+   * ACROPORA product; while UNAS owns it, the mirror's sale holds.
+   */
+  sellingSaleGrossPrice: string | null;
+  sellingSaleStartsAt: string | null;
+  sellingSaleEndsAt: string | null;
   manufacturerPartNumber: string | null;
   secondaryUnit: string | null;
   secondaryUnitFactor: string | null;

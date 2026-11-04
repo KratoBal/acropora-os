@@ -21,6 +21,7 @@ import type {
   SetProductImageOrderDto,
 } from "./dto/product-image.dto.js";
 import type { SetVariantPriceDto } from "./dto/set-variant-price.dto.js";
+import type { SetVariantSaleDto } from "./dto/set-variant-sale.dto.js";
 import type { UpdateProductDto } from "./dto/update-product.dto.js";
 import { richTextImageHosts } from "../homepage-content/homepage-content.service.js";
 import {
@@ -41,7 +42,10 @@ import {
   DOCUMENT_STORE,
   documentStoreEnabled,
 } from "../service-assets/document-store/document-store.provider.js";
-import { ProductRepository } from "./product.repository.js";
+import {
+  ProductRepository,
+  VariantSaleConflict,
+} from "./product.repository.js";
 
 /**
  * A FELTÖLTÖTT KÉP AZONOSÍTÓJA A `url` MEZŐBEN (T4.1-D3, 6. szelet). A tárolókulcs
@@ -142,20 +146,77 @@ export class ProductService {
     variantId: string,
     input: SetVariantPriceDto,
     actorUserId?: string,
+    now: Date = new Date(),
   ) {
     const product = await this.requireProduct(id);
     this.assertLocallyManaged(product);
-    const updated = await this.products.setVariantSellingPrice(
-      id,
-      variantId,
-      new Prisma.Decimal(input.grossPrice),
-      actorUserId,
-    );
+    const updated = await this.products
+      .setVariantSellingPrice(
+        id,
+        variantId,
+        new Prisma.Decimal(input.grossPrice),
+        actorUserId,
+        now,
+      )
+      .catch(saleConflictToHttp);
     if (!updated)
       throw new NotFoundException({
         code: "PRODUCT_VARIANT_NOT_FOUND",
         message: "A változat nem ehhez a termékhez tartozik.",
       });
+    return updated;
+  }
+
+  /**
+   * A VÁLTOZAT SAJÁT AKCIÓJA (T4.1-D3, akciós ár 1. szelet). Csak OS-gazdájú
+   * terméknél (UNAS-gazdánál a tükör akciója áll). A vég a kezdet után, és a
+   * jövőben kell legyen: egy már lejárt akció beállítása elírás. Az akció a
+   * saját eladási árnál olcsóbb (a tranzakció méri, 409).
+   */
+  async setVariantSale(
+    id: string,
+    variantId: string,
+    input: SetVariantSaleDto,
+    actorUserId?: string,
+    now: Date = new Date(),
+  ) {
+    const product = await this.requireProduct(id);
+    this.assertLocallyManaged(product);
+    const startsAt = new Date(input.startsAt);
+    const endsAt = new Date(input.endsAt);
+    if (!(startsAt < endsAt))
+      throw new BadRequestException({
+        code: "PRODUCT_SALE_WINDOW_EMPTY",
+        message: "Az akció vége a kezdete után legyen.",
+      });
+    if (!(endsAt > now))
+      throw new BadRequestException({
+        code: "PRODUCT_SALE_ALREADY_OVER",
+        message: "Az akció vége már elmúlt.",
+      });
+    const updated = await this.products
+      .setVariantSale(
+        id,
+        variantId,
+        { grossPrice: new Prisma.Decimal(input.grossPrice), startsAt, endsAt },
+        actorUserId,
+      )
+      .catch(saleConflictToHttp);
+    if (!updated) throw variantNotFound();
+    return updated;
+  }
+
+  /** Az akció törlése; egy akció nélküli változaton is rendben (nincs mit venni). */
+  async clearVariantSale(id: string, variantId: string, actorUserId?: string) {
+    const product = await this.requireProduct(id);
+    this.assertLocallyManaged(product);
+    const updated = await this.products.setVariantSale(
+      id,
+      variantId,
+      null,
+      actorUserId,
+    );
+    if (!updated) throw variantNotFound();
     return updated;
   }
 
@@ -435,4 +496,27 @@ function safeFileName(name: string): string {
     .slice(0, 180)
     .trim();
   return safe || "kep";
+}
+
+function variantNotFound() {
+  return new NotFoundException({
+    code: "PRODUCT_VARIANT_NOT_FOUND",
+    message: "A változat nem ehhez a termékhez tartozik.",
+  });
+}
+
+/** Az akció és a rendes ár ütközése 409, a két árral együtt. */
+function saleConflictToHttp(error: unknown): never {
+  if (!(error instanceof VariantSaleConflict)) throw error;
+  if (error.code === "own-price-missing")
+    throw new ConflictException({
+      code: "PRODUCT_SALE_OWN_PRICE_MISSING",
+      message: "Előbb a saját eladási árat kell megadni, az akció ahhoz mér.",
+    });
+  throw new ConflictException({
+    code: "PRODUCT_SALE_NOT_LOWER",
+    message: `Az akciós ár (${error.saleGrossPrice} Ft) csak a rendes ár (${error.sellingGrossPrice} Ft) alatt lehet.`,
+    sellingGrossPrice: error.sellingGrossPrice,
+    saleGrossPrice: error.saleGrossPrice,
+  });
 }

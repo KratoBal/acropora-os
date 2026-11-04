@@ -229,11 +229,21 @@ Minden végpont hitelesítést igényel.
 | -------- | ------------------------------------------ | ------------------------------------- | ----------------------------- |
 | `POST`   | `/products/:id/catalog-authority/acropora` | `products.catalog-authority.transfer` | törzsadat átvétele a UNAS-tól |
 | `PUT`    | `/products/:id/variants/:variantId/price`  | `products.manage`                     | saját ár és árelőzmény        |
+| `PUT`    | `/products/:id/variants/:variantId/sale`   | `products.manage`                     | saját akció beállítása        |
+| `DELETE` | `/products/:id/variants/:variantId/sale`   | `products.manage`                     | saját akció törlése           |
 | `PATCH`  | `/products/:id/images/:imageId`            | `products.manage`                     | kép alt-szövege               |
 | `PUT`    | `/products/:id/images/order`               | `products.manage`                     | képek sorrendje               |
 | `POST`   | `/products/:id/images`                     | `products.manage`                     | kép feltöltése (`file` mező)  |
 | `DELETE` | `/products/:id/images/:imageId`            | `products.manage`                     | kép törlése                   |
 | `GET`    | `/products/:id/images/:imageId/file`       | `products.view`                       | a kép fájlja a tárolóból      |
+
+A saját akció (T4.1-D3, akciós ár 1. szelet) ár és félig nyitott ablak:
+`{ grossPrice, startsAt, endsAt }`, egész forint és két időzónás ISO-időpont, a
+vég kötelező és a jövőben van. Csak a saját eladási ár alatt lehet
+(`409 PRODUCT_SALE_NOT_LOWER`, saját ár nélkül `409 PRODUCT_SALE_OWN_PRICE_MISSING`),
+és a rendes ár sem csökkenhet a beállított akció alá. Ebben a szeletben az akció
+tárolódik, de sem a boltba, sem az árelőzménybe nem kerül; a kettő a vetítéssel
+együtt jön.
 
 A feltöltött kép (T4.1-D3, 6. szelet) a dokumentum-tárolóba kerül, onnan tölti fel
 a vetítés a boltba; a sora `source: "OS"`, a `url` mezője `os-upload:<sha256>`

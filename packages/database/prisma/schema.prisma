@@ -1533,6 +1533,15 @@ model ProductVariant {
   /// merheto. A brief 12. pontja epp ezt keri falszifikaciokent, es egy olyan
   /// teszt, ami nem tud elbukni, nem kapu.
   sellingPriceCurrency       String?   @db.VarChar(3)
+  /// A SAJAT AKCIOS AR (T4.1-D3), brutto, a `sellingPriceCurrency` penznemeben.
+  /// A ket idoponttal EGYUTT ervenyes (CHECK): a kezdet az elso pillanat, amikor
+  /// mar, a veg az elso, amikor mar NEM ervenyes (felig nyitott ablak), es a veg
+  /// kotelezo: egy vegtelen akcio nem akcio, hanem uj ar. Ures harmas: nincs
+  /// akcio. Az OS-gazdaju termeknel ez az akcio; a UNAS-gazdanal a tukor
+  /// `saleGrossPrice`-a, ez a mezo ott ures.
+  sellingSaleGrossPrice      Decimal?  @db.Decimal(19, 4)
+  sellingSaleStartsAt        DateTime?
+  sellingSaleEndsAt          DateTime?
   manufacturerPartNumber     String?
   secondaryUnit              String?
   secondaryUnitFactor        Decimal?  @db.Decimal(19, 6)
@@ -4218,14 +4227,19 @@ model MaintenanceOrderDocument {
 /// igazolást, az egy KÉSŐBBI döntés, nem ennek a körnek a kérdése.
 model CompletionCertificate {
   id           String   @id @default(cuid())
-  serviceJobId String   @unique
+  /// A FORRÁS: karbantartási lap (1:1, ezért egyedi) VAGY megrendelés (egy
+  /// megrendeléshez több TIG: részteljesítés, Megrendelések S2). Pontosan egy
+  /// van kitöltve (CHECK `CompletionCertificate_exactly_one_source`).
+  serviceJobId   String?  @unique
+  partnerOrderId String?
   number       String   @unique
   issuedAt     DateTime @default(now())
   issuedByName String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  serviceJob ServiceJob                      @relation(fields: [serviceJobId], references: [id], onDelete: Restrict)
+  serviceJob   ServiceJob?                     @relation(fields: [serviceJobId], references: [id], onDelete: Restrict)
+  partnerOrder PartnerOrder?                   @relation(fields: [partnerOrderId], references: [id], onDelete: Restrict)
   items      CompletionCertificateLineItem[]
   documents  CompletionCertificateDocument[]
   /// A KARBANTARTÁSI PISZKOZAT-SZÁMLA (ADR-014, 4. szelet). Nem
@@ -4236,6 +4250,7 @@ model CompletionCertificate {
   invoices   Invoice[]
 
   @@index([serviceJobId])
+  @@index([partnerOrderId])
 }
 
 /// EGY SOR AZ IGAZOLÁSON. A leíró mezők MÁSOLATOK a kiállítás pillanatából
@@ -4251,10 +4266,19 @@ model CompletionCertificateLineItem {
   quantity       Decimal @db.Decimal(19, 6)
   unitNet        Decimal @db.Decimal(19, 4)
   vatRatePercent Decimal @db.Decimal(5, 2)
+  /// A mennyiségi egység a kiállítás pillanatából (Megrendelések S2: az ajánlat
+  /// tételének `unit`-ja). A régi, szervizes sorokon null, és ott "alkalom".
+  quantityUnit   String?
+  /// A megrendelés tétele, amit a sor (részben) igazol: az elfogadott
+  /// ajánlat-verzió `QuoteItem` sora (murena, S1: nincs saját tétel-másolat). A
+  /// hátralévő mennyiség ezekből a sorokból számolt. Szervizes sornál null.
+  quoteItemId    String?
 
   certificate CompletionCertificate @relation(fields: [certificateId], references: [id], onDelete: Cascade)
+  quoteItem   QuoteItem?            @relation(fields: [quoteItemId], references: [id], onDelete: Restrict)
 
   @@index([certificateId])
+  @@index([quoteItemId])
 }
 
 /// AZ IGAZOLÁS KÉT DOKUMENTUMA: a generált (kiadás előtti) és az aláírt
@@ -10014,6 +10038,8 @@ model QuoteItem {
   block          QuoteBlock      @relation(fields: [blockId, versionId], references: [id, versionId], onDelete: Restrict)
   variant        ProductVariant? @relation("QuoteItemVariant", fields: [variantId], references: [id], onDelete: Restrict)
   bomItems       QuoteBomItem[]
+  /// a TIG-sorok, amelyek ezt a tételt (részben) igazolják (Megrendelések S2)
+  completionCertificateLines CompletionCertificateLineItem[]
 
   @@unique([blockId, position])
   @@unique([id, versionId])
@@ -11468,6 +11494,8 @@ model PartnerOrder {
   customer     Customer?              @relation("PartnerOrderCustomer", fields: [customerId], references: [id], onDelete: SetNull)
   createdBy    User?                  @relation("PartnerOrderCreator", fields: [createdById], references: [id], onDelete: SetNull)
   documents    PartnerOrderDocument[]
+  /// a megrendelés teljesítési igazolásai: több is lehet (részteljesítés, S2)
+  completionCertificates CompletionCertificate[]
 
   @@index([status, createdAt])
   @@index([customerId])
