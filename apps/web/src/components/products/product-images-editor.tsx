@@ -1,6 +1,12 @@
 "use client";
 
-import { Alert, PilotButton, PilotFormField, PilotInput } from "@acropora/ui";
+import {
+  Alert,
+  ConfirmDialog,
+  PilotButton,
+  PilotFormField,
+  PilotInput,
+} from "@acropora/ui";
 import type { ProductImageSummary } from "@acropora/types";
 import { useRef, useState } from "react";
 
@@ -16,9 +22,9 @@ import { ProductImage } from "./product-image-source";
  * teljes, pontos sorrendet fogadja el.
  *
  * FELTÖLTÉS ÉS TÖRLÉS (6. szelet): a feltöltött kép a lista végére kerül, a
- * szerver a tartalmából ismeri fel (JPEG, PNG, GIF, WebP). A törlés két lépés,
- * mert nem visszavonható: a fájl is megy, és a boltból a következő vetítés
- * veszi ki.
+ * szerver a tartalmából ismeri fel (JPEG, PNG, GIF, WebP). A törlés előtt a közös
+ * megerősítés kérdez, mert nem visszavonható: a fájl is megy, és a boltból a
+ * következő vetítés veszi ki.
  */
 export function ProductImagesEditor({
   productId,
@@ -141,48 +147,37 @@ export function ProductImagesEditor({
                   >
                     Hátrébb
                   </PilotButton>
-                  {confirmingDelete === image.id ? (
-                    <>
-                      <PilotButton
-                        variant="danger"
-                        disabled={busy}
-                        onClick={() =>
-                          void run(async () => {
-                            await productApi.deleteImage(
-                              token,
-                              productId,
-                              image.id,
-                            );
-                            setConfirmingDelete(null);
-                          })
-                        }
-                      >
-                        Végleges törlés
-                      </PilotButton>
-                      <PilotButton
-                        variant="ghost"
-                        disabled={busy}
-                        onClick={() => setConfirmingDelete(null)}
-                      >
-                        Mégsem
-                      </PilotButton>
-                    </>
-                  ) : (
-                    <PilotButton
-                      variant="ghost"
-                      disabled={busy}
-                      aria-label={`${index + 1}. kép törlése`}
-                      onClick={() => setConfirmingDelete(image.id)}
-                    >
-                      Törlés
-                    </PilotButton>
-                  )}
+                  <PilotButton
+                    variant="ghost"
+                    disabled={busy}
+                    aria-label={`${index + 1}. kép törlése`}
+                    onClick={() => setConfirmingDelete(image.id)}
+                  >
+                    Törlés
+                  </PilotButton>
                 </div>
               </div>
             </li>
           );
         })}
       </ol>
+      <ConfirmDialog
+        open={confirmingDelete !== null}
+        title="Törlöd a képet?"
+        consequence="A kép és a tárolt fájlja törlődik; a boltból a következő vetítés veszi ki."
+        recovery="Nem vonható vissza: a képet újra fel kell tölteni."
+        confirmLabel="Kép törlése"
+        busy={busy}
+        onCancel={() => setConfirmingDelete(null)}
+        onConfirm={() => {
+          const imageId = confirmingDelete;
+          if (!imageId) return;
+          void run(async () => {
+            await productApi.deleteImage(token, productId, imageId);
+            setConfirmingDelete(null);
+          });
+        }}
+      />
       {images.length === 0 ? (
         <p className="text-sm text-pilot-grey-500">Nincs termékkép.</p>
       ) : null}

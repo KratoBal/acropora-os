@@ -121,7 +121,7 @@ describe("ProductImagesEditor", () => {
     const onSaved = renderEditor();
     fireEvent.click(screen.getByRole("button", { name: "2. kép törlése" }));
     expect(api.deleteImage).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Végleges törlés" }));
+    fireEvent.click(screen.getByRole("button", { name: "Kép törlése" }));
     await waitFor(() =>
       expect(api.deleteImage).toHaveBeenCalledWith(
         "token-1",
