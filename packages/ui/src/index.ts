@@ -19,6 +19,12 @@ export { NavItem } from "./nav-item";
 export type { NavItemProps } from "./nav-item";
 export { PAGE_HEADER_CLASSES, PageHeader } from "./page-header";
 export type { PageHeaderProps } from "./page-header";
+export {
+  PAGE_GUTTER_MX,
+  PAGE_GUTTER_X,
+  PAGE_GUTTER_Y,
+  bleedMirror,
+} from "./page-frame";
 export { Pagination } from "./pagination";
 export type { PaginationProps } from "./pagination";
 export { Sidebar } from "./sidebar";

@@ -10,6 +10,7 @@ import {
   PilotDataTable,
   PilotSelect,
   type PilotTableColumn,
+  PAGE_GUTTER_X,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -430,7 +431,7 @@ export function PilotWorksheetListPage() {
   return (
     <PilotThemeRoot
       bleed
-      className="flex min-h-screen flex-col gap-6 bg-pilot-grey-50 px-4 sm:px-8 py-8"
+      className={`flex min-h-screen flex-col gap-6 bg-pilot-grey-50 ${PAGE_GUTTER_X} py-8`}
     >
       <PageHeader
         eyebrow="Szerviz / Munkatér"

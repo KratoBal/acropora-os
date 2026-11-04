@@ -11,6 +11,7 @@ import {
   PilotDataTable,
   PilotSelect,
   type PilotTableColumn,
+  PAGE_GUTTER_X,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -400,7 +401,9 @@ export function PilotAssetListPage() {
 
   const panel = (
     <div className="flex-1">
-      <div className="border-b border-pilot-grey-100 bg-white px-4 sm:px-8">
+      <div
+        className={`border-b border-pilot-grey-100 bg-white ${PAGE_GUTTER_X}`}
+      >
         <div className="flex gap-0 overflow-x-auto">
           {TABS.map((t) => (
             <button
@@ -428,7 +431,9 @@ export function PilotAssetListPage() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 border-b border-pilot-grey-100 bg-white px-4 sm:px-8 py-3">
+      <div
+        className={`flex flex-wrap items-center gap-3 border-b border-pilot-grey-100 bg-white ${PAGE_GUTTER_X} py-3`}
+      >
         <div className="relative min-w-52 flex-1">
           <Icon
             name="search"
@@ -510,7 +515,7 @@ export function PilotAssetListPage() {
       {exportError ? (
         <p
           role="alert"
-          className="px-4 sm:px-8 py-2 text-sm text-pilot-red-700"
+          className={`${PAGE_GUTTER_X} py-2 text-sm text-pilot-red-700`}
         >
           {exportError}
         </p>
@@ -518,7 +523,7 @@ export function PilotAssetListPage() {
 
       {loading && !data ? (
         <div
-          className="space-y-3 px-4 sm:px-8 py-6"
+          className={`space-y-3 ${PAGE_GUTTER_X} py-6`}
           aria-label="Eszközök betöltése"
         >
           <Skeleton className="h-16" />
@@ -539,7 +544,9 @@ export function PilotAssetListPage() {
             }
             rowLabel={(asset) => `${asset.name} megnyitása`}
           />
-          <div className="flex items-center justify-between border-t border-pilot-grey-100 bg-white px-4 sm:px-8 py-3">
+          <div
+            className={`flex items-center justify-between border-t border-pilot-grey-100 bg-white ${PAGE_GUTTER_X} py-3`}
+          >
             <p className="text-xs text-pilot-grey-400">
               {data.items.length} / {data.pagination.totalItems} eszköz
             </p>
@@ -576,7 +583,7 @@ export function PilotAssetListPage() {
       className="flex min-h-screen flex-col bg-pilot-grey-50"
     >
       <PageHeader
-        className="px-4 sm:px-8 pb-5 pt-6"
+        className={`${PAGE_GUTTER_X} pb-5 pt-6`}
         eyebrow="Szerviz"
         title="Eszköznyilvántartás"
         actions={
@@ -592,7 +599,7 @@ export function PilotAssetListPage() {
       />
 
       {error ? (
-        <div className="px-4 sm:px-8 pt-4">
+        <div className={`${PAGE_GUTTER_X} pt-4`}>
           <Alert
             variant="danger"
             title="Betöltési hiba"
@@ -612,7 +619,7 @@ export function PilotAssetListPage() {
         egyszerre), ez a "varrat".
       */}
       {unitsFailed ? (
-        <p className="px-4 sm:px-8 pt-3 text-xs text-pilot-grey-400">
+        <p className={`${PAGE_GUTTER_X} pt-3 text-xs text-pilot-grey-400`}>
           A helyszín-szűrő most nem tölthető be. A többi szűrő működik.
         </p>
       ) : null}

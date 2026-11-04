@@ -7,6 +7,7 @@ import {
   PilotDataTable,
   Skeleton,
   type PilotTableColumn,
+  PAGE_GUTTER_X,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -283,7 +284,7 @@ export function PilotAquariumListPage() {
       className="flex min-h-screen flex-col bg-pilot-grey-50"
     >
       <PageHeader
-        className="px-4 sm:px-8 pb-5 pt-6"
+        className={`${PAGE_GUTTER_X} pb-5 pt-6`}
         title="Akváriumok"
         description={
           data ? `${data.pagination.totalItems} bejegyzés összesen` : " "
@@ -300,7 +301,9 @@ export function PilotAquariumListPage() {
         }
       />
 
-      <div className="flex flex-wrap items-center gap-4 border-b border-pilot-grey-100 bg-white px-4 sm:px-8 py-4">
+      <div
+        className={`flex flex-wrap items-center gap-4 border-b border-pilot-grey-100 bg-white ${PAGE_GUTTER_X} py-4`}
+      >
         <div className="relative">
           <Icon
             name="search"
@@ -353,7 +356,7 @@ export function PilotAquariumListPage() {
       </div>
 
       {error ? (
-        <div className="px-4 sm:px-8 py-4">
+        <div className={`${PAGE_GUTTER_X} py-4`}>
           <Alert
             variant="danger"
             title="Betöltési hiba"
@@ -370,7 +373,7 @@ export function PilotAquariumListPage() {
       {loading && !data ? (
         <div
           aria-label="Akváriumok betöltése"
-          className="space-y-3 px-4 sm:px-8 py-6"
+          className={`space-y-3 ${PAGE_GUTTER_X} py-6`}
         >
           <Skeleton className="h-16" />
           <Skeleton className="h-64" />
