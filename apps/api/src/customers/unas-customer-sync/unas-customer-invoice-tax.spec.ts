@@ -52,7 +52,7 @@ describe("the buyer's Hungarian tax number on an invoice", () => {
 describe("the counts", () => {
   it("binds through the customer or the order, and splits one, many and none", () => {
     const counts = unasInvoiceTaxCounts(
-      ["one", "many", "none", "noinvoice"],
+      ["one", "many", "none", "noinvoice", "vat"],
       [
         // one number in two shapes, the second bound through the order only
         row({ customerId: "one", partnerTaxNumber: "15490658242" }),
@@ -63,18 +63,22 @@ describe("the counts", () => {
         row({ customerId: "many", partnerTaxNumber: "11111111-1-11" }),
         row({ customerId: "many", partnerTaxNumber: "22222222-2-22" }),
         row({ customerId: "none", partnerTaxNumber: "DE123456789" }),
+        // one company whose VAT code changed: contradictory by the full number, not by the base (barracuda, #2188)
+        row({ customerId: "vat", partnerTaxNumber: "33333333-1-42" }),
+        row({ customerId: "vat", partnerTaxNumber: "33333333-2-42" }),
         // not a UNAS customer, neither directly nor through the order
         row({ customerId: "other", salesOrder: { customerId: "other" } }),
       ],
     );
     assert.deepEqual(counts, {
-      unasCustomers: 4,
-      customersWithInvoice: 3,
-      invoices: 5,
+      unasCustomers: 5,
+      customersWithInvoice: 4,
+      invoices: 7,
       invoicesBoundThroughOrder: 1,
-      invoicesWithHuTaxNumber: 4,
+      invoicesWithHuTaxNumber: 6,
       customersUnambiguous: 1,
-      customersContradictory: 1,
+      customersContradictory: 2,
+      customersContradictoryByBase: 1,
       customersWithoutHuTaxNumber: 1,
     });
   });
@@ -86,7 +90,7 @@ describe("the start log", () => {
       ok: true,
       counts: unasInvoiceTaxCounts(["a"], [row({ customerId: "a" })]),
     });
-    assert.equal(lines.length, 8);
+    assert.equal(lines.length, 9);
     for (const line of lines)
       assert.match(line, /^UNAS-VEVO-SZAMLA-ADOSZAM [a-z_]+=\d+$/);
     assert.equal(lines[0], "UNAS-VEVO-SZAMLA-ADOSZAM unas_vevo=1");

@@ -121,6 +121,7 @@ describe(
         invoicesWithHuTaxNumber: 2,
         customersUnambiguous: 2,
         customersContradictory: 0,
+        customersContradictoryByBase: 0,
         customersWithoutHuTaxNumber: 0,
       });
     });
