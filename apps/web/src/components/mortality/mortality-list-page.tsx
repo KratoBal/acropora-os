@@ -2,7 +2,6 @@
 
 import {
   Alert,
-  Button,
   Icon,
   Pagination,
   PilotButton,
@@ -380,9 +379,9 @@ export function MortalityListPage() {
           title="Betöltési hiba"
           description={error}
           action={
-            <Button variant="secondary" onClick={() => void load()}>
+            <PilotButton variant="secondary" onClick={() => void load()}>
               Újrapróbálás
-            </Button>
+            </PilotButton>
           }
         />
       ) : null}

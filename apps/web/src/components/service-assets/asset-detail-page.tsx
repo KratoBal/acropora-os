@@ -13,6 +13,7 @@ import {
   Skeleton,
   Textarea,
   PilotDateField,
+  PilotButton,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -380,9 +381,9 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
           description={error}
           action={
             !asset ? (
-              <Button variant="secondary" onClick={() => void load()}>
+              <PilotButton variant="secondary" onClick={() => void load()}>
                 Újrapróbálás
-              </Button>
+              </PilotButton>
             ) : undefined
           }
         />

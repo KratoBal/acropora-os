@@ -13,6 +13,7 @@ import {
   Textarea,
   PilotSelect,
   PilotFileInput,
+  PilotButton,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -657,9 +658,9 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
           title="Betöltési hiba"
           description={error}
           action={
-            <Button variant="secondary" onClick={() => void load()}>
+            <PilotButton variant="secondary" onClick={() => void load()}>
               Újrapróbálás
-            </Button>
+            </PilotButton>
           }
         />
       </>
@@ -780,9 +781,9 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
             title="Betöltési hiba"
             description={error}
             action={
-              <Button variant="secondary" onClick={() => void load()}>
+              <PilotButton variant="secondary" onClick={() => void load()}>
                 Újrapróbálás
-              </Button>
+              </PilotButton>
             }
           />
         </div>
