@@ -16,7 +16,7 @@ import type { ServiceAssetsService } from "../service-assets/service-assets.serv
 import type { ServiceJobsService } from "../service-jobs/service-jobs.service.js";
 import type { SuppliersService } from "../suppliers/suppliers.service.js";
 import type { WorksheetsService } from "../worksheets/worksheets.service.js";
-import { SearchService } from "./search.service.js";
+import { externalGroupTimeoutMs, SearchService } from "./search.service.js";
 
 const user = (
   role: UserRole,
@@ -366,6 +366,51 @@ describe("SearchService", () => {
     } finally {
       orderList = original;
     }
+  });
+
+  /*
+    A LÓGÓ WEBSHOP IS KIHAGYÁS (barracuda, #2123): a Medusa-kliensnek nincs kérés-időkorlátja, a `Promise.all`
+    pedig a leglassabb tagra vár. MI PIROSÍT: ha egy soha fel nem oldó rendelés-lista a keresést is
+    lógatja; ha a lejárat a többi csoportot is elvinné; ha a csoport üresen, nem hiányzóan jönne;
+    ha az időkorlát nem a beállított érték (a futás hossza is korlátos itt: a lejárat 30 ms).
+  */
+  it("a webshop that never answers drops ONLY the orders group after the time limit; the search itself is bounded", async () => {
+    const original = orderList;
+    orderList = () => new Promise(() => undefined);
+    try {
+      const started = Date.now();
+      const result = await search(
+        {},
+        { SEARCH_EXTERNAL_GROUP_TIMEOUT_MS: "30" },
+      ).search("rendelés", user("OWNER"));
+      const took = Date.now() - started;
+      assert.equal("orders" in result, false);
+      assert.ok(result.invoices?.length, "the other groups are intact");
+      assert.ok(result.tickets?.length, "the other groups are intact");
+      assert.ok(took >= 25, `the limit was waited for (${took} ms)`);
+      assert.ok(took < 2000, `the search is bounded (${took} ms)`);
+    } finally {
+      orderList = original;
+    }
+  });
+
+  it("a fast answer is not cut by the limit, and the limit setting falls back to 4000 for anything but a positive integer", async () => {
+    const result = await search(
+      {},
+      { SEARCH_EXTERNAL_GROUP_TIMEOUT_MS: "30" },
+    ).search("rendelés", user("OWNER"));
+    assert.ok(result.orders?.length, "an immediate answer arrives");
+    assert.equal(externalGroupTimeoutMs({}), 4000);
+    for (const value of ["", "0", "-5", "1.5", "abc", "30 ms"])
+      assert.equal(
+        externalGroupTimeoutMs({ SEARCH_EXTERNAL_GROUP_TIMEOUT_MS: value }),
+        4000,
+        value,
+      );
+    assert.equal(
+      externalGroupTimeoutMs({ SEARCH_EXTERNAL_GROUP_TIMEOUT_MS: "250" }),
+      250,
+    );
   });
 
   it("maps an order to its number, customer, total and invoice, and opens it on its page (id encoded)", async () => {

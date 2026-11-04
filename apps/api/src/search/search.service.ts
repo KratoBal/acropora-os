@@ -42,6 +42,16 @@ export const SEARCH_GROUP_NAVIGATION: Record<SearchGroup, string> = {
   orders: "webshop-medusa-orders",
 };
 
+const DEFAULT_EXTERNAL_GROUP_TIMEOUT_MS = 4000;
+
+/** `SEARCH_EXTERNAL_GROUP_TIMEOUT_MS`: pozitív egész ezredmásodperc, minden más érték az alapérték. */
+export function externalGroupTimeoutMs(env: NodeJS.ProcessEnv): number {
+  const value = Number(env.SEARCH_EXTERNAL_GROUP_TIMEOUT_MS);
+  return Number.isInteger(value) && value > 0
+    ? value
+    : DEFAULT_EXTERNAL_GROUP_TIMEOUT_MS;
+}
+
 const subtitle = (...parts: Array<string | null | undefined>) =>
   parts.filter((part): part is string => Boolean(part)).join(" · ");
 
@@ -73,18 +83,36 @@ export class SearchService {
    * (Medusa) hívja minden keresésnél; ha az nem érhető el, a csoport hiányzik a válaszból (és a
    * napló megmondja, miért), a többi csoport viszont megjön. A DB-s csoportok hibája továbbra is
    * hiba: ott egy elnyelt kivétel adatbázis-gondot rejtene.
+   *
+   * A LÓGÓ HÍVÁS IS KIHAGYÁS: a Medusa-kliensnek nincs kérés-időkorlátja, és a `Promise.all` a
+   * leglassabb tagra vár, tehát időkorlát nélkül egy lógó Medusa az egész keresést lógatná (barracuda,
+   * #2123). Az időkorlát `SEARCH_EXTERNAL_GROUP_TIMEOUT_MS` (alapból 4000 ms); lejáratkor a csoport
+   * ugyanúgy kimarad és naplózódik. A lejárt hívás a háttérben befejeződik (megszakítani nem
+   * tudjuk), az eredményét eldobjuk.
    */
   private async isolated<T>(
     group: string,
     read: () => Promise<T>,
   ): Promise<T | undefined> {
+    const limit = externalGroupTimeoutMs(this.environment);
+    let timer: NodeJS.Timeout | undefined;
     try {
-      return await read();
+      return await Promise.race([
+        read(),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error(`nem válaszolt ${limit} ms alatt`)),
+            limit,
+          );
+        }),
+      ]);
     } catch (error) {
       this.logger.warn(
         `A(z) ${group} keresési csoport kimaradt: ${error instanceof Error ? error.message : "ismeretlen hiba"}`,
       );
       return undefined;
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   }
 
