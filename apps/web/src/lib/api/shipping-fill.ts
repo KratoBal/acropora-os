@@ -12,6 +12,8 @@ export interface ShippingFillPreview {
     create: number;
     update: number;
     unchanged: number;
+    /** az új sorok közül jelzőnként hányban lesz igaz (#2206; régebbi szervernél hiányzik) */
+    createdFlags?: Record<ShippingFillFlag, number>;
     updatedFlags: Record<ShippingFillFlag, number>;
     manualDiffers: { productId: string; flag: ShippingFillFlag }[];
     manualDiffersTotal: number;

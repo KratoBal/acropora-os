@@ -131,6 +131,20 @@ export function ShippingFillPage() {
               <dd>{report.products}</dd>
               <dt className="text-pilot-grey-600">Új sor</dt>
               <dd>{report.create}</dd>
+              {report.createdFlags
+                ? (Object.keys(FLAG_LABELS) as ShippingFillFlag[]).map(
+                    (flag) => (
+                      <div key={flag} className="contents">
+                        <dt className="pl-3 text-pilot-grey-500">
+                          {FLAG_LABELS[flag]}
+                        </dt>
+                        <dd data-testid={`shipping-fill-created-${flag}`}>
+                          {report.createdFlags![flag]}
+                        </dd>
+                      </div>
+                    ),
+                  )
+                : null}
               <dt className="text-pilot-grey-600">Frissül</dt>
               <dd>{report.update}</dd>
               {(Object.keys(FLAG_LABELS) as ShippingFillFlag[]).map((flag) => (

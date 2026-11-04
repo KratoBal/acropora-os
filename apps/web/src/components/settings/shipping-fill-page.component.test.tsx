@@ -39,6 +39,12 @@ const preview = {
     create: 1850,
     update: 12,
     unchanged: 38,
+    createdFlags: {
+      pickupOnly: 31,
+      foxpostForbidden: 417,
+      isHeavy: 9,
+      isFrozen: 0,
+    },
     updatedFlags: {
       pickupOnly: 4,
       foxpostForbidden: 6,
@@ -70,6 +76,13 @@ describe("ShippingFillPage", () => {
     const shown = await screen.findByTestId("shipping-fill-preview");
     expect(shown).toHaveTextContent("db.stage:5432/acropora");
     expect(shown).toHaveTextContent("1850");
+    // what the new rows will carry, per flag (acrobot 43066: else the live apply is pressed blind)
+    expect(
+      screen.getByTestId("shipping-fill-created-foxpostForbidden"),
+    ).toHaveTextContent("417");
+    expect(
+      screen.getByTestId("shipping-fill-created-pickupOnly"),
+    ).toHaveTextContent("31");
     fireEvent.click(screen.getByRole("button", { name: "Feltöltés" }));
     fireEvent.click(await screen.findByRole("button", { name: "Feltöltöm" }));
     await waitFor(() =>
