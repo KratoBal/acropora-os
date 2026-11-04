@@ -117,6 +117,11 @@ interface ProductTransaction {
   };
   productVariant: {
     findMany(args: unknown): Promise<TakeoverPriceVariant[]>;
+    /** az ár-szerkesztő előtte-képéhez (T4.1-D3) */
+    findFirst(args: unknown): Promise<{
+      sellingGrossPrice: Prisma.Decimal | null;
+      sellingPriceCurrency: string | null;
+    } | null>;
     updateMany(args: unknown): Promise<{ count: number }>;
   };
   /** Átvételkor a UNAS-forrású szállítási jelzők kézire billennek (T4.1-D3). */
@@ -545,6 +550,85 @@ export class ProductRepository extends Repository {
 
         if (!product) throw new Error("Az átvett termék nem található.");
         return { product: toProductDetail(product), changed: result.count > 0 };
+      },
+      { isolationLevel: "Serializable" },
+    );
+  }
+
+  /**
+   * A VÁLTOZAT SAJÁT ÁRÁNAK SZERKESZTÉSE (T4.1-D3, 2. szelet). Egy tranzakció:
+   *
+   * - az ár a változatra, CSAK ha az a termékhez tartozik (`productId` a
+   *   where ágban, tehát egy idegen változat-azonosító nem ír semmit);
+   * - az előzmény ugyanabban a tranzakcióban (`recordOwnPrice`, a D2 szabálya:
+   *   aki a `sellingGrossPrice`-t írja, az írja az előzményt is; csak változáskor
+   *   keletkezik sor);
+   * - a termék `updatedAt`-je is lép, mert a Medusa-vetítés esedékességét a
+   *   termék-sor ideje adja: enélkül az új ár a termék következő, más okú
+   *   változásáig nem menne ki;
+   * - esemény a régi és az új árral, a végzővel.
+   *
+   * A pénznem a változat eddigi pénzneme, ennek hiányában forint (a tükör sem
+   * hordoz mást, lásd `takeover-price.ts`). `null`: a változat nem ehhez a
+   * termékhez tartozik.
+   */
+  async setVariantSellingPrice(
+    productId: string,
+    variantId: string,
+    grossPrice: Prisma.Decimal,
+    actorUserId?: string,
+  ): Promise<ProductDetail | null> {
+    return this.productDatabase.$transaction(
+      async (transaction) => {
+        const before = await transaction.productVariant.findFirst({
+          where: { id: variantId, productId },
+          select: { sellingGrossPrice: true, sellingPriceCurrency: true },
+        });
+        if (!before) return null;
+        const currency = before.sellingPriceCurrency ?? "HUF";
+        await transaction.productVariant.updateMany({
+          where: { id: variantId, productId },
+          data: {
+            sellingGrossPrice: grossPrice,
+            sellingPriceCurrency: currency,
+          },
+        });
+        const now = new Date();
+        const history = await recordOwnPrice(transaction, {
+          productId,
+          variantId,
+          currency,
+          grossPrice,
+          observedAt: now,
+        });
+        await transaction.product.update({
+          where: { id: productId },
+          data: { updatedAt: now },
+        });
+        await transaction.domainEvent.create({
+          data: {
+            id: randomUUID(),
+            eventType: "product.variant.selling-price.set",
+            aggregateType: "Product",
+            aggregateId: productId,
+            actorUserId,
+            occurredAt: now,
+            schemaVersion: 1,
+            payload: {
+              variantId,
+              from: before.sellingGrossPrice?.toString() ?? null,
+              to: grossPrice.toString(),
+              currency,
+              history,
+            } satisfies Prisma.JsonObject,
+          },
+        });
+        const product = await transaction.product.findUnique({
+          where: { id: productId },
+          include: productInclude,
+        });
+        if (!product) throw new Error("A termék nem található.");
+        return toProductDetail(product);
       },
       { isolationLevel: "Serializable" },
     );

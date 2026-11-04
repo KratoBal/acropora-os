@@ -41,6 +41,7 @@ import { JevProductCard } from "@/components/jev-product-intelligence/jev-produc
 import { productApi } from "@/lib/api/products";
 import { currencyLabel } from "@/lib/format/currency";
 import { BarcodeEditor } from "./barcode-editor";
+import { VariantPriceEditor } from "./variant-price-editor";
 
 const value = (candidate: string | null | undefined) => candidate || "—";
 const dateTime = (candidate: string | null | undefined) =>
@@ -1068,6 +1069,18 @@ export function ProductDetailPage({ productId }: { productId: string }) {
                   </PilotDataItem>
                 </PilotDataGrid>
               </div>
+
+              {product.catalogAuthority === "ACROPORA" ? (
+                <VariantPriceEditor
+                  productId={product.id}
+                  variantId={variant.id}
+                  sellingGrossPrice={variant.sellingGrossPrice}
+                  sellingPriceCurrency={variant.sellingPriceCurrency}
+                  canManage={canManage}
+                  token={token}
+                  onSaved={() => setRequestVersion((current) => current + 1)}
+                />
+              ) : null}
 
               <BarcodeEditor
                 barcodes={variant.barcodes}

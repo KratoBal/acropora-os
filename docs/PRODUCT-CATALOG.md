@@ -224,9 +224,13 @@ Minden végpont hitelesítést igényel.
 | Metódus | Útvonal                                    | Jogosultság                           | Művelet                       |
 | ------- | ------------------------------------------ | ------------------------------------- | ----------------------------- |
 | `POST`  | `/products/:id/catalog-authority/acropora` | `products.catalog-authority.transfer` | törzsadat átvétele a UNAS-tól |
+| `PUT`   | `/products/:id/variants/:variantId/price`  | `products.manage`                     | saját ár és árelőzmény        |
 
-UNAS authority rekordra a `PATCH` és `DELETE` végpont
-`409 PRODUCT_MANAGED_BY_UNAS` választ ad.
+UNAS authority rekordra a `PATCH`, a `DELETE` és az ár `PUT` végpontja
+`409 PRODUCT_MANAGED_BY_UNAS` választ ad. Az ár útja a változat saját árát és
+ugyanabban a tranzakcióban az árelőzményt írja (`recordOwnPrice`), és a
+termék `updatedAt`-jét lépteti, hogy a Medusa-vetítés esedékesnek lássa
+(T4.1-D3).
 
 A create mezői: `name`, opcionális `description`, `productType`, opcionális `brandId` és `primaryCategoryId`. A támogatott típusok: `PHYSICAL`, `SERVICE`, `LIVESTOCK`. A korábbi `categoryId` request mező átmenetileg támogatott, de deprecated.
 
