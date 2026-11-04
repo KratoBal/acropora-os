@@ -61,9 +61,14 @@ export function taxNumberSearchKey(search: string): string | null {
  * van (a vevőnél a mező hiányzik).
  */
 export function partnerRolesOf(
-  partner: { isSupplier: boolean; isService: boolean } | null,
+  partner: {
+    isSupplier: boolean;
+    isService: boolean;
+    deletedAt?: Date | null;
+  } | null,
 ): { partnerRoles?: CustomerPartnerRole[] } {
-  if (!partner) return {};
+  // egy törölt partner (Supplier.deletedAt) sora nem partner: a jelvény és a szerep nem látszik rajta (barracuda, #2182)
+  if (!partner || partner.deletedAt) return {};
   const roles: CustomerPartnerRole[] = [];
   if (partner.isSupplier) roles.push("SUPPLIER");
   if (partner.isService) roles.push("SERVICE");
@@ -85,13 +90,19 @@ export function partnerFilter(
     case "ALL":
       return {};
     case "BUYER":
-      return { partner: null };
+      // a törölt partner sora ismét sima vevő-sor
+      return {
+        OR: [
+          { partner: null },
+          { partner: { is: { deletedAt: { not: null } } } },
+        ],
+      };
     case "PARTNER":
-      return { partner: { isNot: null } };
+      return { partner: { is: { deletedAt: null } } };
     case "SUPPLIER":
-      return { partner: { is: { isSupplier: true } } };
+      return { partner: { is: { isSupplier: true, deletedAt: null } } };
     case "SERVICE":
-      return { partner: { is: { isService: true } } };
+      return { partner: { is: { isService: true, deletedAt: null } } };
   }
 }
 
@@ -101,7 +112,9 @@ const addressesInclude = {
 const include = {
   addresses: addressesInclude,
   // the invoice tax gate asks a partner mirror for a tax number (card aaf4f09d); the roles are derived from the flags
-  partner: { select: { id: true, isSupplier: true, isService: true } },
+  partner: {
+    select: { id: true, isSupplier: true, isService: true, deletedAt: true },
+  },
 } satisfies Prisma.CustomerInclude;
 
 type CustomerWithAddresses = Prisma.CustomerGetPayload<{

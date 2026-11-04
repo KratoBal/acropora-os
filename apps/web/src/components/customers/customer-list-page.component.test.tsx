@@ -196,4 +196,15 @@ describe("CustomerListPage paging", () => {
     const target = String(navigation.replace.mock.calls.at(-1)?.[0]);
     expect(new URLSearchParams(target.split("?")[1]).get("page")).toBe("3");
   });
+
+  // MI PIROSÍT: ha a beszállító-szűrő üres listája nem mondja meg, miért üres (egy üres szűrő hibának látszik)
+  it("says why the supplier filter is empty until the partners are linked to customer rows", async () => {
+    const data = response(1);
+    data.items = [];
+    data.pagination = { page: 1, pageSize: 25, totalItems: 0, totalPages: 0 };
+    api.list.mockResolvedValue(data);
+    navigation.params = new URLSearchParams("role=SUPPLIER");
+    render(<CustomerListPage />);
+    expect(await screen.findByText(/a partner-átvezetés után/)).toBeTruthy();
+  });
 });
