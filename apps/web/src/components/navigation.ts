@@ -574,6 +574,14 @@ const mainNavigationGroups: AppNavigationGroup[] = [
         entryId: "asset-functions",
       },
       {
+        // Egy partnertörzs, 1. lépés (acrobot 42536): a duplikátum-lista, csak olvas.
+        subgroup: "Törzsadatok",
+        href: "/beallitasok/partner-duplikatumok",
+        label: "Partner-duplikátumok",
+        icon: "settings",
+        entryId: "partner-duplicates",
+      },
+      {
         // AZ AJANLATI SZOVEGRESZLETEK (#1582 P1): a Figma 35-ben nincs sajat
         // kerete, ezert a Beallitasok tobbi listalapjanak mintajat koveti.
         subgroup: "Árajánlat",

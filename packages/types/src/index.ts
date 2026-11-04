@@ -1743,3 +1743,12 @@ export type {
   PartnerOrderTotalsDto,
   PartnerOrderVatBreakdownDto,
 } from "./partner-orders.js";
+export type {
+  PartnerDuplicateCustomer,
+  PartnerDuplicateGroup,
+  PartnerDuplicateKeyKind,
+  PartnerDuplicatePair,
+  PartnerDuplicateReferences,
+  PartnerDuplicateResponse,
+  PartnerDuplicateSupplier,
+} from "./partner-duplicates.js";

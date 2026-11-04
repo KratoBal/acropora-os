@@ -631,6 +631,15 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
   },
   {
     /**
+     * A PARTNER-DUPLIKÁTUMOK LISTÁJA (egy partnertörzs, 1. lépés; acrobot 42536: Balázs a listából dönt a bizonytalan
+     * párokról). CSAK OLVAS. Ugyanaz a jog, mint a végponté (`settings.manage`): a lista neveket és adószámokat mutat.
+     */
+    id: "partner-duplicates",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.SETTINGS_MANAGE),
+  },
+  {
+    /**
      * AZ AJÁNLATI SZÖVEGRÉSZLETEK KEZELŐJE (#1582 P1). Ugyanaz a jog, ami a
      * végpontok írását védi (`quotes.templates.manage`), és ugyanaz a
      * kapcsoló, mint az Árajánlatok menüponté.

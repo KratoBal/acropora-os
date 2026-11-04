@@ -619,6 +619,7 @@ describe("AppShell the nine main menus", () => {
       "/beallitasok/mertekegysegek",
       "/beallitasok/eszkoz-kategoriak",
       "/beallitasok/eszkoz-funkciok",
+      "/beallitasok/partner-duplikatumok",
     ]);
   });
 });
