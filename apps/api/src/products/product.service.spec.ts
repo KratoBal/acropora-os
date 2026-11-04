@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { ConflictException, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from "@nestjs/common";
 
 import type { ProductRepository } from "./product.repository.js";
 import { ProductService } from "./product.service.js";
@@ -43,6 +47,19 @@ function repositoryWith(
         calls.push("setVariantSellingPrice");
         inputs.push(price.toString());
         return variantId === "variant-1" ? { id: "priced" } : null;
+      },
+      setImageAltText: async (
+        _id: string,
+        imageId: string,
+        altText: string | null,
+      ) => {
+        calls.push("setImageAltText");
+        inputs.push(altText);
+        return imageId === "img-1" ? { id: "alt-set" } : null;
+      },
+      setImageOrder: async (_id: string, imageIds: string[]) => {
+        calls.push("setImageOrder");
+        return imageIds.length === 2 ? { id: "ordered" } : null;
       },
       takeCatalogAuthority: async () => {
         calls.push("takeCatalogAuthority");
@@ -309,5 +326,44 @@ describe("ProductService", () => {
         ),
       NotFoundException,
     );
+  });
+
+  /** THE IMAGE EDITOR (T4.1-D3, slice 4): OS-owned products only; a blank alt is no alt. */
+  it("edits image alt and order only on a product the OS owns", async () => {
+    const own = repositoryWith({
+      id: "product-1",
+      catalogAuthority: "ACROPORA",
+    });
+    const service = new ProductService(own.repository);
+    assert.deepEqual(
+      await service.setImageAlt("product-1", "img-1", { altText: "  Kék  " }),
+      { id: "alt-set" },
+    );
+    await service.setImageAlt("product-1", "img-1", { altText: "   " });
+    assert.deepEqual(own.inputs, ["Kék", null]);
+    await assert.rejects(
+      () => service.setImageAlt("product-1", "img-x", { altText: "x" }),
+      NotFoundException,
+    );
+    assert.deepEqual(
+      await service.setImageOrder("product-1", { imageIds: ["a", "b"] }),
+      { id: "ordered" },
+    );
+    await assert.rejects(
+      () => service.setImageOrder("product-1", { imageIds: ["a"] }),
+      BadRequestException,
+    );
+
+    const unas = repositoryWith({ id: "product-1", catalogAuthority: "UNAS" });
+    const unasService = new ProductService(unas.repository);
+    await assert.rejects(
+      () => unasService.setImageAlt("product-1", "img-1", { altText: "x" }),
+      ConflictException,
+    );
+    await assert.rejects(
+      () => unasService.setImageOrder("product-1", { imageIds: ["a", "b"] }),
+      ConflictException,
+    );
+    assert.deepEqual(unas.calls, []);
   });
 });

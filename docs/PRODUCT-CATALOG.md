@@ -78,13 +78,14 @@ terméket a ciklus elején hagyja ki (`unas-product-sync.repository.ts`, a
 Az átvétel után **itt szerkeszthető**: név, rövid leírás, terméktípus, márka,
 kategória, vásárolható a webshopban jelző (`UpdateProductDto`); saját eladási ár,
 változatonként (az ár-szerkesztő, árelőzménnyel); szállítási jelzők (a szállítási
-szerkesztő; az átvétel a UNAS-forrású jelzőket kézire billenti, T4.1-D3).
+szerkesztő; az átvétel a UNAS-forrású jelzőket kézire billenti, T4.1-D3);
+képek alt-szövege és sorrendje (a képszerkesztő, T4.1-D3).
 
 **Befagy az átvételkori UNAS-értéken, és ma nincs rá OS-oldali szerkesztő:**
-hosszú leírás; keresőoptimalizálási mezők (SEO cím, leírás, kulcsszó); képek és
-alt-szövegek; hasonló és kiegészítő termékek; gyártói cikkszám; mértékegység és
-másodlagos egység; ÁFA-kulcs. A képek és az alt szerkesztőjét, valamint a saját
-akciós árat a T4.1-D3 következő szeletei hozzák.
+hosszú leírás; keresőoptimalizálási mezők (SEO cím, leírás, kulcsszó); képek
+feltöltése és törlése; hasonló és kiegészítő termékek; gyártói cikkszám;
+mértékegység és másodlagos egység; ÁFA-kulcs. A képfeltöltést és a saját akciós
+árat a T4.1-D3 következő szeletei hozzák.
 
 **Nem érinti** (ezeknek ma sem a szinkron a gazdája): készlet, vonalkódok,
 beszállító és raktárhely, a tanácsadó- és adatlap-jelzők (elhelyezés, fény- és
@@ -228,6 +229,8 @@ Minden végpont hitelesítést igényel.
 | ------- | ------------------------------------------ | ------------------------------------- | ----------------------------- |
 | `POST`  | `/products/:id/catalog-authority/acropora` | `products.catalog-authority.transfer` | törzsadat átvétele a UNAS-tól |
 | `PUT`   | `/products/:id/variants/:variantId/price`  | `products.manage`                     | saját ár és árelőzmény        |
+| `PATCH` | `/products/:id/images/:imageId`            | `products.manage`                     | kép alt-szövege               |
+| `PUT`   | `/products/:id/images/order`               | `products.manage`                     | képek sorrendje               |
 
 UNAS authority rekordra a `PATCH`, a `DELETE` és az ár `PUT` végpontja
 `409 PRODUCT_MANAGED_BY_UNAS` választ ad. Az ár útja a változat saját árát és

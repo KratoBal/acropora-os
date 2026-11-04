@@ -14,6 +14,10 @@ import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
 import { CreateProductDto } from "./dto/create-product.dto.js";
+import {
+  SetProductImageAltDto,
+  SetProductImageOrderDto,
+} from "./dto/product-image.dto.js";
 import { ProductListQueryDto } from "./dto/product-list-query.dto.js";
 import { SetVariantPriceDto } from "./dto/set-variant-price.dto.js";
 import { UpdateProductDto } from "./dto/update-product.dto.js";
@@ -59,6 +63,27 @@ export class ProductController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.products.setVariantPrice(id, variantId, input, user.id);
+  }
+
+  @Patch(":id/images/:imageId")
+  @RequirePermissions(PERMISSIONS.PRODUCTS_MANAGE)
+  setImageAlt(
+    @Param("id") id: string,
+    @Param("imageId") imageId: string,
+    @Body() input: SetProductImageAltDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.products.setImageAlt(id, imageId, input, user.id);
+  }
+
+  @Put(":id/images/order")
+  @RequirePermissions(PERMISSIONS.PRODUCTS_MANAGE)
+  setImageOrder(
+    @Param("id") id: string,
+    @Body() input: SetProductImageOrderDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.products.setImageOrder(id, input, user.id);
   }
 
   @Delete(":id")

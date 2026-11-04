@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Inject,
   Injectable,
@@ -11,6 +12,10 @@ import type { ProductCatalogAuthority } from "@acropora/types";
 
 import type { CreateProductDto } from "./dto/create-product.dto.js";
 import type { ProductListQueryDto } from "./dto/product-list-query.dto.js";
+import type {
+  SetProductImageAltDto,
+  SetProductImageOrderDto,
+} from "./dto/product-image.dto.js";
 import type { SetVariantPriceDto } from "./dto/set-variant-price.dto.js";
 import type { UpdateProductDto } from "./dto/update-product.dto.js";
 import { richTextImageHosts } from "../homepage-content/homepage-content.service.js";
@@ -104,6 +109,55 @@ export class ProductService {
       throw new NotFoundException({
         code: "PRODUCT_VARIANT_NOT_FOUND",
         message: "A változat nem ehhez a termékhez tartozik.",
+      });
+    return updated;
+  }
+
+  /**
+   * KÉP ALT-SZÖVEGE ÉS SORRENDJE (T4.1-D3, 4. szelet). Csak OS-gazdájú terméknél:
+   * UNAS-gazdánál a szinkron minden futásnál újraírja a képeket (409, mint a többi
+   * törzsadat-írásnál). Az üres alt null: a kirakat a nevet adja helyette.
+   */
+  async setImageAlt(
+    id: string,
+    imageId: string,
+    input: SetProductImageAltDto,
+    actorUserId?: string,
+  ) {
+    const product = await this.requireProduct(id);
+    this.assertLocallyManaged(product);
+    const altText = input.altText?.trim() ? input.altText.trim() : null;
+    const updated = await this.products.setImageAltText(
+      id,
+      imageId,
+      altText,
+      actorUserId,
+    );
+    if (!updated)
+      throw new NotFoundException({
+        code: "PRODUCT_IMAGE_NOT_FOUND",
+        message: "A kép nem ehhez a termékhez tartozik.",
+      });
+    return updated;
+  }
+
+  async setImageOrder(
+    id: string,
+    input: SetProductImageOrderDto,
+    actorUserId?: string,
+  ) {
+    const product = await this.requireProduct(id);
+    this.assertLocallyManaged(product);
+    const updated = await this.products.setImageOrder(
+      id,
+      input.imageIds,
+      actorUserId,
+    );
+    if (!updated)
+      throw new BadRequestException({
+        code: "PRODUCT_IMAGE_ORDER_MISMATCH",
+        message:
+          "A sorrendnek a termék minden képét pontosan egyszer kell tartalmaznia.",
       });
     return updated;
   }
