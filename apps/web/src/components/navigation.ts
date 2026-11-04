@@ -110,6 +110,12 @@ export const SETTLEMENT_TABS: ReadonlyArray<{
     label: "SimplePay",
     entryId: "simplepay-settlement",
   },
+  {
+    // Balázs, 2026-11-04: egy utalás négy számlára (kártya aeddb2c3)
+    href: "/penzugy/atutalasok",
+    label: "Banki átutalások",
+    entryId: "bank-transfer-settlement",
+  },
 ];
 
 /**

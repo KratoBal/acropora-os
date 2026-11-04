@@ -433,6 +433,12 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     visibility: permission(PERMISSIONS.FINANCE_VIEW),
   },
   {
+    // egy banki jóváírás több saját számlára (kártya aeddb2c3); a beíráshoz a végpont billing.issue jogot kér
+    id: "bank-transfer-settlement",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.FINANCE_VIEW),
+  },
+  {
     id: "inventory",
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.INVENTORY_VIEW),
