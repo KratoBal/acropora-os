@@ -235,6 +235,16 @@ describe("the batch and the observed text", () => {
     assert.doesNotMatch(text, /[\u0000-\u001f]/);
     assert.doesNotMatch(describeSyncReport(report), /aláírás/);
   });
+
+  it("control characters inside a short description become spaces (a log line must stay one line)", async () => {
+    const deps = fake({ o1: [event("08", "Kézbesítve\nHamis sor\t\u0007")] });
+    const report = await syncParcelStatuses(deps, {}, NOW);
+    assert.doesNotMatch(
+      report.observed[0]!.description,
+      /[\u0000-\u001f\u007f]/,
+    );
+    assert.doesNotMatch(describeSyncReport(report), /\n.*Hamis sor/);
+  });
 });
 
 describe("the schedule", () => {
