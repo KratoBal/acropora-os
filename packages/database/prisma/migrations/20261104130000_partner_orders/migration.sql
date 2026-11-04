@@ -15,6 +15,8 @@ CREATE TABLE "PartnerOrder" (
     "id" TEXT NOT NULL,
     "orderNumber" TEXT NOT NULL,
     "quoteId" TEXT NOT NULL,
+    "quoteVersionId" TEXT NOT NULL,
+    "acceptanceId" TEXT NOT NULL,
     "customerId" TEXT,
     "status" "PartnerOrderStatus" NOT NULL DEFAULT 'OPEN',
     "createdById" TEXT,
@@ -57,6 +59,12 @@ CREATE INDEX "PartnerOrderDocument_orderId_step_idx" ON "PartnerOrderDocument"("
 
 -- AddForeignKey
 ALTER TABLE "PartnerOrder" ADD CONSTRAINT "PartnerOrder_quoteId_fkey" FOREIGN KEY ("quoteId") REFERENCES "Quote"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "PartnerOrder" ADD CONSTRAINT "PartnerOrder_quoteVersionId_fkey" FOREIGN KEY ("quoteVersionId") REFERENCES "QuoteVersion"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "PartnerOrder" ADD CONSTRAINT "PartnerOrder_acceptanceId_fkey" FOREIGN KEY ("acceptanceId") REFERENCES "QuoteAcceptance"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "PartnerOrder" ADD CONSTRAINT "PartnerOrder_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE SET NULL ON UPDATE CASCADE;

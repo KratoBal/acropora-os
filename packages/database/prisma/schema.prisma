@@ -9968,6 +9968,7 @@ model QuoteVersion {
   acceptanceLinks      QuoteAcceptanceLink[]
   mailDeliveries       QuoteMailDelivery[]
   handoffs             QuoteProjectHandoff[]
+  partnerOrders        PartnerOrder[]          @relation("PartnerOrderVersion")
 
   @@unique([quoteId, versionNumber])
   @@unique([id, quoteId])
@@ -10133,6 +10134,7 @@ model QuoteAcceptance {
   revokedBy               User?                 @relation("QuoteAcceptanceRevoker", fields: [revokedById], references: [id], onDelete: SetNull)
   acceptanceLink          QuoteAcceptanceLink?  @relation(fields: [acceptanceLinkId], references: [id], onDelete: Restrict)
   handoff                 QuoteProjectHandoff?
+  partnerOrders           PartnerOrder[]        @relation("PartnerOrderAcceptance")
 
   @@index([quoteId, createdAt])
   @@index([quoteVersionId])
@@ -11443,19 +11445,27 @@ enum PartnerOrderDocumentStep {
 }
 
 model PartnerOrder {
-  id          String             @id @default(cuid())
-  orderNumber String             @unique
-  quoteId     String             @unique
-  customerId  String?
-  status      PartnerOrderStatus @default(OPEN)
-  createdById String?
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
+  id             String             @id @default(cuid())
+  orderNumber    String             @unique
+  quoteId        String             @unique
+  /// THE VERSION AND THE ACCEPTANCE THAT WERE SIGNED, pinned when the order is made: the lines and the
+  /// amounts come from this version with the optional items of this acceptance, even if the quote's own
+  /// `acceptedVersionId` later changes (a revoked acceptance, another version accepted). A signed order
+  /// form must not change under its own order.
+  quoteVersionId String
+  acceptanceId   String
+  customerId     String?
+  status         PartnerOrderStatus @default(OPEN)
+  createdById    String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
 
-  quote     Quote                  @relation(fields: [quoteId], references: [id], onDelete: Restrict)
-  customer  Customer?              @relation("PartnerOrderCustomer", fields: [customerId], references: [id], onDelete: SetNull)
-  createdBy User?                  @relation("PartnerOrderCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  documents PartnerOrderDocument[]
+  quote        Quote                  @relation(fields: [quoteId], references: [id], onDelete: Restrict)
+  quoteVersion QuoteVersion           @relation("PartnerOrderVersion", fields: [quoteVersionId], references: [id], onDelete: Restrict)
+  acceptance   QuoteAcceptance        @relation("PartnerOrderAcceptance", fields: [acceptanceId], references: [id], onDelete: Restrict)
+  customer     Customer?              @relation("PartnerOrderCustomer", fields: [customerId], references: [id], onDelete: SetNull)
+  createdBy    User?                  @relation("PartnerOrderCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  documents    PartnerOrderDocument[]
 
   @@index([status, createdAt])
   @@index([customerId])
