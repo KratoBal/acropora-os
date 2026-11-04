@@ -186,7 +186,11 @@ export function CustomerDetailPage({ customerId }: { customerId: string }) {
   const mirror = customer.partnerMirror;
   const readOnly = !canManage || mirror;
   const fromUnas = customer.source === "UNAS";
-  const taxProblem = touched ? huTaxNumberProblem(taxNumber) : null;
+  // like the server: an unchanged number is not checked again, so an old, oddly typed one (from the UNAS) does not
+  // block saving another field; the stored value passes there as well (`huTax`)
+  const taxChanged = taxNumber.trim() !== (customer.taxNumber ?? "").trim();
+  const taxProblem =
+    touched && taxChanged ? huTaxNumberProblem(taxNumber) : null;
   const euProblem =
     touched && euTaxNumber.trim() && !normalizeEuTaxNumber(euTaxNumber)
       ? "A közösségi adószám országkóddal kezdődik, utána a szám (pl. SK2020123456)."
@@ -237,7 +241,7 @@ export function CustomerDetailPage({ customerId }: { customerId: string }) {
       );
       return;
     }
-    if (huTaxNumberProblem(taxNumber)) return;
+    if (taxChanged && huTaxNumberProblem(taxNumber)) return;
     if (euTaxNumber.trim() && !normalizeEuTaxNumber(euTaxNumber)) return;
     for (const item of addresses) {
       if (addressHasData(item.state) && !addressComplete(item.state)) {
@@ -326,7 +330,7 @@ export function CustomerDetailPage({ customerId }: { customerId: string }) {
         <Alert
           variant="info"
           title="Ez a vevő egy partner vevő-tükre"
-          description="A Partnerek képernyőn szerkeszthető, onnan másolódik ide minden mentésnél. Itt csak megtekinthető."
+          description="A Partnerek képernyőn szerkeszthető, onnan másolódik ide minden mentésnél: a név, a kód, a fizetési nap, a számlázási e-mail, az adószám és a cím (a teljes cím, ha megvan). Itt csak megtekinthető."
         />
       ) : null}
       {!canManage && !mirror ? (

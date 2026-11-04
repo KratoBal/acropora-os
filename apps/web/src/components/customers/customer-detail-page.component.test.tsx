@@ -1,4 +1,5 @@
 import {
+  cleanup,
   fireEvent,
   render,
   screen,
@@ -158,6 +159,38 @@ describe("a vevő adatlapja", () => {
   });
 
   it("refuses a tax number of another shape on the page, and sends nothing", async () => {
+    await render_();
+    fireEvent.change(screen.getByLabelText("Adószám"), {
+      target: { value: "1234" },
+    });
+    save();
+    expect(
+      await screen.findByText(/A magyar adószám nyolc számjegy/),
+    ).toBeTruthy();
+    expect(api.update).not.toHaveBeenCalled();
+  });
+
+  // barracuda, #2164 review: the server lets an old, oddly typed number that is already stored stay (so saving another field
+  // is not blocked); the page used to check it unconditionally and the phone number could not be saved at all
+  it("saves another field of a customer whose stored tax number is of an old shape, and does not complain about it", async () => {
+    for (const stored of ["12 34 56 78-1-42x", "12345678"]) {
+      api.update.mockClear();
+      api.detail.mockResolvedValue(customer({ taxNumber: stored }));
+      await render_();
+      fireEvent.change(screen.getByLabelText("Telefonszám"), {
+        target: { value: "+36 1 999 9999" },
+      });
+      save();
+      await waitFor(() => expect(api.update).toHaveBeenCalledTimes(1));
+      expect(screen.queryByText(/A magyar adószám nyolc számjegy/)).toBeNull();
+      // the number was not edited, so the same stored text goes back (the server keeps it as it is)
+      expect(api.update.mock.calls[0]![2]).toMatchObject({ taxNumber: stored });
+      cleanup();
+    }
+  });
+
+  it("checks the number again as soon as it is edited, even from an old shape", async () => {
+    api.detail.mockResolvedValue(customer({ taxNumber: "12 34 56 78-1-42x" }));
     await render_();
     fireEvent.change(screen.getByLabelText("Adószám"), {
       target: { value: "1234" },
