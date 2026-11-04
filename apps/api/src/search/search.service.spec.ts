@@ -45,10 +45,15 @@ let productCalls = 0;
   silently dropped the group and the role test saw an "absent" group where the assert had failed. The
   test checks the recorded query AFTER the search, outside.
 */
-let lastOrderQuery:
-  { q?: string; page?: number; pageSize?: number } | undefined;
-let lastProductQuery:
-  { search?: string; page?: number; pageSize?: number } | undefined;
+const recorded: {
+  order?: { q?: string; page?: number; pageSize?: number };
+  product?: { search?: string; page?: number; pageSize?: number };
+} = {};
+/** (a function, not an assignment in the test: an assignment would narrow the property to `never`) */
+const forgetRecorded = () => {
+  recorded.order = undefined;
+  recorded.product = undefined;
+};
 let orderList: () => Promise<unknown> = async () => ({
   items: [
     {
@@ -178,7 +183,7 @@ const search = (
     {
       list: async (query: { q?: string; page?: number; pageSize?: number }) => {
         orderCalls += 1;
-        lastOrderQuery = query;
+        recorded.order = query;
         return orderList();
       },
     } as unknown as WebshopOrdersService,
@@ -189,7 +194,7 @@ const search = (
         pageSize?: number;
       }) => {
         productCalls += 1;
-        lastProductQuery = query;
+        recorded.product = query;
         return {
           items: [
             {
@@ -393,7 +398,7 @@ describe("SearchService", () => {
   it("orders are present for exactly the roles that hold orders.view, and the list never runs for the others", async () => {
     for (const role of USER_ROLES) {
       orderCalls = 0;
-      lastOrderQuery = undefined;
+      forgetRecorded();
       const subject = user(role);
       const result = await search().search("rendelés", subject);
       const allowed = hasPermission(subject, PERMISSIONS.ORDERS_VIEW);
@@ -401,7 +406,7 @@ describe("SearchService", () => {
       assert.equal(orderCalls, allowed ? 1 : 0, role);
       if (allowed)
         assert.deepEqual(
-          lastOrderQuery,
+          recorded.order,
           { q: "rendelés", page: 1, pageSize: 5 },
           role,
         );
@@ -497,7 +502,7 @@ describe("SearchService", () => {
   it("products are present for exactly the roles that hold products.view, and the list never runs for the others", async () => {
     for (const role of USER_ROLES) {
       productCalls = 0;
-      lastProductQuery = undefined;
+      forgetRecorded();
       const subject = user(role);
       const result = await search().search("só", subject);
       const allowed = hasPermission(subject, PERMISSIONS.PRODUCTS_VIEW);
@@ -505,7 +510,11 @@ describe("SearchService", () => {
       assert.equal(productCalls, allowed ? 1 : 0, role);
       if (allowed)
         assert.deepEqual(
-          lastProductQuery,
+          {
+            search: recorded.product?.search,
+            page: recorded.product?.page,
+            pageSize: recorded.product?.pageSize,
+          },
           { search: "só", page: 1, pageSize: 5 },
           role,
         );
