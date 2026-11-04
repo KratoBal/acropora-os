@@ -1574,6 +1574,15 @@ export const ANONYMIZATION_REGISTER: Readonly<
     thumbnail: "fileContent",
     caption: "freeText",
   },
+  PartnerOrder: {
+    orderNumber: "identifier",
+  },
+  PartnerOrderDocument: {
+    fileName: "freeText",
+    contentType: "business",
+    content: "fileContent",
+    storageKey: "storageReference",
+  },
   Quote: {
     quoteNumber: "identifier",
     title: "freeText",
