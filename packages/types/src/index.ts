@@ -650,6 +650,7 @@ export type {
   CustomerStatusFilter,
   CustomerSummary,
   CustomerType,
+  UpdateCustomerAddressInput,
   UpdateCustomerInput,
 } from "./customer-management.js";
 export { CUSTOMER_LIST_PAGE_SIZE } from "./customer-management.js";
@@ -1606,6 +1607,11 @@ export {
   QUOTE_RICH_TEXT_NODES,
   validateQuoteRichText,
 } from "./quote-text-schema.js";
+export {
+  HU_TAX_NUMBER_PROBLEM,
+  huTaxNumberProblem,
+  normalizeHuTaxNumber,
+} from "./hu-tax-number.js";
 export {
   EU_COUNTRY_NAMES_HU,
   normalizeEuTaxNumber,

@@ -338,6 +338,9 @@ export class CustomersRepository extends Repository {
         const changed = await tx.customer.updateMany({
           where: { id, updatedAt: new Date(input.expectedUpdatedAt) },
           data: {
+            // an edit of the addresses alone must still move `updatedAt`: it is the concurrency token
+            updatedAt: new Date(),
+            type: input.type,
             displayName: input.displayName?.trim(),
             companyName: input.companyName,
             taxNumber: input.taxNumber,
@@ -350,9 +353,42 @@ export class CustomersRepository extends Repository {
           },
         });
         if (changed.count !== 1) throw new Error("STALE_UPDATE");
+        for (const address of input.addresses ?? []) {
+          const data = {
+            type: address.type,
+            name: address.name?.trim() || null,
+            country: address.country?.trim().toUpperCase() || "HU",
+            postalCode: address.postalCode.trim(),
+            city: address.city.trim(),
+            line1: address.line1.trim(),
+            line2: address.line2?.trim() || null,
+          };
+          if (address.id) {
+            // only the customer's OWN address: another customer's id matches nothing
+            const updated = await tx.customerAddress.updateMany({
+              where: { id: address.id, customerId: id },
+              data,
+            });
+            if (updated.count !== 1) throw new Error("ADDRESS_NOT_OWNED");
+          } else {
+            const hasAny = await tx.customerAddress.count({
+              where: { customerId: id },
+            });
+            await tx.customerAddress.create({
+              data: { ...data, customerId: id, isDefault: hasAny === 0 },
+            });
+          }
+        }
         await this.event(tx, "customer.updated", id, actorId, {
           previousDisplayName: existing.displayName,
           displayName: input.displayName ?? existing.displayName,
+          // the names of the fields that were sent, never their values (a tax number, an address)
+          changedFields: Object.entries(input)
+            .filter(
+              ([key, value]) =>
+                key !== "expectedUpdatedAt" && value !== undefined,
+            )
+            .map(([key]) => key),
         });
         const customer = await tx.customer.findUniqueOrThrow({
           where: { id },

@@ -184,6 +184,38 @@ export function mirroredTaxNumber(supplier: {
 }
 
 /**
+ * A PARTNER CÍME A TÜKÖRBEN (acrobot, #2164 review: az állatkert számlája cím nélkül nem állhat meg). A partner képernyőn
+ * az egyetlen cím a tükör SZÁMLÁZÁSI címe lesz, minden mentésnél, ugyanúgy, mint az adószám. A cím csak akkor megy át,
+ * ha teljes (irányítószám, város és utca: a vevő-cím sora ezeket kéri); egy részleges vagy üres partner-cím NEM
+ * törli a tükörét és nem is ír félkész sort. Az ország üresen HU.
+ */
+export function mirroredBillingAddress(supplier: {
+  country?: string | null;
+  postalCode?: string | null;
+  city?: string | null;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+}): {
+  country: string;
+  postalCode: string;
+  city: string;
+  line1: string;
+  line2: string | null;
+} | null {
+  const postalCode = supplier.postalCode?.trim();
+  const city = supplier.city?.trim();
+  const line1 = supplier.addressLine1?.trim();
+  if (!postalCode || !city || !line1) return null;
+  return {
+    country: supplier.country?.trim().toUpperCase() || "HU",
+    postalCode,
+    city,
+    line1,
+    line2: supplier.addressLine2?.trim() || null,
+  };
+}
+
+/**
  * A worksheet belongs to a customer in three places -- the sheet, the unit and
  * the abbreviation the close path requires -- so a service partner is given a
  * customer row of its own to carry them. The row is the partner's, not a buyer's: it is created
@@ -206,6 +238,10 @@ export async function syncWorksheetMirror(
     email?: string | null;
     taxNumber?: string | null;
     country?: string | null;
+    postalCode?: string | null;
+    city?: string | null;
+    addressLine1?: string | null;
+    addressLine2?: string | null;
   },
 ) {
   if (!supplier.isService) {
@@ -229,11 +265,37 @@ export async function syncWorksheetMirror(
     billingEmail: supplier.email?.trim() || null,
     ...mirroredTaxNumber(supplier),
   };
+  const address = mirroredBillingAddress(supplier);
   if (supplier.customerId) {
     await tx.customer.update({
       where: { id: supplier.customerId },
       data: carried,
     });
+    if (address) {
+      // the mirror's one billing address is rewritten in place; a mirror without one is given it
+      const billing = await tx.customerAddress.findFirst({
+        where: { customerId: supplier.customerId, type: "BILLING" },
+        orderBy: { createdAt: "asc" },
+        select: { id: true },
+      });
+      if (billing)
+        await tx.customerAddress.update({
+          where: { id: billing.id },
+          data: address,
+        });
+      else
+        await tx.customerAddress.create({
+          data: {
+            ...address,
+            type: "BILLING",
+            customerId: supplier.customerId,
+            isDefault:
+              (await tx.customerAddress.count({
+                where: { customerId: supplier.customerId },
+              })) === 0,
+          },
+        });
+    }
     return supplier.customerId;
   }
   const mirror = await tx.customer.create({
@@ -245,6 +307,13 @@ export async function syncWorksheetMirror(
       customerNumber: generateCode("PARTNER"),
       type: "COMPANY",
       ...carried,
+      ...(address
+        ? {
+            addresses: {
+              create: [{ ...address, type: "BILLING", isDefault: true }],
+            },
+          }
+        : {}),
     },
     select: { id: true },
   });
@@ -705,6 +774,10 @@ export class SuppliersRepository extends Repository {
               email: supplier.email,
               taxNumber: supplier.taxNumber,
               country: supplier.country,
+              postalCode: supplier.postalCode,
+              city: supplier.city,
+              addressLine1: supplier.addressLine1,
+              addressLine2: supplier.addressLine2,
             });
             await tx.domainEvent.create({
               data: {
@@ -835,6 +908,10 @@ export class SuppliersRepository extends Repository {
               email: true,
               taxNumber: true,
               country: true,
+              postalCode: true,
+              city: true,
+              addressLine1: true,
+              addressLine2: true,
             },
           });
           await syncWorksheetMirror(tx, saved);

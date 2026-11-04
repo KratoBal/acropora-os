@@ -54,7 +54,7 @@ function toRunView(run: {
 /// tényleges változást hordoz-e (UPDATE) vagy sem (UNCHANGED), a
 /// UnasProductSyncDiffEngine kanonikus-hash mintáját követve, jóval
 /// egyszerűbb formában.
-interface CanonicalCustomer {
+export interface CanonicalCustomer {
   type: "PERSON" | "COMPANY";
   displayName: string;
   email: string | null;
@@ -97,6 +97,22 @@ function toAddressInput(
     postalCode,
     city,
     line1,
+  };
+}
+
+/**
+ * WHAT A UNAS UPDATE WRITES ON AN EXISTING CUSTOMER ROW, and nothing else. The tax numbers, the company name, the
+ * billing e-mail and the consents are NOT here: a colleague's edit of those on the customer page (acrobot 42510) must
+ * survive a sync. A spec pins the five keys, so a field added to this write is a red test, not a silent overwrite.
+ * (The type, the name, the e-mail, the phone and the BILLING/SHIPPING addresses ARE overwritten when UNAS changes
+ * the record; the customer page says so on a UNAS customer.)
+ */
+export function unasCustomerUpdateData(canonical: CanonicalCustomer) {
+  return {
+    type: canonical.type,
+    displayName: canonical.displayName,
+    email: canonical.email,
+    phone: canonical.phone,
   };
 }
 
@@ -308,12 +324,7 @@ export class UnasCustomerSyncRepository extends Repository {
 
             await tx.customer.update({
               where: { id: reference.entityId },
-              data: {
-                type: canonical.type,
-                displayName: canonical.displayName,
-                email: canonical.email,
-                phone: canonical.phone,
-              },
+              data: unasCustomerUpdateData(canonical),
             });
             await tx.customerAddress.deleteMany({
               where: {
