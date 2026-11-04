@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import { prisma, Prisma } from "@acropora/database";
 import type {
   BillingDocumentListQuery,
@@ -9,7 +9,9 @@ import {
   EXTERNAL_LIST_ORDER_BY,
   LIST_ORDER_BY,
   externalWhere,
+  matchesPaymentFilter,
   mergeListRows,
+  PAYMENT_FILTER_ROW_LIMIT,
   ownWhere,
   simplePayOrderKey,
   toExternalListItem,
@@ -127,33 +129,45 @@ export class BillingDocumentListRepository {
     );
     const offset = (query.page - 1) * query.pageSize;
     const both = own !== null && external !== null;
+    // A kifizetettség számolt érték: a szűrőnél minden találat sora betöltődik, és a kész soron szűrünk, majd lapozunk.
+    const byPayment = query.paymentState !== undefined;
+    const rowTake = byPayment ? PAYMENT_FILTER_ROW_LIMIT + 1 : undefined;
     const [ownRows, ownCount, externalRows, externalCount] =
       await this.database.$transaction([
         this.database.invoice.findMany({
           where: own ?? { id: { in: [] } },
           select: LIST_SELECT,
           orderBy: LIST_ORDER_BY,
-          skip: both ? 0 : offset,
+          skip: both || byPayment ? 0 : offset,
           take:
-            own === null ? 0 : both ? offset + query.pageSize : query.pageSize,
+            own === null
+              ? 0
+              : (rowTake ?? (both ? offset + query.pageSize : query.pageSize)),
         }),
         this.database.invoice.count({ where: own ?? { id: { in: [] } } }),
         this.database.externalBillingDocument.findMany({
           where: external ?? { id: { in: [] } },
           select: EXTERNAL_LIST_SELECT,
           orderBy: EXTERNAL_LIST_ORDER_BY,
-          skip: both ? 0 : offset,
+          skip: both || byPayment ? 0 : offset,
           take:
             external === null
               ? 0
-              : both
-                ? offset + query.pageSize
-                : query.pageSize,
+              : (rowTake ?? (both ? offset + query.pageSize : query.pageSize)),
         }),
         this.database.externalBillingDocument.count({
           where: external ?? { id: { in: [] } },
         }),
       ]);
+    // a fizetés szerinti szűrés a találatok mindegyikét betölti: a határ fölött szűkítést kér, nem csonkít
+    if (
+      byPayment &&
+      (ownRows.length > PAYMENT_FILTER_ROW_LIMIT ||
+        externalRows.length > PAYMENT_FILTER_ROW_LIMIT)
+    )
+      throw new BadRequestException(
+        "Túl sok a találat a fizetés szerinti szűréshez: szűkítsd az időszakot vagy a keresést.",
+      );
     // a kártyás külső számlák SimplePay-sorai, egy lekérdezéssel a lapra
     const simplePay = await simplePayLinesByOrder(
       this.database,
@@ -215,8 +229,11 @@ export class BillingDocumentListRepository {
       // a Számlázz.hu felületén sztornózott saját számla: a jel az ikertől jön
       return twin.cancelled ? { ...item, cancelled: true } : item;
     };
-    const totalItems = ownCount + externalCount;
-    const items = both
+    // Fizetés-szűrőnél a teljes találati halmaz kell (a lapot a szűrt sorokból vágjuk), egyébként az összefésülés lapja.
+    const window = byPayment
+      ? { offset: 0, size: ownRows.length + externalRows.length }
+      : { offset, size: query.pageSize };
+    const merged = both
       ? mergeListRows(
           ownRows.map((row) => ({
             issueDate: row.issueDate,
@@ -230,12 +247,19 @@ export class BillingDocumentListRepository {
             id: row.id,
             item: toExternal(row),
           })),
-          offset,
-          query.pageSize,
+          window.offset,
+          window.size,
         )
       : own !== null
         ? ownRows.map(toOwn)
         : externalRows.map((row) => toExternal(row));
+    const matching = byPayment
+      ? merged.filter((item) => matchesPaymentFilter(item, query.paymentState))
+      : merged;
+    const totalItems = byPayment ? matching.length : ownCount + externalCount;
+    const items = byPayment
+      ? matching.slice(offset, offset + query.pageSize)
+      : matching;
     return {
       items,
       pagination: {

@@ -1,11 +1,13 @@
 import {
   BILLING_DOCUMENT_LIST_PAGE_SIZE,
+  BILLING_LIST_PAYMENT_FILTERS,
   BILLING_DOCUMENT_ORIGINS,
   BILLING_DOCUMENT_STATUSES,
   BILLING_DOCUMENT_TYPES,
   BILLING_EMAIL_STATUSES,
   INVOICE_FORMATS,
   type BillingDocumentListQuery,
+  type BillingListPaymentFilter,
   type BillingDocumentOrigin,
   type BillingDocumentStatus,
   type BillingDocumentType,
@@ -50,4 +52,8 @@ export class BillingDocumentListQueryDto implements BillingDocumentListQuery {
   @Matches(DAY) @IsISO8601({ strict: true }) @IsOptional() from?: string;
   @Matches(DAY) @IsISO8601({ strict: true }) @IsOptional() to?: string;
   @IsString() @MaxLength(100) @IsOptional() paymentMethod?: string;
+  /** PAID: fizetve; UNPAID: nincs fizetve (a részben fizetett is). */
+  @IsIn(BILLING_LIST_PAYMENT_FILTERS)
+  @IsOptional()
+  paymentState?: BillingListPaymentFilter;
 }
