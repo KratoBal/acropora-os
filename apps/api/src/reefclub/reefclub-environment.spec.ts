@@ -66,11 +66,6 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   // the daily PDF catch-up switches (booleans, #1819 and the cmfx letter fill)
   "EXTERNAL_INVOICE_MAIL_PDF_SCHEDULE",
   "EXTERNAL_INVOICE_PDF_SCHEDULE",
-  // the GLS status sync (V0.4): a switch, two minute counts and the carrier's delivered status codes: not secrets
-  "GLS_DELIVERED_STATUS_CODES",
-  "GLS_STATUS_SYNC_ENABLED",
-  "GLS_STATUS_SYNC_INTERVAL_MINUTES",
-  "GLS_STATUS_SYNC_STARTUP_DELAY_MINUTES",
   "HANDOVER_MAIL_MAX_ATTACHMENT_BYTES",
   // the TEST storefront's origin for the home page admin's preview (2b-1): an address, not a secret
   "HOMEPAGE_PREVIEW_ALLOWED",

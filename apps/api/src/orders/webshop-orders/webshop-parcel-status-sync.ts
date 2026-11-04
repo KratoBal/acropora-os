@@ -29,7 +29,7 @@ export const SYNC_BATCH = 200;
 /** The delivered codes the environment names: trimmed, empty entries dropped, compared as written by the carrier. */
 export const deliveredCodes = (env: NodeJS.ProcessEnv): ReadonlySet<string> =>
   new Set(
-    (env[GLS_DELIVERED_CODES_ENV] ?? "")
+    (env.GLS_DELIVERED_STATUS_CODES ?? "")
       .split(",")
       .map((code) => code.trim())
       .filter((code) => code !== ""),
