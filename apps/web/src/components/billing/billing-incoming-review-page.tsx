@@ -2,7 +2,6 @@
 
 import {
   Alert,
-  Button,
   Icon,
   PageHeader,
   PilotButton,
@@ -195,9 +194,9 @@ export function BillingIncomingReviewPage({ itemId }: { itemId: string }) {
         title="A számla nem tölthető be"
         description={error}
         action={
-          <Button variant="secondary" onClick={() => void load()}>
+          <PilotButton variant="secondary" onClick={() => void load()}>
             Újrapróbálás
-          </Button>
+          </PilotButton>
         }
       />
     );

@@ -6,6 +6,7 @@ import {
   PilotDataTable,
   Skeleton,
   type PilotTableColumn,
+  PilotButton,
 } from "@acropora/ui";
 import type {
   ReceiptsResponse,
@@ -67,9 +68,9 @@ function SzamlazzReceiptsView({ token }: { token: string }) {
         title="Betöltési hiba"
         description={error}
         action={
-          <Button variant="secondary" onClick={() => void load()}>
+          <PilotButton variant="secondary" onClick={() => void load()}>
             Újrapróbálás
-          </Button>
+          </PilotButton>
         }
       />
     );
@@ -277,9 +278,12 @@ function CashRegisterReceiptsView({ token }: { token: string }) {
           title="Betöltési hiba"
           description={error}
           action={
-            <Button variant="secondary" onClick={() => setRetry((v) => v + 1)}>
+            <PilotButton
+              variant="secondary"
+              onClick={() => setRetry((v) => v + 1)}
+            >
               Újrapróbálás
-            </Button>
+            </PilotButton>
           }
         />
       ) : !data ? (

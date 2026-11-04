@@ -1,5 +1,5 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -33,12 +33,7 @@ const DUSK_IKREK = [
 ] as const;
 
 const HATRA = new Map<string, string[]>([
-  ["components/billing/billing-document-detail-page.tsx", ["Button"]],
-  ["components/billing/billing-document-list-page.tsx", ["Button"]],
   ["components/billing/billing-external-document-page.tsx", ["Button"]],
-  ["components/billing/billing-incoming-document-page.tsx", ["Button"]],
-  ["components/billing/billing-incoming-list.tsx", ["Button"]],
-  ["components/billing/billing-incoming-review-page.tsx", ["Button"]],
   ["components/billing/billing-receipts-view.tsx", ["Button"]],
   [
     "components/brands/brand-editor-page.tsx",
@@ -61,9 +56,6 @@ const HATRA = new Map<string, string[]>([
     "components/customers/customer-list-page.tsx",
     ["Badge", "Button", "Card", "Input", "Select"],
   ],
-  ["components/finance/foxpost-settlements-page.tsx", ["Button"]],
-  ["components/finance/gls-settlements-page.tsx", ["Button"]],
-  ["components/finance/simplepay-settlements-page.tsx", ["Button"]],
   [
     "components/inventory/inventory-count-detail-page.tsx",
     ["Badge", "Button", "Card", "CardContent", "CardHeader"],
@@ -73,7 +65,6 @@ const HATRA = new Map<string, string[]>([
     ["Badge", "Button", "Card", "Select"],
   ],
   ["components/messages/messages-page.tsx", ["Input"]],
-  ["components/mortality/mortality-list-page.tsx", ["Button"]],
   ["components/products/dose-effect-list-page.tsx", ["Badge"]],
   ["components/products/product-authority-card.tsx", ["Button"]],
   ["components/products/product-detail-page.tsx", ["Button", "Input"]],
@@ -83,8 +74,6 @@ const HATRA = new Map<string, string[]>([
   ],
   ["components/products/product-list-page.tsx", ["Button"]],
   ["components/products/product-shipping-profile-card.tsx", ["Button"]],
-  ["components/purchasing/expected-arrival-list-page.tsx", ["Button"]],
-  ["components/purchasing/nav-incoming-invoice-list-page.tsx", ["Button"]],
   [
     "components/purchasing/purchase-invoice-detail-page.tsx",
     ["Badge", "Button", "Card", "CardContent", "CardHeader"],
@@ -97,7 +86,6 @@ const HATRA = new Map<string, string[]>([
     "components/purchasing/purchase-invoice-eu-editor-page.tsx",
     ["Badge", "Button", "Card", "FormField", "Input"],
   ],
-  ["components/purchasing/purchase-invoice-list-page.tsx", ["Button"]],
   [
     "components/purchasing/purchase-invoice-scans.tsx",
     ["Button", "Card", "CardContent", "CardHeader"],
@@ -163,6 +151,54 @@ const HATRA = new Map<string, string[]>([
   ],
 ]);
 
+/*
+  A SZÁMLÁLÓK (barracuda, #2125): a pontos egyezés megfogja az új vegyes fájlt, de ha valaki ugyanabban a PR-ban a
+  sorát is felveszi a listára, a teszt zöld maradna. A két szám ezért külön áll: a lista bővítése két helyen kér
+  módosítást, és a reviewban látszik. Fogyáskor a számot is le kell írni (a lista története: 59 / 141 a #2125-ben).
+*/
+const HATRA_MERET = 47;
+const HATRA_IKREK = 129;
+
+/*
+  A GYEREK-LISTA (barracuda, #2125): egy pilot fájl által importált, CSAK duskot használó .tsx (relatív vagy `@/`
+  út, egy szint). A fájlszintű mérés ezt a pilot lapon rajzolt dusk elemet nem látja; itt látszik, ugyanazzal a
+  csak-fogyhat szabállyal. Mélyebb gráf nem kell: a második szint már többnyire közös komponens.
+*/
+const GYEREK = new Map<string, string[]>([
+  [
+    "components/aquariums/customer-picker.tsx",
+    ["Button", "Card", "FormField", "Input"],
+  ],
+  ["components/brands/catalog-actions-panel.tsx", ["Badge", "Button", "Card"]],
+  ["components/content/article-revision-diff.tsx", ["Button"]],
+  ["components/messages/new-conversation-dialog.tsx", ["Button", "Input"]],
+  ["components/products/barcode-editor.tsx", ["Badge", "Button", "Input"]],
+  [
+    "components/products/product-basics-editor.tsx",
+    ["Button", "Card", "FormField", "Input", "Select"],
+  ],
+  [
+    "components/purchasing/purchase-invoice-cancel-form.tsx",
+    ["Button", "Card", "CardContent", "CardHeader"],
+  ],
+  ["components/service-jobs/completion-certificate-panel.tsx", ["Button"]],
+  [
+    "components/service-jobs/handover-mail-dialog.tsx",
+    ["Button", "FormField", "Input"],
+  ],
+  ["components/service-jobs/job-asset-picker.tsx", ["Button", "Input"]],
+  ["components/service-jobs/maintenance-invoice-panel.tsx", ["Button"]],
+  ["components/service-jobs/maintenance-package-panel.tsx", ["Button"]],
+  ["components/service-jobs/service-job-assignee-editor.tsx", ["Button"]],
+  [
+    "components/service-jobs/service-job-fields-editor.tsx",
+    ["Button", "Input"],
+  ],
+  ["components/service/service-document-gallery.tsx", ["Button", "Input"]],
+]);
+const GYEREK_MERET = 15;
+const GYEREK_IKREK = 35;
+
 function fajlok(mappa: string): string[] {
   return readdirSync(mappa).flatMap((nev) => {
     const ut = join(mappa, nev);
@@ -171,9 +207,10 @@ function fajlok(mappa: string): string[] {
   });
 }
 
+/** Blokk-komment csak sor elején vagy szóköz, `{`, `(`, `;` után kezdődik (a `grid-base-track.test.ts` mintája). */
 function kod(forras: string): string {
   return forras
-    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/(^|[\s{(;])\/\*[\s\S]*?\*\//gm, "$1 ")
     .replace(/(^|[^:])\/\/.*$/gm, "$1 ");
 }
 
@@ -203,6 +240,51 @@ function vegyes(forras: string): string[] | null {
   const dusk = DUSK_IKREK.filter((n) => nevek.has(n));
   return pilot && dusk.length ? [...dusk].sort() : null;
 }
+
+function pilotForras(tiszta: string): boolean {
+  return (
+    [...uiNevek(tiszta)].some((n) => n.startsWith("Pilot")) ||
+    /<PilotThemeRoot\b/.test(tiszta)
+  );
+}
+
+/** Egy import-specifikátor a `src` alatti .tsx fájlra (relatív vagy `@/`), vagy null. */
+function felold(honnan: string, spec: string): string | null {
+  const alap = spec.startsWith("@/")
+    ? join(ROOT, spec.slice(2))
+    : spec.startsWith(".")
+      ? join(dirname(honnan), spec)
+      : null;
+  if (!alap) return null;
+  for (const jelolt of [`${alap}.tsx`, join(alap, "index.tsx")])
+    if (existsSync(jelolt)) return jelolt;
+  return null;
+}
+
+/** A pilot fájlok egy szintű, csak duskot használó .tsx gyerekei, a bennük álló dusk ikrekkel. */
+const gyerekek = () => {
+  const talalt = new Map<string, string[]>();
+  for (const ut of fajlok(ROOT)) {
+    const tiszta = kod(readFileSync(ut, "utf8"));
+    if (!pilotForras(tiszta)) continue;
+    for (const m of tiszta.matchAll(
+      /import\s+(type\s+)?(?:\{[^}]*\}|\w+)\s*from\s*"([^"]+)"/g,
+    )) {
+      if (m[1]) continue;
+      const gyerek = felold(ut, m[2]!);
+      if (!gyerek || /\.test\./.test(gyerek)) continue;
+      const gyerekKod = kod(readFileSync(gyerek, "utf8"));
+      if (pilotForras(gyerekKod)) continue;
+      const nevek = uiNevek(gyerekKod);
+      const dusk = DUSK_IKREK.filter((n) => nevek.has(n));
+      if (dusk.length) talalt.set(relative(ROOT, gyerek), [...dusk].sort());
+    }
+  }
+  return new Map([...talalt].sort(([a], [b]) => a.localeCompare(b)));
+};
+
+const osszeg = (lista: Map<string, string[]>) =>
+  [...lista.values()].reduce((n, ikrek) => n + ikrek.length, 0);
 
 const mai = () =>
   new Map(
@@ -252,5 +334,14 @@ describe("dusk iker a pilot lapon", () => {
 
   it("a vegyes fájlok pontosan a hátralévő lista, a benne maradt ikrekkel", () => {
     expect(Object.fromEntries(mai())).toEqual(Object.fromEntries(HATRA));
+  });
+
+  it("a lista mérete és az ikrek száma a kiírt számlálók (bővítés két helyen kér módosítást)", () => {
+    expect([HATRA.size, osszeg(HATRA)]).toEqual([HATRA_MERET, HATRA_IKREK]);
+    expect([GYEREK.size, osszeg(GYEREK)]).toEqual([GYEREK_MERET, GYEREK_IKREK]);
+  });
+
+  it("a pilot lapok csak duskot használó gyerekei pontosan a gyerek-lista", () => {
+    expect(Object.fromEntries(gyerekek())).toEqual(Object.fromEntries(GYEREK));
   });
 });

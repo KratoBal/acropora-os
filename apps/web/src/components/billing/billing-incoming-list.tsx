@@ -2,7 +2,6 @@
 
 import {
   Alert,
-  Button,
   EmptyState,
   Icon,
   Pagination,
@@ -537,9 +536,9 @@ export function BillingIncomingList({ token }: { token: string }) {
           title="Betöltési hiba"
           description={error}
           action={
-            <Button variant="secondary" onClick={() => void load()}>
+            <PilotButton variant="secondary" onClick={() => void load()}>
               Újrapróbálás
-            </Button>
+            </PilotButton>
           }
         />
       ) : null}
