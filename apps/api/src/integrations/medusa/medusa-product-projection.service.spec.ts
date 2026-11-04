@@ -2664,3 +2664,99 @@ describe("MedusaProductProjectionService -- a valtozatok vonalkodja", () => {
     assert.equal(outcome.action === "updated" && "barcodes" in outcome, false);
   });
 });
+
+/*
+  AZ OMNIBUS HIVATKOZASI AR A VALTOZATOKON (V0.2, 2. szelet). MI PIROSIT: ha a kulcs nelkul is
+  hivna a bolt valtozat-listajat (a kapcsolo nem kapcsol ki semmit); ha a patch mas kulcsot is
+  vinne (a bolt tobbi valtozat-metaadata a boltae); ha az azonos ertek ujra kimenne; ha az ures
+  ertek nem uritene a kulcsot, vagy ha uritene egy meg sem levo kulcsot; ha a hianyzo es az
+  elbukott valtozat nem a jelentesbe menne, vagy a bukas megallitana a tobbit.
+*/
+describe("MedusaProductProjectionService -- az Omnibus hivatkozasi ar a valtozatokon", () => {
+  const link = { productId: "prod-os-1", medusaProductId: "prod_medusa_1" };
+  const KEY = "omnibus_lowest_price_30d";
+  const value = (amount: string) =>
+    JSON.stringify({ amount, currency: "huf", complete: true });
+
+  it("kapcsolo nelkul (nincs variantOmnibus) a valtozat-listat sem kerdezi le", async () => {
+    const f = fakes({ link, found: [] });
+    let hivasok = 0;
+    Object.assign(f.medusa, {
+      listVariantMetadata: async () => {
+        hivasok += 1;
+        return [];
+      },
+      updateVariantMetadata: async () => {
+        hivasok += 1;
+      },
+    });
+    const outcome = await f.service.project(product, now);
+    assert.equal(outcome.action, "updated");
+    assert.equal(hivasok, 0);
+    if (outcome.action === "updated") assert.equal(outcome.omnibus, undefined);
+  });
+
+  it("csak a sajat kulcsot irja, csak az eltero erteket; az ures urit; a hianyzo es az elbukott a jelentesbe megy", async () => {
+    const f = fakes({ link, found: [] });
+    const irasok: unknown[] = [];
+    Object.assign(f.medusa, {
+      listVariantMetadata: async () => [
+        { id: "v_a", sku: "A", metadata: { [KEY]: value("1000"), mas: "x" } },
+        { id: "v_b", sku: "B", metadata: { mas: "y" } },
+        { id: "v_c", sku: "C", metadata: { [KEY]: value("900") } },
+        { id: "v_d", sku: "D", metadata: null },
+        { id: "v_e", sku: "E", metadata: { mas: "z" } },
+      ],
+      updateVariantMetadata: async (_p: string, id: string, patch: unknown) => {
+        if (id === "v_d") throw new Error("boom");
+        irasok.push([id, patch]);
+      },
+    });
+    const outcome = await f.service.project(
+      {
+        ...product,
+        variantOmnibus: [
+          { sku: "A", value: value("1000") }, // ugyanaz: nem irunk
+          { sku: "B", value: value("1200") }, // uj: irjuk
+          { sku: "C", value: "" }, // a csokkentes veget ert: urit
+          { sku: "D", value: value("700") }, // elbukik
+          { sku: "E", value: "" }, // nincs mit uriteni: nem nyulunk hozza
+          { sku: "X", value: value("500") }, // nincs a boltban
+        ],
+      },
+      now,
+    );
+    assert.equal(outcome.action, "updated");
+    if (outcome.action !== "updated") return;
+    assert.deepEqual(irasok, [
+      ["v_b", { [KEY]: value("1200") }],
+      ["v_c", { [KEY]: "" }],
+    ]);
+    assert.deepEqual(
+      [
+        outcome.omnibus?.written,
+        outcome.omnibus?.cleared,
+        outcome.omnibus?.unchanged,
+        outcome.omnibus?.missing,
+        outcome.omnibus?.failed.map((x) => x.sku),
+      ],
+      [["B"], ["C"], 2, ["X"], ["D"]],
+    );
+  });
+
+  it("ha a valtozat-lista lekerdezese elbukik, a termek akkor is frissul, es a jelentes megmondja", async () => {
+    const f = fakes({ link, found: [] });
+    Object.assign(f.medusa, {
+      listVariantMetadata: async () => {
+        throw new Error("down");
+      },
+    });
+    const outcome = await f.service.project(
+      { ...product, variantOmnibus: [{ sku: "A", value: value("1") }] },
+      now,
+    );
+    assert.equal(outcome.action, "updated");
+    if (outcome.action !== "updated") return;
+    assert.equal(outcome.omnibus?.failed[0]?.sku, "*");
+  });
+});

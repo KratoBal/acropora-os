@@ -1,6 +1,7 @@
 import type { Prisma } from "@acropora/database";
 
 import {
+  currentReductionStart,
   lowestPriceInWindow,
   seriesOfVariant,
   type HistoryRow,
@@ -29,11 +30,8 @@ export interface LowestPriceDatabase {
   };
 }
 
-export async function lowestPriceForVariant(
-  database: LowestPriceDatabase,
-  variantId: string,
-  reductionStart: Date,
-): Promise<LowestPrice | null> {
+/** The history of the variant's product (both row kinds) and the variant's surcharge, or null for an unknown variant. */
+async function readSeries(database: LowestPriceDatabase, variantId: string) {
   const variant = await database.productVariant.findUnique({
     where: { id: variantId },
     select: { productId: true, unasVariantExtraGrossPrice: true },
@@ -54,8 +52,32 @@ export async function lowestPriceForVariant(
     },
     orderBy: [{ observedAt: "asc" }, { createdAt: "asc" }],
   });
-  return lowestPriceInWindow(
-    seriesOfVariant(rows, variantId, variant.unasVariantExtraGrossPrice),
-    reductionStart,
-  );
+  return {
+    rows,
+    series: seriesOfVariant(rows, variantId, variant.unasVariantExtraGrossPrice),
+  };
+}
+
+export async function lowestPriceForVariant(
+  database: LowestPriceDatabase,
+  variantId: string,
+  reductionStart: Date,
+): Promise<LowestPrice | null> {
+  const read = await readSeries(database, variantId);
+  return read ? lowestPriceInWindow(read.series, reductionStart) : null;
+}
+
+/**
+ * THE REFERENCE PRICE OF THE REDUCTION THAT RUNS NOW (V0.2, slice 2): the lowest price of the 30
+ * days before the reduction began. Null when no reduction runs (nothing to name) or when the
+ * history has no known price to name; the caller clears the shop's key then.
+ */
+export async function lowestPriceBeforeCurrentReduction(
+  database: LowestPriceDatabase,
+  variantId: string,
+): Promise<LowestPrice | null> {
+  const read = await readSeries(database, variantId);
+  if (!read) return null;
+  const start = currentReductionStart(read.rows, variantId);
+  return start ? lowestPriceInWindow(read.series, start) : null;
 }

@@ -14,6 +14,11 @@ import {
 } from "./medusa-admin.client.js";
 import { vonalkodAlakjai } from "./medusa-barcode.policy.js";
 import {
+  OMNIBUS_METADATA_KEY,
+  planOmnibusWrite,
+  type VariantOmnibusInput,
+} from "./medusa-variant-omnibus.js";
+import {
   MedusaProductLinkRepository,
   type MedusaOrphanMark,
 } from "./medusa-product-link.repository.js";
@@ -208,6 +213,13 @@ export interface ProjectableProduct {
    * tényekből (`decideVariantMeasures`). Üres vagy hiányzó: nincs mit kiírni.
    */
   variantMeasures?: VariantMeasureInput[];
+  /**
+   * AZ OMNIBUS HIVATKOZÁSI ÁR változatonként (V0.2, 2. szelet): a futó árcsökkentés
+   * előtti 30 nap legalacsonyabb ára, kész JSON-szövegként; "" üríti a kulcsot (nem
+   * fut árcsökkentés, vagy nincs nevezhető ár). HIÁNYZÓ: a kapcsoló
+   * (`MEDUSA_PROJECT_OMNIBUS`) kikapcsolt, és a vetítés a kulcshoz NEM nyúl.
+   */
+  variantOmnibus?: VariantOmnibusInput[];
   /**
    * Amit a vetítés korábban kiírt (az árva-kezelés nyilvántartása): csak ezeket
    * az értékeket ürítheti, ha a mögöttük álló tény eltűnt.
@@ -412,6 +424,8 @@ export type ProjectionOutcome =
       barcodes?: VariantBarcodeSyncReport;
       /** A változatok tömege és méretei ebben a futásban (SEO P0 PR 8). */
       measures?: VariantMeasureSyncReport;
+      /** Az Omnibus hivatkozási ár a változatokon (V0.2), csak ha volt mit mondani. */
+      omnibus?: VariantOmnibusSyncReport;
       /** A MI kulcsaink, amiket ez a futas levett a cel oldalrol. */
       metadataRemovedKeys: string[];
       /**
@@ -1023,6 +1037,20 @@ export class MedusaProductProjectionService {
             Object.keys(product.writtenMeasures ?? {}).length;
           return vanMit ? { measures: r } : {};
         })()),
+        ...(product.variantOmnibus
+          ? await (async () => {
+              const r = await this.syncVariantOmnibus(
+                medusaProductId,
+                product.variantOmnibus!,
+              );
+              return r.written.length ||
+                r.cleared.length ||
+                r.missing.length ||
+                r.failed.length
+                ? { omnibus: r }
+                : {};
+            })()
+          : {}),
       };
     };
 
@@ -1356,6 +1384,53 @@ export class MedusaProductProjectionService {
     return report;
   }
 
+  /**
+   * AZ OMNIBUS HIVATKOZÁSI ÁR (V0.2, 2. szelet): egy lekérés a termék változatainak
+   * metaadatára, összevetés cikkszám szerint, és CSAK a saját kulcs megy ki vagy
+   * ürül. A Medusa a metaadatot kulcsonként egyesíti, az üres szöveg törli a
+   * kulcsot, tehát a kulcs teljesen a miénk: nyilvántartás nem kell. Egy változat
+   * hibája nem állítja meg a többit.
+   */
+  private async syncVariantOmnibus(
+    medusaProductId: string,
+    wanted: VariantOmnibusInput[],
+  ): Promise<VariantOmnibusSyncReport> {
+    const report: VariantOmnibusSyncReport = {
+      written: [],
+      cleared: [],
+      unchanged: 0,
+      missing: [],
+      failed: [],
+    };
+    let rows: Awaited<ReturnType<MedusaAdminClient["listVariantMetadata"]>>;
+    try {
+      rows = await this.medusa.listVariantMetadata(medusaProductId);
+    } catch (error) {
+      report.failed.push({ sku: "*", error: describeMedusaFailure(error) });
+      return report;
+    }
+    for (const w of wanted) {
+      const row = rows.find((r) => r.sku === w.sku);
+      if (!row) {
+        report.missing.push(w.sku);
+        continue;
+      }
+      if (planOmnibusWrite(row.metadata, w.value) === "unchanged") {
+        report.unchanged += 1;
+        continue;
+      }
+      try {
+        await this.medusa.updateVariantMetadata(medusaProductId, row.id, {
+          [OMNIBUS_METADATA_KEY]: w.value,
+        });
+        (w.value === "" ? report.cleared : report.written).push(w.sku);
+      } catch (error) {
+        report.failed.push({ sku: w.sku, error: describeMedusaFailure(error) });
+      }
+    }
+    return report;
+  }
+
   private async syncVariantBarcodes(
     medusaProductId: string,
     wanted: ProjectableProduct["variantBarcodes"],
@@ -1452,6 +1527,17 @@ export interface VariantMeasureSyncReport extends VariantBarcodeSyncReport {
   /** `cikkszám.mező`: tény nélküli értékek, amiket NEM mi írtunk: érintetlenek. */
   orphans: string[];
   ledger: WrittenMeasures;
+}
+
+/** Az Omnibus hivatkozási ár írásának jelentése (V0.2, 2. szelet). */
+export interface VariantOmnibusSyncReport {
+  /** A cikkszámok, amiknek a kulcsát ez a futás írta. */
+  written: string[];
+  /** A cikkszámok, amiknek a kulcsát ez a futás ürítette (a csökkentés véget ért). */
+  cleared: string[];
+  unchanged: number;
+  missing: string[];
+  failed: { sku: string; error: string }[];
 }
 
 /** A frissítés-ág vonalkód-írásának jelentése (SEO P0 PR 4). */
