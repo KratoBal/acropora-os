@@ -200,6 +200,9 @@ function createDatabase({
     sellingGrossPrice: Prisma.Decimal | null;
     sellingPriceCurrency: string | null;
   } | null,
+  /** the product's own images (id only), and how many rows an image write touches */
+  ownImages = [{ id: "img-1" }, { id: "img-2" }, { id: "img-3" }],
+  imageWriteCount = 1,
   /** the product's shipping-flag sources (null: no profile row) */
   shippingSources = null as Record<string, "UNAS" | "MANUAL"> | null,
   mirror = {
@@ -269,6 +272,16 @@ function createDatabase({
       updateMany: async (args: unknown) => {
         calls.push({ operation: "variantUpdateMany", args });
         return { count: variantCopyCount };
+      },
+    },
+    productImage: {
+      findMany: async (args: unknown) => {
+        calls.push({ operation: "imageFindMany", args });
+        return ownImages;
+      },
+      updateMany: async (args: unknown) => {
+        calls.push({ operation: "imageUpdateMany", args });
+        return { count: imageWriteCount };
       },
     },
     productShippingProfile: {
@@ -783,6 +796,103 @@ describe("ProductRepository", () => {
       data: { payload: Record<string, unknown> };
     };
     assert.equal("shippingFlagsPinned" in event.data.payload, false);
+  });
+
+  /**
+   * THE IMAGE EDITOR (T4.1-D3, slice 4): an alt text only on this product's image, the
+   * order only as an exact permutation of the product's images; both step the
+   * product's `updatedAt` (the projection's due query) and write an event.
+   */
+  it("sets an image's alt text on this product's image, and makes the product due", async () => {
+    const { database, calls } = createDatabase();
+    const result = await new ProductRepository(database).setImageAltText(
+      "product-1",
+      "img-2",
+      "Kék Acropora, felülnézet",
+      "user-1",
+    );
+    assert.ok(result);
+    assert.deepEqual(
+      calls.map((call) => call.operation),
+      ["imageUpdateMany", "transactionUpdate", "event", "transactionFind"],
+    );
+    assert.deepEqual(calls[0]?.args, {
+      where: { id: "img-2", productId: "product-1" },
+      data: { altText: "Kék Acropora, felülnézet" },
+    });
+    const event = calls[2]?.args as {
+      data: { eventType: string; actorUserId: string; payload: unknown };
+    };
+    assert.equal(event.data.eventType, "product.image.alt-text.set");
+    assert.deepEqual(event.data.payload, {
+      imageId: "img-2",
+      altText: "Kék Acropora, felülnézet",
+    });
+  });
+
+  it("writes nothing else for an image of another product", async () => {
+    const { database, calls } = createDatabase({ imageWriteCount: 0 });
+    const result = await new ProductRepository(database).setImageAltText(
+      "product-1",
+      "img-x",
+      null,
+    );
+    assert.equal(result, null);
+    assert.deepEqual(
+      calls.map((call) => call.operation),
+      ["imageUpdateMany"],
+    );
+  });
+
+  it("orders the images by the given permutation", async () => {
+    const { database, calls } = createDatabase();
+    const result = await new ProductRepository(database).setImageOrder(
+      "product-1",
+      ["img-3", "img-1", "img-2"],
+      "user-1",
+    );
+    assert.ok(result);
+    assert.deepEqual(
+      calls
+        .filter((call) => call.operation === "imageUpdateMany")
+        .map((call) => call.args),
+      [
+        {
+          where: { id: "img-3", productId: "product-1" },
+          data: { sortOrder: 0 },
+        },
+        {
+          where: { id: "img-1", productId: "product-1" },
+          data: { sortOrder: 1 },
+        },
+        {
+          where: { id: "img-2", productId: "product-1" },
+          data: { sortOrder: 2 },
+        },
+      ],
+    );
+    assert.ok(calls.some((call) => call.operation === "transactionUpdate"));
+  });
+
+  it("writes no order unless every own image is there exactly once", async () => {
+    for (const ids of [
+      ["img-1", "img-2"],
+      ["img-1", "img-2", "img-2"],
+      ["img-1", "img-2", "img-x"],
+      ["img-1", "img-2", "img-3", "img-x"],
+    ]) {
+      const { database, calls } = createDatabase();
+      const result = await new ProductRepository(database).setImageOrder(
+        "product-1",
+        ids,
+      );
+      assert.equal(result, null, ids.join(","));
+      assert.deepEqual(
+        calls.map((call) => call.operation),
+        ["imageFindMany"],
+        ids.join(","),
+      );
+    }
   });
 
   it("writes no event when the product was already ours", async () => {

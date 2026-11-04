@@ -42,6 +42,7 @@ import { productApi } from "@/lib/api/products";
 import { currencyLabel } from "@/lib/format/currency";
 import { BarcodeEditor } from "./barcode-editor";
 import { VariantPriceEditor } from "./variant-price-editor";
+import { ProductImagesEditor } from "./product-images-editor";
 
 const value = (candidate: string | null | undefined) => candidate || "—";
 const dateTime = (candidate: string | null | undefined) =>
@@ -1134,7 +1135,20 @@ export function ProductDetailPage({ productId }: { productId: string }) {
 
   const images = (
     <PilotSection title="Képek">
-      {product.images.length ? (
+      {product.images.length &&
+      product.catalogAuthority === "ACROPORA" &&
+      canManage ? (
+        <ProductImagesEditor
+          key={product.images
+            .map((image) => `${image.id}:${image.altText ?? ""}`)
+            .join("|")}
+          productId={product.id}
+          productName={product.name}
+          images={product.images}
+          token={token}
+          onSaved={() => setRequestVersion((current) => current + 1)}
+        />
+      ) : product.images.length ? (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {product.images.map((image) => (
             <figure key={image.id}>

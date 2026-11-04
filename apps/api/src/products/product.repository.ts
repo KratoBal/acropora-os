@@ -126,6 +126,11 @@ interface ProductTransaction {
     } | null>;
     updateMany(args: unknown): Promise<{ count: number }>;
   };
+  /** A képek alt-szövege és sorrendje (T4.1-D3, 4. szelet). */
+  productImage: {
+    findMany(args: unknown): Promise<Array<{ id: string }>>;
+    updateMany(args: unknown): Promise<{ count: number }>;
+  };
   /** Átvételkor a UNAS-forrású szállítási jelzők kézire billennek (T4.1-D3). */
   productShippingProfile: {
     findUnique(
@@ -655,6 +660,98 @@ export class ProductRepository extends Repository {
       },
       { isolationLevel: "Serializable" },
     );
+  }
+
+  /**
+   * EGY KÉP ALT-SZÖVEGE (T4.1-D3, 4. szelet). Csak a termék saját képén (`productId`
+   * a where ágban); a termék `updatedAt`-je lép, mert a Medusa-vetítés esedékessége a
+   * termék-sorból olvas, és az alt a termék metaadatában megy ki. `null`: a kép nem
+   * ehhez a termékhez tartozik.
+   */
+  async setImageAltText(
+    productId: string,
+    imageId: string,
+    altText: string | null,
+    actorUserId?: string,
+  ): Promise<ProductDetail | null> {
+    return this.productDatabase.$transaction(async (transaction) => {
+      const written = await transaction.productImage.updateMany({
+        where: { id: imageId, productId },
+        data: { altText },
+      });
+      if (written.count === 0) return null;
+      return this.touchAndRead(transaction, productId, actorUserId, {
+        eventType: "product.image.alt-text.set",
+        payload: { imageId, altText },
+      });
+    });
+  }
+
+  /**
+   * A KÉPEK SORRENDJE: a `sortOrder` a megadott sorrend indexe. A lista a termék
+   * MINDEN képét pontosan egyszer tartalmazza, különben semmi nem íródik (`null`):
+   * egy hiányzó kép a régi sorszámával a többi közé csúszna, egy idegen pedig egy
+   * másik termék sorrendjét írná.
+   */
+  async setImageOrder(
+    productId: string,
+    imageIds: string[],
+    actorUserId?: string,
+  ): Promise<ProductDetail | null> {
+    return this.productDatabase.$transaction(async (transaction) => {
+      const own = await transaction.productImage.findMany({
+        where: { productId },
+        select: { id: true },
+      });
+      const ownIds = new Set(own.map((image) => image.id));
+      if (
+        imageIds.length !== ownIds.size ||
+        new Set(imageIds).size !== imageIds.length ||
+        imageIds.some((id) => !ownIds.has(id))
+      )
+        return null;
+      for (const [sortOrder, id] of imageIds.entries())
+        await transaction.productImage.updateMany({
+          where: { id, productId },
+          data: { sortOrder },
+        });
+      return this.touchAndRead(transaction, productId, actorUserId, {
+        eventType: "product.image.order.set",
+        payload: { imageIds },
+      });
+    });
+  }
+
+  /** A termék esedékessé tétele a vetítésnek, az esemény, és a friss részletek. */
+  private async touchAndRead(
+    transaction: ProductTransaction,
+    productId: string,
+    actorUserId: string | undefined,
+    event: { eventType: string; payload: Prisma.JsonObject },
+  ): Promise<ProductDetail> {
+    const now = new Date();
+    await transaction.product.update({
+      where: { id: productId },
+      data: { updatedAt: now },
+    });
+    await transaction.domainEvent.create({
+      data: {
+        id: randomUUID(),
+        eventType: event.eventType,
+        aggregateType: "Product",
+        aggregateId: productId,
+        actorUserId,
+        occurredAt: now,
+        schemaVersion: 1,
+        payload: event.payload,
+      },
+    });
+    const product = await transaction.product.findUnique({
+      where: { id: productId },
+      include: productInclude,
+    });
+    if (!product) throw new Error("A termék nem található.");
+    return toProductDetail(product);
   }
 
   async listCategoryOptions(): Promise<CatalogOption[]> {

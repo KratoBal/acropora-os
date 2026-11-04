@@ -25,13 +25,14 @@ export const TAKEOVER_EDITABLE = [
   "vásárolható a webshopban jelző",
   "saját eladási ár, változatonként",
   "szállítási jelzők",
+  "képek alt-szövege és sorrendje",
 ] as const;
 
 /** Az átvétel után az utolsó UNAS-értéken áll, és ma nincs rá OS-oldali szerkesztő. */
 export const TAKEOVER_FROZEN = [
   "hosszú leírás",
   "keresőoptimalizálási mezők (SEO cím, leírás, kulcsszó)",
-  "képek és alt-szövegek",
+  "képek feltöltése és törlése",
   "hasonló és kiegészítő termékek",
   "gyártói cikkszám",
   "mértékegység és másodlagos egység",

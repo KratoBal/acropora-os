@@ -173,6 +173,22 @@ export const productApi = {
       { method: "PUT", body: JSON.stringify({ grossPrice }) },
     );
   },
+  /** Egy kép alt-szövege (T4.1-D3); üres: nincs kézi alt, a kirakat a nevet adja. */
+  setImageAlt(token: string, id: string, imageId: string, altText: string) {
+    return apiRequest<ProductDetail>(
+      `/products/${encodeURIComponent(id)}/images/${encodeURIComponent(imageId)}`,
+      token,
+      { method: "PATCH", body: JSON.stringify({ altText }) },
+    );
+  },
+  /** A képek sorrendje: a termék minden képe, pontosan egyszer (T4.1-D3). */
+  setImageOrder(token: string, id: string, imageIds: string[]) {
+    return apiRequest<ProductDetail>(
+      `/products/${encodeURIComponent(id)}/images/order`,
+      token,
+      { method: "PUT", body: JSON.stringify({ imageIds }) },
+    );
+  },
   takeCatalogAuthority(token: string, id: string) {
     return apiRequest<ProductDetail>(
       `/products/${encodeURIComponent(id)}/catalog-authority/acropora`,

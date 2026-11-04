@@ -1,0 +1,132 @@
+"use client";
+
+import { Alert, PilotButton, PilotFormField, PilotInput } from "@acropora/ui";
+import type { ProductImageSummary } from "@acropora/types";
+import { useState } from "react";
+
+import { productApi } from "@/lib/api/products";
+
+/**
+ * A KÉPEK ALT-SZÖVEGE ÉS SORRENDJE (T4.1-D3, 4. szelet). Csak OS-gazdájú terméknél
+ * jelenik meg: UNAS-gazdánál a szinkron minden futásnál újraírja a képeket. Az üres
+ * alt nem hiba: akkor a kirakat a termék nevét adja (a polip D3 szerinti gépi
+ * alapérték). A sorrend a fel/le gombra azonnal mentődik, mert a szerver csak a
+ * teljes, pontos sorrendet fogadja el.
+ *
+ * Feltöltés és törlés ebben a szeletben nincs.
+ */
+export function ProductImagesEditor({
+  productId,
+  productName,
+  images,
+  token,
+  onSaved,
+}: {
+  productId: string;
+  productName: string;
+  images: ProductImageSummary[];
+  token: string;
+  onSaved: () => void;
+}) {
+  const [alts, setAlts] = useState<Record<string, string>>(() =>
+    Object.fromEntries(images.map((image) => [image.id, image.altText ?? ""])),
+  );
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const run = async (action: () => Promise<unknown>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await action();
+      onSaved();
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "A mentés nem sikerült.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const move = (index: number, by: -1 | 1) => {
+    const ids = images.map((image) => image.id);
+    const [moved] = ids.splice(index, 1);
+    ids.splice(index + by, 0, moved!);
+    void run(() => productApi.setImageOrder(token, productId, ids));
+  };
+
+  return (
+    <div className="space-y-4">
+      {error ? (
+        <Alert
+          variant="danger"
+          title="A kép nem mentődött"
+          description={error}
+        />
+      ) : null}
+      <ol className="space-y-4">
+        {images.map((image, index) => {
+          const alt = alts[image.id] ?? "";
+          const changed = alt.trim() !== (image.altText ?? "");
+          return (
+            <li
+              key={image.id}
+              className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)]"
+            >
+              <img
+                src={image.url}
+                alt={image.altText ?? productName}
+                className="aspect-[156/112] w-full rounded-lg border border-pilot-grey-200 object-cover"
+              />
+              <div className="min-w-0 space-y-2">
+                <PilotFormField
+                  label={`${index + 1}. kép alt-szövege`}
+                  help="Üresen a kirakat a termék nevét írja ki."
+                >
+                  <PilotInput
+                    value={alt}
+                    onChange={(value) =>
+                      setAlts((current) => ({ ...current, [image.id]: value }))
+                    }
+                    placeholder={productName}
+                    aria-label={`${index + 1}. kép alt-szövege`}
+                  />
+                </PilotFormField>
+                <div className="flex flex-wrap gap-2">
+                  <PilotButton
+                    variant="secondary"
+                    disabled={busy || !changed}
+                    onClick={() =>
+                      void run(() =>
+                        productApi.setImageAlt(token, productId, image.id, alt),
+                      )
+                    }
+                  >
+                    Alt mentése
+                  </PilotButton>
+                  <PilotButton
+                    variant="ghost"
+                    disabled={busy || index === 0}
+                    aria-label={`${index + 1}. kép előrébb`}
+                    onClick={() => move(index, -1)}
+                  >
+                    Előrébb
+                  </PilotButton>
+                  <PilotButton
+                    variant="ghost"
+                    disabled={busy || index === images.length - 1}
+                    aria-label={`${index + 1}. kép hátrébb`}
+                    onClick={() => move(index, 1)}
+                  >
+                    Hátrébb
+                  </PilotButton>
+                </div>
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
