@@ -1,4 +1,4 @@
-import { prisma } from "@acropora/database";
+import { Prisma, prisma } from "@acropora/database";
 
 import type { PaymentMarkInput } from "../integrations/szamlazz/outgoing-payment-marks.js";
 import type {
@@ -200,49 +200,67 @@ export function bankTransferPlanFrom(
 
 const isoDay = (value: Date) => value.toISOString().slice(0, 10);
 
-/**
- * The credits since `from` (ÉÉÉÉ-HH-NN), a marked duplicate left out, and every Számlázz.hu invoice their texts
- * could name (the latest feed version of each number). Read only.
- */
-export async function loadBankTransfers(from: string): Promise<{
-  credits: BankCredit[];
-  invoices: FeedInvoice[];
-}> {
-  const rows = await prisma.bankTransaction.findMany({
-    where: {
-      direction: "CREDIT",
-      bookingDate: { gte: new Date(`${from}T00:00:00Z`) },
-      duplicateOfId: null,
-      duplicateMarkedAt: null,
-    },
-    orderBy: [{ bookingDate: "asc" }, { id: "asc" }],
-    select: {
-      id: true,
-      amount: true,
-      currency: true,
-      bookingDate: true,
-      valueDate: true,
-      narrative: true,
-    },
-  });
-  const credits = rows.map((row) => ({
+/** A credit as the decision reads it, with the counterparty for the page. */
+const CREDIT_SELECT = {
+  id: true,
+  amount: true,
+  currency: true,
+  bookingDate: true,
+  valueDate: true,
+  narrative: true,
+  counterpartyName: true,
+} as const;
+
+/** Not a debit, not a marked duplicate: the credits a pairing may use. */
+const PAIRABLE_CREDIT = {
+  direction: "CREDIT",
+  duplicateOfId: null,
+  duplicateMarkedAt: null,
+} as const;
+
+function toCredit(row: {
+  id: string;
+  amount: Prisma.Decimal;
+  currency: string;
+  bookingDate: Date;
+  valueDate: Date | null;
+  narrative: string;
+  counterpartyName: string | null;
+}): BankCredit & { counterpartyName: string | null } {
+  return {
     id: row.id,
     amount: row.amount.toFixed(2),
     currency: row.currency,
     bookingDate: isoDay(row.bookingDate),
     valueDate: row.valueDate ? isoDay(row.valueDate) : null,
     narrative: row.narrative,
-  }));
+    counterpartyName: row.counterpartyName,
+  };
+}
+
+/** One pairable credit, or null. */
+export async function loadBankCredit(
+  id: string,
+): Promise<(BankCredit & { counterpartyName: string | null }) | null> {
+  const row = await prisma.bankTransaction.findFirst({
+    where: { id, ...PAIRABLE_CREDIT },
+    select: CREDIT_SELECT,
+  });
+  return row ? toCredit(row) : null;
+}
+
+/** Every Számlázz.hu invoice the texts could name: the latest feed version of each number. Read only. */
+export async function loadFeedInvoicesFor(
+  texts: readonly string[],
+): Promise<FeedInvoice[]> {
   const suffixes = [
     ...new Set(
-      credits.flatMap((credit) =>
-        remittanceInvoiceRefs(credit.narrative).map(
-          (ref) => `${ref.year}/${ref.number}`,
-        ),
+      texts.flatMap((text) =>
+        remittanceInvoiceRefs(text).map((ref) => `${ref.year}/${ref.number}`),
       ),
     ),
   ];
-  if (suffixes.length === 0) return { credits, invoices: [] };
+  if (suffixes.length === 0) return [];
   const documents = await prisma.externalBillingDocument.findMany({
     where: {
       source: "SZAMLAZZ",
@@ -266,7 +284,7 @@ export async function loadBankTransfers(from: string): Promise<{
   const latest = new Map<string, (typeof documents)[number]>();
   for (const row of documents)
     if (!latest.has(row.documentNumber)) latest.set(row.documentNumber, row);
-  const invoices = [...latest.values()].map((row) => ({
+  return [...latest.values()].map((row) => ({
     documentNumber: row.documentNumber,
     kindCode: row.kindCode,
     cancelled: row.cancelled,
@@ -285,7 +303,29 @@ export async function loadBankTransfers(from: string): Promise<{
         })
       : [],
   }));
-  return { credits, invoices };
+}
+
+/**
+ * The credits since `from` (ÉÉÉÉ-HH-NN), a marked duplicate left out, and every Számlázz.hu invoice their texts
+ * could name. Read only.
+ */
+export async function loadBankTransfers(from: string): Promise<{
+  credits: (BankCredit & { counterpartyName: string | null })[];
+  invoices: FeedInvoice[];
+}> {
+  const rows = await prisma.bankTransaction.findMany({
+    where: {
+      ...PAIRABLE_CREDIT,
+      bookingDate: { gte: new Date(`${from}T00:00:00Z`) },
+    },
+    orderBy: [{ bookingDate: "asc" }, { id: "asc" }],
+    select: CREDIT_SELECT,
+  });
+  const credits = rows.map(toCredit);
+  return {
+    credits,
+    invoices: await loadFeedInvoicesFor(credits.map((c) => c.narrative)),
+  };
 }
 
 export async function bankTransferPaidMarkPlan(

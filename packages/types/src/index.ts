@@ -1778,3 +1778,10 @@ export type {
   PartnerMergeSide,
   PartnerMergeUndoResult,
 } from "./partner-merge.js";
+export { BANK_TRANSFER_REFUSAL_TEXT } from "./bank-transfer-pairing.js";
+export type {
+  BankTransferCreditView,
+  BankTransferDecisionView,
+  BankTransferPairResult,
+  BankTransferRefusalValue,
+} from "./bank-transfer-pairing.js";

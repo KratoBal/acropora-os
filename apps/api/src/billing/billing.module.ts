@@ -38,6 +38,11 @@ import {
   BuyerTaxCheckRepository,
   BuyerTaxCheckScheduler,
 } from "./buyer-tax-check.scheduler.js";
+import { BankTransferPairingController } from "./bank-transfer-pairing.controller.js";
+import {
+  BankTransferPairingRepository,
+  BankTransferPairingService,
+} from "./bank-transfer-pairing.service.js";
 import { ManualOutgoingPaymentController } from "./manual-outgoing-payment.controller.js";
 import {
   ManualOutgoingPaymentService,
@@ -67,6 +72,7 @@ import {
     BillingDocumentEmailController,
     BillingEmailDraftController,
     ManualOutgoingPaymentController,
+    BankTransferPairingController,
   ],
   providers: [
     BillingDocumentsRepository,
@@ -93,6 +99,8 @@ import {
     ManualOutgoingPaymentService,
     ManualPaymentAuditRepository,
     PendingPaymentMarkRepository,
+    BankTransferPairingService,
+    BankTransferPairingRepository,
     documentStoreProvider,
   ],
   // a webshop rendelés számlája ugyanazon a vázlaton és kiállításon megy
