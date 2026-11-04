@@ -248,7 +248,8 @@ function TaskCard({
           {task.linkUrl ? (
             <a
               href={task.linkUrl}
-              {...(task.source === "QUOTE"
+              {...(task.source === "QUOTE" ||
+              task.source === "WEBSHOP_COMPLAINT"
                 ? {}
                 : { target: "_blank", rel: "noopener noreferrer" })}
               className="rounded underline-offset-4 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"
@@ -267,6 +268,10 @@ function TaskCard({
             <Badge variant="warning">{TASK_SOURCE_LABELS.AGENT}</Badge>
           ) : task.source === "QUOTE" ? (
             <Badge variant="info">{TASK_SOURCE_LABELS.QUOTE}</Badge>
+          ) : task.source === "WEBSHOP_COMPLAINT" ? (
+            <Badge variant="warning">
+              {TASK_SOURCE_LABELS.WEBSHOP_COMPLAINT}
+            </Badge>
           ) : null}
         </div>
       </div>
@@ -302,7 +307,15 @@ function TaskCard({
           </span>
         ) : null}
         {task.linkUrl ? (
-          task.source === "QUOTE" ? (
+          task.source === "WEBSHOP_COMPLAINT" ? (
+            // V1.2: the order page is ours: it opens here, not in a new tab
+            <a
+              href={task.linkUrl}
+              className="font-semibold text-brand-700 underline-offset-4 hover:underline"
+            >
+              Rendelés megnyitása
+            </a>
+          ) : task.source === "QUOTE" ? (
             // P8: an offer of our own opens here, not in a new tab
             <a
               href={task.linkUrl}

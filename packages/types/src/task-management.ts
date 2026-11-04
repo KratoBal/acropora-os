@@ -1,7 +1,7 @@
 export type TaskStatus = "OPEN" | "DONE";
 
-/** QUOTE: an offer's follow-up (#1582 P8). */
-export type TaskSource = "MANUAL" | "AGENT" | "QUOTE";
+/** QUOTE: an offer's follow-up (#1582 P8). WEBSHOP_COMPLAINT: a customer's shipment-problem report (V1.2). */
+export type TaskSource = "MANUAL" | "AGENT" | "QUOTE" | "WEBSHOP_COMPLAINT";
 
 export type TaskStatusFilter = TaskStatus | "ALL";
 
