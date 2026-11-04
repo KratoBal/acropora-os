@@ -33,7 +33,8 @@ describe("the webshop events and their derivation", () => {
       webshop.map((e) => e.id).sort(),
       [...keys, ...keys.map((k) => `${k}_EN`)].sort(),
     );
-    assert.equal(webshop.length, 22);
+    // twelve templates, each with its English twin
+    assert.equal(webshop.length, 24);
   });
 
   /*
