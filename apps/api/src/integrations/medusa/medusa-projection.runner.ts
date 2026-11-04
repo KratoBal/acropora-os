@@ -1346,6 +1346,12 @@ export async function runProjectionCli(
      * irja, tehat az utolso kep torlese utan ures. A boltnak ezt kifejezetten
      * meg kell kapnia (`imagesCleared`), kulonben a regi kep kint marad. A
      * UNAS-gazdanal a nulla atmeneti lehet (az import torol-es-ujrair), ott nem.
+     *
+     * SZANDEKOS MELLEKHATAS (barracuda, #2144): egy OS-gazdaju, kepsor nelkuli
+     * termek boltbeli kepeit -- ha valaki a Medusa adminban kezzel rakott fel --
+     * minden vetites leveszi. Az OS-gazdanal az OS a kep igazsaga; ugyanez a
+     * torzs megy a letrehozaskor is (`images: []`, `thumbnail: null`, a 2.20.1
+     * validatora elfogadja).
      */
     const kepekToroltek =
       kepek.length === 0 && isAcroporaMasteredProduct(product);
