@@ -39,7 +39,8 @@ function formatStock(value: string | null): string {
 
 type ProductRow = ProductListResponse["items"][number];
 
-export const PRODUCT_TABLE_MIN_WIDTH = 880;
+// 880 + the 140 px shipping column (a82ed229): the name keeps its 150 px
+export const PRODUCT_TABLE_MIN_WIDTH = 1020;
 
 /*
   A WEBSHOP-TERMÉKLISTA OSZLOPAI A KÖZÖS TÁBLÁN (UI-áttekintés, 3. csomag, 2026-11-03). Telefonon a tábla
@@ -105,6 +106,7 @@ export const PRODUCT_COLUMNS: PilotTableColumn<ProductRow>[] = [
     // a82ed229: the shipping flags; "nincs vizsgálva" is not "nincs korlát"
     id: "shipping",
     header: "Szállítás",
+    width: "140px",
     cell: (product) => <ShippingFlagsCell flags={product.shippingFlags} />,
   },
   {

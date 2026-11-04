@@ -159,6 +159,7 @@ describe("WebshopProductListPage", () => {
       "Cikkszám",
       "Bruttó ár",
       "Készlet",
+      "Szállítás",
       "Webshop státusz",
       "Megnyitás",
     ]);
