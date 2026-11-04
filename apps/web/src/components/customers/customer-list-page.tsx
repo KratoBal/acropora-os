@@ -287,7 +287,11 @@ export function CustomerListPage() {
               title={
                 data.pagination.totalItems ? "Nincs találat" : "Nincsenek vevők"
               }
-              description="Módosítsd a szűrőket vagy rögzíts új vevőt."
+              description={
+                params.get("role") === "SUPPLIER"
+                  ? "A beszállítók akkor jelennek meg itt, ha a partnerük egy vevő-sorhoz van kötve (a partner-átvezetés után); addig csak a szerviz-partnerek tükör-sorai vannak a listán."
+                  : "Módosítsd a szűrőket vagy rögzíts új vevőt."
+              }
               action={
                 data.pagination.totalItems ? (
                   <PilotButton

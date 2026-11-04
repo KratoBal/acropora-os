@@ -1,6 +1,7 @@
 import { QuotesModule } from "./quotes/quotes.module.js";
 import { PartnerDuplicateReportModule } from "./partner-duplicates/partner-duplicate-report.module.js";
 import { PartnerMigrationModule } from "./partner-migration/partner-migration.module.js";
+import { PartnerMergeModule } from "./partner-merge/partner-merge.module.js";
 import { PartnerOrdersModule } from "./partner-orders/partner-orders.module.js";
 import { CashRegisterModule } from "./cash-registers/cash-register.module.js";
 import {
@@ -81,6 +82,7 @@ import { MortalityModule } from "./mortality/mortality.module.js";
     QuotesModule,
     PartnerDuplicateReportModule,
     PartnerMigrationModule,
+    PartnerMergeModule,
     PartnerOrdersModule,
     AssistantModule,
     AssetCategoriesModule,
