@@ -596,6 +596,14 @@ const mainNavigationGroups: AppNavigationGroup[] = [
         entryId: "partner-migration",
       },
       {
+        // a82ed229: a szállítási jelzők egyszeri feltöltése a UNAS-ból (próba, írás a lenyomattal)
+        subgroup: "Törzsadatok",
+        href: "/beallitasok/szallitasi-jelzok",
+        label: "Szállítási jelzők feltöltése",
+        icon: "settings",
+        entryId: "shipping-fill",
+      },
+      {
         // AZ AJANLATI SZOVEGRESZLETEK (#1582 P1): a Figma 35-ben nincs sajat
         // kerete, ezert a Beallitasok tobbi listalapjanak mintajat koveti.
         subgroup: "Árajánlat",

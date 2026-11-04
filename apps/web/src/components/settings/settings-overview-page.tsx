@@ -213,6 +213,13 @@ export const SETTINGS_AREAS: SettingsArea[] = [
         href: "/beallitasok/partner-atvezetes",
         entryId: "partner-migration",
       },
+      {
+        label: "Szállítási jelzők feltöltése",
+        description:
+          "Egyszeri feltöltés a UNAS-ból: minden UNAS-os termék megkapja a szállítási jelzőit. Előbb próba, utána írás.",
+        href: "/beallitasok/szallitasi-jelzok",
+        entryId: "shipping-fill",
+      },
     ],
   },
   {

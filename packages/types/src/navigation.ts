@@ -655,6 +655,15 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
   },
   {
     /**
+     * A SZÁLLÍTÁSI JELZŐK EGYSZERI FELTÖLTÉSE (a82ed229; acrobot 43016): próba és írás a lenyomattal. Ugyanaz a jog,
+     * mint a végponté (`settings.manage`); élesen Balázs nyomja.
+     */
+    id: "shipping-fill",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.SETTINGS_MANAGE),
+  },
+  {
+    /**
      * AZ AJÁNLATI SZÖVEGRÉSZLETEK KEZELŐJE (#1582 P1). Ugyanaz a jog, ami a
      * végpontok írását védi (`quotes.templates.manage`), és ugyanaz a
      * kapcsoló, mint az Árajánlatok menüponté.

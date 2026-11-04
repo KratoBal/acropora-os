@@ -61,7 +61,8 @@ const JELZOK = [
     // a82ed229: a UNAS nem ismeri, tehát mindig kézi
     key: "lockerUnsuitable" as const,
     label: "Csomagautomatába nem fér",
-    hint: "Foxpost nem ajánlható, GLS csomagponton csak bolt választható.",
+    // barracuda, #2202: the shop does not act on it yet (the storefront slice of a82ed229), so the hint says so
+    hint: "A kirakatban (következő lépés): Foxpost nem ajánlható, GLS csomagponton csak bolt.",
   },
 ];
 
