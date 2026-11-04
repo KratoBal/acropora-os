@@ -250,6 +250,41 @@ describe("a vevő adatlapja", () => {
     expect(api.update).not.toHaveBeenCalled();
   });
 
+  it("offers the same-named partner's tax number as a hint, and copies it only when asked", async () => {
+    api.detail.mockResolvedValue(
+      customer({
+        taxNumber: undefined,
+        partnerTaxHint: {
+          partnerName: "Fővárosi Állat- és Növénykert",
+          taxNumber: "15501645-2-41",
+        },
+      }),
+    );
+    await render_();
+    const hint = screen.getByTestId("partner-tax-hint");
+    expect(hint.textContent).toContain("15501645-2-41");
+    // nothing is copied by itself
+    expect((screen.getByLabelText("Adószám") as HTMLInputElement).value).toBe(
+      "",
+    );
+    fireEvent.click(within(hint).getByRole("button", { name: "Beírom" }));
+    expect((screen.getByLabelText("Adószám") as HTMLInputElement).value).toBe(
+      "15501645-2-41",
+    );
+    expect(screen.queryByTestId("partner-tax-hint")).toBeNull();
+  });
+
+  it("shows no hint on a customer that already has a tax number", async () => {
+    api.detail.mockResolvedValue(
+      customer({
+        taxNumber: "12345678-1-42",
+        partnerTaxHint: { partnerName: "X Kft.", taxNumber: "15501645-2-41" },
+      }),
+    );
+    await render_();
+    expect(screen.queryByTestId("partner-tax-hint")).toBeNull();
+  });
+
   it("shows the tax number field to a person only when the type becomes company", async () => {
     api.detail.mockResolvedValue(
       customer({ type: "PERSON", companyName: undefined }),

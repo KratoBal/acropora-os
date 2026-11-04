@@ -419,6 +419,26 @@ export function CustomerDetailPage({ customerId }: { customerId: string }) {
                 {navNotice ? (
                   <p className="mt-1 text-xs text-dusk-500">{navNotice}</p>
                 ) : null}
+                {/* the same-named partner's tax number (#2161): a hint where to copy it from, never copied by itself */}
+                {!readOnly && !taxNumber.trim() && customer.partnerTaxHint ? (
+                  <p
+                    className="mt-1 text-xs text-dusk-600"
+                    data-testid="partner-tax-hint"
+                  >
+                    A Partnerek között {customer.partnerTaxHint.partnerName}{" "}
+                    a(z) {customer.partnerTaxHint.taxNumber} adószámmal
+                    szerepel.{" "}
+                    <button
+                      type="button"
+                      className="font-semibold underline"
+                      onClick={() =>
+                        setTaxNumber(customer.partnerTaxHint!.taxNumber)
+                      }
+                    >
+                      Beírom
+                    </button>
+                  </p>
+                ) : null}
               </FormField>
             ) : null}
             {type === "COMPANY" ? (
