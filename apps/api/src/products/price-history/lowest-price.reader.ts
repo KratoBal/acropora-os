@@ -54,7 +54,11 @@ async function readSeries(database: LowestPriceDatabase, variantId: string) {
   });
   return {
     rows,
-    series: seriesOfVariant(rows, variantId, variant.unasVariantExtraGrossPrice),
+    series: seriesOfVariant(
+      rows,
+      variantId,
+      variant.unasVariantExtraGrossPrice,
+    ),
   };
 }
 

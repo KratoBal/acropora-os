@@ -1,5 +1,9 @@
 import { MEDUSA_CURRENCY_CODE } from "./medusa-pricing.policy.js";
 import type { LowestPrice } from "../../products/price-history/lowest-price.js";
+import {
+  lowestPriceBeforeCurrentReduction,
+  type LowestPriceDatabase,
+} from "../../products/price-history/lowest-price.reader.js";
 
 /**
  * THE OMNIBUS METADATA OF A VARIANT, AS THE SHOP GETS IT (V0.2, slice 2).
@@ -59,4 +63,25 @@ export function planOmnibusWrite(
   const present = typeof current === "string" && current !== "";
   if (wanted === "") return present ? "write" : "unchanged";
   return present && current === wanted ? "unchanged" : "write";
+}
+
+/**
+ * What the projection of ONE product hands to the shop: a value per active variant, or `undefined`
+ * when the switch is off (then no history is read and the shop's key is left as it stands). A
+ * variant with no running reduction gets "", which clears its key.
+ */
+export async function omnibusInputsFor(
+  database: LowestPriceDatabase,
+  variants: readonly { id: string; sku: string }[],
+  env: Record<string, string | undefined>,
+): Promise<VariantOmnibusInput[] | undefined> {
+  if (!omnibusProjectionEnabled(env)) return undefined;
+  return Promise.all(
+    variants.map(async (variant) => ({
+      sku: variant.sku,
+      value: omnibusMetadataValue(
+        await lowestPriceBeforeCurrentReduction(database, variant.id),
+      ),
+    })),
+  );
 }

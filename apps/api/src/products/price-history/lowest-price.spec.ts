@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import { Prisma } from "@acropora/database";
 
 import {
+  currentReductionStart,
   lowestPriceInWindow,
   seriesOfVariant,
   type HistoryRow,
@@ -309,5 +310,50 @@ describe("lowestPriceForVariant", () => {
     };
     assert.equal(await lowestPriceForVariant(database, "nincs", NOW), null);
     assert.equal(read, false);
+  });
+});
+
+describe("currentReductionStart", () => {
+  const sale = (n: number, price: string | null) =>
+    row({
+      observedAt: day(n),
+      saleGrossPrice: price === null ? null : D(price),
+    });
+
+  it("is the first day of the sale run that is in force now", () => {
+    const rows = [sale(0, null), sale(10, "1200"), sale(20, "900")];
+    assert.equal(
+      currentReductionStart(rows, "v1")?.getTime(),
+      day(10).getTime(),
+    );
+  });
+
+  it("is null when the last row has no sale price (the reduction ended)", () => {
+    assert.equal(
+      currentReductionStart(
+        [sale(0, null), sale(10, "1200"), sale(20, null)],
+        "v1",
+      ),
+      null,
+    );
+  });
+
+  it("a second, separate sale is measured from its own first day", () => {
+    const rows = [sale(0, "1200"), sale(5, null), sale(30, "1100")];
+    assert.equal(
+      currentReductionStart(rows, "v1")?.getTime(),
+      day(30).getTime(),
+    );
+  });
+
+  it("is null for a taken-over variant (it has own rows: no sale concept), and without rows", () => {
+    assert.equal(
+      currentReductionStart(
+        [sale(0, "1200"), row({ observedAt: day(5), variantId: "v1" })],
+        "v1",
+      ),
+      null,
+    );
+    assert.equal(currentReductionStart([], "v1"), null);
   });
 });
