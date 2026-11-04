@@ -6,6 +6,33 @@ import { useState } from "react";
 
 import { productApi } from "@/lib/api/products";
 
+import {
+  TAKEOVER_EDITABLE,
+  TAKEOVER_FROZEN,
+  TAKEOVER_PRICE_NOTE,
+  TAKEOVER_UNTOUCHED,
+} from "./takeover-scope";
+
+/** Egy felsorolás a `takeover-scope` egyik listájából, címmel. */
+function ScopeList({
+  title,
+  items,
+}: {
+  title: string;
+  items: readonly string[];
+}) {
+  return (
+    <div>
+      <p className="text-sm font-semibold text-pilot-grey-900">{title}</p>
+      <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm text-pilot-grey-700">
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 /**
  * Ki gondozza a termék törzsadatát, és hogyan vesszük át.
  *
@@ -73,11 +100,17 @@ export function ProductAuthorityCard({
       bodyClassName="space-y-3 px-5 py-5"
     >
       {authority === "ACROPORA" ? (
-        <p className="text-sm leading-6 text-pilot-grey-600">
-          A nevet és a leírást itt szerkesztjük. A webshop-szinkron ezt a
-          terméket kihagyja, tehát egy UNAS oldali módosítás nem írja felül,
-          amit itt beírunk.
-        </p>
+        <div className="space-y-3">
+          <p className="text-sm leading-6 text-pilot-grey-600">
+            A webshop-szinkron ezt a terméket teljes egészében kihagyja, tehát
+            egy UNAS oldali módosítás semmit nem ír felül rajta.
+          </p>
+          <ScopeList title="Itt szerkesztjük" items={TAKEOVER_EDITABLE} />
+          <ScopeList
+            title="Az átvételkori UNAS-értéken áll, szerkesztő még nincs rá"
+            items={TAKEOVER_FROZEN}
+          />
+        </div>
       ) : null}
 
       {authority === "UNAS" ? (
@@ -113,11 +146,22 @@ export function ProductAuthorityCard({
           */
           <div className="space-y-3 rounded-md border border-amber-200 bg-amber-50/70 p-3">
             <p className="text-sm text-dusk-800">
-              Az átvétel után a webshop-szinkron <strong>nem írja</strong> ennek
-              a terméknek a nevét és leírását. Ha valaki a UNAS felületén
-              javítja őket, az a javítás ide már nem érkezik meg, és erről nem
-              kapunk értesítést.
+              Az átvétel után a webshop-szinkron{" "}
+              <strong>egyáltalán nem írja</strong> ezt a terméket, nem csak a
+              nevét és a leírását. Ha valaki a UNAS felületén javít rajta
+              valamit, az a javítás ide már nem érkezik meg, és erről nem kapunk
+              értesítést.
             </p>
+            <ScopeList
+              title="Ezután itt szerkeszthető"
+              items={TAKEOVER_EDITABLE}
+            />
+            <ScopeList
+              title="Befagy a mai UNAS-értéken, és ma nincs rá szerkesztő"
+              items={TAKEOVER_FROZEN}
+            />
+            <ScopeList title="Nem érinti" items={TAKEOVER_UNTOUCHED} />
+            <p className="text-sm text-dusk-800">{TAKEOVER_PRICE_NOTE}</p>
             <p className="text-sm text-dusk-800">
               Visszaadni egyelőre nem lehet.
             </p>

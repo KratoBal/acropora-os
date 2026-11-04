@@ -1,7 +1,29 @@
 {
   "extends": "./tsconfig.json",
+  // A TESZT-FORDITAS NEM ELLENORIZ TIPUST, CSAK KIBOCSAT (T6.2, kartya bcaba58f).
+  //
+  // A CI `verify-unit` jobjanak kritikus utja az `api:test` volt (2026-11-03
+  // 22:40-es main futas: a 8 perc 13 mp-es `turbo run test`-bol kb. 6 perc), es
+  // ennek ket perce egy teljes `tsc` tipusellenorzes, amit a `verify-static` job
+  // `pnpm typecheck`-je UGYANARRA a fajlkeszletre mar elvegez: a `tsconfig.json`
+  // `src/**/*.ts`-e a specet is tartalmazza. A `verify-db` ket integracios
+  // hivasa (`test:integration`, `test:brands:integration`) es a smoke teszt
+  // ugyanezt a fajlt forditja, tehat ott is ketszer-haromszor futott.
+  //
+  // A KIMENET NEM VALTOZIK, ES EZT MERTUK: a `src/service-assets` es a
+  // `src/messages` 241 JS fajlja (39 Nest dekorator-metaadattal) `noCheck`-kel
+  // bajtra azonos a tipusellenorzo forditaseval, a sourcemap-komment kivetelevel.
+  // A `declaration` es a `sourceMap` kikapcsolasa csak a nem futtatott
+  // mellektermeket hagyja el (a `node --test` source map nelkul fut).
+  //
+  // AMIT ELVESZIT: egy tipushibas spec az `api:test`-ben nem bukik el, csak a
+  // `verify-static`-ban. A `verify` kapu mindkettot keri, tehat a PR ugyanugy
+  // piros marad.
   "compilerOptions": {
-    "outDir": "./test-dist"
+    "outDir": "./test-dist",
+    "noCheck": true,
+    "declaration": false,
+    "sourceMap": false
   },
   "exclude": ["node_modules", "dist", "test-dist"]
 }
