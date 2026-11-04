@@ -1760,10 +1760,10 @@ export type {
   PartnerDuplicateResponse,
   PartnerDuplicateSupplier,
 } from "./partner-duplicates.js";
-export {
-  PARTNER_MIGRATION_ACTIONS,
-  type PartnerMigrationAction,
-  type PartnerMigrationCustomer,
-  type PartnerMigrationPlan,
-  type PartnerMigrationRow,
+export { PARTNER_MIGRATION_ACTIONS } from "./partner-migration.js";
+export type {
+  PartnerMigrationAction,
+  PartnerMigrationCustomer,
+  PartnerMigrationPlan,
+  PartnerMigrationRow,
 } from "./partner-migration.js";
