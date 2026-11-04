@@ -19,7 +19,10 @@ import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
 import { DOCUMENT_UPLOAD_LIMITS } from "../documents/document-upload-limits.js";
 
-import { IssueCompletionCertificateDto } from "./dto.js";
+import {
+  IssueCompletionCertificateDto,
+  IssuePartnerOrderCertificateDto,
+} from "./dto.js";
 import { CompletionCertificatesService } from "./completion-certificates.service.js";
 
 /** Ugyanaz a kapu, mint a megrendelőlapon és a szerződésen: PARTNERS_MANAGE. */
@@ -28,13 +31,36 @@ import { CompletionCertificatesService } from "./completion-certificates.service
 export class CompletionCertificatesController {
   constructor(private readonly service: CompletionCertificatesService) {}
 
+  /** a munkalap TIG-je (`serviceJobId`), vagy a megrendelés TIG-jei (`partnerOrderId`, Megrendelések S2) */
   @Get()
-  list(@Query("serviceJobId") serviceJobId?: string) {
+  list(
+    @Query("serviceJobId") serviceJobId?: string,
+    @Query("partnerOrderId") partnerOrderId?: string,
+  ) {
+    if (serviceJobId?.trim() && partnerOrderId?.trim())
+      throw new BadRequestException(
+        "A serviceJobId és a partnerOrderId közül csak az egyik adható meg.",
+      );
+    if (partnerOrderId?.trim())
+      return this.service.listForPartnerOrder(partnerOrderId.trim());
     if (!serviceJobId?.trim())
       throw new BadRequestException(
-        "A serviceJobId lekérdezési paraméter kötelező.",
+        "A serviceJobId vagy a partnerOrderId lekérdezési paraméter kötelező.",
       );
     return this.service.list(serviceJobId);
+  }
+
+  /** TIG a megrendelésből: sorok nélkül a teljes hátralévő, sorokkal részteljesítés */
+  @Post("partner-order")
+  issueForPartnerOrder(
+    @Body() dto: IssuePartnerOrderCertificateDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.issueForPartnerOrder(
+      dto.partnerOrderId,
+      dto.lines,
+      user,
+    );
   }
 
   @Get(":id")

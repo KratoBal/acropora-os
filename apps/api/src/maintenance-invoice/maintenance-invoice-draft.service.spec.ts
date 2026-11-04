@@ -362,6 +362,43 @@ describe("MaintenanceInvoiceDraftService.draftFor", () => {
   });
 });
 
+describe("MaintenanceInvoiceDraftService.draftFor, a megrendelés TIG-je (Megrendelések S3)", () => {
+  // MI PIROSÍT: ha a megrendeléses TIG vevőjét nem a megrendelésről veszi (nincs munkalapja)
+  const fromOrder = (customer: unknown) =>
+    ({
+      ...baseCertificate,
+      serviceJob: null,
+      partnerOrder: { customer },
+    }) as never;
+
+  it("a vevő a megrendelésé, és a piszkozat erre a vevőre készül", async () => {
+    const { service: subject, created } = service({
+      certificate: fromOrder({
+        ...baseCertificate.serviceJob.customer,
+        id: "customer-po",
+      }),
+    });
+    await subject.draftFor("cert-1");
+    assert.equal(
+      (created[0] as { customerId: string }).customerId,
+      "customer-po",
+    );
+  });
+
+  it("vevő nélküli megrendelésnél a megrendelést nevezi meg, és nem hív Számlázz.hu-t", async () => {
+    const { service: subject, clientCalls } = service({
+      certificate: fromOrder(null),
+    });
+    await assert.rejects(
+      () => subject.draftFor("cert-1"),
+      (error: unknown) =>
+        error instanceof BadRequestException &&
+        (error as Error).message.startsWith("A megrendeléshez nincs vevő"),
+    );
+    assert.equal(clientCalls(), 0);
+  });
+});
+
 describe("MaintenanceInvoiceDraftService.byCertificate", () => {
   it("returns null when no draft exists yet", async () => {
     const { service: subject } = service({ existingInvoice: null });

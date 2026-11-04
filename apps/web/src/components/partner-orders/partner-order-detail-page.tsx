@@ -24,6 +24,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
 import { partnerOrdersApi } from "@/lib/api/partner-orders";
+import { PartnerOrderCertificatesPanel } from "./partner-order-certificates-panel";
 import {
   errorText,
   formatQuantity,
@@ -57,6 +58,10 @@ export function PartnerOrderDetailPage({ orderId }: { orderId: string }) {
   );
   const canManage = Boolean(
     session && hasPermission(session.user, PERMISSIONS.QUOTES_MANAGE),
+  );
+  // the completion certificate is a partner document: the same gate as on the worksheet
+  const canCertify = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.PARTNERS_MANAGE),
   );
   const [order, setOrder] = useState<PartnerOrderDetailDto | null>(null);
   const [loading, setLoading] = useState(true);
@@ -380,6 +385,18 @@ export function PartnerOrderDetailPage({ orderId }: { orderId: string }) {
           </div>
         </div>
       </PilotCard>
+
+      {canCertify && order.currency === "HUF" ? (
+        <PartnerOrderCertificatesPanel
+          partnerOrderId={order.id}
+          items={order.lines.map((line) => ({
+            quoteItemId: line.quoteItemId,
+            name: line.name,
+            quantity: line.quantity,
+            unit: line.unit,
+          }))}
+        />
+      ) : null}
 
       <PilotCard>
         <PilotCardHeader title="Dokumentumok" />
