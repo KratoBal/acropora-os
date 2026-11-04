@@ -1538,13 +1538,13 @@ export function PurchaseInvoiceEuEditorPage() {
                             </p>
                           ) : (
                             <div className="mt-1 flex items-center gap-2">
-                              <Badge
+                              <PilotBadge
                                 variant={
                                   viesResult.valid ? "success" : "danger"
                                 }
                               >
                                 {viesResult.valid ? "Érvényes" : "Érvénytelen"}
-                              </Badge>
+                              </PilotBadge>
                               {viesResult.valid &&
                               (viesResult.name || viesResult.address) ? (
                                 <span className="text-xs text-dusk-500">

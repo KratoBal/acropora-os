@@ -1,11 +1,11 @@
 "use client";
 import {
   Alert,
-  Badge,
   ConfirmDialog,
   PageHeader,
   Skeleton,
   PAGE_GUTTER_X,
+  PilotBadge,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -480,9 +480,9 @@ export function PilotSupplierEditorPage({
           description="Törzsadatok, bankszámla és kapcsolattartó a beszerzési számlák rögzítéséhez."
           meta={
             supplier ? (
-              <Badge variant={supplier.isActive ? "success" : "neutral"}>
+              <PilotBadge variant={supplier.isActive ? "success" : "grey"}>
                 {supplier.isActive ? "Aktív" : "Inaktív"}
-              </Badge>
+              </PilotBadge>
             ) : null
           }
           actions={
@@ -575,13 +575,13 @@ export function PilotSupplierEditorPage({
                       </p>
                     ) : (
                       <div className="mt-1 flex items-center gap-2">
-                        <Badge
+                        <PilotBadge
                           variant={viesResult.valid ? "success" : "danger"}
                         >
                           {viesResult.valid
                             ? "Érvényes EU-s adószám"
                             : "Érvénytelen EU-s adószám"}
-                        </Badge>
+                        </PilotBadge>
                         {viesResult.valid &&
                         (viesResult.name || viesResult.address) ? (
                           <span className="text-xs text-pilot-grey-500">
@@ -777,7 +777,7 @@ export function PilotSupplierEditorPage({
                                 gyerekei szulo nelkul maradnanak a kepernyon, es a
                                 felhasznalo nem tudna visszaallitani sem. */}
                             {unit.isActive ? null : (
-                              <Badge variant="neutral">archivált</Badge>
+                              <PilotBadge variant="grey">archivált</PilotBadge>
                             )}
                             <PilotButton
                               type="button"

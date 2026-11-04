@@ -12,6 +12,7 @@ import {
   PilotDataTable,
   PilotFileInput,
   type PilotTableColumn,
+  PilotBadge,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -105,7 +106,7 @@ export function countLineColumns({
         <span className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-xs text-dusk-700">{line.sku}</span>
           {isPendingLine(status, line) ? (
-            <Badge variant="warning">Nincs megszámolva</Badge>
+            <PilotBadge variant="amber">Nincs megszámolva</PilotBadge>
           ) : null}
         </span>
       ),

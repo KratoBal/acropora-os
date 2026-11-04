@@ -37,11 +37,11 @@ const HATRA = new Map<string, string[]>([
   ["components/billing/billing-receipts-view.tsx", ["Button"]],
   [
     "components/brands/brand-editor-page.tsx",
-    ["Badge", "Button", "Card", "FormField", "Input", "Select"],
+    ["Button", "Card", "FormField", "Input", "Select"],
   ],
   [
     "components/brands/brand-list-page.tsx",
-    ["Badge", "Button", "Card", "Input", "Select"],
+    ["Button", "Card", "Input", "Select"],
   ],
   ["components/content/article-citations-panel.tsx", ["Button", "Input"]],
   [
@@ -65,12 +65,11 @@ const HATRA = new Map<string, string[]>([
     ["Badge", "Button", "Card", "Select"],
   ],
   ["components/messages/messages-page.tsx", ["Input"]],
-  ["components/products/dose-effect-list-page.tsx", ["Badge"]],
   ["components/products/product-authority-card.tsx", ["Button"]],
   ["components/products/product-detail-page.tsx", ["Button", "Input"]],
   [
     "components/products/product-dose-effects-card.tsx",
-    ["Badge", "Button", "Input", "Select"],
+    ["Button", "Input", "Select"],
   ],
   ["components/products/product-list-page.tsx", ["Button"]],
   ["components/products/product-shipping-profile-card.tsx", ["Button"]],
@@ -91,13 +90,10 @@ const HATRA = new Map<string, string[]>([
     ["Button", "Card", "CardContent", "CardHeader"],
   ],
   ["components/quotes/quote-list-page.tsx", ["Button"]],
-  [
-    "components/seo-landing/seo-landing-list-page.tsx",
-    ["Badge", "Button", "Card"],
-  ],
+  ["components/seo-landing/seo-landing-list-page.tsx", ["Button", "Card"]],
   [
     "components/service-assets/asset-detail-page.tsx",
-    ["Badge", "Button", "Card", "FormField", "Select"],
+    ["Button", "Card", "FormField", "Select"],
   ],
   [
     "components/service-assets/asset-editor-page.tsx",
@@ -117,10 +113,9 @@ const HATRA = new Map<string, string[]>([
   ["components/service-jobs/service-job-list-page.tsx", ["Button"]],
   ["components/service-jobs/service-job-placement-editor.tsx", ["Button"]],
   ["components/settings/mail-image-picker.tsx", ["Button"]],
-  ["components/suppliers/pilot/pilot-supplier-editor-page.tsx", ["Badge"]],
   [
     "components/users/user-list-page.tsx",
-    ["Badge", "Button", "Card", "Input", "Select"],
+    ["Button", "Card", "Input", "Select"],
   ],
   ["components/users/user-visible-units.tsx", ["Button", "Card"]],
   ["components/webshop-orders/webshop-order-detail-page.tsx", ["Button"]],
@@ -135,7 +130,7 @@ const HATRA = new Map<string, string[]>([
   ],
   [
     "components/webshop/webshop-product-list-page.tsx",
-    ["Badge", "Button", "Card", "Input"],
+    ["Button", "Card", "Input"],
   ],
   ["components/worksheets/worksheet-asset-editor.tsx", ["Button"]],
   ["components/worksheets/worksheet-assignee-editor.tsx", ["Button"]],
@@ -154,10 +149,10 @@ const HATRA = new Map<string, string[]>([
 /*
   A SZÁMLÁLÓK (barracuda, #2125): a pontos egyezés megfogja az új vegyes fájlt, de ha valaki ugyanabban a PR-ban a
   sorát is felveszi a listára, a teszt zöld maradna. A két szám ezért külön áll: a lista bővítése két helyen kér
-  módosítást, és a reviewban látszik. Fogyáskor a számot is le kell írni (a lista története: 59 / 141 a #2125-ben).
+  módosítást, és a reviewban látszik. Fogyáskor a számot is le kell írni (a lista története: 59 / 141 a #2125-ben, 47 / 129 a #2134-ben).
 */
-const HATRA_MERET = 47;
-const HATRA_IKREK = 129;
+const HATRA_MERET = 45;
+const HATRA_IKREK = 120;
 
 /*
   A GYEREK-LISTA (barracuda, #2125): egy pilot fájl által importált, CSAK duskot használó .tsx (relatív vagy `@/`
@@ -268,7 +263,7 @@ const gyerekek = () => {
     const tiszta = kod(readFileSync(ut, "utf8"));
     if (!pilotForras(tiszta)) continue;
     for (const m of tiszta.matchAll(
-      /import\s+(type\s+)?(?:\{[^}]*\}|\w+)\s*from\s*"([^"]+)"/g,
+      /import\s+(type\s+)?(?:\w+\s*,\s*)?(?:\{[^}]*\}|\w+)\s*from\s*"([^"]+)"/g,
     )) {
       if (m[1]) continue;
       const gyerek = felold(ut, m[2]!);

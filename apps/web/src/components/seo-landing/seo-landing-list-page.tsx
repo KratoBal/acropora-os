@@ -1,7 +1,6 @@
 "use client";
 import {
   Alert,
-  Badge,
   Button,
   Card,
   EmptyState,
@@ -9,6 +8,7 @@ import {
   PilotDataTable,
   Skeleton,
   type PilotTableColumn,
+  PilotBadge,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -55,9 +55,9 @@ export const SEO_LANDING_COLUMNS: PilotTableColumn<SeoLandingPage>[] = [
     header: "Állapot",
     width: "130px",
     cell: (page) => (
-      <Badge variant={page.isPublished ? "success" : "neutral"}>
+      <PilotBadge variant={page.isPublished ? "success" : "grey"}>
         {page.isPublished ? "Közzétéve" : "Vázlat"}
-      </Badge>
+      </PilotBadge>
     ),
   },
   {

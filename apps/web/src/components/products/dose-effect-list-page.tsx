@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Badge, PilotPageHeader } from "@acropora/ui";
+import { Alert, PilotPageHeader, PilotBadge } from "@acropora/ui";
 import { hasPermission, PERMISSIONS } from "@acropora/types";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -102,9 +102,9 @@ export function DoseEffectListPage() {
                   {row.productName}
                 </Link>
                 {row.usable ? (
-                  <Badge variant="success">Használható</Badge>
+                  <PilotBadge variant="success">Használható</PilotBadge>
                 ) : (
-                  <Badge variant="warning">Nem használható</Badge>
+                  <PilotBadge variant="amber">Nem használható</PilotBadge>
                 )}
               </div>
               <p className="text-dusk-700">

@@ -2,13 +2,13 @@
 
 import {
   Alert,
-  Badge,
   Button,
   ConfirmDialog,
   Input,
   PilotSection,
   Select,
   Textarea,
+  PilotBadge,
 } from "@acropora/ui";
 import {
   AQUARIUM_MEASUREMENT_PARAMETERS,
@@ -263,9 +263,9 @@ export function ProductDoseEffectsCard({
               {DIRECTION_TEXT[row.direction]}
             </span>
             {row.usable ? (
-              <Badge variant="success">Használható</Badge>
+              <PilotBadge variant="success">Használható</PilotBadge>
             ) : (
-              <Badge variant="warning">Nem használható</Badge>
+              <PilotBadge variant="amber">Nem használható</PilotBadge>
             )}
           </div>
           <p className="text-dusk-700">

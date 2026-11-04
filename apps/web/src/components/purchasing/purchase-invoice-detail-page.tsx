@@ -12,6 +12,7 @@ import {
   PilotDataTable,
   Skeleton,
   type PilotTableColumn,
+  PilotBadge,
 } from "@acropora/ui";
 import {
   formatMoney,
@@ -79,7 +80,7 @@ export function purchaseLineColumns(
         ) : (
           <span className="flex flex-wrap items-center gap-2 text-sm text-dusk-600">
             <span>{line.sourceDescription ?? "—"}</span>
-            <Badge variant="warning">Nincs terméktörzsben</Badge>
+            <PilotBadge variant="amber">Nincs terméktörzsben</PilotBadge>
           </span>
         ),
     },
@@ -357,7 +358,7 @@ export function PurchaseInvoiceDetailPage({
                 <div>
                   <dt className="text-dusk-400">Fizetve</dt>
                   <dd className="mt-1 text-dusk-700">
-                    <Badge variant={detail.isPaid ? "success" : "neutral"}>
+                    <PilotBadge variant={detail.isPaid ? "success" : "grey"}>
                       {detail.isPaid
                         ? `Igen (${
                             detail.paidAt
@@ -367,7 +368,7 @@ export function PurchaseInvoiceDetailPage({
                               : "—"
                           })`
                         : "Nyitott"}
-                    </Badge>
+                    </PilotBadge>
                   </dd>
                 </div>
                 <div>
