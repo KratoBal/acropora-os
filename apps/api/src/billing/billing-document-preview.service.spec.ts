@@ -114,6 +114,7 @@ function setup(
   };
   const documents = {
     find: async () => (options.found === undefined ? row() : options.found),
+    partnerTaxHint: async () => null,
   } as unknown as BillingDocumentsRepository;
   const credentials = {
     resolve: async () => {

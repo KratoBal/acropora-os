@@ -190,9 +190,14 @@ export class BillingDocumentIssueService {
 
     const input = buildIssueInput(row);
     if (!input.ok) throw new BadRequestException(input.message);
-    const taxProblem = row.customer
-      ? customerTaxNumberProblem(row.customer)
-      : null;
+    const taxProblem =
+      row.customer && customerTaxNumberProblem(row.customer)
+        ? // the reason names a same-named partner's tax number: where to copy it from
+          customerTaxNumberProblem(
+            row.customer,
+            await this.documents.partnerTaxHint(row.customer),
+          )
+        : null;
     if (taxProblem) throw new BadRequestException(taxProblem);
     // a végszámla előlege közben sztornózható; a felületi sztornót a feed hozza
     const finalProblem = finalInvoiceIssueProblem(

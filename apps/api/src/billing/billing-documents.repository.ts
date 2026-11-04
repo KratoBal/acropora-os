@@ -1,7 +1,11 @@
 import { Injectable } from "@nestjs/common";
 import { contractBilledLines } from "../contracts/contract-billed-lines.js";
-import { partnerTermsFor } from "../customers/partner-payment-terms.js";
+import {
+  partnerTaxNumberFor,
+  partnerTermsFor,
+} from "../customers/partner-payment-terms.js";
 import { prisma, Prisma } from "@acropora/database";
+import type { PartnerTaxHint } from "@acropora/types";
 
 import type { NormalizedBillingDraft } from "./billing-document-draft.js";
 import {
@@ -257,6 +261,25 @@ export class BillingDocumentsRepository {
         })),
       )?.paymentDueDays ?? null
     );
+  }
+
+  /**
+   * A névvel egyező partner adószáma, ha a vevő-sornak nincs (`partnerTaxNumberFor`,
+   * kártya aaf4f09d): csak a kapu okához, az adatot nem írja át. A lekérdezés csak akkor
+   * fut, ha a vevőnek nincs adószáma, tehát a rendes úton nem kerül semmibe.
+   */
+  async partnerTaxHint(customer: {
+    displayName: string;
+    companyName: string | null;
+    taxNumber: string | null;
+    euTaxNumber: string | null;
+  }): Promise<PartnerTaxHint | null> {
+    if (customer.taxNumber?.trim() || customer.euTaxNumber?.trim()) return null;
+    const partners = await this.database.supplier.findMany({
+      where: { taxNumber: { not: null } },
+      select: { name: true, taxNumber: true },
+    });
+    return partnerTaxNumberFor(customer, partners);
   }
 
   /** A saját számla Számlázz.hu-ikrét sztornózták-e (a feed `cancelled` jele). */

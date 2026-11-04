@@ -109,7 +109,7 @@ export {
   looksLikeOrganization,
   ORGANIZATION_NAME_MARKERS,
 } from "./buyer-tax-number.js";
-export type { BuyerTaxSubject } from "./buyer-tax-number.js";
+export type { BuyerTaxSubject, PartnerTaxHint } from "./buyer-tax-number.js";
 export {
   BILLING_CUSTOMER_SOURCES,
   BILLING_DELIVERY_OUTCOMES,

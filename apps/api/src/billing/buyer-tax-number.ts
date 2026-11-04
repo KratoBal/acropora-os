@@ -1,3 +1,5 @@
+import type { PartnerTaxHint } from "@acropora/types";
+
 import { buyerTaxNumberProblem } from "../integrations/szamlazz/szamlazz-buyer-tax.js";
 
 /**
@@ -12,20 +14,24 @@ import { buyerTaxNumberProblem } from "../integrations/szamlazz/szamlazz-buyer-t
  * SZÁNDÉKOSAN nem kapuz: ott a bizonylat a Számlázz.hu-n már létezhet, és a
  * feladat a rögzítése, nem egy új kiállítás.
  */
-export function customerTaxNumberProblem(customer: {
-  type?: string | null;
-  displayName: string;
-  companyName?: string | null;
-  taxNumber?: string | null;
-  euTaxNumber?: string | null;
-  /** a partner, akinek ez a vevő-tükre (`Supplier.customerId`), vagy `null` */
-  partner?: { id: string } | null;
-}): string | null {
+export function customerTaxNumberProblem(
+  customer: {
+    type?: string | null;
+    displayName: string;
+    companyName?: string | null;
+    taxNumber?: string | null;
+    euTaxNumber?: string | null;
+    /** a partner, akinek ez a vevő-tükre (`Supplier.customerId`), vagy `null` */
+    partner?: { id: string } | null;
+  },
+  partnerHint?: PartnerTaxHint | null,
+): string | null {
   return buyerTaxNumberProblem({
     name: customer.companyName?.trim() || customer.displayName,
     type: customer.type,
     partnerMirror: Boolean(customer.partner),
     taxNumber: customer.taxNumber,
     euTaxNumber: customer.euTaxNumber,
+    partnerHint,
   });
 }

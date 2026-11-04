@@ -65,6 +65,20 @@ export function delayUntilNextRun(now: Date): number {
   return next - now.getTime();
 }
 
+/** A pótló futás az indulás után ennyivel (a modulok és az adatbázis kapcsolat előbb). */
+export const CATCH_UP_DELAY_MS = 2 * 60_000;
+
+/**
+ * Induláskor fusson-e le egyszer az előző napra: ha a mai budapesti hat óra már elmúlt.
+ * Ha aznap a rendes futás már lement, a sor kétszer áll a naplóban; ez idempotens.
+ */
+export function catchUpOnStart(now: Date): boolean {
+  return (
+    now.getTime() >=
+    startOfBudapestDay(now).getTime() + BUYER_TAX_CHECK_HOUR * 60 * 60_000
+  );
+}
+
 @Injectable()
 export class BuyerTaxCheckScheduler implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(BuyerTaxCheckScheduler.name);
@@ -76,7 +90,17 @@ export class BuyerTaxCheckScheduler implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit(): void {
     if (!buyerTaxCheckEnabled()) return;
-    this.schedule(new Date());
+    const now = new Date();
+    // a start after six (a deploy, a restart) would skip today's run, and tomorrow's run
+    // looks at a new yesterday: the missed day would never be checked (barracuda, #2159)
+    if (catchUpOnStart(now))
+      this.timer = setTimeout(() => {
+        void this.runOnce().finally(() => {
+          if (!this.stopped) this.schedule(new Date());
+        });
+      }, CATCH_UP_DELAY_MS);
+    else this.schedule(now);
+    this.timer?.unref();
   }
 
   onModuleDestroy(): void {

@@ -262,6 +262,7 @@ export function billingCustomerFromDetail(detail: CustomerDetail): {
       euTaxNumber: detail.euTaxNumber ?? null,
       type: detail.type,
       partnerMirror: detail.partnerMirror ?? false,
+      partnerTaxHint: detail.partnerTaxHint ?? null,
       contactName: null,
       // the invoice goes to the billing address, the ordering one only when there is none (Balázs, 2026-10-26)
       email: detail.billingEmail?.trim() || detail.email || null,

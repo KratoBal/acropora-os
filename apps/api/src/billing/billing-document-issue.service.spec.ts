@@ -111,6 +111,7 @@ function setup(
     respond?: () => Promise<SzamlazzAgentResponse>;
     stockFails?: boolean;
     over?: Record<string, unknown>;
+    partnerHint?: { partnerName: string; taxNumber: string } | null;
     feedCancelled?: boolean;
     /** A foglalás UTÁN látszó előleg-sztornó (OS: ISSUING/ISSUED; feed). */
     stornoAfterClaim?: "OS" | "FEED";
@@ -138,6 +139,7 @@ function setup(
   } as BillingDocumentRow;
   const documents = {
     find: async () => current,
+    partnerTaxHint: async () => options.partnerHint ?? null,
     feedTwinCancelled: async () =>
       (options.feedCancelled ?? false) ||
       (options.stornoAfterClaim === "FEED" && calls.claim > 0),
@@ -457,6 +459,35 @@ describe("BillingDocumentIssueService", () => {
       );
       assert.deepEqual([calls.claim, calls.generate], [0, 0], nev);
     }
+  });
+
+  it("TAX-GATE: the reason names a same-named partner's tax number, where to copy it from", async () => {
+    // Luca, 2026-11-04 13:53 UTC: the old customer row was picked, the partner had the number
+    const { service, calls } = setup({
+      over: {
+        customer: {
+          ...row().customer,
+          displayName: "Fővárosi Állat- és Növénykert",
+          taxNumber: null,
+          euTaxNumber: null,
+          type: "COMPANY",
+          partner: null,
+        },
+      },
+      partnerHint: {
+        partnerName: "Fővárosi Állat- és Növénykert",
+        taxNumber: "15490658-2-42",
+      },
+    });
+    await assert.rejects(
+      () => issue(service),
+      (error: unknown) =>
+        error instanceof BadRequestException &&
+        error.message.includes(
+          "A Partnerek között Fővárosi Állat- és Növénykert a(z) 15490658-2-42 adószámmal szerepel",
+        ),
+    );
+    assert.deepEqual([calls.claim, calls.generate], [0, 0]);
   });
 
   it("TAX-GATE: an explicitly marked person, or a buyer with a Hungarian or an EU tax number, goes out", async () => {

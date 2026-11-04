@@ -1,3 +1,4 @@
+import type { PartnerTaxHint } from "./buyer-tax-number.js";
 import type {
   BillingDocumentStatus,
   BillingDocumentType,
@@ -101,6 +102,8 @@ export interface BillingDocumentCustomer {
    */
   type?: string | null;
   partnerMirror?: boolean;
+  /** a névvel egyező partner adószáma, ha a vevőnek nincs (`CustomerDetail.partnerTaxHint`) */
+  partnerTaxHint?: PartnerTaxHint | null;
   contactName: string | null;
   email: string | null;
   /** A belső partner-azonosító (`customerNumber`). */

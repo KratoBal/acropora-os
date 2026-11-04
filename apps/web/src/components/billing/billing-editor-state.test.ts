@@ -384,6 +384,21 @@ describe("companyTaxNumberReason", () => {
     );
   });
 
+  it("a névvel egyező partner adószámát megnevezi, hogy honnan másolja", () => {
+    expect(
+      companyTaxNumberReason({
+        ...vevo,
+        type: "COMPANY",
+        partnerTaxHint: {
+          partnerName: "Fővárosi Állat- és Növénykert",
+          taxNumber: "15490658-2-42",
+        },
+      }),
+    ).toContain(
+      "A Partnerek között Fővárosi Állat- és Növénykert a(z) 15490658-2-42 adószámmal szerepel",
+    );
+  });
+
   it("az ismeretlen típus és a partner-tükör tiltást kap, a magánszemély és az adószámos nem", () => {
     // the zoo case: a partner mirror, whatever its type says
     expect(

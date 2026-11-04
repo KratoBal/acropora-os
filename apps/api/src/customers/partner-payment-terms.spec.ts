@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { partnerTermsFor } from "./partner-payment-terms.js";
+import {
+  partnerTaxNumberFor,
+  partnerTermsFor,
+} from "./partner-payment-terms.js";
 
 /*
   KÁRTYA 7be4a85b: a vevő-sor napjai üresek, ugyanez a cég a Partnerek oldalon
@@ -77,6 +80,55 @@ describe("partnerTermsFor", () => {
         [allatkert],
       ),
       null,
+    );
+  });
+});
+
+/*
+  A NÉVVEL EGYEZŐ PARTNER ADÓSZÁMA (kártya aaf4f09d; Luca, 2026-11-04 13:53 UTC). MI
+  PIROSÍT: ha a régi vevő-sor nem kapja meg a partner adószámát a kapu okához; ha két
+  különböző adószámú partner közül választ; ha adószám nélküli partnert ad.
+*/
+describe("partnerTaxNumberFor", () => {
+  const oldRow = {
+    displayName: "Fővárosi Állat- és Növénykert",
+    companyName: null,
+  };
+
+  it("a névvel egyező partner adószámát adja, írásjel és kisbetű nélkül egyeztetve", () => {
+    assert.deepEqual(
+      partnerTaxNumberFor(oldRow, [
+        { name: "Másik Kft.", taxNumber: "11111111-2-42" },
+        { name: "FŐVÁROSI ÁLLAT ÉS NÖVÉNYKERT", taxNumber: " 15490658-2-42 " },
+      ]),
+      {
+        partnerName: "FŐVÁROSI ÁLLAT ÉS NÖVÉNYKERT",
+        taxNumber: "15490658-2-42",
+      },
+    );
+  });
+
+  it("nem dönt két különböző adószám között, és adószám nélküli partnert nem ad", () => {
+    assert.equal(
+      partnerTaxNumberFor(oldRow, [
+        { name: "Fővárosi Állat- és Növénykert", taxNumber: "15490658-2-42" },
+        { name: "Fővárosi Állat- és Növénykert", taxNumber: "22222222-2-42" },
+      ]),
+      null,
+    );
+    assert.equal(
+      partnerTaxNumberFor(oldRow, [
+        { name: "Fővárosi Állat- és Növénykert", taxNumber: "  " },
+      ]),
+      null,
+    );
+    // the same base twice (HU prefix, hyphens) is one company
+    assert.equal(
+      partnerTaxNumberFor(oldRow, [
+        { name: "Fővárosi Állat- és Növénykert", taxNumber: "15490658-2-42" },
+        { name: "Fővárosi Állat- és Növénykert", taxNumber: "HU15490658" },
+      ])?.taxNumber,
+      "15490658-2-42",
     );
   });
 });

@@ -10,7 +10,10 @@ import type {
 } from "@acropora/types";
 
 import { withUniqueCode } from "../common/unique-code.util.js";
-import { partnerTermsFor } from "./partner-payment-terms.js";
+import {
+  partnerTaxNumberFor,
+  partnerTermsFor,
+} from "./partner-payment-terms.js";
 import type {
   CreateCustomerDto,
   CustomerListQueryDto,
@@ -223,7 +226,20 @@ export class CustomersRepository extends Repository {
         },
       },
     });
-    const detail = this.toDetail(customer, reference?.externalId ?? null);
+    const detail = {
+      ...this.toDetail(customer, reference?.externalId ?? null),
+      // the invoice tax gate's reason names where to copy a missing tax number from
+      partnerTaxHint:
+        customer.taxNumber?.trim() || customer.euTaxNumber?.trim()
+          ? null
+          : partnerTaxNumberFor(
+              customer,
+              await prisma.supplier.findMany({
+                where: { taxNumber: { not: null } },
+                select: { name: true, taxNumber: true },
+              }),
+            ),
+    };
     if (detail.paymentDueDays !== null) return detail;
     // a sor maga üres: ugyanez a cég a Partnerek oldalon viselhet napot
     const partners = await prisma.supplier.findMany({
