@@ -13,7 +13,18 @@ import {
   type InvoiceFormat,
 } from "@acropora/types";
 import { Type } from "class-transformer";
-import { IsIn, IsInt, IsOptional, IsString, Max, Min } from "class-validator";
+import {
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+  Max,
+  Min,
+} from "class-validator";
+
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 /** `GET /billing/documents` query; the shape is `BillingDocumentListQuery`. */
 export class BillingDocumentListQueryDto implements BillingDocumentListQuery {
@@ -33,4 +44,8 @@ export class BillingDocumentListQueryDto implements BillingDocumentListQuery {
   @IsIn(BILLING_EMAIL_STATUSES) @IsOptional() emailStatus?: BillingEmailStatus;
   /** OWN: a mieink, EXTERNAL: a Számlázz.hu-ból kapottak; hiányzó: mind. */
   @IsIn(BILLING_DOCUMENT_ORIGINS) @IsOptional() origin?: BillingDocumentOrigin;
+  /** A kiállítás napja, `YYYY-MM-DD`, mindkét vég benne. */
+  @Matches(DAY) @IsOptional() from?: string;
+  @Matches(DAY) @IsOptional() to?: string;
+  @IsString() @MaxLength(100) @IsOptional() paymentMethod?: string;
 }

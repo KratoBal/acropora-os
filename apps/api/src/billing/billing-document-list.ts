@@ -11,6 +11,7 @@ import {
   type InvoiceFormat,
 } from "@acropora/types";
 
+import { startOfBudapestDay } from "../dashboard/budapest-day.js";
 import { szamlazzAmountsOfLine } from "./billing-document-issue.js";
 import type { BillingDocumentListRow } from "./billing-document-list.repository.js";
 import {
@@ -40,6 +41,11 @@ export function listWhere(
   if (query.invoiceFormat) where.invoiceFormat = query.invoiceFormat;
   if (query.status) where.status = query.status;
   if (query.emailStatus) where.emailStatus = query.emailStatus;
+  // a kelt szerint, budapesti naptári napokkal; a vázlatnak nincs kiállítási napja, dátum-szűrővel nem jön
+  const issued = ownIssueRange(query);
+  if (issued) where.issueDate = issued;
+  const method = query.paymentMethod?.trim();
+  if (method) where.paymentMethod = { equals: method, mode: "insensitive" };
   const q = query.q?.trim();
   if (q) {
     const contains = { contains: q, mode: "insensitive" as const };
@@ -59,6 +65,22 @@ export function listWhere(
     ];
   }
   return where;
+}
+
+/**
+ * A KELT SZŰRŐJE A SAJÁT SOROKRA: a kiállítás pillanata időbélyeg, a nap a budapesti naptári nap, ezért a határ a
+ * `from` napjának budapesti kezdete és a `to` UTÁNI nap budapesti kezdete (kizáró). Dátum nélkül `null`.
+ */
+export function ownIssueRange(
+  query: Pick<BillingDocumentListQuery, "from" | "to">,
+): Prisma.DateTimeNullableFilter | null {
+  if (!query.from && !query.to) return null;
+  const range: Prisma.DateTimeNullableFilter = {};
+  if (query.from)
+    range.gte = startOfBudapestDay(new Date(`${query.from}T12:00:00Z`));
+  if (query.to)
+    range.lt = startOfBudapestDay(new Date(`${query.to}T12:00:00Z`), 1);
+  return range;
 }
 
 /**
@@ -104,6 +126,31 @@ function listGross(row: BillingDocumentListRow): string {
   return szamlazzDocumentTotals(lines, row.currency).grossAmount;
 }
 
+/**
+ * A NETTÓ ÉS AZ ÁFA, A BRUTTÓVAL EGY SZABÁLLYAL (`listGross`): kiállított sornál a tárolt érték; vázlatnál a
+ * tételekből a #1275 szabályával, hogy a három szám együtt adja ki a bruttót. Ha egy tétel nem számolható, vagy
+ * nincs tárolt érték, `null` (a cellában „—”), nem találgatunk.
+ */
+function listNetVat(
+  row: BillingDocumentListRow,
+): Pick<BillingDocumentListItem, "netAmount" | "vatAmount"> {
+  const decimals = row.currency.toUpperCase() === "HUF" ? 0 : 2;
+  if (row.status === "ISSUED")
+    return {
+      netAmount: row.netAmount?.toFixed(decimals) ?? null,
+      vatAmount: row.vatAmount?.toFixed(decimals) ?? null,
+    };
+  const lines = [];
+  for (const line of row.lines) {
+    const amounts = szamlazzAmountsOfLine(line, row.currency);
+    if (!amounts.ok) return { netAmount: null, vatAmount: null };
+    lines.push(amounts);
+  }
+  if (lines.length === 0) return { netAmount: null, vatAmount: null };
+  const totals = szamlazzDocumentTotals(lines, row.currency);
+  return { netAmount: totals.netAmount, vatAmount: totals.vatAmount };
+}
+
 function customerName(row: BillingDocumentListRow): string {
   // Kiállított sornál a kiállítás a pillanatkép nevét írta a partnerName-be;
   // minden más állapotban a partner mai neve áll, ahogy a részletek is.
@@ -128,6 +175,8 @@ export function toListItem(
     issueDate: budapestDay(row.issueDate),
     dueDate: calendarDay(row.dueDate),
     grossAmount: listGross(row),
+    ...listNetVat(row),
+    paymentMethod: row.paymentMethod?.trim() || null,
     currency: row.currency,
     status,
     emailStatus: (row.emailStatus as BillingEmailStatus | null) ?? null,
@@ -230,6 +279,14 @@ export function externalWhere(
   }
   if (query.invoiceFormat)
     where.electronic = query.invoiceFormat === "ELECTRONIC";
+  // a kelt egy naptári nap (DATE oszlop): a határ UTC éjfélként tárolt nap, mindkét vég benne
+  if (query.from || query.to)
+    where.issueDate = {
+      ...(query.from ? { gte: new Date(`${query.from}T00:00:00Z`) } : {}),
+      ...(query.to ? { lte: new Date(`${query.to}T00:00:00Z`) } : {}),
+    };
+  const method = query.paymentMethod?.trim();
+  if (method) where.paymentMethod = { equals: method, mode: "insensitive" };
   const q = query.q?.trim();
   if (q) {
     const contains = { contains: q, mode: "insensitive" as const };
@@ -312,6 +369,8 @@ export interface ExternalListRow {
   issueDate: Date;
   dueDate: Date | null;
   grossAmount: Prisma.Decimal;
+  netAmount: Prisma.Decimal;
+  vatAmount: Prisma.Decimal;
   currency: string;
   createdAt: Date;
   paidAmount: Prisma.Decimal;
@@ -633,6 +692,13 @@ export function toExternalListItem(
     grossAmount: row.grossAmount.toFixed(
       row.currency.toUpperCase() === "HUF" ? 0 : 2,
     ),
+    netAmount: row.netAmount.toFixed(
+      row.currency.toUpperCase() === "HUF" ? 0 : 2,
+    ),
+    vatAmount: row.vatAmount.toFixed(
+      row.currency.toUpperCase() === "HUF" ? 0 : 2,
+    ),
+    paymentMethod: row.paymentMethod?.trim() || null,
     currency: row.currency,
     status: "ISSUED",
     emailStatus: null,

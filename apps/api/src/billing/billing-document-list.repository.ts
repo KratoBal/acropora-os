@@ -31,6 +31,10 @@ export const LIST_SELECT = {
   issueDate: true,
   dueDate: true,
   grossAmount: true,
+  // a nettó és az ÁFA a bruttó mellett (Luca, 2026-11-04), és a fizetési mód
+  netAmount: true,
+  vatAmount: true,
+  paymentMethod: true,
   currency: true,
   status: true,
   emailStatus: true,
@@ -68,6 +72,8 @@ export const EXTERNAL_LIST_SELECT = {
   issueDate: true,
   dueDate: true,
   grossAmount: true,
+  netAmount: true,
+  vatAmount: true,
   currency: true,
   createdAt: true,
   paidAmount: true,
@@ -238,8 +244,44 @@ export class BillingDocumentListRepository {
         totalItems,
         totalPages: Math.ceil(totalItems / query.pageSize),
       },
+      facets: { paymentMethods: await this.paymentMethodFacets() },
     };
   }
+
+  /**
+   * A FIZETÉSI MÓDOK VÁLASZTÉKA A SZŰRŐHÖZ: a mieink és a külsők szövegei együtt, a kis- és nagybetű szerint
+   * egyszer, ábécében. Minden szűrőtől független, hogy a választék ne szűküljön a már választott érték mellé.
+   */
+  private async paymentMethodFacets(): Promise<string[]> {
+    const [own, external] = await Promise.all([
+      this.database.invoice.findMany({
+        where: { ...OWN_ROWS, paymentMethod: { not: null } },
+        distinct: ["paymentMethod"],
+        select: { paymentMethod: true },
+      }),
+      this.database.externalBillingDocument.findMany({
+        where: { paymentMethod: { not: null } },
+        distinct: ["paymentMethod"],
+        select: { paymentMethod: true },
+      }),
+    ]);
+    return paymentMethodChoices(
+      [...own, ...external].map((row) => row.paymentMethod),
+    );
+  }
+}
+
+/** A szövegek egyszer (kis- és nagybetű nélkül), a legelső alakkal, ábécében; az üres kimarad. */
+export function paymentMethodChoices(
+  values: readonly (string | null)[],
+): string[] {
+  const seen = new Map<string, string>();
+  for (const value of values) {
+    const text = value?.trim();
+    if (text && !seen.has(text.toLowerCase()))
+      seen.set(text.toLowerCase(), text);
+  }
+  return [...seen.values()].sort((a, b) => a.localeCompare(b, "hu"));
 }
 
 /**
