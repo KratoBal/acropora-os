@@ -3,6 +3,11 @@ import type { ProductDetail } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ProductAuthorityCard } from "./product-authority-card";
+import {
+  TAKEOVER_EDITABLE,
+  TAKEOVER_FROZEN,
+  TAKEOVER_PRICE_NOTE,
+} from "./takeover-scope";
 
 const api = vi.hoisted(() => ({ takeCatalogAuthority: vi.fn() }));
 
@@ -52,6 +57,11 @@ describe("ProductAuthorityCard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Törzsadat átvétele" }));
 
     expect(screen.getByText(/nem érkezik meg/)).toBeTruthy();
+    // T4.1-D1: the confirmation names what freezes, not only the name and the description
+    expect(screen.getByText(/egyáltalán nem írja/)).toBeTruthy();
+    for (const field of [...TAKEOVER_EDITABLE, ...TAKEOVER_FROZEN])
+      expect(screen.getByText(field)).toBeTruthy();
+    expect(screen.getByText(TAKEOVER_PRICE_NOTE)).toBeTruthy();
     fireEvent.click(
       screen.getByRole("button", { name: "Átvesszük a törzsadatot" }),
     );
@@ -100,6 +110,9 @@ describe("ProductAuthorityCard", () => {
     renderCard("ACROPORA");
 
     expect(screen.getByText("Acropora OS")).toBeTruthy();
+    // what stands at its takeover value, with no editor yet, stays visible after the takeover too
+    for (const field of TAKEOVER_FROZEN)
+      expect(screen.getByText(field)).toBeTruthy();
     expect(
       screen.queryByRole("button", { name: "Törzsadat átvétele" }),
     ).toBeNull();
