@@ -11,6 +11,7 @@ import {
   monthParts,
   monthYears,
 } from "./hu-month";
+import { PILOT_SHELL_BLEED } from "./page-frame";
 import { useThemePreference } from "./use-theme-preference";
 
 /**
@@ -43,13 +44,8 @@ import { useThemePreference } from "./use-theme-preference";
  * `pilot-grey`.
  */
 
-/**
- * A LAP TELJES SZÉLESSÉGŰ HÁTTERE: a keret (`apps/web/src/components/app-shell.tsx` `<main>`) belső margójával pontosan
- * egyező negatív margó, minden töréspontra (UI 1. csomag, 2026-11-03). A lapok eddig kézzel `-m-6`-ot adtak, ami
- * telefonon 8 px-szel több volt a keret 16 px-énél: a lap 398 px széles lett 390-en (mérve a stage-en 15 lapon). Ha a
- * keret margója változik, EZ is változzon.
- */
-export const PILOT_SHELL_BLEED = "-mx-4 -my-6 sm:-mx-6 lg:-mx-8 lg:-my-8";
+// A keret margójának tükre: a definíció és az indoklás a `page-frame.ts`-ben (T1.2).
+export { PILOT_SHELL_BLEED };
 
 /**
  * A PILOT OLDALAK GYÖKERE -- EZ TESZI RÁ A `data-theme`-ET, ÉS CSAK EZ.

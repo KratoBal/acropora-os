@@ -1,6 +1,12 @@
 "use client";
 import { useAssistantEntity } from "@/components/assistant/page-context";
-import { Alert, ConfirmDialog, Icon, PageHeader } from "@acropora/ui";
+import {
+  Alert,
+  ConfirmDialog,
+  Icon,
+  PageHeader,
+  PAGE_GUTTER_X,
+} from "@acropora/ui";
 import {
   AQUARIUM_MEASUREMENT_TARGET_RANGE,
   hasPermission,
@@ -457,7 +463,7 @@ export function PilotAquariumEditorPage({
       bleed
       className="flex min-h-screen flex-col bg-pilot-grey-50"
     >
-      <div className="px-4 sm:px-8 pt-6">
+      <div className={`${PAGE_GUTTER_X} pt-6`}>
         <Link
           href={isEdit ? `/akvariumok/${aquariumId}` : "/akvariumok"}
           className="mb-3 flex items-center gap-1.5 text-xs text-pilot-grey-400 transition-colors hover:text-pilot-grey-700"
@@ -487,12 +493,12 @@ export function PilotAquariumEditorPage({
       </div>
 
       {error ? (
-        <div className="px-4 sm:px-8 pt-4">
+        <div className={`${PAGE_GUTTER_X} pt-4`}>
           <Alert variant="danger" title="Hiba" description={error} />
         </div>
       ) : null}
 
-      <form onSubmit={handleSubmit} className="flex-1 px-4 sm:px-8 py-6">
+      <form onSubmit={handleSubmit} className={`flex-1 ${PAGE_GUTTER_X} py-6`}>
         <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
           <div className="flex flex-col gap-5">
             {/*

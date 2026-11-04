@@ -297,7 +297,6 @@ export interface PackageBillingRow {
   grossAmount: Prisma.Decimal;
   currency: string;
   issueDate: Date;
-  fulfillmentDate: Date | null;
   /** A soron álló „Papíron megvan” jelölés (a párosított terhelésen álló külön). */
   paperOriginalAt: Date | null;
   /** A PDF-et hordozhatő dokumentumok azonosítói, a használat sorrendjében. */
@@ -1037,9 +1036,11 @@ export class MissingInvoicesRepository {
 
   /**
    * A KÖNYVELŐI CSOMAG BEJÖVŐ SZÁMLÁI: a hónap minden nem sztornózott és
-   * könyvelendő bejövő számlája a teljesítés napja szerint (teljesítés híján a
-   * kiállítás napja; ugyanaz a hónapkulcs, mint a napi ellenőrzésé), fizetve
-   * vagy sem. A PDF-jelöltek sorrendje ugyanaz, mint a sor letöltésénél: a
+   * könyvelendő bejövő számlája a SZÁMLA KELTE (`issueDate`) szerint, fizetve
+   * vagy sem (Balázs, 2026-11-04 07:11 UTC: nem a teljesítés napja dönt; a
+   * #2002 óta az döntött, és egy szeptemberben teljesített, októberben kelt
+   * számla a szeptemberi csomagba esett). A kelte minden bejövő sorban ott
+   * van, ezért nincs tartalék ág. A PDF-jelöltek sorrendje ugyanaz, mint a sor letöltésénél: a
    * feed saját dokumentuma, a kézzel csatolt, a begyűjtött.
    *
    * `refs` MINDEN sor (a sztornózott és a nem könyvelendő is, bármely
@@ -1063,10 +1064,7 @@ export class MissingInvoicesRepository {
         where: {
           cancelled: false,
           notBookable: false,
-          OR: [
-            { fulfillmentDate: range },
-            { fulfillmentDate: null, issueDate: range },
-          ],
+          issueDate: range,
         },
         select: {
           id: true,
@@ -1077,7 +1075,6 @@ export class MissingInvoicesRepository {
           grossAmount: true,
           currency: true,
           issueDate: true,
-          fulfillmentDate: true,
           paperOriginalAt: true,
         },
         orderBy: [{ issueDate: "asc" }, { documentNumber: "asc" }],

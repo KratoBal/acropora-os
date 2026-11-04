@@ -201,6 +201,19 @@ export const SETTINGS_AREAS: SettingsArea[] = [
       },
     ],
   },
+  {
+    title: "Fejlesztés",
+    icon: "settings",
+    links: [
+      {
+        label: "Komponens-katalógus",
+        description:
+          "A közös felületi elemek minden állapotukban, egy lapon: a design-körök ellenőrzéséhez.",
+        href: "/beallitasok/komponensek",
+        permission: PERMISSIONS.SETTINGS_MANAGE,
+      },
+    ],
+  },
 ];
 
 /**

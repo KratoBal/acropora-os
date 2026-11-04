@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Alert, PageHeader, Skeleton } from "@acropora/ui";
+import { Alert, PageHeader, Skeleton, PAGE_GUTTER_X } from "@acropora/ui";
 import type {
   ServiceDraftItem,
   ServiceDraftListResponse,
@@ -373,7 +373,7 @@ export function ServiceDraftsPage() {
   return (
     <PilotThemeRoot
       bleed
-      className="min-h-screen bg-pilot-grey-50 px-4 sm:px-8 py-8 space-y-6 [&_h1]:!font-[inherit] [&_h2]:!font-[inherit]"
+      className={`min-h-screen bg-pilot-grey-50 ${PAGE_GUTTER_X} py-8 space-y-6 [&_h1]:!font-[inherit] [&_h2]:!font-[inherit]`}
     >
       <PageHeader
         eyebrow="Szerviz"

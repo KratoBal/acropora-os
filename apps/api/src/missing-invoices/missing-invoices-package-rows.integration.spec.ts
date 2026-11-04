@@ -8,13 +8,15 @@ import { MissingInvoicesRepository } from "./missing-invoices.repository.js";
 
 /**
  * A KÖNYVELŐI CSOMAG BEJÖVŐ SZÁMLÁINAK KIVÁLASZTÁSA valódi adatbázison: a
- * hónapkulcs a teljesítés napja (híján a kiállítás napja), a sztornózott és a
- * nem könyvelendő sor kimarad, de a hivatkozások között ott van.
+ * hónapkulcs a SZÁMLA KELTE (Balázs, 2026-11-04 07:11 UTC; a teljesítés napja
+ * nem számít), a sztornózott és a nem könyvelendő sor kimarad, de a
+ * hivatkozások között ott van.
  *
- * MI PIROSÍT: ha a kifizetetlen, októberben teljesített számla kimaradna; ha a
- * szeptemberben teljesített, októberben kiállított számla az októberi
- * csomagban is szerepelne; ha a teljesítés nélküli sor a kiállítás hónapja
- * helyett kimaradna; ha a sztornózott vagy nem könyvelendő sor bekerülne.
+ * MI PIROSÍT: ha a kifizetetlen, októberben kelt számla kimaradna; ha az
+ * októberben kelt, de szeptemberben teljesített számla a szeptemberi
+ * csomagba kerülne (a #2002 óta ez történt); ha a szeptemberben kelt, de
+ * októberben teljesített számla az októberi csomagba kerülne; ha a teljesítés
+ * nélküli sor kimaradna; ha a sztornózott vagy nem könyvelendő sor bekerülne.
  * Távoli hónapot használ (2099), hogy a közös fejlesztői adat ne zavarjon.
  */
 const gate = integrationDatabaseGate(process.env);
@@ -80,12 +82,17 @@ describe(
             issueDate: "2099-10-22",
             fulfillmentDate: "2099-10-22",
           }),
-          // szeptemberben teljesített, októberben kiállított: CSAK szeptember
-          row("szept", {
+          // októberben kelt, szeptemberben teljesített: CSAK október (a kelte dönt)
+          row("teljesites-szept", {
             issueDate: "2099-10-02",
             fulfillmentDate: "2099-09-30",
           }),
-          // teljesítés nélkül a kiállítás hónapja dönt
+          // szeptemberben kelt, októberben teljesített: CSAK szeptember
+          row("kelt-szept", {
+            issueDate: "2099-09-30",
+            fulfillmentDate: "2099-10-02",
+          }),
+          // teljesítés nélkül is a kelte dönt
           row("nincs-teljesites", {
             issueDate: "2099-10-05",
             fulfillmentDate: null,
@@ -114,15 +121,16 @@ describe(
         .map((r) => r.documentNumber)
         .sort();
 
-    it("October holds the unpaid and the no-fulfilment-date invoice, not the September-fulfilled, cancelled or non-bookable ones", async () => {
+    it("October holds the invoices ISSUED in October (whatever their fulfilment month), not the cancelled or non-bookable ones", async () => {
       assert.deepEqual(await numbers("2099-10"), [
         "CSOMAGSOR-nincs-teljesites",
         "CSOMAGSOR-okt",
+        "CSOMAGSOR-teljesites-szept",
       ]);
     });
 
-    it("the September-fulfilled invoice is in September only", async () => {
-      assert.deepEqual(await numbers("2099-09"), ["CSOMAGSOR-szept"]);
+    it("the invoice issued in September but fulfilled in October is in September only", async () => {
+      assert.deepEqual(await numbers("2099-09"), ["CSOMAGSOR-kelt-szept"]);
     });
 
     it("the references hold every row, the cancelled and the non-bookable too", async () => {
@@ -131,7 +139,7 @@ describe(
         .map((r) => r.documentNumber)
         .filter((n) => n.startsWith("CSOMAGSOR-"))
         .sort();
-      assert.equal(mine.length, 5);
+      assert.equal(mine.length, 6);
       assert.ok(mine.includes("CSOMAGSOR-sztorno"));
       assert.ok(mine.includes("CSOMAGSOR-nem-konyvelendo"));
     });

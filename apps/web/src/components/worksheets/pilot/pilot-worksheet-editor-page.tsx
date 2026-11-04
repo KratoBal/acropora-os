@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Icon, PageHeader, Skeleton } from "@acropora/ui";
+import { Alert, Icon, PageHeader, Skeleton, PAGE_GUTTER_X } from "@acropora/ui";
 import { hasPermission, PERMISSIONS } from "@acropora/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -210,7 +210,7 @@ export function PilotWorksheetEditorPage({
 
   return (
     <PilotThemeRoot bleed className="min-h-screen bg-pilot-grey-50">
-      <div className="px-4 sm:px-8 pt-6">
+      <div className={`${PAGE_GUTTER_X} pt-6`}>
         <Link
           href={`/szerviz/munkalapok/${worksheetId}`}
           className="mb-3 flex items-center gap-1.5 text-xs text-pilot-grey-400 transition-colors hover:text-pilot-grey-700"
@@ -224,7 +224,7 @@ export function PilotWorksheetEditorPage({
         />
       </div>
 
-      <div className="flex max-w-3xl flex-col gap-5 px-4 sm:px-8 py-6">
+      <div className={`flex max-w-3xl flex-col gap-5 ${PAGE_GUTTER_X} py-6`}>
         <ServiceOfflineNotice state={{ kind: "form" }} pilot />
         {error ? (
           <Alert variant="danger" title="Hiba" description={error} />

@@ -4,7 +4,7 @@ import type {
   MaterialRequestStatusCounts,
   MaterialRequestSummary,
 } from "@acropora/types";
-import { PageHeader } from "@acropora/ui";
+import { PageHeader, PAGE_GUTTER_X } from "@acropora/ui";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -147,12 +147,14 @@ export function MaterialRequestOverviewPage() {
   return (
     <PilotThemeRoot bleed className="min-h-screen bg-pilot-grey-50">
       <PageHeader
-        className="mx-auto max-w-[1320px] px-4 pt-6 sm:px-8"
+        className={`mx-auto max-w-[1320px] ${PAGE_GUTTER_X} pt-6`}
         eyebrow="Szerviz"
         title="Anyagigények"
         description="Áttekintés és beszerzési állapotok"
       />
-      <div className="mx-auto flex max-w-[1320px] flex-col gap-4 px-4 py-6 sm:px-8">
+      <div
+        className={`mx-auto flex max-w-[1320px] flex-col gap-4 ${PAGE_GUTTER_X} py-6`}
+      >
         <StatusMetrics counts={counts} />
         <div className="flex flex-wrap items-center gap-2 rounded-[14px] border border-pilot-grey-200 bg-white p-4 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
           <div
@@ -263,12 +265,12 @@ export function MaterialRequestDetailPage({ id }: { id: string }) {
   return (
     <PilotThemeRoot bleed className="min-h-screen bg-pilot-grey-50">
       <PageHeader
-        className="mx-auto max-w-[1320px] px-4 pt-6 sm:px-8"
+        className={`mx-auto max-w-[1320px] ${PAGE_GUTTER_X} pt-6`}
         eyebrow="Szerviz"
         title="Anyagigény részletei"
         description="Beszerzési felelős és státuszkövetés"
       />
-      <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-8">
+      <div className={`mx-auto max-w-[1320px] ${PAGE_GUTTER_X} py-6`}>
         <MaterialRequestDetail id={id} variant="page" />
       </div>
     </PilotThemeRoot>
