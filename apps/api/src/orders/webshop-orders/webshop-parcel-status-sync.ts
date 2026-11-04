@@ -36,6 +36,10 @@ export const OBSERVED_DESCRIPTION_MAX = 40;
  * A general description ("delivered") repeats on many parcels; a text carrying a recipient's name or an
  * address is unique to its parcel, so it never reaches the log, however short it is. The code is always
  * reported; the parcels whose description did not repeat are counted together under their code, with no text.
+ *
+ * KNOWN LIMIT, stated: a returning recipient (a company's receiving desk) who takes three or more parcels in
+ * the window with the same text passes the threshold and the text is then shown. The observe mode is meant to
+ * run only until the delivered codes are filled in; if it has to run longer, raise this number.
  */
 export const OBSERVED_DESCRIPTION_MIN_PARCELS = 3;
 
