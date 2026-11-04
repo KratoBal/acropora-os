@@ -137,8 +137,13 @@ export class CustomersRepository extends Repository {
        * Expressed as a relation filter rather than an id set, unlike the UNAS
        * origin below: this one IS a real relation, so the database does the
        * work and nothing has to be loaded into memory first.
+       *
+       * THE BILLING PICKER ASKS FOR THEM (card aaf4f09d; Balázs, 2026-11-04 14:23
+       * UTC: the zoo's old UNAS row could not take the tax number): on an invoice the
+       * mirror IS the right buyer, it carries the partner's tax number, term and
+       * billing e-mail. The summary marks it, so the picker can tell the two apart.
        */
-      partner: null,
+      ...(query.includePartnerMirrors === "true" ? {} : { partner: null }),
       ...(query.status === "ALL"
         ? {}
         : { isActive: query.status === "ACTIVE" }),
@@ -401,6 +406,8 @@ export class CustomersRepository extends Repository {
       isActive: customer.isActive,
       archivedAt: customer.archivedAt?.toISOString(),
       address: formatAddress(customer.addresses),
+      taxNumber: customer.taxNumber ?? undefined,
+      partnerMirror: Boolean(customer.partner),
       createdAt: customer.createdAt.toISOString(),
       updatedAt: customer.updatedAt.toISOString(),
     };

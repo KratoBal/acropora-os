@@ -41,6 +41,14 @@ const api = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/api/partner-orders", () => ({ partnerOrdersApi: api }));
 
+const certificates = vi.hoisted(() => ({
+  listForPartnerOrder: vi.fn(),
+  issueForPartnerOrder: vi.fn(),
+}));
+vi.mock("@/lib/api/completion-certificates", () => ({
+  completionCertificatesApi: certificates,
+}));
+
 vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({
     session: {
@@ -233,7 +241,30 @@ describe("a megrendelések listája", () => {
 });
 
 describe("egy megrendelés", () => {
-  beforeEach(() => api.detail.mockResolvedValue(detail()));
+  beforeEach(() => {
+    api.detail.mockResolvedValue(detail());
+    // the certificate panel stays loading: its table repeats the line names, and a
+    // list that resolves before the assertions would make them ambiguous (CI #2158)
+    certificates.listForPartnerOrder.mockReturnValue(new Promise(() => {}));
+  });
+
+  it("offers the completion certificate on a forint order, with the order's lines", async () => {
+    certificates.listForPartnerOrder.mockResolvedValue([]);
+    render(<PartnerOrderDetailPage orderId="o1" />);
+    expect(await screen.findByText("Teljesítési igazolás")).toBeInTheDocument();
+    expect(certificates.listForPartnerOrder).toHaveBeenCalledWith(
+      "token-1",
+      "o1",
+    );
+  });
+
+  it("does not offer it on an order in another currency (the certificate rounds to whole forints)", async () => {
+    api.detail.mockResolvedValue(detail({ currency: "EUR" }));
+    render(<PartnerOrderDetailPage orderId="o1" />);
+    expect(await screen.findByText("Szűrő csere")).toBeInTheDocument();
+    expect(screen.queryByText("Teljesítési igazolás")).not.toBeInTheDocument();
+    expect(certificates.listForPartnerOrder).not.toHaveBeenCalled();
+  });
 
   it("shows the lines with quantity, unit, unit price and the totals per rate", async () => {
     render(<PartnerOrderDetailPage orderId="o1" />);

@@ -77,6 +77,40 @@ describe("renderWebshopMail", () => {
     assert.doesNotMatch(mail.html, /ACROPORABLOCK|\{\{/);
   });
 
+  it("the problem report acknowledgement: the order, the case reference, a colleague will be in touch, no promise", () => {
+    const facts: WebshopMailFacts = {
+      template: "problem-report-received",
+      display_id: 1042,
+      report_id: "ordprb_01ABC",
+    };
+    const hu = renderWebshopMail(
+      template("WEBSHOP_PROBLEM_REPORT_RECEIVED"),
+      facts,
+    );
+    assert.equal(hu.ok, true);
+    if (!hu.ok) return;
+    assert.equal(hu.subject, "Megkaptuk a bejelentésedet (ordprb_01ABC)");
+    assert.match(hu.text, /megkaptuk a bejelentésedet a #1042 rendelésről\./);
+    assert.match(hu.text, /Az ügy azonosítója: ordprb_01ABC\./);
+    assert.match(hu.text, /Kollégánk hamarosan jelentkezik\./);
+    const en = renderWebshopMail(
+      template("WEBSHOP_PROBLEM_REPORT_RECEIVED_EN"),
+      { ...facts, locale: "en" },
+    );
+    assert.equal(en.ok, true);
+    if (!en.ok) return;
+    assert.equal(en.subject, "We have received your report (ordprb_01ABC)");
+    assert.match(en.text, /about order #1042\./);
+    assert.match(en.text, /The case reference is ordprb_01ABC\./);
+    assert.match(en.text, /A colleague will be in touch shortly\./);
+    // no deadline, no guarantee, no outcome in either language
+    for (const text of [hu.text, en.text])
+      assert.doesNotMatch(
+        text.toLowerCase(),
+        /\d+\s*(nap|óra|day|hour)|garanci|warrant|refund|visszat[ée]r|replace|csere/,
+      );
+  });
+
   it("every webshop default renders with its sample facts", () => {
     for (const [name, key] of Object.entries(WEBSHOP_MAIL_KEYS)) {
       const mail = renderWebshopMail(

@@ -23,6 +23,30 @@ import {
 import type { CompletionCertificateInput } from "./completion-certificate-types.js";
 import { IssueCompletionCertificateDto } from "./dto.js";
 import { CompletionCertificatesRepository } from "./completion-certificates.repository.js";
+import {
+  planPartnerOrderCertificate,
+  type CertificateLineRequest,
+  type CertificatePlanError,
+  type OrderLineInput,
+} from "./partner-order-certificate-plan.js";
+import { selectOrderItems } from "../partner-orders/partner-order-items.js";
+
+function planErrorMessage(error: CertificatePlanError): string {
+  switch (error.code) {
+    case "NO_LINES":
+      return "Legalább egy tételt igazolni kell.";
+    case "NOTHING_REMAINING":
+      return "A megrendelés minden tétele teljesítve, nincs mit igazolni.";
+    case "UNKNOWN_ITEM":
+      return "A kért tétel nem ennek a megrendelésnek a tétele.";
+    case "DUPLICATE_ITEM":
+      return `A(z) „${error.name}” tétel kétszer szerepel a kérésben.`;
+    case "INVALID_QUANTITY":
+      return `A(z) „${error.name}” mennyisége pozitív szám legyen, legfeljebb hat tizedessel.`;
+    case "OVER_REMAINING":
+      return `A(z) „${error.name}” tételből ${error.remaining.replace(".", ",")} van hátra, ${error.requested.replace(".", ",")} nem igazolható.`;
+  }
+}
 
 /**
  * A KIÁLLÍTÁS ÉVE, BUDAPESTI NAPTÁR SZERINT -- UGYANAZ AZ INDOK, MINT A
@@ -223,6 +247,159 @@ export class CompletionCertificatesService {
           `A(z) ${number} teljesítési igazolás száma időközben már kiosztásra került. Próbáld újra.`,
         );
       throw error;
+    }
+  }
+
+  /**
+   * TIG A MEGRENDELÉS TÉTELEIBŐL (Megrendelések S2). Kérés nélkül minden tétel a
+   * teljes hátralévővel; kéréssel részteljesítés (`planPartnerOrderCertificate`).
+   * A hátralévő, a szám és a sorok a megrendelés zárja alatt egy tranzakcióban
+   * dőlnek el, a PDF is ott készül, így két egyidejű kiállítás nem léphet túl.
+   */
+  async issueForPartnerOrder(
+    orderId: string,
+    lines: readonly CertificateLineRequest[] | undefined,
+    actor: AuthenticatedUser,
+  ) {
+    let number = "";
+    try {
+      const certificate = await this.repository.issueForPartnerOrder(
+        orderId,
+        async (snapshot) => {
+          if (snapshot.order.status === "CANCELLED")
+            throw new ConflictException(
+              "Lemondott megrendelésre nem állítható ki teljesítési igazolás.",
+            );
+          const address = snapshot.customer?.addresses[0] ?? null;
+          if (!snapshot.customer || !address)
+            throw new BadRequestException(
+              "A megrendelés vevőjének nincs alapértelmezett címe, teljesítési igazolás enélkül nem állítható ki.",
+            );
+          const missingAddress = missingAddressParts(address);
+          if (missingAddress.length > 0)
+            throw new BadRequestException(
+              `A vevő címe hiányos (hiányzik: ${missingAddress.join(", ")}). Egészítsd ki a partnernél, teljesítési igazolás enélkül nem állítható ki.`,
+            );
+
+          // a TIG és a számla egész forintra kerekít (`wholeForintCertificateAmounts`)
+          if (snapshot.currency !== "HUF")
+            throw new BadRequestException(
+              `A teljesítési igazolás forintban készül, ez a megrendelés ${snapshot.currency} pénznemű. Más pénznemű megrendelésre ma nem állítható ki.`,
+            );
+          // a megrendelés tételei: ugyanaz a szabály, mint a megrendelés oldalán (murena, #2156)
+          const order: OrderLineInput[] = selectOrderItems(
+            // the certificate names a line, it does not print its rich text
+            snapshot.versionItems.map((item) => ({
+              ...item,
+              description: null,
+            })),
+            snapshot.selectedOptionalItemIds,
+            snapshot.currency,
+          ).map((item) => ({
+            quoteItemId: item.quoteItemId,
+            name: item.name,
+            quantity: new Prisma.Decimal(item.quantity),
+            unit: item.unit,
+            unitNet: new Prisma.Decimal(item.unitNetPrice),
+            vatRatePercent: new Prisma.Decimal(item.vatRatePercent),
+          }));
+          const plan = planPartnerOrderCertificate({
+            order,
+            certified: snapshot.certifiedLines,
+            request: lines,
+          });
+          if (!plan.ok)
+            throw plan.error.code === "NOTHING_REMAINING"
+              ? new ConflictException(planErrorMessage(plan.error))
+              : new BadRequestException(planErrorMessage(plan.error));
+
+          const now = new Date();
+          number = nextCompletionCertificateNumber({
+            year: budapestYear(now),
+            lastNumber: await snapshot.lastNumberOfYear(
+              completionCertificateNumberPrefix(budapestYear(now)),
+            ),
+          });
+          const input: CompletionCertificateInput = {
+            certificateNumber: number,
+            issuedAt: now,
+            completedAt: now,
+            subject: snapshot.quote.title,
+            worksheetReference: `Megrendelés ${snapshot.order.orderNumber} · Ajánlat ${snapshot.quote.quoteNumber}`,
+            customer: {
+              name: snapshot.customer.displayName,
+              addressLines: [
+                address.line1,
+                `${address.postalCode} ${address.city}`,
+              ],
+              taxNumber: snapshot.customer.taxNumber ?? undefined,
+            },
+            items: plan.lines.map((line) => ({
+              description: line.description,
+              quantity: line.quantity,
+              quantityUnit: line.quantityUnit,
+              unitPrice: line.unitNet,
+              vatRatePercent: line.vatRatePercent,
+            })),
+            signerName: actor.displayName,
+            signerEmail: actor.email,
+          };
+          const content = await completionCertificateDocument(input);
+          const kind = detectUploadedFileKind("application/pdf", content);
+          if (kind === null)
+            throw new Error(
+              "A generált teljesítési igazolás nem érvényes PDF. A kiállítás nem jött létre, mert épp ezt neveznénk hitelesnek.",
+            );
+          await this.refuseOverQuota(content.length);
+          return {
+            number,
+            issuedByName: actor.displayName,
+            items: plan.lines.map((line) => ({
+              description: line.description,
+              quantity: line.quantity,
+              unitNet: line.unitNet,
+              vatRatePercent: line.vatRatePercent,
+              quantityUnit: line.quantityUnit,
+              quoteItemId: line.quoteItemId,
+            })),
+            document: {
+              fileName: `teljesitesi-igazolas-${number}.pdf`,
+              contentType: canonicalMimetypeFor(kind),
+              sizeBytes: content.length,
+              content,
+            },
+          };
+        },
+      );
+      if (!certificate)
+        throw new NotFoundException("A megrendelés nem található.");
+      return certificate;
+    } catch (error) {
+      // a szám a zár alatt számolt, tehát a P2002 egy másik forrás (szervizes TIG) versenye
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      )
+        throw new ConflictException(
+          `A(z) ${number} teljesítési igazolás száma időközben már kiosztásra került. Próbáld újra.`,
+        );
+      throw error;
+    }
+  }
+
+  listForPartnerOrder(orderId: string) {
+    return this.repository.listForPartnerOrder(orderId);
+  }
+
+  private async refuseOverQuota(incomingBytes: number) {
+    const limitBytes = Number(process.env.DOCUMENT_STORE_LIMIT_BYTES ?? 0);
+    if (Number.isFinite(limitBytes) && limitBytes > 0) {
+      const quota = decideQuota({
+        usedBytes: await sumDocumentBytesInUse(),
+        incomingBytes,
+        limitBytes,
+      });
+      if (quota.state === "reject") throw new ConflictException(quota.reason);
     }
   }
 

@@ -171,6 +171,14 @@ const RAW: Readonly<
       contact,
     ].join(""),
   },
+  WEBSHOP_PROBLEM_REPORT_RECEIVED: {
+    subject: "Megkaptuk a bejelentésedet ({{ugy_azonosito}})",
+    bodyHtml: [
+      `<p>Köszönjük, megkaptuk a bejelentésedet a #${v("rendeles_szam")} rendelésről.</p>`,
+      `<p>Az ügy azonosítója: ${v("ugy_azonosito")}.</p>`,
+      "<p>Kollégánk hamarosan jelentkezik.</p>",
+    ].join(""),
+  },
   WEBSHOP_SHIPPING_DELAYED: {
     subject: "Csúszik a rendelésed szállítása (#{{rendeles_szam}})",
     bodyHtml: [
@@ -291,6 +299,14 @@ const RAW_EN: typeof RAW = {
       own("reszek_fizetese_mondat"),
       own("rendeles_tetelek"),
       EN.contact,
+    ].join(""),
+  },
+  WEBSHOP_PROBLEM_REPORT_RECEIVED: {
+    subject: "We have received your report ({{ugy_azonosito}})",
+    bodyHtml: [
+      `<p>Thank you, we have received your report about order #${v("rendeles_szam")}.</p>`,
+      `<p>The case reference is ${v("ugy_azonosito")}.</p>`,
+      "<p>A colleague will be in touch shortly.</p>",
     ].join(""),
   },
   WEBSHOP_SHIPPING_DELAYED: {

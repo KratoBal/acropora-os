@@ -28,11 +28,15 @@ describe(
   () => {
     const suffix = String(Date.now() % 1_000_000);
     const repository = new CustomersRepository();
-    const ids: Record<"zoo" | "percent" | "plain" | "taxed", string> = {
+    const ids: Record<
+      "zoo" | "percent" | "plain" | "taxed" | "mirror",
+      string
+    > = {
       zoo: "",
       percent: "",
       plain: "",
       taxed: "",
+      mirror: "",
     };
     // a tax number of this run only: 8 digits, the suffix padded
     const taxBase = `9${suffix.padStart(7, "0")}`;
@@ -59,11 +63,27 @@ describe(
       await create("percent", `Árvíztűrő 100% Kft ${suffix}`);
       await create("plain", `Arvizturo 1000 Kft ${suffix}`);
       await create("taxed", `Adapt Kft ${suffix}`, `${taxBase}-2-42`);
+      // the zoo's partner mirror: same name, the partner's tax number (card aaf4f09d)
+      await create(
+        "mirror",
+        `Fővárosi Állat- és Növénykert ${suffix}`,
+        `15490658-2-42`,
+      );
+      await prisma.supplier.create({
+        data: {
+          code: `${CUSTOMER_PREFIX}sup-${suffix}`,
+          name: `Fővárosi Állat- és Növénykert ${suffix}`,
+          customerId: ids.mirror,
+        },
+      });
     });
 
     after(removeLeftovers);
 
     async function removeLeftovers() {
+      await prisma.supplier.deleteMany({
+        where: { code: { startsWith: CUSTOMER_PREFIX } },
+      });
       await prisma.customer.deleteMany({
         where: { customerNumber: { startsWith: CUSTOMER_PREFIX } },
       });
@@ -80,6 +100,7 @@ describe(
     const found = async (
       search: string,
       source?: "UNAS" | "MANUAL",
+      includePartnerMirrors?: "true",
     ): Promise<string[]> => {
       const result = await repository.list({
         page: 1,
@@ -87,6 +108,7 @@ describe(
         search,
         status: "ALL",
         ...(source ? { source } : {}),
+        ...(includePartnerMirrors ? { includePartnerMirrors } : {}),
       });
       const ours = new Set(Object.values(ids));
       return result.items.map((item) => item.id).filter((id) => ours.has(id));
@@ -148,6 +170,31 @@ describe(
       assert.deepEqual(
         await found(`allat- es novenykert ${suffix}`, "UNAS"),
         [],
+      );
+    });
+
+    // A SZÁMLA VEVŐVÁLASZTÓJA A TÜKRÖT IS LÁTJA (kártya aaf4f09d; Balázs, 2026-11-04
+    // 14:23 UTC): a Vevők listája nélküle, a számla kérésére vele, jelölve
+    it("the partner mirror stays off the customer list, and comes on the billing picker's request, marked", async () => {
+      const name = `Fővárosi Állat- és Növénykert ${suffix}`;
+      assert.deepEqual(await found(name), [ids.zoo]);
+      assert.deepEqual(
+        (await found(name, undefined, "true")).sort(),
+        [ids.mirror, ids.zoo].sort(),
+      );
+      const listed = await repository.list({
+        page: 1,
+        pageSize: 100,
+        search: name,
+        status: "ALL",
+        includePartnerMirrors: "true",
+      });
+      const mirror = listed.items.find((item) => item.id === ids.mirror)!;
+      assert.equal(mirror.partnerMirror, true);
+      assert.equal(mirror.taxNumber, "15490658-2-42");
+      assert.equal(
+        listed.items.find((item) => item.id === ids.zoo)!.partnerMirror,
+        false,
       );
     });
 

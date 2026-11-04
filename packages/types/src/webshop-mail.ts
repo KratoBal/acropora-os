@@ -166,6 +166,18 @@ type WebshopTemplateFacts =
       readonly order: WebshopMailOrder;
       readonly split_order: WebshopMailOrder;
       readonly payment: WebshopSplitPayment;
+    }
+  | {
+      /**
+       * The acknowledgement of a problem report the customer filed (V1.2
+       * slice 4; the text is acrobot's, Balázs said yes 2026-11-04): the
+       * order's number and the case reference the page gave. No promise of a
+       * time or an outcome. Sent only through this renderer: the webshop has
+       * no built-in text for it (Balázs, 2026-10-05: no fallback mail).
+       */
+      readonly template: "problem-report-received";
+      readonly display_id: number | string;
+      readonly report_id: string;
     };
 
 /** How a split order is paid, from the original order (murena 26656). */
@@ -196,6 +208,7 @@ export const WEBSHOP_MAIL_KEYS = {
   "payment-refunded": "WEBSHOP_REFUND",
   "order-status-closed": "WEBSHOP_ORDER_CLOSED",
   "order-split": "WEBSHOP_ORDER_SPLIT",
+  "problem-report-received": "WEBSHOP_PROBLEM_REPORT_RECEIVED",
 } as const satisfies Record<WebshopMailTemplate, string>;
 
 export const SHOP_NAME = "Acropora tengeri akvarisztika";
@@ -822,6 +835,15 @@ function templateContent(
       };
     }
 
+    case "problem-report-received":
+      return {
+        values: {
+          rendeles_szam: String(facts.display_id),
+          ugy_azonosito: facts.report_id,
+        },
+        blocks: {},
+      };
+
     case "payment-refunded": {
       const r = facts.refund;
       return {
@@ -960,6 +982,12 @@ export const WEBSHOP_MAIL_SAMPLE_FACTS: Readonly<
       payment: null,
     },
     payment: "card",
+  },
+  "problem-report-received": {
+    ...SAMPLE_COMMON,
+    template: "problem-report-received",
+    display_id: 38,
+    report_id: "ordprb_01SAMPLE",
   },
   "payment-refunded": {
     ...SAMPLE_COMMON,
@@ -1243,6 +1271,12 @@ function parseTemplateFacts(
         payment: payment as WebshopSplitPayment,
       };
     }
+    case "problem-report-received":
+      return {
+        template,
+        display_id: id(f.display_id, "facts.display_id"),
+        report_id: str(f.report_id, "facts.report_id"),
+      };
     case "payment-refunded": {
       const r = obj(f.refund, "facts.refund");
       return {
