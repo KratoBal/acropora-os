@@ -5,6 +5,10 @@ import type {
   DashboardSettlementsWidgetData,
 } from "@acropora/types";
 
+import {
+  buyerTaxCheckWhere,
+  type BuyerTaxCheckRow,
+} from "../billing/buyer-tax-check.js";
 import { budapestDayKey } from "./budapest-day.js";
 import {
   OVERDUE_COUNTED_KIND_CODES,
@@ -19,6 +23,21 @@ import {
 export class DashboardFinanceWidgetsRepository extends Repository {
   constructor() {
     super(prisma);
+  }
+
+  /** The issued invoices of `[from, to)` for the tax-number check (`buyer-tax-check.ts`). */
+  issuedForBuyerTaxCheck(from: Date, to: Date): Promise<BuyerTaxCheckRow[]> {
+    return this.database.invoice.findMany({
+      where: buyerTaxCheckWhere(from, to),
+      select: {
+        invoiceNumber: true,
+        issueDate: true,
+        partnerName: true,
+        partnerTaxNumber: true,
+        buyerSnapshot: true,
+        customer: { select: { type: true, partner: { select: { id: true } } } },
+      },
+    });
   }
 
   /**

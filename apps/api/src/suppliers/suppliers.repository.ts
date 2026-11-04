@@ -149,17 +149,6 @@ export async function assertPartnerCodeFreeForCustomer(
 }
 
 /**
- * A worksheet belongs to a customer in three places -- the sheet, the unit and
- * the abbreviation the close path requires -- so a service partner is given a
- * customer row of its own to carry them. The row is the partner's, not a buyer's: it is created
- * here rather than typed in, so a partner is still recorded once, by hand, in
- * one place, and the customer list leaves these rows out.
- *
- * Kept in step on every save, because the name and the code are what a
- * colleague reads on the worksheet: a partner renamed on the partner screen and
- * left alone here would put the old name on every sheet written afterwards.
- */
-/**
  * A PARTNER ADÓSZÁMA A VEVŐ-TÜKÖRBE (Balázs, 2026-11-04 11:43 UTC: az állatkert
  * minden számlája adószám nélkül ment ki; kártya aaf4f09d). A karbantartási és a
  * TIG-számla a tükör sorából olvassa a vevőt, a tükör pedig eddig csak a nevet, a
@@ -170,6 +159,10 @@ export async function assertPartnerCodeFreeForCustomer(
  * ÜRES PARTNER-ADÓSZÁM NEM TÖRÖL: a tükör egy korábbi, kézzel beírt értékét nem
  * nullázzuk egy üres mezővel; az adószám eltávolítása a partneren tehát nem jut át
  * (ritka, és a hiánya veszélyesebb, mint a maradása).
+ *
+ * ÜRES ORSZÁG (barracuda, #2157 review): az ország nélküli partner adószámát az
+ * alakja dönti el. Országkóddal kezdődő érték (`DE123456789`, `HU12345678`) közösségi
+ * adószám, és nem kerülhet a magyar `<adoszam>` mezőbe; minden más belföldinek számít.
  */
 export function mirroredTaxNumber(supplier: {
   taxNumber?: string | null;
@@ -177,10 +170,25 @@ export function mirroredTaxNumber(supplier: {
 }): { taxNumber?: string; euTaxNumber?: string } {
   const value = supplier.taxNumber?.trim();
   if (!value) return {};
-  const country = (supplier.country ?? "HU").trim().toUpperCase();
+  const country = supplier.country?.trim().toUpperCase();
+  if (!country)
+    return /^[A-Z]{2}/i.test(value)
+      ? { euTaxNumber: value }
+      : { taxNumber: value };
   return country === "HU" ? { taxNumber: value } : { euTaxNumber: value };
 }
 
+/**
+ * A worksheet belongs to a customer in three places -- the sheet, the unit and
+ * the abbreviation the close path requires -- so a service partner is given a
+ * customer row of its own to carry them. The row is the partner's, not a buyer's: it is created
+ * here rather than typed in, so a partner is still recorded once, by hand, in
+ * one place, and the customer list leaves these rows out.
+ *
+ * Kept in step on every save, because the name and the code are what a
+ * colleague reads on the worksheet: a partner renamed on the partner screen and
+ * left alone here would put the old name on every sheet written afterwards.
+ */
 export async function syncWorksheetMirror(
   tx: Prisma.TransactionClient,
   supplier: {

@@ -110,9 +110,28 @@ describe("Figyelmet igényel: the figures", () => {
         dueToday: 9,
         dueWithinWeek: 9,
         noPaymentDataPastDue: 9,
+        withoutBuyerTaxNumber: 0,
       }).map((i) => [i.key, i.count]),
       [["overdue", 2]],
       "due-soon and no-payment-data figures are not overdue",
+    );
+    // card aaf4f09d: an issued invoice without the buyer's tax number is its own red line
+    assert.deepEqual(
+      attentionItemsOf("overdue-invoices", {
+        overdue: { count: 0, openAmounts: [] },
+        dueToday: 0,
+        dueWithinWeek: 0,
+        noPaymentDataPastDue: 0,
+        withoutBuyerTaxNumber: 2,
+      }).map((i) => [i.key, i.count, i.tone, i.label]),
+      [
+        [
+          "without-buyer-tax-number",
+          2,
+          "danger",
+          "Kiállított számla adószám nélkül",
+        ],
+      ],
     );
     assert.deepEqual(
       attentionItemsOf("worksheets", {

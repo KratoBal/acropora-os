@@ -57,6 +57,8 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   "ARTICLE_IMAGE_PUBLIC_BASE_URL",
   "ASSET_QR_BASE_URL",
   "BILLING_ISSUE_ENABLED",
+  // the daily buyer tax-number check of the issued invoices (card aaf4f09d): a switch, not a secret
+  "BUYER_TAX_CHECK_ENABLED",
   // the test-only switch for the Brands page catalog buttons: a boolean, not a secret
   "CATALOG_ADMIN_ACTIONS_ENABLED",
   // the catalog buttons' allowed Medusa host names (second guard): host names, not a secret
