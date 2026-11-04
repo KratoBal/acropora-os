@@ -66,6 +66,7 @@ const plan = (): PartnerMigrationPlan => ({
 const previewOf = (
   over: Partial<PartnerMergePreview> = {},
 ): PartnerMergePreview => ({
+  target: "stage-db:5432/acropora",
   keptId: "k",
   mergedId: "u",
   kept: null,
@@ -130,6 +131,8 @@ describe("PartnerMergeSection", () => {
     const dialog = await screen.findByRole("dialog");
     expect(dialog.textContent).toContain("Állatkert (UNAS) (VEVO-u)");
     expect(dialog.textContent).toContain("4 rendelés, 2 számla");
+    // the confirmation names the database, like the migration's
+    expect(dialog.textContent).toContain("stage-db:5432/acropora");
     expect(api.execute).not.toHaveBeenCalled();
     fireEvent.click(within(dialog).getByRole("button", { name: "Összevonás" }));
     await waitFor(() => expect(api.execute).toHaveBeenCalledTimes(1));

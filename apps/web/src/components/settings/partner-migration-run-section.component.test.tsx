@@ -205,6 +205,47 @@ describe("PartnerMigrationRunSection", () => {
     expect(api.apply.mock.calls[0]![1].binds).toEqual({ AMB: "c2" });
   });
 
+  it("a successful write drops the other, now stale preview (apply drops the restore preview, restore drops the apply preview)", async () => {
+    api.apply.mockResolvedValue({ target: "x", outcomes: [] });
+    api.restorePreview.mockResolvedValue({
+      target: "x",
+      outcomes: [{ supplierId: "s2", customerId: "c9", result: "RESTORED" }],
+      fingerprint: "b".repeat(64),
+    });
+    api.restoreApply.mockResolvedValue({ target: "x", outcomes: [] });
+    mount();
+    fireEvent.click(button("Visszaállítási próba"));
+    await screen.findByTestId("migration-restore-preview");
+    fireEvent.click(button("Próba"));
+    await screen.findByTestId("migration-preview");
+    fireEvent.click(button("Átvezetés végrehajtása"));
+    fireEvent.click(
+      within(await screen.findByRole("dialog")).getByRole("button", {
+        name: "Átvezetés végrehajtása",
+      }),
+    );
+    await waitFor(() => expect(api.apply).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(screen.queryByTestId("migration-restore-preview")).toBeNull(),
+    );
+    expect((button("Visszaállítás") as HTMLButtonElement).disabled).toBe(true);
+    // and the other way round
+    fireEvent.click(button("Visszaállítási próba"));
+    await screen.findByTestId("migration-restore-preview");
+    fireEvent.click(button("Próba"));
+    await screen.findByTestId("migration-preview");
+    fireEvent.click(button("Visszaállítás"));
+    fireEvent.click(
+      within(await screen.findByRole("dialog")).getByRole("button", {
+        name: "Visszaállítás",
+      }),
+    );
+    await waitFor(() => expect(api.restoreApply).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(screen.queryByTestId("migration-preview")).toBeNull(),
+    );
+  });
+
   it("restores only after a restore preview, with its fingerprint", async () => {
     api.restorePreview.mockResolvedValue({
       target: "stage-db:5432/acropora",

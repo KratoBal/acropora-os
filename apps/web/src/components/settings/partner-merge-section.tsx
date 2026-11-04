@@ -320,7 +320,7 @@ export function PartnerMergeSection({
       <ConfirmDialog
         open={confirmMerge !== null}
         title="Összevonod ezt a két vevő-sort?"
-        consequence={`A(z) ${confirmMerge ? nameOf(confirmMerge.mergedId) : ""} sor hivatkozásai (${confirmMerge ? describeCounts(confirmMerge.willMove) : ""}) a(z) ${confirmMerge ? nameOf(confirmMerge.keptId) : ""} sorra kerülnek, a megszűnő sor archiválódik. A kiállított számlák tartalma nem változik.`}
+        consequence={`A(z) ${confirmMerge?.target ?? ""} adatbázison a(z) ${confirmMerge ? nameOf(confirmMerge.mergedId) : ""} sor hivatkozásai (${confirmMerge ? describeCounts(confirmMerge.willMove) : ""}) a(z) ${confirmMerge ? nameOf(confirmMerge.keptId) : ""} sorra kerülnek, a megszűnő sor archiválódik. A kiállított számlák tartalma nem változik.`}
         recovery="A napló során a Visszavonás visszaviszi, ami még a megmaradó soron áll; ami közben máshová került, az marad."
         confirmLabel="Összevonás"
         busy={busy}

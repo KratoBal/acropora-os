@@ -101,6 +101,8 @@ export function PartnerMigrationRunSection({
         binds,
       });
       setPreview(null);
+      // a sikeres írás után a régi visszaállítási próba elavult (más halmazt látott): új próba kell
+      setRestorePreview(null);
       setDone(
         result.outcomes.map(
           (o) =>
@@ -120,6 +122,8 @@ export function PartnerMigrationRunSection({
         fingerprint: restorePreview.fingerprint,
       });
       setRestorePreview(null);
+      // és a visszaállítás után a régi átvezetési próba is elavult
+      setPreview(null);
       setDone(
         result.outcomes.map(
           (o) =>
