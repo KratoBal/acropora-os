@@ -306,7 +306,7 @@ export const missingInvoicesApi = {
     );
   },
   /**
-   * A könyvelői csomag (PDF): a hónap bejövő számlái a teljesítés napja
+   * A könyvelői csomag (PDF): a hónap bejövő számlái a számla kelte
    * szerint, kifizetve vagy sem, a PDF-jeikkel egyben (nautilus #1308).
    */
   async accountantPackage(

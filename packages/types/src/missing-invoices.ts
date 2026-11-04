@@ -451,7 +451,7 @@ export interface MissingInvoicePackageUnpaidInvoice {
   /** Tizedes szöveg. */
   amount: string;
   currency: string;
-  /** A teljesítés napja (híján a kiállításé), `ÉÉÉÉ-HH-NN`. */
+  /** A számla kelte, `ÉÉÉÉ-HH-NN`. */
   date: string;
   pdf: MissingInvoicePackagePdf;
 }

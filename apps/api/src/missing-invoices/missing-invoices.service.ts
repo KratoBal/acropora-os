@@ -821,10 +821,11 @@ export class MissingInvoicesService {
   }
 
   /**
-   * A KÖNYVELŐI CSOMAG: a hónap MINDEN bejövő számlája a teljesítés napja
+   * A KÖNYVELŐI CSOMAG: a hónap MINDEN bejövő számlája a SZÁMLA KELTE
    * szerint, kifizetve vagy sem (Balázs, 2026-11-02 20:12 UTC; eddig a banki
    * terhelések hónapja döntött, tehát egy még ki nem fizetett számla nem
-   * szerepelt). Egy számla egyszer, egy hónapban van benne: a szeptemberi
+   * szerepelt; 2026-11-04 07:11 UTC óta nem a teljesítés napja, hanem a kelte
+   * dönt). Egy számla egyszer, egy hónapban van benne: a szeptemberben kelt
    * számla, amit októberben fizettek, CSAK a szeptemberi csomagban áll.
    *
    * KÉT FORRÁSBÓL ÁLL:
@@ -945,7 +946,7 @@ export class MissingInvoicesService {
       (item) => item.month === month && item.refund !== null,
     );
     // a sor kizárásához MINDEN hónap sztornózott vásárlása számít: az eredeti
-    // számla teljesítése szeptember lehet, a visszatérítés terhelése október,
+    // számla kelte szeptember lehet, a visszatérítés terhelése október,
     // és a számla ilyenkor is csak a sztornózott vásárlás sorában szerepel
     // (barracuda kérdése, #2002)
     const inRefund = inFeedTest(
@@ -1127,12 +1128,12 @@ export class MissingInvoicesService {
         const file = paperRow(row) ? null : fileOfRow(row);
         const itemId = itemOfRow(row);
         return {
-          bookingDate: dayOf(row.fulfillmentDate ?? row.issueDate),
+          bookingDate: dayOf(row.issueDate),
           partner: row.supplierName,
           amount: amountOf(row.grossAmount, row.currency),
           currency: row.currency,
           paperOriginal: paperRow(row),
-          label: "teljesítés napja",
+          label: "számla kelte",
           documents: [
             {
               number: row.documentNumber,

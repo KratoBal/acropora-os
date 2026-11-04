@@ -10,6 +10,7 @@ import {
   PilotFileInput,
   Select,
   Skeleton,
+  PAGE_GUTTER_X,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -409,7 +410,7 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
         </div>
       ) : asset ? (
         <>
-          <div className="px-4 sm:px-8 pt-6">
+          <div className={`${PAGE_GUTTER_X} pt-6`}>
             <div className="mb-3 flex items-center justify-between gap-4">
               <Link
                 href={backToList.href}
@@ -469,7 +470,7 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
           </div>
 
           {error ? (
-            <div className="px-4 sm:px-8 pt-4">
+            <div className={`${PAGE_GUTTER_X} pt-4`}>
               <Alert
                 variant="danger"
                 title="A művelet nem sikerült"
@@ -478,12 +479,14 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
             </div>
           ) : null}
           {notice ? (
-            <div className="px-4 sm:px-8 pt-4">
+            <div className={`${PAGE_GUTTER_X} pt-4`}>
               <Alert variant="info" title="Mentve" description={notice} />
             </div>
           ) : null}
 
-          <div className="grid grid-cols-1 items-start gap-6 px-4 sm:px-8 py-6 lg:grid-cols-[1fr_320px]">
+          <div
+            className={`grid grid-cols-1 items-start gap-6 ${PAGE_GUTTER_X} py-6 lg:grid-cols-[1fr_320px]`}
+          >
             <div className="flex flex-col gap-5">
               <PilotCard>
                 <PilotCardHeader title="Azonosítás" />
@@ -915,7 +918,7 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
               ) : null}
             </div>
           </div>
-          <div className="flex justify-end px-4 sm:px-8 pb-8">
+          <div className={`flex justify-end ${PAGE_GUTTER_X} pb-8`}>
             <PilotAssetStepper
               neighbors={neighbors}
               onStep={step}

@@ -7,6 +7,8 @@ import {
   PageHeader,
   Skeleton,
   PilotDateField,
+  PAGE_GUTTER_MX,
+  PAGE_GUTTER_X,
 } from "@acropora/ui";
 import {
   formatMoney,
@@ -156,7 +158,7 @@ export function PilotPosSummaryPage() {
 
   return (
     <PilotThemeRoot bleed className={shell}>
-      <div className="px-4 sm:px-8 pb-5 pt-6">
+      <div className={`${PAGE_GUTTER_X} pb-5 pt-6`}>
         <button
           type="button"
           onClick={backTo.goBack}
@@ -171,7 +173,7 @@ export function PilotPosSummaryPage() {
         />
       </div>
 
-      <div className="mx-4 mb-5 flex flex-wrap items-end gap-3 sm:mx-8">
+      <div className={`${PAGE_GUTTER_MX} mb-5 flex flex-wrap items-end gap-3`}>
         <div className="flex gap-2 text-xs font-semibold">
           <PilotButton
             variant={preset === "today" ? "primary" : "secondary"}
@@ -206,7 +208,7 @@ export function PilotPosSummaryPage() {
         </label>
       </div>
 
-      <div className="mx-4 mb-8 sm:mx-8">
+      <div className={`${PAGE_GUTTER_MX} mb-8`}>
         <PilotCard>
           <PilotCardHeader title="Fizetési módok" />
           {error ? (

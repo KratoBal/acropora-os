@@ -13,6 +13,7 @@ import {
   PilotThemeRoot,
   type CalculatorAquariumOption,
   type CalculatorSuggestedCurrent,
+  PAGE_GUTTER_X,
 } from "@acropora/ui";
 import { hasPermission, PERMISSIONS } from "@acropora/types";
 import { useAuth } from "@/components/auth/auth-provider";
@@ -144,7 +145,7 @@ export function PilotCalculatorsPage() {
   return (
     <PilotThemeRoot
       bleed
-      className="min-h-screen bg-pilot-grey-50 px-4 sm:px-8 py-6"
+      className={`min-h-screen bg-pilot-grey-50 ${PAGE_GUTTER_X} py-6`}
     >
       <PageHeader
         className="mb-5"

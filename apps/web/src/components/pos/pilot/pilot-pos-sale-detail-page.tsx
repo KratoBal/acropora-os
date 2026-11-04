@@ -7,6 +7,7 @@ import {
   PilotDataTable,
   Skeleton,
   type PilotTableColumn,
+  PAGE_GUTTER_X,
 } from "@acropora/ui";
 import {
   formatMoney,
@@ -217,7 +218,7 @@ export function PilotPosSaleDetailPage({ saleId }: { saleId: string }) {
       bleed
       className="flex min-h-screen flex-col bg-pilot-grey-50 [&_h1]:![font-family:inherit] [&_h2]:![font-family:inherit] [&_h3]:![font-family:inherit]"
     >
-      <div className="px-4 sm:px-8 pb-5 pt-6">
+      <div className={`${PAGE_GUTTER_X} pb-5 pt-6`}>
         <button
           type="button"
           onClick={backTo.goBack}
@@ -238,7 +239,7 @@ export function PilotPosSaleDetailPage({ saleId }: { saleId: string }) {
           }
         />
       </div>
-      <div className="flex min-w-0 flex-col gap-5 px-4 sm:px-8 pb-8">
+      <div className={`flex min-w-0 flex-col gap-5 ${PAGE_GUTTER_X} pb-8`}>
         {loading ? (
           <PilotCard className="p-5">
             <Skeleton className="h-4 w-1/3" />
