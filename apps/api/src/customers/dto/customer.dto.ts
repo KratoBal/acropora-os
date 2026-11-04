@@ -70,4 +70,11 @@ export class CustomerListQueryDto {
   @IsIn(["ACTIVE", "INACTIVE", "ALL"]) @IsOptional() status:
     "ACTIVE" | "INACTIVE" | "ALL" = "ACTIVE";
   @IsIn(["UNAS", "MANUAL"]) @IsOptional() source?: "UNAS" | "MANUAL";
+  /**
+   * A partnerek vevő-tükrei is (a számla vevőválasztója, kártya aaf4f09d): alapból
+   * kimaradnak, mert a Vevők listáján nem vevők; a számlán viszont a partner adataival
+   * (adószám, határidő, számlázási e-mail) a tükör a helyes vevő.
+   */
+  @IsIn(["true", "false"]) @IsOptional() includePartnerMirrors?:
+    "true" | "false";
 }

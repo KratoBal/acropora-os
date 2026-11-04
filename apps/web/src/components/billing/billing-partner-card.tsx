@@ -82,6 +82,9 @@ export function BillingPartnerCard({
             search,
             page: "1",
             pageSize: String(CUSTOMER_LIST_PAGE_SIZE.min),
+            // the partners' customer mirrors too: on an invoice the mirror carries the
+            // partner's tax number, term and billing e-mail (card aaf4f09d)
+            includePartnerMirrors: "true",
           }),
           controller.signal,
         )
@@ -200,11 +203,15 @@ export function BillingPartnerCard({
                     onClick={() => void pick(result)}
                     className="flex w-full cursor-pointer flex-col items-start px-4 py-2 text-left hover:bg-pilot-aqua-50"
                   >
-                    <span className="text-sm font-medium text-pilot-grey-900">
+                    <span className="flex items-center gap-2 text-sm font-medium text-pilot-grey-900">
                       {result.companyName?.trim() || result.displayName}
+                      {result.partnerMirror ? (
+                        <PilotBadge variant="blue">Partner</PilotBadge>
+                      ) : null}
                     </span>
                     <span className="text-xs text-pilot-grey-500">
                       {result.customerNumber}
+                      {result.taxNumber ? ` · adószám ${result.taxNumber}` : ""}
                       {result.address ? ` · ${result.address}` : ""}
                     </span>
                   </button>

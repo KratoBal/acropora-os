@@ -1690,6 +1690,44 @@ describe("BillingDocumentEditor", () => {
       );
     });
 
+    it("offers the partners' customer mirrors too, marked and with their tax number (card aaf4f09d)", async () => {
+      // Balázs, 2026-11-04 14:23 UTC: the zoo's old UNAS row could not take the tax number
+      customers.list.mockResolvedValue({
+        items: [
+          {
+            id: "cust-old",
+            customerNumber: "VEVO-AE9D",
+            displayName: "Fővárosi Állat- és Növénykert",
+            address: "1146 Budapest, Állatkerti krt. 6-12.",
+          },
+          {
+            id: "cust-mirror",
+            customerNumber: "PARTNER-D7E3",
+            displayName: "Fővárosi Állat- és Növénykert",
+            companyName: "Fővárosi Állat- és Növénykert",
+            taxNumber: "15490658-2-42",
+            partnerMirror: true,
+            address: "1146 Budapest, Állatkerti krt. 6-12.",
+          },
+        ],
+      });
+      render(<BillingDocumentEditor />);
+      fireEvent.change(screen.getByLabelText("Partner keresése"), {
+        target: { value: "Főv" },
+      });
+      const mirror = await screen.findByRole("button", {
+        name: /PARTNER-D7E3/,
+      });
+      expect(mirror).toHaveTextContent("Partner");
+      expect(mirror).toHaveTextContent("adószám 15490658-2-42");
+      const old = screen.getByRole("button", { name: /VEVO-AE9D/ });
+      expect(old).not.toHaveTextContent("Partner");
+      const [, query] = customers.list.mock.calls[0]!;
+      expect((query as URLSearchParams).get("includePartnerMirrors")).toBe(
+        "true",
+      );
+    });
+
     it("a refused search says so, not 'Nincs találat'", async () => {
       customers.list.mockRejectedValue(
         new Error("pageSize must not be less than 10"),

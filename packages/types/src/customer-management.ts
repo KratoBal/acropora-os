@@ -39,10 +39,16 @@ export interface CustomerSummary {
   address: string | null;
   createdAt: string;
   updatedAt: string;
+  /** a magyar adószám (a számla vevőválasztója mutatja) */
+  taxNumber?: string;
+  /**
+   * Ez a sor egy partner vevő-tükre (`Supplier.customerId`): a számla kapuja (kártya
+   * aaf4f09d) partnernek mindig adószámot kér, és a vevőválasztó „Partner” jellel mutatja.
+   */
+  partnerMirror?: boolean;
 }
 
 export interface CustomerDetail extends CustomerSummary {
-  taxNumber?: string;
   /**
    * The community (EU) tax number, apart from the Hungarian one: the
    * Számlázz.hu Agent takes it in `<adoszamEU>`, never in `<adoszam>`.
@@ -61,11 +67,6 @@ export interface CustomerDetail extends CustomerSummary {
    * nincs ilyen, vagy több partner más-más napot mondana.
    */
   partnerTerms?: { paymentDueDays: number; partnerName: string } | null;
-  /**
-   * Ez a sor egy partner vevő-tükre (`Supplier.customerId`): a számla kapuja
-   * (kártya aaf4f09d) partnernek mindig adószámot kér, a típustól függetlenül.
-   */
-  partnerMirror?: boolean;
   marketingEmailConsent: boolean;
   marketingSmsConsent: boolean;
   addresses: CustomerAddress[];

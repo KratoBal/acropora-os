@@ -46,3 +46,20 @@ describe("the customer list query's page size", () => {
     assert.deepEqual(errors({ search: "Kft", pageSize: "8" }), ["pageSize"]);
   });
 });
+
+// THE BILLING PICKER ASKS FOR THE PARTNER MIRRORS (card aaf4f09d): the switch is
+// exactly "true" or "false"; anything else is refused, not read as a default.
+describe("the customer list query's partner mirror switch", () => {
+  const errors = (raw: Record<string, string>) =>
+    validateSync(plainToInstance(CustomerListQueryDto, raw)).map(
+      (error) => error.property,
+    );
+
+  it("accepts true and false, and refuses anything else", () => {
+    assert.deepEqual(errors({ includePartnerMirrors: "true" }), []);
+    assert.deepEqual(errors({ includePartnerMirrors: "false" }), []);
+    assert.deepEqual(errors({ includePartnerMirrors: "yes" }), [
+      "includePartnerMirrors",
+    ]);
+  });
+});
