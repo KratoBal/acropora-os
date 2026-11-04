@@ -29,7 +29,7 @@ import type { SzamlazzAgentPaymentClient } from "./szamlazz-agent.client.js";
  *      read-back; a business rejection is FAILED; a thrown error (network,
  *      timeout, HTTP, unreadable answer) is UNKNOWN.
  */
-export type PaymentMarkSource = "GLS_COD" | "SIMPLEPAY" | "FOXPOST";
+export type PaymentMarkSource = "GLS_COD" | "SIMPLEPAY" | "FOXPOST" | "MANUAL";
 
 export type PaymentMarkState =
   "PLANNED" | "WRITTEN" | "ALREADY_PAID" | "FAILED" | "UNKNOWN";
@@ -55,7 +55,27 @@ export interface PaymentMarkStore {
     paidAmount: string;
     grossAmount: string;
     currency: string;
+    /** when the feed row arrived: our own marks after it are not in `paidAmount` yet */
+    feedReceivedAt?: Date | null;
   } | null>;
+  /**
+   * Our own marks on the invoice, every source (barracuda, #2168 review): the WRITTEN ones after the feed row
+   * (`since`; all of them when null), summed, and the PLANNED or UNKNOWN ones, counted (an earlier call may
+   * have gone out). `excludeId`: the current request's own log row.
+   */
+  ownMarks?(
+    invoiceNumber: string,
+    since: Date | null,
+    excludeId: string | null,
+  ): Promise<{ writtenSince: string; uncertain: number }>;
+  /**
+   * One write per invoice at a time: the measuring and the PLANNED row run under a lock on the invoice
+   * number, so a second request sees the first one's row (barracuda, #2168 review).
+   */
+  withInvoiceLock?<T>(
+    invoiceNumber: string,
+    run: (store: PaymentMarkStore) => Promise<T>,
+  ): Promise<T>;
   logRow(
     source: PaymentMarkSource,
     invoiceNumber: string,
@@ -89,8 +109,14 @@ export type PaymentMarkOutcome =
   | { kind: "FAILED"; code: string | null; message: string | null }
   | { kind: "UNKNOWN"; error: string }
   | { kind: "LOGGED_BEFORE"; state: PaymentMarkState }
-  | { kind: "UNCERTAIN_BEFORE"; state: PaymentMarkState | "TAKEN" }
-  | { kind: "NOT_UNPAID"; state: string };
+  | {
+      kind: "UNCERTAIN_BEFORE";
+      /** `PENDING_ON_INVOICE`: another mark on this invoice is PLANNED or UNKNOWN */
+      state: PaymentMarkState | "TAKEN" | "PENDING_ON_INVOICE";
+    }
+  | { kind: "NOT_UNPAID"; state: string }
+  /** `allowPartial`: the mark is more than the invoice's open amount */
+  | { kind: "OVER_OPEN"; open: string };
 
 export interface PaymentMarkLine {
   invoiceNumber: string;
@@ -98,6 +124,12 @@ export interface PaymentMarkLine {
   amount: string;
   outcome: PaymentMarkOutcome;
 }
+
+/** the payment request, without the key */
+type PaymentRequest = Omit<
+  Parameters<typeof buildSzamlazzAgentPaymentXml>[0],
+  "agentKey"
+>;
 
 const sha256 = (text: string) =>
   createHash("sha256").update(text).digest("hex");
@@ -110,6 +142,12 @@ export async function applyPaidMarks(input: {
   agentKey: string;
   client: SzamlazzAgentPaymentClient;
   store: PaymentMarkStore;
+  /**
+   * A partly paid invoice may take the mark too, up to its open amount (the manual
+   * entry: a customer may pay in parts). The automatic sources write only on a provably
+   * unpaid invoice, as before.
+   */
+  allowPartial?: boolean;
 }): Promise<PaymentMarkLine[]> {
   const { source, store } = input;
   const lines: PaymentMarkLine[] = [];
@@ -123,82 +161,117 @@ export async function applyPaidMarks(input: {
         outcome,
       });
 
-    const existing = await store.logRow(
-      source,
-      mark.invoiceNumber,
-      mark.sourceRef,
-    );
-    if (existing?.state === "WRITTEN" || existing?.state === "ALREADY_PAID") {
-      line({ kind: "LOGGED_BEFORE", state: existing.state });
-      continue;
-    }
-    if (existing && existing.state !== "FAILED") {
-      line({ kind: "UNCERTAIN_BEFORE", state: existing.state });
-      continue;
-    }
-
-    const invoice = await store.invoice(mark.invoiceNumber);
-    const state = invoice ? paymentStateOf(invoice) : "NOT_FOUND";
-    const row = {
-      source,
-      invoiceNumber: mark.invoiceNumber,
-      markDate: mark.date,
-      amount: mark.amount,
-      sourceRef: mark.sourceRef,
-    };
-    if (state === "PAID") {
-      if (existing) await store.update(existing.id, { state: "ALREADY_PAID" });
-      else
-        await store.create({
-          ...row,
-          state: "ALREADY_PAID",
-          requestSha256: null,
-        });
-      line({ kind: "ALREADY_PAID" });
-      continue;
-    }
-    if (state !== "UNPAID") {
-      line({ kind: "NOT_UNPAID", state });
-      continue;
-    }
-
-    const payment = {
-      invoiceNumber: mark.invoiceNumber,
-      payments: [
-        {
-          date: mark.date,
-          title: mark.title,
-          amount: mark.amount,
-          note: mark.note,
-        },
-      ],
-    };
-    // the fingerprint of the request without the key: the key never lands
-    // in the log
-    const fingerprint = sha256(
-      buildSzamlazzAgentPaymentXml({ ...payment, agentKey: "" }),
-    );
-    let id: string;
-    if (existing) {
-      await store.update(existing.id, {
-        state: "PLANNED",
-        requestSha256: fingerprint,
-        responseCode: null,
-        responseMessage: null,
-      });
-      id = existing.id;
-    } else {
-      const created = await store.create({
-        ...row,
-        state: "PLANNED",
-        requestSha256: fingerprint,
-      });
-      if (!created) {
-        line({ kind: "UNCERTAIN_BEFORE", state: "TAKEN" });
-        continue;
+    const plan = async (
+      s: PaymentMarkStore,
+    ): Promise<{ id: string; payment: PaymentRequest } | null> => {
+      const existing = await s.logRow(
+        source,
+        mark.invoiceNumber,
+        mark.sourceRef,
+      );
+      if (existing?.state === "WRITTEN" || existing?.state === "ALREADY_PAID") {
+        line({ kind: "LOGGED_BEFORE", state: existing.state });
+        return null;
       }
-      id = created.id;
-    }
+      if (existing && existing.state !== "FAILED") {
+        line({ kind: "UNCERTAIN_BEFORE", state: existing.state });
+        return null;
+      }
+
+      const invoice = await s.invoice(mark.invoiceNumber);
+      const state = invoice ? paymentStateOf(invoice) : "NOT_FOUND";
+      const row = {
+        source,
+        invoiceNumber: mark.invoiceNumber,
+        markDate: mark.date,
+        amount: mark.amount,
+        sourceRef: mark.sourceRef,
+      };
+      if (state === "PAID") {
+        if (existing) await s.update(existing.id, { state: "ALREADY_PAID" });
+        else
+          await s.create({
+            ...row,
+            state: "ALREADY_PAID",
+            requestSha256: null,
+          });
+        line({ kind: "ALREADY_PAID" });
+        return null;
+      }
+      const partialAllowed = input.allowPartial === true && state === "PARTIAL";
+      if (state !== "UNPAID" && !partialAllowed) {
+        line({ kind: "NOT_UNPAID", state });
+        return null;
+      }
+      if (input.allowPartial && invoice) {
+        // the open amount, measured right before the write, under the invoice's lock (2 Ft tolerance, as
+        // PAID): the feed's paid amount, minus our own marks written since the feed row; any PLANNED or
+        // UNKNOWN own mark on the invoice stops it (barracuda, #2168 review)
+        const own = s.ownMarks
+          ? await s.ownMarks(
+              mark.invoiceNumber,
+              invoice.feedReceivedAt ?? null,
+              existing?.id ?? null,
+            )
+          : { writtenSince: "0", uncertain: 0 };
+        if (own.uncertain > 0) {
+          line({ kind: "UNCERTAIN_BEFORE", state: "PENDING_ON_INVOICE" });
+          return null;
+        }
+        const open = new Prisma.Decimal(invoice.grossAmount)
+          .abs()
+          .minus(new Prisma.Decimal(invoice.paidAmount).abs())
+          .minus(new Prisma.Decimal(own.writtenSince));
+        if (new Prisma.Decimal(mark.amount).greaterThan(open.plus(2))) {
+          line({ kind: "OVER_OPEN", open: open.toFixed(2) });
+          return null;
+        }
+      }
+
+      const payment = {
+        invoiceNumber: mark.invoiceNumber,
+        payments: [
+          {
+            date: mark.date,
+            title: mark.title,
+            amount: mark.amount,
+            note: mark.note,
+          },
+        ],
+      };
+      // the fingerprint of the request without the key: the key never lands
+      // in the log
+      const fingerprint = sha256(
+        buildSzamlazzAgentPaymentXml({ ...payment, agentKey: "" }),
+      );
+      let id: string;
+      if (existing) {
+        await s.update(existing.id, {
+          state: "PLANNED",
+          requestSha256: fingerprint,
+          responseCode: null,
+          responseMessage: null,
+        });
+        id = existing.id;
+      } else {
+        const created = await s.create({
+          ...row,
+          state: "PLANNED",
+          requestSha256: fingerprint,
+        });
+        if (!created) {
+          line({ kind: "UNCERTAIN_BEFORE", state: "TAKEN" });
+          return null;
+        }
+        id = created.id;
+      }
+      return { id, payment };
+    };
+    const ready = store.withInvoiceLock
+      ? await store.withInvoiceLock(mark.invoiceNumber, plan)
+      : await plan(store);
+    if (!ready) continue;
+    const { id, payment } = ready;
 
     let response;
     try {
@@ -266,6 +339,8 @@ export function paidMarksReport(
         return `kimarad: egy korábbi futás állapota ${o.state}, kézi ellenőrzés kell`;
       case "NOT_UNPAID":
         return `kimarad: a számla állapota ${o.state}, nem bizonyíthatóan fizetetlen`;
+      case "OVER_OPEN":
+        return `kimarad: több, mint a nyitott összeg (${o.open})`;
     }
   };
   for (const l of lines)
@@ -287,79 +362,118 @@ const isUniqueViolation = (error: unknown) =>
   error instanceof Prisma.PrismaClientKnownRequestError &&
   error.code === "P2002";
 
-/** The store on the database (`OutgoingPaymentMark`, `ExternalBillingDocument`). */
-export const prismaPaymentMarkStore: PaymentMarkStore = {
-  async invoice(invoiceNumber) {
-    const row = await prisma.externalBillingDocument.findFirst({
-      // only Számlázz.hu's own invoices can be marked paid there (not eBIZ)
-      where: { source: "SZAMLAZZ", documentNumber: invoiceNumber },
-      orderBy: { feedReceivedAt: "desc" },
-      select: {
-        paymentsKnown: true,
-        paidAmount: true,
-        grossAmount: true,
-        currency: true,
-      },
-    });
-    if (!row) return null;
-    return {
-      // null: not yet projected with its payments, so not provably unpaid
-      paymentsKnown: row.paymentsKnown !== null,
-      paidAmount: row.paidAmount.toFixed(4),
-      grossAmount: row.grossAmount.toFixed(4),
-      currency: row.currency,
-    };
-  },
-  async logRow(source, invoiceNumber, sourceRef) {
-    return prisma.outgoingPaymentMark.findUnique({
-      where: {
-        source_invoiceNumber_sourceRef: { source, invoiceNumber, sourceRef },
-      },
-      select: { id: true, state: true },
-    });
-  },
-  async create(row) {
-    try {
-      return await prisma.outgoingPaymentMark.create({
-        data: {
-          source: row.source,
-          invoiceNumber: row.invoiceNumber,
-          markDate: new Date(`${row.markDate}T00:00:00Z`),
-          amount: new Prisma.Decimal(row.amount),
-          sourceRef: row.sourceRef,
-          state: row.state,
-          requestSha256: row.requestSha256,
+type MarkDatabase = Prisma.TransactionClient | typeof prisma;
+
+/** The store on a database client (`OutgoingPaymentMark`, `ExternalBillingDocument`); a transaction's too. */
+function paymentMarkStoreOn(database: MarkDatabase): PaymentMarkStore {
+  return {
+    async invoice(invoiceNumber) {
+      const row = await database.externalBillingDocument.findFirst({
+        // only Számlázz.hu's own invoices can be marked paid there (not eBIZ)
+        where: { source: "SZAMLAZZ", documentNumber: invoiceNumber },
+        orderBy: { feedReceivedAt: "desc" },
+        select: {
+          paymentsKnown: true,
+          paidAmount: true,
+          grossAmount: true,
+          currency: true,
+          feedReceivedAt: true,
         },
-        select: { id: true },
       });
-    } catch (error) {
-      if (isUniqueViolation(error)) return null;
-      throw error;
-    }
-  },
-  async update(id, patch) {
-    await prisma.outgoingPaymentMark.update({
-      where: { id },
-      data: {
-        state: patch.state,
-        ...(patch.requestSha256 !== undefined
-          ? { requestSha256: patch.requestSha256 }
-          : {}),
-        ...(patch.responseCode !== undefined
-          ? { responseCode: patch.responseCode }
-          : {}),
-        ...(patch.responseMessage !== undefined
-          ? { responseMessage: patch.responseMessage }
-          : {}),
-        ...(patch.outstanding !== undefined
-          ? {
-              outstanding:
-                patch.outstanding === null
-                  ? null
-                  : new Prisma.Decimal(patch.outstanding),
-            }
-          : {}),
-      },
+      if (!row) return null;
+      return {
+        // null: not yet projected with its payments, so not provably unpaid
+        paymentsKnown: row.paymentsKnown !== null,
+        paidAmount: row.paidAmount.toFixed(4),
+        grossAmount: row.grossAmount.toFixed(4),
+        currency: row.currency,
+        feedReceivedAt: row.feedReceivedAt,
+      };
+    },
+    async ownMarks(invoiceNumber, since, excludeId) {
+      const rows = await database.outgoingPaymentMark.findMany({
+        where: {
+          invoiceNumber,
+          state: { in: ["WRITTEN", "PLANNED", "UNKNOWN"] },
+          ...(excludeId ? { id: { not: excludeId } } : {}),
+        },
+        select: { state: true, amount: true, updatedAt: true },
+      });
+      let written = new Prisma.Decimal(0);
+      let uncertain = 0;
+      for (const row of rows)
+        if (row.state !== "WRITTEN") uncertain += 1;
+        // the time it turned WRITTEN, not the PLANNED row's birth: a feed that arrives between the two does not
+        // hold the write yet (barracuda, #2168 review)
+        else if (!since || row.updatedAt > since)
+          written = written.plus(row.amount);
+      return { writtenSince: written.toFixed(4), uncertain };
+    },
+    async logRow(source, invoiceNumber, sourceRef) {
+      return database.outgoingPaymentMark.findUnique({
+        where: {
+          source_invoiceNumber_sourceRef: { source, invoiceNumber, sourceRef },
+        },
+        select: { id: true, state: true },
+      });
+    },
+    async create(row) {
+      try {
+        return await database.outgoingPaymentMark.create({
+          data: {
+            source: row.source,
+            invoiceNumber: row.invoiceNumber,
+            markDate: new Date(`${row.markDate}T00:00:00Z`),
+            amount: new Prisma.Decimal(row.amount),
+            sourceRef: row.sourceRef,
+            state: row.state,
+            requestSha256: row.requestSha256,
+          },
+          select: { id: true },
+        });
+      } catch (error) {
+        if (isUniqueViolation(error)) return null;
+        throw error;
+      }
+    },
+    async update(id, patch) {
+      await database.outgoingPaymentMark.update({
+        where: { id },
+        data: {
+          state: patch.state,
+          ...(patch.requestSha256 !== undefined
+            ? { requestSha256: patch.requestSha256 }
+            : {}),
+          ...(patch.responseCode !== undefined
+            ? { responseCode: patch.responseCode }
+            : {}),
+          ...(patch.responseMessage !== undefined
+            ? { responseMessage: patch.responseMessage }
+            : {}),
+          ...(patch.outstanding !== undefined
+            ? {
+                outstanding:
+                  patch.outstanding === null
+                    ? null
+                    : new Prisma.Decimal(patch.outstanding),
+              }
+            : {}),
+        },
+      });
+    },
+  };
+}
+
+/**
+ * The store on the database, with the invoice lock: a transaction-scoped advisory lock on the invoice
+ * number (`pg_advisory_xact_lock`), the measuring and the PLANNED row inside it, the Számlázz.hu call after.
+ */
+export const prismaPaymentMarkStore: PaymentMarkStore = {
+  ...paymentMarkStoreOn(prisma),
+  withInvoiceLock(invoiceNumber, run) {
+    return prisma.$transaction(async (transaction) => {
+      await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`outgoing-payment:${invoiceNumber}`}))`;
+      return run(paymentMarkStoreOn(transaction));
     });
   },
 };

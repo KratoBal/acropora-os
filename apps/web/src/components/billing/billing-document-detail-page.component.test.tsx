@@ -38,6 +38,8 @@ const api = vi.hoisted(() => ({
   stornoPdf: vi.fn(),
   issuingCheck: vi.fn(),
   issuingResolve: vi.fn(),
+  // the stuck payment marks' list (#2168): read only; the resolution has its own test
+  pendingPaymentMarks: vi.fn(),
   setOwnPaperOriginal: vi.fn(),
 }));
 vi.mock("@/lib/api/billing-documents", () => ({ billingDocumentsApi: api }));
@@ -213,6 +215,7 @@ beforeEach(() => {
     variables: [],
   });
   api.detail.mockReset().mockResolvedValue(detail());
+  api.pendingPaymentMarks.mockReset().mockResolvedValue([]);
   api.final.mockReset();
   api.advance.mockReset();
   api.copy.mockReset();

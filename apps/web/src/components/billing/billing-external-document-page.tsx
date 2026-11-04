@@ -29,6 +29,8 @@ import { billingDocumentsApi } from "@/lib/api/billing-documents";
 import { BILLING_LIST_PATH, formatDay } from "./billing-document-table";
 import { formatMoney, trimDecimal } from "./billing-editor-state";
 import { OWN_MARK_SOURCE_LABELS, PaymentBadge } from "./billing-payment";
+import { ManualPaymentForm, openAmountInput } from "./manual-payment-form";
+import { PendingPaymentMarks } from "./pending-payment-marks";
 import { BillingDetailHeader } from "./billing-detail-header";
 import {
   PaperOriginalButton,
@@ -49,7 +51,8 @@ export const EXTERNAL_SOURCE_NAME: Record<ExternalBillingSource, string> = {
 /** Miért nincs PDF, egy mondatban (a hibakód a lap alján marad). */
 /**
  * A KÜLSŐ KIMENŐ SZÁMLA ADATLAPJA (acrobot 25812): ugyanaz a kinézet, mint a
- * mieinké, CSAK OLVASÁSRA. Nincs szerkesztés, sztornó, újraküldés. A
+ * mieinké, CSAK OLVASÁSRA. Nincs szerkesztés, sztornó, újraküldés; egy nyitott
+ * számlára kézi kifizetés rögzíthető, az is a Számlázz.hu-ba (2026-11-04). A
  * Számlázz.hu-ból jött számla PDF-jét a feed nem adja; a Számlázz.hu-s letöltés
  * hozza (#1658, kézzel indított parancs), az OTP eBIZ-ből jötthöz a napi
  * szinkron (2026-10-02). Ha nincs, a `pdfMissingText` mondja meg, miért.
@@ -67,6 +70,10 @@ export function BillingExternalDocumentPage({
   const canManageFinance = Boolean(
     session && hasPermission(session.user, PERMISSIONS.FINANCE_MANAGE),
   );
+  // the manual payment writes to Számlázz.hu: the issuing permission, as on the server
+  const canRecordPayment = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.BILLING_ISSUE),
+  );
   const [detail, setDetail] = useState<BillingExternalDocumentDetail | null>(
     null,
   );
@@ -74,6 +81,7 @@ export function BillingExternalDocumentPage({
   const [error, setError] = useState<string | null>(null);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
+  const [paymentAttempts, setPaymentAttempts] = useState(0);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -369,6 +377,33 @@ export function BillingExternalDocumentPage({
                   ))}
                 </ul>
               </div>
+            ) : null}
+            {canRecordPayment && !ebiz && detail.documentNumber ? (
+              <PendingPaymentMarks
+                token={token}
+                invoiceNumber={detail.documentNumber}
+                currency={detail.currency}
+                refreshKey={paymentAttempts}
+                onResolved={() => void load()}
+              />
+            ) : null}
+            {canRecordPayment &&
+            !ebiz &&
+            !detail.cancelled &&
+            detail.documentNumber &&
+            (detail.paymentState === "UNPAID" ||
+              detail.paymentState === "PARTIAL") ? (
+              <ManualPaymentForm
+                token={token}
+                invoiceNumber={detail.documentNumber}
+                defaultAmount={openAmountInput(
+                  detail.totals.grossAmount,
+                  detail.paidAmount,
+                  detail.currency,
+                )}
+                onRecorded={() => void load()}
+                onAttempted={() => setPaymentAttempts((n) => n + 1)}
+              />
             ) : null}
           </PilotSection>
           <PilotSection

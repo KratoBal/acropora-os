@@ -219,6 +219,8 @@ export type BillingPaymentSource =
   | "MARK_GLS_COD"
   | "MARK_SIMPLEPAY"
   | "MARK_FOXPOST"
+  /** a kimenő számla oldalán kézzel rögzített kifizetés (2026-11-04) */
+  | "MARK_MANUAL"
   /** Bejövő számla: a Hiányzó számlák banki párosítása (acrobot 25988). */
   | "BANK_PAIRING";
 
@@ -227,7 +229,7 @@ export type BillingPaymentSource =
  * Az adatlap mindig mutatja; ha a feed már kifizetettet mond, kiegészítő adat.
  */
 export interface BillingOwnPaymentMark {
-  source: "GLS_COD" | "SIMPLEPAY" | "FOXPOST";
+  source: "GLS_COD" | "SIMPLEPAY" | "FOXPOST" | "MANUAL";
   /** `YYYY-MM-DD`, a kifizetés napja, ahogy a Számlázz.hu-ba került. */
   date: string;
   amount: DecimalText;
