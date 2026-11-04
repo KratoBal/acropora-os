@@ -30,6 +30,7 @@ import { BILLING_LIST_PATH, formatDay } from "./billing-document-table";
 import { formatMoney, trimDecimal } from "./billing-editor-state";
 import { OWN_MARK_SOURCE_LABELS, PaymentBadge } from "./billing-payment";
 import { ManualPaymentForm, openAmountInput } from "./manual-payment-form";
+import { PendingPaymentMarks } from "./pending-payment-marks";
 import { BillingDetailHeader } from "./billing-detail-header";
 import {
   PaperOriginalButton,
@@ -80,6 +81,7 @@ export function BillingExternalDocumentPage({
   const [error, setError] = useState<string | null>(null);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
+  const [paymentAttempts, setPaymentAttempts] = useState(0);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -376,6 +378,15 @@ export function BillingExternalDocumentPage({
                 </ul>
               </div>
             ) : null}
+            {canRecordPayment && !ebiz && detail.documentNumber ? (
+              <PendingPaymentMarks
+                token={token}
+                invoiceNumber={detail.documentNumber}
+                currency={detail.currency}
+                refreshKey={paymentAttempts}
+                onResolved={() => void load()}
+              />
+            ) : null}
             {canRecordPayment &&
             !ebiz &&
             !detail.cancelled &&
@@ -391,6 +402,7 @@ export function BillingExternalDocumentPage({
                   detail.currency,
                 )}
                 onRecorded={() => void load()}
+                onAttempted={() => setPaymentAttempts((n) => n + 1)}
               />
             ) : null}
           </PilotSection>

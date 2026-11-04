@@ -234,6 +234,77 @@ describe(
       assert.equal(calls, 1);
     });
 
+    // barracuda (#2168): the boundary is the time a mark turned WRITTEN, not its PLANNED birth; a feed that
+    // arrives between the two does not hold the write
+    it("a mark planned before the feed row but written after it still lowers the open amount", async () => {
+      const BOUNDARY_NUMBER = `${MARK}/00086`;
+      const mark = await prisma.outgoingPaymentMark.create({
+        data: {
+          source: "MANUAL",
+          invoiceNumber: BOUNDARY_NUMBER,
+          markDate: new Date("2099-03-18T00:00:00Z"),
+          amount: new Prisma.Decimal(127000),
+          sourceRef: "boundary-planned",
+          state: "PLANNED",
+        },
+        select: { id: true },
+      });
+      // the feed row arrives now: after the PLANNED row, before the write
+      await prisma.externalBillingDocument.create({
+        data: {
+          externalId: "9982",
+          documentNumber: BOUNDARY_NUMBER,
+          feedMessageId: `${MARK}-9982`,
+          feedReceivedAt: new Date(),
+          kindCode: "SZ",
+          electronic: true,
+          issueDate: new Date("2099-03-01T00:00:00Z"),
+          currency: "HUF",
+          customerName: MARK,
+          netAmount: new Prisma.Decimal(100000),
+          vatAmount: new Prisma.Decimal(27000),
+          grossAmount: new Prisma.Decimal(127000),
+          lines: [],
+          paymentsKnown: true,
+          paidAmount: new Prisma.Decimal(0),
+        },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      await prisma.outgoingPaymentMark.update({
+        where: { id: mark.id },
+        data: { state: "WRITTEN" },
+      });
+      const calls: string[] = [];
+      const lines = await applyPaidMarks({
+        source: "MANUAL",
+        marks: [
+          {
+            invoiceNumber: BOUNDARY_NUMBER,
+            date: "2099-03-19",
+            amount: "127000.00",
+            title: "átutalás",
+            note: "kézi",
+            sourceRef: "boundary-second",
+          },
+        ],
+        approved: new Set([BOUNDARY_NUMBER]),
+        agentKey: "k",
+        client: {
+          async registerPayment(xml: string) {
+            calls.push(xml);
+            return { successful: true, outstanding: 0 };
+          },
+        },
+        store,
+        allowPartial: true,
+      });
+      assert.deepEqual(
+        lines.map((line) => line.outcome),
+        [{ kind: "OVER_OPEN", open: "0.00" }],
+      );
+      assert.equal(calls.length, 0);
+    });
+
     after(async () => {
       if (gate.mode === "run") await removeLeftovers();
     });

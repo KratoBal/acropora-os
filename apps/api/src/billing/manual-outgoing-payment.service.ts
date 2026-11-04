@@ -117,6 +117,96 @@ export class ManualPaymentAuditRepository extends Repository {
   }
 }
 
+/** egy függő (PLANNED vagy UNKNOWN) saját jelölés, ahogy a felület mutatja */
+export interface PendingPaymentMark {
+  id: string;
+  source: string;
+  state: "PLANNED" | "UNKNOWN";
+  /** ÉÉÉÉ-HH-NN */
+  date: string;
+  amount: string;
+  createdAt: string;
+  responseMessage: string | null;
+}
+
+/**
+ * A FÜGGŐ JELÖLÉSEK ÉS A LEZÁRÁSUK (barracuda, #2168 review): egy folyamat-leállás után ott maradt PLANNED
+ * vagy UNKNOWN jelölés a számla kézi rögzítését „bizonytalan”-ra állítja (helyesen: inkább álljon meg, mint
+ * kétszer írjon). A kezelő a Számlázz.hu-n megnézi, és lezárja: bekerült (WRITTEN) vagy nem került be
+ * (FAILED, újra rögzíthető). A lezárás auditnaplózott.
+ */
+@Injectable()
+export class PendingPaymentMarkRepository extends Repository {
+  constructor() {
+    super(prisma);
+  }
+
+  async pending(invoiceNumber: string): Promise<PendingPaymentMark[]> {
+    const rows = await this.database.outgoingPaymentMark.findMany({
+      where: { invoiceNumber, state: { in: ["PLANNED", "UNKNOWN"] } },
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        source: true,
+        state: true,
+        markDate: true,
+        amount: true,
+        createdAt: true,
+        responseMessage: true,
+      },
+    });
+    return rows.map((row) => ({
+      id: row.id,
+      source: row.source,
+      state: row.state as "PLANNED" | "UNKNOWN",
+      date: row.markDate.toISOString().slice(0, 10),
+      amount: row.amount.toFixed(2),
+      createdAt: row.createdAt.toISOString(),
+      responseMessage: row.responseMessage,
+    }));
+  }
+
+  /** `false`: a jelölés közben már nem függő (vagy nincs ilyen); csak függőt zár le. */
+  async resolve(input: {
+    id: string;
+    outcome: "WRITTEN" | "FAILED";
+    userId: string;
+  }): Promise<boolean> {
+    return this.database.$transaction(async (transaction) => {
+      const row = await transaction.outgoingPaymentMark.findUnique({
+        where: { id: input.id },
+        select: { invoiceNumber: true, state: true, source: true },
+      });
+      const changed = await transaction.outgoingPaymentMark.updateMany({
+        where: { id: input.id, state: { in: ["PLANNED", "UNKNOWN"] } },
+        data: {
+          state: input.outcome,
+          responseMessage:
+            input.outcome === "WRITTEN"
+              ? "kézzel lezárva: a Számlázz.hu-n bekerült"
+              : "kézzel lezárva: a Számlázz.hu-n nem került be",
+        },
+      });
+      if (changed.count === 0 || !row) return false;
+      await transaction.auditLog.create({
+        data: {
+          userId: input.userId,
+          action: "billing.outgoing-payment.mark-resolved",
+          entityType: "OutgoingInvoice",
+          entityId: row.invoiceNumber,
+          metadata: {
+            markId: input.id,
+            source: row.source,
+            from: row.state,
+            to: input.outcome,
+          },
+        },
+      });
+      return true;
+    });
+  }
+}
+
 function refusal(outcome: PaymentMarkOutcome): Error {
   switch (outcome.kind) {
     case "ALREADY_PAID":
@@ -142,7 +232,10 @@ function refusal(outcome: PaymentMarkOutcome): Error {
     case "UNKNOWN":
     case "UNCERTAIN_BEFORE":
       return new BadGatewayException(
-        "A Számlázz.hu válasza bizonytalan: lehet, hogy a kifizetés rögzült. Mielőtt újra próbálod, nézd meg a számlát a Számlázz.hu felületén.",
+        outcome.kind === "UNCERTAIN_BEFORE" &&
+          outcome.state === "PENDING_ON_INVOICE"
+          ? "Ezen a számlán egy korábbi kifizetés-írás bizonytalan állapotban áll. Nézd meg a számlát a Számlázz.hu felületén, és zárd le a függő jelölést a Kifizetés panelen; utána rögzíthető."
+          : "A Számlázz.hu válasza bizonytalan: lehet, hogy a kifizetés rögzült. Mielőtt újra próbálod, nézd meg a számlát a Számlázz.hu felületén.",
       );
     default:
       return new BadGatewayException("Váratlan válasz a Számlázz.hu-tól.");

@@ -42,6 +42,7 @@ import { ManualOutgoingPaymentController } from "./manual-outgoing-payment.contr
 import {
   ManualOutgoingPaymentService,
   ManualPaymentAuditRepository,
+  PendingPaymentMarkRepository,
 } from "./manual-outgoing-payment.service.js";
 
 /**
@@ -91,6 +92,7 @@ import {
     BuyerTaxCheckScheduler,
     ManualOutgoingPaymentService,
     ManualPaymentAuditRepository,
+    PendingPaymentMarkRepository,
     documentStoreProvider,
   ],
   // a webshop rendelés számlája ugyanazon a vázlaton és kiállításon megy

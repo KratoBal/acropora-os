@@ -1,6 +1,16 @@
-import { Body, Controller, Post } from "@nestjs/common";
+import {
+  BadRequestException,
+  Body,
+  ConflictException,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+} from "@nestjs/common";
 import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 import {
+  IsIn,
   IsOptional,
   IsString,
   IsUUID,
@@ -11,7 +21,10 @@ import {
 
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
-import { ManualOutgoingPaymentService } from "./manual-outgoing-payment.service.js";
+import {
+  ManualOutgoingPaymentService,
+  PendingPaymentMarkRepository,
+} from "./manual-outgoing-payment.service.js";
 
 export class ManualOutgoingPaymentDto {
   @IsString() @MinLength(1) @MaxLength(64) invoiceNumber!: string;
@@ -21,10 +34,46 @@ export class ManualOutgoingPaymentDto {
   @IsUUID() requestId!: string;
 }
 
+export class ResolvePaymentMarkDto {
+  @IsIn(["WRITTEN", "FAILED"]) outcome!: "WRITTEN" | "FAILED";
+}
+
 /** A kimenő számla kézi kifizetése: a Számlázz.hu-ba ír, ezért a kiállítás joga kell. */
 @Controller("billing/outgoing-payments")
 export class ManualOutgoingPaymentController {
-  constructor(private readonly service: ManualOutgoingPaymentService) {}
+  constructor(
+    private readonly service: ManualOutgoingPaymentService,
+    private readonly marks: PendingPaymentMarkRepository,
+  ) {}
+
+  /** a számla függő (PLANNED vagy UNKNOWN) saját jelölései, a lezáráshoz */
+  @Get("pending")
+  @RequirePermissions(PERMISSIONS.BILLING_ISSUE)
+  pending(@Query("invoiceNumber") invoiceNumber?: string) {
+    if (!invoiceNumber?.trim())
+      throw new BadRequestException("A számlaszám kötelező.");
+    return this.marks.pending(invoiceNumber.trim());
+  }
+
+  /** „Ellenőriztem a Számlázz.hu-n”: bekerült (WRITTEN) vagy nem került be (FAILED) */
+  @Post("marks/:id/resolve")
+  @RequirePermissions(PERMISSIONS.BILLING_ISSUE)
+  async resolve(
+    @Param("id") id: string,
+    @Body() dto: ResolvePaymentMarkDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const done = await this.marks.resolve({
+      id,
+      outcome: dto.outcome,
+      userId: user.id,
+    });
+    if (!done)
+      throw new ConflictException(
+        "Ez a jelölés már nem függő (közben lezárták vagy befejeződött).",
+      );
+    return { ok: true };
+  }
 
   @Post()
   @RequirePermissions(PERMISSIONS.BILLING_ISSUE)

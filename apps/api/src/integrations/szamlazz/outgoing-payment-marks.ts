@@ -397,13 +397,15 @@ function paymentMarkStoreOn(database: MarkDatabase): PaymentMarkStore {
           state: { in: ["WRITTEN", "PLANNED", "UNKNOWN"] },
           ...(excludeId ? { id: { not: excludeId } } : {}),
         },
-        select: { state: true, amount: true, createdAt: true },
+        select: { state: true, amount: true, updatedAt: true },
       });
       let written = new Prisma.Decimal(0);
       let uncertain = 0;
       for (const row of rows)
         if (row.state !== "WRITTEN") uncertain += 1;
-        else if (!since || row.createdAt > since)
+        // the time it turned WRITTEN, not the PLANNED row's birth: a feed that arrives between the two does not
+        // hold the write yet (barracuda, #2168 review)
+        else if (!since || row.updatedAt > since)
           written = written.plus(row.amount);
       return { writtenSince: written.toFixed(4), uncertain };
     },

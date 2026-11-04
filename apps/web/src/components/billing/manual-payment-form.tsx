@@ -48,12 +48,15 @@ export function ManualPaymentForm({
   invoiceNumber,
   defaultAmount,
   onRecorded,
+  onAttempted,
 }: {
   token: string;
   invoiceNumber: string;
   /** a nyitott összeg (vagy a bruttó), egész forintra írva */
   defaultAmount: string;
   onRecorded?: (result: ManualOutgoingPaymentResult) => void;
+  /** minden kísérlet után (sikeres vagy nem): a függő jelölések listája újraolvas */
+  onAttempted?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [requestId, setRequestId] = useState("");
@@ -96,6 +99,7 @@ export function ManualPaymentForm({
       );
     } finally {
       setBusy(false);
+      onAttempted?.();
     }
   };
 
