@@ -259,6 +259,63 @@ describe("applyPaidMarks", () => {
     );
   });
 
+  it("the manual entry counts our own marks since the feed row, and stops on a pending one (barracuda, #2168)", async () => {
+    // 00479: gross 27450, the feed says unpaid; a GLS mark of 27450 was written after the feed row
+    const fake = fakeStore();
+    const { client } = fakeClient(() => ok(), fake.events);
+    const manual = (own: { writtenSince: string; uncertain: number }) =>
+      applyPaidMarks({
+        source: "MANUAL",
+        marks: [{ ...MARKS[0]!, sourceRef: "req-2" }],
+        approved: new Set(["ACRW-2026/00479"]),
+        agentKey: "k",
+        client,
+        store: { ...fake.store, ownMarks: async () => own },
+        allowPartial: true,
+      });
+    assert.deepEqual(
+      (await manual({ writtenSince: "27450", uncertain: 0 })).map(
+        (l) => l.outcome,
+      ),
+      [{ kind: "OVER_OPEN", open: "0.00" }],
+    );
+    assert.deepEqual(
+      (await manual({ writtenSince: "0", uncertain: 1 })).map((l) => l.outcome),
+      [{ kind: "UNCERTAIN_BEFORE", state: "PENDING_ON_INVOICE" }],
+    );
+    assert.deepEqual(fake.events, [], "no log row, no call");
+  });
+
+  it("the measuring and the PLANNED row run inside the invoice lock, the call after it", async () => {
+    const fake = fakeStore();
+    const order: string[] = [];
+    const { client } = fakeClient(() => {
+      order.push("call");
+      return ok();
+    }, fake.events);
+    await applyPaidMarks({
+      source: "MANUAL",
+      marks: [{ ...MARKS[0]!, sourceRef: "req-3" }],
+      approved: new Set(["ACRW-2026/00479"]),
+      agentKey: "k",
+      client,
+      store: {
+        ...fake.store,
+        async withInvoiceLock(number, run) {
+          order.push(`lock ${number}`);
+          const result = await run(fake.store);
+          order.push("unlock");
+          return result;
+        },
+      },
+      allowPartial: true,
+    });
+    assert.deepEqual(order, ["lock ACRW-2026/00479", "unlock", "call"]);
+    assert.deepEqual(fake.events.slice(0, 1), [
+      "create ACRW-2026/00479 PLANNED",
+    ]);
+  });
+
   it("a second run: WRITTEN and ALREADY_PAID are done, UNKNOWN and PLANNED wait for a person, FAILED is retried", async () => {
     const { store, events } = fakeStore({
       rows: {

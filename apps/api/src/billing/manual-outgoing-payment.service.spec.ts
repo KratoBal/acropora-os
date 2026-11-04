@@ -55,7 +55,15 @@ function setup(
 ) {
   const calls: string[] = [];
   const audits: unknown[] = [];
-  const rows = new Map<string, { id: string; state: PaymentMarkState }>();
+  const rows = new Map<
+    string,
+    {
+      id: string;
+      state: PaymentMarkState;
+      invoiceNumber?: string;
+      amount?: string;
+    }
+  >();
   const store: PaymentMarkStore = {
     async invoice() {
       if (options.invoice === null) return null;
@@ -72,12 +80,27 @@ function setup(
     async create(row) {
       const key = `${row.source} ${row.invoiceNumber} ${row.sourceRef}`;
       if (rows.has(key)) return null;
-      const created = { id: key, state: row.state };
+      const created = {
+        id: key,
+        state: row.state,
+        invoiceNumber: row.invoiceNumber,
+        amount: row.amount,
+      };
       rows.set(key, created);
       return { id: key };
     },
     async update(id, patch) {
-      rows.set(id, { id, state: patch.state });
+      rows.set(id, { ...rows.get(id)!, id, state: patch.state });
+    },
+    async ownMarks(invoiceNumber, _since, excludeId) {
+      let written = 0;
+      let uncertain = 0;
+      for (const row of rows.values())
+        if (row.invoiceNumber === invoiceNumber && row.id !== excludeId)
+          if (row.state === "WRITTEN") written += Number(row.amount);
+          else if (row.state === "PLANNED" || row.state === "UNKNOWN")
+            uncertain += 1;
+      return { writtenSince: String(written), uncertain };
     },
   };
   const client = {
@@ -156,6 +179,47 @@ describe("ManualOutgoingPaymentService.record", () => {
     await service.record(input(), USER, NOW);
     const again = await service.record(input(), USER, NOW);
     assert.equal(again.state, "ALREADY_RECORDED");
+    assert.equal(calls.length, 1);
+  });
+
+  // barracuda (#2168): two forms (two request ids), the full amount twice, the feed unchanged
+  it("két külön kérés teljes összeggel: a második nem ír, mert a nyitott összeg már nulla", async () => {
+    const { service, calls } = setup();
+    await service.record(input(), USER, NOW);
+    await assert.rejects(
+      () =>
+        service.record(
+          input({ requestId: "6f1b3c1e-1d2a-4c55-9a7e-333333333333" }),
+          USER,
+          NOW,
+        ),
+      (e: unknown) =>
+        e instanceof BadRequestException &&
+        e.message.includes("nyitott összege (0.00)"),
+    );
+    assert.equal(
+      calls.length,
+      1,
+      "the second request never reaches Számlázz.hu",
+    );
+  });
+
+  it("egy függő (bizonytalan) jelölés mellett nem ír, bizonytalant mond", async () => {
+    const { service, calls } = setup({ answer: new Error("timeout") });
+    await assert.rejects(
+      () => service.record(input(), USER, NOW),
+      BadGatewayException,
+    );
+    await assert.rejects(
+      () =>
+        service.record(
+          input({ requestId: "6f1b3c1e-1d2a-4c55-9a7e-444444444444" }),
+          USER,
+          NOW,
+        ),
+      (e: unknown) =>
+        e instanceof BadGatewayException && e.message.includes("bizonytalan"),
+    );
     assert.equal(calls.length, 1);
   });
 
