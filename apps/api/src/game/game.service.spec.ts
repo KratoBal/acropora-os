@@ -281,6 +281,37 @@ describe("an entry", () => {
     assert.equal(entries.get("a@x.hu")!.mailPendingSince, null);
   });
 
+  // barracuda, #2258: WHAT TURNS THIS RED: a test link possible where mail is not redirected (production), even with
+  // the switch left on
+  it("the test link needs the switch AND redirected mail", () => {
+    const env = (over: Record<string, string>) =>
+      setup(question(), {
+        TICKET_MAIL_MODE: "live",
+        TICKET_MAIL_GAME: "live",
+        JATEK_PUBLIC_URL: "https://jatek-teszt.acropora.hu",
+        ...over,
+      }).service.testLinksOn();
+    assert.equal(
+      env({
+        JATEK_TEST_LINKS: "on",
+        TICKET_MAIL_REDIRECT_TO: "teszt@acropora.hu",
+      }),
+      true,
+    );
+    assert.equal(
+      env({ JATEK_TEST_LINKS: "on", TICKET_MAIL_REDIRECT_TO: "off" }),
+      false,
+    );
+    assert.equal(env({ JATEK_TEST_LINKS: "on" }), false);
+    assert.equal(
+      env({
+        JATEK_TEST_LINKS: "off",
+        TICKET_MAIL_REDIRECT_TO: "teszt@acropora.hu",
+      }),
+      false,
+    );
+  });
+
   // barracuda, #2254 v3: WHAT TURNS THIS RED: a mail that cannot go out spending the day's cap, or not waiting in the
   // queue; a failed send keeping its slot
   it("a closed gate queues the mail and spends nothing of the cap; a failed send gives its slot back", async () => {

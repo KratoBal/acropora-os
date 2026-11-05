@@ -281,6 +281,7 @@ describe("the stage test link (acrobot 44026)", () => {
     const audits: unknown[] = [];
     const game = {
       testLinksOn: () => on,
+      publicUrlSet: () => true,
       confirmLink: (token: string) =>
         `https://jatek-teszt.acropora.hu/megerosites?token=${token}`,
     };
@@ -316,6 +317,14 @@ describe("the stage test link (acrobot 44026)", () => {
       confirmed.service.testLink("e1", "u1"),
       (e: any) => e.getResponse().code === "NOT_LINKABLE",
     );
+
+    const noUrl = setupLink(true, open);
+    (noUrl.service as any).game.publicUrlSet = () => false;
+    await assert.rejects(
+      noUrl.service.testLink("e1", "u1"),
+      (e: any) => e.getResponse().code === "NO_PUBLIC_URL",
+    );
+    assert.equal(noUrl.writes.length, 0);
 
     const on = setupLink(true, open);
     const { link } = await on.service.testLink("e1", "u1");
