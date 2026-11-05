@@ -1601,6 +1601,10 @@ export const ANONYMIZATION_REGISTER: Readonly<
   PartnerOrder: {
     orderNumber: "identifier",
   },
+  PartnerOrderSetting: {
+    id: "identifier",
+    updatedById: "identifier",
+  },
   PartnerOrderDocument: {
     fileName: "freeText",
     contentType: "business",

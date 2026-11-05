@@ -32,6 +32,8 @@ vi.mock("next/navigation", () => ({
 
 const api = vi.hoisted(() => ({
   list: vi.fn(),
+  settings: vi.fn(),
+  saveSettings: vi.fn(),
   candidates: vi.fn(),
   create: vi.fn(),
   detail: vi.fn(),
@@ -103,6 +105,9 @@ const LIST: PartnerOrderListResponse = {
       chain: { ...CHAIN, OTHER: 0 },
       openLines: 1,
       totalLines: 2,
+      backlog: false,
+      idleDays: 3,
+      lastMovementAt: "2026-11-04T10:00:00Z",
       createdAt: "2026-11-04T10:00:00Z",
     },
   ],
@@ -197,6 +202,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   navigation.search = new URLSearchParams();
   api.list.mockResolvedValue(LIST);
+  api.settings.mockResolvedValue({ backlogDays: 14 });
   api.candidates.mockResolvedValue([]);
 });
 
@@ -333,6 +339,104 @@ describe("a megrendelések listája", () => {
     const row = (await screen.findByText("MR-2026-0042")).closest("tr")!;
     await waitFor(() => expect(row.className).toContain("md:h-[44px]"));
     window.localStorage.removeItem("acropora.partnerOrders.dense");
+  });
+
+  /*
+    S4b (38caeac2). MI PIROSIT: ha a hatralekos jelveny nem a szerver backlog jelzesebol jon (vagy mas megrendelesen is
+    latszik); ha a napok szama nem jelenik meg a jelvenyen; ha a "Csak hatralekos" szuro nem megy at az API-nak; ha a
+    kuszob mentese nem a beirt szamot kuldi, a 0-t is (Luca: a 0 ervenyes); ha egy ervenytelen szam (negativ, tort,
+    szoveg, 365 felett) elmentheto; ha a nezo (nincs quotes.manage) szerkesztheti; ha a mentes utan a lista nem tolt ujra.
+  */
+  it("marks only the back-ordered order, with the days it has been idle", async () => {
+    api.list.mockResolvedValue({
+      ...LIST,
+      items: [
+        { ...LIST.items[0]!, backlog: true, idleDays: 19 },
+        { ...LIST.items[0]!, id: "o2", orderNumber: "MR-2" },
+      ],
+      total: 2,
+    });
+    render(<PartnerOrderListPage />);
+    const late = (await screen.findByText("MR-2026-0042")).closest("tr")!;
+    expect(within(late).getByText("Hátralékos · 19 napja")).toBeInTheDocument();
+    const fine = screen.getByText("MR-2").closest("tr")!;
+    expect(within(fine).queryByText(/Hátralékos ·/)).not.toBeInTheDocument();
+  });
+
+  it("sends the back-ordered filter to the API", async () => {
+    navigation.search = new URLSearchParams("backlog=1");
+    render(<PartnerOrderListPage />);
+    await screen.findByText("MR-2026-0042");
+    const query = api.list.mock.calls.at(-1)![1] as URLSearchParams;
+    expect(query.get("backlog")).toBe("1");
+    expect(screen.getByLabelText("Csak hátralékos")).toBeChecked();
+  });
+
+  it("the filter writes the address and goes back to the first page", async () => {
+    render(<PartnerOrderListPage />);
+    await screen.findByText("MR-2026-0042");
+    fireEvent.click(screen.getByLabelText("Csak hátralékos"));
+    expect(navigation.replace).toHaveBeenLastCalledWith(
+      "/megrendelesek?backlog=1",
+      { scroll: false },
+    );
+  });
+
+  it("shows the saved days, saves what is typed (zero too) and reloads the list", async () => {
+    api.saveSettings.mockResolvedValue({ backlogDays: 0 });
+    render(<PartnerOrderListPage />);
+    const field = (await screen.findByLabelText(
+      "Hátralék napjai",
+    )) as HTMLInputElement;
+    await waitFor(() => expect(field.value).toBe("14"));
+    const save = screen.getByRole("button", { name: "Mentés" });
+    expect(save).toBeDisabled();
+    fireEvent.change(field, { target: { value: "0" } });
+    expect(save).toBeEnabled();
+    const loads = api.list.mock.calls.length;
+    fireEvent.click(save);
+    await waitFor(() =>
+      expect(api.saveSettings).toHaveBeenCalledWith("token-1", 0),
+    );
+    await waitFor(() =>
+      expect(api.list.mock.calls.length).toBeGreaterThan(loads),
+    );
+    expect(field.value).toBe("0");
+  });
+
+  it("does not let an invalid number be saved, and says why", async () => {
+    render(<PartnerOrderListPage />);
+    const field = (await screen.findByLabelText(
+      "Hátralék napjai",
+    )) as HTMLInputElement;
+    await waitFor(() => expect(field.value).toBe("14"));
+    for (const bad of ["-1", "1.5", "x", "366", "1000"]) {
+      fireEvent.change(field, { target: { value: bad } });
+      expect(
+        screen.getByRole("button", { name: "Mentés" }),
+        bad,
+      ).toBeDisabled();
+      expect(
+        screen.getByText(/0 és 365 közötti egész szám kell/),
+      ).toBeInTheDocument();
+    }
+    fireEvent.change(field, { target: { value: "365" } });
+    expect(screen.getByRole("button", { name: "Mentés" })).toBeEnabled();
+  });
+
+  it("a failed save says so and keeps the typed value", async () => {
+    api.saveSettings.mockRejectedValue(new Error("A beállítás nem menthető."));
+    render(<PartnerOrderListPage />);
+    const field = (await screen.findByLabelText(
+      "Hátralék napjai",
+    )) as HTMLInputElement;
+    await waitFor(() => expect(field.value).toBe("14"));
+    fireEvent.change(field, { target: { value: "7" } });
+    fireEvent.click(screen.getByRole("button", { name: "Mentés" }));
+    expect(
+      await screen.findByText("A beállítás nem menthető."),
+    ).toBeInTheDocument();
+    expect(field.value).toBe("7");
   });
 
   it("opens the order on a click", async () => {

@@ -1745,9 +1745,12 @@ export type {
   VariantSupplierPrices,
 } from "./supplier-price-lists.js";
 export {
+  PARTNER_ORDER_BACKLOG_DAYS_DEFAULT,
+  PARTNER_ORDER_BACKLOG_DAYS_MAX,
   PARTNER_ORDER_CHAIN_FILTERS,
   PARTNER_ORDER_DOCUMENT_STEPS,
   PARTNER_ORDER_STATUSES,
+  partnerOrderBacklog,
   partnerOrderMatchesChainFilter,
 } from "./partner-orders.js";
 export type {
@@ -1761,6 +1764,7 @@ export type {
   PartnerOrderLineDto,
   PartnerOrderListItemDto,
   PartnerOrderListResponse,
+  PartnerOrderSettingsDto,
   PartnerOrderStatusValue,
   PartnerOrderTotalsDto,
   PartnerOrderVatBreakdownDto,

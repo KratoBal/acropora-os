@@ -7,7 +7,9 @@ import {
 import { Prisma } from "@acropora/database";
 import type { PartnerOrderDocumentStep } from "@acropora/database";
 import {
+  PARTNER_ORDER_BACKLOG_DAYS_DEFAULT,
   PARTNER_ORDER_DOCUMENT_STEPS,
+  partnerOrderBacklog,
   partnerOrderMatchesChainFilter,
   type AuthenticatedUser,
   type PartnerOrderCandidateDto,
@@ -16,6 +18,7 @@ import {
   type PartnerOrderDetailDto,
   type PartnerOrderDocumentDto,
   type PartnerOrderListResponse,
+  type PartnerOrderSettingsDto,
   type PartnerOrderStatusValue,
   type QuotePriceDisplay,
 } from "@acropora/types";
@@ -141,19 +144,26 @@ export class PartnerOrdersService {
       status?: PartnerOrderStatusValue;
       stage?: PartnerOrderChainFilter;
       openOnly?: boolean;
+      backlogOnly?: boolean;
     },
+    /** The moment the back-order rule measures from; the caller's clock unless a test brings its own. */
+    now: Date = new Date(),
   ): Promise<PartnerOrderListResponse> {
-    // the chain and open line filters are about documents and certificates: they need every matching order read
-    // first, then cut into pages (S4); the plain list keeps the database's own page
-    if (filter.stage || filter.openOnly) {
+    const backlogDays = await this.backlogDays();
+    // the chain, open line and backlog filters are about documents, certificates and movements: they need every
+    // matching order read first, then cut into pages (S4); the plain list keeps the database's page
+    if (filter.stage || filter.openOnly || filter.backlogOnly) {
       const { rows, chain } = await this.repository.listAll(filter);
-      const items = (await this.listItems(rows, chain)).filter(
+      const items = (
+        await this.listItems(rows, chain, now, backlogDays)
+      ).filter(
         (item) =>
           (!filter.stage ||
             partnerOrderMatchesChainFilter(item.chain, filter.stage)) &&
           (!filter.openOnly ||
             // a cancelled order has no backlog to chase, and the list shows it none (S4a review)
-            (item.status !== "CANCELLED" && item.openLines > 0)),
+            (item.status !== "CANCELLED" && item.openLines > 0)) &&
+          (!filter.backlogOnly || item.backlog),
       );
       return {
         page,
@@ -167,13 +177,40 @@ export class PartnerOrdersService {
       pageSize,
       filter,
     );
-    return { page, pageSize, total, items: await this.listItems(rows, chain) };
+    return {
+      page,
+      pageSize,
+      total,
+      items: await this.listItems(rows, chain, now, backlogDays),
+    };
+  }
+
+  /** The idle days that make an open order back-ordered: the saved setting, else the default (S4b). */
+  async backlogDays(): Promise<number> {
+    return (
+      (await this.repository.settings())?.backlogDays ??
+      PARTNER_ORDER_BACKLOG_DAYS_DEFAULT
+    );
+  }
+
+  async settings(): Promise<PartnerOrderSettingsDto> {
+    return { backlogDays: await this.backlogDays() };
+  }
+
+  async saveSettings(
+    backlogDays: number,
+    user: AuthenticatedUser,
+  ): Promise<PartnerOrderSettingsDto> {
+    const saved = await this.repository.saveSettings(backlogDays, user.id);
+    return { backlogDays: saved.backlogDays };
   }
 
   /** The list's rows with the chain (uploaded and system documents) and the open lines of each order. */
   private async listItems(
     rows: Awaited<ReturnType<PartnerOrdersRepository["list"]>>["rows"],
     chain: Awaited<ReturnType<PartnerOrdersRepository["list"]>>["chain"],
+    now: Date,
+    backlogDays: number,
   ): Promise<PartnerOrderListResponse["items"]> {
     const chains = new Map<string, PartnerOrderChain>();
     for (const entry of chain) {
@@ -192,7 +229,10 @@ export class PartnerOrdersService {
           systemDocumentsOf(source),
         ),
       );
-    const certified = await this.repository.certifiedLines(ids);
+    const [certified, movements] = await Promise.all([
+      this.repository.certifiedLines(ids),
+      this.repository.lastMovements(ids),
+    ]);
     const certifiedByOrder = new Map<string, typeof certified>();
     for (const line of certified)
       certifiedByOrder.set(line.orderId, [
@@ -201,6 +241,21 @@ export class PartnerOrdersService {
       ]);
     return rows.map((row) => {
       const body = orderBody(row);
+      const openLines = openLineCount(
+        body.lines,
+        certifiedByOrder.get(row.id) ?? [],
+      );
+      // the last movement: the creation, or a later certificate or document
+      const moved = movements.get(row.id);
+      const lastMovementAt =
+        moved && moved > row.createdAt ? moved : row.createdAt;
+      const { backlog, idleDays } = partnerOrderBacklog({
+        status: row.status,
+        openLines,
+        lastMovementAt,
+        now,
+        backlogDays,
+      });
       return {
         id: row.id,
         orderNumber: row.orderNumber,
@@ -214,11 +269,11 @@ export class PartnerOrdersService {
         netTotal: body.totals.net,
         currency: body.currency,
         chain: chains.get(row.id) ?? emptyChain(),
-        openLines: openLineCount(
-          body.lines,
-          certifiedByOrder.get(row.id) ?? [],
-        ),
+        openLines,
         totalLines: body.lines.length,
+        backlog,
+        idleDays,
+        lastMovementAt: lastMovementAt.toISOString(),
         createdAt: row.createdAt.toISOString(),
       };
     });

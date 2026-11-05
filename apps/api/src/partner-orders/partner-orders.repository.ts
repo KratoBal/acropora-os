@@ -6,6 +6,7 @@ import {
   type PartnerOrderStatus,
 } from "@acropora/database";
 import type { SystemDocumentSource } from "./partner-order-system-documents.js";
+import { endOfIssueDay, latestMovements } from "./partner-order-movements.js";
 
 /** What an order's lines and totals are computed from: the accepted version and the customer's optional choices. */
 const ACCEPTED_VERSION_SELECT = {
@@ -118,6 +119,9 @@ export const CERTIFICATE_SYSTEM_DOCUMENTS = {
   },
 } satisfies Prisma.CompletionCertificateFindManyArgs;
 
+/** The id of the orders' one settings row (S4b). */
+export const PARTNER_ORDER_SETTING_ID = "default";
+
 const LIST_ORDER = [
   { createdAt: "desc" },
   { id: "desc" },
@@ -207,6 +211,84 @@ export class PartnerOrdersRepository {
           _count: { _all: true },
         })
       : Promise.resolve([]);
+  }
+
+  /**
+   * THE LAST MOVEMENT OF EACH ORDER BESIDES ITS CREATION (S4b): the newest of the four places the chain moves (see
+   * `partner-order-movements.ts`). An order with none is absent from the map (its creation is its last movement).
+   */
+  async lastMovements(orderIds: readonly string[]) {
+    if (!orderIds.length) return new Map<string, Date>();
+    const ids = [...orderIds];
+    const [certificates, documents, certificateDocuments, invoices] =
+      await Promise.all([
+        prisma.completionCertificate.groupBy({
+          by: ["partnerOrderId"],
+          where: { partnerOrderId: { in: ids } },
+          _max: { issuedAt: true },
+        }),
+        prisma.partnerOrderDocument.groupBy({
+          by: ["orderId"],
+          where: { orderId: { in: ids } },
+          _max: { createdAt: true },
+        }),
+        // a relation cannot be grouped on: the rows of the certificates' documents and invoices are read, a handful per order
+        prisma.completionCertificateDocument.findMany({
+          where: { certificate: { partnerOrderId: { in: ids } } },
+          select: {
+            createdAt: true,
+            certificate: { select: { partnerOrderId: true } },
+          },
+        }),
+        prisma.invoice.findMany({
+          where: {
+            status: "ISSUED",
+            issueDate: { not: null },
+            completionCertificate: { partnerOrderId: { in: ids } },
+          },
+          select: {
+            issueDate: true,
+            completionCertificate: { select: { partnerOrderId: true } },
+          },
+        }),
+      ]);
+    return latestMovements([
+      certificates.map((row) => ({
+        orderId: row.partnerOrderId,
+        at: row._max.issuedAt,
+      })),
+      documents.map((row) => ({
+        orderId: row.orderId,
+        at: row._max.createdAt,
+      })),
+      certificateDocuments.map((row) => ({
+        orderId: row.certificate.partnerOrderId,
+        at: row.createdAt,
+      })),
+      invoices.map((row) => ({
+        orderId: row.completionCertificate?.partnerOrderId ?? null,
+        at: row.issueDate ? endOfIssueDay(row.issueDate) : null,
+      })),
+    ]);
+  }
+
+  /** The orders' settings row (one row, `PARTNER_ORDER_SETTING_ID`); null before anybody saved it. */
+  settings() {
+    return prisma.partnerOrderSetting.findUnique({
+      where: { id: PARTNER_ORDER_SETTING_ID },
+    });
+  }
+
+  saveSettings(backlogDays: number, userId: string | null) {
+    return prisma.partnerOrderSetting.upsert({
+      where: { id: PARTNER_ORDER_SETTING_ID },
+      create: {
+        id: PARTNER_ORDER_SETTING_ID,
+        backlogDays,
+        updatedById: userId,
+      },
+      update: { backlogDays, updatedById: userId },
+    });
   }
 
   /** The certified lines of these orders, for the open line count (any certificate counts, as in the issue gate). */
