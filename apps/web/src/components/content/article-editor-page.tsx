@@ -16,14 +16,13 @@ import {
 } from "@acropora/types";
 import {
   Alert,
-  Button,
-  FormField,
-  Input,
   PageHeader,
   Skeleton,
   Textarea,
   PilotFileInput,
   PilotButton,
+  PilotFormField,
+  PilotInput,
 } from "@acropora/ui";
 import {
   RichTextEditor,
@@ -505,21 +504,21 @@ export function ArticleEditorPage({ contentId }: { contentId: string }) {
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <div className="space-y-4">
-          <FormField
+          <PilotFormField
             label="URL-rész"
             htmlFor="article-slug"
-            description="Kisbetű, szám és kötőjel; egy cím csak egy cikké lehet."
+            help="Kisbetű, szám és kötőjel; egy cím csak egy cikké lehet."
           >
-            <Input
+            <PilotInput
               id="article-slug"
               value={form.slug}
               maxLength={ARTICLE_LIMITS.slug}
               disabled={readOnly}
-              onChange={(event) => update({ slug: event.target.value })}
+              onChange={(value) => update({ slug: value })}
             />
-          </FormField>
+          </PilotFormField>
 
-          <FormField
+          <PilotFormField
             label={`Bevezető (${form.excerpt.length}/${ARTICLE_LIMITS.excerpt})`}
             htmlFor="article-excerpt"
           >
@@ -531,10 +530,10 @@ export function ArticleEditorPage({ contentId }: { contentId: string }) {
               disabled={readOnly}
               onChange={(event) => update({ excerpt: event.target.value })}
             />
-          </FormField>
+          </PilotFormField>
 
           {/*
-            NEM `FormField`: annak `<label>`-je űrlapmezőt keres, a szerkesztő
+            NEM `PilotFormField`: annak `<label>`-je űrlapmezőt keres, a szerkesztő
             pedig `contenteditable`. Az akadálymentes neve a saját
             `aria-label`-je.
           */}
@@ -585,24 +584,24 @@ export function ArticleEditorPage({ contentId }: { contentId: string }) {
                 {uploading === "body" ? (
                   <p className="text-xs text-pilot-grey-600">Feltöltés…</p>
                 ) : null}
-                <Input
+                <PilotInput
                   aria-label="Kép címe"
                   placeholder="https://…"
                   value={kepCim}
-                  onChange={(event) => setKepCim(event.target.value)}
+                  onChange={setKepCim}
                 />
-                <Input
+                <PilotInput
                   aria-label="Kép leírása"
                   placeholder="Mit ábrázol a kép"
                   value={kepAlt}
-                  onChange={(event) => setKepAlt(event.target.value)}
+                  onChange={setKepAlt}
                 />
                 {imageProblem(kepCim) ? (
                   <p className="text-xs text-red-700">{imageProblem(kepCim)}</p>
                 ) : null}
                 <div className="flex gap-2">
-                  <Button
-                    size="sm"
+                  <PilotButton
+                    size="action"
                     disabled={!kepCim.trim() || Boolean(imageProblem(kepCim))}
                     onClick={() => {
                       szerkeszto.current?.insertImage({
@@ -613,14 +612,14 @@ export function ArticleEditorPage({ contentId }: { contentId: string }) {
                     }}
                   >
                     Beszúrás
-                  </Button>
-                  <Button
-                    size="sm"
+                  </PilotButton>
+                  <PilotButton
+                    size="action"
                     variant="ghost"
                     onClick={() => setPanel(null)}
                   >
                     Mégse
-                  </Button>
+                  </PilotButton>
                 </div>
               </div>
             ) : null}
@@ -669,21 +668,19 @@ export function ArticleEditorPage({ contentId }: { contentId: string }) {
             ))}
           </fieldset>
 
-          <FormField
+          <PilotFormField
             label="Borítókép címe"
             htmlFor="article-cover"
             error={imageProblem(form.coverImageUrl)}
           >
-            <Input
+            <PilotInput
               id="article-cover"
               placeholder="https://…"
               value={form.coverImageUrl}
               disabled={readOnly}
-              onChange={(event) =>
-                update({ coverImageUrl: event.target.value })
-              }
+              onChange={(value) => update({ coverImageUrl: value })}
             />
-          </FormField>
+          </PilotFormField>
           {readOnly ? null : (
             <label className="block text-sm">
               <span className="text-pilot-grey-700">Borítókép feltöltése</span>
@@ -702,26 +699,24 @@ export function ArticleEditorPage({ contentId }: { contentId: string }) {
               ) : null}
             </label>
           )}
-          <FormField label="Borítókép leírása" htmlFor="article-cover-alt">
-            <Input
+          <PilotFormField label="Borítókép leírása" htmlFor="article-cover-alt">
+            <PilotInput
               id="article-cover-alt"
               value={form.coverImageAlt}
               maxLength={ARTICLE_LIMITS.imageAlt}
               disabled={readOnly}
-              onChange={(event) =>
-                update({ coverImageAlt: event.target.value })
-              }
+              onChange={(value) => update({ coverImageAlt: value })}
             />
-          </FormField>
-          <FormField label="Szerző" htmlFor="article-byline">
-            <Input
+          </PilotFormField>
+          <PilotFormField label="Szerző" htmlFor="article-byline">
+            <PilotInput
               id="article-byline"
               value={form.byline}
               maxLength={ARTICLE_LIMITS.byline}
               disabled={readOnly}
-              onChange={(event) => update({ byline: event.target.value })}
+              onChange={(value) => update({ byline: value })}
             />
-          </FormField>
+          </PilotFormField>
 
           <section className="space-y-2">
             <h2 className="text-sm font-semibold text-dusk-800">
@@ -809,14 +804,14 @@ export function ArticleEditorPage({ contentId }: { contentId: string }) {
                 onCancel={() => setPanel(null)}
               />
             ) : (
-              <Button
-                size="sm"
+              <PilotButton
+                size="action"
                 variant="ghost"
                 disabled={form.products.length >= ARTICLE_LIMITS.products}
                 onClick={() => setPanel("linked")}
               >
                 Termék hozzáadása
-              </Button>
+              </PilotButton>
             )}
           </section>
 
@@ -858,11 +853,11 @@ export function ArticleEditorPage({ contentId }: { contentId: string }) {
               </p>
             ) : (
               <>
-                <Input
+                <PilotInput
                   aria-label="Faj vagy csoport keresése"
                   placeholder="Faj vagy csoport"
                   value={taxonSzuro}
-                  onChange={(event) => setTaxonSzuro(event.target.value)}
+                  onChange={setTaxonSzuro}
                 />
                 <ul
                   aria-label="Választható fajok"
@@ -898,19 +893,19 @@ export function ArticleEditorPage({ contentId }: { contentId: string }) {
 
           <section className="space-y-3">
             <h2 className="text-sm font-semibold text-dusk-800">Keresők</h2>
-            <FormField
+            <PilotFormField
               label={`SEO cím (${form.seoTitle.length}/${ARTICLE_LIMITS.seoTitle})`}
               htmlFor="article-seo-title"
             >
-              <Input
+              <PilotInput
                 id="article-seo-title"
                 value={form.seoTitle}
                 maxLength={ARTICLE_LIMITS.seoTitle}
                 disabled={readOnly}
-                onChange={(event) => update({ seoTitle: event.target.value })}
+                onChange={(value) => update({ seoTitle: value })}
               />
-            </FormField>
-            <FormField
+            </PilotFormField>
+            <PilotFormField
               label={`Meta leírás (${form.metaDescription.length}/${ARTICLE_LIMITS.metaDescription})`}
               htmlFor="article-meta"
             >
@@ -924,20 +919,20 @@ export function ArticleEditorPage({ contentId }: { contentId: string }) {
                   update({ metaDescription: event.target.value })
                 }
               />
-            </FormField>
-            <FormField
+            </PilotFormField>
+            <PilotFormField
               label="Megosztási kép címe"
               htmlFor="article-og"
               error={imageProblem(form.ogImageUrl)}
             >
-              <Input
+              <PilotInput
                 id="article-og"
                 placeholder="https://…"
                 value={form.ogImageUrl}
                 disabled={readOnly}
-                onChange={(event) => update({ ogImageUrl: event.target.value })}
+                onChange={(value) => update({ ogImageUrl: value })}
               />
-            </FormField>
+            </PilotFormField>
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"

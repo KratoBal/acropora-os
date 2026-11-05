@@ -2,15 +2,14 @@
 
 import {
   Alert,
-  Card,
-  CardContent,
-  FormField,
-  Input,
   PageHeader,
-  Select,
   Textarea,
+  PilotCard,
   PilotDateField,
   PilotButton,
+  PilotFormField,
+  PilotInput,
+  PilotSelect,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -170,8 +169,8 @@ export function ContentCreatePage() {
         })}
       </div>
 
-      <Card>
-        <CardContent>
+      <PilotCard>
+        <div className="p-5">
           <form
             onSubmit={submit}
             aria-label={
@@ -187,22 +186,20 @@ export function ContentCreatePage() {
               />
             ) : null}
 
-            <FormField label="Cím">
-              <Input
+            <PilotFormField label="Cím">
+              <PilotInput
                 aria-label="Cím"
                 value={title}
-                onChange={(event) => setTitle(event.target.value)}
+                onChange={setTitle}
                 required
               />
-            </FormField>
+            </PilotFormField>
 
-            <FormField label="Csatorna">
-              <Select
+            <PilotFormField label="Csatorna">
+              <PilotSelect
                 aria-label="Csatorna"
                 value={channel}
-                onChange={(event) =>
-                  setChannel(event.target.value as ContentChannel)
-                }
+                onChange={(value) => setChannel(value as ContentChannel)}
                 required
               >
                 <option value="">Válassz csatornát</option>
@@ -211,8 +208,8 @@ export function ContentCreatePage() {
                     {option.cimke}
                   </option>
                 ))}
-              </Select>
-            </FormField>
+              </PilotSelect>
+            </PilotFormField>
 
             {/*
               A HÁROM MEZŐ CSAK A TELJES TARTALOMNÁL. Ötletnél nem rejtve
@@ -221,14 +218,14 @@ export function ContentCreatePage() {
             */}
             {mode === "draft" ? (
               <>
-                <FormField label="Szöveg">
+                <PilotFormField label="Szöveg">
                   <Textarea
                     aria-label="Szöveg"
                     rows={6}
                     value={body}
                     onChange={(event) => setBody(event.target.value)}
                   />
-                </FormField>
+                </PilotFormField>
 
                 <label className="flex items-center gap-2 text-sm text-dusk-700">
                   <input
@@ -239,13 +236,13 @@ export function ContentCreatePage() {
                   Kép kell hozzá
                 </label>
 
-                <FormField label="Tervezett nap">
+                <PilotFormField label="Tervezett nap">
                   <PilotDateField
                     aria-label="Tervezett nap"
                     value={plannedFor}
                     onChange={(nextValue) => setPlannedFor(nextValue)}
                   />
-                </FormField>
+                </PilotFormField>
               </>
             ) : null}
 
@@ -262,8 +259,8 @@ export function ContentCreatePage() {
               </PilotButton>
             </div>
           </form>
-        </CardContent>
-      </Card>
+        </div>
+      </PilotCard>
     </div>
   );
 }

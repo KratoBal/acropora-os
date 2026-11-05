@@ -405,16 +405,25 @@ export function PilotFormField({
   required,
   children,
   className,
+  htmlFor,
+  error,
 }: {
   label: string;
   help?: string;
   required?: boolean;
   children: ReactNode;
   className?: string;
+  /** ADDITÍV (T1.3, a cikkszerkesztő): a címke a mező `id`-jére mutat, ugyanaz, mint a dusk `FormField`-en. */
+  htmlFor?: string;
+  /** ADDITÍV (T1.3, a cikkszerkesztő): a mező hibája, a súgó alatt, piros sorban. */
+  error?: string;
 }) {
   return (
     <div className={`flex flex-col gap-1 ${className ?? ""}`}>
-      <label className="text-sm font-medium text-pilot-grey-700">
+      <label
+        htmlFor={htmlFor}
+        className="text-sm font-medium text-pilot-grey-700"
+      >
         {label}
         {required ? (
           <span className="ml-0.5 text-pilot-aqua-600">*</span>
@@ -422,6 +431,9 @@ export function PilotFormField({
       </label>
       {children}
       {help ? <p className="text-xs text-pilot-grey-400">{help}</p> : null}
+      {error ? (
+        <p className="text-xs font-medium text-pilot-red-700">{error}</p>
+      ) : null}
     </div>
   );
 }
@@ -567,6 +579,7 @@ export function PilotInput({
   min,
   max,
   maxLength,
+  required,
 }: {
   value?: string;
   onChange?: (value: string) => void;
@@ -591,6 +604,8 @@ export function PilotInput({
   max?: number | string;
   /** ADDITÍV (T1.3, a márka SEO-mezői): a natív hosszkorlát, ugyanaz, mint a dusk `Input`-on. */
   maxLength?: number;
+  /** ADDITÍV (T1.3, a tartalom felvétele): a natív kötelező jelölés, ugyanaz, mint a dusk `Input`-on. */
+  required?: boolean;
   /** ADDITÍV (Direction F, 2026-09-30): egy külső `<label htmlFor>`-hoz. */
   id?: string;
   /** ADDITÍV: ikon a mező elején (a terv keresőmezője). */
@@ -629,6 +644,7 @@ export function PilotInput({
       min={min}
       max={max}
       maxLength={maxLength}
+      required={required}
       onChange={(event) => onChange?.(event.target.value)}
       className={`${leadingIcon ? "w-full" : classes.widthClass} rounded-md px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500 disabled:cursor-not-allowed disabled:bg-pilot-grey-50 disabled:text-pilot-grey-400 ${
         readOnly ? "bg-pilot-grey-50 text-pilot-grey-400" : "bg-white"
@@ -655,11 +671,14 @@ export function PilotSelect({
   id,
   className,
   chevron,
+  required,
 }: {
   children: ReactNode;
   value?: string;
   onChange?: (value: string) => void;
   disabled?: boolean;
+  /** ADDITÍV (T1.3, a tartalom felvétele): a natív kötelező jelölés, ugyanaz, mint a dusk `Select`-en. */
+  required?: boolean;
   "aria-label"?: string;
   /** ADDITÍV (Direction F, 2026-09-30): egy külső `<label htmlFor>`-hoz. */
   id?: string;
@@ -679,6 +698,7 @@ export function PilotSelect({
       id={id}
       value={value}
       disabled={disabled}
+      required={required}
       aria-label={ariaLabel}
       onChange={(event) => onChange?.(event.target.value)}
       className={`w-full cursor-pointer appearance-none rounded-md bg-white px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500 disabled:cursor-not-allowed disabled:bg-pilot-grey-50 disabled:text-pilot-grey-400 ${
