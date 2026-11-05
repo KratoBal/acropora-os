@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 
+import { MobilGomb } from "./mobil-gomb.tsx";
+
 /**
  * A LAPOK KOZOS KERETE (Luca designja, 2026-11-05): ugras-link, a (csak hamis api-nal latszo) proba-sav, fejlec a
  * logoval es a menuvel, a tartalom, a lablec es a mobilon rogzitett "Ugras a heti kerdeshez" gomb. A menu a
@@ -62,9 +64,7 @@ export function OldalKeret({
         </div>
         <small>jatek.acropora.hu</small>
       </footer>
-      <a href="/#heti-kerdes" className="jatek-mobile-cta jatek-button">
-        Ugrás a heti kérdéshez <span>↗</span>
-      </a>
+      <MobilGomb />
     </>
   );
 }
