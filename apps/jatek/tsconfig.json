@@ -1,6 +1,7 @@
 {
   "extends": "@acropora/config/nextjs.json",
   "compilerOptions": {
+    "allowImportingTsExtensions": true,
     "paths": {
       "@/*": ["./src/*"]
     }

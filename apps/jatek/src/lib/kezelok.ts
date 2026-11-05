@@ -1,13 +1,13 @@
-import { bekuldesKeres, megerositesKeres } from "./ervenyesites.js";
-import { latogatoIp } from "./ip.js";
-import type { JatekApi } from "./jatek-api.js";
+import { bekuldesKeres, megerositesKeres } from "./ervenyesites.ts";
+import { latogatoIp } from "./ip.ts";
+import type { JatekApi } from "./jatek-api.ts";
 import {
   BEKULDES_RENDBEN,
   MAR_MEGEROSITVE,
   MEGEROSITVE,
   bekuldesHiba,
   megerositesHiba,
-} from "./uzenetek.js";
+} from "./uzenetek.ts";
 
 /**
  * A KET VEGPONT LOGIKAJA, a Next-fuggoseg nelkul (a route handler csak becsomagolja): igy egy rogzito hamis api-val

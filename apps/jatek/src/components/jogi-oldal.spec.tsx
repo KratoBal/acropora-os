@@ -8,9 +8,9 @@ import {
   JATEKSZABALYZAT,
   JOGI_DOKUMENTUMOK,
   kitoltendoDb,
-} from "../lib/jogi-szovegek.js";
-import { JogiOldal } from "./jogi-oldal.js";
-import { OldalKeret } from "./oldal-keret.js";
+} from "../lib/jogi-szovegek.ts";
+import { JogiOldal } from "./jogi-oldal.tsx";
+import { OldalKeret } from "./oldal-keret.tsx";
 
 /*
   WHAT TURNS THIS RED. A draft page without its draft warning above the text; a [KITÖLTENDŐ] mark that the page

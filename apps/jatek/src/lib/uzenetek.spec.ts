@@ -8,7 +8,7 @@ import {
   NEM_ELERHETO,
   bekuldesHiba,
   megerositesHiba,
-} from "./uzenetek.js";
+} from "./uzenetek.ts";
 
 /*
   WHAT TURNS THIS RED. A sentence that says whether the answer was right or whether the address has played before

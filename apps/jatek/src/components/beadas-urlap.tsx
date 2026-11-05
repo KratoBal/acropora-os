@@ -2,7 +2,7 @@
 
 import { type FormEvent, useState } from "react";
 
-import type { Kerdes } from "../lib/jatek-api.js";
+import type { Kerdes } from "../lib/jatek-api.ts";
 
 type Allapot =
   | { fajta: "var" }

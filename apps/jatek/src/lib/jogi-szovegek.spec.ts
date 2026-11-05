@@ -7,7 +7,7 @@ import {
   JOGI_DOKUMENTUMOK,
   jogiSzovegVazlat,
   kitoltendoDb,
-} from "./jogi-szovegek.js";
+} from "./jogi-szovegek.ts";
 
 /*
   WHAT TURNS THIS RED. A legal or business decision written as if it were made (the organiser, the prizes, the

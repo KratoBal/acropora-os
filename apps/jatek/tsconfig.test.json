@@ -10,6 +10,10 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "ignoreDeprecations": "6.0",
+    // relative imports are written with their real `.ts`/`.tsx` ending (the Next build resolves nothing else);
+    // the test compile rewrites them to `.js` in the output, which is what node runs
+    "allowImportingTsExtensions": false,
+    "rewriteRelativeImportExtensions": true,
     "jsx": "react-jsx",
     "strict": true,
     "noUnusedLocals": true,

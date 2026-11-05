@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import type { BekuldesBemenet, JatekApi } from "./jatek-api.js";
-import { bekuldesKezeles, megerositesKezeles } from "./kezelok.js";
-import { BEKULDES_RENDBEN, NEM_ELERHETO } from "./uzenetek.js";
+import type { BekuldesBemenet, JatekApi } from "./jatek-api.ts";
+import { bekuldesKezeles, megerositesKezeles } from "./kezelok.ts";
+import { BEKULDES_RENDBEN, NEM_ELERHETO } from "./uzenetek.ts";
 
 /*
   WHAT TURNS THIS RED. A bad request reaching the api; the visitor's address not forwarded, or the FRONT entry of

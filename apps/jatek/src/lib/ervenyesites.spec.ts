@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { MAX_VALASZ, bekuldesKeres, megerositesKeres } from "./ervenyesites.js";
+import { MAX_VALASZ, bekuldesKeres, megerositesKeres } from "./ervenyesites.ts";
 
 /*
   WHAT TURNS THIS RED. A request with a missing or non-string field reaching the api; an answer over 200

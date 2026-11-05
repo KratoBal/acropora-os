@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { latogatoIp } from "./ip.js";
+import { latogatoIp } from "./ip.ts";
 
 /*
   WHAT TURNS THIS RED. The FIRST entry taken (a visitor can put anything at the front of the header; the proxy

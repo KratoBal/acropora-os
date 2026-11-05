@@ -8,7 +8,7 @@ import {
   httpJatekApi,
   jatekApiKornyezetbol,
   kerdesEllenorzott,
-} from "./jatek-api.js";
+} from "./jatek-api.ts";
 
 /*
   WHAT TURNS THIS RED. A path, a field name or a status that differs from the contract (nautilus, 2026-11-05);

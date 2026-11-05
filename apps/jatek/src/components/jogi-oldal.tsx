@@ -1,4 +1,4 @@
-import type { JogiDokumentum } from "../lib/jogi-szovegek.js";
+import type { JogiDokumentum } from "../lib/jogi-szovegek.ts";
 
 /** Egy jogi dokumentum (vazlat) a lapon: a vazlat-jelzes FENT, minden szakasz, minden [KITOLTENDO] lathato. */
 export function JogiOldal({ dokumentum }: { dokumentum: JogiDokumentum }) {

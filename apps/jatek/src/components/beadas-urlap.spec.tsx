@@ -3,8 +3,8 @@ import { describe, it } from "node:test";
 
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { HAMIS_KERDES, type Kerdes } from "../lib/jatek-api.js";
-import { BeadasUrlap } from "./beadas-urlap.js";
+import { HAMIS_KERDES, type Kerdes } from "../lib/jatek-api.ts";
+import { BeadasUrlap } from "./beadas-urlap.tsx";
 
 /*
   WHAT TURNS THIS RED (the submission form, rendered to static HTML). A newsletter checkbox, or any checkbox at all
