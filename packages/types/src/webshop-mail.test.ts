@@ -5,7 +5,6 @@ import {
   MAIL_TEMPLATE_EVENTS,
   MAIL_TEMPLATE_VARIABLES,
 } from "./mail-template.js";
-import { webshopAcclimationValue } from "./webshop-acclimation.js";
 import {
   WEBSHOP_MAIL_KEYS,
   WEBSHOP_MAIL_SAMPLE_FACTS,
