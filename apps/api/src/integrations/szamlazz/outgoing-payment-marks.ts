@@ -157,11 +157,6 @@ type PaidMarksPlanInput = {
 };
 
 /**
- * THE FIRST HALF OF THE WRITE: every mark checked and its PLANNED row written, under its invoice's lock; no call. A
- * caller that must hold its own lock over the decision (one bank credit, barracuda #2192) plans under that lock and
- * calls after releasing it: the PLANNED rows already stand, so a second decision sees them.
- */
-/**
  * THE WRITER'S CHECKS BEFORE A WRITE, READ ONLY (acrobot 43886; barracuda on #2251): the log row of this source,
  * invoice and reference, then the invoice as the feed stores it. `skip` is the outcome the writer records instead of
  * writing; null means it would plan the write. The preview without an age limit counts with this, so its number is what
@@ -207,6 +202,11 @@ export async function precheckPaidMark(
   return { existing, invoice, state, skip: null };
 }
 
+/**
+ * THE FIRST HALF OF THE WRITE: every mark checked and its PLANNED row written, under its invoice's lock; no call. A
+ * caller that must hold its own lock over the decision (one bank credit, barracuda #2192) plans under that lock and
+ * calls after releasing it: the PLANNED rows already stand, so a second decision sees them.
+ */
 export async function planPaidMarks(
   input: PaidMarksPlanInput,
 ): Promise<{ lines: PaymentMarkLine[]; planned: PlannedPaymentMark[] }> {
