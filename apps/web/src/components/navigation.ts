@@ -116,6 +116,12 @@ export const SETTLEMENT_TABS: ReadonlyArray<{
     label: "Banki átutalások",
     entryId: "bank-transfer-settlement",
   },
+  {
+    // Balázs, 2026-11-05: "szeretném a futtatás most gombot" (kártya e64540fd)
+    href: "/penzugy/napi-jeloles",
+    label: "Napi jelölés",
+    entryId: "paid-marks-settlement",
+  },
 ];
 
 /**

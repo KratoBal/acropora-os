@@ -55,4 +55,45 @@ describe("the paid-mark runs", { skip: gate.mode === "skip" }, () => {
       "SZAMLAZZ_CONNECTION_NOT_CONFIGURED",
     );
   });
+
+  // e64540fd: WHAT TURNS THIS RED: a dry run without its plan, or marked as a run that wrote; a manual run
+  // without the person who pressed the button; a column the database refuses
+  it("a dry run keeps its plan, and a manual run who pressed the button", async () => {
+    await runs.saveDry(
+      {
+        source: "SIMPLEPAY",
+        writtenCount: 0,
+        failedCount: 0,
+        summary: { PLANNED: 1 },
+        attention: [],
+      },
+      [
+        {
+          invoiceNumber: "ACR-2026/00042",
+          amount: "12700",
+          date: "2026-11-04",
+          sourceRef: "credit-1",
+        },
+      ],
+      { kind: "manual", userId: "user-1" },
+    );
+    const latest = await runs.latest();
+    const row = latest.find((r) => r.source === "SIMPLEPAY")!;
+    assert.equal(row.mode, "dry");
+    assert.equal(row.trigger, "manual");
+    assert.equal(row.triggeredById, "user-1");
+    assert.equal(row.writtenCount, 0);
+    assert.deepEqual(row.planned, [
+      {
+        invoiceNumber: "ACR-2026/00042",
+        amount: "12700",
+        date: "2026-11-04",
+        sourceRef: "credit-1",
+      },
+    ]);
+    const daily = latest.find((r) => r.source === "GLS_COD")!;
+    assert.equal(daily.mode, "auto");
+    assert.equal(daily.trigger, "schedule");
+    assert.deepEqual(daily.planned, []);
+  });
 });

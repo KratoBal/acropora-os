@@ -1110,6 +1110,10 @@ export const ANONYMIZATION_REGISTER: Readonly<
     summary: "json",
     attention: "json",
     errorCode: "business",
+    mode: "business",
+    trigger: "business",
+    triggeredById: "identifier",
+    planned: "json",
   },
   OutgoingPaymentMark: {
     invoiceNumber: "identifier",
