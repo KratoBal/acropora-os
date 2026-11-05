@@ -42,8 +42,10 @@ import {
 } from "./aquarium-measurement-mail.service.js";
 import {
   BILLING_DOCUMENT_MANUAL,
+  BILLING_DOCUMENT_MANUAL_EN,
   BILLING_DOCUMENT_WEBSHOP_ORDER,
   DEFAULT_BILLING_DOCUMENT_MANUAL_TEMPLATE,
+  DEFAULT_BILLING_DOCUMENT_MANUAL_EN_TEMPLATE,
   DEFAULT_BILLING_DOCUMENT_WEBSHOP_ORDER_TEMPLATE,
 } from "./billing-document-mail.content.js";
 import { internalWorksheetLink } from "../../material-requests/material-request-link.js";
@@ -183,6 +185,8 @@ function alapertelmezes(id: string): {
       return DEFAULT_AQUARIUM_MEASUREMENT_RESULT_TEMPLATE;
     case BILLING_DOCUMENT_MANUAL:
       return DEFAULT_BILLING_DOCUMENT_MANUAL_TEMPLATE;
+    case BILLING_DOCUMENT_MANUAL_EN:
+      return DEFAULT_BILLING_DOCUMENT_MANUAL_EN_TEMPLATE;
     case BILLING_DOCUMENT_WEBSHOP_ORDER:
       return DEFAULT_BILLING_DOCUMENT_WEBSHOP_ORDER_TEMPLATE;
     case QUOTE_SEND:

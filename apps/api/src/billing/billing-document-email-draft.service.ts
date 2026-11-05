@@ -6,6 +6,8 @@ import {
 
 import {
   BILLING_DOCUMENT_MANUAL,
+  BILLING_DOCUMENT_MANUAL_EN,
+  DEFAULT_BILLING_DOCUMENT_MANUAL_EN_TEMPLATE,
   DEFAULT_BILLING_DOCUMENT_MANUAL_TEMPLATE,
 } from "../notifications/mail/billing-document-mail.content.js";
 import { TicketMailRepository } from "../notifications/mail/ticket-mail.repository.js";
@@ -47,14 +49,26 @@ export class BillingDocumentEmailDraftService {
    * tudja hívni, és addig egy beégetett szöveget mutatott, miközben a kiküldés
    * már a sablont vitte. A szöveg ugyanaz, mert a sablon nem függ a bizonylattól.
    */
-  async templateDraft(): Promise<BillingEmailDraft> {
-    const stored = await this.templates.template(BILLING_DOCUMENT_MANUAL);
+  async templateDraft(
+    language: "hu" | "en" = "hu",
+  ): Promise<BillingEmailDraft> {
+    /*
+      A NYELV (d5c6befd, P4): az angol nyelvű oldalon rendelő vevő az angol ikerszöveget kapja (a tárolt, hiányában az
+      angol alapszöveg). Magyarra NEM esik vissza csendben: az angol ikernek mindig van alapszövege.
+    */
+    const key =
+      language === "en" ? BILLING_DOCUMENT_MANUAL_EN : BILLING_DOCUMENT_MANUAL;
+    const fallback =
+      language === "en"
+        ? DEFAULT_BILLING_DOCUMENT_MANUAL_EN_TEMPLATE
+        : DEFAULT_BILLING_DOCUMENT_MANUAL_TEMPLATE;
+    const stored = await this.templates.template(key);
     return {
       source: stored ? "stored" : "default",
-      subject: (stored ?? DEFAULT_BILLING_DOCUMENT_MANUAL_TEMPLATE).subject,
-      body: (stored ?? DEFAULT_BILLING_DOCUMENT_MANUAL_TEMPLATE).body,
+      subject: (stored ?? fallback).subject,
+      body: (stored ?? fallback).body,
       bodyHtml: stored?.bodyHtml ?? null,
-      variables: mailTemplateEventVariables(BILLING_DOCUMENT_MANUAL),
+      variables: mailTemplateEventVariables(key),
     };
   }
 }
