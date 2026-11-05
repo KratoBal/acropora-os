@@ -19,14 +19,6 @@ const count = (
   ...keys: string[]
 ) => keys.reduce((sum, key) => sum + (answers?.[key] ?? 0), 0);
 
-const RERUN_TEXT: Record<string, string> = {
-  started: "a kifizetett-jelölés korhatár nélkül elindult",
-  running:
-    "egy kifizetett-jelölés épp futott, a korhatár nélküli NEM indult el",
-  nothing:
-    "egyik forrás sincs automatikus vagy próba állásban, nem futott semmi",
-};
-
 const startText = (answer: FeedBackfillStart) =>
   answer.status === "started"
     ? `Elindult: ${answer.total} szám. A lap magától frissül.`
@@ -40,8 +32,8 @@ const startText = (answer: FeedBackfillStart) =>
  * A TÁROLT SZÁMLÁZZ.HU FEED VISSZATÖLTÉSE AZ ÉV ELEJÉIG (6fd8c574; acrobot 43766, 43768, 43776). A feed csak a push
  * bekötése óta hoz számlát, a korábbiak a kifizetett-jelölésnek "nincs a Számlázz.hu feedben". Sorozatonként a hiány,
  * és amit a Számlázz.hu a számokra felelt: az ACRW sorozat külön sor, így látszik, a cmfx-ben kiállított számokat ismeri-e.
- * Két lépés: ellenőrzés (csak kérdez), utána behúzás (csak amit ismer), és a végén egyszer a kifizetett-jelölés
- * korhatár nélkül.
+ * Két lépés: ellenőrzés (csak kérdez), utána behúzás (csak amit ismer). A régi jóváírások párosítása külön panel
+ * (`AllTimeRunPanel`): előbb száraz előnézet, utána külön gomb (acrobot 43822).
  */
 export function FeedBackfillPanel({
   token,
@@ -178,7 +170,6 @@ export function FeedBackfillPanel({
         >
           Utolsó kör ({status.last.phase === "apply" ? "behúzás" : "ellenőrzés"}
           ): {formatDateTimeHu(status.last.finishedAt)}, {status.last.done} szám
-          {status.last.rerun ? `; ${RERUN_TEXT[status.last.rerun]}` : ""}
         </p>
       ) : null}
       {notice ? (
@@ -200,7 +191,7 @@ export function FeedBackfillPanel({
       <ConfirmDialog
         open={confirm === "apply"}
         title={`Behúzod a ${known} számlát a Számlázz.hu-ból?`}
-        consequence="A számlák a feed részei lesznek, utána a kifizetett-jelölés egyszer korhatár nélkül lefut (a próba állású források csak terveznek). A Számlázz.hu-ban nem változik semmi."
+        consequence="A számlák a feed részei lesznek. A régi jóváírások párosítása nem indul magától: utána a korhatár nélküli előnézet mutatja, mit jelölne. A Számlázz.hu-ban nem változik semmi."
         recovery="Ugyanaz a számla másodszor nem kerül be; a beírt kifizetést csak a Számlázz.hu felületén lehet visszavonni."
         confirmLabel="Behúzás"
         busy={busy}

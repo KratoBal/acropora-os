@@ -46,6 +46,16 @@ export interface PaidMarksStatus {
   sources: { source: PaidMarkSource; mode: PaidMarksMode }[];
 }
 
+/** Egy forrás száraz előnézete korhatár nélkül: mit jelölne kifizetettre (`GET /billing/paid-marks/all-time-preview`). */
+export interface AllTimePreview {
+  source: PaidMarkSource;
+  mode: PaidMarksMode;
+  planned: PaidMarkRunView["planned"];
+  attentionCount: number;
+  summary: Record<string, number>;
+  errorCode: string | null;
+}
+
 export type PaidMarksRunNow =
   | {
       status: "started";
@@ -77,10 +87,19 @@ export const paidMarksApi = {
   status(token: string) {
     return apiRequest<PaidMarksStatus>("/billing/paid-marks/status", token);
   },
-  runNow(token: string) {
+  /** `allTime`: egyszer korhatár nélkül (acrobot 43776), csak a száraz előnézet után (43822); alapból a napi ablak. */
+  runNow(token: string, options: { allTime?: boolean } = {}) {
     return apiRequest<PaidMarksRunNow>("/billing/paid-marks/run", token, {
       method: "POST",
+      ...(options.allTime ? { body: JSON.stringify({ allTime: true }) } : {}),
     });
+  },
+  /** A korhatár nélküli futás száraz előnézete forrásonként (acrobot 43822): nem ír semmit. */
+  allTimePreview(token: string) {
+    return apiRequest<AllTimePreview[]>(
+      "/billing/paid-marks/all-time-preview",
+      token,
+    );
   },
   /** A feedből hiányzó számla a Számlázz.hu-ból (aeddb2c3): `apply: false` az előnézet, `true` a behúzás. */
   feedPull(token: string, numbers: string[], apply: boolean) {

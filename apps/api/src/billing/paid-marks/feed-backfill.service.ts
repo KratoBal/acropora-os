@@ -10,7 +10,6 @@ import {
 } from "../feed-backfill.js";
 import type { FeedPullLine } from "../feed-pull.js";
 import { FeedPullService } from "./feed-pull.service.js";
-import { PaidMarksAutoScheduler } from "./paid-marks-auto.scheduler.js";
 
 /** A tárolt számla száma és fajtája, a hézagokhoz; a teszt cseréli. */
 export interface FeedBackfillStore {
@@ -67,12 +66,11 @@ export interface FeedBackfillStatus {
     done: number;
     total: number;
   } | null;
-  /** az utolsó befejezett kör, és a behúzás utáni korhatár nélküli futás indítása */
+  /** az utolsó befejezett kör */
   last: {
     phase: "dry" | "apply";
     finishedAt: string;
     done: number;
-    rerun?: "started" | "running" | "nothing";
   } | null;
   year: number;
   series: { series: string; highest: string; missing: number }[];
@@ -93,8 +91,8 @@ export const feedBackfillDelayMs = (env: NodeJS.ProcessEnv = process.env) => {
  *
  * KÉT KÖR. A SZÁRAZ minden hiányzó számot megkérdez (a Számlázz.hu-n csak olvasás), és a választ eltárolja; a lap
  * sorozatonként mutatja, hányat ismer (az ACRW sorozat külön, acrobot 43768). A BEHÚZÁS csak a WOULD_STORE számokat
- * húzza be (ugyanaz az idempotens tárolás: másodszor SEEN), és a végén EGYSZER elindítja a kifizetett-jelölést korhatár
- * nélkül (acrobot 43776), hogy a régi jóváírások is párosuljanak.
+ * húzza be (ugyanaz az idempotens tárolás: másodszor SEEN). A régi jóváírások párosítása (a kifizetett-jelölés korhatár
+ * nélkül, acrobot 43776) NEM indul magától: a lapon előbb a száraz előnézete látszik, és külön gomb írja (acrobot 43822).
  *
  * FOLYTATHATÓ: a végleges választ adó számot (ismeri, nem ismeri, behúzva) a következő száraz kör nem kérdezi újra; a
  * hibás válasz újra megy. Egyszerre egy kör fut (egy folyamat), a lekérdezések között szünet van.
@@ -109,10 +107,7 @@ export class FeedBackfillService {
   delayMs = feedBackfillDelayMs();
   private current: Promise<void> | null = null;
 
-  constructor(
-    private readonly feedPull: FeedPullService,
-    private readonly scheduler: PaidMarksAutoScheduler,
-  ) {}
+  constructor(private readonly feedPull: FeedPullService) {}
 
   private async gaps(now: Date): Promise<FeedGapSeries[]> {
     const year = now.getFullYear();
@@ -231,13 +226,6 @@ export class FeedBackfillService {
         phase,
         finishedAt: new Date().toISOString(),
         done,
-        ...(phase === "apply"
-          ? {
-              rerun: this.scheduler.runNow(userId, new Date(), {
-                allTime: true,
-              }).status,
-            }
-          : {}),
       };
     }
   }

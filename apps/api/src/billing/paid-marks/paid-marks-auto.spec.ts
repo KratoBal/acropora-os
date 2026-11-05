@@ -479,6 +479,53 @@ describe("the daily schedule", () => {
       }
     });
 
+    // acrobot 43822: WHAT TURNS THIS RED: the dry look before the run without an age limit planning from the daily
+    // window, writing or recording a run, losing a source's planned lines, or a failed plan hiding the other sources
+    it("the dry look without an age limit plans every source from ALL_TIME_FROM and writes nothing", async () => {
+      process.env.BANK_TRANSFER_MARK_PAID = "auto";
+      delete process.env.GLS_COD_MARK_PAID;
+      try {
+        const log: string[] = [];
+        const froms: string[] = [];
+        const planned = {
+          ...bank(),
+          plan: async (from: string) => {
+            froms.push(from);
+            return (await bank().plan())!;
+          },
+        };
+        const broken = {
+          ...bank(),
+          source: "GLS_COD" as const,
+          switchName: "GLS_COD_MARK_PAID",
+          plan: async () => {
+            throw new Error("GLS_READ_FAILED");
+          },
+        };
+        const scheduler = new PaidMarksAutoScheduler(
+          {} as never,
+          fakeRuns(log),
+        );
+        const preview = await scheduler.previewAllTime([broken, planned]);
+        assert.deepEqual(froms, [ALL_TIME_FROM]);
+        assert.deepEqual(log, []);
+        assert.deepEqual(
+          preview.map((p) => [
+            p.source,
+            p.mode,
+            p.planned.map((m) => m.invoiceNumber),
+            p.errorCode,
+          ]),
+          [
+            ["GLS_COD", "off", [], "GLS_READ_FAILED"],
+            ["BANK_TRANSFER", "auto", ["ACR-2026/00042"], null],
+          ],
+        );
+      } finally {
+        process.env = { ...envBefore };
+      }
+    });
+
     it("the status names the next run while the timer is set, and none after it stops", () => {
       process.env.BANK_TRANSFER_MARK_PAID = "dry";
       try {
