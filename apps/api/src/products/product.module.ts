@@ -8,6 +8,7 @@ import { ProductBarcodeService } from "./product-barcode.service.js";
 import { ProductExtensionController } from "./product-extension.controller.js";
 import { ProductExtensionRepository } from "./product-extension.repository.js";
 import { ProductExtensionService } from "./product-extension.service.js";
+import { ProductShippingProfileBulkController } from "./product-shipping-profile-bulk.controller.js";
 import { ProductShippingProfileController } from "./product-shipping-profile.controller.js";
 import { ShippingProfileFillController } from "./shipping-profile-fill.controller.js";
 import {
@@ -64,6 +65,7 @@ import { DoseProjectionService } from "./dose-effects/dose-projection.service.js
     ProductBarcodeController,
     ProductExtensionController,
     ProductShippingProfileController,
+    ProductShippingProfileBulkController,
     ShippingProfileFillController,
     CatalogOptionsController,
     ProductEnrichmentReviewController,
