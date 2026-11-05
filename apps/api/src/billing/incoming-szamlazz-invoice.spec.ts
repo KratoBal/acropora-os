@@ -18,6 +18,7 @@ const szamlabe = (
     devizanem?: string;
     kelt?: string;
     teszt?: string;
+    eszamla?: string;
     kifizetesek?: string;
     szallitoNev?: string;
     alapVeg?: string;
@@ -29,7 +30,7 @@ const szamlabe = (
     <adoszam>12345678-2-41</adoszam><adoszameu>ATU12345678</adoszameu>
     <bank><nev>Minta Bank</nev><bankszamla>AT61 1904 3002 3457 3201</bankszamla></bank></szallito>
   <alap><id>5150</id><szamlaszam>KI-2026/77</szamlaszam><gazdEsemAzon>1</gazdEsemAzon><tipus>HS</tipus>
-    <eszamla>0</eszamla><hivszamlaszam>KI-2026/70</hivszamlaszam><hivdijbekszam>DB-2026/3</hivdijbekszam>
+    <eszamla>${over.eszamla ?? "0"}</eszamla><hivszamlaszam>KI-2026/70</hivszamlaszam><hivdijbekszam>DB-2026/3</hivdijbekszam>
     <kelt>${over.kelt ?? "2026-09-28"}</kelt><telj>2026-09-25</telj><fizh>2026-10-12</fizh>
     <fizmod>Átutalás</fizmod><fizmodunified>átutalás</fizmodunified><keszpenz>false</keszpenz>
     <rendelesszam>PO-881</rendelesszam><nyelv>de</nyelv><devizanem>${over.devizanem ?? "EUR"}</devizanem>
@@ -175,5 +176,21 @@ describe("projectIncomingInvoice", () => {
       () => projectIncomingInvoice(szamlabe({ szallitoNev: "" })),
       SzamlazzFeedParseError,
     );
+  });
+
+  /**
+   * AZ `eszamla` EGÉSZ KÓD A BEJÖVŐ FEEDBEN IS (acrobot mérése, 2026-11-05, a bejövő üzenetek: 1 az 81 db, papír beszállítók
+   * mint OBI, SOPRO; 2 a 74 db, a Telekom, a Foxpost, a GLS, az OTP eBIZ e-számlái; 3 a 17 db, mind E- előtagú Számlázz.hu-s
+   * kiállító; 0 és hiányzó elem nincs). A kimenő feed dokumentációja szerint 0 nem számla, 1 papír, 2 és 3 e-számla; a bejövő
+   * oldal dokumentációja a kódok jelentését nem írja le, a mért minta egyezik a kimenővel. MI PIROSÍT: ha az `1` (papír)
+   * elektronikus, vagy a 2 és a 3 papír; ha a `0`, a `true` vagy az ismeretlen szöveg elektronikus.
+   */
+  it("reads eszamla as the invoice-format code: 2 and 3 are electronic, 0 and 1 and anything else are not", () => {
+    const electronic = (eszamla: string) =>
+      projectIncomingInvoice(szamlabe({ eszamla })).electronic;
+    for (const code of ["2", "3", " 2 "])
+      assert.equal(electronic(code), true, code);
+    for (const code of ["0", "1", "", "true"])
+      assert.equal(electronic(code), false, code);
   });
 });
