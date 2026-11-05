@@ -6,6 +6,7 @@ import type {
   CatalogOption,
   ProductDetail,
   ProductListResponse,
+  ShippingFilterValue,
 } from "@acropora/types";
 
 import { writeSearchDocument } from "../integrations/ai-product-search/ai-product-search.writer.js";
@@ -35,6 +36,15 @@ import {
 
 const productInclude = {
   brand: true,
+  shippingProfile: {
+    select: {
+      pickupOnly: true,
+      foxpostForbidden: true,
+      isHeavy: true,
+      isFrozen: true,
+      lockerUnsuitable: true,
+    },
+  },
   categories: {
     include: { category: true },
     orderBy: [
@@ -60,8 +70,30 @@ const productInclude = {
   },
 } as const;
 
+/**
+ * THE LIST'S SHIPPING FILTER (a82ed229): one flag set on the product's shipping profile, or `none` for a product
+ * nobody has looked at yet (it has no profile). Not set: no narrowing.
+ */
+export function shippingFilterWhere(
+  filter: ShippingFilterValue | undefined,
+): Prisma.ProductWhereInput {
+  if (!filter) return {};
+  if (filter === "none") return { shippingProfile: { is: null } };
+  return { shippingProfile: { is: { [filter]: true } } };
+}
+
 const productListInclude = {
   brand: true,
+  // the shipping flags for the list's column (a82ed229)
+  shippingProfile: {
+    select: {
+      pickupOnly: true,
+      foxpostForbidden: true,
+      isHeavy: true,
+      isFrozen: true,
+      lockerUnsuitable: true,
+    },
+  },
   categories: {
     where: { isPrimary: true },
     // the leaf and three ancestors: the list's image fallback reads the
@@ -381,6 +413,7 @@ export class ProductRepository extends Repository {
       ...(query.listedOn
         ? { channelListings: { some: { channel: query.listedOn } } }
         : {}),
+      ...shippingFilterWhere(query.shipping),
       ...(query.search
         ? {
             OR: [

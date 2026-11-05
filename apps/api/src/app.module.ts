@@ -35,6 +35,7 @@ import { AiProductSearchModule } from "./integrations/ai-product-search/ai-produ
 import { FavoritesModule } from "./favorites/favorites.module.js";
 import { NavigationCountersModule } from "./navigation/navigation-counters.module.js";
 import { WebshopMailModule } from "./integrations/webshop-mail/webshop-mail.module.js";
+import { WebshopInvoiceModule } from "./integrations/webshop-invoice/webshop-invoice.module.js";
 import { MedusaModule } from "./integrations/medusa/medusa.module.js";
 import { NavOnlineInvoiceModule } from "./integrations/nav/nav-online-invoice.module.js";
 import { PostalCodeModule } from "./integrations/postal-code/postal-code.module.js";
@@ -109,6 +110,7 @@ import { MortalityModule } from "./mortality/mortality.module.js";
     NavigationCountersModule,
     FavoritesModule,
     WebshopMailModule,
+    WebshopInvoiceModule,
     AiChatModule,
     MedusaModule,
     NavOnlineInvoiceModule,

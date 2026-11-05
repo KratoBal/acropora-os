@@ -34,6 +34,10 @@ import {
   PilotThemeRoot,
 } from "@/components/pilot/pilot-ui";
 import { useProductImageSrc } from "@/components/products/product-image-source";
+import {
+  ShippingFilterSelect,
+  ShippingFlagsCell,
+} from "@/components/products/shipping-flags";
 import { productApi } from "@/lib/api/products";
 import {
   changeProductFilters,
@@ -201,6 +205,7 @@ export function ProductListPage() {
         active: state.active === "all" ? undefined : state.active === "active",
         categoryId: state.categoryId || undefined,
         brandId: state.brandId || undefined,
+        shipping: state.shipping || undefined,
       })
       .then((response) => {
         if (!active) return;
@@ -271,7 +276,11 @@ export function ProductListPage() {
   }
 
   const hasFilters = Boolean(
-    state.q || state.active !== "all" || state.categoryId || state.brandId,
+    state.q ||
+    state.active !== "all" ||
+    state.categoryId ||
+    state.brandId ||
+    state.shipping,
   );
   const viewState = deriveProductListViewState({
     loading: loading && !data,
@@ -386,6 +395,13 @@ export function ProductListPage() {
       ),
     },
     {
+      // a82ed229: the shipping flags; "nincs vizsgálva" is not "nincs korlát"
+      id: "shipping",
+      header: "Szállítás",
+      width: "150px",
+      cell: (product) => <ShippingFlagsCell flags={product.shippingFlags} />,
+    },
+    {
       id: "status",
       header: "Állapot",
       width: "104px",
@@ -492,6 +508,11 @@ export function ProductListPage() {
               </option>
             ))}
           </PilotSelect>
+          <ShippingFilterSelect
+            value={state.shipping}
+            onChange={(value) => updateFilter({ shipping: value })}
+            className="min-w-[160px] flex-[1_1_180px] [&_select]:h-10"
+          />
           {/*
             A SÁV "SZŰRŐK TÖRLÉSE" LINKJE (Figma "Clear", meleg szöveg) CSAK
             AKKOR, HA VAN MIT TÖRÖLNI, ÉS NEM A "NINCS TALÁLAT" ÁLLAPOTBAN: ott

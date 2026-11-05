@@ -9,6 +9,10 @@ import {
   Min,
 } from "class-validator";
 
+import {
+  SHIPPING_FILTER_VALUES,
+  type ShippingFilterValue,
+} from "@acropora/types";
 import { optionalQueryBoolean } from "../../common/query-boolean.util.js";
 
 /** The sales channels a product can be listed on. One, for now. */
@@ -56,4 +60,9 @@ export class ProductListQueryDto {
   @IsOptional()
   @IsIn(CATALOG_CHANNELS)
   listedOn?: (typeof CATALOG_CHANNELS)[number];
+
+  /** One shipping flag set, or `none`: nobody has looked at the product yet (a82ed229). */
+  @IsOptional()
+  @IsIn(SHIPPING_FILTER_VALUES)
+  shipping?: ShippingFilterValue;
 }

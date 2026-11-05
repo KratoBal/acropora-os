@@ -1562,6 +1562,11 @@ export const ANONYMIZATION_REGISTER: Readonly<
     currency: "business",
     recordedByUserId: "identifier",
   },
+  WebshopInvoiceDownload: {
+    jti: "identifier",
+    orderId: "identifier",
+    invoiceId: "identifier",
+  },
   WebshopParcel: {
     commerceOrderId: "identifier",
     carrier: "business",
