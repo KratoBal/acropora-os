@@ -25,6 +25,14 @@ const FLAG_LABELS: Record<ShippingFillFlag, string> = {
   isFrozen: "Fagyasztott",
 };
 
+/** "Foxpost nem ajánlható: 417, Nehéz áru: 9"; ha egyik sem igaz: "egyik jelző sem igaz". */
+function createdBreakdown(flags: Record<ShippingFillFlag, number>): string {
+  const parts = (Object.keys(FLAG_LABELS) as ShippingFillFlag[])
+    .filter((flag) => flags[flag] > 0)
+    .map((flag) => `${FLAG_LABELS[flag]}: ${flags[flag]}`);
+  return parts.length ? parts.join(", ") : "egyik jelző sem igaz";
+}
+
 const errorText = (cause: unknown) =>
   cause instanceof Error ? cause.message : "Ismeretlen hiba";
 
@@ -100,7 +108,7 @@ export function ShippingFillPage() {
         <Alert
           variant="info"
           title="Kész"
-          description={`${result.created} új sor, ${result.updated} frissített (${result.target}).`}
+          description={`${result.created} új sor (${createdBreakdown(result.createdFlags)}), ${result.updated} frissített (${result.target}).`}
         />
       ) : null}
       <PilotCard>
@@ -131,20 +139,16 @@ export function ShippingFillPage() {
               <dd>{report.products}</dd>
               <dt className="text-pilot-grey-600">Új sor</dt>
               <dd>{report.create}</dd>
-              {report.createdFlags
-                ? (Object.keys(FLAG_LABELS) as ShippingFillFlag[]).map(
-                    (flag) => (
-                      <div key={flag} className="contents">
-                        <dt className="pl-3 text-pilot-grey-500">
-                          {FLAG_LABELS[flag]}
-                        </dt>
-                        <dd data-testid={`shipping-fill-created-${flag}`}>
-                          {report.createdFlags![flag]}
-                        </dd>
-                      </div>
-                    ),
-                  )
-                : null}
+              {(Object.keys(FLAG_LABELS) as ShippingFillFlag[]).map((flag) => (
+                <div key={flag} className="contents">
+                  <dt className="pl-3 text-pilot-grey-500">
+                    {FLAG_LABELS[flag]}
+                  </dt>
+                  <dd data-testid={`shipping-fill-created-${flag}`}>
+                    {report.createdFlags[flag]}
+                  </dd>
+                </div>
+              ))}
               <dt className="text-pilot-grey-600">Frissül</dt>
               <dd>{report.update}</dd>
               {(Object.keys(FLAG_LABELS) as ShippingFillFlag[]).map((flag) => (

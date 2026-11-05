@@ -68,6 +68,7 @@ describe("ShippingFillPage", () => {
     api.apply.mockResolvedValue({
       target: preview.target,
       created: 1850,
+      createdFlags: preview.report.createdFlags,
       updated: 12,
     });
     render(<ShippingFillPage />);
@@ -89,7 +90,9 @@ describe("ShippingFillPage", () => {
       expect(api.apply).toHaveBeenCalledWith("t", "a".repeat(64)),
     );
     expect(
-      await screen.findByText(/1850 új sor, 12 frissített/),
+      await screen.findByText(
+        /1850 új sor \(Csak üzletben vehető át: 31, Foxpost nem ajánlható: 417, Nehéz áru: 9\), 12 frissített/,
+      ),
     ).toBeInTheDocument();
   });
 
