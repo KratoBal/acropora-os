@@ -122,7 +122,9 @@ export function partnerOrderMatchesChainFilter(
  * THE BACKLOG (HÁTRALÉK), S4b (card 38caeac2; Luca 2026-11-05 11:08 UTC): an order is back-ordered when it is OPEN, has
  * a line no certificate states yet, AND nothing has moved on it for at least `backlogDays` days. Defined here so the
  * list, the filter and the dashboard read one rule.
- * - MOVEMENT is the order's creation, a certificate issued for it, or a document attached to it: any step of the chain.
+ * - MOVEMENT is any step of the chain: the order's creation, a certificate issued for it, a document attached to the
+ *   order, a document of one of its certificates (the signed copy), or an issued invoice of a certificate. An invoice's
+ *   issue date is a DAY: it counts to the END of that day. A draft or a storno is no movement.
  * - The days are ELAPSED TIME (N x 24 hours since the last movement), not calendar days.
  * - `backlogDays` is a setting (default 14); 0 is valid: every open order with an open line is back-ordered at once.
  * - A cancelled, completed or invoiced order is never back-ordered.

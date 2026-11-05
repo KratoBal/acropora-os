@@ -6,6 +6,7 @@ import {
   type PartnerOrderStatus,
 } from "@acropora/database";
 import type { SystemDocumentSource } from "./partner-order-system-documents.js";
+import { endOfIssueDay, latestMovements } from "./partner-order-movements.js";
 
 /** What an order's lines and totals are computed from: the accepted version and the customer's optional choices. */
 const ACCEPTED_VERSION_SELECT = {
@@ -213,33 +214,62 @@ export class PartnerOrdersRepository {
   }
 
   /**
-   * THE LAST MOVEMENT OF EACH ORDER BESIDES ITS CREATION (S4b): the newest certificate issue and the newest attached
-   * document. An order with neither is absent from the map (its creation is its last movement).
+   * THE LAST MOVEMENT OF EACH ORDER BESIDES ITS CREATION (S4b): the newest of the four places the chain moves (see
+   * `partner-order-movements.ts`). An order with none is absent from the map (its creation is its last movement).
    */
   async lastMovements(orderIds: readonly string[]) {
-    const movements = new Map<string, Date>();
-    if (!orderIds.length) return movements;
+    if (!orderIds.length) return new Map<string, Date>();
     const ids = [...orderIds];
-    const [certificates, documents] = await Promise.all([
-      prisma.completionCertificate.groupBy({
-        by: ["partnerOrderId"],
-        where: { partnerOrderId: { in: ids } },
-        _max: { issuedAt: true },
-      }),
-      prisma.partnerOrderDocument.groupBy({
-        by: ["orderId"],
-        where: { orderId: { in: ids } },
-        _max: { createdAt: true },
-      }),
+    const [certificates, documents, certificateDocuments, invoices] =
+      await Promise.all([
+        prisma.completionCertificate.groupBy({
+          by: ["partnerOrderId"],
+          where: { partnerOrderId: { in: ids } },
+          _max: { issuedAt: true },
+        }),
+        prisma.partnerOrderDocument.groupBy({
+          by: ["orderId"],
+          where: { orderId: { in: ids } },
+          _max: { createdAt: true },
+        }),
+        // a relation cannot be grouped on: the rows of the certificates' documents and invoices are read, a handful per order
+        prisma.completionCertificateDocument.findMany({
+          where: { certificate: { partnerOrderId: { in: ids } } },
+          select: {
+            createdAt: true,
+            certificate: { select: { partnerOrderId: true } },
+          },
+        }),
+        prisma.invoice.findMany({
+          where: {
+            status: "ISSUED",
+            issueDate: { not: null },
+            completionCertificate: { partnerOrderId: { in: ids } },
+          },
+          select: {
+            issueDate: true,
+            completionCertificate: { select: { partnerOrderId: true } },
+          },
+        }),
+      ]);
+    return latestMovements([
+      certificates.map((row) => ({
+        orderId: row.partnerOrderId,
+        at: row._max.issuedAt,
+      })),
+      documents.map((row) => ({
+        orderId: row.orderId,
+        at: row._max.createdAt,
+      })),
+      certificateDocuments.map((row) => ({
+        orderId: row.certificate.partnerOrderId,
+        at: row.createdAt,
+      })),
+      invoices.map((row) => ({
+        orderId: row.completionCertificate?.partnerOrderId ?? null,
+        at: row.issueDate ? endOfIssueDay(row.issueDate) : null,
+      })),
     ]);
-    const note = (orderId: string | null, at: Date | null) => {
-      if (!orderId || !at) return;
-      const known = movements.get(orderId);
-      if (!known || at > known) movements.set(orderId, at);
-    };
-    for (const row of certificates) note(row.partnerOrderId, row._max.issuedAt);
-    for (const row of documents) note(row.orderId, row._max.createdAt);
-    return movements;
   }
 
   /** The orders' settings row (one row, `PARTNER_ORDER_SETTING_ID`); null before anybody saved it. */

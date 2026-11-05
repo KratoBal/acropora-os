@@ -10,6 +10,7 @@ import {
   orderNumberFor,
   PartnerOrdersService,
 } from "./partner-orders.service.js";
+import { endOfIssueDay, latestMovements } from "./partner-order-movements.js";
 import {
   MAX_DOCUMENTS_PER_ORDER,
   type OrderContentRow,
@@ -631,6 +632,28 @@ describe("the order list filters and open lines", () => {
         movements: old,
       }).service.list(1, 10, {}, now);
       assert.equal(same.items[0]!.lastMovementAt, "2026-11-01T08:00:00.000Z");
+    });
+
+    // barracuda #2230: a certificate's signed copy and an issued invoice are movements of the chain. The repository
+    // reads them (the real database case is partner-order-movements.integration.spec); here the service must use
+    // what it gets, so a fresh one keeps the order out of the backlog
+    it("a TIG on day 0, its signed copy on day 10 and a part invoice on day 12 is not back-ordered on day 14", async () => {
+      const day0 = new Date(now.getTime() - 19 * DAY); // the fixture's creation, 19 days before `now`
+      const movements = latestMovements([
+        [{ orderId: "o1", at: day0 }],
+        [{ orderId: "o1", at: new Date(day0.getTime() + 10 * DAY) }],
+        [
+          {
+            orderId: "o1",
+            at: endOfIssueDay(new Date(day0.getTime() + 12 * DAY)),
+          },
+        ],
+      ]);
+      const { service } = fake(rows, chain, certified, { movements });
+      const result = await service.list(1, 10, {}, now);
+      // the invoice's day ends at the start of day 13: 6 days ago, not back-ordered under the 14 day default
+      assert.equal(result.items[0]!.idleDays, 6);
+      assert.equal(result.items[0]!.backlog, false);
     });
 
     it("zero days: every open order with an open line is back-ordered at once", async () => {
