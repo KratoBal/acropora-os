@@ -16,7 +16,7 @@ import {
   PilotButton,
   PilotThemeRoot,
 } from "@/components/pilot/pilot-ui";
-import { formatDateTimeHu } from "@/lib/format/date";
+import { formatDateTimeHu, formatTimeHu } from "@/lib/format/date";
 import {
   paidMarksApi,
   type PaidMarkRunView,
@@ -230,7 +230,11 @@ export function PaidMarksPage() {
     <PilotThemeRoot className="space-y-6">
       <PilotPageHeader
         title="Elszámolások"
-        description="A kifizetett-jelölés naponta 7:00-kor fut magától. Most is elindíthatod: ugyanaz a futás, ugyanazokkal a kapcsolókkal."
+        description={`${
+          status?.nextRunAt
+            ? `A kifizetett-jelölés naponta ${formatTimeHu(status.nextRunAt)}-kor fut magától (budapesti idő; legközelebb ${formatDateTimeHu(status.nextRunAt)}).`
+            : "A kifizetett-jelölés napi futása most nincs ütemezve."
+        } Most is elindíthatod: ugyanaz a futás, ugyanazokkal a kapcsolókkal.`}
         actions={
           canRun ? (
             <PilotButton

@@ -68,9 +68,13 @@ const run = (over: Partial<PaidMarkRunView>): PaidMarkRunView => ({
   ...over,
 });
 
-const status = (running = false): PaidMarksStatus => ({
+const status = (
+  running = false,
+  nextRunAt: string | null = "2026-11-06T07:00:00.000Z",
+): PaidMarksStatus => ({
   running,
   startedAt: running ? "2026-11-05T09:30:00.000Z" : null,
+  nextRunAt,
   sources: [
     { source: "GLS_COD", mode: "auto" },
     { source: "FOXPOST", mode: "auto" },
@@ -143,6 +147,20 @@ describe("PaidMarksPage", () => {
     await waitFor(() => expect(api.runNow).toHaveBeenCalledWith("t"));
     expect(await screen.findByText(/A futás elindult/)).toBeInTheDocument();
     await waitFor(() => expect(api.latest).toHaveBeenCalledTimes(2));
+  });
+
+  // e64540fd fix: the header said a fixed "7:00", the server's UTC hour; it is 08:00 in Budapest in winter
+  it("the header says the next daily run in Budapest time, or that none is scheduled", async () => {
+    const { unmount } = render(<PaidMarksPage />);
+    expect(
+      await screen.findByText(/naponta 08:00-kor fut magától/),
+    ).toBeInTheDocument();
+    unmount();
+    api.status.mockResolvedValue(status(false, null));
+    render(<PaidMarksPage />);
+    expect(
+      await screen.findByText(/napi futása most nincs ütemezve/),
+    ).toBeInTheDocument();
   });
 
   it("a run in flight cannot be started again", async () => {
