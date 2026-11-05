@@ -26,6 +26,11 @@ export interface OsShippingProfile {
   foxpostForbidden: boolean;
   isHeavy: boolean;
   isFrozen: boolean;
+  /**
+   * Csomagautomatába nem fér (a82ed229, PR 3 C3). OPCIONÁLIS, mert a UNAS nem
+   * ismeri: a UNAS-ból számolt profilban nincs, és a hiánya nem korlátozás.
+   */
+  lockerUnsuitable?: boolean;
 }
 
 /** Amit a bolt admin vegpontja var. */
@@ -34,6 +39,8 @@ export interface MedusaShippingFlags {
   foxpost_forbidden: boolean;
   is_heavy: boolean;
   is_frozen: boolean;
+  /** commerce #677 óta; egy régebbi bolt nem adja vissza, és ott a hiánya hamis */
+  locker_unsuitable?: boolean;
 }
 
 export function shippingFlagsFromProfile(
@@ -44,6 +51,7 @@ export function shippingFlagsFromProfile(
     foxpost_forbidden: profile.foxpostForbidden,
     is_heavy: profile.isHeavy,
     is_frozen: profile.isFrozen,
+    locker_unsuitable: profile.lockerUnsuitable ?? false,
   };
 }
 
@@ -67,7 +75,8 @@ export function shippingFlagsDiffer(
     current.pickup_only !== wanted.pickup_only ||
     current.foxpost_forbidden !== wanted.foxpost_forbidden ||
     current.is_heavy !== wanted.is_heavy ||
-    current.is_frozen !== wanted.is_frozen
+    current.is_frozen !== wanted.is_frozen ||
+    (current.locker_unsuitable ?? false) !== (wanted.locker_unsuitable ?? false)
   );
 }
 
@@ -83,6 +92,7 @@ export function describeShippingFlags(flags: MedusaShippingFlags): string {
     flags.foxpost_forbidden ? "Foxpost tiltva" : null,
     flags.is_heavy ? "nehéz áru" : null,
     flags.is_frozen ? "fagyasztott" : null,
+    flags.locker_unsuitable ? "csomagautomatába nem fér" : null,
   ].filter((x): x is string => x !== null);
   return igazak.length ? igazak.join(", ") : "nincs korlátozás";
 }

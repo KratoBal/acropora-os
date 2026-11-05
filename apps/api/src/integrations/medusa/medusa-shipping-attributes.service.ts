@@ -103,6 +103,7 @@ export class MedusaShippingAttributesService {
       foxpostForbidden: profile?.foxpostForbidden ?? false,
       isHeavy: profile?.isHeavy ?? false,
       isFrozen: profile?.isFrozen ?? false,
+      lockerUnsuitable: profile?.lockerUnsuitable ?? false,
     });
     const leiras = describeShippingFlags(wanted);
 
@@ -118,25 +119,41 @@ export class MedusaShippingAttributesService {
     const current = await this.medusa.fetchShippingAttributes(
       link.medusaProductId,
     );
-    if (!shippingFlagsDiffer(current, wanted))
+    /*
+      A BOLT, AMI MÉG NEM ISMERI A CSOMAGAUTOMATA-JELZŐT (commerce #677 előtt). A szigorú validátora az egész
+      írást elutasítaná, ha a mezőt küldenénk, tehát csak akkor megy, ha a bolt saját válasza hozza. Így a két
+      oldal telepítési sorrendje nem számít: a régi bolt a négy régi jelzőt kapja, és a jelentés kimondja, ha a
+      csomagautomata-jelzőt nem tudta átvinni.
+    */
+    const shopKnowsLocker = "locker_unsuitable" in current;
+    const { locker_unsuitable: lockerUnsuitable, ...withoutLocker } = wanted;
+    const payload: MedusaShippingFlags = shopKnowsLocker
+      ? wanted
+      : withoutLocker;
+    const flags =
+      !shopKnowsLocker && lockerUnsuitable
+        ? `${leiras} (a bolt még nem ismeri a csomagautomata-jelzőt, nem ment át)`
+        : leiras;
+
+    if (!shippingFlagsDiffer(current, payload))
       return {
         action: "unchanged",
         medusaProductId: link.medusaProductId,
-        flags: leiras,
+        flags,
       };
 
     if (!apply)
       return {
         action: "planned",
         medusaProductId: link.medusaProductId,
-        flags: leiras,
+        flags,
       };
 
-    await this.medusa.setShippingAttributes(link.medusaProductId, wanted);
+    await this.medusa.setShippingAttributes(link.medusaProductId, payload);
     return {
       action: "applied",
       medusaProductId: link.medusaProductId,
-      flags: leiras,
+      flags,
     };
   }
 }

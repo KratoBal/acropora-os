@@ -128,6 +128,36 @@ describe("a szállítási jellemzők átvitele", () => {
     ]);
   });
 
+  // a82ed229 C3: WHAT TURNS THIS RED: the OS row's locker flag not reaching a shop that knows it; the field sent
+  // to a shop before commerce #677 (its strict validator would refuse the whole write); that loss left unsaid
+  it("a csomagautomata-jelző kimegy a boltba, amelyik ismeri", async () => {
+    const f = fakes({ current: { ...CSUPA_HAMIS, locker_unsuitable: false } });
+
+    await f.service.project(
+      "prod-os-1",
+      { ...PROFIL, lockerUnsuitable: true },
+      true,
+    );
+
+    assert.equal(f.kikuldott[0]?.locker_unsuitable, true);
+  });
+
+  it("a régi bolt nem kapja meg a mezőt, és a jelentés kimondja, hogy nem ment át", async () => {
+    const f = fakes({});
+
+    const outcome = await f.service.project(
+      "prod-os-1",
+      { ...PROFIL, lockerUnsuitable: true },
+      true,
+    );
+
+    assert.equal("locker_unsuitable" in f.kikuldott[0]!, false);
+    assert.match(
+      outcome.action === "applied" ? outcome.flags : "",
+      /nem ismeri a csomagautomata-jelzőt/,
+    );
+  });
+
   /**
    * ES AMI A JELENTEST BIZONYITEKKA TESZI: ha a bolti allapot MAR egyezett,
    * azt kimondjuk, es NEM irunk. Enelkul minden futas "kesz"-t mondana, es a
