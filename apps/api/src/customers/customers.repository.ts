@@ -57,6 +57,23 @@ export function taxNumberSearchKey(search: string): string | null {
 }
 
 /**
+ * A KÖTÖTT PARTNER ADÓSZÁMA MINT TIPP (40332480, barracuda #2228): ha a vevő-sor egy élő partnerhez van kötve
+ * (`Supplier.customerId`) és a partnernek van adószáma, az a tipp, a nevek egyezése nélkül is. A névalapú keresés
+ * (`partnerTaxNumberFor`) csak akkor fut, ha nincs ilyen kötés. Ugyanaz a kötés, amelyen a keresés adószám-ága is
+ * megy (`searchCustomerIds`), hogy amit a keresés megtalál, annak a részlete is megadja a számot.
+ */
+export function linkedPartnerTaxHint(
+  partner: {
+    deletedAt?: Date | null;
+    name: string;
+    taxNumber: string | null;
+  } | null,
+): { partnerName: string; taxNumber: string } | null {
+  if (!partner || partner.deletedAt || !partner.taxNumber?.trim()) return null;
+  return { partnerName: partner.name, taxNumber: partner.taxNumber.trim() };
+}
+
+/**
  * A SOR EGY PARTNER VEVŐ-TÜKRE, ha él a partnere: a törölt partner (Supplier.deletedAt) sora ismét sima vevő-sor, nem kap partner
  * jelvényt, és a szerkesztése nem tiltott (a Partnerek képernyőn a törölt partner nem szerkeszthető, tehát a tiltás zsákutca
  * volna; barracuda, #2184 review).
@@ -124,7 +141,15 @@ const include = {
   addresses: addressesInclude,
   // the invoice tax gate asks a partner mirror for a tax number (card aaf4f09d); the roles are derived from the flags
   partner: {
-    select: { id: true, isSupplier: true, isService: true, deletedAt: true },
+    select: {
+      id: true,
+      isSupplier: true,
+      isService: true,
+      deletedAt: true,
+      // the linked partner's own name and tax number: the detail's tax hint comes from the LINK first (40332480)
+      name: true,
+      taxNumber: true,
+    },
   },
 } satisfies Prisma.CustomerInclude;
 
@@ -254,6 +279,11 @@ export class CustomersRepository extends Repository {
    * generated column (`unaccent` is not immutable), so the matching ids are
    * resolved first and narrow the list query, the same shape as the UNAS
    * origin filter above.
+   *
+   * THE TAX NUMBER IS SEARCHED ON THE PARTNER TOO (40332480, barracuda #2228): a partner's customer row (its
+   * "mirror") can lack the tax number the partner has (card aaf4f09d: the zoo's old UNAS row never took it), and a
+   * search by the partner's tax number then found nothing, so the new customer form took a company already in the
+   * register for a new one. A live partner linked to the row (`Supplier.customerId`, not deleted) counts.
    */
   private async searchCustomerIds(search: string): Promise<string[]> {
     const pattern = customerSearchPattern(search);
@@ -266,7 +296,13 @@ export class CustomersRepository extends Repository {
          OR unaccent("customerNumber") ILIKE unaccent(${pattern}::text)
          ${
            taxKey
-             ? Prisma.sql`OR upper(regexp_replace(COALESCE("taxNumber", ''), '[^0-9A-Za-z]', '', 'g')) LIKE ${`%${taxKey}%`}::text`
+             ? Prisma.sql`OR upper(regexp_replace(COALESCE("taxNumber", ''), '[^0-9A-Za-z]', '', 'g')) LIKE ${`%${taxKey}%`}::text
+         OR EXISTS (
+              SELECT 1 FROM "Supplier" s
+              WHERE s."customerId" = "Customer"."id"
+                AND s."deletedAt" IS NULL
+                AND upper(regexp_replace(COALESCE(s."taxNumber", ''), '[^0-9A-Za-z]', '', 'g')) LIKE ${`%${taxKey}%`}::text
+            )`
              : Prisma.empty
          }
     `;
@@ -302,14 +338,15 @@ export class CustomersRepository extends Repository {
       partnerTaxHint:
         customer.taxNumber?.trim() || customer.euTaxNumber?.trim()
           ? null
-          : partnerTaxNumberFor(
+          : (linkedPartnerTaxHint(customer.partner) ??
+            partnerTaxNumberFor(
               customer,
               await prisma.supplier.findMany({
                 // a deleted partner is no source (barracuda, #2161)
                 where: { taxNumber: { not: null }, deletedAt: null },
                 select: { name: true, taxNumber: true },
               }),
-            ),
+            )),
     };
     if (detail.paymentDueDays !== null) return detail;
     // a sor maga üres: ugyanez a cég a Partnerek oldalon viselhet napot

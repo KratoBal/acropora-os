@@ -147,7 +147,13 @@ export function BillingNewCustomerForm({
     );
     return page.items.filter(
       (_item, index) =>
-        taxKey(details[index]?.taxNumber ?? "").slice(0, 8) === base,
+        // a partner's customer row can lack the tax number the partner has: the detail's partner hint carries it
+        // (card aaf4f09d), and the search found the row through the partner's number (40332480)
+        taxKey(
+          details[index]?.taxNumber ||
+            details[index]?.partnerTaxHint?.taxNumber ||
+            "",
+        ).slice(0, 8) === base,
     );
   };
 
