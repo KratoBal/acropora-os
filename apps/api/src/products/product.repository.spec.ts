@@ -974,6 +974,38 @@ describe("ProductRepository", () => {
       }
   });
 
+  // T4.1-D3 sale slice 2: the row says what the shop shows, and during a running sale the shop shows the sale price
+  it("a regular price saved during a running sale writes the sale price into its history row; outside it, none", async () => {
+    for (const [most, sale] of [
+      [new Date("2026-11-12T00:00:00.000Z"), SALE.grossPrice.toString()],
+      [SALE.endsAt, null],
+    ] as const) {
+      const { database, calls } = createDatabase({
+        variantBefore: {
+          sellingGrossPrice: new Prisma.Decimal("9990"),
+          sellingPriceCurrency: "HUF",
+          sellingSaleGrossPrice: SALE.grossPrice,
+          sellingSaleStartsAt: SALE.startsAt,
+          sellingSaleEndsAt: SALE.endsAt,
+        },
+      });
+      await new ProductRepository(database).setVariantSellingPrice(
+        "product-1",
+        "variant-1",
+        new Prisma.Decimal("10990"),
+        undefined,
+        most,
+      );
+      const created = calls.find((call) => call.operation === "historyCreate")
+        ?.args as { data: { saleGrossPrice: Prisma.Decimal | null } };
+      assert.equal(
+        created.data.saleGrossPrice?.toString() ?? null,
+        sale,
+        most.toISOString(),
+      );
+    }
+  });
+
   it("starts a first own price in forint and still writes no duplicate history", async () => {
     const { database, calls } = createDatabase({
       variantBefore: {

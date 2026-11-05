@@ -17,6 +17,7 @@ import {
   type TakeoverPriceVariant,
 } from "./takeover-price.js";
 import { recordOwnPrice } from "./price-history/own-price-history.js";
+import { isOwnSaleActive } from "./own-sale.js";
 import { retryOnSerializationConflict } from "../common/transaction-retry.util.js";
 import { unasShippingProfile } from "../integrations/medusa/medusa-unas-shipping.policy.js";
 import {
@@ -686,6 +687,8 @@ export class ProductRepository extends Repository {
                   variantId: step.variantId,
                   currency: step.sellingPriceCurrency,
                   grossPrice: step.sellingGrossPrice,
+                  // a másolt változatnak nem lehet saját akciója: az akció saját árat kér (`setVariantSale`), ez pedig épp az első
+                  saleGrossPrice: null,
                   observedAt: takenAt,
                 });
             }
@@ -831,6 +834,10 @@ export class ProductRepository extends Repository {
           variantId,
           currency,
           grossPrice,
+          // a mentés pillanatában futó akció: a bolt annak az árát mutatja tovább, a sor ne állítsa az ellenkezőjét
+          saleGrossPrice: isOwnSaleActive(before, now)
+            ? before.sellingSaleGrossPrice
+            : null,
           observedAt: now,
         });
         await transaction.product.update({

@@ -66,6 +66,12 @@ function adatbazis(
   markaSorok: { id: string; updatedAt: Date }[] = [],
   /** A natív célú tény-kulcsok (tömeg, méret): a termékismeret kikapcsolt ágán ezek számítanak. */
   nativKulcsok: string[] = [],
+  /** A saját akció határának sorai (`ProductVariant.sellingSale*`, T4.1-D3). Alapból üres. */
+  sajatAkcioSorok: {
+    productId: string;
+    sellingSaleStartsAt: Date | null;
+    sellingSaleEndsAt: Date | null;
+  }[] = [],
 ) {
   const hivasok: { metodus: string; args: unknown }[] = [];
   const db = {
@@ -96,6 +102,12 @@ function adatbazis(
       findMany: async (args: unknown) => {
         hivasok.push({ metodus: "unasProductSnapshot.findMany", args });
         return akcioSorok;
+      },
+    },
+    productVariant: {
+      findMany: async (args: unknown) => {
+        hivasok.push({ metodus: "productVariant.findMany", args });
+        return sajatAkcioSorok;
       },
     },
     productKnowledgeFact: {
@@ -514,6 +526,7 @@ describe("MedusaProjectionScheduler ures kor naploja", () => {
         upsert: async () => ({}),
       },
       unasProductSnapshot: { findMany: async () => [] },
+      productVariant: { findMany: async () => [] },
       productKnowledgeFact: { findMany: async () => [] },
       attributeDefinition: { findMany: async () => [] },
       brand: { findMany: async () => [] },
@@ -784,6 +797,119 @@ describe("MedusaProjectionScheduler, az akció határa", () => {
       } as NodeJS.ProcessEnv,
     );
     assert.deepEqual(kapott, [["uj-1", "akcios"]]);
+  });
+});
+
+/**
+ * A SAJÁT AKCIÓ HATÁRA (T4.1-D3, akció 2. szelet). Az átvett termék akciója a
+ * változaton áll, és ugyanúgy az óra szerint vált. MI PIROSÍT: az elindult vagy
+ * lejárt saját akció nem kerül a körbe; a jövőbeli vagy már vetített határ
+ * bekerül; két változat határa kétszer viszi a terméket; a lekérdezés nem az
+ * ACROPORA gazdára, az aktív változatra vagy a nem kizárt termékre szól.
+ */
+describe("MedusaProjectionScheduler, a saját akció határa", () => {
+  const MOST_ORA = new Date("2026-11-05T08:00:00.000Z");
+  const ORAJA = (perc: number) => new Date(MOST_ORA.getTime() + perc * 60_000);
+
+  const kor = async (
+    sajatAkcioSorok: {
+      productId: string;
+      sellingSaleStartsAt: Date | null;
+      sellingSaleEndsAt: Date | null;
+    }[],
+    lekepezesek: { entityId: string; lastSyncedAt: Date | null }[],
+  ) => {
+    const { db, hivasok } = adatbazis(
+      [],
+      lekepezesek,
+      undefined,
+      [],
+      [],
+      [],
+      [],
+      [],
+      sajatAkcioSorok,
+    );
+    const { run, kapott } = futtato();
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: run,
+      runPricing: arFuttato().run,
+      environment: BEKAPCSOLVA,
+      logger: naplo().logger,
+      now: () => MOST_ORA,
+    });
+    await scheduler.runOnce();
+    return { kapott, hivasok };
+  };
+
+  it("az elindult és a lejárt saját akció esedékes, a termék egyszer", async () => {
+    const { kapott } = await kor(
+      [
+        {
+          productId: "indult",
+          sellingSaleStartsAt: ORAJA(-10),
+          sellingSaleEndsAt: ORAJA(600),
+        },
+        {
+          productId: "indult",
+          sellingSaleStartsAt: ORAJA(-15),
+          sellingSaleEndsAt: ORAJA(600),
+        },
+        {
+          productId: "lejart",
+          sellingSaleStartsAt: ORAJA(-3000),
+          sellingSaleEndsAt: ORAJA(-5),
+        },
+      ],
+      [
+        { entityId: "indult", lastSyncedAt: ORAJA(-60) },
+        { entityId: "lejart", lastSyncedAt: ORAJA(-60) },
+      ],
+    );
+    assert.deepEqual(kapott, [["indult", "lejart"]]);
+  });
+
+  it("a jövőbeli és a már vetített saját határ nem esedékes", async () => {
+    const { kapott } = await kor(
+      [
+        {
+          productId: "jovo",
+          sellingSaleStartsAt: ORAJA(30),
+          sellingSaleEndsAt: ORAJA(600),
+        },
+        {
+          productId: "vetitve",
+          sellingSaleStartsAt: ORAJA(-20),
+          sellingSaleEndsAt: ORAJA(600),
+        },
+      ],
+      [
+        { entityId: "jovo", lastSyncedAt: ORAJA(-60) },
+        { entityId: "vetitve", lastSyncedAt: ORAJA(-5) },
+      ],
+    );
+    assert.deepEqual(kapott, []);
+  });
+
+  it("a lekérdezés az ablakra, az aktív változatra és az ACROPORA gazdájú, nem kizárt termékre szól", async () => {
+    const { hivasok } = await kor([], []);
+    const args = hivasok.find(
+      (hivas) => hivas.metodus === "productVariant.findMany",
+    )?.args as { where: unknown };
+    const ablak = {
+      gt: new Date(MOST_ORA.getTime() - 7 * 24 * 60 * 60 * 1000),
+      lte: MOST_ORA,
+    };
+    assert.deepEqual(args.where, {
+      isActive: true,
+      OR: [{ sellingSaleStartsAt: ablak }, { sellingSaleEndsAt: ablak }],
+      product: {
+        isActive: true,
+        webshopExcluded: false,
+        catalogAuthority: "ACROPORA",
+      },
+    });
   });
 });
 

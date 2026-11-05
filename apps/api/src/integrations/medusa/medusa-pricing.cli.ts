@@ -7,6 +7,10 @@ import {
   resolvePriceSource,
   type PriceOwner,
 } from "./medusa-price-source.js";
+import {
+  recordOwnPrice,
+  type OwnPriceHistoryTransaction,
+} from "../../products/price-history/own-price-history.js";
 
 import { MedusaConfigurationError } from "./medusa-admin.client.js";
 import { MedusaConnectionError } from "./medusa-connection.types.js";
@@ -51,7 +55,7 @@ import {
  * készlet-vetítés parancsánál: a gazda-ellenőrzés SZABÁLY, nem infrastruktúra,
  * tehát adatbázis nélkül is mérhetőnek kell lennie.
  */
-export interface PricingCliDatabase {
+export interface PricingCliDatabase extends OwnPriceHistoryTransaction {
   productVariant: {
     findMany(args: unknown): Promise<
       {
@@ -60,6 +64,9 @@ export interface PricingCliDatabase {
         productId: string;
         sellingGrossPrice: PrismaTypes.Decimal | null;
         sellingPriceCurrency: string | null;
+        sellingSaleGrossPrice: PrismaTypes.Decimal | null;
+        sellingSaleStartsAt: Date | null;
+        sellingSaleEndsAt: Date | null;
         unasVariantExtraGrossPrice: PrismaTypes.Decimal | null;
       }[]
     >;
@@ -91,6 +98,18 @@ export interface PricingCliDatabase {
 export interface PricingTarget {
   osProductId: string;
   sku: string;
+  /**
+   * A SAJÁT ÁR KÉPE AZ ÁRELŐZMÉNYHEZ (T4.1-D3, akció 2. szelet), vagy `null`, ha
+   * az ár a tükörből jött (annak az előzményét a UNAS szinkron írja). A rendes ár
+   * ÉS a futó akció ára együtt: az előzmény azt rögzíti, amit a bolt mutat, és a
+   * bolt az akció árát mutatja, amíg fut.
+   */
+  ownHistory: {
+    variantId: string;
+    currency: string;
+    grossPrice: PrismaTypes.Decimal;
+    saleGrossPrice: PrismaTypes.Decimal | null;
+  } | null;
   /** Honnan jött az ár. A jelentés ezt írja ki, és nem a hívó találgatja. */
   source: PriceOwner;
   /**
@@ -164,6 +183,9 @@ export async function resolvePricingTargets(
     productId: true,
     sellingGrossPrice: true,
     sellingPriceCurrency: true,
+    sellingSaleGrossPrice: true,
+    sellingSaleStartsAt: true,
+    sellingSaleEndsAt: true,
     /**
      * A VALTOZAT FELARA. A tukor ara TERMEK-szintu, tehat enelkul egy termek
      * minden valtozata ugyanazt a bruttot kapna -- es a dragabb valtozat az
@@ -241,6 +263,7 @@ export async function resolvePricingTargets(
         sellingGrossPrice: variant.sellingGrossPrice,
         sellingPriceCurrency: variant.sellingPriceCurrency,
       },
+      ownSale: variant,
       variantSurcharge: variant.unasVariantExtraGrossPrice,
       now,
     });
@@ -252,9 +275,26 @@ export async function resolvePricingTargets(
       continue;
     }
 
+    const own = decision.source === "own" || decision.source === "own-sale";
     targets.push({
       osProductId: variant.productId,
       sku: variant.sku,
+      // a saját ág csak kitöltött saját árral ad döntést (`own-price-missing`),
+      // a pénznemet pedig a policy követeli meg az írás előtt
+      ownHistory:
+        own &&
+        variant.sellingGrossPrice !== null &&
+        variant.sellingPriceCurrency !== null
+          ? {
+              variantId: variant.id,
+              currency: variant.sellingPriceCurrency,
+              grossPrice: variant.sellingGrossPrice,
+              saleGrossPrice:
+                decision.source === "own-sale"
+                  ? variant.sellingSaleGrossPrice
+                  : null,
+            }
+          : null,
       source: decision.source,
       surcharge: decision.surcharge,
       price: decision.price,
@@ -315,6 +355,7 @@ export async function runPricingCli(
     {
       resolve: (argument) => resolvePricingTargets(argument, database),
       project: (target) => service.project(target),
+      record: (target) => recordShownPrice(database, target),
     },
     out,
   );
@@ -333,6 +374,8 @@ export async function priceTargets(
     project(
       target: PricingTarget,
     ): ReturnType<MedusaPricingProjectionService["project"]>;
+    /** a bolt által mutatott saját ár az előzménybe, a SIKERES vetítés után */
+    record(target: PricingTarget): Promise<unknown>;
   },
   out: {
     stdout(value: string): void;
@@ -365,6 +408,25 @@ export async function priceTargets(
         continue;
       }
 
+      /*
+        AZ ELŐZMÉNY A BOLT ÍRÁSA UTÁN (T4.1-D3, akció 2. szelet): a sor azt
+        állítja, hogy a vevő ezt az árat látta, tehát csak akkor keletkezik, ha
+        a bolt már ezt mutatja. A bukása kudarc: a termék esedékes marad, a
+        következő kör a változatlan bolti árat (`no-change`) és a hiányzó sort
+        is újra próbálja.
+      */
+      try {
+        await deps.record(target);
+      } catch (error) {
+        const fajta = error instanceof Error ? error.name : "UNKNOWN";
+        out.stderr(
+          `${target.sku}: az ar kiment, az elozmeny-sor NEM irodott (${fajta})\n`,
+        );
+        out.failed?.(argument, `${target.sku}: price-history-not-written`);
+        failed += 1;
+        continue;
+      }
+
       out.stdout(
         `${target.sku}: ${outcome.report.result}\n` +
           `      ${describePricing(outcome.report)}\n`,
@@ -373,6 +435,27 @@ export async function priceTargets(
   }
 
   return failed ? 1 : 0;
+}
+
+/**
+ * A SAJÁT ÁRÚ VÁLTOZAT BOLTI ÁRA AZ ELŐZMÉNYBE (`recordOwnPrice`: sor csak
+ * változáskor). A tükörből vetített árnál nem ír: annak az előzménye a UNAS
+ * szinkroné. Az időpont a rögzítésé: ekkor már a bolt mutatja az árat.
+ */
+export function recordShownPrice(
+  database: OwnPriceHistoryTransaction,
+  target: PricingTarget,
+  now: Date = new Date(),
+): Promise<"written" | "unchanged" | "mirror"> {
+  if (!target.ownHistory) return Promise.resolve("mirror");
+  return recordOwnPrice(database, {
+    productId: target.osProductId,
+    variantId: target.ownHistory.variantId,
+    currency: target.ownHistory.currency,
+    grossPrice: target.ownHistory.grossPrice,
+    saleGrossPrice: target.ownHistory.saleGrossPrice,
+    observedAt: now,
+  });
 }
 
 if (
