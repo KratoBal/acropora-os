@@ -11,6 +11,7 @@ import type {
 } from "@acropora/types";
 
 import { withUniqueCode } from "../common/unique-code.util.js";
+import { customerSearchPattern } from "../customers/customers.repository.js";
 import { retryOnSerializationConflict } from "../common/transaction-retry.util.js";
 import { isPrismaUniqueConstraintViolation } from "../common/prisma-error.util.js";
 import { resolveAquariumVolume } from "./aquarium-volume.js";
@@ -189,17 +190,17 @@ function reefClubMark(row: {
 const INTERNAL_ROWS: Prisma.AquariumWhereInput = { ownerAccountId: null };
 
 /**
- * AZ AKVÁRIUM VEVŐ-VÁLASZTÓJÁNAK SZŰRŐJE (tiszta függvény, hogy külön mérhető legyen): aktív ügyfél, a névre keresve. NINCS
- * benne `partner` kulcs: a partner-kötést viselő sor (az egyesített partner) is ajánlható, lásd `searchSelectableCustomers`.
+ * AZ AKVÁRIUM VEVŐ-VÁLASZTÓJÁNAK SZŰRŐJE (tiszta függvény, hogy külön mérhető legyen): aktív ügyfél, és ha a névkeresés
+ * azonosítókat adott (`matchingCustomerIds`), csak ezek. NINCS benne `partner` kulcs: a partner-kötést viselő sor (az egyesített
+ * partner) is ajánlható, lásd `searchSelectableCustomers`. A névkeresés maga nem itt van: az ékezet- és kisbetű-független
+ * egyezést az adatbázis `unaccent`-je adja (`matchingCustomerIds`), a Prisma `contains` az ékezetre nem az.
  */
 export function selectableCustomersWhere(
-  search?: string,
+  matchingCustomerIds?: readonly string[] | null,
 ): Prisma.CustomerWhereInput {
   return {
     isActive: true,
-    ...(search
-      ? { displayName: { contains: search, mode: "insensitive" } }
-      : {}),
+    ...(matchingCustomerIds ? { id: { in: [...matchingCustomerIds] } } : {}),
   };
 }
 
@@ -311,8 +312,11 @@ export class AquariumsRepository {
   async searchSelectableCustomers(
     search?: string,
   ): Promise<AquariumSelectableCustomerListResponse> {
+    const matchingIds = search?.trim()
+      ? await this.matchingCustomerIdsByName(search)
+      : null;
     const rows = await prisma.customer.findMany({
-      where: selectableCustomersWhere(search),
+      where: selectableCustomersWhere(matchingIds),
       select: {
         id: true,
         displayName: true,
@@ -332,6 +336,21 @@ export class AquariumsRepository {
         city: row.addresses[0]?.city,
       })),
     };
+  }
+
+  /**
+   * A NÉVRE EGYEZŐ AKTÍV ÜGYFELEK AZONOSÍTÓI, ékezet- és kisbetű-függetlenül (`unaccent` mindkét oldalon, mint a vevő-lista
+   * keresése, `customers.repository.ts` `searchCustomerIds`): "Fovarosi" megtalálja a "Fővárosi" nevet. A szöveg `%` és `_`
+   * jelei szó szerint értendők (`customerSearchPattern`).
+   */
+  private async matchingCustomerIdsByName(search: string): Promise<string[]> {
+    const pattern = customerSearchPattern(search);
+    const rows = await prisma.$queryRaw<{ id: string }[]>`
+      SELECT "id" FROM "Customer"
+      WHERE "isActive" = true
+        AND unaccent("displayName") ILIKE unaccent(${pattern}::text)
+    `;
+    return rows.map((row) => row.id);
   }
 
   /**
