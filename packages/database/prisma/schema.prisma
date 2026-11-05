@@ -7465,6 +7465,25 @@ model PaidMarkRun {
   @@index([source, startedAt])
 }
 
+/// A NAPI JELÖLÉS EGY FIGYELMET KÉRŐ SORA, AMIT EGY EMBER KÉZZEL RENDEZETTNEK JELÖLT (6fd8c574; Balázs, 2026-11-05
+/// 16:07 UTC): például a cmfx-ben kiállított számla, amit a Számlázz.hu nem ismer, és a kifizetettet a cmfx-ben kézzel
+/// jelölték. Amíg a sor áll, a lap a futás figyelmet kérő tételei közül kiveszi, és a „kézzel rendezve” részben mutatja
+/// (ki, mikor). A visszavonás törli a sort; mindkét lépés AuditLog-sort ír (ki, mikor), tehát a történet ott él.
+model PaidMarkAttentionClosure {
+  id         String                    @id @default(cuid())
+  source     OutgoingPaymentMarkSource
+  /// A tétel tartós kulcsa: banki átutalásnál a jóváírás, egyébként a hivatkozás (számlaszám).
+  key        String
+  /// A tétel oka a futásban (NOT_FOUND, UNRESOLVED).
+  reason     String
+  /// A tétel hivatkozása a lezáráskor, a lapnak (számlaszám vagy a jóváírás napja).
+  reference  String
+  closedAt   DateTime                  @default(now())
+  closedById String
+
+  @@unique([source, key, reason])
+}
+
 /// A TÁROLT SZÁMLÁZZ.HU FEED VISSZATÖLTÉSE (6fd8c574; acrobot 43766): egy feedből hiányzó szám, és amit a Számlázz.hu
 /// Agent a lekérdezésére felelt. A száraz kör tölti (WOULD_STORE, NOT_FOUND, ERROR, ...), a behúzás a WOULD_STORE sort
 /// STORED-ra lépteti. Ettől folytatható: a végleges választ adó számot a következő kör nem kérdezi újra. A válasz XML-je

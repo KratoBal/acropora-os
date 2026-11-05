@@ -2,7 +2,12 @@ import { Injectable } from "@nestjs/common";
 import { Prisma, prisma } from "@acropora/database";
 
 import type { PaymentMarkSource } from "../../integrations/szamlazz/outgoing-payment-marks.js";
-import type { PaidMarkPlanned, PaidMarksRunResult } from "./paid-marks-auto.js";
+import { splitAttention } from "./paid-mark-attention-closure.js";
+import type {
+  PaidMarkAttentionItem,
+  PaidMarkPlanned,
+  PaidMarksRunResult,
+} from "./paid-marks-auto.js";
 
 /** Who started a run: the daily timer, or a person with "Futtatás most" (e64540fd). */
 export type PaidMarkTrigger =
@@ -74,7 +79,11 @@ export class PaidMarkRunRepository {
     });
   }
 
-  /** The latest run of every source that has one. */
+  /**
+   * The latest run of every source that has one. A line a person closed by hand ("Kézzel rendezve", 6fd8c574) is
+   * not in `attention` (nor in `attentionCount`) but in `settled`, with who and when: the closure takes effect at once,
+   * and so does its undo, without a new run.
+   */
   async latest() {
     const rows = await prisma.paidMarkRun.findMany({
       orderBy: { startedAt: "desc" },
@@ -95,10 +104,40 @@ export class PaidMarkRunRepository {
         planned: true,
       },
     });
-    return rows.map((row) => ({
-      ...row,
-      startedAt: row.startedAt.toISOString(),
-      finishedAt: row.finishedAt?.toISOString() ?? null,
-    }));
+    const closures = await prisma.paidMarkAttentionClosure.findMany({
+      select: {
+        source: true,
+        key: true,
+        reason: true,
+        closedAt: true,
+        closedById: true,
+      },
+    });
+    const users = new Map(
+      (
+        await prisma.user.findMany({
+          where: {
+            id: { in: [...new Set(closures.map((c) => c.closedById))] },
+          },
+          select: { id: true, displayName: true, nickname: true },
+        })
+      ).map((u) => [u.id, u.nickname || u.displayName]),
+    );
+    return rows.map((row) => {
+      const { open, settled } = splitAttention(
+        row.source,
+        row.attention as unknown as PaidMarkAttentionItem[],
+        closures,
+        (id) => users.get(id) ?? id,
+      );
+      return {
+        ...row,
+        attention: open,
+        attentionCount: open.length,
+        settled,
+        startedAt: row.startedAt.toISOString(),
+        finishedAt: row.finishedAt?.toISOString() ?? null,
+      };
+    });
   }
 }

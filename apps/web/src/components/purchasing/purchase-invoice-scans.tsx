@@ -2,10 +2,9 @@
 
 import {
   Alert,
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
+  PilotButton,
+  PilotCard,
+  PilotCardHeader,
   PilotFileInput,
 } from "@acropora/ui";
 import type { PurchaseInvoiceScan } from "@acropora/types";
@@ -72,11 +71,9 @@ export function PurchaseInvoiceScans({
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <h2 className="text-sm font-semibold text-dusk-900">Számlakép</h2>
-      </CardHeader>
-      <CardContent className="space-y-3">
+    <PilotCard>
+      <PilotCardHeader title="Számlakép" />
+      <div className="space-y-3 p-5">
         {error ? (
           <Alert variant="danger" title="Hiba történt" description={error} />
         ) : null}
@@ -84,13 +81,13 @@ export function PurchaseInvoiceScans({
           <ul className="space-y-1 text-sm">
             {scans.map((scan) => (
               <li key={scan.id} className="flex flex-wrap items-center gap-3">
-                <Button
+                <PilotButton
                   variant="ghost"
                   aria-label={`${scan.fileName} megnyitása`}
                   onClick={() => void open(scan)}
                 >
                   {scan.fileName}
-                </Button>
+                </PilotButton>
                 <span className="text-xs text-dusk-500">
                   {DAY.format(new Date(scan.createdAt))}
                 </span>
@@ -117,7 +114,7 @@ export function PurchaseInvoiceScans({
             />
           </label>
         ) : null}
-      </CardContent>
-    </Card>
+      </div>
+    </PilotCard>
   );
 }

@@ -131,6 +131,8 @@ export type BankTransferDecision =
       day: string;
       refusal: BankTransferRefusal;
       detail: string;
+      /** CREDIT_USED by another source: that source's marks on this credit, with their state (6fd8c574) */
+      usedElsewhere?: readonly { source: string; state: string }[];
     };
 
 /** One customer: the same Hungarian tax base when every invoice has one, else the same name. */
@@ -173,21 +175,26 @@ export function decideBankTransfer(
   const refuse = (
     refusal: BankTransferRefusal,
     detail: string,
+    usedElsewhere?: readonly { source: string; state: string }[],
   ): BankTransferDecision => ({
     markable: false,
     creditId: credit.id,
     day,
     refusal,
     detail,
+    ...(usedElsewhere ? { usedElsewhere } : {}),
   });
   const used = (credit.existingMarks ?? []).filter(
     (mark) => mark.state !== "FAILED",
   );
-  const otherSource = used.find((mark) => mark.source !== "BANK_TRANSFER");
-  if (otherSource)
+  const otherSources = used.filter((mark) => mark.source !== "BANK_TRANSFER");
+  if (otherSources.length > 0)
     return refuse(
       "CREDIT_USED",
-      `${otherSource.source}: ${otherSource.invoiceNumber}`,
+      otherSources
+        .map((m) => `${m.source}: ${m.invoiceNumber} (${m.state})`)
+        .join(", "),
+      otherSources.map(({ source, state }) => ({ source, state })),
     );
   const refs = remittanceInvoiceRefs(credit.narrative);
   if (refs.length === 0) return refuse("NO_REFERENCE", "");
@@ -302,7 +309,25 @@ export function decideBankTransfer(
   };
 }
 
-/** What a person must look at: every refusal but a transfer naming none of ours, or one already paid. */
+/**
+ * A credit another source's mark already closed, and closed for sure: the money went where Számlázz.hu says it went
+ * (Balázs, 2026-11-05 16:07 UTC; 6fd8c574). Only a WRITTEN or ALREADY_PAID mark: a PLANNED or UNKNOWN one is a write
+ * not known to have happened, and a person must still look.
+ */
+const SETTLED_MARK_STATES: ReadonlySet<string> = new Set([
+  "WRITTEN",
+  "ALREADY_PAID",
+]);
+const settledElsewhere = (decision: BankTransferDecision) =>
+  !decision.markable &&
+  decision.refusal === "CREDIT_USED" &&
+  Boolean(decision.usedElsewhere?.length) &&
+  decision.usedElsewhere!.every((mark) => SETTLED_MARK_STATES.has(mark.state));
+
+/**
+ * What a person must look at: every refusal but a transfer naming none of ours, one already paid, or one another
+ * source's written mark closed. The key is the credit: the reference (the day) is not one transfer's.
+ */
 export function bankTransferPlanFrom(
   decisions: readonly BankTransferDecision[],
 ): PaidMarkPlan {
@@ -312,7 +337,9 @@ export function bankTransferPlanFrom(
     exceptions.push({
       reference: `jóváírás ${decision.day}`,
       reason: decision.refusal,
-      attention: decision.refusal !== "ALREADY_PAID",
+      key: decision.creditId,
+      attention:
+        decision.refusal !== "ALREADY_PAID" && !settledElsewhere(decision),
       ...(decision.detail ? { detail: decision.detail } : {}),
     });
   }

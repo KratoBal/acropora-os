@@ -8,7 +8,13 @@ import {
   Skeleton,
 } from "@acropora/ui";
 import { formatMoney, hasPermission, PERMISSIONS } from "@acropora/types";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import {
@@ -19,6 +25,8 @@ import {
 import { formatDateTimeHu, formatTimeHu } from "@/lib/format/date";
 import {
   paidMarksApi,
+  type FeedPullLine,
+  type PaidMarkAttentionItem,
   type PaidMarkRunView,
   type PaidMarkSource,
   type PaidMarksMode,
@@ -26,7 +34,12 @@ import {
 } from "@/lib/api/paid-marks";
 
 import { FeedBackfillPanel } from "./feed-backfill-panel";
-import { canPullIntoFeed, FeedPullButton } from "./feed-pull-button";
+import {
+  canPullIntoFeed,
+  FeedPullButton,
+  ManualCloseButton,
+  useFeedPreview,
+} from "./feed-pull-button";
 import { SettlementTabs } from "./settlement-tabs";
 
 const errorText = (cause: unknown) =>
@@ -50,6 +63,142 @@ function ModeBadge({ mode }: { mode: PaidMarksMode }) {
   return <PilotBadge variant="grey">Kikapcsolva</PilotBadge>;
 }
 
+/**
+ * Egy figyelmet kérő sor és a gombja (6fd8c574). A „nincs a Számlázz.hu feedben” sornál a Számlázz.hu válasza dönt: ha
+ * ismeri a számlát, „Lekérés”; ha nem, a sor kimondja, hogy cmfx-ben kiállított számla, és ott a „Kézzel rendezve”. A
+ * banki UNRESOLVED sor (a közlemény száma nincs a feedben) szintén kézzel rendezhető.
+ */
+function AttentionLine({
+  source,
+  item,
+  canPull,
+  answers,
+  token,
+  onChanged,
+}: {
+  source: PaidMarkSource;
+  item: PaidMarkAttentionItem;
+  canPull: boolean;
+  answers: ReadonlyMap<string, FeedPullLine> | null;
+  token: string;
+  onChanged: () => void;
+}) {
+  const close = (
+    <ManualCloseButton
+      source={source}
+      item={item}
+      token={token}
+      onDone={onChanged}
+    />
+  );
+  let action: ReactNode = null;
+  if (canPull && canPullIntoFeed(item)) {
+    const answer = answers?.get(item.reference);
+    if (answers === null)
+      action = (
+        <span className="ml-2 text-pilot-grey-500">
+          Számlázz.hu: ellenőrzés…
+        </span>
+      );
+    else if (answer?.outcome === "WOULD_STORE")
+      action = (
+        <FeedPullButton
+          invoiceNumber={item.reference}
+          token={token}
+          known={answer}
+        />
+      );
+    else if (answer?.outcome === "NOT_FOUND")
+      action = (
+        <>
+          <span className="ml-1" data-testid="not-in-szamlazz">
+            · a Számlázz.hu nem ismeri: cmfx-ben kiállított számla, a
+            kifizetettet ott kell kézzel jelölni
+          </span>
+          {close}
+        </>
+      );
+    else
+      action = <FeedPullButton invoiceNumber={item.reference} token={token} />;
+  } else if (canPull && item.reason === "UNRESOLVED") action = close;
+  return (
+    <li>
+      {item.reference}: {item.reason}
+      {item.detail ? ` (${item.detail})` : ""}
+      {action}
+    </li>
+  );
+}
+
+/** A kézzel rendezett sorok: ki és mikor zárta le, és a visszavonás. */
+function SettledList({
+  source,
+  settled,
+  canUndo,
+  token,
+  onChanged,
+}: {
+  source: PaidMarkSource;
+  settled: PaidMarkRunView["settled"];
+  canUndo: boolean;
+  token: string;
+  onChanged: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (settled.length === 0) return null;
+  const undo = async (item: PaidMarkAttentionItem) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await paidMarksApi.closeAttention(token, {
+        source,
+        key: item.key ?? item.reference,
+        reason: item.reason,
+        closed: false,
+      });
+      onChanged();
+    } catch (cause) {
+      setError(errorText(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="space-y-1" data-testid={`paid-mark-settled-${source}`}>
+      <p className="text-xs font-semibold text-pilot-grey-700">
+        Kézzel rendezve: {settled.length}
+      </p>
+      <ul className="space-y-1 text-xs text-pilot-grey-600">
+        {settled.map((item) => (
+          <li key={`${item.key ?? item.reference}-${item.reason}`}>
+            {item.reference}: {item.reason} · {item.closedBy},{" "}
+            {formatDateTimeHu(item.closedAt)}
+            {canUndo ? (
+              <span className="ml-2 inline-flex">
+                <PilotButton
+                  variant="secondary"
+                  disabled={busy}
+                  onClick={() => void undo(item)}
+                >
+                  Visszavonás
+                </PilotButton>
+              </span>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+      {error ? (
+        <Alert
+          variant="danger"
+          title="A visszavonás nem sikerült"
+          description={error}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 /** Egy forrás legutóbbi futása: mikor, ki indította, mit írt, mit tervezne, mi kér figyelmet. */
 function SourceRun({
   source,
@@ -57,14 +206,24 @@ function SourceRun({
   run,
   canPull,
   token,
+  onChanged,
 }: {
   source: PaidMarkSource;
   mode: PaidMarksMode;
   run: PaidMarkRunView | undefined;
-  /** a „Lekérés a Számlázz.hu-ból” joga (a „Futtatás most”-é) */
+  /** a „Lekérés a Számlázz.hu-ból” és a „Kézzel rendezve” joga (a „Futtatás most”-é) */
   canPull: boolean;
   token: string;
+  /** egy lezárás vagy visszavonás után a futások újraolvasása */
+  onChanged: () => void;
 }) {
+  const answers = useFeedPreview(
+    (run?.attention ?? [])
+      .filter((item) => canPullIntoFeed(item))
+      .map((item) => item.reference),
+    token,
+    canPull,
+  );
   return (
     <li
       className="space-y-3 rounded-2xl border border-pilot-grey-200 bg-white px-5 py-4"
@@ -106,20 +265,26 @@ function SourceRun({
               </p>
               <ul className="space-y-1 text-xs text-pilot-grey-700">
                 {run.attention.map((item) => (
-                  <li key={`${item.reference}-${item.reason}`}>
-                    {item.reference}: {item.reason}
-                    {item.detail ? ` (${item.detail})` : ""}
-                    {canPull && canPullIntoFeed(item) ? (
-                      <FeedPullButton
-                        invoiceNumber={item.reference}
-                        token={token}
-                      />
-                    ) : null}
-                  </li>
+                  <AttentionLine
+                    key={`${item.key ?? item.reference}-${item.reason}`}
+                    source={source}
+                    item={item}
+                    canPull={canPull}
+                    answers={answers}
+                    token={token}
+                    onChanged={onChanged}
+                  />
                 ))}
               </ul>
             </div>
           ) : null}
+          <SettledList
+            source={source}
+            settled={run.settled ?? []}
+            canUndo={canPull}
+            token={token}
+            onChanged={onChanged}
+          />
         </>
       )}
     </li>
@@ -292,6 +457,7 @@ export function PaidMarksPage() {
               run={latest.get(source)}
               canPull={canRun}
               token={token}
+              onChanged={() => void load()}
             />
           ))}
         </ul>

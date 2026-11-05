@@ -406,6 +406,83 @@ describe("the plan for the daily run", () => {
   });
 });
 
+/*
+  6fd8c574 (Balázs, 2026-11-05 16:07 UTC): WHAT TURNS THIS RED: a credit another source's WRITTEN or ALREADY_PAID mark
+  closed still asking for a person every morning; a PLANNED or UNKNOWN one (a write not known to have happened), or a
+  mix, no longer asking; the credit used by our own marks for other invoices let through; the line without the credit
+  as its key (the reference is only the day: two transfers of a day would share it).
+*/
+describe("a credit another source closed (6fd8c574)", () => {
+  const usedBy = (...states: string[]) =>
+    decideBankTransfer(
+      credit({
+        existingMarks: states.map((state, i) => ({
+          source: i === 0 ? "GLS_COD" : "FOXPOST",
+          invoiceNumber: `ACRW-2026/0054${i}`,
+          state,
+        })),
+      }),
+      balazs(),
+    );
+  const attentionOf = (decision: ReturnType<typeof decideBankTransfer>) => {
+    const [only] = bankTransferPlanFrom([decision]).exceptions;
+    return [only?.reason, only?.attention];
+  };
+
+  it("WRITTEN or ALREADY_PAID: counted, not listed", () => {
+    assert.deepEqual(attentionOf(usedBy("WRITTEN")), ["CREDIT_USED", false]);
+    assert.deepEqual(attentionOf(usedBy("ALREADY_PAID")), [
+      "CREDIT_USED",
+      false,
+    ]);
+    assert.deepEqual(attentionOf(usedBy("WRITTEN", "ALREADY_PAID")), [
+      "CREDIT_USED",
+      false,
+    ]);
+  });
+
+  it("PLANNED, UNKNOWN or a mix: a person still looks", () => {
+    assert.deepEqual(attentionOf(usedBy("PLANNED")), ["CREDIT_USED", true]);
+    assert.deepEqual(attentionOf(usedBy("UNKNOWN")), ["CREDIT_USED", true]);
+    assert.deepEqual(attentionOf(usedBy("WRITTEN", "PLANNED")), [
+      "CREDIT_USED",
+      true,
+    ]);
+  });
+
+  it("the detail names every other source's mark with its state", () => {
+    const decision = usedBy("WRITTEN", "PLANNED");
+    assert.equal(
+      !decision.markable && decision.detail,
+      "GLS_COD: ACRW-2026/00540 (WRITTEN), FOXPOST: ACRW-2026/00541 (PLANNED)",
+    );
+  });
+
+  it("our own written mark on other invoices: still a person's", () => {
+    const decision = decideBankTransfer(
+      credit({
+        existingMarks: [
+          {
+            source: "BANK_TRANSFER",
+            invoiceNumber: "ACRW-2026/00090",
+            state: "WRITTEN",
+          },
+        ],
+      }),
+      balazs(),
+    );
+    assert.deepEqual(attentionOf(decision), ["CREDIT_USED", true]);
+  });
+
+  it("the line's key is the credit", () => {
+    const [line] = bankTransferPlanFrom([
+      decideBankTransfer(credit({ id: "bt-9", amount: "1.00" }), balazs()),
+    ]).exceptions;
+    assert.equal(line?.reference, `jóváírás ${DAY}`);
+    assert.equal(line?.key, "bt-9");
+  });
+});
+
 describe("the daily run's writer (barracuda, #2192 v2)", () => {
   it("BANK_TRANSFER writes its own way: one credit at a time, under its lock", () => {
     const source = PAID_MARK_SOURCES.find((s) => s.source === "BANK_TRANSFER");

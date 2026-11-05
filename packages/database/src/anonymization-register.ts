@@ -1115,6 +1115,12 @@ export const ANONYMIZATION_REGISTER: Readonly<
     triggeredById: "identifier",
     planned: "json",
   },
+  PaidMarkAttentionClosure: {
+    key: "identifier",
+    reason: "business",
+    reference: "identifier",
+    closedById: "identifier",
+  },
   SzamlazzFeedBackfillNumber: {
     number: "identifier",
     series: "business",
