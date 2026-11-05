@@ -749,6 +749,19 @@ export interface MedusaProblemReport {
   photos: { id: string; url: string; mime_type: string; size_bytes: number }[];
 }
 
+/** Egy vevői elállási nyilatkozat a boltból (V0.3): a vevő e-mailje szándékosan NINCS benne, a rendelésről olvasható. */
+export interface MedusaWithdrawal {
+  id: string;
+  order_id: string;
+  /** a nyilatkozatba beírt név (eltérhet a számlázási névtől) */
+  customer_name: string;
+  item_ids: string[];
+  status: string;
+  /** a beérkezés ideje: a bolt szerverének órája */
+  created_at: string;
+  pulled_at: string | null;
+}
+
 export interface MedusaOrderDetailRow {
   id: string;
   display_id: number;
@@ -1003,6 +1016,16 @@ export interface MedusaAdminClient {
   ): Promise<MedusaProblemReport[]>;
   /** A bejelentés lehúzva (`POST .../:id/pulled`); idempotens. */
   markProblemReportPulled(id: string): Promise<void>;
+  /**
+   * A VEVŐK ELÁLLÁSI NYILATKOZATAI (V0.3; `GET /admin/order-withdrawals`): a boltban tárolt, az OS által még le nem
+   * húzott nyilatkozatok, a legrégebbivel kezdve.
+   */
+  listWithdrawals(
+    status: "new" | "pulled",
+    limit: number,
+  ): Promise<MedusaWithdrawal[]>;
+  /** A nyilatkozat lehúzva (`POST .../:id/pulled`); idempotens. */
+  markWithdrawalPulled(id: string): Promise<void>;
   /** Egy rendelés részlete; nem létező azonosítóra `null`. */
   order(id: string): Promise<MedusaOrderDetailRow | null>;
   /** A rendelés üzleti státusza a történettel; ha nincs, `null`. */
@@ -2002,6 +2025,24 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
   async markProblemReportPulled(id: string): Promise<void> {
     await this.request<unknown>(
       `/admin/order-problem-reports/${encodeURIComponent(id)}/pulled`,
+      { method: "POST", body: JSON.stringify({}) },
+    );
+  }
+
+  async listWithdrawals(
+    status: "new" | "pulled",
+    limit: number,
+  ): Promise<MedusaWithdrawal[]> {
+    const params = new URLSearchParams({ status, limit: String(limit) });
+    const body = await this.request<{ withdrawals?: MedusaWithdrawal[] }>(
+      `/admin/order-withdrawals?${params.toString()}`,
+    );
+    return body.withdrawals ?? [];
+  }
+
+  async markWithdrawalPulled(id: string): Promise<void> {
+    await this.request<unknown>(
+      `/admin/order-withdrawals/${encodeURIComponent(id)}/pulled`,
       { method: "POST", body: JSON.stringify({}) },
     );
   }
