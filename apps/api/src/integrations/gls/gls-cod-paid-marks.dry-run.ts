@@ -40,7 +40,11 @@ const day = (value: Date) => value.toISOString().slice(0, 10);
  *     (`COD-2026.09.17/...`, measured on the September statement),
  *   - our invoices by number, from the forwarded outgoing invoices
  *     (`ExternalBillingDocument`): a row there has a feed version, so its
- *     payments are known once it was projected with them (acrobot 25910).
+ *     payments are known once it was projected with them (acrobot 25910),
+ *   - and, for the NOT_FOUND line a person reads, the same numbers stored under ANOTHER source (`elsewhere`,
+ *     number -> sources): "not in Számlázz.hu's feed at all" and "there, but only as eBIZ" need different hands
+ *     (Balázs's live run 2026-11-05: ACRW-2026/00469 NOT_FOUND while the GLS page showed it paired, from the OS's
+ *     own invoice table).
  */
 export async function loadGlsTransfers(from: string): Promise<
   {
@@ -48,6 +52,7 @@ export async function loadGlsTransfers(from: string): Promise<
     compensation: GlsCompensationInput | null;
     credits: { id: string; amount: Prisma.Decimal }[];
     invoices: Map<string, OutgoingInvoiceInput>;
+    elsewhere: Map<string, string[]>;
   }[]
 > {
   const reports = await prisma.glsCodReport.findMany({
@@ -98,6 +103,16 @@ export async function loadGlsTransfers(from: string): Promise<
       },
     ]),
   );
+  const elsewhere = new Map<string, string[]>();
+  for (const row of await prisma.externalBillingDocument.findMany({
+    where: { source: { not: "SZAMLAZZ" }, documentNumber: { in: numbers } },
+    select: { documentNumber: true, source: true },
+    orderBy: { source: "asc" },
+  })) {
+    const sources = elsewhere.get(row.documentNumber) ?? [];
+    if (!sources.includes(row.source)) sources.push(row.source);
+    elsewhere.set(row.documentNumber, sources);
+  }
   const out = [];
   for (const report of reports) {
     const transferDate = day(report.transferDate);
@@ -129,6 +144,7 @@ export async function loadGlsTransfers(from: string): Promise<
       compensation: letter,
       credits,
       invoices,
+      elsewhere,
     });
   }
   return out;

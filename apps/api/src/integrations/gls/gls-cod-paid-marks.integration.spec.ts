@@ -102,6 +102,7 @@ describe(
         gross: number,
         paymentsKnown: boolean | null,
         paid: number,
+        source = "SZAMLAZZ",
       ) =>
         prisma.externalBillingDocument.create({
           data: {
@@ -120,6 +121,7 @@ describe(
             lines: [],
             paymentsKnown,
             paidAmount: D(paid),
+            source,
           },
         });
       // vetítve, elem nélkül: nem fizetett
@@ -128,6 +130,8 @@ describe(
       await document("9902", "IT-99/00485", 27600, null, 0);
       // vetítve, a Számlázz.hu saját banki párosítása már rögzítette
       await document("9903", "IT-99/00481", 105831, true, 105831);
+      // the same number as eBIZ brought it: never an invoice to mark, but its NOT_FOUND line names it (2026-11-05)
+      await document("9904", "IT-99/00479", 27450, null, 0, "EBIZ");
     });
 
     after(async () => {
@@ -149,6 +153,11 @@ describe(
           (n) => transfer.invoices.get(n)?.paymentsKnown,
         ),
         [true, false, true],
+      );
+      assert.deepEqual([...transfer.elsewhere], [["IT-99/00479", ["EBIZ"]]]);
+      assert.equal(
+        transfer.invoices.get("IT-99/00479")?.grossAmount.toString(),
+        "27450",
       );
       const report = dryRunReport([decideGlsTransfer(transfer)]);
       assert.match(report, /IT-99\/00479\t27450 Ft\t2099-03-17\tutánvét/);
