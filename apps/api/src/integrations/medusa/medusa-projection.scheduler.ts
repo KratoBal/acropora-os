@@ -598,18 +598,20 @@ export class MedusaProjectionScheduler
       kotesek.map((sor) => [sor.entityId, sor.lastSyncedAt]),
     );
 
-    return sorok
-      .filter((sor) => {
-        if (!utoljara.has(sor.productId)) return false;
-        const vetitve = utoljara.get(sor.productId) ?? null;
-        const hatarok = [sor.saleStartsAt, sor.saleEndsAt].filter(
-          (hatar): hatar is Date => hatar !== null && hatar <= most,
-        );
-        return hatarok.some((hatar) => vetitve === null || hatar > vetitve);
-      })
-      .map((sor) => sor.productId)
-      // egy termék több változatának határa egy bejegyzés
-      .filter((id, i, ids) => ids.indexOf(id) === i);
+    return (
+      sorok
+        .filter((sor) => {
+          if (!utoljara.has(sor.productId)) return false;
+          const vetitve = utoljara.get(sor.productId) ?? null;
+          const hatarok = [sor.saleStartsAt, sor.saleEndsAt].filter(
+            (hatar): hatar is Date => hatar !== null && hatar <= most,
+          );
+          return hatarok.some((hatar) => vetitve === null || hatar > vetitve);
+        })
+        .map((sor) => sor.productId)
+        // egy termék több változatának határa egy bejegyzés
+        .filter((id, i, ids) => ids.indexOf(id) === i)
+    );
   }
 
   /**

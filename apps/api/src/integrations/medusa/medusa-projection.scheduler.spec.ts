@@ -846,9 +846,21 @@ describe("MedusaProjectionScheduler, a saját akció határa", () => {
   it("az elindult és a lejárt saját akció esedékes, a termék egyszer", async () => {
     const { kapott } = await kor(
       [
-        { productId: "indult", sellingSaleStartsAt: ORAJA(-10), sellingSaleEndsAt: ORAJA(600) },
-        { productId: "indult", sellingSaleStartsAt: ORAJA(-15), sellingSaleEndsAt: ORAJA(600) },
-        { productId: "lejart", sellingSaleStartsAt: ORAJA(-3000), sellingSaleEndsAt: ORAJA(-5) },
+        {
+          productId: "indult",
+          sellingSaleStartsAt: ORAJA(-10),
+          sellingSaleEndsAt: ORAJA(600),
+        },
+        {
+          productId: "indult",
+          sellingSaleStartsAt: ORAJA(-15),
+          sellingSaleEndsAt: ORAJA(600),
+        },
+        {
+          productId: "lejart",
+          sellingSaleStartsAt: ORAJA(-3000),
+          sellingSaleEndsAt: ORAJA(-5),
+        },
       ],
       [
         { entityId: "indult", lastSyncedAt: ORAJA(-60) },
@@ -861,8 +873,16 @@ describe("MedusaProjectionScheduler, a saját akció határa", () => {
   it("a jövőbeli és a már vetített saját határ nem esedékes", async () => {
     const { kapott } = await kor(
       [
-        { productId: "jovo", sellingSaleStartsAt: ORAJA(30), sellingSaleEndsAt: ORAJA(600) },
-        { productId: "vetitve", sellingSaleStartsAt: ORAJA(-20), sellingSaleEndsAt: ORAJA(600) },
+        {
+          productId: "jovo",
+          sellingSaleStartsAt: ORAJA(30),
+          sellingSaleEndsAt: ORAJA(600),
+        },
+        {
+          productId: "vetitve",
+          sellingSaleStartsAt: ORAJA(-20),
+          sellingSaleEndsAt: ORAJA(600),
+        },
       ],
       [
         { entityId: "jovo", lastSyncedAt: ORAJA(-60) },

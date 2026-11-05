@@ -6,6 +6,7 @@ import { Prisma } from "@acropora/database";
 import {
   describePricing,
   priceTargets,
+  recordShownPrice,
   resolvePricingTargets,
   runPricingCli,
   type PricingCliDatabase,
@@ -204,6 +205,123 @@ describe("Ár-parancs: kit vetítünk", () => {
       .select;
     assert.equal(select.sellingGrossPrice, true);
     assert.equal(select.sellingPriceCurrency, true);
+    assert.equal(select.sellingSaleGrossPrice, true);
+    assert.equal(select.sellingSaleStartsAt, true);
+    assert.equal(select.sellingSaleEndsAt, true);
+  });
+});
+
+/*
+  A SAJÁT AKCIÓ A PARANCSBAN (T4.1-D3, akció 2. szelet). MI PIROSÍT: a futó
+  saját akció mellett a rendes ár megy; az előzmény képe nem a bolti árat
+  hordozza (akció alatt az akciós árat is); a tükörből vetített ár saját sort
+  ír; vagy a rögzítő tükör-célpontnál adatbázishoz nyúl.
+*/
+describe("Ár-parancs: a saját akció", () => {
+  const MOST = new Date("2026-11-12T10:00:00Z");
+  const akcios = {
+    id: "var-1",
+    sku: "STAGEPROOF0002",
+    productId: "prod-os-1",
+    sellingGrossPrice: new Prisma.Decimal("12990"),
+    sellingPriceCurrency: "HUF",
+    sellingSaleGrossPrice: new Prisma.Decimal("9990"),
+    sellingSaleStartsAt: new Date("2026-11-10T00:00:00Z"),
+    sellingSaleEndsAt: new Date("2026-11-17T00:00:00Z"),
+    unasVariantExtraGrossPrice: null,
+  };
+
+  it("futó akciónál az akciós ár megy, és az előzmény képe a rendes és az akciós ár", async () => {
+    const { targets } = await resolvePricingTargets(
+      "sku:STAGEPROOF0002",
+      db({ variants: [akcios] }),
+      MOST,
+    );
+    assert.equal(targets[0]!.source, "own-sale");
+    assert.equal(targets[0]!.price.sellingGrossPrice?.toString(), "9990");
+    assert.deepEqual(
+      {
+        ...targets[0]!.ownHistory,
+        grossPrice: targets[0]!.ownHistory?.grossPrice.toString(),
+        saleGrossPrice: targets[0]!.ownHistory?.saleGrossPrice?.toString(),
+      },
+      {
+        variantId: "var-1",
+        currency: "HUF",
+        grossPrice: "12990",
+        saleGrossPrice: "9990",
+      },
+    );
+  });
+
+  it("az akció vége után a rendes ár megy, és az előzmény képe akció nélküli", async () => {
+    const { targets } = await resolvePricingTargets(
+      "sku:STAGEPROOF0002",
+      db({ variants: [akcios] }),
+      new Date("2026-11-17T00:00:00Z"),
+    );
+    assert.equal(targets[0]!.source, "own");
+    assert.equal(targets[0]!.price.sellingGrossPrice?.toString(), "12990");
+    assert.equal(targets[0]!.ownHistory?.saleGrossPrice, null);
+  });
+
+  it("a tükörből vetített árnak nincs saját előzmény-képe, és a rögzítő nem ír", async () => {
+    const { targets } = await resolvePricingTargets(
+      "sku:STAGEPROOF0002",
+      db({
+        authority: "UNAS",
+        mirror: {
+          productId: "prod-os-1",
+          grossPrice: new Prisma.Decimal("7800"),
+          currency: null,
+          saleGrossPrice: null,
+          saleStartsAt: null,
+          saleEndsAt: null,
+        },
+      }),
+      MOST,
+    );
+    assert.equal(targets[0]!.ownHistory, null);
+    let hivas = 0;
+    const tx = {
+      productPriceHistory: {
+        findFirst: async () => {
+          hivas += 1;
+          return null;
+        },
+        create: async () => {
+          hivas += 1;
+          return {};
+        },
+      },
+    };
+    assert.equal(await recordShownPrice(tx, targets[0]!, MOST), "mirror");
+    assert.equal(hivas, 0);
+  });
+
+  it("a saját ár sora OWN, a változaton, a bolti akciós árral, a rögzítés idejével", async () => {
+    const { targets } = await resolvePricingTargets(
+      "sku:STAGEPROOF0002",
+      db({ variants: [akcios] }),
+      MOST,
+    );
+    const irt: unknown[] = [];
+    const tx = {
+      productPriceHistory: {
+        findFirst: async () => null,
+        create: async (args: unknown) => {
+          irt.push(args);
+          return {};
+        },
+      },
+    };
+    assert.equal(await recordShownPrice(tx, targets[0]!, MOST), "written");
+    const data = (irt[0] as { data: Record<string, unknown> }).data;
+    assert.equal(data.source, "OWN");
+    assert.equal(data.variantId, "var-1");
+    assert.equal(String(data.grossPrice), "12990");
+    assert.equal(String(data.saleGrossPrice), "9990");
+    assert.equal((data.observedAt as Date).getTime(), MOST.getTime());
   });
 });
 
@@ -345,5 +463,65 @@ describe("Ár-parancs: a kudarc termékenként jelződik", () => {
       ["prod-feloldas", "prod-feloldas: nincs kotes"],
       ["prod-megallt", "prod-megallt-sku: tax-inclusive-not-set"],
     ]);
+  });
+
+  /*
+    AZ ELŐZMÉNY A BOLT ÍRÁSA UTÁN (T4.1-D3). MI PIROSÍT: a megállt változat
+    előzmény-sort kap (a bolt nem mutatja az árat); a sikeres nem kap; vagy az
+    előzmény bukása sikerként megy át (a termék nem marad esedékes).
+  */
+  it("az előzmény csak a kiment árra íródik, és a bukása kudarc", async () => {
+    const rogzitett: string[] = [];
+    const jelzett: [string, string][] = [];
+    const stdout: string[] = [];
+    const kod = await priceTargets(
+      ["prod-ok", "prod-megallt", "prod-elozmeny"],
+      {
+        resolve: async (argument) => ({
+          targets: [cel(argument, `${argument}-sku`)],
+          errors: [],
+        }),
+        record: async (target) => {
+          if (target.sku === "prod-elozmeny-sku")
+            throw new TypeError("adatbazis");
+          rogzitett.push(target.sku);
+          return "written";
+        },
+        project: async (target) =>
+          target.sku === "prod-megallt-sku"
+            ? {
+                action: "stopped" as const,
+                reason: "tax-inclusive-not-set" as never,
+                details: "a regio adobeallitasa",
+              }
+            : {
+                action: "projected" as const,
+                report: {
+                  sku: target.sku,
+                  sourceAmount: "1000",
+                  sourceCurrency: "HUF",
+                  medusaAmount: 1000,
+                  medusaCurrencyCode: "huf",
+                  variantId: "variant_1",
+                  priceId: "price_1",
+                  source: "own",
+                  surcharge: null,
+                  result: "no-change",
+                },
+              },
+      },
+      {
+        stdout: (value) => stdout.push(value),
+        stderr: () => {},
+        failed: (target, reason) => jelzett.push([target, reason]),
+      },
+    );
+    assert.equal(kod, 1);
+    assert.deepEqual(rogzitett, ["prod-ok-sku"]);
+    assert.deepEqual(jelzett, [
+      ["prod-megallt", "prod-megallt-sku: tax-inclusive-not-set"],
+      ["prod-elozmeny", "prod-elozmeny-sku: price-history-not-written"],
+    ]);
+    assert.equal(stdout.filter((sor) => sor.startsWith("prod-")).length, 1);
   });
 });

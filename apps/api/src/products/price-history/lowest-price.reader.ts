@@ -95,11 +95,6 @@ export async function lowestPriceBeforeCurrentReduction(
 ): Promise<LowestPrice | null> {
   const read = await readSeries(database, variantId);
   if (!read) return null;
-  const start = currentReductionStart(
-    read.rows,
-    variantId,
-    read.ownSale,
-    now,
-  );
+  const start = currentReductionStart(read.rows, variantId, read.ownSale, now);
   return start ? lowestPriceInWindow(read.series, start) : null;
 }
