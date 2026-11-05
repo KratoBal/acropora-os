@@ -107,6 +107,7 @@ export class MedusaShippingOnCreate implements ShippingOnCreate {
           foxpostForbidden: true,
           isHeavy: true,
           isFrozen: true,
+          lockerUnsuitable: true,
         },
       }),
       this.database.unasProductSnapshot.findMany({

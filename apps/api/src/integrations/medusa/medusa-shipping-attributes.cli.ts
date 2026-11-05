@@ -59,6 +59,7 @@ export interface ShippingAttributesCliDatabase {
         foxpostForbidden: boolean;
         isHeavy: boolean;
         isFrozen: boolean;
+        lockerUnsuitable: boolean;
       }[]
     >;
   };
@@ -128,6 +129,7 @@ export async function runShippingAttributesCli(
       foxpostForbidden: true,
       isHeavy: true,
       isFrozen: true,
+      lockerUnsuitable: true,
     },
     orderBy: { productId: "asc" },
   });
