@@ -63,6 +63,15 @@ function service(input: {
   mailbox?: { id: string; content: Uint8Array; fileName: string }[];
   /** terhelés -> kézzel párosított dokumentum(ok) */
   manual?: Map<string, string[]>;
+  /** a saját kimenő számlák a feedből (`ownOutgoingDocuments`) */
+  ownDocuments?: {
+    documentNumber: string;
+    kindCode: string;
+    customerName: string;
+    grossAmount: Prisma.Decimal;
+    currency: string;
+    issueDate: Date;
+  }[];
 }) {
   const stored: [string, string][] = [];
   const ranges: [string, string][] = [];
@@ -70,6 +79,7 @@ function service(input: {
     accounts: async () => [MAIN, CARD],
     debits: async () => input.debits,
     credits: async () => input.credits ?? [],
+    ownOutgoingDocuments: async () => input.ownDocuments ?? [],
     statementCoverage: async () => new Set(input.coverage),
     manualMatches: async () => input.manual ?? new Map(),
     candidates: async (from: string, to: string) => {
@@ -609,5 +619,60 @@ describe("the payee check of mailbox invoices", () => {
     });
     await missing.month("2026-08", { tab: "ALL" });
     assert.deepEqual(stored, [[upload.id, "COMPANY"]]);
+  });
+});
+
+/**
+ * A VEVŐNEK VISSZAUTALT ÖSSZEG A HIÁNYLISTÁN (kártya a116ec70, Balázs 2026-11-05). MI PIROSÍT: ha a szolgáltatás nem tölti be a
+ * saját kimenő számlákat a besoroláshoz (a cégnek visszautalt összeg „Kérd el a számlát a partnertől” marad); ha a
+ * sztornó nélküli hivatkozás is „Nem kell számla” lenne.
+ */
+describe("MissingInvoicesService refund of one of our own invoices", () => {
+  const ZOO = "Fővárosi Állat- és Növénykert";
+  const own = (
+    documentNumber: string,
+    kindCode: string,
+    gross: number,
+    issueDate: string,
+  ) => ({
+    documentNumber,
+    kindCode,
+    customerName: ZOO,
+    grossAmount: D(gross),
+    currency: "HUF",
+    issueDate: new Date(`${issueDate}T00:00:00Z`),
+  });
+  const run = async (withStorno: boolean) => {
+    const refund = debit("2026-11-04", 11287062, ZOO, {
+      narrative: "E-CRPR-2026-1 utalas vissza",
+    });
+    const { missing } = service({
+      debits: [refund],
+      ownDocuments: [
+        own("E-CRPR-2026-1", "SZ", 11287062, "2026-10-20"),
+        ...(withStorno
+          ? [own("E-CRPR-2026-14", "SS", -11287062, "2026-11-05")]
+          : []),
+      ],
+      coverage: [`${MAIN.id}:2026-11`, `${CARD.id}:2026-11`],
+    });
+    const tab = async (t: "MISSING" | "NO_INVOICE_NEEDED") =>
+      (await missing.month("2026-11", { tab: t })).items.map((i) => i.state);
+    return {
+      missing: await tab("MISSING"),
+      notNeeded: await tab("NO_INVOICE_NEEDED"),
+    };
+  };
+
+  it("is Nem kell számla when a storno of the same customer and amount exists", async () => {
+    const result = await run(true);
+    assert.deepEqual(result.notNeeded, ["NO_INVOICE_NEEDED"]);
+    assert.deepEqual(result.missing, []);
+  });
+
+  it("stays missing when only the invoice is named and there is no storno", async () => {
+    const result = await run(false);
+    assert.deepEqual(result.notNeeded, []);
+    assert.equal(result.missing.length, 1);
   });
 });

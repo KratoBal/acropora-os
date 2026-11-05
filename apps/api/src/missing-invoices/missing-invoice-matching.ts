@@ -395,7 +395,7 @@ const compact = (s: string) => s.replace(/\s/g, "").toLowerCase();
  * A KÖZLEMÉNY SZAVAI: szóköz, vessző, pontosvessző és kettőspont mentén, a
  * szó végi pont nélkül.
  */
-const narrativeTokens = (narrative: string) =>
+export const narrativeTokens = (narrative: string) =>
   narrative
     .split(/[\s,;:]+/)
     .map((token) => token.replace(/\.$/, "").toLowerCase())

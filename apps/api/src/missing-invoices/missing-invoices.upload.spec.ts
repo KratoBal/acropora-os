@@ -47,6 +47,7 @@ function setup(
       },
     ],
     credits: async () => [],
+    ownOutgoingDocuments: async () => [],
     debits: async () => [
       {
         id: "debit-1",
