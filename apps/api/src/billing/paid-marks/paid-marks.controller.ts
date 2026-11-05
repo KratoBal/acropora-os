@@ -67,6 +67,17 @@ export class PaidMarksController {
   }
 
   /**
+   * A KORHATÁR NÉLKÜLI FUTÁS SZÁRAZ ELŐNÉZETE (acrobot 43822): forrásonként, mit jelölne kifizetettre egy futás az
+   * ALL_TIME_FROM naptól (darab és sorok). Nem ír semmit. Az írás a `run` `{ allTime: true }`-val, külön gombbal. A jog
+   * az íróé (`BILLING_ISSUE`): az előnézet annak kell, aki utána megnyomhatja.
+   */
+  @Get("all-time-preview")
+  @RequirePermissions(PERMISSIONS.BILLING_ISSUE)
+  allTimePreview() {
+    return this.scheduler.previewAllTime();
+  }
+
+  /**
    * "LEKÉRÉS A SZÁMLÁZZ.HU-BÓL" (aeddb2c3, acrobot 43506): a feedből hiányzó számla behúzása a "nincs a Számlázz.hu
    * feedben" sorról. `apply: false` a száraz előnézet (a Számlázz.hu-n csak olvas), `apply: true` a behúzás. A jog a
    * "Futtatás most"-é (`BILLING_ISSUE`), mert a behúzott számla a következő futásban jelölhetővé válik.
@@ -113,7 +124,7 @@ export class PaidMarksController {
 
   /**
    * A visszatöltés egy köre: `apply: false` a száraz (minden hiányzó számot megkérdez, a Számlázz.hu-n csak olvas),
-   * `apply: true` a behúzás (csak amit a Számlázz.hu ismer), utána egyszer a kifizetett-jelölés korhatár nélkül. 202: a
+   * `apply: true` a behúzás (csak amit a Számlázz.hu ismer); a korhatár nélküli jelölés külön gomb, előnézet után. 202: a
    * kör elindult, a lap a `feed-backfill` állapotból olvassa. A jog a "Lekérés"-é (`BILLING_ISSUE`).
    */
   @Post("feed-backfill")

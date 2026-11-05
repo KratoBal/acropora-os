@@ -20,8 +20,8 @@ import { FeedBackfillPanel } from "./feed-backfill-panel";
 /*
   A FEED VISSZATÖLTÉSE (6fd8c574; acrobot 43766, 43768). MI PIROSÍT: ha az ACRW sorozat nem külön sorban mondja meg,
   hányat ismer a Számlázz.hu; ha a behúzás megerősítés nélkül indul, vagy nem a behúzható darabot mondja; ha az
-  ellenőrzés a behúzást kéri (vagy fordítva); ha kiállítási jog nélkül is van gomb; ha a lap nem mondja meg, hogy a
-  behúzás után elindult-e a korhatár nélküli kifizetett-jelölés.
+  ellenőrzés a behúzást kéri (vagy fordítva); ha kiállítási jog nélkül is van gomb; ha a behúzás
+  megerősítése nem mondja meg, hogy a régi jóváírások párosítása nem indul magától (acrobot 43822).
 */
 const status = (
   over: Partial<FeedBackfillStatus> = {},
@@ -92,20 +92,13 @@ describe("FeedBackfillPanel", () => {
     expect(screen.queryByRole("button")).toBeNull();
   });
 
-  it("after a pull it says whether the paid marks ran without an age limit", async () => {
-    api.status.mockResolvedValue(
-      status({
-        last: {
-          phase: "apply",
-          finishedAt: "2026-11-05T20:40:00.000Z",
-          done: 302,
-          rerun: "running",
-        },
-      }),
-    );
+  it("the pull says the old credits are not paired by themselves (acrobot 43822)", async () => {
     render(<FeedBackfillPanel token="t" canRun />);
-    expect(await screen.findByTestId("feed-backfill-last")).toHaveTextContent(
-      "a korhatár nélküli NEM indult el",
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Behúzás (302 számla)" }),
+    );
+    expect(await screen.findByRole("dialog")).toHaveTextContent(
+      "nem indul magától",
     );
   });
 });

@@ -10,9 +10,9 @@ import {
 /*
   A VISSZATÖLTÉS KÖREI (6fd8c574; acrobot 43766, 43768, 43776). MI PIROSÍT: ha a száraz kör behúz, vagy egy már
   véglegesen megválaszolt számot újra megkérdez (nem folytatható), vagy a hibásat nem kérdezi újra; ha a behúzás olyan
-  számot is húz, amit a Számlázz.hu nem ismer; ha a behúzás után elmarad az egyszeri, korhatár nélküli
-  kifizetett-jelölés, vagy a száraz kör után is elindul; ha két gombnyomás két kört indít; ha az állapot nem mondja
-  meg sorozatonként, hányat ismer a Számlázz.hu.
+  számot is húz, amit a Számlázz.hu nem ismer; ha két gombnyomás két kört indít; ha az állapot nem mondja meg
+  sorozatonként, hányat ismer a Számlázz.hu. (A korhatár nélküli jelölést a visszatöltés NEM indítja: acrobot 43822,
+  előbb a száraz előnézete, utána külön gomb; a szolgáltatásnak ezért nincs is ütemező-függősége.)
 */
 const NOW = new Date("2026-11-05T20:00:00Z");
 
@@ -26,7 +26,6 @@ function setup(options: {
     (options.checked ?? []).map((c) => [c.number, { ...c }]),
   );
   const asked: string[] = [];
-  const reruns: unknown[] = [];
   const store: FeedBackfillStore = {
     storedNumbers: async () =>
       options.stored.map((documentNumber) => ({
@@ -50,24 +49,15 @@ function setup(options: {
       });
     },
   };
-  const scheduler = {
-    runNow: (userId: string, _now: Date, opts: unknown) => {
-      reruns.push([userId, opts]);
-      return { status: "started" as const, sources: [] };
-    },
-  };
-  const service = new FeedBackfillService(
-    feedPull as never,
-    scheduler as never,
-  );
+  const service = new FeedBackfillService(feedPull as never);
   service.store = store;
   service.delayMs = 0;
-  return { service, asked, reruns, checked };
+  return { service, asked, checked };
 }
 
 describe("the feed backfill", () => {
   it("the dry round asks every gap once, writes nothing, and the status counts the answers per series", async () => {
-    const { service, asked, reruns } = setup({
+    const { service, asked } = setup({
       stored: ["ACRW-2026/00004", "2026/00003"],
       knows: { "ACRW-2026/00002": "WOULD_STORE", "2026/00001": "WOULD_STORE" },
     });
@@ -84,7 +74,6 @@ describe("the feed backfill", () => {
       "dry ACRW-2026/00002",
       "dry ACRW-2026/00003",
     ]);
-    assert.deepEqual(reruns, []);
     const status = await service.status(NOW);
     assert.deepEqual(status.checked, {
       "2026": { WOULD_STORE: 1, NOT_FOUND: 1 },
@@ -92,7 +81,6 @@ describe("the feed backfill", () => {
     });
     assert.equal(status.running, null);
     assert.equal(status.last?.phase, "dry");
-    assert.equal(status.last?.rerun, undefined);
   });
 
   it("a second dry round asks only what has no final answer (an error again, not a known or an unknown one)", async () => {
@@ -118,8 +106,8 @@ describe("the feed backfill", () => {
     assert.deepEqual(asked, ["dry ACRW-2026/00003"]);
   });
 
-  it("the pull takes only what Számlázz.hu knows, then starts the paid marks once without an age limit", async () => {
-    const { service, asked, reruns, checked } = setup({
+  it("the pull takes only what Számlázz.hu knows", async () => {
+    const { service, asked, checked } = setup({
       stored: ["ACRW-2026/00004"],
       checked: [
         {
@@ -143,8 +131,11 @@ describe("the feed backfill", () => {
     await service.settled();
     assert.deepEqual(asked, ["apply ACRW-2026/00002"]);
     assert.equal(checked.get("ACRW-2026/00002")?.outcome, "STORED");
-    assert.deepEqual(reruns, [["u-1", { allTime: true }]]);
-    assert.equal((await service.status(NOW)).last?.rerun, "started");
+    assert.deepEqual((await service.status(NOW)).last, {
+      phase: "apply",
+      finishedAt: (await service.status(NOW)).last!.finishedAt,
+      done: 1,
+    });
   });
 
   it("one round at a time, and nothing to do says so", async () => {

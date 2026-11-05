@@ -200,6 +200,10 @@ describe("PaidMarksPage", () => {
     expect(
       screen.queryByRole("button", { name: "Kézzel rendezve" }),
     ).toBeNull();
+    // the run without an age limit (acrobot 43822) is the writer's, preview included
+    expect(
+      screen.queryByRole("button", { name: "Előnézet korhatár nélkül" }),
+    ).toBeNull();
     expect(api.feedPull).not.toHaveBeenCalled();
   });
 

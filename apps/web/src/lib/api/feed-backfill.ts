@@ -12,7 +12,6 @@ export interface FeedBackfillStatus {
     phase: "dry" | "apply";
     finishedAt: string;
     done: number;
-    rerun?: "started" | "running" | "nothing";
   } | null;
   year: number;
   /** sorozatonként a feedből hiányzó számok darabja, és a tárolt legnagyobb szám */

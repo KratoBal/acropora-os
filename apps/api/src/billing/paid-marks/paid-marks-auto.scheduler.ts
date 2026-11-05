@@ -21,6 +21,7 @@ import {
   paidMarksRunLine,
   runPaidMarksAuto,
   type PaidMarkPlan,
+  type PaidMarkPlanned,
   type PaidMarksMode,
   type PaidMarksRunResult,
 } from "./paid-marks-auto.js";
@@ -123,6 +124,16 @@ export function describePaidMarksAuto(
     : `Kifizetett-jelölés automatikusan: KI, egyik forrás sincs auto vagy dry állásban (${list})`;
 }
 
+/** One source's dry look without an age limit (acrobot 43822): what a run from ALL_TIME_FROM would mark, and why not more. */
+export interface AllTimePreview {
+  source: PaymentMarkSource;
+  mode: PaidMarksMode;
+  planned: PaidMarkPlanned[];
+  attentionCount: number;
+  summary: Record<string, number>;
+  errorCode: string | null;
+}
+
 /** What a "Futtatás most" press answers (e64540fd). */
 export type PaidMarksRunNow =
   | {
@@ -168,6 +179,45 @@ export class PaidMarksAutoScheduler implements OnModuleInit, OnModuleDestroy {
       const mode = paidMarksMode(process.env[s.switchName]);
       return mode === "auto" || mode === "dry";
     });
+  }
+
+  /**
+   * THE DRY LOOK BEFORE THE RUN WITHOUT AN AGE LIMIT (acrobot 43822: "Ne menjen vakon"). After the feed backfill such a
+   * run can mark at once every old invoice the new feed rows make pairable, on an `auto` source; nobody should press it
+   * without seeing the count. Every source on `auto` or `dry` plans from ALL_TIME_FROM with the same decision as the
+   * run; nothing is written and nothing is recorded (the page shows the answer, the write is a separate press). The
+   * bank source writes one credit under its lock, but plans with the same decision (`bankTransferPaidMarkPlan`).
+   */
+  async previewAllTime(
+    sources: readonly (typeof PAID_MARK_SOURCES)[number][] = this.runSources(),
+  ): Promise<AllTimePreview[]> {
+    const out: AllTimePreview[] = [];
+    for (const s of sources) {
+      const mode = paidMarksMode(process.env[s.switchName]);
+      try {
+        const { result, planned } = paidMarksDryResult(
+          await s.plan(ALL_TIME_FROM),
+        );
+        out.push({
+          source: s.source,
+          mode,
+          planned,
+          attentionCount: result.attention.length,
+          summary: { ...result.summary },
+          errorCode: null,
+        });
+      } catch (error) {
+        out.push({
+          source: s.source,
+          mode,
+          planned: [],
+          attentionCount: 0,
+          summary: {},
+          errorCode: errorCode(error, "PAID_MARKS_DRY_FAILED"),
+        });
+      }
+    }
+    return out;
   }
 
   /** Each source and its switch, for the page. */
