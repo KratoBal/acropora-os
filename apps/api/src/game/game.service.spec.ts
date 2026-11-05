@@ -35,7 +35,7 @@ function setup(
   },
 ) {
   const entries = new Map<string, Record<string, unknown>>();
-  const mails: { to: readonly string[]; text: string }[] = [];
+  const mails: { to: readonly string[]; text: string; html?: string }[] = [];
   const days = new Map<string, number>();
   const database = {
     gameMailDay: {
@@ -68,6 +68,10 @@ function setup(
       findUnique: async ({ where }: { where: Record<string, any> }) => {
         if (where.questionId_email)
           return entries.get(where.questionId_email.email) ?? null;
+        if (where.id) {
+          const own = entries.get(where.id);
+          return own ? { ...own, question: q } : null;
+        }
         const found = [...entries.values()].find(
           (e) => e.confirmTokenHash === where.confirmTokenHash,
         );
@@ -121,8 +125,11 @@ function setup(
     },
   };
   const sender = {
-    send: async (mail: { to: readonly string[]; text: string }) =>
-      void mails.push(mail),
+    send: async (mail: {
+      to: readonly string[];
+      text: string;
+      html?: string;
+    }) => void mails.push(mail),
   };
   const service = new GameService(sender as never, env as never);
   service.database = database as never;
@@ -184,6 +191,62 @@ describe("an entry", () => {
       linkToken(mails[0]!),
       "only the token's hash is kept",
     );
+  });
+
+  it("mails the formatted confirmation: the question, the answer, the button with the link and the closing time, and a plain-text twin", async () => {
+    const { service, mails } = setup();
+    await service.submit(entry);
+    const mail = mails[0]!;
+    assert.ok(mail.html, "an HTML body goes with the text");
+    assert.match(
+      mail.html!,
+      /<strong>Melyik a legismertebb zátonyépítő korall\?<\/strong>/,
+    );
+    assert.match(
+      mail.html!,
+      /A beküldött válaszod: <strong>acropóra<\/strong>/,
+    );
+    assert.match(
+      mail.html!,
+      /data-cta=""><a href="https:\/\/jatek-teszt\.acropora\.hu\/megerosites\?token=/,
+    );
+    assert.match(mail.html!, /23:59<\/strong> \(budapesti idő\)/);
+    assert.match(mail.text, /A beküldött válaszod: acropóra/);
+    assert.match(
+      mail.text,
+      /https:\/\/jatek-teszt\.acropora\.hu\/megerosites\?token=/,
+    );
+  });
+
+  it("shows a choice answer by its label, not by its id", async () => {
+    const { service, mails } = setup(
+      question({
+        type: "CHOICE",
+        options: [
+          { id: "a", label: "Acropora" },
+          { id: "b", label: "Montipora" },
+        ],
+        acceptedAnswers: ["a"],
+      }),
+    );
+    await service.submit({ ...entry, answer: "b" });
+    assert.match(
+      mails[0]!.html!,
+      /A beküldött válaszod: <strong>Montipora<\/strong>/,
+    );
+    assert.doesNotMatch(mails[0]!.html!, /<strong>b<\/strong>/);
+  });
+
+  it("does not quote an answer that carries a link: the mail goes, without that line", async () => {
+    const { service, mails } = setup();
+    await service.submit({
+      ...entry,
+      answer: "http://rossz.example/megerosit",
+    });
+    assert.equal(mails.length, 1);
+    assert.doesNotMatch(mails[0]!.html!, /A beküldött válaszod/);
+    assert.doesNotMatch(mails[0]!.text, /rossz\.example/);
+    assert.match(mails[0]!.html!, /megerosites\?token=/);
   });
 
   it("answers a repeat, a confirmed repeat and the bot trap exactly as a new entry", async () => {

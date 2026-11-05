@@ -18,6 +18,11 @@ import {
 } from "@acropora/types";
 
 import {
+  CONFIRMATION_SUBJECT,
+  renderConfirmationMail,
+  type ConfirmationMailInput,
+} from "./game-confirmation-mail.js";
+import {
   MAIL_SENDER,
   type MailSender,
 } from "../notifications/mail/mail.port.js";
@@ -319,7 +324,8 @@ export class GameService implements OnModuleInit {
       await wait(`a napi levél-plafon (${this.dailyCap()}) betelt`);
       return "QUEUED";
     }
-    const outcome = await this.mailConfirmation(email, token, week);
+    const details = await this.confirmationDetails(entryId);
+    const outcome = await this.mailConfirmation(email, token, week, details);
     if (outcome === "SENT") {
       await this.database.gameEntry.update({
         where: { id: entryId },
@@ -382,10 +388,41 @@ export class GameService implements OnModuleInit {
     return null;
   }
 
+  /**
+   * What the confirmation mail says about the entry: the question, the answer as the player sees it (a choice by its
+   * label), the closing time. Read for THIS entry at send time (the queue sends later too). A read that fails or finds
+   * nothing leaves the details out: the mail still goes, with the link and the rest.
+   */
+  private async confirmationDetails(
+    entryId: string,
+  ): Promise<Omit<ConfirmationMailInput, "link">> {
+    try {
+      const entry = await this.database.gameEntry.findUnique({
+        where: { id: entryId },
+        include: { question: true },
+      });
+      if (!entry?.question) return {};
+      const question = entry.question;
+      const options = (question.options as unknown as GameOption[]) ?? [];
+      const answer =
+        question.type === "CHOICE"
+          ? (options.find((o) => o.id === entry.answer)?.label ?? null)
+          : entry.answer;
+      return {
+        prompt: question.prompt,
+        answer,
+        closesAt: question.closesAt,
+      };
+    } catch {
+      return {};
+    }
+  }
+
   private async mailConfirmation(
     email: string,
     token: string,
     week: string,
+    details: Omit<ConfirmationMailInput, "link"> = {},
   ): Promise<"SENT" | "NOT_SENT"> {
     const gate = mailGate({
       mode: mailModeOf(this.environment.TICKET_MAIL_MODE),
@@ -401,21 +438,13 @@ export class GameService implements OnModuleInit {
     }
     const link = this.confirmLink(token);
     try {
+      // the "email" profile's formatted body (the sender's frame and button style), and its plain-text twin
+      const { html, text } = renderConfirmationMail({ link, ...details });
       await this.sender.send({
         to: [email],
-        subject: "Erősítsd meg a játékodat: Acropora karácsonyi nyereményjáték",
-        text: [
-          "Szia!",
-          "",
-          "Köszönjük, hogy játszol az Acropora karácsonyi nyereményjátékán.",
-          "A játékod akkor érvényes, ha megerősíted ezen a linken:",
-          "",
-          link,
-          "",
-          "Ha nem te küldted, nincs teendőd: megerősítés nélkül a beküldés nem számít.",
-          "",
-          "Acropora",
-        ].join("\n"),
+        subject: CONFIRMATION_SUBJECT,
+        html,
+        text,
       });
     } catch (error) {
       this.logger.error(
