@@ -68,7 +68,8 @@ describe(
             amount: D(100000),
             currency: "HUF",
             bookingDate: new Date(`${DAY}T00:00:00Z`),
-            narrative: "2099/00083,86,85,84",
+            // the customer's extra zero: 000083 is 00083 (Balázs's live run 2026-11-05: 2026/000436)
+            narrative: "2099/000083,86,85,84",
             transactionKey: `${MARK}-${key}`,
             ...over,
           },
@@ -128,8 +129,20 @@ describe(
         feedMessageId: "old",
         feedReceivedAt: new Date("2099-03-02T10:00:00Z"),
       });
-      await document("00085", 30000);
-      await document("00086", 40000);
+      /*
+        OUR SERIES WITHOUT A PREFIX (Balázs's live run 2026-11-05 11:05: every 2026/000xx transfer "nincs"). 00085 and
+        00086 are numbered the real way, `2099/00085`; an ACRW 00085 also exists, paid long ago, so the bare number
+        names two invoices and only the open one can be this transfer's. 00185 shares the digits' end: loaded by the
+        query, never matched.
+      */
+      await document("00085", 30000, { documentNumber: "2099/00085" });
+      await document("00085", 5000, {
+        externalId: `${MARK}-acrw-00085`,
+        paidAmount: D(5000),
+        payments: [{ date: "2099-01-10", amount: "5000", title: "átutalás" }],
+      });
+      await document("00086", 40000, { documentNumber: "2099/00086" });
+      await document("00185", 30000);
     });
 
     after(async () => {
@@ -149,8 +162,8 @@ describe(
       assert.deepEqual(
         decision.marks.map((m) => [m.invoiceNumber, m.amount]),
         [
-          ["ACRW-2099/00086", "40000.00"],
-          ["ACRW-2099/00085", "30000.00"],
+          ["2099/00086", "40000.00"],
+          ["2099/00085", "30000.00"],
           ["ACRW-2099/00084", "20000.00"],
         ],
       );

@@ -80,6 +80,22 @@ describe("a reference against an invoice number", () => {
     assert.equal(refMatchesInvoiceNumber(typo!, "ACRW-2026/00083"), true);
     assert.equal(refMatchesInvoiceNumber(typo!, "ACRB-2026/00083"), false);
   });
+
+  // Balázs's live run, 2026-11-05 11:05: every transfer naming the 2026/ series stood as "nincs"
+  it("our series without a prefix: a bare reference fits it, a prefixed one does not", () => {
+    const [bare] = remittanceInvoiceRefs("2026/00083");
+    assert.equal(refMatchesInvoiceNumber(bare!, "2026/00083"), true);
+    assert.equal(refMatchesInvoiceNumber(bare!, "2026/00084"), false);
+    assert.equal(refMatchesInvoiceNumber(bare!, "2025/00083"), false);
+    const [prefixed] = remittanceInvoiceRefs("ACRW-2026/00083");
+    assert.equal(refMatchesInvoiceNumber(prefixed!, "2026/00083"), false);
+  });
+
+  it("the customer's extra zero is the same number: 2026/000436 is ACRW-2026/00436", () => {
+    const [padded] = remittanceInvoiceRefs("2026/000436");
+    assert.equal(refMatchesInvoiceNumber(padded!, "ACRW-2026/00436"), true);
+    assert.equal(refMatchesInvoiceNumber(padded!, "ACRW-2026/01436"), false);
+  });
 });
 
 describe("the transfer against the named invoices", () => {
