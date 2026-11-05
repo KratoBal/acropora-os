@@ -161,6 +161,34 @@ export class ProductShippingProfileRepository extends Repository {
     input: UpsertProductShippingProfileDto,
     actorUserId: string,
   ): Promise<ProductShippingProfileDetail> {
+    return this.write(productId, () => input, actorUserId);
+  }
+
+  /**
+   * A RÉSZLEGES ÍRÁS (a82ed229, 2c, tömeges szerkesztés): csak a megadott jelzők változnak. A többi a termék mai
+   * értéke, és ezt UGYANABBAN a tranzakcióban olvassuk, amelyik ír: egy közben mentett kártya jelzőit így nem írja
+   * vissza egy korábbi olvasásból. Sor nélküli terméknél a mai érték a UNAS-adat (amit a szinkron is írna), anélkül
+   * csupa hamis; az egyező jelző így UNAS-forrású marad (`manualShippingWrite`).
+   */
+  async patch(
+    productId: string,
+    flags: Partial<UpsertProductShippingProfileDto>,
+    actorUserId: string,
+  ): Promise<ProductShippingProfileDetail> {
+    return this.write(
+      productId,
+      (current) => ({ ...current, ...flags }),
+      actorUserId,
+    );
+  }
+
+  private async write(
+    productId: string,
+    resolve: (
+      current: UpsertProductShippingProfileDto,
+    ) => UpsertProductShippingProfileDto,
+    actorUserId: string,
+  ): Promise<ProductShippingProfileDetail> {
     return this.profileDatabase.$transaction(
       async (transaction) => {
         const existing = await transaction.productShippingProfile.findUnique({
@@ -172,10 +200,28 @@ export class ProductShippingProfileRepository extends Repository {
               where: { productId },
               select: { rawPayload: true },
             });
+        const unas = snapshot ? unasShippingProfile(snapshot.rawPayload) : null;
+        const input = resolve(
+          existing
+            ? {
+                pickupOnly: existing.pickupOnly,
+                foxpostForbidden: existing.foxpostForbidden,
+                isHeavy: existing.isHeavy,
+                isFrozen: existing.isFrozen,
+                lockerUnsuitable: existing.lockerUnsuitable,
+              }
+            : {
+                pickupOnly: unas?.pickupOnly ?? false,
+                foxpostForbidden: unas?.foxpostForbidden ?? false,
+                isHeavy: unas?.isHeavy ?? false,
+                isFrozen: unas?.isFrozen ?? false,
+                lockerUnsuitable: false,
+              },
+        );
         const data = manualShippingWrite(
           existing,
           input,
-          snapshot ? { unas: unasShippingProfile(snapshot.rawPayload) } : null,
+          snapshot ? { unas } : null,
         );
         /*
           AN EXPLICIT UPDATE OR CREATE, NOT AN UPSERT: Prisma checks an upsert's `create` part even when the row
