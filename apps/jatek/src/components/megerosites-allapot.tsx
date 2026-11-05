@@ -1,71 +1,76 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 type Allapot =
   | { fajta: "var" }
+  | { fajta: "kuldes" }
   | { fajta: "ok"; uzenet: string }
   | { fajta: "hiba"; uzenet: string };
 
+const SIKERTELEN = "A megerősítés most nem sikerült. Próbáld újra később.";
+
 /**
- * A MEGEROSITES: a lap betoltesekor EGY POST a sajat `/api/megerosites` utvonalra (a token a level linkjebol jon).
- * Szandekosan bongeszoben, nem a szerver renderelesekor: egy level-ellenorzo vagy linkelozetes, ami csak
- * lekeri a lapot, de nem futtat JavaScriptet, nem erosit meg semmit.
+ * A MEGEROSITES: egy gomb ("Megerősítem a részvételem"), es a POST a sajat `/api/megerosites` utvonalra CSAK a
+ * kattintasra megy (a token a level linkjebol jon). NEM a lap betoltesekor, es ez dontes, nem kenyelem
+ * (acrobot, 2026-11-05 23:25, barracuda #2255 review): az eddigi, betolteskor induló alak a JavaScriptet nem futtato
+ * linkelozetest kizarta, a JS-t futtato level-szurot (Microsoft Defender Safe Links, ceges sandboxok: bongeszoben
+ * nyitjak meg a linket) NEM, es az a cim tulajdonosa helyett erositett volna meg, ami a dupla megerosites celjat
+ * utotte at. A kattintast egy szuro nem vegzi el.
  */
 export function MegerositesAllapot({ token }: { token: string }) {
   const [allapot, setAllapot] = useState<Allapot>({ fajta: "var" });
 
-  useEffect(() => {
-    let megszakitva = false;
-    (async () => {
-      try {
-        const valasz = await fetch("/api/megerosites", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token }),
-        });
-        const test = (await valasz.json()) as {
-          ok?: boolean;
-          message?: string;
-        };
-        if (megszakitva) return;
-        const uzenet = typeof test.message === "string" ? test.message : "";
-        setAllapot(
-          test.ok
-            ? { fajta: "ok", uzenet }
-            : {
-                fajta: "hiba",
-                uzenet:
-                  uzenet ||
-                  "A megerősítés most nem sikerült. Próbáld újra később.",
-              },
-        );
-      } catch {
-        if (!megszakitva)
-          setAllapot({
-            fajta: "hiba",
-            uzenet: "A megerősítés most nem sikerült. Próbáld újra később.",
-          });
-      }
-    })();
-    return () => {
-      megszakitva = true;
-    };
-  }, [token]);
+  async function megerosit() {
+    setAllapot({ fajta: "kuldes" });
+    try {
+      const valasz = await fetch("/api/megerosites", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      });
+      const test = (await valasz.json()) as {
+        ok?: boolean;
+        message?: string;
+      };
+      const uzenet = typeof test.message === "string" ? test.message : "";
+      setAllapot(
+        test.ok
+          ? { fajta: "ok", uzenet }
+          : { fajta: "hiba", uzenet: uzenet || SIKERTELEN },
+      );
+    } catch {
+      setAllapot({ fajta: "hiba", uzenet: SIKERTELEN });
+    }
+  }
 
-  if (allapot.fajta === "var")
+  if (allapot.fajta === "ok" || allapot.fajta === "hiba")
     return (
-      <p className="jatek-uzenet" role="status">
-        A részvételed megerősítése folyamatban van…
+      <p
+        className="jatek-uzenet"
+        data-fajta={allapot.fajta}
+        role={allapot.fajta === "hiba" ? "alert" : "status"}
+      >
+        {allapot.uzenet}
       </p>
     );
+
   return (
-    <p
-      className="jatek-uzenet"
-      data-fajta={allapot.fajta}
-      role={allapot.fajta === "hiba" ? "alert" : "status"}
-    >
-      {allapot.uzenet}
-    </p>
+    <div className="jatek-megerosites">
+      <h1>Erősítsd meg a részvételed</h1>
+      <p>
+        Már csak egy lépés: a gombbal erősíted meg, hogy te adtad be ezt a
+        választ. A megerősítésig a játékod nem érvényes.
+      </p>
+      <button
+        type="button"
+        className="jatek-button jatek-submit"
+        onClick={() => void megerosit()}
+        disabled={allapot.fajta === "kuldes"}
+      >
+        {allapot.fajta === "kuldes" ? "Küldés…" : "Megerősítem a részvételem"}{" "}
+        <span>↗</span>
+      </button>
+    </div>
   );
 }

@@ -1333,3 +1333,6 @@ body {
 .jatek-check a:hover {
   color: var(--jatek-orange);
 }
+.jatek-megerosites .jatek-button {
+  margin-top: 22px;
+}
