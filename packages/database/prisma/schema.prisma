@@ -7465,6 +7465,25 @@ model PaidMarkRun {
   @@index([source, startedAt])
 }
 
+/// A TÁROLT SZÁMLÁZZ.HU FEED VISSZATÖLTÉSE (6fd8c574; acrobot 43766): egy feedből hiányzó szám, és amit a Számlázz.hu
+/// Agent a lekérdezésére felelt. A száraz kör tölti (WOULD_STORE, NOT_FOUND, ERROR, ...), a behúzás a WOULD_STORE sort
+/// STORED-ra lépteti. Ettől folytatható: a végleges választ adó számot a következő kör nem kérdezi újra. A válasz XML-je
+/// nem kerül ide, csak a szám, a fajta és az összegek (a `detail`); a behúzott számla a feed-üzenetek között él.
+model SzamlazzFeedBackfillNumber {
+  number      String    @id
+  /// A sorozat: `ACRW-2026` vagy az előtag nélküli `2026`.
+  series      String
+  /// WOULD_STORE, STORED, NOT_FOUND, ERROR, UNREADABLE, OTHER_NUMBER (a `FeedPullLine` kimenetei).
+  outcome     String
+  /// A kimenet magyarázata: a fajta és az összegek, vagy a hiba kódja. Vevő nélkül.
+  detail      String
+  checkedAt   DateTime
+  checkedById String
+  storedAt    DateTime?
+
+  @@index([series, outcome])
+}
+
 /// A KIMENŐ SZÁMLÁK KIFIZETETT-JELÖLÉSÉNEK NAPLÓJA, minden forrásra (acrobot
 /// 25989; terv: agents/nautilus/megosztas/gls-utanvet-kifizetett-terv-2026-10-01.md,
 /// 4. pont; a közös alakot murena javasolta, 25999). A Számlázz.hu

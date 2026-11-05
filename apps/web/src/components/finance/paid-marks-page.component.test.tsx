@@ -17,6 +17,19 @@ const api = vi.hoisted(() => ({
   feedPull: vi.fn(),
 }));
 vi.mock("@/lib/api/paid-marks", () => ({ paidMarksApi: api }));
+// the backfill panel has its own test (feed-backfill-panel); here it has nothing to show
+vi.mock("@/lib/api/feed-backfill", () => ({
+  feedBackfillApi: {
+    status: vi.fn().mockResolvedValue({
+      running: null,
+      last: null,
+      year: 2026,
+      series: [],
+      checked: {},
+    }),
+    start: vi.fn(),
+  },
+}));
 vi.mock("next/navigation", () => ({
   usePathname: () => "/penzugy/napi-jeloles",
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),

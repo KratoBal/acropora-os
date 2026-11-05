@@ -12,6 +12,7 @@ import {
   runPaidMarksAuto,
 } from "./paid-marks-auto.js";
 import {
+  ALL_TIME_FROM,
   describePaidMarksAuto,
   msUntilNextRun,
   PaidMarksAutoScheduler,
@@ -412,6 +413,47 @@ describe("the daily schedule", () => {
         assert.equal(scheduler.status().running, false);
         await scheduler.runOnce(new Date(), [bank()]);
         assert.equal(log.length, 2);
+      } finally {
+        process.env = { ...envBefore };
+      }
+    });
+
+    // acrobot 43776: WHAT TURNS THIS RED: the one look without an age limit still bounded by the daily window, or the
+    // daily run (and a plain press) losing its window
+    it("the one look without an age limit starts at ALL_TIME_FROM; the daily run and a plain press keep the window", async () => {
+      process.env.BANK_TRANSFER_MARK_PAID = "dry";
+      process.env.PAID_MARKS_AUTO_DAYS = "60";
+      try {
+        const froms: string[] = [];
+        const source = {
+          ...bank(),
+          plan: async (from: string) => {
+            froms.push(from);
+            return {
+              source: "BANK_TRANSFER" as const,
+              marks: [],
+              exceptions: [],
+            };
+          },
+        };
+        const scheduler = new PaidMarksAutoScheduler({} as never, fakeRuns([]));
+        const now = new Date("2026-11-05T20:00:00Z");
+        await scheduler.runOnce(
+          now,
+          [source],
+          { kind: "manual", userId: "u" },
+          ALL_TIME_FROM,
+        );
+        await scheduler.runOnce(now, [source]);
+        assert.deepEqual(froms, [ALL_TIME_FROM, runFrom(now, 60)]);
+        assert.equal(ALL_TIME_FROM, "2000-01-01");
+
+        const asked: (string | undefined)[] = [];
+        scheduler.runOnce = async (_now, _sources, _trigger, from) =>
+          void asked.push(from);
+        scheduler.runNow("u", now, { allTime: true });
+        scheduler.runNow("u", now);
+        assert.deepEqual(asked, [ALL_TIME_FROM, undefined]);
       } finally {
         process.env = { ...envBefore };
       }

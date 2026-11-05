@@ -99,6 +99,13 @@ export function msUntilNextRun(now: Date, hour: number): number {
   return next.getTime() - now.getTime();
 }
 
+/**
+ * THE ONE LOOK WITHOUT AN AGE LIMIT (acrobot 43776, promised to Balázs 2026-11-05 19:20 UTC): after the feed backfill
+ * the old credits (the zoo's 2026-09-07 transfer, 2026/00069 and 00070) fall out of the daily window. One run from this
+ * day takes every stored credit and settlement; the decision is the same, and the log keeps it idempotent.
+ */
+export const ALL_TIME_FROM = "2000-01-01";
+
 /** The first day a run looks at: `days` before `now`, as YYYY-MM-DD. */
 export function runFrom(now: Date, days: number): string {
   return new Date(now.getTime() - days * 86_400_000).toISOString().slice(0, 10);
@@ -189,16 +196,24 @@ export class PaidMarksAutoScheduler implements OnModuleInit, OnModuleDestroy {
    * same code and the same switches. It does not wait for the run: the answer says it started, and the
    * page reads the outcome from `latest`.
    */
-  runNow(userId: string, now = new Date()): PaidMarksRunNow {
+  runNow(
+    userId: string,
+    now = new Date(),
+    options: { allTime?: boolean } = {},
+  ): PaidMarksRunNow {
     const sources = this.runSources();
     if (sources.length === 0)
       return { status: "nothing", reason: "no-source-on-auto-or-dry" };
     if (this.running) return { status: "running" };
-    void this.runOnce(now, sources, { kind: "manual", userId }).catch(
-      (error: unknown) =>
-        this.logger.error(
-          `Kifizetett-jelölés (kézi): a futás váratlanul elbukott (${errorCode(error, "PAID_MARKS_RUN_FAILED")})`,
-        ),
+    void this.runOnce(
+      now,
+      sources,
+      { kind: "manual", userId },
+      options.allTime ? ALL_TIME_FROM : undefined,
+    ).catch((error: unknown) =>
+      this.logger.error(
+        `Kifizetett-jelölés (kézi): a futás váratlanul elbukott (${errorCode(error, "PAID_MARKS_RUN_FAILED")})`,
+      ),
     );
     return {
       status: "started",
@@ -240,6 +255,8 @@ export class PaidMarksAutoScheduler implements OnModuleInit, OnModuleDestroy {
     now = new Date(),
     sources: readonly (typeof PAID_MARK_SOURCES)[number][] = this.runSources(),
     trigger: PaidMarkTrigger = { kind: "schedule" },
+    /** the first day to look at; by default the daily window (`PAID_MARKS_AUTO_DAYS`) */
+    from?: string,
   ): Promise<void> {
     if (sources.length === 0) return;
     if (this.running) {
@@ -248,7 +265,11 @@ export class PaidMarksAutoScheduler implements OnModuleInit, OnModuleDestroy {
       );
       return;
     }
-    const done = this.runSourcesOnce(now, sources, trigger);
+    const done = this.runSourcesOnce(
+      sources,
+      trigger,
+      from ?? runFrom(now, paidMarksAutoDays()),
+    );
     this.running = { startedAt: now, done };
     try {
       await done;
@@ -258,11 +279,12 @@ export class PaidMarksAutoScheduler implements OnModuleInit, OnModuleDestroy {
   }
 
   private async runSourcesOnce(
-    now: Date,
     sources: readonly (typeof PAID_MARK_SOURCES)[number][],
     trigger: PaidMarkTrigger,
+    from: string,
   ): Promise<void> {
-    const from = runFrom(now, paidMarksAutoDays());
+    if (from === ALL_TIME_FROM)
+      this.logger.log("Kifizetett-jelölés: egyszeri futás korhatár nélkül");
     const mode = (s: (typeof PAID_MARK_SOURCES)[number]) =>
       paidMarksMode(process.env[s.switchName]);
 
