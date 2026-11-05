@@ -12,6 +12,7 @@ import {
   partnerOrderBacklog,
   partnerOrderMatchesChainFilter,
   type AuthenticatedUser,
+  type DashboardPartnerOrderBacklogWidgetData,
   type PartnerOrderCandidateDto,
   type PartnerOrderChain,
   type PartnerOrderChainFilter,
@@ -182,6 +183,35 @@ export class PartnerOrdersService {
       pageSize,
       total,
       items: await this.listItems(rows, chain, now, backlogDays),
+    };
+  }
+
+  /**
+   * THE DASHBOARD'S BACKLOG (S4b-2): how many open orders are back-ordered under the saved setting, and the ones that
+   * have stood the longest (the same rule as the list's badge and filter: `partnerOrderBacklog`). Only OPEN orders are
+   * read; the movement, the open lines and the setting are the list's own, so the number and the filtered list agree.
+   */
+  async backlogSummary(
+    now: Date = new Date(),
+    oldestCount = 5,
+  ): Promise<DashboardPartnerOrderBacklogWidgetData> {
+    const backlogDays = await this.backlogDays();
+    const { rows, chain } = await this.repository.listAll({ status: "OPEN" });
+    const late = (await this.listItems(rows, chain, now, backlogDays))
+      .filter((item) => item.backlog)
+      .sort(
+        (a, b) =>
+          b.idleDays - a.idleDays || a.orderNumber.localeCompare(b.orderNumber),
+      );
+    return {
+      count: late.length,
+      backlogDays,
+      oldest: late.slice(0, oldestCount).map((item) => ({
+        orderId: item.id,
+        orderNumber: item.orderNumber,
+        customerName: item.customerName,
+        idleDays: item.idleDays,
+      })),
     };
   }
 

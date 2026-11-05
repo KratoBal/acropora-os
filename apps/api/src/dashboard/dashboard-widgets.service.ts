@@ -31,6 +31,7 @@ import { UnasStockSyncOutboxRepository } from "../inventory/unas-stock-sync-outb
 import { MessagesService } from "../messages/messages.service.js";
 import { MissingInvoicesService } from "../missing-invoices/missing-invoices.service.js";
 import { WebshopOrdersService } from "../orders/webshop-orders/webshop-orders.service.js";
+import { PartnerOrdersService } from "../partner-orders/partner-orders.service.js";
 import { ExpectedArrivalService } from "../purchasing/expected-arrivals/expected-arrival.service.js";
 import { assignedUnitIdsFor } from "../service-jobs/assigned-units.query.js";
 import { aquariumFindings } from "./aquarium-findings.js";
@@ -113,6 +114,7 @@ export class DashboardWidgetsService {
     private readonly systemWidgets: DashboardSystemWidgetsRepository,
     webshopOrders: WebshopOrdersService,
     private readonly messages: MessagesService,
+    private readonly partnerOrders: PartnerOrdersService,
     @Optional()
     @Inject(DASHBOARD_WIDGET_LOADERS)
     loaders?: Partial<Record<DashboardWidgetId, WidgetLoader>>,
@@ -248,6 +250,7 @@ export class DashboardWidgetsService {
     return {
       tasks: (user) => this.repository.tasksWidget(user.id),
       "expected-arrivals": () => this.expectedArrivalsWidget(),
+      "partner-order-backlog": () => this.partnerOrders.backlogSummary(),
       "service-tickets": async (user) =>
         this.serviceWidgets.serviceTickets(await serviceViewer(user)),
       worksheets: async (user) =>

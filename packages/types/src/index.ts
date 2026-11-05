@@ -1260,6 +1260,7 @@ export type {
   DashboardSystemState,
   DashboardSystemStatusWidgetData,
   DashboardExpectedArrivalsWidgetData,
+  DashboardPartnerOrderBacklogWidgetData,
   DashboardIncomingInvoicesWidgetData,
   DashboardLayoutEntry,
   DashboardMaintenanceCalendarWidgetData,

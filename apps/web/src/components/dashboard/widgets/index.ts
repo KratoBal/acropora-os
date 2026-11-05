@@ -11,6 +11,7 @@ import { materialRequestsWidget } from "./material-requests-widget";
 import { messagesWidget } from "./messages-widget";
 import { missingInvoicesWidget } from "./missing-invoices-widget";
 import { overdueInvoicesWidget } from "./overdue-invoices-widget";
+import { partnerOrderBacklogWidget } from "./partner-order-backlog-widget";
 import { webshopOrdersWidget } from "./webshop-orders-widget";
 import { serviceTicketsWidget } from "./service-tickets-widget";
 import { settlementsWidget } from "./settlements-widget";
@@ -33,6 +34,7 @@ export const DASHBOARD_WIDGET_VIEWS: Partial<
   tasks: tasksWidget,
   messages: messagesWidget,
   "expected-arrivals": expectedArrivalsWidget,
+  "partner-order-backlog": partnerOrderBacklogWidget,
   "service-tickets": serviceTicketsWidget,
   worksheets: worksheetsWidget,
   "material-requests": materialRequestsWidget,
