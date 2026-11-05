@@ -22,6 +22,13 @@
  */
 import type { MailBlock, MailBlocks } from "./mail-blocks.js";
 import {
+  isWebshopLivestockKind,
+  WEBSHOP_ACCLIMATION_TEXTS,
+  webshopAcclimationValue,
+  type WebshopAcclimationTexts,
+  type WebshopLivestockKind,
+} from "./webshop-acclimation.js";
+import {
   WEBSHOP_ENGLISH_KEY_SUFFIX,
   type MailTemplateValues,
 } from "./mail-template.js";
@@ -51,6 +58,13 @@ export interface WebshopMailOrder {
 /** commerce `MailOrder`: the pickup half of a mixed cart is `pickup: true`. */
 export interface WebshopPlacedOrder extends WebshopMailOrder {
   readonly pickup: boolean;
+  /**
+   * The kinds of live animal among the order's lines (commerce #684, V2.6), for
+   * the acclimatisation section (`webshop-acclimation.ts`). OPTIONAL and
+   * tolerant: a webshop that does not send it, or sends something else, means
+   * no kinds, never a refused mail (`facts_version` stays 1).
+   */
+  readonly livestock_kinds?: readonly WebshopLivestockKind[];
 }
 
 /** commerce `ShippedMailFacts`. */
@@ -538,9 +552,11 @@ export interface WebshopMailContent {
  */
 export function webshopMailContent(
   facts: WebshopMailFacts,
+  /** The acclimatisation guides; the shipped table unless a test brings its own. */
+  acclimationTexts: WebshopAcclimationTexts = WEBSHOP_ACCLIMATION_TEXTS,
 ): WebshopMailContent {
   const t = webshopMailText(facts.locale);
-  const own = templateContent(facts, t, facts.locale);
+  const own = templateContent(facts, t, facts.locale, acclimationTexts);
   return {
     values: {
       ...own.values,
@@ -557,6 +573,7 @@ function templateContent(
   facts: WebshopTemplateFacts,
   t: WebshopMailText,
   locale: WebshopMailLocale | undefined,
+  acclimationTexts: WebshopAcclimationTexts,
 ): WebshopMailContent {
   switch (facts.template) {
     case "order-placed": {
@@ -597,6 +614,11 @@ function templateContent(
           vegyes_kosar_mondat: mixedLine,
           osszesen: mailForint(total),
           kovetkezo_lepes: next,
+          akklimatizacio: webshopAcclimationValue(
+            orders.flatMap((o) => o.livestock_kinds ?? []),
+            locale === "en" ? "en" : "hu",
+            acclimationTexts,
+          ),
         },
         blocks: {
           rendeles_tetelek: mixed
@@ -1167,7 +1189,18 @@ function parseTemplateFacts(
         const o = obj(x, p);
         if (typeof o.pickup !== "boolean")
           throw new FactsError(`${p}.pickup: igaz/hamis kell`);
-        return { ...order(x, p), pickup: o.pickup };
+        return {
+          ...order(x, p),
+          pickup: o.pickup,
+          // a webshop that sends no list (or something else) leaves the key out, as before
+          ...(Array.isArray(o.livestock_kinds)
+            ? {
+                livestock_kinds: o.livestock_kinds.filter(
+                  isWebshopLivestockKind,
+                ),
+              }
+            : {}),
+        };
       });
       if (!orders.length)
         throw new FactsError("facts.orders: legalább egy rendelés kell");

@@ -113,6 +113,8 @@ const RAW: Readonly<
       `<p>Köszönjük a rendelésedet! ${v("vegyes_kosar_mondat")}</p>`,
       own("rendeles_tetelek"),
       own("kovetkezo_lepes"),
+      // V2.6: empty (and no paragraph) until the kind's guide is in `webshop-acclimation.ts`
+      own("akklimatizacio"),
     ].join(""),
   },
   WEBSHOP_ORDER_CONFIRMED: status(
@@ -230,6 +232,8 @@ const RAW_EN: typeof RAW = {
       `<p>Thank you for your order! ${v("vegyes_kosar_mondat")}</p>`,
       own("rendeles_tetelek"),
       own("kovetkezo_lepes"),
+      // V2.6: empty (and no paragraph) until the kind's guide is in `webshop-acclimation.ts`
+      own("akklimatizacio"),
     ].join(""),
   },
   WEBSHOP_ORDER_CONFIRMED: status(

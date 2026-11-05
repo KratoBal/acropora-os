@@ -254,6 +254,16 @@ export type {
   WebshopLegalPart,
   WebshopLegalVersion,
 } from "./webshop-legal.js";
+export {
+  WEBSHOP_ACCLIMATION_TEXTS,
+  WEBSHOP_LIVESTOCK_KINDS,
+  isWebshopLivestockKind,
+  webshopAcclimationValue,
+} from "./webshop-acclimation.js";
+export type {
+  WebshopAcclimationTexts,
+  WebshopLivestockKind,
+} from "./webshop-acclimation.js";
 export type {
   WebshopMailRender,
   WebshopRenderSteps,
