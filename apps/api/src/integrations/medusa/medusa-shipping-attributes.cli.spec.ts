@@ -210,7 +210,12 @@ describe("a szállítási jellemzők parancsa", () => {
   szerinti termek nem kerul a celok koze; ha felulirja a KEZZEL kitoltott
   profilt; ha egy felulirás nelkuli UNAS-termek is cel lesz.
 */
-  describe("a UNAS szállítási felülírása", () => {
+  /*
+    A JELZOK FORRASA AZ OS-SOR (a82ed229, az eles feltolto utan, 2026-11-05). MI PIROSIT: ha egy sor nelkuli
+    UNAS-termek a nyers adatabol megis cella valik; ha a sor nelkuli UNAS-termek csendben kimarad (a FIGYELEM
+    sor nelkul); ha a UNAS a kezi sort felulirja.
+  */
+  describe("a UNAS-adat nem forrás, csak jelzés", () => {
     const csakFoxpost = {
       ShippingMethods: {
         Denied: {
@@ -222,7 +227,7 @@ describe("a szállítási jellemzők parancsa", () => {
       },
     };
 
-    it("a felülírt termék cél lesz, a felülírás nélküli nem, és a sort kiírja", async () => {
+    it("a sor nélküli UNAS-termék nem cél, de a kimenet megszámolja", async () => {
       const f = fakes(
         [],
         [],
@@ -238,11 +243,27 @@ describe("a szállítási jellemzők parancsa", () => {
         f.database,
         f.service,
       );
-      assert.deepEqual(
-        f.hivasok.map((h) => h.id),
-        ["unas-1"],
+      assert.deepEqual(f.hivasok, []);
+      assert.match(
+        f.szoveg(),
+        /FIGYELEM: 2 UNAS-terméknek nincs szállítási-jellemző sora/,
       );
-      assert.match(f.szoveg(), /1 a UNAS szállítási felülírásából/);
+    });
+
+    it("a sorral bíró UNAS-termék nem számít a figyelmeztetésbe", async () => {
+      const f = fakes(
+        [PROFIL],
+        [],
+        [{ productId: PROFIL.productId, rawPayload: csakFoxpost }],
+      );
+      await runShippingAttributesCli(
+        [],
+        f.out,
+        undefined,
+        f.database,
+        f.service,
+      );
+      assert.doesNotMatch(f.szoveg(), /FIGYELEM/);
     });
 
     it("a kézzel kitöltött profil erősebb a UNAS-nál", async () => {
@@ -289,8 +310,9 @@ describe("a szállítási jellemzők parancsa", () => {
     };
 
     it("csak az egyértelmű párt adja át, a kétértelműt és a párnélkülit megszámolja", async () => {
+      // os-1 is a target through its OS row; its UNAS mirror still gives the article number for the pairing
       const f = fakes(
-        [],
+        [{ ...PROFIL, productId: "os-1" }],
         [],
         [{ productId: "os-1", rawPayload: csakFoxpost }],
         [

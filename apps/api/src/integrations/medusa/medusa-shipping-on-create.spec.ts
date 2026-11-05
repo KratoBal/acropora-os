@@ -8,8 +8,7 @@ import type { ShippingAttributesCliDatabase } from "./medusa-shipping-attributes
   A LÉTREHOZOTT TERMÉK SZÁLLÍTÁSI OSZTÁLYÁNAK FORRÁSAI (kártya 2a7f2313,
   acrobot 27099 döntései). MI PIROSÍT:
   - a UNAS felülírja a kézzel kitöltött sort;
-  - a „csak Foxpost” UNAS-tétel (a Modern Reef is ilyen) nem bolti átvétel;
-  - a „csak GLS házhoz” nem Foxpost-tiltás;
+  - a sor nélküli termék UNAS nyers adatából mégis forrás lesz (a82ed229, az éles feltöltő után kikerült);
   - az élő állat kategóriája nem jelöl bolti átvételt;
   - a profilt és a kategória-fát termékenként kérdezi, vagy egy hibát megtart.
 */
@@ -105,16 +104,11 @@ describe("the shipping class of a created product", () => {
     assert.deepEqual(on(projected[0]!.profile), ["isHeavy"]);
   });
 
-  it("UNAS 'Foxpost only' (Modern Reef) is store pickup; 'GLS home only' forbids Foxpost", async () => {
+  // a82ed229: since the live fill (2026-11-05) the OS row is the only source; UNAS data without a row is not read
+  it("UNAS data without a row is not a source: the product has no restriction, as an OS-only product", async () => {
     const foxpostOnly = setup({ unas: denied(GLS_HOME, GLS_POINT) });
     await foxpostOnly.helper.afterCreate("p1");
-    assert.deepEqual(on(foxpostOnly.projected[0]!.profile), ["pickupOnly"]);
-
-    const glsHomeOnly = setup({ unas: denied(FOXPOST, GLS_POINT) });
-    await glsHomeOnly.helper.afterCreate("p1");
-    assert.deepEqual(on(glsHomeOnly.projected[0]!.profile), [
-      "foxpostForbidden",
-    ]);
+    assert.equal(foxpostOnly.projected[0]!.profile, null);
   });
 
   it("a live animal is store pickup by its category, whatever UNAS says", async () => {
