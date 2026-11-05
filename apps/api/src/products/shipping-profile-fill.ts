@@ -27,6 +27,8 @@ export interface ShippingFillReport {
   create: number;
   update: number;
   unchanged: number;
+  /** Jelzőnként: az új sorok közül hányban lesz igaz (acrobot 43066: a próba enélkül vak a létrehozásra). */
+  createdFlags: Record<ShippingFlag, number>;
   /** Jelzőnként: hány terméken írna át a UNAS. */
   updatedFlags: Record<ShippingFlag, number>;
   /** Kézi jelző, ami eltér a UNAS-étól: a kézi marad, de látszik. */
@@ -69,6 +71,12 @@ export async function planShippingFill(
     create: 0,
     update: 0,
     unchanged: 0,
+    createdFlags: {
+      pickupOnly: 0,
+      foxpostForbidden: 0,
+      isHeavy: 0,
+      isFrozen: 0,
+    },
     updatedFlags: {
       pickupOnly: 0,
       foxpostForbidden: 0,
@@ -98,8 +106,11 @@ export async function planShippingFill(
       const regi = meglevo.get(sor.productId) ?? null;
       const unas = unasShippingProfile(sor.rawPayload);
       const plan = planUnasShippingFlags(regi, unas);
-      if (plan.kind === "create") report.create++;
-      else if (plan.kind === "update") {
+      if (plan.kind === "create") {
+        report.create++;
+        for (const flag of SHIPPING_FLAGS)
+          if (plan.data[flag]) report.createdFlags[flag]++;
+      } else if (plan.kind === "update") {
         report.update++;
         for (const flag of plan.flags) report.updatedFlags[flag]++;
       } else report.unchanged++;
@@ -139,6 +150,7 @@ export function describeShippingFill(r: ShippingFillReport): string {
   const sorok = [
     `Termék a UNAS-tükörrel: ${r.products}`,
     `Új sor (eddig nem volt): ${r.create}`,
+    ...SHIPPING_FLAGS.map((f) => `  ${f} igaz: ${r.createdFlags[f]}`),
     `Frissül (UNAS-forrású jelző változott): ${r.update}`,
     ...SHIPPING_FLAGS.map((f) => `  ${f}: ${r.updatedFlags[f]}`),
     `Változatlan: ${r.unchanged}`,
