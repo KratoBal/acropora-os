@@ -180,6 +180,63 @@ describe(
       });
     });
 
+    /*
+      A NEVKERESES EKEZET- ES KISBETU-FUGGETLEN (40332480). MI PIROSIT: ha a keresett nev ekezet nelkul nem talalja az
+      ekezetes nevet (a Prisma `contains` nem unaccent); ha a nagybetus keresett szoveg nem talal; ha a `%` jel
+      joker lenne a szovegben; ha az inaktiv sor a keresett nevnel is eloujjon.
+    */
+    describe("az akvárium ügyfél-választójának névkeresése", () => {
+      it("ékezet- és kisbetű-független, a % jel szó szerint értendő, az inaktívat nem adja", async () => {
+        const tag = `AQ-INT-ACC-${suffix}`;
+        const accented = await prisma.customer.create({
+          data: {
+            customerNumber: `${CUSTOMER_PREFIX}acc-${suffix}`,
+            type: "COMPANY",
+            displayName: `${tag} Fővárosi Állatkert`,
+          },
+        });
+        await prisma.customer.create({
+          data: {
+            customerNumber: `${CUSTOMER_PREFIX}acc-off-${suffix}`,
+            type: "COMPANY",
+            displayName: `${tag} Fővárosi inaktív`,
+            isActive: false,
+          },
+        });
+        const percent = await prisma.customer.create({
+          data: {
+            customerNumber: `${CUSTOMER_PREFIX}acc-pct-${suffix}`,
+            type: "COMPANY",
+            displayName: `${tag} 100% Kft`,
+          },
+        });
+        await prisma.customer.create({
+          data: {
+            customerNumber: `${CUSTOMER_PREFIX}acc-1000-${suffix}`,
+            type: "COMPANY",
+            displayName: `${tag} 1000 Kft`,
+          },
+        });
+
+        for (const typed of [
+          `${tag} fovarosi allatkert`,
+          `${tag.toLowerCase()} FŐVÁROSI ÁLLATKERT`,
+        ]) {
+          const found = await repository.searchSelectableCustomers(typed);
+          assert.deepEqual(
+            found.items.map((item) => item.id),
+            [accented.id],
+            typed,
+          );
+        }
+        const pct = await repository.searchSelectableCustomers(`${tag} 100%`);
+        assert.deepEqual(
+          pct.items.map((item) => item.id),
+          [percent.id],
+        );
+      });
+    });
+
     describe("a kliens művelet-azonosítója", () => {
       const KULCS = `aquarium-create:OWN:${new Date(
         Date.UTC(2026, 8, 24, 14, 30, 0),
