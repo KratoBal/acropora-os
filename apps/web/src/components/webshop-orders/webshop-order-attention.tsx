@@ -49,8 +49,8 @@ export function stoppedDateText(at: string): string {
 export function WebshopOrderAttention({ token }: { token: string }) {
   const [data, setData] = useState<WebshopOrderAttentionResponse | null>(null);
 
+  // nem `if (!token)`: éles (sütis) belépésnél a token üres, a süti hitelesít (kártya 6f8e6f23)
   useEffect(() => {
-    if (!token) return;
     const controller = new AbortController();
     webshopOrdersApi
       .attention(token, controller.signal)

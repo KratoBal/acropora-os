@@ -8,7 +8,11 @@ import { apiRequest } from "./client";
 
 /** A Banki átutalások lap (kártya aeddb2c3): jóváírások, ellenőrzés, beírás. */
 export const bankTransfersApi = {
-  list(token: string, query: { from?: string; all?: boolean } = {}) {
+  list(
+    token: string,
+    query: { from?: string; all?: boolean } = {},
+    signal?: AbortSignal,
+  ) {
     const params = new URLSearchParams();
     if (query.from) params.set("from", query.from);
     if (query.all) params.set("all", "true");
@@ -16,6 +20,7 @@ export const bankTransfersApi = {
     return apiRequest<BankTransferCreditView[]>(
       `/billing/bank-transfers${suffix}`,
       token,
+      signal ? { signal } : undefined,
     );
   },
   /** what the typed invoice numbers decide; nothing is written */

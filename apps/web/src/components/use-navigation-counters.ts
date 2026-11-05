@@ -33,8 +33,9 @@ export function useNavigationCounters(
     [token],
   );
 
+  // nem `!token`: éles (sütis) belépésnél a token üres, a süti hitelesít; a munkamenetet az `enabled` jelzi (6f8e6f23)
   useEffect(() => {
-    if (!enabled || !token) {
+    if (!enabled) {
       setCounters(null);
       return;
     }

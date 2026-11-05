@@ -75,6 +75,40 @@ beforeEach(() => {
 });
 
 describe("BankTransfersPage", () => {
+  it("loads with a production (cookie) session that has no readable token (6f8e6f23)", async () => {
+    // élesben a munkamenet sütis: `production-auth.ts` `token: undefined`-et ad, a böngésző a sütit küldi
+    auth.session = { ...as("OWNER"), token: undefined };
+    api.list.mockResolvedValue([credit({ written: ["ACRW-2026/00084"] })]);
+    render(<BankTransfersPage />);
+    expect(
+      await screen.findByText("Beírva: ACRW-2026/00084"),
+    ).toBeInTheDocument();
+    expect(api.list).toHaveBeenCalledTimes(1);
+  });
+
+  it("a list that never answers ends in an error, not a standing loader or an empty claim (6f8e6f23)", async () => {
+    const timeout = new AbortController();
+    vi.spyOn(AbortSignal, "timeout").mockReturnValue(timeout.signal);
+    api.list.mockImplementation(
+      (_token: unknown, _query: unknown, signal: AbortSignal) =>
+        new Promise((_resolve, reject) =>
+          signal.addEventListener("abort", () =>
+            reject(new DOMException("timed out", "TimeoutError")),
+          ),
+        ),
+    );
+    render(<BankTransfersPage />);
+    await waitFor(() => expect(api.list).toHaveBeenCalledTimes(1));
+    timeout.abort();
+    expect(
+      await screen.findByText(/60 másodperc alatt sem fejeződött be/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Nincs párosítandó jóváírás"),
+    ).not.toBeInTheDocument();
+    vi.restoreAllMocks();
+  });
+
   it("shows each credit's state: written, matching, or needing a person", async () => {
     api.list.mockResolvedValue([
       credit({ id: "w", written: ["ACRW-2026/00084"] }),
