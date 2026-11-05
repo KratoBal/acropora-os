@@ -478,7 +478,8 @@ describe("Tervezet törlése és másolat (5937bdf2)", () => {
     expect(navigation.push).not.toHaveBeenCalled();
   });
 
-  it("a published or sent quote has no Törlés, and an open one has no copy button", async () => {
+  // card 534b2de4 (Luca): an open quote can be copied too; it still has no Törlés
+  it("a published or sent quote has no Törlés, but has the copy button", async () => {
     api.detail.mockResolvedValue(
       quote([version({ id: "v1", versionNumber: 1, status: "PUBLISHED" })]),
     );
@@ -486,8 +487,25 @@ describe("Tervezet törlése és másolat (5937bdf2)", () => {
     await screen.findByRole("button", { name: "Új verzió" });
     expect(screen.queryByRole("button", { name: "Törlés" })).toBeNull();
     expect(
-      screen.queryByRole("button", { name: "Másolat új ajánlatként" }),
-    ).toBeNull();
+      screen.getByRole("button", { name: "Másolat új ajánlatként" }),
+    ).toBeTruthy();
+  });
+
+  it("an open quote: Másolat új ajánlatként creates the copy, opens the NEW quote, and leaves the open one alone", async () => {
+    api.detail.mockResolvedValue(
+      quote([version({ id: "v1", versionNumber: 1, status: "PUBLISHED" })], {
+        status: "SENT",
+      }),
+    );
+    api.copyAsNew.mockResolvedValue({ id: "q9", quoteNumber: "AJ-2026-0099" });
+    render(<QuoteDetailPage quoteId="q1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Másolat új ajánlatként" }),
+    );
+    await waitFor(() =>
+      expect(api.copyAsNew).toHaveBeenCalledWith("token-1", "q1"),
+    );
+    expect(navigation.push).toHaveBeenCalledWith("/ajanlatok/q9");
   });
 
   it("a closed quote: Másolat új ajánlatként creates the copy and opens the NEW quote", async () => {

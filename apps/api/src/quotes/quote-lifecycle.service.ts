@@ -10,7 +10,6 @@ import { nextQuoteNumber } from "./quote-number.js";
 import { copyVersionContent } from "./quote-version-editor.js";
 
 /** Closed quotes: no new version, no reopening; a copy as a new quote is the way on. */
-const CLOSED_STATUSES = new Set(["ACCEPTED", "REJECTED", "CANCELLED"]);
 
 /** A copy's validity when the source's has already passed. */
 const COPY_VALID_DAYS = 30;
@@ -121,11 +120,14 @@ export class QuoteLifecycleService {
   }
 
   /**
-   * A CLOSED QUOTE AS A NEW QUOTE: a new number, status DRAFT, version 1, a
-   * deep copy of the latest PUBLISHED version (blocks, items, BOM lines with
-   * their cost snapshots, milestones). The old quote is not touched. A source
-   * validity that has passed becomes today plus 30 days, or the copy could not
-   * be published.
+   * A QUOTE AS A NEW QUOTE, in any status (Luca, card 534b2de4, 2026-11-05: "nyitott ajánlatot másolni ... most írok
+   * egyet az állatkertnek": the same lines with a few letters changed, sent in parallel, so the copy is not an
+   * accepted quote). A new number, status DRAFT, version 1, a deep copy of the latest PUBLISHED version (blocks,
+   * items, BOM lines with their cost snapshots, milestones); the same customer. A quote that was never published
+   * (only a draft) copies its latest version. The source is NOT touched, open or closed: it is only locked for the
+   * read, its number, its versions and its follow-ups (`quote:<id>:...`, opened by a send or a postponement, which
+   * the copy never had) stay as they are. A source validity that has passed becomes today plus 30 days, or the copy
+   * could not be published.
    */
   async copyAsNew(quoteId: string, user: AuthenticatedUser) {
     return this.database.$transaction(async (tx) => {
@@ -143,26 +145,29 @@ export class QuoteLifecycleService {
           customerId: true,
         },
       });
-      if (!CLOSED_STATUSES.has(quote.status))
-        throw new ConflictException(
-          "Csak lezárt ajánlatból készíthető másolat; a nyitott ajánlathoz új verzió nyitható.",
-        );
-      const source = await tx.quoteVersion.findFirst({
+      const sourceInclude = {
+        blocks: {
+          orderBy: { position: "asc" },
+          include: { items: { orderBy: { position: "asc" } } },
+        },
+        bomItems: { orderBy: [{ quoteItemId: "asc" }, { position: "asc" }] },
+        milestones: { orderBy: { position: "asc" } },
+      } satisfies Prisma.QuoteVersionInclude;
+      // what the customer was offered (the latest published version), else the working draft of a never published one
+      const published = await tx.quoteVersion.findFirst({
         where: { quoteId, status: "PUBLISHED" },
         orderBy: { versionNumber: "desc" },
-        include: {
-          blocks: {
-            orderBy: { position: "asc" },
-            include: { items: { orderBy: { position: "asc" } } },
-          },
-          bomItems: { orderBy: [{ quoteItemId: "asc" }, { position: "asc" }] },
-          milestones: { orderBy: { position: "asc" } },
-        },
+        include: sourceInclude,
       });
+      const source =
+        published ??
+        (await tx.quoteVersion.findFirst({
+          where: { quoteId },
+          orderBy: { versionNumber: "desc" },
+          include: sourceInclude,
+        }));
       if (!source)
-        throw new ConflictException(
-          "Nincs publikált verzió, amiből másolat készíthető.",
-        );
+        throw new ConflictException("Nincs verzió, amiből másolat készíthető.");
       const today = budapestToday();
       const sourceValid = source.validUntil.toISOString().slice(0, 10);
       const validUntil =
