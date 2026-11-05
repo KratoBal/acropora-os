@@ -174,6 +174,21 @@ export const productApi = {
       { method: "PUT", body: JSON.stringify(input) },
     );
   },
+  /**
+   * CSOPORTOS SZÁLLÍTÁSI SZERKESZTÉS (a82ed229, 2c): csak a megadott jelzők változnak, a többi marad, ahogy a
+   * terméken áll. Egy hívásban legfeljebb 500 termék.
+   */
+  bulkShippingProfiles(
+    token: string,
+    productIds: readonly string[],
+    changes: Partial<ProductShippingProfileInput>,
+  ) {
+    return apiRequest<{ updated: number; notFound: string[] }>(
+      "/products/shipping-profiles/bulk",
+      token,
+      { method: "POST", body: JSON.stringify({ productIds, changes }) },
+    );
+  },
   /** A változat saját bruttó ára (T4.1-D3); csak OS-gazdájú terméknél, a szerver 409-cel utasítja el a többit. */
   setVariantPrice(
     token: string,

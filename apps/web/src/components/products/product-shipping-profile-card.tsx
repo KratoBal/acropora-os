@@ -36,7 +36,8 @@ import {
  * jelenne meg, a hianya ketertelmu lenne -- nem tudnank, hogy nincs jogunk
  * hozza, vagy nincs meg adat.
  */
-const JELZOK = [
+/** A jelzők felirata és magyarázata; a lista csoportos szerkesztője is ezt használja (a82ed229, 2c). */
+export const JELZOK = [
   {
     key: "pickupOnly" as const,
     label: "Csak üzletben vehető át",

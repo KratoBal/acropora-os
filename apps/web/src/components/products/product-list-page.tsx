@@ -34,11 +34,15 @@ import {
   PilotThemeRoot,
 } from "@/components/pilot/pilot-ui";
 import { useProductImageSrc } from "@/components/products/product-image-source";
+import { ShippingBulkDialog } from "@/components/products/shipping-bulk-dialog";
 import {
   ShippingFilterSelect,
   ShippingFlagsCell,
 } from "@/components/products/shipping-flags";
-import { productApi } from "@/lib/api/products";
+import {
+  productApi,
+  type ProductShippingProfileInput,
+} from "@/lib/api/products";
 import {
   changeProductFilters,
   changeProductPage,
@@ -156,11 +160,22 @@ export function ProductListPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [requestVersion, setRequestVersion] = useState(0);
+  // a82ed229, 2c: the selection is the visible page's; a new query clears it
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+  const [bulkNotice, setBulkNotice] = useState<string | null>(null);
 
   const canView = Boolean(
     session && hasPermission(session.user, PERMISSIONS.PRODUCTS_VIEW),
   );
+  const canManage = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.PRODUCTS_MANAGE),
+  );
   const token = session?.token ?? "";
+
+  useEffect(() => setSelected(new Set()), [queryKey]);
 
   const replaceState = useCallback(
     (nextState: ProductListUrlState) => {
@@ -312,7 +327,67 @@ export function ProductListPage() {
     definícióból épül, a szélességet és a számoszlopok jobbra zárását
     egyszer mondjuk ki (`PilotDataTable`).
   */
+  const pageIds = data?.items.map((product) => product.id) ?? [];
+  const allSelected =
+    pageIds.length > 0 && pageIds.every((id) => selected.has(id));
+  const toggle = (id: string) =>
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const saveBulk = (changes: Partial<ProductShippingProfileInput>) => {
+    setBulkBusy(true);
+    setBulkError(null);
+    void productApi
+      .bulkShippingProfiles(token, [...selected], changes)
+      .then((result) => {
+        setBulkOpen(false);
+        setSelected(new Set());
+        setBulkNotice(
+          result.notFound.length
+            ? `${result.updated} termék szállítási jelzői mentve; ${result.notFound.length} termék nem található.`
+            : `${result.updated} termék szállítási jelzői mentve.`,
+        );
+        setRequestVersion((value) => value + 1);
+      })
+      .catch((cause: unknown) =>
+        setBulkError(
+          cause instanceof Error ? cause.message : "A mentés nem sikerült.",
+        ),
+      )
+      .finally(() => setBulkBusy(false));
+  };
+
+  const selectColumn: PilotTableColumn<ProductListItem> = {
+    id: "select",
+    width: "48px",
+    phone: "hide",
+    header: (
+      <input
+        type="checkbox"
+        aria-label="Az oldal minden termékének kijelölése"
+        checked={allSelected}
+        onChange={() => setSelected(allSelected ? new Set() : new Set(pageIds))}
+        className="size-4 accent-pilot-aqua-700"
+      />
+    ),
+    cell: (product) => (
+      <input
+        type="checkbox"
+        aria-label={`${product.name} kijelölése`}
+        checked={selected.has(product.id)}
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => event.stopPropagation()}
+        onChange={() => toggle(product.id)}
+        className="size-4 accent-pilot-aqua-700"
+      />
+    ),
+  };
+
   const columns: PilotTableColumn<ProductListItem>[] = [
+    ...(canManage ? [selectColumn] : []),
     {
       id: "product",
       header: "Termék",
@@ -531,6 +606,22 @@ export function ProductListPage() {
         </div>
       </section>
 
+      {bulkNotice ? (
+        <Alert
+          variant="info"
+          title={bulkNotice}
+          action={
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setBulkNotice(null)}
+            >
+              Bezárás
+            </Button>
+          }
+        />
+      ) : null}
+
       {refreshing ? (
         <p className="text-xs font-medium text-pilot-aqua-700" role="status">
           Lista frissítése…
@@ -632,6 +723,33 @@ export function ProductListPage() {
             </div>
           </div>
 
+          {canManage && selected.size > 0 ? (
+            <div
+              className="flex flex-wrap items-center gap-3 border-t border-pilot-grey-200 bg-pilot-aqua-50 px-5 py-3"
+              data-testid="product-bulk-bar"
+            >
+              <span className="text-sm font-semibold text-pilot-grey-900">
+                {selected.size} kijelölve
+              </span>
+              <PilotButton
+                size="regular"
+                onClick={() => {
+                  setBulkError(null);
+                  setBulkOpen(true);
+                }}
+              >
+                Szállítási jelzők…
+              </PilotButton>
+              <button
+                type="button"
+                onClick={() => setSelected(new Set())}
+                className="text-xs text-pilot-grey-600 hover:underline"
+              >
+                Kijelölés törlése
+              </button>
+            </div>
+          ) : null}
+
           <PilotDataTable
             columns={columns}
             rows={data.items}
@@ -653,6 +771,14 @@ export function ProductListPage() {
           </div>
         </section>
       ) : null}
+      <ShippingBulkDialog
+        open={bulkOpen}
+        count={selected.size}
+        busy={bulkBusy}
+        error={bulkError}
+        onClose={() => setBulkOpen(false)}
+        onSubmit={saveBulk}
+      />
     </PilotThemeRoot>
   );
 }

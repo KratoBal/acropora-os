@@ -40,6 +40,7 @@ const profil = (overrides: Record<string, unknown> = {}) => ({
 function fixture(
   existing: ReturnType<typeof profil> | null,
   snapshot: { rawPayload: unknown } | null = null,
+  { outsideReadThrows = false }: { outsideReadThrows?: boolean } = {},
 ) {
   const hivasok: Array<{ muvelet: string; args: unknown }> = [];
   const transaction = {
@@ -71,7 +72,13 @@ function fixture(
   };
   const database = {
     product: { findUnique: async () => ({ id: "product-1" }) },
-    productShippingProfile: { findUnique: async () => existing },
+    productShippingProfile: {
+      findUnique: async () => {
+        if (outsideReadThrows)
+          throw new Error("read outside the write's transaction");
+        return existing;
+      },
+    },
     $transaction: async <T>(
       operation: (tx: typeof transaction) => Promise<T>,
     ) => operation(transaction),
@@ -328,5 +335,55 @@ describe("az első írás a UNAS-adathoz mér", () => {
     assert.equal(upsert.create.foxpostForbiddenSource, "UNAS");
     assert.equal(upsert.create.pickupOnlySource, "UNAS");
     assert.equal(upsert.create.lockerUnsuitable, true);
+  });
+});
+
+/*
+  A RÉSZLEGES ÍRÁS (a82ed229, 2c). MI PIROSÍT: ha a mai jelzőket a tranzakción KÍVÜL olvassa (egy közben mentett
+  kártya jelzőit visszaírná); ha meglévő soron egy nem kért jelzőt is ír; ha sor nélküli terméknél a UNAS-szal egyező,
+  nem kért jelző kézi lesz.
+*/
+describe("a részleges szállítási írás", () => {
+  it("meglévő soron csak a kért jelzőt írja, és a mai értéket a tranzakcióban olvassa", async () => {
+    const { repository, hivasok } = fixture(profil(), null, {
+      outsideReadThrows: true,
+    });
+
+    await repository.patch("product-1", { lockerUnsuitable: true }, "user-1");
+
+    assert.deepEqual(hivasok.find((h) => h.muvelet === "upsert")?.args, {
+      update: { lockerUnsuitable: true },
+    });
+  });
+
+  it("sor nélkül a UNAS-adatból indul: a nem kért, egyező jelző UNAS marad, a kért kézi lesz", async () => {
+    const { repository, hivasok } = fixture(
+      null,
+      {
+        rawPayload: {
+          ShippingMethods: {
+            Denied: { Method: [{ Name: "Foxpost csomagautomaták" }] },
+          },
+        },
+      },
+      { outsideReadThrows: true },
+    );
+
+    await repository.patch("product-1", { isHeavy: true }, "user-1");
+
+    assert.deepEqual(hivasok.find((h) => h.muvelet === "upsert")?.args, {
+      create: {
+        productId: "product-1",
+        pickupOnly: false,
+        pickupOnlySource: "UNAS",
+        foxpostForbidden: true,
+        foxpostForbiddenSource: "UNAS",
+        isHeavy: true,
+        isHeavySource: "MANUAL",
+        isFrozen: false,
+        isFrozenSource: "UNAS",
+        lockerUnsuitable: false,
+      },
+    });
   });
 });
