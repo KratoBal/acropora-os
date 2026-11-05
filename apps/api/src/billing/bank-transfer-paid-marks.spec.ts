@@ -162,6 +162,72 @@ describe("one transfer for several of our invoices", () => {
   });
 });
 
+/*
+  OUR SERIES WITHOUT A PREFIX (Balázs's live run 2026-11-05 11:05: "2026/00083 nincs" while the invoice was there).
+  WHAT TURNS THIS RED: the bare series not matched; of two invoices sharing a bare number, the paid one taken, or
+  either taken when both wait for money.
+*/
+describe("the 2026/ series, numbered without a prefix", () => {
+  const bare = (
+    number: string,
+    gross: string,
+    over: Partial<FeedInvoice> = {},
+  ) => invoice(number, gross, { documentNumber: `2026/${number}`, ...over });
+
+  it("Balázs's transfer on the real numbers is marked", () => {
+    const decision = decideBankTransfer(credit(), [
+      bare("00083", "10000.00", {
+        paidAmount: "10000.00",
+        payments: [
+          {
+            date: DAY,
+            amount: "10000",
+            title: "átutalás",
+            bankTransactionId: "szhu-1",
+          },
+        ],
+      }),
+      bare("00084", "20000.00"),
+      bare("00085", "30000.00"),
+      bare("00086", "40000.00"),
+    ]);
+    assert.equal(decision.markable, true);
+    if (!decision.markable) return;
+    assert.deepEqual(
+      decision.marks.map((m) => m.invoiceNumber),
+      ["2026/00086", "2026/00085", "2026/00084"],
+    );
+  });
+
+  it("a bare number of two series: the one waiting for money, never the one paid long ago", () => {
+    const paidLongAgo = invoice("00084", "7000.00", {
+      paidAmount: "7000.00",
+      payments: [{ date: "2026-02-01", amount: "7000", title: "átutalás" }],
+    });
+    const decision = decideBankTransfer(
+      credit({ amount: "20000.00", narrative: "2026/00084" }),
+      [paidLongAgo, bare("00084", "20000.00")],
+    );
+    assert.equal(decision.markable, true);
+    if (!decision.markable) return;
+    assert.deepEqual(
+      decision.marks.map((m) => m.invoiceNumber),
+      ["2026/00084"],
+    );
+  });
+
+  it("both waiting for money: a person decides", () => {
+    const decision = decideBankTransfer(
+      credit({ amount: "20000.00", narrative: "2026/00084" }),
+      [invoice("00084", "20000.00"), bare("00084", "20000.00")],
+    );
+    assert.equal(decision.markable, false);
+    if (decision.markable) return;
+    assert.equal(decision.refusal, "UNRESOLVED");
+    assert.equal(decision.detail, "2026/00084 több");
+  });
+});
+
 describe("a credit already used (barracuda, #2192)", () => {
   it("another source's mark on the credit: not used again", () => {
     const decision = decideBankTransfer(

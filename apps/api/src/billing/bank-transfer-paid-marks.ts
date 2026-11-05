@@ -119,6 +119,24 @@ const fillerText = (cents: bigint) => {
   return `${sign}${abs / 100n}.${String(abs % 100n).padStart(2, "0")}`;
 };
 
+/**
+ * Whether this transfer can be paying the invoice: something is still open on it, or Számlázz.hu booked a transfer on
+ * it that day (its own pairing of this very credit). A fully paid invoice with no transfer that day is not: of the
+ * series that share a bare number, it narrows to the one that waits for money. An unreadable amount keeps the
+ * invoice in (the reference stays ambiguous, a person decides).
+ */
+const couldBeThisTransfers = (day: string) => (invoice: FeedInvoice) => {
+  const gross = moneyCents(invoice.grossAmount);
+  const paid = moneyCents(invoice.paidAmount);
+  if (gross === null || paid === null || gross - paid > 0n) return true;
+  return invoice.payments.some(
+    (payment) =>
+      payment.date === day &&
+      (Boolean(payment.bankTransactionId) ||
+        /átutal/i.test(payment.title ?? "")),
+  );
+};
+
 export function decideBankTransfer(
   credit: BankCredit,
   invoices: readonly FeedInvoice[],
@@ -155,8 +173,11 @@ export function decideBankTransfer(
         !invoice.cancelled &&
         refMatchesInvoiceNumber(ref, invoice.documentNumber),
     );
-    if (hits.length === 1) {
-      if (!named.includes(hits[0]!)) named.push(hits[0]!);
+    // a bare number fits every series (`2026/00083` and `ACRW-2026/00083`): of two, only one can be this transfer's
+    const candidates =
+      hits.length > 1 ? hits.filter(couldBeThisTransfers(day)) : hits;
+    if (candidates.length === 1) {
+      if (!named.includes(candidates[0]!)) named.push(candidates[0]!);
     } else
       unresolved.push(
         `${ref.year}/${ref.number}${hits.length === 0 ? " nincs" : " több"}`,
@@ -333,18 +354,28 @@ export async function loadBankCredit(
 export async function loadFeedInvoicesFor(
   texts: readonly string[],
 ): Promise<FeedInvoice[]> {
-  const suffixes = [
-    ...new Set(
+  // the year and the number without its leading zeros: `2026/000436` is ACRW-2026/00436, so the text's own padding
+  // cannot be the database's suffix; the exact (numeric) comparison is `refMatchesInvoiceNumber`'s
+  const keys = [
+    ...new Map(
       texts.flatMap((text) =>
-        remittanceInvoiceRefs(text).map((ref) => `${ref.year}/${ref.number}`),
+        remittanceInvoiceRefs(text).map((ref) => {
+          const digits = ref.number.replace(/^0+(?=\d)/, "");
+          return [`${ref.year}|${digits}`, { year: ref.year, digits }] as const;
+        }),
       ),
-    ),
+    ).values(),
   ];
-  if (suffixes.length === 0) return [];
+  if (keys.length === 0) return [];
   const documents = await prisma.externalBillingDocument.findMany({
     where: {
       source: "SZAMLAZZ",
-      OR: suffixes.map((suffix) => ({ documentNumber: { endsWith: suffix } })),
+      OR: keys.map((key) => ({
+        AND: [
+          { documentNumber: { contains: `${key.year}/` } },
+          { documentNumber: { endsWith: key.digits } },
+        ],
+      })),
     },
     orderBy: [{ feedReceivedAt: "desc" }, { id: "asc" }],
     select: {
