@@ -178,7 +178,7 @@ export function VariantSaleEditor({
               aria-label="Akciós bruttó ár"
             />
           </PilotFormField>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <PilotFormField label="Első nap" help="0:00-tól, budapesti idő">
               <PilotInput
                 type="date"
