@@ -301,7 +301,7 @@ describe("the daily schedule", () => {
     const envBefore = { ...process.env };
     const bank = (gate?: Promise<void>) => ({
       source: "BANK_TRANSFER" as const,
-      switchName: "PAID_MARKS_TEST_BANK",
+      switchName: "BANK_TRANSFER_MARK_PAID",
       plan: async () => {
         await gate;
         return {
@@ -336,7 +336,7 @@ describe("the daily schedule", () => {
       }) as never;
 
     it("a dry source records its plan with invoice number and amount, writes nothing and asks for no key", async () => {
-      process.env.PAID_MARKS_TEST_BANK = "dry";
+      process.env.BANK_TRANSFER_MARK_PAID = "dry";
       try {
         const log: string[] = [];
         let keyAsked = 0;
@@ -358,7 +358,7 @@ describe("the daily schedule", () => {
     });
 
     it("a second press while a run is in flight does not start another; after it, it does", async () => {
-      process.env.PAID_MARKS_TEST_BANK = "dry";
+      process.env.BANK_TRANSFER_MARK_PAID = "dry";
       try {
         const log: string[] = [];
         let release!: () => void;
