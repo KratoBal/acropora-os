@@ -373,6 +373,20 @@ describe("ProductListPage", () => {
     );
   });
 
+  it("az eltérés-szűrő: a URL-ből az API-ig jut, és a választóban saját felirata van (2d)", async () => {
+    navigation.params = new URLSearchParams("szallitas=unasDiff");
+    api.list.mockResolvedValue(populatedResponse);
+    render(createElement(ProductListPage));
+    await screen.findByRole("table");
+    expect(api.list).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ shipping: "unasDiff" }),
+    );
+    expect(
+      screen.getByRole("option", { name: "Kézi, eltér a UNAS-tól" }),
+    ).toBeInTheDocument();
+  });
+
   it("a fejléc és a sor ugyanabból az oszlopból igazodik: a számoszlop mindkettőben jobbra zár", async () => {
     api.list.mockResolvedValue(populatedResponse);
     render(createElement(ProductListPage));
