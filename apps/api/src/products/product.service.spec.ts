@@ -718,4 +718,41 @@ describe("ProductService", () => {
           "PRODUCT_SALE_NOT_LOWER",
     );
   });
+
+  it("answers 409 with its own code when a running sale's start would move (barracuda #2219)", async () => {
+    const own = repositoryWith({
+      id: "product-1",
+      catalogAuthority: "ACROPORA",
+    });
+    let passedNow: unknown;
+    (
+      own.repository as unknown as {
+        setVariantSale: (...args: unknown[]) => Promise<never>;
+      }
+    ).setVariantSale = async (...args: unknown[]) => {
+      passedNow = args[4];
+      throw new VariantSaleConflict("sale-start-locked", "9990", "7990");
+    };
+    const now = new Date("2026-11-12T00:00:00.000Z");
+    await assert.rejects(
+      () =>
+        new ProductService(own.repository).setVariantSale(
+          "product-1",
+          "variant-1",
+          {
+            grossPrice: "7990",
+            startsAt: "2026-11-12T00:00:00Z",
+            endsAt: "2026-11-17T00:00:00Z",
+          },
+          undefined,
+          now,
+        ),
+      (error: unknown) =>
+        error instanceof ConflictException &&
+        (error.getResponse() as { code: string }).code ===
+          "PRODUCT_SALE_START_LOCKED",
+    );
+    // the service's "now" is the repository's: the guard and the window check read the same moment
+    assert.equal(passedNow, now);
+  });
 });

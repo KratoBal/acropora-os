@@ -269,7 +269,7 @@ export interface VariantSale {
  */
 export class VariantSaleConflict extends Error {
   constructor(
-    readonly code: "own-price-missing" | "sale-not-lower",
+    readonly code: "own-price-missing" | "sale-not-lower" | "sale-start-locked",
     readonly sellingGrossPrice: string | null,
     readonly saleGrossPrice: string | null,
   ) {
@@ -890,6 +890,8 @@ export class ProductRepository extends Repository {
     variantId: string,
     sale: VariantSale | null,
     actorUserId?: string,
+    /** a „most" kívülről: a futó akció kezdetének őre ehhez mér */
+    now: Date = new Date(),
   ): Promise<ProductDetail | null> {
     return retryOnSerializationConflict(() =>
       this.productDatabase.$transaction(
@@ -909,6 +911,22 @@ export class ProductRepository extends Repository {
             throw new VariantSaleConflict(
               "sale-not-lower",
               before.sellingGrossPrice!.toString(),
+              sale.grossPrice.toString(),
+            );
+          /*
+            A FUTÓ AKCIÓ KEZDETE NEM MOZDUL (barracuda, #2219). Az Omnibus a csökkentés kezdete előtti 30 napot nézi,
+            és a saját akció kezdete a változat mezője (`currentReductionStart`): egy későbbre tett kezdet az ablakba
+            húzná ugyanennek az akciónak a korábbi, akciós sorait, és az akció a saját referenciája lenne (acrobot
+            41899 ezt kizárja). Az ár és a vég módosítható; új kezdet törléssel és új akcióval jár.
+          */
+          if (
+            sale &&
+            isOwnSaleActive(before, now) &&
+            sale.startsAt.getTime() !== before.sellingSaleStartsAt!.getTime()
+          )
+            throw new VariantSaleConflict(
+              "sale-start-locked",
+              before.sellingGrossPrice?.toString() ?? null,
               sale.grossPrice.toString(),
             );
           await transaction.productVariant.updateMany({

@@ -200,6 +200,7 @@ export class ProductService {
         variantId,
         { grossPrice: new Prisma.Decimal(input.grossPrice), startsAt, endsAt },
         actorUserId,
+        now,
       )
       .catch(saleConflictToHttp);
     if (!updated) throw variantNotFound();
@@ -512,6 +513,12 @@ function saleConflictToHttp(error: unknown): never {
     throw new ConflictException({
       code: "PRODUCT_SALE_OWN_PRICE_MISSING",
       message: "Előbb a saját eladási árat kell megadni, az akció ahhoz mér.",
+    });
+  if (error.code === "sale-start-locked")
+    throw new ConflictException({
+      code: "PRODUCT_SALE_START_LOCKED",
+      message:
+        "A futó akció kezdete nem módosítható: az ár és a vég igen. Új kezdethez töröld az akciót, és állíts be újat.",
     });
   throw new ConflictException({
     code: "PRODUCT_SALE_NOT_LOWER",

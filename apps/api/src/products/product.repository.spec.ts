@@ -827,6 +827,85 @@ describe("ProductRepository", () => {
     });
   });
 
+  /*
+    A RUNNING SALE'S START IS FIXED (barracuda #2219, acrobot 43470). WHAT TURNS THIS RED: a running sale's start
+    moved later (its own earlier sale rows would fall into its Omnibus window) or earlier; its price or end refused;
+    a not yet running sale's start refused.
+  */
+  it("keeps a running sale's start, lets its price and end change, and moves a planned sale freely", async () => {
+    const during = new Date("2026-11-12T00:00:00.000Z");
+    const running = {
+      sellingGrossPrice: new Prisma.Decimal("9990"),
+      sellingPriceCurrency: "HUF",
+      sellingSaleGrossPrice: SALE.grossPrice,
+      sellingSaleStartsAt: SALE.startsAt,
+      sellingSaleEndsAt: SALE.endsAt,
+    };
+    const save = (
+      variantBefore: typeof running,
+      sale: typeof SALE,
+      now: Date,
+    ) => {
+      const { database, calls } = createDatabase({ variantBefore });
+      return {
+        calls,
+        run: () =>
+          new ProductRepository(database).setVariantSale(
+            "product-1",
+            "variant-1",
+            sale,
+            undefined,
+            now,
+          ),
+      };
+    };
+    for (const startsAt of [
+      new Date("2026-11-12T00:00:00.000Z"),
+      new Date("2026-11-09T00:00:00.000Z"),
+    ]) {
+      const { run, calls } = save(running, { ...SALE, startsAt }, during);
+      await assert.rejects(
+        run,
+        (error: unknown) =>
+          error instanceof VariantSaleConflict &&
+          error.code === "sale-start-locked",
+        startsAt.toISOString(),
+      );
+      assert.deepEqual(
+        calls.map((call) => call.operation),
+        ["variantFindFirst"],
+      );
+    }
+    const kept = save(
+      running,
+      {
+        grossPrice: new Prisma.Decimal("6990"),
+        startsAt: SALE.startsAt,
+        endsAt: new Date("2026-11-20T00:00:00.000Z"),
+      },
+      during,
+    );
+    assert.ok(await kept.run());
+    // before it begins, the start is free
+    const planned = save(
+      running,
+      { ...SALE, startsAt: new Date("2026-11-11T00:00:00.000Z") },
+      new Date("2026-11-09T00:00:00.000Z"),
+    );
+    assert.ok(await planned.run());
+    // and a clear of a running sale is allowed
+    const { database } = createDatabase({ variantBefore: running });
+    assert.ok(
+      await new ProductRepository(database).setVariantSale(
+        "product-1",
+        "variant-1",
+        null,
+        undefined,
+        during,
+      ),
+    );
+  });
+
   it("refuses a sale that is not below the own price, or with no own price", async () => {
     for (const [grossPrice, code] of [
       ["9990", "sale-not-lower"],
