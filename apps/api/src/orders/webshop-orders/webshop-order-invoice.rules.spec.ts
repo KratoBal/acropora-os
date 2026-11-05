@@ -10,6 +10,7 @@ import {
   invoiceDraftOf,
   invoiceRefusal,
   newCustomerOf,
+  orderLanguageOf,
 } from "./webshop-order-invoice.rules.js";
 
 /*
@@ -416,5 +417,24 @@ describe("the buyer", () => {
       buyerMismatch(order(), { ...same, taxNumber: "12345678-2-41" }) ?? "",
       /adószám/,
     );
+  });
+});
+
+describe("the language of the customer's mail (d5c6befd, P4)", () => {
+  it("is English only when the shop wrote exactly en; everything else is Hungarian", () => {
+    assert.equal(orderLanguageOf({ storefront_locale: "en" }), "en");
+    for (const metadata of [
+      { storefront_locale: "hu" },
+      { storefront_locale: "EN" },
+      { storefront_locale: " en" },
+      { storefront_locale: "de" },
+      { storefront_locale: null },
+      { storefront_locale: ["en"] },
+      { other: "en" },
+      {},
+      null,
+      undefined,
+    ])
+      assert.equal(orderLanguageOf(metadata), "hu", JSON.stringify(metadata));
   });
 });

@@ -95,17 +95,29 @@ function setup(over: {
   orderStatus?: string | null;
   /** A levél-kapu mondata, ha zárva van (`gateRefusal`). */
   mailClosed?: string;
+  /** The order's `storefront_locale` metadata, as the shop wrote it (d5c6befd, P4). */
+  locale?: unknown;
 }) {
   const calls: string[] = [];
   let proforma: Row | undefined = over.proforma;
   const drafts: Record<string, unknown>[] = [];
+  const languages: unknown[] = [];
+  const sentSubjects: string[] = [];
   const service = new WebshopOrderInvoiceService(
     {
       source: async () => ({
-        order: order(
-          over.provider === undefined ? "pp_acropora_transfer" : over.provider,
-          over.email === undefined ? "vevo@example.test" : over.email,
-        ),
+        order: {
+          ...order(
+            over.provider === undefined
+              ? "pp_acropora_transfer"
+              : over.provider,
+            over.email === undefined ? "vevo@example.test" : over.email,
+          ),
+          metadata:
+            over.locale === undefined
+              ? null
+              : { storefront_locale: over.locale },
+        },
         status:
           over.orderStatus === null
             ? null
@@ -168,20 +180,24 @@ function setup(over: {
         input: { mode: string; to: string[]; subject: string },
       ) => {
         calls.push(`send ${id} ${input.mode} to ${input.to.join(",")}`);
+        sentSubjects.push(input.subject);
         return {} as BillingDocumentDetail;
       },
     } as never,
     {
-      templateDraft: async () => ({
-        source: "default",
-        subject: "Bizonylat",
-        body: "Kedves {{nev}}",
-        bodyHtml: null,
-        variables: [],
-      }),
+      templateDraft: async (language?: unknown) => (
+        languages.push(language),
+        {
+          source: "default",
+          subject: language === "en" ? "Document" : "Bizonylat",
+          body: language === "en" ? "Dear {{nev}}" : "Kedves {{nev}}",
+          bodyHtml: null,
+          variables: [],
+        }
+      ),
     } as never,
   );
-  return { service, calls, drafts };
+  return { service, calls, drafts, languages, sentSubjects };
 }
 
 const status = async (p: Promise<unknown>) => {
@@ -290,6 +306,52 @@ describe("sending the proforma from the order page", () => {
   jött, a díjbekérő mégis elkészült). MI PIROSÍT: zárt kapunál kiállít vagy
   vázlatot ment; nem a kapu mondata jön; nyitott kapunál megáll.
 */
+describe("the language of the proforma's mail (d5c6befd, P4)", () => {
+  /*
+    WHAT TURNS THIS RED. An order from the English storefront getting the Hungarian text; a Hungarian, an old (no
+    metadata) or an unrecognised-language order getting English; the mail's language leaking into the document (the
+    PDF stays Hungarian); the resend of an issued proforma ignoring the language.
+  */
+  it("an order the shop marked English gets the English letter, anything else the Hungarian one", async () => {
+    for (const [locale, language, subject] of [
+      ["en", "en", "Document"],
+      ["hu", "hu", "Bizonylat"],
+      [undefined, "hu", "Bizonylat"],
+      ["EN", "hu", "Bizonylat"],
+      ["de", "hu", "Bizonylat"],
+      [null, "hu", "Bizonylat"],
+    ] as const) {
+      const { service, languages, sentSubjects } = setup({ locale });
+      await service.sendProforma("order_55", USER, NOW);
+      assert.deepEqual(languages, [language], String(locale));
+      assert.deepEqual(sentSubjects, [subject], String(locale));
+    }
+  });
+
+  it("the resend of an issued proforma follows the language too, and the document is the same", async () => {
+    const { service, calls, drafts, sentSubjects } = setup({
+      locale: "en",
+      proforma: { id: "doc_1", status: "ISSUED", number: "D-1" },
+      emailStatus: "SENT",
+    });
+    await service.sendProforma("order_55", USER, NOW);
+    assert.deepEqual(sentSubjects, ["Document"]);
+    assert.deepEqual(
+      calls.filter((c) => !c.startsWith("invoices")),
+      ["send doc_1 RESEND to vevo@example.test"],
+    );
+    assert.equal(drafts.length, 0);
+  });
+
+  it("the document itself is built the same for an English order (the PDF language is not touched here)", async () => {
+    const en = setup({ locale: "en" });
+    const hu = setup({});
+    await en.service.sendProforma("order_55", USER, NOW);
+    await hu.service.sendProforma("order_55", USER, NOW);
+    assert.deepEqual(en.drafts, hu.drafts);
+  });
+});
+
 describe("a closed mail gate", () => {
   it("issues nothing and says why", async () => {
     const closed =

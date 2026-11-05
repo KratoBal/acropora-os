@@ -845,6 +845,20 @@ export const MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
       description: `Az angol nyelvű oldalon rendelőknek. ${e.description}`,
     }),
   ),
+  /**
+   * THE ENGLISH TWIN OF THE INVOICE MAIL'S STARTING TEXT (card d5c6befd, P4): the webshop's proforma goes out on the
+   * `BILLING_DOCUMENT_MANUAL` text, so a customer who ordered on the English storefront gets this twin instead. The
+   * attachment's own language is a separate matter and stays Hungarian (acrobot 41434-41439).
+   */
+  ...HUNGARIAN_MAIL_TEMPLATE_EVENTS.filter(
+    (e) => e.id === "BILLING_DOCUMENT_MANUAL",
+  ).map((e) => ({
+    ...e,
+    id: `${e.id}${WEBSHOP_ENGLISH_KEY_SUFFIX}`,
+    name: "Számla kiküldése (angol nyelvű webshopos rendelés)",
+    description:
+      "A számla vagy díjbekérő levelének alapszövege az angol nyelvű oldalon rendelőknek. A PDF csatolmány nyelve ettől független (ma magyar).",
+  })),
 ];
 
 /**
