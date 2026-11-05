@@ -2,12 +2,10 @@
 
 import {
   Alert,
-  Badge,
-  Card,
-  FormField,
   Icon,
-  Input,
   PilotCallout,
+  PilotCard,
+  PilotFormField,
   PilotPageHeader,
   PilotSection,
   Skeleton,
@@ -1299,9 +1297,9 @@ export function PurchaseInvoiceEuEditorPage() {
       ) : null}
 
       {arrivalPrefillLoading ? (
-        <Card className="p-5">
+        <PilotCard className="p-5">
           <Skeleton className="h-4 w-1/3" />
-        </Card>
+        </PilotCard>
       ) : null}
 
       {arrivalPrefillError ? (
@@ -1325,9 +1323,9 @@ export function PurchaseInvoiceEuEditorPage() {
       ) : null}
 
       {navPrefillLoading ? (
-        <Card className="p-5">
+        <PilotCard className="p-5">
           <Skeleton className="h-4 w-1/3" />
-        </Card>
+        </PilotCard>
       ) : null}
 
       {navPrefillError ? (
@@ -1444,15 +1442,15 @@ export function PurchaseInvoiceEuEditorPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                <Input
+                <PilotInput
                   aria-label="Beszállító keresése"
                   value={supplierSearch}
-                  onChange={(event) => setSupplierSearch(event.target.value)}
+                  onChange={(value) => setSupplierSearch(value)}
                   placeholder="Beszállító neve, adószáma…"
                   leadingIcon={<Icon name="search" size={17} />}
                 />
                 {supplierResults.length > 0 ? (
-                  <Card className="divide-y divide-dusk-100 overflow-hidden">
+                  <PilotCard className="divide-y divide-dusk-100 overflow-hidden">
                     {supplierResults.map((supplier) => (
                       <button
                         key={supplier.id}
@@ -1471,7 +1469,7 @@ export function PurchaseInvoiceEuEditorPage() {
                         </span>
                       </button>
                     ))}
-                  </Card>
+                  </PilotCard>
                 ) : null}
                 {!showNewSupplier ? (
                   <PilotButton
@@ -1484,24 +1482,21 @@ export function PurchaseInvoiceEuEditorPage() {
                 ) : (
                   <div className="space-y-3 rounded-lg border border-dusk-200 p-3">
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <FormField label="Név">
-                        <Input
+                      <PilotFormField label="Név">
+                        <PilotInput
                           aria-label="Beszállító neve"
                           value={newSupplierName}
-                          onChange={(event) =>
-                            setNewSupplierName(event.target.value)
-                          }
+                          onChange={(value) => setNewSupplierName(value)}
                         />
-                      </FormField>
-                      <FormField
+                      </PilotFormField>
+                      <PilotFormField
                         label={isDomestic ? "Adószám" : "Közösségi adószám"}
                       >
                         <div className="flex gap-2">
-                          <Input
+                          <PilotInput
                             aria-label="Adószám"
                             value={newSupplierTaxNumber}
-                            onChange={(event) => {
-                              const value = event.target.value;
+                            onChange={(value) => {
                               setNewSupplierTaxNumber(value);
                               setViesResult(null);
                               setViesConflicts([]);
@@ -1571,34 +1566,30 @@ export function PurchaseInvoiceEuEditorPage() {
                             );
                           }}
                         />
-                      </FormField>
-                      <FormField label="Ország (ISO kód)">
-                        <Input
+                      </PilotFormField>
+                      <PilotFormField label="Ország (ISO kód)">
+                        <PilotInput
                           aria-label="Ország"
                           value={newSupplierCountry}
                           maxLength={2}
                           disabled
                           placeholder={isDomestic ? "HU" : "Adószámból"}
                         />
-                      </FormField>
-                      <FormField label="E-mail">
-                        <Input
+                      </PilotFormField>
+                      <PilotFormField label="E-mail">
+                        <PilotInput
                           aria-label="E-mail"
                           value={newSupplierEmail}
-                          onChange={(event) =>
-                            setNewSupplierEmail(event.target.value)
-                          }
+                          onChange={(value) => setNewSupplierEmail(value)}
                         />
-                      </FormField>
-                      <FormField label="Telefon">
-                        <Input
+                      </PilotFormField>
+                      <PilotFormField label="Telefon">
+                        <PilotInput
                           aria-label="Telefon"
                           value={newSupplierPhone}
-                          onChange={(event) =>
-                            setNewSupplierPhone(event.target.value)
-                          }
+                          onChange={(value) => setNewSupplierPhone(value)}
                         />
-                      </FormField>
+                      </PilotFormField>
                     </div>
                     <div className="flex justify-end gap-2">
                       <PilotButton
@@ -1633,7 +1624,7 @@ export function PurchaseInvoiceEuEditorPage() {
             subtitle="A rögzített adatok a beszerzés és a készletmozgás alapjai."
           >
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-3">
-              <FormField
+              <PilotFormField
                 label="Számlaszám"
                 error={
                   supplierInvoiceNumberError
@@ -1642,7 +1633,7 @@ export function PurchaseInvoiceEuEditorPage() {
                 }
               >
                 <div ref={supplierInvoiceNumberFieldRef}>
-                  <Input
+                  <PilotInput
                     aria-label="Számlaszám"
                     aria-invalid={supplierInvoiceNumberError}
                     value={supplierInvoiceNumber}
@@ -1651,63 +1642,47 @@ export function PurchaseInvoiceEuEditorPage() {
                         ? "A számlaszám megadása kötelező."
                         : undefined
                     }
-                    className={
-                      supplierInvoiceNumberError
-                        ? "border-rose-500 focus:border-rose-500 focus:ring-rose-500/15"
-                        : undefined
-                    }
-                    onChange={(event) => {
-                      setSupplierInvoiceNumber(event.target.value);
-                      if (event.target.value.trim())
-                        setSupplierInvoiceNumberError(false);
+                    onChange={(value) => {
+                      setSupplierInvoiceNumber(value);
+                      if (value.trim()) setSupplierInvoiceNumberError(false);
                     }}
                   />
                 </div>
-              </FormField>
-              <FormField label="Pénznem">
-                <Input
+              </PilotFormField>
+              <PilotFormField label="Pénznem">
+                <PilotInput
                   aria-label="Pénznem"
                   value={effectiveCurrency}
                   maxLength={3}
                   disabled={isDomestic}
-                  onChange={(event) =>
-                    setCurrency(event.target.value.toUpperCase())
-                  }
+                  onChange={(value) => setCurrency(value.toUpperCase())}
                 />
-              </FormField>
+              </PilotFormField>
               {isDomestic ? (
-                <FormField label="ÁFA-kulcs (%)">
-                  <Input
+                <PilotFormField label="ÁFA-kulcs (%)">
+                  <PilotInput
                     aria-label="ÁFA-kulcs"
                     type="number"
                     step="any"
                     min={0}
                     max={100}
-                    value={vatRate}
-                    onChange={(event) =>
-                      setVatRate(
-                        event.target.value === ""
-                          ? ""
-                          : Number(event.target.value),
-                      )
+                    value={String(vatRate)}
+                    onChange={(value) =>
+                      setVatRate(value === "" ? "" : Number(value))
                     }
                   />
-                </FormField>
+                </PilotFormField>
               ) : (
-                <FormField label="MNB árfolyam (Ft)">
-                  <Input
+                <PilotFormField label="MNB árfolyam (Ft)">
+                  <PilotInput
                     aria-label="Árfolyam"
                     type="number"
                     step="any"
                     min={0}
-                    value={exchangeRate}
+                    value={String(exchangeRate)}
                     disabled={currency.trim().toUpperCase() === "HUF"}
-                    onChange={(event) =>
-                      setExchangeRate(
-                        event.target.value === ""
-                          ? ""
-                          : Number(event.target.value),
-                      )
+                    onChange={(value) =>
+                      setExchangeRate(value === "" ? "" : Number(value))
                     }
                   />
                   {rateLoading ? (
@@ -1717,29 +1692,29 @@ export function PurchaseInvoiceEuEditorPage() {
                   ) : rateNotice ? (
                     <p className="mt-1 text-xs text-dusk-500">{rateNotice}</p>
                   ) : null}
-                </FormField>
+                </PilotFormField>
               )}
-              <FormField label="Számla kelte">
+              <PilotFormField label="Számla kelte">
                 <PilotDateField
                   aria-label="Számla kelte"
                   value={invoiceDate}
                   onChange={(nextValue) => setInvoiceDate(nextValue)}
                 />
-              </FormField>
-              <FormField label="Fizetési határidő">
+              </PilotFormField>
+              <PilotFormField label="Fizetési határidő">
                 <PilotDateField
                   aria-label="Fizetési határidő"
                   value={dueDate}
                   onChange={(nextValue) => setDueDate(nextValue)}
                 />
-              </FormField>
-              <FormField label="Megjegyzés">
-                <Input
+              </PilotFormField>
+              <PilotFormField label="Megjegyzés">
+                <PilotInput
                   aria-label="Megjegyzés"
                   value={note}
-                  onChange={(event) => setNote(event.target.value)}
+                  onChange={(value) => setNote(value)}
                 />
-              </FormField>
+              </PilotFormField>
             </div>
             <div className="mt-4 flex flex-wrap items-center gap-4">
               <label className="flex items-center gap-2 text-sm">
@@ -1751,13 +1726,13 @@ export function PurchaseInvoiceEuEditorPage() {
                 A számla ki van fizetve
               </label>
               {isPaid ? (
-                <FormField label="Fizetés dátuma">
+                <PilotFormField label="Fizetés dátuma">
                   <PilotDateField
                     aria-label="Fizetés dátuma"
                     value={paidAt}
                     onChange={(nextValue) => setPaidAt(nextValue)}
                   />
-                </FormField>
+                </PilotFormField>
               ) : null}
             </div>
           </PilotSection>
@@ -1841,7 +1816,7 @@ export function PurchaseInvoiceEuEditorPage() {
             </div>
             {searchingProducts ? <Skeleton className="mt-2 h-4 w-1/3" /> : null}
             {productResults.length > 0 ? (
-              <Card className="mt-2 divide-y divide-dusk-100 overflow-hidden">
+              <PilotCard className="mt-2 divide-y divide-dusk-100 overflow-hidden">
                 {productResults.map((product) => (
                   <button
                     key={product.variantId}
@@ -1854,17 +1829,15 @@ export function PurchaseInvoiceEuEditorPage() {
                         <p className="font-medium text-dusk-900">
                           {product.productName}
                         </p>
-                        <Badge
-                          variant={
-                            product.origin === "UNAS" ? "info" : "neutral"
-                          }
+                        <PilotBadge
+                          variant={product.origin === "UNAS" ? "blue" : "grey"}
                         >
                           {product.origin === "UNAS"
                             ? "UNAS-termék"
                             : product.origin === "LOCAL"
                               ? "Helyi termék"
                               : "Ismeretlen eredet"}
-                        </Badge>
+                        </PilotBadge>
                       </div>
                       <p className="font-mono text-xs text-dusk-500">
                         {product.sku}
@@ -1875,7 +1848,7 @@ export function PurchaseInvoiceEuEditorPage() {
                     </p>
                   </button>
                 ))}
-              </Card>
+              </PilotCard>
             ) : null}
           </div>
 

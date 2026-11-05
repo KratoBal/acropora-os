@@ -53,22 +53,6 @@ const HATRA = new Map<string, string[]>([
   ],
   ["components/products/product-list-page.tsx", ["Button"]],
   ["components/products/product-shipping-profile-card.tsx", ["Button"]],
-  [
-    "components/purchasing/purchase-invoice-detail-page.tsx",
-    ["Badge", "Card", "CardContent", "CardHeader"],
-  ],
-  [
-    "components/purchasing/purchase-invoice-edit-form.tsx",
-    ["Card", "CardContent", "CardHeader"],
-  ],
-  [
-    "components/purchasing/purchase-invoice-eu-editor-page.tsx",
-    ["Badge", "Card", "FormField", "Input"],
-  ],
-  [
-    "components/purchasing/purchase-invoice-scans.tsx",
-    ["Button", "Card", "CardContent", "CardHeader"],
-  ],
   ["components/seo-landing/seo-landing-list-page.tsx", ["Card"]],
   [
     "components/service-assets/asset-detail-page.tsx",
@@ -115,10 +99,10 @@ const HATRA = new Map<string, string[]>([
 /*
   A SZÁMLÁLÓK (barracuda, #2125): a pontos egyezés megfogja az új vegyes fájlt, de ha valaki ugyanabban a PR-ban a
   sorát is felveszi a listára, a teszt zöld maradna. A két szám ezért külön áll: a lista bővítése két helyen kér
-  módosítást, és a reviewban látszik. Fogyáskor a számot is le kell írni (a lista története: 59 / 141 a #2125-ben, 47 / 129 a #2134-ben, 45 / 120 a #2137-ben, 36 / 96 a #2140-ben, 32 / 86 a #2229-ben, 29 / 76 a 6. szeletben, a content mappa).
+  módosítást, és a reviewban látszik. Fogyáskor a számot is le kell írni (a lista története: 59 / 141 a #2125-ben, 47 / 129 a #2134-ben, 45 / 120 a #2137-ben, 36 / 96 a #2140-ben, 32 / 86 a #2229-ben, 29 / 76 a #2232-ben, 25 / 61 a 7. szeletben, a purchasing mappa).
 */
-const HATRA_MERET = 29;
-const HATRA_IKREK = 76;
+const HATRA_MERET = 25;
+const HATRA_IKREK = 61;
 
 /*
   A GYEREK-LISTA (barracuda, #2125): egy pilot fájl által importált, CSAK duskot használó .tsx (relatív vagy `@/`

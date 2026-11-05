@@ -236,7 +236,7 @@ describe("PurchaseInvoiceEuEditorPage NAV bevételezés", () => {
       "placeholder",
       "A számlaszám megadása kötelező.",
     );
-    expect(invoiceNumber).toHaveClass("border-rose-500");
+    expect(invoiceNumber).toHaveClass("ring-red-400");
     expect(
       screen.getByText("A számlaszám megadása kötelező."),
     ).toBeInTheDocument();
