@@ -48,7 +48,16 @@ const STATE_TEXT: Record<SaleState, string> = {
  * kezdete. A rendes ár alatti szabályt a szerver is őrzi (409), itt csak azért áll, hogy a hiba mentés előtt látsszon.
  */
 export function saleRequestOf(
-  input: { price: string; firstDay: string; lastDay: string },
+  input: {
+    price: string;
+    firstDay: string;
+    lastDay: string;
+    /**
+     * A FUTÓ akció tárolt kezdete: ezt küldjük vissza változatlanul, mert a szerver a futó akció kezdetét nem engedi
+     * mozdítani (barracuda #2219, az Omnibus-ablak miatt), és a tárolt kezdet nem mindig nap eleje.
+     */
+    lockedStartsAt?: string;
+  },
   regularPrice: string | null,
 ): { grossPrice: string; startsAt: string; endsAt: string } | string {
   const grossPrice = normalizePriceInput(input.price);
@@ -57,7 +66,7 @@ export function saleRequestOf(
   const regular = Number(regularPrice ?? "NaN");
   if (Number.isFinite(regular) && Number(grossPrice) >= regular)
     return "Az akciós ár a rendes ár alatt legyen.";
-  const startsAt = budapestDayStartIso(input.firstDay);
+  const startsAt = input.lockedStartsAt ?? budapestDayStartIso(input.firstDay);
   const endsAt = budapestDayStartIso(nextDay(input.lastDay));
   if (!startsAt || !endsAt) return "Add meg az akció első és utolsó napját.";
   if (input.lastDay < input.firstDay)
@@ -108,6 +117,11 @@ export function VariantSaleEditor({
         }
       : null;
 
+  // a running sale's start is fixed (the server refuses a moved one): its first-day field is read only
+  const running =
+    sale !== null &&
+    saleStateOf(sale.startsAt, sale.endsAt, now()) === "running";
+
   const run = async (action: () => Promise<unknown>) => {
     setBusy(true);
     setError(null);
@@ -128,7 +142,12 @@ export function VariantSaleEditor({
 
   const save = () => {
     const request = saleRequestOf(
-      { price, firstDay, lastDay },
+      {
+        price,
+        firstDay,
+        lastDay,
+        ...(running && sale ? { lockedStartsAt: sale.startsAt } : {}),
+      },
       sellingGrossPrice,
     );
     if (typeof request === "string") {
@@ -179,11 +198,19 @@ export function VariantSaleEditor({
             />
           </PilotFormField>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <PilotFormField label="Első nap" help="0:00-tól, budapesti idő">
+            <PilotFormField
+              label="Első nap"
+              help={
+                running
+                  ? "A futó akció kezdete nem módosítható: az ár és az utolsó nap igen."
+                  : "0:00-tól, budapesti idő"
+              }
+            >
               <PilotInput
                 type="date"
                 value={firstDay}
                 onChange={setFirstDay}
+                disabled={running}
                 aria-label="Az akció első napja"
               />
             </PilotFormField>

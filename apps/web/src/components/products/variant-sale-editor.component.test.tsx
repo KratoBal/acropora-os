@@ -129,6 +129,25 @@ describe("saleRequestOf", () => {
   });
 });
 
+describe("a running sale's start (barracuda #2219)", () => {
+  it("sends the stored start unchanged, even when it is not a day's start", () => {
+    expect(
+      saleRequestOf(
+        {
+          price: "7990",
+          firstDay: "2026-11-12",
+          lastDay: "2026-11-16",
+          lockedStartsAt: "2026-11-05T10:50:00.000Z",
+        },
+        "9990",
+      ),
+    ).toMatchObject({
+      startsAt: "2026-11-05T10:50:00.000Z",
+      endsAt: "2026-11-16T23:00:00.000Z",
+    });
+  });
+});
+
 describe("saleStateOf", () => {
   it("the start instant is running, the end instant is over", () => {
     const s = "2026-11-09T23:00:00.000Z";
@@ -156,6 +175,10 @@ describe("VariantSaleEditor", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Akció módosítása" }));
+    // a running sale's start cannot move: the field is read only, and the request keeps the stored start
+    expect(
+      screen.getByText(/A futó akció kezdete nem módosítható/),
+    ).toBeTruthy();
     // the form is filled from the stored sale: the last day is the day BEFORE the stored end, so the unchanged
     // days go back as the same window (asserted on the request below; the date field shows them in Hungarian)
     fireEvent.change(screen.getByLabelText("Akciós bruttó ár"), {
