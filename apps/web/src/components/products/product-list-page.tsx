@@ -343,13 +343,18 @@ export function ProductListPage() {
     void productApi
       .bulkShippingProfiles(token, [...selected], changes)
       .then((result) => {
+        // barracuda, #2207: what did not go through stays selected, so the same save can be retried on it
+        const failed = result.failed ?? [];
         setBulkOpen(false);
-        setSelected(new Set());
-        setBulkNotice(
-          result.notFound.length
-            ? `${result.updated} termék szállítási jelzői mentve; ${result.notFound.length} termék nem található.`
-            : `${result.updated} termék szállítási jelzői mentve.`,
-        );
+        setSelected(new Set(failed.map((failure) => failure.productId)));
+        const parts = [`${result.updated} termék szállítási jelzői mentve`];
+        if (result.notFound.length)
+          parts.push(`${result.notFound.length} termék nem található`);
+        if (failed.length)
+          parts.push(
+            `${failed.length} termék mentése nem sikerült, ezek kijelölve maradtak: próbáld újra`,
+          );
+        setBulkNotice(`${parts.join("; ")}.`);
         setRequestVersion((value) => value + 1);
       })
       .catch((cause: unknown) =>

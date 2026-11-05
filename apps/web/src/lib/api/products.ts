@@ -183,11 +183,15 @@ export const productApi = {
     productIds: readonly string[],
     changes: Partial<ProductShippingProfileInput>,
   ) {
-    return apiRequest<{ updated: number; notFound: string[] }>(
-      "/products/shipping-profiles/bulk",
-      token,
-      { method: "POST", body: JSON.stringify({ productIds, changes }) },
-    );
+    return apiRequest<{
+      updated: number;
+      notFound: string[];
+      /** a nem sikerült írások; `conflict`: párhuzamos mentés ütközött, újrapróbálható */
+      failed?: { productId: string; reason: "conflict" | "error" }[];
+    }>("/products/shipping-profiles/bulk", token, {
+      method: "POST",
+      body: JSON.stringify({ productIds, changes }),
+    });
   },
   /** A változat saját bruttó ára (T4.1-D3); csak OS-gazdájú terméknél, a szerver 409-cel utasítja el a többit. */
   setVariantPrice(

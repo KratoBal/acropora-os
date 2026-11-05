@@ -461,6 +461,38 @@ describe("ProductListPage", () => {
     expect(screen.queryByTestId("product-bulk-bar")).toBeNull();
   });
 
+  it("ami nem ment át, kijelölve marad, és a lap megmondja (barracuda, #2207)", async () => {
+    api.list.mockResolvedValue(populatedResponse);
+    api.bulkShippingProfiles.mockResolvedValue({
+      updated: 0,
+      notFound: [],
+      failed: [{ productId: "product-1", reason: "conflict" }],
+    });
+    render(createElement(ProductListPage));
+    fireEvent.click(
+      await screen.findByRole("checkbox", {
+        name: "Red Sea ReefMat 500 kijelölése",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Szállítási jelzők…" }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(
+      within(dialog).getByRole("combobox", { name: "Fagyasztott" }),
+      { target: { value: "yes" } },
+    );
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Mentés (1 termék)" }),
+    );
+    expect(
+      await screen.findByText(
+        /1 termék mentése nem sikerült, ezek kijelölve maradtak/,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("product-bulk-bar")).toHaveTextContent(
+      "1 kijelölve",
+    );
+  });
+
   it("az oldal-kijelölő az oldal összes termékét jelöli, és products.manage nélkül nincs kijelölés", async () => {
     api.list.mockResolvedValue(populatedResponse);
     const { unmount } = render(createElement(ProductListPage));
