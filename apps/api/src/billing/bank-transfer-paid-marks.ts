@@ -1,4 +1,8 @@
 import { Prisma, prisma } from "@acropora/database";
+import {
+  outgoingMissingPayments,
+  type OutgoingMissingPayments,
+} from "@acropora/types";
 
 import {
   callPlannedMarks,
@@ -63,8 +67,16 @@ export interface FeedInvoice {
   customerTaxNumber: string | null;
   grossAmount: string;
   paidAmount: string;
-  /** null: the feed row has no payments yet, so nothing is provably open */
+  /**
+   * null: the feed row was not projected with its payments, so nothing is provably open. false: Számlázz.hu sent no
+   * `kifizetesek` element, whose meaning is the payment method's (`missingPayments`).
+   */
   paymentsKnown: boolean | null;
+  /**
+   * What a missing `kifizetesek` element means for this invoice's payment method (`outgoingMissingPayments`): UNPAID
+   * for a transfer, cash on delivery or an empty method. Absent: not known, so a `false` row is not proven open.
+   */
+  missingPayments?: OutgoingMissingPayments;
   payments: readonly {
     date: string;
     amount: string;
@@ -74,6 +86,22 @@ export interface FeedInvoice {
     bankTransactionId?: string | null;
   }[];
 }
+
+/**
+ * Whether the invoice's payments are known (Balázs's live run 2026-11-05 12:04: four transfer invoices stood as
+ * PAYMENTS_UNKNOWN). A row with payments is known; a row with NO payments element is known UNPAID only when its
+ * payment method says so (transfer, cash on delivery, empty: `outgoingMissingPayments`), the rule the document list
+ * uses too. A card or cash invoice with no element may well be paid, and a row not yet projected (null) is unknown.
+ */
+const paymentsProven = (invoice: FeedInvoice): boolean =>
+  invoice.paymentsKnown === true ||
+  (invoice.paymentsKnown === false && invoice.missingPayments === "UNPAID");
+
+/** The kind of a document a reference named that a customer does not pay, for the person reading the line. */
+const NOT_PAYABLE_KIND: Readonly<Record<string, string>> = {
+  D: "díjbekérő",
+  SL: "szállítólevél",
+};
 
 /** The kinds a customer pays: an invoice, a final invoice, an advance invoice. */
 const PAYABLE_KINDS: ReadonlySet<string> = new Set(["SZ", "VS", "ES"]);
@@ -181,16 +209,35 @@ export function decideBankTransfer(
     if (candidates.length === 1) {
       if (!named.includes(candidates[0]!)) named.push(candidates[0]!);
       if (hits.length > 1) narrowed.add(candidates[0]!.documentNumber);
-    } else
-      unresolved.push(
-        `${ref.year}/${ref.number}${hits.length === 0 ? " nincs" : " több"}`,
+    } else if (hits.length > 1)
+      unresolved.push(`${ref.year}/${ref.number} több`);
+    else {
+      // the line says WHY there is none (2026-11-05 12:04: "2026/000436 nincs" could not tell a missing feed row from
+      // a cancelled or a proforma one): the same number among the read rows that are not payable
+      const notPayable = invoices.filter((invoice) =>
+        refMatchesInvoiceNumber(ref, invoice.documentNumber),
       );
+      unresolved.push(
+        notPayable.length === 0
+          ? `${ref.year}/${ref.number} nincs a feedben`
+          : `${ref.year}/${ref.number} nem fizetendő: ${notPayable
+              .map(
+                (invoice) =>
+                  `${invoice.documentNumber} ${
+                    invoice.cancelled
+                      ? "sztornózott"
+                      : (NOT_PAYABLE_KIND[invoice.kindCode] ?? invoice.kindCode)
+                  }`,
+              )
+              .join(", ")}`,
+      );
+    }
   }
   if (unresolved.length > 0) return refuse("UNRESOLVED", unresolved.join(", "));
   const numbers = named.map((invoice) => invoice.documentNumber).join(", ");
   if (named.some((invoice) => invoice.currency !== credit.currency))
     return refuse("OTHER_CURRENCY", numbers);
-  if (named.some((invoice) => invoice.paymentsKnown !== true))
+  if (named.some((invoice) => !paymentsProven(invoice)))
     return refuse("PAYMENTS_UNKNOWN", numbers);
   if (new Set(named.map(customerKey)).size > 1)
     return refuse("DIFFERENT_CUSTOMERS", numbers);
@@ -395,6 +442,8 @@ export async function loadFeedInvoicesFor(
       paidAmount: true,
       paymentsKnown: true,
       payments: true,
+      paymentMethod: true,
+      paymentMethodUnified: true,
     },
   });
   // the latest feed version of each number
@@ -411,6 +460,10 @@ export async function loadFeedInvoicesFor(
     grossAmount: row.grossAmount.toFixed(2),
     paidAmount: row.paidAmount.toFixed(2),
     paymentsKnown: row.paymentsKnown,
+    missingPayments: outgoingMissingPayments(
+      row.paymentMethod,
+      row.paymentMethodUnified,
+    ),
     payments: Array.isArray(row.payments)
       ? row.payments.flatMap((payment) => {
           const p = payment as { date?: unknown; amount?: unknown };
