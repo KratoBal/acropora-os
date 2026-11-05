@@ -177,6 +177,20 @@ function toDateInput(isoDate: string | undefined): string {
   return isoDate ? isoDate.slice(0, 10) : "";
 }
 
+/**
+ * A SZÁM-MEZŐ BEÍRT SZÖVEGE (barracuda, #2233 review): az állapot szám, a `PilotInput` viszont szöveget kap. A
+ * `String(401)` a félig beírt „401.0”-t gépelés közben „401”-re írná vissza (a React a DOM-ot átírja, ha a szöveg
+ * eltér), és a következő „5” után 4015 lenne az árfolyam. A beírt szöveg marad, amíg ugyanazt a számot jelenti; a
+ * máshonnan beállított érték (az MNB-árfolyam) felülírja.
+ */
+function useNumberFieldText(value: number | "") {
+  const [draft, setDraft] = useState<string | null>(null);
+  const kept =
+    draft !== null &&
+    (draft === "" ? value === "" : value !== "" && Number(draft) === value);
+  return [kept ? draft : String(value), setDraft] as const;
+}
+
 export function PurchaseInvoiceEuEditorPage() {
   const { session } = useAuth();
   const router = useRouter();
@@ -241,6 +255,9 @@ export function PurchaseInvoiceEuEditorPage() {
   const [rateLoading, setRateLoading] = useState(false);
   const [rateNotice, setRateNotice] = useState<string | null>(null);
   const [vatRate, setVatRate] = useState<number | "">(27);
+  const [exchangeRateText, setExchangeRateText] =
+    useNumberFieldText(exchangeRate);
+  const [vatRateText, setVatRateText] = useNumberFieldText(vatRate);
   const [invoiceDate, setInvoiceDate] = useState(todayIso());
   const [dueDate, setDueDate] = useState("");
   const [isPaid, setIsPaid] = useState(false);
@@ -1666,10 +1683,11 @@ export function PurchaseInvoiceEuEditorPage() {
                     step="any"
                     min={0}
                     max={100}
-                    value={String(vatRate)}
-                    onChange={(value) =>
-                      setVatRate(value === "" ? "" : Number(value))
-                    }
+                    value={vatRateText}
+                    onChange={(value) => {
+                      setVatRateText(value);
+                      setVatRate(value === "" ? "" : Number(value));
+                    }}
                   />
                 </PilotFormField>
               ) : (
@@ -1679,11 +1697,12 @@ export function PurchaseInvoiceEuEditorPage() {
                     type="number"
                     step="any"
                     min={0}
-                    value={String(exchangeRate)}
+                    value={exchangeRateText}
                     disabled={currency.trim().toUpperCase() === "HUF"}
-                    onChange={(value) =>
-                      setExchangeRate(value === "" ? "" : Number(value))
-                    }
+                    onChange={(value) => {
+                      setExchangeRateText(value);
+                      setExchangeRate(value === "" ? "" : Number(value));
+                    }}
                   />
                   {rateLoading ? (
                     <p className="mt-1 text-xs text-dusk-500">

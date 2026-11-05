@@ -1543,6 +1543,21 @@ describe("PurchaseInvoiceEuEditorPage várható beérkezésből", () => {
   });
 });
 
+describe("PurchaseInvoiceEuEditorPage szám-mezők", () => {
+  it("az árfolyam gépelés közben megtartja a „401.0” alakot, a betöltött MNB-árfolyamot pedig mutatja (barracuda, #2233)", async () => {
+    navigation.params = new URLSearchParams();
+    render(createElement(PurchaseInvoiceEuEditorPage));
+
+    const rate = screen.getByRole("spinbutton", { name: "Árfolyam" });
+    await waitFor(() => expect(rate).toHaveValue(398.5));
+
+    fireEvent.change(rate, { target: { value: "401.0" } });
+    expect((rate as HTMLInputElement).value).toBe("401.0");
+    fireEvent.change(rate, { target: { value: "401.05" } });
+    expect((rate as HTMLInputElement).value).toBe("401.05");
+  });
+});
+
 describe("the editor's line state and summary", () => {
   const line = (overrides: Record<string, unknown> = {}) =>
     ({
