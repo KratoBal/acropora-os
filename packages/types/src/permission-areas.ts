@@ -197,6 +197,13 @@ export const PERMISSION_AREAS: readonly PermissionArea[] = [
     manage: P.CONTENT_MANAGE,
     extras: [{ permission: P.CONTENT_APPROVE, label: "Tartalom jóváhagyása" }],
   },
+  {
+    key: "game",
+    label: "Nyereményjáték",
+    view: P.GAME_VIEW,
+    manage: P.GAME_MANAGE,
+    extras: [],
+  },
   { key: "ai-test", label: "AI teszt", view: P.AI_TEST_VIEW, extras: [] },
   {
     key: "knowledge-research",

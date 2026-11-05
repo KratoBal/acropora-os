@@ -11682,3 +11682,84 @@ model PartnerOrderDocument {
 
   @@index([orderId, step])
 }
+
+/// A KARÁCSONYI NYEREMÉNYJÁTÉK HETI KÉRDÉSE (kártya 31445d0f; Balázs, 2026-11-05). Hetente egy: szabad szöveges (TEXT)
+/// vagy választós (CHOICE). Az elfogadott válaszok soha nem mennek ki a nyilvános végpontra.
+model GameQuestion {
+  id              String      @id @default(cuid())
+  /// A hét kulcsa, például 2026-W46; hetente egy kérdés.
+  week            String      @unique
+  /// TEXT vagy CHOICE.
+  type            String
+  prompt          String
+  /// CHOICE: [{ id, label }]; TEXT: [].
+  options         Json        @default("[]")
+  /// TEXT: az elfogadott válaszok (kisbetű, ékezet és szóköz nélkül hasonlítva); CHOICE: a helyes lehetőségek id-je.
+  acceptedAnswers Json        @default("[]")
+  opensAt         DateTime
+  closesAt        DateTime
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  entries         GameEntry[]
+  draws           GameDraw[]
+
+  @@index([opensAt])
+}
+
+/// EGY BEKÜLDÉS: egy e-mail cím egy hétre egyszer (a kérdés és az e-mail egyedi). Csak a megerősítő link után számít
+/// (`confirmedAt`). A helyesség az automatikus összevetés, vagy a kezelő kézi döntése, ha van.
+model GameEntry {
+  id               String       @id @default(cuid())
+  questionId       String
+  question         GameQuestion @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  /// Kisbetűs, levágott e-mail cím.
+  email            String
+  answer           String
+  autoCorrect      Boolean
+  /// A kezelő döntése: null, ha nem döntött; különben ez számít az automatikus helyett.
+  manualCorrect    Boolean?
+  manualById       String?
+  manualAt         DateTime?
+  /// A megerősítő token SHA-256 lenyomata; maga a token csak a levélben van.
+  confirmTokenHash String       @unique
+  confirmedAt      DateTime?
+  /// Hány megerősítő levél ment erre a beküldésre, és mikor az utolsó (barracuda, #2254: a saját küldőnkön át nem
+  /// lehet egy címet levelekkel elárasztani; a levelek száma és üteme címenként és kérdésenként korlátos).
+  mailCount        Int          @default(0)
+  lastMailedAt     DateTime?
+  /// A napi levél-plafon fölött (JATEK_MAIL_DAILY_CAP) a beküldés megvan, a levél vár: mióta. A kezelő látja és küldi ki.
+  mailPendingSince DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@unique([questionId, email])
+  @@index([questionId, confirmedAt])
+}
+
+/// EGY SORSOLÁS: heti (egy kérdés helyes, megerősített beküldői) vagy karácsonyi (súly = a helyes hetek száma). A mag,
+/// a jelöltlista és a nyertes mentve: ugyanazzal a maggal újrafuttatva ugyanaz jön ki (élőben képernyőn futtatható).
+model GameDraw {
+  id          String        @id @default(cuid())
+  /// WEEKLY vagy CHRISTMAS.
+  kind        String
+  questionId  String?
+  question    GameQuestion? @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  seed        String
+  /// [{ email, weight }], e-mail szerint rendezve, ahogy a sorsolás látta.
+  candidates  Json
+  winnerEmail String?
+  ticket      Int?
+  tickets     Int
+  createdById String
+  createdAt   DateTime      @default(now())
+
+  @@index([kind, createdAt])
+}
+
+/// A NYEREMÉNYJÁTÉK LEVELEINEK NAPI SZÁMLÁLÓJA (acrobot, 2026-11-05 22:57): egy budapesti napra hány megerősítő levél ment.
+/// A növelés atomi (upsert increment); a plafon fölötti beküldés levele sorba áll (`GameEntry.mailPendingSince`).
+model GameMailDay {
+  /// A budapesti nap, például 2026-11-06.
+  day  String @id
+  sent Int    @default(0)
+}

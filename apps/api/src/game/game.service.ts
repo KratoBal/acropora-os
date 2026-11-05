@@ -1,0 +1,375 @@
+import { createHash, randomBytes } from "node:crypto";
+
+import {
+  HttpException,
+  HttpStatus,
+  Inject,
+  Injectable,
+  Logger,
+  Optional,
+} from "@nestjs/common";
+import { Prisma, prisma } from "@acropora/database";
+import {
+  isGameAnswerCorrect,
+  normalizeGameEmail,
+  type GameOption,
+  type GameQuestionType,
+} from "@acropora/types";
+
+import {
+  MAIL_SENDER,
+  type MailSender,
+} from "../notifications/mail/mail.port.js";
+import {
+  mailGate,
+  mailModeOf,
+  mailRedirect,
+} from "../notifications/mail/ticket-mail.rules.js";
+
+/** The error shape of the public game endpoints (exchange/jatek/jatek-api-szerzodes.md). */
+export function gameError(
+  status: HttpStatus,
+  code: string,
+  message: string,
+): HttpException {
+  return new HttpException({ statusCode: status, code, message }, status);
+}
+
+const sha256 = (value: string) =>
+  createHash("sha256").update(value).digest("hex");
+
+export interface PublicGameQuestion {
+  id: string;
+  week: string;
+  type: GameQuestionType;
+  prompt: string;
+  options: GameOption[];
+  opensAt: string;
+  closesAt: string;
+}
+
+/** The database the service reads and writes; the test hands in a fake. */
+export type GameDatabase = Pick<
+  typeof prisma,
+  "gameQuestion" | "gameEntry" | "gameMailDay"
+>;
+
+export const GAME_ENV = Symbol("GAME_ENV");
+
+/**
+ * THE MAIL'S PACE PER ADDRESS AND QUESTION (barracuda, #2254: our own sender must not flood one address). A new link
+ * goes out at most every two minutes, and at most five times for one entry; past either, the entry answers the same
+ * and sends nothing. This holds whatever the caller's address claims, so a forged header cannot buy more mail.
+ */
+export const GAME_MAIL_COOLDOWN_MS = 2 * 60_000;
+export const GAME_MAIL_MAX_PER_ENTRY = 5;
+/** The giveaway's mail in one Budapest day, in all (acrobot, 2026-11-05 22:57), unless JATEK_MAIL_DAILY_CAP says other. */
+export const GAME_MAIL_DAILY_CAP_DEFAULT = 3000;
+
+/**
+ * THE GIVEAWAY'S PUBLIC SIDE (card 31445d0f; brief exchange/jatek/brief-2026-11-05.md; the contract with the page:
+ * exchange/jatek/jatek-api-szerzodes.md). The open question without its accepted answers, an entry, and its
+ * confirmation from the mailed link.
+ *
+ * WHAT IT DOES NOT TELL A CALLER: whether an address has played this week, or whether an answer is right. Every
+ * accepted entry answers the same (`CHECK_EMAIL`): a new one, a repeat, and the bot trap alike. An unconfirmed repeat
+ * takes the new answer and gets a new link (a lost mail can be asked again), paced per address (`GAME_MAIL_COOLDOWN_MS`,
+ * `GAME_MAIL_MAX_PER_ENTRY`); a confirmed one is left alone, and so is one confirmed between our read and our write
+ * (the write is conditional on `confirmedAt: null`). Two first entries at once: the second answers the same, no mail.
+ *
+ * THE MAIL goes through the OS's own sender and its gate: TICKET_MAIL_MODE, the path switch TICKET_MAIL_GAME, and the
+ * redirect (on stage every mail goes to TICKET_MAIL_REDIRECT_TO). A closed gate keeps the entry and says so in the log;
+ * the caller hears the same answer, so it learns nothing from it either.
+ */
+@Injectable()
+export class GameService {
+  private readonly logger = new Logger(GameService.name);
+  /** the test replaces it */
+  database: GameDatabase = prisma;
+  now: () => Date = () => new Date();
+
+  constructor(
+    @Optional()
+    @Inject(MAIL_SENDER)
+    private readonly sender: MailSender | null = null,
+    @Optional()
+    @Inject(GAME_ENV)
+    private readonly environment: NodeJS.ProcessEnv = process.env,
+  ) {}
+
+  private async openQuestion() {
+    const now = this.now();
+    return this.database.gameQuestion.findFirst({
+      where: { opensAt: { lte: now }, closesAt: { gt: now } },
+      orderBy: { opensAt: "desc" },
+    });
+  }
+
+  private publicView(question: {
+    id: string;
+    week: string;
+    type: string;
+    prompt: string;
+    options: unknown;
+    opensAt: Date;
+    closesAt: Date;
+  }): PublicGameQuestion {
+    return {
+      id: question.id,
+      week: question.week,
+      type: question.type as GameQuestionType,
+      prompt: question.prompt,
+      options:
+        question.type === "CHOICE" ? (question.options as GameOption[]) : [],
+      opensAt: question.opensAt.toISOString(),
+      closesAt: question.closesAt.toISOString(),
+    };
+  }
+
+  async current(): Promise<{ question: PublicGameQuestion | null }> {
+    const question = await this.openQuestion();
+    return { question: question ? this.publicView(question) : null };
+  }
+
+  async submit(input: {
+    questionId?: unknown;
+    email?: unknown;
+    answer?: unknown;
+    website?: unknown;
+  }): Promise<{ status: "CHECK_EMAIL" }> {
+    const answered = { status: "CHECK_EMAIL" } as const;
+    // the bot trap: a filled hidden field gets the same answer and nothing is kept
+    if (typeof input.website === "string" && input.website.trim() !== "")
+      return answered;
+    const email =
+      typeof input.email === "string" ? normalizeGameEmail(input.email) : null;
+    if (!email)
+      throw gameError(
+        HttpStatus.BAD_REQUEST,
+        "INVALID_EMAIL",
+        "Kérjük, adj meg egy érvényes e-mail címet.",
+      );
+    if (typeof input.questionId !== "string" || input.questionId === "")
+      throw gameError(
+        HttpStatus.NOT_FOUND,
+        "NO_QUESTION",
+        "Nincs ilyen kérdés.",
+      );
+    const question = await this.database.gameQuestion.findUnique({
+      where: { id: input.questionId },
+    });
+    if (!question)
+      throw gameError(
+        HttpStatus.NOT_FOUND,
+        "NO_QUESTION",
+        "Nincs ilyen kérdés.",
+      );
+    const now = this.now();
+    if (now < question.opensAt || now >= question.closesAt)
+      throw gameError(
+        HttpStatus.CONFLICT,
+        "CLOSED",
+        "Erre a kérdésre most nem lehet válaszolni.",
+      );
+    const answer = typeof input.answer === "string" ? input.answer.trim() : "";
+    const options = (question.options as unknown as GameOption[]) ?? [];
+    if (
+      answer.length === 0 ||
+      answer.length > 200 ||
+      (question.type === "CHOICE" && !options.some((o) => o.id === answer))
+    )
+      throw gameError(
+        HttpStatus.BAD_REQUEST,
+        "INVALID_ANSWER",
+        "Kérjük, adj meg egy választ.",
+      );
+
+    const autoCorrect = isGameAnswerCorrect(
+      question.type as GameQuestionType,
+      answer,
+      (question.acceptedAnswers as unknown as string[]) ?? [],
+    );
+    const token = randomBytes(32).toString("base64url");
+    const existing = await this.database.gameEntry.findUnique({
+      where: { questionId_email: { questionId: question.id, email } },
+    });
+    if (existing?.confirmedAt) return answered;
+    let entryId: string;
+    if (existing) {
+      const recent =
+        existing.lastMailedAt !== null &&
+        now.getTime() - existing.lastMailedAt.getTime() < GAME_MAIL_COOLDOWN_MS;
+      if (recent || existing.mailCount >= GAME_MAIL_MAX_PER_ENTRY)
+        return answered;
+      // only while still unconfirmed: a confirmation in between keeps its answer and its link
+      const { count } = await this.database.gameEntry.updateMany({
+        where: { id: existing.id, confirmedAt: null },
+        data: {
+          answer,
+          autoCorrect,
+          confirmTokenHash: sha256(token),
+          mailCount: { increment: 1 },
+          lastMailedAt: now,
+        },
+      });
+      if (count === 0) return answered;
+      entryId = existing.id;
+    } else {
+      try {
+        ({ id: entryId } = await this.database.gameEntry.create({
+          data: {
+            questionId: question.id,
+            email,
+            answer,
+            autoCorrect,
+            confirmTokenHash: sha256(token),
+            mailCount: 1,
+            lastMailedAt: now,
+          },
+          select: { id: true },
+        }));
+      } catch (error) {
+        // a second first entry for the same address at the same moment: the first one stands
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2002"
+        )
+          return answered;
+        throw error;
+      }
+    }
+    await this.deliver(entryId, email, token, question.week);
+    return answered;
+  }
+
+  /** The Budapest day a mail is counted on (the daily cap's key). */
+  private today(): string {
+    return new Intl.DateTimeFormat("sv-SE", {
+      timeZone: "Europe/Budapest",
+    }).format(this.now());
+  }
+
+  /** The daily cap of the giveaway's mail (JATEK_MAIL_DAILY_CAP, default 3000). */
+  dailyCap(): number {
+    const n = Number(this.environment.JATEK_MAIL_DAILY_CAP);
+    return Number.isInteger(n) && n >= 0 ? n : GAME_MAIL_DAILY_CAP_DEFAULT;
+  }
+
+  /** Today's mail so far, for the admin. */
+  async sentToday(): Promise<number> {
+    const row = await this.database.gameMailDay.findUnique({
+      where: { day: this.today() },
+    });
+    return row?.sent ?? 0;
+  }
+
+  /**
+   * ONE CONFIRMATION MAIL, UNDER THE DAILY CAP (acrobot, 2026-11-05 22:57): a slot is taken first (an atomic increment of
+   * the day's counter); past the cap the entry stays, its mail waits (`mailPendingSince`), and the admin sees it and
+   * sends it later. The caller hears the same answer either way. Returns what happened, for the admin's queue.
+   */
+  async deliver(
+    entryId: string,
+    email: string,
+    token: string,
+    week: string,
+  ): Promise<"SENT" | "QUEUED" | "NOT_SENT"> {
+    const { sent } = await this.database.gameMailDay.upsert({
+      where: { day: this.today() },
+      create: { day: this.today(), sent: 1 },
+      update: { sent: { increment: 1 } },
+    });
+    if (sent > this.dailyCap()) {
+      await this.database.gameEntry.update({
+        where: { id: entryId },
+        data: { mailPendingSince: this.now() },
+      });
+      this.logger.warn(
+        `Nyereményjáték ${week}: a napi levél-plafon (${this.dailyCap()}) betelt, a megerősítő levél sorban áll`,
+      );
+      return "QUEUED";
+    }
+    const outcome = await this.mailConfirmation(email, token, week);
+    if (outcome === "SENT")
+      await this.database.gameEntry.update({
+        where: { id: entryId },
+        data: { mailPendingSince: null },
+      });
+    return outcome;
+  }
+
+  private async mailConfirmation(
+    email: string,
+    token: string,
+    week: string,
+  ): Promise<"SENT" | "NOT_SENT"> {
+    const gate = mailGate({
+      mode: mailModeOf(this.environment.TICKET_MAIL_MODE),
+      pathMode: mailModeOf(this.environment.TICKET_MAIL_GAME),
+      redirect: mailRedirect(this.environment.TICKET_MAIL_REDIRECT_TO),
+    });
+    const base = this.environment.JATEK_PUBLIC_URL?.trim().replace(/\/+$/, "");
+    if (gate.kind === "closed" || !this.sender || !base) {
+      this.logger.warn(
+        `Nyereményjáték ${week}: a megerősítő levél nem ment ki (${gate.kind === "closed" ? gate.reason : !this.sender ? "no-sender" : "no-JATEK_PUBLIC_URL"}); a beküldés megvan, megerősítetlenül`,
+      );
+      return "NOT_SENT";
+    }
+    const link = `${base}/megerosites?token=${encodeURIComponent(token)}`;
+    try {
+      await this.sender.send({
+        to: [email],
+        subject: "Erősítsd meg a játékodat: Acropora karácsonyi nyereményjáték",
+        text: [
+          "Szia!",
+          "",
+          "Köszönjük, hogy játszol az Acropora karácsonyi nyereményjátékán.",
+          "A játékod akkor érvényes, ha megerősíted ezen a linken:",
+          "",
+          link,
+          "",
+          "Ha nem te küldted, nincs teendőd: megerősítés nélkül a beküldés nem számít.",
+          "",
+          "Acropora",
+        ].join("\n"),
+      });
+    } catch (error) {
+      this.logger.error(
+        `Nyereményjáték ${week}: a megerősítő levél küldése elbukott (${error instanceof Error ? error.name : "UNKNOWN"})`,
+      );
+      return "NOT_SENT";
+    }
+    return "SENT";
+  }
+
+  async confirm(input: {
+    token?: unknown;
+  }): Promise<{ status: "CONFIRMED" | "ALREADY_CONFIRMED"; week: string }> {
+    const token = typeof input.token === "string" ? input.token.trim() : "";
+    const entry = token
+      ? await this.database.gameEntry.findUnique({
+          where: { confirmTokenHash: sha256(token) },
+          include: { question: true },
+        })
+      : null;
+    if (!entry)
+      throw gameError(
+        HttpStatus.BAD_REQUEST,
+        "INVALID_TOKEN",
+        "Ez a megerősítő link nem érvényes.",
+      );
+    if (entry.confirmedAt)
+      return { status: "ALREADY_CONFIRMED", week: entry.question.week };
+    if (this.now() >= entry.question.closesAt)
+      throw gameError(
+        HttpStatus.CONFLICT,
+        "CLOSED",
+        "Ez a heti kérdés már lezárult, a megerősítés nem számít.",
+      );
+    await this.database.gameEntry.update({
+      where: { id: entry.id },
+      data: { confirmedAt: this.now() },
+    });
+    return { status: "CONFIRMED", week: entry.question.week };
+  }
+}

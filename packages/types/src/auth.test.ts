@@ -391,6 +391,8 @@ describe("a MANAGER jogkör-készlete rögzítve van", () => {
         "dashboard.view",
         "finance.manage",
         "finance.view",
+        "game.manage",
+        "game.view",
         "icp.manage",
         "icp.view",
         "inventory.manage",

@@ -286,6 +286,12 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     visibility: permission(PERMISSIONS.CONTENT_VIEW),
   },
   {
+    /** A karácsonyi nyereményjáték kezelése (kártya 31445d0f): saját jog, csak emberi szerepnek (acrobot, 2026-11-05). */
+    id: "game",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.GAME_VIEW),
+  },
+  {
     id: "pos",
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.ORDERS_VIEW),
