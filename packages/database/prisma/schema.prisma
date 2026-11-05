@@ -11723,6 +11723,10 @@ model GameEntry {
   /// A megerősítő token SHA-256 lenyomata; maga a token csak a levélben van.
   confirmTokenHash String       @unique
   confirmedAt      DateTime?
+  /// Hány megerősítő levél ment erre a beküldésre, és mikor az utolsó (barracuda, #2254: a saját küldőnkön át nem
+  /// lehet egy címet levelekkel elárasztani; a levelek száma és üteme címenként és kérdésenként korlátos).
+  mailCount        Int          @default(0)
+  lastMailedAt     DateTime?
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 

@@ -423,17 +423,17 @@ function Draws({
 
 /**
  * A KARÁCSONYI NYEREMÉNYJÁTÉK KEZELÉSE (kártya 31445d0f; Balázs, 2026-11-05). A heti kérdések, a beküldések a kétes
- * válaszok kézi döntésével, és a heti meg a karácsonyi sorsolás. Olvasni a tartalom-olvasás joga (content.view),
- * kérdést menteni, dönteni és sorsolni a tartalom-kezelésé (content.manage).
+ * válaszok kézi döntésével, és a heti meg a karácsonyi sorsolás. Olvasni a game.view, kérdést menteni, dönteni és
+ * sorsolni a game.manage joga; mindkettő csak emberi szerepé (acrobot, 2026-11-05).
  */
 export function GameAdminPage() {
   const { session } = useAuth();
   const token = session?.token ?? "";
   const canView = Boolean(
-    session && hasPermission(session.user, PERMISSIONS.CONTENT_VIEW),
+    session && hasPermission(session.user, PERMISSIONS.GAME_VIEW),
   );
   const canManage = Boolean(
-    session && hasPermission(session.user, PERMISSIONS.CONTENT_MANAGE),
+    session && hasPermission(session.user, PERMISSIONS.GAME_MANAGE),
   );
   const [questions, setQuestions] = useState<GameQuestionView[] | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -459,7 +459,7 @@ export function GameAdminPage() {
       <Alert
         variant="danger"
         title="Nincs hozzáférésed a nyereményjátékhoz"
-        description="A megtekintéshez content.view jogosultság szükséges."
+        description="A megtekintéshez game.view jogosultság szükséges."
       />
     );
 

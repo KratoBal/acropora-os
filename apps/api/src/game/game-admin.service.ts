@@ -6,6 +6,8 @@ import {
   christmasCandidates,
   drawGameWinner,
   GAME_QUESTION_TYPES,
+  isGameAnswerCorrect,
+  type GameQuestionType,
   type GameDrawCandidate,
   type GameOption,
 } from "@acropora/types";
@@ -124,10 +126,32 @@ export class GameAdminService {
     }
   }
 
+  /**
+   * An edit takes the entries with it (barracuda, #2254): when an accepted variant is added after the answers came in,
+   * the stored automatic decision of every entry is worked out again in the same transaction, so a right answer does
+   * not stay "no match" and fall out of the draw. A person's decision (`manualCorrect`) stays as it was.
+   */
   async updateQuestion(id: string, input: GameQuestionInput) {
-    return this.database.gameQuestion.update({
-      where: { id },
-      data: this.checkQuestion(input),
+    const data = this.checkQuestion(input);
+    return this.database.$transaction(async (tx) => {
+      const question = await tx.gameQuestion.update({ where: { id }, data });
+      const entries = await tx.gameEntry.findMany({
+        where: { questionId: id },
+        select: { id: true, answer: true, autoCorrect: true },
+      });
+      for (const entry of entries) {
+        const autoCorrect = isGameAnswerCorrect(
+          question.type as GameQuestionType,
+          entry.answer,
+          question.acceptedAnswers as unknown as string[],
+        );
+        if (autoCorrect !== entry.autoCorrect)
+          await tx.gameEntry.update({
+            where: { id: entry.id },
+            data: { autoCorrect },
+          });
+      }
+      return question;
     });
   }
 
@@ -219,6 +243,18 @@ export class GameAdminService {
         "A heti sorsoláshoz kérdés kell.",
       );
     const questionId = input.kind === "WEEKLY" ? input.questionId! : null;
+    if (
+      questionId &&
+      !(await this.database.gameQuestion.findUnique({
+        where: { id: questionId },
+        select: { id: true },
+      }))
+    )
+      throw gameError(
+        HttpStatus.NOT_FOUND,
+        "NO_QUESTION",
+        "Nincs ilyen kérdés.",
+      );
     const candidates = await this.candidatesOf(input.kind, questionId);
     const seed = randomBytes(16).toString("hex");
     const result = drawGameWinner(candidates, seed);

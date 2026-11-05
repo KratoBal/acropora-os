@@ -747,7 +747,7 @@ describe("navigation", () => {
     // `settings.manage` adja pontosan ezt a ket szerepet.
     "/szerviz/piszkozatok": "settings.manage",
     "/tartalom": "content.view",
-    "/tartalom/nyeremenyjatek": "content.view",
+    "/tartalom/nyeremenyjatek": "game.view",
     // a webshop kezdolapja a Webshop csoportban (2026-10-26): ugyanaz a jog,
     // mint a Beallitasok kartyajae es az API vegpontjaie
     "/admin/kezdolap": "products.view",

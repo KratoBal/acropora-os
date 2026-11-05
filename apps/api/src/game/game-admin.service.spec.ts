@@ -45,6 +45,10 @@ function setup(entries: ReturnType<typeof entry>[]) {
   };
   const database = {
     ...tx,
+    gameQuestion: {
+      findUnique: async ({ where }: { where: { id: string } }) =>
+        where.id === "nincs" ? null : { id: where.id },
+    },
     gameEntry: {
       findMany: async ({ where }: { where: { questionId?: string } }) =>
         entries.filter(
@@ -125,6 +129,80 @@ describe("the draw", () => {
     await assert.rejects(
       service.draw({ kind: "WEEKLY" }, "u1"),
       (e: any) => e.getResponse().code === "INVALID_DRAW",
+    );
+  });
+});
+
+describe("an edit of a question (barracuda, #2254)", () => {
+  // WHAT TURNS THIS RED: an accepted variant added after the answers came in, and the stored "no match" staying, so a
+  // right answer falls out of the draw; or a person's decision overwritten by the recount
+  it("works the stored decision out again; a person's decision stays", async () => {
+    const rows = [
+      { id: "e1", answer: "akropóra", autoCorrect: false, manualCorrect: null },
+      {
+        id: "e2",
+        answer: "Montipora",
+        autoCorrect: false,
+        manualCorrect: true,
+      },
+      { id: "e3", answer: "Acropora", autoCorrect: true, manualCorrect: null },
+    ];
+    const tx = {
+      gameQuestion: {
+        update: async ({ data }: { data: Record<string, unknown> }) => ({
+          id: "q1",
+          ...data,
+        }),
+      },
+      gameEntry: {
+        findMany: async () =>
+          rows.map(({ id, answer, autoCorrect }) => ({
+            id,
+            answer,
+            autoCorrect,
+          })),
+        update: async ({
+          where,
+          data,
+        }: {
+          where: { id: string };
+          data: { autoCorrect: boolean };
+        }) => {
+          Object.assign(
+            rows.find((r) => r.id === where.id)!,
+            data,
+          );
+        },
+      },
+    };
+    const service = new GameAdminService();
+    service.database = {
+      $transaction: async (fn: (t: typeof tx) => unknown) => fn(tx),
+    } as never;
+    await service.updateQuestion("q1", {
+      week: "2026-W45",
+      type: "TEXT",
+      prompt: "Melyik?",
+      options: [],
+      acceptedAnswers: ["Acropora", "Akropora"],
+      opensAt: "2026-11-06T06:00:00Z",
+      closesAt: "2026-11-13T22:59:59Z",
+    });
+    assert.deepEqual(
+      rows.map((r) => [r.id, r.autoCorrect, r.manualCorrect]),
+      [
+        ["e1", true, null],
+        ["e2", false, true],
+        ["e3", true, null],
+      ],
+    );
+  });
+
+  it("a weekly draw on a question that does not exist is a 404, not a 500", async () => {
+    const { service } = setup([]);
+    await assert.rejects(
+      service.draw({ kind: "WEEKLY", questionId: "nincs" }, "u1"),
+      (e: any) => e.getResponse().code === "NO_QUESTION",
     );
   });
 });

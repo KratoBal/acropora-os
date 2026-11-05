@@ -10,15 +10,32 @@ import {
 } from "@nestjs/common";
 
 import { Public } from "../auth/decorators/public.decorator.js";
-import { callerAddress, IpRateLimiter } from "../common/ip-rate-limit.js";
+import { type callerAddress, IpRateLimiter } from "../common/ip-rate-limit.js";
 import { GameConfirmDto, GameEntryDto } from "./game-public.dto.js";
 import { gameError, GameService } from "./game.service.js";
 
 type CallerRequest = Parameters<typeof callerAddress>[0];
 
+/**
+ * The address a forged header cannot move: the LAST `X-Forwarded-For` hop, which our own proxy appended (the first ones
+ * are whatever the caller wrote; barracuda and acrobot on #2254). Behind the game page's server every visitor shares
+ * that server's address, so for the entry this limit is in effect one shared ceiling; what keeps one address from being
+ * flooded with mail is the service's pace per address and question, which no header changes.
+ */
+export function lastHopAddress(request: CallerRequest): string {
+  const forwarded = request.headers["x-forwarded-for"];
+  const hops = (
+    Array.isArray(forwarded) ? forwarded.join(",") : (forwarded ?? "")
+  )
+    .split(",")
+    .map((hop) => hop.trim())
+    .filter(Boolean);
+  return hops.at(-1) || request.ip || "unknown";
+}
+
 /** The limit, answered in the contract's shape (`TOO_MANY`), not the shared limiter's bare message. */
 function limit(limiter: IpRateLimiter, request: CallerRequest): void {
-  if (!limiter.hit(callerAddress(request)))
+  if (!limiter.hit(lastHopAddress(request)))
     throw gameError(
       HttpStatus.TOO_MANY_REQUESTS,
       "TOO_MANY",
@@ -34,7 +51,8 @@ function limit(limiter: IpRateLimiter, request: CallerRequest): void {
 @Controller("jatek")
 export class GamePublicController {
   static readonly reads = new IpRateLimiter(60, 3000);
-  static readonly entries = new IpRateLimiter(10, 600);
+  /** the entry writes and mails: 120 a minute in all (a first week's busiest minute is far below it) */
+  static readonly entries = new IpRateLimiter(120, 120);
   static readonly confirms = new IpRateLimiter(20, 1200);
 
   constructor(private readonly game: GameService) {}

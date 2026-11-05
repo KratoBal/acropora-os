@@ -29,6 +29,8 @@ CREATE TABLE "GameEntry" (
     "manualAt" TIMESTAMP(3),
     "confirmTokenHash" TEXT NOT NULL,
     "confirmedAt" TIMESTAMP(3),
+    "mailCount" INTEGER NOT NULL DEFAULT 0,
+    "lastMailedAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 

@@ -159,12 +159,14 @@ describe("GameAdminPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("with the reading right only there is no decision and no draw", async () => {
+  it("a VIEWER sees neither the players' addresses nor a draw (acrobot: game rights are the human roles' only)", async () => {
     auth.session = as("VIEWER");
-    api.questions.mockResolvedValue([]);
     render(<GameAdminPage />);
-    await waitFor(() => expect(api.questions).toHaveBeenCalled());
+    expect(
+      await screen.findByText("Nincs hozzáférésed a nyereményjátékhoz"),
+    ).toBeInTheDocument();
+    expect(api.questions).not.toHaveBeenCalled();
+    expect(api.entries).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: "Heti sorsolás" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Kérdés mentése" })).toBeNull();
   });
 });

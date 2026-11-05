@@ -8,7 +8,7 @@ import {
   Logger,
   Optional,
 } from "@nestjs/common";
-import { prisma } from "@acropora/database";
+import { Prisma, prisma } from "@acropora/database";
 import {
   isGameAnswerCorrect,
   normalizeGameEmail,
@@ -54,13 +54,23 @@ export type GameDatabase = Pick<typeof prisma, "gameQuestion" | "gameEntry">;
 export const GAME_ENV = Symbol("GAME_ENV");
 
 /**
+ * THE MAIL'S PACE PER ADDRESS AND QUESTION (barracuda, #2254: our own sender must not flood one address). A new link
+ * goes out at most every two minutes, and at most five times for one entry; past either, the entry answers the same
+ * and sends nothing. This holds whatever the caller's address claims, so a forged header cannot buy more mail.
+ */
+export const GAME_MAIL_COOLDOWN_MS = 2 * 60_000;
+export const GAME_MAIL_MAX_PER_ENTRY = 5;
+
+/**
  * THE GIVEAWAY'S PUBLIC SIDE (card 31445d0f; brief exchange/jatek/brief-2026-11-05.md; the contract with the page:
  * exchange/jatek/jatek-api-szerzodes.md). The open question without its accepted answers, an entry, and its
  * confirmation from the mailed link.
  *
  * WHAT IT DOES NOT TELL A CALLER: whether an address has played this week, or whether an answer is right. Every
  * accepted entry answers the same (`CHECK_EMAIL`): a new one, a repeat, and the bot trap alike. An unconfirmed repeat
- * takes the new answer and gets a new link (a lost mail can be asked again); a confirmed one is left alone.
+ * takes the new answer and gets a new link (a lost mail can be asked again), paced per address (`GAME_MAIL_COOLDOWN_MS`,
+ * `GAME_MAIL_MAX_PER_ENTRY`); a confirmed one is left alone, and so is one confirmed between our read and our write
+ * (the write is conditional on `confirmedAt: null`). Two first entries at once: the second answers the same, no mail.
  *
  * THE MAIL goes through the OS's own sender and its gate: TICKET_MAIL_MODE, the path switch TICKET_MAIL_GAME, and the
  * redirect (on stage every mail goes to TICKET_MAIL_REDIRECT_TO). A closed gate keeps the entry and says so in the log;
@@ -179,25 +189,47 @@ export class GameService {
       where: { questionId_email: { questionId: question.id, email } },
     });
     if (existing?.confirmedAt) return answered;
-    if (existing)
-      await this.database.gameEntry.update({
-        where: { id: existing.id },
+    if (existing) {
+      const recent =
+        existing.lastMailedAt !== null &&
+        now.getTime() - existing.lastMailedAt.getTime() < GAME_MAIL_COOLDOWN_MS;
+      if (recent || existing.mailCount >= GAME_MAIL_MAX_PER_ENTRY)
+        return answered;
+      // only while still unconfirmed: a confirmation in between keeps its answer and its link
+      const { count } = await this.database.gameEntry.updateMany({
+        where: { id: existing.id, confirmedAt: null },
         data: {
           answer,
           autoCorrect,
           confirmTokenHash: sha256(token),
+          mailCount: { increment: 1 },
+          lastMailedAt: now,
         },
       });
-    else
-      await this.database.gameEntry.create({
-        data: {
-          questionId: question.id,
-          email,
-          answer,
-          autoCorrect,
-          confirmTokenHash: sha256(token),
-        },
-      });
+      if (count === 0) return answered;
+    } else {
+      try {
+        await this.database.gameEntry.create({
+          data: {
+            questionId: question.id,
+            email,
+            answer,
+            autoCorrect,
+            confirmTokenHash: sha256(token),
+            mailCount: 1,
+            lastMailedAt: now,
+          },
+        });
+      } catch (error) {
+        // a second first entry for the same address at the same moment: the first one stands
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2002"
+        )
+          return answered;
+        throw error;
+      }
+    }
     await this.mailConfirmation(email, token, question.week);
     return answered;
   }

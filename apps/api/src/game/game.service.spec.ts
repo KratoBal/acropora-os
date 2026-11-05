@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { GameService } from "./game.service.js";
+import { Prisma } from "@acropora/database";
+
+import { GAME_MAIL_MAX_PER_ENTRY, GameService } from "./game.service.js";
 
 /*
   THE GIVEAWAY'S PUBLIC SIDE (card 31445d0f; contract exchange/jatek/jatek-api-szerzodes.md). What turns this red: the
@@ -51,11 +53,38 @@ function setup(
         return found ? { ...found, question: q } : null;
       },
       create: async ({ data }: { data: Record<string, unknown> }) => {
+        if (entries.has(data.email as string)) {
+          const error = Object.assign(
+            new Prisma.PrismaClientKnownRequestError("unique", {
+              code: "P2002",
+              clientVersion: "test",
+            }),
+          );
+          throw error;
+        }
         entries.set(data.email as string, {
           id: data.email,
           confirmedAt: null,
           ...data,
         });
+      },
+      updateMany: async ({
+        where,
+        data,
+      }: {
+        where: { id: string; confirmedAt?: null };
+        data: Record<string, any>;
+      }) => {
+        const row = entries.get(where.id);
+        // only what the where asks: the condition under test must come from the code, not from this double
+        if (!row) return { count: 0 };
+        if ("confirmedAt" in where && row.confirmedAt !== where.confirmedAt)
+          return { count: 0 };
+        const { mailCount, ...rest } = data;
+        Object.assign(row, rest, {
+          mailCount: (row.mailCount as number) + (mailCount?.increment ?? 0),
+        });
+        return { count: 1 };
       },
       update: async ({
         where,
@@ -137,7 +166,8 @@ describe("an entry", () => {
   it("answers a repeat, a confirmed repeat and the bot trap exactly as a new entry", async () => {
     const { service, entries, mails, linkToken } = setup();
     await service.submit(entry);
-    // an unconfirmed repeat: the new answer and a new link (a lost mail can be asked again)
+    // an unconfirmed repeat after the pause: the new answer and a new link (a lost mail can be asked again)
+    service.now = () => new Date(OPEN.getTime() + 3 * 60_000);
     assert.deepEqual(await service.submit({ ...entry, answer: "Montipora" }), {
       status: "CHECK_EMAIL",
     });
@@ -161,6 +191,52 @@ describe("an entry", () => {
     );
     assert.equal(entries.has("bot@example.com"), false);
     assert.equal(mails.length, 2);
+  });
+
+  // barracuda, #2254: WHAT TURNS THIS RED: one address flooded with mail through our own sender (the pace and the cap
+  // hold whatever the caller's address claims); a confirmation in between overwritten; two first entries at once a 500
+  it("three quick entries to one address send exactly one mail; past the cap, none", async () => {
+    const { service, mails } = setup();
+    for (let i = 0; i < 3; i++)
+      await service.submit({ ...entry, answer: `valasz-${i}` });
+    assert.equal(mails.length, 1);
+    let at = OPEN.getTime();
+    for (let i = 0; i < 10; i++) {
+      at += 3 * 60_000;
+      service.now = () => new Date(at);
+      await service.submit(entry);
+    }
+    assert.equal(mails.length, GAME_MAIL_MAX_PER_ENTRY);
+  });
+
+  it("a confirmation between the read and the write keeps its answer, and a second first entry at once answers the same", async () => {
+    const { service, entries, mails, linkToken } = setup();
+    await service.submit(entry);
+    service.now = () => new Date(OPEN.getTime() + 3 * 60_000);
+    // the read sees it unconfirmed; the confirmation lands before the write
+    const realFind = (service.database as any).gameEntry.findUnique;
+    (service.database as any).gameEntry.findUnique = async (args: any) => {
+      const row = await realFind(args);
+      if (args.where.questionId_email) {
+        const snapshot = row ? { ...row } : row;
+        await service.confirm({ token: linkToken(mails[0]!) });
+        return snapshot;
+      }
+      return row;
+    };
+    assert.deepEqual(await service.submit({ ...entry, answer: "Montipora" }), {
+      status: "CHECK_EMAIL",
+    });
+    assert.equal(entries.get("jatekos@example.com")!.answer, "acropóra");
+    assert.equal(mails.length, 1);
+
+    const race = setup();
+    (race.service.database as any).gameEntry.findUnique = async () => null;
+    await race.service.submit(entry);
+    assert.deepEqual(await race.service.submit(entry), {
+      status: "CHECK_EMAIL",
+    });
+    assert.equal(race.mails.length, 1);
   });
 
   it("refuses a bad address, an empty answer, a choice that is no option, and a closed week, in the contract's codes", async () => {
