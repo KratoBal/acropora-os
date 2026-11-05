@@ -188,6 +188,21 @@ function reefClubMark(row: {
  */
 const INTERNAL_ROWS: Prisma.AquariumWhereInput = { ownerAccountId: null };
 
+/**
+ * AZ AKVÁRIUM VEVŐ-VÁLASZTÓJÁNAK SZŰRŐJE (tiszta függvény, hogy külön mérhető legyen): aktív ügyfél, a névre keresve. NINCS
+ * benne `partner` kulcs: a partner-kötést viselő sor (az egyesített partner) is ajánlható, lásd `searchSelectableCustomers`.
+ */
+export function selectableCustomersWhere(
+  search?: string,
+): Prisma.CustomerWhereInput {
+  return {
+    isActive: true,
+    ...(search
+      ? { displayName: { contains: search, mode: "insensitive" } }
+      : {}),
+  };
+}
+
 @Injectable()
 export class AquariumsRepository {
   /**
@@ -278,10 +293,15 @@ export class AquariumsRepository {
    *
    * Lásd `AquariumSelectableCustomer` fejlécét (`@acropora/types`): ez a
    * lekérdezés `aquariums.view` alatt fut, mert a mobil `SERVICE` szerepkör
-   * nem éri el a `/customers`-t. Legfeljebb 20 találat, csak aktív, nem
-   * partner-tulajdonú ügyfél (ugyanaz a szűrés, mint a `customers.repository`
-   * `partner: null` során -- egy szerviz partner saját munkalap-vevő sora nem
-   * akvárium-tulajdonos).
+   * nem éri el a `/customers`-t. Legfeljebb 20 találat, csak aktív ügyfél.
+   *
+   * A PARTNER-KÖTÉST VISELŐ SOR IS AJÁNLHATÓ (2026-11-05, az árajánlat választó
+   * élő hibája után). Ez a lekérdezés eredetileg `partner: null`-t kért: egy
+   * szerviz partner saját munkalap-vevő sora nem akvárium-tulajdonos. A
+   * partnertörzs egyesítése óta (egy partnertörzs, `#2182`) viszont egy partner
+   * és a vevője EGY sor, amely a partner-kötést viseli: ezzel a szűréssel az
+   * egyesített partner (például egy állatkert, amelynek akváriumai vannak) nem
+   * volt kiválasztható, és az akvárium felvitelnél nem jött elő.
    *
    * A VÁROS A LEGKÖZELEBBI ALAPÉRTELMEZETT CÍMBŐL jön (`isDefault` első,
    * aztán a legrégebbi), egyetlen lekérdezésben -- nem a teljes cím-formázás
@@ -292,13 +312,7 @@ export class AquariumsRepository {
     search?: string,
   ): Promise<AquariumSelectableCustomerListResponse> {
     const rows = await prisma.customer.findMany({
-      where: {
-        partner: null,
-        isActive: true,
-        ...(search
-          ? { displayName: { contains: search, mode: "insensitive" } }
-          : {}),
-      },
+      where: selectableCustomersWhere(search),
       select: {
         id: true,
         displayName: true,

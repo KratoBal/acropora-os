@@ -66,6 +66,10 @@ describe(
       // -- egy törölt vevőt a fenti sor már nem talál meg name szerint, a
       // sorrend mégis a biztonságosabb, hogy a takarítás önmagában is
       // értelmes maradjon, ha valaha külön futtatnák.
+      // a partner-linked customer of the picker test: the partner first, then its customer
+      await prisma.supplier.deleteMany({
+        where: { code: { startsWith: CUSTOMER_PREFIX } },
+      });
       await prisma.customer.deleteMany({
         where: { customerNumber: { startsWith: CUSTOMER_PREFIX } },
       });
@@ -84,12 +88,16 @@ describe(
       const customersLeft = await prisma.customer.count({
         where: { customerNumber: { startsWith: CUSTOMER_PREFIX } },
       });
+      const suppliersLeft = await prisma.supplier.count({
+        where: { code: { startsWith: CUSTOMER_PREFIX } },
+      });
       nincsMaradek([
         { nev: "AquariumEquipment", darab: equipmentLeft },
         { nev: "Aquarium", darab: aquariumsLeft },
         { nev: "User", darab: usersLeft },
         { nev: "WorksheetDepartment", darab: departmentsLeft },
         { nev: "Customer", darab: customersLeft },
+        { nev: "Supplier", darab: suppliersLeft },
       ]);
     }
 
@@ -121,6 +129,55 @@ describe(
     it("POZITÍV KONTROLL: a suite létre tud hozni egy akváriumot", async () => {
       const created = await repository.create(createInput(), "no-actor");
       assert.equal(created.name, `AQ-INT-${suffix}`);
+    });
+
+    /*
+      AZ EGYESITETT PARTNER AZ AKVARIUM VALASZTOBAN (2026-11-05). MI PIROSIT: ha a partner-kotest viselo vevo-sor
+      (egy partner es a vevoje egy sora) nem jon elo; ha az inaktiv sor eloujjon; ha a sima vevo elveszne.
+    */
+    describe("az akvárium ügyfél-választója", () => {
+      it("a partner-kötést viselő ügyfelet is kínálja, az inaktívat nem", async () => {
+        const name = `AQ-INT-PICK-${suffix}`;
+        const plain = await prisma.customer.create({
+          data: {
+            customerNumber: `${CUSTOMER_PREFIX}plain-${suffix}`,
+            type: "COMPANY",
+            displayName: `${name} sima`,
+          },
+        });
+        const mirror = await prisma.customer.create({
+          data: {
+            customerNumber: `${CUSTOMER_PREFIX}mirror-${suffix}`,
+            type: "COMPANY",
+            displayName: `${name} partner`,
+          },
+        });
+        await prisma.supplier.create({
+          data: {
+            code: `${CUSTOMER_PREFIX}sup-${suffix}`,
+            name: `${name} partner`,
+            country: "HU",
+            isSupplier: false,
+            isService: false,
+            customerId: mirror.id,
+          },
+        });
+        await prisma.customer.create({
+          data: {
+            customerNumber: `${CUSTOMER_PREFIX}off-${suffix}`,
+            type: "COMPANY",
+            displayName: `${name} inaktív`,
+            isActive: false,
+          },
+        });
+
+        const result = await repository.searchSelectableCustomers(name);
+
+        assert.deepEqual(
+          result.items.map((item) => item.id).sort(),
+          [mirror.id, plain.id].sort(),
+        );
+      });
     });
 
     describe("a kliens művelet-azonosítója", () => {
