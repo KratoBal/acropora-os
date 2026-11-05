@@ -50,6 +50,8 @@ export function QuoteNewPage() {
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<CustomerSummary[]>([]);
   const [searchError, setSearchError] = useState<string | null>(null);
+  // the text of the search that has ANSWERED: an empty list reads as "no match" only for it, never while one is in flight
+  const [answered, setAnswered] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [validityDays, setValidityDays] = useState(30);
   const [currency, setCurrency] = useState("HUF");
@@ -72,6 +74,7 @@ export function QuoteNewPage() {
     if (customer || search.trim().length < 2) {
       setResults([]);
       setSearchError(null);
+      setAnswered(null);
       return;
     }
     const controller = new AbortController();
@@ -82,12 +85,16 @@ export function QuoteNewPage() {
         // the API's own lower bound: a smaller page is a 400, not a short list
         // (Balázs on stage, 2026-10-08: the search listed nothing)
         pageSize: String(CUSTOMER_LIST_PAGE_SIZE.min),
+        // the partners' customer rows too (their "mirror" of the one partner register): a partner joined with a
+        // customer by the merge IS a mirror, and without this the search never offers it (Luca, 2026-11-05)
+        includePartnerMirrors: "true",
       });
       customersApi
         .list(token, query, controller.signal)
         .then((response) => {
           setResults(response.items);
           setSearchError(null);
+          setAnswered(search.trim());
         })
         .catch((cause: unknown) => {
           if (isAbort(cause)) return;
@@ -104,6 +111,11 @@ export function QuoteNewPage() {
 
   const template = templates.find((t) => t.id === templateId) ?? null;
   const ready = Boolean(customer && title.trim());
+  // why the create button is grey, said out loud: a tooltip on a disabled button is never seen
+  const missing = [
+    customer ? null : "a partner (válaszd ki a találatok közül)",
+    title.trim() ? null : "az ajánlat címe",
+  ].filter((part): part is string => part !== null);
 
   const chooseTemplate = (id: string) => {
     setTemplateId(id);
@@ -170,6 +182,12 @@ export function QuoteNewPage() {
         <Alert variant="danger" title="Hiba történt" description={error} />
       ) : null}
 
+      {ready ? null : (
+        <p role="status" className="text-sm text-pilot-grey-600">
+          Az ajánlat létrehozásához még hiányzik: {missing.join(" és ")}.
+        </p>
+      )}
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="space-y-6">
           <PilotCard>
@@ -208,6 +226,15 @@ export function QuoteNewPage() {
                         {searchError}
                       </p>
                     ) : null}
+                    {!searchError &&
+                    results.length === 0 &&
+                    answered !== null &&
+                    answered === search.trim() ? (
+                      <p role="status" className="text-sm text-pilot-grey-600">
+                        Nincs ilyen partner. Próbálj rövidebb szövegrészt, vagy
+                        vedd fel a Partnerek között.
+                      </p>
+                    ) : null}
                     {results.length ? (
                       <ul
                         aria-label="Találatok"
@@ -224,6 +251,11 @@ export function QuoteNewPage() {
                               }}
                             >
                               {item.displayName}
+                              {item.partnerMirror ? (
+                                <span className="ml-2 text-xs text-pilot-grey-500">
+                                  partner
+                                </span>
+                              ) : null}
                             </button>
                           </li>
                         ))}
