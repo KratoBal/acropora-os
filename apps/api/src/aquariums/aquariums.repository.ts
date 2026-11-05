@@ -204,6 +204,14 @@ export function selectableCustomersWhere(
   };
 }
 
+/**
+ * A VÁLASZTÓ LEGFELJEBB ENNYI SORT MUTAT, ÉS AZ AZONOSÍTÓ-LEKÉRDEZÉS IS ENNYIT HOZ (barracuda, #2239 review): a rövid keresés („a”,
+ * „kft”) a teljes vevőtörzs nagy részére illik, és egy korlátlan azonosító-lista egy `in`-be menne, ahol a Postgres kötési
+ * korlátja (32767) élesben már megállított egy lekérdezést (#2019). A két lekérdezés ugyanazt a rendezést használja, tehát a
+ * korlátolt azonosítók pontosan azok, amelyeket a lista úgyis mutatna.
+ */
+export const SELECTABLE_CUSTOMER_LIMIT = 20;
+
 @Injectable()
 export class AquariumsRepository {
   /**
@@ -327,7 +335,7 @@ export class AquariumsRepository {
         },
       },
       orderBy: { displayName: "asc" },
-      take: 20,
+      take: SELECTABLE_CUSTOMER_LIMIT,
     });
     return {
       items: rows.map((row) => ({
@@ -349,6 +357,8 @@ export class AquariumsRepository {
       SELECT "id" FROM "Customer"
       WHERE "isActive" = true
         AND unaccent("displayName") ILIKE unaccent(${pattern}::text)
+      ORDER BY "displayName" ASC, "id" ASC
+      LIMIT ${SELECTABLE_CUSTOMER_LIMIT}
     `;
     return rows.map((row) => row.id);
   }
