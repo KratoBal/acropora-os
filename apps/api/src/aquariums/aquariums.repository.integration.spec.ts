@@ -5,7 +5,10 @@ import { prisma } from "@acropora/database";
 
 import { integrationDatabaseGate } from "../common/integration-database.js";
 import { nincsMaradek } from "../common/takaritas-leltar.js";
-import { AquariumsRepository } from "./aquariums.repository.js";
+import {
+  AquariumsRepository,
+  SELECTABLE_CUSTOMER_LIMIT,
+} from "./aquariums.repository.js";
 
 /**
  * A HELYSZÍNI FELVITEL IDEMPOTENCIÁJA, ADATBÁZISON.
@@ -233,6 +236,34 @@ describe(
         assert.deepEqual(
           pct.items.map((item) => item.id),
           [percent.id],
+        );
+      });
+    });
+
+    /*
+      A NEVKERESES AZONOSITO-LEKERDEZESE KORLATOS (barracuda, #2239 review, #2019 bind-korlat). MI PIROSIT: ha a
+      nyers lekerdezes ujra korlat nelkul hozza az osszes egyezo azonositot; ha a korlat nem a mutatott rendezes elso sorait
+      tartja meg (a lista nem a nev szerinti elso 20-at mutatna).
+    */
+    describe("az akvárium ügyfél-választójának találati korlátja", () => {
+      it("legfeljebb a korlátnyi, név szerint első sort adja, sok egyezésnél is", async () => {
+        const tag = `AQ-INT-LIM-${suffix}`;
+        const total = SELECTABLE_CUSTOMER_LIMIT + 3;
+        for (let i = 1; i <= total; i++)
+          await prisma.customer.create({
+            data: {
+              customerNumber: `${CUSTOMER_PREFIX}lim-${i}-${suffix}`,
+              type: "COMPANY",
+              displayName: `${tag} ${String(i).padStart(2, "0")}`,
+            },
+          });
+        const found = await repository.searchSelectableCustomers(tag);
+        assert.deepEqual(
+          found.items.map((item) => item.displayName),
+          Array.from(
+            { length: SELECTABLE_CUSTOMER_LIMIT },
+            (_, i) => `${tag} ${String(i + 1).padStart(2, "0")}`,
+          ),
         );
       });
     });
