@@ -195,6 +195,26 @@ describe("the source plans: what needs a person", () => {
     );
   });
 
+  // barracuda, #2246 a: WHAT TURNS THIS RED: a GLS line keyed by the invoice alone, so a person's "Kézzel rendezve" on
+  // one transfer would silently close a later transfer's line for the same invoice
+  it("GLS: a line's key is the invoice and the transfer day", () => {
+    const transfer = (transferDate: string) => ({
+      transferDate,
+      markable: true as const,
+      transferred: "100",
+      creditId: `bt-${transferDate}`,
+      marks: [],
+      skipped: [
+        { invoiceNumber: "ACRW-2026/00469", reason: "NOT_FOUND" as const },
+      ],
+    });
+    const plan = glsPlanFrom([transfer("2026-09-10"), transfer("2026-10-01")]);
+    assert.deepEqual(
+      plan.exceptions.map((e) => e.key),
+      ["ACRW-2026/00469@2026-09-10", "ACRW-2026/00469@2026-10-01"],
+    );
+  });
+
   it("Foxpost: a settlement that failed to read, with its error", () => {
     const plan = foxpostPlanFrom([
       {
