@@ -56,6 +56,9 @@ export function CustomerPicker({
         search,
         page: "1",
         pageSize: "10",
+        // the partners' customer rows too: a partner joined with a customer by the merge IS one row (its "mirror"), and
+        // without this the search never offers it, so a zoo that has aquariums could not be picked (40332480)
+        includePartnerMirrors: "true",
       });
       customersApi
         .list(token, query, controller.signal)
