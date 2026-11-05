@@ -102,6 +102,8 @@ function setup(
     previous?: { invoiceId: string } | null;
     sendError?: Error;
     sender?: boolean;
+    /** The mail's language by the document's order (d5c6befd); left out = no language service, as before. */
+    language?: "hu" | "en";
   } = {},
 ) {
   const calls = {
@@ -136,6 +138,9 @@ function setup(
     store,
     options.sender === false ? null : sender,
     options.env ?? OPEN,
+    options.language === undefined
+      ? null
+      : ({ of: async () => options.language } as never),
   );
   return { service, calls };
 }
@@ -163,6 +168,25 @@ describe("BillingDocumentEmailService", () => {
       ["SEND", "SENT"],
     );
     assert.equal(calls.finished[0]!.previousEmailStatus, "PENDING");
+  });
+
+  it("an English document fills the amount and the date the English way (d5c6befd)", async () => {
+    const text = "Due: {gross_total} by {due_date}.";
+    const english = setup({ language: "en" });
+    await english.service.send("doc-1", input({ body: text }), USER);
+    assert.equal(
+      english.calls.sent[0]!.text,
+      "Due: HUF\u00a01,270 by 8 October 2026.",
+    );
+    for (const options of [{ language: "hu" as const }, {}]) {
+      const hungarian = setup(options);
+      await hungarian.service.send("doc-1", input({ body: text }), USER);
+      assert.equal(
+        hungarian.calls.sent[0]!.text,
+        "Due: 1270\u00a0Ft by 2026. 10. 08..",
+        JSON.stringify(options),
+      );
+    }
   });
 
   it("sends a formatted body as cleaned HTML with a text alternative made from it", async () => {
