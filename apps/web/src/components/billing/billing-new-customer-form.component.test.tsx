@@ -135,6 +135,11 @@ describe("Új vevő a számla Vevő kártyáján (acrobot 28105)", () => {
     ).toBeTruthy();
     // the search is by the first eight digits, with the separators gone
     expect(api.customers.list.mock.calls[0]![1].get("search")).toBe("12345678");
+    // MI PIROSIT: ha a keresés nem kéri a partner-kötést viselő sorokat, egy már a törzsben lévő partner (az egyesítés
+    // után egy sor a partnerrel) új cégnek látszana, és második sor jönne létre ugyanazzal az adószámmal
+    expect(
+      api.customers.list.mock.calls[0]![1].get("includePartnerMirrors"),
+    ).toBe("true");
     expect(screen.queryByRole("button", { name: /Más Bt\./ })).toBe(null);
     fireEvent.click(screen.getByRole("button", { name: /Adapt Kft\./ }));
     expect(onPickExisting).toHaveBeenCalledWith(existing);
