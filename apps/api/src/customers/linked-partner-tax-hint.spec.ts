@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { linkedPartnerTaxHint } from "./customers.repository.js";
+import { linkedPartnerTaxHint } from "./partner-payment-terms.js";
 
 /**
  * A KOTOTT PARTNER ADOSZAMA MINT TIPP (40332480, barracuda #2228). MI PIROSIT: ha a kotes nelkuli sor kap tippet; ha a
