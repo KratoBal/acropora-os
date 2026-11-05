@@ -118,63 +118,118 @@ export const CERTIFICATE_SYSTEM_DOCUMENTS = {
   },
 } satisfies Prisma.CompletionCertificateFindManyArgs;
 
+const LIST_ORDER = [
+  { createdAt: "desc" },
+  { id: "desc" },
+] satisfies Prisma.PartnerOrderOrderByWithRelationInput[];
+
+const LIST_SELECT = {
+  id: true,
+  orderNumber: true,
+  status: true,
+  customerId: true,
+  createdAt: true,
+  customer: { select: { displayName: true } },
+  ...ORDER_CONTENT_SELECT,
+} satisfies Prisma.PartnerOrderSelect;
+
+/** The search and the status of the list; the chain and open line filters are the service's (see `listAll`). */
+function listWhere(filter: OrderListFilter): Prisma.PartnerOrderWhereInput {
+  return {
+    ...(filter.status ? { status: filter.status } : {}),
+    ...(filter.q
+      ? {
+          OR: [
+            { orderNumber: { contains: filter.q, mode: "insensitive" } },
+            {
+              quote: {
+                OR: [
+                  { title: { contains: filter.q, mode: "insensitive" } },
+                  { quoteNumber: { contains: filter.q, mode: "insensitive" } },
+                ],
+              },
+            },
+            {
+              customer: {
+                displayName: { contains: filter.q, mode: "insensitive" },
+              },
+            },
+          ],
+        }
+      : {}),
+  };
+}
+
 @Injectable()
 export class PartnerOrdersRepository {
   async list(page: number, pageSize: number, filter: OrderListFilter) {
-    const where: Prisma.PartnerOrderWhereInput = {
-      ...(filter.status ? { status: filter.status } : {}),
-      ...(filter.q
-        ? {
-            OR: [
-              { orderNumber: { contains: filter.q, mode: "insensitive" } },
-              {
-                quote: {
-                  OR: [
-                    { title: { contains: filter.q, mode: "insensitive" } },
-                    {
-                      quoteNumber: { contains: filter.q, mode: "insensitive" },
-                    },
-                  ],
-                },
-              },
-              {
-                customer: {
-                  displayName: { contains: filter.q, mode: "insensitive" },
-                },
-              },
-            ],
-          }
-        : {}),
-    };
+    const where = listWhere(filter);
     const [rows, total] = await prisma.$transaction(
       [
         prisma.partnerOrder.findMany({
           where,
-          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          orderBy: LIST_ORDER,
           skip: (page - 1) * pageSize,
           take: pageSize,
-          select: {
-            id: true,
-            orderNumber: true,
-            status: true,
-            customerId: true,
-            createdAt: true,
-            customer: { select: { displayName: true } },
-            ...ORDER_CONTENT_SELECT,
-          },
+          select: LIST_SELECT,
         }),
         prisma.partnerOrder.count({ where }),
       ],
       { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
     );
-    const chain = rows.length
-      ? await prisma.partnerOrderDocument.groupBy({
+    return { rows, total, chain: await this.chainCounts(rows) };
+  }
+
+  /**
+   * EVERY ORDER THE FILTER MATCHES, not a page (S4): a filter on where the chain stands, or on open lines, is about
+   * documents and certificates, so it can only be answered after they are read, and a page cut by the database
+   * first would show the wrong orders on every page. The orders of one company are in the hundreds, and the
+   * service reads the same chain and certificate data it reads for a page, once for all of them.
+   */
+  async listAll(filter: OrderListFilter) {
+    const rows = await prisma.partnerOrder.findMany({
+      where: listWhere(filter),
+      orderBy: LIST_ORDER,
+      select: LIST_SELECT,
+    });
+    return { rows, chain: await this.chainCounts(rows) };
+  }
+
+  private chainCounts(rows: readonly { id: string }[]) {
+    return rows.length
+      ? prisma.partnerOrderDocument.groupBy({
           by: ["orderId", "step"],
           where: { orderId: { in: rows.map((row) => row.id) } },
           _count: { _all: true },
         })
-      : [];
-    return { rows, total, chain };
+      : Promise.resolve([]);
+  }
+
+  /** The certified lines of these orders, for the open line count (any certificate counts, as in the issue gate). */
+  async certifiedLines(orderIds: readonly string[]) {
+    if (!orderIds.length) return [];
+    const rows = await prisma.completionCertificateLineItem.findMany({
+      where: {
+        certificate: { partnerOrderId: { in: [...orderIds] } },
+        quoteItemId: { not: null },
+      },
+      select: {
+        quoteItemId: true,
+        quantity: true,
+        certificate: { select: { partnerOrderId: true } },
+      },
+    });
+    return rows.flatMap((row) =>
+      row.quoteItemId && row.certificate.partnerOrderId
+        ? [
+            {
+              orderId: row.certificate.partnerOrderId,
+              quoteItemId: row.quoteItemId,
+              quantity: row.quantity,
+            },
+          ]
+        : [],
+    );
   }
 
   detail(id: string) {

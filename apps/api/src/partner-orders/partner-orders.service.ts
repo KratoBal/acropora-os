@@ -8,9 +8,11 @@ import { Prisma } from "@acropora/database";
 import type { PartnerOrderDocumentStep } from "@acropora/database";
 import {
   PARTNER_ORDER_DOCUMENT_STEPS,
+  partnerOrderMatchesChainFilter,
   type AuthenticatedUser,
   type PartnerOrderCandidateDto,
   type PartnerOrderChain,
+  type PartnerOrderChainFilter,
   type PartnerOrderDetailDto,
   type PartnerOrderDocumentDto,
   type PartnerOrderListResponse,
@@ -27,6 +29,7 @@ import {
 import { decideQuota } from "../service-assets/document-store/document-quota.js";
 
 import { orderTotals, selectOrderItems } from "./partner-order-items.js";
+import { openLineCount } from "./partner-order-open-lines.js";
 import {
   MAX_DOCUMENTS_PER_ORDER,
   PartnerOrdersRepository,
@@ -133,13 +136,43 @@ export class PartnerOrdersService {
   async list(
     page: number,
     pageSize: number,
-    filter: { q?: string; status?: PartnerOrderStatusValue },
+    filter: {
+      q?: string;
+      status?: PartnerOrderStatusValue;
+      stage?: PartnerOrderChainFilter;
+      openOnly?: boolean;
+    },
   ): Promise<PartnerOrderListResponse> {
+    // the chain and open line filters are about documents and certificates: they need every matching order read
+    // first, then cut into pages (S4); the plain list keeps the database's own page
+    if (filter.stage || filter.openOnly) {
+      const { rows, chain } = await this.repository.listAll(filter);
+      const items = (await this.listItems(rows, chain)).filter(
+        (item) =>
+          (!filter.stage ||
+            partnerOrderMatchesChainFilter(item.chain, filter.stage)) &&
+          (!filter.openOnly || item.openLines > 0),
+      );
+      return {
+        page,
+        pageSize,
+        total: items.length,
+        items: items.slice((page - 1) * pageSize, page * pageSize),
+      };
+    }
     const { rows, total, chain } = await this.repository.list(
       page,
       pageSize,
       filter,
     );
+    return { page, pageSize, total, items: await this.listItems(rows, chain) };
+  }
+
+  /** The list's rows with the chain (uploaded and system documents) and the open lines of each order. */
+  private async listItems(
+    rows: Awaited<ReturnType<PartnerOrdersRepository["list"]>>["rows"],
+    chain: Awaited<ReturnType<PartnerOrdersRepository["list"]>>["chain"],
+  ): Promise<PartnerOrderListResponse["items"]> {
     const chains = new Map<string, PartnerOrderChain>();
     for (const entry of chain) {
       const current = chains.get(entry.orderId) ?? emptyChain();
@@ -147,9 +180,8 @@ export class PartnerOrdersService {
       chains.set(entry.orderId, current);
     }
     // the system-made documents count too: the list sees where the chain stands (acrobot 42589)
-    const sources = await this.repository.systemDocumentSources(
-      rows.map((row) => row.id),
-    );
+    const ids = rows.map((row) => row.id);
+    const sources = await this.repository.systemDocumentSources(ids);
     for (const [orderId, source] of sources)
       chains.set(
         orderId,
@@ -158,29 +190,36 @@ export class PartnerOrdersService {
           systemDocumentsOf(source),
         ),
       );
-    return {
-      page,
-      pageSize,
-      total,
-      items: rows.map((row) => {
-        const body = orderBody(row);
-        return {
-          id: row.id,
-          orderNumber: row.orderNumber,
-          quoteId: row.quote.id,
-          quoteNumber: row.quote.quoteNumber,
-          title: row.quote.title,
-          status: row.status,
-          customerId: row.customerId,
-          customerName: row.customer?.displayName ?? null,
-          quoteAccepted: body.accepted,
-          netTotal: body.totals.net,
-          currency: body.currency,
-          chain: chains.get(row.id) ?? emptyChain(),
-          createdAt: row.createdAt.toISOString(),
-        };
-      }),
-    };
+    const certified = await this.repository.certifiedLines(ids);
+    const certifiedByOrder = new Map<string, typeof certified>();
+    for (const line of certified)
+      certifiedByOrder.set(line.orderId, [
+        ...(certifiedByOrder.get(line.orderId) ?? []),
+        line,
+      ]);
+    return rows.map((row) => {
+      const body = orderBody(row);
+      return {
+        id: row.id,
+        orderNumber: row.orderNumber,
+        quoteId: row.quote.id,
+        quoteNumber: row.quote.quoteNumber,
+        title: row.quote.title,
+        status: row.status,
+        customerId: row.customerId,
+        customerName: row.customer?.displayName ?? null,
+        quoteAccepted: body.accepted,
+        netTotal: body.totals.net,
+        currency: body.currency,
+        chain: chains.get(row.id) ?? emptyChain(),
+        openLines: openLineCount(
+          body.lines,
+          certifiedByOrder.get(row.id) ?? [],
+        ),
+        totalLines: body.lines.length,
+        createdAt: row.createdAt.toISOString(),
+      };
+    });
   }
 
   async candidates(): Promise<PartnerOrderCandidateDto[]> {

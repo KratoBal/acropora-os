@@ -1745,12 +1745,15 @@ export type {
   VariantSupplierPrices,
 } from "./supplier-price-lists.js";
 export {
+  PARTNER_ORDER_CHAIN_FILTERS,
   PARTNER_ORDER_DOCUMENT_STEPS,
   PARTNER_ORDER_STATUSES,
+  partnerOrderMatchesChainFilter,
 } from "./partner-orders.js";
 export type {
   PartnerOrderCandidateDto,
   PartnerOrderChain,
+  PartnerOrderChainFilter,
   PartnerOrderDetailDto,
   PartnerOrderDocumentDto,
   PartnerOrderSystemDocumentDto,
