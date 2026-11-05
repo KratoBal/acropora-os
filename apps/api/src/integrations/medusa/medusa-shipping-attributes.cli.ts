@@ -10,7 +10,11 @@ import {
   medusaClientForProjection,
   storedCredentialProvider,
 } from "./medusa-projection.credentials.js";
-import { liveAnimalSubtreeIds } from "./medusa-livestock.policy.js";
+import {
+  deriveLivestockKind,
+  liveAnimalKindSubtrees,
+  liveAnimalSubtreeIds,
+} from "./medusa-livestock.policy.js";
 import { MedusaShippingAttributesService } from "./medusa-shipping-attributes.service.js";
 import {
   listAllShopSkus,
@@ -119,6 +123,14 @@ export async function runShippingAttributesCli(
       })
     : [];
   const eloAllatTermekek = new Set(besorolasok.map((sor) => sor.productId));
+  // az elo allat FAJTAJA (V2.6): ugyanazokbol a besorolasokbol, tobb gyoker alatt allo termeknel null
+  const fajtaReszfak = liveAnimalKindSubtrees(kategoriak);
+  const besorolasPerTermek = new Map<string, string[]>();
+  for (const sor of besorolasok)
+    besorolasPerTermek.set(sor.productId, [
+      ...(besorolasPerTermek.get(sor.productId) ?? []),
+      sor.categoryId,
+    ]);
 
   const profilok = await database.productShippingProfile.findMany({
     where: idk.length ? { productId: { in: idk } } : {},
@@ -219,6 +231,10 @@ export async function runShippingAttributesCli(
       apply,
       eloAllatTermekek.has(productId),
       parositas.osToShop.get(productId) ?? null,
+      deriveLivestockKind(
+        besorolasPerTermek.get(productId) ?? [],
+        fajtaReszfak,
+      ),
     );
     switch (outcome.action) {
       case "skipped":

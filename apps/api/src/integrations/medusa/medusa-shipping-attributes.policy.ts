@@ -1,3 +1,5 @@
+import type { LivestockKind } from "./medusa-livestock.policy.js";
+
 /**
  * A SZALLITASI JELLEMZOK ATVITELE: MI MEGY AT, ES MI NEM.
  *
@@ -41,10 +43,17 @@ export interface MedusaShippingFlags {
   is_frozen: boolean;
   /** commerce #677 óta; egy régebbi bolt nem adja vissza, és ott a hiánya hamis */
   locker_unsuitable?: boolean;
+  /**
+   * Az elo allat fajtaja (commerce V2.6): a kategoria-fabol szarmaztatott, a
+   * profil-sor nem tarolja. Egy regebbi bolt nem adja vissza, es ott a hianya
+   * NEM "nincs fajta", csak azt jelenti, hogy a bolt meg nem ismeri.
+   */
+  livestock_kind?: LivestockKind | null;
 }
 
 export function shippingFlagsFromProfile(
   profile: OsShippingProfile,
+  livestockKind: LivestockKind | null = null,
 ): MedusaShippingFlags {
   return {
     pickup_only: profile.pickupOnly,
@@ -52,6 +61,7 @@ export function shippingFlagsFromProfile(
     is_heavy: profile.isHeavy,
     is_frozen: profile.isFrozen,
     locker_unsuitable: profile.lockerUnsuitable ?? false,
+    livestock_kind: livestockKind,
   };
 }
 
@@ -76,9 +86,17 @@ export function shippingFlagsDiffer(
     current.foxpost_forbidden !== wanted.foxpost_forbidden ||
     current.is_heavy !== wanted.is_heavy ||
     current.is_frozen !== wanted.is_frozen ||
-    (current.locker_unsuitable ?? false) !== (wanted.locker_unsuitable ?? false)
+    (current.locker_unsuitable ?? false) !==
+      (wanted.locker_unsuitable ?? false) ||
+    (current.livestock_kind ?? null) !== (wanted.livestock_kind ?? null)
   );
 }
+
+const LIVESTOCK_KIND_LABEL: Record<LivestockKind, string> = {
+  FISH: "hal",
+  INVERTEBRATE: "gerinctelen",
+  CORAL: "korall",
+};
 
 /**
  * EMBERI ALAK A JELENTESHEZ: melyik zaszlo all igazra.
@@ -93,6 +111,9 @@ export function describeShippingFlags(flags: MedusaShippingFlags): string {
     flags.is_heavy ? "nehéz áru" : null,
     flags.is_frozen ? "fagyasztott" : null,
     flags.locker_unsuitable ? "csomagautomatába nem fér" : null,
+    flags.livestock_kind
+      ? `élő állat: ${LIVESTOCK_KIND_LABEL[flags.livestock_kind]}`
+      : null,
   ].filter((x): x is string => x !== null);
   return igazak.length ? igazak.join(", ") : "nincs korlátozás";
 }
