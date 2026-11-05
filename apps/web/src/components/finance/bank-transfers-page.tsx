@@ -29,6 +29,9 @@ import { SettlementTabs } from "./settlement-tabs";
 const errorText = (cause: unknown) =>
   cause instanceof Error ? cause.message : "Ismeretlen hiba";
 
+/** A lista lekérésének felső határa: utána a lap hibát mond, nem áll tovább a betöltőn (kártya 6f8e6f23). */
+export const BANK_TRANSFERS_LIST_TIMEOUT_MS = 60_000;
+
 /** Where a credit stands, in one badge and an optional line. */
 function CreditState({ credit }: { credit: BankTransferCreditView }) {
   if (credit.written.length > 0)
@@ -214,13 +217,24 @@ export function BankTransfersPage() {
   const [open, setOpen] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
+  /*
+    A TOKEN NEM FELTÉTEL (kártya 6f8e6f23, Balázs 2026-11-05 15:58 UTC: a lap üres, csak a betöltő áll). Az éles
+    belépés sütis, ott a munkamenetnek nincs olvasható tokenje (`production-auth.ts`: `token: undefined`), a böngésző
+    a sütit küldi. Egy `!token` feltétel élesben a kérés előtt visszatért, és a betöltő örökre állt, hibaüzenet nélkül.
+    A lekérés felső határa is ezért van: ha a válasz nem jön meg, a lap kimondja, és nem áll tovább a betöltőn.
+  */
   const load = useCallback(async () => {
-    if (!token || !canView) return;
+    if (!canView) return;
     setError(null);
+    const signal = AbortSignal.timeout(BANK_TRANSFERS_LIST_TIMEOUT_MS);
     try {
-      setCredits(await bankTransfersApi.list(token, { all }));
+      setCredits(await bankTransfersApi.list(token, { all }, signal));
     } catch (cause) {
-      setError(errorText(cause));
+      setError(
+        signal.aborted
+          ? `A banki jóváírások lekérése ${BANK_TRANSFERS_LIST_TIMEOUT_MS / 1000} másodperc alatt sem fejeződött be. Próbáld újra; ha ismétlődik, szólj.`
+          : errorText(cause),
+      );
       setCredits([]);
     }
   }, [token, canView, all]);
@@ -263,10 +277,13 @@ export function BankTransfersPage() {
       {credits === null ? (
         <Skeleton className="h-32" />
       ) : credits.length === 0 ? (
-        <EmptyState
-          title="Nincs párosítandó jóváírás"
-          description="Az elmúlt 60 napban nincs saját számlát megnevező jóváírás."
-        />
+        // a hibás lekérés után nem állítjuk, hogy nincs jóváírás: a fenti hiba mondja meg, mi történt
+        error ? null : (
+          <EmptyState
+            title="Nincs párosítandó jóváírás"
+            description="Az elmúlt 60 napban nincs saját számlát megnevező jóváírás."
+          />
+        )
       ) : (
         <ul className="space-y-3" data-testid="bank-transfers">
           {credits.map((credit) => (
