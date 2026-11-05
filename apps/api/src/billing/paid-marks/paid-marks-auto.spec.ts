@@ -12,6 +12,7 @@ import {
   runPaidMarksAuto,
 } from "./paid-marks-auto.js";
 import {
+  ALL_TIME_FROM,
   describePaidMarksAuto,
   msUntilNextRun,
   PaidMarksAutoScheduler,
@@ -191,6 +192,26 @@ describe("the source plans: what needs a person", () => {
         "ACRW-2026/00468: GLS 2026-09-10; nincs a Számlázz.hu feedben",
         "ACRW-2026/00467: GLS 2026-09-10",
       ],
+    );
+  });
+
+  // barracuda, #2246 a: WHAT TURNS THIS RED: a GLS line keyed by the invoice alone, so a person's "Kézzel rendezve" on
+  // one transfer would silently close a later transfer's line for the same invoice
+  it("GLS: a line's key is the invoice and the transfer day", () => {
+    const transfer = (transferDate: string) => ({
+      transferDate,
+      markable: true as const,
+      transferred: "100",
+      creditId: `bt-${transferDate}`,
+      marks: [],
+      skipped: [
+        { invoiceNumber: "ACRW-2026/00469", reason: "NOT_FOUND" as const },
+      ],
+    });
+    const plan = glsPlanFrom([transfer("2026-09-10"), transfer("2026-10-01")]);
+    assert.deepEqual(
+      plan.exceptions.map((e) => e.key),
+      ["ACRW-2026/00469@2026-09-10", "ACRW-2026/00469@2026-10-01"],
     );
   });
 
@@ -412,6 +433,94 @@ describe("the daily schedule", () => {
         assert.equal(scheduler.status().running, false);
         await scheduler.runOnce(new Date(), [bank()]);
         assert.equal(log.length, 2);
+      } finally {
+        process.env = { ...envBefore };
+      }
+    });
+
+    // acrobot 43776: WHAT TURNS THIS RED: the one look without an age limit still bounded by the daily window, or the
+    // daily run (and a plain press) losing its window
+    it("the one look without an age limit starts at ALL_TIME_FROM; the daily run and a plain press keep the window", async () => {
+      process.env.BANK_TRANSFER_MARK_PAID = "dry";
+      process.env.PAID_MARKS_AUTO_DAYS = "60";
+      try {
+        const froms: string[] = [];
+        const source = {
+          ...bank(),
+          plan: async (from: string) => {
+            froms.push(from);
+            return {
+              source: "BANK_TRANSFER" as const,
+              marks: [],
+              exceptions: [],
+            };
+          },
+        };
+        const scheduler = new PaidMarksAutoScheduler({} as never, fakeRuns([]));
+        const now = new Date("2026-11-05T20:00:00Z");
+        await scheduler.runOnce(
+          now,
+          [source],
+          { kind: "manual", userId: "u" },
+          ALL_TIME_FROM,
+        );
+        await scheduler.runOnce(now, [source]);
+        assert.deepEqual(froms, [ALL_TIME_FROM, runFrom(now, 60)]);
+        assert.equal(ALL_TIME_FROM, "2000-01-01");
+
+        const asked: (string | undefined)[] = [];
+        scheduler.runOnce = async (_now, _sources, _trigger, from) =>
+          void asked.push(from);
+        scheduler.runNow("u", now, { allTime: true });
+        scheduler.runNow("u", now);
+        assert.deepEqual(asked, [ALL_TIME_FROM, undefined]);
+      } finally {
+        process.env = { ...envBefore };
+      }
+    });
+
+    // acrobot 43822: WHAT TURNS THIS RED: the dry look before the run without an age limit planning from the daily
+    // window, writing or recording a run, losing a source's planned lines, or a failed plan hiding the other sources
+    it("the dry look without an age limit plans every source from ALL_TIME_FROM and writes nothing", async () => {
+      process.env.BANK_TRANSFER_MARK_PAID = "auto";
+      delete process.env.GLS_COD_MARK_PAID;
+      try {
+        const log: string[] = [];
+        const froms: string[] = [];
+        const planned = {
+          ...bank(),
+          plan: async (from: string) => {
+            froms.push(from);
+            return (await bank().plan())!;
+          },
+        };
+        const broken = {
+          ...bank(),
+          source: "GLS_COD" as const,
+          switchName: "GLS_COD_MARK_PAID",
+          plan: async () => {
+            throw new Error("GLS_READ_FAILED");
+          },
+        };
+        const scheduler = new PaidMarksAutoScheduler(
+          {} as never,
+          fakeRuns(log),
+        );
+        const preview = await scheduler.previewAllTime([broken, planned]);
+        assert.deepEqual(froms, [ALL_TIME_FROM]);
+        assert.deepEqual(log, []);
+        assert.deepEqual(
+          preview.map((p) => [
+            p.source,
+            p.mode,
+            p.planned.map((m) => m.invoiceNumber),
+            p.errorCode,
+          ]),
+          [
+            ["GLS_COD", "off", [], "GLS_READ_FAILED"],
+            ["BANK_TRANSFER", "auto", ["ACR-2026/00042"], null],
+          ],
+        );
       } finally {
         process.env = { ...envBefore };
       }

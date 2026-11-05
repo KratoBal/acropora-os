@@ -40,9 +40,11 @@ const exception = (
   reference: string,
   reason: string,
   detail?: string,
+  key?: string,
 ): PaidMarkException => ({
   reference,
   reason,
+  ...(key ? { key } : {}),
   attention: !SETTLES_ITSELF.has(reason),
   ...(detail ? { detail } : {}),
 });
@@ -74,6 +76,9 @@ export function glsPlanFrom(
               s.reason === "NOT_FOUND"
                 ? `GLS ${d.transferDate}; ${notFoundWhere(elsewhere.get(s.invoiceNumber))}`
                 : `GLS ${d.transferDate}`,
+              // one invoice, one transfer: a later GLS transfer for the same invoice is a new line, not one
+              // a person already closed by hand (barracuda, #2246 a)
+              `${s.invoiceNumber}@${d.transferDate}`,
             ),
           )
         : [exception(d.transferDate, d.refusal, `utalt ${d.transferred} Ft`)],

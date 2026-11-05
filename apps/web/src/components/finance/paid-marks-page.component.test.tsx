@@ -18,6 +18,19 @@ const api = vi.hoisted(() => ({
   closeAttention: vi.fn(),
 }));
 vi.mock("@/lib/api/paid-marks", () => ({ paidMarksApi: api }));
+// the backfill panel has its own test (feed-backfill-panel); here it has nothing to show
+vi.mock("@/lib/api/feed-backfill", () => ({
+  feedBackfillApi: {
+    status: vi.fn().mockResolvedValue({
+      running: null,
+      last: null,
+      year: 2026,
+      series: [],
+      checked: {},
+    }),
+    start: vi.fn(),
+  },
+}));
 vi.mock("next/navigation", () => ({
   usePathname: () => "/penzugy/napi-jeloles",
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
@@ -186,6 +199,10 @@ describe("PaidMarksPage", () => {
     ).toBeNull();
     expect(
       screen.queryByRole("button", { name: "Kézzel rendezve" }),
+    ).toBeNull();
+    // the run without an age limit (acrobot 43822) is the writer's, preview included
+    expect(
+      screen.queryByRole("button", { name: "Előnézet korhatár nélkül" }),
     ).toBeNull();
     expect(api.feedPull).not.toHaveBeenCalled();
   });

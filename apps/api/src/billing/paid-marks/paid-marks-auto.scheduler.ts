@@ -21,6 +21,7 @@ import {
   paidMarksRunLine,
   runPaidMarksAuto,
   type PaidMarkPlan,
+  type PaidMarkPlanned,
   type PaidMarksMode,
   type PaidMarksRunResult,
 } from "./paid-marks-auto.js";
@@ -99,6 +100,13 @@ export function msUntilNextRun(now: Date, hour: number): number {
   return next.getTime() - now.getTime();
 }
 
+/**
+ * THE ONE LOOK WITHOUT AN AGE LIMIT (acrobot 43776, promised to Balázs 2026-11-05 19:20 UTC): after the feed backfill
+ * the old credits (the zoo's 2026-09-07 transfer, 2026/00069 and 00070) fall out of the daily window. One run from this
+ * day takes every stored credit and settlement; the decision is the same, and the log keeps it idempotent.
+ */
+export const ALL_TIME_FROM = "2000-01-01";
+
 /** The first day a run looks at: `days` before `now`, as YYYY-MM-DD. */
 export function runFrom(now: Date, days: number): string {
   return new Date(now.getTime() - days * 86_400_000).toISOString().slice(0, 10);
@@ -114,6 +122,16 @@ export function describePaidMarksAuto(
   return modes.some((m) => m.mode === "auto" || m.mode === "dry")
     ? `Kifizetett-jelölés automatikusan: naponta ${hour}:00-kor, ${days} napra vissza (${list})`
     : `Kifizetett-jelölés automatikusan: KI, egyik forrás sincs auto vagy dry állásban (${list})`;
+}
+
+/** One source's dry look without an age limit (acrobot 43822): what a run from ALL_TIME_FROM would mark, and why not more. */
+export interface AllTimePreview {
+  source: PaymentMarkSource;
+  mode: PaidMarksMode;
+  planned: PaidMarkPlanned[];
+  attentionCount: number;
+  summary: Record<string, number>;
+  errorCode: string | null;
 }
 
 /** What a "Futtatás most" press answers (e64540fd). */
@@ -163,6 +181,45 @@ export class PaidMarksAutoScheduler implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  /**
+   * THE DRY LOOK BEFORE THE RUN WITHOUT AN AGE LIMIT (acrobot 43822: "Ne menjen vakon"). After the feed backfill such a
+   * run can mark at once every old invoice the new feed rows make pairable, on an `auto` source; nobody should press it
+   * without seeing the count. Every source on `auto` or `dry` plans from ALL_TIME_FROM with the same decision as the
+   * run; nothing is written and nothing is recorded (the page shows the answer, the write is a separate press). The
+   * bank source writes one credit under its lock, but plans with the same decision (`bankTransferPaidMarkPlan`).
+   */
+  async previewAllTime(
+    sources: readonly (typeof PAID_MARK_SOURCES)[number][] = this.runSources(),
+  ): Promise<AllTimePreview[]> {
+    const out: AllTimePreview[] = [];
+    for (const s of sources) {
+      const mode = paidMarksMode(process.env[s.switchName]);
+      try {
+        const { result, planned } = paidMarksDryResult(
+          await s.plan(ALL_TIME_FROM),
+        );
+        out.push({
+          source: s.source,
+          mode,
+          planned,
+          attentionCount: result.attention.length,
+          summary: { ...result.summary },
+          errorCode: null,
+        });
+      } catch (error) {
+        out.push({
+          source: s.source,
+          mode,
+          planned: [],
+          attentionCount: 0,
+          summary: {},
+          errorCode: errorCode(error, "PAID_MARKS_DRY_FAILED"),
+        });
+      }
+    }
+    return out;
+  }
+
   /** Each source and its switch, for the page. */
   modes(): { source: PaymentMarkSource; mode: PaidMarksMode }[] {
     return PAID_MARK_SOURCES.map((s) => ({
@@ -189,16 +246,24 @@ export class PaidMarksAutoScheduler implements OnModuleInit, OnModuleDestroy {
    * same code and the same switches. It does not wait for the run: the answer says it started, and the
    * page reads the outcome from `latest`.
    */
-  runNow(userId: string, now = new Date()): PaidMarksRunNow {
+  runNow(
+    userId: string,
+    now = new Date(),
+    options: { allTime?: boolean } = {},
+  ): PaidMarksRunNow {
     const sources = this.runSources();
     if (sources.length === 0)
       return { status: "nothing", reason: "no-source-on-auto-or-dry" };
     if (this.running) return { status: "running" };
-    void this.runOnce(now, sources, { kind: "manual", userId }).catch(
-      (error: unknown) =>
-        this.logger.error(
-          `Kifizetett-jelölés (kézi): a futás váratlanul elbukott (${errorCode(error, "PAID_MARKS_RUN_FAILED")})`,
-        ),
+    void this.runOnce(
+      now,
+      sources,
+      { kind: "manual", userId },
+      options.allTime ? ALL_TIME_FROM : undefined,
+    ).catch((error: unknown) =>
+      this.logger.error(
+        `Kifizetett-jelölés (kézi): a futás váratlanul elbukott (${errorCode(error, "PAID_MARKS_RUN_FAILED")})`,
+      ),
     );
     return {
       status: "started",
@@ -240,6 +305,8 @@ export class PaidMarksAutoScheduler implements OnModuleInit, OnModuleDestroy {
     now = new Date(),
     sources: readonly (typeof PAID_MARK_SOURCES)[number][] = this.runSources(),
     trigger: PaidMarkTrigger = { kind: "schedule" },
+    /** the first day to look at; by default the daily window (`PAID_MARKS_AUTO_DAYS`) */
+    from?: string,
   ): Promise<void> {
     if (sources.length === 0) return;
     if (this.running) {
@@ -248,7 +315,11 @@ export class PaidMarksAutoScheduler implements OnModuleInit, OnModuleDestroy {
       );
       return;
     }
-    const done = this.runSourcesOnce(now, sources, trigger);
+    const done = this.runSourcesOnce(
+      sources,
+      trigger,
+      from ?? runFrom(now, paidMarksAutoDays()),
+    );
     this.running = { startedAt: now, done };
     try {
       await done;
@@ -258,11 +329,12 @@ export class PaidMarksAutoScheduler implements OnModuleInit, OnModuleDestroy {
   }
 
   private async runSourcesOnce(
-    now: Date,
     sources: readonly (typeof PAID_MARK_SOURCES)[number][],
     trigger: PaidMarkTrigger,
+    from: string,
   ): Promise<void> {
-    const from = runFrom(now, paidMarksAutoDays());
+    if (from === ALL_TIME_FROM)
+      this.logger.log("Kifizetett-jelölés: egyszeri futás korhatár nélkül");
     const mode = (s: (typeof PAID_MARK_SOURCES)[number]) =>
       paidMarksMode(process.env[s.switchName]);
 

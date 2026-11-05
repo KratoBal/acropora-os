@@ -939,6 +939,78 @@ describe("PurchaseInvoiceEuEditorPage beszállítói számla betöltése", () =>
     expect(screen.getAllByText("Nincs terméktörzsben")).toHaveLength(2);
   });
 
+  // What must fail (Balázs, 2026-11-05 20:37, card 1ff7c758): the product search opening at the top of the list, so
+  // the user had to scroll up from the line being linked; a second search box left up top while one is open below;
+  // the search not focused; the panel staying open after "Mégse" or after the link.
+  describe("linking a line to an existing product", () => {
+    const openLink = async () => {
+      render(createElement(PurchaseInvoiceEuEditorPage));
+      upload();
+      await screen.findByText("Frachtkosten (anteilig)");
+      fireEvent.click(
+        screen.getByRole("button", { name: "Kapcsolás meglévő termékhez" }),
+      );
+      return screen.getByLabelText("Termék keresése");
+    };
+
+    it("opens the search inside the line being linked, focused, and shows no second search box", async () => {
+      const search = await openLink();
+      const lineBox = search.closest("[data-line-state]") as HTMLElement | null;
+      expect(lineBox).not.toBeNull();
+      expect(
+        within(lineBox!).getByText("Dupla Marin Coral Plugs 10 St., SB"),
+      ).toBeInTheDocument();
+      expect(screen.getByTestId("line-product-search")).toContainElement(
+        search,
+      );
+      expect(search).toHaveFocus();
+      expect(screen.getAllByLabelText("Termék keresése")).toHaveLength(1);
+      // the manual item stays in the top block
+      expect(
+        screen.getByRole("button", { name: "Kézi tétel felvétele" }),
+      ).toBeInTheDocument();
+    });
+
+    it("closes with Mégse, and the top search comes back", async () => {
+      await openLink();
+      fireEvent.click(
+        within(screen.getByTestId("line-product-search")).getByRole("button", {
+          name: "Mégse",
+        }),
+      );
+      expect(
+        screen.queryByTestId("line-product-search"),
+      ).not.toBeInTheDocument();
+      const top = screen.getByLabelText("Termék keresése");
+      expect(top.closest("[data-line-state]")).toBeNull();
+    });
+
+    it("links the chosen product to that line and closes the panel", async () => {
+      purchasingApiMock.searchProducts.mockResolvedValue([
+        {
+          variantId: "variant-1",
+          sku: "SKU-1",
+          productName: "Kapcsolt termék",
+          unit: "db",
+          currentStock: 3,
+          origin: "LOCAL",
+        },
+      ]);
+      const search = await openLink();
+      const lineBox = search.closest("[data-line-state]") as HTMLElement;
+      fireEvent.click(await within(lineBox).findByText("Kapcsolt termék"));
+      await waitFor(() =>
+        expect(
+          screen.queryByTestId("line-product-search"),
+        ).not.toBeInTheDocument(),
+      );
+      expect(screen.getByText("Kapcsolt termék")).toBeInTheDocument();
+      expect(
+        screen.getByLabelText("Termék keresése").closest("[data-line-state]"),
+      ).toBeNull();
+    });
+  });
+
   it("marks a PDF-read invoice as one to check, with its warnings", async () => {
     purchasingApiMock.importSupplierInvoice.mockResolvedValue({
       ...imported,

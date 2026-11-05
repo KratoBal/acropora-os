@@ -33,6 +33,8 @@ import {
   type PaidMarksStatus,
 } from "@/lib/api/paid-marks";
 
+import { AllTimeRunPanel, PAID_MARK_SOURCE_LABEL } from "./all-time-run-panel";
+import { FeedBackfillPanel } from "./feed-backfill-panel";
 import {
   canPullIntoFeed,
   FeedPullButton,
@@ -43,13 +45,6 @@ import { SettlementTabs } from "./settlement-tabs";
 
 const errorText = (cause: unknown) =>
   cause instanceof Error ? cause.message : "Ismeretlen hiba";
-
-const SOURCE_LABEL: Record<PaidMarkSource, string> = {
-  GLS_COD: "GLS utánvét",
-  FOXPOST: "Foxpost utánvét",
-  SIMPLEPAY: "SimplePay kártyás fizetés",
-  BANK_TRANSFER: "Banki átutalás",
-};
 
 /** A kapcsoló állása, ahogy a vevő oldaláról számít: ír-e, vagy csak tervez. */
 function ModeBadge({ mode }: { mode: PaidMarksMode }) {
@@ -229,7 +224,9 @@ function SourceRun({
       data-testid={`paid-mark-source-${source}`}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-sm font-semibold">{SOURCE_LABEL[source]}</span>
+        <span className="text-sm font-semibold">
+          {PAID_MARK_SOURCE_LABEL[source]}
+        </span>
         <ModeBadge mode={mode} />
       </div>
       {!run ? (
@@ -424,6 +421,10 @@ export function PaidMarksPage() {
         }
       />
       <SettlementTabs />
+      <FeedBackfillPanel token={token} canRun={canRun} />
+      {canRun ? (
+        <AllTimeRunPanel token={token} onStarted={() => void load()} />
+      ) : null}
       {notice ? (
         <Alert variant="info" title="Indítás" description={notice} />
       ) : null}
