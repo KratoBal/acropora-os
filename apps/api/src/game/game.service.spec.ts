@@ -43,6 +43,16 @@ function setup(
         days.set(where.day, (days.get(where.day) ?? 0) + 1);
         return { day: where.day, sent: days.get(where.day)! };
       },
+      // what the data asks, not a fixed step: the amount under test must come from the code
+      update: async ({
+        where,
+        data,
+      }: {
+        where: { day: string };
+        data: { sent: { decrement: number } };
+      }) => {
+        days.set(where.day, (days.get(where.day) ?? 0) - data.sent.decrement);
+      },
       findUnique: async ({ where }: { where: { day: string } }) =>
         days.has(where.day)
           ? { day: where.day, sent: days.get(where.day)! }
@@ -119,7 +129,7 @@ function setup(
   service.now = () => OPEN;
   const linkToken = (mail: { text: string }) =>
     decodeURIComponent(/megerosites\?token=([^\s]+)/.exec(mail.text)![1]!);
-  return { service, entries, mails, linkToken };
+  return { service, entries, mails, linkToken, days, sender };
 }
 
 describe("the public question", () => {
@@ -269,6 +279,44 @@ describe("an entry", () => {
     assert.equal(entries.size, 3);
     assert.ok(entries.get("c@x.hu")!.mailPendingSince instanceof Date);
     assert.equal(entries.get("a@x.hu")!.mailPendingSince, null);
+  });
+
+  // barracuda, #2254 v3: WHAT TURNS THIS RED: a mail that cannot go out spending the day's cap, or not waiting in the
+  // queue; a failed send keeping its slot
+  it("a closed gate queues the mail and spends nothing of the cap; a failed send gives its slot back", async () => {
+    const closed = setup(question(), {
+      TICKET_MAIL_MODE: "live",
+      TICKET_MAIL_GAME: "off",
+      TICKET_MAIL_REDIRECT_TO: "teszt@acropora.hu",
+      JATEK_PUBLIC_URL: "https://jatek-teszt.acropora.hu",
+    });
+    await closed.service.submit(entry);
+    assert.ok(
+      closed.entries.get("jatekos@example.com")!.mailPendingSince instanceof
+        Date,
+    );
+    // no slot was taken at all (a taken and given-back slot would sum to 0 as well)
+    assert.equal(closed.days.size, 0);
+
+    const failing = setup();
+    failing.sender.send = async () => {
+      throw new Error("SMTP_DOWN");
+    };
+    await failing.service.submit(entry);
+    // the admin sees why, without the log (acrobot 44026)
+    assert.equal(
+      failing.service.mailStatus().lastError?.reason,
+      "Error: SMTP_DOWN",
+    );
+    assert.equal(closed.service.mailStatus().blocked, "path-off");
+    assert.ok(
+      failing.entries.get("jatekos@example.com")!.mailPendingSince instanceof
+        Date,
+    );
+    assert.equal(
+      [...failing.days.values()].reduce((a, b) => a + b, 0),
+      0,
+    );
   });
 
   it("refuses a bad address, an empty answer, a choice that is no option, and a closed week, in the contract's codes", async () => {

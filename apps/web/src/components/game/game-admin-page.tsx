@@ -195,6 +195,22 @@ function Entries({
 }) {
   const [rows, setRows] = useState<GameEntryView[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [testLinks, setTestLinks] = useState(false);
+  const [links, setLinks] = useState<Record<string, string>>({});
+  useEffect(() => {
+    void gameApi
+      .mailQueue(token)
+      .then((queue) => setTestLinks(queue.testLinks))
+      .catch(() => setTestLinks(false));
+  }, [token]);
+  const takeLink = async (entry: GameEntryView) => {
+    try {
+      const { link } = await gameApi.testLink(token, entry.id);
+      setLinks((current) => ({ ...current, [entry.id]: link }));
+    } catch (cause) {
+      setError(errorText(cause));
+    }
+  };
   const load = useCallback(async () => {
     try {
       setRows(await gameApi.entries(token, question.id));
@@ -248,6 +264,23 @@ function Entries({
                 {entry.autoCorrect ? "helyes" : "nem egyezik"}
               </PilotBadge>
             )}
+            {canManage && testLinks && !entry.confirmedAt ? (
+              <PilotButton
+                variant="secondary"
+                onClick={() => void takeLink(entry)}
+              >
+                Teszt-link
+              </PilotButton>
+            ) : null}
+            {links[entry.id] ? (
+              <a
+                className="break-all text-xs underline"
+                href={links[entry.id]}
+                data-testid="game-test-link"
+              >
+                {links[entry.id]}
+              </a>
+            ) : null}
             {canManage ? (
               entry.manualCorrect === null ? (
                 <PilotButton
@@ -314,6 +347,22 @@ function MailQueue({
         Megerősítő levelek ma: {queue.sentToday} / {queue.dailyCap}
         {queue.pending > 0 ? ` · várakozik: ${queue.pending}` : ""}
       </p>
+      {queue.blocked ? (
+        <Alert
+          variant="danger"
+          title="A megerősítő levél most nem megy ki"
+          description={`Ok: ${queue.blocked}`}
+        />
+      ) : null}
+      {queue.lastError ? (
+        <p
+          className="text-xs text-pilot-grey-600"
+          data-testid="game-mail-error"
+        >
+          Utolsó sikertelen küldés: {formatDateTimeHu(queue.lastError.at)},{" "}
+          {queue.lastError.reason}
+        </p>
+      ) : null}
       {canManage && queue.pending > 0 ? (
         <PilotButton disabled={busy} onClick={() => void send()}>
           Várakozó levelek kiküldése

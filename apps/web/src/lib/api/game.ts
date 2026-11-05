@@ -57,6 +57,12 @@ export interface GameMailQueue {
   pending: number;
   sentToday: number;
   dailyCap: number;
+  /** miért nem menne most levél (kapu, küldő, link-alap), vagy null */
+  blocked: string | null;
+  /** az utolsó elbukott küldés (ebben a folyamatban), vagy null */
+  lastError: { at: string; reason: string } | null;
+  /** a teszten: a megerősítő link levél nélkül is kérhető (JATEK_TEST_LINKS=on) */
+  testLinks: boolean;
 }
 
 export interface GameDrawVerify {
@@ -106,6 +112,14 @@ export const gameApi = {
   sendQueued(token: string) {
     return apiRequest<GameMailQueue & { sent: number }>(
       "/game/mail-queue/send",
+      token,
+      { method: "POST" },
+    );
+  },
+  /** A megerősítő link levél nélkül, csak a teszten (JATEK_TEST_LINKS=on). */
+  testLink(token: string, entryId: string) {
+    return apiRequest<{ link: string }>(
+      `/game/entries/${encodeURIComponent(entryId)}/test-link`,
       token,
       { method: "POST" },
     );

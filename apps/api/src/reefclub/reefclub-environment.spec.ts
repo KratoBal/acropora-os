@@ -92,6 +92,8 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   "JATEK_PUBLIC_URL",
   // the giveaway's daily mail cap (acrobot, 2026-11-05): a number, not a secret
   "JATEK_MAIL_DAILY_CAP",
+  // the stage-only switch for a confirmation link without the mail: a switch, not a secret
+  "JATEK_TEST_LINKS",
   "PAID_MARKS_AUTO_DAYS",
   "PAID_MARKS_AUTO_HOUR",
   "PARTNER_URL",

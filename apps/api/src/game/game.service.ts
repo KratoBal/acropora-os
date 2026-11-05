@@ -6,6 +6,7 @@ import {
   Inject,
   Injectable,
   Logger,
+  OnModuleInit,
   Optional,
 } from "@nestjs/common";
 import { Prisma, prisma } from "@acropora/database";
@@ -66,6 +67,13 @@ export const GAME_MAIL_MAX_PER_ENTRY = 5;
 /** The giveaway's mail in one Budapest day, in all (acrobot, 2026-11-05 22:57), unless JATEK_MAIL_DAILY_CAP says other. */
 export const GAME_MAIL_DAILY_CAP_DEFAULT = 3000;
 
+/** A send error for the admin: its kind and the start of its message, never longer than a line. */
+function sendErrorText(error: unknown): string {
+  if (!(error instanceof Error)) return "UNKNOWN";
+  const message = error.message.replace(/\s+/g, " ").slice(0, 160);
+  return message ? `${error.name}: ${message}` : error.name;
+}
+
 /**
  * THE GIVEAWAY'S PUBLIC SIDE (card 31445d0f; brief exchange/jatek/brief-2026-11-05.md; the contract with the page:
  * exchange/jatek/jatek-api-szerzodes.md). The open question without its accepted answers, an entry, and its
@@ -82,7 +90,7 @@ export const GAME_MAIL_DAILY_CAP_DEFAULT = 3000;
  * the caller hears the same answer, so it learns nothing from it either.
  */
 @Injectable()
-export class GameService {
+export class GameService implements OnModuleInit {
   private readonly logger = new Logger(GameService.name);
   /** the test replaces it */
   database: GameDatabase = prisma;
@@ -96,6 +104,17 @@ export class GameService {
     @Inject(GAME_ENV)
     private readonly environment: NodeJS.ProcessEnv = process.env,
   ) {}
+
+  /**
+   * Without the shared secret every visitor behind the game page's server falls on one key, and the page's limits
+   * are one allowance for all (barracuda, #2254 v3): said once at start, where a deploy log shows it.
+   */
+  onModuleInit(): void {
+    if (!this.environment.JATEK_PROXY_SECRET?.trim())
+      this.logger.warn(
+        "Nyereményjáték: nincs JATEK_PROXY_SECRET, a lap mögötti látogatók egy közös korlát-kulcson osztoznak",
+      );
+  }
 
   private async openQuestion() {
     const now = this.now();
@@ -273,29 +292,94 @@ export class GameService {
     email: string,
     token: string,
     week: string,
+    /** the queue's send: the attempt is counted only once the mail went out (barracuda, #2254 v3) */
+    countOnSend = false,
   ): Promise<"SENT" | "QUEUED" | "NOT_SENT"> {
+    const wait = async (reason: string) => {
+      await this.database.gameEntry.update({
+        where: { id: entryId },
+        data: { mailPendingSince: this.now() },
+      });
+      this.logger.warn(
+        `Nyereményjáték ${week}: a megerősítő levél sorban áll (${reason})`,
+      );
+    };
+    // a mail that cannot go out at all waits, and spends nothing of the day's cap (barracuda, #2254 v3)
+    const blocked = this.mailBlocked();
+    if (blocked) {
+      await wait(blocked);
+      return "NOT_SENT";
+    }
     const { sent } = await this.database.gameMailDay.upsert({
       where: { day: this.today() },
       create: { day: this.today(), sent: 1 },
       update: { sent: { increment: 1 } },
     });
     if (sent > this.dailyCap()) {
-      await this.database.gameEntry.update({
-        where: { id: entryId },
-        data: { mailPendingSince: this.now() },
-      });
-      this.logger.warn(
-        `Nyereményjáték ${week}: a napi levél-plafon (${this.dailyCap()}) betelt, a megerősítő levél sorban áll`,
-      );
+      await wait(`a napi levél-plafon (${this.dailyCap()}) betelt`);
       return "QUEUED";
     }
     const outcome = await this.mailConfirmation(email, token, week);
-    if (outcome === "SENT")
+    if (outcome === "SENT") {
       await this.database.gameEntry.update({
         where: { id: entryId },
-        data: { mailPendingSince: null },
+        data: {
+          mailPendingSince: null,
+          ...(countOnSend
+            ? { mailCount: { increment: 1 }, lastMailedAt: this.now() }
+            : {}),
+        },
       });
-    return outcome;
+      return "SENT";
+    }
+    // the send failed: the slot is given back, and the mail waits for the queue
+    await this.database.gameMailDay.update({
+      where: { day: this.today() },
+      data: { sent: { decrement: 1 } },
+    });
+    await wait("a küldés elbukott");
+    return "NOT_SENT";
+  }
+
+  /**
+   * The last send that failed, kept in this process for the admin (acrobot 44026: on stage the mail never arrived,
+   * and the log is not readable from the fleet). Cleared by the next mail that goes out.
+   */
+  private lastMailError: { at: string; reason: string } | null = null;
+
+  /** Why mail would not go out now, and the last failure: the admin's view of a mail that never arrived. */
+  mailStatus(): {
+    blocked: string | null;
+    lastError: { at: string; reason: string } | null;
+  } {
+    return { blocked: this.mailBlocked(), lastError: this.lastMailError };
+  }
+
+  /** The confirmation link of a token, on the game page (JATEK_PUBLIC_URL). */
+  confirmLink(token: string): string {
+    const base = (this.environment.JATEK_PUBLIC_URL ?? "")
+      .trim()
+      .replace(/\/+$/, "");
+    return `${base}/megerosites?token=${encodeURIComponent(token)}`;
+  }
+
+  /** Whether the admin may take a confirmation link without the mail (JATEK_TEST_LINKS=on; stage only). */
+  testLinksOn(): boolean {
+    return this.environment.JATEK_TEST_LINKS?.trim() === "on";
+  }
+
+  /** Why a mail cannot go out now (the gate, the sender, the link's base), or null. */
+  mailBlocked(): string | null {
+    const gate = mailGate({
+      mode: mailModeOf(this.environment.TICKET_MAIL_MODE),
+      pathMode: mailModeOf(this.environment.TICKET_MAIL_GAME),
+      redirect: mailRedirect(this.environment.TICKET_MAIL_REDIRECT_TO),
+    });
+    if (gate.kind === "closed") return gate.reason;
+    if (!this.sender) return "no-sender";
+    if (!this.environment.JATEK_PUBLIC_URL?.trim())
+      return "no-JATEK_PUBLIC_URL";
+    return null;
   }
 
   private async mailConfirmation(
@@ -315,7 +399,7 @@ export class GameService {
       );
       return "NOT_SENT";
     }
-    const link = `${base}/megerosites?token=${encodeURIComponent(token)}`;
+    const link = this.confirmLink(token);
     try {
       await this.sender.send({
         to: [email],
@@ -337,8 +421,13 @@ export class GameService {
       this.logger.error(
         `Nyereményjáték ${week}: a megerősítő levél küldése elbukott (${error instanceof Error ? error.name : "UNKNOWN"})`,
       );
+      this.lastMailError = {
+        at: this.now().toISOString(),
+        reason: sendErrorText(error),
+      };
       return "NOT_SENT";
     }
+    this.lastMailError = null;
     return "SENT";
   }
 

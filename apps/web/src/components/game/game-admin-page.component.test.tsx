@@ -18,6 +18,7 @@ const api = vi.hoisted(() => ({
   verify: vi.fn(),
   mailQueue: vi.fn(),
   sendQueued: vi.fn(),
+  testLink: vi.fn(),
 }));
 vi.mock("@/lib/api/game", () => ({ gameApi: api }));
 vi.mock("next/navigation", () => ({
@@ -98,9 +99,17 @@ beforeEach(() => {
     },
   ]);
   api.decide.mockReset().mockResolvedValue({});
-  api.mailQueue
-    .mockReset()
-    .mockResolvedValue({ pending: 4, sentToday: 3000, dailyCap: 3000 });
+  api.mailQueue.mockReset().mockResolvedValue({
+    pending: 4,
+    sentToday: 3000,
+    dailyCap: 3000,
+    blocked: "path-off",
+    lastError: null,
+    testLinks: true,
+  });
+  api.testLink.mockReset().mockResolvedValue({
+    link: "https://jatek-teszt.acropora.hu/megerosites?token=abc",
+  });
   api.sendQueued.mockReset().mockResolvedValue({
     pending: 0,
     sentToday: 3000,
@@ -190,5 +199,30 @@ describe("GameAdminPage", () => {
       within(queue).getByRole("button", { name: "Várakozó levelek kiküldése" }),
     );
     await waitFor(() => expect(api.sendQueued).toHaveBeenCalledWith("t"));
+  });
+  it("says why the mail does not go out, and on stage gives the link of an unconfirmed entry", async () => {
+    api.entries.mockResolvedValue([
+      {
+        id: "e3",
+        email: "uj@x.hu",
+        answer: "acropora",
+        autoCorrect: true,
+        manualCorrect: null,
+        manualAt: null,
+        confirmedAt: null,
+        createdAt: "2026-11-06T09:00:00.000Z",
+        counts: false,
+      },
+    ]);
+    render(<GameAdminPage />);
+    expect(await screen.findByText("Ok: path-off")).toBeInTheDocument();
+    const entries = await screen.findByTestId("game-entries");
+    fireEvent.click(
+      await within(entries).findByRole("button", { name: "Teszt-link" }),
+    );
+    expect(await screen.findByTestId("game-test-link")).toHaveTextContent(
+      "megerosites?token=abc",
+    );
+    expect(api.testLink).toHaveBeenCalledWith("t", "e3");
   });
 });
