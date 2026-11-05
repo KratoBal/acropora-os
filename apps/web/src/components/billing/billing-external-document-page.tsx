@@ -3,7 +3,6 @@ import { useAssistantEntity } from "../assistant/page-context";
 
 import {
   Alert,
-  Button,
   Icon,
   PilotDataGrid,
   PilotDataItem,
@@ -420,14 +419,14 @@ export function BillingExternalDocumentPage({
               </PilotDataItem>
               <PilotDataItem label="PDF">
                 {detail.pdfAvailable ? (
-                  <Button
+                  <PilotButton
                     variant="secondary"
-                    size="sm"
+                    size="action"
                     disabled={pdfBusy}
                     onClick={() => void openPdf()}
                   >
                     {pdfBusy ? "Megnyitás…" : "PDF megnyitása"}
-                  </Button>
+                  </PilotButton>
                 ) : (
                   // a Számlázz.hu-s sor PDF-jét 2026-10-12 óta a letöltés hozza (#1658): a régi
                   // „a Számlázz.hu nem adja” szöveg ezt már nem mondta igazul

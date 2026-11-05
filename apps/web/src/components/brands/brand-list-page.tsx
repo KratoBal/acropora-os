@@ -1,14 +1,14 @@
 "use client";
 import {
   Alert,
-  Card,
   EmptyState,
-  Input,
   PageHeader,
   Pagination,
+  PilotCard,
   PilotDataTable,
+  PilotInput,
+  PilotSelect,
   type PilotTableColumn,
-  Select,
   Skeleton,
   PilotButton,
   PilotBadge,
@@ -208,45 +208,45 @@ export function BrandListPage() {
       ) : null}
       {data ? (
         <>
-          <Card className="p-4">
+          <PilotCard className="p-4">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-              <Input
+              <PilotInput
                 aria-label="Márka keresése"
                 value={search}
-                onChange={(event) => setSearch(event.target.value)}
+                onChange={setSearch}
                 placeholder="Név, alias, slug"
               />
-              <Select
+              <PilotSelect
                 aria-label="Státusz"
                 value={params.get("status") ?? "ACTIVE"}
-                onChange={(event) => filter("status", event.target.value)}
+                onChange={(value) => filter("status", value)}
               >
                 <option value="ACTIVE">Aktív</option>
                 <option value="ARCHIVED">Archivált</option>
                 <option value="ALL">Mind</option>
-              </Select>
-              <Select
+              </PilotSelect>
+              <PilotSelect
                 aria-label="Forrás"
                 value={params.get("source") ?? ""}
-                onChange={(event) => filter("source", event.target.value)}
+                onChange={(value) => filter("source", value)}
               >
                 <option value="">Minden forrás</option>
                 <option value="UNAS">UNAS</option>
                 <option value="MANUAL">Manuális</option>
-              </Select>
-              <Select
+              </PilotSelect>
+              <PilotSelect
                 aria-label="Termékhasználat"
                 value={params.get("hasProducts") ?? ""}
-                onChange={(event) => filter("hasProducts", event.target.value)}
+                onChange={(value) => filter("hasProducts", value)}
               >
                 <option value="">Minden használat</option>
                 <option value="true">Van termék</option>
                 <option value="false">Nincs termék</option>
-              </Select>
+              </PilotSelect>
             </div>
-          </Card>
+          </PilotCard>
           {data.items.length ? (
-            <Card className="overflow-x-auto">
+            <PilotCard className="overflow-x-auto">
               <div className="flex justify-end px-3 py-2">
                 <Pagination
                   position="top"
@@ -262,7 +262,7 @@ export function BrandListPage() {
                 rowTestId="brand-row"
                 minWidth={800}
               />
-            </Card>
+            </PilotCard>
           ) : (
             <EmptyState
               title={

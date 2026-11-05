@@ -1,16 +1,15 @@
 "use client";
 import {
   Alert,
-  Button,
-  Card,
   ConfirmDialog,
-  FormField,
-  Input,
   PageHeader,
-  Select,
   Skeleton,
   Textarea,
+  PilotCard,
   PilotFileInput,
+  PilotFormField,
+  PilotInput,
+  PilotSelect,
   PilotBadge,
   PilotButton,
 } from "@acropora/ui";
@@ -239,19 +238,22 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
         />
       ) : null}
       <form className="space-y-6" onSubmit={submit}>
-        <Card className="p-6">
+        <PilotCard className="p-6">
           <h2 className="font-semibold">Identitás</h2>
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <FormField label="Kanonikus név">
-              <Input
+            <PilotFormField label="Kanonikus név">
+              <PilotInput
                 aria-label="Kanonikus név"
                 value={name}
-                onChange={(event) => setName(event.target.value)}
+                onChange={setName}
               />
-            </FormField>
-            <FormField label="Slug">
-              <Input disabled value={brand?.slug ?? "Mentéskor generálódik"} />
-            </FormField>
+            </PilotFormField>
+            <PilotFormField label="Slug">
+              <PilotInput
+                disabled
+                value={brand?.slug ?? "Mentéskor generálódik"}
+              />
+            </PilotFormField>
           </div>
           {brand ? (
             <div className="mt-4 flex items-center gap-2">
@@ -263,33 +265,29 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
               </span>
             </div>
           ) : null}
-        </Card>
-        <Card className="p-6">
+        </PilotCard>
+        <PilotCard className="p-6">
           <h2 className="font-semibold">Megjelenés</h2>
           <div className="mt-4 grid gap-4">
-            <FormField label="Leírás">
+            <PilotFormField label="Leírás">
               <Textarea
                 aria-label="Leírás"
                 className="min-h-24"
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
               />
-            </FormField>
+            </PilotFormField>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <FormField label="Weboldal URL">
-                <Input
+              <PilotFormField label="Weboldal URL">
+                <PilotInput
                   type="url"
                   value={websiteUrl}
-                  onChange={(event) => setWebsiteUrl(event.target.value)}
+                  onChange={setWebsiteUrl}
                 />
-              </FormField>
-              <FormField label="Logó URL">
-                <Input
-                  type="url"
-                  value={logoUrl}
-                  onChange={(event) => setLogoUrl(event.target.value)}
-                />
-              </FormField>
+              </PilotFormField>
+              <PilotFormField label="Logó URL">
+                <PilotInput type="url" value={logoUrl} onChange={setLogoUrl} />
+              </PilotFormField>
             </div>
             <div className="flex flex-wrap items-center gap-4">
               {logoUrl ? (
@@ -323,49 +321,49 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
               ) : null}
             </div>
           </div>
-        </Card>
+        </PilotCard>
         {brand ? (
-          <Card className="p-6">
+          <PilotCard className="p-6">
             <h2 className="font-semibold">Márkaoldal a webshopban</h2>
             <p className="mt-1 text-sm text-dusk-500">
               Üresen hagyva a webshop a márka nevét és leírását használja.
             </p>
             <div className="mt-4 grid gap-4">
-              <FormField label="Oldalcím (SEO)">
-                <Input
+              <PilotFormField label="Oldalcím (SEO)">
+                <PilotInput
                   aria-label="Oldalcím (SEO)"
                   maxLength={120}
                   value={seoTitle}
-                  onChange={(event) => setSeoTitle(event.target.value)}
+                  onChange={setSeoTitle}
                 />
-              </FormField>
-              <FormField label="Meta leírás">
+              </PilotFormField>
+              <PilotFormField label="Meta leírás">
                 <Textarea
                   aria-label="Meta leírás"
                   maxLength={320}
                   value={metaDescription}
                   onChange={(event) => setMetaDescription(event.target.value)}
                 />
-              </FormField>
-              <FormField label="Bevezető szöveg">
+              </PilotFormField>
+              <PilotFormField label="Bevezető szöveg">
                 <Textarea
                   aria-label="Bevezető szöveg"
                   className="min-h-24"
                   value={intro}
                   onChange={(event) => setIntro(event.target.value)}
                 />
-              </FormField>
-              <FormField label="Márkanév a Merchant feedben">
-                <Input
+              </PilotFormField>
+              <PilotFormField label="Márkanév a Merchant feedben">
+                <PilotInput
                   aria-label="Márkanév a Merchant feedben"
                   maxLength={120}
                   placeholder={name}
                   value={merchantBrandName}
-                  onChange={(event) => setMerchantBrandName(event.target.value)}
+                  onChange={setMerchantBrandName}
                 />
-              </FormField>
+              </PilotFormField>
             </div>
-          </Card>
+          </PilotCard>
         ) : null}
         <div className="flex justify-end">
           <PilotButton type="submit" disabled={busy}>
@@ -375,23 +373,23 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
       </form>
       {brand ? (
         <>
-          <Card className="p-6">
+          <PilotCard className="p-6">
             <h2 className="font-semibold">Aliasok</h2>
             <div className="mt-4 flex gap-2">
-              <Input
+              <PilotInput
                 aria-label="Új alias"
                 value={alias}
-                onChange={(event) => setAlias(event.target.value)}
+                onChange={setAlias}
                 placeholder="Forrásnév"
               />
-              <Select
+              <PilotSelect
                 aria-label="Alias forrása"
                 value={aliasSource}
-                onChange={(event) => setAliasSource(event.target.value)}
+                onChange={setAliasSource}
               >
                 <option value="MANUAL">{aliasSourceLabel("MANUAL")}</option>
                 <option value="UNAS">{aliasSourceLabel("UNAS")}</option>
-              </Select>
+              </PilotSelect>
               <PilotButton
                 disabled={busy || !alias.trim()}
                 onClick={() => void addAlias()}
@@ -409,20 +407,20 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
                     <strong>{item.alias}</strong>{" "}
                     <PilotBadge>{aliasSourceLabel(item.source)}</PilotBadge>
                   </div>
-                  <Button
+                  <PilotButton
                     variant="ghost"
-                    size="sm"
+                    size="action"
                     onClick={() =>
                       setPendingAlias({ id: item.id, alias: item.alias })
                     }
                   >
                     Eltávolítás
-                  </Button>
+                  </PilotButton>
                 </div>
               ))}
             </div>
-          </Card>
-          <Card className="p-6">
+          </PilotCard>
+          <PilotCard className="p-6">
             <h2 className="font-semibold">Használat és források</h2>
             <p className="mt-2 text-sm">
               {brand.usage.productCount} termék ·{" "}
@@ -435,8 +433,8 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
                 </PilotBadge>
               ))}
             </div>
-          </Card>
-          <Card className="p-6">
+          </PilotCard>
+          <PilotCard className="p-6">
             <h2 className="font-semibold">Audit</h2>
             <p className="mt-2 text-sm text-dusk-500">
               Létrehozva: {new Date(brand.createdAt).toLocaleString("hu-HU")} ·
@@ -445,16 +443,17 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
                 ? ` · Archiválva: ${new Date(brand.archivedAt).toLocaleString("hu-HU")}`
                 : ""}
             </p>
-            <Button
-              className="mt-4"
-              variant={brand.isActive ? "danger" : "secondary"}
-              onClick={() =>
-                brand.isActive ? setConfirmArchive(true) : void archive()
-              }
-            >
-              {brand.isActive ? "Archiválás" : "Visszaállítás"}
-            </Button>
-          </Card>
+            <div className="mt-4">
+              <PilotButton
+                variant={brand.isActive ? "danger" : "secondary"}
+                onClick={() =>
+                  brand.isActive ? setConfirmArchive(true) : void archive()
+                }
+              >
+                {brand.isActive ? "Archiválás" : "Visszaállítás"}
+              </PilotButton>
+            </div>
+          </PilotCard>
         </>
       ) : null}
       {confirmArchive ? (
@@ -464,7 +463,7 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
           aria-labelledby="archive-title"
           className="fixed inset-0 z-50 flex items-center justify-center bg-dusk-950/40 p-4"
         >
-          <Card className="max-w-lg p-6">
+          <PilotCard className="max-w-lg p-6">
             <h2 id="archive-title" className="font-semibold">
               Márka archiválása
             </h2>
@@ -488,7 +487,7 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
                 Archiválás megerősítése
               </PilotButton>
             </div>
-          </Card>
+          </PilotCard>
         </div>
       ) : null}
 
