@@ -38,6 +38,7 @@ export function ShippingFlagsCell({
 const FILTER_LABELS: Readonly<Record<ShippingFilterValue, string>> = {
   ...SHIPPING_FLAG_SHORT_LABELS,
   none: "Nincs vizsgálva",
+  unasDiff: "Kézi, eltér a UNAS-tól",
 };
 
 /** A szállítási szűrő: egy jelző, vagy a még nem vizsgált termékek. */
