@@ -566,6 +566,7 @@ export function PilotInput({
   inputMode,
   min,
   max,
+  maxLength,
 }: {
   value?: string;
   onChange?: (value: string) => void;
@@ -588,6 +589,8 @@ export function PilotInput({
    */
   min?: number | string;
   max?: number | string;
+  /** ADDITÍV (T1.3, a márka SEO-mezői): a natív hosszkorlát, ugyanaz, mint a dusk `Input`-on. */
+  maxLength?: number;
   /** ADDITÍV (Direction F, 2026-09-30): egy külső `<label htmlFor>`-hoz. */
   id?: string;
   /** ADDITÍV: ikon a mező elején (a terv keresőmezője). */
@@ -625,6 +628,7 @@ export function PilotInput({
       inputMode={inputMode}
       min={min}
       max={max}
+      maxLength={maxLength}
       onChange={(event) => onChange?.(event.target.value)}
       className={`${leadingIcon ? "w-full" : classes.widthClass} rounded-md px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500 disabled:cursor-not-allowed disabled:bg-pilot-grey-50 disabled:text-pilot-grey-400 ${
         readOnly ? "bg-pilot-grey-50 text-pilot-grey-400" : "bg-white"

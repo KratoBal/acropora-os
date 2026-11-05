@@ -2,7 +2,6 @@
 
 import {
   Alert,
-  Button,
   PilotDataTable,
   Skeleton,
   type PilotTableColumn,
@@ -393,20 +392,20 @@ export function BillingReceiptsView({ token }: { token: string }) {
   return (
     <div className="space-y-4">
       <div role="group" aria-label="Nyugták forrása" className="flex gap-2">
-        <Button
+        <PilotButton
           variant={source === "cash" ? "primary" : "secondary"}
           aria-pressed={source === "cash"}
           onClick={() => setSource("cash")}
         >
           Pénztárgép
-        </Button>
-        <Button
+        </PilotButton>
+        <PilotButton
           variant={source === "szamlazz" ? "primary" : "secondary"}
           aria-pressed={source === "szamlazz"}
           onClick={() => setSource("szamlazz")}
         >
           Számlázz.hu
-        </Button>
+        </PilotButton>
       </div>
       {source === "cash" ? (
         <CashRegisterReceiptsView token={token} />
