@@ -46,12 +46,17 @@ export function xsDateDay(raw: string): string | null {
 }
 
 /**
- * EGY LOGIKAI MEZŐ AZ XSD SZERINT `xs:boolean`: a `true` és az `1` igaz, a `false` és a `0` hamis (kis- és nagybetűtől
- * és szóköztől függetlenül). Az `eszamla` eddig CSAK az `1`-et fogadta el, a `sztornozott` és a `teszt` viszont mindkettőt, és
- * egy `true` jelölésű e-számla ezért „Papír alapú” lett a listán (40332480 utáni mérés, Balázs 2026-11-05). Ami se igaz, se
- * hamis forma (hiányzó, ismeretlen), az itt hamis marad, mint eddig: a mező nem kötelező a vetítéshez.
+ * AZ `eszamla` NEM LOGIKAI MEZŐ, HANEM EGÉSZ SZÁM, háromféle számla-formátum kóddal. A Számlázz.hu pénzügyi adatkapcsolat
+ * (docs.szamlazz.hu/penzugyi-adatkapcsolat/kimeno-szamlak) XSD-je `int`, és a mintafájl megjegyzése szerint
+ * `0` nem számla, `1` papír alapú számla, `2` e-számla, `3` e-számla. A 2 és a 3 közötti különbséget a dokumentáció nem
+ * mondja meg; mindkettő elektronikus. Éles mérés (acrobot, 2026-11-05, 419 feed-üzenet): 1 az 303, 2 a 74, 3 a 42, `true`
+ * egyszer sem; a 3 MIND `E-` előtagú számlaszám (E-CRPR, E-KBOS, ...), az 1 a papír sorozatok (ACRW, CRPR-, 2026/ ...).
+ *
+ * A MÚLT HIBÁJA: a jelző `=== "1"` volt, tehát épp a PAPÍR kódot olvasta elektronikusnak, és a 2-t, 3-at papírnak (két E-CRPR
+ * számla „Papír alapú” lett, az ACRW-ek „E-számla”). Az előtagra NEM építünk: a kód mondja meg. Ismeretlen vagy hiányzó
+ * érték nem elektronikus (nem találgatunk).
  */
-export function szamlazzBoolean(raw: string | null | undefined): boolean {
-  const value = raw?.trim().toLowerCase();
-  return value === "1" || value === "true";
+export function szamlazzIsElectronic(raw: string | null | undefined): boolean {
+  const value = raw?.trim();
+  return value === "2" || value === "3";
 }

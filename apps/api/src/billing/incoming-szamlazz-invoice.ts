@@ -7,7 +7,6 @@ import {
   type XmlElement,
 } from "../missing-invoices/szamlazz-feed-xml.js";
 import {
-  szamlazzBoolean,
   szamlazzCurrency,
   xsDateDay,
 } from "../missing-invoices/szamlazz-values.js";
@@ -144,7 +143,7 @@ export function projectIncomingInvoice(xml: string): IncomingInvoiceProjection {
     externalId,
     kindCode: required(root, "alap", "tipus"),
     documentNumber: required(root, "alap", "szamlaszam"),
-    electronic: szamlazzBoolean(textAt(root, "alap", "eszamla")),
+    electronic: textAt(root, "alap", "eszamla") === "1",
     issueDate,
     fulfillmentDate: day(textAt(root, "alap", "telj")),
     dueDate: day(textAt(root, "alap", "fizh")),
