@@ -165,6 +165,8 @@ export function decideBankTransfer(
   if (refs.length === 0) return refuse("NO_REFERENCE", "");
 
   const named: FeedInvoice[] = [];
+  /** invoices a bare number named only after the narrowing chose among series: the mark says so (barracuda, #2216 b) */
+  const narrowed = new Set<string>();
   const unresolved: string[] = [];
   for (const ref of refs) {
     const hits = invoices.filter(
@@ -178,6 +180,7 @@ export function decideBankTransfer(
       hits.length > 1 ? hits.filter(couldBeThisTransfers(day)) : hits;
     if (candidates.length === 1) {
       if (!named.includes(candidates[0]!)) named.push(candidates[0]!);
+      if (hits.length > 1) narrowed.add(candidates[0]!.documentNumber);
     } else
       unresolved.push(
         `${ref.year}/${ref.number}${hits.length === 0 ? " nincs" : " több"}`,
@@ -243,7 +246,9 @@ export function decideBankTransfer(
       date: day,
       amount: fillerText(cents),
       title: "átutalás",
-      note: `Banki átutalás ${day}, egy utalás ${named.length} számlára`,
+      note: narrowed.has(invoice.documentNumber)
+        ? `Banki átutalás ${day}, egy utalás ${named.length} számlára; a közlemény előtag nélküli számából, a nyitott számlához rendelve`
+        : `Banki átutalás ${day}, egy utalás ${named.length} számlára`,
       sourceRef: credit.id,
     })),
   };

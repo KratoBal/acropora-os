@@ -7,6 +7,7 @@ import {
   type GlsTransferDecision,
   type OutgoingInvoiceInput,
 } from "./gls-cod-paid-marks.js";
+import { invoiceSourcesOutsideTheFeed } from "./gls-cod-not-found-sources.js";
 
 /**
  * THE DRY RUN OF THE GLS PAID MARKS: what would be marked paid in Számlázz.hu,
@@ -103,16 +104,7 @@ export async function loadGlsTransfers(from: string): Promise<
       },
     ]),
   );
-  const elsewhere = new Map<string, string[]>();
-  for (const row of await prisma.externalBillingDocument.findMany({
-    where: { source: { not: "SZAMLAZZ" }, documentNumber: { in: numbers } },
-    select: { documentNumber: true, source: true },
-    orderBy: { source: "asc" },
-  })) {
-    const sources = elsewhere.get(row.documentNumber) ?? [];
-    if (!sources.includes(row.source)) sources.push(row.source);
-    elsewhere.set(row.documentNumber, sources);
-  }
+  const elsewhere = await invoiceSourcesOutsideTheFeed(numbers);
   const out = [];
   for (const report of reports) {
     const transferDate = day(report.transferDate);
