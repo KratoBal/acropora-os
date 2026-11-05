@@ -1,0 +1,19 @@
+/*
+  A JATEK KINEZETE EGY HELYEN (theme.css + jatek.css). Balazs designt ad hozza (2026-11-05): a kinezet CSERELHETO,
+  a markup (a komponensek) nem fugg a szinektol es a betutipustol. Ezt a ket fajlt kell lecserelni; a
+  komponensek csak a `jatek-*` osztalyneveket es a valtozokat ismerik.
+*/
+:root {
+  --jatek-bg: #f4f7f9;
+  --jatek-kartya: #ffffff;
+  --jatek-szoveg: #14232b;
+  --jatek-halvany: #55656e;
+  --jatek-vonal: #d3dde3;
+  --jatek-akcent: #0b6e8a;
+  --jatek-akcent-szoveg: #ffffff;
+  --jatek-hiba: #a4262c;
+  --jatek-ok: #1a6b3a;
+  --jatek-sugar: 10px;
+  --jatek-betu: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --jatek-szelesseg: 640px;
+}

@@ -1,0 +1,156 @@
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--jatek-bg);
+  color: var(--jatek-szoveg);
+  font-family: var(--jatek-betu);
+  line-height: 1.5;
+}
+.jatek-oldal {
+  max-width: var(--jatek-szelesseg);
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+}
+.jatek-fej {
+  margin-bottom: 24px;
+}
+.jatek-cim {
+  font-size: 1.75rem;
+  line-height: 1.2;
+  margin: 0 0 4px;
+}
+.jatek-alcim {
+  margin: 0;
+  color: var(--jatek-halvany);
+}
+.jatek-kartya {
+  background: var(--jatek-kartya);
+  border: 1px solid var(--jatek-vonal);
+  border-radius: var(--jatek-sugar);
+  padding: 20px;
+}
+.jatek-het {
+  margin: 0 0 8px;
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--jatek-halvany);
+}
+.jatek-kerdes {
+  margin: 0 0 8px;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+.jatek-hatarido {
+  margin: 0 0 16px;
+  color: var(--jatek-halvany);
+  font-size: 0.9rem;
+}
+.jatek-urlap {
+  display: grid;
+  gap: 16px;
+}
+.jatek-mezo {
+  display: grid;
+  gap: 4px;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.jatek-mezo > label,
+.jatek-mezo > legend {
+  font-weight: 600;
+  padding: 0;
+}
+.jatek-mezo input[type="text"],
+.jatek-mezo input[type="email"] {
+  font: inherit;
+  padding: 10px 12px;
+  border: 1px solid var(--jatek-vonal);
+  border-radius: calc(var(--jatek-sugar) - 4px);
+  width: 100%;
+}
+.jatek-valasztas {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 0;
+}
+.jatek-gomb {
+  font: inherit;
+  font-weight: 600;
+  padding: 12px 18px;
+  border: 0;
+  border-radius: calc(var(--jatek-sugar) - 4px);
+  background: var(--jatek-akcent);
+  color: var(--jatek-akcent-szoveg);
+  cursor: pointer;
+}
+.jatek-gomb[disabled] {
+  opacity: 0.6;
+  cursor: wait;
+}
+.jatek-megjegyzes {
+  margin: 0;
+  color: var(--jatek-halvany);
+  font-size: 0.85rem;
+}
+.jatek-uzenet {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: calc(var(--jatek-sugar) - 4px);
+  border: 1px solid var(--jatek-vonal);
+}
+.jatek-uzenet[data-fajta="ok"] {
+  border-color: var(--jatek-ok);
+  color: var(--jatek-ok);
+}
+.jatek-uzenet[data-fajta="hiba"] {
+  border-color: var(--jatek-hiba);
+  color: var(--jatek-hiba);
+}
+.jatek-proba {
+  margin: 0 0 16px;
+  padding: 8px 12px;
+  border: 1px dashed var(--jatek-halvany);
+  border-radius: calc(var(--jatek-sugar) - 4px);
+  color: var(--jatek-halvany);
+  font-size: 0.85rem;
+}
+/* A botcsapda mezo: nem type=hidden, hanem a kepernyon kivulre tolva (a botok kitoltik, az ember nem latja). */
+.jatek-csali {
+  position: absolute;
+  left: -10000px;
+  top: auto;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+.jatek-lablec {
+  margin-top: 32px;
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 0.9rem;
+}
+.jatek-lablec a,
+.jatek-megjegyzes a {
+  color: var(--jatek-akcent);
+}
+.jatek-jogi h2 {
+  font-size: 1.1rem;
+  margin: 24px 0 4px;
+}
+.jatek-jogi p {
+  margin: 0 0 8px;
+}
+.jatek-vazlat {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--jatek-hiba);
+  border-radius: calc(var(--jatek-sugar) - 4px);
+  color: var(--jatek-hiba);
+  font-weight: 600;
+}
