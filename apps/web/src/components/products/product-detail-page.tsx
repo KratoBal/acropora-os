@@ -43,6 +43,7 @@ import { productApi } from "@/lib/api/products";
 import { currencyLabel } from "@/lib/format/currency";
 import { BarcodeEditor } from "./barcode-editor";
 import { VariantPriceEditor } from "./variant-price-editor";
+import { VariantSaleEditor } from "./variant-sale-editor";
 import { ProductImagesEditor } from "./product-images-editor";
 
 const value = (candidate: string | null | undefined) => candidate || "—";
@@ -1078,6 +1079,20 @@ export function ProductDetailPage({ productId }: { productId: string }) {
                   variantId={variant.id}
                   sellingGrossPrice={variant.sellingGrossPrice}
                   sellingPriceCurrency={variant.sellingPriceCurrency}
+                  canManage={canManage}
+                  token={token}
+                  onSaved={() => setRequestVersion((current) => current + 1)}
+                />
+              ) : null}
+              {product.catalogAuthority === "ACROPORA" ? (
+                <VariantSaleEditor
+                  productId={product.id}
+                  variantId={variant.id}
+                  sellingGrossPrice={variant.sellingGrossPrice}
+                  sellingPriceCurrency={variant.sellingPriceCurrency}
+                  sellingSaleGrossPrice={variant.sellingSaleGrossPrice}
+                  sellingSaleStartsAt={variant.sellingSaleStartsAt}
+                  sellingSaleEndsAt={variant.sellingSaleEndsAt}
                   canManage={canManage}
                   token={token}
                   onSaved={() => setRequestVersion((current) => current + 1)}
