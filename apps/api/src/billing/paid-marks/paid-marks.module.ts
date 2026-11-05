@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 
 import { SzamlazzModule } from "../../integrations/szamlazz/szamlazz.module.js";
+import { FeedPullService } from "./feed-pull.service.js";
 import { PaidMarkRunRepository } from "./paid-mark-run.repository.js";
 import { PaidMarksAutoScheduler } from "./paid-marks-auto.scheduler.js";
 import { PaidMarksController } from "./paid-marks.controller.js";
@@ -9,6 +10,6 @@ import { PaidMarksController } from "./paid-marks.controller.js";
 @Module({
   imports: [SzamlazzModule],
   controllers: [PaidMarksController],
-  providers: [PaidMarkRunRepository, PaidMarksAutoScheduler],
+  providers: [PaidMarkRunRepository, PaidMarksAutoScheduler, FeedPullService],
 })
 export class PaidMarksModule {}

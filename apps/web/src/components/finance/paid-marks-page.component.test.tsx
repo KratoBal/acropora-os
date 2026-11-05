@@ -14,6 +14,7 @@ const api = vi.hoisted(() => ({
   latest: vi.fn(),
   status: vi.fn(),
   runNow: vi.fn(),
+  feedPull: vi.fn(),
 }));
 vi.mock("@/lib/api/paid-marks", () => ({ paidMarksApi: api }));
 vi.mock("next/navigation", () => ({
@@ -87,6 +88,7 @@ beforeEach(() => {
   auth.session = as("OWNER");
   api.status.mockReset().mockResolvedValue(status());
   api.runNow.mockReset();
+  api.feedPull.mockReset();
   api.latest.mockReset().mockResolvedValue([
     run({}),
     run({
@@ -172,8 +174,91 @@ describe("PaidMarksPage", () => {
 
   it("without the issue right there is no button", async () => {
     auth.session = as("VIEWER");
+    api.latest.mockResolvedValue([glsNotFound()]);
     render(<PaidMarksPage />);
     await screen.findByTestId("paid-mark-sources");
     expect(screen.queryByRole("button", { name: "Futtatás most" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Lekérés a Számlázz.hu-ból" }),
+    ).toBeNull();
+  });
+
+  /*
+    „LEKÉRÉS A SZÁMLÁZZ.HU-BÓL” (aeddb2c3, acrobot 43506). MI PIROSÍT: ha a gomb nem a „nincs a Számlázz.hu feedben”
+    sornál, vagy egy nem pontos számnál is áll; ha az előnézet nélkül húz be; ha a megerősítő ablak nem mutatja, mi
+    kerülne be; ha a behúzás nem pontosan azt az egy számot kéri.
+  */
+  it("pulls a missing feed invoice: a preview first, the pull only after the confirmation", async () => {
+    api.latest.mockResolvedValue([glsNotFound()]);
+    api.feedPull
+      .mockResolvedValueOnce([
+        {
+          number: "ACRW-2026/00469",
+          outcome: "WOULD_STORE",
+          detail:
+            "SZ, bruttó 28900.0 HUF, fizetve 0.00, kifizetések elem nélkül",
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          number: "ACRW-2026/00469",
+          outcome: "STORED",
+          detail: "SZ, bruttó 28900.0 HUF",
+          stored: "NEW",
+          projected: "PROJECTED",
+        },
+      ]);
+    render(<PaidMarksPage />);
+    const gls = await screen.findByTestId("paid-mark-source-GLS_COD");
+    // one button: the line with an exact number that is missing from the feed, not the other NOT_FOUND
+    const buttons = within(gls).getAllByRole("button", {
+      name: "Lekérés a Számlázz.hu-ból",
+    });
+    expect(buttons).toHaveLength(1);
+    fireEvent.click(buttons[0]!);
+    await waitFor(() =>
+      expect(api.feedPull).toHaveBeenCalledWith(
+        "t",
+        ["ACRW-2026/00469"],
+        false,
+      ),
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("bruttó 28900.0 HUF");
+    expect(api.feedPull).toHaveBeenCalledTimes(1);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Behúzás" }));
+    await waitFor(() =>
+      expect(api.feedPull).toHaveBeenLastCalledWith(
+        "t",
+        ["ACRW-2026/00469"],
+        true,
+      ),
+    );
+    expect(await screen.findByTestId("feed-pull-result")).toHaveTextContent(
+      "ACRW-2026/00469: behúzva; a következő futás már párosítja",
+    );
   });
 });
+
+function glsNotFound(): PaidMarkRunView {
+  return run({
+    attentionCount: 3,
+    attention: [
+      {
+        reference: "ACRW-2026/00469",
+        reason: "NOT_FOUND",
+        detail: "GLS 2026-09-10; nincs a Számlázz.hu feedben",
+      },
+      {
+        reference: "ACRW-2026/00470",
+        reason: "NOT_FOUND",
+        detail: "GLS 2026-09-10; a feedben csak EBIZ forrással",
+      },
+      {
+        reference: "2026-11-05",
+        reason: "NO_CREDIT",
+        detail: "utalt 79950 Ft",
+      },
+    ],
+  });
+}

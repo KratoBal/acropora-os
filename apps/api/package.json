@@ -74,6 +74,7 @@
     "foxpost:paid-marks": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/foxpost/foxpost-paid-marks.cli.js",
     "simplepay:paid-marks": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/simplepay/simplepay-paid-marks.cli.js",
     "billing:external-backfill": "tsc -p tsconfig.json && node --env-file=../../.env dist/billing/external-billing-backfill.cli.js",
+    "billing:feed-pull": "tsc -p tsconfig.json && node --env-file=../../.env dist/billing/feed-pull.cli.js",
     "worksheets:sheets": "tsc -p tsconfig.json && node --env-file=../../.env dist/worksheets/worksheet-sheet-backfill.cli.js",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist test-dist",
