@@ -24,6 +24,8 @@ export interface ShippingFillPreview {
 export interface ShippingFillApplyResult {
   target: string;
   created: number;
+  /** jelzőnként: az írt új sorok közül hányban igaz (barracuda, #2204: a Kész sor is mutassa, amit a próba) */
+  createdFlags: ShippingFillReport["createdFlags"];
   updated: number;
 }
 
@@ -115,6 +117,7 @@ export class ShippingProfileFillService {
     return {
       target: this.target(),
       created: report.create,
+      createdFlags: report.createdFlags,
       updated: report.update,
     };
   }

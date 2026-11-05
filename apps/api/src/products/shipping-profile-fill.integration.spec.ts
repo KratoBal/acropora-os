@@ -115,6 +115,8 @@ describe(
       const { fingerprint } = await service().preview();
       const result = await service().apply(fingerprint, ids.user!);
       assert.ok(result.created >= 2);
+      // the done line shows what the preview showed (barracuda, #2204)
+      assert.ok(result.createdFlags.foxpostForbidden >= 1);
       const rows = await ours();
       assert.deepEqual(
         rows
