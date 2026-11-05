@@ -14,7 +14,10 @@ import { describe, it } from "node:test";
 */
 const APP = join(process.cwd(), "src", "app");
 const KOMMENT = /\/\*[\s\S]*?\*\//g;
-const css = readFileSync(join(APP, "jatek.css"), "utf8").replace(KOMMENT, "");
+// a jatek es a fodij-oldal stilusa egyutt: az also hatar mindkettore ervenyes
+const css = ["jatek.css", "fodij.css"]
+  .map((f) => readFileSync(join(APP, f), "utf8").replace(KOMMENT, ""))
+  .join("\n");
 const tema = readFileSync(join(APP, "theme.css"), "utf8").replace(KOMMENT, "");
 
 type Szabaly = { szelektor: string; torzs: string; mobil: boolean };
@@ -97,27 +100,41 @@ describe("az olvashatóság", () => {
     );
   });
 
-  it("every text colour is at least 4.5:1 against the lightest card background", () => {
+  it("every text colour is a hex, a defined theme variable or inherit, and at least 4.5:1 against the lightest card background", () => {
     let db = 0;
     for (const s of mind) {
       if (DISZ.some((d) => s.szelektor.includes(d))) continue;
-      for (const m of s.torzs.matchAll(
-        /(?<![-\w])color:\s*(#[0-9a-fA-F]{3,6})\b/g,
-      )) {
+      for (const m of s.torzs.matchAll(/(?<![-\w])color:\s*([^;]+);?/g)) {
+        const ertek = m[1]!.trim();
+        let hex: string;
+        const valtozoNev = /^var\(--([\w-]+)\)$/.exec(ertek);
+        if (/^#[0-9a-fA-F]{3,6}$/.test(ertek)) hex = ertek;
+        else if (valtozoNev) hex = valtozo(valtozoNev[1]!);
+        else if (/^(inherit|currentcolor)$/i.test(ertek)) continue;
+        else
+          assert.fail(
+            `${s.szelektor}: color "${ertek}" is a form the guard cannot measure (use a hex or a theme variable)`,
+          );
         db += 1;
         if (NARANCSON.some((n) => s.szelektor.includes(n)))
           assert.ok(
-            kontraszt(m[1]!, NARANCS) >= 4.5,
-            `${s.szelektor}: ${m[1]} on orange`,
+            kontraszt(hex, NARANCS) >= 4.5,
+            `${s.szelektor}: ${hex} on orange`,
           );
-        else
+        else if (s.szelektor.includes("[aria-pressed")) {
+          // a narancs hatterű kapcsolo gomb: a sotet felirat a narancson
           assert.ok(
-            kontraszt(m[1]!, KARTYA) >= 4.5,
-            `${s.szelektor}: ${m[1]} ${kontraszt(m[1]!, KARTYA).toFixed(2)}`,
+            kontraszt(hex, NARANCS) >= 4.5 || kontraszt(hex, KARTYA) >= 4.5,
+            `${s.szelektor}: ${hex}`,
+          );
+        } else
+          assert.ok(
+            kontraszt(hex, KARTYA) >= 4.5,
+            `${s.szelektor}: ${hex} ${kontraszt(hex, KARTYA).toFixed(2)}`,
           );
       }
     }
-    assert.ok(db >= 8, `colours seen: ${db}`);
+    assert.ok(db >= 12, `colours seen: ${db}`);
   });
 
   it("the muted text colour and the main text colour keep their contrast", () => {

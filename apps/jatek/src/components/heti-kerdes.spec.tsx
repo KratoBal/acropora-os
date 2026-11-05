@@ -96,6 +96,11 @@ describe("a főoldal állandó szakaszai", () => {
     assert.match(h, /src="\/nano\.jpg"/);
   });
 
+  it("the prize card leads to the page's own prize page, in the same window", () => {
+    assert.match(h, /<a href="\/fodij">Ismerd meg az akváriumot/);
+    assert.doesNotMatch(h, /aquaforest\.eu/);
+  });
+
   it("have neither a prototype wording nor a newsletter option", () => {
     assert.doesNotMatch(h, /prototípus|prototipus|minta forduló/i);
     assert.doesNotMatch(

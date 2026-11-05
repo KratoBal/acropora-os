@@ -57,13 +57,7 @@ export function Hero() {
           <span className="jatek-eyebrow">A KAMPÁNY FŐDÍJA</span>
           <h2>AF Nano Tank</h2>
           <span>AQUAFOREST</span>
-          <a
-            href="https://aquaforest.eu/en/nano-tank/"
-            target="_blank"
-            rel="noopener"
-          >
-            Ismerd meg az akváriumot ↗
-          </a>
+          <a href="/fodij">Ismerd meg az akváriumot ↗</a>
         </div>
         <span className="jatek-photo-note">
           Gyártói illusztráció · a dekoráció és az élővilág nem ígért nyeremény
