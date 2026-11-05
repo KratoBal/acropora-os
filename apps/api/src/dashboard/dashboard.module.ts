@@ -4,6 +4,7 @@ import { InventoryModule } from "../inventory/inventory.module.js";
 import { MessagesModule } from "../messages/messages.module.js";
 import { MissingInvoicesModule } from "../missing-invoices/missing-invoices.module.js";
 import { WebshopOrdersModule } from "../orders/webshop-orders/webshop-orders.module.js";
+import { PartnerOrdersModule } from "../partner-orders/partner-orders.module.js";
 import { PurchasingModule } from "../purchasing/purchasing.module.js";
 import { DashboardAquariumWidgetsRepository } from "./dashboard-aquarium-widgets.repository.js";
 import { DashboardFinanceWidgetsRepository } from "./dashboard-finance-widgets.repository.js";
@@ -22,6 +23,7 @@ import { DashboardService } from "./dashboard.service.js";
     MissingInvoicesModule,
     WebshopOrdersModule,
     MessagesModule,
+    PartnerOrdersModule,
   ],
   controllers: [DashboardController],
   providers: [

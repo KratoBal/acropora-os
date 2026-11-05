@@ -15,6 +15,7 @@ import type { UnasStockSyncOutboxRepository } from "../inventory/unas-stock-sync
 import type { MessagesService } from "../messages/messages.service.js";
 import type { MissingInvoicesService } from "../missing-invoices/missing-invoices.service.js";
 import type { WebshopOrdersService } from "../orders/webshop-orders/webshop-orders.service.js";
+import type { PartnerOrdersService } from "../partner-orders/partner-orders.service.js";
 import type { DashboardAquariumWidgetsRepository } from "./dashboard-aquarium-widgets.repository.js";
 import type { DashboardFinanceWidgetsRepository } from "./dashboard-finance-widgets.repository.js";
 import type { DashboardLayoutRepository } from "./dashboard-layout.repository.js";
@@ -44,9 +45,10 @@ function service(
   options: {
     stored?: unknown;
     capabilities?: ServiceCapabilityValue[];
-    loaders?: ConstructorParameters<typeof DashboardWidgetsService>[11];
+    loaders?: ConstructorParameters<typeof DashboardWidgetsService>[12];
     webshopOrders?: Partial<WebshopOrdersService>;
     messages?: Partial<MessagesService>;
+    partnerOrders?: Partial<PartnerOrdersService>;
     financeWidgets?: Partial<DashboardFinanceWidgetsRepository>;
   } = {},
 ) {
@@ -94,6 +96,7 @@ function service(
       {} as DashboardSystemWidgetsRepository,
       (options.webshopOrders ?? {}) as WebshopOrdersService,
       (options.messages ?? {}) as MessagesService,
+      (options.partnerOrders ?? {}) as PartnerOrdersService,
       options.loaders,
     ),
   };
@@ -359,6 +362,64 @@ describe("Olvasatlan üzenetek", () => {
     });
     await svc.widgets(user("SERVICE"), ["messages"]);
     assert.equal(asked.length, 2, "a per-user count is never cached");
+  });
+});
+
+/*
+  A HATRALEKOS MEGRENDELESEK KARTYAJA (S4b-2, 38caeac2). MI PIROSIT: ha a kartya adata nem a megrendelesek szolgaltatasa
+  hatralek-osszefoglalojabol jon (a szam es a szurt lista kulonbozne); ha a quotes.view nelkuli felhasznalo megkapja;
+  ha a szerver az osszefoglalo hibajat a teljes vezerlopulttal viszi el.
+*/
+describe("Hátralékos megrendelések", () => {
+  const summary = {
+    count: 2,
+    backlogDays: 14,
+    oldest: [
+      {
+        orderId: "o1",
+        orderNumber: "MR-1",
+        customerName: "A Kft.",
+        idleDays: 30,
+      },
+      { orderId: "o2", orderNumber: "MR-2", customerName: null, idleDays: 15 },
+    ],
+  };
+
+  it("gives the card the orders service's own backlog summary", async () => {
+    const { svc } = service({
+      partnerOrders: { backlogSummary: async () => summary },
+    });
+    const r = await svc.widgets(user("SALES"), ["partner-order-backlog"]);
+    assert.deepEqual(r.results["partner-order-backlog"], {
+      status: "ok",
+      data: summary,
+    });
+  });
+
+  it("is forbidden for a role without quotes.view", async () => {
+    const { svc } = service({
+      partnerOrders: { backlogSummary: async () => summary },
+    });
+    const r = await svc.widgets(user("SERVICE"), ["partner-order-backlog"]);
+    assert.deepEqual(r.results["partner-order-backlog"], {
+      status: "forbidden",
+    });
+  });
+
+  it("a failing summary is that card's error, not the dashboard's", async () => {
+    const { svc } = service({
+      partnerOrders: {
+        backlogSummary: async () => {
+          throw new Error("db down");
+        },
+      },
+    });
+    const r = await svc.widgets(user("SALES"), [
+      "partner-order-backlog",
+      "tasks",
+    ]);
+    assert.equal(r.results["partner-order-backlog"]?.status, "error");
+    assert.equal(r.results.tasks?.status, "ok");
   });
 });
 

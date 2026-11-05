@@ -703,6 +703,50 @@ describe("the order list filters and open lines", () => {
       );
     });
 
+    // S4b-2: the dashboard card's number is the list's own rule over the open orders
+    it("the dashboard summary counts the back-ordered open orders, the longest idle first, and says the days", async () => {
+      const movements = new Map([
+        ["o1", new Date(now.getTime() - 16 * DAY)],
+        ["o3", new Date(now.getTime() - 18 * DAY)],
+      ]);
+      const { service } = fake(rows, chain, certified, { movements });
+      const summary = await service.backlogSummary(now);
+      // o1 and o3 have open lines and are past 14 days (o1 16, o3 18: the LONGER idle one, o3, comes first); o2 is fully certified
+      assert.equal(summary.count, 2);
+      assert.equal(summary.backlogDays, 14);
+      assert.deepEqual(
+        summary.oldest.map((o) => [o.orderId, o.idleDays]),
+        [
+          ["o3", 18],
+          ["o1", 16],
+        ],
+      );
+    });
+
+    it("the dashboard summary lists at most the asked number of orders but counts them all", async () => {
+      const { service } = fake(rows, chain, certified);
+      const summary = await service.backlogSummary(now, 1);
+      assert.equal(summary.count, 2);
+      assert.equal(summary.oldest.length, 1);
+    });
+
+    it("the dashboard summary reads the OPEN orders only, and follows the saved days", async () => {
+      let asked: unknown = null;
+      const repo = {
+        listAll: async (filter: unknown) => {
+          asked = filter;
+          return { rows: [], chain: [] };
+        },
+        systemDocumentSources: async () => new Map(),
+        certifiedLines: async () => [],
+        lastMovements: async () => new Map(),
+        settings: async () => ({ backlogDays: 3 }),
+      } as unknown as PartnerOrdersRepository;
+      const summary = await new PartnerOrdersService(repo).backlogSummary(now);
+      assert.deepEqual(asked, { status: "OPEN" });
+      assert.deepEqual(summary, { count: 0, backlogDays: 3, oldest: [] });
+    });
+
     it("the settings: the default without a row, the saved value with one, saved under the user's id", async () => {
       const { service, saved } = fake(rows, chain, certified);
       assert.deepEqual(await service.settings(), { backlogDays: 14 });
