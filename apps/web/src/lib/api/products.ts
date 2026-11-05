@@ -206,6 +206,30 @@ export const productApi = {
       { method: "PUT", body: JSON.stringify({ grossPrice }) },
     );
   },
+  /**
+   * A változat saját akciója (T4.1-D3): ár és félig nyitott ablak (`[startsAt, endsAt)`, ISO időzónával). 409, ha
+   * nincs saját ár, vagy az akció nem olcsóbb nála; 400, ha az ablak üres vagy már véget ért.
+   */
+  setVariantSale(
+    token: string,
+    id: string,
+    variantId: string,
+    sale: { grossPrice: string; startsAt: string; endsAt: string },
+  ) {
+    return apiRequest<ProductDetail>(
+      `/products/${encodeURIComponent(id)}/variants/${encodeURIComponent(variantId)}/sale`,
+      token,
+      { method: "PUT", body: JSON.stringify(sale) },
+    );
+  },
+  /** A változat saját akciójának törlése (T4.1-D3). */
+  clearVariantSale(token: string, id: string, variantId: string) {
+    return apiRequest<ProductDetail>(
+      `/products/${encodeURIComponent(id)}/variants/${encodeURIComponent(variantId)}/sale`,
+      token,
+      { method: "DELETE" },
+    );
+  },
   /** Egy kép alt-szövege (T4.1-D3); üres: nincs kézi alt, a kirakat a nevet adja. */
   setImageAlt(token: string, id: string, imageId: string, altText: string) {
     return apiRequest<ProductDetail>(
