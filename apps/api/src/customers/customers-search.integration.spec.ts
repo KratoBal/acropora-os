@@ -198,6 +198,69 @@ describe(
       );
     });
 
+    // A PARTNER ADÓSZÁMA IS KERESHETŐ A TÜKÖR SORÁN (40332480, barracuda #2228): a tükör vevő-sorából hiányozhat az
+    // adószám (aaf4f09d), a partnernél megvan. MI PIROSIT: ha a partner adószámára a tükör nem jön elő; ha a törölt
+    // partner adószáma is találna; ha a kötés nélküli partner adószáma egy másik vevőt találna meg.
+    it("the tax number is searched on the linked, live partner too", async () => {
+      const partnerTax = `7${suffix.padStart(7, "0")}`;
+      const deletedTax = `6${suffix.padStart(7, "0")}`;
+      const bare = await prisma.customer.create({
+        data: {
+          customerNumber: `${CUSTOMER_PREFIX}bare-${suffix}`,
+          type: "COMPANY",
+          // a name that is NOT the partner's: only the link can tie the two
+          displayName: `Bare Customer ${suffix}`,
+        },
+      });
+      await prisma.supplier.create({
+        data: {
+          code: `${CUSTOMER_PREFIX}bare-sup-${suffix}`,
+          name: `Bare Mirror ${suffix}`,
+          taxNumber: `${partnerTax}-2-42`,
+          customerId: bare.id,
+        },
+      });
+      const gone = await prisma.customer.create({
+        data: {
+          customerNumber: `${CUSTOMER_PREFIX}gone-${suffix}`,
+          type: "COMPANY",
+          displayName: `Gone Customer ${suffix}`,
+        },
+      });
+      await prisma.supplier.create({
+        data: {
+          code: `${CUSTOMER_PREFIX}gone-sup-${suffix}`,
+          name: `Gone Mirror ${suffix}`,
+          taxNumber: `${deletedTax}-2-42`,
+          customerId: gone.id,
+          deletedAt: new Date(),
+        },
+      });
+      const ask = async (search: string) =>
+        (
+          await repository.list({
+            page: 1,
+            pageSize: 100,
+            search,
+            status: "ALL",
+            includePartnerMirrors: "true",
+          })
+        ).items.map((item) => item.id);
+
+      // the customer row has no tax number of its own; the live partner's number finds it, however it is written
+      for (const text of [`${partnerTax}-2-42`, `${partnerTax}242`, partnerTax])
+        assert.deepEqual(await ask(text), [bare.id], text);
+      // a deleted partner is no source (the same rule as the tax number hint)
+      assert.deepEqual(await ask(`${deletedTax}-2-42`), []);
+      // the detail hands the same number over as the hint, from the LINK (the names differ), so the new customer form
+      // can compare it; a deleted partner gives none
+      assert.deepEqual((await repository.detail(bare.id))?.partnerTaxHint, {
+        partnerName: `Bare Mirror ${suffix}`,
+        taxNumber: `${partnerTax}-2-42`,
+      });
+      assert.equal((await repository.detail(gone.id))?.partnerTaxHint, null);
+    });
+
     // A TÖRÖLT PARTNER NEM FORRÁS (barracuda, #2161): sem az adószám-tipphez, sem a napokhoz
     it("a deleted partner gives no tax number hint, a live one does", async () => {
       const partner = await prisma.supplier.create({
