@@ -20,6 +20,19 @@ const DATE_TIME = new Intl.DateTimeFormat("hu-HU", {
   hour12: false,
 });
 
+const TIME = new Intl.DateTimeFormat("hu-HU", {
+  timeZone: "Europe/Budapest",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+
+/** Egy időpont órája és perce budapesti idővel: `08:00` (a nyári időszámítással is). */
+export function formatTimeHu(value: string | Date): string {
+  const date = typeof value === "string" ? new Date(value) : value;
+  return Number.isNaN(date.getTime()) ? "" : TIME.format(date);
+}
+
 /** Egy időpont (ISO) magyar alakban, budapesti idővel: `2026. 11. 03. 14:20`. */
 export function formatDateTimeHu(value: string | Date): string {
   const date = typeof value === "string" ? new Date(value) : value;

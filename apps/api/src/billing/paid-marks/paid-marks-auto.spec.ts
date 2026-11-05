@@ -385,6 +385,21 @@ describe("the daily schedule", () => {
       }
     });
 
+    it("the status names the next run while the timer is set, and none after it stops", () => {
+      process.env.BANK_TRANSFER_MARK_PAID = "dry";
+      try {
+        const scheduler = new PaidMarksAutoScheduler({} as never, fakeRuns([]));
+        assert.equal(scheduler.status().nextRunAt, null);
+        scheduler.onModuleInit();
+        const next = Date.parse(scheduler.status().nextRunAt!);
+        assert.ok(next > Date.now() && next <= Date.now() + 86_400_000);
+        scheduler.onModuleDestroy();
+        assert.equal(scheduler.status().nextRunAt, null);
+      } finally {
+        process.env = { ...envBefore };
+      }
+    });
+
     it("runNow answers started, then running while in flight, and nothing without a source on auto or dry", async () => {
       const scheduler = new PaidMarksAutoScheduler({} as never, fakeRuns([]));
       const original = process.env.BANK_TRANSFER_MARK_PAID;

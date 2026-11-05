@@ -143,6 +143,12 @@ export class PaidMarksAutoScheduler implements OnModuleInit, OnModuleDestroy {
    * call, no blind retry, the bank credit's lock) stay under it as before.
    */
   private running: { startedAt: Date; done: Promise<void> } | null = null;
+  /**
+   * When the timer fires next (e64540fd fix): the page shows this instant in Budapest time, not a fixed
+   * "7:00". The hour is the process's own local hour (`setHours`), and the API process may run in UTC, so
+   * the same PAID_MARKS_AUTO_HOUR is 08:00 in Budapest in winter and 09:00 in summer.
+   */
+  private nextRunAt: Date | null = null;
 
   constructor(
     private readonly credentials: SzamlazzCredentialProvider,
@@ -166,10 +172,15 @@ export class PaidMarksAutoScheduler implements OnModuleInit, OnModuleDestroy {
   }
 
   /** Whether a run is in flight, and since when. */
-  status(): { running: boolean; startedAt: string | null } {
+  status(): {
+    running: boolean;
+    startedAt: string | null;
+    nextRunAt: string | null;
+  } {
     return {
       running: this.running !== null,
       startedAt: this.running?.startedAt.toISOString() ?? null,
+      nextRunAt: this.nextRunAt?.toISOString() ?? null,
     };
   }
 
@@ -218,6 +229,7 @@ export class PaidMarksAutoScheduler implements OnModuleInit, OnModuleDestroy {
     this.stopped = true;
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
+    this.nextRunAt = null;
   }
 
   /**
@@ -314,14 +326,14 @@ export class PaidMarksAutoScheduler implements OnModuleInit, OnModuleDestroy {
   }
 
   private schedule(hour: number): void {
-    this.timer = setTimeout(
-      () => {
-        void this.runOnce().finally(() => {
-          if (!this.stopped) this.schedule(hour);
-        });
-      },
-      msUntilNextRun(new Date(), hour),
-    );
+    const now = new Date();
+    const wait = msUntilNextRun(now, hour);
+    this.nextRunAt = new Date(now.getTime() + wait);
+    this.timer = setTimeout(() => {
+      void this.runOnce().finally(() => {
+        if (!this.stopped) this.schedule(hour);
+      });
+    }, wait);
     this.timer.unref();
   }
 }

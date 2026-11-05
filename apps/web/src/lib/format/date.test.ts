@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatDateTimeHu, formatDayHu } from "./date";
+import { formatDateTimeHu, formatDayHu, formatTimeHu } from "./date";
 
 // What must fail: the three list date shapes living side by side again ("2026-11-03", "nov. 3.",
 // "2026. 08. 19."); the time shown in UTC instead of Budapest time; a broken value printing
@@ -24,6 +24,13 @@ describe("the list date format", () => {
     expect(formatDateTimeHu("2026-07-25T10:00:00.000Z")).toBe(
       "2026. 07. 25. 12:00",
     );
+  });
+
+  // e64540fd: the paid-mark run's 07:00 UTC is 08:00 in Budapest in winter and 09:00 in summer
+  it("writes an hour and minute with the Budapest clock too", () => {
+    expect(formatTimeHu("2026-11-06T07:00:00.000Z")).toBe("08:00");
+    expect(formatTimeHu("2026-07-06T07:00:00.000Z")).toBe("09:00");
+    expect(formatTimeHu("nem dátum")).toBe("");
   });
 
   it("gives an empty text for a broken time, not Invalid Date", () => {

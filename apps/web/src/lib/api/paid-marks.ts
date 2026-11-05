@@ -31,6 +31,8 @@ export interface PaidMarkRunView {
 export interface PaidMarksStatus {
   running: boolean;
   startedAt: string | null;
+  /** a napi futás következő időpontja (ISO); `null`, ha nincs ütemezve */
+  nextRunAt: string | null;
   sources: { source: PaidMarkSource; mode: PaidMarksMode }[];
 }
 
