@@ -360,7 +360,8 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
 
   /** A duplikátumnak jelölt tételek ebben a hónapban; csak `finance.manage`-zel kérhető (a szerver is ezt kéri). */
   const loadDuplicates = useCallback(async () => {
-    if (!canManage || !token) return;
+    // nem `!token`: éles (sütis) belépésnél a token üres, a süti hitelesít (kártya 6f8e6f23)
+    if (!canManage) return;
     try {
       setDuplicates((await missingInvoicesApi.duplicates(token, month)).items);
     } catch {

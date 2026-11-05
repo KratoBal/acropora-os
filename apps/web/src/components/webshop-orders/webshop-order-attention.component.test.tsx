@@ -152,9 +152,11 @@ describe("WebshopOrderAttention", () => {
     expect(stopped.textContent).toContain("Az ismételt próbálkozás leállítva.");
   });
 
-  it("does not ask without a token", async () => {
+  it("asks with a cookie session too, whose token is empty (6f8e6f23)", async () => {
+    api.attention.mockResolvedValue(RESPONSE);
     render(<WebshopOrderAttention token="" />);
-    expect(api.attention).not.toHaveBeenCalled();
+    expect(await screen.findByTestId("figyelem-panel")).toBeTruthy();
+    expect(api.attention).toHaveBeenCalledTimes(1);
   });
 
   it("writes the wait in minutes, hours or days", () => {
