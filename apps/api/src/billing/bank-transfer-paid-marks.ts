@@ -247,7 +247,8 @@ export function decideBankTransfer(
       amount: fillerText(cents),
       title: "átutalás",
       note: narrowed.has(invoice.documentNumber)
-        ? `Banki átutalás ${day}, egy utalás ${named.length} számlára; a közlemény előtag nélküli számából, a nyitott számlához rendelve`
+        ? // short: the Agent's `leiras` limit is not known (the xsd is not in the repo), the longest note so far was ~60
+          `Banki átutalás ${day}, egy utalás ${named.length} számlára; előtag nélküli szám, a nyitott számlához`
         : `Banki átutalás ${day}, egy utalás ${named.length} számlára`,
       sourceRef: credit.id,
     })),

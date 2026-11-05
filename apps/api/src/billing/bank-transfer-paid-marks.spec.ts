@@ -219,7 +219,11 @@ describe("the 2026/ series, numbered without a prefix", () => {
     // the mark says the series was chosen by the narrowing, so a wrong pick can be traced (barracuda, #2216 b)
     assert.match(
       decision.marks[0]!.note,
-      /előtag nélküli számából, a nyitott számlához rendelve$/,
+      /; előtag nélküli szám, a nyitott számlához$/,
+    );
+    assert.ok(
+      decision.marks[0]!.note.length <= 90,
+      `${decision.marks[0]!.note.length} karakter`,
     );
   });
 
