@@ -25,6 +25,7 @@ import {
   type PaidMarksStatus,
 } from "@/lib/api/paid-marks";
 
+import { canPullIntoFeed, FeedPullButton } from "./feed-pull-button";
 import { SettlementTabs } from "./settlement-tabs";
 
 const errorText = (cause: unknown) =>
@@ -53,10 +54,15 @@ function SourceRun({
   source,
   mode,
   run,
+  canPull,
+  token,
 }: {
   source: PaidMarkSource;
   mode: PaidMarksMode;
   run: PaidMarkRunView | undefined;
+  /** a „Lekérés a Számlázz.hu-ból” joga (a „Futtatás most”-é) */
+  canPull: boolean;
+  token: string;
 }) {
   return (
     <li
@@ -102,6 +108,12 @@ function SourceRun({
                   <li key={`${item.reference}-${item.reason}`}>
                     {item.reference}: {item.reason}
                     {item.detail ? ` (${item.detail})` : ""}
+                    {canPull && canPullIntoFeed(item) ? (
+                      <FeedPullButton
+                        invoiceNumber={item.reference}
+                        token={token}
+                      />
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -276,6 +288,8 @@ export function PaidMarksPage() {
               source={source}
               mode={mode}
               run={latest.get(source)}
+              canPull={canRun}
+              token={token}
             />
           ))}
         </ul>

@@ -44,6 +44,21 @@ export type PaidMarksRunNow =
   | { status: "running" }
   | { status: "nothing"; reason: string };
 
+/** Egy szám a behúzásból (`POST /billing/paid-marks/feed-pull`); a `detail` a szám, a fajta és az összegek, vevő nélkül. */
+export interface FeedPullLine {
+  number: string;
+  outcome:
+    | "WOULD_STORE"
+    | "STORED"
+    | "NOT_FOUND"
+    | "ERROR"
+    | "UNREADABLE"
+    | "OTHER_NUMBER";
+  detail: string;
+  stored?: "NEW" | "NEW_VERSION" | "SEEN";
+  projected?: string;
+}
+
 /** A kifizetett-jelölés napi futása (kártya e64540fd): állás, legutóbbi futások, „Futtatás most”. */
 export const paidMarksApi = {
   latest(token: string) {
@@ -55,6 +70,13 @@ export const paidMarksApi = {
   runNow(token: string) {
     return apiRequest<PaidMarksRunNow>("/billing/paid-marks/run", token, {
       method: "POST",
+    });
+  },
+  /** A feedből hiányzó számla a Számlázz.hu-ból (aeddb2c3): `apply: false` az előnézet, `true` a behúzás. */
+  feedPull(token: string, numbers: string[], apply: boolean) {
+    return apiRequest<FeedPullLine[]>("/billing/paid-marks/feed-pull", token, {
+      method: "POST",
+      body: JSON.stringify({ numbers, apply }),
     });
   },
 };
