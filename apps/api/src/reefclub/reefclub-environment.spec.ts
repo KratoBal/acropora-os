@@ -88,6 +88,8 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   "OWN_IMAGE_REFERENCE_HOSTS",
   // the one-time feed backfill's pause between two Agent queries (6fd8c574): an interval, not a secret
   "FEED_BACKFILL_DELAY_MS",
+  // the giveaway page's public address, the base of its confirmation link (card 31445d0f): an origin, not a secret
+  "JATEK_PUBLIC_URL",
   "PAID_MARKS_AUTO_DAYS",
   "PAID_MARKS_AUTO_HOUR",
   "PARTNER_URL",
