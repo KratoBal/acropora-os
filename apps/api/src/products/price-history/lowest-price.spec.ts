@@ -292,7 +292,13 @@ describe("lowestPriceForVariant", () => {
       productVariant: {
         findUnique: async (args) => {
           calls.variant = args;
-          return { productId: "p1", unasVariantExtraGrossPrice: D(100) };
+          return {
+            productId: "p1",
+            unasVariantExtraGrossPrice: D(100),
+            sellingSaleGrossPrice: null,
+            sellingSaleStartsAt: null,
+            sellingSaleEndsAt: null,
+          };
         },
       },
       productPriceHistory: {
@@ -337,7 +343,7 @@ describe("currentReductionStart", () => {
   it("is the first day of the sale run that is in force now", () => {
     const rows = [sale(0, null), sale(10, "1200"), sale(20, "900")];
     assert.equal(
-      currentReductionStart(rows, "v1")?.getTime(),
+      currentReductionStart(rows, "v1", null, NOW)?.getTime(),
       day(10).getTime(),
     );
   });
@@ -347,6 +353,8 @@ describe("currentReductionStart", () => {
       currentReductionStart(
         [sale(0, null), sale(10, "1200"), sale(20, null)],
         "v1",
+        null,
+        NOW,
       ),
       null,
     );
@@ -355,7 +363,7 @@ describe("currentReductionStart", () => {
   it("a second, separate sale is measured from its own first day", () => {
     const rows = [sale(0, "1200"), sale(5, null), sale(30, "1100")];
     assert.equal(
-      currentReductionStart(rows, "v1")?.getTime(),
+      currentReductionStart(rows, "v1", null, NOW)?.getTime(),
       day(30).getTime(),
     );
   });
@@ -365,9 +373,11 @@ describe("currentReductionStart", () => {
       currentReductionStart(
         [sale(0, "1200"), row({ observedAt: day(5), variantId: "v1" })],
         "v1",
+        null,
+        NOW,
       ),
       null,
     );
-    assert.equal(currentReductionStart([], "v1"), null);
+    assert.equal(currentReductionStart([], "v1", null, NOW), null);
   });
 });

@@ -254,6 +254,6 @@ export function listPriceFromDecision(
       new Prisma.Decimal(1).plus(vatRate.dividedBy(100)),
     ),
     reason: null,
-    sale: decision.source === "mirror-sale",
+    sale: decision.source === "mirror-sale" || decision.source === "own-sale",
   };
 }

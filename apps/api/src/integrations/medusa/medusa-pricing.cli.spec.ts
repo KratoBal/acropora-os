@@ -23,6 +23,9 @@ interface VariantRow {
   productId: string;
   sellingGrossPrice: Prisma.Decimal | null;
   sellingPriceCurrency: string | null;
+  sellingSaleGrossPrice?: Prisma.Decimal | null;
+  sellingSaleStartsAt?: Date | null;
+  sellingSaleEndsAt?: Date | null;
   unasVariantExtraGrossPrice: Prisma.Decimal | null;
 }
 
@@ -60,7 +63,19 @@ function db(options: {
     productVariant: {
       findMany: async (args: unknown) => {
         queries.push(args);
-        return variants;
+        return variants.map((variant) => ({
+          sellingSaleGrossPrice: null,
+          sellingSaleStartsAt: null,
+          sellingSaleEndsAt: null,
+          ...variant,
+        }));
+      },
+    },
+    productPriceHistory: {
+      findFirst: async () => null,
+      create: async (args: unknown) => {
+        queries.push(args);
+        return {};
       },
     },
     product: {
@@ -295,6 +310,7 @@ describe("Ár-parancs: a kudarc termékenként jelződik", () => {
           argument === "prod-feloldas"
             ? { targets: [], errors: ["prod-feloldas: nincs kotes"] }
             : { targets: [cel(argument, `${argument}-sku`)], errors: [] },
+        record: async () => "mirror",
         project: async (target) =>
           (target as { sku: string }).sku === "prod-megallt-sku"
             ? {

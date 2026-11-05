@@ -1,6 +1,7 @@
 import { Prisma } from "@acropora/database";
 
 import type { CatalogAuthority } from "../../products/catalog-authority.js";
+import { isOwnSaleActive, type OwnSaleRow } from "../../products/own-sale.js";
 
 import {
   SUPPORTED_CURRENCY,
@@ -52,7 +53,7 @@ export interface MirrorPriceRow {
 }
 
 /** Melyik oldalról jött az ár. A jelentés ezt írja ki. */
-export type PriceOwner = "mirror" | "mirror-sale" | "own";
+export type PriceOwner = "mirror" | "mirror-sale" | "own" | "own-sale";
 
 export type PriceSourceRefusal =
   /**
@@ -91,6 +92,13 @@ export function resolvePriceSource(input: {
   authority: CatalogAuthority | null;
   mirror: MirrorPriceRow | null;
   own: ProjectablePrice;
+  /**
+   * A VÁLTOZAT SAJÁT AKCIÓJA, vagy `null`. KÖTELEZŐ mező, nem opcionális: egy hívó,
+   * amelyik kihagyná, az átvett termék futó akciójánál a rendes árat adná tovább
+   * (a bolt drágábban árulna, az ajánlat a listaárral számolna), és semmi nem szólna.
+   * A tükör akciója itt nem számít: átvett terméknél a tükör befagyott.
+   */
+  ownSale: OwnSaleRow | null;
   /**
    * A VALTOZAT FELARA A UNAS OLDALAROL (`ProductVariant.unasVariantExtraGrossPrice`).
    *
@@ -135,6 +143,22 @@ export function resolvePriceSource(input: {
      *   itt hozzaadni    -> a vevo TOBBET fizetne (a felar ketszer szamolna)
      *   a tukornel nem   -> a vevo KEVESEBBET fizetne
      */
+    /*
+      A FUTÓ SAJÁT AKCIÓ ÁRA MEGY KI (T4.1-D3, akció 2. szelet), ugyanazzal a
+      szabállyal, mint a tükör akciójánál ("viszi az akciókat", Balázs,
+      2026-09-04): a bolt a futó akció árát kapja összegként. A pénznem a saját
+      áré: az akció ugyanannak a változatnak az ára, más pénznemet nem hordoz.
+    */
+    if (input.ownSale && isOwnSaleActive(input.ownSale, input.now))
+      return {
+        ok: true,
+        source: "own-sale",
+        price: {
+          sellingGrossPrice: input.ownSale.sellingSaleGrossPrice,
+          sellingPriceCurrency: input.own.sellingPriceCurrency,
+        },
+        surcharge: null,
+      };
     return { ok: true, source: "own", price: input.own, surcharge: null };
   }
 
@@ -306,4 +330,6 @@ const FORRAS_NEVE: Record<PriceOwner, string> = {
   "mirror-sale":
     "UNAS tükör, AKCIÓS ár (UnasProductSnapshot.saleGrossPrice) -- a boltban most is ez az ár fut",
   own: "Acropora OS (ProductVariant.sellingGrossPrice) -- a gazdaságot átvettük",
+  "own-sale":
+    "Acropora OS, AKCIÓS ár (ProductVariant.sellingSaleGrossPrice) -- a saját akció most fut",
 };

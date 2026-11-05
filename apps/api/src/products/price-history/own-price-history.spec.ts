@@ -42,6 +42,7 @@ const input = (over: Partial<Parameters<typeof recordOwnPrice>[1]> = {}) => ({
   variantId: "v1",
   currency: "HUF",
   grossPrice: D("14490"),
+  saleGrossPrice: null,
   observedAt: AT,
   ...over,
 });

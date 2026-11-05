@@ -148,6 +148,8 @@ export type ProjectionSchedulerDatabase = Pick<
   | "product"
   | "externalReference"
   | "unasProductSnapshot"
+  /** A saját akció határa (T4.1-D3, akció 2. szelet): az átvett termék akciója a változaton áll. */
+  | "productVariant"
   /** A tények változása (SEO P0 PR 8): a tény-írás a terméket nem érinti. */
   | "productKnowledgeFact"
   /** A natív célú kulcsok (tömeg, méret): azok akkor is esedékessé tesznek, ha a termékismeret ki van kapcsolva. */
@@ -546,13 +548,43 @@ export class MedusaProjectionScheduler
   private async akcioHatarAzonositok(): Promise<string[]> {
     const most = this.now();
     const ablak = { gt: new Date(most.getTime() - AKCIO_ABLAK_MS), lte: most };
-    const sorok = await this.db.unasProductSnapshot.findMany({
+    const tukor = await this.db.unasProductSnapshot.findMany({
       where: {
         OR: [{ saleStartsAt: ablak }, { saleEndsAt: ablak }],
         product: { isActive: true, webshopExcluded: false },
       },
       select: { productId: true, saleStartsAt: true, saleEndsAt: true },
     });
+    /*
+      A SAJÁT AKCIÓ HATÁRA IS (T4.1-D3, akció 2. szelet): az átvett termék akciója
+      a változaton áll (`sellingSale*`), és ugyanúgy az óra szerint vált, írás
+      nélkül. Csak ACROPORA gazdánál: a UNAS gazdájú termék árát a tükör adja, a
+      saját akció mezői ott nem mennek ki (`resolvePriceSource`).
+    */
+    const sajat = await this.db.productVariant.findMany({
+      where: {
+        isActive: true,
+        OR: [{ sellingSaleStartsAt: ablak }, { sellingSaleEndsAt: ablak }],
+        product: {
+          isActive: true,
+          webshopExcluded: false,
+          catalogAuthority: "ACROPORA",
+        },
+      },
+      select: {
+        productId: true,
+        sellingSaleStartsAt: true,
+        sellingSaleEndsAt: true,
+      },
+    });
+    const sorok = [
+      ...tukor,
+      ...sajat.map((sor) => ({
+        productId: sor.productId,
+        saleStartsAt: sor.sellingSaleStartsAt,
+        saleEndsAt: sor.sellingSaleEndsAt,
+      })),
+    ];
     if (!sorok.length) return [];
 
     const kotesek = await this.db.externalReference.findMany({
@@ -575,7 +607,9 @@ export class MedusaProjectionScheduler
         );
         return hatarok.some((hatar) => vetitve === null || hatar > vetitve);
       })
-      .map((sor) => sor.productId);
+      .map((sor) => sor.productId)
+      // egy termék több változatának határa egy bejegyzés
+      .filter((id, i, ids) => ids.indexOf(id) === i);
   }
 
   /**

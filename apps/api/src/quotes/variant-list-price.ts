@@ -31,6 +31,9 @@ export async function loadVariantListPrices(
       vatRate: true,
       sellingGrossPrice: true,
       sellingPriceCurrency: true,
+      sellingSaleGrossPrice: true,
+      sellingSaleStartsAt: true,
+      sellingSaleEndsAt: true,
       unasVariantExtraGrossPrice: true,
       product: { select: { catalogAuthority: true } },
     },
@@ -62,6 +65,7 @@ export async function loadVariantListPrices(
           sellingGrossPrice: v.sellingGrossPrice,
           sellingPriceCurrency: v.sellingPriceCurrency,
         },
+        ownSale: v,
         variantSurcharge: v.unasVariantExtraGrossPrice,
         now,
       });

@@ -60,6 +60,7 @@ describe("honnan jön az ár", () => {
       authority: "UNAS",
       mirror: tukor(),
       own: nincsSajat,
+      ownSale: null,
       variantSurcharge: null,
       now: most,
     });
@@ -84,6 +85,7 @@ describe("honnan jön az ár", () => {
       authority: "ACROPORA",
       mirror: tukor({ grossPrice: forint("7800") }),
       own: sajat,
+      ownSale: null,
       variantSurcharge: null,
       now: most,
     });
@@ -107,6 +109,7 @@ describe("honnan jön az ár", () => {
       authority: "UNAS",
       mirror: tukor(),
       own: nincsSajat,
+      ownSale: null,
       variantSurcharge: null,
       now: most,
     });
@@ -124,6 +127,7 @@ describe("honnan jön az ár", () => {
       authority: "UNAS",
       mirror: tukor({ currency: "EUR" }),
       own: nincsSajat,
+      ownSale: null,
       variantSurcharge: null,
       now: most,
     });
@@ -140,6 +144,7 @@ describe("honnan jön az ár", () => {
       authority: null,
       mirror: tukor(),
       own: sajat,
+      ownSale: null,
       variantSurcharge: null,
       now: most,
     });
@@ -155,6 +160,7 @@ describe("a három hiány három külön néven", () => {
       authority: "UNAS",
       mirror: null,
       own: nincsSajat,
+      ownSale: null,
       variantSurcharge: null,
       now: most,
     });
@@ -168,6 +174,7 @@ describe("a három hiány három külön néven", () => {
       authority: "UNAS",
       mirror: tukor({ grossPrice: null }),
       own: nincsSajat,
+      ownSale: null,
       variantSurcharge: null,
       now: most,
     });
@@ -180,6 +187,7 @@ describe("a három hiány három külön néven", () => {
       authority: "ACROPORA",
       mirror: tukor(),
       own: nincsSajat,
+      ownSale: null,
       variantSurcharge: null,
       now: most,
     });
@@ -203,6 +211,7 @@ describe("a három hiány három külön néven", () => {
         authority: "UNAS",
         mirror: null,
         own: nincsSajat,
+        ownSale: null,
         variantSurcharge: null,
         now: most,
       }),
@@ -212,6 +221,7 @@ describe("a három hiány három külön néven", () => {
         authority: "UNAS",
         mirror: tukor({ grossPrice: null }),
         own: nincsSajat,
+        ownSale: null,
         variantSurcharge: null,
         now: most,
       }),
@@ -221,6 +231,7 @@ describe("a három hiány három külön néven", () => {
         authority: "ACROPORA",
         mirror: tukor(),
         own: nincsSajat,
+        ownSale: null,
         variantSurcharge: null,
         now: most,
       }),
@@ -256,6 +267,7 @@ describe("az aktív akció ára megy ki", () => {
       authority: "UNAS",
       mirror: tukor({ saleGrossPrice: forint("3500") }),
       own: nincsSajat,
+      ownSale: null,
       variantSurcharge: null,
       now: most,
     });
@@ -278,6 +290,7 @@ describe("az aktív akció ára megy ki", () => {
       authority: "UNAS",
       mirror: tukor({ saleGrossPrice: forint("3500") }),
       own: nincsSajat,
+      ownSale: null,
       variantSurcharge: null,
       now: most,
     });
@@ -306,6 +319,7 @@ describe("az aktív akció ára megy ki", () => {
       authority: "UNAS",
       mirror: tukor({ saleGrossPrice: forint("3500") }),
       own: nincsSajat,
+      ownSale: null,
       variantSurcharge: null,
       now: most,
     });
@@ -326,6 +340,7 @@ describe("az aktív akció ára megy ki", () => {
         saleEndsAt: new Date("2026-08-01T00:00:00Z"),
       }),
       own: nincsSajat,
+      ownSale: null,
       variantSurcharge: null,
       now: most,
     });
@@ -368,16 +383,83 @@ describe("a jelentés megnevezi a forrást", () => {
       describePriceSource("mirror"),
       describePriceSource("mirror-sale"),
       describePriceSource("own"),
+      describePriceSource("own-sale"),
     ];
     /*
       HAROM KULONBOZO MONDAT. Egy kozos szoveg epp azt venne el, amiert a mezo
       letezik -- es az akcios ag korabban PONTOSAN a listaar mondatat kapta meg.
     */
-    assert.equal(new Set(nevek).size, 3);
+    assert.equal(new Set(nevek).size, 4);
     assert.match(nevek[0]!, /UnasProductSnapshot/);
     assert.match(nevek[1]!, /AKCIÓS/);
     assert.match(nevek[1]!, /saleGrossPrice/);
     assert.match(nevek[2]!, /sellingGrossPrice/);
+    assert.match(nevek[3]!, /AKCIÓS/);
+    assert.match(nevek[3]!, /sellingSaleGrossPrice/);
+  });
+});
+
+/**
+ * A SAJÁT AKCIÓ (T4.1-D3, akció 2. szelet). MI PIROSÍT: futó saját akciónál a
+ * rendes ár megy ki (a vevő többet fizet); a kezdés pillanatában még a rendes,
+ * a vég pillanatában még az akciós (a félig nyitott ablak elcsúszik); a saját
+ * akció UNAS gazdánál számít; vagy a felár rákerül.
+ */
+describe("a futó saját akció ára megy ki", () => {
+  const KEZD = new Date("2026-11-10T00:00:00Z");
+  const VEG = new Date("2026-11-17T00:00:00Z");
+  const akcio = {
+    sellingSaleGrossPrice: forint("7900"),
+    sellingSaleStartsAt: KEZD,
+    sellingSaleEndsAt: VEG,
+  };
+  const dontes = (now: Date, authority: "ACROPORA" | "UNAS" = "ACROPORA") =>
+    resolvePriceSource({
+      authority,
+      mirror: tukor(),
+      own: sajat,
+      ownSale: akcio,
+      variantSurcharge: forint("150"),
+      now,
+    });
+
+  it("az ablakban az akciós ár megy, a saját pénznemmel, felár nélkül", () => {
+    const d = dontes(new Date("2026-11-12T10:00:00Z"));
+    assert.ok(d.ok);
+    assert.equal(d.source, "own-sale");
+    assert.equal(d.price.sellingGrossPrice?.toString(), "7900");
+    assert.equal(d.price.sellingPriceCurrency, "HUF");
+    assert.equal(d.surcharge, null);
+  });
+
+  it("a kezdés pillanatában már az akció, a vég pillanatában már a rendes ár", () => {
+    const kezdet = dontes(KEZD);
+    const veg = dontes(VEG);
+    const elotte = dontes(new Date(KEZD.getTime() - 1));
+    assert.ok(kezdet.ok && veg.ok && elotte.ok);
+    assert.equal(kezdet.source, "own-sale");
+    assert.equal(veg.source, "own");
+    assert.equal(veg.price.sellingGrossPrice?.toString(), "9900");
+    assert.equal(elotte.source, "own");
+  });
+
+  it("UNAS gazdánál a saját akció nem számít: a tükör ára megy", () => {
+    const d = dontes(new Date("2026-11-12T10:00:00Z"), "UNAS");
+    assert.ok(d.ok);
+    assert.equal(d.source, "mirror");
+  });
+
+  it("hiányos akció-mezőnél nincs akció (nincs nyitott határ, mint a tükörnél)", () => {
+    const d = resolvePriceSource({
+      authority: "ACROPORA",
+      mirror: null,
+      own: sajat,
+      ownSale: { ...akcio, sellingSaleEndsAt: null },
+      variantSurcharge: null,
+      now: new Date("2026-11-12T10:00:00Z"),
+    });
+    assert.ok(d.ok);
+    assert.equal(d.source, "own");
   });
 });
 
@@ -403,6 +485,7 @@ describe("a változat felára a termék-szintű tükör-ár tetejére kerül", (
       authority: "UNAS",
       mirror: tukor(),
       own: nincsSajat,
+      ownSale: null,
       variantSurcharge: forint("150"),
       now: most,
     });
@@ -419,6 +502,7 @@ describe("a változat felára a termék-szintű tükör-ár tetejére kerül", (
       authority: "UNAS",
       mirror: tukor({ saleGrossPrice: forint("6000") }),
       own: nincsSajat,
+      ownSale: null,
       variantSurcharge: forint("150"),
       now: most,
     });
@@ -442,6 +526,7 @@ describe("a változat felára a termék-szintű tükör-ár tetejére kerül", (
       authority: "ACROPORA",
       mirror: tukor(),
       own: sajat,
+      ownSale: null,
       variantSurcharge: forint("150"),
       now: most,
     });
@@ -465,6 +550,7 @@ describe("a változat felára a termék-szintű tükör-ár tetejére kerül", (
       authority: "UNAS",
       mirror: tukor({ grossPrice: null }),
       own: nincsSajat,
+      ownSale: null,
       variantSurcharge: forint("150"),
       now: most,
     });
@@ -479,6 +565,7 @@ describe("a változat felára a termék-szintű tükör-ár tetejére kerül", (
       authority: "UNAS",
       mirror: tukor(),
       own: nincsSajat,
+      ownSale: null,
       variantSurcharge: null,
       now: most,
     });
