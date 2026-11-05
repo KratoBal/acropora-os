@@ -1,3 +1,5 @@
+import { headers } from "next/headers";
+
 import {
   Gyik,
   Hero,
