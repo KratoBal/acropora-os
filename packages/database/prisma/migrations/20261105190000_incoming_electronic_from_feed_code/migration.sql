@@ -20,10 +20,10 @@ BEGIN
   WITH decided AS (
     SELECT
       d."id",
-      substring(m."body" from '<eszamla>\s*([0-9]+)\s*</eszamla>') IN ('2', '3') AS "isElectronic"
+      substring(m."body" from '<eszamla>\s*([0-9]+)\s*</eszamla>') IN ('1', '2', '3') AS "isElectronic"
     FROM "IncomingBillingDocument" d
     JOIN "SzamlazzFeedMessage" m
-      ON m."id" = d."feedMessageId" AND m."kind" = 'SZAMLABE'
+      ON m."id" = d."feedMessageId"
     WHERE d."source" = 'SZAMLAZZ'
       AND m."body" ~ '<eszamla>\s*[0-9]+\s*</eszamla>'
   ), moved AS (
