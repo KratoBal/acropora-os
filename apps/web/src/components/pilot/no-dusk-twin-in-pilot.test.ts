@@ -33,15 +33,6 @@ const DUSK_IKREK = [
 ] as const;
 
 const HATRA = new Map<string, string[]>([
-  ["components/content/article-citations-panel.tsx", ["Button", "Input"]],
-  [
-    "components/content/article-editor-page.tsx",
-    ["Button", "FormField", "Input"],
-  ],
-  [
-    "components/content/content-create-page.tsx",
-    ["Card", "CardContent", "FormField", "Input", "Select"],
-  ],
   [
     "components/customers/customer-list-page.tsx",
     ["Badge", "Card", "Input", "Select"],
@@ -124,10 +115,10 @@ const HATRA = new Map<string, string[]>([
 /*
   A SZÁMLÁLÓK (barracuda, #2125): a pontos egyezés megfogja az új vegyes fájlt, de ha valaki ugyanabban a PR-ban a
   sorát is felveszi a listára, a teszt zöld maradna. A két szám ezért külön áll: a lista bővítése két helyen kér
-  módosítást, és a reviewban látszik. Fogyáskor a számot is le kell írni (a lista története: 59 / 141 a #2125-ben, 47 / 129 a #2134-ben, 45 / 120 a #2137-ben, 36 / 96 a #2140-ben).
+  módosítást, és a reviewban látszik. Fogyáskor a számot is le kell írni (a lista története: 59 / 141 a #2125-ben, 47 / 129 a #2134-ben, 45 / 120 a #2137-ben, 36 / 96 a #2140-ben, 32 / 86 a #2229-ben, 29 / 76 a 6. szeletben, a content mappa).
 */
-const HATRA_MERET = 32;
-const HATRA_IKREK = 86;
+const HATRA_MERET = 29;
+const HATRA_IKREK = 76;
 
 /*
   A GYEREK-LISTA (barracuda, #2125): egy pilot fájl által importált, CSAK duskot használó .tsx (relatív vagy `@/`
