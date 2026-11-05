@@ -1,10 +1,24 @@
-import { Body, Controller, Get, HttpCode, Post } from "@nestjs/common";
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Post,
+  Put,
+} from "@nestjs/common";
+import { prisma } from "@acropora/database";
 import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 
 import { CurrentUser } from "../../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../../auth/decorators/require-permissions.decorator.js";
+import { AttentionClosureDto } from "./dto/attention-closure.dto.js";
 import { FeedPullDto } from "./dto/feed-pull.dto.js";
 import { FeedPullService } from "./feed-pull.service.js";
+import {
+  AttentionNotClosableError,
+  setAttentionClosure,
+} from "./paid-mark-attention-closure.js";
 import { PaidMarkRunRepository } from "./paid-mark-run.repository.js";
 import { PaidMarksAutoScheduler } from "./paid-marks-auto.scheduler.js";
 
@@ -59,5 +73,25 @@ export class PaidMarksController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.feedPull.pull(input.numbers, input.apply, user.id);
+  }
+
+  /**
+   * „KÉZZEL RENDEZVE” (6fd8c574; Balázs, 2026-11-05 16:07 UTC): egy NOT_FOUND vagy UNRESOLVED sor lezárása (például a
+   * cmfx-ben kiállított számla, amit a Számlázz.hu nem ismer, és a cmfx-ben kézzel jelölték), vagy a lezárás visszavonása.
+   * Csak a mi listánkat zárja, a Számlázz.hu-ba nem ír. A jog a „Futtatás most”-é (`BILLING_ISSUE`). Naplózva: AuditLog.
+   */
+  @Put("attention-closure")
+  @RequirePermissions(PERMISSIONS.BILLING_ISSUE)
+  async closeAttention(
+    @Body() input: AttentionClosureDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    try {
+      return await setAttentionClosure(prisma, { ...input, userId: user.id });
+    } catch (error) {
+      if (error instanceof AttentionNotClosableError)
+        throw new BadRequestException(error.message);
+      throw error;
+    }
   }
 }
