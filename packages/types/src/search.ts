@@ -8,6 +8,7 @@ export const SEARCH_GROUPS = [
   "quotes",
   "orders",
   "products",
+  "customers",
 ] as const;
 
 export type SearchGroup = (typeof SEARCH_GROUPS)[number];
