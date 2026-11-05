@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 
 import type { MedusaAdminClient } from "./medusa-admin.client.js";
+import type { LivestockKind } from "./medusa-livestock.policy.js";
 import { MedusaProductLinkRepository } from "./medusa-product-link.repository.js";
 import {
   describeShippingFlags,
@@ -84,6 +85,12 @@ export class MedusaShippingAttributesService {
      * egy korábbi OS-állapoté). A kötés-sor, ha van, elsőbbséget kap.
      */
     bySku?: string | null,
+    /**
+     * AZ ELO ALLAT FAJTAJA A KATEGORIABOL (V2.6, kartya f4e4832b): a harom
+     * gyoker egyike, vagy `null`, ha nem elo allat (vagy tobb gyoker alatt all).
+     * A bolt csak a vevoi visszaigazolas akklimatizacios szakaszahoz kapja.
+     */
+    livestockKind: LivestockKind | null = null,
   ): Promise<ShippingAttributesOutcome> {
     if (!profile && !derivedPickupOnly)
       return { action: "skipped", reason: "no-profile" };
@@ -92,19 +99,22 @@ export class MedusaShippingAttributesService {
     const link = found ?? (bySku ? { medusaProductId: bySku } : null);
     if (!link) return { action: "skipped", reason: "no-link" };
 
-    const wanted: MedusaShippingFlags = shippingFlagsFromProfile({
-      /**
-       * A HIANYZO PROFIL MEZOI HAMISAK, es ez NEM ugyanaz, mint a fenti
-       * "kihagyjuk" ag: ide csak akkor jutunk el, ha a szarmaztatott ertek
-       * IGAZ, tehat van mit mondanunk. A tobbi harom mezo ilyenkor tenyleg
-       * ismeretlen -- es a hianyuk NEM korlatozas.
-       */
-      pickupOnly: (profile?.pickupOnly ?? false) || derivedPickupOnly,
-      foxpostForbidden: profile?.foxpostForbidden ?? false,
-      isHeavy: profile?.isHeavy ?? false,
-      isFrozen: profile?.isFrozen ?? false,
-      lockerUnsuitable: profile?.lockerUnsuitable ?? false,
-    });
+    const wanted: MedusaShippingFlags = shippingFlagsFromProfile(
+      {
+        /**
+         * A HIANYZO PROFIL MEZOI HAMISAK, es ez NEM ugyanaz, mint a fenti
+         * "kihagyjuk" ag: ide csak akkor jutunk el, ha a szarmaztatott ertek
+         * IGAZ, tehat van mit mondanunk. A tobbi harom mezo ilyenkor tenyleg
+         * ismeretlen -- es a hianyuk NEM korlatozas.
+         */
+        pickupOnly: (profile?.pickupOnly ?? false) || derivedPickupOnly,
+        foxpostForbidden: profile?.foxpostForbidden ?? false,
+        isHeavy: profile?.isHeavy ?? false,
+        isFrozen: profile?.isFrozen ?? false,
+        lockerUnsuitable: profile?.lockerUnsuitable ?? false,
+      },
+      livestockKind,
+    );
     const leiras = describeShippingFlags(wanted);
 
     /**
@@ -126,14 +136,32 @@ export class MedusaShippingAttributesService {
       csomagautomata-jelzőt nem tudta átvinni.
     */
     const shopKnowsLocker = "locker_unsuitable" in current;
-    const { locker_unsuitable: lockerUnsuitable, ...withoutLocker } = wanted;
-    const payload: MedusaShippingFlags = shopKnowsLocker
-      ? wanted
-      : withoutLocker;
-    const flags =
+    /*
+      UGYANEZ A FAJTARA (commerce V2.6 S1a): a bolt szigoru validatora egy ismeretlen `livestock_kind` miatt az
+      EGESZ irast elutasitana, vagyis az elo allat `pickup_only` jelzoje is elakadna. A mezo ezert csak akkor
+      megy, ha a bolt SAJAT valasza hozza (az S1a utan a "nincs rekord" alapertelmezes is `null`-t ad, tehat
+      a kulcs ott van). A regi bolt a korabbi jelzoket kapja, es a jelentes kimondja, ha a fajta nem ment at.
+    */
+    const shopKnowsKind = "livestock_kind" in current;
+    const {
+      locker_unsuitable: lockerUnsuitable,
+      livestock_kind: wantedKind,
+      ...withoutNewer
+    } = wanted;
+    const payload: MedusaShippingFlags = {
+      ...withoutNewer,
+      ...(shopKnowsLocker ? { locker_unsuitable: lockerUnsuitable } : {}),
+      ...(shopKnowsKind ? { livestock_kind: wantedKind ?? null } : {}),
+    };
+    const notes = [
       !shopKnowsLocker && lockerUnsuitable
-        ? `${leiras} (a bolt még nem ismeri a csomagautomata-jelzőt, nem ment át)`
-        : leiras;
+        ? "a bolt még nem ismeri a csomagautomata-jelzőt, nem ment át"
+        : null,
+      !shopKnowsKind && wantedKind
+        ? "a bolt még nem ismeri az élő állat fajtáját, nem ment át"
+        : null,
+    ].filter((note): note is string => note !== null);
+    const flags = notes.length ? `${leiras} (${notes.join("; ")})` : leiras;
 
     if (!shippingFlagsDiffer(current, payload))
       return {

@@ -18,6 +18,7 @@ const PROFIL = {
 const FA = [
   { id: "gy1", name: "Korallok", parentId: null },
   { id: "gy1a", name: "SPS", parentId: "gy1" },
+  { id: "gy2", name: "Halak", parentId: null },
   { id: "mu1", name: "Technika", parentId: null },
 ];
 
@@ -34,6 +35,7 @@ function fakes(
     apply: boolean;
     derived: boolean;
     bySku?: string | null;
+    kind?: string;
   }[] = [];
   const lekerdezes: unknown[] = [];
 
@@ -65,8 +67,15 @@ function fakes(
       apply: boolean,
       derived = false,
       bySku: string | null = null,
+      kind: string | null = null,
     ) => {
-      hivasok.push({ id, apply, derived, ...(bySku ? { bySku } : {}) });
+      hivasok.push({
+        id,
+        apply,
+        derived,
+        ...(bySku ? { bySku } : {}),
+        ...(kind ? { kind } : {}),
+      });
       return apply
         ? ({
             action: "applied",
@@ -184,9 +193,36 @@ describe("a szállítási jellemzők parancsa", () => {
     await runShippingAttributesCli([], f.out, undefined, f.database, f.service);
 
     assert.deepEqual(f.hivasok, [
-      { id: "prod-elo-1", apply: false, derived: true },
+      { id: "prod-elo-1", apply: false, derived: true, kind: "CORAL" },
     ]);
     assert.match(f.szoveg(), /1 élő állat besorolás alapján/);
+  });
+
+  /**
+   * V2.6: A FAJTA TERMEKENKENT SZAMOLODIK. MI PIROSIT: ha a fajta az elso
+   * termekrol a tobbire is atragad; ha a ket gyoker alatt allo termek fajtat kap.
+   */
+  it("a fajta termékenként számolódik, két gyökér alatt álló termék fajtája null", async () => {
+    const f = fakes(
+      [],
+      [
+        { productId: "prod-koral", categoryId: "gy1a" },
+        { productId: "prod-hal", categoryId: "gy2" },
+        { productId: "prod-ketto", categoryId: "gy1" },
+        { productId: "prod-ketto", categoryId: "gy2" },
+      ],
+    );
+
+    await runShippingAttributesCli([], f.out, undefined, f.database, f.service);
+
+    assert.deepEqual(
+      f.hivasok.map((h) => [h.id, h.kind ?? null]),
+      [
+        ["prod-hal", "FISH"],
+        ["prod-ketto", null],
+        ["prod-koral", "CORAL"],
+      ],
+    );
   });
 
   it("profil nélkül megmondja, hogy nincs mit átvinni", async () => {

@@ -1,5 +1,10 @@
 import type { MedusaAdminClient } from "./medusa-admin.client.js";
-import { liveAnimalSubtreeIds } from "./medusa-livestock.policy.js";
+import {
+  deriveLivestockKind,
+  liveAnimalKindSubtrees,
+  liveAnimalSubtreeIds,
+  type LivestockKind,
+} from "./medusa-livestock.policy.js";
 import type { ShippingAttributesCliDatabase } from "./medusa-shipping-attributes.cli.js";
 import type {
   MedusaShippingAttributesService,
@@ -42,10 +47,17 @@ export interface ShippingOnCreate {
 export function shippingSourceFor(input: {
   handRow: OsShippingProfile | null;
   liveAnimal: boolean;
-}): { profile: OsShippingProfile | null; derivedPickupOnly: boolean } {
+  /** Az elo allat fajtaja a kategoriabol (V2.6), vagy null. */
+  livestockKind?: LivestockKind | null;
+}): {
+  profile: OsShippingProfile | null;
+  derivedPickupOnly: boolean;
+  livestockKind: LivestockKind | null;
+} {
   return {
     profile: input.handRow,
     derivedPickupOnly: input.liveAnimal,
+    livestockKind: input.liveAnimal ? (input.livestockKind ?? null) : null,
   };
 }
 
@@ -64,7 +76,12 @@ export class MedusaShippingOnCreate implements ShippingOnCreate {
 
   /** Egy futásban egyszer kérdezzük; a sikertelen kérdést nem tartjuk meg. */
   private profileId: Promise<string | null> | undefined;
-  private liveAnimalCategories: Promise<Set<string>> | undefined;
+  private liveAnimalCategories:
+    | Promise<{
+        ids: Set<string>;
+        kinds: ReturnType<typeof liveAnimalKindSubtrees>;
+      }>
+    | undefined;
 
   defaultProfileId(): Promise<string | null> {
     this.profileId ??= this.medusa.defaultShippingProfileId().catch((error) => {
@@ -74,10 +91,13 @@ export class MedusaShippingOnCreate implements ShippingOnCreate {
     return this.profileId;
   }
 
-  private liveAnimalIds(): Promise<Set<string>> {
+  private liveAnimalTrees() {
     this.liveAnimalCategories ??= this.database.category
       .findMany({ select: { id: true, name: true, parentId: true } })
-      .then((rows) => liveAnimalSubtreeIds(rows))
+      .then((rows) => ({
+        ids: liveAnimalSubtreeIds(rows),
+        kinds: liveAnimalKindSubtrees(rows),
+      }))
       .catch((error) => {
         this.liveAnimalCategories = undefined;
         throw error;
@@ -86,7 +106,7 @@ export class MedusaShippingOnCreate implements ShippingOnCreate {
   }
 
   async afterCreate(osProductId: string): Promise<ShippingAttributesOutcome> {
-    const liveIds = await this.liveAnimalIds();
+    const { ids: liveIds, kinds } = await this.liveAnimalTrees();
     const [placements, handRows] = await Promise.all([
       liveIds.size
         ? this.database.productCategory.findMany({
@@ -106,15 +126,21 @@ export class MedusaShippingOnCreate implements ShippingOnCreate {
         },
       }),
     ]);
-    const { profile, derivedPickupOnly } = shippingSourceFor({
+    const { profile, derivedPickupOnly, livestockKind } = shippingSourceFor({
       handRow: handRows[0] ?? null,
       liveAnimal: placements.length > 0,
+      livestockKind: deriveLivestockKind(
+        placements.map((placement) => placement.categoryId),
+        kinds,
+      ),
     });
     return this.attributes.project(
       osProductId,
       profile,
       true,
       derivedPickupOnly,
+      undefined,
+      livestockKind,
     );
   }
 }

@@ -24,7 +24,7 @@ function setup(over: {
   unas?: unknown;
   liveAnimal?: boolean;
 }) {
-  const projected: { profile: unknown; derived: boolean }[] = [];
+  const projected: { profile: unknown; derived: boolean; kind?: string }[] = [];
   const counts = { category: 0, profile: 0 };
   const database = {
     category: {
@@ -77,9 +77,15 @@ function setup(over: {
         profile: unknown,
         apply: boolean,
         derived?: boolean,
+        _bySku?: string | null,
+        kind?: string | null,
       ) => {
         assert.equal(apply, true);
-        projected.push({ profile, derived: derived ?? false });
+        projected.push({
+          profile,
+          derived: derived ?? false,
+          ...(kind ? { kind } : {}),
+        });
         return { action: "applied", medusaProductId: "m1", flags: "x" };
       },
     },
@@ -114,7 +120,21 @@ describe("the shipping class of a created product", () => {
   it("a live animal is store pickup by its category, whatever UNAS says", async () => {
     const { helper, projected } = setup({ liveAnimal: true, unas: {} });
     await helper.afterCreate("p1");
-    assert.deepEqual(projected[0], { profile: null, derived: true });
+    assert.deepEqual(projected[0], {
+      profile: null,
+      derived: true,
+      kind: "FISH",
+    });
+  });
+
+  // V2.6: the kind of live animal comes from the root the product stands under, and a product that is not one has none
+  it("a live animal carries the kind of its root, anything else carries none", async () => {
+    const fish = setup({ liveAnimal: true });
+    await fish.helper.afterCreate("p1");
+    assert.equal(fish.projected[0]!.kind, "FISH");
+    const tool = setup({});
+    await tool.helper.afterCreate("p1");
+    assert.equal("kind" in tool.projected[0]!, false);
   });
 
   it("asks the profile and the category tree once per run", async () => {

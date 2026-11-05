@@ -31,6 +31,8 @@ describe("a szállítási zászlók leképezése", () => {
         is_heavy: true,
         is_frozen: false,
         locker_unsuitable: true,
+        // V2.6: no kind without a derived one
+        livestock_kind: null,
       },
     );
     // ES A FORDITOTT MINTA IS, kulonben ket felcserelt mezo eszrevetlen marad:
@@ -49,6 +51,7 @@ describe("a szállítási zászlók leképezése", () => {
         is_heavy: false,
         is_frozen: true,
         locker_unsuitable: false,
+        livestock_kind: null,
       },
     );
   });
@@ -147,5 +150,74 @@ describe("a zászlók emberi alakja", () => {
       }),
       "nincs korlátozás",
     );
+  });
+});
+
+/*
+  AZ ELO ALLAT FAJTAJA A JELZOK KOZOTT (V2.6). MI PIROSIT: ha a fajta nem jut el a
+  kimeno jelzokig; ha a kulonbseg-vizsgalat nem latja (a bolt allapota sosem
+  frissulne); ha a "nincs fajta" es a "mar nincs fajta" ugyanannak latszana.
+*/
+describe("az élő állat fajtája a szállítási jelzők között", () => {
+  const PROFIL = {
+    pickupOnly: true,
+    foxpostForbidden: false,
+    isHeavy: false,
+    isFrozen: false,
+  };
+  const ALAP = {
+    pickup_only: true,
+    foxpost_forbidden: false,
+    is_heavy: false,
+    is_frozen: false,
+    locker_unsuitable: false,
+  };
+
+  it("a leképezés viszi a fajtát, és fajta nélkül null", () => {
+    assert.equal(
+      shippingFlagsFromProfile(PROFIL, "CORAL").livestock_kind,
+      "CORAL",
+    );
+    assert.equal(shippingFlagsFromProfile(PROFIL).livestock_kind, null);
+  });
+
+  it("a fajta változása is változás, és a fajta törlése is", () => {
+    assert.equal(
+      shippingFlagsDiffer(
+        { ...ALAP, livestock_kind: "FISH" },
+        { ...ALAP, livestock_kind: "CORAL" },
+      ),
+      true,
+    );
+    assert.equal(
+      shippingFlagsDiffer(
+        { ...ALAP, livestock_kind: "FISH" },
+        { ...ALAP, livestock_kind: null },
+      ),
+      true,
+    );
+    assert.equal(
+      shippingFlagsDiffer(
+        { ...ALAP, livestock_kind: "FISH" },
+        { ...ALAP, livestock_kind: "FISH" },
+      ),
+      false,
+    );
+  });
+
+  // a hianyzo mezo (regi bolt) es a null ugyanaz: egyik sem fajta
+  it("a hiányzó fajta és a null egyforma", () => {
+    assert.equal(
+      shippingFlagsDiffer(ALAP, { ...ALAP, livestock_kind: null }),
+      false,
+    );
+  });
+
+  it("a jelentés kimondja a fajtát", () => {
+    assert.match(
+      describeShippingFlags({ ...ALAP, livestock_kind: "INVERTEBRATE" }),
+      /élő állat: gerinctelen/,
+    );
+    assert.doesNotMatch(describeShippingFlags(ALAP), /élő állat/);
   });
 });
