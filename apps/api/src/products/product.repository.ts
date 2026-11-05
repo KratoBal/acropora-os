@@ -18,11 +18,14 @@ import {
 } from "./takeover-price.js";
 import { recordOwnPrice } from "./price-history/own-price-history.js";
 import { retryOnSerializationConflict } from "../common/transaction-retry.util.js";
+import { unasShippingProfile } from "../integrations/medusa/medusa-unas-shipping.policy.js";
 import {
+  manualFlagsDifferingFromUnas,
   pinUnasShippingFlags,
   SHIPPING_FLAGS,
   type ShippingFlag,
   type ShippingFlagSource,
+  type StoredShippingProfile,
 } from "./shipping-profile-sources.js";
 import type { ArKep } from "../imports/unas/unas-ar-tortenet.js";
 import type { CreateProductDto } from "./dto/create-product.dto.js";
@@ -75,7 +78,7 @@ const productInclude = {
  * nobody has looked at yet (it has no profile). Not set: no narrowing.
  */
 export function shippingFilterWhere(
-  filter: ShippingFilterValue | undefined,
+  filter: Exclude<ShippingFilterValue, "unasDiff"> | undefined,
 ): Prisma.ProductWhereInput {
   if (!filter) return {};
   if (filter === "none") return { shippingProfile: { is: null } };
@@ -213,6 +216,17 @@ export interface ProductDatabase {
   /** a feltöltött kép kiolvasásához (T4.1-D3, 6. szelet) */
   productImage: {
     findFirst(args: unknown): Promise<StoredProductImage | null>;
+  };
+  /** a lista eltérés-szűrőjéhez (a82ed229, 2d): a kézi jelzős sorok és a UNAS-adatuk */
+  productShippingProfile: {
+    findMany(
+      args: unknown,
+    ): Promise<Array<StoredShippingProfile & { productId: string }>>;
+  };
+  unasProductSnapshot: {
+    findMany(
+      args: unknown,
+    ): Promise<Array<{ productId: string; rawPayload: unknown }>>;
   };
   $transaction<T>(
     operation: (transaction: ProductTransaction) => Promise<T>,
@@ -399,6 +413,46 @@ export class ProductRepository extends Repository {
       : null;
   }
 
+  /**
+   * AZ ELTÉRÉS-SZŰRŐ (a82ed229, 2d): azok a termékek, ahol egy kézi jelző mást mond, mint a termék UNAS-adata ma
+   * (`manualFlagsDifferingFromUnas`, ugyanaz, mint a feltöltés próbájáé). A jelölt csak kézi jelzős sor lehet, és
+   * UNAS-adat nélkül nincs mihez eltérni, tehát a halmaz a kézi írások számával nő, nem a katalóguséval.
+   */
+  private async unasDiffProductIds(): Promise<string[]> {
+    const profiles = await this.productDatabase.productShippingProfile.findMany(
+      {
+        where: {
+          OR: SHIPPING_FLAGS.map((flag) => ({ [`${flag}Source`]: "MANUAL" })),
+        },
+        select: {
+          productId: true,
+          ...Object.fromEntries(
+            SHIPPING_FLAGS.flatMap((flag) => [
+              [flag, true],
+              [`${flag}Source`, true],
+            ]),
+          ),
+        },
+      },
+    );
+    if (profiles.length === 0) return [];
+    const snapshots = await this.productDatabase.unasProductSnapshot.findMany({
+      where: { productId: { in: profiles.map((p) => p.productId) } },
+      select: { productId: true, rawPayload: true },
+    });
+    const payload = new Map(snapshots.map((s) => [s.productId, s.rawPayload]));
+    return profiles
+      .filter(
+        (profile) =>
+          payload.has(profile.productId) &&
+          manualFlagsDifferingFromUnas(
+            profile,
+            unasShippingProfile(payload.get(profile.productId)),
+          ).length > 0,
+      )
+      .map((profile) => profile.productId);
+  }
+
   async list(query: ProductListQueryDto): Promise<ProductListResponse> {
     const where: Prisma.ProductWhereInput = {
       ...(query.active === undefined ? {} : { isActive: query.active }),
@@ -413,7 +467,9 @@ export class ProductRepository extends Repository {
       ...(query.listedOn
         ? { channelListings: { some: { channel: query.listedOn } } }
         : {}),
-      ...shippingFilterWhere(query.shipping),
+      ...(query.shipping === "unasDiff"
+        ? { id: { in: await this.unasDiffProductIds() } }
+        : shippingFilterWhere(query.shipping)),
       ...(query.search
         ? {
             OR: [

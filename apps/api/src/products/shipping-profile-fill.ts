@@ -5,6 +5,7 @@ import { prisma } from "@acropora/database";
 import { unasShippingProfile } from "../integrations/medusa/medusa-unas-shipping.policy.js";
 import {
   applyUnasShippingFlags,
+  manualFlagsDifferingFromUnas,
   planUnasShippingFlags,
   SHIPPING_FLAGS,
   type ShippingFlag,
@@ -121,12 +122,8 @@ export async function planShippingFill(
           plan,
         });
       if (regi)
-        for (const flag of SHIPPING_FLAGS)
-          if (
-            regi[`${flag}Source`] === "MANUAL" &&
-            regi[flag] !== (unas?.[flag] ?? false)
-          )
-            report.manualDiffers.push({ productId: sor.productId, flag });
+        for (const flag of manualFlagsDifferingFromUnas(regi, unas))
+          report.manualDiffers.push({ productId: sor.productId, flag });
     }
   }
   return { report, changes, fingerprint: shippingFillFingerprint(changes) };

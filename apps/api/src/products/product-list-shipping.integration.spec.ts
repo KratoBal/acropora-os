@@ -54,6 +54,42 @@ describe(
       await prisma.productShippingProfile.create({
         data: { productId: ids.looked, ...flags },
       });
+      // 2d: UNAS denies Foxpost on two of them; one was allowed by hand, one agrees by hand
+      const foxpostDenied = {
+        ShippingMethods: {
+          Denied: { Method: [{ Name: "Foxpost csomagautomaták" }] },
+        },
+      };
+      ids.manualDiff = await product("manualDiff");
+      ids.manualSame = await product("manualSame");
+      ids.manualNoUnas = await product("manualNoUnas");
+      for (const key of ["manualDiff", "manualSame"])
+        await prisma.unasProductSnapshot.create({
+          data: { productId: ids[key]!, rawPayload: foxpostDenied },
+        });
+      await prisma.productShippingProfile.create({
+        data: {
+          productId: ids.manualDiff,
+          ...flags,
+          foxpostForbiddenSource: "MANUAL",
+        },
+      });
+      await prisma.productShippingProfile.create({
+        data: {
+          productId: ids.manualSame,
+          ...flags,
+          foxpostForbidden: true,
+          foxpostForbiddenSource: "MANUAL",
+        },
+      });
+      await prisma.productShippingProfile.create({
+        data: {
+          productId: ids.manualNoUnas,
+          ...flags,
+          isHeavy: true,
+          isHeavySource: "MANUAL",
+        },
+      });
     });
 
     after(async () => {
@@ -64,7 +100,8 @@ describe(
     });
 
     const listed = async (
-      shipping?: "isHeavy" | "lockerUnsuitable" | "isFrozen" | "none",
+      shipping?:
+        "isHeavy" | "lockerUnsuitable" | "isFrozen" | "none" | "unasDiff",
     ) =>
       (
         await repository.list({
@@ -89,10 +126,19 @@ describe(
     it("the filter: a flag keeps only the products with it; none keeps only those never looked at", async () => {
       const names = async (shipping: Parameters<typeof listed>[0]) =>
         (await listed(shipping)).map((item) => item.id).sort();
-      assert.deepEqual(await names("isHeavy"), [ids.heavyLocker]);
+      assert.deepEqual(
+        await names("isHeavy"),
+        [ids.heavyLocker, ids.manualNoUnas].sort(),
+      );
       assert.deepEqual(await names("lockerUnsuitable"), [ids.heavyLocker]);
       assert.deepEqual(await names("isFrozen"), []);
       assert.deepEqual(await names("none"), [ids.never]);
+    });
+
+    it("the UNAS difference filter: only a hand-set flag that UNAS contradicts today (2d)", async () => {
+      const found = (await listed("unasDiff")).map((item) => item.id);
+      // not the hand-set flag that agrees with UNAS, not the one without UNAS data, not the UNAS-sourced rows
+      assert.deepEqual(found, [ids.manualDiff]);
     });
   },
 );

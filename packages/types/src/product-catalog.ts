@@ -152,8 +152,15 @@ export const SHIPPING_FLAG_SHORT_LABELS: Readonly<
   lockerUnsuitable: "Automatába nem fér",
 };
 
-/** The list's shipping filter: one flag set, or nobody has looked at the product yet. */
-export const SHIPPING_FILTER_VALUES = [...SHIPPING_FLAG_KEYS, "none"] as const;
+/**
+ * The list's shipping filter: one flag set; nobody has looked at the product yet; or a flag set by hand that differs
+ * from what the product's UNAS data says (`unasDiff`, a82ed229 2d).
+ */
+export const SHIPPING_FILTER_VALUES = [
+  ...SHIPPING_FLAG_KEYS,
+  "none",
+  "unasDiff",
+] as const;
 export type ShippingFilterValue = (typeof SHIPPING_FILTER_VALUES)[number];
 
 export function isShippingFilterValue(

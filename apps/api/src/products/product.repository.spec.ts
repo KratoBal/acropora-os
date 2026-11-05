@@ -396,6 +396,19 @@ function createDatabase({
         return foundImage;
       },
     },
+    // a82ed229, 2d: the list's UNAS difference filter
+    productShippingProfile: {
+      findMany: async (args) => {
+        calls.push({ operation: "shippingProfileFindMany", args });
+        return [];
+      },
+    },
+    unasProductSnapshot: {
+      findMany: async (args) => {
+        calls.push({ operation: "snapshotFindMany", args });
+        return [];
+      },
+    },
     $transaction: (operation, options) => {
       txOptions.push(options);
       return operation(transaction);

@@ -69,6 +69,22 @@ export function planUnasShippingFlags(
   };
 }
 
+/**
+ * A KÉZI JELZŐK, AMIK ELTÉRNEK A UNAS-ÉTÓL (a82ed229, 2d): a kézzel állított jelző marad, de látszania kell, ha a
+ * UNAS ma mást mondana. A feltöltés próbája és a lista eltérés-szűrője ugyanezt kérdezi. A UNAS felülírás nélküli
+ * terméke (`unas` `null`) korlátozás nélküli, tehát ott a kézi `true` az eltérés.
+ */
+export function manualFlagsDifferingFromUnas(
+  profile: StoredShippingProfile,
+  unas: OsShippingProfile | null,
+): ShippingFlag[] {
+  return SHIPPING_FLAGS.filter(
+    (flag) =>
+      profile[`${flag}Source`] === "MANUAL" &&
+      profile[flag] !== (unas?.[flag] ?? false),
+  );
+}
+
 const PROFIL_MEZOK = {
   pickupOnly: true,
   foxpostForbidden: true,
