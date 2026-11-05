@@ -10,7 +10,7 @@ body {
   background: var(--jatek-bg);
   color: var(--jatek-text);
   font-family: var(--font-dm-sans), "DM Sans", system-ui, sans-serif;
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.65;
 }
 a {
@@ -54,7 +54,7 @@ summary:focus-visible {
   align-items: center;
   justify-content: center;
   gap: 9px;
-  font-size: 10px;
+  font-size: 13px;
   letter-spacing: 1.5px;
 }
 .jatek-dot {
@@ -93,7 +93,7 @@ header {
 .jatek-brand small {
   display: block;
   font:
-    7px var(--font-dm-sans),
+    13px var(--font-dm-sans),
     "DM Sans",
     system-ui,
     sans-serif;
@@ -105,7 +105,7 @@ nav {
   display: flex;
   gap: 32px;
   color: #b9c6d0;
-  font-size: 13px;
+  font-size: 15px;
 }
 nav a:hover,
 .jatek-text-link:hover,
@@ -121,7 +121,7 @@ nav a:hover,
   background: var(--jatek-orange);
   border: 1px solid var(--jatek-orange);
   color: #11171b;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 700;
   border-radius: 5px;
   transition:
@@ -140,7 +140,7 @@ nav a:hover,
 }
 .jatek-button.jatek-small {
   padding: 11px 17px;
-  font-size: 12px;
+  font-size: 15px;
   gap: 25px;
 }
 .jatek-hero {
@@ -156,7 +156,7 @@ nav a:hover,
   padding: 57px 0 45px;
 }
 .jatek-eyebrow {
-  font-size: 10px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 2.1px;
   color: var(--jatek-blue);
@@ -188,7 +188,7 @@ h1 em {
 }
 .jatek-hero-copy > p {
   color: var(--jatek-muted);
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.8;
 }
 .jatek-hero-actions {
@@ -198,7 +198,7 @@ h1 em {
   margin-top: 30px;
 }
 .jatek-text-link {
-  font-size: 12px;
+  font-size: 15px;
 }
 .jatek-text-link span {
   margin-left: 12px;
@@ -216,16 +216,16 @@ h1 em {
   border-radius: 50%;
   display: grid;
   place-items: center;
-  font-size: 10px;
+  font-size: 13px;
   color: var(--jatek-orange);
 }
 .jatek-launch strong {
   display: block;
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 500;
 }
 .jatek-launch small {
-  font-size: 10px;
+  font-size: 13px;
   color: var(--jatek-muted);
   display: block;
   margin-top: 3px;
@@ -270,13 +270,13 @@ h1 em {
   margin: 8px 0;
 }
 .jatek-prize-label > span:not(.jatek-eyebrow) {
-  font-size: 9px;
+  font-size: 13px;
   letter-spacing: 3px;
   color: var(--jatek-muted);
 }
 .jatek-prize-label a {
   display: block;
-  font-size: 10px;
+  font-size: 13px;
   margin-top: 10px;
   color: #c1ced8;
 }
@@ -284,8 +284,8 @@ h1 em {
   position: absolute;
   bottom: 16px;
   right: 0;
-  color: #8395a4;
-  font-size: 8px;
+  color: var(--jatek-muted);
+  font-size: 13px;
   max-width: 280px;
   text-align: right;
 }
@@ -298,7 +298,7 @@ h1 em {
   border-bottom: 1px solid var(--jatek-border);
   padding: 23px 0;
   color: #b5c3ce;
-  font-size: 12px;
+  font-size: 15px;
 }
 .jatek-campaign-strip b {
   color: var(--jatek-orange);
@@ -310,9 +310,9 @@ h1 em {
     sans-serif;
 }
 .jatek-campaign-strip .jatek-strip-end {
-  font-size: 8px;
+  font-size: 13px;
   letter-spacing: 2px;
-  color: #738695;
+  color: var(--jatek-muted);
 }
 .jatek-play-section {
   padding-top: 86px;
@@ -330,7 +330,7 @@ h2 {
   margin: 12px 0 0;
 }
 .jatek-pill {
-  font-size: 10px;
+  font-size: 13px;
   color: #b5c5d0;
   padding: 7px 12px;
   border: 1px solid var(--jatek-border);
@@ -355,14 +355,14 @@ h2 {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  font-size: 8px;
+  font-size: 13px;
   letter-spacing: 1.3px;
-  color: #718b9e;
+  color: var(--jatek-muted);
 }
 .jatek-status {
   color: var(--jatek-blue);
   letter-spacing: 0.3px;
-  font-size: 10px;
+  font-size: 13px;
   display: flex;
   align-items: center;
   gap: 7px;
@@ -382,12 +382,12 @@ h2 {
 }
 .jatek-muted {
   color: var(--jatek-muted);
-  font-size: 11px;
+  font-size: 14px;
   margin: 0 0 27px;
 }
 form > label {
   display: block;
-  font-size: 11px;
+  font-size: 14px;
   margin: 16px 0 8px;
 }
 form > label span {
@@ -401,15 +401,15 @@ input:not([type="checkbox"]) {
   color: var(--jatek-text);
   background: #08121a;
   min-height: 49px;
-  font-size: 13px;
+  font-size: 15px;
 }
 input::placeholder {
-  color: #6c8395;
+  color: var(--jatek-muted);
 }
 .jatek-field-note {
   display: block;
-  font-size: 9px;
-  color: #8298a9;
+  font-size: 13px;
+  color: var(--jatek-muted);
   margin-top: 6px;
 }
 .jatek-consents {
@@ -419,7 +419,7 @@ input::placeholder {
   display: flex;
   align-items: start;
   gap: 10px;
-  font-size: 10px;
+  font-size: 13px;
   color: #b8c6d0;
   line-height: 1.8;
 }
@@ -431,7 +431,7 @@ input::placeholder {
   accent-color: var(--jatek-orange);
 }
 .jatek-check b {
-  font-size: 9px;
+  font-size: 13px;
   font-weight: 400;
   color: var(--jatek-muted);
 }
@@ -451,12 +451,12 @@ input::placeholder {
 }
 .jatek-submit {
   width: 100%;
-  font-size: 13px;
+  font-size: 15px;
   padding: 15px 19px;
 }
 .jatek-privacy-note {
-  color: #7890a2;
-  font-size: 9px;
+  color: var(--jatek-muted);
+  font-size: 13px;
   text-align: center;
   margin: 11px 0 0;
 }
@@ -519,7 +519,7 @@ input::placeholder {
   margin: 8px 0;
 }
 .jatek-week-card > p {
-  font-size: 10px;
+  font-size: 13px;
   color: var(--jatek-muted);
   margin: 2px 0 28px;
 }
@@ -532,9 +532,9 @@ input::placeholder {
 .jatek-timer-title {
   display: flex;
   justify-content: space-between;
-  color: #91a6b7;
+  color: var(--jatek-muted);
   letter-spacing: 1.3px;
-  font-size: 8px;
+  font-size: 13px;
 }
 .jatek-timer-title span:last-child {
   color: var(--jatek-orange);
@@ -560,9 +560,9 @@ input::placeholder {
   font-variant-numeric: tabular-nums;
 }
 .jatek-timer small {
-  font-size: 7px;
+  font-size: 13px;
   letter-spacing: 1.5px;
-  color: #7c97ab;
+  color: var(--jatek-muted);
 }
 .jatek-timer i {
   font-size: 20px;
@@ -570,21 +570,21 @@ input::placeholder {
   color: #3c586b;
 }
 .jatek-timer-block > small {
-  font-size: 9px;
+  font-size: 13px;
   line-height: 1.6;
-  color: #7c97ab;
+  color: var(--jatek-muted);
   display: block;
 }
 .jatek-week-foot {
   margin-top: auto;
   padding-top: 28px;
   color: #b7c7d2;
-  font-size: 10px;
+  font-size: 13px;
 }
 .jatek-week-foot span {
   display: block;
-  font-size: 10px;
-  color: #6f8b9e;
+  font-size: 13px;
+  color: var(--jatek-muted);
   margin-top: 5px;
 }
 .jatek-how {
@@ -624,7 +624,7 @@ input::placeholder {
   margin-top: 23px;
 }
 .jatek-steps p {
-  font-size: 12px;
+  font-size: 15px;
   color: var(--jatek-muted);
   max-width: 310px;
 }
@@ -653,7 +653,7 @@ input::placeholder {
   margin: 0 0 8px;
 }
 .jatek-empty-winners p {
-  font-size: 11px;
+  font-size: 14px;
   color: var(--jatek-muted);
   max-width: 650px;
   margin: 0;
@@ -673,7 +673,7 @@ input::placeholder {
 details {
   border-bottom: 1px solid var(--jatek-border);
   padding: 18px 0;
-  font-size: 12px;
+  font-size: 15px;
 }
 details:first-child {
   padding-top: 0;
@@ -694,7 +694,7 @@ details[open] summary:after {
 }
 details p {
   color: var(--jatek-muted);
-  font-size: 12px;
+  font-size: 15px;
 }
 footer {
   border-top: 1px solid var(--jatek-border);
@@ -710,22 +710,22 @@ footer .jatek-brand {
   color: var(--jatek-text);
 }
 .jatek-footer-dot {
-  font-size: 9px;
+  font-size: 13px;
   color: var(--jatek-orange);
 }
 footer > span {
-  font-size: 10px;
+  font-size: 13px;
 }
 footer > div {
   display: flex;
   gap: 25px;
   margin-left: auto;
-  font-size: 10px;
+  font-size: 13px;
 }
 footer small {
   width: 100%;
-  font-size: 9px;
-  color: #5e778a;
+  font-size: 13px;
+  color: var(--jatek-muted);
 }
 .jatek-mobile-cta {
   display: none;
@@ -749,12 +749,12 @@ dialog h2 {
 }
 dialog p,
 dialog li {
-  font-size: 13px;
+  font-size: 15px;
   color: #b8c9d5;
 }
 dialog .jatek-button {
   margin-top: 20px;
-  font-size: 12px;
+  font-size: 15px;
 }
 .jatek-close {
   position: absolute;
@@ -770,7 +770,7 @@ dialog .jatek-button {
   padding: 65px 15px;
 }
 .jatek-success p {
-  font-size: 13px;
+  font-size: 15px;
   color: var(--jatek-muted);
 }
 .jatek-success-icon {
@@ -857,13 +857,13 @@ dialog .jatek-button {
     width: calc(100% - 40px);
   }
   .jatek-demo-bar {
-    font-size: 8px;
+    font-size: 13px;
     height: 29px;
     letter-spacing: 1px;
     gap: 6px;
   }
   .jatek-demo-bar > span:last-child {
-    font-size: 8px;
+    font-size: 13px;
     letter-spacing: 0;
   }
   header {
@@ -877,7 +877,7 @@ dialog .jatek-button {
     gap: 5px;
   }
   .jatek-brand small {
-    font-size: 5.5px;
+    font-size: 13px;
     letter-spacing: 1.1px;
   }
   .jatek-brand svg {
@@ -885,7 +885,7 @@ dialog .jatek-button {
   }
   .jatek-button.jatek-small {
     padding: 10px 12px;
-    font-size: 10px;
+    font-size: 13px;
     gap: 12px;
   }
   .jatek-hero {
@@ -898,7 +898,7 @@ dialog .jatek-button {
     padding: 34px 0 0;
   }
   .jatek-eyebrow {
-    font-size: 8px;
+    font-size: 13px;
     letter-spacing: 1.6px;
   }
   h1 {
@@ -911,7 +911,7 @@ dialog .jatek-button {
     display: none;
   }
   .jatek-hero-copy > p {
-    font-size: 12px;
+    font-size: 16px;
     max-width: 320px;
   }
   .jatek-desktop {
@@ -922,22 +922,22 @@ dialog .jatek-button {
     margin-top: 23px;
   }
   .jatek-button {
-    font-size: 12px;
+    font-size: 16px;
     padding: 14px 19px;
     gap: 28px;
   }
   .jatek-text-link {
-    font-size: 10px;
+    font-size: 13px;
   }
   .jatek-launch {
     margin-top: 25px;
     gap: 10px;
   }
   .jatek-launch strong {
-    font-size: 10px;
+    font-size: 13px;
   }
   .jatek-launch small {
-    font-size: 8px;
+    font-size: 13px;
     max-width: 265px;
   }
   .jatek-hero-art {
@@ -965,27 +965,27 @@ dialog .jatek-button {
     font-size: 21px;
   }
   .jatek-prize-label .jatek-eyebrow {
-    font-size: 7px;
+    font-size: 13px;
   }
   .jatek-prize-label a {
-    font-size: 9px;
+    font-size: 13px;
   }
   .jatek-prize-label > span:not(.jatek-eyebrow) {
-    font-size: 7px;
+    font-size: 13px;
   }
   .jatek-photo-note {
     bottom: 10px;
-    font-size: 6px;
+    font-size: 13px;
     width: 175px;
   }
   .jatek-campaign-strip {
     gap: 9px;
     padding: 16px 0;
     flex-wrap: wrap;
-    font-size: 9px;
+    font-size: 13px;
   }
   .jatek-campaign-strip b {
-    font-size: 15px;
+    font-size: 16px;
     margin-right: 5px;
   }
   .jatek-campaign-strip > span:last-of-type {
@@ -1006,7 +1006,7 @@ dialog .jatek-button {
     line-height: 1.25;
   }
   .jatek-pill {
-    font-size: 9px;
+    font-size: 13px;
     padding: 5px 10px;
   }
   .jatek-game-grid {
@@ -1018,24 +1018,24 @@ dialog .jatek-button {
     padding: 23px 20px;
   }
   .jatek-card-top > span:last-child {
-    font-size: 6px;
+    font-size: 13px;
     letter-spacing: 0.8px;
   }
   .jatek-status {
-    font-size: 8px;
+    font-size: 13px;
   }
   .jatek-question-card h3 {
     font-size: 22px;
     margin-top: 23px;
   }
   .jatek-muted {
-    font-size: 10px;
+    font-size: 13px;
   }
   .jatek-check {
-    font-size: 10px;
+    font-size: 13px;
   }
   .jatek-privacy-note {
-    font-size: 8px;
+    font-size: 13px;
   }
   .jatek-week-card {
     padding: 23px;
@@ -1099,7 +1099,7 @@ dialog .jatek-button {
   .jatek-steps p {
     margin: 0;
     max-width: none;
-    font-size: 12px;
+    font-size: 16px;
   }
   .jatek-winners {
     padding-top: 49px;
@@ -1121,7 +1121,7 @@ dialog .jatek-button {
     line-height: 1.4;
   }
   .jatek-empty-winners p {
-    font-size: 11px;
+    font-size: 14px;
   }
   .jatek-faq {
     grid-template-columns: 1fr;
@@ -1129,7 +1129,7 @@ dialog .jatek-button {
     padding: 49px 0;
   }
   details {
-    font-size: 12px;
+    font-size: 16px;
     padding: 17px 0;
   }
   footer {
@@ -1137,14 +1137,14 @@ dialog .jatek-button {
     gap: 18px;
   }
   footer > span {
-    font-size: 9px;
+    font-size: 13px;
   }
   footer > div {
     width: 100%;
     margin: 0;
   }
   footer small {
-    font-size: 8px;
+    font-size: 13px;
   }
   .jatek-mobile-cta {
     position: fixed;
@@ -1212,7 +1212,7 @@ body {
   gap: 10px;
 }
 .jatek-valasztasok legend {
-  font-size: 11px;
+  font-size: 14px;
   margin: 0 0 8px;
   padding: 0;
 }
@@ -1227,7 +1227,7 @@ body {
   border: 1px solid #2e4250;
   border-radius: 5px;
   background: #08121a;
-  font-size: 13px;
+  font-size: 15px;
   cursor: pointer;
 }
 .jatek-valasztas:has(input:checked) {
@@ -1257,7 +1257,7 @@ body {
   padding: 12px 14px;
   border-radius: 5px;
   border: 1px solid var(--jatek-border);
-  font-size: 13px;
+  font-size: 15px;
 }
 .jatek-uzenet[data-fajta="ok"] {
   border-color: var(--jatek-blue);
@@ -1276,7 +1276,7 @@ body {
   margin: 20px 0 10px;
 }
 .jatek-sikeres p {
-  font-size: 13px;
+  font-size: 15px;
   color: var(--jatek-muted);
   margin: 0 auto;
   max-width: 420px;
@@ -1289,7 +1289,7 @@ body {
   margin: 0 0 10px;
 }
 .jatek-nincs-kerdes p {
-  font-size: 13px;
+  font-size: 15px;
   color: var(--jatek-muted);
   margin: 0;
 }
@@ -1310,7 +1310,7 @@ body {
   font-weight: 600;
 }
 .jatek-jogi p {
-  font-size: 13px;
+  font-size: 15px;
   color: #b8c9d5;
   margin: 0 0 10px;
 }
@@ -1320,7 +1320,7 @@ body {
   border: 1px solid var(--jatek-orange);
   border-radius: 5px;
   color: var(--jatek-orange);
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 600;
 }
 .jatek-fejlec-nav-aktiv {
@@ -1335,4 +1335,54 @@ body {
 }
 .jatek-megerosites .jatek-button {
   margin-top: 22px;
+}
+
+/*
+  OLVASHATOSAG (Balazs, 2026-11-06 00:1x, mobilon "olvashatatlanul kicsi meg halvany felirat"). A meretek es a szinek
+  fent egy lepcson mentek feljebb (nincs 13 px alatti betu; mobilon a torzs es a beviteli mezo 16 px; a halvany
+  szovegek a --jatek-muted szinre, minden szoveg legalabb 4.5:1 a kartya hatteren: lasd a jatek-olvashatosag spec-et).
+  Ez a szakasz csak azt rendezi el, amit a nagyobb szoveg elmozditott. A design stilusa marad.
+*/
+.jatek-card-top {
+  flex-wrap: wrap;
+}
+.jatek-brand small {
+  white-space: nowrap;
+}
+.jatek-check {
+  font-size: 14px;
+}
+.jatek-mobile-cta[data-rejtett="true"] {
+  display: none;
+}
+@media (max-width: 700px) {
+  /* 16 px: ez alatt az iPhone a beviteli mezore ugrik, amikor belekattintanak */
+  input:not([type="checkbox"]) {
+    font-size: 16px;
+  }
+  .jatek-brand small {
+    display: none;
+  }
+  .jatek-hero-art {
+    height: 470px;
+  }
+  .jatek-prize-label {
+    bottom: 70px;
+  }
+  .jatek-photo-note {
+    left: 0;
+    right: 0;
+    bottom: 10px;
+    width: auto;
+    max-width: none;
+    text-align: left;
+  }
+  .jatek-mobile-cta {
+    bottom: max(12px, env(safe-area-inset-bottom));
+    padding: 13px 19px;
+  }
+  /* a rogzitett gomb magassaga + a hezag: az oldal vege alatt semmi nem csuszik a gomb ala */
+  footer {
+    padding-bottom: calc(110px + env(safe-area-inset-bottom));
+  }
 }
