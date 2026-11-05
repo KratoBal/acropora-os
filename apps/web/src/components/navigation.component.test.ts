@@ -206,7 +206,10 @@ describe("navigation", () => {
           "QR-kód nyomtatás",
         ],
       ],
-      ["Tartalom és tudás", ["Tartalom", "Tudásbázis", "AI teszt"]],
+      [
+        "Tartalom és tudás",
+        ["Tartalom", "Nyereményjáték", "Tudásbázis", "AI teszt"],
+      ],
       [
         "Webshop",
         [
@@ -442,6 +445,7 @@ describe("navigation", () => {
     ["/szerviz/eszkozok", "service-assets", "Eszköznyilvántartás"],
     ["/szerviz/anyagigenyek", "material-requests-pending", "Anyagigények"],
     ["/tartalom", "content", "Tartalom"],
+    ["/tartalom/nyeremenyjatek", "game", "Nyereményjáték"],
     ["/ai-teszt", "ai-test", "AI teszt"],
     ["/tudasbazis", "knowledge-base", "Tudásbázis"],
     ["/beallitasok", "settings-general", "Általános"],
@@ -743,6 +747,7 @@ describe("navigation", () => {
     // `settings.manage` adja pontosan ezt a ket szerepet.
     "/szerviz/piszkozatok": "settings.manage",
     "/tartalom": "content.view",
+    "/tartalom/nyeremenyjatek": "content.view",
     // a webshop kezdolapja a Webshop csoportban (2026-10-26): ugyanaz a jog,
     // mint a Beallitasok kartyajae es az API vegpontjaie
     "/admin/kezdolap": "products.view",

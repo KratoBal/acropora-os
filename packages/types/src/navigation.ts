@@ -286,6 +286,12 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     visibility: permission(PERMISSIONS.CONTENT_VIEW),
   },
   {
+    /** A karácsonyi nyereményjáték kezelése (kártya 31445d0f): a tartalom joga, mert marketing-tartalom. */
+    id: "game",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.CONTENT_VIEW),
+  },
+  {
     id: "pos",
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.ORDERS_VIEW),

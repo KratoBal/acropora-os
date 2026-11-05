@@ -506,6 +506,13 @@ const mainNavigationGroups: AppNavigationGroup[] = [
         entryId: "content",
       },
       {
+        // a karácsonyi nyereményjáték kezelése (kártya 31445d0f)
+        href: "/tartalom/nyeremenyjatek",
+        label: "Nyereményjáték",
+        icon: "clipboard",
+        entryId: "game",
+      },
+      {
         // belső szerkesztői modul a teszten (S4): a többi belső próbafelület mellett
         href: KNOWLEDGE_BASE_PATH,
         label: "Tudásbázis",
