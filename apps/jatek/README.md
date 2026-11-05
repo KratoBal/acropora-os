@@ -10,11 +10,12 @@ A karácsonyi nyereményjáték nyilvános oldala (jatek.acropora.hu). Külön k
 
 ## Környezet (FUTÁSIDŐBEN; építéskor nem kell semmi)
 
-| Változó                 | Mire                                                                                                                                                                |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `JATEK_API_URL`         | az OS api címe (teszten `https://api-staging.acropora.hu`). A jatek SZERVERE hívja, a böngésző nem.                                                                 |
-| `JATEK_ALLOW_FAKE=true` | CSAK addig, amíg az api nincs kint: a hamis (próba) api indulhat éles módban is. `JATEK_API_URL` nélkül, ezen kapcsoló nélkül a `NODE_ENV=production` indulás hiba. |
-| `JATEK_INDEXABLE=true`  | a keresők indexelhetik az oldalt. Alapból NEM (teszt).                                                                                                              |
+| Változó                 | Mire                                                                                                                                                                                                                                                                                                       |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `JATEK_API_URL`         | az OS api címe (teszten `https://api-staging.acropora.hu`). A jatek SZERVERE hívja, a böngésző nem.                                                                                                                                                                                                        |
+| `JATEK_ALLOW_FAKE=true` | CSAK addig, amíg az api nincs kint: a hamis (próba) api indulhat éles módban is. `JATEK_API_URL` nélkül, ezen kapcsoló nélkül a `NODE_ENV=production` indulás hiba.                                                                                                                                        |
+| `JATEK_PROXY_SECRET`    | közös titok az api-val (acrobot állítja be mindkét app env-jébe). A szerver ezzel hitelesíti a látogató IP-jét (`X-Jatek-Client-IP`, `X-Jatek-Proxy-Secret`); nélküle az api az utolsó proxy-hopra kulcsol, és minden látogató egy közös sebességkeretbe esik. Soha nem kerül a böngészőbe vagy a naplóba. |
+| `JATEK_INDEXABLE=true`  | a keresők indexelhetik az oldalt. Alapból NEM (teszt).                                                                                                                                                                                                                                                     |
 
 A megerősítő levél linkjét az api állítja össze (`JATEK_PUBLIC_URL` az api környezetében).
 

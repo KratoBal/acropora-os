@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  FEJLEC_IP,
+  FEJLEC_TITOK,
   HAMIS_KERDES,
   UTVONALAK,
   hamisJatekApi,
@@ -157,6 +159,49 @@ describe("httpJatekApi.bekuldes", () => {
       null,
     );
     assert.deepEqual(Object.keys(r), ["ok"]);
+  });
+});
+
+describe("a hitelesített fejlécek (nautilus, 2026-11-05 22:58)", () => {
+  const TITOK = "proba-titok-nem-valodi";
+
+  it("all three calls carry the proxy secret; the two POSTs also carry the visitor's address under the same name", async () => {
+    const a = hamisFetch({ status: 202, body: { status: "CHECK_EMAIL" } });
+    const api = httpJatekApi("https://api.example", a.fetchImpl, TITOK);
+    await api.aktualis();
+    await api.bekuldes(BEMENET, "203.0.113.9");
+    await api.megerosites("tok", "203.0.113.9");
+    assert.equal(a.hivasok.length, 3);
+    for (const h of a.hivasok) assert.equal(h.headers[FEJLEC_TITOK], TITOK);
+    assert.equal(FEJLEC_IP, "X-Jatek-Client-IP");
+    assert.equal(FEJLEC_TITOK, "X-Jatek-Proxy-Secret");
+    assert.equal(a.hivasok[0]!.headers[FEJLEC_IP], undefined);
+    for (const h of a.hivasok.slice(1)) {
+      assert.equal(h.headers[FEJLEC_IP], "203.0.113.9");
+      assert.equal(h.headers["X-Forwarded-For"], "203.0.113.9");
+    }
+  });
+
+  it("without a secret (or a blank one) no secret header goes out, and the call still works", async () => {
+    for (const titok of [undefined, "", "   "]) {
+      const a = hamisFetch({ status: 202, body: { status: "CHECK_EMAIL" } });
+      const r = await httpJatekApi(
+        "https://api.example",
+        a.fetchImpl,
+        titok,
+      ).bekuldes(BEMENET, "203.0.113.9");
+      assert.deepEqual(r, { ok: true });
+      assert.equal(FEJLEC_TITOK in a.hivasok[0]!.headers, false);
+    }
+  });
+
+  it("the secret comes from JATEK_PROXY_SECRET of the environment, and never from the page", async () => {
+    const a = hamisFetch({ status: 200, body: { question: null } });
+    await jatekApiKornyezetbol(
+      { JATEK_API_URL: "https://api.example", JATEK_PROXY_SECRET: TITOK },
+      a.fetchImpl,
+    ).aktualis();
+    assert.equal(a.hivasok[0]!.headers[FEJLEC_TITOK], TITOK);
   });
 });
 

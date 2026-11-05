@@ -67,6 +67,7 @@ export const JATEKSZABALYZAT: JogiDokumentum = {
         "Minden héten sorsolás van a helyes, megerősített részvételek között. A heti sorsolás rövid videóban látható.",
         "Karácsony előtt fődíj-sorsolás van élő adásban. Aki több héten játszott helyesen és megerősítve, annyiszor szerepel a karácsonyi sorsolás jelöltlistáján, ahány héten ezt megtette.",
         "A jelöltlista, az eredmény és a véletlen mag elmentésre kerül, a sorsolás visszakereshető.",
+        "Ha egy sorsolást újra lefuttatnak, mindig az első, rögzített eredmény számít; az újrafuttatás csak ellenőrzés.",
         "[KITÖLTENDŐ: a heti sorsolások időpontja, a fődíj-sorsolás helye és a közvetítés csatornája]",
       ],
     },

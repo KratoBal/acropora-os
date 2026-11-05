@@ -88,7 +88,22 @@ const hibaBol = (status: number, test: unknown): Hiba => {
 
 const IDOKORLAT_MS = 8000;
 
-export function httpJatekApi(alap: string, fetchImpl: Fetch = fetch): JatekApi {
+/**
+ * A latogato IP-jet az api HITELESITETT fejlecben kapja (nautilus, 2026-11-05 22:58): `X-Jatek-Client-IP` a latogato
+ * cime, `X-Jatek-Proxy-Secret` a `JATEK_PROXY_SECRET` ertek. A titkot MINDEN hivas viszi (az `aktualis` is), az IP-t
+ * csak az, ahol van. Titok nelkul a fejlec elmarad, es az api az utolso proxy-hopra kulcsol (minden latogato egy
+ * kozos kerethez kerul): ez nem hiba, hanem a titok nelkuli uzem. Az `X-Forwarded-For` marad, de az api mar nem erre
+ * tamaszkodik. A titok csak a szerveren el: komponensben nem szerepelhet (lasd `felulet-forras.spec.ts`).
+ */
+export const FEJLEC_IP = "X-Jatek-Client-IP";
+export const FEJLEC_TITOK = "X-Jatek-Proxy-Secret";
+
+export function httpJatekApi(
+  alap: string,
+  fetchImpl: Fetch = fetch,
+  proxyTitok?: string,
+): JatekApi {
+  const titok = proxyTitok?.trim() || undefined;
   const cim = (utvonal: string) => `${alap.replace(/\/+$/, "")}${utvonal}`;
   const hivas = async (
     utvonal: string,
@@ -102,7 +117,10 @@ export function httpJatekApi(alap: string, fetchImpl: Fetch = fetch): JatekApi {
           ...(init.body === undefined
             ? {}
             : { "Content-Type": "application/json" }),
-          ...(init.ip ? { "X-Forwarded-For": init.ip } : {}),
+          ...(init.ip
+            ? { "X-Forwarded-For": init.ip, [FEJLEC_IP]: init.ip }
+            : {}),
+          ...(titok ? { [FEJLEC_TITOK]: titok } : {}),
         },
         ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
         cache: "no-store",
@@ -231,7 +249,11 @@ export function jatekApiKornyezetbol(
     try {
       const url = new URL(alap);
       if (url.protocol === "https:" || url.protocol === "http:")
-        return httpJatekApi(url.origin + url.pathname, fetchImpl);
+        return httpJatekApi(
+          url.origin + url.pathname,
+          fetchImpl,
+          env.JATEK_PROXY_SECRET,
+        );
     } catch {
       // a hibas cim nem esik vissza hamisra: lent dobunk
     }

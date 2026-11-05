@@ -13,7 +13,7 @@ export default async function MegerositesLap({ searchParams }: Props) {
   const egy = Array.isArray(token) ? token[0] : token;
   return (
     <OldalKeret>
-      <section className="jatek-kartya">
+      <section className="jatek-wrap jatek-jogi">
         {egy ? (
           <MegerositesAllapot token={egy} />
         ) : (

@@ -24,7 +24,7 @@ describe("a felulet forrasa", () => {
       const szoveg = readFileSync(f, "utf8");
       assert.doesNotMatch(
         szoveg,
-        /JATEK_API_URL|JATEK_ALLOW_FAKE|process\.env/,
+        /JATEK_API_URL|JATEK_ALLOW_FAKE|JATEK_PROXY_SECRET|process\.env/,
         f,
       );
     }

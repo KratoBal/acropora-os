@@ -27,6 +27,14 @@ describe("a jogi szoveg vazlatai", () => {
     assert.equal(jogiSzovegVazlat(), true);
   });
 
+  it("the rules say a re-run draw only checks: the first recorded result counts (barracuda's question, 2026-11-05)", () => {
+    const szabaly = szoveg(JATEKSZABALYZAT);
+    assert.match(
+      szabaly,
+      /újra lefuttatnak, mindig az első, rögzített eredmény számít; az újrafuttatás csak ellenőrzés/,
+    );
+  });
+
   it("every decision that is the owner's stays a mark", () => {
     const szabaly = szoveg(JATEKSZABALYZAT);
     for (const reszlet of ["szervező", "időtartam", "nyeremény", "értesít"]) {

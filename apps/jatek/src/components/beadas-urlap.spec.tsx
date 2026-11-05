@@ -7,8 +7,9 @@ import { HAMIS_KERDES, type Kerdes } from "../lib/jatek-api.ts";
 import { BeadasUrlap } from "./beadas-urlap.tsx";
 
 /*
-  WHAT TURNS THIS RED (the submission form, rendered to static HTML). A newsletter checkbox, or any checkbox at all
-  (Balázs, 2026-11-05 20:51: "nem kérem"); a honeypot that is a type=hidden field, is not out of the tab order, or can
+  WHAT TURNS THIS RED (the submission form, rendered to static HTML). A newsletter checkbox, or a second checkbox of
+  any kind (Balázs, 2026-11-05 20:51: "nem kérem"; the design's "Szeretnék Acropora-híreket" option is deliberately
+  left out); a rules-acceptance checkbox that is not required or arrives pre-checked; a honeypot that is a type=hidden field, is not out of the tab order, or can
   be autofilled; a text answer without the 200 character limit, or a choice question without its options; a form
   that gives the api's address away; a note that does not link the rules and the privacy notice.
 */
@@ -23,11 +24,14 @@ const html = (kerdes: Kerdes) =>
   renderToStaticMarkup(<BeadasUrlap kerdes={kerdes} />);
 
 describe("a beküldő űrlap", () => {
-  it("has no checkbox of any kind and never mentions a newsletter", () => {
+  it("has exactly one checkbox: the required, unchecked rules acceptance; never a newsletter", () => {
     for (const kerdes of [SZOVEG, HAMIS_KERDES]) {
       const h = html(kerdes);
-      assert.doesNotMatch(h, /type="checkbox"/);
-      assert.doesNotMatch(h, /hírlevél|newsletter/i);
+      const dobozok = h.match(/<input[^>]*type="checkbox"[^>]*>/g) ?? [];
+      assert.equal(dobozok.length, 1);
+      assert.match(dobozok[0]!, /required/);
+      assert.doesNotMatch(dobozok[0]!, /checked/);
+      assert.doesNotMatch(h, /hírlevél|newsletter|Acropora-hír|marketing/i);
     }
   });
 
