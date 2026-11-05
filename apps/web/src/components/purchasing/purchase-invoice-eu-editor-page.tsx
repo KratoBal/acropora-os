@@ -250,6 +250,7 @@ export function PurchaseInvoiceEuEditorPage() {
   const [supplierInvoiceNumberError, setSupplierInvoiceNumberError] =
     useState(false);
   const supplierInvoiceNumberFieldRef = useRef<HTMLDivElement>(null);
+  const inlineSearchRef = useRef<HTMLDivElement>(null);
   const [currency, setCurrency] = useState(navInvoiceId ? "HUF" : "EUR");
   const [exchangeRate, setExchangeRate] = useState<number | "">("");
   const [rateLoading, setRateLoading] = useState(false);
@@ -780,6 +781,25 @@ export function PurchaseInvoiceEuEditorPage() {
     setProductSearch(line.sourceDescription || line.productName);
   };
 
+  const closeProductSearch = () => {
+    setProductSearchTargetKey(null);
+    setProductSearch("");
+    setProductResults([]);
+  };
+
+  /**
+   * A KAPCSOLÁS KERESŐJE A KIVÁLASZTOTT SOR ALATT NYÍLIK (Balázs panasza, 2026-11-05 20:37; kártya 1ff7c758): eddig a
+   * lista tetején volt, és fel kellett görgetni hozzá. Amint egy sorhoz kapcsolás indul, a kereső a sor alatt jelenik
+   * meg, fókuszban, és a sor a látótérbe kerül.
+   */
+  useEffect(() => {
+    if (!productSearchTargetKey) return;
+    const panel = inlineSearchRef.current;
+    if (!panel) return;
+    panel.querySelector("input")?.focus();
+    panel.scrollIntoView?.({ block: "nearest" });
+  }, [productSearchTargetKey]);
+
   /**
    * #1199 P-026: a termék nélküli, nem díj-sorokhoz egyszer kér javaslatot,
    * amint a szállító ki van választva. A javaslat csak felajánl; a
@@ -918,6 +938,46 @@ export function PurchaseInvoiceEuEditorPage() {
     }
     setLines((previous) => previous.filter((line) => line.key !== key));
   };
+
+  /** A keresés találatai: a felső (új tétel) és a soron belüli (kapcsolás) kereső ugyanazt mutatja. */
+  const productSearchResults = (
+    <>
+      {searchingProducts ? <Skeleton className="mt-2 h-4 w-1/3" /> : null}
+      {productResults.length > 0 ? (
+        <PilotCard className="mt-2 divide-y divide-dusk-100 overflow-hidden">
+          {productResults.map((product) => (
+            <button
+              key={product.variantId}
+              type="button"
+              onClick={() => addLine(product)}
+              className="flex w-full items-center justify-between px-4 py-2 text-left text-sm hover:bg-dusk-50"
+            >
+              <div>
+                <div className="flex items-center gap-2">
+                  <p className="font-medium text-dusk-900">
+                    {product.productName}
+                  </p>
+                  <PilotBadge
+                    variant={product.origin === "UNAS" ? "blue" : "grey"}
+                  >
+                    {product.origin === "UNAS"
+                      ? "UNAS-termék"
+                      : product.origin === "LOCAL"
+                        ? "Helyi termék"
+                        : "Ismeretlen eredet"}
+                  </PilotBadge>
+                </div>
+                <p className="font-mono text-xs text-dusk-500">{product.sku}</p>
+              </div>
+              <p className="text-xs text-dusk-500">
+                Készlet: {product.currentStock} {product.unit}
+              </p>
+            </button>
+          ))}
+        </PilotCard>
+      ) : null}
+    </>
+  );
 
   const totalNet = lines.reduce((sum, line) => sum + lineNet(line), 0);
   const effectiveCurrency = isDomestic ? "HUF" : currency.trim().toUpperCase();
@@ -1794,36 +1854,24 @@ export function PurchaseInvoiceEuEditorPage() {
             }
           />
           <div>
-            <p className="mb-2 text-xs text-pilot-grey-500">
-              Termék kapcsolása a számlasorhoz
-            </p>
-            {productSearchTargetKey ? (
-              <div className="mb-2 flex items-center justify-between rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-800">
-                <span>A kiválasztott számlasorhoz keresel terméket.</span>
-                <button
-                  type="button"
-                  className="font-semibold hover:underline"
-                  onClick={() => {
-                    setProductSearchTargetKey(null);
-                    setProductSearch("");
-                    setProductResults([]);
-                  }}
-                >
-                  Mégse
-                </button>
-              </div>
-            ) : null}
+            {productSearchTargetKey ? null : (
+              <p className="mb-2 text-xs text-pilot-grey-500">
+                Termék kapcsolása a számlasorhoz
+              </p>
+            )}
             <div className="flex flex-wrap items-center gap-3">
-              <div className="min-w-[240px] flex-1">
-                <PilotInput
-                  aria-label="Termék keresése"
-                  value={productSearch}
-                  onChange={setProductSearch}
-                  placeholder="Cikkszám vagy terméknév…"
-                  leadingIcon={<Icon name="search" size={17} />}
-                  className="h-10"
-                />
-              </div>
+              {productSearchTargetKey ? null : (
+                <div className="min-w-[240px] flex-1">
+                  <PilotInput
+                    aria-label="Termék keresése"
+                    value={productSearch}
+                    onChange={setProductSearch}
+                    placeholder="Cikkszám vagy terméknév…"
+                    leadingIcon={<Icon name="search" size={17} />}
+                    className="h-10"
+                  />
+                </div>
+              )}
               <PilotButton
                 size="regular"
                 variant="secondary"
@@ -1833,42 +1881,7 @@ export function PurchaseInvoiceEuEditorPage() {
                 Kézi tétel felvétele
               </PilotButton>
             </div>
-            {searchingProducts ? <Skeleton className="mt-2 h-4 w-1/3" /> : null}
-            {productResults.length > 0 ? (
-              <PilotCard className="mt-2 divide-y divide-dusk-100 overflow-hidden">
-                {productResults.map((product) => (
-                  <button
-                    key={product.variantId}
-                    type="button"
-                    onClick={() => addLine(product)}
-                    className="flex w-full items-center justify-between px-4 py-2 text-left text-sm hover:bg-dusk-50"
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium text-dusk-900">
-                          {product.productName}
-                        </p>
-                        <PilotBadge
-                          variant={product.origin === "UNAS" ? "blue" : "grey"}
-                        >
-                          {product.origin === "UNAS"
-                            ? "UNAS-termék"
-                            : product.origin === "LOCAL"
-                              ? "Helyi termék"
-                              : "Ismeretlen eredet"}
-                        </PilotBadge>
-                      </div>
-                      <p className="font-mono text-xs text-dusk-500">
-                        {product.sku}
-                      </p>
-                    </div>
-                    <p className="text-xs text-dusk-500">
-                      Készlet: {product.currentStock} {product.unit}
-                    </p>
-                  </button>
-                ))}
-              </PilotCard>
-            ) : null}
+            {productSearchTargetKey ? null : productSearchResults}
           </div>
 
           {lines.length === 0 ? (
@@ -2026,6 +2039,33 @@ export function PurchaseInvoiceEuEditorPage() {
                         >
                           Új helyi termék létrehozása
                         </PilotButton>
+                      </div>
+                    ) : null}
+                    {productSearchTargetKey === line.key ? (
+                      <div
+                        ref={inlineSearchRef}
+                        data-testid="line-product-search"
+                        className="mt-3 rounded-lg bg-sky-50 p-3 ring-1 ring-sky-100"
+                      >
+                        <div className="mb-2 flex items-center justify-between text-xs text-sky-800">
+                          <span>Ehhez a számlasorhoz keresel terméket.</span>
+                          <button
+                            type="button"
+                            className="font-semibold hover:underline"
+                            onClick={closeProductSearch}
+                          >
+                            Mégse
+                          </button>
+                        </div>
+                        <PilotInput
+                          aria-label="Termék keresése"
+                          value={productSearch}
+                          onChange={setProductSearch}
+                          placeholder="Cikkszám vagy terméknév…"
+                          leadingIcon={<Icon name="search" size={17} />}
+                          className="h-10"
+                        />
+                        {productSearchResults}
                       </div>
                     ) : null}
                     {line.createLocalProduct ? (
