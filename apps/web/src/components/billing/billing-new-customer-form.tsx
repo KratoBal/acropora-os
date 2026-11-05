@@ -133,6 +133,10 @@ export function BillingNewCustomerForm({
         search: base,
         page: "1",
         pageSize: String(CUSTOMER_LIST_PAGE_SIZE.min),
+        // the partners' customer rows too: after the partner register merge a partner and its customer are ONE row
+        // that carries the partner link, and the list leaves such rows out unless asked (a company already in the
+        // register would be taken for a new one: card 40332480)
+        includePartnerMirrors: "true",
       }),
     );
     // the search also hits the digits of a customer number or an e-mail; only
