@@ -52,9 +52,13 @@ const draftQuote = (over: Partial<QuoteRow> = {}): QuoteRow => ({
 function fake(input: {
   exists?: boolean;
   quote: QuoteRow;
+  /** the latest PUBLISHED version */
   source?: object | null;
+  /** the latest version of any status (asked only when there is no published one) */
+  sourceAny?: object | null;
 }) {
   const writes: string[] = [];
+  const versionQueries: { where: { status?: string }; orderBy: unknown }[] = [];
   const created: Record<string, unknown[]> = {};
   const note = (name: string, data?: unknown) => {
     writes.push(name);
@@ -78,7 +82,15 @@ function fake(input: {
     },
     quoteVersion: {
       deleteMany: (a: unknown) => note("quoteVersion.deleteMany", a),
-      findFirst: async () => input.source ?? null,
+      findFirst: async (a: {
+        where: { status?: string };
+        orderBy: unknown;
+      }) => {
+        versionQueries.push(a);
+        return a.where.status === "PUBLISHED"
+          ? (input.source ?? null)
+          : (input.sourceAny ?? null);
+      },
     },
     quoteBomItem: {
       deleteMany: (a: unknown) => note("quoteBomItem.deleteMany", a),
@@ -105,7 +117,7 @@ function fake(input: {
   Object.assign(service, {
     database: { $transaction: (fn: (t: typeof tx) => unknown) => fn(tx) },
   });
-  return { service, writes, created };
+  return { service, writes, created, versionQueries };
 }
 
 describe("deleteDraft", () => {
@@ -245,7 +257,15 @@ describe("copyAsNew", () => {
     ],
   });
 
-  for (const status of ["ACCEPTED", "REJECTED", "CANCELLED"])
+  // card 534b2de4 (Luca): an OPEN quote (a draft, a sent one, a postponed one) is copied too
+  for (const status of [
+    "ACCEPTED",
+    "REJECTED",
+    "CANCELLED",
+    "DRAFT",
+    "SENT",
+    "POSTPONED",
+  ])
     it(`a ${status} quote: a new quote with a new number, version 1 as a deep copy, the source untouched`, async () => {
       const { service, writes, created } = fake({
         quote: draftQuote({ status }),
@@ -300,25 +320,66 @@ describe("copyAsNew", () => {
     assert.ok(got > Date.now() + 28 * day && got < Date.now() + 32 * day);
   });
 
-  for (const status of ["DRAFT", "SENT", "POSTPONED"])
-    it(`a ${status} quote is not copied (it has a new version), and nothing is written`, async () => {
-      const { service, writes } = fake({
-        quote: draftQuote({ status }),
-        source: source("2099-12-31"),
-      });
-      await assert.rejects(() => service.copyAsNew("q1", user), {
-        name: "ConflictException",
-      });
-      assert.deepEqual(writes, []);
+  // what the customer was offered: an open quote copies its latest PUBLISHED version, never a newer working draft
+  it("a sent quote copies its latest published version, and does not look for a draft", async () => {
+    const { service, created, versionQueries, writes } = fake({
+      quote: draftQuote({ status: "SENT" }),
+      source: source("2099-12-31"),
+      sourceAny: { ...source("2099-12-31"), id: "v-draft", status: "DRAFT" },
     });
+    await service.copyAsNew("q1", user);
+    const data = created["quote.create"]![0] as {
+      customerId: string;
+      versions: { create: { createdFromVersionId: string } };
+    };
+    assert.equal(data.versions.create.createdFromVersionId, "v-src");
+    assert.equal(data.customerId, "c1");
+    assert.equal(versionQueries.length, 1);
+    assert.equal(versionQueries[0]!.where.status, "PUBLISHED");
+    // the source is only read: nothing of it is updated, deleted or closed
+    assert.equal(
+      writes.some((name) => /update|delete/i.test(name)),
+      false,
+    );
+  });
 
-  it("a closed quote with no published version is refused, and nothing is written", async () => {
-    const { service, writes } = fake({
-      quote: draftQuote({ status: "REJECTED" }),
+  it("a never published quote (only a working draft) copies its latest version", async () => {
+    const { service, created, versionQueries } = fake({
+      quote: draftQuote({ status: "DRAFT" }),
       source: null,
+      sourceAny: { ...source("2099-12-31"), id: "v-draft", status: "DRAFT" },
+    });
+    const result = await service.copyAsNew("q1", user);
+    assert.equal(result.id, "q-new");
+    const data = created["quote.create"]![0] as {
+      versions: { create: { createdFromVersionId: string } };
+    };
+    assert.equal(data.versions.create.createdFromVersionId, "v-draft");
+    assert.equal(versionQueries.length, 2);
+    // the fallback asks for the newest version of any status
+    assert.equal("status" in versionQueries[1]!.where, false);
+    assert.deepEqual(versionQueries[1]!.orderBy, { versionNumber: "desc" });
+  });
+
+  it("a quote with no version at all is refused, and nothing is written", async () => {
+    const { service, writes } = fake({
+      quote: draftQuote({ status: "DRAFT" }),
+      source: null,
+      sourceAny: null,
     });
     await assert.rejects(() => service.copyAsNew("q1", user), {
       name: "ConflictException",
+    });
+    assert.deepEqual(writes, []);
+  });
+
+  it("an unknown quote is a 404, and nothing is written", async () => {
+    const { service, writes } = fake({
+      exists: false,
+      quote: draftQuote(),
+    });
+    await assert.rejects(() => service.copyAsNew("nope", user), {
+      name: "NotFoundException",
     });
     assert.deepEqual(writes, []);
   });
