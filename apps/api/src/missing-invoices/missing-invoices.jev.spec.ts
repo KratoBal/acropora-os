@@ -61,6 +61,7 @@ function setup(enabled = true) {
     accounts: async () => [ACCOUNT],
     debits: async () => [debit],
     credits: async () => [],
+    ownOutgoingDocuments: async () => [],
     statementCoverage: async () => new Set([`${ACCOUNT.id}:2026-05`]),
     manualMatches: async () => new Map(matches),
     candidates: async () => documents,
