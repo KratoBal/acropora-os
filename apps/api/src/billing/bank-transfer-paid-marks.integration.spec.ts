@@ -141,7 +141,12 @@ describe(
         paidAmount: D(5000),
         payments: [{ date: "2099-01-10", amount: "5000", title: "átutalás" }],
       });
-      await document("00086", 40000, { documentNumber: "2099/00086" });
+      // a transfer invoice with NO payments element (Balázs's live run 2026-11-05 12:04): known unpaid, marked
+      await document("00086", 40000, {
+        documentNumber: "2099/00086",
+        paymentsKnown: false,
+        paymentMethod: "Átutalás",
+      });
       await document("00185", 30000);
     });
 

@@ -148,6 +148,20 @@ describe("one transfer for several of our invoices", () => {
     const unknown = balazs();
     unknown[2] = { ...unknown[2]!, paymentsKnown: null };
     assert.equal(refusal(unknown), "PAYMENTS_UNKNOWN");
+    // no payments element on a card invoice, or with no known method: it may be paid, so not proven open
+    for (const missingPayments of ["CARD_AT_ORDER", undefined] as const) {
+      const noElement = balazs();
+      noElement[2] = {
+        ...noElement[2]!,
+        paymentsKnown: false,
+        missingPayments,
+      };
+      assert.equal(
+        refusal(noElement),
+        "PAYMENTS_UNKNOWN",
+        String(missingPayments),
+      );
+    }
     assert.equal(refusal(balazs(), { currency: "EUR" }), "OTHER_CURRENCY");
   });
 
@@ -236,6 +250,53 @@ describe("the 2026/ series, numbered without a prefix", () => {
     if (decision.markable) return;
     assert.equal(decision.refusal, "UNRESOLVED");
     assert.equal(decision.detail, "2026/00084 több");
+  });
+});
+
+/*
+  BALÁZS'S LIVE RUN 2026-11-05 12:04: his four invoices stood as PAYMENTS_UNKNOWN. A transfer invoice with NO
+  `kifizetesek` element is known unpaid (the document list's rule, `outgoingMissingPayments`), not unknown. And a
+  "nincs" line says why. WHAT TURNS THIS RED: a transfer invoice with no payments element refused; a reference to a
+  cancelled or a proforma document reported as missing from the feed, or the reverse.
+*/
+describe("a transfer invoice with no payments element, and why a number is not found", () => {
+  it("is known unpaid, and Balázs's transfer is marked", () => {
+    const unpaid = balazs().map((invoice, i) =>
+      i === 0
+        ? invoice
+        : {
+            ...invoice,
+            paymentsKnown: false,
+            missingPayments: "UNPAID" as const,
+          },
+    );
+    const decision = decideBankTransfer(credit(), unpaid);
+    assert.equal(decision.markable, true);
+    if (!decision.markable) return;
+    assert.deepEqual(
+      decision.marks.map((m) => m.invoiceNumber),
+      ["ACRW-2026/00086", "ACRW-2026/00085", "ACRW-2026/00084"],
+    );
+  });
+
+  it("names a missing feed row apart from a cancelled or a proforma document", () => {
+    const detail = (rows: FeedInvoice[]) => {
+      const d = decideBankTransfer(credit(), rows);
+      return d.markable ? "" : d.detail;
+    };
+    assert.equal(detail(balazs().slice(0, 3)), "2026/00086 nincs a feedben");
+    const cancelled = balazs();
+    cancelled[1] = { ...cancelled[1]!, cancelled: true };
+    assert.equal(
+      detail(cancelled),
+      "2026/00084 nem fizetendő: ACRW-2026/00084 sztornózott",
+    );
+    const proforma = balazs();
+    proforma[1] = { ...proforma[1]!, kindCode: "D" };
+    assert.equal(
+      detail(proforma),
+      "2026/00084 nem fizetendő: ACRW-2026/00084 díjbekérő",
+    );
   });
 });
 
