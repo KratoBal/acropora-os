@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   WEBSHOP_MAIL_KEYS,
   WEBSHOP_MAIL_SAMPLE_FACTS,
+  webshopAcclimationValue,
   type WebshopMailFacts,
 } from "@acropora/types";
 
@@ -394,5 +395,59 @@ describe("the order confirmation's legal part", () => {
     );
     assert.equal(mail.ok, true);
     if (mail.ok) assert.doesNotMatch(mail.html, /Jogi tájékoztatók/);
+  });
+});
+
+/*
+  V2.6 (f4e4832b): AZ AKKLIMATIZACIOS SZAKASZ A LEVELBEN. MI PIROSIT: ha az ures ertek ures
+  bekezdest hagyna a levelben (a fajtak ma is megerkeznek, a szoveg meg nincs); ha az elo
+  allatos rendeles levele barmiben elternek a nem elo allatosetol, amig a tabla ures; ha a
+  helyorzo kiszivarogna.
+*/
+describe("the acclimatisation section in the order confirmation", () => {
+  const placed = (kinds: string[]): WebshopMailFacts => {
+    const facts = JSON.parse(
+      JSON.stringify(WEBSHOP_MAIL_SAMPLE_FACTS["order-placed"]),
+    ) as { orders: { livestock_kinds?: string[] }[] };
+    facts.orders[0]!.livestock_kinds = kinds;
+    return facts as unknown as WebshopMailFacts;
+  };
+  const render = (facts: WebshopMailFacts, key = "WEBSHOP_ORDER_PLACED") => {
+    const mail = renderWebshopMail(template(key), facts);
+    assert.equal(mail.ok, true);
+    if (!mail.ok) throw new Error("not ok");
+    return mail;
+  };
+
+  // adaptive: with the shipped table empty the live order reads exactly like a plain one; once a kind's text is in
+  // the table, the same order must carry it (and still no placeholder and no empty paragraph)
+  // MI PIROSIT: ha a szakasz helye kikerul az alapertelmezett sablonbol (az ures tabla ezt nem latja, a kitoltott igen)
+  it("both default order confirmations place the akklimatizacio value, after the next step", () => {
+    for (const key of ["WEBSHOP_ORDER_PLACED", "WEBSHOP_ORDER_PLACED_EN"]) {
+      const html = template(key).bodyHtml;
+      const next = html.indexOf('data-variable="kovetkezo_lepes"');
+      const guide = html.indexOf('data-variable="akklimatizacio"');
+      assert.ok(next >= 0 && guide > next, key);
+    }
+  });
+
+  it("an order of live animals reads like a plain one while the table is empty, and carries the kind's text once it is not", () => {
+    for (const [key, locale] of [
+      ["WEBSHOP_ORDER_PLACED", "hu"],
+      ["WEBSHOP_ORDER_PLACED_EN", "en"],
+    ] as const) {
+      const kinds = ["FISH", "INVERTEBRATE", "CORAL"] as const;
+      const plain = render(placed([]), key);
+      const live = render(placed([...kinds]), key);
+      const value = webshopAcclimationValue(kinds, locale);
+      if (value === "") {
+        assert.equal(live.html, plain.html);
+        assert.equal(live.text, plain.text);
+      } else {
+        assert.ok(live.text.includes(value.split("\n")[0]!));
+      }
+      assert.equal(live.subject, plain.subject);
+      assert.doesNotMatch(live.html, /\{\{|akklimatizacio|<p>\s*<\/p>/);
+    }
   });
 });

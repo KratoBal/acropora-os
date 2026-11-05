@@ -295,6 +295,11 @@ export const MAIL_TEMPLATE_VARIABLES: readonly MailTemplateVariable[] = [
     description:
       "Mi történik most: összekészítjük, vagy a boltban veszed át. A rendelés szállításától függ.",
   },
+  {
+    name: "akklimatizacio",
+    description:
+      "Az élő állatnak szóló akklimatizációs útmutató, fajtánként (hal, gerinctelen, korall). Üres, ha a rendelésben nincs élő állat, vagy ha a fajtához még nincs jóváhagyott szöveg.",
+  },
   { name: "szallitasi_mod", description: "A szállítási mód neve." },
   {
     name: "szallito",
@@ -640,6 +645,7 @@ const HUNGARIAN_MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
       "vegyes_kosar_mondat",
       "osszesen",
       "kovetkezo_lepes",
+      "akklimatizacio",
       "rendeles_tetelek",
     ],
   },
