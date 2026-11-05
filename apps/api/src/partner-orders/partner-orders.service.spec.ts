@@ -417,12 +417,12 @@ describe("document", () => {
   kombinalasnal.
 */
 describe("the order list filters and open lines", () => {
-  const row = (id: string) =>
+  const row = (id: string, status = "OPEN") =>
     ({
       ...orderRow(),
       id,
       orderNumber: `MR-${id}`,
-      status: "OPEN",
+      status,
       customerId: null,
       customer: null,
       createdAt: new Date("2026-11-01T08:00:00Z"),
@@ -526,6 +526,42 @@ describe("the order list filters and open lines", () => {
       ["o1", "o3"],
     );
     assert.equal(result.total, 2);
+  });
+
+  // S4a review: the Hátralék column shows a cancelled order a dash, so the open filter must not list it
+  it("the open filter leaves out a cancelled order that has open lines, the plain list still shows it", async () => {
+    const withCancelled = [...rows, row("o4", "CANCELLED")];
+    const { service } = fake(withCancelled, chain, certified);
+    const open = await service.list(1, 10, { openOnly: true });
+    assert.deepEqual(
+      open.items.map((item) => item.id),
+      ["o1", "o3"],
+    );
+    const all = await service.list(1, 10, {});
+    assert.deepEqual(
+      all.items.map((item) => [item.id, item.openLines]),
+      [
+        ["o1", 2],
+        ["o2", 0],
+        ["o3", 2],
+        ["o4", 2],
+      ],
+    );
+  });
+
+  // S4a review: several certificates, one signed and a later one not: that order still waits for a signature
+  it("the signature filter keeps the order whose second TIG is not signed yet", async () => {
+    const two = [row("p1")];
+    const twoChain = [
+      chainOf("p1", "COMPLETION", 2),
+      chainOf("p1", "SIGNED_COMPLETION", 1),
+    ];
+    const { service } = fake(two, twoChain, []);
+    const result = await service.list(1, 10, { stage: "AWAITING_SIGNATURE" });
+    assert.deepEqual(
+      result.items.map((item) => item.id),
+      ["p1"],
+    );
   });
 
   it("both filters together keep only the orders that match both", async () => {

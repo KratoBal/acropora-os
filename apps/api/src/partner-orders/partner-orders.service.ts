@@ -151,7 +151,9 @@ export class PartnerOrdersService {
         (item) =>
           (!filter.stage ||
             partnerOrderMatchesChainFilter(item.chain, filter.stage)) &&
-          (!filter.openOnly || item.openLines > 0),
+          (!filter.openOnly ||
+            // a cancelled order has no backlog to chase, and the list shows it none (S4a review)
+            (item.status !== "CANCELLED" && item.openLines > 0)),
       );
       return {
         page,

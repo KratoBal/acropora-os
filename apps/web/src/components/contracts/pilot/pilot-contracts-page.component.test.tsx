@@ -252,7 +252,11 @@ describe("PilotContractsPage -- új szerződés, duplikált szerződésszám (40
         "A szerződés nem mentődött: A megadott partner nem található.",
       );
       expect(screen.queryByText("Műveleti hiba")).toBeNull();
-      expect(scroll).toHaveBeenCalledWith({ block: "nearest" });
+      // the scroll is an effect that runs after the error is on screen: under load it can land a moment after
+      // `findByTestId` resolves (card 7363eb4b, CI #2222), so wait for it instead of reading it at once
+      await waitFor(() =>
+        expect(scroll).toHaveBeenCalledWith({ block: "nearest" }),
+      );
     } finally {
       if (original) Element.prototype.scrollIntoView = original;
       else

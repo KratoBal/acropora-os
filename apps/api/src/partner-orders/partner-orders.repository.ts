@@ -185,6 +185,10 @@ export class PartnerOrdersRepository {
    * documents and certificates, so it can only be answered after they are read, and a page cut by the database
    * first would show the wrong orders on every page. The orders of one company are in the hundreds, and the
    * service reads the same chain and certificate data it reads for a page, once for all of them.
+   *
+   * THE BOUND: the chain counts, the system documents and the certified lines each take the matching orders' ids in
+   * one `IN` list, and Postgres allows 32767 bind parameters in a statement. Today the orders are in the hundreds.
+   * Before they come near thousands (many years of orders), read these in chunks of a few thousand ids instead.
    */
   async listAll(filter: OrderListFilter) {
     const rows = await prisma.partnerOrder.findMany({
