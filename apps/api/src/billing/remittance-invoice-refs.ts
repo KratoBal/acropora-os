@@ -62,16 +62,25 @@ export function remittanceInvoiceRefs(text: string): RemittanceInvoiceRef[] {
   return out;
 }
 
-/** Whether an invoice number (`ACRW-2026/00083`) is the reference; without a prefix, any of our series fits. */
+/**
+ * Whether an invoice number is the reference; without a prefix, any of our series fits. The number is compared as a
+ * number, so a customer's extra zero (`2026/000436`) is still `ACRW-2026/00436`.
+ *
+ * OUR SERIES WITHOUT A PREFIX (aeddb2c3, Balázs's live run 2026-11-05 11:05): the `2026/` series is numbered
+ * `2026/00083`, with no letters at all (`external-invoice-mail-pdf.ts`, "the invoices without a letter"). Every
+ * transfer naming one stood as "nincs" while the invoice was there. A reference WITH a prefix still names only that
+ * series: `ACRW-2026/00083` is not `2026/00083`.
+ */
 export function refMatchesInvoiceNumber(
   ref: RemittanceInvoiceRef,
   invoiceNumber: string,
 ): boolean {
-  const match = /^([A-Z]+)-(\d{4})\/(\d+)$/i.exec(invoiceNumber.trim());
+  const match = /^(?:([A-Z]+)-)?(\d{4})\/(\d+)$/i.exec(invoiceNumber.trim());
   if (!match) return false;
   if (match[2] !== ref.year || Number(match[3]) !== Number(ref.number))
     return false;
   if (!ref.prefix) return true;
+  if (!match[1]) return false;
   // the mistyped ARCW is ACRW
   const normal = (value: string) => value.toUpperCase().replace(/^ARC/, "ACR");
   return normal(match[1]!) === normal(ref.prefix);
