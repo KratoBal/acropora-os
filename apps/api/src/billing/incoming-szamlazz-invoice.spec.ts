@@ -18,6 +18,7 @@ const szamlabe = (
     devizanem?: string;
     kelt?: string;
     teszt?: string;
+    eszamla?: string;
     kifizetesek?: string;
     szallitoNev?: string;
     alapVeg?: string;
@@ -29,7 +30,7 @@ const szamlabe = (
     <adoszam>12345678-2-41</adoszam><adoszameu>ATU12345678</adoszameu>
     <bank><nev>Minta Bank</nev><bankszamla>AT61 1904 3002 3457 3201</bankszamla></bank></szallito>
   <alap><id>5150</id><szamlaszam>KI-2026/77</szamlaszam><gazdEsemAzon>1</gazdEsemAzon><tipus>HS</tipus>
-    <eszamla>0</eszamla><hivszamlaszam>KI-2026/70</hivszamlaszam><hivdijbekszam>DB-2026/3</hivdijbekszam>
+    <eszamla>${over.eszamla ?? "0"}</eszamla><hivszamlaszam>KI-2026/70</hivszamlaszam><hivdijbekszam>DB-2026/3</hivdijbekszam>
     <kelt>${over.kelt ?? "2026-09-28"}</kelt><telj>2026-09-25</telj><fizh>2026-10-12</fizh>
     <fizmod>Átutalás</fizmod><fizmodunified>átutalás</fizmodunified><keszpenz>false</keszpenz>
     <rendelesszam>PO-881</rendelesszam><nyelv>de</nyelv><devizanem>${over.devizanem ?? "EUR"}</devizanem>
@@ -175,5 +176,18 @@ describe("projectIncomingInvoice", () => {
       () => projectIncomingInvoice(szamlabe({ szallitoNev: "" })),
       SzamlazzFeedParseError,
     );
+  });
+
+  /**
+   * AZ `eszamla` ÉS A TÖBBI LOGIKAI MEZŐ UGYANAZT A KÉT ALAKOT FOGADJA EL (40332480 utáni mérés). MI PIROSÍT: ha az
+   * e-számla jelzője csak az `1`-et ismeri (a `true` jelölésű e-számla „Papír alapú” lenne); ha a `false` vagy a `0` igaz.
+   */
+  it("reads eszamla as an xs:boolean: 1 and true are electronic, 0 and false are not", () => {
+    const electronic = (eszamla: string) =>
+      projectIncomingInvoice(szamlabe({ eszamla })).electronic;
+    for (const form of ["1", "true", "TRUE", " 1 "])
+      assert.equal(electronic(form), true, form);
+    for (const form of ["0", "false", ""])
+      assert.equal(electronic(form), false, form);
   });
 });

@@ -44,3 +44,14 @@ export function xsDateDay(raw: string): string | null {
   if (Number.isNaN(parsed.getTime())) return null;
   return parsed.toISOString().slice(0, 10) === day ? day : null;
 }
+
+/**
+ * EGY LOGIKAI MEZŐ AZ XSD SZERINT `xs:boolean`: a `true` és az `1` igaz, a `false` és a `0` hamis (kis- és nagybetűtől
+ * és szóköztől függetlenül). Az `eszamla` eddig CSAK az `1`-et fogadta el, a `sztornozott` és a `teszt` viszont mindkettőt, és
+ * egy `true` jelölésű e-számla ezért „Papír alapú” lett a listán (40332480 utáni mérés, Balázs 2026-11-05). Ami se igaz, se
+ * hamis forma (hiányzó, ismeretlen), az itt hamis marad, mint eddig: a mező nem kötelező a vetítéshez.
+ */
+export function szamlazzBoolean(raw: string | null | undefined): boolean {
+  const value = raw?.trim().toLowerCase();
+  return value === "1" || value === "true";
+}

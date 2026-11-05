@@ -206,4 +206,18 @@ describe("projectExternalInvoice", () => {
       "VS",
     ]);
   });
+
+  /**
+   * AZ `eszamla` ÉS A TÖBBI LOGIKAI MEZŐ UGYANAZT A KÉT ALAKOT FOGADJA EL (40332480 utáni mérés: két e-számla „Papír alapú”
+   * lett a listán). MI PIROSÍT: ha az e-számla jelzője csak az `1`-et ismeri; ha a `false` vagy a `0` igaz; ha a hiányzó vagy
+   * ismeretlen alak elektronikus lenne.
+   */
+  it("reads eszamla as an xs:boolean: 1 and true are electronic, 0 and false are not", () => {
+    const electronic = (eszamla: string) =>
+      projectExternalInvoice(szamla({ eszamla })).electronic;
+    for (const form of ["1", "true", "TRUE", " 1 "])
+      assert.equal(electronic(form), true, form);
+    for (const form of ["0", "false", "", "igen"])
+      assert.equal(electronic(form), false, form);
+  });
 });
