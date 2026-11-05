@@ -56,6 +56,31 @@ describe("GlobalSearch", () => {
     );
   });
 
+  it("a Vevők csoportot saját címmel mutatja, és a találat a vevő oldalára visz", async () => {
+    api.search.mockResolvedValue({
+      customers: [
+        {
+          id: "customer-1",
+          title: "Kovács Anna",
+          subtitle: "VEVO-0001 · Partner",
+          path: "/vevok/customer-1",
+        },
+      ],
+    });
+    render(<GlobalSearch token="token" />);
+    const input = screen.getByRole("searchbox", { name: "Keresés" });
+
+    fireEvent.change(input, { target: { value: "kovács" } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250);
+    });
+
+    expect(screen.getByRole("heading", { name: "Vevők" })).toBeVisible();
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(navigation.push).toHaveBeenCalledWith("/vevok/customer-1");
+  });
+
   it("Esc-re bezárja a találatokat, rövid keresésre pedig nem kérdez", () => {
     render(<GlobalSearch token="token" />);
     const input = screen.getByRole("searchbox", { name: "Keresés" });

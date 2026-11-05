@@ -13,6 +13,8 @@ import {
 } from "../auth/navigation-features.js";
 import { partnerScopeOf } from "../auth/partner-scope.util.js";
 import { InvoiceSearchService } from "../billing/invoice-search.service.js";
+import { CustomerListQueryDto } from "../customers/dto/customer.dto.js";
+import { CustomersRepository } from "../customers/customers.repository.js";
 import { QuotesService } from "../quotes/quotes.service.js";
 import { WebshopOrdersService } from "../orders/webshop-orders/webshop-orders.service.js";
 import { ProductListQueryDto } from "../products/dto/product-list-query.dto.js";
@@ -44,6 +46,8 @@ export const SEARCH_GROUP_NAVIGATION: Record<SearchGroup, string> = {
   orders: "webshop-medusa-orders",
   // a belső termékkatalógus (`/products`); a webshop termékek menüpontja (`webshop-products`) ugyanazt a jogot kéri
   products: "products",
+  // a Vevők lista (`/vevok`, menüpont: `webshop-customers`); a lista `CUSTOMERS_VIEW`-t kér. A partner vevő-tükre is találat (egy partnertörzs)
+  customers: "webshop-customers",
 };
 
 const DEFAULT_EXTERNAL_GROUP_TIMEOUT_MS = 4000;
@@ -73,6 +77,7 @@ export class SearchService {
     private readonly quotes: QuotesService,
     private readonly orders: WebshopOrdersService,
     private readonly products: ProductService,
+    private readonly customers: CustomersRepository,
     /**
      * A menü szerver-oldali kapcsolói (`navigationFeatures`): a feature-höz kötött menüpont
      * (például az ajánlat) feature NÉLKÜL MINDENKINEK rejtett, tehát a keresőnek a
@@ -139,6 +144,7 @@ export class SearchService {
       quotes,
       orders,
       products,
+      customers,
     ] = await Promise.all([
       canSee(SEARCH_GROUP_NAVIGATION.tickets)
         ? this.serviceJobs.list({ search: query }, user)
@@ -178,6 +184,18 @@ export class SearchService {
               search: query,
               page: 1,
               pageSize: LIMIT,
+            }),
+          )
+        : undefined,
+      canSee(SEARCH_GROUP_NAVIGATION.customers)
+        ? this.customers.list(
+            Object.assign(new CustomerListQueryDto(), {
+              search: query,
+              page: 1,
+              pageSize: LIMIT,
+              status: "ACTIVE",
+              // ugyanaz, amit a Vevők lista kér alapból (`customer-list-page.tsx`): vevők és partnerek együtt
+              role: "ALL",
             }),
           )
         : undefined,
@@ -260,6 +278,21 @@ export class SearchService {
               title: product.name,
               subtitle: subtitle(product.primarySku, product.brand?.name),
               path: `/products/${encodeURIComponent(product.id)}`,
+            })),
+          }),
+      ...(customers === undefined
+        ? {}
+        : {
+            customers: customers.items.slice(0, LIMIT).map((customer) => ({
+              id: customer.id,
+              title: customer.displayName,
+              subtitle: subtitle(
+                customer.customerNumber,
+                customer.taxNumber,
+                customer.email,
+                customer.partnerMirror ? "Partner" : null,
+              ),
+              path: `/vevok/${encodeURIComponent(customer.id)}`,
             })),
           }),
       ...(orders === undefined

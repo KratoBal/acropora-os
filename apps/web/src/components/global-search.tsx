@@ -21,6 +21,7 @@ const GROUP_LABEL: Record<(typeof SEARCH_GROUPS)[number], string> = {
   quotes: "Ajánlatok",
   orders: "Rendelések",
   products: "Termékek",
+  customers: "Vevők",
 };
 
 type FlattenedResult = SearchResultItem & {
