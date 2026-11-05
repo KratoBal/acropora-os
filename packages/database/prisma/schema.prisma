@@ -11614,6 +11614,18 @@ model PartnerOrder {
   @@index([customerId])
 }
 
+/// A MEGRENDELÉSEK BEÁLLÍTÁSAI (egy sor, az azonosítója a kódban rögzített). S4b (kártya 38caeac2, Luca 2026-11-05):
+/// hány napja nincs mozgás egy nyitott, teljesítetlen tételű megrendelésen ahhoz, hogy hátralékos legyen. A 0 érvényes
+/// érték (minden nyitott, teljesítetlen tételű megrendelés hátralékos). Sor nélkül az alapérték, 14, érvényes.
+/// `updatedById` csak a napló: nincs kapcsolat, a felhasználó törlése ne érintse a beállítást.
+model PartnerOrderSetting {
+  id          String   @id
+  backlogDays Int      @default(14)
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 model PartnerOrderDocument {
   id           String                   @id @default(cuid())
   orderId      String

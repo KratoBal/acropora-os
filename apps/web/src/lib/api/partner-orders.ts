@@ -4,6 +4,7 @@ import type {
   PartnerOrderDocumentDto,
   PartnerOrderDocumentStepValue,
   PartnerOrderListResponse,
+  PartnerOrderSettingsDto,
 } from "@acropora/types";
 
 import { API_PREFIX } from "./api-prefix";
@@ -20,6 +21,20 @@ export const partnerOrdersApi = {
       `/partner-orders?${query}`,
       token,
       { signal },
+    );
+  },
+  settings(token: string, signal?: AbortSignal) {
+    return apiRequest<PartnerOrderSettingsDto>(
+      "/partner-orders/settings",
+      token,
+      { signal },
+    );
+  },
+  saveSettings(token: string, backlogDays: number) {
+    return apiRequest<PartnerOrderSettingsDto>(
+      "/partner-orders/settings",
+      token,
+      { method: "PUT", body: JSON.stringify({ backlogDays }) },
     );
   },
   candidates(token: string, signal?: AbortSignal) {

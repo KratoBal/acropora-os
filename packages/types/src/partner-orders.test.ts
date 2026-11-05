@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  PARTNER_ORDER_BACKLOG_DAYS_DEFAULT,
   PARTNER_ORDER_CHAIN_FILTERS,
   PARTNER_ORDER_DOCUMENT_STEPS,
+  partnerOrderBacklog,
   partnerOrderMatchesChainFilter,
   type PartnerOrderChain,
 } from "./partner-orders.js";
@@ -104,5 +106,83 @@ describe("the chain filter", () => {
         ["INVOICED"],
         String(n),
       );
+  });
+});
+
+/*
+  A HATRALEKOS MEGRENDELES (S4b, 38caeac2; Luca: nyitott + teljesitetlen tetel + legalabb N nap mozgas nelkul, a 0 is
+  ervenyes). MI PIROSIT: ha a hatar egy ora ertekkel elcsuszik (N nap = N x 24 ora, nem naptari nap); ha a 0 napos kuszob
+  nem teszi azonnal hatralekossa a nyitott, teljesitetlen megrendelest; ha a lemondott, teljesitett vagy szamlazott
+  megrendeles hatralekos lehet; ha a teljesen igazolt (nincs nyitott tetel) megrendeles az; ha a jovobeli mozgas
+  negativ nap-szamot ad.
+*/
+describe("the backlog rule", () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const now = new Date("2026-11-20T12:00:00Z");
+  const base = {
+    status: "OPEN" as const,
+    openLines: 2,
+    lastMovementAt: new Date(now.getTime() - 14 * DAY),
+    now,
+    backlogDays: 14,
+  };
+
+  it("the default is fourteen days", () => {
+    assert.equal(PARTNER_ORDER_BACKLOG_DAYS_DEFAULT, 14);
+  });
+
+  it("is back-ordered exactly at N x 24 hours, not a minute before", () => {
+    assert.deepEqual(partnerOrderBacklog(base), {
+      backlog: true,
+      idleDays: 14,
+    });
+    assert.equal(
+      partnerOrderBacklog({
+        ...base,
+        lastMovementAt: new Date(now.getTime() - 14 * DAY + 60_000),
+      }).backlog,
+      false,
+    );
+    assert.equal(
+      partnerOrderBacklog({
+        ...base,
+        lastMovementAt: new Date(now.getTime() - 14 * DAY + 60_000),
+      }).idleDays,
+      13,
+    );
+  });
+
+  it("zero days is valid: an open order with an open line is back-ordered at once", () => {
+    assert.equal(
+      partnerOrderBacklog({ ...base, backlogDays: 0, lastMovementAt: now })
+        .backlog,
+      true,
+    );
+  });
+
+  it("only an OPEN order with an open line can be back-ordered", () => {
+    for (const status of ["COMPLETED", "INVOICED", "CANCELLED"] as const)
+      assert.equal(
+        partnerOrderBacklog({ ...base, status }).backlog,
+        false,
+        status,
+      );
+    assert.equal(partnerOrderBacklog({ ...base, openLines: 0 }).backlog, false);
+  });
+
+  it("a movement in the future counts as no idle time, never a negative number of days", () => {
+    const result = partnerOrderBacklog({
+      ...base,
+      lastMovementAt: new Date(now.getTime() + 5 * DAY),
+    });
+    assert.deepEqual(result, { backlog: false, idleDays: 0 });
+    assert.equal(
+      partnerOrderBacklog({
+        ...base,
+        backlogDays: 0,
+        lastMovementAt: new Date(now.getTime() + 5 * DAY),
+      }).backlog,
+      true,
+    );
   });
 });

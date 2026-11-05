@@ -442,8 +442,13 @@ describe("the order list filters and open lines", () => {
       quoteItemId: string;
       quantity: Prisma.Decimal;
     }[],
+    extra: {
+      movements?: Map<string, Date>;
+      backlogDays?: number | null;
+    } = {},
   ) {
     const calls = { list: 0, listAll: 0 };
+    const saved: { days: number; userId: string | null }[] = [];
     const repository = {
       list: async (page: number, pageSize: number) => {
         calls.list += 1;
@@ -460,8 +465,17 @@ describe("the order list filters and open lines", () => {
       systemDocumentSources: async () => new Map(),
       certifiedLines: async (ids: readonly string[]) =>
         certified.filter((line) => ids.includes(line.orderId)),
+      lastMovements: async () => extra.movements ?? new Map(),
+      settings: async () =>
+        extra.backlogDays === undefined || extra.backlogDays === null
+          ? null
+          : { backlogDays: extra.backlogDays },
+      saveSettings: async (days: number, userId: string | null) => {
+        saved.push({ days, userId });
+        return { backlogDays: days };
+      },
     } as unknown as PartnerOrdersRepository;
-    return { service: new PartnerOrdersService(repository), calls };
+    return { service: new PartnerOrdersService(repository), calls, saved };
   }
 
   // item-a 2 db, item-b 1 alkalom (the fixture's two lines)
@@ -577,5 +591,102 @@ describe("the order list filters and open lines", () => {
       invoice.items.map((item) => item.id),
       ["o2"],
     );
+  });
+
+  /*
+    A HATRALEKOS MEGRENDELES (S4b, 38caeac2). MI PIROSIT: ha az alapertek nem 14 nap, amig senki nem mentett beallitast;
+    ha a letrehozas utani tetlen napok helyett a TIG vagy a dokumentum mozgasa nem szamit; ha a 0 napos kuszob nem
+    teszi azonnal hatralekossa a nyitott, teljesitetlen megrendelest; ha a teljesen igazolt vagy lemondott megrendeles
+    hatralekos; ha a szuro nem az egesz halmazon fut; ha a beallitast nem a mentő felhasznalo azonositojaval ment.
+  */
+  describe("the backlog", () => {
+    const now = new Date("2026-11-20T12:00:00Z"); // 19 days after the fixture's creation (2026-11-01T08:00Z)
+    const DAY = 24 * 60 * 60 * 1000;
+    const flags = (result: Awaited<ReturnType<PartnerOrdersService["list"]>>) =>
+      result.items.map((item) => [item.id, item.backlog, item.idleDays]);
+
+    it("the default is fourteen days: an open order with open lines idle for 19 days is back-ordered, a fully certified one is not", async () => {
+      const { service } = fake(rows, chain, certified);
+      const result = await service.list(1, 10, {}, now);
+      assert.deepEqual(flags(result), [
+        ["o1", true, 19],
+        ["o2", false, 19],
+        ["o3", true, 19],
+      ]);
+      assert.equal(result.items[0]!.lastMovementAt, "2026-11-01T08:00:00.000Z");
+    });
+
+    it("a certificate or a document is a movement: the idle days count from the newest one", async () => {
+      const movements = new Map([["o1", new Date(now.getTime() - 3 * DAY)]]);
+      const { service } = fake(rows, chain, certified, { movements });
+      const result = await service.list(1, 10, {}, now);
+      assert.deepEqual(flags(result)[0], ["o1", false, 3]);
+      assert.equal(
+        result.items[0]!.lastMovementAt,
+        new Date(now.getTime() - 3 * DAY).toISOString(),
+      );
+      // an older movement than the creation changes nothing
+      const old = new Map([["o1", new Date("2026-10-01T00:00:00Z")]]);
+      const same = await fake(rows, chain, certified, {
+        movements: old,
+      }).service.list(1, 10, {}, now);
+      assert.equal(same.items[0]!.lastMovementAt, "2026-11-01T08:00:00.000Z");
+    });
+
+    it("zero days: every open order with an open line is back-ordered at once", async () => {
+      const { service } = fake(rows, chain, certified, { backlogDays: 0 });
+      const fresh = await service.list(
+        1,
+        10,
+        {},
+        new Date("2026-11-01T08:00:00Z"),
+      );
+      assert.deepEqual(
+        flags(fresh).map((entry) => entry[1]),
+        [true, false, true],
+      );
+    });
+
+    it("a saved setting replaces the default: 30 days leaves a 19 days idle order alone", async () => {
+      const { service } = fake(rows, chain, certified, { backlogDays: 30 });
+      const result = await service.list(1, 10, {}, now);
+      assert.deepEqual(
+        flags(result).map((entry) => entry[1]),
+        [false, false, false],
+      );
+    });
+
+    it("a cancelled order is never back-ordered, whatever it still has open", async () => {
+      const { service } = fake([row("o4", "CANCELLED")], [], [], {
+        backlogDays: 0,
+      });
+      const result = await service.list(1, 10, {}, now);
+      assert.deepEqual(flags(result), [["o4", false, 19]]);
+    });
+
+    it("the backlog filter reads every order, then cuts the pages", async () => {
+      const { service, calls } = fake(rows, chain, certified);
+      const first = await service.list(1, 1, { backlogOnly: true }, now);
+      const second = await service.list(2, 1, { backlogOnly: true }, now);
+      assert.equal(calls.list, 0);
+      assert.equal(first.total, 2);
+      assert.deepEqual(
+        first.items.map((item) => item.id),
+        ["o1"],
+      );
+      assert.deepEqual(
+        second.items.map((item) => item.id),
+        ["o3"],
+      );
+    });
+
+    it("the settings: the default without a row, the saved value with one, saved under the user's id", async () => {
+      const { service, saved } = fake(rows, chain, certified);
+      assert.deepEqual(await service.settings(), { backlogDays: 14 });
+      assert.deepEqual(await service.saveSettings(0, USER), { backlogDays: 0 });
+      assert.deepEqual(saved, [{ days: 0, userId: "user-1" }]);
+      const withRow = fake(rows, chain, certified, { backlogDays: 7 });
+      assert.deepEqual(await withRow.service.settings(), { backlogDays: 7 });
+    });
   });
 });

@@ -118,6 +118,9 @@ export const CERTIFICATE_SYSTEM_DOCUMENTS = {
   },
 } satisfies Prisma.CompletionCertificateFindManyArgs;
 
+/** The id of the orders' one settings row (S4b). */
+export const PARTNER_ORDER_SETTING_ID = "default";
+
 const LIST_ORDER = [
   { createdAt: "desc" },
   { id: "desc" },
@@ -207,6 +210,55 @@ export class PartnerOrdersRepository {
           _count: { _all: true },
         })
       : Promise.resolve([]);
+  }
+
+  /**
+   * THE LAST MOVEMENT OF EACH ORDER BESIDES ITS CREATION (S4b): the newest certificate issue and the newest attached
+   * document. An order with neither is absent from the map (its creation is its last movement).
+   */
+  async lastMovements(orderIds: readonly string[]) {
+    const movements = new Map<string, Date>();
+    if (!orderIds.length) return movements;
+    const ids = [...orderIds];
+    const [certificates, documents] = await Promise.all([
+      prisma.completionCertificate.groupBy({
+        by: ["partnerOrderId"],
+        where: { partnerOrderId: { in: ids } },
+        _max: { issuedAt: true },
+      }),
+      prisma.partnerOrderDocument.groupBy({
+        by: ["orderId"],
+        where: { orderId: { in: ids } },
+        _max: { createdAt: true },
+      }),
+    ]);
+    const note = (orderId: string | null, at: Date | null) => {
+      if (!orderId || !at) return;
+      const known = movements.get(orderId);
+      if (!known || at > known) movements.set(orderId, at);
+    };
+    for (const row of certificates) note(row.partnerOrderId, row._max.issuedAt);
+    for (const row of documents) note(row.orderId, row._max.createdAt);
+    return movements;
+  }
+
+  /** The orders' settings row (one row, `PARTNER_ORDER_SETTING_ID`); null before anybody saved it. */
+  settings() {
+    return prisma.partnerOrderSetting.findUnique({
+      where: { id: PARTNER_ORDER_SETTING_ID },
+    });
+  }
+
+  saveSettings(backlogDays: number, userId: string | null) {
+    return prisma.partnerOrderSetting.upsert({
+      where: { id: PARTNER_ORDER_SETTING_ID },
+      create: {
+        id: PARTNER_ORDER_SETTING_ID,
+        backlogDays,
+        updatedById: userId,
+      },
+      update: { backlogDays, updatedById: userId },
+    });
   }
 
   /** The certified lines of these orders, for the open line count (any certificate counts, as in the issue gate). */

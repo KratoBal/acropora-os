@@ -118,6 +118,45 @@ export function partnerOrderMatchesChainFilter(
   }
 }
 
+/**
+ * THE BACKLOG (HÁTRALÉK), S4b (card 38caeac2; Luca 2026-11-05 11:08 UTC): an order is back-ordered when it is OPEN, has
+ * a line no certificate states yet, AND nothing has moved on it for at least `backlogDays` days. Defined here so the
+ * list, the filter and the dashboard read one rule.
+ * - MOVEMENT is the order's creation, a certificate issued for it, or a document attached to it: any step of the chain.
+ * - The days are ELAPSED TIME (N x 24 hours since the last movement), not calendar days.
+ * - `backlogDays` is a setting (default 14); 0 is valid: every open order with an open line is back-ordered at once.
+ * - A cancelled, completed or invoiced order is never back-ordered.
+ */
+export const PARTNER_ORDER_BACKLOG_DAYS_DEFAULT = 14;
+export const PARTNER_ORDER_BACKLOG_DAYS_MAX = 365;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export function partnerOrderBacklog(input: {
+  status: PartnerOrderStatusValue;
+  openLines: number;
+  lastMovementAt: Date;
+  now: Date;
+  backlogDays: number;
+}): { backlog: boolean; idleDays: number } {
+  const idleMs = Math.max(
+    0,
+    input.now.getTime() - input.lastMovementAt.getTime(),
+  );
+  return {
+    idleDays: Math.floor(idleMs / DAY_MS),
+    backlog:
+      input.status === "OPEN" &&
+      input.openLines > 0 &&
+      idleMs >= input.backlogDays * DAY_MS,
+  };
+}
+
+/** The orders' settings (S4b): how many idle days make an open order back-ordered. */
+export interface PartnerOrderSettingsDto {
+  backlogDays: number;
+}
+
 export interface PartnerOrderListItemDto {
   id: string;
   orderNumber: string;
@@ -141,6 +180,12 @@ export interface PartnerOrderListItemDto {
   openLines: number;
   /** The order's line count (the denominator of `openLines`). */
   totalLines: number;
+  /** Back-ordered by the rule above (`partnerOrderBacklog`). */
+  backlog: boolean;
+  /** Whole days since the last movement (see the rule above). */
+  idleDays: number;
+  /** The last movement: the creation, a certificate or a document, whichever is newest. */
+  lastMovementAt: string;
   createdAt: string;
 }
 
