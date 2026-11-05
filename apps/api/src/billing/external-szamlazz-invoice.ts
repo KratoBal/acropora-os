@@ -9,6 +9,7 @@ import {
   type XmlElement,
 } from "../missing-invoices/szamlazz-feed-xml.js";
 import {
+  szamlazzIsElectronic,
   szamlazzCurrency,
   xsDateDay,
 } from "../missing-invoices/szamlazz-values.js";
@@ -24,7 +25,7 @@ import {
  *   alap.id            externalId (a Számlázz.hu azonosítója, a változatok kulcsa)
  *   alap.szamlaszam    documentNumber
  *   alap.tipus         kindCode, nyersen (a felirat: EXTERNAL_KIND_LABELS)
- *   alap.eszamla       electronic (1: e-számla)
+ *   alap.eszamla       electronic (egész kód: 0 nem számla, 1 papír, 2 és 3 e-számla; `szamlazzIsElectronic`)
  *   alap.kelt          issueDate      (xs:date, az időzóna-utótag nélkül)
  *   alap.telj          fulfillmentDate
  *   alap.fizh          dueDate
@@ -201,7 +202,7 @@ export function projectExternalInvoice(xml: string): ExternalInvoiceProjection {
     externalId,
     kindCode: required(root, "alap", "tipus"),
     documentNumber: required(root, "alap", "szamlaszam"),
-    electronic: textAt(root, "alap", "eszamla") === "1",
+    electronic: szamlazzIsElectronic(textAt(root, "alap", "eszamla")),
     issueDate,
     fulfillmentDate: day(textAt(root, "alap", "telj")),
     dueDate: day(textAt(root, "alap", "fizh")),

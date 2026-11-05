@@ -29,7 +29,7 @@ const szamla = (
     <cim><irsz>1106</irsz><telepules>Budapest</telepules><cim>Pesti Gábor utca 35.</cim></cim>
     <adoszam>23916229-2-42</adoszam></szallito>
   <alap><id>4242</id><szamlaszam>ACRW-2026/00508</szamlaszam><gazdEsemAzon>1</gazdEsemAzon><forras>34</forras>
-    <tipus>${over.tipus ?? "SZ"}</tipus><eszamla>${over.eszamla ?? "1"}</eszamla>
+    <tipus>${over.tipus ?? "SZ"}</tipus><eszamla>${over.eszamla ?? "3"}</eszamla>
     <kelt>${over.kelt ?? "2026-09-30"}</kelt><telj>2026-09-29</telj><fizh>2026-10-08</fizh>
     <fizmod>Átutalás</fizmod><fizmodunified>átutalás</fizmodunified><keszpenz>false</keszpenz>
     <nyelv>hu</nyelv><devizanem>${over.devizanem ?? "Ft"}</devizanem><penzforg>false</penzforg>
@@ -205,5 +205,27 @@ describe("projectExternalInvoice", () => {
       "SZ",
       "VS",
     ]);
+  });
+
+  /**
+   * AZ `eszamla` EGÉSZ KÓD, NEM LOGIKAI MEZŐ (docs.szamlazz.hu/penzugyi-adatkapcsolat/kimeno-szamlak: 0 nem számla, 1 papír,
+   * 2 és 3 e-számla; éles mérés 2026-11-05: két E-CRPR e-számla kódja 3 volt, és „Papír alapú” lett). MI PIROSÍT: ha az
+   * `1` (papír) elektronikus; ha a 2 vagy a 3 papír; ha a `0` elektronikus; ha egy `true` vagy ismeretlen szöveg
+   * elektronikus; ha a szám-előtag (E-) dönt a kód helyett.
+   */
+  it("reads eszamla as the invoice-format code: 2 and 3 are electronic, 0 and 1 and anything else are not", () => {
+    const electronic = (eszamla: string, documentNumber?: string) =>
+      projectExternalInvoice(
+        documentNumber
+          ? szamla({ eszamla }).replace("ACRW-2026/00508", documentNumber)
+          : szamla({ eszamla }),
+      ).electronic;
+    for (const code of ["2", "3", " 3 "])
+      assert.equal(electronic(code), true, code);
+    for (const code of ["0", "1", "", "true", "igen"])
+      assert.equal(electronic(code), false, code);
+    // the code decides, the number prefix does not
+    assert.equal(electronic("1", "E-CRPR-2026-14"), false);
+    assert.equal(electronic("3", "ACRW-2026/00545"), true);
   });
 });
