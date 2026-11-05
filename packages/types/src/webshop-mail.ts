@@ -121,6 +121,12 @@ export interface WebshopMailCommonFacts {
    * stays 1, so the OS and the webshop can be deployed in either order.
    */
   readonly locale?: WebshopMailLocale;
+  /**
+   * The address of the storefront's guest order page in the mail's language (commerce `order_view_url`), or null.
+   * OPTIONAL and tolerant, like `livestock_kinds`: a webshop that does not send it, or sends something that is not a
+   * plain https address, means no link, never a refused mail (`facts_version` stays 1).
+   */
+  readonly order_view_url?: string | null;
 }
 
 export const WEBSHOP_MAIL_LOCALES = ["hu", "en"] as const;
@@ -372,6 +378,8 @@ export interface WebshopMailText {
   readonly mixedOneCardPayment: string;
   readonly nextShipped: string;
   readonly nextPickup: string;
+  /** The sentence that carries the guest order page's address (`order_view_url`). */
+  readonly orderViewLine: (url: string) => string;
   readonly glsPoint: string;
   readonly glsHome: string;
   readonly glsLogoLocker: string;
@@ -432,6 +440,8 @@ const HU_TEXT: WebshopMailText = {
   nextShipped:
     "Összekészítjük a rendelésedet. Követési szám csak a csomag feladása után lesz.",
   nextPickup: "Az élő állatos rendelést a boltban veszed át.",
+  orderViewLine: (url) =>
+    `A rendelésed állapotát bármikor megnézheted a rendelésszámmal és az e-mail-címeddel: ${url}`,
   glsPoint: "GLS csomagpont",
   glsHome: "GLS házhozszállítás",
   glsLogoLocker: "GLS Automata",
@@ -494,6 +504,8 @@ const EN_TEXT: WebshopMailText = {
   nextShipped:
     "We are getting your order ready. You will get a tracking number only once the parcel has been shipped.",
   nextPickup: "You pick up the live-animal order at the store.",
+  orderViewLine: (url) =>
+    `You can check your order at any time with your order number and e-mail address: ${url}`,
   glsPoint: "GLS parcel point",
   glsHome: "GLS home delivery",
   glsLogoLocker: "GLS Parcel Locker",
@@ -564,6 +576,11 @@ export function webshopMailContent(
       rendeles_datum: facts.order_created_at
         ? mailDay(facts.order_created_at, facts.locale)
         : "",
+      // empty (and no paragraph in the default mail) without a usable address
+      rendeles_megtekintes_mondat: (() => {
+        const url = safeOrderViewUrl(facts.order_view_url);
+        return url ? t.orderViewLine(url) : "";
+      })(),
     },
     blocks: own.blocks,
   };
@@ -901,6 +918,7 @@ const SAMPLE_COMMON = {
   customer_name: "Kiss Márta",
   order_created_at: "2026-10-05T09:21:00.000Z",
   locale: "hu" as const,
+  order_view_url: "https://shop.example/hu/rendeles-megtekintese",
 };
 
 /**
@@ -1137,6 +1155,23 @@ function order(v: unknown, path: string): WebshopMailOrder {
   };
 }
 
+/**
+ * THE GUEST ORDER PAGE'S ADDRESS, if it is one a mail may carry: a plain https address, no credentials, no spaces or
+ * control characters, at most 300 characters. Anything else is null (no link): the value goes into a customer's mail
+ * as it stands, so only an address that looks like an address is let through. Not a check that the page exists.
+ */
+export function safeOrderViewUrl(v: unknown): string | null {
+  if (typeof v !== "string" || v.length === 0 || v.length > 300) return null;
+  if (/[\s\u0000-\u001f\u007f<>"']/.test(v)) return null;
+  try {
+    const url = new URL(v);
+    if (url.protocol !== "https:" || url.username || url.password) return null;
+    return url.href === v || url.href === `${v}/` ? v : null;
+  } catch {
+    return null;
+  }
+}
+
 /** `hu` or `en`; missing is `hu`, anything else is refused (400): a wrong language must not become Hungarian silently. */
 function parseLocale(v: unknown): WebshopMailLocale {
   if (v === undefined || v === null) return "hu";
@@ -1168,6 +1203,7 @@ export function parseWebshopMailFacts(
         customer_name: strOrNull(f.customer_name, "facts.customer_name"),
         order_created_at: created,
         locale: parseLocale(f.locale),
+        order_view_url: safeOrderViewUrl(f.order_view_url),
       },
     };
   } catch (error) {

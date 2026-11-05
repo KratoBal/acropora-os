@@ -451,3 +451,77 @@ describe("the acclimatisation section in the order confirmation", () => {
     }
   });
 });
+
+/*
+  A VENDEG RENDELES-LAPJANAK CIME A VISSZAIGAZOLO LEVELBEN (a "Rendelesem" oldal hianylistaja; acrobot 43870). MI
+  PIROSIT: a hely kikerul az alapertelmezett sablonbol (magyar vagy angol); a cim nelkuli level kap egy ures
+  bekezdest vagy egy helykitolto nyers {{...}} jelet; a cim a MASIK nyelv mondataval jon; egy nem https cim vagy egy
+  tag-jel kijut a levelbe.
+*/
+describe("the guest order page's address in the order confirmation", () => {
+  const placed = (extra: Record<string, unknown>): WebshopMailFacts =>
+    ({
+      ...JSON.parse(JSON.stringify(WEBSHOP_MAIL_SAMPLE_FACTS["order-placed"])),
+      ...extra,
+    }) as WebshopMailFacts;
+  const render = (facts: WebshopMailFacts, key: string) => {
+    const mail = renderWebshopMail(template(key), facts);
+    assert.equal(mail.ok, true);
+    if (!mail.ok) throw new Error("not ok");
+    return mail;
+  };
+  const HU_URL = "https://shop.example/hu/rendeles-megtekintese";
+  const EN_URL = "https://shop.example/en-hu/rendeles-megtekintese";
+
+  it("both default order confirmations place the sentence, after the acclimatisation value", () => {
+    for (const key of ["WEBSHOP_ORDER_PLACED", "WEBSHOP_ORDER_PLACED_EN"]) {
+      const html = template(key).bodyHtml;
+      const guide = html.indexOf('data-variable="akklimatizacio"');
+      const view = html.indexOf('data-variable="rendeles_megtekintes_mondat"');
+      assert.ok(guide >= 0 && view > guide, key);
+    }
+  });
+
+  it("the Hungarian mail carries the Hungarian sentence and the address, in the html and in the text", () => {
+    const mail = render(
+      placed({ order_view_url: HU_URL }),
+      "WEBSHOP_ORDER_PLACED",
+    );
+    for (const part of [mail.html, mail.text]) {
+      assert.ok(part.includes(HU_URL));
+      assert.ok(part.includes("A rendelésed állapotát bármikor megnézheted"));
+    }
+  });
+
+  it("the English mail carries the English sentence and the address", () => {
+    const mail = render(
+      placed({ locale: "en", order_view_url: EN_URL }),
+      "WEBSHOP_ORDER_PLACED_EN",
+    );
+    for (const part of [mail.html, mail.text]) {
+      assert.ok(part.includes(EN_URL));
+      assert.ok(part.includes("You can check your order at any time"));
+    }
+    assert.doesNotMatch(mail.html, /bármikor megnézheted/);
+  });
+
+  it("without an address (none sent, or not a plain https one) the mail has no sentence, no empty paragraph and no placeholder", () => {
+    const sima = render(
+      placed({ order_view_url: null }),
+      "WEBSHOP_ORDER_PLACED",
+    );
+    for (const rossz of [undefined, "http://shop.example/x", "<b>x</b>"]) {
+      const mail = render(
+        placed({ order_view_url: rossz }),
+        "WEBSHOP_ORDER_PLACED",
+      );
+      assert.equal(mail.html, sima.html, String(rossz));
+      assert.equal(mail.text, sima.text, String(rossz));
+    }
+    assert.doesNotMatch(
+      sima.html,
+      /rendeles_megtekintes|megnézheted|<p>\s*<\/p>|\{\{/,
+    );
+    assert.doesNotMatch(sima.text, /megnézheted|\{\{/);
+  });
+});

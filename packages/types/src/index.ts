@@ -231,6 +231,7 @@ export {
   hungarianDay,
   isWebshopMailTemplate,
   parseWebshopMailFacts,
+  safeOrderViewUrl,
   webshopMailContent,
   webshopMailKey,
   webshopMailLocaleOf,

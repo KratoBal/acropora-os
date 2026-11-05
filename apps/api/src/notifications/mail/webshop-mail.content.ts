@@ -115,6 +115,8 @@ const RAW: Readonly<
       own("kovetkezo_lepes"),
       // V2.6: empty (and no paragraph) until the kind's guide is in `webshop-acclimation.ts`
       own("akklimatizacio"),
+      // the guest order page's address; empty (and no paragraph) when the shop sends none
+      own("rendeles_megtekintes_mondat"),
     ].join(""),
   },
   WEBSHOP_ORDER_CONFIRMED: status(
@@ -234,6 +236,8 @@ const RAW_EN: typeof RAW = {
       own("kovetkezo_lepes"),
       // V2.6: empty (and no paragraph) until the kind's guide is in `webshop-acclimation.ts`
       own("akklimatizacio"),
+      // the guest order page's address; empty (and no paragraph) when the shop sends none
+      own("rendeles_megtekintes_mondat"),
     ].join(""),
   },
   WEBSHOP_ORDER_CONFIRMED: status(
