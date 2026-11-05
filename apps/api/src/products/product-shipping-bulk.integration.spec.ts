@@ -82,7 +82,11 @@ describe("the shipping bulk edit", { skip: gate.mode === "skip" }, () => {
       { lockerUnsuitable: true },
       ids.user!,
     );
-    assert.deepEqual(result, { updated: 3, notFound: ["no-such-product"] });
+    assert.deepEqual(result, {
+      updated: 3,
+      notFound: ["no-such-product"],
+      failed: [],
+    });
     const rows = await prisma.productShippingProfile.findMany({
       where: { productId: { in: [ids.profiled!, ids.unasOnly!, ids.local!] } },
     });
