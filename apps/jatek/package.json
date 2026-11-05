@@ -1,0 +1,26 @@
+{
+  "name": "@acropora/jatek",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --port 3003",
+    "build": "next build",
+    "start": "next start --port 3003",
+    "test": "rm -rf test-dist && tsc -p tsconfig.test.json && specs=$(find test-dist -name '*.spec.js') && { [ -n \"$specs\" ] || { echo 'Nem talaltam unit spec fajlt - nem jelentek sikert.' >&2; exit 1; }; } && node --test $specs",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf .next"
+  },
+  "dependencies": {
+    "next": "^16.4.1",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@acropora/config": "workspace:*",
+    "@types/node": "^26.1.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "^6.0.3"
+  }
+}
