@@ -67,6 +67,13 @@ export const GAME_MAIL_MAX_PER_ENTRY = 5;
 /** The giveaway's mail in one Budapest day, in all (acrobot, 2026-11-05 22:57), unless JATEK_MAIL_DAILY_CAP says other. */
 export const GAME_MAIL_DAILY_CAP_DEFAULT = 3000;
 
+/** A send error for the admin: its kind and the start of its message, never longer than a line. */
+function sendErrorText(error: unknown): string {
+  if (!(error instanceof Error)) return "UNKNOWN";
+  const message = error.message.replace(/\s+/g, " ").slice(0, 160);
+  return message ? `${error.name}: ${message}` : error.name;
+}
+
 /**
  * THE GIVEAWAY'S PUBLIC SIDE (card 31445d0f; brief exchange/jatek/brief-2026-11-05.md; the contract with the page:
  * exchange/jatek/jatek-api-szerzodes.md). The open question without its accepted answers, an entry, and its
@@ -334,8 +341,35 @@ export class GameService implements OnModuleInit {
     return "NOT_SENT";
   }
 
+  /**
+   * The last send that failed, kept in this process for the admin (acrobot 44026: on stage the mail never arrived,
+   * and the log is not readable from the fleet). Cleared by the next mail that goes out.
+   */
+  private lastMailError: { at: string; reason: string } | null = null;
+
+  /** Why mail would not go out now, and the last failure: the admin's view of a mail that never arrived. */
+  mailStatus(): {
+    blocked: string | null;
+    lastError: { at: string; reason: string } | null;
+  } {
+    return { blocked: this.mailBlocked(), lastError: this.lastMailError };
+  }
+
+  /** The confirmation link of a token, on the game page (JATEK_PUBLIC_URL). */
+  confirmLink(token: string): string {
+    const base = (this.environment.JATEK_PUBLIC_URL ?? "")
+      .trim()
+      .replace(/\/+$/, "");
+    return `${base}/megerosites?token=${encodeURIComponent(token)}`;
+  }
+
+  /** Whether the admin may take a confirmation link without the mail (JATEK_TEST_LINKS=on; stage only). */
+  testLinksOn(): boolean {
+    return this.environment.JATEK_TEST_LINKS?.trim() === "on";
+  }
+
   /** Why a mail cannot go out now (the gate, the sender, the link's base), or null. */
-  private mailBlocked(): string | null {
+  mailBlocked(): string | null {
     const gate = mailGate({
       mode: mailModeOf(this.environment.TICKET_MAIL_MODE),
       pathMode: mailModeOf(this.environment.TICKET_MAIL_GAME),
@@ -365,7 +399,7 @@ export class GameService implements OnModuleInit {
       );
       return "NOT_SENT";
     }
-    const link = `${base}/megerosites?token=${encodeURIComponent(token)}`;
+    const link = this.confirmLink(token);
     try {
       await this.sender.send({
         to: [email],
@@ -387,8 +421,13 @@ export class GameService implements OnModuleInit {
       this.logger.error(
         `Nyereményjáték ${week}: a megerősítő levél küldése elbukott (${error instanceof Error ? error.name : "UNKNOWN"})`,
       );
+      this.lastMailError = {
+        at: this.now().toISOString(),
+        reason: sendErrorText(error),
+      };
       return "NOT_SENT";
     }
+    this.lastMailError = null;
     return "SENT";
   }
 

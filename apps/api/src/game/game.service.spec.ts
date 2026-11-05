@@ -303,6 +303,12 @@ describe("an entry", () => {
       throw new Error("SMTP_DOWN");
     };
     await failing.service.submit(entry);
+    // the admin sees why, without the log (acrobot 44026)
+    assert.equal(
+      failing.service.mailStatus().lastError?.reason,
+      "Error: SMTP_DOWN",
+    );
+    assert.equal(closed.service.mailStatus().blocked, "path-off");
     assert.ok(
       failing.entries.get("jatekos@example.com")!.mailPendingSince instanceof
         Date,

@@ -332,7 +332,54 @@ export class GameAdminService {
       pending,
       sentToday: await this.game.sentToday(),
       dailyCap: this.game.dailyCap(),
+      ...this.game.mailStatus(),
+      testLinks: this.game.testLinksOn(),
     };
+  }
+
+  /**
+   * A CONFIRMATION LINK WITHOUT THE MAIL, FOR A TEST ROUND (acrobot 44026): on stage the round must be clickable to the
+   * end even when the mail does not arrive. Only with JATEK_TEST_LINKS=on (never set in production), only for an
+   * unconfirmed entry of an open question; the entry gets a new link (the mailed one stops working), audited.
+   */
+  async testLink(entryId: string, userId: string) {
+    if (!this.game.testLinksOn())
+      throw gameError(
+        HttpStatus.FORBIDDEN,
+        "TEST_LINKS_OFF",
+        "Teszt-link csak a teszt környezetben adható (JATEK_TEST_LINKS=on).",
+      );
+    const entry = await this.database.gameEntry.findUnique({
+      where: { id: entryId },
+      select: {
+        id: true,
+        confirmedAt: true,
+        question: { select: { closesAt: true } },
+      },
+    });
+    if (!entry || entry.confirmedAt || entry.question.closesAt <= new Date())
+      throw gameError(
+        HttpStatus.CONFLICT,
+        "NOT_LINKABLE",
+        "Teszt-link csak nyitott kérdés megerősítetlen beküldésére adható.",
+      );
+    const token = randomBytes(32).toString("base64url");
+    await this.database.gameEntry.update({
+      where: { id: entry.id },
+      data: {
+        confirmTokenHash: createHash("sha256").update(token).digest("hex"),
+      },
+    });
+    await this.database.auditLog.create({
+      data: {
+        userId,
+        action: "game.entry.test-link",
+        entityType: "GameEntry",
+        entityId: entry.id,
+        metadata: {},
+      },
+    });
+    return { link: this.game.confirmLink(token) };
   }
 
   /**

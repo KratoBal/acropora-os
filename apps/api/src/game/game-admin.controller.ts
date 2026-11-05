@@ -83,4 +83,11 @@ export class GameAdminController {
   sendQueued(@CurrentUser() user: AuthenticatedUser) {
     return this.admin.sendQueued(user.id);
   }
+
+  /** A confirmation link without the mail, for a stage round only (JATEK_TEST_LINKS=on; acrobot 44026). */
+  @Post("entries/:id/test-link")
+  @RequirePermissions(PERMISSIONS.GAME_MANAGE)
+  testLink(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.admin.testLink(id, user.id);
+  }
 }

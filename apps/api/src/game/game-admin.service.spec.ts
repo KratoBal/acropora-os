@@ -235,6 +235,8 @@ describe("the mail queue (acrobot 43965)", () => {
       },
       sentToday: async () => 3000,
       dailyCap: () => 3000,
+      mailStatus: () => ({ blocked: null, lastError: null }),
+      testLinksOn: () => false,
     };
     const service = new GameAdminService(game as never);
     service.database = {
@@ -268,6 +270,63 @@ describe("the mail queue (acrobot 43965)", () => {
     assert.ok(
       writes.every((w) => Object.keys(w).join() === "confirmTokenHash"),
     );
+  });
+});
+
+describe("the stage test link (acrobot 44026)", () => {
+  // WHAT TURNS THIS RED: a link handed out without the stage switch, for a confirmed entry, or without a new token
+  // and an audit row
+  const setupLink = (on: boolean, entry: Record<string, unknown> | null) => {
+    const writes: Record<string, unknown>[] = [];
+    const audits: unknown[] = [];
+    const game = {
+      testLinksOn: () => on,
+      confirmLink: (token: string) =>
+        `https://jatek-teszt.acropora.hu/megerosites?token=${token}`,
+    };
+    const service = new GameAdminService(game as never);
+    service.database = {
+      gameEntry: {
+        findUnique: async () => entry,
+        update: async ({ data }: { data: Record<string, unknown> }) =>
+          void writes.push(data),
+      },
+      auditLog: {
+        create: async ({ data }: { data: unknown }) => void audits.push(data),
+      },
+    } as never;
+    return { service, writes, audits };
+  };
+  const open = {
+    id: "e1",
+    confirmedAt: null,
+    question: { closesAt: new Date("2099-01-01") },
+  };
+
+  it("gives a new link, audited, only with the stage switch on and only for an unconfirmed entry of an open week", async () => {
+    const off = setupLink(false, open);
+    await assert.rejects(
+      off.service.testLink("e1", "u1"),
+      (e: any) => e.getResponse().code === "TEST_LINKS_OFF",
+    );
+    assert.equal(off.writes.length, 0);
+
+    const confirmed = setupLink(true, { ...open, confirmedAt: new Date() });
+    await assert.rejects(
+      confirmed.service.testLink("e1", "u1"),
+      (e: any) => e.getResponse().code === "NOT_LINKABLE",
+    );
+
+    const on = setupLink(true, open);
+    const { link } = await on.service.testLink("e1", "u1");
+    const token = decodeURIComponent(/token=(.+)$/.exec(link)![1]!);
+    assert.match(token, /^[A-Za-z0-9_-]{43}$/);
+    assert.notEqual(
+      on.writes[0]!.confirmTokenHash,
+      token,
+      "only the hash is kept",
+    );
+    assert.equal(on.audits.length, 1);
   });
 });
 
