@@ -16,6 +16,7 @@ import type { BillingDocumentsRepository } from "./billing-documents.repository.
 function service(
   stored: { subject: string; body: string; bodyHtml: string | null } | null,
   exists = true,
+  language?: "hu" | "en",
 ) {
   const asked: string[] = [];
   const documents = {
@@ -28,7 +29,11 @@ function service(
     },
   } as unknown as TicketMailRepository;
   return {
-    drafts: new BillingDocumentEmailDraftService(documents, templates),
+    drafts: new BillingDocumentEmailDraftService(
+      documents,
+      templates,
+      language === undefined ? null : ({ of: async () => language } as never),
+    ),
     asked,
   };
 }
@@ -127,5 +132,26 @@ describe("BillingDocumentEmailDraftService", () => {
     const hu = DEFAULT_BILLING_DOCUMENT_MANUAL_TEMPLATE;
     assert.deepEqual(names(en.subject + en.body), names(hu.subject + hu.body));
     assert.ok(!/[áéíóöőúüű]/i.test(en.subject + en.body));
+  });
+
+  it("the drawer opens in the language of the document's order (d5c6befd)", async () => {
+    const english = service(null, true, "en");
+    const draft = await english.drafts.draft("doc-1");
+    assert.deepEqual(english.asked, ["BILLING_DOCUMENT_MANUAL_EN"]);
+    assert.equal(draft.body, DEFAULT_BILLING_DOCUMENT_MANUAL_EN_TEMPLATE.body);
+    const hungarian = service(null, true, "hu");
+    await hungarian.drafts.draft("doc-1");
+    assert.deepEqual(hungarian.asked, ["BILLING_DOCUMENT_MANUAL"]);
+    // without a language service it is the Hungarian text, as before
+    const plain = service(null);
+    await plain.drafts.draft("doc-1");
+    assert.deepEqual(plain.asked, ["BILLING_DOCUMENT_MANUAL"]);
+  });
+
+  it("a missing document is still a 404, before any language is asked", async () => {
+    await assert.rejects(
+      service(null, false, "en").drafts.draft("doc-x"),
+      NotFoundException,
+    );
   });
 });
