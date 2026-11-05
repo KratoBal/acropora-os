@@ -8838,7 +8838,7 @@ model ExternalBillingDocument {
   /// A Számlázz.hu bizonylattípusa, nyersen (`alap.tipus`, például SZ).
   kindCode              String
   documentNumber        String
-  /// `alap.eszamla`: 1 elektronikus, minden más papír.
+  /// `alap.eszamla` kódja szerint: 2 és 3 elektronikus, 0 (nem számla) és 1 (papír) nem.
   electronic            Boolean
   issueDate             DateTime  @db.Date
   fulfillmentDate       DateTime? @db.Date
