@@ -9,9 +9,10 @@ import {
 } from "./partner-orders.js";
 
 /*
-  A LANC SZERINTI SZURO (S4, 38caeac2). MI PIROSIT: ha egy megrendeles a "hol tart" negy utolso szuroje
-  KOZUL egyszerre kettoben is (vagy egyben sem) allna; ha az alairt TIG a TIG szamlalo nelkul (kezzel csatolt
-  alairt peldany) "nincs TIG"-nek latszana; ha a szamlazott megrendeles a "szamlara var" szuroben maradna.
+  A LANC SZERINTI SZURO (S4, 38caeac2; a barracuda megjegyzese utan szamlalo-alapu). MI PIROSIT: ha a reszben
+  alairt tobb-TIG-es megrendeles kimaradna az "alairasra var" szurobol (a kizaro felosztas ezt tette); ha az alairt
+  peldany szamlalasa a TIG-et megelozne; ha a teljesen szamlazott megrendeles "szamlazasra var" maradna; ha a kezzel
+  csatolt alairt TIG, TIG-darabszam nelkul, "nincs TIG"-nek latszana.
 */
 const chain = (over: Partial<PartnerOrderChain> = {}): PartnerOrderChain => ({
   ...(Object.fromEntries(
@@ -52,6 +53,30 @@ describe("the chain filter", () => {
     );
   });
 
+  // the case the exclusive stages hid: part completions, one signed, a later one not
+  it("two TIGs with one signed copy: still waiting for a signature, and the signed one waits for its invoice", () => {
+    assert.deepEqual(
+      matches(
+        chain({ SIGNED_ORDER_FORM: 1, COMPLETION: 2, SIGNED_COMPLETION: 1 }),
+      ),
+      ["AWAITING_SIGNATURE", "AWAITING_INVOICE"],
+    );
+  });
+
+  it("two signed TIGs with one invoice: still waiting for the second invoice, and invoiced", () => {
+    assert.deepEqual(
+      matches(
+        chain({
+          SIGNED_ORDER_FORM: 1,
+          COMPLETION: 2,
+          SIGNED_COMPLETION: 2,
+          INVOICE: 1,
+        }),
+      ),
+      ["AWAITING_INVOICE", "INVOICED"],
+    );
+  });
+
   it("a signed TIG attached by hand, with no TIG counted, waits for its invoice, not for a completion", () => {
     assert.deepEqual(matches(chain({ SIGNED_COMPLETION: 1 })), [
       "NO_ORDER_FORM",
@@ -65,28 +90,19 @@ describe("the chain filter", () => {
     ]);
   });
 
-  // every chain sits in exactly one of the four stages that follow each other
-  it("exactly one of NO_COMPLETION, AWAITING_SIGNATURE, AWAITING_INVOICE, INVOICED holds, for every combination", () => {
-    const stages = [
-      "NO_COMPLETION",
-      "AWAITING_SIGNATURE",
-      "AWAITING_INVOICE",
-      "INVOICED",
-    ] as const;
-    for (const completion of [0, 1])
-      for (const signed of [0, 1])
-        for (const invoice of [0, 1]) {
-          const held = stages.filter((stage) =>
-            partnerOrderMatchesChainFilter(
-              chain({
-                COMPLETION: completion,
-                SIGNED_COMPLETION: signed,
-                INVOICE: invoice,
-              }),
-              stage,
-            ),
-          );
-          assert.equal(held.length, 1, `${completion}/${signed}/${invoice}`);
-        }
+  it("a fully signed and invoiced chain waits for nothing", () => {
+    for (const n of [1, 2, 3])
+      assert.deepEqual(
+        matches(
+          chain({
+            SIGNED_ORDER_FORM: 1,
+            COMPLETION: n,
+            SIGNED_COMPLETION: n,
+            INVOICE: n,
+          }),
+        ),
+        ["INVOICED"],
+        String(n),
+      );
   });
 });

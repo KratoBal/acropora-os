@@ -74,17 +74,17 @@ export type PartnerOrderSystemDocumentDto =
 export type PartnerOrderChain = Record<PartnerOrderDocumentStepValue, number>;
 
 /**
- * WHERE THE CHAIN STANDS, as a list filter (S4, card 38caeac2). Each value is a question about the document counts
- * of the chain (`PartnerOrderChain`, uploaded and system-made documents together), so the list and the API read the
- * same rule:
+ * WHERE THE CHAIN STANDS, as a list filter (S4, card 38caeac2). Each value is a QUESTION about the document counts
+ * of the chain (`PartnerOrderChain`, uploaded and system-made documents together), not a partition: an order can
+ * answer several of them, because an order can have several certificates (part completions), each at its own step.
  * - NO_ORDER_FORM: no signed order form attached yet;
- * - NO_COMPLETION: no completion certificate (TIG) yet;
- * - AWAITING_SIGNATURE: a TIG exists, no signed TIG;
- * - AWAITING_INVOICE: a signed TIG exists, no invoice;
- * - INVOICED: an invoice exists.
- * The first two are about the beginning of the chain, the last three follow each other: an order sits in exactly one
- * of NO_COMPLETION, AWAITING_SIGNATURE, AWAITING_INVOICE, INVOICED, except that a chain with a signed TIG but no TIG
- * count (a signed copy attached by hand) counts as awaiting its invoice, not as having no completion.
+ * - NO_COMPLETION: no completion certificate (TIG), no signed copy and no invoice yet;
+ * - AWAITING_SIGNATURE: more TIGs than signed copies (some certificate has no signed copy yet);
+ * - AWAITING_INVOICE: more signed copies than invoices (some signed TIG has no invoice yet);
+ * - INVOICED: at least one invoice (a storno'd one is not counted by the chain).
+ * The two "awaiting" values assume a signed copy stands for one TIG; the chain counts documents, it does not know
+ * which certificate a signed copy belongs to. A signed copy attached by hand with no TIG counted (S > C) waits for its
+ * invoice, not for a completion.
  */
 export const PARTNER_ORDER_CHAIN_FILTERS = [
   "NO_ORDER_FORM",
@@ -110,13 +110,9 @@ export function partnerOrderMatchesChainFilter(
         chain.INVOICE === 0
       );
     case "AWAITING_SIGNATURE":
-      return (
-        chain.COMPLETION > 0 &&
-        chain.SIGNED_COMPLETION === 0 &&
-        chain.INVOICE === 0
-      );
+      return chain.COMPLETION > chain.SIGNED_COMPLETION;
     case "AWAITING_INVOICE":
-      return chain.SIGNED_COMPLETION > 0 && chain.INVOICE === 0;
+      return chain.SIGNED_COMPLETION > chain.INVOICE;
     case "INVOICED":
       return chain.INVOICE > 0;
   }
