@@ -580,6 +580,8 @@ export function PilotInput({
   max,
   maxLength,
   required,
+  step,
+  "aria-invalid": ariaInvalid,
 }: {
   value?: string;
   onChange?: (value: string) => void;
@@ -606,6 +608,13 @@ export function PilotInput({
   maxLength?: number;
   /** ADDITÍV (T1.3, a tartalom felvétele): a natív kötelező jelölés, ugyanaz, mint a dusk `Input`-on. */
   required?: boolean;
+  /**
+   * ADDITÍV (T1.3, a beszerzési számla): a szám-mező lépésköze. A `step="any"` nélkül a natív űrlap-ellenőrzés
+   * a tizedes árfolyamot (`395.12`) érvénytelennek veszi, és a beküldés elakad.
+   */
+  step?: number | "any";
+  /** ADDITÍV (T1.3, a beszerzési számla): a hibás mező jelölése, ugyanaz a piros keret, mint a `PilotDateField`-en. */
+  "aria-invalid"?: boolean;
   /** ADDITÍV (Direction F, 2026-09-30): egy külső `<label htmlFor>`-hoz. */
   id?: string;
   /** ADDITÍV: ikon a mező elején (a terv keresőmezője). */
@@ -645,8 +654,12 @@ export function PilotInput({
       max={max}
       maxLength={maxLength}
       required={required}
+      step={step}
+      aria-invalid={ariaInvalid || undefined}
       onChange={(event) => onChange?.(event.target.value)}
-      className={`${leadingIcon ? "w-full" : classes.widthClass} rounded-md px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500 disabled:cursor-not-allowed disabled:bg-pilot-grey-50 disabled:text-pilot-grey-400 ${
+      className={`${leadingIcon ? "w-full" : classes.widthClass} rounded-md px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ${
+        ariaInvalid ? "ring-red-400" : "ring-pilot-grey-200"
+      } placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500 disabled:cursor-not-allowed disabled:bg-pilot-grey-50 disabled:text-pilot-grey-400 ${
         readOnly ? "bg-pilot-grey-50 text-pilot-grey-400" : "bg-white"
       } ${leadingIcon ? "pl-9" : ""} ${classes.rest}`}
     />

@@ -236,7 +236,7 @@ describe("PurchaseInvoiceEuEditorPage NAV bevételezés", () => {
       "placeholder",
       "A számlaszám megadása kötelező.",
     );
-    expect(invoiceNumber).toHaveClass("border-rose-500");
+    expect(invoiceNumber).toHaveClass("ring-red-400");
     expect(
       screen.getByText("A számlaszám megadása kötelező."),
     ).toBeInTheDocument();
@@ -1540,6 +1540,21 @@ describe("PurchaseInvoiceEuEditorPage várható beérkezésből", () => {
       screen.getByText(/csak a proforma érkezett meg/),
     ).toBeInTheDocument();
     expect(screen.queryByText("Várható beérkezésből előtöltve")).toBeNull();
+  });
+});
+
+describe("PurchaseInvoiceEuEditorPage szám-mezők", () => {
+  it("az árfolyam gépelés közben megtartja a „401.0” alakot, a betöltött MNB-árfolyamot pedig mutatja (barracuda, #2233)", async () => {
+    navigation.params = new URLSearchParams();
+    render(createElement(PurchaseInvoiceEuEditorPage));
+
+    const rate = screen.getByRole("spinbutton", { name: "Árfolyam" });
+    await waitFor(() => expect(rate).toHaveValue(398.5));
+
+    fireEvent.change(rate, { target: { value: "401.0" } });
+    expect((rate as HTMLInputElement).value).toBe("401.0");
+    fireEvent.change(rate, { target: { value: "401.05" } });
+    expect((rate as HTMLInputElement).value).toBe("401.05");
   });
 });
 
