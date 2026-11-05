@@ -21,6 +21,19 @@ export const PAID_MARK_SOURCE_LABEL: Record<PaidMarkSource, string> = {
 const errorText = (cause: unknown) =>
   cause instanceof Error ? cause.message : "Ismeretlen hiba";
 
+/** Amit az író kihagyna, okonként, a lap szavaival (acrobot 43886: a szám az, amit az író tényleg megkísérel). */
+const SKIP_TEXT: Record<string, string> = {
+  LOGGED_BEFORE: "már beírva",
+  ALREADY_PAID: "a feed szerint fizetve",
+  NOT_UNPAID: "nem bizonyíthatóan fizetetlen",
+  UNCERTAIN_BEFORE: "bizonytalan korábbi hívás",
+};
+const skippedText = (skipped: Record<string, number>) =>
+  Object.entries(skipped)
+    .filter(([, n]) => n > 0)
+    .map(([kind, n]) => `${SKIP_TEXT[kind] ?? kind} ${n}`)
+    .join(", ");
+
 const total = (planned: AllTimePreview["planned"]) =>
   planned.reduce((sum, mark) => sum + Number(mark.amount), 0);
 
@@ -129,7 +142,7 @@ export function AllTimeRunPanel({
                 {": "}
                 {p.errorCode
                   ? `az előnézet nem sikerült (${p.errorCode})`
-                  : `${p.mode === "auto" ? "kifizetettre jelölne" : "próba: csak tervezné"} ${p.planned.length} számlát (${formatMoney(String(total(p.planned)), "HUF")}); figyelmet kérne ${p.attentionCount}`}
+                  : `${p.mode === "auto" ? "kifizetettre jelölne" : "próba: csak tervezné"} ${p.planned.length} számlát (${formatMoney(String(total(p.planned)), "HUF")}); figyelmet kérne ${p.attentionCount}${skippedText(p.skipped) ? `; kimarad: ${skippedText(p.skipped)}` : ""}`}
               </p>
               {p.planned.length > 0 ? (
                 <ul className="divide-y divide-pilot-grey-100 rounded-xl border border-pilot-grey-200 text-xs">
