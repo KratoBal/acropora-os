@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { contractBilledLines } from "../contracts/contract-billed-lines.js";
 import {
+  linkedPartnerTaxHint,
   partnerTaxNumberFor,
   partnerTermsFor,
 } from "../customers/partner-payment-terms.js";
@@ -69,7 +70,10 @@ const DETAIL_INCLUDE = {
       customerNumber: true,
       // a vevő adószám-kapujához (`customerTaxNumberProblem`): a típus és a partner-tükör
       type: true,
-      partner: { select: { id: true } },
+      // a kötés a tipphez is (`partnerTaxHint`): a kötött partner adószáma, nem a névegyezés
+      partner: {
+        select: { id: true, name: true, taxNumber: true, deletedAt: true },
+      },
       displayName: true,
       companyName: true,
       taxNumber: true,
@@ -264,17 +268,27 @@ export class BillingDocumentsRepository {
   }
 
   /**
-   * A névvel egyező partner adószáma, ha a vevő-sornak nincs (`partnerTaxNumberFor`,
-   * kártya aaf4f09d): csak a kapu okához, az adatot nem írja át. A lekérdezés csak akkor
-   * fut, ha a vevőnek nincs adószáma, tehát a rendes úton nem kerül semmibe.
+   * A partner adószáma a vevő-sor hiányzó adószámához (kártya aaf4f09d, 40332480): csak a kapu
+   * okához, az adatot nem írja át. ELŐSZÖR a KÖTÉS (`Supplier.customerId`, `linkedPartnerTaxHint`),
+   * mert az egyesített partnernél a tükör neve eltérhet a partnerétől, és a név szerinti keresés
+   * ilyenkor mást mondana, mint a vevő részlete. A névalapú (`partnerTaxNumberFor`) a tartalék
+   * a kötetlen régi vevő-sorokra. A lekérdezés csak akkor fut, ha a vevőnek nincs adószáma és
+   * kötés sem adott tippet.
    */
   async partnerTaxHint(customer: {
     displayName: string;
     companyName: string | null;
     taxNumber: string | null;
     euTaxNumber: string | null;
+    partner?: {
+      deletedAt?: Date | null;
+      name: string;
+      taxNumber: string | null;
+    } | null;
   }): Promise<PartnerTaxHint | null> {
     if (customer.taxNumber?.trim() || customer.euTaxNumber?.trim()) return null;
+    const linked = linkedPartnerTaxHint(customer.partner ?? null);
+    if (linked) return linked;
     const partners = await this.database.supplier.findMany({
       // a deleted partner is no source (barracuda, #2161)
       where: { taxNumber: { not: null }, deletedAt: null },

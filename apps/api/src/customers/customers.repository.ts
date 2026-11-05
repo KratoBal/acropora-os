@@ -13,6 +13,7 @@ import type {
 
 import { withUniqueCode } from "../common/unique-code.util.js";
 import {
+  linkedPartnerTaxHint,
   partnerTaxNumberFor,
   partnerTermsFor,
 } from "./partner-payment-terms.js";
@@ -54,23 +55,6 @@ export function taxNumberSearchKey(search: string): string | null {
     .toUpperCase()
     .replace(/^HU(?=\d)/, "");
   return key.length >= 4 && /\d/.test(key) ? key : null;
-}
-
-/**
- * A KÖTÖTT PARTNER ADÓSZÁMA MINT TIPP (40332480, barracuda #2228): ha a vevő-sor egy élő partnerhez van kötve
- * (`Supplier.customerId`) és a partnernek van adószáma, az a tipp, a nevek egyezése nélkül is. A névalapú keresés
- * (`partnerTaxNumberFor`) csak akkor fut, ha nincs ilyen kötés. Ugyanaz a kötés, amelyen a keresés adószám-ága is
- * megy (`searchCustomerIds`), hogy amit a keresés megtalál, annak a részlete is megadja a számot.
- */
-export function linkedPartnerTaxHint(
-  partner: {
-    deletedAt?: Date | null;
-    name: string;
-    taxNumber: string | null;
-  } | null,
-): { partnerName: string; taxNumber: string } | null {
-  if (!partner || partner.deletedAt || !partner.taxNumber?.trim()) return null;
-  return { partnerName: partner.name, taxNumber: partner.taxNumber.trim() };
 }
 
 /**
