@@ -197,6 +197,8 @@ describe("the 2026/ series, numbered without a prefix", () => {
       decision.marks.map((m) => m.invoiceNumber),
       ["2026/00086", "2026/00085", "2026/00084"],
     );
+    // one series only: no narrowing, the plain note
+    assert.ok(decision.marks.every((m) => !m.note.includes("előtag nélküli")));
   });
 
   it("a bare number of two series: the one waiting for money, never the one paid long ago", () => {
@@ -213,6 +215,11 @@ describe("the 2026/ series, numbered without a prefix", () => {
     assert.deepEqual(
       decision.marks.map((m) => m.invoiceNumber),
       ["2026/00084"],
+    );
+    // the mark says the series was chosen by the narrowing, so a wrong pick can be traced (barracuda, #2216 b)
+    assert.match(
+      decision.marks[0]!.note,
+      /előtag nélküli számából, a nyitott számlához rendelve$/,
     );
   });
 

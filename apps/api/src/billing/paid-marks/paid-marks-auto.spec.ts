@@ -162,6 +162,38 @@ describe("the source plans: what needs a person", () => {
     );
   });
 
+  // Balázs's live run 2026-11-05: "ACRW-2026/00469: NOT_FOUND" while the GLS page showed it paired; the line says which case
+  it("GLS: a NOT_FOUND line says whether the invoice is missing from the feed or stored only under another source", () => {
+    const plan = glsPlanFrom(
+      [
+        {
+          transferDate: "2026-09-10",
+          markable: true,
+          transferred: "57800",
+          creditId: "bt",
+          marks: [],
+          skipped: [
+            { invoiceNumber: "ACRW-2026/00469", reason: "NOT_FOUND" },
+            { invoiceNumber: "ACRW-2026/00468", reason: "NOT_FOUND" },
+            { invoiceNumber: "ACRW-2026/00467", reason: "AMOUNT_MISMATCH" },
+          ],
+        },
+      ],
+      new Map([
+        ["ACRW-2026/00469", ["EBIZ"]],
+        ["ACRW-2026/00467", ["EBIZ"]],
+      ]),
+    );
+    assert.deepEqual(
+      plan.exceptions.map((e) => `${e.reference}: ${e.detail}`),
+      [
+        "ACRW-2026/00469: GLS 2026-09-10; a feedben csak EBIZ forrással",
+        "ACRW-2026/00468: GLS 2026-09-10; nincs a Számlázz.hu feedben",
+        "ACRW-2026/00467: GLS 2026-09-10",
+      ],
+    );
+  });
+
   it("Foxpost: a settlement that failed to read, with its error", () => {
     const plan = foxpostPlanFrom([
       {
