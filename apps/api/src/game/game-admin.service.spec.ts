@@ -64,7 +64,7 @@ function setup(entries: ReturnType<typeof entry>[]) {
     },
     $transaction: async (fn: (t: typeof tx) => unknown) => fn(tx),
   };
-  const service = new GameAdminService();
+  const service = new GameAdminService(null as never);
   service.database = database as never;
   return { service, draws, audits };
 }
@@ -175,7 +175,7 @@ describe("an edit of a question (barracuda, #2254)", () => {
         },
       },
     };
-    const service = new GameAdminService();
+    const service = new GameAdminService(null as never);
     service.database = {
       $transaction: async (fn: (t: typeof tx) => unknown) => fn(tx),
     } as never;
@@ -207,6 +207,56 @@ describe("an edit of a question (barracuda, #2254)", () => {
   });
 });
 
+describe("the mail queue (acrobot 43965)", () => {
+  // WHAT TURNS THIS RED: a waiting mail sent with its old link, sent past today's cap, or the send not audited
+  it("sends the waiting mails oldest first with a new link, and stops where the cap queues again", async () => {
+    const waiting = ["a@x.hu", "b@x.hu", "c@x.hu"].map((email) => ({
+      id: email,
+      email,
+      question: { week: "2026-W45" },
+      confirmTokenHash: "regi",
+    }));
+    const delivered: string[] = [];
+    const audits: unknown[] = [];
+    const game = {
+      deliver: async (_id: string, email: string) => {
+        if (delivered.length === 2) return "QUEUED";
+        delivered.push(email);
+        return "SENT";
+      },
+      sentToday: async () => 3000,
+      dailyCap: () => 3000,
+    };
+    const service = new GameAdminService(game as never);
+    service.database = {
+      gameEntry: {
+        findMany: async () => waiting,
+        count: async () => 1,
+        update: async ({
+          where,
+          data,
+        }: {
+          where: { id: string };
+          data: Record<string, any>;
+        }) => {
+          Object.assign(
+            waiting.find((w) => w.id === where.id)!,
+            { confirmTokenHash: data.confirmTokenHash },
+          );
+        },
+      },
+      auditLog: {
+        create: async ({ data }: { data: unknown }) => void audits.push(data),
+      },
+    } as never;
+    const result = await service.sendQueued("u1");
+    assert.deepEqual(delivered, ["a@x.hu", "b@x.hu"]);
+    assert.equal(result.sent, 2);
+    assert.ok(waiting.slice(0, 2).every((w) => w.confirmTokenHash !== "regi"));
+    assert.equal(audits.length, 1);
+  });
+});
+
 describe("a question", () => {
   const base = {
     week: "2026-W45",
@@ -222,7 +272,7 @@ describe("a question", () => {
   };
   const code = async (input: Record<string, unknown>) => {
     const created: unknown[] = [];
-    const service = new GameAdminService();
+    const service = new GameAdminService(null as never);
     service.database = {
       gameQuestion: {
         create: async ({ data }: { data: unknown }) => void created.push(data),

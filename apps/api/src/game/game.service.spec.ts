@@ -36,7 +36,18 @@ function setup(
 ) {
   const entries = new Map<string, Record<string, unknown>>();
   const mails: { to: readonly string[]; text: string }[] = [];
+  const days = new Map<string, number>();
   const database = {
+    gameMailDay: {
+      upsert: async ({ where }: { where: { day: string } }) => {
+        days.set(where.day, (days.get(where.day) ?? 0) + 1);
+        return { day: where.day, sent: days.get(where.day)! };
+      },
+      findUnique: async ({ where }: { where: { day: string } }) =>
+        days.has(where.day)
+          ? { day: where.day, sent: days.get(where.day)! }
+          : null,
+    },
     gameQuestion: {
       findFirst: async () =>
         OPEN >= q.opensAt && OPEN < q.closesAt ? q : null,
@@ -65,8 +76,10 @@ function setup(
         entries.set(data.email as string, {
           id: data.email,
           confirmedAt: null,
+          mailPendingSince: null,
           ...data,
         });
+        return { id: data.email };
       },
       updateMany: async ({
         where,
@@ -237,6 +250,25 @@ describe("an entry", () => {
       status: "CHECK_EMAIL",
     });
     assert.equal(race.mails.length, 1);
+  });
+
+  // acrobot 43965: WHAT TURNS THIS RED: mail past the daily cap going out anyway, or the entry past it lost
+  it("past the daily cap the entry is kept, its mail waits, and the caller hears the same", async () => {
+    const { service, entries, mails } = setup(question(), {
+      TICKET_MAIL_MODE: "live",
+      TICKET_MAIL_GAME: "live",
+      TICKET_MAIL_REDIRECT_TO: "teszt@acropora.hu",
+      JATEK_PUBLIC_URL: "https://jatek-teszt.acropora.hu",
+      JATEK_MAIL_DAILY_CAP: "2",
+    });
+    for (const email of ["a@x.hu", "b@x.hu", "c@x.hu"])
+      assert.deepEqual(await service.submit({ ...entry, email }), {
+        status: "CHECK_EMAIL",
+      });
+    assert.equal(mails.length, 2);
+    assert.equal(entries.size, 3);
+    assert.ok(entries.get("c@x.hu")!.mailPendingSince instanceof Date);
+    assert.equal(entries.get("a@x.hu")!.mailPendingSince, null);
   });
 
   it("refuses a bad address, an empty answer, a choice that is no option, and a closed week, in the contract's codes", async () => {

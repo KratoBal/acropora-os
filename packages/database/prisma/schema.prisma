@@ -11727,6 +11727,8 @@ model GameEntry {
   /// lehet egy címet levelekkel elárasztani; a levelek száma és üteme címenként és kérdésenként korlátos).
   mailCount        Int          @default(0)
   lastMailedAt     DateTime?
+  /// A napi levél-plafon fölött (JATEK_MAIL_DAILY_CAP) a beküldés megvan, a levél vár: mióta. A kezelő látja és küldi ki.
+  mailPendingSince DateTime?
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 
@@ -11752,4 +11754,12 @@ model GameDraw {
   createdAt   DateTime      @default(now())
 
   @@index([kind, createdAt])
+}
+
+/// A NYEREMÉNYJÁTÉK LEVELEINEK NAPI SZÁMLÁLÓJA (acrobot, 2026-11-05 22:57): egy budapesti napra hány megerősítő levél ment.
+/// A növelés atomi (upsert increment); a plafon fölötti beküldés levele sorba áll (`GameEntry.mailPendingSince`).
+model GameMailDay {
+  /// A budapesti nap, például 2026-11-06.
+  day  String @id
+  sent Int    @default(0)
 }

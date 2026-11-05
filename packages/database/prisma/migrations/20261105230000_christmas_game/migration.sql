@@ -1,5 +1,5 @@
--- A KARÁCSONYI NYEREMÉNYJÁTÉK (kártya 31445d0f; Balázs, 2026-11-05): heti kérdés, beküldés, sorsolás. Három új, üres
--- tábla, meglévő sort nem érint. ROLLBACK: DROP TABLE "GameDraw", "GameEntry", "GameQuestion";
+-- A KARÁCSONYI NYEREMÉNYJÁTÉK (kártya 31445d0f; Balázs, 2026-11-05): heti kérdés, beküldés, sorsolás. Négy új, üres
+-- tábla, meglévő sort nem érint. ROLLBACK: DROP TABLE "GameDraw", "GameEntry", "GameQuestion", "GameMailDay";
 
 -- CreateTable
 CREATE TABLE "GameQuestion" (
@@ -31,6 +31,7 @@ CREATE TABLE "GameEntry" (
     "confirmedAt" TIMESTAMP(3),
     "mailCount" INTEGER NOT NULL DEFAULT 0,
     "lastMailedAt" TIMESTAMP(3),
+    "mailPendingSince" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -51,6 +52,14 @@ CREATE TABLE "GameDraw" (
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "GameDraw_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "GameMailDay" (
+    "day" TEXT NOT NULL,
+    "sent" INTEGER NOT NULL DEFAULT 0,
+
+    CONSTRAINT "GameMailDay_pkey" PRIMARY KEY ("day")
 );
 
 -- CreateIndex

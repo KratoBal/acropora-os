@@ -24,6 +24,7 @@ import {
   gameApi,
   type GameDrawView,
   type GameEntryView,
+  type GameMailQueue,
   type GameQuestionView,
 } from "@/lib/api/game";
 import { formatDateTimeHu } from "@/lib/format/date";
@@ -271,6 +272,60 @@ function Entries({
   );
 }
 
+/** A napi levél-plafon fölött várakozó megerősítő levelek, és a kiküldésük (acrobot, 2026-11-05). */
+function MailQueue({
+  token,
+  canManage,
+}: {
+  token: string;
+  canManage: boolean;
+}) {
+  const [queue, setQueue] = useState<GameMailQueue | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const load = useCallback(async () => {
+    try {
+      setQueue(await gameApi.mailQueue(token));
+    } catch (cause) {
+      setError(errorText(cause));
+    }
+  }, [token]);
+  useEffect(() => {
+    void load();
+  }, [load]);
+  const send = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      setQueue(await gameApi.sendQueued(token));
+    } catch (cause) {
+      setError(errorText(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (!queue) return null;
+  return (
+    <section
+      className="space-y-2 rounded-2xl border border-pilot-grey-200 bg-white px-5 py-4"
+      data-testid="game-mail-queue"
+    >
+      <p className="text-sm">
+        Megerősítő levelek ma: {queue.sentToday} / {queue.dailyCap}
+        {queue.pending > 0 ? ` · várakozik: ${queue.pending}` : ""}
+      </p>
+      {canManage && queue.pending > 0 ? (
+        <PilotButton disabled={busy} onClick={() => void send()}>
+          Várakozó levelek kiküldése
+        </PilotButton>
+      ) : null}
+      {error ? (
+        <Alert variant="danger" title="Hiba történt" description={error} />
+      ) : null}
+    </section>
+  );
+}
+
 /** A sorsolások: új heti vagy karácsonyi sorsolás, és a régi újrafuttatása ugyanazzal a maggal. */
 function Draws({
   token,
@@ -510,6 +565,7 @@ export function GameAdminPage() {
           ) : null}
         </section>
       )}
+      <MailQueue token={token} canManage={canManage} />
       {questions ? (
         <Draws token={token} questions={questions} canManage={canManage} />
       ) : null}

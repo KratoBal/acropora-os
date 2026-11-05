@@ -70,4 +70,17 @@ export class GameAdminController {
   verify(@Param("id") id: string) {
     return this.admin.verify(id);
   }
+
+  /** The mail waiting past the daily cap (acrobot, 2026-11-05 22:57). */
+  @Get("mail-queue")
+  @RequirePermissions(PERMISSIONS.GAME_VIEW)
+  mailQueue() {
+    return this.admin.mailQueue();
+  }
+
+  @Post("mail-queue/send")
+  @RequirePermissions(PERMISSIONS.GAME_MANAGE)
+  sendQueued(@CurrentUser() user: AuthenticatedUser) {
+    return this.admin.sendQueued(user.id);
+  }
 }

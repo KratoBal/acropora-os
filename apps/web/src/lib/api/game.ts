@@ -53,6 +53,12 @@ export interface GameDrawView {
   createdAt: string;
 }
 
+export interface GameMailQueue {
+  pending: number;
+  sentToday: number;
+  dailyCap: number;
+}
+
 export interface GameDrawVerify {
   drawId: string;
   seed: string;
@@ -92,6 +98,17 @@ export const gameApi = {
       method: "POST",
       body: JSON.stringify({ kind, ...(questionId ? { questionId } : {}) }),
     });
+  },
+  /** A napi levél-plafon fölött várakozó megerősítő levelek (acrobot, 2026-11-05). */
+  mailQueue(token: string) {
+    return apiRequest<GameMailQueue>("/game/mail-queue", token);
+  },
+  sendQueued(token: string) {
+    return apiRequest<GameMailQueue & { sent: number }>(
+      "/game/mail-queue/send",
+      token,
+      { method: "POST" },
+    );
   },
   verify(token: string, drawId: string) {
     return apiRequest<GameDrawVerify>(

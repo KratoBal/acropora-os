@@ -49,7 +49,10 @@ export interface PublicGameQuestion {
 }
 
 /** The database the service reads and writes; the test hands in a fake. */
-export type GameDatabase = Pick<typeof prisma, "gameQuestion" | "gameEntry">;
+export type GameDatabase = Pick<
+  typeof prisma,
+  "gameQuestion" | "gameEntry" | "gameMailDay"
+>;
 
 export const GAME_ENV = Symbol("GAME_ENV");
 
@@ -60,6 +63,8 @@ export const GAME_ENV = Symbol("GAME_ENV");
  */
 export const GAME_MAIL_COOLDOWN_MS = 2 * 60_000;
 export const GAME_MAIL_MAX_PER_ENTRY = 5;
+/** The giveaway's mail in one Budapest day, in all (acrobot, 2026-11-05 22:57), unless JATEK_MAIL_DAILY_CAP says other. */
+export const GAME_MAIL_DAILY_CAP_DEFAULT = 3000;
 
 /**
  * THE GIVEAWAY'S PUBLIC SIDE (card 31445d0f; brief exchange/jatek/brief-2026-11-05.md; the contract with the page:
@@ -189,6 +194,7 @@ export class GameService {
       where: { questionId_email: { questionId: question.id, email } },
     });
     if (existing?.confirmedAt) return answered;
+    let entryId: string;
     if (existing) {
       const recent =
         existing.lastMailedAt !== null &&
@@ -207,9 +213,10 @@ export class GameService {
         },
       });
       if (count === 0) return answered;
+      entryId = existing.id;
     } else {
       try {
-        await this.database.gameEntry.create({
+        ({ id: entryId } = await this.database.gameEntry.create({
           data: {
             questionId: question.id,
             email,
@@ -219,7 +226,8 @@ export class GameService {
             mailCount: 1,
             lastMailedAt: now,
           },
-        });
+          select: { id: true },
+        }));
       } catch (error) {
         // a second first entry for the same address at the same moment: the first one stands
         if (
@@ -230,15 +238,71 @@ export class GameService {
         throw error;
       }
     }
-    await this.mailConfirmation(email, token, question.week);
+    await this.deliver(entryId, email, token, question.week);
     return answered;
+  }
+
+  /** The Budapest day a mail is counted on (the daily cap's key). */
+  private today(): string {
+    return new Intl.DateTimeFormat("sv-SE", {
+      timeZone: "Europe/Budapest",
+    }).format(this.now());
+  }
+
+  /** The daily cap of the giveaway's mail (JATEK_MAIL_DAILY_CAP, default 3000). */
+  dailyCap(): number {
+    const n = Number(this.environment.JATEK_MAIL_DAILY_CAP);
+    return Number.isInteger(n) && n >= 0 ? n : GAME_MAIL_DAILY_CAP_DEFAULT;
+  }
+
+  /** Today's mail so far, for the admin. */
+  async sentToday(): Promise<number> {
+    const row = await this.database.gameMailDay.findUnique({
+      where: { day: this.today() },
+    });
+    return row?.sent ?? 0;
+  }
+
+  /**
+   * ONE CONFIRMATION MAIL, UNDER THE DAILY CAP (acrobot, 2026-11-05 22:57): a slot is taken first (an atomic increment of
+   * the day's counter); past the cap the entry stays, its mail waits (`mailPendingSince`), and the admin sees it and
+   * sends it later. The caller hears the same answer either way. Returns what happened, for the admin's queue.
+   */
+  async deliver(
+    entryId: string,
+    email: string,
+    token: string,
+    week: string,
+  ): Promise<"SENT" | "QUEUED" | "NOT_SENT"> {
+    const { sent } = await this.database.gameMailDay.upsert({
+      where: { day: this.today() },
+      create: { day: this.today(), sent: 1 },
+      update: { sent: { increment: 1 } },
+    });
+    if (sent > this.dailyCap()) {
+      await this.database.gameEntry.update({
+        where: { id: entryId },
+        data: { mailPendingSince: this.now() },
+      });
+      this.logger.warn(
+        `Nyereményjáték ${week}: a napi levél-plafon (${this.dailyCap()}) betelt, a megerősítő levél sorban áll`,
+      );
+      return "QUEUED";
+    }
+    const outcome = await this.mailConfirmation(email, token, week);
+    if (outcome === "SENT")
+      await this.database.gameEntry.update({
+        where: { id: entryId },
+        data: { mailPendingSince: null },
+      });
+    return outcome;
   }
 
   private async mailConfirmation(
     email: string,
     token: string,
     week: string,
-  ): Promise<void> {
+  ): Promise<"SENT" | "NOT_SENT"> {
     const gate = mailGate({
       mode: mailModeOf(this.environment.TICKET_MAIL_MODE),
       pathMode: mailModeOf(this.environment.TICKET_MAIL_GAME),
@@ -249,7 +313,7 @@ export class GameService {
       this.logger.warn(
         `Nyereményjáték ${week}: a megerősítő levél nem ment ki (${gate.kind === "closed" ? gate.reason : !this.sender ? "no-sender" : "no-JATEK_PUBLIC_URL"}); a beküldés megvan, megerősítetlenül`,
       );
-      return;
+      return "NOT_SENT";
     }
     const link = `${base}/megerosites?token=${encodeURIComponent(token)}`;
     try {
@@ -273,7 +337,9 @@ export class GameService {
       this.logger.error(
         `Nyereményjáték ${week}: a megerősítő levél küldése elbukott (${error instanceof Error ? error.name : "UNKNOWN"})`,
       );
+      return "NOT_SENT";
     }
+    return "SENT";
   }
 
   async confirm(input: {

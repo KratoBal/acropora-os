@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 
 import { HttpStatus, Injectable } from "@nestjs/common";
 import { Prisma, prisma } from "@acropora/database";
@@ -12,7 +12,7 @@ import {
   type GameOption,
 } from "@acropora/types";
 
-import { gameError } from "./game.service.js";
+import { gameError, GameService } from "./game.service.js";
 
 /** The admin's question: what the form sends (create and edit alike). */
 export interface GameQuestionInput {
@@ -43,6 +43,8 @@ const counts = (entry: {
  */
 @Injectable()
 export class GameAdminService {
+  constructor(private readonly game: GameService) {}
+
   /** the test replaces it */
   database: Pick<
     typeof prisma,
@@ -315,5 +317,59 @@ export class GameAdminService {
       tickets: again?.tickets ?? 0,
       same: (again?.winner.email ?? null) === draw.winnerEmail,
     };
+  }
+
+  /** The mail queue (acrobot, 2026-11-05 22:57): what waits past the daily cap, today's mail and the cap. */
+  async mailQueue() {
+    const pending = await this.database.gameEntry.count({
+      where: { mailPendingSince: { not: null }, confirmedAt: null },
+    });
+    return {
+      pending,
+      sentToday: await this.game.sentToday(),
+      dailyCap: this.game.dailyCap(),
+    };
+  }
+
+  /**
+   * The waiting mails sent, oldest first, as far as today's cap lets them: each gets a new link (the old token is
+   * replaced). It stops at the first one the cap queues again.
+   */
+  async sendQueued(userId: string) {
+    const waiting = await this.database.gameEntry.findMany({
+      where: { mailPendingSince: { not: null }, confirmedAt: null },
+      orderBy: { mailPendingSince: "asc" },
+      select: { id: true, email: true, question: { select: { week: true } } },
+    });
+    let sent = 0;
+    for (const entry of waiting) {
+      const token = randomBytes(32).toString("base64url");
+      await this.database.gameEntry.update({
+        where: { id: entry.id },
+        data: {
+          confirmTokenHash: createHash("sha256").update(token).digest("hex"),
+          mailCount: { increment: 1 },
+          lastMailedAt: new Date(),
+        },
+      });
+      const outcome = await this.game.deliver(
+        entry.id,
+        entry.email,
+        token,
+        entry.question.week,
+      );
+      if (outcome === "QUEUED") break;
+      if (outcome === "SENT") sent++;
+    }
+    await this.database.auditLog.create({
+      data: {
+        userId,
+        action: "game.mail-queue.sent",
+        entityType: "GameEntry",
+        entityId: "mail-queue",
+        metadata: { waiting: waiting.length, sent },
+      },
+    });
+    return { sent, ...(await this.mailQueue()) };
   }
 }

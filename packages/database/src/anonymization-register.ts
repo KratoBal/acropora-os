@@ -1141,6 +1141,9 @@ export const ANONYMIZATION_REGISTER: Readonly<
     manualById: "identifier",
     confirmTokenHash: "passwordHash",
   },
+  GameMailDay: {
+    day: "business",
+  },
   GameDraw: {
     kind: "business",
     seed: "identifier",

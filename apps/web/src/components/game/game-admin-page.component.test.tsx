@@ -16,6 +16,8 @@ const api = vi.hoisted(() => ({
   draws: vi.fn(),
   draw: vi.fn(),
   verify: vi.fn(),
+  mailQueue: vi.fn(),
+  sendQueued: vi.fn(),
 }));
 vi.mock("@/lib/api/game", () => ({ gameApi: api }));
 vi.mock("next/navigation", () => ({
@@ -96,6 +98,15 @@ beforeEach(() => {
     },
   ]);
   api.decide.mockReset().mockResolvedValue({});
+  api.mailQueue
+    .mockReset()
+    .mockResolvedValue({ pending: 4, sentToday: 3000, dailyCap: 3000 });
+  api.sendQueued.mockReset().mockResolvedValue({
+    pending: 0,
+    sentToday: 3000,
+    dailyCap: 3000,
+    sent: 4,
+  });
   api.draws.mockReset().mockResolvedValue([
     {
       id: "d1",
@@ -168,5 +179,16 @@ describe("GameAdminPage", () => {
     expect(api.questions).not.toHaveBeenCalled();
     expect(api.entries).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: "Heti sorsolás" })).toBeNull();
+  });
+  it("shows the mail waiting past the daily cap, and sends it on a press", async () => {
+    render(<GameAdminPage />);
+    const queue = await screen.findByTestId("game-mail-queue");
+    expect(queue).toHaveTextContent(
+      "Megerősítő levelek ma: 3000 / 3000 · várakozik: 4",
+    );
+    fireEvent.click(
+      within(queue).getByRole("button", { name: "Várakozó levelek kiküldése" }),
+    );
+    await waitFor(() => expect(api.sendQueued).toHaveBeenCalledWith("t"));
   });
 });
