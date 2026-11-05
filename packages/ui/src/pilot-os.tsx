@@ -247,6 +247,7 @@ export function PilotDataTable<Row>({
   minWidth = 960,
   sort,
   onSort,
+  dense = false,
 }: {
   columns: readonly PilotTableColumn<Row>[];
   rows: readonly Row[];
@@ -272,6 +273,11 @@ export function PilotDataTable<Row>({
   sort?: PilotTableSort | null;
   /** Egy `sortable` oszlop fejlécére kattintottak; az irányt a hívó váltja. */
   onSort?: (columnId: string) => void;
+  /**
+   * SŰRŰ SOROK (asztalon): alacsonyabb sor és kisebb cella-térköz, hogy egy képernyőre több sor férjen. Alapból
+   * ki van kapcsolva, a többi lista változatlan. Telefonon a kártyalista nem változik.
+   */
+  dense?: boolean;
 }) {
   const alignClass = (align: PilotTableColumn<Row>["align"]) =>
     align === "right" ? "text-right" : "text-left";
@@ -398,7 +404,7 @@ export function PilotDataTable<Row>({
                     : onRowActivate
                       ? `${bg} text-pilot-grey-500`
                       : bg
-                } md:h-[72px] max-md:block max-md:rounded-lg max-md:border max-md:border-pilot-grey-200 max-md:p-4 ${extraClass}`}
+                } ${dense ? "md:h-[44px]" : "md:h-[72px]"} max-md:block max-md:rounded-lg max-md:border max-md:border-pilot-grey-200 max-md:p-4 ${extraClass}`}
               >
                 {columns.map((column) => (
                   <td
@@ -408,7 +414,7 @@ export function PilotDataTable<Row>({
                         ? column.header
                         : undefined
                     }
-                    className={`px-4 py-3 align-middle text-sm first:pl-5 last:pr-5 ${alignClass(column.align)}${column.nowrap ? " whitespace-nowrap" : ""} ${phoneCellClass(column)}`}
+                    className={`px-4 ${dense ? "md:py-1.5" : "py-3"} align-middle text-sm first:pl-5 last:pr-5 ${alignClass(column.align)}${column.nowrap ? " whitespace-nowrap" : ""} ${phoneCellClass(column)}`}
                   >
                     {column.cell(row)}
                   </td>

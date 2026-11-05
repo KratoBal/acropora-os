@@ -73,6 +73,55 @@ export type PartnerOrderSystemDocumentDto =
 /** Where the chain stands: the documents per step, uploaded and system-made together. */
 export type PartnerOrderChain = Record<PartnerOrderDocumentStepValue, number>;
 
+/**
+ * WHERE THE CHAIN STANDS, as a list filter (S4, card 38caeac2). Each value is a question about the document counts
+ * of the chain (`PartnerOrderChain`, uploaded and system-made documents together), so the list and the API read the
+ * same rule:
+ * - NO_ORDER_FORM: no signed order form attached yet;
+ * - NO_COMPLETION: no completion certificate (TIG) yet;
+ * - AWAITING_SIGNATURE: a TIG exists, no signed TIG;
+ * - AWAITING_INVOICE: a signed TIG exists, no invoice;
+ * - INVOICED: an invoice exists.
+ * The first two are about the beginning of the chain, the last three follow each other: an order sits in exactly one
+ * of NO_COMPLETION, AWAITING_SIGNATURE, AWAITING_INVOICE, INVOICED, except that a chain with a signed TIG but no TIG
+ * count (a signed copy attached by hand) counts as awaiting its invoice, not as having no completion.
+ */
+export const PARTNER_ORDER_CHAIN_FILTERS = [
+  "NO_ORDER_FORM",
+  "NO_COMPLETION",
+  "AWAITING_SIGNATURE",
+  "AWAITING_INVOICE",
+  "INVOICED",
+] as const;
+export type PartnerOrderChainFilter =
+  (typeof PARTNER_ORDER_CHAIN_FILTERS)[number];
+
+export function partnerOrderMatchesChainFilter(
+  chain: PartnerOrderChain,
+  filter: PartnerOrderChainFilter,
+): boolean {
+  switch (filter) {
+    case "NO_ORDER_FORM":
+      return chain.SIGNED_ORDER_FORM === 0;
+    case "NO_COMPLETION":
+      return (
+        chain.COMPLETION === 0 &&
+        chain.SIGNED_COMPLETION === 0 &&
+        chain.INVOICE === 0
+      );
+    case "AWAITING_SIGNATURE":
+      return (
+        chain.COMPLETION > 0 &&
+        chain.SIGNED_COMPLETION === 0 &&
+        chain.INVOICE === 0
+      );
+    case "AWAITING_INVOICE":
+      return chain.SIGNED_COMPLETION > 0 && chain.INVOICE === 0;
+    case "INVOICED":
+      return chain.INVOICE > 0;
+  }
+}
+
 export interface PartnerOrderListItemDto {
   id: string;
   orderNumber: string;
@@ -89,6 +138,13 @@ export interface PartnerOrderListItemDto {
   currency: string;
   /** Document count per chain step. */
   chain: PartnerOrderChain;
+  /**
+   * How many of the order's lines still have a quantity no completion certificate states (S4): the order's lines
+   * minus the certified lines, per quote item. 0 when everything is certified.
+   */
+  openLines: number;
+  /** The order's line count (the denominator of `openLines`). */
+  totalLines: number;
   createdAt: string;
 }
 

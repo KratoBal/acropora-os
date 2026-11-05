@@ -34,6 +34,8 @@ export class PartnerOrdersController {
     return this.service.list(query.page, query.pageSize, {
       q: query.q?.trim() || undefined,
       status: query.status,
+      stage: query.stage,
+      openOnly: query.open === "1",
     });
   }
 

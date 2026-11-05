@@ -9,7 +9,9 @@ import {
   Min,
 } from "class-validator";
 import {
+  PARTNER_ORDER_CHAIN_FILTERS,
   PARTNER_ORDER_STATUSES,
+  type PartnerOrderChainFilter,
   type PartnerOrderStatusValue,
 } from "@acropora/types";
 
@@ -18,6 +20,12 @@ export class PartnerOrderListQueryDto {
   @Type(() => Number) @IsInt() @Min(1) @Max(100) pageSize = 25;
   @IsOptional() @IsString() @MaxLength(200) q?: string;
   @IsOptional() @IsIn(PARTNER_ORDER_STATUSES) status?: PartnerOrderStatusValue;
+  /** Where the chain stands (S4); see `PARTNER_ORDER_CHAIN_FILTERS`. */
+  @IsOptional()
+  @IsIn(PARTNER_ORDER_CHAIN_FILTERS)
+  stage?: PartnerOrderChainFilter;
+  /** `1`: only the orders with a line no certificate states yet (S4). Anything else is refused. */
+  @IsOptional() @IsIn(["1"]) open?: "1";
 }
 
 export class CreatePartnerOrderDto {

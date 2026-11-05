@@ -101,6 +101,8 @@ const LIST: PartnerOrderListResponse = {
       netTotal: "25000",
       currency: "HUF",
       chain: { ...CHAIN, OTHER: 0 },
+      openLines: 1,
+      totalLines: 2,
       createdAt: "2026-11-04T10:00:00Z",
     },
   ],
@@ -198,6 +200,23 @@ beforeEach(() => {
   api.candidates.mockResolvedValue([]);
 });
 
+/**
+ * A tiltott tároló: a `window.localStorage` ELÉRÉSE dob (privát ablak, tiltott oldaladat), nem csak az olvasás. A
+ * `Storage.prototype` kémje ebben a környezetben nem fogja meg, ezért a tulajdonságot cseréljük.
+ */
+function blockStorage() {
+  const original = Object.getOwnPropertyDescriptor(window, "localStorage");
+  Object.defineProperty(window, "localStorage", {
+    configurable: true,
+    get() {
+      throw new Error("blocked");
+    },
+  });
+  return () => {
+    if (original) Object.defineProperty(window, "localStorage", original);
+  };
+}
+
 describe("a megrendelések listája", () => {
   it("shows the order, the partner, the net total and where the chain stands", async () => {
     render(<PartnerOrderListPage />);
@@ -209,6 +228,111 @@ describe("a megrendelések listája", () => {
     expect(within(row).getByText("Megrendelőlap ✓")).toBeInTheDocument();
     expect(within(row).getByText("TIG")).toBeInTheDocument();
     expect(within(row).queryByText("TIG ✓")).not.toBeInTheDocument();
+  });
+
+  /*
+    S4 (38caeac2). MI PIROSIT: ha a hatralek oszlop a teljesitett es a nyitott tetelt egyformanak mutatja, vagy a
+    lemondott megrendelest is hatralekosnak; ha a szuro nem az API-nak megy at (a cim marad valtozatlan); ha egy
+    ismeretlen cimbeli ertek szuronek szamit; ha a suru mod nem allitja a sormagassagot, nem jegyzodik meg, vagy
+    a nem mukodo tarolo a lapot elviszi.
+  */
+  it("shows the open lines of each order, and nothing for a cancelled one", async () => {
+    api.list.mockResolvedValue({
+      ...LIST,
+      items: [
+        LIST.items[0]!,
+        { ...LIST.items[0]!, id: "o2", orderNumber: "MR-2", openLines: 0 },
+        {
+          ...LIST.items[0]!,
+          id: "o3",
+          orderNumber: "MR-3",
+          status: "CANCELLED",
+        },
+      ],
+      total: 3,
+    });
+    render(<PartnerOrderListPage />);
+    const open = (await screen.findByText("MR-2026-0042")).closest("tr")!;
+    expect(within(open).getByText("1 / 2 tétel")).toBeInTheDocument();
+    const done = screen.getByText("MR-2").closest("tr")!;
+    expect(within(done).getByText("Teljesítve")).toBeInTheDocument();
+    const cancelled = screen.getByText("MR-3").closest("tr")!;
+    expect(within(cancelled).queryByText(/tétel/)).not.toBeInTheDocument();
+    expect(within(cancelled).getByText("—")).toBeInTheDocument();
+  });
+
+  it("sends the chain and open line filters to the API, and a value it does not know is no filter", async () => {
+    navigation.search = new URLSearchParams("stage=AWAITING_SIGNATURE&open=1");
+    render(<PartnerOrderListPage />);
+    await screen.findByText("MR-2026-0042");
+    const query = api.list.mock.calls.at(-1)![1] as URLSearchParams;
+    expect(query.get("stage")).toBe("AWAITING_SIGNATURE");
+    expect(query.get("open")).toBe("1");
+  });
+
+  it("drops a stage it does not know instead of sending it", async () => {
+    navigation.search = new URLSearchParams("stage=SOMETHING_ELSE");
+    render(<PartnerOrderListPage />);
+    await screen.findByText("MR-2026-0042");
+    const query = api.list.mock.calls.at(-1)![1] as URLSearchParams;
+    expect(query.has("stage")).toBe(false);
+  });
+
+  it("changing the filters writes them to the address and goes back to the first page", async () => {
+    render(<PartnerOrderListPage />);
+    await screen.findByText("MR-2026-0042");
+    fireEvent.change(screen.getByLabelText("Hol tart"), {
+      target: { value: "AWAITING_INVOICE" },
+    });
+    expect(navigation.replace).toHaveBeenLastCalledWith(
+      "/megrendelesek?stage=AWAITING_INVOICE",
+      { scroll: false },
+    );
+    fireEvent.click(screen.getByLabelText("Csak teljesítetlen tétellel"));
+    expect(navigation.replace).toHaveBeenLastCalledWith(
+      "/megrendelesek?open=1",
+      { scroll: false },
+    );
+  });
+
+  it("dense rows: the row gets lower, the choice is remembered, and a blocked storage does not break the page", async () => {
+    window.localStorage.removeItem("acropora.partnerOrders.dense");
+    render(<PartnerOrderListPage />);
+    const row = () => screen.getByText("MR-2026-0042").closest("tr")!;
+    await screen.findByText("MR-2026-0042");
+    expect(row().className).toContain("md:h-[72px]");
+    fireEvent.click(screen.getByRole("button", { name: "Sűrű sorok" }));
+    expect(row().className).toContain("md:h-[44px]");
+    expect(window.localStorage.getItem("acropora.partnerOrders.dense")).toBe(
+      "1",
+    );
+    const restore = blockStorage();
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Tágas sorok" }));
+      expect(row().className).toContain("md:h-[72px]");
+    } finally {
+      restore();
+    }
+  });
+
+  // MI PIROSIT: ha az elso olvasas hibaja (privat ablak, tiltott tarolo) kivetelkent a lap renderelesig jutna
+  it("a storage that throws on the first read leaves the page standing, in the default density", async () => {
+    const restore = blockStorage();
+    try {
+      render(<PartnerOrderListPage />);
+      const row = (await screen.findByText("MR-2026-0042")).closest("tr")!;
+      expect(row.className).toContain("md:h-[72px]");
+    } finally {
+      restore();
+    }
+  });
+
+  it("starts dense when the browser remembers it", async () => {
+    window.localStorage.setItem("acropora.partnerOrders.dense", "1");
+    render(<PartnerOrderListPage />);
+    const row = (await screen.findByText("MR-2026-0042")).closest("tr")!;
+    await waitFor(() => expect(row.className).toContain("md:h-[44px]"));
+    window.localStorage.removeItem("acropora.partnerOrders.dense");
   });
 
   it("opens the order on a click", async () => {

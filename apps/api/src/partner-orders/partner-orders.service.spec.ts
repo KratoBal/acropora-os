@@ -408,3 +408,138 @@ describe("document", () => {
     );
   });
 });
+
+/*
+  A LISTA SZUROI ES A HATRALEKOS TETELEK (S4, 38caeac2). MI PIROSIT: ha a lanc szerinti szuro csak az aktualis
+  lapot szurne (az adatbazis vagja a lapot, es a masodik lapon rossz sorok allnanak); ha a teljes olvasas a
+  szuro nelkuli listara is lefutna (felesleges, es a lapozas elcsuszna); ha a hatralekos tetel a reszteljesites
+  utan is nyitott marad, vagy a teljes igazolas utan is annak szamit; ha a ket szuro egyike elmaradna a
+  kombinalasnal.
+*/
+describe("the order list filters and open lines", () => {
+  const row = (id: string) =>
+    ({
+      ...orderRow(),
+      id,
+      orderNumber: `MR-${id}`,
+      status: "OPEN",
+      customerId: null,
+      customer: null,
+      createdAt: new Date("2026-11-01T08:00:00Z"),
+    }) as unknown as OrderContentRow & { id: string };
+
+  const chainOf = (orderId: string, step: string, count = 1) => ({
+    orderId,
+    step,
+    _count: { _all: count },
+  });
+
+  function fake(
+    rows: ReturnType<typeof row>[],
+    chain: ReturnType<typeof chainOf>[],
+    certified: {
+      orderId: string;
+      quoteItemId: string;
+      quantity: Prisma.Decimal;
+    }[],
+  ) {
+    const calls = { list: 0, listAll: 0 };
+    const repository = {
+      list: async (page: number, pageSize: number) => {
+        calls.list += 1;
+        return {
+          rows: rows.slice((page - 1) * pageSize, page * pageSize),
+          total: rows.length,
+          chain,
+        };
+      },
+      listAll: async () => {
+        calls.listAll += 1;
+        return { rows, chain };
+      },
+      systemDocumentSources: async () => new Map(),
+      certifiedLines: async (ids: readonly string[]) =>
+        certified.filter((line) => ids.includes(line.orderId)),
+    } as unknown as PartnerOrdersRepository;
+    return { service: new PartnerOrdersService(repository), calls };
+  }
+
+  // item-a 2 db, item-b 1 alkalom (the fixture's two lines)
+  const rows = [row("o1"), row("o2"), row("o3")];
+  const chain = [
+    chainOf("o1", "COMPLETION"),
+    chainOf("o2", "COMPLETION"),
+    chainOf("o2", "SIGNED_COMPLETION"),
+    chainOf("o3", "COMPLETION"),
+  ];
+  const certified = [
+    { orderId: "o1", quoteItemId: "item-a", quantity: new Prisma.Decimal(1) },
+    { orderId: "o2", quoteItemId: "item-a", quantity: new Prisma.Decimal(2) },
+    { orderId: "o2", quoteItemId: "item-b", quantity: new Prisma.Decimal(1) },
+  ];
+
+  it("the plain list keeps the database's page and says each order's open and total lines", async () => {
+    const { service, calls } = fake(rows, chain, certified);
+    const result = await service.list(1, 10, {});
+    assert.deepEqual(calls, { list: 1, listAll: 0 });
+    assert.deepEqual(
+      result.items.map((item) => [item.id, item.openLines, item.totalLines]),
+      [
+        ["o1", 2, 2],
+        ["o2", 0, 2],
+        ["o3", 2, 2],
+      ],
+    );
+  });
+
+  it("a part certificate keeps the line open, a full one closes it", async () => {
+    const { service } = fake([row("o1"), row("o2")], chain, certified);
+    const result = await service.list(1, 10, {});
+    // o1: item-a certified 1 of 2 (still open) and item-b untouched: both open; o2: both certified in full
+    assert.deepEqual(
+      result.items.map((item) => item.openLines),
+      [2, 0],
+    );
+  });
+
+  it("the chain filter reads every order, then cuts the pages: the second page holds the second match", async () => {
+    const { service, calls } = fake(rows, chain, certified);
+    const first = await service.list(1, 1, { stage: "AWAITING_SIGNATURE" });
+    const second = await service.list(2, 1, { stage: "AWAITING_SIGNATURE" });
+    assert.deepEqual(calls.list, 0);
+    assert.equal(first.total, 2);
+    assert.deepEqual(
+      first.items.map((item) => item.id),
+      ["o1"],
+    );
+    assert.deepEqual(
+      second.items.map((item) => item.id),
+      ["o3"],
+    );
+  });
+
+  it("the open filter leaves out the order that is certified in full", async () => {
+    const { service } = fake(rows, chain, certified);
+    const result = await service.list(1, 10, { openOnly: true });
+    assert.deepEqual(
+      result.items.map((item) => item.id),
+      ["o1", "o3"],
+    );
+    assert.equal(result.total, 2);
+  });
+
+  it("both filters together keep only the orders that match both", async () => {
+    const { service } = fake(rows, chain, certified);
+    const result = await service.list(1, 10, {
+      stage: "AWAITING_INVOICE",
+      openOnly: true,
+    });
+    assert.deepEqual(result.items, []);
+    assert.equal(result.total, 0);
+    const invoice = await service.list(1, 10, { stage: "AWAITING_INVOICE" });
+    assert.deepEqual(
+      invoice.items.map((item) => item.id),
+      ["o2"],
+    );
+  });
+});
