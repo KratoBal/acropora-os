@@ -5,6 +5,14 @@ export type PaidMarkSource =
   "GLS_COD" | "FOXPOST" | "SIMPLEPAY" | "BANK_TRANSFER";
 export type PaidMarksMode = "off" | "dry" | "live" | "auto";
 
+/** Egy figyelmet kérő sor; a `key` a tartós kulcsa (banki átutalásnál a jóváírás), nélküle a `reference`. */
+export interface PaidMarkAttentionItem {
+  reference: string;
+  reason: string;
+  key?: string;
+  detail?: string;
+}
+
 /** The latest run of one source (`GET /billing/paid-marks/latest`). */
 export interface PaidMarkRunView {
   source: PaidMarkSource;
@@ -14,7 +22,9 @@ export interface PaidMarkRunView {
   failedCount: number;
   attentionCount: number;
   summary: Record<string, number>;
-  attention: { reference: string; reason: string; detail?: string }[];
+  attention: PaidMarkAttentionItem[];
+  /** a kézzel rendezettnek jelölt sorok (6fd8c574): nem kérnek figyelmet, de látszik, ki és mikor zárta le őket */
+  settled: (PaidMarkAttentionItem & { closedAt: string; closedBy: string })[];
   errorCode: string | null;
   mode: "auto" | "dry";
   trigger: "schedule" | "manual";
@@ -78,5 +88,21 @@ export const paidMarksApi = {
       method: "POST",
       body: JSON.stringify({ numbers, apply }),
     });
+  },
+  /** „Kézzel rendezve” (6fd8c574): `closed: true` lezárja a sort, `false` visszavonja; csak a mi listánkat zárja. */
+  closeAttention(
+    token: string,
+    input: {
+      source: PaidMarkSource;
+      key: string;
+      reason: string;
+      closed: boolean;
+    },
+  ) {
+    return apiRequest<{ changed: boolean }>(
+      "/billing/paid-marks/attention-closure",
+      token,
+      { method: "PUT", body: JSON.stringify(input) },
+    );
   },
 };

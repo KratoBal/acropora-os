@@ -15,6 +15,7 @@ const api = vi.hoisted(() => ({
   status: vi.fn(),
   runNow: vi.fn(),
   feedPull: vi.fn(),
+  closeAttention: vi.fn(),
 }));
 vi.mock("@/lib/api/paid-marks", () => ({ paidMarksApi: api }));
 vi.mock("next/navigation", () => ({
@@ -61,6 +62,7 @@ const run = (over: Partial<PaidMarkRunView>): PaidMarkRunView => ({
   attentionCount: 0,
   summary: { WRITTEN: 3 },
   attention: [],
+  settled: [],
   errorCode: null,
   mode: "auto",
   trigger: "schedule",
@@ -89,6 +91,7 @@ beforeEach(() => {
   api.status.mockReset().mockResolvedValue(status());
   api.runNow.mockReset();
   api.feedPull.mockReset();
+  api.closeAttention.mockReset().mockResolvedValue({ changed: true });
   api.latest.mockReset().mockResolvedValue([
     run({}),
     run({
@@ -181,6 +184,10 @@ describe("PaidMarksPage", () => {
     expect(
       screen.queryByRole("button", { name: "Lekérés a Számlázz.hu-ból" }),
     ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Kézzel rendezve" }),
+    ).toBeNull();
+    expect(api.feedPull).not.toHaveBeenCalled();
   });
 
   /*
@@ -210,12 +217,7 @@ describe("PaidMarksPage", () => {
       ]);
     render(<PaidMarksPage />);
     const gls = await screen.findByTestId("paid-mark-source-GLS_COD");
-    // one button: the line with an exact number that is missing from the feed, not the other NOT_FOUND
-    const buttons = within(gls).getAllByRole("button", {
-      name: "Lekérés a Számlázz.hu-ból",
-    });
-    expect(buttons).toHaveLength(1);
-    fireEvent.click(buttons[0]!);
+    // the preview asks Számlázz.hu on load, only for the exact number missing from the feed (not the eBIZ one)
     await waitFor(() =>
       expect(api.feedPull).toHaveBeenCalledWith(
         "t",
@@ -223,6 +225,11 @@ describe("PaidMarksPage", () => {
         false,
       ),
     );
+    const buttons = await within(gls).findAllByRole("button", {
+      name: "Lekérés a Számlázz.hu-ból",
+    });
+    expect(buttons).toHaveLength(1);
+    fireEvent.click(buttons[0]!);
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toHaveTextContent("bruttó 28900.0 HUF");
     expect(api.feedPull).toHaveBeenCalledTimes(1);
@@ -236,6 +243,120 @@ describe("PaidMarksPage", () => {
     );
     expect(await screen.findByTestId("feed-pull-result")).toHaveTextContent(
       "ACRW-2026/00469: behúzva; a következő futás már párosítja",
+    );
+  });
+
+  /*
+    6fd8c574 (Balázs, 2026-11-05 16:07 UTC). MI PIROSÍT: ha a „Lekérés” gomb a számlaszám alakja szerint áll, nem a
+    Számlázz.hu válasza szerint (a cmfx-ben kiállított, a Számlázz.hu-ban nem lévő számlán is ott lenne); ha a sor nem
+    mondja ki, hogy cmfx-ben kell kézzel jelölni; ha a „Kézzel rendezve” megerősítés nélkül, rossz kulccsal zár, vagy
+    utána nem olvas újra; ha a lezárt sor nem mutatja, ki zárta le, vagy nem vonható vissza.
+  */
+  it("Számlázz.hu does not know the invoice: no pull button, the line says cmfx, and it closes by hand", async () => {
+    api.latest.mockResolvedValue([glsNotFound()]);
+    api.feedPull.mockResolvedValue([
+      {
+        number: "ACRW-2026/00469",
+        outcome: "NOT_FOUND",
+        detail: "nincs ilyen számla",
+      },
+    ]);
+    render(<PaidMarksPage />);
+    const gls = await screen.findByTestId("paid-mark-source-GLS_COD");
+    expect(await within(gls).findByTestId("not-in-szamlazz")).toHaveTextContent(
+      "cmfx-ben kiállított számla",
+    );
+    expect(
+      within(gls).queryByRole("button", { name: "Lekérés a Számlázz.hu-ból" }),
+    ).toBeNull();
+    const close = within(gls).getAllByRole("button", {
+      name: "Kézzel rendezve",
+    });
+    expect(close).toHaveLength(1);
+    fireEvent.click(close[0]!);
+    expect(api.closeAttention).not.toHaveBeenCalled();
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("ACRW-2026/00469");
+    const reads = api.latest.mock.calls.length;
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Kézzel rendezve" }),
+    );
+    await waitFor(() =>
+      expect(api.closeAttention).toHaveBeenCalledWith("t", {
+        source: "GLS_COD",
+        key: "ACRW-2026/00469",
+        reason: "NOT_FOUND",
+        closed: true,
+      }),
+    );
+    await waitFor(() =>
+      expect(api.latest.mock.calls.length).toBeGreaterThan(reads),
+    );
+  });
+
+  it("a bank line naming no feed invoice closes by its credit", async () => {
+    api.latest.mockResolvedValue([
+      run({
+        source: "BANK_TRANSFER",
+        attentionCount: 1,
+        attention: [
+          {
+            reference: "jóváírás 2026-11-04",
+            reason: "UNRESOLVED",
+            key: "credit-7",
+            detail: "2026/00070 nincs a feedben",
+          },
+        ],
+      }),
+    ]);
+    render(<PaidMarksPage />);
+    const bank = await screen.findByTestId("paid-mark-source-BANK_TRANSFER");
+    fireEvent.click(
+      within(bank).getByRole("button", { name: "Kézzel rendezve" }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Kézzel rendezve" }),
+    );
+    await waitFor(() =>
+      expect(api.closeAttention).toHaveBeenCalledWith("t", {
+        source: "BANK_TRANSFER",
+        key: "credit-7",
+        reason: "UNRESOLVED",
+        closed: true,
+      }),
+    );
+    expect(api.feedPull).not.toHaveBeenCalled();
+  });
+
+  it("a line closed by hand shows who and when, and the undo reopens it", async () => {
+    api.latest.mockResolvedValue([
+      run({
+        settled: [
+          {
+            reference: "2026/00069",
+            reason: "NOT_FOUND",
+            detail: "GLS 2026-11-04; nincs a Számlázz.hu feedben",
+            closedAt: "2026-11-05T19:00:00.000Z",
+            closedBy: "Balázs",
+          },
+        ],
+      }),
+    ]);
+    render(<PaidMarksPage />);
+    const settled = await screen.findByTestId("paid-mark-settled-GLS_COD");
+    expect(settled).toHaveTextContent("Kézzel rendezve: 1");
+    expect(settled).toHaveTextContent("2026/00069: NOT_FOUND · Balázs");
+    fireEvent.click(
+      within(settled).getByRole("button", { name: "Visszavonás" }),
+    );
+    await waitFor(() =>
+      expect(api.closeAttention).toHaveBeenCalledWith("t", {
+        source: "GLS_COD",
+        key: "2026/00069",
+        reason: "NOT_FOUND",
+        closed: false,
+      }),
     );
   });
 });

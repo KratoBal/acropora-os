@@ -7465,6 +7465,25 @@ model PaidMarkRun {
   @@index([source, startedAt])
 }
 
+/// A NAPI JELÖLÉS EGY FIGYELMET KÉRŐ SORA, AMIT EGY EMBER KÉZZEL RENDEZETTNEK JELÖLT (6fd8c574; Balázs, 2026-11-05
+/// 16:07 UTC): például a cmfx-ben kiállított számla, amit a Számlázz.hu nem ismer, és a kifizetettet a cmfx-ben kézzel
+/// jelölték. Amíg a sor áll, a lap a futás figyelmet kérő tételei közül kiveszi, és a „kézzel rendezve” részben mutatja
+/// (ki, mikor). A visszavonás törli a sort; mindkét lépés AuditLog-sort ír (ki, mikor), tehát a történet ott él.
+model PaidMarkAttentionClosure {
+  id         String                    @id @default(cuid())
+  source     OutgoingPaymentMarkSource
+  /// A tétel tartós kulcsa: banki átutalásnál a jóváírás, egyébként a hivatkozás (számlaszám).
+  key        String
+  /// A tétel oka a futásban (NOT_FOUND, UNRESOLVED).
+  reason     String
+  /// A tétel hivatkozása a lezáráskor, a lapnak (számlaszám vagy a jóváírás napja).
+  reference  String
+  closedAt   DateTime                  @default(now())
+  closedById String
+
+  @@unique([source, key, reason])
+}
+
 /// A KIMENŐ SZÁMLÁK KIFIZETETT-JELÖLÉSÉNEK NAPLÓJA, minden forrásra (acrobot
 /// 25989; terv: agents/nautilus/megosztas/gls-utanvet-kifizetett-terv-2026-10-01.md,
 /// 4. pont; a közös alakot murena javasolta, 25999). A Számlázz.hu
