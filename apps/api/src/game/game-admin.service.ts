@@ -322,7 +322,11 @@ export class GameAdminService {
   /** The mail queue (acrobot, 2026-11-05 22:57): what waits past the daily cap, today's mail and the cap. */
   async mailQueue() {
     const pending = await this.database.gameEntry.count({
-      where: { mailPendingSince: { not: null }, confirmedAt: null },
+      where: {
+        mailPendingSince: { not: null },
+        confirmedAt: null,
+        question: { closesAt: { gt: new Date() } },
+      },
     });
     return {
       pending,
@@ -336,8 +340,13 @@ export class GameAdminService {
    * replaced). It stops at the first one the cap queues again.
    */
   async sendQueued(userId: string) {
+    // only a question still open: a closed week's link would answer CLOSED (barracuda, #2254 v3)
     const waiting = await this.database.gameEntry.findMany({
-      where: { mailPendingSince: { not: null }, confirmedAt: null },
+      where: {
+        mailPendingSince: { not: null },
+        confirmedAt: null,
+        question: { closesAt: { gt: new Date() } },
+      },
       orderBy: { mailPendingSince: "asc" },
       select: { id: true, email: true, question: { select: { week: true } } },
     });
@@ -348,18 +357,18 @@ export class GameAdminService {
         where: { id: entry.id },
         data: {
           confirmTokenHash: createHash("sha256").update(token).digest("hex"),
-          mailCount: { increment: 1 },
-          lastMailedAt: new Date(),
         },
       });
+      // the attempt counts only once the mail went out
       const outcome = await this.game.deliver(
         entry.id,
         entry.email,
         token,
         entry.question.week,
+        true,
       );
-      if (outcome === "QUEUED") break;
-      if (outcome === "SENT") sent++;
+      if (outcome !== "SENT") break;
+      sent++;
     }
     await this.database.auditLog.create({
       data: {

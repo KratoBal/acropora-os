@@ -218,9 +218,18 @@ describe("the mail queue (acrobot 43965)", () => {
     }));
     const delivered: string[] = [];
     const audits: unknown[] = [];
+    const writes: Record<string, unknown>[] = [];
     const game = {
-      deliver: async (_id: string, email: string) => {
-        if (delivered.length === 2) return "QUEUED";
+      deliver: async (
+        _id: string,
+        email: string,
+        _token: string,
+        _week: string,
+        countOnSend: boolean,
+      ) => {
+        // the queue's send counts the attempt only once it went out (barracuda, #2254 v3)
+        assert.equal(countOnSend, true);
+        if (delivered.length === 2) return "NOT_SENT";
         delivered.push(email);
         return "SENT";
       },
@@ -239,6 +248,7 @@ describe("the mail queue (acrobot 43965)", () => {
           where: { id: string };
           data: Record<string, any>;
         }) => {
+          writes.push(data);
           Object.assign(
             waiting.find((w) => w.id === where.id)!,
             { confirmTokenHash: data.confirmTokenHash },
@@ -254,6 +264,10 @@ describe("the mail queue (acrobot 43965)", () => {
     assert.equal(result.sent, 2);
     assert.ok(waiting.slice(0, 2).every((w) => w.confirmTokenHash !== "regi"));
     assert.equal(audits.length, 1);
+    // only the new link is written before the send; the count comes with a sent mail (in deliver)
+    assert.ok(
+      writes.every((w) => Object.keys(w).join() === "confirmTokenHash"),
+    );
   });
 });
 

@@ -6,6 +6,7 @@ import {
   Inject,
   Injectable,
   Logger,
+  OnModuleInit,
   Optional,
 } from "@nestjs/common";
 import { Prisma, prisma } from "@acropora/database";
@@ -82,7 +83,7 @@ export const GAME_MAIL_DAILY_CAP_DEFAULT = 3000;
  * the caller hears the same answer, so it learns nothing from it either.
  */
 @Injectable()
-export class GameService {
+export class GameService implements OnModuleInit {
   private readonly logger = new Logger(GameService.name);
   /** the test replaces it */
   database: GameDatabase = prisma;
@@ -96,6 +97,17 @@ export class GameService {
     @Inject(GAME_ENV)
     private readonly environment: NodeJS.ProcessEnv = process.env,
   ) {}
+
+  /**
+   * Without the shared secret every visitor behind the game page's server falls on one key, and the page's limits
+   * are one allowance for all (barracuda, #2254 v3): said once at start, where a deploy log shows it.
+   */
+  onModuleInit(): void {
+    if (!this.environment.JATEK_PROXY_SECRET?.trim())
+      this.logger.warn(
+        "Nyereményjáték: nincs JATEK_PROXY_SECRET, a lap mögötti látogatók egy közös korlát-kulcson osztoznak",
+      );
+  }
 
   private async openQuestion() {
     const now = this.now();
@@ -273,29 +285,67 @@ export class GameService {
     email: string,
     token: string,
     week: string,
+    /** the queue's send: the attempt is counted only once the mail went out (barracuda, #2254 v3) */
+    countOnSend = false,
   ): Promise<"SENT" | "QUEUED" | "NOT_SENT"> {
+    const wait = async (reason: string) => {
+      await this.database.gameEntry.update({
+        where: { id: entryId },
+        data: { mailPendingSince: this.now() },
+      });
+      this.logger.warn(
+        `Nyereményjáték ${week}: a megerősítő levél sorban áll (${reason})`,
+      );
+    };
+    // a mail that cannot go out at all waits, and spends nothing of the day's cap (barracuda, #2254 v3)
+    const blocked = this.mailBlocked();
+    if (blocked) {
+      await wait(blocked);
+      return "NOT_SENT";
+    }
     const { sent } = await this.database.gameMailDay.upsert({
       where: { day: this.today() },
       create: { day: this.today(), sent: 1 },
       update: { sent: { increment: 1 } },
     });
     if (sent > this.dailyCap()) {
-      await this.database.gameEntry.update({
-        where: { id: entryId },
-        data: { mailPendingSince: this.now() },
-      });
-      this.logger.warn(
-        `Nyereményjáték ${week}: a napi levél-plafon (${this.dailyCap()}) betelt, a megerősítő levél sorban áll`,
-      );
+      await wait(`a napi levél-plafon (${this.dailyCap()}) betelt`);
       return "QUEUED";
     }
     const outcome = await this.mailConfirmation(email, token, week);
-    if (outcome === "SENT")
+    if (outcome === "SENT") {
       await this.database.gameEntry.update({
         where: { id: entryId },
-        data: { mailPendingSince: null },
+        data: {
+          mailPendingSince: null,
+          ...(countOnSend
+            ? { mailCount: { increment: 1 }, lastMailedAt: this.now() }
+            : {}),
+        },
       });
-    return outcome;
+      return "SENT";
+    }
+    // the send failed: the slot is given back, and the mail waits for the queue
+    await this.database.gameMailDay.update({
+      where: { day: this.today() },
+      data: { sent: { decrement: 1 } },
+    });
+    await wait("a küldés elbukott");
+    return "NOT_SENT";
+  }
+
+  /** Why a mail cannot go out now (the gate, the sender, the link's base), or null. */
+  private mailBlocked(): string | null {
+    const gate = mailGate({
+      mode: mailModeOf(this.environment.TICKET_MAIL_MODE),
+      pathMode: mailModeOf(this.environment.TICKET_MAIL_GAME),
+      redirect: mailRedirect(this.environment.TICKET_MAIL_REDIRECT_TO),
+    });
+    if (gate.kind === "closed") return gate.reason;
+    if (!this.sender) return "no-sender";
+    if (!this.environment.JATEK_PUBLIC_URL?.trim())
+      return "no-JATEK_PUBLIC_URL";
+    return null;
   }
 
   private async mailConfirmation(
