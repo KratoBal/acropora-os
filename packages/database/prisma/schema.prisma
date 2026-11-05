@@ -7453,6 +7453,14 @@ model PaidMarkRun {
   attention      Json
   /// Ha a futás maga elbukott (például nincs Számlázz.hu-kulcs).
   errorCode      String?
+  /// "auto": a futás írt; "dry": csak a terv, semmi nem íródott (a forrás kapcsolója dry; e64540fd).
+  mode           String                    @default("auto")
+  /// "schedule": a napi futás; "manual": valaki megnyomta a „Futtatás most” gombot.
+  trigger        String                    @default("schedule")
+  /// A gombot megnyomó felhasználó (csak kézi futásnál).
+  triggeredById  String?
+  /// Egy dry futás terve: mit jelölne kifizetettre, { invoiceNumber, amount, date, sourceRef }[].
+  planned        Json                      @default("[]")
 
   @@index([source, startedAt])
 }

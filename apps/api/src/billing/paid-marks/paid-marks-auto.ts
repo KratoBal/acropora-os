@@ -53,6 +53,39 @@ export interface PaidMarksRunResult {
   }[];
 }
 
+/** One invoice a dry run would mark paid, as the page lists it (e64540fd). */
+export interface PaidMarkPlanned {
+  readonly invoiceNumber: string;
+  readonly amount: string;
+  readonly date: string;
+  readonly sourceRef: string;
+}
+
+/**
+ * A DRY RUN'S RESULT (e64540fd): the plan's marks as `PLANNED` and its exceptions, the same summary and
+ * attention shape as a run that wrote, and the list of what it would mark.
+ */
+export function paidMarksDryResult(plan: PaidMarkPlan): {
+  result: PaidMarksRunResult;
+  planned: PaidMarkPlanned[];
+} {
+  const result = paidMarksRunResult(plan.source, [], plan.exceptions);
+  return {
+    result: {
+      ...result,
+      summary: plan.marks.length
+        ? { PLANNED: plan.marks.length, ...result.summary }
+        : result.summary,
+    },
+    planned: plan.marks.map((m) => ({
+      invoiceNumber: m.invoiceNumber,
+      amount: m.amount,
+      date: m.date,
+      sourceRef: m.sourceRef,
+    })),
+  };
+}
+
 /** The writer's outcomes that need a person: an uncertain or refused write. */
 const OUTCOME_ATTENTION: ReadonlySet<PaymentMarkLine["outcome"]["kind"]> =
   new Set(["FAILED", "UNKNOWN", "UNCERTAIN_BEFORE", "NOT_UNPAID"]);

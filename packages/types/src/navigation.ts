@@ -439,6 +439,12 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     visibility: permission(PERMISSIONS.FINANCE_VIEW),
   },
   {
+    // a kifizetett-jelölés napi futása (kártya e64540fd); a „Futtatás most” gomb billing.issue jogot kér
+    id: "paid-marks-settlement",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.FINANCE_VIEW),
+  },
+  {
     id: "inventory",
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.INVENTORY_VIEW),

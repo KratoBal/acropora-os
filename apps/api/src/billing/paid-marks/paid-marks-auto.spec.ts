@@ -283,8 +283,128 @@ describe("the daily schedule", () => {
     );
     assert.match(
       describePaidMarksAuto([{ source: "GLS_COD", mode: "live" }], 7, 60),
-      /KI, egyik forrás sincs auto állásban/,
+      /KI, egyik forrás sincs auto vagy dry állásban/,
     );
+    // e64540fd: a dry source runs too (it records the plan)
+    assert.match(
+      describePaidMarksAuto([{ source: "BANK_TRANSFER", mode: "dry" }], 7, 60),
+      /naponta 7:00-kor/,
+    );
+  });
+
+  /*
+    "FUTTATAS MOST" (e64540fd). MI PIROSIT: egy dry forras ir, vagy Szamlazz-kulcsot ker; a dry terv
+    szamlaszam es osszeg nelkul tarolodik; ket futas egyszerre indul (a kezi a napira, vagy ket kezi);
+    a futas a gombot nyomo felhasznalo nelkul tarolodik.
+  */
+  describe("Futtatás most", () => {
+    const envBefore = { ...process.env };
+    const bank = (gate?: Promise<void>) => ({
+      source: "BANK_TRANSFER" as const,
+      switchName: "BANK_TRANSFER_MARK_PAID",
+      plan: async () => {
+        await gate;
+        return {
+          source: "BANK_TRANSFER" as const,
+          marks: [
+            {
+              invoiceNumber: "ACR-2026/00042",
+              date: "2026-11-04",
+              amount: "12700",
+              title: "átutalás",
+              note: "n",
+              sourceRef: "credit-1",
+            },
+          ],
+          exceptions: [],
+        };
+      },
+    });
+    const fakeRuns = (log: string[]) =>
+      ({
+        save: async () => void log.push("save"),
+        saveDry: async (
+          r: { source: string; summary: Record<string, number> },
+          planned: { invoiceNumber: string; amount: string }[],
+          trigger: { kind: string; userId?: string },
+        ) =>
+          void log.push(
+            `dry ${r.source} ${planned.map((p) => `${p.invoiceNumber}:${p.amount}`).join(",")} PLANNED=${r.summary.PLANNED} by ${trigger.kind}:${trigger.userId ?? "-"}`,
+          ),
+        saveFailed: async (source: string, code: string) =>
+          void log.push(`failed ${source} ${code}`),
+      }) as never;
+
+    it("a dry source records its plan with invoice number and amount, writes nothing and asks for no key", async () => {
+      process.env.BANK_TRANSFER_MARK_PAID = "dry";
+      try {
+        const log: string[] = [];
+        let keyAsked = 0;
+        const scheduler = new PaidMarksAutoScheduler(
+          { resolve: async () => (keyAsked++, { agentKey: "k" }) } as never,
+          fakeRuns(log),
+        );
+        await scheduler.runOnce(new Date(), [bank()], {
+          kind: "manual",
+          userId: "user-1",
+        });
+        assert.deepEqual(log, [
+          "dry BANK_TRANSFER ACR-2026/00042:12700 PLANNED=1 by manual:user-1",
+        ]);
+        assert.equal(keyAsked, 0);
+      } finally {
+        process.env = { ...envBefore };
+      }
+    });
+
+    it("a second press while a run is in flight does not start another; after it, it does", async () => {
+      process.env.BANK_TRANSFER_MARK_PAID = "dry";
+      try {
+        const log: string[] = [];
+        let release!: () => void;
+        const gate = new Promise<void>((r) => (release = r));
+        const scheduler = new PaidMarksAutoScheduler(
+          {} as never,
+          fakeRuns(log),
+        );
+        const first = scheduler.runOnce(new Date(), [bank(gate)], {
+          kind: "manual",
+          userId: "user-1",
+        });
+        assert.equal(scheduler.status().running, true);
+        // the daily timer firing meanwhile does not double it either
+        await scheduler.runOnce(new Date(), [bank()]);
+        release();
+        await first;
+        assert.equal(log.length, 1);
+        assert.equal(scheduler.status().running, false);
+        await scheduler.runOnce(new Date(), [bank()]);
+        assert.equal(log.length, 2);
+      } finally {
+        process.env = { ...envBefore };
+      }
+    });
+
+    it("runNow answers started, then running while in flight, and nothing without a source on auto or dry", async () => {
+      const scheduler = new PaidMarksAutoScheduler({} as never, fakeRuns([]));
+      const original = process.env.BANK_TRANSFER_MARK_PAID;
+      for (const s of [
+        "GLS_COD_MARK_PAID",
+        "FOXPOST_MARK_PAID",
+        "SIMPLEPAY_MARK_PAID",
+        "BANK_TRANSFER_MARK_PAID",
+      ])
+        delete process.env[s];
+      try {
+        assert.deepEqual(scheduler.runNow("user-1"), {
+          status: "nothing",
+          reason: "no-source-on-auto-or-dry",
+        });
+      } finally {
+        process.env = { ...envBefore };
+        void original;
+      }
+    });
   });
 
   it("no key: nothing is planned, every auto source gets a failed run", async () => {

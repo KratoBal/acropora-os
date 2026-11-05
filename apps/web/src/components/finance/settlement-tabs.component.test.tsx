@@ -54,6 +54,7 @@ describe("SettlementTabs", () => {
       "/penzugy/simplepay",
       // card aeddb2c3: one transfer for several invoices
       "/penzugy/atutalasok",
+      "/penzugy/napi-jeloles",
     ]);
     expect(screen.getByRole("link", { name: "GLS" })).toHaveAttribute(
       "aria-current",
