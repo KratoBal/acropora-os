@@ -1121,6 +1121,13 @@ export const ANONYMIZATION_REGISTER: Readonly<
     reference: "identifier",
     closedById: "identifier",
   },
+  SzamlazzFeedBackfillNumber: {
+    number: "identifier",
+    series: "business",
+    outcome: "business",
+    detail: "business",
+    checkedById: "identifier",
+  },
   OutgoingPaymentMark: {
     invoiceNumber: "identifier",
     sourceRef: "identifier",

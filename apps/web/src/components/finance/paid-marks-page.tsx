@@ -33,6 +33,7 @@ import {
   type PaidMarksStatus,
 } from "@/lib/api/paid-marks";
 
+import { FeedBackfillPanel } from "./feed-backfill-panel";
 import {
   canPullIntoFeed,
   FeedPullButton,
@@ -424,6 +425,7 @@ export function PaidMarksPage() {
         }
       />
       <SettlementTabs />
+      <FeedBackfillPanel token={token} canRun={canRun} />
       {notice ? (
         <Alert variant="info" title="Indítás" description={notice} />
       ) : null}

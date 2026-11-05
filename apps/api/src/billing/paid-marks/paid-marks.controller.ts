@@ -13,7 +13,10 @@ import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 import { CurrentUser } from "../../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../../auth/decorators/require-permissions.decorator.js";
 import { AttentionClosureDto } from "./dto/attention-closure.dto.js";
+import { FeedBackfillDto } from "./dto/feed-backfill.dto.js";
 import { FeedPullDto } from "./dto/feed-pull.dto.js";
+import { RunNowDto } from "./dto/run-now.dto.js";
+import { FeedBackfillService } from "./feed-backfill.service.js";
 import { FeedPullService } from "./feed-pull.service.js";
 import {
   AttentionNotClosableError,
@@ -33,6 +36,7 @@ export class PaidMarksController {
     private readonly runs: PaidMarkRunRepository,
     private readonly scheduler: PaidMarksAutoScheduler,
     private readonly feedPull: FeedPullService,
+    private readonly backfill: FeedBackfillService,
   ) {}
 
   @Get("latest")
@@ -56,8 +60,10 @@ export class PaidMarksController {
   @Post("run")
   @HttpCode(202)
   @RequirePermissions(PERMISSIONS.BILLING_ISSUE)
-  run(@CurrentUser() user: AuthenticatedUser) {
-    return this.scheduler.runNow(user.id);
+  run(@Body() input: RunNowDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.scheduler.runNow(user.id, new Date(), {
+      allTime: input?.allTime === true,
+    });
   }
 
   /**
@@ -93,5 +99,30 @@ export class PaidMarksController {
         throw new BadRequestException(error.message);
       throw error;
     }
+  }
+
+  /**
+   * A TÁROLT FEED VISSZATÖLTÉSE AZ ÉV ELEJÉIG (6fd8c574; acrobot 43766): sorozatonként a feedből hiányzó számok, és amit
+   * a Számlázz.hu rájuk felelt (az ACRW sorozat külön látszik).
+   */
+  @Get("feed-backfill")
+  @RequirePermissions(PERMISSIONS.FINANCE_VIEW)
+  backfillStatus() {
+    return this.backfill.status();
+  }
+
+  /**
+   * A visszatöltés egy köre: `apply: false` a száraz (minden hiányzó számot megkérdez, a Számlázz.hu-n csak olvas),
+   * `apply: true` a behúzás (csak amit a Számlázz.hu ismer), utána egyszer a kifizetett-jelölés korhatár nélkül. 202: a
+   * kör elindult, a lap a `feed-backfill` állapotból olvassa. A jog a "Lekérés"-é (`BILLING_ISSUE`).
+   */
+  @Post("feed-backfill")
+  @HttpCode(202)
+  @RequirePermissions(PERMISSIONS.BILLING_ISSUE)
+  startBackfill(
+    @Body() input: FeedBackfillDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.backfill.start(input.apply, user.id);
   }
 }
