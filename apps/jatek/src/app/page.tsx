@@ -10,6 +10,7 @@ import {
   type KerdesAllapot,
 } from "@/components/heti-kerdes";
 import { OldalKeret } from "@/components/oldal-keret";
+import { latogatoIp } from "@/lib/ip";
 import { jatekApiKornyezetbol } from "@/lib/jatek-api";
 
 // A heti kerdes mindig az api mostani allapota: sosem gyorsitotarazott lap.
@@ -17,7 +18,10 @@ export const dynamic = "force-dynamic";
 
 export default async function KezdoLap() {
   const api = jatekApiKornyezetbol(process.env);
-  const eredmeny = await api.aktualis();
+  const kerFejlec = await headers();
+  const eredmeny = await api.aktualis(
+    latogatoIp(kerFejlec.get("x-forwarded-for")),
+  );
 
   const allapot: KerdesAllapot = !eredmeny.ok
     ? { fajta: "elerhetetlen" }

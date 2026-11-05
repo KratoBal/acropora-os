@@ -45,7 +45,7 @@ export type AktualisEredmeny = { ok: true; question: Kerdes | null } | Hiba;
 export interface JatekApi {
   /** `true`, ha ez a hamis api (az oldal kiirja, hogy proba). */
   readonly hamis: boolean;
-  aktualis(): Promise<AktualisEredmeny>;
+  aktualis(latogatoIp?: string | null): Promise<AktualisEredmeny>;
   bekuldes(
     bemenet: BekuldesBemenet,
     latogatoIp: string | null,
@@ -90,10 +90,12 @@ const IDOKORLAT_MS = 8000;
 
 /**
  * A latogato IP-jet az api HITELESITETT fejlecben kapja (nautilus, 2026-11-05 22:58): `X-Jatek-Client-IP` a latogato
- * cime, `X-Jatek-Proxy-Secret` a `JATEK_PROXY_SECRET` ertek. A titkot MINDEN hivas viszi (az `aktualis` is), az IP-t
- * csak az, ahol van. Titok nelkul a fejlec elmarad, es az api az utolso proxy-hopra kulcsol (minden latogato egy
- * kozos kerethez kerul): ez nem hiba, hanem a titok nelkuli uzem. Az `X-Forwarded-For` marad, de az api mar nem erre
- * tamaszkodik. A titok csak a szerveren el: komponensben nem szerepelhet (lasd `felulet-forras.spec.ts`).
+ * cime, `X-Jatek-Proxy-Secret` a `JATEK_PROXY_SECRET` ertek. MINDKETTOT MINDEN hivas viszi, ahol van, az `aktualis` is
+ * (nautilus, 23:06): az api a kulcsot csak akkor veszi a latogatonak, ha a titok ES a cim egyutt ott van; cim nelkul a
+ * GET az utolso hopra esik, es a lap mogott minden latogato egy 60/perc keretben osztozik. Titok nelkul a titok-fejlec
+ * elmarad, es az api az utolso proxy-hopra kulcsol (kozos keret): ez nem hiba, hanem a titok nelkuli uzem. Az
+ * `X-Forwarded-For` marad, de az api mar nem erre tamaszkodik. A titok csak a szerveren el: komponensben nem
+ * szerepelhet (lasd `felulet-forras.spec.ts`).
  */
 export const FEJLEC_IP = "X-Jatek-Client-IP";
 export const FEJLEC_TITOK = "X-Jatek-Proxy-Secret";
@@ -133,8 +135,8 @@ export function httpJatekApi(
   };
   return {
     hamis: false,
-    async aktualis() {
-      const r = await hivas(UTVONALAK.aktualis, { method: "GET" });
+    async aktualis(ip) {
+      const r = await hivas(UTVONALAK.aktualis, { method: "GET", ip });
       if (!r) return { ...ELERHETETLEN };
       if (r.status !== 200) return hibaBol(r.status, r.test);
       const k = (r.test as { question?: unknown } | null)?.question;

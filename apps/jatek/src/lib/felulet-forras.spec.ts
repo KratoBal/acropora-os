@@ -42,4 +42,12 @@ describe("a felulet forrasa", () => {
     for (const h of hivasok)
       assert.match(h, /^\/api\/(bekuldes|megerosites)$/, h);
   });
+
+  it("the home page reads the week's question with the visitor's address (the GET needs it too: without it every visitor shares one rate bucket)", () => {
+    const oldal = readFileSync(join(SRC, "app", "page.tsx"), "utf8");
+    assert.match(
+      oldal,
+      /api\.aktualis\(\s*latogatoIp\(\s*\w+\.get\("x-forwarded-for"\)\s*,?\s*\)\s*,?\s*\)/,
+    );
+  });
 });
