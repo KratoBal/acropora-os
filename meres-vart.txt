@@ -1,0 +1,8 @@
+# os-e-szamla-jelzo-migracio: ket rontas egy futasban, mindegyik MAS esetet er.
+# (a) a 1-es kod (papir) is elektronikus lesz:
+not ok - az 1-es és 0-s kódú sor nem elektronikus (az elavult, fordított érték kijavul)
+# (b) a nem SZAMLAKI uzenet is szamit (a SZAMLABE 3-as kodu uzenethez kotott sor atiródik):
+not ok - olvashatatlan kód, hiányzó elem, nem SZAMLAKI üzenet, hiányzó üzenet és az eBIZ sor érintetlen
+# Kontrollok, ezekre nincs hatassal:
+ok - a 2-es és 3-as kódú sor elektronikus lesz, a szóközös elem is
+ok - idempotens: a második futás semmit sem változtat
