@@ -24,7 +24,13 @@ function rogzitoApi(valaszok: {
   const api: JatekApi = {
     hamis: false,
     async aktualis() {
-      return { ok: true, question: null };
+      return { ok: true, question: null, next: null };
+    },
+    async nyertesek() {
+      return { ok: true, winners: [] };
+    },
+    async kep() {
+      return { ok: false, status: 404, code: "NO_IMAGE", message: "" };
     },
     async bekuldes(bemenet, ip) {
       r.bekuldes.push({ bemenet, ip });

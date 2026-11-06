@@ -25,7 +25,8 @@ export const JATEKSZABALYZAT: JogiDokumentum = {
   // A SZABÁLYZAT VÉGLEGES: Balázs szövege, szó szerint (exchange/jatek/Jatekszabalyzat-balazs-2026-11-06.docx, 2026-11-06 09:06 UTC);
   // nincs rajta vázlat-jelzés, és nincs benne [KITÖLTENDŐ]. A TXT-TŐL KÉT HELYEN TÉR EL, Balázs kérésére (acrobot 44298,
   // 2026-11-06 09:10 UTC): a 6. szakasz végén a fődíj mondatai, a 7. végén a nyertes nevének közzététele, és a menetrend két
-  // nyilvánvaló elírása javítva ("Az hatodik" és "Az hetedik" helyett "A hatodik", "A hetedik"). A többi szó szerint.
+  // nyilvánvaló elírása javítva ("Az hatodik" és "Az hetedik" helyett "A hatodik", "A hetedik"), és további két elírás
+  // (acrobot 44311: "Fődij" helyett "Fődíj", "résztvehet" helyett "részt vehet"). A többi szó szerint.
   szakaszok: [
     {
       cim: "1. A játék szervezője",
@@ -48,13 +49,13 @@ export const JATEKSZABALYZAT: JogiDokumentum = {
         "Az ötödik hét kérdése 2026 december 5 22:00 órakor jelenik meg és 2026 december 12 21:00 óráig lehet válaszolni.",
         "A hatodik hét kérdése 2026 december 12 22:00 órakor jelenik meg és 2026 december 19 21:00 óráig lehet válaszolni.",
         "A hetedik hét kérdése 2026 december 19 22:00 órakor jelenik meg és 2026 december 26 21:00 óráig lehet válaszolni.",
-        "A Fődij sorsolása 2026 december 26-án este 22:00 órakor történik.",
+        "A Fődíj sorsolása 2026 december 26-án este 22:00 órakor történik.",
       ],
     },
     {
       cim: "3. Ki vehet részt",
       bekezdesek: [
-        "A játékban bárki résztvehet, aki a játék kezdetekor betöltötte a 18. életévét. A játékban az Acropora Kft. dolgozói és családtagjai nem vehetnek részt.",
+        "A játékban bárki részt vehet, aki a játék kezdetekor betöltötte a 18. életévét. A játékban az Acropora Kft. dolgozói és családtagjai nem vehetnek részt.",
       ],
     },
     {
@@ -87,7 +88,7 @@ export const JATEKSZABALYZAT: JogiDokumentum = {
         "Az ötödik hét kérdése 2026 december 5 22:00 órakor jelenik meg és 2026 december 12 21:00 óráig lehet válaszolni.",
         "A hatodik hét kérdése 2026 december 12 22:00 órakor jelenik meg és 2026 december 19 21:00 óráig lehet válaszolni.",
         "A hetedik hét kérdése 2026 december 19 22:00 órakor jelenik meg és 2026 december 26 21:00 óráig lehet válaszolni.",
-        "A Fődij sorsolása 2026 december 26-án este 22:00 órakor történik.",
+        "A Fődíj sorsolása 2026 december 26-án este 22:00 órakor történik.",
         "A fődíj egy Aquaforest AF Nano Tank akvárium. A képeken látható dekoráció és élővilág nem része a nyereménynek. A heti nyereményt az adott heti kérdéssel együtt tesszük közzé a játék oldalán.",
       ],
     },

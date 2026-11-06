@@ -1386,3 +1386,41 @@ body {
     padding-bottom: calc(110px + env(safe-area-inset-bottom));
   }
 }
+
+/* A hét nyereményének képe (a heti kártyán): a doboz helyén, kerek sarkokkal */
+.jatek-prize-photo {
+  height: 192px;
+  width: 100%;
+  display: grid;
+  place-items: center;
+}
+.jatek-prize-photo img {
+  max-height: 180px;
+  max-width: 100%;
+  object-fit: contain;
+  border-radius: 10px;
+}
+
+/* A korábbi nyertesek listája: rövidített név és a sorsolás */
+.jatek-winner-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.jatek-winner-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 18px;
+  padding: 16px 20px;
+  border: 1px solid var(--jatek-border);
+  border-radius: 10px;
+  background: #0c1720;
+}
+.jatek-winner-list li span {
+  color: var(--jatek-muted);
+  font-size: 14px;
+}
