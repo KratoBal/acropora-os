@@ -152,6 +152,13 @@ export const PERMISSION_AREAS: readonly PermissionArea[] = [
     ],
   },
   {
+    key: "rentals",
+    label: "Eszközbérlés",
+    view: P.RENTALS_VIEW,
+    manage: P.RENTALS_MANAGE,
+    extras: [],
+  },
+  {
     key: "service",
     label: "Szerviz",
     view: P.SERVICE_VIEW,

@@ -3117,6 +3117,7 @@ model Customer {
   /// ReefClub 5. szelet: a vevo bolti osszerendelesei es a neki kiadott kodok.
   reefClubLinks        ReefClubCustomerLink[]
   reefClubLinkCodes    ReefClubLinkCode[]
+  rentals              Rental[]
 
   @@index([displayName])
   @@index([email])
@@ -5185,7 +5186,45 @@ model RentalEquipment {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
+  rentals Rental[]
+
   @@index([isActive, name])
+}
+
+enum RentalStatus {
+  OPEN
+  RETURNED
+}
+
+/// One device rented to one customer (task eszkozberles, S2). The device's fee, deposit, replacement value and accessories
+/// are copied here when the rental is recorded: the contract prints what was agreed that day. At most one OPEN rental per
+/// device, enforced by a partial unique index in the migration (`Rental_equipmentId_open_key`; not expressible here).
+model Rental {
+  id                  String       @id @default(cuid())
+  rentalNumber        String       @unique
+  status              RentalStatus @default(OPEN)
+  customerId          String
+  equipmentId         String
+  startsAt            DateTime
+  plannedReturnAt     DateTime
+  dailyFeeHuf         Int
+  depositHuf          Int
+  replacementValueHuf Int
+  accessories         String?
+  /// Started 24-hour periods of the planned span times the daily fee, at recording time.
+  expectedFeeHuf      Int
+  note                String?
+  returnedAt          DateTime?
+  createdById         String?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  customer  Customer        @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  equipment RentalEquipment @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
+
+  @@index([status, plannedReturnAt])
+  @@index([customerId])
+  @@index([equipmentId])
 }
 
 model AssetLabel {

@@ -382,8 +382,8 @@ describe("permissionOverrideChangeProblem", () => {
 
   it("a kezelés-megtekintés párok a jogokból jönnek, és egyik sablon sem sérti", () => {
     // 15: a kutatási tudástár (knowledge.manage -> knowledge.view, S4) a 15.; 16: a nyereményjáték (game.manage ->
-    // game.view, kártya 31445d0f)
-    assert.equal(MANAGE_VIEW_PAIRS.length, 16);
+    // game.view, kártya 31445d0f); 17: az eszközbérlés (rentals.manage -> rentals.view, task eszkozberles)
+    assert.equal(MANAGE_VIEW_PAIRS.length, 17);
     assert.ok(
       MANAGE_VIEW_PAIRS.some(
         ([manage, view]) =>

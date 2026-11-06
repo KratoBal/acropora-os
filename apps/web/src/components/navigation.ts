@@ -266,6 +266,13 @@ const mainNavigationGroups: AppNavigationGroup[] = [
         entryId: "partner-orders",
       },
       {
+        // Eszközbérlés (task eszkozberles, S2): kiadás, és később a visszavétel
+        href: "/berles",
+        label: "Bérlés",
+        icon: "clipboard",
+        entryId: "rentals",
+      },
+      {
         href: "/partnerek",
         label: "Partnerek",
         icon: "truck",

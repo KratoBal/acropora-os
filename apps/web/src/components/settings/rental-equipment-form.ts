@@ -1,6 +1,7 @@
 import {
   formatMoney,
   normalizeOptionalRentalText,
+  normalizeRentalSerialNumber,
   RENTAL_EQUIPMENT_LIMITS,
   type RentalEquipment,
 } from "@acropora/types";
@@ -82,7 +83,7 @@ export function rentalEquipmentPayload(
     ok: true,
     input: {
       name,
-      serialNumber: normalizeOptionalRentalText(form.serialNumber),
+      serialNumber: normalizeRentalSerialNumber(form.serialNumber),
       ...amounts,
       accessories: normalizeOptionalRentalText(form.accessories),
       note: normalizeOptionalRentalText(form.note),

@@ -182,7 +182,14 @@ describe("navigation", () => {
       ],
       [
         "Értékesítés",
-        ["POS", "Árajánlatok", "Megrendelések", "Partnerek", "Szerződések"],
+        [
+          "POS",
+          "Árajánlatok",
+          "Megrendelések",
+          "Bérlés",
+          "Partnerek",
+          "Szerződések",
+        ],
       ],
       [
         "Pénzügy",
@@ -438,6 +445,7 @@ describe("navigation", () => {
     ["/penzugy/szamlazas", "billing", "Számlázás"],
     ["/ajanlatok", "quotes", "Árajánlatok"],
     ["/megrendelesek", "partner-orders", "Megrendelések"],
+    ["/berles", "rentals", "Bérlés"],
     ["/penzugy/elszamolasok", "settlements", "Elszámolások"],
     ["/penzugy/hianyzo-szamlak", "missing-invoices", "Hiányzó számlák"],
     ["/raktar", "inventory", "Leltár"],
@@ -800,6 +808,8 @@ describe("navigation", () => {
     "/ajanlatok": "quotes.view",
     // Megrendelések (2026-11-04): ugyanaz a jog és kapcsoló, mint az ajánlatoké.
     "/megrendelesek": "quotes.view",
+    // Eszközbérlés S2: a bérlési pult, ugyanaz a jog, mint az olvasó végpontoké
+    "/berles": "rentals.view",
     "/penzugy/elszamolasok": "finance.view",
     // A Hiányzó számlák 2026-09-30-án jött, a bevezetés UTÁN; a jog az
     // Elszámolásoké (`finance.view`).

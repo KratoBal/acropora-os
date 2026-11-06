@@ -298,6 +298,7 @@ function fakeTx(seed: {
     asset: { count: async () => 0 },
     worksheetDepartment: { count: async () => 0 },
     partnerOrder: { count: async () => 0 },
+    rental: { count: moreOf("rental", "customerId") },
     user: { count: async () => 0 },
     reefClubLinkCode: { count: moreOf("reefClubLinkCode", "customerId") },
     reefClubCustomerLink: {
@@ -504,6 +505,7 @@ describe("applyOperations and restoreRegistered", () => {
 
   it("keeps a created row that any referencing table still points at, including the cascading and the restricting ones", async () => {
     const tables = [
+      "rental",
       "reefClubLinkCode",
       "reefClubCustomerLink",
       "customerMergeLog",

@@ -100,3 +100,33 @@ export function nextDay(day: string): string {
     .toISOString()
     .slice(0, 10);
 }
+
+/**
+ * A `datetime-local` value (`2026-11-10T14:30`, Budapest wall clock) as an ISO instant (UTC). The offset is the one at that
+ * moment (winter +1, summer +2 hours), not today's. `null` when the text is not that shape.
+ */
+export function budapestLocalToIso(local: string): string | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(local);
+  if (!m) return null;
+  const guess = Date.UTC(
+    Number(m[1]),
+    Number(m[2]) - 1,
+    Number(m[3]),
+    Number(m[4]),
+    Number(m[5]),
+  );
+  if (Number.isNaN(guess)) return null;
+  let at = guess - budapestOffsetMs(guess);
+  // the offset of the found instant, not of the guess: the clock may change in between
+  at = guess - budapestOffsetMs(at);
+  return new Date(at).toISOString();
+}
+
+/** An instant as a `datetime-local` value on the Budapest wall clock: `2026-11-10T14:30`. */
+export function budapestLocalOf(value: string | Date): string {
+  const date = typeof value === "string" ? new Date(value) : value;
+  if (Number.isNaN(date.getTime())) return "";
+  const part = (type: string) =>
+    PARTS.formatToParts(date).find((p) => p.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}T${part("hour")}:${part("minute")}`;
+}

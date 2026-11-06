@@ -338,6 +338,7 @@ async function referencesOf(tx: Tx, customerId: string): Promise<number> {
     tx.asset.count({ where }),
     tx.worksheetDepartment.count({ where }),
     tx.partnerOrder.count({ where }),
+    tx.rental.count({ where }),
     tx.user.count({ where }),
     // a Cascade-os hivatkozók (a törlés CSENDBEN törölné őket) és a Restrict-esek (a törlés hibát dobna, és az egész visszaállítás
     // visszagördülne egyetlen sor miatt): barracuda, #2185 review
