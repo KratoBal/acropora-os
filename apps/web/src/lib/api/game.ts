@@ -66,6 +66,30 @@ export interface GameDrawView {
   names: Record<string, string>;
 }
 
+/**
+ * Az élő sorsolás oldal nézete (a szerver ezt adja, semmi mást): számok, a nyeremény, és sorsolás után CSAK a nyertes
+ * rövidített neve és kitakart címe. Más játékos neve vagy címe ide soha nem kerül (az oldalt élő adásban mutatjuk).
+ */
+export interface GameLiveDrawView {
+  kind: "WEEKLY" | "CHRISTMAS";
+  questionId: string | null;
+  week: string | null;
+  prizeName: string | null;
+  prizeImageId: string | null;
+  candidates: number;
+  tickets: number;
+  /** miért nem indítható most a sorsolás, vagy null */
+  blocked: string | null;
+  drawn: {
+    drawId: string;
+    winnerName: string | null;
+    winnerEmailMasked: string | null;
+    ticket: number | null;
+    tickets: number;
+    drawnAt: string;
+  } | null;
+}
+
 /** A feltöltött nyereménykép a kép-tárolóból (a kérdés az `id`-t őrzi). */
 export interface GamePrizeImage {
   id: string;
@@ -202,6 +226,23 @@ export const gameApi = {
       token,
       { method: "POST" },
     );
+  },
+  /** Az élő sorsolás oldal nézete: a szám, a nyeremény, és ha már volt sorsolás, annak az eredménye. */
+  liveDraw(token: string, kind: "WEEKLY" | "CHRISTMAS", questionId?: string) {
+    const query = new URLSearchParams({ kind });
+    if (questionId) query.set("questionId", questionId);
+    return apiRequest<GameLiveDrawView>(`/game/live-draw?${query}`, token);
+  },
+  /** A gomb: a meglévő sorsolás, hétenként egyszer; ismételt nyomásra a rögzített eredmény jön vissza. */
+  runLiveDraw(
+    token: string,
+    kind: "WEEKLY" | "CHRISTMAS",
+    questionId?: string,
+  ) {
+    return apiRequest<GameLiveDrawView>("/game/live-draw", token, {
+      method: "POST",
+      body: JSON.stringify(questionId ? { kind, questionId } : { kind }),
+    });
   },
   verify(token: string, drawId: string) {
     return apiRequest<GameDrawVerify>(

@@ -62,6 +62,22 @@ export function shortPublicName(name: string): string {
 }
 
 /**
+ * A WINNER'S ADDRESS AS THE PUBLIC LIST SHOWS IT (Balázs, 2026-11-06 10:51 UTC, acrobot 44368; the length rule is acrobot's,
+ * 44431, after barracuda's note on #2286): the first two characters of the part before the @, three bullet signs, then the @
+ * and the whole domain: "ko•••@gmail.com". A part of three characters or fewer shows ONE character, because with the name
+ * beside it two letters of a two- or three-character part would give the whole address away. An address with no @ shows
+ * nothing of itself ("•••"): this is the one place an address could be printed whole by mistake, so a malformed one is
+ * hidden, never passed on.
+ */
+export function maskPublicEmail(email: string): string {
+  const at = email.lastIndexOf("@");
+  if (at < 1 || at === email.length - 1) return "•••";
+  const local = [...email.slice(0, at)];
+  const shown = local.slice(0, local.length <= 3 ? 1 : 2).join("");
+  return `${shown}•••${email.slice(at)}`;
+}
+
+/**
  * THE NAME THE PUBLIC LIST SHOWS: the shortened form, but only for what looks like a person's name (letters, marks, hyphen,
  * apostrophe, spaces). A "name" with a dot, a digit, an at sign or the like ("nyeremeny-acropora.hu") would be published
  * whole when it won, so it shows as "Nyertes" (barracuda, #2279).
@@ -130,6 +146,8 @@ export interface PublicGameWinner {
   kind: "WEEKLY" | "CHRISTMAS";
   week: string | null;
   name: string;
+  /** the winner's address, partly hidden ("ko•••@gmail.com"): the privacy notice (section 4) publishes it so two players with the same short name can be told apart */
+  emailMasked: string;
   prizeName: string | null;
   drawnAt: string;
 }
@@ -346,7 +364,7 @@ export class GameService implements OnModuleInit {
    */
   async winners(): Promise<{ winners: PublicGameWinner[] }> {
     const all = await this.database.gameDraw.findMany({
-      orderBy: { createdAt: "asc" },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       include: { question: { select: { week: true, prizeName: true } } },
     });
     // THE LIST ENDS WITH THE ERASURE (the notice: the name and the masked address come off the list): from the grand
@@ -389,6 +407,7 @@ export class GameService implements OnModuleInit {
         kind: draw.kind === "CHRISTMAS" ? "CHRISTMAS" : "WEEKLY",
         week: draw.question?.week ?? null,
         name: publicWinnerName(name),
+        emailMasked: maskPublicEmail(draw.winnerEmail!),
         prizeName: draw.question?.prizeName ?? null,
         drawnAt: draw.createdAt.toISOString(),
       });

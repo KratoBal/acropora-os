@@ -161,12 +161,21 @@ describe("httpJatekApi.aktualis", () => {
       kind: "WEEKLY",
       week: "2026-W45",
       name: "Kovács P.",
+      emailMasked: "ko•••@example.hu",
       prizeName: "Nano",
       drawnAt: "2026-11-14T20:00:00.000Z",
     };
     const a = hamisFetch({
       status: 200,
-      body: { winners: [jo, { kind: "X", name: "x" }, { ...jo, name: "" }] },
+      body: {
+        winners: [
+          jo,
+          { kind: "X", name: "x" },
+          { ...jo, name: "" },
+          { ...jo, emailMasked: "" },
+          { ...jo, emailMasked: "kovacs@example.hu" },
+        ],
+      },
     });
     const r = await httpJatekApi("https://api.example", a.fetchImpl).nyertesek(
       "203.0.113.9",

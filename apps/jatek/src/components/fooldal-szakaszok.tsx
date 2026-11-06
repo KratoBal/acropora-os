@@ -151,7 +151,9 @@ export function Nyertesek({
         <ul className="jatek-winner-list" data-testid="nyertesek">
           {nyertesek.map((nyertes) => (
             <li key={`${nyertes.drawnAt}-${nyertes.name}`}>
-              <b>{nyertes.name}</b>
+              <b>
+                {nyertes.name} <i>({nyertes.emailMasked})</i>
+              </b>
               <span>
                 {nyertes.kind === "CHRISTMAS"
                   ? "Karácsonyi fődíj"
