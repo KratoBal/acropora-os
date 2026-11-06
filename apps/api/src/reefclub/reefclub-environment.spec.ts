@@ -94,6 +94,9 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   "JATEK_MAIL_DAILY_CAP",
   // the stage-only switch for a confirmation link without the mail: a switch, not a secret
   "JATEK_TEST_LINKS",
+  // the giveaway's data erasure (card bc0ca668): days after the grand prize draw, and its dry-run switch, not secrets
+  "JATEK_ERASE_AFTER_DAYS",
+  "JATEK_ERASE_DRY_RUN",
   "PAID_MARKS_AUTO_DAYS",
   "PAID_MARKS_AUTO_HOUR",
   "PARTNER_URL",

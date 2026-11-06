@@ -5,6 +5,7 @@ import { Prisma, prisma } from "@acropora/database";
 import {
   christmasCandidates,
   drawGameWinner,
+  drawGameWinnerInOrder,
   GAME_QUESTION_TYPES,
   isGameAnswerCorrect,
   type GameQuestionType,
@@ -391,14 +392,17 @@ export class GameAdminService {
     return rows.map((row) => ({ ...row, names }));
   }
 
-  /** The draw run again from what it kept: the same seed and candidates must pick the same winner. */
+  /**
+   * The draw run again from what it kept: the same seed and candidates must pick the same winner. In the KEPT order: the
+   * list is stored sorted, and after the data erasure its placeholders no longer sort as the addresses did.
+   */
   async verify(drawId: string) {
     const draw = await this.database.gameDraw.findUnique({
       where: { id: drawId },
     });
     if (!draw)
       throw gameError(HttpStatus.NOT_FOUND, "NO_DRAW", "Nincs ilyen sorsolás.");
-    const again = drawGameWinner(
+    const again = drawGameWinnerInOrder(
       draw.candidates as unknown as GameDrawCandidate[],
       draw.seed,
     );
