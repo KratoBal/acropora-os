@@ -6,6 +6,8 @@ import { Prisma } from "@acropora/database";
 import {
   GAME_MAIL_MAX_PER_ENTRY,
   GameService,
+  normalizeGameName,
+  publicWinnerName,
   shortPublicName,
 } from "./game.service.js";
 
@@ -651,7 +653,7 @@ describe("the prize, the next question and the winners on the public page (Balá
     assert.equal(await noImage.service.prizeImage("q1"), null);
   });
 
-  it("lists the winners by the shortened name only, newest as given, skipping a winner without a name", async () => {
+  it("lists the winners by the shortened name only, newest first, skipping a winner without a name", async () => {
     const { service } = setup(question(NANO), undefined, {
       draws: [
         {
@@ -663,10 +665,10 @@ describe("the prize, the next question and the winners on the public page (Balá
         },
         {
           kind: "WEEKLY",
-          questionId: "q1",
+          questionId: "q9",
           winnerEmail: "nev-nelkul@x.hu",
-          createdAt: new Date("2026-11-14T19:00:00Z"),
-          question: { week: "2026-W45", prizeName: null },
+          createdAt: new Date("2026-11-07T19:00:00Z"),
+          question: { week: "2026-W44", prizeName: null },
         },
         {
           kind: "CHRISTMAS",
@@ -685,13 +687,99 @@ describe("the prize, the next question and the winners on the public page (Balá
     assert.deepEqual(
       winners.map((w) => [w.kind, w.week, w.name, w.prizeName]),
       [
-        ["WEEKLY", "2026-W45", "Kovács P.", "Aquaforest AF Nano Tank"],
         ["CHRISTMAS", null, "nagy A.", null],
+        ["WEEKLY", "2026-W45", "Kovács P.", "Aquaforest AF Nano Tank"],
       ],
     );
     const text = JSON.stringify(winners);
     for (const secret of ["@", "Péter", "Mária"])
       assert.equal(text.includes(secret), false, secret);
+  });
+
+  it("only the FIRST draw of a week counts: a re-draw never publishes a second name, and a first draw with no winner leaves the week without one (barracuda, #2279)", async () => {
+    const draw = (
+      id: string,
+      questionId: string | null,
+      email: string | null,
+      at: string,
+      kind = "WEEKLY",
+    ) => ({
+      id,
+      kind,
+      questionId,
+      winnerEmail: email,
+      createdAt: new Date(at),
+      question: questionId
+        ? { week: `w-${questionId}`, prizeName: null }
+        : null,
+    });
+    const { service } = setup(question(NANO), undefined, {
+      // newest first, as a list ordered the other way round would arrive: the code must not rely on the order
+      draws: [
+        draw("d5", null, "uj@x.hu", "2026-12-27T20:00:00Z", "CHRISTMAS"),
+        draw("d4", null, "elso@x.hu", "2026-12-26T20:00:00Z", "CHRISTMAS"),
+        draw("d3", "q2", "masodik-huzas@x.hu", "2026-11-15T20:00:00Z"),
+        draw("d2", "q2", null, "2026-11-14T20:00:00Z"),
+        draw("d1b", "q1", "ujrahuzas@x.hu", "2026-11-08T21:00:00Z"),
+        draw("d1a", "q1", "elso-huzas@x.hu", "2026-11-07T21:00:00Z"),
+      ],
+      named: [
+        { email: "elso-huzas@x.hu", questionId: "q1", name: "Első Húzás" },
+        { email: "ujrahuzas@x.hu", questionId: "q1", name: "Újra Húzás" },
+        { email: "masodik-huzas@x.hu", questionId: "q2", name: "Mások Máté" },
+        { email: "elso@x.hu", questionId: "q0", name: "Karácsony Elsőként" },
+        { email: "uj@x.hu", questionId: "q0", name: "Karácsony Újra" },
+      ],
+    });
+    const { winners } = await service.winners();
+    assert.deepEqual(
+      winners.map((w) => [w.kind, w.week, w.name]),
+      [
+        ["CHRISTMAS", null, "Karácsony E."],
+        ["WEEKLY", "w-q1", "Első H."],
+      ],
+    );
+  });
+
+  it("the winners list shows a winner whose 'name' is a web address as 'Nyertes', not whole", async () => {
+    const { service } = setup(question(NANO), undefined, {
+      draws: [
+        {
+          kind: "WEEKLY",
+          questionId: "q1",
+          winnerEmail: "reklam@x.hu",
+          createdAt: new Date("2026-11-14T20:00:00Z"),
+          question: { week: "2026-W45", prizeName: null },
+        },
+      ],
+      named: [
+        {
+          email: "reklam@x.hu",
+          questionId: "q1",
+          name: "nyeremeny-acropora.hu",
+        },
+      ],
+    });
+    const { winners } = await service.winners();
+    assert.deepEqual(
+      winners.map((w) => w.name),
+      ["Nyertes"],
+    );
+  });
+
+  it("a name that does not look like a person's shows as 'Nyertes', never whole: a web address, digits, an at sign", () => {
+    assert.equal(publicWinnerName("nyeremeny-acropora.hu"), "Nyertes");
+    assert.equal(publicWinnerName("Kovács 2"), "Nyertes");
+    assert.equal(publicWinnerName("kovacs@x.hu"), "Nyertes");
+    assert.equal(publicWinnerName("Kovács Péter"), "Kovács P.");
+    assert.equal(publicWinnerName("Anna-Mária Nagy"), "Anna-Mária N.");
+    assert.equal(publicWinnerName("O'Brien Pat"), "O'Brien P.");
+  });
+
+  it("invisible and direction-changing characters never reach a kept name: a right-to-left override, a zero-width space", () => {
+    assert.equal(normalizeGameName("Kov\u202Eács\u200B Péter"), "Kovács Péter");
+    assert.equal(normalizeGameName("\u200B\u202E"), null);
+    assert.equal(normalizeGameName("\u0007Nagy Éva"), "Nagy Éva");
   });
 
   it("shortens a name to the first word and the first name's initial", () => {

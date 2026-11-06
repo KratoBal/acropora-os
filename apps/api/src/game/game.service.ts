@@ -55,6 +55,17 @@ export function shortPublicName(name: string): string {
   return `${words[0]} ${initial}.`;
 }
 
+/**
+ * THE NAME THE PUBLIC LIST SHOWS: the shortened form, but only for what looks like a person's name (letters, marks, hyphen,
+ * apostrophe, spaces). A "name" with a dot, a digit, an at sign or the like ("nyeremeny-acropora.hu") would be published
+ * whole when it won, so it shows as "Nyertes" (barracuda, #2279).
+ */
+export function publicWinnerName(name: string): string {
+  return /^[\p{L}\p{M}'\u2019 -]+$/u.test(name)
+    ? shortPublicName(name)
+    : "Nyertes";
+}
+
 /** The longest name the giveaway keeps. */
 export const GAME_NAME_MAX = 120;
 
@@ -64,7 +75,12 @@ export const GAME_NAME_MAX = 120;
  * once, in one place. The page shows a winner by a shortened form of it (surname and the first name's initial).
  */
 export function normalizeGameName(value: string): string | null {
-  const name = value.replace(/\s+/g, " ").trim();
+  // invisible and direction-changing characters (control and format: a zero-width space, U+202E) are dropped: the name is
+  // shown on the public page (barracuda, #2277)
+  const name = value
+    .replace(/[\p{Cc}\p{Cf}]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
   if (name.length < 2 || name.length > GAME_NAME_MAX) return null;
   return /\p{L}/u.test(name) ? name : null;
 }
@@ -273,14 +289,28 @@ export class GameService implements OnModuleInit {
       : null;
   }
 
-  /** THE PAST WINNERS (newest first, at most 20): the shortened name and the prize; a winner without a name is left out. */
+  /**
+   * THE PAST WINNERS (newest first, at most 20): the shortened name and the prize; a winner without a name is left out.
+   * ONLY THE FIRST DRAW OF A WEEK (or of the Christmas draw) COUNTS: the rules say a re-run draw never replaces the first
+   * recorded result, so a second draw for the same week must not publish a second name (barracuda, #2279). The first
+   * draw counts even if it had no winner: then the week has none.
+   */
   async winners(): Promise<{ winners: PublicGameWinner[] }> {
-    const draws = await this.database.gameDraw.findMany({
-      where: { winnerEmail: { not: null } },
-      orderBy: { createdAt: "desc" },
-      take: 20,
+    const all = await this.database.gameDraw.findMany({
+      orderBy: { createdAt: "asc" },
       include: { question: { select: { week: true, prizeName: true } } },
     });
+    const firstOf = new Map<string, (typeof all)[number]>();
+    for (const draw of [...all].sort(
+      (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
+    )) {
+      const key = `${draw.kind}:${draw.questionId ?? ""}`;
+      if (!firstOf.has(key)) firstOf.set(key, draw);
+    }
+    const draws = [...firstOf.values()]
+      .filter((draw) => draw.winnerEmail !== null)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, 20);
     const emails = [...new Set(draws.map((d) => d.winnerEmail!))];
     const entries = emails.length
       ? await this.database.gameEntry.findMany({
@@ -300,7 +330,7 @@ export class GameService implements OnModuleInit {
       winners.push({
         kind: draw.kind === "CHRISTMAS" ? "CHRISTMAS" : "WEEKLY",
         week: draw.question?.week ?? null,
-        name: shortPublicName(name),
+        name: publicWinnerName(name),
         prizeName: draw.question?.prizeName ?? null,
         drawnAt: draw.createdAt.toISOString(),
       });
