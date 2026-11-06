@@ -43,6 +43,36 @@ describe("a jogi oldal", () => {
     }
   });
 
+  it("the rules page shows the two schedules as real tables (header cells, seven rows), the lists as lists, the organiser's lines broken, and the sub-headings", () => {
+    const h = renderToStaticMarkup(<JogiOldal dokumentum={JATEKSZABALYZAT} />);
+    assert.equal((h.match(/<table>/g) ?? []).length, 2);
+    assert.equal((h.match(/<th scope="col">/g) ?? []).length, 5);
+    // 7 body rows in each table
+    assert.equal((h.match(/<tbody>/g) ?? []).length, 2);
+    assert.match(
+      h,
+      /<td>2026\. november 7\. 22:00<\/td><td>2026\. november 14\. 21:00<\/td>/,
+    );
+    assert.equal((h.match(/<ul>/g) ?? []).length, 7);
+    assert.match(h, /<li>a játék kezdetekor betöltötte a 18\. életévét;<\/li>/);
+    assert.match(h, /<h3>7\.1\. Heti nyeremények<\/h3>/);
+    assert.match(h, /Acropora Kft\.<\/span><span><br\/>Cím: 1106 Budapest/);
+    assert.doesNotMatch(h, /vazlat-jelzes|VÁZLAT/);
+  });
+
+  it("the privacy notice page shows its subtitle and lead before the first section, the file's bold as <strong>, and no raw ** marks", () => {
+    const h = renderToStaticMarkup(<JogiOldal dokumentum={ADATKEZELES} />);
+    assert.ok(
+      h.indexOf("Az Acropora nyereményjáték résztvevői részére") <
+        h.indexOf("1. Az adatkezelő"),
+    );
+    assert.match(h, /<strong>Acropora Kft\.<\/strong>/);
+    assert.match(h, /a <strong>hozzájárulásod<\/strong>/);
+    assert.match(h, /<h3>2\.1\. A nevezéshez kapcsolódó adatok<\/h3>/);
+    assert.equal(h.includes("**"), false);
+    assert.doesNotMatch(h, /vazlat-jelzes|VÁZLAT/);
+  });
+
   it("the two documents are different pages with their own title", () => {
     const a = renderToStaticMarkup(<JogiOldal dokumentum={JATEKSZABALYZAT} />);
     const b = renderToStaticMarkup(<JogiOldal dokumentum={ADATKEZELES} />);
