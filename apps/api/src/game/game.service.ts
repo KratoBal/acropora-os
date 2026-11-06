@@ -125,6 +125,14 @@ export interface PublicGameNext {
   prize: PublicGamePrize | null;
 }
 
+/** A closed week with its correct answer, for the public page (rules, section 6: published after the closing). */
+export interface PublicGameClosedWeek {
+  week: string;
+  prompt: string;
+  answer: string;
+  closesAt: string;
+}
+
 /** A past draw's winner for the public list: only the shortened name, never the address. */
 export interface PublicGameWinner {
   kind: "WEEKLY" | "CHRISTMAS";
@@ -279,6 +287,41 @@ export class GameService implements OnModuleInit {
             prize: this.prizeOf(next),
           }
         : null,
+    };
+  }
+
+  /**
+   * THE CORRECT ANSWER, AFTER THE CLOSING AND NOT BEFORE (rules v2, section 6: "a helyes választ az adott heti forduló
+   * lezárását követően teszi közzé a játék weboldalán"). Decided here, on the server: only a question whose `closesAt` has
+   * passed (at the closing moment itself it has) is read, so an open or coming question's answer is never in a response.
+   * A choice question gives the label of the right option (or options), a free-text one the first accepted answer as the
+   * admin wrote it. The newest 20 closed weeks.
+   */
+  async closedWeeks(): Promise<{ weeks: PublicGameClosedWeek[] }> {
+    const rows = await this.database.gameQuestion.findMany({
+      where: { closesAt: { lte: this.now() } },
+      orderBy: { closesAt: "desc" },
+      take: 20,
+    });
+    return {
+      weeks: rows.map((question) => {
+        const accepted =
+          (question.acceptedAnswers as unknown as string[]) ?? [];
+        const options = (question.options as unknown as GameOption[]) ?? [];
+        const answer =
+          question.type === "CHOICE"
+            ? accepted
+                .map((id) => options.find((o) => o.id === id)?.label)
+                .filter((label): label is string => !!label)
+                .join(" / ")
+            : (accepted[0] ?? "");
+        return {
+          week: question.week,
+          prompt: question.prompt,
+          answer,
+          closesAt: question.closesAt.toISOString(),
+        };
+      }),
     };
   }
 
