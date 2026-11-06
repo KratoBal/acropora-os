@@ -12,6 +12,7 @@ const api = vi.hoisted(() => ({
   list: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
+  productOptions: vi.fn(),
 }));
 vi.mock("@/lib/api/livestock-arrivals", () => ({ livestockArrivalsApi: api }));
 vi.mock("next/navigation", () => ({
@@ -71,6 +72,21 @@ beforeEach(() => {
   api.list.mockReset().mockResolvedValue({ items: [arrival()] });
   api.create.mockReset().mockResolvedValue(arrival());
   api.update.mockReset().mockResolvedValue(arrival());
+  api.productOptions.mockReset().mockResolvedValue([
+    {
+      id: "p9",
+      name: "Paracanthurus hepatus",
+      commonName: "Regal tang",
+      kind: "FISH",
+    },
+    { id: "p8", name: "Zoanthus mix", commonName: null, kind: null },
+    {
+      id: "p7",
+      name: "Euphyllia ancora",
+      commonName: "Hammer koral",
+      kind: "CORAL",
+    },
+  ]);
 });
 
 describe("a lista", () => {
@@ -197,6 +213,7 @@ describe("a felvétel", () => {
     expect(api.create.mock.calls[0]![1]).toEqual({
       kind: "FISH",
       label: "Paracanthurus hepatus",
+      productId: null,
       expectedOn: "2026-11-20",
       quantity: null,
       status: "ORDERED",
@@ -275,10 +292,95 @@ describe("a szerkesztés", () => {
   });
 });
 
+describe("a termék választó", () => {
+  const open = async () => {
+    render(<LivestockArrivalsPage />);
+    await screen.findByTestId("livestock-arrival-list");
+    fireEvent.click(screen.getByRole("button", { name: "Új érkezés" }));
+    return screen.findByTestId("livestock-arrival-form");
+  };
+  const pick = async (form: HTMLElement, name: RegExp) => {
+    fireEvent.focus(within(form).getByRole("textbox", { name: "Termék" }));
+    fireEvent.click(await screen.findByRole("button", { name }));
+  };
+
+  it("keres a szerveren a beírt szóra, és a találat a választó helyére kerül", async () => {
+    const form = await open();
+    const input = within(form).getByRole("textbox", { name: "Termék" });
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "parac" } });
+    await screen.findByRole("button", { name: /Paracanthurus hepatus/ });
+    expect(api.productOptions).toHaveBeenLastCalledWith(
+      "t",
+      "parac",
+      expect.any(AbortSignal),
+    );
+  });
+
+  it("az egyértelmű fajtájú termék beállítja és zárja a fajtát, kitölti az üres megnevezést, és az azonosítója megy a mentéskor", async () => {
+    const form = await open();
+    await pick(form, /Euphyllia ancora/);
+    expect(within(form).getByLabelText("Fajta")).toHaveValue("CORAL");
+    expect(within(form).getByLabelText("Fajta")).toBeDisabled();
+    expect(within(form).getByLabelText("Megnevezés")).toHaveValue(
+      "Euphyllia ancora",
+    );
+    fireEvent.change(within(form).getByLabelText("Várható érkezés napja"), {
+      target: { value: "2026. 11. 20." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Mentés" }));
+    await waitFor(() => expect(api.create).toHaveBeenCalledTimes(1));
+    expect(api.create.mock.calls[0]![1]).toMatchObject({
+      kind: "CORAL",
+      label: "Euphyllia ancora",
+      productId: "p7",
+    });
+  });
+
+  it("a már beírt megnevezést nem írja felül, és a fajta nélküli (több gyökérű) termék a fajtát a személyre hagyja", async () => {
+    const form = await open();
+    fireEvent.change(within(form).getByLabelText("Megnevezés"), {
+      target: { value: "Saját név" },
+    });
+    fireEvent.change(within(form).getByLabelText("Fajta"), {
+      target: { value: "CORAL" },
+    });
+    await pick(form, /Zoanthus mix/);
+    expect(within(form).getByLabelText("Megnevezés")).toHaveValue("Saját név");
+    expect(within(form).getByLabelText("Fajta")).toHaveValue("CORAL");
+    expect(within(form).getByLabelText("Fajta")).toBeEnabled();
+  });
+
+  it("szerkesztésnél a kötött termék neve látszik, és a Csere után mentve a kötés null-ként törlődik", async () => {
+    render(<LivestockArrivalsPage />);
+    const list = await screen.findByTestId("livestock-arrival-list");
+    fireEvent.click(within(list).getByRole("button"));
+    const form = await screen.findByTestId("livestock-arrival-form");
+    expect(
+      within(form).getByText("Zoanthus Utter Chaos (darab)"),
+    ).toBeInTheDocument();
+    fireEvent.click(within(form).getByRole("button", { name: "Csere" }));
+    fireEvent.click(screen.getByRole("button", { name: "Mentés" }));
+    await waitFor(() => expect(api.update).toHaveBeenCalledTimes(1));
+    expect(api.update.mock.calls[0]![2]).toMatchObject({ productId: null });
+  });
+
+  it("a tárolt kötés változatlanul megy vissza, ha a választóhoz nem nyúlt senki", async () => {
+    render(<LivestockArrivalsPage />);
+    const list = await screen.findByTestId("livestock-arrival-list");
+    fireEvent.click(within(list).getByRole("button"));
+    await screen.findByTestId("livestock-arrival-form");
+    fireEvent.click(screen.getByRole("button", { name: "Mentés" }));
+    await waitFor(() => expect(api.update).toHaveBeenCalledTimes(1));
+    expect(api.update.mock.calls[0]![2]).toMatchObject({ productId: "p1" });
+  });
+});
+
 describe("az űrlap alakja az API felé", () => {
   const form = {
     kind: "CORAL" as const,
     label: "  Zoanthus  ",
+    product: null,
     expectedOn: "2026-11-13",
     quantity: " 12 ",
     status: "ORDERED" as const,
@@ -290,12 +392,21 @@ describe("az űrlap alakja az API felé", () => {
     expect(inputOfForm(form)).toEqual({
       kind: "CORAL",
       label: "Zoanthus",
+      productId: null,
       expectedOn: "2026-11-13",
       quantity: 12,
       status: "ORDERED",
       preorderable: true,
       note: null,
     });
+  });
+
+  it("a kiválasztott termék azonosítója megy, a kiürített választó null (a módosításnál ez törli a kötést)", () => {
+    expect(
+      inputOfForm({ ...form, product: { id: "p9", title: "Paracanthurus" } })
+        .productId,
+    ).toBe("p9");
+    expect(inputOfForm({ ...form, product: null }).productId).toBeNull();
   });
 
   it("lezárt állapotnál az előjegyezhető nem mehet ki igazként, nyitottnál igen", () => {

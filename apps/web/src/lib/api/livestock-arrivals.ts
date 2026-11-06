@@ -2,6 +2,7 @@ import type {
   LivestockArrival,
   LivestockArrivalKind,
   LivestockArrivalListResponse,
+  LivestockArrivalProductOption,
   LivestockArrivalStatus,
 } from "@acropora/types";
 
@@ -15,10 +16,11 @@ export interface LivestockArrivalFilters {
   upcoming?: boolean;
 }
 
-/** Az űrlap tartalma: a három törölhető mező `null`-lal törlődik, a többi mindig megy. */
+/** Az űrlap tartalma: a három törölhető mező (a termék, a darabszám, a megjegyzés) `null`-lal törlődik, a többi mindig megy. */
 export interface LivestockArrivalInput {
   kind: LivestockArrivalKind;
   label: string;
+  productId: string | null;
   expectedOn: string;
   quantity: number | null;
   status: LivestockArrivalStatus;
@@ -38,11 +40,22 @@ function query(filters: LivestockArrivalFilters): string {
   return text ? `?${text}` : "";
 }
 
-/** Élő állat érkezések: lista, egy sor, felvétel, módosítás. Törlés nincs: a lemondott érkezés CANCELLED. */
+/** Élő állat érkezések: lista, a termék-választó találatai, felvétel, módosítás. Törlés nincs: a lemondott érkezés CANCELLED. */
 export const livestockArrivalsApi = {
   list(token: string, filters: LivestockArrivalFilters, signal?: AbortSignal) {
     return apiRequest<LivestockArrivalListResponse>(
       `/livestock-arrivals${query(filters)}`,
+      token,
+      { signal },
+    );
+  },
+  /** Legfeljebb húsz élő állat termék a keresett szóra (üres keresésre a lista eleje). */
+  productOptions(token: string, term: string, signal?: AbortSignal) {
+    const text = term.trim();
+    return apiRequest<LivestockArrivalProductOption[]>(
+      `/livestock-arrivals/options/products${
+        text ? `?q=${encodeURIComponent(text)}` : ""
+      }`,
       token,
       { signal },
     );
