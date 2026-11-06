@@ -5,8 +5,11 @@ import {
   ADATKEZELES,
   JATEKSZABALYZAT,
   JOGI_DOKUMENTUMOK,
+  dokumentumSzovege,
   jogiSzovegVazlat,
   kitoltendoDb,
+  blokkSzovegei,
+  szakaszBlokkok,
 } from "./jogi-szovegek.ts";
 
 /*
@@ -15,8 +18,7 @@ import {
   stays a [KITÖLTENDŐ]); the draft going out without its warning; the page promising a newsletter, or saying less
   than the brief decided (only the correct answers are drawn, once a week per address, confirmation by link).
 */
-const szoveg = (d: (typeof JOGI_DOKUMENTUMOK)[number]) =>
-  d.szakaszok.flatMap((s) => [s.cim, ...s.bekezdesek]).join("\n");
+const szoveg = dokumentumSzovege;
 
 describe("a jogi szoveg vazlatai", () => {
   it("both documents are final (Balázs's texts, 2026-11-06): no draft warning and no open mark, and the draft check says so", () => {
@@ -36,65 +38,85 @@ describe("a jogi szoveg vazlatai", () => {
     assert.equal(kitoltendoDb(vazlat), 1);
   });
 
-  it("the rules are the owner's eight sections word for word: his title lines, the organiser, the schedule, the draw and the name asked of a player", () => {
+  it("the rules are version 2 (Balázs's OK, 2026-11-06): fifteen numbered sections, the two tables as tables, the lists as lists, the organiser and the schedule", () => {
+    assert.equal(
+      JATEKSZABALYZAT.cim,
+      "Acropora nyereményjáték – Játékszabályzat",
+    );
     assert.deepEqual(
-      JATEKSZABALYZAT.szakaszok.map((s) => s.cim),
+      JATEKSZABALYZAT.szakaszok.map((x) => x.cim),
       [
         "1. A játék szervezője",
         "2. A játék időtartama",
-        "3. Ki vehet részt",
-        "4. Hogyan lehet részt venni",
-        "5. A válasz értékelése",
-        "6. A sorsolás",
-        "7. A nyertesek értesítése",
-        "8. Adatkezelés",
+        "3. A részvétel feltételei",
+        "4. A játék menete és az érvényes nevezés",
+        "5. A nevezések száma és az ismételt beküldés",
+        "6. A válaszok értékelése",
+        "7. Nyeremények",
+        "8. A heti sorsolások",
+        "9. A fődíj sorsolása",
+        "10. A sorsolások dokumentálása és a pótnyertesek",
+        "11. A nyertesek értesítése és a nyeremények átadása",
+        "12. Visszaélések és technikai problémák",
+        "13. Adatkezelés",
+        "14. Kérdések és panaszok",
+        "15. A szabályzat elérhetősége és módosítása",
       ],
+    );
+    const blokkok = JATEKSZABALYZAT.szakaszok.flatMap((x) => [
+      ...szakaszBlokkok(x),
+    ]);
+    const tablazatok = blokkok.filter((x) => x.fajta === "tablazat");
+    assert.equal(tablazatok.length, 2);
+    // the rounds (section 2): round, opening, deadline; seven rounds
+    assert.deepEqual(tablazatok[0]!.fejlec, [
+      "Forduló",
+      "A kérdés megjelenése",
+      "A válaszadás és az email-megerősítés határideje",
+    ]);
+    assert.equal(tablazatok[0]!.sorok.length, 7);
+    assert.deepEqual(tablazatok[0]!.sorok[0], [
+      "1. hét",
+      "2026. november 7. 22:00",
+      "2026. november 14. 21:00",
+    ]);
+    assert.deepEqual(tablazatok[0]!.sorok[6], [
+      "7. hét",
+      "2026. december 19. 22:00",
+      "2026. december 26. 21:00",
+    ]);
+    // the weekly draws (section 8): round, draw time; seven rounds, every row two cells
+    assert.deepEqual(tablazatok[1]!.fejlec, ["Forduló", "Sorsolás időpontja"]);
+    assert.equal(tablazatok[1]!.sorok.length, 7);
+    for (const sor of tablazatok[1]!.sorok) assert.equal(sor.length, 2);
+    assert.equal(blokkok.filter((x) => x.fajta === "lista").length, 7);
+    assert.deepEqual(
+      blokkok.filter((x) => x.fajta === "alcim").map((x) => x.szoveg),
+      ["7.1. Heti nyeremények", "7.2. Fődíj"],
     );
     const szabaly = szoveg(JATEKSZABALYZAT);
     for (const mondat of [
       "Acropora Kft.",
       "Adószám: 23916229-2-42",
-      "A játék 2026 november 7-én 22:00 órakor kezdődik.",
-      "A Fődíj sorsolása 2026 december 26-án este 22:00 órakor történik.",
-      "A játékban bárki részt vehet, aki a játék kezdetekor betöltötte a 18. életévét.",
-      "A játékos megadja a nevét, az e-mail-címét és a válaszát.",
+      "A játék 2026. november 7-én 22:00 órakor kezdődik, és hét heti fordulóból áll.",
+      "A fődíj sorsolásának időpontja: 2026. december 26. 22:00.",
+      "Egy játékos különböző heti fordulókban több heti nyereményt is nyerhet.",
+      "A Szervező a helyes választ az adott heti forduló lezárását követően teszi közzé a játék weboldalán.",
+      "1 db Aquaforest AF Nano Tank akvárium.",
+      "a nyertes rövidített neve, például Kovács P.",
     ])
       assert.ok(szabaly.includes(mondat), mondat);
     assert.equal(szabaly.includes("[KITÖLTENDŐ"), false);
   });
 
-  it("the rules differ from the owner's file in exactly these places: two sentences he asked to add (the prize, the published name) and two typos of the schedule corrected", () => {
-    const szabaly = szoveg(JATEKSZABALYZAT);
-    for (const mondat of [
-      "A fődíj egy Aquaforest AF Nano Tank akvárium. A képeken látható dekoráció és élővilág nem része a nyereménynek. A heti nyereményt az adott heti kérdéssel együtt tesszük közzé a játék oldalán.",
-      "A nyertes nevét rövidített alakban (vezetéknév és a keresztnév kezdőbetűje, például Kovács P.) közzétesszük a játék oldalán.",
-      "A hatodik hét kérdése 2026 december 12 22:00 órakor jelenik meg",
-      "A hetedik hét kérdése 2026 december 19 22:00 órakor jelenik meg",
-    ])
-      assert.ok(szabaly.includes(mondat), mondat);
-    assert.equal(szabaly.includes("Az hatodik"), false);
-    assert.equal(szabaly.includes("Az hetedik"), false);
-    // two more obvious slips, corrected on acrobot's word (44311): "Fődij" and "résztvehet"
-    assert.equal(szabaly.includes("Fődij"), false);
-    assert.equal(szabaly.includes("résztvehet"), false);
-    assert.equal(szabaly.split("A Fődíj sorsolása").length - 1, 2);
-    // the prize sentences close section 6, the name sentence closes section 7
-    assert.match(
-      JATEKSZABALYZAT.szakaszok[5]!.bekezdesek.at(-1)!,
-      /^A fődíj egy Aquaforest AF Nano Tank/,
+  it("the organiser's paragraph keeps its line breaks (the name, the address, the tax number, the contact are separate lines)", () => {
+    const szervezo = szakaszBlokkok(JATEKSZABALYZAT.szakaszok[0]!).find(
+      (x) => x.fajta === "bekezdes" && x.sorok.length > 1,
     );
-    assert.match(
-      JATEKSZABALYZAT.szakaszok[6]!.bekezdesek.at(-1)!,
-      /^A nyertes nevét rövidített alakban/,
-    );
-  });
-
-  it("the rules say a re-run draw only checks: the first recorded result counts (barracuda's question, 2026-11-05)", () => {
-    const szabaly = szoveg(JATEKSZABALYZAT);
-    assert.match(
-      szabaly,
-      /újra lefuttatnak, mindig az első, rögzített eredmény számít; az újrafuttatás csak ellenőrzés/,
-    );
+    assert.ok(szervezo && szervezo.fajta === "bekezdes");
+    assert.equal(szervezo.sorok.length, 4);
+    assert.equal(szervezo.sorok[0], "Acropora Kft.");
+    assert.match(szervezo.sorok[3]!, /info@acropora\.hu$/);
   });
 
   it("the privacy notice is the owner's four sections word for word, plus one sentence he asked for: the shortened winner's name is published", () => {
@@ -117,18 +139,33 @@ describe("a jogi szoveg vazlatai", () => {
       assert.ok(adat.includes(mondat), mondat);
     // the one added sentence (acrobot 44299), the last of section 3
     assert.equal(
-      ADATKEZELES.szakaszok[2]!.bekezdesek.at(-1),
+      ADATKEZELES.szakaszok[2]!.bekezdesek!.at(-1),
       "Ha nyersz, a nevedet rövidített alakban (vezetéknév és a keresztnév kezdőbetűje, például Kovács P.) közzétesszük a játék oldalán.",
     );
   });
 
-  it("the rules say what the page does: correct answers only, once a week, confirmation by link, more weeks more chances", () => {
+  it("the rules say what the system does: only correct, confirmed entries are drawn, one entry per round, confirmation by link, a chance per right week, a re-run only checks", () => {
     const szabaly = szoveg(JATEKSZABALYZAT);
-    assert.match(szabaly, /Csak a helyes válasz kerül a sorsolásba/);
-    assert.match(szabaly, /hetente egyszer/);
-    assert.match(szabaly, /megerősítő linkre kattint/);
-    assert.match(szabaly, /annyiszor szerepel/);
-    assert.match(szabaly, /nem kap visszajelzést/);
+    assert.match(
+      szabaly,
+      /kizárólag a helyes választ tartalmazó, határidőn belül beküldött és megerősített/,
+    );
+    assert.match(
+      szabaly,
+      /Egy természetes személy egy heti fordulóban egy alkalommal nevezhet/,
+    );
+    assert.match(szabaly, /megerősítő linkre kattintva meg kell erősítenie/);
+    assert.match(szabaly, /egy megfelelően teljesített héttel egy esélyt/);
+    assert.match(szabaly, /nem ad visszajelzést arról, hogy a válasz helyes-e/);
+    assert.match(
+      szabaly,
+      /Az első szabályszerűen végrehajtott és rögzített sorsolás eredménye az irányadó\. Egy ellenőrzési célú megismétlés nem változtatja meg ezt az eredményt/,
+    );
+    // the weekly winners take part in the grand prize draw too (the live draw page and the weekly rule follow this)
+    assert.match(
+      szabaly,
+      /A heti nyereményt korábban elnyerő játékos a fődíj sorsolásában: részt vehet/,
+    );
   });
 
   it("the e-mail address is for the game and the winner's notice only: no newsletter, anywhere", () => {
@@ -148,10 +185,13 @@ describe("a jogi szoveg vazlatai", () => {
 
   it("the sections are numbered in order and none is empty", () => {
     for (const d of JOGI_DOKUMENTUMOK) {
-      d.szakaszok.forEach((s, i) => {
-        assert.match(s.cim, new RegExp(`^${i + 1}\\. `), d.azonosito);
-        assert.ok(s.bekezdesek.length > 0);
-        for (const b of s.bekezdesek) assert.ok(b.trim().length > 0);
+      d.szakaszok.forEach((x, i) => {
+        assert.match(x.cim, new RegExp(`^${i + 1}\\. `), d.azonosito);
+        const blokkok = szakaszBlokkok(x);
+        assert.ok(blokkok.length > 0, x.cim);
+        const darabok = blokkok.flatMap((blokk) => blokkSzovegei(blokk));
+        assert.ok(darabok.length > 0, x.cim);
+        for (const darab of darabok) assert.ok(darab.trim().length > 0, x.cim);
       });
     }
   });
