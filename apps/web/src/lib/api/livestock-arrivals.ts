@@ -52,10 +52,11 @@ export const livestockArrivalsApi = {
   /** Legfeljebb húsz élő állat termék a keresett szóra (üres keresésre a lista eleje). */
   productOptions(token: string, term: string, signal?: AbortSignal) {
     const text = term.trim();
+    // the query is built outside the path: the route-coverage guard reads the path literal, and an inline ternary
+    // inside `${}` cut it in the middle (CI, OS #2271)
+    const search = text ? `?q=${encodeURIComponent(text)}` : "";
     return apiRequest<LivestockArrivalProductOption[]>(
-      `/livestock-arrivals/options/products${
-        text ? `?q=${encodeURIComponent(text)}` : ""
-      }`,
+      `/livestock-arrivals/options/products${search}`,
       token,
       { signal },
     );
