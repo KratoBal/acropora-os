@@ -11,7 +11,7 @@ import { FodijVilagitas } from "./fodij-vilagitas.tsx";
  */
 const IKONOK = [
   { src: "ikon-szuro.svg", szoveg: "REJTETT SZŰRÉS" },
-  { src: "ikon-vilagitas.svg", szoveg: "ZÁTONY LED-VILÁGÍTÁS" },
+  { src: "ikon-vilagitas.svg", szoveg: "KORALLOS LED-VILÁGÍTÁS" },
   { src: "ikon-szivattyu.svg", szoveg: "KERINGETŐ SZIVATTYÚ" },
   { src: "ikon-futo.svg", szoveg: "VÍZMELEGÍTŐ" },
 ];
@@ -20,7 +20,7 @@ const TERMEKEK = [
   {
     src: "termek-reef-salt.png",
     nev: "REEF SALT",
-    alt: "Reef Salt zátonysó zacskója",
+    alt: "Reef Salt tengeri só zacskója",
   },
   {
     src: "termek-nano-rock.png",
@@ -48,7 +48,7 @@ const TERMEKEK = [
 const LEPESEK = [
   {
     kep: "lepes-1.webp",
-    szoveg: "Csomagold ki a zátonyodat",
+    szoveg: "Csomagold ki az akváriumodat",
     alt: "Rajz: a kicsomagolt akváriumdoboz",
   },
   {
@@ -83,19 +83,19 @@ const MIERT = [
     kep: "miert-szures.webp",
     cim: "Rejtett szűrés",
     szoveg: "Letisztult megjelenés, látható technika nélkül.",
-    alt: "Az akvárium fekete oldalfala, mögötte a rejtett szűrőpanel",
+    alt: "Az akvárium fekete oldalfala, mögötte a rejtett szűrőház",
   },
   {
     kep: "miert-egyutt.webp",
     cim: "Együttműködésre tervezve",
     szoveg:
       "Minden elemet teljes rendszerként válogattunk össze és teszteltünk.",
-    alt: "A szűrőpanel kamrái és a csatlakozó cső közelről",
+    alt: "A szűrőház kamrái és a csatlakozó cső közelről",
   },
   {
     kep: "miert-kezdo.webp",
     cim: "Kezdőknek is könnyű",
-    szoveg: "Egyszerű összeállítás, még ha ez az első zátonyakváriumod is.",
+    szoveg: "Egyszerű összeállítás, még ha ez az első tengeri akváriumod is.",
     alt: "Az akvárium üvegtartálya és a ráhelyezett LED-lámpa",
   },
   {
@@ -109,7 +109,7 @@ const MIERT = [
 const KINEK = [
   {
     kep: "kinek-kezdo.webp",
-    cim: "Első zátonyakváriumosoknak",
+    cim: "Első korallos akváriumnak",
     szoveg: "Könnyű belépő a tengeri akváriumok világába.",
     alt: "Az akvárium korallokkal, ibolya fényben",
   },
@@ -121,7 +121,7 @@ const KINEK = [
   },
   {
     kep: "kinek-nano.webp",
-    cim: "Nano zátonyrajongóknak",
+    cim: "Nano akvárium rajongóknak",
     szoveg: "Kompakt kiegészítés bármelyik gyűjteményhez.",
     alt: "Egy férfi a színes korallokkal teli akvárium mögött",
   },
@@ -137,7 +137,7 @@ const AKVARIUM = [
   ["Medence mérete", "45 × 45 × 45 cm"],
   ["Űrtartalom", "90 L bruttó / 85 L nettó"],
   ["Üveg", "6 mm Super White"],
-  ["Szűrőpanel", "3 kamra, állítható vízbeszívással"],
+  ["Szűrőház", "3 kamra, állítható vízbeszívással"],
   ["Szivattyú", "1000 L/h DC keringető szivattyú"],
   ["Fűtő", "150 W üveg fűtő"],
   ["LED-lámpa", "90 LED, 18 W"],
@@ -177,16 +177,16 @@ export function FodijOldal() {
       <section className="fodij-hero jatek-wrap">
         <div className="fodij-hero-szoveg">
           <p className="fodij-cimke">ÚJ</p>
-          <h1>ZÁTONY A DOBOZBAN</h1>
+          <h1>TENGER A DOBOZBAN</h1>
           <h2>TELJES, KÉSZ, TÖKÉLETES</h2>
           <p>
-            Tengervizes akváriumot indítani még sosem volt ilyen egyszerű.{" "}
+            Tengeri akváriumot indítani még sosem volt ilyen egyszerű.{" "}
             <strong>
-              Az AF Nano Tank mindent tartalmaz, ami az első zátonyakváriumod
+              Az AF Nano Tank mindent tartalmaz, ami az első sósvízi akváriumod
               felépítéséhez kell
             </strong>
-            : gondosan válogatott technikát, zátonysót, dekorkövet, homokot és a
-            nélkülözhetetlen indító termékeket.
+            : gondosan válogatott technikát, tengersót, dekorkövet, homokot és a
+            nélkülözhetetlen indító baktériumokat.
           </p>
           <a className="jatek-button" href="#keszlet">
             ISMERD MEG A KÉSZLETET <span>↗</span>
@@ -213,7 +213,7 @@ export function FodijOldal() {
           playsInline
           preload="none"
           poster={kep("video-poszter.jpg")}
-          aria-label="Bemutató videó: az AF Nano Tank zátonya közelről"
+          aria-label="Bemutató videó: az AF Nano Tank koralljai közelről"
         >
           <source src={kep("video.mp4")} type="video/mp4" />
         </video>
@@ -274,7 +274,7 @@ export function FodijOldal() {
         aria-labelledby="fodij-lepesek-cim"
       >
         <h2 id="fodij-lepesek-cim">
-          A DOBOZTÓL A ZÁTONYIG, NÉHÁNY EGYSZERŰ LÉPÉSBEN
+          A DOBOZTÓL A SZIRTIG, NÉHÁNY EGYSZERŰ LÉPÉSBEN
         </h2>
         <ol>
           {LEPESEK.map((l) => (
@@ -371,12 +371,12 @@ export function FodijOldal() {
         <div className="fodij-zaro-szoveg">
           <h2 id="fodij-zaro-cim">KOCKA ALAKÚ KAPU A TISZTA NYUGALOMHOZ</h2>
           <p>
-            Hozz létre virágzó zátony-ökoszisztémát egy teljes készlettel,
+            Hozz létre virágzó tengeri ökoszisztémát egy teljes készlettel,
             amelyet úgy terveztünk, hogy az első naptól egyszerű, szép és
             sikeres legyen.
           </p>
           <a className="jatek-button" href="/#heti-kerdes">
-            KEZDD EL MA A ZÁTONYOS UTAZÁSODAT <span>↗</span>
+            KEZDD EL MA A SÓSVÍZI UTAZÁSODAT <span>↗</span>
           </a>
         </div>
       </section>

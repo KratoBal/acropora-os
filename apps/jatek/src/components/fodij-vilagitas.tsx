@@ -13,7 +13,7 @@ const KEPEK: Record<Nezet, { src: string; alt: string; felirat: string }> = {
   nappal: {
     src: "/fodij/vilagitas-nappal.webp",
     alt: "Világos nappali, benne egy kis tengervizes akvárium a fekete szekrényén, délutáni fényben.",
-    felirat: "Gyönyörű zátony nappal",
+    felirat: "Gyönyörű fények nappal",
   },
   ejszaka: {
     src: "/fodij/vilagitas-ejszaka.webp",

@@ -8,7 +8,7 @@ import "../fodij.css";
 export const metadata: Metadata = {
   title: "AF Nano Tank, a fődíj",
   description:
-    "Az Acropora nyereményjáték fődíja: az Aquaforest AF Nano Tank, teljes zátonyakvárium-készlet.",
+    "Az Acropora nyereményjáték fődíja: az Aquaforest AF Nano Tank, teljes tengeri akvárium-készlet.",
 };
 
 export default function FodijLap() {

@@ -25,11 +25,11 @@ const h2k = [...html.matchAll(/<h[12][^>]*>([\s\S]*?)<\/h[12]>/g)].map((m) =>
 describe("a fődíj-oldal", () => {
   it("has the nine sections of the original, in its order, in Hungarian", () => {
     assert.deepEqual(h2k, [
-      "ZÁTONY A DOBOZBAN",
+      "TENGER A DOBOZBAN",
       "TELJES, KÉSZ, TÖKÉLETES",
       "A SAJÁT ABLAKOD AZ ÓCEÁNRA",
       "MINDEN, AMI KELL, EGY CSOMAGBAN",
-      "A DOBOZTÓL A ZÁTONYIG, NÉHÁNY EGYSZERŰ LÉPÉSBEN",
+      "A DOBOZTÓL A SZIRTIG, NÉHÁNY EGYSZERŰ LÉPÉSBEN",
       "MIÉRT AZ AF NANO TANK?",
       "VILÁGÍTÁS, AMI TÖKÉLETES HANGULATOT TEREMT",
       "TÖKÉLETES VÁLASZTÁS",
@@ -68,12 +68,50 @@ describe("a fődíj-oldal", () => {
       assert.ok(existsSync(join(PUBLIC, "fodij", f)), f);
   });
 
+  // WHAT TURNS THIS RED (Balázs's text corrections, 2026-11-06 evening, exchange/jatek/szovegjavitas-balazs-2026-11-06.md): the
+  // word "zátony" (or "zátonyakvárium", "zátonysó", "zátonyos") coming back anywhere on the prize page or its metadata; the
+  // filter part called "Szűrőpanel" again instead of "Szűrőház"; one of the sentences he rewrote reading as before.
+  it("carries Balázs's wording: no 'zátony' anywhere, 'Szűrőház', the rewritten sentences", () => {
+    const forrasok = [
+      "src/components/fodij-oldal.tsx",
+      "src/components/fodij-vilagitas.tsx",
+      "src/app/fodij/page.tsx",
+    ].map((f) => readFileSync(join(process.cwd(), f), "utf8"));
+    for (const forras of forrasok) {
+      assert.doesNotMatch(forras, /zátony/i);
+      assert.doesNotMatch(forras, /szűrőpanel/i);
+    }
+    const szoveg = html
+      .replace(/<!-- -->/g, "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ");
+    assert.doesNotMatch(szoveg, /zátony|szűrőpanel/i);
+    for (const mondat of [
+      "Tengeri akváriumot indítani még sosem volt ilyen egyszerű.",
+      "ami az első sósvízi akváriumod felépítéséhez kell",
+      "tengersót, dekorkövet, homokot és a nélkülözhetetlen indító baktériumokat.",
+      "Egyszerű összeállítás, még ha ez az első tengeri akváriumod is.",
+      "KORALLOS LED-VILÁGÍTÁS",
+      "Első korallos akváriumnak",
+      "Nano akvárium rajongóknak",
+      "Szűrőház",
+      "Hozz létre virágzó tengeri ökoszisztémát egy teljes készlettel, amelyet úgy terveztünk, hogy az első naptól egyszerű, szép és sikeres legyen.",
+      "Csomagold ki az akváriumodat",
+    ])
+      assert.ok(szoveg.includes(mondat), mondat);
+    assert.ok(html.includes('alt="Reef Salt tengeri só zacskója"'));
+    assert.ok(
+      html.includes("Bemutató videó: az AF Nano Tank koralljai közelről"),
+    );
+    assert.match(forrasok[2]!, /teljes tengeri akvárium-készlet/);
+  });
+
   it("the two buttons lead to the kit section and to the weekly question", () => {
     assert.match(html, /href="#keszlet"[^>]*>ISMERD MEG A KÉSZLETET/);
     assert.match(html, /id="keszlet"/);
     assert.match(
       html,
-      /href="\/#heti-kerdes"[^>]*>KEZDD EL MA A ZÁTONYOS UTAZÁSODAT/,
+      /href="\/#heti-kerdes"[^>]*>KEZDD EL MA A SÓSVÍZI UTAZÁSODAT/,
     );
   });
 
@@ -103,7 +141,7 @@ describe("a nappal / éjszaka kapcsoló", () => {
     assert.match(h, /aria-pressed="true"[^>]*>NAPPAL/);
     assert.match(h, /aria-pressed="false"[^>]*>ÉJSZAKA/);
     assert.match(h, /vilagitas-nappal\.webp/);
-    assert.match(h, /Gyönyörű zátony nappal/);
+    assert.match(h, /Gyönyörű fények nappal/);
     // the night properties appear only in the night
     assert.doesNotMatch(h, /Állítható fényerő|Kék és RGB/);
   });
