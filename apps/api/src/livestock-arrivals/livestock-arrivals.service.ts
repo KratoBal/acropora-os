@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -26,6 +27,8 @@ const NOT_FOUND = "Az érkezés nem található.";
 const NOT_OPEN =
   "Csak megrendelt vagy úton lévő érkezésre lehet előjegyezni: a megérkezett vagy lemondott érkezés nem előjegyezhető.";
 const NO_PRODUCT = "A kiválasztott termék nem található, vagy nem élő állat.";
+const CHANGED =
+  "Az érkezést közben valaki módosította: töltsd újra, és vidd át a változtatást.";
 const KIND_MISMATCH =
   "Az érkezés fajtája nem egyezik a kiválasztott termék fajtájával.";
 const BAD_DAY = "A dátum nem létező nap.";
@@ -115,6 +118,12 @@ export class LivestockArrivalsService {
   ): Promise<LivestockArrival> {
     const current = await this.repository.get(id);
     if (!current) throw new NotFoundException(NOT_FOUND);
+    if (
+      patch.expectedUpdatedAt !== undefined &&
+      new Date(patch.expectedUpdatedAt).getTime() !==
+        new Date(current.updatedAt).getTime()
+    )
+      throw new ConflictException(CHANGED);
     const status = patch.status ?? current.status;
     const closing =
       patch.status !== undefined && !isLivestockArrivalOpen(patch.status);
@@ -140,7 +149,8 @@ export class LivestockArrivalsService {
         ? { productId: current.productId, kind: current.kind }
         : undefined,
     );
-    const updated = await this.repository.update(id, data);
+    const updated = await this.repository.update(id, data, current.updatedAt);
+    if (updated === "changed") throw new ConflictException(CHANGED);
     if (!updated) throw new NotFoundException(NOT_FOUND);
     return updated;
   }
