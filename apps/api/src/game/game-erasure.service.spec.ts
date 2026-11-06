@@ -11,6 +11,7 @@ import {
 import {
   GAME_ERASE_AFTER_DAYS_DEFAULT,
   gameEraseAfterDays,
+  gameEraseDeadline,
   GameErasureService,
 } from "./game-erasure.service.js";
 import { GameService } from "./game.service.js";
@@ -215,8 +216,9 @@ function services(rows: ReturnType<typeof round>, now: Date, env: Row = {}) {
   erasure.database = fake.database as never;
   erasure.now = () => now;
   erasure.environment = env;
-  const game = new GameService(null, {});
+  const game = new GameService(null, env);
   game.database = fake.database as never;
+  game.now = () => now;
   const admin = new GameAdminService(game);
   admin.database = fake.database as never;
   return { ...fake, erasure, game, admin };
@@ -230,13 +232,17 @@ const firstWinners = (rows: ReturnType<typeof round>) =>
   );
 
 describe("the game data erasure", () => {
-  it("erases nothing before the grand prize draw, nor before its days have passed", async () => {
+  it("erases nothing before the grand prize draw's days have passed, nor without it before the deadline", async () => {
     const before = round();
     before.draws = before.draws.filter((d) => d.kind === "WEEKLY");
-    const early = services(before, new Date("2027-01-30T00:00:00Z"));
+    // no later question either: the last one closed weeks ago, so the late draw is said aloud
+    before.questions = before.questions.filter((q) => q.id !== "q9");
+    // the deadline: the first moment of 2027-01-10 in Budapest (CET), 2027-01-09T23:00Z
+    const early = services(before, new Date("2027-01-09T22:59:59Z"));
     const none = await early.erasure.run({ dryRun: false });
     assert.equal(none.due, false);
-    assert.equal(none.dueAt, null);
+    assert.equal(none.dueAt, "2027-01-09T23:00:00.000Z");
+    assert.equal(none.waitingForGrandDraw, true);
     assert.equal(early.writes(), 0);
 
     const rows = round();
@@ -270,7 +276,10 @@ describe("the game data erasure", () => {
     const rows = round();
     const winners = firstWinners(rows);
     const s = services(rows, new Date(GRAND_AT.getTime() + 15 * DAY));
+    s.game.now = () => new Date(GRAND_AT.getTime() + DAY);
     const publicBefore = await s.game.winners();
+    assert.ok(publicBefore.winners.length > 0);
+    s.game.now = () => new Date(GRAND_AT.getTime() + 15 * DAY);
     const result = await s.erasure.run({ dryRun: false, userId: null });
 
     assert.equal(result.due, true);
@@ -320,7 +329,9 @@ describe("the game data erasure", () => {
     // every kept draw picks the same (kept or placeholder) winner when run again
     for (const d of rows.draws)
       assert.equal((await s.admin.verify(d.id)).same, true, d.id);
-    // the public list is what it was
+    // the public list is empty from the moment the erasure is due; the kept rows are the ones it named before
+    assert.deepEqual(await s.game.winners(), { winners: [] });
+    s.game.now = () => new Date(GRAND_AT.getTime() + DAY);
     assert.deepEqual(await s.game.winners(), publicBefore);
 
     // a question set up after the draw: untouched
@@ -334,6 +345,62 @@ describe("the game data erasure", () => {
     assert.equal(s.audits[0]!.entityId, "d4");
     assert.equal(s.audits[0]!.metadata.entriesErased, result.entriesErased);
     assert.ok(!JSON.stringify(s.audits).includes("@"));
+  });
+
+  it("without the grand prize draw the fallback deadline erases the round, and the public list empties then", async () => {
+    const rows = round();
+    rows.draws = rows.draws.filter((d) => d.kind === "WEEKLY");
+    const weekly = new Set(
+      ["d1", "d2"].map(
+        (id) => rows.draws.find((d) => d.id === id)!.winnerEmail!,
+      ),
+    );
+    const s = services(rows, new Date("2027-01-09T22:00:00Z"));
+    assert.ok((await s.game.winners()).winners.length > 0);
+    s.erasure.now = s.game.now = () => new Date("2027-01-09T23:00:00Z");
+    const result = await s.erasure.run({ dryRun: false });
+    assert.equal(result.due, true);
+    assert.equal(result.keptWinners, weekly.size);
+    for (const e of rows.entries.filter((e) => e.questionId !== "q9"))
+      assert.ok(e.email.startsWith("erased:") || weekly.has(e.email), e.email);
+    assert.deepEqual(await s.game.winners(), { winners: [] });
+    assert.equal(
+      rows.entries.find((e) => e.questionId === "q9")!.email,
+      "fanni@x.hu",
+    );
+  });
+
+  it("the deadline comes first when the grand prize draw is late, and a later draw does not draw a placeholder", async () => {
+    const rows = round();
+    const late = new Date("2027-01-05T21:00:00Z");
+    for (const d of rows.draws.filter((d) => d.kind === "CHRISTMAS"))
+      d.createdAt = late;
+    const s = services(rows, new Date("2027-01-09T23:00:00Z"));
+    const plan = await s.erasure.plan();
+    assert.equal(plan.dueAt.toISOString(), "2027-01-09T23:00:00.000Z");
+    assert.equal(plan.due, true);
+    await s.erasure.run({ dryRun: false });
+    const kept = new Set(
+      rows.entries
+        .filter((e) => !e.email.startsWith("erased:"))
+        .map((e) => e.email),
+    );
+    // the draw's candidates after the erasure: only addresses still kept, never a placeholder
+    const admin = s.admin as unknown as {
+      candidatesOf: (
+        k: string,
+        q: string | null,
+      ) => Promise<GameDrawCandidate[]>;
+    };
+    (s.database.gameEntry as Row).findMany = async () =>
+      rows.entries.map((e) => ({
+        ...e,
+        confirmedAt: new Date(),
+        autoCorrect: true,
+        manualCorrect: null,
+      }));
+    for (const c of await admin.candidatesOf("CHRISTMAS", null))
+      assert.ok(kept.has(c.email), c.email);
   });
 
   it("a second run finds nothing left: no write, no audit row", async () => {
@@ -369,6 +436,22 @@ describe("the game data erasure", () => {
 });
 
 describe("the erasure's days and switch", () => {
+  it("the deadline is a Budapest day's first moment, in its own offset; a bad one falls back and says so", () => {
+    assert.deepEqual(gameEraseDeadline(undefined), {
+      deadline: new Date("2027-01-09T23:00:00Z"),
+      error: null,
+    });
+    assert.equal(
+      gameEraseDeadline("2027-07-01").deadline.toISOString(),
+      "2027-06-30T22:00:00.000Z",
+    );
+    for (const bad of ["2027-02-30", "2027-1-10", "januar"]) {
+      const out = gameEraseDeadline(bad);
+      assert.equal(out.deadline.toISOString(), "2027-01-09T23:00:00.000Z", bad);
+      assert.ok(out.error?.includes("JATEK_ERASE_DEADLINE"), bad);
+    }
+  });
+
   it("0..15 days are taken, anything else falls back to 14 and says so", () => {
     assert.deepEqual(gameEraseAfterDays(undefined), { days: 14, error: null });
     assert.deepEqual(gameEraseAfterDays("0"), { days: 0, error: null });

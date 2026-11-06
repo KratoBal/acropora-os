@@ -13,6 +13,7 @@ import {
   type GameOption,
 } from "@acropora/types";
 
+import { GAME_ERASED_PREFIX } from "./game-erasure.service.js";
 import { gameError, GameService } from "./game.service.js";
 
 /** The admin's question: what the form sends (create and edit alike). */
@@ -268,7 +269,10 @@ export class GameAdminService {
         manualCorrect: true,
       },
     });
-    const right = rows.filter(counts);
+    // an erased entry is no one's any more (card bc0ca668): a draw run after the erasure does not draw a placeholder
+    const right = rows
+      .filter(counts)
+      .filter((r) => !r.email.startsWith(GAME_ERASED_PREFIX));
     const candidates =
       kind === "WEEKLY"
         ? right.map((r) => ({ email: r.email, weight: 1 }))

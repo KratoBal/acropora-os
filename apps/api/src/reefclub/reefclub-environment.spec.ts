@@ -97,6 +97,7 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   // the giveaway's data erasure (card bc0ca668): days after the grand prize draw, and its dry-run switch, not secrets
   "JATEK_ERASE_AFTER_DAYS",
   "JATEK_ERASE_DRY_RUN",
+  "JATEK_ERASE_DEADLINE",
   "PAID_MARKS_AUTO_DAYS",
   "PAID_MARKS_AUTO_HOUR",
   "PARTNER_URL",

@@ -13,6 +13,59 @@ const CHUNK = 100;
 const erased = (email: string | null) =>
   email !== null && email.startsWith(GAME_ERASED_PREFIX);
 
+/** The notice's fixed date (acrobot 44381): the data goes by this day even if the grand prize draw is late or never runs. */
+export const GAME_ERASE_DEADLINE_DEFAULT = "2027-01-10";
+
+/** A Budapest day's first moment: "2027-01-10" -> 2027-01-09T23:00:00Z (the zone's offset on that day, not a fixed one). */
+function budapestDayStart(day: string): Date {
+  const [y, m, d] = day.split("-").map(Number) as [number, number, number];
+  const utcMidnight = Date.UTC(y, m - 1, d);
+  const shown = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Budapest",
+    hour: "2-digit",
+    hourCycle: "h23",
+  }).format(new Date(utcMidnight));
+  return new Date(utcMidnight - Number(shown) * 3_600_000);
+}
+
+/**
+ * THE FALLBACK DEADLINE (JATEK_ERASE_DEADLINE, a Budapest day, default 2027-01-10): the erasure runs from the start of
+ * that day even without a grand prize draw. A malformed value falls back to the default and says so.
+ */
+export function gameEraseDeadline(value: string | undefined): {
+  deadline: Date;
+  error: string | null;
+} {
+  const day = value?.trim() || GAME_ERASE_DEADLINE_DEFAULT;
+  const valid =
+    /^\d{4}-\d{2}-\d{2}$/.test(day) &&
+    !Number.isNaN(new Date(`${day}T00:00:00Z`).getTime()) &&
+    new Date(`${day}T00:00:00Z`).toISOString().slice(0, 10) === day;
+  if (valid) return { deadline: budapestDayStart(day), error: null };
+  return {
+    deadline: budapestDayStart(GAME_ERASE_DEADLINE_DEFAULT),
+    error: `JATEK_ERASE_DEADLINE=${day.slice(0, 20)} is not a day like ${GAME_ERASE_DEADLINE_DEFAULT}; using ${GAME_ERASE_DEADLINE_DEFAULT}`,
+  };
+}
+
+/**
+ * WHEN THE ERASURE IS DUE: the first Christmas draw (the grand prize draw) plus the days, or the fallback deadline,
+ * whichever comes first. The public winner list ends at the same moment (the notice: the name and the masked address
+ * come off the list then).
+ */
+export function gameErasureDueAt(
+  draws: readonly { kind: string; createdAt: Date }[],
+  afterDays: number,
+  deadline: Date,
+): { grand: Date | null; dueAt: Date } {
+  let grand: Date | null = null;
+  for (const draw of draws)
+    if (draw.kind === "CHRISTMAS" && (!grand || draw.createdAt < grand))
+      grand = draw.createdAt;
+  const afterDraw = grand ? grand.getTime() + afterDays * DAY_MS : Infinity;
+  return { grand, dueAt: new Date(Math.min(afterDraw, deadline.getTime())) };
+}
+
 export interface GameErasureEntry {
   id: string;
   questionId: string;
@@ -35,8 +88,8 @@ export interface GameErasurePlan {
   /** the first Christmas draw: the grand prize draw of the rules; null when it has not been run */
   grandDrawId: string | null;
   grandDrawAt: Date | null;
-  /** when the erasure is due: the grand prize draw plus the configured days */
-  dueAt: Date | null;
+  /** when the erasure is due: the grand prize draw plus the configured days, or the fallback deadline if sooner */
+  dueAt: Date;
   due: boolean;
   /** entries whose name, address and answer are erased */
   eraseEntryIds: string[];
@@ -79,24 +132,26 @@ export function planGameErasure(input: {
   closesAt: ReadonlyMap<string, Date>;
   now: Date;
   afterDays: number;
+  deadline: Date;
 }): GameErasurePlan {
   const draws = [...input.draws].sort(
     (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
   );
   const grand = draws.find((d) => d.kind === "CHRISTMAS") ?? null;
+  const { dueAt } = gameErasureDueAt(draws, input.afterDays, input.deadline);
   const empty: GameErasurePlan = {
     grandDrawId: grand?.id ?? null,
     grandDrawAt: grand?.createdAt ?? null,
-    dueAt: grand
-      ? new Date(grand.createdAt.getTime() + input.afterDays * DAY_MS)
-      : null,
+    dueAt,
     due: false,
     eraseEntryIds: [],
     winnerEntryIds: [],
     draws: [],
     keptWinners: 0,
   };
-  if (!grand || input.now < empty.dueAt!) return empty;
+  if (input.now < dueAt) return empty;
+  // the round: what had closed by the grand prize draw, or, without one, by the moment the erasure became due
+  const cutoff = grand?.createdAt ?? dueAt;
 
   const firstOf = new Map<string, GameErasureDraw>();
   for (const draw of draws) {
@@ -108,7 +163,7 @@ export function planGameErasure(input: {
   const inRound = input.entries
     .filter((e) => {
       const closes = input.closesAt.get(e.questionId);
-      return closes !== undefined && closes <= grand.createdAt;
+      return closes !== undefined && closes <= cutoff;
     })
     .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 
@@ -138,7 +193,7 @@ export function planGameErasure(input: {
   for (const draw of draws) {
     if (
       draw.questionId !== null &&
-      !((input.closesAt.get(draw.questionId) ?? Infinity) <= grand.createdAt)
+      !((input.closesAt.get(draw.questionId) ?? Infinity) <= cutoff)
     )
       continue;
     const keep = first.has(draw.id) ? draw.winnerEmail : null;
@@ -193,13 +248,19 @@ export function gameEraseAfterDays(value: string | undefined): {
 export interface GameErasureResult {
   dryRun: boolean;
   grandDrawAt: string | null;
-  dueAt: string | null;
+  dueAt: string;
   due: boolean;
   afterDays: number;
   entriesErased: number;
   winnerEntriesTrimmed: number;
   drawsAnonymised: number;
   keptWinners: number;
+  /**
+   * THE GRAND PRIZE DRAW IS LATE (barracuda, #2282): no Christmas draw, and the last question closed more than the days
+   * ago. Said loudly on every run and in the preview: without the draw the erasure waits for the fallback deadline, and
+   * a draw run after that would find only the kept winners.
+   */
+  waitingForGrandDraw: boolean;
 }
 
 /**
@@ -227,8 +288,19 @@ export class GameErasureService {
     return days;
   }
 
-  async plan(): Promise<GameErasurePlan & { afterDays: number }> {
+  deadline(): Date {
+    const { deadline, error } = gameEraseDeadline(
+      this.environment.JATEK_ERASE_DEADLINE,
+    );
+    if (error) this.logger.error(error);
+    return deadline;
+  }
+
+  async plan(): Promise<
+    GameErasurePlan & { afterDays: number; lastClosesAt: Date | null }
+  > {
     const afterDays = this.afterDays();
+    const deadline = this.deadline();
     const [draws, questions, entries] = await Promise.all([
       this.database.gameDraw.findMany({
         select: {
@@ -261,8 +333,13 @@ export class GameErasureService {
         closesAt: new Map(questions.map((q) => [q.id, q.closesAt])),
         now: this.now(),
         afterDays,
+        deadline,
       }),
       afterDays,
+      lastClosesAt: questions.reduce<Date | null>(
+        (last, q) => (!last || q.closesAt > last ? q.closesAt : last),
+        null,
+      ),
     };
   }
 
@@ -274,21 +351,26 @@ export class GameErasureService {
     const result: GameErasureResult = {
       dryRun: options.dryRun,
       grandDrawAt: plan.grandDrawAt?.toISOString() ?? null,
-      dueAt: plan.dueAt?.toISOString() ?? null,
+      dueAt: plan.dueAt.toISOString(),
       due: plan.due,
       afterDays: plan.afterDays,
       entriesErased: plan.eraseEntryIds.length,
       winnerEntriesTrimmed: plan.winnerEntryIds.length,
       drawsAnonymised: plan.draws.length,
       keptWinners: plan.keptWinners,
+      waitingForGrandDraw:
+        !plan.grandDrawAt &&
+        plan.lastClosesAt !== null &&
+        this.now().getTime() - plan.lastClosesAt.getTime() >
+          plan.afterDays * DAY_MS,
     };
     const counts = `${result.entriesErased} entries erased, ${result.winnerEntriesTrimmed} winner entries without their answer, ${result.drawsAnonymised} draws anonymised, ${result.keptWinners} winners kept`;
-    if (!plan.due) {
-      this.logger.log(
-        plan.dueAt
-          ? `Game data erasure not due until ${result.dueAt}`
-          : "Game data erasure not due: the grand prize draw has not run",
+    if (result.waitingForGrandDraw)
+      this.logger.error(
+        `Game data erasure: the grand prize draw has not run, the last question closed at ${plan.lastClosesAt!.toISOString()}, more than ${plan.afterDays} days ago; the erasure runs at ${result.dueAt} without it`,
       );
+    if (!plan.due) {
+      this.logger.log(`Game data erasure not due until ${result.dueAt}`);
       return result;
     }
     const nothing =

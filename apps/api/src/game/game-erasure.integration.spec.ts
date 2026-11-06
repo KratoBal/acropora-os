@@ -153,7 +153,9 @@ describe(
       erasure.environment = {};
       const game = new GameService(null, {});
       const admin = new GameAdminService(game);
+      game.now = () => new Date(GRAND_AT.getTime() + DAY);
       const publicBefore = await game.winners();
+      assert.ok(publicBefore.winners.length > 0);
 
       const result = await erasure.run({ dryRun: false });
       assert.equal(result.due, true);
@@ -190,6 +192,10 @@ describe(
       }
       for (const d of draws)
         assert.equal((await admin.verify(d.id)).same, true, d.id);
+      // the public list: empty once the erasure is due; before it, the kept rows name the same winners
+      game.now = erasure.now;
+      assert.deepEqual(await game.winners(), { winners: [] });
+      game.now = () => new Date(GRAND_AT.getTime() + DAY);
       assert.deepEqual(await game.winners(), publicBefore);
 
       const audit = await prisma.auditLog.findFirst({
