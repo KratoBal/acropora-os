@@ -17,6 +17,10 @@ const jo = {
   questionId: "q1",
   email: "jatekos@example.com",
   name: "Kovács Péter",
+  rulesAccepted: true,
+  consentGiven: true,
+  rulesVersion: "szabalyzat-1.0",
+  privacyVersion: "adatkezeles-1.0",
   answer: "acropora",
   website: "",
 };
@@ -74,6 +78,34 @@ describe("bekuldesKeres", () => {
       );
     assert.ok(bekuldesKeres({ ...jo, name: "Nagy Éva" }).ok);
     assert.ok(bekuldesKeres({ ...jo, name: "x".repeat(MAX_NEV) }).ok);
+  });
+
+  it("refuses an entry without BOTH acceptances, each a real true, with its own code", () => {
+    for (const over of [
+      { rulesAccepted: false },
+      { consentGiven: false },
+      { rulesAccepted: undefined },
+      { consentGiven: undefined },
+      { rulesAccepted: "true" },
+      { consentGiven: 1 },
+    ])
+      assert.deepEqual(
+        bekuldesKeres({ ...jo, ...over }),
+        { ok: false, code: "CONSENT_REQUIRED" },
+        JSON.stringify(over),
+      );
+  });
+
+  it("passes the two text versions on as they came (the api decides if they are current), capped in length; a missing one becomes empty", () => {
+    const hosszu = "x".repeat(100);
+    const r = bekuldesKeres({
+      ...jo,
+      rulesVersion: hosszu,
+      privacyVersion: undefined,
+    });
+    assert.ok(r.ok);
+    assert.equal(r.value.rulesVersion.length, 40);
+    assert.equal(r.value.privacyVersion, "");
   });
 
   it("refuses an empty, blank or over-long answer", () => {

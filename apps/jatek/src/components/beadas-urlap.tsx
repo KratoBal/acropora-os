@@ -3,6 +3,7 @@
 import { type FormEvent, useState } from "react";
 
 import type { Kerdes } from "../lib/jatek-api.ts";
+import { VERZIO } from "../lib/jogi-szovegek.ts";
 
 type Allapot =
   | { fajta: "var" }
@@ -32,12 +33,14 @@ export function BeadasUrlap({ kerdes }: { kerdes: Kerdes }) {
   const [email, setEmail] = useState("");
   const [valasz, setValasz] = useState("");
   const [csali, setCsali] = useState("");
-  const [elfogadom, setElfogadom] = useState(false);
+  // KÉT KÜLÖN, ALAPBÓL ÜRES jelölőnégyzet (adatkezelési tájékoztató 3.1): a szabályzat elfogadása és az adatkezelési hozzájárulás
+  const [szabalyzat, setSzabalyzat] = useState(false);
+  const [hozzajarulas, setHozzajarulas] = useState(false);
   const [allapot, setAllapot] = useState<Allapot>({ fajta: "var" });
 
   async function kuld(esemeny: FormEvent<HTMLFormElement>) {
     esemeny.preventDefault();
-    if (!elfogadom) return;
+    if (!szabalyzat || !hozzajarulas) return;
     setAllapot({ fajta: "kuldes" });
     try {
       const valaszHttp = await fetch("/api/bekuldes", {
@@ -47,6 +50,10 @@ export function BeadasUrlap({ kerdes }: { kerdes: Kerdes }) {
           questionId: kerdes.id,
           email,
           name: nev,
+          rulesAccepted: true,
+          consentGiven: true,
+          rulesVersion: VERZIO.szabalyzat,
+          privacyVersion: VERZIO.adatkezeles,
           answer: valasz,
           website: csali,
         }),
@@ -173,19 +180,33 @@ export function BeadasUrlap({ kerdes }: { kerdes: Kerdes }) {
             id="jatek-szabalyzat-elfogadas"
             type="checkbox"
             required
-            checked={elfogadom}
-            onChange={(e) => setElfogadom(e.target.checked)}
+            checked={szabalyzat}
+            onChange={(e) => setSzabalyzat(e.target.checked)}
           />
           <span>
             Elfogadom a{" "}
             <a href="/jatekszabalyzat" target="_blank" rel="noopener">
               játékszabályzatot
             </a>
-            , és megismertem az{" "}
-            <a href="/adatkezeles" target="_blank" rel="noopener">
-              adatkezelési tájékoztatót
-            </a>
             . <b>* Kötelező</b>
+          </span>
+        </label>
+        <label className="jatek-check">
+          <input
+            id="jatek-hozzajarulas"
+            type="checkbox"
+            required
+            checked={hozzajarulas}
+            onChange={(e) => setHozzajarulas(e.target.checked)}
+          />
+          <span>
+            Hozzájárulok, hogy az{" "}
+            <a href="/adatkezeles" target="_blank" rel="noopener">
+              adatkezelési tájékoztató
+            </a>{" "}
+            szerint kezeljétek az adataimat, és nyertesség esetén a rövidített
+            nevem és részben kitakart e-mail-címem megjelenjen a játék oldalán
+            és a fődíj élő sorsolásán. <b>* Kötelező</b>
           </span>
         </label>
       </div>
