@@ -246,7 +246,7 @@ export class LivestockArrivalsRepository {
     readAt: string,
   ): Promise<LivestockArrival | "changed" | null> {
     const { count } = await prisma.livestockArrival.updateMany({
-      where: { id },
+      where: { id, updatedAt: new Date(readAt) },
       data: { ...data, expectedOn: livestockArrivalDay(data.expectedOn) },
     });
     const row = await this.get(id);
