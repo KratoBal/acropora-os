@@ -144,6 +144,22 @@ describe("the update body", () => {
     );
   });
 
+  it("takes the version the form was loaded from as an ISO time, and refuses null or a non-time", () => {
+    assert.deepEqual(
+      errors(UpdateLivestockArrivalDto, {
+        expectedUpdatedAt: "2026-11-06T08:00:00.000Z",
+      }),
+      [],
+    );
+    for (const bad of [null, "tegnap", "2026-13-40", 5])
+      assert.ok(
+        errors(UpdateLivestockArrivalDto, { expectedUpdatedAt: bad }).some(
+          (e) => e.startsWith("expectedUpdatedAt"),
+        ),
+        String(bad),
+      );
+  });
+
   it("does not take a null for what is not clearable: the kind, the label, the day, the status, the tick", () => {
     for (const field of [
       "kind",

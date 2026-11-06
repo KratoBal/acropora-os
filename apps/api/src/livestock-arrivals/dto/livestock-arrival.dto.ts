@@ -3,6 +3,7 @@ import {
   IsBoolean,
   IsIn,
   IsInt,
+  IsISO8601,
   IsOptional,
   IsString,
   Matches,
@@ -82,6 +83,10 @@ export class CreateLivestockArrivalDto {
  * through the string and number checks.
  */
 export class UpdateLivestockArrivalDto {
+  /** The `updatedAt` of the record the form was loaded from: a record changed since is refused (409), not overwritten. */
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsISO8601({ strict: true })
+  expectedUpdatedAt?: string;
   @ValidateIf((_object, value) => value !== undefined)
   @IsIn(LIVESTOCK_ARRIVAL_KINDS)
   kind?: (typeof LIVESTOCK_ARRIVAL_KINDS)[number];

@@ -254,24 +254,22 @@ export class LivestockArrivalsRepository {
   }
 
   /** `null` when there is no such arrival. */
+  /**
+   * THE WRITE IS CONDITIONAL ON THE ROW NOT HAVING MOVED SINCE THE SERVICE READ IT (`updatedAt` in the where): the service merges
+   * the request over the stored record and writes every field, so a second edit landing between the read and the write would
+   * otherwise be silently overwritten. Returns "changed" when the row moved, null when it is gone.
+   */
   async update(
     id: string,
     data: LivestockArrivalWrite,
-  ): Promise<LivestockArrival | null> {
-    try {
-      const row = await prisma.livestockArrival.update({
-        where: { id },
-        data: { ...data, expectedOn: livestockArrivalDay(data.expectedOn) },
-        select: SELECT,
-      });
-      return livestockArrivalView(row);
-    } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === "P2025"
-      )
-        return null;
-      throw error;
-    }
+    readAt: string,
+  ): Promise<LivestockArrival | "changed" | null> {
+    const { count } = await prisma.livestockArrival.updateMany({
+      where: { id, updatedAt: new Date(readAt) },
+      data: { ...data, expectedOn: livestockArrivalDay(data.expectedOn) },
+    });
+    const row = await this.get(id);
+    if (count === 1) return row;
+    return row ? "changed" : null;
   }
 }
