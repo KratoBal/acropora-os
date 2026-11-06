@@ -36,6 +36,7 @@ export const TABLE_LABEL: Record<PartnerMergeReferenceTable, string> = {
   Contract: "szerződés",
   Quote: "árajánlat",
   PartnerOrder: "partner-rendelés",
+  Rental: "eszközbérlés",
   ReefClubCustomerLink: "ReefClub-összekötés",
   ReefClubLinkCode: "ReefClub-kód",
   User: "felhasználó",

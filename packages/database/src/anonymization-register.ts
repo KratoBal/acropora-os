@@ -826,6 +826,12 @@ export const ANONYMIZATION_REGISTER: Readonly<
     accessories: "business",
     note: "freeText",
   },
+  Rental: {
+    rentalNumber: "identifier",
+    accessories: "business",
+    note: "freeText",
+    createdById: "identifier",
+  },
   UnitOfMeasure: {
     code: "business",
     name: "business",

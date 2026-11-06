@@ -1114,12 +1114,26 @@ export type { FavoriteListResponse } from "./favorite.js";
 export { normalizeAssetFunctionName } from "./asset-function.js";
 export {
   normalizeOptionalRentalText,
+  normalizeRentalSerialNumber,
   RENTAL_EQUIPMENT_LIMITS,
 } from "./rental-equipment.js";
 export type {
   RentalEquipment,
   RentalEquipmentListResponse,
 } from "./rental-equipment.js";
+export {
+  RENTAL_LIMITS,
+  RENTAL_STATUSES,
+  rentalFeeHuf,
+  rentalPeriodCount,
+} from "./rental.js";
+export type {
+  Rental,
+  RentalCustomerMatchResponse,
+  RentalCustomerSummary,
+  RentalListResponse,
+  RentalStatus,
+} from "./rental.js";
 export type {
   AssetFunction,
   AssetFunctionListResponse,

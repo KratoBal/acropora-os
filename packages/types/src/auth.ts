@@ -116,6 +116,10 @@ export const PERMISSIONS = {
   QUOTES_ACCEPTANCE_LINK_MANAGE: "quotes.acceptance_link.manage",
   QUOTES_TEMPLATES_MANAGE: "quotes.templates.manage",
   QUOTES_HANDOFF: "quotes.handoff",
+  /// Eszközbérlés (task eszkozberles, S2): the rental desk. View lists the rentals, manage records one (and, in S4, the
+  /// return). Granted to the shop's sales role (acrobot 44216: the role that sees the till and the partner orders).
+  RENTALS_VIEW: "rentals.view",
+  RENTALS_MANAGE: "rentals.manage",
   DASHBOARD_VIEW: "dashboard.view",
   TASKS_VIEW: "tasks.view",
   ORDERS_VIEW: "orders.view",
@@ -398,6 +402,8 @@ const BASE_ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>> =
         permission !== PERMISSIONS.CONTENT_APPROVE,
     ),
     SALES: [
+      PERMISSIONS.RENTALS_VIEW,
+      PERMISSIONS.RENTALS_MANAGE,
       PERMISSIONS.QUOTES_VIEW,
       PERMISSIONS.QUOTES_MANAGE,
       PERMISSIONS.QUOTES_PUBLISH,

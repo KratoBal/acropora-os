@@ -401,6 +401,15 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
   },
   {
     /**
+     * BÉRLÉS (task eszkozberles, S2; Balázs, 2026-11-06): the rental desk under Értékesítés. The same right as its endpoints'
+     * reads (`rentals.view`); recording asks for `rentals.manage` on the server. No feature switch: Balázs asked for it now.
+     */
+    id: "rentals",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.RENTALS_VIEW),
+  },
+  {
+    /**
      * ELSZÁMOLÁSOK (Balázs, 2026-09-30 15:06 UTC): egy menüpont a Pénzügy
      * alatt, fülekkel a Foxpost, a GLS és a SimplePay elszámolásra. A menüpont
      * annak látszik, akinek legalább egy fülhöz van joga; ma mindhárom
