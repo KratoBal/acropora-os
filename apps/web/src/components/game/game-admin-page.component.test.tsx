@@ -6,7 +6,7 @@ import {
   within,
 } from "@testing-library/react";
 import type { Session, UserRole } from "@acropora/types";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
   questions: vi.fn(),
@@ -60,7 +60,12 @@ function as(role: UserRole): Session {
   };
 }
 
+// a mai nap a tesztben: a W45 kérdés zárása (2026-11-13) után; csak a Date hamis, az időzítők maradnak valódiak
+afterEach(() => vi.useRealTimers());
+
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-11-20T12:00:00.000Z"));
   auth.session = as("OWNER");
   api.createQuestion.mockReset();
   api.updateQuestion.mockReset();
@@ -301,6 +306,40 @@ describe("GameAdminPage", () => {
     expect(
       await within(draws).findByText(/újrafuttatva: ugyanaz: jo@x.hu/),
     ).toBeInTheDocument();
+  });
+
+  it("the draw buttons wait for the closing: the weekly one until the chosen question has closed, the Christmas one until the last has; the first draw is final, and the page says so", async () => {
+    vi.setSystemTime(new Date("2026-11-10T12:00:00.000Z"));
+    render(<GameAdminPage />);
+    const draws = await screen.findByTestId("game-draws");
+    fireEvent.change(within(draws).getByRole("combobox"), {
+      target: { value: "q1" },
+    });
+    expect(
+      within(draws).getByRole("button", { name: "Heti sorsolás" }),
+    ).toBeDisabled();
+    expect(
+      within(draws).getByRole("button", { name: "Karácsonyi sorsolás" }),
+    ).toBeDisabled();
+    const wait = within(draws).getByTestId("game-draw-wait");
+    expect(wait).toHaveTextContent("A heti sorsolás a kérdés zárása után");
+    expect(wait).toHaveTextContent("A karácsonyi sorsolás az utolsó kérdés");
+    expect(wait).toHaveTextContent("Az első sorsolás végleges");
+  });
+
+  it("after the closing both draw buttons are enabled and no waiting note is shown", async () => {
+    render(<GameAdminPage />);
+    const draws = await screen.findByTestId("game-draws");
+    fireEvent.change(within(draws).getByRole("combobox"), {
+      target: { value: "q1" },
+    });
+    expect(
+      within(draws).getByRole("button", { name: "Heti sorsolás" }),
+    ).toBeEnabled();
+    expect(
+      within(draws).getByRole("button", { name: "Karácsonyi sorsolás" }),
+    ).toBeEnabled();
+    expect(within(draws).queryByTestId("game-draw-wait")).toBeNull();
   });
 
   it("a VIEWER sees neither the players' addresses nor a draw (acrobot: game rights are the human roles' only)", async () => {

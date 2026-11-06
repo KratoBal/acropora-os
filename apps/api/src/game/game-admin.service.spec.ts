@@ -27,7 +27,14 @@ const entry = (
   ...over,
 });
 
-function setup(entries: ReturnType<typeof entry>[]) {
+/** The moment the tests run at, and the default: every question has closed already. */
+const NOW = new Date("2026-11-20T12:00:00Z");
+const CLOSED = new Date("2026-11-14T20:00:00Z");
+
+function setup(
+  entries: ReturnType<typeof entry>[],
+  over: { closesAt?: Date; lastCloses?: Date } = {},
+) {
   const draws: Record<string, any>[] = [];
   const audits: Record<string, unknown>[] = [];
   const tx = {
@@ -47,7 +54,14 @@ function setup(entries: ReturnType<typeof entry>[]) {
     ...tx,
     gameQuestion: {
       findUnique: async ({ where }: { where: { id: string } }) =>
-        where.id === "nincs" ? null : { id: where.id },
+        where.id === "nincs"
+          ? null
+          : { id: where.id, closesAt: over.closesAt ?? CLOSED },
+      // "a question that closes after `gt`": the latest closing among the questions decides, as the code's own where asks
+      findFirst: async ({ where }: { where: { closesAt: { gt: Date } } }) =>
+        (over.lastCloses ?? CLOSED) > where.closesAt.gt
+          ? { id: "utolso" }
+          : null,
     },
     gameEntry: {
       findMany: async ({ where }: { where: { questionId?: string } }) =>
@@ -64,7 +78,7 @@ function setup(entries: ReturnType<typeof entry>[]) {
     },
     $transaction: async (fn: (t: typeof tx) => unknown) => fn(tx),
   };
-  const service = new GameAdminService(null as never);
+  const service = new GameAdminService({ now: () => NOW } as never);
   service.database = database as never;
   return { service, draws, audits };
 }
@@ -122,6 +136,38 @@ describe("the draw", () => {
     const again = await service.verify(draws[0]!.id);
     assert.equal(again.same, true);
     assert.equal(again.winnerEmail, draws[0]!.winnerEmail);
+  });
+
+  // WHAT TURNS THIS RED: a weekly draw run while the week can still take answers (the first draw is final on the public list,
+  // so a trial or accidental draw would close the week for good, with a wrong or no winner); a Christmas draw before the last
+  // question has closed; a draw at or after the closing refused.
+  it("a weekly draw is refused until the question has closed, and nothing is written; at the closing moment and after it, it runs", async () => {
+    const open = setup([entry("a@x.hu", "w45")], {
+      closesAt: new Date("2026-11-21T20:00:00Z"),
+    });
+    await assert.rejects(
+      open.service.draw({ kind: "WEEKLY", questionId: "w45" }, "u1"),
+      (e: any) => e.getResponse().code === "DRAW_TOO_EARLY",
+    );
+    assert.equal(open.draws.length, 0);
+    assert.equal(open.audits.length, 0);
+    const exactly = setup([entry("a@x.hu", "w45")], { closesAt: NOW });
+    await exactly.service.draw({ kind: "WEEKLY", questionId: "w45" }, "u1");
+    assert.equal(exactly.draws.length, 1);
+  });
+
+  it("the Christmas draw is refused while any question is still open, and runs once the last one has closed", async () => {
+    const open = setup([entry("a@x.hu", "w45")], {
+      lastCloses: new Date("2026-11-27T20:00:00Z"),
+    });
+    await assert.rejects(
+      open.service.draw({ kind: "CHRISTMAS" }, "u1"),
+      (e: any) => e.getResponse().code === "DRAW_TOO_EARLY",
+    );
+    assert.equal(open.draws.length, 0);
+    const done = setup([entry("a@x.hu", "w45")], { lastCloses: NOW });
+    await done.service.draw({ kind: "CHRISTMAS" }, "u1");
+    assert.equal(done.draws.length, 1);
   });
 
   it("a weekly draw needs its question", async () => {

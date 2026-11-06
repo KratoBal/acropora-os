@@ -583,6 +583,18 @@ function Draws({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [verified, setVerified] = useState<Record<string, string>>({});
+  /**
+   * A SORSOLÁS CSAK A ZÁRÁS UTÁN (barracuda, #2279; acrobot 44326): egy hét ELSŐ sorsolása végleges a nyilvános listán, ezért a
+   * heti sorsolás a kérdés zárásáig, a karácsonyi az utolsó kérdés zárásáig nem indítható. A szerver is megtagadja (409);
+   * itt a gomb áll le, és a szöveg megmondja, mire vár.
+   */
+  const now = Date.now();
+  const picked = questions.find((q) => q.id === questionId);
+  const weeklyWaitsFor =
+    picked && new Date(picked.closesAt).getTime() > now ? picked : null;
+  const christmasWaitsFor = questions.some(
+    (q) => new Date(q.closesAt).getTime() > now,
+  );
   const load = useCallback(async () => {
     try {
       setRows(await gameApi.draws(token));
@@ -652,19 +664,30 @@ function Draws({
             </PilotSelect>
           </PilotFormField>
           <PilotButton
-            disabled={busy || !questionId}
+            disabled={busy || !questionId || weeklyWaitsFor !== null}
             onClick={() => setConfirm("WEEKLY")}
           >
             Heti sorsolás
           </PilotButton>
           <PilotButton
             variant="secondary"
-            disabled={busy}
+            disabled={busy || christmasWaitsFor}
             onClick={() => setConfirm("CHRISTMAS")}
           >
             Karácsonyi sorsolás
           </PilotButton>
         </div>
+      ) : null}
+      {canManage && (weeklyWaitsFor || christmasWaitsFor) ? (
+        <p className="text-xs text-pilot-grey-600" data-testid="game-draw-wait">
+          {weeklyWaitsFor
+            ? `A heti sorsolás a kérdés zárása után indítható (${formatDateTimeHu(weeklyWaitsFor.closesAt)}). `
+            : ""}
+          {christmasWaitsFor
+            ? "A karácsonyi sorsolás az utolsó kérdés zárása után indítható. "
+            : ""}
+          Az első sorsolás végleges: az kerül ki a nyilvános oldalra.
+        </p>
       ) : null}
       {error ? (
         <Alert variant="danger" title="Hiba történt" description={error} />
