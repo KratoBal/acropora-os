@@ -625,12 +625,20 @@ export class GameService implements OnModuleInit {
       return "QUEUED";
     }
     const details = await this.confirmationDetails(entryId);
-    const outcome = await this.mailConfirmation(email, token, week, details);
+    const { outcome, mailId } = await this.mailConfirmation(
+      email,
+      token,
+      week,
+      details,
+    );
     if (outcome === "SENT") {
       await this.database.gameEntry.update({
         where: { id: entryId },
         data: {
           mailPendingSince: null,
+          // the sent copy's id, so that the erasure deletes exactly this mail from the sender's mailbox (card
+          // jatek-level-torles; the notice: the sent copies go by 2027-01-10)
+          ...(mailId ? { sentMailIds: { push: mailId } } : {}),
           ...(countOnSend
             ? { mailCount: { increment: 1 }, lastMailedAt: this.now() }
             : {}),
@@ -737,7 +745,7 @@ export class GameService implements OnModuleInit {
     token: string,
     week: string,
     details: Omit<ConfirmationMailInput, "link"> = {},
-  ): Promise<"SENT" | "NOT_SENT"> {
+  ): Promise<{ outcome: "SENT" | "NOT_SENT"; mailId?: string }> {
     const gate = mailGate({
       mode: mailModeOf(this.environment.TICKET_MAIL_MODE),
       pathMode: mailModeOf(this.environment.TICKET_MAIL_GAME),
@@ -748,18 +756,20 @@ export class GameService implements OnModuleInit {
       this.logger.warn(
         `Nyereményjáték ${week}: a megerősítő levél nem ment ki (${gate.kind === "closed" ? gate.reason : !this.sender ? "no-sender" : "no-JATEK_PUBLIC_URL"}); a beküldés megvan, megerősítetlenül`,
       );
-      return "NOT_SENT";
+      return { outcome: "NOT_SENT" };
     }
     const link = this.confirmLink(token);
+    let mailId: string | undefined;
     try {
       // the "email" profile's formatted body (the sender's frame and button style), and its plain-text twin
       const { html, text } = renderConfirmationMail({ link, ...details });
-      await this.sender.send({
+      const sent = await this.sender.send({
         to: [email],
         subject: CONFIRMATION_SUBJECT,
         html,
         text,
       });
+      mailId = sent?.id;
     } catch (error) {
       this.logger.error(
         `Nyereményjáték ${week}: a megerősítő levél küldése elbukott (${error instanceof Error ? error.name : "UNKNOWN"})`,
@@ -768,10 +778,10 @@ export class GameService implements OnModuleInit {
         at: this.now().toISOString(),
         reason: sendErrorText(error),
       };
-      return "NOT_SENT";
+      return { outcome: "NOT_SENT" };
     }
     this.lastMailError = null;
-    return "SENT";
+    return { outcome: "SENT", ...(mailId ? { mailId } : {}) };
   }
 
   async confirm(input: {

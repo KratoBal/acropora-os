@@ -265,6 +265,21 @@ describe("an entry", () => {
     );
   });
 
+  it("keeps the sent mail's Gmail id on the entry, and nothing when the sender names none (card jatek-level-torles)", async () => {
+    const named = setup();
+    named.sender.send = async () => ({ id: "gmail-1" }) as never;
+    await named.service.submit(entry);
+    assert.deepEqual(named.entries.get("jatekos@example.com")!.sentMailIds, {
+      push: "gmail-1",
+    });
+    const plain = setup();
+    await plain.service.submit(entry);
+    assert.equal(
+      "sentMailIds" in plain.entries.get("jatekos@example.com")!,
+      false,
+    );
+  });
+
   it("keeps the name trimmed with its inner spaces collapsed, and an unconfirmed repeat takes the newer name", async () => {
     const { service, entries } = setup();
     await service.submit(entry);

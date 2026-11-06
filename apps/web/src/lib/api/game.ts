@@ -110,6 +110,34 @@ export interface GameMailQueue {
   testLinks: boolean;
 }
 
+/**
+ * AZ ADATTÖRLÉS ELŐNÉZETE (kártyák bc0ca668, jatek-level-torles): mikor esedékes, és mit tehet a küldő kulcsa a kiment
+ * megerősítő levelek elküldött példányaival. Csak számok és állapot, cím soha.
+ */
+export interface GameErasurePreview {
+  dueAt: string;
+  due: boolean;
+  waitingForGrandDraw: boolean;
+  mail: {
+    capability:
+      | { kind: "DELETE" | "TRASH" | "SEND_ONLY" | "NOT_CONFIGURED" }
+      | { kind: "ERROR"; code: string };
+    /** be van-e kapcsolva a törlés (JATEK_ERASE_MAIL=on); kikapcsolva csak számol */
+    enabled: boolean;
+    /** a lezárt hetek még törlésre váró, nyilvántartott levelei */
+    tracked: number;
+    /** az utolsó ütemezett futás számai (a mért száraz futás a bekapcsolás előtt), vagy null */
+    lastRun: {
+      at: string;
+      dryRun: boolean;
+      tracked: number;
+      legacy: number;
+      removed: number;
+      sentByDays: number;
+    } | null;
+  };
+}
+
 export interface GameDrawVerify {
   drawId: string;
   seed: string;
@@ -186,6 +214,10 @@ export const gameApi = {
       token,
       { method: "POST" },
     );
+  },
+  /** Az adattörlés és a levéltörlés állapota (száraz előnézet, nem ír). */
+  erasure(token: string) {
+    return apiRequest<GameErasurePreview>("/game/erasure", token);
   },
   /** A megerősítő link levél nélkül, csak a teszten (JATEK_TEST_LINKS=on). */
   testLink(token: string, entryId: string) {

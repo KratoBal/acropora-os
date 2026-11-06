@@ -1,6 +1,12 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 import { Prisma, prisma } from "@acropora/database";
 import type { GameDrawCandidate } from "@acropora/types";
+
+import {
+  GmailSentMailbox,
+  type SentMailboxCapability,
+} from "../notifications/mail/gmail-sent-mailbox.js";
+import { CONFIRMATION_SUBJECT } from "./game-confirmation-mail.js";
 
 /** What an erased address becomes: no "@", so it is never a player's address, and it marks the row as done. */
 export const GAME_ERASED_PREFIX = "erased:";
@@ -8,6 +14,28 @@ export const GAME_ERASED_PREFIX = "erased:";
 export const GAME_ERASE_AFTER_DAYS_DEFAULT = 14;
 export const GAME_ERASE_AFTER_DAYS_MAX = 15;
 const DAY_MS = 86_400_000;
+/** Gmail's batchDelete limit, and the step the progress is kept by. */
+const MAIL_BATCH = 1000;
+
+/**
+ * JATEK_ERASE_MAIL=on: the sent mails are removed from the sender's mailbox; anything else (the default) only counts.
+ * Kept OFF on stage while stage and production share the ticket@ key: a stage run would reach the production mailbox.
+ */
+export const gameEraseMailOn = (environment: NodeJS.ProcessEnv) =>
+  environment.JATEK_ERASE_MAIL?.trim().toLowerCase() === "on";
+
+export interface GameMailErasureResult {
+  at: string;
+  /** true when nothing was removed on purpose: a dry run, or the switch off */
+  dryRun: boolean;
+  enabled: boolean;
+  capability: SentMailboxCapability["kind"];
+  tracked: number;
+  legacy: number;
+  removed: number;
+  /** the confirmation mails the game counted as sent (GameMailDay), an upper bound for tracked + legacy */
+  sentByDays: number;
+}
 const CHUNK = 100;
 
 const erased = (email: string | null) =>
@@ -272,11 +300,28 @@ export interface GameErasureResult {
 @Injectable()
 export class GameErasureService {
   private readonly logger = new Logger(GameErasureService.name);
+
+  constructor(
+    @Optional()
+    @Inject(GmailSentMailbox)
+    private readonly mailbox: Pick<
+      GmailSentMailbox,
+      "capability" | "findSent" | "remove"
+    > | null = null,
+  ) {}
+
   /** the test replaces them */
   database: Pick<
     typeof prisma,
-    "gameQuestion" | "gameEntry" | "gameDraw" | "auditLog" | "$transaction"
+    | "gameQuestion"
+    | "gameEntry"
+    | "gameDraw"
+    | "gameMailDay"
+    | "auditLog"
+    | "$transaction"
   > = prisma;
+  /** the last mail run's counts, for the admin's status row (the measured dry run before the switch goes on) */
+  lastMailRun: GameMailErasureResult | null = null;
   now: () => Date = () => new Date();
   environment: NodeJS.ProcessEnv = process.env;
 
@@ -428,6 +473,168 @@ export class GameErasureService {
       },
     });
     this.logger.log(`Game data erasure done: ${counts}`);
+    return result;
+  }
+
+  /** The mails of the questions that have closed: their link is no use any more. */
+  private async closedQuestions() {
+    const now = this.now();
+    const closed = await this.database.gameQuestion.findMany({
+      where: { closesAt: { lte: now } },
+      select: { id: true, closesAt: true },
+    });
+    return {
+      ids: closed.map((q) => q.id),
+      lastClosesAt: closed.reduce<Date | null>(
+        (last, q) => (!last || q.closesAt > last ? q.closesAt : last),
+        null,
+      ),
+    };
+  }
+
+  /**
+   * The admin's status row: what the sender's key may do, whether the removal is switched on, how many tracked mails of
+   * closed weeks are left, and the last scheduled run's counts (no mailbox search here).
+   */
+  async mailStatus(): Promise<{
+    capability: SentMailboxCapability;
+    enabled: boolean;
+    tracked: number;
+    lastRun: GameMailErasureResult | null;
+  }> {
+    const capability = this.mailbox
+      ? await this.mailbox.capability()
+      : ({ kind: "NOT_CONFIGURED" } as const);
+    const { ids } = await this.closedQuestions();
+    const rows = ids.length
+      ? await this.database.gameEntry.findMany({
+          where: { questionId: { in: ids }, sentMailIds: { isEmpty: false } },
+          select: { sentMailIds: true },
+        })
+      : [];
+    return {
+      capability,
+      enabled: gameEraseMailOn(this.environment),
+      tracked: rows.reduce((sum, r) => sum + r.sentMailIds.length, 0),
+      lastRun: this.lastMailRun,
+    };
+  }
+
+  /**
+   * THE SENT COPIES OUT OF THE SENDER'S MAILBOX (card jatek-level-torles; the notice: by 2027-01-10). Every run, not
+   * only when the data erasure is due: a confirmation mail is no use once its question has closed, and with a trash-only
+   * key the Trash keeps a mail 30 more days, so the sooner the better.
+   *
+   * WHICH MAILS: those of the questions that have closed, and only those (an open question's link is still in use).
+   * Exactly by the Gmail ids the send recorded on the entry, and, for the mails sent before the ids were kept, the sent
+   * mails whose Subject is exactly the confirmation subject and that went out by the last closing (the weeks do not
+   * overlap: a mail sent before a closing belongs to a closed week). Each subject hit is checked against its header.
+   *
+   * With the full scope the mails go for good, with gmail.modify to the Trash; with neither nothing happens, and the
+   * admin's status row says so. Idempotent: a removed mail's id leaves the entry, a removed mail is no longer found.
+   * One audit row with counts per run that removed something; never an address or a subject in the log.
+   */
+  async eraseMail(options: {
+    dryRun: boolean;
+    userId?: string | null;
+  }): Promise<GameMailErasureResult> {
+    const capability = this.mailbox
+      ? await this.mailbox.capability()
+      : ({ kind: "NOT_CONFIGURED" } as const);
+    // THE MAILBOX IS A DECISION OF ITS OWN (barracuda, #2288): without JATEK_ERASE_MAIL=on a run only counts. Removal
+    // with the full scope cannot be undone, and the older mails' subject match has to be seen on the real mailbox first
+    const enabled = gameEraseMailOn(this.environment);
+    const countOnly = options.dryRun || !enabled;
+    const result: GameMailErasureResult = {
+      at: this.now().toISOString(),
+      dryRun: countOnly,
+      enabled,
+      capability: capability.kind,
+      tracked: 0,
+      legacy: 0,
+      removed: 0,
+      // an upper bound for the measurement: every confirmation mail the game counted as sent, all days together
+      sentByDays: (
+        await this.database.gameMailDay.findMany({ select: { sent: true } })
+      ).reduce((sum, d) => sum + d.sent, 0),
+    };
+    const done = (r: GameMailErasureResult) => (this.lastMailRun = r);
+    const { ids: closedIds, lastClosesAt } = await this.closedQuestions();
+    const entries = closedIds.length
+      ? await this.database.gameEntry.findMany({
+          where: {
+            questionId: { in: closedIds },
+            sentMailIds: { isEmpty: false },
+          },
+          select: { id: true, sentMailIds: true },
+        })
+      : [];
+    const tracked = new Set(entries.flatMap((e) => e.sentMailIds));
+    result.tracked = tracked.size;
+    if (capability.kind !== "DELETE" && capability.kind !== "TRASH") {
+      if (tracked.size > 0 || capability.kind === "ERROR")
+        this.logger.warn(
+          `Game mail erasure cannot remove the sent mails: the sender's key is ${capability.kind}${capability.kind === "ERROR" ? ` (${capability.code})` : ""}, ${tracked.size} tracked mails wait`,
+        );
+      return done(result);
+    }
+    if (!lastClosesAt || !this.mailbox) return done(result);
+    const legacy = (
+      await this.mailbox.findSent(CONFIRMATION_SUBJECT, lastClosesAt)
+    ).filter((id) => !tracked.has(id));
+    result.legacy = legacy.length;
+    const all = [...tracked, ...legacy];
+    if (countOnly || all.length === 0) {
+      if (all.length > 0 || countOnly)
+        this.logger.log(
+          `Game mail erasure ${enabled ? "dry run" : "switched off (JATEK_ERASE_MAIL)"}: ${result.tracked} tracked and ${result.legacy} older sent mails would go (${capability.kind}); the game counted ${result.sentByDays} confirmation mails sent`,
+        );
+      return done(result);
+    }
+    // BATCH BY BATCH, THE PROGRESS KEPT (barracuda, #2288): a batch that went is taken off the entries before the next
+    // one, so a run that fails half-way never sends an id it removed already to Gmail again
+    const gone = new Set<string>();
+    try {
+      for (let i = 0; i < all.length; i += MAIL_BATCH) {
+        const batch = all.slice(i, i + MAIL_BATCH);
+        result.removed += await this.mailbox.remove(batch, capability.kind);
+        for (const id of batch) gone.add(id);
+        const finished = entries.filter(
+          (e) =>
+            e.sentMailIds.length > 0 &&
+            e.sentMailIds.every((id) => gone.has(id)),
+        );
+        const clears = finished.map((e) =>
+          this.database.gameEntry.update({
+            where: { id: e.id },
+            data: { sentMailIds: [] },
+          }),
+        );
+        for (let j = 0; j < clears.length; j += CHUNK)
+          await this.database.$transaction(clears.slice(j, j + CHUNK));
+        for (const e of finished) e.sentMailIds = [];
+      }
+    } finally {
+      if (result.removed > 0)
+        await this.database.auditLog.create({
+          data: {
+            userId: options.userId ?? null,
+            action: "game.mail-erased",
+            entityType: "GameEntry",
+            entityId: "sent-mail",
+            metadata: {
+              mode: capability.kind,
+              tracked: result.tracked,
+              legacy: result.legacy,
+              removed: result.removed,
+            },
+          },
+        });
+      done(result);
+    }
+    this.logger.log(
+      `Game mail erasure done: ${result.removed} sent mails ${capability.kind === "DELETE" ? "deleted" : "moved to the Trash"} (${result.tracked} tracked, ${result.legacy} older)`,
+    );
     return result;
   }
 }

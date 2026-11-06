@@ -47,20 +47,35 @@ export class GameErasureScheduler implements OnModuleInit, OnModuleDestroy {
   }
 
   async runOnce(): Promise<"DONE" | "FAILED"> {
+    const dryRun = gameEraseDryRun(this.environment);
+    // the data and the sent mails (card jatek-level-torles) each on its own: one failing does not stop the other
+    const data = await this.attempt("Game data erasure", () =>
+      this.erasure.run({ dryRun }),
+    );
+    const mail = await this.attempt("Game mail erasure", () =>
+      this.erasure.eraseMail({ dryRun }),
+    );
+    return data && mail ? "DONE" : "FAILED";
+  }
+
+  private async attempt(
+    what: string,
+    step: () => Promise<unknown>,
+  ): Promise<boolean> {
     try {
-      await this.erasure.run({ dryRun: gameEraseDryRun(this.environment) });
-      return "DONE";
+      await step();
+      return true;
     } catch (error) {
-      // the next run tries again: the erasure is idempotent, the rows already erased stay erased. Only the kind and the
-      // code go to the log: a database error's message can quote the write, and the write carries a winner's address
+      // the next run tries again: both are idempotent. Only the kind and the code go to the log: a database error's
+      // message can quote the write, and the write carries a winner's address
       const code =
         error instanceof Error && "code" in error
           ? ` ${String(error.code)}`
           : "";
       this.logger.error(
-        `Game data erasure failed: ${error instanceof Error ? error.name : "UNKNOWN"}${code}`,
+        `${what} failed: ${error instanceof Error ? error.name : "UNKNOWN"}${code}`,
       );
-      return "FAILED";
+      return false;
     }
   }
 

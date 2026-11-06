@@ -18,6 +18,7 @@ const api = vi.hoisted(() => ({
   draw: vi.fn(),
   verify: vi.fn(),
   mailQueue: vi.fn(),
+  erasure: vi.fn(),
   sendQueued: vi.fn(),
   testLink: vi.fn(),
   uploadPrizeImage: vi.fn(),
@@ -36,7 +37,7 @@ vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({ session: auth.session }),
 }));
 
-import { GameAdminPage } from "./game-admin-page";
+import { GameAdminPage, mailErasureText } from "./game-admin-page";
 
 /*
   A NYEREMÉNYJÁTÉK KEZELÉSE (kártya 31445d0f). MI PIROSÍT: ha a beküldésnél nem látszik, megerősítette-e és helyes-e;
@@ -121,6 +122,24 @@ beforeEach(() => {
     blocked: "path-off",
     lastError: null,
     testLinks: true,
+  });
+  api.erasure.mockReset().mockResolvedValue({
+    dueAt: "2027-01-09T23:00:00.000Z",
+    due: false,
+    waitingForGrandDraw: false,
+    mail: {
+      capability: { kind: "DELETE" },
+      enabled: false,
+      tracked: 3,
+      lastRun: {
+        at: "2026-11-15T10:00:00.000Z",
+        dryRun: true,
+        tracked: 3,
+        legacy: 40,
+        removed: 0,
+        sentByDays: 45,
+      },
+    },
   });
   api.testLink.mockReset().mockResolvedValue({
     link: "https://jatek-teszt.acropora.hu/megerosites?token=abc",
@@ -362,6 +381,25 @@ describe("GameAdminPage", () => {
       within(queue).getByRole("button", { name: "Várakozó levelek kiküldése" }),
     );
     await waitFor(() => expect(api.sendQueued).toHaveBeenCalledWith("t"));
+  });
+  it("shows when the data goes and whether the sent mails can be removed (card jatek-level-torles)", async () => {
+    render(<GameAdminPage />);
+    const row = await screen.findByTestId("game-mail-erasure");
+    expect(row).toHaveTextContent(
+      "Levelek törlése: lehetséges (végleges törlés) · a törlés kikapcsolva, csak számol · lezárt hetek levelei törlésre várnak: 3",
+    );
+    expect(mailErasureText({ kind: "SEND_ONLY" })).toBe(
+      "nem lehetséges: a kulcs csak küldésre szól",
+    );
+    expect(
+      mailErasureText({ kind: "ERROR", code: "SENT_MAILBOX_TOKEN_FAILED_400" }),
+    ).toBe("nem mérhető (SENT_MAILBOX_TOKEN_FAILED_400)");
+    expect(screen.getByTestId("game-mail-erasure-run")).toHaveTextContent(
+      "csak számolt): nyilvántartott 3, régebbi 40, törölve 0; a játék 45 megerősítő levelet küldött",
+    );
+    expect(screen.getByTestId("game-erasure")).toHaveTextContent(
+      "Adatok törlése: 2027.",
+    );
   });
   it("says why the mail does not go out, and on stage gives the link of an unconfirmed entry", async () => {
     api.entries.mockResolvedValue([

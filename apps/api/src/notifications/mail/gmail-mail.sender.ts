@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 
 import { base64Url, buildMimeMessage, formatMailFrom } from "./mime.js";
-import type { MailSender, OutgoingMail } from "./mail.port.js";
+import type { MailSender, MailSent, OutgoingMail } from "./mail.port.js";
 
 /**
  * A `ticket@` FELADÓ ALAPÉRTELMEZETT NEVE.
@@ -115,7 +115,7 @@ export class GmailMailSender implements MailSender {
     private readonly environment: NodeJS.ProcessEnv = process.env,
   ) {}
 
-  async send(mail: OutgoingMail): Promise<void> {
+  async send(mail: OutgoingMail): Promise<MailSent> {
     const config = ticketMailConfig(this.environment);
     if (!config) throw new TicketMailError("TICKET_MAIL_NOT_CONFIGURED");
 
@@ -202,6 +202,14 @@ export class GmailMailSender implements MailSender {
       );
       throw new TicketMailError(`TICKET_MAIL_SEND_FAILED_${response.status}`);
     }
+    /*
+      A KIMENT LEVEL AZONOSITOJA (kartya jatek-level-torles): a valasz `{ id, threadId }`. A level mar kiment, tehat
+      egy olvashatatlan valasz NEM hiba: ures nyom, a jatek a targy szerinti torlessel eri el ezt a peldanyt.
+    */
+    const body = (await Promise.resolve()
+      .then(() => response.json())
+      .catch(() => null)) as { id?: unknown } | null;
+    return typeof body?.id === "string" && body.id ? { id: body.id } : {};
   }
 
   private async token(config: TicketMailConfig): Promise<string> {
