@@ -9,6 +9,7 @@ import {
   LIVESTOCK_ARRIVAL_LIMITS,
   isLivestockArrivalOpen,
   type LivestockArrival,
+  type LivestockArrivalKind,
   type LivestockArrivalListResponse,
 } from "@acropora/types";
 
@@ -28,6 +29,8 @@ const NOT_OPEN =
 const NO_PRODUCT = "A kiválasztott termék nem található, vagy nem élő állat.";
 const CHANGED =
   "Az érkezést közben valaki módosította: töltsd újra, és vidd át a változtatást.";
+const KIND_MISMATCH =
+  "Az érkezés fajtája nem egyezik a kiválasztott termék fajtájával.";
 const BAD_DAY = "A dátum nem létező nap.";
 const BAD_LABEL =
   "Adj meg egy megnevezést (a faj, a csoport vagy a darab neve).";
@@ -142,7 +145,9 @@ export class LivestockArrivalsService {
               : current.preorderable,
         note: patch.note === undefined ? current.note : patch.note,
       },
-      patch.productId === undefined ? current.productId : undefined,
+      current.productId
+        ? { productId: current.productId, kind: current.kind }
+        : undefined,
     );
     const updated = await this.repository.update(id, data, current.updatedAt);
     if (updated === "changed") throw new ConflictException(CHANGED);
@@ -152,12 +157,15 @@ export class LivestockArrivalsService {
 
   /**
    * THE RULES OF A RECORD, ONE PLACE FOR CREATE AND UPDATE: a real day, a label with something in it, a product that is a live animal,
-   * and a pre-registration only while the animal is still coming. `knownProduct` is the link already stored and unchanged:
-   * it is not asked again (a product removed since would otherwise make an unrelated edit fail).
+   * and a pre-registration only while the animal is still coming. `stored` is the link and kind already on the record:
+   * an unchanged link is not asked again (a product removed or archived since would otherwise make an unrelated edit fail).
+   * A NEW link needs a product the picker would offer (active, not archived: an arriving animal needs a live listing), and
+   * whenever the product's kind is unambiguous the arrival's kind must be the same one (a wrong kind would later pick the
+   * wrong acclimation advice). A kind edit on an unchanged link is checked against the kind too, but never against the archive.
    */
   private async checked(
     data: LivestockArrivalWrite,
-    knownProduct?: string | null,
+    stored?: { productId: string; kind: LivestockArrivalKind },
   ): Promise<LivestockArrivalWrite> {
     const label = data.label.trim();
     if (label.length < LIVESTOCK_ARRIVAL_LIMITS.label.min)
@@ -165,12 +173,16 @@ export class LivestockArrivalsService {
     if (!isRealDay(data.expectedOn)) throw new BadRequestException(BAD_DAY);
     if (data.preorderable && !isLivestockArrivalOpen(data.status))
       throw new BadRequestException(NOT_OPEN);
-    if (
-      data.productId &&
-      data.productId !== knownProduct &&
-      !(await this.repository.isLiveAnimalProduct(data.productId))
-    )
-      throw new BadRequestException(NO_PRODUCT);
+    if (data.productId) {
+      const isNew = data.productId !== stored?.productId;
+      if (isNew || data.kind !== stored?.kind) {
+        const product = await this.repository.liveAnimalProduct(data.productId);
+        if (isNew && !product?.offered)
+          throw new BadRequestException(NO_PRODUCT);
+        if (product?.kind && product.kind !== data.kind)
+          throw new BadRequestException(KIND_MISMATCH);
+      }
+    }
     return { ...data, label, note: clean(data.note) };
   }
 }
