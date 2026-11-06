@@ -3,7 +3,11 @@ import { describe, it } from "node:test";
 
 import { Prisma } from "@acropora/database";
 
-import { GAME_MAIL_MAX_PER_ENTRY, GameService } from "./game.service.js";
+import {
+  GAME_MAIL_MAX_PER_ENTRY,
+  GameService,
+  shortPublicName,
+} from "./game.service.js";
 
 /*
   THE GIVEAWAY'S PUBLIC SIDE (card 31445d0f; contract exchange/jatek/jatek-api-szerzodes.md). What turns this red: the
@@ -22,6 +26,9 @@ const question = (over: Record<string, unknown> = {}) => ({
   acceptedAnswers: ["Acropora"],
   opensAt: new Date("2026-11-06T06:00:00Z"),
   closesAt: new Date("2026-11-13T22:59:59Z"),
+  prizeName: null as string | null,
+  prizeDescription: null as string | null,
+  prizeImageId: null as string | null,
   ...over,
 });
 
@@ -33,7 +40,14 @@ function setup(
     TICKET_MAIL_REDIRECT_TO: "teszt@acropora.hu",
     JATEK_PUBLIC_URL: "https://jatek-teszt.acropora.hu/",
   },
+  more: {
+    questions?: ReturnType<typeof question>[];
+    draws?: Record<string, unknown>[];
+    images?: Record<string, { content: Buffer; contentType: string }>;
+    named?: { email: string; questionId: string; name: string }[];
+  } = {},
 ) {
+  const all = [q, ...(more.questions ?? [])];
   const entries = new Map<string, Record<string, unknown>>();
   const mails: { to: readonly string[]; text: string; html?: string }[] = [];
   const days = new Map<string, number>();
@@ -59,12 +73,39 @@ function setup(
           : null,
     },
     gameQuestion: {
-      findFirst: async () =>
-        OPEN >= q.opensAt && OPEN < q.closesAt ? q : null,
+      // honours the where and the order it is given: the open one (opensAt lte now, closesAt gt now) and the next one
+      // (opensAt gt now, soonest first) come from the code's own query
+      findFirst: async ({
+        where,
+        orderBy,
+      }: {
+        where: { opensAt: { lte?: Date; gt?: Date }; closesAt?: { gt: Date } };
+        orderBy: { opensAt: "asc" | "desc" };
+      }) =>
+        all
+          .filter(
+            (x) =>
+              (!where.opensAt.lte || x.opensAt <= where.opensAt.lte) &&
+              (!where.opensAt.gt || x.opensAt > where.opensAt.gt) &&
+              (!where.closesAt || x.closesAt > where.closesAt.gt),
+          )
+          .sort((a, b) =>
+            orderBy.opensAt === "asc"
+              ? a.opensAt.getTime() - b.opensAt.getTime()
+              : b.opensAt.getTime() - a.opensAt.getTime(),
+          )[0] ?? null,
       findUnique: async ({ where }: { where: { id: string } }) =>
-        where.id === q.id ? q : null,
+        all.find((x) => x.id === where.id) ?? null,
+    },
+    mailImage: {
+      findUnique: async ({ where }: { where: { id: string } }) =>
+        more.images?.[where.id] ?? null,
+    },
+    gameDraw: {
+      findMany: async () => more.draws ?? [],
     },
     gameEntry: {
+      findMany: async () => more.named ?? [],
       findUnique: async ({ where }: { where: Record<string, any> }) => {
         if (where.questionId_email)
           return entries.get(where.questionId_email.email) ?? null;
@@ -154,6 +195,7 @@ describe("the public question", () => {
       "id",
       "opensAt",
       "options",
+      "prize",
       "prompt",
       "type",
       "week",
@@ -162,7 +204,10 @@ describe("the public question", () => {
     const closed = setup(
       question({ closesAt: new Date("2026-11-06T07:00:00Z") }),
     );
-    assert.deepEqual(await closed.service.current(), { question: null });
+    assert.deepEqual(await closed.service.current(), {
+      question: null,
+      next: null,
+    });
   });
 });
 
@@ -523,5 +568,137 @@ describe("the confirmation", () => {
       service.confirm({ token: linkToken(mails[0]!) }),
       (e: any) => e.getResponse().code === "CLOSED",
     );
+  });
+});
+
+describe("the prize, the next question and the winners on the public page (Balázs, 2026-11-06)", () => {
+  // WHAT TURNS THIS RED: the next question's prompt or options leaving before it opens; the question after the next one
+  // shown ahead (its prize picture given out early); a prize picture given for a question that is not public; a
+  // winner's full name or address on the public list; a winner shown by anything but "surname + initial."; a winner
+  // without a name on the list; a prize with no name shown (a description or picture alone).
+  const NANO = {
+    prizeName: "Aquaforest AF Nano Tank",
+    prizeDescription: "Egy kis akvárium.",
+    prizeImageId: "img-nano",
+  };
+  const NEXT = question({
+    id: "q2",
+    week: "2026-W46",
+    prompt: "A következő kérdés szövege",
+    opensAt: new Date("2026-11-13T23:00:00Z"),
+    closesAt: new Date("2026-11-20T22:59:59Z"),
+    prizeName: "Pumpa",
+    prizeImageId: "img-pumpa",
+  });
+  const LATER = question({
+    id: "q3",
+    week: "2026-W47",
+    prompt: "Még későbbi kérdés",
+    opensAt: new Date("2026-11-20T23:00:00Z"),
+    closesAt: new Date("2026-11-27T22:59:59Z"),
+    prizeName: "Titok",
+    prizeImageId: "img-titok",
+  });
+  const images = {
+    "img-nano": { content: Buffer.from("nano"), contentType: "image/png" },
+    "img-pumpa": { content: Buffer.from("pumpa"), contentType: "image/png" },
+    "img-titok": { content: Buffer.from("titok"), contentType: "image/png" },
+  };
+
+  it("the open question carries its prize (name, description, whether it has a picture), and the next one is seen ahead without its prompt", async () => {
+    const { service } = setup(question(NANO), undefined, {
+      questions: [NEXT, LATER],
+    });
+    const { question: open, next } = await service.current();
+    assert.deepEqual(open!.prize, {
+      name: "Aquaforest AF Nano Tank",
+      description: "Egy kis akvárium.",
+      hasImage: true,
+    });
+    assert.deepEqual(next, {
+      id: "q2",
+      week: "2026-W46",
+      opensAt: "2026-11-13T23:00:00.000Z",
+      prize: { name: "Pumpa", description: null, hasImage: true },
+    });
+    assert.equal(
+      JSON.stringify(next).includes("következő kérdés szövege"),
+      false,
+    );
+  });
+
+  it("with nothing open, the next question comes with the time it opens; without a prize name there is no prize", async () => {
+    const closed = question({ closesAt: new Date("2026-11-06T07:00:00Z") });
+    const { service } = setup(closed, undefined, {
+      questions: [{ ...NEXT, prizeName: null }],
+    });
+    const result = await service.current();
+    assert.equal(result.question, null);
+    assert.equal(result.next!.prize, null);
+    assert.equal(result.next!.opensAt, "2026-11-13T23:00:00.000Z");
+  });
+
+  it("gives a prize picture for an opened question and for the very next one, not for a later one, not for a nameless question", async () => {
+    const { service } = setup(question(NANO), undefined, {
+      questions: [NEXT, LATER],
+      images,
+    });
+    assert.equal((await service.prizeImage("q1"))?.bytes.toString(), "nano");
+    assert.equal((await service.prizeImage("q2"))?.bytes.toString(), "pumpa");
+    assert.equal(await service.prizeImage("q3"), null);
+    assert.equal(await service.prizeImage("nincs"), null);
+    const noImage = setup(question(), undefined, { images });
+    assert.equal(await noImage.service.prizeImage("q1"), null);
+  });
+
+  it("lists the winners by the shortened name only, newest as given, skipping a winner without a name", async () => {
+    const { service } = setup(question(NANO), undefined, {
+      draws: [
+        {
+          kind: "WEEKLY",
+          questionId: "q1",
+          winnerEmail: "kovacs@x.hu",
+          createdAt: new Date("2026-11-14T20:00:00Z"),
+          question: { week: "2026-W45", prizeName: "Aquaforest AF Nano Tank" },
+        },
+        {
+          kind: "WEEKLY",
+          questionId: "q1",
+          winnerEmail: "nev-nelkul@x.hu",
+          createdAt: new Date("2026-11-14T19:00:00Z"),
+          question: { week: "2026-W45", prizeName: null },
+        },
+        {
+          kind: "CHRISTMAS",
+          questionId: null,
+          winnerEmail: "nagy@x.hu",
+          createdAt: new Date("2026-12-23T20:00:00Z"),
+          question: null,
+        },
+      ],
+      named: [
+        { email: "kovacs@x.hu", questionId: "q1", name: "Kovács Péter" },
+        { email: "nagy@x.hu", questionId: "q0", name: "nagy  anna Mária" },
+      ],
+    });
+    const { winners } = await service.winners();
+    assert.deepEqual(
+      winners.map((w) => [w.kind, w.week, w.name, w.prizeName]),
+      [
+        ["WEEKLY", "2026-W45", "Kovács P.", "Aquaforest AF Nano Tank"],
+        ["CHRISTMAS", null, "nagy A.", null],
+      ],
+    );
+    const text = JSON.stringify(winners);
+    for (const secret of ["@", "Péter", "Mária"])
+      assert.equal(text.includes(secret), false, secret);
+  });
+
+  it("shortens a name to the first word and the first name's initial", () => {
+    assert.equal(shortPublicName("Kovács Péter"), "Kovács P.");
+    assert.equal(shortPublicName("  Nagy   Anna Mária "), "Nagy A.");
+    assert.equal(shortPublicName("Kovács éva"), "Kovács É.");
+    assert.equal(shortPublicName("Éva"), "Éva");
+    assert.equal(shortPublicName(""), "");
   });
 });
