@@ -228,9 +228,13 @@ describe("a jogi szoveg vazlatai", () => {
       szoveg(JATEKSZABALYZAT),
       /a nyertes rövidített neve, például Kovács P\., részben kitakart e-mail-címe, például ko•••@gmail\.com, és a nyereménye/,
     );
-    assert.equal(VERZIO.szabalyzat, "szabalyzat-1.1");
+    // "legyen mindenhol játék" (Balázs, 2026-11-06 19:16 UTC): the rules say "A játék fődíja:", never "kampány"; the rules are 1.2
+    assert.match(szoveg(JATEKSZABALYZAT), /A játék fődíja:/);
+    assert.doesNotMatch(szoveg(JATEKSZABALYZAT), /kampány/i);
+    assert.doesNotMatch(tajekoztato, /kampány/i);
+    assert.equal(VERZIO.szabalyzat, "szabalyzat-1.2");
     assert.equal(VERZIO.adatkezeles, "adatkezeles-1.2");
-    assert.match(szoveg(JATEKSZABALYZAT), /Verzió: 1\.1\./);
+    assert.match(szoveg(JATEKSZABALYZAT), /Verzió: 1\.2\./);
     assert.match(tajekoztato, /Verzió: 1\.2/);
   });
 

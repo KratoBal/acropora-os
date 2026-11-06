@@ -57,7 +57,7 @@ export function Hero() {
           alt="Aquaforest AF Nano Tank tengeri akvárium színes korallokkal, hivatalos termékfotó"
         />
         <div className="jatek-prize-label">
-          <span className="jatek-eyebrow">A KAMPÁNY FŐDÍJA</span>
+          <span className="jatek-eyebrow">A JÁTÉK FŐDÍJA</span>
           <h2>AF Nano Tank</h2>
           <span>AQUAFOREST</span>
           <a href="/fodij">Ismerd meg az akváriumot ↗</a>

@@ -218,7 +218,15 @@ describe("a főoldal állandó szakaszai", () => {
     assert.doesNotMatch(lepesek, /Add meg az e-mail-címedet/);
     // the grand prize line of the third step says "A játék fődíja" (Balázs, 2026-11-06 19:02 UTC)
     assert.match(lepesek, /A játék fődíja az Aquaforest AF Nano Tank\./);
-    assert.doesNotMatch(lepesek, /A kampány fődíja/);
+    assert.doesNotMatch(lepesek, /kampány/i);
+  });
+
+  // WHAT TURNS THIS RED (Balázs, 2026-11-06 19:16 UTC, "legyen mindenhol játék"): the front page's prize label saying
+  // "kampány" again.
+  it("the front page names the prize as the game's, not the campaign's", () => {
+    const hero = renderToStaticMarkup(<Hero />).replace(/<!-- -->/g, "");
+    assert.match(hero, /A JÁTÉK FŐDÍJA/);
+    assert.doesNotMatch(hero, /KAMPÁNY/i);
   });
 
   it("the winners list shows the shortened names only, with the draw and the prize; with none yet it keeps the empty box", () => {
