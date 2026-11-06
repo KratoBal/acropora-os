@@ -16,7 +16,7 @@ export const KITOLTENDO = "[KITÖLTENDŐ";
  */
 export const VERZIO = {
   szabalyzat: "szabalyzat-1.2",
-  adatkezeles: "adatkezeles-1.1",
+  adatkezeles: "adatkezeles-1.2",
 } as const;
 
 /** Egy szakasz tartalmának darabja: bekezdés (sortöréssel is), alcím, felsorolás, táblázat. */
@@ -1003,7 +1003,7 @@ export const ADATKEZELES: JogiDokumentum = {
         {
           fajta: "bekezdes",
           sorok: [
-            "A megerősítő és értesítő levelek elküldött példányait a küldő postafiókból a nevezési adatokkal együtt, **2027. január 10-ig** töröljük. A rendszer a levelekről csak darabszámot naplóz, email-címet nem.",
+            "A levélküldő szolgáltató a kiküldés naplóját a saját szabályai szerint, korlátozott ideig őrzi. A rendszer a levelekről csak darabszámot naplóz, email-címet nem.",
           ],
         },
       ],
@@ -1042,16 +1042,7 @@ export const ADATKEZELES: JogiDokumentum = {
         {
           fajta: "bekezdes",
           sorok: [
-            "**Google Ireland Limited**",
-            "Cím: Gordon House, Barrow Street, Dublin 4, Írország",
-            "Igénybe vett szolgáltatás: **Google Workspace (Gmail)**.",
-            "Feladata: a megerősítő és értesítő emailek küldése, valamint a játékkal kapcsolatos levelezés tárolása.",
-          ],
-        },
-        {
-          fajta: "bekezdes",
-          sorok: [
-            "A Google a Google Workspace adatfeldolgozási feltételei szerint, adatfeldolgozóként jár el.",
+            "Sendinblue SAS (Brevo), Párizs, Franciaország: a megerősítő és értesítő levelek kiküldése. Az adatokat az Európai Unióban kezeli.",
           ],
         },
         { fajta: "alcim", szoveg: "További közreműködők" },
@@ -1105,7 +1096,7 @@ export const ADATKEZELES: JogiDokumentum = {
         {
           fajta: "bekezdes",
           sorok: [
-            "A Google (levélküldés, YouTube) a szolgáltatás nyújtása során az adatokhoz az Európai Gazdasági Térségen kívül, így az Egyesült Államokban is hozzáférhet. Ennek alapja az EU–USA adatvédelmi keretrendszerről szóló európai bizottsági megfelelőségi határozat (GDPR 45. cikk), amelyhez a Google csatlakozott, valamint az Európai Bizottság által elfogadott általános adatvédelmi kikötések (GDPR 46. cikk (2) bekezdés c) pont). A garanciák a Google Workspace adatfeldolgozási feltételeiben ismerhetők meg (https://workspace.google.com/terms/dpa_terms.html), és kérésedre az info@acropora.hu címen is megküldjük őket.",
+            "A Google (YouTube) a szolgáltatás nyújtása során az adatokhoz az Európai Gazdasági Térségen kívül, így az Egyesült Államokban is hozzáférhet. Ennek alapja az EU–USA adatvédelmi keretrendszerről szóló európai bizottsági megfelelőségi határozat (GDPR 45. cikk), amelyhez a Google csatlakozott, valamint az Európai Bizottság által elfogadott általános adatvédelmi kikötések (GDPR 46. cikk (2) bekezdés c) pont). A YouTube-on megjelenő tartalomra a Google saját adatvédelmi irányelvei vonatkoznak: https://policies.google.com/privacy.",
           ],
         },
       ],
@@ -1340,7 +1331,7 @@ export const ADATKEZELES: JogiDokumentum = {
           fajta: "bekezdes",
           sorok: [
             "**Közzététel dátuma: 2026. november 6.**",
-            "**Verzió: 1.1**",
+            "**Verzió: 1.2**",
           ],
         },
       ],

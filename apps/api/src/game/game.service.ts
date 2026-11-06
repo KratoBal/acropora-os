@@ -20,12 +20,11 @@ import {
 import {
   CONFIRMATION_SUBJECT,
   renderConfirmationMail,
+  TEST_TOKEN_PREFIX,
   type ConfirmationMailInput,
 } from "./game-confirmation-mail.js";
-import {
-  MAIL_SENDER,
-  type MailSender,
-} from "../notifications/mail/mail.port.js";
+import { gameSmtpProblems } from "./game-smtp-mail.js";
+import { type MailSender } from "../notifications/mail/mail.port.js";
 import { GAME_PRIVACY_VERSION, GAME_RULES_VERSION } from "./game-consent.js";
 import {
   mailGate,
@@ -159,6 +158,8 @@ export type GameDatabase = Pick<
 >;
 
 export const GAME_ENV = Symbol("GAME_ENV");
+/** The giveaway's OWN mail sender (Brevo SMTP from jatek@, behind the stage redirect), or null when it is not configured. */
+export const GAME_MAIL_SENDER = Symbol("GAME_MAIL_SENDER");
 
 /**
  * THE MAIL'S PACE PER ADDRESS AND QUESTION (barracuda, #2254: our own sender must not flood one address). A new link
@@ -201,7 +202,7 @@ export class GameService implements OnModuleInit {
 
   constructor(
     @Optional()
-    @Inject(MAIL_SENDER)
+    @Inject(GAME_MAIL_SENDER)
     private readonly sender: MailSender | null = null,
     @Optional()
     @Inject(GAME_ENV)
@@ -695,6 +696,17 @@ export class GameService implements OnModuleInit {
     return Boolean(this.environment.JATEK_PUBLIC_URL?.trim());
   }
 
+  /**
+   * THE GAME HAS NO SENDER (acrobot 44556): its mail goes on its own Brevo SMTP (JATEK_SMTP_*), never on the ticket desk's
+   * Gmail by default. The reason names the settings that are missing or unusable (names only, never a value).
+   */
+  private noSenderReason(): string {
+    const problems = gameSmtpProblems(this.environment);
+    return problems.length > 0
+      ? `no-game-sender (${problems.join(", ")})`
+      : "no-game-sender";
+  }
+
   /** Why a mail cannot go out now (the gate, the sender, the link's base), or null. */
   mailBlocked(): string | null {
     const gate = mailGate({
@@ -703,7 +715,7 @@ export class GameService implements OnModuleInit {
       redirect: mailRedirect(this.environment.TICKET_MAIL_REDIRECT_TO),
     });
     if (gate.kind === "closed") return gate.reason;
-    if (!this.sender) return "no-sender";
+    if (!this.sender) return this.noSenderReason();
     if (!this.environment.JATEK_PUBLIC_URL?.trim())
       return "no-JATEK_PUBLIC_URL";
     return null;
@@ -754,7 +766,7 @@ export class GameService implements OnModuleInit {
     const base = this.environment.JATEK_PUBLIC_URL?.trim().replace(/\/+$/, "");
     if (gate.kind === "closed" || !this.sender || !base) {
       this.logger.warn(
-        `Nyereményjáték ${week}: a megerősítő levél nem ment ki (${gate.kind === "closed" ? gate.reason : !this.sender ? "no-sender" : "no-JATEK_PUBLIC_URL"}); a beküldés megvan, megerősítetlenül`,
+        `Nyereményjáték ${week}: a megerősítő levél nem ment ki (${gate.kind === "closed" ? gate.reason : !this.sender ? this.noSenderReason() : "no-JATEK_PUBLIC_URL"}); a beküldés megvan, megerősítetlenül`,
       );
       return { outcome: "NOT_SENT" };
     }
@@ -782,6 +794,29 @@ export class GameService implements OnModuleInit {
     }
     this.lastMailError = null;
     return { outcome: "SENT", ...(mailId ? { mailId } : {}) };
+  }
+
+  /**
+   * THE TEST MAIL (acrobot 44553, Balázs wants to see the real confirmation mail before the game opens): the SAME
+   * `mailConfirmation` the entries use, so the same gate (TICKET_MAIL_MODE, TICKET_MAIL_GAME, the redirect), the same sender,
+   * the same renderer and the same `From`: if this goes out, the real one goes out. The link is the real JATEK_PUBLIC_URL +
+   * /megerosites?token=<test token>; the test token creates no entry and is worth nothing (the game page recognises its
+   * prefix). The result names WHY it did not go: the closed switch, the missing sender or address, or the sender's error.
+   */
+  async sendTestMail(
+    email: string,
+  ): Promise<{ outcome: "SENT" | "NOT_SENT"; reason: string | null }> {
+    const blocked = this.mailBlocked();
+    const token = `${TEST_TOKEN_PREFIX}${randomBytes(12).toString("hex")}`;
+    const result = await this.mailConfirmation(email, token, "próba", {
+      prompt:
+        "Ez egy próbalevél, nem nevezés: a lenti gomb nem hoz létre semmit, csak azt mutatja, hogy a link működik.",
+    });
+    if (result.outcome === "SENT") return { outcome: "SENT", reason: null };
+    return {
+      outcome: "NOT_SENT",
+      reason: blocked ?? this.lastMailError?.reason ?? "ismeretlen ok",
+    };
   }
 
   async confirm(input: {

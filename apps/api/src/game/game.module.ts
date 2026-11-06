@@ -6,7 +6,8 @@ import { GameAdminService } from "./game-admin.service.js";
 import { GameErasureScheduler } from "./game-erasure.scheduler.js";
 import { GameErasureService } from "./game-erasure.service.js";
 import { GamePublicController } from "./game-public.controller.js";
-import { GameService } from "./game.service.js";
+import { createGameMailSender } from "./game-smtp-mail.js";
+import { GAME_MAIL_SENDER, GameService } from "./game.service.js";
 
 /**
  * The Christmas giveaway (card 31445d0f): the public question, entry and confirmation; the admin and the draws; the
@@ -16,6 +17,8 @@ import { GameService } from "./game.service.js";
   imports: [NotificationsModule],
   controllers: [GamePublicController, GameAdminController],
   providers: [
+    // the giveaway's own mail sender (Brevo SMTP from jatek@), not the shared Gmail one; null when it is not configured
+    { provide: GAME_MAIL_SENDER, useFactory: () => createGameMailSender() },
     GameService,
     GameAdminService,
     GameErasureService,

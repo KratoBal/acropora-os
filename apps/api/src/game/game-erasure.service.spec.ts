@@ -538,6 +538,7 @@ describe("the game mail erasure", () => {
     ]);
     const removed: { ids: string[]; kind: string }[] = [];
     const searches: Date[] = [];
+    const subjectsAsked: string[] = [];
     const database = {
       gameQuestion: {
         findMany: async ({ where }: Row) =>
@@ -575,10 +576,7 @@ describe("the game mail erasure", () => {
       capability: async () => ({ kind }),
       findSent: async (subject: string, before: Date) => {
         searches.push(before);
-        assert.equal(
-          subject,
-          "Erősítsd meg a játékodat: Acropora karácsonyi nyereményjáték",
-        );
+        subjectsAsked.push(subject);
         return [...sent].filter(([, at]) => at <= before).map(([id]) => id);
       },
       remove: async (ids: readonly string[], k: string) => {
@@ -593,7 +591,7 @@ describe("the game mail erasure", () => {
     erasure.database = database as never;
     erasure.now = () => NOW;
     erasure.environment = env;
-    return { erasure, entries, audits, removed, searches };
+    return { erasure, entries, audits, removed, searches, subjectsAsked };
   }
 
   it("removes the closed week's tracked mails and the older ones by the last closing, never the open week's", async () => {
@@ -615,7 +613,12 @@ describe("the game mail erasure", () => {
     assert.deepEqual(m.removed, [
       { ids: ["m1", "m2", "regi"], kind: "DELETE" },
     ]);
-    assert.deepEqual(m.searches, [CLOSED]);
+    // one search per subject: the current one and the older one the earlier (test) mails went out under
+    assert.deepEqual(m.searches, [CLOSED, CLOSED]);
+    assert.deepEqual(m.subjectsAsked, [
+      "Erősítsd meg a részvételed: Acropora karácsonyi nyereményjáték",
+      "Erősítsd meg a játékodat: Acropora karácsonyi nyereményjáték",
+    ]);
     assert.deepEqual(m.entries.find((e) => e.id === "e1")!.sentMailIds, []);
     assert.deepEqual(m.entries.find((e) => e.id === "e3")!.sentMailIds, ["m9"]);
     assert.equal(m.audits.length, 1);

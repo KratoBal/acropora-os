@@ -51,6 +51,7 @@ const INTERNAL_PREFIXES = [
   "GMAIL_",
   "GOOGLE_",
   "INVOICE_COLLECTION_",
+  "JATEK_SMTP_",
   "JEV_",
   "MEDUSA_",
   "NAV_",

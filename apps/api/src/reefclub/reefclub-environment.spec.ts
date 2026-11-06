@@ -92,6 +92,10 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   "JATEK_PUBLIC_URL",
   // the giveaway's daily mail cap (acrobot, 2026-11-05): a number, not a secret
   "JATEK_MAIL_DAILY_CAP",
+  // the giveaway's sender and Reply-To addresses (acrobot 44556): addresses, not secrets (its SMTP login and key are under
+  // JATEK_SMTP_, which the ReefClub rule refuses as an internal integration)
+  "JATEK_MAIL_FROM",
+  "JATEK_MAIL_REPLY_TO",
   // the stage-only switch for a confirmation link without the mail: a switch, not a secret
   "JATEK_TEST_LINKS",
   // the giveaway's data erasure (card bc0ca668): days after the grand prize draw, and its dry-run switch, not secrets
@@ -184,6 +188,20 @@ describe("ReefClub környezet-lista (terv v6.1, 2.1)", () => {
       "MASTER_KEY_V2",
     ])
       assert.ok(forbiddenReason(name), name);
+  });
+
+  // WHAT TURNS THIS RED (acrobot 44556): the game's SMTP login and key (JATEK_SMTP_USER, JATEK_SMTP_PASS: "PASS" is not in the
+  // secret shape) reaching the public process without being refused; the game's two addresses being refused for no reason.
+  it("a játék SMTP-belépése és kulcsa tiltott a ReefClub-folyamatban, a két címe nem titok", () => {
+    for (const name of [
+      "JATEK_SMTP_HOST",
+      "JATEK_SMTP_PORT",
+      "JATEK_SMTP_USER",
+      "JATEK_SMTP_PASS",
+    ])
+      assert.match(forbiddenReason(name) ?? "", /JATEK_SMTP_/, name);
+    for (const name of ["JATEK_MAIL_FROM", "JATEK_MAIL_REPLY_TO"])
+      assert.equal(forbiddenReason(name), null, name);
   });
 
   it("a REEFCLUB_ előtag alatti titok megengedett, az az övé", () => {

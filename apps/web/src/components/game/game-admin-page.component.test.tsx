@@ -21,6 +21,7 @@ const api = vi.hoisted(() => ({
   erasure: vi.fn(),
   sendQueued: vi.fn(),
   testLink: vi.fn(),
+  testMail: vi.fn(),
   uploadPrizeImage: vi.fn(),
   prizeImageContent: vi.fn(),
 }));
@@ -37,7 +38,11 @@ vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({ session: auth.session }),
 }));
 
-import { GameAdminPage, mailErasureText } from "./game-admin-page";
+import {
+  GameAdminPage,
+  mailErasureText,
+  testMailText,
+} from "./game-admin-page";
 
 /*
   A NYEREMÉNYJÁTÉK KEZELÉSE (kártya 31445d0f). MI PIROSÍT: ha a beküldésnél nem látszik, megerősítette-e és helyes-e;
@@ -115,6 +120,7 @@ beforeEach(() => {
     },
   ]);
   api.decide.mockReset().mockResolvedValue({});
+  api.testMail.mockReset().mockResolvedValue({ outcome: "SENT", reason: null });
   api.mailQueue.mockReset().mockResolvedValue({
     pending: 4,
     sentToday: 3000,
@@ -381,6 +387,58 @@ describe("GameAdminPage", () => {
       within(queue).getByRole("button", { name: "Várakozó levelek kiküldése" }),
     );
     await waitFor(() => expect(api.sendQueued).toHaveBeenCalledWith("t"));
+  });
+  // WHAT TURNS THIS RED (acrobot 44553): the test mail button sent with a malformed address, or showing "sent" for a closed
+  // switch; a "not sent" that does not name the switch.
+  it("sends a test mail to the typed address and says it went; a closed switch says which one", async () => {
+    render(<GameAdminPage />);
+    const block = await screen.findByTestId("game-test-mail");
+    const send = within(block).getByRole("button", {
+      name: "Próbalevél küldése",
+    });
+    expect(send).toBeDisabled();
+    fireEvent.change(within(block).getByLabelText("Próbalevél címzettje"), {
+      target: { value: " nincs-kukac " },
+    });
+    expect(send).toBeDisabled();
+    fireEvent.change(within(block).getByLabelText("Próbalevél címzettje"), {
+      target: { value: " proba@example.com " },
+    });
+    fireEvent.click(send);
+    await waitFor(() =>
+      expect(api.testMail).toHaveBeenCalledWith("t", "proba@example.com"),
+    );
+    expect(
+      await screen.findByTestId("game-test-mail-result"),
+    ).toHaveTextContent("Elment.");
+    api.testMail.mockResolvedValue({ outcome: "NOT_SENT", reason: "path-off" });
+    fireEvent.click(send);
+    await waitFor(() =>
+      expect(screen.getByTestId("game-test-mail-result")).toHaveTextContent(
+        "Nem ment el: a játék levél-kapcsolója (TICKET_MAIL_GAME) nem „live”.",
+      ),
+    );
+    expect(screen.getByTestId("game-test-mail-result")).not.toHaveTextContent(
+      "Elment.",
+    );
+  });
+  it("names the missing public address or the sender's own error when the test mail does not go", () => {
+    expect(
+      testMailText({ outcome: "NOT_SENT", reason: "no-JATEK_PUBLIC_URL" }),
+    ).toContain("JATEK_PUBLIC_URL");
+    expect(testMailText({ outcome: "NOT_SENT", reason: "mail-off" })).toContain(
+      "TICKET_MAIL_MODE",
+    );
+    expect(
+      testMailText({ outcome: "NOT_SENT", reason: "SMTP_DOWN" }),
+    ).toContain("SMTP_DOWN");
+    const noSender = testMailText({
+      outcome: "NOT_SENT",
+      reason: "no-game-sender (JATEK_SMTP_HOST, JATEK_MAIL_FROM)",
+    });
+    expect(noSender).toContain("saját levélküldője");
+    expect(noSender).toContain("JATEK_SMTP_HOST, JATEK_MAIL_FROM");
+    expect(noSender).toContain("nem esik vissza");
   });
   it("shows when the data goes and whether the sent mails can be removed (card jatek-level-torles)", async () => {
     render(<GameAdminPage />);
