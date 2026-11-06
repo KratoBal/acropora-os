@@ -98,6 +98,20 @@ function setup(
           )[0] ?? null,
       findUnique: async ({ where }: { where: { id: string } }) =>
         all.find((x) => x.id === where.id) ?? null,
+      // the closed ones, as the code's own where asks (closesAt lte now), newest closing first, at most `take`
+      findMany: async ({
+        where,
+        orderBy,
+        take,
+      }: {
+        where: { closesAt: { lte: Date } };
+        orderBy: { closesAt: "desc" };
+        take: number;
+      }) =>
+        all
+          .filter((x) => x.closesAt <= where.closesAt.lte)
+          .sort((a, b) => b.closesAt.getTime() - a.closesAt.getTime())
+          .slice(0, take),
     },
     mailImage: {
       findUnique: async ({ where }: { where: { id: string } }) =>
@@ -788,5 +802,99 @@ describe("the prize, the next question and the winners on the public page (Balá
     assert.equal(shortPublicName("Kovács éva"), "Kovács É.");
     assert.equal(shortPublicName("Éva"), "Éva");
     assert.equal(shortPublicName(""), "");
+  });
+});
+
+describe("the correct answer on the public page (rules v2, section 6)", () => {
+  // WHAT TURNS THIS RED: an answer given while the week can still take answers (or before it opens); a closed week without
+  // its answer; a choice question's answer given as the option's id instead of its label; a free-text answer other than
+  // the first accepted one as the admin wrote it; the accepted list leaking whole; more than the newest twenty weeks.
+  const CLOSED_TEXT = question({
+    id: "q0",
+    week: "2026-W44",
+    prompt: "Melyik a legismertebb zátonyépítő korall?",
+    acceptedAnswers: ["Acropora", "acropóra", "Acropora sp."],
+    opensAt: new Date("2026-10-30T06:00:00Z"),
+    closesAt: new Date("2026-11-05T22:59:59Z"),
+  });
+  const CLOSED_CHOICE = question({
+    id: "qc",
+    week: "2026-W43",
+    type: "CHOICE",
+    prompt: "Melyik nemzetség tartozik ide?",
+    options: [
+      { id: "a", label: "Acropora" },
+      { id: "b", label: "Montipora" },
+    ],
+    acceptedAnswers: ["b"],
+    opensAt: new Date("2026-10-23T06:00:00Z"),
+    closesAt: new Date("2026-10-29T22:59:59Z"),
+  });
+  const COMING = question({
+    id: "q2",
+    week: "2026-W46",
+    acceptedAnswers: ["Titok-válasz"],
+    opensAt: new Date("2026-11-13T23:00:00Z"),
+    closesAt: new Date("2026-11-20T22:59:59Z"),
+  });
+
+  it("gives the answer of a closed week only: the option's label for a choice, the first accepted answer for a free text; never an open or coming week's", async () => {
+    // OPEN (the harness question, closes 2026-11-13) and COMING are not closed at 2026-11-06 12:00
+    const { service } = setup(
+      question({ acceptedAnswers: ["Nyitott-válasz"] }),
+      undefined,
+      { questions: [CLOSED_TEXT, CLOSED_CHOICE, COMING] },
+    );
+    const { weeks } = await service.closedWeeks();
+    assert.deepEqual(
+      weeks.map((w) => [w.week, w.answer]),
+      [
+        ["2026-W44", "Acropora"],
+        ["2026-W43", "Montipora"],
+      ],
+    );
+    const text = JSON.stringify(weeks);
+    for (const secret of [
+      "Nyitott-válasz",
+      "Titok-válasz",
+      "acropóra",
+      "acceptedAnswers",
+    ])
+      assert.equal(text.includes(secret), false, secret);
+  });
+
+  it("a week is published from the closing moment itself, and not a millisecond before", async () => {
+    const edge = question({
+      id: "qe",
+      week: "2026-W45",
+      acceptedAnswers: ["Határ"],
+      opensAt: new Date("2026-11-01T06:00:00Z"),
+      closesAt: OPEN, // closes exactly at the moment the service reads the clock
+    });
+    const at = setup(edge);
+    assert.deepEqual(
+      (await at.service.closedWeeks()).weeks.map((w) => w.answer),
+      ["Határ"],
+    );
+    const before = setup(edge);
+    before.service.now = () => new Date(OPEN.getTime() - 1);
+    assert.deepEqual((await before.service.closedWeeks()).weeks, []);
+  });
+
+  it("lists the newest twenty closed weeks", async () => {
+    const many = Array.from({ length: 25 }, (_, i) =>
+      question({
+        id: `m${i}`,
+        week: `2026-W${String(i + 1).padStart(2, "0")}`,
+        opensAt: new Date(Date.UTC(2026, 0, 1 + i)),
+        closesAt: new Date(Date.UTC(2026, 0, 2 + i)),
+      }),
+    );
+    const { service } = setup(many[0]!, undefined, {
+      questions: many.slice(1),
+    });
+    const { weeks } = await service.closedWeeks();
+    assert.equal(weeks.length, 20);
+    assert.equal(weeks[0]!.week, "2026-W25");
   });
 });
