@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { BadRequestException, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from "@nestjs/common";
 import type { LivestockArrival, LivestockArrivalKind } from "@acropora/types";
 
 import type {
@@ -46,11 +50,13 @@ function setup(
     string,
     { kind: LivestockArrivalKind | null; offered: boolean }
   > = { p1: { kind: null, offered: true } },
+  writeOutcome: "changed" | "gone" | null = null,
 ) {
   const calls = {
     list: [] as LivestockArrivalFilters[],
     created: [] as { data: LivestockArrivalWrite; by: string | null }[],
     updated: [] as LivestockArrivalWrite[],
+    readAt: [] as string[],
     productChecks: [] as string[],
     productOptions: [] as (string | undefined)[],
   };
@@ -72,7 +78,14 @@ function setup(
       calls.productOptions.push(q);
       return [{ id: "p1", name: "Zoanthus", commonName: null, kind: "CORAL" }];
     },
-    update: async (_id: string, data: LivestockArrivalWrite) => {
+    update: async (
+      _id: string,
+      data: LivestockArrivalWrite,
+      readAt: string,
+    ) => {
+      calls.readAt.push(readAt);
+      if (writeOutcome === "changed") return "changed" as const;
+      if (writeOutcome === "gone") return null;
       calls.updated.push(data);
       return stored({ ...data });
     },
@@ -191,6 +204,43 @@ describe("update", () => {
     );
     await service.update("a1", { productId: "p2" });
     assert.deepEqual(calls.productChecks, ["ghost", "p2"]);
+  });
+
+  it("writes conditionally on the row it read: a row that moved in between is a 409, not an overwrite", async () => {
+    const { service, calls } = setup(stored(), undefined, "changed");
+    await assert.rejects(
+      service.update("a1", { quantity: 3 }),
+      ConflictException,
+    );
+    assert.deepEqual(calls.readAt, ["2026-11-06T08:00:00.000Z"]);
+    assert.equal(calls.updated.length, 0);
+  });
+
+  it("a row deleted between the read and the write is a 404", async () => {
+    const { service } = setup(stored(), undefined, "gone");
+    await assert.rejects(
+      service.update("a1", { quantity: 3 }),
+      NotFoundException,
+    );
+  });
+
+  it("a form loaded from an older version of the record is refused before anything is written; the current version passes", async () => {
+    const { service, calls } = setup(
+      stored({ updatedAt: "2026-11-06T09:00:00.000Z" }),
+    );
+    await assert.rejects(
+      service.update("a1", {
+        quantity: 3,
+        expectedUpdatedAt: "2026-11-06T08:00:00.000Z",
+      }),
+      ConflictException,
+    );
+    assert.equal(calls.readAt.length, 0);
+    await service.update("a1", {
+      quantity: 3,
+      expectedUpdatedAt: "2026-11-06T09:00:00.000Z",
+    });
+    assert.equal(calls.updated.length, 1);
   });
 
   it("a NEW link needs a product the picker offers: an archived or inactive one is refused, a stored archived link stays", async () => {
