@@ -1864,6 +1864,7 @@ export type {
 export {
   christmasCandidates,
   drawGameWinner,
+  drawGameWinnerInOrder,
   GAME_QUESTION_TYPES,
   isGameAnswerCorrect,
   normalizeGameAnswer,
