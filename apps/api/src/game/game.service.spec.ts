@@ -6,6 +6,7 @@ import { Prisma } from "@acropora/database";
 import {
   GAME_MAIL_MAX_PER_ENTRY,
   GameService,
+  maskPublicEmail,
   normalizeGameName,
   publicWinnerName,
   shortPublicName,
@@ -691,9 +692,32 @@ describe("the prize, the next question and the winners on the public page (Balá
         ["WEEKLY", "2026-W45", "Kovács P.", "Aquaforest AF Nano Tank"],
       ],
     );
+    // the list carries the masked address next to the shortened name, never the whole address or the full name
+    assert.deepEqual(
+      winners.map((w) => w.emailMasked),
+      ["na•••@x.hu", "ko•••@x.hu"],
+    );
     const text = JSON.stringify(winners);
-    for (const secret of ["@", "Péter", "Mária"])
+    for (const secret of ["nagy@x.hu", "kovacs@x.hu", "Péter", "Mária"])
       assert.equal(text.includes(secret), false, secret);
+  });
+
+  // WHAT TURNS THIS RED (Balázs, 2026-11-06 10:51 UTC): more or fewer than the first two characters of the part before the @, a
+  // different number of hiding marks, the domain cut or changed, a one-character part shown as two, and an address with no @
+  // printed whole.
+  it("hides an address as the first two characters, three bullets, then @ and the whole domain; one character when the part is shorter than two; nothing of a malformed address", () => {
+    assert.equal(maskPublicEmail("kovacs.peter@gmail.com"), "ko•••@gmail.com");
+    assert.equal(maskPublicEmail("ab@x.hu"), "ab•••@x.hu");
+    assert.equal(maskPublicEmail("a@x.hu"), "a•••@x.hu");
+    assert.equal(maskPublicEmail("Éva@freemail.hu"), "Év•••@freemail.hu");
+    assert.equal(
+      maskPublicEmail("név+jelzo@sub.pelda.co.hu"),
+      "né•••@sub.pelda.co.hu",
+    );
+    // an @ inside a quoted local part: the domain after the LAST @ stays whole
+    assert.equal(maskPublicEmail('"a@b"@x.hu'), '"a•••@x.hu');
+    for (const rossz of ["", "nincs-kukac", "@x.hu", "valaki@"])
+      assert.equal(maskPublicEmail(rossz), "•••", rossz);
   });
 
   it("only the FIRST draw of a week counts: a re-draw never publishes a second name, and a first draw with no winner leaves the week without one (barracuda, #2279)", async () => {
