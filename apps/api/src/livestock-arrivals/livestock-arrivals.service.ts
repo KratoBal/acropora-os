@@ -26,7 +26,8 @@ import {
 const NOT_FOUND = "Az érkezés nem található.";
 const NOT_OPEN =
   "Csak megrendelt vagy úton lévő érkezésre lehet előjegyezni: a megérkezett vagy lemondott érkezés nem előjegyezhető.";
-const NO_PRODUCT = "A kiválasztott termék nem található, vagy nem élő állat.";
+const NO_PRODUCT =
+  "A kiválasztott termék nem található, nem élő állat, vagy nem aktív (archivált).";
 const CHANGED =
   "Az érkezést közben valaki módosította: töltsd újra, és vidd át a változtatást.";
 const KIND_MISMATCH =
@@ -67,16 +68,12 @@ export class LivestockArrivalsService {
   async list(
     query: LivestockArrivalListQueryDto,
   ): Promise<LivestockArrivalListResponse> {
-    return {
-      items: await this.repository.list({
-        status: query.status,
-        kind: query.kind,
-        preorderable: query.preorderable,
-        upcoming: query.upcoming
-          ? { today: budapestDay(this.now()) }
-          : undefined,
-      }),
-    };
+    return this.repository.list({
+      status: query.status,
+      kind: query.kind,
+      preorderable: query.preorderable,
+      upcoming: query.upcoming ? { today: budapestDay(this.now()) } : undefined,
+    });
   }
 
   /** The products the form may link: live animal products matching the search. */

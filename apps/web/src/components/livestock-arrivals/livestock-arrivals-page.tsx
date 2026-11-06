@@ -274,6 +274,8 @@ export function LivestockArrivalsPage() {
     session && hasPermission(session.user, PERMISSIONS.INVENTORY_MANAGE),
   );
   const [rows, setRows] = useState<LivestockArrival[] | null>(null);
+  /** A szerver levágta a listát: több érkezés felel meg a szűrőnek, mint amennyit mutat. */
+  const [truncated, setTruncated] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<"" | LivestockArrivalStatus>("");
   const [kind, setKind] = useState<"" | LivestockArrivalKind>("");
@@ -299,6 +301,7 @@ export function LivestockArrivalsPage() {
           signal,
         );
         setRows(response.items);
+        setTruncated(response.truncated);
         setError(null);
       } catch (cause) {
         if (cause instanceof DOMException && cause.name === "AbortError")
@@ -391,6 +394,12 @@ export function LivestockArrivalsPage() {
       </section>
       {error ? (
         <Alert variant="danger" title="Hiba történt" description={error} />
+      ) : null}
+      {truncated ? (
+        <Alert
+          title={`Csak az első ${LIVESTOCK_ARRIVAL_LIMITS.list.max} érkezést mutatjuk`}
+          description="Ennél több érkezés felel meg a szűrőnek, a lista a legközelebbiekkel kezdődik. Szűkítsd állapotra vagy fajtára, vagy kapcsold be a Csak a közelgők szűrőt."
+        />
       ) : null}
       {rows === null ? (
         <Skeleton className="h-32" />
