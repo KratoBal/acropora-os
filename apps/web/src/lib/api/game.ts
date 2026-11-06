@@ -125,6 +125,8 @@ export interface GameErasurePreview {
   due: boolean;
   waitingForGrandDraw: boolean;
   mail: {
+    /** hol küld most a játék: BREVO = a saját küldője (jatek@), az új levelek nem a ticket@ postafiókban vannak */
+    gameSender: "BREVO" | "NOT_CONFIGURED";
     capability:
       | { kind: "DELETE" | "TRASH" | "SEND_ONLY" | "NOT_CONFIGURED" }
       | { kind: "ERROR"; code: string };

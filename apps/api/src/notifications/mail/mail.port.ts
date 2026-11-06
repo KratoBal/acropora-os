@@ -128,6 +128,12 @@ export interface MailSender {
 /** A kiment level nyoma a szolgaltatonal: a Gmail uzenet-azonositoja, ha a valasz megnevezte. */
 export interface MailSent {
   readonly id?: string;
+  /**
+   * WHOSE ID IT IS (card jatek-level-torles, acrobot 44560): the game keeps an id only when it is a Gmail one, because it
+   * deletes it from the Gmail mailbox. An SMTP Message-ID handed to Gmail's batchDelete would be refused, and every
+   * later erasure run would fail on it.
+   */
+  readonly provider?: "gmail";
 }
 
 export const MAIL_SENDER = Symbol("MAIL_SENDER");

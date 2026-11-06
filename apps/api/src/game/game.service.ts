@@ -781,7 +781,8 @@ export class GameService implements OnModuleInit {
         html,
         text,
       });
-      mailId = sent?.id;
+      // only a Gmail id: the erasure deletes it from the Gmail mailbox (an SMTP sender's id is not one, mail.port.ts)
+      mailId = sent?.provider === "gmail" ? sent.id : undefined;
     } catch (error) {
       this.logger.error(
         `Nyereményjáték ${week}: a megerősítő levél küldése elbukott (${error instanceof Error ? error.name : "UNKNOWN"})`,

@@ -209,7 +209,9 @@ export class GmailMailSender implements MailSender {
     const body = (await Promise.resolve()
       .then(() => response.json())
       .catch(() => null)) as { id?: unknown } | null;
-    return typeof body?.id === "string" && body.id ? { id: body.id } : {};
+    return typeof body?.id === "string" && body.id
+      ? { id: body.id, provider: "gmail" }
+      : {};
   }
 
   private async token(config: TicketMailConfig): Promise<string> {

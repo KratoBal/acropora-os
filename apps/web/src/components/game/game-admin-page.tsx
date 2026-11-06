@@ -689,8 +689,18 @@ function ErasureStatus({ token }: { token: string }) {
           ? " (a fődíj sorsolása még nem futott le)"
           : ""}
       </p>
+      {preview.mail.gameSender === "BREVO" ? (
+        <p data-testid="game-mail-sender">
+          A játék levelei Brevón mennek (jatek@): azok nem a ticket@
+          postafiókban vannak. Az alábbi sor csak a váltás előtt a ticket@-ről
+          kiment levelekre vonatkozik.
+        </p>
+      ) : null}
       <p data-testid="game-mail-erasure">
-        Levelek törlése: {mailErasureText(preview.mail.capability)}
+        {preview.mail.gameSender === "BREVO"
+          ? "A ticket@-ről korábban kiment levelek törlése: "
+          : "Levelek törlése: "}
+        {mailErasureText(preview.mail.capability)}
         {preview.mail.enabled ? "" : " · a törlés kikapcsolva, csak számol"}
         {preview.mail.tracked > 0
           ? ` · lezárt hetek levelei törlésre várnak: ${preview.mail.tracked}`

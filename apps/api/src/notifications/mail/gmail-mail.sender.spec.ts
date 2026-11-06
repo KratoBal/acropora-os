@@ -267,6 +267,7 @@ describe("a kiment level nyoma (kartya jatek-level-torles)", () => {
   it("a kuldes a Gmail uzenet-azonositojat adja vissza", async () => {
     assert.deepEqual(await kuldo({ token: "ok" }).send(LEVEL), {
       id: "kitalalt-uzenet",
+      provider: "gmail",
     });
   });
 });
