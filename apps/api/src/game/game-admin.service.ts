@@ -341,8 +341,40 @@ export class GameAdminService {
       );
   }
 
+  /**
+   * ONE DRAW AT A TIME PER (kind, question), held by a Postgres advisory lock for the whole transaction (barracuda, #2287): the
+   * live page's "check, then write" and an admin draw of the same week cannot interleave. The lock is taken on its own
+   * connection, so what runs under it must NOT take it again (the draw's own transaction is another connection and would wait
+   * for this one forever): that is why `drawUnlocked` exists.
+   */
+  private withDrawLock<T>(
+    kind: "WEEKLY" | "CHRISTMAS",
+    questionId: string | null,
+    run: () => Promise<T>,
+  ): Promise<T> {
+    const key = `game-draw:${kind}:${questionId ?? ""}`;
+    return this.database.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`;
+        return run();
+      },
+      { maxWait: 10_000, timeout: 30_000 },
+    );
+  }
+
   /** A new draw: the entries as they are now, a fresh seed; kept with what it saw. */
   async draw(
+    input: { kind: "WEEKLY" | "CHRISTMAS"; questionId?: string | null },
+    userId: string,
+  ) {
+    const { kind, questionId } = this.liveTarget(input);
+    return this.withDrawLock(kind, questionId, () =>
+      this.drawUnlocked(input, userId),
+    );
+  }
+
+  /** The draw itself, WITHOUT the lock: only `draw` and `runLiveDraw` call it, both already under `withDrawLock`. */
+  private async drawUnlocked(
     input: { kind: "WEEKLY" | "CHRISTMAS"; questionId?: string | null },
     userId: string,
   ) {
@@ -447,7 +479,8 @@ export class GameAdminService {
       );
     const first = await this.database.gameDraw.findFirst({
       where: { kind, questionId },
-      orderBy: { createdAt: "asc" },
+      // the id breaks a tie on the same millisecond, so the screen and the public list pick the same "first" (barracuda, #2287)
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     });
     let blocked: string | null = null;
     let candidates: number;
@@ -514,17 +547,20 @@ export class GameAdminService {
 
   /**
    * THE BUTTON ON AIR: runs the EXISTING draw (the server picks with its own seed, the page never chooses anyone), but only
-   * when that week has no draw yet. With one already recorded nothing new is written and the recorded result comes back, so
-   * a second press on air cannot make a second record.
+   * when that week has no draw yet. The check and the write happen under one lock per (kind, question), so two presses that
+   * arrive together (a timed-out request pressed again while the server is still working) write ONE draw; with one already
+   * recorded nothing new is written and the recorded result comes back.
    */
   async runLiveDraw(
     input: { kind: "WEEKLY" | "CHRISTMAS"; questionId?: string | null },
     userId: string,
   ) {
     const target = this.liveTarget(input);
-    const before = await this.liveDraw(target);
-    if (!before.drawn) await this.draw(target, userId);
-    return this.liveDraw(target);
+    return this.withDrawLock(target.kind, target.questionId, async () => {
+      const before = await this.liveDraw(target);
+      if (!before.drawn) await this.drawUnlocked(target, userId);
+      return this.liveDraw(target);
+    });
   }
 
   /**

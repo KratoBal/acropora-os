@@ -191,6 +191,47 @@ describe("the live draw page", () => {
     );
   });
 
+  it("with no winner the rolling number never stops as the winning ticket", async () => {
+    api.runLiveDraw.mockResolvedValue({
+      ...before,
+      candidates: 0,
+      tickets: 0,
+      drawn: {
+        ...drawn,
+        winnerName: null,
+        winnerEmailMasked: null,
+        ticket: null,
+        tickets: 0,
+      },
+    });
+    await mount();
+    await act(async () => {
+      screen.getByRole("button", { name: "Sorsolás" }).click();
+      await vi.advanceTimersByTimeAsync(REVEAL_MS.settle + 100);
+    });
+    expect(screen.queryByTestId("live-draw-ticket")).toBeNull();
+    expect(screen.queryByText("A nyertes szelvény")).toBeNull();
+  });
+
+  it("a press that fails on the way back looks again: a draw the server did record shows at once, with no button", async () => {
+    api.runLiveDraw.mockRejectedValue(new Error("Időtúllépés."));
+    api.liveDraw
+      .mockReset()
+      .mockResolvedValueOnce(before)
+      .mockResolvedValue({ ...before, drawn });
+    await mount();
+    await act(async () => {
+      screen.getByRole("button", { name: "Sorsolás" }).click();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(api.liveDraw).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId("live-draw-winner").textContent).toBe(
+      "Kovács P.",
+    );
+    expect(screen.queryByRole("button", { name: "Sorsolás" })).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("without the manage permission there is no button and no call", async () => {
     auth.session = as("VIEWER");
     await mount();

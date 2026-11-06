@@ -170,6 +170,15 @@ function LiveDraw({
         setSettleUp(false);
         setNameUp(false);
         setError(cause instanceof Error ? cause.message : "Ismeretlen hiba");
+        // The request may have failed on the way back while the server DID record the draw: look again, so a recorded
+        // result shows at once and the button does not come back for nothing (barracuda, #2287).
+        gameApi
+          .liveDraw(token, kind, questionId)
+          .then((next) => {
+            setView(next);
+            if (next.drawn) setError(null);
+          })
+          .catch(() => undefined);
       });
   }, [token, kind, questionId]);
 
@@ -261,11 +270,14 @@ function LiveDraw({
         </section>
       ) : phase === "drawing" ? (
         <section className="live-draw-stage" aria-live="polite">
-          <RollingTicket
-            tickets={view.tickets}
-            finalTicket={result?.drawn?.ticket ?? null}
-            settled={settleUp && result !== null}
-          />
+          {/* with no winner there is no ticket to stop on: the number must not settle as "the winning ticket" */}
+          {result && result.drawn?.ticket == null ? null : (
+            <RollingTicket
+              tickets={view.tickets}
+              finalTicket={result?.drawn?.ticket ?? null}
+              settled={settleUp && result !== null}
+            />
+          )}
           <p className="live-draw-note">Sorsolás folyamatban…</p>
         </section>
       ) : (

@@ -31,6 +31,38 @@ const entry = (
 const NOW = new Date("2026-11-20T12:00:00Z");
 const CLOSED = new Date("2026-11-14T20:00:00Z");
 
+/**
+ * A REAL MUTEX PER ADVISORY-LOCK KEY in the fake database: `$executeRaw` (the service's `pg_advisory_xact_lock`) queues behind
+ * whoever holds the key, and the lock is let go when the transaction ends, as Postgres does. Without it the tests could not
+ * see what the lock holds back.
+ */
+function lockingTransaction<T extends object>(tx: T) {
+  const chains = new Map<string, Promise<void>>();
+  return async (fn: (t: T & { $executeRaw: unknown }) => unknown) => {
+    const releases: (() => void)[] = [];
+    const inTransaction = {
+      ...tx,
+      $executeRaw: async (_strings: TemplateStringsArray, key: string) => {
+        const previous = chains.get(key) ?? Promise.resolve();
+        let release!: () => void;
+        const mine = new Promise<void>((resolve) => (release = resolve));
+        chains.set(
+          key,
+          previous.then(() => mine),
+        );
+        await previous;
+        releases.push(release);
+        return 1;
+      },
+    };
+    try {
+      return await fn(inTransaction);
+    } finally {
+      for (const release of releases) release();
+    }
+  };
+}
+
 function setup(
   entries: ReturnType<typeof entry>[],
   over: { closesAt?: Date; lastCloses?: Date } = {},
@@ -76,7 +108,7 @@ function setup(
       findUnique: async ({ where }: { where: { id: string } }) =>
         draws.find((d) => d.id === where.id) ?? null,
     },
-    $transaction: async (fn: (t: typeof tx) => unknown) => fn(tx),
+    $transaction: lockingTransaction(tx),
   };
   const service = new GameAdminService({ now: () => NOW } as never);
   service.database = database as never;
@@ -618,6 +650,8 @@ function liveSetup(
     closesAt?: Date;
     lastCloses?: Date;
     existing?: Record<string, unknown>[];
+    /** macrotask ticks the fake `create` waits before it writes: lets a second request run its check in the gap */
+    slowCreateTicks?: number;
   } = {},
 ) {
   const draws: Record<string, any>[] = [...(over.existing ?? [])];
@@ -625,6 +659,8 @@ function liveSetup(
   const tx = {
     gameDraw: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
+        for (let i = 0; i < (over.slowCreateTicks ?? 0); i += 1)
+          await new Promise((resolve) => setImmediate(resolve));
         const row = {
           id: `d${draws.length + 1}`,
           createdAt: new Date(NOW.getTime() + draws.length * 1000),
@@ -681,19 +717,26 @@ function liveSetup(
         orderBy,
       }: {
         where: { kind: string; questionId: string | null };
-        orderBy: { createdAt: "asc" | "desc" };
+        orderBy: { createdAt?: "asc" | "desc"; id?: "asc" | "desc" }[];
       }) =>
         draws
           .filter(
             (d) => d.kind === where.kind && d.questionId === where.questionId,
           )
-          .sort(
-            (a, b) =>
-              (a.createdAt.getTime() - b.createdAt.getTime()) *
-              (orderBy.createdAt === "desc" ? -1 : 1),
-          )[0] ?? null,
+          .sort((a, b) => {
+            for (const rule of orderBy) {
+              const direction = Object.values(rule)[0] === "desc" ? -1 : 1;
+              const [x, y] =
+                "createdAt" in rule
+                  ? [a.createdAt.getTime(), b.createdAt.getTime()]
+                  : [a.id, b.id];
+              if (x < y) return -direction;
+              if (x > y) return direction;
+            }
+            return 0;
+          })[0] ?? null,
     },
-    $transaction: async (fn: (t: typeof tx) => unknown) => fn(tx),
+    $transaction: lockingTransaction(tx),
   };
   const service = new GameAdminService({ now: () => NOW } as never);
   service.database = database as never;
@@ -788,6 +831,57 @@ describe("the live draw page's view and button", () => {
     assert.equal(view.drawn!.drawId, "early");
     assert.equal(view.drawn!.winnerName, "Nagy A.");
     assert.equal(view.candidates, 2);
+  });
+
+  // WHAT TURNS THIS RED (barracuda, #2287): the check and the write not under one lock. Two presses that arrive together
+  // (a request that timed out in the browser while the server was still working, pressed again) would both see "no draw yet"
+  // and both write one. The fake `create` waits a few ticks, so the second request's check runs BEFORE the first one writes:
+  // a plain Promise.all over a fake with no such gap would pass even without the lock.
+  it("two presses that overlap write ONE draw, and both get the same recorded result", async () => {
+    const { service, draws, audits } = liveSetup(players, names, {
+      slowCreateTicks: 3,
+    });
+    const [a, b] = await Promise.all([
+      service.runLiveDraw(target, "u1"),
+      service.runLiveDraw(target, "u1"),
+    ]);
+    assert.equal(draws.length, 1);
+    assert.equal(audits.length, 1);
+    assert.deepEqual(a.drawn, b.drawn);
+  });
+
+  it("an admin draw and a live press of the same week do not interleave: still one draw", async () => {
+    const { service, draws } = liveSetup(players, names, {
+      slowCreateTicks: 3,
+    });
+    const [, view] = await Promise.all([
+      service.draw(target, "u1"),
+      service.runLiveDraw(target, "u1"),
+    ]);
+    assert.equal(draws.length, 1);
+    assert.equal(view.drawn!.drawId, "d1");
+  });
+
+  it("the first draw is the one with the smaller id when two share the same instant", async () => {
+    const at = new Date("2026-11-20T10:00:00Z");
+    const row = (id: string, winnerEmail: string) => ({
+      id,
+      kind: "WEEKLY",
+      questionId: "w45",
+      createdAt: at,
+      winnerEmail,
+      ticket: 0,
+      tickets: 2,
+      candidates: [],
+    });
+    for (const order of [
+      [row("a", "nagy.anna@x.hu"), row("b", "szabo.bela@x.hu")],
+      [row("b", "szabo.bela@x.hu"), row("a", "nagy.anna@x.hu")],
+    ]) {
+      const { service } = liveSetup(players, names, { existing: order });
+      const view = await service.liveDraw(target);
+      assert.equal(view.drawn!.drawId, "a");
+    }
   });
 
   it("a winner without a usable name shows as Nyertes, never the name field as it is", async () => {
