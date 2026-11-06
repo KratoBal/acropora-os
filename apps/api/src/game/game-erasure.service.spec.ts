@@ -716,7 +716,10 @@ describe("the game mail erasure", () => {
     // the first 1000: m1, m2 and b0..b997; e1 is done, e4 and e5 are not
     assert.equal(m.removed[0]!.ids.length, 1000);
     assert.deepEqual(m.entries.find((e) => e.id === "e1")!.sentMailIds, []);
-    assert.equal(m.entries.find((e) => e.id === "e4")!.sentMailIds.length, 999);
+    // e4 straddles the two batches (b0..b997 went with the first): only the id not removed yet stays on it
+    assert.deepEqual(m.entries.find((e) => e.id === "e4")!.sentMailIds, [
+      "b998",
+    ]);
     assert.deepEqual(m.entries.find((e) => e.id === "e5")!.sentMailIds, [
       "c1",
       "c2",
@@ -724,5 +727,9 @@ describe("the game mail erasure", () => {
     // what went is in the audit row, also on a failed run
     assert.equal(m.audits.length, 1);
     assert.equal(m.audits[0]!.metadata.removed, 1000);
+    // the next run sends only what is left: no id the first batch removed goes to Gmail again
+    await m.erasure.eraseMail({ dryRun: false });
+    const again = m.removed.slice(1).flatMap((r) => r.ids);
+    assert.deepEqual(again.sort(), ["b998", "c1", "c2", "regi"]);
   });
 });
