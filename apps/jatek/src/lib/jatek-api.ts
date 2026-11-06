@@ -72,6 +72,10 @@ export type BekuldesBemenet = {
   questionId: string;
   email: string;
   name: string;
+  rulesAccepted: true;
+  consentGiven: true;
+  rulesVersion: string;
+  privacyVersion: string;
   answer: string;
   website: string;
 };

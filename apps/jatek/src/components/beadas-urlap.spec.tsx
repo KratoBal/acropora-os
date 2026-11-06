@@ -24,15 +24,34 @@ const html = (kerdes: Kerdes) =>
   renderToStaticMarkup(<BeadasUrlap kerdes={kerdes} />);
 
 describe("a beküldő űrlap", () => {
-  it("has exactly one checkbox: the required, unchecked rules acceptance; never a newsletter", () => {
+  it("has exactly two checkboxes, the rules acceptance and the data consent, each required and unticked; never a newsletter", () => {
     for (const kerdes of [SZOVEG, HAMIS_KERDES]) {
       const h = html(kerdes);
       const dobozok = h.match(/<input[^>]*type="checkbox"[^>]*>/g) ?? [];
-      assert.equal(dobozok.length, 1);
-      assert.match(dobozok[0]!, /required/);
-      assert.doesNotMatch(dobozok[0]!, /checked/);
+      assert.equal(dobozok.length, 2);
+      for (const doboz of dobozok) {
+        assert.match(doboz, /required/);
+        assert.doesNotMatch(doboz, /checked/);
+      }
+      assert.match(dobozok[0]!, /id="jatek-szabalyzat-elfogadas"/);
+      assert.match(dobozok[1]!, /id="jatek-hozzajarulas"/);
       assert.doesNotMatch(h, /hírlevél|newsletter|Acropora-hír|marketing/i);
     }
+  });
+
+  it("the two acceptances read as the privacy notice says: the rules apart, the consent apart, both naming the notice's own words and linking the documents", () => {
+    const h = html(SZOVEG).replace(/<!-- -->/g, "");
+    assert.match(
+      h,
+      /Elfogadom a <a href="\/jatekszabalyzat"[^>]*>játékszabályzatot<\/a>\./,
+    );
+    assert.match(
+      h,
+      /Hozzájárulok, hogy az <a href="\/adatkezeles"[^>]*>adatkezelési tájékoztató<\/a> szerint kezeljétek az adataimat, és nyertesség esetén a rövidített nevem és részben kitakart e-mail-címem megjelenjen a játék oldalán és a fődíj élő sorsolásán\./,
+    );
+    // the rules sentence does not carry the consent (apart, as the notice 3.1 requires)
+    const szabalyzat = /Elfogadom a [\s\S]*?<\/label>/.exec(h)![0];
+    assert.doesNotMatch(szabalyzat, /Hozzájárulok|adatkezelési tájékoztató/);
   });
 
   it("asks for the name in a required text field the browser can fill, and says the winner is shown shortened", () => {
