@@ -80,6 +80,8 @@ describe("a fődíj-oldal", () => {
     for (const forras of forrasok) {
       assert.doesNotMatch(forras, /zátony/i);
       assert.doesNotMatch(forras, /szűrőpanel/i);
+      // Balázs wrote "tengeri" for "tengervizes" in the first sentence; the alt texts follow the same pattern (acrobot 44540)
+      assert.doesNotMatch(forras, /tengervizes/i);
     }
     const szoveg = html
       .replace(/<!-- -->/g, "")

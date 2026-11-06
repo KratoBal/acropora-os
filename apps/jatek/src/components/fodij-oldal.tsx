@@ -196,7 +196,7 @@ export function FodijOldal() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/nano.jpg"
-            alt="Az AF Nano Tank tengervizes akvárium színes korallokkal és LED-lámpával."
+            alt="Az AF Nano Tank tengeri akvárium színes korallokkal és LED-lámpával."
           />
         </div>
       </section>
