@@ -105,7 +105,7 @@ export function HetiKerdesSzakasz({ allapot }: { allapot: KerdesAllapot }) {
             </div>
           ) : null}
           <div className="jatek-week-foot">
-            Heti ajándékok. Egy különleges fődíj.
+            Heti nyeremények. Egy különleges fődíj.
             <span>Az óceán rád vár.</span>
           </div>
         </aside>
