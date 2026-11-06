@@ -599,20 +599,26 @@ export class GameErasureService {
         const batch = all.slice(i, i + MAIL_BATCH);
         result.removed += await this.mailbox.remove(batch, capability.kind);
         for (const id of batch) gone.add(id);
-        const finished = entries.filter(
-          (e) =>
-            e.sentMailIds.length > 0 &&
-            e.sentMailIds.every((id) => gone.has(id)),
+        // an entry whose ids straddle two batches keeps only the ones not removed yet (barracuda, #2288): a removed id
+        // is never sent to Gmail again, so a batchDelete that refuses unknown ids cannot stop every later run
+        const touched = entries.filter((e) =>
+          e.sentMailIds.some((id) => gone.has(id)),
         );
-        const clears = finished.map((e) =>
+        const left = new Map(
+          touched.map((e) => [
+            e.id,
+            e.sentMailIds.filter((id) => !gone.has(id)),
+          ]),
+        );
+        const writes = touched.map((e) =>
           this.database.gameEntry.update({
             where: { id: e.id },
-            data: { sentMailIds: [] },
+            data: { sentMailIds: left.get(e.id)! },
           }),
         );
-        for (let j = 0; j < clears.length; j += CHUNK)
-          await this.database.$transaction(clears.slice(j, j + CHUNK));
-        for (const e of finished) e.sentMailIds = [];
+        for (let j = 0; j < writes.length; j += CHUNK)
+          await this.database.$transaction(writes.slice(j, j + CHUNK));
+        for (const e of touched) e.sentMailIds = left.get(e.id)!;
       }
     } finally {
       if (result.removed > 0)
