@@ -7,6 +7,9 @@
  * A TERMEKFOTO (`/nano.jpg`) az Aquaforest hivatalos fotoja (a designcsomagbol; forras: aquaforest.eu). A felhasznalasi
  * engedelyt NEM tudom: a kerdes a tulajdonosnak szol (lasd a PR-torzset).
  */
+import type { Nyertes } from "../lib/jatek-api.ts";
+import { hetCimke } from "./heti-kerdes.tsx";
+
 export function Hero() {
   return (
     <section className="jatek-hero jatek-wrap" id="fodij">
@@ -127,7 +130,12 @@ export function Lepesek() {
   );
 }
 
-export function Nyertesek() {
+export function Nyertesek({
+  nyertesek = [],
+}: {
+  /** a korábbi sorsolások nyertesei, CSAK rövidített névvel (az api így adja) */
+  nyertesek?: readonly Nyertes[];
+}) {
   return (
     <section className="jatek-winners jatek-wrap" id="nyertesek">
       <div className="jatek-section-heading">
@@ -135,19 +143,39 @@ export function Nyertesek() {
           <div className="jatek-eyebrow">AKIKNEK KEDVEZETT A SZERENCSE</div>
           <h2>Az eddigi sorsolások nyertesei.</h2>
         </div>
-        <span className="jatek-pill">Még a rajt előtt vagyunk</span>
+        {nyertesek.length === 0 ? (
+          <span className="jatek-pill">Még a rajt előtt vagyunk</span>
+        ) : null}
       </div>
-      <div className="jatek-empty-winners">
-        <span className="jatek-trophy">♧</span>
-        <div>
-          <h3>Az első nyertes helye már megvan.</h3>
-          <p>
-            Az első sorsolás után itt találod a korábbi nyerteseket és a heti
-            nyereményeket. Jelenleg nincs kihirdetett eredmény.
-          </p>
+      {nyertesek.length > 0 ? (
+        <ul className="jatek-winner-list" data-testid="nyertesek">
+          {nyertesek.map((nyertes) => (
+            <li key={`${nyertes.drawnAt}-${nyertes.name}`}>
+              <b>{nyertes.name}</b>
+              <span>
+                {nyertes.kind === "CHRISTMAS"
+                  ? "Karácsonyi fődíj"
+                  : nyertes.week
+                    ? hetCimke(nyertes.week)
+                    : "Heti sorsolás"}
+                {nyertes.prizeName ? ` · ${nyertes.prizeName}` : ""}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="jatek-empty-winners">
+          <span className="jatek-trophy">♧</span>
+          <div>
+            <h3>Az első nyertes helye már megvan.</h3>
+            <p>
+              Az első sorsolás után itt találod a korábbi nyerteseket és a heti
+              nyereményeket. Jelenleg nincs kihirdetett eredmény.
+            </p>
+          </div>
+          <span className="jatek-empty-number">01</span>
         </div>
-        <span className="jatek-empty-number">01</span>
-      </div>
+      )}
     </section>
   );
 }
