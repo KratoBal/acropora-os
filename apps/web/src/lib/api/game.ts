@@ -122,6 +122,14 @@ export const gameApi = {
     if (!response.ok) throw new Error("A kép nem tölthető be.");
     return response.blob();
   },
+  /** Egy meglévő kérdés javítása (a teljes űrlap megy; a beküldések helyességét a szerver újraszámolja). */
+  updateQuestion(token: string, id: string, input: GameQuestionInput) {
+    return apiRequest<GameQuestionView>(
+      `/game/questions/${encodeURIComponent(id)}`,
+      token,
+      { method: "PUT", body: JSON.stringify(input) },
+    );
+  },
   entries(token: string, questionId: string) {
     return apiRequest<GameEntryView[]>(
       `/game/questions/${encodeURIComponent(questionId)}/entries`,

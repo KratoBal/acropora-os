@@ -28,7 +28,7 @@ import {
   type GameMailQueue,
   type GameQuestionView,
 } from "@/lib/api/game";
-import { budapestInstant } from "@/lib/format/budapest-time";
+import { budapestInstant, budapestParts } from "@/lib/format/budapest-time";
 import { formatDateTimeHu } from "@/lib/format/date";
 
 const errorText = (cause: unknown) =>
@@ -128,18 +128,45 @@ function PrizeImage({
   );
 }
 
+/** Egy meglévő kérdés az űrlap mezőiben (a nyitás és a zárás budapesti nap és óra:perc). */
+function formOf(question: GameQuestionView): typeof EMPTY_FORM {
+  const opens = budapestParts(question.opensAt);
+  const closes = budapestParts(question.closesAt);
+  return {
+    week: question.week,
+    type: question.type,
+    prompt: question.prompt,
+    options: question.options
+      .map((option) => `${option.id}: ${option.label}`)
+      .join("\n"),
+    accepted: question.acceptedAnswers.join("\n"),
+    opens: opens?.day ?? "",
+    opensTime: opens?.time ?? "00:00",
+    closes: closes?.day ?? "",
+    closesTime: closes?.time ?? "23:59",
+    prizeName: question.prizeName ?? "",
+    prizeDescription: question.prizeDescription ?? "",
+    prizeImageId: question.prizeImageId ?? "",
+  };
+}
+
 /**
- * Az új kérdés űrlapja. CHOICE-nál a lehetőségek soronként (`a: Acropora`), a helyes válasz a lehetőség betűje;
+ * Az új kérdés űrlapja, és (a `question` megadva) egy meglévő kérdés javítása ugyanezzel az űrlappal: a hét nem változik,
+ * a többi (szöveg, válaszok, nyitás és zárás, nyeremény) igen. CHOICE-nál a lehetőségek soronként (`a: Acropora`), a helyes válasz a lehetőség betűje;
  * TEXT-nél az elfogadott válaszok soronként (a kis- és nagybetű, az ékezet és a szóköz nem számít).
  */
-function NewQuestion({
+function QuestionForm({
   token,
-  onCreated,
+  question,
+  onDone,
+  onCancel,
 }: {
   token: string;
-  onCreated: () => void;
+  question?: GameQuestionView;
+  onDone: () => void;
+  onCancel?: () => void;
 }) {
-  const [form, setForm] = useState(EMPTY_FORM);
+  const [form, setForm] = useState(question ? formOf(question) : EMPTY_FORM);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const set = (key: keyof typeof EMPTY_FORM) => (value: string) =>
@@ -161,20 +188,35 @@ function NewQuestion({
               return { id: id!.trim(), label: label.join(":").trim() };
             })
           : [];
-      await gameApi.createQuestion(token, {
+      const input = {
         week: form.week.trim(),
         type: form.type,
         prompt: form.prompt.trim(),
         options,
         acceptedAnswers: lines(form.accepted),
-        opensAt: budapestInstant(form.opens, form.opensTime) ?? "",
-        closesAt: budapestInstant(form.closes, form.closesTime) ?? "",
+        // az érintetlen időpont a tárolt marad (a másodperc is): a javítás nem csúsztatja el a régi zárást
+        opensAt:
+          question &&
+          form.opens === formOf(question).opens &&
+          form.opensTime === formOf(question).opensTime
+            ? question.opensAt
+            : (budapestInstant(form.opens, form.opensTime) ?? ""),
+        closesAt:
+          question &&
+          form.closes === formOf(question).closes &&
+          form.closesTime === formOf(question).closesTime
+            ? question.closesAt
+            : (budapestInstant(form.closes, form.closesTime) ?? ""),
         prizeName: form.prizeName.trim() || null,
         prizeDescription: form.prizeDescription.trim() || null,
         prizeImageId: form.prizeImageId || null,
-      });
-      setForm(EMPTY_FORM);
-      onCreated();
+      };
+      if (question) await gameApi.updateQuestion(token, question.id, input);
+      else {
+        await gameApi.createQuestion(token, input);
+        setForm(EMPTY_FORM);
+      }
+      onDone();
     } catch (cause) {
       setError(errorText(cause));
     } finally {
@@ -185,14 +227,17 @@ function NewQuestion({
   return (
     <section
       className="space-y-3 rounded-2xl border border-pilot-grey-200 bg-white px-5 py-4"
-      data-testid="game-new-question"
+      data-testid={question ? "game-edit-question" : "game-new-question"}
     >
-      <p className="text-sm font-semibold">Új heti kérdés</p>
+      <p className="text-sm font-semibold">
+        {question ? `Kérdés javítása (${question.week})` : "Új heti kérdés"}
+      </p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <PilotFormField label="Hét (például 2026-W46)" required>
           <PilotInput
             value={form.week}
             onChange={set("week")}
+            disabled={Boolean(question)}
             aria-label="Hét"
           />
         </PilotFormField>
@@ -311,9 +356,16 @@ function NewQuestion({
           description={error}
         />
       ) : null}
-      <PilotButton disabled={busy} onClick={() => void save()}>
-        Kérdés mentése
-      </PilotButton>
+      <div className="flex gap-2">
+        <PilotButton disabled={busy} onClick={() => void save()}>
+          Kérdés mentése
+        </PilotButton>
+        {onCancel ? (
+          <PilotButton variant="secondary" onClick={onCancel}>
+            Mégse
+          </PilotButton>
+        ) : null}
+      </div>
     </section>
   );
 }
@@ -683,6 +735,7 @@ export function GameAdminPage() {
   );
   const [questions, setQuestions] = useState<GameQuestionView[] | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -734,7 +787,10 @@ export function GameAdminPage() {
                 <button
                   type="button"
                   className={`flex w-full flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-2 text-left ${q.id === selected ? "bg-pilot-grey-50" : ""}`}
-                  onClick={() => setSelected(q.id)}
+                  onClick={() => {
+                    setSelected(q.id);
+                    setEditing(false);
+                  }}
                 >
                   <span className="font-medium">{q.week}</span>
                   <span className="min-w-0 flex-1 truncate">{q.prompt}</span>
@@ -751,6 +807,24 @@ export function GameAdminPage() {
               </li>
             ))}
           </ul>
+          {question && canManage ? (
+            editing ? (
+              <QuestionForm
+                key={question.id}
+                token={token}
+                question={question}
+                onDone={() => {
+                  setEditing(false);
+                  void load();
+                }}
+                onCancel={() => setEditing(false)}
+              />
+            ) : (
+              <PilotButton variant="secondary" onClick={() => setEditing(true)}>
+                Kérdés javítása ({question.week})
+              </PilotButton>
+            )
+          ) : null}
           {question ? (
             <Entries
               token={token}
@@ -766,7 +840,7 @@ export function GameAdminPage() {
         <Draws token={token} questions={questions} canManage={canManage} />
       ) : null}
       {canManage ? (
-        <NewQuestion token={token} onCreated={() => void load()} />
+        <QuestionForm token={token} onDone={() => void load()} />
       ) : null}
     </PilotThemeRoot>
   );

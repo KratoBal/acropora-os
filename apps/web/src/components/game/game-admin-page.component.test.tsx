@@ -11,6 +11,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const api = vi.hoisted(() => ({
   questions: vi.fn(),
   createQuestion: vi.fn(),
+  updateQuestion: vi.fn(),
   entries: vi.fn(),
   decide: vi.fn(),
   draws: vi.fn(),
@@ -61,6 +62,8 @@ function as(role: UserRole): Session {
 
 beforeEach(() => {
   auth.session = as("OWNER");
+  api.createQuestion.mockReset();
+  api.updateQuestion.mockReset();
   api.questions.mockReset().mockResolvedValue([
     {
       id: "q1",
@@ -229,6 +232,47 @@ describe("GameAdminPage", () => {
       prizeDescription: "Egy kis akvárium.",
       prizeImageId: "img1",
     });
+  });
+
+  it("corrects an existing question with the same form: prefilled in Budapest time, an untouched time stays as stored (seconds too), a changed one is rebuilt, the week is locked", async () => {
+    api.updateQuestion.mockResolvedValue({});
+    render(<GameAdminPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Kérdés javítása (2026-W45)" }),
+    );
+    const form = await screen.findByTestId("game-edit-question");
+    expect(within(form).getByLabelText("Hét")).toBeDisabled();
+    expect(within(form).getByLabelText("Hét")).toHaveValue("2026-W45");
+    expect(within(form).getByLabelText("Kérdés szövege")).toHaveValue(
+      "Melyik a legismertebb zátonyépítő korall?",
+    );
+    expect(within(form).getByLabelText("Nyitás ideje")).toHaveValue("06:00");
+    expect(within(form).getByLabelText("Zárás ideje")).toHaveValue("23:59");
+    expect(within(form).getByLabelText("Nyeremény neve")).toHaveValue(
+      "Aquaforest AF Nano Tank",
+    );
+    fireEvent.change(within(form).getByLabelText("Nyeremény leírása"), {
+      target: { value: "Egy kis akvárium." },
+    });
+    fireEvent.change(within(form).getByLabelText("Nyitás ideje"), {
+      target: { value: "21:00" },
+    });
+    fireEvent.click(
+      within(form).getByRole("button", { name: "Kérdés mentése" }),
+    );
+    await waitFor(() => expect(api.updateQuestion).toHaveBeenCalledTimes(1));
+    const [token, id, input] = api.updateQuestion.mock.calls[0]!;
+    expect([token, id]).toEqual(["t", "q1"]);
+    expect(input).toMatchObject({
+      week: "2026-W45",
+      // a nyitás megváltozott: 21:00 budapesti = 20:00 UTC; a zárás érintetlen: a tárolt másodperccel
+      opensAt: "2026-11-06T20:00:00.000Z",
+      closesAt: "2026-11-13T22:59:59.000Z",
+      prizeName: "Aquaforest AF Nano Tank",
+      prizeDescription: "Egy kis akvárium.",
+      prizeImageId: null,
+    });
+    expect(api.createQuestion).not.toHaveBeenCalled();
   });
 
   it("draws for the chosen week only after the confirmation, and runs a kept draw again with its seed", async () => {
