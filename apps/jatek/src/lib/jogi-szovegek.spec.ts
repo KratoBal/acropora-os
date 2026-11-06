@@ -119,29 +119,53 @@ describe("a jogi szoveg vazlatai", () => {
     assert.match(szervezo.sorok[3]!, /info@acropora\.hu$/);
   });
 
-  it("the privacy notice is the owner's four sections word for word, plus one sentence he asked for: the shortened winner's name is published", () => {
+  it("the privacy notice is version 2 (Balázs's text, acrobot 44375): fourteen numbered sections after a subtitle and a lead, word for word, with the bold marks kept in the data", () => {
+    assert.equal(ADATKEZELES.cim, "Adatkezelési tájékoztató");
     assert.deepEqual(
       ADATKEZELES.szakaszok.map((x) => x.cim),
       [
         "1. Az adatkezelő",
-        "2. Milyen adatokat kezelünk",
-        "3. Mire használjuk",
-        "4. Mennyi ideig őrizzük",
+        "2. Milyen adatokat kezelünk?",
+        "3. Az adatkezelés célja és jogalapja",
+        "4. A nyertesek nevének közzététele",
+        "5. Mennyi ideig őrizzük meg az adatokat?",
+        "6. Kik férhetnek hozzá az adatokhoz?",
+        "7. Nemzetközi adattovábbítás",
+        "8. Technikai adatok és sütik",
+        "9. Hírlevél és marketing",
+        "10. A hozzájárulás visszavonása",
+        "11. Milyen jogok illetnek meg?",
+        "12. Panasz és bírósági jogorvoslat",
+        "13. Automatizált döntések és adatbiztonság",
+        "14. A tájékoztató elérhetősége és változásai",
       ],
+    );
+    // the subtitle and the lead come before the first section
+    const bevezeto = (ADATKEZELES.bevezeto ?? [])
+      .flatMap(blokkSzovegei)
+      .join("\n");
+    assert.match(bevezeto, /Az Acropora nyereményjáték résztvevői részére/);
+    assert.match(
+      bevezeto,
+      /A részvételhez nem szükséges vásárolnod vagy hírlevélre feliratkoznod\./,
     );
     const adat = szoveg(ADATKEZELES);
     for (const mondat of [
       "Acropora Kft.",
       "Adószám: 23916229-2-42",
-      "A nevedet, e-mail-címedet, a beküldött válaszodat, azt, hogy melyik kérdésre és mikor küldted be, valamint a megerősítés tényét és idejét.",
-      "Az adataidat a fődíj sorsolását követő maximum 15 nappal töröljük rendszerünkből",
+      "Ennek az adatkezelésnek a jogalapja a hozzájárulásod, a GDPR 6. cikk (1) bekezdés a) pontja alapján.",
+      "A hozzájárulást a nevezési felületen található külön, alapértelmezetten üres jelölőnégyzet bejelölésével adhatod meg. A hozzájárulás megadása elkülönül a Játékszabályzat elfogadásától.",
+      "ko•••@gmail.com",
+      "Hetzner Online GmbH",
+      "A weboldal nem használ sütit",
     ])
       assert.ok(adat.includes(mondat), mondat);
-    // the one added sentence (acrobot 44299), the last of section 3
-    assert.equal(
-      ADATKEZELES.szakaszok[2]!.bekezdesek!.at(-1),
-      "Ha nyersz, a nevedet rövidített alakban (vezetéknév és a keresztnév kezdőbetűje, például Kovács P.) közzétesszük a játék oldalán.",
-    );
+    assert.equal(adat.includes("**"), false);
+    assert.equal(adat.includes("[KITÖLTENDŐ"), false);
+    // the data keeps the bold marks the file has (the page turns them into <strong>)
+    const nyers = JSON.stringify(ADATKEZELES);
+    assert.ok(nyers.includes("**hozzájárulásod**"));
+    assert.ok(nyers.includes("**Acropora Kft.**"));
   });
 
   it("the rules say what the system does: only correct, confirmed entries are drawn, one entry per round, confirmation by link, a chance per right week, a re-run only checks", () => {
@@ -169,9 +193,20 @@ describe("a jogi szoveg vazlatai", () => {
   });
 
   it("the e-mail address is for the game and the winner's notice only: no newsletter, anywhere", () => {
-    const mind = JOGI_DOKUMENTUMOK.map(szoveg).join("\n");
-    assert.match(szoveg(ADATKEZELES), /hírlevélre sem használjuk/);
-    assert.match(szoveg(ADATKEZELES), /nincs hírlevélre feliratkozás/);
+    // the text of the blocks only: a section heading ("9. Hírlevél és marketing") names a topic, it is not a claim
+    const mind = JOGI_DOKUMENTUMOK.map((d) =>
+      [...(d.bevezeto ?? []), ...d.szakaszok.flatMap(szakaszBlokkok)]
+        .flatMap(blokkSzovegei)
+        .join("\n"),
+    ).join("\n");
+    assert.match(
+      szoveg(ADATKEZELES),
+      /nem szükséges vásárolnod vagy hírlevélre feliratkoznod/,
+    );
+    assert.match(
+      szoveg(ADATKEZELES),
+      /A játékhoz nem tartozik hírlevél-feliratkozás/,
+    );
     // every sentence that names the newsletter denies it
     for (const mondat of mind
       .split(/(?<=\.)\s+|\n/)

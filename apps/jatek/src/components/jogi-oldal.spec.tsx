@@ -60,6 +60,19 @@ describe("a jogi oldal", () => {
     assert.doesNotMatch(h, /vazlat-jelzes|VÁZLAT/);
   });
 
+  it("the privacy notice page shows its subtitle and lead before the first section, the file's bold as <strong>, and no raw ** marks", () => {
+    const h = renderToStaticMarkup(<JogiOldal dokumentum={ADATKEZELES} />);
+    assert.ok(
+      h.indexOf("Az Acropora nyereményjáték résztvevői részére") <
+        h.indexOf("1. Az adatkezelő"),
+    );
+    assert.match(h, /<strong>Acropora Kft\.<\/strong>/);
+    assert.match(h, /a <strong>hozzájárulásod<\/strong>/);
+    assert.match(h, /<h3>2\.1\. A nevezéshez kapcsolódó adatok<\/h3>/);
+    assert.equal(h.includes("**"), false);
+    assert.doesNotMatch(h, /vazlat-jelzes|VÁZLAT/);
+  });
+
   it("the two documents are different pages with their own title", () => {
     const a = renderToStaticMarkup(<JogiOldal dokumentum={JATEKSZABALYZAT} />);
     const b = renderToStaticMarkup(<JogiOldal dokumentum={ADATKEZELES} />);

@@ -39,15 +39,18 @@ export const szakaszBlokkok = (szakasz: JogiSzakasz): readonly JogiBlokk[] =>
 export const blokkSzovegei = (blokk: JogiBlokk): string[] => {
   switch (blokk.fajta) {
     case "bekezdes":
-      return [...blokk.sorok];
+      return blokk.sorok.map(egyszeru);
     case "alcim":
-      return [blokk.szoveg];
+      return [egyszeru(blokk.szoveg)];
     case "lista":
-      return [...blokk.elemek];
+      return blokk.elemek.map(egyszeru);
     case "tablazat":
-      return [...blokk.fejlec, ...blokk.sorok.flat()];
+      return [...blokk.fejlec, ...blokk.sorok.flat()].map(egyszeru);
   }
 };
+
+/** A szöveg félkövér jelölés (`**...**`) nélkül: amit az olvasó betűre lát. A lap a jelölésből <strong>-ot rajzol. */
+export const egyszeru = (szoveg: string): string => szoveg.replaceAll("**", "");
 
 /** A szakasz minden szövegdarabja: a cím és a blokkok. */
 export const szakaszSzovegei = (szakasz: JogiSzakasz): string[] => [
@@ -57,13 +60,18 @@ export const szakaszSzovegei = (szakasz: JogiSzakasz): string[] => [
 
 /** A dokumentum minden szövege soronként (vizsgálathoz). */
 export const dokumentumSzovege = (dokumentum: JogiDokumentum): string =>
-  dokumentum.szakaszok.flatMap(szakaszSzovegei).join("\n");
+  [
+    ...(dokumentum.bevezeto ?? []).flatMap(blokkSzovegei),
+    ...dokumentum.szakaszok.flatMap(szakaszSzovegei),
+  ].join("\n");
 
 export type JogiDokumentum = {
   azonosito: "jatekszabalyzat" | "adatkezeles";
   cim: string;
   /** A vázlat-jelzés: csak a még nem végleges dokumentumon áll; a végleges szövegen nincs. */
   vazlat_jelzes?: string;
+  /** A szakaszok előtti rész (alcím, bevezető bekezdések); nem számozott. */
+  bevezeto?: readonly JogiBlokk[];
   szakaszok: readonly JogiSzakasz[];
 };
 
@@ -691,36 +699,634 @@ export const JATEKSZABALYZAT: JogiDokumentum = {
 export const ADATKEZELES: JogiDokumentum = {
   azonosito: "adatkezeles",
   cim: "Adatkezelési tájékoztató",
-  // A TÁJÉKOZTATÓ VÉGLEGES: Balázs szövege, szó szerint (exchange/jatek/Adatkezelesi-tajekoztato-balazs-2026-11-06.docx, 2026-11-06
-  // 09:10 UTC), egy kivétellel (acrobot 44299): a 3. szakasz végén a nyertes nevének közzététele, mert azt ki kell mondani.
+  // A TÁJÉKOZTATÓ VÉGLEGES, 2. VÁLTOZAT: Balázs szövege (acrobot kitöltve, 2026-11-06 11:55 UTC, acrobot 44375) szó szerint a
+  // `Adatkezelesi-acrobot-kitoltve-2026-11-06.md`-ből, a félkövér jelöléssel (`**...**`) együtt. Nincs rajta vázlat-jelzés.
+  bevezeto: [
+    { fajta: "alcim", szoveg: "Az Acropora nyereményjáték résztvevői részére" },
+    {
+      fajta: "bekezdes",
+      sorok: [
+        "Ez a tájékoztató bemutatja, hogyan kezeljük a **https://jatek.acropora.hu** weboldalon meghirdetett, 2026. november 7-én induló nyereményjátékhoz kapcsolódó személyes adatokat.",
+      ],
+    },
+    {
+      fajta: "bekezdes",
+      sorok: [
+        "A játékban való részvétel önkéntes. A részvételhez nem szükséges vásárolnod vagy hírlevélre feliratkoznod.",
+      ],
+    },
+  ],
   szakaszok: [
     {
       cim: "1. Az adatkezelő",
-      bekezdesek: [
-        "Acropora Kft.",
-        "1106 Budapest Pesti Gábor utca 35",
-        "Adószám: 23916229-2-42",
-        "info@acropora.hu",
+      blokkok: [
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "**Acropora Kft.**",
+            "Cím: 1106 Budapest, Pesti Gábor utca 35.",
+            "Adószám: 23916229-2-42",
+            "Email: **info@acropora.hu**",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: ["A továbbiakban: **Adatkezelő** vagy **Szervező**."],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "Adatkezelési kérdéssel és a jogaid gyakorlásával kapcsolatban az info@acropora.hu címen kereshetsz minket.",
+          ],
+        },
       ],
     },
     {
-      cim: "2. Milyen adatokat kezelünk",
-      bekezdesek: [
-        "A nevedet, e-mail-címedet, a beküldött válaszodat, azt, hogy melyik kérdésre és mikor küldted be, valamint a megerősítés tényét és idejét.",
+      cim: "2. Milyen adatokat kezelünk?",
+      blokkok: [
+        { fajta: "alcim", szoveg: "2.1. A nevezéshez kapcsolódó adatok" },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "A játékban való részvétel során az alábbi adatokat kezeljük:",
+          ],
+        },
+        {
+          fajta: "lista",
+          elemek: [
+            "a neved;",
+            "az email-címed;",
+            "a beküldött válaszod;",
+            "az érintett kérdés és heti forduló azonosítója;",
+            "a válasz beküldésének időpontja;",
+            "az email-megerősítés ténye és időpontja;",
+            "a Játékszabályzat elfogadásának és az adatkezelési hozzájárulás megadásának ténye, időpontja és az elfogadott dokumentumok verziója;",
+            "a válasz értékelése és a nevezés érvényessége;",
+            "a heti sorsolásokhoz és a fődíjsorsoláshoz kapcsolódó részvételi azonosítók, megszerzett esélyek és eredmények.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "Az email-megerősítéshez a rendszer ideiglenes megerősítő azonosítót is kezel.",
+          ],
+        },
+        { fajta: "alcim", szoveg: "2.2. A nyertesek további adatai" },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "Ha nyersz, a nyeremény átadásához további adatokat kérhetünk, például:",
+          ],
+        },
+        {
+          fajta: "lista",
+          elemek: [
+            "teljes név;",
+            "kapcsolattartási telefonszám;",
+            "szállítási cím, ha a nyereményt kiszállítjuk;",
+            "az átvétel visszaigazolása;",
+            "a jogosultság ellenőrzéséhez, valamint az esetleges számviteli és adózási kötelezettségek teljesítéséhez szükséges adatok.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "Csak az adott nyeremény átadásához és az alkalmazandó kötelezettségek teljesítéséhez szükséges adatokat kérjük el. A pontos adatkört az adatok bekérésekor közöljük.",
+          ],
+        },
+        { fajta: "alcim", szoveg: "2.3. Kapcsolatfelvétel és panasz" },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "Ha emailben keresel minket, kezeljük az email-címedet, a levelezés tartalmát és az ügy intézéséhez szükséges adatokat.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "Kérjük, ne küldj a játékhoz vagy a kérdésed megválaszolásához nem szükséges személyes adatot.",
+          ],
+        },
       ],
     },
     {
-      cim: "3. Mire használjuk",
-      bekezdesek: [
-        "A játék lebonyolítására: a beküldések rögzítésére, a részvétel megerősítésére, a sorsolásra és a nyertes értesítésére.",
-        "Az e-mail-címedet másra, így hírlevélre sem használjuk. A játékhoz nincs hírlevélre feliratkozás.",
-        "Ha nyersz, a nevedet rövidített alakban (vezetéknév és a keresztnév kezdőbetűje, például Kovács P.) közzétesszük a játék oldalán.",
+      cim: "3. Az adatkezelés célja és jogalapja",
+      blokkok: [
+        { fajta: "alcim", szoveg: "3.1. Nevezés, megerősítés és sorsolás" },
+        { fajta: "bekezdes", sorok: ["Az adatokat azért kezeljük, hogy:"] },
+        {
+          fajta: "lista",
+          elemek: [
+            "rögzítsük a nevezésedet;",
+            "megerősítő emailt küldjünk;",
+            "ellenőrizzük a részvételi feltételek teljesülését;",
+            "értékeljük a válaszodat;",
+            "nyilvántartsuk a megszerzett fődíjesélyeket;",
+            "lebonyolítsuk és dokumentáljuk a sorsolásokat;",
+            "értesítsük a nyerteseket.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "Ennek az adatkezelésnek a jogalapja a **hozzájárulásod**, a GDPR 6. cikk (1) bekezdés a) pontja alapján.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "A hozzájárulást a nevezési felületen található külön, alapértelmezetten üres jelölőnégyzet bejelölésével adhatod meg. A hozzájárulás megadása elkülönül a Játékszabályzat elfogadásától.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "A nevezéshez szükséges adatok és hozzájárulás nélkül nem tudjuk biztosítani a részvételedet.",
+          ],
+        },
+        { fajta: "alcim", szoveg: "3.2. A nyeremény átadása" },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "A nyeremény átadásához szükséges adatokat a Játékszabályzat szerinti kötelezettségünk teljesítése érdekében kezeljük.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "Jogalap: **szerződés teljesítése**, a GDPR 6. cikk (1) bekezdés b) pontja alapján.",
+          ],
+        },
+        {
+          fajta: "alcim",
+          szoveg: "3.3. Számviteli és adózási kötelezettségek",
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "Amennyiben a nyeremény átadása számviteli vagy adózási kötelezettséggel jár, az ehhez szükséges adatokat **jogi kötelezettség teljesítése** alapján kezeljük, a GDPR 6. cikk (1) bekezdés c) pontja szerint.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "Az alkalmazandó jogszabályok: a számvitelről szóló 2000. évi C. törvény (a nyeremények kiadását alátámasztó bizonylatok), valamint a személyi jövedelemadóról szóló 1995. évi CXVII. törvény (a nyereményhez kapcsolódó adókötelezettség, amelyet a Szervező teljesít).",
+          ],
+        },
+        { fajta: "alcim", szoveg: "3.4. Panaszkezelés" },
+        {
+          fajta: "bekezdes",
+          sorok: ["A panaszok intézéséhez szükséges adatkezelés jogalapja:"],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "az Adatkezelő **jogos érdeke** (GDPR 6. cikk (1) bekezdés f) pont), amely a játékkal kapcsolatos kérdések és panaszok kivizsgálásához, megválaszolásához, valamint az esetleges jogviták megelőzéséhez és rendezéséhez fűződik. Csak azokat az adatokat kezeljük, amelyeket a megkeresésben megadsz, vagy amelyek az ügy intézéséhez szükségesek.",
+          ],
+        },
       ],
     },
     {
-      cim: "4. Mennyi ideig őrizzük",
-      bekezdesek: [
-        "Az adataidat a fődíj sorsolását követő maximum 15 nappal töröljük rendszerünkből",
+      cim: "4. A nyertesek nevének közzététele",
+      blokkok: [
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "Az eredmények átlátható bemutatása érdekében a játék weboldalán közzétesszük a nyertes **vezetéknevét és keresztnevének kezdőbetűjét**, például: **Kovács P.**, a részben kitakart email-címét (lásd lent), valamint a megnyert nyereményt és a forduló megjelölését.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "A nyertes email-címét csak részben kitakarva tesszük közzé: a címnek a @ előtti részéből az első két karakter látszik, a többit pontok takarják, a @ utáni rész teljes (például: **ko•••@gmail.com**). Erre azért van szükség, hogy az azonos rövidített nevű nyertesek megkülönböztethetők legyenek. A teljes email-címet, a telefonszámot és a szállítási címet nem tesszük közzé.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "A rövidített név is személyes adat. A honlapon megjelenő eredményt bárki megtekintheti.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "A közzététel jogalapja a **hozzájárulásod** (GDPR 6. cikk (1) bekezdés a) pont), amelyet a nevezési felületen, az adatkezelési hozzájárulás jelölőnégyzetével adsz meg: a hozzájárulás szövege kifejezetten tartalmazza, hogy nyertesség esetén a rövidített neved és a részben kitakart email-címed megjelenik.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "A közzététel időtartama: **2027. január 10-ig**. Ezt követően a nevet és a kitakart email-címet eltávolítjuk az általunk kezelt eredménylistáról.",
+          ],
+        },
+        { fajta: "alcim", szoveg: "A fődíj élő sorsolása" },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "A fődíj sorsolását élőben közvetítjük az **Acropora YouTube csatornáján**. Az adásban a nyertesnek ugyanazok az adatai jelennek meg, mint a weboldalon: a rövidített neve, a részben kitakart email-címe és a nyeremény. Más játékos neve vagy email-címe az adásban nem jelenik meg. A jogalap ugyanaz a hozzájárulás, mint a weboldali közzétételnél.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "Az adás felvétele a csatornán **2027. január 10-ig** nyilvánosan elérhető, ezt követően nem nyilvánossá tesszük. A YouTube szolgáltatója a Google Ireland Limited; a csatornán megjelenő tartalomra a YouTube saját adatkezelési feltételei is vonatkoznak.",
+          ],
+        },
+      ],
+    },
+    {
+      cim: "5. Mennyi ideig őrizzük meg az adatokat?",
+      blokkok: [
+        { fajta: "alcim", szoveg: "5.1. Nevezési adatok" },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "A nevezési adatokat legkésőbb a fődíj 2026. december 26-i sorsolását követő 15. napig, **2027. január 10-ig** töröljük a játék aktív adatbázisából.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "Ez a törlési határidő nem vonatkozik azokra az adatokra, amelyeket a következő pontok szerint, külön célból és jogalapon tovább kell kezelnünk.",
+          ],
+        },
+        { fajta: "alcim", szoveg: "5.2. Nyereményátadási adatok" },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "A kizárólag a nyeremény átadásához szükséges adatokat az átadás lezárását követő **90 nap** elteltével töröljük, kivéve a kötelezően megőrzendő dokumentumokban szereplő adatokat.",
+          ],
+        },
+        { fajta: "alcim", szoveg: "5.3. Számviteli és adózási adatok" },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "A jogszabály alapján megőrzendő bizonylatokat és az azokban szereplő adatokat a számvitelről szóló 2000. évi C. törvény 169. § (2) bekezdése alapján **legalább 8 évig** őrizzük meg.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "Ez nem jelenti a teljes nevezési adatbázis további megőrzését.",
+          ],
+        },
+        { fajta: "alcim", szoveg: "5.4. Panaszok és megkeresések" },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "A kapcsolattartási és panaszkezelési adatokat az ügy lezárását követő **5 évig**, az általános elévülési időnek megfelelően (Ptk. 6:22. §) őrizzük meg.",
+          ],
+        },
+        { fajta: "alcim", szoveg: "5.5. Biztonsági mentések és levelezés" },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "A törlés kiterjed az általunk kezelt, további megőrzést nem igénylő exportokra és másolatokra is.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "A biztonsági mentésekből az adatok a mentés készítésétől számított **legfeljebb 90 napon** belül kerülnek ki. A mentéseket kizárólag helyreállításra használjuk; helyreállítás esetén a korábban esedékessé vált törléseket ismét végrehajtjuk.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "A megerősítő és értesítő levelek elküldött példányait a küldő postafiókból a nevezési adatokkal együtt, **2027. január 10-ig** töröljük. A rendszer a levelekről csak darabszámot naplóz, email-címet nem.",
+          ],
+        },
+      ],
+    },
+    {
+      cim: "6. Kik férhetnek hozzá az adatokhoz?",
+      blokkok: [
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "Az Acropora Kft. munkatársai közül kizárólag azok férhetnek hozzá az adatokhoz, akiknek ez a játék lebonyolításához, a nyeremények átadásához vagy az ügyintézéshez szükséges.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "A szolgáltatás működéséhez az alábbi szolgáltatókat vesszük igénybe:",
+          ],
+        },
+        { fajta: "alcim", szoveg: "Tárhelyszolgáltatás" },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "**Hetzner Online GmbH**",
+            "Cím: Industriestr. 25, 91710 Gunzenhausen, Németország",
+            "Feladata: a játékot kiszolgáló szerver infrastruktúrájának biztosítása.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "Az adatkezelés tényleges helyszíne: **Németország** (Európai Unió).",
+          ],
+        },
+        { fajta: "alcim", szoveg: "Levelezés és levélküldés" },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "**Google Ireland Limited**",
+            "Cím: Gordon House, Barrow Street, Dublin 4, Írország",
+            "Igénybe vett szolgáltatás: **Google Workspace (Gmail)**.",
+            "Feladata: a megerősítő és értesítő emailek küldése, valamint a játékkal kapcsolatos levelezés tárolása.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "A Google a Google Workspace adatfeldolgozási feltételei szerint, adatfeldolgozóként jár el.",
+          ],
+        },
+        { fajta: "alcim", szoveg: "További közreműködők" },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "**FOXPOST Zrt.** (csomagküldés)",
+            "Feladata: a heti nyeremények kiszállítása a nyertes által választott csomagautomatába. Megkapja a nyertes nevét, telefonszámát, email-címét és a választott csomagautomatát.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "**Könyvelés**",
+            "A nyereményekhez kapcsolódó számviteli bizonylatok adataihoz a könyvelésünket végző szolgáltató fér hozzá, kizárólag a számviteli és adózási kötelezettségek teljesítéséhez.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "A személyes adatokat nem értékesítjük, és nem adjuk át más szervezetnek annak saját marketingcéljaira.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "Jogszabályban meghatározott esetben az arra jogosult hatóság részére adatot szolgáltathatunk.",
+          ],
+        },
+      ],
+    },
+    {
+      cim: "7. Nemzetközi adattovábbítás",
+      blokkok: [
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "A szolgáltatók igénybevétele során az adatok feldolgozásának helyét és az esetleges, Európai Gazdasági Térségen kívüli hozzáférést a konkrét szolgáltatási szerződések határozzák meg.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: ["A játékhoz kapcsolódó nemzetközi adattovábbítás:"],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "A tárhelyszolgáltató (Hetzner) az adatokat az Európai Unióban, Németországban kezeli; EU-n kívülre nem továbbítja.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "A Google (levélküldés, YouTube) a szolgáltatás nyújtása során az adatokhoz az Európai Gazdasági Térségen kívül, így az Egyesült Államokban is hozzáférhet. Ennek alapja az EU–USA adatvédelmi keretrendszerről szóló európai bizottsági megfelelőségi határozat (GDPR 45. cikk), amelyhez a Google csatlakozott, valamint az Európai Bizottság által elfogadott általános adatvédelmi kikötések (GDPR 46. cikk (2) bekezdés c) pont). A garanciák a Google Workspace adatfeldolgozási feltételeiben ismerhetők meg (https://workspace.google.com/terms/dpa_terms.html), és kérésedre az info@acropora.hu címen is megküldjük őket.",
+          ],
+        },
+      ],
+    },
+    {
+      cim: "8. Technikai adatok és sütik",
+      blokkok: [
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "A tömeges, automatizált beküldések korlátozásához a rendszer a látogató IP-címét ideiglenesen, a szerver memóriájában használja.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "A sebességkorlátozáshoz kapcsolódó bejegyzés **legfeljebb egy percig** él a szerver memóriájában, ezután automatikusan törlődik. Adatbázisba és naplóba nem kerül.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "Az IP-címet e célból nem kapcsoljuk a nevezési adatbázishoz.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "E technikai adatkezelés jogalapja az Adatkezelőnek a weboldal biztonságos működtetéséhez és a visszaélések megelőzéséhez fűződő **jogos érdeke**, a GDPR 6. cikk (1) bekezdés f) pontja alapján.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "Az érdekmérlegelés lényege: a korlátozás nélkül a nevezési felületet gépi, tömeges beküldéssel el lehetne árasztani, ami a többi játékos esélyeit és a megerősítő levelek kézbesítését veszélyeztetné. Az IP-cím kezelése ehhez a legkisebb szükséges beavatkozás: csak percenkénti számlálásra használjuk, nem tároljuk, nem kapcsoljuk a nevezésedhez, és egy percen belül törlődik. Ezért úgy ítéljük meg, hogy a jogos érdekünk nem sérti aránytalanul a jogaidat. A teljes érdekmérlegelést kérésedre az info@acropora.hu címen megküldjük.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "A játékot kiszolgáló alkalmazások naplóiba IP-cím, név vagy email-cím nem kerül; hozzáférési naplót a játék oldalairól nem vezetünk. Hiba esetén a napló csak a forduló azonosítóját és a hiba fajtáját rögzíti.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "A weboldal **nem használ sütit**, és nem használ más böngészőtárhelyet, látogatottságmérő vagy külső követőkódot sem. A betűtípusokat és a képeket a saját szerverünkről töltjük be.",
+          ],
+        },
+      ],
+    },
+    {
+      cim: "9. Hírlevél és marketing",
+      blokkok: [
+        {
+          fajta: "bekezdes",
+          sorok: ["A játékhoz **nem tartozik hírlevél-feliratkozás**."],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "A nevezéskor megadott email-címedet nem használjuk reklámlevelek, ajánlatok vagy hírlevelek küldésére.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "A részvételt megerősítő, a nyereményről tájékoztató és a játék lebonyolításához szükséges üzeneteket a játékhoz kapcsolódóan küldjük.",
+          ],
+        },
+      ],
+    },
+    {
+      cim: "10. A hozzájárulás visszavonása",
+      blokkok: [
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "A hozzájáruláson alapuló adatkezeléshez adott hozzájárulásodat bármikor, indokolás nélkül visszavonhatod az **info@acropora.hu** címre küldött levélben.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "A visszavonás nem érinti a visszavonás előtt végzett adatkezelés jogszerűségét.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "Ha a sorsolás előtt visszavonod a nevezési adatok kezeléséhez adott hozzájárulásodat, a nevezésedet és a hozzá tartozó esélyeket kivesszük a még le nem zajlott sorsolásokból.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "A visszavonás nem változtatja meg automatikusan a már lezajlott sorsolás eredményét. A más jogalapon, például jogszabályi kötelezettség miatt megőrzendő adatokat a rájuk vonatkozó szabályok szerint kezeljük tovább.",
+          ],
+        },
+      ],
+    },
+    {
+      cim: "11. Milyen jogok illetnek meg?",
+      blokkok: [
+        { fajta: "bekezdes", sorok: ["A GDPR feltételei szerint kérheted:"] },
+        {
+          fajta: "lista",
+          elemek: [
+            "**a hozzáférést:** tájékoztatást és másolatot kérhetsz a rólad kezelt személyes adatokról;",
+            "**a helyesbítést:** kérheted a pontatlan adatok javítását és a hiányos adatok kiegészítését;",
+            "**a törlést:** kérheted az adataid törlését, ha annak feltételei fennállnak;",
+            "**az adatkezelés korlátozását:** a GDPR-ban meghatározott esetekben;",
+            "**az adathordozhatóságot:** az általad rendelkezésünkre bocsátott, hozzájárulás vagy szerződés alapján, automatizáltan kezelt adatok tekintetében.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "A saját helyzeteddel kapcsolatos okból tiltakozhatsz a jogos érdek alapján végzett adatkezelés ellen. Ilyenkor megvizsgáljuk, fennállnak-e az adatkezelés folytatásának jogszabályi feltételei.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "A jogaid nem minden esetben korlátlanok; például a kötelezően megőrzendő bizonylatok törlését a megőrzési idő alatt nem tudjuk teljesíteni.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "Kérésedet az **info@acropora.hu** címre küldheted. Szükség esetén az azonosításodhoz arányos, további információt kérhetünk.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "Indokolatlan késedelem nélkül, főszabály szerint a kérelem beérkezésétől számított **egy hónapon belül** tájékoztatunk az intézkedésről.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "A kérelmek összetettsége vagy száma miatt ez a határidő szükség esetén további két hónappal meghosszabbítható. Erről és az indokokról az első hónapon belül tájékoztatunk.",
+          ],
+        },
+      ],
+    },
+    {
+      cim: "12. Panasz és bírósági jogorvoslat",
+      blokkok: [
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "Ha úgy gondolod, hogy személyes adataid kezelése sérti a jogaidat, megkereshetsz minket az **info@acropora.hu** címen.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "Ettől függetlenül panaszt tehetsz a felügyeleti hatóságnál:",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "**Nemzeti Adatvédelmi és Információszabadság Hatóság – NAIH**",
+            "Cím: 1055 Budapest, Falk Miksa utca 9–11.",
+            "Email: ugyfelszolgalat@naih.hu",
+            "Honlap: https://www.naih.hu",
+          ],
+        },
+        { fajta: "bekezdes", sorok: ["Jogosult vagy bírósághoz is fordulni."] },
+      ],
+    },
+    {
+      cim: "13. Automatizált döntések és adatbiztonság",
+      blokkok: [
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "A játék rendszerében a feleletválasztós és az egyértelmű szabadszavas válaszok értékelése automatizáltan történhet. A kétes szabadszavas válaszokat a Szervező kézzel ellenőrzi.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "A sorsolás a Játékszabályzatban meghatározott véletlenszerű kiválasztási eljárással történik.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "Az értékeléssel vagy a részvétel érvényességével kapcsolatos kifogásodat az info@acropora.hu címen jelezheted.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "Az adatok védelméhez hozzáférési korlátozásokat és a kockázatokhoz igazodó technikai, illetve szervezési intézkedéseket alkalmazunk.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "Az automatizált értékelés a megadott helyes válasszal való egyezést vizsgálja (szabadszavas válasznál a kis- és nagybetűk, az ékezetek és a szóközök eltérésétől eltekintve). Ez nem minősül a GDPR 22. cikke szerinti, rád nézve joghatással járó vagy hasonlóan jelentős mértékben érintő döntésnek. Ha vitatod a válaszod értékelését, kérésedre azt munkatársunk felülvizsgálja.",
+          ],
+        },
+      ],
+    },
+    {
+      cim: "14. A tájékoztató elérhetősége és változásai",
+      blokkok: [
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "A tájékoztató a játék weboldalán, a nevezés előtt és a játék teljes időtartama alatt elérhető.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "Az adatkezelés lényeges változásairól megfelelő tájékoztatást adunk. Ha új adatkezelési célhoz hozzájárulás szükséges, azt külön kérjük.",
+          ],
+        },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "**Közzététel dátuma: 2026. november 6.**",
+            "**Verzió: 1.0**",
+          ],
+        },
       ],
     },
   ],
@@ -730,9 +1336,10 @@ export const JOGI_DOKUMENTUMOK = [JATEKSZABALYZAT, ADATKEZELES] as const;
 
 /** Hány `[KITÖLTENDŐ` jelölés van egy dokumentumban. */
 export const kitoltendoDb = (dokumentum: JogiDokumentum): number =>
-  dokumentum.szakaszok
-    .flatMap(szakaszSzovegei)
-    .reduce((db, szoveg) => db + szoveg.split(KITOLTENDO).length - 1, 0);
+  [
+    ...(dokumentum.bevezeto ?? []).flatMap(blokkSzovegei),
+    ...dokumentum.szakaszok.flatMap(szakaszSzovegei),
+  ].reduce((db, szoveg) => db + szoveg.split(KITOLTENDO).length - 1, 0);
 
 /** Igaz, amig akar egy `[KITÖLTENDŐ` jelölés megmaradt: ez a szöveg NEM mehet ki élesre. */
 export const jogiSzovegVazlat = (): boolean =>

@@ -17,6 +17,9 @@ export function JogiOldal({ dokumentum }: { dokumentum: JogiDokumentum }) {
         </p>
       ) : null}
       <h1>{dokumentum.cim}</h1>
+      {(dokumentum.bevezeto ?? []).map((blokk, i) => (
+        <Blokk key={`b${i}`} blokk={blokk} />
+      ))}
       {dokumentum.szakaszok.map((szakasz) => (
         <section key={szakasz.cim}>
           <h2>{szakasz.cim}</h2>
@@ -29,6 +32,19 @@ export function JogiOldal({ dokumentum }: { dokumentum: JogiDokumentum }) {
   );
 }
 
+/** Egy szöveg a lapon: a `**...**` jelölés félkövér (<strong>), a többi sima szöveg. */
+function Szoveg({ szoveg }: { szoveg: string }) {
+  return (
+    <>
+      {szoveg
+        .split(/\*\*(.+?)\*\*/)
+        .map((resz, i) =>
+          i % 2 === 1 ? <strong key={i}>{resz}</strong> : resz,
+        )}
+    </>
+  );
+}
+
 /** Egy blokk a lapon: bekezdés (a sortörések megmaradnak), alcím, felsorolás vagy táblázat. */
 function Blokk({ blokk }: { blokk: JogiBlokk }) {
   switch (blokk.fajta) {
@@ -38,18 +54,24 @@ function Blokk({ blokk }: { blokk: JogiBlokk }) {
           {blokk.sorok.map((sor, i) => (
             <span key={i}>
               {i > 0 ? <br /> : null}
-              {sor}
+              <Szoveg szoveg={sor} />
             </span>
           ))}
         </p>
       );
     case "alcim":
-      return <h3>{blokk.szoveg}</h3>;
+      return (
+        <h3>
+          <Szoveg szoveg={blokk.szoveg} />
+        </h3>
+      );
     case "lista":
       return (
         <ul>
           {blokk.elemek.map((elem, i) => (
-            <li key={i}>{elem}</li>
+            <li key={i}>
+              <Szoveg szoveg={elem} />
+            </li>
           ))}
         </ul>
       );
