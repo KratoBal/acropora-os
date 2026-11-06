@@ -269,9 +269,10 @@ describe("an entry", () => {
     );
   });
 
-  it("keeps the sent mail's Gmail id on the entry, and nothing when the sender names none (card jatek-level-torles)", async () => {
+  it("keeps the sent mail's Gmail id on the entry, and nothing when the sender names none or another provider's (card jatek-level-torles)", async () => {
     const named = setup();
-    named.sender.send = async () => ({ id: "gmail-1" }) as never;
+    named.sender.send = async () =>
+      ({ id: "gmail-1", provider: "gmail" }) as never;
     await named.service.submit(entry);
     assert.deepEqual(named.entries.get("jatekos@example.com")!.sentMailIds, {
       push: "gmail-1",
@@ -280,6 +281,15 @@ describe("an entry", () => {
     await plain.service.submit(entry);
     assert.equal(
       "sentMailIds" in plain.entries.get("jatekos@example.com")!,
+      false,
+    );
+    // an SMTP sender's Message-ID is not a Gmail id: the erasure would hand it to Gmail's batchDelete (acrobot 44560)
+    const smtp = setup();
+    smtp.sender.send = async () =>
+      ({ id: "<abc@smtp-relay.brevo.com>" }) as never;
+    await smtp.service.submit(entry);
+    assert.equal(
+      "sentMailIds" in smtp.entries.get("jatekos@example.com")!,
       false,
     );
   });

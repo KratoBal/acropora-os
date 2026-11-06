@@ -668,6 +668,7 @@ describe("the game mail erasure", () => {
   it("without a mailbox (no key) it says NOT_CONFIGURED, and the status row counts the tracked mails of closed weeks", async () => {
     const m = mailSetup();
     assert.deepEqual(await m.erasure.mailStatus(), {
+      gameSender: "NOT_CONFIGURED",
       capability: { kind: "DELETE" },
       enabled: true,
       tracked: 2,
@@ -702,6 +703,25 @@ describe("the game mail erasure", () => {
     const status = await off.erasure.mailStatus();
     assert.equal(status.enabled, false);
     assert.deepEqual(status.lastRun, counted);
+    assert.equal(status.gameSender, "NOT_CONFIGURED");
+  });
+
+  it("names the game's own Brevo sender in the status row once its SMTP settings are complete (acrobot 44558)", async () => {
+    const brevo = mailSetup("SEND_ONLY", {
+      JATEK_SMTP_HOST: "smtp-relay.brevo.com",
+      JATEK_SMTP_PORT: "587",
+      JATEK_SMTP_USER: "kitalalt-felhasznalo",
+      JATEK_SMTP_PASS: "kitalalt-jelszo",
+      JATEK_MAIL_FROM: "Acropora Nyereményjáték <jatek@acropora.hu>",
+    });
+    assert.equal((await brevo.erasure.mailStatus()).gameSender, "BREVO");
+    const half = mailSetup("SEND_ONLY", {
+      JATEK_SMTP_HOST: "smtp-relay.brevo.com",
+    });
+    assert.equal(
+      (await half.erasure.mailStatus()).gameSender,
+      "NOT_CONFIGURED",
+    );
   });
 
   it("keeps its progress batch by batch: a failed second batch leaves the first batch's ids off their entries", async () => {

@@ -10,6 +10,7 @@ import {
   CONFIRMATION_SUBJECT,
   LEGACY_CONFIRMATION_SUBJECTS,
 } from "./game-confirmation-mail.js";
+import { gameSmtpProblems } from "./game-smtp-mail.js";
 
 /** What an erased address becomes: no "@", so it is never a player's address, and it marks the row as done. */
 export const GAME_ERASED_PREFIX = "erased:";
@@ -500,6 +501,11 @@ export class GameErasureService {
    * closed weeks are left, and the last scheduled run's counts (no mailbox search here).
    */
   async mailStatus(): Promise<{
+    /**
+     * WHERE THE GAME SENDS NOW (acrobot 44558): BREVO when its own SMTP sender is set (jatek@). Then the new mails are not in
+     * the ticket@ mailbox at all, and the capability below concerns only what left ticket@ before the switch.
+     */
+    gameSender: "BREVO" | "NOT_CONFIGURED";
     capability: SentMailboxCapability;
     enabled: boolean;
     tracked: number;
@@ -516,6 +522,10 @@ export class GameErasureService {
         })
       : [];
     return {
+      gameSender:
+        gameSmtpProblems(this.environment).length === 0
+          ? "BREVO"
+          : "NOT_CONFIGURED",
       capability,
       enabled: gameEraseMailOn(this.environment),
       tracked: rows.reduce((sum, r) => sum + r.sentMailIds.length, 0),

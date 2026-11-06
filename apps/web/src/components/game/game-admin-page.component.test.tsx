@@ -134,6 +134,7 @@ beforeEach(() => {
     due: false,
     waitingForGrandDraw: false,
     mail: {
+      gameSender: "NOT_CONFIGURED",
       capability: { kind: "DELETE" },
       enabled: false,
       tracked: 3,
@@ -457,6 +458,27 @@ describe("GameAdminPage", () => {
     );
     expect(screen.getByTestId("game-erasure")).toHaveTextContent(
       "Adatok törlése: 2027.",
+    );
+  });
+  it("with the game's own Brevo sender, says the new mails are not in ticket@ and the row is about the older ones only", async () => {
+    api.erasure.mockResolvedValue({
+      dueAt: "2027-01-09T23:00:00.000Z",
+      due: false,
+      waitingForGrandDraw: false,
+      mail: {
+        gameSender: "BREVO",
+        capability: { kind: "SEND_ONLY" },
+        enabled: false,
+        tracked: 0,
+        lastRun: null,
+      },
+    });
+    render(<GameAdminPage />);
+    expect(await screen.findByTestId("game-mail-sender")).toHaveTextContent(
+      "A játék levelei Brevón mennek (jatek@)",
+    );
+    expect(screen.getByTestId("game-mail-erasure")).toHaveTextContent(
+      "A ticket@-ről korábban kiment levelek törlése: nem lehetséges: a kulcs csak küldésre szól",
     );
   });
   it("says why the mail does not go out, and on stage gives the link of an unconfirmed entry", async () => {
