@@ -233,6 +233,7 @@ describe("navigation", () => {
           "Mértékegységek",
           "Eszköz-kategóriák",
           "Eszköz-funkciók",
+          "Bérelhető eszközök",
           "Partner-duplikátumok",
           "Partner-átvezetés",
           "Szállítási jelzők feltöltése",
@@ -383,6 +384,7 @@ describe("navigation", () => {
       ["Törzsadatok", "units-of-measure"],
       ["Törzsadatok", "asset-categories"],
       ["Törzsadatok", "asset-functions"],
+      ["Törzsadatok", "rental-equipment"],
       ["Törzsadatok", "partner-duplicates"],
       ["Törzsadatok", "partner-migration"],
       ["Törzsadatok", "shipping-fill"],
@@ -460,6 +462,11 @@ describe("navigation", () => {
     ["/beallitasok/mertekegysegek", "units-of-measure", "Mértékegységek"],
     ["/beallitasok/eszkoz-kategoriak", "asset-categories", "Eszköz-kategóriák"],
     ["/beallitasok/eszkoz-funkciok", "asset-functions", "Eszköz-funkciók"],
+    [
+      "/beallitasok/berelheto-eszkozok",
+      "rental-equipment",
+      "Bérelhető eszközök",
+    ],
     [
       "/beallitasok/partner-duplikatumok",
       "partner-duplicates",
@@ -828,6 +835,8 @@ describe("navigation", () => {
     // AZ ESZKOZ-FUNKCIOK UGYANAZ A FAJTA TETEL, ugyanaz a bontas -- kanban
     // 68add892, 2026-09-22.
     "/beallitasok/eszkoz-funkciok": "settings.manage",
+    // Eszközbérlés S1: a bérelhető eszközök törzse, ugyanaz a jog, mint a végpontoké
+    "/beallitasok/berelheto-eszkozok": "settings.manage",
     // Az ajánlati szövegrészletek (#1582 P1): ugyanaz a jog, ami az írást védi.
     "/beallitasok/ajanlat-szovegreszletek": "quotes.templates.manage",
     // Az ajánlatsablonok (#1582): ugyanaz a jog, ami az írást védi.

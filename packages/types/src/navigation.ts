@@ -711,6 +711,15 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.SETTINGS_MANAGE),
   },
+  {
+    /**
+     * THE RENTAL EQUIPMENT MASTER (task eszkozberles, S1; Balázs, 2026-11-06): one row per rented-out device, under Settings.
+     * The same right as its endpoints (`settings.manage`), so the menu and the calls cannot drift apart.
+     */
+    id: "rental-equipment",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.SETTINGS_MANAGE),
+  },
   NAV_TILE,
 ];
 
