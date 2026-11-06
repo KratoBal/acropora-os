@@ -389,8 +389,8 @@ export class GameService implements OnModuleInit {
   }
 
   /**
-   * What the confirmation mail says about the entry: the question, the answer as the player sees it (a choice by its
-   * label), the closing time. Read for THIS entry at send time (the queue sends later too). A read that fails or finds
+   * What the confirmation mail says about the entry: the question, a choice answer by its label (a free-text answer
+   * is never quoted), the closing time. Read for THIS entry at send time (the queue sends later too). A read that fails or finds
    * nothing leaves the details out: the mail still goes, with the link and the rest.
    */
   private async confirmationDetails(
@@ -404,13 +404,14 @@ export class GameService implements OnModuleInit {
       if (!entry?.question) return {};
       const question = entry.question;
       const options = (question.options as unknown as GameOption[]) ?? [];
-      const answer =
+      // only a choice's label (our own text) goes into the mail; a free-text answer never does (barracuda, #2263)
+      const choiceLabel =
         question.type === "CHOICE"
           ? (options.find((o) => o.id === entry.answer)?.label ?? null)
-          : entry.answer;
+          : null;
       return {
         prompt: question.prompt,
-        answer,
+        choiceLabel,
         closesAt: question.closesAt,
       };
     } catch {

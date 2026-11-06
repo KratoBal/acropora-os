@@ -19,33 +19,17 @@ export interface ConfirmationMailInput {
   readonly link: string;
   /** A heti kerdes szovege; ha nincs, a bekezdes kimarad. */
   readonly prompt?: string | null;
-  /** A beadott valasz, megjeleniteshez (`answerForMail` szuri); ha nincs, a bekezdes kimarad. */
-  readonly answer?: string | null;
+  /**
+   * A VALASZTOS KERDES FELIRATA, amit a jatekos valasztott: a MI szovegunk (az admin allitotta be). A SZABAD SZOVEGES
+   * VALASZ SOHA NEM KERUL A LEVELBE (barracuda, #2263 review): a beadas barmely cimre mehet, tehat egy ilyen valasz
+   * szovege egy idegen postafiokjaba erkezne az Acropora feladojarol, a sajat arculatunkban. Szurot (hossz, link, @)
+   * probaltam eloszor, es a csupasz domain (`nyeremeny-acropora.hu/atvetel`), a telefonszam es a rovid felhivas atment
+   * rajta, a levelezok pedig kattinthatova teszik. Ami nem a mi szovegunk, az nem megy ki: ezert a mezo neve nem
+   * `answer`, hogy egy szabad valaszt veletlenul se lehessen ide adni.
+   */
+  readonly choiceLabel?: string | null;
   /** A kerdes zarasa: a megerosites eddig ervenyes. */
   readonly closesAt?: Date | null;
-}
-
-const MAX_ANSWER_CHARS = 120;
-
-/**
- * A BEADOTT VALASZ, AMIT A LEVELBE ENGEDUNK. A beküldő egy ISMERETLEN címre is küldhet beadást, tehát a válasz szövege
- * az Acropora feladójáról egy idegennek érkezik: egy hosszú vagy linket tartalmazó "válasz" ezen a csatornán átmenne
- * (és a sima szöveges levélben a levelezők a linket kattinthatóvá teszik). Ezért csak a RÖVID, link- és címmentes válasz
- * kerül a levélbe; minden más esetben a válasz nem idézett, a levél többi része változatlan. A szóközök egyre vannak
- * húzva, a vezérlőkarakterek kiesnek.
- */
-export function answerForMail(
-  answer: string | null | undefined,
-): string | null {
-  if (typeof answer !== "string") return null;
-  // eslint-disable-next-line no-control-regex
-  const tiszta = answer
-    .replace(/[\u0000-\u001f\u007f]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (tiszta === "" || tiszta.length > MAX_ANSWER_CHARS) return null;
-  if (/:\/\/|www\.|@|[<>]/i.test(tiszta)) return null;
-  return tiszta;
 }
 
 const BUDAPEST = "Europe/Budapest";
@@ -77,7 +61,7 @@ export function renderConfirmationMail(input: ConfirmationMailInput): {
   text: string;
 } {
   const kerdes = input.prompt?.trim();
-  const valasz = answerForMail(input.answer);
+  const valasz = input.choiceLabel?.trim() || null;
   const nyers = [
     "<h2>Acropora karácsonyi nyereményjáték</h2>",
     "<p>Szia!</p>",

@@ -193,7 +193,7 @@ describe("an entry", () => {
     );
   });
 
-  it("mails the formatted confirmation: the question, the answer, the button with the link and the closing time, and a plain-text twin", async () => {
+  it("mails the formatted confirmation: the question, the button with the link and the closing time, and a plain-text twin", async () => {
     const { service, mails } = setup();
     await service.submit(entry);
     const mail = mails[0]!;
@@ -204,21 +204,35 @@ describe("an entry", () => {
     );
     assert.match(
       mail.html!,
-      /A beküldött válaszod: <strong>acropóra<\/strong>/,
-    );
-    assert.match(
-      mail.html!,
       /data-cta=""><a href="https:\/\/jatek-teszt\.acropora\.hu\/megerosites\?token=/,
     );
     assert.match(mail.html!, /23:59<\/strong> \(budapesti idő\)/);
-    assert.match(mail.text, /A beküldött válaszod: acropóra/);
     assert.match(
       mail.text,
       /https:\/\/jatek-teszt\.acropora\.hu\/megerosites\?token=/,
     );
   });
 
-  it("shows a choice answer by its label, not by its id", async () => {
+  it("never quotes a free-text answer: not the right one, not a link, not a bare domain, not a phone number", async () => {
+    for (const valasz of [
+      "acropóra",
+      "http://rossz.example/megerosit",
+      "nyeremeny-acropora.hu/atvetel",
+      "Nyertél! Hívd: 06 30 123 4567",
+      "Zoanthus sp.",
+    ]) {
+      const { service, mails } = setup();
+      await service.submit({ ...entry, answer: valasz });
+      assert.equal(mails.length, 1, valasz);
+      const mail = mails[0]!;
+      assert.doesNotMatch(mail.html!, /A beküldött válaszod/, valasz);
+      assert.ok(!mail.html!.includes(valasz), valasz);
+      assert.ok(!mail.text.includes(valasz), valasz);
+      assert.match(mail.html!, /megerosites\?token=/);
+    }
+  });
+
+  it("shows a choice answer by its label (our own text), not by its id", async () => {
     const { service, mails } = setup(
       question({
         type: "CHOICE",
@@ -235,18 +249,6 @@ describe("an entry", () => {
       /A beküldött válaszod: <strong>Montipora<\/strong>/,
     );
     assert.doesNotMatch(mails[0]!.html!, /<strong>b<\/strong>/);
-  });
-
-  it("does not quote an answer that carries a link: the mail goes, without that line", async () => {
-    const { service, mails } = setup();
-    await service.submit({
-      ...entry,
-      answer: "http://rossz.example/megerosit",
-    });
-    assert.equal(mails.length, 1);
-    assert.doesNotMatch(mails[0]!.html!, /A beküldött válaszod/);
-    assert.doesNotMatch(mails[0]!.text, /rossz\.example/);
-    assert.match(mails[0]!.html!, /megerosites\?token=/);
   });
 
   it("answers a repeat, a confirmed repeat and the bot trap exactly as a new entry", async () => {

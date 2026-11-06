@@ -8,7 +8,6 @@ import {
   mailHtmlDocument,
 } from "../notifications/mail/mime.js";
 import {
-  answerForMail,
   closingForMail,
   CONFIRMATION_BUTTON,
   renderConfirmationMail,
@@ -18,16 +17,16 @@ import {
   WHAT TURNS THIS RED (the giveaway's confirmation mail, in the "email" profile: acrobot, 2026-11-06 00:52). A body the
   sender's gate would refuse (the builder throws MAIL_HTML_UNSANITIZED when the body is not its own sanitized output);
   the confirm button missing or not a button (the frame writes the inline style only for `data-cta`); the link, the
-  question, the answer or the closing time missing; the closing time in the wrong zone (Budapest, not UTC); a value
-  not escaped; the player's answer quoted when it is long or carries a link or an address (it reaches a stranger's
-  inbox from our sender); the plain-text twin saying something the HTML does not.
+  question, the choice label or the closing time missing; the closing time in the wrong zone (Budapest, not UTC); a
+  value not escaped; a FREE-TEXT answer quoted at all (it reaches a stranger's inbox from our sender, and no filter
+  held: barracuda, #2263 review); the plain-text twin saying something the HTML does not.
 */
 const LINK = "https://jatek-teszt.acropora.hu/megerosites?token=abc_DEF-123";
 const CLOSES = new Date("2026-11-13T22:59:59Z");
 const full = renderConfirmationMail({
   link: LINK,
   prompt: "Melyik a legismertebb zátonyépítő korall?",
-  answer: "Acropora",
+  choiceLabel: "Acropora",
   closesAt: CLOSES,
 });
 
@@ -97,11 +96,11 @@ describe("the confirmation mail body", () => {
     assert.doesNotMatch(full.text, /<|&amp;|&lt;/);
   });
 
-  it("escapes what it is given: a question or an answer with markup does not become markup", () => {
+  it("escapes what it is given: a question or a label with markup does not become markup", () => {
     const m = renderConfirmationMail({
       link: LINK,
       prompt: 'Mi az <b>"a" & b</b>?',
-      answer: "ez & az",
+      choiceLabel: "ez & az",
     });
     assert.ok(!m.html.includes("<b>"));
     assert.match(m.html, /&lt;b&gt;/);
@@ -112,7 +111,7 @@ describe("the confirmation mail body", () => {
     );
   });
 
-  it("without the details it still carries the link, and leaves the question, the answer and the closing out", () => {
+  it("without the details it still carries the link, and leaves the question, the choice line and the closing out", () => {
     const m = renderConfirmationMail({ link: LINK });
     assert.match(m.html, /data-cta=""/);
     assert.doesNotMatch(m.html, /A heti kérdés|A beküldött válaszod|zárásáig/);
@@ -120,46 +119,28 @@ describe("the confirmation mail body", () => {
   });
 });
 
-describe("the answer shown in the mail", () => {
-  it("is quoted when it is short and plain, with the white space collapsed", () => {
-    assert.equal(
-      answerForMail("  Acropora   millepora "),
-      "Acropora millepora",
+describe("the answer in the mail", () => {
+  it("a choice's label is shown (our own text), a missing or blank one leaves the line out", () => {
+    assert.match(
+      renderConfirmationMail({ link: LINK, choiceLabel: "Montipora" }).html,
+      /A beküldött válaszod: <strong>Montipora<\/strong>/,
     );
-    assert.equal(
-      answerForMail("Kék tang (Paracanthurus)"),
-      "Kék tang (Paracanthurus)",
-    );
+    for (const nincs of [undefined, null, "", "   "])
+      assert.doesNotMatch(
+        renderConfirmationMail({ link: LINK, choiceLabel: nincs }).html,
+        /A beküldött válaszod/,
+      );
   });
 
-  it("is NOT quoted when it carries a link, an address or markup, or when it is long or empty", () => {
-    for (const rossz of [
-      "https://rossz.example/megerosit",
-      "nézd meg: www.rossz.example",
-      "ir@pelda.hu",
-      "<b>x</b>",
-      "x".repeat(121),
-      "   ",
-      "",
-    ])
-      assert.equal(answerForMail(rossz), null, rossz);
-    assert.equal(answerForMail(undefined), null);
-    assert.equal(answerForMail(null), null);
-    assert.equal(answerForMail("x".repeat(120)), "x".repeat(120));
-  });
-
-  it("drops control characters", () => {
-    assert.equal(answerForMail("a\u0000b\u0007c\nd"), "a b c d");
-  });
-
-  it("a rejected answer is left out of the mail, the rest of the mail stays", () => {
+  it("the input has no field for a free-text answer: the mail cannot carry one", () => {
+    // a free answer cannot be handed over by a field called `answer`: it does not exist
     const m = renderConfirmationMail({
       link: LINK,
       prompt: "Kérdés?",
-      answer: "http://rossz.example",
+      ...({ answer: "nyeremeny-acropora.hu/atvetel 06 30 123 4567" } as object),
     });
+    assert.doesNotMatch(m.html, /nyeremeny-acropora|06 30/);
+    assert.doesNotMatch(m.text, /nyeremeny-acropora|06 30/);
     assert.doesNotMatch(m.html, /A beküldött válaszod/);
-    assert.doesNotMatch(m.text, /rossz\.example/);
-    assert.match(m.html, /A heti kérdés/);
   });
 });
