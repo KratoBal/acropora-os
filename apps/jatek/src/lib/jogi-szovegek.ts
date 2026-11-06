@@ -12,10 +12,10 @@ export const KITOLTENDO = "[KITÖLTENDŐ";
 /**
  * A DOKUMENTUMOK VERZIÓJA (acrobot 44375): az űrlap ezt küldi el, hogy a játékos melyik szöveget fogadta el, és a szerver ezt
  * tárolja a nevezéssel. A dokumentum szövegének minden változásakor emelni kell, ITT ÉS az api `game-consent.ts`-ében
- * (az api egyik specje a két fájlt összeveti). A szabályzat szövege maga "Verzió: 1.1"-et mond.
+ * (az api egyik specje a két fájlt összeveti). A szabályzat szövege maga "Verzió: 1.2"-t mond.
  */
 export const VERZIO = {
-  szabalyzat: "szabalyzat-1.1",
+  szabalyzat: "szabalyzat-1.2",
   adatkezeles: "adatkezeles-1.1",
 } as const;
 
@@ -337,7 +337,7 @@ export const JATEKSZABALYZAT: JogiDokumentum = {
           ],
         },
         { fajta: "alcim", szoveg: "7.2. Fődíj" },
-        { fajta: "bekezdes", sorok: ["A kampány fődíja:"] },
+        { fajta: "bekezdes", sorok: ["A játék fődíja:"] },
         {
           fajta: "bekezdes",
           sorok: ["1 db Aquaforest AF Nano Tank akvárium."],
@@ -698,7 +698,7 @@ export const JATEKSZABALYZAT: JogiDokumentum = {
           fajta: "bekezdes",
           sorok: [
             "A szabályzat közzétételének dátuma: 2026. november 6.",
-            "Verzió: 1.1.",
+            "Verzió: 1.2.",
           ],
         },
       ],
