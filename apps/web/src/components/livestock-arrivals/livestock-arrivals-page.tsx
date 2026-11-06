@@ -157,7 +157,10 @@ function ArrivalDrawer({
         </div>
       }
     >
-      <div className="space-y-4" data-testid="livestock-arrival-form">
+      <div
+        className="flex-1 space-y-4 overflow-y-auto px-6 py-5"
+        data-testid="livestock-arrival-form"
+      >
         {error ? (
           <Alert variant="danger" title="Nem sikerült" description={error} />
         ) : null}
