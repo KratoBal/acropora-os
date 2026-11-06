@@ -229,9 +229,40 @@ describe("a jogi szoveg vazlatai", () => {
       /a nyertes rövidített neve, például Kovács P\., részben kitakart e-mail-címe, például ko•••@gmail\.com, és a nyereménye/,
     );
     assert.equal(VERZIO.szabalyzat, "szabalyzat-1.1");
-    assert.equal(VERZIO.adatkezeles, "adatkezeles-1.1");
+    assert.equal(VERZIO.adatkezeles, "adatkezeles-1.2");
     assert.match(szoveg(JATEKSZABALYZAT), /Verzió: 1\.1\./);
-    assert.match(tajekoztato, /Verzió: 1\.1/);
+    assert.match(tajekoztato, /Verzió: 1\.2/);
+  });
+
+  // WHAT TURNS THIS RED (acrobot 44556/44557, Balázs 2026-11-06 19:24 UTC): the game's mail goes on Brevo, not on Gmail. The
+  // notice still naming Google Workspace / Gmail as the mail processor, or promising to delete the sent copies from a sending
+  // mailbox (there is none); the Brevo line missing; the Google line in the transfer section still counting the mail.
+  it("the privacy notice names Brevo as the mail processor and no Gmail, and says the sender keeps its own log for a limited time", () => {
+    const tajekoztato = szoveg(ADATKEZELES);
+    assert.match(
+      tajekoztato,
+      /Sendinblue SAS \(Brevo\), Párizs, Franciaország: a megerősítő és értesítő levelek kiküldése\. Az adatokat az Európai Unióban kezeli\./,
+    );
+    assert.doesNotMatch(tajekoztato, /Gmail/);
+    assert.doesNotMatch(
+      tajekoztato,
+      /Igénybe vett szolgáltatás: \*?\*?Google Workspace/,
+    );
+    assert.doesNotMatch(tajekoztato, /A Google \(levélküldés/);
+    assert.match(
+      tajekoztato,
+      /A Google \(YouTube\) a szolgáltatás nyújtása során/,
+    );
+    assert.match(
+      tajekoztato,
+      /A levélküldő szolgáltató a kiküldés naplóját a saját szabályai szerint, korlátozott ideig őrzi\./,
+    );
+    assert.doesNotMatch(tajekoztato, /küldő postafiókból/);
+    // the Google Ireland block that described the mail is gone; the YouTube provider is still named once
+    assert.equal(
+      (tajekoztato.match(/Google Ireland Limited/g) ?? []).length,
+      1,
+    );
   });
 
   it("the e-mail address is for the game and the winner's notice only: no newsletter, anywhere", () => {

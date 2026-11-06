@@ -8,4 +8,4 @@
  * reads both files and fails when they differ.
  */
 export const GAME_RULES_VERSION = "szabalyzat-1.1";
-export const GAME_PRIVACY_VERSION = "adatkezeles-1.1";
+export const GAME_PRIVACY_VERSION = "adatkezeles-1.2";
