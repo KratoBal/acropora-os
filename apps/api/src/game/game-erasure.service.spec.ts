@@ -472,6 +472,7 @@ describe("the erasure's days and switch", () => {
 
   it("the scheduled run passes the switch, and a failure logs no address", async () => {
     const calls: unknown[] = [];
+    const mails: unknown[] = [];
     const scheduler = new GameErasureScheduler({
       run: async (options: unknown) => {
         calls.push(options);
@@ -481,6 +482,7 @@ describe("the erasure's days and switch", () => {
           });
         return {} as never;
       },
+      eraseMail: async (options: unknown) => void mails.push(options),
     } as never);
     const logged: string[] = [];
     (
@@ -491,8 +493,175 @@ describe("the erasure's days and switch", () => {
     scheduler.environment = {};
     assert.equal(await scheduler.runOnce(), "FAILED");
     assert.deepEqual(calls, [{ dryRun: true }, { dryRun: false }]);
+    // the mail step runs with the same switch, also when the data step failed
+    assert.deepEqual(mails, [{ dryRun: true }, { dryRun: false }]);
     assert.equal(logged.length, 1);
     assert.ok(logged[0]!.includes("P2025"));
     assert.ok(!logged[0]!.includes("@"));
+  });
+});
+
+/*
+  THE SENT MAILS OUT OF THE SENDER'S MAILBOX (card jatek-level-torles). What turns this red: an open question's mail
+  removed (its link is still in use); a tracked id not removed, or removed twice; the older, untracked mails not
+  searched by the last closing; a key that may not remove treated as one that may; a dry run removing; the ids left on
+  the entry after removal, or a second run removing again; an audit row with an address or without the counts.
+*/
+describe("the game mail erasure", () => {
+  const CLOSED = new Date("2026-11-14T20:00:00Z");
+  const OPEN_CLOSES = new Date("2026-11-21T20:00:00Z");
+  const NOW = new Date("2026-11-15T10:00:00Z");
+
+  function mailSetup(kind: "DELETE" | "TRASH" | "SEND_ONLY" = "DELETE") {
+    const questions = [
+      { id: "q1", closesAt: CLOSED },
+      { id: "q2", closesAt: OPEN_CLOSES },
+    ];
+    const entries = [
+      { id: "e1", questionId: "q1", sentMailIds: ["m1", "m2"] },
+      { id: "e2", questionId: "q1", sentMailIds: [] as string[] },
+      { id: "e3", questionId: "q2", sentMailIds: ["m9"] },
+    ];
+    const audits: Row[] = [];
+    // the older mails in the mailbox, by when they went out; the search must name the limit
+    const sent = new Map<string, Date>([
+      ["m1", new Date("2026-11-10T10:00:00Z")],
+      ["m2", new Date("2026-11-11T10:00:00Z")],
+      ["regi", new Date("2026-11-09T10:00:00Z")],
+      ["m9", new Date("2026-11-15T09:00:00Z")],
+    ]);
+    const removed: { ids: string[]; kind: string }[] = [];
+    const searches: Date[] = [];
+    const database = {
+      gameQuestion: {
+        findMany: async ({ where }: Row) =>
+          questions.filter(
+            (q) => !where?.closesAt || q.closesAt <= where.closesAt.lte,
+          ),
+      },
+      gameEntry: {
+        findMany: async ({ where }: Row) =>
+          entries.filter(
+            (e) =>
+              where.questionId.in.includes(e.questionId) &&
+              (where.sentMailIds?.isEmpty === false
+                ? e.sentMailIds.length > 0
+                : true),
+          ),
+        update: ({ where, data }: Row) => ({
+          apply: () =>
+            Object.assign(
+              entries.find((e) => e.id === where.id)!,
+              data,
+            ),
+        }),
+      },
+      auditLog: { create: async ({ data }: Row) => void audits.push(data) },
+      $transaction: async (ops: { apply: () => void }[]) => {
+        for (const op of ops) op.apply();
+      },
+    };
+    const mailbox = {
+      capability: async () => ({ kind }),
+      findSent: async (subject: string, before: Date) => {
+        searches.push(before);
+        assert.equal(
+          subject,
+          "Erősítsd meg a játékodat: Acropora karácsonyi nyereményjáték",
+        );
+        return [...sent].filter(([, at]) => at <= before).map(([id]) => id);
+      },
+      remove: async (ids: readonly string[], k: string) => {
+        removed.push({ ids: [...ids], kind: k });
+        for (const id of ids) sent.delete(id);
+        return ids.length;
+      },
+    };
+    const erasure = new GameErasureService(mailbox as never);
+    erasure.database = database as never;
+    erasure.now = () => NOW;
+    return { erasure, entries, audits, removed, searches };
+  }
+
+  it("removes the closed week's tracked mails and the older ones by the last closing, never the open week's", async () => {
+    const m = mailSetup();
+    const result = await m.erasure.eraseMail({ dryRun: false });
+    assert.deepEqual(result, {
+      dryRun: false,
+      capability: "DELETE",
+      tracked: 2,
+      legacy: 1,
+      removed: 3,
+    });
+    assert.deepEqual(m.removed, [
+      { ids: ["m1", "m2", "regi"], kind: "DELETE" },
+    ]);
+    assert.deepEqual(m.searches, [CLOSED]);
+    assert.deepEqual(m.entries.find((e) => e.id === "e1")!.sentMailIds, []);
+    assert.deepEqual(m.entries.find((e) => e.id === "e3")!.sentMailIds, ["m9"]);
+    assert.equal(m.audits.length, 1);
+    assert.equal(m.audits[0]!.action, "game.mail-erased");
+    assert.deepEqual(m.audits[0]!.metadata, {
+      mode: "DELETE",
+      tracked: 2,
+      legacy: 1,
+      removed: 3,
+    });
+    assert.ok(!JSON.stringify(m.audits).includes("@"));
+    // a second run finds nothing left: no removal, no audit row
+    const again = await m.erasure.eraseMail({ dryRun: false });
+    assert.equal(again.removed + again.tracked + again.legacy, 0);
+    assert.equal(m.removed.length, 1);
+    assert.equal(m.audits.length, 1);
+  });
+
+  it("a trash-only key moves them to the Trash; a send-only key removes nothing; a dry run counts and removes nothing", async () => {
+    const trash = mailSetup("TRASH");
+    await trash.erasure.eraseMail({ dryRun: false });
+    assert.equal(trash.removed[0]!.kind, "TRASH");
+
+    const sendOnly = mailSetup("SEND_ONLY");
+    const none = await sendOnly.erasure.eraseMail({ dryRun: false });
+    assert.deepEqual(none, {
+      dryRun: false,
+      capability: "SEND_ONLY",
+      tracked: 2,
+      legacy: 0,
+      removed: 0,
+    });
+    assert.deepEqual(sendOnly.removed, []);
+    assert.deepEqual(sendOnly.searches, []);
+
+    const dry = mailSetup();
+    const counted = await dry.erasure.eraseMail({ dryRun: true });
+    assert.deepEqual(counted, {
+      dryRun: true,
+      capability: "DELETE",
+      tracked: 2,
+      legacy: 1,
+      removed: 0,
+    });
+    assert.deepEqual(dry.removed, []);
+    assert.deepEqual(dry.entries.find((e) => e.id === "e1")!.sentMailIds, [
+      "m1",
+      "m2",
+    ]);
+    assert.equal(dry.audits.length, 0);
+  });
+
+  it("without a mailbox (no key) it says NOT_CONFIGURED, and the status row counts the tracked mails of closed weeks", async () => {
+    const m = mailSetup();
+    assert.deepEqual(await m.erasure.mailStatus(), {
+      capability: { kind: "DELETE" },
+      tracked: 2,
+    });
+    const bare = new GameErasureService();
+    bare.database = (m.erasure as unknown as { database: unknown })
+      .database as never;
+    bare.now = () => NOW;
+    assert.equal(
+      (await bare.eraseMail({ dryRun: false })).capability,
+      "NOT_CONFIGURED",
+    );
   });
 });

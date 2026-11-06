@@ -25,6 +25,7 @@ import {
   gameApi,
   type GameDrawView,
   type GameEntryView,
+  type GameErasurePreview,
   type GameMailQueue,
   type GameQuestionView,
 } from "@/lib/api/game";
@@ -567,6 +568,68 @@ function MailQueue({
   );
 }
 
+/** Mit tehet a küldő kulcsa a kiment levelekkel, egy mondatban (kártya jatek-level-torles). */
+export function mailErasureText(
+  capability: GameErasurePreview["mail"]["capability"],
+): string {
+  switch (capability.kind) {
+    case "DELETE":
+      return "lehetséges (végleges törlés)";
+    case "TRASH":
+      return "csak kukába (a Gmail 30 nap után üríti; a 12-11 után kukázott leveleknél a kukát a határidő előtt üríteni kell)";
+    case "SEND_ONLY":
+      return "nem lehetséges: a kulcs csak küldésre szól";
+    case "NOT_CONFIGURED":
+      return "nem lehetséges: nincs levélküldő kulcs";
+    case "ERROR":
+      return `nem mérhető (${capability.code})`;
+  }
+}
+
+/**
+ * AZ ADATTÖRLÉS ÁLLAPOTA (kártyák bc0ca668, jatek-level-torles; a tájékoztató: 2027-01-10): mikor törlődnek a játékosok
+ * adatai, és törölhetők-e a kiment levelek elküldött példányai. Csak olvas.
+ */
+function ErasureStatus({ token }: { token: string }) {
+  const [preview, setPreview] = useState<GameErasurePreview | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    gameApi
+      .erasure(token)
+      .then(setPreview)
+      .catch((cause: unknown) => setError(errorText(cause)));
+  }, [token]);
+  if (error)
+    return (
+      <Alert
+        variant="danger"
+        title="Az adattörlés állapota nem tölthető be"
+        description={error}
+      />
+    );
+  if (!preview) return null;
+  return (
+    <section
+      className="space-y-1 rounded-2xl border border-pilot-grey-200 bg-white px-5 py-4 text-sm"
+      data-testid="game-erasure"
+    >
+      <p>
+        Adatok törlése:{" "}
+        {preview.due ? "esedékes" : formatDateTimeHu(preview.dueAt)}
+        {preview.waitingForGrandDraw
+          ? " (a fődíj sorsolása még nem futott le)"
+          : ""}
+      </p>
+      <p data-testid="game-mail-erasure">
+        Levelek törlése: {mailErasureText(preview.mail.capability)}
+        {preview.mail.tracked > 0
+          ? ` · lezárt hetek levelei törlésre várnak: ${preview.mail.tracked}`
+          : ""}
+      </p>
+    </section>
+  );
+}
+
 /** A sorsolások: új heti vagy karácsonyi sorsolás, és a régi újrafuttatása ugyanazzal a maggal. */
 function Draws({
   token,
@@ -859,6 +922,7 @@ export function GameAdminPage() {
         </section>
       )}
       <MailQueue token={token} canManage={canManage} />
+      <ErasureStatus token={token} />
       {questions ? (
         <Draws token={token} questions={questions} canManage={canManage} />
       ) : null}

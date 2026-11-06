@@ -11853,6 +11853,10 @@ model GameEntry {
   lastMailedAt     DateTime?
   /// A napi levél-plafon fölött (JATEK_MAIL_DAILY_CAP) a beküldés megvan, a levél vár: mióta. A kezelő látja és küldi ki.
   mailPendingSince DateTime?
+  /// A kiment megerősítő levelek Gmail-azonosítója (kártya jatek-level-torles): az elküldött példányokat a törlés PONTOSAN
+  /// ezek alapján veszi ki a küldő postafiókból (a tájékoztató: 2027-01-10-ig), utána üres. A régi soroknál üres: azokat a
+  /// tárgy szerinti, bájtra ellenőrzött keresés éri el.
+  sentMailIds      String[]     @default([])
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 

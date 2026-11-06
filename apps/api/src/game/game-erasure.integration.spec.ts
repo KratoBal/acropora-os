@@ -207,6 +207,42 @@ describe(
       assert.ok(audit);
       assert.ok(!JSON.stringify(audit.metadata).includes("@"));
 
+      // the sent mails (card jatek-level-torles): an id pushed on the entry, found by the scalar-list filter, cleared
+      const tracked = entries.find((e) => e.email.startsWith("erased:"))!;
+      await prisma.gameEntry.update({
+        where: { id: tracked.id },
+        data: { sentMailIds: { push: "it-gmail-1" } },
+      });
+      await prisma.gameEntry.update({
+        where: { id: tracked.id },
+        data: { sentMailIds: { push: "it-gmail-2" } },
+      });
+      const removed: string[][] = [];
+      const withMailbox = new GameErasureService({
+        capability: async () => ({ kind: "DELETE" }),
+        findSent: async () => [],
+        remove: async (ids: readonly string[]) => {
+          removed.push([...ids]);
+          return ids.length;
+        },
+      } as never);
+      withMailbox.now = erasure.now;
+      // only this suite's questions: the filter is the real one, the other suites' rows are not in the tracked set
+      const mail = await withMailbox.eraseMail({ dryRun: false });
+      assert.ok(
+        removed[0]?.includes("it-gmail-1") &&
+          removed[0]?.includes("it-gmail-2"),
+      );
+      assert.equal(mail.removed >= 2, true);
+      const cleared = await prisma.gameEntry.findUnique({
+        where: { id: tracked.id },
+        select: { sentMailIds: true },
+      });
+      assert.deepEqual(cleared?.sentMailIds, []);
+      await prisma.auditLog.deleteMany({
+        where: { action: "game.mail-erased", entityId: "sent-mail" },
+      });
+
       const again = await erasure.run({ dryRun: false });
       assert.equal(
         again.entriesErased +

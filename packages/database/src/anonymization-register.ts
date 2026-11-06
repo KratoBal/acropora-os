@@ -1157,6 +1157,7 @@ export const ANONYMIZATION_REGISTER: Readonly<
     answer: "freeText",
     manualById: "identifier",
     confirmTokenHash: "passwordHash",
+    sentMailIds: "identifier",
   },
   GameMailDay: {
     day: "business",

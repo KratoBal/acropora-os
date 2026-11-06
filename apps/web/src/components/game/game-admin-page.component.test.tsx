@@ -18,6 +18,7 @@ const api = vi.hoisted(() => ({
   draw: vi.fn(),
   verify: vi.fn(),
   mailQueue: vi.fn(),
+  erasure: vi.fn(),
   sendQueued: vi.fn(),
   testLink: vi.fn(),
   uploadPrizeImage: vi.fn(),
@@ -121,6 +122,12 @@ beforeEach(() => {
     blocked: "path-off",
     lastError: null,
     testLinks: true,
+  });
+  api.erasure.mockReset().mockResolvedValue({
+    dueAt: "2027-01-09T23:00:00.000Z",
+    due: false,
+    waitingForGrandDraw: false,
+    mail: { capability: { kind: "SEND_ONLY" }, tracked: 3 },
   });
   api.testLink.mockReset().mockResolvedValue({
     link: "https://jatek-teszt.acropora.hu/megerosites?token=abc",
@@ -362,6 +369,16 @@ describe("GameAdminPage", () => {
       within(queue).getByRole("button", { name: "Várakozó levelek kiküldése" }),
     );
     await waitFor(() => expect(api.sendQueued).toHaveBeenCalledWith("t"));
+  });
+  it("shows when the data goes and whether the sent mails can be removed (card jatek-level-torles)", async () => {
+    render(<GameAdminPage />);
+    const row = await screen.findByTestId("game-mail-erasure");
+    expect(row).toHaveTextContent(
+      "Levelek törlése: nem lehetséges: a kulcs csak küldésre szól · lezárt hetek levelei törlésre várnak: 3",
+    );
+    expect(screen.getByTestId("game-erasure")).toHaveTextContent(
+      "Adatok törlése: 2027.",
+    );
   });
   it("says why the mail does not go out, and on stage gives the link of an unconfirmed entry", async () => {
     api.entries.mockResolvedValue([

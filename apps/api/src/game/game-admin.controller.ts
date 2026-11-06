@@ -148,8 +148,12 @@ export class GameAdminController {
    */
   @Get("erasure")
   @RequirePermissions(PERMISSIONS.GAME_VIEW)
-  erasurePreview() {
-    return this.erasure.run({ dryRun: true });
+  async erasurePreview() {
+    return {
+      ...(await this.erasure.run({ dryRun: true })),
+      // what the sender's key may do with the sent copies (card jatek-level-torles), without searching the mailbox
+      mail: await this.erasure.mailStatus(),
+    };
   }
 
   /** A confirmation link without the mail, for a stage round only (JATEK_TEST_LINKS=on; acrobot 44026). */
