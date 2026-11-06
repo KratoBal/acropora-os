@@ -697,7 +697,7 @@ export const JATEKSZABALYZAT: JogiDokumentum = {
         {
           fajta: "bekezdes",
           sorok: [
-            "A szabályzat közzétételének dátuma: 2026. november 6..",
+            "A szabályzat közzétételének dátuma: 2026. november 6.",
             "Verzió: 1.1.",
           ],
         },
