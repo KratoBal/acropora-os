@@ -1,13 +1,17 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { liveAnimalKindSubtrees } from "../integrations/medusa/medusa-livestock.policy.js";
 import {
   livestockArrivalDay,
   livestockArrivalView,
+  livestockProductOption,
 } from "./livestock-arrivals.repository.js";
 
 /*
-  WHAT TURNS THIS RED. The expected day shifting by one around midnight (a `@db.Date` column is stored as midnight UTC of the
+  WHAT TURNS THIS RED. The product picker's kind taken from anything but the category subtree (or guessed when the product sits
+  under two roots or none: a wrong kind would pre-select the wrong acclimatisation advice later); a common name not trimmed or a
+  blank one shown. The expected day shifting by one around midnight (a `@db.Date` column is stored as midnight UTC of the
   day: reading it through a local timezone would move the day), the product's name not reaching the list, a missing link
   shown as an empty name, a timestamp not in ISO form.
 */
@@ -60,6 +64,70 @@ describe("the arrival as the API shows it", () => {
     assert.equal(
       livestockArrivalDay("2026-11-13").toISOString(),
       "2026-11-13T00:00:00.000Z",
+    );
+  });
+});
+
+describe("the product picker's options", () => {
+  // Korallok > SPS; Halak > Bohóchalak; Gerinctelenek
+  const subtrees = liveAnimalKindSubtrees([
+    { id: "c-coral", name: "Korallok", parentId: null },
+    { id: "c-sps", name: "SPS", parentId: "c-coral" },
+    { id: "c-fish", name: "Halak", parentId: null },
+    { id: "c-clown", name: "Bohóchalak", parentId: "c-fish" },
+    { id: "c-invert", name: "Gerinctelenek", parentId: null },
+  ] as never);
+  const product = (categoryIds: string[], magyarNev: string | null = null) => ({
+    id: "p1",
+    name: "Acropora tenuis",
+    datasheet: magyarNev === null ? null : { magyarNev },
+    categories: categoryIds.map((categoryId) => ({ categoryId })),
+  });
+
+  it("derives the kind from the category subtree, through a child category too", () => {
+    assert.equal(
+      livestockProductOption(product(["c-sps"]), subtrees).kind,
+      "CORAL",
+    );
+    assert.equal(
+      livestockProductOption(product(["c-clown"]), subtrees).kind,
+      "FISH",
+    );
+    assert.equal(
+      livestockProductOption(product(["c-invert"]), subtrees).kind,
+      "INVERTEBRATE",
+    );
+  });
+
+  it("leaves the kind null when the product sits under more than one root, or under none of them", () => {
+    assert.equal(
+      livestockProductOption(product(["c-sps", "c-clown"]), subtrees).kind,
+      null,
+    );
+    assert.equal(
+      livestockProductOption(product(["elsewhere"]), subtrees).kind,
+      null,
+    );
+    assert.equal(livestockProductOption(product([]), subtrees).kind, null);
+  });
+
+  it("carries the name and the trimmed common name, and null for a blank or missing one", () => {
+    assert.deepEqual(
+      livestockProductOption(product(["c-sps"], "  Tenuis korall "), subtrees),
+      {
+        id: "p1",
+        name: "Acropora tenuis",
+        commonName: "Tenuis korall",
+        kind: "CORAL",
+      },
+    );
+    assert.equal(
+      livestockProductOption(product(["c-sps"], "   "), subtrees).commonName,
+      null,
+    );
+    assert.equal(
+      livestockProductOption(product(["c-sps"]), subtrees).commonName,
+      null,
     );
   });
 });

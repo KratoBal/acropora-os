@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { BadRequestException, NotFoundException } from "@nestjs/common";
-import type { LivestockArrival } from "@acropora/types";
+import type { LivestockArrival, LivestockArrivalKind } from "@acropora/types";
 
 import type {
   LivestockArrivalFilters,
@@ -18,7 +18,10 @@ import {
   WHAT TURNS THIS RED (the live animal arrivals' rules, card f4e4832b S2). A day that has the right shape and is not a day
   (`2026-02-30`) stored; a pre-registration on an arrival that is already here or cancelled; a closing status that leaves the
   old pre-registration tick on; a tick set explicitly on a closed arrival accepted; a product that does not exist linked;
-  an unrelated edit asked to look the stored product up again; an explicit null not clearing a link, a quantity or a note;
+  an unrelated edit asked to look the stored product up again; a product that is not a live animal linked (the check is
+  the live animal roots, the same source as the shop's pickup-only rule); an explicit null not clearing a link, a quantity or a note;
+  a new link to an archived or inactive product accepted (the picker would not offer it); an arrival whose kind differs from the
+  product's unambiguous kind saved, on create, on a new link or on a kind edit of a stored link; a stored archived link refused again;
   a blank label saved; "upcoming" counted from UTC instead of the shop's Budapest day.
 */
 const stored = (over: Partial<LivestockArrival> = {}): LivestockArrival => ({
@@ -39,13 +42,17 @@ const stored = (over: Partial<LivestockArrival> = {}): LivestockArrival => ({
 
 function setup(
   initial: LivestockArrival | null = stored(),
-  products: readonly string[] = ["p1"],
+  products: Record<
+    string,
+    { kind: LivestockArrivalKind | null; offered: boolean }
+  > = { p1: { kind: null, offered: true } },
 ) {
   const calls = {
     list: [] as LivestockArrivalFilters[],
     created: [] as { data: LivestockArrivalWrite; by: string | null }[],
     updated: [] as LivestockArrivalWrite[],
     productChecks: [] as string[],
+    productOptions: [] as (string | undefined)[],
   };
   const repository = {
     list: async (filters: LivestockArrivalFilters) => {
@@ -53,13 +60,17 @@ function setup(
       return [stored()];
     },
     get: async () => initial,
-    productExists: async (id: string) => {
+    liveAnimalProduct: async (id: string) => {
       calls.productChecks.push(id);
-      return products.includes(id);
+      return products[id] ?? null;
     },
     create: async (data: LivestockArrivalWrite, by: string | null) => {
       calls.created.push({ data, by });
       return stored({ ...data, id: "new" });
+    },
+    productOptions: async (q: string | undefined) => {
+      calls.productOptions.push(q);
+      return [{ id: "p1", name: "Zoanthus", commonName: null, kind: "CORAL" }];
     },
     update: async (_id: string, data: LivestockArrivalWrite) => {
       calls.updated.push(data);
@@ -122,7 +133,7 @@ describe("create", () => {
     assert.equal(calls.created.length, 2);
   });
 
-  it("asks whether a linked product exists, and refuses one that does not", async () => {
+  it("asks whether a linked product is a live animal, and refuses one that is not (or does not exist)", async () => {
     const { service, calls } = setup();
     await service.create({ ...input, productId: "p1" }, null);
     assert.deepEqual(calls.productChecks, ["p1"]);
@@ -169,9 +180,9 @@ describe("update", () => {
   });
 
   it("does not ask again about the stored product when it is unchanged, but does for a new one", async () => {
-    const { service, calls } = setup(stored({ productId: "removed-since" }), [
-      "p2",
-    ]);
+    const { service, calls } = setup(stored({ productId: "removed-since" }), {
+      p2: { kind: null, offered: true },
+    });
     await service.update("a1", { label: "Új név" });
     assert.deepEqual(calls.productChecks, []);
     await assert.rejects(
@@ -180,6 +191,56 @@ describe("update", () => {
     );
     await service.update("a1", { productId: "p2" });
     assert.deepEqual(calls.productChecks, ["ghost", "p2"]);
+  });
+
+  it("a NEW link needs a product the picker offers: an archived or inactive one is refused, a stored archived link stays", async () => {
+    const { service, calls } = setup(stored({ productId: "old" }), {
+      old: { kind: "FISH", offered: false },
+      gone: { kind: "FISH", offered: false },
+      live: { kind: "FISH", offered: true },
+    });
+    await assert.rejects(
+      service.update("a1", { productId: "gone" }),
+      BadRequestException,
+    );
+    await service.update("a1", { label: "Új név" });
+    await service.update("a1", { productId: "old" });
+    await service.update("a1", { productId: "live" });
+    assert.deepEqual(calls.productChecks, ["gone", "live"]);
+    assert.equal(calls.updated.length, 3);
+  });
+
+  it("the arrival's kind must match the product's kind when that is unambiguous, on create and on a new link", async () => {
+    const { service, calls } = setup(stored({ kind: "FISH" }), {
+      coral: { kind: "CORAL", offered: true },
+      mixed: { kind: null, offered: true },
+    });
+    await assert.rejects(
+      service.create({ ...input, kind: "FISH", productId: "coral" }, null),
+      BadRequestException,
+    );
+    await assert.rejects(
+      service.update("a1", { productId: "coral" }),
+      BadRequestException,
+    );
+    await service.create({ ...input, kind: "CORAL", productId: "coral" }, null);
+    await service.create({ ...input, kind: "FISH", productId: "mixed" }, null);
+    assert.equal(calls.created.length, 2);
+    assert.equal(calls.updated.length, 0);
+  });
+
+  it("changing the kind of an arrival with a stored link checks the kind against the link, even an archived one", async () => {
+    const { service, calls } = setup(
+      stored({ kind: "CORAL", productId: "old" }),
+      { old: { kind: "CORAL", offered: false } },
+    );
+    await assert.rejects(
+      service.update("a1", { kind: "FISH" }),
+      BadRequestException,
+    );
+    await service.update("a1", { kind: "CORAL", note: "x" });
+    assert.deepEqual(calls.productChecks, ["old"]);
+    assert.equal(calls.updated.length, 1);
   });
 
   it("closing the arrival (arrived, cancelled) takes the pre-registration tick off by itself", async () => {
@@ -223,6 +284,17 @@ describe("update", () => {
       NotFoundException,
     );
     await assert.rejects(setup(null).service.get("x"), NotFoundException);
+  });
+});
+
+describe("productOptions", () => {
+  it("hands the search to the repository as it is, and returns its options", async () => {
+    const { service, calls } = setup();
+    const options = await service.productOptions("zoa");
+    assert.deepEqual(calls.productOptions, ["zoa"]);
+    assert.equal(options[0]!.kind, "CORAL");
+    await service.productOptions(undefined);
+    assert.deepEqual(calls.productOptions, ["zoa", undefined]);
   });
 });
 

@@ -504,6 +504,12 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     visibility: permission(PERMISSIONS.MORTALITY_VIEW),
   },
   {
+    /** Az élő állat érkezések (kártya f4e4832b, V2.6 S2): a készletet vezetők látják; a telefonra most nem kerül. */
+    id: "livestock-arrivals",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.INVENTORY_VIEW),
+  },
+  {
     id: "unas-connection",
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.SETTINGS_MANAGE),

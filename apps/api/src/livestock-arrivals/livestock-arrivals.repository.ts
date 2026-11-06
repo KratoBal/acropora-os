@@ -4,8 +4,14 @@ import { Prisma, prisma } from "@acropora/database";
 import type {
   LivestockArrival,
   LivestockArrivalKind,
+  LivestockArrivalProductOption,
   LivestockArrivalStatus,
 } from "@acropora/types";
+
+import {
+  deriveLivestockKind,
+  liveAnimalKindSubtrees,
+} from "../integrations/medusa/medusa-livestock.policy.js";
 
 /** What the repository writes: the service has already checked every value. */
 export interface LivestockArrivalWrite {
@@ -70,6 +76,30 @@ export function livestockArrivalView(row: Row): LivestockArrival {
 export const livestockArrivalDay = (value: string) =>
   new Date(`${value}T00:00:00.000Z`);
 
+/** The search offers at most this many products (the mortality log's picker does the same). */
+export const PRODUCT_OPTION_LIMIT = 20;
+
+/** A product row as the picker's option, with the kind its categories give (null when ambiguous or none). Exported for the test. */
+export function livestockProductOption(
+  row: {
+    id: string;
+    name: string;
+    datasheet: { magyarNev: string | null } | null;
+    categories: readonly { categoryId: string }[];
+  },
+  subtrees: ReturnType<typeof liveAnimalKindSubtrees>,
+): LivestockArrivalProductOption {
+  return {
+    id: row.id,
+    name: row.name,
+    commonName: row.datasheet?.magyarNev?.trim() || null,
+    kind: deriveLivestockKind(
+      row.categories.map((c) => c.categoryId),
+      subtrees,
+    ),
+  };
+}
+
 @Injectable()
 export class LivestockArrivalsRepository {
   /**
@@ -107,8 +137,86 @@ export class LivestockArrivalsRepository {
     return row ? livestockArrivalView(row) : null;
   }
 
-  async productExists(productId: string): Promise<boolean> {
-    return (await prisma.product.count({ where: { id: productId } })) > 0;
+  /**
+   * THE LIVE ANIMAL PRODUCTS: the three roots' whole subtrees (Korallok, Halak, Gerinctelenek), the same source as the shop's
+   * pickup-only rule and the mortality log. Read per call (a few hundred categories), so a renamed or moved category is
+   * followed without a restart.
+   */
+  private async kindSubtrees() {
+    return liveAnimalKindSubtrees(
+      await prisma.category.findMany({
+        select: { id: true, name: true, parentId: true },
+      }),
+    );
+  }
+
+  /**
+   * THE LINK'S FACTS: null unless the product exists under one of the three live animal roots; otherwise the kind its
+   * categories give (null when ambiguous) and whether the picker would offer it (active, not archived).
+   */
+  async liveAnimalProduct(
+    productId: string,
+  ): Promise<{ kind: LivestockArrivalKind | null; offered: boolean } | null> {
+    const subtrees = await this.kindSubtrees();
+    const ids = [...subtrees.values()].flatMap((set) => [...set]);
+    if (ids.length === 0) return null;
+    const row = await prisma.product.findFirst({
+      where: {
+        id: productId,
+        categories: { some: { categoryId: { in: ids } } },
+      },
+      select: {
+        isActive: true,
+        archivedAt: true,
+        categories: { select: { categoryId: true } },
+      },
+    });
+    if (!row) return null;
+    return {
+      kind: deriveLivestockKind(
+        row.categories.map((c) => c.categoryId),
+        subtrees,
+      ),
+      offered: row.isActive && row.archivedAt === null,
+    };
+  }
+
+  /** At most `PRODUCT_OPTION_LIMIT` live animal products matching the search, by name, A to Z. */
+  async productOptions(
+    q: string | undefined,
+  ): Promise<LivestockArrivalProductOption[]> {
+    const subtrees = await this.kindSubtrees();
+    const ids = [...subtrees.values()].flatMap((set) => [...set]);
+    if (ids.length === 0) return [];
+    const needle = q?.trim();
+    const rows = await prisma.product.findMany({
+      where: {
+        isActive: true,
+        archivedAt: null,
+        categories: { some: { categoryId: { in: ids } } },
+        ...(needle
+          ? {
+              OR: [
+                { name: { contains: needle, mode: "insensitive" } },
+                {
+                  datasheet: {
+                    magyarNev: { contains: needle, mode: "insensitive" },
+                  },
+                },
+              ],
+            }
+          : {}),
+      },
+      orderBy: [{ name: "asc" }, { id: "asc" }],
+      take: PRODUCT_OPTION_LIMIT,
+      select: {
+        id: true,
+        name: true,
+        datasheet: { select: { magyarNev: true } },
+        categories: { select: { categoryId: true } },
+      },
+    });
+    return rows.map((row) => livestockProductOption(row, subtrees));
   }
 
   async create(

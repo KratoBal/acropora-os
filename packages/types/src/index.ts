@@ -278,6 +278,7 @@ export type {
   LivestockArrival,
   LivestockArrivalKind,
   LivestockArrivalListResponse,
+  LivestockArrivalProductOption,
   LivestockArrivalStatus,
 } from "./livestock-arrival.js";
 export type {

@@ -115,3 +115,8 @@ export class UpdateLivestockArrivalDto {
   @MaxLength(LIVESTOCK_ARRIVAL_LIMITS.note.max)
   note?: string | null;
 }
+
+/** The product picker's search. */
+export class LivestockArrivalOptionQueryDto {
+  @IsOptional() @IsString() @MaxLength(200) q?: string;
+}
