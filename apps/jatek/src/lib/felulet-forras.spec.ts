@@ -47,7 +47,9 @@ describe("a felulet forrasa", () => {
     const oldal = readFileSync(join(SRC, "app", "page.tsx"), "utf8");
     assert.match(
       oldal,
-      /api\.aktualis\(\s*latogatoIp\(\s*\w+\.get\("x-forwarded-for"\)\s*,?\s*\)\s*,?\s*\)/,
+      /const ip = latogatoIp\(\s*\w+\.get\("x-forwarded-for"\)\s*,?\s*\)/,
     );
+    assert.match(oldal, /api\.aktualis\(\s*ip\s*,?\s*\)/);
+    assert.match(oldal, /api\.nyertesek\(\s*ip\s*,?\s*\)/);
   });
 });
