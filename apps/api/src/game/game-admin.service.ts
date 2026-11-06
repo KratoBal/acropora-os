@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 
-import { HttpStatus, Injectable } from "@nestjs/common";
+import { HttpException, HttpStatus, Injectable } from "@nestjs/common";
 import { Prisma, prisma } from "@acropora/database";
 import {
   christmasCandidates,
@@ -12,7 +12,12 @@ import {
   type GameOption,
 } from "@acropora/types";
 
-import { gameError, GameService } from "./game.service.js";
+import {
+  gameError,
+  GameService,
+  maskPublicEmail,
+  publicWinnerName,
+} from "./game.service.js";
 
 /** The admin's question: what the form sends (create and edit alike). */
 export interface GameQuestionInput {
@@ -290,24 +295,12 @@ export class GameAdminService {
     );
   }
 
-  /** A new draw: the entries as they are now, a fresh seed; kept with what it saw. */
-  async draw(
-    input: { kind: "WEEKLY" | "CHRISTMAS"; questionId?: string | null },
-    userId: string,
-  ) {
-    if (input.kind !== "WEEKLY" && input.kind !== "CHRISTMAS")
-      throw gameError(
-        HttpStatus.BAD_REQUEST,
-        "INVALID_DRAW",
-        "A sorsolás heti vagy karácsonyi.",
-      );
-    if (input.kind === "WEEKLY" && !input.questionId)
-      throw gameError(
-        HttpStatus.BAD_REQUEST,
-        "INVALID_DRAW",
-        "A heti sorsoláshoz kérdés kell.",
-      );
-    const questionId = input.kind === "WEEKLY" ? input.questionId! : null;
+  /**
+   * THE DRAW'S TIMING RULE, one place for the admin draw and the live page: a weekly draw only after the question closed, the
+   * Christmas draw only after the last question closed (the first draw is final, so a draw while answers can still come
+   * would close the week for good).
+   */
+  private async assertDrawAllowed(questionId: string | null) {
     const now = this.game.now();
     if (questionId) {
       const question = await this.database.gameQuestion.findUnique({
@@ -341,6 +334,27 @@ export class GameAdminService {
         "DRAW_TOO_EARLY",
         "A karácsonyi sorsolás az utolsó kérdés zárása után indítható: addig még jöhetnek válaszok, és az első sorsolás végleges.",
       );
+  }
+
+  /** A new draw: the entries as they are now, a fresh seed; kept with what it saw. */
+  async draw(
+    input: { kind: "WEEKLY" | "CHRISTMAS"; questionId?: string | null },
+    userId: string,
+  ) {
+    if (input.kind !== "WEEKLY" && input.kind !== "CHRISTMAS")
+      throw gameError(
+        HttpStatus.BAD_REQUEST,
+        "INVALID_DRAW",
+        "A sorsolás heti vagy karácsonyi.",
+      );
+    if (input.kind === "WEEKLY" && !input.questionId)
+      throw gameError(
+        HttpStatus.BAD_REQUEST,
+        "INVALID_DRAW",
+        "A heti sorsoláshoz kérdés kell.",
+      );
+    const questionId = input.kind === "WEEKLY" ? input.questionId! : null;
+    await this.assertDrawAllowed(questionId);
     const candidates = await this.candidatesOf(input.kind, questionId);
     const seed = randomBytes(16).toString("hex");
     const result = drawGameWinner(candidates, seed);
@@ -373,6 +387,139 @@ export class GameAdminService {
       });
       return draw;
     });
+  }
+
+  /** The target of a live draw, checked: a weekly one needs its question, the Christmas one has none. */
+  private liveTarget(input: {
+    kind: "WEEKLY" | "CHRISTMAS";
+    questionId?: string | null;
+  }) {
+    if (input.kind !== "WEEKLY" && input.kind !== "CHRISTMAS")
+      throw gameError(
+        HttpStatus.BAD_REQUEST,
+        "INVALID_DRAW",
+        "A sorsolás heti vagy karácsonyi.",
+      );
+    if (input.kind === "WEEKLY" && !input.questionId)
+      throw gameError(
+        HttpStatus.BAD_REQUEST,
+        "INVALID_DRAW",
+        "A heti sorsoláshoz kérdés kell.",
+      );
+    return {
+      kind: input.kind,
+      questionId: input.kind === "WEEKLY" ? input.questionId! : null,
+    };
+  }
+
+  /**
+   * THE LIVE DRAW PAGE'S VIEW (acrobot 44363, Balázs 2026-11-06): what a screen-shared page may show, and NOTHING else. It
+   * carries counts, the prize, and (once drawn) the WINNER's shortened name and masked address; no candidate, no other
+   * player's name or address ever leaves here, because the privacy notice publishes only the winner's shortened name. The
+   * draw shown is the FIRST one of that week (the one the rules count), so a later accidental run cannot change the screen.
+   */
+  async liveDraw(input: {
+    kind: "WEEKLY" | "CHRISTMAS";
+    questionId?: string | null;
+  }) {
+    const { kind, questionId } = this.liveTarget(input);
+    const question = questionId
+      ? await this.database.gameQuestion.findUnique({
+          where: { id: questionId },
+          select: {
+            week: true,
+            prizeName: true,
+            prizeDescription: true,
+            prizeImageId: true,
+          },
+        })
+      : null;
+    if (questionId && !question)
+      throw gameError(
+        HttpStatus.NOT_FOUND,
+        "NO_QUESTION",
+        "Nincs ilyen kérdés.",
+      );
+    const first = await this.database.gameDraw.findFirst({
+      where: { kind, questionId },
+      orderBy: { createdAt: "asc" },
+    });
+    let blocked: string | null = null;
+    let candidates: number;
+    let tickets: number;
+    if (first) {
+      const kept = (first.candidates as unknown as GameDrawCandidate[]) ?? [];
+      candidates = kept.length;
+      tickets = first.tickets;
+    } else {
+      try {
+        await this.assertDrawAllowed(questionId);
+      } catch (cause) {
+        if (!(cause instanceof HttpException)) throw cause;
+        const response = cause.getResponse() as { message?: string };
+        blocked = response.message ?? "A sorsolás most nem indítható.";
+      }
+      const now = await this.candidatesOf(kind, questionId);
+      candidates = now.length;
+      tickets = now.reduce((sum, c) => sum + c.weight, 0);
+    }
+    let drawn: {
+      drawId: string;
+      winnerName: string | null;
+      winnerEmailMasked: string | null;
+      ticket: number | null;
+      tickets: number;
+      drawnAt: string;
+    } | null = null;
+    if (first) {
+      let winnerName: string | null = null;
+      if (first.winnerEmail) {
+        const entries = await this.database.gameEntry.findMany({
+          where: { email: first.winnerEmail, name: { not: null } },
+          orderBy: { createdAt: "asc" },
+          select: { questionId: true, name: true },
+        });
+        const own = entries.find((e) => e.questionId === first.questionId);
+        const name = (own ?? entries.at(-1))?.name;
+        winnerName = name ? publicWinnerName(name) : "Nyertes";
+      }
+      drawn = {
+        drawId: first.id,
+        winnerName,
+        winnerEmailMasked: first.winnerEmail
+          ? maskPublicEmail(first.winnerEmail)
+          : null,
+        ticket: first.ticket,
+        tickets: first.tickets,
+        drawnAt: first.createdAt.toISOString(),
+      };
+    }
+    return {
+      kind,
+      questionId,
+      week: question?.week ?? null,
+      prizeName: question?.prizeName ?? null,
+      prizeImageId: question?.prizeImageId ?? null,
+      candidates,
+      tickets,
+      blocked,
+      drawn,
+    };
+  }
+
+  /**
+   * THE BUTTON ON AIR: runs the EXISTING draw (the server picks with its own seed, the page never chooses anyone), but only
+   * when that week has no draw yet. With one already recorded nothing new is written and the recorded result comes back, so
+   * a second press on air cannot make a second record.
+   */
+  async runLiveDraw(
+    input: { kind: "WEEKLY" | "CHRISTMAS"; questionId?: string | null },
+    userId: string,
+  ) {
+    const target = this.liveTarget(input);
+    const before = await this.liveDraw(target);
+    if (!before.drawn) await this.draw(target, userId);
+    return this.liveDraw(target);
   }
 
   /**

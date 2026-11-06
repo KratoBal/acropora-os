@@ -604,3 +604,229 @@ describe("the week's prize and the players' names (card 31445d0f, Balázs 2026-1
     ]);
   });
 });
+
+/*
+  THE LIVE DRAW PAGE'S SERVER SIDE (acrobot 44363, Balázs 2026-11-06). What turns this red: any player's address or name other
+  than the winner's shortened name and masked address in the view (the page is screen-shared on a live stream, and the privacy
+  notice publishes only the winner's shortened name); a second press that writes a second draw; a view that follows a later
+  draw instead of the first recorded one; a draw that runs while the week can still take answers.
+*/
+function liveSetup(
+  entries: ReturnType<typeof entry>[],
+  names: Record<string, string | null>,
+  over: {
+    closesAt?: Date;
+    lastCloses?: Date;
+    existing?: Record<string, unknown>[];
+  } = {},
+) {
+  const draws: Record<string, any>[] = [...(over.existing ?? [])];
+  const audits: Record<string, unknown>[] = [];
+  const tx = {
+    gameDraw: {
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        const row = {
+          id: `d${draws.length + 1}`,
+          createdAt: new Date(NOW.getTime() + draws.length * 1000),
+          ...data,
+        };
+        draws.push(row);
+        return row;
+      },
+    },
+    auditLog: {
+      create: async ({ data }: { data: Record<string, unknown> }) =>
+        void audits.push(data),
+    },
+  };
+  const database = {
+    ...tx,
+    gameQuestion: {
+      findUnique: async ({ where }: { where: { id: string } }) =>
+        where.id === "nincs"
+          ? null
+          : {
+              id: where.id,
+              week: "2026-W45",
+              prizeName: "Nano akvárium",
+              prizeDescription: null,
+              prizeImageId: "kep1",
+              closesAt: over.closesAt ?? CLOSED,
+            },
+      findFirst: async ({ where }: { where: { closesAt: { gt: Date } } }) =>
+        (over.lastCloses ?? CLOSED) > where.closesAt.gt
+          ? { id: "utolso" }
+          : null,
+    },
+    gameEntry: {
+      findMany: async ({
+        where,
+      }: {
+        where: { questionId?: string; email?: string };
+      }) =>
+        where.email
+          ? entries
+              .filter((e) => e.email === where.email && names[e.email])
+              .map((e) => ({ questionId: e.questionId, name: names[e.email] }))
+          : entries.filter(
+              (e) =>
+                e.confirmedAt !== null &&
+                (!where.questionId || e.questionId === where.questionId),
+            ),
+    },
+    gameDraw: {
+      ...tx.gameDraw,
+      findFirst: async ({
+        where,
+        orderBy,
+      }: {
+        where: { kind: string; questionId: string | null };
+        orderBy: { createdAt: "asc" | "desc" };
+      }) =>
+        draws
+          .filter(
+            (d) => d.kind === where.kind && d.questionId === where.questionId,
+          )
+          .sort(
+            (a, b) =>
+              (a.createdAt.getTime() - b.createdAt.getTime()) *
+              (orderBy.createdAt === "desc" ? -1 : 1),
+          )[0] ?? null,
+    },
+    $transaction: async (fn: (t: typeof tx) => unknown) => fn(tx),
+  };
+  const service = new GameAdminService({ now: () => NOW } as never);
+  service.database = database as never;
+  return { service, draws, audits };
+}
+
+describe("the live draw page's view and button", () => {
+  const players = [
+    entry("kovacs.peter@x.hu", "w45"),
+    entry("nagy.anna@x.hu", "w45"),
+    entry("szabo.bela@x.hu", "w45"),
+  ];
+  const names = {
+    "kovacs.peter@x.hu": "Kovács Péter",
+    "nagy.anna@x.hu": "Nagy Anna",
+    "szabo.bela@x.hu": "Szabó Béla",
+  };
+  const target = { kind: "WEEKLY" as const, questionId: "w45" };
+
+  it("before the draw it shows the counts and the prize and carries no address and no name", async () => {
+    const { service, draws } = liveSetup(players, names);
+    const view = await service.liveDraw(target);
+    assert.equal(view.candidates, 3);
+    assert.equal(view.tickets, 3);
+    assert.equal(view.prizeName, "Nano akvárium");
+    assert.equal(view.drawn, null);
+    assert.equal(view.blocked, null);
+    assert.doesNotMatch(JSON.stringify(view), /@|Kovács|Nagy|Szabó/);
+    assert.equal(draws.length, 0);
+  });
+
+  it("the button runs the existing draw once and shows only the winner's shortened name and masked address", async () => {
+    const { service, draws, audits } = liveSetup(players, names);
+    const view = await service.runLiveDraw(target, "u1");
+    assert.equal(draws.length, 1);
+    assert.equal(audits.length, 1);
+    const winner = draws[0]!.winnerEmail as string;
+    assert.ok(Object.keys(names).includes(winner));
+    assert.equal(view.drawn!.drawId, "d1");
+    const [family, given] = names[winner as keyof typeof names]!.split(" ");
+    assert.equal(view.drawn!.winnerName, `${family} ${given![0]}.`);
+    assert.equal(
+      view.drawn!.winnerEmailMasked,
+      `${winner.slice(0, 2)}•••${winner.slice(winner.indexOf("@"))}`,
+    );
+    assert.equal(view.drawn!.ticket, draws[0]!.ticket);
+    const shown = JSON.stringify(view);
+    assert.doesNotMatch(shown, new RegExp(winner.replace(".", "\\.")));
+    for (const email of Object.keys(names)) assert.ok(!shown.includes(email));
+    for (const other of Object.entries(names).filter(([e]) => e !== winner))
+      assert.ok(!shown.includes(other[1]));
+  });
+
+  it("a second press writes nothing: the recorded draw comes back", async () => {
+    const { service, draws, audits } = liveSetup(players, names);
+    const first = await service.runLiveDraw(target, "u1");
+    const second = await service.runLiveDraw(target, "u1");
+    assert.equal(draws.length, 1);
+    assert.equal(audits.length, 1);
+    assert.deepEqual(second.drawn, first.drawn);
+  });
+
+  it("the view shows the FIRST recorded draw, whatever was recorded later", async () => {
+    const { service } = liveSetup(players, names, {
+      existing: [
+        {
+          id: "late",
+          kind: "WEEKLY",
+          questionId: "w45",
+          createdAt: new Date("2026-11-21T10:00:00Z"),
+          winnerEmail: "szabo.bela@x.hu",
+          ticket: 2,
+          tickets: 3,
+          candidates: [],
+        },
+        {
+          id: "early",
+          kind: "WEEKLY",
+          questionId: "w45",
+          createdAt: new Date("2026-11-20T10:00:00Z"),
+          winnerEmail: "nagy.anna@x.hu",
+          ticket: 1,
+          tickets: 3,
+          candidates: [
+            { email: "nagy.anna@x.hu", weight: 1 },
+            { email: "szabo.bela@x.hu", weight: 1 },
+          ],
+        },
+      ],
+    });
+    const view = await service.liveDraw(target);
+    assert.equal(view.drawn!.drawId, "early");
+    assert.equal(view.drawn!.winnerName, "Nagy A.");
+    assert.equal(view.candidates, 2);
+  });
+
+  it("a winner without a usable name shows as Nyertes, never the name field as it is", async () => {
+    for (const bad of [null, "nyeremeny.acropora@x.hu"]) {
+      const { service } = liveSetup([entry("egyedul@x.hu", "w45")], {
+        "egyedul@x.hu": bad,
+      });
+      const view = await service.runLiveDraw(target, "u1");
+      assert.equal(view.drawn!.winnerName, "Nyertes");
+      assert.equal(view.drawn!.winnerEmailMasked, "eg•••@x.hu");
+    }
+  });
+
+  it("while the week can still take answers the view says why and the button writes nothing", async () => {
+    const { service, draws, audits } = liveSetup(players, names, {
+      closesAt: new Date("2026-11-21T20:00:00Z"),
+    });
+    const view = await service.liveDraw(target);
+    assert.match(view.blocked ?? "", /zárása után/);
+    await assert.rejects(
+      service.runLiveDraw(target, "u1"),
+      (e: any) => e.getResponse().code === "DRAW_TOO_EARLY",
+    );
+    assert.equal(draws.length, 0);
+    assert.equal(audits.length, 0);
+  });
+
+  it("the Christmas view counts tickets by weight, and a weekly one needs its question", async () => {
+    const { service } = liveSetup(
+      [entry("a@x.hu", "w45"), entry("a@x.hu", "w46"), entry("b@x.hu", "w46")],
+      {},
+    );
+    const view = await service.liveDraw({ kind: "CHRISTMAS" });
+    assert.equal(view.candidates, 2);
+    assert.equal(view.tickets, 3);
+    assert.equal(view.week, null);
+    await assert.rejects(
+      service.liveDraw({ kind: "WEEKLY" }),
+      (e: any) => e.getResponse().code === "INVALID_DRAW",
+    );
+  });
+});
