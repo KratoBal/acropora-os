@@ -90,11 +90,11 @@ export function HetiKerdesSzakasz({ allapot }: { allapot: KerdesAllapot }) {
             <span>?</span>
           </div>
           <h3>
-            Az első heti ajándék
+            Az első heti nyeremény
             <br />
             hamarosan kiderül.
           </h3>
-          <p>A heti ajándék az első kérdéssel együtt jelenik meg.</p>
+          <p>A heti nyeremény az első kérdéssel együtt jelenik meg.</p>
           {allapot.fajta === "nyitott" ? (
             <div className="jatek-timer-block">
               <div className="jatek-timer-title">

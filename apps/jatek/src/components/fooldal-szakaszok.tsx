@@ -26,7 +26,7 @@ export function Hero() {
           </em>
         </h1>
         <p>
-          Játssz velünk hétről hétre, nyerj heti ajándékokat,
+          Játssz velünk hétről hétre, nyerj heti nyereményeket,
           <br className="jatek-desktop" /> és álmodj egy saját tengeri világot.
         </p>
         <div className="jatek-hero-actions">
@@ -118,7 +118,7 @@ export function Lepesek() {
           </span>
           <h3>Várd a heti sorsolást</h3>
           <p>
-            A válaszadási időszak után heti ajándékot sorsolunk a helyes
+            A válaszadási időszak után heti nyereményt sorsolunk a helyes
             válaszok között. A kampány fődíja az Aquaforest AF Nano Tank.
           </p>
         </article>
@@ -143,7 +143,7 @@ export function Nyertesek() {
           <h3>Az első nyertes helye már megvan.</h3>
           <p>
             Az első sorsolás után itt találod a korábbi nyerteseket és a heti
-            ajándékokat. Jelenleg nincs kihirdetett eredmény.
+            nyereményeket. Jelenleg nincs kihirdetett eredmény.
           </p>
         </div>
         <span className="jatek-empty-number">01</span>

@@ -28,7 +28,7 @@ export const metadata: Metadata = {
     template: "%s · Acropora nyereményjáték",
   },
   description:
-    "Merülj játékba az Acroporával: heti kérdések, heti ajándékok és egy Aquaforest AF Nano Tank fődíj.",
+    "Merülj játékba az Acroporával: heti kérdések, heti nyeremények és egy Aquaforest AF Nano Tank fődíj.",
   // A teszten nem kell a keresobe; elesben a JATEK_INDEXABLE=true kapcsolja be.
   robots: { index: process.env.JATEK_INDEXABLE === "true" },
 };
