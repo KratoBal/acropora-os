@@ -6,7 +6,10 @@ import {
   GmailSentMailbox,
   type SentMailboxCapability,
 } from "../notifications/mail/gmail-sent-mailbox.js";
-import { CONFIRMATION_SUBJECT } from "./game-confirmation-mail.js";
+import {
+  CONFIRMATION_SUBJECT,
+  LEGACY_CONFIRMATION_SUBJECTS,
+} from "./game-confirmation-mail.js";
 
 /** What an erased address becomes: no "@", so it is never a player's address, and it marks the row as done. */
 export const GAME_ERASED_PREFIX = "erased:";
@@ -579,9 +582,16 @@ export class GameErasureService {
       return done(result);
     }
     if (!lastClosesAt || !this.mailbox) return done(result);
-    const legacy = (
-      await this.mailbox.findSent(CONFIRMATION_SUBJECT, lastClosesAt)
-    ).filter((id) => !tracked.has(id));
+    // by the current subject AND the older ones: the mails that left the sender's mailbox under a subject we have since
+    // rewritten are still there (the test mails before the game opened)
+    const found = new Set<string>();
+    for (const subject of [
+      CONFIRMATION_SUBJECT,
+      ...LEGACY_CONFIRMATION_SUBJECTS,
+    ])
+      for (const id of await this.mailbox.findSent(subject, lastClosesAt))
+        found.add(id);
+    const legacy = [...found].filter((id) => !tracked.has(id));
     result.legacy = legacy.length;
     const all = [...tracked, ...legacy];
     if (countOnly || all.length === 0) {
