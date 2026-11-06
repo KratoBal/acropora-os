@@ -19,16 +19,21 @@ const szoveg = (d: (typeof JOGI_DOKUMENTUMOK)[number]) =>
   d.szakaszok.flatMap((s) => [s.cim, ...s.bekezdesek]).join("\n");
 
 describe("a jogi szoveg vazlatai", () => {
-  it("the rules are final (Balázs's text, 2026-11-06): no draft warning and no open mark; the privacy notice is still a draft, and the check says so", () => {
-    assert.equal(JATEKSZABALYZAT.vazlat_jelzes, undefined);
-    assert.equal(kitoltendoDb(JATEKSZABALYZAT), 0);
-    assert.ok(
-      kitoltendoDb(ADATKEZELES) >= 5,
-      String(kitoltendoDb(ADATKEZELES)),
-    );
-    assert.match(ADATKEZELES.vazlat_jelzes ?? "", /^VÁZLAT/);
-    // a vázlat-jelzés addig igaz, amíg a tájékoztatón egy jelölés is nyitva van
-    assert.equal(jogiSzovegVazlat(), true);
+  it("both documents are final (Balázs's texts, 2026-11-06): no draft warning and no open mark, and the draft check says so", () => {
+    for (const d of JOGI_DOKUMENTUMOK) {
+      assert.equal(d.vazlat_jelzes, undefined, d.azonosito);
+      assert.equal(kitoltendoDb(d), 0, d.azonosito);
+    }
+    assert.equal(jogiSzovegVazlat(), false);
+  });
+
+  it("the draft machinery still works for a text that is not final: an open mark is counted", () => {
+    const vazlat = {
+      azonosito: "adatkezeles" as const,
+      cim: "x",
+      szakaszok: [{ cim: "1. x", bekezdesek: ["[KITÖLTENDŐ: valami]"] }],
+    };
+    assert.equal(kitoltendoDb(vazlat), 1);
   });
 
   it("the rules are the owner's eight sections word for word: his title lines, the organiser, the schedule, the draw and the name asked of a player", () => {
@@ -58,6 +63,28 @@ describe("a jogi szoveg vazlatai", () => {
     assert.equal(szabaly.includes("[KITÖLTENDŐ"), false);
   });
 
+  it("the rules differ from the owner's file in exactly these places: two sentences he asked to add (the prize, the published name) and two typos of the schedule corrected", () => {
+    const szabaly = szoveg(JATEKSZABALYZAT);
+    for (const mondat of [
+      "A fődíj egy Aquaforest AF Nano Tank akvárium. A képeken látható dekoráció és élővilág nem része a nyereménynek. A heti nyereményt az adott heti kérdéssel együtt tesszük közzé a játék oldalán.",
+      "A nyertes nevét rövidített alakban (vezetéknév és a keresztnév kezdőbetűje, például Kovács P.) közzétesszük a játék oldalán.",
+      "A hatodik hét kérdése 2026 december 12 22:00 órakor jelenik meg",
+      "A hetedik hét kérdése 2026 december 19 22:00 órakor jelenik meg",
+    ])
+      assert.ok(szabaly.includes(mondat), mondat);
+    assert.equal(szabaly.includes("Az hatodik"), false);
+    assert.equal(szabaly.includes("Az hetedik"), false);
+    // the prize sentences close section 6, the name sentence closes section 7
+    assert.match(
+      JATEKSZABALYZAT.szakaszok[5]!.bekezdesek.at(-1)!,
+      /^A fődíj egy Aquaforest AF Nano Tank/,
+    );
+    assert.match(
+      JATEKSZABALYZAT.szakaszok[6]!.bekezdesek.at(-1)!,
+      /^A nyertes nevét rövidített alakban/,
+    );
+  });
+
   it("the rules say a re-run draw only checks: the first recorded result counts (barracuda's question, 2026-11-05)", () => {
     const szabaly = szoveg(JATEKSZABALYZAT);
     assert.match(
@@ -66,17 +93,29 @@ describe("a jogi szoveg vazlatai", () => {
     );
   });
 
-  it("every decision of the privacy notice that is the owner's stays a mark", () => {
+  it("the privacy notice is the owner's four sections word for word, plus one sentence he asked for: the shortened winner's name is published", () => {
+    assert.deepEqual(
+      ADATKEZELES.szakaszok.map((x) => x.cim),
+      [
+        "1. Az adatkezelő",
+        "2. Milyen adatokat kezelünk",
+        "3. Mire használjuk",
+        "4. Mennyi ideig őrizzük",
+      ],
+    );
     const adat = szoveg(ADATKEZELES);
-    for (const resz of [
-      "adatkezelő",
-      "jogalap",
-      "őrizzük",
-      "adatfeldolgoz",
-      "jogaid",
+    for (const mondat of [
+      "Acropora Kft.",
+      "Adószám: 23916229-2-42",
+      "A nevedet, e-mail-címedet, a beküldött válaszodat, azt, hogy melyik kérdésre és mikor küldted be, valamint a megerősítés tényét és idejét.",
+      "Az adataidat a fődíj sorsolását követő maximum 15 nappal töröljük rendszerünkből",
     ])
-      assert.match(adat, new RegExp(resz, "i"), resz);
-    assert.doesNotMatch(adat, /GDPR|6\. cikk|Infotv|NAIH/);
+      assert.ok(adat.includes(mondat), mondat);
+    // the one added sentence (acrobot 44299), the last of section 3
+    assert.equal(
+      ADATKEZELES.szakaszok[2]!.bekezdesek.at(-1),
+      "Ha nyersz, a nevedet rövidített alakban (vezetéknév és a keresztnév kezdőbetűje, például Kovács P.) közzétesszük a játék oldalán.",
+    );
   });
 
   it("the rules say what the page does: correct answers only, once a week, confirmation by link, more weeks more chances", () => {
