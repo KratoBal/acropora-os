@@ -486,6 +486,12 @@ const mainNavigationGroups: AppNavigationGroup[] = [
         icon: "fish",
         entryId: "mortality",
       },
+      {
+        href: "/elo-allat-erkezesek",
+        label: "Élő állat érkezések",
+        icon: "package",
+        entryId: "livestock-arrivals",
+      },
     ],
   },
   {
