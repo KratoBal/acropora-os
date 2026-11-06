@@ -5232,6 +5232,20 @@ model RentalEquipment {
   @@index([isActive, name])
 }
 
+/// The rental desk's settings, one row (id fixed in code; task eszkozberles, S3). Without a row, or with a NULL template,
+/// the built-in contract text is used. The two late-return numbers stay NULL until Balazs decides (acrobot 44187): the
+/// contract then prints that they are not set yet, instead of a number nobody agreed to.
+/// `updatedById` is only a record: no relation, deleting the user must not touch the setting.
+model RentalSetting {
+  id                   String   @id
+  contractTemplate     String?
+  lateFeeMultiplier    Decimal? @db.Decimal(5, 2)
+  replacementAfterDays Int?
+  updatedById          String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
 enum RentalStatus {
   OPEN
   RETURNED

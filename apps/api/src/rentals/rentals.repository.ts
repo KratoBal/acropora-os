@@ -185,6 +185,15 @@ export class RentalsRepository {
     });
   }
 
+  /**
+   * Removes a customer row this request created a moment ago, when its rental could not be stored (two desks handing out
+   * the same device: the loser's new renter would otherwise stay in the register with no rental; barracuda, #2274 review).
+   * Only a row with no rental is touched; its addresses go with it (cascade).
+   */
+  async removeUnusedNewCustomer(id: string): Promise<void> {
+    await prisma.customer.deleteMany({ where: { id, rentals: { none: {} } } });
+  }
+
   async create(row: RentalCreateRow): Promise<Rental> {
     try {
       return await withUniqueCode(

@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import {
@@ -14,6 +15,8 @@ import {
 
 import { byHungarianName } from "../common/hungarian-name-sort.util.js";
 import { CustomersRepository } from "../customers/customers.repository.js";
+import { rentalContractDocument } from "./rental-contract-document.js";
+import { RentalSettingsService } from "./rental-settings.js";
 import type { CreateCustomerDto } from "../customers/dto/customer.dto.js";
 import type {
   CreateRentalDto,
@@ -31,9 +34,12 @@ const ALREADY_RENTED =
 
 @Injectable()
 export class RentalsService {
+  private readonly logger = new Logger(RentalsService.name);
+
   constructor(
     private readonly repository: RentalsRepository,
     private readonly customers: CustomersRepository,
+    private readonly settings: RentalSettingsService,
   ) {}
 
   async list(query: RentalListQueryDto): Promise<RentalListResponse> {
@@ -44,6 +50,22 @@ export class RentalsService {
     const rental = await this.repository.byId(id);
     if (!rental) throw new NotFoundException("A bérlés nem található.");
     return rental;
+  }
+
+  /**
+   * The contract of a rental, with today's template and settings (a reprint picks up a corrected text; the rental's own
+   * terms never change). `printedAt` comes from the caller so a test can pin it.
+   */
+  async contract(id: string, printedAt: Date) {
+    const rental = await this.get(id);
+    const settings = await this.settings.get();
+    const bytes = await rentalContractDocument({
+      rental,
+      template: settings.contractTemplate,
+      settings,
+      printedAt,
+    });
+    return { bytes, fileName: `berleti-szerzodes-${rental.rentalNumber}.pdf` };
   }
 
   async availableEquipment(): Promise<RentalEquipmentListResponse> {
@@ -90,6 +112,7 @@ export class RentalsService {
       throw new ConflictException(ALREADY_RENTED);
 
     let customerId = input.customerId ?? null;
+    let createdCustomerId: string | null = null;
     if (customerId) {
       const customer = await this.repository.liveCustomer(customerId);
       if (!customer)
@@ -102,6 +125,7 @@ export class RentalsService {
         actorId,
       );
       customerId = created.id;
+      createdCustomerId = created.id;
     }
 
     try {
@@ -123,9 +147,21 @@ export class RentalsService {
         createdById: actorId,
       });
     } catch (error) {
+      if (createdCustomerId) await this.dropNewCustomer(createdCustomerId);
       if (error instanceof EquipmentAlreadyRentedError)
         throw new ConflictException(ALREADY_RENTED);
       throw error;
+    }
+  }
+
+  /** A failed clean-up is logged, never thrown: the desk must see why the rental failed, not why the tidying did. */
+  private async dropNewCustomer(id: string) {
+    try {
+      await this.repository.removeUnusedNewCustomer(id);
+    } catch (cleanup) {
+      this.logger.warn(
+        `Rental not stored; the renter created for it (${id}) could not be removed: ${cleanup instanceof Error ? cleanup.message : String(cleanup)}`,
+      );
     }
   }
 }

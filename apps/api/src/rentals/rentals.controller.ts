@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Header,
+  Param,
+  Post,
+  Query,
+  StreamableFile,
+} from "@nestjs/common";
 import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
@@ -37,6 +46,19 @@ export class RentalsController {
   @RequirePermissions(PERMISSIONS.RENTALS_VIEW)
   customerMatches(@Query() query: RentalCustomerMatchQueryDto) {
     return this.service.customerMatches(query);
+  }
+
+  /** The contract PDF, inline: the desk prints it straight from the browser (S3). */
+  @Get(":id/contract.pdf")
+  @RequirePermissions(PERMISSIONS.RENTALS_VIEW)
+  @Header("Cache-Control", "private, no-store")
+  async contract(@Param("id") id: string) {
+    const document = await this.service.contract(id, new Date());
+    return new StreamableFile(document.bytes, {
+      type: "application/pdf",
+      length: document.bytes.length,
+      disposition: `inline; filename*=UTF-8''${encodeURIComponent(document.fileName)}`,
+    });
   }
 
   @Get(":id")

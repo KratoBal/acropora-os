@@ -4,6 +4,8 @@ import { after, before, describe, it } from "node:test";
 import { prisma } from "@acropora/database";
 
 import { integrationDatabaseGate } from "../common/integration-database.js";
+import { DEFAULT_RENTAL_CONTRACT_TEMPLATE } from "./rental-contract-default.js";
+import { RENTAL_SETTING_ID, RentalSettingsService } from "./rental-settings.js";
 import {
   EquipmentAlreadyRentedError,
   RentalsRepository,
@@ -86,7 +88,48 @@ describe("rentals on Postgres", { skip: gate.mode === "skip" }, () => {
     });
   });
   after(async () => {
-    if (gate.mode === "run") await removeLeftovers();
+    if (gate.mode === "run") {
+      await removeLeftovers();
+      await prisma.rentalSetting.deleteMany({
+        where: { id: RENTAL_SETTING_ID },
+      });
+    }
+  });
+
+  it("stores the settings, and keeps the built-in text as NULL so its later fixes still arrive", async () => {
+    const settings = new RentalSettingsService();
+    await prisma.rentalSetting.deleteMany({ where: { id: RENTAL_SETTING_ID } });
+    assert.equal((await settings.get()).contractTemplateIsDefault, true);
+
+    const saved = await settings.save(
+      {
+        contractTemplate: "Bérlő: {{berlo_nev}}",
+        lateFeeMultiplier: 1.5,
+        replacementAfterDays: 14,
+      },
+      "u-1",
+    );
+    assert.deepEqual(saved, {
+      contractTemplate: "Bérlő: {{berlo_nev}}",
+      contractTemplateIsDefault: false,
+      lateFeeMultiplier: 1.5,
+      replacementAfterDays: 14,
+    });
+
+    await settings.save(
+      {
+        contractTemplate: DEFAULT_RENTAL_CONTRACT_TEMPLATE,
+        lateFeeMultiplier: null,
+        replacementAfterDays: null,
+      },
+      "u-1",
+    );
+    const row = await prisma.rentalSetting.findUnique({
+      where: { id: RENTAL_SETTING_ID },
+    });
+    assert.equal(row?.contractTemplate, null);
+    assert.equal(row?.lateFeeMultiplier, null);
+    assert.equal((await settings.get()).contractTemplateIsDefault, true);
   });
 
   it("refuses a second OPEN rental of the same device, and allows one after the return", async () => {
@@ -108,6 +151,32 @@ describe("rentals on Postgres", { skip: gate.mode === "skip" }, () => {
     });
     const second = await repository.create(row());
     assert.notEqual(second.id, first.id);
+  });
+
+  it("removes a new renter only while it has no rental, with its address", async () => {
+    const orphan = await prisma.customer.create({
+      data: {
+        customerNumber: `${PREFIX}${n}-orphan`,
+        type: "PERSON",
+        displayName: "Árva Bérlő",
+        addresses: {
+          create: [
+            {
+              type: "BILLING",
+              postalCode: "1111",
+              city: "Bp",
+              line1: "Fő u. 1.",
+            },
+          ],
+        },
+      },
+    });
+    await repository.removeUnusedNewCustomer(orphan.id);
+    assert.equal(await prisma.customer.count({ where: { id: orphan.id } }), 0);
+
+    // the renter of the earlier test has rentals: untouched
+    await repository.removeUnusedNewCustomer(customerId);
+    assert.equal(await prisma.customer.count({ where: { id: customerId } }), 1);
   });
 
   it("matches a customer by phone, e-mail or name, live rows only", async () => {
