@@ -7,8 +7,10 @@ import {
   Header,
   HttpCode,
   HttpStatus,
+  Param,
   Post,
   Req,
+  StreamableFile,
 } from "@nestjs/common";
 
 import { Public } from "../auth/decorators/public.decorator.js";
@@ -101,6 +103,33 @@ export class GamePublicController {
   current(@Req() request: CallerRequest) {
     limit(GamePublicController.reads, request);
     return this.game.current();
+  }
+
+  /** The past winners by their shortened names (never an address). */
+  @Public()
+  @Get("nyertesek")
+  @Header("Cache-Control", "no-store")
+  winners(@Req() request: CallerRequest) {
+    limit(GamePublicController.reads, request);
+    return this.game.winners();
+  }
+
+  /** A question's prize picture, only for a question that is public (it has opened, or is the next one). */
+  @Public()
+  @Get("nyeremeny-kep/:questionId")
+  @Header("Cache-Control", "public, max-age=300")
+  async prizeImage(
+    @Param("questionId") questionId: string,
+    @Req() request: CallerRequest,
+  ) {
+    limit(GamePublicController.reads, request);
+    const image = await this.game.prizeImage(questionId.slice(0, 64));
+    if (!image)
+      throw gameError(HttpStatus.NOT_FOUND, "NO_IMAGE", "Nincs ilyen kép.");
+    return new StreamableFile(image.bytes, {
+      type: image.contentType,
+      length: image.bytes.byteLength,
+    });
   }
 
   @Public()

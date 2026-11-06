@@ -27,7 +27,14 @@ export function reszek(hatravan: number): {
 
 const ketjegy = (n: number) => String(n).padStart(2, "0");
 
-export function Visszaszamlalo({ closesAt }: { closesAt: string }) {
+export function Visszaszamlalo({
+  closesAt,
+  cimke = "Visszaszámláló a kérdés zárásáig",
+}: {
+  /** a cél pillanat (a nyitás vagy a zárás) */
+  closesAt: string;
+  cimke?: string;
+}) {
   const [most, setMost] = useState<number | null>(null);
   useEffect(() => {
     setMost(Date.now());
@@ -43,7 +50,7 @@ export function Visszaszamlalo({ closesAt }: { closesAt: string }) {
       className="jatek-timer"
       data-testid="visszaszamlalo"
       role="timer"
-      aria-label="Visszaszámláló a kérdés zárásáig"
+      aria-label={cimke}
     >
       <span>
         <b>{ertek(r?.nap)}</b>
