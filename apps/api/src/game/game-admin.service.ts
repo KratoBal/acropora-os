@@ -23,6 +23,10 @@ export interface GameQuestionInput {
   acceptedAnswers: string[];
   opensAt: string;
   closesAt: string;
+  /** the week's prize: `undefined` leaves it, `null` or "" clears it */
+  prizeName?: string | null;
+  prizeDescription?: string | null;
+  prizeImageId?: string | null;
 }
 
 /** An entry counts in a draw when it is confirmed and right: the person's decision, else the automatic one. */
@@ -48,10 +52,15 @@ export class GameAdminService {
   /** the test replaces it */
   database: Pick<
     typeof prisma,
-    "gameQuestion" | "gameEntry" | "gameDraw" | "auditLog" | "$transaction"
+    | "gameQuestion"
+    | "gameEntry"
+    | "gameDraw"
+    | "auditLog"
+    | "mailImage"
+    | "$transaction"
   > = prisma;
 
-  private checkQuestion(input: GameQuestionInput) {
+  private checkQuestion(input: GameQuestionInput, creating = false) {
     const bad = (message: string) =>
       gameError(HttpStatus.BAD_REQUEST, "INVALID_QUESTION", message);
     if (!/^\d{4}-W\d{2}$/.test(input.week))
@@ -81,6 +90,16 @@ export class GameAdminService {
       if (accepted.some((a) => !ids.has(a)))
         throw bad("A helyes válasz a lehetőségek közül való legyen.");
     }
+    // the prize: an absent key leaves the stored value, null or blank clears it
+    const text = (value: string | null | undefined) =>
+      value === undefined ? undefined : value?.trim() || null;
+    const prizeName = text(input.prizeName);
+    const prizeDescription = text(input.prizeDescription);
+    const prizeImageId = text(input.prizeImageId);
+    // a NEW question without a name has none; on an edit an absent name key leaves the stored one
+    const nameStays = prizeName !== undefined ? prizeName !== null : !creating;
+    if (!nameStays && (prizeDescription || prizeImageId))
+      throw bad("A nyereményhez név kell.");
     return {
       week: input.week,
       type: input.type,
@@ -89,7 +108,36 @@ export class GameAdminService {
       acceptedAnswers: accepted as unknown as Prisma.InputJsonValue,
       opensAt: opens,
       closesAt: closes,
+      ...(prizeName !== undefined ? { prizeName } : {}),
+      ...(prizeDescription !== undefined ? { prizeDescription } : {}),
+      ...(prizeImageId !== undefined ? { prizeImageId } : {}),
     };
+  }
+
+  /** A prize image has to be one in the image store: a wrong id would otherwise be a database error. */
+  private async checkPrizeImage(prizeImageId: string | null | undefined) {
+    if (!prizeImageId?.trim()) return;
+    const found = await this.database.mailImage.findUnique({
+      where: { id: prizeImageId.trim() },
+      select: { id: true },
+    });
+    if (!found)
+      throw gameError(
+        HttpStatus.BAD_REQUEST,
+        "INVALID_QUESTION",
+        "A kiválasztott kép nem található.",
+      );
+  }
+
+  /** The stored prize image for the admin's preview, or null. */
+  async prizeImage(id: string) {
+    const row = await this.database.mailImage.findUnique({
+      where: { id },
+      select: { content: true, contentType: true },
+    });
+    return row
+      ? { bytes: Buffer.from(row.content), contentType: row.contentType }
+      : null;
   }
 
   async questions() {
@@ -110,10 +158,10 @@ export class GameAdminService {
   }
 
   async createQuestion(input: GameQuestionInput) {
+    const data = this.checkQuestion(input, true);
+    await this.checkPrizeImage(data.prizeImageId);
     try {
-      return await this.database.gameQuestion.create({
-        data: this.checkQuestion(input),
-      });
+      return await this.database.gameQuestion.create({ data });
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -135,6 +183,7 @@ export class GameAdminService {
    */
   async updateQuestion(id: string, input: GameQuestionInput) {
     const data = this.checkQuestion(input);
+    await this.checkPrizeImage(data.prizeImageId);
     return this.database.$transaction(async (tx) => {
       const question = await tx.gameQuestion.update({ where: { id }, data });
       const entries = await tx.gameEntry.findMany({
@@ -164,6 +213,7 @@ export class GameAdminService {
       select: {
         id: true,
         email: true,
+        name: true,
         answer: true,
         autoCorrect: true,
         manualCorrect: true,
@@ -291,11 +341,33 @@ export class GameAdminService {
     });
   }
 
+  /**
+   * THE DRAWS, WITH THE NAMES the admin reads next to the addresses: the kept draw (seed, candidates, winner) is not
+   * changed by it. `names` maps an address to the name of its latest entry that has one.
+   */
   async draws() {
-    return this.database.gameDraw.findMany({
+    const rows = await this.database.gameDraw.findMany({
       orderBy: { createdAt: "desc" },
       include: { question: { select: { week: true } } },
     });
+    const emails = new Set<string>();
+    for (const row of rows) {
+      if (row.winnerEmail) emails.add(row.winnerEmail);
+      for (const candidate of (row.candidates as unknown as GameDrawCandidate[]) ??
+        [])
+        emails.add(candidate.email);
+    }
+    const named =
+      emails.size === 0
+        ? []
+        : await this.database.gameEntry.findMany({
+            where: { email: { in: [...emails] }, name: { not: null } },
+            orderBy: { createdAt: "asc" },
+            select: { email: true, name: true },
+          });
+    const names: Record<string, string> = {};
+    for (const entry of named) if (entry.name) names[entry.email] = entry.name;
+    return rows.map((row) => ({ ...row, names }));
   }
 
   /** The draw run again from what it kept: the same seed and candidates must pick the same winner. */

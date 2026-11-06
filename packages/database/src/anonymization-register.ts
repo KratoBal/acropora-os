@@ -1146,9 +1146,12 @@ export const ANONYMIZATION_REGISTER: Readonly<
     prompt: "business",
     options: "json",
     acceptedAnswers: "json",
+    prizeName: "business",
+    prizeDescription: "business",
   },
   GameEntry: {
     email: "email",
+    name: "personName",
     answer: "freeText",
     manualById: "identifier",
     confirmTokenHash: "passwordHash",

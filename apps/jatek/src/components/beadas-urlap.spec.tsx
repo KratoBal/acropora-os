@@ -11,7 +11,7 @@ import { BeadasUrlap } from "./beadas-urlap.tsx";
   any kind (Balázs, 2026-11-05 20:51: "nem kérem"; the design's "Szeretnék Acropora-híreket" option is deliberately
   left out); a rules-acceptance checkbox that is not required or arrives pre-checked; a honeypot that is a type=hidden field, is not out of the tab order, or can
   be autofilled; a text answer without the 200 character limit, or a choice question without its options; a form
-  that gives the api's address away; a note that does not link the rules and the privacy notice.
+  that gives the api's address away; a note that does not link the rules and the privacy notice; no name field, or one that is not required.
 */
 const SZOVEG: Kerdes = {
   ...HAMIS_KERDES,
@@ -32,6 +32,17 @@ describe("a beküldő űrlap", () => {
       assert.match(dobozok[0]!, /required/);
       assert.doesNotMatch(dobozok[0]!, /checked/);
       assert.doesNotMatch(h, /hírlevél|newsletter|Acropora-hír|marketing/i);
+    }
+  });
+
+  it("asks for the name in a required text field the browser can fill, and says the winner is shown shortened", () => {
+    for (const kerdes of [SZOVEG, HAMIS_KERDES]) {
+      const h = html(kerdes);
+      const mezo = h.match(/<input[^>]*id="jatek-nev"[^>]*>/)?.[0] ?? "";
+      assert.match(mezo, /required/);
+      assert.match(mezo, /autoComplete="name"|autocomplete="name"/i);
+      assert.match(mezo, /maxLength="120"|maxlength="120"/i);
+      assert.match(h, /rövidítve \(például Kovács P\.\)/);
     }
   });
 

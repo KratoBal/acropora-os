@@ -47,6 +47,7 @@ function rogzitoApi(valaszok: {
 const JO = {
   questionId: "q1",
   email: "j@example.com",
+  name: "Kovács Péter",
   answer: "acropora",
   website: "",
 };

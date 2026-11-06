@@ -44,6 +44,20 @@ export function gameError(
 const sha256 = (value: string) =>
   createHash("sha256").update(value).digest("hex");
 
+/** The longest name the giveaway keeps. */
+export const GAME_NAME_MAX = 120;
+
+/**
+ * THE PLAYER'S NAME as it is kept: trimmed, inner whitespace collapsed to one space, and at least two characters with a
+ * letter among them. `null` when it is not a name (empty, one character, only digits or marks), so the caller says so
+ * once, in one place. The page shows a winner by a shortened form of it (surname and the first name's initial).
+ */
+export function normalizeGameName(value: string): string | null {
+  const name = value.replace(/\s+/g, " ").trim();
+  if (name.length < 2 || name.length > GAME_NAME_MAX) return null;
+  return /\p{L}/u.test(name) ? name : null;
+}
+
 export interface PublicGameQuestion {
   id: string;
   week: string;
@@ -158,6 +172,7 @@ export class GameService implements OnModuleInit {
   async submit(input: {
     questionId?: unknown;
     email?: unknown;
+    name?: unknown;
     answer?: unknown;
     website?: unknown;
   }): Promise<{ status: "CHECK_EMAIL" }> {
@@ -172,6 +187,14 @@ export class GameService implements OnModuleInit {
         HttpStatus.BAD_REQUEST,
         "INVALID_EMAIL",
         "Kérjük, adj meg egy érvényes e-mail címet.",
+      );
+    const name =
+      typeof input.name === "string" ? normalizeGameName(input.name) : null;
+    if (!name)
+      throw gameError(
+        HttpStatus.BAD_REQUEST,
+        "INVALID_NAME",
+        "Kérjük, add meg a nevedet.",
       );
     if (typeof input.questionId !== "string" || input.questionId === "")
       throw gameError(
@@ -229,6 +252,7 @@ export class GameService implements OnModuleInit {
       const { count } = await this.database.gameEntry.updateMany({
         where: { id: existing.id, confirmedAt: null },
         data: {
+          name,
           answer,
           autoCorrect,
           confirmTokenHash: sha256(token),
@@ -244,6 +268,7 @@ export class GameService implements OnModuleInit {
           data: {
             questionId: question.id,
             email,
+            name,
             answer,
             autoCorrect,
             confirmTokenHash: sha256(token),

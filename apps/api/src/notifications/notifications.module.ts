@@ -87,6 +87,8 @@ import { TicketMailService } from "./mail/ticket-mail.service.js";
     MaintenanceMailService,
     AquariumMeasurementMailService,
     NotificationLogRepository,
+    // a nyereményjáték a nyeremény képét ugyanebbe a kép-tárolóba tölti (kártya 31445d0f)
+    MailImageService,
   ],
 })
 export class NotificationsModule {}
