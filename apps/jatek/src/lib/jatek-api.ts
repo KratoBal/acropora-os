@@ -49,6 +49,8 @@ export type Nyertes = {
   kind: "WEEKLY" | "CHRISTMAS";
   week: string | null;
   name: string;
+  /** a nyertes e-mail-címe részben kitakarva ("ko•••@gmail.com"): a két azonos rövid nevű játékos megkülönböztetéséhez (tájékoztató 4. pont) */
+  emailMasked: string;
   prizeName: string | null;
   drawnAt: string;
 };
@@ -316,6 +318,9 @@ function nyertesEllenorzott(w: unknown): w is Nyertes {
     (n.kind === "WEEKLY" || n.kind === "CHRISTMAS") &&
     typeof n.name === "string" &&
     n.name !== "" &&
+    typeof n.emailMasked === "string" &&
+    // csak a részben kitakart alak megy a lapra: a "•••" jel nélküli cím (egy teljes cím) kiesik, mielőtt kirajzolódna
+    n.emailMasked.includes("•••") &&
     typeof n.drawnAt === "string"
   );
 }
