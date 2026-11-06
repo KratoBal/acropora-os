@@ -347,7 +347,14 @@ export class GameAdminService {
       throw gameError(
         HttpStatus.FORBIDDEN,
         "TEST_LINKS_OFF",
-        "Teszt-link csak a teszt környezetben adható (JATEK_TEST_LINKS=on).",
+        "Teszt-link csak a teszt környezetben adható (JATEK_TEST_LINKS=on, átirányított levelezés mellett).",
+      );
+    // a relative link would open on the OS's own site, not on the game page (barracuda, #2258)
+    if (!this.game.publicUrlSet())
+      throw gameError(
+        HttpStatus.CONFLICT,
+        "NO_PUBLIC_URL",
+        "A játék oldalának címe (JATEK_PUBLIC_URL) nincs beállítva.",
       );
     const entry = await this.database.gameEntry.findUnique({
       where: { id: entryId },

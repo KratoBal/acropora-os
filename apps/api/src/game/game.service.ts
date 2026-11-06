@@ -369,9 +369,22 @@ export class GameService implements OnModuleInit {
     return `${base}/megerosites?token=${encodeURIComponent(token)}`;
   }
 
-  /** Whether the admin may take a confirmation link without the mail (JATEK_TEST_LINKS=on; stage only). */
+  /**
+   * Whether the admin may take a confirmation link without the mail: JATEK_TEST_LINKS=on AND the mail redirected
+   * (TICKET_MAIL_REDIRECT_TO set to an address), which is what marks a test environment. A switch left on in
+   * production, where the redirect is "off", still gives no link (barracuda, #2258: a second lock, since such a link
+   * lets a person confirm in a player's place).
+   */
   testLinksOn(): boolean {
-    return this.environment.JATEK_TEST_LINKS?.trim() === "on";
+    return (
+      this.environment.JATEK_TEST_LINKS?.trim() === "on" &&
+      mailRedirect(this.environment.TICKET_MAIL_REDIRECT_TO).kind === "on"
+    );
+  }
+
+  /** Whether the game page's address is set: without it a link would point at the wrong site. */
+  publicUrlSet(): boolean {
+    return Boolean(this.environment.JATEK_PUBLIC_URL?.trim());
   }
 
   /** Why a mail cannot go out now (the gate, the sender, the link's base), or null. */
