@@ -1136,7 +1136,7 @@ export const ADATKEZELES: JogiDokumentum = {
         {
           fajta: "bekezdes",
           sorok: [
-            "A játékot kiszolgáló alkalmazások naplóiba IP-cím, név vagy email-cím nem kerül; hozzáférési naplót a játék oldalairól nem vezetünk. Hiba esetén a napló csak a forduló azonosítóját és a hiba fajtáját rögzíti.",
+            "A játékot kiszolgáló alkalmazások saját naplóiba IP-cím, név vagy email-cím nem kerül; hiba esetén a napló csak a forduló azonosítóját és a hiba fajtáját rögzíti. A szervereink előtti forgalomirányító (proxy) üzemeltetési és biztonsági okból technikai naplót vezethet a kérésekről (IP-cím, időpont, megnyitott cím). Ennek jogalapja a fent leírt jogos érdek, és ezeket a bejegyzéseket legfeljebb 30 napig őrizzük meg.",
           ],
         },
         {
