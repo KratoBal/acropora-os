@@ -963,6 +963,7 @@ dialog .jatek-button {
   }
   .jatek-prize-label h2 {
     font-size: 21px;
+    letter-spacing: -0.7px;
   }
   .jatek-prize-label .jatek-eyebrow {
     font-size: 13px;
@@ -1161,12 +1162,14 @@ dialog .jatek-button {
   }
   .jatek-success h3 {
     font-size: 22px;
+    letter-spacing: -0.7px;
   }
   dialog {
     padding: 32px 23px;
   }
   dialog h2 {
     font-size: 24px;
+    letter-spacing: -0.7px;
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1274,6 +1277,7 @@ body {
 .jatek-sikeres h3 {
   font-size: 24px;
   margin: 20px 0 10px;
+  letter-spacing: -0.7px;
 }
 .jatek-sikeres p {
   font-size: 15px;
@@ -1287,6 +1291,7 @@ body {
 .jatek-nincs-kerdes h3 {
   font-size: 22px;
   margin: 0 0 10px;
+  letter-spacing: -0.7px;
 }
 .jatek-nincs-kerdes p {
   font-size: 15px;
@@ -1314,10 +1319,13 @@ body {
   color: #b8c9d5;
   margin: 0 0 10px;
 }
+/* A 16 px-es alcím NEM örökölheti a globális -1.4px-et (az a 65 px-es főcímre való): a szóköz is összecsúszott
+   ("2.2.Anyertesektovábbiadatai", Balázs, 2026-11-06). A kis címek -0.3px-et kapnak, mint a lépések és a jogi h2. */
 .jatek-jogi h3 {
   font-size: 16px;
   margin: 20px 0 6px;
   font-weight: 600;
+  letter-spacing: -0.3px;
 }
 .jatek-jogi ul {
   margin: 0 0 12px;
