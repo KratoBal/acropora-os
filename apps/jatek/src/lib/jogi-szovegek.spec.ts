@@ -19,12 +19,43 @@ const szoveg = (d: (typeof JOGI_DOKUMENTUMOK)[number]) =>
   d.szakaszok.flatMap((s) => [s.cim, ...s.bekezdesek]).join("\n");
 
 describe("a jogi szoveg vazlatai", () => {
-  it("both documents are drafts with open [KITÖLTENDŐ] marks, and the check says so", () => {
-    for (const d of JOGI_DOKUMENTUMOK) {
-      assert.ok(kitoltendoDb(d) >= 5, `${d.azonosito}: ${kitoltendoDb(d)}`);
-      assert.match(d.vazlat_jelzes, /^VÁZLAT/);
-    }
+  it("the rules are final (Balázs's text, 2026-11-06): no draft warning and no open mark; the privacy notice is still a draft, and the check says so", () => {
+    assert.equal(JATEKSZABALYZAT.vazlat_jelzes, undefined);
+    assert.equal(kitoltendoDb(JATEKSZABALYZAT), 0);
+    assert.ok(
+      kitoltendoDb(ADATKEZELES) >= 5,
+      String(kitoltendoDb(ADATKEZELES)),
+    );
+    assert.match(ADATKEZELES.vazlat_jelzes ?? "", /^VÁZLAT/);
+    // a vázlat-jelzés addig igaz, amíg a tájékoztatón egy jelölés is nyitva van
     assert.equal(jogiSzovegVazlat(), true);
+  });
+
+  it("the rules are the owner's eight sections word for word: his title lines, the organiser, the schedule, the draw and the name asked of a player", () => {
+    assert.deepEqual(
+      JATEKSZABALYZAT.szakaszok.map((s) => s.cim),
+      [
+        "1. A játék szervezője",
+        "2. A játék időtartama",
+        "3. Ki vehet részt",
+        "4. Hogyan lehet részt venni",
+        "5. A válasz értékelése",
+        "6. A sorsolás",
+        "7. A nyertesek értesítése",
+        "8. Adatkezelés",
+      ],
+    );
+    const szabaly = szoveg(JATEKSZABALYZAT);
+    for (const mondat of [
+      "Acropora Kft.",
+      "Adószám: 23916229-2-42",
+      "A játék 2026 november 7-én 22:00 órakor kezdődik.",
+      "A Fődij sorsolása 2026 december 26-án este 22:00 órakor történik.",
+      "A játékban bárki résztvehet, aki a játék kezdetekor betöltötte a 18. életévét.",
+      "A játékos megadja a nevét, az e-mail-címét és a válaszát.",
+    ])
+      assert.ok(szabaly.includes(mondat), mondat);
+    assert.equal(szabaly.includes("[KITÖLTENDŐ"), false);
   });
 
   it("the rules say a re-run draw only checks: the first recorded result counts (barracuda's question, 2026-11-05)", () => {
@@ -35,19 +66,7 @@ describe("a jogi szoveg vazlatai", () => {
     );
   });
 
-  it("every decision that is the owner's stays a mark", () => {
-    const szabaly = szoveg(JATEKSZABALYZAT);
-    for (const reszlet of ["szervező", "időtartam", "nyeremény", "értesít"]) {
-      assert.ok(
-        JATEKSZABALYZAT.szakaszok.some(
-          (s) =>
-            new RegExp(reszlet, "i").test(s.cim) &&
-            s.bekezdesek.join().includes("[KITÖLTENDŐ"),
-        ),
-        reszlet,
-      );
-    }
-    assert.doesNotMatch(szabaly, /Ft\b|forint|EUR|Kft\.|Zrt\./);
+  it("every decision of the privacy notice that is the owner's stays a mark", () => {
     const adat = szoveg(ADATKEZELES);
     for (const resz of [
       "adatkezelő",

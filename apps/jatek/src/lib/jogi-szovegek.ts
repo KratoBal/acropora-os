@@ -15,7 +15,8 @@ export type JogiSzakasz = { cim: string; bekezdesek: readonly string[] };
 export type JogiDokumentum = {
   azonosito: "jatekszabalyzat" | "adatkezeles";
   cim: string;
-  vazlat_jelzes: string;
+  /** A vázlat-jelzés: csak a még nem végleges dokumentumon áll; a végleges szövegen nincs. */
+  vazlat_jelzes?: string;
   szakaszok: readonly JogiSzakasz[];
 };
 
@@ -25,32 +26,44 @@ const VAZLAT =
 export const JATEKSZABALYZAT: JogiDokumentum = {
   azonosito: "jatekszabalyzat",
   cim: "Játékszabályzat",
-  vazlat_jelzes: VAZLAT,
+  // A SZABÁLYZAT VÉGLEGES: Balázs szövege, szó szerint (exchange/jatek/Jatekszabalyzat-balazs-2026-11-06.docx, 2026-11-06 09:06 UTC);
+  // nincs rajta vázlat-jelzés, és nincs benne [KITÖLTENDŐ].
   szakaszok: [
     {
       cim: "1. A játék szervezője",
       bekezdesek: [
-        "[KITÖLTENDŐ: a szervező neve, székhelye, cégjegyzékszáma, adószáma és elérhetősége]",
+        "Acropora Kft.",
+        "1106 Budapest Pesti Gábor utca 35",
+        "Adószám: 23916229-2-42",
+        "info@acropora.hu",
       ],
     },
     {
       cim: "2. A játék időtartama",
       bekezdesek: [
         "A játékban hetente új kérdés nyílik. Egy kérdésre a nyitás és a zárás között lehet válaszolni.",
-        "[KITÖLTENDŐ: a játék első és utolsó napja, a karácsony előtti fődíj-sorsolás időpontja]",
+        "A játék 2026 november 7-én 22:00 órakor kezdődik.",
+        "Az első hét kérdésére 2026 november 14 21:00-ig lehet választ beküldeni.",
+        "A második hét kérdése 2026 november 14 22:00 órakor jelenik meg és 2026 november 21 21:00 óráig lehet válaszolni.",
+        "A harmadik hét kérdése 2026 november 21 22:00 órakor jelenik meg és 2026 november 28 21:00 óráig lehet válaszolni.",
+        "A negyedik hét kérdése 2026 november 28 22:00 órakor jelenik meg és 2026 december 5 21:00 óráig lehet válaszolni.",
+        "Az ötödik hét kérdése 2026 december 5 22:00 órakor jelenik meg és 2026 december 12 21:00 óráig lehet válaszolni.",
+        "Az hatodik hét kérdése 2026 december 12 22:00 órakor jelenik meg és 2026 december 19 21:00 óráig lehet válaszolni.",
+        "Az hetedik hét kérdése 2026 december 19 22:00 órakor jelenik meg és 2026 december 26 21:00 óráig lehet válaszolni.",
+        "A Fődij sorsolása 2026 december 26-án este 22:00 órakor történik.",
       ],
     },
     {
       cim: "3. Ki vehet részt",
       bekezdesek: [
-        "[KITÖLTENDŐ: a részvétel feltételei, az életkori és egyéb korlátozások, a játékból kizártak köre]",
+        "A játékban bárki résztvehet, aki a játék kezdetekor betöltötte a 18. életévét. A játékban az Acropora Kft. dolgozói és családtagjai nem vehetnek részt.",
       ],
     },
     {
       cim: "4. Hogyan lehet részt venni",
       bekezdesek: [
         "Hetente egy kérdés érkezik: vagy szabad szöveggel kell válaszolni, vagy a megadott lehetőségek közül kell választani.",
-        "A játékos megadja az e-mail-címét és a válaszát. A részvétel akkor érvényes, ha a játékos a kapott levélben lévő megerősítő linkre kattint. A megerősítés a kérdés zárásáig lehetséges.",
+        "A játékos megadja a nevét, az e-mail-címét és a válaszát. A részvétel akkor érvényes, ha a játékos a kapott levélben lévő megerősítő linkre kattint. A megerősítés a kérdés zárásáig lehetséges.",
         "Egy e-mail-címmel hetente egyszer lehet játszani.",
       ],
     },
@@ -64,36 +77,29 @@ export const JATEKSZABALYZAT: JogiDokumentum = {
     {
       cim: "6. A sorsolás",
       bekezdesek: [
-        "Minden héten sorsolás van a helyes, megerősített részvételek között. A heti sorsolás rövid videóban látható.",
-        "Karácsony előtt fődíj-sorsolás van élő adásban. Aki több héten játszott helyesen és megerősítve, annyiszor szerepel a karácsonyi sorsolás jelöltlistáján, ahány héten ezt megtette.",
+        "Minden héten sorsolás van a helyes, megerősített részvételek között.",
+        "Aki több héten játszott helyesen és megerősítve, annyiszor szerepel a karácsonyi sorsolás jelöltlistáján, ahány héten ezt megtette.",
         "A jelöltlista, az eredmény és a véletlen mag elmentésre kerül, a sorsolás visszakereshető.",
         "Ha egy sorsolást újra lefuttatnak, mindig az első, rögzített eredmény számít; az újrafuttatás csak ellenőrzés.",
-        "[KITÖLTENDŐ: a heti sorsolások időpontja, a fődíj-sorsolás helye és a közvetítés csatornája]",
+        "A játék 2026 november 7-én 22:00 órakor kezdődik.",
+        "Az első hét kérdésére 2026 november 14 21:00-ig lehet választ beküldeni.",
+        "A második hét kérdése 2026 november 14 22:00 órakor jelenik meg és 2026 november 21 21:00 óráig lehet válaszolni.",
+        "A harmadik hét kérdése 2026 november 21 22:00 órakor jelenik meg és 2026 november 28 21:00 óráig lehet válaszolni.",
+        "A negyedik hét kérdése 2026 november 28 22:00 órakor jelenik meg és 2026 december 5 21:00 óráig lehet válaszolni.",
+        "Az ötödik hét kérdése 2026 december 5 22:00 órakor jelenik meg és 2026 december 12 21:00 óráig lehet válaszolni.",
+        "Az hatodik hét kérdése 2026 december 12 22:00 órakor jelenik meg és 2026 december 19 21:00 óráig lehet válaszolni.",
+        "Az hetedik hét kérdése 2026 december 19 22:00 órakor jelenik meg és 2026 december 26 21:00 óráig lehet válaszolni.",
+        "A Fődij sorsolása 2026 december 26-án este 22:00 órakor történik.",
       ],
     },
     {
-      cim: "7. A nyeremények",
-      bekezdesek: [
-        "[KITÖLTENDŐ: a heti nyeremény és a fődíj megnevezése, értéke, az átvétel módja, a nyereményhez kapcsolódó adófizetési kötelezettség]",
-      ],
+      cim: "7. A nyertesek értesítése",
+      bekezdesek: ["A nyertest a megadott e-mail-címen értesítjük."],
     },
     {
-      cim: "8. A nyertesek értesítése",
-      bekezdesek: [
-        "A nyertest a megadott e-mail-címen értesítjük.",
-        "[KITÖLTENDŐ: a jelentkezés határideje, és mi történik, ha a nyertes nem jelentkezik]",
-      ],
-    },
-    {
-      cim: "9. Adatkezelés",
+      cim: "8. Adatkezelés",
       bekezdesek: [
         "Az e-mail-címet csak a játékra és a nyertes értesítésére használjuk, hírlevélre nem. A részletek az Adatkezelési tájékoztatóban vannak.",
-      ],
-    },
-    {
-      cim: "10. Egyéb rendelkezések",
-      bekezdesek: [
-        "[KITÖLTENDŐ: kizárás csalás esetén, a szabályzat módosítása, a játék lezárása, a felelősség korlátai, a vitás kérdések rendezése]",
       ],
     },
   ],
