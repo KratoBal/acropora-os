@@ -15,6 +15,7 @@ import { RequirePermissions } from "../auth/decorators/require-permissions.decor
 import {
   CreateLivestockArrivalDto,
   LivestockArrivalListQueryDto,
+  LivestockArrivalOptionQueryDto,
   UpdateLivestockArrivalDto,
 } from "./dto/livestock-arrival.dto.js";
 import { LivestockArrivalsService } from "./livestock-arrivals.service.js";
@@ -32,6 +33,13 @@ export class LivestockArrivalsController {
   @RequirePermissions(PERMISSIONS.INVENTORY_VIEW)
   list(@Query() query: LivestockArrivalListQueryDto) {
     return this.service.list(query);
+  }
+
+  /** BEFORE `:id`: Nest matches in declaration order, and `options` would be taken for an id. */
+  @Get("options/products")
+  @RequirePermissions(PERMISSIONS.INVENTORY_VIEW)
+  productOptions(@Query() query: LivestockArrivalOptionQueryDto) {
+    return this.service.productOptions(query.q);
   }
 
   @Get(":id")

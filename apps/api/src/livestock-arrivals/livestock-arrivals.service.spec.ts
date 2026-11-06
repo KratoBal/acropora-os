@@ -18,7 +18,8 @@ import {
   WHAT TURNS THIS RED (the live animal arrivals' rules, card f4e4832b S2). A day that has the right shape and is not a day
   (`2026-02-30`) stored; a pre-registration on an arrival that is already here or cancelled; a closing status that leaves the
   old pre-registration tick on; a tick set explicitly on a closed arrival accepted; a product that does not exist linked;
-  an unrelated edit asked to look the stored product up again; an explicit null not clearing a link, a quantity or a note;
+  an unrelated edit asked to look the stored product up again; a product that is not a live animal linked (the check is
+  the live animal roots, the same source as the shop's pickup-only rule); an explicit null not clearing a link, a quantity or a note;
   a blank label saved; "upcoming" counted from UTC instead of the shop's Budapest day.
 */
 const stored = (over: Partial<LivestockArrival> = {}): LivestockArrival => ({
@@ -46,6 +47,7 @@ function setup(
     created: [] as { data: LivestockArrivalWrite; by: string | null }[],
     updated: [] as LivestockArrivalWrite[],
     productChecks: [] as string[],
+    productOptions: [] as (string | undefined)[],
   };
   const repository = {
     list: async (filters: LivestockArrivalFilters) => {
@@ -53,13 +55,17 @@ function setup(
       return [stored()];
     },
     get: async () => initial,
-    productExists: async (id: string) => {
+    isLiveAnimalProduct: async (id: string) => {
       calls.productChecks.push(id);
       return products.includes(id);
     },
     create: async (data: LivestockArrivalWrite, by: string | null) => {
       calls.created.push({ data, by });
       return stored({ ...data, id: "new" });
+    },
+    productOptions: async (q: string | undefined) => {
+      calls.productOptions.push(q);
+      return [{ id: "p1", name: "Zoanthus", commonName: null, kind: "CORAL" }];
     },
     update: async (_id: string, data: LivestockArrivalWrite) => {
       calls.updated.push(data);
@@ -122,7 +128,7 @@ describe("create", () => {
     assert.equal(calls.created.length, 2);
   });
 
-  it("asks whether a linked product exists, and refuses one that does not", async () => {
+  it("asks whether a linked product is a live animal, and refuses one that is not (or does not exist)", async () => {
     const { service, calls } = setup();
     await service.create({ ...input, productId: "p1" }, null);
     assert.deepEqual(calls.productChecks, ["p1"]);
@@ -223,6 +229,17 @@ describe("update", () => {
       NotFoundException,
     );
     await assert.rejects(setup(null).service.get("x"), NotFoundException);
+  });
+});
+
+describe("productOptions", () => {
+  it("hands the search to the repository as it is, and returns its options", async () => {
+    const { service, calls } = setup();
+    const options = await service.productOptions("zoa");
+    assert.deepEqual(calls.productOptions, ["zoa"]);
+    assert.equal(options[0]!.kind, "CORAL");
+    await service.productOptions(undefined);
+    assert.deepEqual(calls.productOptions, ["zoa", undefined]);
   });
 });
 
