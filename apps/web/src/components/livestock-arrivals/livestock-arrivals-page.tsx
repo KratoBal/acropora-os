@@ -41,6 +41,7 @@ import {
   type LivestockArrivalFilters,
   type LivestockArrivalInput,
 } from "@/lib/api/livestock-arrivals";
+import { ApiError } from "@/lib/api/client";
 import { formatDayHu } from "@/lib/format/date";
 
 const errorText = (cause: unknown) =>
@@ -120,15 +121,20 @@ function ArrivalDrawer({
   row,
   onClose,
   onSaved,
+  onStale,
 }: {
   token: string;
   row: LivestockArrival | null;
   onClose: () => void;
   onSaved: () => void;
+  /** Az érkezést közben más módosította (409): a lista frissüljön, hogy az újranyitott sor már az új értékekkel jöjjön. */
+  onStale: () => void;
 }) {
   const [form, setForm] = useState<FormState>(formOf(row));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Ütközés után a mentés zárva: ez az űrlap a régi verzióból jött, minden mentése újra ütközne. */
+  const [stale, setStale] = useState(false);
   const open = isLivestockArrivalOpen(form.status);
   /** A találatok fajtája azonosító szerint: a választó csak az azonosítót és a nevet adja vissza. */
   const productKinds = useRef(new Map<string, LivestockArrivalKind | null>());
@@ -170,18 +176,23 @@ function ArrivalDrawer({
     setError(null);
     try {
       const input = inputOfForm(form);
-      if (row) await livestockArrivalsApi.update(token, row.id, input);
+      if (row)
+        await livestockArrivalsApi.update(token, row.id, input, row.updatedAt);
       else await livestockArrivalsApi.create(token, input);
       onSaved();
     } catch (cause) {
       setError(errorText(cause));
+      if (cause instanceof ApiError && cause.status === 409) {
+        setStale(true);
+        onStale();
+      }
     } finally {
       setBusy(false);
     }
   };
 
   const canSave =
-    form.label.trim().length > 0 && form.expectedOn !== "" && !busy;
+    form.label.trim().length > 0 && form.expectedOn !== "" && !busy && !stale;
 
   return (
     <PilotDrawer
@@ -532,6 +543,7 @@ export function LivestockArrivalsPage() {
             setEditing(undefined);
             void load();
           }}
+          onStale={() => void load()}
         />
       ) : null}
     </PilotThemeRoot>
