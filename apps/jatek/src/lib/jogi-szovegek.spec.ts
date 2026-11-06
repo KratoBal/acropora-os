@@ -55,8 +55,8 @@ describe("a jogi szoveg vazlatai", () => {
       "Acropora Kft.",
       "Adószám: 23916229-2-42",
       "A játék 2026 november 7-én 22:00 órakor kezdődik.",
-      "A Fődij sorsolása 2026 december 26-án este 22:00 órakor történik.",
-      "A játékban bárki résztvehet, aki a játék kezdetekor betöltötte a 18. életévét.",
+      "A Fődíj sorsolása 2026 december 26-án este 22:00 órakor történik.",
+      "A játékban bárki részt vehet, aki a játék kezdetekor betöltötte a 18. életévét.",
       "A játékos megadja a nevét, az e-mail-címét és a válaszát.",
     ])
       assert.ok(szabaly.includes(mondat), mondat);
@@ -74,6 +74,10 @@ describe("a jogi szoveg vazlatai", () => {
       assert.ok(szabaly.includes(mondat), mondat);
     assert.equal(szabaly.includes("Az hatodik"), false);
     assert.equal(szabaly.includes("Az hetedik"), false);
+    // two more obvious slips, corrected on acrobot's word (44311): "Fődij" and "résztvehet"
+    assert.equal(szabaly.includes("Fődij"), false);
+    assert.equal(szabaly.includes("résztvehet"), false);
+    assert.equal(szabaly.split("A Fődíj sorsolása").length - 1, 2);
     // the prize sentences close section 6, the name sentence closes section 7
     assert.match(
       JATEKSZABALYZAT.szakaszok[5]!.bekezdesek.at(-1)!,
