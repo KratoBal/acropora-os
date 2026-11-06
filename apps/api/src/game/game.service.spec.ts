@@ -720,14 +720,18 @@ describe("the prize, the next question and the winners on the public page (Balá
       assert.equal(text.includes(secret), false, secret);
   });
 
-  // WHAT TURNS THIS RED (Balázs, 2026-11-06 10:51 UTC): more or fewer than the first two characters of the part before the @, a
-  // different number of hiding marks, the domain cut or changed, a one-character part shown as two, and an address with no @
+  // WHAT TURNS THIS RED (Balázs, 2026-11-06 10:51 UTC; the length rule acrobot 44431): more or fewer than two characters of a
+  // part of four or more, more than ONE character of a part of one to three (two and three were the barracuda case: the name
+  // beside it gives the rest away), a different number of hiding marks, the domain cut or changed, and an address with no @
   // printed whole.
-  it("hides an address as the first two characters, three bullets, then @ and the whole domain; one character when the part is shorter than two; nothing of a malformed address", () => {
+  it("hides an address as the first two characters (one when the part before the @ has three or fewer), three bullets, then @ and the whole domain; nothing of a malformed address", () => {
     assert.equal(maskPublicEmail("kovacs.peter@gmail.com"), "ko•••@gmail.com");
-    assert.equal(maskPublicEmail("ab@x.hu"), "ab•••@x.hu");
+    assert.equal(maskPublicEmail("abcd@x.hu"), "ab•••@x.hu");
+    assert.equal(maskPublicEmail("abc@x.hu"), "a•••@x.hu");
+    assert.equal(maskPublicEmail("ab@x.hu"), "a•••@x.hu");
     assert.equal(maskPublicEmail("a@x.hu"), "a•••@x.hu");
-    assert.equal(maskPublicEmail("Éva@freemail.hu"), "Év•••@freemail.hu");
+    assert.equal(maskPublicEmail("Évi@freemail.hu"), "É•••@freemail.hu");
+    assert.equal(maskPublicEmail("Évike@freemail.hu"), "Év•••@freemail.hu");
     assert.equal(
       maskPublicEmail("név+jelzo@sub.pelda.co.hu"),
       "né•••@sub.pelda.co.hu",

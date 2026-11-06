@@ -29,6 +29,7 @@ import {
   GameQuestionDto,
 } from "./game-admin.dto.js";
 import { GameAdminService } from "./game-admin.service.js";
+import { GameErasureService } from "./game-erasure.service.js";
 
 /**
  * THE GIVEAWAY'S ADMIN (card 31445d0f, slice 2). Its own rights (acrobot, 2026-11-05 22:41): GAME_VIEW reads the entries
@@ -40,6 +41,7 @@ export class GameAdminController {
   constructor(
     private readonly admin: GameAdminService,
     private readonly images: MailImageService,
+    private readonly erasure: GameErasureService,
   ) {}
 
   /**
@@ -156,6 +158,16 @@ export class GameAdminController {
   @RequirePermissions(PERMISSIONS.GAME_MANAGE)
   sendQueued(@CurrentUser() user: AuthenticatedUser) {
     return this.admin.sendQueued(user.id);
+  }
+
+  /**
+   * THE DATA ERASURE, PREVIEWED (card bc0ca668): when it is due and what it would erase, counted, without writing. The
+   * erasure itself runs on the scheduler.
+   */
+  @Get("erasure")
+  @RequirePermissions(PERMISSIONS.GAME_VIEW)
+  erasurePreview() {
+    return this.erasure.run({ dryRun: true });
   }
 
   /** A confirmation link without the mail, for a stage round only (JATEK_TEST_LINKS=on; acrobot 44026). */
