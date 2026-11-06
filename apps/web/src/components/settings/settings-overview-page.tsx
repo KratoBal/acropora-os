@@ -200,6 +200,13 @@ export const SETTINGS_AREAS: SettingsArea[] = [
         entryId: "asset-functions",
       },
       {
+        label: "Bérelhető eszközök",
+        description:
+          "A kölcsönzött eszközök darabonként: gyári szám, napi díj, kaució, pótlási érték, tartozékok.",
+        href: "/beallitasok/berelheto-eszkozok",
+        entryId: "rental-equipment",
+      },
+      {
         label: "Partner-duplikátumok",
         description:
           "Ugyanaz a cég vevőként, szállítóként vagy webshopos vásárlóként: csak olvasható lista a döntéshez.",

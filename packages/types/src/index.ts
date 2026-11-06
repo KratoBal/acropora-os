@@ -1112,6 +1112,14 @@ export type {
 export { FAVORITE_LIMITS, isFavoriteHref } from "./favorite.js";
 export type { FavoriteListResponse } from "./favorite.js";
 export { normalizeAssetFunctionName } from "./asset-function.js";
+export {
+  normalizeOptionalRentalText,
+  RENTAL_EQUIPMENT_LIMITS,
+} from "./rental-equipment.js";
+export type {
+  RentalEquipment,
+  RentalEquipmentListResponse,
+} from "./rental-equipment.js";
 export type {
   AssetFunction,
   AssetFunctionListResponse,

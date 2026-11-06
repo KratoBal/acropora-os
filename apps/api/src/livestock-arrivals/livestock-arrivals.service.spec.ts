@@ -51,6 +51,7 @@ function setup(
     { kind: LivestockArrivalKind | null; offered: boolean }
   > = { p1: { kind: null, offered: true } },
   writeOutcome: "changed" | "gone" | null = null,
+  listTruncated = false,
 ) {
   const calls = {
     list: [] as LivestockArrivalFilters[],
@@ -63,7 +64,7 @@ function setup(
   const repository = {
     list: async (filters: LivestockArrivalFilters) => {
       calls.list.push(filters);
-      return [stored()];
+      return { items: [stored()], truncated: listTruncated };
     },
     get: async () => initial,
     liveAnimalProduct: async (id: string) => {
@@ -366,6 +367,15 @@ describe("list", () => {
     });
     await service.list({});
     assert.equal(calls.list[1]!.upcoming, undefined);
+  });
+
+  it("hands on the list as the repository cut it, with the truncated flag", async () => {
+    const cut = setup(stored(), undefined, null, true);
+    assert.equal((await cut.service.list({})).truncated, true);
+    const whole = setup();
+    const response = await whole.service.list({});
+    assert.equal(response.truncated, false);
+    assert.equal(response.items.length, 1);
   });
 
   it("the Budapest day is right across the summer-time shift and the midnight edge", () => {

@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { liveAnimalKindSubtrees } from "../integrations/medusa/medusa-livestock.policy.js";
+import { LIVESTOCK_ARRIVAL_LIMITS } from "@acropora/types";
+
 import {
   livestockArrivalDay,
+  livestockArrivalList,
   livestockArrivalView,
   livestockProductOption,
 } from "./livestock-arrivals.repository.js";
@@ -65,6 +68,30 @@ describe("the arrival as the API shows it", () => {
       livestockArrivalDay("2026-11-13").toISOString(),
       "2026-11-13T00:00:00.000Z",
     );
+  });
+});
+
+describe("the list's cut", () => {
+  const max = LIVESTOCK_ARRIVAL_LIMITS.list.max;
+  const rows = (count: number) =>
+    Array.from({ length: count }, (_, index) => row({ id: `a${index}` }));
+
+  it("a list at the limit is whole: nothing is flagged", () => {
+    const list = livestockArrivalList(rows(max));
+    assert.equal(list.items.length, max);
+    assert.equal(list.truncated, false);
+  });
+
+  it("one row over the limit is dropped from the list and flagged: the query asks for one more than it shows", () => {
+    const list = livestockArrivalList(rows(max + 1));
+    assert.equal(list.items.length, max);
+    assert.equal(list.truncated, true);
+    assert.equal(list.items.at(-1)?.id, `a${max - 1}`);
+  });
+
+  it("a short or empty list is whole", () => {
+    assert.deepEqual(livestockArrivalList([]), { items: [], truncated: false });
+    assert.equal(livestockArrivalList(rows(3)).items.length, 3);
   });
 });
 
