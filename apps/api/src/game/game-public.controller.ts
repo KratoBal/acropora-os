@@ -105,6 +105,15 @@ export class GamePublicController {
     return this.game.current();
   }
 
+  /** The closed weeks with their correct answers (never before the closing). */
+  @Public()
+  @Get("lezart")
+  @Header("Cache-Control", "no-store")
+  closed(@Req() request: CallerRequest) {
+    limit(GamePublicController.reads, request);
+    return this.game.closedWeeks();
+  }
+
   /** The past winners by their shortened names (never an address). */
   @Public()
   @Get("nyertesek")

@@ -221,8 +221,13 @@ describe("an edit of a question (barracuda, #2254)", () => {
         },
       },
     };
-    const service = new GameAdminService(null as never);
+    const service = new GameAdminService({ now: () => NOW } as never);
     service.database = {
+      gameQuestion: {
+        findUnique: async () => ({
+          closesAt: new Date("2026-11-13T22:59:59Z"),
+        }),
+      },
       $transaction: async (fn: (t: typeof tx) => unknown) => fn(tx),
     } as never;
     await service.updateQuestion("q1", {
@@ -242,6 +247,61 @@ describe("an edit of a question (barracuda, #2254)", () => {
         ["e3", true, null],
       ],
     );
+  });
+
+  // WHAT TURNS THIS RED (barracuda, #2283): a question that has closed (its correct answer public, its week drawable) given a
+  // closing in the future again; or an edit of a closed question that keeps its closing in the past refused (a typo in the
+  // question or the prize must stay fixable); or an open question's closing no longer movable.
+  it("a closed question cannot be given a closing in the future (409, nothing written); its other fields, an open question's closing, and a closing still in the past stay editable", async () => {
+    const updated: unknown[] = [];
+    const tx = {
+      gameQuestion: {
+        update: async ({ data }: { data: Record<string, unknown> }) => {
+          updated.push(data);
+          return { id: "q1", ...data };
+        },
+      },
+      gameEntry: { findMany: async () => [], update: async () => undefined },
+    };
+    const make = (storedCloses: string) => {
+      const service = new GameAdminService({ now: () => NOW } as never);
+      service.database = {
+        gameQuestion: {
+          findUnique: async () => ({ closesAt: new Date(storedCloses) }),
+        },
+        $transaction: async (fn: (t: typeof tx) => unknown) => fn(tx),
+      } as never;
+      return service;
+    };
+    const input = (closesAt: string) => ({
+      week: "2026-W45",
+      type: "TEXT",
+      prompt: "Melyik?",
+      options: [],
+      acceptedAnswers: ["Acropora"],
+      opensAt: "2026-11-06T06:00:00Z",
+      closesAt,
+    });
+    // closed at 2026-11-13, now is 2026-11-20: a closing on 2026-11-27 reopens it
+    await assert.rejects(
+      make("2026-11-13T22:59:59Z").updateQuestion(
+        "q1",
+        input("2026-11-27T22:59:59Z"),
+      ),
+      (e: any) => e.getResponse().code === "QUESTION_CLOSED",
+    );
+    assert.equal(updated.length, 0);
+    // the same closed question, closing kept in the past: allowed
+    await make("2026-11-13T22:59:59Z").updateQuestion(
+      "q1",
+      input("2026-11-13T22:59:59Z"),
+    );
+    // an open question (closes 2026-11-27): its closing can move
+    await make("2026-11-27T22:59:59Z").updateQuestion(
+      "q1",
+      input("2026-11-30T22:59:59Z"),
+    );
+    assert.equal(updated.length, 2);
   });
 
   it("a weekly draw on a question that does not exist is a 404, not a 500", async () => {

@@ -185,6 +185,19 @@ export class GameAdminService {
    */
   async updateQuestion(id: string, input: GameQuestionInput) {
     const data = this.checkQuestion(input);
+    // A CLOSED QUESTION IS NOT REOPENED (barracuda, #2283): once it has closed, its correct answer is public and the week can
+    // be drawn, so moving its closing into the future would let a week that has been published take answers again
+    const stored = await this.database.gameQuestion.findUnique({
+      where: { id },
+      select: { closesAt: true },
+    });
+    const now = this.game.now();
+    if (stored && stored.closesAt <= now && data.closesAt > now)
+      throw gameError(
+        HttpStatus.CONFLICT,
+        "QUESTION_CLOSED",
+        "A lezárt kérdés zárása nem tolható a jövőbe: a helyes válasza már nyilvános, és a hét sorsolható.",
+      );
     await this.checkPrizeImage(data.prizeImageId);
     return this.database.$transaction(async (tx) => {
       const question = await tx.gameQuestion.update({ where: { id }, data });
