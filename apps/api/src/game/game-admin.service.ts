@@ -295,17 +295,38 @@ export class GameAdminService {
         "A heti sorsoláshoz kérdés kell.",
       );
     const questionId = input.kind === "WEEKLY" ? input.questionId! : null;
-    if (
-      questionId &&
-      !(await this.database.gameQuestion.findUnique({
+    const now = this.game.now();
+    if (questionId) {
+      const question = await this.database.gameQuestion.findUnique({
         where: { id: questionId },
+        select: { id: true, closesAt: true },
+      });
+      if (!question)
+        throw gameError(
+          HttpStatus.NOT_FOUND,
+          "NO_QUESTION",
+          "Nincs ilyen kérdés.",
+        );
+      // THE FIRST DRAW OF A WEEK IS FINAL on the public list (the rules: a re-run never replaces the first recorded result),
+      // so it cannot be run while the week can still take answers: a trial or accidental draw would close the week for good
+      // (barracuda, #2279)
+      if (question.closesAt > now)
+        throw gameError(
+          HttpStatus.CONFLICT,
+          "DRAW_TOO_EARLY",
+          "A heti sorsolás a kérdés zárása után indítható: addig még jöhetnek válaszok, és az első sorsolás végleges.",
+        );
+    } else if (
+      // the same for the Christmas draw: after the LAST question has closed
+      await this.database.gameQuestion.findFirst({
+        where: { closesAt: { gt: now } },
         select: { id: true },
-      }))
+      })
     )
       throw gameError(
-        HttpStatus.NOT_FOUND,
-        "NO_QUESTION",
-        "Nincs ilyen kérdés.",
+        HttpStatus.CONFLICT,
+        "DRAW_TOO_EARLY",
+        "A karácsonyi sorsolás az utolsó kérdés zárása után indítható: addig még jöhetnek válaszok, és az első sorsolás végleges.",
       );
     const candidates = await this.candidatesOf(input.kind, questionId);
     const seed = randomBytes(16).toString("hex");
