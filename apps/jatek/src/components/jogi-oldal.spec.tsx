@@ -18,18 +18,23 @@ import { OldalKeret } from "./oldal-keret.tsx";
   that is missing; a frame without the links to the three pages.
 */
 describe("a jogi oldal", () => {
-  it("shows the draft warning first, then every section, and every [KITÖLTENDŐ] mark of the data", () => {
+  it("shows a draft's warning first, then every section, and every [KITÖLTENDŐ] mark of the data; a final text has no warning", () => {
     for (const d of JOGI_DOKUMENTUMOK) {
       const h = renderToStaticMarkup(<JogiOldal dokumentum={d} />);
-      assert.ok(
-        h.indexOf("vazlat-jelzes") < h.indexOf(d.szakaszok[0]!.cim),
-        d.azonosito,
-      );
-      assert.ok(h.includes("VÁZLAT"), d.azonosito);
+      if (d.vazlat_jelzes) {
+        assert.ok(
+          h.indexOf("vazlat-jelzes") < h.indexOf(d.szakaszok[0]!.cim),
+          d.azonosito,
+        );
+        assert.ok(h.includes("VÁZLAT"), d.azonosito);
+      } else {
+        assert.equal(h.includes("vazlat-jelzes"), false, d.azonosito);
+        assert.equal(h.includes("VÁZLAT"), false, d.azonosito);
+      }
       for (const szakasz of d.szakaszok)
         assert.ok(h.includes(szakasz.cim), szakasz.cim);
       // a szakaszok jelolesei + a vazlat-jelzes sajat egy emlitese
-      const jelzesben = d.vazlat_jelzes.split("[KITÖLTENDŐ").length - 1;
+      const jelzesben = (d.vazlat_jelzes ?? "").split("[KITÖLTENDŐ").length - 1;
       assert.equal(
         (h.match(/\[KITÖLTENDŐ/g) ?? []).length,
         kitoltendoDb(d) + jelzesben,

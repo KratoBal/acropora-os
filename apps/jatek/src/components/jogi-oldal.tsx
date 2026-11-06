@@ -7,9 +7,11 @@ export function JogiOldal({ dokumentum }: { dokumentum: JogiDokumentum }) {
       className="jatek-wrap jatek-jogi"
       data-dokumentum={dokumentum.azonosito}
     >
-      <p className="jatek-vazlat" data-testid="vazlat-jelzes">
-        {dokumentum.vazlat_jelzes}
-      </p>
+      {dokumentum.vazlat_jelzes ? (
+        <p className="jatek-vazlat" data-testid="vazlat-jelzes">
+          {dokumentum.vazlat_jelzes}
+        </p>
+      ) : null}
       <h1>{dokumentum.cim}</h1>
       {dokumentum.szakaszok.map((szakasz) => (
         <section key={szakasz.cim}>
