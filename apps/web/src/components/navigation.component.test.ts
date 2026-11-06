@@ -96,7 +96,7 @@ describe("navigation", () => {
     1564264593444839436; "Akvarisztika" is acrobot's working name). The four
     pages keep their own entries, so their visibility does not change.
   */
-  it("puts the aquariums, the calculators, the ICP and the mortality log under Akvarisztika", () => {
+  it("puts the aquariums, the calculators, the ICP, the mortality log and the live animal arrivals under Akvarisztika", () => {
     expect(
       group("Akvarisztika").children.map((item) => [item.href, item.entryId]),
     ).toEqual([
@@ -104,6 +104,7 @@ describe("navigation", () => {
       ["/kalkulatorok", "calculators"],
       ["/icp", "icp"],
       ["/elhullasi-naplo", "mortality"],
+      ["/elo-allat-erkezesek", "livestock-arrivals"],
     ]);
   });
 
@@ -171,7 +172,13 @@ describe("navigation", () => {
       ["Áttekintés", ["Dashboard", "Feladataim", "Üzenetek"]],
       [
         "Akvarisztika",
-        ["Akváriumok", "Kalkulátorok", "ICP", "Elhullási napló"],
+        [
+          "Akváriumok",
+          "Kalkulátorok",
+          "ICP",
+          "Elhullási napló",
+          "Élő állat érkezések",
+        ],
       ],
       [
         "Értékesítés",
@@ -438,6 +445,7 @@ describe("navigation", () => {
     ["/kalkulatorok", "calculators", "Kalkulátorok"],
     ["/icp", "icp", "ICP"],
     ["/elhullasi-naplo", "mortality", "Elhullási napló"],
+    ["/elo-allat-erkezesek", "livestock-arrivals", "Élő állat érkezések"],
     ["/szerviz/piszkozatok", "service-drafts", "Piszkozatok"],
     ["/szerviz/hibajegyek", "service-jobs", "Hibajegyek"],
     ["/szerviz/karbantartas", "maintenance", "Karbantartás"],
@@ -799,6 +807,8 @@ describe("navigation", () => {
     "/kalkulatorok": "aquariums.view",
     "/icp": "icp.view",
     "/elhullasi-naplo": "mortality.view",
+    // az élő állat érkezések (kártya f4e4832b): a készletet vezetők, ugyanaz a jog, ami a végponté
+    "/elo-allat-erkezesek": "inventory.view",
     "/ai-teszt": "ai-test.view",
     // a kutatási tudástár (S4): a bevezetés után felvett sor, a menü joga az olvasásé
     "/tudasbazis": "knowledge.view",
