@@ -1,11 +1,12 @@
 import { Injectable } from "@nestjs/common";
 
 import { Prisma, prisma } from "@acropora/database";
-import type {
-  LivestockArrival,
-  LivestockArrivalKind,
-  LivestockArrivalProductOption,
-  LivestockArrivalStatus,
+import {
+  LIVESTOCK_ARRIVAL_LIMITS,
+  type LivestockArrival,
+  type LivestockArrivalKind,
+  type LivestockArrivalProductOption,
+  type LivestockArrivalStatus,
 } from "@acropora/types";
 
 import {
@@ -72,6 +73,21 @@ export function livestockArrivalView(row: Row): LivestockArrival {
   };
 }
 
+/**
+ * THE LIST FROM THE ROWS READ (one more than the list shows): the extra row is not shown, it only says that the list was cut.
+ * Exported for the test: the query asks for `max + 1`, and this is where that extra row is told apart from the shown ones.
+ */
+export function livestockArrivalList(rows: Row[]): {
+  items: LivestockArrival[];
+  truncated: boolean;
+} {
+  const max = LIVESTOCK_ARRIVAL_LIMITS.list.max;
+  return {
+    items: rows.slice(0, max).map(livestockArrivalView),
+    truncated: rows.length > max,
+  };
+}
+
 /** `YYYY-MM-DD` to the midnight UTC a `@db.Date` column stores (exported for the same test). */
 export const livestockArrivalDay = (value: string) =>
   new Date(`${value}T00:00:00.000Z`);
@@ -106,7 +122,9 @@ export class LivestockArrivalsRepository {
    * THE SOONEST DAY FIRST, THEN THE ID: two arrivals of the same day keep a stable order between two reads (the id is the
    * tie-break, so the list does not "jump" for the person reading it).
    */
-  async list(filters: LivestockArrivalFilters): Promise<LivestockArrival[]> {
+  async list(
+    filters: LivestockArrivalFilters,
+  ): Promise<{ items: LivestockArrival[]; truncated: boolean }> {
     const where: Prisma.LivestockArrivalWhereInput = {
       ...(filters.status ? { status: filters.status } : {}),
       ...(filters.kind ? { kind: filters.kind } : {}),
@@ -124,9 +142,10 @@ export class LivestockArrivalsRepository {
       where,
       select: SELECT,
       orderBy: [{ expectedOn: "asc" }, { id: "asc" }],
-      take: 500,
+      // one more than shown: that extra row is how the list knows it was cut
+      take: LIVESTOCK_ARRIVAL_LIMITS.list.max + 1,
     });
-    return rows.map(livestockArrivalView);
+    return livestockArrivalList(rows);
   }
 
   async get(id: string): Promise<LivestockArrival | null> {
@@ -235,24 +254,22 @@ export class LivestockArrivalsRepository {
   }
 
   /** `null` when there is no such arrival. */
+  /**
+   * THE WRITE IS CONDITIONAL ON THE ROW NOT HAVING MOVED SINCE THE SERVICE READ IT (`updatedAt` in the where): the service merges
+   * the request over the stored record and writes every field, so a second edit landing between the read and the write would
+   * otherwise be silently overwritten. Returns "changed" when the row moved, null when it is gone.
+   */
   async update(
     id: string,
     data: LivestockArrivalWrite,
-  ): Promise<LivestockArrival | null> {
-    try {
-      const row = await prisma.livestockArrival.update({
-        where: { id },
-        data: { ...data, expectedOn: livestockArrivalDay(data.expectedOn) },
-        select: SELECT,
-      });
-      return livestockArrivalView(row);
-    } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === "P2025"
-      )
-        return null;
-      throw error;
-    }
+    readAt: string,
+  ): Promise<LivestockArrival | "changed" | null> {
+    const { count } = await prisma.livestockArrival.updateMany({
+      where: { id, updatedAt: new Date(readAt) },
+      data: { ...data, expectedOn: livestockArrivalDay(data.expectedOn) },
+    });
+    const row = await this.get(id);
+    if (count === 1) return row;
+    return row ? "changed" : null;
   }
 }

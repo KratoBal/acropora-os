@@ -69,7 +69,9 @@ const arrival = (over: Partial<LivestockArrival> = {}): LivestockArrival => ({
 
 beforeEach(() => {
   auth.session = as("OWNER");
-  api.list.mockReset().mockResolvedValue({ items: [arrival()] });
+  api.list
+    .mockReset()
+    .mockResolvedValue({ items: [arrival()], truncated: false });
   api.create.mockReset().mockResolvedValue(arrival());
   api.update.mockReset().mockResolvedValue(arrival());
   api.productOptions.mockReset().mockResolvedValue([
@@ -130,6 +132,7 @@ describe("a lista", () => {
   it("egy sor nélküli darabszám kötőjel, a termék nélküli sor nem mutat Termék sort", async () => {
     api.list.mockResolvedValue({
       items: [arrival({ quantity: null, productId: null, productName: null })],
+      truncated: false,
     });
     render(<LivestockArrivalsPage />);
     const list = await screen.findByTestId("livestock-arrival-list");
@@ -137,8 +140,22 @@ describe("a lista", () => {
     expect(within(list).queryByText(/^Termék:/)).toBeNull();
   });
 
+  it("ha a szerver levágta a listát, megmondja, hogy nem az összes látszik, és mit tegyen; teljes listánál nem szól", async () => {
+    api.list.mockResolvedValue({ items: [arrival()], truncated: true });
+    const { unmount } = render(<LivestockArrivalsPage />);
+    expect(
+      await screen.findByText("Csak az első 500 érkezést mutatjuk"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("livestock-arrival-list")).toBeInTheDocument();
+    unmount();
+    api.list.mockResolvedValue({ items: [arrival()], truncated: false });
+    render(<LivestockArrivalsPage />);
+    await screen.findByTestId("livestock-arrival-list");
+    expect(screen.queryByText(/Csak az első/)).not.toBeInTheDocument();
+  });
+
   it("üres listánál megmondja, mi a teendő, és hibánál a hibát mutatja", async () => {
-    api.list.mockResolvedValue({ items: [] });
+    api.list.mockResolvedValue({ items: [], truncated: false });
     const { unmount } = render(<LivestockArrivalsPage />);
     expect(await screen.findByText("Nincs ilyen érkezés")).toBeInTheDocument();
     unmount();

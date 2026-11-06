@@ -49,6 +49,8 @@ export const LIVESTOCK_ARRIVAL_LIMITS = {
   label: { min: 1, max: 120 },
   note: { max: 500 },
   quantity: { min: 1, max: 100000 },
+  /** The list shows at most this many arrivals, the soonest first; more is flagged `truncated`. */
+  list: { max: 500 },
 } as const;
 
 export interface LivestockArrival {
@@ -72,6 +74,8 @@ export interface LivestockArrival {
 
 export interface LivestockArrivalListResponse {
   items: LivestockArrival[];
+  /** True when more arrivals match than `LIVESTOCK_ARRIVAL_LIMITS.list.max`: the list is its soonest part, not all of it. */
+  truncated: boolean;
 }
 
 /**

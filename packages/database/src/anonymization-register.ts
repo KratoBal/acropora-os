@@ -820,6 +820,12 @@ export const ANONYMIZATION_REGISTER: Readonly<
   AssetFunction: {
     name: "business",
   },
+  RentalEquipment: {
+    name: "business",
+    serialNumber: "identifier",
+    accessories: "business",
+    note: "freeText",
+  },
   UnitOfMeasure: {
     code: "business",
     name: "business",

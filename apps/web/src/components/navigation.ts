@@ -599,6 +599,14 @@ const mainNavigationGroups: AppNavigationGroup[] = [
         entryId: "asset-functions",
       },
       {
+        // Eszközbérlés, S1 (task eszkozberles): a bérelhető eszközök törzse
+        subgroup: "Törzsadatok",
+        href: "/beallitasok/berelheto-eszkozok",
+        label: "Bérelhető eszközök",
+        icon: "settings",
+        entryId: "rental-equipment",
+      },
+      {
         // Egy partnertörzs, 1. lépés (acrobot 42536): a duplikátum-lista, csak olvas.
         subgroup: "Törzsadatok",
         href: "/beallitasok/partner-duplikatumok",
