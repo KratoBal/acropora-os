@@ -110,7 +110,11 @@ function setup(
       }) =>
         all
           .filter((x) => x.closesAt <= where.closesAt.lte)
-          .sort((a, b) => b.closesAt.getTime() - a.closesAt.getTime())
+          .sort((a, b) =>
+            orderBy.closesAt === "desc"
+              ? b.closesAt.getTime() - a.closesAt.getTime()
+              : a.closesAt.getTime() - b.closesAt.getTime(),
+          )
           .slice(0, take),
     },
     mailImage: {
