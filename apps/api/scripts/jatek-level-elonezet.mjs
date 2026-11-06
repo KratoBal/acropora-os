@@ -2,7 +2,7 @@
 /*
   A NYEREMENYJATEK MEGEROSITO LEVELENEK ELONEZETE, KULDES NELKUL.
 
-    node apps/api/scripts/jatek-level-elonezet.mjs [kimenet.html] [--valasz "szoveg"] [--kerdes "szoveg"] [--zaras 2026-11-13T22:59:59Z]
+    node apps/api/scripts/jatek-level-elonezet.mjs [kimenet.html] [--felirat "szoveg"] [--kerdes "szoveg"] [--zaras 2026-11-13T22:59:59Z]
 
   Ugyanazt a torzset rendereli, amit a kuldes (`renderConfirmationMail`), es ugyanabba a keretbe teszi, amibe a MIME-epito
   (`mailHtmlDocument`: a gomb itt kapja az inline stilusat), majd HTML fajlba irja. NEM kuld, nem er hozza az adatbazishoz
@@ -24,7 +24,8 @@ const kapcsolo = (nev, alap) => {
   args.splice(i, 2);
   return ertek;
 };
-const valasz = kapcsolo("valasz", "Acropora");
+// a VALASZTOS kerdes felirata (a mi szovegunk); szabad szoveges valasz nem kerul a levelbe, ezert nincs ra kapcsolo
+const felirat = kapcsolo("felirat", null);
 const kerdes = kapcsolo("kerdes", "Melyik a legismertebb zátonyépítő korall?");
 const zaras = new Date(kapcsolo("zaras", "2026-11-13T22:59:59Z"));
 const kimenet = resolve(args[0] ?? "jatek-megerosito-level.html");
@@ -49,7 +50,7 @@ const { mailHtmlDocument } = await import(
 const { html, text } = renderConfirmationMail({
   link: "https://jatek-teszt.acropora.hu/megerosites?token=ELONEZET-NEM-VALODI-TOKEN",
   prompt: kerdes,
-  answer: valasz,
+  choiceLabel: felirat,
   closesAt: zaras,
 });
 writeFileSync(kimenet, mailHtmlDocument(html), "utf8");
