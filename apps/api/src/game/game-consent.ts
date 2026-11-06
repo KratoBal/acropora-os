@@ -7,5 +7,5 @@
  * BUMP A VERSION WHEN THE TEXT OF ITS DOCUMENT CHANGES, here and in `apps/jatek/src/lib/jogi-szovegek.ts` (`VERZIO`): a spec
  * reads both files and fails when they differ.
  */
-export const GAME_RULES_VERSION = "szabalyzat-1.0";
-export const GAME_PRIVACY_VERSION = "adatkezeles-1.0";
+export const GAME_RULES_VERSION = "szabalyzat-1.1";
+export const GAME_PRIVACY_VERSION = "adatkezeles-1.1";

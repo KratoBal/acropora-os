@@ -12,11 +12,11 @@ export const KITOLTENDO = "[KITÖLTENDŐ";
 /**
  * A DOKUMENTUMOK VERZIÓJA (acrobot 44375): az űrlap ezt küldi el, hogy a játékos melyik szöveget fogadta el, és a szerver ezt
  * tárolja a nevezéssel. A dokumentum szövegének minden változásakor emelni kell, ITT ÉS az api `game-consent.ts`-ében
- * (az api egyik specje a két fájlt összeveti). A szabályzat szövege maga "Verzió: 1.0"-t mond.
+ * (az api egyik specje a két fájlt összeveti). A szabályzat szövege maga "Verzió: 1.1"-et mond.
  */
 export const VERZIO = {
-  szabalyzat: "szabalyzat-1.0",
-  adatkezeles: "adatkezeles-1.0",
+  szabalyzat: "szabalyzat-1.1",
+  adatkezeles: "adatkezeles-1.1",
 } as const;
 
 /** Egy szakasz tartalmának darabja: bekezdés (sortöréssel is), alcím, felsorolás, táblázat. */
@@ -565,7 +565,7 @@ export const JATEKSZABALYZAT: JogiDokumentum = {
         {
           fajta: "bekezdes",
           sorok: [
-            "A nyertesek eredményhirdetése a következő felületen és adattartalommal történik (a nyertes rövidített neve, például Kovács P., és a nyereménye): https://jatek.acropora.hu. A Fődíj sorsolása élőben történik az Acropora YouTube csatornáján",
+            "A nyertesek eredményhirdetése a következő felületen és adattartalommal történik (a nyertes rövidített neve, például Kovács P., részben kitakart e-mail-címe, például ko•••@gmail.com, és a nyereménye): https://jatek.acropora.hu. A Fődíj sorsolása élőben történik az Acropora YouTube csatornáján",
           ],
         },
         {
@@ -698,7 +698,7 @@ export const JATEKSZABALYZAT: JogiDokumentum = {
           fajta: "bekezdes",
           sorok: [
             "A szabályzat közzétételének dátuma: 2026. november 6..",
-            "Verzió: 1.0.",
+            "Verzió: 1.1.",
           ],
         },
       ],
@@ -920,7 +920,7 @@ export const ADATKEZELES: JogiDokumentum = {
         {
           fajta: "bekezdes",
           sorok: [
-            "A közzététel jogalapja a **hozzájárulásod** (GDPR 6. cikk (1) bekezdés a) pont), amelyet a nevezési felületen, az adatkezelési hozzájárulás jelölőnégyzetével adsz meg: a hozzájárulás szövege kifejezetten tartalmazza, hogy nyertesség esetén a rövidített neved és a részben kitakart email-címed megjelenik.",
+            "A közzététel jogalapja a **szerződés teljesítése** (GDPR 6. cikk (1) bekezdés b) pont): a nyertes rövidített nevének, részben kitakart email-címének és nyereményének közzététele a Játékszabályzat feltétele, amelyet a nevezéskor elfogadsz.",
           ],
         },
         {
@@ -933,7 +933,7 @@ export const ADATKEZELES: JogiDokumentum = {
         {
           fajta: "bekezdes",
           sorok: [
-            "A fődíj sorsolását élőben közvetítjük az **Acropora YouTube csatornáján**. Az adásban a nyertesnek ugyanazok az adatai jelennek meg, mint a weboldalon: a rövidített neve, a részben kitakart email-címe és a nyeremény. Más játékos neve vagy email-címe az adásban nem jelenik meg. A jogalap ugyanaz a hozzájárulás, mint a weboldali közzétételnél.",
+            "A fődíj sorsolását élőben közvetítjük az **Acropora YouTube csatornáján**. Az adásban a nyertesnek ugyanazok az adatai jelennek meg, mint a weboldalon: a rövidített neve, a részben kitakart email-címe és a nyeremény. Más játékos neve vagy email-címe az adásban nem jelenik meg. A jogalap ugyanaz, mint a weboldali közzétételnél (szerződés teljesítése, GDPR 6. cikk (1) bekezdés b) pont).",
           ],
         },
         {
@@ -1205,6 +1205,12 @@ export const ADATKEZELES: JogiDokumentum = {
             "A visszavonás nem változtatja meg automatikusan a már lezajlott sorsolás eredményét. A más jogalapon, például jogszabályi kötelezettség miatt megőrzendő adatokat a rájuk vonatkozó szabályok szerint kezeljük tovább.",
           ],
         },
+        {
+          fajta: "bekezdes",
+          sorok: [
+            "A hozzájárulás visszavonása nem érinti a nyertes rövidített nevének, részben kitakart email-címének és nyereményének közzétételét, mert az a Játékszabályzat feltétele, nem a hozzájáruláson alapul. Ha a közzététellel kapcsolatban kérdésed vagy kifogásod van, írj nekünk a tájékoztató elején megadott elérhetőségen, és egyedileg megvizsgáljuk.",
+          ],
+        },
       ],
     },
     {
@@ -1334,7 +1340,7 @@ export const ADATKEZELES: JogiDokumentum = {
           fajta: "bekezdes",
           sorok: [
             "**Közzététel dátuma: 2026. november 6.**",
-            "**Verzió: 1.0**",
+            "**Verzió: 1.1**",
           ],
         },
       ],
