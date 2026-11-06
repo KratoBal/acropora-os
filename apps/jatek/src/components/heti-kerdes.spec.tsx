@@ -7,6 +7,7 @@ import { HAMIS_KERDES } from "../lib/jatek-api.ts";
 import {
   Gyik,
   Hero,
+  HelyesValaszok,
   KampanySav,
   Lepesek,
   Nyertesek,
@@ -233,6 +234,26 @@ describe("a főoldal állandó szakaszai", () => {
     assert.match(lista, /Karácsonyi fődíj/);
     assert.doesNotMatch(lista, /jatek-empty-winners|Még a rajt előtt/);
     assert.match(renderToStaticMarkup(<Nyertesek />), /jatek-empty-winners/);
+  });
+
+  it("the closed weeks' correct answers are listed with the week and the question; with no closed week the section is not there", () => {
+    const lista = renderToStaticMarkup(
+      <HelyesValaszok
+        hetek={[
+          {
+            week: "2026-W44",
+            prompt: "Melyik a legismertebb zátonyépítő korall?",
+            answer: "Acropora",
+            closesAt: "2026-11-05T22:59:59.000Z",
+          },
+        ]}
+      />,
+    );
+    assert.match(lista, /data-testid="helyes-valaszok"/);
+    assert.match(lista, /44\. hét/);
+    assert.match(lista, /Melyik a legismertebb zátonyépítő korall\?/);
+    assert.match(lista, /Helyes válasz: <b>Acropora<\/b>/);
+    assert.equal(renderToStaticMarkup(<HelyesValaszok />), "");
   });
 
   it("have neither a prototype wording nor a newsletter option", () => {

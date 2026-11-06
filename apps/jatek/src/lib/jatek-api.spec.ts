@@ -57,13 +57,14 @@ const BEMENET = {
 };
 
 describe("a szerzodes utvonalai", () => {
-  it("are the five /jatek paths", () => {
+  it("are the six /jatek paths", () => {
     assert.deepEqual(UTVONALAK, {
       aktualis: "/jatek/aktualis",
       bekuldes: "/jatek/bekuldes",
       megerosites: "/jatek/megerosites",
       nyertesek: "/jatek/nyertesek",
       kep: "/jatek/nyeremeny-kep",
+      lezart: "/jatek/lezart",
     });
   });
 });
@@ -178,6 +179,33 @@ describe("httpJatekApi.aktualis", () => {
       "https://api.example",
       rossz.fetchImpl,
     ).nyertesek();
+    assert.ok(!u.ok && u.code === "UNAVAILABLE");
+  });
+
+  it("lists the closed weeks with their answers from GET /jatek/lezart, drops a row without an answer; a failed call is unavailable", async () => {
+    const jo = {
+      week: "2026-W44",
+      prompt: "Melyik korall?",
+      answer: "Acropora",
+      closesAt: "2026-11-05T22:59:59.000Z",
+    };
+    const a = hamisFetch({
+      status: 200,
+      body: {
+        weeks: [jo, { ...jo, week: "2026-W43", answer: "  " }, { week: 1 }],
+      },
+    });
+    const r = await httpJatekApi("https://api.example", a.fetchImpl).lezart(
+      "203.0.113.9",
+    );
+    assert.deepEqual(r, { ok: true, weeks: [jo] });
+    assert.equal(a.hivasok[0]!.url, "https://api.example/jatek/lezart");
+    assert.equal(a.hivasok[0]!.headers[FEJLEC_IP], "203.0.113.9");
+    const rossz = hamisFetch({ status: 502, text: "<html>Bad Gateway</html>" });
+    const u = await httpJatekApi(
+      "https://api.example",
+      rossz.fetchImpl,
+    ).lezart();
     assert.ok(!u.ok && u.code === "UNAVAILABLE");
   });
 
@@ -411,6 +439,7 @@ describe("a hamis api", () => {
       next: null,
     });
     assert.deepEqual(await api.nyertesek(), { ok: true, winners: [] });
+    assert.deepEqual(await api.lezart(), { ok: true, weeks: [] });
     assert.equal((await api.kep("proba-kerdes")).ok, false);
     assert.deepEqual(await api.bekuldes(BEMENET, null), {
       ok: false,

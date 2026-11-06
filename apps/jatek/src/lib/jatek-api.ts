@@ -16,6 +16,7 @@ export const UTVONALAK = {
   megerosites: "/jatek/megerosites",
   nyertesek: "/jatek/nyertesek",
   kep: "/jatek/nyeremeny-kep",
+  lezart: "/jatek/lezart",
 } as const;
 
 export type KerdesTipus = "TEXT" | "CHOICE";
@@ -33,6 +34,14 @@ export type Kovetkezo = {
   week: string;
   opensAt: string;
   prize: Nyeremeny | null;
+};
+
+/** Egy lezárt hét helyes válasszal (a szabályzat 6. pontja: a zárás után tesszük közzé; a szerver dönti el, mikor). */
+export type LezartHet = {
+  week: string;
+  prompt: string;
+  answer: string;
+  closesAt: string;
 };
 
 /** Egy korábbi sorsolás nyertese: CSAK a rövidített név (például "Kovács P."), cím soha. */
@@ -74,6 +83,7 @@ export type MegerositesEredmeny =
   { ok: true; status: "CONFIRMED" | "ALREADY_CONFIRMED"; week: string } | Hiba;
 export type AktualisEredmeny =
   { ok: true; question: Kerdes | null; next: Kovetkezo | null } | Hiba;
+export type LezartEredmeny = { ok: true; weeks: LezartHet[] } | Hiba;
 export type NyertesekEredmeny = { ok: true; winners: Nyertes[] } | Hiba;
 export type KepEredmeny =
   { ok: true; bytes: ArrayBuffer; contentType: string } | Hiba;
@@ -91,6 +101,7 @@ export interface JatekApi {
     latogatoIp: string | null,
   ): Promise<MegerositesEredmeny>;
   nyertesek(latogatoIp?: string | null): Promise<NyertesekEredmeny>;
+  lezart(latogatoIp?: string | null): Promise<LezartEredmeny>;
   /** Egy kérdés nyereményképe (csak a nyilvános kérdésé; az api dönti el). */
   kep(kerdesId: string, latogatoIp?: string | null): Promise<KepEredmeny>;
 }
@@ -200,6 +211,15 @@ export function httpJatekApi(
         ? { ok: true, winners: lista.filter(nyertesEllenorzott) }
         : { ...ELERHETETLEN, status: 502 };
     },
+    async lezart(ip) {
+      const r = await hivas(UTVONALAK.lezart, { method: "GET", ip });
+      if (!r) return { ...ELERHETETLEN };
+      if (r.status !== 200) return hibaBol(r.status, r.test);
+      const lista = (r.test as { weeks?: unknown } | null)?.weeks;
+      return Array.isArray(lista)
+        ? { ok: true, weeks: lista.filter(lezartHetEllenorzott) }
+        : { ...ELERHETETLEN, status: 502 };
+    },
     async kep(kerdesId, ip) {
       try {
         const valasz = await fetchImpl(
@@ -281,6 +301,18 @@ function kovetkezoEllenorzott(k: unknown): k is Kovetkezo {
   );
 }
 
+function lezartHetEllenorzott(w: unknown): w is LezartHet {
+  const n = w as Partial<LezartHet> | null;
+  return (
+    !!n &&
+    typeof n.week === "string" &&
+    typeof n.prompt === "string" &&
+    typeof n.answer === "string" &&
+    n.answer.trim() !== "" &&
+    typeof n.closesAt === "string"
+  );
+}
+
 function nyertesEllenorzott(w: unknown): w is Nyertes {
   const n = w as Partial<Nyertes> | null;
   return (
@@ -336,6 +368,9 @@ export function hamisJatekApi(): JatekApi {
     },
     async nyertesek() {
       return { ok: true, winners: [] };
+    },
+    async lezart() {
+      return { ok: true, weeks: [] };
     },
     async kep() {
       return { ok: false, status: 404, code: "NO_IMAGE", message: "" };

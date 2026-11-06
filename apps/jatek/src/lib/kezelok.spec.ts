@@ -29,6 +29,9 @@ function rogzitoApi(valaszok: {
     async nyertesek() {
       return { ok: true, winners: [] };
     },
+    async lezart() {
+      return { ok: true, weeks: [] };
+    },
     async kep() {
       return { ok: false, status: 404, code: "NO_IMAGE", message: "" };
     },

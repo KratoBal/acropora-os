@@ -7,7 +7,7 @@
  * A TERMEKFOTO (`/nano.jpg`) az Aquaforest hivatalos fotoja (a designcsomagbol; forras: aquaforest.eu). A felhasznalasi
  * engedelyt NEM tudom: a kerdes a tulajdonosnak szol (lasd a PR-torzset).
  */
-import type { Nyertes } from "../lib/jatek-api.ts";
+import type { LezartHet, Nyertes } from "../lib/jatek-api.ts";
 import { hetCimke } from "./heti-kerdes.tsx";
 
 export function Hero() {
@@ -176,6 +176,40 @@ export function Nyertesek({
           <span className="jatek-empty-number">01</span>
         </div>
       )}
+    </section>
+  );
+}
+
+/**
+ * A LEZÁRT HETEK HELYES VÁLASZAI (szabályzat 6. pont, Balázs 2026-11-06): a forduló zárása után a lap kiírja a kérdést és a
+ * helyes választ. A szerver csak lezárt hét válaszát adja (a zárás pillanatától), ezért itt nincs mit rejteni: ami
+ * megjön, az nyilvános. Nincs lezárt hét: a szakasz nem jelenik meg.
+ */
+export function HelyesValaszok({
+  hetek = [],
+}: {
+  hetek?: readonly LezartHet[];
+}) {
+  if (hetek.length === 0) return null;
+  return (
+    <section className="jatek-answers jatek-wrap" id="helyes-valaszok">
+      <div className="jatek-section-heading">
+        <div>
+          <div className="jatek-eyebrow">A LEZÁRT FORDULÓK</div>
+          <h2>A helyes válaszok.</h2>
+        </div>
+      </div>
+      <ul className="jatek-winner-list" data-testid="helyes-valaszok">
+        {hetek.map((het) => (
+          <li key={het.week}>
+            <b>{hetCimke(het.week)}</b>
+            <span>{het.prompt}</span>
+            <span>
+              Helyes válasz: <b>{het.answer}</b>
+            </span>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
