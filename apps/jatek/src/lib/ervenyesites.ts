@@ -16,6 +16,12 @@ export type BekuldesKeres = {
   email: string;
   /** a beküldő neve: levágva, a belső szóközök egyre vonva (az api ugyanígy tárolja) */
   name: string;
+  /** a két külön, alapból üres jelölőnégyzet: a szabályzat elfogadása és az adatkezelési hozzájárulás (mindkettő kötelező) */
+  rulesAccepted: true;
+  consentGiven: true;
+  /** az űrlapon látott két szöveg verziója (az api csak a mostaniakat fogadja el) */
+  rulesVersion: string;
+  privacyVersion: string;
   answer: string;
   website: string;
 };
@@ -27,6 +33,7 @@ export type KeresEredmeny<T> =
       code:
         | "INVALID_EMAIL"
         | "INVALID_NAME"
+        | "CONSENT_REQUIRED"
         | "INVALID_ANSWER"
         | "INVALID_TOKEN"
         | "BAD_REQUEST";
@@ -56,6 +63,9 @@ export function bekuldesKeres(body: unknown): KeresEredmeny<BekuldesKeres> {
     !/\p{L}/u.test(name)
   )
     return { ok: false, code: "INVALID_NAME" };
+  // mindkét elfogadás kell (az api is kéri): a nyers `true`, nem "igaz-szerű" érték
+  if (b.rulesAccepted !== true || b.consentGiven !== true)
+    return { ok: false, code: "CONSENT_REQUIRED" };
   if (answer === null) return { ok: false, code: "INVALID_ANSWER" };
   const trimmed = answer.trim();
   if (trimmed === "" || trimmed.length > MAX_VALASZ)
@@ -67,6 +77,11 @@ export function bekuldesKeres(body: unknown): KeresEredmeny<BekuldesKeres> {
       questionId,
       email,
       name,
+      rulesAccepted: true,
+      consentGiven: true,
+      // a verziókat szó szerint továbbadjuk (az api dönti el, a mostaniak-e), de korlátozott hosszal
+      rulesVersion: (szoveg(b.rulesVersion) ?? "").slice(0, 40),
+      privacyVersion: (szoveg(b.privacyVersion) ?? "").slice(0, 40),
       answer: trimmed,
       website: website.slice(0, 200),
     },

@@ -26,6 +26,7 @@ import {
   MAIL_SENDER,
   type MailSender,
 } from "../notifications/mail/mail.port.js";
+import { GAME_PRIVACY_VERSION, GAME_RULES_VERSION } from "./game-consent.js";
 import {
   mailGate,
   mailModeOf,
@@ -342,6 +343,10 @@ export class GameService implements OnModuleInit {
     questionId?: unknown;
     email?: unknown;
     name?: unknown;
+    rulesAccepted?: unknown;
+    consentGiven?: unknown;
+    rulesVersion?: unknown;
+    privacyVersion?: unknown;
     answer?: unknown;
     website?: unknown;
   }): Promise<{ status: "CHECK_EMAIL" }> {
@@ -364,6 +369,23 @@ export class GameService implements OnModuleInit {
         HttpStatus.BAD_REQUEST,
         "INVALID_NAME",
         "Kérjük, add meg a nevedet.",
+      );
+    // BOTH separate acceptances are required (privacy notice 3.1: the consent is its own unticked box, apart from the rules),
+    // and they are asked here, not only on the page; and only against the texts that are current now
+    if (input.rulesAccepted !== true || input.consentGiven !== true)
+      throw gameError(
+        HttpStatus.BAD_REQUEST,
+        "CONSENT_REQUIRED",
+        "A részvételhez el kell fogadnod a játékszabályzatot, és hozzá kell járulnod az adatkezeléshez.",
+      );
+    if (
+      input.rulesVersion !== GAME_RULES_VERSION ||
+      input.privacyVersion !== GAME_PRIVACY_VERSION
+    )
+      throw gameError(
+        HttpStatus.CONFLICT,
+        "OUTDATED_TEXT",
+        "A játékszabályzat vagy az adatkezelési tájékoztató közben megváltozott. Töltsd újra az oldalt, és fogadd el újra.",
       );
     if (typeof input.questionId !== "string" || input.questionId === "")
       throw gameError(
@@ -422,6 +444,10 @@ export class GameService implements OnModuleInit {
         where: { id: existing.id, confirmedAt: null },
         data: {
           name,
+          rulesAcceptedAt: now,
+          consentAt: now,
+          rulesVersion: GAME_RULES_VERSION,
+          privacyVersion: GAME_PRIVACY_VERSION,
           answer,
           autoCorrect,
           confirmTokenHash: sha256(token),
@@ -438,6 +464,10 @@ export class GameService implements OnModuleInit {
             questionId: question.id,
             email,
             name,
+            rulesAcceptedAt: now,
+            consentAt: now,
+            rulesVersion: GAME_RULES_VERSION,
+            privacyVersion: GAME_PRIVACY_VERSION,
             answer,
             autoCorrect,
             confirmTokenHash: sha256(token),

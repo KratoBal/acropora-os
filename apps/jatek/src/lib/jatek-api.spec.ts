@@ -48,6 +48,10 @@ const BEMENET = {
   questionId: "q1",
   email: "j@example.com",
   name: "Kovács Péter",
+  rulesAccepted: true as const,
+  consentGiven: true as const,
+  rulesVersion: "szabalyzat-1.0",
+  privacyVersion: "adatkezeles-1.0",
   answer: "a",
   website: "",
 };

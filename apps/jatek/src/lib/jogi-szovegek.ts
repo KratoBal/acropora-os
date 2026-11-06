@@ -9,6 +9,16 @@
  */
 export const KITOLTENDO = "[KITÖLTENDŐ";
 
+/**
+ * A DOKUMENTUMOK VERZIÓJA (acrobot 44375): az űrlap ezt küldi el, hogy a játékos melyik szöveget fogadta el, és a szerver ezt
+ * tárolja a nevezéssel. A dokumentum szövegének minden változásakor emelni kell, ITT ÉS az api `game-consent.ts`-ében
+ * (az api egyik specje a két fájlt összeveti). A szabályzat szövege maga "Verzió: 1.0"-t mond.
+ */
+export const VERZIO = {
+  szabalyzat: "szabalyzat-1.0",
+  adatkezeles: "adatkezeles-1.0",
+} as const;
+
 export type JogiSzakasz = { cim: string; bekezdesek: readonly string[] };
 
 export type JogiDokumentum = {

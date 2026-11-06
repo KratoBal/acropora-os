@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import { Prisma } from "@acropora/database";
 
+import { GAME_PRIVACY_VERSION, GAME_RULES_VERSION } from "./game-consent.js";
 import {
   GAME_MAIL_MAX_PER_ENTRY,
   GameService,
@@ -218,6 +219,10 @@ describe("an entry", () => {
     questionId: "q1",
     email: " Jatekos@Example.com ",
     name: "  Kovács   Péter ",
+    rulesAccepted: true,
+    consentGiven: true,
+    rulesVersion: GAME_RULES_VERSION,
+    privacyVersion: GAME_PRIVACY_VERSION,
     answer: "acropóra",
     website: "",
   };
@@ -249,6 +254,70 @@ describe("an entry", () => {
     service.now = () => new Date(OPEN.getTime() + 3 * 60_000);
     await service.submit({ ...entry, name: "Kovács Péter Pál" });
     assert.equal(entries.get("jatekos@example.com")!.name, "Kovács Péter Pál");
+  });
+
+  // WHAT TURNS THIS RED (privacy notice 3.1, acrobot 44375): an entry accepted without the rules accepted or without the data
+  // consent (each alone, either missing, or a value that is not true); the two acceptances and the versions not kept; a
+  // page with an old text version taken; an unconfirmed repeat leaving the old acceptance time.
+  it("refuses an entry without BOTH acceptances, on the server: the rules alone, the consent alone, neither, or a value that is not true", async () => {
+    const codes = async (input: Record<string, unknown>) =>
+      setup()
+        .service.submit(input)
+        .then(
+          () => "ok",
+          (e) => (e.getResponse() as { code: string }).code,
+        );
+    for (const over of [
+      { rulesAccepted: false },
+      { consentGiven: false },
+      { rulesAccepted: undefined },
+      { consentGiven: undefined },
+      { rulesAccepted: "true" },
+      { consentGiven: 1 },
+      { rulesAccepted: false, consentGiven: false },
+    ])
+      assert.equal(
+        await codes({ ...entry, ...over }),
+        "CONSENT_REQUIRED",
+        JSON.stringify(over),
+      );
+    assert.equal(await codes(entry), "ok");
+  });
+
+  it("refuses a page that showed old texts: a version that is not the current one (409 OUTDATED_TEXT), and nothing is kept", async () => {
+    for (const over of [
+      { rulesVersion: "szabalyzat-0.9" },
+      { privacyVersion: "adatkezeles-0.9" },
+      { rulesVersion: undefined },
+      { privacyVersion: undefined },
+    ]) {
+      const { service, entries, mails } = setup();
+      await assert.rejects(
+        service.submit({ ...entry, ...over }),
+        (e: any) => e.getResponse().code === "OUTDATED_TEXT",
+        JSON.stringify(over),
+      );
+      assert.equal(entries.size, 0);
+      assert.equal(mails.length, 0);
+    }
+  });
+
+  it("keeps when each acceptance was given and which version of each text; an unconfirmed repeat renews the times", async () => {
+    const { service, entries } = setup();
+    await service.submit(entry);
+    const first = entries.get("jatekos@example.com")!;
+    assert.equal(first.rulesVersion, GAME_RULES_VERSION);
+    assert.equal(first.privacyVersion, GAME_PRIVACY_VERSION);
+    assert.deepEqual(first.rulesAcceptedAt, OPEN);
+    assert.deepEqual(first.consentAt, OPEN);
+    const later = new Date(OPEN.getTime() + 3 * 60_000);
+    service.now = () => later;
+    await service.submit(entry);
+    assert.deepEqual(
+      entries.get("jatekos@example.com")!.rulesAcceptedAt,
+      later,
+    );
+    assert.deepEqual(entries.get("jatekos@example.com")!.consentAt, later);
   });
 
   it("mails the formatted confirmation: the question, the button with the link and the closing time, and a plain-text twin", async () => {
@@ -539,6 +608,10 @@ describe("the confirmation", () => {
       questionId: "q1",
       email: "a@x.hu",
       name: "Kovács Péter",
+      rulesAccepted: true,
+      consentGiven: true,
+      rulesVersion: GAME_RULES_VERSION,
+      privacyVersion: GAME_PRIVACY_VERSION,
       answer: "Acropora",
     });
     const token = linkToken(mails[0]!);
@@ -563,6 +636,10 @@ describe("the confirmation", () => {
       questionId: "q1",
       email: "a@x.hu",
       name: "Kovács Péter",
+      rulesAccepted: true,
+      consentGiven: true,
+      rulesVersion: GAME_RULES_VERSION,
+      privacyVersion: GAME_PRIVACY_VERSION,
       answer: "Acropora",
     });
     service.now = () => new Date("2026-11-14T00:00:00Z");
