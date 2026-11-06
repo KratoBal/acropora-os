@@ -21,7 +21,7 @@ const required = (method: keyof LivestockArrivalsController) =>
 
 describe("LivestockArrivalsController", () => {
   it("the reads need inventory.view, the writes inventory.manage", () => {
-    for (const method of ["list", "get"] as const)
+    for (const method of ["list", "get", "productOptions"] as const)
       assert.deepEqual(required(method), [PERMISSIONS.INVENTORY_VIEW], method);
     for (const method of ["create", "update"] as const)
       assert.deepEqual(
@@ -31,7 +31,7 @@ describe("LivestockArrivalsController", () => {
       );
   });
 
-  it("has exactly four endpoints and no DELETE", () => {
+  it("has exactly five endpoints and no DELETE", () => {
     const handlers = Object.getOwnPropertyNames(
       LivestockArrivalsController.prototype,
     )
@@ -48,11 +48,28 @@ describe("LivestockArrivalsController", () => {
           )[name]!,
         ),
       ]);
-    assert.equal(handlers.length, 4);
+    assert.equal(handlers.length, 5);
     // RequestMethod: GET 0, POST 1, PUT 2, DELETE 3, PATCH 4
     assert.deepEqual(
       handlers.filter(([, method]) => method === 3),
       [],
+    );
+  });
+
+  it("declares the product options BEFORE the `:id` route (Nest matches in declaration order)", () => {
+    const names = Object.getOwnPropertyNames(
+      LivestockArrivalsController.prototype,
+    ).filter((n) => n !== "constructor");
+    assert.ok(
+      names.indexOf("productOptions") < names.indexOf("get"),
+      names.join(","),
+    );
+    assert.equal(
+      Reflect.getMetadata(
+        "path",
+        LivestockArrivalsController.prototype.productOptions,
+      ),
+      "options/products",
     );
   });
 
