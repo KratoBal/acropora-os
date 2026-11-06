@@ -5,8 +5,11 @@ import {
   MissingInvoicesDrawer,
   type ChargeDetailExtras,
 } from "./missing-invoices-drawer";
+import { MISSING_INVOICE_CATEGORY_LABELS } from "@acropora/types";
+
 import {
   TAB_STATES,
+  chargeAmountText,
   formatMonth,
   whatToDo,
   type ChargeRow,
@@ -94,6 +97,73 @@ describe("the model", () => {
     expect(whatToDo("PROVIDE_PREMIUM_NOTICE", "Próba Kft.")).toMatch(
       /díjértesítőt/,
     );
+  });
+});
+
+describe("the amount's sign (a116ec70: a customer refund is money going back)", () => {
+  const plain = (text: string) => text.replace(/\s/g, " ");
+
+  it("a customer refund shows a negative amount, every other charge stays unsigned", () => {
+    expect(
+      plain(
+        chargeAmountText({
+          amount: "11287062",
+          currency: "HUF",
+          category: "CUSTOMER_REFUND",
+        }),
+      ),
+    ).toMatch(/^[-\u2212]11 287 062 Ft$/);
+    const others = Object.keys(MISSING_INVOICE_CATEGORY_LABELS).filter(
+      (category) => category !== "CUSTOMER_REFUND",
+    ) as (keyof typeof MISSING_INVOICE_CATEGORY_LABELS)[];
+    // the guard must see the whole set: eleven other categories, not an empty list
+    expect(others).toHaveLength(11);
+    for (const category of others) {
+      const text = plain(
+        chargeAmountText({ amount: "11287062", currency: "HUF", category }),
+      );
+      expect(text, category).toBe("11 287 062 Ft");
+    }
+  });
+
+  it("a refund in another currency is negative too, and a zero refund carries no sign", () => {
+    expect(
+      plain(
+        chargeAmountText({
+          amount: "468.00",
+          currency: "EUR",
+          category: "CUSTOMER_REFUND",
+        }),
+      ),
+    ).toMatch(/^[-\u2212]468,00 EUR$/);
+    expect(
+      plain(
+        chargeAmountText({
+          amount: "0",
+          currency: "HUF",
+          category: "CUSTOMER_REFUND",
+        }),
+      ),
+    ).toBe("0 Ft");
+  });
+
+  it("an amount that is already signed does not flip back to positive, and a bad one shows as it is", () => {
+    expect(
+      plain(
+        chargeAmountText({
+          amount: "-500",
+          currency: "HUF",
+          category: "CUSTOMER_REFUND",
+        }),
+      ),
+    ).toMatch(/^[-\u2212]500 Ft$/);
+    expect(
+      chargeAmountText({
+        amount: "n/a",
+        currency: "HUF",
+        category: "CUSTOMER_REFUND",
+      }),
+    ).toBe("n/a");
   });
 });
 
@@ -496,6 +566,27 @@ describe("MissingInvoicesMonthDetail", () => {
     expect(within(eur).getByText("NAV")).toBeInTheDocument();
   });
 
+  it("a customer refund row shows its amount NEGATIVE; a charge beside it stays unsigned (a116ec70)", () => {
+    const refund = charge({
+      id: "c-refund",
+      partner: "Fővárosi Állat- és Növénykert",
+      narrative: "E-CRPR-2026-1 utalás vissza",
+      amount: "11287062",
+      original: null,
+      category: "CUSTOMER_REFUND",
+      state: "NO_INVOICE_NEEDED",
+    });
+    const props = base();
+    render(<MissingInvoicesMonthDetail {...props} rows={[charge(), refund]} />);
+    const row = screen.getByRole("row", { name: /^Fővárosi Állat/ });
+    expect(
+      within(row).getByText((t) => /^[-\u2212]11\s287\s062\sFt$/.test(t)),
+    ).toBeInTheDocument();
+    const card = screen.getByRole("row", { name: /^OPENAI/ });
+    expect(within(card).getByText("21 990 Ft")).toBeInTheDocument();
+    expect(within(card).queryByText(/^[-\u2212]/)).toBeNull();
+  });
+
   it("tabs, filters, a row and paging report back to the caller", () => {
     const props = base();
     render(<MissingInvoicesMonthDetail {...props} />);
@@ -749,6 +840,33 @@ describe("MissingInvoicesDrawer", () => {
     ).toHaveTextContent(
       "A számla a magánszemély nevére szól: kérd újra az Próba Kft. nevére.",
     );
+  });
+
+  it("the drawer shows a customer refund's amount negative too, and a plain charge's unsigned (a116ec70)", () => {
+    const refund = charge({
+      partner: "Fővárosi Állat- és Növénykert",
+      amount: "11287062",
+      original: null,
+      category: "CUSTOMER_REFUND",
+      state: "NO_INVOICE_NEEDED",
+    });
+    const { unmount } = render(
+      <MissingInvoicesDrawer {...base()} row={refund} />,
+    );
+    const dialog = screen.getByRole("dialog", {
+      name: "Fővárosi Állat- és Növénykert",
+    });
+    const text = (dialog.textContent ?? "").replace(/\s/g, " ");
+    expect(text).toMatch(/[-\u2212]11 287 062 Ft/);
+    expect(text).not.toMatch(/[^-\u2212 ]11 287 062 Ft/);
+    unmount();
+    render(<MissingInvoicesDrawer {...base()} />);
+    const plain = (screen.getByRole("dialog").textContent ?? "").replace(
+      /\s/g,
+      " ",
+    );
+    expect(plain).toMatch(/21 990 Ft/);
+    expect(plain).not.toMatch(/[-\u2212]21 990 Ft/);
   });
 
   it("pairing is an explicit click, never automatic, and a private-person candidate says so", () => {
