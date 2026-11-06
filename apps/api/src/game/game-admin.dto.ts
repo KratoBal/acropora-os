@@ -3,6 +3,7 @@ import {
   ArrayMaxSize,
   IsArray,
   IsBoolean,
+  IsEmail,
   IsIn,
   IsOptional,
   IsString,
@@ -85,4 +86,10 @@ export class GameDrawDto {
   @IsString()
   @MaxLength(64)
   questionId?: string;
+}
+
+export class GameTestMailDto {
+  @IsEmail()
+  @MaxLength(254)
+  email!: string;
 }

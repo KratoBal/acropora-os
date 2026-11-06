@@ -27,6 +27,7 @@ import {
   GameDecisionDto,
   GameDrawDto,
   GameQuestionDto,
+  GameTestMailDto,
 } from "./game-admin.dto.js";
 import { GameAdminService } from "./game-admin.service.js";
 import { GameErasureService } from "./game-erasure.service.js";
@@ -172,6 +173,16 @@ export class GameAdminController {
       // what the sender's key may do with the sent copies (card jatek-level-torles), without searching the mailbox
       mail: await this.erasure.mailStatus(),
     };
+  }
+
+  /** One real confirmation mail to the typed address, through the entries' own gate and sender (acrobot 44553). */
+  @Post("test-mail")
+  @RequirePermissions(PERMISSIONS.GAME_MANAGE)
+  testMail(
+    @Body() input: GameTestMailDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.admin.sendTestMail(input.email, user.id);
   }
 
   /** A confirmation link without the mail, for a stage round only (JATEK_TEST_LINKS=on; acrobot 44026). */

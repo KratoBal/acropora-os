@@ -55,6 +55,14 @@ export const CONFIRMATION_SUBJECT =
   "Erősítsd meg a játékodat: Acropora karácsonyi nyereményjáték";
 export const CONFIRMATION_BUTTON = "Megerősítem a részvételem";
 
+/**
+ * A PRÓBALEVÉL TOKENJÉNEK ELŐTAGJA (acrobot 44553): az admin "Próbalevél küldése" gombja ezzel kezdődő tokent tesz a linkbe, és a
+ * játék /megerosites oldala ezt felismeri ("Ez próbalevél volt: a link működik."). A PONT SZÁNDÉKOS: a valódi token
+ * base64url (A-Z a-z 0-9 - _), abban nincs pont, tehát egy valódi token soha nem kezdődhet így. Az előtagot a játék appja is
+ * ismeri (apps/jatek/src/lib/proba-token.ts); az api egyik specje a kettőt összeveti.
+ */
+export const TEST_TOKEN_PREFIX = "proba.";
+
 /** A tiszta HTML-torzs és a szöveges vetülete; a küldő mindkettőt viszi (`html` + `text`). */
 export function renderConfirmationMail(input: ConfirmationMailInput): {
   html: string;

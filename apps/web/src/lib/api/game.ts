@@ -98,6 +98,12 @@ export interface GamePrizeImage {
   height: number;
 }
 
+/** A próbalevél eredménye: elment, vagy miért nem (a kapcsoló, a küldő, a cím, vagy a küldő hibája). */
+export interface GameTestMailResult {
+  outcome: "SENT" | "NOT_SENT";
+  reason: string | null;
+}
+
 export interface GameMailQueue {
   pending: number;
   sentToday: number;
@@ -214,6 +220,13 @@ export const gameApi = {
       token,
       { method: "POST" },
     );
+  },
+  /** Egy valódi megerősítő levél a megadott címre, ugyanazon a kapun és küldőn át, mint a nevezéseké (nem hoz létre nevezést). */
+  testMail(token: string, email: string) {
+    return apiRequest<GameTestMailResult>("/game/test-mail", token, {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
   },
   /** Az adattörlés és a levéltörlés állapota (száraz előnézet, nem ír). */
   erasure(token: string) {

@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+import { PROBA_UZENET, probaToken } from "../lib/proba-token.ts";
+
 type Allapot =
   | { fajta: "var" }
   | { fajta: "kuldes" }
@@ -20,6 +22,15 @@ const SIKERTELEN = "A megerősítés most nem sikerült. Próbáld újra későb
  */
 export function MegerositesAllapot({ token }: { token: string }) {
   const [allapot, setAllapot] = useState<Allapot>({ fajta: "var" });
+
+  // A PRÓBALEVÉL LINKJE (acrobot 44553): nincs mit megerősíteni és nincs mit küldeni az api-nak; a lap azt mondja ki, amit a
+  // próba mér: a link ide ért, és a lap működik.
+  if (probaToken(token))
+    return (
+      <p className="jatek-uzenet" data-fajta="ok" role="status">
+        {PROBA_UZENET}
+      </p>
+    );
 
   async function megerosit() {
     setAllapot({ fajta: "kuldes" });

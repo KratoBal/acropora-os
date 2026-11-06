@@ -27,6 +27,7 @@ import {
   type GameEntryView,
   type GameErasurePreview,
   type GameMailQueue,
+  type GameTestMailResult,
   type GameQuestionView,
 } from "@/lib/api/game";
 import { budapestInstant, budapestParts } from "@/lib/format/budapest-time";
@@ -498,6 +499,26 @@ function Entries({
   );
 }
 
+/** A próbalevél eredménye egy mondatban: elment, vagy melyik kapcsoló, küldő vagy beállítás miatt nem. */
+export function testMailText(result: GameTestMailResult): string {
+  if (result.outcome === "SENT")
+    return "Elment. Nézd meg a postafiókot (a spamet is), és kattints a linkre: az „Ez próbalevél volt: a link működik.” szöveget kell látnod.";
+  const reason = result.reason ?? "ismeretlen ok";
+  const text =
+    reason === "mail-off"
+      ? "a fő levél-kapcsoló (TICKET_MAIL_MODE) nem „live”"
+      : reason === "path-off"
+        ? "a játék levél-kapcsolója (TICKET_MAIL_GAME) nem „live”"
+        : reason === "no-redirect"
+          ? "nincs megadva az átirányítás (TICKET_MAIL_REDIRECT_TO)"
+          : reason.startsWith("no-game-sender")
+            ? `a játéknak nincs saját levélküldője, és nem esik vissza másikra (a JATEK_SMTP_* és JATEK_MAIL_FROM beállítás hiányos${reason.slice("no-game-sender".length)})`
+            : reason === "no-JATEK_PUBLIC_URL"
+              ? "a játék oldalának címe (JATEK_PUBLIC_URL) nincs beállítva"
+              : `a küldő hibája: ${reason}`;
+  return `Nem ment el: ${text}.`;
+}
+
 /** A napi levél-plafon fölött várakozó megerősítő levelek, és a kiküldésük (acrobot, 2026-11-05). */
 function MailQueue({
   token,
@@ -509,6 +530,8 @@ function MailQueue({
   const [queue, setQueue] = useState<GameMailQueue | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [testTo, setTestTo] = useState("");
+  const [testResult, setTestResult] = useState<GameTestMailResult | null>(null);
   const load = useCallback(async () => {
     try {
       setQueue(await gameApi.mailQueue(token));
@@ -524,6 +547,18 @@ function MailQueue({
     setError(null);
     try {
       setQueue(await gameApi.sendQueued(token));
+    } catch (cause) {
+      setError(errorText(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const sendTest = async () => {
+    setBusy(true);
+    setError(null);
+    setTestResult(null);
+    try {
+      setTestResult(await gameApi.testMail(token, testTo.trim()));
     } catch (cause) {
       setError(errorText(cause));
     } finally {
@@ -560,6 +595,40 @@ function MailQueue({
         <PilotButton disabled={busy} onClick={() => void send()}>
           Várakozó levelek kiküldése
         </PilotButton>
+      ) : null}
+      {canManage ? (
+        <div className="space-y-2" data-testid="game-test-mail">
+          <p className="text-sm font-medium">Próbalevél</p>
+          <p className="text-xs text-pilot-grey-600">
+            Egy valódi megerősítő levél a megadott címre, ugyanazon a kapun és
+            küldőn át, mint a nevezéseké. Nem hoz létre nevezést; a levél linkje
+            azt mutatja, hogy működik.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <PilotInput
+              type="email"
+              aria-label="Próbalevél címzettje"
+              placeholder="cim@pelda.hu"
+              value={testTo}
+              onChange={setTestTo}
+            />
+            <PilotButton
+              disabled={busy || !/^\S+@\S+\.\S+$/.test(testTo.trim())}
+              onClick={() => void sendTest()}
+            >
+              Próbalevél küldése
+            </PilotButton>
+          </div>
+          {testResult ? (
+            <p
+              className={`text-sm ${testResult.outcome === "SENT" ? "text-pilot-grey-800" : "text-red-700"}`}
+              data-testid="game-test-mail-result"
+              role="status"
+            >
+              {testMailText(testResult)}
+            </p>
+          ) : null}
+        </div>
       ) : null}
       {error ? (
         <Alert variant="danger" title="Hiba történt" description={error} />

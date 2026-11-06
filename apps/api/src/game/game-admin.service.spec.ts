@@ -924,3 +924,35 @@ describe("the live draw page's view and button", () => {
     );
   });
 });
+
+// WHAT TURNS THIS RED (acrobot 44553): the test mail's audit row carrying the address it was sent to (the log must not), or
+// no row at all; the answer not being the game service's (sent, or why not).
+describe("the test mail button", () => {
+  it("returns the game service's answer and audits the outcome and the reason, never the address", async () => {
+    const audits: Record<string, any>[] = [];
+    const asked: string[] = [];
+    const service = new GameAdminService({
+      now: () => NOW,
+      sendTestMail: async (email: string) => {
+        asked.push(email);
+        return { outcome: "NOT_SENT", reason: "path-off" };
+      },
+    } as never);
+    service.database = {
+      auditLog: {
+        create: async ({ data }: { data: Record<string, unknown> }) =>
+          void audits.push(data),
+      },
+    } as never;
+    const result = await service.sendTestMail(" proba@example.com ", "u1");
+    assert.deepEqual(result, { outcome: "NOT_SENT", reason: "path-off" });
+    assert.deepEqual(asked, ["proba@example.com"]);
+    assert.equal(audits.length, 1);
+    assert.equal(audits[0]!.action, "game.test-mail");
+    assert.deepEqual(audits[0]!.metadata, {
+      outcome: "NOT_SENT",
+      reason: "path-off",
+    });
+    assert.doesNotMatch(JSON.stringify(audits[0]), /proba@example|@/);
+  });
+});

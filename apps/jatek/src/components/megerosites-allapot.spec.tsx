@@ -6,6 +6,7 @@ import { describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { MegerositesAllapot } from "./megerosites-allapot.tsx";
+import { PROBA_UZENET, probaToken } from "../lib/proba-token.ts";
 
 /*
   WHAT TURNS THIS RED (the confirmation, card 31445d0f, barracuda's #2255 note). The confirmation sent when the page
@@ -35,5 +36,35 @@ describe("a megerősítő gomb", () => {
     );
     assert.match(fuggveny, /fetch\(\s*"\/api\/megerosites"/);
     assert.match(FORRAS, /onClick=\{\(\) => void megerosit\(\)\}/);
+  });
+});
+
+/*
+  WHAT TURNS THIS RED (acrobot 44553): the test mail's link opening the real confirmation screen (a button that would POST a
+  token to the api), instead of saying that the link works; a real token being taken for a test one.
+*/
+describe("a próbalevél linkje", () => {
+  it("azt írja ki, hogy a link működik, és nem kínál megerősítést", () => {
+    const h = renderToStaticMarkup(
+      <MegerositesAllapot token="proba.0123456789abcdef01234567" />,
+    );
+    assert.match(h, /Ez próbalevél volt: a link működik\./);
+    assert.equal(PROBA_UZENET, "Ez próbalevél volt: a link működik.");
+    assert.doesNotMatch(h, /<button|Erősítsd meg|Megerősítem/);
+  });
+
+  it("a valódi token a megerősítő képernyőt kapja a gombbal", () => {
+    const h = renderToStaticMarkup(
+      <MegerositesAllapot token="valodi-nem-proba" />,
+    );
+    assert.match(h, /Erősítsd meg a részvételed/);
+    assert.match(h, /<button/);
+    assert.doesNotMatch(h, /próbalevél/);
+  });
+
+  it("csak a pontos előtag számít próbának (a valódi token base64url, pont nélkül)", () => {
+    assert.equal(probaToken("proba.abc"), true);
+    for (const t of ["proba-abc", "proba", "xproba.abc", "", "Proba.abc"])
+      assert.equal(probaToken(t), false, t);
   });
 });

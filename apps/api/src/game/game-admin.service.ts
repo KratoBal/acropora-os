@@ -616,6 +616,25 @@ export class GameAdminService {
     };
   }
 
+  /**
+   * THE TEST MAIL BUTTON (acrobot 44553): one real confirmation mail to the address typed in, through the same gate and sender
+   * as the entries'. The result says what happened (sent / why not); the audit row keeps the outcome and the reason, NEVER
+   * the address.
+   */
+  async sendTestMail(email: string, userId: string) {
+    const result = await this.game.sendTestMail(email.trim());
+    await this.database.auditLog.create({
+      data: {
+        userId,
+        action: "game.test-mail",
+        entityType: "GameMail",
+        entityId: "test-mail",
+        metadata: { outcome: result.outcome, reason: result.reason },
+      },
+    });
+    return result;
+  }
+
   /** The mail queue (acrobot, 2026-11-05 22:57): what waits past the daily cap, today's mail and the cap. */
   async mailQueue() {
     const pending = await this.database.gameEntry.count({

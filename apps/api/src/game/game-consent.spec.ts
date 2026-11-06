@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, it } from "node:test";
 
 import { GAME_PRIVACY_VERSION, GAME_RULES_VERSION } from "./game-consent.js";
+import { TEST_TOKEN_PREFIX } from "./game-confirmation-mail.js";
 
 /*
   WHAT TURNS THIS RED: the server's current text versions and the game page's (apps/jatek/src/lib/jogi-szovegek.ts, `VERZIO`)
@@ -35,5 +36,24 @@ describe("the text versions of the entry's two acceptances", () => {
       assert.match(version, /^[a-z]+-\d+\.\d+$/);
       assert.ok(version.length <= 40);
     }
+  });
+});
+
+/*
+  WHAT TURNS THIS RED: the test mail's token prefix (the api puts it in the link) and the game page's (it recognises the link
+  and says "Ez próbalevél volt: a link működik.") drifting apart: the test link would then open the real confirmation screen.
+*/
+describe("the test mail's token prefix", () => {
+  it("is the same in the api and on the game page, and cannot be the start of a real token", () => {
+    const page = readFileSync(
+      join(process.cwd(), "..", "jatek", "src", "lib", "proba-token.ts"),
+      "utf8",
+    );
+    assert.equal(
+      /PROBA_TOKEN_PREFIX\s*=\s*"([^"]+)"/.exec(page)?.[1],
+      TEST_TOKEN_PREFIX,
+    );
+    // a real token is base64url (A-Z a-z 0-9 - _): no dot, so it can never start with the prefix
+    assert.ok(TEST_TOKEN_PREFIX.includes("."));
   });
 });

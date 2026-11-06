@@ -5,6 +5,10 @@ import { Prisma } from "@acropora/database";
 
 import { GAME_PRIVACY_VERSION, GAME_RULES_VERSION } from "./game-consent.js";
 import {
+  CONFIRMATION_SUBJECT,
+  TEST_TOKEN_PREFIX,
+} from "./game-confirmation-mail.js";
+import {
   GAME_MAIL_MAX_PER_ENTRY,
   GameService,
   maskPublicEmail,
@@ -1020,5 +1024,110 @@ describe("the correct answer on the public page (rules v2, section 6)", () => {
     const { weeks } = await service.closedWeeks();
     assert.equal(weeks.length, 20);
     assert.equal(weeks[0]!.week, "2026-W25");
+  });
+});
+
+/*
+  THE TEST MAIL AND THE GAME'S OWN SENDER (acrobot 44553, 44556). WHAT TURNS THIS RED: the test mail going through another
+  gate, sender, subject or From than a real entry's mail (then "the test went out" would not mean "the real one goes out");
+  a test token that creates an entry, or one that does not carry the prefix the game page recognises; a closed switch
+  answering "sent", or a "not sent" that does not say which switch; the game's mail leaving when it has no sender of its own
+  (it must not fall back to the ticket desk's).
+*/
+describe("the test mail and the game's own sender", () => {
+  const MAIL_ENV = {
+    TICKET_MAIL_MODE: "live",
+    TICKET_MAIL_GAME: "live",
+    TICKET_MAIL_REDIRECT_TO: "teszt@acropora.hu",
+    JATEK_PUBLIC_URL: "https://jatek-teszt.acropora.hu/",
+  };
+  const entry = {
+    questionId: "q1",
+    email: "jatekos@example.com",
+    name: "Kovács Péter",
+    rulesAccepted: true,
+    consentGiven: true,
+    rulesVersion: GAME_RULES_VERSION,
+    privacyVersion: GAME_PRIVACY_VERSION,
+    answer: "acropóra",
+    website: "",
+  };
+  const sentMails = (mails: unknown[]) =>
+    mails as {
+      to: string[];
+      subject: string;
+      text: string;
+      html: string;
+    }[];
+
+  it("goes through the same sender, subject and link base as an entry's mail, and creates no entry", async () => {
+    const { service, entries, mails } = setup(question(), MAIL_ENV);
+    await service.submit(entry);
+    const before = entries.size;
+    const result = await service.sendTestMail("proba@example.com");
+    assert.deepEqual(result, { outcome: "SENT", reason: null });
+    assert.equal(entries.size, before);
+    const [real, test] = sentMails(mails);
+    assert.equal(mails.length, 2);
+    assert.equal(test!.subject, CONFIRMATION_SUBJECT);
+    assert.equal(test!.subject, real!.subject);
+    assert.deepEqual(test!.to, ["proba@example.com"]);
+    const link = /https:\/\/[^\s"]+megerosites\?token=[^\s"<]+/.exec(
+      test!.text,
+    )![0];
+    assert.match(
+      link,
+      new RegExp(
+        `^https://jatek-teszt\\.acropora\\.hu/megerosites\\?token=${TEST_TOKEN_PREFIX.replace(".", "\\.")}[0-9a-f]{24}$`,
+      ),
+    );
+    // the real mail's link has the same base and no test prefix
+    assert.match(
+      /https:\/\/[^\s"]+megerosites\?token=([^\s"<]+)/.exec(real!.text)![0],
+      /^https:\/\/jatek-teszt\.acropora\.hu\/megerosites\?token=(?!proba\.)/,
+    );
+  });
+
+  it("a closed switch is not 'sent': nothing goes out and the answer names the switch", async () => {
+    for (const [over, reason] of [
+      [{ TICKET_MAIL_GAME: "off" }, "path-off"],
+      [{ TICKET_MAIL_MODE: "off" }, "mail-off"],
+      [{ JATEK_PUBLIC_URL: "" }, "no-JATEK_PUBLIC_URL"],
+    ] as const) {
+      const { service, mails } = setup(question(), { ...MAIL_ENV, ...over });
+      assert.deepEqual(await service.sendTestMail("proba@example.com"), {
+        outcome: "NOT_SENT",
+        reason,
+      });
+      assert.equal(mails.length, 0, reason);
+    }
+  });
+
+  it("a sender that throws is 'not sent' with its reason, not a thrown error", async () => {
+    const { service, sender } = setup(question(), MAIL_ENV);
+    sender.send = async () => {
+      throw new Error("SMTP_DOWN");
+    };
+    const result = await service.sendTestMail("proba@example.com");
+    assert.equal(result.outcome, "NOT_SENT");
+    assert.ok(result.reason && result.reason.length > 0);
+  });
+
+  it("without a sender of its own the mail does not go, and the answer names the missing settings (never a value)", async () => {
+    const mails: unknown[] = [];
+    const service = new GameService(null, {
+      ...MAIL_ENV,
+      JATEK_SMTP_HOST: "smtp-relay.brevo.com",
+      JATEK_SMTP_USER: "login",
+      JATEK_SMTP_PASS: "geheim-kulcs",
+    } as never);
+    const result = await service.sendTestMail("proba@example.com");
+    assert.equal(result.outcome, "NOT_SENT");
+    assert.match(result.reason ?? "", /^no-game-sender \(/);
+    assert.match(result.reason ?? "", /JATEK_SMTP_PORT/);
+    assert.match(result.reason ?? "", /JATEK_MAIL_FROM/);
+    assert.doesNotMatch(result.reason ?? "", /geheim-kulcs|smtp-relay|login/);
+    assert.equal(mails.length, 0);
+    assert.equal(service.mailBlocked()?.startsWith("no-game-sender"), true);
   });
 });
