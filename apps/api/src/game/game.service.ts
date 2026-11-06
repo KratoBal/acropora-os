@@ -364,7 +364,7 @@ export class GameService implements OnModuleInit {
    */
   async winners(): Promise<{ winners: PublicGameWinner[] }> {
     const all = await this.database.gameDraw.findMany({
-      orderBy: { createdAt: "asc" },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       include: { question: { select: { week: true, prizeName: true } } },
     });
     // THE LIST ENDS WITH THE ERASURE (the notice: the name and the masked address come off the list): from the grand

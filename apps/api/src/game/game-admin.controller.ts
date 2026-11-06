@@ -8,6 +8,7 @@ import {
   Param,
   Post,
   Put,
+  Query,
   StreamableFile,
   UploadedFile,
   UseInterceptors,
@@ -121,6 +122,23 @@ export class GameAdminController {
   @RequirePermissions(PERMISSIONS.GAME_MANAGE)
   draw(@Body() input: GameDrawDto, @CurrentUser() user: AuthenticatedUser) {
     return this.admin.draw(input, user.id);
+  }
+
+  /** What the live draw page shows before and after the draw (counts, prize, the winner's shortened name): no e-mail. */
+  @Get("live-draw")
+  @RequirePermissions(PERMISSIONS.GAME_MANAGE)
+  liveDraw(@Query() query: GameDrawDto) {
+    return this.admin.liveDraw(query);
+  }
+
+  /** The button on the live page: the existing draw, once per week; a second press returns the recorded result. */
+  @Post("live-draw")
+  @RequirePermissions(PERMISSIONS.GAME_MANAGE)
+  runLiveDraw(
+    @Body() input: GameDrawDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.admin.runLiveDraw(input, user.id);
   }
 
   @Post("draws/:id/verify")
