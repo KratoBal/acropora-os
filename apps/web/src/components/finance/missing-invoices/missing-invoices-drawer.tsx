@@ -13,6 +13,7 @@ import {
   CATEGORY_LABELS,
   CHARGE_STATE_LABELS,
   INVOICE_SOURCE_LABELS,
+  chargeAmountText,
   formatAmount,
   formatDay,
   whatToDo,
@@ -138,7 +139,7 @@ export function MissingInvoicesDrawer({
 
   const amountLine = row
     ? [
-        formatAmount(row.amount, row.currency),
+        chargeAmountText(row),
         ...(row.original
           ? [formatAmount(row.original.amount, row.original.currency)]
           : []),

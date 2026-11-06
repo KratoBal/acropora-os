@@ -25,6 +25,7 @@ import {
   CHARGE_TABS,
   FILTER_CATEGORIES,
   INVOICE_SOURCE_LABELS,
+  chargeAmountText,
   formatAmount,
   formatDay,
   formatMonth,
@@ -228,7 +229,7 @@ export function MissingInvoicesMonthDetail({
       cell: (row) => (
         <span className="block whitespace-nowrap tabular-nums">
           <span className="block font-semibold text-pilot-grey-900">
-            {formatAmount(row.amount, row.currency)}
+            {chargeAmountText(row)}
           </span>
           {row.original ? (
             <span className="block text-xs text-pilot-grey-500">

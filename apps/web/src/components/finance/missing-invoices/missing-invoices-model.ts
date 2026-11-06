@@ -9,6 +9,7 @@ import type {
   MissingInvoiceTab,
 } from "@acropora/types";
 import {
+  formatMoney,
   MISSING_INVOICE_CATEGORY_LABELS,
   MISSING_INVOICE_SOURCE_LABELS,
   MISSING_INVOICE_STATE_LABELS,
@@ -306,3 +307,19 @@ export function formatDay(day: string): string {
  * (`@acropora/types`, T1.5), a lap hívói a megszokott néven érik el.
  */
 export { formatMoney as formatAmount } from "@acropora/types";
+
+/**
+ * A SOR OSSZEGE, AHOGY A LAPON ALL (kartya a116ec70, Balazs 2026-11-05 09:07 UTC: "negativ elojel kell", acrobot IGEN, 2026-11-06).
+ * A lap terheleseket listaz, az `amount` elojel nelkul all, es minden sor pozitivnak latszik. Egy VEVOI VISSZATERITES
+ * (`CUSTOMER_REFUND`: a vevonek visszautalt penz, a sztornozott szamla osszege) viszont a penz VISSZAMENESE, ezert csak
+ * ennel a besorolasnal jelenik meg negativ osszeggel; a tobbi terheles valtozatlanul elojel nelkul. Nulla osszegnel nincs
+ * elojel (nem "-0"). A sorrend es a hiany-osszegek nem erintettek: ez csak a megjelenites.
+ */
+export function chargeAmountText(
+  row: Pick<ChargeRow, "amount" | "currency" | "category">,
+): string {
+  const abs = Math.abs(Number(row.amount));
+  if (row.category !== "CUSTOMER_REFUND" || !Number.isFinite(abs) || abs === 0)
+    return formatMoney(row.amount, row.currency);
+  return formatMoney(-abs, row.currency);
+}
