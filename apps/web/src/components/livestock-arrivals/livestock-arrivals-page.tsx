@@ -21,9 +21,13 @@ import {
   type LivestockArrivalKind,
   type LivestockArrivalStatus,
 } from "@acropora/types";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import {
+  MortalitySearchPicker,
+  type PickerOption,
+} from "@/components/mortality/mortality-search-picker";
 import {
   PilotBadge,
   PilotButton,
@@ -56,6 +60,7 @@ const STATUS_BADGE: Record<
 interface FormState {
   kind: LivestockArrivalKind;
   label: string;
+  product: PickerOption | null;
   expectedOn: string;
   quantity: string;
   status: LivestockArrivalStatus;
@@ -66,6 +71,7 @@ interface FormState {
 const EMPTY_FORM: FormState = {
   kind: "FISH",
   label: "",
+  product: null,
   expectedOn: "",
   quantity: "",
   status: "ORDERED",
@@ -78,6 +84,9 @@ function formOf(row: LivestockArrival | null): FormState {
   return {
     kind: row.kind,
     label: row.label,
+    product: row.productId
+      ? { id: row.productId, title: row.productName ?? row.productId }
+      : null,
     expectedOn: row.expectedOn,
     quantity: row.quantity === null ? "" : String(row.quantity),
     status: row.status,
@@ -95,6 +104,8 @@ export function inputOfForm(form: FormState): LivestockArrivalInput {
   return {
     kind: form.kind,
     label: form.label.trim(),
+    // a kiürített választó `null`: a módosításnál ez törli a kötést
+    productId: form.product?.id ?? null,
     expectedOn: form.expectedOn,
     quantity: quantity === "" ? null : Number(quantity),
     status: form.status,
@@ -119,6 +130,38 @@ function ArrivalDrawer({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const open = isLivestockArrivalOpen(form.status);
+  /** A találatok fajtája azonosító szerint: a választó csak az azonosítót és a nevet adja vissza. */
+  const productKinds = useRef(new Map<string, LivestockArrivalKind | null>());
+  /** Ha a termék kategóriái egyértelműen megmondják a fajtát, a szerver más fajtát nem fogad el: a mező zárva. */
+  const lockedKind = form.product
+    ? (productKinds.current.get(form.product.id) ?? null)
+    : null;
+  const searchProducts = useCallback(
+    async (term: string, signal: AbortSignal) =>
+      (await livestockArrivalsApi.productOptions(token, term, signal)).map(
+        (option) => {
+          productKinds.current.set(option.id, option.kind);
+          return {
+            id: option.id,
+            title: option.name,
+            subtitle: option.commonName,
+          };
+        },
+      ),
+    [token],
+  );
+  const chooseProduct = (option: PickerOption | null) =>
+    setForm((current) => {
+      if (!option) return { ...current, product: null };
+      const kind = productKinds.current.get(option.id) ?? null;
+      return {
+        ...current,
+        product: option,
+        // a fajta a termékből jön, ha egyértelmű; a megnevezés csak üresen töltődik ki
+        kind: kind ?? current.kind,
+        label: current.label.trim() === "" ? option.title : current.label,
+      };
+    });
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((current) => ({ ...current, [key]: value }));
 
@@ -164,9 +207,29 @@ function ArrivalDrawer({
         {error ? (
           <Alert variant="danger" title="Nem sikerült" description={error} />
         ) : null}
-        <PilotFormField label="Fajta" required>
+        <PilotFormField
+          label="Termék"
+          help="Nem kötelező. Ha az érkező állat egy termék a boltban, válaszd ki: a fajta a termék kategóriájából jön, és az üres megnevezés kitöltődik."
+        >
+          <MortalitySearchPicker
+            label="Termék"
+            placeholder="Keresés név alapján…"
+            value={form.product}
+            onChange={chooseProduct}
+            search={searchProducts}
+            emptyText="Nincs ilyen nevű élő állat."
+          />
+        </PilotFormField>
+        <PilotFormField
+          label="Fajta"
+          required
+          help={
+            lockedKind ? "A kiválasztott termék kategóriájából jön." : undefined
+          }
+        >
           <PilotSelect
             value={form.kind}
+            disabled={lockedKind !== null}
             onChange={(value) => set("kind", value as LivestockArrivalKind)}
             aria-label="Fajta"
           >
