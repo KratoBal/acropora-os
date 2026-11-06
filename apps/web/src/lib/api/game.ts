@@ -98,8 +98,19 @@ export interface GameErasurePreview {
     capability:
       | { kind: "DELETE" | "TRASH" | "SEND_ONLY" | "NOT_CONFIGURED" }
       | { kind: "ERROR"; code: string };
+    /** be van-e kapcsolva a törlés (JATEK_ERASE_MAIL=on); kikapcsolva csak számol */
+    enabled: boolean;
     /** a lezárt hetek még törlésre váró, nyilvántartott levelei */
     tracked: number;
+    /** az utolsó ütemezett futás számai (a mért száraz futás a bekapcsolás előtt), vagy null */
+    lastRun: {
+      at: string;
+      dryRun: boolean;
+      tracked: number;
+      legacy: number;
+      removed: number;
+      sentByDays: number;
+    } | null;
   };
 }
 

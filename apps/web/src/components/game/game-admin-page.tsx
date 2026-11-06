@@ -622,10 +622,23 @@ function ErasureStatus({ token }: { token: string }) {
       </p>
       <p data-testid="game-mail-erasure">
         Levelek törlése: {mailErasureText(preview.mail.capability)}
+        {preview.mail.enabled ? "" : " · a törlés kikapcsolva, csak számol"}
         {preview.mail.tracked > 0
           ? ` · lezárt hetek levelei törlésre várnak: ${preview.mail.tracked}`
           : ""}
       </p>
+      {preview.mail.lastRun ? (
+        <p
+          className="text-xs text-pilot-grey-600"
+          data-testid="game-mail-erasure-run"
+        >
+          Utolsó futás ({formatDateTimeHu(preview.mail.lastRun.at)}
+          {preview.mail.lastRun.dryRun ? ", csak számolt" : ""}): nyilvántartott{" "}
+          {preview.mail.lastRun.tracked}, régebbi {preview.mail.lastRun.legacy},
+          törölve {preview.mail.lastRun.removed}; a játék{" "}
+          {preview.mail.lastRun.sentByDays} megerősítő levelet küldött
+        </p>
+      ) : null}
     </section>
   );
 }

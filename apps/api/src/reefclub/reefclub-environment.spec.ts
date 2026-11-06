@@ -98,6 +98,8 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   "JATEK_ERASE_AFTER_DAYS",
   "JATEK_ERASE_DRY_RUN",
   "JATEK_ERASE_DEADLINE",
+  // the switch for removing the sent mails from the sender's mailbox (card jatek-level-torles): a switch, not a secret
+  "JATEK_ERASE_MAIL",
   "PAID_MARKS_AUTO_DAYS",
   "PAID_MARKS_AUTO_HOUR",
   "PARTNER_URL",

@@ -227,6 +227,7 @@ describe(
         },
       } as never);
       withMailbox.now = erasure.now;
+      withMailbox.environment = { JATEK_ERASE_MAIL: "on" };
       // only this suite's questions: the filter is the real one, the other suites' rows are not in the tracked set
       const mail = await withMailbox.eraseMail({ dryRun: false });
       assert.ok(
