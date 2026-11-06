@@ -48,7 +48,10 @@ describe(
       await removeLeftovers();
     });
 
-    after(removeLeftovers);
+    // in "refuse" mode the database is not a test one: nothing is written there, not even a prefixed cleanup
+    after(async () => {
+      if (gate.mode === "run") await removeLeftovers();
+    });
 
     async function removeLeftovers() {
       await prisma.livestockArrival.deleteMany({
