@@ -244,9 +244,10 @@ describe("a jogi szoveg vazlatai", () => {
       /Sendinblue SAS \(Brevo\), Párizs, Franciaország: a megerősítő és értesítő levelek kiküldése\. Az adatokat az Európai Unióban kezeli\./,
     );
     assert.doesNotMatch(tajekoztato, /Gmail/);
-    assert.doesNotMatch(
+    assert.doesNotMatch(tajekoztato, /Workspace/);
+    assert.match(
       tajekoztato,
-      /Igénybe vett szolgáltatás: \*?\*?Google Workspace/,
+      /A YouTube-on megjelenő tartalomra a Google saját adatvédelmi irányelvei vonatkoznak: https:\/\/policies\.google\.com\/privacy\./,
     );
     assert.doesNotMatch(tajekoztato, /A Google \(levélküldés/);
     assert.match(

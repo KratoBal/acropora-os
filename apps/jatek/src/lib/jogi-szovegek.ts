@@ -1096,7 +1096,7 @@ export const ADATKEZELES: JogiDokumentum = {
         {
           fajta: "bekezdes",
           sorok: [
-            "A Google (YouTube) a szolgáltatás nyújtása során az adatokhoz az Európai Gazdasági Térségen kívül, így az Egyesült Államokban is hozzáférhet. Ennek alapja az EU–USA adatvédelmi keretrendszerről szóló európai bizottsági megfelelőségi határozat (GDPR 45. cikk), amelyhez a Google csatlakozott, valamint az Európai Bizottság által elfogadott általános adatvédelmi kikötések (GDPR 46. cikk (2) bekezdés c) pont). A garanciák a Google Workspace adatfeldolgozási feltételeiben ismerhetők meg (https://workspace.google.com/terms/dpa_terms.html), és kérésedre az info@acropora.hu címen is megküldjük őket.",
+            "A Google (YouTube) a szolgáltatás nyújtása során az adatokhoz az Európai Gazdasági Térségen kívül, így az Egyesült Államokban is hozzáférhet. Ennek alapja az EU–USA adatvédelmi keretrendszerről szóló európai bizottsági megfelelőségi határozat (GDPR 45. cikk), amelyhez a Google csatlakozott, valamint az Európai Bizottság által elfogadott általános adatvédelmi kikötések (GDPR 46. cikk (2) bekezdés c) pont). A YouTube-on megjelenő tartalomra a Google saját adatvédelmi irányelvei vonatkoznak: https://policies.google.com/privacy.",
           ],
         },
       ],
