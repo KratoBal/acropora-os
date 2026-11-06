@@ -33,6 +33,29 @@ function zoneOffsetMs(utc: number): number {
   return wall - Math.floor(utc / 1000) * 1000;
 }
 
+/** Egy pillanat budapesti napja (`YYYY-MM-DD`) és órája:perce (`HH:MM`): a `budapestInstant` párja, a szerkesztő űrlap előtöltéséhez. */
+export function budapestParts(
+  iso: string,
+): { day: string; time: string } | null {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: ZONE,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).formatToParts(at);
+  const get = (type: string) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+  return {
+    day: `${get("year")}-${get("month")}-${get("day")}`,
+    time: `${get("hour")}:${get("minute")}`,
+  };
+}
+
 /** `day` = `YYYY-MM-DD`, `time` = `HH:MM`; `null`, ha bármelyik nem ilyen alakú vagy nem létező. */
 export function budapestInstant(day: string, time: string): string | null {
   const d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);

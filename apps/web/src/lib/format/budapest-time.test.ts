@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { budapestInstant } from "./budapest-time";
+import { budapestInstant, budapestParts } from "./budapest-time";
 
 /**
  * WHAT TURNS THIS RED: a nyitás a böngésző zónájában számolva (a teszt UTC-n és más zónán is ugyanazt várja); a téli
@@ -40,6 +40,31 @@ describe("a budapesti fali idő pillanatként", () => {
     expect(budapestInstant("2026-03-29", "04:00")).toBe(
       "2026-03-29T02:00:00.000Z",
     );
+  });
+
+  it("a pillanatból visszaadja a budapesti napot és órát:percet (a szerkesztő űrlap előtöltése), és a két irány egymás párja", () => {
+    expect(budapestParts("2026-11-07T20:00:00.000Z")).toEqual({
+      day: "2026-11-07",
+      time: "21:00",
+    });
+    // éjfél körül a nap a budapesti: 23:30 UTC már a következő nap
+    expect(budapestParts("2026-11-06T23:30:00.000Z")).toEqual({
+      day: "2026-11-07",
+      time: "00:30",
+    });
+    expect(budapestParts("2026-07-01T10:30:00.000Z")).toEqual({
+      day: "2026-07-01",
+      time: "12:30",
+    });
+    for (const [day, time] of [
+      ["2026-11-07", "21:00"],
+      ["2026-07-01", "12:30"],
+      ["2026-10-25", "04:00"],
+    ] as const) {
+      const iso = budapestInstant(day, time)!;
+      expect(budapestParts(iso)).toEqual({ day, time });
+    }
+    expect(budapestParts("nem idő")).toBeNull();
   });
 
   it("nem létező napot vagy órát nem fogad el, és rossz alakot sem", () => {
