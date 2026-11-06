@@ -1314,6 +1314,41 @@ body {
   color: #b8c9d5;
   margin: 0 0 10px;
 }
+.jatek-jogi h3 {
+  font-size: 16px;
+  margin: 20px 0 6px;
+  font-weight: 600;
+}
+.jatek-jogi ul {
+  margin: 0 0 12px;
+  padding-left: 22px;
+  color: #b8c9d5;
+  font-size: 15px;
+}
+.jatek-jogi li {
+  margin: 0 0 4px;
+}
+.jatek-tablazat {
+  margin: 4px 0 14px;
+  overflow-x: auto;
+}
+.jatek-tablazat table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  color: #b8c9d5;
+}
+.jatek-tablazat th,
+.jatek-tablazat td {
+  text-align: left;
+  padding: 8px 12px;
+  border: 1px solid var(--jatek-border);
+}
+.jatek-tablazat th {
+  color: #fff;
+  font-weight: 600;
+  background: #0c1720;
+}
 .jatek-vazlat {
   margin: 0 0 22px;
   padding: 12px 14px;

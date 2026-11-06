@@ -11833,6 +11833,11 @@ model GameEntry {
   email            String
   /// A beküldő neve (a nyertes nevét teszi közzé az oldal, rövidítve). Üres a régi, név nélküli sorokon; új beküldésnél a szerver kéri.
   name             String?
+  /// A játékszabályzat elfogadása és az adatkezelési hozzájárulás (két külön jelölőnégyzet, acrobot 44375): mikor, és a két szöveg melyik verzióját látta a játékos. Üres a régi sorokon; új beküldésnél a szerver kéri, és az ismétlés a megerősítésig frissíti.
+  rulesAcceptedAt  DateTime?
+  consentAt        DateTime?
+  rulesVersion     String?
+  privacyVersion   String?
   answer           String
   autoCorrect      Boolean
   /// A kezelő döntése: null, ha nem döntött; különben ez számít az automatikus helyett.

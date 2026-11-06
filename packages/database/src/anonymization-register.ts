@@ -1152,6 +1152,8 @@ export const ANONYMIZATION_REGISTER: Readonly<
   GameEntry: {
     email: "email",
     name: "personName",
+    rulesVersion: "business",
+    privacyVersion: "business",
     answer: "freeText",
     manualById: "identifier",
     confirmTokenHash: "passwordHash",
