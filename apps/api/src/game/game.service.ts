@@ -32,6 +32,11 @@ import {
   mailModeOf,
   mailRedirect,
 } from "../notifications/mail/ticket-mail.rules.js";
+import {
+  gameEraseAfterDays,
+  gameEraseDeadline,
+  gameErasureDueAt,
+} from "./game-erasure.service.js";
 
 /** The error shape of the public game endpoints (exchange/jatek/jatek-api-szerzodes.md). */
 export function gameError(
@@ -344,6 +349,15 @@ export class GameService implements OnModuleInit {
       orderBy: { createdAt: "asc" },
       include: { question: { select: { week: true, prizeName: true } } },
     });
+    // THE LIST ENDS WITH THE ERASURE (the notice: the name and the masked address come off the list): from the grand
+    // prize draw plus JATEK_ERASE_AFTER_DAYS, or the fallback JATEK_ERASE_DEADLINE if sooner, the list is empty; the
+    // winners' accounting rows stay
+    const { dueAt } = gameErasureDueAt(
+      all,
+      gameEraseAfterDays(this.environment.JATEK_ERASE_AFTER_DAYS).days,
+      gameEraseDeadline(this.environment.JATEK_ERASE_DEADLINE).deadline,
+    );
+    if (this.now() >= dueAt) return { winners: [] };
     const firstOf = new Map<string, (typeof all)[number]>();
     for (const draw of [...all].sort(
       (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
