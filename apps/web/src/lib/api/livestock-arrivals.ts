@@ -52,8 +52,6 @@ export const livestockArrivalsApi = {
   /** Legfeljebb húsz élő állat termék a keresett szóra (üres keresésre a lista eleje). */
   productOptions(token: string, term: string, signal?: AbortSignal) {
     const text = term.trim();
-    // the query is built outside the path: the route-coverage guard reads the path literal, and an inline ternary
-    // inside `${}` cut it in the middle (CI, OS #2271)
     const search = text ? `?q=${encodeURIComponent(text)}` : "";
     return apiRequest<LivestockArrivalProductOption[]>(
       `/livestock-arrivals/options/products${search}`,
@@ -67,11 +65,23 @@ export const livestockArrivalsApi = {
       body: JSON.stringify(input),
     });
   },
-  update(token: string, id: string, input: LivestockArrivalInput) {
+  /**
+   * `expectedUpdatedAt` az az `updatedAt`, amivel az űrlap betöltődött: a szerver minden módosításnál frissen olvas, tehát
+   * csak ezzel veszi észre, hogy közben más mentett (409, a sor nem íródik felül). A felvételnél nincs ilyen mező.
+   */
+  update(
+    token: string,
+    id: string,
+    input: LivestockArrivalInput,
+    expectedUpdatedAt: string,
+  ) {
     return apiRequest<LivestockArrival>(
       `/livestock-arrivals/${encodeURIComponent(id)}`,
       token,
-      { method: "PATCH", body: JSON.stringify(input) },
+      {
+        method: "PATCH",
+        body: JSON.stringify({ ...input, expectedUpdatedAt }),
+      },
     );
   },
 };
