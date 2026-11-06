@@ -5165,6 +5165,29 @@ model UnitOfMeasure {
   @@index([kind, isActive, sortOrder])
 }
 
+/// A rented-out device, one row per physical piece (task eszkozberles, S1; Balazs, 2026-11-06,
+/// Eszkozberles thread). Maintained under Settings; the rental itself (S2) points at this row.
+/// All amounts are gross whole forints: the shop quotes rental prices in HUF, never in fractions.
+model RentalEquipment {
+  id                  String   @id @default(cuid())
+  name                String
+  /// Unique when given; a device without a factory serial may leave it empty (NULLs never collide).
+  serialNumber        String?  @unique
+  dailyFeeHuf         Int
+  depositHuf          Int
+  /// What a lost or destroyed device costs the renter.
+  replacementValueHuf Int
+  /// The accessories handed over with the device, printed on the contract (free text).
+  accessories         String?
+  note                String?
+  /// A retired device is not deleted (rentals will reference it); it only drops out of the picker.
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([isActive, name])
+}
+
 model AssetLabel {
   id         String           @id @default(cuid())
   /// Melyik generalasi tetelbol szuletett. NULLAZHATO: a mezo elott kiadott

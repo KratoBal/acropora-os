@@ -50,6 +50,7 @@ import { SimplePaySettlementModule } from "./integrations/simplepay/simplepay-se
 import { InventoryModule } from "./inventory/inventory.module.js";
 import { AssetCategoriesModule } from "./asset-categories/asset-categories.module.js";
 import { AssetFunctionsModule } from "./asset-functions/asset-functions.module.js";
+import { RentalEquipmentModule } from "./rental-equipment/rental-equipment.module.js";
 import { UnitsModule } from "./units/units.module.js";
 import { UnasOrderSyncModule } from "./orders/unas-order-sync/unas-order-sync.module.js";
 import { CarrierShipmentModule } from "./orders/carrier-shipment/carrier-shipment.module.js";
@@ -91,6 +92,7 @@ import { MortalityModule } from "./mortality/mortality.module.js";
     AssistantModule,
     AssetCategoriesModule,
     AssetFunctionsModule,
+    RentalEquipmentModule,
     UnitsModule,
     AquariumsModule,
     MortalityModule,
