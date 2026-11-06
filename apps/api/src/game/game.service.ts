@@ -61,16 +61,18 @@ export function shortPublicName(name: string): string {
 }
 
 /**
- * A WINNER'S ADDRESS AS THE PUBLIC LIST SHOWS IT (Balázs, 2026-11-06 10:51 UTC, acrobot 44368): the first two characters of the
- * part before the @, three bullet signs, then the @ and the whole domain: "ko•••@gmail.com". A part before the @ shorter than
- * two characters shows one character. An address with no @ shows nothing of itself ("•••"): this is the one place an address
- * could be printed whole by mistake, so a malformed one is hidden, never passed on.
+ * A WINNER'S ADDRESS AS THE PUBLIC LIST SHOWS IT (Balázs, 2026-11-06 10:51 UTC, acrobot 44368; the length rule is acrobot's,
+ * 44431, after barracuda's note on #2286): the first two characters of the part before the @, three bullet signs, then the @
+ * and the whole domain: "ko•••@gmail.com". A part of three characters or fewer shows ONE character, because with the name
+ * beside it two letters of a two- or three-character part would give the whole address away. An address with no @ shows
+ * nothing of itself ("•••"): this is the one place an address could be printed whole by mistake, so a malformed one is
+ * hidden, never passed on.
  */
 export function maskPublicEmail(email: string): string {
   const at = email.lastIndexOf("@");
   if (at < 1 || at === email.length - 1) return "•••";
   const local = [...email.slice(0, at)];
-  const shown = local.slice(0, local.length < 2 ? 1 : 2).join("");
+  const shown = local.slice(0, local.length <= 3 ? 1 : 2).join("");
   return `${shown}•••${email.slice(at)}`;
 }
 
