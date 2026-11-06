@@ -51,5 +51,6 @@ describe("a felulet forrasa", () => {
     );
     assert.match(oldal, /api\.aktualis\(\s*ip\s*,?\s*\)/);
     assert.match(oldal, /api\.nyertesek\(\s*ip\s*,?\s*\)/);
+    assert.match(oldal, /api\.lezart\(\s*ip\s*,?\s*\)/);
   });
 });
