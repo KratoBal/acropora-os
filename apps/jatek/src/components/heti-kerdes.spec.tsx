@@ -215,6 +215,7 @@ describe("a főoldal állandó szakaszai", () => {
             kind: "WEEKLY",
             week: "2026-W45",
             name: "Kovács P.",
+            emailMasked: "ko•••@example.hu",
             prizeName: "Aquaforest AF Nano Tank",
             drawnAt: "2026-11-14T20:00:00.000Z",
           },
@@ -222,6 +223,7 @@ describe("a főoldal állandó szakaszai", () => {
             kind: "CHRISTMAS",
             week: null,
             name: "Nagy A.",
+            emailMasked: "n•••@example.hu",
             prizeName: null,
             drawnAt: "2026-12-26T21:00:00.000Z",
           },
@@ -229,7 +231,8 @@ describe("a főoldal állandó szakaszai", () => {
       />,
     );
     assert.match(lista, /data-testid="nyertesek"/);
-    assert.match(lista, /<b>Kovács P\.<\/b>/);
+    assert.match(lista, /Kovács P\./);
+    assert.match(lista, /ko•••@example\.hu/);
     assert.match(lista, /45\. hét · Aquaforest AF Nano Tank/);
     assert.match(lista, /Karácsonyi fődíj/);
     assert.doesNotMatch(lista, /jatek-empty-winners|Még a rajt előtt/);
