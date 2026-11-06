@@ -207,6 +207,20 @@ describe("a főoldal állandó szakaszai", () => {
     assert.doesNotMatch(h, /aquaforest\.eu/);
   });
 
+  // WHAT TURNS THIS RED (Balázs, 2026-11-06 19:01 UTC): the second step asking only for the e-mail address, while the form asks
+  // for the name too.
+  it("the second step tells the player to give the name and the e-mail address", () => {
+    const lepesek = renderToStaticMarkup(<Lepesek />).replace(/<!-- -->/g, "");
+    assert.match(
+      lepesek,
+      /Add meg a nevedet és az e-mail címedet, fogadd el a játékszabályzatot/,
+    );
+    assert.doesNotMatch(lepesek, /Add meg az e-mail-címedet/);
+    // the grand prize line of the third step says "A játék fődíja" (Balázs, 2026-11-06 19:02 UTC)
+    assert.match(lepesek, /A játék fődíja az Aquaforest AF Nano Tank\./);
+    assert.doesNotMatch(lepesek, /A kampány fődíja/);
+  });
+
   it("the winners list shows the shortened names only, with the draw and the prize; with none yet it keeps the empty box", () => {
     const lista = renderToStaticMarkup(
       <Nyertesek

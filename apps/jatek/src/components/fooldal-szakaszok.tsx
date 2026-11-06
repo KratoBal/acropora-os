@@ -110,9 +110,9 @@ export function Lepesek() {
           </span>
           <h3>Küldd be a válaszod</h3>
           <p>
-            Egy heted van válaszolni. Add meg az e-mail-címedet, fogadd el a
-            játékszabályzatot, és erősítsd meg a részvételed a levélben kapott
-            linkkel.
+            Egy heted van válaszolni. Add meg a nevedet és az e-mail címedet,
+            fogadd el a játékszabályzatot, és erősítsd meg a részvételed a
+            levélben kapott linkkel.
           </p>
         </article>
         <article>
@@ -122,7 +122,7 @@ export function Lepesek() {
           <h3>Várd a heti sorsolást</h3>
           <p>
             A válaszadási időszak után heti nyereményt sorsolunk a helyes
-            válaszok között. A kampány fődíja az Aquaforest AF Nano Tank.
+            válaszok között. A játék fődíja az Aquaforest AF Nano Tank.
           </p>
         </article>
       </div>
