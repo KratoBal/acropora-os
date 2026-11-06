@@ -1151,6 +1151,11 @@ export const ANONYMIZATION_REGISTER: Readonly<
     winnerEmail: "email",
     createdById: "identifier",
   },
+  LivestockArrival: {
+    label: "business",
+    note: "freeText",
+    createdById: "identifier",
+  },
   OutgoingPaymentMark: {
     invoiceNumber: "identifier",
     sourceRef: "identifier",
