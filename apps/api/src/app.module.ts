@@ -77,6 +77,7 @@ import { SearchModule } from "./search/search.module.js";
 import { KnowledgeBaseModule } from "./knowledge-base/knowledge-base.module.js";
 
 import { ServiceDraftsModule } from "./service-drafts/service-drafts.module.js";
+import { LivestockArrivalsModule } from "./livestock-arrivals/livestock-arrivals.module.js";
 import { MortalityModule } from "./mortality/mortality.module.js";
 
 @Module({
@@ -93,6 +94,7 @@ import { MortalityModule } from "./mortality/mortality.module.js";
     UnitsModule,
     AquariumsModule,
     MortalityModule,
+    LivestockArrivalsModule,
     AuthModule,
     BrandsModule,
     CatalogActionsModule,
