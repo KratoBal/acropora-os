@@ -1003,7 +1003,7 @@ export const ADATKEZELES: JogiDokumentum = {
         {
           fajta: "bekezdes",
           sorok: [
-            "A levélküldő szolgáltató a kiküldés naplóját a saját szabályai szerint, korlátozott ideig őrzi. A rendszer a levelekről csak darabszámot naplóz, email-címet nem.",
+            "A levélküldő szolgáltató a kiküldés naplóját a saját adatkezelési feltételei szerint, korlátozott ideig őrzi (https://www.brevo.com/legal/privacypolicy/). A rendszer a levelekről csak darabszámot naplóz, email-címet nem.",
           ],
         },
       ],
@@ -1042,7 +1042,7 @@ export const ADATKEZELES: JogiDokumentum = {
         {
           fajta: "bekezdes",
           sorok: [
-            "Sendinblue SAS (Brevo), Párizs, Franciaország: a megerősítő és értesítő levelek kiküldése. Az adatokat az Európai Unióban kezeli.",
+            "Sendinblue SAS (Brevo), Párizs, Franciaország: a megerősítő és értesítő levelek kiküldése. Az adatokat az adatfeldolgozási feltételei szerint elsősorban az Európai Unióban kezeli.",
           ],
         },
         { fajta: "alcim", szoveg: "További közreműködők" },

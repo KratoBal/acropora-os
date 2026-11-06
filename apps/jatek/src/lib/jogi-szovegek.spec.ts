@@ -245,7 +245,7 @@ describe("a jogi szoveg vazlatai", () => {
     const tajekoztato = szoveg(ADATKEZELES);
     assert.match(
       tajekoztato,
-      /Sendinblue SAS \(Brevo\), Párizs, Franciaország: a megerősítő és értesítő levelek kiküldése\. Az adatokat az Európai Unióban kezeli\./,
+      /Sendinblue SAS \(Brevo\), Párizs, Franciaország: a megerősítő és értesítő levelek kiküldése\. Az adatokat az adatfeldolgozási feltételei szerint elsősorban az Európai Unióban kezeli\./,
     );
     assert.doesNotMatch(tajekoztato, /Gmail/);
     assert.doesNotMatch(tajekoztato, /Workspace/);
@@ -260,7 +260,7 @@ describe("a jogi szoveg vazlatai", () => {
     );
     assert.match(
       tajekoztato,
-      /A levélküldő szolgáltató a kiküldés naplóját a saját szabályai szerint, korlátozott ideig őrzi\./,
+      /A levélküldő szolgáltató a kiküldés naplóját a saját adatkezelési feltételei szerint, korlátozott ideig őrzi \(https:\/\/www\.brevo\.com\/legal\/privacypolicy\/\)\./,
     );
     assert.doesNotMatch(tajekoztato, /küldő postafiókból/);
     // the Google Ireland block that described the mail is gone; the YouTube provider is still named once
