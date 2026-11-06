@@ -5,6 +5,7 @@ import {
   ConfirmDialog,
   EmptyState,
   PilotDateField,
+  PilotFileInput,
   PilotPageHeader,
   Skeleton,
 } from "@acropora/ui";
@@ -103,8 +104,7 @@ function PrizeImage({
       help="PNG, JPEG, GIF vagy WebP, legfeljebb 1 MB."
     >
       <div className="space-y-2">
-        <input
-          type="file"
+        <PilotFileInput
           accept="image/png,image/jpeg,image/gif,image/webp"
           aria-label="Nyeremény képe"
           disabled={busy}
