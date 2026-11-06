@@ -384,3 +384,117 @@ describe("a question", () => {
     );
   });
 });
+
+describe("the week's prize and the players' names (card 31445d0f, Balázs 2026-11-06)", () => {
+  // WHAT TURNS THIS RED: a prize description or picture saved without a name; a picture id that is not in the image store
+  // saved (a database error at the foreign key instead of a sentence); a blank prize field kept as an empty text instead
+  // of cleared; an absent prize key on an edit clearing the stored prize; the entries list or the draws list without the
+  // name next to the address; a draw's kept candidates changed to carry the names (the seed would no longer replay).
+  const QUESTION = {
+    week: "2026-W46",
+    type: "TEXT",
+    prompt: "Mi a kérdés?",
+    options: [],
+    acceptedAnswers: ["acropora"],
+    opensAt: "2026-11-07T20:00:00.000Z",
+    closesAt: "2026-11-14T20:00:00.000Z",
+  };
+
+  function prizeSetup(images: string[] = ["img1"]) {
+    const created: Record<string, unknown>[] = [];
+    const entryQueries: Record<string, any>[] = [];
+    const database = {
+      gameQuestion: {
+        create: async ({ data }: { data: Record<string, unknown> }) => {
+          created.push(data);
+          return { id: "q1", ...data };
+        },
+      },
+      mailImage: {
+        findUnique: async ({ where }: { where: { id: string } }) =>
+          images.includes(where.id) ? { id: where.id } : null,
+      },
+      gameEntry: {
+        findMany: async (query: Record<string, any>) => {
+          entryQueries.push(query);
+          return [
+            { email: "a@x.hu", name: "Kovács Péter" },
+            { email: "a@x.hu", name: "Kovács Péter Pál" },
+            { email: "b@x.hu", name: "Nagy Anna" },
+          ];
+        },
+      },
+      gameDraw: {
+        findMany: async () => [
+          {
+            id: "d1",
+            winnerEmail: "a@x.hu",
+            candidates: [
+              { email: "a@x.hu", weight: 1 },
+              { email: "b@x.hu", weight: 1 },
+            ],
+            question: { week: "2026-W46" },
+          },
+        ],
+      },
+    };
+    const service = new GameAdminService(null as never);
+    service.database = database as never;
+    return { service, created, entryQueries };
+  }
+  const code = (error: any) => error.getResponse().code;
+
+  it("keeps the prize trimmed; a blank field is cleared, an absent key is left out of the write", async () => {
+    const { service, created } = prizeSetup();
+    await service.createQuestion({
+      ...QUESTION,
+      prizeName: "  Aquaforest Nano  ",
+      prizeDescription: "   ",
+      prizeImageId: "img1",
+    });
+    assert.equal(created[0]!.prizeName, "Aquaforest Nano");
+    assert.equal(created[0]!.prizeDescription, null);
+    assert.equal(created[0]!.prizeImageId, "img1");
+    await service.createQuestion({ ...QUESTION, week: "2026-W47" });
+    for (const key of ["prizeName", "prizeDescription", "prizeImageId"])
+      assert.equal(key in created[1]!, false, key);
+  });
+
+  it("refuses a description or a picture without a name, and a picture that is not in the store", async () => {
+    const { service, created } = prizeSetup();
+    await assert.rejects(
+      service.createQuestion({ ...QUESTION, prizeDescription: "csak leírás" }),
+      (e: any) => code(e) === "INVALID_QUESTION",
+    );
+    await assert.rejects(
+      service.createQuestion({ ...QUESTION, prizeImageId: "img1" }),
+      (e: any) => code(e) === "INVALID_QUESTION",
+    );
+    await assert.rejects(
+      service.createQuestion({
+        ...QUESTION,
+        prizeName: "Nano",
+        prizeImageId: "nincs-ilyen",
+      }),
+      (e: any) => code(e) === "INVALID_QUESTION",
+    );
+    assert.equal(created.length, 0);
+  });
+
+  it("the draws list carries a name per address (the latest entry with one) and leaves the kept candidates alone", async () => {
+    const { service, entryQueries } = prizeSetup();
+    const [draw] = await service.draws();
+    assert.deepEqual(draw!.names, {
+      "a@x.hu": "Kovács Péter Pál",
+      "b@x.hu": "Nagy Anna",
+    });
+    assert.deepEqual(draw!.candidates, [
+      { email: "a@x.hu", weight: 1 },
+      { email: "b@x.hu", weight: 1 },
+    ]);
+    assert.deepEqual(entryQueries[0]!.where.email.in.sort(), [
+      "a@x.hu",
+      "b@x.hu",
+    ]);
+  });
+});

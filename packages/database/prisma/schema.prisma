@@ -8531,6 +8531,7 @@ model MailImage {
   createdAt    DateTime @default(now())
 
   uploadedBy User? @relation("MailImageUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+  gamePrizes GameQuestion[] @relation("GamePrizeImage")
 
   @@index([uploadedById])
 }
@@ -11808,12 +11809,18 @@ model GameQuestion {
   acceptedAnswers Json        @default("[]")
   opensAt         DateTime
   closesAt        DateTime
+  /// A hét nyereménye (Balázs, 2026-11-06): neve, rövid leírása és képe (a levélsablon-kép tárolóból). Mind opcionális: a régi kérdéseknek nincs.
+  prizeName        String?
+  prizeDescription String?
+  prizeImageId     String?
+  prizeImage       MailImage?  @relation("GamePrizeImage", fields: [prizeImageId], references: [id], onDelete: SetNull)
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
   entries         GameEntry[]
   draws           GameDraw[]
 
   @@index([opensAt])
+  @@index([prizeImageId])
 }
 
 /// EGY BEKÜLDÉS: egy e-mail cím egy hétre egyszer (a kérdés és az e-mail egyedi). Csak a megerősítő link után számít
@@ -11824,6 +11831,8 @@ model GameEntry {
   question         GameQuestion @relation(fields: [questionId], references: [id], onDelete: Restrict)
   /// Kisbetűs, levágott e-mail cím.
   email            String
+  /// A beküldő neve (a nyertes nevét teszi közzé az oldal, rövidítve). Üres a régi, név nélküli sorokon; új beküldésnél a szerver kéri.
+  name             String?
   answer           String
   autoCorrect      Boolean
   /// A kezelő döntése: null, ha nem döntött; különben ez számít az automatikus helyett.

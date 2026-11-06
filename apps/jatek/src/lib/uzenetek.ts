@@ -15,6 +15,7 @@ export const NEM_ELERHETO =
 
 const BEKULDES_HIBAK: Readonly<Record<string, string>> = {
   INVALID_EMAIL: "Ez az e-mail-cím nem tűnik érvényesnek. Nézd át, kérjük.",
+  INVALID_NAME: "Kérjük, add meg a nevedet.",
   INVALID_ANSWER:
     "A válaszod nem fogadható el. Írj be egy választ (legfeljebb 200 karakter), vagy válassz a lehetőségek közül.",
   NO_QUESTION: "Most nincs nyitott kérdés.",

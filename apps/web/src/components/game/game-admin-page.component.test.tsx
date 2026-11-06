@@ -19,6 +19,8 @@ const api = vi.hoisted(() => ({
   mailQueue: vi.fn(),
   sendQueued: vi.fn(),
   testLink: vi.fn(),
+  uploadPrizeImage: vi.fn(),
+  prizeImageContent: vi.fn(),
 }));
 vi.mock("@/lib/api/game", () => ({ gameApi: api }));
 vi.mock("next/navigation", () => ({
@@ -69,6 +71,9 @@ beforeEach(() => {
       acceptedAnswers: ["Acropora"],
       opensAt: "2026-11-06T05:00:00.000Z",
       closesAt: "2026-11-13T22:59:59.000Z",
+      prizeName: "Aquaforest AF Nano Tank",
+      prizeDescription: null,
+      prizeImageId: null,
       entryCount: 2,
       confirmedCount: 1,
       candidateCount: 1,
@@ -78,6 +83,7 @@ beforeEach(() => {
     {
       id: "e1",
       email: "jo@x.hu",
+      name: "Kovács Péter",
       answer: "acropora",
       autoCorrect: true,
       manualCorrect: null,
@@ -89,6 +95,7 @@ beforeEach(() => {
     {
       id: "e2",
       email: "ketes@x.hu",
+      name: null,
       answer: "akropóra korall",
       autoCorrect: false,
       manualCorrect: null,
@@ -128,6 +135,7 @@ beforeEach(() => {
       ticket: 0,
       tickets: 1,
       createdAt: "2026-11-07T18:00:00.000Z",
+      names: { "jo@x.hu": "Kovács Péter" },
     },
   ]);
   api.draw.mockReset().mockResolvedValue({});
@@ -149,6 +157,78 @@ describe("GameAdminPage", () => {
     await waitFor(() =>
       expect(api.decide).toHaveBeenCalledWith("t", "e2", true),
     );
+  });
+
+  it("shows the player's name next to the address in the entries, the draw's winner and the question's prize; a nameless entry shows the address alone", async () => {
+    render(<GameAdminPage />);
+    const entries = await screen.findByTestId("game-entries");
+    expect(entries).toHaveTextContent("Kovács Péter · jo@x.hu");
+    expect(entries).not.toHaveTextContent("null");
+    const draws = await screen.findByTestId("game-draws");
+    expect(draws).toHaveTextContent("Kovács Péter · jo@x.hu");
+    expect(
+      await screen.findByText("nyeremény: Aquaforest AF Nano Tank"),
+    ).toBeInTheDocument();
+  });
+
+  it("saves a new question with the opening and closing as Budapest time (day and hour:minute) and the week's prize", async () => {
+    api.createQuestion.mockResolvedValue({});
+    api.uploadPrizeImage.mockResolvedValue({ id: "img1" });
+    api.prizeImageContent.mockResolvedValue(
+      new Blob(["x"], { type: "image/png" }),
+    );
+    URL.createObjectURL = vi.fn(() => "blob:preview");
+    URL.revokeObjectURL = vi.fn();
+    render(<GameAdminPage />);
+    const form = await screen.findByTestId("game-new-question");
+    fireEvent.change(within(form).getByLabelText("Hét"), {
+      target: { value: "2026-W46" },
+    });
+    fireEvent.change(within(form).getByLabelText("Kérdés szövege"), {
+      target: { value: "Mi a kérdés?" },
+    });
+    fireEvent.change(within(form).getByLabelText("Elfogadott válaszok"), {
+      target: { value: "Acropora" },
+    });
+    fireEvent.change(within(form).getByLabelText("Nyitás napja"), {
+      target: { value: "2026. 11. 07." },
+    });
+    fireEvent.change(within(form).getByLabelText("Nyitás ideje"), {
+      target: { value: "21:00" },
+    });
+    fireEvent.change(within(form).getByLabelText("Zárás napja"), {
+      target: { value: "2026. 11. 14." },
+    });
+    fireEvent.change(within(form).getByLabelText("Zárás ideje"), {
+      target: { value: "20:59" },
+    });
+    fireEvent.change(within(form).getByLabelText("Nyeremény neve"), {
+      target: { value: "  AF Nano Tank " },
+    });
+    fireEvent.change(within(form).getByLabelText("Nyeremény leírása"), {
+      target: { value: "Egy kis akvárium." },
+    });
+    const file = new File(["x"], "nano.png", { type: "image/png" });
+    fireEvent.change(within(form).getByLabelText("Nyeremény képe"), {
+      target: { files: [file] },
+    });
+    await waitFor(() =>
+      expect(api.uploadPrizeImage).toHaveBeenCalledWith("t", file),
+    );
+    await within(form).findByAltText("A nyeremény képe");
+    fireEvent.click(
+      within(form).getByRole("button", { name: "Kérdés mentése" }),
+    );
+    await waitFor(() => expect(api.createQuestion).toHaveBeenCalledTimes(1));
+    expect(api.createQuestion.mock.calls[0]![1]).toMatchObject({
+      week: "2026-W46",
+      // 21:00 budapesti (CET, +1) = 20:00 UTC; 20:59 egy hét múlva
+      opensAt: "2026-11-07T20:00:00.000Z",
+      closesAt: "2026-11-14T19:59:00.000Z",
+      prizeName: "AF Nano Tank",
+      prizeDescription: "Egy kis akvárium.",
+      prizeImageId: "img1",
+    });
   });
 
   it("draws for the chosen week only after the confirmation, and runs a kept draw again with its seed", async () => {

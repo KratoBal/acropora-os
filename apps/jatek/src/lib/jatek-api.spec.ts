@@ -47,6 +47,7 @@ function hamisFetch(
 const BEMENET = {
   questionId: "q1",
   email: "j@example.com",
+  name: "Kovács Péter",
   answer: "a",
   website: "",
 };

@@ -27,15 +27,16 @@ import {
   type GameMailQueue,
   type GameQuestionView,
 } from "@/lib/api/game";
+import { budapestInstant } from "@/lib/format/budapest-time";
 import { formatDateTimeHu } from "@/lib/format/date";
 
 const errorText = (cause: unknown) =>
   cause instanceof Error ? cause.message : "Ismeretlen hiba";
 
-/** A nap a böngésző (budapesti) idejében: a nyitás a nap eleje, a zárás a nap vége. */
-const dayStart = (day: string) => new Date(`${day}T00:00:00`).toISOString();
-const dayEnd = (day: string) => new Date(`${day}T23:59:59`).toISOString();
-
+/**
+ * A nyitás és a zárás a nap ÉS az óra:perc, budapesti idő szerint (a boltban érvényes idő, nem a gép zónája). Az üres
+ * óra:perc a régi űrlap értékét adja: a nyitás a nap eleje (00:00), a zárás a nap vége (23:59).
+ */
 const EMPTY_FORM = {
   week: "",
   type: "TEXT" as "TEXT" | "CHOICE",
@@ -43,8 +44,89 @@ const EMPTY_FORM = {
   options: "",
   accepted: "",
   opens: "",
+  opensTime: "00:00",
   closes: "",
+  closesTime: "23:59",
+  prizeName: "",
+  prizeDescription: "",
+  prizeImageId: "",
 };
+
+/** A nyeremény képe: feltöltés a kép-tárolóba, előnézettel; a kérdés az azonosítót őrzi. */
+function PrizeImage({
+  token,
+  imageId,
+  onChange,
+}: {
+  token: string;
+  imageId: string;
+  onChange: (id: string) => void;
+}) {
+  const [preview, setPreview] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!imageId) {
+      setPreview(null);
+      return;
+    }
+    let url: string | null = null;
+    let cancelled = false;
+    void gameApi
+      .prizeImageContent(token, imageId)
+      .then((blob) => {
+        if (cancelled) return;
+        url = URL.createObjectURL(blob);
+        setPreview(url);
+      })
+      .catch(() => setPreview(null));
+    return () => {
+      cancelled = true;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [token, imageId]);
+  const upload = async (file: File | undefined) => {
+    if (!file) return;
+    setBusy(true);
+    setError(null);
+    try {
+      onChange((await gameApi.uploadPrizeImage(token, file)).id);
+    } catch (cause) {
+      setError(errorText(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <PilotFormField
+      label="Képe"
+      help="PNG, JPEG, GIF vagy WebP, legfeljebb 1 MB."
+    >
+      <div className="space-y-2">
+        <input
+          type="file"
+          accept="image/png,image/jpeg,image/gif,image/webp"
+          aria-label="Nyeremény képe"
+          disabled={busy}
+          onChange={(event) => void upload(event.target.files?.[0])}
+        />
+        {preview ? (
+          <div className="flex items-center gap-3">
+            <img
+              src={preview}
+              alt="A nyeremény képe"
+              className="h-24 w-24 rounded-lg object-cover ring-1 ring-pilot-grey-200"
+            />
+            <PilotButton variant="secondary" onClick={() => onChange("")}>
+              Kép törlése
+            </PilotButton>
+          </div>
+        ) : null}
+        {error ? <p className="text-sm text-rose-600">{error}</p> : null}
+      </div>
+    </PilotFormField>
+  );
+}
 
 /**
  * Az új kérdés űrlapja. CHOICE-nál a lehetőségek soronként (`a: Acropora`), a helyes válasz a lehetőség betűje;
@@ -85,8 +167,11 @@ function NewQuestion({
         prompt: form.prompt.trim(),
         options,
         acceptedAnswers: lines(form.accepted),
-        opensAt: form.opens ? dayStart(form.opens) : "",
-        closesAt: form.closes ? dayEnd(form.closes) : "",
+        opensAt: budapestInstant(form.opens, form.opensTime) ?? "",
+        closesAt: budapestInstant(form.closes, form.closesTime) ?? "",
+        prizeName: form.prizeName.trim() || null,
+        prizeDescription: form.prizeDescription.trim() || null,
+        prizeImageId: form.prizeImageId || null,
       });
       setForm(EMPTY_FORM);
       onCreated();
@@ -105,7 +190,11 @@ function NewQuestion({
       <p className="text-sm font-semibold">Új heti kérdés</p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <PilotFormField label="Hét (például 2026-W46)" required>
-          <PilotInput value={form.week} onChange={set("week")} />
+          <PilotInput
+            value={form.week}
+            onChange={set("week")}
+            aria-label="Hét"
+          />
         </PilotFormField>
         <PilotFormField label="Típus" required>
           <PilotSelect
@@ -123,16 +212,64 @@ function NewQuestion({
             aria-label="Nyitás napja"
           />
         </PilotFormField>
-        <PilotFormField label="Zárás napja (a nap végéig)" required>
+        <PilotFormField label="Nyitás ideje (budapesti)" required>
+          <PilotInput
+            type="time"
+            value={form.opensTime}
+            onChange={set("opensTime")}
+            aria-label="Nyitás ideje"
+          />
+        </PilotFormField>
+        <PilotFormField label="Zárás napja" required>
           <PilotDateField
             value={form.closes}
             onChange={set("closes")}
             aria-label="Zárás napja"
           />
         </PilotFormField>
+        <PilotFormField label="Zárás ideje (budapesti)" required>
+          <PilotInput
+            type="time"
+            value={form.closesTime}
+            onChange={set("closesTime")}
+            aria-label="Zárás ideje"
+          />
+        </PilotFormField>
+      </div>
+      <div className="space-y-3 rounded-xl border border-pilot-grey-100 px-4 py-3">
+        <p className="text-sm font-semibold">A hét nyereménye</p>
+        <PilotFormField
+          label="Neve"
+          help="Nem kötelező, de a leírás és a kép csak névvel menthető."
+        >
+          <PilotInput
+            value={form.prizeName}
+            onChange={set("prizeName")}
+            maxLength={120}
+            aria-label="Nyeremény neve"
+          />
+        </PilotFormField>
+        <PilotFormField label="Rövid leírása">
+          <textarea
+            className="min-h-16 w-full rounded-xl border border-pilot-grey-200 px-3 py-2 text-sm"
+            value={form.prizeDescription}
+            onChange={(event) => set("prizeDescription")(event.target.value)}
+            maxLength={500}
+            aria-label="Nyeremény leírása"
+          />
+        </PilotFormField>
+        <PrizeImage
+          token={token}
+          imageId={form.prizeImageId}
+          onChange={set("prizeImageId")}
+        />
       </div>
       <PilotFormField label="A kérdés" required>
-        <PilotInput value={form.prompt} onChange={set("prompt")} />
+        <PilotInput
+          value={form.prompt}
+          onChange={set("prompt")}
+          aria-label="Kérdés szövege"
+        />
       </PilotFormField>
       {form.type === "CHOICE" ? (
         <PilotFormField
@@ -247,7 +384,10 @@ function Entries({
           key={entry.id}
           className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-2"
         >
-          <span className="font-medium">{entry.email}</span>
+          <span className="font-medium">
+            {entry.name ? `${entry.name} · ` : ""}
+            {entry.email}
+          </span>
           <span>{entry.answer}</span>
           <span className="inline-flex flex-wrap items-center gap-2">
             {entry.confirmedAt ? (
@@ -492,8 +632,10 @@ function Draws({
                     : "Karácsonyi"}
                 </span>
                 {": "}
-                {row.winnerEmail ?? "nincs jelölt"} · {row.candidates.length}{" "}
-                jelölt, {row.tickets} sorsjegy ·{" "}
+                {row.winnerEmail
+                  ? `${row.names[row.winnerEmail] ? `${row.names[row.winnerEmail]} · ` : ""}${row.winnerEmail}`
+                  : "nincs jelölt"}{" "}
+                · {row.candidates.length} jelölt, {row.tickets} sorsjegy ·{" "}
                 {formatDateTimeHu(row.createdAt)}
               </p>
               <p className="text-xs text-pilot-grey-600">
@@ -596,6 +738,11 @@ export function GameAdminPage() {
                 >
                   <span className="font-medium">{q.week}</span>
                   <span className="min-w-0 flex-1 truncate">{q.prompt}</span>
+                  {q.prizeName ? (
+                    <span className="text-xs text-pilot-grey-600">
+                      nyeremény: {q.prizeName}
+                    </span>
+                  ) : null}
                   <span className="text-xs text-pilot-grey-600">
                     {q.entryCount} beküldés, {q.confirmedCount} megerősítve,{" "}
                     {q.candidateCount} jelölt

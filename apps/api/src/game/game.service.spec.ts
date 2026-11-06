@@ -170,6 +170,7 @@ describe("an entry", () => {
   const entry = {
     questionId: "q1",
     email: " Jatekos@Example.com ",
+    name: "  Kovács   Péter ",
     answer: "acropóra",
     website: "",
   };
@@ -191,6 +192,16 @@ describe("an entry", () => {
       linkToken(mails[0]!),
       "only the token's hash is kept",
     );
+  });
+
+  it("keeps the name trimmed with its inner spaces collapsed, and an unconfirmed repeat takes the newer name", async () => {
+    const { service, entries } = setup();
+    await service.submit(entry);
+    assert.equal(entries.get("jatekos@example.com")!.name, "Kovács Péter");
+    // after the mail pause, as a repeat is allowed to take the new values
+    service.now = () => new Date(OPEN.getTime() + 3 * 60_000);
+    await service.submit({ ...entry, name: "Kovács Péter Pál" });
+    assert.equal(entries.get("jatekos@example.com")!.name, "Kovács Péter Pál");
   });
 
   it("mails the formatted confirmation: the question, the button with the link and the closing time, and a plain-text twin", async () => {
@@ -433,6 +444,13 @@ describe("an entry", () => {
       await codes(service, { ...entry, answer: "  " }),
       "INVALID_ANSWER",
     );
+    // the name is required on a new entry: absent, one character, no letter in it, or not a text
+    for (const name of [undefined, "", "  ", "K", "1234", "--", 42])
+      assert.equal(
+        await codes(service, { ...entry, name }),
+        "INVALID_NAME",
+        String(name),
+      );
     assert.equal(
       await codes(service, { ...entry, questionId: "nincs" }),
       "NO_QUESTION",
@@ -473,6 +491,7 @@ describe("the confirmation", () => {
     await service.submit({
       questionId: "q1",
       email: "a@x.hu",
+      name: "Kovács Péter",
       answer: "Acropora",
     });
     const token = linkToken(mails[0]!);
@@ -496,6 +515,7 @@ describe("the confirmation", () => {
     await service.submit({
       questionId: "q1",
       email: "a@x.hu",
+      name: "Kovács Péter",
       answer: "Acropora",
     });
     service.now = () => new Date("2026-11-14T00:00:00Z");

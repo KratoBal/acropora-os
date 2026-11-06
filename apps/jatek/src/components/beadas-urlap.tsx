@@ -14,7 +14,8 @@ const NEM_ELERHETO =
   "A játék most nem érhető el. Kérjük, próbáld újra egy kicsit később.";
 
 /**
- * A BEKULDO URLAP (Luca designja, 2026-11-05). E-mail-cim + valasz (szabad szoveg VAGY valasztas), rejtett
+ * A BEKULDO URLAP (Luca designja, 2026-11-05). Nev (Balazs, 2026-11-06: kotelezo; a nyertes nevet az oldal roviditve
+ * teszi kozze, ezt a mezo alatti megjegyzes mondja) + e-mail-cim + valasz (szabad szoveg VAGY valasztas), rejtett
  * botcsapda-mezo (`website`: a kepernyon kivulre tolva, `tabIndex=-1`, `autoComplete=off`, uresen kell menjen), es
  * EGY kotelezo jelolonegyzet: "Elfogadom a jatekszabalyzatot, es megismertem az adatkezelesi tajekoztatot".
  * A beküldés a lap SAJAT `/api/bekuldes` utvonalara megy (az api cimet a szerver tudja).
@@ -27,6 +28,7 @@ const NEM_ELERHETO =
  * "levelet kuldtunk" uzenet jon.
  */
 export function BeadasUrlap({ kerdes }: { kerdes: Kerdes }) {
+  const [nev, setNev] = useState("");
   const [email, setEmail] = useState("");
   const [valasz, setValasz] = useState("");
   const [csali, setCsali] = useState("");
@@ -44,6 +46,7 @@ export function BeadasUrlap({ kerdes }: { kerdes: Kerdes }) {
         body: JSON.stringify({
           questionId: kerdes.id,
           email,
+          name: nev,
           answer: valasz,
           website: csali,
         }),
@@ -111,6 +114,26 @@ export function BeadasUrlap({ kerdes }: { kerdes: Kerdes }) {
           />
         </>
       )}
+
+      <label htmlFor="jatek-nev">
+        A neved <span>*</span>
+      </label>
+      <input
+        id="jatek-nev"
+        name="nev"
+        type="text"
+        placeholder="Kovács Péter"
+        autoComplete="name"
+        required
+        minLength={2}
+        maxLength={120}
+        value={nev}
+        onChange={(e) => setNev(e.target.value)}
+      />
+      <small className="jatek-field-note">
+        Ha te nyersz, a neved rövidítve (például Kovács P.) jelenik meg az
+        oldalon.
+      </small>
 
       <label htmlFor="jatek-email">
         E-mail-címed <span>*</span>

@@ -15,6 +15,12 @@ export class GameEntryDto {
   @MaxLength(320)
   email?: string;
 
+  /** the player's name (required for a new entry; the service says INVALID_NAME) */
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  name?: string;
+
   @IsOptional()
   @IsString()
   @MaxLength(1000)

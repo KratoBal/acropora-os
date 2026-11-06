@@ -33,6 +33,7 @@ export type Hiba = { ok: false; status: number; code: string; message: string };
 export type BekuldesBemenet = {
   questionId: string;
   email: string;
+  name: string;
   answer: string;
   website: string;
 };

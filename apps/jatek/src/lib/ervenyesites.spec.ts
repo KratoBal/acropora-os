@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { MAX_VALASZ, bekuldesKeres, megerositesKeres } from "./ervenyesites.ts";
+import {
+  MAX_NEV,
+  MAX_VALASZ,
+  bekuldesKeres,
+  megerositesKeres,
+} from "./ervenyesites.ts";
 
 /*
   WHAT TURNS THIS RED. A request with a missing or non-string field reaching the api; an answer over 200
@@ -11,6 +16,7 @@ import { MAX_VALASZ, bekuldesKeres, megerositesKeres } from "./ervenyesites.ts";
 const jo = {
   questionId: "q1",
   email: "jatekos@example.com",
+  name: "Kovács Péter",
   answer: "acropora",
   website: "",
 };
@@ -21,6 +27,7 @@ describe("bekuldesKeres", () => {
       ...jo,
       answer: "  acropora  ",
       email: " jatekos@example.com ",
+      name: "  Kovács   Péter ",
     });
     assert.deepEqual(r, { ok: true, value: { ...jo } });
     const csali = bekuldesKeres({ ...jo, website: "http://spam.example" });
@@ -47,6 +54,26 @@ describe("bekuldesKeres", () => {
         { ok: false, code: "INVALID_EMAIL" },
         email,
       );
+  });
+
+  it("refuses a missing name, one character, no letter in it, or an over-long one, with its own code", () => {
+    for (const name of [
+      undefined,
+      "",
+      "   ",
+      "K",
+      "123",
+      "--",
+      42,
+      "x".repeat(MAX_NEV + 1),
+    ])
+      assert.deepEqual(
+        bekuldesKeres({ ...jo, name }),
+        { ok: false, code: "INVALID_NAME" },
+        String(name),
+      );
+    assert.ok(bekuldesKeres({ ...jo, name: "Nagy Éva" }).ok);
+    assert.ok(bekuldesKeres({ ...jo, name: "x".repeat(MAX_NEV) }).ok);
   });
 
   it("refuses an empty, blank or over-long answer", () => {
