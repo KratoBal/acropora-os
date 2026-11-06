@@ -1,0 +1,303 @@
+/*
+  AZ ÉLŐ SORSOLÁS OLDALA: a nyereményjáték saját arca (apps/jatek/src/app/theme.css színei: sötét alap, narancs és kék
+  kiemelés), teljes képernyőn, az OS menüje nélkül. A betűtípus az OS egyetlen betűtípusa (Inter): az OS-ben nem
+  töltünk be másikat.
+*/
+.live-draw {
+  --ld-bg: #070d13;
+  --ld-panel: #0d1821;
+  --ld-border: #21323e;
+  --ld-text: #f0f4f6;
+  --ld-muted: #a9bbc9;
+  --ld-orange: #ff803e;
+  --ld-blue: #62c7f7;
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2.2vh;
+  padding: 4vh 5vw;
+  background:
+    radial-gradient(
+      ellipse at 50% 120%,
+      rgba(98, 199, 247, 0.16),
+      transparent 60%
+    ),
+    var(--ld-bg);
+  color: var(--ld-text);
+  text-align: center;
+}
+.live-draw > * {
+  position: relative;
+  z-index: 1;
+}
+.live-draw-brand {
+  position: absolute !important;
+  top: 3.2vh;
+  left: 3.4vw;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  font-size: clamp(16px, 1.3vw, 26px);
+}
+.live-draw-brand svg {
+  width: clamp(28px, 2.4vw, 48px);
+  height: clamp(28px, 2.4vw, 48px);
+  fill: none;
+  stroke: var(--ld-orange);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.live-draw-head h1 {
+  margin: 0;
+  font-size: clamp(34px, 3.6vw, 76px);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.live-draw-head p {
+  margin: 0.4em 0 0;
+  font-size: clamp(20px, 1.9vw, 40px);
+  color: var(--ld-blue);
+  font-weight: 600;
+}
+.live-draw-stage,
+.live-draw-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2.4vh;
+}
+.live-draw-prize-image {
+  max-height: 26vh;
+  max-width: 40vw;
+  border-radius: 20px;
+  border: 1px solid var(--ld-border);
+  object-fit: cover;
+}
+.live-draw-count {
+  margin: 0;
+  font-size: clamp(24px, 2.4vw, 50px);
+  color: var(--ld-muted);
+}
+.live-draw-count strong {
+  color: var(--ld-text);
+  font-size: 1.5em;
+  font-variant-numeric: tabular-nums;
+}
+.live-draw-button {
+  margin-top: 1vh;
+  padding: 0.5em 2.2em;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--ld-orange), #ff5a1f);
+  color: #1a0d05;
+  font: inherit;
+  font-size: clamp(34px, 3.4vw, 72px);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  box-shadow: 0 0 0 0 rgba(255, 128, 62, 0.6);
+  animation: live-draw-pulse 2.2s ease-in-out infinite;
+}
+.live-draw-button:hover {
+  filter: brightness(1.08);
+}
+.live-draw-button:focus-visible {
+  outline: 3px solid var(--ld-blue);
+  outline-offset: 6px;
+}
+.live-draw-note {
+  margin: 0;
+  color: var(--ld-muted);
+  font-size: clamp(18px, 1.6vw, 34px);
+}
+.live-draw-error {
+  margin: 0;
+  color: #ff8a8a;
+  font-size: clamp(18px, 1.6vw, 34px);
+}
+.live-draw-ticket {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.live-draw-ticket small {
+  color: var(--ld-muted);
+  font-size: clamp(20px, 1.9vw, 40px);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.live-draw-ticket strong {
+  font-size: clamp(120px, 20vw, 420px);
+  line-height: 1;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  color: var(--ld-blue);
+  text-shadow: 0 0 60px rgba(98, 199, 247, 0.55);
+}
+.live-draw-ticket-settled strong {
+  color: var(--ld-orange);
+  text-shadow: 0 0 90px rgba(255, 128, 62, 0.8);
+  animation: live-draw-pop 0.7s ease-out;
+}
+.live-draw-label {
+  margin: 0;
+  color: var(--ld-muted);
+  font-size: clamp(22px, 2vw, 44px);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+.live-draw-result h2 {
+  margin: 0;
+  font-size: clamp(64px, 9vw, 190px);
+  font-weight: 900;
+  line-height: 1.05;
+  color: var(--ld-text);
+  text-shadow: 0 0 80px rgba(255, 128, 62, 0.65);
+  animation: live-draw-pop 0.9s ease-out;
+}
+.live-draw-masked {
+  margin: 0;
+  color: var(--ld-muted);
+  font-size: clamp(24px, 2.4vw, 52px);
+}
+.live-draw-prize {
+  margin: 0;
+  color: var(--ld-orange);
+  font-size: clamp(30px, 3.2vw, 68px);
+  font-weight: 800;
+}
+.live-draw-rings {
+  position: absolute;
+  inset: 0;
+  z-index: 0 !important;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  opacity: 0.35;
+}
+.live-draw-rings i {
+  position: absolute;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  border-top-color: var(--ld-blue);
+  border-right-color: var(--ld-orange);
+}
+.live-draw-rings i:nth-child(1) {
+  width: 46vmin;
+  height: 46vmin;
+}
+.live-draw-rings i:nth-child(2) {
+  width: 72vmin;
+  height: 72vmin;
+  animation-direction: reverse;
+}
+.live-draw-rings i:nth-child(3) {
+  width: 100vmin;
+  height: 100vmin;
+}
+.live-draw-idle .live-draw-rings i {
+  animation: live-draw-spin 40s linear infinite;
+}
+.live-draw-drawing .live-draw-rings {
+  opacity: 0.8;
+}
+.live-draw-drawing .live-draw-rings i {
+  animation: live-draw-spin 3s linear infinite;
+}
+.live-draw-drawing .live-draw-rings i:nth-child(2) {
+  animation-duration: 4.5s;
+  animation-direction: reverse;
+}
+.live-draw-revealed .live-draw-rings i {
+  animation: live-draw-spin 14s linear infinite;
+}
+.live-draw-confetti {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.live-draw-confetti b {
+  position: absolute;
+  top: -4vh;
+  width: 14px;
+  height: 28px;
+  border-radius: 3px;
+  animation: live-draw-fall linear infinite;
+}
+.live-draw-confetti-orange {
+  background: var(--ld-orange);
+}
+.live-draw-confetti-blue {
+  background: var(--ld-blue);
+}
+.live-draw-choices {
+  display: grid;
+  gap: 18px;
+  width: min(900px, 90vw);
+}
+.live-draw-choice {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 22px 28px;
+  border: 1px solid var(--ld-border);
+  border-radius: 16px;
+  background: var(--ld-panel);
+  color: var(--ld-text);
+  text-decoration: none;
+  font-size: clamp(18px, 1.5vw, 28px);
+}
+.live-draw-choice:hover,
+.live-draw-choice:focus-visible {
+  border-color: var(--ld-orange);
+}
+.live-draw-choice span {
+  color: var(--ld-muted);
+}
+@keyframes live-draw-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes live-draw-pulse {
+  50% {
+    box-shadow: 0 0 0 28px rgba(255, 128, 62, 0);
+    transform: scale(1.03);
+  }
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 128, 62, 0.6);
+  }
+}
+@keyframes live-draw-pop {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.06);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes live-draw-fall {
+  to {
+    transform: translateY(112vh) rotate(540deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-draw *,
+  .live-draw-rings i,
+  .live-draw-confetti b {
+    animation: none !important;
+  }
+}
