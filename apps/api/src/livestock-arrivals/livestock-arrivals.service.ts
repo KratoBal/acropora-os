@@ -24,7 +24,7 @@ import {
 const NOT_FOUND = "Az érkezés nem található.";
 const NOT_OPEN =
   "Csak megrendelt vagy úton lévő érkezésre lehet előjegyezni: a megérkezett vagy lemondott érkezés nem előjegyezhető.";
-const NO_PRODUCT = "A kiválasztott termék nem található.";
+const NO_PRODUCT = "A kiválasztott termék nem található, vagy nem élő állat.";
 const BAD_DAY = "A dátum nem létező nap.";
 const BAD_LABEL =
   "Adj meg egy megnevezést (a faj, a csoport vagy a darab neve).";
@@ -71,6 +71,11 @@ export class LivestockArrivalsService {
           : undefined,
       }),
     };
+  }
+
+  /** The products the form may link: live animal products matching the search. */
+  productOptions(q: string | undefined) {
+    return this.repository.productOptions(q);
   }
 
   async get(id: string): Promise<LivestockArrival> {
@@ -136,7 +141,7 @@ export class LivestockArrivalsService {
   }
 
   /**
-   * THE RULES OF A RECORD, ONE PLACE FOR CREATE AND UPDATE: a real day, a label with something in it, a product that exists,
+   * THE RULES OF A RECORD, ONE PLACE FOR CREATE AND UPDATE: a real day, a label with something in it, a product that is a live animal,
    * and a pre-registration only while the animal is still coming. `knownProduct` is the link already stored and unchanged:
    * it is not asked again (a product removed since would otherwise make an unrelated edit fail).
    */
@@ -153,7 +158,7 @@ export class LivestockArrivalsService {
     if (
       data.productId &&
       data.productId !== knownProduct &&
-      !(await this.repository.productExists(data.productId))
+      !(await this.repository.isLiveAnimalProduct(data.productId))
     )
       throw new BadRequestException(NO_PRODUCT);
     return { ...data, label, note: clean(data.note) };

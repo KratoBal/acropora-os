@@ -74,6 +74,19 @@ export interface LivestockArrivalListResponse {
   items: LivestockArrival[];
 }
 
+/**
+ * A product the form may link: a live animal product (one under the Korallok, Halak or Gerinctelenek roots). `kind` is the
+ * kind its categories give (the same derivation as the shop's acclimatisation section), or null when it sits under more than
+ * one root or none: the form then leaves the kind to the person.
+ */
+export interface LivestockArrivalProductOption {
+  id: string;
+  name: string;
+  /** The Hungarian common name from the datasheet, if any. */
+  commonName: string | null;
+  kind: LivestockArrivalKind | null;
+}
+
 /** True when an arrival in this state may be registered for. */
 export function isLivestockArrivalOpen(
   status: LivestockArrivalStatus,
