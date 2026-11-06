@@ -8,6 +8,7 @@ import {
   dokumentumSzovege,
   jogiSzovegVazlat,
   kitoltendoDb,
+  VERZIO,
   blokkSzovegei,
   szakaszBlokkok,
 } from "./jogi-szovegek.ts";
@@ -190,6 +191,47 @@ describe("a jogi szoveg vazlatai", () => {
       szabaly,
       /A heti nyereményt korábban elnyerő játékos a fődíj sorsolásában: részt vehet/,
     );
+  });
+
+  // WHAT TURNS THIS RED (Balázs "A", 2026-11-06 14:29 UTC, acrobot 44519): the publication of the winner's shortened name, masked
+  // address and prize described as resting on CONSENT (it is a condition of the rules, GDPR 6(1)(b)), in the notice's section
+  // 4 or in the live-draw paragraph; the withdrawal section not saying that withdrawing does not stop the publication; the
+  // rules' results paragraph leaving the masked address out; the versions not moved with the texts.
+  it("the publication of the winner's data rests on the rules (contract, GDPR 6(1)(b)), not on consent; withdrawal does not stop it; the rules name the masked address; versions 1.1", () => {
+    const tajekoztato = szoveg(ADATKEZELES);
+    const kezdet = tajekoztato.indexOf("\n4. A nyertesek nevének közzététele");
+    assert.ok(kezdet >= 0, "the section 4 heading");
+    const negyedik = tajekoztato.slice(
+      kezdet,
+      tajekoztato.indexOf("\n5. ", kezdet + 1),
+    );
+    assert.ok(negyedik.length > 200, "section 4 has its text");
+    assert.match(
+      negyedik,
+      /A közzététel jogalapja a szerződés teljesítése \(GDPR 6\. cikk \(1\) bekezdés b\) pont\): a nyertes rövidített nevének, részben kitakart email-címének és nyereményének közzététele a Játékszabályzat feltétele, amelyet a nevezéskor elfogadsz\./,
+    );
+    assert.match(
+      negyedik,
+      /A jogalap ugyanaz, mint a weboldali közzétételnél \(szerződés teljesítése, GDPR 6\. cikk \(1\) bekezdés b\) pont\)\./,
+    );
+    assert.doesNotMatch(negyedik, /hozzájárulás/i);
+    assert.match(
+      tajekoztato,
+      /A hozzájárulás visszavonása nem érinti a nyertes rövidített nevének, részben kitakart email-címének és nyereményének közzétételét, mert az a Játékszabályzat feltétele, nem a hozzájáruláson alapul\./,
+    );
+    // the entry data (3.1) stays on consent
+    assert.match(
+      tajekoztato,
+      /Ennek az adatkezelésnek a jogalapja a hozzájárulásod/,
+    );
+    assert.match(
+      szoveg(JATEKSZABALYZAT),
+      /a nyertes rövidített neve, például Kovács P\., részben kitakart e-mail-címe, például ko•••@gmail\.com, és a nyereménye/,
+    );
+    assert.equal(VERZIO.szabalyzat, "szabalyzat-1.1");
+    assert.equal(VERZIO.adatkezeles, "adatkezeles-1.1");
+    assert.match(szoveg(JATEKSZABALYZAT), /Verzió: 1\.1\./);
+    assert.match(tajekoztato, /Verzió: 1\.1/);
   });
 
   it("the e-mail address is for the game and the winner's notice only: no newsletter, anywhere", () => {

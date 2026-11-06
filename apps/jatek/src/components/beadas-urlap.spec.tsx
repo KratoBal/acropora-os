@@ -39,19 +39,25 @@ describe("a beküldő űrlap", () => {
     }
   });
 
-  it("the two acceptances read as the privacy notice says: the rules apart, the consent apart, both naming the notice's own words and linking the documents", () => {
+  // WHAT TURNS THIS RED (Balázs "A", 2026-11-06 14:29 UTC): the publication of the winner's data back inside the CONSENT box
+  // (it is a condition of the rules, GDPR 6(1)(b), not a consent), or missing from the RULES box (the player must see it
+  // at the box that makes it a condition); the two boxes merged; a link missing.
+  it("the two acceptances read as the privacy notice says: the rules box carries the publication condition, the consent box only the processing, both linking their documents", () => {
     const h = html(SZOVEG).replace(/<!-- -->/g, "");
     assert.match(
       h,
-      /Elfogadom a <a href="\/jatekszabalyzat"[^>]*>játékszabályzatot<\/a>\./,
+      /Elfogadom a <a href="\/jatekszabalyzat"[^>]*>játékszabályzatot<\/a>, beleértve, hogy nyertesség esetén a rövidített nevem, részben kitakart e-mail-címem és a nyereményem megjelenik a játék oldalán és a fődíj élő sorsolásán\./,
     );
     assert.match(
       h,
-      /Hozzájárulok, hogy az <a href="\/adatkezeles"[^>]*>adatkezelési tájékoztató<\/a> szerint kezeljétek az adataimat, és nyertesség esetén a rövidített nevem és részben kitakart e-mail-címem megjelenjen a játék oldalán és a fődíj élő sorsolásán\./,
+      /Hozzájárulok, hogy az <a href="\/adatkezeles"[^>]*>adatkezelési tájékoztató<\/a> szerint kezeljétek az adataimat\./,
     );
-    // the rules sentence does not carry the consent (apart, as the notice 3.1 requires)
     const szabalyzat = /Elfogadom a [\s\S]*?<\/label>/.exec(h)![0];
+    const hozzajarulas = /Hozzájárulok, hogy [\s\S]*?<\/label>/.exec(h)![0];
+    // the rules box does not carry the consent (apart, as the notice 3.1 requires) ...
     assert.doesNotMatch(szabalyzat, /Hozzájárulok|adatkezelési tájékoztató/);
+    // ... and the consent box does not carry the publication
+    assert.doesNotMatch(hozzajarulas, /megjelen|nyertes|kitakart|sorsol/);
   });
 
   it("asks for the name in a required text field the browser can fill, and says the winner is shown shortened", () => {

@@ -188,7 +188,9 @@ export function BeadasUrlap({ kerdes }: { kerdes: Kerdes }) {
             <a href="/jatekszabalyzat" target="_blank" rel="noopener">
               játékszabályzatot
             </a>
-            . <b>* Kötelező</b>
+            , beleértve, hogy nyertesség esetén a rövidített nevem, részben
+            kitakart e-mail-címem és a nyereményem megjelenik a játék oldalán és
+            a fődíj élő sorsolásán. <b>* Kötelező</b>
           </span>
         </label>
         <label className="jatek-check">
@@ -204,9 +206,7 @@ export function BeadasUrlap({ kerdes }: { kerdes: Kerdes }) {
             <a href="/adatkezeles" target="_blank" rel="noopener">
               adatkezelési tájékoztató
             </a>{" "}
-            szerint kezeljétek az adataimat, és nyertesség esetén a rövidített
-            nevem és részben kitakart e-mail-címem megjelenjen a játék oldalán
-            és a fődíj élő sorsolásán. <b>* Kötelező</b>
+            szerint kezeljétek az adataimat. <b>* Kötelező</b>
           </span>
         </label>
       </div>
