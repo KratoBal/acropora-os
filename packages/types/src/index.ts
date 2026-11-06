@@ -1134,6 +1134,20 @@ export type {
   RentalListResponse,
   RentalStatus,
 } from "./rental.js";
+export {
+  fillRentalContractTemplate,
+  RENTAL_CONTRACT_LIMITS,
+  RENTAL_CONTRACT_MISSING_VALUE,
+  RENTAL_CONTRACT_VARIABLES,
+  rentalContractBlocks,
+  unknownRentalContractVariables,
+} from "./rental-contract.js";
+export type {
+  RentalContractBlock,
+  RentalContractValues,
+  RentalContractVariable,
+  RentalSettings,
+} from "./rental-contract.js";
 export type {
   AssetFunction,
   AssetFunctionListResponse,

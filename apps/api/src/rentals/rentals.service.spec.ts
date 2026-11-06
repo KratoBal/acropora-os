@@ -10,6 +10,7 @@ import {
   RentalsRepository,
   type RentalCreateRow,
 } from "./rentals.repository.js";
+import type { RentalSettingsService } from "./rental-settings.js";
 import { RentalsService } from "./rentals.service.js";
 
 /*
@@ -35,6 +36,7 @@ function build(options?: {
   customerLive?: boolean;
 }) {
   const created: RentalCreateRow[] = [];
+  const removed: string[] = [];
   const newCustomers: unknown[] = [];
   const repository: Partial<RentalsRepository> = {
     equipment: async () =>
@@ -44,6 +46,7 @@ function build(options?: {
     hasOpenRental: async () => options?.open ?? false,
     liveCustomer: async (id) =>
       options?.customerLive === false ? null : { id },
+    removeUnusedNewCustomer: async (id) => void removed.push(id),
     create: async (row) => {
       if (options?.raceLost) throw new EquipmentAlreadyRentedError();
       created.push(row);
@@ -60,9 +63,11 @@ function build(options?: {
     service: new RentalsService(
       repository as RentalsRepository,
       customers as CustomersRepository,
+      {} as RentalSettingsService,
     ),
     created,
     newCustomers,
+    removed,
   };
 }
 
@@ -189,6 +194,22 @@ describe("recording a rental", () => {
         ),
       ConflictException,
     );
+  });
+
+  it("removes the renter it just created when the index wins the race, and only that one", async () => {
+    const lost = build({ raceLost: true });
+    await assert.rejects(
+      () => lost.service.create({ ...base, newCustomer }, "u-1"),
+      ConflictException,
+    );
+    assert.deepEqual(lost.removed, ["c-new"]);
+
+    const existing = build({ raceLost: true });
+    await assert.rejects(
+      () => existing.service.create({ ...base, customerId: "c-1" }, "u-1"),
+      ConflictException,
+    );
+    assert.deepEqual(existing.removed, []);
   });
 
   it("refuses an archived or merged-away customer", async () => {

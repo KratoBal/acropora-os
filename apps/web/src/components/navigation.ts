@@ -614,6 +614,14 @@ const mainNavigationGroups: AppNavigationGroup[] = [
         entryId: "rental-equipment",
       },
       {
+        // Eszközbérlés, S3: a szerződés szövege és a késedelmi számok
+        subgroup: "Törzsadatok",
+        href: "/beallitasok/berleti-szerzodes",
+        label: "Bérleti szerződés",
+        icon: "settings",
+        entryId: "rental-contract",
+      },
+      {
         // Egy partnertörzs, 1. lépés (acrobot 42536): a duplikátum-lista, csak olvas.
         subgroup: "Törzsadatok",
         href: "/beallitasok/partner-duplikatumok",
