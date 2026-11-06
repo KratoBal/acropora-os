@@ -5,7 +5,10 @@ import {
   OnModuleInit,
 } from "@nestjs/common";
 
-import { prismaPaymentMarkStore } from "../../integrations/szamlazz/outgoing-payment-marks.js";
+import {
+  precheckPaidMark,
+  prismaPaymentMarkStore,
+} from "../../integrations/szamlazz/outgoing-payment-marks.js";
 import type {
   PaymentMarkSource,
   PaymentMarkStore,
@@ -128,7 +131,10 @@ export function describePaidMarksAuto(
 export interface AllTimePreview {
   source: PaymentMarkSource;
   mode: PaidMarksMode;
+  /** what the writer would really try: the plan's marks that pass the writer's own checks (`precheckPaidMark`) */
   planned: PaidMarkPlanned[];
+  /** the plan's marks the writer would leave out, per reason: LOGGED_BEFORE, ALREADY_PAID, NOT_UNPAID, UNCERTAIN_BEFORE */
+  skipped: Record<string, number>;
   attentionCount: number;
   summary: Record<string, number>;
   errorCode: string | null;
@@ -187,21 +193,37 @@ export class PaidMarksAutoScheduler implements OnModuleInit, OnModuleDestroy {
    * without seeing the count. Every source on `auto` or `dry` plans from ALL_TIME_FROM with the same decision as the
    * run; nothing is written and nothing is recorded (the page shows the answer, the write is a separate press). The
    * bank source writes one credit under its lock, but plans with the same decision (`bankTransferPaidMarkPlan`).
+   *
+   * THE COUNT IS WHAT THE WRITER TRIES (acrobot 43886; barracuda on #2251): a plan from ALL_TIME_FROM holds every mark
+   * of every old transfer, the ones the daily runs already wrote too. Each mark goes through the writer's own checks,
+   * read only (`precheckPaidMark`: the log row, then the invoice as the feed stores it); what it would leave out is
+   * counted per reason, not listed as a mark.
    */
   async previewAllTime(
     sources: readonly (typeof PAID_MARK_SOURCES)[number][] = this.runSources(),
+    store: Pick<
+      PaymentMarkStore,
+      "logRow" | "invoice"
+    > = prismaPaymentMarkStore,
   ): Promise<AllTimePreview[]> {
     const out: AllTimePreview[] = [];
     for (const s of sources) {
       const mode = paidMarksMode(process.env[s.switchName]);
       try {
-        const { result, planned } = paidMarksDryResult(
-          await s.plan(ALL_TIME_FROM),
-        );
+        const plan = await s.plan(ALL_TIME_FROM);
+        const { result } = paidMarksDryResult(plan);
+        const skipped: Record<string, number> = {};
+        const tries: (typeof plan.marks)[number][] = [];
+        for (const mark of plan.marks) {
+          const { skip } = await precheckPaidMark(plan.source, mark, store);
+          if (skip) skipped[skip.kind] = (skipped[skip.kind] ?? 0) + 1;
+          else tries.push(mark);
+        }
         out.push({
           source: s.source,
           mode,
-          planned,
+          planned: paidMarksDryResult({ ...plan, marks: tries }).planned,
+          skipped,
           attentionCount: result.attention.length,
           summary: { ...result.summary },
           errorCode: null,
@@ -211,6 +233,7 @@ export class PaidMarksAutoScheduler implements OnModuleInit, OnModuleDestroy {
           source: s.source,
           mode,
           planned: [],
+          skipped: {},
           attentionCount: 0,
           summary: {},
           errorCode: errorCode(error, "PAID_MARKS_DRY_FAILED"),

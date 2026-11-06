@@ -1823,3 +1823,16 @@ export type {
   ShippingFilterValue,
   ShippingFlagKey,
 } from "./product-catalog.js";
+export {
+  christmasCandidates,
+  drawGameWinner,
+  GAME_QUESTION_TYPES,
+  isGameAnswerCorrect,
+  normalizeGameAnswer,
+  normalizeGameEmail,
+} from "./game.js";
+export type {
+  GameDrawCandidate,
+  GameOption,
+  GameQuestionType,
+} from "./game.js";

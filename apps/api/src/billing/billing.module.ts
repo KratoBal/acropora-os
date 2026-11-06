@@ -1,11 +1,13 @@
 import { Module } from "@nestjs/common";
 
+import { MedusaModule } from "../integrations/medusa/medusa.module.js";
 import { SzamlazzModule } from "../integrations/szamlazz/szamlazz.module.js";
 import { NotificationsModule } from "../notifications/notifications.module.js";
 import { documentStoreProvider } from "../service-assets/document-store/document-store.provider.js";
 import { BillingDocumentEmailController } from "./billing-document-email.controller.js";
 import { BillingDocumentEmailRepository } from "./billing-document-email.repository.js";
 import { BillingDocumentEmailDraftService } from "./billing-document-email-draft.service.js";
+import { BillingDocumentLanguageService } from "./billing-document-language.service.js";
 import { BillingDocumentEmailService } from "./billing-document-email.service.js";
 import { BillingDocumentAdvanceController } from "./billing-document-advance.controller.js";
 import { BillingDocumentFinalController } from "./billing-document-final.controller.js";
@@ -57,7 +59,7 @@ import {
  * Számlázz.hu-kulcs feloldása.
  */
 @Module({
-  imports: [SzamlazzModule, NotificationsModule],
+  imports: [SzamlazzModule, NotificationsModule, MedusaModule],
   controllers: [
     ExternalBillingDocumentsController,
     OutgoingPackageController,
@@ -91,6 +93,7 @@ import {
     BillingDocumentEmailRepository,
     BillingDocumentEmailService,
     BillingDocumentEmailDraftService,
+    BillingDocumentLanguageService,
     OutgoingPackageService,
     ExternalInvoicePdfScheduler,
     ExternalInvoiceMailPdfScheduler,

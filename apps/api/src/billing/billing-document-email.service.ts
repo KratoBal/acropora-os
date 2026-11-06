@@ -46,6 +46,7 @@ import {
   renderBillingEmail,
   renderBillingEmailHtml,
 } from "./billing-document-email.js";
+import { BillingDocumentLanguageService } from "./billing-document-language.service.js";
 import { BillingDocumentEmailRepository } from "./billing-document-email.repository.js";
 import { ISSUED_PDF } from "./billing-document-issue.service.js";
 import { BillingDocumentsRepository } from "./billing-documents.repository.js";
@@ -93,6 +94,10 @@ export class BillingDocumentEmailService {
     @Optional()
     @Inject(TICKET_MAIL_ENV)
     private readonly environment: NodeJS.ProcessEnv = process.env,
+    /** The mail's language by the document's order (d5c6befd); without it every mail is Hungarian, as before. */
+    @Optional()
+    @Inject(BillingDocumentLanguageService)
+    private readonly language: BillingDocumentLanguageService | null = null,
   ) {}
 
   /**
@@ -162,6 +167,7 @@ export class BillingDocumentEmailService {
     const values = billingEmailValues(
       row,
       current.customer?.name ?? row.partnerName,
+      (await this.language?.of(row)) ?? "hu",
     );
     const subject = renderBillingEmail(input.subject, values);
     // A formázott törzs a jegy-levél mintáját követi (acrobot 25346): az

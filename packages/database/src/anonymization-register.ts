@@ -1128,6 +1128,29 @@ export const ANONYMIZATION_REGISTER: Readonly<
     detail: "business",
     checkedById: "identifier",
   },
+  GameQuestion: {
+    week: "business",
+    type: "business",
+    prompt: "business",
+    options: "json",
+    acceptedAnswers: "json",
+  },
+  GameEntry: {
+    email: "email",
+    answer: "freeText",
+    manualById: "identifier",
+    confirmTokenHash: "passwordHash",
+  },
+  GameMailDay: {
+    day: "business",
+  },
+  GameDraw: {
+    kind: "business",
+    seed: "identifier",
+    candidates: "json",
+    winnerEmail: "email",
+    createdById: "identifier",
+  },
   OutgoingPaymentMark: {
     invoiceNumber: "identifier",
     sourceRef: "identifier",

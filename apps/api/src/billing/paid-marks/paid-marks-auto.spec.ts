@@ -506,7 +506,19 @@ describe("the daily schedule", () => {
           {} as never,
           fakeRuns(log),
         );
-        const preview = await scheduler.previewAllTime([broken, planned]);
+        const unpaid = {
+          logRow: async () => null,
+          invoice: async () => ({
+            paymentsKnown: true,
+            paidAmount: "0",
+            grossAmount: "12700",
+            currency: "HUF",
+          }),
+        };
+        const preview = await scheduler.previewAllTime(
+          [broken, planned],
+          unpaid,
+        );
         assert.deepEqual(froms, [ALL_TIME_FROM]);
         assert.deepEqual(log, []);
         assert.deepEqual(
@@ -521,6 +533,69 @@ describe("the daily schedule", () => {
             ["BANK_TRANSFER", "auto", ["ACR-2026/00042"], null],
           ],
         );
+      } finally {
+        process.env = { ...envBefore };
+      }
+    });
+
+    // acrobot 43886, barracuda on #2251: WHAT TURNS THIS RED: the preview counting a mark the writer would leave out
+    // (already written in the log, already paid by the feed, not provably unpaid, an uncertain earlier call), so the
+    // number on the confirmation is more than the writer tries; or a left-out mark not counted by its reason
+    it("the preview counts only what the writer would try, and the rest per reason", async () => {
+      process.env.BANK_TRANSFER_MARK_PAID = "auto";
+      try {
+        const marks = ["W", "A", "P", "U", "O", "F"].map((n) => ({
+          invoiceNumber: `ACR-2026/0000${n}`,
+          date: "2026-09-07",
+          amount: "100",
+          title: "átutalás",
+          note: "n",
+          sourceRef: `credit-${n}`,
+        }));
+        const source = {
+          ...bank(),
+          plan: async () => ({
+            source: "BANK_TRANSFER" as const,
+            marks,
+            exceptions: [],
+          }),
+        };
+        // W: written by a daily run; A: logged already paid; U: an uncertain earlier call; P: paid by the feed;
+        // O: partly paid (not provably unpaid); F: an earlier FAILED row on an unpaid invoice, so tried again
+        const logged: Record<string, string> = {
+          "ACR-2026/0000W": "WRITTEN",
+          "ACR-2026/0000A": "ALREADY_PAID",
+          "ACR-2026/0000U": "UNKNOWN",
+          "ACR-2026/0000F": "FAILED",
+        };
+        const paid: Record<string, string> = {
+          "ACR-2026/0000P": "100",
+          "ACR-2026/0000O": "40",
+        };
+        const store = {
+          logRow: async (_s: string, invoiceNumber: string) =>
+            logged[invoiceNumber]
+              ? { id: invoiceNumber, state: logged[invoiceNumber] as never }
+              : null,
+          invoice: async (invoiceNumber: string) => ({
+            paymentsKnown: true,
+            paidAmount: paid[invoiceNumber] ?? "0",
+            grossAmount: "100",
+            currency: "HUF",
+          }),
+        };
+        const scheduler = new PaidMarksAutoScheduler({} as never, fakeRuns([]));
+        const [preview] = await scheduler.previewAllTime([source], store);
+        assert.deepEqual(
+          preview!.planned.map((m) => m.invoiceNumber),
+          ["ACR-2026/0000F"],
+        );
+        assert.deepEqual(preview!.skipped, {
+          LOGGED_BEFORE: 2,
+          UNCERTAIN_BEFORE: 1,
+          ALREADY_PAID: 1,
+          NOT_UNPAID: 1,
+        });
       } finally {
         process.env = { ...envBefore };
       }

@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  Inject,
+  Injectable,
+  NotFoundException,
+  Optional,
+} from "@nestjs/common";
 import {
   mailTemplateEventVariables,
   type MailTemplateVariable,
@@ -11,6 +16,7 @@ import {
   DEFAULT_BILLING_DOCUMENT_MANUAL_TEMPLATE,
 } from "../notifications/mail/billing-document-mail.content.js";
 import { TicketMailRepository } from "../notifications/mail/ticket-mail.repository.js";
+import { BillingDocumentLanguageService } from "./billing-document-language.service.js";
 import { BillingDocumentsRepository } from "./billing-documents.repository.js";
 
 export interface BillingEmailDraft {
@@ -35,12 +41,16 @@ export class BillingDocumentEmailDraftService {
   constructor(
     private readonly documents: BillingDocumentsRepository,
     private readonly templates: TicketMailRepository,
+    @Optional()
+    @Inject(BillingDocumentLanguageService)
+    private readonly language: BillingDocumentLanguageService | null = null,
   ) {}
 
   async draft(id: string): Promise<BillingEmailDraft> {
-    if (!(await this.documents.find(id)))
-      throw new NotFoundException("A bizonylat nem található.");
-    return this.templateDraft();
+    const document = await this.documents.find(id);
+    if (!document) throw new NotFoundException("A bizonylat nem található.");
+    // a webshop-rendelés bizonylata a rendelés nyelvén nyílik (d5c6befd); minden más magyar
+    return this.templateDraft((await this.language?.of(document)) ?? "hu");
   }
 
   /**

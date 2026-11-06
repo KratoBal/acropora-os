@@ -50,7 +50,10 @@ export interface PaidMarksStatus {
 export interface AllTimePreview {
   source: PaidMarkSource;
   mode: PaidMarksMode;
+  /** amit az író tényleg megkísérelne (a saját ellenőrzései után) */
   planned: PaidMarkRunView["planned"];
+  /** amit az író kihagyna, okonként: LOGGED_BEFORE, ALREADY_PAID, NOT_UNPAID, UNCERTAIN_BEFORE */
+  skipped: Record<string, number>;
   attentionCount: number;
   summary: Record<string, number>;
   errorCode: string | null;

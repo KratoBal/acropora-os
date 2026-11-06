@@ -157,6 +157,52 @@ type PaidMarksPlanInput = {
 };
 
 /**
+ * THE WRITER'S CHECKS BEFORE A WRITE, READ ONLY (acrobot 43886; barracuda on #2251): the log row of this source,
+ * invoice and reference, then the invoice as the feed stores it. `skip` is the outcome the writer records instead of
+ * writing; null means it would plan the write. The preview without an age limit counts with this, so its number is what
+ * the writer really tries, not every mark of every old transfer; the writer itself takes the same answer, so the two
+ * cannot drift apart. A partly paid invoice is a skip here; the manual entry (`allowPartial`) decides it on its own.
+ */
+export async function precheckPaidMark(
+  source: PaymentMarkSource,
+  mark: Pick<PaymentMarkInput, "invoiceNumber" | "sourceRef">,
+  store: Pick<PaymentMarkStore, "logRow" | "invoice">,
+  allowPartial = false,
+): Promise<{
+  existing: { id: string; state: PaymentMarkState } | null;
+  invoice: Awaited<ReturnType<PaymentMarkStore["invoice"]>>;
+  state: ReturnType<typeof paymentStateOf> | "NOT_FOUND" | null;
+  skip: PaymentMarkOutcome | null;
+}> {
+  const existing = await store.logRow(
+    source,
+    mark.invoiceNumber,
+    mark.sourceRef,
+  );
+  if (existing?.state === "WRITTEN" || existing?.state === "ALREADY_PAID")
+    return {
+      existing,
+      invoice: null,
+      state: null,
+      skip: { kind: "LOGGED_BEFORE", state: existing.state },
+    };
+  if (existing && existing.state !== "FAILED")
+    return {
+      existing,
+      invoice: null,
+      state: null,
+      skip: { kind: "UNCERTAIN_BEFORE", state: existing.state },
+    };
+  const invoice = await store.invoice(mark.invoiceNumber);
+  const state = invoice ? paymentStateOf(invoice) : "NOT_FOUND";
+  if (state === "PAID")
+    return { existing, invoice, state, skip: { kind: "ALREADY_PAID" } };
+  if (state !== "UNPAID" && !(allowPartial && state === "PARTIAL"))
+    return { existing, invoice, state, skip: { kind: "NOT_UNPAID", state } };
+  return { existing, invoice, state, skip: null };
+}
+
+/**
  * THE FIRST HALF OF THE WRITE: every mark checked and its PLANNED row written, under its invoice's lock; no call. A
  * caller that must hold its own lock over the decision (one bank credit, barracuda #2192) plans under that lock and
  * calls after releasing it: the PLANNED rows already stand, so a second decision sees them.
@@ -180,22 +226,12 @@ export async function planPaidMarks(
     const plan = async (
       s: PaymentMarkStore,
     ): Promise<{ id: string; payment: PaymentRequest } | null> => {
-      const existing = await s.logRow(
+      const { existing, invoice, skip } = await precheckPaidMark(
         source,
-        mark.invoiceNumber,
-        mark.sourceRef,
+        mark,
+        s,
+        input.allowPartial === true,
       );
-      if (existing?.state === "WRITTEN" || existing?.state === "ALREADY_PAID") {
-        line({ kind: "LOGGED_BEFORE", state: existing.state });
-        return null;
-      }
-      if (existing && existing.state !== "FAILED") {
-        line({ kind: "UNCERTAIN_BEFORE", state: existing.state });
-        return null;
-      }
-
-      const invoice = await s.invoice(mark.invoiceNumber);
-      const state = invoice ? paymentStateOf(invoice) : "NOT_FOUND";
       const row = {
         source,
         invoiceNumber: mark.invoiceNumber,
@@ -203,7 +239,7 @@ export async function planPaidMarks(
         amount: mark.amount,
         sourceRef: mark.sourceRef,
       };
-      if (state === "PAID") {
+      if (skip?.kind === "ALREADY_PAID") {
         if (existing) await s.update(existing.id, { state: "ALREADY_PAID" });
         else
           await s.create({
@@ -211,12 +247,9 @@ export async function planPaidMarks(
             state: "ALREADY_PAID",
             requestSha256: null,
           });
-        line({ kind: "ALREADY_PAID" });
-        return null;
       }
-      const partialAllowed = input.allowPartial === true && state === "PARTIAL";
-      if (state !== "UNPAID" && !partialAllowed) {
-        line({ kind: "NOT_UNPAID", state });
+      if (skip) {
+        line(skip);
         return null;
       }
       if (input.allowPartial && invoice) {

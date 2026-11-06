@@ -41,6 +41,7 @@ const preview: AllTimePreview[] = [
         sourceRef: "credit-zoo",
       },
     ],
+    skipped: { LOGGED_BEFORE: 12, ALREADY_PAID: 3 },
     attentionCount: 3,
     summary: { PLANNED: 2 },
     errorCode: null,
@@ -56,6 +57,7 @@ const preview: AllTimePreview[] = [
         sourceRef: "gls-1",
       },
     ],
+    skipped: {},
     attentionCount: 0,
     summary: { PLANNED: 1 },
     errorCode: null,
@@ -64,6 +66,7 @@ const preview: AllTimePreview[] = [
     source: "FOXPOST",
     mode: "auto",
     planned: [],
+    skipped: {},
     attentionCount: 0,
     summary: {},
     errorCode: "FOXPOST_READ_FAILED",
@@ -88,6 +91,13 @@ describe("AllTimeRunPanel", () => {
     expect(bank).toHaveTextContent("kifizetettre jelölne 2 számlát");
     expect(bank).toHaveTextContent("2026/00069");
     expect(bank).toHaveTextContent("figyelmet kérne 3");
+    // acrobot 43886: what the writer would leave out is said per reason, not counted as a mark
+    expect(bank).toHaveTextContent(
+      "kimarad: már beírva 12, a feed szerint fizetve 3",
+    );
+    expect(
+      screen.getByTestId("all-time-preview-GLS_COD"),
+    ).not.toHaveTextContent("kimarad");
     expect(screen.getByTestId("all-time-preview-GLS_COD")).toHaveTextContent(
       "próba: csak tervezné 1 számlát",
     );

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  // A JATEK CSOMAG TESZT-FORDITASA (a partner csomag mintaja: `node --test`, ESM kimenet, nincs `paths`, a specek
+  // relativ, `.js` vegu importot hasznalnak). A `jsx` a felulet-specekhez kell: a komponenseket a specek
+  // `react-dom/server`-rel statikus HTML-re rendelik, es a HTML-t olvassak (nincs jsdom, nincs bongeszo).
+  "extends": "../../packages/config/base.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "ignoreDeprecations": "6.0",
+    // relative imports are written with their real `.ts`/`.tsx` ending (the Next build resolves nothing else);
+    // the test compile rewrites them to `.js` in the output, which is what node runs
+    "allowImportingTsExtensions": false,
+    "rewriteRelativeImportExtensions": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "types": ["node"],
+    "outDir": "./test-dist",
+    "rootDir": "./src"
+  },
+  "include": ["src/**/*.spec.ts", "src/**/*.spec.tsx"]
+}

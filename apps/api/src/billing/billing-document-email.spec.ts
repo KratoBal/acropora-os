@@ -70,6 +70,44 @@ describe("billingEmailValues", () => {
   });
 });
 
+describe("billingEmailValues in English (d5c6befd)", () => {
+  it("writes the amount and the date the English way, and leaves everything else as it is", () => {
+    const en = billingEmailValues(row(), "Partner Kft.", "en");
+    assert.equal(en.gross_total, "HUF\u00a012,985");
+    assert.equal(en.due_date, "8 October 2026");
+    const hu = billingEmailValues(row(), "Partner Kft.");
+    for (const key of [
+      "customer_name",
+      "document_number",
+      "invoice_number",
+      "document_link",
+      "order_number",
+    ] as const)
+      assert.equal(en[key], hu[key], key);
+  });
+
+  it("keeps two decimals outside HUF in English too, and an absent date stays absent", () => {
+    const en = billingEmailValues(
+      row({
+        currency: "EUR",
+        grossAmount: new Prisma.Decimal("12.5"),
+        dueDate: null,
+      }),
+      "Partner Kft.",
+      "en",
+    );
+    assert.equal(en.gross_total, "€12.50");
+    assert.equal(en.due_date, null);
+  });
+
+  it("the Hungarian values are the same with the language given or left out", () => {
+    assert.deepEqual(
+      billingEmailValues(row(), "Partner Kft.", "hu"),
+      billingEmailValues(row(), "Partner Kft."),
+    );
+  });
+});
+
 describe("renderBillingEmail", () => {
   const values = billingEmailValues(row(), "Partner Kft.");
 

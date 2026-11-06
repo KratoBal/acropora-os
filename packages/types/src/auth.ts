@@ -166,6 +166,12 @@ export const PERMISSIONS = {
   /// "content.manage" azt jelentené, hogy aki írja, jóvá is hagyhatja -- a
   /// kapu pedig pont az, hogy a kettő nem ugyanaz a kéz.
   CONTENT_MANAGE: "content.manage",
+  /// A KARÁCSONYI NYEREMÉNYJÁTÉK (kártya 31445d0f; acrobot döntése, 2026-11-05 22:41): a beküldések és a játékosok
+  /// e-mail címei. Külön jog, nem a tartalomé: a tartalom-olvasás a VIEWER és a gépi CONTENT_AGENT szerepben is
+  /// benne van, a játékosok címe pedig csak emberi szerepnek (OWNER, ADMIN, MANAGER) jár.
+  GAME_VIEW: "game.view",
+  /// A kérdés felvétele, a kétes válasz kézi döntése és a sorsolás: csak emberi szerepnek, gépi token nem sorsolhat.
+  GAME_MANAGE: "game.manage",
   /// A második lépcső: jóváhagyás és kiküldésre bocsátás.
   ///
   /// EZ A JOG MA KÉT NEVESÍTETT EMBERHEZ TARTOZIK: Balázshoz és Lucához. Nem
