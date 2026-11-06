@@ -6767,6 +6767,11 @@ model ExternalReference {
   updatedAt    DateTime       @updatedAt
 
   @@unique([system, entityType, externalId])
+  /// A DB-BEN EZ AZ INDEX RÉSZLEGES: `WHERE "entityType" <> 'Customer'` (20261104200000_external_reference_customer_many).
+  /// Egy összevont cég egy `Customer` során több UNAS-fiók áll (egy partnertörzs, terv 3.4), minden más entitás-típusnál
+  /// marad az egy külső rekord egy entitáshoz. A Prisma nem tud részleges indexet kifejezni, ezért a séma a teljes alakot
+  /// deklarálja (a kulcs-hozzáférő sok helyen használt): egy `prisma migrate dev` javaslata, ami a teljes indexet
+  /// visszaállítaná, eldobandó. A `Customer` típusnál `findUnique` ezen a kulcson nem egyértelmű: `findFirst` kell.
   @@unique([system, entityType, entityId])
   @@index([entityType, entityId])
 }
