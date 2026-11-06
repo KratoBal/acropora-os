@@ -150,16 +150,35 @@ export class LivestockArrivalsRepository {
     );
   }
 
-  /** True only for an existing product under one of the three live animal roots. */
-  async isLiveAnimalProduct(productId: string): Promise<boolean> {
+  /**
+   * THE LINK'S FACTS: null unless the product exists under one of the three live animal roots; otherwise the kind its
+   * categories give (null when ambiguous) and whether the picker would offer it (active, not archived).
+   */
+  async liveAnimalProduct(
+    productId: string,
+  ): Promise<{ kind: LivestockArrivalKind | null; offered: boolean } | null> {
     const subtrees = await this.kindSubtrees();
     const ids = [...subtrees.values()].flatMap((set) => [...set]);
-    if (ids.length === 0) return false;
-    const hit = await prisma.productCategory.findFirst({
-      where: { productId, categoryId: { in: ids } },
-      select: { id: true },
+    if (ids.length === 0) return null;
+    const row = await prisma.product.findFirst({
+      where: {
+        id: productId,
+        categories: { some: { categoryId: { in: ids } } },
+      },
+      select: {
+        isActive: true,
+        archivedAt: true,
+        categories: { select: { categoryId: true } },
+      },
     });
-    return hit !== null;
+    if (!row) return null;
+    return {
+      kind: deriveLivestockKind(
+        row.categories.map((c) => c.categoryId),
+        subtrees,
+      ),
+      offered: row.isActive && row.archivedAt === null,
+    };
   }
 
   /** At most `PRODUCT_OPTION_LIMIT` live animal products matching the search, by name, A to Z. */
