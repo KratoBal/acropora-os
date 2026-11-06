@@ -85,15 +85,31 @@ export function drawGameWinner(
   candidates: readonly GameDrawCandidate[],
   seed: string,
 ): { winner: GameDrawCandidate; ticket: number; tickets: number } | null {
-  const sorted = candidates
-    .filter((c) => Number.isInteger(c.weight) && c.weight > 0)
-    .slice()
-    .sort((a, b) => (a.email < b.email ? -1 : a.email > b.email ? 1 : 0));
-  const tickets = sorted.reduce((sum, c) => sum + c.weight, 0);
+  return drawGameWinnerInOrder(
+    candidates
+      .slice()
+      .sort((a, b) => (a.email < b.email ? -1 : a.email > b.email ? 1 : 0)),
+    seed,
+  );
+}
+
+/**
+ * THE DRAW ON A KEPT LIST, IN ITS KEPT ORDER: what `drawGameWinner` does after its sort. A kept draw's candidates are
+ * stored sorted already, so for them both give the same winner; once the players' data is erased (card bc0ca668) the
+ * addresses are placeholders that no longer sort as the addresses did, and only the kept order can repeat the draw.
+ */
+export function drawGameWinnerInOrder(
+  candidates: readonly GameDrawCandidate[],
+  seed: string,
+): { winner: GameDrawCandidate; ticket: number; tickets: number } | null {
+  const weighted = candidates.filter(
+    (c) => Number.isInteger(c.weight) && c.weight > 0,
+  );
+  const tickets = weighted.reduce((sum, c) => sum + c.weight, 0);
   if (tickets === 0) return null;
   const ticket = Math.floor(unitOf(seed) * tickets);
   let reached = 0;
-  for (const candidate of sorted) {
+  for (const candidate of weighted) {
     reached += candidate.weight;
     if (ticket < reached) return { winner: candidate, ticket, tickets };
   }

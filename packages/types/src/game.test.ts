@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   christmasCandidates,
   drawGameWinner,
+  drawGameWinnerInOrder,
   isGameAnswerCorrect,
   normalizeGameAnswer,
   normalizeGameEmail,
@@ -79,6 +80,25 @@ describe("the draw", () => {
       String(wins.get("a@x.hu")),
     );
     assert.ok(wins.get("b@x.hu")! > 800 && wins.get("c@x.hu")! > 800);
+  });
+
+  it("on a list already in order, the kept-order draw picks what the draw picks; on another order it does not sort", () => {
+    const sorted = [...candidates].sort((a, b) => (a.email < b.email ? -1 : 1));
+    for (let i = 0; i < 200; i++)
+      assert.deepEqual(
+        drawGameWinnerInOrder(sorted, `seed-${i}`),
+        drawGameWinner(candidates, `seed-${i}`),
+      );
+    // the same weights renamed so that they sort the other way round: the kept order still decides
+    const renamed = sorted.map((c, i) => ({ ...c, email: `z${9 - i}` }));
+    for (let i = 0; i < 200; i++) {
+      const kept = drawGameWinnerInOrder(renamed, `seed-${i}`)!;
+      const original = drawGameWinner(candidates, `seed-${i}`)!;
+      assert.equal(
+        sorted[renamed.indexOf(kept.winner)]!.email,
+        original.winner.email,
+      );
+    }
   });
 
   it("no candidate with a weight: no winner", () => {
