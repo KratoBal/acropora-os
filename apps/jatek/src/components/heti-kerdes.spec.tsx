@@ -189,6 +189,18 @@ describe("a főoldal állandó szakaszai", () => {
     assert.match(h, /src="\/nano\.jpg"/);
   });
 
+  it("the start line and the first FAQ answer carry the two times: the live show at 21:00, the first question at 22:00 (Balázs, 2026-11-06)", () => {
+    assert.match(
+      h,
+      /Az élő adás 21:00-kor kezdődik, az első kérdés 22:00-kor nyílik\./,
+    );
+    assert.match(
+      h,
+      /2026\. november 7-én, szombaton\. Az Acropora YouTube élő adása 21:00-kor kezdődik, az első kérdés 22:00-kor nyílik\./,
+    );
+    assert.doesNotMatch(h, /a pontos időpont hamarosan|A pontos kezdési idő/);
+  });
+
   it("the prize card leads to the page's own prize page, in the same window", () => {
     assert.match(h, /<a href="\/fodij">Ismerd meg az akváriumot/);
     assert.doesNotMatch(h, /aquaforest\.eu/);

@@ -45,7 +45,7 @@ export function Hero() {
           <div>
             <strong>Indulás: november 7., szombat</strong>
             <small>
-              Az Acropora YouTube élő adásában · 2026. november 7. 21:00 óra
+              Az élő adás 21:00-kor kezdődik, az első kérdés 22:00-kor nyílik.
             </small>
           </div>
         </div>
@@ -184,7 +184,7 @@ const KERDESEK: readonly { kerdes: string; valasz: string }[] = [
   {
     kerdes: "Mikor indul a nyereményjáték?",
     valasz:
-      "2026. november 7-én, szombaton, az Acropora YouTube élő adásában, 21:00 órakor.",
+      "2026. november 7-én, szombaton. Az Acropora YouTube élő adása 21:00-kor kezdődik, az első kérdés 22:00-kor nyílik.",
   },
   {
     kerdes: "Meddig válaszolhatok egy kérdésre?",
