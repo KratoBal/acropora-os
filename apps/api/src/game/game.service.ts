@@ -44,6 +44,28 @@ export function gameError(
 const sha256 = (value: string) =>
   createHash("sha256").update(value).digest("hex");
 
+/**
+ * A WINNER'S NAME AS THE PAGE SHOWS IT (Balázs, 2026-11-06): the first word and the initial of the second, "Kovács P." (the
+ * surname comes first in Hungarian). One word stays as it is. The full name never leaves the OS.
+ */
+export function shortPublicName(name: string): string {
+  const words = name.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+  if (words.length < 2) return words[0] ?? "";
+  const initial = [...words[1]!][0]!.toLocaleUpperCase("hu-HU");
+  return `${words[0]} ${initial}.`;
+}
+
+/**
+ * THE NAME THE PUBLIC LIST SHOWS: the shortened form, but only for what looks like a person's name (letters, marks, hyphen,
+ * apostrophe, spaces). A "name" with a dot, a digit, an at sign or the like ("nyeremeny-acropora.hu") would be published
+ * whole when it won, so it shows as "Nyertes" (barracuda, #2279).
+ */
+export function publicWinnerName(name: string): string {
+  return /^[\p{L}\p{M}'\u2019 -]+$/u.test(name)
+    ? shortPublicName(name)
+    : "Nyertes";
+}
+
 /** The longest name the giveaway keeps. */
 export const GAME_NAME_MAX = 120;
 
@@ -53,9 +75,21 @@ export const GAME_NAME_MAX = 120;
  * once, in one place. The page shows a winner by a shortened form of it (surname and the first name's initial).
  */
 export function normalizeGameName(value: string): string | null {
-  const name = value.replace(/\s+/g, " ").trim();
+  // invisible and direction-changing characters (control and format: a zero-width space, U+202E) are dropped: the name is
+  // shown on the public page (barracuda, #2277)
+  const name = value
+    .replace(/[\p{Cc}\p{Cf}]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
   if (name.length < 2 || name.length > GAME_NAME_MAX) return null;
   return /\p{L}/u.test(name) ? name : null;
+}
+
+/** The week's prize as the page shows it; the picture is fetched by the question's id (`prizeImage`). */
+export interface PublicGamePrize {
+  name: string;
+  description: string | null;
+  hasImage: boolean;
 }
 
 export interface PublicGameQuestion {
@@ -66,12 +100,30 @@ export interface PublicGameQuestion {
   options: GameOption[];
   opensAt: string;
   closesAt: string;
+  prize: PublicGamePrize | null;
+}
+
+/** The next question, seen ahead: when it opens, and its prize (no prompt, no options). */
+export interface PublicGameNext {
+  id: string;
+  week: string;
+  opensAt: string;
+  prize: PublicGamePrize | null;
+}
+
+/** A past draw's winner for the public list: only the shortened name, never the address. */
+export interface PublicGameWinner {
+  kind: "WEEKLY" | "CHRISTMAS";
+  week: string | null;
+  name: string;
+  prizeName: string | null;
+  drawnAt: string;
 }
 
 /** The database the service reads and writes; the test hands in a fake. */
 export type GameDatabase = Pick<
   typeof prisma,
-  "gameQuestion" | "gameEntry" | "gameMailDay"
+  "gameQuestion" | "gameEntry" | "gameMailDay" | "gameDraw" | "mailImage"
 >;
 
 export const GAME_ENV = Symbol("GAME_ENV");
@@ -143,6 +195,20 @@ export class GameService implements OnModuleInit {
     });
   }
 
+  private prizeOf(question: {
+    prizeName: string | null;
+    prizeDescription: string | null;
+    prizeImageId: string | null;
+  }): PublicGamePrize | null {
+    return question.prizeName
+      ? {
+          name: question.prizeName,
+          description: question.prizeDescription,
+          hasImage: question.prizeImageId !== null,
+        }
+      : null;
+  }
+
   private publicView(question: {
     id: string;
     week: string;
@@ -151,6 +217,9 @@ export class GameService implements OnModuleInit {
     options: unknown;
     opensAt: Date;
     closesAt: Date;
+    prizeName: string | null;
+    prizeDescription: string | null;
+    prizeImageId: string | null;
   }): PublicGameQuestion {
     return {
       id: question.id,
@@ -161,12 +230,112 @@ export class GameService implements OnModuleInit {
         question.type === "CHOICE" ? (question.options as GameOption[]) : [],
       opensAt: question.opensAt.toISOString(),
       closesAt: question.closesAt.toISOString(),
+      prize: this.prizeOf(question),
     };
   }
 
-  async current(): Promise<{ question: PublicGameQuestion | null }> {
+  /** The question that opens next (the soonest one that has not opened yet), or null. */
+  private async nextQuestion() {
+    return this.database.gameQuestion.findFirst({
+      where: { opensAt: { gt: this.now() } },
+      orderBy: { opensAt: "asc" },
+    });
+  }
+
+  /**
+   * THE OPEN QUESTION, AND THE NEXT ONE seen ahead (Balázs, 2026-11-06): while no question is open, the page counts down
+   * to `next.opensAt` and shows `next.prize`, and it asks again when the count reaches zero, so the question appears
+   * by itself. The next question's prompt is NOT sent: it is not for the public before it opens.
+   */
+  async current(): Promise<{
+    question: PublicGameQuestion | null;
+    next: PublicGameNext | null;
+  }> {
     const question = await this.openQuestion();
-    return { question: question ? this.publicView(question) : null };
+    const next = await this.nextQuestion();
+    return {
+      question: question ? this.publicView(question) : null,
+      next: next
+        ? {
+            id: next.id,
+            week: next.week,
+            opensAt: next.opensAt.toISOString(),
+            prize: this.prizeOf(next),
+          }
+        : null,
+    };
+  }
+
+  /**
+   * A QUESTION'S PRIZE PICTURE for the public page, and only when the question is public: it has opened, or it is the
+   * very next one (its prize is shown ahead). A later question's picture is not given out early. Null otherwise.
+   */
+  async prizeImage(questionId: string) {
+    const question = await this.database.gameQuestion.findUnique({
+      where: { id: questionId },
+      select: { opensAt: true, prizeImageId: true },
+    });
+    if (!question?.prizeImageId) return null;
+    if (question.opensAt > this.now()) {
+      const next = await this.nextQuestion();
+      if (next?.id !== questionId) return null;
+    }
+    const image = await this.database.mailImage.findUnique({
+      where: { id: question.prizeImageId },
+      select: { content: true, contentType: true },
+    });
+    return image
+      ? { bytes: Buffer.from(image.content), contentType: image.contentType }
+      : null;
+  }
+
+  /**
+   * THE PAST WINNERS (newest first, at most 20): the shortened name and the prize; a winner without a name is left out.
+   * ONLY THE FIRST DRAW OF A WEEK (or of the Christmas draw) COUNTS: the rules say a re-run draw never replaces the first
+   * recorded result, so a second draw for the same week must not publish a second name (barracuda, #2279). The first
+   * draw counts even if it had no winner: then the week has none.
+   */
+  async winners(): Promise<{ winners: PublicGameWinner[] }> {
+    const all = await this.database.gameDraw.findMany({
+      orderBy: { createdAt: "asc" },
+      include: { question: { select: { week: true, prizeName: true } } },
+    });
+    const firstOf = new Map<string, (typeof all)[number]>();
+    for (const draw of [...all].sort(
+      (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
+    )) {
+      const key = `${draw.kind}:${draw.questionId ?? ""}`;
+      if (!firstOf.has(key)) firstOf.set(key, draw);
+    }
+    const draws = [...firstOf.values()]
+      .filter((draw) => draw.winnerEmail !== null)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, 20);
+    const emails = [...new Set(draws.map((d) => d.winnerEmail!))];
+    const entries = emails.length
+      ? await this.database.gameEntry.findMany({
+          where: { email: { in: emails }, name: { not: null } },
+          orderBy: { createdAt: "asc" },
+          select: { email: true, questionId: true, name: true },
+        })
+      : [];
+    const winners: PublicGameWinner[] = [];
+    for (const draw of draws) {
+      const own = entries.find(
+        (e) => e.email === draw.winnerEmail && e.questionId === draw.questionId,
+      );
+      const latest = entries.filter((e) => e.email === draw.winnerEmail).at(-1);
+      const name = (own ?? latest)?.name;
+      if (!name) continue;
+      winners.push({
+        kind: draw.kind === "CHRISTMAS" ? "CHRISTMAS" : "WEEKLY",
+        week: draw.question?.week ?? null,
+        name: publicWinnerName(name),
+        prizeName: draw.question?.prizeName ?? null,
+        drawnAt: draw.createdAt.toISOString(),
+      });
+    }
+    return { winners };
   }
 
   async submit(input: {

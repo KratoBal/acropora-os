@@ -14,9 +14,35 @@ export const UTVONALAK = {
   aktualis: "/jatek/aktualis",
   bekuldes: "/jatek/bekuldes",
   megerosites: "/jatek/megerosites",
+  nyertesek: "/jatek/nyertesek",
+  kep: "/jatek/nyeremeny-kep",
 } as const;
 
 export type KerdesTipus = "TEXT" | "CHOICE";
+
+/** A hét nyereménye: neve, rövid leírása, és hogy van-e képe (a kép a lap saját `/api/nyeremeny-kep/<kérdés>` útján jön). */
+export type Nyeremeny = {
+  name: string;
+  description: string | null;
+  hasImage: boolean;
+};
+
+/** A következő kérdés előre látva: mikor nyílik, és mi a nyereménye. A szövege nincs benne: nyitás előtt nem nyilvános. */
+export type Kovetkezo = {
+  id: string;
+  week: string;
+  opensAt: string;
+  prize: Nyeremeny | null;
+};
+
+/** Egy korábbi sorsolás nyertese: CSAK a rövidített név (például "Kovács P."), cím soha. */
+export type Nyertes = {
+  kind: "WEEKLY" | "CHRISTMAS";
+  week: string | null;
+  name: string;
+  prizeName: string | null;
+  drawnAt: string;
+};
 
 export type Kerdes = {
   id: string;
@@ -26,6 +52,7 @@ export type Kerdes = {
   options: { id: string; label: string }[];
   opensAt: string;
   closesAt: string;
+  prize: Nyeremeny | null;
 };
 
 export type Hiba = { ok: false; status: number; code: string; message: string };
@@ -41,7 +68,11 @@ export type BekuldesBemenet = {
 export type BekuldesEredmeny = { ok: true } | Hiba;
 export type MegerositesEredmeny =
   { ok: true; status: "CONFIRMED" | "ALREADY_CONFIRMED"; week: string } | Hiba;
-export type AktualisEredmeny = { ok: true; question: Kerdes | null } | Hiba;
+export type AktualisEredmeny =
+  { ok: true; question: Kerdes | null; next: Kovetkezo | null } | Hiba;
+export type NyertesekEredmeny = { ok: true; winners: Nyertes[] } | Hiba;
+export type KepEredmeny =
+  { ok: true; bytes: ArrayBuffer; contentType: string } | Hiba;
 
 export interface JatekApi {
   /** `true`, ha ez a hamis api (az oldal kiirja, hogy proba). */
@@ -55,6 +86,9 @@ export interface JatekApi {
     token: string,
     latogatoIp: string | null,
   ): Promise<MegerositesEredmeny>;
+  nyertesek(latogatoIp?: string | null): Promise<NyertesekEredmeny>;
+  /** Egy kérdés nyereményképe (csak a nyilvános kérdésé; az api dönti el). */
+  kep(kerdesId: string, latogatoIp?: string | null): Promise<KepEredmeny>;
 }
 
 const ELERHETETLEN: Hiba = {
@@ -140,11 +174,55 @@ export function httpJatekApi(
       const r = await hivas(UTVONALAK.aktualis, { method: "GET", ip });
       if (!r) return { ...ELERHETETLEN };
       if (r.status !== 200) return hibaBol(r.status, r.test);
-      const k = (r.test as { question?: unknown } | null)?.question;
-      if (k === null) return { ok: true, question: null };
-      return kerdesEllenorzott(k)
-        ? { ok: true, question: k }
+      const t = r.test as { question?: unknown; next?: unknown } | null;
+      // a következő kérdés nélkül is él az oldal (az api régebbi alakja, vagy nincs több kérdés)
+      const next = kovetkezoEllenorzott(t?.next) ? t!.next : null;
+      if (t?.question === null) return { ok: true, question: null, next };
+      if (!kerdesEllenorzott(t?.question))
+        return { ...ELERHETETLEN, status: 502 };
+      const question = t!.question as Kerdes;
+      return {
+        ok: true,
+        question: { ...question, prize: nyeremenyEllenorzott(question.prize) },
+        next,
+      };
+    },
+    async nyertesek(ip) {
+      const r = await hivas(UTVONALAK.nyertesek, { method: "GET", ip });
+      if (!r) return { ...ELERHETETLEN };
+      if (r.status !== 200) return hibaBol(r.status, r.test);
+      const lista = (r.test as { winners?: unknown } | null)?.winners;
+      return Array.isArray(lista)
+        ? { ok: true, winners: lista.filter(nyertesEllenorzott) }
         : { ...ELERHETETLEN, status: 502 };
+    },
+    async kep(kerdesId, ip) {
+      try {
+        const valasz = await fetchImpl(
+          cim(`${UTVONALAK.kep}/${encodeURIComponent(kerdesId)}`),
+          {
+            method: "GET",
+            headers: {
+              Accept: "image/*",
+              ...(ip ? { "X-Forwarded-For": ip, [FEJLEC_IP]: ip } : {}),
+              ...(titok ? { [FEJLEC_TITOK]: titok } : {}),
+            },
+            cache: "no-store",
+            signal: AbortSignal.timeout(IDOKORLAT_MS),
+          },
+        );
+        const tipus = valasz.headers.get("content-type") ?? "";
+        // csak kép megy tovább: egy hibaoldal vagy JSON nem lehet a kép
+        if (valasz.status === 200 && /^image\/(png|jpeg|gif|webp)$/.test(tipus))
+          return {
+            ok: true,
+            bytes: await valasz.arrayBuffer(),
+            contentType: tipus,
+          };
+        return hibaBol(valasz.status, await jsonTest(valasz));
+      } catch {
+        return { ...ELERHETETLEN };
+      }
     },
     async bekuldes(bemenet, ip) {
       const r = await hivas(UTVONALAK.bekuldes, {
@@ -174,6 +252,40 @@ export function httpJatekApi(
       return hibaBol(r.status, r.test);
     },
   };
+}
+
+/** A nyeremeny alakja az api valaszabol; ami nem illik, az nincs nyeremeny. */
+export function nyeremenyEllenorzott(p: unknown): Nyeremeny | null {
+  const n = p as Partial<Nyeremeny> | null;
+  return !!n &&
+    typeof n.name === "string" &&
+    n.name !== "" &&
+    (n.description === null || typeof n.description === "string") &&
+    typeof n.hasImage === "boolean"
+    ? { name: n.name, description: n.description ?? null, hasImage: n.hasImage }
+    : null;
+}
+
+function kovetkezoEllenorzott(k: unknown): k is Kovetkezo {
+  const q = k as Partial<Kovetkezo> | null;
+  return (
+    !!q &&
+    typeof q.id === "string" &&
+    typeof q.week === "string" &&
+    typeof q.opensAt === "string" &&
+    !Number.isNaN(Date.parse(q.opensAt))
+  );
+}
+
+function nyertesEllenorzott(w: unknown): w is Nyertes {
+  const n = w as Partial<Nyertes> | null;
+  return (
+    !!n &&
+    (n.kind === "WEEKLY" || n.kind === "CHRISTMAS") &&
+    typeof n.name === "string" &&
+    n.name !== "" &&
+    typeof n.drawnAt === "string"
+  );
 }
 
 /** Az api valaszabol jovo kerdes alakja; ami nem illik, azt nem rajzoljuk ki. */
@@ -208,6 +320,7 @@ export const HAMIS_KERDES: Kerdes = {
   ],
   opensAt: "2026-11-06T06:00:00.000Z",
   closesAt: "2026-11-13T22:59:59.000Z",
+  prize: null,
 };
 
 /** A hamis api: a szerzodes hibaival, memoria nelkul. Az ervenyes proba-token: `proba-token-ervenyes`. */
@@ -215,7 +328,13 @@ export function hamisJatekApi(): JatekApi {
   return {
     hamis: true,
     async aktualis() {
-      return { ok: true, question: HAMIS_KERDES };
+      return { ok: true, question: HAMIS_KERDES, next: null };
+    },
+    async nyertesek() {
+      return { ok: true, winners: [] };
+    },
+    async kep() {
+      return { ok: false, status: 404, code: "NO_IMAGE", message: "" };
     },
     async bekuldes(bemenet) {
       if (bemenet.questionId !== HAMIS_KERDES.id)
