@@ -26,7 +26,7 @@ export function Hero() {
           </em>
         </h1>
         <p>
-          Játssz velünk hétről hétre, nyerj heti ajándékokat,
+          Játssz velünk hétről hétre, nyerj heti nyereményeket,
           <br className="jatek-desktop" /> és álmodj egy saját tengeri világot.
         </p>
         <div className="jatek-hero-actions">
@@ -42,7 +42,7 @@ export function Hero() {
           <div>
             <strong>Indulás: november 7., szombat</strong>
             <small>
-              Az Acropora YouTube élő adásában · a pontos időpont hamarosan
+              Az Acropora YouTube élő adásában · 2026. november 7. 21:00 óra
             </small>
           </div>
         </div>
@@ -60,7 +60,8 @@ export function Hero() {
           <a href="/fodij">Ismerd meg az akváriumot ↗</a>
         </div>
         <span className="jatek-photo-note">
-          Gyártói illusztráció · a dekoráció és az élővilág nem ígért nyeremény
+          Gyártói illusztráció · a dekoráció és az élővilág nem része a
+          nyereménynek
         </span>
       </div>
     </section>
@@ -117,7 +118,7 @@ export function Lepesek() {
           </span>
           <h3>Várd a heti sorsolást</h3>
           <p>
-            A válaszadási időszak után heti ajándékot sorsolunk a helyes
+            A válaszadási időszak után heti nyereményt sorsolunk a helyes
             válaszok között. A kampány fődíja az Aquaforest AF Nano Tank.
           </p>
         </article>
@@ -132,7 +133,7 @@ export function Nyertesek() {
       <div className="jatek-section-heading">
         <div>
           <div className="jatek-eyebrow">AKIKNEK KEDVEZETT A SZERENCSE</div>
-          <h2>A reef következő szerencsései.</h2>
+          <h2>Az eddigi sorsolások nyertesei.</h2>
         </div>
         <span className="jatek-pill">Még a rajt előtt vagyunk</span>
       </div>
@@ -142,7 +143,7 @@ export function Nyertesek() {
           <h3>Az első nyertes helye már megvan.</h3>
           <p>
             Az első sorsolás után itt találod a korábbi nyerteseket és a heti
-            ajándékokat. Jelenleg nincs kihirdetett eredmény.
+            nyereményeket. Jelenleg nincs kihirdetett eredmény.
           </p>
         </div>
         <span className="jatek-empty-number">01</span>
@@ -155,7 +156,7 @@ const KERDESEK: readonly { kerdes: string; valasz: string }[] = [
   {
     kerdes: "Mikor indul a nyereményjáték?",
     valasz:
-      "2026. november 7-én, szombaton, az Acropora YouTube élő adásában. A pontos kezdési idő még nincs megadva.",
+      "2026. november 7-én, szombaton, az Acropora YouTube élő adásában, 21:00 órakor.",
   },
   {
     kerdes: "Meddig válaszolhatok egy kérdésre?",
@@ -171,6 +172,11 @@ const KERDESEK: readonly { kerdes: string; valasz: string }[] = [
     kerdes: "Mire használjátok az e-mail-címemet?",
     valasz:
       "Csak a játékra és a nyertes értesítésére. Hírlevélre nem iratkozol fel, és a részvételnek nem feltétele semmilyen feliratkozás.",
+  },
+  {
+    kerdes: "Honnan tudom meg, hogy nyertem?",
+    valasz:
+      "A heti sorsolások a játék indulása után minden szombaton este 9 órakor történnek. A kisorsolt nyertes neve megjelenik itt az oldalon, de e-mailben is felvesszük Veled a kapcsolatot.",
   },
 ];
 
