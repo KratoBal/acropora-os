@@ -1,5 +1,10 @@
 "use client";
-import { Button, Card, FormField, Input } from "@acropora/ui";
+import {
+  PilotButton,
+  PilotCard,
+  PilotFormField,
+  PilotInput,
+} from "@acropora/ui";
 import type { CreateCustomerInput, CustomerSummary } from "@acropora/types";
 import { useEffect, useState } from "react";
 import { customersApi } from "@/lib/api/customers";
@@ -76,7 +81,7 @@ export function CustomerPicker({
   return (
     <div className="space-y-3">
       <div className="flex gap-2">
-        <Button
+        <PilotButton
           type="button"
           variant={mode === "existing" ? "primary" : "secondary"}
           onClick={() => {
@@ -85,8 +90,8 @@ export function CustomerPicker({
           }}
         >
           Meglévő ügyfél
-        </Button>
-        <Button
+        </PilotButton>
+        <PilotButton
           type="button"
           variant={mode === "new" ? "primary" : "secondary"}
           onClick={() => {
@@ -95,16 +100,16 @@ export function CustomerPicker({
           }}
         >
           Új ügyfél
-        </Button>
+        </PilotButton>
       </div>
 
       {mode === "existing" ? (
         selection.customerId ? (
-          <Card className="flex items-center justify-between p-3">
+          <PilotCard className="flex items-center justify-between p-3">
             <span className="font-semibold text-dusk-900">
               {selection.customerLabel}
             </span>
-            <Button
+            <PilotButton
               type="button"
               variant="secondary"
               onClick={() => {
@@ -113,20 +118,21 @@ export function CustomerPicker({
               }}
             >
               Csere
-            </Button>
-          </Card>
+            </PilotButton>
+          </PilotCard>
         ) : (
-          <FormField label="Ügyfél keresése">
-            <Input
+          <PilotFormField label="Ügyfél keresése" htmlFor="ugyfel-kereses">
+            <PilotInput
+              id="ugyfel-kereses"
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={setSearch}
               placeholder="Név, telefonszám, e-mail"
             />
             {searching ? (
               <p className="text-xs text-dusk-500">Keresés…</p>
             ) : null}
             {results.length ? (
-              <Card className="divide-y">
+              <PilotCard className="divide-y">
                 {results.map((customer) => (
                   <button
                     key={customer.id}
@@ -145,9 +151,9 @@ export function CustomerPicker({
                     {customer.phone ? ` (${customer.phone})` : ""}
                   </button>
                 ))}
-              </Card>
+              </PilotCard>
             ) : null}
-          </FormField>
+          </PilotFormField>
         )
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -160,54 +166,54 @@ export function CustomerPicker({
             irányítószámot is) később is pótolhatod; a számla kiállításakor a
             hiányos cím jelezve lesz.
           </p>
-          <FormField label="Név" htmlFor="uj-ugyfel-nev">
-            <Input
+          <PilotFormField label="Név" htmlFor="uj-ugyfel-nev">
+            <PilotInput
               id="uj-ugyfel-nev"
               value={selection.newCustomer?.displayName ?? ""}
-              onChange={(event) =>
+              onChange={(value) =>
                 onChange({
                   newCustomer: {
                     ...(selection.newCustomer ?? EMPTY_NEW_CUSTOMER),
-                    displayName: event.target.value,
+                    displayName: value,
                   },
                 })
               }
             />
-          </FormField>
-          <FormField label="Telefonszám" htmlFor="uj-ugyfel-telefon">
-            <Input
+          </PilotFormField>
+          <PilotFormField label="Telefonszám" htmlFor="uj-ugyfel-telefon">
+            <PilotInput
               id="uj-ugyfel-telefon"
               value={selection.newCustomer?.phone ?? ""}
-              onChange={(event) =>
+              onChange={(value) =>
                 onChange({
                   newCustomer: {
                     ...(selection.newCustomer ?? EMPTY_NEW_CUSTOMER),
-                    phone: event.target.value,
+                    phone: value,
                   },
                 })
               }
             />
-          </FormField>
-          <FormField label="E-mail cím" htmlFor="uj-ugyfel-email">
-            <Input
+          </PilotFormField>
+          <PilotFormField label="E-mail cím" htmlFor="uj-ugyfel-email">
+            <PilotInput
               id="uj-ugyfel-email"
               type="email"
               value={selection.newCustomer?.email ?? ""}
-              onChange={(event) =>
+              onChange={(value) =>
                 onChange({
                   newCustomer: {
                     ...(selection.newCustomer ?? EMPTY_NEW_CUSTOMER),
-                    email: event.target.value,
+                    email: value,
                   },
                 })
               }
             />
-          </FormField>
-          <FormField label="Irányítószám" htmlFor="uj-ugyfel-iranyitoszam">
-            <Input
+          </PilotFormField>
+          <PilotFormField label="Irányítószám" htmlFor="uj-ugyfel-iranyitoszam">
+            <PilotInput
               id="uj-ugyfel-iranyitoszam"
               value={selection.newCustomer?.addresses?.[0]?.postalCode ?? ""}
-              onChange={(event) =>
+              onChange={(value) =>
                 onChange({
                   newCustomer: {
                     ...(selection.newCustomer ?? EMPTY_NEW_CUSTOMER),
@@ -215,19 +221,19 @@ export function CustomerPicker({
                       {
                         ...(selection.newCustomer?.addresses?.[0] ??
                           EMPTY_NEW_CUSTOMER.addresses![0]!),
-                        postalCode: event.target.value,
+                        postalCode: value,
                       },
                     ],
                   },
                 })
               }
             />
-          </FormField>
-          <FormField label="Város" htmlFor="uj-ugyfel-varos">
-            <Input
+          </PilotFormField>
+          <PilotFormField label="Város" htmlFor="uj-ugyfel-varos">
+            <PilotInput
               id="uj-ugyfel-varos"
               value={selection.newCustomer?.addresses?.[0]?.city ?? ""}
-              onChange={(event) =>
+              onChange={(value) =>
                 onChange({
                   newCustomer: {
                     ...(selection.newCustomer ?? EMPTY_NEW_CUSTOMER),
@@ -235,23 +241,23 @@ export function CustomerPicker({
                       {
                         ...(selection.newCustomer?.addresses?.[0] ??
                           EMPTY_NEW_CUSTOMER.addresses![0]!),
-                        city: event.target.value,
+                        city: value,
                       },
                     ],
                   },
                 })
               }
             />
-          </FormField>
-          <FormField
+          </PilotFormField>
+          <PilotFormField
             label="Cím"
             htmlFor="uj-ugyfel-utca"
             className="sm:col-span-2"
           >
-            <Input
+            <PilotInput
               id="uj-ugyfel-utca"
               value={selection.newCustomer?.addresses?.[0]?.line1 ?? ""}
-              onChange={(event) =>
+              onChange={(value) =>
                 onChange({
                   newCustomer: {
                     ...(selection.newCustomer ?? EMPTY_NEW_CUSTOMER),
@@ -259,14 +265,14 @@ export function CustomerPicker({
                       {
                         ...(selection.newCustomer?.addresses?.[0] ??
                           EMPTY_NEW_CUSTOMER.addresses![0]!),
-                        line1: event.target.value,
+                        line1: value,
                       },
                     ],
                   },
                 })
               }
             />
-          </FormField>
+          </PilotFormField>
         </div>
       )}
     </div>

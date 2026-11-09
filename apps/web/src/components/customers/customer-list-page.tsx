@@ -2,15 +2,15 @@
 import { plainText } from "@/lib/format/plain-text";
 import {
   Alert,
-  Badge,
-  Card,
   EmptyState,
-  Input,
   PageHeader,
   Pagination,
+  PilotBadge,
+  PilotCard,
   PilotDataTable,
+  PilotInput,
+  PilotSelect,
   type PilotTableColumn,
-  Select,
   Skeleton,
   PilotButton,
 } from "@acropora/ui";
@@ -62,13 +62,13 @@ const columns: PilotTableColumn<CustomerRow>[] = [
           <span className="mt-1 flex flex-wrap gap-1" data-testid="role-badges">
             {(item.partnerRoles?.length ? item.partnerRoles : []).map(
               (role) => (
-                <Badge key={role} variant="info">
+                <PilotBadge key={role} variant="blue">
                   {ROLE_BADGE[role]}
-                </Badge>
+                </PilotBadge>
               ),
             )}
             {item.partnerRoles?.length ? null : (
-              <Badge variant="info">Partner</Badge>
+              <PilotBadge variant="blue">Partner</PilotBadge>
             )}
           </span>
         ) : null}
@@ -95,9 +95,9 @@ const columns: PilotTableColumn<CustomerRow>[] = [
     header: "Forrás",
     width: "180px",
     cell: (item) => (
-      <Badge variant={item.source === "UNAS" ? "info" : "neutral"}>
+      <PilotBadge variant={item.source === "UNAS" ? "blue" : "grey"}>
         {item.source === "UNAS" ? "Webshopos" : "Általunk rögzített"}
-      </Badge>
+      </PilotBadge>
     ),
   },
 ];
@@ -220,18 +220,18 @@ export function CustomerListPage() {
       ) : null}
       {data ? (
         <>
-          <Card className="p-4">
+          <PilotCard className="p-4">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-              <Input
+              <PilotInput
                 aria-label="Vevő keresése"
                 value={search}
-                onChange={(event) => setSearch(event.target.value)}
+                onChange={setSearch}
                 placeholder="Név, cégnév, email, partnerkód"
               />
-              <Select
+              <PilotSelect
                 aria-label="Szerep"
                 value={params.get("role") ?? ""}
-                onChange={(event) => filter("role", event.target.value)}
+                onChange={(value) => filter("role", value)}
               >
                 <option value="">{ROLE_FILTER_LABEL.ALL}</option>
                 {CUSTOMER_LIST_ROLES.filter((role) => role !== "ALL").map(
@@ -241,29 +241,29 @@ export function CustomerListPage() {
                     </option>
                   ),
                 )}
-              </Select>
-              <Select
+              </PilotSelect>
+              <PilotSelect
                 aria-label="Forrás"
                 value={params.get("source") ?? ""}
-                onChange={(event) => filter("source", event.target.value)}
+                onChange={(value) => filter("source", value)}
               >
                 <option value="">Minden forrás</option>
                 <option value="UNAS">Webshop (UNAS)</option>
                 <option value="MANUAL">Általunk rögzített</option>
-              </Select>
-              <Select
+              </PilotSelect>
+              <PilotSelect
                 aria-label="Státusz"
                 value={params.get("status") ?? "ACTIVE"}
-                onChange={(event) => filter("status", event.target.value)}
+                onChange={(value) => filter("status", value)}
               >
                 <option value="ACTIVE">Aktív</option>
                 <option value="INACTIVE">Inaktív</option>
                 <option value="ALL">Mind</option>
-              </Select>
+              </PilotSelect>
             </div>
-          </Card>
+          </PilotCard>
           {data.items.length ? (
-            <Card className="overflow-x-auto">
+            <PilotCard className="overflow-x-auto">
               <div className="flex justify-end px-3 py-2">
                 <Pagination
                   position="top"
@@ -281,7 +281,7 @@ export function CustomerListPage() {
                 onRowActivate={(item) => router.push(`/vevok/${item.id}`)}
                 minWidth={720}
               />
-            </Card>
+            </PilotCard>
           ) : (
             <EmptyState
               title={
