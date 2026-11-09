@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   createResidualDictionary,
   scanRows,
+  scanRowsAsync,
   scanText,
   type ResidualDictionary,
 } from "./residual-scan.js";
@@ -187,6 +188,28 @@ describe("credential keys left in a JSON value (barracuda, #2322)", () => {
       ]).clean,
       true,
     );
+  });
+});
+
+describe("a stream of rows", () => {
+  it("gives the same report as the list, so a database can be read page by page", async () => {
+    const d = dictionary();
+    const rows = [
+      {
+        model: "Customer",
+        row: {
+          id: "c1",
+          notes: "Hívta Teszt Elek",
+          payload: { resetToken: "x" },
+        },
+      },
+      { model: "Invoice", row: { id: "i1", memo: "ok" } },
+    ];
+    async function* stream() {
+      for (const row of rows) yield row;
+    }
+    assert.deepEqual(await scanRowsAsync(d, stream()), scanRows(d, rows));
+    assert.equal((await scanRowsAsync(d, stream())).clean, false);
   });
 });
 

@@ -237,44 +237,65 @@ export interface ResidualReport {
   findings: ResidualFinding[];
 }
 
+/** One row's worth of scanning, accumulating counts: the same rules for a sync list and an async stream of rows. */
+function createScanner(dictionary: ResidualDictionary) {
+  const counts = new Map<string, ResidualFinding>();
+  let rowsScanned = 0;
+  const bump = (
+    model: string,
+    field: string,
+    kind: ResidualFinding["kind"],
+  ) => {
+    const id = `${model}.${field}\u0000${kind}`;
+    const finding = counts.get(id) ?? { model, field, kind, count: 0 };
+    finding.count += 1;
+    counts.set(id, finding);
+  };
+  return {
+    add(model: string, row: Readonly<Record<string, unknown>>) {
+      rowsScanned += 1;
+      for (const [field, value] of Object.entries(row)) {
+        // a credential or network key left inside a JSON value (the net under the JSON scrubber's key deletion)
+        for (const key of jsonKeys(value)) {
+          if (isDeletedKey(normalizeKey(key)))
+            bump(model, field, "credentialKey");
+        }
+        for (const text of strings(value)) {
+          for (const kind of scanText(dictionary, text))
+            bump(model, field, kind);
+        }
+      }
+    },
+    report(): ResidualReport {
+      const findings = [...counts.values()].sort(
+        (a, b) =>
+          a.model.localeCompare(b.model) ||
+          a.field.localeCompare(b.field) ||
+          a.kind.localeCompare(b.kind),
+      );
+      return { clean: findings.length === 0, rowsScanned, findings };
+    },
+  };
+}
+
+type ScannedRow = { model: string; row: Readonly<Record<string, unknown>> };
+
 /** Scans anonymized rows. Names the column and the kind, and counts: never the value, the row or a position. */
 export function scanRows(
   dictionary: ResidualDictionary,
-  rows: Iterable<{ model: string; row: Readonly<Record<string, unknown>> }>,
+  rows: Iterable<ScannedRow>,
 ): ResidualReport {
-  const counts = new Map<string, ResidualFinding>();
-  let rowsScanned = 0;
-  for (const { model, row } of rows) {
-    rowsScanned += 1;
-    for (const [field, value] of Object.entries(row)) {
-      // a credential or network key left inside a JSON value (the net under the JSON scrubber's key deletion)
-      for (const key of jsonKeys(value)) {
-        if (!isDeletedKey(normalizeKey(key))) continue;
-        const id = `${model}.${field}\u0000credentialKey`;
-        const finding = counts.get(id) ?? {
-          model,
-          field,
-          kind: "credentialKey" as const,
-          count: 0,
-        };
-        finding.count += 1;
-        counts.set(id, finding);
-      }
-      for (const text of strings(value)) {
-        for (const kind of scanText(dictionary, text)) {
-          const id = `${model}.${field}\u0000${kind}`;
-          const finding = counts.get(id) ?? { model, field, kind, count: 0 };
-          finding.count += 1;
-          counts.set(id, finding);
-        }
-      }
-    }
-  }
-  const findings = [...counts.values()].sort(
-    (a, b) =>
-      a.model.localeCompare(b.model) ||
-      a.field.localeCompare(b.field) ||
-      a.kind.localeCompare(b.kind),
-  );
-  return { clean: findings.length === 0, rowsScanned, findings };
+  const scanner = createScanner(dictionary);
+  for (const { model, row } of rows) scanner.add(model, row);
+  return scanner.report();
+}
+
+/** The same scan over a STREAM of rows (a database read page by page), so no table has to fit in memory. */
+export async function scanRowsAsync(
+  dictionary: ResidualDictionary,
+  rows: AsyncIterable<ScannedRow>,
+): Promise<ResidualReport> {
+  const scanner = createScanner(dictionary);
+  for await (const { model, row } of rows) scanner.add(model, row);
+  return scanner.report();
 }
