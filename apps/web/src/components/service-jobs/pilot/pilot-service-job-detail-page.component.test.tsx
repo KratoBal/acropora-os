@@ -758,7 +758,19 @@ describe("PilotServiceJobDetailPage -- a régi lapról áthozott őrök", () => 
     expect(screen.getByText("Delegált kollégák")).toBeTruthy();
   });
 
-  it("a delegálás a TELJES névsort küldi", async () => {
+  it("a delegálás a TELJES névsort küldi: a meglévő delegált is megy az új mellett", async () => {
+    // a jegyen már áll valaki: csak így különbözik a teljes névsor a változástól (barracuda, #2300)
+    api.detail.mockResolvedValue(
+      detail({
+        assignees: [
+          {
+            userId: "user-sanyi",
+            name: "Sanyi",
+            assignedAt: "2026-09-13T08:00:00.000Z",
+          },
+        ],
+      }),
+    );
     api.setAssignees.mockResolvedValue(
       detail({
         assignees: [
@@ -781,7 +793,7 @@ describe("PilotServiceJobDetailPage -- a régi lapról áthozott őrök", () => 
 
     await waitFor(() =>
       expect(api.setAssignees).toHaveBeenCalledWith("token-1", "job-1", {
-        userIds: ["user-eva"],
+        userIds: ["user-sanyi", "user-eva"],
       }),
     );
   });
