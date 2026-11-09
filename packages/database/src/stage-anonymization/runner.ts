@@ -7,7 +7,7 @@ import { createJsonScrubber, type JsonScrubOptions } from "./json-scrubber.js";
 import { createPseudonymizer, type Pseudonymizer } from "./pseudonymizer.js";
 import {
   createResidualDictionary,
-  scanRows,
+  scanRowsAsync,
   type ResidualKind,
 } from "./residual-scan.js";
 import { createRowTransformer, isNaturalPersonRow } from "./row-transformer.js";
@@ -240,12 +240,9 @@ export async function runAnonymization(
   for (const model of models)
     targetCounts[model] = await database.countRows(model);
   const totalRows = Object.values(targetCounts).reduce((sum, n) => sum + n, 0);
-  const residual = scanRows(
+  const residual = await scanRowsAsync(
     realDictionary,
-    tables(database, models) as unknown as Iterable<{
-      model: string;
-      row: Row;
-    }>,
+    tables(database, models),
   );
 
   // 4. THE GATE
