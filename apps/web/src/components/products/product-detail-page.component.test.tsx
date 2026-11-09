@@ -711,6 +711,14 @@ describe("ProductDetailPage mirror ownership", () => {
     expect(
       await screen.findByText("Utolsó beszerzési nettó ár"),
     ).toBeInTheDocument();
+    // the pilot field hands the number keyboard and the spacing on to the real input (barracuda, #2312)
+    expect(screen.getByLabelText("Utolsó beszerzési nettó ár")).toHaveAttribute(
+      "inputmode",
+      "decimal",
+    );
+    expect(screen.getByLabelText("Utolsó beszerzési nettó ár")).toHaveClass(
+      "mt-1",
+    );
     fireEvent.change(screen.getByLabelText("Utolsó beszerzési nettó ár"), {
       target: { value: "1000" },
     });
