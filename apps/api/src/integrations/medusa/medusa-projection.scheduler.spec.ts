@@ -1393,6 +1393,9 @@ describe("a márka változása is esedékessé teszi a termékeit (t11)", () => 
   });
 });
 
+/** Egy kötés, amit a kifutott-jelölő pontja (2026-11-09) UTÁN vetítettek. */
+const JELOLO_UTAN = new Date("2026-11-09T12:00:00.000Z");
+
 /** A dupla `product.findMany`-je az `isActive` szűrőt is alkalmazza (lásd lent, ca422e92). */
 function csakAKertAllapot(db: ProjectionSchedulerDatabase) {
   const eredeti = db.product.findMany.bind(db.product);
@@ -1439,7 +1442,8 @@ describe("a vetítés után inaktivált termék is esedékes (ca422e92)", () => 
       [
         { entityId: "aktiv-friss", lastSyncedAt: korabban },
         { entityId: "inaktivalt", lastSyncedAt: korabban },
-        { entityId: "inaktiv-regi", lastSyncedAt: korabban },
+        // a jelölő-pont (2026-11-09) UTÁN vetítve: a változása régebbi, nem esedékes
+        { entityId: "inaktiv-regi", lastSyncedAt: JELOLO_UTAN },
       ],
     );
     csakAKertAllapot(db);
@@ -1454,6 +1458,40 @@ describe("a vetítés után inaktivált termék is esedékes (ca422e92)", () => 
     await scheduler.runOnce();
     assert.deepEqual(kapott, [["inaktivalt"]]);
     assert.deepEqual(ar.kapott, []);
+  });
+
+  /**
+   * A JELÖLŐ ELŐTT VETÍTETT INAKTÍV TERMÉK (acrobot mérése, 2026-11-09 19:00: a 129 régi
+   * cím). MI PIROSÍT: a kifutott-jelölő (V4.2) előtt draftként kivitt inaktív termék nem
+   * kerül újra sorra, mert a változása régebbi a kötésnél; vagy a pont után vetített is
+   * minden körben újra esedékes.
+   */
+  it("a jelölő előtt vetített inaktív termék egyszer újra esedékes, a pont után vetített nem", async () => {
+    const { run, kapott } = futtato(0);
+    const { db } = adatbazis(
+      [
+        termek({ id: "jelolo-elott", isActive: false, updatedAt: REGEN }),
+        termek({ id: "jelolo-utan", isActive: false, updatedAt: REGEN }),
+      ],
+      [
+        {
+          entityId: "jelolo-elott",
+          lastSyncedAt: new Date("2026-10-27T10:00:00.000Z"),
+        },
+        { entityId: "jelolo-utan", lastSyncedAt: JELOLO_UTAN },
+      ],
+    );
+    csakAKertAllapot(db);
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: run,
+      runPricing: arFuttato().run,
+      environment: BEKAPCSOLVA,
+      logger: naplo().logger,
+      now: () => new Date(MOST.getTime() + 1_000),
+    });
+    await scheduler.runOnce();
+    assert.deepEqual(kapott, [["jelolo-elott"]]);
   });
 
   /**

@@ -784,12 +784,21 @@ export class MedusaProjectionScheduler
       for (const t of termekek)
         if (!t.isActive) valtozas.set(t.id, t.updatedAt);
     }
+    /*
+      A JELÖLŐ ELŐTT VETÍTETT INAKTÍV TERMÉK IS (ca422e92, acrobot mérése 2026-11-09 19:00):
+      a 129 régi cím termékeit a vetítés már inaktívként vitte ki (draft), de még a
+      kifutott-jelölő (V4.2, #2148, 11-04) előtt, tehát jelölő nélkül; a változásuk
+      régebbi a kötésnél, és a fenti feltétel rájuk nem áll. Egyszer újra esedékesek:
+      utána a kötés a pont után áll.
+    */
     const esedekes = kotesek
       .filter((k) => {
         const mikor = valtozas.get(k.entityId);
         return (
           mikor !== undefined &&
-          (k.lastSyncedAt === null || mikor > k.lastSyncedAt)
+          (k.lastSyncedAt === null ||
+            mikor > k.lastSyncedAt ||
+            k.lastSyncedAt < KIFUTOTT_JELOLO_OTA)
         );
       })
       .map((k) => k.entityId);
@@ -987,6 +996,14 @@ const DEFAULT_BATCH = 25;
 const OVERSCAN = 4;
 /** Az inaktivált termékek lekérdezésének szelete: messze a Postgres kötött-paraméter határa (32767) alatt. */
 const KOTES_SZELET = 1000;
+/**
+ * A KIFUTOTT-JELÖLŐ VERZIÓJA, DÁTUMKÉNT (ca422e92): az ennél korábban vetített inaktív
+ * termék a jelölő (V4.2, #2148, 2026-11-04 a mainen) előtti szabállyal ment ki. A pont
+ * szándékosan későbbi a beolvadásnál: a teszt telepítésének ideje nincs mérve, és egy
+ * későbbi pont csak egy fölösleges újravetítésbe kerül termékenként, egy korábbi viszont
+ * jelölő nélkül hagyna terméket.
+ */
+const KIFUTOTT_JELOLO_OTA = new Date("2026-11-09T00:00:00.000Z");
 /**
  * Az akciós határ keresésének visszatekintő ablaka. Csak a keresést szűkíti;
  * egy hétnél hosszabban álló ütemező után a régebbi határt a következő
