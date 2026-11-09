@@ -50,6 +50,7 @@ process.on("SIGTERM", () => process.exit(0));
 `,
   );
 const base = {
+  loadedEnvFiles: [] as string[] | null,
   databaseUrl: URL_OK,
   password: "stage-jelszo-nem-igazi-1", // scan-secrets: allow (an invented test string, not a credential)
   path: process.env.PATH,
@@ -95,6 +96,19 @@ describe("the integration measurement gates the start", () => {
     }
   });
 
+  it("does not start the instance when a .env file would be loaded into it, or when that was not measured", async () => {
+    for (const loadedEnvFiles of [["/srv/acropora/.env"], null]) {
+      const checks = await runTrial({
+        ...base,
+        loadedEnvFiles,
+        apiMain: standIn("envfile"),
+        database: database(),
+      });
+      assert.ok(checks.some((c) => !c.passed && c.name.includes(".env file")));
+      assert.equal(existsSync(join(dir, "envfile")), false);
+    }
+  });
+
   it("refuses a database that is not a temporary one before it measures or starts anything", async () => {
     await assert.rejects(
       runTrial({
@@ -130,7 +144,7 @@ describe("the instance", () => {
     assert.equal(login.passed, false);
     assert.equal(
       checks.filter((c) => c.name.startsWith("integration closed")).length,
-      11,
+      12,
     );
     // stopped: nothing answers on the port any more
     await assert.rejects(

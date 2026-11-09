@@ -11,6 +11,7 @@ import {
   buildTrialEnvironment,
   createTrialDatabase,
   hashStagePassword,
+  measureGeneratedClientEnvFiles,
   PrismaClient,
   runTrialFlows,
   withDatabaseName,
@@ -31,7 +32,7 @@ import {
  * the stage-only hash (`hashStagePassword`, the application's own scheme); a throwaway COPY of it (`withTrialCopy`, a real
  * `CREATE DATABASE ... TEMPLATE`), the environment the trial gives its instance (`buildTrialEnvironment`, put in place of this
  * process's environment), the real Nest application started IN THIS PROCESS on the copy (the trial command starts the built API as a
- * child process; the spawn is covered by the unit tests with real child processes), the integration measurement (11 checks, with the
+ * child process; the spawn is covered by the unit tests with real child processes), the integration measurement (12 checks, with the
  * real settings and device token queries), and the four flows. Then the copy is dropped, and the scratch database is checked to hold
  * NONE of the trial's rows: the swap candidate is never written to.
  *
@@ -152,6 +153,7 @@ describe(
             env,
             settings: await trialDb.connectionSettings(),
             deviceTokens: await trialDb.deviceTokenCount(),
+            loadedEnvFiles: measureGeneratedClientEnvFiles(import.meta.url),
           });
           assert.equal(await trialDb.loginEmail(), OWNER_EMAIL);
           app = await boot();
@@ -179,7 +181,7 @@ describe(
         checks.filter((c) => c.name.startsWith("integration closed")).length,
         11,
       );
-      assert.equal(checks.length, 11 + 9);
+      assert.equal(checks.length, 12 + 9);
       assert.equal(
         await databaseExists(copyNameSeen),
         false,

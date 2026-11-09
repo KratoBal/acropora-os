@@ -26,6 +26,8 @@ export interface TrialRunOptions {
   /** The built API entry point (`apps/api/dist/main.js`). */
   readonly apiMain: string;
   readonly database: TrialDatabase;
+  /** The `.env` files the generated Prisma client would load (`prismaLoadedEnvFiles`); `null` when that could not be measured. */
+  readonly loadedEnvFiles: readonly string[] | null;
   readonly port?: number;
   readonly redisUrl?: string;
   readonly path?: string;
@@ -108,6 +110,7 @@ export async function runTrial(
     env,
     settings: await options.database.connectionSettings(),
     deviceTokens: await options.database.deviceTokenCount(),
+    loadedEnvFiles: options.loadedEnvFiles,
   });
   if (integration.some((check) => !check.passed)) return integration;
 

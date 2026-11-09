@@ -48,6 +48,8 @@ export interface TrialRule {
   readonly settings?: readonly ConnectionIntegration[];
   /** The count of device tokens in the database must be zero. */
   readonly noDeviceTokens?: boolean;
+  /** No `.env` file may exist that the Prisma client would load into the instance (see `trial-env-files.ts`), and it must have been measured. */
+  readonly noLoadedEnvFiles?: boolean;
 }
 
 export type ConnectionIntegration = "UNAS" | "NAV" | "Számlázz" | "Medusa";
@@ -160,6 +162,11 @@ export const TRIAL_RULES: readonly TrialRule[] = [
     check: "integration closed: public lookups (VIES, MNB)",
     closedUrls: ["VIES_API_URL", "MNB_API_URL"],
   },
+  {
+    check:
+      "integration closed: no .env file is read into the instance (the Prisma client loads the ones it was generated with)",
+    noLoadedEnvFiles: true,
+  },
 ];
 
 const isSet = (value: string | undefined): value is string =>
@@ -186,6 +193,7 @@ function problemsOf(
   env: Readonly<Record<string, string | undefined>>,
   settings: readonly ConnectionSettingState[] | undefined,
   deviceTokens: number | undefined,
+  loadedEnvFiles: readonly string[] | null | undefined,
 ): string[] {
   const problems: string[] = [];
   const except = new Set(rule.except ?? []);
@@ -240,6 +248,13 @@ function problemsOf(
     else if (deviceTokens > 0)
       problems.push(`${deviceTokens} device token(s) are in the database`);
   }
+  if (rule.noLoadedEnvFiles) {
+    if (loadedEnvFiles === undefined || loadedEnvFiles === null)
+      problems.push("the .env files the Prisma client loads were not measured");
+    else
+      for (const path of loadedEnvFiles)
+        problems.push(`the Prisma client would load ${path}`);
+  }
   return problems;
 }
 
@@ -250,6 +265,8 @@ export interface TrialMeasurementInput {
   readonly settings?: readonly ConnectionSettingState[];
   /** The number of rows in the device token table. */
   readonly deviceTokens?: number;
+  /** The `.env` files the generated Prisma client would load (`prismaLoadedEnvFiles`): `null` or absent means it was not measured. */
+  readonly loadedEnvFiles?: readonly string[] | null;
 }
 
 /**
@@ -265,6 +282,7 @@ export function assessTrialIntegrations(
       input.env,
       input.settings,
       input.deviceTokens,
+      input.loadedEnvFiles,
     );
     return problems.length === 0
       ? { name: rule.check, passed: true }

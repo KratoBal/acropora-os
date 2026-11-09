@@ -23,3 +23,7 @@ export { createTrialDatabase, type TrialDatabase } from "./trial-database.js";
 export { withDatabaseName } from "./trial-environment.js";
 /** The Prisma client class, for a caller that must not import the package's main entry (its module makes a client from the environment on load). */
 export { PrismaClient } from "@prisma/client";
+export {
+  measureGeneratedClientEnvFiles,
+  prismaLoadedEnvFiles,
+} from "./trial-env-files.js";

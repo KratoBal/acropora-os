@@ -21,6 +21,7 @@ import { PrismaClient } from "@prisma/client";
 
 import { describeRunFailure } from "../src/stage-anonymization/stage-run.js";
 import { createTrialDatabase } from "../src/stage-anonymization/trial-database.js";
+import { measureGeneratedClientEnvFiles } from "../src/stage-anonymization/trial-env-files.js";
 import { runTrial } from "../src/stage-anonymization/trial-run.js";
 import type { TrialCheck } from "../src/stage-anonymization/verification-gate.js";
 
@@ -57,6 +58,7 @@ try {
     password: password as string,
     apiMain,
     database: createTrialDatabase(client),
+    loadedEnvFiles: measureGeneratedClientEnvFiles(import.meta.url),
     redisUrl: process.env.REDIS_URL,
     path: process.env.PATH,
     progress: (line) => console.error(`trial: ${line}`),
