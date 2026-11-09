@@ -156,6 +156,34 @@ describe("accounts, parcels and addresses", () => {
   });
 });
 
+describe("text in a structured field (barracuda, #2320)", () => {
+  // a phone, bank, tax or parcel key can hold text; no real character may reach the stage through it
+  const keepsNoLetter = (real: string, fake: string): boolean =>
+    [...fake].length === [...real].length &&
+    [...real].every(
+      (char, i) =>
+        !/\p{L}/u.test(char) || (fake[i] !== char && /[A-Za-z]/.test(fake[i]!)),
+    );
+
+  it("replaces a text under a phone, account, IBAN, tax or parcel key letter for letter", () => {
+    const input = {
+      phone: "Kovács Péter titkárság",
+      bankAccount: "Kovács Éva",
+      iban: "csak délután, Éva",
+      taxNumber: "Példa Kft",
+      parcelNumber: "Őrült Ürge",
+    };
+    const out = scrub(input) as Record<string, string>;
+    for (const [key, real] of Object.entries(input)) {
+      assert.notEqual(out[key], real, key);
+      assert.ok(
+        keepsNoLetter(real, out[key]!),
+        `${key}: ${real} -> ${out[key]}`,
+      );
+    }
+  });
+});
+
 describe("deleted keys, arrays and extra rules", () => {
   it("deletes credential and network keys at any depth, and walks arrays", () => {
     const out = scrub({
