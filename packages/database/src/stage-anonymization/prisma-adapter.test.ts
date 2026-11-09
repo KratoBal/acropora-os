@@ -131,6 +131,40 @@ describe("the SQL", () => {
       assert.throws(() => quote(bad), /not a safe SQL identifier/, bad);
   });
 
+  it("finds every model of the real schema by an @id or @@id, never by a @unique the register may pseudonymize (barracuda, #2329)", () => {
+    const blocks = new Map(
+      [...REAL_SCHEMA.matchAll(/\nmodel (\w+) \{(.*?)\n\}/gs)].map((m) => [
+        m[1]!,
+        m[2]!,
+      ]),
+    );
+    const models = adapterModels(REAL_SCHEMA);
+    assert.equal(models.length, blocks.size);
+    for (const model of models) {
+      const block = blocks.get(model.name)!;
+      assert.ok(
+        /@id\b|@@id\(/.test(block),
+        `${model.name} has no @id or @@id in the schema`,
+      );
+      for (const field of model.key)
+        assert.ok(
+          new RegExp(`^\\s+${field}\\s+\\S+.*@id\\b`, "m").test(block) ||
+            new RegExp(`@@id\\(\\[[^\\]]*\\b${field}\\b`).test(block),
+          `${model.name}.${field} is not an @id or part of an @@id`,
+        );
+    }
+  });
+
+  it("refuses a model with only a @unique (the run stops before any row is read)", () => {
+    assert.throws(
+      () =>
+        adapterModels(
+          "model Only {\n  email String @unique\n  name  String\n}\n",
+        ),
+      /Only: no @id or @@id/,
+    );
+  });
+
   it("builds a keyset page for a single and a composite key, with the mapped column under its field name", () => {
     assert.equal(
       selectPageSql(customer, false),

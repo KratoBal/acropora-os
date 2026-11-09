@@ -82,3 +82,17 @@ export async function runStageAnonymization(
     trial: input.trial,
   });
 }
+
+/**
+ * WHAT THE COMMAND MAY PRINT ABOUT A FAILURE (barracuda, #2329). The runner's and the transformer's own messages name a field, a
+ * kind and a count, never a value, so they print as they are. A DATABASE error is different: a raw SQL error carries the server's
+ * DETAIL line (`Key ("email")=(...) already exists`), and on an unexpected failure that line can hold a real value, which would go
+ * to the terminal and the host log. A Prisma client error therefore prints its NAME and CODE only.
+ */
+export function describeRunFailure(error: unknown): string {
+  if (error instanceof Error && /^PrismaClient/.test(error.name)) {
+    const code = (error as { code?: unknown }).code;
+    return `${error.name}${typeof code === "string" ? ` ${code}` : ""} (the database's message is not printed: it can carry a value)`;
+  }
+  return error instanceof Error ? error.message : "the run failed";
+}
