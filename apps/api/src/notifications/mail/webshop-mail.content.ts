@@ -193,6 +193,16 @@ const RAW: Readonly<
       `<p>Ha később nem kérsz több levelet, itt bármikor leiratkozhatsz: <a href="{{hirlevel_leiratkozo_link}}">leiratkozás</a>.</p>`,
     ].join(""),
   },
+  WEBSHOP_STOCK_ALERT_CONFIRM: {
+    subject: "Erősítsd meg az értesítés-kérésedet",
+    bodyHtml: [
+      `<p>Értesítést kértél tőlünk, ha ebből újra érkezik: <strong>${v("ertesites_targya")}</strong>.</p>`,
+      "<p>Az értesítés akkor él, ha megerősíted a lenti gombbal. Amíg ez nem történik meg, nem írunk erről.</p>",
+      `<p data-cta=""><a href="{{ertesites_megerosito_link}}">Értesítés-kérés megerősítése</a></p>`,
+      `<p>A link ${v("megerosites_lejarat")} végéig működik. Ha nem te kérted, nincs teendőd: megerősítés nélkül erről nem kapsz levelet.</p>`,
+      `<p>Nem kérsz több értesítést erről? <a href="{{ertesites_leiratkozo_link}}">Leiratkozás</a></p>`,
+    ].join(""),
+  },
   WEBSHOP_SHIPPING_DELAYED: {
     subject: "Csúszik a rendelésed szállítása (#{{rendeles_szam}})",
     bodyHtml: [
@@ -335,6 +345,16 @@ const RAW_EN: typeof RAW = {
       `<p data-cta=""><a href="{{hirlevel_megerosito_link}}">Confirm subscription</a></p>`,
       `<p>The link works until ${v("megerosites_lejarat")}. If you did not subscribe, there is nothing to do: without a confirmation, no newsletter goes to your address.</p>`,
       `<p>If you no longer want our mails later, you can leave at any time here: <a href="{{hirlevel_leiratkozo_link}}">unsubscribe</a>.</p>`,
+    ].join(""),
+  },
+  WEBSHOP_STOCK_ALERT_CONFIRM: {
+    subject: "Confirm your notification request",
+    bodyHtml: [
+      `<p>You asked us to tell you when this arrives again: <strong>${v("ertesites_targya")}</strong>.</p>`,
+      "<p>The request starts once you confirm it with the button below. Until then, we do not write about it.</p>",
+      `<p data-cta=""><a href="{{ertesites_megerosito_link}}">Confirm the request</a></p>`,
+      `<p>The link works until ${v("megerosites_lejarat")}. If it was not you, there is nothing to do: without a confirmation, you get no mail about it.</p>`,
+      `<p>No more notifications about this? <a href="{{ertesites_leiratkozo_link}}">Unsubscribe</a></p>`,
     ].join(""),
   },
   WEBSHOP_SHIPPING_DELAYED: {
