@@ -144,7 +144,7 @@ function isGeneratedId(field: SchemaField): boolean {
 }
 
 /** The argument list of `@relation(...)`, with nested parentheses. */
-function relationArguments(attributes: string): string | null {
+export function relationArguments(attributes: string): string | null {
   const start = attributes.indexOf("@relation(");
   if (start === -1) return null;
   let depth = 0;
@@ -160,7 +160,7 @@ function relationArguments(attributes: string): string | null {
   throw new Error(`unterminated @relation(...) in: ${attributes}`);
 }
 
-function listArgument(args: string, key: string): string[] {
+export function listArgument(args: string, key: string): string[] {
   const match = new RegExp(`${key}:\\s*\\[([^\\]]*)\\]`).exec(args);
   if (!match) return [];
   return (match[1] ?? "")
