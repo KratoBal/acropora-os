@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Button, ConfirmDialog } from "@acropora/ui";
+import { Alert, ConfirmDialog, PilotButton } from "@acropora/ui";
 import {
   formatMoney,
   hasPermission,
@@ -183,9 +183,9 @@ export function MaintenanceInvoicePanel({
           enélkül nem készíthető.
         </p>
       ) : invoice === null ? (
-        <Button disabled={creating} onClick={() => void createDraft()}>
+        <PilotButton disabled={creating} onClick={() => void createDraft()}>
           {creating ? "Piszkozat készítése…" : "Piszkozat készítése"}
-        </Button>
+        </PilotButton>
       ) : (
         <div className="space-y-3">
           <dl className="grid gap-2 text-sm">
@@ -212,7 +212,7 @@ export function MaintenanceInvoicePanel({
           ) : null}
           <div className="flex flex-wrap items-center gap-2">
             {invoice.status !== "ISSUING" ? (
-              <Button
+              <PilotButton
                 variant="secondary"
                 disabled={downloading}
                 onClick={() => void downloadPdf()}
@@ -222,19 +222,19 @@ export function MaintenanceInvoicePanel({
                   : invoice.status === "ISSUED"
                     ? "Számla letöltése"
                     : "Előnézet letöltése"}
-              </Button>
+              </PilotButton>
             ) : null}
             {invoice.status === "DRAFT" ? (
               <>
-                <Button
+                <PilotButton
                   disabled={!invoice.issueEnabled || !canIssue || issuing}
                   onClick={() => setConfirmIssue(true)}
                 >
                   {issuing ? "Kiállítás…" : "Kiállítás"}
-                </Button>
+                </PilotButton>
                 {/*
                   LÁTHATÓ FELIRAT, NEM CSAK `title`: egy tiltott gomb
-                  `pointer-events: none` szabállyal jár (lásd a `Button`
+                  `pointer-events: none` szabállyal jár (lásd a `PilotButton`
                   stílusát), ami a böngésző hover-buborékát is megakadályozhatja.
                 */}
                 {!invoice.issueEnabled ? (

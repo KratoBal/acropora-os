@@ -46,6 +46,7 @@ import { PilotDelegatedColleaguesCard } from "./pilot-delegated-colleagues-card"
 import { ServiceJobPlacementEditor } from "../service-job-placement-editor";
 import { ServiceJobFieldsEditor } from "../service-job-fields-editor";
 import { CompletionCertificatePanel } from "../completion-certificate-panel";
+import { MaintenanceInvoicePanel } from "../maintenance-invoice-panel";
 import { MaintenancePackagePanel } from "../maintenance-package-panel";
 import {
   serviceJobNoteDescription,
@@ -1342,6 +1343,13 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
           */}
           {job.kind === "MAINTENANCE" ? (
             <CompletionCertificatePanel serviceJobId={job.id} />
+          ) : null}
+          {/*
+            A PISZKOZAT-SZÁMLA (ADR-014, 4. szelet), VISSZAHOZVA (kártya 0baba3b9, acrobot 44712): a régi részletlapon
+            állt, és a pilot lapra váltáskor csendben kimaradt. Ugyanaz a hely, mint ott: a teljesítési igazolás után.
+          */}
+          {job.kind === "MAINTENANCE" ? (
+            <MaintenanceInvoicePanel serviceJobId={job.id} />
           ) : null}
           {job.kind === "MAINTENANCE" ? (
             <MaintenancePackagePanel

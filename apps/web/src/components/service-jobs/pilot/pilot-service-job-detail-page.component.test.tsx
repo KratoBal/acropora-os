@@ -45,6 +45,14 @@ vi.mock("../completion-certificate-panel", () => ({
     </div>
   ),
 }));
+// the draft invoice, back on the pilot page (kanban 0baba3b9, acrobot 44712)
+vi.mock("../maintenance-invoice-panel", () => ({
+  MaintenanceInvoicePanel: ({ serviceJobId }: { serviceJobId: string }) => (
+    <div data-testid="maintenance-invoice-panel-stub">
+      számla panel ({serviceJobId})
+    </div>
+  ),
+}));
 vi.mock("../maintenance-package-panel", () => ({
   MaintenancePackagePanel: ({
     serviceJobId,
@@ -184,6 +192,9 @@ describe("PilotServiceJobDetailPage -- MAINTENANCE panelek", () => {
     expect(
       screen.getByTestId("maintenance-package-panel-stub"),
     ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("maintenance-invoice-panel-stub"),
+    ).toHaveTextContent("job-1");
   });
 
   /*
@@ -251,6 +262,9 @@ describe("PilotServiceJobDetailPage -- MAINTENANCE panelek", () => {
     ).not.toBeInTheDocument();
     expect(
       screen.queryByTestId("maintenance-package-panel-stub"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("maintenance-invoice-panel-stub"),
     ).not.toBeInTheDocument();
   });
 });
