@@ -66,3 +66,112 @@ export function resolveEffectiveTheme(
   if (preference === "system") return systemIsDark ? "dark" : "light";
   return preference;
 }
+
+/**
+ * A FIÓKHOZ MENTETT TÉMA, KÖZÖS TÁROLÓBAN (Balázs, 2026-11-09: a telefon böngészője minden alkalommal elfelejtette;
+ * a localStorage-t egy Discordból nyitott link, egy privát lap vagy a Safari ITP elviszi).
+ *
+ * A SZERVER AZ ELSŐDLEGES: belépéskor a fiók témája (`applyServerThemePreference`) felülírja a helyit, és a helyi
+ * tár ettől fogva csak gyorsítótár. Választáskor a tároló menti a helyit, és a bekötött mentéssel (`setThemePreference
+ * Persistence`) a szerverre is.
+ *
+ * NINCS SÖTÉT VILLANÁS: az a kliens, amelyik a szervertől várja a témát (`holdThemeForServer`, az OS weben), helyi
+ * érték nélkül a szerver válaszáig VILÁGOSAN marad, nem a telefon sötét módjára vált át előre. Ahol nincs szerver
+ * (a partner portál ma), a régi viselkedés áll: a helyi érték, vagy a rendszer.
+ *
+ * EGY TÁROLÓ, MINDEN HOOK UGYANAZT LÁTJA: eddig minden `useThemePreference` a saját állapotát olvasta, tehát egy
+ * választás csak a választó keretében hatott, a többi lap újranyitásig a régit mutatta.
+ */
+export interface ThemeState {
+  preference: ThemePreference;
+  /** false: a szerver még nem válaszolt, és nincs helyi érték; addig világos marad */
+  settled: boolean;
+}
+
+let state: ThemeState | null = null;
+let holdForServer = false;
+let persist: ((preference: ThemePreference) => Promise<unknown>) | null = null;
+const listeners = new Set<() => void>();
+
+const notify = () => {
+  for (const listener of listeners) listener();
+};
+
+/** The stored value, or null when there is none (not "system": the two mean different things to the hold). */
+export function readCachedThemePreference(): ThemePreference | null {
+  try {
+    const stored = window.localStorage.getItem(STORAGE_KEY);
+    return isThemePreference(stored) ? stored : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The OS web calls it once, before the first render: without a cached value it waits for the server, in light. */
+export function holdThemeForServer(): void {
+  holdForServer = true;
+}
+
+export function getThemeState(): ThemeState {
+  if (state === null) {
+    const cached =
+      typeof window === "undefined" ? null : readCachedThemePreference();
+    state = {
+      preference: cached ?? "system",
+      settled: cached !== null || !holdForServer,
+    };
+  }
+  return state;
+}
+
+/** Before hydration and on the server: system, not settled (light). */
+export const SERVER_THEME_STATE: ThemeState = {
+  preference: "system",
+  settled: false,
+};
+
+export function subscribeThemeState(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+/**
+ * The account's theme after sign-in: the server's value wins and is cached; `null` (not chosen, or signed out) keeps
+ * what the browser has. Either way the wait is over.
+ */
+export function applyServerThemePreference(
+  server: ThemePreference | null,
+): void {
+  const current = getThemeState();
+  if (server !== null) writeThemePreference(server);
+  const preference = server ?? current.preference;
+  if (preference === current.preference && current.settled) return;
+  state = { preference, settled: true };
+  notify();
+}
+
+/** Where a choice is saved besides the browser (the OS web: the account); `null` when signed out. */
+export function setThemePreferencePersistence(
+  save: ((preference: ThemePreference) => Promise<unknown>) | null,
+): void {
+  persist = save;
+}
+
+/** A person's choice: at once here and in every view, then on the account when a save is bound. */
+export function chooseThemePreference(preference: ThemePreference): void {
+  writeThemePreference(preference);
+  state = { preference, settled: true };
+  notify();
+  // a failed save keeps the choice in this browser; the next sign-in shows the account's value again
+  void persist?.(preference).catch((error: unknown) => {
+    console.warn("A téma mentése a fiókhoz nem sikerült.", error);
+  });
+}
+
+/** Tests only: back to the state before the first read. */
+export function resetThemeStateForTests(): void {
+  state = null;
+  holdForServer = false;
+  persist = null;
+  listeners.clear();
+}

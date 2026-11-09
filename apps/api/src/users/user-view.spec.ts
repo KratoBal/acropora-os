@@ -30,6 +30,11 @@ const row = (overrides: Partial<User> = {}): User => ({
    * mellekhatas volt, hanem az egyetlen hely, ahol a varrat szol.
    */
   signatureCodeHash: null,
+  /**
+   * THE THEME ON THE ACCOUNT (card 302951c0). The admin view does not carry it on purpose: it is the person's own
+   * display choice, read only through their own session (`/auth/me`), not another person's data to manage.
+   */
+  themePreference: null,
   createdAt: new Date("2026-01-01T00:00:00.000Z"),
   updatedAt: new Date("2026-01-02T00:00:00.000Z"),
   ...overrides,

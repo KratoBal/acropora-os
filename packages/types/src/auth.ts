@@ -711,7 +711,18 @@ export interface AuthenticatedUser {
    * exceptions must make every construction site fill it.
    */
   permissions?: readonly Permission[];
+  /**
+   * THE THEME THE PERSON CHOSE, saved on the account (Balázs, 2026-11-09: the phone's browser forgot it every time).
+   * `null`: not chosen yet, the browser's own setting decides. Optional: an older server leaves it out, which reads
+   * the same as `null`.
+   */
+  themePreference?: ThemePreference | null;
 }
+
+/** A person's theme: light, dark, or the device's own mode. */
+export type ThemePreference = "light" | "dark" | "system";
+
+export const THEME_PREFERENCES = ["light", "dark", "system"] as const;
 
 /**
  * WHOSE PERMISSIONS ARE ASKED ABOUT: a role (its template) and, when known, the

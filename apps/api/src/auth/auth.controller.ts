@@ -5,6 +5,7 @@ import {
   Inject,
   Optional,
   Post,
+  Put,
   Req,
   Res,
 } from "@nestjs/common";
@@ -21,7 +22,7 @@ import type {
   AuthenticatedRequest,
   DevelopmentLoginDto,
 } from "./auth.types.js";
-import { ProductionLoginDto } from "./auth.types.js";
+import { ProductionLoginDto, ThemePreferenceDto } from "./auth.types.js";
 import {
   cookieOptions,
   type CookieResponse,
@@ -79,6 +80,24 @@ export class AuthController {
         navigationFeatures(this.environment, user.id),
       ),
       expiresAt: request.sessionExpiresAt,
+    };
+  }
+
+  /**
+   * THE PERSON'S OWN THEME (Balázs, 2026-11-09: the phone's browser forgot it every time): saved on the account, so a
+   * new tab, a private window or a link opened from Discord starts in it. Every signed-in person, only for themselves;
+   * `/auth/me` hands it back at the next sign-in.
+   */
+  @Put("me/theme")
+  async setThemePreference(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() body: ThemePreferenceDto,
+  ): Promise<{ themePreference: ThemePreferenceDto["preference"] }> {
+    return {
+      themePreference: await this.authService.setThemePreference(
+        user.id,
+        body.preference,
+      ),
     };
   }
 
