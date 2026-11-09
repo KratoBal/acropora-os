@@ -10,7 +10,7 @@ import type { Pseudonymizer } from "./pseudonymizer.js";
  * happens to equal another real name is not replaced twice):
  *   1. PATTERNS: e-mail addresses, IBANs (a valid mod-97 one, or a Hungarian one of the right shape: a typo'd real IBAN must not
  *      survive), Hungarian account numbers (`8-8` and `8-8-8`), company tax numbers (`8-1-2`, and `HU` plus eight digits),
- *      a personal tax id ONLY next to the words "adoazonosito" (a bare ten-digit number starting with 8 is far more often an
+ *      IP addresses (v4, and v6), a personal tax id ONLY next to the words "adoazonosito" (a bare ten-digit number starting with 8 is far more often an
  *      order or a ticket number), and phone numbers written with a country prefix (+36, 0036, 06, or another +CC). A phone
  *      number written without a prefix ("30 123 4567") is NOT caught here: nothing in the text says it is a phone number; the
  *      residual check of the chain (S4) looks for the real digits.
@@ -29,6 +29,7 @@ export interface ScrubStats {
   taxNumber: number;
   personalTaxId: number;
   phone: number;
+  ip: number;
   name: number;
 }
 
@@ -86,6 +87,7 @@ export function createTextScrubber(
     taxNumber: 0,
     personalTaxId: 0,
     phone: 0,
+    ip: 0,
     name: 0,
   };
 
@@ -167,6 +169,17 @@ export function createTextScrubber(
       /(?<![\w+])\+(?!36)\d{1,3}(?:[ .-]?\d{2,4}){2,4}(?!\d)/g,
       "phone",
       (m) => engine.phone(m[0]),
+    );
+    // IP addresses (v4, and v6 of four groups or with "::"): a log line copied into a note names a client
+    add(
+      /(?<![\d.])(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)(?![\d.])/g,
+      "ip",
+      (m) => engine.ipAddress(m[0]),
+    );
+    add(
+      /(?<![\w:])(?:(?:[0-9a-fA-F]{1,4}:){3,7}[0-9a-fA-F]{1,4}|(?:[0-9a-fA-F]{0,4}:){1,6}:[0-9a-fA-F]{1,4}(?::[0-9a-fA-F]{1,4}){0,5})(?![\w:])/g,
+      "ip",
+      (m) => engine.ipAddress(m[0]),
     );
     return spans;
   };
