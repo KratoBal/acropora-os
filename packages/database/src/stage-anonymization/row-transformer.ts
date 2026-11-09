@@ -119,6 +119,28 @@ export function classifyRow(
   return true;
 }
 
+/**
+ * Whether a row of `model` describes a natural person, from its party fields and type field (see the header); the same
+ * decision `transformRow` makes. The runner (S5) uses it to build the residual dictionary from natural persons only.
+ */
+export function isNaturalPersonRow(
+  model: string,
+  row: Readonly<Record<string, unknown>>,
+  decisions: ReadonlyMap<string, FieldDecision>,
+): boolean {
+  let typeValue: string | null = null;
+  const names: string[] = [];
+  const taxNumbers: string[] = [];
+  for (const [field, value] of Object.entries(row)) {
+    if (typeof value !== "string" || value === "") continue;
+    const kind = decisions.get(`${model}.${field}`)?.kind;
+    if (kind === "partyName") names.push(value);
+    else if (kind === "partyTaxNumber") taxNumbers.push(value);
+    else if (TYPE_KEYS.has(normalizeKey(field))) typeValue = value;
+  }
+  return classifyRow(typeValue, names, taxNumbers);
+}
+
 /** The kinds this transformer pseudonymizes, and replaces: every kind with that action must be named (the test enforces it). */
 export const PSEUDONYMIZED_KIND_NAMES = [
   "email",
@@ -273,18 +295,7 @@ export function createRowTransformer(
       const out: Record<string, unknown> = {};
       let natural: boolean | undefined;
       const isNatural = (): boolean => {
-        if (natural !== undefined) return natural;
-        let typeValue: string | null = null;
-        const names: string[] = [];
-        const taxNumbers: string[] = [];
-        for (const [field, value] of Object.entries(row)) {
-          if (typeof value !== "string" || value === "") continue;
-          const kind = decisions.get(`${model}.${field}`)?.kind;
-          if (kind === "partyName") names.push(value);
-          else if (kind === "partyTaxNumber") taxNumbers.push(value);
-          else if (TYPE_KEYS.has(normalizeKey(field))) typeValue = value;
-        }
-        natural = classifyRow(typeValue, names, taxNumbers);
+        natural ??= isNaturalPersonRow(model, row, decisions);
         return natural;
       };
 
