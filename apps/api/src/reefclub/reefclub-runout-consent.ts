@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 
 /**
  * THE "WHEN DOES IT RUN OUT" REMINDER'S CONSENT (ReefClub V3.2, card cd94ed11, slice 2). A member turns the reminder on PER
@@ -35,6 +35,13 @@ export function runOutAvailability(
   return { kind: "available", text, version };
 }
 
-/** The unsubscribe link's key: 32 random bytes, base64url (a bearer key for ONE action, the unsubscribe, nothing else). */
-export const newUnsubscribeToken = (): string =>
+/**
+ * The unsubscribe link's key: 32 random bytes, base64url (a bearer key for ONE action, the unsubscribe, nothing else). The raw key
+ * exists only in the mail's link; the table keeps its hash (`hashUnsubscribeKey`), so a copy of the table cannot unsubscribe anyone.
+ */
+export const newUnsubscribeKey = (): string =>
   randomBytes(32).toString("base64url");
+
+/** sha256, hex. A key of 256 random bits needs no salt or slow hash: there is nothing to guess. */
+export const hashUnsubscribeKey = (key: string): string =>
+  createHash("sha256").update(key).digest("hex");
