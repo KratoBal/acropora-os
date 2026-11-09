@@ -233,7 +233,10 @@ export function MissingInvoicesMonthDetail({
           </span>
           {row.original ? (
             <span className="block text-xs text-pilot-grey-500">
-              {formatAmount(row.original.amount, row.original.currency)}
+              {chargeAmountText({
+                ...row.original,
+                category: row.category,
+              })}
             </span>
           ) : null}
         </span>

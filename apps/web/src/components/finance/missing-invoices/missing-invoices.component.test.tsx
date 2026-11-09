@@ -587,6 +587,36 @@ describe("MissingInvoicesMonthDetail", () => {
     expect(within(card).queryByText(/^[-\u2212]/)).toBeNull();
   });
 
+  // WHAT TURNS THIS RED (a116ec70, acrobot 44678): the second line of the Összeg cell (the amount in the card's own currency)
+  // staying unsigned while the first line shows the refund negative: one cell, two signs.
+  it("a customer refund's original-currency line is negative too, a charge's stays unsigned", () => {
+    const refund = charge({
+      id: "c-refund-eur",
+      partner: "von Wussow",
+      narrative: "Rückerstattung",
+      amount: "21990",
+      original: { amount: "55.38", currency: "EUR" },
+      category: "CUSTOMER_REFUND",
+      state: "NO_INVOICE_NEEDED",
+    });
+    render(
+      <MissingInvoicesMonthDetail
+        {...base()}
+        rows={[charge({ id: "c-plain" }), refund]}
+      />,
+    );
+    const row = screen.getByRole("row", { name: /^von Wussow/ });
+    expect(
+      within(row).getByText((t) => /^[-\u2212]21\s990\sFt$/.test(t)),
+    ).toBeInTheDocument();
+    expect(
+      within(row).getByText((t) => /^[-\u2212]55,38\sEUR$/.test(t)),
+    ).toBeInTheDocument();
+    const card = screen.getByRole("row", { name: /^OPENAI/ });
+    expect(within(card).getByText("55,38 EUR")).toBeInTheDocument();
+    expect(within(card).queryByText(/^[-\u2212]/)).toBeNull();
+  });
+
   it("tabs, filters, a row and paging report back to the caller", () => {
     const props = base();
     render(<MissingInvoicesMonthDetail {...props} />);
@@ -840,6 +870,20 @@ describe("MissingInvoicesDrawer", () => {
     ).toHaveTextContent(
       "A számla a magánszemély nevére szól: kérd újra az Próba Kft. nevére.",
     );
+  });
+
+  it("the drawer's amount line signs the original-currency part of a refund too (a116ec70)", () => {
+    const refund = charge({
+      partner: "von Wussow",
+      amount: "21990",
+      original: { amount: "55.38", currency: "EUR" },
+      category: "CUSTOMER_REFUND",
+      state: "NO_INVOICE_NEEDED",
+    });
+    render(<MissingInvoicesDrawer {...base()} row={refund} />);
+    const dialog = screen.getByRole("dialog", { name: "von Wussow" });
+    const text = (dialog.textContent ?? "").replace(/\s/g, " ");
+    expect(text).toMatch(/[-\u2212]21 990 Ft · [-\u2212]55,38 EUR/);
   });
 
   it("the drawer shows a customer refund's amount negative too, and a plain charge's unsigned (a116ec70)", () => {
