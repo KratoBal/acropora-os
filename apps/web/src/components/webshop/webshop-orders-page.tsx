@@ -2,12 +2,11 @@
 
 import {
   Alert,
-  Badge,
-  Card,
-  CardContent,
-  CardHeader,
   PageHeader,
   Skeleton,
+  PilotBadge,
+  PilotCard,
+  PilotCardHeader,
   PilotSelect,
   PilotButton,
 } from "@acropora/ui";
@@ -70,11 +69,11 @@ export function formatStatusAge(
 
 function statusVariant(
   order: UnasOrderListItem,
-): "success" | "danger" | "neutral" {
+): "success" | "danger" | "grey" {
   if (order.unasDeletedAt) return "danger";
   if (order.unasStatusLabel === "Sikertelenül lezárt rendelés") return "danger";
   if (order.unasStatusLabel === "Megrendelés lezárva") return "success";
-  return "neutral";
+  return "grey";
 }
 
 function statusLabel(order: UnasOrderListItem): string {
@@ -249,27 +248,29 @@ export function WebshopOrdersPage() {
         <Alert variant="danger" title="Hiba történt" description={error} />
       ) : null}
 
-      <Card>
-        <CardHeader>
-          <h2 className="text-sm font-semibold text-dusk-900">Rendelések</h2>
-          <label className="text-xs text-dusk-500">
-            Nézet{" "}
-            <PilotSelect
-              aria-label="Rendelések nézete"
-              value={view}
-              onChange={(nextValue) =>
-                setView(nextValue === "all" ? "all" : "open")
-              }
-              chevron
-            >
-              <option value="open">Nyitott</option>
-              <option value="all">Összes</option>
-            </PilotSelect>
-            {" · "}
-            {visibleOrders.length.toLocaleString("hu-HU")} rendelés
-          </label>
-        </CardHeader>
-        <CardContent className="space-y-2">
+      <PilotCard>
+        <PilotCardHeader
+          title="Rendelések"
+          action={
+            <label className="text-xs text-dusk-500">
+              Nézet{" "}
+              <PilotSelect
+                aria-label="Rendelések nézete"
+                value={view}
+                onChange={(nextValue) =>
+                  setView(nextValue === "all" ? "all" : "open")
+                }
+                chevron
+              >
+                <option value="open">Nyitott</option>
+                <option value="all">Összes</option>
+              </PilotSelect>
+              {" · "}
+              {visibleOrders.length.toLocaleString("hu-HU")} rendelés
+            </label>
+          }
+        />
+        <div className="space-y-2 p-5">
           {loading ? <Skeleton className="h-4 w-1/3" /> : null}
           {!loading && visibleOrders.length === 0 ? (
             <p className="text-sm text-dusk-500">
@@ -342,9 +343,9 @@ export function WebshopOrdersPage() {
                           })}
                         </td>
                         <td className="px-5 py-3">
-                          <Badge variant={statusVariant(order)}>
+                          <PilotBadge variant={statusVariant(order)}>
                             {detailedStatus(order)?.icon} {statusLabel(order)}
-                          </Badge>
+                          </PilotBadge>
                           <p className="mt-1 text-xs text-dusk-500">
                             {formatStatusAge(order.statusChangedAt)}
                           </p>
@@ -373,8 +374,8 @@ export function WebshopOrdersPage() {
               </div>
             </>
           ) : null}
-        </CardContent>
-      </Card>
+        </div>
+      </PilotCard>
     </div>
   );
 }
