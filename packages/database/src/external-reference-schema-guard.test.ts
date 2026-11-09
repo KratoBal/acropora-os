@@ -15,7 +15,7 @@ import { describe, it } from "node:test";
 const root = new URL("../prisma/", import.meta.url);
 const schema = readFileSync(new URL("schema.prisma", root), "utf8");
 const migrationsDir = new URL("migrations/", root);
-const THIS = "20261104200000_external_reference_customer_many";
+const THIS = "20261109170000_external_reference_customer_many";
 const INDEX = "ExternalReference_system_entityType_entityId_key";
 const names = readdirSync(migrationsDir)
   .filter((name) => /^\d{14}_/.test(name))
