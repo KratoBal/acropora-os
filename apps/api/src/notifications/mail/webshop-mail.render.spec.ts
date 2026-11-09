@@ -120,7 +120,8 @@ describe("renderWebshopMail", () => {
       order_created_at: null,
       order_view_url: null,
       confirm_url: "https://shop.example/hu/hirlevel/megerosites?token=AbC_9",
-      unsubscribe_url: "https://shop.example/hu/hirlevel/leiratkozas?token=XyZ-1",
+      unsubscribe_url:
+        "https://shop.example/hu/hirlevel/leiratkozas?token=XyZ-1",
       expires_at: "2026-11-16T15:00:00.000Z",
     };
     const hu = renderWebshopMail(template("WEBSHOP_NEWSLETTER_CONFIRM"), facts);
