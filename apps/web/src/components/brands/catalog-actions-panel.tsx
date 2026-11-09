@@ -1,5 +1,11 @@
 "use client";
-import { Alert, Badge, Button, Card, ConfirmDialog } from "@acropora/ui";
+import {
+  Alert,
+  ConfirmDialog,
+  PilotBadge,
+  PilotButton,
+  PilotCard,
+} from "@acropora/ui";
 import type {
   CatalogActionKind,
   CatalogActionRun,
@@ -66,11 +72,11 @@ function statusBadge(run: CatalogActionRun) {
   }`;
   const variant =
     run.status === "running"
-      ? "neutral"
+      ? "grey"
       : run.status === "succeeded"
         ? "success"
         : "danger";
-  return <Badge variant={variant}>{label}</Badge>;
+  return <PilotBadge variant={variant}>{label}</PilotBadge>;
 }
 
 /**
@@ -173,7 +179,7 @@ export function CatalogActionsPanel({ token }: { token: string }) {
   const confirmRun = confirming ? runs[confirming] : undefined;
 
   return (
-    <Card className="space-y-4 p-4" aria-label="Katalógus-műveletek">
+    <PilotCard className="space-y-4 p-4" aria-label="Katalógus-műveletek">
       <div>
         <h2 className="text-base font-semibold">Katalógus-műveletek</h2>
         <p className="text-sm text-dusk-500">
@@ -209,7 +215,7 @@ export function CatalogActionsPanel({ token }: { token: string }) {
                 <p className="text-sm text-dusk-500">{action.description}</p>
               </div>
               <div className="flex gap-2">
-                <Button
+                <PilotButton
                   variant="secondary"
                   disabled={busy || Boolean(running) || Boolean(hostBlock)}
                   onClick={() =>
@@ -217,15 +223,15 @@ export function CatalogActionsPanel({ token }: { token: string }) {
                   }
                 >
                   Próba
-                </Button>
-                <Button
+                </PilotButton>
+                <PilotButton
                   disabled={
                     busy || Boolean(running) || Boolean(hostBlock) || !canApply
                   }
                   onClick={() => setConfirming(action.kind)}
                 >
                   Végrehajtás
-                </Button>
+                </PilotButton>
               </div>
             </div>
             {run ? (
@@ -306,6 +312,6 @@ export function CatalogActionsPanel({ token }: { token: string }) {
           </pre>
         ) : null}
       </ConfirmDialog>
-    </Card>
+    </PilotCard>
   );
 }

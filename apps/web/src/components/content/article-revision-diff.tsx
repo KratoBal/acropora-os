@@ -6,7 +6,7 @@ import type {
   ArticleRevisionDiff,
   ArticleRevisionSummary,
 } from "@acropora/types";
-import { Alert, Button, Skeleton } from "@acropora/ui";
+import { Alert, PilotButton, Skeleton } from "@acropora/ui";
 import { useEffect, useRef, useState } from "react";
 
 import { contentApi } from "@/lib/api/content";
@@ -200,24 +200,22 @@ export function ArticleRevisions({
                     : ""}
               </span>
               {older ? (
-                <Button
+                <PilotButton
                   type="button"
-                  size="sm"
                   variant="ghost"
                   onClick={() => compare(older.id, revision.id)}
                 >
                   Az előzőhöz képest
-                </Button>
+                </PilotButton>
               ) : null}
               {index === 0 ? (
-                <Button
+                <PilotButton
                   type="button"
-                  size="sm"
                   variant="ghost"
                   onClick={() => compare(revision.id, "current")}
                 >
                   A mostani szöveghez képest
-                </Button>
+                </PilotButton>
               ) : null}
             </li>
           );

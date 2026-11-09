@@ -48,16 +48,13 @@ const HATRA_IKREK = 0;
   csak-fogyhat szabállyal. Mélyebb gráf nem kell: a második szint már többnyire közös komponens.
 */
 const GYEREK = new Map<string, string[]>([
-  ["components/brands/catalog-actions-panel.tsx", ["Badge", "Button", "Card"]],
-  ["components/content/article-revision-diff.tsx", ["Button"]],
-  ["components/products/barcode-editor.tsx", ["Badge", "Button", "Input"]],
   [
     "components/products/product-basics-editor.tsx",
     ["Button", "Card", "FormField", "Input", "Select"],
   ],
 ]);
-const GYEREK_MERET = 4;
-const GYEREK_IKREK = 12;
+const GYEREK_MERET = 1;
+const GYEREK_IKREK = 5;
 
 function fajlok(mappa: string): string[] {
   return readdirSync(mappa).flatMap((nev) => {
