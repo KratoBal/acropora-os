@@ -18,4 +18,13 @@ beforeAll(() => {
   if (typeof document !== "undefined") beszurLathatosagShim();
 });
 
-afterEach(() => cleanup());
+/**
+ * THE THEME STORE LIVES IN THE MODULE (card 302951c0): every view shares one state, read from the cache once. Without
+ * this reset a test that puts "dark" into the cache would still see the state an earlier test in the same file read.
+ * Browser tests only: the server route tests never load the store.
+ */
+afterEach(async () => {
+  cleanup();
+  if (typeof document !== "undefined")
+    (await import("@acropora/ui")).resetThemeStateForTests();
+});
