@@ -38,10 +38,6 @@ const HATRA = new Map<string, string[]>([
     ["Badge", "Card", "Input", "Select"],
   ],
   ["components/products/product-detail-page.tsx", ["Button", "Input"]],
-  [
-    "components/products/product-dose-effects-card.tsx",
-    ["Button", "Input", "Select"],
-  ],
   ["components/products/product-list-page.tsx", ["Button"]],
   ["components/products/product-shipping-profile-card.tsx", ["Button"]],
   ["components/seo-landing/seo-landing-list-page.tsx", ["Card"]],
@@ -64,10 +60,10 @@ const HATRA = new Map<string, string[]>([
 /*
   A SZÁMLÁLÓK (barracuda, #2125): a pontos egyezés megfogja az új vegyes fájlt, de ha valaki ugyanabban a PR-ban a
   sorát is felveszi a listára, a teszt zöld maradna. A két szám ezért külön áll: a lista bővítése két helyen kér
-  módosítást, és a reviewban látszik. Fogyáskor a számot is le kell írni (a lista története: 59 / 141 a #2125-ben, 47 / 129 a #2134-ben, 45 / 120 a #2137-ben, 36 / 96 a #2140-ben, 32 / 86 a #2229-ben, 29 / 76 a #2232-ben, 25 / 61 a 7. szeletben, a purchasing mappa, 11 / 27 a 14. szeletben, a leltár két lapja).
+  módosítást, és a reviewban látszik. Fogyáskor a számot is le kell írni (a lista története: 59 / 141 a #2125-ben, 47 / 129 a #2134-ben, 45 / 120 a #2137-ben, 36 / 96 a #2140-ben, 32 / 86 a #2229-ben, 29 / 76 a #2232-ben, 25 / 61 a 7. szeletben, a purchasing mappa, 10 / 24 a 14. szeletben, a leltár két lapja és az adag-hatás kártya).
 */
-const HATRA_MERET = 11;
-const HATRA_IKREK = 27;
+const HATRA_MERET = 10;
+const HATRA_IKREK = 24;
 
 /*
   A GYEREK-LISTA (barracuda, #2125): egy pilot fájl által importált, CSAK duskot használó .tsx (relatív vagy `@/`
