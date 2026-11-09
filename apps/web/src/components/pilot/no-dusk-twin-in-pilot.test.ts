@@ -67,15 +67,7 @@ const HATRA = new Map<string, string[]>([
     ["Badge", "Card", "CardContent", "CardHeader"],
   ],
   ["components/webshop/webshop-product-list-page.tsx", ["Card", "Input"]],
-  [
-    "components/worksheets/worksheet-line-editor.tsx",
-    ["Button", "Card", "Input"],
-  ],
   ["components/worksheets/worksheet-list-page.tsx", ["Avatar"]],
-  [
-    "components/worksheets/worksheet-material-requests.tsx",
-    ["Badge", "Button", "Input"],
-  ],
 ]);
 
 /*
@@ -83,8 +75,8 @@ const HATRA = new Map<string, string[]>([
   sorát is felveszi a listára, a teszt zöld maradna. A két szám ezért külön áll: a lista bővítése két helyen kér
   módosítást, és a reviewban látszik. Fogyáskor a számot is le kell írni (a lista története: 59 / 141 a #2125-ben, 47 / 129 a #2134-ben, 45 / 120 a #2137-ben, 36 / 96 a #2140-ben, 32 / 86 a #2229-ben, 29 / 76 a #2232-ben, 25 / 61 a 7. szeletben, a purchasing mappa).
 */
-const HATRA_MERET = 16;
-const HATRA_IKREK = 43;
+const HATRA_MERET = 14;
+const HATRA_IKREK = 37;
 
 /*
   A GYEREK-LISTA (barracuda, #2125): egy pilot fájl által importált, CSAK duskot használó .tsx (relatív vagy `@/`

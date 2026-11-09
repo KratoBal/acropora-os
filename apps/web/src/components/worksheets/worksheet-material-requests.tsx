@@ -2,14 +2,13 @@
 
 import {
   Alert,
-  Badge,
-  Button,
   EmptyState,
-  Input,
   Skeleton,
   PilotDateField,
   PilotSelect,
   PilotButton,
+  PilotBadge,
+  PilotInput,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -238,31 +237,25 @@ export function WorksheetMaterialRequests({
             <div className="space-y-3 rounded border border-dusk-200 p-3">
               {rows.map((sor, index) => (
                 <div key={index} className="flex items-end gap-2">
-                  <Input
+                  <PilotInput
                     aria-label="Tétel neve"
                     placeholder="Pl. 40mm PVC nyomócső"
                     value={sor.name}
-                    onChange={(event) =>
-                      updateRow(index, "name", event.target.value)
-                    }
+                    onChange={(value) => updateRow(index, "name", value)}
                     className="flex-1"
                   />
-                  <Input
+                  <PilotInput
                     aria-label="Mennyiség"
                     placeholder="Pl. 10 méter"
                     value={sor.quantity}
-                    onChange={(event) =>
-                      updateRow(index, "quantity", event.target.value)
-                    }
+                    onChange={(value) => updateRow(index, "quantity", value)}
                     className="w-28"
                   />
-                  <Input
+                  <PilotInput
                     aria-label="Egység"
                     placeholder="Pl. db"
                     value={sor.unit}
-                    onChange={(event) =>
-                      updateRow(index, "unit", event.target.value)
-                    }
+                    onChange={(value) => updateRow(index, "unit", value)}
                     className="w-20"
                   />
                   {rows.length > 1 ? (
@@ -326,7 +319,7 @@ export function WorksheetMaterialRequests({
                 <PilotButton disabled={busy} onClick={() => void sendNew()}>
                   {busy ? "Küldés…" : "Küldés"}
                 </PilotButton>
-                <Button
+                <PilotButton
                   variant="secondary"
                   disabled={busy}
                   onClick={() => {
@@ -339,7 +332,7 @@ export function WorksheetMaterialRequests({
                   }}
                 >
                   Mégse
-                </Button>
+                </PilotButton>
               </div>
             </div>
           ) : (
@@ -369,13 +362,13 @@ export function WorksheetMaterialRequests({
                 <p className="text-xs text-dusk-500">
                   {materialRequestByline(request)}
                 </p>
-                <Badge
+                <PilotBadge
                   variant={
                     MATERIAL_REQUEST_STATUS_BADGE_VARIANT[request.status]
                   }
                 >
                   {MATERIAL_REQUEST_STATUS_LABEL[request.status]}
-                </Badge>
+                </PilotBadge>
               </div>
               <ul className="mt-2 space-y-0.5 text-sm text-dusk-800">
                 {request.items.map((item) => (
@@ -393,13 +386,14 @@ export function WorksheetMaterialRequests({
                 </Link>
               ) : null}
               {request.status === "DRAFT" ? (
-                <Button
-                  className="mt-2"
-                  disabled={sendingId === request.id}
-                  onClick={() => void sendDraft(request.id)}
-                >
-                  {sendingId === request.id ? "Küldés…" : "Küldés"}
-                </Button>
+                <div className="mt-2">
+                  <PilotButton
+                    disabled={sendingId === request.id}
+                    onClick={() => void sendDraft(request.id)}
+                  >
+                    {sendingId === request.id ? "Küldés…" : "Küldés"}
+                  </PilotButton>
+                </div>
               ) : null}
             </li>
           ))}
