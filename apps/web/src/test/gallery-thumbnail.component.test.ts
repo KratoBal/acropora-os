@@ -34,7 +34,9 @@ const LAPOK = [
   },
   {
     nev: "hibajegy",
-    komponens: "src/components/service-jobs/service-job-detail-page.tsx",
+    // the live detail page (the old service-job-detail-page.tsx had no route and is gone, kanban 0baba3b9)
+    komponens:
+      "src/components/service-jobs/pilot/pilot-service-job-detail-page.tsx",
     kliens: "src/lib/api/service-jobs.ts",
   },
 ] as const;

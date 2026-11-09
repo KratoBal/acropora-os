@@ -66,10 +66,6 @@ const HATRA = new Map<string, string[]>([
     "components/service-assets/pilot/pilot-asset-detail-page.tsx",
     ["FormField", "Select"],
   ],
-  [
-    "components/service-jobs/service-job-detail-page.tsx",
-    ["Badge", "Button", "FormField", "Input"],
-  ],
   ["components/settings/mail-image-picker.tsx", ["Button"]],
   ["components/users/user-list-page.tsx", ["Card", "Input", "Select"]],
   ["components/users/user-visible-units.tsx", ["Card"]],
@@ -98,8 +94,8 @@ const HATRA = new Map<string, string[]>([
   sorát is felveszi a listára, a teszt zöld maradna. A két szám ezért külön áll: a lista bővítése két helyen kér
   módosítást, és a reviewban látszik. Fogyáskor a számot is le kell írni (a lista története: 59 / 141 a #2125-ben, 47 / 129 a #2134-ben, 45 / 120 a #2137-ben, 36 / 96 a #2140-ben, 32 / 86 a #2229-ben, 29 / 76 a #2232-ben, 25 / 61 a 7. szeletben, a purchasing mappa).
 */
-const HATRA_MERET = 22;
-const HATRA_IKREK = 58;
+const HATRA_MERET = 21;
+const HATRA_IKREK = 54;
 
 /*
   A GYEREK-LISTA (barracuda, #2125): egy pilot fájl által importált, CSAK duskot használó .tsx (relatív vagy `@/`
@@ -123,12 +119,10 @@ const GYEREK = new Map<string, string[]>([
     "components/purchasing/purchase-invoice-cancel-form.tsx",
     ["Button", "Card", "CardContent", "CardHeader"],
   ],
-  ["components/service-jobs/maintenance-invoice-panel.tsx", ["Button"]],
-  ["components/service-jobs/service-job-assignee-editor.tsx", ["Button"]],
   ["components/service/service-document-gallery.tsx", ["Button", "Input"]],
 ]);
-const GYEREK_MERET = 10;
-const GYEREK_IKREK = 26;
+const GYEREK_MERET = 8;
+const GYEREK_IKREK = 24;
 
 function fajlok(mappa: string): string[] {
   return readdirSync(mappa).flatMap((nev) => {
