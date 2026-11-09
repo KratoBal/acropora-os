@@ -238,6 +238,8 @@ export class MedusaProjectionScheduler
   private readonly homepageOn: () => Promise<boolean>;
   /** Hany URES kor telt el egymas utan. A nem-ures kor nullazza. */
   private egymasUtaniUresKorok = 0;
+  /** Az inaktivált lista forgó kezdete (`inaktivaltAzonositok`): ahányat egy kör ténylegesen vitt, annyit lép. */
+  private inaktivEltolas = 0;
 
   /**
    * EGY OPCIONALIS FUGGOSEG-OBJEKTUM, ES EZ A REPO MINTAJA, NEM ROGTONZES: a
@@ -361,6 +363,11 @@ export class MedusaProjectionScheduler
     const esedekes = [
       ...new Set([...akcio, ...teny, ...marka, ...altalanos, ...inaktivalt]),
     ].slice(0, limit);
+    // a forgás annyit lép, ahány inaktivált termék ebben a körben ténylegesen sorra került
+    const elotte = new Set([...akcio, ...teny, ...marka, ...altalanos]);
+    this.inaktivEltolas += esedekes.filter(
+      (id) => inaktivalt.includes(id) && !elotte.has(id),
+    ).length;
     /*
       AZ ELBUKOTT ÁR ESEDÉKES MARAD (329f8a2e, murena tény-kommentje, acrobot
       27698). A termék-kötés `lastSyncedAt`-jét csak a termék-vetítés írja, tehát
@@ -751,22 +758,33 @@ export class MedusaProjectionScheduler
   private async inaktivaltAzonositok(limit: number): Promise<string[]> {
     const kotesek = await this.db.externalReference.findMany({
       where: MEDUSA_PRODUCT_REFERENCE,
+      // stabil sorrend: a forgó kezdet (lent) csak így jelent minden körben ugyanazt a helyet
+      orderBy: { entityId: "asc" },
       select: { entityId: true, lastSyncedAt: true },
     });
     if (!kotesek.length) return [];
-    const termekek = await this.db.product.findMany({
-      where: {
-        id: { in: kotesek.map((k) => k.entityId) },
-        isActive: false,
-        webshopExcluded: false,
-      },
-      select: { id: true, isActive: true, updatedAt: true },
-    });
-    // a szűrés a kódban is megvan: egy tágabb válasz se tegyen aktív terméket ide
-    const valtozas = new Map(
-      termekek.filter((t) => !t.isActive).map((t) => [t.id, t.updatedAt]),
-    );
-    return kotesek
+    /*
+      SZELETENKÉNT (barracuda, #2332 review, 1. kérdés): egy felső határ nélküli
+      `in`-lista a Postgres kötött-paraméter határán (32767) elhasal (#2019). Ma
+      kb. 1500 kötés áll a teszt boltban; a szelet a növekedést is elviszi.
+    */
+    const valtozas = new Map<string, Date>();
+    for (let i = 0; i < kotesek.length; i += KOTES_SZELET) {
+      const termekek = await this.db.product.findMany({
+        where: {
+          id: {
+            in: kotesek.slice(i, i + KOTES_SZELET).map((k) => k.entityId),
+          },
+          isActive: false,
+          webshopExcluded: false,
+        },
+        select: { id: true, isActive: true, updatedAt: true },
+      });
+      // a szűrés a kódban is megvan: egy tágabb válasz se tegyen aktív terméket ide
+      for (const t of termekek)
+        if (!t.isActive) valtozas.set(t.id, t.updatedAt);
+    }
+    const esedekes = kotesek
       .filter((k) => {
         const mikor = valtozas.get(k.entityId);
         return (
@@ -774,8 +792,22 @@ export class MedusaProjectionScheduler
           (k.lastSyncedAt === null || mikor > k.lastSyncedAt)
         );
       })
-      .map((k) => k.entityId)
-      .slice(0, limit);
+      .map((k) => k.entityId);
+    /*
+      FORGÓ KEZDET (barracuda, #2332 review, 2. kérdés): egy inaktivált termék,
+      ami MÁS okból megáll (pl. ellentmondó változat-opciók), nem lépteti a
+      `lastSyncedAt`-et, tehát minden körben esedékes marad. Rögzített kezdettel
+      a lista elején álló, beragadt termékek elfoglalnák a kör maradék helyeit, és
+      a mögöttük állók soha nem kerülnének sorra. A kezdet annyit lép, ahányat a
+      kör ténylegesen vitt (`runOnce`), tehát a sor körbejár, és mindenki sorra kerül.
+    */
+    if (!esedekes.length) return [];
+    const kezdet = this.inaktivEltolas % esedekes.length;
+    this.inaktivEltolas = kezdet;
+    return [...esedekes.slice(kezdet), ...esedekes.slice(0, kezdet)].slice(
+      0,
+      limit,
+    );
   }
 
   /**
@@ -953,6 +985,8 @@ const DEFAULT_BATCH = 25;
  * beolvasasa utan tudjuk eldonteni: egy naprakesz termek nem tolti a keretet.
  */
 const OVERSCAN = 4;
+/** Az inaktivált termékek lekérdezésének szelete: messze a Postgres kötött-paraméter határa (32767) alatt. */
+const KOTES_SZELET = 1000;
 /**
  * Az akciós határ keresésének visszatekintő ablaka. Csak a keresést szűkíti;
  * egy hétnél hosszabban álló ütemező után a régebbi határt a következő

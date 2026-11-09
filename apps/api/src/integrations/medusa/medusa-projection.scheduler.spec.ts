@@ -1393,6 +1393,22 @@ describe("a márka változása is esedékessé teszi a termékeit (t11)", () => 
   });
 });
 
+/** A dupla `product.findMany`-je az `isActive` szűrőt is alkalmazza (lásd lent, ca422e92). */
+function csakAKertAllapot(db: ProjectionSchedulerDatabase) {
+  const eredeti = db.product.findMany.bind(db.product);
+  (db.product as { findMany: unknown }).findMany = async (args: {
+    where?: { isActive?: boolean };
+  }) => {
+    const sorok = (await eredeti(args as never)) as unknown as {
+      isActive: boolean;
+    }[];
+    const kert = args.where?.isActive;
+    return typeof kert === "boolean"
+      ? sorok.filter((t) => t.isActive === kert)
+      : sorok;
+  };
+}
+
 describe("a vetítés után inaktivált termék is esedékes (ca422e92)", () => {
   /**
    * MI PIROSÍT: a kötött termék, amit a legutóbbi vetítése UTÁN inaktiváltak,
@@ -1426,18 +1442,7 @@ describe("a vetítés után inaktivált termék is esedékes (ca422e92)", () => 
         { entityId: "inaktiv-regi", lastSyncedAt: korabban },
       ],
     );
-    const eredeti = db.product.findMany.bind(db.product);
-    (db.product as { findMany: unknown }).findMany = async (args: {
-      where?: { isActive?: boolean };
-    }) => {
-      const sorok = (await eredeti(args as never)) as unknown as {
-        isActive: boolean;
-      }[];
-      const kert = args.where?.isActive;
-      return typeof kert === "boolean"
-        ? sorok.filter((t) => t.isActive === kert)
-        : sorok;
-    };
+    csakAKertAllapot(db);
     const scheduler = new MedusaProjectionScheduler({
       db,
       runProjection: run,
@@ -1449,6 +1454,79 @@ describe("a vetítés után inaktivált termék is esedékes (ca422e92)", () => 
     await scheduler.runOnce();
     assert.deepEqual(kapott, [["inaktivalt"]]);
     assert.deepEqual(ar.kapott, []);
+  });
+
+  /**
+   * A BERAGADT INAKTÍV TERMÉK NEM SZORÍTJA KI A TÖBBIT (barracuda, #2332 review, 2.).
+   * MI PIROSÍT: rögzített kezdettel minden kör ugyanazt a két terméket viszi, ha a
+   * futtató nem lépteti őket (itt a futtató dupla nem ír `lastSyncedAt`-et, mint egy
+   * megálló vetítés); a kezdet nem annyit lép, ahányat a kör vitt.
+   */
+  it("a kör forgó kezdettel viszi az inaktiváltakat, ha azok nem lépnek tovább", async () => {
+    const korabban = new Date(MOST.getTime() - 60_000);
+    const azonositok = ["a", "b", "c", "d"];
+    const { run, kapott } = futtato(1);
+    const { db } = adatbazis(
+      azonositok.map((id) => termek({ id, isActive: false, updatedAt: MOST })),
+      azonositok.map((id) => ({ entityId: id, lastSyncedAt: korabban })),
+    );
+    csakAKertAllapot(db);
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: run,
+      runPricing: arFuttato().run,
+      environment: {
+        ...BEKAPCSOLVA,
+        MEDUSA_PROJECTION_SCHEDULE_BATCH_SIZE: "2",
+      } as NodeJS.ProcessEnv,
+      logger: naplo().logger,
+      now: () => new Date(MOST.getTime() + 1_000),
+    });
+    for (let kor = 0; kor < 3; kor++) await scheduler.runOnce();
+    assert.deepEqual(kapott, [
+      ["a", "b"],
+      ["c", "d"],
+      ["a", "b"],
+    ]);
+  });
+
+  /**
+   * SZELETENKÉNT KÉRDEZ (barracuda, #2332 review, 1.). MI PIROSÍT: a teljes kötés-lista
+   * egyetlen `in`-be megy (a Postgres 32767-es határán elhasalna), vagy egy szelet
+   * kimarad.
+   */
+  it("a kötés-listát ezres szeletekben kérdezi", async () => {
+    const kotesek = Array.from({ length: 2500 }, (_, i) => ({
+      entityId: `p${String(i).padStart(4, "0")}`,
+      lastSyncedAt: MOST,
+    }));
+    const { db, hivasok } = adatbazis([], kotesek);
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: futtato(0).run,
+      runPricing: arFuttato().run,
+      environment: BEKAPCSOLVA,
+      logger: naplo().logger,
+      now: () => new Date(MOST.getTime() + 1_000),
+    });
+    await scheduler.runOnce();
+    const szeletek = hivasok
+      .filter((h) => h.metodus === "product.findMany")
+      .map(
+        (h) => (h.args as { where: { id?: { in?: string[] } } }).where.id?.in,
+      )
+      .filter(
+        (lista): lista is string[] =>
+          Array.isArray(lista) && lista.length > 0 && lista[0]!.startsWith("p"),
+      );
+    assert.deepEqual(
+      szeletek.map((lista) => lista.length),
+      [1000, 1000, 500],
+    );
+    assert.deepEqual(
+      szeletek.flat(),
+      kotesek.map((k) => k.entityId),
+    );
   });
 });
 
