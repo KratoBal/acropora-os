@@ -77,6 +77,11 @@ database on the CI service, applies every real migration, seeds invented rows, r
 
 ## Decisions and limits, said plainly
 
+- **The visited-row count has one blind spot** (barracuda, #2328): `transformCoverage` compares the number of rows the transform
+  visited with the source count, so a row that is skipped AND a row that is read twice in the same model cancel out and the number
+  matches. Keyset paging (the adapter reads `WHERE (key) > (last key) ORDER BY key`, so a delete or an update between pages moves
+  nothing) rules out both; a different reader must do the same.
+
 - **Open decision (the owner): company names and tax numbers** are kept for now (`COMPANY_DATA_ACTION` in the register: one line
   changes it, and a company then gets a fake `... Kft.` name). A sole trader and a private person are always pseudonymized.
 - **Open decision (the owner): typo duplicates.** The fakes are deterministic per exact value (folded for case and spacing), so two

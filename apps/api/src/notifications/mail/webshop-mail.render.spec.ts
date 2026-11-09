@@ -150,6 +150,93 @@ describe("renderWebshopMail", () => {
     assert.match(en.html, />unsubscribe<\/a>/);
   });
 
+  it("the stock alert's confirmation: what was asked for, the button, the link's last day, the leaving link, in both languages", () => {
+    const facts: WebshopMailFacts = {
+      template: "stock-alert-confirm",
+      customer_name: null,
+      order_created_at: null,
+      order_view_url: null,
+      confirm_url: "https://shop.example/hu/ertesites/megerosites?token=AbC_9",
+      unsubscribe_url:
+        "https://shop.example/hu/ertesites/leiratkozas?token=XyZ-1",
+      expires_at: "2026-11-16T15:00:00.000Z",
+      subject_label: "Acropora <b>abrolhosensis</b>",
+    };
+    const hu = renderWebshopMail(
+      template("WEBSHOP_STOCK_ALERT_CONFIRM"),
+      facts,
+    );
+    assert.equal(hu.ok, true);
+    if (!hu.ok) return;
+    assert.equal(hu.subject, "Erősítsd meg az értesítés-kérésedet");
+    assert.match(
+      hu.html,
+      /<a href="https:\/\/shop\.example\/hu\/ertesites\/megerosites\?token=AbC_9"[^>]*>Értesítés-kérés megerősítése<\/a>/,
+    );
+    assert.match(
+      hu.html,
+      /<a href="https:\/\/shop\.example\/hu\/ertesites\/leiratkozas\?token=XyZ-1"[^>]*>Leiratkozás<\/a>/,
+    );
+    // the subject is the shop's text, escaped like every value: no markup reaches the mail
+    assert.match(
+      hu.text,
+      /ha ebből újra érkezik: Acropora <b>abrolhosensis<\/b>\./,
+    );
+    assert.doesNotMatch(hu.html, /<b>abrolhosensis/);
+    assert.match(hu.text, /A link 2026\. november 16\. végéig működik\./);
+    assert.doesNotMatch(hu.html, /ACROPORABLOCK|\{\{/);
+    const en = renderWebshopMail(template("WEBSHOP_STOCK_ALERT_CONFIRM_EN"), {
+      ...facts,
+      locale: "en",
+    });
+    assert.equal(en.ok, true);
+    if (!en.ok) return;
+    assert.equal(en.subject, "Confirm your notification request");
+    assert.match(en.text, /The link works until 16 November 2026\./);
+    assert.match(en.html, />Confirm the request<\/a>/);
+    assert.match(en.html, />Unsubscribe<\/a>/);
+  });
+
+  it("the stock alert's confirmation is refused without clean https links or without its subject", () => {
+    const facts = {
+      customer_name: null,
+      order_created_at: null,
+      locale: "hu",
+      order_view_url: null,
+      confirm_url: "https://shop.example/hu/ertesites/megerosites?token=a",
+      unsubscribe_url: "https://shop.example/hu/ertesites/leiratkozas?token=b",
+      expires_at: "2026-11-16T15:00:00.000Z",
+      subject_label: "Acropora abrolhosensis",
+    };
+    for (const unsubscribe_url of [
+      "http://shop.example/hu/ertesites/leiratkozas?token=b",
+      "javascript:alert(1)",
+      "",
+    ]) {
+      const parsed = parseWebshopMailFacts("stock-alert-confirm", {
+        ...facts,
+        unsubscribe_url,
+      });
+      assert.equal(parsed.ok, false, unsubscribe_url);
+      if (!parsed.ok) assert.match(parsed.error, /facts\.unsubscribe_url/);
+    }
+    for (const subject_label of ["", "   ", undefined]) {
+      const parsed = parseWebshopMailFacts("stock-alert-confirm", {
+        ...facts,
+        subject_label,
+      });
+      assert.equal(parsed.ok, false, String(subject_label));
+      if (!parsed.ok) assert.match(parsed.error, /facts\.subject_label/);
+    }
+    // the control: the same facts pass, and the newsletter's facts still need no subject
+    assert.equal(parseWebshopMailFacts("stock-alert-confirm", facts).ok, true);
+    const { subject_label: _s, ...newsletter } = facts;
+    assert.equal(
+      parseWebshopMailFacts("newsletter-confirm", newsletter).ok,
+      true,
+    );
+  });
+
   it("the newsletter's confirmation is refused without clean https links: a mail without them is never sent", () => {
     for (const confirm_url of [
       "http://shop.example/hu/hirlevel/megerosites?token=a",
