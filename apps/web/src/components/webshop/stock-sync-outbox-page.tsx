@@ -2,12 +2,11 @@
 
 import {
   Alert,
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
   PageHeader,
   Skeleton,
+  PilotButton,
+  PilotCard,
+  PilotCardHeader,
   PilotDataTable,
   PilotSelect,
   type PilotTableColumn,
@@ -211,14 +210,13 @@ export function outboxColumns({
       width: "110px",
       cell: (row) =>
         row.status === "FAILED" || row.status === "DEAD_LETTER" ? (
-          <Button
+          <PilotButton
             variant="secondary"
-            size="sm"
             disabled={pendingAction !== null}
             onClick={() => void retryRow(row)}
           >
             {pendingAction === `retry:${row.id}` ? "Küldés…" : "Újra"}
-          </Button>
+          </PilotButton>
         ) : (
           <span className="text-dusk-400">-</span>
         ),
@@ -427,25 +425,22 @@ export function StockSyncOutboxPage() {
         />
       ) : null}
 
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-sm font-semibold text-dusk-900">
-              A kiküldő állapota
-            </h2>
-            {canManage ? (
-              <Button
+      <PilotCard>
+        <PilotCardHeader
+          title="A kiküldő állapota"
+          action={
+            canManage ? (
+              <PilotButton
                 variant="secondary"
-                size="sm"
                 disabled={pendingAction !== null}
                 onClick={() => void runBatch()}
               >
                 {pendingAction === "run" ? "Futtatás…" : "Futtatás most"}
-              </Button>
-            ) : null}
-          </div>
-        </CardHeader>
-        <CardContent>
+              </PilotButton>
+            ) : undefined
+          }
+        />
+        <div className="p-5">
           {loading ? (
             <Skeleton className="h-16 w-full" />
           ) : summary ? (
@@ -499,32 +494,34 @@ export function StockSyncOutboxPage() {
               </p>
             </div>
           ) : null}
-        </CardContent>
-      </Card>
+        </div>
+      </PilotCard>
 
-      <Card>
-        <CardHeader>
-          <h2 className="text-sm font-semibold text-dusk-900">A sor tételei</h2>
-          <label className="text-xs text-dusk-500">
-            Állapot:{" "}
-            <PilotSelect
-              aria-label="Állapot szűrő"
-              value={status}
-              onChange={(nextValue) =>
-                setStatus(nextValue as StockSyncOutboxStatus | "")
-              }
-              chevron
-            >
-              <option value="">összes</option>
-              {STATUS_ORDER.map((value) => (
-                <option key={value} value={value}>
-                  {STATUS_LABELS[value]}
-                </option>
-              ))}
-            </PilotSelect>
-          </label>
-        </CardHeader>
-        <CardContent>
+      <PilotCard>
+        <PilotCardHeader
+          title="A sor tételei"
+          action={
+            <label className="text-xs text-dusk-500">
+              Állapot:{" "}
+              <PilotSelect
+                aria-label="Állapot szűrő"
+                value={status}
+                onChange={(nextValue) =>
+                  setStatus(nextValue as StockSyncOutboxStatus | "")
+                }
+                chevron
+              >
+                <option value="">összes</option>
+                {STATUS_ORDER.map((value) => (
+                  <option key={value} value={value}>
+                    {STATUS_LABELS[value]}
+                  </option>
+                ))}
+              </PilotSelect>
+            </label>
+          }
+        />
+        <div className="p-5">
           {rowsLoading ? (
             <Skeleton className="h-24 w-full" />
           ) : rows === null ? (
@@ -560,8 +557,8 @@ export function StockSyncOutboxPage() {
               minWidth={OUTBOX_TABLE_MIN_WIDTH}
             />
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </PilotCard>
     </div>
   );
 }
