@@ -225,6 +225,12 @@ describe("what makes an integration live", () => {
       "no settings at all",
     );
     assert.equal(onlyFailed(baseEnv(), clean(), 3).length, 1);
+    // NaN is not zero (a count that came back as no row): `NaN > 0` is false, so only an explicit check fails it
+    assert.equal(onlyFailed(baseEnv(), clean(), Number.NaN).length, 1);
+    assert.equal(
+      onlyFailed(baseEnv(), clean(), Number.POSITIVE_INFINITY).length,
+      1,
+    );
     assert.equal(
       direct({ env: baseEnv(), settings: clean(), loadedEnvFiles: [] }).length,
       1,

@@ -69,7 +69,14 @@ const text = (value: unknown): string | undefined =>
 
 const dateOnly = (date: Date): string => date.toISOString().slice(0, 10);
 
-/** The API's own message of a 4xx (a validation or business-rule text), cut short. Never of a 5xx. */
+/**
+ * The API's own message of a 4xx (a validation or business-rule text), cut short. Never of a 5xx.
+ *
+ * ONE BRANCH WHERE "NO VALUE IN THE REPORT" RESTS ON AN ASSUMPTION (barracuda, #2333): a 4xx text written by the application, such as a
+ * unique-conflict turned into a 409 or a business rule, could carry a value. The trial runs on the anonymized copy, so any value
+ * there is invented data, and the trial only sends values it made up itself; that is why this message is allowed through. It is
+ * allowed on purpose, and said here so it is not mistaken for a guarantee.
+ */
 function hintOf(response: Response): string {
   if (response.status < 400 || response.status >= 500) return "";
   const message = field(response.json, "message");
