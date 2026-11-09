@@ -1076,6 +1076,7 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
       brandId: null,
       variants: [
         {
+          isActive: true,
           sku: "SKU-1",
           manufacturerPartNumber: null,
           unit: null,
@@ -1516,6 +1517,7 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
         {
           // a `ProductBarcode` sorok ehhez kotnek (SEO P0 PR 4)
           id: "valtozat-1",
+          isActive: true,
           sku,
           // A futtato a vonalkodot a ELSO valtozat `manufacturerPartNumber`
           // mezojebol veszi, ha a ProductBarcode forras ki van kapcsolva.
@@ -2394,6 +2396,81 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
     const adat = (irasok[0]!.args as { data: Record<string, unknown> }).data;
     assert.equal(adat.entityId, "prod-1");
     assert.equal(adat.externalId, "prod_medusa_1");
+  });
+
+  /**
+   * AZ INAKTIVALT TERMEK AKTIV VALTOZAT NELKUL (kartya ca422e92).
+   *
+   * MI PIROSIT: az inaktiv termek, amelynek a valtozata is inaktiv, `no-sku`
+   * okkal megall (a bolt published vagy jelolo nelkuli draft marad, a kotes nem
+   * lep, es az utemezo minden korben ujra elovenne); vagy a kikuldott torzsben
+   * nem draft, csatorna nelkul, kifutott jelolovel megy. A KONTROLL az aktiv
+   * termek ugyanazzal az inaktiv valtozattal: az tovabbra is megall, mert ott
+   * az inaktiv valtozat nem mehet ki.
+   */
+  it("az inaktiv termek aktiv valtozat nelkul is kimegy, draftkent, kifutott jelolovel", async () => {
+    for (const [aktiv, vartKod] of [
+      [false, 0],
+      [true, 1],
+    ] as const) {
+      const { out, stdout, stderr } = collector();
+      const alap = termek();
+      const { db } = adatbazis(
+        termek({
+          isActive: aktiv,
+          variants: [{ ...alap.variants[0]!, isActive: false }],
+          channelListings: [
+            {
+              channel: "UNAS",
+              slug: "teszt-termek",
+              seoRobots: null,
+              seoTitle: null,
+              seoDescription: null,
+              seoKeywords: null,
+              productUrl: "https://www.acropora.hu/Teszt-termek",
+            },
+          ],
+        }),
+      );
+      const keresek: { url: string; method: string; body: unknown }[] = [];
+
+      const code = await boltiKorben(() =>
+        runProjectionCli(
+          ["prod-1"],
+          out,
+          provider(environmentSetting),
+          boltiKornyezet,
+          db,
+          boltiFetchTorzzsel(keresek),
+        ),
+      );
+
+      const naplo = stderr.join("") + stdout.join("");
+      assert.equal(code, vartKod, `aktiv=${aktiv}: ${naplo}`);
+      const letrehozas = keresek.find(
+        (k) => k.url.endsWith("/admin/products") && k.method === "POST",
+      );
+      if (aktiv) {
+        assert.match(naplo, /MEGÁLLT \(no-sku\)/);
+        assert.equal(letrehozas, undefined);
+        continue;
+      }
+      assert.ok(letrehozas, naplo);
+      const torzs = letrehozas.body as {
+        status: string;
+        sales_channels: unknown[];
+        metadata?: Record<string, unknown>;
+        variants: { sku: string }[];
+      };
+      assert.equal(torzs.status, "draft");
+      assert.deepEqual(torzs.sales_channels, []);
+      assert.equal(torzs.metadata?.discontinued, "true");
+      assert.deepEqual(
+        torzs.variants.map((v) => v.sku),
+        ["SKU-1"],
+      );
+      assert.match(naplo, /a termék inaktív/);
+    }
   });
 
   /**
