@@ -27,6 +27,13 @@ code touches a database yet: the runner works on an adapter (`RunnerDatabase`), 
 5. **Working trial on the stage** (a stub invoice, an order flow, a work sheet, a ticket). The caller runs it and passes the
    result; without one the gate does not pass.
 
+   **The gate requires its checks, not only the ones it was handed.** The seven sections (rowCounts, referentialIntegrity,
+   residualPersonalData, formats, invariants, correlations, workingTrial) must each be present exactly once, and a missing or
+   repeated one fails the gate in a `gateStructure` section that names it. The format check needs a sample of fake e-mail,
+   phone, IBAN and personal tax id on every run (a source that has none of one of them is a run that did not look). A company
+   tax number sample is required only while the kinds table makes company fakes: the company data is KEPT today (the open
+   decision), so no company fake exists and none is required.
+
 ## What the run needs
 
 - A pseudonymization key and a scan key, each at least 32 bytes, made for the run and kept only in the stage process. Never in the

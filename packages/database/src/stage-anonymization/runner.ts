@@ -83,6 +83,8 @@ export interface RunnerOptions {
   decisions: ReadonlyMap<string, FieldDecision>;
   requiredFields: ReadonlySet<string>;
   knownFields: ReadonlySet<string>;
+  /** Number, boolean, date and enum fields: the only ones that pass with no decision (the transformer's second lock). */
+  outOfScopeFields: ReadonlySet<string>;
   uniqueFields: ReadonlySet<string>;
   /** The pseudonymization key (at least 32 bytes): the fakes of this run. Stays in the stage process. */
   pseudonymizationKey: string;
@@ -186,6 +188,7 @@ export async function runAnonymization(
     decisions,
     requiredFields: options.requiredFields,
     knownFields: options.knownFields,
+    outOfScopeFields: options.outOfScopeFields,
     uniqueFields: options.uniqueFields,
     engine,
     text,

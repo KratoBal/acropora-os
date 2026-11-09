@@ -1131,7 +1131,12 @@ describe("az átirányítás-lista köre (SEO P0 PR 7b)", () => {
       logger: naplo().logger,
       runRedirects: async () => {
         hivas += 1;
-        return { status: "unchanged", count: 0, hash: "h" };
+        return {
+          status: "unchanged",
+          count: 0,
+          hash: "h",
+          retargeted: { brand: 0, gone: 0 },
+        };
       },
     });
     await scheduler.runOnce();
@@ -1155,6 +1160,7 @@ describe("az átirányítás-lista köre (SEO P0 PR 7b)", () => {
           hash: "h",
           remoteCount: 0,
           remoteHash: "r",
+          retargeted: { brand: 0, gone: 0 },
         };
       },
     });

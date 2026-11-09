@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   checkRegister,
+  outOfScopeFieldKeys,
   requiredFieldKeys,
   schemaFieldKeys,
   uniqueFieldKeys,
@@ -231,6 +232,7 @@ const options = (
   decisions: checked.decisions,
   requiredFields: requiredFieldKeys(FIXTURE_SCHEMA),
   knownFields: schemaFieldKeys(FIXTURE_SCHEMA),
+  outOfScopeFields: outOfScopeFieldKeys(FIXTURE_SCHEMA),
   uniqueFields: uniqueFieldKeys(FIXTURE_SCHEMA),
   pseudonymizationKey: "proba-kulcs-nem-valodi-0123456789-abcdef-xyz",
   scanKey: "proba-futas-kulcs-nem-valodi-0123456789-abcdef",
@@ -416,6 +418,19 @@ describe("a clean run", () => {
       noCompany.report.sections.find((s) => s.name === "formats")!.problems,
       ["companyTaxNumber: no sample was given, so nothing was checked"],
     );
+  });
+
+  it("stops the whole run on a text value in a field with no decision (the transformer's second lock, wired through the runner), and writes nothing", async () => {
+    const decisions = new Map(checked.decisions);
+    decisions.delete("Customer.notes");
+    const db = new MemoryDatabase(NAME, source());
+    await assert.rejects(
+      runAnonymization(options(db, { decisions })),
+      (error: Error) =>
+        error.message.startsWith("Customer.notes:") &&
+        !error.message.includes("Hívja"),
+    );
+    assert.equal(db.tables.Customer![0]!.email, REAL.personEmail);
   });
 
   it("writes back only the rows that changed", async () => {
