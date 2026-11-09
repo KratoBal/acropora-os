@@ -1,7 +1,7 @@
 "use client";
 
 import type { ConversationDetail, ConversationPerson } from "@acropora/types";
-import { Button, Icon, Input } from "@acropora/ui";
+import { Icon, PilotButton, PilotInput } from "@acropora/ui";
 import { useEffect, useState } from "react";
 
 import { messagesApi } from "@/lib/api/messages";
@@ -111,10 +111,10 @@ export function NewConversationDialog({
             size={16}
             className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-pilot-grey-500"
           />
-          <Input
+          <PilotInput
             autoFocus
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={setQuery}
             placeholder="Kolléga keresése…"
             className="pl-9"
           />
@@ -161,10 +161,10 @@ export function NewConversationDialog({
         {chosen.length > 1 ? (
           <label className="block text-sm text-pilot-grey-700">
             A csoport neve (nem kötelező)
-            <Input
+            <PilotInput
               value={title}
               maxLength={120}
-              onChange={(event) => setTitle(event.target.value)}
+              onChange={setTitle}
               placeholder="pl. Zoo szerviz"
               className="mt-1"
             />
@@ -176,16 +176,16 @@ export function NewConversationDialog({
           </p>
         ) : null}
         <div className="flex justify-end gap-2">
-          <Button variant="secondary" onClick={onClose} disabled={busy}>
+          <PilotButton variant="secondary" onClick={onClose} disabled={busy}>
             Mégse
-          </Button>
-          <Button
+          </PilotButton>
+          <PilotButton
+            variant="accent"
             onClick={() => void start()}
             disabled={busy || chosen.length === 0}
-            className="bg-pilot-accent-warm hover:bg-pilot-accent-warm-text"
           >
             Indítás
-          </Button>
+          </PilotButton>
         </div>
       </div>
     </div>

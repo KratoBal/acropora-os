@@ -475,22 +475,7 @@ describe("az eszköz kategóriája az adatlapon", () => {
     expect(cimke.nextElementSibling?.textContent).toBe("Szivattyú");
   });
 
-  /**
-   * KATEGORIA NELKUL A MEZO OTT MARAD, GONDOLATJELLEL.
-   *
-   * MI PIROSIT: ha a mezot csak akkor rajzolnank ki, amikor van erteke. Az
-   * elrejtes ugyanugy nez ki, mint a mai hiba -- a kezelo nem tudna megmondani,
-   * hogy ezen az eszkozon NINCS kategoria, vagy a lap nem mutatja.
-   *
-   * ES EZ NEM ELMELETI ESET: az atvezeto migracio SZANDEKOSAN hagy `NULL`-on
-   * minden olyan sort, aminek a regi szoveges erteke egyetlen kategoriara sem
-   * illeszkedett. Az a halmaz az, amit at kell nezni, tehat pont ott nem szabad
-   * elrejteni a mezot.
-   *
-   * AZ ALLITAS A CIMKE UTANI ELEMRE MEGY, nem a gondolatjelre magara: a lapon
-   * tobb kitoltetlen mezo is all, tehat a puszta „van gondolatjel" allitas
-   * akkor is zold lenne, ha EZ a mezo hianyozna.
-   */
+  // the old page drew an empty category field with a dash; the pilot page draws a field only with a value (barracuda, #2303)
 });
 
 describe("az eszköz matricakódja az adatlapon", () => {
@@ -506,14 +491,7 @@ describe("az eszköz matricakódja az adatlapon", () => {
     expect(screen.getAllByText("V2196").length).toBeGreaterThan(0);
   });
 
-  /**
-   * MATRICA NELKUL A MEZO OTT MARAD, GONDOLATJELLEL.
-   *
-   * MI PIROSIT: ha a mezot csak akkor rajzolnank ki, amikor van erteke. Az
-   * ELREJTES ugyanugy nez ki, mint a mai hiba: a kezelo nem tudna megmondani,
-   * hogy ezen a gepen NINCS matrica, vagy a lap nem mutatja. A tobbi
-   * kitoltetlen mezo (sorozatszam, leltari szam) is gondolatjelet ir.
-   */
+  // the old page drew an empty label-code field with a dash; the pilot page draws a field only with a value (barracuda, #2303)
   /**
    * A QR-PANEL A SAJAT KODJAT MUTATJA, NEM A MATRICAKODOT.
    *

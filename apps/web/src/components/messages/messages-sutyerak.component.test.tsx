@@ -266,4 +266,18 @@ describe("Sutyerák az Üzenetekben (web)", () => {
     expect(within(rows[0]!).getByTestId("sutyerak-avatar")).toBeInTheDocument();
     expect(within(rows[1]!).queryByTestId("sutyerak-avatar")).toBeNull();
   });
+
+  it("the start button keeps the conversations' warm accent, and the search field gets the focus (T1.3, pilot components)", async () => {
+    api.people.mockResolvedValue({ items: [sutyerak] });
+    render(
+      <NewConversationDialog
+        token="t1"
+        onClose={() => {}}
+        onCreated={() => {}}
+      />,
+    );
+    const start = await screen.findByRole("button", { name: "Indítás" });
+    expect(start).toHaveClass("bg-pilot-accent-warm");
+    expect(screen.getByPlaceholderText("Kolléga keresése…")).toHaveFocus();
+  });
 });

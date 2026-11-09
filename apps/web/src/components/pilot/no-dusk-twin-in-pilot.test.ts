@@ -45,7 +45,6 @@ const HATRA = new Map<string, string[]>([
     "components/inventory/inventory-count-list-page.tsx",
     ["Badge", "Button", "Card", "Select"],
   ],
-  ["components/messages/messages-page.tsx", ["Input"]],
   ["components/products/product-detail-page.tsx", ["Button", "Input"]],
   [
     "components/products/product-dose-effects-card.tsx",
@@ -59,8 +58,6 @@ const HATRA = new Map<string, string[]>([
     ["Card", "FormField", "Input", "Select"],
   ],
   ["components/settings/mail-image-picker.tsx", ["Button"]],
-  ["components/users/user-list-page.tsx", ["Card", "Input", "Select"]],
-  ["components/users/user-visible-units.tsx", ["Card"]],
   [
     "components/webshop/stock-sync-outbox-page.tsx",
     ["Button", "Card", "CardContent", "CardHeader"],
@@ -86,8 +83,8 @@ const HATRA = new Map<string, string[]>([
   sorát is felveszi a listára, a teszt zöld maradna. A két szám ezért külön áll: a lista bővítése két helyen kér
   módosítást, és a reviewban látszik. Fogyáskor a számot is le kell írni (a lista története: 59 / 141 a #2125-ben, 47 / 129 a #2134-ben, 45 / 120 a #2137-ben, 36 / 96 a #2140-ben, 32 / 86 a #2229-ben, 29 / 76 a #2232-ben, 25 / 61 a 7. szeletben, a purchasing mappa).
 */
-const HATRA_MERET = 19;
-const HATRA_IKREK = 48;
+const HATRA_MERET = 16;
+const HATRA_IKREK = 43;
 
 /*
   A GYEREK-LISTA (barracuda, #2125): egy pilot fájl által importált, CSAK duskot használó .tsx (relatív vagy `@/`
@@ -101,7 +98,6 @@ const GYEREK = new Map<string, string[]>([
   ],
   ["components/brands/catalog-actions-panel.tsx", ["Badge", "Button", "Card"]],
   ["components/content/article-revision-diff.tsx", ["Button"]],
-  ["components/messages/new-conversation-dialog.tsx", ["Button", "Input"]],
   ["components/products/barcode-editor.tsx", ["Badge", "Button", "Input"]],
   [
     "components/products/product-basics-editor.tsx",
@@ -113,8 +109,8 @@ const GYEREK = new Map<string, string[]>([
   ],
   ["components/service/service-document-gallery.tsx", ["Button", "Input"]],
 ]);
-const GYEREK_MERET = 8;
-const GYEREK_IKREK = 24;
+const GYEREK_MERET = 7;
+const GYEREK_IKREK = 22;
 
 function fajlok(mappa: string): string[] {
   return readdirSync(mappa).flatMap((nev) => {
