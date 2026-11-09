@@ -91,6 +91,8 @@ export interface ThemeState {
 let state: ThemeState | null = null;
 let holdForServer = false;
 let persist: ((preference: ThemePreference) => Promise<unknown>) | null = null;
+/** The signed-in account the cached value belongs to (barracuda, #2310): set with the server's answer. */
+let account: string | null = null;
 const listeners = new Set<() => void>();
 
 const notify = () => {
@@ -104,6 +106,35 @@ export function readCachedThemePreference(): ThemePreference | null {
     return isThemePreference(stored) ? stored : null;
   } catch {
     return null;
+  }
+}
+
+/*
+  WHOSE CACHED VALUE IT IS (barracuda, #2310): on a shared browser person A's choice must not stay with person B whose
+  account has none. The owner is kept next to the value; a value without an owner (chosen while signed out, or from
+  before the account kept it) is the browser's own.
+*/
+const OWNER_KEY = "acropora-theme-preference-owner";
+
+function readCacheOwner(): string | null {
+  try {
+    return window.localStorage.getItem(OWNER_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeCache(
+  preference: ThemePreference | null,
+  owner: string | null,
+): void {
+  try {
+    if (preference === null) window.localStorage.removeItem(STORAGE_KEY);
+    else window.localStorage.setItem(STORAGE_KEY, preference);
+    if (owner === null) window.localStorage.removeItem(OWNER_KEY);
+    else window.localStorage.setItem(OWNER_KEY, owner);
+  } catch {
+    // a browser without storage keeps the choice for this page only
   }
 }
 
@@ -136,15 +167,25 @@ export function subscribeThemeState(listener: () => void): () => void {
 }
 
 /**
- * The account's theme after sign-in: the server's value wins and is cached; `null` (not chosen, or signed out) keeps
- * what the browser has. Either way the wait is over.
+ * The account's theme after sign-in: the server's value wins and is cached under that account; `null` (not chosen, or
+ * signed out) keeps what the browser has, unless the cached value is another account's: then the system decides.
+ * Either way the wait is over.
  */
 export function applyServerThemePreference(
   server: ThemePreference | null,
+  accountId: string | null = null,
 ): void {
   const current = getThemeState();
-  if (server !== null) writeThemePreference(server);
-  const preference = server ?? current.preference;
+  account = accountId;
+  let preference = server ?? current.preference;
+  if (server !== null) writeCache(server, accountId);
+  else if (accountId !== null) {
+    const owner = readCacheOwner();
+    if (owner !== null && owner !== accountId) {
+      writeCache(null, null);
+      preference = "system";
+    }
+  }
   if (preference === current.preference && current.settled) return;
   state = { preference, settled: true };
   notify();
@@ -159,7 +200,7 @@ export function setThemePreferencePersistence(
 
 /** A person's choice: at once here and in every view, then on the account when a save is bound. */
 export function chooseThemePreference(preference: ThemePreference): void {
-  writeThemePreference(preference);
+  writeCache(preference, account);
   state = { preference, settled: true };
   notify();
   // a failed save keeps the choice in this browser; the next sign-in shows the account's value again
@@ -173,5 +214,6 @@ export function resetThemeStateForTests(): void {
   state = null;
   holdForServer = false;
   persist = null;
+  account = null;
   listeners.clear();
 }
