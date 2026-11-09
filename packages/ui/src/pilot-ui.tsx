@@ -2,6 +2,7 @@
 import type {
   InputHTMLAttributes,
   KeyboardEventHandler,
+  MouseEvent,
   ReactNode,
   Ref,
 } from "react";
@@ -287,7 +288,11 @@ export function PilotButton({
   children: ReactNode;
   /** `accent`: ADDITÍV (T1.3, az Üzenetek): a beszélgetések meleg kiemelőszíne, a modul elsődleges gombjain. */
   variant?: "primary" | "secondary" | "ghost" | "danger" | "accent";
-  onClick?: () => void;
+  /**
+   * ADDITÍV (T1.3, a leltárlista): the click event reaches the handler, as on the dusk `Button`, so a button inside a
+   * clickable table row can stop the row's own activation (`event.stopPropagation()`).
+   */
+  onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
   type?: "button" | "submit";
   disabled?: boolean;
   fullWidth?: boolean;
