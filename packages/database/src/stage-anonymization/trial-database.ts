@@ -64,7 +64,9 @@ export function createTrialDatabase(client: SqlClient): TrialDatabase {
         >(settingsSql(table, columns));
         // no row: the state is left out, and the measurement fails for it ("not read")
         if (rows.length === 0) continue;
-        // EVERY row counts (barracuda, #2333): a second row that holds a secret must not slip past a measurement of the first only
+        // EVERY row counts (barracuda, #2333), although each of these tables is a singleton by a database CHECK (`"id" = 'unas'` and the
+        // like, measured in the migrations): a second row cannot exist today, and if that rule is ever relaxed, a secret in it must not
+        // slip past a measurement of the first row only
         states.push({
           integration,
           credentialMode: rows[0]!.mode,
