@@ -99,7 +99,7 @@ const CONTROLLERS = [
   "src/dashboard/dashboard.controller.ts",
   // The article images' public route (2026-10-26): one image by id, @Public.
   "src/content/article-image-public.controller.ts",
-  // The projection queue's state (ca422e92, 2026-11-09): read-only numbers, @Public like health/inventory/live.
+  // The projection queue's state (ca422e92, 2026-11-09): read-only numbers, behind inventory.view (#2340 review).
   "src/integrations/medusa/medusa-projection-status.controller.ts",
 ];
 
