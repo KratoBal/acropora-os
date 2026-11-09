@@ -2,12 +2,12 @@
 
 import {
   Alert,
-  Card,
   ConfirmDialog,
   EmptyState,
   Skeleton,
   PilotSelect,
   PilotButton,
+  PilotCard,
 } from "@acropora/ui";
 import { hasPermission, PERMISSIONS, type UserRole } from "@acropora/types";
 import { useCallback, useEffect, useState } from "react";
@@ -154,7 +154,7 @@ export function UserVisibleUnits({
   const valaszthato = units.filter((u) => !mar.has(u.id));
 
   return (
-    <Card className="space-y-3 p-4">
+    <PilotCard className="space-y-3 p-4">
       <h2 className="text-sm font-semibold">Látható alegységek</h2>
       {/*
         A HATÁS KIMONDVA, MERT KÜLÖNBEN NEM LÁTSZIK. Ez a lista dönti el, hogy
@@ -290,6 +290,6 @@ export function UserVisibleUnits({
         }}
         onCancel={() => setToRemove(null)}
       />
-    </Card>
+    </PilotCard>
   );
 }

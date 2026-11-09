@@ -285,7 +285,8 @@ export function PilotButton({
   title,
 }: {
   children: ReactNode;
-  variant?: "primary" | "secondary" | "ghost" | "danger";
+  /** `accent`: ADDITÍV (T1.3, az Üzenetek): a beszélgetések meleg kiemelőszíne, a modul elsődleges gombjain. */
+  variant?: "primary" | "secondary" | "ghost" | "danger" | "accent";
   onClick?: () => void;
   type?: "button" | "submit";
   disabled?: boolean;
@@ -347,6 +348,7 @@ export function PilotButton({
     ghost:
       "bg-transparent text-pilot-grey-500 hover:bg-pilot-grey-100 hover:text-pilot-grey-900",
     danger: "bg-white text-red-600 ring-1 ring-red-200 hover:bg-red-50",
+    accent: "bg-pilot-accent-warm text-white hover:bg-pilot-accent-warm-text",
   };
   return (
     <button
@@ -588,11 +590,14 @@ export function PilotInput({
   step,
   "aria-invalid": ariaInvalid,
   onKeyDown,
+  autoFocus,
 }: {
   value?: string;
   onChange?: (value: string) => void;
   /** ADDITÍV (T1.3, a matricakód-mező): az Enter hozzáad és nem küld be űrlapot, ugyanaz, mint a dusk `Input`-on. */
   onKeyDown?: KeyboardEventHandler<HTMLInputElement>;
+  /** ADDITÍV (T1.3, az új beszélgetés ablaka): nyitáskor ide kerül a fókusz, ugyanaz, mint a dusk `Input`-on. */
+  autoFocus?: boolean;
   type?: string;
   placeholder?: string;
   readOnly?: boolean;
@@ -666,6 +671,7 @@ export function PilotInput({
       aria-invalid={ariaInvalid || undefined}
       onChange={(event) => onChange?.(event.target.value)}
       onKeyDown={onKeyDown}
+      autoFocus={autoFocus}
       className={`${leadingIcon ? "w-full" : classes.widthClass} rounded-md px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ${
         ariaInvalid ? "ring-red-400" : "ring-pilot-grey-200"
       } placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500 disabled:cursor-not-allowed disabled:bg-pilot-grey-50 disabled:text-pilot-grey-400 ${
