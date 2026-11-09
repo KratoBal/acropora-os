@@ -6,14 +6,14 @@ code touches a database yet: the runner works on an adapter (`RunnerDatabase`), 
 
 ## The modules (each a pure function set with its own tests)
 
-| Slice | File | What it does |
-|---|---|---|
-| register | `anonymization-register.ts`, `anonymization-register-check.ts` | one decision per text, JSON and binary column; the CI test fails on a new column without one |
-| S1 | `pseudonymizer.ts` | keyed, deterministic, format-valid fakes (e-mail, names, phone, tax numbers, IBAN, account numbers, street, parcel number, IP); no real character survives a fallback |
-| S2 | `text-scrubber.ts`, `json-scrubber.ts` | patterns and a real-name dictionary in free text; key-name rules in JSON; credential and network keys deleted by a part of the name |
-| S3 | `row-transformer.ts` | the register applied to one row: keep, pseudonymize, replace, delete (or drop the row); natural-person rows recognised; fail closed |
-| S4 | `residual-scan.ts`, `verification-gate.ts` | a keyed-digest dictionary of the real values scans the anonymized rows; the seven-section gate of plan 3.5 |
-| S5 | `runner.ts` | the orchestration over an abstract database, behind a guard that accepts only a temporary database name |
+| Slice    | File                                                           | What it does                                                                                                                                                          |
+| -------- | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| register | `anonymization-register.ts`, `anonymization-register-check.ts` | one decision per text, JSON and binary column; the CI test fails on a new column without one                                                                          |
+| S1       | `pseudonymizer.ts`                                             | keyed, deterministic, format-valid fakes (e-mail, names, phone, tax numbers, IBAN, account numbers, street, parcel number, IP); no real character survives a fallback |
+| S2       | `text-scrubber.ts`, `json-scrubber.ts`                         | patterns and a real-name dictionary in free text; key-name rules in JSON; credential and network keys deleted by a part of the name                                   |
+| S3       | `row-transformer.ts`                                           | the register applied to one row: keep, pseudonymize, replace, delete (or drop the row); natural-person rows recognised; fail closed                                   |
+| S4       | `residual-scan.ts`, `verification-gate.ts`                     | a keyed-digest dictionary of the real values scans the anonymized rows; the seven-section gate of plan 3.5                                                            |
+| S5       | `runner.ts`                                                    | the orchestration over an abstract database, behind a guard that accepts only a temporary database name                                                               |
 
 ## How a run goes (plan 3.1), and who does each step
 
