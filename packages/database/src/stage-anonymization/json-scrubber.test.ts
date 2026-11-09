@@ -184,6 +184,85 @@ describe("text in a structured field (barracuda, #2320)", () => {
   });
 });
 
+describe("credential and network keys are deleted by a part of the name (barracuda, #2322)", () => {
+  const KEYS = [
+    "resetToken",
+    "sessionToken",
+    "apiToken",
+    "bearerToken",
+    "clientSecret",
+    "webhookSecret",
+    "signingSecret",
+    "privateKey",
+    "x-api-key",
+    "cookie",
+    "setCookie",
+    "signature",
+    "credentials",
+    "refresh_token_hash",
+    "remoteAddr",
+    "x-forwarded-for",
+    "xRealIp",
+    "tokenCount", // an innocent key goes too, on purpose: a leaked key must not stay
+  ];
+
+  it("removes every variant at any depth and in arrays, and keeps the control keys", () => {
+    const secret = "valodi-titok-ertek";
+    const input: Record<string, unknown> = {
+      description: "ok",
+      recipient: "nem ip",
+      scripts: 3,
+      nested: { keep: "x" },
+    };
+    for (const key of KEYS) input[key] = secret;
+    (input.nested as Record<string, unknown>).deeper = Object.fromEntries(
+      KEYS.map((key) => [key, { any: secret }]),
+    );
+    input.list = [
+      Object.fromEntries(KEYS.map((key) => [key, secret])),
+      { description: "ok2" },
+    ];
+    const out = JSON.stringify(scrub(input));
+    for (const key of KEYS) assert.ok(!out.includes(`"${key}"`), key);
+    assert.ok(!out.includes(secret));
+    const parsed = scrub(input) as Record<string, unknown>;
+    assert.equal(parsed.description, "ok");
+    assert.equal(parsed.recipient, "nem ip");
+    assert.equal(parsed.scripts, 3);
+    assert.deepEqual(parsed.nested, { keep: "x", deeper: {} });
+    assert.deepEqual(parsed.list, [{}, { description: "ok2" }]);
+  });
+
+  it("deletes a credential key whatever its value is: a string, a number, an object", () => {
+    const out = scrub({
+      apiToken: 12345,
+      clientSecret: { a: 1 },
+      bearerToken: null,
+      ok: 1,
+    });
+    assert.deepEqual(out, { ok: 1 });
+  });
+});
+
+describe("the e-mail key rule", () => {
+  it("replaces an e-mail address key (email, contactEmail, emailAddress), and not a text about e-mail", () => {
+    const out = scrub({
+      contactEmail: "a@b.hu",
+      email: "c@d.hu",
+      "E-mail": "e@f.hu",
+      emailAddress: "g@h.hu",
+      emailSubject: "Árajánlat",
+      emailTemplate: "sablon-1",
+    }) as Record<string, string>;
+    assert.equal(out.contactEmail, engine.email("a@b.hu"));
+    assert.equal(out.email, engine.email("c@d.hu"));
+    assert.equal(out["E-mail"], engine.email("e@f.hu"));
+    assert.equal(out.emailAddress, engine.email("g@h.hu"));
+    assert.equal(out.emailSubject, "Árajánlat");
+    assert.equal(out.emailTemplate, "sablon-1");
+  });
+});
+
 describe("deleted keys, arrays and extra rules", () => {
   it("deletes credential and network keys at any depth, and walks arrays", () => {
     const out = scrub({

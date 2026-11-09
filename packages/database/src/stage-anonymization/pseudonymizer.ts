@@ -172,6 +172,8 @@ export interface Pseudonymizer {
   /** A Hungarian domestic account number: 16 or 24 digits, written with or without dashes. */
   bankAccountNumber(real: string): string;
   streetAddress(real: string): string;
+  /** An IP address (v4 or v6) to a documentation-range address (RFC 5737 / RFC 3849): it can never be a real host. */
+  ipAddress(real: string): string;
   /** A carrier parcel number: character class for character class, other characters kept. */
   parcelNumber(real: string): string;
 }
@@ -415,6 +417,16 @@ export function createPseudonymizer(
 
     parcelNumber(real) {
       return shape("parcel", real);
+    },
+
+    ipAddress(real) {
+      const value = real.trim();
+      if (/^\d{1,3}(\.\d{1,3}){3}$/.test(value)) {
+        const s = stream("ip4", value);
+        return `${s.pick(["192.0.2", "198.51.100", "203.0.113"])}.${1 + s.below(254)}`;
+      }
+      const s = stream("ip6", value.toLowerCase());
+      return `2001:db8::${(1 + s.below(65534)).toString(16)}:${(1 + s.below(65534)).toString(16)}`;
     },
   };
 }
