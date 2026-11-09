@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ProductListResponse, Session } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -11,9 +11,10 @@ import {
 const api = vi.hoisted(() => ({ list: vi.fn() }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 const search = vi.hoisted(() => ({ params: new URLSearchParams() }));
+const nav = vi.hoisted(() => ({ replace: vi.fn() }));
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+  useRouter: () => ({ replace: nav.replace, push: vi.fn() }),
   usePathname: () => "/webshop/termekek",
   useSearchParams: () => search.params,
 }));
@@ -86,9 +87,24 @@ beforeEach(() => {
   auth.session = ownerSession;
   search.params = new URLSearchParams();
   api.list.mockReset().mockResolvedValue(response([reefSalt]));
+  nav.replace.mockReset();
 });
 
 describe("WebshopProductListPage", () => {
+  // T1.3, slice 15: the pilot search field hands the typed text, and it reaches the URL (first page)
+  it("puts the typed search into the URL, back on the first page", async () => {
+    render(<WebshopProductListPage />);
+    await screen.findByText("Reef Salt 4 kg");
+    fireEvent.change(screen.getByLabelText("Termék keresése"), {
+      target: { value: "salt" },
+    });
+    await waitFor(() =>
+      expect(nav.replace).toHaveBeenCalledWith(
+        "/webshop/termekek?search=salt&page=1",
+      ),
+    );
+  });
+
   /**
    * Listed, not published. Nothing writes `isPublished`, so it is false on
    * every row: a filter on it would answer with an empty screen on a shop

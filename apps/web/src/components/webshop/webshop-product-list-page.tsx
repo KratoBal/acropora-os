@@ -2,10 +2,10 @@
 
 import {
   Alert,
-  Card,
   EmptyState,
-  Input,
   PageHeader,
+  PilotCard,
+  PilotInput,
   PilotDataTable,
   Skeleton,
   type PilotTableColumn,
@@ -260,12 +260,12 @@ export function WebshopProductListPage() {
 
       {data ? (
         <>
-          <Card className="flex flex-wrap items-center gap-3 p-4">
+          <PilotCard className="flex flex-wrap items-center gap-3 p-4">
             <div className="min-w-[240px] flex-[2_1_320px]">
-              <Input
+              <PilotInput
                 aria-label="Termék keresése"
                 value={search}
-                onChange={(event) => setSearch(event.target.value)}
+                onChange={setSearch}
                 placeholder="Terméknév vagy cikkszám"
               />
             </div>
@@ -280,10 +280,10 @@ export function WebshopProductListPage() {
               }}
               className="min-w-[160px] flex-[1_1_180px]"
             />
-          </Card>
+          </PilotCard>
 
           {data.items.length ? (
-            <Card>
+            <PilotCard>
               <PilotDataTable
                 columns={PRODUCT_COLUMNS}
                 rows={data.items}
@@ -291,7 +291,7 @@ export function WebshopProductListPage() {
                 rowTestId="webshop-product-row"
                 minWidth={PRODUCT_TABLE_MIN_WIDTH}
               />
-            </Card>
+            </PilotCard>
           ) : (
             /*
               An empty screen has to say which of the two emptinesses it is.
