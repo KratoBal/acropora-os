@@ -1,6 +1,7 @@
 import type { PilotBadgeVariant } from "@acropora/ui";
 import { formatNumber } from "@acropora/types";
 import type {
+  PartnerOrderChainFilter,
   PartnerOrderDocumentStepValue,
   PartnerOrderStatusValue,
   QuoteRichText,
@@ -53,6 +54,21 @@ export const PARTNER_ORDER_STEP_ORDER: PartnerOrderDocumentStepValue[] = [
   "INVOICE",
   "OTHER",
 ];
+
+/** The list's "Hol tart" filter, in the order the chain runs. */
+export const PARTNER_ORDER_CHAIN_FILTER_LABEL: Record<
+  PartnerOrderChainFilter,
+  string
+> = {
+  NO_ORDER_FORM: "Nincs aláírt megrendelőlap",
+  NO_COMPLETION: "Még nincs TIG",
+  AWAITING_SIGNATURE: "TIG aláírásra vár",
+  AWAITING_INVOICE: "Számlázásra vár",
+  INVOICED: "Számlázva",
+};
+
+/** The list's remembered row density (a per-browser convenience, never needed for the page to work). */
+export const PARTNER_ORDER_DENSE_KEY = "acropora.partnerOrders.dense";
 
 /** The four steps the list shows as "where the chain stands". */
 export const PARTNER_ORDER_LIST_STEPS: Array<{

@@ -32,15 +32,24 @@ type BillingEmailVariable = (typeof BILLING_EMAIL_VARIABLES)[number];
 const OPTIONAL: ReadonlySet<BillingEmailVariable> = new Set(["document_link"]);
 
 const HUNGARIAN_DATE = new Intl.DateTimeFormat("hu-HU", { timeZone: "UTC" });
+/** "12 November 2026": written out, so an English reader cannot take day and month the wrong way round. */
+const ENGLISH_DATE = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "UTC",
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+});
 
 /** Egy kiállított bizonylat változóinak értéke; `null`, ahol nincs érték. */
 export function billingEmailValues(
   row: BillingDocumentRow,
   customerName: string,
+  /** The mail's language (d5c6befd): the amount and the date follow it; Hungarian unless said otherwise. */
+  language: "hu" | "en" = "hu",
 ): Record<BillingEmailVariable, string | null> {
   const currency = row.currency.toUpperCase();
   const gross = row.grossAmount
-    ? new Intl.NumberFormat("hu-HU", {
+    ? new Intl.NumberFormat(language === "en" ? "en-GB" : "hu-HU", {
         style: "currency",
         currency,
         maximumFractionDigits: currency === "HUF" ? 0 : 2,
@@ -57,7 +66,9 @@ export function billingEmailValues(
     // csak számlánál és előlegszámlánál (szerződés): díjbekérőn nincs számlaszám
     invoice_number: isInvoice ? row.invoiceNumber : null,
     gross_total: gross,
-    due_date: row.dueDate ? HUNGARIAN_DATE.format(row.dueDate) : null,
+    due_date: row.dueDate
+      ? (language === "en" ? ENGLISH_DATE : HUNGARIAN_DATE).format(row.dueDate)
+      : null,
     document_link: row.externalUrl,
     order_number: row.reference?.trim() || null,
   };

@@ -17,6 +17,7 @@ import {
   type PartnerOrderDetailDto,
   type PartnerOrderDocumentDto,
   type PartnerOrderDocumentStepValue,
+  type PartnerOrderSystemDocumentDto,
 } from "@acropora/types";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -24,6 +25,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
 import { partnerOrdersApi } from "@/lib/api/partner-orders";
+import { completionCertificatesApi } from "@/lib/api/completion-certificates";
+import { maintenanceInvoiceApi } from "@/lib/api/maintenance-invoice";
+import { quotesApi } from "@/lib/api/quotes";
 import { PartnerOrderCertificatesPanel } from "./partner-order-certificates-panel";
 import {
   errorText,
@@ -132,6 +136,47 @@ export function PartnerOrderDetailPage({ orderId }: { orderId: string }) {
       const link = document.createElement("a");
       link.href = url;
       link.download = document_.fileName;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (cause) {
+      setDocumentError(errorText(cause, "A dokumentum nem tölthető le."));
+    }
+  };
+
+  /** a rendszer által készült dokumentum letöltése, a fajtája saját végpontján (acrobot 42589) */
+  const downloadSystem = async (document_: PartnerOrderSystemDocumentDto) => {
+    setDocumentError(null);
+    try {
+      const [blob, fileName] =
+        document_.kind === "QUOTE_PDF"
+          ? [
+              await quotesApi.pdf(
+                token,
+                document_.quoteId,
+                document_.versionId,
+              ),
+              `${document_.label}.pdf`,
+            ]
+          : document_.kind === "CERTIFICATE_DOCUMENT"
+            ? [
+                await completionCertificatesApi.downloadDocument(
+                  token,
+                  document_.certificateId,
+                  document_.documentId,
+                ),
+                document_.fileName,
+              ]
+            : [
+                await maintenanceInvoiceApi.downloadPdf(
+                  token,
+                  document_.invoiceId,
+                ),
+                `szamla-${document_.invoiceNumber}.pdf`,
+              ];
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName.replace(/[\\/]/g, "-");
       link.click();
       URL.revokeObjectURL(url);
     } catch (cause) {
@@ -408,16 +453,24 @@ export function PartnerOrderDetailPage({ orderId }: { orderId: string }) {
         <div className="divide-y divide-pilot-grey-100">
           {PARTNER_ORDER_STEP_ORDER.map((step) => {
             const documents = order.documents.filter((d) => d.step === step);
+            // the system-made ones of the step: the quote's PDF, the certificates, the issued invoices
+            const systemDocuments = (order.systemDocuments ?? []).filter(
+              (d) => d.step === step,
+            );
+            // a storno'd invoice stays listed, but it is not an invoice of the chain (acrobot 42859)
+            const count =
+              documents.length +
+              systemDocuments.filter(
+                (d) => !(d.kind === "INVOICE_PDF" && d.stornoInvoiceNumber),
+              ).length;
             return (
               <section key={step} className="px-5 py-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <h4 className="text-sm font-semibold">
                       {PARTNER_ORDER_STEP[step].label}
-                      {documents.length > 0 ? (
-                        <PilotBadge variant="success">
-                          {`${documents.length} db`}
-                        </PilotBadge>
+                      {count > 0 ? (
+                        <PilotBadge variant="success">{`${count} db`}</PilotBadge>
                       ) : null}
                     </h4>
                     <p className="text-xs text-pilot-grey-600">
@@ -449,6 +502,37 @@ export function PartnerOrderDetailPage({ orderId }: { orderId: string }) {
                     </>
                   ) : null}
                 </div>
+                {systemDocuments.length > 0 ? (
+                  <ul
+                    className="mt-2 space-y-1"
+                    data-testid="rendszer-dokumentumok"
+                  >
+                    {systemDocuments.map((document_, index) => (
+                      <li
+                        key={`${document_.kind}-${index}`}
+                        className="flex flex-wrap items-center gap-3 text-sm"
+                      >
+                        <button
+                          type="button"
+                          className="font-medium text-pilot-blue-700 hover:underline"
+                          onClick={() => void downloadSystem(document_)}
+                        >
+                          {document_.label}
+                        </button>
+                        {document_.kind === "INVOICE_PDF" &&
+                        document_.stornoInvoiceNumber ? (
+                          <PilotBadge variant="amber">Sztornózva</PilotBadge>
+                        ) : null}
+                        <span className="text-xs text-pilot-grey-600">
+                          automatikus
+                          {document_.createdAt
+                            ? ` · ${formatQuoteDay(document_.createdAt)}`
+                            : ""}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
                 {documents.length > 0 ? (
                   <ul className="mt-2 space-y-1">
                     {documents.map((document_) => (

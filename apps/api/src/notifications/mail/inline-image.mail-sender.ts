@@ -2,7 +2,12 @@ import { RICH_TEXT_IMAGE_SCHEME, richImageIds } from "@acropora/rich-text";
 import { Inject, Injectable } from "@nestjs/common";
 
 import { GmailMailSender } from "./gmail-mail.sender.js";
-import type { MailInlineImage, MailSender, OutgoingMail } from "./mail.port.js";
+import type {
+  MailInlineImage,
+  MailSender,
+  MailSent,
+  OutgoingMail,
+} from "./mail.port.js";
 import { MailImageRepository } from "./mail-image.repository.js";
 
 /**
@@ -38,7 +43,7 @@ export class InlineImageMailSender implements MailSender {
     private readonly images: Pick<MailImageRepository, "contents">,
   ) {}
 
-  async send(mail: OutgoingMail): Promise<void> {
+  async send(mail: OutgoingMail): Promise<MailSent | void> {
     const ids = mail.html === undefined ? [] : richImageIds(mail.html);
     if (ids.length === 0) return this.inner.send(mail);
 

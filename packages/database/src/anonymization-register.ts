@@ -771,6 +771,11 @@ export const ANONYMIZATION_REGISTER: Readonly<
     parameterCode: "business",
     clientOperationId: "identifier",
   },
+  // ReefClub V3.2: the per-product consent of the run-out reminder. A version label, and nothing else: the unsubscribe link's key is
+  // computed from the row id and a secret, and stored nowhere.
+  ReefClubRunOutReminder: {
+    consentVersion: "business",
+  },
   // ReefClub 8: the projection of the product dose list. Numbers, names and fixed refusal codes
   // of products; the run's error text is free text (a database or network error message).
   ReefClubDoseProjectionRun: {
@@ -819,6 +824,18 @@ export const ANONYMIZATION_REGISTER: Readonly<
   },
   AssetFunction: {
     name: "business",
+  },
+  RentalEquipment: {
+    name: "business",
+    serialNumber: "identifier",
+    accessories: "business",
+    note: "freeText",
+  },
+  Rental: {
+    rentalNumber: "identifier",
+    accessories: "business",
+    note: "freeText",
+    createdById: "identifier",
   },
   UnitOfMeasure: {
     code: "business",
@@ -1110,6 +1127,57 @@ export const ANONYMIZATION_REGISTER: Readonly<
     summary: "json",
     attention: "json",
     errorCode: "business",
+    mode: "business",
+    trigger: "business",
+    triggeredById: "identifier",
+    planned: "json",
+  },
+  PaidMarkAttentionClosure: {
+    key: "identifier",
+    reason: "business",
+    reference: "identifier",
+    closedById: "identifier",
+  },
+  SzamlazzFeedBackfillNumber: {
+    number: "identifier",
+    series: "business",
+    outcome: "business",
+    detail: "business",
+    checkedById: "identifier",
+  },
+  GameQuestion: {
+    week: "business",
+    type: "business",
+    prompt: "business",
+    options: "json",
+    acceptedAnswers: "json",
+    prizeName: "business",
+    prizeDescription: "business",
+  },
+  GameEntry: {
+    email: "email",
+    name: "personName",
+    rulesVersion: "business",
+    privacyVersion: "business",
+    answer: "freeText",
+    manualById: "identifier",
+    confirmTokenHash: "passwordHash",
+    sentMailIds: "identifier",
+  },
+  GameMailDay: {
+    day: "business",
+  },
+  GameDraw: {
+    kind: "business",
+    seed: "identifier",
+    candidates: "json",
+    winnerEmail: "email",
+    createdById: "identifier",
+  },
+  LivestockArrival: {
+    label: "business",
+    note: "freeText",
+    createdById: "identifier",
   },
   OutgoingPaymentMark: {
     invoiceNumber: "identifier",
@@ -1562,6 +1630,11 @@ export const ANONYMIZATION_REGISTER: Readonly<
     currency: "business",
     recordedByUserId: "identifier",
   },
+  WebshopInvoiceDownload: {
+    jti: "identifier",
+    orderId: "identifier",
+    invoiceId: "identifier",
+  },
   WebshopParcel: {
     commerceOrderId: "identifier",
     carrier: "business",
@@ -1591,6 +1664,10 @@ export const ANONYMIZATION_REGISTER: Readonly<
   },
   PartnerOrder: {
     orderNumber: "identifier",
+  },
+  PartnerOrderSetting: {
+    id: "identifier",
+    updatedById: "identifier",
   },
   PartnerOrderDocument: {
     fileName: "freeText",

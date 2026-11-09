@@ -6,6 +6,7 @@ import type {
   CatalogOption,
   ProductDetail,
   ProductListResponse,
+  ShippingFilterValue,
 } from "@acropora/types";
 
 import { writeSearchDocument } from "../integrations/ai-product-search/ai-product-search.writer.js";
@@ -16,12 +17,16 @@ import {
   type TakeoverPriceVariant,
 } from "./takeover-price.js";
 import { recordOwnPrice } from "./price-history/own-price-history.js";
+import { isOwnSaleActive } from "./own-sale.js";
 import { retryOnSerializationConflict } from "../common/transaction-retry.util.js";
+import { unasShippingProfile } from "../integrations/medusa/medusa-unas-shipping.policy.js";
 import {
+  manualFlagsDifferingFromUnas,
   pinUnasShippingFlags,
   SHIPPING_FLAGS,
   type ShippingFlag,
   type ShippingFlagSource,
+  type StoredShippingProfile,
 } from "./shipping-profile-sources.js";
 import type { ArKep } from "../imports/unas/unas-ar-tortenet.js";
 import type { CreateProductDto } from "./dto/create-product.dto.js";
@@ -35,6 +40,15 @@ import {
 
 const productInclude = {
   brand: true,
+  shippingProfile: {
+    select: {
+      pickupOnly: true,
+      foxpostForbidden: true,
+      isHeavy: true,
+      isFrozen: true,
+      lockerUnsuitable: true,
+    },
+  },
   categories: {
     include: { category: true },
     orderBy: [
@@ -60,8 +74,30 @@ const productInclude = {
   },
 } as const;
 
+/**
+ * THE LIST'S SHIPPING FILTER (a82ed229): one flag set on the product's shipping profile, or `none` for a product
+ * nobody has looked at yet (it has no profile). Not set: no narrowing.
+ */
+export function shippingFilterWhere(
+  filter: Exclude<ShippingFilterValue, "unasDiff"> | undefined,
+): Prisma.ProductWhereInput {
+  if (!filter) return {};
+  if (filter === "none") return { shippingProfile: { is: null } };
+  return { shippingProfile: { is: { [filter]: true } } };
+}
+
 const productListInclude = {
   brand: true,
+  // the shipping flags for the list's column (a82ed229)
+  shippingProfile: {
+    select: {
+      pickupOnly: true,
+      foxpostForbidden: true,
+      isHeavy: true,
+      isFrozen: true,
+      lockerUnsuitable: true,
+    },
+  },
   categories: {
     where: { isPrimary: true },
     // the leaf and three ancestors: the list's image fallback reads the
@@ -182,6 +218,17 @@ export interface ProductDatabase {
   productImage: {
     findFirst(args: unknown): Promise<StoredProductImage | null>;
   };
+  /** a lista eltérés-szűrőjéhez (a82ed229, 2d): a kézi jelzős sorok és a UNAS-adatuk */
+  productShippingProfile: {
+    findMany(
+      args: unknown,
+    ): Promise<Array<StoredShippingProfile & { productId: string }>>;
+  };
+  unasProductSnapshot: {
+    findMany(
+      args: unknown,
+    ): Promise<Array<{ productId: string; rawPayload: unknown }>>;
+  };
   $transaction<T>(
     operation: (transaction: ProductTransaction) => Promise<T>,
     options?: { isolationLevel?: "Serializable"; timeout?: number },
@@ -222,7 +269,7 @@ export interface VariantSale {
  */
 export class VariantSaleConflict extends Error {
   constructor(
-    readonly code: "own-price-missing" | "sale-not-lower",
+    readonly code: "own-price-missing" | "sale-not-lower" | "sale-start-locked",
     readonly sellingGrossPrice: string | null,
     readonly saleGrossPrice: string | null,
   ) {
@@ -367,6 +414,46 @@ export class ProductRepository extends Repository {
       : null;
   }
 
+  /**
+   * AZ ELTÉRÉS-SZŰRŐ (a82ed229, 2d): azok a termékek, ahol egy kézi jelző mást mond, mint a termék UNAS-adata ma
+   * (`manualFlagsDifferingFromUnas`, ugyanaz, mint a feltöltés próbájáé). A jelölt csak kézi jelzős sor lehet, és
+   * UNAS-adat nélkül nincs mihez eltérni, tehát a halmaz a kézi írások számával nő, nem a katalóguséval.
+   */
+  private async unasDiffProductIds(): Promise<string[]> {
+    const profiles = await this.productDatabase.productShippingProfile.findMany(
+      {
+        where: {
+          OR: SHIPPING_FLAGS.map((flag) => ({ [`${flag}Source`]: "MANUAL" })),
+        },
+        select: {
+          productId: true,
+          ...Object.fromEntries(
+            SHIPPING_FLAGS.flatMap((flag) => [
+              [flag, true],
+              [`${flag}Source`, true],
+            ]),
+          ),
+        },
+      },
+    );
+    if (profiles.length === 0) return [];
+    const snapshots = await this.productDatabase.unasProductSnapshot.findMany({
+      where: { productId: { in: profiles.map((p) => p.productId) } },
+      select: { productId: true, rawPayload: true },
+    });
+    const payload = new Map(snapshots.map((s) => [s.productId, s.rawPayload]));
+    return profiles
+      .filter(
+        (profile) =>
+          payload.has(profile.productId) &&
+          manualFlagsDifferingFromUnas(
+            profile,
+            unasShippingProfile(payload.get(profile.productId)),
+          ).length > 0,
+      )
+      .map((profile) => profile.productId);
+  }
+
   async list(query: ProductListQueryDto): Promise<ProductListResponse> {
     const where: Prisma.ProductWhereInput = {
       ...(query.active === undefined ? {} : { isActive: query.active }),
@@ -381,6 +468,9 @@ export class ProductRepository extends Repository {
       ...(query.listedOn
         ? { channelListings: { some: { channel: query.listedOn } } }
         : {}),
+      ...(query.shipping === "unasDiff"
+        ? { id: { in: await this.unasDiffProductIds() } }
+        : shippingFilterWhere(query.shipping)),
       ...(query.search
         ? {
             OR: [
@@ -597,6 +687,8 @@ export class ProductRepository extends Repository {
                   variantId: step.variantId,
                   currency: step.sellingPriceCurrency,
                   grossPrice: step.sellingGrossPrice,
+                  // a másolt változatnak nem lehet saját akciója: az akció saját árat kér (`setVariantSale`), ez pedig épp az első
+                  saleGrossPrice: null,
                   observedAt: takenAt,
                 });
             }
@@ -742,6 +834,10 @@ export class ProductRepository extends Repository {
           variantId,
           currency,
           grossPrice,
+          // a mentés pillanatában futó akció: a bolt annak az árát mutatja tovább, a sor ne állítsa az ellenkezőjét
+          saleGrossPrice: isOwnSaleActive(before, now)
+            ? before.sellingSaleGrossPrice
+            : null,
           observedAt: now,
         });
         await transaction.product.update({
@@ -794,6 +890,8 @@ export class ProductRepository extends Repository {
     variantId: string,
     sale: VariantSale | null,
     actorUserId?: string,
+    /** a „most" kívülről: a futó akció kezdetének őre ehhez mér */
+    now: Date = new Date(),
   ): Promise<ProductDetail | null> {
     return retryOnSerializationConflict(() =>
       this.productDatabase.$transaction(
@@ -813,6 +911,22 @@ export class ProductRepository extends Repository {
             throw new VariantSaleConflict(
               "sale-not-lower",
               before.sellingGrossPrice!.toString(),
+              sale.grossPrice.toString(),
+            );
+          /*
+            A FUTÓ AKCIÓ KEZDETE NEM MOZDUL (barracuda, #2219). Az Omnibus a csökkentés kezdete előtti 30 napot nézi,
+            és a saját akció kezdete a változat mezője (`currentReductionStart`): egy későbbre tett kezdet az ablakba
+            húzná ugyanennek az akciónak a korábbi, akciós sorait, és az akció a saját referenciája lenne (acrobot
+            41899 ezt kizárja). Az ár és a vég módosítható; új kezdet törléssel és új akcióval jár.
+          */
+          if (
+            sale &&
+            isOwnSaleActive(before, now) &&
+            sale.startsAt.getTime() !== before.sellingSaleStartsAt!.getTime()
+          )
+            throw new VariantSaleConflict(
+              "sale-start-locked",
+              before.sellingGrossPrice?.toString() ?? null,
               sale.grossPrice.toString(),
             );
           await transaction.productVariant.updateMany({

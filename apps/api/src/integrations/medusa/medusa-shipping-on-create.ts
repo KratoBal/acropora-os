@@ -1,12 +1,16 @@
 import type { MedusaAdminClient } from "./medusa-admin.client.js";
-import { liveAnimalSubtreeIds } from "./medusa-livestock.policy.js";
+import {
+  deriveLivestockKind,
+  liveAnimalKindSubtrees,
+  liveAnimalSubtreeIds,
+  type LivestockKind,
+} from "./medusa-livestock.policy.js";
 import type { ShippingAttributesCliDatabase } from "./medusa-shipping-attributes.cli.js";
 import type {
   MedusaShippingAttributesService,
   ShippingAttributesOutcome,
 } from "./medusa-shipping-attributes.service.js";
 import type { OsShippingProfile } from "./medusa-shipping-attributes.policy.js";
-import { unasShippingProfile } from "./medusa-unas-shipping.policy.js";
 
 /**
  * AZ ÚJ TERMÉK SZÁLLÍTÁSA, MÁR A LÉTREHOZÁSKOR (kártya 2a7f2313, a #1546
@@ -21,19 +25,16 @@ import { unasShippingProfile } from "./medusa-unas-shipping.policy.js";
  *      létrehozás ezt a profilt kapja. Ha nem pontosan egy van, nem választunk:
  *      a termék profil nélkül születik, és a kimenet kimondja.
  *
- *   2. AZ OSZTÁLY. Ugyanazokból a forrásokból, ugyanabban a sorrendben, mint a
- *      `medusa-shipping-attributes` parancs (acrobot 27099 döntései):
- *        - a kézzel kitöltött szállítási-jellemző sor ERŐSEBB a UNAS-nál;
- *        - különben a UNAS szállítási felülírása (`unasShippingProfile`: a
- *          „csak Foxpost” tétel, köztük a Modern Reef, bolti átvétel; a „csak
- *          GLS házhoz” Foxpost-tiltás);
- *        - az élő állat a KATEGÓRIÁBÓL bolti átvétel, bármit mond a UNAS.
+ *   2. AZ OSZTÁLY. Ugyanazokból a forrásokból, mint a `medusa-shipping-attributes`
+ *      parancs: a szállítási-jellemző sor (a82ed229: az OS a jelzők gazdája, a
+ *      UNAS-szinkron és a kézi írás tartja, az egyszeri feltöltő élesen is
+ *      lefutott 2026-11-05-én), és az élő állat a KATEGÓRIÁBÓL bolti átvétel,
+ *      bármit mond a sor. A UNAS nyers adatából számolt tartalék kikerült: sor
+ *      nélkül a terméknek nincs korlátozása, ahogy a csak OS-ben élő terméknek.
  *      A frissen létrehozott terméknek kötés-sora van, tehát SKU-párosítás itt
  *      nem kell: a kötés pontos.
  *
- * Az OS-be NEM ír. A jelzők 2026-10-09 óta az OS-ben is élnek (a82ed229: a
- * UNAS-szinkron és a kézi írás tartja őket); a UNAS-ból számolt érték itt már
- * csak a még sor nélküli terméknél dönt.
+ * Az OS-be NEM ír.
  */
 export interface ShippingOnCreate {
   /** A bolt alapértelmezett szállítási profilja; `null`: nem pontosan egy van. */
@@ -45,12 +46,18 @@ export interface ShippingOnCreate {
 /** A forrás-sorrend egy termékre, adatbázis nélkül mérhetően. */
 export function shippingSourceFor(input: {
   handRow: OsShippingProfile | null;
-  unasPayload: unknown;
   liveAnimal: boolean;
-}): { profile: OsShippingProfile | null; derivedPickupOnly: boolean } {
+  /** Az elo allat fajtaja a kategoriabol (V2.6), vagy null. */
+  livestockKind?: LivestockKind | null;
+}): {
+  profile: OsShippingProfile | null;
+  derivedPickupOnly: boolean;
+  livestockKind: LivestockKind | null;
+} {
   return {
-    profile: input.handRow ?? unasShippingProfile(input.unasPayload) ?? null,
+    profile: input.handRow,
     derivedPickupOnly: input.liveAnimal,
+    livestockKind: input.liveAnimal ? (input.livestockKind ?? null) : null,
   };
 }
 
@@ -69,7 +76,12 @@ export class MedusaShippingOnCreate implements ShippingOnCreate {
 
   /** Egy futásban egyszer kérdezzük; a sikertelen kérdést nem tartjuk meg. */
   private profileId: Promise<string | null> | undefined;
-  private liveAnimalCategories: Promise<Set<string>> | undefined;
+  private liveAnimalCategories:
+    | Promise<{
+        ids: Set<string>;
+        kinds: ReturnType<typeof liveAnimalKindSubtrees>;
+      }>
+    | undefined;
 
   defaultProfileId(): Promise<string | null> {
     this.profileId ??= this.medusa.defaultShippingProfileId().catch((error) => {
@@ -79,10 +91,13 @@ export class MedusaShippingOnCreate implements ShippingOnCreate {
     return this.profileId;
   }
 
-  private liveAnimalIds(): Promise<Set<string>> {
+  private liveAnimalTrees() {
     this.liveAnimalCategories ??= this.database.category
       .findMany({ select: { id: true, name: true, parentId: true } })
-      .then((rows) => liveAnimalSubtreeIds(rows))
+      .then((rows) => ({
+        ids: liveAnimalSubtreeIds(rows),
+        kinds: liveAnimalKindSubtrees(rows),
+      }))
       .catch((error) => {
         this.liveAnimalCategories = undefined;
         throw error;
@@ -91,8 +106,8 @@ export class MedusaShippingOnCreate implements ShippingOnCreate {
   }
 
   async afterCreate(osProductId: string): Promise<ShippingAttributesOutcome> {
-    const liveIds = await this.liveAnimalIds();
-    const [placements, handRows, unasRows] = await Promise.all([
+    const { ids: liveIds, kinds } = await this.liveAnimalTrees();
+    const [placements, handRows] = await Promise.all([
       liveIds.size
         ? this.database.productCategory.findMany({
             where: { productId: osProductId, categoryId: { in: [...liveIds] } },
@@ -107,23 +122,25 @@ export class MedusaShippingOnCreate implements ShippingOnCreate {
           foxpostForbidden: true,
           isHeavy: true,
           isFrozen: true,
+          lockerUnsuitable: true,
         },
       }),
-      this.database.unasProductSnapshot.findMany({
-        where: { productId: osProductId },
-        select: { productId: true, rawPayload: true },
-      }),
     ]);
-    const { profile, derivedPickupOnly } = shippingSourceFor({
+    const { profile, derivedPickupOnly, livestockKind } = shippingSourceFor({
       handRow: handRows[0] ?? null,
-      unasPayload: unasRows[0]?.rawPayload ?? null,
       liveAnimal: placements.length > 0,
+      livestockKind: deriveLivestockKind(
+        placements.map((placement) => placement.categoryId),
+        kinds,
+      ),
     });
     return this.attributes.project(
       osProductId,
       profile,
       true,
       derivedPickupOnly,
+      undefined,
+      livestockKind,
     );
   }
 }

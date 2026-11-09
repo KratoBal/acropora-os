@@ -79,6 +79,56 @@ export const LIVE_ANIMAL_ROOT_NAMES = [
   "Gerinctelenek",
 ] as const;
 
+/**
+ * AZ ELO ALLAT FAJTAJA (V2.6, kartya f4e4832b): MELYIK A HAROM GYOKER KOZUL.
+ *
+ * Ugyanabbol a harom gyokerbol jon, mint a bolti atvetel, es ugyanazert nem
+ * nevbol vagy cimbol: a kategoria-fa adja. A bolt (commerce `livestock_kind`)
+ * csak tovabbviszi, es egyetlen olvasoja a vevoi visszaigazolas akklimatizacios
+ * szakasza, ami fajtankent mas. NEM szallitasi szabaly: a bolti atvetelt tovabbra
+ * is egyedul a `pickup_only` donti el.
+ */
+export const LIVESTOCK_KINDS = ["FISH", "INVERTEBRATE", "CORAL"] as const;
+export type LivestockKind = (typeof LIVESTOCK_KINDS)[number];
+
+const KIND_BY_ROOT_NAME: Readonly<
+  Record<(typeof LIVE_ANIMAL_ROOT_NAMES)[number], LivestockKind>
+> = {
+  Korallok: "CORAL",
+  Halak: "FISH",
+  Gerinctelenek: "INVERTEBRATE",
+};
+
+/** Fajtankent a gyoker teljes reszfaja (a kategoria-azonositok halmaza). */
+export function liveAnimalKindSubtrees(
+  categories: readonly WysiwygCategoryNode[],
+): ReadonlyMap<LivestockKind, ReadonlySet<string>> {
+  return new Map(
+    LIVE_ANIMAL_ROOT_NAMES.map((name) => [
+      KIND_BY_ROOT_NAME[name],
+      subtreeIdsByNames(categories, [name]),
+    ]),
+  );
+}
+
+/**
+ * A TERMEK FAJTAJA A BESOROLASAIBOL.
+ *
+ * MINDEN BESOROLAS SZAMIT (mint a bolti atvetelnel). Ha a termek TOBB gyoker
+ * alatt is all, a fajta NULL, nem az elso talalat: egy tippelt fajta rossz
+ * akklimatizacios utmutatot kuldene egy allat mellé, a hianyzo fajta csak azt,
+ * hogy nincs utmutato. A kategoria nelkuli termek is null.
+ */
+export function deriveLivestockKind(
+  productCategoryIds: readonly string[],
+  kindSubtrees: ReadonlyMap<LivestockKind, ReadonlySet<string>>,
+): LivestockKind | null {
+  const kinds = LIVESTOCK_KINDS.filter((kind) =>
+    productCategoryIds.some((id) => kindSubtrees.get(kind)?.has(id)),
+  );
+  return kinds.length === 1 ? kinds[0]! : null;
+}
+
 /** A harom elo allat gyoker teljes reszfaja. */
 export function liveAnimalSubtreeIds(
   categories: readonly WysiwygCategoryNode[],

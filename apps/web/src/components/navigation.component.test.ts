@@ -96,7 +96,7 @@ describe("navigation", () => {
     1564264593444839436; "Akvarisztika" is acrobot's working name). The four
     pages keep their own entries, so their visibility does not change.
   */
-  it("puts the aquariums, the calculators, the ICP and the mortality log under Akvarisztika", () => {
+  it("puts the aquariums, the calculators, the ICP, the mortality log and the live animal arrivals under Akvarisztika", () => {
     expect(
       group("Akvarisztika").children.map((item) => [item.href, item.entryId]),
     ).toEqual([
@@ -104,6 +104,7 @@ describe("navigation", () => {
       ["/kalkulatorok", "calculators"],
       ["/icp", "icp"],
       ["/elhullasi-naplo", "mortality"],
+      ["/elo-allat-erkezesek", "livestock-arrivals"],
     ]);
   });
 
@@ -171,11 +172,24 @@ describe("navigation", () => {
       ["Áttekintés", ["Dashboard", "Feladataim", "Üzenetek"]],
       [
         "Akvarisztika",
-        ["Akváriumok", "Kalkulátorok", "ICP", "Elhullási napló"],
+        [
+          "Akváriumok",
+          "Kalkulátorok",
+          "ICP",
+          "Elhullási napló",
+          "Élő állat érkezések",
+        ],
       ],
       [
         "Értékesítés",
-        ["POS", "Árajánlatok", "Megrendelések", "Partnerek", "Szerződések"],
+        [
+          "POS",
+          "Árajánlatok",
+          "Megrendelések",
+          "Bérlés",
+          "Partnerek",
+          "Szerződések",
+        ],
       ],
       [
         "Pénzügy",
@@ -206,7 +220,10 @@ describe("navigation", () => {
           "QR-kód nyomtatás",
         ],
       ],
-      ["Tartalom és tudás", ["Tartalom", "Tudásbázis", "AI teszt"]],
+      [
+        "Tartalom és tudás",
+        ["Tartalom", "Nyereményjáték", "Tudásbázis", "AI teszt"],
+      ],
       [
         "Webshop",
         [
@@ -230,7 +247,10 @@ describe("navigation", () => {
           "Mértékegységek",
           "Eszköz-kategóriák",
           "Eszköz-funkciók",
+          "Bérelhető eszközök",
           "Partner-duplikátumok",
+          "Partner-átvezetés",
+          "Szállítási jelzők feltöltése",
           "Ajánlat szövegrészletek",
           "Ajánlatsablonok",
         ],
@@ -378,7 +398,10 @@ describe("navigation", () => {
       ["Törzsadatok", "units-of-measure"],
       ["Törzsadatok", "asset-categories"],
       ["Törzsadatok", "asset-functions"],
+      ["Törzsadatok", "rental-equipment"],
       ["Törzsadatok", "partner-duplicates"],
+      ["Törzsadatok", "partner-migration"],
+      ["Törzsadatok", "shipping-fill"],
       ["Árajánlat", "quote-snippets"],
       ["Árajánlat", "quote-templates"],
     ]);
@@ -422,6 +445,7 @@ describe("navigation", () => {
     ["/penzugy/szamlazas", "billing", "Számlázás"],
     ["/ajanlatok", "quotes", "Árajánlatok"],
     ["/megrendelesek", "partner-orders", "Megrendelések"],
+    ["/berles", "rentals", "Bérlés"],
     ["/penzugy/elszamolasok", "settlements", "Elszámolások"],
     ["/penzugy/hianyzo-szamlak", "missing-invoices", "Hiányzó számlák"],
     ["/raktar", "inventory", "Leltár"],
@@ -431,6 +455,7 @@ describe("navigation", () => {
     ["/kalkulatorok", "calculators", "Kalkulátorok"],
     ["/icp", "icp", "ICP"],
     ["/elhullasi-naplo", "mortality", "Elhullási napló"],
+    ["/elo-allat-erkezesek", "livestock-arrivals", "Élő állat érkezések"],
     ["/szerviz/piszkozatok", "service-drafts", "Piszkozatok"],
     ["/szerviz/hibajegyek", "service-jobs", "Hibajegyek"],
     ["/szerviz/karbantartas", "maintenance", "Karbantartás"],
@@ -438,6 +463,7 @@ describe("navigation", () => {
     ["/szerviz/eszkozok", "service-assets", "Eszköznyilvántartás"],
     ["/szerviz/anyagigenyek", "material-requests-pending", "Anyagigények"],
     ["/tartalom", "content", "Tartalom"],
+    ["/tartalom/nyeremenyjatek", "game", "Nyereményjáték"],
     ["/ai-teszt", "ai-test", "AI teszt"],
     ["/tudasbazis", "knowledge-base", "Tudásbázis"],
     ["/beallitasok", "settings-general", "Általános"],
@@ -453,9 +479,24 @@ describe("navigation", () => {
     ["/beallitasok/eszkoz-kategoriak", "asset-categories", "Eszköz-kategóriák"],
     ["/beallitasok/eszkoz-funkciok", "asset-functions", "Eszköz-funkciók"],
     [
+      "/beallitasok/berelheto-eszkozok",
+      "rental-equipment",
+      "Bérelhető eszközök",
+    ],
+    [
       "/beallitasok/partner-duplikatumok",
       "partner-duplicates",
       "Partner-duplikátumok",
+    ],
+    [
+      "/beallitasok/partner-atvezetes",
+      "partner-migration",
+      "Partner-átvezetés",
+    ],
+    [
+      "/beallitasok/szallitasi-jelzok",
+      "shipping-fill",
+      "Szállítási jelzők feltöltése",
     ],
     [
       "/beallitasok/ajanlat-szovegreszletek",
@@ -729,6 +770,7 @@ describe("navigation", () => {
     // `settings.manage` adja pontosan ezt a ket szerepet.
     "/szerviz/piszkozatok": "settings.manage",
     "/tartalom": "content.view",
+    "/tartalom/nyeremenyjatek": "game.view",
     // a webshop kezdolapja a Webshop csoportban (2026-10-26): ugyanaz a jog,
     // mint a Beallitasok kartyajae es az API vegpontjaie
     "/admin/kezdolap": "products.view",
@@ -766,6 +808,8 @@ describe("navigation", () => {
     "/ajanlatok": "quotes.view",
     // Megrendelések (2026-11-04): ugyanaz a jog és kapcsoló, mint az ajánlatoké.
     "/megrendelesek": "quotes.view",
+    // Eszközbérlés S2: a bérlési pult, ugyanaz a jog, mint az olvasó végpontoké
+    "/berles": "rentals.view",
     "/penzugy/elszamolasok": "finance.view",
     // A Hiányzó számlák 2026-09-30-án jött, a bevezetés UTÁN; a jog az
     // Elszámolásoké (`finance.view`).
@@ -780,6 +824,8 @@ describe("navigation", () => {
     "/kalkulatorok": "aquariums.view",
     "/icp": "icp.view",
     "/elhullasi-naplo": "mortality.view",
+    // az élő állat érkezések (kártya f4e4832b): a készletet vezetők, ugyanaz a jog, ami a végponté
+    "/elo-allat-erkezesek": "inventory.view",
     "/ai-teszt": "ai-test.view",
     // a kutatási tudástár (S4): a bevezetés után felvett sor, a menü joga az olvasásé
     "/tudasbazis": "knowledge.view",
@@ -797,6 +843,9 @@ describe("navigation", () => {
     "/beallitasok/mertekegysegek": "settings.manage",
     // Egy partnertörzs, 1. lépés: ugyanaz a jog, mint a végponté
     "/beallitasok/partner-duplikatumok": "settings.manage",
+    "/beallitasok/partner-atvezetes": "settings.manage",
+    // a82ed229: a szállítási jelzők feltöltése, ugyanaz a jog, mint a végponté
+    "/beallitasok/szallitasi-jelzok": "settings.manage",
     // AZ ESZKOZ-KATEGORIAK UGYANAZ A FAJTA TETEL, es ugyanaz a bontas: a
     // szerelo HASZNALJA a listat (az eszkoz-szerkeszto legordulojet
     // `service.view` olvassa), de nem IRJA. Ha az iras is `service.view`
@@ -806,6 +855,8 @@ describe("navigation", () => {
     // AZ ESZKOZ-FUNKCIOK UGYANAZ A FAJTA TETEL, ugyanaz a bontas -- kanban
     // 68add892, 2026-09-22.
     "/beallitasok/eszkoz-funkciok": "settings.manage",
+    // Eszközbérlés S1: a bérelhető eszközök törzse, ugyanaz a jog, mint a végpontoké
+    "/beallitasok/berelheto-eszkozok": "settings.manage",
     // Az ajánlati szövegrészletek (#1582 P1): ugyanaz a jog, ami az írást védi.
     "/beallitasok/ajanlat-szovegreszletek": "quotes.templates.manage",
     // Az ajánlatsablonok (#1582): ugyanaz a jog, ami az írást védi.

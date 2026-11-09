@@ -48,7 +48,31 @@ export interface CustomerSummary {
    * aaf4f09d) partnernek mindig adószámot kér, és a vevőválasztó „Partner” jellel mutatja.
    */
   partnerMirror?: boolean;
+  /**
+   * A SZEREPEK JELÖLÉSKÉNT A SOR(ON) (egy partnertörzs): a `Supplier` kötésből és a jelzőiből származtatva, külön oszlop nélkül.
+   * Csak a partner-sornál van; a vevőnél hiányzik.
+   */
+  partnerRoles?: CustomerPartnerRole[];
 }
+
+/** A partner szerepei a vevő-soron. */
+export const CUSTOMER_PARTNER_ROLES = ["SUPPLIER", "SERVICE"] as const;
+export type CustomerPartnerRole = (typeof CUSTOMER_PARTNER_ROLES)[number];
+
+/**
+ * A VEVŐK LISTA SZEREP-SZŰRŐJE (egy partnertörzs: egy lista, szerep-szűrővel és jelvényekkel). Hiányzó: a régi viselkedés
+ * (a partner-sorok nélkül, a választók ezt várják); jelen lévő érték: a lista a partnereket is mutatja.
+ * `ALL` mindenki, `BUYER` csak a vevők (nem partnerek), `PARTNER` minden partner, `SUPPLIER` a beszállítók, `SERVICE` a
+ * szerviz-partnerek.
+ */
+export const CUSTOMER_LIST_ROLES = [
+  "ALL",
+  "BUYER",
+  "PARTNER",
+  "SUPPLIER",
+  "SERVICE",
+] as const;
+export type CustomerListRole = (typeof CUSTOMER_LIST_ROLES)[number];
 
 export interface CustomerDetail extends CustomerSummary {
   /**

@@ -152,6 +152,13 @@ export const PERMISSION_AREAS: readonly PermissionArea[] = [
     ],
   },
   {
+    key: "rentals",
+    label: "Eszközbérlés",
+    view: P.RENTALS_VIEW,
+    manage: P.RENTALS_MANAGE,
+    extras: [],
+  },
+  {
     key: "service",
     label: "Szerviz",
     view: P.SERVICE_VIEW,
@@ -196,6 +203,13 @@ export const PERMISSION_AREAS: readonly PermissionArea[] = [
     view: P.CONTENT_VIEW,
     manage: P.CONTENT_MANAGE,
     extras: [{ permission: P.CONTENT_APPROVE, label: "Tartalom jóváhagyása" }],
+  },
+  {
+    key: "game",
+    label: "Nyereményjáték",
+    view: P.GAME_VIEW,
+    manage: P.GAME_MANAGE,
+    extras: [],
   },
   { key: "ai-test", label: "AI teszt", view: P.AI_TEST_VIEW, extras: [] },
   {

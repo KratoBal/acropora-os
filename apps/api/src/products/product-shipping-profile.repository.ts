@@ -4,6 +4,8 @@ import { Inject, Injectable, Optional } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
 
 import type { UpsertProductShippingProfileDto } from "./dto/upsert-product-shipping-profile.dto.js";
+import type { OsShippingProfile } from "../integrations/medusa/medusa-shipping-attributes.policy.js";
+import { unasShippingProfile } from "../integrations/medusa/medusa-unas-shipping.policy.js";
 import type {
   ShippingFlag,
   ShippingFlagSource,
@@ -16,7 +18,12 @@ type ProfileRecord = NonNullable<
 interface ProfileTransaction {
   productShippingProfile: {
     findUnique(args: unknown): Promise<ProfileRecord | null>;
-    upsert(args: unknown): Promise<ProfileRecord>;
+    create(args: unknown): Promise<ProfileRecord>;
+    update(args: unknown): Promise<ProfileRecord>;
+  };
+  /** the product's UNAS data, for the first write's baseline (barracuda, #2198 a) */
+  unasProductSnapshot: {
+    findUnique(args: unknown): Promise<{ rawPayload: unknown } | null>;
   };
   auditLog: { create(args: unknown): Promise<unknown> };
   domainEvent: { create(args: unknown): Promise<unknown> };
@@ -85,18 +92,32 @@ function toDetail(profile: ProfileRecord): ProductShippingProfileDetail {
 /**
  * A KÉZI ÍRÁS (a82ed229): csak a megváltozott jelző lesz kézi. A kártya mind a
  * négyet elküldi, és ha mindet kézire állítanánk, egy javítás a többi, UNAS-ból
- * jövő jelzőt is lefagyasztaná. Új sornál minden jelző kézi: azt valaki kitöltötte.
+ * jövő jelzőt is lefagyasztaná.
+ *
+ * AZ ELSŐ ÍRÁS (még nincs sor; barracuda, #2198 a): a szinkron csak az általa érintett terméknek hoz létre sort, és
+ * a feltöltő még nem futott, tehát sok terméknek nincs. Ilyenkor a „változás” mércéje a termék UNAS-adata
+ * (`unasBaseline`): ami azzal egyezik, az `UNAS` marad (a szinkron tovább követi), csak az eltérő lesz kézi. Ha a
+ * terméknek nincs UNAS-adata (csak az OS-ben él), nincs mit követni: minden jelző kézi, ahogy eddig.
  */
 export function manualShippingWrite(
   existing: ProfileRecord | null,
   input: UpsertProductShippingProfileDto,
+  unasBaseline: { unas: OsShippingProfile | null } | null = null,
 ): Record<string, boolean | ShippingFlagSource> {
   const data: Record<string, boolean | ShippingFlagSource> = {};
-  for (const flag of FLAGS)
-    if (!existing || existing[flag] !== input[flag]) {
+  for (const flag of FLAGS) {
+    if (existing) {
+      if (existing[flag] === input[flag]) continue;
       data[flag] = input[flag];
       data[`${flag}Source`] = "MANUAL";
+      continue;
     }
+    data[flag] = input[flag];
+    data[`${flag}Source`] =
+      unasBaseline && input[flag] === (unasBaseline.unas?.[flag] ?? false)
+        ? "UNAS"
+        : "MANUAL";
+  }
   if (input.lockerUnsuitable !== undefined)
     data.lockerUnsuitable = input.lockerUnsuitable;
   return data;
@@ -140,17 +161,82 @@ export class ProductShippingProfileRepository extends Repository {
     input: UpsertProductShippingProfileDto,
     actorUserId: string,
   ): Promise<ProductShippingProfileDetail> {
+    return this.write(productId, () => input, actorUserId);
+  }
+
+  /**
+   * A RÉSZLEGES ÍRÁS (a82ed229, 2c, tömeges szerkesztés): csak a megadott jelzők változnak. A többi a termék mai
+   * értéke, és ezt UGYANABBAN a tranzakcióban olvassuk, amelyik ír: egy közben mentett kártya jelzőit így nem írja
+   * vissza egy korábbi olvasásból. Sor nélküli terméknél a mai érték a UNAS-adat (amit a szinkron is írna), anélkül
+   * csupa hamis; az egyező jelző így UNAS-forrású marad (`manualShippingWrite`).
+   */
+  async patch(
+    productId: string,
+    flags: Partial<UpsertProductShippingProfileDto>,
+    actorUserId: string,
+  ): Promise<ProductShippingProfileDetail> {
+    return this.write(
+      productId,
+      (current) => ({ ...current, ...flags }),
+      actorUserId,
+    );
+  }
+
+  private async write(
+    productId: string,
+    resolve: (
+      current: UpsertProductShippingProfileDto,
+    ) => UpsertProductShippingProfileDto,
+    actorUserId: string,
+  ): Promise<ProductShippingProfileDetail> {
     return this.profileDatabase.$transaction(
       async (transaction) => {
         const existing = await transaction.productShippingProfile.findUnique({
           where: { productId },
         });
-        const data = manualShippingWrite(existing, input);
-        const profile = await transaction.productShippingProfile.upsert({
-          where: { productId },
-          update: data,
-          create: { productId, ...data },
-        });
+        const snapshot = existing
+          ? null
+          : await transaction.unasProductSnapshot.findUnique({
+              where: { productId },
+              select: { rawPayload: true },
+            });
+        const unas = snapshot ? unasShippingProfile(snapshot.rawPayload) : null;
+        const input = resolve(
+          existing
+            ? {
+                pickupOnly: existing.pickupOnly,
+                foxpostForbidden: existing.foxpostForbidden,
+                isHeavy: existing.isHeavy,
+                isFrozen: existing.isFrozen,
+                lockerUnsuitable: existing.lockerUnsuitable,
+              }
+            : {
+                pickupOnly: unas?.pickupOnly ?? false,
+                foxpostForbidden: unas?.foxpostForbidden ?? false,
+                isHeavy: unas?.isHeavy ?? false,
+                isFrozen: unas?.isFrozen ?? false,
+                lockerUnsuitable: false,
+              },
+        );
+        const data = manualShippingWrite(
+          existing,
+          input,
+          snapshot ? { unas } : null,
+        );
+        /*
+          AN EXPLICIT UPDATE OR CREATE, NOT AN UPSERT: Prisma checks an upsert's `create` part even when the row
+          exists, and for an existing row `data` holds only the changed flags, so a save that changed less than all
+          four failed (found by the bulk edit's database test, a82ed229 2c). The read above is in the same
+          serializable transaction, so the branch is the row's real state.
+        */
+        const profile = existing
+          ? await transaction.productShippingProfile.update({
+              where: { productId },
+              data,
+            })
+          : await transaction.productShippingProfile.create({
+              data: { productId, ...data },
+            });
         const action = existing
           ? "product_shipping_profile.updated"
           : "product_shipping_profile.created";

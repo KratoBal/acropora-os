@@ -18,6 +18,7 @@ const PROFIL = {
 const FA = [
   { id: "gy1", name: "Korallok", parentId: null },
   { id: "gy1a", name: "SPS", parentId: "gy1" },
+  { id: "gy2", name: "Halak", parentId: null },
   { id: "mu1", name: "Technika", parentId: null },
 ];
 
@@ -34,6 +35,7 @@ function fakes(
     apply: boolean;
     derived: boolean;
     bySku?: string | null;
+    kind?: string;
   }[] = [];
   const lekerdezes: unknown[] = [];
 
@@ -65,8 +67,15 @@ function fakes(
       apply: boolean,
       derived = false,
       bySku: string | null = null,
+      kind: string | null = null,
     ) => {
-      hivasok.push({ id, apply, derived, ...(bySku ? { bySku } : {}) });
+      hivasok.push({
+        id,
+        apply,
+        derived,
+        ...(bySku ? { bySku } : {}),
+        ...(kind ? { kind } : {}),
+      });
       return apply
         ? ({
             action: "applied",
@@ -184,9 +193,36 @@ describe("a szállítási jellemzők parancsa", () => {
     await runShippingAttributesCli([], f.out, undefined, f.database, f.service);
 
     assert.deepEqual(f.hivasok, [
-      { id: "prod-elo-1", apply: false, derived: true },
+      { id: "prod-elo-1", apply: false, derived: true, kind: "CORAL" },
     ]);
     assert.match(f.szoveg(), /1 élő állat besorolás alapján/);
+  });
+
+  /**
+   * V2.6: A FAJTA TERMEKENKENT SZAMOLODIK. MI PIROSIT: ha a fajta az elso
+   * termekrol a tobbire is atragad; ha a ket gyoker alatt allo termek fajtat kap.
+   */
+  it("a fajta termékenként számolódik, két gyökér alatt álló termék fajtája null", async () => {
+    const f = fakes(
+      [],
+      [
+        { productId: "prod-koral", categoryId: "gy1a" },
+        { productId: "prod-hal", categoryId: "gy2" },
+        { productId: "prod-ketto", categoryId: "gy1" },
+        { productId: "prod-ketto", categoryId: "gy2" },
+      ],
+    );
+
+    await runShippingAttributesCli([], f.out, undefined, f.database, f.service);
+
+    assert.deepEqual(
+      f.hivasok.map((h) => [h.id, h.kind ?? null]),
+      [
+        ["prod-hal", "FISH"],
+        ["prod-ketto", null],
+        ["prod-koral", "CORAL"],
+      ],
+    );
   });
 
   it("profil nélkül megmondja, hogy nincs mit átvinni", async () => {
@@ -210,7 +246,12 @@ describe("a szállítási jellemzők parancsa", () => {
   szerinti termek nem kerul a celok koze; ha felulirja a KEZZEL kitoltott
   profilt; ha egy felulirás nelkuli UNAS-termek is cel lesz.
 */
-  describe("a UNAS szállítási felülírása", () => {
+  /*
+    A JELZOK FORRASA AZ OS-SOR (a82ed229, az eles feltolto utan, 2026-11-05). MI PIROSIT: ha egy sor nelkuli
+    UNAS-termek a nyers adatabol megis cella valik; ha a sor nelkuli UNAS-termek csendben kimarad (a FIGYELEM
+    sor nelkul); ha a UNAS a kezi sort felulirja.
+  */
+  describe("a UNAS-adat nem forrás, csak jelzés", () => {
     const csakFoxpost = {
       ShippingMethods: {
         Denied: {
@@ -222,7 +263,7 @@ describe("a szállítási jellemzők parancsa", () => {
       },
     };
 
-    it("a felülírt termék cél lesz, a felülírás nélküli nem, és a sort kiírja", async () => {
+    it("a sor nélküli UNAS-termék nem cél, de a kimenet megszámolja", async () => {
       const f = fakes(
         [],
         [],
@@ -238,11 +279,27 @@ describe("a szállítási jellemzők parancsa", () => {
         f.database,
         f.service,
       );
-      assert.deepEqual(
-        f.hivasok.map((h) => h.id),
-        ["unas-1"],
+      assert.deepEqual(f.hivasok, []);
+      assert.match(
+        f.szoveg(),
+        /FIGYELEM: 2 UNAS-terméknek nincs szállítási-jellemző sora/,
       );
-      assert.match(f.szoveg(), /1 a UNAS szállítási felülírásából/);
+    });
+
+    it("a sorral bíró UNAS-termék nem számít a figyelmeztetésbe", async () => {
+      const f = fakes(
+        [PROFIL],
+        [],
+        [{ productId: PROFIL.productId, rawPayload: csakFoxpost }],
+      );
+      await runShippingAttributesCli(
+        [],
+        f.out,
+        undefined,
+        f.database,
+        f.service,
+      );
+      assert.doesNotMatch(f.szoveg(), /FIGYELEM/);
     });
 
     it("a kézzel kitöltött profil erősebb a UNAS-nál", async () => {
@@ -289,8 +346,9 @@ describe("a szállítási jellemzők parancsa", () => {
     };
 
     it("csak az egyértelmű párt adja át, a kétértelműt és a párnélkülit megszámolja", async () => {
+      // os-1 is a target through its OS row; its UNAS mirror still gives the article number for the pairing
       const f = fakes(
-        [],
+        [{ ...PROFIL, productId: "os-1" }],
         [],
         [{ productId: "os-1", rawPayload: csakFoxpost }],
         [

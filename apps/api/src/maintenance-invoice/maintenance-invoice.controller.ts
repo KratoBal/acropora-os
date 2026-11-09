@@ -7,9 +7,10 @@ import {
   Post,
   StreamableFile,
 } from "@nestjs/common";
-import { PERMISSIONS } from "@acropora/types";
+import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 import { IsBoolean, IsOptional } from "class-validator";
 
+import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
 import { MaintenanceInvoiceDraftService } from "./maintenance-invoice-draft.service.js";
 
@@ -51,9 +52,11 @@ export class MaintenanceInvoiceController {
   draft(
     @Param("certificateId") certificateId: string,
     @Body() body: MaintenanceInvoiceDraftDto = {},
+    @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.draftService.draftFor(certificateId, {
       acknowledgeUnsigned: body.acknowledgeUnsigned === true,
+      actor: user,
     });
   }
 

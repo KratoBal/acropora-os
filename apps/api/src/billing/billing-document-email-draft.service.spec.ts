@@ -5,7 +5,10 @@ import { describe, it } from "node:test";
 
 import { NotFoundException } from "@nestjs/common";
 
-import { DEFAULT_BILLING_DOCUMENT_MANUAL_TEMPLATE } from "../notifications/mail/billing-document-mail.content.js";
+import {
+  DEFAULT_BILLING_DOCUMENT_MANUAL_EN_TEMPLATE,
+  DEFAULT_BILLING_DOCUMENT_MANUAL_TEMPLATE,
+} from "../notifications/mail/billing-document-mail.content.js";
 import type { TicketMailRepository } from "../notifications/mail/ticket-mail.repository.js";
 import { BillingDocumentEmailDraftService } from "./billing-document-email-draft.service.js";
 import type { BillingDocumentsRepository } from "./billing-documents.repository.js";
@@ -13,6 +16,7 @@ import type { BillingDocumentsRepository } from "./billing-documents.repository.
 function service(
   stored: { subject: string; body: string; bodyHtml: string | null } | null,
   exists = true,
+  language?: "hu" | "en",
 ) {
   const asked: string[] = [];
   const documents = {
@@ -25,7 +29,11 @@ function service(
     },
   } as unknown as TicketMailRepository;
   return {
-    drafts: new BillingDocumentEmailDraftService(documents, templates),
+    drafts: new BillingDocumentEmailDraftService(
+      documents,
+      templates,
+      language === undefined ? null : ({ of: async () => language } as never),
+    ),
     asked,
   };
 }
@@ -79,6 +87,70 @@ describe("BillingDocumentEmailDraftService", () => {
   it("does not find a document outside the module", async () => {
     await assert.rejects(
       service(null, false).drafts.draft("doc-1"),
+      NotFoundException,
+    );
+  });
+
+  it("the English twin: its own key, the stored text first and the English default after, never the Hungarian one (d5c6befd, P4)", async () => {
+    const stored = await service({
+      subject: "Invoice {{document_number}}",
+      body: "Dear {{customer_name}}",
+      bodyHtml: null,
+    }).drafts.templateDraft("en");
+    assert.deepEqual(
+      [stored.source, stored.subject, stored.body],
+      ["stored", "Invoice {{document_number}}", "Dear {{customer_name}}"],
+    );
+    const { drafts, asked } = service(null);
+    const fallback = await drafts.templateDraft("en");
+    assert.deepEqual(asked, ["BILLING_DOCUMENT_MANUAL_EN"]);
+    assert.deepEqual(
+      [fallback.source, fallback.subject, fallback.body],
+      [
+        "default",
+        DEFAULT_BILLING_DOCUMENT_MANUAL_EN_TEMPLATE.subject,
+        DEFAULT_BILLING_DOCUMENT_MANUAL_EN_TEMPLATE.body,
+      ],
+    );
+    assert.notEqual(
+      fallback.body,
+      DEFAULT_BILLING_DOCUMENT_MANUAL_TEMPLATE.body,
+    );
+    assert.ok(fallback.variables.some((v) => v.name === "document_number"));
+  });
+
+  it("without a language it is the Hungarian manual text, as before", async () => {
+    const { drafts, asked } = service(null);
+    await drafts.templateDraft();
+    assert.deepEqual(asked, ["BILLING_DOCUMENT_MANUAL"]);
+  });
+
+  it("the English default says what the Hungarian one says: the same four variables, no legal sentence", () => {
+    const names = (text: string) =>
+      [...text.matchAll(/\{\{(\w+)\}\}/g)].map((m) => m[1]).sort();
+    const en = DEFAULT_BILLING_DOCUMENT_MANUAL_EN_TEMPLATE;
+    const hu = DEFAULT_BILLING_DOCUMENT_MANUAL_TEMPLATE;
+    assert.deepEqual(names(en.subject + en.body), names(hu.subject + hu.body));
+    assert.ok(!/[áéíóöőúüű]/i.test(en.subject + en.body));
+  });
+
+  it("the drawer opens in the language of the document's order (d5c6befd)", async () => {
+    const english = service(null, true, "en");
+    const draft = await english.drafts.draft("doc-1");
+    assert.deepEqual(english.asked, ["BILLING_DOCUMENT_MANUAL_EN"]);
+    assert.equal(draft.body, DEFAULT_BILLING_DOCUMENT_MANUAL_EN_TEMPLATE.body);
+    const hungarian = service(null, true, "hu");
+    await hungarian.drafts.draft("doc-1");
+    assert.deepEqual(hungarian.asked, ["BILLING_DOCUMENT_MANUAL"]);
+    // without a language service it is the Hungarian text, as before
+    const plain = service(null);
+    await plain.drafts.draft("doc-1");
+    assert.deepEqual(plain.asked, ["BILLING_DOCUMENT_MANUAL"]);
+  });
+
+  it("a missing document is still a 404, before any language is asked", async () => {
+    await assert.rejects(
+      service(null, false, "en").drafts.draft("doc-x"),
       NotFoundException,
     );
   });

@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import { main } from "./shipping-profile-fill.cli.js";
 import {
   applyUnasShippingFlags,
+  manualFlagsDifferingFromUnas,
   pinUnasShippingFlags,
   planUnasShippingFlags,
   type StoredShippingProfile,
@@ -69,6 +70,44 @@ describe("a UNAS-beállítás a szállítási jelzőkre", () => {
     assert.deepEqual(
       planUnasShippingFlags(sor({ foxpostForbidden: true }), unasFoxpost),
       { kind: "unchanged" },
+    );
+  });
+});
+
+/*
+  A KÉZI ÉS A UNAS ELTÉRÉSE (a82ed229, 2d). MI PIROSÍT: egy UNAS-forrású jelző eltérésnek számít (azt a szinkron
+  úgyis követi); egy kézi, de egyező jelző eltérésnek számít; a felülírás nélküli UNAS-termék (`null`) kézi `true`-ja
+  nem számít eltérésnek.
+*/
+describe("a kézi jelző eltérése a UNAS-étól", () => {
+  it("csak a kézi és eltérő jelzőt nevezi meg", () => {
+    assert.deepEqual(
+      manualFlagsDifferingFromUnas(
+        sor({
+          // kézi, eltér: a UNAS tiltja a Foxpostot, kézzel engedték
+          foxpostForbiddenSource: "MANUAL",
+          // kézi, egyezik: a UNAS sem nehéz
+          isHeavySource: "MANUAL",
+          // UNAS-forrású és eltér: nem eltérés, a szinkron követi
+          isFrozen: true,
+        }),
+        unasFoxpost,
+      ),
+      ["foxpostForbidden"],
+    );
+  });
+
+  it("felülírás nélküli UNAS-terméken a kézi igaz az eltérés", () => {
+    assert.deepEqual(
+      manualFlagsDifferingFromUnas(
+        sor({ pickupOnly: true, pickupOnlySource: "MANUAL" }),
+        null,
+      ),
+      ["pickupOnly"],
+    );
+    assert.deepEqual(
+      manualFlagsDifferingFromUnas(sor({ pickupOnlySource: "MANUAL" }), null),
+      [],
     );
   });
 });

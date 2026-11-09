@@ -23,6 +23,7 @@ const api = vi.hoisted(() => ({
   list: vi.fn(),
   categoryOptions: vi.fn(),
   brandOptions: vi.fn(),
+  bulkShippingProfiles: vi.fn(),
 }));
 
 const auth = vi.hoisted(() => ({
@@ -325,6 +326,67 @@ describe("ProductListPage", () => {
     ).toBe("icon");
   });
 
+  /*
+    a82ed229, 2b: A SZÁLLÍTÁS OSZLOP ÉS SZŰRŐ. MI PIROSÍT: ha a még nem vizsgált termék ugyanúgy néz ki, mint a
+    megvizsgált, korlát nélküli; ha a jelzők nem látszanak; ha a szűrő nem jut el az API-ig.
+  */
+  it("a Szállítás oszlop: nincs vizsgálva, nincs korlát, és a jelzők rövid neve", async () => {
+    const [first] = populatedResponse.items;
+    api.list.mockResolvedValue({
+      ...populatedResponse,
+      items: [
+        { ...first!, id: "p-never", shippingFlags: null },
+        { ...first!, id: "p-none", shippingFlags: [] },
+        {
+          ...first!,
+          id: "p-heavy",
+          shippingFlags: ["isHeavy", "lockerUnsuitable"],
+        },
+      ],
+    });
+    render(createElement(ProductListPage));
+    // in the table: the filter's options carry the same short names
+    const table = await screen.findByRole("table");
+    expect(within(table).getByText("nincs vizsgálva")).toBeInTheDocument();
+    expect(within(table).getByText("nincs korlát")).toBeInTheDocument();
+    expect(within(table).getByText("Nehéz")).toBeInTheDocument();
+    expect(within(table).getByText("Automatába nem fér")).toBeInTheDocument();
+  });
+
+  it("a Szállítás szűrő az URL-be kerül, és az URL-ből az API-ig jut", async () => {
+    navigation.params = new URLSearchParams("szallitas=isHeavy");
+    api.list.mockResolvedValue(populatedResponse);
+    render(createElement(ProductListPage));
+    await screen.findByRole("table");
+    expect(api.list).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ shipping: "isHeavy" }),
+    );
+    fireEvent.change(screen.getByLabelText("Szállítás"), {
+      target: { value: "lockerUnsuitable" },
+    });
+    await waitFor(() =>
+      expect(navigation.replace).toHaveBeenCalledWith(
+        expect.stringContaining("szallitas=lockerUnsuitable"),
+        expect.anything(),
+      ),
+    );
+  });
+
+  it("az eltérés-szűrő: a URL-ből az API-ig jut, és a választóban saját felirata van (2d)", async () => {
+    navigation.params = new URLSearchParams("szallitas=unasDiff");
+    api.list.mockResolvedValue(populatedResponse);
+    render(createElement(ProductListPage));
+    await screen.findByRole("table");
+    expect(api.list).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ shipping: "unasDiff" }),
+    );
+    expect(
+      screen.getByRole("option", { name: "Kézi, eltér a UNAS-tól" }),
+    ).toBeInTheDocument();
+  });
+
   it("a fejléc és a sor ugyanabból az oszlopból igazodik: a számoszlop mindkettőben jobbra zár", async () => {
     api.list.mockResolvedValue(populatedResponse);
     render(createElement(ProductListPage));
@@ -334,11 +396,13 @@ describe("ProductListPage", () => {
       "cell",
     );
     expect(headers.map((header) => header.textContent)).toEqual([
+      "",
       "Termék",
       "SKU",
       "Bruttó ár",
       "Akciós ár",
       "Készlet",
+      "Szállítás",
       "Állapot",
       "Művelet",
     ]);
@@ -348,12 +412,120 @@ describe("ProductListPage", () => {
     expect(headers.map(right)).toEqual([
       false,
       false,
+      false,
       true,
       true,
       true,
       false,
+      false,
       true,
     ]);
+  });
+
+  // a82ed229, 2c: WHAT TURNS THIS RED: a bulk save that sends a flag nobody touched (it would overwrite the
+  // product's own value and turn it MANUAL); a checkbox that opens the product; the selection for a viewer.
+  it("a kijelölt termékek szállítási jelzői: csak az átállított jelző megy, és a lista újratölt", async () => {
+    api.list.mockResolvedValue(populatedResponse);
+    api.bulkShippingProfiles.mockResolvedValue({ updated: 1, notFound: [] });
+    render(createElement(ProductListPage));
+    const box = await screen.findByRole("checkbox", {
+      name: "Red Sea ReefMat 500 kijelölése",
+    });
+    fireEvent.click(box);
+    expect(navigation.push).not.toHaveBeenCalled();
+    const bar = screen.getByTestId("product-bulk-bar");
+    expect(bar).toHaveTextContent("1 kijelölve");
+    fireEvent.click(
+      within(bar).getByRole("button", { name: "Szállítási jelzők…" }),
+    );
+    const dialog = screen.getByRole("dialog");
+    const save = within(dialog).getByRole("button", {
+      name: "Mentés (1 termék)",
+    });
+    expect(save).toBeDisabled();
+    fireEvent.change(
+      within(dialog).getByRole("combobox", { name: "Foxpost nem ajánlható" }),
+      { target: { value: "yes" } },
+    );
+    fireEvent.change(
+      within(dialog).getByRole("combobox", { name: "Nehéz áru" }),
+      { target: { value: "no" } },
+    );
+    // set and set back: "nem változik" again, so it is not sent
+    const frozen = within(dialog).getByRole("combobox", {
+      name: "Fagyasztott",
+    });
+    fireEvent.change(frozen, { target: { value: "yes" } });
+    fireEvent.change(frozen, { target: { value: "" } });
+    const calls = api.list.mock.calls.length;
+    fireEvent.click(save);
+    await waitFor(() =>
+      expect(api.bulkShippingProfiles).toHaveBeenCalledWith(
+        "token-owner",
+        ["product-1"],
+        { foxpostForbidden: true, isHeavy: false },
+      ),
+    );
+    expect(
+      await screen.findByText("1 termék szállítási jelzői mentve."),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(api.list.mock.calls.length).toBeGreaterThan(calls),
+    );
+    expect(screen.queryByTestId("product-bulk-bar")).toBeNull();
+  });
+
+  it("ami nem ment át, kijelölve marad, és a lap megmondja (barracuda, #2207)", async () => {
+    api.list.mockResolvedValue(populatedResponse);
+    api.bulkShippingProfiles.mockResolvedValue({
+      updated: 0,
+      notFound: [],
+      failed: [{ productId: "product-1", reason: "conflict" }],
+    });
+    render(createElement(ProductListPage));
+    fireEvent.click(
+      await screen.findByRole("checkbox", {
+        name: "Red Sea ReefMat 500 kijelölése",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Szállítási jelzők…" }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(
+      within(dialog).getByRole("combobox", { name: "Fagyasztott" }),
+      { target: { value: "yes" } },
+    );
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Mentés (1 termék)" }),
+    );
+    expect(
+      await screen.findByText(
+        /1 termék mentése nem sikerült, ezek kijelölve maradtak/,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("product-bulk-bar")).toHaveTextContent(
+      "1 kijelölve",
+    );
+  });
+
+  it("az oldal-kijelölő az oldal összes termékét jelöli, és products.manage nélkül nincs kijelölés", async () => {
+    api.list.mockResolvedValue(populatedResponse);
+    const { unmount } = render(createElement(ProductListPage));
+    fireEvent.click(
+      await screen.findByRole("checkbox", {
+        name: "Az oldal minden termékének kijelölése",
+      }),
+    );
+    expect(screen.getByTestId("product-bulk-bar")).toHaveTextContent(
+      "1 kijelölve",
+    );
+    unmount();
+    auth.session = {
+      ...ownerSession,
+      user: { ...ownerSession.user, role: "WAREHOUSE" },
+    };
+    render(createElement(ProductListPage));
+    await screen.findByRole("table");
+    expect(screen.queryByRole("checkbox")).toBeNull();
   });
 
   it("üres katalógus állapotot jelenít meg", async () => {

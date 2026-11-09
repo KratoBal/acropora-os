@@ -115,9 +115,85 @@ describe("ProductShippingProfileCard", () => {
           foxpostForbidden: false,
           isHeavy: true,
           isFrozen: false,
+          // a82ed229: the new flag goes along, unchanged
+          lockerUnsuitable: false,
         },
       );
     });
+  });
+
+  /*
+    a82ed229, 2a: JELZŐNKÉNT A FORRÁS ÉS AZ ÚJ JELZŐ. MI PIROSÍT: ha a UNAS-ból töltött és a kézzel átírt jelző
+    ugyanúgy néz ki; ha a csomagautomata-jelző nem látszik, vagy nem menthető; ha egy forrás nélküli válasznál
+    (régi szerver) a kártya kitalál egy forrást.
+  */
+  it("jelzőnként kiírja a forrást, és mutatja a csomagautomata-jelzőt", async () => {
+    api.getShippingProfile.mockReturnValue(
+      kesobb(
+        profil({
+          isHeavy: true,
+          lockerUnsuitable: true,
+          sources: {
+            pickupOnly: "UNAS",
+            foxpostForbidden: "UNAS",
+            isHeavy: "MANUAL",
+            isFrozen: "UNAS",
+          },
+        }),
+      ),
+    );
+    render(
+      <ProductShippingProfileCard
+        token="token-1"
+        productId="product-1"
+        canManage
+      />,
+    );
+    const nehez = await screen.findByText("Nehéz áru");
+    expect(nehez.parentElement?.textContent).toBe("Nehéz áruIgen· kézzel");
+    expect(screen.getByText("Fagyasztott").parentElement?.textContent).toBe(
+      "FagyasztottNem· UNAS szerint",
+    );
+    expect(
+      screen.getByText("Csomagautomatába nem fér").parentElement?.textContent,
+    ).toBe("Csomagautomatába nem férIgen· kézzel");
+  });
+
+  it("forrás nélküli válasznál nem talál ki forrást", async () => {
+    api.getShippingProfile.mockReturnValue(kesobb(profil()));
+    render(
+      <ProductShippingProfileCard
+        token="token-1"
+        productId="product-1"
+        canManage
+      />,
+    );
+    const nehez = await screen.findByText("Nehéz áru");
+    expect(nehez.parentElement?.textContent).toBe("Nehéz áruNem");
+  });
+
+  it("a csomagautomata-jelző menthető", async () => {
+    api.getShippingProfile.mockReturnValue(kesobb(profil()));
+    api.saveShippingProfile.mockReturnValue(
+      kesobb(profil({ lockerUnsuitable: true })),
+    );
+    render(
+      <ProductShippingProfileCard
+        token="token-1"
+        productId="product-1"
+        canManage
+      />,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Módosítás" }));
+    fireEvent.click(await screen.findByLabelText(/Csomagautomatába nem fér/));
+    fireEvent.click(screen.getByRole("button", { name: "Mentés" }));
+    await waitFor(() =>
+      expect(api.saveShippingProfile).toHaveBeenCalledWith(
+        "token-1",
+        "product-1",
+        expect.objectContaining({ lockerUnsuitable: true, isHeavy: false }),
+      ),
+    );
   });
 
   it("jog nélkül nincs szerkesztő gomb", async () => {

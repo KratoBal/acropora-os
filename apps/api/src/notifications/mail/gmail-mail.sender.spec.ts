@@ -261,3 +261,13 @@ describe("a feladó címe", () => {
     assert.equal(dekodoltNev(sor), "Ügyfélszolgálat");
   });
 });
+
+describe("a kiment level nyoma (kartya jatek-level-torles)", () => {
+  /** MI PIROSIT: ha a Gmail valaszanak `id`-je nem jut vissza a hivohoz (a jatek ezzel torli az elkuldott peldanyt). */
+  it("a kuldes a Gmail uzenet-azonositojat adja vissza", async () => {
+    assert.deepEqual(await kuldo({ token: "ok" }).send(LEVEL), {
+      id: "kitalalt-uzenet",
+      provider: "gmail",
+    });
+  });
+});

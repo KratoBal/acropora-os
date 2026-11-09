@@ -69,6 +69,7 @@ export const DASHBOARD_WIDGET_IDS = [
   "missing-invoices",
   "incoming-invoices",
   "expected-arrivals",
+  "partner-order-backlog",
   "supplier-matching",
   "settlements",
   "webshop-orders",
@@ -388,6 +389,18 @@ export const DASHBOARD_WIDGETS: readonly DashboardWidgetDefinition[] = [
       "ExpectedArrivalService.list() (open mail arrivals + unbooked NAV invoices); no ETA field exists.",
   }),
   widget({
+    id: "partner-order-backlog",
+    title: "Hátralékos megrendelések",
+    description: "Nyitott, teljesítetlen tételű megrendelések mozgás nélkül",
+    category: "finance",
+    requiredPermissions: [P.QUOTES_VIEW],
+    recommendedRoles: ["SALES", ...MANAGERS],
+    availability: "active",
+    priority: 46,
+    dataSource:
+      "PartnerOrdersService.backlogSummary(): open orders with a line no certificate states and no movement for the set days (partnerOrderBacklog).",
+  }),
+  widget({
     id: "supplier-matching",
     title: "JEV beszállítói párosítás",
     description: "Emberi megerősítésre vár",
@@ -589,6 +602,7 @@ export const DASHBOARD_ROLE_PRESETS: Partial<
   SALES: [
     "attention",
     "tasks",
+    "partner-order-backlog",
     "overdue-invoices",
     "incoming-invoices",
     "missing-invoices",
@@ -597,6 +611,7 @@ export const DASHBOARD_ROLE_PRESETS: Partial<
   OWNER: [
     "attention",
     "tasks",
+    "partner-order-backlog",
     "system-status",
     "jev-intelligence",
     "approvals",
@@ -606,6 +621,7 @@ export const DASHBOARD_ROLE_PRESETS: Partial<
   ADMIN: [
     "attention",
     "tasks",
+    "partner-order-backlog",
     "system-status",
     "jev-intelligence",
     "approvals",
@@ -615,6 +631,7 @@ export const DASHBOARD_ROLE_PRESETS: Partial<
   MANAGER: [
     "attention",
     "tasks",
+    "partner-order-backlog",
     "approvals",
     "upcoming-deadlines",
     "expected-arrivals",
@@ -1007,6 +1024,22 @@ export interface DashboardExpectedArrivalsWidgetData {
     supplierName: string;
     stage: "PROFORMA" | "INVOICE" | "LATE_CORRECTION";
     arrivedAt: string | null;
+  }[];
+}
+
+/**
+ * Hátralékos megrendelések (S4b-2, card 38caeac2): the number of back-ordered orders (open, a line no certificate
+ * states, no movement for `backlogDays` days: `partnerOrderBacklog`) and the ones that have stood the longest.
+ */
+export interface DashboardPartnerOrderBacklogWidgetData {
+  count: number;
+  /** The setting the count was made with. */
+  backlogDays: number;
+  oldest: {
+    orderId: string;
+    orderNumber: string;
+    customerName: string | null;
+    idleDays: number;
   }[];
 }
 

@@ -2,10 +2,10 @@
 
 import {
   Alert,
-  Card,
   EmptyState,
-  Input,
   PageHeader,
+  PilotCard,
+  PilotInput,
   PilotDataTable,
   Skeleton,
   type PilotTableColumn,
@@ -15,6 +15,7 @@ import {
 import {
   formatMoney,
   hasPermission,
+  isShippingFilterValue,
   PERMISSIONS,
   type ProductListResponse,
 } from "@acropora/types";
@@ -23,6 +24,10 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import {
+  ShippingFilterSelect,
+  ShippingFlagsCell,
+} from "@/components/products/shipping-flags";
 import { productApi } from "@/lib/api/products";
 
 const PAGE_SIZE = 25;
@@ -34,7 +39,8 @@ function formatStock(value: string | null): string {
 
 type ProductRow = ProductListResponse["items"][number];
 
-export const PRODUCT_TABLE_MIN_WIDTH = 880;
+// 880 + the 140 px shipping column (a82ed229): the name keeps its 150 px
+export const PRODUCT_TABLE_MIN_WIDTH = 1020;
 
 /*
   A WEBSHOP-TERMÉKLISTA OSZLOPAI A KÖZÖS TÁBLÁN (UI-áttekintés, 3. csomag, 2026-11-03). Telefonon a tábla
@@ -97,6 +103,13 @@ export const PRODUCT_COLUMNS: PilotTableColumn<ProductRow>[] = [
     cell: (item) => formatStock(item.stockOnHand),
   },
   {
+    // a82ed229: the shipping flags; "nincs vizsgálva" is not "nincs korlát"
+    id: "shipping",
+    header: "Szállítás",
+    width: "140px",
+    cell: (product) => <ShippingFlagsCell flags={product.shippingFlags} />,
+  },
+  {
     id: "status",
     header: "Webshop státusz",
     width: "150px",
@@ -156,6 +169,8 @@ export function WebshopProductListPage() {
   const token = session?.token ?? "";
   const page = Number(params.get("page") ?? "1") || 1;
   const searchParam = params.get("search") ?? "";
+  const shippingParam = params.get("szallitas");
+  const shipping = isShippingFilterValue(shippingParam) ? shippingParam : "";
 
   const query = useMemo(
     () => ({
@@ -163,8 +178,9 @@ export function WebshopProductListPage() {
       page,
       pageSize: PAGE_SIZE,
       ...(searchParam ? { search: searchParam } : {}),
+      ...(shipping ? { shipping } : {}),
     }),
-    [page, searchParam],
+    [page, searchParam, shipping],
   );
 
   const load = useCallback(async () => {
@@ -244,17 +260,30 @@ export function WebshopProductListPage() {
 
       {data ? (
         <>
-          <Card className="p-4">
-            <Input
-              aria-label="Termék keresése"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Terméknév vagy cikkszám"
+          <PilotCard className="flex flex-wrap items-center gap-3 p-4">
+            <div className="min-w-[240px] flex-[2_1_320px]">
+              <PilotInput
+                aria-label="Termék keresése"
+                value={search}
+                onChange={setSearch}
+                placeholder="Terméknév vagy cikkszám"
+              />
+            </div>
+            <ShippingFilterSelect
+              value={shipping}
+              onChange={(value) => {
+                const next = new URLSearchParams(params.toString());
+                if (value) next.set("szallitas", value);
+                else next.delete("szallitas");
+                next.set("page", "1");
+                router.replace(`${pathname}?${next}`);
+              }}
+              className="min-w-[160px] flex-[1_1_180px]"
             />
-          </Card>
+          </PilotCard>
 
           {data.items.length ? (
-            <Card>
+            <PilotCard>
               <PilotDataTable
                 columns={PRODUCT_COLUMNS}
                 rows={data.items}
@@ -262,7 +291,7 @@ export function WebshopProductListPage() {
                 rowTestId="webshop-product-row"
                 minWidth={PRODUCT_TABLE_MIN_WIDTH}
               />
-            </Card>
+            </PilotCard>
           ) : (
             /*
               An empty screen has to say which of the two emptinesses it is.

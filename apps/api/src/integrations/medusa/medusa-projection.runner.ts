@@ -828,7 +828,7 @@ export async function runProjectionCli(
 
     megnezettTermek += 1;
 
-    const product = await db.product.findUnique({
+    const betoltott = await db.product.findUnique({
       where: { id: productId },
       select: {
         id: true,
@@ -857,11 +857,12 @@ export async function runProjectionCli(
          * `null` here, and its link is cleared rather than left as it was.
          */
         brand: { select: OS_BRAND_FOR_SHOP_SELECT },
+        // every variant with its flag: which ones go out is decided below (ca422e92)
         variants: {
-          where: { isActive: true },
           orderBy: [{ createdAt: "asc" }, { id: "asc" }],
           select: {
             id: true,
+            isActive: true,
             sku: true,
             manufacturerPartNumber: true,
             unit: true,
@@ -937,11 +938,32 @@ export async function runProjectionCli(
       },
     });
 
-    if (!product) {
+    if (!betoltott) {
       out.stderr(`${argument}: nincs ilyen termék (${productId})\n`);
       failed += 1;
       continue;
     }
+
+    /**
+     * AZ INAKTÍV TERMÉK AKTÍV VÁLTOZAT NÉLKÜL IS KIMEGY (kártya ca422e92).
+     *
+     * A vetítés az aktív változatokkal dolgozik. Egy inaktivált terméknél
+     * viszont gyakran a változatai is inaktívak, és akkor cikkszám nélkül a
+     * vetítés `no-sku` okkal megállt: a bolt published vagy jelölő nélküli
+     * draft maradt, a kötés `lastSyncedAt`-je nem lépett, és az ütemező minden
+     * körben újra elővette volna. Ilyenkor a termék az ÖSSZES változatával megy,
+     * hogy a boltba a draft és a kifutott-jelölő kerüljön; a publikációs döntés
+     * bemenete ettől nem változik (`activeVariantCount` az aktívakat számolja).
+     * Aktív terméknél minden marad a régiben: az inaktív változat nem megy ki.
+     */
+    const aktivValtozatok = betoltott.variants.filter((v) => v.isActive);
+    const product = {
+      ...betoltott,
+      variants:
+        betoltott.isActive || aktivValtozatok.length
+          ? aktivValtozatok
+          : betoltott.variants,
+    };
 
     /**
      * Csak azt vetítjük ki, aminek a törzsadata a MIÉNK. Egy UNAS-gazdájú
@@ -1546,7 +1568,7 @@ export async function runProjectionCli(
           catalogAuthority: product.catalogAuthority,
           isActive: product.isActive,
           webshopSellable: product.webshopSellable,
-          activeVariantCount: product.variants.length,
+          activeVariantCount: aktivValtozatok.length,
           /*
             A CIKKSZAMOK A NEM-TERMEK KAPUHOZ KELLENEK. A lekerdezes mar
             hozza oket (`variants.select.sku`), tehat ez nem uj kor -- csak

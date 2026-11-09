@@ -110,6 +110,18 @@ export const SETTLEMENT_TABS: ReadonlyArray<{
     label: "SimplePay",
     entryId: "simplepay-settlement",
   },
+  {
+    // Balázs, 2026-11-04: egy utalás négy számlára (kártya aeddb2c3)
+    href: "/penzugy/atutalasok",
+    label: "Banki átutalások",
+    entryId: "bank-transfer-settlement",
+  },
+  {
+    // Balázs, 2026-11-05: "szeretném a futtatás most gombot" (kártya e64540fd)
+    href: "/penzugy/napi-jeloles",
+    label: "Napi jelölés",
+    entryId: "paid-marks-settlement",
+  },
 ];
 
 /**
@@ -252,6 +264,13 @@ const mainNavigationGroups: AppNavigationGroup[] = [
         label: "Megrendelések",
         icon: "clipboard",
         entryId: "partner-orders",
+      },
+      {
+        // Eszközbérlés (task eszkozberles, S2): kiadás, és később a visszavétel
+        href: "/berles",
+        label: "Bérlés",
+        icon: "clipboard",
+        entryId: "rentals",
       },
       {
         href: "/partnerek",
@@ -474,6 +493,12 @@ const mainNavigationGroups: AppNavigationGroup[] = [
         icon: "fish",
         entryId: "mortality",
       },
+      {
+        href: "/elo-allat-erkezesek",
+        label: "Élő állat érkezések",
+        icon: "package",
+        entryId: "livestock-arrivals",
+      },
     ],
   },
   {
@@ -492,6 +517,13 @@ const mainNavigationGroups: AppNavigationGroup[] = [
         label: "Tartalom",
         icon: "clipboard",
         entryId: "content",
+      },
+      {
+        // a karácsonyi nyereményjáték kezelése (kártya 31445d0f)
+        href: "/tartalom/nyeremenyjatek",
+        label: "Nyereményjáték",
+        icon: "clipboard",
+        entryId: "game",
       },
       {
         // belső szerkesztői modul a teszten (S4): a többi belső próbafelület mellett
@@ -574,12 +606,36 @@ const mainNavigationGroups: AppNavigationGroup[] = [
         entryId: "asset-functions",
       },
       {
+        // Eszközbérlés, S1 (task eszkozberles): a bérelhető eszközök törzse
+        subgroup: "Törzsadatok",
+        href: "/beallitasok/berelheto-eszkozok",
+        label: "Bérelhető eszközök",
+        icon: "settings",
+        entryId: "rental-equipment",
+      },
+      {
         // Egy partnertörzs, 1. lépés (acrobot 42536): a duplikátum-lista, csak olvas.
         subgroup: "Törzsadatok",
         href: "/beallitasok/partner-duplikatumok",
         label: "Partner-duplikátumok",
         icon: "settings",
         entryId: "partner-duplicates",
+      },
+      {
+        // Egy partnertörzs, egyszeri átvezetés: a partnerek terve, csak olvas.
+        subgroup: "Törzsadatok",
+        href: "/beallitasok/partner-atvezetes",
+        label: "Partner-átvezetés",
+        icon: "settings",
+        entryId: "partner-migration",
+      },
+      {
+        // a82ed229: a szállítási jelzők egyszeri feltöltése a UNAS-ból (próba, írás a lenyomattal)
+        subgroup: "Törzsadatok",
+        href: "/beallitasok/szallitasi-jelzok",
+        label: "Szállítási jelzők feltöltése",
+        icon: "settings",
+        entryId: "shipping-fill",
       },
       {
         // AZ AJANLATI SZOVEGRESZLETEK (#1582 P1): a Figma 35-ben nincs sajat

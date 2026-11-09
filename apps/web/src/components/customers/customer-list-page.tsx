@@ -2,22 +2,24 @@
 import { plainText } from "@/lib/format/plain-text";
 import {
   Alert,
-  Badge,
-  Card,
   EmptyState,
-  Input,
   PageHeader,
   Pagination,
+  PilotBadge,
+  PilotCard,
   PilotDataTable,
+  PilotInput,
+  PilotSelect,
   type PilotTableColumn,
-  Select,
   Skeleton,
   PilotButton,
 } from "@acropora/ui";
 import {
+  CUSTOMER_LIST_ROLES,
   hasPermission,
   PERMISSIONS,
   type CustomerListResponse,
+  type CustomerPartnerRole,
 } from "@acropora/types";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -26,6 +28,22 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { customersApi } from "@/lib/api/customers";
 
 type CustomerRow = CustomerListResponse["items"][number];
+
+/** A szerep jelvénye a soron (egy partnertörzs): a Supplier-kötésből származtatva, külön oszlop nélkül. */
+const ROLE_BADGE: Record<CustomerPartnerRole, string> = {
+  SUPPLIER: "Beszállító",
+  SERVICE: "Szerviz-partner",
+};
+
+/** A szerep-szűrő választéka, a lista a `role` URL-kulcson át szűr (hiányzó: mindenki). */
+const ROLE_FILTER_LABEL: Record<(typeof CUSTOMER_LIST_ROLES)[number], string> =
+  {
+    ALL: "Minden szerep",
+    BUYER: "Csak vevők",
+    PARTNER: "Minden partner",
+    SUPPLIER: "Beszállítók",
+    SERVICE: "Szerviz-partnerek",
+  };
 
 // The shared table: on the phone every row is a card with the name as its title.
 const columns: PilotTableColumn<CustomerRow>[] = [
@@ -38,6 +56,20 @@ const columns: PilotTableColumn<CustomerRow>[] = [
         {item.companyName ? (
           <span className="block text-xs font-normal text-dusk-500">
             {item.companyName}
+          </span>
+        ) : null}
+        {item.partnerMirror ? (
+          <span className="mt-1 flex flex-wrap gap-1" data-testid="role-badges">
+            {(item.partnerRoles?.length ? item.partnerRoles : []).map(
+              (role) => (
+                <PilotBadge key={role} variant="blue">
+                  {ROLE_BADGE[role]}
+                </PilotBadge>
+              ),
+            )}
+            {item.partnerRoles?.length ? null : (
+              <PilotBadge variant="blue">Partner</PilotBadge>
+            )}
           </span>
         ) : null}
       </span>
@@ -63,9 +95,9 @@ const columns: PilotTableColumn<CustomerRow>[] = [
     header: "Forrás",
     width: "180px",
     cell: (item) => (
-      <Badge variant={item.source === "UNAS" ? "info" : "neutral"}>
+      <PilotBadge variant={item.source === "UNAS" ? "blue" : "grey"}>
         {item.source === "UNAS" ? "Webshopos" : "Általunk rögzített"}
-      </Badge>
+      </PilotBadge>
     ),
   },
 ];
@@ -88,6 +120,8 @@ export function CustomerListPage() {
   const token = session?.token ?? "";
   const query = useMemo(() => {
     const q = new URLSearchParams(params.toString());
+    // egy lista a vevőkkel és a partnerekkel: szerep nélkül mindenki jön (a szerep-szűrő szűkít)
+    if (!q.has("role")) q.set("role", "ALL");
     if (!q.has("page")) q.set("page", "1");
     if (!q.has("pageSize")) q.set("pageSize", "25");
     return q;
@@ -156,8 +190,8 @@ export function CustomerListPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Webshop vásárlók"
-        description="A UNAS webshopból szinkronizált és a kézzel rögzített vásárlók. A beszállítók és a szerviz partnerek a Partnerek menüpontban vannak."
+        title="Vevők és partnerek"
+        description="Egy lista: a UNAS webshopból szinkronizált és a kézzel rögzített vevők, és a partnerek (beszállítók, szerviz-partnerek), a szerep jelvénye a soron. Szűrhető szerepre."
         actions={
           canManage ? (
             <Link href="/vevok/uj">
@@ -186,36 +220,50 @@ export function CustomerListPage() {
       ) : null}
       {data ? (
         <>
-          <Card className="p-4">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <Input
+          <PilotCard className="p-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+              <PilotInput
                 aria-label="Vevő keresése"
                 value={search}
-                onChange={(event) => setSearch(event.target.value)}
+                onChange={setSearch}
                 placeholder="Név, cégnév, email, partnerkód"
               />
-              <Select
+              <PilotSelect
+                aria-label="Szerep"
+                value={params.get("role") ?? ""}
+                onChange={(value) => filter("role", value)}
+              >
+                <option value="">{ROLE_FILTER_LABEL.ALL}</option>
+                {CUSTOMER_LIST_ROLES.filter((role) => role !== "ALL").map(
+                  (role) => (
+                    <option key={role} value={role}>
+                      {ROLE_FILTER_LABEL[role]}
+                    </option>
+                  ),
+                )}
+              </PilotSelect>
+              <PilotSelect
                 aria-label="Forrás"
                 value={params.get("source") ?? ""}
-                onChange={(event) => filter("source", event.target.value)}
+                onChange={(value) => filter("source", value)}
               >
                 <option value="">Minden forrás</option>
                 <option value="UNAS">Webshop (UNAS)</option>
                 <option value="MANUAL">Általunk rögzített</option>
-              </Select>
-              <Select
+              </PilotSelect>
+              <PilotSelect
                 aria-label="Státusz"
                 value={params.get("status") ?? "ACTIVE"}
-                onChange={(event) => filter("status", event.target.value)}
+                onChange={(value) => filter("status", value)}
               >
                 <option value="ACTIVE">Aktív</option>
                 <option value="INACTIVE">Inaktív</option>
                 <option value="ALL">Mind</option>
-              </Select>
+              </PilotSelect>
             </div>
-          </Card>
+          </PilotCard>
           {data.items.length ? (
-            <Card className="overflow-x-auto">
+            <PilotCard className="overflow-x-auto">
               <div className="flex justify-end px-3 py-2">
                 <Pagination
                   position="top"
@@ -233,13 +281,17 @@ export function CustomerListPage() {
                 onRowActivate={(item) => router.push(`/vevok/${item.id}`)}
                 minWidth={720}
               />
-            </Card>
+            </PilotCard>
           ) : (
             <EmptyState
               title={
                 data.pagination.totalItems ? "Nincs találat" : "Nincsenek vevők"
               }
-              description="Módosítsd a szűrőket vagy rögzíts új vevőt."
+              description={
+                params.get("role") === "SUPPLIER"
+                  ? "A beszállítók akkor jelennek meg itt, ha a partnerük egy vevő-sorhoz van kötve (a partner-átvezetés után); addig csak a szerviz-partnerek tükör-sorai vannak a listán."
+                  : "Módosítsd a szűrőket vagy rögzíts új vevőt."
+              }
               action={
                 data.pagination.totalItems ? (
                   <PilotButton

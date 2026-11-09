@@ -1,0 +1,349 @@
+import type { ResidualReport } from "./residual-scan.js";
+
+/**
+ * THE VERIFICATION GATE (stage anonymization chain, slice S4; card 07b56a1f; plan 2026-10-12 section 3.5: "a stage-csere csak akkor
+ * tortenik meg, ha mind atment"). PURE: the numbers and samples a runner (S5) measured on the temporary database go in, a pass or
+ * fail with the reasons comes out. Nothing here reads a database; the runner does the measuring and this decides.
+ *
+ * THE REPORT NAMES, NEVER SHOWS: a problem line holds a table, a column, a kind and numbers (counts, aggregate sums). It never
+ * holds a personal value, a row or a position, so the report can be posted to the board without a second review.
+ *
+ * SEVEN CHECKS, as the plan lists them (plus an eighth the plan does not, `transformCoverage`: the transform visited every row): (1) row counts per table against the source (an intentionally emptied table, and the rows
+ * the transformer dropped, are accounted for), (2) referential integrity (no orphan foreign key), (3) ZERO residual personal data
+ * (the S4 scan), (4) format validity of the fakes (written independently of the engine and calibrated on a published example),
+ * (5) business invariants (monthly order and invoice sums, stock balances, status distributions) equal to the source,
+ * (6) correlations (the customer-order and customer-invoice pairings) equal to the source, (7) the working trial (a stub invoice, an order flow, a work sheet, a ticket) on an application
+ * instance bound to the TEMPORARY database, BEFORE the swap: a script step outside this module that enters as a result with
+ * named checks, which the runner passes after it ran.
+ */
+
+export interface GateSection {
+  name: string;
+  passed: boolean;
+  /** Table, column, kind and numbers only. */
+  problems: string[];
+}
+
+export interface GateReport {
+  passed: boolean;
+  sections: GateSection[];
+}
+
+const section = (name: string, problems: string[]): GateSection => ({
+  name,
+  passed: problems.length === 0,
+  problems,
+});
+
+type Counts = Readonly<Record<string, number>>;
+
+/** (1) Row counts. `emptied`: tables the plan empties on purpose (they must be 0). `dropped`: rows the transformer removed per table. */
+export function compareRowCounts(
+  source: Counts,
+  target: Counts,
+  options: { emptied?: ReadonlySet<string>; dropped?: Counts } = {},
+): GateSection {
+  const problems: string[] = [];
+  const emptied = options.emptied ?? new Set<string>();
+  for (const [table, sourceCount] of Object.entries(source)) {
+    if (!(table in target)) {
+      problems.push(
+        `${table}: missing from the target (source ${sourceCount})`,
+      );
+      continue;
+    }
+    const targetCount = target[table]!;
+    if (emptied.has(table)) {
+      if (targetCount !== 0)
+        problems.push(`${table}: should be emptied, target ${targetCount}`);
+      continue;
+    }
+    const expected = sourceCount - (options.dropped?.[table] ?? 0);
+    if (targetCount !== expected) {
+      problems.push(
+        `${table}: source ${sourceCount}, dropped ${options.dropped?.[table] ?? 0}, expected ${expected}, target ${targetCount}`,
+      );
+    }
+  }
+  for (const table of Object.keys(target)) {
+    if (!(table in source))
+      problems.push(`${table}: in the target, not in the source`);
+  }
+  return section("rowCounts", problems);
+}
+
+/** (2) Referential integrity: the orphan count per foreign key must be 0 (`Model.field -> Target`). */
+export function checkReferentialIntegrity(
+  orphans: Counts,
+  migrationsApplied: boolean,
+  healthOk: boolean,
+): GateSection {
+  const problems = Object.entries(orphans)
+    .filter(([, count]) => count !== 0)
+    .map(([key, count]) => `${key}: ${count} orphan row(s)`);
+  if (!migrationsApplied)
+    problems.push("migrations: the migration state is not clean");
+  if (!healthOk) problems.push("health: the application health check failed");
+  return section("referentialIntegrity", problems);
+}
+
+/**
+ * (1b) The transform LOOK at every row (barracuda, #2328): per model, the rows the transform loop visited (transformed, unchanged
+ * or dropped, all count) must equal the source's count. A reader that skips a row after a delete (an OFFSET page) leaves that row
+ * UNTRANSFORMED in the swap candidate, and the residual scan sees it only if its value happens to be in the dictionary, so the
+ * count is the net. A model the loop never visited is a problem too.
+ */
+export function transformCoverageSection(
+  visited: Readonly<Record<string, number>>,
+  source: Readonly<Record<string, number>>,
+): GateSection {
+  const problems: string[] = [];
+  for (const [model, expected] of Object.entries(source)) {
+    const seen = visited[model] ?? 0;
+    if (seen !== expected)
+      problems.push(
+        `${model}: the transform visited ${seen} row(s), the source has ${expected}`,
+      );
+  }
+  for (const model of Object.keys(visited))
+    if (!(model in source))
+      problems.push(`${model}: visited by the transform, not in the source`);
+  if (Object.keys(source).length === 0)
+    problems.push("no model was measured, so nothing was compared");
+  return section("transformCoverage", problems);
+}
+
+/** (3) Residual personal data: nothing found. The S4 scan's report, as a section. */
+export function residualSection(
+  report: ResidualReport,
+  expectedRows: number,
+): GateSection {
+  const problems = report.findings.map((f) =>
+    f.kind === "credentialKey"
+      ? `${f.model}.${f.field}: ${f.count} credential or network key(s) left in the JSON`
+      : `${f.model}.${f.field}: ${f.count} value(s) with a real ${f.kind}`,
+  );
+  // a scan that read nothing proves nothing: the number of rows it saw must be the number of rows the target has
+  if (report.rowsScanned !== expectedRows) {
+    problems.push(
+      `scan coverage: ${report.rowsScanned} row(s) scanned, ${expectedRows} expected`,
+    );
+  }
+  return section("residualPersonalData", problems);
+}
+
+// ---- (4) formats: validators written here, independent of the engine ----
+
+const mod97 = (iban: string): boolean => {
+  const compact = iban.replace(/\s+/g, "").toUpperCase();
+  if (!/^[A-Z]{2}\d{2}[A-Z0-9]{8,30}$/.test(compact)) return false;
+  const moved = compact.slice(4) + compact.slice(0, 4);
+  const numeric = [...moved]
+    .map((c) => (/\d/.test(c) ? c : String(c.charCodeAt(0) - 55)))
+    .join("");
+  return BigInt(numeric) % 97n === 1n;
+};
+
+/** Weights 9-7-3-1 repeated: the weighted sum of the digits must be a multiple of ten. */
+const blockOk = (digits: string): boolean => {
+  const weights = [9, 7, 3, 1];
+  let sum = 0;
+  for (let i = 0; i < digits.length; i += 1)
+    sum += Number(digits[i]) * weights[i % 4]!;
+  return sum % 10 === 0;
+};
+
+const huBbanOk = (bban: string): boolean =>
+  /^\d{24}$/.test(bban) &&
+  blockOk(bban.slice(0, 8)) &&
+  (/^0{8}$/.test(bban.slice(16))
+    ? blockOk(bban.slice(8, 16))
+    : blockOk(bban.slice(8)));
+
+const companyCoreOk = (core: string): boolean => {
+  if (!/^\d{8}$/.test(core)) return false;
+  const weights = [9, 7, 3, 1, 9, 7, 3];
+  let sum = 0;
+  for (let i = 0; i < 7; i += 1) sum += Number(core[i]) * weights[i]!;
+  return (10 - (sum % 10)) % 10 === Number(core[7]);
+};
+
+const personalTaxIdOk = (value: string): boolean => {
+  const digits = value.replace(/\D/g, "");
+  if (!/^8\d{9}$/.test(digits)) return false;
+  let sum = 0;
+  for (let i = 0; i < 9; i += 1) sum += (i + 1) * Number(digits[i]);
+  return sum % 11 === Number(digits[9]) && sum % 11 !== 10;
+};
+
+export const FORMAT_VALIDATORS = {
+  email: (value: string) => /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/.test(value),
+  /** The fake e-mail domain is undeliverable on purpose (plan 3.2): a stage mail must never leave. */
+  fakeEmail: (value: string) =>
+    /^[^\s@]+@teszt\.acropora\.invalid$/.test(value),
+  companyTaxNumber: (value: string) => {
+    const digits = value.replace(/\D/g, "");
+    return digits.length === 11 && companyCoreOk(digits.slice(0, 8));
+  },
+  personalTaxId: personalTaxIdOk,
+  iban: (value: string) => {
+    if (!mod97(value)) return false;
+    const compact = value.replace(/\s+/g, "").toUpperCase();
+    return compact.startsWith("HU") ? huBbanOk(compact.slice(4)) : true;
+  },
+  phone: (value: string) =>
+    /^\+?[\d\s().-]{6,}$/.test(value) && value.replace(/\D/g, "").length >= 6,
+} as const;
+
+export type FormatKind = keyof typeof FORMAT_VALIDATORS;
+
+/**
+ * The format kinds that are ALWAYS required, and cannot be left out by any caller (barracuda, #2325 round 2): a caller passing an
+ * empty list must not be able to turn the whole format section green. Every real source has e-mail addresses, phone numbers,
+ * IBANs and natural persons' tax ids, so a run with no sample of one of them is a run that did not look.
+ */
+export const ALWAYS_REQUIRED_FORMAT_KINDS: readonly FormatKind[] = [
+  "fakeEmail",
+  "phone",
+  "iban",
+  "personalTaxId",
+];
+
+/**
+ * The kind that is required only when the caller says fakes of it exist: a company's tax number is KEPT while the company-data
+ * decision is open, so no company fake is made and no sample of it can exist. The default requires it; the runner drops it
+ * (and only it) while the kinds table keeps the company's tax number.
+ */
+export const CONDITIONAL_FORMAT_KINDS: readonly FormatKind[] = [
+  "companyTaxNumber",
+];
+
+/** All five kinds, the strictest list. */
+export const REQUIRED_FORMAT_KINDS: readonly FormatKind[] = [
+  ...ALWAYS_REQUIRED_FORMAT_KINDS,
+  ...CONDITIONAL_FORMAT_KINDS,
+];
+
+/**
+ * (4) Format validity of a sample of fakes, per kind: 100% must pass, and every required kind must be sampled. The four always
+ * required kinds are fixed; `conditionalKinds` (default: the company tax number) are the ones a caller may drop. Reports counts only.
+ */
+export function checkFormats(
+  samples: Partial<Record<FormatKind, readonly string[]>>,
+  conditionalKinds: readonly FormatKind[] = CONDITIONAL_FORMAT_KINDS,
+): GateSection {
+  const requiredKinds = [...ALWAYS_REQUIRED_FORMAT_KINDS, ...conditionalKinds];
+  const problems: string[] = [];
+  for (const kind of requiredKinds) {
+    if (samples[kind] === undefined)
+      problems.push(`${kind}: no sample was given, so nothing was checked`);
+  }
+  for (const [kind, values] of Object.entries(samples) as [
+    FormatKind,
+    readonly string[],
+  ][]) {
+    const validate = FORMAT_VALIDATORS[kind];
+    if (!validate) {
+      problems.push(`${kind}: no validator for this kind`);
+      continue;
+    }
+    if (values.length === 0) {
+      problems.push(`${kind}: the sample is empty, so nothing was checked`);
+      continue;
+    }
+    const bad = values.filter((value) => !validate(value)).length;
+    if (bad > 0)
+      problems.push(
+        `${kind}: ${bad} of ${values.length} sampled value(s) fail the check`,
+      );
+  }
+  return section("formats", problems);
+}
+
+/** (5) and (6) Aggregates (monthly sums, stock balances, status distributions, pairing counts) equal to the source, key by key. */
+export function compareAggregates(
+  name: "invariants" | "correlations",
+  source: Readonly<Record<string, number | string>>,
+  target: Readonly<Record<string, number | string>>,
+): GateSection {
+  const problems: string[] = [];
+  for (const [key, value] of Object.entries(source)) {
+    if (!(key in target))
+      problems.push(`${key}: missing from the target (source ${value})`);
+    else if (target[key] !== value)
+      problems.push(`${key}: source ${value}, target ${target[key]}`);
+  }
+  for (const key of Object.keys(target)) {
+    if (!(key in source))
+      problems.push(`${key}: in the target, not in the source`);
+  }
+  if (Object.keys(source).length === 0)
+    problems.push("no aggregate was measured, so nothing was compared");
+  return section(name, problems);
+}
+
+export interface TrialCheck {
+  /** What the trial did, in words the owner can read ("a work sheet is created", "an invoice is drafted"). */
+  name: string;
+  passed: boolean;
+}
+
+/**
+ * (7) The working trial, run on an application instance bound to the TEMPORARY database BEFORE the swap (owner's operating
+ * decision, 2026-11-09). A trial that did not run, failed, or reported NO CHECKS fails the gate: a trial that names nothing it
+ * did cannot be told from a stub that returns "passed", so the result must carry at least one named check, each of which passed.
+ * The report names the failed checks, so the card shows what the trial covered.
+ */
+export function trialSection(
+  ran: boolean,
+  passed: boolean,
+  checks: readonly TrialCheck[] = [],
+): GateSection {
+  if (!ran) return section("workingTrial", ["the working trial did not run"]);
+  const problems: string[] = [];
+  if (!passed) problems.push("the working trial ran and failed");
+  if (checks.length === 0)
+    problems.push(
+      "the working trial reported no checks, so nothing shows what it covered",
+    );
+  for (const check of checks)
+    if (!check.passed) problems.push(`trial check failed: ${check.name}`);
+  return section("workingTrial", problems);
+}
+
+/**
+ * The sections the gate REQUIRES, each exactly once (barracuda, #2325). The gate is the one point that stops the stage swap, so
+ * a missing check must be a failure, not a shorter list of green ones: a runner that skipped the residual scan would otherwise
+ * pass on the other six.
+ */
+export const REQUIRED_SECTIONS = [
+  "rowCounts",
+  "transformCoverage",
+  "referentialIntegrity",
+  "residualPersonalData",
+  "formats",
+  "invariants",
+  "correlations",
+  "workingTrial",
+] as const;
+
+/**
+ * The gate: every required section must be present exactly once, and every section given (a runner may add its own, such as
+ * the unique-column check) must pass. A missing or repeated required section fails the gate and the report names it, in a
+ * `gateStructure` section of its own.
+ */
+export function buildGateReport(sections: readonly GateSection[]): GateReport {
+  const structure: string[] = [];
+  for (const name of REQUIRED_SECTIONS) {
+    const times = sections.filter((s) => s.name === name).length;
+    if (times === 0) structure.push(`${name}: the required section is missing`);
+    else if (times > 1)
+      structure.push(`${name}: the required section appears ${times} times`);
+  }
+  const all = [...sections];
+  if (structure.length > 0) all.push(section("gateStructure", structure));
+  return {
+    passed: all.length > 0 && all.every((s) => s.passed),
+    sections: all,
+  };
+}

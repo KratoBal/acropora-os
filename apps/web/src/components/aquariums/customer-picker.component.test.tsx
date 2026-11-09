@@ -1,8 +1,12 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
 
-const api = vi.hoisted(() => ({ list: vi.fn(async () => ({ items: [] })) }));
+const api = vi.hoisted(() => ({
+  list: vi.fn(async (_token: string, _query: URLSearchParams) => ({
+    items: [],
+  })),
+}));
 vi.mock("@/lib/api/customers", () => ({ customersApi: api }));
 
 import { CustomerPicker, type CustomerSelection } from "./customer-picker";
@@ -14,6 +18,7 @@ import { CustomerPicker, type CustomerSelection } from "./customer-picker";
  * válik (`required`); ha a név beírása elveszíti a többit vagy a cím-sort.
  */
 afterEach(cleanup);
+beforeEach(() => api.list.mockClear());
 
 const NEW: CustomerSelection = {
   newCustomer: {
@@ -69,5 +74,42 @@ describe("az akváriumhoz felvitt új ügyfél űrlapja", () => {
       postalCode: "",
       city: "Győr",
     });
+  });
+});
+
+/**
+ * A MEGLÉVŐ ÜGYFÉL KERESÉSE AZ EGYESÍTETT PARTNERT IS KÍNÁLJA (40332480). MI PIROSÍT: ha a keresés kérése nem viszi a
+ * `includePartnerMirrors` jelzőt (a vevő-lista alapból a partner-kötést viselő sort kihagyja, és az egyesített
+ * partner, például egy állatkert, nem lenne kiválasztható); ha a jelző értéke nem `true`.
+ */
+describe("a meglévő ügyfél keresése az akvárium-lapon", () => {
+  // T1.3, 16. szelet: a keresőmező címkéje eddig nem mutatott a mezőre (se a dusk, se a pilot alakban), most igen
+  it("a keresőmező a címkéjével is megtalálható", () => {
+    render(<CustomerPicker token="t" selection={{}} onChange={vi.fn()} />);
+    expect(screen.getByLabelText("Ügyfél keresése")).toBe(
+      screen.getByPlaceholderText("Név, telefonszám, e-mail"),
+    );
+  });
+
+  it("a partner-kötést viselő sort is kéri a vevő-listától", async () => {
+    vi.useFakeTimers();
+    try {
+      render(<CustomerPicker token="t" selection={{}} onChange={vi.fn()} />);
+      fireEvent.change(
+        screen.getByPlaceholderText("Név, telefonszám, e-mail"),
+        {
+          target: { value: "Fővárosi" },
+        },
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400);
+      });
+      expect(api.list).toHaveBeenCalledTimes(1);
+      const query = api.list.mock.calls[0]![1];
+      expect(query.get("search")).toBe("Fővárosi");
+      expect(query.get("includePartnerMirrors")).toBe("true");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -148,12 +148,12 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
     }
   };
 
-  // Luca (card 5937bdf2): a never-published draft can be deleted, a closed
-  // quote can be copied as a new quote. The server decides; these only show
-  // the button where it can work.
+  // Luca (card 5937bdf2): a never-published draft can be deleted. Any quote can
+  // be copied as a new quote (card 534b2de4: an open one too, to send a similar
+  // one to the same customer in parallel). The server decides; the delete
+  // flag only shows the button where it can work.
   const neverPublished = quote.versions.every((v) => v.status === "DRAFT");
   const deletable = quote.status === "DRAFT" && neverPublished;
-  const closed = ["ACCEPTED", "REJECTED", "CANCELLED"].includes(quote.status);
   const deleteDraft = async () => {
     setBusy(true);
     setError(null);
@@ -258,9 +258,7 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
           </div>
         }
         actions={
-          (editable && (canManage || canRecord)) ||
-          canMail ||
-          (canManage && (deletable || closed)) ? (
+          (editable && (canManage || canRecord)) || canMail || canManage ? (
             <div className="flex flex-wrap gap-2">
               {canMail ? (
                 <PilotButton
@@ -307,7 +305,7 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
                   Elfogadás rögzítése
                 </PilotButton>
               ) : null}
-              {canManage && closed ? (
+              {canManage ? (
                 <PilotButton
                   size="regular"
                   variant="secondary"

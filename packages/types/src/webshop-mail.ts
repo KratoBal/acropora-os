@@ -22,6 +22,13 @@
  */
 import type { MailBlock, MailBlocks } from "./mail-blocks.js";
 import {
+  isWebshopLivestockKind,
+  WEBSHOP_ACCLIMATION_TEXTS,
+  webshopAcclimationValue,
+  type WebshopAcclimationTexts,
+  type WebshopLivestockKind,
+} from "./webshop-acclimation.js";
+import {
   WEBSHOP_ENGLISH_KEY_SUFFIX,
   type MailTemplateValues,
 } from "./mail-template.js";
@@ -51,6 +58,13 @@ export interface WebshopMailOrder {
 /** commerce `MailOrder`: the pickup half of a mixed cart is `pickup: true`. */
 export interface WebshopPlacedOrder extends WebshopMailOrder {
   readonly pickup: boolean;
+  /**
+   * The kinds of live animal among the order's lines (commerce #684, V2.6), for
+   * the acclimatisation section (`webshop-acclimation.ts`). OPTIONAL and
+   * tolerant: a webshop that does not send it, or sends something else, means
+   * no kinds, never a refused mail (`facts_version` stays 1).
+   */
+  readonly livestock_kinds?: readonly WebshopLivestockKind[];
 }
 
 /** commerce `ShippedMailFacts`. */
@@ -107,6 +121,12 @@ export interface WebshopMailCommonFacts {
    * stays 1, so the OS and the webshop can be deployed in either order.
    */
   readonly locale?: WebshopMailLocale;
+  /**
+   * The address of the storefront's guest order page in the mail's language (commerce `order_view_url`), or null.
+   * OPTIONAL and tolerant, like `livestock_kinds`: a webshop that does not send it, or sends something that is not a
+   * plain https address, means no link, never a refused mail (`facts_version` stays 1).
+   */
+  readonly order_view_url?: string | null;
 }
 
 export const WEBSHOP_MAIL_LOCALES = ["hu", "en"] as const;
@@ -178,6 +198,36 @@ type WebshopTemplateFacts =
       readonly template: "problem-report-received";
       readonly display_id: number | string;
       readonly report_id: string;
+    }
+  | {
+      /**
+       * The newsletter's confirmation (double opt-in, commerce card
+       * d707cf5f): the link that confirms the sign-up (it works once, until
+       * `expires_at`), and the link that leaves the list. There is no order
+       * behind it: the common `order_created_at` and `order_view_url` are
+       * null, `customer_name` is the name typed into the sign-up. The text is
+       * a proposal on Balázs's list; the shop sends it only behind its switch.
+       */
+      readonly template: "newsletter-confirm";
+      readonly confirm_url: string;
+      readonly unsubscribe_url: string;
+      readonly expires_at: string;
+    }
+  | {
+      /**
+       * The stock alert's confirmation ("Szólj, ha jön hasonló", commerce
+       * card 0c1265d2, acropora-commerce #701): the newsletter's double
+       * opt-in, plus what the address signed up for (`subject_label`, a
+       * species "Acropora abrolhosensis" or a product's title). No name was
+       * asked: `customer_name`, `order_created_at` and `order_view_url` are
+       * null. The text is a proposal; the shop sends it only behind
+       * ACROPORA_STOCK_ALERT on the test shop.
+       */
+      readonly template: "stock-alert-confirm";
+      readonly confirm_url: string;
+      readonly unsubscribe_url: string;
+      readonly expires_at: string;
+      readonly subject_label: string;
     };
 
 /** How a split order is paid, from the original order (murena 26656). */
@@ -209,6 +259,8 @@ export const WEBSHOP_MAIL_KEYS = {
   "order-status-closed": "WEBSHOP_ORDER_CLOSED",
   "order-split": "WEBSHOP_ORDER_SPLIT",
   "problem-report-received": "WEBSHOP_PROBLEM_REPORT_RECEIVED",
+  "newsletter-confirm": "WEBSHOP_NEWSLETTER_CONFIRM",
+  "stock-alert-confirm": "WEBSHOP_STOCK_ALERT_CONFIRM",
 } as const satisfies Record<WebshopMailTemplate, string>;
 
 export const SHOP_NAME = "Acropora tengeri akvarisztika";
@@ -358,6 +410,8 @@ export interface WebshopMailText {
   readonly mixedOneCardPayment: string;
   readonly nextShipped: string;
   readonly nextPickup: string;
+  /** The sentence that carries the guest order page's address (`order_view_url`). */
+  readonly orderViewLine: (url: string) => string;
   readonly glsPoint: string;
   readonly glsHome: string;
   readonly glsLogoLocker: string;
@@ -418,6 +472,8 @@ const HU_TEXT: WebshopMailText = {
   nextShipped:
     "Összekészítjük a rendelésedet. Követési szám csak a csomag feladása után lesz.",
   nextPickup: "Az élő állatos rendelést a boltban veszed át.",
+  orderViewLine: (url) =>
+    `A rendelésed állapotát bármikor megnézheted a rendelésszámmal és az e-mail-címeddel: ${url}`,
   glsPoint: "GLS csomagpont",
   glsHome: "GLS házhozszállítás",
   glsLogoLocker: "GLS Automata",
@@ -480,6 +536,8 @@ const EN_TEXT: WebshopMailText = {
   nextShipped:
     "We are getting your order ready. You will get a tracking number only once the parcel has been shipped.",
   nextPickup: "You pick up the live-animal order at the store.",
+  orderViewLine: (url) =>
+    `You can check your order at any time with your order number and e-mail address: ${url}`,
   glsPoint: "GLS parcel point",
   glsHome: "GLS home delivery",
   glsLogoLocker: "GLS Parcel Locker",
@@ -538,9 +596,11 @@ export interface WebshopMailContent {
  */
 export function webshopMailContent(
   facts: WebshopMailFacts,
+  /** The acclimatisation guides; the shipped table unless a test brings its own. */
+  acclimationTexts: WebshopAcclimationTexts = WEBSHOP_ACCLIMATION_TEXTS,
 ): WebshopMailContent {
   const t = webshopMailText(facts.locale);
-  const own = templateContent(facts, t, facts.locale);
+  const own = templateContent(facts, t, facts.locale, acclimationTexts);
   return {
     values: {
       ...own.values,
@@ -548,6 +608,11 @@ export function webshopMailContent(
       rendeles_datum: facts.order_created_at
         ? mailDay(facts.order_created_at, facts.locale)
         : "",
+      // empty (and no paragraph in the default mail) without a usable address
+      rendeles_megtekintes_mondat: (() => {
+        const url = safeOrderViewUrl(facts.order_view_url);
+        return url ? t.orderViewLine(url) : "";
+      })(),
     },
     blocks: own.blocks,
   };
@@ -557,6 +622,7 @@ function templateContent(
   facts: WebshopTemplateFacts,
   t: WebshopMailText,
   locale: WebshopMailLocale | undefined,
+  acclimationTexts: WebshopAcclimationTexts,
 ): WebshopMailContent {
   switch (facts.template) {
     case "order-placed": {
@@ -597,6 +663,11 @@ function templateContent(
           vegyes_kosar_mondat: mixedLine,
           osszesen: mailForint(total),
           kovetkezo_lepes: next,
+          akklimatizacio: webshopAcclimationValue(
+            orders.flatMap((o) => o.livestock_kinds ?? []),
+            locale === "en" ? "en" : "hu",
+            acclimationTexts,
+          ),
         },
         blocks: {
           rendeles_tetelek: mixed
@@ -844,6 +915,27 @@ function templateContent(
         blocks: {},
       };
 
+    case "newsletter-confirm":
+      return {
+        values: {
+          hirlevel_megerosito_link: facts.confirm_url,
+          hirlevel_leiratkozo_link: facts.unsubscribe_url,
+          megerosites_lejarat: mailDay(facts.expires_at, locale),
+        },
+        blocks: {},
+      };
+
+    case "stock-alert-confirm":
+      return {
+        values: {
+          ertesites_megerosito_link: facts.confirm_url,
+          ertesites_leiratkozo_link: facts.unsubscribe_url,
+          megerosites_lejarat: mailDay(facts.expires_at, locale),
+          ertesites_targya: facts.subject_label,
+        },
+        blocks: {},
+      };
+
     case "payment-refunded": {
       const r = facts.refund;
       return {
@@ -879,6 +971,7 @@ const SAMPLE_COMMON = {
   customer_name: "Kiss Márta",
   order_created_at: "2026-10-05T09:21:00.000Z",
   locale: "hu" as const,
+  order_view_url: "https://shop.example/hu/rendeles-megtekintese",
 };
 
 /**
@@ -988,6 +1081,27 @@ export const WEBSHOP_MAIL_SAMPLE_FACTS: Readonly<
     template: "problem-report-received",
     display_id: 38,
     report_id: "ordprb_01SAMPLE",
+  },
+  "newsletter-confirm": {
+    ...SAMPLE_COMMON,
+    order_created_at: null,
+    order_view_url: null,
+    template: "newsletter-confirm",
+    confirm_url: "https://shop.example/hu/hirlevel/megerosites?token=minta",
+    unsubscribe_url: "https://shop.example/hu/hirlevel/leiratkozas?token=minta",
+    expires_at: "2026-10-12T09:21:00.000Z",
+  },
+  "stock-alert-confirm": {
+    ...SAMPLE_COMMON,
+    customer_name: null,
+    order_created_at: null,
+    order_view_url: null,
+    template: "stock-alert-confirm",
+    confirm_url: "https://shop.example/hu/ertesites/megerosites?token=minta",
+    unsubscribe_url:
+      "https://shop.example/hu/ertesites/leiratkozas?token=minta",
+    expires_at: "2026-10-12T09:21:00.000Z",
+    subject_label: "Acropora abrolhosensis",
   },
   "payment-refunded": {
     ...SAMPLE_COMMON,
@@ -1115,6 +1229,23 @@ function order(v: unknown, path: string): WebshopMailOrder {
   };
 }
 
+/**
+ * THE GUEST ORDER PAGE'S ADDRESS, if it is one a mail may carry: a plain https address, no credentials, no spaces or
+ * control characters, at most 300 characters. Anything else is null (no link): the value goes into a customer's mail
+ * as it stands, so only an address that looks like an address is let through. Not a check that the page exists.
+ */
+export function safeOrderViewUrl(v: unknown): string | null {
+  if (typeof v !== "string" || v.length === 0 || v.length > 300) return null;
+  if (/[\s\u0000-\u001f\u007f<>"']/.test(v)) return null;
+  try {
+    const url = new URL(v);
+    if (url.protocol !== "https:" || url.username || url.password) return null;
+    return url.href === v || url.href === `${v}/` ? v : null;
+  } catch {
+    return null;
+  }
+}
+
 /** `hu` or `en`; missing is `hu`, anything else is refused (400): a wrong language must not become Hungarian silently. */
 function parseLocale(v: unknown): WebshopMailLocale {
   if (v === undefined || v === null) return "hu";
@@ -1146,6 +1277,7 @@ export function parseWebshopMailFacts(
         customer_name: strOrNull(f.customer_name, "facts.customer_name"),
         order_created_at: created,
         locale: parseLocale(f.locale),
+        order_view_url: safeOrderViewUrl(f.order_view_url),
       },
     };
   } catch (error) {
@@ -1167,7 +1299,18 @@ function parseTemplateFacts(
         const o = obj(x, p);
         if (typeof o.pickup !== "boolean")
           throw new FactsError(`${p}.pickup: igaz/hamis kell`);
-        return { ...order(x, p), pickup: o.pickup };
+        return {
+          ...order(x, p),
+          pickup: o.pickup,
+          // a webshop that sends no list (or something else) leaves the key out, as before
+          ...(Array.isArray(o.livestock_kinds)
+            ? {
+                livestock_kinds: o.livestock_kinds.filter(
+                  isWebshopLivestockKind,
+                ),
+              }
+            : {}),
+        };
       });
       if (!orders.length)
         throw new FactsError("facts.orders: legalább egy rendelés kell");
@@ -1277,6 +1420,29 @@ function parseTemplateFacts(
         display_id: id(f.display_id, "facts.display_id"),
         report_id: str(f.report_id, "facts.report_id"),
       };
+    case "newsletter-confirm":
+    case "stock-alert-confirm": {
+      // the two links go into an href: a clean https address or the mail is refused (422), never sent without them
+      const link = (value: unknown, at: string) => {
+        const url = safeOrderViewUrl(value);
+        if (!url) throw new FactsError(`${at}: tiszta https cím kell`);
+        return url;
+      };
+      const expires_at = str(f.expires_at, "facts.expires_at");
+      if (Number.isNaN(new Date(expires_at).getTime()))
+        throw new FactsError("facts.expires_at: ISO időpont kell");
+      const links = {
+        confirm_url: link(f.confirm_url, "facts.confirm_url"),
+        unsubscribe_url: link(f.unsubscribe_url, "facts.unsubscribe_url"),
+        expires_at,
+      };
+      if (template === "newsletter-confirm") return { template, ...links };
+      // the stock alert names what was signed up for; an empty one would leave the mail's sentence without its subject
+      const subject_label = str(f.subject_label, "facts.subject_label").trim();
+      if (!subject_label)
+        throw new FactsError("facts.subject_label: nem lehet üres");
+      return { template, ...links, subject_label };
+    }
     case "payment-refunded": {
       const r = obj(f.refund, "facts.refund");
       return {

@@ -1,5 +1,7 @@
 import { Prisma } from "@acropora/database";
 
+import { isOwnSaleActive, type OwnSaleRow } from "../own-sale.js";
+
 /**
  * THE LOWEST PRICE OF THE 30 DAYS BEFORE A PRICE REDUCTION, FROM THE PRICE HISTORY (card 90c54873,
  * V0.2, slice 1).
@@ -35,7 +37,8 @@ import { Prisma } from "@acropora/database";
  * TWO SOURCES, ONE SERIES. The UNAS mirror rows are per product (`variantId` null) and carry the
  * list price and the sale price; a variant's price is the mirror's plus the variant's UNAS
  * surcharge. A product we have taken over has OWN rows per variant from the takeover day (the
- * variant's own gross price, no sale concept). The series of a taken-over variant is the mirror
+ * variant's own gross price, and while its own sale ran the sale price the shop showed, T4.1-D3).
+ * The series of a taken-over variant is the mirror
  * rows BEFORE its first OWN row, then the OWN rows; a mirror row at or after the first OWN row is
  * dropped (the mirror is frozen at the takeover, and a stray row must not pull the answer).
  *
@@ -180,9 +183,10 @@ export function seriesOfVariant(
         currency: row.currency,
       };
     }),
+    // an own row is the shop's price too: the sale price while the variant's own sale ran
     ...own.map((row): PricePoint => ({
       at: row.observedAt,
-      amount: row.grossPrice,
+      amount: row.saleGrossPrice ?? row.grossPrice,
       currency: row.currency,
     })),
   ];
@@ -193,16 +197,28 @@ const byTime = (a: HistoryRow, b: HistoryRow) =>
   a.createdAt.getTime() - b.createdAt.getTime();
 
 /**
- * WHEN THE REDUCTION THAT RUNS NOW BEGAN, from the UNAS mirror rows of the variant's product, or null
- * when no reduction runs. A reduction is a run of mirror rows that carry a sale price; its start is
- * the first row of the run that is in force now (a deeper second cut inside the run does not move
- * it: the reference is measured from the FIRST cut). A taken-over variant (it has OWN rows) has no
- * sale concept, so no reduction: null.
+ * WHEN THE REDUCTION THAT RUNS NOW BEGAN, or null when no reduction runs.
+ *
+ * A VARIANT WHOSE OWN SALE RUNS NOW (T4.1-D3, sale slice 2): the sale's own start, read from the
+ * variant, not from the history. The variant's fields are what the shop is priced from, and the
+ * history row of the sale is written only after the shop got the price, which in a projection round
+ * is AFTER the product (and its Omnibus key) was projected: read from the history, the first round
+ * of a sale would clear the key.
+ *
+ * Otherwise from the UNAS mirror rows of the variant's product. A reduction is a run of mirror rows
+ * that carry a sale price; its start is the first row of the run that is in force now (a deeper
+ * second cut inside the run does not move it: the reference is measured from the FIRST cut). A
+ * taken-over variant (it has OWN rows) whose own sale does not run has no reduction: null (its
+ * mirror is frozen at the takeover).
  */
 export function currentReductionStart(
   rows: readonly HistoryRow[],
   variantId: string,
+  ownSale: OwnSaleRow | null,
+  now: Date,
 ): Date | null {
+  if (ownSale && isOwnSaleActive(ownSale, now))
+    return ownSale.sellingSaleStartsAt;
   if (rows.some((row) => row.variantId === variantId)) return null;
   const mirror = rows.filter((row) => row.variantId === null).sort(byTime);
   const last = mirror[mirror.length - 1];

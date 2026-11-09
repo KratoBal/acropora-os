@@ -1,15 +1,13 @@
 "use client";
 
 import {
+  PAGE_GUTTER_X,
   Alert,
   ConfirmDialog,
-  FormField,
   Icon,
   PageHeader,
   PilotFileInput,
-  Select,
   Skeleton,
-  PAGE_GUTTER_X,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -29,6 +27,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useReturnTo, useStepTo } from "@/components/navigation-history";
 import { ServiceDocumentGallery } from "@/components/service/service-document-gallery";
+import { ServiceOfflineNotice } from "@/components/service/service-offline-notice";
 import { assetsApi } from "@/lib/api/assets";
 import { PilotAssetStepper, useAssetNeighbors } from "./pilot-asset-stepper";
 import {
@@ -128,12 +127,30 @@ function formatDateTime(value: string) {
   }).format(new Date(value));
 }
 
-function Field({ label, value }: { label: string; value?: string }) {
-  if (!value) return null;
+/**
+ * One field of the data card. An empty one is left out, except where the empty value is itself information
+ * (`shownEmpty`): the category and the label code (acrobot 44775, barracuda 44772). The category migration leaves on
+ * purpose every asset NULL whose old text matched no category, and that set is the one to review; hidden, an empty
+ * category looks like a page that does not show it. The empty mark is the pilot one (`PilotDataRow`'s "Nincs megadva").
+ */
+function Field({
+  label,
+  value,
+  shownEmpty = false,
+}: {
+  label: string;
+  value?: string | null;
+  shownEmpty?: boolean;
+}) {
+  if (!value && !shownEmpty) return null;
   return (
     <div>
       <p className="mb-0.5 text-[11px] text-pilot-grey-400">{label}</p>
-      <p className="text-sm text-pilot-grey-800">{value}</p>
+      {value ? (
+        <p className="text-sm text-pilot-grey-800">{value}</p>
+      ) : (
+        <p className="text-sm italic text-pilot-grey-300">Nincs megadva</p>
+      )}
     </div>
   );
 }
@@ -386,12 +403,22 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
   if (loading && !asset)
     return (
       <PilotThemeRoot bleed className="min-h-screen bg-pilot-grey-50 p-8">
+        {/* without a connection the page says why it stays empty (the old page's notice, kanban 0baba3b9) */}
+        <ServiceOfflineNotice state={{ kind: "empty" }} pilot />
         <Skeleton className="h-72" />
       </PilotThemeRoot>
     );
 
   return (
     <PilotThemeRoot bleed className="min-h-screen bg-pilot-grey-50">
+      {/*
+        THE OFFLINE NOTICE, BACK (kanban 0baba3b9, acrobot 44748): the old asset page said why its data stood still or was
+        missing without a connection; the pilot page had lost it. The same notice the other pilot pages draw.
+      */}
+      <ServiceOfflineNotice
+        state={asset ? { kind: "loaded" } : { kind: "empty" }}
+        pilot
+      />
       {deleted ? (
         <div className="p-8">
           <PilotCard>
@@ -496,14 +523,18 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
                     value={asset.partnerInternalCode}
                   />
                   <Field label="Sorozatszám" value={asset.serialNumber} />
-                  <Field label="Matricakód" value={asset.labelCode} />
+                  <Field
+                    label="Matricakód"
+                    value={asset.labelCode}
+                    shownEmpty
+                  />
                 </div>
               </PilotCard>
 
               <PilotCard>
                 <PilotCardHeader title="Technikai adatok" />
                 <div className="grid grid-cols-2 gap-x-8 gap-y-4 p-5">
-                  <Field label="Kategória" value={asset.category} />
+                  <Field label="Kategória" value={asset.category} shownEmpty />
                   <Field label="Funkció" value={asset.function} />
                   <Field label="Gyártó" value={asset.manufacturer} />
                   <Field label="Modell" value={asset.model} />
@@ -669,14 +700,12 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
                   />
                   {canManage ? (
                     <div className="mt-5 grid grid-cols-1 gap-3 border-t border-pilot-grey-100 pt-5 md:grid-cols-[180px_minmax(0,1fr)_auto] md:items-end">
-                      <FormField label="Dokumentumtípus">
-                        <Select
+                      <PilotFormField label="Dokumentumtípus">
+                        <PilotSelect
                           aria-label="Dokumentumtípus"
                           value={documentType}
-                          onChange={(event) =>
-                            setDocumentType(
-                              event.target.value as AssetDocumentType,
-                            )
+                          onChange={(value) =>
+                            setDocumentType(value as AssetDocumentType)
                           }
                         >
                           {Object.entries(documentTypeLabel).map(
@@ -686,9 +715,9 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
                               </option>
                             ),
                           )}
-                        </Select>
-                      </FormField>
-                      <FormField label="Fénykép vagy PDF">
+                        </PilotSelect>
+                      </PilotFormField>
+                      <PilotFormField label="Fénykép vagy PDF">
                         <PilotFileInput
                           ref={documentInput}
                           accept="image/jpeg,image/png,application/pdf"
@@ -697,7 +726,7 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
                             setDocumentFile(event.target.files?.[0] ?? null)
                           }
                         />
-                      </FormField>
+                      </PilotFormField>
                       <PilotButton
                         disabled={!documentFile || busy}
                         onClick={() => void uploadDocument()}

@@ -3,16 +3,14 @@ import { useAssistantEntity } from "../assistant/page-context";
 
 import {
   Alert,
-  Badge,
-  Card,
-  CardContent,
-  CardHeader,
   PageHeader,
   PilotDataTable,
   Skeleton,
   type PilotTableColumn,
   PilotBadge,
   PilotButton,
+  PilotCard,
+  PilotCardHeader,
 } from "@acropora/ui";
 import {
   formatMoney,
@@ -159,17 +157,17 @@ export function purchaseLineColumns(
       width: "140px",
       cell: (line) => (
         <div>
-          <Badge
+          <PilotBadge
             variant={
               line.syncStatus === "OK"
                 ? "success"
                 : line.syncStatus === "FAILED"
                   ? "danger"
-                  : "neutral"
+                  : "grey"
             }
           >
             {purchaseSyncLabel(line.syncStatus)}
-          </Badge>
+          </PilotBadge>
           {line.syncError ? (
             <p className="mt-1 text-xs text-rose-600">{line.syncError}</p>
           ) : null}
@@ -265,9 +263,9 @@ export function PurchaseInvoiceDetailPage({
       />
 
       {loading ? (
-        <Card className="p-5">
+        <PilotCard className="p-5">
           <Skeleton className="h-4 w-1/3" />
-        </Card>
+        </PilotCard>
       ) : null}
 
       {error ? (
@@ -308,16 +306,16 @@ export function PurchaseInvoiceDetailPage({
 
       {detail ? (
         <>
-          <Card>
-            <CardHeader>
-              <h2 className="text-sm font-semibold text-dusk-900">
-                Áttekintés
-              </h2>
-              <Badge variant={detail.source === "EU" ? "info" : "neutral"}>
-                {detail.source === "EU" ? "EU-s beszerzés" : "Belföldi"}
-              </Badge>
-            </CardHeader>
-            <CardContent>
+          <PilotCard>
+            <PilotCardHeader
+              title="Áttekintés"
+              action={
+                <PilotBadge variant={detail.source === "EU" ? "blue" : "grey"}>
+                  {detail.source === "EU" ? "EU-s beszerzés" : "Belföldi"}
+                </PilotBadge>
+              }
+            />
+            <div className="p-5">
               <dl className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-4">
                 <div>
                   <dt className="text-dusk-400">Beszállító</dt>
@@ -393,16 +391,18 @@ export function PurchaseInvoiceDetailPage({
                   </p>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </PilotCard>
 
-          <Card className="overflow-hidden">
-            <CardHeader>
-              <h2 className="text-sm font-semibold text-dusk-900">Tételek</h2>
-              <span className="text-xs text-dusk-500">
-                {detail.lines.length.toLocaleString("hu-HU")} tétel
-              </span>
-            </CardHeader>
+          <PilotCard className="overflow-hidden">
+            <PilotCardHeader
+              title="Tételek"
+              action={
+                <span className="text-xs text-dusk-500">
+                  {detail.lines.length.toLocaleString("hu-HU")} tétel
+                </span>
+              }
+            />
             <PilotDataTable
               columns={purchaseLineColumns(detail.currency)}
               rows={detail.lines}
@@ -410,7 +410,7 @@ export function PurchaseInvoiceDetailPage({
               rowTestId="purchase-line-row"
               minWidth={PURCHASE_LINE_TABLE_MIN_WIDTH}
             />
-          </Card>
+          </PilotCard>
           <PurchaseInvoiceScans
             token={token}
             invoiceId={detail.id}

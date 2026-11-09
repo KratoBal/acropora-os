@@ -31,6 +31,7 @@ import {
   invoiceDraftOf,
   invoiceRefusal,
   newCustomerOf,
+  orderLanguageOf,
   proformaDraftOf,
   proformaRefusal,
 } from "./webshop-order-invoice.rules.js";
@@ -177,7 +178,9 @@ export class WebshopOrderInvoiceService {
       throw new ConflictException(
         "A rendelésen nincs e-mail cím, ezért a díjbekérő nem küldhető ki.",
       );
-    const letter = await this.emailDrafts.templateDraft();
+    const letter = await this.emailDrafts.templateDraft(
+      orderLanguageOf(order.metadata),
+    );
     await this.email.send(
       proforma.id,
       {

@@ -78,6 +78,7 @@ function service(input: {
     accounts: async () => [ACCOUNT],
     debits: async () => input.debits,
     credits: async () => [],
+    ownOutgoingDocuments: async () => [],
     statementCoverage: async () => new Set([`${ACCOUNT.id}:2026-08`]),
     manualMatches: async () => new Map(),
     candidates: async () => input.documents,

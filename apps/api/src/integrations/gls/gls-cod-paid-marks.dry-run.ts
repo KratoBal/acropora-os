@@ -7,6 +7,7 @@ import {
   type GlsTransferDecision,
   type OutgoingInvoiceInput,
 } from "./gls-cod-paid-marks.js";
+import { invoiceSourcesOutsideTheFeed } from "./gls-cod-not-found-sources.js";
 
 /**
  * THE DRY RUN OF THE GLS PAID MARKS: what would be marked paid in Számlázz.hu,
@@ -40,7 +41,11 @@ const day = (value: Date) => value.toISOString().slice(0, 10);
  *     (`COD-2026.09.17/...`, measured on the September statement),
  *   - our invoices by number, from the forwarded outgoing invoices
  *     (`ExternalBillingDocument`): a row there has a feed version, so its
- *     payments are known once it was projected with them (acrobot 25910).
+ *     payments are known once it was projected with them (acrobot 25910),
+ *   - and, for the NOT_FOUND line a person reads, the same numbers stored under ANOTHER source (`elsewhere`,
+ *     number -> sources): "not in Számlázz.hu's feed at all" and "there, but only as eBIZ" need different hands
+ *     (Balázs's live run 2026-11-05: ACRW-2026/00469 NOT_FOUND while the GLS page showed it paired, from the OS's
+ *     own invoice table).
  */
 export async function loadGlsTransfers(from: string): Promise<
   {
@@ -48,6 +53,7 @@ export async function loadGlsTransfers(from: string): Promise<
     compensation: GlsCompensationInput | null;
     credits: { id: string; amount: Prisma.Decimal }[];
     invoices: Map<string, OutgoingInvoiceInput>;
+    elsewhere: Map<string, string[]>;
   }[]
 > {
   const reports = await prisma.glsCodReport.findMany({
@@ -98,6 +104,7 @@ export async function loadGlsTransfers(from: string): Promise<
       },
     ]),
   );
+  const elsewhere = await invoiceSourcesOutsideTheFeed(numbers);
   const out = [];
   for (const report of reports) {
     const transferDate = day(report.transferDate);
@@ -129,6 +136,7 @@ export async function loadGlsTransfers(from: string): Promise<
       compensation: letter,
       credits,
       invoices,
+      elsewhere,
     });
   }
   return out;

@@ -36,9 +36,11 @@ import { SupplierInvoiceImportService } from "../purchasing/supplier-invoice-imp
 import { pdfTextLines } from "../purchasing/supplier-invoice-import/pdf-text-lines.js";
 import {
   classifyTransaction,
+  NO_INVOICE_CATEGORIES,
   payrollNamesOf,
   type BankCategory,
 } from "./bank-transaction.classify.js";
+import { ownInvoiceRefund } from "./own-invoice-refund.js";
 import {
   matchMonth,
   mergeManualUploads,
@@ -1177,13 +1179,23 @@ export class MissingInvoicesService {
   }
 
   private async compute(): Promise<Computed> {
-    const [accountRows, debits, credits, coverage, manual] = await Promise.all([
-      this.repository.accounts(),
-      this.repository.debits(),
-      this.repository.credits(),
-      this.repository.statementCoverage(),
-      this.repository.manualMatches(),
-    ]);
+    const [accountRows, debits, credits, coverage, manual, ownRows] =
+      await Promise.all([
+        this.repository.accounts(),
+        this.repository.debits(),
+        this.repository.credits(),
+        this.repository.statementCoverage(),
+        this.repository.manualMatches(),
+        this.repository.ownOutgoingDocuments(),
+      ]);
+    const ownDocuments = ownRows.map((row) => ({
+      number: row.documentNumber,
+      kindCode: row.kindCode,
+      customerName: row.customerName,
+      gross: row.grossAmount,
+      currency: row.currency,
+      issueDate: dayOf(row.issueDate),
+    }));
     const accounts = accountRows.map((account) => ({
       id: account.id,
       name: account.name ?? `${account.accountNumber} (${account.currency})`,
@@ -1226,7 +1238,32 @@ export class MissingInvoicesService {
     );
     const payrollNames = payrollNamesOf(debits);
     const classified = debits.map((debit) => {
-      const ruled = classifyTransaction(debit, { ownAccounts, payrollNames });
+      const byRule = classifyTransaction(debit, { ownAccounts, payrollNames });
+      /*
+        A VEVŐNEK VISSZAUTALT ÖSSZEG (kártya a116ec70): a közlemény saját számlaszámot nevez, és ugyanarra a vevőre azonos
+        összegű sztornó áll. A besorolás magánszemélynél a számlaszám-mintából is tudja; cégnél csak ebből az adatból.
+        Kártyás fizetés és a már besorolt „Nem kell számla” tétel kimarad; a kézi átsorolás úgyis fölötte áll.
+      */
+      const refund =
+        !NO_INVOICE_CATEGORIES.has(byRule.category) &&
+        !/KÁRTY/i.test(debit.transactionType ?? "")
+          ? ownInvoiceRefund(
+              {
+                bookingDate: dayOf(debit.bookingDate),
+                amount: debit.amount,
+                currency: debit.currency,
+                counterpartyName: debit.counterpartyName,
+                narrative: debit.narrative,
+              },
+              ownDocuments,
+            )
+          : null;
+      const ruled = refund
+        ? {
+            category: "CUSTOMER_REFUND" as BankCategory,
+            rule: `a saját ${refund.cited} számlánk összegét utaltuk vissza a vevőnek, a sztornó: ${refund.credit.number}`,
+          }
+        : byRule;
       // a kézi átsorolás a szabály fölött áll; a szabály mondata megmarad
       const classification = debit.categoryOverride
         ? {

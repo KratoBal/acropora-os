@@ -33,10 +33,11 @@ import {
  * price is worse than none. Whether a reduction may be announced then is a business and legal
  * decision (on the list for Balázs before going live); on the test shop this is the behaviour.
  *
- * OPEN BOUNDARY, named: a variant taken over by the OS (it has OWN rows) has no sale concept in the
- * history, so its value is always "" (the key is cleared). If a Medusa PRICE-LIST reduction runs on
- * such a variant, the shop shows a reduction WITHOUT an Omnibus line. Today this probably does not
- * occur (the OS creates no price lists); it must be solved before one does.
+ * A TAKEN-OVER VARIANT (it has OWN rows) gets a value while its OWN sale runs (T4.1-D3, sale slice
+ * 2): the reduction's start is the sale's start, and the history before it holds the shop's earlier
+ * prices, earlier own sales included. Without a running own sale its value is "". OPEN BOUNDARY,
+ * still named: a Medusa PRICE-LIST reduction on such a variant would show WITHOUT an Omnibus line;
+ * the OS creates no price lists today.
  *
  * OFF BY DEFAULT: `MEDUSA_PROJECT_OMNIBUS=true`, EXACTLY that (the knowledge switch's pattern).
  * Nothing in this file writes; the projection service does, and only with the switch.
@@ -93,6 +94,8 @@ export async function omnibusInputsFor(
   database: LowestPriceDatabase,
   variants: readonly { id: string; sku: string }[],
   env: Record<string, string | undefined>,
+  /** whether a variant's own sale runs: the same "now" as its price decision */
+  now: Date = new Date(),
 ): Promise<VariantOmnibusInput[] | undefined> {
   if (!omnibusProjectionEnabled(env)) return undefined;
   return Promise.all(
@@ -100,6 +103,7 @@ export async function omnibusInputsFor(
       const lowest = await lowestPriceBeforeCurrentReduction(
         database,
         variant.id,
+        now,
       );
       return {
         sku: variant.sku,

@@ -45,13 +45,16 @@ beforeEach(() => {
 });
 
 describe("SettlementTabs", () => {
-  it("shows the three tabs, pointing to their own paths, the current one marked", () => {
+  it("shows the four tabs, pointing to their own paths, the current one marked", () => {
     render(<SettlementTabs />);
     const links = screen.getAllByRole("link");
     expect(links.map((link) => link.getAttribute("href"))).toEqual([
       "/penzugy/foxpost",
       "/penzugy/gls",
       "/penzugy/simplepay",
+      // card aeddb2c3: one transfer for several invoices
+      "/penzugy/atutalasok",
+      "/penzugy/napi-jeloles",
     ]);
     expect(screen.getByRole("link", { name: "GLS" })).toHaveAttribute(
       "aria-current",
@@ -71,6 +74,7 @@ describe("SettlementTabs", () => {
       screen.getByText("Utánvét, díjszámla és kompenzáció"),
     ).toBeInTheDocument();
     expect(screen.getByText("Kártyás forgalmi kimutatás")).toBeInTheDocument();
+    expect(screen.getByText("Egy utalás több számlára")).toBeInTheDocument();
   });
 
   it("shows no tab to a role without the finance view", () => {

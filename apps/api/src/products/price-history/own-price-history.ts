@@ -27,7 +27,11 @@ import {
  * the SAME transaction. A spec (`own-price-history.guard.spec.ts`) fails when a file writes the
  * field without it, so the price editor that does not exist yet (D3) cannot be added without it.
  *
- * NO READER YET: nothing computes the 30-day lowest price today; this only collects.
+ * THE SALE PRICE (T4.1-D3, sale slice 2). A row holds what the shop SHOWED: the regular price and,
+ * while the variant's own sale runs, the sale price (`saleGrossPrice`), as the mirror rows do. The
+ * pricing projection writes it after the shop got the price (`recordShownPrice`), so a sale set for
+ * next week gets no row until the shop shows it; the price editor passes the sale running at the
+ * moment of the save.
  */
 export interface OwnPriceHistoryTransaction {
   productPriceHistory: {
@@ -43,6 +47,8 @@ export interface OwnPriceInput {
   currency: string;
   /** a `Decimal`, not a string: the comparison normalises on the Decimal's own text */
   grossPrice: Prisma.Decimal;
+  /** the own sale price the shop shows with it, or null: REQUIRED, so no writer forgets a running sale */
+  saleGrossPrice: Prisma.Decimal | null;
   observedAt: Date;
 }
 
@@ -55,7 +61,7 @@ export async function recordOwnPrice(
     netPrice: null,
     grossPrice: input.grossPrice,
     saleNetPrice: null,
-    saleGrossPrice: null,
+    saleGrossPrice: input.saleGrossPrice,
   };
   const last = await transaction.productPriceHistory.findFirst({
     where: { variantId: input.variantId },

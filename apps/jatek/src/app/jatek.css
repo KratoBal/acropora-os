@@ -1,0 +1,1469 @@
+* {
+  box-sizing: border-box;
+}
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 28px;
+}
+body {
+  margin: 0;
+  background: var(--jatek-bg);
+  color: var(--jatek-text);
+  font-family: var(--font-dm-sans), "DM Sans", system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.65;
+}
+a {
+  color: inherit;
+  text-decoration: none;
+}
+button,
+input {
+  font: inherit;
+}
+button,
+a,
+input,
+summary {
+  -webkit-tap-highlight-color: transparent;
+}
+button,
+summary {
+  cursor: pointer;
+}
+button {
+  color: inherit;
+}
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--jatek-blue);
+  outline-offset: 5px;
+}
+.jatek-wrap {
+  max-width: 1280px;
+  width: calc(100% - 112px);
+  margin: auto;
+}
+.jatek-demo-bar {
+  height: 30px;
+  background: #11212b;
+  color: #b8c9d3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  font-size: 13px;
+  letter-spacing: 1.5px;
+}
+.jatek-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--jatek-orange);
+}
+header {
+  height: 106px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 25px;
+  border-bottom: 1px solid #17252f;
+}
+.jatek-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--font-manrope), Manrope, system-ui, sans-serif;
+  font-size: 25px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  line-height: 1.2;
+}
+.jatek-brand svg {
+  width: 40px;
+  height: 42px;
+  fill: none;
+  stroke: var(--jatek-orange);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.jatek-brand small {
+  display: block;
+  font:
+    13px var(--font-dm-sans),
+    "DM Sans",
+    system-ui,
+    sans-serif;
+  letter-spacing: 2.1px;
+  margin-top: 5px;
+  color: var(--jatek-muted);
+}
+nav {
+  display: flex;
+  gap: 32px;
+  color: #b9c6d0;
+  font-size: 15px;
+}
+nav a:hover,
+.jatek-text-link:hover,
+.jatek-inline:hover {
+  color: var(--jatek-orange);
+}
+.jatek-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 35px;
+  padding: 17px 24px;
+  background: var(--jatek-orange);
+  border: 1px solid var(--jatek-orange);
+  color: #11171b;
+  font-size: 16px;
+  font-weight: 700;
+  border-radius: 5px;
+  transition:
+    transform 0.2s,
+    background 0.2s,
+    box-shadow 0.2s;
+}
+.jatek-button:hover {
+  background: #ff985f;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 25px #ff803e20;
+}
+.jatek-button span {
+  font-size: 20px;
+  line-height: 1;
+}
+.jatek-button.jatek-small {
+  padding: 11px 17px;
+  font-size: 15px;
+  gap: 25px;
+}
+.jatek-hero {
+  position: relative;
+  min-height: 704px;
+  display: grid;
+  grid-template-columns: 1fr 1.08fr;
+  align-items: center;
+}
+.jatek-hero-copy {
+  position: relative;
+  z-index: 2;
+  padding: 57px 0 45px;
+}
+.jatek-eyebrow {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 2.1px;
+  color: var(--jatek-blue);
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+.jatek-line {
+  width: 25px;
+  height: 1px;
+  background: var(--jatek-orange);
+}
+h1,
+h2,
+h3 {
+  font-family: var(--font-manrope), Manrope, system-ui, sans-serif;
+  letter-spacing: -1.4px;
+  line-height: 1.16;
+}
+h1 {
+  font-size: 65px;
+  font-weight: 650;
+  margin: 25px 0 22px;
+  letter-spacing: -3.5px;
+}
+h1 em {
+  font-style: normal;
+  color: var(--jatek-orange);
+}
+.jatek-hero-copy > p {
+  color: var(--jatek-muted);
+  font-size: 16px;
+  line-height: 1.8;
+}
+.jatek-hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 29px;
+  margin-top: 30px;
+}
+.jatek-text-link {
+  font-size: 15px;
+}
+.jatek-text-link span {
+  margin-left: 12px;
+}
+.jatek-launch {
+  display: flex;
+  gap: 13px;
+  align-items: center;
+  margin-top: 36px;
+}
+.jatek-play {
+  width: 31px;
+  height: 31px;
+  border: 1px solid #33424c;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  color: var(--jatek-orange);
+}
+.jatek-launch strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+}
+.jatek-launch small {
+  font-size: 13px;
+  color: var(--jatek-muted);
+  display: block;
+  margin-top: 3px;
+  max-width: 330px;
+}
+.jatek-hero-art {
+  height: 100%;
+  position: relative;
+  min-width: 0;
+}
+.jatek-hero-art > img {
+  position: absolute;
+  width: 140%;
+  height: 100%;
+  max-width: none;
+  object-fit: cover;
+  left: -20%;
+  top: 0;
+  mix-blend-mode: screen;
+}
+.jatek-orbit {
+  position: absolute;
+  width: 95%;
+  aspect-ratio: 1;
+  border: 1px solid #1b476530;
+  border-radius: 50%;
+  top: 10%;
+  left: 3%;
+  background: radial-gradient(ellipse, #0e497835, transparent 67%);
+  box-shadow: 0 0 100px #125c8f0c;
+}
+.jatek-prize-label {
+  position: absolute;
+  bottom: 65px;
+  left: 24px;
+  z-index: 2;
+  border-left: 2px solid var(--jatek-orange);
+  padding-left: 18px;
+}
+.jatek-prize-label h2 {
+  font-size: 28px;
+  margin: 8px 0;
+}
+.jatek-prize-label > span:not(.jatek-eyebrow) {
+  font-size: 13px;
+  letter-spacing: 3px;
+  color: var(--jatek-muted);
+}
+.jatek-prize-label a {
+  display: block;
+  font-size: 13px;
+  margin-top: 10px;
+  color: #c1ced8;
+}
+.jatek-photo-note {
+  position: absolute;
+  bottom: 16px;
+  right: 0;
+  color: var(--jatek-muted);
+  font-size: 13px;
+  max-width: 280px;
+  text-align: right;
+}
+.jatek-campaign-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  border-top: 1px solid var(--jatek-border);
+  border-bottom: 1px solid var(--jatek-border);
+  padding: 23px 0;
+  color: #b5c3ce;
+  font-size: 15px;
+}
+.jatek-campaign-strip b {
+  color: var(--jatek-orange);
+  margin-right: 13px;
+  font:
+    20px var(--font-manrope),
+    Manrope,
+    system-ui,
+    sans-serif;
+}
+.jatek-campaign-strip .jatek-strip-end {
+  font-size: 13px;
+  letter-spacing: 2px;
+  color: var(--jatek-muted);
+}
+.jatek-play-section {
+  padding-top: 86px;
+}
+.jatek-section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 20px;
+  margin-bottom: 30px;
+}
+h2 {
+  font-weight: 600;
+  font-size: 32px;
+  margin: 12px 0 0;
+}
+.jatek-pill {
+  font-size: 13px;
+  color: #b5c5d0;
+  padding: 7px 12px;
+  border: 1px solid var(--jatek-border);
+  border-radius: 30px;
+  white-space: nowrap;
+}
+.jatek-game-grid {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 24px;
+}
+.jatek-question-card {
+  border: 1px solid #2b414f;
+  border-radius: 10px;
+  padding: 32px;
+  background: linear-gradient(125deg, #11232e, #0b151e 70%);
+  position: relative;
+  overflow: hidden;
+}
+.jatek-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+  letter-spacing: 1.3px;
+  color: var(--jatek-muted);
+}
+.jatek-status {
+  color: var(--jatek-blue);
+  letter-spacing: 0.3px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.jatek-status i {
+  width: 5px;
+  height: 5px;
+  background: var(--jatek-blue);
+  border-radius: 50%;
+  box-shadow: 0 0 10px #62c7f7;
+}
+.jatek-question-card h3 {
+  font-size: 25px;
+  line-height: 1.4;
+  margin: 25px 0 8px;
+  letter-spacing: -0.7px;
+}
+.jatek-muted {
+  color: var(--jatek-muted);
+  font-size: 14px;
+  margin: 0 0 27px;
+}
+form > label {
+  display: block;
+  font-size: 14px;
+  margin: 16px 0 8px;
+}
+form > label span {
+  color: var(--jatek-orange);
+}
+input:not([type="checkbox"]) {
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid #2e4250;
+  border-radius: 5px;
+  color: var(--jatek-text);
+  background: #08121a;
+  min-height: 49px;
+  font-size: 15px;
+}
+input::placeholder {
+  color: var(--jatek-muted);
+}
+.jatek-field-note {
+  display: block;
+  font-size: 13px;
+  color: var(--jatek-muted);
+  margin-top: 6px;
+}
+.jatek-consents {
+  margin: 23px 0;
+}
+.jatek-check {
+  display: flex;
+  align-items: start;
+  gap: 10px;
+  font-size: 13px;
+  color: #b8c6d0;
+  line-height: 1.8;
+}
+.jatek-check input {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 3px 0 0;
+  accent-color: var(--jatek-orange);
+}
+.jatek-check b {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--jatek-muted);
+}
+.jatek-check.jatek-optional {
+  padding-top: 14px;
+  margin-top: 14px;
+  border-top: 1px solid #243541;
+}
+.jatek-inline {
+  border: 0;
+  padding: 0;
+  background: none;
+  font-size: inherit;
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.jatek-submit {
+  width: 100%;
+  font-size: 15px;
+  padding: 15px 19px;
+}
+.jatek-privacy-note {
+  color: var(--jatek-muted);
+  font-size: 13px;
+  text-align: center;
+  margin: 11px 0 0;
+}
+.jatek-week-card {
+  background:
+    radial-gradient(ellipse at 50% 15%, #12354d55, transparent 65%), #0c1720;
+  border: 1px solid var(--jatek-border);
+  border-radius: 10px;
+  padding: 32px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.jatek-week-card > .jatek-eyebrow {
+  align-self: start;
+  color: var(--jatek-muted);
+}
+.jatek-gift-art {
+  height: 192px;
+  width: 100%;
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+.jatek-gift-art:before {
+  content: "";
+  position: absolute;
+  width: 150px;
+  height: 150px;
+  background: #10487255;
+  filter: blur(34px);
+  border-radius: 50%;
+}
+.jatek-gift-art svg {
+  height: 140px;
+  width: 160px;
+  stroke: #6cb6e6;
+  fill: #1c3d5340;
+  stroke-width: 1.2;
+  transform: rotate(-8deg);
+  filter: drop-shadow(0 0 9px #2f9ce755);
+  animation: bob 6s ease-in-out infinite;
+}
+.jatek-gift-art > span {
+  position: absolute;
+  font:
+    32px var(--font-manrope),
+    Manrope,
+    system-ui,
+    sans-serif;
+  color: var(--jatek-orange);
+  top: 94px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.jatek-week-card h3 {
+  font-size: 22px;
+  letter-spacing: -0.7px;
+  margin: 8px 0;
+}
+.jatek-week-card > p {
+  font-size: 13px;
+  color: var(--jatek-muted);
+  margin: 2px 0 28px;
+}
+.jatek-timer-block {
+  width: 100%;
+  padding: 23px 0;
+  border-top: 1px solid var(--jatek-border);
+  border-bottom: 1px solid var(--jatek-border);
+}
+.jatek-timer-title {
+  display: flex;
+  justify-content: space-between;
+  color: var(--jatek-muted);
+  letter-spacing: 1.3px;
+  font-size: 13px;
+}
+.jatek-timer-title span:last-child {
+  color: var(--jatek-orange);
+}
+.jatek-timer {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  margin: 19px 0;
+}
+.jatek-timer span {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.jatek-timer b {
+  font:
+    30px var(--font-manrope),
+    Manrope,
+    system-ui,
+    sans-serif;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.jatek-timer small {
+  font-size: 13px;
+  letter-spacing: 1.5px;
+  color: var(--jatek-muted);
+}
+.jatek-timer i {
+  font-size: 20px;
+  font-style: normal;
+  color: #3c586b;
+}
+.jatek-timer-block > small {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--jatek-muted);
+  display: block;
+}
+.jatek-week-foot {
+  margin-top: auto;
+  padding-top: 28px;
+  color: #b7c7d2;
+  font-size: 13px;
+}
+.jatek-week-foot span {
+  display: block;
+  font-size: 13px;
+  color: var(--jatek-muted);
+  margin-top: 5px;
+}
+.jatek-how {
+  padding-top: 87px;
+}
+.jatek-how h2 {
+  max-width: 650px;
+}
+.jatek-steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 45px;
+  margin-top: 35px;
+}
+.jatek-steps article {
+  border-top: 1px solid var(--jatek-border);
+  padding-top: 20px;
+}
+.jatek-steps article > span {
+  font:
+    24px var(--font-manrope),
+    Manrope,
+    system-ui,
+    sans-serif;
+  color: var(--jatek-orange);
+  display: flex;
+  justify-content: space-between;
+}
+.jatek-steps i {
+  font-size: 18px;
+  font-style: normal;
+  color: #476173;
+}
+.jatek-steps h3 {
+  font-size: 16px;
+  letter-spacing: -0.3px;
+  margin-top: 23px;
+}
+.jatek-steps p {
+  font-size: 15px;
+  color: var(--jatek-muted);
+  max-width: 310px;
+}
+.jatek-winners {
+  padding-top: 82px;
+}
+.jatek-empty-winners {
+  border: 1px solid var(--jatek-border);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 28px 32px;
+  background: #0b151d;
+}
+.jatek-trophy {
+  font-size: 38px;
+  color: var(--jatek-orange);
+  width: 60px;
+  flex: none;
+  text-align: center;
+}
+.jatek-empty-winners h3 {
+  font-size: 17px;
+  letter-spacing: -0.3px;
+  margin: 0 0 8px;
+}
+.jatek-empty-winners p {
+  font-size: 14px;
+  color: var(--jatek-muted);
+  max-width: 650px;
+  margin: 0;
+}
+.jatek-empty-number {
+  font-size: 64px;
+  color: #20313f;
+  font-family: var(--font-manrope), Manrope, system-ui, sans-serif;
+  margin-left: auto;
+}
+.jatek-faq {
+  padding: 85px 0;
+  display: grid;
+  grid-template-columns: 1fr 1.5fr;
+  gap: 50px;
+}
+details {
+  border-bottom: 1px solid var(--jatek-border);
+  padding: 18px 0;
+  font-size: 15px;
+}
+details:first-child {
+  padding-top: 0;
+}
+summary {
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  gap: 25px;
+}
+summary:after {
+  content: "+";
+  font-size: 18px;
+  color: var(--jatek-orange);
+}
+details[open] summary:after {
+  content: "−";
+}
+details p {
+  color: var(--jatek-muted);
+  font-size: 15px;
+}
+footer {
+  border-top: 1px solid var(--jatek-border);
+  padding: 35px 0 28px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 24px;
+  color: var(--jatek-muted);
+}
+footer .jatek-brand {
+  font-size: 18px;
+  color: var(--jatek-text);
+}
+.jatek-footer-dot {
+  font-size: 13px;
+  color: var(--jatek-orange);
+}
+footer > span {
+  font-size: 13px;
+}
+footer > div {
+  display: flex;
+  gap: 25px;
+  margin-left: auto;
+  font-size: 13px;
+}
+footer small {
+  width: 100%;
+  font-size: 13px;
+  color: var(--jatek-muted);
+}
+.jatek-mobile-cta {
+  display: none;
+}
+dialog {
+  border: 1px solid #35536a;
+  background: #0d1b26;
+  color: var(--jatek-text);
+  border-radius: 12px;
+  max-width: 590px;
+  width: calc(100% - 36px);
+  padding: 40px;
+  box-shadow: 0 30px 100px #0009;
+}
+dialog::backdrop {
+  background: #02080edb;
+  backdrop-filter: blur(8px);
+}
+dialog h2 {
+  font-size: 27px;
+}
+dialog p,
+dialog li {
+  font-size: 15px;
+  color: #b8c9d5;
+}
+dialog .jatek-button {
+  margin-top: 20px;
+  font-size: 15px;
+}
+.jatek-close {
+  position: absolute;
+  right: 14px;
+  top: 9px;
+  background: none;
+  border: 0;
+  font-size: 28px;
+  color: var(--jatek-muted);
+}
+.jatek-success {
+  text-align: center;
+  padding: 65px 15px;
+}
+.jatek-success p {
+  font-size: 15px;
+  color: var(--jatek-muted);
+}
+.jatek-success-icon {
+  display: grid;
+  place-items: center;
+  width: 62px;
+  height: 62px;
+  margin: auto;
+  border: 1px solid #62c7f7;
+  border-radius: 50%;
+  font-size: 25px;
+  color: var(--jatek-blue);
+}
+.jatek-success .jatek-button {
+  margin-top: 20px;
+}
+.jatek-skip {
+  position: fixed;
+  top: -70px;
+  left: 15px;
+  background: var(--jatek-orange);
+  padding: 12px;
+  z-index: 10;
+  color: #000;
+}
+.jatek-skip:focus {
+  top: 15px;
+}
+@keyframes bob {
+  50% {
+    transform: rotate(-4deg) translateY(-6px);
+  }
+}
+@media (min-width: 1500px) {
+  .jatek-hero {
+    min-height: 760px;
+  }
+  h1 {
+    font-size: 76px;
+  }
+}
+@media (max-width: 1000px) {
+  .jatek-wrap {
+    width: calc(100% - 56px);
+  }
+  nav {
+    gap: 20px;
+  }
+  .jatek-brand {
+    font-size: 21px;
+  }
+  h1 {
+    font-size: 54px;
+  }
+  .jatek-hero {
+    min-height: 660px;
+  }
+  .jatek-hero-art > img {
+    width: 155%;
+    left: -28%;
+  }
+  .jatek-game-grid {
+    grid-template-columns: 1.45fr 1fr;
+  }
+  .jatek-question-card,
+  .jatek-week-card {
+    padding: 25px;
+  }
+  .jatek-campaign-strip .jatek-strip-end {
+    display: none;
+  }
+  .jatek-question-card h3 {
+    font-size: 22px;
+  }
+  .jatek-timer b {
+    font-size: 25px;
+  }
+  .jatek-steps {
+    gap: 25px;
+  }
+}
+@media (max-width: 700px) {
+  .jatek-wrap {
+    width: calc(100% - 40px);
+  }
+  .jatek-demo-bar {
+    font-size: 13px;
+    height: 29px;
+    letter-spacing: 1px;
+    gap: 6px;
+  }
+  .jatek-demo-bar > span:last-child {
+    font-size: 13px;
+    letter-spacing: 0;
+  }
+  header {
+    height: 84px;
+  }
+  header nav {
+    display: none;
+  }
+  .jatek-brand {
+    font-size: 18px;
+    gap: 5px;
+  }
+  .jatek-brand small {
+    font-size: 13px;
+    letter-spacing: 1.1px;
+  }
+  .jatek-brand svg {
+    width: 30px;
+  }
+  .jatek-button.jatek-small {
+    padding: 10px 12px;
+    font-size: 13px;
+    gap: 12px;
+  }
+  .jatek-hero {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .jatek-hero-copy {
+    width: 100%;
+    padding: 34px 0 0;
+  }
+  .jatek-eyebrow {
+    font-size: 13px;
+    letter-spacing: 1.6px;
+  }
+  h1 {
+    font-size: 49px;
+    letter-spacing: -2.8px;
+    line-height: 1.08;
+    margin: 23px 0 18px;
+  }
+  h1 br:nth-child(3) {
+    display: none;
+  }
+  .jatek-hero-copy > p {
+    font-size: 16px;
+    max-width: 320px;
+  }
+  .jatek-desktop {
+    display: none;
+  }
+  .jatek-hero-actions {
+    gap: 20px;
+    margin-top: 23px;
+  }
+  .jatek-button {
+    font-size: 16px;
+    padding: 14px 19px;
+    gap: 28px;
+  }
+  .jatek-text-link {
+    font-size: 13px;
+  }
+  .jatek-launch {
+    margin-top: 25px;
+    gap: 10px;
+  }
+  .jatek-launch strong {
+    font-size: 13px;
+  }
+  .jatek-launch small {
+    font-size: 13px;
+    max-width: 265px;
+  }
+  .jatek-hero-art {
+    height: 390px;
+    width: 100%;
+    margin-top: 5px;
+  }
+  .jatek-hero-art > img {
+    width: 160%;
+    left: -30%;
+    height: 100%;
+    object-position: center 30%;
+  }
+  .jatek-orbit {
+    top: 0;
+    width: 90%;
+    left: 5%;
+  }
+  .jatek-prize-label {
+    bottom: 25px;
+    left: 0;
+    padding-left: 12px;
+  }
+  .jatek-prize-label h2 {
+    font-size: 21px;
+    letter-spacing: -0.7px;
+  }
+  .jatek-prize-label .jatek-eyebrow {
+    font-size: 13px;
+  }
+  .jatek-prize-label a {
+    font-size: 13px;
+  }
+  .jatek-prize-label > span:not(.jatek-eyebrow) {
+    font-size: 13px;
+  }
+  .jatek-photo-note {
+    bottom: 10px;
+    font-size: 13px;
+    width: 175px;
+  }
+  .jatek-campaign-strip {
+    gap: 9px;
+    padding: 16px 0;
+    flex-wrap: wrap;
+    font-size: 13px;
+  }
+  .jatek-campaign-strip b {
+    font-size: 16px;
+    margin-right: 5px;
+  }
+  .jatek-campaign-strip > span:last-of-type {
+    display: none;
+  }
+  .jatek-play-section {
+    padding-top: 45px;
+  }
+  .jatek-section-heading {
+    align-items: start;
+    flex-direction: column;
+    gap: 15px;
+    margin-bottom: 22px;
+  }
+  h2 {
+    font-size: 27px;
+    letter-spacing: -1px;
+    line-height: 1.25;
+  }
+  .jatek-pill {
+    font-size: 13px;
+    padding: 5px 10px;
+  }
+  .jatek-game-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  .jatek-question-card {
+    padding: 23px 20px;
+  }
+  .jatek-card-top > span:last-child {
+    font-size: 13px;
+    letter-spacing: 0.8px;
+  }
+  .jatek-status {
+    font-size: 13px;
+  }
+  .jatek-question-card h3 {
+    font-size: 22px;
+    margin-top: 23px;
+  }
+  .jatek-muted {
+    font-size: 13px;
+  }
+  .jatek-check {
+    font-size: 13px;
+  }
+  .jatek-privacy-note {
+    font-size: 13px;
+  }
+  .jatek-week-card {
+    padding: 23px;
+  }
+  .jatek-gift-art {
+    height: 150px;
+  }
+  .jatek-gift-art svg {
+    height: 120px;
+  }
+  .jatek-gift-art > span {
+    top: 71px;
+  }
+  .jatek-week-card h3 {
+    font-size: 21px;
+  }
+  .jatek-week-card > p {
+    margin-bottom: 20px;
+  }
+  .jatek-timer-block {
+    max-width: 350px;
+    padding: 18px 0;
+  }
+  .jatek-timer b {
+    font-size: 30px;
+  }
+  .jatek-timer {
+    margin: 14px 0;
+  }
+  .jatek-week-foot {
+    padding-top: 20px;
+  }
+  .jatek-how {
+    padding-top: 49px;
+  }
+  .jatek-how h2 {
+    max-width: 300px;
+  }
+  .jatek-steps {
+    grid-template-columns: 1fr;
+    gap: 18px;
+    margin-top: 28px;
+  }
+  .jatek-steps article {
+    display: grid;
+    grid-template-columns: 38px 1fr;
+    gap: 0 15px;
+    padding-top: 18px;
+  }
+  .jatek-steps article > span {
+    grid-row: 1/3;
+    font-size: 22px;
+  }
+  .jatek-steps i {
+    display: none;
+  }
+  .jatek-steps h3 {
+    margin: 3px 0 10px;
+    font-size: 16px;
+  }
+  .jatek-steps p {
+    margin: 0;
+    max-width: none;
+    font-size: 16px;
+  }
+  .jatek-winners {
+    padding-top: 49px;
+  }
+  .jatek-empty-winners {
+    padding: 23px 18px;
+    gap: 15px;
+    align-items: start;
+  }
+  .jatek-trophy {
+    width: 29px;
+    font-size: 29px;
+  }
+  .jatek-empty-number {
+    display: none;
+  }
+  .jatek-empty-winners h3 {
+    font-size: 16px;
+    line-height: 1.4;
+  }
+  .jatek-empty-winners p {
+    font-size: 14px;
+  }
+  .jatek-faq {
+    grid-template-columns: 1fr;
+    gap: 28px;
+    padding: 49px 0;
+  }
+  details {
+    font-size: 16px;
+    padding: 17px 0;
+  }
+  footer {
+    padding: 27px 0 104px;
+    gap: 18px;
+  }
+  footer > span {
+    font-size: 13px;
+  }
+  footer > div {
+    width: 100%;
+    margin: 0;
+  }
+  footer small {
+    font-size: 13px;
+  }
+  .jatek-mobile-cta {
+    position: fixed;
+    bottom: 12px;
+    left: 20px;
+    right: 20px;
+    z-index: 5;
+    display: flex;
+    box-shadow: 0 8px 35px #0009;
+    padding: 14px 19px;
+  }
+  .jatek-success {
+    padding: 35px 0;
+  }
+  .jatek-success h3 {
+    font-size: 22px;
+    letter-spacing: -0.7px;
+  }
+  dialog {
+    padding: 32px 23px;
+  }
+  dialog h2 {
+    font-size: 24px;
+    letter-spacing: -0.7px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *:before,
+  *:after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+/* Contain the atmospheric image within the viewport. */
+body {
+  overflow-x: clip;
+}
+.jatek-hero-art {
+  clip-path: inset(-100px 0 -20px -70px);
+}
+@media (max-width: 700px) {
+  .jatek-hero-art {
+    clip-path: inset(0 -20px 0 -20px);
+  }
+  .jatek-hero-copy {
+    min-width: 0;
+  }
+  dialog .jatek-eyebrow {
+    letter-spacing: 1px;
+  }
+}
+.jatek-hero-art {
+  overflow: hidden;
+  clip-path: none;
+}
+
+/* --- A JATEK SAJAT RESZEI, amik a prototipusban nem voltak (a prototipus nem kuld adatot) --- */
+.jatek-valasztasok {
+  border: 0;
+  padding: 0;
+  margin: 16px 0 0;
+  display: grid;
+  gap: 10px;
+}
+.jatek-valasztasok legend {
+  font-size: 14px;
+  margin: 0 0 8px;
+  padding: 0;
+}
+.jatek-valasztasok legend span {
+  color: var(--jatek-orange);
+}
+.jatek-valasztas {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 16px;
+  border: 1px solid #2e4250;
+  border-radius: 5px;
+  background: #08121a;
+  font-size: 15px;
+  cursor: pointer;
+}
+.jatek-valasztas:has(input:checked) {
+  border-color: var(--jatek-orange);
+}
+.jatek-valasztas input {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  accent-color: var(--jatek-orange);
+}
+.jatek-csali {
+  position: absolute;
+  left: -10000px;
+  top: auto;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+.jatek-uzenet {
+  margin: 16px 0 0;
+  padding: 12px 14px;
+  border-radius: 5px;
+  border: 1px solid var(--jatek-border);
+  font-size: 15px;
+}
+.jatek-uzenet[data-fajta="ok"] {
+  border-color: var(--jatek-blue);
+  color: var(--jatek-blue);
+}
+.jatek-uzenet[data-fajta="hiba"] {
+  border-color: var(--jatek-orange);
+  color: var(--jatek-orange);
+}
+.jatek-sikeres {
+  text-align: center;
+  padding: 55px 15px;
+}
+.jatek-sikeres h3 {
+  font-size: 24px;
+  margin: 20px 0 10px;
+  letter-spacing: -0.7px;
+}
+.jatek-sikeres p {
+  font-size: 15px;
+  color: var(--jatek-muted);
+  margin: 0 auto;
+  max-width: 420px;
+}
+.jatek-nincs-kerdes {
+  padding: 30px 0;
+}
+.jatek-nincs-kerdes h3 {
+  font-size: 22px;
+  margin: 0 0 10px;
+  letter-spacing: -0.7px;
+}
+.jatek-nincs-kerdes p {
+  font-size: 15px;
+  color: var(--jatek-muted);
+  margin: 0;
+}
+.jatek-jogi {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 60px 0 80px;
+}
+.jatek-jogi h1 {
+  font-size: 34px;
+  letter-spacing: -1px;
+  margin: 18px 0 20px;
+}
+.jatek-jogi h2 {
+  font-size: 18px;
+  letter-spacing: -0.3px;
+  margin: 30px 0 8px;
+  font-weight: 600;
+}
+.jatek-jogi p {
+  font-size: 15px;
+  color: #b8c9d5;
+  margin: 0 0 10px;
+}
+/* A 16 px-es alcím NEM örökölheti a globális -1.4px-et (az a 65 px-es főcímre való): a szóköz is összecsúszott
+   ("2.2.Anyertesektovábbiadatai", Balázs, 2026-11-06). A kis címek -0.3px-et kapnak, mint a lépések és a jogi h2. */
+.jatek-jogi h3 {
+  font-size: 16px;
+  margin: 20px 0 6px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+}
+.jatek-jogi ul {
+  margin: 0 0 12px;
+  padding-left: 22px;
+  color: #b8c9d5;
+  font-size: 15px;
+}
+.jatek-jogi li {
+  margin: 0 0 4px;
+}
+.jatek-tablazat {
+  margin: 4px 0 14px;
+  overflow-x: auto;
+}
+.jatek-tablazat table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  color: #b8c9d5;
+}
+.jatek-tablazat th,
+.jatek-tablazat td {
+  text-align: left;
+  padding: 8px 12px;
+  border: 1px solid var(--jatek-border);
+}
+.jatek-tablazat th {
+  color: #fff;
+  font-weight: 600;
+  background: #0c1720;
+}
+.jatek-vazlat {
+  margin: 0 0 22px;
+  padding: 12px 14px;
+  border: 1px solid var(--jatek-orange);
+  border-radius: 5px;
+  color: var(--jatek-orange);
+  font-size: 15px;
+  font-weight: 600;
+}
+.jatek-fejlec-nav-aktiv {
+  color: var(--jatek-orange);
+}
+.jatek-check a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.jatek-check a:hover {
+  color: var(--jatek-orange);
+}
+.jatek-megerosites .jatek-button {
+  margin-top: 22px;
+}
+
+/*
+  OLVASHATOSAG (Balazs, 2026-11-06 00:1x, mobilon "olvashatatlanul kicsi meg halvany felirat"). A meretek es a szinek
+  fent egy lepcson mentek feljebb (nincs 13 px alatti betu; mobilon a torzs es a beviteli mezo 16 px; a halvany
+  szovegek a --jatek-muted szinre, minden szoveg legalabb 4.5:1 a kartya hatteren: lasd a jatek-olvashatosag spec-et).
+  Ez a szakasz csak azt rendezi el, amit a nagyobb szoveg elmozditott. A design stilusa marad.
+*/
+.jatek-card-top {
+  flex-wrap: wrap;
+}
+.jatek-brand small {
+  white-space: nowrap;
+}
+.jatek-check {
+  font-size: 14px;
+}
+.jatek-mobile-cta[data-rejtett="true"] {
+  display: none;
+}
+@media (max-width: 700px) {
+  /* 16 px: ez alatt az iPhone a beviteli mezore ugrik, amikor belekattintanak */
+  input:not([type="checkbox"]) {
+    font-size: 16px;
+  }
+  .jatek-brand small {
+    display: none;
+  }
+  .jatek-hero-art {
+    height: 470px;
+  }
+  .jatek-prize-label {
+    bottom: 70px;
+  }
+  .jatek-photo-note {
+    left: 0;
+    right: 0;
+    bottom: 10px;
+    width: auto;
+    max-width: none;
+    text-align: left;
+  }
+  .jatek-mobile-cta {
+    bottom: max(12px, env(safe-area-inset-bottom));
+    padding: 13px 19px;
+  }
+  /* a rogzitett gomb magassaga + a hezag: az oldal vege alatt semmi nem csuszik a gomb ala */
+  footer {
+    padding-bottom: calc(110px + env(safe-area-inset-bottom));
+  }
+}
+
+/* A hét nyereményének képe (a heti kártyán): a doboz helyén, kerek sarkokkal */
+.jatek-prize-photo {
+  height: 192px;
+  width: 100%;
+  display: grid;
+  place-items: center;
+}
+.jatek-prize-photo img {
+  max-height: 180px;
+  max-width: 100%;
+  object-fit: contain;
+  border-radius: 10px;
+}
+
+/* A korábbi nyertesek listája: rövidített név és a sorsolás */
+.jatek-winner-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.jatek-winner-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 18px;
+  padding: 16px 20px;
+  border: 1px solid var(--jatek-border);
+  border-radius: 10px;
+  background: #0c1720;
+}
+.jatek-winner-list li span {
+  color: var(--jatek-muted);
+  font-size: 14px;
+}

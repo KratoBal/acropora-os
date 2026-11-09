@@ -52,12 +52,14 @@ export const PAYMENT_STATE_TONE: Readonly<
  * „Fizetve (GLS utánvét)” és az adatlap jelölés-sora ugyanazt mondja.
  */
 export const OWN_MARK_SOURCE_LABELS: Record<
-  "GLS_COD" | "SIMPLEPAY" | "FOXPOST",
+  "GLS_COD" | "SIMPLEPAY" | "FOXPOST" | "MANUAL" | "BANK_TRANSFER",
   string
 > = {
   GLS_COD: "GLS utánvét",
   SIMPLEPAY: "SimplePay",
   FOXPOST: "Foxpost",
+  MANUAL: "kézi rögzítés",
+  BANK_TRANSFER: "banki átutalás",
 };
 
 const AT_ORDER: Record<string, string> = {
@@ -69,6 +71,8 @@ const AT_ORDER: Record<string, string> = {
   MARK_GLS_COD: OWN_MARK_SOURCE_LABELS.GLS_COD,
   MARK_SIMPLEPAY: OWN_MARK_SOURCE_LABELS.SIMPLEPAY,
   MARK_FOXPOST: OWN_MARK_SOURCE_LABELS.FOXPOST,
+  MARK_MANUAL: OWN_MARK_SOURCE_LABELS.MANUAL,
+  MARK_BANK_TRANSFER: OWN_MARK_SOURCE_LABELS.BANK_TRANSFER,
   // bejövő számla: a Hiányzó számlák banki párosítása (acrobot 25988)
   BANK_PAIRING: "banki párosítás",
 };

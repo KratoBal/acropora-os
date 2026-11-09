@@ -133,6 +133,10 @@ export function BillingNewCustomerForm({
         search: base,
         page: "1",
         pageSize: String(CUSTOMER_LIST_PAGE_SIZE.min),
+        // the partners' customer rows too: after the partner register merge a partner and its customer are ONE row
+        // that carries the partner link, and the list leaves such rows out unless asked (a company already in the
+        // register would be taken for a new one: card 40332480)
+        includePartnerMirrors: "true",
       }),
     );
     // the search also hits the digits of a customer number or an e-mail; only
@@ -143,7 +147,13 @@ export function BillingNewCustomerForm({
     );
     return page.items.filter(
       (_item, index) =>
-        taxKey(details[index]?.taxNumber ?? "").slice(0, 8) === base,
+        // a partner's customer row can lack the tax number the partner has: the detail's partner hint carries it
+        // (card aaf4f09d), and the search found the row through the partner's number (40332480)
+        taxKey(
+          details[index]?.taxNumber ||
+            details[index]?.partnerTaxHint?.taxNumber ||
+            "",
+        ).slice(0, 8) === base,
     );
   };
 

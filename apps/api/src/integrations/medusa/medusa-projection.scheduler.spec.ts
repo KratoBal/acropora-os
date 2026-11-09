@@ -19,6 +19,7 @@ const REGEN = new Date("2026-09-01T10:00:00.000Z");
 function termek(overrides: Record<string, unknown> = {}) {
   return {
     id: "prod-1",
+    isActive: true,
     updatedAt: MOST,
     variants: [{ updatedAt: REGEN }],
     unasSnapshot: { updatedAt: REGEN },
@@ -66,6 +67,12 @@ function adatbazis(
   markaSorok: { id: string; updatedAt: Date }[] = [],
   /** A natív célú tény-kulcsok (tömeg, méret): a termékismeret kikapcsolt ágán ezek számítanak. */
   nativKulcsok: string[] = [],
+  /** A saját akció határának sorai (`ProductVariant.sellingSale*`, T4.1-D3). Alapból üres. */
+  sajatAkcioSorok: {
+    productId: string;
+    sellingSaleStartsAt: Date | null;
+    sellingSaleEndsAt: Date | null;
+  }[] = [],
 ) {
   const hivasok: { metodus: string; args: unknown }[] = [];
   const db = {
@@ -96,6 +103,12 @@ function adatbazis(
       findMany: async (args: unknown) => {
         hivasok.push({ metodus: "unasProductSnapshot.findMany", args });
         return akcioSorok;
+      },
+    },
+    productVariant: {
+      findMany: async (args: unknown) => {
+        hivasok.push({ metodus: "productVariant.findMany", args });
+        return sajatAkcioSorok;
       },
     },
     productKnowledgeFact: {
@@ -514,6 +527,7 @@ describe("MedusaProjectionScheduler ures kor naploja", () => {
         upsert: async () => ({}),
       },
       unasProductSnapshot: { findMany: async () => [] },
+      productVariant: { findMany: async () => [] },
       productKnowledgeFact: { findMany: async () => [] },
       attributeDefinition: { findMany: async () => [] },
       brand: { findMany: async () => [] },
@@ -787,6 +801,119 @@ describe("MedusaProjectionScheduler, az akció határa", () => {
   });
 });
 
+/**
+ * A SAJÁT AKCIÓ HATÁRA (T4.1-D3, akció 2. szelet). Az átvett termék akciója a
+ * változaton áll, és ugyanúgy az óra szerint vált. MI PIROSÍT: az elindult vagy
+ * lejárt saját akció nem kerül a körbe; a jövőbeli vagy már vetített határ
+ * bekerül; két változat határa kétszer viszi a terméket; a lekérdezés nem az
+ * ACROPORA gazdára, az aktív változatra vagy a nem kizárt termékre szól.
+ */
+describe("MedusaProjectionScheduler, a saját akció határa", () => {
+  const MOST_ORA = new Date("2026-11-05T08:00:00.000Z");
+  const ORAJA = (perc: number) => new Date(MOST_ORA.getTime() + perc * 60_000);
+
+  const kor = async (
+    sajatAkcioSorok: {
+      productId: string;
+      sellingSaleStartsAt: Date | null;
+      sellingSaleEndsAt: Date | null;
+    }[],
+    lekepezesek: { entityId: string; lastSyncedAt: Date | null }[],
+  ) => {
+    const { db, hivasok } = adatbazis(
+      [],
+      lekepezesek,
+      undefined,
+      [],
+      [],
+      [],
+      [],
+      [],
+      sajatAkcioSorok,
+    );
+    const { run, kapott } = futtato();
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: run,
+      runPricing: arFuttato().run,
+      environment: BEKAPCSOLVA,
+      logger: naplo().logger,
+      now: () => MOST_ORA,
+    });
+    await scheduler.runOnce();
+    return { kapott, hivasok };
+  };
+
+  it("az elindult és a lejárt saját akció esedékes, a termék egyszer", async () => {
+    const { kapott } = await kor(
+      [
+        {
+          productId: "indult",
+          sellingSaleStartsAt: ORAJA(-10),
+          sellingSaleEndsAt: ORAJA(600),
+        },
+        {
+          productId: "indult",
+          sellingSaleStartsAt: ORAJA(-15),
+          sellingSaleEndsAt: ORAJA(600),
+        },
+        {
+          productId: "lejart",
+          sellingSaleStartsAt: ORAJA(-3000),
+          sellingSaleEndsAt: ORAJA(-5),
+        },
+      ],
+      [
+        { entityId: "indult", lastSyncedAt: ORAJA(-60) },
+        { entityId: "lejart", lastSyncedAt: ORAJA(-60) },
+      ],
+    );
+    assert.deepEqual(kapott, [["indult", "lejart"]]);
+  });
+
+  it("a jövőbeli és a már vetített saját határ nem esedékes", async () => {
+    const { kapott } = await kor(
+      [
+        {
+          productId: "jovo",
+          sellingSaleStartsAt: ORAJA(30),
+          sellingSaleEndsAt: ORAJA(600),
+        },
+        {
+          productId: "vetitve",
+          sellingSaleStartsAt: ORAJA(-20),
+          sellingSaleEndsAt: ORAJA(600),
+        },
+      ],
+      [
+        { entityId: "jovo", lastSyncedAt: ORAJA(-60) },
+        { entityId: "vetitve", lastSyncedAt: ORAJA(-5) },
+      ],
+    );
+    assert.deepEqual(kapott, []);
+  });
+
+  it("a lekérdezés az ablakra, az aktív változatra és az ACROPORA gazdájú, nem kizárt termékre szól", async () => {
+    const { hivasok } = await kor([], []);
+    const args = hivasok.find(
+      (hivas) => hivas.metodus === "productVariant.findMany",
+    )?.args as { where: unknown };
+    const ablak = {
+      gt: new Date(MOST_ORA.getTime() - 7 * 24 * 60 * 60 * 1000),
+      lte: MOST_ORA,
+    };
+    assert.deepEqual(args.where, {
+      isActive: true,
+      OR: [{ sellingSaleStartsAt: ablak }, { sellingSaleEndsAt: ablak }],
+      product: {
+        isActive: true,
+        webshopExcluded: false,
+        catalogAuthority: "ACROPORA",
+      },
+    });
+  });
+});
+
 /*
   AZ ELBUKOTT ÁR ESEDÉKES MARAD (329f8a2e, murena tény-kommentje, acrobot
   27698). MI PIROSIT: a kudarc nem kerül a termék saját ár-sorára; egy bukott
@@ -1005,7 +1132,12 @@ describe("az átirányítás-lista köre (SEO P0 PR 7b)", () => {
       logger: naplo().logger,
       runRedirects: async () => {
         hivas += 1;
-        return { status: "unchanged", count: 0, hash: "h" };
+        return {
+          status: "unchanged",
+          count: 0,
+          hash: "h",
+          retargeted: { brand: 0, gone: 0 },
+        };
       },
     });
     await scheduler.runOnce();
@@ -1029,6 +1161,7 @@ describe("az átirányítás-lista köre (SEO P0 PR 7b)", () => {
           hash: "h",
           remoteCount: 0,
           remoteHash: "r",
+          retargeted: { brand: 0, gone: 0 },
         };
       },
     });
@@ -1257,6 +1390,181 @@ describe("a márka változása is esedékessé teszi a termékeit (t11)", () => 
       await scheduler.runOnce();
       assert.deepEqual(kapott, vart);
     }
+  });
+});
+
+/** Egy kötés, amit a kifutott-jelölő pontja (2026-11-09) UTÁN vetítettek. */
+const JELOLO_UTAN = new Date("2026-11-09T12:00:00.000Z");
+
+/** A dupla `product.findMany`-je az `isActive` szűrőt is alkalmazza (lásd lent, ca422e92). */
+function csakAKertAllapot(db: ProjectionSchedulerDatabase) {
+  const eredeti = db.product.findMany.bind(db.product);
+  (db.product as { findMany: unknown }).findMany = async (args: {
+    where?: { isActive?: boolean };
+  }) => {
+    const sorok = (await eredeti(args as never)) as unknown as {
+      isActive: boolean;
+    }[];
+    const kert = args.where?.isActive;
+    return typeof kert === "boolean"
+      ? sorok.filter((t) => t.isActive === kert)
+      : sorok;
+  };
+}
+
+describe("a vetítés után inaktivált termék is esedékes (ca422e92)", () => {
+  /**
+   * MI PIROSÍT: a kötött termék, amit a legutóbbi vetítése UTÁN inaktiváltak,
+   * nem kerül sorra (a bolt published vagy jelölő nélküli draft marad); egy
+   * kötés nélküli vagy a vetítése óta nem változott inaktív termék sorra kerül
+   * (minden körben újra vetítene); vagy az inaktivált termék az ár-futásba is
+   * megy (aktív változat nélkül ott minden körben kudarcot írna).
+   *
+   * A DUPLA ITT ALKALMAZZA az `isActive` szűrőt: enélkül az általános
+   * esedékesség is visszakapná az inaktív terméket, és a teszt a javítás
+   * nélkül is zöld lenne.
+   */
+  it("csak a kötött, a vetítése után változott inaktív termék esedékes, és ára nem megy", async () => {
+    const korabban = new Date(MOST.getTime() - 60_000);
+    const { run, kapott } = futtato(0);
+    const ar = arFuttato(0);
+    const { db } = adatbazis(
+      [
+        termek({ id: "aktiv-friss", updatedAt: REGEN }),
+        termek({ id: "inaktivalt", isActive: false, updatedAt: MOST }),
+        termek({
+          id: "inaktiv-kotes-nelkul",
+          isActive: false,
+          updatedAt: MOST,
+        }),
+        termek({ id: "inaktiv-regi", isActive: false, updatedAt: REGEN }),
+      ],
+      [
+        { entityId: "aktiv-friss", lastSyncedAt: korabban },
+        { entityId: "inaktivalt", lastSyncedAt: korabban },
+        // a jelölő-pont (2026-11-09) UTÁN vetítve: a változása régebbi, nem esedékes
+        { entityId: "inaktiv-regi", lastSyncedAt: JELOLO_UTAN },
+      ],
+    );
+    csakAKertAllapot(db);
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: run,
+      runPricing: ar.run,
+      environment: BEKAPCSOLVA,
+      logger: naplo().logger,
+      now: () => new Date(MOST.getTime() + 1_000),
+    });
+    await scheduler.runOnce();
+    assert.deepEqual(kapott, [["inaktivalt"]]);
+    assert.deepEqual(ar.kapott, []);
+  });
+
+  /**
+   * A JELÖLŐ ELŐTT VETÍTETT INAKTÍV TERMÉK (acrobot mérése, 2026-11-09 19:00: a 129 régi
+   * cím). MI PIROSÍT: a kifutott-jelölő (V4.2) előtt draftként kivitt inaktív termék nem
+   * kerül újra sorra, mert a változása régebbi a kötésnél; vagy a pont után vetített is
+   * minden körben újra esedékes.
+   */
+  it("a jelölő előtt vetített inaktív termék egyszer újra esedékes, a pont után vetített nem", async () => {
+    const { run, kapott } = futtato(0);
+    const { db } = adatbazis(
+      [
+        termek({ id: "jelolo-elott", isActive: false, updatedAt: REGEN }),
+        termek({ id: "jelolo-utan", isActive: false, updatedAt: REGEN }),
+      ],
+      [
+        {
+          entityId: "jelolo-elott",
+          lastSyncedAt: new Date("2026-10-27T10:00:00.000Z"),
+        },
+        { entityId: "jelolo-utan", lastSyncedAt: JELOLO_UTAN },
+      ],
+    );
+    csakAKertAllapot(db);
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: run,
+      runPricing: arFuttato().run,
+      environment: BEKAPCSOLVA,
+      logger: naplo().logger,
+      now: () => new Date(MOST.getTime() + 1_000),
+    });
+    await scheduler.runOnce();
+    assert.deepEqual(kapott, [["jelolo-elott"]]);
+  });
+
+  /**
+   * A BERAGADT INAKTÍV TERMÉK NEM SZORÍTJA KI A TÖBBIT (barracuda, #2332 review, 2.).
+   * MI PIROSÍT: rögzített kezdettel minden kör ugyanazt a két terméket viszi, ha a
+   * futtató nem lépteti őket (itt a futtató dupla nem ír `lastSyncedAt`-et, mint egy
+   * megálló vetítés); a kezdet nem annyit lép, ahányat a kör vitt.
+   */
+  it("a kör forgó kezdettel viszi az inaktiváltakat, ha azok nem lépnek tovább", async () => {
+    const korabban = new Date(MOST.getTime() - 60_000);
+    const azonositok = ["a", "b", "c", "d"];
+    const { run, kapott } = futtato(1);
+    const { db } = adatbazis(
+      azonositok.map((id) => termek({ id, isActive: false, updatedAt: MOST })),
+      azonositok.map((id) => ({ entityId: id, lastSyncedAt: korabban })),
+    );
+    csakAKertAllapot(db);
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: run,
+      runPricing: arFuttato().run,
+      environment: {
+        ...BEKAPCSOLVA,
+        MEDUSA_PROJECTION_SCHEDULE_BATCH_SIZE: "2",
+      } as NodeJS.ProcessEnv,
+      logger: naplo().logger,
+      now: () => new Date(MOST.getTime() + 1_000),
+    });
+    for (let kor = 0; kor < 3; kor++) await scheduler.runOnce();
+    assert.deepEqual(kapott, [
+      ["a", "b"],
+      ["c", "d"],
+      ["a", "b"],
+    ]);
+  });
+
+  /**
+   * SZELETENKÉNT KÉRDEZ (barracuda, #2332 review, 1.). MI PIROSÍT: a teljes kötés-lista
+   * egyetlen `in`-be megy (a Postgres 32767-es határán elhasalna), vagy egy szelet
+   * kimarad.
+   */
+  it("a kötés-listát ezres szeletekben kérdezi", async () => {
+    const kotesek = Array.from({ length: 2500 }, (_, i) => ({
+      entityId: `p${String(i).padStart(4, "0")}`,
+      lastSyncedAt: MOST,
+    }));
+    const { db, hivasok } = adatbazis([], kotesek);
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: futtato(0).run,
+      runPricing: arFuttato().run,
+      environment: BEKAPCSOLVA,
+      logger: naplo().logger,
+      now: () => new Date(MOST.getTime() + 1_000),
+    });
+    await scheduler.runOnce();
+    const szeletek = hivasok
+      .filter((h) => h.metodus === "product.findMany")
+      .map(
+        (h) => (h.args as { where: { id?: { in?: string[] } } }).where.id?.in,
+      )
+      .filter(
+        (lista): lista is string[] =>
+          Array.isArray(lista) && lista.length > 0 && lista[0]!.startsWith("p"),
+      );
+    assert.deepEqual(
+      szeletek.map((lista) => lista.length),
+      [1000, 1000, 500],
+    );
+    assert.deepEqual(
+      szeletek.flat(),
+      kotesek.map((k) => k.entityId),
+    );
   });
 });
 

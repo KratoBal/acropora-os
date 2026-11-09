@@ -1,0 +1,481 @@
+/*
+  A FODIJ-OLDAL (AF Nano Tank) KINEZETE. Az eredeti Aquaforest-oldal szakaszrendje es elrendezese, a jatek sajat
+  stilusaban: a szinek es a betuk a theme.css valtozoi (nem az Aquaforest lila-fekete palettaja). Az olvashatosagi alsó
+  hatar itt is ervenyes (nincs 13 px alatti betu, a torzs 16 px, a szoveg legalabb 4.5:1; lasd a jatek-olvashatosag
+  spec-et, ami ezt a fajlt is olvassa).
+*/
+.fodij {
+  overflow-x: clip;
+}
+.fodij h1,
+.fodij h2,
+.fodij h3 {
+  font-family: var(--font-manrope), Manrope, system-ui, sans-serif;
+  text-transform: uppercase;
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.5px;
+  margin: 0;
+}
+.fodij h2 {
+  font-size: clamp(30px, 4.6vw, 56px);
+  margin-bottom: 32px;
+}
+.fodij h3 {
+  font-size: 20px;
+  letter-spacing: 0;
+}
+.fodij p {
+  font-size: 16px;
+  line-height: 1.65;
+  margin: 0;
+}
+.fodij img,
+.fodij video {
+  display: block;
+  max-width: 100%;
+}
+.fodij ul,
+.fodij ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* 1. nyito szakasz */
+.fodij-hero {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 48px;
+  align-items: center;
+  padding: 72px 0;
+}
+.fodij-cimke {
+  color: var(--jatek-orange);
+  font-family: var(--font-manrope), Manrope, system-ui, sans-serif;
+  font-weight: 800;
+  font-size: 20px;
+  letter-spacing: 2px;
+  margin-bottom: 16px;
+}
+.fodij-hero h1 {
+  font-size: clamp(44px, 7vw, 92px);
+  letter-spacing: -2px;
+  margin-bottom: 20px;
+}
+.fodij-hero h2 {
+  font-size: clamp(20px, 2.4vw, 30px);
+  color: var(--jatek-orange);
+  margin-bottom: 20px;
+}
+.fodij-hero-szoveg p {
+  max-width: 540px;
+  margin-bottom: 28px;
+}
+.fodij-hero-szoveg strong {
+  color: var(--jatek-text);
+}
+.fodij-hero-kep img {
+  width: 100%;
+  max-height: 600px;
+  object-fit: contain;
+  border-radius: 10px;
+}
+
+/* 2. video */
+.fodij-video {
+  text-align: center;
+  padding: 24px 0 72px;
+}
+.fodij-video h2 {
+  margin-bottom: 40px;
+}
+.fodij-video video {
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  border-radius: 10px;
+}
+.fodij-meret {
+  margin-top: 28px;
+}
+.fodij-meret span {
+  display: block;
+  max-width: 960px;
+  margin: 0 auto;
+  padding-top: 8px;
+  border-top: 1px dashed var(--jatek-muted);
+  color: var(--jatek-muted);
+  font-size: 14px;
+  letter-spacing: 1px;
+}
+
+/* 3. minden, ami kell */
+.fodij-csomag {
+  background: var(--jatek-panel);
+  padding: 72px 0;
+}
+.fodij-csomag h2 {
+  font-size: clamp(26px, 3.4vw, 40px);
+  margin-bottom: 12px;
+}
+.fodij-csomag h2 em {
+  font-style: normal;
+  color: var(--jatek-orange);
+}
+.fodij-alcim {
+  color: var(--jatek-muted);
+  margin-bottom: 36px;
+}
+.fodij-ikonok {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+  text-align: center;
+}
+.fodij-ikonok li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+.fodij-ikonok img {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+}
+.fodij-ikonok span,
+.fodij-termekek span {
+  font-family: var(--font-manrope), Manrope, system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.5px;
+}
+.fodij-elvalaszto {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 44px 0 28px;
+  color: var(--jatek-muted);
+}
+.fodij-elvalaszto::before,
+.fodij-elvalaszto::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--jatek-border);
+}
+.fodij-elvalaszto span {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 2px;
+}
+.fodij-termekek {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 20px;
+  text-align: center;
+}
+.fodij-termekek li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.fodij-termekek img {
+  width: 100%;
+  height: 120px;
+  object-fit: contain;
+}
+.fodij-termekek span {
+  font-size: 13px;
+}
+.fodij-zaromondat {
+  margin-top: 40px;
+  color: var(--jatek-muted);
+}
+.fodij-zaromondat strong {
+  color: var(--jatek-text);
+}
+
+/* 4. lepesek */
+.fodij-lepesek {
+  padding: 72px 0;
+}
+.fodij-lepesek h2 {
+  font-size: clamp(24px, 3vw, 36px);
+}
+.fodij-lepesek ol {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 16px;
+}
+.fodij-lepesek li {
+  text-align: center;
+}
+.fodij-lepesek img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border: 2px solid #3a5568;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+.fodij-lepesek li span {
+  display: block;
+  font-size: 14px;
+  color: var(--jatek-muted);
+}
+
+/* 5. miert az AF Nano Tank */
+.fodij-miert {
+  padding-top: 24px;
+}
+.fodij-csempek {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+.fodij-csempek article,
+.fodij-panelek article {
+  position: relative;
+  overflow: hidden;
+  background: #000;
+}
+.fodij-csempek img,
+.fodij-panelek img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.fodij-csempek article {
+  aspect-ratio: 1;
+}
+.fodij-csempek article::after,
+.fodij-panelek article::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgb(7 13 19 / 82%),
+    rgb(7 13 19 / 20%) 55%
+  );
+  pointer-events: none;
+}
+.fodij-csempek article > div,
+.fodij-panelek article > div {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 28px;
+}
+.fodij-csempek h3,
+.fodij-panelek h3 {
+  font-size: 22px;
+  text-transform: none;
+  margin-bottom: 8px;
+  color: var(--jatek-text);
+}
+.fodij-csempek p,
+.fodij-panelek p {
+  font-size: 16px;
+  max-width: 340px;
+  color: var(--jatek-text);
+}
+
+/* 6. vilagitas */
+.fodij-vilagitas-szakasz {
+  padding: 72px 0;
+}
+.fodij-vilagitas-szakasz h2 {
+  font-size: clamp(26px, 3.6vw, 44px);
+}
+.fodij-felirat {
+  color: var(--jatek-muted);
+  margin-bottom: 16px;
+}
+.fodij-kapcsolo {
+  display: inline-flex;
+  border: 1px solid var(--jatek-border);
+  border-radius: 30px;
+  padding: 4px;
+  margin-bottom: 20px;
+}
+.fodij-kapcsolo button,
+.fodij-tulajdonsagok button {
+  border: 0;
+  background: none;
+  color: var(--jatek-text);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  padding: 10px 20px;
+  border-radius: 24px;
+  min-height: 44px;
+}
+.fodij-kapcsolo button[aria-pressed="true"],
+.fodij-tulajdonsagok button[aria-pressed="true"] {
+  background: var(--jatek-orange);
+  color: #11171b;
+}
+.fodij-vilagitas-kep {
+  aspect-ratio: 1024 / 572;
+  background: var(--jatek-panel);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.fodij-vilagitas-kep img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.fodij-tulajdonsagok {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+}
+.fodij-tulajdonsagok button {
+  border: 1px solid var(--jatek-border);
+  letter-spacing: 0;
+  font-weight: 600;
+}
+
+/* 7. tokeletes valasztas */
+.fodij-kinek {
+  padding-top: 24px;
+}
+.fodij-panelek {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+}
+.fodij-panelek article {
+  aspect-ratio: 3 / 4.4;
+}
+
+/* 8. mi van a dobozban */
+.fodij-doboz {
+  padding: 72px 0;
+}
+.fodij-tablak {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 48px;
+}
+.fodij-tabla h3 {
+  margin-bottom: 20px;
+}
+.fodij-tabla dl {
+  margin: 0;
+}
+.fodij-tabla dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 14px 0;
+  border-top: 1px solid var(--jatek-border);
+  font-size: 16px;
+}
+.fodij-tabla dt {
+  color: var(--jatek-muted);
+}
+.fodij-tabla dd {
+  margin: 0;
+  text-align: right;
+}
+
+/* 9. zaro szakasz */
+.fodij-zaro {
+  position: relative;
+  min-height: 640px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  text-align: center;
+}
+.fodij-zaro > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.fodij-zaro::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgb(7 13 19 / 58%);
+}
+.fodij-zaro-szoveg {
+  position: relative;
+  z-index: 1;
+  max-width: 760px;
+  padding: 72px 24px;
+}
+.fodij-zaro h2 {
+  font-size: clamp(32px, 5.4vw, 64px);
+}
+.fodij-zaro p {
+  margin: 0 auto 32px;
+  max-width: 560px;
+  color: var(--jatek-text);
+}
+
+@media (max-width: 1000px) {
+  .fodij-lepesek ol {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .fodij-panelek {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .fodij-termekek {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 700px) {
+  .fodij-hero {
+    grid-template-columns: 1fr;
+    gap: 28px;
+    padding: 36px 0 48px;
+  }
+  .fodij h2 {
+    margin-bottom: 24px;
+  }
+  .fodij-video {
+    padding-bottom: 48px;
+  }
+  .fodij-csomag,
+  .fodij-lepesek,
+  .fodij-vilagitas-szakasz,
+  .fodij-doboz {
+    padding: 48px 0;
+  }
+  .fodij-ikonok {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .fodij-lepesek ol {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .fodij-csempek {
+    grid-template-columns: 1fr;
+  }
+  .fodij-csempek article > div,
+  .fodij-panelek article > div {
+    padding: 20px;
+  }
+  .fodij-panelek article {
+    aspect-ratio: 3 / 5;
+  }
+  .fodij-tablak {
+    grid-template-columns: 1fr;
+    gap: 36px;
+  }
+  .fodij-zaro {
+    min-height: 560px;
+  }
+}

@@ -200,11 +200,32 @@ export const SETTINGS_AREAS: SettingsArea[] = [
         entryId: "asset-functions",
       },
       {
+        label: "Bérelhető eszközök",
+        description:
+          "A kölcsönzött eszközök darabonként: gyári szám, napi díj, kaució, pótlási érték, tartozékok.",
+        href: "/beallitasok/berelheto-eszkozok",
+        entryId: "rental-equipment",
+      },
+      {
         label: "Partner-duplikátumok",
         description:
           "Ugyanaz a cég vevőként, szállítóként vagy webshopos vásárlóként: csak olvasható lista a döntéshez.",
         href: "/beallitasok/partner-duplikatumok",
         entryId: "partner-duplicates",
+      },
+      {
+        label: "Partner-átvezetés",
+        description:
+          "A partnerek (beszállítók, szerviz-partnerek) terve: melyik vevő-sorra kerül, melyikhez kötődik, melyikből készül új. Csak olvasható.",
+        href: "/beallitasok/partner-atvezetes",
+        entryId: "partner-migration",
+      },
+      {
+        label: "Szállítási jelzők feltöltése",
+        description:
+          "Egyszeri feltöltés a UNAS-ból: minden UNAS-os termék megkapja a szállítási jelzőit. Előbb próba, utána írás.",
+        href: "/beallitasok/szallitasi-jelzok",
+        entryId: "shipping-fill",
       },
     ],
   },

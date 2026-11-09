@@ -8,6 +8,7 @@ import {
 } from "../missing-invoices/szamlazz-feed-xml.js";
 import {
   szamlazzCurrency,
+  szamlazzIsElectronic,
   xsDateDay,
 } from "../missing-invoices/szamlazz-values.js";
 import {
@@ -27,7 +28,7 @@ import {
  *
  * A MEZŐK (szamlabe.xsd):
  *
- *   alap.id, szamlaszam, tipus, eszamla       azonosító, szám, típus, e-számla
+ *   alap.id, szamlaszam, tipus, eszamla       azonosító, szám, típus, e-számla (kód: 2 és 3 e-számla, lásd `szamlazzIsElectronic`)
  *   alap.kelt, telj, fizh                     kelt, teljesítés, határidő
  *   alap.fizmod                               fizetési mód
  *   alap.devizanem, devizaarf, devizabank     pénznem (Ft -> HUF), árfolyam, bank
@@ -143,7 +144,7 @@ export function projectIncomingInvoice(xml: string): IncomingInvoiceProjection {
     externalId,
     kindCode: required(root, "alap", "tipus"),
     documentNumber: required(root, "alap", "szamlaszam"),
-    electronic: textAt(root, "alap", "eszamla") === "1",
+    electronic: szamlazzIsElectronic(textAt(root, "alap", "eszamla")),
     issueDate,
     fulfillmentDate: day(textAt(root, "alap", "telj")),
     dueDate: day(textAt(root, "alap", "fizh")),

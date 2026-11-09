@@ -683,3 +683,38 @@ describe("the problem report calls (V1.2)", () => {
     assert.equal(calls[0]!.method, "POST");
   });
 });
+
+describe("the withdrawal calls (V0.3)", () => {
+  function recorder(body: unknown) {
+    const calls: { url: string; method?: string }[] = [];
+    const fetchImpl = (async (url: string, init?: RequestInit) => {
+      calls.push({ url: String(url), method: init?.method });
+      return { ok: true, json: async () => body } as unknown as Response;
+    }) as unknown as typeof fetch;
+    return { calls, fetchImpl };
+  }
+  const make = (fetchImpl: typeof fetch) =>
+    new HttpMedusaAdminClient(
+      { baseUrl: "https://shop.example", apiKey: "k" },
+      fetchImpl,
+    );
+
+  it("lists by status and limit, and answers an empty list when the body has none", async () => {
+    const { calls, fetchImpl } = recorder({});
+    assert.deepEqual(await make(fetchImpl).listWithdrawals("new", 50), []);
+    assert.equal(
+      calls[0]!.url,
+      "https://shop.example/admin/order-withdrawals?status=new&limit=50",
+    );
+  });
+
+  it("marks a declaration pulled on its own address, with the id encoded", async () => {
+    const { calls, fetchImpl } = recorder({ status: "pulled" });
+    await make(fetchImpl).markWithdrawalPulled("ordwdr/1");
+    assert.equal(
+      calls[0]!.url,
+      "https://shop.example/admin/order-withdrawals/ordwdr%2F1/pulled",
+    );
+    assert.equal(calls[0]!.method, "POST");
+  });
+});

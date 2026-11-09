@@ -148,6 +148,8 @@ export type ProjectionSchedulerDatabase = Pick<
   | "product"
   | "externalReference"
   | "unasProductSnapshot"
+  /** A saját akció határa (T4.1-D3, akció 2. szelet): az átvett termék akciója a változaton áll. */
+  | "productVariant"
   /** A tények változása (SEO P0 PR 8): a tény-írás a terméket nem érinti. */
   | "productKnowledgeFact"
   /** A natív célú kulcsok (tömeg, méret): azok akkor is esedékessé tesznek, ha a termékismeret ki van kapcsolva. */
@@ -236,6 +238,8 @@ export class MedusaProjectionScheduler
   private readonly homepageOn: () => Promise<boolean>;
   /** Hany URES kor telt el egymas utan. A nem-ures kor nullazza. */
   private egymasUtaniUresKorok = 0;
+  /** Az inaktivált lista forgó kezdete (`inaktivaltAzonositok`): ahányat egy kör ténylegesen vitt, annyit lép. */
+  private inaktivEltolas = 0;
 
   /**
    * EGY OPCIONALIS FUGGOSEG-OBJEKTUM, ES EZ A REPO MINTAJA, NEM ROGTONZES: a
@@ -349,14 +353,21 @@ export class MedusaProjectionScheduler
     const akcio = await this.akcioHatarAzonositok();
     const teny = await this.tenyValtozasAzonositok();
     const marka = await this.markaValtozasAzonositok();
+    /*
+      AZ INAKTIVÁLT TERMÉK A SOR VÉGÉN (ca422e92): a kifutott lap késése kisebb
+      kár, mint egy értékesíthető terméké, és az első körök visszamenőleges
+      halmazát így a napi változások nem várják ki.
+    */
+    const altalanos = await this.esedekesAzonositok(limit);
+    const inaktivalt = await this.inaktivaltAzonositok(limit);
     const esedekes = [
-      ...new Set([
-        ...akcio,
-        ...teny,
-        ...marka,
-        ...(await this.esedekesAzonositok(limit)),
-      ]),
+      ...new Set([...akcio, ...teny, ...marka, ...altalanos, ...inaktivalt]),
     ].slice(0, limit);
+    // a forgás annyit lép, ahány inaktivált termék ebben a körben ténylegesen sorra került
+    const elotte = new Set([...akcio, ...teny, ...marka, ...altalanos]);
+    this.inaktivEltolas += esedekes.filter(
+      (id) => inaktivalt.includes(id) && !elotte.has(id),
+    ).length;
     /*
       AZ ELBUKOTT ÁR ESEDÉKES MARAD (329f8a2e, murena tény-kommentje, acrobot
       27698). A termék-kötés `lastSyncedAt`-jét csak a termék-vetítés írja, tehát
@@ -407,9 +418,12 @@ export class MedusaProjectionScheduler
       A termék-vetítés bukása nem állítja meg: a kör többi terméke ugyanúgy
       kötött, és az áruk ugyanúgy igaz.
     */
-    const kotesek = await this.kotottAzonositok([...esedekes, ...arUjra]);
+    // az inaktivált termék draftként megy ki, ára nem kell (és aktív változat
+    // nélkül az ár-futás minden körben kudarcot írna rá)
+    const arra = esedekes.filter((id) => !inaktivalt.includes(id));
+    const kotesek = await this.kotottAzonositok([...arra, ...arUjra]);
     const arazhato = [...kotesek.keys()];
-    const kotesNelkul = esedekes.length + arUjra.length - arazhato.length;
+    const kotesNelkul = arra.length + arUjra.length - arazhato.length;
     if (kotesNelkul > 0)
       this.naplo.log(
         `Medusa price projection: ${kotesNelkul} termek Medusa kotes nelkul, ` +
@@ -546,13 +560,43 @@ export class MedusaProjectionScheduler
   private async akcioHatarAzonositok(): Promise<string[]> {
     const most = this.now();
     const ablak = { gt: new Date(most.getTime() - AKCIO_ABLAK_MS), lte: most };
-    const sorok = await this.db.unasProductSnapshot.findMany({
+    const tukor = await this.db.unasProductSnapshot.findMany({
       where: {
         OR: [{ saleStartsAt: ablak }, { saleEndsAt: ablak }],
         product: { isActive: true, webshopExcluded: false },
       },
       select: { productId: true, saleStartsAt: true, saleEndsAt: true },
     });
+    /*
+      A SAJÁT AKCIÓ HATÁRA IS (T4.1-D3, akció 2. szelet): az átvett termék akciója
+      a változaton áll (`sellingSale*`), és ugyanúgy az óra szerint vált, írás
+      nélkül. Csak ACROPORA gazdánál: a UNAS gazdájú termék árát a tükör adja, a
+      saját akció mezői ott nem mennek ki (`resolvePriceSource`).
+    */
+    const sajat = await this.db.productVariant.findMany({
+      where: {
+        isActive: true,
+        OR: [{ sellingSaleStartsAt: ablak }, { sellingSaleEndsAt: ablak }],
+        product: {
+          isActive: true,
+          webshopExcluded: false,
+          catalogAuthority: "ACROPORA",
+        },
+      },
+      select: {
+        productId: true,
+        sellingSaleStartsAt: true,
+        sellingSaleEndsAt: true,
+      },
+    });
+    const sorok = [
+      ...tukor,
+      ...sajat.map((sor) => ({
+        productId: sor.productId,
+        saleStartsAt: sor.sellingSaleStartsAt,
+        saleEndsAt: sor.sellingSaleEndsAt,
+      })),
+    ];
     if (!sorok.length) return [];
 
     const kotesek = await this.db.externalReference.findMany({
@@ -566,16 +610,20 @@ export class MedusaProjectionScheduler
       kotesek.map((sor) => [sor.entityId, sor.lastSyncedAt]),
     );
 
-    return sorok
-      .filter((sor) => {
-        if (!utoljara.has(sor.productId)) return false;
-        const vetitve = utoljara.get(sor.productId) ?? null;
-        const hatarok = [sor.saleStartsAt, sor.saleEndsAt].filter(
-          (hatar): hatar is Date => hatar !== null && hatar <= most,
-        );
-        return hatarok.some((hatar) => vetitve === null || hatar > vetitve);
-      })
-      .map((sor) => sor.productId);
+    return (
+      sorok
+        .filter((sor) => {
+          if (!utoljara.has(sor.productId)) return false;
+          const vetitve = utoljara.get(sor.productId) ?? null;
+          const hatarok = [sor.saleStartsAt, sor.saleEndsAt].filter(
+            (hatar): hatar is Date => hatar !== null && hatar <= most,
+          );
+          return hatarok.some((hatar) => vetitve === null || hatar > vetitve);
+        })
+        .map((sor) => sor.productId)
+        // egy termék több változatának határa egy bejegyzés
+        .filter((id, i, ids) => ids.indexOf(id) === i)
+    );
   }
 
   /**
@@ -684,6 +732,91 @@ export class MedusaProjectionScheduler
         );
       })
       .map((k) => k.entityId);
+  }
+
+  /**
+   * A VETÍTÉS UTÁN INAKTIVÁLT TERMÉK IS ESEDÉKES (kártya ca422e92).
+   *
+   * Az általános esedékesség (`esedekesAzonositok`) csak aktív terméket olvas,
+   * tehát egy termék, amit a legutóbbi vetítése UTÁN inaktiváltak, többé nem
+   * került sorra: a boltban published maradt, vagy kifutott-jelölő nélküli
+   * draft. Közben az átirányítás-lista (`productRedirectTarget`, #2323) a
+   * régi címét a lapjára küldi, mert az OS szabálya szerint kifutott, és van
+   * lapja -- a boltban viszont nincs (mérve 2026-11-09, 129 régi cím 404-en).
+   *
+   * CSAK A KÖTÖTT TERMÉK, és csak akkor, ha a változása későbbi a kötés
+   * `lastSyncedAt`-jénél. Kötés nélküli inaktív termék soha nem esedékes: a
+   * boltban nincs mit visszavonni, és a "még nem vetített" ág különben minden
+   * körben előre hozná. A kiinduló halmaz a kötések listája, nem a legutóbb
+   * módosított termékek ablaka: a régi inaktiválások is sorra kerülnek.
+   *
+   * A webshopból KIZÁRT termék nincs itt, és nem véletlenül: a jelölő csak
+   * létrehozáskor íródik (beszerzési számla, árajánlat), a futtató a kizárt
+   * terméket kötés nélkül nem vetíti, tehát kötött kizárt termék ma nem
+   * keletkezhet.
+   */
+  private async inaktivaltAzonositok(limit: number): Promise<string[]> {
+    const kotesek = await this.db.externalReference.findMany({
+      where: MEDUSA_PRODUCT_REFERENCE,
+      // stabil sorrend: a forgó kezdet (lent) csak így jelent minden körben ugyanazt a helyet
+      orderBy: { entityId: "asc" },
+      select: { entityId: true, lastSyncedAt: true },
+    });
+    if (!kotesek.length) return [];
+    /*
+      SZELETENKÉNT (barracuda, #2332 review, 1. kérdés): egy felső határ nélküli
+      `in`-lista a Postgres kötött-paraméter határán (32767) elhasal (#2019). Ma
+      kb. 1500 kötés áll a teszt boltban; a szelet a növekedést is elviszi.
+    */
+    const valtozas = new Map<string, Date>();
+    for (let i = 0; i < kotesek.length; i += KOTES_SZELET) {
+      const termekek = await this.db.product.findMany({
+        where: {
+          id: {
+            in: kotesek.slice(i, i + KOTES_SZELET).map((k) => k.entityId),
+          },
+          isActive: false,
+          webshopExcluded: false,
+        },
+        select: { id: true, isActive: true, updatedAt: true },
+      });
+      // a szűrés a kódban is megvan: egy tágabb válasz se tegyen aktív terméket ide
+      for (const t of termekek)
+        if (!t.isActive) valtozas.set(t.id, t.updatedAt);
+    }
+    /*
+      A JELÖLŐ ELŐTT VETÍTETT INAKTÍV TERMÉK IS (ca422e92, acrobot mérése 2026-11-09 19:00):
+      a 129 régi cím termékeit a vetítés már inaktívként vitte ki (draft), de még a
+      kifutott-jelölő (V4.2, #2148, 11-04) előtt, tehát jelölő nélkül; a változásuk
+      régebbi a kötésnél, és a fenti feltétel rájuk nem áll. Egyszer újra esedékesek:
+      utána a kötés a pont után áll.
+    */
+    const esedekes = kotesek
+      .filter((k) => {
+        const mikor = valtozas.get(k.entityId);
+        return (
+          mikor !== undefined &&
+          (k.lastSyncedAt === null ||
+            mikor > k.lastSyncedAt ||
+            k.lastSyncedAt < KIFUTOTT_JELOLO_OTA)
+        );
+      })
+      .map((k) => k.entityId);
+    /*
+      FORGÓ KEZDET (barracuda, #2332 review, 2. kérdés): egy inaktivált termék,
+      ami MÁS okból megáll (pl. ellentmondó változat-opciók), nem lépteti a
+      `lastSyncedAt`-et, tehát minden körben esedékes marad. Rögzített kezdettel
+      a lista elején álló, beragadt termékek elfoglalnák a kör maradék helyeit, és
+      a mögöttük állók soha nem kerülnének sorra. A kezdet annyit lép, ahányat a
+      kör ténylegesen vitt (`runOnce`), tehát a sor körbejár, és mindenki sorra kerül.
+    */
+    if (!esedekes.length) return [];
+    const kezdet = this.inaktivEltolas % esedekes.length;
+    this.inaktivEltolas = kezdet;
+    return [...esedekes.slice(kezdet), ...esedekes.slice(0, kezdet)].slice(
+      0,
+      limit,
+    );
   }
 
   /**
@@ -861,6 +994,16 @@ const DEFAULT_BATCH = 25;
  * beolvasasa utan tudjuk eldonteni: egy naprakesz termek nem tolti a keretet.
  */
 const OVERSCAN = 4;
+/** Az inaktivált termékek lekérdezésének szelete: messze a Postgres kötött-paraméter határa (32767) alatt. */
+const KOTES_SZELET = 1000;
+/**
+ * A KIFUTOTT-JELÖLŐ VERZIÓJA, DÁTUMKÉNT (ca422e92): az ennél korábban vetített inaktív
+ * termék a jelölő (V4.2, #2148, 2026-11-04 a mainen) előtti szabállyal ment ki. A pont
+ * szándékosan későbbi a beolvadásnál: a teszt telepítésének ideje nincs mérve, és egy
+ * későbbi pont csak egy fölösleges újravetítésbe kerül termékenként, egy korábbi viszont
+ * jelölő nélkül hagyna terméket.
+ */
+const KIFUTOTT_JELOLO_OTA = new Date("2026-11-09T00:00:00.000Z");
 /**
  * Az akciós határ keresésének visszatekintő ablaka. Csak a keresést szűkíti;
  * egy hétnél hosszabban álló ütemező után a régebbi határt a következő

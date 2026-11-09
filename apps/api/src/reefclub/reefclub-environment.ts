@@ -51,6 +51,7 @@ const INTERNAL_PREFIXES = [
   "GMAIL_",
   "GOOGLE_",
   "INVOICE_COLLECTION_",
+  "JATEK_SMTP_",
   "JEV_",
   "MEDUSA_",
   "NAV_",
@@ -65,7 +66,12 @@ const INTERNAL_PREFIXES = [
 ] as const;
 
 /** Internal names outside the shape and the namespaces. */
-const INTERNAL_NAMES = new Set(["AUTH_PROVIDER", "REDIS_URL"]);
+const INTERNAL_NAMES = new Set([
+  "AUTH_PROVIDER",
+  "REDIS_URL",
+  // the bank-transfer paid marks' switch (card aeddb2c3): it turns on writes to Számlázz.hu
+  "BANK_TRANSFER_MARK_PAID",
+]);
 
 /** Why `name` must not be in the ReefClub environment, or null if it may. */
 export function forbiddenReason(name: string): string | null {

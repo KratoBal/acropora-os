@@ -61,7 +61,64 @@ export async function pdfBlob(
   return response.blob();
 }
 
+/** A kimenő számla kézi kifizetése (a Számlázz.hu-ba ír, `POST /billing/outgoing-payments`). */
+export type ManualOutgoingPaymentInput = {
+  invoiceNumber: string;
+  /** ÉÉÉÉ-HH-NN */
+  date: string;
+  amount: string;
+  note?: string;
+  requestId: string;
+};
+
+export type ManualOutgoingPaymentResult = {
+  state: "WRITTEN" | "ALREADY_RECORDED";
+  outstanding: number | null;
+  message: string;
+};
+
+/** egy függő (PLANNED vagy UNKNOWN) saját kifizetés-jelölés */
+export type PendingPaymentMark = {
+  id: string;
+  source: string;
+  state: "PLANNED" | "UNKNOWN";
+  date: string;
+  amount: string;
+  createdAt: string;
+  responseMessage: string | null;
+  /** a PLANNED that may still be inside its Számlázz.hu call: not closable yet */
+  inFlight: boolean;
+};
+
 export const billingDocumentsApi = {
+  pendingPaymentMarks(token: string, invoiceNumber: string) {
+    return apiRequest<PendingPaymentMark[]>(
+      `/billing/outgoing-payments/pending?${new URLSearchParams({ invoiceNumber })}`,
+      token,
+    );
+  },
+  resolvePaymentMark(token: string, id: string, outcome: "WRITTEN" | "FAILED") {
+    return apiRequest<{ ok: true }>(
+      `/billing/outgoing-payments/marks/${encodeURIComponent(id)}/resolve`,
+      token,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ outcome }),
+      },
+    );
+  },
+  recordOutgoingPayment(token: string, input: ManualOutgoingPaymentInput) {
+    return apiRequest<ManualOutgoingPaymentResult>(
+      "/billing/outgoing-payments",
+      token,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      },
+    );
+  },
   cashRegisterReceipts(
     token: string,
     day: string,

@@ -10,14 +10,17 @@ import {
   medusaClientForProjection,
   storedCredentialProvider,
 } from "./medusa-projection.credentials.js";
-import { liveAnimalSubtreeIds } from "./medusa-livestock.policy.js";
+import {
+  deriveLivestockKind,
+  liveAnimalKindSubtrees,
+  liveAnimalSubtreeIds,
+} from "./medusa-livestock.policy.js";
 import { MedusaShippingAttributesService } from "./medusa-shipping-attributes.service.js";
 import {
   listAllShopSkus,
   osSkuIndex,
   pairShopProducts,
 } from "./medusa-sku-pairing.js";
-import { unasShippingProfile } from "./medusa-unas-shipping.policy.js";
 
 /**
  * A SZALLITASI JELLEMZOK ATVITELE A BOLTBA.
@@ -59,6 +62,7 @@ export interface ShippingAttributesCliDatabase {
         foxpostForbidden: boolean;
         isHeavy: boolean;
         isFrozen: boolean;
+        lockerUnsuitable: boolean;
       }[]
     >;
   };
@@ -66,7 +70,7 @@ export interface ShippingAttributesCliDatabase {
   productVariant: {
     findMany(args: unknown): Promise<{ sku: string; productId: string }[]>;
   };
-  /** A UNAS-tükör nyers válasza: a szállítási mód-felülírások forrása. */
+  /** A UNAS-tükör: a SKU-párosítás forrása (a cikkszám), és a sor nélküli UNAS-termékek száma. */
   unasProductSnapshot: {
     findMany(
       args: unknown,
@@ -119,6 +123,14 @@ export async function runShippingAttributesCli(
       })
     : [];
   const eloAllatTermekek = new Set(besorolasok.map((sor) => sor.productId));
+  // az elo allat FAJTAJA (V2.6): ugyanazokbol a besorolasokbol, tobb gyoker alatt allo termeknel null
+  const fajtaReszfak = liveAnimalKindSubtrees(kategoriak);
+  const besorolasPerTermek = new Map<string, string[]>();
+  for (const sor of besorolasok)
+    besorolasPerTermek.set(sor.productId, [
+      ...(besorolasPerTermek.get(sor.productId) ?? []),
+      sor.categoryId,
+    ]);
 
   const profilok = await database.productShippingProfile.findMany({
     where: idk.length ? { productId: { in: idk } } : {},
@@ -128,39 +140,36 @@ export async function runShippingAttributesCli(
       foxpostForbidden: true,
       isHeavy: true,
       isFrozen: true,
+      lockerUnsuitable: true,
     },
     orderBy: { productId: "asc" },
   });
 
   /*
-    A HARMADIK FORRAS: A UNAS SZALLITASI MOD-FELULIRASAI (kartya 2a7f2313,
-    Balazs 2026-10-06 16:45 UTC, csak a teszt bolt). A KEZZEL kitoltott
-    profil-sor ERŐSEBB: ahol van, a UNAS-bol jovo nem irja felul -- azt valaki
-    megvizsgalta. Ez a parancs az OS-be NEM ir. A jelzok 2026-10-09 ota az
-    OS-ben is elnek (a82ed229: a UNAS-szinkron es a kezi iras tartja oket), igy a
-    UNAS-bol szamolt ertek itt mar csak a meg sor nelkuli termeknel dont.
+    A JELZOK FORRASA AZ OS-SOR, ES CSAK AZ (a82ed229). A UNAS-szinkron a snapshot
+    irasa utan a sort is irja, a kezi iras is, es az egyszeri feltolto (eles
+    futas 2026-11-05) minden UNAS-termeknek adott sort. A UNAS nyers adatabol
+    szamolt tartalek ezert nem dont tobbe semmirol; ha megis marad UNAS-termek
+    sor nelkul, azt nem csendben potoljuk, hanem kimondjuk, hogy a feltolto
+    hianyzik nala. A snapshotbol itt mar csak az azonosito kell ehhez.
   */
   const unasSorok = await database.unasProductSnapshot.findMany({
     where: idk.length ? { productId: { in: idk } } : {},
-    select: { productId: true, rawPayload: true },
+    select: { productId: true },
   });
-  const unasProfilok = new Map(
-    unasSorok.flatMap((sor) => {
-      const profil = unasShippingProfile(sor.rawPayload);
-      return profil
-        ? [[sor.productId, { productId: sor.productId, ...profil }] as const]
-        : [];
-    }),
-  );
 
   const profilPerTermek = new Map(profilok.map((p) => [p.productId, p]));
   const celok = [
-    ...new Set([
-      ...profilPerTermek.keys(),
-      ...unasProfilok.keys(),
-      ...eloAllatTermekek,
-    ]),
+    ...new Set([...profilPerTermek.keys(), ...eloAllatTermekek]),
   ].sort();
+  const sorNelkuliUnas = unasSorok.filter(
+    (sor) => !profilPerTermek.has(sor.productId),
+  ).length;
+  // a nulla cel-szam elott is: a sor nelkuli UNAS-termek epp ilyenkor marad rejtve
+  if (sorNelkuliUnas)
+    out.stdout(
+      `FIGYELEM: ${sorNelkuliUnas} UNAS-terméknek nincs szállítási-jellemző sora; a jelzőit nem visszük át, előbb a feltöltő (shipping-profile:fill) kell.\n`,
+    );
 
   if (celok.length === 0) {
     /**
@@ -175,12 +184,8 @@ export async function runShippingAttributesCli(
     return 0;
   }
 
-  const csakUnas = [...unasProfilok.keys()].filter(
-    (id) => !profilPerTermek.has(id),
-  );
   out.stdout(
-    `${celok.length} termék: ${profilPerTermek.size} kézzel kitöltött, ` +
-      `${csakUnas.length} a UNAS szállítási felülírásából, ` +
+    `${celok.length} termék: ${profilPerTermek.size} szállítási-jellemző sorral, ` +
       `${eloAllatTermekek.size} élő állat besorolás alapján.\n`,
   );
 
@@ -219,14 +224,17 @@ export async function runShippingAttributesCli(
 
   let bukott = 0;
   for (const productId of celok) {
-    const profil =
-      profilPerTermek.get(productId) ?? unasProfilok.get(productId) ?? null;
+    const profil = profilPerTermek.get(productId) ?? null;
     const outcome = await futtato.project(
       productId,
       profil,
       apply,
       eloAllatTermekek.has(productId),
       parositas.osToShop.get(productId) ?? null,
+      deriveLivestockKind(
+        besorolasPerTermek.get(productId) ?? [],
+        fajtaReszfak,
+      ),
     );
     switch (outcome.action) {
       case "skipped":

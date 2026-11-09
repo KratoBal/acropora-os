@@ -11,6 +11,7 @@ import {
   type PricePoint,
 } from "./lowest-price.js";
 import {
+  lowestPriceBeforeCurrentReduction,
   lowestPriceForVariant,
   type LowestPriceDatabase,
 } from "./lowest-price.reader.js";
@@ -292,7 +293,13 @@ describe("lowestPriceForVariant", () => {
       productVariant: {
         findUnique: async (args) => {
           calls.variant = args;
-          return { productId: "p1", unasVariantExtraGrossPrice: D(100) };
+          return {
+            productId: "p1",
+            unasVariantExtraGrossPrice: D(100),
+            sellingSaleGrossPrice: null,
+            sellingSaleStartsAt: null,
+            sellingSaleEndsAt: null,
+          };
         },
       },
       productPriceHistory: {
@@ -337,7 +344,7 @@ describe("currentReductionStart", () => {
   it("is the first day of the sale run that is in force now", () => {
     const rows = [sale(0, null), sale(10, "1200"), sale(20, "900")];
     assert.equal(
-      currentReductionStart(rows, "v1")?.getTime(),
+      currentReductionStart(rows, "v1", null, NOW)?.getTime(),
       day(10).getTime(),
     );
   });
@@ -347,6 +354,8 @@ describe("currentReductionStart", () => {
       currentReductionStart(
         [sale(0, null), sale(10, "1200"), sale(20, null)],
         "v1",
+        null,
+        NOW,
       ),
       null,
     );
@@ -355,7 +364,7 @@ describe("currentReductionStart", () => {
   it("a second, separate sale is measured from its own first day", () => {
     const rows = [sale(0, "1200"), sale(5, null), sale(30, "1100")];
     assert.equal(
-      currentReductionStart(rows, "v1")?.getTime(),
+      currentReductionStart(rows, "v1", null, NOW)?.getTime(),
       day(30).getTime(),
     );
   });
@@ -365,9 +374,84 @@ describe("currentReductionStart", () => {
       currentReductionStart(
         [sale(0, "1200"), row({ observedAt: day(5), variantId: "v1" })],
         "v1",
+        null,
+        NOW,
       ),
       null,
     );
-    assert.equal(currentReductionStart([], "v1"), null);
+    assert.equal(currentReductionStart([], "v1", null, NOW), null);
+  });
+});
+
+/*
+  A TAKEN-OVER VARIANT'S OWN SALE (T4.1-D3, sale slice 2). WHAT TURNS THIS RED: an own row's sale price
+  ignored in the series (an earlier own sale would not count as a lower price); the running own sale's
+  start not taken from the variant (the first round of a sale would clear the shop's Omnibus key,
+  because its history row is written only after the shop got the price); an ended own sale still
+  naming a reduction; the end instant counted as inside the sale.
+*/
+describe("the own sale of a taken-over variant", () => {
+  const ownSale = (starts: number, ends: number, price = "800") => ({
+    sellingSaleGrossPrice: D(price),
+    sellingSaleStartsAt: day(starts),
+    sellingSaleEndsAt: day(ends),
+  });
+  const own = (n: number, gross: string, sale: string | null = null) =>
+    row({
+      observedAt: day(n),
+      variantId: "v1",
+      grossPrice: D(gross),
+      saleGrossPrice: sale === null ? null : D(sale),
+    });
+
+  it("an own row's sale price is the shop's price in the series", () => {
+    const series = seriesOfVariant(
+      [own(0, "1000"), own(5, "1000", "700"), own(9, "1000")],
+      "v1",
+      null,
+    );
+    assert.deepEqual(
+      series.map((p) => p.amount?.toString()),
+      ["1000", "700", "1000"],
+    );
+  });
+
+  it("the running own sale's start is the reduction's, even before its history row exists", () => {
+    const rows = [own(0, "1000")];
+    assert.equal(
+      currentReductionStart(rows, "v1", ownSale(38, 45), NOW)?.getTime(),
+      day(38).getTime(),
+    );
+  });
+
+  it("an ended or a future own sale names no reduction; its end instant is outside it", () => {
+    const rows = [own(0, "1000"), own(30, "1000", "800")];
+    assert.equal(currentReductionStart(rows, "v1", ownSale(30, 35), NOW), null);
+    assert.equal(currentReductionStart(rows, "v1", ownSale(42, 45), NOW), null);
+    assert.equal(currentReductionStart(rows, "v1", ownSale(30, 40), NOW), null);
+  });
+
+  it("the reference of a running own sale counts an earlier own sale in the window", async () => {
+    const database: LowestPriceDatabase = {
+      productVariant: {
+        findUnique: async () => ({
+          productId: "p1",
+          unasVariantExtraGrossPrice: null,
+          ...ownSale(38, 45, "850"),
+        }),
+      },
+      productPriceHistory: {
+        findMany: async () => [
+          own(0, "1000"),
+          own(20, "1000", "900"),
+          own(25, "1000"),
+          // the running sale's own row, written after the shop got it: at the start, so not in the window
+          own(38, "1000", "850"),
+        ],
+      },
+    };
+    const lowest = await lowestPriceBeforeCurrentReduction(database, "v1", NOW);
+    assert.equal(lowest?.amount.toString(), "900");
+    assert.equal(lowest?.reductionStart.getTime(), day(38).getTime());
   });
 });

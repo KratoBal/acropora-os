@@ -1,5 +1,11 @@
 "use client";
-import type { InputHTMLAttributes, ReactNode, Ref } from "react";
+import type {
+  InputHTMLAttributes,
+  KeyboardEventHandler,
+  MouseEvent,
+  ReactNode,
+  Ref,
+} from "react";
 import { useEffect, useId, useRef, useState } from "react";
 
 import { Icon } from "./icon";
@@ -280,8 +286,13 @@ export function PilotButton({
   title,
 }: {
   children: ReactNode;
-  variant?: "primary" | "secondary" | "ghost" | "danger";
-  onClick?: () => void;
+  /** `accent`: ADDITÍV (T1.3, az Üzenetek): a beszélgetések meleg kiemelőszíne, a modul elsődleges gombjain. */
+  variant?: "primary" | "secondary" | "ghost" | "danger" | "accent";
+  /**
+   * ADDITÍV (T1.3, a leltárlista): the click event reaches the handler, as on the dusk `Button`, so a button inside a
+   * clickable table row can stop the row's own activation (`event.stopPropagation()`).
+   */
+  onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
   type?: "button" | "submit";
   disabled?: boolean;
   fullWidth?: boolean;
@@ -342,6 +353,7 @@ export function PilotButton({
     ghost:
       "bg-transparent text-pilot-grey-500 hover:bg-pilot-grey-100 hover:text-pilot-grey-900",
     danger: "bg-white text-red-600 ring-1 ring-red-200 hover:bg-red-50",
+    accent: "bg-pilot-accent-warm text-white hover:bg-pilot-accent-warm-text",
   };
   return (
     <button
@@ -405,16 +417,25 @@ export function PilotFormField({
   required,
   children,
   className,
+  htmlFor,
+  error,
 }: {
   label: string;
   help?: string;
   required?: boolean;
   children: ReactNode;
   className?: string;
+  /** ADDITÍV (T1.3, a cikkszerkesztő): a címke a mező `id`-jére mutat, ugyanaz, mint a dusk `FormField`-en. */
+  htmlFor?: string;
+  /** ADDITÍV (T1.3, a cikkszerkesztő): a mező hibája, a súgó alatt, piros sorban. */
+  error?: string;
 }) {
   return (
     <div className={`flex flex-col gap-1 ${className ?? ""}`}>
-      <label className="text-sm font-medium text-pilot-grey-700">
+      <label
+        htmlFor={htmlFor}
+        className="text-sm font-medium text-pilot-grey-700"
+      >
         {label}
         {required ? (
           <span className="ml-0.5 text-pilot-aqua-600">*</span>
@@ -422,6 +443,9 @@ export function PilotFormField({
       </label>
       {children}
       {help ? <p className="text-xs text-pilot-grey-400">{help}</p> : null}
+      {error ? (
+        <p className="text-xs font-medium text-pilot-red-700">{error}</p>
+      ) : null}
     </div>
   );
 }
@@ -566,9 +590,19 @@ export function PilotInput({
   inputMode,
   min,
   max,
+  maxLength,
+  required,
+  step,
+  "aria-invalid": ariaInvalid,
+  onKeyDown,
+  autoFocus,
 }: {
   value?: string;
   onChange?: (value: string) => void;
+  /** ADDITÍV (T1.3, a matricakód-mező): az Enter hozzáad és nem küld be űrlapot, ugyanaz, mint a dusk `Input`-on. */
+  onKeyDown?: KeyboardEventHandler<HTMLInputElement>;
+  /** ADDITÍV (T1.3, az új beszélgetés ablaka): nyitáskor ide kerül a fókusz, ugyanaz, mint a dusk `Input`-on. */
+  autoFocus?: boolean;
   type?: string;
   placeholder?: string;
   readOnly?: boolean;
@@ -588,6 +622,17 @@ export function PilotInput({
    */
   min?: number | string;
   max?: number | string;
+  /** ADDITÍV (T1.3, a márka SEO-mezői): a natív hosszkorlát, ugyanaz, mint a dusk `Input`-on. */
+  maxLength?: number;
+  /** ADDITÍV (T1.3, a tartalom felvétele): a natív kötelező jelölés, ugyanaz, mint a dusk `Input`-on. */
+  required?: boolean;
+  /**
+   * ADDITÍV (T1.3, a beszerzési számla): a szám-mező lépésköze. A `step="any"` nélkül a natív űrlap-ellenőrzés
+   * a tizedes árfolyamot (`395.12`) érvénytelennek veszi, és a beküldés elakad.
+   */
+  step?: number | "any";
+  /** ADDITÍV (T1.3, a beszerzési számla): a hibás mező jelölése, ugyanaz a piros keret, mint a `PilotDateField`-en. */
+  "aria-invalid"?: boolean;
   /** ADDITÍV (Direction F, 2026-09-30): egy külső `<label htmlFor>`-hoz. */
   id?: string;
   /** ADDITÍV: ikon a mező elején (a terv keresőmezője). */
@@ -625,8 +670,16 @@ export function PilotInput({
       inputMode={inputMode}
       min={min}
       max={max}
+      maxLength={maxLength}
+      required={required}
+      step={step}
+      aria-invalid={ariaInvalid || undefined}
       onChange={(event) => onChange?.(event.target.value)}
-      className={`${leadingIcon ? "w-full" : classes.widthClass} rounded-md px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500 disabled:cursor-not-allowed disabled:bg-pilot-grey-50 disabled:text-pilot-grey-400 ${
+      onKeyDown={onKeyDown}
+      autoFocus={autoFocus}
+      className={`${leadingIcon ? "w-full" : classes.widthClass} rounded-md px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ${
+        ariaInvalid ? "ring-red-400" : "ring-pilot-grey-200"
+      } placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500 disabled:cursor-not-allowed disabled:bg-pilot-grey-50 disabled:text-pilot-grey-400 ${
         readOnly ? "bg-pilot-grey-50 text-pilot-grey-400" : "bg-white"
       } ${leadingIcon ? "pl-9" : ""} ${classes.rest}`}
     />
@@ -651,11 +704,14 @@ export function PilotSelect({
   id,
   className,
   chevron,
+  required,
 }: {
   children: ReactNode;
   value?: string;
   onChange?: (value: string) => void;
   disabled?: boolean;
+  /** ADDITÍV (T1.3, a tartalom felvétele): a natív kötelező jelölés, ugyanaz, mint a dusk `Select`-en. */
+  required?: boolean;
   "aria-label"?: string;
   /** ADDITÍV (Direction F, 2026-09-30): egy külső `<label htmlFor>`-hoz. */
   id?: string;
@@ -675,6 +731,7 @@ export function PilotSelect({
       id={id}
       value={value}
       disabled={disabled}
+      required={required}
       aria-label={ariaLabel}
       onChange={(event) => onChange?.(event.target.value)}
       className={`w-full cursor-pointer appearance-none rounded-md bg-white px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500 disabled:cursor-not-allowed disabled:bg-pilot-grey-50 disabled:text-pilot-grey-400 ${
@@ -702,12 +759,16 @@ export function PilotSelect({
 export function PilotCard({
   children,
   className = "",
+  "aria-label": ariaLabel,
 }: {
   children: ReactNode;
   className?: string;
+  /** ADDITÍV (T1.3, a katalógus-műveletek): a kártya neve, ugyanaz, mint a dusk `Card`-on. */
+  "aria-label"?: string;
 }) {
   return (
     <div
+      aria-label={ariaLabel}
       className={`rounded-xl bg-white ring-1 ring-pilot-grey-200 ${className}`}
     >
       {children}

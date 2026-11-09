@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, ConfirmDialog, PilotSelect } from "@acropora/ui";
+import { ConfirmDialog, PilotButton, PilotSelect } from "@acropora/ui";
 import type {
   ServiceJobAssetLink,
   ServiceJobDetail,
@@ -351,7 +351,7 @@ export function ServiceJobPlacementEditor({
               {error ? (
                 <p className="text-xs font-medium text-rose-600">{error}</p>
               ) : null}
-              <Button
+              <PilotButton
                 type="button"
                 variant="secondary"
                 // a `unit === ""` masik elofordulasa: lasd a fajl feje
@@ -368,7 +368,7 @@ export function ServiceJobPlacementEditor({
                 }}
               >
                 {saving ? "Mentés..." : "Helyszín és eszközök mentése"}
-              </Button>
+              </PilotButton>
             </>
           )}
         </>

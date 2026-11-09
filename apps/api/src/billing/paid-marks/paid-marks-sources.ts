@@ -40,16 +40,29 @@ const exception = (
   reference: string,
   reason: string,
   detail?: string,
+  key?: string,
 ): PaidMarkException => ({
   reference,
   reason,
+  ...(key ? { key } : {}),
   attention: !SETTLES_ITSELF.has(reason),
   ...(detail ? { detail } : {}),
 });
 
+/**
+ * Where a NOT_FOUND invoice is, said on its line (Balázs's live run 2026-11-05): not in Számlázz.hu's feed at all,
+ * or there only under another source (eBIZ). The two need different hands, and the list is where a person sees it.
+ */
+const notFoundWhere = (sources: readonly string[] | undefined) =>
+  sources?.length
+    ? `a feedben csak ${sources.join(", ")} forrással`
+    : "nincs a Számlázz.hu feedben";
+
 /** GLS: a refused transfer, and every invoice a markable transfer skipped. */
 export function glsPlanFrom(
   decisions: readonly GlsTransferDecision[],
+  /** invoice number -> the sources it is stored under, other than Számlázz.hu's feed */
+  elsewhere: ReadonlyMap<string, readonly string[]> = new Map(),
 ): PaidMarkPlan {
   return {
     source: "GLS_COD",
@@ -57,7 +70,16 @@ export function glsPlanFrom(
     exceptions: decisions.flatMap((d) =>
       d.markable
         ? d.skipped.map((s) =>
-            exception(s.invoiceNumber, s.reason, `GLS ${d.transferDate}`),
+            exception(
+              s.invoiceNumber,
+              s.reason,
+              s.reason === "NOT_FOUND"
+                ? `GLS ${d.transferDate}; ${notFoundWhere(elsewhere.get(s.invoiceNumber))}`
+                : `GLS ${d.transferDate}`,
+              // one invoice, one transfer: a later GLS transfer for the same invoice is a new line, not one
+              // a person already closed by hand (barracuda, #2246 a)
+              `${s.invoiceNumber}@${d.transferDate}`,
+            ),
           )
         : [exception(d.transferDate, d.refusal, `utalt ${d.transferred} Ft`)],
     ),
@@ -132,8 +154,10 @@ export function simplePayPlanFrom(input: {
 }
 
 export async function glsPaidMarkPlan(from: string): Promise<PaidMarkPlan> {
+  const transfers = await loadGlsTransfers(from);
   return glsPlanFrom(
-    (await loadGlsTransfers(from)).map((t) => decideGlsTransfer(t)),
+    transfers.map((t) => decideGlsTransfer(t)),
+    transfers[0]?.elsewhere,
   );
 }
 

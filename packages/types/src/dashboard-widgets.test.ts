@@ -195,6 +195,7 @@ describe("role presets", () => {
     assert.deepEqual(ids(layout), [
       "attention",
       "tasks",
+      "partner-order-backlog",
       "system-status",
       "jev-intelligence",
       "expected-arrivals",
@@ -203,6 +204,7 @@ describe("role presets", () => {
     assert.deepEqual(ids(presetDashboardLayout(viewer("MANAGER"))), [
       "attention",
       "tasks",
+      "partner-order-backlog",
       "expected-arrivals",
     ]);
     assert.deepEqual(
@@ -416,5 +418,41 @@ describe("the JEV and system widgets (owner decision, 2026-10-02)", () => {
     assert.deepEqual(dashboardWidget("attention").requiredPermissions, [
       PERMISSIONS.DASHBOARD_VIEW,
     ]);
+  });
+});
+
+/*
+  A HATRALEKOS MEGRENDELESEK KARTYAJA (S4b-2, 38caeac2; Luca). MI PIROSIT: ha a kartyat quotes.view nelkuli szerep is
+  megkapja; ha a vezeto es ertekesito szerepkor alapelrendezeseibol hianyzik; ha egy szerep alapelrendezeseben szerepel,
+  amelynek nincs hozza joga (a szerep-teszt altalanosan fogja, itt a konkret allitas).
+*/
+describe("the back-ordered orders card", () => {
+  const widget = DASHBOARD_WIDGETS.find(
+    (w) => w.id === "partner-order-backlog",
+  );
+
+  it("is an active card on the orders' own permission, with its source named", () => {
+    assert.ok(widget);
+    assert.equal(widget.availability, "active");
+    assert.deepEqual([...widget.requiredPermissions], ["quotes.view"]);
+    assert.ok(widget.dataSource);
+  });
+
+  it("is in the default layout of the roles that work the orders, and of nobody who may not see them", () => {
+    for (const role of ["SALES", "MANAGER", "OWNER", "ADMIN"] as const)
+      assert.ok(
+        presetDashboardLayout(viewer(role)).some(
+          (entry) => entry.widgetId === "partner-order-backlog",
+        ),
+        role,
+      );
+    for (const role of ["SERVICE", "WAREHOUSE", "VIEWER"] as const)
+      assert.equal(
+        presetDashboardLayout(viewer(role)).some(
+          (entry) => entry.widgetId === "partner-order-backlog",
+        ),
+        false,
+        role,
+      );
   });
 });

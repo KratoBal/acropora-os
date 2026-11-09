@@ -6,11 +6,14 @@ import type {
   CustomerAddress,
   CustomerDetail,
   CustomerListResponse,
+  CustomerListRole,
+  CustomerPartnerRole,
   CustomerSummary,
 } from "@acropora/types";
 
 import { withUniqueCode } from "../common/unique-code.util.js";
 import {
+  linkedPartnerTaxHint,
   partnerTaxNumberFor,
   partnerTermsFor,
 } from "./partner-payment-terms.js";
@@ -54,13 +57,84 @@ export function taxNumberSearchKey(search: string): string | null {
   return key.length >= 4 && /\d/.test(key) ? key : null;
 }
 
+/**
+ * A SOR EGY PARTNER VEVŐ-TÜKRE, ha él a partnere: a törölt partner (Supplier.deletedAt) sora ismét sima vevő-sor, nem kap partner
+ * jelvényt, és a szerkesztése nem tiltott (a Partnerek képernyőn a törölt partner nem szerkeszthető, tehát a tiltás zsákutca
+ * volna; barracuda, #2184 review).
+ */
+export function isPartnerMirror(
+  partner: { deletedAt?: Date | null } | null,
+): boolean {
+  return partner !== null && !partner.deletedAt;
+}
+
+/**
+ * A SZEREPEK A SUPPLIER-KÖTÉSBŐL (egy partnertörzs): a vevő-sor szerepei jelölésként, külön oszlop nélkül. Csak a partner-sornál
+ * van (a vevőnél a mező hiányzik).
+ */
+export function partnerRolesOf(
+  partner: {
+    isSupplier: boolean;
+    isService: boolean;
+    deletedAt?: Date | null;
+  } | null,
+): { partnerRoles?: CustomerPartnerRole[] } {
+  // egy törölt partner (Supplier.deletedAt) sora nem partner: a jelvény és a szerep nem látszik rajta (barracuda, #2182)
+  if (!partner || partner.deletedAt) return {};
+  const roles: CustomerPartnerRole[] = [];
+  if (partner.isSupplier) roles.push("SUPPLIER");
+  if (partner.isService) roles.push("SERVICE");
+  return { partnerRoles: roles };
+}
+
+/**
+ * A VEVŐ-LISTA SZEREP-SZŰRŐJE A `where`-BEN. Szerep nélkül a régi viselkedés (a partner vevő-tükrei kimaradnak, hacsak a hívó
+ * nem kéri őket: a számla vevőválasztója). Szereppel a lista a partnereket is mutatja: `BUYER` csak a vevőket (partner nélkül),
+ * `PARTNER` minden partnert, `SUPPLIER` a beszállítókat, `SERVICE` a szerviz-partnereket, `ALL` mindenkit.
+ */
+export function partnerFilter(
+  role: CustomerListRole | undefined,
+  includeMirrors: boolean,
+): Prisma.CustomerWhereInput {
+  switch (role) {
+    case undefined:
+      return includeMirrors ? {} : { partner: null };
+    case "ALL":
+      return {};
+    case "BUYER":
+      // a törölt partner sora ismét sima vevő-sor
+      return {
+        OR: [
+          { partner: null },
+          { partner: { is: { deletedAt: { not: null } } } },
+        ],
+      };
+    case "PARTNER":
+      return { partner: { is: { deletedAt: null } } };
+    case "SUPPLIER":
+      return { partner: { is: { isSupplier: true, deletedAt: null } } };
+    case "SERVICE":
+      return { partner: { is: { isService: true, deletedAt: null } } };
+  }
+}
+
 const addressesInclude = {
   orderBy: [{ isDefault: "desc" as const }, { createdAt: "asc" as const }],
 };
 const include = {
   addresses: addressesInclude,
-  // the invoice tax gate asks a partner mirror for a tax number (card aaf4f09d)
-  partner: { select: { id: true } },
+  // the invoice tax gate asks a partner mirror for a tax number (card aaf4f09d); the roles are derived from the flags
+  partner: {
+    select: {
+      id: true,
+      isSupplier: true,
+      isService: true,
+      deletedAt: true,
+      // the linked partner's own name and tax number: the detail's tax hint comes from the LINK first (40332480)
+      name: true,
+      taxNumber: true,
+    },
+  },
 } satisfies Prisma.CustomerInclude;
 
 type CustomerWithAddresses = Prisma.CustomerGetPayload<{
@@ -143,7 +217,7 @@ export class CustomersRepository extends Repository {
        * mirror IS the right buyer, it carries the partner's tax number, term and
        * billing e-mail. The summary marks it, so the picker can tell the two apart.
        */
-      ...(query.includePartnerMirrors === "true" ? {} : { partner: null }),
+      ...partnerFilter(query.role, query.includePartnerMirrors === "true"),
       ...(query.status === "ALL"
         ? {}
         : { isActive: query.status === "ACTIVE" }),
@@ -189,6 +263,11 @@ export class CustomersRepository extends Repository {
    * generated column (`unaccent` is not immutable), so the matching ids are
    * resolved first and narrow the list query, the same shape as the UNAS
    * origin filter above.
+   *
+   * THE TAX NUMBER IS SEARCHED ON THE PARTNER TOO (40332480, barracuda #2228): a partner's customer row (its
+   * "mirror") can lack the tax number the partner has (card aaf4f09d: the zoo's old UNAS row never took it), and a
+   * search by the partner's tax number then found nothing, so the new customer form took a company already in the
+   * register for a new one. A live partner linked to the row (`Supplier.customerId`, not deleted) counts.
    */
   private async searchCustomerIds(search: string): Promise<string[]> {
     const pattern = customerSearchPattern(search);
@@ -201,7 +280,13 @@ export class CustomersRepository extends Repository {
          OR unaccent("customerNumber") ILIKE unaccent(${pattern}::text)
          ${
            taxKey
-             ? Prisma.sql`OR upper(regexp_replace(COALESCE("taxNumber", ''), '[^0-9A-Za-z]', '', 'g')) LIKE ${`%${taxKey}%`}::text`
+             ? Prisma.sql`OR upper(regexp_replace(COALESCE("taxNumber", ''), '[^0-9A-Za-z]', '', 'g')) LIKE ${`%${taxKey}%`}::text
+         OR EXISTS (
+              SELECT 1 FROM "Supplier" s
+              WHERE s."customerId" = "Customer"."id"
+                AND s."deletedAt" IS NULL
+                AND upper(regexp_replace(COALESCE(s."taxNumber", ''), '[^0-9A-Za-z]', '', 'g')) LIKE ${`%${taxKey}%`}::text
+            )`
              : Prisma.empty
          }
     `;
@@ -233,14 +318,15 @@ export class CustomersRepository extends Repository {
       partnerTaxHint:
         customer.taxNumber?.trim() || customer.euTaxNumber?.trim()
           ? null
-          : partnerTaxNumberFor(
+          : (linkedPartnerTaxHint(customer.partner) ??
+            partnerTaxNumberFor(
               customer,
               await prisma.supplier.findMany({
                 // a deleted partner is no source (barracuda, #2161)
                 where: { taxNumber: { not: null }, deletedAt: null },
                 select: { name: true, taxNumber: true },
               }),
-            ),
+            )),
     };
     if (detail.paymentDueDays !== null) return detail;
     // a sor maga üres: ugyanez a cég a Partnerek oldalon viselhet napot
@@ -443,7 +529,8 @@ export class CustomersRepository extends Repository {
       archivedAt: customer.archivedAt?.toISOString(),
       address: formatAddress(customer.addresses),
       taxNumber: customer.taxNumber ?? undefined,
-      partnerMirror: Boolean(customer.partner),
+      partnerMirror: isPartnerMirror(customer.partner),
+      ...partnerRolesOf(customer.partner),
       createdAt: customer.createdAt.toISOString(),
       updatedAt: customer.updatedAt.toISOString(),
     };
@@ -458,7 +545,7 @@ export class CustomersRepository extends Repository {
       taxNumber: customer.taxNumber ?? undefined,
       euTaxNumber: customer.euTaxNumber ?? undefined,
       paymentDueDays: customer.paymentDueDays ?? null,
-      partnerMirror: Boolean(customer.partner),
+      partnerMirror: isPartnerMirror(customer.partner),
       marketingEmailConsent: customer.marketingEmailConsent,
       marketingSmsConsent: customer.marketingSmsConsent,
       addresses: customer.addresses.map(toAddress),

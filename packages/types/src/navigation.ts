@@ -286,6 +286,12 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     visibility: permission(PERMISSIONS.CONTENT_VIEW),
   },
   {
+    /** A karácsonyi nyereményjáték kezelése (kártya 31445d0f): saját jog, csak emberi szerepnek (acrobot, 2026-11-05). */
+    id: "game",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.GAME_VIEW),
+  },
+  {
     id: "pos",
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.ORDERS_VIEW),
@@ -395,6 +401,15 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
   },
   {
     /**
+     * BÉRLÉS (task eszkozberles, S2; Balázs, 2026-11-06): the rental desk under Értékesítés. The same right as its endpoints'
+     * reads (`rentals.view`); recording asks for `rentals.manage` on the server. No feature switch: Balázs asked for it now.
+     */
+    id: "rentals",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.RENTALS_VIEW),
+  },
+  {
+    /**
      * ELSZÁMOLÁSOK (Balázs, 2026-09-30 15:06 UTC): egy menüpont a Pénzügy
      * alatt, fülekkel a Foxpost, a GLS és a SimplePay elszámolásra. A menüpont
      * annak látszik, akinek legalább egy fülhöz van joga; ma mindhárom
@@ -429,6 +444,18 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
   },
   {
     id: "simplepay-settlement",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.FINANCE_VIEW),
+  },
+  {
+    // egy banki jóváírás több saját számlára (kártya aeddb2c3); a beíráshoz a végpont billing.issue jogot kér
+    id: "bank-transfer-settlement",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.FINANCE_VIEW),
+  },
+  {
+    // a kifizetett-jelölés napi futása (kártya e64540fd); a „Futtatás most” gomb billing.issue jogot kér
+    id: "paid-marks-settlement",
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.FINANCE_VIEW),
   },
@@ -484,6 +511,12 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     id: "mortality",
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.MORTALITY_VIEW),
+  },
+  {
+    /** Az élő állat érkezések (kártya f4e4832b, V2.6 S2): a készletet vezetők látják; a telefonra most nem kerül. */
+    id: "livestock-arrivals",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.INVENTORY_VIEW),
   },
   {
     id: "unas-connection",
@@ -640,6 +673,24 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
   },
   {
     /**
+     * A PARTNEREK ÁTVEZETÉSÉNEK TERVE (egy partnertörzs, egyszeri átvezetés; Balázs a listából dönt). CSAK OLVAS. Ugyanaz a
+     * jog, mint a végponté (`settings.manage`): a lista neveket és adószámokat mutat.
+     */
+    id: "partner-migration",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.SETTINGS_MANAGE),
+  },
+  {
+    /**
+     * A SZÁLLÍTÁSI JELZŐK EGYSZERI FELTÖLTÉSE (a82ed229; acrobot 43016): próba és írás a lenyomattal. Ugyanaz a jog,
+     * mint a végponté (`settings.manage`); élesen Balázs nyomja.
+     */
+    id: "shipping-fill",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.SETTINGS_MANAGE),
+  },
+  {
+    /**
      * AZ AJÁNLATI SZÖVEGRÉSZLETEK KEZELŐJE (#1582 P1). Ugyanaz a jog, ami a
      * végpontok írását védi (`quotes.templates.manage`), és ugyanaz a
      * kapcsoló, mint az Árajánlatok menüponté.
@@ -672,6 +723,15 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
      * kapcsolat.
      */
     id: "asset-functions",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.SETTINGS_MANAGE),
+  },
+  {
+    /**
+     * THE RENTAL EQUIPMENT MASTER (task eszkozberles, S1; Balázs, 2026-11-06): one row per rented-out device, under Settings.
+     * The same right as its endpoints (`settings.manage`), so the menu and the calls cannot drift apart.
+     */
+    id: "rental-equipment",
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.SETTINGS_MANAGE),
   },

@@ -10,6 +10,7 @@ import {
   WEBSHOP_MAIL_SAMPLE_FACTS,
   hungarianDay,
   mailDay,
+  safeOrderViewUrl,
   mailForint,
   parseWebshopMailFacts,
   webshopMailContent,
@@ -33,8 +34,8 @@ describe("the webshop events and their derivation", () => {
       webshop.map((e) => e.id).sort(),
       [...keys, ...keys.map((k) => `${k}_EN`)].sort(),
     );
-    // twelve templates, each with its English twin
-    assert.equal(webshop.length, 24);
+    // fourteen templates (the fourteenth: the stock alert's confirmation), each with its English twin
+    assert.equal(webshop.length, 28);
   });
 
   /*
@@ -291,6 +292,69 @@ describe("the derived content", () => {
     szereppel küldi a visszaigazolás tényeit, és ha az OS nem ismeri, 400-zal
     elutasítja, a levél pedig ki sem megy; vagy a szöveg eltér a commerce-étől.
   */
+  /*
+    V2.6 (f4e4832b): a kirakat az elo allat fajtait a rendelesenkent kuldi. MI PIROSIT: ha az
+    ismeretlen vagy hianyzo mezo elutasitana a levelet (a regi kirakat, az uj OS: a telepitesi
+    sorrend szabad); ha egy ismeretlen fajta atjutna; ha a fajtak nem jutnak el az ertekig; ha az ertek
+    a szallitott tablaval (ures) is kitoltodne.
+  */
+  it("the kinds of live animal: a missing or odd list leaves the key out, an unknown kind is dropped, never a refused mail", () => {
+    const facts = JSON.parse(
+      JSON.stringify(WEBSHOP_MAIL_SAMPLE_FACTS["order-placed"]),
+    ) as { orders: { livestock_kinds?: unknown }[] };
+    const kindsOf = () => {
+      const parsed = parseWebshopMailFacts("order-placed", facts);
+      assert.equal(parsed.ok, true);
+      const f = (parsed as { facts: WebshopMailFacts }).facts;
+      return f.template === "order-placed"
+        ? f.orders.map((o) => o.livestock_kinds)
+        : [];
+    };
+    delete facts.orders[0]!.livestock_kinds;
+    assert.equal(kindsOf()[0], undefined);
+    facts.orders[0]!.livestock_kinds = "FISH";
+    assert.equal(kindsOf()[0], undefined);
+    facts.orders[0]!.livestock_kinds = ["CORAL", "SHRIMP", 3, "FISH"];
+    assert.deepEqual(kindsOf()[0], ["CORAL", "FISH"]);
+  });
+
+  it("the akklimatizacio value is declared for the order confirmation and its English twin", () => {
+    for (const id of ["WEBSHOP_ORDER_PLACED", "WEBSHOP_ORDER_PLACED_EN"]) {
+      const event = MAIL_TEMPLATE_EVENTS.find((e) => e.id === id);
+      assert.ok(event?.variables.includes("akklimatizacio"), id);
+    }
+  });
+
+  // MI PIROSIT: ha az ertek nincs bekotve (az ures tabla ezt nem latja, ezert a teszt sajat tablaval dolgozik); ha a
+  // vegyes kosar masodik rendelesenek fajtaja kimarad; ha az angol level a magyar tablat olvasna
+  it("the akklimatizacio value is the text of the kinds of ALL the orders, in the mail's own language", () => {
+    const texts = {
+      hu: { FISH: "Hal hu", CORAL: "Korall hu" },
+      en: { FISH: "Fish en", CORAL: "Coral en" },
+    } as const;
+    const facts = JSON.parse(
+      JSON.stringify(WEBSHOP_MAIL_SAMPLE_FACTS["order-placed"]),
+    ) as {
+      orders: { livestock_kinds?: string[] }[];
+      locale?: string;
+    };
+    const second = JSON.parse(JSON.stringify(facts.orders[0]));
+    facts.orders = [facts.orders[0]!, second];
+    facts.orders[0]!.livestock_kinds = ["CORAL"];
+    facts.orders[1]!.livestock_kinds = ["FISH"];
+    const valueOf = (locale?: string) => {
+      const input = { ...facts, ...(locale ? { locale } : {}) };
+      const parsed = parseWebshopMailFacts("order-placed", input);
+      assert.equal(parsed.ok, true);
+      return webshopMailContent(
+        (parsed as { facts: WebshopMailFacts }).facts,
+        texts,
+      ).values.akklimatizacio;
+    };
+    assert.equal(valueOf(), "Hal hu\n\nKorall hu");
+    assert.equal(valueOf("en"), "Fish en\n\nCoral en");
+  });
+
   it("prepayment by bank transfer: accepted, named, and said in commerce's words", () => {
     const facts = JSON.parse(
       JSON.stringify(WEBSHOP_MAIL_SAMPLE_FACTS["order-placed"]),
@@ -458,6 +522,97 @@ describe("the English words", () => {
       mailDay("2026-10-11T22:30:00.000Z", undefined),
       "2026. október 12.",
     );
+  });
+});
+
+/*
+  A VENDEG RENDELES-LAPJANAK CIME A LEVELBEN (a "Rendelesem" oldal hianylistaja; acrobot 43870). MI PIROSIT: a cim
+  nem az igazi, hanem a bolt barmilyen szovege kerul egy vevo levelebe (http, szokoz, jelszo az cimben, tag-jel, tul
+  hosszu); a mondat nyelve nem a level nyelve; a cim nelkuli level valamit mutat (a bekezdes nem tunik el); a bolt
+  cim nelkul KUDARCOT kap (a cim kiegeszito: sosem utasitott el level).
+*/
+describe("the guest order page's address in the mail", () => {
+  it("is declared for the order confirmation and its English twin", () => {
+    for (const id of ["WEBSHOP_ORDER_PLACED", "WEBSHOP_ORDER_PLACED_EN"]) {
+      const event = MAIL_TEMPLATE_EVENTS.find((e) => e.id === id);
+      assert.ok(event?.variables.includes("rendeles_megtekintes_mondat"), id);
+    }
+  });
+
+  it("only a plain https address passes: anything else is no link", () => {
+    const jo = "https://shop-staging.acropora.hu/hu/rendeles-megtekintese";
+    assert.equal(safeOrderViewUrl(jo), jo);
+    for (const rossz of [
+      undefined,
+      null,
+      "",
+      42,
+      "http://shop.example/hu/rendeles-megtekintese",
+      "https://user:pw@shop.example/x",
+      "https://shop.example/ x",
+      "https://shop.example/<script>",
+      'https://shop.example/"x',
+      "javascript:alert(1)",
+      "//shop.example/x",
+      "nem url",
+      `https://shop.example/${"a".repeat(300)}`,
+      "HTTPS://SHOP.EXAMPLE/x",
+    ])
+      assert.equal(safeOrderViewUrl(rossz), null, String(rossz));
+  });
+
+  it("the parser keeps a good address, makes a bad or missing one null, and never refuses the mail for it", () => {
+    const sample = JSON.parse(
+      JSON.stringify(WEBSHOP_MAIL_SAMPLE_FACTS["order-placed"]),
+    ) as Record<string, unknown>;
+    const url = (v: unknown) => {
+      const parsed = parseWebshopMailFacts("order-placed", {
+        ...sample,
+        order_view_url: v,
+      });
+      assert.equal(parsed.ok, true);
+      return (parsed as { facts: WebshopMailFacts }).facts.order_view_url;
+    };
+    assert.equal(
+      url("https://shop.example/hu/rendeles-megtekintese"),
+      "https://shop.example/hu/rendeles-megtekintese",
+    );
+    for (const rossz of [
+      undefined,
+      null,
+      "http://x.example/",
+      "nem url",
+      7,
+      ["x"],
+    ])
+      assert.equal(url(rossz), null, String(rossz));
+  });
+
+  it("the value is a sentence with the address in the mail's language, and empty without one", () => {
+    const hu = webshopMailContent({
+      ...WEBSHOP_MAIL_SAMPLE_FACTS["order-placed"],
+      order_view_url: "https://shop.example/hu/rendeles-megtekintese",
+    }).values.rendeles_megtekintes_mondat;
+    assert.equal(
+      hu,
+      "A rendelésed állapotát bármikor megnézheted a rendelésszámmal és az e-mail-címeddel: https://shop.example/hu/rendeles-megtekintese",
+    );
+    const en = webshopMailContent({
+      ...WEBSHOP_MAIL_SAMPLE_FACTS["order-placed"],
+      locale: "en",
+      order_view_url: "https://shop.example/en-hu/rendeles-megtekintese",
+    }).values.rendeles_megtekintes_mondat;
+    assert.equal(
+      en,
+      "You can check your order at any time with your order number and e-mail address: https://shop.example/en-hu/rendeles-megtekintese",
+    );
+    for (const nincs of [undefined, null, "http://x.example/", "<b>"]) {
+      const v = webshopMailContent({
+        ...WEBSHOP_MAIL_SAMPLE_FACTS["order-placed"],
+        order_view_url: nincs as string | null | undefined,
+      }).values.rendeles_megtekintes_mondat;
+      assert.equal(v, "", String(nincs));
+    }
   });
 });
 

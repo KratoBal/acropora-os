@@ -135,11 +135,63 @@ describe("Új vevő a számla Vevő kártyáján (acrobot 28105)", () => {
     ).toBeTruthy();
     // the search is by the first eight digits, with the separators gone
     expect(api.customers.list.mock.calls[0]![1].get("search")).toBe("12345678");
+    // MI PIROSIT: ha a keresés nem kéri a partner-kötést viselő sorokat, egy már a törzsben lévő partner (az egyesítés
+    // után egy sor a partnerrel) új cégnek látszana, és második sor jönne létre ugyanazzal az adószámmal
+    expect(
+      api.customers.list.mock.calls[0]![1].get("includePartnerMirrors"),
+    ).toBe("true");
     expect(screen.queryByRole("button", { name: /Más Bt\./ })).toBe(null);
     fireEvent.click(screen.getByRole("button", { name: /Adapt Kft\./ }));
     expect(onPickExisting).toHaveBeenCalledWith(existing);
     expect(api.customers.create).not.toHaveBeenCalled();
     expect(onSaved).not.toHaveBeenCalled();
+  });
+
+  // 40332480 (barracuda #2228): a tukor vevo-soraibol hianyozhat az adoszam, a reszlet partner-javaslata (partnerTaxHint)
+  // hordozza. MI PIROSIT: ha a duplikacio-szuro csak a sor sajat adoszamat nezi, a megtalalt tukor kiesne, es a ceg
+  // ujnak latszana
+  it("a partner's customer row without a tax number of its own is the duplicate through the partner hint", async () => {
+    api.nav.lookup.mockResolvedValue({
+      valid: true,
+      data: {
+        name: "Adapt Kft.",
+        taxNumber: "12345678-2-42",
+        address: {
+          country: "HU",
+          postalCode: "1106",
+          city: "Budapest",
+          line1: "Fő utca 1.",
+        },
+      },
+    });
+    const mirror = {
+      id: "c-mirror",
+      displayName: "Adapt",
+      companyName: "Adapt Kft.",
+      customerNumber: "PARTNER-1",
+      partnerMirror: true,
+    };
+    api.customers.list.mockResolvedValue({ items: [mirror] });
+    api.customers.detail.mockResolvedValue({
+      id: "c-mirror",
+      taxNumber: null,
+      partnerTaxHint: { partnerName: "Adapt Kft.", taxNumber: "12345678-2-42" },
+    });
+    renderForm("12345678-2-42");
+    fireEvent.click(screen.getByRole("button", { name: "Kitöltés a NAV-ból" }));
+    await waitFor(() =>
+      expect((screen.getByLabelText("Cím") as HTMLInputElement).value).toBe(
+        "Fő utca 1.",
+      ),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Vevő mentése és kiválasztása" }),
+    );
+    expect(
+      await screen.findByText("Ezzel az adószámmal már van vevő:"),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Adapt Kft\./ })).toBeTruthy();
+    expect(api.customers.create).not.toHaveBeenCalled();
   });
 
   it("EU-s cég: a VIES nevet ad, a közösségi adószám a saját mezőjébe kerül, nem a vevő adószámába", async () => {

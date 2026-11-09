@@ -2,10 +2,10 @@
 
 import {
   Alert,
-  Button,
   ConfirmDialog,
-  Input,
   Skeleton,
+  PilotButton,
+  PilotInput,
   PilotSelect,
 } from "@acropora/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -282,9 +282,8 @@ export function ArticleCitationsPanel({
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-dusk-800">{targetLabel(c)}</span>
                   {writable ? (
-                    <Button
-                      type="button"
-                      size="sm"
+                    <PilotButton
+                      size="action"
                       variant="ghost"
                       disabled={busy}
                       onClick={() =>
@@ -292,7 +291,7 @@ export function ArticleCitationsPanel({
                       }
                     >
                       Hivatkozás törlése
-                    </Button>
+                    </PilotButton>
                   ) : null}
                 </div>
                 {c.problems.map((p) => (
@@ -322,17 +321,16 @@ export function ArticleCitationsPanel({
                 ) : null}
                 {writable && c.unanswered.length ? (
                   <div className="flex flex-wrap items-center gap-2">
-                    <Input
+                    <PilotInput
                       aria-label="Az elfogadás oka"
                       placeholder="Miért elfogadható így a mondat?"
                       value={answers[c.id] ?? ""}
-                      onChange={(event) =>
-                        setAnswers({ ...answers, [c.id]: event.target.value })
+                      onChange={(value) =>
+                        setAnswers({ ...answers, [c.id]: value })
                       }
                     />
-                    <Button
-                      type="button"
-                      size="sm"
+                    <PilotButton
+                      size="action"
                       variant="secondary"
                       disabled={busy || !(answers[c.id] ?? "").trim()}
                       onClick={() =>
@@ -350,15 +348,14 @@ export function ArticleCitationsPanel({
                       }
                     >
                       Elfogadom okkal
-                    </Button>
+                    </PilotButton>
                   </div>
                 ) : null}
               </div>
             ))}
             {writable && draft?.sentence !== s.sentence ? (
-              <Button
-                type="button"
-                size="sm"
+              <PilotButton
+                size="action"
                 variant="ghost"
                 onClick={() =>
                   setDraft({
@@ -370,7 +367,7 @@ export function ArticleCitationsPanel({
                 }
               >
                 Hivatkozás hozzáadása
-              </Button>
+              </PilotButton>
             ) : null}
             {writable && draft?.sentence === s.sentence ? (
               <div className="flex flex-wrap items-center gap-2 pl-2">
@@ -393,12 +390,10 @@ export function ArticleCitationsPanel({
                   ))}
                 </PilotSelect>
                 {draft.kind === "NOT_TECHNICAL" ? (
-                  <Input
+                  <PilotInput
                     aria-label="Miért nem szakmai a mondat"
                     value={draft.reason}
-                    onChange={(event) =>
-                      setDraft({ ...draft, reason: event.target.value })
-                    }
+                    onChange={(value) => setDraft({ ...draft, reason: value })}
                   />
                 ) : (
                   <PilotSelect
@@ -425,22 +420,20 @@ export function ArticleCitationsPanel({
                     ))}
                   </PilotSelect>
                 )}
-                <Button
-                  type="button"
-                  size="sm"
+                <PilotButton
+                  size="action"
                   disabled={busy || !draftReady}
                   onClick={save}
                 >
                   Hivatkozás mentése
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
+                </PilotButton>
+                <PilotButton
+                  size="action"
                   variant="ghost"
                   onClick={() => setDraft(null)}
                 >
                   Mégse
-                </Button>
+                </PilotButton>
               </div>
             ) : null}
           </li>
@@ -459,9 +452,8 @@ export function ArticleCitationsPanel({
                   {KIND_LABELS[o.kind]}: „{o.sentence}”
                 </span>
                 {writable ? (
-                  <Button
-                    type="button"
-                    size="sm"
+                  <PilotButton
+                    size="action"
                     variant="ghost"
                     disabled={busy}
                     onClick={() =>
@@ -469,7 +461,7 @@ export function ArticleCitationsPanel({
                     }
                   >
                     Törlés
-                  </Button>
+                  </PilotButton>
                 ) : null}
               </li>
             ))}

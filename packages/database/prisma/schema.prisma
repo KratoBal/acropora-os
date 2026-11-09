@@ -201,6 +201,13 @@ enum OutgoingPaymentMarkSource {
   GLS_COD
   SIMPLEPAY
   FOXPOST
+  /// a kimenő számla oldalán kézzel rögzített kifizetés (kártya 2026/00083-86, Balázs
+  /// 2026-11-04 16:40 UTC); a `sourceRef` a kérés azonosítója, hogy egy dupla kattintás ne
+  /// legyen két kifizetés
+  MANUAL
+  /// egy banki jóváírás, amelynek közleménye több saját számlát nevez meg (kártya aeddb2c3, Balázs
+  /// 2026-11-04 16:36 UTC: „2026/00083,86,85,84”); a `sourceRef` a jóváírás (`BankTransaction.id`)
+  BANK_TRANSFER
 }
 
 enum GlsSyncRunStatus {
@@ -896,6 +903,13 @@ enum InvoiceSyncStatus {
   ERROR
 }
 
+/// A felhasználó választott témája; `SYSTEM` a készülék sötét/világos módját követi.
+enum UserThemePreference {
+  LIGHT
+  DARK
+  SYSTEM
+}
+
 model User {
   id                     String                        @id @default(cuid())
   /// A gépi tokenek, amik ennek a felhasználónak a nevében járnak el.
@@ -968,6 +982,9 @@ model User {
   role                   UserRole
   isActive               Boolean                       @default(true)
   avatarUrl              String?
+  /// A felület témája, a fiókhoz mentve (Balázs, 2026-11-09: a telefon böngészője minden alkalommal elfelejtette).
+  /// NULL: még nem választott, ilyenkor a böngésző saját (helyi) beállítása dönt. A localStorage csak gyorsítótár.
+  themePreference        UserThemePreference?
   /// MELYIK PARTNER NEVEBEN lep be ez a fiok. Sajat kollegan mindketto NULL.
   ///
   /// A ketto kozul LEGFELJEBB az egyik lehet kitoltve (adatbazis CHECK
@@ -1217,6 +1234,8 @@ model ReefClubAccount {
   /// Az automatikus ajanlasok es a rogzitett beadott adagok (8. szelet).
   recommendations      ReefClubRecommendation[]
   administeredDoses    ReefClubAdministeredDose[]
+  /// A tag termekenkenti kifogyas-emlekezteto hozzajarulasai (V3.2).
+  runOutReminders      ReefClubRunOutReminder[]
 }
 
 enum ReefClubIdentityProvider {
@@ -1476,7 +1495,10 @@ model Product {
   /// Az ajanlasok es a rogzitett adagok, amelyek ezt a termeket nevezik meg (ReefClub 8. szelet).
   reefClubRecommendations    ReefClubRecommendation[]
   reefClubDoses              ReefClubAdministeredDose[]
+  reefClubRunOutReminders    ReefClubRunOutReminder[]
   articleLinks               ArticleProduct[]
+  /// the live animal arrivals that name this product (card f4e4832b, V2.6 S2)
+  livestockArrivals          LivestockArrival[]
 
   @@index([brandId])
   @@index([categoryId])
@@ -3108,6 +3130,7 @@ model Customer {
   /// ReefClub 5. szelet: a vevo bolti osszerendelesei es a neki kiadott kodok.
   reefClubLinks        ReefClubCustomerLink[]
   reefClubLinkCodes    ReefClubLinkCode[]
+  rentals              Rental[]
 
   @@index([displayName])
   @@index([email])
@@ -4622,6 +4645,7 @@ model Aquarium {
   shareEvents             AquariumShareEvent[]
   reefClubRecommendations ReefClubRecommendation[]
   reefClubDoses           ReefClubAdministeredDose[]
+  reefClubRunOutReminders  ReefClubRunOutReminder[]
 
   @@index([customerId, isActive])
   @@index([departmentId])
@@ -5154,6 +5178,67 @@ model UnitOfMeasure {
   @@unique([kind, code])
   /// A valaszto lekerdezese: fajtara szurve, aktivak, sorrendben.
   @@index([kind, isActive, sortOrder])
+}
+
+/// A rented-out device, one row per physical piece (task eszkozberles, S1; Balazs, 2026-11-06,
+/// Eszkozberles thread). Maintained under Settings; the rental itself (S2) points at this row.
+/// All amounts are gross whole forints: the shop quotes rental prices in HUF, never in fractions.
+model RentalEquipment {
+  id                  String   @id @default(cuid())
+  name                String
+  /// Unique when given; a device without a factory serial may leave it empty (NULLs never collide).
+  serialNumber        String?  @unique
+  dailyFeeHuf         Int
+  depositHuf          Int
+  /// What a lost or destroyed device costs the renter.
+  replacementValueHuf Int
+  /// The accessories handed over with the device, printed on the contract (free text).
+  accessories         String?
+  note                String?
+  /// A retired device is not deleted (rentals will reference it); it only drops out of the picker.
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  rentals Rental[]
+
+  @@index([isActive, name])
+}
+
+enum RentalStatus {
+  OPEN
+  RETURNED
+}
+
+/// One device rented to one customer (task eszkozberles, S2). The device's fee, deposit, replacement value and accessories
+/// are copied here when the rental is recorded: the contract prints what was agreed that day. At most one OPEN rental per
+/// device, enforced by a partial unique index in the migration (`Rental_equipmentId_open_key`; not expressible here).
+model Rental {
+  id                  String       @id @default(cuid())
+  rentalNumber        String       @unique
+  status              RentalStatus @default(OPEN)
+  customerId          String
+  equipmentId         String
+  startsAt            DateTime
+  plannedReturnAt     DateTime
+  dailyFeeHuf         Int
+  depositHuf          Int
+  replacementValueHuf Int
+  accessories         String?
+  /// Started 24-hour periods of the planned span times the daily fee, at recording time.
+  expectedFeeHuf      Int
+  note                String?
+  returnedAt          DateTime?
+  createdById         String?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  customer  Customer        @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  equipment RentalEquipment @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
+
+  @@index([status, plannedReturnAt])
+  @@index([customerId])
+  @@index([equipmentId])
 }
 
 model AssetLabel {
@@ -7451,8 +7536,54 @@ model PaidMarkRun {
   attention      Json
   /// Ha a futás maga elbukott (például nincs Számlázz.hu-kulcs).
   errorCode      String?
+  /// "auto": a futás írt; "dry": csak a terv, semmi nem íródott (a forrás kapcsolója dry; e64540fd).
+  mode           String                    @default("auto")
+  /// "schedule": a napi futás; "manual": valaki megnyomta a „Futtatás most” gombot.
+  trigger        String                    @default("schedule")
+  /// A gombot megnyomó felhasználó (csak kézi futásnál).
+  triggeredById  String?
+  /// Egy dry futás terve: mit jelölne kifizetettre, { invoiceNumber, amount, date, sourceRef }[].
+  planned        Json                      @default("[]")
 
   @@index([source, startedAt])
+}
+
+/// A NAPI JELÖLÉS EGY FIGYELMET KÉRŐ SORA, AMIT EGY EMBER KÉZZEL RENDEZETTNEK JELÖLT (6fd8c574; Balázs, 2026-11-05
+/// 16:07 UTC): például a cmfx-ben kiállított számla, amit a Számlázz.hu nem ismer, és a kifizetettet a cmfx-ben kézzel
+/// jelölték. Amíg a sor áll, a lap a futás figyelmet kérő tételei közül kiveszi, és a „kézzel rendezve” részben mutatja
+/// (ki, mikor). A visszavonás törli a sort; mindkét lépés AuditLog-sort ír (ki, mikor), tehát a történet ott él.
+model PaidMarkAttentionClosure {
+  id         String                    @id @default(cuid())
+  source     OutgoingPaymentMarkSource
+  /// A tétel tartós kulcsa: banki átutalásnál a jóváírás, egyébként a hivatkozás (számlaszám).
+  key        String
+  /// A tétel oka a futásban (NOT_FOUND, UNRESOLVED).
+  reason     String
+  /// A tétel hivatkozása a lezáráskor, a lapnak (számlaszám vagy a jóváírás napja).
+  reference  String
+  closedAt   DateTime                  @default(now())
+  closedById String
+
+  @@unique([source, key, reason])
+}
+
+/// A TÁROLT SZÁMLÁZZ.HU FEED VISSZATÖLTÉSE (6fd8c574; acrobot 43766): egy feedből hiányzó szám, és amit a Számlázz.hu
+/// Agent a lekérdezésére felelt. A száraz kör tölti (WOULD_STORE, NOT_FOUND, ERROR, ...), a behúzás a WOULD_STORE sort
+/// STORED-ra lépteti. Ettől folytatható: a végleges választ adó számot a következő kör nem kérdezi újra. A válasz XML-je
+/// nem kerül ide, csak a szám, a fajta és az összegek (a `detail`); a behúzott számla a feed-üzenetek között él.
+model SzamlazzFeedBackfillNumber {
+  number      String    @id
+  /// A sorozat: `ACRW-2026` vagy az előtag nélküli `2026`.
+  series      String
+  /// WOULD_STORE, STORED, NOT_FOUND, ERROR, UNREADABLE, OTHER_NUMBER (a `FeedPullLine` kimenetei).
+  outcome     String
+  /// A kimenet magyarázata: a fajta és az összegek, vagy a hiba kódja. Vevő nélkül.
+  detail      String
+  checkedAt   DateTime
+  checkedById String
+  storedAt    DateTime?
+
+  @@index([series, outcome])
 }
 
 /// A KIMENŐ SZÁMLÁK KIFIZETETT-JELÖLÉSÉNEK NAPLÓJA, minden forrásra (acrobot
@@ -8419,6 +8550,7 @@ model MailImage {
   createdAt    DateTime @default(now())
 
   uploadedBy User? @relation("MailImageUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+  gamePrizes GameQuestion[] @relation("GamePrizeImage")
 
   @@index([uploadedById])
 }
@@ -8531,6 +8663,52 @@ enum ExpectedArrivalStatus {
   OPEN
   RECEIVED
   DISMISSED
+}
+
+/// The three kinds of live animal the shop sells, the same three the order confirmation's acclimatisation section
+/// tells apart (`WEBSHOP_LIVESTOCK_KINDS` in `@acropora/types`; a test keeps the two lists equal).
+enum LivestockKind {
+  FISH
+  INVERTEBRATE
+  CORAL
+}
+
+enum LivestockArrivalStatus {
+  ORDERED
+  IN_TRANSIT
+  ARRIVED
+  CANCELLED
+}
+
+/// A LIVE ANIMAL ARRIVAL, SEEN FROM THE CUSTOMER'S SIDE (card f4e4832b, V2.6 S2; acrobot 2026-11-06: no money in it, a fish
+/// or an invertebrate by species or group, a unique coral by the piece, an optional product link, entered by hand in the OS).
+/// NOT the purchasing record: `ExpectedArrival` is a supplier's pro forma or invoice waiting to be booked, with no animal,
+/// no date and no customer-facing meaning; this one says WHAT is coming WHEN and whether it can be pre-registered for.
+/// Nothing reads it yet but the OS's own list; the customer-facing parts (the notify-me list, the shop's date line) are
+/// separate slices, and the model can still change shape because no customer data stands behind it.
+model LivestockArrival {
+  id           String                 @id @default(cuid())
+  kind         LivestockKind
+  /// What the customer will read: a species, a group ("Zoanthus"), or a piece's name.
+  label        String
+  /// Optional link to the catalog product (a unique coral is a piece, so it usually has one).
+  productId    String?
+  /// The expected day; a day, not a moment (the supplier gives a day, and the shop's day is Budapest's).
+  expectedOn   DateTime               @db.Date
+  quantity     Int?
+  status       LivestockArrivalStatus @default(ORDERED)
+  /// Whether an interested customer may register for it (only while it has not arrived and is not cancelled).
+  preorderable Boolean                @default(false)
+  /// Internal; never shown to a customer.
+  note         String?
+  createdById  String?
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([status, expectedOn])
+  @@index([productId])
 }
 
 /// Egy levélből jött PDF (proforma vagy számla), a bájtjaival együtt, hogy a
@@ -8828,7 +9006,7 @@ model ExternalBillingDocument {
   /// A Számlázz.hu bizonylattípusa, nyersen (`alap.tipus`, például SZ).
   kindCode              String
   documentNumber        String
-  /// `alap.eszamla`: 1 elektronikus, minden más papír.
+  /// `alap.eszamla` kódja szerint: 2 és 3 elektronikus, 0 (nem számla) és 1 (papír) nem.
   electronic            Boolean
   issueDate             DateTime  @db.Date
   fulfillmentDate       DateTime? @db.Date
@@ -9721,6 +9899,20 @@ model WebshopOrderStaleThreshold {
   enabled         Boolean          @default(true)
   updatedByUserId String?
   updatedAt       DateTime         @updatedAt
+}
+
+/// A VENDÉG SZÁMLA-LETÖLTÉSÉNEK EGYSZER HASZNÁLATOS TOKENJE (V1.1, Balázs jóváhagyta acrobot útján, 2026-11-05).
+/// A letöltő hivatkozás az OS-től jön, HMAC-aláírt, legfeljebb 15 perces, és egyetlen számlára szól; ez a tábla
+/// teszi egyszer használatossá: a token azonosítója (`jti`) a SIKERES letöltéskor kerül ide, egyedi kulccsal, tehát
+/// a második használat ütközik. Egyben a letöltés naplója is (melyik rendelés, melyik számla, mikor). Nincs név,
+/// e-mail vagy cím benne. Nincs idegen kulcs: egy törölt számla sora ne akassza meg a naplót.
+model WebshopInvoiceDownload {
+  jti        String   @id @db.VarChar(64)
+  orderId    String   @db.VarChar(64)
+  invoiceId  String
+  redeemedAt DateTime @default(now())
+
+  @@index([orderId, redeemedAt])
 }
 
 /// A WEBSHOP RENDELÉS BELSŐ MEGJEGYZÉSE (a Figma 494:386 Megjegyzések kártyája).
@@ -10750,6 +10942,33 @@ model ReefClubAdministeredDose {
   @@index([productId])
 }
 
+/// MIKOR FOGY EL EMLEKEZTETO, TERMEKENKENTI HOZZAJARULAS (ReefClub V3.2, kartya cd94ed11, 2. szelet). Egy sor egy tag egy
+/// termekere: a tag KIFEJEZETTEN bekapcsolta az emlekeztetot, ehhez az akvariumhoz (a kifogyas az akvarium literebol
+/// szamolodik). A sor maga a hozzajarulas bizonyitek: mikor (`consentAt`) es a szoveg MELYIK verziojara
+/// (`consentVersion`) adta; a leiratkozas ideje (`unsubscribedAt`) vagy ures (aktiv). Ujrabekapcsolas ugyanazt a sort
+/// frissiti (uj ido, verzio, a leiratkozas torolve, a regi kulcs eldobva): egy tagnak egy termekre egy sora van.
+/// A leiratkozo link kulcsa NINCS tarolva: a sor azonositojabol es egy szerver-titokbol (REEFCLUB_RUNOUT_UNSUBSCRIBE_SECRET)
+/// szamolt HMAC, igy minden kikuldott level linkje mindig mukodik, a tabla masolata pedig nem tud leiratkoztatni senkit.
+/// Ures tablaval indul, a kapcsolo (REEFCLUB_RUNOUT_ENABLED) alapbol ki van.
+model ReefClubRunOutReminder {
+  id             String          @id @default(cuid())
+  accountId      String
+  productId      String
+  aquariumId     String
+  consentVersion String
+  consentAt      DateTime
+  unsubscribedAt DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  account        ReefClubAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  product        Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  aquarium       Aquarium        @relation(fields: [aquariumId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, productId])
+  @@index([productId])
+  @@index([aquariumId])
+}
+
 enum ReefClubDoseProjectionRunStatus {
   SUCCEEDED
   FAILED
@@ -11590,6 +11809,18 @@ model PartnerOrder {
   @@index([customerId])
 }
 
+/// A MEGRENDELÉSEK BEÁLLÍTÁSAI (egy sor, az azonosítója a kódban rögzített). S4b (kártya 38caeac2, Luca 2026-11-05):
+/// hány napja nincs mozgás egy nyitott, teljesítetlen tételű megrendelésen ahhoz, hogy hátralékos legyen. A 0 érvényes
+/// érték (minden nyitott, teljesítetlen tételű megrendelés hátralékos). Sor nélkül az alapérték, 14, érvényes.
+/// `updatedById` csak a napló: nincs kapcsolat, a felhasználó törlése ne érintse a beállítást.
+model PartnerOrderSetting {
+  id          String   @id
+  backlogDays Int      @default(14)
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 model PartnerOrderDocument {
   id           String                   @id @default(cuid())
   orderId      String
@@ -11607,4 +11838,102 @@ model PartnerOrderDocument {
   uploadedBy User?        @relation("PartnerOrderDocumentUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
 
   @@index([orderId, step])
+}
+
+/// A KARÁCSONYI NYEREMÉNYJÁTÉK HETI KÉRDÉSE (kártya 31445d0f; Balázs, 2026-11-05). Hetente egy: szabad szöveges (TEXT)
+/// vagy választós (CHOICE). Az elfogadott válaszok soha nem mennek ki a nyilvános végpontra.
+model GameQuestion {
+  id              String      @id @default(cuid())
+  /// A hét kulcsa, például 2026-W46; hetente egy kérdés.
+  week            String      @unique
+  /// TEXT vagy CHOICE.
+  type            String
+  prompt          String
+  /// CHOICE: [{ id, label }]; TEXT: [].
+  options         Json        @default("[]")
+  /// TEXT: az elfogadott válaszok (kisbetű, ékezet és szóköz nélkül hasonlítva); CHOICE: a helyes lehetőségek id-je.
+  acceptedAnswers Json        @default("[]")
+  opensAt         DateTime
+  closesAt        DateTime
+  /// A hét nyereménye (Balázs, 2026-11-06): neve, rövid leírása és képe (a levélsablon-kép tárolóból). Mind opcionális: a régi kérdéseknek nincs.
+  prizeName        String?
+  prizeDescription String?
+  prizeImageId     String?
+  prizeImage       MailImage?  @relation("GamePrizeImage", fields: [prizeImageId], references: [id], onDelete: SetNull)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  entries         GameEntry[]
+  draws           GameDraw[]
+
+  @@index([opensAt])
+  @@index([prizeImageId])
+}
+
+/// EGY BEKÜLDÉS: egy e-mail cím egy hétre egyszer (a kérdés és az e-mail egyedi). Csak a megerősítő link után számít
+/// (`confirmedAt`). A helyesség az automatikus összevetés, vagy a kezelő kézi döntése, ha van.
+model GameEntry {
+  id               String       @id @default(cuid())
+  questionId       String
+  question         GameQuestion @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  /// Kisbetűs, levágott e-mail cím.
+  email            String
+  /// A beküldő neve (a nyertes nevét teszi közzé az oldal, rövidítve). Üres a régi, név nélküli sorokon; új beküldésnél a szerver kéri.
+  name             String?
+  /// A játékszabályzat elfogadása és az adatkezelési hozzájárulás (két külön jelölőnégyzet, acrobot 44375): mikor, és a két szöveg melyik verzióját látta a játékos. Üres a régi sorokon; új beküldésnél a szerver kéri, és az ismétlés a megerősítésig frissíti.
+  rulesAcceptedAt  DateTime?
+  consentAt        DateTime?
+  rulesVersion     String?
+  privacyVersion   String?
+  answer           String
+  autoCorrect      Boolean
+  /// A kezelő döntése: null, ha nem döntött; különben ez számít az automatikus helyett.
+  manualCorrect    Boolean?
+  manualById       String?
+  manualAt         DateTime?
+  /// A megerősítő token SHA-256 lenyomata; maga a token csak a levélben van.
+  confirmTokenHash String       @unique
+  confirmedAt      DateTime?
+  /// Hány megerősítő levél ment erre a beküldésre, és mikor az utolsó (barracuda, #2254: a saját küldőnkön át nem
+  /// lehet egy címet levelekkel elárasztani; a levelek száma és üteme címenként és kérdésenként korlátos).
+  mailCount        Int          @default(0)
+  lastMailedAt     DateTime?
+  /// A napi levél-plafon fölött (JATEK_MAIL_DAILY_CAP) a beküldés megvan, a levél vár: mióta. A kezelő látja és küldi ki.
+  mailPendingSince DateTime?
+  /// A kiment megerősítő levelek Gmail-azonosítója (kártya jatek-level-torles): az elküldött példányokat a törlés PONTOSAN
+  /// ezek alapján veszi ki a küldő postafiókból (a tájékoztató: 2027-01-10-ig), utána üres. A régi soroknál üres: azokat a
+  /// tárgy szerinti, bájtra ellenőrzött keresés éri el.
+  sentMailIds      String[]     @default([])
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@unique([questionId, email])
+  @@index([questionId, confirmedAt])
+}
+
+/// EGY SORSOLÁS: heti (egy kérdés helyes, megerősített beküldői) vagy karácsonyi (súly = a helyes hetek száma). A mag,
+/// a jelöltlista és a nyertes mentve: ugyanazzal a maggal újrafuttatva ugyanaz jön ki (élőben képernyőn futtatható).
+model GameDraw {
+  id          String        @id @default(cuid())
+  /// WEEKLY vagy CHRISTMAS.
+  kind        String
+  questionId  String?
+  question    GameQuestion? @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  seed        String
+  /// [{ email, weight }], e-mail szerint rendezve, ahogy a sorsolás látta.
+  candidates  Json
+  winnerEmail String?
+  ticket      Int?
+  tickets     Int
+  createdById String
+  createdAt   DateTime      @default(now())
+
+  @@index([kind, createdAt])
+}
+
+/// A NYEREMÉNYJÁTÉK LEVELEINEK NAPI SZÁMLÁLÓJA (acrobot, 2026-11-05 22:57): egy budapesti napra hány megerősítő levél ment.
+/// A növelés atomi (upsert increment); a plafon fölötti beküldés levele sorba áll (`GameEntry.mailPendingSince`).
+model GameMailDay {
+  /// A budapesti nap, például 2026-11-06.
+  day  String @id
+  sent Int    @default(0)
 }

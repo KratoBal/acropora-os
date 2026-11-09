@@ -295,6 +295,16 @@ export const MAIL_TEMPLATE_VARIABLES: readonly MailTemplateVariable[] = [
     description:
       "Mi történik most: összekészítjük, vagy a boltban veszed át. A rendelés szállításától függ.",
   },
+  {
+    name: "rendeles_megtekintes_mondat",
+    description:
+      "A mondat a vendég rendelés-lapjáról (rendelésszámmal és e-mail-címmel nézhető meg a rendelés), a lap címével. Üres, ha a bolt nem küldte a lap címét.",
+  },
+  {
+    name: "akklimatizacio",
+    description:
+      "Az élő állatnak szóló akklimatizációs útmutató, fajtánként (hal, gerinctelen, korall). Üres, ha a rendelésben nincs élő állat, vagy ha a fajtához még nincs jóváhagyott szöveg.",
+  },
   { name: "szallitasi_mod", description: "A szállítási mód neve." },
   {
     name: "szallito",
@@ -321,6 +331,38 @@ export const MAIL_TEMPLATE_VARIABLES: readonly MailTemplateVariable[] = [
     name: "ugy_azonosito",
     description:
       "A problémabejelentés azonosítója, amit a vevő a bejelentéskor kapott, például ordprb_01ABC.",
+  },
+  {
+    name: "hirlevel_megerosito_link",
+    description:
+      "A hírlevél-feliratkozás megerősítő linkje. Egyszer használható, a lejáratig.",
+    kind: "link",
+  },
+  {
+    name: "hirlevel_leiratkozo_link",
+    description: "A hírlevélről leiratkozó link. Nem jár le.",
+    kind: "link",
+  },
+  {
+    name: "ertesites_megerosito_link",
+    description:
+      "A „Szólj, ha jön hasonló” értesítés-kérés megerősítő linkje. Egyszer használható, a lejáratig.",
+    kind: "link",
+  },
+  {
+    name: "ertesites_leiratkozo_link",
+    description: "Az értesítés-kérésről leiratkozó link. Nem jár le.",
+    kind: "link",
+  },
+  {
+    name: "ertesites_targya",
+    description:
+      "Amire a vevő értesítést kért: egy faj (például Acropora abrolhosensis) vagy egy termék neve.",
+  },
+  {
+    name: "megerosites_lejarat",
+    description:
+      "Az utolsó nap, amikor a megerősítő link még működik, például 2026. november 16.",
   },
   {
     name: "masodik_resz_szam",
@@ -636,10 +678,12 @@ const HUNGARIAN_MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
       "rendeles_szam",
       "ugyfel_neve",
       "rendeles_datum",
+      "rendeles_megtekintes_mondat",
       "rendeles_szamok",
       "vegyes_kosar_mondat",
       "osszesen",
       "kovetkezo_lepes",
+      "akklimatizacio",
       "rendeles_tetelek",
     ],
   },
@@ -652,6 +696,7 @@ const HUNGARIAN_MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
       "rendeles_szam",
       "ugyfel_neve",
       "rendeles_datum",
+      "rendeles_megtekintes_mondat",
       "szallitasi_mod",
       "osszesen",
       "fizetendo_doboz",
@@ -668,6 +713,7 @@ const HUNGARIAN_MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
       "rendeles_szam",
       "ugyfel_neve",
       "rendeles_datum",
+      "rendeles_megtekintes_mondat",
       "szallitasi_mod",
       "osszesen",
       "fizetendo_doboz",
@@ -683,6 +729,7 @@ const HUNGARIAN_MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
       "rendeles_szam",
       "ugyfel_neve",
       "rendeles_datum",
+      "rendeles_megtekintes_mondat",
       "szallitasi_mod",
       "osszesen",
       "fizetendo_doboz",
@@ -698,6 +745,7 @@ const HUNGARIAN_MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
       "rendeles_szam",
       "ugyfel_neve",
       "rendeles_datum",
+      "rendeles_megtekintes_mondat",
       "szallito",
       "tracking_szam",
       "tracking_link",
@@ -716,6 +764,7 @@ const HUNGARIAN_MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
       "rendeles_szam",
       "ugyfel_neve",
       "rendeles_datum",
+      "rendeles_megtekintes_mondat",
       "rendeles_szamok",
       "masodik_resz_szam",
       "reszek_fizetese_mondat",
@@ -732,7 +781,41 @@ const HUNGARIAN_MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
       "rendeles_szam",
       "ugyfel_neve",
       "rendeles_datum",
+      "rendeles_megtekintes_mondat",
       "ugy_azonosito",
+    ],
+  },
+  {
+    id: "WEBSHOP_NEWSLETTER_CONFIRM",
+    group: "WEBSHOP",
+    name: "Hírlevél megerősítése",
+    description:
+      "Amikor valaki feliratkozik a webshop hírlevelére: a megerősítő link (kettős megerősítés) és a leiratkozó link.",
+    // rendeles_datum and rendeles_megtekintes_mondat are every webshop mail's; here they are always empty (no order)
+    variables: [
+      "ugyfel_neve",
+      "rendeles_datum",
+      "rendeles_megtekintes_mondat",
+      "hirlevel_megerosito_link",
+      "megerosites_lejarat",
+      "hirlevel_leiratkozo_link",
+    ],
+  },
+  {
+    id: "WEBSHOP_STOCK_ALERT_CONFIRM",
+    group: "WEBSHOP",
+    name: "Értesítés-kérés megerősítése",
+    description:
+      "Amikor valaki egy eladott egyedi darab lapján értesítést kér, ha hasonló érkezik („Szólj, ha jön hasonló”): a megerősítő link (kettős megerősítés) és a leiratkozó link.",
+    // ugyfel_neve, rendeles_datum and rendeles_megtekintes_mondat are every webshop mail's; here they are always empty (no name asked, no order)
+    variables: [
+      "ugyfel_neve",
+      "rendeles_datum",
+      "rendeles_megtekintes_mondat",
+      "ertesites_targya",
+      "ertesites_megerosito_link",
+      "megerosites_lejarat",
+      "ertesites_leiratkozo_link",
     ],
   },
   {
@@ -745,6 +828,7 @@ const HUNGARIAN_MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
       "rendeles_szam",
       "ugyfel_neve",
       "rendeles_datum",
+      "rendeles_megtekintes_mondat",
       "rendeles_szamok",
       "zarolt_osszeg",
       "bolti_rendeles_mondat",
@@ -760,6 +844,7 @@ const HUNGARIAN_MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
       "rendeles_szam",
       "ugyfel_neve",
       "rendeles_datum",
+      "rendeles_megtekintes_mondat",
       "rendeles_szamok",
       "fizetesi_link",
       "fizetendo",
@@ -779,6 +864,7 @@ const HUNGARIAN_MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
       "rendeles_szam",
       "ugyfel_neve",
       "rendeles_datum",
+      "rendeles_megtekintes_mondat",
       "rendeles_szamok",
       "fizetesi_link",
       "fizetendo",
@@ -797,6 +883,7 @@ const HUNGARIAN_MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
       "rendeles_szam",
       "ugyfel_neve",
       "rendeles_datum",
+      "rendeles_megtekintes_mondat",
       "visszaterites_osszege",
       "kartya_megnevezes",
       "eddigi_visszaterites_mondat",
@@ -811,6 +898,7 @@ const HUNGARIAN_MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
       "rendeles_szam",
       "ugyfel_neve",
       "rendeles_datum",
+      "rendeles_megtekintes_mondat",
       "szallitasi_mod",
       "osszesen",
       "fizetendo_doboz",
@@ -839,6 +927,20 @@ export const MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
       description: `Az angol nyelvű oldalon rendelőknek. ${e.description}`,
     }),
   ),
+  /**
+   * THE ENGLISH TWIN OF THE INVOICE MAIL'S STARTING TEXT (card d5c6befd, P4): the webshop's proforma goes out on the
+   * `BILLING_DOCUMENT_MANUAL` text, so a customer who ordered on the English storefront gets this twin instead. The
+   * attachment's own language is a separate matter and stays Hungarian (acrobot 41434-41439).
+   */
+  ...HUNGARIAN_MAIL_TEMPLATE_EVENTS.filter(
+    (e) => e.id === "BILLING_DOCUMENT_MANUAL",
+  ).map((e) => ({
+    ...e,
+    id: `${e.id}${WEBSHOP_ENGLISH_KEY_SUFFIX}`,
+    name: "Számla kiküldése (angol nyelvű webshopos rendelés)",
+    description:
+      "A számla vagy díjbekérő levelének alapszövege az angol nyelvű oldalon rendelőknek. A PDF csatolmány nyelve ettől független (ma magyar).",
+  })),
 ];
 
 /**

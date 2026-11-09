@@ -4,14 +4,7 @@ import {
   magyarSzamErteke,
   munkaoraEgysegFigyelmeztetes,
 } from "@acropora/types";
-import {
-  Button,
-  Card,
-  Input,
-  PilotButton,
-  PilotCard,
-  PilotInput,
-} from "@acropora/ui";
+import { PilotButton, PilotCard, PilotInput } from "@acropora/ui";
 
 import type {
   WorksheetLineInput,
@@ -375,7 +368,7 @@ export function WorksheetLineEditor({
   }
 
   return (
-    <Card className="space-y-3 p-4">
+    <PilotCard className="space-y-3 p-4">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-dusk-800">Tételek</h2>
         <PilotButton
@@ -422,48 +415,40 @@ export function WorksheetLineEditor({
               className={`grid gap-2 border-b pb-3 last:border-0 last:pb-0 ${COLUMNS}`}
             >
               <div className="space-y-2">
-                <Input
+                <PilotInput
                   aria-label={`${index + 1}. tétel megnevezése`}
                   value={line.description}
                   disabled={disabled}
                   placeholder="Megnevezés"
-                  onChange={(event) =>
-                    update(index, { description: event.target.value })
-                  }
+                  onChange={(value) => update(index, { description: value })}
                 />
-                <Input
+                <PilotInput
                   aria-label={`${index + 1}. tétel kiegészítő sora`}
                   value={line.detail}
                   disabled={disabled}
                   placeholder="Kiegészítő sor (pl. gépazonosító)"
-                  onChange={(event) =>
-                    update(index, { detail: event.target.value })
-                  }
+                  onChange={(value) => update(index, { detail: value })}
                 />
               </div>
               <div className="space-y-1">
                 <NarrowLabel>Mennyiség</NarrowLabel>
-                <Input
+                <PilotInput
                   aria-label={`${index + 1}. tétel mennyisége`}
                   value={line.quantity}
                   disabled={disabled}
                   inputMode="decimal"
-                  onChange={(event) =>
-                    update(index, { quantity: event.target.value })
-                  }
+                  onChange={(value) => update(index, { quantity: value })}
                 />
               </div>
               <div className="space-y-1">
                 {/* A mértékegységnek nincs jele: a mező TARTALMA maga a jel
                   (`óra`, `db`), tehát egy melléírt egység csak ismételné. */}
                 <NarrowLabel>Mértékegység</NarrowLabel>
-                <Input
+                <PilotInput
                   aria-label={`${index + 1}. tétel mértékegysége`}
                   value={line.unit}
                   disabled={disabled}
-                  onChange={(event) =>
-                    update(index, { unit: event.target.value })
-                  }
+                  onChange={(value) => update(index, { unit: value })}
                 />
                 {/*
                 A FIGYELMEZTETES A MEZO ALATT ALL, ahol az ertek, amirol szol.
@@ -522,7 +507,7 @@ export function WorksheetLineEditor({
                 miert nem irhato: a fajta donti el, nem o.
               */}
                 <NarrowLabel>Hányan</NarrowLabel>
-                <Input
+                <PilotInput
                   aria-label={`${index + 1}. tételen hányan dolgoztak`}
                   value={line.workerCount}
                   disabled={disabled || line.kind !== "LABOR"}
@@ -532,9 +517,7 @@ export function WorksheetLineEditor({
                       ? "Hányan dolgoztak ezen a tételen"
                       : "Csak munkaóra-tételnél adható meg"
                   }
-                  onChange={(event) =>
-                    update(index, { workerCount: event.target.value })
-                  }
+                  onChange={(value) => update(index, { workerCount: value })}
                 />
               </div>
               {/*
@@ -556,7 +539,7 @@ export function WorksheetLineEditor({
               Ha valaki egyszer "takarítja" a draftot -- jó szándékkal, mert a
               mező már nem látszik --, az a teszt pirosodik ki.
             */}
-              <Button
+              <PilotButton
                 type="button"
                 variant="ghost"
                 disabled={disabled}
@@ -566,7 +549,7 @@ export function WorksheetLineEditor({
                 }
               >
                 Törlés
-              </Button>
+              </PilotButton>
             </div>
           );
         })}
@@ -575,6 +558,6 @@ export function WorksheetLineEditor({
         A "Nettó összesen (előnézet)" sor ugyanabban a körben került ki: az ár
         nem látszik, tehát egy belőle számolt összeg sem.
       */}
-    </Card>
+    </PilotCard>
   );
 }

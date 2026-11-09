@@ -40,4 +40,27 @@ describe("a fizetettnek jelölés csak Számlázz.hu számlát lát", () => {
         );
       }
     });
+
+  /*
+    THE ONE QUERY THAT LOOKS PAST SZÁMLÁZZ.HU, ON PURPOSE (2026-11-05): it names where a NOT_FOUND invoice is. WHAT
+    TURNS THIS RED: it selects anything but the number and the source (an amount or a payment could become a mark),
+    or the paid-mark loader stops calling it through this one module.
+  */
+  it("the NOT_FOUND diagnosis reads only numbers and sources, and only through its own module", () => {
+    const source = readFileSync(
+      "src/integrations/gls/gls-cod-not-found-sources.ts",
+      "utf8",
+    );
+    const selects = [...source.matchAll(/select:\s*\{([^}]*)\}/g)].map((m) =>
+      m[1]!.replace(/\s/g, ""),
+    );
+    assert.deepEqual(selects, ["documentNumber:true,source:true"]);
+    assert.match(
+      readFileSync(
+        "src/integrations/gls/gls-cod-paid-marks.dry-run.ts",
+        "utf8",
+      ),
+      /invoiceSourcesOutsideTheFeed\(numbers\)/,
+    );
+  });
 });

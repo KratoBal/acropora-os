@@ -28,6 +28,7 @@ function productQueryString(query: ProductListApiQuery): string {
   if (query.search) params.set("search", query.search);
   if (query.active !== undefined) params.set("active", String(query.active));
   if (query.categoryId) params.set("categoryId", query.categoryId);
+  if (query.shipping) params.set("shipping", query.shipping);
   if (query.brandId) params.set("brandId", query.brandId);
   if (query.listedOn) params.set("listedOn", query.listedOn);
   return params.toString();
@@ -39,11 +40,23 @@ export interface ProductShippingProfileInput {
   foxpostForbidden: boolean;
   isHeavy: boolean;
   isFrozen: boolean;
+  /** Csomagautomatába nem fér (a82ed229): csak kézi, a UNAS nem ismeri. */
+  lockerUnsuitable?: boolean;
 }
+
+/** Egy jelző forrása: a UNAS-szinkroné, vagy kézzel írt (a #1654 óta). */
+export type ShippingFlagSource = "UNAS" | "MANUAL";
 
 export interface ProductShippingProfileDetail extends ProductShippingProfileInput {
   productId: string;
   updatedAt: string;
+  lockerUnsuitable?: boolean;
+  sources?: Partial<
+    Record<
+      "pickupOnly" | "foxpostForbidden" | "isHeavy" | "isFrozen",
+      ShippingFlagSource
+    >
+  >;
 }
 
 export const productApi = {
@@ -161,6 +174,25 @@ export const productApi = {
       { method: "PUT", body: JSON.stringify(input) },
     );
   },
+  /**
+   * CSOPORTOS SZÁLLÍTÁSI SZERKESZTÉS (a82ed229, 2c): csak a megadott jelzők változnak, a többi marad, ahogy a
+   * terméken áll. Egy hívásban legfeljebb 500 termék.
+   */
+  bulkShippingProfiles(
+    token: string,
+    productIds: readonly string[],
+    changes: Partial<ProductShippingProfileInput>,
+  ) {
+    return apiRequest<{
+      updated: number;
+      notFound: string[];
+      /** a nem sikerült írások; `conflict`: párhuzamos mentés ütközött, újrapróbálható */
+      failed?: { productId: string; reason: "conflict" | "error" }[];
+    }>("/products/shipping-profiles/bulk", token, {
+      method: "POST",
+      body: JSON.stringify({ productIds, changes }),
+    });
+  },
   /** A változat saját bruttó ára (T4.1-D3); csak OS-gazdájú terméknél, a szerver 409-cel utasítja el a többit. */
   setVariantPrice(
     token: string,
@@ -172,6 +204,30 @@ export const productApi = {
       `/products/${encodeURIComponent(id)}/variants/${encodeURIComponent(variantId)}/price`,
       token,
       { method: "PUT", body: JSON.stringify({ grossPrice }) },
+    );
+  },
+  /**
+   * A változat saját akciója (T4.1-D3): ár és félig nyitott ablak (`[startsAt, endsAt)`, ISO időzónával). 409, ha
+   * nincs saját ár, vagy az akció nem olcsóbb nála; 400, ha az ablak üres vagy már véget ért.
+   */
+  setVariantSale(
+    token: string,
+    id: string,
+    variantId: string,
+    sale: { grossPrice: string; startsAt: string; endsAt: string },
+  ) {
+    return apiRequest<ProductDetail>(
+      `/products/${encodeURIComponent(id)}/variants/${encodeURIComponent(variantId)}/sale`,
+      token,
+      { method: "PUT", body: JSON.stringify(sale) },
+    );
+  },
+  /** A változat saját akciójának törlése (T4.1-D3). */
+  clearVariantSale(token: string, id: string, variantId: string) {
+    return apiRequest<ProductDetail>(
+      `/products/${encodeURIComponent(id)}/variants/${encodeURIComponent(variantId)}/sale`,
+      token,
+      { method: "DELETE" },
     );
   },
   /** Egy kép alt-szövege (T4.1-D3); üres: nincs kézi alt, a kirakat a nevet adja. */

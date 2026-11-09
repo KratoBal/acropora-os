@@ -1,5 +1,8 @@
 import { QuotesModule } from "./quotes/quotes.module.js";
+import { GameModule } from "./game/game.module.js";
 import { PartnerDuplicateReportModule } from "./partner-duplicates/partner-duplicate-report.module.js";
+import { PartnerMigrationModule } from "./partner-migration/partner-migration.module.js";
+import { PartnerMergeModule } from "./partner-merge/partner-merge.module.js";
 import { PartnerOrdersModule } from "./partner-orders/partner-orders.module.js";
 import { CashRegisterModule } from "./cash-registers/cash-register.module.js";
 import {
@@ -33,6 +36,7 @@ import { AiProductSearchModule } from "./integrations/ai-product-search/ai-produ
 import { FavoritesModule } from "./favorites/favorites.module.js";
 import { NavigationCountersModule } from "./navigation/navigation-counters.module.js";
 import { WebshopMailModule } from "./integrations/webshop-mail/webshop-mail.module.js";
+import { WebshopInvoiceModule } from "./integrations/webshop-invoice/webshop-invoice.module.js";
 import { MedusaModule } from "./integrations/medusa/medusa.module.js";
 import { NavOnlineInvoiceModule } from "./integrations/nav/nav-online-invoice.module.js";
 import { PostalCodeModule } from "./integrations/postal-code/postal-code.module.js";
@@ -46,6 +50,8 @@ import { SimplePaySettlementModule } from "./integrations/simplepay/simplepay-se
 import { InventoryModule } from "./inventory/inventory.module.js";
 import { AssetCategoriesModule } from "./asset-categories/asset-categories.module.js";
 import { AssetFunctionsModule } from "./asset-functions/asset-functions.module.js";
+import { RentalEquipmentModule } from "./rental-equipment/rental-equipment.module.js";
+import { RentalsModule } from "./rentals/rentals.module.js";
 import { UnitsModule } from "./units/units.module.js";
 import { UnasOrderSyncModule } from "./orders/unas-order-sync/unas-order-sync.module.js";
 import { CarrierShipmentModule } from "./orders/carrier-shipment/carrier-shipment.module.js";
@@ -73,19 +79,26 @@ import { SearchModule } from "./search/search.module.js";
 import { KnowledgeBaseModule } from "./knowledge-base/knowledge-base.module.js";
 
 import { ServiceDraftsModule } from "./service-drafts/service-drafts.module.js";
+import { LivestockArrivalsModule } from "./livestock-arrivals/livestock-arrivals.module.js";
 import { MortalityModule } from "./mortality/mortality.module.js";
 
 @Module({
   imports: [
     QuotesModule,
+    GameModule,
     PartnerDuplicateReportModule,
+    PartnerMigrationModule,
+    PartnerMergeModule,
     PartnerOrdersModule,
     AssistantModule,
     AssetCategoriesModule,
     AssetFunctionsModule,
+    RentalEquipmentModule,
+    RentalsModule,
     UnitsModule,
     AquariumsModule,
     MortalityModule,
+    LivestockArrivalsModule,
     AuthModule,
     BrandsModule,
     CatalogActionsModule,
@@ -105,6 +118,7 @@ import { MortalityModule } from "./mortality/mortality.module.js";
     NavigationCountersModule,
     FavoritesModule,
     WebshopMailModule,
+    WebshopInvoiceModule,
     AiChatModule,
     MedusaModule,
     NavOnlineInvoiceModule,

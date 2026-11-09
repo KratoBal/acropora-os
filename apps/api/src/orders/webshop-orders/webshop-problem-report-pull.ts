@@ -88,7 +88,7 @@ export interface ProblemPullReport {
   failed: { reportId: string; error: string }[];
 }
 
-const errorCode = (error: unknown): string => {
+export const errorCode = (error: unknown): string => {
   if (error && typeof error === "object") {
     const code = (error as { code?: unknown }).code;
     if (typeof code === "string" && /^[A-Z0-9_]+$/.test(code)) return code;

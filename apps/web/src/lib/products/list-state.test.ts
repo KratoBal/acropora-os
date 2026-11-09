@@ -23,6 +23,7 @@ describe("product list URL state", () => {
       active: "active",
       categoryId: "cat",
       brandId: "brand",
+      shipping: "",
       page: 1,
       pageSize: 25,
     });
@@ -39,6 +40,25 @@ describe("product list URL state", () => {
         pageSize: 50,
       }),
       "q=reef&active=false&page=2&pageSize=50",
+    );
+  });
+
+  it("a82ed229: the shipping filter goes in the URL as szallitas, an unknown value is dropped", () => {
+    assert.equal(
+      parseProductListState(new URLSearchParams("szallitas=lockerUnsuitable"))
+        .shipping,
+      "lockerUnsuitable",
+    );
+    assert.equal(
+      parseProductListState(new URLSearchParams("szallitas=semmi")).shipping,
+      "",
+    );
+    assert.equal(
+      serializeProductListState({
+        ...DEFAULT_PRODUCT_LIST_STATE,
+        shipping: "none",
+      }),
+      "szallitas=none",
     );
   });
 

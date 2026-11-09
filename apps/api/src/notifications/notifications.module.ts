@@ -8,6 +8,7 @@ import { NotificationLogRepository } from "./notification-log.repository.js";
 import { NotificationsService } from "./notifications.service.js";
 import { AquariumMeasurementMailService } from "./mail/aquarium-measurement-mail.service.js";
 import { GmailMailSender } from "./mail/gmail-mail.sender.js";
+import { GmailSentMailbox } from "./mail/gmail-sent-mailbox.js";
 import { HandoverMailRepository } from "./mail/handover-mail.repository.js";
 import { HandoverMailService } from "./mail/handover-mail.service.js";
 import { MaintenanceMailRepository } from "./mail/maintenance-mail.repository.js";
@@ -52,6 +53,8 @@ import { TicketMailService } from "./mail/ticket-mail.service.js";
       `mail-sender-wiring.spec.ts` fajlban.
     */
     GmailMailSender,
+    // the sender's own sent mailbox, for the game's erasure (card jatek-level-torles): it cannot send
+    GmailSentMailbox,
     /*
       A KEP-FELOLDO BUROK (2026-09-28) A KET MASIK KOZOTT ALL: az atiranyito
       ot kapja belso kuldokent, o a Gmailt. Onallo szolgaltato, mert az
@@ -87,6 +90,10 @@ import { TicketMailService } from "./mail/ticket-mail.service.js";
     MaintenanceMailService,
     AquariumMeasurementMailService,
     NotificationLogRepository,
+    // a nyereményjáték a nyeremény képét ugyanebbe a kép-tárolóba tölti (kártya 31445d0f)
+    MailImageService,
+    // a nyereményjáték a kiment megerősítő levelek elküldött példányait törli (kártya jatek-level-torles)
+    GmailSentMailbox,
   ],
 })
 export class NotificationsModule {}

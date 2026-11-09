@@ -216,6 +216,106 @@ describe("applyPaidMarks", () => {
     );
   });
 
+  it("allowPartial (the manual entry): a partly paid invoice takes a mark up to its open amount, never more", async () => {
+    // 00485: gross 27600, 100 already paid, so 27500 is open
+    const { store, events } = fakeStore({
+      invoices: { "ACRW-2026/00485": { paidAmount: "100" } },
+    });
+    const { client } = fakeClient(() => ok(), events);
+    const run = (amount: string) =>
+      applyPaidMarks({
+        source: "MANUAL",
+        marks: [{ ...MARKS[2]!, amount, sourceRef: `req-${amount}` }],
+        approved: new Set(["ACRW-2026/00485"]),
+        agentKey: "k",
+        client,
+        store,
+        allowPartial: true,
+      });
+    assert.deepEqual(
+      (await run("27503")).map((l) => l.outcome),
+      [{ kind: "OVER_OPEN", open: "27500.00" }],
+      "more than the open amount (beyond the 2 Ft tolerance)",
+    );
+    assert.deepEqual(events, [], "no log, no call for an over-open mark");
+    assert.deepEqual(
+      (await run("27500")).map((l) => l.outcome),
+      [{ kind: "WRITTEN", outstanding: 0 }],
+    );
+    // the automatic sources keep the old rule: a partly paid invoice is skipped
+    const auto = await applyPaidMarks({
+      source: "GLS_COD",
+      marks: [MARKS[2]!],
+      approved: new Set(["ACRW-2026/00485"]),
+      agentKey: "k",
+      client,
+      store: fakeStore({
+        invoices: { "ACRW-2026/00485": { paidAmount: "100" } },
+      }).store,
+    });
+    assert.deepEqual(
+      auto.map((l) => l.outcome),
+      [{ kind: "NOT_UNPAID", state: "PARTIAL" }],
+    );
+  });
+
+  it("the manual entry counts our own marks since the feed row, and stops on a pending one (barracuda, #2168)", async () => {
+    // 00479: gross 27450, the feed says unpaid; a GLS mark of 27450 was written after the feed row
+    const fake = fakeStore();
+    const { client } = fakeClient(() => ok(), fake.events);
+    const manual = (own: { writtenSince: string; uncertain: number }) =>
+      applyPaidMarks({
+        source: "MANUAL",
+        marks: [{ ...MARKS[0]!, sourceRef: "req-2" }],
+        approved: new Set(["ACRW-2026/00479"]),
+        agentKey: "k",
+        client,
+        store: { ...fake.store, ownMarks: async () => own },
+        allowPartial: true,
+      });
+    assert.deepEqual(
+      (await manual({ writtenSince: "27450", uncertain: 0 })).map(
+        (l) => l.outcome,
+      ),
+      [{ kind: "OVER_OPEN", open: "0.00" }],
+    );
+    assert.deepEqual(
+      (await manual({ writtenSince: "0", uncertain: 1 })).map((l) => l.outcome),
+      [{ kind: "UNCERTAIN_BEFORE", state: "PENDING_ON_INVOICE" }],
+    );
+    assert.deepEqual(fake.events, [], "no log row, no call");
+  });
+
+  it("the measuring and the PLANNED row run inside the invoice lock, the call after it", async () => {
+    const fake = fakeStore();
+    const order: string[] = [];
+    const { client } = fakeClient(() => {
+      order.push("call");
+      return ok();
+    }, fake.events);
+    await applyPaidMarks({
+      source: "MANUAL",
+      marks: [{ ...MARKS[0]!, sourceRef: "req-3" }],
+      approved: new Set(["ACRW-2026/00479"]),
+      agentKey: "k",
+      client,
+      store: {
+        ...fake.store,
+        async withInvoiceLock(number, run) {
+          order.push(`lock ${number}`);
+          const result = await run(fake.store);
+          order.push("unlock");
+          return result;
+        },
+      },
+      allowPartial: true,
+    });
+    assert.deepEqual(order, ["lock ACRW-2026/00479", "unlock", "call"]);
+    assert.deepEqual(fake.events.slice(0, 1), [
+      "create ACRW-2026/00479 PLANNED",
+    ]);
+  });
+
   it("a second run: WRITTEN and ALREADY_PAID are done, UNKNOWN and PLANNED wait for a person, FAILED is retried", async () => {
     const { store, events } = fakeStore({
       rows: {

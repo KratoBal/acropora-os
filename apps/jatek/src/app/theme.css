@@ -1,0 +1,14 @@
+/*
+  A JATEK KINEZETE EGY HELYEN (theme.css + jatek.css). Luca designja (2026-11-05, exchange/jatek/design-2026-11-05/),
+  atultetve: a szinek itt, az osztalyok es a kiosztas a jatek.css-ben. A kinezet CSERELHETO: a komponensek csak a
+  `jatek-*` osztalyneveket es ezeket a valtozokat ismerik.
+*/
+:root {
+  --jatek-bg: #070d13;
+  --jatek-panel: #0d1821;
+  --jatek-border: #21323e;
+  --jatek-text: #f0f4f6;
+  --jatek-muted: #a9bbc9;
+  --jatek-orange: #ff803e;
+  --jatek-blue: #62c7f7;
+}

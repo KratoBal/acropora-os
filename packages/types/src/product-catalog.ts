@@ -128,6 +128,47 @@ export interface ProductChannelListingSummary {
   backorderAllowed: boolean;
 }
 
+/**
+ * THE SHIPPING FLAGS OF A PRODUCT (card a82ed229): the four the UNAS sync fills, and the parcel-locker one that is
+ * only set by hand. One list, so the product list's column, its filter and the API agree on the keys and the order.
+ */
+export const SHIPPING_FLAG_KEYS = [
+  "pickupOnly",
+  "foxpostForbidden",
+  "isHeavy",
+  "isFrozen",
+  "lockerUnsuitable",
+] as const;
+export type ShippingFlagKey = (typeof SHIPPING_FLAG_KEYS)[number];
+
+/** Short labels for a list cell and a filter option. */
+export const SHIPPING_FLAG_SHORT_LABELS: Readonly<
+  Record<ShippingFlagKey, string>
+> = {
+  pickupOnly: "Csak bolt",
+  foxpostForbidden: "Foxpost tiltva",
+  isHeavy: "Nehéz",
+  isFrozen: "Fagyasztott",
+  lockerUnsuitable: "Automatába nem fér",
+};
+
+/**
+ * The list's shipping filter: one flag set; nobody has looked at the product yet; or a flag set by hand that differs
+ * from what the product's UNAS data says (`unasDiff`, a82ed229 2d).
+ */
+export const SHIPPING_FILTER_VALUES = [
+  ...SHIPPING_FLAG_KEYS,
+  "none",
+  "unasDiff",
+] as const;
+export type ShippingFilterValue = (typeof SHIPPING_FILTER_VALUES)[number];
+
+export function isShippingFilterValue(
+  value: string | null | undefined,
+): value is ShippingFilterValue {
+  return (SHIPPING_FILTER_VALUES as readonly string[]).includes(value ?? "");
+}
+
 export interface ProductListItem {
   id: string;
   name: string;
@@ -140,6 +181,11 @@ export interface ProductListItem {
   primaryCategory: ProductCategorySummary | null;
   primarySku: string | null;
   thumbnail: ProductImageSummary | null;
+  /**
+   * The shipping flags set on the product (a82ed229); `null` when nobody has looked at it yet (no profile), which is
+   * not the same as an empty list (looked at, none applies). Optional: an older server does not send it.
+   */
+  shippingFlags?: ShippingFlagKey[] | null;
   unasListing: ProductChannelListingSummary | null;
   /**
    * UNAS-mirrored list gross price. Null for a purely local product, which has
@@ -256,6 +302,8 @@ export interface ProductListApiQuery {
   active?: boolean;
   categoryId?: string;
   brandId?: string;
+  /** one shipping flag set, or `none`: never looked at (a82ed229) */
+  shipping?: ShippingFilterValue;
   /**
    * Only products listed on this channel.
    *

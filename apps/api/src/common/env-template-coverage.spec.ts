@@ -161,6 +161,28 @@ const SZANDEKOS_KIVETEL = new Set<string>([
    * listan allna, adossagnak latszana -- holott nincs mit potolni.
    */
   "RELEASE_EVIDENCE_RESULT_DETAIL_JSON",
+  /**
+   * NEM A FUTO ALKALMAZAS OLVASSA, hanem a `packages/database/prisma/stage-anonymize.ts` parancs, amit a stage
+   * uzemeltetoje a HOSTON futtat, egy ideiglenes adatbazison (docs/stage-anonymization.md). A ket kulcs es a
+   * jelszo-lenyomat egyetlen futasra keszul, es SEMMILYEN sablonba nem valo: egy .env.example vagy
+   * .env.production.example fajlban egy kulcs helye tartosnak latszana, es ez a parancs azert vesz mindent
+   * kornyezetbol (nem kapcsolobol), hogy semmi ne maradjon a shell elozmenyeiben vagy a tarban. A nev sem
+   * adossag: nincs mit potolni.
+   */
+  "STAGE_ANON_PSEUDONYM_KEY",
+  "STAGE_ANON_SCAN_KEY",
+  "STAGE_ANON_PASSWORD_HASH",
+  "STAGE_ANON_TRIAL_COMMAND",
+  // A jelszo-lenyomat segedparancs olvassa (prisma/stage-hash-password.ts), ugyanazert, mint a tobbit: host-parancs, a
+  // jelszo sablonba nem valo.
+  "STAGE_ANON_PASSWORD",
+  // A mukodesi proba parancsa olvassa (prisma/stage-trial.ts es a stage-anonymize.ts atadasa): a sima jelszo es az API belepesi
+  // pontja. Host-parancs, a jelszo sablonba nem valo. A PATH es a HOME operacios rendszer valtozo, nem beallitas: a proba-parancs
+  // csak ezt a kis keszletet kapja, ezert az atadas neven nevezi oket.
+  "STAGE_TRIAL_PASSWORD",
+  "STAGE_TRIAL_API_MAIN",
+  "PATH",
+  "HOME",
 ]);
 
 /**

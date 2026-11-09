@@ -17,9 +17,12 @@ import {
 } from "@acropora/ui";
 import {
   hasPermission,
+  PARTNER_ORDER_BACKLOG_DAYS_MAX,
+  PARTNER_ORDER_CHAIN_FILTERS,
   PARTNER_ORDER_STATUSES,
   PERMISSIONS,
   type PartnerOrderCandidateDto,
+  type PartnerOrderChainFilter,
   type PartnerOrderListItemDto,
   type PartnerOrderListResponse,
 } from "@acropora/types";
@@ -37,6 +40,8 @@ import {
 } from "@/components/quotes/quote-format";
 
 import {
+  PARTNER_ORDER_CHAIN_FILTER_LABEL,
+  PARTNER_ORDER_DENSE_KEY,
   PARTNER_ORDER_LIST_STEPS,
   PARTNER_ORDER_STATUS,
   PARTNER_ORDERS_PATH,
@@ -64,6 +69,21 @@ export function PartnerOrderListPage() {
   const page = urlPage(params);
   const appliedSearch = params.get("q") ?? "";
   const statusFilter = params.get("status") ?? "";
+  const stageParam = params.get("stage") ?? "";
+  // only a stage the API knows goes on: a stale or hand-typed value in the address is no filter
+  const stageFilter = (
+    PARTNER_ORDER_CHAIN_FILTERS as readonly string[]
+  ).includes(stageParam)
+    ? (stageParam as PartnerOrderChainFilter)
+    : "";
+  const openOnly = params.get("open") === "1";
+  const backlogOnly = params.get("backlog") === "1";
+  // the days setting (S4b): the saved value, and what is typed in the field
+  const [backlogDays, setBacklogDays] = useState<number | null>(null);
+  const [daysText, setDaysText] = useState("");
+  const [savingDays, setSavingDays] = useState(false);
+  const [daysError, setDaysError] = useState<string | null>(null);
+  const [dense, setDense] = useState(false);
   const [search, setSearch] = useState(appliedSearch);
   const [data, setData] = useState<PartnerOrderListResponse | null>(null);
   const [candidates, setCandidates] = useState<PartnerOrderCandidateDto[]>([]);
@@ -84,14 +104,74 @@ export function PartnerOrderListPage() {
     return () => clearTimeout(timer);
   }, [appliedSearch, search, update]);
 
+  // the remembered density; storage can be missing or throw (private window, blocked site data), the page works without
+  useEffect(() => {
+    try {
+      setDense(window.localStorage.getItem(PARTNER_ORDER_DENSE_KEY) === "1");
+    } catch {
+      // no storage: the default density stays
+    }
+  }, []);
+
+  const toggleDense = () => {
+    setDense((current) => {
+      const next = !current;
+      try {
+        window.localStorage.setItem(PARTNER_ORDER_DENSE_KEY, next ? "1" : "0");
+      } catch {
+        // not remembered, still applied now
+      }
+      return next;
+    });
+  };
+
   const query = useMemo(() => {
     const value = new URLSearchParams();
     value.set("page", String(page));
     value.set("pageSize", String(PAGE_SIZE));
     if (appliedSearch) value.set("q", appliedSearch);
     if (statusFilter) value.set("status", statusFilter);
+    if (stageFilter) value.set("stage", stageFilter);
+    if (openOnly) value.set("open", "1");
+    if (backlogOnly) value.set("backlog", "1");
     return value;
-  }, [appliedSearch, page, statusFilter]);
+  }, [appliedSearch, backlogOnly, openOnly, page, stageFilter, statusFilter]);
+
+  useEffect(() => {
+    if (!canView) return;
+    const controller = new AbortController();
+    partnerOrdersApi
+      .settings(token, controller.signal)
+      .then((settings) => {
+        setBacklogDays(settings.backlogDays);
+        setDaysText(String(settings.backlogDays));
+      })
+      // the list works without the setting: a failed read leaves the field empty and the badge rule is the server's
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [canView, token]);
+
+  const daysValid =
+    /^\d{1,3}$/.test(daysText.trim()) &&
+    Number(daysText) <= PARTNER_ORDER_BACKLOG_DAYS_MAX;
+  const saveDays = async () => {
+    if (!daysValid) return;
+    setSavingDays(true);
+    setDaysError(null);
+    try {
+      const saved = await partnerOrdersApi.saveSettings(
+        token,
+        Number(daysText),
+      );
+      setBacklogDays(saved.backlogDays);
+      setDaysText(String(saved.backlogDays));
+      await load();
+    } catch (cause) {
+      setDaysError(errorText(cause, "A beállítás nem menthető."));
+    } finally {
+      setSavingDays(false);
+    }
+  };
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -137,7 +217,7 @@ export function PartnerOrderListPage() {
     {
       id: "order",
       header: "Megrendelés",
-      width: "28%",
+      width: "24%",
       cell: (row) => (
         <div className="min-w-0">
           <p className="font-semibold text-pilot-grey-900">{row.orderNumber}</p>
@@ -148,13 +228,13 @@ export function PartnerOrderListPage() {
     {
       id: "partner",
       header: "Partner",
-      width: "20%",
+      width: "17%",
       cell: (row) => row.customerName ?? "—",
     },
     {
       id: "total",
       header: "Nettó összeg",
-      width: "14%",
+      width: "12%",
       align: "right",
       cell: (row) => (
         <span className="font-semibold">
@@ -180,7 +260,7 @@ export function PartnerOrderListPage() {
     {
       id: "chain",
       header: "Hol tart",
-      width: "26%",
+      width: "23%",
       cell: (row) => (
         <span className="flex flex-wrap gap-1">
           {PARTNER_ORDER_LIST_STEPS.map(({ step, label }) => (
@@ -193,6 +273,28 @@ export function PartnerOrderListPage() {
           ))}
         </span>
       ),
+    },
+    {
+      id: "open",
+      header: "Hátralék",
+      width: "12%",
+      cell: (row) =>
+        row.status === "CANCELLED" || row.totalLines === 0 ? (
+          "—"
+        ) : row.openLines === 0 ? (
+          <PilotBadge variant="success">Teljesítve</PilotBadge>
+        ) : (
+          <span className="flex flex-wrap gap-1">
+            <PilotBadge variant="amber">
+              {`${row.openLines} / ${row.totalLines} tétel`}
+            </PilotBadge>
+            {row.backlog ? (
+              <PilotBadge variant="danger">
+                {`Hátralékos · ${row.idleDays} napja`}
+              </PilotBadge>
+            ) : null}
+          </span>
+        ),
     },
   ];
 
@@ -281,6 +383,87 @@ export function PartnerOrderListPage() {
             </option>
           ))}
         </PilotSelect>
+        <PilotSelect
+          chevron
+          aria-label="Hol tart"
+          value={stageFilter}
+          onChange={(value) => update({ stage: value || null, page: null })}
+        >
+          <option value="">Bárhol a láncban</option>
+          {PARTNER_ORDER_CHAIN_FILTERS.map((stage) => (
+            <option key={stage} value={stage}>
+              {PARTNER_ORDER_CHAIN_FILTER_LABEL[stage]}
+            </option>
+          ))}
+        </PilotSelect>
+        <label className="flex items-center gap-1.5 text-sm text-pilot-grey-700">
+          <input
+            type="checkbox"
+            checked={openOnly}
+            onChange={(event) =>
+              update({ open: event.target.checked ? "1" : null, page: null })
+            }
+          />
+          Csak teljesítetlen tétellel
+        </label>
+        <label className="flex items-center gap-1.5 text-sm text-pilot-grey-700">
+          <input
+            type="checkbox"
+            checked={backlogOnly}
+            onChange={(event) =>
+              update({
+                backlog: event.target.checked ? "1" : null,
+                page: null,
+              })
+            }
+          />
+          Csak hátralékos
+        </label>
+        <PilotButton
+          variant="secondary"
+          aria-pressed={dense}
+          onClick={toggleDense}
+        >
+          {dense ? "Tágas sorok" : "Sűrű sorok"}
+        </PilotButton>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 text-sm text-pilot-grey-600">
+        <span>
+          Hátralékos: nyitott megrendelés, teljesítetlen tétellel, amelyen ennyi
+          napja nincs mozgás:
+        </span>
+        <div className="w-20">
+          <PilotInput
+            aria-label="Hátralék napjai"
+            inputMode="numeric"
+            value={daysText}
+            disabled={!canManage || backlogDays === null}
+            onChange={setDaysText}
+          />
+        </div>
+        <span>nap</span>
+        {canManage ? (
+          <PilotButton
+            variant="secondary"
+            disabled={
+              !daysValid || savingDays || Number(daysText) === backlogDays
+            }
+            onClick={() => void saveDays()}
+          >
+            {savingDays ? "Mentés…" : "Mentés"}
+          </PilotButton>
+        ) : null}
+        {!daysValid && daysText !== "" ? (
+          <span role="alert" className="text-pilot-red-700">
+            0 és {PARTNER_ORDER_BACKLOG_DAYS_MAX} közötti egész szám kell.
+          </span>
+        ) : null}
+        {daysError ? (
+          <span role="alert" className="text-pilot-red-700">
+            {daysError}
+          </span>
+        ) : null}
       </div>
 
       {error ? (
@@ -298,7 +481,11 @@ export function PartnerOrderListPage() {
         <Skeleton className="h-64 w-full" />
       ) : data && data.items.length === 0 ? (
         <p className="rounded-lg border border-pilot-grey-200 bg-white p-6 text-sm text-pilot-grey-600">
-          {appliedSearch || statusFilter
+          {appliedSearch ||
+          statusFilter ||
+          stageFilter ||
+          openOnly ||
+          backlogOnly
             ? "Nincs a szűrésnek megfelelő megrendelés."
             : "Még nincs megrendelés. Az elfogadott ajánlatokból itt hozhatod létre."}
         </p>
@@ -308,6 +495,7 @@ export function PartnerOrderListPage() {
             columns={columns}
             rows={data.items}
             rowKey={(row) => row.id}
+            dense={dense}
             rowLabel={(row) => `${row.orderNumber} · ${row.title}`}
             onRowActivate={(row) =>
               router.push(`${PARTNER_ORDERS_PATH}/${row.id}`)

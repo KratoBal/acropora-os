@@ -1,3 +1,8 @@
+import {
+  isShippingFilterValue,
+  type ShippingFilterValue,
+} from "@acropora/types";
+
 export const PRODUCT_PAGE_SIZES = [25, 50, 100] as const;
 export type ProductActiveFilter = "all" | "active" | "archived";
 
@@ -6,6 +11,8 @@ export interface ProductListUrlState {
   active: ProductActiveFilter;
   categoryId: string;
   brandId: string;
+  /** a82ed229: one shipping flag, or never looked at */
+  shipping: ShippingFilterValue | "";
   page: number;
   pageSize: (typeof PRODUCT_PAGE_SIZES)[number];
 }
@@ -15,6 +22,7 @@ export const DEFAULT_PRODUCT_LIST_STATE: ProductListUrlState = {
   active: "all",
   categoryId: "",
   brandId: "",
+  shipping: "",
   page: 1,
   pageSize: 25,
 };
@@ -35,6 +43,9 @@ export function parseProductListState(
       active === "true" ? "active" : active === "false" ? "archived" : "all",
     categoryId: params.get("categoryId") ?? "",
     brandId: params.get("brandId") ?? "",
+    shipping: isShippingFilterValue(params.get("szallitas"))
+      ? (params.get("szallitas") as ShippingFilterValue)
+      : "",
     page: positiveInteger(params.get("page"), 1),
     pageSize: PRODUCT_PAGE_SIZES.includes(
       size as (typeof PRODUCT_PAGE_SIZES)[number],
@@ -51,6 +62,7 @@ export function serializeProductListState(state: ProductListUrlState): string {
   if (state.active === "archived") params.set("active", "false");
   if (state.categoryId) params.set("categoryId", state.categoryId);
   if (state.brandId) params.set("brandId", state.brandId);
+  if (state.shipping) params.set("szallitas", state.shipping);
   if (state.page > 1) params.set("page", String(state.page));
   if (state.pageSize !== 25) params.set("pageSize", String(state.pageSize));
   return params.toString();

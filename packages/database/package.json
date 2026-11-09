@@ -7,6 +7,10 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./dist/index.js"
+    },
+    "./stage-anonymization": {
+      "types": "./src/stage-anonymization/index.ts",
+      "default": "./dist/stage-anonymization/index.js"
     }
   },
   "dependencies": {
@@ -26,6 +30,9 @@
     "prisma:studio": "prisma studio",
     "prisma:seed": "prisma generate && tsx prisma/seed.ts",
     "release-evidence:record": "prisma generate && tsx prisma/record-release-evidence.ts",
+    "stage:anonymize": "prisma generate && tsx prisma/stage-anonymize.ts",
+    "stage:hash-password": "tsx prisma/stage-hash-password.ts",
+    "stage:trial": "tsx prisma/stage-trial.ts",
     "test": "rm -rf test-dist && tsc -p tsconfig.test.json && tests=$(find test-dist -name '*.test.js') && { [ -n \"$tests\" ] || { echo 'Nem talaltam teszt fajlt - nem jelentek sikert.' >&2; exit 1; }; } && node --test $tests",
     "clean": "rm -rf dist test-dist src/generated"
   },

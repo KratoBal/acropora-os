@@ -11,6 +11,7 @@ import type {
 } from "@acropora/types";
 
 import { withUniqueCode } from "../common/unique-code.util.js";
+import { customerSearchPattern } from "../customers/customers.repository.js";
 import { retryOnSerializationConflict } from "../common/transaction-retry.util.js";
 import { isPrismaUniqueConstraintViolation } from "../common/prisma-error.util.js";
 import { resolveAquariumVolume } from "./aquarium-volume.js";
@@ -188,6 +189,29 @@ function reefClubMark(row: {
  */
 const INTERNAL_ROWS: Prisma.AquariumWhereInput = { ownerAccountId: null };
 
+/**
+ * AZ AKVÁRIUM VEVŐ-VÁLASZTÓJÁNAK SZŰRŐJE (tiszta függvény, hogy külön mérhető legyen): aktív ügyfél, és ha a névkeresés
+ * azonosítókat adott (`matchingCustomerIds`), csak ezek. NINCS benne `partner` kulcs: a partner-kötést viselő sor (az egyesített
+ * partner) is ajánlható, lásd `searchSelectableCustomers`. A névkeresés maga nem itt van: az ékezet- és kisbetű-független
+ * egyezést az adatbázis `unaccent`-je adja (`matchingCustomerIds`), a Prisma `contains` az ékezetre nem az.
+ */
+export function selectableCustomersWhere(
+  matchingCustomerIds?: readonly string[] | null,
+): Prisma.CustomerWhereInput {
+  return {
+    isActive: true,
+    ...(matchingCustomerIds ? { id: { in: [...matchingCustomerIds] } } : {}),
+  };
+}
+
+/**
+ * A VÁLASZTÓ LEGFELJEBB ENNYI SORT MUTAT, ÉS AZ AZONOSÍTÓ-LEKÉRDEZÉS IS ENNYIT HOZ (barracuda, #2239 review): a rövid keresés („a”,
+ * „kft”) a teljes vevőtörzs nagy részére illik, és egy korlátlan azonosító-lista egy `in`-be menne, ahol a Postgres kötési
+ * korlátja (32767) élesben már megállított egy lekérdezést (#2019). A két lekérdezés ugyanazt a rendezést használja, tehát a
+ * korlátolt azonosítók pontosan azok, amelyeket a lista úgyis mutatna.
+ */
+export const SELECTABLE_CUSTOMER_LIMIT = 20;
+
 @Injectable()
 export class AquariumsRepository {
   /**
@@ -278,10 +302,15 @@ export class AquariumsRepository {
    *
    * Lásd `AquariumSelectableCustomer` fejlécét (`@acropora/types`): ez a
    * lekérdezés `aquariums.view` alatt fut, mert a mobil `SERVICE` szerepkör
-   * nem éri el a `/customers`-t. Legfeljebb 20 találat, csak aktív, nem
-   * partner-tulajdonú ügyfél (ugyanaz a szűrés, mint a `customers.repository`
-   * `partner: null` során -- egy szerviz partner saját munkalap-vevő sora nem
-   * akvárium-tulajdonos).
+   * nem éri el a `/customers`-t. Legfeljebb 20 találat, csak aktív ügyfél.
+   *
+   * A PARTNER-KÖTÉST VISELŐ SOR IS AJÁNLHATÓ (2026-11-05, az árajánlat választó
+   * élő hibája után). Ez a lekérdezés eredetileg `partner: null`-t kért: egy
+   * szerviz partner saját munkalap-vevő sora nem akvárium-tulajdonos. A
+   * partnertörzs egyesítése óta (egy partnertörzs, `#2182`) viszont egy partner
+   * és a vevője EGY sor, amely a partner-kötést viseli: ezzel a szűréssel az
+   * egyesített partner (például egy állatkert, amelynek akváriumai vannak) nem
+   * volt kiválasztható, és az akvárium felvitelnél nem jött elő.
    *
    * A VÁROS A LEGKÖZELEBBI ALAPÉRTELMEZETT CÍMBŐL jön (`isDefault` első,
    * aztán a legrégebbi), egyetlen lekérdezésben -- nem a teljes cím-formázás
@@ -291,14 +320,11 @@ export class AquariumsRepository {
   async searchSelectableCustomers(
     search?: string,
   ): Promise<AquariumSelectableCustomerListResponse> {
+    const matchingIds = search?.trim()
+      ? await this.matchingCustomerIdsByName(search)
+      : null;
     const rows = await prisma.customer.findMany({
-      where: {
-        partner: null,
-        isActive: true,
-        ...(search
-          ? { displayName: { contains: search, mode: "insensitive" } }
-          : {}),
-      },
+      where: selectableCustomersWhere(matchingIds),
       select: {
         id: true,
         displayName: true,
@@ -309,7 +335,7 @@ export class AquariumsRepository {
         },
       },
       orderBy: { displayName: "asc" },
-      take: 20,
+      take: SELECTABLE_CUSTOMER_LIMIT,
     });
     return {
       items: rows.map((row) => ({
@@ -318,6 +344,23 @@ export class AquariumsRepository {
         city: row.addresses[0]?.city,
       })),
     };
+  }
+
+  /**
+   * A NÉVRE EGYEZŐ AKTÍV ÜGYFELEK AZONOSÍTÓI, ékezet- és kisbetű-függetlenül (`unaccent` mindkét oldalon, mint a vevő-lista
+   * keresése, `customers.repository.ts` `searchCustomerIds`): "Fovarosi" megtalálja a "Fővárosi" nevet. A szöveg `%` és `_`
+   * jelei szó szerint értendők (`customerSearchPattern`).
+   */
+  private async matchingCustomerIdsByName(search: string): Promise<string[]> {
+    const pattern = customerSearchPattern(search);
+    const rows = await prisma.$queryRaw<{ id: string }[]>`
+      SELECT "id" FROM "Customer"
+      WHERE "isActive" = true
+        AND unaccent("displayName") ILIKE unaccent(${pattern}::text)
+      ORDER BY "displayName" ASC, "id" ASC
+      LIMIT ${SELECTABLE_CUSTOMER_LIMIT}
+    `;
+    return rows.map((row) => row.id);
   }
 
   /**

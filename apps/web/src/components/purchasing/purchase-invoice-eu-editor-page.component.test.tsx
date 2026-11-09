@@ -236,7 +236,7 @@ describe("PurchaseInvoiceEuEditorPage NAV bevételezés", () => {
       "placeholder",
       "A számlaszám megadása kötelező.",
     );
-    expect(invoiceNumber).toHaveClass("border-rose-500");
+    expect(invoiceNumber).toHaveClass("ring-red-400");
     expect(
       screen.getByText("A számlaszám megadása kötelező."),
     ).toBeInTheDocument();
@@ -939,6 +939,78 @@ describe("PurchaseInvoiceEuEditorPage beszállítói számla betöltése", () =>
     expect(screen.getAllByText("Nincs terméktörzsben")).toHaveLength(2);
   });
 
+  // What must fail (Balázs, 2026-11-05 20:37, card 1ff7c758): the product search opening at the top of the list, so
+  // the user had to scroll up from the line being linked; a second search box left up top while one is open below;
+  // the search not focused; the panel staying open after "Mégse" or after the link.
+  describe("linking a line to an existing product", () => {
+    const openLink = async () => {
+      render(createElement(PurchaseInvoiceEuEditorPage));
+      upload();
+      await screen.findByText("Frachtkosten (anteilig)");
+      fireEvent.click(
+        screen.getByRole("button", { name: "Kapcsolás meglévő termékhez" }),
+      );
+      return screen.getByLabelText("Termék keresése");
+    };
+
+    it("opens the search inside the line being linked, focused, and shows no second search box", async () => {
+      const search = await openLink();
+      const lineBox = search.closest("[data-line-state]") as HTMLElement | null;
+      expect(lineBox).not.toBeNull();
+      expect(
+        within(lineBox!).getByText("Dupla Marin Coral Plugs 10 St., SB"),
+      ).toBeInTheDocument();
+      expect(screen.getByTestId("line-product-search")).toContainElement(
+        search,
+      );
+      expect(search).toHaveFocus();
+      expect(screen.getAllByLabelText("Termék keresése")).toHaveLength(1);
+      // the manual item stays in the top block
+      expect(
+        screen.getByRole("button", { name: "Kézi tétel felvétele" }),
+      ).toBeInTheDocument();
+    });
+
+    it("closes with Mégse, and the top search comes back", async () => {
+      await openLink();
+      fireEvent.click(
+        within(screen.getByTestId("line-product-search")).getByRole("button", {
+          name: "Mégse",
+        }),
+      );
+      expect(
+        screen.queryByTestId("line-product-search"),
+      ).not.toBeInTheDocument();
+      const top = screen.getByLabelText("Termék keresése");
+      expect(top.closest("[data-line-state]")).toBeNull();
+    });
+
+    it("links the chosen product to that line and closes the panel", async () => {
+      purchasingApiMock.searchProducts.mockResolvedValue([
+        {
+          variantId: "variant-1",
+          sku: "SKU-1",
+          productName: "Kapcsolt termék",
+          unit: "db",
+          currentStock: 3,
+          origin: "LOCAL",
+        },
+      ]);
+      const search = await openLink();
+      const lineBox = search.closest("[data-line-state]") as HTMLElement;
+      fireEvent.click(await within(lineBox).findByText("Kapcsolt termék"));
+      await waitFor(() =>
+        expect(
+          screen.queryByTestId("line-product-search"),
+        ).not.toBeInTheDocument(),
+      );
+      expect(screen.getByText("Kapcsolt termék")).toBeInTheDocument();
+      expect(
+        screen.getByLabelText("Termék keresése").closest("[data-line-state]"),
+      ).toBeNull();
+    });
+  });
+
   it("marks a PDF-read invoice as one to check, with its warnings", async () => {
     purchasingApiMock.importSupplierInvoice.mockResolvedValue({
       ...imported,
@@ -1540,6 +1612,21 @@ describe("PurchaseInvoiceEuEditorPage várható beérkezésből", () => {
       screen.getByText(/csak a proforma érkezett meg/),
     ).toBeInTheDocument();
     expect(screen.queryByText("Várható beérkezésből előtöltve")).toBeNull();
+  });
+});
+
+describe("PurchaseInvoiceEuEditorPage szám-mezők", () => {
+  it("az árfolyam gépelés közben megtartja a „401.0” alakot, a betöltött MNB-árfolyamot pedig mutatja (barracuda, #2233)", async () => {
+    navigation.params = new URLSearchParams();
+    render(createElement(PurchaseInvoiceEuEditorPage));
+
+    const rate = screen.getByRole("spinbutton", { name: "Árfolyam" });
+    await waitFor(() => expect(rate).toHaveValue(398.5));
+
+    fireEvent.change(rate, { target: { value: "401.0" } });
+    expect((rate as HTMLInputElement).value).toBe("401.0");
+    fireEvent.change(rate, { target: { value: "401.05" } });
+    expect((rate as HTMLInputElement).value).toBe("401.05");
   });
 });
 

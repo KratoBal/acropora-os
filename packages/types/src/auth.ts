@@ -116,6 +116,10 @@ export const PERMISSIONS = {
   QUOTES_ACCEPTANCE_LINK_MANAGE: "quotes.acceptance_link.manage",
   QUOTES_TEMPLATES_MANAGE: "quotes.templates.manage",
   QUOTES_HANDOFF: "quotes.handoff",
+  /// Eszközbérlés (task eszkozberles, S2): the rental desk. View lists the rentals, manage records one (and, in S4, the
+  /// return). Granted to the shop's sales role (acrobot 44216: the role that sees the till and the partner orders).
+  RENTALS_VIEW: "rentals.view",
+  RENTALS_MANAGE: "rentals.manage",
   DASHBOARD_VIEW: "dashboard.view",
   TASKS_VIEW: "tasks.view",
   ORDERS_VIEW: "orders.view",
@@ -166,6 +170,12 @@ export const PERMISSIONS = {
   /// "content.manage" azt jelentené, hogy aki írja, jóvá is hagyhatja -- a
   /// kapu pedig pont az, hogy a kettő nem ugyanaz a kéz.
   CONTENT_MANAGE: "content.manage",
+  /// A KARÁCSONYI NYEREMÉNYJÁTÉK (kártya 31445d0f; acrobot döntése, 2026-11-05 22:41): a beküldések és a játékosok
+  /// e-mail címei. Külön jog, nem a tartalomé: a tartalom-olvasás a VIEWER és a gépi CONTENT_AGENT szerepben is
+  /// benne van, a játékosok címe pedig csak emberi szerepnek (OWNER, ADMIN, MANAGER) jár.
+  GAME_VIEW: "game.view",
+  /// A kérdés felvétele, a kétes válasz kézi döntése és a sorsolás: csak emberi szerepnek, gépi token nem sorsolhat.
+  GAME_MANAGE: "game.manage",
   /// A második lépcső: jóváhagyás és kiküldésre bocsátás.
   ///
   /// EZ A JOG MA KÉT NEVESÍTETT EMBERHEZ TARTOZIK: Balázshoz és Lucához. Nem
@@ -392,6 +402,8 @@ const BASE_ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>> =
         permission !== PERMISSIONS.CONTENT_APPROVE,
     ),
     SALES: [
+      PERMISSIONS.RENTALS_VIEW,
+      PERMISSIONS.RENTALS_MANAGE,
       PERMISSIONS.QUOTES_VIEW,
       PERMISSIONS.QUOTES_MANAGE,
       PERMISSIONS.QUOTES_PUBLISH,
@@ -699,7 +711,18 @@ export interface AuthenticatedUser {
    * exceptions must make every construction site fill it.
    */
   permissions?: readonly Permission[];
+  /**
+   * THE THEME THE PERSON CHOSE, saved on the account (Balázs, 2026-11-09: the phone's browser forgot it every time).
+   * `null`: not chosen yet, the browser's own setting decides. Optional: an older server leaves it out, which reads
+   * the same as `null`.
+   */
+  themePreference?: ThemePreference | null;
 }
+
+/** A person's theme: light, dark, or the device's own mode. */
+export type ThemePreference = "light" | "dark" | "system";
+
+export const THEME_PREFERENCES = ["light", "dark", "system"] as const;
 
 /**
  * WHOSE PERMISSIONS ARE ASKED ABOUT: a role (its template) and, when known, the

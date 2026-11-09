@@ -32,6 +32,8 @@ vi.mock("next/navigation", () => ({
 
 const api = vi.hoisted(() => ({
   list: vi.fn(),
+  settings: vi.fn(),
+  saveSettings: vi.fn(),
   candidates: vi.fn(),
   create: vi.fn(),
   detail: vi.fn(),
@@ -44,6 +46,16 @@ vi.mock("@/lib/api/partner-orders", () => ({ partnerOrdersApi: api }));
 const certificates = vi.hoisted(() => ({
   listForPartnerOrder: vi.fn(),
   issueForPartnerOrder: vi.fn(),
+  downloadDocument: vi.fn(),
+}));
+const quotes = vi.hoisted(() => ({ pdf: vi.fn() }));
+vi.mock("@/lib/api/quotes", () => ({ quotesApi: quotes }));
+const invoices = vi.hoisted(() => ({
+  byCertificate: vi.fn(),
+  downloadPdf: vi.fn(),
+}));
+vi.mock("@/lib/api/maintenance-invoice", () => ({
+  maintenanceInvoiceApi: invoices,
 }));
 vi.mock("@/lib/api/completion-certificates", () => ({
   completionCertificatesApi: certificates,
@@ -91,6 +103,11 @@ const LIST: PartnerOrderListResponse = {
       netTotal: "25000",
       currency: "HUF",
       chain: { ...CHAIN, OTHER: 0 },
+      openLines: 1,
+      totalLines: 2,
+      backlog: false,
+      idleDays: 3,
+      lastMovementAt: "2026-11-04T10:00:00Z",
       createdAt: "2026-11-04T10:00:00Z",
     },
   ],
@@ -174,6 +191,7 @@ function detail(
         createdAt: "2026-11-04T11:00:00Z",
       },
     ],
+    systemDocuments: [],
     createdAt: "2026-11-04T10:00:00Z",
     createdByName: "Luca",
     ...over,
@@ -184,8 +202,26 @@ beforeEach(() => {
   vi.clearAllMocks();
   navigation.search = new URLSearchParams();
   api.list.mockResolvedValue(LIST);
+  api.settings.mockResolvedValue({ backlogDays: 14 });
   api.candidates.mockResolvedValue([]);
 });
+
+/**
+ * A tiltott tároló: a `window.localStorage` ELÉRÉSE dob (privát ablak, tiltott oldaladat), nem csak az olvasás. A
+ * `Storage.prototype` kémje ebben a környezetben nem fogja meg, ezért a tulajdonságot cseréljük.
+ */
+function blockStorage() {
+  const original = Object.getOwnPropertyDescriptor(window, "localStorage");
+  Object.defineProperty(window, "localStorage", {
+    configurable: true,
+    get() {
+      throw new Error("blocked");
+    },
+  });
+  return () => {
+    if (original) Object.defineProperty(window, "localStorage", original);
+  };
+}
 
 describe("a megrendelések listája", () => {
   it("shows the order, the partner, the net total and where the chain stands", async () => {
@@ -198,6 +234,209 @@ describe("a megrendelések listája", () => {
     expect(within(row).getByText("Megrendelőlap ✓")).toBeInTheDocument();
     expect(within(row).getByText("TIG")).toBeInTheDocument();
     expect(within(row).queryByText("TIG ✓")).not.toBeInTheDocument();
+  });
+
+  /*
+    S4 (38caeac2). MI PIROSIT: ha a hatralek oszlop a teljesitett es a nyitott tetelt egyformanak mutatja, vagy a
+    lemondott megrendelest is hatralekosnak; ha a szuro nem az API-nak megy at (a cim marad valtozatlan); ha egy
+    ismeretlen cimbeli ertek szuronek szamit; ha a suru mod nem allitja a sormagassagot, nem jegyzodik meg, vagy
+    a nem mukodo tarolo a lapot elviszi.
+  */
+  it("shows the open lines of each order, and nothing for a cancelled one", async () => {
+    api.list.mockResolvedValue({
+      ...LIST,
+      items: [
+        LIST.items[0]!,
+        { ...LIST.items[0]!, id: "o2", orderNumber: "MR-2", openLines: 0 },
+        {
+          ...LIST.items[0]!,
+          id: "o3",
+          orderNumber: "MR-3",
+          status: "CANCELLED",
+        },
+      ],
+      total: 3,
+    });
+    render(<PartnerOrderListPage />);
+    const open = (await screen.findByText("MR-2026-0042")).closest("tr")!;
+    expect(within(open).getByText("1 / 2 tétel")).toBeInTheDocument();
+    const done = screen.getByText("MR-2").closest("tr")!;
+    expect(within(done).getByText("Teljesítve")).toBeInTheDocument();
+    const cancelled = screen.getByText("MR-3").closest("tr")!;
+    expect(within(cancelled).queryByText(/tétel/)).not.toBeInTheDocument();
+    expect(within(cancelled).getByText("—")).toBeInTheDocument();
+  });
+
+  it("sends the chain and open line filters to the API, and a value it does not know is no filter", async () => {
+    navigation.search = new URLSearchParams("stage=AWAITING_SIGNATURE&open=1");
+    render(<PartnerOrderListPage />);
+    await screen.findByText("MR-2026-0042");
+    const query = api.list.mock.calls.at(-1)![1] as URLSearchParams;
+    expect(query.get("stage")).toBe("AWAITING_SIGNATURE");
+    expect(query.get("open")).toBe("1");
+  });
+
+  it("drops a stage it does not know instead of sending it", async () => {
+    navigation.search = new URLSearchParams("stage=SOMETHING_ELSE");
+    render(<PartnerOrderListPage />);
+    await screen.findByText("MR-2026-0042");
+    const query = api.list.mock.calls.at(-1)![1] as URLSearchParams;
+    expect(query.has("stage")).toBe(false);
+  });
+
+  it("changing the filters writes them to the address and goes back to the first page", async () => {
+    render(<PartnerOrderListPage />);
+    await screen.findByText("MR-2026-0042");
+    fireEvent.change(screen.getByLabelText("Hol tart"), {
+      target: { value: "AWAITING_INVOICE" },
+    });
+    expect(navigation.replace).toHaveBeenLastCalledWith(
+      "/megrendelesek?stage=AWAITING_INVOICE",
+      { scroll: false },
+    );
+    fireEvent.click(screen.getByLabelText("Csak teljesítetlen tétellel"));
+    expect(navigation.replace).toHaveBeenLastCalledWith(
+      "/megrendelesek?open=1",
+      { scroll: false },
+    );
+  });
+
+  it("dense rows: the row gets lower, the choice is remembered, and a blocked storage does not break the page", async () => {
+    window.localStorage.removeItem("acropora.partnerOrders.dense");
+    render(<PartnerOrderListPage />);
+    const row = () => screen.getByText("MR-2026-0042").closest("tr")!;
+    await screen.findByText("MR-2026-0042");
+    expect(row().className).toContain("md:h-[72px]");
+    fireEvent.click(screen.getByRole("button", { name: "Sűrű sorok" }));
+    expect(row().className).toContain("md:h-[44px]");
+    expect(window.localStorage.getItem("acropora.partnerOrders.dense")).toBe(
+      "1",
+    );
+    const restore = blockStorage();
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Tágas sorok" }));
+      expect(row().className).toContain("md:h-[72px]");
+    } finally {
+      restore();
+    }
+  });
+
+  // MI PIROSIT: ha az elso olvasas hibaja (privat ablak, tiltott tarolo) kivetelkent a lap renderelesig jutna
+  it("a storage that throws on the first read leaves the page standing, in the default density", async () => {
+    const restore = blockStorage();
+    try {
+      render(<PartnerOrderListPage />);
+      const row = (await screen.findByText("MR-2026-0042")).closest("tr")!;
+      expect(row.className).toContain("md:h-[72px]");
+    } finally {
+      restore();
+    }
+  });
+
+  it("starts dense when the browser remembers it", async () => {
+    window.localStorage.setItem("acropora.partnerOrders.dense", "1");
+    render(<PartnerOrderListPage />);
+    const row = (await screen.findByText("MR-2026-0042")).closest("tr")!;
+    await waitFor(() => expect(row.className).toContain("md:h-[44px]"));
+    window.localStorage.removeItem("acropora.partnerOrders.dense");
+  });
+
+  /*
+    S4b (38caeac2). MI PIROSIT: ha a hatralekos jelveny nem a szerver backlog jelzesebol jon (vagy mas megrendelesen is
+    latszik); ha a napok szama nem jelenik meg a jelvenyen; ha a "Csak hatralekos" szuro nem megy at az API-nak; ha a
+    kuszob mentese nem a beirt szamot kuldi, a 0-t is (Luca: a 0 ervenyes); ha egy ervenytelen szam (negativ, tort,
+    szoveg, 365 felett) elmentheto; ha a nezo (nincs quotes.manage) szerkesztheti; ha a mentes utan a lista nem tolt ujra.
+  */
+  it("marks only the back-ordered order, with the days it has been idle", async () => {
+    api.list.mockResolvedValue({
+      ...LIST,
+      items: [
+        { ...LIST.items[0]!, backlog: true, idleDays: 19 },
+        { ...LIST.items[0]!, id: "o2", orderNumber: "MR-2" },
+      ],
+      total: 2,
+    });
+    render(<PartnerOrderListPage />);
+    const late = (await screen.findByText("MR-2026-0042")).closest("tr")!;
+    expect(within(late).getByText("Hátralékos · 19 napja")).toBeInTheDocument();
+    const fine = screen.getByText("MR-2").closest("tr")!;
+    expect(within(fine).queryByText(/Hátralékos ·/)).not.toBeInTheDocument();
+  });
+
+  it("sends the back-ordered filter to the API", async () => {
+    navigation.search = new URLSearchParams("backlog=1");
+    render(<PartnerOrderListPage />);
+    await screen.findByText("MR-2026-0042");
+    const query = api.list.mock.calls.at(-1)![1] as URLSearchParams;
+    expect(query.get("backlog")).toBe("1");
+    expect(screen.getByLabelText("Csak hátralékos")).toBeChecked();
+  });
+
+  it("the filter writes the address and goes back to the first page", async () => {
+    render(<PartnerOrderListPage />);
+    await screen.findByText("MR-2026-0042");
+    fireEvent.click(screen.getByLabelText("Csak hátralékos"));
+    expect(navigation.replace).toHaveBeenLastCalledWith(
+      "/megrendelesek?backlog=1",
+      { scroll: false },
+    );
+  });
+
+  it("shows the saved days, saves what is typed (zero too) and reloads the list", async () => {
+    api.saveSettings.mockResolvedValue({ backlogDays: 0 });
+    render(<PartnerOrderListPage />);
+    const field = (await screen.findByLabelText(
+      "Hátralék napjai",
+    )) as HTMLInputElement;
+    await waitFor(() => expect(field.value).toBe("14"));
+    const save = screen.getByRole("button", { name: "Mentés" });
+    expect(save).toBeDisabled();
+    fireEvent.change(field, { target: { value: "0" } });
+    expect(save).toBeEnabled();
+    const loads = api.list.mock.calls.length;
+    fireEvent.click(save);
+    await waitFor(() =>
+      expect(api.saveSettings).toHaveBeenCalledWith("token-1", 0),
+    );
+    await waitFor(() =>
+      expect(api.list.mock.calls.length).toBeGreaterThan(loads),
+    );
+    expect(field.value).toBe("0");
+  });
+
+  it("does not let an invalid number be saved, and says why", async () => {
+    render(<PartnerOrderListPage />);
+    const field = (await screen.findByLabelText(
+      "Hátralék napjai",
+    )) as HTMLInputElement;
+    await waitFor(() => expect(field.value).toBe("14"));
+    for (const bad of ["-1", "1.5", "x", "366", "1000"]) {
+      fireEvent.change(field, { target: { value: bad } });
+      expect(
+        screen.getByRole("button", { name: "Mentés" }),
+        bad,
+      ).toBeDisabled();
+      expect(
+        screen.getByText(/0 és 365 közötti egész szám kell/),
+      ).toBeInTheDocument();
+    }
+    fireEvent.change(field, { target: { value: "365" } });
+    expect(screen.getByRole("button", { name: "Mentés" })).toBeEnabled();
+  });
+
+  it("a failed save says so and keeps the typed value", async () => {
+    api.saveSettings.mockRejectedValue(new Error("A beállítás nem menthető."));
+    render(<PartnerOrderListPage />);
+    const field = (await screen.findByLabelText(
+      "Hátralék napjai",
+    )) as HTMLInputElement;
+    await waitFor(() => expect(field.value).toBe("14"));
+    fireEvent.change(field, { target: { value: "7" } });
+    fireEvent.click(screen.getByRole("button", { name: "Mentés" }));
+    expect(
+      await screen.findByText("A beállítás nem menthető."),
+    ).toBeInTheDocument();
+    expect(field.value).toBe("7");
   });
 
   it("opens the order on a click", async () => {
@@ -248,13 +487,118 @@ describe("egy megrendelés", () => {
     certificates.listForPartnerOrder.mockReturnValue(new Promise(() => {}));
   });
 
+  /*
+    A LÁNC RENDSZER-DOKUMENTUMAI (kártya 88649353; Balázs 17:40 UTC; acrobot 42589). MI PIROSÍT: ha az
+    ajánlat PDF-je, a TIG vagy a számla nem a saját lépésében jelenik meg; ha a lépés darabszáma nem
+    számolja őket; ha a letöltés nem a fajtája végpontján megy; ha törölhetőnek látszanak.
+  */
+  // acrobot 42859: a storno'd invoice stays listed with its mark, and the step does not count it
+  it("shows a storno'd invoice marked, and does not count it as the chain's invoice", async () => {
+    api.detail.mockResolvedValue(
+      detail({
+        systemDocuments: [
+          {
+            kind: "INVOICE_PDF",
+            step: "INVOICE",
+            label: "Számla ACRS-2026-12 · Sztornózva (ACRS-2026-13)",
+            invoiceId: "inv-1",
+            invoiceNumber: "ACRS-2026-12",
+            createdAt: "2026-11-04T13:00:00Z",
+            stornoInvoiceNumber: "ACRS-2026-13",
+          },
+        ],
+      }),
+    );
+    render(<PartnerOrderDetailPage orderId="o1" />);
+    const item = (
+      await screen.findByRole("button", {
+        name: "Számla ACRS-2026-12 · Sztornózva (ACRS-2026-13)",
+      })
+    ).closest("li")!;
+    expect(within(item).getByText("Sztornózva")).toBeInTheDocument();
+    const step = item.closest("section")!;
+    expect(within(step).queryByText(/\d+ db/)).not.toBeInTheDocument();
+  });
+
+  it("shows the system-made documents in their steps, counted, downloadable, not deletable", async () => {
+    api.detail.mockResolvedValue(
+      detail({
+        systemDocuments: [
+          {
+            kind: "QUOTE_PDF",
+            step: "QUOTE",
+            label: "Ajánlat AJ-2026-0042 · 2. verzió",
+            quoteId: "q1",
+            versionId: "v2",
+            createdAt: "2026-11-01T09:00:00Z",
+          },
+          {
+            kind: "CERTIFICATE_DOCUMENT",
+            step: "COMPLETION",
+            label: "Teljesítési igazolás TI-2026-008",
+            certificateId: "cert-1",
+            documentId: "d9",
+            fileName: "TI-2026-008.pdf",
+            createdAt: "2026-11-04T12:00:00Z",
+          },
+          {
+            kind: "INVOICE_PDF",
+            step: "INVOICE",
+            label: "Számla ACRS-2026-12",
+            invoiceId: "inv-1",
+            invoiceNumber: "ACRS-2026-12",
+            createdAt: "2026-11-04T13:00:00Z",
+            stornoInvoiceNumber: null,
+          },
+        ],
+      }),
+    );
+    quotes.pdf.mockResolvedValue(new Blob(["%PDF"]));
+    invoices.downloadPdf.mockResolvedValue(new Blob(["%PDF"]));
+    certificates.downloadDocument.mockResolvedValue(new Blob(["%PDF"]));
+    URL.createObjectURL = vi.fn(() => "blob:x");
+    URL.revokeObjectURL = vi.fn();
+    render(<PartnerOrderDetailPage orderId="o1" />);
+    const quoteButton = await screen.findByRole("button", {
+      name: "Ajánlat AJ-2026-0042 · 2. verzió",
+    });
+    expect(
+      quoteButton.closest("section")!.querySelector("h4"),
+    ).toHaveTextContent("1 db");
+    fireEvent.click(quoteButton);
+    await waitFor(() =>
+      expect(quotes.pdf).toHaveBeenCalledWith("token-1", "q1", "v2"),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Teljesítési igazolás TI-2026-008" }),
+    );
+    await waitFor(() =>
+      expect(certificates.downloadDocument).toHaveBeenCalledWith(
+        "token-1",
+        "cert-1",
+        "d9",
+      ),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Számla ACRS-2026-12" }),
+    );
+    await waitFor(() =>
+      expect(invoices.downloadPdf).toHaveBeenCalledWith("token-1", "inv-1"),
+    );
+    // only the uploaded file has a delete button
+    expect(screen.getAllByRole("button", { name: "Törlés" })).toHaveLength(1);
+  });
+
   it("offers the completion certificate on a forint order, with the order's lines", async () => {
     certificates.listForPartnerOrder.mockResolvedValue([]);
     render(<PartnerOrderDetailPage orderId="o1" />);
     expect(await screen.findByText("Teljesítési igazolás")).toBeInTheDocument();
-    expect(certificates.listForPartnerOrder).toHaveBeenCalledWith(
-      "token-1",
-      "o1",
+    // the panel asks in its own effect, after the heading is on the page (CI #2168, a loaded runner)
+    await waitFor(() =>
+      expect(certificates.listForPartnerOrder).toHaveBeenCalledWith(
+        "token-1",
+        "o1",
+      ),
     );
   });
 

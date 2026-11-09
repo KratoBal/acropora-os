@@ -4,6 +4,8 @@ import { describe, it } from "node:test";
 import {
   WEBSHOP_MAIL_KEYS,
   WEBSHOP_MAIL_SAMPLE_FACTS,
+  parseWebshopMailFacts,
+  webshopAcclimationValue,
   type WebshopMailFacts,
 } from "@acropora/types";
 
@@ -109,6 +111,164 @@ describe("renderWebshopMail", () => {
         text.toLowerCase(),
         /\d+\s*(nap|óra|day|hour)|garanci|warrant|refund|visszat[ée]r|replace|csere/,
       );
+  });
+
+  it("the newsletter's confirmation: the button confirms, the link's last day, the leaving link, in both languages", () => {
+    const facts: WebshopMailFacts = {
+      template: "newsletter-confirm",
+      customer_name: "Kiss Anna",
+      order_created_at: null,
+      order_view_url: null,
+      confirm_url: "https://shop.example/hu/hirlevel/megerosites?token=AbC_9",
+      unsubscribe_url:
+        "https://shop.example/hu/hirlevel/leiratkozas?token=XyZ-1",
+      expires_at: "2026-11-16T15:00:00.000Z",
+    };
+    const hu = renderWebshopMail(template("WEBSHOP_NEWSLETTER_CONFIRM"), facts);
+    assert.equal(hu.ok, true);
+    if (!hu.ok) return;
+    assert.equal(hu.subject, "Erősítsd meg a feliratkozásodat a hírlevelünkre");
+    assert.match(
+      hu.html,
+      /<a href="https:\/\/shop\.example\/hu\/hirlevel\/megerosites\?token=AbC_9"[^>]*>Feliratkozás megerősítése<\/a>/,
+    );
+    assert.match(
+      hu.html,
+      /<a href="https:\/\/shop\.example\/hu\/hirlevel\/leiratkozas\?token=XyZ-1"[^>]*>leiratkozás<\/a>/,
+    );
+    assert.match(hu.text, /A link 2026\. november 16\. végéig működik\./);
+    assert.doesNotMatch(hu.html, /ACROPORABLOCK|\{\{/);
+    const en = renderWebshopMail(template("WEBSHOP_NEWSLETTER_CONFIRM_EN"), {
+      ...facts,
+      locale: "en",
+    });
+    assert.equal(en.ok, true);
+    if (!en.ok) return;
+    assert.equal(en.subject, "Confirm your subscription to our newsletter");
+    assert.match(en.text, /The link works until 16 November 2026\./);
+    assert.match(en.html, />Confirm subscription<\/a>/);
+    assert.match(en.html, />unsubscribe<\/a>/);
+  });
+
+  it("the stock alert's confirmation: what was asked for, the button, the link's last day, the leaving link, in both languages", () => {
+    const facts: WebshopMailFacts = {
+      template: "stock-alert-confirm",
+      customer_name: null,
+      order_created_at: null,
+      order_view_url: null,
+      confirm_url: "https://shop.example/hu/ertesites/megerosites?token=AbC_9",
+      unsubscribe_url:
+        "https://shop.example/hu/ertesites/leiratkozas?token=XyZ-1",
+      expires_at: "2026-11-16T15:00:00.000Z",
+      subject_label: "Acropora <b>abrolhosensis</b>",
+    };
+    const hu = renderWebshopMail(
+      template("WEBSHOP_STOCK_ALERT_CONFIRM"),
+      facts,
+    );
+    assert.equal(hu.ok, true);
+    if (!hu.ok) return;
+    assert.equal(hu.subject, "Erősítsd meg az értesítés-kérésedet");
+    assert.match(
+      hu.html,
+      /<a href="https:\/\/shop\.example\/hu\/ertesites\/megerosites\?token=AbC_9"[^>]*>Értesítés-kérés megerősítése<\/a>/,
+    );
+    assert.match(
+      hu.html,
+      /<a href="https:\/\/shop\.example\/hu\/ertesites\/leiratkozas\?token=XyZ-1"[^>]*>Leiratkozás<\/a>/,
+    );
+    // the subject is the shop's text, escaped like every value: no markup reaches the mail
+    assert.match(
+      hu.text,
+      /ha ebből újra érkezik: Acropora <b>abrolhosensis<\/b>\./,
+    );
+    assert.doesNotMatch(hu.html, /<b>abrolhosensis/);
+    assert.match(hu.text, /A link 2026\. november 16\. végéig működik\./);
+    assert.doesNotMatch(hu.html, /ACROPORABLOCK|\{\{/);
+    const en = renderWebshopMail(template("WEBSHOP_STOCK_ALERT_CONFIRM_EN"), {
+      ...facts,
+      locale: "en",
+    });
+    assert.equal(en.ok, true);
+    if (!en.ok) return;
+    assert.equal(en.subject, "Confirm your notification request");
+    assert.match(en.text, /The link works until 16 November 2026\./);
+    assert.match(en.html, />Confirm the request<\/a>/);
+    assert.match(en.html, />Unsubscribe<\/a>/);
+  });
+
+  it("the stock alert's confirmation is refused without clean https links or without its subject", () => {
+    const facts = {
+      customer_name: null,
+      order_created_at: null,
+      locale: "hu",
+      order_view_url: null,
+      confirm_url: "https://shop.example/hu/ertesites/megerosites?token=a",
+      unsubscribe_url: "https://shop.example/hu/ertesites/leiratkozas?token=b",
+      expires_at: "2026-11-16T15:00:00.000Z",
+      subject_label: "Acropora abrolhosensis",
+    };
+    for (const unsubscribe_url of [
+      "http://shop.example/hu/ertesites/leiratkozas?token=b",
+      "javascript:alert(1)",
+      "",
+    ]) {
+      const parsed = parseWebshopMailFacts("stock-alert-confirm", {
+        ...facts,
+        unsubscribe_url,
+      });
+      assert.equal(parsed.ok, false, unsubscribe_url);
+      if (!parsed.ok) assert.match(parsed.error, /facts\.unsubscribe_url/);
+    }
+    for (const subject_label of ["", "   ", undefined]) {
+      const parsed = parseWebshopMailFacts("stock-alert-confirm", {
+        ...facts,
+        subject_label,
+      });
+      assert.equal(parsed.ok, false, String(subject_label));
+      if (!parsed.ok) assert.match(parsed.error, /facts\.subject_label/);
+    }
+    // the control: the same facts pass, and the newsletter's facts still need no subject
+    assert.equal(parseWebshopMailFacts("stock-alert-confirm", facts).ok, true);
+    const { subject_label: _s, ...newsletter } = facts;
+    assert.equal(
+      parseWebshopMailFacts("newsletter-confirm", newsletter).ok,
+      true,
+    );
+  });
+
+  it("the newsletter's confirmation is refused without clean https links: a mail without them is never sent", () => {
+    for (const confirm_url of [
+      "http://shop.example/hu/hirlevel/megerosites?token=a",
+      "javascript:alert(1)",
+      'https://shop.example/x?token=a"onmouseover="x',
+      "",
+    ]) {
+      const parsed = parseWebshopMailFacts("newsletter-confirm", {
+        customer_name: null,
+        order_created_at: null,
+        locale: "hu",
+        order_view_url: null,
+        confirm_url,
+        unsubscribe_url: "https://shop.example/hu/hirlevel/leiratkozas?token=b",
+        expires_at: "2026-11-16T15:00:00.000Z",
+      });
+      assert.equal(parsed.ok, false, confirm_url);
+      if (!parsed.ok) assert.match(parsed.error, /facts\.confirm_url/);
+    }
+    // the control: the same facts with a clean link pass
+    assert.equal(
+      parseWebshopMailFacts("newsletter-confirm", {
+        customer_name: null,
+        order_created_at: null,
+        locale: "hu",
+        order_view_url: null,
+        confirm_url: "https://shop.example/hu/hirlevel/megerosites?token=a",
+        unsubscribe_url: "https://shop.example/hu/hirlevel/leiratkozas?token=b",
+        expires_at: "2026-11-16T15:00:00.000Z",
+      }).ok,
+      true,
+    );
   });
 
   it("every webshop default renders with its sample facts", () => {
@@ -394,5 +554,133 @@ describe("the order confirmation's legal part", () => {
     );
     assert.equal(mail.ok, true);
     if (mail.ok) assert.doesNotMatch(mail.html, /Jogi tájékoztatók/);
+  });
+});
+
+/*
+  V2.6 (f4e4832b): AZ AKKLIMATIZACIOS SZAKASZ A LEVELBEN. MI PIROSIT: ha az ures ertek ures
+  bekezdest hagyna a levelben (a fajtak ma is megerkeznek, a szoveg meg nincs); ha az elo
+  allatos rendeles levele barmiben elternek a nem elo allatosetol, amig a tabla ures; ha a
+  helyorzo kiszivarogna.
+*/
+describe("the acclimatisation section in the order confirmation", () => {
+  const placed = (kinds: string[]): WebshopMailFacts => {
+    const facts = JSON.parse(
+      JSON.stringify(WEBSHOP_MAIL_SAMPLE_FACTS["order-placed"]),
+    ) as { orders: { livestock_kinds?: string[] }[] };
+    facts.orders[0]!.livestock_kinds = kinds;
+    return facts as unknown as WebshopMailFacts;
+  };
+  const render = (facts: WebshopMailFacts, key = "WEBSHOP_ORDER_PLACED") => {
+    const mail = renderWebshopMail(template(key), facts);
+    assert.equal(mail.ok, true);
+    if (!mail.ok) throw new Error("not ok");
+    return mail;
+  };
+
+  // adaptive: with the shipped table empty the live order reads exactly like a plain one; once a kind's text is in
+  // the table, the same order must carry it (and still no placeholder and no empty paragraph)
+  // MI PIROSIT: ha a szakasz helye kikerul az alapertelmezett sablonbol (az ures tabla ezt nem latja, a kitoltott igen)
+  it("both default order confirmations place the akklimatizacio value, after the next step", () => {
+    for (const key of ["WEBSHOP_ORDER_PLACED", "WEBSHOP_ORDER_PLACED_EN"]) {
+      const html = template(key).bodyHtml;
+      const next = html.indexOf('data-variable="kovetkezo_lepes"');
+      const guide = html.indexOf('data-variable="akklimatizacio"');
+      assert.ok(next >= 0 && guide > next, key);
+    }
+  });
+
+  it("an order of live animals reads like a plain one while the table is empty, and carries the kind's text once it is not", () => {
+    for (const [key, locale] of [
+      ["WEBSHOP_ORDER_PLACED", "hu"],
+      ["WEBSHOP_ORDER_PLACED_EN", "en"],
+    ] as const) {
+      const kinds = ["FISH", "INVERTEBRATE", "CORAL"] as const;
+      const plain = render(placed([]), key);
+      const live = render(placed([...kinds]), key);
+      const value = webshopAcclimationValue(kinds, locale);
+      if (value === "") {
+        assert.equal(live.html, plain.html);
+        assert.equal(live.text, plain.text);
+      } else {
+        assert.ok(live.text.includes(value.split("\n")[0]!));
+      }
+      assert.equal(live.subject, plain.subject);
+      assert.doesNotMatch(live.html, /\{\{|akklimatizacio|<p>\s*<\/p>/);
+    }
+  });
+});
+
+/*
+  A VENDEG RENDELES-LAPJANAK CIME A VISSZAIGAZOLO LEVELBEN (a "Rendelesem" oldal hianylistaja; acrobot 43870). MI
+  PIROSIT: a hely kikerul az alapertelmezett sablonbol (magyar vagy angol); a cim nelkuli level kap egy ures
+  bekezdest vagy egy helykitolto nyers {{...}} jelet; a cim a MASIK nyelv mondataval jon; egy nem https cim vagy egy
+  tag-jel kijut a levelbe.
+*/
+describe("the guest order page's address in the order confirmation", () => {
+  const placed = (extra: Record<string, unknown>): WebshopMailFacts =>
+    ({
+      ...JSON.parse(JSON.stringify(WEBSHOP_MAIL_SAMPLE_FACTS["order-placed"])),
+      ...extra,
+    }) as WebshopMailFacts;
+  const render = (facts: WebshopMailFacts, key: string) => {
+    const mail = renderWebshopMail(template(key), facts);
+    assert.equal(mail.ok, true);
+    if (!mail.ok) throw new Error("not ok");
+    return mail;
+  };
+  const HU_URL = "https://shop.example/hu/rendeles-megtekintese";
+  const EN_URL = "https://shop.example/en-hu/rendeles-megtekintese";
+
+  it("both default order confirmations place the sentence, after the acclimatisation value", () => {
+    for (const key of ["WEBSHOP_ORDER_PLACED", "WEBSHOP_ORDER_PLACED_EN"]) {
+      const html = template(key).bodyHtml;
+      const guide = html.indexOf('data-variable="akklimatizacio"');
+      const view = html.indexOf('data-variable="rendeles_megtekintes_mondat"');
+      assert.ok(guide >= 0 && view > guide, key);
+    }
+  });
+
+  it("the Hungarian mail carries the Hungarian sentence and the address, in the html and in the text", () => {
+    const mail = render(
+      placed({ order_view_url: HU_URL }),
+      "WEBSHOP_ORDER_PLACED",
+    );
+    for (const part of [mail.html, mail.text]) {
+      assert.ok(part.includes(HU_URL));
+      assert.ok(part.includes("A rendelésed állapotát bármikor megnézheted"));
+    }
+  });
+
+  it("the English mail carries the English sentence and the address", () => {
+    const mail = render(
+      placed({ locale: "en", order_view_url: EN_URL }),
+      "WEBSHOP_ORDER_PLACED_EN",
+    );
+    for (const part of [mail.html, mail.text]) {
+      assert.ok(part.includes(EN_URL));
+      assert.ok(part.includes("You can check your order at any time"));
+    }
+    assert.doesNotMatch(mail.html, /bármikor megnézheted/);
+  });
+
+  it("without an address (none sent, or not a plain https one) the mail has no sentence, no empty paragraph and no placeholder", () => {
+    const sima = render(
+      placed({ order_view_url: null }),
+      "WEBSHOP_ORDER_PLACED",
+    );
+    for (const rossz of [undefined, "http://shop.example/x", "<b>x</b>"]) {
+      const mail = render(
+        placed({ order_view_url: rossz }),
+        "WEBSHOP_ORDER_PLACED",
+      );
+      assert.equal(mail.html, sima.html, String(rossz));
+      assert.equal(mail.text, sima.text, String(rossz));
+    }
+    assert.doesNotMatch(
+      sima.html,
+      /rendeles_megtekintes|megnézheted|<p>\s*<\/p>|\{\{/,
+    );
+    assert.doesNotMatch(sima.text, /megnézheted|\{\{/);
   });
 });

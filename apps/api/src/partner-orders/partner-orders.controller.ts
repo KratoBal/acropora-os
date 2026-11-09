@@ -7,6 +7,7 @@ import {
   Header,
   Param,
   Post,
+  Put,
   Query,
   StreamableFile,
   UploadedFile,
@@ -20,7 +21,11 @@ import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
 import { DOCUMENT_UPLOAD_LIMITS } from "../documents/document-upload-limits.js";
 
-import { CreatePartnerOrderDto, PartnerOrderListQueryDto } from "./dto.js";
+import {
+  CreatePartnerOrderDto,
+  PartnerOrderListQueryDto,
+  UpdatePartnerOrderSettingsDto,
+} from "./dto.js";
 import { PartnerOrdersService } from "./partner-orders.service.js";
 
 /** Same gates as the quotes: reading needs QUOTES_VIEW, every change QUOTES_MANAGE. */
@@ -34,7 +39,26 @@ export class PartnerOrdersController {
     return this.service.list(query.page, query.pageSize, {
       q: query.q?.trim() || undefined,
       status: query.status,
+      stage: query.stage,
+      openOnly: query.open === "1",
+      backlogOnly: query.backlog === "1",
     });
+  }
+
+  /** The orders' settings (S4b): how many idle days make an open order back-ordered. Declared before `:id`. */
+  @Get("settings")
+  @RequirePermissions(PERMISSIONS.QUOTES_VIEW)
+  settings() {
+    return this.service.settings();
+  }
+
+  @Put("settings")
+  @RequirePermissions(PERMISSIONS.QUOTES_MANAGE)
+  saveSettings(
+    @Body() body: UpdatePartnerOrderSettingsDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.saveSettings(body.backlogDays, user);
   }
 
   @Get("candidates")

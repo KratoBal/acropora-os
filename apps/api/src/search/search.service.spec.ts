@@ -9,6 +9,7 @@ import {
 } from "@acropora/types";
 
 import type { AquariumsService } from "../aquariums/aquariums.service.js";
+import type { CustomersRepository } from "../customers/customers.repository.js";
 import type { InvoiceSearchService } from "../billing/invoice-search.service.js";
 import type { WebshopOrdersService } from "../orders/webshop-orders/webshop-orders.service.js";
 import type { ProductService } from "../products/product.service.js";
@@ -39,6 +40,8 @@ let quoteCalls = 0;
 let orderCalls = 0;
 /** the product list: how often it ran */
 let productCalls = 0;
+/** the customer list: how often it ran */
+let customerCalls = 0;
 /*
   THE MOCKS RECORD THEIR QUERY AND NEVER ASSERT INSIDE (barracuda, #2123 review): the orders call runs
   behind `isolated()`, which swallows ANY exception as a webshop failure, so an assert thrown in the mock
@@ -48,11 +51,19 @@ let productCalls = 0;
 const recorded: {
   order?: { q?: string; page?: number; pageSize?: number };
   product?: { search?: string; page?: number; pageSize?: number };
+  customer?: {
+    search?: string;
+    page?: number;
+    pageSize?: number;
+    status?: string;
+    role?: string;
+  };
 } = {};
 /** (a function, not an assignment in the test: an assignment would narrow the property to `never`) */
 const forgetRecorded = () => {
   recorded.order = undefined;
   recorded.product = undefined;
+  recorded.customer = undefined;
 };
 let orderList: () => Promise<unknown> = async () => ({
   items: [
@@ -213,6 +224,35 @@ const search = (
         };
       },
     } as unknown as ProductService,
+    {
+      list: async (query: {
+        search?: string;
+        page?: number;
+        pageSize?: number;
+        status?: string;
+        role?: string;
+      }) => {
+        customerCalls += 1;
+        recorded.customer = query;
+        return {
+          items: [
+            {
+              id: "cust/1",
+              customerNumber: "VEVO-0001",
+              displayName: "Kovács Anna",
+              taxNumber: "12345678-1-42",
+              email: "anna@example.invalid",
+            },
+            {
+              id: "cust-2",
+              customerNumber: "VEVO-0002",
+              displayName: "Állatkert Zrt.",
+              partnerMirror: true,
+            },
+          ],
+        };
+      },
+    } as unknown as CustomersRepository,
     environment,
   );
 
@@ -223,6 +263,7 @@ describe("SearchService", () => {
       [
         "aquariums",
         "assets",
+        "customers",
         "invoices",
         "orders",
         "partners",
@@ -533,6 +574,59 @@ describe("SearchService", () => {
           "/products/prod%2F1",
         ],
         ["prod-2", "Névtelen termék", "", "/products/prod-2"],
+      ],
+    );
+  });
+
+  /*
+    A VEVŐ-CSOPORT (T2.2, 4. szelet másik fele): a Vevők lista, `customers.view` kapuval. MI PIROSÍT: ha
+    a csoport a jog nélküli szerepnek is megjelenne, vagy a lista lefutna nekik; ha a lekérdezés nem az
+    első, 5 elemű, aktív, `role: ALL` oldal volna (a Vevők lista alapja); ha a találat útvonalában az
+    azonosító nem kódolt; ha a partner-tükör jelölése kimaradna, vagy hiányzó adat "undefined" feliratot
+    írna a sorba.
+  */
+  it("customers are present for exactly the roles that hold customers.view, and the list never runs for the others", async () => {
+    for (const role of USER_ROLES) {
+      customerCalls = 0;
+      forgetRecorded();
+      const subject = user(role);
+      const result = await search().search("kovács", subject);
+      const allowed = hasPermission(subject, PERMISSIONS.CUSTOMERS_VIEW);
+      assert.equal("customers" in result, allowed, role);
+      assert.equal(customerCalls, allowed ? 1 : 0, role);
+      if (allowed)
+        assert.deepEqual(
+          {
+            search: recorded.customer?.search,
+            page: recorded.customer?.page,
+            pageSize: recorded.customer?.pageSize,
+            status: recorded.customer?.status,
+            role: recorded.customer?.role,
+          },
+          {
+            search: "kovács",
+            page: 1,
+            pageSize: 5,
+            status: "ACTIVE",
+            role: "ALL",
+          },
+          role,
+        );
+    }
+  });
+
+  it("maps a customer to its number, tax number and e-mail, marks a partner mirror, and opens it on its page (id encoded)", async () => {
+    const result = await search().search("kovács", user("OWNER"));
+    assert.deepEqual(
+      result.customers?.map((c) => [c.id, c.title, c.subtitle, c.path]),
+      [
+        [
+          "cust/1",
+          "Kovács Anna",
+          "VEVO-0001 · 12345678-1-42 · anna@example.invalid",
+          "/vevok/cust%2F1",
+        ],
+        ["cust-2", "Állatkert Zrt.", "VEVO-0002 · Partner", "/vevok/cust-2"],
       ],
     );
   });

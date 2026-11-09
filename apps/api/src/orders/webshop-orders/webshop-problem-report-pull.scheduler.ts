@@ -20,7 +20,7 @@ export interface ProblemReportPullConfig {
   startupDelayMs: number;
 }
 
-const boundedMinutes = (
+export const boundedMinutes = (
   value: string | undefined,
   fallback: number,
   minimum: number,

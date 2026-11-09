@@ -138,6 +138,18 @@ export function proformaRefusal(
 }
 
 /**
+ * THE LANGUAGE OF THE CUSTOMER'S MAIL (card d5c6befd, P4): `en` only when the shop wrote exactly that on the order
+ * (commerce `storefront_locale`, set when the customer paid on the English storefront). Anything else, a missing
+ * value or an old order included, is Hungarian: the mail never changes language by a guess. This is the MAIL's
+ * language; the invoice PDF's language is separate and stays Hungarian (acrobot 41434-41439).
+ */
+export function orderLanguageOf(
+  metadata: Record<string, unknown> | null | undefined,
+): "hu" | "en" {
+  return metadata?.storefront_locale === "en" ? "en" : "hu";
+}
+
+/**
  * A VEVŐ KULCSA A KÜLSŐ HIVATKOZÁSBAN (acrobot 4. döntése: e-mail alapján
  * keressük vagy hozzuk létre, Medusa-kötéssel). Regisztrált vevőnél a Medusa
  * vevő-azonosítója; vendégnél a kisbetűs e-mail cím, `guest:` előtaggal.

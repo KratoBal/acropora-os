@@ -2,9 +2,8 @@
 
 import {
   Alert,
-  Card,
-  CardContent,
-  CardHeader,
+  PilotCard,
+  PilotCardHeader,
   PilotDateField,
   PilotButton,
 } from "@acropora/ui";
@@ -84,11 +83,9 @@ export function PurchaseInvoiceEditForm({
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <h2 className="text-sm font-semibold text-dusk-900">Adatok javítása</h2>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <PilotCard>
+      <PilotCardHeader title="Adatok javítása" />
+      <div className="space-y-4 p-5">
         <p className="text-xs text-dusk-500">
           A rögzített számlán ezek javíthatók, mert nem hatnak a készletre. A
           mennyiség, az ár és a termék nem.
@@ -189,7 +186,7 @@ export function PurchaseInvoiceEditForm({
             Javítás mentése
           </PilotButton>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </PilotCard>
   );
 }

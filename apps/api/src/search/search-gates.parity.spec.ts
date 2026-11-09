@@ -15,6 +15,7 @@ import {
 import { AquariumsController } from "../aquariums/aquariums.controller.js";
 import { BillingDocumentReadController } from "../billing/billing-document-read.controller.js";
 import { IncomingBillingDocumentsController } from "../billing/incoming-billing-documents.controller.js";
+import { CustomersController } from "../customers/customers.controller.js";
 import { ServiceAssetsController } from "../service-assets/service-assets.controller.js";
 import { ServiceJobsController } from "../service-jobs/service-jobs.controller.js";
 import { WebshopOrdersController } from "../orders/webshop-orders/webshop-orders.controller.js";
@@ -57,6 +58,8 @@ const LISTS: Record<
   orders: [{ controller: WebshopOrdersController, handler: "list" }],
   // a termékkatalógus lista kezelője `listProducts`
   products: [{ controller: ProductController, handler: "listProducts" }],
+  // a Vevők lista (`/customers`); a menüpont a `webshop-customers`
+  customers: [{ controller: CustomersController, handler: "list" }],
 };
 
 function requiredFor(controller: Function, handler: string) {

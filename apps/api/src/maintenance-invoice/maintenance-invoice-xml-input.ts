@@ -1,4 +1,5 @@
 import { Prisma } from "@acropora/database";
+import { EU_COUNTRY_NAMES_HU, viesCountry } from "@acropora/types";
 
 import {
   computeCertificateLineAmounts,
@@ -12,6 +13,24 @@ import type { SzamlazzAgentInvoiceInput } from "../integrations/szamlazz/szamlaz
 /**
  * A TELJESÍTÉSI IGAZOLÁS -> SZÁMLÁZZ.HU XML LEKÉPEZÉSE (ADR-014, 4. szelet).
  */
+
+/**
+ * AN EU BUYER'S COUNTRY, IN HUNGARIAN (barracuda #2157, 3rd point; card e7806491): Számlázz.hu's `orszag` is free text
+ * and the invoice prints it as written, so it goes by its Hungarian name, as on the billing page's invoices
+ * (`billing-document-issue.ts`): the address's country when it is an EU one, else the EU tax number's prefix. Nothing
+ * when neither is known: an empty country is left out, never guessed.
+ */
+export function euBuyerCountry(
+  addressCountry: string | undefined,
+  euTaxNumber: string,
+): { country?: string } {
+  const code =
+    addressCountry && EU_COUNTRY_NAMES_HU[addressCountry]
+      ? addressCountry
+      : viesCountry(euTaxNumber);
+  const name = code ? EU_COUNTRY_NAMES_HU[code] : undefined;
+  return name ? { country: name } : {};
+}
 
 export interface MaintenanceInvoiceCertificateSource {
   number: string;
@@ -32,6 +51,8 @@ export interface MaintenanceInvoiceCertificateSource {
         line2: string | null;
         postalCode: string;
         city: string;
+        /** ISO code (HU by default) */
+        country?: string;
       }[];
     };
   };
@@ -232,6 +253,10 @@ export function maintenanceInvoiceXmlInputFrom(
           ? {
               euTaxNumber: certificate.serviceJob.customer.euTaxNumber.trim(),
               vatSubject: 6,
+              ...euBuyerCountry(
+                address.country,
+                certificate.serviceJob.customer.euTaxNumber.trim(),
+              ),
             }
           : {}),
         taxSubject: {

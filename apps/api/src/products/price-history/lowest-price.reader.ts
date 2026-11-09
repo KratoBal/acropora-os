@@ -7,6 +7,7 @@ import {
   type HistoryRow,
   type LowestPrice,
 } from "./lowest-price.js";
+import type { OwnSaleRow } from "../own-sale.js";
 
 /**
  * THE LOWEST PRICE OF ONE VARIANT IN THE 30 DAYS BEFORE A REDUCTION, READ FROM THE DATABASE (V0.2,
@@ -20,10 +21,13 @@ import {
  */
 export interface LowestPriceDatabase {
   productVariant: {
-    findUnique(args: unknown): Promise<{
-      productId: string;
-      unasVariantExtraGrossPrice: Prisma.Decimal | null;
-    } | null>;
+    findUnique(args: unknown): Promise<
+      | ({
+          productId: string;
+          unasVariantExtraGrossPrice: Prisma.Decimal | null;
+        } & OwnSaleRow)
+      | null
+    >;
   };
   productPriceHistory: {
     findMany(args: unknown): Promise<HistoryRow[]>;
@@ -34,7 +38,13 @@ export interface LowestPriceDatabase {
 async function readSeries(database: LowestPriceDatabase, variantId: string) {
   const variant = await database.productVariant.findUnique({
     where: { id: variantId },
-    select: { productId: true, unasVariantExtraGrossPrice: true },
+    select: {
+      productId: true,
+      unasVariantExtraGrossPrice: true,
+      sellingSaleGrossPrice: true,
+      sellingSaleStartsAt: true,
+      sellingSaleEndsAt: true,
+    },
   });
   if (!variant) return null;
   const rows = await database.productPriceHistory.findMany({
@@ -54,6 +64,7 @@ async function readSeries(database: LowestPriceDatabase, variantId: string) {
   });
   return {
     rows,
+    ownSale: variant,
     series: seriesOfVariant(
       rows,
       variantId,
@@ -74,14 +85,16 @@ export async function lowestPriceForVariant(
 /**
  * THE REFERENCE PRICE OF THE REDUCTION THAT RUNS NOW (V0.2, slice 2): the lowest price of the 30
  * days before the reduction began. Null when no reduction runs (nothing to name) or when the
- * history has no known price to name; the caller clears the shop's key then.
+ * history has no known price to name; the caller clears the shop's key then. `now` decides
+ * whether the variant's own sale runs (T4.1-D3).
  */
 export async function lowestPriceBeforeCurrentReduction(
   database: LowestPriceDatabase,
   variantId: string,
+  now: Date,
 ): Promise<LowestPrice | null> {
   const read = await readSeries(database, variantId);
   if (!read) return null;
-  const start = currentReductionStart(read.rows, variantId);
+  const start = currentReductionStart(read.rows, variantId, read.ownSale, now);
   return start ? lowestPriceInWindow(read.series, start) : null;
 }

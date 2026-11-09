@@ -1,11 +1,13 @@
 import { Module } from "@nestjs/common";
 
+import { MedusaModule } from "../integrations/medusa/medusa.module.js";
 import { SzamlazzModule } from "../integrations/szamlazz/szamlazz.module.js";
 import { NotificationsModule } from "../notifications/notifications.module.js";
 import { documentStoreProvider } from "../service-assets/document-store/document-store.provider.js";
 import { BillingDocumentEmailController } from "./billing-document-email.controller.js";
 import { BillingDocumentEmailRepository } from "./billing-document-email.repository.js";
 import { BillingDocumentEmailDraftService } from "./billing-document-email-draft.service.js";
+import { BillingDocumentLanguageService } from "./billing-document-language.service.js";
 import { BillingDocumentEmailService } from "./billing-document-email.service.js";
 import { BillingDocumentAdvanceController } from "./billing-document-advance.controller.js";
 import { BillingDocumentFinalController } from "./billing-document-final.controller.js";
@@ -38,6 +40,17 @@ import {
   BuyerTaxCheckRepository,
   BuyerTaxCheckScheduler,
 } from "./buyer-tax-check.scheduler.js";
+import { BankTransferPairingController } from "./bank-transfer-pairing.controller.js";
+import {
+  BankTransferPairingRepository,
+  BankTransferPairingService,
+} from "./bank-transfer-pairing.service.js";
+import { ManualOutgoingPaymentController } from "./manual-outgoing-payment.controller.js";
+import {
+  ManualOutgoingPaymentService,
+  ManualPaymentAuditRepository,
+  PendingPaymentMarkRepository,
+} from "./manual-outgoing-payment.service.js";
 
 /**
  * A SZÁMLÁZÁS MODUL: a vázlat (murena), a kiállítás, a lista, a PDF és a kiküldés (nautilus). A
@@ -46,7 +59,7 @@ import {
  * Számlázz.hu-kulcs feloldása.
  */
 @Module({
-  imports: [SzamlazzModule, NotificationsModule],
+  imports: [SzamlazzModule, NotificationsModule, MedusaModule],
   controllers: [
     ExternalBillingDocumentsController,
     OutgoingPackageController,
@@ -60,6 +73,8 @@ import {
     BillingDocumentReadController,
     BillingDocumentEmailController,
     BillingEmailDraftController,
+    ManualOutgoingPaymentController,
+    BankTransferPairingController,
   ],
   providers: [
     BillingDocumentsRepository,
@@ -78,11 +93,17 @@ import {
     BillingDocumentEmailRepository,
     BillingDocumentEmailService,
     BillingDocumentEmailDraftService,
+    BillingDocumentLanguageService,
     OutgoingPackageService,
     ExternalInvoicePdfScheduler,
     ExternalInvoiceMailPdfScheduler,
     BuyerTaxCheckRepository,
     BuyerTaxCheckScheduler,
+    ManualOutgoingPaymentService,
+    ManualPaymentAuditRepository,
+    PendingPaymentMarkRepository,
+    BankTransferPairingService,
+    BankTransferPairingRepository,
     documentStoreProvider,
   ],
   // a webshop rendelés számlája ugyanazon a vázlaton és kiállításon megy

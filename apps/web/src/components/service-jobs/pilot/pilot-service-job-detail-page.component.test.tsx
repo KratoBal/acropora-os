@@ -1,8 +1,19 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { ServiceJobDetail, Session } from "@acropora/types";
+import type {
+  ServiceJobDetail,
+  ServiceJobDocumentSummary,
+  Session,
+} from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { KULDES_KIHAGYAS_OKA } from "../handover-mail-skip-reason";
 import { PilotServiceJobDetailPage } from "./pilot-service-job-detail-page";
 
 /**
@@ -45,6 +56,14 @@ vi.mock("../completion-certificate-panel", () => ({
     </div>
   ),
 }));
+// the draft invoice, back on the pilot page (kanban 0baba3b9, acrobot 44712)
+vi.mock("../maintenance-invoice-panel", () => ({
+  MaintenanceInvoicePanel: ({ serviceJobId }: { serviceJobId: string }) => (
+    <div data-testid="maintenance-invoice-panel-stub">
+      számla panel ({serviceJobId})
+    </div>
+  ),
+}));
 vi.mock("../maintenance-package-panel", () => ({
   MaintenancePackagePanel: ({
     serviceJobId,
@@ -77,6 +96,13 @@ const api = vi.hoisted(() => ({
   detail: vi.fn(),
   documents: vi.fn(),
   uploadDocument: vi.fn(),
+  move: vi.fn(),
+  setAssignees: vi.fn(),
+  deleteDocument: vi.fn(),
+  downloadDocument: vi.fn(),
+  downloadDocumentThumbnail: vi.fn(),
+  handoverMailPreview: vi.fn(),
+  sendHandoverMail: vi.fn(),
 }));
 const sheets = vi.hoisted(() => ({
   attachable: vi.fn(),
@@ -184,6 +210,9 @@ describe("PilotServiceJobDetailPage -- MAINTENANCE panelek", () => {
     expect(
       screen.getByTestId("maintenance-package-panel-stub"),
     ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("maintenance-invoice-panel-stub"),
+    ).toHaveTextContent("job-1");
   });
 
   /*
@@ -251,6 +280,9 @@ describe("PilotServiceJobDetailPage -- MAINTENANCE panelek", () => {
     ).not.toBeInTheDocument();
     expect(
       screen.queryByTestId("maintenance-package-panel-stub"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("maintenance-invoice-panel-stub"),
     ).not.toBeInTheDocument();
   });
 });
@@ -634,5 +666,251 @@ describe("PilotServiceJobDetailPage -- redesign", () => {
     await screen.findByText("Ehhez a jegyhez nincs eszköz rendelve.");
     await user.click(screen.getByRole("button", { name: "Helyszín" }));
     expect(screen.getByTestId("placement-editor-stub")).toBeInTheDocument();
+  });
+});
+
+/*
+  A RÉGI LAPRÓL ÁTHOZOTT ŐRÖK (kanban 0baba3b9, barracuda #2300). A régi `service-job-detail-page.tsx` útvonal nélkül
+  állt, és a specje (50 teszt) vele ment. Ezek a ma élő viselkedést mérik az élő lapon: ugyanaz a logika a pilot
+  lapon fut (kiküldés és a kihagyás oka, csatolmány-törlés, megtartott megjegyzés, jogkör), a delegálás a
+  `PilotDelegatedColleaguesCard`-on. MI PIROSÍT: egy begépelt üzenet egy félrekattintástól elvész; egy `skipped` vagy
+  `refused` válasz sikernek látszik, vagy a kihagyás oka helyett egy közös mondat jön; a bukott lépés megjegyzése
+  csendben egy másik lépéssel megy el; a csatolmány kérdés nélkül törlődik; a delegálás nem a teljes névsort küldi;
+  olvasó jognál feltöltés, törlés vagy delegálás kínálkozik.
+*/
+function csatolmany(
+  overrides: Partial<ServiceJobDocumentSummary> = {},
+): ServiceJobDocumentSummary {
+  return {
+    id: "doc-1",
+    type: "OTHER",
+    fileName: "jegyzokonyv.pdf",
+    contentType: "application/pdf",
+    sizeBytes: 204800,
+    sha256: "a".repeat(64),
+    caption: null,
+    createdAt: "2026-09-01T09:00:00.000Z",
+    ...overrides,
+  };
+}
+
+describe("PilotServiceJobDetailPage -- a régi lapról áthozott őrök", () => {
+  beforeEach(() => {
+    auth.session = sessionAs("SERVICE");
+    api.detail.mockReset().mockResolvedValue(detail());
+    api.documents.mockReset().mockResolvedValue({ items: [csatolmany()] });
+    api.uploadDocument.mockReset().mockResolvedValue([]);
+    api.move.mockReset().mockResolvedValue({ ok: true });
+    api.setAssignees.mockReset();
+    api.deleteDocument.mockReset().mockResolvedValue(undefined);
+    api.handoverMailPreview.mockReset().mockResolvedValue({
+      kind: "send",
+      recipients: [
+        { name: "Üzemeltető Ubul", email: "uzem@partner.hu" },
+        { name: "Műszaki Manó", email: "muszak@partner.hu" },
+      ],
+      subject: "A KB-2026-001 számú hibajegyet lezártuk.",
+    });
+    api.sendHandoverMail
+      .mockReset()
+      .mockResolvedValue({ kind: "sent", recipients: 2 });
+    sheets.attachable.mockReset().mockResolvedValue({ items: [] });
+    sheets.departments.mockReset().mockResolvedValue({ items: [] });
+    sheets.assignableUsers.mockReset().mockResolvedValue({
+      items: [
+        { id: "user-sanyi", name: "Sanyi" },
+        { id: "user-eva", name: "Éva" },
+      ],
+    });
+  });
+
+  it("a csatolmány törlése ELŐBB kérdez, és csak a megerősítés után hív", async () => {
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Törlés" }));
+
+    expect(await screen.findByText("Törlöd ezt a csatolmányt?")).toBeTruthy();
+    expect(api.deleteDocument).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(/csak úgy kerül vissza, ha újra feltöltöd/),
+    ).toBeTruthy();
+
+    const dialogus = screen.getByRole("dialog");
+    fireEvent.click(within(dialogus).getByRole("button", { name: "Törlés" }));
+    await waitFor(() =>
+      expect(api.deleteDocument).toHaveBeenCalledWith(
+        "token-1",
+        "job-1",
+        "doc-1",
+      ),
+    );
+  });
+
+  it("olvasó jogkörnél nincs feltöltés, törlés és delegálás, a delegáltak kártyája viszont látszik", async () => {
+    auth.session = sessionAs("VIEWER");
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+
+    expect(await screen.findByText("jegyzokonyv.pdf")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Törlés" })).toBeNull();
+    expect(screen.queryByText("+ fotó")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /Kollégák delegálása/ }),
+    ).toBeNull();
+    expect(screen.getByText("Delegált kollégák")).toBeTruthy();
+  });
+
+  it("a delegálás a TELJES névsort küldi: a meglévő delegált is megy az új mellett", async () => {
+    // a jegyen már áll valaki: csak így különbözik a teljes névsor a változástól (barracuda, #2300)
+    api.detail.mockResolvedValue(
+      detail({
+        assignees: [
+          {
+            userId: "user-sanyi",
+            name: "Sanyi",
+            assignedAt: "2026-09-13T08:00:00.000Z",
+          },
+        ],
+      }),
+    );
+    api.setAssignees.mockResolvedValue(
+      detail({
+        assignees: [
+          {
+            userId: "user-eva",
+            name: "Éva",
+            assignedAt: "2026-09-14T18:00:00.000Z",
+          },
+        ],
+      }),
+    );
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+    fireEvent.click(
+      (
+        await screen.findAllByRole("button", { name: /Kollégák delegálása/ })
+      )[0]!,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: /Éva/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Delegálás mentése" }));
+
+    await waitFor(() =>
+      expect(api.setAssignees).toHaveBeenCalledWith("token-1", "job-1", {
+        userIds: ["user-sanyi", "user-eva"],
+      }),
+    );
+  });
+
+  it("a bukott lépés megjegyzésével MÁSIK lépésre megáll, és NEM küld el semmit", async () => {
+    api.move.mockRejectedValueOnce(new Error("A hálózat nem elérhető."));
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+
+    fireEvent.change(await screen.findByLabelText("Megjegyzés a lépéshez"), {
+      target: { value: "Szivattyú rendelve" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Tovább → Ütemezve" }));
+    await waitFor(() => expect(api.move).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Tovább → Meghiúsult" }),
+    );
+
+    expect(await screen.findByText(/lépéshez készült/)).toBeTruthy();
+    expect(api.move).toHaveBeenCalledTimes(1);
+  });
+
+  describe("a lezárt hibajegy kiküldése", () => {
+    async function ablakotNyit() {
+      api.detail.mockResolvedValue(
+        detail({
+          status: "COMPLETED",
+          partnerStatus: "COMPLETED",
+          partnerStatusLabel: "Elkészült",
+          allowedSteps: [],
+        }),
+      );
+      render(<PilotServiceJobDetailPage jobId="job-1" />);
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Küldés e-mailben" }),
+      );
+      const ablak = await screen.findByRole("dialog", {
+        name: "A KB-2026-001 számú hibajegy kiküldése",
+      });
+      await waitFor(() =>
+        expect(within(ablak).getByLabelText("Üzenet")).toBeTruthy(),
+      );
+      return ablak;
+    }
+    const kuld = (ablak: HTMLElement) => {
+      fireEvent.change(within(ablak).getByLabelText("Üzenet"), {
+        target: { value: "Köszönjük." },
+      });
+      fireEvent.click(
+        within(ablak).getByRole("button", { name: "Elküldés 2 címzettnek" }),
+      );
+    };
+
+    it("a refused válasznál a szerver mondata jelenik meg, nem siker", async () => {
+      api.sendHandoverMail.mockResolvedValue({
+        kind: "refused",
+        message: "A dokumentumcsomag 5,2 MB, a határ 4 MB.",
+      });
+      const ablak = await ablakotNyit();
+      kuld(ablak);
+      expect(
+        await within(ablak).findByText(
+          "A dokumentumcsomag 5,2 MB, a határ 4 MB.",
+        ),
+      ).toBeTruthy();
+      expect(screen.queryByText(/A hibajegy kiküldve/)).toBeNull();
+    });
+
+    it("a skipped választ NEM sikerként mutatja, és az ablak nyitva marad", async () => {
+      api.sendHandoverMail.mockResolvedValue({
+        kind: "skipped",
+        reason: "no-recipient",
+      });
+      const ablak = await ablakotNyit();
+      kuld(ablak);
+      expect(
+        await within(ablak).findByText("A kiküldés nem sikerült"),
+      ).toBeTruthy();
+      expect(screen.queryByText(/A hibajegy kiküldve/)).toBeNull();
+      expect(within(ablak).getByLabelText("Üzenet")).toBeTruthy();
+    });
+
+    it("a küldés kihagyásának OKA jut el a kezelőhöz, nem egy közös mondat", async () => {
+      api.sendHandoverMail.mockResolvedValue({
+        kind: "skipped",
+        reason: "no-sender",
+      });
+      const ablak = await ablakotNyit();
+      kuld(ablak);
+      expect(
+        await within(ablak).findByText(KULDES_KIHAGYAS_OKA["no-sender"]),
+      ).toBeTruthy();
+    });
+
+    it("begépelt üzenet mellett a háttérre kattintás NEM zárja be, üres mellett bezárja", async () => {
+      const ablak = await ablakotNyit();
+      fireEvent.change(within(ablak).getByLabelText("Üzenet"), {
+        target: { value: "Köszönjük a bizalmat." },
+      });
+      fireEvent.click(ablak.parentElement as HTMLElement);
+      expect(
+        screen.getByRole("dialog", {
+          name: "A KB-2026-001 számú hibajegy kiküldése",
+        }),
+      ).toBeTruthy();
+
+      fireEvent.change(within(ablak).getByLabelText("Üzenet"), {
+        target: { value: "" },
+      });
+      fireEvent.click(ablak.parentElement as HTMLElement);
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("dialog", {
+            name: "A KB-2026-001 számú hibajegy kiküldése",
+          }),
+        ).toBeNull(),
+      );
+    });
   });
 });

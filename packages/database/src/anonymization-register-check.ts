@@ -36,6 +36,8 @@ export interface SchemaField {
   /** The scalar or relation type without `[]` and `?`. */
   readonly type: string;
   readonly isList: boolean;
+  /** `true` for a `Type?` field (it may be NULL). */
+  readonly isOptional: boolean;
   /** Field attributes with any trailing `//` comment removed. */
   readonly attributes: string;
   readonly line: number;
@@ -111,12 +113,13 @@ export function parseSchemaModels(schema: string): SchemaModel[] {
         `schema.prisma:${lineNumber}: cannot read this line as a field: ${line}`,
       );
     }
-    const [, name = "", type = "", list, , attributes] = field;
+    const [, name = "", type = "", list, optional, attributes] = field;
     current.fields.push({
       model: current.name,
       name,
       type,
       isList: list === "[]",
+      isOptional: optional === "?",
       attributes: stripLineComment(attributes ?? ""),
       line: lineNumber,
     });
@@ -141,7 +144,7 @@ function isGeneratedId(field: SchemaField): boolean {
 }
 
 /** The argument list of `@relation(...)`, with nested parentheses. */
-function relationArguments(attributes: string): string | null {
+export function relationArguments(attributes: string): string | null {
   const start = attributes.indexOf("@relation(");
   if (start === -1) return null;
   let depth = 0;
@@ -157,7 +160,7 @@ function relationArguments(attributes: string): string | null {
   throw new Error(`unterminated @relation(...) in: ${attributes}`);
 }
 
-function listArgument(args: string, key: string): string[] {
+export function listArgument(args: string, key: string): string[] {
   const match = new RegExp(`${key}:\\s*\\[([^\\]]*)\\]`).exec(args);
   if (!match) return [];
   return (match[1] ?? "")
@@ -325,4 +328,71 @@ export function checkRegister(
   // A field that failed to resolve can be reached again through another
   // foreign key; report it once.
   return { decisions, inScopeFieldCount, problems: [...new Set(problems)] };
+}
+
+/**
+ * The in-scope fields that MUST hold a value (not `?`, not a list): a deleted field of this kind cannot be set to NULL, so its
+ * ROW is the thing to delete (the register's own wording for the `delete` action). Keyed `Model.field`, like the decisions.
+ */
+export function requiredFieldKeys(schema: string): Set<string> {
+  const required = new Set<string>();
+  for (const model of parseSchemaModels(schema)) {
+    for (const field of model.fields) {
+      if (isInScope(field) && !field.isOptional && !field.isList) {
+        required.add(`${model.name}.${field.name}`);
+      }
+    }
+  }
+  return required;
+}
+
+/** Every field of the schema (any type), keyed `Model.field`: what a row may carry. A key outside it is a typo or a stale column. */
+export function schemaFieldKeys(schema: string): Set<string> {
+  const keys = new Set<string>();
+  for (const model of parseSchemaModels(schema)) {
+    for (const field of model.fields) keys.add(`${model.name}.${field.name}`);
+  }
+  return keys;
+}
+
+const OUT_OF_SCOPE_SCALARS = new Set([
+  "Int",
+  "BigInt",
+  "Float",
+  "Decimal",
+  "Boolean",
+  "DateTime",
+]);
+
+/**
+ * The fields whose SCHEMA TYPE is a number, a boolean, a date or an enum: the only ones a row may carry without an anonymization
+ * decision. Keyed `Model.field`. The row transformer's second lock (barracuda, #2324): it lets a field through without a decision
+ * ONLY if the schema says it is of such a type, whatever the value looks like (an enum is a string, a Decimal an object), so the
+ * transformer does not depend on the register check having required a decision for every text, JSON and bytes column.
+ */
+export function outOfScopeFieldKeys(schema: string): Set<string> {
+  const enums = new Set(
+    [...schema.matchAll(/^enum (\w+) \{/gm)].map((match) => match[1]!),
+  );
+  const keys = new Set<string>();
+  for (const model of parseSchemaModels(schema)) {
+    for (const field of model.fields) {
+      if (OUT_OF_SCOPE_SCALARS.has(field.type) || enums.has(field.type))
+        keys.add(`${model.name}.${field.name}`);
+    }
+  }
+  return keys;
+}
+
+/** The in-scope fields that carry their own `@unique`, keyed `Model.field`: a replacement for such a field must differ row by row. */
+export function uniqueFieldKeys(schema: string): Set<string> {
+  const unique = new Set<string>();
+  for (const model of parseSchemaModels(schema)) {
+    for (const field of model.fields) {
+      if (isInScope(field) && /(^|\s)@unique(\s|\(|$)/.test(field.attributes)) {
+        unique.add(`${model.name}.${field.name}`);
+      }
+    }
+  }
+  return unique;
 }

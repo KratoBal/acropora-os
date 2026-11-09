@@ -1,5 +1,9 @@
-import { IsEmail, IsString, MinLength } from "class-validator";
-import type { AuthenticatedUser } from "@acropora/types";
+import { IsEmail, IsIn, IsString, MinLength } from "class-validator";
+import {
+  THEME_PREFERENCES,
+  type AuthenticatedUser,
+  type ThemePreference,
+} from "@acropora/types";
 
 export interface AuthenticatedRequest {
   sessionKind?: import("./session.repository.js").SessionKind;
@@ -38,6 +42,12 @@ export interface DevelopmentLoginDto {
  * gets a real class with decorators: `whitelist`/`forbidNonWhitelisted`
  * in main.ts only take effect for a recognized class metatype.
  */
+/** The person's own theme (`PUT /auth/me/theme`): one of the three, nothing else. */
+export class ThemePreferenceDto {
+  @IsIn(THEME_PREFERENCES)
+  preference!: ThemePreference;
+}
+
 export class ProductionLoginDto {
   @IsEmail()
   email!: string;

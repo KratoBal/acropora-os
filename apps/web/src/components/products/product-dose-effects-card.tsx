@@ -2,14 +2,13 @@
 
 import {
   Alert,
-  Button,
   ConfirmDialog,
-  Input,
   PilotSection,
-  Select,
   Textarea,
   PilotBadge,
   PilotButton,
+  PilotInput,
+  PilotSelect,
 } from "@acropora/ui";
 import {
   AQUARIUM_MEASUREMENT_PARAMETERS,
@@ -229,13 +228,12 @@ export function ProductDoseEffectsCard({
       subtitle="Mennyit változtat egy adagegység 100 liter vízben (a ReefClub adagajánlásához)"
       action={
         canManage && !draft && rows ? (
-          <Button
+          <PilotButton
             variant="secondary"
-            size="sm"
             onClick={() => setDraft({ ...EMPTY_DRAFT })}
           >
             Új sor
-          </Button>
+          </PilotButton>
         ) : undefined
       }
       bodyClassName="space-y-3 px-5 py-5"
@@ -303,8 +301,7 @@ export function ProductDoseEffectsCard({
               {!row.verifiedBy &&
               row.recordedBy &&
               row.recordedBy.id !== currentUserId ? (
-                <Button
-                  size="sm"
+                <PilotButton
                   disabled={busy}
                   onClick={() =>
                     void act(() =>
@@ -313,24 +310,22 @@ export function ProductDoseEffectsCard({
                   }
                 >
                   Ellenőriztem
-                </Button>
+                </PilotButton>
               ) : null}
-              <Button
-                size="sm"
+              <PilotButton
                 variant="secondary"
                 disabled={busy}
                 onClick={() => edit(row)}
               >
                 Szerkesztés
-              </Button>
-              <Button
-                size="sm"
+              </PilotButton>
+              <PilotButton
                 variant="secondary"
                 disabled={busy}
                 onClick={() => setArchiving(row.id)}
               >
                 Archiválás
-              </Button>
+              </PilotButton>
             </div>
           ) : null}
         </div>
@@ -359,8 +354,7 @@ export function ProductDoseEffectsCard({
                 {parameterLabel(suggested.parameterCode)}{" "}
                 {DIRECTION_TEXT[suggested.direction]}
               </span>
-              <Button
-                size="sm"
+              <PilotButton
                 variant="secondary"
                 onClick={() =>
                   setDraft({
@@ -372,7 +366,7 @@ export function ProductDoseEffectsCard({
                 }
               >
                 Felvétel
-              </Button>
+              </PilotButton>
             </div>
           ))}
         </div>
@@ -389,12 +383,12 @@ export function ProductDoseEffectsCard({
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <label className="space-y-1">
               <span className="text-xs text-dusk-500">Paraméter</span>
-              <Select
+              <PilotSelect
                 aria-label="Paraméter"
                 value={draft.parameterCode}
                 disabled={!!draft.editing}
-                onChange={(event) =>
-                  setDraft({ ...draft, parameterCode: event.target.value })
+                onChange={(value) =>
+                  setDraft({ ...draft, parameterCode: value })
                 }
               >
                 {AQUARIUM_MEASUREMENT_PARAMETERS.map((parameter) => (
@@ -402,79 +396,77 @@ export function ProductDoseEffectsCard({
                     {parameter.label}
                   </option>
                 ))}
-              </Select>
+              </PilotSelect>
             </label>
             <label className="space-y-1">
               <span className="text-xs text-dusk-500">Irány</span>
-              <Select
+              <PilotSelect
                 aria-label="Irány"
                 value={draft.direction}
                 disabled={!!draft.editing}
-                onChange={(event) =>
+                onChange={(value) =>
                   setDraft({
                     ...draft,
-                    direction: event.target.value as DoseEffectDirection,
+                    direction: value as DoseEffectDirection,
                   })
                 }
               >
                 <option value="EMEL">emel</option>
                 <option value="CSOKKENT">csökkent</option>
-              </Select>
+              </PilotSelect>
             </label>
             <label className="space-y-1">
               <span className="text-xs text-dusk-500">
                 Hatás 100 literre, egy adagegység (
                 {parameterUnit(draft.parameterCode)})
               </span>
-              <Input
+              <PilotInput
                 aria-label="Hatás 100 literre"
                 inputMode="decimal"
                 value={draft.effectPer100L}
-                onChange={(event) =>
-                  setDraft({ ...draft, effectPer100L: event.target.value })
+                onChange={(value) =>
+                  setDraft({ ...draft, effectPer100L: value })
                 }
               />
             </label>
             <label className="space-y-1">
               <span className="text-xs text-dusk-500">Adagegység</span>
-              <Select
+              <PilotSelect
                 aria-label="Adagegység"
                 value={draft.doseUnit}
-                onChange={(event) =>
+                onChange={(value) =>
                   setDraft({
                     ...draft,
-                    doseUnit: event.target.value as DoseUnit,
+                    doseUnit: value as DoseUnit,
                   })
                 }
               >
                 <option value="ML">ml</option>
                 <option value="G">g</option>
                 <option value="CSEPP">csepp</option>
-              </Select>
+              </PilotSelect>
             </label>
             <label className="space-y-1">
               <span className="text-xs text-dusk-500">Legkisebb adaglépés</span>
-              <Input
+              <PilotInput
                 aria-label="Adaglépés"
                 inputMode="decimal"
                 value={draft.doseStep}
-                onChange={(event) =>
-                  setDraft({ ...draft, doseStep: event.target.value })
-                }
+                onChange={(value) => setDraft({ ...draft, doseStep: value })}
               />
             </label>
             <label className="space-y-1">
               <span className="text-xs text-dusk-500">
                 A gyártó napi legnagyobb adagja 100 literre
               </span>
-              <Input
+              <PilotInput
                 aria-label="Napi legnagyobb adag"
                 inputMode="decimal"
                 value={draft.maxDailyDosePer100L}
-                onChange={(event) =>
+                onChange={(value) =>
                   setDraft({
                     ...draft,
-                    maxDailyDosePer100L: event.target.value,
+                    maxDailyDosePer100L: value,
                   })
                 }
               />
@@ -483,13 +475,11 @@ export function ProductDoseEffectsCard({
               <span className="text-xs text-dusk-500">
                 Hatásidő órában (üresen 24)
               </span>
-              <Input
+              <PilotInput
                 aria-label="Hatásidő"
                 inputMode="numeric"
                 value={draft.effectHours}
-                onChange={(event) =>
-                  setDraft({ ...draft, effectHours: event.target.value })
-                }
+                onChange={(value) => setDraft({ ...draft, effectHours: value })}
               />
             </label>
           </div>

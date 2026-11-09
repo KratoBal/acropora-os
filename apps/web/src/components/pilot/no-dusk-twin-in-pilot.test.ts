@@ -1,4 +1,14 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -32,149 +42,24 @@ const DUSK_IKREK = [
   "Select",
 ] as const;
 
-const HATRA = new Map<string, string[]>([
-  ["components/billing/billing-external-document-page.tsx", ["Button"]],
-  ["components/billing/billing-receipts-view.tsx", ["Button"]],
-  [
-    "components/brands/brand-editor-page.tsx",
-    ["Button", "Card", "FormField", "Input", "Select"],
-  ],
-  ["components/brands/brand-list-page.tsx", ["Card", "Input", "Select"]],
-  ["components/content/article-citations-panel.tsx", ["Button", "Input"]],
-  [
-    "components/content/article-editor-page.tsx",
-    ["Button", "FormField", "Input"],
-  ],
-  [
-    "components/content/content-create-page.tsx",
-    ["Card", "CardContent", "FormField", "Input", "Select"],
-  ],
-  [
-    "components/customers/customer-list-page.tsx",
-    ["Badge", "Card", "Input", "Select"],
-  ],
-  [
-    "components/inventory/inventory-count-detail-page.tsx",
-    ["Badge", "Button", "Card", "CardContent", "CardHeader"],
-  ],
-  [
-    "components/inventory/inventory-count-list-page.tsx",
-    ["Badge", "Button", "Card", "Select"],
-  ],
-  ["components/messages/messages-page.tsx", ["Input"]],
-  ["components/products/product-detail-page.tsx", ["Button", "Input"]],
-  [
-    "components/products/product-dose-effects-card.tsx",
-    ["Button", "Input", "Select"],
-  ],
-  ["components/products/product-list-page.tsx", ["Button"]],
-  ["components/products/product-shipping-profile-card.tsx", ["Button"]],
-  [
-    "components/purchasing/purchase-invoice-detail-page.tsx",
-    ["Badge", "Card", "CardContent", "CardHeader"],
-  ],
-  [
-    "components/purchasing/purchase-invoice-edit-form.tsx",
-    ["Card", "CardContent", "CardHeader"],
-  ],
-  [
-    "components/purchasing/purchase-invoice-eu-editor-page.tsx",
-    ["Badge", "Card", "FormField", "Input"],
-  ],
-  [
-    "components/purchasing/purchase-invoice-scans.tsx",
-    ["Button", "Card", "CardContent", "CardHeader"],
-  ],
-  ["components/seo-landing/seo-landing-list-page.tsx", ["Card"]],
-  [
-    "components/service-assets/asset-detail-page.tsx",
-    ["Button", "Card", "FormField", "Select"],
-  ],
-  [
-    "components/service-assets/asset-editor-page.tsx",
-    ["Card", "FormField", "Input", "Select"],
-  ],
-  [
-    "components/service-assets/pilot/pilot-asset-detail-page.tsx",
-    ["FormField", "Select"],
-  ],
-  ["components/service-jobs/partner-picker.tsx", ["Select"]],
-  [
-    "components/service-jobs/service-job-detail-page.tsx",
-    ["Badge", "Button", "FormField", "Input"],
-  ],
-  ["components/service-jobs/service-job-editor-page.tsx", ["Input"]],
-  ["components/service-jobs/service-job-placement-editor.tsx", ["Button"]],
-  ["components/settings/mail-image-picker.tsx", ["Button"]],
-  ["components/users/user-list-page.tsx", ["Card", "Input", "Select"]],
-  ["components/users/user-visible-units.tsx", ["Card"]],
-  [
-    "components/webshop/stock-sync-outbox-page.tsx",
-    ["Button", "Card", "CardContent", "CardHeader"],
-  ],
-  [
-    "components/webshop/webshop-orders-page.tsx",
-    ["Badge", "Card", "CardContent", "CardHeader"],
-  ],
-  ["components/webshop/webshop-product-list-page.tsx", ["Card", "Input"]],
-  [
-    "components/worksheets/worksheet-line-editor.tsx",
-    ["Button", "Card", "Input"],
-  ],
-  ["components/worksheets/worksheet-list-page.tsx", ["Avatar"]],
-  [
-    "components/worksheets/worksheet-material-requests.tsx",
-    ["Badge", "Button", "Input"],
-  ],
-]);
+const HATRA = new Map<string, string[]>([]);
 
 /*
   A SZÁMLÁLÓK (barracuda, #2125): a pontos egyezés megfogja az új vegyes fájlt, de ha valaki ugyanabban a PR-ban a
   sorát is felveszi a listára, a teszt zöld maradna. A két szám ezért külön áll: a lista bővítése két helyen kér
-  módosítást, és a reviewban látszik. Fogyáskor a számot is le kell írni (a lista története: 59 / 141 a #2125-ben, 47 / 129 a #2134-ben, 45 / 120 a #2137-ben).
+  módosítást, és a reviewban látszik. Fogyáskor a számot is le kell írni (a lista története: 59 / 141 a #2125-ben, 47 / 129 a #2134-ben, 45 / 120 a #2137-ben, 36 / 96 a #2140-ben, 32 / 86 a #2229-ben, 29 / 76 a #2232-ben, 25 / 61 a 7. szeletben, a purchasing mappa, 8 / 30 a 13. szeletben: a termékek, a SEO landing és a levélkép-választó, 5 / 18 a 14. szeletben, a leltár két lapja és az adag-hatás kártya, 4 / 14 a 8. szeletben, az eszköz-szerkesztő, 1 / 4 a 15. szeletben, a webshop három lapja, 0 / 0 a 16. szeletben, a vevőlista).
 */
-const HATRA_MERET = 36;
-const HATRA_IKREK = 96;
+const HATRA_MERET = 0;
+const HATRA_IKREK = 0;
 
 /*
   A GYEREK-LISTA (barracuda, #2125): egy pilot fájl által importált, CSAK duskot használó .tsx (relatív vagy `@/`
   út, egy szint). A fájlszintű mérés ezt a pilot lapon rajzolt dusk elemet nem látja; itt látszik, ugyanazzal a
   csak-fogyhat szabállyal. Mélyebb gráf nem kell: a második szint már többnyire közös komponens.
 */
-const GYEREK = new Map<string, string[]>([
-  [
-    "components/aquariums/customer-picker.tsx",
-    ["Button", "Card", "FormField", "Input"],
-  ],
-  ["components/brands/catalog-actions-panel.tsx", ["Badge", "Button", "Card"]],
-  ["components/content/article-revision-diff.tsx", ["Button"]],
-  ["components/messages/new-conversation-dialog.tsx", ["Button", "Input"]],
-  ["components/products/barcode-editor.tsx", ["Badge", "Button", "Input"]],
-  [
-    "components/products/product-basics-editor.tsx",
-    ["Button", "Card", "FormField", "Input", "Select"],
-  ],
-  [
-    "components/purchasing/purchase-invoice-cancel-form.tsx",
-    ["Button", "Card", "CardContent", "CardHeader"],
-  ],
-  ["components/service-jobs/completion-certificate-panel.tsx", ["Button"]],
-  [
-    "components/service-jobs/handover-mail-dialog.tsx",
-    ["Button", "FormField", "Input"],
-  ],
-  ["components/service-jobs/job-asset-picker.tsx", ["Button", "Input"]],
-  ["components/service-jobs/maintenance-invoice-panel.tsx", ["Button"]],
-  ["components/service-jobs/maintenance-package-panel.tsx", ["Button"]],
-  ["components/service-jobs/service-job-assignee-editor.tsx", ["Button"]],
-  [
-    "components/service-jobs/service-job-fields-editor.tsx",
-    ["Button", "Input"],
-  ],
-  ["components/service/service-document-gallery.tsx", ["Button", "Input"]],
-]);
-const GYEREK_MERET = 15;
-const GYEREK_IKREK = 35;
+const GYEREK = new Map<string, string[]>([]);
+const GYEREK_MERET = 0;
+const GYEREK_IKREK = 0;
 
 function fajlok(mappa: string): string[] {
   return readdirSync(mappa).flatMap((nev) => {
@@ -226,9 +111,9 @@ function pilotForras(tiszta: string): boolean {
 }
 
 /** Egy import-specifikátor a `src` alatti .tsx fájlra (relatív vagy `@/`), vagy null. */
-function felold(honnan: string, spec: string): string | null {
+function felold(honnan: string, spec: string, gyoker = ROOT): string | null {
   const alap = spec.startsWith("@/")
-    ? join(ROOT, spec.slice(2))
+    ? join(gyoker, spec.slice(2))
     : spec.startsWith(".")
       ? join(dirname(honnan), spec)
       : null;
@@ -239,22 +124,22 @@ function felold(honnan: string, spec: string): string | null {
 }
 
 /** A pilot fájlok egy szintű, csak duskot használó .tsx gyerekei, a bennük álló dusk ikrekkel. */
-const gyerekek = () => {
+const gyerekek = (gyoker = ROOT) => {
   const talalt = new Map<string, string[]>();
-  for (const ut of fajlok(ROOT)) {
+  for (const ut of fajlok(gyoker)) {
     const tiszta = kod(readFileSync(ut, "utf8"));
     if (!pilotForras(tiszta)) continue;
     for (const m of tiszta.matchAll(
       /import\s+(type\s+)?(?:\w+\s*,\s*)?(?:\{[^}]*\}|\w+)\s*from\s*"([^"]+)"/g,
     )) {
       if (m[1]) continue;
-      const gyerek = felold(ut, m[2]!);
+      const gyerek = felold(ut, m[2]!, gyoker);
       if (!gyerek || /\.test\./.test(gyerek)) continue;
       const gyerekKod = kod(readFileSync(gyerek, "utf8"));
       if (pilotForras(gyerekKod)) continue;
       const nevek = uiNevek(gyerekKod);
       const dusk = DUSK_IKREK.filter((n) => nevek.has(n));
-      if (dusk.length) talalt.set(relative(ROOT, gyerek), [...dusk].sort());
+      if (dusk.length) talalt.set(relative(gyoker, gyerek), [...dusk].sort());
     }
   }
   return new Map([...talalt].sort(([a], [b]) => a.localeCompare(b)));
@@ -307,6 +192,66 @@ describe("dusk iker a pilot lapon", () => {
       ),
     );
     expect(pilot.length).toBeGreaterThan(100);
+  });
+
+  /*
+    A GYEREK-MÉRŐ PÓZITÍV KONTROLLJA (barracuda, #2317 v2): ha a gyerek-lista üres, a "csak fogyhat" állítás akkor is zöld, ha a
+    gyűjtés elromlik (az import-regex, a `felold`, a pilot-felismerés) és SEMMIT nem talál. Ez egy ideiglenes mappában épített
+    mintán méri, hogy a `gyerekek` megtalálja, amit kell, és kihagyja, amit nem. MI PIROSÍT: a relatív vagy az `@/` import
+    elvesztése; egy NEM pilot lap dusk gyerekének felvétele; egy pilot gyerek vagy egy csak típusként importált fájl felvétele; a
+    tiszta (dusk iker nélküli) gyerek felvétele.
+  */
+  it("a gyerek-mérő megtalálja a pilot lap dusk ikres gyerekét, és kihagyja a többit (pozitív kontroll)", () => {
+    const gyoker = mkdtempSync(join(tmpdir(), "dusk-iker-"));
+    try {
+      const ir = (ut: string, tartalom: string) => {
+        mkdirSync(dirname(join(gyoker, ut)), { recursive: true });
+        writeFileSync(join(gyoker, ut), tartalom);
+      };
+      ir(
+        "pages/pilot-page.tsx",
+        [
+          'import { PilotCard } from "@acropora/ui";',
+          'import { RelChild } from "./rel-child";',
+          'import { AtChild } from "@/components/at-child";',
+          'import { Clean } from "./clean-child";',
+          'import { PilotKid } from "./pilot-kid";',
+          'import type { OnlyType } from "./only-type";',
+          '// import { Commented } from "./commented-child";',
+          "",
+        ].join("\n"),
+      );
+      ir(
+        "pages/rel-child.tsx",
+        'import { Alert, Button } from "@acropora/ui";\n',
+      );
+      ir(
+        "components/at-child.tsx",
+        'import { Card, Input } from "@acropora/ui";\n',
+      );
+      ir("pages/clean-child.tsx", 'import { Alert } from "@acropora/ui";\n');
+      ir(
+        "pages/pilot-kid.tsx",
+        'import { Button, PilotButton } from "@acropora/ui";\n',
+      );
+      ir("pages/only-type.tsx", 'import { Select } from "@acropora/ui";\n');
+      ir(
+        "pages/commented-child.tsx",
+        'import { Badge } from "@acropora/ui";\n',
+      );
+      // a NOT pilot parent: its dusk child is not this list's business
+      ir(
+        "pages/dusk-parent.tsx",
+        'import { Input } from "@acropora/ui";\nimport { Lonely } from "./lonely-child";\n',
+      );
+      ir("pages/lonely-child.tsx", 'import { Button } from "@acropora/ui";\n');
+      expect(Object.fromEntries(gyerekek(gyoker))).toEqual({
+        "components/at-child.tsx": ["Card", "Input"],
+        "pages/rel-child.tsx": ["Button"],
+      });
+    } finally {
+      rmSync(gyoker, { recursive: true, force: true });
+    }
   });
 
   it("a vegyes fájlok pontosan a hátralévő lista, a benne maradt ikrekkel", () => {

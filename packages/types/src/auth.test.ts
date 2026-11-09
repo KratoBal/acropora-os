@@ -391,6 +391,8 @@ describe("a MANAGER jogkör-készlete rögzítve van", () => {
         "dashboard.view",
         "finance.manage",
         "finance.view",
+        "game.manage",
+        "game.view",
         "icp.manage",
         "icp.view",
         "inventory.manage",
@@ -421,6 +423,9 @@ describe("a MANAGER jogkör-készlete rögzítve van", () => {
         "quotes.send",
         "quotes.templates.manage",
         "quotes.view",
+        // eszközbérlés (task eszkozberles): a vezető is rögzít bérlést (acrobot 44216)
+        "rentals.manage",
+        "rentals.view",
         "service.manage",
         "service.view",
         "tasks.view",

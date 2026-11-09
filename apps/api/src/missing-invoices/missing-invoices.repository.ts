@@ -319,6 +319,26 @@ export class MissingInvoicesRepository {
   }
 
   /**
+   * A SAJÁT KIMENŐ SZÁMLÁK (a Számlázz.hu feedjéből): a vevőnek visszautalt összeg felismeréséhez (`ownInvoiceRefund`,
+   * kártya a116ec70): a közleményben megnevezett saját számlaszám, és a hozzá tartozó sztornó vagy jóváíró. Csak olvasás;
+   * a feed néhány száz sort ad, tehát nem kell ablakot húzni.
+   */
+  ownOutgoingDocuments() {
+    return this.database.externalBillingDocument.findMany({
+      where: { source: "SZAMLAZZ" },
+      orderBy: [{ issueDate: "asc" }, { documentNumber: "asc" }],
+      select: {
+        documentNumber: true,
+        kindCode: true,
+        customerName: true,
+        grossAmount: true,
+        currency: true,
+        issueDate: true,
+      },
+    });
+  }
+
+  /**
    * A jóváírások: a sztornózott vásárlás visszatérítése ezekből látszik
    * (acrobot 25933), és a kivonatok utolsó napja is ezekkel együtt mérhető.
    */

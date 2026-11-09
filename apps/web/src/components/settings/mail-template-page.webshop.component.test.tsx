@@ -135,7 +135,7 @@ beforeEach(() => {
 });
 
 describe("Levélsablonok: Szerviz és Webshop", () => {
-  it("the Webshop tab lists its twelve templates with their status", async () => {
+  it("the Webshop tab lists its fourteen templates with their status", async () => {
     await megjelenit();
     expect(
       screen
@@ -144,8 +144,8 @@ describe("Levélsablonok: Szerviz és Webshop", () => {
     ).toBe("true");
     await webshopFul();
     const lista = screen.getByRole("list", { name: "Sablonok" });
-    /* twelve Hungarian mails (the twelfth: the problem report acknowledgement), and the twelve English twins next to them (card d5c6befd) */
-    expect(within(lista).getAllByRole("button")).toHaveLength(24);
+    /* fourteen Hungarian mails (the fourteenth: the stock alert's confirmation), and the fourteen English twins next to them (card d5c6befd) */
+    expect(within(lista).getAllByRole("button")).toHaveLength(28);
     const angol = within(lista).getByRole("button", {
       name: /Csomag átadva a szállítónak \(angol\)/,
     });

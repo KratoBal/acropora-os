@@ -231,6 +231,7 @@ export {
   hungarianDay,
   isWebshopMailTemplate,
   parseWebshopMailFacts,
+  safeOrderViewUrl,
   webshopMailContent,
   webshopMailKey,
   webshopMailLocaleOf,
@@ -254,6 +255,32 @@ export type {
   WebshopLegalPart,
   WebshopLegalVersion,
 } from "./webshop-legal.js";
+export {
+  WEBSHOP_ACCLIMATION_TEXTS,
+  WEBSHOP_LIVESTOCK_KINDS,
+  isWebshopLivestockKind,
+  webshopAcclimationValue,
+} from "./webshop-acclimation.js";
+export type {
+  WebshopAcclimationTexts,
+  WebshopLivestockKind,
+} from "./webshop-acclimation.js";
+export {
+  LIVESTOCK_ARRIVAL_KINDS,
+  LIVESTOCK_ARRIVAL_KIND_LABELS,
+  LIVESTOCK_ARRIVAL_LIMITS,
+  LIVESTOCK_ARRIVAL_OPEN_STATUSES,
+  LIVESTOCK_ARRIVAL_STATUSES,
+  LIVESTOCK_ARRIVAL_STATUS_LABELS,
+  isLivestockArrivalOpen,
+} from "./livestock-arrival.js";
+export type {
+  LivestockArrival,
+  LivestockArrivalKind,
+  LivestockArrivalListResponse,
+  LivestockArrivalProductOption,
+  LivestockArrivalStatus,
+} from "./livestock-arrival.js";
 export type {
   WebshopMailRender,
   WebshopRenderSteps,
@@ -423,6 +450,7 @@ export {
   ROLE_PERMISSIONS,
   USER_ROLES,
   ASSIGNABLE_ROLES,
+  THEME_PREFERENCES,
 } from "./auth.js";
 export { CATALOG_ACTION_KINDS } from "./catalog-actions.js";
 export type {
@@ -487,6 +515,7 @@ export type {
   PartnerMembership,
   Permission,
   Session,
+  ThemePreference,
   UserRole,
 } from "./auth.js";
 export type {
@@ -648,6 +677,8 @@ export type {
   CustomerAddressType,
   CustomerDetail,
   CustomerListResponse,
+  CustomerListRole,
+  CustomerPartnerRole,
   CustomerSource,
   CustomerStatusFilter,
   CustomerSummary,
@@ -655,7 +686,11 @@ export type {
   UpdateCustomerAddressInput,
   UpdateCustomerInput,
 } from "./customer-management.js";
-export { CUSTOMER_LIST_PAGE_SIZE } from "./customer-management.js";
+export {
+  CUSTOMER_LIST_PAGE_SIZE,
+  CUSTOMER_LIST_ROLES,
+  CUSTOMER_PARTNER_ROLES,
+} from "./customer-management.js";
 export type {
   AcroporaDomainEvent,
   CatalogImportApplied,
@@ -1079,6 +1114,28 @@ export type {
 export { FAVORITE_LIMITS, isFavoriteHref } from "./favorite.js";
 export type { FavoriteListResponse } from "./favorite.js";
 export { normalizeAssetFunctionName } from "./asset-function.js";
+export {
+  normalizeOptionalRentalText,
+  normalizeRentalSerialNumber,
+  RENTAL_EQUIPMENT_LIMITS,
+} from "./rental-equipment.js";
+export type {
+  RentalEquipment,
+  RentalEquipmentListResponse,
+} from "./rental-equipment.js";
+export {
+  RENTAL_LIMITS,
+  RENTAL_STATUSES,
+  rentalFeeHuf,
+  rentalPeriodCount,
+} from "./rental.js";
+export type {
+  Rental,
+  RentalCustomerMatchResponse,
+  RentalCustomerSummary,
+  RentalListResponse,
+  RentalStatus,
+} from "./rental.js";
 export type {
   AssetFunction,
   AssetFunctionListResponse,
@@ -1244,6 +1301,7 @@ export type {
   DashboardSystemState,
   DashboardSystemStatusWidgetData,
   DashboardExpectedArrivalsWidgetData,
+  DashboardPartnerOrderBacklogWidgetData,
   DashboardIncomingInvoicesWidgetData,
   DashboardLayoutEntry,
   DashboardMaintenanceCalendarWidgetData,
@@ -1729,18 +1787,26 @@ export type {
   VariantSupplierPrices,
 } from "./supplier-price-lists.js";
 export {
+  PARTNER_ORDER_BACKLOG_DAYS_DEFAULT,
+  PARTNER_ORDER_BACKLOG_DAYS_MAX,
+  PARTNER_ORDER_CHAIN_FILTERS,
   PARTNER_ORDER_DOCUMENT_STEPS,
   PARTNER_ORDER_STATUSES,
+  partnerOrderBacklog,
+  partnerOrderMatchesChainFilter,
 } from "./partner-orders.js";
 export type {
   PartnerOrderCandidateDto,
   PartnerOrderChain,
+  PartnerOrderChainFilter,
   PartnerOrderDetailDto,
   PartnerOrderDocumentDto,
+  PartnerOrderSystemDocumentDto,
   PartnerOrderDocumentStepValue,
   PartnerOrderLineDto,
   PartnerOrderListItemDto,
   PartnerOrderListResponse,
+  PartnerOrderSettingsDto,
   PartnerOrderStatusValue,
   PartnerOrderTotalsDto,
   PartnerOrderVatBreakdownDto,
@@ -1754,3 +1820,60 @@ export type {
   PartnerDuplicateResponse,
   PartnerDuplicateSupplier,
 } from "./partner-duplicates.js";
+export { PARTNER_MIGRATION_ACTIONS } from "./partner-migration.js";
+export type {
+  PartnerMigrationAction,
+  PartnerMigrationApplyInput,
+  PartnerMigrationApplyOutcome,
+  PartnerMigrationApplyResult,
+  PartnerMigrationCustomer,
+  PartnerMigrationPlan,
+  PartnerMigrationRestoreInput,
+  PartnerMigrationRestoreOutcome,
+  PartnerMigrationRestorePreview,
+  PartnerMigrationRestoreResult,
+  PartnerMigrationRow,
+  PartnerMigrationRunOperation,
+  PartnerMigrationRunPreview,
+} from "./partner-migration.js";
+export { PARTNER_MERGE_REFERENCE_TABLES } from "./partner-merge.js";
+export type {
+  PartnerMergeExecuteInput,
+  PartnerMergeFieldFill,
+  PartnerMergeLogEntry,
+  PartnerMergePreview,
+  PartnerMergeReferenceTable,
+  PartnerMergeSide,
+  PartnerMergeUndoResult,
+} from "./partner-merge.js";
+export { BANK_TRANSFER_REFUSAL_TEXT } from "./bank-transfer-pairing.js";
+export type {
+  BankTransferCreditView,
+  BankTransferDecisionView,
+  BankTransferPairResult,
+  BankTransferRefusalValue,
+} from "./bank-transfer-pairing.js";
+export {
+  isShippingFilterValue,
+  SHIPPING_FILTER_VALUES,
+  SHIPPING_FLAG_KEYS,
+  SHIPPING_FLAG_SHORT_LABELS,
+} from "./product-catalog.js";
+export type {
+  ShippingFilterValue,
+  ShippingFlagKey,
+} from "./product-catalog.js";
+export {
+  christmasCandidates,
+  drawGameWinner,
+  drawGameWinnerInOrder,
+  GAME_QUESTION_TYPES,
+  isGameAnswerCorrect,
+  normalizeGameAnswer,
+  normalizeGameEmail,
+} from "./game.js";
+export type {
+  GameDrawCandidate,
+  GameOption,
+  GameQuestionType,
+} from "./game.js";

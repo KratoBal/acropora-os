@@ -5,29 +5,57 @@ import {
   OnModuleInit,
 } from "@nestjs/common";
 
-import { prismaPaymentMarkStore } from "../../integrations/szamlazz/outgoing-payment-marks.js";
-import type { PaymentMarkSource } from "../../integrations/szamlazz/outgoing-payment-marks.js";
-import { HttpSzamlazzAgentClient } from "../../integrations/szamlazz/szamlazz-agent.client.js";
+import {
+  precheckPaidMark,
+  prismaPaymentMarkStore,
+} from "../../integrations/szamlazz/outgoing-payment-marks.js";
+import type {
+  PaymentMarkSource,
+  PaymentMarkStore,
+} from "../../integrations/szamlazz/outgoing-payment-marks.js";
+import {
+  HttpSzamlazzAgentClient,
+  type SzamlazzAgentPaymentClient,
+} from "../../integrations/szamlazz/szamlazz-agent.client.js";
 import { SzamlazzCredentialProvider } from "../../integrations/szamlazz/szamlazz-credential.provider.js";
 import {
+  paidMarksDryResult,
   paidMarksMode,
   paidMarksRunLine,
   runPaidMarksAuto,
   type PaidMarkPlan,
+  type PaidMarkPlanned,
   type PaidMarksMode,
+  type PaidMarksRunResult,
 } from "./paid-marks-auto.js";
-import { PaidMarkRunRepository } from "./paid-mark-run.repository.js";
+import {
+  PaidMarkRunRepository,
+  type PaidMarkTrigger,
+} from "./paid-mark-run.repository.js";
 import {
   foxpostPaidMarkPlan,
   glsPaidMarkPlan,
   simplePayPaidMarkPlan,
 } from "./paid-marks-sources.js";
+import {
+  bankTransferPaidMarkPlan,
+  runBankTransferMarks,
+} from "../bank-transfer-paid-marks.js";
 
 /** The sources, their switches and their dry-run plans. */
 export const PAID_MARK_SOURCES: readonly {
   source: PaymentMarkSource;
   switchName: string;
   plan: (from: string) => Promise<PaidMarkPlan>;
+  /** a source that writes its own way (one bank credit under its lock, #2192); else the shared writer */
+  run?: (
+    from: string,
+    context: {
+      agentKey: string;
+      client: SzamlazzAgentPaymentClient;
+      store: PaymentMarkStore;
+    },
+  ) => Promise<PaidMarksRunResult>;
 }[] = [
   { source: "GLS_COD", switchName: "GLS_COD_MARK_PAID", plan: glsPaidMarkPlan },
   {
@@ -39,6 +67,13 @@ export const PAID_MARK_SOURCES: readonly {
     source: "SIMPLEPAY",
     switchName: "SIMPLEPAY_MARK_PAID",
     plan: simplePayPaidMarkPlan,
+  },
+  // one transfer, several of our invoices (card aeddb2c3): automatic only on one customer and an exact amount
+  {
+    source: "BANK_TRANSFER",
+    switchName: "BANK_TRANSFER_MARK_PAID",
+    plan: bankTransferPaidMarkPlan,
+    run: runBankTransferMarks,
   },
 ];
 
@@ -68,6 +103,13 @@ export function msUntilNextRun(now: Date, hour: number): number {
   return next.getTime() - now.getTime();
 }
 
+/**
+ * THE ONE LOOK WITHOUT AN AGE LIMIT (acrobot 43776, promised to Balázs 2026-11-05 19:20 UTC): after the feed backfill
+ * the old credits (the zoo's 2026-09-07 transfer, 2026/00069 and 00070) fall out of the daily window. One run from this
+ * day takes every stored credit and settlement; the decision is the same, and the log keeps it idempotent.
+ */
+export const ALL_TIME_FROM = "2000-01-01";
+
 /** The first day a run looks at: `days` before `now`, as YYYY-MM-DD. */
 export function runFrom(now: Date, days: number): string {
   return new Date(now.getTime() - days * 86_400_000).toISOString().slice(0, 10);
@@ -80,10 +122,32 @@ export function describePaidMarksAuto(
   days: number,
 ): string {
   const list = modes.map((m) => `${m.source}=${m.mode}`).join(", ");
-  return modes.some((m) => m.mode === "auto")
+  return modes.some((m) => m.mode === "auto" || m.mode === "dry")
     ? `Kifizetett-jelölés automatikusan: naponta ${hour}:00-kor, ${days} napra vissza (${list})`
-    : `Kifizetett-jelölés automatikusan: KI, egyik forrás sincs auto állásban (${list})`;
+    : `Kifizetett-jelölés automatikusan: KI, egyik forrás sincs auto vagy dry állásban (${list})`;
 }
+
+/** One source's dry look without an age limit (acrobot 43822): what a run from ALL_TIME_FROM would mark, and why not more. */
+export interface AllTimePreview {
+  source: PaymentMarkSource;
+  mode: PaidMarksMode;
+  /** what the writer would really try: the plan's marks that pass the writer's own checks (`precheckPaidMark`) */
+  planned: PaidMarkPlanned[];
+  /** the plan's marks the writer would leave out, per reason: LOGGED_BEFORE, ALREADY_PAID, NOT_UNPAID, UNCERTAIN_BEFORE */
+  skipped: Record<string, number>;
+  attentionCount: number;
+  summary: Record<string, number>;
+  errorCode: string | null;
+}
+
+/** What a "Futtatás most" press answers (e64540fd). */
+export type PaidMarksRunNow =
+  | {
+      status: "started";
+      sources: { source: PaymentMarkSource; mode: PaidMarksMode }[];
+    }
+  | { status: "running" }
+  | { status: "nothing"; reason: "no-source-on-auto-or-dry" };
 
 /**
  * THE DAILY RUN (acrobot 26101): every source on `auto` writes its markable
@@ -96,16 +160,141 @@ export class PaidMarksAutoScheduler implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PaidMarksAutoScheduler.name);
   private timer: NodeJS.Timeout | null = null;
   private stopped = false;
+  /**
+   * THE ONE LOCK OF A RUN, the daily one and the manual one alike (e64540fd): while a run is in flight
+   * a second one does not start, so two runs never plan and write the same invoices at once. The API
+   * runs as one process (one container per environment); the writer's own guards (PLANNED before the
+   * call, no blind retry, the bank credit's lock) stay under it as before.
+   */
+  private running: { startedAt: Date; done: Promise<void> } | null = null;
+  /**
+   * When the timer fires next (e64540fd fix): the page shows this instant in Budapest time, not a fixed
+   * "7:00". The hour is the process's own local hour (`setHours`), and the API process may run in UTC, so
+   * the same PAID_MARKS_AUTO_HOUR is 08:00 in Budapest in winter and 09:00 in summer.
+   */
+  private nextRunAt: Date | null = null;
 
   constructor(
     private readonly credentials: SzamlazzCredentialProvider,
     private readonly runs: PaidMarkRunRepository,
   ) {}
 
-  private autoSources() {
-    return PAID_MARK_SOURCES.filter(
-      (s) => paidMarksMode(process.env[s.switchName]) === "auto",
+  /** The sources a run takes: `auto` writes, `dry` records the plan only (e64540fd). */
+  private runSources() {
+    return PAID_MARK_SOURCES.filter((s) => {
+      const mode = paidMarksMode(process.env[s.switchName]);
+      return mode === "auto" || mode === "dry";
+    });
+  }
+
+  /**
+   * THE DRY LOOK BEFORE THE RUN WITHOUT AN AGE LIMIT (acrobot 43822: "Ne menjen vakon"). After the feed backfill such a
+   * run can mark at once every old invoice the new feed rows make pairable, on an `auto` source; nobody should press it
+   * without seeing the count. Every source on `auto` or `dry` plans from ALL_TIME_FROM with the same decision as the
+   * run; nothing is written and nothing is recorded (the page shows the answer, the write is a separate press). The
+   * bank source writes one credit under its lock, but plans with the same decision (`bankTransferPaidMarkPlan`).
+   *
+   * THE COUNT IS WHAT THE WRITER TRIES (acrobot 43886; barracuda on #2251): a plan from ALL_TIME_FROM holds every mark
+   * of every old transfer, the ones the daily runs already wrote too. Each mark goes through the writer's own checks,
+   * read only (`precheckPaidMark`: the log row, then the invoice as the feed stores it); what it would leave out is
+   * counted per reason, not listed as a mark.
+   */
+  async previewAllTime(
+    sources: readonly (typeof PAID_MARK_SOURCES)[number][] = this.runSources(),
+    store: Pick<
+      PaymentMarkStore,
+      "logRow" | "invoice"
+    > = prismaPaymentMarkStore,
+  ): Promise<AllTimePreview[]> {
+    const out: AllTimePreview[] = [];
+    for (const s of sources) {
+      const mode = paidMarksMode(process.env[s.switchName]);
+      try {
+        const plan = await s.plan(ALL_TIME_FROM);
+        const { result } = paidMarksDryResult(plan);
+        const skipped: Record<string, number> = {};
+        const tries: (typeof plan.marks)[number][] = [];
+        for (const mark of plan.marks) {
+          const { skip } = await precheckPaidMark(plan.source, mark, store);
+          if (skip) skipped[skip.kind] = (skipped[skip.kind] ?? 0) + 1;
+          else tries.push(mark);
+        }
+        out.push({
+          source: s.source,
+          mode,
+          planned: paidMarksDryResult({ ...plan, marks: tries }).planned,
+          skipped,
+          attentionCount: result.attention.length,
+          summary: { ...result.summary },
+          errorCode: null,
+        });
+      } catch (error) {
+        out.push({
+          source: s.source,
+          mode,
+          planned: [],
+          skipped: {},
+          attentionCount: 0,
+          summary: {},
+          errorCode: errorCode(error, "PAID_MARKS_DRY_FAILED"),
+        });
+      }
+    }
+    return out;
+  }
+
+  /** Each source and its switch, for the page. */
+  modes(): { source: PaymentMarkSource; mode: PaidMarksMode }[] {
+    return PAID_MARK_SOURCES.map((s) => ({
+      source: s.source,
+      mode: paidMarksMode(process.env[s.switchName]),
+    }));
+  }
+
+  /** Whether a run is in flight, and since when. */
+  status(): {
+    running: boolean;
+    startedAt: string | null;
+    nextRunAt: string | null;
+  } {
+    return {
+      running: this.running !== null,
+      startedAt: this.running?.startedAt.toISOString() ?? null,
+      nextRunAt: this.nextRunAt?.toISOString() ?? null,
+    };
+  }
+
+  /**
+   * "FUTTATÁS MOST" (Balázs, 2026-11-05 08:14 UTC; e64540fd): the daily run, started by hand, with the
+   * same code and the same switches. It does not wait for the run: the answer says it started, and the
+   * page reads the outcome from `latest`.
+   */
+  runNow(
+    userId: string,
+    now = new Date(),
+    options: { allTime?: boolean } = {},
+  ): PaidMarksRunNow {
+    const sources = this.runSources();
+    if (sources.length === 0)
+      return { status: "nothing", reason: "no-source-on-auto-or-dry" };
+    if (this.running) return { status: "running" };
+    void this.runOnce(
+      now,
+      sources,
+      { kind: "manual", userId },
+      options.allTime ? ALL_TIME_FROM : undefined,
+    ).catch((error: unknown) =>
+      this.logger.error(
+        `Kifizetett-jelölés (kézi): a futás váratlanul elbukott (${errorCode(error, "PAID_MARKS_RUN_FAILED")})`,
+      ),
     );
+    return {
+      status: "started",
+      sources: sources.map((s) => ({
+        source: s.source,
+        mode: paidMarksMode(process.env[s.switchName]),
+      })),
+    };
   }
 
   onModuleInit(): void {
@@ -120,7 +309,7 @@ export class PaidMarksAutoScheduler implements OnModuleInit, OnModuleDestroy {
         paidMarksAutoDays(),
       ),
     );
-    if (this.autoSources().length === 0) return;
+    if (this.runSources().length === 0) return;
     this.schedule(hour);
   }
 
@@ -128,14 +317,70 @@ export class PaidMarksAutoScheduler implements OnModuleInit, OnModuleDestroy {
     this.stopped = true;
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
+    this.nextRunAt = null;
   }
 
-  /** `sources` only for the test; by default the ones on `auto`. */
+  /**
+   * `sources` only for the test; by default the ones on `auto` or `dry`. A run already in flight is not
+   * doubled: the call returns without running (the daily timer's next turn comes the next day).
+   */
   async runOnce(
     now = new Date(),
-    sources: readonly (typeof PAID_MARK_SOURCES)[number][] = this.autoSources(),
+    sources: readonly (typeof PAID_MARK_SOURCES)[number][] = this.runSources(),
+    trigger: PaidMarkTrigger = { kind: "schedule" },
+    /** the first day to look at; by default the daily window (`PAID_MARKS_AUTO_DAYS`) */
+    from?: string,
   ): Promise<void> {
     if (sources.length === 0) return;
+    if (this.running) {
+      this.logger.warn(
+        `Kifizetett-jelölés: egy futás már tart (${this.running.startedAt.toISOString()} óta), ez nem indult`,
+      );
+      return;
+    }
+    const done = this.runSourcesOnce(
+      sources,
+      trigger,
+      from ?? runFrom(now, paidMarksAutoDays()),
+    );
+    this.running = { startedAt: now, done };
+    try {
+      await done;
+    } finally {
+      this.running = null;
+    }
+  }
+
+  private async runSourcesOnce(
+    sources: readonly (typeof PAID_MARK_SOURCES)[number][],
+    trigger: PaidMarkTrigger,
+    from: string,
+  ): Promise<void> {
+    if (from === ALL_TIME_FROM)
+      this.logger.log("Kifizetett-jelölés: egyszeri futás korhatár nélkül");
+    const mode = (s: (typeof PAID_MARK_SOURCES)[number]) =>
+      paidMarksMode(process.env[s.switchName]);
+
+    // a dry source only plans: it needs no Számlázz.hu key, and it never writes
+    for (const s of sources.filter((x) => mode(x) === "dry")) {
+      try {
+        const { result, planned } = paidMarksDryResult(await s.plan(from));
+        await this.runs.saveDry(result, planned, trigger);
+        this.logger.log(
+          `Kifizetett-jelölés ${s.source} (dry): kifizetettre jelölne ${planned.length}; figyelmet kér ${result.attention.length}`,
+        );
+      } catch (error) {
+        const code = errorCode(error, "PAID_MARKS_DRY_FAILED");
+        this.logger.error(
+          `Kifizetett-jelölés ${s.source} (dry): a terv elbukott (${code})`,
+        );
+        await this.runs.saveFailed(s.source, code, trigger, "dry");
+      }
+    }
+
+    // the rest writes: by default only the `auto` ones are here (a test hands its sources in directly)
+    const writing = sources.filter((x) => mode(x) !== "dry");
+    if (writing.length === 0) return;
     let agentKey: string;
     try {
       agentKey = (await this.credentials.resolve()).agentKey;
@@ -144,40 +389,46 @@ export class PaidMarksAutoScheduler implements OnModuleInit, OnModuleDestroy {
       this.logger.error(
         `Kifizetett-jelölés: nincs Számlázz.hu-kulcs (${code}), semmi nem futott`,
       );
-      for (const s of sources) await this.runs.saveFailed(s.source, code);
+      for (const s of writing)
+        await this.runs.saveFailed(s.source, code, trigger);
       return;
     }
-    const from = runFrom(now, paidMarksAutoDays());
     const client = new HttpSzamlazzAgentClient();
-    for (const s of sources) {
+    for (const s of writing) {
       try {
-        const result = await runPaidMarksAuto({
-          plan: await s.plan(from),
-          agentKey,
-          client,
-          store: prismaPaymentMarkStore,
-        });
-        await this.runs.save(result);
+        const result = s.run
+          ? await s.run(from, {
+              agentKey,
+              client,
+              store: prismaPaymentMarkStore,
+            })
+          : await runPaidMarksAuto({
+              plan: await s.plan(from),
+              agentKey,
+              client,
+              store: prismaPaymentMarkStore,
+            });
+        await this.runs.save(result, trigger);
         this.logger.log(paidMarksRunLine(result));
       } catch (error) {
         const code = errorCode(error, "PAID_MARKS_AUTO_FAILED");
         this.logger.error(
           `Kifizetett-jelölés ${s.source}: a futás elbukott (${code})`,
         );
-        await this.runs.saveFailed(s.source, code);
+        await this.runs.saveFailed(s.source, code, trigger);
       }
     }
   }
 
   private schedule(hour: number): void {
-    this.timer = setTimeout(
-      () => {
-        void this.runOnce().finally(() => {
-          if (!this.stopped) this.schedule(hour);
-        });
-      },
-      msUntilNextRun(new Date(), hour),
-    );
+    const now = new Date();
+    const wait = msUntilNextRun(now, hour);
+    this.nextRunAt = new Date(now.getTime() + wait);
+    this.timer = setTimeout(() => {
+      void this.runOnce().finally(() => {
+        if (!this.stopped) this.schedule(hour);
+      });
+    }, wait);
     this.timer.unref();
   }
 }

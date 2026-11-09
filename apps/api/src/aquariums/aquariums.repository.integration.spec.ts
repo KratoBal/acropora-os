@@ -5,7 +5,10 @@ import { prisma } from "@acropora/database";
 
 import { integrationDatabaseGate } from "../common/integration-database.js";
 import { nincsMaradek } from "../common/takaritas-leltar.js";
-import { AquariumsRepository } from "./aquariums.repository.js";
+import {
+  AquariumsRepository,
+  SELECTABLE_CUSTOMER_LIMIT,
+} from "./aquariums.repository.js";
 
 /**
  * A HELYSZÍNI FELVITEL IDEMPOTENCIÁJA, ADATBÁZISON.
@@ -66,6 +69,10 @@ describe(
       // -- egy törölt vevőt a fenti sor már nem talál meg name szerint, a
       // sorrend mégis a biztonságosabb, hogy a takarítás önmagában is
       // értelmes maradjon, ha valaha külön futtatnák.
+      // a partner-linked customer of the picker test: the partner first, then its customer
+      await prisma.supplier.deleteMany({
+        where: { code: { startsWith: CUSTOMER_PREFIX } },
+      });
       await prisma.customer.deleteMany({
         where: { customerNumber: { startsWith: CUSTOMER_PREFIX } },
       });
@@ -84,12 +91,16 @@ describe(
       const customersLeft = await prisma.customer.count({
         where: { customerNumber: { startsWith: CUSTOMER_PREFIX } },
       });
+      const suppliersLeft = await prisma.supplier.count({
+        where: { code: { startsWith: CUSTOMER_PREFIX } },
+      });
       nincsMaradek([
         { nev: "AquariumEquipment", darab: equipmentLeft },
         { nev: "Aquarium", darab: aquariumsLeft },
         { nev: "User", darab: usersLeft },
         { nev: "WorksheetDepartment", darab: departmentsLeft },
         { nev: "Customer", darab: customersLeft },
+        { nev: "Supplier", darab: suppliersLeft },
       ]);
     }
 
@@ -121,6 +132,140 @@ describe(
     it("POZITÍV KONTROLL: a suite létre tud hozni egy akváriumot", async () => {
       const created = await repository.create(createInput(), "no-actor");
       assert.equal(created.name, `AQ-INT-${suffix}`);
+    });
+
+    /*
+      AZ EGYESITETT PARTNER AZ AKVARIUM VALASZTOBAN (2026-11-05). MI PIROSIT: ha a partner-kotest viselo vevo-sor
+      (egy partner es a vevoje egy sora) nem jon elo; ha az inaktiv sor eloujjon; ha a sima vevo elveszne.
+    */
+    describe("az akvárium ügyfél-választója", () => {
+      it("a partner-kötést viselő ügyfelet is kínálja, az inaktívat nem", async () => {
+        const name = `AQ-INT-PICK-${suffix}`;
+        const plain = await prisma.customer.create({
+          data: {
+            customerNumber: `${CUSTOMER_PREFIX}plain-${suffix}`,
+            type: "COMPANY",
+            displayName: `${name} sima`,
+          },
+        });
+        const mirror = await prisma.customer.create({
+          data: {
+            customerNumber: `${CUSTOMER_PREFIX}mirror-${suffix}`,
+            type: "COMPANY",
+            displayName: `${name} partner`,
+          },
+        });
+        await prisma.supplier.create({
+          data: {
+            code: `${CUSTOMER_PREFIX}sup-${suffix}`,
+            name: `${name} partner`,
+            country: "HU",
+            isSupplier: false,
+            isService: false,
+            customerId: mirror.id,
+          },
+        });
+        await prisma.customer.create({
+          data: {
+            customerNumber: `${CUSTOMER_PREFIX}off-${suffix}`,
+            type: "COMPANY",
+            displayName: `${name} inaktív`,
+            isActive: false,
+          },
+        });
+
+        const result = await repository.searchSelectableCustomers(name);
+
+        assert.deepEqual(
+          result.items.map((item) => item.id).sort(),
+          [mirror.id, plain.id].sort(),
+        );
+      });
+    });
+
+    /*
+      A NEVKERESES EKEZET- ES KISBETU-FUGGETLEN (40332480). MI PIROSIT: ha a keresett nev ekezet nelkul nem talalja az
+      ekezetes nevet (a Prisma `contains` nem unaccent); ha a nagybetus keresett szoveg nem talal; ha a `%` jel
+      joker lenne a szovegben; ha az inaktiv sor a keresett nevnel is eloujjon.
+    */
+    describe("az akvárium ügyfél-választójának névkeresése", () => {
+      it("ékezet- és kisbetű-független, a % jel szó szerint értendő, az inaktívat nem adja", async () => {
+        const tag = `AQ-INT-ACC-${suffix}`;
+        const accented = await prisma.customer.create({
+          data: {
+            customerNumber: `${CUSTOMER_PREFIX}acc-${suffix}`,
+            type: "COMPANY",
+            displayName: `${tag} Fővárosi Állatkert`,
+          },
+        });
+        await prisma.customer.create({
+          data: {
+            customerNumber: `${CUSTOMER_PREFIX}acc-off-${suffix}`,
+            type: "COMPANY",
+            displayName: `${tag} Fővárosi inaktív`,
+            isActive: false,
+          },
+        });
+        const percent = await prisma.customer.create({
+          data: {
+            customerNumber: `${CUSTOMER_PREFIX}acc-pct-${suffix}`,
+            type: "COMPANY",
+            displayName: `${tag} 100% Kft`,
+          },
+        });
+        await prisma.customer.create({
+          data: {
+            customerNumber: `${CUSTOMER_PREFIX}acc-1000-${suffix}`,
+            type: "COMPANY",
+            displayName: `${tag} 1000 Kft`,
+          },
+        });
+
+        for (const typed of [
+          `${tag} fovarosi allatkert`,
+          `${tag.toLowerCase()} FŐVÁROSI ÁLLATKERT`,
+        ]) {
+          const found = await repository.searchSelectableCustomers(typed);
+          assert.deepEqual(
+            found.items.map((item) => item.id),
+            [accented.id],
+            typed,
+          );
+        }
+        const pct = await repository.searchSelectableCustomers(`${tag} 100%`);
+        assert.deepEqual(
+          pct.items.map((item) => item.id),
+          [percent.id],
+        );
+      });
+    });
+
+    /*
+      A NEVKERESES AZONOSITO-LEKERDEZESE KORLATOS (barracuda, #2239 review, #2019 bind-korlat). MI PIROSIT: ha a
+      nyers lekerdezes ujra korlat nelkul hozza az osszes egyezo azonositot; ha a korlat nem a mutatott rendezes elso sorait
+      tartja meg (a lista nem a nev szerinti elso 20-at mutatna).
+    */
+    describe("az akvárium ügyfél-választójának találati korlátja", () => {
+      it("legfeljebb a korlátnyi, név szerint első sort adja, sok egyezésnél is", async () => {
+        const tag = `AQ-INT-LIM-${suffix}`;
+        const total = SELECTABLE_CUSTOMER_LIMIT + 3;
+        for (let i = 1; i <= total; i++)
+          await prisma.customer.create({
+            data: {
+              customerNumber: `${CUSTOMER_PREFIX}lim-${i}-${suffix}`,
+              type: "COMPANY",
+              displayName: `${tag} ${String(i).padStart(2, "0")}`,
+            },
+          });
+        const found = await repository.searchSelectableCustomers(tag);
+        assert.deepEqual(
+          found.items.map((item) => item.displayName),
+          Array.from(
+            { length: SELECTABLE_CUSTOMER_LIMIT },
+            (_, i) => `${tag} ${String(i + 1).padStart(2, "0")}`,
+          ),
+        );
+      });
     });
 
     describe("a kliens művelet-azonosítója", () => {

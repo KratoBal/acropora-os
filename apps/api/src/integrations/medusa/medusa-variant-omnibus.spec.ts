@@ -46,7 +46,13 @@ function database(rows: HistoryRow[]): {
       productVariant: {
         findUnique: async () => {
           reads += 1;
-          return { productId: "p1", unasVariantExtraGrossPrice: null };
+          return {
+            productId: "p1",
+            unasVariantExtraGrossPrice: null,
+            sellingSaleGrossPrice: null,
+            sellingSaleStartsAt: null,
+            sellingSaleEndsAt: null,
+          };
         },
       },
       productPriceHistory: { findMany: async () => rows },

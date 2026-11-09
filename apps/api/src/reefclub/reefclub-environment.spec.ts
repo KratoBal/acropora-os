@@ -86,6 +86,24 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   "NEXT_PROXY_TIMEOUT_MS",
   "NODE_ENV",
   "OWN_IMAGE_REFERENCE_HOSTS",
+  // the one-time feed backfill's pause between two Agent queries (6fd8c574): an interval, not a secret
+  "FEED_BACKFILL_DELAY_MS",
+  // the giveaway page's public address, the base of its confirmation link (card 31445d0f): an origin, not a secret
+  "JATEK_PUBLIC_URL",
+  // the giveaway's daily mail cap (acrobot, 2026-11-05): a number, not a secret
+  "JATEK_MAIL_DAILY_CAP",
+  // the giveaway's sender and Reply-To addresses (acrobot 44556): addresses, not secrets (its SMTP login and key are under
+  // JATEK_SMTP_, which the ReefClub rule refuses as an internal integration)
+  "JATEK_MAIL_FROM",
+  "JATEK_MAIL_REPLY_TO",
+  // the stage-only switch for a confirmation link without the mail: a switch, not a secret
+  "JATEK_TEST_LINKS",
+  // the giveaway's data erasure (card bc0ca668): days after the grand prize draw, and its dry-run switch, not secrets
+  "JATEK_ERASE_AFTER_DAYS",
+  "JATEK_ERASE_DRY_RUN",
+  "JATEK_ERASE_DEADLINE",
+  // the switch for removing the sent mails from the sender's mailbox (card jatek-level-torles): a switch, not a secret
+  "JATEK_ERASE_MAIL",
   "PAID_MARKS_AUTO_DAYS",
   "PAID_MARKS_AUTO_HOUR",
   "PARTNER_URL",
@@ -98,6 +116,8 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   // the internal API's switch for issuing ReefClub codes (#1778): a boolean, and the ReefClub's own
   // web address, which the ReefClub process reads anyway (`REEFCLUB_WEB_URL`); neither is a secret
   "REEFCLUB_LINKING_ENABLED",
+  // the run-out reminder's switch (V3.2): exactly "true" turns it on, a boolean, not a secret
+  "REEFCLUB_RUNOUT_ENABLED",
   "REEFCLUB_WEB_URL",
   "RELEASE_COMMIT_SHA",
   "RELEASE_EVIDENCE_EXPECTED_REPOSITORY",
@@ -114,6 +134,13 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   "WEBSHOP_COMPLAINT_PULL_ENABLED",
   "WEBSHOP_COMPLAINT_PULL_INTERVAL_MINUTES",
   "WEBSHOP_COMPLAINT_PULL_STARTUP_DELAY_MINUTES",
+  // the webshop withdrawal pull (V0.3): the same four kinds of name: a switch, two minute counts and a user id
+  "WEBSHOP_WITHDRAWAL_ASSIGNEE_ID",
+  "WEBSHOP_WITHDRAWAL_PULL_ENABLED",
+  "WEBSHOP_WITHDRAWAL_PULL_INTERVAL_MINUTES",
+  "WEBSHOP_WITHDRAWAL_PULL_STARTUP_DELAY_MINUTES",
+  // the guest invoice download's public API address (V1.1): an origin, not a secret (its SECRET twin is refused by the rule)
+  "WEBSHOP_INVOICE_PUBLIC_BASE_URL",
   "WEB_URL",
 ]);
 
@@ -163,6 +190,20 @@ describe("ReefClub környezet-lista (terv v6.1, 2.1)", () => {
       "MASTER_KEY_V2",
     ])
       assert.ok(forbiddenReason(name), name);
+  });
+
+  // WHAT TURNS THIS RED (acrobot 44556): the game's SMTP login and key (JATEK_SMTP_USER, JATEK_SMTP_PASS: "PASS" is not in the
+  // secret shape) reaching the public process without being refused; the game's two addresses being refused for no reason.
+  it("a játék SMTP-belépése és kulcsa tiltott a ReefClub-folyamatban, a két címe nem titok", () => {
+    for (const name of [
+      "JATEK_SMTP_HOST",
+      "JATEK_SMTP_PORT",
+      "JATEK_SMTP_USER",
+      "JATEK_SMTP_PASS",
+    ])
+      assert.match(forbiddenReason(name) ?? "", /JATEK_SMTP_/, name);
+    for (const name of ["JATEK_MAIL_FROM", "JATEK_MAIL_REPLY_TO"])
+      assert.equal(forbiddenReason(name), null, name);
   });
 
   it("a REEFCLUB_ előtag alatti titok megengedett, az az övé", () => {

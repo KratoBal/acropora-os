@@ -28,6 +28,11 @@ export interface PaidMarkException {
   /** The transfer day, the settlement code, the order or the invoice. */
   readonly reference: string;
   readonly reason: string;
+  /**
+   * What the line is about, for good (6fd8c574: a person's "Kézzel rendezve" closes it by this): the credit of a bank
+   * transfer, whose reference is only its day. Without it the reference is the key.
+   */
+  readonly key?: string;
   /** False when it resolves itself (already paid, not a card order, ...). */
   readonly attention: boolean;
   readonly detail?: string;
@@ -46,11 +51,48 @@ export interface PaidMarksRunResult {
   readonly failedCount: number;
   /** Per reason: WRITTEN, and every skip or exception reason. */
   readonly summary: Readonly<Record<string, number>>;
-  readonly attention: readonly {
-    reference: string;
-    reason: string;
-    detail?: string;
-  }[];
+  readonly attention: readonly PaidMarkAttentionItem[];
+}
+
+/** One line a person must look at, as a run stores it (`PaidMarkRun.attention`). */
+export interface PaidMarkAttentionItem {
+  reference: string;
+  reason: string;
+  key?: string;
+  detail?: string;
+}
+
+/** One invoice a dry run would mark paid, as the page lists it (e64540fd). */
+export interface PaidMarkPlanned {
+  readonly invoiceNumber: string;
+  readonly amount: string;
+  readonly date: string;
+  readonly sourceRef: string;
+}
+
+/**
+ * A DRY RUN'S RESULT (e64540fd): the plan's marks as `PLANNED` and its exceptions, the same summary and
+ * attention shape as a run that wrote, and the list of what it would mark.
+ */
+export function paidMarksDryResult(plan: PaidMarkPlan): {
+  result: PaidMarksRunResult;
+  planned: PaidMarkPlanned[];
+} {
+  const result = paidMarksRunResult(plan.source, [], plan.exceptions);
+  return {
+    result: {
+      ...result,
+      summary: plan.marks.length
+        ? { PLANNED: plan.marks.length, ...result.summary }
+        : result.summary,
+    },
+    planned: plan.marks.map((m) => ({
+      invoiceNumber: m.invoiceNumber,
+      amount: m.amount,
+      date: m.date,
+      sourceRef: m.sourceRef,
+    })),
+  };
 }
 
 /** The writer's outcomes that need a person: an uncertain or refused write. */
@@ -73,10 +115,18 @@ export async function runPaidMarksAuto(input: {
     client: input.client,
     store: input.store,
   });
+  return paidMarksRunResult(plan.source, lines, plan.exceptions);
+}
+
+/** A run's summary from the writer's lines and the plan's exceptions (a source with its own writer uses it too). */
+export function paidMarksRunResult(
+  source: PaymentMarkSource,
+  lines: readonly PaymentMarkLine[],
+  exceptions: readonly PaidMarkException[],
+): PaidMarksRunResult {
   const summary: Record<string, number> = {};
   const count = (key: string) => (summary[key] = (summary[key] ?? 0) + 1);
-  const attention: { reference: string; reason: string; detail?: string }[] =
-    [];
+  const attention: PaidMarkAttentionItem[] = [];
   for (const line of lines) {
     count(line.outcome.kind);
     if (OUTCOME_ATTENTION.has(line.outcome.kind))
@@ -86,17 +136,18 @@ export async function runPaidMarksAuto(input: {
         detail: outcomeDetail(line.outcome),
       });
   }
-  for (const exception of plan.exceptions) {
+  for (const exception of exceptions) {
     count(exception.reason);
     if (exception.attention)
       attention.push({
         reference: exception.reference,
         reason: exception.reason,
+        ...(exception.key ? { key: exception.key } : {}),
         ...(exception.detail ? { detail: exception.detail } : {}),
       });
   }
   return {
-    source: plan.source,
+    source,
     writtenCount: summary.WRITTEN ?? 0,
     failedCount:
       (summary.FAILED ?? 0) +
