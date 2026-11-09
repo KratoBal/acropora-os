@@ -2,7 +2,13 @@
 
 import { useEffect, useState } from "react";
 
-import { Alert, Button, FormField, Input, Textarea } from "@acropora/ui";
+import {
+  Alert,
+  PilotButton,
+  PilotFormField,
+  PilotInput,
+  Textarea,
+} from "@acropora/ui";
 import type { ServiceJobHandoverMailPreview } from "@acropora/types";
 
 import { KIHAGYAS_OKA } from "./handover-mail-skip-reason";
@@ -157,7 +163,7 @@ export function HandoverMailDialog({
 
         {preview?.kind === "send" ? (
           <>
-            <FormField label="Címzettek">
+            <PilotFormField label="Címzettek">
               {/*
                 A CIM IS LATSZIK, NEV SZERINT -- ez a spec szo szerinti resze.
                 A lista nem szerkesztheto: a kort a helyszin gazdaja hatarozza
@@ -171,22 +177,22 @@ export function HandoverMailDialog({
                   </li>
                 ))}
               </ul>
-            </FormField>
+            </PilotFormField>
 
-            <FormField label="Tárgy" htmlFor="handover-mail-subject">
-              <Input
+            <PilotFormField label="Tárgy" htmlFor="handover-mail-subject">
+              <PilotInput
                 id="handover-mail-subject"
                 value={subject}
                 maxLength={200}
                 disabled={busy}
-                onChange={(event) => setSubject(event.target.value)}
+                onChange={setSubject}
               />
-            </FormField>
+            </PilotFormField>
 
-            <FormField
+            <PilotFormField
               label="Üzenet"
               htmlFor="handover-mail-message"
-              description="Ez lesz a levél törzse, pontosan így. A rendszer semmit nem fűz hozzá."
+              help="Ez lesz a levél törzse, pontosan így. A rendszer semmit nem fűz hozzá."
             >
               <Textarea
                 id="handover-mail-message"
@@ -196,7 +202,7 @@ export function HandoverMailDialog({
                 disabled={busy}
                 onChange={(event) => setMessage(event.target.value)}
               />
-            </FormField>
+            </PilotFormField>
           </>
         ) : null}
 
@@ -209,15 +215,15 @@ export function HandoverMailDialog({
         ) : null}
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button
+          <PilotButton
             disabled={!kuldheto || busy}
             onClick={() => onSend({ subject, message })}
           >
             {busy ? "Kiküldés…" : `Elküldés ${cimzettek.length} címzettnek`}
-          </Button>
-          <Button variant="secondary" disabled={busy} onClick={onCancel}>
+          </PilotButton>
+          <PilotButton variant="secondary" disabled={busy} onClick={onCancel}>
             Mégsem
-          </Button>
+          </PilotButton>
         </div>
         {preview?.kind === "send" ? (
           <p className="text-sm text-dusk-500">

@@ -2,10 +2,10 @@
 
 import {
   Alert,
-  Input,
-  PilotFileInput,
-  PilotSelect,
   PilotButton,
+  PilotFileInput,
+  PilotInput,
+  PilotSelect,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -560,11 +560,11 @@ export function ServiceJobEditorPage({
               <label className="text-sm font-semibold" htmlFor="hibajegy-cim">
                 Mi a baj?
               </label>
-              <Input
+              <PilotInput
                 id="hibajegy-cim"
                 value={title}
                 disabled={contractUnresolved}
-                onChange={(event) => setTitle(event.target.value)}
+                onChange={setTitle}
                 placeholder="Például: a hármas medence szivattyúja nem indul"
               />
             </div>
