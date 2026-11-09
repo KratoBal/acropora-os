@@ -212,6 +212,22 @@ type WebshopTemplateFacts =
       readonly confirm_url: string;
       readonly unsubscribe_url: string;
       readonly expires_at: string;
+    }
+  | {
+      /**
+       * The stock alert's confirmation ("Szólj, ha jön hasonló", commerce
+       * card 0c1265d2, acropora-commerce #701): the newsletter's double
+       * opt-in, plus what the address signed up for (`subject_label`, a
+       * species "Acropora abrolhosensis" or a product's title). No name was
+       * asked: `customer_name`, `order_created_at` and `order_view_url` are
+       * null. The text is a proposal; the shop sends it only behind
+       * ACROPORA_STOCK_ALERT on the test shop.
+       */
+      readonly template: "stock-alert-confirm";
+      readonly confirm_url: string;
+      readonly unsubscribe_url: string;
+      readonly expires_at: string;
+      readonly subject_label: string;
     };
 
 /** How a split order is paid, from the original order (murena 26656). */
@@ -244,6 +260,7 @@ export const WEBSHOP_MAIL_KEYS = {
   "order-split": "WEBSHOP_ORDER_SPLIT",
   "problem-report-received": "WEBSHOP_PROBLEM_REPORT_RECEIVED",
   "newsletter-confirm": "WEBSHOP_NEWSLETTER_CONFIRM",
+  "stock-alert-confirm": "WEBSHOP_STOCK_ALERT_CONFIRM",
 } as const satisfies Record<WebshopMailTemplate, string>;
 
 export const SHOP_NAME = "Acropora tengeri akvarisztika";
@@ -908,6 +925,17 @@ function templateContent(
         blocks: {},
       };
 
+    case "stock-alert-confirm":
+      return {
+        values: {
+          ertesites_megerosito_link: facts.confirm_url,
+          ertesites_leiratkozo_link: facts.unsubscribe_url,
+          megerosites_lejarat: mailDay(facts.expires_at, locale),
+          ertesites_targya: facts.subject_label,
+        },
+        blocks: {},
+      };
+
     case "payment-refunded": {
       const r = facts.refund;
       return {
@@ -1062,6 +1090,18 @@ export const WEBSHOP_MAIL_SAMPLE_FACTS: Readonly<
     confirm_url: "https://shop.example/hu/hirlevel/megerosites?token=minta",
     unsubscribe_url: "https://shop.example/hu/hirlevel/leiratkozas?token=minta",
     expires_at: "2026-10-12T09:21:00.000Z",
+  },
+  "stock-alert-confirm": {
+    ...SAMPLE_COMMON,
+    customer_name: null,
+    order_created_at: null,
+    order_view_url: null,
+    template: "stock-alert-confirm",
+    confirm_url: "https://shop.example/hu/ertesites/megerosites?token=minta",
+    unsubscribe_url:
+      "https://shop.example/hu/ertesites/leiratkozas?token=minta",
+    expires_at: "2026-10-12T09:21:00.000Z",
+    subject_label: "Acropora abrolhosensis",
   },
   "payment-refunded": {
     ...SAMPLE_COMMON,
@@ -1380,7 +1420,8 @@ function parseTemplateFacts(
         display_id: id(f.display_id, "facts.display_id"),
         report_id: str(f.report_id, "facts.report_id"),
       };
-    case "newsletter-confirm": {
+    case "newsletter-confirm":
+    case "stock-alert-confirm": {
       // the two links go into an href: a clean https address or the mail is refused (422), never sent without them
       const link = (value: unknown, at: string) => {
         const url = safeOrderViewUrl(value);
@@ -1390,12 +1431,17 @@ function parseTemplateFacts(
       const expires_at = str(f.expires_at, "facts.expires_at");
       if (Number.isNaN(new Date(expires_at).getTime()))
         throw new FactsError("facts.expires_at: ISO időpont kell");
-      return {
-        template,
+      const links = {
         confirm_url: link(f.confirm_url, "facts.confirm_url"),
         unsubscribe_url: link(f.unsubscribe_url, "facts.unsubscribe_url"),
         expires_at,
       };
+      if (template === "newsletter-confirm") return { template, ...links };
+      // the stock alert names what was signed up for; an empty one would leave the mail's sentence without its subject
+      const subject_label = str(f.subject_label, "facts.subject_label").trim();
+      if (!subject_label)
+        throw new FactsError("facts.subject_label: nem lehet üres");
+      return { template, ...links, subject_label };
     }
     case "payment-refunded": {
       const r = obj(f.refund, "facts.refund");
