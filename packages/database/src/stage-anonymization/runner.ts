@@ -20,7 +20,9 @@ import {
   compareRowCounts,
   CONDITIONAL_FORMAT_KINDS,
   residualSection,
+  transformCoverageSection,
   trialSection,
+  type TrialCheck,
   type FormatKind,
   type GateReport,
   type GateSection,
@@ -54,7 +56,12 @@ export interface RunnerDatabase {
   readonly name: string;
   models(): readonly string[];
   countRows(model: string): Promise<number>;
-  /** Every row of a model, all columns, streamed (called more than once). */
+  /**
+   * Every row of a model, all columns, streamed (called more than once). The stream must survive the run's own writes: a stable
+   * snapshot or KEYSET paging (`WHERE key > last`). The transform replaces and deletes rows of the same table while it reads, so
+   * OFFSET paging would skip a row after every delete, and a skipped row is left untransformed. The gate's `transformCoverage`
+   * section catches a reader that does this, but it cannot repair it.
+   */
   rows(model: string): AsyncIterable<Row>;
   /** Replaces a row's columns (the row is found by its key). */
   replaceRow(model: string, original: Row, replacement: Row): Promise<void>;
@@ -91,8 +98,12 @@ export interface RunnerOptions {
   /** The residual-scan key (at least 32 bytes), for one run only. */
   scanKey: string;
   stagePasswordHash: string;
-  /** The working trial's result, run by the caller after the transform; absent means it did not run, and the gate fails. */
-  trial?: () => Promise<{ passed: boolean }>;
+  /**
+   * The working trial, run by the caller on an application instance bound to this TEMPORARY database, after the transform and BEFORE
+   * any swap (owner's operating decision, 2026-11-09). Absent means it did not run, and the gate fails; a result with no named
+   * checks fails too, so a stub that returns only `passed: true` does not open the gate.
+   */
+  trial?: () => Promise<{ passed: boolean; checks?: readonly TrialCheck[] }>;
   kinds?: Readonly<Record<string, AnonymizationKind>>;
   jsonOptions?: JsonScrubOptions;
   /** How many fakes per kind the format check samples. */
@@ -111,14 +122,27 @@ export interface RunnerResult {
   dictionarySizes: Readonly<Record<ResidualKind, number>>;
 }
 
+/** JSON text with the keys of every object sorted, so two JSON values that differ only in key order compare equal. */
+const canonical = (value: unknown): string =>
+  JSON.stringify(value, (_key, inner: unknown) =>
+    inner && typeof inner === "object" && !Array.isArray(inner)
+      ? Object.fromEntries(
+          Object.entries(inner as Record<string, unknown>).sort(([a], [b]) =>
+            a < b ? -1 : a > b ? 1 : 0,
+          ),
+        )
+      : inner,
+  );
+
 const sameValue = (a: unknown, b: unknown): boolean => {
   if (Buffer.isBuffer(a) && Buffer.isBuffer(b)) return a.equals(b);
   if (a instanceof Date && b instanceof Date)
     return a.getTime() === b.getTime();
-  return JSON.stringify(a) === JSON.stringify(b);
+  return canonical(a) === canonical(b);
 };
 
-const sameRow = (a: Row, b: Row): boolean =>
+/** Whether two rows hold the same values; exported for its test (a JSON value compares by content, not by key order). */
+export const sameRow = (a: Row, b: Row): boolean =>
   Object.keys(a).length === Object.keys(b).length &&
   Object.keys(a).every((key) => sameValue(a[key], b[key]));
 
@@ -174,7 +198,11 @@ export async function runAnonymization(
         realNames.add(value);
       } else if (kind === "partyTaxNumber" && natural)
         dictionary.add("taxNumber", value);
-      else if (kind === "bankAccount") dictionary.add("iban", value);
+      else if (kind === "bankAccount") {
+        // the field holds an IBAN or a domestic account number; each kind ignores a value of the other shape
+        dictionary.add("iban", value);
+        dictionary.add("account", value);
+      }
     }
   }
   const sourceInvariants = await database.invariants();
@@ -202,9 +230,12 @@ export async function runAnonymization(
   const samples: Partial<Record<FormatKind, string[]>> = {};
   let rowsTransformed = 0;
   let rowsDropped = 0;
+  /** Per model, the rows the loop below visited: transformed, unchanged and dropped all count (the gate compares it with the source). */
+  const visited: Record<string, number> = {};
 
   for (const model of models) {
     for await (const original of database.rows(model)) {
+      visited[model] = (visited[model] ?? 0) + 1;
       const result = transformer.transformRow(model, original);
       if (result.dropped) {
         await database.deleteRow(model, original);
@@ -260,6 +291,7 @@ export async function runAnonymization(
   };
   const sections: GateSection[] = [
     compareRowCounts(sourceCounts, targetCounts, { dropped }),
+    transformCoverageSection(visited, sourceCounts),
     checkReferentialIntegrity(
       await database.orphanCounts(),
       await database.migrationsClean(),
@@ -286,7 +318,9 @@ export async function runAnonymization(
     ),
     collisionSection,
     options.trial
-      ? trialSection(true, (await options.trial()).passed)
+      ? await options
+          .trial()
+          .then((r) => trialSection(true, r.passed, r.checks))
       : trialSection(false, false),
   ];
   const report = buildGateReport(sections);

@@ -6,14 +6,14 @@ code touches a database yet: the runner works on an adapter (`RunnerDatabase`), 
 
 ## The modules (each a pure function set with its own tests)
 
-| Slice    | File                                                           | What it does                                                                                                                                                          |
-| -------- | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| register | `anonymization-register.ts`, `anonymization-register-check.ts` | one decision per text, JSON and binary column; the CI test fails on a new column without one                                                                          |
-| S1       | `pseudonymizer.ts`                                             | keyed, deterministic, format-valid fakes (e-mail, names, phone, tax numbers, IBAN, account numbers, street, parcel number, IP); no real character survives a fallback |
-| S2       | `text-scrubber.ts`, `json-scrubber.ts`                         | patterns and a real-name dictionary in free text; key-name rules in JSON; credential and network keys deleted by a part of the name                                   |
-| S3       | `row-transformer.ts`                                           | the register applied to one row: keep, pseudonymize, replace, delete (or drop the row); natural-person rows recognised; fail closed                                   |
-| S4       | `residual-scan.ts`, `verification-gate.ts`                     | a keyed-digest dictionary of the real values scans the anonymized rows; the seven-section gate of plan 3.5                                                            |
-| S5       | `runner.ts`                                                    | the orchestration over an abstract database, behind a guard that accepts only a temporary database name                                                               |
+| Slice    | File                                                           | What it does                                                                                                                                                             |
+| -------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| register | `anonymization-register.ts`, `anonymization-register-check.ts` | one decision per text, JSON and binary column; the CI test fails on a new column without one                                                                             |
+| S1       | `pseudonymizer.ts`                                             | keyed, deterministic, format-valid fakes (e-mail, names, phone, tax numbers, IBAN, account numbers, street, parcel number, IP); no real character survives a fallback    |
+| S2       | `text-scrubber.ts`, `json-scrubber.ts`                         | patterns and a real-name dictionary in free text; key-name rules in JSON; credential and network keys deleted by a part of the name                                      |
+| S3       | `row-transformer.ts`                                           | the register applied to one row: keep, pseudonymize, replace, delete (or drop the row); natural-person rows recognised; fail closed                                      |
+| S4       | `residual-scan.ts`, `verification-gate.ts`                     | a keyed-digest dictionary of the real values scans the anonymized rows; the eight-section gate (the seven of plan 3.5 plus a check that the transform visited every row) |
+| S5       | `runner.ts`                                                    | the orchestration over an abstract database, behind a guard that accepts only a temporary database name                                                                  |
 
 ## How a run goes (plan 3.1), and who does each step
 
@@ -22,12 +22,17 @@ code touches a database yet: the runner works on an adapter (`RunnerDatabase`), 
    refuses any other name, so production, the stage database and a developer's database cannot be hit by a wrong argument.
 3. **`runAnonymization`** (the runner; needs the S6 adapter to run against a real database): measures the source, builds the
    residual dictionary from the natural persons' values, transforms every row in the temporary database, measures again, scans
-   for residual personal data, runs the gate, and returns the report with `swapAllowed`.
+   for residual personal data, runs the working trial, runs the gate, and returns the report with `swapAllowed`.
 4. **Swap** the temporary database in as the stage database (HOST), only when `swapAllowed` is true. The runner never swaps.
-5. **Working trial on the stage** (a stub invoice, an order flow, a work sheet, a ticket). The caller runs it and passes the
-   result; without one the gate does not pass.
 
-   **The gate requires its checks, not only the ones it was handed.** The seven sections (rowCounts, referentialIntegrity,
+   **The working trial runs BEFORE the swap, on the temporary database** (owner's operating decision, 2026-11-09; it fits the
+   plan's "everything happens during the copy"). The caller starts an application instance bound to the temporary database, runs
+   a stub invoice, an order flow, a work sheet and a ticket against it, and hands the runner a result with NAMED checks
+   (`{ passed, checks: [{ name, passed }] }`). The gate does not accept a trial that was skipped, failed, or reported no
+   checks: a bare `passed: true` cannot be told from a stub, so it fails and the report says so. There is no trial after the
+   swap, and so nothing to roll back after it.
+
+   **The gate requires its checks, not only the ones it was handed.** The eight sections (rowCounts, transformCoverage, referentialIntegrity,
    residualPersonalData, formats, invariants, correlations, workingTrial) must each be present exactly once, and a missing or
    repeated one fails the gate in a `gateStructure` section that names it. The format check needs a sample of fake e-mail,
    phone, IBAN and personal tax id on every run (a source that has none of one of them is a run that did not look). A company

@@ -14,6 +14,7 @@ import { createPseudonymizer } from "./pseudonymizer.js";
 import {
   assertTemporaryDatabase,
   runAnonymization,
+  sameRow,
   type Row,
   type RunnerDatabase,
   type RunnerOptions,
@@ -173,6 +174,7 @@ const REAL = {
   phone: "+36 30 123 4567",
   personalTaxId: "8123456789",
   iban: "HU42117730161111101800000000",
+  accountNumber: "11773016-11111018",
   company: "Példa Kft.",
   companyTax: "12345676-2-42",
   userEmail: "admin.valaki@example.com",
@@ -198,7 +200,7 @@ const source = (): Record<string, Row[]> => ({
       email: "iroda@pelda.hu",
       phone: null,
       taxNumber: REAL.companyTax,
-      iban: null,
+      iban: REAL.accountNumber,
       notes: null,
       loyaltyPoints: 5,
     },
@@ -237,11 +239,35 @@ const options = (
   pseudonymizationKey: "proba-kulcs-nem-valodi-0123456789-abcdef-xyz",
   scanKey: "proba-futas-kulcs-nem-valodi-0123456789-abcdef",
   stagePasswordHash: "stage-only-hash",
-  trial: async () => ({ passed: true }),
+  trial: async () => ({
+    passed: true,
+    checks: [{ name: "fixture trial", passed: true }],
+  }),
   ...over,
 });
 
 const NAME = "stage_anon_tmp_20261109";
+
+describe("comparing a row with its replacement", () => {
+  it("compares JSON by content, not by key order, and still sees a changed value, a Date and a Buffer", () => {
+    assert.equal(
+      sameRow(
+        { id: "a", payload: { x: 1, y: { p: 1, q: [1, 2] } } },
+        { id: "a", payload: { y: { q: [1, 2], p: 1 }, x: 1 } },
+      ),
+      true,
+    );
+    assert.equal(sameRow({ payload: { x: 1 } }, { payload: { x: 2 } }), false);
+    assert.equal(sameRow({ payload: [1, 2] }, { payload: [2, 1] }), false);
+    assert.equal(sameRow({ d: new Date(5) }, { d: new Date(5) }), true);
+    assert.equal(sameRow({ d: new Date(5) }, { d: new Date(6) }), false);
+    assert.equal(
+      sameRow({ b: Buffer.from("a") }, { b: Buffer.from("b") }),
+      false,
+    );
+    assert.equal(sameRow({ a: 1 }, { a: 1, b: null }), false);
+  });
+});
 
 describe("the guard", () => {
   it("accepts only a temporary anonymization database name", () => {
@@ -319,6 +345,7 @@ describe("a clean run", () => {
       phone: 1,
       taxNumber: 1,
       iban: 1,
+      account: 1,
       name: 4,
     });
   });
@@ -462,10 +489,54 @@ describe("the gate refuses", () => {
     );
     const failed = await runAnonymization(
       options(new MemoryDatabase(NAME, source()), {
-        trial: async () => ({ passed: false }),
+        trial: async () => ({
+          passed: false,
+          checks: [{ name: "fixture trial", passed: false }],
+        }),
       }),
     );
     assert.equal(failed.swapAllowed, false);
+  });
+
+  it("does not accept a stubbed trial that returns only passed:true (the operating decision: the trial runs before the swap and must name what it checked)", async () => {
+    const stub = await runAnonymization(
+      options(new MemoryDatabase(NAME, source()), {
+        trial: async () => ({ passed: true }),
+      }),
+    );
+    assert.equal(stub.swapAllowed, false);
+    assert.match(
+      stub.report.sections.find((s) => s.name === "workingTrial")!.problems[0]!,
+      /reported no checks/,
+    );
+  });
+
+  it("fails the gate when the reader skips a row after a delete (an OFFSET reader): the skipped row would stay untransformed", async () => {
+    /** A reader that pages by position over the LIVE table: a delete shifts the rest up, and the next row is skipped. */
+    class OffsetDatabase extends MemoryDatabase {
+      override async *rows(model: string) {
+        this.reads.push(model);
+        for (let i = 0; i < this.tables[model]!.length; i += 1)
+          yield { ...this.tables[model]![i]! };
+      }
+    }
+    const result = await runAnonymization(
+      options(new OffsetDatabase(NAME, source())),
+    );
+    assert.equal(result.swapAllowed, false);
+    assert.deepEqual(
+      result.report.sections.find((s) => s.name === "transformCoverage")!
+        .problems,
+      ["Session: the transform visited 1 row(s), the source has 2"],
+    );
+    // the keyset reader of the other tests passes the same section
+    const ok = await runAnonymization(
+      options(new MemoryDatabase(NAME, source())),
+    );
+    assert.equal(
+      ok.report.sections.find((s) => s.name === "transformCoverage")!.passed,
+      true,
+    );
   });
 
   it("finds a real value a kept column carries, naming the column and the kind", async () => {

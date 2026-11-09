@@ -32,6 +32,7 @@ function dictionary(): ResidualDictionary {
   builder.add("taxNumber", REAL.taxNumber);
   builder.add("taxNumber", "12345678-2-42");
   builder.add("iban", REAL.iban);
+  builder.add("account", "11773016-11111018");
   builder.add("name", "Dr. " + REAL.name);
   return builder.build();
 }
@@ -72,6 +73,17 @@ describe("what the scan finds in a text", () => {
       scanText(d, "utalás: hu42 1177 3016 1111 1018 0000 0000"),
       ["iban"],
     );
+  });
+
+  it("finds a domestic account number, 16 or 24 digits, however it is written (barracuda, #2328)", () => {
+    for (const written of [
+      "11773016-11111018",
+      "11773016 11111018",
+      "1177301611111018",
+    ])
+      assert.deepEqual(scanText(d, `Számla: ${written}`), ["account"], written);
+    assert.deepEqual(scanText(d, "Számla: 11773016-11111019"), []);
+    assert.deepEqual(scanText(d, "Rendelés 117730161111101"), []);
   });
 
   it("finds several kinds in one text, each once", () => {
@@ -236,6 +248,7 @@ describe("the dictionary", () => {
     builder.add("phone", "12345");
     builder.add("taxNumber", "123");
     builder.add("iban", "HU12");
+    builder.add("account", "123-456");
     builder.add("name", "Egyedül");
     builder.add("email", REAL.email);
     const d = builder.build();
@@ -244,6 +257,7 @@ describe("the dictionary", () => {
       phone: 0,
       taxNumber: 0,
       iban: 0,
+      account: 0,
       name: 0,
     });
     assert.equal(d.has("email", REAL.email), true);
