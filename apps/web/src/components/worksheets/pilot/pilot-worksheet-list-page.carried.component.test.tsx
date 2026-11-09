@@ -1,3 +1,8 @@
+/*
+  CARRIED OVER (kanban 0baba3b9): this spec measured the old `worksheet-list-page.tsx`, which no route drew (the
+  worksheet routes draw the pilot pages). It runs on the live pilot page now, beside the page's own spec; every test
+  kept, a few queries adjusted to the pilot page (its labels and layout), each measuring the same behaviour.
+*/
 import {
   fireEvent,
   render,
@@ -13,7 +18,7 @@ import {
   savotMond,
   setOnLine,
 } from "@/components/service/service-offline-notice.testing";
-import { WorksheetListPage } from "./worksheet-list-page";
+import { PilotWorksheetListPage as WorksheetListPage } from "./pilot-worksheet-list-page";
 
 const navigation = vi.hoisted(() => ({
   params: new URLSearchParams(),
@@ -35,6 +40,9 @@ const api = vi.hoisted(() => ({
 }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 
+vi.mock("next/font/local", () => ({
+  default: () => ({ className: "pilot-inter-stub" }),
+}));
 vi.mock("next/navigation", () => ({
   usePathname: () => "/szerviz/munkalapok",
   useRouter: () => navigation,
@@ -279,9 +287,11 @@ describe("WorksheetListPage állapot-csempék", () => {
 
     // A valasz KET sort tartalmaz, a harom szam mindegyike mas: ha a csempe a
     // `items.length`-bol dolgozna, mindharom 2 lenne.
-    expect(await screen.findByText("7")).toBeTruthy();
-    expect(screen.getByText("3")).toBeTruthy();
-    expect(screen.getByText("11")).toBeTruthy();
+    // the pilot page repeats the counts on its tabs: the tiles are read in their own group
+    const csempek = await screen.findByLabelText("Munkalapok állapot szerint");
+    expect(await within(csempek).findByText("7")).toBeTruthy();
+    expect(within(csempek).getByText("3")).toBeTruthy();
+    expect(within(csempek).getByText("11")).toBeTruthy();
   });
 
   it("a csempe kattintásra a címsorba írja az állapotot", async () => {
@@ -337,9 +347,10 @@ describe("WorksheetListPage állapot-csempék", () => {
     await screen.findByText("Sanyi, Kiss Péter");
 
     // A fixture negy szama kulonbozik egymastol ES a totalItems-tol is.
-    expect(screen.getByText("7")).toBeTruthy();
-    expect(screen.getByText("3")).toBeTruthy();
-    expect(screen.getByText("11")).toBeTruthy();
+    const csempek = screen.getByLabelText("Munkalapok állapot szerint");
+    expect(within(csempek).getByText("7")).toBeTruthy();
+    expect(within(csempek).getByText("3")).toBeTruthy();
+    expect(within(csempek).getByText("11")).toBeTruthy();
   });
 
   /**
@@ -350,9 +361,8 @@ describe("WorksheetListPage állapot-csempék", () => {
   it("a láblécben az összes találat száma áll, nem a lapon lévőké", async () => {
     render(<WorksheetListPage />);
 
-    expect(
-      await screen.findByText("40 találat, ebből 2 ezen a lapon"),
-    ).toBeTruthy();
+    // the pilot footer: the rows on this page over every match
+    expect(await screen.findByText("2 / 40 munkalap")).toBeTruthy();
   });
 });
 
