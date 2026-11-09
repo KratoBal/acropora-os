@@ -19,6 +19,7 @@ const REGEN = new Date("2026-09-01T10:00:00.000Z");
 function termek(overrides: Record<string, unknown> = {}) {
   return {
     id: "prod-1",
+    isActive: true,
     updatedAt: MOST,
     variants: [{ updatedAt: REGEN }],
     unasSnapshot: { updatedAt: REGEN },
@@ -1389,6 +1390,65 @@ describe("a márka változása is esedékessé teszi a termékeit (t11)", () => 
       await scheduler.runOnce();
       assert.deepEqual(kapott, vart);
     }
+  });
+});
+
+describe("a vetítés után inaktivált termék is esedékes (ca422e92)", () => {
+  /**
+   * MI PIROSÍT: a kötött termék, amit a legutóbbi vetítése UTÁN inaktiváltak,
+   * nem kerül sorra (a bolt published vagy jelölő nélküli draft marad); egy
+   * kötés nélküli vagy a vetítése óta nem változott inaktív termék sorra kerül
+   * (minden körben újra vetítene); vagy az inaktivált termék az ár-futásba is
+   * megy (aktív változat nélkül ott minden körben kudarcot írna).
+   *
+   * A DUPLA ITT ALKALMAZZA az `isActive` szűrőt: enélkül az általános
+   * esedékesség is visszakapná az inaktív terméket, és a teszt a javítás
+   * nélkül is zöld lenne.
+   */
+  it("csak a kötött, a vetítése után változott inaktív termék esedékes, és ára nem megy", async () => {
+    const korabban = new Date(MOST.getTime() - 60_000);
+    const { run, kapott } = futtato(0);
+    const ar = arFuttato(0);
+    const { db } = adatbazis(
+      [
+        termek({ id: "aktiv-friss", updatedAt: REGEN }),
+        termek({ id: "inaktivalt", isActive: false, updatedAt: MOST }),
+        termek({
+          id: "inaktiv-kotes-nelkul",
+          isActive: false,
+          updatedAt: MOST,
+        }),
+        termek({ id: "inaktiv-regi", isActive: false, updatedAt: REGEN }),
+      ],
+      [
+        { entityId: "aktiv-friss", lastSyncedAt: korabban },
+        { entityId: "inaktivalt", lastSyncedAt: korabban },
+        { entityId: "inaktiv-regi", lastSyncedAt: korabban },
+      ],
+    );
+    const eredeti = db.product.findMany.bind(db.product);
+    (db.product as { findMany: unknown }).findMany = async (args: {
+      where?: { isActive?: boolean };
+    }) => {
+      const sorok = (await eredeti(args as never)) as unknown as {
+        isActive: boolean;
+      }[];
+      const kert = args.where?.isActive;
+      return typeof kert === "boolean"
+        ? sorok.filter((t) => t.isActive === kert)
+        : sorok;
+    };
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: run,
+      runPricing: ar.run,
+      environment: BEKAPCSOLVA,
+      logger: naplo().logger,
+      now: () => new Date(MOST.getTime() + 1_000),
+    });
+    await scheduler.runOnce();
+    assert.deepEqual(kapott, [["inaktivalt"]]);
+    assert.deepEqual(ar.kapott, []);
   });
 });
 
