@@ -141,7 +141,12 @@ export function MissingInvoicesDrawer({
     ? [
         chargeAmountText(row),
         ...(row.original
-          ? [formatAmount(row.original.amount, row.original.currency)]
+          ? [
+              chargeAmountText({
+                ...row.original,
+                category: row.category,
+              }),
+            ]
           : []),
       ].join(" · ")
     : "";

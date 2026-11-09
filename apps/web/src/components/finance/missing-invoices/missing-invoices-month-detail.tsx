@@ -26,7 +26,6 @@ import {
   FILTER_CATEGORIES,
   INVOICE_SOURCE_LABELS,
   chargeAmountText,
-  formatAmount,
   formatDay,
   formatMonth,
   type BankAccountOption,
@@ -233,7 +232,10 @@ export function MissingInvoicesMonthDetail({
           </span>
           {row.original ? (
             <span className="block text-xs text-pilot-grey-500">
-              {formatAmount(row.original.amount, row.original.currency)}
+              {chargeAmountText({
+                ...row.original,
+                category: row.category,
+              })}
             </span>
           ) : null}
         </span>
