@@ -87,7 +87,12 @@ function enumNames(schema: string): Set<string> {
   return new Set([...schema.matchAll(/^enum (\w+) \{/gm)].map((m) => m[1]!));
 }
 
-/** The key rows are found by: `@id`, else `@@id([...])`, else the first required single `@unique`, else the first `@@unique([...])`. */
+/**
+ * The key rows are found and paged by: `@id`, else `@@id([...])`, and NOTHING ELSE (barracuda, #2329). A `@unique` fallback would
+ * be wrong here: the register pseudonymizes some unique columns (a `User.email`), the page continues from the ORIGINAL key, and the
+ * rewritten row comes back under its fake key on a later page. Every model of the real schema has an `@id` or `@@id` today (a test
+ * measures it); a model without one stops the run before any row is read.
+ */
 function keyOf(
   model: string,
   fields: readonly SchemaField[],
@@ -100,17 +105,8 @@ function keyOf(
     return compound[1]!
       .split(",")
       .map((part) => part.trim().replace(/\(.*$/, ""));
-  const unique = fields.find(
-    (f) => /(^|\s)@unique(\s|\(|$)/.test(f.attributes) && !f.isOptional,
-  );
-  if (unique) return [unique.name];
-  const compoundUnique = /@@unique\(\[([^\]]*)\]/.exec(block);
-  if (compoundUnique)
-    return compoundUnique[1]!
-      .split(",")
-      .map((part) => part.trim().replace(/\(.*$/, ""));
   throw new Error(
-    `${model}: no @id, @@id or @unique: the runner cannot find or page its rows`,
+    `${model}: no @id or @@id: the runner cannot find or page its rows by a key the transform leaves alone`,
   );
 }
 

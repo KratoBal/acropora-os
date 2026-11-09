@@ -24,7 +24,10 @@ import { PrismaClient } from "@prisma/client";
 
 import { ANONYMIZATION_REGISTER } from "../src/anonymization-register.js";
 import type { RunnerOptions } from "../src/stage-anonymization/runner.js";
-import { runStageAnonymization } from "../src/stage-anonymization/stage-run.js";
+import {
+  describeRunFailure,
+  runStageAnonymization,
+} from "../src/stage-anonymization/stage-run.js";
 import { parseTrialResult } from "../src/stage-anonymization/trial-result.js";
 
 const REQUIRED = [
@@ -104,7 +107,7 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  // the message names fields and counts, never a value (the runner's and transformer's rule)
-  console.error(error instanceof Error ? error.message : "the run failed");
+  // the runner's and the transformer's messages name fields and counts, never a value; a database error prints name and code only
+  console.error(describeRunFailure(error));
   process.exit(3);
 });
