@@ -58,6 +58,22 @@ describe("what the scan finds in a text", () => {
     assert.deepEqual(scanText(d, "Dr. Teszt Elek"), ["name"]);
   });
 
+  it("finds a name with a Hungarian suffix up to 6 letters, a phone number followed by more numbers, and a lower case IBAN (barracuda, #2325)", () => {
+    assert.deepEqual(scanText(d, "Teszt Eleknek küldtem"), ["name"]);
+    assert.deepEqual(scanText(d, "Elek Tesztnél járt"), ["name"]);
+    assert.deepEqual(scanText(d, "Teszt Elekkel találkoztam"), ["name"]);
+    // 7 letters after the stem is no suffix the scrubber cuts, so it is no finding either
+    assert.deepEqual(scanText(d, "Teszt Elekabcdefg"), []);
+    assert.deepEqual(scanText(d, "Hívja: 30 123 4567 2024"), ["phone"]);
+    assert.deepEqual(scanText(d, "Hívja: 06 30 123 4567 2024"), ["phone"]);
+    assert.deepEqual(scanText(d, "Hívja: 2024 30 123 4567"), ["phone"]);
+    assert.deepEqual(scanText(d, "Hívja: 30 123 4568 2024"), []);
+    assert.deepEqual(
+      scanText(d, "utalás: hu42 1177 3016 1111 1018 0000 0000"),
+      ["iban"],
+    );
+  });
+
   it("finds several kinds in one text, each once", () => {
     const found = scanText(
       d,

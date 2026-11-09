@@ -170,11 +170,28 @@ export const FORMAT_VALIDATORS = {
 
 export type FormatKind = keyof typeof FORMAT_VALIDATORS;
 
-/** (4) Format validity of a sample of fakes, per kind: 100% must pass. Reports counts only. */
+/**
+ * The kinds the format check MUST have a sample of by default (barracuda, #2325): a kind the runner gave no sample of is a
+ * problem, not a silent pass. A caller with a narrower source passes its own list, and that choice is visible at the call.
+ */
+export const REQUIRED_FORMAT_KINDS: readonly FormatKind[] = [
+  "fakeEmail",
+  "phone",
+  "iban",
+  "companyTaxNumber",
+  "personalTaxId",
+];
+
+/** (4) Format validity of a sample of fakes, per kind: 100% must pass, and every required kind must be sampled. Reports counts only. */
 export function checkFormats(
   samples: Partial<Record<FormatKind, readonly string[]>>,
+  requiredKinds: readonly FormatKind[] = REQUIRED_FORMAT_KINDS,
 ): GateSection {
   const problems: string[] = [];
+  for (const kind of requiredKinds) {
+    if (samples[kind] === undefined)
+      problems.push(`${kind}: no sample was given, so nothing was checked`);
+  }
   for (const [kind, values] of Object.entries(samples) as [
     FormatKind,
     readonly string[],
@@ -231,10 +248,38 @@ export function trialSection(ran: boolean, passed: boolean): GateSection {
   );
 }
 
-/** The gate: every section must pass for the stage swap to proceed. An empty list of sections never passes. */
+/**
+ * The sections the gate REQUIRES, each exactly once (barracuda, #2325). The gate is the one point that stops the stage swap, so
+ * a missing check must be a failure, not a shorter list of green ones: a runner that skipped the residual scan would otherwise
+ * pass on the other six.
+ */
+export const REQUIRED_SECTIONS = [
+  "rowCounts",
+  "referentialIntegrity",
+  "residualPersonalData",
+  "formats",
+  "invariants",
+  "correlations",
+  "workingTrial",
+] as const;
+
+/**
+ * The gate: every required section must be present exactly once, and every section given (a runner may add its own, such as
+ * the unique-column check) must pass. A missing or repeated required section fails the gate and the report names it, in a
+ * `gateStructure` section of its own.
+ */
 export function buildGateReport(sections: readonly GateSection[]): GateReport {
+  const structure: string[] = [];
+  for (const name of REQUIRED_SECTIONS) {
+    const times = sections.filter((s) => s.name === name).length;
+    if (times === 0) structure.push(`${name}: the required section is missing`);
+    else if (times > 1)
+      structure.push(`${name}: the required section appears ${times} times`);
+  }
+  const all = [...sections];
+  if (structure.length > 0) all.push(section("gateStructure", structure));
   return {
-    passed: sections.length > 0 && sections.every((s) => s.passed),
-    sections: [...sections],
+    passed: all.length > 0 && all.every((s) => s.passed),
+    sections: all,
   };
 }

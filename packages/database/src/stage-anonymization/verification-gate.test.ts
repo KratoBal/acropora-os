@@ -5,12 +5,15 @@ import { createPseudonymizer } from "./pseudonymizer.js";
 import {
   buildGateReport,
   checkFormats,
+  REQUIRED_FORMAT_KINDS,
+  REQUIRED_SECTIONS,
   checkReferentialIntegrity,
   compareAggregates,
   compareRowCounts,
   FORMAT_VALIDATORS,
   residualSection,
   trialSection,
+  type GateSection,
 } from "./verification-gate.js";
 
 /*
@@ -177,15 +180,40 @@ describe("(4) formats", () => {
   });
 
   it("counts the failures per kind without showing a value, and refuses an empty sample", () => {
-    const section = checkFormats({
-      iban: ["HU42117730161111101800000000", "nem-iban-kovacs-eva"],
-      fakeEmail: [],
-    });
+    const section = checkFormats(
+      {
+        iban: ["HU42117730161111101800000000", "nem-iban-kovacs-eva"],
+        fakeEmail: [],
+      },
+      ["iban", "fakeEmail"],
+    );
     assert.deepEqual(section.problems, [
       "iban: 1 of 2 sampled value(s) fail the check",
       "fakeEmail: the sample is empty, so nothing was checked",
     ]);
     assert.ok(!JSON.stringify(section).includes("kovacs"));
+  });
+
+  it("fails a required kind that has no sample at all, by default all five kinds (a kind the runner left out is not a pass)", () => {
+    assert.deepEqual([...REQUIRED_FORMAT_KINDS].sort(), [
+      "companyTaxNumber",
+      "fakeEmail",
+      "iban",
+      "personalTaxId",
+      "phone",
+    ]);
+    const section = checkFormats({
+      fakeEmail: ["u3k9f2a7qd1x@teszt.acropora.invalid"],
+    });
+    assert.equal(section.passed, false);
+    assert.deepEqual(section.problems, [
+      "phone: no sample was given, so nothing was checked",
+      "iban: no sample was given, so nothing was checked",
+      "companyTaxNumber: no sample was given, so nothing was checked",
+      "personalTaxId: no sample was given, so nothing was checked",
+    ]);
+    // a kind outside the required list is still checked when it is given
+    assert.equal(checkFormats({ iban: ["nem-iban"] }, ["iban"]).passed, false);
   });
 });
 
@@ -228,15 +256,78 @@ describe("(7) the working trial and the whole gate", () => {
     assert.equal(trialSection(true, true).passed, true);
   });
 
-  it("passes only when every section passes, and never with no section", () => {
-    const ok = compareAggregates("invariants", { a: 1 }, { a: 1 });
-    const bad = compareAggregates("correlations", { a: 1 }, { a: 2 });
-    assert.equal(buildGateReport([ok, ok]).passed, true);
-    assert.equal(buildGateReport([ok, bad]).passed, false);
-    assert.equal(buildGateReport([]).passed, false);
+  const named = (name: string, passed = true): GateSection => ({
+    name,
+    passed,
+    problems: passed ? [] : ["a problem"],
+  });
+  const everySection = () => REQUIRED_SECTIONS.map((name) => named(name));
+
+  it("passes only when every required section is present and passes, and never with no section", () => {
     assert.deepEqual(
-      buildGateReport([ok, bad]).sections.map((s) => s.name),
-      ["invariants", "correlations"],
+      [...REQUIRED_SECTIONS],
+      [
+        "rowCounts",
+        "referentialIntegrity",
+        "residualPersonalData",
+        "formats",
+        "invariants",
+        "correlations",
+        "workingTrial",
+      ],
+    );
+    assert.equal(buildGateReport(everySection()).passed, true);
+    assert.equal(buildGateReport([]).passed, false);
+    const withBad = everySection().map((s) =>
+      s.name === "correlations" ? named("correlations", false) : s,
+    );
+    assert.equal(buildGateReport(withBad).passed, false);
+    assert.deepEqual(
+      buildGateReport(withBad).sections.map((s) => s.name),
+      [...REQUIRED_SECTIONS],
+    );
+  });
+
+  it("fails a gate that lacks a required section and names it, even when every other section is green", () => {
+    for (const missing of REQUIRED_SECTIONS) {
+      const report = buildGateReport(
+        everySection().filter((s) => s.name !== missing),
+      );
+      assert.equal(report.passed, false, missing);
+      assert.deepEqual(report.sections.at(-1), {
+        name: "gateStructure",
+        passed: false,
+        problems: [`${missing}: the required section is missing`],
+      });
+    }
+    // the case barracuda named: a lone green rowCounts is not a gate
+    assert.equal(buildGateReport([named("rowCounts")]).passed, false);
+  });
+
+  it("fails a required section that appears twice (a second green one must not stand in for a first red one)", () => {
+    const report = buildGateReport([
+      ...everySection(),
+      named("residualPersonalData", false),
+    ]);
+    assert.equal(report.passed, false);
+    assert.ok(
+      report.sections
+        .find((s) => s.name === "gateStructure")
+        ?.problems.includes(
+          "residualPersonalData: the required section appears 2 times",
+        ),
+    );
+  });
+
+  it("lets a runner add its own section, which must pass too", () => {
+    assert.equal(
+      buildGateReport([...everySection(), named("uniqueColumns")]).passed,
+      true,
+    );
+    assert.equal(
+      buildGateReport([...everySection(), named("uniqueColumns", false)])
+        .passed,
+      false,
     );
   });
 });
