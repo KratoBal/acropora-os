@@ -194,6 +194,12 @@ describe("a trial against an API that does not answer as expected", () => {
         { status: "ISSUED", documentNumber: "2026-000123" },
         "not a stub",
       ],
+      [
+        "POST /billing/documents/inv-1/issue",
+        200,
+        { status: "ISSUED", documentNumber: "TESZT-2026-0a1b2c3d" },
+        "not a stub",
+      ],
       ["POST /service/jobs/job-1/move", 201, { status: "NEW" }, "not TRIAGED"],
       [
         "GET /service/worksheets/ws-1",

@@ -262,7 +262,7 @@ export async function runTrialFlows(
       if (field(issued.json, "status") !== "ISSUED")
         throw new StepError("the invoice is not ISSUED");
       const number = text(field(issued.json, "documentNumber"));
-      if (number === undefined || !/^TESZT-\d{4}-[0-9a-f]{8}$/.test(number))
+      if (number === undefined || !/^TESZT-\d{4}-[0-9A-F]{8}$/.test(number))
         throw new StepError(
           "the document number is not a stub (TESZT-...) number",
         );

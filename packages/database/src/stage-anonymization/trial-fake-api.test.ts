@@ -61,7 +61,7 @@ export async function startFakeApi(): Promise<FakeApi> {
     [
       "POST /billing/documents/inv-1/issue",
       200,
-      { id: "inv-1", status: "ISSUED", documentNumber: "TESZT-2026-0a1b2c3d" },
+      { id: "inv-1", status: "ISSUED", documentNumber: "TESZT-2026-0A1B2C3D" },
     ],
     [
       "POST /pos/sales",
