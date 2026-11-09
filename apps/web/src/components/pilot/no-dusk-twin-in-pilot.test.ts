@@ -47,14 +47,9 @@ const HATRA_IKREK = 0;
   út, egy szint). A fájlszintű mérés ezt a pilot lapon rajzolt dusk elemet nem látja; itt látszik, ugyanazzal a
   csak-fogyhat szabállyal. Mélyebb gráf nem kell: a második szint már többnyire közös komponens.
 */
-const GYEREK = new Map<string, string[]>([
-  [
-    "components/products/product-basics-editor.tsx",
-    ["Button", "Card", "FormField", "Input", "Select"],
-  ],
-]);
-const GYEREK_MERET = 1;
-const GYEREK_IKREK = 5;
+const GYEREK = new Map<string, string[]>([]);
+const GYEREK_MERET = 0;
+const GYEREK_IKREK = 0;
 
 function fajlok(mappa: string): string[] {
   return readdirSync(mappa).flatMap((nev) => {
