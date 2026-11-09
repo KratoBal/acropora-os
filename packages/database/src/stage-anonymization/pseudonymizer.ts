@@ -27,13 +27,21 @@ import {
  *     serial, the 10th digit the sum of (position x digit) over the first nine, mod 11. SOURCE: secondary articles that agree
  *     (penzcentrum.hu and others); the legal text (1996. evi XX. torveny, annex 1) was NOT retrieved, and the sources do not say
  *     what happens when the remainder is 10: such a serial is skipped here, so the output is never ambiguous.
- *   - company tax number (adoszam 8-1-2): the 8-digit core is replaced, the VAT code and the county code are kept. THE CORE'S
- *     CHECK DIGIT IS NOT COMPUTED: no source this slice could reach confirms the method (the 9-7-3-1-9-7-3 weights belong to
- *     bank accounts), and the application itself does not validate a tax number's shape (it only requires one for an
- *     organisation). The output has the right shape and length, not a guaranteed checksum.
+ *   - company tax number (adoszam 8-1-2): the 8-digit core is replaced, the VAT code and the county code are kept. The core's
+ *     8th digit is the check digit of the first seven, weighted 9-7-3-1-9-7-3 (the sum plus the check digit is a multiple of
+ *     ten). MEASURED, not quoted (barracuda's request, #2320): the rule holds on all four public company tax numbers checked
+ *     (OTP Bank and Richter Gedeon from their own filings, Magyar Telekom from an official 2010 notice, MOL from a company
+ *     directory); a wrong rule would pass four numbers by chance once in ten thousand. The application itself does not validate
+ *     a tax number's shape, so this is faithfulness to the real format, not a requirement of the app.
  *   - phone, street address, parcel number: a plausible Hungarian shape (the area code kept, the subscriber digits replaced;
  *     a street from the synthetic list; a carrier parcel number substituted character class for character class). A carrier
  *     parcel number may carry a check digit that this does not reproduce.
+ *
+ * NO REAL CHARACTER SURVIVES A FALLBACK (barracuda, #2320): a field named "phone" or "bank account" can hold text ("Kovacs Peter,
+ * titkarsag", a name typed into the wrong field). Whatever does not parse as the expected form goes through `shape`, which
+ * replaces EVERY digit and EVERY letter (accented ones too: a name's word lengths, spaces and accents are a fingerprint) with a
+ * DIFFERENT digit or letter, and a value that does parse has its leftover letters replaced the same way. Only separators and
+ * a country prefix (HU, DE ...) are kept.
  *   - names: synthetic Hungarian family and given names from `pseudonym-names.ts`, in Hungarian order (family name first).
  *
  * COLLISIONS: a fake can coincide with another real value's fake (most visible in the 8-digit tax core: about 10^7 values).
@@ -154,7 +162,8 @@ export interface Pseudonymizer {
   givenName(real: string): string;
   /** A full name in Hungarian order (family name first); a leading title (Dr., ifj. ...) is kept. */
   personName(real: string): string;
-  phone(real: string): string;
+  /** `attempt` re-draws after a collision. A value that is not a phone number is replaced character for character. */
+  phone(real: string, attempt?: number): string;
   /** `attempt` re-draws after a collision (see `findCollisions`). */
   companyTaxNumber(real: string, attempt?: number): string;
   euTaxNumber(real: string, attempt?: number): string;
@@ -194,19 +203,47 @@ export function createPseudonymizer(
   const stream = (domain: string, input: string, attempt = 0) =>
     new Stream(key, domain, input, attempt);
 
-  /** Character class for character class: digits to digits, upper case to upper case, lower case to lower case. */
+  const replaceChar = (s: Stream, char: string): string => {
+    if (/[0-9]/.test(char)) return String((Number(char) + 1 + s.below(9)) % 10);
+    const upper = char !== char.toLowerCase();
+    const base = upper ? 65 : 97;
+    const code = char.charCodeAt(0);
+    const index = code >= base && code < base + 26 ? code - base : -1;
+    // an ASCII letter becomes a DIFFERENT letter of its case; an accented or other letter becomes any ASCII letter
+    const next = index >= 0 ? (index + 1 + s.below(25)) % 26 : s.below(26);
+    return String.fromCharCode(base + next);
+  };
+
+  /** Every digit and every letter replaced by a different one of its class; every other character stays. */
   const shape = (domain: string, real: string): string => {
     const s = stream(domain, real.trim().toUpperCase());
-    return real.replace(/[0-9A-Za-z]/g, (char) => {
-      if (/[0-9]/.test(char)) return String(s.below(10));
-      const letter = String.fromCharCode(65 + s.below(26));
-      return /[a-z]/.test(char) ? letter.toLowerCase() : letter;
-    });
+    return real.replace(/[0-9]|\p{L}/gu, (char) => replaceChar(s, char));
+  };
+
+  /** The letters of a parsed value replaced (a leading two-letter country prefix may be kept). */
+  const lettersGone = (
+    domain: string,
+    real: string,
+    value: string,
+    keepPrefix = false,
+  ): string => {
+    if (!/\p{L}/u.test(value)) return value;
+    const prefix = keepPrefix
+      ? (/^\s*[A-Za-z]{2}(?=\s?\d)/.exec(value)?.[0] ?? "")
+      : "";
+    const s = stream(domain, real.trim().toUpperCase());
+    return (
+      prefix +
+      value
+        .slice(prefix.length)
+        .replace(/\p{L}/gu, (char) => replaceChar(s, char))
+    );
   };
 
   const companyCore = (core8: string, attempt: number): string => {
     const s = stream("huTaxCore", core8, attempt);
-    return String(1 + s.below(9)) + s.digits(7);
+    const first7 = String(1 + s.below(9)) + s.digits(6);
+    return first7 + check9731(first7);
   };
 
   const familyName = (real: string): string =>
@@ -217,9 +254,14 @@ export function createPseudonymizer(
   const companyTaxNumber = (real: string, attempt = 0): string => {
     const digits = digitsOf(real);
     if (digits.length < 8) return shape("taxShort", real);
-    return fillDigits(
+    return lettersGone(
+      "taxLetters",
       real,
-      companyCore(digits.slice(0, 8), attempt) + digits.slice(8),
+      fillDigits(
+        real,
+        companyCore(digits.slice(0, 8), attempt) + digits.slice(8),
+      ),
+      true,
     );
   };
 
@@ -252,9 +294,9 @@ export function createPseudonymizer(
       return [...titles, family, given].filter(Boolean).join(" ");
     },
 
-    phone(real) {
+    phone(real, attempt = 0) {
       const digits = digitsOf(real);
-      if (digits.length < 6) return real;
+      if (digits.length < 6) return shape("phoneShort", real);
       const startsPlus = real.trim().startsWith("+");
       let skip: number;
       let national: string;
@@ -285,8 +327,12 @@ export function createPseudonymizer(
       let keep = skip + area;
       if (keep >= digits.length - 3) keep = Math.max(0, digits.length - 4);
       const subscriber = digits.length - keep;
-      const fake = stream("phone", national).digits(subscriber);
-      return fillDigits(real, digits.slice(0, keep) + fake);
+      const fake = stream("phone", national, attempt).digits(subscriber);
+      return lettersGone(
+        "phoneLetters",
+        real,
+        fillDigits(real, digits.slice(0, keep) + fake),
+      );
     },
 
     companyTaxNumber,
@@ -313,7 +359,12 @@ export function createPseudonymizer(
       for (;;) {
         const first9 = `8${String(days).padStart(5, "0")}${String(s.below(1000)).padStart(3, "0")}`;
         const check = personalTaxIdCheck(first9);
-        if (check < 10) return fillDigits(real, first9 + String(check));
+        if (check < 10)
+          return lettersGone(
+            "taxIdLetters",
+            real,
+            fillDigits(real, first9 + String(check)),
+          );
       }
     },
 
@@ -348,9 +399,10 @@ export function createPseudonymizer(
         return shape("bankAccount", real);
       const real24 = digits.length === 16 ? `${digits}00000000` : digits;
       const fake24 = fakeHuBban(key, real24);
-      return fillDigits(
+      return lettersGone(
+        "accountLetters",
         real,
-        digits.length === 16 ? fake24.slice(0, 16) : fake24,
+        fillDigits(real, digits.length === 16 ? fake24.slice(0, 16) : fake24),
       );
     },
 
@@ -368,6 +420,20 @@ export function createPseudonymizer(
 }
 
 /**
+ * The national digits of a phone number: the country prefix (0036, +36, 06) and every separator removed, so the two writings of
+ * one number ("+36 30 123 4567", "06301234567") are ONE real value. Pass it to `findCollisions` for phone numbers; the default
+ * normalizer would count the two writings as two values that share a fake, a false collision.
+ */
+export function normalizePhone(value: string): string {
+  const digits = digitsOf(value);
+  if (digits.startsWith("0036")) return digits.slice(4);
+  if (value.trim().startsWith("+") && digits.startsWith("36"))
+    return digits.slice(2);
+  if (digits.startsWith("06")) return digits.slice(2);
+  return digits;
+}
+
+/**
  * The groups of real values that share one fake (a collision), as INDEXES into `values`, never the values themselves: a real
  * value must not end up in a log or a report. Values that normalize to the same text are one value, not a collision.
  */
@@ -375,19 +441,25 @@ export function findCollisions(
   values: readonly string[],
   fake: (value: string) => string,
   normalize: (value: string) => string = normalizeText,
+  /**
+   * What two FAKES must share to collide. A fake keeps the real value's writing (a phone's "+36" or "06", its separators), so
+   * two fakes of different writings can be the same number: pass `normalizePhone` here too for phone numbers.
+   */
+  normalizeFake: (fake: string) => string = (value) => value,
 ): { fake: string; indexes: number[] }[] {
   const firstByReal = new Map<string, number>();
-  const byFake = new Map<string, number[]>();
+  const byFake = new Map<string, { fake: string; indexes: number[] }>();
   values.forEach((value, index) => {
     const real = normalize(value);
     if (firstByReal.has(real)) return;
     firstByReal.set(real, index);
     const made = fake(value);
-    byFake.set(made, [...(byFake.get(made) ?? []), index]);
+    const slot = normalizeFake(made);
+    const group = byFake.get(slot) ?? { fake: made, indexes: [] };
+    group.indexes.push(index);
+    byFake.set(slot, group);
   });
-  return [...byFake]
-    .filter(([, indexes]) => indexes.length > 1)
-    .map(([made, indexes]) => ({ fake: made, indexes }));
+  return [...byFake.values()].filter((group) => group.indexes.length > 1);
 }
 
 /**
