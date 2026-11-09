@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Button } from "@acropora/ui";
+import { Alert, PilotButton } from "@acropora/ui";
 import { useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -131,9 +131,9 @@ export function CompletionCertificatePanel({
       {certificates === null ? (
         <p className="text-sm text-muted">Betöltés…</p>
       ) : certificates.length === 0 ? (
-        <Button disabled={issuing} onClick={() => void issue()}>
+        <PilotButton disabled={issuing} onClick={() => void issue()}>
           {issuing ? "Kiállítás…" : "Teljesítési igazolás kiállítása"}
-        </Button>
+        </PilotButton>
       ) : (
         certificates.map((certificate) => (
           <div key={certificate.id} className="rounded-lg border p-3 text-sm">
