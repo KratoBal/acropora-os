@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   WEBSHOP_MAIL_KEYS,
   WEBSHOP_MAIL_SAMPLE_FACTS,
+  parseWebshopMailFacts,
   webshopAcclimationValue,
   type WebshopMailFacts,
 } from "@acropora/types";
@@ -110,6 +111,76 @@ describe("renderWebshopMail", () => {
         text.toLowerCase(),
         /\d+\s*(nap|óra|day|hour)|garanci|warrant|refund|visszat[ée]r|replace|csere/,
       );
+  });
+
+  it("the newsletter's confirmation: the button confirms, the link's last day, the leaving link, in both languages", () => {
+    const facts: WebshopMailFacts = {
+      template: "newsletter-confirm",
+      customer_name: "Kiss Anna",
+      order_created_at: null,
+      order_view_url: null,
+      confirm_url: "https://shop.example/hu/hirlevel/megerosites?token=AbC_9",
+      unsubscribe_url: "https://shop.example/hu/hirlevel/leiratkozas?token=XyZ-1",
+      expires_at: "2026-11-16T15:00:00.000Z",
+    };
+    const hu = renderWebshopMail(template("WEBSHOP_NEWSLETTER_CONFIRM"), facts);
+    assert.equal(hu.ok, true);
+    if (!hu.ok) return;
+    assert.equal(hu.subject, "Erősítsd meg a feliratkozásodat a hírlevelünkre");
+    assert.match(
+      hu.html,
+      /<a href="https:\/\/shop\.example\/hu\/hirlevel\/megerosites\?token=AbC_9"[^>]*>Feliratkozás megerősítése<\/a>/,
+    );
+    assert.match(
+      hu.html,
+      /<a href="https:\/\/shop\.example\/hu\/hirlevel\/leiratkozas\?token=XyZ-1"[^>]*>leiratkozás<\/a>/,
+    );
+    assert.match(hu.text, /A link 2026\. november 16\. végéig működik\./);
+    assert.doesNotMatch(hu.html, /ACROPORABLOCK|\{\{/);
+    const en = renderWebshopMail(template("WEBSHOP_NEWSLETTER_CONFIRM_EN"), {
+      ...facts,
+      locale: "en",
+    });
+    assert.equal(en.ok, true);
+    if (!en.ok) return;
+    assert.equal(en.subject, "Confirm your subscription to our newsletter");
+    assert.match(en.text, /The link works until 16 November 2026\./);
+    assert.match(en.html, />Confirm subscription<\/a>/);
+    assert.match(en.html, />unsubscribe<\/a>/);
+  });
+
+  it("the newsletter's confirmation is refused without clean https links: a mail without them is never sent", () => {
+    for (const confirm_url of [
+      "http://shop.example/hu/hirlevel/megerosites?token=a",
+      "javascript:alert(1)",
+      'https://shop.example/x?token=a"onmouseover="x',
+      "",
+    ]) {
+      const parsed = parseWebshopMailFacts("newsletter-confirm", {
+        customer_name: null,
+        order_created_at: null,
+        locale: "hu",
+        order_view_url: null,
+        confirm_url,
+        unsubscribe_url: "https://shop.example/hu/hirlevel/leiratkozas?token=b",
+        expires_at: "2026-11-16T15:00:00.000Z",
+      });
+      assert.equal(parsed.ok, false, confirm_url);
+      if (!parsed.ok) assert.match(parsed.error, /facts\.confirm_url/);
+    }
+    // the control: the same facts with a clean link pass
+    assert.equal(
+      parseWebshopMailFacts("newsletter-confirm", {
+        customer_name: null,
+        order_created_at: null,
+        locale: "hu",
+        order_view_url: null,
+        confirm_url: "https://shop.example/hu/hirlevel/megerosites?token=a",
+        unsubscribe_url: "https://shop.example/hu/hirlevel/leiratkozas?token=b",
+        expires_at: "2026-11-16T15:00:00.000Z",
+      }).ok,
+      true,
+    );
   });
 
   it("every webshop default renders with its sample facts", () => {

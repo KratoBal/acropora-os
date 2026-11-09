@@ -198,6 +198,20 @@ type WebshopTemplateFacts =
       readonly template: "problem-report-received";
       readonly display_id: number | string;
       readonly report_id: string;
+    }
+  | {
+      /**
+       * The newsletter's confirmation (double opt-in, commerce card
+       * d707cf5f): the link that confirms the sign-up (it works once, until
+       * `expires_at`), and the link that leaves the list. There is no order
+       * behind it: the common `order_created_at` and `order_view_url` are
+       * null, `customer_name` is the name typed into the sign-up. The text is
+       * a proposal on Balázs's list; the shop sends it only behind its switch.
+       */
+      readonly template: "newsletter-confirm";
+      readonly confirm_url: string;
+      readonly unsubscribe_url: string;
+      readonly expires_at: string;
     };
 
 /** How a split order is paid, from the original order (murena 26656). */
@@ -229,6 +243,7 @@ export const WEBSHOP_MAIL_KEYS = {
   "order-status-closed": "WEBSHOP_ORDER_CLOSED",
   "order-split": "WEBSHOP_ORDER_SPLIT",
   "problem-report-received": "WEBSHOP_PROBLEM_REPORT_RECEIVED",
+  "newsletter-confirm": "WEBSHOP_NEWSLETTER_CONFIRM",
 } as const satisfies Record<WebshopMailTemplate, string>;
 
 export const SHOP_NAME = "Acropora tengeri akvarisztika";
@@ -883,6 +898,16 @@ function templateContent(
         blocks: {},
       };
 
+    case "newsletter-confirm":
+      return {
+        values: {
+          hirlevel_megerosito_link: facts.confirm_url,
+          hirlevel_leiratkozo_link: facts.unsubscribe_url,
+          megerosites_lejarat: mailDay(facts.expires_at, locale),
+        },
+        blocks: {},
+      };
+
     case "payment-refunded": {
       const r = facts.refund;
       return {
@@ -1028,6 +1053,15 @@ export const WEBSHOP_MAIL_SAMPLE_FACTS: Readonly<
     template: "problem-report-received",
     display_id: 38,
     report_id: "ordprb_01SAMPLE",
+  },
+  "newsletter-confirm": {
+    ...SAMPLE_COMMON,
+    order_created_at: null,
+    order_view_url: null,
+    template: "newsletter-confirm",
+    confirm_url: "https://shop.example/hu/hirlevel/megerosites?token=minta",
+    unsubscribe_url: "https://shop.example/hu/hirlevel/leiratkozas?token=minta",
+    expires_at: "2026-10-12T09:21:00.000Z",
   },
   "payment-refunded": {
     ...SAMPLE_COMMON,
@@ -1346,6 +1380,23 @@ function parseTemplateFacts(
         display_id: id(f.display_id, "facts.display_id"),
         report_id: str(f.report_id, "facts.report_id"),
       };
+    case "newsletter-confirm": {
+      // the two links go into an href: a clean https address or the mail is refused (422), never sent without them
+      const link = (value: unknown, at: string) => {
+        const url = safeOrderViewUrl(value);
+        if (!url) throw new FactsError(`${at}: tiszta https cím kell`);
+        return url;
+      };
+      const expires_at = str(f.expires_at, "facts.expires_at");
+      if (Number.isNaN(new Date(expires_at).getTime()))
+        throw new FactsError("facts.expires_at: ISO időpont kell");
+      return {
+        template,
+        confirm_url: link(f.confirm_url, "facts.confirm_url"),
+        unsubscribe_url: link(f.unsubscribe_url, "facts.unsubscribe_url"),
+        expires_at,
+      };
+    }
     case "payment-refunded": {
       const r = obj(f.refund, "facts.refund");
       return {

@@ -183,6 +183,16 @@ const RAW: Readonly<
       "<p>Kollégánk hamarosan jelentkezik.</p>",
     ].join(""),
   },
+  WEBSHOP_NEWSLETTER_CONFIRM: {
+    subject: "Erősítsd meg a feliratkozásodat a hírlevelünkre",
+    bodyHtml: [
+      "<p>Köszönjük, hogy feliratkoztál az Acropora hírlevelére!</p>",
+      "<p>A feliratkozás akkor él, ha megerősíted a lenti gombbal. Amíg ez nem történik meg, nem küldünk hírlevelet.</p>",
+      `<p data-cta=""><a href="{{hirlevel_megerosito_link}}">Feliratkozás megerősítése</a></p>`,
+      `<p>A link ${v("megerosites_lejarat")} végéig működik. Ha nem te iratkoztál fel, nincs teendőd: megerősítés nélkül a címedre nem megy hírlevél.</p>`,
+      `<p>Ha később nem kérsz több levelet, itt bármikor leiratkozhatsz: <a href="{{hirlevel_leiratkozo_link}}">leiratkozás</a>.</p>`,
+    ].join(""),
+  },
   WEBSHOP_SHIPPING_DELAYED: {
     subject: "Csúszik a rendelésed szállítása (#{{rendeles_szam}})",
     bodyHtml: [
@@ -315,6 +325,16 @@ const RAW_EN: typeof RAW = {
       `<p>Thank you, we have received your report about order #${v("rendeles_szam")}.</p>`,
       `<p>The case reference is ${v("ugy_azonosito")}.</p>`,
       "<p>A colleague will be in touch shortly.</p>",
+    ].join(""),
+  },
+  WEBSHOP_NEWSLETTER_CONFIRM: {
+    subject: "Confirm your subscription to our newsletter",
+    bodyHtml: [
+      "<p>Thank you for subscribing to the Acropora newsletter!</p>",
+      "<p>Your subscription starts once you confirm it with the button below. Until then, we send no newsletter.</p>",
+      `<p data-cta=""><a href="{{hirlevel_megerosito_link}}">Confirm subscription</a></p>`,
+      `<p>The link works until ${v("megerosites_lejarat")}. If you did not subscribe, there is nothing to do: without a confirmation, no newsletter goes to your address.</p>`,
+      `<p>If you no longer want our mails later, you can leave at any time here: <a href="{{hirlevel_leiratkozo_link}}">unsubscribe</a>.</p>`,
     ].join(""),
   },
   WEBSHOP_SHIPPING_DELAYED: {

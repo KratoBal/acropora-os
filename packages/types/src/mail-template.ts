@@ -333,6 +333,22 @@ export const MAIL_TEMPLATE_VARIABLES: readonly MailTemplateVariable[] = [
       "A problémabejelentés azonosítója, amit a vevő a bejelentéskor kapott, például ordprb_01ABC.",
   },
   {
+    name: "hirlevel_megerosito_link",
+    description:
+      "A hírlevél-feliratkozás megerősítő linkje. Egyszer használható, a lejáratig.",
+    kind: "link",
+  },
+  {
+    name: "hirlevel_leiratkozo_link",
+    description: "A hírlevélről leiratkozó link. Nem jár le.",
+    kind: "link",
+  },
+  {
+    name: "megerosites_lejarat",
+    description:
+      "Az utolsó nap, amikor a megerősítő link még működik, például 2026. november 16.",
+  },
+  {
     name: "masodik_resz_szam",
     description:
       "Szétbontott rendelésnél a később érkező rész száma #-tel, például #39.",
@@ -751,6 +767,22 @@ const HUNGARIAN_MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
       "rendeles_datum",
       "rendeles_megtekintes_mondat",
       "ugy_azonosito",
+    ],
+  },
+  {
+    id: "WEBSHOP_NEWSLETTER_CONFIRM",
+    group: "WEBSHOP",
+    name: "Hírlevél megerősítése",
+    description:
+      "Amikor valaki feliratkozik a webshop hírlevelére: a megerősítő link (kettős megerősítés) és a leiratkozó link.",
+    // rendeles_datum and rendeles_megtekintes_mondat are every webshop mail's; here they are always empty (no order)
+    variables: [
+      "ugyfel_neve",
+      "rendeles_datum",
+      "rendeles_megtekintes_mondat",
+      "hirlevel_megerosito_link",
+      "megerosites_lejarat",
+      "hirlevel_leiratkozo_link",
     ],
   },
   {
