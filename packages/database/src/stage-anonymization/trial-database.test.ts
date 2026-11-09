@@ -131,6 +131,26 @@ describe("createTrialDatabase", () => {
     );
   });
 
+  it("counts EVERY row of a settings table: a second row that holds a secret does not slip past a measurement of the first only", async () => {
+    const { client, queries } = clientReturning([
+      [
+        { mode: "ENV_FALLBACK", stored: 0 },
+        { mode: "DATABASE", stored: 1 },
+        { mode: "DATABASE", stored: 2 },
+      ],
+      [{ mode: "ENV_FALLBACK", stored: 0 }],
+      [],
+      [],
+    ]);
+    const states = await createTrialDatabase(client).connectionSettings();
+    assert.deepEqual(states[0], {
+      integration: "UNAS",
+      credentialMode: "ENV_FALLBACK",
+      storedCredentialColumns: 3,
+    });
+    assert.ok(!queries[0]!.includes("LIMIT"), "no LIMIT: every row is read");
+  });
+
   it("counts the device tokens, and an unreadable count is NaN (never zero)", async () => {
     assert.equal(
       await createTrialDatabase(

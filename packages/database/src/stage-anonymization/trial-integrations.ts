@@ -243,7 +243,7 @@ function problemsOf(
       );
   }
   if (rule.noDeviceTokens) {
-    if (deviceTokens === undefined)
+    if (deviceTokens === undefined || !Number.isFinite(deviceTokens))
       problems.push("device tokens were not counted");
     else if (deviceTokens > 0)
       problems.push(`${deviceTokens} device token(s) are in the database`);

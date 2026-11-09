@@ -52,7 +52,7 @@ export const settingsSql = (
 ): string =>
   `SELECT "credentialMode"::text AS "mode", (${columns
     .map((column) => `("${column}" IS NOT NULL)::int`)
-    .join(" + ")}) AS "stored" FROM "${table}" ORDER BY "id" LIMIT 1`;
+    .join(" + ")}) AS "stored" FROM "${table}" ORDER BY "id"`;
 
 export function createTrialDatabase(client: SqlClient): TrialDatabase {
   return {
@@ -62,13 +62,18 @@ export function createTrialDatabase(client: SqlClient): TrialDatabase {
         const rows = await client.$queryRawUnsafe<
           { mode: string | null; stored: number | bigint | null }[]
         >(settingsSql(table, columns));
-        const row = rows[0];
         // no row: the state is left out, and the measurement fails for it ("not read")
-        if (row === undefined) continue;
+        if (rows.length === 0) continue;
+        // EVERY row counts (barracuda, #2333). Measured in the migrations: UNAS and NAV are singletons by a database CHECK
+        // (`"id" = 'unas'`, `"id" = 'nav'`); Médusa and Számlázz are NOT: they are one seeded row with a fixed id by convention only, so a
+        // second row could exist there, and a secret in it must not slip past a measurement of the first row only.
         states.push({
           integration,
-          credentialMode: row.mode,
-          storedCredentialColumns: Number(row.stored ?? 0),
+          credentialMode: rows[0]!.mode,
+          storedCredentialColumns: rows.reduce(
+            (sum, row) => sum + Number(row.stored ?? 0),
+            0,
+          ),
         });
       }
       return states;
