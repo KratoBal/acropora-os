@@ -263,7 +263,7 @@ describe("a kettevagott valtozo", () => {
 });
 
 describe("a link-fajta valtozok", () => {
-  it("pontosan a kilenc webcim-valtozo link fajtaju", () => {
+  it("pontosan a tiz webcim-valtozo link fajtaju", () => {
     assert.deepEqual(
       MAIL_TEMPLATE_VARIABLES.filter((v) => v.kind === "link").map(
         (v) => v.name,
@@ -277,6 +277,7 @@ describe("a link-fajta valtozok", () => {
         "hirlevel_leiratkozo_link",
         "ertesites_megerosito_link",
         "ertesites_leiratkozo_link",
+        "ertesites_termek_link",
         "fizetesi_link",
       ],
     );

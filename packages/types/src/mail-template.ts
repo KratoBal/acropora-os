@@ -374,6 +374,17 @@ export const MAIL_TEMPLATE_VARIABLES: readonly MailTemplateVariable[] = [
       "Amire a vevő értesítést kért: egy faj (például Acropora abrolhosensis) vagy egy termék neve.",
   },
   {
+    name: "ertesites_termek_neve",
+    description:
+      "Az értesítés-kérés teljesülésekor: a most kapható darab neve, ahogy a webshop írja.",
+  },
+  {
+    name: "ertesites_termek_link",
+    description:
+      "Az értesítés-kérés teljesülésekor: a most kapható darab termékoldala a webshopban.",
+    kind: "link",
+  },
+  {
     name: "megerosites_lejarat",
     description:
       "Az utolsó nap, amikor a megerősítő link még működik, például 2026. november 16.",
@@ -845,6 +856,23 @@ const HUNGARIAN_MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
       "ertesites_targya",
       "ertesites_megerosito_link",
       "megerosites_lejarat",
+      "ertesites_leiratkozo_link",
+    ],
+  },
+  {
+    id: "WEBSHOP_STOCK_ALERT_ARRIVAL",
+    group: "WEBSHOP",
+    name: "Értesítés: újra kapható",
+    description:
+      "Egyszer, amikor egy megerősített „Szólj, ha jön hasonló” értesítés-kérés tárgyából (faj vagy termék) új darab kapható a webshopban: a darab neve, a termékoldal és a leiratkozó link.",
+    // ugyfel_neve, rendeles_datum and rendeles_megtekintes_mondat are every webshop mail's; here they are always empty (no name asked, no order)
+    variables: [
+      "ugyfel_neve",
+      "rendeles_datum",
+      "rendeles_megtekintes_mondat",
+      "ertesites_targya",
+      "ertesites_termek_neve",
+      "ertesites_termek_link",
       "ertesites_leiratkozo_link",
     ],
   },

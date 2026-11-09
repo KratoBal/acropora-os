@@ -247,6 +247,23 @@ type WebshopTemplateFacts =
       readonly unsubscribe_url: string;
       readonly expires_at: string;
       readonly subject_label: string;
+    }
+  | {
+      /**
+       * The stock alert's arrival (commerce card 0c1265d2): ONE mail to a
+       * confirmed sign-up when a piece of what it waits for can be bought.
+       * `subject_label` is what was waited for (a species or a product's
+       * title), `product_title` and `product_url` the piece that came and its
+       * storefront page, `unsubscribe_url` the leaving link. No name, no order:
+       * `customer_name`, `order_created_at` and `order_view_url` are null. The
+       * text is a proposal; the shop sends it only behind ACROPORA_STOCK_ALERT
+       * on the test shop.
+       */
+      readonly template: "stock-alert-arrival";
+      readonly subject_label: string;
+      readonly product_title: string;
+      readonly product_url: string;
+      readonly unsubscribe_url: string;
     };
 
 /** How a split order is paid, from the original order (murena 26656). */
@@ -281,6 +298,7 @@ export const WEBSHOP_MAIL_KEYS = {
   "withdrawal-received": "WEBSHOP_WITHDRAWAL_RECEIVED",
   "newsletter-confirm": "WEBSHOP_NEWSLETTER_CONFIRM",
   "stock-alert-confirm": "WEBSHOP_STOCK_ALERT_CONFIRM",
+  "stock-alert-arrival": "WEBSHOP_STOCK_ALERT_ARRIVAL",
 } as const satisfies Record<WebshopMailTemplate, string>;
 
 export const SHOP_NAME = "Acropora tengeri akvarisztika";
@@ -967,6 +985,17 @@ function templateContent(
         blocks: {},
       };
 
+    case "stock-alert-arrival":
+      return {
+        values: {
+          ertesites_targya: facts.subject_label,
+          ertesites_termek_neve: facts.product_title,
+          ertesites_termek_link: facts.product_url,
+          ertesites_leiratkozo_link: facts.unsubscribe_url,
+        },
+        blocks: {},
+      };
+
     case "payment-refunded": {
       const r = facts.refund;
       return {
@@ -1142,6 +1171,18 @@ export const WEBSHOP_MAIL_SAMPLE_FACTS: Readonly<
       "https://shop.example/hu/ertesites/leiratkozas?token=minta",
     expires_at: "2026-10-12T09:21:00.000Z",
     subject_label: "Acropora abrolhosensis",
+  },
+  "stock-alert-arrival": {
+    ...SAMPLE_COMMON,
+    customer_name: null,
+    order_created_at: null,
+    order_view_url: null,
+    template: "stock-alert-arrival",
+    subject_label: "Acropora abrolhosensis",
+    product_title: "Acropora abrolhosensis ULTRA",
+    product_url: "https://shop.example/hu/termek/acropora-abrolhosensis-ultra",
+    unsubscribe_url:
+      "https://shop.example/hu/ertesites/leiratkozas?token=minta",
   },
   "payment-refunded": {
     ...SAMPLE_COMMON,
@@ -1509,6 +1550,27 @@ function parseTemplateFacts(
       if (!subject_label)
         throw new FactsError("facts.subject_label: nem lehet üres");
       return { template, ...links, subject_label };
+    }
+    case "stock-alert-arrival": {
+      // the product's page and the leaving link go into an href: a clean https address or the mail is refused (422)
+      const link = (value: unknown, at: string) => {
+        const url = safeOrderViewUrl(value);
+        if (!url) throw new FactsError(`${at}: tiszta https cím kell`);
+        return url;
+      };
+      // the mail's sentence names both: an empty one would leave it without its subject or its piece
+      const named = (value: unknown, at: string) => {
+        const text = str(value, at).trim();
+        if (!text) throw new FactsError(`${at}: nem lehet üres`);
+        return text;
+      };
+      return {
+        template,
+        subject_label: named(f.subject_label, "facts.subject_label"),
+        product_title: named(f.product_title, "facts.product_title"),
+        product_url: link(f.product_url, "facts.product_url"),
+        unsubscribe_url: link(f.unsubscribe_url, "facts.unsubscribe_url"),
+      };
     }
     case "payment-refunded": {
       const r = obj(f.refund, "facts.refund");
