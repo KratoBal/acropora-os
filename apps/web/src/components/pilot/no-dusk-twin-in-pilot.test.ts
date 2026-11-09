@@ -32,20 +32,15 @@ const DUSK_IKREK = [
   "Select",
 ] as const;
 
-const HATRA = new Map<string, string[]>([
-  [
-    "components/customers/customer-list-page.tsx",
-    ["Badge", "Card", "Input", "Select"],
-  ],
-]);
+const HATRA = new Map<string, string[]>([]);
 
 /*
   A SZÁMLÁLÓK (barracuda, #2125): a pontos egyezés megfogja az új vegyes fájlt, de ha valaki ugyanabban a PR-ban a
   sorát is felveszi a listára, a teszt zöld maradna. A két szám ezért külön áll: a lista bővítése két helyen kér
-  módosítást, és a reviewban látszik. Fogyáskor a számot is le kell írni (a lista története: 59 / 141 a #2125-ben, 47 / 129 a #2134-ben, 45 / 120 a #2137-ben, 36 / 96 a #2140-ben, 32 / 86 a #2229-ben, 29 / 76 a #2232-ben, 25 / 61 a 7. szeletben, a purchasing mappa, 8 / 30 a 13. szeletben: a termékek, a SEO landing és a levélkép-választó, 5 / 18 a 14. szeletben, a leltár két lapja és az adag-hatás kártya, 4 / 14 a 8. szeletben, az eszköz-szerkesztő, 1 / 4 a 15. szeletben, a webshop három lapja).
+  módosítást, és a reviewban látszik. Fogyáskor a számot is le kell írni (a lista története: 59 / 141 a #2125-ben, 47 / 129 a #2134-ben, 45 / 120 a #2137-ben, 36 / 96 a #2140-ben, 32 / 86 a #2229-ben, 29 / 76 a #2232-ben, 25 / 61 a 7. szeletben, a purchasing mappa, 8 / 30 a 13. szeletben: a termékek, a SEO landing és a levélkép-választó, 5 / 18 a 14. szeletben, a leltár két lapja és az adag-hatás kártya, 4 / 14 a 8. szeletben, az eszköz-szerkesztő, 1 / 4 a 15. szeletben, a webshop három lapja, 0 / 0 a 16. szeletben, a vevőlista).
 */
-const HATRA_MERET = 1;
-const HATRA_IKREK = 4;
+const HATRA_MERET = 0;
+const HATRA_IKREK = 0;
 
 /*
   A GYEREK-LISTA (barracuda, #2125): egy pilot fájl által importált, CSAK duskot használó .tsx (relatív vagy `@/`
@@ -54,21 +49,12 @@ const HATRA_IKREK = 4;
 */
 const GYEREK = new Map<string, string[]>([
   [
-    "components/aquariums/customer-picker.tsx",
-    ["Button", "Card", "FormField", "Input"],
-  ],
-  [
     "components/products/product-basics-editor.tsx",
     ["Button", "Card", "FormField", "Input", "Select"],
   ],
-  [
-    "components/purchasing/purchase-invoice-cancel-form.tsx",
-    ["Button", "Card", "CardContent", "CardHeader"],
-  ],
-  ["components/service/service-document-gallery.tsx", ["Button", "Input"]],
 ]);
-const GYEREK_MERET = 4;
-const GYEREK_IKREK = 15;
+const GYEREK_MERET = 1;
+const GYEREK_IKREK = 5;
 
 function fajlok(mappa: string): string[] {
   return readdirSync(mappa).flatMap((nev) => {
