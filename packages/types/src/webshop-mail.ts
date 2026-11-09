@@ -201,6 +201,25 @@ type WebshopTemplateFacts =
     }
   | {
       /**
+       * The acknowledgement of a withdrawal declaration the customer made
+       * (commerce V0.3 slice 2; 45/2014. Korm. rendelet 22. §: the
+       * acknowledgement goes on a durable medium, without undue delay, and
+       * this mail is that medium). The order's number, the declaration's
+       * reference, the name it was signed with and the time it came in; the
+       * lines it names go as ids (the shop has no titles in this call, so the
+       * mail does not list them). The wording is a DRAFT on Balázs's list
+       * (Eldöntendő, 3rd point): no deadline, no outcome, no statutory
+       * sentence. Sent only through this renderer, behind the shop's switch.
+       */
+      readonly template: "withdrawal-received";
+      readonly display_id: number | string;
+      readonly withdrawal_id: string;
+      readonly declared_name: string;
+      readonly item_ids: readonly string[];
+      readonly received_at: string;
+    }
+  | {
+      /**
        * The newsletter's confirmation (double opt-in, commerce card
        * d707cf5f): the link that confirms the sign-up (it works once, until
        * `expires_at`), and the link that leaves the list. There is no order
@@ -276,6 +295,7 @@ export const WEBSHOP_MAIL_KEYS = {
   "order-status-closed": "WEBSHOP_ORDER_CLOSED",
   "order-split": "WEBSHOP_ORDER_SPLIT",
   "problem-report-received": "WEBSHOP_PROBLEM_REPORT_RECEIVED",
+  "withdrawal-received": "WEBSHOP_WITHDRAWAL_RECEIVED",
   "newsletter-confirm": "WEBSHOP_NEWSLETTER_CONFIRM",
   "stock-alert-confirm": "WEBSHOP_STOCK_ALERT_CONFIRM",
   "stock-alert-arrival": "WEBSHOP_STOCK_ALERT_ARRIVAL",
@@ -933,6 +953,17 @@ function templateContent(
         blocks: {},
       };
 
+    case "withdrawal-received":
+      return {
+        values: {
+          rendeles_szam: String(facts.display_id),
+          nyilatkozat_azonosito: facts.withdrawal_id,
+          nyilatkozat_neve: facts.declared_name,
+          nyilatkozat_idopont: mailDay(facts.received_at, locale),
+        },
+        blocks: {},
+      };
+
     case "newsletter-confirm":
       return {
         values: {
@@ -1111,6 +1142,15 @@ export const WEBSHOP_MAIL_SAMPLE_FACTS: Readonly<
     display_id: 38,
     report_id: "ordprb_01SAMPLE",
   },
+  "withdrawal-received": {
+    ...SAMPLE_COMMON,
+    template: "withdrawal-received",
+    display_id: 38,
+    withdrawal_id: "ordwd_01SAMPLE",
+    declared_name: "Minta Vevő",
+    item_ids: ["item_01SAMPLE"],
+    received_at: "2026-11-09T12:00:00.000Z",
+  },
   "newsletter-confirm": {
     ...SAMPLE_COMMON,
     order_created_at: null,
@@ -1212,6 +1252,13 @@ function str(v: unknown, path: string): string {
       `${path}: szöveg kell (legfeljebb ${MAX_TEXT} karakter)`,
     );
   return v;
+}
+/** Text that must say something: an empty reference or name would leave the mail's sentence without its subject. */
+function filled(v: unknown, path: string): string {
+  const text = str(v, path);
+  if (text.trim() === "")
+    throw new FactsError(`${path}: nem lehet üres szöveg`);
+  return text;
 }
 function strOrNull(v: unknown, path: string): string | null {
   return v === null || v === undefined ? null : str(v, path);
@@ -1461,6 +1508,26 @@ function parseTemplateFacts(
         display_id: id(f.display_id, "facts.display_id"),
         report_id: str(f.report_id, "facts.report_id"),
       };
+    case "withdrawal-received": {
+      const received_at = str(f.received_at, "facts.received_at");
+      if (Number.isNaN(new Date(received_at).getTime()))
+        throw new FactsError("facts.received_at: ISO időpont kell");
+      if (
+        !Array.isArray(f.item_ids) ||
+        f.item_ids.length === 0 ||
+        f.item_ids.length > 50 ||
+        f.item_ids.some((x) => typeof x !== "string" || x === "")
+      )
+        throw new FactsError("facts.item_ids: 1-50 azonosító kell");
+      return {
+        template,
+        display_id: id(f.display_id, "facts.display_id"),
+        withdrawal_id: filled(f.withdrawal_id, "facts.withdrawal_id"),
+        declared_name: filled(f.declared_name, "facts.declared_name"),
+        item_ids: f.item_ids as string[],
+        received_at,
+      };
+    }
     case "newsletter-confirm":
     case "stock-alert-confirm": {
       // the two links go into an href: a clean https address or the mail is refused (422), never sent without them

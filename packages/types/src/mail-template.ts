@@ -333,6 +333,20 @@ export const MAIL_TEMPLATE_VARIABLES: readonly MailTemplateVariable[] = [
       "A problémabejelentés azonosítója, amit a vevő a bejelentéskor kapott, például ordprb_01ABC.",
   },
   {
+    name: "nyilatkozat_azonosito",
+    description:
+      "Az elállási nyilatkozat azonosítója, amit a vevő a leadáskor kapott, például ordwd_01ABC.",
+  },
+  {
+    name: "nyilatkozat_neve",
+    description:
+      "A név, amellyel a vevő az elállási nyilatkozatot leadta (nem biztos, hogy egyezik a számlázási névvel).",
+  },
+  {
+    name: "nyilatkozat_idopont",
+    description: "A nap, amikor az elállási nyilatkozat beérkezett.",
+  },
+  {
     name: "hirlevel_megerosito_link",
     description:
       "A hírlevél-feliratkozás megerősítő linkje. Egyszer használható, a lejáratig.",
@@ -794,6 +808,22 @@ const HUNGARIAN_MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
       "rendeles_datum",
       "rendeles_megtekintes_mondat",
       "ugy_azonosito",
+    ],
+  },
+  {
+    id: "WEBSHOP_WITHDRAWAL_RECEIVED",
+    group: "WEBSHOP",
+    name: "Elállási nyilatkozat megérkezett",
+    description:
+      "Amikor a vevő elállási nyilatkozatot ad le egy rendelésről: a beérkezés tartós adathordozón való visszaigazolása. A szöveg vázlat, Balázs döntésére vár.",
+    variables: [
+      "rendeles_szam",
+      "ugyfel_neve",
+      "rendeles_datum",
+      "rendeles_megtekintes_mondat",
+      "nyilatkozat_azonosito",
+      "nyilatkozat_neve",
+      "nyilatkozat_idopont",
     ],
   },
   {

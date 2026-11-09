@@ -183,6 +183,21 @@ const RAW: Readonly<
       "<p>Kollégánk hamarosan jelentkezik.</p>",
     ].join(""),
   },
+  /*
+    A VAZLAT (Balazs dontesere var, Eldontendo lista 3. pont, 2026-11-09): a beerkezes visszaigazolasa tartos
+    adathordozon (45/2014. Korm. rendelet 22. §), ezert csak a tenyek allnak benne: a rendeles, a nyilatkozat
+    azonositoja, neve es napja. Nincs hatarido, nincs kimenet-igeret (visszaterites, csere), nincs torvenyi mondat:
+    ezek a tulajdonos es a jogasz szavai. A vegleges szoveget a sablon-szerkeszto adja (a mentett szoveg elobb all).
+  */
+  WEBSHOP_WITHDRAWAL_RECEIVED: {
+    subject:
+      "Megkaptuk az elállási nyilatkozatodat ({{nyilatkozat_azonosito}})",
+    bodyHtml: [
+      `<p>Megkaptuk az elállási nyilatkozatodat a #${v("rendeles_szam")} rendelésről.</p>`,
+      `<p>A nyilatkozat azonosítója: ${v("nyilatkozat_azonosito")}. A nyilatkozatot ${v("nyilatkozat_neve")} nevével adták le, ${v("nyilatkozat_idopont")} napján érkezett meg.</p>`,
+      "<p>A további teendőkről a csapatunk jelentkezik.</p>",
+    ].join(""),
+  },
   WEBSHOP_NEWSLETTER_CONFIRM: {
     subject: "Erősítsd meg a feliratkozásodat a hírlevelünkre",
     bodyHtml: [
@@ -345,6 +360,15 @@ const RAW_EN: typeof RAW = {
       `<p>Thank you, we have received your report about order #${v("rendeles_szam")}.</p>`,
       `<p>The case reference is ${v("ugy_azonosito")}.</p>`,
       "<p>A colleague will be in touch shortly.</p>",
+    ].join(""),
+  },
+  WEBSHOP_WITHDRAWAL_RECEIVED: {
+    subject:
+      "We have received your withdrawal declaration ({{nyilatkozat_azonosito}})",
+    bodyHtml: [
+      `<p>We have received your withdrawal declaration about order #${v("rendeles_szam")}.</p>`,
+      `<p>The declaration's reference is ${v("nyilatkozat_azonosito")}. It was made in the name of ${v("nyilatkozat_neve")} and reached us on ${v("nyilatkozat_idopont")}.</p>`,
+      "<p>Our team will get in touch about what follows.</p>",
     ].join(""),
   },
   WEBSHOP_NEWSLETTER_CONFIRM: {

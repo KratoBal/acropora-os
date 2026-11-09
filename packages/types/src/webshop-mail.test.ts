@@ -34,8 +34,8 @@ describe("the webshop events and their derivation", () => {
       webshop.map((e) => e.id).sort(),
       [...keys, ...keys.map((k) => `${k}_EN`)].sort(),
     );
-    // fifteen templates (the fifteenth: the stock alert's arrival), each with its English twin
-    assert.equal(webshop.length, 30);
+    // sixteen templates (the fifteenth: the withdrawal acknowledgement; the sixteenth: the stock alert's arrival), each with its English twin
+    assert.equal(webshop.length, 32);
   });
 
   /*

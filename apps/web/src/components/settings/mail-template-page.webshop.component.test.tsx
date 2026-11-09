@@ -135,7 +135,7 @@ beforeEach(() => {
 });
 
 describe("Levélsablonok: Szerviz és Webshop", () => {
-  it("the Webshop tab lists its fifteen templates with their status", async () => {
+  it("the Webshop tab lists its sixteen templates with their status", async () => {
     await megjelenit();
     expect(
       screen
@@ -144,8 +144,14 @@ describe("Levélsablonok: Szerviz és Webshop", () => {
     ).toBe("true");
     await webshopFul();
     const lista = screen.getByRole("list", { name: "Sablonok" });
-    /* fifteen Hungarian mails (the fifteenth: the stock alert's arrival), and the fifteen English twins next to them (card d5c6befd) */
-    expect(within(lista).getAllByRole("button")).toHaveLength(30);
+    /* sixteen Hungarian mails (the fifteenth: the withdrawal acknowledgement, a draft; the sixteenth: the stock alert's arrival), and the sixteen English twins next to them (card d5c6befd) */
+    expect(within(lista).getAllByRole("button")).toHaveLength(32);
+    // the draft is listed like any other: the owner edits its wording in the editor, so it must be reachable there
+    expect(
+      within(lista).getByRole("button", {
+        name: /Elállási nyilatkozat megérkezett(?! \(angol\))/,
+      }),
+    ).toBeTruthy();
     const angol = within(lista).getByRole("button", {
       name: /Csomag átadva a szállítónak \(angol\)/,
     });
