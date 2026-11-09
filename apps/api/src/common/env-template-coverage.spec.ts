@@ -173,6 +173,9 @@ const SZANDEKOS_KIVETEL = new Set<string>([
   "STAGE_ANON_SCAN_KEY",
   "STAGE_ANON_PASSWORD_HASH",
   "STAGE_ANON_TRIAL_COMMAND",
+  // A jelszo-lenyomat segedparancs olvassa (prisma/stage-hash-password.ts), ugyanazert, mint a tobbit: host-parancs, a
+  // jelszo sablonba nem valo.
+  "STAGE_ANON_PASSWORD",
 ]);
 
 /**
