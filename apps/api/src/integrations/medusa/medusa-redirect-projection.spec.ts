@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import type { MedusaUrlRedirect } from "./medusa-admin.client.js";
 import { runRedirectCli } from "./medusa-redirect.cli.js";
 import {
+  describeRedirectProjection,
   projectUrlRedirects,
   urlRedirectsHash,
   type RedirectSource,
@@ -100,6 +101,62 @@ describe("projectUrlRedirects", () => {
     const b = bolt([]);
     const e = await projectUrlRedirects(b.client, forras(ott), false);
     assert.equal(e.status, "would-send");
+    assert.deepEqual(b.kuldott, []);
+  });
+
+  it("410-es sor: a célja önmaga, nem lánc; a lap nélküli termékeket megszámolja", async () => {
+    const b = bolt([]);
+    const e = await projectUrlRedirects(
+      b.client,
+      {
+        activeRedirects: async () => [
+          {
+            sourcePath: "/SLW-10",
+            destinationPath: "/SLW-10",
+            httpStatus: 410,
+            target: "gone",
+          },
+          {
+            sourcePath: "/SLW-20",
+            destinationPath: "/hu/marka/jebao",
+            httpStatus: 301,
+            target: "brand",
+          },
+          {
+            sourcePath: "/Pumpa",
+            destinationPath: "/hu/termek/p",
+            httpStatus: 301,
+            target: "page",
+          },
+        ],
+      },
+      true,
+    );
+    assert.equal(e.status, "sent");
+    assert.deepEqual(b.kuldott, [
+      [
+        { source_path: "/SLW-10", destination_path: "/SLW-10", status: 410 },
+        r("/SLW-20", "/hu/marka/jebao"),
+        r("/Pumpa", "/hu/termek/p"),
+      ],
+    ]);
+    assert.match(
+      describeRedirectProjection(e),
+      /lap nelkuli termek: 1 a markalapra, 1 410$/,
+    );
+  });
+
+  it("301 egy 410-es forrásra: lánc, nem küld", async () => {
+    const b = bolt([]);
+    const e = await projectUrlRedirects(
+      b.client,
+      forras([
+        { source_path: "/x", destination_path: "/x", status: 410 },
+        r("/y", "/X"),
+      ]),
+      true,
+    );
+    assert.equal(e.status, "refused");
     assert.deepEqual(b.kuldott, []);
   });
 

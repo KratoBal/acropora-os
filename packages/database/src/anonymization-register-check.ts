@@ -355,6 +355,35 @@ export function schemaFieldKeys(schema: string): Set<string> {
   return keys;
 }
 
+const OUT_OF_SCOPE_SCALARS = new Set([
+  "Int",
+  "BigInt",
+  "Float",
+  "Decimal",
+  "Boolean",
+  "DateTime",
+]);
+
+/**
+ * The fields whose SCHEMA TYPE is a number, a boolean, a date or an enum: the only ones a row may carry without an anonymization
+ * decision. Keyed `Model.field`. The row transformer's second lock (barracuda, #2324): it lets a field through without a decision
+ * ONLY if the schema says it is of such a type, whatever the value looks like (an enum is a string, a Decimal an object), so the
+ * transformer does not depend on the register check having required a decision for every text, JSON and bytes column.
+ */
+export function outOfScopeFieldKeys(schema: string): Set<string> {
+  const enums = new Set(
+    [...schema.matchAll(/^enum (\w+) \{/gm)].map((match) => match[1]!),
+  );
+  const keys = new Set<string>();
+  for (const model of parseSchemaModels(schema)) {
+    for (const field of model.fields) {
+      if (OUT_OF_SCOPE_SCALARS.has(field.type) || enums.has(field.type))
+        keys.add(`${model.name}.${field.name}`);
+    }
+  }
+  return keys;
+}
+
 /** The in-scope fields that carry their own `@unique`, keyed `Model.field`: a replacement for such a field must differ row by row. */
 export function uniqueFieldKeys(schema: string): Set<string> {
   const unique = new Set<string>();
