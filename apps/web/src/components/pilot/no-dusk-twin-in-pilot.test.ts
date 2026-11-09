@@ -1,4 +1,14 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -101,9 +111,9 @@ function pilotForras(tiszta: string): boolean {
 }
 
 /** Egy import-specifikátor a `src` alatti .tsx fájlra (relatív vagy `@/`), vagy null. */
-function felold(honnan: string, spec: string): string | null {
+function felold(honnan: string, spec: string, gyoker = ROOT): string | null {
   const alap = spec.startsWith("@/")
-    ? join(ROOT, spec.slice(2))
+    ? join(gyoker, spec.slice(2))
     : spec.startsWith(".")
       ? join(dirname(honnan), spec)
       : null;
@@ -114,22 +124,22 @@ function felold(honnan: string, spec: string): string | null {
 }
 
 /** A pilot fájlok egy szintű, csak duskot használó .tsx gyerekei, a bennük álló dusk ikrekkel. */
-const gyerekek = () => {
+const gyerekek = (gyoker = ROOT) => {
   const talalt = new Map<string, string[]>();
-  for (const ut of fajlok(ROOT)) {
+  for (const ut of fajlok(gyoker)) {
     const tiszta = kod(readFileSync(ut, "utf8"));
     if (!pilotForras(tiszta)) continue;
     for (const m of tiszta.matchAll(
       /import\s+(type\s+)?(?:\w+\s*,\s*)?(?:\{[^}]*\}|\w+)\s*from\s*"([^"]+)"/g,
     )) {
       if (m[1]) continue;
-      const gyerek = felold(ut, m[2]!);
+      const gyerek = felold(ut, m[2]!, gyoker);
       if (!gyerek || /\.test\./.test(gyerek)) continue;
       const gyerekKod = kod(readFileSync(gyerek, "utf8"));
       if (pilotForras(gyerekKod)) continue;
       const nevek = uiNevek(gyerekKod);
       const dusk = DUSK_IKREK.filter((n) => nevek.has(n));
-      if (dusk.length) talalt.set(relative(ROOT, gyerek), [...dusk].sort());
+      if (dusk.length) talalt.set(relative(gyoker, gyerek), [...dusk].sort());
     }
   }
   return new Map([...talalt].sort(([a], [b]) => a.localeCompare(b)));
@@ -182,6 +192,66 @@ describe("dusk iker a pilot lapon", () => {
       ),
     );
     expect(pilot.length).toBeGreaterThan(100);
+  });
+
+  /*
+    A GYEREK-MÉRŐ PÓZITÍV KONTROLLJA (barracuda, #2317 v2): ha a gyerek-lista üres, a "csak fogyhat" állítás akkor is zöld, ha a
+    gyűjtés elromlik (az import-regex, a `felold`, a pilot-felismerés) és SEMMIT nem talál. Ez egy ideiglenes mappában épített
+    mintán méri, hogy a `gyerekek` megtalálja, amit kell, és kihagyja, amit nem. MI PIROSÍT: a relatív vagy az `@/` import
+    elvesztése; egy NEM pilot lap dusk gyerekének felvétele; egy pilot gyerek vagy egy csak típusként importált fájl felvétele; a
+    tiszta (dusk iker nélküli) gyerek felvétele.
+  */
+  it("a gyerek-mérő megtalálja a pilot lap dusk ikres gyerekét, és kihagyja a többit (pozitív kontroll)", () => {
+    const gyoker = mkdtempSync(join(tmpdir(), "dusk-iker-"));
+    try {
+      const ir = (ut: string, tartalom: string) => {
+        mkdirSync(dirname(join(gyoker, ut)), { recursive: true });
+        writeFileSync(join(gyoker, ut), tartalom);
+      };
+      ir(
+        "pages/pilot-page.tsx",
+        [
+          'import { PilotCard } from "@acropora/ui";',
+          'import { RelChild } from "./rel-child";',
+          'import { AtChild } from "@/components/at-child";',
+          'import { Clean } from "./clean-child";',
+          'import { PilotKid } from "./pilot-kid";',
+          'import type { OnlyType } from "./only-type";',
+          '// import { Commented } from "./commented-child";',
+          "",
+        ].join("\n"),
+      );
+      ir(
+        "pages/rel-child.tsx",
+        'import { Alert, Button } from "@acropora/ui";\n',
+      );
+      ir(
+        "components/at-child.tsx",
+        'import { Card, Input } from "@acropora/ui";\n',
+      );
+      ir("pages/clean-child.tsx", 'import { Alert } from "@acropora/ui";\n');
+      ir(
+        "pages/pilot-kid.tsx",
+        'import { Button, PilotButton } from "@acropora/ui";\n',
+      );
+      ir("pages/only-type.tsx", 'import { Select } from "@acropora/ui";\n');
+      ir(
+        "pages/commented-child.tsx",
+        'import { Badge } from "@acropora/ui";\n',
+      );
+      // a NOT pilot parent: its dusk child is not this list's business
+      ir(
+        "pages/dusk-parent.tsx",
+        'import { Input } from "@acropora/ui";\nimport { Lonely } from "./lonely-child";\n',
+      );
+      ir("pages/lonely-child.tsx", 'import { Button } from "@acropora/ui";\n');
+      expect(Object.fromEntries(gyerekek(gyoker))).toEqual({
+        "components/at-child.tsx": ["Card", "Input"],
+        "pages/rel-child.tsx": ["Button"],
+      });
+    } finally {
+      rmSync(gyoker, { recursive: true, force: true });
+    }
   });
 
   it("a vegyes fájlok pontosan a hátralévő lista, a benne maradt ikrekkel", () => {
