@@ -116,6 +116,8 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   // the internal API's switch for issuing ReefClub codes (#1778): a boolean, and the ReefClub's own
   // web address, which the ReefClub process reads anyway (`REEFCLUB_WEB_URL`); neither is a secret
   "REEFCLUB_LINKING_ENABLED",
+  // the run-out reminder's switch (V3.2): exactly "true" turns it on, a boolean, not a secret
+  "REEFCLUB_RUNOUT_ENABLED",
   "REEFCLUB_WEB_URL",
   "RELEASE_COMMIT_SHA",
   "RELEASE_EVIDENCE_EXPECTED_REPOSITORY",

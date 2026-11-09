@@ -771,6 +771,12 @@ export const ANONYMIZATION_REGISTER: Readonly<
     parameterCode: "business",
     clientOperationId: "identifier",
   },
+  // ReefClub V3.2: the per-product consent of the run-out reminder. A version label, and the unsubscribe link's random key (one
+  // action only, but a bearer key all the same: never shown outside the owner's own mail).
+  ReefClubRunOutReminder: {
+    consentVersion: "business",
+    unsubscribeToken: "secret",
+  },
   // ReefClub 8: the projection of the product dose list. Numbers, names and fixed refusal codes
   // of products; the run's error text is free text (a database or network error message).
   ReefClubDoseProjectionRun: {

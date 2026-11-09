@@ -1224,6 +1224,8 @@ model ReefClubAccount {
   /// Az automatikus ajanlasok es a rogzitett beadott adagok (8. szelet).
   recommendations      ReefClubRecommendation[]
   administeredDoses    ReefClubAdministeredDose[]
+  /// A tag termekenkenti kifogyas-emlekezteto hozzajarulasai (V3.2).
+  runOutReminders      ReefClubRunOutReminder[]
 }
 
 enum ReefClubIdentityProvider {
@@ -1483,6 +1485,7 @@ model Product {
   /// Az ajanlasok es a rogzitett adagok, amelyek ezt a termeket nevezik meg (ReefClub 8. szelet).
   reefClubRecommendations    ReefClubRecommendation[]
   reefClubDoses              ReefClubAdministeredDose[]
+  reefClubRunOutReminders    ReefClubRunOutReminder[]
   articleLinks               ArticleProduct[]
   /// the live animal arrivals that name this product (card f4e4832b, V2.6 S2)
   livestockArrivals          LivestockArrival[]
@@ -4632,6 +4635,7 @@ model Aquarium {
   shareEvents             AquariumShareEvent[]
   reefClubRecommendations ReefClubRecommendation[]
   reefClubDoses           ReefClubAdministeredDose[]
+  reefClubRunOutReminders  ReefClubRunOutReminder[]
 
   @@index([customerId, isActive])
   @@index([departmentId])
@@ -10921,6 +10925,33 @@ model ReefClubAdministeredDose {
   @@index([accountId])
   @@index([recommendationId])
   @@index([productId])
+}
+
+/// MIKOR FOGY EL EMLEKEZTETO, TERMEKENKENTI HOZZAJARULAS (ReefClub V3.2, kartya cd94ed11, 2. szelet). Egy sor egy tag egy
+/// termekere: a tag KIFEJEZETTEN bekapcsolta az emlekeztetot, ehhez az akvariumhoz (a kifogyas az akvarium literebol
+/// szamolodik). A sor maga a hozzajarulas bizonyitek: mikor (`consentAt`) es a szoveg MELYIK verziojara
+/// (`consentVersion`) adta; a leiratkozas ideje (`unsubscribedAt`) vagy ures (aktiv). Ujrabekapcsolas ugyanazt a sort
+/// frissiti (uj ido, verzio, uj leiratkozasi kulcs, a leiratkozas torolve): egy tagnak egy termekre egy sora van.
+/// A `unsubscribeToken` a minden levelben ott allo leiratkozo link kulcsa: veletlen, egyetlen muveletre (a leiratkozasra)
+/// jo, tehat nem hozzaferesi kulcs. Ures tablaval indul, a kapcsolo (REEFCLUB_RUNOUT_ENABLED) alapbol ki van.
+model ReefClubRunOutReminder {
+  id               String          @id @default(cuid())
+  accountId        String
+  productId        String
+  aquariumId       String
+  consentVersion   String
+  consentAt        DateTime
+  unsubscribedAt   DateTime?
+  unsubscribeToken String          @unique
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  account          ReefClubAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  product          Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  aquarium         Aquarium        @relation(fields: [aquariumId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, productId])
+  @@index([productId])
+  @@index([aquariumId])
 }
 
 enum ReefClubDoseProjectionRunStatus {
