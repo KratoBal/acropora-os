@@ -203,6 +203,16 @@ const RAW: Readonly<
       `<p>Nem kérsz több értesítést erről? <a href="{{ertesites_leiratkozo_link}}">Leiratkozás</a></p>`,
     ].join(""),
   },
+  WEBSHOP_STOCK_ALERT_ARRIVAL: {
+    subject: "Megérkezett: {{ertesites_targya}}",
+    bodyHtml: [
+      `<p>Értesítést kértél, ha ebből újra érkezik: <strong>${v("ertesites_targya")}</strong>. Most kapható:</p>`,
+      `<p><strong>${v("ertesites_termek_neve")}</strong></p>`,
+      `<p data-cta=""><a href="{{ertesites_termek_link}}">Megnézem</a></p>`,
+      "<p>Erről a kérésről ez az egyetlen levelünk. Ha a következő darabról is tudni szeretnél, kérd újra.</p>",
+      `<p>Nem kérsz több értesítést erről? <a href="{{ertesites_leiratkozo_link}}">Leiratkozás</a></p>`,
+    ].join(""),
+  },
   WEBSHOP_SHIPPING_DELAYED: {
     subject: "Csúszik a rendelésed szállítása (#{{rendeles_szam}})",
     bodyHtml: [
@@ -354,6 +364,16 @@ const RAW_EN: typeof RAW = {
       "<p>The request starts once you confirm it with the button below. Until then, we do not write about it.</p>",
       `<p data-cta=""><a href="{{ertesites_megerosito_link}}">Confirm the request</a></p>`,
       `<p>The link works until ${v("megerosites_lejarat")}. If it was not you, there is nothing to do: without a confirmation, you get no mail about it.</p>`,
+      `<p>No more notifications about this? <a href="{{ertesites_leiratkozo_link}}">Unsubscribe</a></p>`,
+    ].join(""),
+  },
+  WEBSHOP_STOCK_ALERT_ARRIVAL: {
+    subject: "It has arrived: {{ertesites_targya}}",
+    bodyHtml: [
+      `<p>You asked us to tell you when this arrives again: <strong>${v("ertesites_targya")}</strong>. Available now:</p>`,
+      `<p><strong>${v("ertesites_termek_neve")}</strong></p>`,
+      `<p data-cta=""><a href="{{ertesites_termek_link}}">Take a look</a></p>`,
+      "<p>This is our only mail for this request. To hear about the next piece too, ask again.</p>",
       `<p>No more notifications about this? <a href="{{ertesites_leiratkozo_link}}">Unsubscribe</a></p>`,
     ].join(""),
   },
