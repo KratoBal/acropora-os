@@ -18,6 +18,7 @@ import {
   checkReferentialIntegrity,
   compareAggregates,
   compareRowCounts,
+  CONDITIONAL_FORMAT_KINDS,
   residualSection,
   trialSection,
   type FormatKind,
@@ -82,6 +83,8 @@ export interface RunnerOptions {
   decisions: ReadonlyMap<string, FieldDecision>;
   requiredFields: ReadonlySet<string>;
   knownFields: ReadonlySet<string>;
+  /** Number, boolean, date and enum fields: the only ones that pass with no decision (the transformer's second lock). */
+  outOfScopeFields: ReadonlySet<string>;
   uniqueFields: ReadonlySet<string>;
   /** The pseudonymization key (at least 32 bytes): the fakes of this run. Stays in the stage process. */
   pseudonymizationKey: string;
@@ -185,6 +188,7 @@ export async function runAnonymization(
     decisions,
     requiredFields: options.requiredFields,
     knownFields: options.knownFields,
+    outOfScopeFields: options.outOfScopeFields,
     uniqueFields: options.uniqueFields,
     engine,
     text,
@@ -262,7 +266,14 @@ export async function runAnonymization(
       await database.healthOk(),
     ),
     residualSection(residual, totalRows),
-    checkFormats(samples),
+    // fakeEmail, phone, iban and personalTaxId samples are always required (the caller cannot drop them); the company tax number
+    // only while the kinds table makes company fakes (it keeps them today, the open company-data decision: no fake, no sample)
+    checkFormats(
+      samples,
+      kinds.partyTaxNumber?.action === "pseudonymize"
+        ? CONDITIONAL_FORMAT_KINDS
+        : [],
+    ),
     compareAggregates(
       "invariants",
       sourceInvariants,

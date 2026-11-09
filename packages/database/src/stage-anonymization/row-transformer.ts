@@ -27,6 +27,9 @@ import { foldText, type TextScrubber } from "./text-scrubber.js";
  * organisation marker in a name (Kft., Zrt. ...) or a company-shaped tax number say company; no evidence at all is a natural
  * person, because the plan says an uncertain case is pseudonymized (the cost of a wrong guess is a fake name, not a leak).
  *
+ * TWO LOCKS ON AN UNDECIDED FIELD, independent of each other: the register check (CI) requires a decision for every text, JSON and
+ * bytes column, and the transformer itself lets a field without a decision pass ONLY if its schema type is a number, a boolean, a
+ * date or an enum (`outOfScopeFields`), whatever the value looks like. If the CI step ever lapses, a new text column stops the run.
  * FAIL CLOSED: a row field with no decision that is not a known schema field (a typo, a stale column) is an error, and so is a
  * value of a type its kind cannot handle; the message names the field and the type, never the value. A schema field of a type
  * the register does not cover (a date, a number, an enum) passes unchanged (the register's scope is by type; see its header).
@@ -44,6 +47,12 @@ export interface RowTransformerOptions {
   requiredFields: ReadonlySet<string>;
   /** `schemaFieldKeys(schema)`: every field of the schema, of any type. */
   knownFields: ReadonlySet<string>;
+  /**
+   * `outOfScopeFieldKeys(schema)`: the fields whose schema type is a number, a boolean, a date or an enum. THE SECOND LOCK: a field
+   * with no decision passes only if it is in this set; a text, JSON or bytes field with no decision is an error even if the
+   * register check would never have let it be undecided. Required, so the lock cannot be left out by omission.
+   */
+  outOfScopeFields: ReadonlySet<string>;
   /**
    * `uniqueFieldKeys(schema)`: the fields with their own `@unique`. A password hash in such a field (a confirmation token's hash)
    * must not become ONE stage-only value for every row, so it gets a fresh token like the other replaced tokens.
@@ -173,8 +182,15 @@ const describeType = (value: unknown): string =>
 export function createRowTransformer(
   options: RowTransformerOptions,
 ): RowTransformer {
-  const { decisions, requiredFields, knownFields, engine, text, json } =
-    options;
+  const {
+    decisions,
+    requiredFields,
+    knownFields,
+    outOfScopeFields,
+    engine,
+    text,
+    json,
+  } = options;
   const kinds: Readonly<Record<string, AnonymizationKind>> =
     options.kinds ?? ANONYMIZATION_KINDS;
   const stats: Record<string, number> = {};
@@ -308,7 +324,12 @@ export function createRowTransformer(
               `${key}: not a field of the schema (a typo, or a column the register has not seen)`,
             );
           }
-          out[field] = value; // a type the register does not cover: a date, a number, an enum
+          if (!outOfScopeFields.has(key)) {
+            throw new Error(
+              `${key}: a ${describeType(value)} value in a text, JSON or bytes field that has no anonymization decision`,
+            );
+          }
+          out[field] = value; // a type the register does not cover: a date, a number, a boolean, an enum
           continue;
         }
         if (value === null || value === undefined) {

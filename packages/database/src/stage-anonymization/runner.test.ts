@@ -3,11 +3,13 @@ import { describe, it } from "node:test";
 
 import {
   checkRegister,
+  outOfScopeFieldKeys,
   requiredFieldKeys,
   schemaFieldKeys,
   uniqueFieldKeys,
   type AnonymizationRegister,
 } from "../anonymization-register-check.js";
+import { ANONYMIZATION_KINDS } from "../anonymization-register.js";
 import { createPseudonymizer } from "./pseudonymizer.js";
 import {
   assertTemporaryDatabase,
@@ -16,6 +18,7 @@ import {
   type RunnerDatabase,
   type RunnerOptions,
 } from "./runner.js";
+import { REQUIRED_SECTIONS } from "./verification-gate.js";
 
 /*
   THE RUNNER (S5). WHAT TURNS THIS RED: a run against a database whose name is not a temporary anonymization name (and any
@@ -37,6 +40,7 @@ model Customer {
   email         String?
   phone         String?
   taxNumber     String?
+  iban          String?
   notes         String?
   loyaltyPoints Int
 }
@@ -76,6 +80,7 @@ const FIXTURE_REGISTER: AnonymizationRegister = {
     email: "email",
     phone: "phone",
     taxNumber: "partyTaxNumber",
+    iban: "bankAccount",
     notes: "freeText",
   },
   User: {
@@ -167,6 +172,7 @@ const REAL = {
   personEmail: "teszt.elek@example.com",
   phone: "+36 30 123 4567",
   personalTaxId: "8123456789",
+  iban: "HU42117730161111101800000000",
   company: "Példa Kft.",
   companyTax: "12345676-2-42",
   userEmail: "admin.valaki@example.com",
@@ -181,6 +187,7 @@ const source = (): Record<string, Row[]> => ({
       email: REAL.personEmail,
       phone: REAL.phone,
       taxNumber: REAL.personalTaxId,
+      iban: REAL.iban,
       notes: `Hívja ${REAL.person}`,
       loyaltyPoints: 10,
     },
@@ -191,6 +198,7 @@ const source = (): Record<string, Row[]> => ({
       email: "iroda@pelda.hu",
       phone: null,
       taxNumber: REAL.companyTax,
+      iban: null,
       notes: null,
       loyaltyPoints: 5,
     },
@@ -224,6 +232,7 @@ const options = (
   decisions: checked.decisions,
   requiredFields: requiredFieldKeys(FIXTURE_SCHEMA),
   knownFields: schemaFieldKeys(FIXTURE_SCHEMA),
+  outOfScopeFields: outOfScopeFieldKeys(FIXTURE_SCHEMA),
   uniqueFields: uniqueFieldKeys(FIXTURE_SCHEMA),
   pseudonymizationKey: "proba-kulcs-nem-valodi-0123456789-abcdef-xyz",
   scanKey: "proba-futas-kulcs-nem-valodi-0123456789-abcdef",
@@ -309,7 +318,7 @@ describe("a clean run", () => {
       email: 3,
       phone: 1,
       taxNumber: 1,
-      iban: 0,
+      iban: 1,
       name: 4,
     });
   });
@@ -350,6 +359,78 @@ describe("a clean run", () => {
         name,
       );
     }
+  });
+
+  it("hands the gate every required section exactly once (no gateStructure problem), and the gate defaults need a sample of each format kind", async () => {
+    const result = await runAnonymization(
+      options(new MemoryDatabase(NAME, source())),
+    );
+    const names = result.report.sections.map((s) => s.name);
+    for (const required of REQUIRED_SECTIONS)
+      assert.equal(names.filter((n) => n === required).length, 1, required);
+    assert.ok(!names.includes("gateStructure"));
+  });
+
+  it("fails the gate when a required format kind was never sampled (a source with no IBAN), (the caller has no switch for it)", async () => {
+    const noIban = (): Record<string, Row[]> => ({
+      ...source(),
+      Customer: source().Customer!.map((row) => ({ ...row, iban: null })),
+    });
+    const refused = await runAnonymization(
+      options(new MemoryDatabase(NAME, noIban())),
+    );
+    assert.equal(refused.swapAllowed, false);
+    assert.deepEqual(
+      refused.report.sections.find((s) => s.name === "formats")!.problems,
+      ["iban: no sample was given, so nothing was checked"],
+    );
+  });
+
+  it("requires a company tax number sample only when the kinds table makes company fakes (while the company data is kept, none exist)", async () => {
+    // the table as it stands: a company's tax number is KEPT, so the default list leaves companyTaxNumber out and the run passes
+    assert.equal(ANONYMIZATION_KINDS.partyTaxNumber.action, "keep");
+    const pseudonymizing = {
+      ...ANONYMIZATION_KINDS,
+      partyTaxNumber: {
+        ...ANONYMIZATION_KINDS.partyTaxNumber,
+        action: "pseudonymize" as const,
+      },
+    };
+    const withCompany = await runAnonymization(
+      options(new MemoryDatabase(NAME, source()), { kinds: pseudonymizing }),
+    );
+    assert.equal(
+      withCompany.report.sections.find((s) => s.name === "formats")!.passed,
+      true,
+    );
+    // no company row, so no company fake: the format check now names the kind
+    const noCompany = await runAnonymization(
+      options(
+        new MemoryDatabase(NAME, {
+          ...source(),
+          Customer: source().Customer!.slice(0, 1),
+          Order: source().Order!.slice(0, 1),
+        }),
+        { kinds: pseudonymizing },
+      ),
+    );
+    assert.deepEqual(
+      noCompany.report.sections.find((s) => s.name === "formats")!.problems,
+      ["companyTaxNumber: no sample was given, so nothing was checked"],
+    );
+  });
+
+  it("stops the whole run on a text value in a field with no decision (the transformer's second lock, wired through the runner), and writes nothing", async () => {
+    const decisions = new Map(checked.decisions);
+    decisions.delete("Customer.notes");
+    const db = new MemoryDatabase(NAME, source());
+    await assert.rejects(
+      runAnonymization(options(db, { decisions })),
+      (error: Error) =>
+        error.message.startsWith("Customer.notes:") &&
+        !error.message.includes("Hívja"),
+    );
+    assert.equal(db.tables.Customer![0]!.email, REAL.personEmail);
   });
 
   it("writes back only the rows that changed", async () => {

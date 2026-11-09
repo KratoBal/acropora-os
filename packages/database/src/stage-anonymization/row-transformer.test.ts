@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 
 import {
   checkRegister,
+  outOfScopeFieldKeys,
   requiredFieldKeys,
   schemaFieldKeys,
   uniqueFieldKeys,
@@ -92,6 +93,12 @@ model Asset {
   qrToken String
 }
 
+model Order {
+  id    String  @id @default(cuid())
+  total Decimal
+  paid  Boolean
+}
+
 model Doc {
   id        String  @id @default(cuid())
   content   Bytes
@@ -146,6 +153,7 @@ const make = (
     decisions: fixture.decisions,
     requiredFields: requiredFieldKeys(FIXTURE_SCHEMA),
     knownFields: schemaFieldKeys(FIXTURE_SCHEMA),
+    outOfScopeFields: outOfScopeFieldKeys(FIXTURE_SCHEMA),
     uniqueFields: uniqueFieldKeys(FIXTURE_SCHEMA),
     engine,
     text,
@@ -494,6 +502,85 @@ describe("text fields of a document row", () => {
   });
 });
 
+describe("the second lock: a field with no decision passes only by its schema TYPE (barracuda, #2324)", () => {
+  it("lists the number, boolean, date and enum fields, and no text, JSON or bytes field", () => {
+    const keys = outOfScopeFieldKeys(FIXTURE_SCHEMA);
+    for (const yes of [
+      "Customer.type",
+      "Customer.createdAt",
+      "Customer.loyaltyPoints",
+      "Session.expiresAt",
+    ])
+      assert.ok(keys.has(yes), yes);
+    for (const no of [
+      "Customer.displayName",
+      "Customer.payload",
+      "Customer.id",
+      "Doc.content",
+      "Doc.tags",
+      "Session.userId",
+    ])
+      assert.ok(!keys.has(no), no);
+  });
+
+  it("stops on a text, JSON or bytes value in a field with no decision, even though the field is a known schema field, naming the field and the type", () => {
+    // the decisions as they would be if the register check had lapsed and a new column had no row
+    const decisions = new Map(fixture.decisions);
+    decisions.delete("Customer.notes");
+    decisions.delete("Customer.payload");
+    decisions.delete("Doc.content");
+    const t = make({ decisions });
+    const base = {
+      id: "c1",
+      type: "PERSON",
+      displayName: "Valaki",
+      loyaltyPoints: 1,
+    };
+    for (const [field, value, type] of [
+      ["notes", "valodi szoveg", "string"],
+      ["payload", { a: "valodi" }, "object"],
+    ] as const) {
+      assert.throws(
+        () => t.transformRow("Customer", { ...base, [field]: value }),
+        (error: Error) =>
+          error.message.startsWith(`Customer.${field}:`) &&
+          error.message.includes(type) &&
+          !error.message.includes("valodi"),
+        field,
+      );
+    }
+    assert.throws(
+      () => t.transformRow("Doc", { id: "d", content: Buffer.from("valodi") }),
+      /Doc\.content: a Buffer value/,
+    );
+  });
+
+  it("lets a number, a boolean, a date and an enum pass with no decision, whatever the value looks like (a Decimal is an object, an enum a string)", () => {
+    const decimalLike = { d: [1], e: 0, s: 1, toString: () => "1.5" };
+    const out = row(
+      make().transformRow("Order", {
+        id: "o9",
+        total: decimalLike,
+        paid: true,
+      }),
+    );
+    assert.equal(out.total, decimalLike);
+    assert.equal(out.paid, true);
+    assert.equal(
+      row(
+        make().transformRow("Customer", {
+          id: "c",
+          type: "PERSON",
+          displayName: "x y",
+          loyaltyPoints: 3,
+          createdAt: new Date(0),
+        }),
+      ).type,
+      "PERSON",
+    );
+  });
+});
+
 describe("fail closed", () => {
   it("throws on a field that is not in the schema, naming it but not the value", () => {
     assert.throws(
@@ -607,6 +694,7 @@ describe("against the real schema and register", () => {
     decisions: real.decisions,
     requiredFields: requiredFieldKeys(schema),
     knownFields: schemaFieldKeys(schema),
+    outOfScopeFields: outOfScopeFieldKeys(schema),
     uniqueFields: uniqueFieldKeys(schema),
     engine,
     text,
