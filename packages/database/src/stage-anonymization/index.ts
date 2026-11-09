@@ -11,6 +11,7 @@ export {
 export {
   assessTrialIntegrations,
   CLOSED_URL,
+  TRIAL_RULES,
   type ConnectionSettingState,
 } from "./trial-integrations.js";
 export { buildTrialEnvironment } from "./trial-environment.js";

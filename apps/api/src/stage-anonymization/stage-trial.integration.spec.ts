@@ -14,6 +14,7 @@ import {
   measureGeneratedClientEnvFiles,
   PrismaClient,
   runTrialFlows,
+  TRIAL_RULES,
   withDatabaseName,
   withTrialCopy,
 } from "@acropora/database/stage-anonymization";
@@ -179,9 +180,9 @@ describe(
       );
       assert.equal(
         checks.filter((c) => c.name.startsWith("integration closed")).length,
-        11,
+        TRIAL_RULES.length,
       );
-      assert.equal(checks.length, 12 + 9);
+      assert.equal(checks.length, TRIAL_RULES.length + 9);
       assert.equal(
         await databaseExists(copyNameSeen),
         false,
