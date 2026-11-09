@@ -15,6 +15,7 @@ import {
   FORMAT_VALIDATORS,
   residualSection,
   trialSection,
+  transformCoverageSection,
   type GateSection,
 } from "./verification-gate.js";
 
@@ -273,10 +274,47 @@ describe("(5) and (6) aggregates", () => {
 });
 
 describe("(7) the working trial and the whole gate", () => {
-  it("fails a trial that did not run or failed, passes one that ran and passed", () => {
+  const check = (name: string, passed = true) => ({ name, passed });
+
+  it("fails a trial that did not run or failed, passes one that ran, passed and named what it checked", () => {
     assert.equal(trialSection(false, false).passed, false);
-    assert.equal(trialSection(true, false).passed, false);
-    assert.equal(trialSection(true, true).passed, true);
+    assert.equal(trialSection(true, false, [check("invoice")]).passed, false);
+    assert.equal(trialSection(true, true, [check("invoice")]).passed, true);
+  });
+
+  it("does not accept a stubbed trial: a bare passed:true with no named check, or one failed check, fails and says which", () => {
+    const stub = trialSection(true, true);
+    assert.equal(stub.passed, false);
+    assert.match(stub.problems[0]!, /reported no checks/);
+    const partial = trialSection(true, true, [
+      check("invoice"),
+      check("work sheet", false),
+    ]);
+    assert.equal(partial.passed, false);
+    assert.deepEqual(partial.problems, ["trial check failed: work sheet"]);
+  });
+
+  it("measures that the transform visited every row of every model (a reader that skips one fails, naming the model and both numbers)", () => {
+    const source = { Customer: 2, Session: 2 };
+    assert.equal(
+      transformCoverageSection({ Customer: 2, Session: 2 }, source).passed,
+      true,
+    );
+    assert.deepEqual(
+      transformCoverageSection({ Customer: 2, Session: 1 }, source).problems,
+      ["Session: the transform visited 1 row(s), the source has 2"],
+    );
+    // a model never visited, an extra model, and nothing measured at all
+    assert.deepEqual(
+      transformCoverageSection({ Customer: 2 }, source).problems,
+      ["Session: the transform visited 0 row(s), the source has 2"],
+    );
+    assert.deepEqual(
+      transformCoverageSection({ Customer: 2, Session: 2, Ghost: 1 }, source)
+        .problems,
+      ["Ghost: visited by the transform, not in the source"],
+    );
+    assert.equal(transformCoverageSection({}, {}).passed, false);
   });
 
   const named = (name: string, passed = true): GateSection => ({
@@ -291,6 +329,7 @@ describe("(7) the working trial and the whole gate", () => {
       [...REQUIRED_SECTIONS],
       [
         "rowCounts",
+        "transformCoverage",
         "referentialIntegrity",
         "residualPersonalData",
         "formats",

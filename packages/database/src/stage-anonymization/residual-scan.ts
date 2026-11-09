@@ -27,7 +27,8 @@ import { foldText } from "./text-scrubber.js";
  * IS reported: that is a true collision worth a look, and the report counts it like any other hit.
  */
 
-export type ResidualKind = "email" | "phone" | "taxNumber" | "iban" | "name";
+export type ResidualKind =
+  "email" | "phone" | "taxNumber" | "iban" | "account" | "name";
 
 const TITLES = new Set(["dr", "id", "ifj", "ozv", "prof"]);
 const MIN_PHONE_DIGITS = 7;
@@ -79,6 +80,11 @@ function normalizations(kind: ResidualKind, value: string): string[] {
       const compact = value.replace(/\s+/g, "").toUpperCase();
       return /^[A-Z]{2}\d{2}[A-Z0-9]{8,30}$/.test(compact) ? [compact] : [];
     }
+    case "account": {
+      // a Hungarian domestic account number: 8+8 or 8+8+8 digits, written with dashes or spaces or none (barracuda, #2328)
+      const digits = digitsOf(value);
+      return digits.length === 16 || digits.length === 24 ? [digits] : [];
+    }
     case "name": {
       const words = nameWords(value);
       if (words.length < 2 || words.length > MAX_NAME_WORDS) return [];
@@ -114,6 +120,7 @@ export function createResidualDictionary(
         phone: 0,
         taxNumber: 0,
         iban: 0,
+        account: 0,
         name: 0,
       } as Record<ResidualKind, number>;
       for (const [kind, set] of digests) sizes[kind] = set.size;
@@ -144,6 +151,13 @@ export function scanText(
   )) {
     if (dictionary.has("iban", match[0].replace(/\s+/g, "").toUpperCase()))
       found.add("iban");
+  }
+
+  // a domestic account number: two or three groups of eight digits, compared by its digits
+  for (const match of text.matchAll(
+    /(?<![\d])\d{8}(?:[- ]?\d{8}){1,2}(?!\d)/g,
+  )) {
+    if (dictionary.has("account", digitsOf(match[0]))) found.add("account");
   }
 
   // a phone number: a digit run with the usual separators, compared by its national digits
