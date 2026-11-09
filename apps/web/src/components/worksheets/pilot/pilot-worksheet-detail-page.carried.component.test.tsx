@@ -1,3 +1,8 @@
+/*
+  CARRIED OVER (kanban 0baba3b9): this spec measured the old `worksheet-detail-page.tsx`, which no route drew (the
+  worksheet routes draw the pilot pages). It runs on the live pilot page now, beside the page's own spec; every test
+  kept, a few queries adjusted to the pilot page (its labels and layout), each measuring the same behaviour.
+*/
 import {
   fireEvent,
   render,
@@ -13,7 +18,7 @@ import {
   setOnLine,
 } from "@/components/service/service-offline-notice.testing";
 
-import { WorksheetDetailPage } from "./worksheet-detail-page";
+import { PilotWorksheetDetailPage as WorksheetDetailPage } from "./pilot-worksheet-detail-page";
 
 /**
  * A `next/font/local` HÍVÁSA A NEXT.JS FORDÍTÓI MAKRÓJA -- vitest alatt,
@@ -652,8 +657,9 @@ describe("WorksheetDetailPage adatlap-szerkezet", () => {
     await screen.findByText("Kompresszor bevizsgálás");
 
     expect(screen.getByText("Összesítés")).toBeTruthy();
-    expect(screen.getByText("Összes munkaóra")).toBeTruthy();
-    expect(screen.getByText("2 óra")).toBeTruthy();
+    // the pilot page names the total in the summary and on the hours card
+    expect(screen.getAllByText("Összes munkaóra").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("2 óra").length).toBeGreaterThan(0);
   });
 
   it("a tétel sorában is ott a saját munkaórája", async () => {
@@ -680,7 +686,7 @@ describe("WorksheetDetailPage adatlap-szerkezet", () => {
     // A fejléc NEVEZI el az oszlopot, a cella HORDOZZA az értéket. Külön-külön
     // egyik sem elég: egy fejléc üres oszlop fölött is állhat.
     expect(screen.getByText("Munkaóra")).toBeTruthy();
-    expect(cellak[4]?.textContent).toBe("2");
+    expect(cellak[4]?.textContent).toBe("2 munkaóra");
   });
 
   /**
@@ -1028,8 +1034,9 @@ describe("WorksheetDetailPage és az eszköz átadása", () => {
 
   it("a gomb az ELLENKEZŐ irányt küldi el, nem fordít vakon", async () => {
     render(<WorksheetDetailPage worksheetId="worksheet-1" />);
-    const gomb = await screen.findByTestId("munkalap-atadas-gomb");
-    expect(gomb.textContent).toBe("Átadás rögzítése");
+    const gomb = await screen.findByRole("button", {
+      name: "Átadás rögzítése",
+    });
 
     fireEvent.click(gomb);
 
@@ -1049,8 +1056,9 @@ describe("WorksheetDetailPage és az eszköz átadása", () => {
       handedOverByName: "Szerelő Sándor",
     });
     render(<WorksheetDetailPage worksheetId="worksheet-1" />);
-    const gomb = await screen.findByTestId("munkalap-atadas-gomb");
-    expect(gomb.textContent).toBe("Átadás visszavonása");
+    const gomb = await screen.findByRole("button", {
+      name: "Átadás visszavonása",
+    });
 
     fireEvent.click(gomb);
 
