@@ -8,12 +8,13 @@ import type { ResidualReport } from "./residual-scan.js";
  * THE REPORT NAMES, NEVER SHOWS: a problem line holds a table, a column, a kind and numbers (counts, aggregate sums). It never
  * holds a personal value, a row or a position, so the report can be posted to the board without a second review.
  *
- * SEVEN CHECKS, as the plan lists them: (1) row counts per table against the source (an intentionally emptied table, and the rows
+ * SEVEN CHECKS, as the plan lists them (plus an eighth the plan does not, `transformCoverage`: the transform visited every row): (1) row counts per table against the source (an intentionally emptied table, and the rows
  * the transformer dropped, are accounted for), (2) referential integrity (no orphan foreign key), (3) ZERO residual personal data
  * (the S4 scan), (4) format validity of the fakes (written independently of the engine and calibrated on a published example),
  * (5) business invariants (monthly order and invoice sums, stock balances, status distributions) equal to the source,
- * (6) correlations (the customer-order and customer-invoice pairings) equal to the source, (7) the working trial on the stage,
- * which is a human or a script step outside this module and enters as a boolean the runner sets after it ran.
+ * (6) correlations (the customer-order and customer-invoice pairings) equal to the source, (7) the working trial (a stub invoice, an order flow, a work sheet, a ticket) on an application
+ * instance bound to the TEMPORARY database, BEFORE the swap: a script step outside this module that enters as a result with
+ * named checks, which the runner passes after it ran.
  */
 
 export interface GateSection {
@@ -84,6 +85,32 @@ export function checkReferentialIntegrity(
     problems.push("migrations: the migration state is not clean");
   if (!healthOk) problems.push("health: the application health check failed");
   return section("referentialIntegrity", problems);
+}
+
+/**
+ * (1b) The transform LOOK at every row (barracuda, #2328): per model, the rows the transform loop visited (transformed, unchanged
+ * or dropped, all count) must equal the source's count. A reader that skips a row after a delete (an OFFSET page) leaves that row
+ * UNTRANSFORMED in the swap candidate, and the residual scan sees it only if its value happens to be in the dictionary, so the
+ * count is the net. A model the loop never visited is a problem too.
+ */
+export function transformCoverageSection(
+  visited: Readonly<Record<string, number>>,
+  source: Readonly<Record<string, number>>,
+): GateSection {
+  const problems: string[] = [];
+  for (const [model, expected] of Object.entries(source)) {
+    const seen = visited[model] ?? 0;
+    if (seen !== expected)
+      problems.push(
+        `${model}: the transform visited ${seen} row(s), the source has ${expected}`,
+      );
+  }
+  for (const model of Object.keys(visited))
+    if (!(model in source))
+      problems.push(`${model}: visited by the transform, not in the source`);
+  if (Object.keys(source).length === 0)
+    problems.push("no model was measured, so nothing was compared");
+  return section("transformCoverage", problems);
 }
 
 /** (3) Residual personal data: nothing found. The S4 scan's report, as a section. */
@@ -171,22 +198,41 @@ export const FORMAT_VALIDATORS = {
 export type FormatKind = keyof typeof FORMAT_VALIDATORS;
 
 /**
- * The kinds the format check MUST have a sample of by default (barracuda, #2325): a kind the runner gave no sample of is a
- * problem, not a silent pass. A caller with a narrower source passes its own list, and that choice is visible at the call.
+ * The format kinds that are ALWAYS required, and cannot be left out by any caller (barracuda, #2325 round 2): a caller passing an
+ * empty list must not be able to turn the whole format section green. Every real source has e-mail addresses, phone numbers,
+ * IBANs and natural persons' tax ids, so a run with no sample of one of them is a run that did not look.
  */
-export const REQUIRED_FORMAT_KINDS: readonly FormatKind[] = [
+export const ALWAYS_REQUIRED_FORMAT_KINDS: readonly FormatKind[] = [
   "fakeEmail",
   "phone",
   "iban",
-  "companyTaxNumber",
   "personalTaxId",
 ];
 
-/** (4) Format validity of a sample of fakes, per kind: 100% must pass, and every required kind must be sampled. Reports counts only. */
+/**
+ * The kind that is required only when the caller says fakes of it exist: a company's tax number is KEPT while the company-data
+ * decision is open, so no company fake is made and no sample of it can exist. The default requires it; the runner drops it
+ * (and only it) while the kinds table keeps the company's tax number.
+ */
+export const CONDITIONAL_FORMAT_KINDS: readonly FormatKind[] = [
+  "companyTaxNumber",
+];
+
+/** All five kinds, the strictest list. */
+export const REQUIRED_FORMAT_KINDS: readonly FormatKind[] = [
+  ...ALWAYS_REQUIRED_FORMAT_KINDS,
+  ...CONDITIONAL_FORMAT_KINDS,
+];
+
+/**
+ * (4) Format validity of a sample of fakes, per kind: 100% must pass, and every required kind must be sampled. The four always
+ * required kinds are fixed; `conditionalKinds` (default: the company tax number) are the ones a caller may drop. Reports counts only.
+ */
 export function checkFormats(
   samples: Partial<Record<FormatKind, readonly string[]>>,
-  requiredKinds: readonly FormatKind[] = REQUIRED_FORMAT_KINDS,
+  conditionalKinds: readonly FormatKind[] = CONDITIONAL_FORMAT_KINDS,
 ): GateSection {
+  const requiredKinds = [...ALWAYS_REQUIRED_FORMAT_KINDS, ...conditionalKinds];
   const problems: string[] = [];
   for (const kind of requiredKinds) {
     if (samples[kind] === undefined)
@@ -236,16 +282,33 @@ export function compareAggregates(
   return section(name, problems);
 }
 
-/** (7) The working trial on the stage (a stub invoice, an order flow, a work sheet, a ticket) ran, and passed. */
-export function trialSection(ran: boolean, passed: boolean): GateSection {
-  return section(
-    "workingTrial",
-    ran
-      ? passed
-        ? []
-        : ["the working trial ran and failed"]
-      : ["the working trial did not run"],
-  );
+export interface TrialCheck {
+  /** What the trial did, in words the owner can read ("a work sheet is created", "an invoice is drafted"). */
+  name: string;
+  passed: boolean;
+}
+
+/**
+ * (7) The working trial, run on an application instance bound to the TEMPORARY database BEFORE the swap (owner's operating
+ * decision, 2026-11-09). A trial that did not run, failed, or reported NO CHECKS fails the gate: a trial that names nothing it
+ * did cannot be told from a stub that returns "passed", so the result must carry at least one named check, each of which passed.
+ * The report names the failed checks, so the card shows what the trial covered.
+ */
+export function trialSection(
+  ran: boolean,
+  passed: boolean,
+  checks: readonly TrialCheck[] = [],
+): GateSection {
+  if (!ran) return section("workingTrial", ["the working trial did not run"]);
+  const problems: string[] = [];
+  if (!passed) problems.push("the working trial ran and failed");
+  if (checks.length === 0)
+    problems.push(
+      "the working trial reported no checks, so nothing shows what it covered",
+    );
+  for (const check of checks)
+    if (!check.passed) problems.push(`trial check failed: ${check.name}`);
+  return section("workingTrial", problems);
 }
 
 /**
@@ -255,6 +318,7 @@ export function trialSection(ran: boolean, passed: boolean): GateSection {
  */
 export const REQUIRED_SECTIONS = [
   "rowCounts",
+  "transformCoverage",
   "referentialIntegrity",
   "residualPersonalData",
   "formats",
