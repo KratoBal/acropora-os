@@ -70,3 +70,10 @@ export function buildTrialEnvironment(
     MEDUSA_ADMIN_URL: CLOSED_URL,
   };
 }
+
+/** The same connection string with another database name (the query and the credentials stay). */
+export function withDatabaseName(url: string, name: string): string {
+  const next = new URL(url);
+  next.pathname = `/${name}`;
+  return next.toString();
+}

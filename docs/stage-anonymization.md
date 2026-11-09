@@ -99,6 +99,27 @@ The trial starts an API instance on the TEMPORARY database. A real provider is n
   wrong, never a value; the gate then fails with that name. The check also reads the four stored connection settings and the device
   token table of the temporary database: a stored credential column that survived the anonymization, or a settings row that was not
   read, fails it.
+- **The four flows** (`runTrialFlows`), as an owner or admin who logs in with the stage password (`POST /auth/mobile/login/password`,
+  a Bearer token): a person customer with a billing address, a stub invoice (a draft, then issued: the document number must be a
+  `TESZT-...` one, which also proves Számlázz.hu was not called), a POS sale with a manual line (the only order flow that is local;
+  the webshop orders go through Medusa and cannot run), a work sheet (partner code, department, sheet) and a ticket (created,
+  NEW, moved to TRIAGED). One named check per step; a step that needs an earlier one that failed is reported as failed ("skipped"),
+  never left out. A failed step says its HTTP status and, for a 4xx, the API's own message; never the body of a 5xx, a token or the
+  password.
+- **The trial runs on a throwaway COPY of the temporary database** (`withTrialCopy`: `CREATE DATABASE ... TEMPLATE ...`, named
+  `<temporary name>_trial`, dropped afterwards whatever happens), because the trial writes rows (a customer, a TESZT invoice, a
+  sale, a work sheet, a ticket) and the temporary database IS the swap candidate: the stage never receives them. The anonymization
+  command closes its own connections to the temporary database first (Postgres refuses to copy a database somebody is connected
+  to), and the trial command gets a SMALL environment: the copy as `DATABASE_URL`, `STAGE_TRIAL_PASSWORD`, `REDIS_URL`,
+  `STAGE_TRIAL_API_MAIN`, `PATH` and `HOME`, not the operator's shell with its keys.
+- **What the trial needs on the host:** the API built (`pnpm --filter @acropora/api build`, the trial starts
+  `apps/api/dist/main.js`), a Redis the health check can ping, a user with the right to create a database, and an active owner or
+  admin in the data (an anonymized account keeps its password hash, so the stage password logs in). The measurement of the
+  integrations decides whether the instance starts at all.
+- **A trial under a running application is not tested here:** the unit tests start a real child process as a stand-in for the API
+  (the start, the health wait, the stop, the environment it gets), and a CI integration spec
+  (`apps/api/src/stage-anonymization/stage-trial.integration.spec.ts`) runs the measurement and the four flows against the REAL
+  application on a scratch Postgres database, through the real copy.
 - **The measurement is checked against the code:** a test fails if a rule names a variable the code never reads (a typo would
   protect nothing).
 

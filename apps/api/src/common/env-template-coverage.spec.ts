@@ -176,6 +176,13 @@ const SZANDEKOS_KIVETEL = new Set<string>([
   // A jelszo-lenyomat segedparancs olvassa (prisma/stage-hash-password.ts), ugyanazert, mint a tobbit: host-parancs, a
   // jelszo sablonba nem valo.
   "STAGE_ANON_PASSWORD",
+  // A mukodesi proba parancsa olvassa (prisma/stage-trial.ts es a stage-anonymize.ts atadasa): a sima jelszo es az API belepesi
+  // pontja. Host-parancs, a jelszo sablonba nem valo. A PATH es a HOME operacios rendszer valtozo, nem beallitas: a proba-parancs
+  // csak ezt a kis keszletet kapja, ezert az atadas neven nevezi oket.
+  "STAGE_TRIAL_PASSWORD",
+  "STAGE_TRIAL_API_MAIN",
+  "PATH",
+  "HOME",
 ]);
 
 /**

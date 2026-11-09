@@ -15,3 +15,11 @@ export {
 } from "./trial-integrations.js";
 export { buildTrialEnvironment } from "./trial-environment.js";
 export { parseTrialResult } from "./trial-result.js";
+export { runTrial, type TrialRunOptions } from "./trial-run.js";
+export { runTrialFlows } from "./trial-flows.js";
+export { withTrialCopy } from "./trial-copy.js";
+export { createTrialCommand } from "./trial-command.js";
+export { createTrialDatabase, type TrialDatabase } from "./trial-database.js";
+export { withDatabaseName } from "./trial-environment.js";
+/** The Prisma client class, for a caller that must not import the package's main entry (its module makes a client from the environment on load). */
+export { PrismaClient } from "@prisma/client";
