@@ -62,8 +62,10 @@ STAGE_ANON_PASSWORD_HASH=... [STAGE_ANON_TRIAL_COMMAND='["program","arg"]'] \
 pnpm --filter @acropora/database stage:anonymize
 ```
 
-It is run by the stage operator on the HOST, never by the API. Everything comes from the environment (no flags). The optional trial
-command is a JSON array run without a shell after the transform; exit code 0 is a passed trial, and without one the gate fails.
+It is run by the stage operator on the HOST, never by the API. Everything comes from the environment (no flags). The trial
+command is a JSON array run without a shell after the transform and BEFORE any swap, against an application instance bound to the
+temporary database. Its last stdout line must be `{"checks":[{"name":"...","passed":true}]}` and its exit code 0 (`parseTrialResult`);
+without one, or with no named check, the gate fails.
 The report is printed as JSON (table and column names and counts, never a value) and the exit code is 0 only when the gate passed,
 so the swap step can chain on it. The command never swaps and never dumps; those stay host steps. `runStageAnonymization`
 (`stage-run.ts`) is the same thing as a function: it checks the register against the schema first, hands the models that lose rows

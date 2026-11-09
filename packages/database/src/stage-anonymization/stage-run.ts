@@ -14,7 +14,11 @@ import {
   createPrismaRunnerDatabase,
   type SqlClient,
 } from "./prisma-adapter.js";
-import { runAnonymization, type RunnerResult } from "./runner.js";
+import {
+  runAnonymization,
+  type RunnerOptions,
+  type RunnerResult,
+} from "./runner.js";
 
 /**
  * THE COMPOSITION OF A STAGE ANONYMIZATION RUN (stage anonymization chain, slice S6; card 07b56a1f). It reads nothing but the
@@ -37,7 +41,7 @@ export interface StageRunInput {
   pseudonymizationKey: string;
   scanKey: string;
   stagePasswordHash: string;
-  trial?: () => Promise<{ passed: boolean }>;
+  trial?: RunnerOptions["trial"];
 }
 
 export async function runStageAnonymization(

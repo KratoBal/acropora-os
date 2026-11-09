@@ -161,6 +161,18 @@ const SZANDEKOS_KIVETEL = new Set<string>([
    * listan allna, adossagnak latszana -- holott nincs mit potolni.
    */
   "RELEASE_EVIDENCE_RESULT_DETAIL_JSON",
+  /**
+   * NEM A FUTO ALKALMAZAS OLVASSA, hanem a `packages/database/prisma/stage-anonymize.ts` parancs, amit a stage
+   * uzemeltetoje a HOSTON futtat, egy ideiglenes adatbazison (docs/stage-anonymization.md). A ket kulcs es a
+   * jelszo-lenyomat egyetlen futasra keszul, es SEMMILYEN sablonba nem valo: egy .env.example vagy
+   * .env.production.example fajlban egy kulcs helye tartosnak latszana, es ez a parancs azert vesz mindent
+   * kornyezetbol (nem kapcsolobol), hogy semmi ne maradjon a shell elozmenyeiben vagy a tarban. A nev sem
+   * adossag: nincs mit potolni.
+   */
+  "STAGE_ANON_PSEUDONYM_KEY",
+  "STAGE_ANON_SCAN_KEY",
+  "STAGE_ANON_PASSWORD_HASH",
+  "STAGE_ANON_TRIAL_COMMAND",
 ]);
 
 /**

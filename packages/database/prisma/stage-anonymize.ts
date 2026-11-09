@@ -8,7 +8,9 @@
 ///   STAGE_ANON_SCAN_KEY              at least 32 bytes; the residual-scan dictionary key, for this run only
 ///   STAGE_ANON_PASSWORD_HASH         the hash of the stage-only password that replaces every password hash
 ///   STAGE_ANON_TRIAL_COMMAND         optional; a JSON array of strings (program and arguments), run WITHOUT a shell after
-///                                    the transform. Exit code 0 means the working trial passed. Absent: the gate fails.
+///                                    the transform. Its last stdout line must be
+///                                    {"checks":[{"name":"...","passed":true}]} and its exit code 0; absent, or
+///                                    no named check: the gate fails. It runs BEFORE the swap, on the temporary database.
 ///
 /// The run never swaps anything. It prints the gate report as JSON on stdout (counts and column names only, never a value) and
 /// exits 0 only when the gate passed, so a host script can chain the swap on the exit code. Production and the stage database
@@ -21,7 +23,9 @@ import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
 
 import { ANONYMIZATION_REGISTER } from "../src/anonymization-register.js";
+import type { RunnerOptions } from "../src/stage-anonymization/runner.js";
 import { runStageAnonymization } from "../src/stage-anonymization/stage-run.js";
+import { parseTrialResult } from "../src/stage-anonymization/trial-result.js";
 
 const REQUIRED = [
   "DATABASE_URL",
@@ -41,9 +45,12 @@ function readEnvironment(): Record<(typeof REQUIRED)[number], string> {
   ) as Record<(typeof REQUIRED)[number], string>;
 }
 
-/** The trial command as an argument array: no shell, so nothing in it is interpreted. */
-function trialFromEnvironment():
-  (() => Promise<{ passed: boolean }>) | undefined {
+/**
+ * The trial command as an argument array: no shell, so nothing in it is interpreted. It runs on the TEMPORARY database, before any
+ * swap, and reports its named checks as one JSON line on stdout (see `parseTrialResult`); its progress output goes to the terminal
+ * through stderr only, because stdout is where the result is read.
+ */
+function trialFromEnvironment(): RunnerOptions["trial"] {
   const raw = process.env.STAGE_ANON_TRIAL_COMMAND;
   if (!raw) return undefined;
   const parsed: unknown = JSON.parse(raw);
@@ -58,9 +65,15 @@ function trialFromEnvironment():
   const [program, ...args] = parsed as [string, ...string[]];
   return () =>
     new Promise((resolve) => {
-      const child = spawn(program, args, { stdio: "inherit" });
-      child.on("error", () => resolve({ passed: false }));
-      child.on("close", (code) => resolve({ passed: code === 0 }));
+      const child = spawn(program, args, {
+        stdio: ["inherit", "pipe", "inherit"],
+      });
+      let stdout = "";
+      child.stdout.on("data", (chunk: Buffer) => {
+        stdout += chunk.toString("utf8");
+      });
+      child.on("error", () => resolve({ passed: false, checks: [] }));
+      child.on("close", (code) => resolve(parseTrialResult(stdout, code)));
     });
 }
 

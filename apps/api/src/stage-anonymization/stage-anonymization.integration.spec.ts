@@ -34,6 +34,9 @@ const REAL = {
   name: "Kovacs Bela Valodi",
   phone: "+36301234567",
   password: "valodi-jelszo-lenyomat-nem-igazi",
+  personalTaxId: "8123456789",
+  iban: "HU42117730161111101800000000",
+  account: "11773016-11111018",
 };
 
 const withDatabase = (url: string, database: string): string => {
@@ -49,6 +52,8 @@ describe(
     let admin: PrismaClient;
     let scratch: PrismaClient;
     let scratchUrl: string;
+    let seededUserId: string;
+    let seeded: { users: number; customers: number; suppliers: number };
     let schema: string;
     let result: Awaited<ReturnType<typeof runStageAnonymization>>;
     const keys = {
@@ -88,19 +93,22 @@ describe(
         { env: { ...process.env, DATABASE_URL: scratchUrl } },
       );
       scratch = new PrismaClient({ datasources: { db: { url: scratchUrl } } });
-      await scratch.user.create({
-        data: {
-          email: REAL.email,
-          displayName: REAL.name,
-          role: "ADMIN",
-          passwordHash: REAL.password,
-        },
-      });
+      seededUserId = (
+        await scratch.user.create({
+          data: {
+            email: REAL.email,
+            displayName: REAL.name,
+            role: "ADMIN",
+            passwordHash: REAL.password,
+          },
+        })
+      ).id;
       await scratch.customer.create({
         data: {
           customerNumber: "VEVO-T1",
           type: "PERSON",
           displayName: REAL.name,
+          taxNumber: REAL.personalTaxId,
           email: REAL.email.replace("kovacs", "vevo"),
           phone: REAL.phone,
         },
@@ -114,6 +122,20 @@ describe(
           taxNumber: "12345678-2-42",
         },
       });
+      await scratch.supplier.create({
+        data: {
+          code: "BESZ-T1",
+          name: "Teszt Beszallito Bt.",
+          iban: REAL.iban,
+          bankAccountNumber: REAL.account,
+        },
+      });
+      // the migrations may seed rows of their own, so the checks below compare with what stands NOW, not with a literal
+      seeded = {
+        users: await scratch.user.count(),
+        customers: await scratch.customer.count(),
+        suppliers: await scratch.supplier.count(),
+      };
     });
 
     after(async () => {
@@ -132,7 +154,10 @@ describe(
         schema,
         register: ANONYMIZATION_REGISTER,
         stagePasswordHash: "stage-only-hash-nem-igazi",
-        trial: async () => ({ passed: true }),
+        trial: async () => ({
+          passed: true,
+          checks: [{ name: "the scratch database answers", passed: true }],
+        }),
         ...keys,
       });
       // the sections name tables, columns and counts only, so the report is safe to print on a failure
@@ -149,12 +174,25 @@ describe(
     it("leaves none of the invented personal values in the scratch database, and keeps the row counts", async () => {
       const users = await scratch.user.findMany();
       const customers = await scratch.customer.findMany();
-      assert.equal(users.length, 1);
-      assert.equal(customers.length, 2);
-      const text = JSON.stringify([users, customers]);
-      for (const value of [REAL.email, REAL.name, REAL.phone, REAL.password])
+      const suppliers = await scratch.supplier.findMany();
+      assert.equal(users.length, seeded.users);
+      assert.equal(customers.length, seeded.customers);
+      assert.equal(suppliers.length, seeded.suppliers);
+      const text = JSON.stringify([users, customers, suppliers]);
+      for (const value of [
+        REAL.email,
+        REAL.name,
+        REAL.phone,
+        REAL.password,
+        REAL.personalTaxId,
+        REAL.iban,
+        REAL.account,
+      ])
         assert.ok(!text.includes(value), "a real value survived the run");
-      assert.equal(users[0]?.passwordHash, "stage-only-hash-nem-igazi");
+      assert.equal(
+        users.find((user) => user.id === seededUserId)?.passwordHash,
+        "stage-only-hash-nem-igazi",
+      );
     });
 
     it("refuses a database that is not a temporary one, before it reads a row", async () => {
@@ -165,7 +203,10 @@ describe(
           schema,
           register: ANONYMIZATION_REGISTER,
           stagePasswordHash: "stage-only-hash-nem-igazi",
-          trial: async () => ({ passed: true }),
+          trial: async () => ({
+            passed: true,
+            checks: [{ name: "never runs", passed: true }],
+          }),
           ...keys,
         }),
         /temporary database/,
