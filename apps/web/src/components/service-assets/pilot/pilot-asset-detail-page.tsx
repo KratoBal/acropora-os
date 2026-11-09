@@ -1,15 +1,13 @@
 "use client";
 
 import {
+  PAGE_GUTTER_X,
   Alert,
   ConfirmDialog,
-  FormField,
   Icon,
   PageHeader,
   PilotFileInput,
-  Select,
   Skeleton,
-  PAGE_GUTTER_X,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -669,14 +667,12 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
                   />
                   {canManage ? (
                     <div className="mt-5 grid grid-cols-1 gap-3 border-t border-pilot-grey-100 pt-5 md:grid-cols-[180px_minmax(0,1fr)_auto] md:items-end">
-                      <FormField label="Dokumentumtípus">
-                        <Select
+                      <PilotFormField label="Dokumentumtípus">
+                        <PilotSelect
                           aria-label="Dokumentumtípus"
                           value={documentType}
-                          onChange={(event) =>
-                            setDocumentType(
-                              event.target.value as AssetDocumentType,
-                            )
+                          onChange={(value) =>
+                            setDocumentType(value as AssetDocumentType)
                           }
                         >
                           {Object.entries(documentTypeLabel).map(
@@ -686,9 +682,9 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
                               </option>
                             ),
                           )}
-                        </Select>
-                      </FormField>
-                      <FormField label="Fénykép vagy PDF">
+                        </PilotSelect>
+                      </PilotFormField>
+                      <PilotFormField label="Fénykép vagy PDF">
                         <PilotFileInput
                           ref={documentInput}
                           accept="image/jpeg,image/png,application/pdf"
@@ -697,7 +693,7 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
                             setDocumentFile(event.target.files?.[0] ?? null)
                           }
                         />
-                      </FormField>
+                      </PilotFormField>
                       <PilotButton
                         disabled={!documentFile || busy}
                         onClick={() => void uploadDocument()}
