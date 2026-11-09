@@ -7,6 +7,7 @@ import { MedusaConnectionStartupValidator } from "./medusa-connection-startup.va
 import { MedusaCredentialCryptoService } from "./medusa-credential-crypto.service.js";
 import { MedusaCredentialProvider } from "./medusa-credential.provider.js";
 import { MedusaProjectionScheduler } from "./medusa-projection.scheduler.js";
+import { MedusaProjectionStatusController } from "./medusa-projection-status.controller.js";
 import { MedusaInventoryScheduler } from "./medusa-inventory.scheduler.js";
 
 /**
@@ -23,11 +24,12 @@ import { MedusaInventoryScheduler } from "./medusa-inventory.scheduler.js";
  * megjegyzes, ami egy megvaltozott allapotot ir le, rosszabb a semminel.
  *
  * AMI VISZONT VALTOZATLANUL NINCS ITT: vetitest indito VEGPONT es
- * esemenyfigyelo. Az utemezo alapertelmezesben KIKAPCSOLT, tehat a vetites
+ * esemenyfigyelo. (A `health/medusa-projection` csak OLVAS: a sor allapotat
+ * adja, vetitest nem indit.) Az utemezo alapertelmezesben KIKAPCSOLT, tehat a vetites
  * indítasi modja csak ott valtozik, ahol valaki a kapcsolot bekapcsolja.
  */
 @Module({
-  controllers: [MedusaConnectionController],
+  controllers: [MedusaConnectionController, MedusaProjectionStatusController],
   providers: [
     MedusaConnectionRepository,
     MedusaCredentialCryptoService,
