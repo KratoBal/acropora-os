@@ -20,6 +20,7 @@ function termek(overrides: Record<string, unknown> = {}) {
   return {
     id: "prod-1",
     isActive: true,
+    webshopSellable: true,
     updatedAt: MOST,
     variants: [{ updatedAt: REGEN }],
     unasSnapshot: { updatedAt: REGEN },
@@ -1400,15 +1401,29 @@ const JELOLO_UTAN = new Date("2026-11-09T12:00:00.000Z");
 function csakAKertAllapot(db: ProjectionSchedulerDatabase) {
   const eredeti = db.product.findMany.bind(db.product);
   (db.product as { findMany: unknown }).findMany = async (args: {
-    where?: { isActive?: boolean };
+    where?: {
+      isActive?: boolean;
+      OR?: { isActive?: boolean; webshopSellable?: boolean }[];
+    };
   }) => {
     const sorok = (await eredeti(args as never)) as unknown as {
       isActive: boolean;
+      webshopSellable: boolean;
     }[];
+    const illik = (
+      t: { isActive: boolean; webshopSellable: boolean },
+      f: { isActive?: boolean; webshopSellable?: boolean },
+    ) =>
+      (f.isActive === undefined || t.isActive === f.isActive) &&
+      (f.webshopSellable === undefined ||
+        t.webshopSellable === f.webshopSellable);
     const kert = args.where?.isActive;
-    return typeof kert === "boolean"
-      ? sorok.filter((t) => t.isActive === kert)
-      : sorok;
+    const vagy = args.where?.OR;
+    return sorok.filter(
+      (t) =>
+        (typeof kert !== "boolean" || t.isActive === kert) &&
+        (!vagy || vagy.some((f) => illik(t, f))),
+    );
   };
 }
 
@@ -1492,6 +1507,44 @@ describe("a vetítés után inaktivált termék is esedékes (ca422e92)", () => 
     });
     await scheduler.runOnce();
     assert.deepEqual(kapott, [["jelolo-elott"]]);
+  });
+
+  /**
+   * AZ AKTÍV, DE NEM WEBSHOPOS TERMÉK IS KIFUTOTT (ca422e92, a 129 régi cím, 2026-11-09
+   * este). MI PIROSÍT: a vetítő csak az inaktívat nézi, így egy aktív, nem webshopos
+   * termék, amelyik a jelölő előtt ment ki, sosem kapja meg a jelölőt, pedig az
+   * átirányítás-lista a lapjára küldi; vagy egy értékesíthető, a jelölő előtt vetített
+   * termék is sorra kerül (minden kötött termék egyszer újra menne).
+   */
+  it("a jelölő előtt vetített aktív, nem webshopos termék is esedékes, az értékesíthető nem", async () => {
+    const { run, kapott } = futtato(0);
+    const regiKotes = new Date("2026-10-27T10:00:00.000Z");
+    const { db } = adatbazis(
+      [
+        termek({
+          id: "nem-webshopos",
+          webshopSellable: false,
+          updatedAt: REGEN,
+        }),
+        termek({ id: "ertekesitheto", updatedAt: REGEN }),
+      ],
+      [
+        { entityId: "nem-webshopos", lastSyncedAt: regiKotes },
+        { entityId: "ertekesitheto", lastSyncedAt: regiKotes },
+      ],
+    );
+    csakAKertAllapot(db);
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: run,
+      runPricing: arFuttato().run,
+      environment: BEKAPCSOLVA,
+      logger: naplo().logger,
+      now: () => new Date(MOST.getTime() + 1_000),
+    });
+    await scheduler.runOnce();
+    assert.deepEqual(kapott, [["nem-webshopos"]]);
+    assert.equal(scheduler.allapot().lastRound!.inactiveDueTotal, 1);
   });
 
   /**
