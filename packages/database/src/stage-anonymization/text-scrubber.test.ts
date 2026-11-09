@@ -81,6 +81,38 @@ describe("patterns", () => {
   });
 });
 
+describe("IP addresses (barracuda, #2322)", () => {
+  it("replaces an IPv4 and an IPv6 address in a copied log line with a documentation-range address, and keeps what is not an address", () => {
+    const out = scrubber().scrubText(
+      "A kérés a 81.182.10.20 címről jött, v6: 2a01:4f8:1c1b:5d3a::1 és fe80:0:0:0:1:2:3:4. Verzió 1.2.3, idő 10:30:45, 999.1.1.1, 12.34.56.78.90.",
+    );
+    assert.ok(!/81\.182\.10\.20|2a01:4f8|fe80:0:0/.test(out));
+    assert.ok(out.includes(engine.ipAddress("81.182.10.20")));
+    assert.ok(out.includes(engine.ipAddress("fe80:0:0:0:1:2:3:4")));
+    assert.ok(
+      out.includes("Verzió 1.2.3, idő 10:30:45, 999.1.1.1, 12.34.56.78.90."),
+    );
+    assert.match(
+      engine.ipAddress("81.182.10.20"),
+      /^(192\.0\.2|198\.51\.100|203\.0\.113)\.\d{1,3}$/,
+    );
+    assert.match(
+      engine.ipAddress("2a01:4f8::1"),
+      /^2001:db8::[0-9a-f]+:[0-9a-f]+$/,
+    );
+  });
+
+  it("gives the same address the same fake, counts it, and leaves the original out of the stats", () => {
+    const s = scrubber();
+    const out = s.scrubText("a 81.182.10.20, majd megint 81.182.10.20");
+    assert.equal(
+      out,
+      `a ${engine.ipAddress("81.182.10.20")}, majd megint ${engine.ipAddress("81.182.10.20")}`,
+    );
+    assert.equal(s.stats.ip, 2);
+  });
+});
+
 describe("names", () => {
   it("replaces a dictionary name with the fake of that person, whatever the case, accents, order or Hungarian suffix", () => {
     const fake = engine.personName("Teszt Elek");
@@ -141,6 +173,7 @@ describe("counts", () => {
       taxNumber: 1,
       personalTaxId: 0,
       phone: 1,
+      ip: 0,
       name: 1,
     });
     assert.ok(Object.values(s.stats).every((n) => typeof n === "number"));

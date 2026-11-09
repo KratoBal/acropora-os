@@ -1,5 +1,6 @@
 import { createHmac } from "node:crypto";
 
+import { isDeletedKey } from "./json-scrubber.js";
 import { normalizePhone } from "./pseudonymizer.js";
 import { foldText } from "./text-scrubber.js";
 
@@ -201,10 +202,30 @@ function* strings(value: unknown): Generator<string> {
   }
 }
 
+/** Every KEY of every object inside a JSON-like value (the value's own top level included when it is an object), at any depth. */
+function* jsonKeys(value: unknown): Generator<string> {
+  if (Array.isArray(value)) for (const item of value) yield* jsonKeys(item);
+  else if (
+    value &&
+    typeof value === "object" &&
+    !Buffer.isBuffer(value) &&
+    !(value instanceof Date)
+  ) {
+    for (const [key, child] of Object.entries(value)) {
+      yield key;
+      yield* jsonKeys(child);
+    }
+  }
+}
+
+const normalizeKey = (key: string): string =>
+  foldText(key).replace(/[^a-z0-9]/g, "");
+
 export interface ResidualFinding {
   model: string;
   field: string;
-  kind: ResidualKind;
+  /** `credentialKey`: a key in a JSON value that names a credential or a network address (S2 deletes these; one left is a leak). */
+  kind: ResidualKind | "credentialKey";
   /** How many values of this column held a real value of this kind. */
   count: number;
 }
@@ -226,6 +247,19 @@ export function scanRows(
   for (const { model, row } of rows) {
     rowsScanned += 1;
     for (const [field, value] of Object.entries(row)) {
+      // a credential or network key left inside a JSON value (the net under the JSON scrubber's key deletion)
+      for (const key of jsonKeys(value)) {
+        if (!isDeletedKey(normalizeKey(key))) continue;
+        const id = `${model}.${field}\u0000credentialKey`;
+        const finding = counts.get(id) ?? {
+          model,
+          field,
+          kind: "credentialKey" as const,
+          count: 0,
+        };
+        finding.count += 1;
+        counts.set(id, finding);
+      }
       for (const text of strings(value)) {
         for (const kind of scanText(dictionary, text)) {
           const id = `${model}.${field}\u0000${kind}`;
