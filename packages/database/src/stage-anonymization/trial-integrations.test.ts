@@ -33,7 +33,8 @@ const assess = (
   env: Record<string, string | undefined> = baseEnv(),
   settings: ConnectionSettingState[] | undefined = clean(),
   deviceTokens: number | undefined = 0,
-) => assessTrialIntegrations({ env, settings, deviceTokens });
+) =>
+  assessTrialIntegrations({ env, settings, deviceTokens, loadedEnvFiles: [] });
 const failing = (checks: { name: string; passed: boolean }[]) =>
   checks.filter((c) => !c.passed);
 
@@ -219,17 +220,122 @@ describe("what makes an integration live", () => {
     const direct = (input: Parameters<typeof assessTrialIntegrations>[0]) =>
       failing(assessTrialIntegrations(input));
     assert.equal(
-      direct({ env: baseEnv(), deviceTokens: 0 }).length,
+      direct({ env: baseEnv(), deviceTokens: 0, loadedEnvFiles: [] }).length,
       4,
       "no settings at all",
     );
     assert.equal(onlyFailed(baseEnv(), clean(), 3).length, 1);
-    assert.equal(direct({ env: baseEnv(), settings: clean() }).length, 1);
+    assert.equal(
+      direct({ env: baseEnv(), settings: clean(), loadedEnvFiles: [] }).length,
+      1,
+    );
   });
 
   it("does not flag the variables the trial legitimately sets (the exceptions) and ignores unrelated ones", () => {
     const env = { ...baseEnv(), SOME_OTHER_THING: "x", HOME: "/home/x" };
     assert.deepEqual(failing(assess(env)), []);
+  });
+});
+
+describe("the .env files the Prisma client would load (barracuda, #2331)", () => {
+  const direct = (loadedEnvFiles: readonly string[] | null | undefined) =>
+    failing(
+      assessTrialIntegrations({
+        env: baseEnv(),
+        settings: clean(),
+        deviceTokens: 0,
+        loadedEnvFiles,
+      }),
+    );
+  it("passes when no such file exists, and fails naming the file when one does (a clean environment is not enough if a .env puts keys back)", () => {
+    assert.deepEqual(direct([]), []);
+    const found = direct(["/srv/acropora/.env"]);
+    assert.equal(found.length, 1);
+    assert.match(
+      found[0]!.name,
+      /^integration closed: no \.env file is read into the instance .*\(the Prisma client would load \/srv\/acropora\/\.env\)$/,
+    );
+    assert.equal(
+      direct(["/a/.env", "/b/prisma/.env"])[0]!.name.includes("/b/prisma/.env"),
+      true,
+    );
+  });
+
+  it("fails when it was not measured (null, or not given): a client that stops carrying the block must not read as 'nothing loaded'", () => {
+    assert.equal(direct(null).length, 1);
+    assert.equal(direct(undefined).length, 1);
+    assert.match(direct(null)[0]!.name, /were not measured/);
+  });
+});
+
+describe("every URL default the code reads from the environment is a rule (barracuda, #2331)", () => {
+  /** Environment variables the application reads with a LITERAL http(s) default, found in the code (a constant counts: `?? DEFAULT`). */
+  const urlDefaults = (): Map<string, string[]> => {
+    const found = new Map<string, string[]>();
+    const walk = (dir: URL): void => {
+      for (const entry of readdirSync(dir)) {
+        if (["node_modules", "dist", "test-dist", ".turbo"].includes(entry))
+          continue;
+        const next = new URL(
+          entry + (statSync(new URL(entry, dir)).isDirectory() ? "/" : ""),
+          dir,
+        );
+        if (statSync(next).isDirectory()) walk(next);
+        else if (/\.ts$/.test(entry) && !/\.(spec|test)\.ts$/.test(entry)) {
+          const source = readFileSync(next, "utf8");
+          const constants = new Map(
+            [
+              ...source.matchAll(
+                /(?:const|let)\s+(\w+)(?::\s*string)?\s*=\s*["'`](https?:\/\/[^"'`]*)["'`]/g,
+              ),
+            ].map((m) => [m[1]!, m[2]!]),
+          );
+          for (const m of source.matchAll(
+            /(?:process\.)?env(?:ironment)?(?:\.([A-Z][A-Z0-9_]{2,})|\[\s*["']([A-Z][A-Z0-9_]{2,})["']\s*\])(?:\?)?(?:\.trim\(\))?\s*(?:\?\?|\|\|)\s*(?:["'`](https?:\/\/[^"'`]*)["'`]|(\w+))/g,
+          )) {
+            const name = m[1] ?? m[2]!;
+            const value = m[3] ?? constants.get(m[4] ?? "");
+            if (value === undefined) continue;
+            found.set(name, [...(found.get(name) ?? []), value]);
+          }
+        }
+      }
+    };
+    walk(new URL("../../../../apps/api/src/", import.meta.url));
+    return found;
+  };
+
+  /** A URL default that is NOT an external reach, with the reason (the web app's own address, for links and CORS). */
+  const NOT_EXTERNAL = new Map([
+    ["WEB_URL", "the application's own web address, a localhost default"],
+    [
+      "REEFCLUB_WEB_URL",
+      "the ReefClub web address written into the links of a mail body, never fetched (and the REEFCLUB_ prefix is refused anyway)",
+    ],
+  ]);
+
+  it("finds each in a rule's closed URLs: a new `process.env.X ?? 'https://...'` that no rule names would be a live client that the clean environment silently leaves live", () => {
+    const covered = new Set(
+      TRIAL_RULES.flatMap((r) => [
+        ...(r.closedUrls ?? []),
+        ...(r.closedUrlsIfSet ?? []),
+      ]),
+    );
+    const found = urlDefaults();
+    // the control: the six the code was read to have (so the scan cannot pass by finding nothing)
+    for (const known of [
+      "NAV_API_URL",
+      "UNAS_API_URL",
+      "VIES_API_URL",
+      "MNB_API_URL",
+      "GMAIL_API_URL",
+      "GOOGLE_OAUTH_TOKEN_URL",
+    ])
+      assert.ok(found.has(known), `the scan finds ${known}`);
+    const uncovered = [...found.keys()].filter(
+      (name) => !covered.has(name) && !NOT_EXTERNAL.has(name),
+    );
+    assert.deepEqual(uncovered, []);
   });
 });
 
