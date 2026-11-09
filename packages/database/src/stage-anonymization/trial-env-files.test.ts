@@ -80,7 +80,19 @@ describe("prismaLoadedEnvFiles", () => {
 
 describe("measureGeneratedClientEnvFiles", () => {
   it("reads the real generated client of this repository: a list, or null when it cannot be read", () => {
-    const measured = measureGeneratedClientEnvFiles(import.meta.url);
+    const measured = measureGeneratedClientEnvFiles();
     assert.ok(measured === null || Array.isArray(measured));
+    // the default resolves from the database package, so it reads the client (the API cannot resolve it from its own folder)
+    assert.notEqual(
+      measured,
+      null,
+      "the generated client of this repository is readable",
+    );
+    assert.deepEqual(measured, measureGeneratedClientEnvFiles(import.meta.url));
+    // a module outside any package that has the client cannot be measured: that is null, never an empty list
+    assert.equal(
+      measureGeneratedClientEnvFiles("file:///nincs/ilyen/modul.js"),
+      null,
+    );
   });
 });

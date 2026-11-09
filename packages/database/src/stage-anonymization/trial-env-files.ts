@@ -38,12 +38,14 @@ export function prismaLoadedEnvFiles(
 }
 
 /**
- * The same measurement on the real generated client: `fromUrl` is `import.meta.url` of a module in a package that depends on
- * `@prisma/client` (so the client is resolved the way the application resolves it). `null` when the client or its block cannot be
- * read.
+ * The same measurement on the real generated client. `fromUrl` is the module the client is resolved FROM; the default is this file,
+ * which sits in the database package that depends on `@prisma/client`: the application resolves the client through that same
+ * package, so it is the same generated client. (A caller in another package, such as the API, cannot resolve `@prisma/client`
+ * itself under pnpm's strict layout, which the first CI run showed: that read as "not measured".) `null` when the client or its
+ * block cannot be read.
  */
 export function measureGeneratedClientEnvFiles(
-  fromUrl: string,
+  fromUrl: string = import.meta.url,
 ): string[] | null {
   try {
     const clientDir = dirname(createRequire(fromUrl).resolve("@prisma/client"));

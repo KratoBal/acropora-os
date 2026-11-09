@@ -153,7 +153,7 @@ describe(
             env,
             settings: await trialDb.connectionSettings(),
             deviceTokens: await trialDb.deviceTokenCount(),
-            loadedEnvFiles: measureGeneratedClientEnvFiles(import.meta.url),
+            loadedEnvFiles: measureGeneratedClientEnvFiles(),
           });
           assert.equal(await trialDb.loginEmail(), OWNER_EMAIL);
           app = await boot();
