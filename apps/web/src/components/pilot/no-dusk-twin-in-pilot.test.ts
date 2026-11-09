@@ -38,10 +38,6 @@ const HATRA = new Map<string, string[]>([
     ["Badge", "Card", "Input", "Select"],
   ],
   [
-    "components/service-assets/asset-editor-page.tsx",
-    ["Card", "FormField", "Input", "Select"],
-  ],
-  [
     "components/webshop/stock-sync-outbox-page.tsx",
     ["Button", "Card", "CardContent", "CardHeader"],
   ],
@@ -55,10 +51,10 @@ const HATRA = new Map<string, string[]>([
 /*
   A SZÁMLÁLÓK (barracuda, #2125): a pontos egyezés megfogja az új vegyes fájlt, de ha valaki ugyanabban a PR-ban a
   sorát is felveszi a listára, a teszt zöld maradna. A két szám ezért külön áll: a lista bővítése két helyen kér
-  módosítást, és a reviewban látszik. Fogyáskor a számot is le kell írni (a lista története: 59 / 141 a #2125-ben, 47 / 129 a #2134-ben, 45 / 120 a #2137-ben, 36 / 96 a #2140-ben, 32 / 86 a #2229-ben, 29 / 76 a #2232-ben, 25 / 61 a 7. szeletben, a purchasing mappa, 8 / 30 a 13. szeletben: a termékek, a SEO landing és a levélkép-választó, 5 / 18 a 14. szeletben, a leltár két lapja és az adag-hatás kártya).
+  módosítást, és a reviewban látszik. Fogyáskor a számot is le kell írni (a lista története: 59 / 141 a #2125-ben, 47 / 129 a #2134-ben, 45 / 120 a #2137-ben, 36 / 96 a #2140-ben, 32 / 86 a #2229-ben, 29 / 76 a #2232-ben, 25 / 61 a 7. szeletben, a purchasing mappa, 8 / 30 a 13. szeletben: a termékek, a SEO landing és a levélkép-választó, 5 / 18 a 14. szeletben, a leltár két lapja és az adag-hatás kártya, 4 / 14 a 8. szeletben, az eszköz-szerkesztő).
 */
-const HATRA_MERET = 5;
-const HATRA_IKREK = 18;
+const HATRA_MERET = 4;
+const HATRA_IKREK = 14;
 
 /*
   A GYEREK-LISTA (barracuda, #2125): egy pilot fájl által importált, CSAK duskot használó .tsx (relatív vagy `@/`
