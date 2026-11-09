@@ -885,14 +885,27 @@ export class MedusaProjectionScheduler
           id: {
             in: kotesek.slice(i, i + KOTES_SZELET).map((k) => k.entityId),
           },
-          isActive: false,
+          /*
+            KIFUTOTT AZ IS, AMI AKTÍV, DE NEM WEBSHOPOS (ca422e92, 2026-11-09 este): a
+            kifutott jelölőt (`isDiscontinued`) és az átirányítás-lista „lap” döntését
+            (`productRedirectTarget`) az inaktív VAGY nem webshopos termék kapja. Csak az
+            inaktívat nézve egy aktív, nem webshopos termék 301-et kapott a lapjára, a
+            jelölőt viszont soha (a 129 régi cím: a `health/medusa-projection` első
+            körében `inactiveDueTotal: 0`).
+          */
+          OR: [{ isActive: false }, { webshopSellable: false }],
           webshopExcluded: false,
         },
-        select: { id: true, isActive: true, updatedAt: true },
+        select: {
+          id: true,
+          isActive: true,
+          webshopSellable: true,
+          updatedAt: true,
+        },
       });
-      // a szűrés a kódban is megvan: egy tágabb válasz se tegyen aktív terméket ide
+      // a szűrés a kódban is megvan: egy tágabb válasz se tegyen értékesíthető terméket ide
       for (const t of termekek)
-        if (!t.isActive) valtozas.set(t.id, t.updatedAt);
+        if (!t.isActive || !t.webshopSellable) valtozas.set(t.id, t.updatedAt);
     }
     /*
       A JELÖLŐ ELŐTT VETÍTETT INAKTÍV TERMÉK IS (ca422e92, acrobot mérése 2026-11-09 19:00):
