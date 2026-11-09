@@ -10931,23 +10931,23 @@ model ReefClubAdministeredDose {
 /// termekere: a tag KIFEJEZETTEN bekapcsolta az emlekeztetot, ehhez az akvariumhoz (a kifogyas az akvarium literebol
 /// szamolodik). A sor maga a hozzajarulas bizonyitek: mikor (`consentAt`) es a szoveg MELYIK verziojara
 /// (`consentVersion`) adta; a leiratkozas ideje (`unsubscribedAt`) vagy ures (aktiv). Ujrabekapcsolas ugyanazt a sort
-/// frissiti (uj ido, verzio, uj leiratkozasi kulcs, a leiratkozas torolve): egy tagnak egy termekre egy sora van.
-/// A `unsubscribeToken` a minden levelben ott allo leiratkozo link kulcsa: veletlen, egyetlen muveletre (a leiratkozasra)
-/// jo, tehat nem hozzaferesi kulcs. Ures tablaval indul, a kapcsolo (REEFCLUB_RUNOUT_ENABLED) alapbol ki van.
+/// frissiti (uj ido, verzio, a leiratkozas torolve, a regi kulcs eldobva): egy tagnak egy termekre egy sora van.
+/// A leiratkozo link kulcsa NINCS tarolva: a sor azonositojabol es egy szerver-titokbol (REEFCLUB_RUNOUT_UNSUBSCRIBE_SECRET)
+/// szamolt HMAC, igy minden kikuldott level linkje mindig mukodik, a tabla masolata pedig nem tud leiratkoztatni senkit.
+/// Ures tablaval indul, a kapcsolo (REEFCLUB_RUNOUT_ENABLED) alapbol ki van.
 model ReefClubRunOutReminder {
-  id               String          @id @default(cuid())
-  accountId        String
-  productId        String
-  aquariumId       String
-  consentVersion   String
-  consentAt        DateTime
-  unsubscribedAt   DateTime?
-  unsubscribeToken String          @unique
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
-  account          ReefClubAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  product          Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
-  aquarium         Aquarium        @relation(fields: [aquariumId], references: [id], onDelete: Cascade)
+  id             String          @id @default(cuid())
+  accountId      String
+  productId      String
+  aquariumId     String
+  consentVersion String
+  consentAt      DateTime
+  unsubscribedAt DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  account        ReefClubAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  product        Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  aquarium       Aquarium        @relation(fields: [aquariumId], references: [id], onDelete: Cascade)
 
   @@unique([accountId, productId])
   @@index([productId])

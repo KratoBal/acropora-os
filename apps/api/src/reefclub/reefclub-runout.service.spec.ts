@@ -4,8 +4,9 @@ import { describe, it } from "node:test";
 import {
   RUNOUT_CONSENT_TEXT,
   RUNOUT_CONSENT_VERSION,
-  newUnsubscribeToken,
+  reminderIdFromKey,
   runOutAvailability,
+  unsubscribeKeyFor,
 } from "./reefclub-runout-consent.js";
 import { ReefClubRunOutService } from "./reefclub-runout.service.js";
 
@@ -14,11 +15,16 @@ import { ReefClubRunOutService } from "./reefclub-runout.service.js";
   consent text is not given (either one alone must stop it, and today the text IS not given); a row that does not name the text
   version and the time it was given at; an aquarium with no litres taking the reminder; a foreign aquarium answering anything but
   the 404; the unsubscribe key not unique-looking, or a second click on it an error; turning it on again not clearing the
-  unsubscribe; a product that does not exist (the foreign key) not a named refusal.
+  unsubscribe; a product that does not exist (the foreign key) not a named refusal, and an aquarium that vanished mid-write reported
+  as a missing product; the key stored in a row, or an old mail's link ending (a copy of the table must not unsubscribe, and every sent link must work); no secret still recording a consent.
 */
 const NOW = new Date("2026-11-09T10:00:00Z");
 const TEXT = "Hozzájárulok, hogy emlékeztető levelet kapjak.";
-const ON = { REEFCLUB_RUNOUT_ENABLED: "true" };
+const SECRET = "proba-nem-valodi".padEnd(40, "-");
+const ON = {
+  REEFCLUB_RUNOUT_ENABLED: "true",
+  REEFCLUB_RUNOUT_UNSUBSCRIBE_SECRET: SECRET,
+};
 
 type Row = {
   id: string;
@@ -28,10 +34,9 @@ type Row = {
   consentVersion: string;
   consentAt: Date;
   unsubscribedAt: Date | null;
-  unsubscribeToken: string;
 };
 
-function setup(over: { litres?: unknown; missingProduct?: boolean } = {}) {
+function setup(over: { litres?: unknown; fkField?: string } = {}) {
   const rows: Row[] = [];
   const database = {
     aquarium: {
@@ -41,8 +46,11 @@ function setup(over: { litres?: unknown; missingProduct?: boolean } = {}) {
     },
     reefClubRunOutReminder: {
       upsert: async ({ where, create, update }: any) => {
-        if (over.missingProduct)
-          throw Object.assign(new Error("fk"), { code: "P2003" });
+        if (over.fkField !== undefined)
+          throw Object.assign(new Error("fk"), {
+            code: "P2003",
+            meta: { field_name: over.fkField },
+          });
         const key = where.accountId_productId;
         const row = rows.find(
           (r) => r.accountId === key.accountId && r.productId === key.productId,
@@ -63,15 +71,14 @@ function setup(over: { litres?: unknown; missingProduct?: boolean } = {}) {
               r.accountId === where.accountId) &&
             (where.productId === undefined ||
               r.productId === where.productId) &&
-            (where.unsubscribeToken === undefined ||
-              r.unsubscribeToken === where.unsubscribeToken) &&
+            (where.id === undefined || r.id === where.id) &&
             r.unsubscribedAt === where.unsubscribedAt,
         );
         for (const r of hit) Object.assign(r, data);
         return { count: hit.length };
       },
       findUnique: async ({ where }: any) =>
-        rows.find((r) => r.unsubscribeToken === where.unsubscribeToken) ?? null,
+        rows.find((r) => r.id === where.id) ?? null,
     },
   };
   const access = {
@@ -81,6 +88,7 @@ function setup(over: { litres?: unknown; missingProduct?: boolean } = {}) {
     },
   };
   const service = new ReefClubRunOutService(access as never, database as never);
+  service.environment = ON;
   return { service, rows };
 }
 
@@ -104,10 +112,43 @@ describe("the two locks: the switch and the consent text", () => {
     });
   });
 
-  it("the unsubscribe key is 32 random bytes, base64url, never the same twice", () => {
-    const keys = new Set(Array.from({ length: 50 }, newUnsubscribeToken));
-    assert.equal(keys.size, 50);
-    for (const key of keys) assert.match(key, /^[A-Za-z0-9_-]{43}$/);
+  it("without a usable secret (missing, or under 32 characters) nothing is recorded: the third lock", () => {
+    for (const secret of [undefined, "", "rovid", "x".repeat(31)])
+      assert.deepEqual(
+        runOutAvailability(
+          {
+            REEFCLUB_RUNOUT_ENABLED: "true",
+            REEFCLUB_RUNOUT_UNSUBSCRIBE_SECRET: secret,
+          },
+          TEXT,
+        ),
+        { kind: "no-secret" },
+        String(secret),
+      );
+  });
+
+  it("the unsubscribe key is the row id and an HMAC of it: stable, secret-bound, and one id's key opens no other row", () => {
+    const key = unsubscribeKeyFor("r1", SECRET);
+    assert.match(key, /^r1\.[A-Za-z0-9_-]{43}$/);
+    assert.equal(unsubscribeKeyFor("r1", SECRET), key, "the same every time");
+    assert.notEqual(unsubscribeKeyFor("r2", SECRET), key);
+    assert.equal(reminderIdFromKey(key, SECRET), "r1");
+    // another secret does not accept it, a swapped id does not, nor does a cut or padded key
+    assert.equal(reminderIdFromKey(key, SECRET + "x"), null);
+    assert.equal(reminderIdFromKey(key.replace("r1.", "r2."), SECRET), null);
+    for (const bad of [
+      "",
+      "r1",
+      "r1.",
+      ".abc",
+      key.slice(0, -1),
+      key + "A",
+      `${key}.x`,
+      "r1.%%%",
+    ])
+      assert.equal(reminderIdFromKey(bad, SECRET), null, bad);
+    assert.throws(() => unsubscribeKeyFor("r1", "rovid"), /UNSUBSCRIBE_SECRET/);
+    assert.throws(() => unsubscribeKeyFor("a.b", SECRET), /reminder id/);
   });
 });
 
@@ -146,6 +187,21 @@ describe("turning it on", () => {
     );
     assert.equal(c.outcome === "REFUSED" && c.code, "CONSENT_TEXT_MISSING");
     assert.equal(today.rows.length, 0);
+    // switch and text given, but no unsubscribe secret: nothing is recorded either
+    const noSecret = setup();
+    noSecret.service.environment = { REEFCLUB_RUNOUT_ENABLED: "true" };
+    noSecret.service.availability = () =>
+      runOutAvailability(noSecret.service.environment, TEXT);
+    const d = await noSecret.service.enable(
+      "a1",
+      { productId: "p1", aquariumId: "q1" },
+      NOW,
+    );
+    assert.equal(
+      d.outcome === "REFUSED" && d.code,
+      "UNSUBSCRIBE_SECRET_MISSING",
+    );
+    assert.equal(noSecret.rows.length, 0);
   });
 
   it("records the time, the text version, the aquarium and a key; a second turn-on updates the same row and clears the unsubscribe", async () => {
@@ -162,6 +218,7 @@ describe("turning it on", () => {
     assert.equal(rows[0]!.consentAt, NOW);
     assert.equal(rows[0]!.aquariumId, "q1");
     assert.equal(rows[0]!.unsubscribedAt, null);
+    const firstKey = service.unsubscribeKeyFor(rows[0]!.id);
     await service.disable("a1", "p1", NOW);
     assert.ok(rows[0]!.unsubscribedAt);
     const later = new Date("2026-11-20T10:00:00Z");
@@ -174,10 +231,9 @@ describe("turning it on", () => {
     assert.equal(rows[0]!.unsubscribedAt, null);
     assert.equal(rows[0]!.consentAt, later);
     assert.equal(rows[0]!.aquariumId, "q2");
-    assert.notEqual(
-      again.outcome === "ENABLED" && again.unsubscribeToken,
-      first.outcome === "ENABLED" && first.unsubscribeToken,
-    );
+    assert.equal(again.outcome, "ENABLED");
+    // the key is the same after a turn-on again: every mail ever sent keeps a working link
+    assert.equal(service.unsubscribeKeyFor(rows[0]!.id), firstKey);
   });
 
   it("an aquarium with no litres is refused (the days are counted from them), a foreign one is the 404, a missing product a named refusal", async () => {
@@ -206,14 +262,43 @@ describe("turning it on", () => {
       ),
       /NOT_FOUND_404/,
     );
-    const missing = setup({ missingProduct: true });
-    missing.service.availability = () => runOutAvailability(ON, TEXT);
-    const m = await missing.service.enable(
-      "a1",
-      { productId: "nincs", aquariumId: "q1" },
-      NOW,
+    for (const field of [
+      "ReefClubRunOutReminder_productId_fkey (index)",
+      "productId",
+    ]) {
+      const missing = setup({ fkField: field });
+      missing.service.availability = () => runOutAvailability(ON, TEXT);
+      const m = await missing.service.enable(
+        "a1",
+        { productId: "nincs", aquariumId: "q1" },
+        NOW,
+      );
+      assert.equal(
+        m.outcome === "REFUSED" && m.code,
+        "PRODUCT_NOT_FOUND",
+        field,
+      );
+    }
+  });
+
+  it("a foreign key failure on the AQUARIUM is the 404 (not a missing product), and one it cannot place is rethrown, never labelled", async () => {
+    const gone = setup({
+      fkField: "ReefClubRunOutReminder_aquariumId_fkey (index)",
+    });
+    gone.service.availability = () => runOutAvailability(ON, TEXT);
+    await assert.rejects(
+      gone.service.enable("a1", { productId: "p1", aquariumId: "q1" }, NOW),
+      (error: Error) => error.name === "NotFoundException",
     );
-    assert.equal(m.outcome === "REFUSED" && m.code, "PRODUCT_NOT_FOUND");
+    for (const field of ["ReefClubRunOutReminder_accountId_fkey (index)", ""]) {
+      const odd = setup({ fkField: field });
+      odd.service.availability = () => runOutAvailability(ON, TEXT);
+      await assert.rejects(
+        odd.service.enable("a1", { productId: "p1", aquariumId: "q1" }, NOW),
+        /fk/,
+        field,
+      );
+    }
   });
 });
 
@@ -230,23 +315,61 @@ describe("turning it off and the unsubscribe link", () => {
       NOW,
     );
     assert.equal(on.outcome, "ENABLED");
-    const key = on.outcome === "ENABLED" ? on.unsubscribeToken : "";
-    assert.deepEqual(await service.unsubscribeByToken("rossz-kulcs", NOW), {
+    const id = on.outcome === "ENABLED" ? on.id : "";
+    const key = service.unsubscribeKeyFor(id);
+    // NOTHING IN THE ROW COULD UNSUBSCRIBE: the key is in no field, and the row's own id alone is not a key
+    assert.ok(!JSON.stringify(rows).includes(key));
+    assert.deepEqual(await service.unsubscribeByKey(id, NOW), {
       outcome: "UNKNOWN_KEY",
     });
-    assert.deepEqual(await service.unsubscribeByToken("", NOW), {
+    assert.equal(rows[0]!.unsubscribedAt, null);
+    assert.deepEqual(await service.unsubscribeByKey("rossz-kulcs", NOW), {
       outcome: "UNKNOWN_KEY",
     });
-    assert.deepEqual(await service.unsubscribeByToken(key, NOW), {
+    assert.deepEqual(await service.unsubscribeByKey("", NOW), {
+      outcome: "UNKNOWN_KEY",
+    });
+    assert.deepEqual(await service.unsubscribeByKey(key, NOW), {
       outcome: "UNSUBSCRIBED",
     });
     assert.equal(rows[0]!.unsubscribedAt, NOW);
     assert.deepEqual(
-      await service.unsubscribeByToken(key, new Date("2027-01-01")),
+      await service.unsubscribeByKey(key, new Date("2027-01-01")),
       { outcome: "ALREADY_UNSUBSCRIBED" },
     );
     // the first unsubscribe time stays
     assert.equal(rows[0]!.unsubscribedAt, NOW);
+  });
+
+  it("EVERY mail's link keeps working: an old key unsubscribes after a newer mail, and a missing secret is loud, not a silent unknown", async () => {
+    const { service } = setup();
+    service.availability = () => runOutAvailability(ON, TEXT);
+    const on = await service.enable(
+      "a1",
+      { productId: "p1", aquariumId: "q1" },
+      NOW,
+    );
+    const id = on.outcome === "ENABLED" ? on.id : "";
+    const older = service.unsubscribeKeyFor(id);
+    const newer = service.unsubscribeKeyFor(id);
+    assert.equal(older, newer);
+    assert.deepEqual(await service.unsubscribeByKey(older, NOW), {
+      outcome: "UNSUBSCRIBED",
+    });
+    service.environment = {};
+    assert.throws(() => service.unsubscribeKeyFor(id), /UNSUBSCRIBE_SECRET/);
+    await assert.rejects(
+      service.unsubscribeByKey(older, NOW),
+      /UNSUBSCRIBE_SECRET/,
+    );
+  });
+
+  it("a valid key of a row that is gone is UNKNOWN_KEY", async () => {
+    const { service } = setup();
+    assert.deepEqual(
+      await service.unsubscribeByKey(unsubscribeKeyFor("torolt", SECRET), NOW),
+      { outcome: "UNKNOWN_KEY" },
+    );
   });
 
   it("the placeholder version label exists and the text is still null (a text is given together with a new version)", () => {
