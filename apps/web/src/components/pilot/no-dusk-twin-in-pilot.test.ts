@@ -66,9 +66,6 @@ const GYEREK = new Map<string, string[]>([
     "components/aquariums/customer-picker.tsx",
     ["Button", "Card", "FormField", "Input"],
   ],
-  ["components/brands/catalog-actions-panel.tsx", ["Badge", "Button", "Card"]],
-  ["components/content/article-revision-diff.tsx", ["Button"]],
-  ["components/products/barcode-editor.tsx", ["Badge", "Button", "Input"]],
   [
     "components/products/product-basics-editor.tsx",
     ["Button", "Card", "FormField", "Input", "Select"],
@@ -79,8 +76,8 @@ const GYEREK = new Map<string, string[]>([
   ],
   ["components/service/service-document-gallery.tsx", ["Button", "Input"]],
 ]);
-const GYEREK_MERET = 7;
-const GYEREK_IKREK = 22;
+const GYEREK_MERET = 4;
+const GYEREK_IKREK = 15;
 
 function fajlok(mappa: string): string[] {
   return readdirSync(mappa).flatMap((nev) => {

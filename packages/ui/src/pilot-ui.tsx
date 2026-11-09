@@ -759,12 +759,16 @@ export function PilotSelect({
 export function PilotCard({
   children,
   className = "",
+  "aria-label": ariaLabel,
 }: {
   children: ReactNode;
   className?: string;
+  /** ADDITÍV (T1.3, a katalógus-műveletek): a kártya neve, ugyanaz, mint a dusk `Card`-on. */
+  "aria-label"?: string;
 }) {
   return (
     <div
+      aria-label={ariaLabel}
       className={`rounded-xl bg-white ring-1 ring-pilot-grey-200 ${className}`}
     >
       {children}
