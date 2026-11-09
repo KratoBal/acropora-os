@@ -58,6 +58,12 @@ GRANT EXECUTE ON FUNCTION "reefclub_redeem_link_code"(text, text) TO "reefclub_a
 GRANT SELECT, INSERT ON "ReefClubRecommendation" TO "reefclub_app";
 GRANT UPDATE ("status", "feedbackAt") ON "ReefClubRecommendation" TO "reefclub_app";
 GRANT SELECT, INSERT ON "ReefClubAdministeredDose" TO "reefclub_app";
+-- The per-product consent of the run-out reminder (V3.2, slice 2): the member turns it on (INSERT), off (the unsubscribe time) and
+-- on again (the same row's consent time, version, aquarium and a new unsubscribe key, the unsubscribe time cleared). The row is
+-- never deleted from here; the account's, the product's or the aquarium's deletion cascades with the owner's rights.
+GRANT SELECT, INSERT ON "ReefClubRunOutReminder" TO "reefclub_app";
+GRANT UPDATE ("aquariumId", "consentVersion", "consentAt", "unsubscribedAt", "unsubscribeToken", "updatedAt")
+  ON "ReefClubRunOutReminder" TO "reefclub_app";
 -- The projection of the product dose list (plan 6.2, slice 8, path B): the role may only READ it,
 -- and of the run record only what the staleness gate needs (not the error text). The OS (internal)
 -- process, the table owner, rebuilds both; the role has no INSERT, UPDATE or DELETE on them, so
@@ -134,6 +140,7 @@ ALTER TABLE "ReefClubCustomerLink" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "ReefClubLinkCode" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "ReefClubRecommendation" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "ReefClubAdministeredDose" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "ReefClubRunOutReminder" ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Aquarium_all_roles" ON "Aquarium";
 CREATE POLICY "Aquarium_all_roles" ON "Aquarium" AS PERMISSIVE FOR ALL TO PUBLIC
@@ -158,6 +165,9 @@ CREATE POLICY "ReefClubRecommendation_all_roles" ON "ReefClubRecommendation" AS 
   FOR ALL TO PUBLIC USING (true) WITH CHECK (true);
 DROP POLICY IF EXISTS "ReefClubAdministeredDose_all_roles" ON "ReefClubAdministeredDose";
 CREATE POLICY "ReefClubAdministeredDose_all_roles" ON "ReefClubAdministeredDose" AS PERMISSIVE
+  FOR ALL TO PUBLIC USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "ReefClubRunOutReminder_all_roles" ON "ReefClubRunOutReminder";
+CREATE POLICY "ReefClubRunOutReminder_all_roles" ON "ReefClubRunOutReminder" AS PERMISSIVE
   FOR ALL TO PUBLIC USING (true) WITH CHECK (true);
 
 -- The aquarium: only a ReefClub one (it has an owner account) is created, changed or deleted.

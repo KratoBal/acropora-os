@@ -33,6 +33,13 @@ export type RunOutResult =
 
 export const MAX_AQUARIUM_LITRES = 100_000;
 
+/**
+ * AN ALLOW-LIST, NOT A BLOCK-LIST (barracuda, #2299): only a millilitre dose is counted against a millilitre pack. `parseDose`
+ * gives "drop" | "ml" today; a unit it may learn later (a gram, a tablet) is refused by itself here instead of being counted as
+ * millilitres without a compiler warning.
+ */
+export const isMillilitreUnit = (unit: string): boolean => unit === "ml";
+
 export function runOutDays(input: {
   /** The canonical dose, or anything `parseDose` reads: "5 ml/100 L/day", "1 ml/100 L, 1-2/week". */
   dose: string;
@@ -42,11 +49,10 @@ export function runOutDays(input: {
 }): RunOutResult {
   const dose = parseDose(input.dose);
   if (!dose.ok) return { ok: false, reason: `dose: ${dose.reason}` };
-  if (dose.unit === "drop")
+  if (!isMillilitreUnit(dose.unit))
     return {
       ok: false,
-      reason:
-        "dose in drops: the volume of a drop is not known, so the pack cannot be counted in millilitres",
+      reason: `dose in ${dose.unit}: only a millilitre dose can be counted against the pack (the volume of a drop, or of any other unit, is not known)`,
     };
 
   const pack = parseQuantity(input.packageText, "volume");

@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { addDays, runOutDates, runOutDays } from "./run-out.js";
+import {
+  addDays,
+  isMillilitreUnit,
+  runOutDates,
+  runOutDays,
+} from "./run-out.js";
 
 /*
   WHAT TURNS THIS RED (ReefClub reminder V3.2, card cd94ed11): a pack's days counted from a dose in drops, a pack size that is
@@ -54,7 +59,22 @@ describe("how many days a pack lasts", () => {
   });
 
   it("a dose in drops is refused: a drop has no known volume", () => {
-    assert.match(refused("1 drop/100 L/day", "100 ml", 300), /drops/);
+    assert.match(refused("1 drop/100 L/day", "100 ml", 300), /^dose in drop/);
+  });
+
+  // barracuda, #2299: the unit check is an allow-list. `parseDose` gives "drop" | "ml" today, so a unit it may learn later is
+  // tested on the check itself: only exactly "ml" is counted.
+  it("only a millilitre unit is counted, whatever else a dose parser may learn to call a unit", () => {
+    assert.equal(isMillilitreUnit("ml"), true);
+    for (const unit of ["drop", "g", "tablet", "l", "ML", ""])
+      assert.equal(isMillilitreUnit(unit), false, unit);
+  });
+
+  // barracuda, #2299: a frequency that starts at 0 would make the longest case infinite; the dose parser refuses it already,
+  // and this pins that.
+  it("a frequency that starts at 0 is refused by the dose parser, so the longest case is never infinite", () => {
+    for (const dose of ["1 ml/100 L, 0-2/week", "1 ml/100 L, 0/week"])
+      assert.match(refused(dose, "250 ml", 200), /^dose:/, dose);
   });
 
   it("a pack size that is not one number and one volume unit is refused, a mass included", () => {
