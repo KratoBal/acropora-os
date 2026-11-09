@@ -83,6 +83,14 @@ describe("az akváriumhoz felvitt új ügyfél űrlapja", () => {
  * partner, például egy állatkert, nem lenne kiválasztható); ha a jelző értéke nem `true`.
  */
 describe("a meglévő ügyfél keresése az akvárium-lapon", () => {
+  // T1.3, 16. szelet: a keresőmező címkéje eddig nem mutatott a mezőre (se a dusk, se a pilot alakban), most igen
+  it("a keresőmező a címkéjével is megtalálható", () => {
+    render(<CustomerPicker token="t" selection={{}} onChange={vi.fn()} />);
+    expect(screen.getByLabelText("Ügyfél keresése")).toBe(
+      screen.getByPlaceholderText("Név, telefonszám, e-mail"),
+    );
+  });
+
   it("a partner-kötést viselő sort is kéri a vevő-listától", async () => {
     vi.useFakeTimers();
     try {
