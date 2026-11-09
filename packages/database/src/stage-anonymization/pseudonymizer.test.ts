@@ -12,6 +12,7 @@ import {
   findCollisions,
   ibanCheckDigits,
   MIN_KEY_BYTES,
+  normalizePhone,
   PSEUDONYMIZED_KINDS,
 } from "./pseudonymizer.js";
 import { FAMILY_NAMES, GIVEN_NAMES } from "./pseudonym-names.js";
@@ -60,7 +61,32 @@ const huBbanOk = (bban: string): boolean =>
 
 const REGISTRY_EXAMPLE = "HU42117730161111101800000000";
 
+/** The company tax core rule, written independently of the engine: weights 9-7-3-1-9-7-3 on the first seven, check = 10 - sum mod 10. */
+const coreOk = (core: string): boolean => {
+  if (!/^\d{8}$/.test(core)) return false;
+  const weights = [9, 7, 3, 1, 9, 7, 3];
+  let sum = 0;
+  for (let i = 0; i < 7; i += 1) sum += Number(core[i]) * weights[i]!;
+  return (10 - (sum % 10)) % 10 === Number(core[7]);
+};
+
+/** True when no letter of `real` is left at its place in `fake` and every letter there is a plain ASCII one. */
+const keepsNoLetter = (real: string, fake: string): boolean => {
+  if ([...fake].length !== [...real].length) return false;
+  return [...real].every(
+    (char, i) =>
+      !/\p{L}/u.test(char) || (fake[i] !== char && /[A-Za-z]/.test(fake[i]!)),
+  );
+};
+
 describe("the validators (calibration on the registry's published example)", () => {
+  it("the company tax core validator accepts a hand-computed vector and rejects it with one digit changed", () => {
+    // 1234567: 9+14+9+4+45+42+21 = 144, so the check digit is 10 - 4 = 6
+    assert.ok(coreOk("12345676"));
+    assert.ok(!coreOk("12345677"));
+    assert.ok(!coreOk("22345676"));
+  });
+
   it("accept the example, and reject it with one digit changed", () => {
     assert.ok(mod97Valid(REGISTRY_EXAMPLE));
     assert.ok(!mod97Valid("HU43" + REGISTRY_EXAMPLE.slice(4)));
@@ -172,9 +198,33 @@ describe("phone", () => {
     assert.equal(a.slice(2), b.slice(1 + 1)); // 36 30 xxxxxxx versus 06 30 xxxxxxx
   });
 
-  it("keeps a foreign country code and leaves a too-short number alone", () => {
+  it("keeps a foreign country code, and re-draws with another attempt", () => {
     assert.ok(engine.phone("+43 660 1234567").startsWith("+43 "));
-    assert.equal(engine.phone("12345"), "12345");
+    assert.notEqual(
+      engine.phone("+36 30 123 4567", 1),
+      engine.phone("+36 30 123 4567", 0),
+    );
+    assert.equal(
+      engine.phone("+36 30 123 4567", 1),
+      engine.phone("+36 30 123 4567", 1),
+    );
+  });
+
+  it("folds the writings of one number into one real value, and compares fakes by their national digits when asked", () => {
+    const writings = ["+36 30 123 4567", "06301234567", "0036 30 123 4567"];
+    assert.equal(new Set(writings.map(normalizePhone)).size, 1);
+    assert.deepEqual(
+      findCollisions(writings, (v) => engine.phone(v), normalizePhone),
+      [],
+    );
+    // two DIFFERENT real numbers whose fakes are the same number written two ways: the plain comparison misses it
+    const fake = (v: string) =>
+      v === "a" ? "+36 30 111 2222" : "06 30 111 2222";
+    assert.deepEqual(findCollisions(["a", "b"], fake), []);
+    assert.deepEqual(
+      findCollisions(["a", "b"], fake, undefined, normalizePhone),
+      [{ fake: "+36 30 111 2222", indexes: [0, 1] }],
+    );
   });
 });
 
@@ -185,6 +235,13 @@ describe("tax numbers", () => {
     assert.notEqual(fake.slice(0, 8), "12345678");
     assert.ok(fake[0] !== "0");
     assert.equal(engine.companyTaxNumber("12345678242").length, 11);
+    // the core's 8th digit is the 9-7-3-1-9-7-3 check digit of the first seven (measured on four public company numbers)
+    for (let i = 0; i < 2000; i += 1) {
+      const core = engine
+        .companyTaxNumber(`${10000000 + i * 4999}-2-44`)
+        .slice(0, 8);
+      assert.ok(coreOk(core), core);
+    }
   });
 
   it("gives an EU VAT number of Hungary the same core as the company tax number, and keeps another country's prefix", () => {
@@ -295,6 +352,81 @@ describe("street address and parcel number", () => {
     assert.equal(fake.length, "CL-AB123456789 x".length);
     assert.match(fake, /^[A-Z]{2}-[A-Z]{2}\d{9} [a-z]$/);
     assert.notEqual(fake, "CL-AB123456789 x");
+  });
+});
+
+describe("no real letter survives a fallback (barracuda, #2320)", () => {
+  const texts = [
+    "Kovács Éva",
+    "Kovács Péter titkárság",
+    "csak délután, Éva",
+    "lásd e-mail",
+    "Őrült Ürge Úr",
+    "12345",
+  ];
+
+  it("replaces a text in a phone field character for character, never returning it unchanged", () => {
+    for (const text of texts) {
+      const fake = engine.phone(text);
+      assert.notEqual(fake, text, text);
+      assert.ok(keepsNoLetter(text, fake), `${text} -> ${fake}`);
+    }
+    assert.equal(engine.phone(""), "");
+    assert.equal(engine.phone("   "), "   ");
+  });
+
+  it("replaces every letter, accented ones included, when a name sits in a bank, tax or parcel field", () => {
+    const calls: [string, (value: string) => string][] = [
+      ["account", (v) => engine.bankAccountNumber(v)],
+      ["iban", (v) => engine.iban(v)],
+      ["company tax", (v) => engine.companyTaxNumber(v)],
+      ["EU VAT", (v) => engine.euTaxNumber(v)],
+      ["personal tax id", (v) => engine.personalTaxId(v)],
+      ["parcel", (v) => engine.parcelNumber(v)],
+    ];
+    for (const [label, call] of calls) {
+      for (const text of texts) {
+        const fake = call(text);
+        assert.ok(
+          keepsNoLetter(text, fake) || label === "EU VAT",
+          `${label}: ${text} -> ${fake}`,
+        );
+      }
+    }
+    // the EU VAT keeps a two-letter country prefix on purpose: "Ko" of "Kovács Éva" is read as one, so only the rest is checked
+    assert.ok(
+      keepsNoLetter("vács Éva", engine.euTaxNumber("Kovács Éva").slice(2)),
+    );
+  });
+
+  it("replaces the leftover letters of a value that DOES parse (a note after the number)", () => {
+    for (const [label, real, fake] of [
+      [
+        "account",
+        "11773016-11111018 Kovács",
+        engine.bankAccountNumber("11773016-11111018 Kovács"),
+      ],
+      [
+        "company tax",
+        "12345678-2-42 Példa Kft",
+        engine.companyTaxNumber("12345678-2-42 Példa Kft"),
+      ],
+      [
+        "personal tax id",
+        "8123456789 Éva",
+        engine.personalTaxId("8123456789 Éva"),
+      ],
+      ["phone", "Éva 06 30 123 4567", engine.phone("Éva 06 30 123 4567")],
+    ] as const) {
+      assert.ok(keepsNoLetter(real, fake), `${label}: ${real} -> ${fake}`);
+    }
+  });
+
+  it("keeps the country prefix of a VAT number, and the digits of a replaced text differ from the originals", () => {
+    assert.ok(engine.euTaxNumber("HU12345678").startsWith("HU"));
+    assert.ok(engine.euTaxNumber("ATU12345678").startsWith("AT"));
+    const fake = engine.parcelNumber("AB123456789");
+    for (let i = 0; i < 11; i += 1) assert.notEqual(fake[i], "AB123456789"[i]);
   });
 });
 
