@@ -12,6 +12,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -58,9 +59,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [adapter]);
 
   // the account's theme once the session is known (null: not chosen, or signed out), and where a choice is saved
+  const themeAppliedFor = useRef<string | null | undefined>(undefined);
   useEffect(() => {
     if (isLoading) return;
-    applyServerThemePreference(session?.user.themePreference ?? null);
+    // once per account (barracuda, #2310): a later session object of the same person must not carry an older value
+    // back over a choice made since
+    const accountId = session?.user.id ?? null;
+    if (themeAppliedFor.current !== accountId) {
+      themeAppliedFor.current = accountId;
+      applyServerThemePreference(
+        session?.user.themePreference ?? null,
+        accountId,
+      );
+    }
     setThemePreferencePersistence(
       session
         ? (preference) =>

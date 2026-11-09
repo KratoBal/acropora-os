@@ -2,8 +2,6 @@
 
 import {
   Alert,
-  Button,
-  Input,
   PilotDataGrid,
   PilotDataItem,
   PilotPageHeader,
@@ -29,6 +27,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import {
   PilotBadge,
   PilotButton,
+  PilotInput,
   PilotThemeRoot,
 } from "@/components/pilot/pilot-ui";
 import { ProductAuthorityCard } from "@/components/products/product-authority-card";
@@ -345,13 +344,9 @@ function ProductExtensionEditor({
           <PilotBadge variant="blue">Saját adat</PilotBadge>
         </div>
         {canManage && !editing ? (
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => setEditing(true)}
-          >
+          <PilotButton variant="secondary" onClick={() => setEditing(true)}>
             Szerkesztés
-          </Button>
+          </PilotButton>
         ) : null}
       </div>
 
@@ -373,7 +368,7 @@ function ProductExtensionEditor({
             ].map(([field, label, placeholder]) => (
               <div key={field} className="text-xs font-medium text-dusk-600">
                 <span>{label}</span>
-                <Input
+                <PilotInput
                   aria-label={label}
                   className="mt-1"
                   inputMode={
@@ -384,8 +379,8 @@ function ProductExtensionEditor({
                   }
                   placeholder={placeholder}
                   value={form[field as keyof ExtensionForm] as string}
-                  onChange={(event) =>
-                    textField(field as keyof ExtensionForm, event.target.value)
+                  onChange={(value) =>
+                    textField(field as keyof ExtensionForm, value)
                   }
                 />
               </div>
@@ -400,27 +395,27 @@ function ProductExtensionEditor({
               <>
                 <div className="text-xs font-medium text-dusk-600">
                   <span>Utolsó beszerzési nettó ár</span>
-                  <Input
+                  <PilotInput
                     aria-label="Utolsó beszerzési nettó ár"
                     className="mt-1"
                     inputMode="decimal"
                     placeholder="0"
                     value={form.lastPurchaseNetPrice}
-                    onChange={(event) =>
-                      textField("lastPurchaseNetPrice", event.target.value)
+                    onChange={(value) =>
+                      textField("lastPurchaseNetPrice", value)
                     }
                   />
                 </div>
                 <div className="text-xs font-medium text-dusk-600">
                   <span>Utolsó beszerzési ÁFA (%)</span>
-                  <Input
+                  <PilotInput
                     aria-label="Utolsó beszerzési ÁFA"
                     className="mt-1"
                     inputMode="decimal"
                     placeholder="27"
                     value={form.lastPurchaseVatRate}
-                    onChange={(event) =>
-                      textField("lastPurchaseVatRate", event.target.value)
+                    onChange={(value) =>
+                      textField("lastPurchaseVatRate", value)
                     }
                   />
                 </div>
@@ -439,15 +434,13 @@ function ProductExtensionEditor({
                     ? ` (${form.defaultPurchaseCurrency})`
                     : ""}
                 </span>
-                <Input
+                <PilotInput
                   aria-label="Utolsó beszerzési ár"
                   className="mt-1"
                   inputMode="decimal"
                   placeholder="0"
                   value={form.lastPurchaseNetPrice}
-                  onChange={(event) =>
-                    textField("lastPurchaseNetPrice", event.target.value)
-                  }
+                  onChange={(value) => textField("lastPurchaseNetPrice", value)}
                 />
               </div>
             )}
@@ -701,13 +694,12 @@ export function ProductDetailPage({ productId }: { productId: string }) {
         title="A termék nem tölthető be"
         description={error}
         action={
-          <Button
+          <PilotButton
             variant="secondary"
-            size="sm"
             onClick={() => setRequestVersion((value) => value + 1)}
           >
             Újrapróbálás
-          </Button>
+          </PilotButton>
         }
       />
     );

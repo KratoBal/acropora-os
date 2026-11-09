@@ -109,24 +109,57 @@ describe("the theme store", () => {
     );
     warn.mockRestore();
   });
+
+  /*
+    A SHARED BROWSER (barracuda, #2310): person A's cached choice must not stay with person B whose account has none;
+    B's own cached choice does stay, and a choice is cached under the account that made it.
+  */
+  it("another account's cached value does not stay with an account that has none", () => {
+    window.localStorage.setItem("acropora-theme-preference", "dark");
+    window.localStorage.setItem("acropora-theme-preference-owner", "user-a");
+    holdThemeForServer();
+    const { result } = renderHook(() => useThemePreference());
+    act(() => applyServerThemePreference(null, "user-b"));
+    expect(result.current.preference).toBe("system");
+    expect(window.localStorage.getItem("acropora-theme-preference")).toBeNull();
+  });
+
+  it("the account's own cached value stays when the account has none", () => {
+    window.localStorage.setItem("acropora-theme-preference", "dark");
+    window.localStorage.setItem("acropora-theme-preference-owner", "user-b");
+    holdThemeForServer();
+    const { result } = renderHook(() => useThemePreference());
+    act(() => applyServerThemePreference(null, "user-b"));
+    expect(result.current.preference).toBe("dark");
+  });
+
+  it("a choice is cached under the signed-in account", () => {
+    holdThemeForServer();
+    renderHook(() => useThemePreference());
+    act(() => applyServerThemePreference("light", "user-a"));
+    act(() => chooseThemePreference("dark"));
+    expect(window.localStorage.getItem("acropora-theme-preference-owner")).toBe(
+      "user-a",
+    );
+  });
 });
 
 /*
   THE AUTH PROVIDER BINDS IT: the session's theme is applied once the session is known, and a choice is saved through
   `PUT /auth/me/theme` while signed in.
 */
-const adapter = vi.hoisted(() => ({ restore: vi.fn() }));
+const adapter = vi.hoisted(() => ({ restore: vi.fn(), login: vi.fn() }));
 vi.mock("@/lib/auth/production-auth", () => ({
   ProductionAuthAdapter: class {
     restoreSession = adapter.restore;
-    login = vi.fn();
+    login = adapter.login;
     logout = vi.fn();
   },
 }));
 vi.mock("@/lib/auth/development-auth", () => ({
   DevelopmentAuthAdapter: class {
     restoreSession = adapter.restore;
-    login = vi.fn();
+    login = adapter.login;
     logout = vi.fn();
   },
 }));
@@ -166,5 +199,48 @@ describe("the auth provider and the account's theme", () => {
     );
     act(() => chooseThemePreference("system"));
     expect(prefs.setTheme).toHaveBeenCalledWith("t1", "system");
+  });
+
+  it("a later session object of the same person does not bring the older value back over a choice", async () => {
+    const { AuthProvider, useAuth } =
+      await import("@/components/auth/auth-provider");
+    const session = {
+      id: "s1",
+      token: "t1",
+      expiresAt: "2099-01-01T00:00:00.000Z",
+      user: {
+        id: "u1",
+        email: "balazs@acropora.local",
+        displayName: "Balázs",
+        role: "OWNER",
+        customerId: null,
+        supplierId: null,
+        themePreference: "light",
+      },
+    } as Session;
+    adapter.restore.mockResolvedValue(session);
+    adapter.login.mockResolvedValue({ ...session, user: { ...session.user } });
+    prefs.setTheme.mockResolvedValue({ themePreference: "dark" });
+    function View() {
+      const { effectiveTheme } = useThemePreference();
+      const { login } = useAuth();
+      return (
+        <button type="button" onClick={() => void login("x")}>
+          {effectiveTheme}
+        </button>
+      );
+    }
+    render(
+      <AuthProvider>
+        <View />
+      </AuthProvider>,
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("button")).toHaveTextContent("light"),
+    );
+    act(() => chooseThemePreference("dark"));
+    await act(async () => screen.getByRole("button").click());
+    await waitFor(() => expect(adapter.login).toHaveBeenCalled());
+    expect(screen.getByRole("button")).toHaveTextContent("dark");
   });
 });
