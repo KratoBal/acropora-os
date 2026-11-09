@@ -369,7 +369,7 @@ describe("a clean run", () => {
     assert.ok(!names.includes("gateStructure"));
   });
 
-  it("fails the gate when a required format kind was never sampled (a source with no IBAN), and passes when the caller names a narrower list", async () => {
+  it("fails the gate when a required format kind was never sampled (a source with no IBAN), (the caller has no switch for it)", async () => {
     const noIban = (): Record<string, Row[]> => ({
       ...source(),
       Customer: source().Customer!.map((row) => ({ ...row, iban: null })),
@@ -382,12 +382,6 @@ describe("a clean run", () => {
       refused.report.sections.find((s) => s.name === "formats")!.problems,
       ["iban: no sample was given, so nothing was checked"],
     );
-    const narrowed = await runAnonymization(
-      options(new MemoryDatabase(NAME, noIban()), {
-        requiredFormatKinds: ["fakeEmail", "phone", "personalTaxId"],
-      }),
-    );
-    assert.equal(narrowed.swapAllowed, true);
   });
 
   it("requires a company tax number sample only when the kinds table makes company fakes (while the company data is kept, none exist)", async () => {

@@ -18,7 +18,7 @@ import {
   checkReferentialIntegrity,
   compareAggregates,
   compareRowCounts,
-  REQUIRED_FORMAT_KINDS,
+  CONDITIONAL_FORMAT_KINDS,
   residualSection,
   trialSection,
   type FormatKind,
@@ -95,12 +95,6 @@ export interface RunnerOptions {
   jsonOptions?: JsonScrubOptions;
   /** How many fakes per kind the format check samples. */
   sampleSize?: number;
-  /**
-   * The format kinds the gate requires a sample of. Absent: the gate's five, except `companyTaxNumber` while the kinds table keeps
-   * a company's tax number (the open company-data decision): no company fake is made then, so a sample of it cannot exist and
-   * requiring it would fail every run. A source without, say, any IBAN names a narrower list here, visibly.
-   */
-  requiredFormatKinds?: readonly FormatKind[];
   /** A test passes a stub engine; production leaves it out. */
   engine?: Pseudonymizer;
 }
@@ -269,14 +263,13 @@ export async function runAnonymization(
       await database.healthOk(),
     ),
     residualSection(residual, totalRows),
+    // fakeEmail, phone, iban and personalTaxId samples are always required (the caller cannot drop them); the company tax number
+    // only while the kinds table makes company fakes (it keeps them today, the open company-data decision: no fake, no sample)
     checkFormats(
       samples,
-      options.requiredFormatKinds ??
-        REQUIRED_FORMAT_KINDS.filter(
-          (kind) =>
-            kind !== "companyTaxNumber" ||
-            kinds.partyTaxNumber?.action === "pseudonymize",
-        ),
+      kinds.partyTaxNumber?.action === "pseudonymize"
+        ? CONDITIONAL_FORMAT_KINDS
+        : [],
     ),
     compareAggregates(
       "invariants",

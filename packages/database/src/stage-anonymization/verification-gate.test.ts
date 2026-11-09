@@ -5,6 +5,8 @@ import { createPseudonymizer } from "./pseudonymizer.js";
 import {
   buildGateReport,
   checkFormats,
+  ALWAYS_REQUIRED_FORMAT_KINDS,
+  CONDITIONAL_FORMAT_KINDS,
   REQUIRED_FORMAT_KINDS,
   REQUIRED_SECTIONS,
   checkReferentialIntegrity,
@@ -184,8 +186,10 @@ describe("(4) formats", () => {
       {
         iban: ["HU42117730161111101800000000", "nem-iban-kovacs-eva"],
         fakeEmail: [],
+        phone: [engine.phone("+36 30 123 4567")],
+        personalTaxId: [engine.personalTaxId("8123456789")],
       },
-      ["iban", "fakeEmail"],
+      [],
     );
     assert.deepEqual(section.problems, [
       "iban: 1 of 2 sampled value(s) fail the check",
@@ -209,11 +213,30 @@ describe("(4) formats", () => {
     assert.deepEqual(section.problems, [
       "phone: no sample was given, so nothing was checked",
       "iban: no sample was given, so nothing was checked",
+      "personalTaxId: no sample was given, so nothing was checked",
       "companyTaxNumber: no sample was given, so nothing was checked",
+    ]);
+  });
+
+  it("lets a caller drop ONLY the company tax number: an empty list turns the other four on, not the whole section green (barracuda, #2325 round 2)", () => {
+    assert.deepEqual(
+      [...ALWAYS_REQUIRED_FORMAT_KINDS],
+      ["fakeEmail", "phone", "iban", "personalTaxId"],
+    );
+    assert.deepEqual([...CONDITIONAL_FORMAT_KINDS], ["companyTaxNumber"]);
+    const section = checkFormats({}, []);
+    assert.equal(section.passed, false);
+    assert.deepEqual(section.problems, [
+      "fakeEmail: no sample was given, so nothing was checked",
+      "phone: no sample was given, so nothing was checked",
+      "iban: no sample was given, so nothing was checked",
       "personalTaxId: no sample was given, so nothing was checked",
     ]);
     // a kind outside the required list is still checked when it is given
-    assert.equal(checkFormats({ iban: ["nem-iban"] }, ["iban"]).passed, false);
+    assert.equal(
+      checkFormats({ companyTaxNumber: ["nem-adoszam"] }, []).passed,
+      false,
+    );
   });
 });
 

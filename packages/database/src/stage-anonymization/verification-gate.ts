@@ -171,22 +171,41 @@ export const FORMAT_VALIDATORS = {
 export type FormatKind = keyof typeof FORMAT_VALIDATORS;
 
 /**
- * The kinds the format check MUST have a sample of by default (barracuda, #2325): a kind the runner gave no sample of is a
- * problem, not a silent pass. A caller with a narrower source passes its own list, and that choice is visible at the call.
+ * The format kinds that are ALWAYS required, and cannot be left out by any caller (barracuda, #2325 round 2): a caller passing an
+ * empty list must not be able to turn the whole format section green. Every real source has e-mail addresses, phone numbers,
+ * IBANs and natural persons' tax ids, so a run with no sample of one of them is a run that did not look.
  */
-export const REQUIRED_FORMAT_KINDS: readonly FormatKind[] = [
+export const ALWAYS_REQUIRED_FORMAT_KINDS: readonly FormatKind[] = [
   "fakeEmail",
   "phone",
   "iban",
-  "companyTaxNumber",
   "personalTaxId",
 ];
 
-/** (4) Format validity of a sample of fakes, per kind: 100% must pass, and every required kind must be sampled. Reports counts only. */
+/**
+ * The kind that is required only when the caller says fakes of it exist: a company's tax number is KEPT while the company-data
+ * decision is open, so no company fake is made and no sample of it can exist. The default requires it; the runner drops it
+ * (and only it) while the kinds table keeps the company's tax number.
+ */
+export const CONDITIONAL_FORMAT_KINDS: readonly FormatKind[] = [
+  "companyTaxNumber",
+];
+
+/** All five kinds, the strictest list. */
+export const REQUIRED_FORMAT_KINDS: readonly FormatKind[] = [
+  ...ALWAYS_REQUIRED_FORMAT_KINDS,
+  ...CONDITIONAL_FORMAT_KINDS,
+];
+
+/**
+ * (4) Format validity of a sample of fakes, per kind: 100% must pass, and every required kind must be sampled. The four always
+ * required kinds are fixed; `conditionalKinds` (default: the company tax number) are the ones a caller may drop. Reports counts only.
+ */
 export function checkFormats(
   samples: Partial<Record<FormatKind, readonly string[]>>,
-  requiredKinds: readonly FormatKind[] = REQUIRED_FORMAT_KINDS,
+  conditionalKinds: readonly FormatKind[] = CONDITIONAL_FORMAT_KINDS,
 ): GateSection {
+  const requiredKinds = [...ALWAYS_REQUIRED_FORMAT_KINDS, ...conditionalKinds];
   const problems: string[] = [];
   for (const kind of requiredKinds) {
     if (samples[kind] === undefined)
