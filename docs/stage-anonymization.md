@@ -46,12 +46,41 @@ code touches a database yet: the runner works on an adapter (`RunnerDatabase`), 
   fakes should stay stable between copies.
 - The stage-only password hash (the hash of the password the owner hands out). Every password hash field gets it, except a
   `@unique` one (it gets a fresh token per row).
-- The adapter (S6): row streaming per model, a write-back by key, the orphan counts per foreign key, the business aggregates
-  and pairings, the migration state, the health check. Which aggregates and pairings to measure is the list of plan 3.5 points 5
-  and 6 (monthly order and invoice sums, stock balances, status distributions, the customer-order and customer-invoice pairings);
-  a measure that the transform changes on purpose (the sessions that are dropped) does not belong on it.
+- The adapter (`prisma-adapter.ts`, S6): row streaming per model, a write-back by key, the orphan counts per foreign key, the
+  business aggregates and pairings, the migration state, the health check, all as raw SQL over the Prisma client, read from the
+  schema text. It measures per enum column the row count per value, per numeric column the exact sum, and per relation the
+  non-null and distinct counts (columns the transform never touches); a model whose rows the transform drops is left out of the
+  aggregates, since its numbers move on purpose. Its database name is what the SERVER says (`current_database()`), and the runner's
+  guard refuses anything that is not a `stage_anon_tmp_...` name before a row is read.
+
+## The command (S6)
+
+```
+cd <the repository root>
+DATABASE_URL=<the temporary database> STAGE_ANON_PSEUDONYM_KEY=... STAGE_ANON_SCAN_KEY=... \
+STAGE_ANON_PASSWORD_HASH=... [STAGE_ANON_TRIAL_COMMAND='["program","arg"]'] \
+pnpm --filter @acropora/database stage:anonymize
+```
+
+It is run by the stage operator on the HOST, never by the API. Everything comes from the environment (no flags). The trial
+command is a JSON array run without a shell after the transform and BEFORE any swap, against an application instance bound to the
+temporary database. Its last stdout line must be `{"checks":[{"name":"...","passed":true}]}` and its exit code 0 (`parseTrialResult`);
+without one, or with no named check, the gate fails.
+The report is printed as JSON (table and column names and counts, never a value) and the exit code is 0 only when the gate passed,
+so the swap step can chain on it. The command never swaps and never dumps; those stay host steps. `runStageAnonymization`
+(`stage-run.ts`) is the same thing as a function: it checks the register against the schema first, hands the models that lose rows
+to the adapter, and calls the runner.
+
+The first run against a real Postgres is the CI integration spec
+(`apps/api/src/stage-anonymization/stage-anonymization.integration.spec.ts`): it creates a scratch `stage_anon_tmp_ci_...`
+database on the CI service, applies every real migration, seeds invented rows, runs the whole chain and drops the database.
 
 ## Decisions and limits, said plainly
+
+- **The visited-row count has one blind spot** (barracuda, #2328): `transformCoverage` compares the number of rows the transform
+  visited with the source count, so a row that is skipped AND a row that is read twice in the same model cancel out and the number
+  matches. Keyset paging (the adapter reads `WHERE (key) > (last key) ORDER BY key`, so a delete or an update between pages moves
+  nothing) rules out both; a different reader must do the same.
 
 - **Open decision (the owner): company names and tax numbers** are kept for now (`COMPANY_DATA_ACTION` in the register: one line
   changes it, and a company then gets a fake `... Kft.` name). A sole trader and a private person are always pseudonymized.
