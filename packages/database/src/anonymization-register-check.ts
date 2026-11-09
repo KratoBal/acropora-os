@@ -36,6 +36,8 @@ export interface SchemaField {
   /** The scalar or relation type without `[]` and `?`. */
   readonly type: string;
   readonly isList: boolean;
+  /** `true` for a `Type?` field (it may be NULL). */
+  readonly isOptional: boolean;
   /** Field attributes with any trailing `//` comment removed. */
   readonly attributes: string;
   readonly line: number;
@@ -111,12 +113,13 @@ export function parseSchemaModels(schema: string): SchemaModel[] {
         `schema.prisma:${lineNumber}: cannot read this line as a field: ${line}`,
       );
     }
-    const [, name = "", type = "", list, , attributes] = field;
+    const [, name = "", type = "", list, optional, attributes] = field;
     current.fields.push({
       model: current.name,
       name,
       type,
       isList: list === "[]",
+      isOptional: optional === "?",
       attributes: stripLineComment(attributes ?? ""),
       line: lineNumber,
     });
@@ -325,4 +328,42 @@ export function checkRegister(
   // A field that failed to resolve can be reached again through another
   // foreign key; report it once.
   return { decisions, inScopeFieldCount, problems: [...new Set(problems)] };
+}
+
+/**
+ * The in-scope fields that MUST hold a value (not `?`, not a list): a deleted field of this kind cannot be set to NULL, so its
+ * ROW is the thing to delete (the register's own wording for the `delete` action). Keyed `Model.field`, like the decisions.
+ */
+export function requiredFieldKeys(schema: string): Set<string> {
+  const required = new Set<string>();
+  for (const model of parseSchemaModels(schema)) {
+    for (const field of model.fields) {
+      if (isInScope(field) && !field.isOptional && !field.isList) {
+        required.add(`${model.name}.${field.name}`);
+      }
+    }
+  }
+  return required;
+}
+
+/** Every field of the schema (any type), keyed `Model.field`: what a row may carry. A key outside it is a typo or a stale column. */
+export function schemaFieldKeys(schema: string): Set<string> {
+  const keys = new Set<string>();
+  for (const model of parseSchemaModels(schema)) {
+    for (const field of model.fields) keys.add(`${model.name}.${field.name}`);
+  }
+  return keys;
+}
+
+/** The in-scope fields that carry their own `@unique`, keyed `Model.field`: a replacement for such a field must differ row by row. */
+export function uniqueFieldKeys(schema: string): Set<string> {
+  const unique = new Set<string>();
+  for (const model of parseSchemaModels(schema)) {
+    for (const field of model.fields) {
+      if (isInScope(field) && /(^|\s)@unique(\s|\(|$)/.test(field.attributes)) {
+        unique.add(`${model.name}.${field.name}`);
+      }
+    }
+  }
+  return unique;
 }
