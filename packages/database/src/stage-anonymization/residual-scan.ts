@@ -32,6 +32,7 @@ export type ResidualKind = "email" | "phone" | "taxNumber" | "iban" | "name";
 const TITLES = new Set(["dr", "id", "ifj", "ozv", "prof"]);
 const MIN_PHONE_DIGITS = 7;
 const MAX_NAME_WORDS = 5;
+const MAX_SUFFIX_LETTERS = 6;
 
 const nameWords = (value: string): string[] => {
   const words = foldText(value)
@@ -139,9 +140,10 @@ export function scanText(
   }
 
   for (const match of text.matchAll(
-    /\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,4})?\b/g,
+    /\b[A-Za-z]{2}\d{2}(?: ?[A-Za-z0-9]{4}){2,7}(?: ?[A-Za-z0-9]{1,4})?\b/g,
   )) {
-    if (dictionary.has("iban", match[0].replace(/\s+/g, ""))) found.add("iban");
+    if (dictionary.has("iban", match[0].replace(/\s+/g, "").toUpperCase()))
+      found.add("iban");
   }
 
   // a phone number: a digit run with the usual separators, compared by its national digits
@@ -152,6 +154,26 @@ export function scanText(
       dictionary.has("phone", national)
     )
       found.add("phone");
+    // a number followed by more numbers ("30 123 4567 2024") runs into ONE greedy match whose national digits are shifted: look
+    // at every window of 7 to 11 digits inside the run as well (the prefix forms "06..." and "36..." are 11 digits)
+    const runDigits = digitsOf(match[0]);
+    for (let start = 0; start < runDigits.length; start += 1) {
+      for (let len = MIN_PHONE_DIGITS; len <= 11; len += 1) {
+        if (start + len > runDigits.length) break;
+        const raw = runDigits.slice(start, start + len);
+        // the digits as written, without the country or trunk prefix the way `normalizePhone` strips it (a "+" is not in a digit window)
+        for (const window of [
+          normalizePhone(raw),
+          raw.startsWith("36") ? raw.slice(2) : raw,
+        ]) {
+          if (
+            window.length >= MIN_PHONE_DIGITS &&
+            dictionary.has("phone", window)
+          )
+            found.add("phone");
+        }
+      }
+    }
     // a tax number written with its dashes, or a run of digits that is one
     const digits = digitsOf(match[0]);
     if (
@@ -184,6 +206,19 @@ export function scanText(
         break;
       words.push(tokens[i + len - 1]!.word);
       if (dictionary.has("name", words.join(" "))) found.add("name");
+      // a Hungarian suffix on the last word ("Kovács Annának"): the same cut the scrubber makes, up to 6 letters
+      const last = words[words.length - 1]!;
+      for (
+        let cut = 1;
+        cut <= MAX_SUFFIX_LETTERS && last.length - cut >= 2;
+        cut += 1
+      ) {
+        const trimmed = [
+          ...words.slice(0, -1),
+          last.slice(0, last.length - cut),
+        ];
+        if (dictionary.has("name", trimmed.join(" "))) found.add("name");
+      }
     }
   }
   return [...found];

@@ -263,7 +263,7 @@ describe("a kettevagott valtozo", () => {
 });
 
 describe("a link-fajta valtozok", () => {
-  it("pontosan az ot webcim-valtozo link fajtaju", () => {
+  it("pontosan a het webcim-valtozo link fajtaju", () => {
     assert.deepEqual(
       MAIL_TEMPLATE_VARIABLES.filter((v) => v.kind === "link").map(
         (v) => v.name,
@@ -273,6 +273,8 @@ describe("a link-fajta valtozok", () => {
         "munkalap_linkje",
         "munkalap_belso_linkje",
         "tracking_link",
+        "hirlevel_megerosito_link",
+        "hirlevel_leiratkozo_link",
         "fizetesi_link",
       ],
     );
