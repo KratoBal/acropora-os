@@ -72,19 +72,21 @@ const isCompanyRow = (parent: Readonly<Record<string, unknown>>): boolean =>
       COMPANY_TYPES.has(foldText(value)),
   );
 
-const DELETE_KEYS = new Set([
-  "password",
-  "passwordhash",
-  "token",
-  "accesstoken",
-  "refreshtoken",
-  "secret",
-  "apikey",
-  "authorization",
-  "ip",
-  "ipaddress",
-  "clientip",
-]);
+/**
+ * CREDENTIAL AND NETWORK KEYS ARE DELETED BY A PART OF THE NAME, NOT BY AN EXACT NAME (barracuda, #2322). The keys of real JSON are
+ * varied (resetToken, sessionToken, clientSecret, x-api-key, setCookie, privateKey, refresh_token_hash, x-forwarded-for ...); the
+ * key is normalized (case, accents, hyphens and underscores gone) and deleted when it CONTAINS one of these parts. A live token or
+ * secret that reaches the stage is usable against production, and the stage is open to more people than production is, so the
+ * rule errs on the side of deleting: an innocent "tokenCount" goes too, a leaked key does not stay.
+ */
+export const CREDENTIAL_KEY =
+  /(password|passwd|passphrase|token|secret|apikey|authorization|cookie|signature|privatekey|credential|bearer|jwt)/;
+export const NETWORK_KEY =
+  /(^ip$|ipaddr|clientip|remoteaddr|forwardedfor|realip|ipv4|ipv6)/;
+
+/** Whether a NORMALIZED key (see `normalizeKey`) names a credential or a network address. */
+export const isDeletedKey = (normalizedKey: string): boolean =>
+  CREDENTIAL_KEY.test(normalizedKey) || NETWORK_KEY.test(normalizedKey);
 
 export function createJsonScrubber(
   engine: Pseudonymizer,
@@ -109,7 +111,10 @@ export function createJsonScrubber(
 
   const rules: JsonKeyRule[] = [
     ...(options.extraRules ?? []),
-    { test: (k) => /email/.test(k), apply: (v) => engine.email(v) },
+    {
+      test: (k) => /(^email$|email$|^emailaddress$|emailaddr)/.test(k),
+      apply: (v) => engine.email(v),
+    },
     {
       test: (k) =>
         /^(phone|tel|telefon|mobile|mobil|telefonszam|phonenumber|mobilephone|mobilszam)$/.test(
@@ -191,7 +196,7 @@ export function createJsonScrubber(
       const out: Record<string, unknown> = {};
       for (const [rawKey, child] of Object.entries(object)) {
         const key = normalizeKey(rawKey);
-        if (DELETE_KEYS.has(key)) continue;
+        if (isDeletedKey(key)) continue;
         if (typeof child === "string" && child !== "") {
           const context: JsonRuleContext = { ancestors, parent: object };
           const rule = rules.find((r) => r.test(key, context));
