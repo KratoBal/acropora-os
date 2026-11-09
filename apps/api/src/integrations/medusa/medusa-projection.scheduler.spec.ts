@@ -1674,3 +1674,118 @@ describe("MedusaProjectionScheduler kezdolap kore", () => {
     );
   });
 });
+
+describe("a vetítő sorának állapota kívülről (ca422e92, acrobot 45402)", () => {
+  /**
+   * MI PIROSÍT: a kör számai nem a kör döntését mondják (egy termék két
+   * forrásnál is számít, vagy a vágás utáni szám áll a jelöltek helyén); az
+   * inaktív esedékesek összes száma helyett a körbe vágott szám jön; a kiéheztetés
+   * (az általános sor kitölti a keretet, az inaktív 0) nem látszik; egy dobó kör
+   * befejezetlennek marad; az állapot élő hivatkozás, amit a hívó átírhat.
+   */
+  const korabban = new Date(MOST.getTime() - 60_000);
+  const kesz = (
+    termekek: Record<string, unknown>[],
+    kotesek: { entityId: string; lastSyncedAt: Date | null }[],
+    over: Partial<{ batch: string; run: ProjectionRunner }> = {},
+  ) => {
+    const { db } = adatbazis(termekek, kotesek);
+    csakAKertAllapot(db);
+    return new MedusaProjectionScheduler({
+      db,
+      runProjection: over.run ?? futtato(0).run,
+      runPricing: arFuttato().run,
+      environment: {
+        ...BEKAPCSOLVA,
+        ...(over.batch
+          ? { MEDUSA_PROJECTION_SCHEDULE_BATCH_SIZE: over.batch }
+          : {}),
+      } as NodeJS.ProcessEnv,
+      logger: naplo().logger,
+      now: () => new Date(MOST.getTime() + 1_000),
+    });
+  };
+
+  it("kör előtt: a beállítás látszik, az utolsó kör null", () => {
+    const allapot = kesz([], []).allapot();
+    assert.equal(allapot.enabled, true);
+    assert.equal(allapot.lastRound, null);
+    assert.equal(typeof allapot.batchSize, "number");
+    assert.equal(typeof allapot.intervalMinutes, "number");
+  });
+
+  it("egy kör után forrásonként a jelöltek és a körbe vittek, és az összes inaktív esedékes", async () => {
+    const inaktiv = ["i1", "i2", "i3", "i4"];
+    const scheduler = kesz(
+      [
+        termek({ id: "g1", updatedAt: MOST }),
+        ...inaktiv.map((id) =>
+          termek({ id, isActive: false, updatedAt: MOST }),
+        ),
+      ],
+      ["g1", ...inaktiv].map((id) => ({
+        entityId: id,
+        lastSyncedAt: korabban,
+      })),
+      { batch: "3" },
+    );
+    await scheduler.runOnce();
+    const kor = scheduler.allapot().lastRound!;
+    assert.equal(kor.outcome, "APPLIED");
+    assert.ok(kor.finishedAt);
+    assert.deepEqual(kor.candidates, {
+      sale: 0,
+      fact: 0,
+      brand: 0,
+      general: 1,
+      inactive: 3,
+    });
+    assert.deepEqual(kor.taken, {
+      sale: 0,
+      fact: 0,
+      brand: 0,
+      general: 1,
+      inactive: 2,
+    });
+    // a vágás előtt: mind a négy esedékes, nem csak a körbe vágott három
+    assert.equal(kor.inactiveDueTotal, 4);
+  });
+
+  it("a kiéheztetés látszik: ha az általános sor kitölti a keretet, az inaktív 0, az esedékes áll", async () => {
+    const scheduler = kesz(
+      [
+        termek({ id: "g1", updatedAt: MOST }),
+        termek({ id: "g2", updatedAt: MOST }),
+        termek({ id: "i1", isActive: false, updatedAt: MOST }),
+      ],
+      ["g1", "g2", "i1"].map((id) => ({
+        entityId: id,
+        lastSyncedAt: korabban,
+      })),
+      { batch: "2" },
+    );
+    await scheduler.runOnce();
+    const kor = scheduler.allapot().lastRound!;
+    assert.equal(kor.taken!.general, 2);
+    assert.equal(kor.taken!.inactive, 0);
+    assert.equal(kor.inactiveDueTotal, 1);
+  });
+
+  it("egy dobó kör ERROR-ral és befejezési idővel áll; az állapot másolat", async () => {
+    const scheduler = kesz(
+      [termek({ id: "g1", updatedAt: MOST })],
+      [{ entityId: "g1", lastSyncedAt: korabban }],
+      {
+        run: async () => {
+          throw new Error("BOOM");
+        },
+      },
+    );
+    await assert.rejects(scheduler.runOnce());
+    const allapot = scheduler.allapot();
+    assert.equal(allapot.lastRound!.outcome, "ERROR");
+    assert.ok(allapot.lastRound!.finishedAt);
+    allapot.lastRound!.taken!.general = 99;
+    assert.equal(scheduler.allapot().lastRound!.taken!.general, 1);
+  });
+});

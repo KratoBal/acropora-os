@@ -173,6 +173,48 @@ export type ProjectionRunner = (
 
 export type ProjectionRunOutcome = "APPLIED" | "SKIPPED" | "FAILED";
 
+/** A kör esedékes-forrásai, a sorrendjükben: egy termék az ELSŐ forrásánál számít. */
+export const PROJECTION_ROUND_SOURCES = [
+  "sale",
+  "fact",
+  "brand",
+  "general",
+  "inactive",
+] as const;
+export type ProjectionRoundSource = (typeof PROJECTION_ROUND_SOURCES)[number];
+
+/**
+ * A VETÍTŐ SORA KÍVÜLRŐL (ca422e92, acrobot 45402): a teszt API naplója és
+ * környezete nem olvasható a flottának, tehát az, hogy egy termékcsoport
+ * sorra kerül-e, vagy egy másik forrás minden kört kitölt (kiéheztetés), csak
+ * innen dönthető el. Csak számok és időpontok: termék-azonosító, név és titok
+ * nincs benne, és a lekérdezése nem dolgozik (a kör maga írja, memóriába).
+ *
+ *   candidates        forrásonként a jelöltek száma, a kör vágása ELŐTT (az
+ *                     `general` legfeljebb a keret, mert a forrása is vág)
+ *   taken             forrásonként, hány ment ebbe a körbe (az első forrásánál)
+ *   inactiveDueTotal  az összes esedékes inaktivált kötött termék, a vágás előtt
+ */
+export type ProjectionRoundStatus = {
+  enabled: boolean;
+  batchSize: number;
+  intervalMinutes: number;
+  /** a folyamat (és az időzítő) indulása: újraindításkor ez is újraindul */
+  schedulerStartedAt: string | null;
+  nextRoundAt: string | null;
+  lastRound: {
+    startedAt: string;
+    finishedAt: string | null;
+    outcome: ProjectionRunOutcome | "ERROR" | null;
+    candidates: Record<ProjectionRoundSource, number> | null;
+    taken: Record<ProjectionRoundSource, number> | null;
+    inactiveDueTotal: number | null;
+    priceRetry: number | null;
+  } | null;
+};
+
+type KorAllapot = NonNullable<ProjectionRoundStatus["lastRound"]>;
+
 /**
  * A NAPLO IS PARAMETER, UGYANABBOL AZ OKBOL, MINT AZ ADATBAZIS ES A FUTTATO:
  * enelkul az, HOGY MIT IR KI, nem merheto -- es epp ez a resz letezik azert,
@@ -225,6 +267,11 @@ export class MedusaProjectionScheduler
   private readonly logger = new Logger(MedusaProjectionScheduler.name);
   private timer: NodeJS.Timeout | null = null;
   private stopped = false;
+  private indulas: Date | null = null;
+  private kovetkezoKor: Date | null = null;
+  private utolsoKor: KorAllapot | null = null;
+  /** Az utolsó `inaktivaltAzonositok` hívás összes esedékese, a vágás előtt. */
+  private inaktivEsedekesOsszesen = 0;
 
   private readonly db: ProjectionSchedulerDatabase;
   private readonly runProjection: ProjectionRunner;
@@ -319,7 +366,28 @@ export class MedusaProjectionScheduler
       `Medusa projection scheduler enabled (${config.intervalMs / 60_000} min, ` +
         `batch ${config.batchSize})`,
     );
+    this.indulas = this.now();
     this.schedule(config.startupDelayMs, config.intervalMs);
+  }
+
+  /** A sor állapota a `GET /health/medusa-projection` számára: másolat, nem élő hivatkozás. */
+  allapot(): ProjectionRoundStatus {
+    const config = medusaProjectionScheduleConfig(this.environment);
+    const kor = this.utolsoKor;
+    return {
+      enabled: config.enabled,
+      batchSize: config.batchSize,
+      intervalMinutes: config.intervalMs / 60_000,
+      schedulerStartedAt: this.indulas?.toISOString() ?? null,
+      nextRoundAt: this.kovetkezoKor?.toISOString() ?? null,
+      lastRound: kor
+        ? {
+            ...kor,
+            candidates: kor.candidates && { ...kor.candidates },
+            taken: kor.taken && { ...kor.taken },
+          }
+        : null,
+    };
   }
 
   onModuleDestroy(): void {
@@ -337,6 +405,28 @@ export class MedusaProjectionScheduler
    * az utemezo dolgozik-e egyaltalan.
    */
   async runOnce(): Promise<ProjectionRunOutcome> {
+    const kor: KorAllapot = {
+      startedAt: this.now().toISOString(),
+      finishedAt: null,
+      outcome: null,
+      candidates: null,
+      taken: null,
+      inactiveDueTotal: null,
+      priceRetry: null,
+    };
+    this.utolsoKor = kor;
+    try {
+      kor.outcome = await this.kor(kor);
+      return kor.outcome;
+    } catch (error) {
+      kor.outcome = "ERROR";
+      throw error;
+    } finally {
+      kor.finishedAt = this.now().toISOString();
+    }
+  }
+
+  private async kor(allapot: KorAllapot): Promise<ProjectionRunOutcome> {
     const config = medusaProjectionScheduleConfig(this.environment);
     const limit = config.batchSize || DEFAULT_BATCH;
     /*
@@ -368,6 +458,24 @@ export class MedusaProjectionScheduler
     this.inaktivEltolas += esedekes.filter(
       (id) => inaktivalt.includes(id) && !elotte.has(id),
     ).length;
+    const forrasok: Record<ProjectionRoundSource, string[]> = {
+      sale: akcio,
+      fact: teny,
+      brand: marka,
+      general: altalanos,
+      inactive: inaktivalt,
+    };
+    allapot.candidates = {} as Record<ProjectionRoundSource, number>;
+    allapot.taken = {} as Record<ProjectionRoundSource, number>;
+    const szamolt = new Set<string>();
+    for (const forras of PROJECTION_ROUND_SOURCES) {
+      allapot.candidates[forras] = forrasok[forras].length;
+      allapot.taken[forras] = forrasok[forras].filter(
+        (id) => esedekes.includes(id) && !szamolt.has(id),
+      ).length;
+      for (const id of forrasok[forras]) szamolt.add(id);
+    }
+    allapot.inactiveDueTotal = this.inaktivEsedekesOsszesen;
     /*
       AZ ELBUKOTT ÁR ESEDÉKES MARAD (329f8a2e, murena tény-kommentje, acrobot
       27698). A termék-kötés `lastSyncedAt`-jét csak a termék-vetítés írja, tehát
@@ -382,6 +490,7 @@ export class MedusaProjectionScheduler
         limit,
       )
     ).filter((id) => !esedekes.includes(id));
+    allapot.priceRetry = arUjra.length;
     if (!esedekes.length && !arUjra.length) {
       this.uresKorNaploja();
       return "SKIPPED";
@@ -762,6 +871,7 @@ export class MedusaProjectionScheduler
       orderBy: { entityId: "asc" },
       select: { entityId: true, lastSyncedAt: true },
     });
+    this.inaktivEsedekesOsszesen = 0;
     if (!kotesek.length) return [];
     /*
       SZELETENKÉNT (barracuda, #2332 review, 1. kérdés): egy felső határ nélküli
@@ -810,6 +920,7 @@ export class MedusaProjectionScheduler
       a mögöttük állók soha nem kerülnének sorra. A kezdet annyit lép, ahányat a
       kör ténylegesen vitt (`runOnce`), tehát a sor körbejár, és mindenki sorra kerül.
     */
+    this.inaktivEsedekesOsszesen = esedekes.length;
     if (!esedekes.length) return [];
     const kezdet = this.inaktivEltolas % esedekes.length;
     this.inaktivEltolas = kezdet;
@@ -964,7 +1075,9 @@ export class MedusaProjectionScheduler
   }
 
   private schedule(delayMs: number, intervalMs: number): void {
+    this.kovetkezoKor = new Date(this.now().getTime() + delayMs);
     this.timer = setTimeout(() => {
+      this.kovetkezoKor = null;
       void this.runOnce()
         .then((kimenetel) => {
           if (kimenetel !== "SKIPPED")
