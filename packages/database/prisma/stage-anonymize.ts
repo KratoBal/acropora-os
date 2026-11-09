@@ -42,7 +42,8 @@ function readEnvironment(): Record<(typeof REQUIRED)[number], string> {
 }
 
 /** The trial command as an argument array: no shell, so nothing in it is interpreted. */
-function trialFromEnvironment(): (() => Promise<{ passed: boolean }>) | undefined {
+function trialFromEnvironment():
+  (() => Promise<{ passed: boolean }>) | undefined {
   const raw = process.env.STAGE_ANON_TRIAL_COMMAND;
   if (!raw) return undefined;
   const parsed: unknown = JSON.parse(raw);

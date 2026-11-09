@@ -1,6 +1,6 @@
 import {
   ANONYMIZATION_KINDS,
-  type AnonymizationRegister,
+  type AnonymizationKind,
 } from "../anonymization-register.js";
 import {
   checkRegister,
@@ -8,8 +8,12 @@ import {
   requiredFieldKeys,
   schemaFieldKeys,
   uniqueFieldKeys,
+  type AnonymizationRegister,
 } from "../anonymization-register-check.js";
-import { createPrismaRunnerDatabase, type SqlClient } from "./prisma-adapter.js";
+import {
+  createPrismaRunnerDatabase,
+  type SqlClient,
+} from "./prisma-adapter.js";
 import { runAnonymization, type RunnerResult } from "./runner.js";
 
 /**
@@ -49,7 +53,9 @@ export async function runStageAnonymization(
   const requiredFields = requiredFieldKeys(schema);
   const excludeModels = new Set<string>();
   for (const [key, decision] of check.decisions) {
-    const kind = ANONYMIZATION_KINDS[decision.kind as keyof typeof ANONYMIZATION_KINDS];
+    const kind = (
+      ANONYMIZATION_KINDS as Readonly<Record<string, AnonymizationKind>>
+    )[decision.kind];
     const deletes =
       kind !== undefined &&
       (kind.action === "delete" || kind.naturalPersonRows === "delete");
