@@ -26,7 +26,6 @@ import {
   FILTER_CATEGORIES,
   INVOICE_SOURCE_LABELS,
   chargeAmountText,
-  formatAmount,
   formatDay,
   formatMonth,
   type BankAccountOption,
