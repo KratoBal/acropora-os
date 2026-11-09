@@ -79,6 +79,76 @@ describe("renderWebshopMail", () => {
     assert.doesNotMatch(mail.html, /ACROPORABLOCK|\{\{/);
   });
 
+  /*
+    WHAT TURNS THIS RED (commerce V0.3, the withdrawal acknowledgement; the wording is a DRAFT on Balázs's list). The mail
+    not carrying the order, the declaration's reference, the name it was signed with or the day it came in; the name or
+    the reference not escaped (a customer's name is typed text); a deadline, a statutory sentence or an outcome (refund,
+    exchange) creeping into the text in either language (those are the owner's and the lawyer's words); the English
+    twin missing; the facts parser accepting a declaration with no lines, a bad time or a non-text line id.
+  */
+  it("the withdrawal acknowledgement: the order, the reference, the name and the day; no deadline, no outcome, no statutory wording", () => {
+    const facts: WebshopMailFacts = {
+      template: "withdrawal-received",
+      display_id: 1042,
+      withdrawal_id: "ordwd_01ABC",
+      declared_name: "Kiss <b>Anna</b>",
+      item_ids: ["item_1"],
+      received_at: "2026-11-09T12:00:00.000Z",
+    };
+    const hu = renderWebshopMail(
+      template("WEBSHOP_WITHDRAWAL_RECEIVED"),
+      facts,
+    );
+    assert.equal(hu.ok, true);
+    if (!hu.ok) return;
+    assert.equal(
+      hu.subject,
+      "Megkaptuk az elállási nyilatkozatodat (ordwd_01ABC)",
+    );
+    assert.match(hu.text, /a #1042 rendelésről\./);
+    assert.match(hu.text, /azonosítója: ordwd_01ABC\./);
+    assert.match(hu.text, /Kiss <b>Anna<\/b> nevével/);
+    assert.match(hu.html, /Kiss &lt;b&gt;Anna&lt;\/b&gt;/);
+    assert.doesNotMatch(hu.html, /<b>Anna/);
+    assert.match(hu.text, /2026\. november 9\./);
+    const en = renderWebshopMail(template("WEBSHOP_WITHDRAWAL_RECEIVED_EN"), {
+      ...facts,
+      locale: "en",
+    });
+    assert.equal(en.ok, true);
+    if (!en.ok) return;
+    assert.equal(
+      en.subject,
+      "We have received your withdrawal declaration (ordwd_01ABC)",
+    );
+    assert.match(en.text, /about order #1042\./);
+    assert.match(en.text, /reference is ordwd_01ABC\./);
+    assert.match(en.text, /9 November 2026/);
+    // no deadline, no promised outcome, no statutory sentence in either language
+    for (const text of [hu.text, en.text])
+      assert.doesNotMatch(
+        text.toLowerCase(),
+        /\d+\s*(nap|óra|munkanap|day|hour)|visszat[ée]r|refund|csere|replace|korm\.|45\/2014|14 nap/,
+      );
+    assert.equal(
+      WEBSHOP_MAIL_KEYS["withdrawal-received"],
+      "WEBSHOP_WITHDRAWAL_RECEIVED",
+    );
+  });
+
+  it("the withdrawal facts: the sample parses, and a declaration with no lines, a bad time or a non-text line id is refused", () => {
+    const sample = WEBSHOP_MAIL_SAMPLE_FACTS["withdrawal-received"];
+    assert.equal(parseWebshopMailFacts("withdrawal-received", sample).ok, true);
+    const bad = (over: Record<string, unknown>) =>
+      parseWebshopMailFacts("withdrawal-received", { ...sample, ...over });
+    assert.equal(bad({ item_ids: [] }).ok, false);
+    assert.equal(bad({ item_ids: [1] }).ok, false);
+    assert.equal(bad({ item_ids: [""] }).ok, false);
+    assert.equal(bad({ received_at: "nem ido" }).ok, false);
+    assert.equal(bad({ declared_name: "" }).ok, false);
+    assert.equal(bad({ withdrawal_id: "" }).ok, false);
+  });
+
   it("the problem report acknowledgement: the order, the case reference, a colleague will be in touch, no promise", () => {
     const facts: WebshopMailFacts = {
       template: "problem-report-received",
