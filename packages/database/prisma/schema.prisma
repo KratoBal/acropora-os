@@ -3107,6 +3107,7 @@ model Customer {
   mergedFrom   Customer[] @relation("CustomerMerge")
   /// A régi azonosítók, hogy egy régi VEVO- vagy PARTNER- szám továbbra is megtalálja a cég egyetlen sorát.
   aliases           CustomerAlias[]
+  externalAccounts  CustomerExternalAccount[]
   mergeLogsAsKept   CustomerMergeLog[] @relation("CustomerMergeKept")
   mergeLogsAsMerged CustomerMergeLog[] @relation("CustomerMergeMerged")
 
@@ -3163,6 +3164,32 @@ enum CustomerAliasKind {
   CUSTOMER_NUMBER
   /// a megszűnt sor `Customer.id`-ja
   ROW_ID
+}
+
+/// EGY PARTNERTÖRZS, 3.4: EGY `Customer` SOR TÖBB KÜLSŐ (UNAS) FIÓKJA. Két munkatárs ugyanannak a cégnek külön UNAS-fiókból
+/// rendel, ma ez két vevő-sor; összevonás után az EGY megmaradó soron kell, hogy a második fiók is megtalálja a céget.
+///
+/// MIÉRT KÜLÖN TÁBLA, ÉS NEM AZ `ExternalReference` EGYEDISÉGÉNEK ENYHÍTÉSE (mérve 2026-11-09, a #2180 verify-db-je): a
+/// `(system, entityType, entityId)` egyedi indexet részlegessé tenni (`WHERE "entityType" <> 'Customer'`) MINDEN
+/// `externalReference.upsert()` hívást eltör, mert a Prisma natív `INSERT .. ON CONFLICT (system, entityType, entityId)`
+/// alakot küld, ahhoz pedig a részleges index nem rendelhető (Postgres 42P10): a Medusa készlet-, ár- és méret-szinkron és a
+/// UNAS-import is ezt hívja, minden entitás-típusra. Ezért az `ExternalReference` egyedi indexei TELJESEK maradnak, és a
+/// Customer ELSŐ (elsődleges) UNAS-fiókja továbbra is ott áll; a TOVÁBBI fiókok ide kerülnek. A külső azonosító egy
+/// rendszerben csak EGY vevőhöz tartozhat (a UNAS-szinkron ezen keres).
+///
+/// Additív: SEMMI nem olvassa és nem írja még (a UNAS- és Medusa-szinkron kódja nem változik; az összevonás 4. lépése
+/// tölti majd).
+model CustomerExternalAccount {
+  id         String         @id @default(cuid())
+  customerId String
+  system     ExternalSystem
+  externalId String
+  createdAt  DateTime       @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([system, externalId])
+  @@index([customerId])
 }
 
 /// EGY PARTNERTÖRZS, 2. LÉPÉS: összevonásonként egy sor (melyik maradt, melyik szűnt meg, és minden áthelyezett hivatkozás

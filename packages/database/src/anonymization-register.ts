@@ -544,6 +544,10 @@ export const ANONYMIZATION_REGISTER: Readonly<
     // an old customer number or row id: an identifier, kept so references keep matching
     value: "identifier",
   },
+  CustomerExternalAccount: {
+    // a further UNAS account of the same company: an identifier, like `ExternalReference.externalId`
+    externalId: "identifier",
+  },
   CustomerMergeLog: {
     actorUserId: "identifier",
     reason: "freeText",
