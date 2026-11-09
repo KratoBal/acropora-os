@@ -59,11 +59,11 @@ GRANT SELECT, INSERT ON "ReefClubRecommendation" TO "reefclub_app";
 GRANT UPDATE ("status", "feedbackAt") ON "ReefClubRecommendation" TO "reefclub_app";
 GRANT SELECT, INSERT ON "ReefClubAdministeredDose" TO "reefclub_app";
 -- The per-product consent of the run-out reminder (V3.2, slice 2): the member turns it on (INSERT), off (the unsubscribe time) and
--- on again (the same row's consent time, version and aquarium, the unsubscribe time cleared, the old key dropped), and a mail's key
--- hash is set when the mail is composed. The row is
+-- on again (the same row's consent time, version and aquarium, and the unsubscribe time cleared). The unsubscribe key is computed from the row id and
+-- a secret, so no column holds it. The row is
 -- never deleted from here; the account's, the product's or the aquarium's deletion cascades with the owner's rights.
 GRANT SELECT, INSERT ON "ReefClubRunOutReminder" TO "reefclub_app";
-GRANT UPDATE ("aquariumId", "consentVersion", "consentAt", "unsubscribedAt", "unsubscribeKeyHash", "updatedAt")
+GRANT UPDATE ("aquariumId", "consentVersion", "consentAt", "unsubscribedAt", "updatedAt")
   ON "ReefClubRunOutReminder" TO "reefclub_app";
 -- The projection of the product dose list (plan 6.2, slice 8, path B): the role may only READ it,
 -- and of the run record only what the staleness gate needs (not the error text). The OS (internal)

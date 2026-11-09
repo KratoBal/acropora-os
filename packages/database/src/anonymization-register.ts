@@ -771,11 +771,10 @@ export const ANONYMIZATION_REGISTER: Readonly<
     parameterCode: "business",
     clientOperationId: "identifier",
   },
-  // ReefClub V3.2: the per-product consent of the run-out reminder. A version label, and the hash of the unsubscribe link's random
-  // key (the raw key lives only in the owner's own mail; one action only, but a bearer key all the same).
+  // ReefClub V3.2: the per-product consent of the run-out reminder. A version label, and nothing else: the unsubscribe link's key is
+  // computed from the row id and a secret, and stored nowhere.
   ReefClubRunOutReminder: {
     consentVersion: "business",
-    unsubscribeKeyHash: "secret",
   },
   // ReefClub 8: the projection of the product dose list. Numbers, names and fixed refusal codes
   // of products; the run's error text is free text (a database or network error message).
