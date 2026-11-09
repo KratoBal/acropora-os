@@ -351,13 +351,15 @@ export class MedusaProjectionScheduler
     const akcio = await this.akcioHatarAzonositok();
     const teny = await this.tenyValtozasAzonositok();
     const marka = await this.markaValtozasAzonositok();
+    /*
+      AZ INAKTIVÁLT TERMÉK A SOR VÉGÉN (ca422e92): a kifutott lap késése kisebb
+      kár, mint egy értékesíthető terméké, és az első körök visszamenőleges
+      halmazát így a napi változások nem várják ki.
+    */
+    const altalanos = await this.esedekesAzonositok(limit);
+    const inaktivalt = await this.inaktivaltAzonositok(limit);
     const esedekes = [
-      ...new Set([
-        ...akcio,
-        ...teny,
-        ...marka,
-        ...(await this.esedekesAzonositok(limit)),
-      ]),
+      ...new Set([...akcio, ...teny, ...marka, ...altalanos, ...inaktivalt]),
     ].slice(0, limit);
     /*
       AZ ELBUKOTT ÁR ESEDÉKES MARAD (329f8a2e, murena tény-kommentje, acrobot
@@ -409,9 +411,12 @@ export class MedusaProjectionScheduler
       A termék-vetítés bukása nem állítja meg: a kör többi terméke ugyanúgy
       kötött, és az áruk ugyanúgy igaz.
     */
-    const kotesek = await this.kotottAzonositok([...esedekes, ...arUjra]);
+    // az inaktivált termék draftként megy ki, ára nem kell (és aktív változat
+    // nélkül az ár-futás minden körben kudarcot írna rá)
+    const arra = esedekes.filter((id) => !inaktivalt.includes(id));
+    const kotesek = await this.kotottAzonositok([...arra, ...arUjra]);
     const arazhato = [...kotesek.keys()];
-    const kotesNelkul = esedekes.length + arUjra.length - arazhato.length;
+    const kotesNelkul = arra.length + arUjra.length - arazhato.length;
     if (kotesNelkul > 0)
       this.naplo.log(
         `Medusa price projection: ${kotesNelkul} termek Medusa kotes nelkul, ` +
@@ -720,6 +725,57 @@ export class MedusaProjectionScheduler
         );
       })
       .map((k) => k.entityId);
+  }
+
+  /**
+   * A VETÍTÉS UTÁN INAKTIVÁLT TERMÉK IS ESEDÉKES (kártya ca422e92).
+   *
+   * Az általános esedékesség (`esedekesAzonositok`) csak aktív terméket olvas,
+   * tehát egy termék, amit a legutóbbi vetítése UTÁN inaktiváltak, többé nem
+   * került sorra: a boltban published maradt, vagy kifutott-jelölő nélküli
+   * draft. Közben az átirányítás-lista (`productRedirectTarget`, #2323) a
+   * régi címét a lapjára küldi, mert az OS szabálya szerint kifutott, és van
+   * lapja -- a boltban viszont nincs (mérve 2026-11-09, 129 régi cím 404-en).
+   *
+   * CSAK A KÖTÖTT TERMÉK, és csak akkor, ha a változása későbbi a kötés
+   * `lastSyncedAt`-jénél. Kötés nélküli inaktív termék soha nem esedékes: a
+   * boltban nincs mit visszavonni, és a "még nem vetített" ág különben minden
+   * körben előre hozná. A kiinduló halmaz a kötések listája, nem a legutóbb
+   * módosított termékek ablaka: a régi inaktiválások is sorra kerülnek.
+   *
+   * A webshopból KIZÁRT termék nincs itt, és nem véletlenül: a jelölő csak
+   * létrehozáskor íródik (beszerzési számla, árajánlat), a futtató a kizárt
+   * terméket kötés nélkül nem vetíti, tehát kötött kizárt termék ma nem
+   * keletkezhet.
+   */
+  private async inaktivaltAzonositok(limit: number): Promise<string[]> {
+    const kotesek = await this.db.externalReference.findMany({
+      where: MEDUSA_PRODUCT_REFERENCE,
+      select: { entityId: true, lastSyncedAt: true },
+    });
+    if (!kotesek.length) return [];
+    const termekek = await this.db.product.findMany({
+      where: {
+        id: { in: kotesek.map((k) => k.entityId) },
+        isActive: false,
+        webshopExcluded: false,
+      },
+      select: { id: true, isActive: true, updatedAt: true },
+    });
+    // a szűrés a kódban is megvan: egy tágabb válasz se tegyen aktív terméket ide
+    const valtozas = new Map(
+      termekek.filter((t) => !t.isActive).map((t) => [t.id, t.updatedAt]),
+    );
+    return kotesek
+      .filter((k) => {
+        const mikor = valtozas.get(k.entityId);
+        return (
+          mikor !== undefined &&
+          (k.lastSyncedAt === null || mikor > k.lastSyncedAt)
+        );
+      })
+      .map((k) => k.entityId)
+      .slice(0, limit);
   }
 
   /**
