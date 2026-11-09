@@ -102,6 +102,24 @@ describe("(3) residual personal data", () => {
     assert.deepEqual(found.problems, [
       "Customer.notes: 2 value(s) with a real name",
     ]);
+    const keyFound = residualSection(
+      {
+        clean: false,
+        rowsScanned: 10,
+        findings: [
+          {
+            model: "AuditLog",
+            field: "payload",
+            kind: "credentialKey",
+            count: 3,
+          },
+        ],
+      },
+      10,
+    );
+    assert.deepEqual(keyFound.problems, [
+      "AuditLog.payload: 3 credential or network key(s) left in the JSON",
+    ]);
     const short = residualSection(
       { clean: true, rowsScanned: 3, findings: [] },
       10,

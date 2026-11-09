@@ -91,8 +91,10 @@ export function residualSection(
   report: ResidualReport,
   expectedRows: number,
 ): GateSection {
-  const problems = report.findings.map(
-    (f) => `${f.model}.${f.field}: ${f.count} value(s) with a real ${f.kind}`,
+  const problems = report.findings.map((f) =>
+    f.kind === "credentialKey"
+      ? `${f.model}.${f.field}: ${f.count} credential or network key(s) left in the JSON`
+      : `${f.model}.${f.field}: ${f.count} value(s) with a real ${f.kind}`,
   );
   // a scan that read nothing proves nothing: the number of rows it saw must be the number of rows the target has
   if (report.rowsScanned !== expectedRows) {

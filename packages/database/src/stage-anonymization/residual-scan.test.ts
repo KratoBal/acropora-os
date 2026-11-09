@@ -146,6 +146,50 @@ describe("what the scan reports", () => {
   });
 });
 
+describe("credential keys left in a JSON value (barracuda, #2322)", () => {
+  const d = dictionary();
+
+  it("finds a credential or network key at any depth, by a part of the name, naming the column and counting", () => {
+    const report = scanRows(d, [
+      {
+        model: "AuditLog",
+        row: {
+          id: "a",
+          payload: {
+            ok: 1,
+            nested: [
+              { resetToken: "x" },
+              { deeper: { "x-api-key": "y", remoteAddr: "z" } },
+            ],
+          },
+        },
+      },
+      { model: "AuditLog", row: { id: "b", payload: { setCookie: "c" } } },
+      {
+        model: "AuditLog",
+        row: {
+          id: "c",
+          payload: { description: "ok", recipient: "r", scripts: 1 },
+        },
+      },
+    ]);
+    assert.deepEqual(report.findings, [
+      { model: "AuditLog", field: "payload", kind: "credentialKey", count: 4 },
+    ]);
+    assert.equal(report.clean, false);
+    assert.ok(!JSON.stringify(report).includes("resetToken"));
+  });
+
+  it("does not take a top-level COLUMN name for a JSON key (the register decides columns)", () => {
+    assert.equal(
+      scanRows(d, [
+        { model: "Session", row: { tokenHash: "x", ipAddress: "y" } },
+      ]).clean,
+      true,
+    );
+  });
+});
+
 describe("the dictionary", () => {
   it("keeps digests, not values, and ignores a value too short or malformed for its kind", () => {
     const builder = createResidualDictionary(KEY);
