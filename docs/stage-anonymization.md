@@ -44,7 +44,11 @@ code touches a database yet: the runner works on an adapter (`RunnerDatabase`), 
 - A pseudonymization key and a scan key, each at least 32 bytes, made for the run and kept only in the stage process. Never in the
   repository, never in a log. A new pseudonymization key gives different fakes (the stage's names change); keep it if the stage's
   fakes should stay stable between copies.
-- The stage-only password hash (the hash of the password the owner hands out). Every password hash field gets it, except a
+- The stage-only password hash (the hash of the password the owner hands out), made on the host with the application's own scheme:
+  `cd <the repository root> && STAGE_ANON_PASSWORD=<the password> pnpm --filter @acropora/database stage:hash-password`. The
+  password comes from the environment (never an argument: it would stay in the shell history), only the hash is printed, and a
+  password under 10 characters is refused (every account shares it). A test in the API package makes the application's own check
+  accept the hash, in both directions. Every password hash field gets it, except a
   `@unique` one (it gets a fresh token per row).
 - The adapter (`prisma-adapter.ts`, S6): row streaming per model, a write-back by key, the orphan counts per foreign key, the
   business aggregates and pairings, the migration state, the health check, all as raw SQL over the Prisma client, read from the
@@ -74,6 +78,29 @@ to the adapter, and calls the runner.
 The first run against a real Postgres is the CI integration spec
 (`apps/api/src/stage-anonymization/stage-anonymization.integration.spec.ts`): it creates a scratch `stage_anon_tmp_ci_...`
 database on the CI service, applies every real migration, seeds invented rows, runs the whole chain and drops the database.
+
+## The working trial's guards (task stage-anonim-proba)
+
+The trial starts an API instance on the TEMPORARY database. A real provider is never touched, and the trial measures that FIRST:
+
+- **The instance gets an environment built from nothing** (`buildTrialEnvironment`), not a copy of the operator's shell (the
+  anonymization command passes its whole environment to the trial command, so a copy would carry any live key the shell holds).
+  It refuses a database whose name is not `stage_anon_tmp_...`. `NODE_ENV=staging` (the production validators would demand the
+  UNAS master key and decryptable settings rows, which an anonymized database does not have), the stub modes for invoicing (a
+  `TESZT-` invoice number, no call to Számlázz.hu), GLS, Foxpost and the ticket mail, four default-on schedulers switched off.
+- **Two kinds of live reach exist, and the measurement treats them differently.** A client with a CREDENTIAL refuses before any
+  network call, so its variable must be ABSENT (Gmail, APNs, FCM, NAV, UNAS, Medusa, GLS, Foxpost, the Brevo SMTP relays, TypeSafe,
+  OTP eBIZ, the assistant gateway). A host that falls back to the LIVE address when its variable is unset (NAV, UNAS, VIES;
+  the Gmail API, Google OAuth and the MNB service even when it is EMPTY) must be SET, to a closed address (loopback or `.invalid`).
+  Számlázz.hu, the NAV cash-register client, OTP eBIZ, FCM, TypeSafe and the Google read-only client have the host written into
+  the code: for them the missing credential (and, for invoicing, the stub mode) is the only protection, and the measurement says so.
+- **One named check per integration** (`assessTrialIntegrations`): mail, push, invoicing, payment, NAV, GLS and Foxpost, Brevo,
+  UNAS, Medusa, AI and the others, public lookups. A failed check carries the integration's name and the variable NAMES that are
+  wrong, never a value; the gate then fails with that name. The check also reads the four stored connection settings and the device
+  token table of the temporary database: a stored credential column that survived the anonymization, or a settings row that was not
+  read, fails it.
+- **The measurement is checked against the code:** a test fails if a rule names a variable the code never reads (a typo would
+  protect nothing).
 
 ## Decisions and limits, said plainly
 
