@@ -450,6 +450,7 @@ export {
   ROLE_PERMISSIONS,
   USER_ROLES,
   ASSIGNABLE_ROLES,
+  THEME_PREFERENCES,
 } from "./auth.js";
 export { CATALOG_ACTION_KINDS } from "./catalog-actions.js";
 export type {
@@ -514,6 +515,7 @@ export type {
   PartnerMembership,
   Permission,
   Session,
+  ThemePreference,
   UserRole,
 } from "./auth.js";
 export type {

@@ -153,5 +153,18 @@ describe(
         UnauthorizedException,
       );
     });
+
+    /*
+      THE THEME ON THE ACCOUNT (Balázs, 2026-11-09, card 302951c0), on the real schema: a new account has none (null:
+      the browser decides), a saved one comes back in the session's user, lower case, and a second save replaces it.
+    */
+    it("saves the person's theme and hands it back in the session's user", async () => {
+      const id = createdIds[0]!;
+      assert.equal((await resolver.resolveById(id)).themePreference, null);
+      assert.equal(await resolver.setThemePreference(id, "dark"), "dark");
+      assert.equal((await resolver.resolveById(id)).themePreference, "dark");
+      await resolver.setThemePreference(id, "system");
+      assert.equal((await resolver.resolveById(id)).themePreference, "system");
+    });
   },
 );

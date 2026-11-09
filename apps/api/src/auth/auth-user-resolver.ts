@@ -8,6 +8,7 @@ import { prisma } from "@acropora/database";
 import {
   permissionsWithOverrides,
   type AuthenticatedUser,
+  type ThemePreference,
 } from "@acropora/types";
 
 import { createHash } from "node:crypto";
@@ -104,6 +105,26 @@ export class AuthUserResolver {
    * `AuthService.resolveToken`, where the persisted `Session` row only
    * stores `userId` (no cached e-mail/displayName/role to fall back on).
    */
+  /**
+   * THE PERSON'S OWN THEME, on the account (Balázs, 2026-11-09: the phone's browser forgot it every time). Only the
+   * caller's own row; the value is one of the three, checked by the DTO before it comes here.
+   */
+  async setThemePreference(
+    userId: string,
+    preference: ThemePreference,
+  ): Promise<ThemePreference> {
+    const saved = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        themePreference: preference.toUpperCase() as
+          "LIGHT" | "DARK" | "SYSTEM",
+      },
+      select: { themePreference: true },
+    });
+    return (saved.themePreference?.toLowerCase() ??
+      preference) as ThemePreference;
+  }
+
   async resolveById(userId: string): Promise<AuthenticatedUser> {
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -160,6 +181,8 @@ export class AuthUserResolver {
     nickname?: string | null;
     role: AuthenticatedUser["role"];
     avatarUrl: string | null;
+    /** optional: a narrower test row may leave it out, which reads as "not chosen" */
+    themePreference?: "LIGHT" | "DARK" | "SYSTEM" | null;
     customerId: string | null;
     supplierId: string | null;
     /** KÖTELEZŐ: a fordító minden lekérdezésen számon kéri az eltéréseket. */
@@ -172,6 +195,10 @@ export class AuthUserResolver {
       nickname: user.nickname ?? null,
       role: user.role,
       avatarUrl: user.avatarUrl,
+      // the theme chosen on the account (Balázs, 2026-11-09), lower case as the clients use it; null: not chosen
+      themePreference: user.themePreference
+        ? (user.themePreference.toLowerCase() as ThemePreference)
+        : null,
       customerId: user.customerId,
       supplierId: user.supplierId,
       /*

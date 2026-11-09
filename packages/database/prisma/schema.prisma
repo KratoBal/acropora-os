@@ -903,6 +903,13 @@ enum InvoiceSyncStatus {
   ERROR
 }
 
+/// A felhasználó választott témája; `SYSTEM` a készülék sötét/világos módját követi.
+enum UserThemePreference {
+  LIGHT
+  DARK
+  SYSTEM
+}
+
 model User {
   id                     String                        @id @default(cuid())
   /// A gépi tokenek, amik ennek a felhasználónak a nevében járnak el.
@@ -975,6 +982,9 @@ model User {
   role                   UserRole
   isActive               Boolean                       @default(true)
   avatarUrl              String?
+  /// A felület témája, a fiókhoz mentve (Balázs, 2026-11-09: a telefon böngészője minden alkalommal elfelejtette).
+  /// NULL: még nem választott, ilyenkor a böngésző saját (helyi) beállítása dönt. A localStorage csak gyorsítótár.
+  themePreference        UserThemePreference?
   /// MELYIK PARTNER NEVEBEN lep be ez a fiok. Sajat kollegan mindketto NULL.
   ///
   /// A ketto kozul LEGFELJEBB az egyik lehet kitoltve (adatbazis CHECK
