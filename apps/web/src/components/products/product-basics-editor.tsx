@@ -1,6 +1,14 @@
 "use client";
 
-import { Alert, Button, Card, FormField, Input, Select } from "@acropora/ui";
+import {
+  Alert,
+  PilotButton,
+  PilotCard,
+  PilotCardHeader,
+  PilotFormField,
+  PilotInput,
+  PilotSelect,
+} from "@acropora/ui";
 import type { CatalogOption, ProductDetail } from "@acropora/types";
 import { type FormEvent, useEffect, useState } from "react";
 
@@ -111,113 +119,117 @@ export function ProductBasicsEditor({
   if (!canManage) return null;
 
   return (
-    <Card className="p-4">
-      <h2 className="text-sm font-semibold text-dusk-900">
-        Alapadatok szerkesztése
-      </h2>
-      <p className="mt-1 text-xs text-dusk-500">
-        A név, a leírás és a kategória az Acropora OS tulajdona ezen a terméken.
-      </p>
+    <PilotCard>
+      <PilotCardHeader title="Alapadatok szerkesztése" />
+      <div className="p-5">
+        <p className="text-xs text-dusk-500">
+          A név, a leírás és a kategória az Acropora OS tulajdona ezen a
+          terméken.
+        </p>
 
-      {error ? (
-        <Alert
-          className="mt-3"
-          variant="danger"
-          title="A mentés nem sikerült"
-          description={error}
-        />
-      ) : null}
-      {notice ? (
-        <Alert
-          className="mt-3"
-          variant="info"
-          title="Mentve"
-          description={notice}
-        />
-      ) : null}
-
-      <form className="mt-4 space-y-4" onSubmit={(event) => void submit(event)}>
-        <FormField label="Név" htmlFor="product-name">
-          <Input
-            id="product-name"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            disabled={busy}
+        {error ? (
+          <Alert
+            className="mt-3"
+            variant="danger"
+            title="A mentés nem sikerült"
+            description={error}
           />
-        </FormField>
-        {/*
+        ) : null}
+        {notice ? (
+          <Alert
+            className="mt-3"
+            variant="info"
+            title="Mentve"
+            description={notice}
+          />
+        ) : null}
+
+        <form
+          className="mt-4 space-y-4"
+          onSubmit={(event) => void submit(event)}
+        >
+          <PilotFormField label="Név" htmlFor="product-name">
+            <PilotInput
+              id="product-name"
+              value={name}
+              onChange={setName}
+              disabled={busy}
+            />
+          </PilotFormField>
+          {/*
           A szöveg azt mondja meg, MI TÖRTÉNIK egy törléssel. A különbség itt
           nagyobb, mint máshol: ezt a terméket a webshop szinkronja kihagyja,
           tehát az eredeti szöveget SEMMI nem hozza vissza. Egy UNAS-gazdájú
           terméknél a következő szinkron helyrerakná; itt nincs ilyen háló.
         */}
-        {/*
-          NEM `FormField`: annak `<label>`-je egy urlapmezot keres, a
+          {/*
+          NEM `PilotFormField`: annak `<label>`-je egy urlapmezot keres, a
           szerkeszto pedig `contenteditable`. A szerkeszto akadalymentes neve
           a sajat `aria-label`-je ("Leírás"), a felirat itt csak szoveg.
         */}
-        <div className="space-y-1.5">
-          <p className="block text-sm font-semibold text-dusk-800">Leírás</p>
-          <p className="text-xs text-dusk-500">
-            A törölt szöveget és formázást a szinkron nem hozza vissza: ezt a
-            terméket már mi gondozzuk. Az előnézet azt mutatja, ami a mentés
-            után tárolódik.
-          </p>
-          <ProductDescriptionEditor
-            token={token}
-            product={product}
-            value={description}
-            onChange={(html) => {
-              setDescription(html);
-              setDescriptionEdited(true);
-            }}
-          />
-        </div>
-        {/*
+          <div className="space-y-1.5">
+            <p className="block text-sm font-semibold text-dusk-800">Leírás</p>
+            <p className="text-xs text-dusk-500">
+              A törölt szöveget és formázást a szinkron nem hozza vissza: ezt a
+              terméket már mi gondozzuk. Az előnézet azt mutatja, ami a mentés
+              után tárolódik.
+            </p>
+            <ProductDescriptionEditor
+              token={token}
+              product={product}
+              value={description}
+              onChange={(html) => {
+                setDescription(html);
+                setDescriptionEdited(true);
+              }}
+            />
+          </div>
+          {/*
           A felirat szándékosan "elsődleges", nem "kategória": egy termék TÖBB
           kategóriához is tartozhat, és a lista szűrője MINDEGYIK alatt megtalálja
           (mérve: a szűrő a kapcsolat-táblára megy, nem a skalárra). Ez a mező
           csak azt mondja meg, melyik az elsődleges.
         */}
-        <FormField
-          label="Elsődleges kategória"
-          htmlFor="product-primary-category"
-          description="A termék több kategóriához is tartozhat; ez azt állítja be, melyik az elsődleges."
-        >
-          <Select
-            id="product-primary-category"
-            value={primaryCategoryId}
-            onChange={(event) => setPrimaryCategoryId(event.target.value)}
-            disabled={busy}
+          <PilotFormField
+            label="Elsődleges kategória"
+            htmlFor="product-primary-category"
+            help="A termék több kategóriához is tartozhat; ez azt állítja be, melyik az elsődleges."
           >
-            <option value="">Nincs kategória</option>
-            {categories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.label}
-              </option>
-            ))}
-          </Select>
-        </FormField>
-        <FormField
-          label="Vásárolható"
-          htmlFor="product-webshop-sellable"
-          description="A termék megvehető-e a saját webshopunkban. Nem azonos az Aktív állapottal: az az archiválásról szól."
-        >
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              id="product-webshop-sellable"
-              type="checkbox"
-              checked={webshopSellable}
-              onChange={(event) => setWebshopSellable(event.target.checked)}
+            <PilotSelect
+              id="product-primary-category"
+              value={primaryCategoryId}
+              onChange={setPrimaryCategoryId}
               disabled={busy}
-            />
-            Vásárolható a webshopban
-          </label>
-        </FormField>
-        <Button type="submit" disabled={busy}>
-          {busy ? "Mentés…" : "Mentés"}
-        </Button>
-      </form>
-    </Card>
+            >
+              <option value="">Nincs kategória</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.label}
+                </option>
+              ))}
+            </PilotSelect>
+          </PilotFormField>
+          <PilotFormField
+            label="Vásárolható"
+            htmlFor="product-webshop-sellable"
+            help="A termék megvehető-e a saját webshopunkban. Nem azonos az Aktív állapottal: az az archiválásról szól."
+          >
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                id="product-webshop-sellable"
+                type="checkbox"
+                checked={webshopSellable}
+                onChange={(event) => setWebshopSellable(event.target.checked)}
+                disabled={busy}
+              />
+              Vásárolható a webshopban
+            </label>
+          </PilotFormField>
+          <PilotButton type="submit" disabled={busy}>
+            {busy ? "Mentés…" : "Mentés"}
+          </PilotButton>
+        </form>
+      </div>
+    </PilotCard>
   );
 }
