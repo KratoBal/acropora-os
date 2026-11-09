@@ -2474,6 +2474,104 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
   });
 
   /**
+   * A WEBSHOP-SLUG AZ ELSŐ VETÍTÉSKOR (SEO D2, seo-d2-slug-bekotes).
+   *
+   * MI PIROSÍT: a WEBSHOP-slug nélküli termék nem kér slugot (a kézzel felvitt termék
+   * handle-je a Medusa ékezetes névből képzett alakja marad); a kapott slug nem lesz
+   * handle a kapcsoló mellett; a meglévő slugot újra kéri; vagy egy elbukó képzés a
+   * vetítést is megállítja.
+   */
+  const unasSor = {
+    channel: "UNAS",
+    slug: "teszt-termek",
+    seoRobots: null,
+    seoTitle: null,
+    seoDescription: null,
+    seoKeywords: null,
+    productUrl: null,
+  };
+  const futas = async (
+    channelListings: unknown[],
+    env: Record<string, string>,
+    ensure: (productId: string) => Promise<string>,
+  ) => {
+    const { out, stdout, stderr } = collector();
+    const { db } = adatbazis(termek({ channelListings }));
+    const keresek: { url: string; method: string; body: unknown }[] = [];
+    const code = await boltiKorben(() =>
+      runProjectionCli(
+        ["prod-1"],
+        out,
+        provider(environmentSetting),
+        { ...boltiKornyezet, ...env },
+        db,
+        boltiFetchTorzzsel(keresek),
+        ensure,
+      ),
+    );
+    const letrehozas = keresek.find(
+      (k) => k.url.endsWith("/admin/products") && k.method === "POST",
+    );
+    return {
+      code,
+      naplo: stderr.join("") + stdout.join(""),
+      stderr: stderr.join(""),
+      handle: (letrehozas?.body as { handle?: string } | undefined)?.handle,
+    };
+  };
+
+  it("a WEBSHOP-slug nélküli termék az első vetítéskor slugot kap, és a kapcsolóval az lesz a handle", async () => {
+    const kert: string[] = [];
+    const ensure = async (id: string) => (kert.push(id), "teszt-termek-sku-1");
+    const be = await futas(
+      [unasSor],
+      { MEDUSA_HANDLE_FROM_WEBSHOP_SLUG: "true" },
+      ensure,
+    );
+    assert.equal(be.code, 0, be.naplo);
+    assert.deepEqual(kert, ["prod-1"]);
+    assert.equal(be.handle, "teszt-termek-sku-1");
+    assert.match(be.naplo, /webshop-slug képezve: teszt-termek-sku-1/);
+    // a kapcsoló nélkül a slug képződik, a handle a mai (UNAS) marad
+    const ki = await futas([unasSor], {}, ensure);
+    assert.equal(ki.code, 0, ki.naplo);
+    assert.equal(ki.handle, "teszt-termek");
+    // a kézzel felvitt termék: se UNAS-, se WEBSHOP-sor; a kapcsolóval a handle a slug
+    const kezi = await futas(
+      [],
+      { MEDUSA_HANDLE_FROM_WEBSHOP_SLUG: "true" },
+      ensure,
+    );
+    assert.equal(kezi.handle, "teszt-termek-sku-1");
+  });
+
+  it("a meglévő WEBSHOP-slugot nem kéri újra", async () => {
+    const kert: string[] = [];
+    const meglevo = await futas(
+      [unasSor, { ...unasSor, channel: "WEBSHOP", slug: "mar-van" }],
+      { MEDUSA_HANDLE_FROM_WEBSHOP_SLUG: "true" },
+      async (id) => (kert.push(id), "uj"),
+    );
+    assert.equal(meglevo.code, 0, meglevo.naplo);
+    assert.deepEqual(kert, []);
+    assert.equal(meglevo.handle, "mar-van");
+  });
+
+  it("az elbukó slug-képzés nem állítja meg a vetítést: a mai úton megy, egy naplósorral", async () => {
+    const r = await futas(
+      [unasSor],
+      { MEDUSA_HANDLE_FROM_WEBSHOP_SLUG: "true" },
+      async () => {
+        throw new TypeError("a@b.hu");
+      },
+    );
+    assert.equal(r.code, 0, r.naplo);
+    assert.equal(r.handle, "teszt-termek");
+    assert.match(r.stderr, /a webshop-slug nem képződött \(TypeError\)/);
+    assert.doesNotMatch(r.stderr, /a@b\.hu/);
+  });
+
+  /**
    * A SIKER NULLAZ, ES EZ NEM MELLEKES: EGY OTTFELEJTETT OK HAZUDIK.
    *
    * A kep itt UGY megy ki, hogy a taroloig el sem jutunk: a lekepezes MAR

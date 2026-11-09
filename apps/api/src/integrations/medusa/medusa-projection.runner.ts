@@ -116,6 +116,8 @@ import {
   knowledgeRowsFor,
   projectKnowledgeEnabled,
 } from "./medusa-product-knowledge.service.js";
+import { PrismaWebshopSlugStore } from "../../products/slug/webshop-slug.repository.js";
+import { WebshopSlugService } from "../../products/slug/webshop-slug.service.js";
 import { copyProductImages } from "./product-image-copier.js";
 import { publishProductImages } from "./product-image-publisher.js";
 import {
@@ -539,7 +541,22 @@ export async function runProjectionCli(
    * mai viselkedes valtozatlan.
    */
   fetchImpl?: typeof fetch,
+  /**
+   * A WEBSHOP-SLUG ELSŐ KÉPZÉSE (SEO D2, seo-d2-slug-bekotes): a termék meglévő
+   * slugját adja, vagy egyszer képez egyet a névből. Megadva ez fut; megadás
+   * nélkül a valódi szolgáltatás, de CSAK a valódi adatbázissal: egy átadott
+   * adatbázis-dupla mellé a futtató nem nyúl a globális adatbázishoz.
+   */
+  ensureWebshopSlug?: (productId: string) => Promise<string>,
 ): Promise<number> {
+  const slugKepzes =
+    ensureWebshopSlug ??
+    (db === (prisma as unknown as ProjectionDatabase)
+      ? (productId: string) =>
+          new WebshopSlugService(new PrismaWebshopSlugStore()).webshopSlug(
+            productId,
+          )
+      : null);
   if (!productIds.length) {
     out.stderr("Adj meg legalább egy termékazonosítót.\n");
     return 1;
@@ -1001,6 +1018,47 @@ export async function runProjectionCli(
       out.stdout(`${productId}: a felvevő nem kérte a webshopba, kihagyva\n`);
       webshopbolKihagyott += 1;
       continue;
+    }
+
+    /*
+      A WEBSHOP-SLUG AZ ELSŐ VETÍTÉSKOR (SEO D2, seo-d2-slug-bekotes, 2026-11-09). A D2
+      szerint a slug az első kéréskor keletkezik, és a vetítés kéri, de a
+      `WebshopSlugService.webshopSlug()`-nak a backfill CLI-n kívül nem volt hívója: egy
+      kézzel felvitt vagy a backfill után létrejött termék slugot csak kézi CLI-futással
+      kapott, és addig a bolt a Medusa saját szabályával képzett handle-t a névből
+      (ékezettel, például `tengeri-só-25-kg-zsák`). Itt egyszer képződik, a terv
+      algoritmusával; a meglévőt nem írja át, és a név későbbi változása sem. Ha a
+      képzés elhasal, a vetítés a mai úton megy tovább: a slug a következő körben
+      képződik, a termék addig sem marad ki.
+    */
+    if (
+      slugKepzes &&
+      !product.channelListings.some(
+        (sor) => sor.channel === "WEBSHOP" && sor.slug,
+      )
+    ) {
+      try {
+        const slug = await slugKepzes(product.id);
+        product.channelListings = [
+          ...product.channelListings.filter((sor) => sor.channel !== "WEBSHOP"),
+          {
+            channel: "WEBSHOP",
+            slug,
+            seoRobots: null,
+            seoTitle: null,
+            seoDescription: null,
+            seoKeywords: null,
+            productUrl: null,
+          },
+        ];
+        out.stdout(`${productId}: webshop-slug képezve: ${slug}\n`);
+      } catch (error) {
+        out.stderr(
+          `${productId}: a webshop-slug nem képződött (${
+            error instanceof Error ? error.name : "UNKNOWN"
+          }), a vetítés a mai úton megy\n`,
+        );
+      }
     }
 
     /**
