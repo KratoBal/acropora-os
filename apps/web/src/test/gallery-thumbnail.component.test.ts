@@ -29,7 +29,9 @@ const LAPOK = [
   },
   {
     nev: "eszkoz",
-    komponens: "src/components/service-assets/asset-detail-page.tsx",
+    // the live detail page (the old asset-detail-page.tsx had no route and is gone, kanban 0baba3b9)
+    komponens:
+      "src/components/service-assets/pilot/pilot-asset-detail-page.tsx",
     kliens: "src/lib/api/assets.ts",
   },
   {
