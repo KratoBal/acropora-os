@@ -64,9 +64,9 @@ export function createTrialDatabase(client: SqlClient): TrialDatabase {
         >(settingsSql(table, columns));
         // no row: the state is left out, and the measurement fails for it ("not read")
         if (rows.length === 0) continue;
-        // EVERY row counts (barracuda, #2333), although each of these tables is a singleton by a database CHECK (`"id" = 'unas'` and the
-        // like, measured in the migrations): a second row cannot exist today, and if that rule is ever relaxed, a secret in it must not
-        // slip past a measurement of the first row only
+        // EVERY row counts (barracuda, #2333). Measured in the migrations: UNAS and NAV are singletons by a database CHECK
+        // (`"id" = 'unas'`, `"id" = 'nav'`); Médusa and Számlázz are NOT: they are one seeded row with a fixed id by convention only, so a
+        // second row could exist there, and a secret in it must not slip past a measurement of the first row only.
         states.push({
           integration,
           credentialMode: rows[0]!.mode,
