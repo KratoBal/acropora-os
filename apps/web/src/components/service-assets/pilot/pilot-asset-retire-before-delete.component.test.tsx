@@ -1,8 +1,13 @@
+/*
+  CARRIED OVER (kanban 0baba3b9, acrobot 44748): this spec measured the old `asset-detail-page.tsx`, which no route drew
+  (the asset route draws `PilotAssetDetailPage`). It now runs on the live pilot page, unchanged where the behaviour is
+  the same: all ten pass on it.
+*/
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { AssetDetail, AssetQrCode, Session } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { AssetDetailPage } from "./asset-detail-page";
+import { PilotAssetDetailPage as AssetDetailPage } from "./pilot-asset-detail-page";
 
 /**
  * A TAGADO ALLITAS ELE POZITIV KELL, ES A SORREND NEM IZLES (26162440).
@@ -55,6 +60,7 @@ import { AssetDetailPage } from "./asset-detail-page";
 
 const navigation = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn() }));
 const api = vi.hoisted(() => ({
+  neighbors: vi.fn().mockResolvedValue({ previous: null, next: null }),
   detail: vi.fn(),
   qr: vi.fn(),
   update: vi.fn(),
@@ -66,6 +72,10 @@ const api = vi.hoisted(() => ({
 }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 
+// the pilot page pulls the pilot font through PilotThemeRoot; vitest has no Next build
+vi.mock("next/font/local", () => ({
+  default: () => ({ className: "pilot-inter-stub" }),
+}));
 vi.mock("next/navigation", () => ({
   usePathname: () => "/szerviz/eszkozok/asset-1",
   useRouter: () => navigation,
@@ -73,6 +83,8 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/components/navigation-history", () => ({
   useReturnTo: () => ({ href: "/szerviz/eszkozok", fromWithinApp: false }),
+  useListHref: (listPath: string) => listPath,
+  useStepTo: () => () => undefined,
 }));
 vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({ session: auth.session }),

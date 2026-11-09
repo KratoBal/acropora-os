@@ -27,6 +27,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useReturnTo, useStepTo } from "@/components/navigation-history";
 import { ServiceDocumentGallery } from "@/components/service/service-document-gallery";
+import { ServiceOfflineNotice } from "@/components/service/service-offline-notice";
 import { assetsApi } from "@/lib/api/assets";
 import { PilotAssetStepper, useAssetNeighbors } from "./pilot-asset-stepper";
 import {
@@ -384,12 +385,22 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
   if (loading && !asset)
     return (
       <PilotThemeRoot bleed className="min-h-screen bg-pilot-grey-50 p-8">
+        {/* without a connection the page says why it stays empty (the old page's notice, kanban 0baba3b9) */}
+        <ServiceOfflineNotice state={{ kind: "empty" }} pilot />
         <Skeleton className="h-72" />
       </PilotThemeRoot>
     );
 
   return (
     <PilotThemeRoot bleed className="min-h-screen bg-pilot-grey-50">
+      {/*
+        THE OFFLINE NOTICE, BACK (kanban 0baba3b9, acrobot 44748): the old asset page said why its data stood still or was
+        missing without a connection; the pilot page had lost it. The same notice the other pilot pages draw.
+      */}
+      <ServiceOfflineNotice
+        state={asset ? { kind: "loaded" } : { kind: "empty" }}
+        pilot
+      />
       {deleted ? (
         <div className="p-8">
           <PilotCard>
