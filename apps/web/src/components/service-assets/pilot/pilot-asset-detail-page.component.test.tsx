@@ -1,8 +1,8 @@
 /*
   CARRIED OVER (kanban 0baba3b9, acrobot 44748): this spec measured the old `asset-detail-page.tsx`, which no route drew
   (the asset route draws `PilotAssetDetailPage`). It now runs on the live pilot page, unchanged where the behaviour is
-  the same. Left behind on purpose: the two "an empty field stays, with a dash" tests (the pilot page draws a field
-  only with a value, a design difference, not a lost function).
+  the same. The two "an empty field stays" tests came back with the pilot empty mark (acrobot 44775): the category and the
+  label code are drawn empty too.
 */
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { AssetDetail, AssetQrCode, Session } from "@acropora/types";
@@ -475,7 +475,28 @@ describe("az eszköz kategóriája az adatlapon", () => {
     expect(cimke.nextElementSibling?.textContent).toBe("Szivattyú");
   });
 
-  // the old page drew an empty category field with a dash; the pilot page draws a field only with a value (barracuda, #2303)
+  /**
+   * KATEGORIA NELKUL A MEZO OTT MARAD, A PILOT URES-JELOLESSEL ("Nincs megadva"; a regi lapon gondolatjel).
+   *
+   * MI PIROSIT: ha a mezot csak akkor rajzolnank ki, amikor van erteke. Az
+   * elrejtes ugyanugy nez ki, mint a mai hiba -- a kezelo nem tudna megmondani,
+   * hogy ezen az eszkozon NINCS kategoria, vagy a lap nem mutatja.
+   *
+   * ES EZ NEM ELMELETI ESET: az atvezeto migracio SZANDEKOSAN hagy `NULL`-on
+   * minden olyan sort, aminek a regi szoveges erteke egyetlen kategoriara sem
+   * illeszkedett. Az a halmaz az, amit at kell nezni, tehat pont ott nem szabad
+   * elrejteni a mezot (barracuda 44772, acrobot 44775).
+   *
+   * AZ ALLITAS A CIMKE UTANI ELEMRE MEGY, nem a jelolesre magara: a puszta
+   * „van Nincs megadva" allitas akkor is zold lenne, ha EZ a mezo hianyozna.
+   */
+  it("kategória nélkül a mező ott marad, a pilot üres-jelöléssel", async () => {
+    render(<AssetDetailPage assetId="asset-1" />);
+
+    expect(await screen.findByText("Kategória")).toBeTruthy();
+    const cimke = screen.getByText("Kategória");
+    expect(cimke.nextElementSibling?.textContent).toBe("Nincs megadva");
+  });
 });
 
 describe("az eszköz matricakódja az adatlapon", () => {
@@ -491,7 +512,21 @@ describe("az eszköz matricakódja az adatlapon", () => {
     expect(screen.getAllByText("V2196").length).toBeGreaterThan(0);
   });
 
-  // the old page drew an empty label-code field with a dash; the pilot page draws a field only with a value (barracuda, #2303)
+  /**
+   * MATRICA NELKUL A MEZO OTT MARAD, A PILOT URES-JELOLESSEL.
+   *
+   * MI PIROSIT: ha a mezot csak akkor rajzolnank ki, amikor van erteke. Az
+   * ELREJTES ugyanugy nez ki, mint a mai hiba: a kezelo nem tudna megmondani,
+   * hogy ezen a gepen NINCS matrica, vagy a lap nem mutatja.
+   */
+  it("matrica nélkül a mező ott marad, a pilot üres-jelöléssel", async () => {
+    render(<AssetDetailPage assetId="asset-1" />);
+
+    expect(await screen.findByText("Matricakód")).toBeTruthy();
+    const cimke = screen.getByText("Matricakód");
+    expect(cimke.nextElementSibling?.textContent).toBe("Nincs megadva");
+  });
+
   /**
    * A QR-PANEL A SAJAT KODJAT MUTATJA, NEM A MATRICAKODOT.
    *

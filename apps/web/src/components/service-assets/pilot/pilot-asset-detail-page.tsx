@@ -127,12 +127,30 @@ function formatDateTime(value: string) {
   }).format(new Date(value));
 }
 
-function Field({ label, value }: { label: string; value?: string }) {
-  if (!value) return null;
+/**
+ * One field of the data card. An empty one is left out, except where the empty value is itself information
+ * (`shownEmpty`): the category and the label code (acrobot 44775, barracuda 44772). The category migration leaves on
+ * purpose every asset NULL whose old text matched no category, and that set is the one to review; hidden, an empty
+ * category looks like a page that does not show it. The empty mark is the pilot one (`PilotDataRow`'s "Nincs megadva").
+ */
+function Field({
+  label,
+  value,
+  shownEmpty = false,
+}: {
+  label: string;
+  value?: string | null;
+  shownEmpty?: boolean;
+}) {
+  if (!value && !shownEmpty) return null;
   return (
     <div>
       <p className="mb-0.5 text-[11px] text-pilot-grey-400">{label}</p>
-      <p className="text-sm text-pilot-grey-800">{value}</p>
+      {value ? (
+        <p className="text-sm text-pilot-grey-800">{value}</p>
+      ) : (
+        <p className="text-sm italic text-pilot-grey-300">Nincs megadva</p>
+      )}
     </div>
   );
 }
@@ -505,14 +523,18 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
                     value={asset.partnerInternalCode}
                   />
                   <Field label="Sorozatszám" value={asset.serialNumber} />
-                  <Field label="Matricakód" value={asset.labelCode} />
+                  <Field
+                    label="Matricakód"
+                    value={asset.labelCode}
+                    shownEmpty
+                  />
                 </div>
               </PilotCard>
 
               <PilotCard>
                 <PilotCardHeader title="Technikai adatok" />
                 <div className="grid grid-cols-2 gap-x-8 gap-y-4 p-5">
-                  <Field label="Kategória" value={asset.category} />
+                  <Field label="Kategória" value={asset.category} shownEmpty />
                   <Field label="Funkció" value={asset.function} />
                   <Field label="Gyártó" value={asset.manufacturer} />
                   <Field label="Modell" value={asset.model} />
