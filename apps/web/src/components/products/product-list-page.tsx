@@ -2,7 +2,6 @@
 
 import {
   Alert,
-  Button,
   EmptyState,
   Icon,
   Pagination,
@@ -616,13 +615,12 @@ export function ProductListPage() {
           variant="info"
           title={bulkNotice}
           action={
-            <Button
+            <PilotButton
               variant="secondary"
-              size="sm"
               onClick={() => setBulkNotice(null)}
             >
               Bezárás
-            </Button>
+            </PilotButton>
           }
         />
       ) : null}
@@ -639,13 +637,12 @@ export function ProductListPage() {
           title="A lista frissítése nem sikerült"
           description={error}
           action={
-            <Button
+            <PilotButton
               variant="secondary"
-              size="sm"
               onClick={() => setRequestVersion((value) => value + 1)}
             >
               Újrapróbálás
-            </Button>
+            </PilotButton>
           }
         />
       ) : null}
@@ -657,13 +654,12 @@ export function ProductListPage() {
           title="A terméklista nem tölthető be"
           description={error ?? undefined}
           action={
-            <Button
+            <PilotButton
               variant="secondary"
-              size="sm"
               onClick={() => setRequestVersion((value) => value + 1)}
             >
               Újrapróbálás
-            </Button>
+            </PilotButton>
           }
         />
       ) : null}

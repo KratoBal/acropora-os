@@ -1,7 +1,6 @@
 "use client";
 import {
   Alert,
-  Card,
   EmptyState,
   PageHeader,
   PilotDataTable,
@@ -9,6 +8,7 @@ import {
   type PilotTableColumn,
   PilotBadge,
   PilotButton,
+  PilotCard,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -140,7 +140,7 @@ export function SeoLandingListPage() {
         />
       ) : null}
       {pages && pages.length ? (
-        <Card>
+        <PilotCard>
           <PilotDataTable
             columns={SEO_LANDING_COLUMNS}
             rows={pages}
@@ -148,7 +148,7 @@ export function SeoLandingListPage() {
             rowTestId="seo-landing-row"
             minWidth={SEO_LANDING_TABLE_MIN_WIDTH}
           />
-        </Card>
+        </PilotCard>
       ) : null}
     </div>
   );
