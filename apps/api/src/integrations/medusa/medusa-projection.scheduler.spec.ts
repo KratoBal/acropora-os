@@ -1265,6 +1265,7 @@ describe("a boltban maradt élő állat fajta köre (kártya 4b30b373)", () => {
   const jelentes = (torolt: number) => ({
     rows: 5,
     carrying: 2,
+    derivedPickup: 0,
     unpaired: 0,
     entries: Array.from({ length: torolt }, (_, i) => ({
       osProductId: `os-${i}`,
@@ -1347,6 +1348,44 @@ describe("a boltban maradt élő állat fajta köre (kártya 4b30b373)", () => {
       n.sorok.some((s) => s.startsWith("Boltban maradt fajta:")),
       n.sorok.join("\n"),
     );
+  });
+});
+
+describe("a származtatott átvétel levételének kapcsolója (kartya c603774e)", () => {
+  /**
+   * MI PIROSIT: a lepes a fajta kapcsolojatol fuggetlenul nem indul (a fajta kapcsolo a teszten mar be van kapcsolva, es ez
+   * a kapcsolo nem inditjuk vele); az atvetel kapcsoloja egyedul nem inditja a lepest; alapbol (egyik sem) nem fut.
+   */
+  const ures = () =>
+    adatbazis([termek()], [{ entityId: "prod-1", lastSyncedAt: MOST }]).db;
+  const hivasok = async (environment: Record<string, string>) => {
+    let hivas = 0;
+    const scheduler = new MedusaProjectionScheduler({
+      db: ures(),
+      runProjection: futtato().run,
+      runPricing: arFuttato().run,
+      environment: { ...BEKAPCSOLVA, ...environment } as NodeJS.ProcessEnv,
+      logger: naplo().logger,
+      runLeftoverKinds: async () => {
+        hivas += 1;
+        return {
+          rows: 0,
+          carrying: 0,
+          derivedPickup: 0,
+          entries: [],
+          unpaired: 0,
+        };
+      },
+    });
+    await scheduler.runOnce();
+    return hivas;
+  };
+
+  it("a lépés fut, ha a fajta VAGY az átvétel kapcsolója be van kapcsolva, és nem fut, ha egyik sem", async () => {
+    assert.equal(await hivasok({}), 0);
+    assert.equal(await hivasok({ MEDUSA_CLEAR_LEFTOVER_KIND: "true" }), 1);
+    assert.equal(await hivasok({ MEDUSA_CLEAR_LEFTOVER_PICKUP: "true" }), 1);
+    assert.equal(await hivasok({ MEDUSA_CLEAR_LEFTOVER_PICKUP: "false" }), 0);
   });
 });
 
