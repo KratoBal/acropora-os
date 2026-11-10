@@ -5265,6 +5265,11 @@ model Rental {
   dailyFeeHuf         Int
   depositHuf          Int
   replacementValueHuf Int
+  /// THE CONTRACT AS AGREED (S3): the text and the two late-return settings in force when the rental was recorded, so a
+  /// reprint is the signed contract. Null text: a rental recorded before S3 (it prints today's text).
+  contractTemplate    String?
+  lateFeeMultiplier   Decimal?     @db.Decimal(5, 2)
+  replacementAfterDays Int?
   accessories         String?
   /// Started 24-hour periods of the planned span times the daily fee, at recording time.
   expectedFeeHuf      Int

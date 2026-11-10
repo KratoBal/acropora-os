@@ -3,7 +3,10 @@ import { describe, it } from "node:test";
 
 import { BadRequestException, ConflictException } from "@nestjs/common";
 
+import type { Rental } from "@acropora/types";
+
 import type { CustomersRepository } from "../customers/customers.repository.js";
+import { readPdfTextLines } from "../documents/pdf/pdf-text-readback.js";
 import {
   EquipmentAlreadyRentedError,
   phoneMatchKey,
@@ -18,8 +21,18 @@ import { RentalsService } from "./rentals.service.js";
   would rewrite the contract); the desk's deposit ignored, or the device's lost when none is given; the expected fee not by
   started 24 hours; a rental recorded with both or neither customer; a new customer written although the rental is then refused
   (an end before the start, a retired or rented-out device); the race lost to the index surfacing as a 500 instead of a 409;
-  a phone key built from fewer than nine digits.
+  a phone key built from fewer than nine digits. The contract (S3): the text and the late-return settings in force at recording
+  not frozen on the rental, or a reprint reading today's Settings instead of them (barracuda, #2360).
 */
+const TODAY = {
+  contractTemplate: "MAI {{kesedelmi_szorzo}}",
+  contractTemplateIsDefault: false,
+  lateFeeMultiplier: 1.5,
+  replacementAfterDays: 14,
+};
+const settingsToday = {
+  get: async () => TODAY,
+} as unknown as RentalSettingsService;
 const equipment = {
   id: "eq-1",
   isActive: true,
@@ -63,7 +76,7 @@ function build(options?: {
     service: new RentalsService(
       repository as RentalsRepository,
       customers as CustomersRepository,
-      {} as RentalSettingsService,
+      settingsToday,
     ),
     created,
     newCustomers,
@@ -102,6 +115,10 @@ describe("recording a rental", () => {
         dailyFeeHuf: 2500,
         depositHuf: 20000,
         replacementValueHuf: 120000,
+        // the contract as agreed today, frozen on the rental
+        contractTemplate: "MAI {{kesedelmi_szorzo}}",
+        lateFeeMultiplier: 1.5,
+        replacementAfterDays: 14,
         accessories: "tápegység",
         // 49 hours: three started periods
         expectedFeeHuf: 7500,
@@ -230,5 +247,68 @@ describe("the phone match key", () => {
       assert.equal(phoneMatchKey(raw), "301234567", raw);
     for (const raw of ["123 4567", "", null, undefined])
       assert.equal(phoneMatchKey(raw), null, String(raw));
+  });
+});
+
+describe("printing the contract (S3)", () => {
+  const agreed = {
+    id: "r-1",
+    rentalNumber: "BER-1",
+    status: "OPEN",
+    equipment: { id: "eq-1", name: "Ozmózis", serialNumber: null },
+    customer: {
+      id: "c-1",
+      customerNumber: "VEVO-1",
+      displayName: "Kiss Anna",
+      phone: null,
+      email: null,
+      address: null,
+    },
+    startsAt: "2026-11-10T09:00:00.000Z",
+    plannedReturnAt: "2026-11-11T09:00:00.000Z",
+    dailyFeeHuf: 1000,
+    depositHuf: 10000,
+    replacementValueHuf: 50000,
+    // nothing was set when the rental was recorded
+    lateFeeMultiplier: null,
+    replacementAfterDays: null,
+    accessories: null,
+    expectedFeeHuf: 1000,
+    note: null,
+    returnedAt: null,
+    createdAt: "2026-11-10T09:00:00.000Z",
+  } as Rental;
+
+  const print = async (frozen: string | null) => {
+    const repository: Partial<RentalsRepository> = {
+      byId: async () => agreed,
+      contractTemplateOf: async () => frozen,
+    };
+    const service = new RentalsService(
+      repository as RentalsRepository,
+      {} as CustomersRepository,
+      settingsToday,
+    );
+    // printed three days later, after Settings changed
+    const { bytes } = await service.contract(
+      "r-1",
+      new Date("2026-11-13T10:00:00.000Z"),
+    );
+    return (await readPdfTextLines(bytes)).map((l) => l.text).join("\n");
+  };
+
+  it("reprints the text and settings frozen at recording, dated on the rental's day, not today's", async () => {
+    const text = await print("KORI {{kesedelmi_szorzo}} Kelt: {{kelt_datum}}");
+    assert.ok(
+      text.includes("KORI [még nincs megadva] Kelt: 2026. 11. 10."),
+      text,
+    );
+    assert.ok(!text.includes("MAI"), text);
+    assert.ok(!text.includes("1,5"), text);
+  });
+
+  it("prints today's text only for a rental recorded before the text was frozen", async () => {
+    const text = await print(null);
+    assert.ok(text.includes("MAI [még nincs megadva]"), text);
   });
 });

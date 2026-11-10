@@ -14,7 +14,7 @@ import {
 
 /*
   ON A REAL POSTGRES. WHAT TURNS THIS RED: the partial unique index missing (a second OPEN rental of the same device stored)
-  or too wide (a device that came back cannot be rented again); its violation not recognised as "already rented" (a 500 at
+  or too wide (a device that came back cannot be rented again); the contract's frozen text or settings not stored (S3); its violation not recognised as "already rented" (a 500 at
   the desk); a rented-out device still offered; the customer match missing a phone written another way, an e-mail in other
   case or a name without accents, or offering an archived row.
 */
@@ -47,6 +47,9 @@ describe("rentals on Postgres", { skip: gate.mode === "skip" }, () => {
     dailyFeeHuf: 2500,
     depositHuf: 30000,
     replacementValueHuf: 120000,
+    contractTemplate: "Szöveg {{kesedelmi_szorzo}}",
+    lateFeeMultiplier: 1.25,
+    replacementAfterDays: 9,
     accessories: null,
     expectedFeeHuf: 5000,
     note: null,
@@ -135,6 +138,13 @@ describe("rentals on Postgres", { skip: gate.mode === "skip" }, () => {
   it("refuses a second OPEN rental of the same device, and allows one after the return", async () => {
     const first = await repository.create(row());
     assert.match(first.rentalNumber, /^BER/);
+    // the contract as agreed is stored on the rental, the multiplier with its decimals
+    assert.equal(first.lateFeeMultiplier, 1.25);
+    assert.equal(first.replacementAfterDays, 9);
+    assert.equal(
+      await repository.contractTemplateOf(first.id),
+      "Szöveg {{kesedelmi_szorzo}}",
+    );
 
     await assert.rejects(
       () => repository.create(row()),

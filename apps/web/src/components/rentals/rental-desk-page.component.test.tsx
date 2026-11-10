@@ -76,6 +76,8 @@ const rental = (plannedReturnAt: string): Rental => ({
   dailyFeeHuf: 1000,
   depositHuf: 10000,
   replacementValueHuf: 50000,
+  lateFeeMultiplier: null,
+  replacementAfterDays: null,
   accessories: null,
   expectedFeeHuf: 2000,
   note: null,
@@ -159,6 +161,7 @@ describe("RentalDeskPage", () => {
     api.create.mockResolvedValue(rental("2026-11-07T09:00:00.000Z"));
     api.contractPdf.mockResolvedValue(new Blob(["%PDF"]));
     URL.createObjectURL = vi.fn(() => "blob:contract");
+    URL.revokeObjectURL = vi.fn();
     printed.length = 0;
     vi.spyOn(window, "open").mockImplementation(() => {
       const tab = new EventTarget() as EventTarget & { print: () => void };
@@ -201,6 +204,23 @@ describe("RentalDeskPage", () => {
     await waitFor(() => expect(printed).toEqual(["print"]));
     expect(api.contractPdf).toHaveBeenCalledWith("token-1", "r-1");
     expect(window.open).toHaveBeenCalledWith("blob:contract", "_blank");
+  });
+
+  it("releases the contract's blob URL a minute after opening it", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      api.list.mockResolvedValue({
+        items: [rental("2026-11-09T09:00:00.000Z")],
+      });
+      render(<RentalDeskPage now={() => NOW} />);
+      fireEvent.click(await screen.findByRole("button", { name: "Szerződés" }));
+      await waitFor(() => expect(window.open).toHaveBeenCalled());
+      expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(60_000);
+      expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:contract");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("says so when the browser blocks the contract tab", async () => {

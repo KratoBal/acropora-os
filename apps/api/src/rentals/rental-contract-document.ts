@@ -6,7 +6,6 @@ import {
   rentalContractBlocks,
   type Rental,
   type RentalContractValues,
-  type RentalSettings,
 } from "@acropora/types";
 
 import {
@@ -45,14 +44,11 @@ const orDash = (text: string | null) =>
   text && text.trim() !== "" ? text : "nincs";
 
 /**
- * The values of the contract's places, from the rental's own copy of the terms (never from the device's current row: the
- * contract prints what was agreed). Times on the Budapest clock; a setting not decided yet prints as such.
+ * The values of the contract's places, from the rental's own copy of the terms (never from the device's current row or
+ * today's Settings: the contract prints what was agreed). Times on the Budapest clock; a setting not decided when the rental
+ * was recorded prints as such. Dated on the rental's first day, never the day of a reprint (barracuda, #2360).
  */
-export function rentalContractValues(
-  rental: Rental,
-  settings: Pick<RentalSettings, "lateFeeMultiplier" | "replacementAfterDays">,
-  printedAt: Date,
-): RentalContractValues {
+export function rentalContractValues(rental: Rental): RentalContractValues {
   return {
     szerzodes_szam: rental.rentalNumber,
     ceg_nev: ACROPORA_COMPANY.name,
@@ -74,14 +70,14 @@ export function rentalContractValues(
     kaucio: huf(rental.depositHuf),
     potlasi_ertek: huf(rental.replacementValueHuf),
     kesedelmi_szorzo:
-      settings.lateFeeMultiplier === null
+      rental.lateFeeMultiplier === null
         ? RENTAL_CONTRACT_MISSING_VALUE
-        : NUMBER.format(settings.lateFeeMultiplier),
+        : NUMBER.format(rental.lateFeeMultiplier),
     kesedelem_napok:
-      settings.replacementAfterDays === null
+      rental.replacementAfterDays === null
         ? RENTAL_CONTRACT_MISSING_VALUE
-        : String(settings.replacementAfterDays),
-    kelt_datum: BUDAPEST_DAY.format(printedAt),
+        : String(rental.replacementAfterDays),
+    kelt_datum: BUDAPEST_DAY.format(new Date(rental.startsAt)),
   };
 }
 
@@ -93,7 +89,6 @@ export function rentalContractValues(
 export function rentalContractDocument(input: {
   rental: Rental;
   template: string;
-  settings: Pick<RentalSettings, "lateFeeMultiplier" | "replacementAfterDays">;
   printedAt: Date;
 }): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -106,13 +101,57 @@ export function rentalContractDocument(input: {
     try {
       const filled = fillRentalContractTemplate(
         input.template,
-        rentalContractValues(input.rental, input.settings, input.printedAt),
+        rentalContractValues(input.rental),
       );
       let y = PDF_FIRST_CONTENT_TOP;
       const need = (height: number) => {
         if (y + height <= PDF_CONTENT_BOTTOM) return;
         addPage(document);
         y = PDF_CONTINUATION_CONTENT_TOP;
+      };
+
+      const PARAGRAPH = { width: PDF_CONTENT_WIDTH, lineGap: 2 };
+      const heightOf = (text: string) =>
+        document.heightOfString(text, PARAGRAPH);
+      /**
+       * A paragraph taller than the room left is split between words onto the next pages HERE: the document has no margins
+       * (the header and footer are drawn into them afterwards), so pdfkit's own page break would start the rest at the very top
+       * of the page, under the header (barracuda, #2360). Each piece is the longest run of words that fits.
+       */
+      const writeParagraph = (text: string) => {
+        let rest = text;
+        while (rest !== "") {
+          const room = PDF_CONTENT_BOTTOM - y;
+          const height = heightOf(rest);
+          if (height <= room) {
+            document.text(rest, PDF_LEFT, y, PARAGRAPH);
+            y += height + 8;
+            return;
+          }
+          // each piece keeps the space or line break after it, so joining the pieces gives the text back
+          const words = rest.split(/(?<=\s)/);
+          let low = 0;
+          let high = words.length;
+          while (low < high) {
+            const mid = Math.ceil((low + high) / 2);
+            if (heightOf(words.slice(0, mid).join("").trimEnd()) <= room)
+              low = mid;
+            else high = mid - 1;
+          }
+          // not even one word fits a fresh page: write it anyway, or this would turn pages forever
+          const fits =
+            low === 0 && y === PDF_CONTINUATION_CONTENT_TOP ? 1 : low;
+          if (fits > 0)
+            document.text(
+              words.slice(0, fits).join("").trimEnd(),
+              PDF_LEFT,
+              y,
+              PARAGRAPH,
+            );
+          rest = words.slice(fits).join("");
+          addPage(document);
+          y = PDF_CONTINUATION_CONTENT_TOP;
+        }
       };
 
       for (const block of rentalContractBlocks(filled)) {
@@ -146,20 +185,8 @@ export function rentalContractDocument(input: {
           }
           y += 30;
         } else {
-          const text = block.lines.join("\n");
-          document.fontSize(9.5);
-          const height = document.heightOfString(text, {
-            width: PDF_CONTENT_WIDTH,
-            lineGap: 2,
-          });
-          need(
-            Math.min(height, PDF_CONTENT_BOTTOM - PDF_CONTINUATION_CONTENT_TOP),
-          );
-          document.fillColor(PDF_INK).text(text, PDF_LEFT, y, {
-            width: PDF_CONTENT_WIDTH,
-            lineGap: 2,
-          });
-          y = Math.max(y + height, document.y) + 8;
+          document.fontSize(9.5).fillColor(PDF_INK);
+          writeParagraph(block.lines.join("\n"));
         }
       }
 

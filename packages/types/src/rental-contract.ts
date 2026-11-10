@@ -26,9 +26,10 @@ export const RENTAL_CONTRACT_VARIABLES = {
   varhato_dij: "A várható bérleti díj a tervezett időre, Ft-tal",
   kaucio: "A kaució, Ft-tal",
   potlasi_ertek: "Az eszköz pótlási értéke, Ft-tal",
-  kesedelmi_szorzo: "A késedelmi szorzó (a Beállításokból)",
-  kesedelem_napok: "Hány nap késés után jár a pótlási érték (a Beállításokból)",
-  kelt_datum: "A nyomtatás napja",
+  kesedelmi_szorzo: "A késedelmi szorzó (a bérléskor érvényes beállítás)",
+  kesedelem_napok:
+    "Hány nap késés után jár a pótlási érték (a bérléskor érvényes beállítás)",
+  kelt_datum: "A szerződés kelte: a bérlés kezdőnapja",
 } as const;
 
 export type RentalContractVariable = keyof typeof RENTAL_CONTRACT_VARIABLES;
@@ -60,7 +61,8 @@ export function unknownRentalContractVariables(template: string): string[] {
   const unknown = new Set<string>();
   for (const match of template.matchAll(PLACE)) {
     const name = match[1] ?? "";
-    if (!(name in RENTAL_CONTRACT_VARIABLES)) unknown.add(name);
+    // own keys only: `in` also sees the prototype ({{constructor}}, {{toString}}, {{__proto__}}; barracuda, #2360)
+    if (!Object.hasOwn(RENTAL_CONTRACT_VARIABLES, name)) unknown.add(name);
   }
   return [...unknown];
 }
@@ -71,7 +73,9 @@ export function fillRentalContractTemplate(
   values: RentalContractValues,
 ): string {
   return template.replace(PLACE, (whole, name: string) =>
-    name in values ? values[name as RentalContractVariable] : whole,
+    Object.hasOwn(values, name)
+      ? values[name as RentalContractVariable]
+      : whole,
   );
 }
 

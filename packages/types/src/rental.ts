@@ -2,7 +2,8 @@
  * A RENTAL: one device to one customer, from a start to a planned return (task eszkozberles, S2; Balázs, 2026-11-06).
  *
  * The device's fee, deposit, replacement value and accessories are COPIED onto the rental when it is recorded: the contract
- * prints what was agreed that day, and a later price change in Settings must not rewrite it. The deposit may differ from the
+ * prints what was agreed that day, and a later price change in Settings must not rewrite it. So are the contract's text and
+ * the two late-return settings (S3; acrobot 45779 on barracuda's #2360 review): a reprint is the contract that was signed. The deposit may differ from the
  * device's default (the desk may agree on another one).
  *
  * At most one OPEN rental per device: a partial unique index in the migration, not only a check in the service.
@@ -32,6 +33,10 @@ export interface Rental {
   dailyFeeHuf: number;
   depositHuf: number;
   replacementValueHuf: number;
+  /** The late-fee multiplier in force when the rental was recorded; null when none was set then (the contract says so). */
+  lateFeeMultiplier: number | null;
+  /** The late days after which the replacement value may be claimed, as in force when recorded; null when none was set. */
+  replacementAfterDays: number | null;
   accessories: string | null;
   /** The fee for the planned period: started 24-hour periods times the daily fee. */
   expectedFeeHuf: number;

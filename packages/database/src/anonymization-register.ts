@@ -851,6 +851,7 @@ export const ANONYMIZATION_REGISTER: Readonly<
   },
   Rental: {
     rentalNumber: "identifier",
+    contractTemplate: "business",
     accessories: "business",
     note: "freeText",
     createdById: "identifier",

@@ -7,6 +7,11 @@ import {
   type Rental,
 } from "@acropora/types";
 
+import {
+  PDF_CONTENT_BOTTOM,
+  PDF_CONTINUATION_CONTENT_TOP,
+  PDF_FIRST_CONTENT_TOP,
+} from "../documents/pdf/branded-document.js";
 import { readPdfTextLines } from "../documents/pdf/pdf-text-readback.js";
 import { DEFAULT_RENTAL_CONTRACT_TEMPLATE } from "./rental-contract-default.js";
 import {
@@ -18,7 +23,8 @@ import {
   WHAT TURNS THIS RED. A time printed in UTC instead of on the Budapest clock; the device's CURRENT terms printed instead of the
   rental's own copy; an undecided late-return setting printed as a number (0, or an invented default) instead of "not set yet";
   the built-in text carrying a place the renderer does not know; the contract losing a Hungarian letter (ő, ű) or the renter's
-  details on paper; the signature mark printed as text.
+  details on paper; the signature mark printed as text; today's Settings or the day of a reprint printed instead of what the
+  rental froze when it was recorded (barracuda, #2360).
 */
 const rental: Rental = {
   id: "r-1",
@@ -38,6 +44,8 @@ const rental: Rental = {
   dailyFeeHuf: 2500,
   depositHuf: 20000,
   replacementValueHuf: 120000,
+  lateFeeMultiplier: null,
+  replacementAfterDays: null,
   accessories: "tápegység, 2 tömlő",
   expectedFeeHuf: 7500,
   note: null,
@@ -45,11 +53,10 @@ const rental: Rental = {
   createdAt: "2026-11-06T09:00:00.000Z",
 };
 const PRINTED = new Date("2026-11-06T09:05:00.000Z");
-const UNSET = { lateFeeMultiplier: null, replacementAfterDays: null };
 
 describe("the rental contract's values", () => {
   it("prints the rental's own terms, on the Budapest clock", () => {
-    const values = rentalContractValues(rental, UNSET, PRINTED);
+    const values = rentalContractValues(rental);
     assert.equal(values.berles_kezdete, "2026. 11. 06. 10:00");
     assert.equal(values.tervezett_visszahozas, "2026. 11. 08. 10:30");
     assert.match(values.kaucio, /^20\s000 Ft$/);
@@ -58,15 +65,21 @@ describe("the rental contract's values", () => {
     assert.equal(values.kelt_datum, "2026. 11. 06.");
   });
 
-  it("says the late-return settings are not set, and prints them once they are", () => {
-    const unset = rentalContractValues(rental, UNSET, PRINTED);
+  it("is dated on the rental's first Budapest day, whenever it is printed (barracuda, #2360)", () => {
+    // 23:30 UTC on the 6th is already the 7th in Budapest
+    const late = { ...rental, startsAt: "2026-11-06T23:30:00.000Z" };
+    assert.equal(rentalContractValues(late).kelt_datum, "2026. 11. 07.");
+  });
+
+  it("says the late-return settings were not set when agreed, and prints the rental's own when they were", () => {
+    const unset = rentalContractValues(rental);
     assert.equal(unset.kesedelmi_szorzo, RENTAL_CONTRACT_MISSING_VALUE);
     assert.equal(unset.kesedelem_napok, RENTAL_CONTRACT_MISSING_VALUE);
-    const set = rentalContractValues(
-      rental,
-      { lateFeeMultiplier: 1.5, replacementAfterDays: 14 },
-      PRINTED,
-    );
+    const set = rentalContractValues({
+      ...rental,
+      lateFeeMultiplier: 1.5,
+      replacementAfterDays: 14,
+    });
     assert.equal(set.kesedelmi_szorzo, "1,5");
     assert.equal(set.kesedelem_napok, "14");
   });
@@ -84,7 +97,6 @@ describe("the rental contract PDF", () => {
     const bytes = await rentalContractDocument({
       rental,
       template: DEFAULT_RENTAL_CONTRACT_TEMPLATE,
-      settings: UNSET,
       printedAt: PRINTED,
     });
     const lines = (await readPdfTextLines(bytes)).map((l) => l.text);
@@ -113,12 +125,40 @@ describe("the rental contract PDF", () => {
     );
   });
 
+  it("splits a paragraph longer than a page between the content edges, losing no word (barracuda, #2360)", async () => {
+    const words = 2500;
+    const template = `## Első\n\n${Array(words).fill("szerzodes").join(" ")}\n\n## VÉGE`;
+    const lines = await readPdfTextLines(
+      await rentalContractDocument({ rental, template, printedAt: PRINTED }),
+    );
+    const body = lines.filter((line) => line.text.includes("szerzodes"));
+    assert.ok(new Set(body.map((line) => line.pageNumber)).size >= 3);
+    for (const line of body) {
+      const top =
+        line.pageNumber === 1
+          ? PDF_FIRST_CONTENT_TOP
+          : PDF_CONTINUATION_CONTENT_TOP;
+      assert.ok(line.top >= top - 1, `page ${line.pageNumber} top ${line.top}`);
+      assert.ok(
+        line.top + line.height <= PDF_CONTENT_BOTTOM + 1,
+        `page ${line.pageNumber} bottom ${line.top + line.height}`,
+      );
+    }
+    const count = body
+      .map(
+        (line) =>
+          line.text.split(/\s+/).filter((w) => w === "szerzodes").length,
+      )
+      .reduce((a, b) => a + b, 0);
+    assert.equal(count, words);
+    assert.ok(lines.some((line) => line.text === "VÉGE"));
+  });
+
   it("gives the same bytes for the same rental at the same moment", async () => {
     const make = () =>
       rentalContractDocument({
         rental,
         template: DEFAULT_RENTAL_CONTRACT_TEMPLATE,
-        settings: UNSET,
         printedAt: PRINTED,
       });
     assert.deepEqual(await make(), await make());

@@ -53,16 +53,18 @@ export class RentalsService {
   }
 
   /**
-   * The contract of a rental, with today's template and settings (a reprint picks up a corrected text; the rental's own
-   * terms never change). `printedAt` comes from the caller so a test can pin it.
+   * The contract of a rental AS SIGNED: its text and late-return settings were frozen on the rental when it was recorded
+   * (acrobot 45779 on barracuda's #2360 review), so a reprint after a change in Settings is still the agreed contract. A rental
+   * recorded before S3 has no frozen text and prints today's. `printedAt` comes from the caller so a test can pin it.
    */
   async contract(id: string, printedAt: Date) {
     const rental = await this.get(id);
-    const settings = await this.settings.get();
+    const template =
+      (await this.repository.contractTemplateOf(id)) ??
+      (await this.settings.get()).contractTemplate;
     const bytes = await rentalContractDocument({
       rental,
-      template: settings.contractTemplate,
-      settings,
+      template,
       printedAt,
     });
     return { bytes, fileName: `berleti-szerzodes-${rental.rentalNumber}.pdf` };
@@ -110,6 +112,8 @@ export class RentalsService {
       );
     if (await this.repository.hasOpenRental(equipment.id))
       throw new ConflictException(ALREADY_RENTED);
+    // read before any write: the contract as agreed today, frozen on the rental
+    const settings = await this.settings.get();
 
     let customerId = input.customerId ?? null;
     let createdCustomerId: string | null = null;
@@ -137,6 +141,9 @@ export class RentalsService {
         dailyFeeHuf: equipment.dailyFeeHuf,
         depositHuf: input.depositHuf ?? equipment.depositHuf,
         replacementValueHuf: equipment.replacementValueHuf,
+        contractTemplate: settings.contractTemplate,
+        lateFeeMultiplier: settings.lateFeeMultiplier,
+        replacementAfterDays: settings.replacementAfterDays,
         accessories: equipment.accessories,
         expectedFeeHuf: rentalFeeHuf(
           startsAt,

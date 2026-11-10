@@ -138,6 +138,8 @@ export function RentalDeskPage({
         await rentalsApi.contractPdf(token, rental.id),
       );
       const opened = window.open(url, "_blank");
+      // the tab keeps its own copy once loaded; a minute is enough for a slow one, and the page never holds the PDF for good
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
       if (!opened) {
         setError(
           `A böngésző nem engedte megnyitni a szerződést (${rental.rentalNumber}). A listában a Szerződés gombbal nyomtatható.`,
