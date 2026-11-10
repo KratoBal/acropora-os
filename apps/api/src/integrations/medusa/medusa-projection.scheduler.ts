@@ -1169,8 +1169,9 @@ export class MedusaProjectionScheduler
    * meg nem ismer.
    *
    * AMIT A JEL NEM LAT, es a `medusa-projection-due.ts` fejleceben tetelesen
-   * all: a kod valtozasat, a kategoria- es kep-hozzarendelest (azokon a
-   * tablakon NINCS `updatedAt` -- merve), es a bolt oldali valtozast.
+   * all: a kod valtozasat es a bolt oldali valtozast. A kategoria- es
+   * kep-hozzarendelesnek nincs sajat idobelyege, de minden iroja a `Product`
+   * sort is mozditja (visszamerve 2026-11-10, kartya 6e05f8a4).
    *
    * A KAPCSOLATOK 2026-09-08-IG UGYANEBBE A LISTABA TARTOZTAK, ES MOSTANTOL NEM.
    * A `ProductRelation` tablan addig nem volt idobelyeg, tehat egy
