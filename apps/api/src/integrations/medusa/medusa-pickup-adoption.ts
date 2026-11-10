@@ -1,3 +1,8 @@
+import { liveAnimalProductIds } from "./medusa-leftover-kind.js";
+import {
+  skuParositas,
+  type ShippingAttributesCliDatabase,
+} from "./medusa-shipping-attributes.cli.js";
 import type { MedusaShippingAttributesService } from "./medusa-shipping-attributes.service.js";
 
 /**
@@ -224,4 +229,54 @@ export function describePickupAdoption(
     `Átvétel adoptálása: ${result.adopted.length} adoptálható sor a fájlban, ${done} ${apply ? "jelölve" : "jelölendő"}, ${result.refused.length} elutasítva.\n`,
   );
   return sorok.join("");
+}
+
+/** Amit a lista osszeallitasa az OS adatbazisabol olvas: az elo allat besorolas, a profil-sorok, a SKU-parositas es a nev. */
+export type PickupAdoptionDatabase = Pick<
+  ShippingAttributesCliDatabase,
+  | "category"
+  | "productCategory"
+  | "productShippingProfile"
+  | "productVariant"
+  | "unasProductSnapshot"
+> & {
+  product: {
+    findMany(args: unknown): Promise<{ id: string; name: string }[]>;
+  };
+};
+
+/**
+ * A LISTA OSSZEALLITASA, EGY HELYEN: a parancs es a vegpont ugyanazt hivja, hogy a ket ut ne mondhasson mast. Csak olvas (a bolt
+ * szallitasi-jellemzo sorait es SKU-listajat, az OS adatbazisat).
+ */
+export async function gatherUnmarkedPickup(
+  shipping: Pick<
+    MedusaShippingAttributesService,
+    "listShopShippingAttributes" | "osProductOfShop" | "listShopSkus"
+  >,
+  database: PickupAdoptionDatabase,
+): Promise<UnmarkedPickupReport> {
+  const live = await liveAnimalProductIds(database);
+  const profilePickup = new Set(
+    (
+      await database.productShippingProfile.findMany({
+        where: { pickupOnly: true },
+        select: { productId: true },
+      })
+    ).map((sor) => sor.productId),
+  );
+  return listUnmarkedPickup(shipping, {
+    live,
+    profilePickup,
+    pairing: async () => (await skuParositas(shipping, database)).osToShop,
+    names: async (ids) =>
+      new Map(
+        (
+          await database.product.findMany({
+            where: { id: { in: ids } },
+            select: { id: true, name: true },
+          })
+        ).map((termek) => [termek.id, termek.name]),
+      ),
+  });
 }

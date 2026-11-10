@@ -6,13 +6,13 @@ import { prisma } from "@acropora/database";
 import { MedusaConfigurationError } from "./medusa-admin.client.js";
 import { MedusaConnectionError } from "./medusa-connection.types.js";
 import { MedusaProductLinkRepository } from "./medusa-product-link.repository.js";
-import { liveAnimalProductIds } from "./medusa-leftover-kind.js";
 import {
   adoptPickup,
   describePickupAdoption,
   describeUnmarkedPickup,
-  listUnmarkedPickup,
+  gatherUnmarkedPickup,
   parseReviewedIds,
+  type PickupAdoptionDatabase,
   type PickupAdoptionService,
 } from "./medusa-pickup-adoption.js";
 import {
@@ -20,11 +20,7 @@ import {
   medusaClientForProjection,
   storedCredentialProvider,
 } from "./medusa-projection.credentials.js";
-import {
-  skuParositas,
-  type CliOutput,
-  type ShippingAttributesCliDatabase,
-} from "./medusa-shipping-attributes.cli.js";
+import { type CliOutput } from "./medusa-shipping-attributes.cli.js";
 import { MedusaShippingAttributesService } from "./medusa-shipping-attributes.service.js";
 
 /**
@@ -37,18 +33,7 @@ import { MedusaShippingAttributesService } from "./medusa-shipping-attributes.se
  * A fajl soronkent egy OS-azonosito (az elso szo): a lista sorainak elso oszlopa, az atnezes utan. Amit nem soroltak fel, a parancs
  * nem erinti, es a fajlban felsorolt, de nem adoptalhato azonosito NEVET es okat kap a kimenetben.
  */
-export type PickupAdoptionCliDatabase = Pick<
-  ShippingAttributesCliDatabase,
-  | "category"
-  | "productCategory"
-  | "productShippingProfile"
-  | "productVariant"
-  | "unasProductSnapshot"
-> & {
-  product: {
-    findMany(args: unknown): Promise<{ id: string; name: string }[]>;
-  };
-};
+export type PickupAdoptionCliDatabase = PickupAdoptionDatabase;
 
 export async function runPickupAdoptionCli(
   argumentumok: string[],
@@ -113,29 +98,7 @@ export async function runPickupAdoptionCli(
   }
   const shipping = futtato;
 
-  const live = await liveAnimalProductIds(database);
-  const profilePickup = new Set(
-    (
-      await database.productShippingProfile.findMany({
-        where: { pickupOnly: true },
-        select: { productId: true },
-      })
-    ).map((sor) => sor.productId),
-  );
-  const report = await listUnmarkedPickup(shipping, {
-    live,
-    profilePickup,
-    pairing: async () => (await skuParositas(shipping, database)).osToShop,
-    names: async (ids) =>
-      new Map(
-        (
-          await database.product.findMany({
-            where: { id: { in: ids } },
-            select: { id: true, name: true },
-          })
-        ).map((termek) => [termek.id, termek.name]),
-      ),
-  });
+  const report = await gatherUnmarkedPickup(shipping, database);
   out.stdout(describeUnmarkedPickup(report));
   if (!reviewed) return 0;
   if (!report.markKnown) return 1;
