@@ -457,6 +457,12 @@ export const MAIL_TEMPLATE_VARIABLES: readonly MailTemplateVariable[] = [
     description: "Blokk: a csomagban lévő tételek, ár nélkül.",
     kind: "block",
   },
+  {
+    name: "hasznalati_utmutato",
+    description:
+      "Blokk: a csomag termékeinek jóváhagyott használati útmutatója, termékenként az első bekezdés és a termékoldal linkje. Ha egyiknek sincs, nem jelenik meg.",
+    kind: "block",
+  },
   // #1582 P3: the quote mail's own variables
   {
     name: "ajanlat_szama",
@@ -783,6 +789,7 @@ const HUNGARIAN_MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
       "szallitas_doboz",
       "fizetendo_doboz",
       "csomag_tartalma",
+      "hasznalati_utmutato",
     ],
   },
   {
