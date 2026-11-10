@@ -7,6 +7,8 @@ import {
   AUTO_ACCEPT_RULE,
   autoAcceptDecision,
   dosingGroup,
+  isStrictPack,
+  packDecision,
   runAutoAccept,
   type AutoEvidence,
   type AutoInput,
@@ -501,13 +503,14 @@ describe("a futtató", () => {
         ["dosingMode", "SKIP"],
         ["dosingGuidance", "SKIP"],
         ["dosingTests", "SKIP"],
+        ["packSize", "SKIP"],
       ],
     );
     assert.equal(accepted.length, 0);
     const wet = await runAutoAccept(["p1"], true, deps(accepted));
     assert.deepEqual(
       wet.map((o) => o.kind),
-      ["ACCEPTED", "SKIP", "SKIP", "SKIP"],
+      ["ACCEPTED", "SKIP", "SKIP", "SKIP", "SKIP"],
     );
     assert.deepEqual(accepted, [["p1", "fr-dosing", AUTO_ACCEPT_RULE]]);
   });
@@ -638,5 +641,134 @@ describe("a szöveg sem viszi ki az automatikus tényt (barracuda, #1801)", () =
   it("az automatikus tényre épülő szöveg nem megy ki, az emberire igen", () => {
     assert.equal(projectedCopy([lead], [], "ACROPORA"), null);
     assert.ok(projectedCopy([lead], [emberi], "ACROPORA")?.description);
+  });
+});
+
+describe("a kiszerelés (ReefClub V3.2 kifogyási emlékeztető, acrobot 45501)", () => {
+  const pack = (over: Partial<AutoResult> = {}): AutoResult => ({
+    id: "fr-pack",
+    status: "VERIFIED",
+    value: "500 ml",
+    evidence: [page()],
+    ...over,
+  });
+  const accepted: string[][] = [];
+  const deps = (
+    over: {
+      pack?: AutoResult | null;
+      dose?: AutoResult | null;
+      doseFact?: string | null;
+    } = {},
+  ) => ({
+    latestResult: async (_p: string, field: string) =>
+      field === "packSize"
+        ? over.pack === undefined
+          ? pack()
+          : over.pack
+        : field === "dosing"
+          ? over.dose === undefined
+            ? dosing({ value: "5 ml/100 L/day" })
+            : over.dose
+          : field === "ean"
+            ? ean()
+            : null,
+    productFact: async (_p: string, field: string) =>
+      field === "dosing" && over.doseFact
+        ? {
+            fieldResultId: "fr-old",
+            acceptedByRule: null,
+            value: over.doseFact,
+          }
+        : null,
+    sharedPages: async () => new Map<string, (string | null)[]>(),
+    accept: async (p: string, id: string, rule: string) => {
+      accepted.push([p, id, rule]);
+    },
+  });
+
+  it("csak a szigorú alak: egy szám és egy térfogat- vagy tömegegység", () => {
+    for (const ok of ["500 ml", "1 l", "250 g", "0,5 l"])
+      assert.equal(isStrictPack(ok), true, ok);
+    for (const bad of ["2 x 500 ml", "~500 ml", "500", "500 ml + 100 ml", ""])
+      assert.equal(isStrictPack(bad), false, bad);
+  });
+
+  it("adag nélküli terméknél és nem szigorú alaknál emberhez megy, a közös kihagyás változatlanul átjön", () => {
+    const accept = {
+      kind: "ACCEPT",
+      fieldResultId: "fr-pack",
+      value: "500 ml",
+    } as const;
+    assert.equal(packDecision(accept, true).kind, "ACCEPT");
+    assert.match(
+      (packDecision(accept, false) as { reason: string }).reason,
+      /adagolás nélküli/,
+    );
+    assert.match(
+      (
+        packDecision({ ...accept, value: "2 x 500 ml" }, true) as {
+          reason: string;
+        }
+      ).reason,
+      /nem szigorú alak/,
+    );
+    const skip = {
+      kind: "SKIP",
+      reason: "nem gyártói forrás (RETAILER_PAGE)",
+    } as const;
+    assert.deepEqual(packDecision(skip, true), skip);
+  });
+
+  it("a futtató az adaggal együtt elfogadja; adag nélkül, megosztott lapról vagy kereskedői lapról nem", async () => {
+    accepted.length = 0;
+    const out = await runAutoAccept(["p1"], true, deps());
+    assert.deepEqual(
+      out.filter((o) => o.kind === "ACCEPTED").map((o) => [o.field, o.detail]),
+      [
+        ["dosing", "5 ml/100 L/day"],
+        ["packSize", "500 ml"],
+      ],
+    );
+    // a dose a person accepted earlier is a dose too
+    accepted.length = 0;
+    await runAutoAccept(["p1"], true, {
+      ...deps({ dose: null, doseFact: "5 ml/100 L/day" }),
+    });
+    assert.deepEqual(accepted, [["p1", "fr-pack", AUTO_ACCEPT_RULE]]);
+    // no dose at all: the pack waits for a person
+    accepted.length = 0;
+    const none = await runAutoAccept(["p1"], true, deps({ dose: null }));
+    assert.deepEqual(accepted, []);
+    assert.match(
+      none.find((o) => o.field === "packSize")!.detail,
+      /adagolás nélküli/,
+    );
+    // the sizes of one agent share a page: never a pack from it, even with the same dose
+    accepted.length = 0;
+    const shared = await runAutoAccept(["p1"], true, {
+      ...deps(),
+      sharedPages: async () =>
+        new Map([[PAGE, ["5 ml/100 L/day" as string | null]]]),
+    });
+    assert.deepEqual(
+      accepted.map((a) => a[1]),
+      ["fr-dosing"],
+    );
+    assert.match(
+      shared.find((o) => o.field === "packSize")!.detail,
+      /másik termékhez is tartozik/,
+    );
+    accepted.length = 0;
+    await runAutoAccept(
+      ["p1"],
+      true,
+      deps({
+        pack: pack({ evidence: [page({ sourceType: "RETAILER_PAGE" })] }),
+      }),
+    );
+    assert.deepEqual(
+      accepted.map((a) => a[1]),
+      ["fr-dosing"],
+    );
   });
 });
