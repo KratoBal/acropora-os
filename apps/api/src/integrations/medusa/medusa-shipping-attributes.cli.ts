@@ -15,6 +15,11 @@ import {
   liveAnimalKindSubtrees,
   liveAnimalSubtreeIds,
 } from "./medusa-livestock.policy.js";
+import {
+  clearLeftoverKinds as leftoverKinds,
+  describeLeftoverKinds,
+  type LeftoverKindService,
+} from "./medusa-leftover-kind.js";
 import { MedusaShippingAttributesService } from "./medusa-shipping-attributes.service.js";
 import {
   listAllShopSkus,
@@ -264,12 +269,62 @@ export async function runShippingAttributesCli(
     }
   }
 
+  /*
+    A BOLTBAN MARADT FAJTA (kartya 4b30b373): egy termek, ami kikerult az elo allat kategoriabol, es nincs
+    profil-sora, nem celpont fent, ezert a boltban a regi `livestock_kind` maradna. A bolti sorokbol keressuk.
+  */
+  await clearLeftoverKinds(
+    futtato,
+    new Set(celok),
+    parositas.osToShop,
+    idk,
+    apply,
+    out,
+  );
+
   if (!apply)
     out.stdout(
       "\nEz a futás semmit nem írt. Az átvitelhez add meg a --apply kapcsolót.\n",
     );
 
   return bukott ? 1 : 0;
+}
+
+/**
+ * A BOLTBAN MARADT ELO ALLAT FAJTA LETORLESE (V2.6 S1b koveto, kartya 4b30b373).
+ *
+ * A bolt sorai kozul azokat nezi, amelyeken fajta all, es amelyek OS-termeke NEM celpont a fo koron (nincs profil-sora
+ * es nincs elo allat besorolasa): az OS mar nem vezeti le a fajtat, ezert a bolt sora null-t kap. Amelyik OS-termek
+ * celpont volt, azt a fo kor mar a levezetett fajtaval irta (vagy mar igy allt). Amelyik bolti sorhoz nem talalunk OS-
+ * termeket (sem kotes-sor, sem egyertelmu SKU-par), ahhoz nem nyulunk, csak megszamoljuk.
+ */
+export async function clearLeftoverKinds(
+  futtato: LeftoverKindService,
+  celok: ReadonlySet<string>,
+  osToShop: ReadonlyMap<string, string>,
+  idk: readonly string[],
+  apply: boolean,
+  out: CliOutput,
+): Promise<{
+  rows: number;
+  carrying: number;
+  cleared: number;
+  unpaired: number;
+}> {
+  // a szabaly a `medusa-leftover-kind.ts`-ben all, mert a vetitesi kor ugyanazt futtatja
+  const report = await leftoverKinds(futtato, {
+    skip: (osProductId) => celok.has(osProductId),
+    pairing: async () => osToShop,
+    only: idk,
+    apply,
+  });
+  out.stdout(describeLeftoverKinds(report, apply));
+  return {
+    rows: report.rows,
+    carrying: report.carrying,
+    cleared: report.entries.length,
+    unpaired: report.unpaired,
+  };
 }
 
 /**

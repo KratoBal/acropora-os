@@ -1006,6 +1006,7 @@ export type {
   ElhelyezesiIgeny,
   UnasProductMirrorDetail,
   ProductListResponse,
+  ProductLivestockKind,
   ProductUpdateInput,
   ProductType,
   ProductVariantSummary,

@@ -21,6 +21,7 @@ import { isOwnSaleActive } from "./own-sale.js";
 import {
   datasheetPatchOf,
   filledNameFields,
+  type DatasheetPatch,
 } from "./product-datasheet-patch.js";
 import { retryOnSerializationConflict } from "../common/transaction-retry.util.js";
 import { unasShippingProfile } from "../integrations/medusa/medusa-unas-shipping.policy.js";
@@ -54,7 +55,14 @@ const productInclude = {
     },
   },
   categories: {
-    include: { category: true },
+    // the leaf and three ancestors: the detail names the live animal kind from the root of the path (card 20b0dd47)
+    include: {
+      category: {
+        include: {
+          parent: { include: { parent: { include: { parent: true } } } },
+        },
+      },
+    },
     orderBy: [
       { isPrimary: "desc" },
       { sortOrder: "asc" },
@@ -145,6 +153,47 @@ const productListInclude = {
   },
 } as const;
 
+/**
+ * EGY KITOLTOTT NEV FELOLDJA A MEZO MEGTAGADASAT (kartya 20b0dd47, barracuda #2357): a "kitoltve ES megtagadva" par itt nem
+ * keletkezhet. A sor NYOM NELKUL nem torlodik: az indoka, az oka es a megtagadas napja a termek domain-esemenyebe kerul,
+ * ugyanabban a tranzakcioban. A megtagadas-sor nem tarolja, ki tagadta meg; az esemeny actorja az iro (ha ismert).
+ */
+async function resolveRefusedNames(
+  transaction: ProductTransaction,
+  productId: string,
+  patch: DatasheetPatch | null,
+  actorUserId: string | null,
+): Promise<void> {
+  const filled = filledNameFields(patch);
+  if (filled.length === 0) return;
+  const where = { datasheet: { productId }, mezo: { in: filled } };
+  const refused = await transaction.productDatasheetFieldRefusal.findMany({
+    where,
+    select: { mezo: true, indok: true, oka: true, createdAt: true },
+  });
+  if (refused.length === 0) return;
+  await transaction.productDatasheetFieldRefusal.deleteMany({ where });
+  await transaction.domainEvent.create({
+    data: {
+      id: randomUUID(),
+      eventType: "product.datasheet.refusal-resolved",
+      aggregateType: "Product",
+      aggregateId: productId,
+      actorUserId,
+      occurredAt: new Date(),
+      schemaVersion: 1,
+      payload: {
+        resolved: refused.map((row) => ({
+          field: row.mezo,
+          reason: row.indok,
+          cause: row.oka,
+          refusedAt: row.createdAt.toISOString(),
+        })),
+      } satisfies Prisma.JsonObject,
+    },
+  });
+}
+
 interface ProductTransaction {
   product: {
     create(args: unknown): Promise<ProductWithRelations>;
@@ -154,6 +203,10 @@ interface ProductTransaction {
   };
   productCategory: {
     updateMany(args: unknown): Promise<unknown>;
+    upsert(args: unknown): Promise<unknown>;
+  };
+  /** A nevek kozvetlen irasa (kartya 20b0dd47): az adatlap sora, a termek sora NELKUL. */
+  productDatasheet: {
     upsert(args: unknown): Promise<unknown>;
   };
   /** Egy kitoltott nev feloldja a mezo megtagadasat (kartya 20b0dd47): elobb a sor, aztan a torles. */
@@ -558,6 +611,54 @@ export class ProductRepository extends Repository {
     };
   }
 
+  /**
+   * A NEVEK KOZVETLEN IRASA (kartya 20b0dd47, acrobot stage-probaja): a magyar, az angol es a nemet nev az ADATLAP sorara
+   * kerul, a termek sorat nem erinti. Ez az ut a UNAS-gazdaju termeken is megy (a nevek Acropora-tulajdonuak, a UNAS-
+   * szinkron nem irja oket), es ezert a `Product.updatedAt` sem lep: a vetites esedekesseg-jele az, tehat egy nev-iras
+   * nem viszi a termeket a boltba (a vetites ugyanugy nem olvassa a neveket). Csak az adott mezok irodnak, az ures nev
+   * torol, egy kitoltott nev feloldja a mezo megtagadasat. `null`, ha nincs ilyen termek.
+   */
+  updateDatasheetNames(
+    id: string,
+    input: {
+      magyarNev?: string | null;
+      angolNev?: string | null;
+      nemetNev?: string | null;
+    },
+    actorUserId: string | null = null,
+  ): Promise<ProductDetail | null> {
+    // CSAK A HAROM NEV: a belso hivo se irhasson itt elhelyezesi igenyt (fenyIgeny, aramlasIgeny) UNAS-gazdaju termeken
+    // (barracuda, #2361 review); HTTP-n a globalis ValidationPipe (whitelist + forbidNonWhitelisted) amugy is elutasitja
+    const patch = datasheetPatchOf({
+      magyarNev: input.magyarNev,
+      angolNev: input.angolNev,
+      nemetNev: input.nemetNev,
+    });
+    return this.productDatabase.$transaction(
+      async (transaction) => {
+        const existing = await transaction.product.findUnique({
+          where: { id },
+          select: { id: true },
+        });
+        if (!existing) return null;
+        if (patch) {
+          await transaction.productDatasheet.upsert({
+            where: { productId: id },
+            create: { productId: id, ...patch },
+            update: patch,
+          });
+          await resolveRefusedNames(transaction, id, patch, actorUserId);
+        }
+        const product = await transaction.product.findUnique({
+          where: { id },
+          include: productInclude,
+        });
+        return product ? toProductDetail(product) : null;
+      },
+      { isolationLevel: "Serializable" },
+    );
+  }
+
   update(id: string, input: UpdateProductDto): Promise<ProductDetail> {
     const primaryCategoryId =
       input.primaryCategoryId !== undefined
@@ -588,42 +689,7 @@ export class ProductRepository extends Repository {
           },
           include: productInclude,
         });
-        // egy kitoltott nev feloldja a mezo megtagadasat: a "kitoltve ES megtagadva" par itt nem keletkezhet. A sor NYOM NELKUL
-        // nem torlodik: az indoka es az oka a termek domain-esemenyebe kerul (barracuda, #2357 review)
-        const filled = filledNameFields(datasheetPatch);
-        if (filled.length > 0) {
-          const where = { datasheet: { productId: id }, mezo: { in: filled } };
-          const refused =
-            await transaction.productDatasheetFieldRefusal.findMany({
-              where,
-              select: { mezo: true, indok: true, oka: true, createdAt: true },
-            });
-          if (refused.length > 0) {
-            await transaction.productDatasheetFieldRefusal.deleteMany({
-              where,
-            });
-            await transaction.domainEvent.create({
-              data: {
-                id: randomUUID(),
-                eventType: "product.datasheet.refusal-resolved",
-                aggregateType: "Product",
-                aggregateId: id,
-                // a megtagadas-sor nem tarolja, ki tagadta meg; az iro a PATCH hivoja, amit ez a metodus nem kap meg
-                actorUserId: null,
-                occurredAt: new Date(),
-                schemaVersion: 1,
-                payload: {
-                  resolved: refused.map((row) => ({
-                    field: row.mezo,
-                    reason: row.indok,
-                    cause: row.oka,
-                    refusedAt: row.createdAt.toISOString(),
-                  })),
-                } satisfies Prisma.JsonObject,
-              },
-            });
-          }
-        }
+        await resolveRefusedNames(transaction, id, datasheetPatch, null);
 
         if (primaryWasProvided) {
           await transaction.productCategory.updateMany({

@@ -65,6 +65,15 @@ function repositoryWith(
         inputs.push(input);
         return { id: "updated" };
       },
+      updateDatasheetNames: async (
+        _id: string,
+        input: unknown,
+        actorUserId: string | null,
+      ) => {
+        calls.push("updateDatasheetNames");
+        inputs.push([input, actorUserId]);
+        return product ? { id: "named" } : null;
+      },
       archive: async () => {
         calls.push("archive");
         return { id: "archived" };
@@ -259,6 +268,65 @@ describe("ProductService", () => {
       '<p>a</p><p><img src="https://static.acropora.hu/a.webp" alt="a"></p>',
     );
     assert.deepEqual(without, { name: "Leírás nélkül" });
+  });
+
+  /*
+    A NEVEK UNAS-GAZDAJU TERMEKEN IS (kartya 20b0dd47, acrobot stage-probaja: a PATCH /products/:id 409-et adott a korallok
+    tobbsegen). MI PIROSIT: a nev-ut UNAS-gazdaju termeken 409 (a nevek Acropora-tulajdonuak); a termek tobbi mezoje ott
+    mar nem 409 (az `updateProduct` ugyanazon a termeken tovabbra is az); a hianyzo termek nem 404; az ures torzs nem
+    400; az iro nem jut el az esemenyig; a termek-iras (update) fut a nevekre.
+  */
+  it("writes the names of an UNAS managed product, while its other fields stay blocked", async () => {
+    const { repository, calls, inputs } = repositoryWith({
+      id: "product-1",
+      catalogAuthority: "UNAS",
+      unasMirror: { source: "UNAS" },
+    });
+    const service = new ProductService(repository);
+
+    const result = await service.updateProductNames(
+      "product-1",
+      { nemetNev: "Steinkoralle" },
+      "user-1",
+    );
+    assert.equal((result as { id: string }).id, "named");
+    assert.deepEqual(calls, ["updateDatasheetNames"]);
+    assert.deepEqual(inputs, [[{ nemetNev: "Steinkoralle" }, "user-1"]]);
+    // the same product: any other field is still the webshop's
+    await assert.rejects(
+      service.updateProduct("product-1", { name: "Forbidden" }),
+      (error) =>
+        error instanceof ConflictException &&
+        error.message === "PRODUCT_MANAGED_BY_UNAS",
+    );
+    assert.ok(!calls.includes("update"));
+  });
+
+  it("names of a missing product are a 404, an empty body is a 400, and neither writes", async () => {
+    const missing = repositoryWith(null);
+    await assert.rejects(
+      new ProductService(missing.repository).updateProductNames("nope", {
+        magyarNev: "x",
+      }),
+      NotFoundException,
+    );
+    const present = repositoryWith({
+      id: "product-1",
+      catalogAuthority: "ACROPORA",
+    });
+    await assert.rejects(
+      new ProductService(present.repository).updateProductNames(
+        "product-1",
+        {},
+      ),
+      BadRequestException,
+    );
+    // clearing (null) is a write, not an empty body
+    await new ProductService(present.repository).updateProductNames(
+      "product-1",
+      { angolNev: null },
+    );
+    assert.deepEqual(present.calls, ["updateDatasheetNames"]);
   });
 
   it("blocks generic writes to an UNAS managed product", async () => {
