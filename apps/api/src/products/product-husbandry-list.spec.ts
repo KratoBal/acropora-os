@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 import { Prisma } from "@acropora/database";
 
 import {
-  husbandryFilterWhere,
+  husbandryFilterMembers,
   husbandryListState,
   underLiveAnimalRoot,
 } from "./product-husbandry-list.js";
@@ -18,26 +18,20 @@ import {
 */
 describe("a tartási szűrő feltétele", () => {
   it("szűrő nélkül nincs feltétel", () => {
-    assert.deepEqual(husbandryFilterWhere(undefined), {});
+    assert.deepEqual(husbandryFilterMembers(undefined), []);
   });
 
-  it("mindkét érték elő állatra szűkít az elsődleges kategóriával, és az AND-ben áll (a keresés OR-jával nem ütközik)", () => {
+  it("mindkét érték elő állatra szűkít az elsődleges kategóriával; két tagot ad, felső szintű kulcs nélkül (az AND-gyűjtő tagjai)", () => {
     for (const filter of ["verified", "unverified"] as const) {
-      const where = husbandryFilterWhere(filter) as {
-        AND: Record<string, unknown>[];
-        OR?: unknown;
-      };
-      assert.equal(
-        "OR" in where,
-        false,
-        "no top-level OR: it would collide with the search",
-      );
-      assert.equal(where.AND.length, 2);
-      assert.deepEqual(where.AND[0], {
+      const members = husbandryFilterMembers(filter);
+      assert.equal(members.length, 2);
+      assert.deepEqual(members[0], {
         categories: {
           some: { isPrimary: true, category: underLiveAnimalRoot() },
         },
       });
+      // no member carries an AND key of its own: the list's one AND array is the only place an AND stands
+      for (const member of members) assert.equal("AND" in member, false);
     }
   });
 
@@ -71,16 +65,12 @@ describe("a tartási szűrő feltétele", () => {
   });
 
   it("az ellenőrzött a bélyeges blokk, a nem ellenőrzött a bélyeg nélküli ÉS a datasheet-sor nélküli", () => {
-    const verified = husbandryFilterWhere("verified") as {
-      AND: Record<string, unknown>[];
-    };
-    assert.deepEqual(verified.AND[1], {
+    const verified = husbandryFilterMembers("verified");
+    assert.deepEqual(verified[1], {
       datasheet: { is: { ellenorizveAt: { not: null } } },
     });
-    const unverified = husbandryFilterWhere("unverified") as {
-      AND: Record<string, unknown>[];
-    };
-    assert.deepEqual(unverified.AND[1], {
+    const unverified = husbandryFilterMembers("unverified");
+    assert.deepEqual(unverified[1], {
       OR: [
         { datasheet: { is: null } },
         { datasheet: { is: { ellenorizveAt: null } } },
@@ -89,10 +79,27 @@ describe("a tartási szűrő feltétele", () => {
   });
 });
 
-const category = (...path: string[]) => {
-  // path from the root down: build the nested parent chain the list loads
-  let node: { name: string; parent: unknown } | null = null;
-  for (const name of path) node = { name, parent: node };
+type TestCategory = {
+  name: string;
+  parentId: string | null;
+  parent: TestCategory | null;
+};
+
+/**
+ * A chain as the list loads it: the category and the parents above it, each with its own `parentId`. `loaded` is how many levels are
+ * loaded (the list loads four); a chain deeper than that is cut, and the topmost loaded node keeps a non-null `parentId`.
+ */
+const category = (...path: string[]): TestCategory =>
+  category_(path, path.length);
+const category_ = (path: string[], loaded: number): TestCategory => {
+  let node: TestCategory | null = null;
+  const cut = Math.max(0, path.length - loaded);
+  for (let index = cut; index < path.length; index += 1)
+    node = {
+      name: path[index]!,
+      parentId: index === 0 ? null : `id-of-${path[index - 1]}`,
+      parent: node,
+    };
   return node!;
 };
 
@@ -136,6 +143,51 @@ const baseSheet = {
   ellenorizteUserId: null,
   ellenorizveAt: null,
 };
+
+describe("a sor gyökér-olvasata (barracuda a #2386-on)", () => {
+  const row = (chain: TestCategory) => ({
+    categories: [{ isPrimary: true, category: chain }],
+    datasheet: null,
+  });
+
+  it("a valódi gyökér (szülő nélküli) ad fajtát, a betöltött lánc hossza nem számít, ha eléri a gyökeret", () => {
+    for (const chain of [
+      category("Halak"),
+      category("Korallok", "SPS"),
+      category("Gerinctelenek", "Rákok", "Garnélák"),
+      category("Korallok", "SPS", "Acropora", "Fajok"),
+    ])
+      assert.notEqual(husbandryListState(row(chain)), null);
+  });
+
+  it("egy mélyebb fa belső 'Halak' csomópontja nem gyökér: a lánc nem éri el a gyökeret, tehát nincs állapot", () => {
+    // five levels: Szűrők > A > B > Halak > Alsó. The list loads four: Alsó, Halak, B, A; the topmost loaded node (A) has a parent.
+    const deep = category_(["Szűrők", "A", "B", "Halak", "Alsó"], 4);
+    assert.equal(deep.parent?.parent?.parent?.name, "A");
+    assert.notEqual(deep.parent?.parent?.parent?.parentId, null);
+    assert.equal(husbandryListState(row(deep)), null);
+    // and a loaded chain whose topmost node is a "Halak" that is NOT a root
+    const innerHalak = category_(["Szűrők", "Halak", "Alsó"], 2);
+    assert.equal(innerHalak.parent?.name, "Halak");
+    assert.equal(husbandryListState(row(innerHalak)), null);
+  });
+
+  it("a gyökér-nevű de szülővel bíró csúcs sem gyökér, és a hiányzó parentId (nem betöltött mező) sem hamisít élő állatot", () => {
+    assert.equal(
+      husbandryListState(row({ name: "Halak", parentId: "x", parent: null })),
+      null,
+    );
+    assert.equal(
+      husbandryListState({
+        categories: [
+          { isPrimary: true, category: { name: "Halak" } as TestCategory },
+        ],
+        datasheet: null,
+      }),
+      null,
+    );
+  });
+});
 
 describe("a lista sorának tartási állapota", () => {
   it("nem elő állat: nincs állapot (null), és az elsődleges kategória nélküli sor sem kap", () => {
