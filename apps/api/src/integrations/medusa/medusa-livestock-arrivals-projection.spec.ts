@@ -4,6 +4,8 @@ import { describe, it } from "node:test";
 import {
   type ArrivalSourceRow,
   arrivalsDiffer,
+  cappedArrivals,
+  describeLivestockArrivalsProjection,
   projectLivestockArrivals,
   projectLivestockArrivalsInRound,
   publicArrivals,
@@ -134,6 +136,50 @@ describe("projectLivestockArrivals", () => {
     assert.deepEqual(
       shop.map((r) => r.os_id),
       ["arr-1"],
+    );
+  });
+
+  it("over the shop's cap: the earliest days go, the rest is counted and said (barracuda, #2354)", () => {
+    const rows = [
+      {
+        os_id: "c",
+        kind: "FISH" as const,
+        label: "C",
+        expected_on: "2026-11-22",
+        status: "ORDERED" as const,
+        medusa_product_id: null,
+      },
+      {
+        os_id: "a",
+        kind: "FISH" as const,
+        label: "A",
+        expected_on: "2026-11-20",
+        status: "ORDERED" as const,
+        medusa_product_id: null,
+      },
+      {
+        os_id: "b",
+        kind: "FISH" as const,
+        label: "B",
+        expected_on: "2026-11-21",
+        status: "ORDERED" as const,
+        medusa_product_id: null,
+      },
+    ];
+    const capped = cappedArrivals(rows, 2);
+    assert.deepEqual(
+      capped.rows.map((r) => r.os_id),
+      ["a", "b"],
+    );
+    assert.equal(capped.leftOut, 1);
+    assert.deepEqual(cappedArrivals(rows, 3), { rows, leftOut: 0 });
+    assert.match(
+      describeLivestockArrivalsProjection({
+        status: "sent",
+        count: 2,
+        leftOut: 1,
+      }),
+      /1 sor kimaradt a 1000-es plafon miatt/,
     );
   });
 
