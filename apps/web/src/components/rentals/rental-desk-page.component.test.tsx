@@ -9,12 +9,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RentalDeskPage } from "./rental-desk-page";
 import { emptyRentalForm, rentalRequest, type RentalForm } from "./rental-form";
+import {
+  emptyRentalReturnForm,
+  rentalReturnRequest,
+} from "./rental-return-form";
 
 /*
   WHAT TURNS THIS RED. A new renter sent without phone, e-mail or address; the desk's wall-clock time sent as UTC; a chosen
   existing customer sent as a new one (the register would get a duplicate); the device's deposit not offered when the device
   is picked; a viewer (rentals.view only) shown the recording form; an overdue rental not marked; the contract not opened
-  for printing right after the rental is recorded (S3), or a blocked tab passing in silence.
+  for printing right after the rental is recorded (S3), or a blocked tab passing in silence. The return (S4): a kept deposit sent
+  without its reason or over the deposit; a reason sent with nothing kept; a missing multiplier shown as a number instead of
+  said; the return offered to a viewer; a cut list shown as if whole.
 */
 const api = vi.hoisted(() => ({
   list: vi.fn(),
@@ -22,6 +28,8 @@ const api = vi.hoisted(() => ({
   customerMatches: vi.fn(),
   create: vi.fn(),
   contractPdf: vi.fn(),
+  returnPreview: vi.fn(),
+  returnRental: vi.fn(),
 }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 
@@ -82,6 +90,7 @@ const rental = (plannedReturnAt: string): Rental => ({
   expectedFeeHuf: 2000,
   note: null,
   returnedAt: null,
+  settlement: null,
   createdAt: "2026-11-01T09:00:00.000Z",
 });
 
@@ -149,13 +158,61 @@ describe("the rental request", () => {
   });
 });
 
+describe("the return request", () => {
+  it("sends the Budapest wall-clock time as an instant, and nothing kept by default", () => {
+    expect(rentalReturnRequest(emptyRentalReturnForm(NOW), 10000)).toEqual({
+      ok: true,
+      input: { returnedAt: "2026-11-06T09:00:00.000Z", depositKeptHuf: 0 },
+    });
+  });
+
+  it("needs a reason for a kept amount, never more than the deposit, and drops a reason with nothing kept", () => {
+    const form = emptyRentalReturnForm(NOW);
+    expect(
+      rentalReturnRequest({ ...form, depositKeptHuf: "500" }, 10000).ok,
+    ).toBe(false);
+    expect(
+      rentalReturnRequest(
+        { ...form, depositKeptHuf: "10001", depositKeptReason: "sérült" },
+        10000,
+      ).ok,
+    ).toBe(false);
+    expect(
+      rentalReturnRequest({ ...form, depositKeptHuf: "2,5" }, 10000).ok,
+    ).toBe(false);
+    expect(
+      rentalReturnRequest({ ...form, depositKeptReason: "semmi" }, 10000),
+    ).toEqual({
+      ok: true,
+      input: { returnedAt: "2026-11-06T09:00:00.000Z", depositKeptHuf: 0 },
+    });
+    expect(
+      rentalReturnRequest(
+        {
+          ...form,
+          depositKeptHuf: "2 000",
+          depositKeptReason: " törött fedél ",
+        },
+        10000,
+      ),
+    ).toEqual({
+      ok: true,
+      input: {
+        returnedAt: "2026-11-06T09:00:00.000Z",
+        depositKeptHuf: 2000,
+        depositKeptReason: "törött fedél",
+      },
+    });
+  });
+});
+
 const printed: string[] = [];
 
 describe("RentalDeskPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     auth.session = session("SALES");
-    api.list.mockResolvedValue({ items: [] });
+    api.list.mockResolvedValue({ items: [], truncated: false });
     api.availableEquipment.mockResolvedValue({ items: [device] });
     api.customerMatches.mockResolvedValue({ items: [known] });
     api.create.mockResolvedValue(rental("2026-11-07T09:00:00.000Z"));
@@ -225,7 +282,10 @@ describe("RentalDeskPage", () => {
 
   it("says so when the browser blocks the contract tab", async () => {
     vi.mocked(window.open).mockReturnValue(null);
-    api.list.mockResolvedValue({ items: [rental("2026-11-09T09:00:00.000Z")] });
+    api.list.mockResolvedValue({
+      items: [rental("2026-11-09T09:00:00.000Z")],
+      truncated: false,
+    });
     render(<RentalDeskPage now={() => NOW} />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Szerződés" }));
@@ -235,7 +295,10 @@ describe("RentalDeskPage", () => {
   });
 
   it("marks an overdue rental", async () => {
-    api.list.mockResolvedValue({ items: [rental("2026-11-05T09:00:00.000Z")] });
+    api.list.mockResolvedValue({
+      items: [rental("2026-11-05T09:00:00.000Z")],
+      truncated: false,
+    });
     render(<RentalDeskPage now={() => NOW} />);
     expect(await screen.findByText(/lejárt/)).toBeTruthy();
   });
@@ -246,5 +309,96 @@ describe("RentalDeskPage", () => {
     expect(await screen.findByText("Kint lévő eszközök")).toBeTruthy();
     expect(screen.queryByText("Új bérlés")).toBeNull();
     expect(api.availableEquipment).not.toHaveBeenCalled();
+  });
+
+  it("does not offer the return to a viewer", async () => {
+    auth.session = session("VIEWER");
+    api.list.mockResolvedValue({
+      items: [rental("2026-11-05T09:00:00.000Z")],
+      truncated: false,
+    });
+    render(<RentalDeskPage now={() => NOW} />);
+    expect(await screen.findByText(/lejárt/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Visszavétel" })).toBeNull();
+  });
+
+  it("says when the list is cut", async () => {
+    api.list.mockResolvedValue({
+      items: [rental("2026-11-09T09:00:00.000Z")],
+      truncated: true,
+    });
+    render(<RentalDeskPage now={() => NOW} />);
+    expect(await screen.findByText(/A lista nem teljes/)).toBeTruthy();
+  });
+
+  it("takes a late device back: says the missing multiplier, sends the kept deposit with its reason", async () => {
+    const late = rental("2026-11-03T09:00:00.000Z");
+    api.list.mockResolvedValueOnce({ items: [late], truncated: false });
+    api.returnPreview.mockResolvedValue({
+      returnedAt: "2026-11-06T09:00:00.000Z",
+      settlement: {
+        periods: 5,
+        feeHuf: 5000,
+        latePeriods: 3,
+        lateSurchargeHuf: null,
+        lateFeeMultiplier: null,
+        replacementClaimable: false,
+      },
+      replacementAfterDays: null,
+      depositHuf: 10000,
+      replacementValueHuf: 50000,
+    });
+    api.returnRental.mockResolvedValue({
+      ...late,
+      status: "RETURNED",
+      returnedAt: "2026-11-06T09:00:00.000Z",
+      settlement: {
+        feeHuf: 5000,
+        lateSurchargeHuf: null,
+        depositKeptHuf: 2000,
+        depositKeptReason: "törött fedél",
+      },
+    });
+    render(<RentalDeskPage now={() => NOW} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Visszavétel" }));
+    expect(
+      await screen.findByText(/nem volt késedelmi szorzó megadva/),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/pótlási érték: a bérléskor nem volt megadva/),
+    ).toBeTruthy();
+    expect(api.returnPreview).toHaveBeenCalledWith(
+      "token-1",
+      "r-1",
+      "2026-11-06T09:00:00.000Z",
+      expect.any(AbortSignal),
+    );
+
+    fireEvent.change(screen.getByLabelText("Visszatartott kaució (Ft)"), {
+      target: { value: "2000" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Visszavétel rögzítése" }),
+    );
+    expect(await screen.findByText(/írd meg az okát/)).toBeTruthy();
+    expect(api.returnRental).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText("A visszatartás oka"), {
+      target: { value: "törött fedél" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Visszavétel rögzítése" }),
+    );
+    await waitFor(() =>
+      expect(api.returnRental).toHaveBeenCalledWith("token-1", "r-1", {
+        returnedAt: "2026-11-06T09:00:00.000Z",
+        depositKeptHuf: 2000,
+        depositKeptReason: "törött fedél",
+      }),
+    );
+    expect(await screen.findByText(/Visszavéve: BER-1/)).toBeTruthy();
+    // the list is read again: the device is no longer out
+    expect(api.list).toHaveBeenCalledTimes(2);
   });
 });

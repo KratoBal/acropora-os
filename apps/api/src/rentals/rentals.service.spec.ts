@@ -12,6 +12,7 @@ import {
   phoneMatchKey,
   RentalsRepository,
   type RentalCreateRow,
+  type RentalReturnRow,
 } from "./rentals.repository.js";
 import type { RentalSettingsService } from "./rental-settings.js";
 import { RentalsService } from "./rentals.service.js";
@@ -22,7 +23,11 @@ import { RentalsService } from "./rentals.service.js";
   started 24 hours; a rental recorded with both or neither customer; a new customer written although the rental is then refused
   (an end before the start, a retired or rented-out device); the race lost to the index surfacing as a 500 instead of a 409;
   a phone key built from fewer than nine digits. The contract (S3): the text and the late-return settings in force at recording
-  not frozen on the rental, or a reprint reading today's Settings instead of them (barracuda, #2360).
+  not frozen on the rental, or a reprint reading today's Settings instead of them (barracuda, #2360). On the return (S4): the
+  fee or the surcharge taken from anything but the rule and the rental's own frozen settings (today's Settings must not reach
+  an agreed rental); a surcharge invented while no multiplier was agreed; more deposit kept than given, or kept without a
+  reason; a reason kept with nothing kept; a return in the future or before the start; a second return over the first (409,
+  not a new settlement).
 */
 const TODAY = {
   contractTemplate: "MAI {{kesedelmi_szorzo}}",
@@ -310,5 +315,163 @@ describe("printing the contract (S3)", () => {
   it("prints today's text only for a rental recorded before the text was frozen", async () => {
     const text = await print(null);
     assert.ok(text.includes("MAI [még nincs megadva]"), text);
+  });
+});
+
+describe("taking a rental back (S4)", () => {
+  const now = new Date("2026-11-10T12:00:00.000Z");
+  const open = {
+    id: "r-1",
+    status: "OPEN",
+    startsAt: "2026-11-06T10:00:00.000Z",
+    plannedReturnAt: "2026-11-08T10:00:00.000Z",
+    dailyFeeHuf: 2000,
+    depositHuf: 30000,
+    replacementValueHuf: 120000,
+  } as Rental;
+
+  function backDesk(options?: {
+    rental?: Rental;
+    multiplier?: number | null;
+    alreadyReturned?: boolean;
+  }) {
+    const writes: RentalReturnRow[] = [];
+    const agreed = {
+      ...open,
+      lateFeeMultiplier:
+        options?.multiplier === undefined ? 2 : options.multiplier,
+      replacementAfterDays: 3,
+    };
+    const repository: Partial<RentalsRepository> = {
+      byId: async () => options?.rental ?? agreed,
+      markReturned: async (_id, row) => {
+        if (options?.alreadyReturned) return false;
+        writes.push(row);
+        return true;
+      },
+    };
+    // today's Settings differ from what the rental agreed, and must not reach it
+    const settings = {
+      get: async () => ({
+        contractTemplate: "",
+        contractTemplateIsDefault: true,
+        lateFeeMultiplier: 3,
+        replacementAfterDays: 30,
+      }),
+    };
+    return {
+      service: new RentalsService(
+        repository as RentalsRepository,
+        {} as CustomersRepository,
+        settings as RentalSettingsService,
+      ),
+      writes,
+    };
+  }
+
+  it("records the fee of the actual time and the surcharge with the multiplier the rental agreed, not today's", async () => {
+    const { service, writes } = backDesk();
+    await service.returnRental(
+      "r-1",
+      { depositKeptHuf: 5000, depositKeptReason: "hiányzó tápegység" },
+      "u-2",
+      now,
+    );
+    // 4 days 2 hours out: 5 periods; 2 days 2 hours late: 3 late periods, each 2000 * (2 - 1) on top
+    assert.deepEqual(writes, [
+      {
+        returnedAt: now,
+        finalFeeHuf: 10000,
+        lateSurchargeHuf: 6000,
+        depositKeptHuf: 5000,
+        depositKeptReason: "hiányzó tápegység",
+        returnedById: "u-2",
+      },
+    ]);
+  });
+
+  it("charges no surcharge when the rental agreed no multiplier, even if one is set today; the preview gives the agreed days", async () => {
+    const { service, writes } = backDesk({ multiplier: null });
+    const preview = await service.returnPreview("r-1", undefined, now);
+    assert.equal(preview.settlement.lateSurchargeHuf, null);
+    assert.equal(preview.settlement.latePeriods, 3);
+    assert.equal(preview.replacementAfterDays, 3);
+    await service.returnRental("r-1", { depositKeptHuf: 0 }, "u-2", now);
+    assert.equal(writes[0]?.lateSurchargeHuf, null);
+    assert.equal(writes[0]?.finalFeeHuf, 10000);
+  });
+
+  it("refuses more than the deposit, or a kept amount with no reason; drops a reason with nothing kept", async () => {
+    for (const input of [
+      { depositKeptHuf: 30001, depositKeptReason: "sérült" },
+      { depositKeptHuf: 100 },
+    ]) {
+      const { service, writes } = backDesk();
+      await assert.rejects(
+        () => service.returnRental("r-1", input, "u-2", now),
+        BadRequestException,
+        JSON.stringify(input),
+      );
+      assert.deepEqual(writes, []);
+    }
+    const { service, writes } = backDesk();
+    await service.returnRental(
+      "r-1",
+      { depositKeptHuf: 0, depositKeptReason: "semmi" },
+      "u-2",
+      now,
+    );
+    assert.equal(writes[0]?.depositKeptReason, null);
+  });
+
+  it("refuses a return in the future or before the start, and takes the desk's earlier time", async () => {
+    for (const returnedAt of [
+      "2026-11-10T12:06:00.000Z",
+      "2026-11-06T09:00:00.000Z",
+    ]) {
+      const { service, writes } = backDesk();
+      await assert.rejects(
+        () =>
+          service.returnRental(
+            "r-1",
+            { returnedAt, depositKeptHuf: 0 },
+            "u-2",
+            now,
+          ),
+        BadRequestException,
+        returnedAt,
+      );
+      assert.deepEqual(writes, []);
+    }
+    const { service, writes } = backDesk();
+    await service.returnRental(
+      "r-1",
+      { returnedAt: "2026-11-08T09:00:00.000Z", depositKeptHuf: 0 },
+      "u-2",
+      now,
+    );
+    // on time: 47 hours are two periods, nothing late
+    assert.equal(writes[0]?.finalFeeHuf, 4000);
+    assert.equal(writes[0]?.lateSurchargeHuf, 0);
+  });
+
+  it("answers a rental already taken back with 409, before and after the conditional write", async () => {
+    await assert.rejects(
+      () =>
+        backDesk({
+          rental: { ...open, status: "RETURNED" },
+        }).service.returnRental("r-1", { depositKeptHuf: 0 }, "u-2", now),
+      ConflictException,
+    );
+    await assert.rejects(
+      () =>
+        backDesk({ alreadyReturned: true }).service.returnRental(
+          "r-1",
+          { depositKeptHuf: 0 },
+          "u-2",
+          now,
+        ),
+      ConflictException,
+    );
   });
 });

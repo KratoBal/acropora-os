@@ -9,8 +9,11 @@ import {
   RENTAL_LIMITS,
   rentalFeeHuf,
   rentalPeriodCount,
+  rentalSettlement,
+  type Rental,
   type RentalEquipmentListResponse,
   type RentalListResponse,
+  type RentalReturnPreview,
 } from "@acropora/types";
 
 import { byHungarianName } from "../common/hungarian-name-sort.util.js";
@@ -23,11 +26,16 @@ import type {
   RentalCustomerMatchQueryDto,
   RentalListQueryDto,
   RentalNewCustomerDto,
+  ReturnRentalDto,
 } from "./dto/rental.dto.js";
 import {
   EquipmentAlreadyRentedError,
   RentalsRepository,
 } from "./rentals.repository.js";
+
+const ALREADY_RETURNED = "Ezt a bérlést már visszavették. Frissítsd a listát.";
+/** A desk clock a little ahead of the server's is not a future return. */
+const CLOCK_SKEW_MS = 5 * 60 * 1000;
 
 const ALREADY_RENTED =
   "Ez az eszköz már ki van adva egy nyitott bérlésben. Előbb a visszavételét kell rögzíteni.";
@@ -43,7 +51,102 @@ export class RentalsService {
   ) {}
 
   async list(query: RentalListQueryDto): Promise<RentalListResponse> {
-    return { items: await this.repository.list(query.status) };
+    return await this.repository.list(query.status);
+  }
+
+  /**
+   * THE SETTLEMENT BEFORE THE DESK CONFIRMS (S4): counted by the same rule and the same agreed terms as the return itself,
+   * so the panel shows what will be recorded. `now` comes from the caller so a test can pin it.
+   */
+  async returnPreview(
+    id: string,
+    returnedAtInput: string | undefined,
+    now: Date,
+  ): Promise<RentalReturnPreview> {
+    const rental = await this.openRental(id);
+    const returnedAt = this.returnTime(rental, returnedAtInput, now);
+    return {
+      returnedAt: returnedAt.toISOString(),
+      settlement: this.settle(rental, returnedAt),
+      replacementAfterDays: rental.replacementAfterDays,
+      depositHuf: rental.depositHuf,
+      replacementValueHuf: rental.replacementValueHuf,
+    };
+  }
+
+  /**
+   * RECORDS THE RETURN. The fee and the surcharge are counted here, never taken from the request: the desk decides only the
+   * time and the kept deposit. A kept amount needs its reason (Balázs: "kaució vissza vagy levonás okkal"). The surcharge stays
+   * null while no multiplier is set, so nothing is charged that nobody decided; the replacement value is never charged here.
+   */
+  async returnRental(
+    id: string,
+    input: ReturnRentalDto,
+    actorId: string,
+    now: Date,
+  ): Promise<Rental> {
+    const rental = await this.openRental(id);
+    const returnedAt = this.returnTime(rental, input.returnedAt, now);
+    if (input.depositKeptHuf > rental.depositHuf)
+      throw new BadRequestException(
+        `A visszatartott összeg legfeljebb a kaució lehet (${rental.depositHuf} Ft).`,
+      );
+    const reason = input.depositKeptReason ?? null;
+    if (input.depositKeptHuf > 0 && !reason)
+      throw new BadRequestException(
+        "Ha a kaucióból visszatartasz, írd meg az okát is.",
+      );
+    const settlement = this.settle(rental, returnedAt);
+    const recorded = await this.repository.markReturned(id, {
+      returnedAt,
+      finalFeeHuf: settlement.feeHuf,
+      lateSurchargeHuf: settlement.lateSurchargeHuf,
+      depositKeptHuf: input.depositKeptHuf,
+      // nothing kept: a reason typed anyway is not a reason for anything
+      depositKeptReason: input.depositKeptHuf > 0 ? reason : null,
+      returnedById: actorId,
+    });
+    if (!recorded) throw new ConflictException(ALREADY_RETURNED);
+    return await this.get(id);
+  }
+
+  private async openRental(id: string): Promise<Rental> {
+    const rental = await this.get(id);
+    if (rental.status !== "OPEN") throw new ConflictException(ALREADY_RETURNED);
+    return rental;
+  }
+
+  private returnTime(
+    rental: Rental,
+    input: string | undefined,
+    now: Date,
+  ): Date {
+    const returnedAt = input ? new Date(input) : now;
+    if (returnedAt.getTime() > now.getTime() + CLOCK_SKEW_MS)
+      throw new BadRequestException(
+        "A visszahozás időpontja nem lehet a jövőben.",
+      );
+    if (rentalPeriodCount(rental.startsAt, returnedAt) === null)
+      throw new BadRequestException(
+        "A visszahozás a bérlés kezdete után legyen.",
+      );
+    return returnedAt;
+  }
+
+  /**
+   * By the terms frozen on the rental when it was recorded (acrobot 45779): a multiplier set in Settings after the contract
+   * was signed does not reach it.
+   */
+  private settle(rental: Rental, returnedAt: Date) {
+    // returnTime has already refused a return before the start, the only case the rule answers null for
+    return rentalSettlement({
+      startsAt: rental.startsAt,
+      plannedReturnAt: rental.plannedReturnAt,
+      returnedAt,
+      dailyFeeHuf: rental.dailyFeeHuf,
+      lateFeeMultiplier: rental.lateFeeMultiplier,
+      replacementAfterDays: rental.replacementAfterDays,
+    })!;
   }
 
   async get(id: string) {

@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Header,
+  HttpCode,
   Param,
   Post,
   Query,
@@ -16,6 +17,8 @@ import {
   CreateRentalDto,
   RentalCustomerMatchQueryDto,
   RentalListQueryDto,
+  RentalReturnPreviewQueryDto,
+  ReturnRentalDto,
 } from "./dto/rental.dto.js";
 import { RentalsService } from "./rentals.service.js";
 
@@ -59,6 +62,28 @@ export class RentalsController {
       length: document.bytes.length,
       disposition: `inline; filename*=UTF-8''${encodeURIComponent(document.fileName)}`,
     });
+  }
+
+  /** What the return would settle, before the desk confirms (S4). */
+  @Get(":id/return-preview")
+  @RequirePermissions(PERMISSIONS.RENTALS_VIEW)
+  returnPreview(
+    @Param("id") id: string,
+    @Query() query: RentalReturnPreviewQueryDto,
+  ) {
+    return this.service.returnPreview(id, query.returnedAt, new Date());
+  }
+
+  /** Takes the device back and records the settlement (S4): the same right as recording the rental. */
+  @Post(":id/return")
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.RENTALS_MANAGE)
+  returnRental(
+    @Param("id") id: string,
+    @Body() input: ReturnRentalDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.returnRental(id, input, user.id, new Date());
   }
 
   @Get(":id")
