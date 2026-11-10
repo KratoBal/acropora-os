@@ -10980,6 +10980,19 @@ model ReefClubRunOutReminder {
   consentVersion String
   consentAt      DateTime
   unsubscribedAt DateTime?
+  /// A KULDO ALLAPOTA (V3.2, 5. szelet; az OS folyamat irja, a ReefClub-szerep nem). Az utolso
+  /// kikuldott emlekezteto kifogyasi napja: ugyanarra a napra masodik level nem megy.
+  remindedForRunOut DateTime?     @db.Date
+  remindedAt        DateTime?
+  /// Honnan jott az utolso kikuldott emlekezteto kezdonapja: ORDER (a tag bolti rendelesenek
+  /// kiszallitasa vagy atadasa) vagy CONSENT (a hozzajarulas napja). acrobot 45493: az arany merheto legyen.
+  remindStartSource String?       @db.VarChar(16)
+  /// A kuldes berlete (mint a bolti kapcsolat ertesitojenel): ket peldany nem kuldi ketszer.
+  remindClaimedAt   DateTime?
+  /// Sikertelen kuldesek a `remindAttemptsFor` kifogyasi napra; egy UJ kifogyasi nap (uj ciklus) teljes
+  /// keszlettel indul, siker utan mindketto nullazodik.
+  remindAttempts    Int             @default(0)
+  remindAttemptsFor DateTime?       @db.Date
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   account        ReefClubAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)

@@ -779,6 +779,8 @@ export const ANONYMIZATION_REGISTER: Readonly<
   // computed from the row id and a secret, and stored nowhere.
   ReefClubRunOutReminder: {
     consentVersion: "business",
+    // the sender's start-day source: ORDER or CONSENT, a fixed word
+    remindStartSource: "business",
   },
   // ReefClub 8: the projection of the product dose list. Numbers, names and fixed refusal codes
   // of products; the run's error text is free text (a database or network error message).

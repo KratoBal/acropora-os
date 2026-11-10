@@ -691,6 +691,27 @@ describe(
         text: "Akvárium-próba szöveg.",
         version: "akvarium-proba-v1",
       });
+      // the product is on the run-out list (the turn-on takes no other, #2344 barracuda), so the control can succeed
+      const listRun = await prisma.reefClubDoseProjectionRun.create({
+        data: {
+          status: "SUCCEEDED",
+          trigger: "EDIT",
+          startedAt: new Date(),
+          finishedAt: new Date(),
+          rowCount: 0,
+          runOutRows: {
+            create: [
+              {
+                productId: aProduct,
+                productName: `${NAME_PREFIX} termék`,
+                dose: "5 ml/100 L/day",
+                packageText: "500 ml",
+                packageMl: 500,
+              },
+            ],
+          },
+        },
+      });
       try {
         const enable = (aquariumId: string, session: Session) =>
           rc("/rc/v1/runout-reminders", {
@@ -729,6 +750,9 @@ describe(
         const own = await enable(b1, sessionB);
         assert.equal(own.status, 201, own.body);
       } finally {
+        await prisma.reefClubDoseProjectionRun.delete({
+          where: { id: listRun.id },
+        });
         runOut.availability = closed;
         await prisma.reefClubRunOutReminder.deleteMany({
           where: { productId: aProduct, aquariumId: b1 },
