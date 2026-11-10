@@ -33,7 +33,7 @@
     "stage:anonymize": "prisma generate && tsx prisma/stage-anonymize.ts",
     "stage:hash-password": "tsx prisma/stage-hash-password.ts",
     "stage:trial": "tsx prisma/stage-trial.ts",
-    "test": "rm -rf test-dist && tsc -p tsconfig.test.json && tests=$(find test-dist -name '*.test.js') && { [ -n \"$tests\" ] || { echo 'Nem talaltam teszt fajlt - nem jelentek sikert.' >&2; exit 1; }; } && node --test $tests",
+    "test": "rm -rf test-dist && tsc -p tsconfig.test.json && tests=$(find test-dist -name '*.test.js') && { [ -n \"$tests\" ] || { echo 'Nem talaltam teszt fajlt - nem jelentek sikert.' >&2; exit 1; }; } && node ../../scripts/node-test-gated.mjs $tests",
     "clean": "rm -rf dist test-dist src/generated"
   },
   "devDependencies": {
