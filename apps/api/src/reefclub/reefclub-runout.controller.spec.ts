@@ -10,7 +10,7 @@ import { REEFCLUB_PUBLIC_KEY, type ReefClubRequest } from "./reefclub.guard.js";
 /*
   THE RUN-OUT REMINDER'S ROUTES (ReefClub V3.2, slice 3b). WHAT TURNS THIS RED: the account taken from anywhere but the session; a
   named refusal of the service answered as a success, or without its code; a missing product answered as anything but a 404 with
-  its code; the unsubscribe needing a session, or a wrong key answered as a success; a second turn-off an error; the unsubscribe
+  its code; the unsubscribe needing a session, or a wrong key answered as a success; a turn-off of a reminder that is not on anything but the one 404; the unsubscribe
   or the turn-on without its limit; the turn-off or the turn-on public.
 */
 const request = (account = "a1"): ReefClubRequest => ({
@@ -88,17 +88,19 @@ describe("the run-out reminder routes", () => {
     }
   });
 
-  it("turning off answers the outcome, a second time NOT_ACTIVE and not an error", async () => {
+  it("turning off is a 204, and no active reminder of the product (a second time, or another member's) the one 404", async () => {
     const outcomes = [{ outcome: "DISABLED" }, { outcome: "NOT_ACTIVE" }];
     const { controller, calls } = setup({
       disable: async () => outcomes.shift(),
     });
-    assert.deepEqual(await controller.disable(request("a7"), "p1"), {
-      outcome: "DISABLED",
-    });
-    assert.deepEqual(await controller.disable(request("a7"), "p1"), {
-      outcome: "NOT_ACTIVE",
-    });
+    assert.equal(await controller.disable(request("a7"), "p1"), undefined);
+    const second = await statusOf(controller.disable(request("a7"), "p1"));
+    assert.equal(second.status, 404);
+    assert.equal(
+      second.body.code,
+      undefined,
+      "the one 404, no code of its own",
+    );
     assert.deepEqual(calls[0], ["disable", "a7", "p1"]);
   });
 

@@ -11,6 +11,7 @@ import {
   Req,
 } from "@nestjs/common";
 
+import { reefClubNotFound } from "./reefclub-aquarium-access.js";
 import {
   reefClubCallerAddress,
   ReefClubRateLimits,
@@ -20,7 +21,6 @@ import {
   ReefClubRunOutUnsubscribeDto,
 } from "./reefclub-runout.dto.js";
 import {
-  type DisableResult,
   type RunOutReminderItem,
   type RunOutStatus,
   ReefClubRunOutService,
@@ -37,12 +37,14 @@ import {
  *   GET     /rc/v1/runout-reminders              the state of the three locks (and the text, only when all are open) and the
  *                                                member's reminders that are on; writes nothing
  *   POST    /rc/v1/runout-reminders              {productId, aquariumId, consentVersion}: turns it on (the consent record)
- *   DELETE  /rc/v1/runout-reminders/:productId   turns it off; a second time says NOT_ACTIVE, not an error
+ *   DELETE  /rc/v1/runout-reminders/:productId   turns it off (204); no active reminder of the product is the one 404
  *   POST    /rc/v1/runout-reminders/unsubscribe  {key}: the mail's link, WITHOUT a session
  *
  * The account is the session's, never a field of the body. A refusal of the service is a 400 with its code (the switch is off,
  * the text is not given, the page showed an older text, the aquarium has no litres), a missing product a 404 with its code, and a
- * foreign or missing aquarium the one 404 of the aquarium routes.
+ * foreign or missing aquarium the one 404 of the aquarium routes. The turn-off answers like the shop link's end: a product the member
+ * has no active reminder of is the one 404, whether another member has one or nobody does (the id sweep of
+ * `reefclub-akvarium.integration.spec.ts` measures it byte for byte).
  *
  * THE UNSUBSCRIBE IS A POST, NOT A GET: a mail program's link checker opens every link of a mail, and a GET that unsubscribes
  * would turn the reminder off before the member read the mail. The link opens the ReefClub page, and the page posts the key. It
@@ -106,10 +108,12 @@ export class ReefClubRunOutController {
   }
 
   @Delete(":productId")
+  @HttpCode(204)
   async disable(
     @Req() request: ReefClubRequest,
     @Param("productId") productId: string,
-  ): Promise<DisableResult> {
-    return this.runOut.disable(accountOf(request), productId);
+  ): Promise<void> {
+    const result = await this.runOut.disable(accountOf(request), productId);
+    if (result.outcome === "NOT_ACTIVE") throw reefClubNotFound();
   }
 }
