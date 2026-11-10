@@ -219,6 +219,108 @@ describe("a tartási blokk kulcsa", () => {
   });
 });
 
+describe("az opcionális tények kulcsai (V2.2 S1b-2)", () => {
+  it("a tartomány csak mindkét végével megy ki, számként; az egyvégű kimarad", () => {
+    const out = parsed(
+      husbandryMetadata(
+        row({
+          careDifficulty: "HALADO",
+          tempMinC: "24.0",
+          tempMaxC: { toString: () => "26.5" },
+          salinityMinSg: 1.023,
+          salinityMaxSg: "1.026",
+          khMinDkh: "7",
+        }),
+        "FISH",
+      ),
+    )!;
+    assert.deepEqual(out.temp_c, { min: 24, max: 26.5 });
+    assert.deepEqual(out.salinity_sg, { min: 1.023, max: 1.026 });
+    assert.equal("kh_dkh" in out, false);
+  });
+
+  it("az opcionális kulcsok a kötelezők UTÁN állnak, rögzített sorrendben, és a hamis meg a nulla válasz", () => {
+    const out = parsed(
+      husbandryMetadata(
+        row({
+          careDifficulty: "HALADO",
+          kinekNem: "Kis medencébe nem.",
+          lifespanYears: 0,
+          stingOrVenom: false,
+          quarantineWeeks: 4,
+          acclimatization: "  Csepegtetés.  ",
+          breedsInTank: false,
+          handlingWarning: "  ",
+        }),
+        "CORAL",
+      ),
+    )!;
+    assert.deepEqual(Object.keys(out), [
+      "v",
+      "kind",
+      "verified_on",
+      "difficulty",
+      "not_for",
+      "lifespan_years",
+      "sting_or_venom",
+      "quarantine_weeks",
+      "acclimatization",
+      "breeds_in_tank",
+    ]);
+    assert.equal(out.lifespan_years, 0);
+    assert.equal(out.sting_or_venom, false);
+    assert.equal(out.acclimatization, "Csepegtetés.");
+  });
+
+  it("a csípés vagy méreg a figyelmeztetésével megy ki, és a figyelmeztetés nélkül talált veszélyt sem rejti el", () => {
+    const withWarning = parsed(
+      husbandryMetadata(
+        row({
+          careDifficulty: "HALADO",
+          stingOrVenom: true,
+          handlingWarning: "Kesztyűvel fogd.",
+        }),
+        "CORAL",
+      ),
+    )!;
+    assert.equal(withWarning.sting_or_venom, true);
+    assert.equal(withWarning.handling_warning, "Kesztyűvel fogd.");
+    const without = parsed(
+      husbandryMetadata(
+        row({ careDifficulty: "HALADO", stingOrVenom: true }),
+        "CORAL",
+      ),
+    )!;
+    assert.equal(without.sting_or_venom, true);
+    assert.equal("handling_warning" in without, false);
+  });
+
+  it("opcionális tény nélkül a szöveg a korábbival azonos (a vetítés nem ír újra változatlan kulcsot)", () => {
+    const before = husbandryMetadata(
+      row({ careDifficulty: "HALADO", reefSafe: "IGEN" }),
+      "FISH",
+    );
+    const after = husbandryMetadata(
+      row({
+        careDifficulty: "HALADO",
+        reefSafe: "IGEN",
+        tempMinC: null,
+        tempMaxC: null,
+        lifespanYears: null,
+        stingOrVenom: null,
+        breedsInTank: null,
+      }),
+      "FISH",
+    );
+    assert.equal(before, after);
+  });
+
+  it("csak opcionális tényből álló ellenőrzött blokk is kimegy, mert van mit mondani", () => {
+    const out = parsed(husbandryMetadata(row({ quarantineWeeks: 6 }), "FISH"))!;
+    assert.equal(out.quarantine_weeks, 6);
+  });
+});
+
 describe("a kapcsoló", () => {
   it("csak a pontosan `true` kapcsolja be", () => {
     assert.equal(
@@ -259,9 +361,24 @@ describe("a kulcs és a futtató", () => {
   it("a futtató kérdése az ellenőrzést kéri, a forrást és az ellenőrzőt NEM", () => {
     const at = runner.indexOf("datasheet: {");
     assert.notEqual(at, -1);
-    const select = runner.slice(at, at + 700);
+    const select = runner.slice(at, at + 1400);
     assert.match(select, /ellenorizveAt:\s*true/);
     assert.match(select, /careDifficulty:\s*true/);
+    for (const optional of [
+      "tempMinC",
+      "tempMaxC",
+      "salinityMinSg",
+      "salinityMaxSg",
+      "khMinDkh",
+      "khMaxDkh",
+      "lifespanYears",
+      "stingOrVenom",
+      "handlingWarning",
+      "quarantineWeeks",
+      "acclimatization",
+      "breedsInTank",
+    ])
+      assert.match(select, new RegExp(`${optional}:\\s*true`), optional);
     for (const internal of [
       "forrasTipus",
       "forrasHivatkozas",
