@@ -54,6 +54,9 @@ describe(
       await prisma.livestockArrival.deleteMany({
         where: { label: { startsWith: PREFIX } },
       });
+      await prisma.product.deleteMany({
+        where: { name: { startsWith: PREFIX } },
+      });
       nincsMaradek([
         {
           nev: "LivestockArrival",
@@ -136,6 +139,101 @@ describe(
         new Date().toISOString(),
       );
       assert.equal(result, null);
+    });
+
+    /*
+      THE PRODUCT MOVES WITH ITS ARRIVAL (V2.6 S3a). The shop's `livestock_arrival` key is projected from the arrival, and the
+      projection picks the products to send from the most recently updated ones: an arrival that changes on a product nobody else
+      touched would never be picked. WHAT TURNS THIS RED: a write that leaves the product's `updatedAt` where it was (the key
+      would reach the shop only by luck); a re-link that moves only the new product (the old product's page keeps an arrival it no
+      longer has); a REFUSED write moving a product it did not change; an arrival with no product failing the write.
+    */
+    describe("the product's updatedAt moves with its arrival", () => {
+      const product = (label: string) =>
+        prisma.product.create({
+          data: { name: `${PREFIX} ${label}` },
+          select: { id: true, updatedAt: true },
+        });
+      const updatedAtOf = async (id: string) =>
+        (
+          await prisma.product.findUniqueOrThrow({
+            where: { id },
+            select: { updatedAt: true },
+          })
+        ).updatedAt.getTime();
+
+      it("creating an arrival linked to a product moves that product only", async () => {
+        const linked = await product("linked");
+        const other = await product("other");
+        await sleep(20);
+        await repository.create(
+          { ...data("on a product"), productId: linked.id },
+          null,
+        );
+        assert.ok((await updatedAtOf(linked.id)) > linked.updatedAt.getTime());
+        assert.equal(await updatedAtOf(other.id), other.updatedAt.getTime());
+      });
+
+      it("re-linking an arrival moves the old product and the new one, and no third", async () => {
+        const first = await product("first");
+        const second = await product("second");
+        const bystander = await product("bystander");
+        const arrival = await repository.create(
+          { ...data("moves"), productId: first.id },
+          null,
+        );
+        await sleep(20);
+        const firstBefore = await updatedAtOf(first.id);
+        const secondBefore = await updatedAtOf(second.id);
+        const result = await repository.update(
+          arrival.id,
+          { ...data("moves"), productId: second.id },
+          arrival.updatedAt,
+        );
+        assert.ok(result && result !== "changed");
+        assert.ok((await updatedAtOf(first.id)) > firstBefore);
+        assert.ok((await updatedAtOf(second.id)) > secondBefore);
+        assert.equal(
+          await updatedAtOf(bystander.id),
+          bystander.updatedAt.getTime(),
+        );
+      });
+
+      it("taking the link off moves the product it stood on", async () => {
+        const stood = await product("stood");
+        const arrival = await repository.create(
+          { ...data("unlinked"), productId: stood.id },
+          null,
+        );
+        await sleep(20);
+        const before = await updatedAtOf(stood.id);
+        const result = await repository.update(
+          arrival.id,
+          { ...data("unlinked"), productId: null },
+          arrival.updatedAt,
+        );
+        assert.ok(result && result !== "changed");
+        assert.ok((await updatedAtOf(stood.id)) > before);
+      });
+
+      it("a refused write moves nothing, and an arrival with no product writes fine", async () => {
+        const stays = await product("stays");
+        const arrival = await repository.create(
+          { ...data("refused"), productId: stays.id },
+          null,
+        );
+        await sleep(20);
+        const before = await updatedAtOf(stays.id);
+        const refused = await repository.update(
+          arrival.id,
+          { ...data("refused"), productId: stays.id },
+          "2020-01-01T00:00:00.000Z",
+        );
+        assert.equal(refused, "changed");
+        assert.equal(await updatedAtOf(stays.id), before);
+        const free = await repository.create(data("no product"), null);
+        assert.equal(free.productId, null);
+      });
     });
   },
 );
