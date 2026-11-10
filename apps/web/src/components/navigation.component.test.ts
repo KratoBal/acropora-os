@@ -248,6 +248,7 @@ describe("navigation", () => {
           "Eszköz-kategóriák",
           "Eszköz-funkciók",
           "Bérelhető eszközök",
+          "Bérleti szerződés",
           "Partner-duplikátumok",
           "Partner-átvezetés",
           "Szállítási jelzők feltöltése",
@@ -399,6 +400,7 @@ describe("navigation", () => {
       ["Törzsadatok", "asset-categories"],
       ["Törzsadatok", "asset-functions"],
       ["Törzsadatok", "rental-equipment"],
+      ["Törzsadatok", "rental-contract"],
       ["Törzsadatok", "partner-duplicates"],
       ["Törzsadatok", "partner-migration"],
       ["Törzsadatok", "shipping-fill"],
@@ -483,6 +485,7 @@ describe("navigation", () => {
       "rental-equipment",
       "Bérelhető eszközök",
     ],
+    ["/beallitasok/berleti-szerzodes", "rental-contract", "Bérleti szerződés"],
     [
       "/beallitasok/partner-duplikatumok",
       "partner-duplicates",
@@ -857,6 +860,7 @@ describe("navigation", () => {
     "/beallitasok/eszkoz-funkciok": "settings.manage",
     // Eszközbérlés S1: a bérelhető eszközök törzse, ugyanaz a jog, mint a végpontoké
     "/beallitasok/berelheto-eszkozok": "settings.manage",
+    "/beallitasok/berleti-szerzodes": "settings.manage",
     // Az ajánlati szövegrészletek (#1582 P1): ugyanaz a jog, ami az írást védi.
     "/beallitasok/ajanlat-szovegreszletek": "quotes.templates.manage",
     // Az ajánlatsablonok (#1582): ugyanaz a jog, ami az írást védi.

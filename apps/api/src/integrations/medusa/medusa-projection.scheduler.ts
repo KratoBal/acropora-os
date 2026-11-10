@@ -91,6 +91,15 @@ export const clearLeftoverKindInRound = (env: NodeJS.ProcessEnv): boolean =>
   env.MEDUSA_CLEAR_LEFTOVER_KIND === "true";
 
 /**
+ * A BOLTBAN MARADT, AZ OS ALTAL SZARMAZTATOTT CSAK BOLTI ATVETEL LEVETELE A KORBEN (kartya c603774e, acrobot 45810), KULON
+ * kapcsoloval, alapbol KI (a fajta kapcsolojatol fuggetlenul: az mar fut a teszten, ez nem inditjuk vele). Iras csak ott, ahol
+ * a bolti sor `pickup_only` igaz ES az OS jelolte (commerce #724), az OS-termeknek nincs elo allat besorolasa, es a profil-sora
+ * nem mondja ki az atvetelt. Egy kezzel bekapcsolt ertek (jelolo nelkul) soha. Iras elott a sort ujra olvassa.
+ */
+export const clearLeftoverPickupInRound = (env: NodeJS.ProcessEnv): boolean =>
+  env.MEDUSA_CLEAR_LEFTOVER_PICKUP === "true";
+
+/**
  * A VETITES UTEMEZOJE.
  *
  * EZ A PR NEM UJ KEPESSEGET AD, HANEM EGY MEGLEVOT KOT BE. Az esedekesseg-jel
@@ -257,6 +266,8 @@ export type RoundStepCounts = {
         failed: false;
         rows: number;
         carrying: number;
+        /** hanyon all az OS altal jelolt, szarmaztatott csak bolti atvetel (kartya c603774e) */
+        derivedPickup: number;
         cleared: number;
         unpaired: number;
       }
@@ -425,7 +436,23 @@ export class MedusaProjectionScheduler
         );
         const database = prisma as unknown as ShippingAttributesCliDatabase;
         const eloAllat = await liveAnimalProductIds(database);
+        const pickupOn = clearLeftoverPickupInRound(this.environment);
+        // a profil-sor kimondott atvetele tudatos ertek: azt a lepes nem veszi le
+        const profilAtvetel = pickupOn
+          ? new Set(
+              (
+                await database.productShippingProfile.findMany({
+                  where: { pickupOnly: true },
+                  select: { productId: true },
+                })
+              ).map((sor) => sor.productId),
+            )
+          : null;
         return clearLeftoverKinds(service, {
+          kind: clearLeftoverKindInRound(this.environment),
+          pickup: profilAtvetel
+            ? { keep: (osProductId) => profilAtvetel.has(osProductId) }
+            : undefined,
           skip: (osProductId) => eloAllat.has(osProductId),
           // lusta: a bolt SKU-listajat csak akkor olvassuk, ha van kotes-sor nelkuli, fajtat viselo bolti sor
           pairing: async () => (await skuParositas(service, database)).osToShop,
@@ -780,13 +807,18 @@ export class MedusaProjectionScheduler
    * a nulla torles ne nezzen ki ugy, mintha a lepes nem futott volna.
    */
   private async fajtaKor(allapot: KorAllapot): Promise<void> {
-    if (!clearLeftoverKindInRound(this.environment)) return;
+    if (
+      !clearLeftoverKindInRound(this.environment) &&
+      !clearLeftoverPickupInRound(this.environment)
+    )
+      return;
     try {
       const jelentes = await this.runLeftoverKinds();
       allapot.steps.leftoverKind = {
         failed: false,
         rows: jelentes.rows,
         carrying: jelentes.carrying,
+        derivedPickup: jelentes.derivedPickup,
         cleared: jelentes.entries.filter((e) => e.action === "applied").length,
         unpaired: jelentes.unpaired,
       };

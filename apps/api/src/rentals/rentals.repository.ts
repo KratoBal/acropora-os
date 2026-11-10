@@ -43,10 +43,16 @@ const RENTAL_SELECT = {
   dailyFeeHuf: true,
   depositHuf: true,
   replacementValueHuf: true,
+  lateFeeMultiplier: true,
+  replacementAfterDays: true,
   accessories: true,
   expectedFeeHuf: true,
   note: true,
   returnedAt: true,
+  finalFeeHuf: true,
+  lateSurchargeHuf: true,
+  depositKeptHuf: true,
+  depositKeptReason: true,
   createdAt: true,
   equipment: { select: { id: true, name: true, serialNumber: true } },
   customer: { select: CUSTOMER_SELECT },
@@ -87,10 +93,22 @@ function toRental(row: RentalRow): Rental {
     dailyFeeHuf: row.dailyFeeHuf,
     depositHuf: row.depositHuf,
     replacementValueHuf: row.replacementValueHuf,
+    lateFeeMultiplier: row.lateFeeMultiplier?.toNumber() ?? null,
+    replacementAfterDays: row.replacementAfterDays,
     accessories: row.accessories,
     expectedFeeHuf: row.expectedFeeHuf,
     note: row.note,
     returnedAt: row.returnedAt?.toISOString() ?? null,
+    // a rental returned before S4 has no recorded settlement, and none is invented for it
+    settlement:
+      row.status === "RETURNED" && row.finalFeeHuf !== null
+        ? {
+            feeHuf: row.finalFeeHuf,
+            lateSurchargeHuf: row.lateSurchargeHuf,
+            depositKeptHuf: row.depositKeptHuf ?? 0,
+            depositKeptReason: row.depositKeptReason,
+          }
+        : null,
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -112,23 +130,72 @@ export type RentalCreateRow = {
   dailyFeeHuf: number;
   depositHuf: number;
   replacementValueHuf: number;
+  /** The contract as agreed: the text and the late-return settings in force now, frozen on the rental. */
+  contractTemplate: string;
+  lateFeeMultiplier: number | null;
+  replacementAfterDays: number | null;
   accessories: string | null;
   expectedFeeHuf: number;
   note: string | null;
   createdById: string | null;
 };
 
+export type RentalReturnRow = {
+  returnedAt: Date;
+  finalFeeHuf: number;
+  lateSurchargeHuf: number | null;
+  depositKeptHuf: number;
+  depositKeptReason: string | null;
+  returnedById: string;
+};
+
+/** The most rentals one list answer carries; over it the answer says `truncated` (barracuda, #2274 b). */
+export const RENTAL_LIST_LIMIT = 500;
+
 @Injectable()
 export class RentalsRepository {
   /** Open rentals first by planned return (the overdue on top), then the returned ones, newest first. */
-  async list(status: RentalStatus | undefined): Promise<Rental[]> {
+  async list(
+    status: RentalStatus | undefined,
+  ): Promise<{ items: Rental[]; truncated: boolean }> {
     const rows = await prisma.rental.findMany({
       where: status ? { status } : {},
-      orderBy: [{ status: "asc" }, { plannedReturnAt: "asc" }],
+      // an OPEN row has no returnedAt, so the second key only orders the returned ones (newest first)
+      orderBy: [
+        { status: "asc" },
+        { returnedAt: { sort: "desc", nulls: "first" } },
+        { plannedReturnAt: "asc" },
+      ],
       select: RENTAL_SELECT,
-      take: 500,
+      // one more than shown: its presence is the only honest way to know the list is cut
+      take: RENTAL_LIST_LIMIT + 1,
     });
-    return rows.map(toRental);
+    return {
+      items: rows.slice(0, RENTAL_LIST_LIMIT).map(toRental),
+      truncated: rows.length > RENTAL_LIST_LIMIT,
+    };
+  }
+
+  /**
+   * RECORDS THE RETURN, only while the rental is still OPEN: the condition is in the write, so two desks taking the same device
+   * back settle it once, and the second gets `false` (not a second settlement over the first). OPEN -> RETURNED also frees the
+   * device for the next rental (the partial unique index covers OPEN rows only).
+   */
+  async markReturned(id: string, row: RentalReturnRow): Promise<boolean> {
+    const { count } = await prisma.rental.updateMany({
+      where: { id, status: "OPEN" },
+      data: { ...row, status: "RETURNED" },
+    });
+    return count === 1;
+  }
+
+  /** The contract text frozen on the rental; null for a rental recorded before S3. */
+  async contractTemplateOf(id: string): Promise<string | null> {
+    const row = await prisma.rental.findUnique({
+      where: { id },
+      select: { contractTemplate: true },
+    });
+    return row?.contractTemplate ?? null;
   }
 
   async byId(id: string): Promise<Rental | null> {
@@ -185,6 +252,15 @@ export class RentalsRepository {
     });
   }
 
+  /**
+   * Removes a customer row this request created a moment ago, when its rental could not be stored (two desks handing out
+   * the same device: the loser's new renter would otherwise stay in the register with no rental; barracuda, #2274 review).
+   * Only a row with no rental is touched; its addresses go with it (cascade).
+   */
+  async removeUnusedNewCustomer(id: string): Promise<void> {
+    await prisma.customer.deleteMany({ where: { id, rentals: { none: {} } } });
+  }
+
   async create(row: RentalCreateRow): Promise<Rental> {
     try {
       return await withUniqueCode(
@@ -192,7 +268,14 @@ export class RentalsRepository {
         async (rentalNumber) =>
           toRental(
             await prisma.rental.create({
-              data: { ...row, rentalNumber },
+              data: {
+                ...row,
+                rentalNumber,
+                lateFeeMultiplier:
+                  row.lateFeeMultiplier === null
+                    ? null
+                    : new Prisma.Decimal(row.lateFeeMultiplier),
+              },
               select: RENTAL_SELECT,
             }),
           ),

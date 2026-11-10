@@ -3,10 +3,14 @@ import type {
   RentalCustomerMatchResponse,
   RentalEquipmentListResponse,
   RentalListResponse,
+  RentalReturnInput,
+  RentalReturnPreview,
   RentalStatus,
 } from "@acropora/types";
 
-import { apiRequest } from "./client";
+import { API_PREFIX } from "./api-prefix";
+import { pdfBlob } from "./billing-documents";
+import { apiAuthHeaders, apiRequest } from "./client";
 
 const base = "/rentals";
 
@@ -55,6 +59,42 @@ export const rentalsApi = {
       `${base}/customer-matches?${query.toString()}`,
       token,
       { signal },
+    );
+  },
+  /** The contract PDF, with the current template (S3). */
+  async contractPdf(token: string, id: string): Promise<Blob> {
+    const response = await fetch(
+      `${API_PREFIX}${base}/${encodeURIComponent(id)}/contract.pdf`,
+      { credentials: "same-origin", headers: apiAuthHeaders(token) },
+    );
+    return pdfBlob(response, "A szerződés PDF-je nem tölthető le.");
+  },
+  /** What the return would settle at `returnedAt` (the server's now without it), before the desk confirms (S4). */
+  returnPreview(
+    token: string,
+    id: string,
+    returnedAt?: string,
+    signal?: AbortSignal,
+  ) {
+    const query = returnedAt
+      ? `?returnedAt=${encodeURIComponent(returnedAt)}`
+      : "";
+    return apiRequest<RentalReturnPreview>(
+      `${base}/${encodeURIComponent(id)}/return-preview${query}`,
+      token,
+      { signal },
+    );
+  },
+  /** Takes the device back; the server counts the fee and the surcharge (S4). */
+  returnRental(token: string, id: string, input: RentalReturnInput) {
+    return apiRequest<Rental>(
+      `${base}/${encodeURIComponent(id)}/return`,
+      token,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      },
     );
   },
   create(token: string, input: CreateRentalInput) {

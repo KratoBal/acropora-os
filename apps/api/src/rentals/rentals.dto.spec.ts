@@ -6,11 +6,12 @@ import { describe, it } from "node:test";
 import { plainToInstance } from "class-transformer";
 import { validateSync } from "class-validator";
 
-import { CreateRentalDto } from "./dto/rental.dto.js";
+import { CreateRentalDto, ReturnRentalDto } from "./dto/rental.dto.js";
 
 /*
   WHAT TURNS THIS RED. A new renter accepted without phone, e-mail or a full address (Balázs: all of them are needed); a date
-  that is not an ISO instant accepted; a negative or fractional deposit accepted.
+  that is not an ISO instant accepted; a negative or fractional deposit accepted. On the return: a blank, negative or fractional
+  kept amount accepted, or a reason longer than the limit.
 */
 const errors = (plain: unknown) =>
   validateSync(plainToInstance(CreateRentalDto, plain)).flatMap(
@@ -75,5 +76,41 @@ describe("the rental body", () => {
     );
     for (const depositHuf of [-1, 2.5])
       assert.ok(errors({ ...base, customerId: "c", depositHuf }).length > 0);
+  });
+});
+
+describe("the return body (S4)", () => {
+  const returnErrors = (plain: unknown) =>
+    validateSync(plainToInstance(ReturnRentalDto, plain)).map(
+      (e) => e.property,
+    );
+
+  it("takes a kept amount (also as text) with an optional time and reason", () => {
+    assert.deepEqual(returnErrors({ depositKeptHuf: 0 }), []);
+    assert.deepEqual(
+      returnErrors({
+        depositKeptHuf: "5000",
+        depositKeptReason: "sérült fedél",
+        returnedAt: "2026-11-08T09:00:00.000Z",
+      }),
+      [],
+    );
+  });
+
+  it("refuses a missing, blank, negative or fractional kept amount, a bad time and an overlong reason", () => {
+    for (const depositKeptHuf of [undefined, "", " ", -1, 2.5])
+      assert.deepEqual(
+        returnErrors({ depositKeptHuf }),
+        ["depositKeptHuf"],
+        String(depositKeptHuf),
+      );
+    assert.deepEqual(
+      returnErrors({ depositKeptHuf: 0, returnedAt: "tegnap" }),
+      ["returnedAt"],
+    );
+    assert.deepEqual(
+      returnErrors({ depositKeptHuf: 1, depositKeptReason: "x".repeat(501) }),
+      ["depositKeptReason"],
+    );
   });
 });

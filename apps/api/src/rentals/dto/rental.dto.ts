@@ -131,3 +131,31 @@ export class RentalCustomerMatchQueryDto {
   @MaxLength(200)
   email?: string;
 }
+
+/** The time the return panel previews; the server's now when omitted. */
+export class RentalReturnPreviewQueryDto {
+  @Transform(blankIsMissing)
+  @IsOptional()
+  @IsISO8601({ strict: true }, { message: "A visszahozás időpontja hibás." })
+  returnedAt?: string;
+}
+
+/** THE RETURN (S4). The settlement itself is counted by the server; the desk only says when, and what of the deposit it keeps. */
+export class ReturnRentalDto {
+  @Transform(blankIsMissing)
+  @IsOptional()
+  @IsISO8601({ strict: true }, { message: "A visszahozás időpontja hibás." })
+  returnedAt?: string;
+
+  @Type(() => Number)
+  @Transform(blankAmountIsInvalid)
+  @IsInt({ message: "A visszatartott kaució egész forintösszeg legyen." })
+  @Min(0, { message: "A visszatartott kaució nem lehet negatív." })
+  depositKeptHuf!: number;
+
+  @Transform(blankIsMissing)
+  @IsOptional()
+  @IsString()
+  @MaxLength(RENTAL_LIMITS.depositKeptReason.max)
+  depositKeptReason?: string;
+}

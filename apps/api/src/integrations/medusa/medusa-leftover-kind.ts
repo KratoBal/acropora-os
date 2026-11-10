@@ -1,5 +1,8 @@
 import { liveAnimalSubtreeIds } from "./medusa-livestock.policy.js";
-import { rowsCarryingKind } from "./medusa-shipping-attributes.policy.js";
+import {
+  rowsCarryingDerivedPickup,
+  rowsCarryingKind,
+} from "./medusa-shipping-attributes.policy.js";
 import type { MedusaShippingAttributesService } from "./medusa-shipping-attributes.service.js";
 
 /**
@@ -25,7 +28,8 @@ export interface LeftoverKindEntry {
   medusaProductId: string;
   /** a bolti sor, ahogy allt, es hogy mi tortent vele */
   flags: string;
-  action: "planned" | "applied";
+  /** `unchanged`: iras elott ujra olvasva a sor mar nem torlendo */
+  action: "planned" | "applied" | "unchanged";
 }
 
 export interface LeftoverKindReport {
@@ -33,6 +37,8 @@ export interface LeftoverKindReport {
   rows: number;
   /** ezek kozul hanyon allt fajta */
   carrying: number;
+  /** hanyon all az OS altal szarmaztatott (jelolt) csak bolti atvetel (commerce #724, kartya c603774e) */
+  derivedPickup: number;
   entries: LeftoverKindEntry[];
   /** fajtat viselo bolti sor, amihez nincs OS-termek: nem nyultunk hozzajuk */
   unpaired: number;
@@ -51,10 +57,24 @@ export async function clearLeftoverKinds(
     /** ha megadott, csak ezekre az OS-termekekre szukit */
     only?: readonly string[];
     apply: boolean;
+    /** a fajta torlese (alapbol igaz) */
+    kind?: boolean;
+    /**
+     * A SZARMAZTATOTT CSAK BOLTI ATVETEL LEVETELE (kartya c603774e), alapbol KI. Csak ott, ahol a bolti sor `pickup_only` igaz
+     * ES az OS jelolte (kezi ertek, jelolo nelkul, soha), az OS-termek nem celpont (`skip`) es a `keep` sem tartja meg
+     * (a profil-sora kimondja az atvetelt: az tudatos ertek, nem levezetett).
+     */
+    pickup?: { keep(osProductId: string): boolean };
   },
 ): Promise<LeftoverKindReport> {
   const rows = await service.listShopShippingAttributes();
+  const wantKind = options.kind ?? true;
   const carrying = rowsCarryingKind(rows);
+  const derivedPickup = rowsCarryingDerivedPickup(rows);
+  const candidates = new Set<(typeof rows)[number]>([
+    ...(wantKind ? carrying : []),
+    ...(options.pickup ? derivedPickup : []),
+  ]);
   let shopToOs: Map<string, string> | null = null;
   const bySku = async (shopProductId: string): Promise<string | null> => {
     if (!shopToOs)
@@ -65,7 +85,7 @@ export async function clearLeftoverKinds(
   };
   const entries: LeftoverKindEntry[] = [];
   let unpaired = 0;
-  for (const row of carrying) {
+  for (const row of candidates) {
     const osProductId =
       (await service.osProductOfShop(row.product_id)) ??
       (await bySku(row.product_id));
@@ -75,7 +95,15 @@ export async function clearLeftoverKinds(
     }
     if (options.skip(osProductId)) continue;
     if (options.only?.length && !options.only.includes(osProductId)) continue;
-    const outcome = await service.clearLeftoverKind(row, options.apply);
+    const clear = {
+      kind: wantKind && carrying.includes(row),
+      pickup:
+        !!options.pickup &&
+        derivedPickup.includes(row) &&
+        !options.pickup.keep(osProductId),
+    };
+    if (!clear.kind && !clear.pickup) continue;
+    const outcome = await service.clearLeftoverKind(row, options.apply, clear);
     entries.push({
       osProductId,
       medusaProductId: outcome.medusaProductId,
@@ -83,7 +111,13 @@ export async function clearLeftoverKinds(
       action: outcome.action,
     });
   }
-  return { rows: rows.length, carrying: carrying.length, entries, unpaired };
+  return {
+    rows: rows.length,
+    carrying: carrying.length,
+    derivedPickup: derivedPickup.length,
+    entries,
+    unpaired,
+  };
 }
 
 /** Az elo allat besorolasu OS-termekek: a harom gyoker reszfajaba tartozo besorolas barmelyik sorabol. */
@@ -119,12 +153,21 @@ export function describeLeftoverKinds(
   const sorok = report.entries.map(
     (e) =>
       `${e.osProductId}: ${
-        e.action === "applied" ? "most állítottuk be" : "KIKÜLDENÉNK"
+        e.action === "applied"
+          ? "most állítottuk be"
+          : e.action === "unchanged"
+            ? "közben megváltozott, nem nyúltunk hozzá"
+            : "KIKÜLDENÉNK"
       } -> ${e.medusaProductId} (${e.flags})\n`,
   );
   sorok.push(
     `Boltban maradt élő állat fajta: a bolt ${report.rows} szállítási-jellemző sort adott, ${report.carrying}-n áll fajta, ` +
-      `${report.entries.length} ${apply ? "törölve" : "törlendő"}, ${report.unpaired} OS-termék nélkül (nem nyúltunk hozzá).\n`,
+      `${report.entries.filter((e) => e.action !== "unchanged").length} ${apply ? "törölve" : "törlendő"}, ${report.unpaired} OS-termék nélkül (nem nyúltunk hozzá).` +
+      // a meglévő mondat változatlan marad (a napló és a tesztek arra illeszkednek): a származtatott átvétel külön tagmondat
+      (report.derivedPickup
+        ? ` Az OS által jelölt, származtatott bolti átvétel: ${report.derivedPickup} sor.`
+        : "") +
+      "\n",
   );
   return sorok.join("");
 }

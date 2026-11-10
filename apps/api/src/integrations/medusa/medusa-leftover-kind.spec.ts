@@ -138,6 +138,7 @@ describe("a boltban maradt fajta megosztott szabálya", () => {
       {
         rows: 10,
         carrying: 3,
+        derivedPickup: 2,
         unpaired: 1,
         entries: [
           {
@@ -155,6 +156,15 @@ describe("a boltban maradt fajta megosztott szabálya", () => {
       szoveg,
       /a bolt 10 szállítási-jellemző sort adott, 3-n áll fajta, 1 törölve, 1 OS-termék nélkül/,
     );
+    assert.match(
+      szoveg,
+      /Az OS által jelölt, származtatott bolti átvétel: 2 sor\./,
+    );
+    const nulla = describeLeftoverKinds(
+      { rows: 1, carrying: 0, derivedPickup: 0, unpaired: 0, entries: [] },
+      true,
+    );
+    assert.doesNotMatch(nulla, /származtatott/);
   });
 });
 
@@ -201,5 +211,141 @@ describe("az élő állat besorolású termékek", () => {
     });
     assert.equal(ids.size, 0);
     assert.equal(hivas, 0);
+  });
+});
+
+/*
+  A SZARMAZTATOTT ATVETEL LEVETELE A MEGOSZTOTT SZABALYBAN (kartya c603774e). MI PIROSIT: kapcsolo (`pickup`) nelkul is nyul az
+  atvetelhez; a kezi (jelolo nelkuli) sort is leveszi; a profil-sorral megtartott termeket (`keep`) vagy a celpontot (`skip`)
+  leveszi; a fajta-kapcsolo kikapcsolva (`kind: false`) is torli a fajtat; egy sor, amin fajta ES jelolt atvetel is all, ket
+  iras lesz egy helyett; a parositatlan jelolt sor nem szamit torlesnek; a kozben megvaltozott sor torleskent szamolodik.
+*/
+describe("a boltban maradt származtatott átvétel megosztott szabálya", () => {
+  const atvetel = (
+    product_id: string,
+    derived: boolean | undefined,
+    kind: "FISH" | null = null,
+    pickup = true,
+  ) => ({
+    ...sor(product_id, kind),
+    pickup_only: pickup,
+    ...(derived === undefined ? {} : { pickup_only_derived: derived }),
+  });
+
+  function figyelo(
+    rows: ReturnType<typeof atvetel>[],
+    kotesek: Record<string, string>,
+    action: "applied" | "unchanged" = "applied",
+  ) {
+    const hivasok: { shop: string; clear: unknown }[] = [];
+    const service = {
+      listShopShippingAttributes: async () => rows,
+      osProductOfShop: async (shop: string) => kotesek[shop] ?? null,
+      clearLeftoverKind: async (
+        row: { product_id: string },
+        _apply: boolean,
+        clear: unknown,
+      ) => {
+        hivasok.push({ shop: row.product_id, clear });
+        return { action, medusaProductId: row.product_id, flags: "x" };
+      },
+    } as unknown as LeftoverKindService;
+    return { service, hivasok };
+  }
+  const rows = [
+    atvetel("jelolt", true),
+    atvetel("kezi", false),
+    atvetel("regi", undefined),
+    atvetel("ki", true, null, false),
+    atvetel("profilos", true),
+    atvetel("celpont", true),
+  ];
+  const kotesek = {
+    jelolt: "os-jelolt",
+    kezi: "os-kezi",
+    regi: "os-regi",
+    ki: "os-ki",
+    profilos: "os-profilos",
+    celpont: "os-celpont",
+  };
+  const keres = {
+    pairing: async () => new Map<string, string>(),
+    apply: true,
+    kind: false,
+  };
+
+  it("kapcsoló nélkül nem nyúl az átvételhez; kapcsolóval csak a jelölt, el nem tartott, nem célpont sort veszi le", async () => {
+    // kapcsoló nélkül a jelölt sor nem is jelölt: a párosítatlan jelölt sor nem kér SKU-párosítást (bolti listaolvasás), és nem számít párosítatlannak
+    let parositast = 0;
+    const ki = figyelo([...rows, atvetel("arva", true)], kotesek);
+    const kiJelentes = await clearLeftoverKinds(ki.service, {
+      ...keres,
+      skip: () => false,
+      pairing: async () => {
+        parositast += 1;
+        return new Map<string, string>();
+      },
+    });
+    assert.deepEqual(ki.hivasok, []);
+    assert.equal(parositast, 0);
+    assert.equal(kiJelentes.unpaired, 0);
+
+    const be = figyelo(rows, kotesek);
+    const jelentes = await clearLeftoverKinds(be.service, {
+      ...keres,
+      skip: (id) => id === "os-celpont",
+      pickup: { keep: (id) => id === "os-profilos" },
+    });
+    assert.deepEqual(be.hivasok, [
+      { shop: "jelolt", clear: { kind: false, pickup: true } },
+    ]);
+    assert.equal(jelentes.derivedPickup, 3);
+    assert.equal(jelentes.entries.length, 1);
+  });
+
+  it("egy soron fajta és jelölt átvétel is áll: EGY írás, mindkettővel; a fajta-kapcsoló nélkül csak az átvétel", async () => {
+    const mind = [atvetel("mindketto", true, "FISH")];
+    const egyutt = figyelo(mind, { mindketto: "os-m" });
+    await clearLeftoverKinds(egyutt.service, {
+      ...keres,
+      kind: true,
+      skip: () => false,
+      pickup: { keep: () => false },
+    });
+    assert.deepEqual(egyutt.hivasok, [
+      { shop: "mindketto", clear: { kind: true, pickup: true } },
+    ]);
+    const csakAtvetel = figyelo(mind, { mindketto: "os-m" });
+    await clearLeftoverKinds(csakAtvetel.service, {
+      ...keres,
+      kind: false,
+      skip: () => false,
+      pickup: { keep: () => false },
+    });
+    assert.deepEqual(csakAtvetel.hivasok, [
+      { shop: "mindketto", clear: { kind: false, pickup: true } },
+    ]);
+  });
+
+  it("a párosítatlan jelölt sort megszámolja és nem bántja; a közben megváltozott sor nem számít törlésnek", async () => {
+    const parositatlan = figyelo([atvetel("arva", true)], {});
+    const jelentes = await clearLeftoverKinds(parositatlan.service, {
+      ...keres,
+      skip: () => false,
+      pickup: { keep: () => false },
+    });
+    assert.deepEqual(parositatlan.hivasok, []);
+    assert.equal(jelentes.unpaired, 1);
+
+    const valtozott = figyelo([atvetel("a", true)], { a: "os-a" }, "unchanged");
+    const masodik = await clearLeftoverKinds(valtozott.service, {
+      ...keres,
+      skip: () => false,
+      pickup: { keep: () => false },
+    });
+    assert.equal(masodik.entries[0]?.action, "unchanged");
+    const szoveg = describeLeftoverKinds(masodik, true);
+    assert.match(szoveg, /közben megváltozott, nem nyúltunk hozzá/);
+    assert.match(szoveg, /0 törölve/);
   });
 });

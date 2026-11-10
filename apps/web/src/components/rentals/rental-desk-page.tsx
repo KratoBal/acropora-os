@@ -32,11 +32,12 @@ import {
   rentalRequest,
   type RentalForm,
 } from "./rental-form";
+import { RentalReturnPanel } from "./rental-return-panel";
 
 /**
  * THE RENTAL DESK (task eszkozberles, S2; Balázs, 2026-11-06): the devices out now, and a new rental. The renter goes into the
  * existing customer register; while the desk types the name, phone or e-mail, matching customers are offered, so a returning
- * renter is not written twice.
+ * renter is not written twice. A device out is taken back from its row (S4): the panel settles the fee and the deposit.
  */
 export function RentalDeskPage({
   now = () => new Date(),
@@ -50,6 +51,8 @@ export function RentalDeskPage({
   );
 
   const [open, setOpen] = useState<Rental[]>([]);
+  const [truncated, setTruncated] = useState(false);
+  const [returning, setReturning] = useState<string | null>(null);
   const [equipment, setEquipment] = useState<RentalEquipment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -70,6 +73,7 @@ export function RentalDeskPage({
             : Promise.resolve({ items: [] }),
         ]);
         setOpen(rentals.items);
+        setTruncated(rentals.truncated);
         setEquipment(available.items);
       } catch (cause) {
         if (cause instanceof DOMException && cause.name === "AbortError")
@@ -128,6 +132,32 @@ export function RentalDeskPage({
     }));
   };
 
+  /**
+   * Opens the contract PDF in a new tab and starts the print dialog there (the billing PDFs do the same). A blocked pop-up
+   * is said, not swallowed: the contract can still be printed from the list.
+   */
+  const printContract = async (rental: Pick<Rental, "id" | "rentalNumber">) => {
+    try {
+      const url = URL.createObjectURL(
+        await rentalsApi.contractPdf(token, rental.id),
+      );
+      const opened = window.open(url, "_blank");
+      // the tab keeps its own copy once loaded; a minute is enough for a slow one, and the page never holds the PDF for good
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      if (!opened) {
+        setError(
+          `A böngésző nem engedte megnyitni a szerződést (${rental.rentalNumber}). A listában a Szerződés gombbal nyomtatható.`,
+        );
+        return;
+      }
+      opened.addEventListener("load", () => opened.print());
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "A szerződés nem tölthető le.",
+      );
+    }
+  };
+
   const save = async () => {
     const request = rentalRequest(form, customer);
     if (!request.ok) {
@@ -140,8 +170,9 @@ export function RentalDeskPage({
     try {
       const rental = await rentalsApi.create(token, request.input);
       setNotice(
-        `Bérlés rögzítve: ${rental.rentalNumber} (${rental.equipment.name}, ${rental.customer.displayName}).`,
+        `Bérlés rögzítve: ${rental.rentalNumber} (${rental.equipment.name}, ${rental.customer.displayName}). A szerződés nyomtatásra megnyílik.`,
       );
+      void printContract(rental);
       setForm(emptyRentalForm(now()));
       setCustomer(null);
       setMatches([]);
@@ -172,6 +203,19 @@ export function RentalDeskPage({
     </label>
   );
 
+  const returned = async (rental: Rental) => {
+    const settlement = rental.settlement;
+    setReturning(null);
+    setError(null);
+    setNotice(
+      `Visszavéve: ${rental.rentalNumber} (${rental.equipment.name}).` +
+        (settlement
+          ? ` Bérleti díj: ${formatMoney(settlement.feeHuf + (settlement.lateSurchargeHuf ?? 0), "HUF")}; kaucióból visszajár: ${formatMoney(rental.depositHuf - settlement.depositKeptHuf, "HUF")}.`
+          : ""),
+    );
+    await load();
+  };
+
   const overdue = (rental: Rental) =>
     new Date(rental.plannedReturnAt).getTime() < now().getTime();
 
@@ -201,33 +245,69 @@ export function RentalDeskPage({
           ) : open.length === 0 ? (
             <p className="text-sm text-dusk-500">Most nincs kiadott eszköz.</p>
           ) : (
-            <ul className="divide-y">
-              {open.map((rental) => (
-                <li key={rental.id} className="space-y-1 py-3 text-sm">
-                  <p className="font-medium text-dusk-900">
-                    {rental.rentalNumber} · {rental.equipment.name}
-                    {rental.equipment.serialNumber
-                      ? ` (${rental.equipment.serialNumber})`
-                      : ""}
-                  </p>
-                  <p className="text-dusk-700">
-                    {rental.customer.displayName}
-                    {rental.customer.phone ? ` · ${rental.customer.phone}` : ""}
-                  </p>
-                  <p
-                    className={
-                      overdue(rental)
-                        ? "font-medium text-red-700"
-                        : "text-dusk-500"
-                    }
+            <>
+              {truncated ? (
+                <p className="pb-2 text-sm font-medium text-amber-700">
+                  A lista nem teljes: csak az első {open.length} bérlés látszik.
+                </p>
+              ) : null}
+              <ul className="divide-y">
+                {open.map((rental) => (
+                  <li
+                    key={rental.id}
+                    className="flex flex-wrap items-start justify-between gap-3 py-3 text-sm"
                   >
-                    Kint: {formatDateTimeHu(rental.startsAt)} · vissza:{" "}
-                    {formatDateTimeHu(rental.plannedReturnAt)}
-                    {overdue(rental) ? " · lejárt" : ""}
-                  </p>
-                </li>
-              ))}
-            </ul>
+                    <div className="space-y-1">
+                      <p className="font-medium text-dusk-900">
+                        {rental.rentalNumber} · {rental.equipment.name}
+                        {rental.equipment.serialNumber
+                          ? ` (${rental.equipment.serialNumber})`
+                          : ""}
+                      </p>
+                      <p className="text-dusk-700">
+                        {rental.customer.displayName}
+                        {rental.customer.phone
+                          ? ` · ${rental.customer.phone}`
+                          : ""}
+                      </p>
+                      <p
+                        className={
+                          overdue(rental)
+                            ? "font-medium text-red-700"
+                            : "text-dusk-500"
+                        }
+                      >
+                        Kint: {formatDateTimeHu(rental.startsAt)} · vissza:{" "}
+                        {formatDateTimeHu(rental.plannedReturnAt)}
+                        {overdue(rental) ? " · lejárt" : ""}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="secondary"
+                        onClick={() => void printContract(rental)}
+                      >
+                        Szerződés
+                      </Button>
+                      {canRecord && returning !== rental.id ? (
+                        <Button onClick={() => setReturning(rental.id)}>
+                          Visszavétel
+                        </Button>
+                      ) : null}
+                    </div>
+                    {returning === rental.id ? (
+                      <RentalReturnPanel
+                        rental={rental}
+                        token={token}
+                        now={now}
+                        onReturned={(done) => void returned(done)}
+                        onCancel={() => setReturning(null)}
+                      />
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
         </CardContent>
       </Card>
