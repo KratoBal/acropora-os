@@ -23,6 +23,7 @@ import type {
 import type { SetVariantPriceDto } from "./dto/set-variant-price.dto.js";
 import type { SetVariantSaleDto } from "./dto/set-variant-sale.dto.js";
 import type { UpdateProductDto } from "./dto/update-product.dto.js";
+import type { UpdateProductNamesDto } from "./dto/update-product-names.dto.js";
 import { richTextImageHosts } from "../homepage-content/homepage-content.service.js";
 import {
   detectImageContentType,
