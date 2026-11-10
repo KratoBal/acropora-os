@@ -12,7 +12,7 @@ import type { MedusaShippingAttributesService } from "./medusa-shipping-attribut
  * `MEDUSA_CLEAR_LEFTOVER_KIND=true`), mert a rendszeres kezi parancs ellentetes az allo renddel, es a teszten nem is futtathato.
  *
  * AMIT EZ A LEPES TESZ, ES CSAK EZT (acrobot dontese, 2026-11-10): a bolti sor `livestock_kind` mezojet null-ra allitja,
- * azon a termeken, aminek az OS-ben NINCS elo allat besorolasa. A tobbi zaszlo valtozatlanul visszamegy. A bolti sort,
+ * azon a termeken, aminek az OS-ben NINCS elo allat besorolasa. Csak a fajta megy (reszleges frissites): a tobbi zaszlot nem kuldjuk, tehat nem is irjuk felul. A bolti sort,
  * amelyhez nincs OS-termek (kotes-sor, utana egyertelmu SKU-par), nem bantja, csak megszamolja.
  */
 export type LeftoverKindService = Pick<
