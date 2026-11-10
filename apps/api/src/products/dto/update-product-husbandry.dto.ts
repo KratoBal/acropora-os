@@ -180,6 +180,79 @@ export class UpdateProductHusbandryDto {
   @MaxLength(500)
   forrasHivatkozas?: string | null;
 
+  /*
+    THE OPTIONAL FACTS (V2.2 S1b): ranges, lifespan, sting or venom and its handling warning, quarantine and acclimatization,
+    breeding in the tank. Every key optional, `null` clears; the cross-field rules (a range's ends, the warning a sting needs) are
+    the decision's (`product-husbandry.ts`).
+  */
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 1 })
+  @Min(0)
+  @Max(40)
+  tempMinC?: number | null;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 1 })
+  @Min(0)
+  @Max(40)
+  tempMaxC?: number | null;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 3 })
+  @Min(1)
+  @Max(1.04)
+  salinityMinSg?: number | null;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 3 })
+  @Min(1)
+  @Max(1.04)
+  salinityMaxSg?: number | null;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 1 })
+  @Min(0)
+  @Max(30)
+  khMinDkh?: number | null;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 1 })
+  @Min(0)
+  @Max(30)
+  khMaxDkh?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(150)
+  lifespanYears?: number | null;
+
+  @IsOptional()
+  @IsBoolean()
+  stingOrVenom?: boolean | null;
+
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(300)
+  handlingWarning?: string | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(52)
+  quarantineWeeks?: number | null;
+
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(300)
+  acclimatization?: string | null;
+
+  @IsOptional()
+  @IsBoolean()
+  breedsInTank?: boolean | null;
+
   @IsOptional()
   @IsBoolean()
   ellenorizve?: boolean;
