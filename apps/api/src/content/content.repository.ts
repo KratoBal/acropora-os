@@ -45,6 +45,11 @@ export class ContentRepository {
     });
   }
 
+  /** How many items wait for an approver, all channels: the count the approvers' home page shows. */
+  countAwaitingApproval() {
+    return prisma.contentItem.count({ where: { state: "AWAITING_APPROVAL" } });
+  }
+
   /** The item's channel, or `null` when there is no such item. */
   async channelOf(id: string) {
     return (

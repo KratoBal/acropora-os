@@ -208,11 +208,23 @@ describe("the return request", () => {
 
 const printed: string[] = [];
 
+// the desk reads the list twice, by status: the devices out (OPEN) and the returned ones (RETURNED)
+type ListAnswer = { items: Rental[]; truncated: boolean };
+let openAnswer: ListAnswer = { items: [], truncated: false };
+let returnedAnswer: ListAnswer = { items: [], truncated: false };
+const openListIs = (answer: ListAnswer) => void (openAnswer = answer);
+const openCalls = () =>
+  api.list.mock.calls.filter((call) => call[1] === "OPEN").length;
+
 describe("RentalDeskPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     auth.session = session("SALES");
-    api.list.mockResolvedValue({ items: [], truncated: false });
+    openAnswer = { items: [], truncated: false };
+    returnedAnswer = { items: [], truncated: false };
+    api.list.mockImplementation(async (_token: string, status?: string) =>
+      status === "RETURNED" ? returnedAnswer : openAnswer,
+    );
     api.availableEquipment.mockResolvedValue({ items: [device] });
     api.customerMatches.mockResolvedValue({ items: [known] });
     api.create.mockResolvedValue(rental("2026-11-07T09:00:00.000Z"));
@@ -266,8 +278,9 @@ describe("RentalDeskPage", () => {
   it("releases the contract's blob URL a minute after opening it", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
-      api.list.mockResolvedValue({
+      openListIs({
         items: [rental("2026-11-09T09:00:00.000Z")],
+        truncated: false,
       });
       render(<RentalDeskPage now={() => NOW} />);
       fireEvent.click(await screen.findByRole("button", { name: "Szerződés" }));
@@ -282,7 +295,7 @@ describe("RentalDeskPage", () => {
 
   it("says so when the browser blocks the contract tab", async () => {
     vi.mocked(window.open).mockReturnValue(null);
-    api.list.mockResolvedValue({
+    openListIs({
       items: [rental("2026-11-09T09:00:00.000Z")],
       truncated: false,
     });
@@ -295,7 +308,7 @@ describe("RentalDeskPage", () => {
   });
 
   it("marks an overdue rental", async () => {
-    api.list.mockResolvedValue({
+    openListIs({
       items: [rental("2026-11-05T09:00:00.000Z")],
       truncated: false,
     });
@@ -313,7 +326,7 @@ describe("RentalDeskPage", () => {
 
   it("does not offer the return to a viewer", async () => {
     auth.session = session("VIEWER");
-    api.list.mockResolvedValue({
+    openListIs({
       items: [rental("2026-11-05T09:00:00.000Z")],
       truncated: false,
     });
@@ -323,7 +336,7 @@ describe("RentalDeskPage", () => {
   });
 
   it("says when the list is cut", async () => {
-    api.list.mockResolvedValue({
+    openListIs({
       items: [rental("2026-11-09T09:00:00.000Z")],
       truncated: true,
     });
@@ -333,7 +346,7 @@ describe("RentalDeskPage", () => {
 
   it("takes a late device back: says the missing multiplier, sends the kept deposit with its reason", async () => {
     const late = rental("2026-11-03T09:00:00.000Z");
-    api.list.mockResolvedValueOnce({ items: [late], truncated: false });
+    openListIs({ items: [late], truncated: false });
     api.returnPreview.mockResolvedValue({
       returnedAt: "2026-11-06T09:00:00.000Z",
       settlement: {
@@ -399,6 +412,6 @@ describe("RentalDeskPage", () => {
     );
     expect(await screen.findByText(/Visszavéve: BER-1/)).toBeTruthy();
     // the list is read again: the device is no longer out
-    expect(api.list).toHaveBeenCalledTimes(2);
+    expect(openCalls()).toBe(2);
   });
 });

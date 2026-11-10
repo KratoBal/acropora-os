@@ -12,6 +12,7 @@ import {
 import type { ExpectedArrivalService } from "../purchasing/expected-arrivals/expected-arrival.service.js";
 import type { StockReconciliationService } from "../inventory/stock-reconciliation.service.js";
 import type { UnasStockSyncOutboxRepository } from "../inventory/unas-stock-sync-outbox.repository.js";
+import type { ContentService } from "../content/content.service.js";
 import type { MessagesService } from "../messages/messages.service.js";
 import type { MissingInvoicesService } from "../missing-invoices/missing-invoices.service.js";
 import type { WebshopOrdersService } from "../orders/webshop-orders/webshop-orders.service.js";
@@ -45,10 +46,11 @@ function service(
   options: {
     stored?: unknown;
     capabilities?: ServiceCapabilityValue[];
-    loaders?: ConstructorParameters<typeof DashboardWidgetsService>[12];
+    loaders?: ConstructorParameters<typeof DashboardWidgetsService>[13];
     webshopOrders?: Partial<WebshopOrdersService>;
     messages?: Partial<MessagesService>;
     partnerOrders?: Partial<PartnerOrdersService>;
+    content?: Partial<ContentService>;
     financeWidgets?: Partial<DashboardFinanceWidgetsRepository>;
   } = {},
 ) {
@@ -97,6 +99,7 @@ function service(
       (options.webshopOrders ?? {}) as WebshopOrdersService,
       (options.messages ?? {}) as MessagesService,
       (options.partnerOrders ?? {}) as PartnerOrdersService,
+      (options.content ?? {}) as ContentService,
       options.loaders,
     ),
   };
@@ -362,6 +365,59 @@ describe("Olvasatlan üzenetek", () => {
     });
     await svc.widgets(user("SERVICE"), ["messages"]);
     assert.equal(asked.length, 2, "a per-user count is never cached");
+  });
+});
+
+/*
+  A JÓVÁHAGYÁSRA VÁRÓ TARTALOM KÁRTYÁJA (T5.1 PR2, acrobot 45938). MI PIROSÍT: ha a szám nem a tartalom-szolgáltatás
+  jóváhagyásra váró számlálójából jön; ha a content.approve nélküli szerepkör (a MANAGER ír, de nem hagy jóvá) megkapja; ha a
+  szám felhasználónként gyorsítótárba kerül; ha a hibás számláló a teljes vezérlőpultot viszi el.
+*/
+describe("Jóváhagyásra váró tartalom", () => {
+  it("gives the approver the content service's own count, every time", async () => {
+    let asked = 0;
+    const { svc } = service({
+      content: {
+        awaitingApproval: async () => {
+          asked += 1;
+          return { total: 3 };
+        },
+      },
+    });
+    const r = await svc.widgets(user("OWNER"), ["content-approval"]);
+    assert.deepEqual(r.results["content-approval"], {
+      status: "ok",
+      data: { total: 3 },
+    });
+    await svc.widgets(user("ADMIN"), ["content-approval"]);
+    assert.equal(asked, 2);
+  });
+
+  it("is forbidden for a role without content.approve", async () => {
+    const { svc } = service({
+      content: { awaitingApproval: async () => ({ total: 3 }) },
+    });
+    for (const role of ["MANAGER", "SALES", "SERVICE", "VIEWER"] as const)
+      assert.deepEqual(
+        (await svc.widgets(user(role), ["content-approval"])).results[
+          "content-approval"
+        ],
+        { status: "forbidden" },
+        role,
+      );
+  });
+
+  it("a failing count is that card's error, not the dashboard's", async () => {
+    const { svc } = service({
+      content: {
+        awaitingApproval: async () => {
+          throw new Error("db down");
+        },
+      },
+    });
+    const r = await svc.widgets(user("OWNER"), ["content-approval", "tasks"]);
+    assert.equal(r.results["content-approval"]?.status, "error");
+    assert.equal(r.results.tasks?.status, "ok");
   });
 });
 

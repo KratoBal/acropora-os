@@ -1336,6 +1336,7 @@ export type {
   DashboardMissingInvoicesWidgetData,
   DashboardWebshopOrdersWidgetData,
   DashboardMessagesWidgetData,
+  DashboardContentApprovalWidgetData,
   DashboardOverdueInvoicesWidgetData,
   DashboardServiceTicketsWidgetData,
   DashboardSettlementsWidgetData,

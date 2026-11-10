@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   RENTAL_CONTRACT_MISSING_VALUE,
+  rentalContractBlocks,
   unknownRentalContractVariables,
   type Rental,
 } from "@acropora/types";
@@ -15,6 +16,7 @@ import {
 import { readPdfTextLines } from "../documents/pdf/pdf-text-readback.js";
 import { DEFAULT_RENTAL_CONTRACT_TEMPLATE } from "./rental-contract-default.js";
 import {
+  contractLayoutPlan,
   rentalContractDocument,
   rentalContractValues,
 } from "./rental-contract-document.js";
@@ -158,6 +160,96 @@ describe("the rental contract PDF", () => {
     assert.ok(lines.some((line) => line.text === "VÉGE"));
   });
 
+  /*
+    BALÁZS, 2026-11-10 14:15 UTC (msg 1569717175214670000): the printed contract was three pages, the last one only the signature.
+    WHAT TURNS THIS RED: the built-in text with a full rental on more than two pages; a page holding nothing but a signature block,
+    whatever the length of an edited text.
+  */
+  it("the built-in text with a full rental fits two pages, the signatures on a page with text", async () => {
+    const full: Rental = {
+      ...rental,
+      customer: {
+        ...rental.customer,
+        displayName: "Kiss Anna Mária",
+        address: "1111 Budapest, Fő utca 1. 2. emelet 3. ajtó",
+      },
+      accessories: "tápegység, 2 tömlő, szűrőbetét, nyomásmérő",
+      note: "Karcos burkolat a bal oldalon, a kijelző sarka repedt.",
+    };
+    const lines = await readPdfTextLines(
+      await rentalContractDocument({
+        rental: full,
+        template: DEFAULT_RENTAL_CONTRACT_TEMPLATE,
+        printedAt: PRINTED,
+      }),
+    );
+    assert.equal(Math.max(...lines.map((l) => l.pageNumber)), 2);
+    assert.deepEqual(lonelySignaturePages(lines), []);
+  });
+
+  it("a text whose signature would stand alone in both spacings: the paragraph before it goes over with it", async () => {
+    // measured: 18 paragraphs of 56 words leave the signature alone with the normal and the compact spacing alike
+    const template = `## Szerződés\n\n${Array.from(
+      { length: 18 },
+      (_, i) => `${i + 1}. ` + "szöveg ".repeat(56),
+    ).join("\n\n")}\n\n[[alairas]]`;
+    const plan = contractLayoutPlan(rentalContractBlocks(template));
+    assert.deepEqual(
+      [...plan.breakBefore],
+      [18],
+      "the case reaches the keep-with path",
+    );
+    const lines = await readPdfTextLines(
+      await rentalContractDocument({ rental, template, printedAt: PRINTED }),
+    );
+    assert.deepEqual(lonelySignaturePages(lines), []);
+    // the last page holds the moved paragraph, then the signatures
+    const last = Math.max(...lines.map((l) => l.pageNumber));
+    assert.ok(
+      lines.some((l) => l.pageNumber === last && l.text.startsWith("18. ")),
+    );
+  });
+
+  it("two signatures: moving the first one's paragraph is measured again, and the second one gets company too (barracuda, #2369)", async () => {
+    // measured: 8 + 8 paragraphs of 56 words; with one round only, the second signature is left alone
+    const part = (key: string) =>
+      Array.from(
+        { length: 8 },
+        (_, i) => `${key}${i + 1}. ` + "szöveg ".repeat(56),
+      ).join("\n\n");
+    const template = `## A\n\n${part("A")}\n\n[[alairas]]\n\n## B\n\n${part("B")}\n\n[[alairas]]`;
+    const plan = contractLayoutPlan(rentalContractBlocks(template));
+    assert.deepEqual(
+      [...plan.breakBefore].sort((x, y) => x - y),
+      [8, 18],
+    );
+    const lines = await readPdfTextLines(
+      await rentalContractDocument({ rental, template, printedAt: PRINTED }),
+    );
+    assert.deepEqual(lonelySignaturePages(lines), []);
+  });
+
+  it("never leaves a signature block alone on a page, whatever the length of the text before it", async () => {
+    for (let paragraphs = 1; paragraphs <= 40; paragraphs += 3) {
+      const filler = Array.from(
+        { length: paragraphs },
+        (_, i) => `${i + 1}. bekezdés: ` + "a szerződés szövege ".repeat(18),
+      ).join("\n\n");
+      const lines = await readPdfTextLines(
+        await rentalContractDocument({
+          rental,
+          template: `## Szerződés\n\n${filler}\n\n[[alairas]]`,
+          printedAt: PRINTED,
+        }),
+      );
+      assert.deepEqual(
+        lonelySignaturePages(lines),
+        [],
+        `${paragraphs} paragraphs`,
+      );
+    }
+  });
+
   it("gives the same bytes for the same rental at the same moment", async () => {
     const make = () =>
       rentalContractDocument({
@@ -168,3 +260,22 @@ describe("the rental contract PDF", () => {
     assert.deepEqual(await make(), await make());
   });
 });
+
+/** The pages whose body holds only the signature labels (the header and the footer are outside the content band). */
+function lonelySignaturePages(
+  lines: { pageNumber: number; text: string; top?: number }[],
+): number[] {
+  const pages = new Set(lines.map((l) => l.pageNumber));
+  return [...pages].filter((page) => {
+    const body = lines.filter(
+      (l) =>
+        l.pageNumber === page &&
+        (l.top ?? 0) >= PDF_CONTINUATION_CONTENT_TOP - 1 &&
+        (l.top ?? 0) <= PDF_CONTENT_BOTTOM,
+    );
+    return (
+      body.some((l) => l.text === "Bérbeadó Bérlő") &&
+      body.every((l) => l.text === "Bérbeadó Bérlő")
+    );
+  });
+}

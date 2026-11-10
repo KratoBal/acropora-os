@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 
+import { ContentModule } from "../content/content.module.js";
 import { InventoryModule } from "../inventory/inventory.module.js";
 import { MessagesModule } from "../messages/messages.module.js";
 import { MissingInvoicesModule } from "../missing-invoices/missing-invoices.module.js";
@@ -23,6 +24,7 @@ import { DashboardService } from "./dashboard.service.js";
     MissingInvoicesModule,
     WebshopOrdersModule,
     MessagesModule,
+    ContentModule,
     PartnerOrdersModule,
   ],
   controllers: [DashboardController],

@@ -136,6 +136,80 @@ describe("renderWebshopMail", () => {
     );
   });
 
+  /*
+    THE LINES' TITLES IN THE ACKNOWLEDGEMENT (V0.3, card 3c292c56). WHAT TURNS THIS RED: the titles not rendered as a list in
+    both languages; a title's markup passing unescaped; the paragraph left behind (an empty gap) when the shop sends no
+    titles; a bad `item_titles` (not a list, a non-text entry, an empty one) refusing the mail instead of being dropped (the
+    acknowledgement is a legal one and must go out); the titles not trimmed or not capped.
+  */
+  it("the withdrawal acknowledgement lists the lines' titles, escaped, in both languages, and leaves no gap without them", () => {
+    const facts: WebshopMailFacts = {
+      template: "withdrawal-received",
+      display_id: 1042,
+      withdrawal_id: "ordwd_01ABC",
+      declared_name: "Kiss Anna",
+      item_ids: ["item_1", "item_2"],
+      item_titles: ["Kék <i>korall</i>", "Tengeri só 20 kg"],
+      received_at: "2026-11-09T12:00:00.000Z",
+    };
+    for (const [key, locale] of [
+      ["WEBSHOP_WITHDRAWAL_RECEIVED", "hu"],
+      ["WEBSHOP_WITHDRAWAL_RECEIVED_EN", "en"],
+    ] as const) {
+      const mail = renderWebshopMail(template(key), { ...facts, locale });
+      assert.equal(mail.ok, true, key);
+      if (!mail.ok) return;
+      assert.match(mail.html, /<li>Kék &lt;i&gt;korall&lt;\/i&gt;<\/li>/, key);
+      assert.doesNotMatch(mail.html, /<i>korall/, key);
+      assert.match(mail.html, /<li>Tengeri só 20 kg<\/li>/, key);
+      assert.match(mail.text, /- Kék <i>korall<\/i>\n- Tengeri só 20 kg/, key);
+      // the list stands between the first sentence and the reference, in its own place
+      assert.ok(mail.html.indexOf("<ul") > mail.html.indexOf("#1042"), key);
+      assert.ok(
+        mail.html.indexOf("<ul") < mail.html.indexOf("ordwd_01ABC"),
+        key,
+      );
+      const { item_titles: _omitted, ...without } = facts;
+      const bare = renderWebshopMail(template(key), { ...without, locale });
+      assert.equal(bare.ok, true, key);
+      if (!bare.ok) return;
+      assert.doesNotMatch(bare.html, /<ul|<p>\s*<\/p>/, key);
+      assert.doesNotMatch(bare.text, /^- /m, key);
+    }
+  });
+
+  it("the withdrawal facts: the titles are decoration: bad ones are dropped, the mail is never refused for them", () => {
+    const sample = WEBSHOP_MAIL_SAMPLE_FACTS["withdrawal-received"];
+    assert.equal(parseWebshopMailFacts("withdrawal-received", sample).ok, true);
+    const titles = (value: unknown) => {
+      const parsed = parseWebshopMailFacts("withdrawal-received", {
+        ...sample,
+        item_titles: value,
+      });
+      assert.equal(parsed.ok, true, JSON.stringify(value));
+      return parsed.ok && parsed.facts.template === "withdrawal-received"
+        ? parsed.facts.item_titles
+        : undefined;
+    };
+    assert.deepEqual(titles(["  Egy  ", "", 3, null, "Kettő"]), [
+      "Egy",
+      "Kettő",
+    ]);
+    assert.equal(titles("nem lista"), undefined);
+    assert.equal(titles([]), undefined);
+    assert.equal(titles(["", "  "]), undefined);
+    assert.equal(titles(["x".repeat(400)])?.[0]?.length, 300);
+    assert.equal(
+      titles(Array.from({ length: 60 }, (_, i) => `t${i}`))?.length,
+      50,
+    );
+    const missing = parseWebshopMailFacts("withdrawal-received", {
+      ...sample,
+      item_titles: undefined,
+    });
+    assert.equal(missing.ok, true);
+  });
+
   it("the withdrawal facts: the sample parses, and a declaration with no lines, a bad time or a non-text line id is refused", () => {
     const sample = WEBSHOP_MAIL_SAMPLE_FACTS["withdrawal-received"];
     assert.equal(parseWebshopMailFacts("withdrawal-received", sample).ok, true);

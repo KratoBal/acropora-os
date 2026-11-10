@@ -33,6 +33,7 @@ import {
   type RentalForm,
 } from "./rental-form";
 import { RentalReturnPanel } from "./rental-return-panel";
+import { RentalReturnedList } from "./rental-returned-list";
 
 /**
  * THE RENTAL DESK (task eszkozberles, S2; Balázs, 2026-11-06): the devices out now, and a new rental. The renter goes into the
@@ -53,6 +54,8 @@ export function RentalDeskPage({
   const [open, setOpen] = useState<Rental[]>([]);
   const [truncated, setTruncated] = useState(false);
   const [returning, setReturning] = useState<string | null>(null);
+  // bumped after a return, so the returned list reads the new row
+  const [returnedVersion, setReturnedVersion] = useState(0);
   const [equipment, setEquipment] = useState<RentalEquipment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -213,6 +216,7 @@ export function RentalDeskPage({
           ? ` Bérleti díj: ${formatMoney(settlement.feeHuf + (settlement.lateSurchargeHuf ?? 0), "HUF")}; kaucióból visszajár: ${formatMoney(rental.depositHuf - settlement.depositKeptHuf, "HUF")}.`
           : ""),
     );
+    setReturnedVersion((v) => v + 1);
     await load();
   };
 
@@ -223,7 +227,7 @@ export function RentalDeskPage({
     <div className="space-y-6">
       <PageHeader
         title="Bérlés"
-        description="A kint lévő eszközök és az új bérlés rögzítése. A bérlő a vevőtörzsbe kerül; ha már szerepel, a rendszer felajánlja."
+        description="A kint lévő és a visszahozott eszközök, és az új bérlés rögzítése. A bérlő a vevőtörzsbe kerül; ha már szerepel, a rendszer felajánlja."
       />
 
       {error ? (
@@ -311,6 +315,12 @@ export function RentalDeskPage({
           )}
         </CardContent>
       </Card>
+
+      <RentalReturnedList
+        token={token}
+        reloadKey={returnedVersion}
+        onPrint={(rental) => void printContract(rental)}
+      />
 
       {canRecord ? (
         <Card>
