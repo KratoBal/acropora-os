@@ -1593,6 +1593,73 @@ describe("ProductRepository", () => {
     });
   });
 
+  /*
+    A NEVEK AZ ADATLAPON (kartya 20b0dd47, S2). MI PIROSIT: a nev nem a helyi adatlap-upserten at megy; a nev nincs
+    levagva; az ures nev nem null (a torles elmarad); egy nev-frissites a masik ket nevet es az elhelyezesi igenyt is
+    nullazza vagy beirja (csak az adott mezo kerul az upsertbe); adatlap-irast general akkor is, ha egy nev sem adott.
+  */
+  it("writes the names only through the local datasheet upsert, trimmed, and only the given ones", async () => {
+    const { database, calls } = createDatabase();
+    const repository = new ProductRepository(database);
+    await repository.update("product-1", {
+      angolNev: "  Staghorn coral ",
+      nemetNev: "",
+    });
+
+    const updateArgs = calls.find(
+      (call) => call.operation === "transactionUpdate",
+    )?.args as {
+      data: {
+        datasheet?: {
+          upsert?: { create?: unknown; update?: unknown };
+        };
+      };
+    };
+    const expected = { angolNev: "Staghorn coral", nemetNev: null };
+    assert.deepEqual(updateArgs.data.datasheet?.upsert?.create, expected);
+    assert.deepEqual(updateArgs.data.datasheet?.upsert?.update, expected);
+  });
+
+  it("searches the Hungarian, English and German names of the datasheet too", async () => {
+    const { database, calls } = createDatabase();
+    const repository = new ProductRepository(database);
+    await repository.list({ page: 1, pageSize: 10, search: "geweih" });
+
+    const where = (
+      calls.find((call) => call.operation === "findMany")?.args as {
+        where: { OR?: Record<string, unknown>[] };
+      }
+    ).where;
+    const datasheet = where.OR?.find((clause) => "datasheet" in clause) as
+      | {
+          datasheet: {
+            is: { OR: Record<string, { contains: string; mode: string }>[] };
+          };
+        }
+      | undefined;
+    assert.ok(datasheet, "a datasheet clause must be part of the search");
+    assert.deepEqual(
+      datasheet.datasheet.is.OR.map((clause) => Object.keys(clause)[0]).sort(),
+      ["angolNev", "magyarNev", "nemetNev"],
+    );
+    for (const clause of datasheet.datasheet.is.OR) {
+      const condition = Object.values(clause)[0]!;
+      assert.equal(condition.contains, "geweih");
+      assert.equal(condition.mode, "insensitive");
+    }
+  });
+
+  it("does not touch the datasheet when no datasheet field is given", async () => {
+    const { database, calls } = createDatabase();
+    const repository = new ProductRepository(database);
+    await repository.update("product-1", { name: "Reef Salt 2" });
+
+    const updateArgs = calls.find(
+      (call) => call.operation === "transactionUpdate",
+    )?.args as { data: { datasheet?: unknown } };
+    assert.equal(updateArgs.data.datasheet, undefined);
+  });
+
   it("applies pagination and catalog filters", async () => {
     const { database, calls } = createDatabase();
     const repository = new ProductRepository(database);

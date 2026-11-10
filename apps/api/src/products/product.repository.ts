@@ -18,6 +18,7 @@ import {
 } from "./takeover-price.js";
 import { recordOwnPrice } from "./price-history/own-price-history.js";
 import { isOwnSaleActive } from "./own-sale.js";
+import { datasheetPatchOf } from "./product-datasheet-patch.js";
 import { retryOnSerializationConflict } from "../common/transaction-retry.util.js";
 import { unasShippingProfile } from "../integrations/medusa/medusa-unas-shipping.policy.js";
 import {
@@ -70,7 +71,13 @@ const productInclude = {
   images: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] },
   unasSnapshot: true,
   datasheet: {
-    select: { fenyIgeny: true, aramlasIgeny: true },
+    select: {
+      fenyIgeny: true,
+      aramlasIgeny: true,
+      magyarNev: true,
+      angolNev: true,
+      nemetNev: true,
+    },
   },
 } as const;
 
@@ -482,6 +489,33 @@ export class ProductRepository extends Repository {
                   },
                 },
               },
+              // a keresheto nevek (kartya 20b0dd47, Balazs 2026-08-31): a magyar, az angol es a nemet nev is talal
+              {
+                datasheet: {
+                  is: {
+                    OR: [
+                      {
+                        magyarNev: {
+                          contains: query.search,
+                          mode: "insensitive",
+                        },
+                      },
+                      {
+                        angolNev: {
+                          contains: query.search,
+                          mode: "insensitive",
+                        },
+                      },
+                      {
+                        nemetNev: {
+                          contains: query.search,
+                          mode: "insensitive",
+                        },
+                      },
+                    ],
+                  },
+                },
+              },
             ],
           }
         : {}),
@@ -516,9 +550,7 @@ export class ProductRepository extends Repository {
         : input.categoryId;
     const primaryWasProvided =
       input.primaryCategoryId !== undefined || input.categoryId !== undefined;
-    const placementNeedsWereProvided =
-      input.fenyIgeny !== undefined || input.aramlasIgeny !== undefined;
-
+    const datasheetPatch = datasheetPatchOf(input);
     return this.productDatabase.$transaction(
       async (transaction) => {
         await transaction.product.update({
@@ -530,27 +562,10 @@ export class ProductRepository extends Repository {
             brandId: input.brandId,
             webshopSellable: input.webshopSellable,
             advisorKind: input.advisorKind,
-            ...(placementNeedsWereProvided
+            ...(datasheetPatch
               ? {
                   datasheet: {
-                    upsert: {
-                      create: {
-                        ...(input.fenyIgeny !== undefined
-                          ? { fenyIgeny: input.fenyIgeny }
-                          : {}),
-                        ...(input.aramlasIgeny !== undefined
-                          ? { aramlasIgeny: input.aramlasIgeny }
-                          : {}),
-                      },
-                      update: {
-                        ...(input.fenyIgeny !== undefined
-                          ? { fenyIgeny: input.fenyIgeny }
-                          : {}),
-                        ...(input.aramlasIgeny !== undefined
-                          ? { aramlasIgeny: input.aramlasIgeny }
-                          : {}),
-                      },
-                    },
+                    upsert: { create: datasheetPatch, update: datasheetPatch },
                   },
                 }
               : {}),

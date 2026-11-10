@@ -4,6 +4,7 @@ import { Prisma } from "@acropora/database";
 
 import {
   categoryPath,
+  toProductDetail,
   toProductListItem,
   type ProductWithRelations,
 } from "./product.types.js";
@@ -206,5 +207,36 @@ describe("the primary category's path on the list", () => {
       categoryPath(loop as { name: string; parent: null }).length,
       8,
     );
+  });
+});
+
+/*
+  A NEVEK AZ ADATLAPON (kartya 20b0dd47, S2). MI PIROSIT: a reszletes nezet nem adja vissza a magyar, angol vagy nemet
+  nevet (az adatlap sorabol); egy nev egy masik mezo helyen jelenik meg (a ket nyelv felcserelese); adatlap nelkul nem
+  null, hanem hianyzo ertek (a "nincs kitoltve" jele a null).
+*/
+describe("toProductDetail: a nevek az adatlapon", () => {
+  it("a magyar, az angol es a nemet nevet a sajat mezojebe adja", () => {
+    const detail = toProductDetail(
+      baseProduct({
+        datasheet: {
+          fenyIgeny: null,
+          aramlasIgeny: null,
+          magyarNev: "Szarvkorall",
+          angolNev: "Staghorn coral",
+          nemetNev: "Hirschgeweihkoralle",
+        },
+      } as unknown as Partial<ProductWithRelations>),
+    );
+    assert.equal(detail.magyarNev, "Szarvkorall");
+    assert.equal(detail.angolNev, "Staghorn coral");
+    assert.equal(detail.nemetNev, "Hirschgeweihkoralle");
+  });
+
+  it("adatlap nelkul mindharom null (nincs kitoltve)", () => {
+    const detail = toProductDetail(baseProduct());
+    assert.equal(detail.magyarNev, null);
+    assert.equal(detail.angolNev, null);
+    assert.equal(detail.nemetNev, null);
   });
 });
