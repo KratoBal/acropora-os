@@ -27,7 +27,7 @@ import {
 import { retryOnSerializationConflict } from "../common/transaction-retry.util.js";
 import { husbandryDatasheetSelect } from "./product-husbandry.repository.js";
 import {
-  husbandryFilterWhere,
+  husbandryFilterMembers,
   husbandryListState,
   type HusbandryListRow,
 } from "./product-husbandry-list.js";
@@ -624,6 +624,9 @@ export class ProductRepository extends Repository {
   }
 
   async list(query: ProductListQueryDto): Promise<ProductListResponse> {
+    const and: Prisma.ProductWhereInput[] = [
+      ...husbandryFilterMembers(query.husbandry),
+    ];
     const where: Prisma.ProductWhereInput = {
       ...(query.active === undefined ? {} : { isActive: query.active }),
       ...(query.brandId ? { brandId: query.brandId } : {}),
@@ -640,7 +643,8 @@ export class ProductRepository extends Repository {
       ...(query.shipping === "unasDiff"
         ? { id: { in: await this.unasDiffProductIds() } }
         : shippingFilterWhere(query.shipping)),
-      ...husbandryFilterWhere(query.husbandry),
+      // ONE `AND` array: every filter that needs an AND puts its members here (a second top-level AND key would replace this one)
+      ...(and.length > 0 ? { AND: and } : {}),
       ...(query.search
         ? {
             OR: [
