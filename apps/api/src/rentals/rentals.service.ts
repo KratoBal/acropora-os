@@ -51,7 +51,7 @@ export class RentalsService {
   ) {}
 
   async list(query: RentalListQueryDto): Promise<RentalListResponse> {
-    return await this.repository.list(query.status);
+    return await this.repository.list(query.status, query.q);
   }
 
   /**

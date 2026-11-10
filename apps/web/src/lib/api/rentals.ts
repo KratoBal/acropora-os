@@ -34,8 +34,17 @@ export type CreateRentalInput = {
 
 /** The rental desk (task eszkozberles, S2): reads under `rentals.view`, recording under `rentals.manage`. */
 export const rentalsApi = {
-  list(token: string, status?: RentalStatus, signal?: AbortSignal) {
-    const query = status ? `?status=${status}` : "";
+  list(
+    token: string,
+    status?: RentalStatus,
+    signal?: AbortSignal,
+    search?: string,
+  ) {
+    const params = new URLSearchParams();
+    if (status) params.set("status", status);
+    if (search?.trim()) params.set("q", search.trim());
+    const text = params.toString();
+    const query = text ? `?${text}` : "";
     return apiRequest<RentalListResponse>(`${base}${query}`, token, {
       signal,
     });

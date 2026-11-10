@@ -82,10 +82,44 @@ export function RentalReturnedList({
     return () => controller.abort();
   }, [token, reloadKey]);
 
-  const shown = useMemo(
-    () => rows.filter((r) => rentalMatches(r, query)),
-    [rows, query],
-  );
+  /*
+    A CUT LIST IS SEARCHED IN THE DATABASE (#2370 open point): over RENTAL_LIST_LIMIT rows the loaded ones are only the
+    newest, and filtering them would miss an older rental. Then the search goes to the server (the same fields, 300 ms
+    after the last key); an uncut list keeps filtering in the browser, at once. `searched` holds the answer for one query.
+  */
+  const [searched, setSearched] = useState<{
+    q: string;
+    items: Rental[];
+  } | null>(null);
+  useEffect(() => {
+    const q = query.trim();
+    if (!truncated || q === "") {
+      setSearched(null);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      rentalsApi
+        .list(token, "RETURNED", controller.signal, q)
+        .then((answer) => setSearched({ q, items: answer.items }))
+        .catch((cause) => {
+          if (cause instanceof DOMException && cause.name === "AbortError")
+            return;
+          setError(
+            cause instanceof Error ? cause.message : "A keresés nem futott le.",
+          );
+        });
+    }, 300);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [token, reloadKey, truncated, query]);
+
+  const shown = useMemo(() => {
+    const source = searched?.q === query.trim() ? searched.items : rows;
+    return source.filter((r) => rentalMatches(r, query));
+  }, [rows, searched, query]);
 
   return (
     <Card>
