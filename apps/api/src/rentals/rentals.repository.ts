@@ -149,6 +149,28 @@ export type RentalReturnRow = {
   returnedById: string;
 };
 
+/**
+ * The search box's fields in the database (the page's `rentalMatches`): the contract number, the device's name and serial
+ * number, the renter's name, phone and e-mail; any of them, case-insensitive. Nothing to search: no condition.
+ */
+export function rentalSearchWhere(
+  q: string | undefined,
+): Prisma.RentalWhereInput {
+  const needle = q?.trim();
+  if (!needle) return {};
+  const contains = { contains: needle, mode: "insensitive" as const };
+  return {
+    OR: [
+      { rentalNumber: contains },
+      { equipment: { name: contains } },
+      { equipment: { serialNumber: contains } },
+      { customer: { displayName: contains } },
+      { customer: { phone: contains } },
+      { customer: { email: contains } },
+    ],
+  };
+}
+
 /** The most rentals one list answer carries; over it the answer says `truncated` (barracuda, #2274 b). */
 export const RENTAL_LIST_LIMIT = 500;
 
@@ -157,9 +179,10 @@ export class RentalsRepository {
   /** Open rentals first by planned return (the overdue on top), then the returned ones, newest first. */
   async list(
     status: RentalStatus | undefined,
+    q?: string,
   ): Promise<{ items: Rental[]; truncated: boolean }> {
     const rows = await prisma.rental.findMany({
-      where: status ? { status } : {},
+      where: { ...(status ? { status } : {}), ...rentalSearchWhere(q) },
       // an OPEN row has no returnedAt, so the second key only orders the returned ones (newest first)
       orderBy: [
         { status: "asc" },

@@ -17,7 +17,8 @@ import {
   or too wide (a device that came back cannot be rented again); the contract's frozen text or settings not stored (S3); its violation not recognised as "already rented" (a 500 at
   the desk); a rented-out device still offered; the customer match missing a phone written another way, an e-mail in other
   case or a name without accents, or offering an archived row. The return (S4): the write not conditional on OPEN (a second
-  desk settling over the first), the settlement not read back as recorded.
+  desk settling over the first), the settlement not read back as recorded. The list's search (#2370): a field of the page's
+  box not searched in the database, or a case-sensitive match.
 */
 const gate = integrationDatabaseGate(process.env);
 const PREFIX = "RENTAL-IT-";
@@ -183,6 +184,32 @@ describe("rentals on Postgres", { skip: gate.mode === "skip" }, () => {
     const second = await repository.create(row());
     assert.notEqual(second.id, first.id);
     assert.equal(second.settlement, null);
+  });
+
+  // #2370 open point: the search runs in the database, over the same fields as the page's box, case-insensitive
+  it("searches the list in the database: contract number, device, renter; other rentals left out", async () => {
+    // the rental the test above left on the device (one OPEN, one RETURNED: either will do)
+    const stored = await prisma.rental.findFirst({
+      where: { equipmentId },
+      select: { id: true },
+    });
+    const rental = (await repository.byId(stored!.id))!;
+    const ids = async (q: string) =>
+      (await repository.list(undefined, q)).items.map((r) => r.id);
+    for (const q of [
+      rental.rentalNumber.toLowerCase(),
+      `${PREFIX}OZMÓZIS`.toLowerCase(),
+      `rentális árpád ${n}`.toUpperCase(),
+      "555-1234",
+      `arpad.${n}@example.com`,
+    ])
+      assert.ok((await ids(q)).includes(rental.id), q);
+    assert.equal(
+      (await ids(`${PREFIX}nincs-ilyen-${n}`)).includes(rental.id),
+      false,
+    );
+    // a blank search is no search
+    assert.ok((await ids("   ")).includes(rental.id));
   });
 
   it("removes a new renter only while it has no rental, with its address", async () => {

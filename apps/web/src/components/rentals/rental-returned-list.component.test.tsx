@@ -13,7 +13,7 @@ import {
   The returned list not read by its own status; a row without its dates, fee or deposit settlement; a surcharge or a kept deposit
   left out of the line, or the kept deposit's reason; a rental returned before the settlement existed shown with invented numbers;
   the search missing the contract number, the device or the renter; the contract not printable from the list; the list not
-  read again after a return.
+  read again after a return; a cut list searched only in its loaded rows, or a whole list sent to the server (#2370).
 */
 const api = vi.hoisted(() => ({ list: vi.fn() }));
 vi.mock("@/lib/api/rentals", () => ({ rentalsApi: api }));
@@ -145,6 +145,53 @@ describe("RentalReturnedList", () => {
     expect(
       screen.getByText("Nincs a keresésnek megfelelő bérlés."),
     ).toBeTruthy();
+  });
+
+  // #2370 open point: a cut list is searched in the database, an uncut one in the browser
+  it("on a cut list the search asks the server and shows its answer; on a whole list it does not", async () => {
+    const regi = returned({
+      id: "r-old",
+      rentalNumber: "BER-1",
+      equipment: { id: "eq-9", name: "Régi párásító", serialNumber: "SN-1" },
+    });
+    api.list.mockImplementation(
+      async (_t: string, _s: string, _sig: AbortSignal, q?: string) =>
+        q
+          ? { items: [regi], truncated: false }
+          : { items: [returned()], truncated: true },
+    );
+    render(
+      <RentalReturnedList token="t" reloadKey={0} onPrint={() => undefined} />,
+    );
+    await screen.findByText(/BER-7/);
+    fireEvent.change(
+      screen.getByLabelText("Keresés a visszahozott bérlések között"),
+      {
+        target: { value: "régi" },
+      },
+    );
+    expect(await screen.findByText(/BER-1/)).toBeTruthy();
+    expect(api.list).toHaveBeenLastCalledWith(
+      "t",
+      "RETURNED",
+      expect.any(AbortSignal),
+      "régi",
+    );
+
+    api.list.mockReset();
+    api.list.mockResolvedValue({ items: [returned()], truncated: false });
+    const whole = render(
+      <RentalReturnedList token="t" reloadKey={0} onPrint={() => undefined} />,
+    );
+    await waitFor(() => expect(api.list).toHaveBeenCalledTimes(1));
+    fireEvent.change(
+      whole.getAllByLabelText("Keresés a visszahozott bérlések között").at(-1)!,
+      {
+        target: { value: "kiss" },
+      },
+    );
+    await new Promise((r) => setTimeout(r, 400));
+    expect(api.list).toHaveBeenCalledTimes(1);
   });
 
   it("reads the list again when a return bumps the key, and says when it is cut", async () => {

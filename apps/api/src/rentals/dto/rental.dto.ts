@@ -111,6 +111,16 @@ export class RentalListQueryDto {
   @IsOptional()
   @IsIn(RENTAL_STATUSES)
   status?: (typeof RENTAL_STATUSES)[number];
+
+  /**
+   * A SEARCH IN THE DATABASE, not in the loaded rows: the list carries at most RENTAL_LIST_LIMIT rows, and a search over
+   * a cut list misses the older ones (#2370 open point). The same fields as the page's own search box.
+   */
+  @Transform(blankIsMissing)
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  q?: string;
 }
 
 /** What the desk typed so far; any of the three may be empty. */
