@@ -19,7 +19,9 @@ import { productApi } from "@/lib/api/products";
  * gerinctelen termeken jelenik meg (a kategoria-fa gyokerebol, a szerver mondja: `livestockKind`), a halnal es a
  * tobbi termeknel nem. A nevek az OS-ben tarolodnak es szerkeszthetok; a webshopba MA NEM mennek.
  *
- * A mentes CSAK A VALTOZOTT mezoket kuldi: egy meg sosem kitoltott termeken a puszta mentes nem hoz letre adatlap-sort. Az
+ * A mentes a kulon nev-vegpontra megy (`PATCH /products/:id/names`), mert a UNAS-gazdaju termeken a termek TOBBI mezoje 409,
+ * a nevek viszont Acropora-tulajdonuak, es ott is irhatonak kell lenniuk (acrobot stage-probaja: a korallok tobbsege UNAS-
+ * gazdaju). A mentes CSAK A VALTOZOTT mezoket kuldi: egy meg sosem kitoltott termeken a puszta mentes nem hoz letre adatlap-sort. Az
  * ures mezo torli a nevet. A szerver a mentes utan visszaolvasva adja a termeket, azt tesszuk ki (mint az alapadat-
  * szerkesztonel).
  */
@@ -73,7 +75,7 @@ export function ProductNamesCard({
     if (busy || !canManage) return;
     setError(null);
     setNotice(null);
-    const changed: ProductUpdateInput = {};
+    const changed: Pick<ProductUpdateInput, NameKey> = {};
     for (const { key } of FIELDS) {
       const next = values[key].trim();
       if (next !== stored(product, key).trim()) changed[key] = next;
@@ -84,7 +86,7 @@ export function ProductNamesCard({
     }
     setBusy(true);
     try {
-      await productApi.update(token, product.id, changed);
+      await productApi.updateNames(token, product.id, changed);
       onSaved(await productApi.detail(token, product.id));
       setNotice("A nevek a szerverről visszaolvasva látszanak.");
     } catch (cause) {

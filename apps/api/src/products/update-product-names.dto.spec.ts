@@ -5,6 +5,7 @@ import { plainToInstance } from "class-transformer";
 import { validateSync } from "class-validator";
 
 import { UpdateProductDto } from "./dto/update-product.dto.js";
+import { UpdateProductNamesDto } from "./dto/update-product-names.dto.js";
 
 /*
   MI PIROSIT (kartya 20b0dd47, S2): a nev szokozokkal megy tovabb (a repository mar nem tudja, mi volt az eredeti); egy
@@ -47,5 +48,31 @@ describe("az UpdateProductDto nev-mezoi", () => {
   it("a nem szoveget elutasitja", () => {
     for (const bad of [5, true, ["x"], { a: 1 }])
       assert.equal(invalid({ magyarNev: bad }), true);
+  });
+});
+
+/*
+  A KULON NEV-DTO (kartya 20b0dd47, `PATCH /products/:id/names`): ugyanazok a szabalyok, mint az UpdateProductDto nev-mezoin.
+  MI PIROSIT: a szoveg szokozokkal megy tovabb; a hosszkorlat elmarad; a null (torles) elutasitva; egy nem szoveg atmegy;
+  a termek mas mezoje (name) a nev-DTO-n at nem tiltott a DTO szintjen: az ismeretlen mezot a globalis ValidationPipe (whitelist + forbidNonWhitelisted, app.configuration.ts) utasitja el, nem ez a spec.
+*/
+describe("az UpdateProductNamesDto", () => {
+  const names = (body: Record<string, unknown>) =>
+    plainToInstance(UpdateProductNamesDto, body);
+  const bad = (body: Record<string, unknown>) =>
+    validateSync(names(body)).length > 0;
+
+  it("a szoveget a szokozok nelkul adja tovabb, a null es a hianyzo rendben van", () => {
+    const value = names({ magyarNev: "  Szarvkorall ", nemetNev: null });
+    assert.equal(value.magyarNev, "Szarvkorall");
+    assert.equal(bad({ magyarNev: "x", angolNev: "y", nemetNev: null }), false);
+    assert.equal(bad({}), false);
+  });
+
+  it("a 200 karakternel hosszabb nevet es a nem szoveget elutasitja", () => {
+    assert.equal(bad({ angolNev: "a".repeat(200) }), false);
+    assert.equal(bad({ angolNev: "a".repeat(201) }), true);
+    for (const wrong of [5, true, ["x"], { a: 1 }])
+      assert.equal(bad({ nemetNev: wrong }), true);
   });
 });
