@@ -210,6 +210,25 @@ describe("the rental contract PDF", () => {
     );
   });
 
+  it("two signatures: moving the first one's paragraph is measured again, and the second one gets company too (barracuda, #2369)", async () => {
+    // measured: 8 + 8 paragraphs of 56 words; with one round only, the second signature is left alone
+    const part = (key: string) =>
+      Array.from(
+        { length: 8 },
+        (_, i) => `${key}${i + 1}. ` + "szöveg ".repeat(56),
+      ).join("\n\n");
+    const template = `## A\n\n${part("A")}\n\n[[alairas]]\n\n## B\n\n${part("B")}\n\n[[alairas]]`;
+    const plan = contractLayoutPlan(rentalContractBlocks(template));
+    assert.deepEqual(
+      [...plan.breakBefore].sort((x, y) => x - y),
+      [8, 18],
+    );
+    const lines = await readPdfTextLines(
+      await rentalContractDocument({ rental, template, printedAt: PRINTED }),
+    );
+    assert.deepEqual(lonelySignaturePages(lines), []);
+  });
+
   it("never leaves a signature block alone on a page, whatever the length of the text before it", async () => {
     for (let paragraphs = 1; paragraphs <= 40; paragraphs += 3) {
       const filler = Array.from(
