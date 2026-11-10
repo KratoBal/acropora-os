@@ -45,6 +45,7 @@ import type {
   VariantOmnibusSyncReport,
 } from "./medusa-product-projection.service.js";
 import type { LowestPriceDatabase } from "../../products/price-history/lowest-price.reader.js";
+import { livestockArrivalMetadata } from "./medusa-livestock-arrival.js";
 import { omnibusInputsFor } from "./medusa-variant-omnibus.js";
 import {
   betoltTiltoLista,
@@ -874,6 +875,17 @@ export async function runProjectionCli(
          * `null` here, and its link is cleared rather than left as it was.
          */
         brand: { select: OS_BRAND_FOR_SHOP_SELECT },
+        /**
+         * AZ ERKEZESEK, AMIKRE A VEVO ELOJEGYEZHET (V2.6 S3a): csak a termekhez kotott, elojegyezheto, meg nem
+         * erkezett sorok; a szabaly (melyik a kovetkezo, mi megy ki) a `livestockArrivalMetadata`-ban all.
+         */
+        livestockArrivals: {
+          where: {
+            preorderable: true,
+            status: { in: ["ORDERED", "IN_TRANSIT"] },
+          },
+          select: { id: true, expectedOn: true, status: true },
+        },
         // every variant with its flag: which ones go out is decided below (ca422e92)
         variants: {
           orderBy: [{ createdAt: "asc" }, { id: "asc" }],
@@ -1576,6 +1588,7 @@ export async function runProjectionCli(
         // the WYSIWYG subtree lives in the UNAS tree (`Category`), so the
         // flag reads the UNAS rows on both paths: a store-tree id never
         // matches it, and a pilot product would silently lose the flag
+        livestockArrival: livestockArrivalMetadata(product.livestockArrivals),
         uniquePiece: isWysiwygProduct(
           product.categories.map((row) => row.categoryId),
           await wysiwygReszfa(),

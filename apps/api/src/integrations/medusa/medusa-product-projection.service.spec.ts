@@ -2211,6 +2211,40 @@ describe("MedusaProductProjectionService -- a metaadat megőrzése", () => {
     assert.equal("kezzel_irt" in (f.updatedWith[0]?.metadata ?? {}), false);
   });
 
+  /*
+    THE NEXT ARRIVAL OF THE PRODUCT (V2.6 S3a). Mi pirosit: a kulcs nem kerul a metaadatba, ha van erkezes; egy
+    erkezes nelkuli termeken a regi kulcs a boltban marad (az osszefesules az owned kulcsot ""-vel veszi le: a kirakat
+    "Erkezik" sora ott allna, amit mar nem varunk); a kulcs idegen kulcsot visz magaval.
+  */
+  it("az érkezés kulcsa a metaadatba kerül, ha van olyan érkezés, amire a vevő előjegyezhet", async () => {
+    const f = fakes({
+      link: { productId: "prod-os-1", medusaProductId: "prod_megvan" },
+      existingMetadata: { kezzel_irt: "marad" },
+    });
+    const text = '{"v":1,"expected_on":"2026-11-13","status":"in_transit"}';
+
+    await f.service.project({ ...product, livestockArrival: text }, now);
+
+    assert.equal(f.updatedWith[0]?.metadata?.livestock_arrival, text);
+    assert.equal("kezzel_irt" in (f.updatedWith[0]?.metadata ?? {}), false);
+  });
+
+  it('érkezés nélkül a régi kulcs törlődik (a boltban ""-vel megy ki), és a hiányzó érték nem küld újat', async () => {
+    const f = fakes({
+      link: { productId: "prod-os-1", medusaProductId: "prod_megvan" },
+      existingMetadata: {
+        livestock_arrival:
+          '{"v":1,"expected_on":"2026-11-13","status":"ordered"}',
+        kezzel_irt: "marad",
+      },
+    });
+
+    await f.service.project({ ...product, livestockArrival: null }, now);
+
+    assert.equal(f.updatedWith[0]?.metadata?.livestock_arrival, "");
+    assert.equal("kezzel_irt" in (f.updatedWith[0]?.metadata ?? {}), false);
+  });
+
   /**
    * A BUKAS IRANYA A MEGORZES FELE ALL, ES A JELENTES KIMONDJA.
    *

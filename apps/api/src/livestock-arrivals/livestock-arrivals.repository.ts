@@ -242,15 +242,18 @@ export class LivestockArrivalsRepository {
     data: LivestockArrivalWrite,
     createdById: string | null,
   ): Promise<LivestockArrival> {
-    const row = await prisma.livestockArrival.create({
-      data: {
-        ...data,
-        expectedOn: livestockArrivalDay(data.expectedOn),
-        createdById,
-      },
-      select: SELECT,
+    return prisma.$transaction(async (tx) => {
+      const row = await tx.livestockArrival.create({
+        data: {
+          ...data,
+          expectedOn: livestockArrivalDay(data.expectedOn),
+          createdById,
+        },
+        select: SELECT,
+      });
+      await touchProducts(tx, [row.productId]);
+      return livestockArrivalView(row);
     });
-    return livestockArrivalView(row);
   }
 
   /** `null` when there is no such arrival. */
@@ -264,12 +267,42 @@ export class LivestockArrivalsRepository {
     data: LivestockArrivalWrite,
     readAt: string,
   ): Promise<LivestockArrival | "changed" | null> {
-    const { count } = await prisma.livestockArrival.updateMany({
-      where: { id, updatedAt: new Date(readAt) },
-      data: { ...data, expectedOn: livestockArrivalDay(data.expectedOn) },
+    return prisma.$transaction(async (tx) => {
+      // the product the arrival stood on BEFORE the write: a re-link or an unlink changes the key of the old product too
+      const before = await tx.livestockArrival.findUnique({
+        where: { id },
+        select: { productId: true },
+      });
+      const { count } = await tx.livestockArrival.updateMany({
+        where: { id, updatedAt: new Date(readAt) },
+        data: { ...data, expectedOn: livestockArrivalDay(data.expectedOn) },
+      });
+      if (count === 1)
+        await touchProducts(tx, [before?.productId, data.productId]);
+      const row = await tx.livestockArrival.findUnique({
+        where: { id },
+        select: SELECT,
+      });
+      if (count === 1) return row ? livestockArrivalView(row) : null;
+      return row ? "changed" : null;
     });
-    const row = await this.get(id);
-    if (count === 1) return row;
-    return row ? "changed" : null;
   }
+}
+
+/**
+ * THE PRODUCT'S `updatedAt` MOVES WITH ITS ARRIVAL (V2.6 S3a). The shop's `livestock_arrival` key is projected from the arrival,
+ * and the projection picks the products to send from the most recently updated ones: an arrival that changes on a product
+ * nobody else touched would never be picked. So the write that changes an arrival (in the same transaction) touches the
+ * product it stands on, and, when it moved, the one it stood on. Nothing else about the product changes.
+ */
+async function touchProducts(
+  tx: Pick<Prisma.TransactionClient, "product">,
+  ids: readonly (string | null | undefined)[],
+): Promise<void> {
+  const unique = [...new Set(ids.filter((id): id is string => Boolean(id)))];
+  if (unique.length === 0) return;
+  await tx.product.updateMany({
+    where: { id: { in: unique } },
+    data: { updatedAt: new Date() },
+  });
 }

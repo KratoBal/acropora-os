@@ -33,6 +33,8 @@ function termek(overrides: Record<string, unknown> = {}) {
      * de a teszt nem allit, az a dupla biztos hibaja.
      */
     sourceRelations: [] as { updatedAt: Date }[],
+    /** AZ ERKEZESEK IDOBELYEGE (V2.6 S3a): ugyanaz az indok, a hivo `termek.livestockArrivals.map(...)`-et hiv. */
+    livestockArrivals: [] as { updatedAt: Date }[],
     ...overrides,
   };
 }
@@ -668,6 +670,58 @@ describe("a kapcsolatok idobelyege esedekesse tesz", () => {
     assert.deepEqual((lekerdezes.args as { where: unknown }).where, {
       isActive: true,
       webshopExcluded: false,
+    });
+  });
+
+  /**
+   * AZ ERKEZES IDOBELYEGE (V2.6 S3a): a termek `livestock_arrival` kulcsa az erkezesbol jon, tehat az erkezes valtozasa
+   * esedekesse teszi a termeket, akkor is, ha maga a termek es minden mas bemenete regi.
+   */
+  describe("az erkezes idobelyege esedekesse tesz", () => {
+    const KOZBEN = new Date("2026-09-02T10:00:00.000Z");
+    const igy = async (erkezesek: { updatedAt: Date }[]) => {
+      const { db } = adatbazis(
+        [termek({ updatedAt: REGEN, livestockArrivals: erkezesek })],
+        [{ entityId: "prod-1", lastSyncedAt: KOZBEN }],
+      );
+      const { run, kapott } = futtato();
+      const scheduler = new MedusaProjectionScheduler({
+        db,
+        runProjection: run,
+        runPricing: arFuttato().run,
+        environment: BEKAPCSOLVA,
+      });
+      await scheduler.runOnce();
+      return kapott;
+    };
+
+    it("CSAK az erkezes mozdult: a termek esedekes", async () => {
+      assert.deepEqual(await igy([{ updatedAt: MOST }]), [["prod-1"]]);
+    });
+
+    it("az erkezes REGEBBI a vetitesnel: nem esedekes", async () => {
+      assert.deepEqual(await igy([{ updatedAt: REGEN }]), []);
+    });
+
+    it("a lekerdezes az erkezeseket is keri", async () => {
+      const { db, hivasok } = adatbazis(
+        [termek()],
+        [{ entityId: "prod-1", lastSyncedAt: MOST }],
+      );
+      const { run } = futtato();
+      const scheduler = new MedusaProjectionScheduler({
+        db,
+        runProjection: run,
+        runPricing: arFuttato().run,
+        environment: BEKAPCSOLVA,
+      });
+      await scheduler.runOnce();
+      const lekerdezes = hivasok.find(
+        (hivas) => hivas.metodus === "product.findMany",
+      );
+      const select = (lekerdezes!.args as { select: Record<string, unknown> })
+        .select;
+      assert.ok(select.livestockArrivals, "az erkezeseket kerni kell");
     });
   });
 
