@@ -126,6 +126,18 @@ describe("husbandry store, on the database", { skip: !runIntegration }, () => {
     );
   });
 
+  it("the product's updatedAt moves with the write (the projection picks products by their timestamps)", async () => {
+    const before = (await prisma.product.findUnique({
+      where: { id: productId },
+    }))!.updatedAt;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await write({ etetesGyakorisag: "hetente" });
+    const after = (await prisma.product.findUnique({
+      where: { id: productId },
+    }))!.updatedAt;
+    assert.ok(after.getTime() > before.getTime());
+  });
+
   it("an update changes only the given columns", async () => {
     const result = await write({ medenceErettsegHonap: 6, minLiter: 300 });
     assert.ok(result.kind === "ok");

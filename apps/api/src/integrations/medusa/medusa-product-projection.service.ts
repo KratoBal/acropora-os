@@ -52,6 +52,7 @@ import {
   mergeProductMetadata,
   PRIMARY_CATEGORY_KEY,
   LIVESTOCK_ARRIVAL_KEY,
+  HUSBANDRY_KEY,
   UNIQUE_PIECE_KEY,
 } from "./medusa-metadata-merge.js";
 import {
@@ -162,6 +163,11 @@ export interface ProjectableProduct {
    * `null`/hianyzik, ha nincs olyan erkezes, amire a vevo elojegyezhet. A hiany veszi le a kulcsot az osszefesuleskor.
    */
   livestockArrival?: string | null;
+  /**
+   * A TARTASI BLOKK (V2.2 S3): a kulcs erteke, mar kesz szovegkent (`husbandryMetadata`), vagy `null`/hianyzik, ha nincs mit
+   * mondani (nem elo allat, nem ellenorzott, kikapcsolt kapcsolo). A hiany veszi le a kulcsot az osszefesuleskor.
+   */
+  husbandry?: string | null;
   /**
    * A GONDOZOTT "HASONLO" KAPCSOLATOK, MAR MEDUSA AZONOSITOKKAL.
    *
@@ -834,6 +840,8 @@ export class MedusaProductProjectionService {
       ...(product.livestockArrival
         ? { [LIVESTOCK_ARRIVAL_KEY]: product.livestockArrival }
         : {}),
+      // csak akkor kerul be, ha van mit mondani; a hianya veszi le a kulcsot az osszefesuleskor (V2.2 S3)
+      ...(product.husbandry ? { [HUSBANDRY_KEY]: product.husbandry } : {}),
       ...(isDiscontinued(publication.reason, product.unasProductUrl)
         ? { [DISCONTINUED_KEY]: "true" }
         : {}),

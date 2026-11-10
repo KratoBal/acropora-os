@@ -46,6 +46,14 @@ import type {
 } from "./medusa-product-projection.service.js";
 import type { LowestPriceDatabase } from "../../products/price-history/lowest-price.reader.js";
 import { livestockArrivalMetadata } from "./medusa-livestock-arrival.js";
+import {
+  husbandryMetadata,
+  projectHusbandryEnabled,
+} from "./medusa-husbandry.js";
+import {
+  deriveLivestockKind,
+  liveAnimalKindSubtrees,
+} from "./medusa-livestock.policy.js";
 import { omnibusInputsFor } from "./medusa-variant-omnibus.js";
 import {
   betoltTiltoLista,
@@ -830,6 +838,20 @@ export async function runProjectionCli(
       );
     return wysiwygIds;
   };
+  /**
+   * AZ ELO ALLAT FAJTA-RESZFAI (V2.2 S3), FUTASONKENT EGYSZER, LUSTAN, a WYSIWYG reszfa mintajara: a tartasi blokk csak elo
+   * allatra megy ki, es a fajtat a kategoria-fa adja (nem a nev). A teljes fa kell hozza, ezert nem termekenkent kerdezzuk.
+   */
+  let fajtaReszfak: ReturnType<typeof liveAnimalKindSubtrees> | null = null;
+  const eloAllatFajtaReszfak = async () => {
+    if (!fajtaReszfak)
+      fajtaReszfak = liveAnimalKindSubtrees(
+        await db.category.findMany({
+          select: { id: true, name: true, parentId: true },
+        }),
+      );
+    return fajtaReszfak;
+  };
   for (const argument of targets) {
     let productId: string;
     if (argument.startsWith("sku:")) {
@@ -885,6 +907,35 @@ export async function runProjectionCli(
             status: { in: ["ORDERED", "IN_TRANSIT"] },
           },
           select: { id: true, expectedOn: true, status: true },
+        },
+        /**
+         * A TARTASI BLOKK ELLENORZOTT TENYEI (V2.2 S3): a szabaly (csak elo allat, csak ellenorzott, csak a kitoltott tenyek)
+         * a `husbandryMetadata`-ban all. A forras tipusa es hivatkozasa, es az ellenorzo azonositoja szandekosan NEM kerul
+         * ide: azok nem hagyhatjak el az OS-t.
+         */
+        datasheet: {
+          select: {
+            careDifficulty: true,
+            minLiter: true,
+            medenceErettsegHonap: true,
+            elhelyezesZona: true,
+            reefSafe: true,
+            reefSafeIndok: true,
+            socialKeeping: true,
+            aggression: true,
+            korallevo: true,
+            gerinctelenevo: true,
+            feedingType: true,
+            etetesGyakorisag: true,
+            eloEleseg: true,
+            fenyIgeny: true,
+            aramlasIgeny: true,
+            meretMax: true,
+            meretDimenzio: true,
+            szarmazas: true,
+            kinekNem: true,
+            ellenorizveAt: true,
+          },
         },
         // every variant with its flag: which ones go out is decided below (ca422e92)
         variants: {
@@ -1589,6 +1640,17 @@ export async function runProjectionCli(
         // flag reads the UNAS rows on both paths: a store-tree id never
         // matches it, and a pilot product would silently lose the flag
         livestockArrival: livestockArrivalMetadata(product.livestockArrivals),
+        // CSAK A KAPCSOLOVAL (`MEDUSA_PROJECT_HUSBANDRY`, alapbol KI): kikapcsolva a kulcs nem megy ki, es egy meglevo kulcsot az
+        // osszefesules levesz (V2.2 S3)
+        husbandry: projectHusbandryEnabled(env)
+          ? husbandryMetadata(
+              product.datasheet,
+              deriveLivestockKind(
+                product.categories.map((row) => row.categoryId),
+                await eloAllatFajtaReszfak(),
+              ),
+            )
+          : null,
         uniquePiece: isWysiwygProduct(
           product.categories.map((row) => row.categoryId),
           await wysiwygReszfa(),

@@ -1885,6 +1885,15 @@ describe("ProductRepository", () => {
           "product.husbandry.verification-withdrawn",
     );
     assert.equal(events.length, 1);
+    // the withdrawal changes what the shop may say, and the round picks products by their timestamps (V2.2 S3)
+    const touched = calls.filter(
+      (call) => call.operation === "productUpdateMany",
+    );
+    assert.equal(touched.length, 1);
+    assert.ok(
+      (touched[0]!.args as { data: { updatedAt: unknown } }).data
+        .updatedAt instanceof Date,
+    );
   });
 
   it("a changed light or flow need on the general update withdraws it too", async () => {
@@ -1945,6 +1954,10 @@ describe("ProductRepository", () => {
     );
     assert.deepEqual(upsertOf(calls).update, { magyarNev: "Szarvkorall" });
     assert.equal(calls.filter((call) => call.operation === "audit").length, 0);
+    assert.equal(
+      calls.filter((call) => call.operation === "productUpdateMany").length,
+      0,
+    );
   });
 
   it("a block that was not verified has nothing to log, but the columns are nulled all the same (a verification committed in between cannot survive)", async () => {
