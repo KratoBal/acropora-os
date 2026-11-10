@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
@@ -8,7 +14,12 @@ import { createServer } from "node:http";
 import { describe, it } from "node:test";
 
 import type { TrialDatabase } from "./trial-database.js";
-import { freePort, portIsFree, runTrial } from "./trial-run.js";
+import {
+  freePort,
+  portIsFree,
+  processOwnsListeningPort,
+  runTrial,
+} from "./trial-run.js";
 import type { ConnectionSettingState } from "./trial-integrations.js";
 
 /*
@@ -229,6 +240,109 @@ describe("the instance", () => {
     assert.match(api.name, /exited with code 5 right after \/health answered/);
     assert.ok(!checks.some((c) => c.name.startsWith("login:")));
   });
+
+  /*
+    THE IDENTITY OF WHOEVER ANSWERS (card eb2ed687). WHAT TURNS THESE RED: a /health answer asked for, and taken, before the
+    instance holds the port (a foreign process would give it); the ownership read that counts a connected socket (state 01), a
+    socket of another port, or another process's socket as the instance's; an unmeasurable system (no /proc, no pid) read as "not
+    the owner" (it must be `null`, so the timing guards still run).
+  */
+  it("reads the listening socket of the port from the kernel table: only LISTEN, only that port, only that process's descriptors (IPv4 and IPv6)", () => {
+    const proc = mkdtempSync(join(tmpdir(), "fake-proc-"));
+    mkdirSync(join(proc, "net"), { recursive: true });
+    const header =
+      "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n";
+    const row = (local: string, state: string, inode: number) =>
+      `   0: ${local} 00000000:0000 ${state} 00000000:00000000 00:00000000 00000000  1000        0 ${inode} 1 0000000000000000 100 0 0 10 0\n`;
+    // 8080 = 1F90: a LISTEN row (inode 111), the same port ESTABLISHED (inode 222), another port LISTEN (inode 333)
+    writeFileSync(
+      join(proc, "net", "tcp"),
+      header +
+        row("0100007F:1F90", "0A", 111) +
+        row("0100007F:1F90", "01", 222) +
+        row("0100007F:1F91", "0A", 333),
+    );
+    // IPv6: 9000 = 2328, LISTEN (inode 444)
+    writeFileSync(
+      join(proc, "net", "tcp6"),
+      header + row("00000000000000000000000001000000:2328", "0A", 444),
+    );
+    const fds = (pid: number, inodes: number[]) => {
+      mkdirSync(join(proc, String(pid), "fd"), { recursive: true });
+      inodes.forEach((inode, index) =>
+        symlinkSync(
+          `socket:[${inode}]`,
+          join(proc, String(pid), "fd", String(index + 3)),
+        ),
+      );
+    };
+    fds(100, [111, 999]); // holds the LISTEN socket of 8080
+    fds(200, [222, 333]); // an ESTABLISHED socket of 8080 and a LISTEN of another port
+    fds(300, [444]); // the IPv6 listener of 9000
+    assert.equal(processOwnsListeningPort(100, 8080, proc), true);
+    assert.equal(processOwnsListeningPort(200, 8080, proc), false);
+    assert.equal(processOwnsListeningPort(100, 8081, proc), false);
+    assert.equal(processOwnsListeningPort(300, 9000, proc), true);
+    assert.equal(processOwnsListeningPort(100, 9000, proc), false);
+    // not measurable: no pid, a process with no fd directory, no /proc at all
+    assert.equal(processOwnsListeningPort(undefined, 8080, proc), null);
+    assert.equal(processOwnsListeningPort(999, 8080, proc), null);
+    assert.equal(
+      processOwnsListeningPort(100, 8080, join(proc, "nincs")),
+      null,
+    );
+  });
+
+  it(
+    "on Linux the real kernel table agrees: this process owns a port it listens on, a child that never listens does not",
+    { skip: process.platform !== "linux" },
+    async () => {
+      const server = createServer();
+      await new Promise<void>((resolve) =>
+        server.listen(0, "127.0.0.1", resolve),
+      );
+      const port = (server.address() as { port: number }).port;
+      try {
+        assert.equal(processOwnsListeningPort(process.pid, port), true);
+        assert.equal(processOwnsListeningPort(process.ppid, port), false);
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+      assert.equal(processOwnsListeningPort(process.pid, port), false);
+    },
+  );
+
+  it(
+    "never asks /health, and never takes an answer, while the instance does not hold the port (a foreign process would give it)",
+    { skip: process.platform !== "linux" },
+    async () => {
+      const silent = script(
+        "never-listens.mjs",
+        "setInterval(() => {}, 1000);\nprocess.on('SIGTERM', () => process.exit(0));\n",
+      );
+      let asked = 0;
+      const checks = await runTrial({
+        ...base,
+        apiMain: silent,
+        database: database(),
+        healthTimeoutMs: 1_500,
+        // a foreign process that answers at once, whatever is asked
+        fetchImpl: (async () => {
+          asked += 1;
+          return new Response("{}", { status: 200 });
+        }) as typeof fetch,
+      });
+      const api = checks.find((c) => c.name.startsWith("api:"))!;
+      assert.equal(api.passed, false);
+      assert.match(api.name, /did not answer \/health in time/);
+      assert.equal(
+        asked,
+        0,
+        "no /health request while the port is not the instance's",
+      );
+      assert.ok(!checks.some((c) => c.name.startsWith("login:")));
+    },
+  );
 
   it("reports an instance that never answers /health in time", async () => {
     const apiMain = script(

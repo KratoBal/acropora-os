@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { readdirSync, readFileSync, readlinkSync } from "node:fs";
 import { createServer } from "node:net";
 
 import type { TrialDatabase } from "./trial-database.js";
@@ -35,6 +36,8 @@ export interface TrialRunOptions {
   readonly healthTimeoutMs?: number;
   readonly fetchImpl?: typeof fetch;
   readonly spawnImpl?: typeof spawn;
+  /** Who holds the listening socket (tests); the default reads `/proc`. */
+  readonly ownsPortImpl?: typeof processOwnsListeningPort;
   readonly progress?: (line: string) => void;
 }
 
@@ -75,8 +78,66 @@ export function portIsFree(port: number): Promise<boolean> {
   });
 }
 
-/** How long the instance gets, after `/health` answered, to show it is still the one that is running (see `waitForHealth`). */
+/** How long the instance gets, after `/health` answered, to show it is still the one that is running (the fallback of `waitForHealth`). */
 const SETTLE_MS = 250;
+
+/**
+ * DOES THIS PROCESS HOLD THE LISTENING SOCKET OF THE PORT (card eb2ed687): the IDENTITY of whoever answers `/health`, instead of
+ * a guess from timing. Two listeners cannot share a port, so when the child owns the listening socket, every answer on that port
+ * is the child's. It reads the kernel's table (`/proc/net/tcp` and `tcp6`: the listening sockets of the port and their inodes)
+ * and the process's open files (`/proc/<pid>/fd`: `socket:[inode]`), so it needs NO change in the instance (the real API, a
+ * stand-in), no nonce and no port chosen by the instance.
+ *
+ * `true` / `false`: measured. `null`: it cannot be measured here (no `/proc`, no pid, a file that cannot be read): the caller
+ * falls back to the timing guards and does not pretend to know. The trial runs on Linux (the stage container); on another system
+ * the fallback is what remains.
+ */
+export function processOwnsListeningPort(
+  pid: number | undefined,
+  port: number,
+  proc = "/proc",
+): boolean | null {
+  if (pid === undefined || !Number.isInteger(pid) || pid <= 0) return null;
+  try {
+    const hexPort = port.toString(16).toUpperCase().padStart(4, "0");
+    const listening = new Set<string>();
+    for (const table of ["tcp", "tcp6"]) {
+      let text: string;
+      try {
+        text = readFileSync(`${proc}/net/${table}`, "utf8");
+      } catch (error) {
+        // IPv6 may be off (no tcp6); the IPv4 table is the one that must be there
+        if (table === "tcp6") continue;
+        throw error;
+      }
+      for (const line of text.split("\n").slice(1)) {
+        const cols = line.trim().split(/\s+/);
+        // sl local_address rem_address st tx:rx tr:when retrnsmt uid timeout inode
+        const [, local, , state, , , , , , inode] = cols;
+        if (
+          state === "0A" &&
+          local !== undefined &&
+          local.split(":")[1]?.toUpperCase() === hexPort &&
+          inode !== undefined
+        )
+          listening.add(inode);
+      }
+    }
+    for (const fd of readdirSync(`${proc}/${pid}/fd`)) {
+      let target: string;
+      try {
+        target = readlinkSync(`${proc}/${pid}/fd/${fd}`);
+      } catch {
+        continue; // a descriptor closed while we read
+      }
+      const match = /^socket:\[(\d+)\]$/.exec(target);
+      if (match && listening.has(match[1]!)) return true;
+    }
+    return false;
+  } catch {
+    return null;
+  }
+}
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
@@ -86,19 +147,34 @@ async function waitForHealth(
   child: ChildProcess,
   timeoutMs: number,
   doFetch: typeof fetch,
+  port: number,
+  ownsPort: typeof processOwnsListeningPort = processOwnsListeningPort,
 ): Promise<string | null> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (child.exitCode !== null)
       return `exited with code ${child.exitCode} before it answered`;
+    /*
+      THE ANSWER IS THE INSTANCE'S OWN ONLY WHEN THE INSTANCE HOLDS THE PORT (card eb2ed687). Measured: the child's listening
+      socket on the port. Not yet (it is still starting, or another process holds the port): do not ask `/health` at all, a
+      foreign process would answer it. Held: the answer is the child's, nobody else can listen there. Not measurable (`null`):
+      the timing guards below, as before.
+    */
+    const owned = ownsPort(child.pid, port);
+    if (owned === false) {
+      await sleep(100);
+      continue;
+    }
     try {
       const response = await doFetch(`${baseUrl}/health`, {
         signal: AbortSignal.timeout(3_000),
       });
       if (response.ok) {
+        // measured identity: nothing more to wait for
+        if (owned === true) return null;
         /*
-          THE ANSWER MUST BE THE INSTANCE'S OWN: an instance that could not bind (the port was taken, so another process
-          answered) exits within moments. Give it a moment, and a child that is gone is not the one that answered.
+          NOT MEASURABLE here: an instance that could not bind (the port was taken, so another process answered) exits within
+          moments. Give it a moment, and a child that is gone is not the one that answered.
         */
         await sleep(SETTLE_MS);
         if (child.exitCode !== null)
@@ -181,6 +257,8 @@ export async function runTrial(
       child,
       options.healthTimeoutMs ?? 90_000,
       options.fetchImpl ?? fetch,
+      port,
+      options.ownsPortImpl,
     );
     if (failure !== null)
       return [
