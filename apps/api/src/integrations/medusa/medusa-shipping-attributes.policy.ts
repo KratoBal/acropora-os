@@ -130,20 +130,3 @@ export function rowsCarryingKind<
 >(rows: readonly T[]): T[] {
   return rows.filter((row) => (row.livestock_kind ?? null) !== null);
 }
-
-/**
- * A bolti sor zaszloi VALTOZATLANUL, csak a fajta nelkul. A tobbi zaszlo nem az OS dontese ezen a termeken (nincs
- * profil-sora), tehat nem nyulunk hozzajuk: a kikuldes az ELTAROLT ertekeket kuldi vissza.
- */
-export function flagsWithoutKind(
-  row: MedusaShippingFlags,
-): MedusaShippingFlags {
-  return {
-    pickup_only: row.pickup_only,
-    foxpost_forbidden: row.foxpost_forbidden,
-    is_heavy: row.is_heavy,
-    is_frozen: row.is_frozen,
-    locker_unsuitable: row.locker_unsuitable ?? false,
-    livestock_kind: null,
-  };
-}

@@ -1281,10 +1281,14 @@ export interface MedusaAdminClient {
    * elo allat fajtakat.
    */
   listShippingAttributes(): Promise<MedusaShippingAttributeRow[]>;
-  /** A negy zaszlo kikuldese. EZ IR A BOLTI OLDALRA. */
+  /**
+   * A zaszlok kikuldese. EZ IR A BOLTI OLDALRA. A bolt route-ja reszleges frissitest fogad (minden zaszlo opcionalis,
+   * a megadottak irodnak): a boltban maradt fajta letorlese csak a fajtat kuldi, hogy egy kozben kezzel atallitott
+   * masik zaszlot ne irjon vissza.
+   */
   setShippingAttributes(
     productId: string,
-    flags: MedusaShippingFlags,
+    flags: Partial<MedusaShippingFlags>,
   ): Promise<MedusaShippingAttributeRow>;
   /**
    * A TERMEKISMERET A BOLT OLDALAN, OLVASASRA (#1431, a PR A / PR B
@@ -2576,7 +2580,7 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
 
   async setShippingAttributes(
     productId: string,
-    flags: MedusaShippingFlags,
+    flags: Partial<MedusaShippingFlags>,
   ): Promise<MedusaShippingAttributeRow> {
     const body = await this.request<{
       shipping_attribute: MedusaShippingAttributeRow;

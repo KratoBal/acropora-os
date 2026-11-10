@@ -5,7 +5,6 @@ import type { LivestockKind } from "./medusa-livestock.policy.js";
 import { MedusaProductLinkRepository } from "./medusa-product-link.repository.js";
 import {
   describeShippingFlags,
-  flagsWithoutKind,
   shippingFlagsDiffer,
   shippingFlagsFromProfile,
   type MedusaShippingFlags,
@@ -76,7 +75,7 @@ export class MedusaShippingAttributesService {
   /**
    * A BOLTBAN MARADT FAJTA LETORLESE (kartya 4b30b373): a bolti sor `livestock_kind`-ja null lesz, a tobbi zaszlo
    * valtozatlan. Csak olyan sorra hivd, aminek az OS-ben mar nincs elo allat besorolasa (a hivo dont). Proba-futasnal
-   * (`apply` hamis) nem ir, es megmondja, mit kuldene.
+   * (`apply` hamis) nem ir, es megmondja, mit kuldene. Csak a fajta mezot kuldi (reszleges frissites).
    */
   async clearLeftoverKind(
     row: MedusaShippingFlags & { product_id: string },
@@ -89,10 +88,11 @@ export class MedusaShippingAttributesService {
     const flags = `${describeShippingFlags(row)} -> a fajta törlése`;
     if (!apply)
       return { action: "planned", medusaProductId: row.product_id, flags };
-    await this.medusa.setShippingAttributes(
-      row.product_id,
-      flagsWithoutKind(row),
-    );
+    // CSAK A FAJTA megy (a bolt route-ja reszleges frissitest fogad): a tobbi zaszlot, amit kozben valaki a Medusa
+    // adminban atallitott, nem irjuk vissza (barracuda, #2353 review)
+    await this.medusa.setShippingAttributes(row.product_id, {
+      livestock_kind: null,
+    });
     return { action: "applied", medusaProductId: row.product_id, flags };
   }
 
