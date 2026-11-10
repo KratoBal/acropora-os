@@ -50,6 +50,7 @@ const rental: Rental = {
   expectedFeeHuf: 7500,
   note: null,
   returnedAt: null,
+  settlement: null,
   createdAt: "2026-11-06T09:00:00.000Z",
 };
 const PRINTED = new Date("2026-11-06T09:05:00.000Z");

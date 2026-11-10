@@ -10,7 +10,7 @@ import { RentalsController } from "./rentals.controller.js";
 
 /*
   WHAT TURNS THIS RED. A read on anything but rentals.view, the recording on anything but rentals.manage (a viewer could then
-  hand out a device); a route under settings.manage or customers.view (the sales desk has neither); the signed-in user's id not
+  hand out a device, or take one back); a route under settings.manage or customers.view (the sales desk has neither); the signed-in user's id not
   handed to the service on create.
 */
 const prototype = RentalsController.prototype as unknown as Record<
@@ -32,6 +32,8 @@ describe("RentalsController", () => {
       "customerMatches",
       "get",
       "list",
+      "returnPreview",
+      "returnRental",
     ]);
     for (const name of [
       "availableEquipment",
@@ -39,9 +41,11 @@ describe("RentalsController", () => {
       "customerMatches",
       "get",
       "list",
+      "returnPreview",
     ])
       assert.deepEqual(required(name), [PERMISSIONS.RENTALS_VIEW], name);
-    assert.deepEqual(required("create"), [PERMISSIONS.RENTALS_MANAGE]);
+    for (const name of ["create", "returnRental"])
+      assert.deepEqual(required(name), [PERMISSIONS.RENTALS_MANAGE], name);
   });
 
   it("hands the signed-in user's id to the service on create", async () => {
@@ -51,5 +55,15 @@ describe("RentalsController", () => {
     } as never);
     await controller.create({} as never, { id: "u-7" } as never);
     assert.deepEqual(seen, ["u-7"]);
+  });
+
+  it("hands the signed-in user's id to the service on return", async () => {
+    const seen: string[] = [];
+    const controller = new RentalsController({
+      returnRental: async (_id: string, _input: unknown, by: string) =>
+        void seen.push(by),
+    } as never);
+    await controller.returnRental("r-1", {} as never, { id: "u-8" } as never);
+    assert.deepEqual(seen, ["u-8"]);
   });
 });

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { PERMISSIONS, ROLE_PERMISSIONS, USER_ROLES } from "./auth.js";
-import { rentalFeeHuf, rentalPeriodCount } from "./rental.js";
+import { rentalFeeHuf, rentalPeriodCount, rentalSettlement } from "./rental.js";
 
 /*
   WHAT TURNS THIS RED. A started 24 hours not counted (24h + 1 minute must be two periods); a period shorter than a day
@@ -30,6 +30,86 @@ describe("the rental fee", () => {
     assert.equal(
       rentalPeriodCount("2026-10-24T08:00:00.000Z", "2026-10-25T09:00:00.000Z"),
       2,
+    );
+  });
+});
+
+describe("the settlement of a return (S4)", () => {
+  const base = {
+    startsAt: "2026-11-01T10:00:00Z",
+    plannedReturnAt: "2026-11-04T10:00:00Z",
+    dailyFeeHuf: 2000,
+    lateFeeMultiplier: 2,
+    replacementAfterDays: 5,
+  };
+
+  it("on time or early: the started periods of the ACTUAL time, no surcharge, no flag", () => {
+    assert.deepEqual(
+      rentalSettlement({ ...base, returnedAt: "2026-11-03T09:00:00Z" }),
+      {
+        periods: 2,
+        feeHuf: 4000,
+        latePeriods: 0,
+        lateSurchargeHuf: 0,
+        lateFeeMultiplier: null,
+        replacementClaimable: false,
+      },
+    );
+  });
+
+  it("late: the late periods are rental days, and the surcharge makes each one daily fee times the multiplier", () => {
+    // 3 planned + 2 started late periods = 5 periods; surcharge 2 * 2000 * (2 - 1)
+    assert.deepEqual(
+      rentalSettlement({ ...base, returnedAt: "2026-11-05T11:00:00Z" }),
+      {
+        periods: 5,
+        feeHuf: 10000,
+        latePeriods: 2,
+        lateSurchargeHuf: 4000,
+        lateFeeMultiplier: 2,
+        replacementClaimable: false,
+      },
+    );
+  });
+
+  it("no multiplier set: the surcharge is null (not charged, not guessed); the fee for the time out still counts", () => {
+    const s = rentalSettlement({
+      ...base,
+      lateFeeMultiplier: null,
+      returnedAt: "2026-11-05T11:00:00Z",
+    })!;
+    assert.equal(s.feeHuf, 10000);
+    assert.equal(s.lateSurchargeHuf, null);
+    assert.equal(s.lateFeeMultiplier, null);
+  });
+
+  it("the replacement value may be claimed only when the late days EXCEED the setting (the contract's words), never without it", () => {
+    const at = (days: number) =>
+      new Date(
+        Date.parse(base.plannedReturnAt) + days * 86_400_000,
+      ).toISOString();
+    assert.equal(
+      rentalSettlement({ ...base, returnedAt: at(5) })!.replacementClaimable,
+      false,
+    );
+    assert.equal(
+      rentalSettlement({ ...base, returnedAt: at(5.1) })!.replacementClaimable,
+      true,
+    );
+    assert.equal(
+      rentalSettlement({
+        ...base,
+        replacementAfterDays: null,
+        returnedAt: at(30),
+      })!.replacementClaimable,
+      false,
+    );
+  });
+
+  it("a return before the start is no settlement", () => {
+    assert.equal(
+      rentalSettlement({ ...base, returnedAt: "2026-11-01T09:00:00Z" }),
+      null,
     );
   });
 });

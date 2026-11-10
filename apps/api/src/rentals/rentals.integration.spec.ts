@@ -16,7 +16,8 @@ import {
   ON A REAL POSTGRES. WHAT TURNS THIS RED: the partial unique index missing (a second OPEN rental of the same device stored)
   or too wide (a device that came back cannot be rented again); the contract's frozen text or settings not stored (S3); its violation not recognised as "already rented" (a 500 at
   the desk); a rented-out device still offered; the customer match missing a phone written another way, an e-mail in other
-  case or a name without accents, or offering an archived row.
+  case or a name without accents, or offering an archived row. The return (S4): the write not conditional on OPEN (a second
+  desk settling over the first), the settlement not read back as recorded.
 */
 const gate = integrationDatabaseGate(process.env);
 const PREFIX = "RENTAL-IT-";
@@ -155,12 +156,33 @@ describe("rentals on Postgres", { skip: gate.mode === "skip" }, () => {
       false,
     );
 
-    await prisma.rental.update({
-      where: { id: first.id },
-      data: { status: "RETURNED", returnedAt: new Date() },
+    const back = {
+      returnedAt: new Date("2026-11-09T10:00:00.000Z"),
+      finalFeeHuf: 10000,
+      lateSurchargeHuf: 1250,
+      depositKeptHuf: 5000,
+      depositKeptReason: "hiányzó tömlő",
+      returnedById: "u-1",
+    };
+    assert.equal(await repository.markReturned(first.id, back), true);
+    // a second desk taking the same rental back: no write over the first settlement
+    assert.equal(
+      await repository.markReturned(first.id, { ...back, depositKeptHuf: 0 }),
+      false,
+    );
+    const returned = await repository.byId(first.id);
+    assert.equal(returned?.status, "RETURNED");
+    assert.equal(returned?.returnedAt, "2026-11-09T10:00:00.000Z");
+    assert.deepEqual(returned?.settlement, {
+      feeHuf: 10000,
+      lateSurchargeHuf: 1250,
+      depositKeptHuf: 5000,
+      depositKeptReason: "hiányzó tömlő",
     });
+
     const second = await repository.create(row());
     assert.notEqual(second.id, first.id);
+    assert.equal(second.settlement, null);
   });
 
   it("removes a new renter only while it has no rental, with its address", async () => {
