@@ -13,13 +13,15 @@ import { emptyRentalForm, rentalRequest, type RentalForm } from "./rental-form";
 /*
   WHAT TURNS THIS RED. A new renter sent without phone, e-mail or address; the desk's wall-clock time sent as UTC; a chosen
   existing customer sent as a new one (the register would get a duplicate); the device's deposit not offered when the device
-  is picked; a viewer (rentals.view only) shown the recording form; an overdue rental not marked.
+  is picked; a viewer (rentals.view only) shown the recording form; an overdue rental not marked; the contract not opened
+  for printing right after the rental is recorded (S3), or a blocked tab passing in silence.
 */
 const api = vi.hoisted(() => ({
   list: vi.fn(),
   availableEquipment: vi.fn(),
   customerMatches: vi.fn(),
   create: vi.fn(),
+  contractPdf: vi.fn(),
 }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 
@@ -74,6 +76,8 @@ const rental = (plannedReturnAt: string): Rental => ({
   dailyFeeHuf: 1000,
   depositHuf: 10000,
   replacementValueHuf: 50000,
+  lateFeeMultiplier: null,
+  replacementAfterDays: null,
   accessories: null,
   expectedFeeHuf: 2000,
   note: null,
@@ -145,6 +149,8 @@ describe("the rental request", () => {
   });
 });
 
+const printed: string[] = [];
+
 describe("RentalDeskPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -153,6 +159,16 @@ describe("RentalDeskPage", () => {
     api.availableEquipment.mockResolvedValue({ items: [device] });
     api.customerMatches.mockResolvedValue({ items: [known] });
     api.create.mockResolvedValue(rental("2026-11-07T09:00:00.000Z"));
+    api.contractPdf.mockResolvedValue(new Blob(["%PDF"]));
+    URL.createObjectURL = vi.fn(() => "blob:contract");
+    URL.revokeObjectURL = vi.fn();
+    printed.length = 0;
+    vi.spyOn(window, "open").mockImplementation(() => {
+      const tab = new EventTarget() as EventTarget & { print: () => void };
+      tab.print = () => void printed.push("print");
+      queueMicrotask(() => tab.dispatchEvent(new Event("load")));
+      return tab as unknown as Window;
+    });
   });
 
   it("offers the device's deposit and the fee, and records with a chosen customer", async () => {
@@ -184,6 +200,38 @@ describe("RentalDeskPage", () => {
       depositHuf: 30000,
     });
     expect(await screen.findByText(/Bérlés rögzítve: BER-1/)).toBeTruthy();
+    // S3: the contract of the new rental opens and its print dialog starts, at once
+    await waitFor(() => expect(printed).toEqual(["print"]));
+    expect(api.contractPdf).toHaveBeenCalledWith("token-1", "r-1");
+    expect(window.open).toHaveBeenCalledWith("blob:contract", "_blank");
+  });
+
+  it("releases the contract's blob URL a minute after opening it", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      api.list.mockResolvedValue({
+        items: [rental("2026-11-09T09:00:00.000Z")],
+      });
+      render(<RentalDeskPage now={() => NOW} />);
+      fireEvent.click(await screen.findByRole("button", { name: "Szerződés" }));
+      await waitFor(() => expect(window.open).toHaveBeenCalled());
+      expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(60_000);
+      expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:contract");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("says so when the browser blocks the contract tab", async () => {
+    vi.mocked(window.open).mockReturnValue(null);
+    api.list.mockResolvedValue({ items: [rental("2026-11-09T09:00:00.000Z")] });
+    render(<RentalDeskPage now={() => NOW} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Szerződés" }));
+
+    expect(await screen.findByText(/nem engedte megnyitni/)).toBeTruthy();
+    expect(api.contractPdf).toHaveBeenCalledWith("token-1", "r-1");
   });
 
   it("marks an overdue rental", async () => {

@@ -620,6 +620,7 @@ describe("AppShell the nine main menus", () => {
       "/beallitasok/eszkoz-kategoriak",
       "/beallitasok/eszkoz-funkciok",
       "/beallitasok/berelheto-eszkozok",
+      "/beallitasok/berleti-szerzodes",
       "/beallitasok/partner-duplikatumok",
       "/beallitasok/partner-atvezetes",
       "/beallitasok/szallitasi-jelzok",

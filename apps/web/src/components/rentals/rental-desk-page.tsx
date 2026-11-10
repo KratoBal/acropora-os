@@ -128,6 +128,32 @@ export function RentalDeskPage({
     }));
   };
 
+  /**
+   * Opens the contract PDF in a new tab and starts the print dialog there (the billing PDFs do the same). A blocked pop-up
+   * is said, not swallowed: the contract can still be printed from the list.
+   */
+  const printContract = async (rental: Pick<Rental, "id" | "rentalNumber">) => {
+    try {
+      const url = URL.createObjectURL(
+        await rentalsApi.contractPdf(token, rental.id),
+      );
+      const opened = window.open(url, "_blank");
+      // the tab keeps its own copy once loaded; a minute is enough for a slow one, and the page never holds the PDF for good
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      if (!opened) {
+        setError(
+          `A böngésző nem engedte megnyitni a szerződést (${rental.rentalNumber}). A listában a Szerződés gombbal nyomtatható.`,
+        );
+        return;
+      }
+      opened.addEventListener("load", () => opened.print());
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "A szerződés nem tölthető le.",
+      );
+    }
+  };
+
   const save = async () => {
     const request = rentalRequest(form, customer);
     if (!request.ok) {
@@ -140,8 +166,9 @@ export function RentalDeskPage({
     try {
       const rental = await rentalsApi.create(token, request.input);
       setNotice(
-        `Bérlés rögzítve: ${rental.rentalNumber} (${rental.equipment.name}, ${rental.customer.displayName}).`,
+        `Bérlés rögzítve: ${rental.rentalNumber} (${rental.equipment.name}, ${rental.customer.displayName}). A szerződés nyomtatásra megnyílik.`,
       );
+      void printContract(rental);
       setForm(emptyRentalForm(now()));
       setCustomer(null);
       setMatches([]);
@@ -203,28 +230,41 @@ export function RentalDeskPage({
           ) : (
             <ul className="divide-y">
               {open.map((rental) => (
-                <li key={rental.id} className="space-y-1 py-3 text-sm">
-                  <p className="font-medium text-dusk-900">
-                    {rental.rentalNumber} · {rental.equipment.name}
-                    {rental.equipment.serialNumber
-                      ? ` (${rental.equipment.serialNumber})`
-                      : ""}
-                  </p>
-                  <p className="text-dusk-700">
-                    {rental.customer.displayName}
-                    {rental.customer.phone ? ` · ${rental.customer.phone}` : ""}
-                  </p>
-                  <p
-                    className={
-                      overdue(rental)
-                        ? "font-medium text-red-700"
-                        : "text-dusk-500"
-                    }
+                <li
+                  key={rental.id}
+                  className="flex flex-wrap items-start justify-between gap-3 py-3 text-sm"
+                >
+                  <div className="space-y-1">
+                    <p className="font-medium text-dusk-900">
+                      {rental.rentalNumber} · {rental.equipment.name}
+                      {rental.equipment.serialNumber
+                        ? ` (${rental.equipment.serialNumber})`
+                        : ""}
+                    </p>
+                    <p className="text-dusk-700">
+                      {rental.customer.displayName}
+                      {rental.customer.phone
+                        ? ` · ${rental.customer.phone}`
+                        : ""}
+                    </p>
+                    <p
+                      className={
+                        overdue(rental)
+                          ? "font-medium text-red-700"
+                          : "text-dusk-500"
+                      }
+                    >
+                      Kint: {formatDateTimeHu(rental.startsAt)} · vissza:{" "}
+                      {formatDateTimeHu(rental.plannedReturnAt)}
+                      {overdue(rental) ? " · lejárt" : ""}
+                    </p>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    onClick={() => void printContract(rental)}
                   >
-                    Kint: {formatDateTimeHu(rental.startsAt)} · vissza:{" "}
-                    {formatDateTimeHu(rental.plannedReturnAt)}
-                    {overdue(rental) ? " · lejárt" : ""}
-                  </p>
+                    Szerződés
+                  </Button>
                 </li>
               ))}
             </ul>

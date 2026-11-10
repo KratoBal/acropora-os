@@ -43,6 +43,8 @@ const RENTAL_SELECT = {
   dailyFeeHuf: true,
   depositHuf: true,
   replacementValueHuf: true,
+  lateFeeMultiplier: true,
+  replacementAfterDays: true,
   accessories: true,
   expectedFeeHuf: true,
   note: true,
@@ -87,6 +89,8 @@ function toRental(row: RentalRow): Rental {
     dailyFeeHuf: row.dailyFeeHuf,
     depositHuf: row.depositHuf,
     replacementValueHuf: row.replacementValueHuf,
+    lateFeeMultiplier: row.lateFeeMultiplier?.toNumber() ?? null,
+    replacementAfterDays: row.replacementAfterDays,
     accessories: row.accessories,
     expectedFeeHuf: row.expectedFeeHuf,
     note: row.note,
@@ -112,6 +116,10 @@ export type RentalCreateRow = {
   dailyFeeHuf: number;
   depositHuf: number;
   replacementValueHuf: number;
+  /** The contract as agreed: the text and the late-return settings in force now, frozen on the rental. */
+  contractTemplate: string;
+  lateFeeMultiplier: number | null;
+  replacementAfterDays: number | null;
   accessories: string | null;
   expectedFeeHuf: number;
   note: string | null;
@@ -129,6 +137,15 @@ export class RentalsRepository {
       take: 500,
     });
     return rows.map(toRental);
+  }
+
+  /** The contract text frozen on the rental; null for a rental recorded before S3. */
+  async contractTemplateOf(id: string): Promise<string | null> {
+    const row = await prisma.rental.findUnique({
+      where: { id },
+      select: { contractTemplate: true },
+    });
+    return row?.contractTemplate ?? null;
   }
 
   async byId(id: string): Promise<Rental | null> {
@@ -185,6 +202,15 @@ export class RentalsRepository {
     });
   }
 
+  /**
+   * Removes a customer row this request created a moment ago, when its rental could not be stored (two desks handing out
+   * the same device: the loser's new renter would otherwise stay in the register with no rental; barracuda, #2274 review).
+   * Only a row with no rental is touched; its addresses go with it (cascade).
+   */
+  async removeUnusedNewCustomer(id: string): Promise<void> {
+    await prisma.customer.deleteMany({ where: { id, rentals: { none: {} } } });
+  }
+
   async create(row: RentalCreateRow): Promise<Rental> {
     try {
       return await withUniqueCode(
@@ -192,7 +218,14 @@ export class RentalsRepository {
         async (rentalNumber) =>
           toRental(
             await prisma.rental.create({
-              data: { ...row, rentalNumber },
+              data: {
+                ...row,
+                rentalNumber,
+                lateFeeMultiplier:
+                  row.lateFeeMultiplier === null
+                    ? null
+                    : new Prisma.Decimal(row.lateFeeMultiplier),
+              },
               select: RENTAL_SELECT,
             }),
           ),

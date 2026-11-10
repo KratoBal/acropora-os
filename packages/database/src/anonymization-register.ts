@@ -844,8 +844,14 @@ export const ANONYMIZATION_REGISTER: Readonly<
     accessories: "business",
     note: "freeText",
   },
+  RentalSetting: {
+    id: "identifier",
+    contractTemplate: "business",
+    updatedById: "identifier",
+  },
   Rental: {
     rentalNumber: "identifier",
+    contractTemplate: "business",
     accessories: "business",
     note: "freeText",
     createdById: "identifier",

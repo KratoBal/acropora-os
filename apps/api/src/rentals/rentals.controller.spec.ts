@@ -27,12 +27,19 @@ describe("RentalsController", () => {
       .sort();
     assert.deepEqual(handlers, [
       "availableEquipment",
+      "contract",
       "create",
       "customerMatches",
       "get",
       "list",
     ]);
-    for (const name of ["availableEquipment", "customerMatches", "get", "list"])
+    for (const name of [
+      "availableEquipment",
+      "contract",
+      "customerMatches",
+      "get",
+      "list",
+    ])
       assert.deepEqual(required(name), [PERMISSIONS.RENTALS_VIEW], name);
     assert.deepEqual(required("create"), [PERMISSIONS.RENTALS_MANAGE]);
   });

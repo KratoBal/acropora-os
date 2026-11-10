@@ -5232,6 +5232,20 @@ model RentalEquipment {
   @@index([isActive, name])
 }
 
+/// The rental desk's settings, one row (id fixed in code; task eszkozberles, S3). Without a row, or with a NULL template,
+/// the built-in contract text is used. The two late-return numbers stay NULL until Balazs decides (acrobot 44187): the
+/// contract then prints that they are not set yet, instead of a number nobody agreed to.
+/// `updatedById` is only a record: no relation, deleting the user must not touch the setting.
+model RentalSetting {
+  id                   String   @id
+  contractTemplate     String?
+  lateFeeMultiplier    Decimal? @db.Decimal(5, 2)
+  replacementAfterDays Int?
+  updatedById          String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
 enum RentalStatus {
   OPEN
   RETURNED
@@ -5251,6 +5265,11 @@ model Rental {
   dailyFeeHuf         Int
   depositHuf          Int
   replacementValueHuf Int
+  /// THE CONTRACT AS AGREED (S3): the text and the two late-return settings in force when the rental was recorded, so a
+  /// reprint is the signed contract. Null text: a rental recorded before S3 (it prints today's text).
+  contractTemplate    String?
+  lateFeeMultiplier   Decimal?     @db.Decimal(5, 2)
+  replacementAfterDays Int?
   accessories         String?
   /// Started 24-hour periods of the planned span times the daily fee, at recording time.
   expectedFeeHuf      Int

@@ -735,6 +735,12 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.SETTINGS_MANAGE),
   },
+  {
+    /** THE RENTAL CONTRACT TEXT (task eszkozberles, S3): the same right as its endpoints (`settings.manage`). */
+    id: "rental-contract",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.SETTINGS_MANAGE),
+  },
   NAV_TILE,
 ];
 

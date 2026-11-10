@@ -6,7 +6,9 @@ import type {
   RentalStatus,
 } from "@acropora/types";
 
-import { apiRequest } from "./client";
+import { API_PREFIX } from "./api-prefix";
+import { pdfBlob } from "./billing-documents";
+import { apiAuthHeaders, apiRequest } from "./client";
 
 const base = "/rentals";
 
@@ -56,6 +58,14 @@ export const rentalsApi = {
       token,
       { signal },
     );
+  },
+  /** The contract PDF, with the current template (S3). */
+  async contractPdf(token: string, id: string): Promise<Blob> {
+    const response = await fetch(
+      `${API_PREFIX}${base}/${encodeURIComponent(id)}/contract.pdf`,
+      { credentials: "same-origin", headers: apiAuthHeaders(token) },
+    );
+    return pdfBlob(response, "A szerződés PDF-je nem tölthető le.");
   },
   create(token: string, input: CreateRentalInput) {
     return apiRequest<Rental>(base, token, {

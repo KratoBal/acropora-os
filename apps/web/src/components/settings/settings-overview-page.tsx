@@ -207,6 +207,13 @@ export const SETTINGS_AREAS: SettingsArea[] = [
         entryId: "rental-equipment",
       },
       {
+        label: "Bérleti szerződés",
+        description:
+          "A bérléskor nyomtatott szerződés szövege, és a késedelmes visszahozás két száma.",
+        href: "/beallitasok/berleti-szerzodes",
+        entryId: "rental-contract",
+      },
+      {
         label: "Partner-duplikátumok",
         description:
           "Ugyanaz a cég vevőként, szállítóként vagy webshopos vásárlóként: csak olvasható lista a döntéshez.",
