@@ -14,10 +14,10 @@ import { type FormEvent, useEffect, useState } from "react";
 import { productApi } from "@/lib/api/products";
 
 /**
- * A KORALL ES A GERINCTELEN NEVEI (kartya 20b0dd47, Balazs 2026-08-31, emlek 1113): a tudomanyos nev a termeknev, alatta
- * KERESHETO mezokent a magyar, az angol es a nemet nev (a nemet a kulfoldi nyitashoz). A blokk csak a korall es a
- * gerinctelen termeken jelenik meg (a kategoria-fa gyokerebol, a szerver mondja: `livestockKind`), a halnal es a
- * tobbi termeknel nem. A nevek az OS-ben tarolodnak es szerkeszthetok; a webshopba MA NEM mennek.
+ * AZ ELO ALLATOK NEVEI (kartya 20b0dd47, Balazs 2026-08-31, emlek 1113): a tudomanyos nev a termeknev, alatta KERESHETO
+ * mezokent a magyar, az angol es a nemet nev (a nemet a kulfoldi nyitashoz). A blokk minden elo allat termeken
+ * megjelenik: korall, gerinctelen ES hal (acrobot 46058: a V2.2 tartasi blokk hianylistaja halnal is keri a magyar nevet,
+ * murena 46056); a fajtat a kategoria-fa gyokere adja (a szerver mondja: `livestockKind`), a tobbi termeknel nincs. A nevek az OS-ben tarolodnak es szerkeszthetok; a webshopba MA NEM mennek.
  *
  * A mentes a kulon nev-vegpontra megy (`PATCH /products/:id/names`), mert a UNAS-gazdaju termeken a termek TOBBI mezoje 409,
  * a nevek viszont Acropora-tulajdonuak, es ott is irhatonak kell lenniuk (acrobot stage-probaja: a korallok tobbsege UNAS-
@@ -64,11 +64,8 @@ export function ProductNamesCard({
     });
   }, [product.magyarNev, product.angolNev, product.nemetNev]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (
-    product.livestockKind !== "CORAL" &&
-    product.livestockKind !== "INVERTEBRATE"
-  )
-    return null;
+  // every live animal: a coral, an invertebrate or a fish; not the other products
+  if (product.livestockKind === null) return null;
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();

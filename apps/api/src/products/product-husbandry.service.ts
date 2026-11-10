@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -12,6 +13,7 @@ import type {
 
 import type { UpdateProductHusbandryDto } from "./dto/update-product-husbandry.dto.js";
 import {
+  husbandryVersionOf,
   husbandryWriteErrors,
   normalizedHusbandryTexts,
 } from "./product-husbandry.js";
@@ -37,7 +39,7 @@ export function husbandryDecision(
   actorUserId: string,
   now: Date,
 ): HusbandryDecision {
-  const { ellenorizve, ...rest } = input;
+  const { ellenorizve, seenVersion, ...rest } = input;
   const patch = normalizedHusbandryTexts(rest as ProductHusbandryInput);
   const keys = Object.keys(patch).filter(
     (key) => (patch as Record<string, unknown>)[key] !== undefined,
@@ -45,6 +47,24 @@ export function husbandryDecision(
   if (keys.length === 0 && ellenorizve === undefined)
     return { refused: ["Legalább egy tartási adatot add meg."] };
 
+  /*
+    A VERIFICATION STATES THAT SOMEONE LOOKED AT THESE FACTS (barracuda on #2375): it must name the version it saw, and the
+    stored row, read inside this serializable transaction, must still be that version. A plain save needs no version (it
+    withdraws a verification, it never states one).
+  */
+  if (ellenorizve === true) {
+    if (typeof seenVersion !== "string" || seenVersion === "")
+      return {
+        refused: [
+          "Az ellenőrzéshez a látott állapot kell (seenVersion): töltsd újra a blokkot.",
+        ],
+      };
+    if (seenVersion !== husbandryVersionOf(current))
+      return {
+        conflict:
+          "Közben módosult a tartási blokk. Töltsd újra, nézd át, és utána ellenőrizd.",
+      };
+  }
   const errors = husbandryWriteErrors({ patch, current }, ellenorizve === true);
   if (errors.length > 0) return { refused: errors };
 
@@ -88,6 +108,11 @@ export class ProductHusbandryService {
     );
     if (result.kind === "not-found")
       throw new NotFoundException("A termék nem található.");
+    if (result.kind === "conflict")
+      throw new ConflictException({
+        code: "HUSBANDRY_CHANGED",
+        message: result.message,
+      });
     if (result.kind === "refused")
       throw new BadRequestException({
         code: "HUSBANDRY_REFUSED",

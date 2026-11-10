@@ -9,6 +9,7 @@ import { integrationDatabaseGate } from "../common/integration-database.js";
 import { UpdateProductHusbandryDto } from "./dto/update-product-husbandry.dto.js";
 import { ProductHusbandryRepository } from "./product-husbandry.repository.js";
 import { ProductRepository } from "./product.repository.js";
+import { husbandryVersionOf } from "./product-husbandry.js";
 import { husbandryDecision } from "./product-husbandry.service.js";
 
 const gate = integrationDatabaseGate(process.env);
@@ -85,9 +86,19 @@ describe("husbandry store, on the database", { skip: !runIntegration }, () => {
     await prisma.$disconnect();
   });
 
+  // a caller who verifies has looked at the stored facts: unless the test says otherwise, it holds their current version
   const write = (body: Record<string, unknown>, now = new Date()) =>
     repository.write(productId, userId, (current) =>
-      husbandryDecision(current, dto(body), userId, now),
+      husbandryDecision(
+        current,
+        dto(
+          body.ellenorizve === true && body.seenVersion === undefined
+            ? { ...body, seenVersion: husbandryVersionOf(current) }
+            : body,
+        ),
+        userId,
+        now,
+      ),
     );
 
   it("a product with no datasheet row: the first write creates it, and the kind comes from the category tree", async () => {
@@ -244,6 +255,31 @@ describe("husbandry store, on the database", { skip: !runIntegration }, () => {
       await products.update(productId, { fenyIgeny: "EROS" });
       assert.equal(await verifiedNow(), false);
     });
+  });
+
+  it("a verification that names a version other than the stored one is a conflict: nothing is stamped (barracuda on #2375)", async () => {
+    const seen = (await repository.read(productId))!.version;
+    // someone else changes a fact after the verifier looked
+    await write({ etetesGyakorisag: "naponta, reggel" });
+    const stale = await write({
+      forrasTipus: "szakirodalom",
+      forrasHivatkozas: "https://example.invalid/x",
+      ellenorizve: true,
+      seenVersion: seen,
+    });
+    assert.equal(stale.kind, "conflict");
+    const after = (await repository.read(productId))!;
+    assert.equal(after.verification.verified, false);
+    // the version the screen reloads is the current one, and verifying with it goes through
+    const reloaded = after.version;
+    assert.notEqual(reloaded, seen);
+    const fresh = await write({
+      forrasTipus: "szakirodalom",
+      forrasHivatkozas: "https://example.invalid/x",
+      ellenorizve: true,
+      seenVersion: reloaded,
+    });
+    assert.equal(fresh.kind, "ok");
   });
 
   it("an unknown product is not-found", async () => {

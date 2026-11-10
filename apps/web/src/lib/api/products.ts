@@ -13,6 +13,8 @@ import type {
   ProductQualityQueuePage,
   ProductExtensionDetail,
   ProductExtensionUpdateInput,
+  ProductHusbandry,
+  ProductHusbandryInput,
   ProductListApiQuery,
   ProductListResponse,
   ProductUpdateInput,
@@ -343,6 +345,25 @@ export const productApi = {
   ) {
     return apiRequest<ProductDetail>(
       `/products/${encodeURIComponent(id)}/names`,
+      token,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      },
+    );
+  },
+  /** A tartasi blokk (V2.2, kartya d2fc06e7): a tenyek, az ellenorzes es a hianyzo kotelezo mezok. */
+  husbandry(token: string, id: string) {
+    return apiRequest<ProductHusbandry>(
+      `/products/${encodeURIComponent(id)}/husbandry`,
+      token,
+    );
+  },
+  /** A tartasi tenyek irasa; csak az adott kulcsok irodnak, `null` torol, `ellenorizve: true` ellenoriz. */
+  updateHusbandry(token: string, id: string, input: ProductHusbandryInput) {
+    return apiRequest<ProductHusbandry>(
+      `/products/${encodeURIComponent(id)}/husbandry`,
       token,
       {
         method: "PATCH",

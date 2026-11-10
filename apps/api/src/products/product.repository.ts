@@ -223,7 +223,13 @@ async function husbandryVerificationWithdrawal(
     },
   });
   const changed = changedHusbandryFacts(patch, stored);
-  if (changed.length === 0 || !stored?.ellenorizveAt) return null;
+  if (changed.length === 0) return null;
+  // THE COLUMNS ARE NULLED WHENEVER A FACT CHANGES, not only when the read saw a verification (barracuda, #2374 approval):
+  // the general update runs at the default isolation, and a verification committed between this read and the write would
+  // otherwise survive the edit; nulling a row that was never verified is harmless. The LOG is written only for a
+  // verification that was actually withdrawn.
+  if (!stored?.ellenorizveAt)
+    return { ellenorizveAt: null, ellenorizteUserId: null };
   const metadata = {
     productId,
     via,

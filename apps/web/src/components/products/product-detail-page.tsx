@@ -37,6 +37,7 @@ import { ProductDoseEffectsCard } from "@/components/products/product-dose-effec
 import { ProductShippingProfileCard } from "@/components/products/product-shipping-profile-card";
 import { ProductSupplierPricesCard } from "@/components/products/product-supplier-prices-card";
 import { ProductBasicsEditor } from "@/components/products/product-basics-editor";
+import { ProductHusbandryCard } from "@/components/products/product-husbandry-card";
 import { ProductNamesCard } from "@/components/products/product-names-card";
 import { JevProductCard } from "@/components/jev-product-intelligence/jev-product-card";
 import { productApi } from "@/lib/api/products";
@@ -1242,11 +1243,10 @@ export function ProductDetailPage({ productId }: { productId: string }) {
               ]
             : []),
           /*
-            A KORALL ES A GERINCTELEN NEVEI (kartya 20b0dd47): az adatlap nevei OS-tulajdonuak, a UNAS-szinkron nem ir
-            rajuk, ezert a gazda-allapottol fuggetlenul latszanak; a kartya maga donti el (livestockKind), kell-e.
+            AZ ELO ALLATOK NEVEI (kartya 20b0dd47; a hal is, acrobot 46058): az adatlap nevei OS-tulajdonuak, a UNAS-szinkron
+            nem ir rajuk, ezert a gazda-allapottol fuggetlenul latszanak; minden elo allaton (korall, gerinctelen, hal).
           */
-          ...(product.livestockKind === "CORAL" ||
-          product.livestockKind === "INVERTEBRATE"
+          ...(product.livestockKind !== null
             ? [
                 {
                   id: "names",
@@ -1256,6 +1256,24 @@ export function ProductDetailPage({ productId }: { productId: string }) {
                       product={product}
                       canManage={canManage}
                       onSaved={setProduct}
+                    />
+                  ),
+                },
+              ]
+            : []),
+          /*
+            A TARTÁSI BLOKK (V2.2 S2, kártya d2fc06e7): az élő állat tartási adatai az OS-ben tárolódnak, a UNAS-szinkron nem ír
+            rájuk, ezért a gazda-állapottól függetlenül látszanak; a kártya maga dönti el (livestockKind), kell-e.
+          */
+          ...(product.livestockKind !== null
+            ? [
+                {
+                  id: "husbandry",
+                  main: (
+                    <ProductHusbandryCard
+                      token={token}
+                      product={product}
+                      canManage={canManage}
                     />
                   ),
                 },

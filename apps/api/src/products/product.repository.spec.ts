@@ -1628,13 +1628,18 @@ describe("ProductRepository", () => {
         };
       };
     };
+    // a placement need is a husbandry fact: writing one also nulls the verification columns (V2.2)
     assert.deepEqual(updateArgs.data.datasheet?.upsert?.create, {
       fenyIgeny: "EROS",
       aramlasIgeny: "KOZEPES",
+      ellenorizveAt: null,
+      ellenorizteUserId: null,
     });
     assert.deepEqual(updateArgs.data.datasheet?.upsert?.update, {
       fenyIgeny: "EROS",
       aramlasIgeny: "KOZEPES",
+      ellenorizveAt: null,
+      ellenorizteUserId: null,
     });
   });
 
@@ -1955,7 +1960,7 @@ describe("ProductRepository", () => {
     );
   });
 
-  it("a block that was not verified has nothing to withdraw: no columns, no log", async () => {
+  it("a block that was not verified has nothing to log, but the columns are nulled all the same (a verification committed in between cannot survive)", async () => {
     for (const storedDatasheet of [
       null,
       { ...VERIFIED_SHEET, ellenorizveAt: null, ellenorizteUserId: null },
@@ -1966,7 +1971,10 @@ describe("ProductRepository", () => {
         { magyarNev: "Agancskorall" },
         "user-1",
       );
-      assert.deepEqual(upsertOf(calls).update, { magyarNev: "Agancskorall" });
+      assert.deepEqual(upsertOf(calls).update, {
+        magyarNev: "Agancskorall",
+        ...WITHDRAWN,
+      });
       assert.equal(
         calls.filter((call) => call.operation === "audit").length,
         0,

@@ -34,8 +34,9 @@ beforeEach(() => {
   api.detail.mockReset();
 });
 
-describe("A korall és a gerinctelen nevei", () => {
-  it.each(["FISH", null])("nem jelenik meg ennél a fajtánál: %s", (kind) => {
+describe("Az élő állatok nevei", () => {
+  // acrobot 46058: the fish too, not only the coral and the invertebrate
+  it.each([null])("nem jelenik meg élő állaton kívül: %s", (kind) => {
     const { container } = render(
       <ProductNamesCard
         token="t"
@@ -47,7 +48,7 @@ describe("A korall és a gerinctelen nevei", () => {
     expect(container.textContent).toBe("");
   });
 
-  it.each(["CORAL", "INVERTEBRATE"])(
+  it.each(["CORAL", "INVERTEBRATE", "FISH"])(
     "megjelenik és a mostani neveket mutatja: %s",
     (kind) => {
       render(
