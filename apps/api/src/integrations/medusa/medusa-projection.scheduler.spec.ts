@@ -1350,6 +1350,131 @@ describe("a boltban maradt élő állat fajta köre (kártya 4b30b373)", () => {
   });
 });
 
+describe("a lista-lépések számai a kör állapotában (acrobot 45814)", () => {
+  /**
+   * MI PIROSIT: a fajta-lépés vagy az érkezési kör számai nem kerülnek a `lastRound.steps` alá (a stage-en csak a
+   * naplóból látszanának); egy kikapcsolt lépés számot mutat (null kell); egy dobó lépés nem `failed`; az üres
+   * (SKIPPED) kör nem hoz számot, holott a lépések előtte futnak; az állapot nem másolat.
+   */
+  const ures = () =>
+    adatbazis([termek()], [{ entityId: "prod-1", lastSyncedAt: MOST }]).db;
+  const fajta = {
+    rows: 5,
+    carrying: 2,
+    unpaired: 1,
+    entries: [
+      {
+        osProductId: "os-1",
+        medusaProductId: "prod_1",
+        flags: "x",
+        action: "applied" as const,
+      },
+      {
+        osProductId: "os-2",
+        medusaProductId: "prod_2",
+        flags: "x",
+        action: "planned" as const,
+      },
+    ],
+  };
+  const indit = (
+    environment: Record<string, string>,
+    deps: Record<string, unknown>,
+  ) =>
+    new MedusaProjectionScheduler({
+      db: ures(),
+      runProjection: futtato().run,
+      runPricing: arFuttato().run,
+      environment: { ...BEKAPCSOLVA, ...environment } as NodeJS.ProcessEnv,
+      logger: naplo().logger,
+      ...deps,
+    });
+
+  it("üres (SKIPPED) körben is hoz számot: sor, fajtás, törölt (csak az alkalmazott), páratlan; az érkezési kör db és kimaradt", async () => {
+    const scheduler = indit(
+      {
+        MEDUSA_CLEAR_LEFTOVER_KIND: "true",
+        MEDUSA_PROJECT_LIVESTOCK_ARRIVALS: "true",
+      },
+      {
+        runLeftoverKinds: async () => fajta,
+        runLivestockArrivals: async () => ({
+          status: "unchanged" as const,
+          count: 7,
+          leftOut: 3,
+        }),
+      },
+    );
+    assert.equal(await scheduler.runOnce(), "SKIPPED");
+    assert.deepEqual(scheduler.allapot().lastRound!.steps, {
+      leftoverKind: {
+        failed: false,
+        rows: 5,
+        carrying: 2,
+        cleared: 1,
+        unpaired: 1,
+      },
+      arrivals: { failed: false, status: "unchanged", count: 7, leftOut: 3 },
+    });
+  });
+
+  it("kikapcsolt lépés null; egy dobó lépés failed, és a másik lépés száma megmarad", async () => {
+    const kikapcsolt = indit({}, {});
+    await kikapcsolt.runOnce();
+    assert.deepEqual(kikapcsolt.allapot().lastRound!.steps, {
+      leftoverKind: null,
+      arrivals: null,
+    });
+    const dobo = indit(
+      {
+        MEDUSA_CLEAR_LEFTOVER_KIND: "true",
+        MEDUSA_PROJECT_LIVESTOCK_ARRIVALS: "true",
+      },
+      {
+        runLeftoverKinds: async () => {
+          throw new Error("HTTP 404");
+        },
+        runLivestockArrivals: async () => ({
+          status: "sent" as const,
+          count: 2,
+        }),
+      },
+    );
+    await dobo.runOnce();
+    assert.deepEqual(dobo.allapot().lastRound!.steps, {
+      leftoverKind: { failed: true },
+      arrivals: { failed: false, status: "sent", count: 2, leftOut: 0 },
+    });
+  });
+
+  it("a következő kör nem viszi tovább az előző számait, és az állapot másolat", async () => {
+    let kor = 0;
+    const scheduler = indit(
+      { MEDUSA_CLEAR_LEFTOVER_KIND: "true" },
+      {
+        runLeftoverKinds: async () => {
+          kor += 1;
+          return kor === 1 ? fajta : { ...fajta, rows: 9 };
+        },
+      },
+    );
+    await scheduler.runOnce();
+    const elso = scheduler.allapot();
+    (elso.lastRound!.steps.leftoverKind as { rows: number }).rows = 99;
+    assert.equal(
+      (scheduler.allapot().lastRound!.steps.leftoverKind as { rows: number })
+        .rows,
+      5,
+    );
+    await scheduler.runOnce();
+    assert.equal(
+      (scheduler.allapot().lastRound!.steps.leftoverKind as { rows: number })
+        .rows,
+      9,
+    );
+  });
+});
+
 describe("a tény-változás is esedékessé tesz (SEO P0 PR 8)", () => {
   /**
    * MI PIROSIT: egy, a kötés utolsó vetítése UTÁN változott tény nem teszi

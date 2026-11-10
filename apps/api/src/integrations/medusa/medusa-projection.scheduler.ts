@@ -240,7 +240,36 @@ export type ProjectionRoundStatus = {
     taken: Record<ProjectionRoundSource, number> | null;
     inactiveDueTotal: number | null;
     priceRetry: number | null;
+    /** a lista-lepesek szamai (csak szamok, azonosito nincs); null = a lepes ebben a korben nem futott (kapcsolo ki) */
+    steps: RoundStepCounts;
   } | null;
+};
+
+/**
+ * A LISTA-LEPESEK SZAMAI A KORBEN (acrobot 45814): a stage API naploja a flottanak nem olvashato, a lepes eredmenye
+ * (hany sor, hanyon fajta, hany torolve) viszont csak ott allt. A lepesek a SKIPPED kor elott futnak, tehat egy ures
+ * kor is hoz szamot. `failed: true` = a lepes dobott (a naploban az ok), a termek-vetites tovabb futott.
+ */
+export type RoundStepCounts = {
+  leftoverKind:
+    | { failed: true }
+    | {
+        failed: false;
+        rows: number;
+        carrying: number;
+        cleared: number;
+        unpaired: number;
+      }
+    | null;
+  arrivals:
+    | { failed: true }
+    | {
+        failed: false;
+        status: LivestockArrivalsOutcome["status"];
+        count: number;
+        leftOut: number;
+      }
+    | null;
 };
 
 type KorAllapot = NonNullable<ProjectionRoundStatus["lastRound"]>;
@@ -454,6 +483,12 @@ export class MedusaProjectionScheduler
             ...kor,
             candidates: kor.candidates && { ...kor.candidates },
             taken: kor.taken && { ...kor.taken },
+            steps: {
+              leftoverKind: kor.steps.leftoverKind && {
+                ...kor.steps.leftoverKind,
+              },
+              arrivals: kor.steps.arrivals && { ...kor.steps.arrivals },
+            },
           }
         : null,
     };
@@ -482,6 +517,7 @@ export class MedusaProjectionScheduler
       taken: null,
       inactiveDueTotal: null,
       priceRetry: null,
+      steps: { leftoverKind: null, arrivals: null },
     };
     this.utolsoKor = kor;
     try {
@@ -508,8 +544,8 @@ export class MedusaProjectionScheduler
     await this.atiranyitasKor();
     await this.landingKor();
     await this.kezdolapKor();
-    await this.erkezoAllatokKor();
-    await this.fajtaKor();
+    await this.erkezoAllatokKor(allapot);
+    await this.fajtaKor(allapot);
     const kezdet = this.now();
     const akcio = await this.akcioHatarAzonositok();
     const teny = await this.tenyValtozasAzonositok();
@@ -690,16 +726,23 @@ export class MedusaProjectionScheduler
    * AZ ÉRKEZŐ ÁLLATOK EGY KÖRE (V2.6 S4b), a kezdőlap után, ugyanazzal a szabállyal: a hiba csak napló, a termék-vetítést
    * nem állítja meg. Kapcsolóval, alapból KI (a commerce modul, #719, előbb kerül ki).
    */
-  private async erkezoAllatokKor(): Promise<void> {
+  private async erkezoAllatokKor(allapot: KorAllapot): Promise<void> {
     if (!projectLivestockArrivalsInRound(this.environment)) return;
     try {
       const eredmeny = await this.runLivestockArrivals();
+      allapot.steps.arrivals = {
+        failed: false,
+        status: eredmeny.status,
+        count: eredmeny.count,
+        leftOut: eredmeny.leftOut ?? 0,
+      };
       // a set over the shop's cap is a warning every round, changed or not (barracuda, #2354)
       if (eredmeny.leftOut)
         this.naplo.warn(describeLivestockArrivalsProjection(eredmeny));
       else if (eredmeny.status !== "unchanged")
         this.naplo.log(describeLivestockArrivalsProjection(eredmeny));
     } catch (error) {
+      allapot.steps.arrivals = { failed: true };
       this.naplo.warn(
         `Erkezo allatok: a kor nem futott le (${
           error instanceof Error ? error.message : String(error)
@@ -736,14 +779,22 @@ export class MedusaProjectionScheduler
    * termek-vetitest nem allitja meg. A kor naploja kiirja, MIT torolt; az elso lefutas az osszegzest is kiirja, hogy
    * a nulla torles ne nezzen ki ugy, mintha a lepes nem futott volna.
    */
-  private async fajtaKor(): Promise<void> {
+  private async fajtaKor(allapot: KorAllapot): Promise<void> {
     if (!clearLeftoverKindInRound(this.environment)) return;
     try {
       const jelentes = await this.runLeftoverKinds();
+      allapot.steps.leftoverKind = {
+        failed: false,
+        rows: jelentes.rows,
+        carrying: jelentes.carrying,
+        cleared: jelentes.entries.filter((e) => e.action === "applied").length,
+        unpaired: jelentes.unpaired,
+      };
       if (jelentes.entries.length || this.fajtaElsoKor)
         this.naplo.log(describeLeftoverKinds(jelentes, true));
       this.fajtaElsoKor = false;
     } catch (error) {
+      allapot.steps.leftoverKind = { failed: true };
       this.naplo.warn(
         `Boltban maradt fajta: a kor nem futott le (${
           error instanceof Error ? error.message : String(error)
