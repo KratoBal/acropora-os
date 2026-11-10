@@ -282,6 +282,59 @@ describe("husbandry store, on the database", { skip: !runIntegration }, () => {
     assert.equal(fresh.kind, "ok");
   });
 
+  it("the optional facts are written and read back (decimals as text), a crossed range is refused, and an edit of one withdraws the verification", async () => {
+    const written = await write({
+      tempMinC: 24,
+      tempMaxC: 26.5,
+      salinityMinSg: 1.023,
+      salinityMaxSg: 1.026,
+      khMinDkh: 7,
+      khMaxDkh: 11,
+      lifespanYears: 8,
+      stingOrVenom: true,
+      handlingWarning: "Kesztyűvel fogd meg.",
+      quarantineWeeks: 4,
+      acclimatization: "Csepegtetés, kb. 2 óra.",
+      breedsInTank: false,
+    });
+    assert.ok(written.kind === "ok");
+    const facts = written.husbandry.facts;
+    assert.equal(facts.tempMinC, "24");
+    assert.equal(facts.tempMaxC, "26.5");
+    assert.equal(facts.salinityMinSg, "1.023");
+    assert.equal(facts.khMaxDkh, "11");
+    assert.equal(facts.lifespanYears, 8);
+    assert.equal(facts.stingOrVenom, true);
+    assert.equal(facts.breedsInTank, false);
+    // none of the optional facts is required
+    assert.equal(written.husbandry.missing.includes("tempMinC"), false);
+
+    // a crossed range is refused (the stored other end is the measure) and nothing is written
+    const crossed = await write({ tempMaxC: 20 });
+    assert.equal(crossed.kind, "refused");
+    assert.equal((await repository.read(productId))!.facts.tempMaxC, "26.5");
+
+    // a sting with the warning removed is refused
+    const unwarned = await write({ handlingWarning: null });
+    assert.equal(unwarned.kind, "refused");
+
+    // an optional fact edited after a verification withdraws it
+    await write({
+      forrasTipus: "szakirodalom",
+      forrasHivatkozas: "https://example.invalid/x",
+      ellenorizve: true,
+    });
+    assert.equal(
+      (await repository.read(productId))!.verification.verified,
+      true,
+    );
+    await write({ quarantineWeeks: 6 });
+    assert.equal(
+      (await repository.read(productId))!.verification.verified,
+      false,
+    );
+  });
+
   it("an unknown product is not-found", async () => {
     const result = await repository.write("nincs-ilyen", userId, (current) =>
       husbandryDecision(current, dto({ kinekNem: "x" }), userId, new Date()),

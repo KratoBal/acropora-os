@@ -51,6 +51,18 @@ const facts = (
   kinekNem: null,
   forrasTipus: null,
   forrasHivatkozas: null,
+  tempMinC: null,
+  tempMaxC: null,
+  salinityMinSg: null,
+  salinityMaxSg: null,
+  khMinDkh: null,
+  khMaxDkh: null,
+  lifespanYears: null,
+  stingOrVenom: null,
+  handlingWarning: null,
+  quarantineWeeks: null,
+  acclimatization: null,
+  breedsInTank: null,
   ...overrides,
 });
 
@@ -320,6 +332,18 @@ describe("husbandryChanges", () => {
     kinekNem: "",
     forrasTipus: "",
     forrasHivatkozas: "",
+    tempMinC: "",
+    tempMaxC: "",
+    salinityMinSg: "",
+    salinityMaxSg: "",
+    khMinDkh: "",
+    khMaxDkh: "",
+    lifespanYears: "",
+    stingOrVenom: "",
+    handlingWarning: "",
+    quarantineWeeks: "",
+    acclimatization: "",
+    breedsInTank: "",
     ...overrides,
   });
 
@@ -349,6 +373,34 @@ describe("husbandryChanges", () => {
       korallevo: false,
       minLiter: 300,
       feedingType: ["ALGAEVO"],
+    });
+    expect(result.badNumber).toBeNull();
+  });
+
+  it("az opcionális mezők: a szám szám (a tizedes marad), a logikai logikai, az üres törlés", () => {
+    const stored = facts({
+      tempMinC: "24.0",
+      stingOrVenom: true,
+      handlingWarning: "régi figyelmeztetés",
+    });
+    const result = husbandryChanges(
+      stored,
+      form({
+        tempMinC: "24.5",
+        salinityMinSg: "1.023",
+        stingOrVenom: "false",
+        handlingWarning: "",
+        quarantineWeeks: "4",
+        breedsInTank: "true",
+      }),
+    );
+    expect(result.input).toEqual({
+      tempMinC: 24.5,
+      salinityMinSg: 1.023,
+      stingOrVenom: false,
+      handlingWarning: null,
+      quarantineWeeks: 4,
+      breedsInTank: true,
     });
     expect(result.badNumber).toBeNull();
   });

@@ -1278,6 +1278,8 @@ export const ANONYMIZATION_REGISTER: Readonly<
     forrasTipus: "business",
     forrasHivatkozas: "business",
     ellenorizteUserId: "identifier",
+    handlingWarning: "business",
+    acclimatization: "business",
   },
   ProductDatasheetFieldRefusal: {
     indok: "freeText",

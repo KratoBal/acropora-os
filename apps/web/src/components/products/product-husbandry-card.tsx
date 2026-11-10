@@ -182,6 +182,34 @@ const FIELDS: FieldDef[] = [
     ],
   },
   { key: "kinekNem", label: "Kinek NEM ajánljuk (egy mondat)", kind: "text" },
+  /*
+    THE OPTIONAL FACTS (V2.2 S1b): never required, never in the missing list; empty means "being checked". They stand under the
+    block's one verification: editing any of them withdraws it.
+  */
+  { key: "tempMinC", label: "Hőmérséklet, alsó határ (°C)", kind: "number" },
+  { key: "tempMaxC", label: "Hőmérséklet, felső határ (°C)", kind: "number" },
+  {
+    key: "salinityMinSg",
+    label: "Sótartalom, alsó határ (SG)",
+    kind: "number",
+  },
+  {
+    key: "salinityMaxSg",
+    label: "Sótartalom, felső határ (SG)",
+    kind: "number",
+  },
+  { key: "khMinDkh", label: "KH, alsó határ (dKH)", kind: "number" },
+  { key: "khMaxDkh", label: "KH, felső határ (dKH)", kind: "number" },
+  { key: "lifespanYears", label: "Várható élettartam (év)", kind: "number" },
+  { key: "stingOrVenom", label: "Csípés vagy méreg", kind: "bool" },
+  {
+    key: "handlingWarning",
+    label: "Kezelési figyelmeztetés (csípésnél vagy mérgnél kötelező)",
+    kind: "text",
+  },
+  { key: "quarantineWeeks", label: "Karantén-ajánlás (hét)", kind: "number" },
+  { key: "acclimatization", label: "Akklimatizáció módja", kind: "text" },
+  { key: "breedsInTank", label: "Szaporítható a medencében", kind: "bool" },
   { key: "forrasTipus", label: "A forrás típusa", kind: "text" },
   { key: "forrasHivatkozas", label: "A forrás hivatkozása", kind: "text" },
 ];

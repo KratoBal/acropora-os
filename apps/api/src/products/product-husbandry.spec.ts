@@ -42,6 +42,18 @@ function emptyFacts(): ProductHusbandryFacts {
     kinekNem: null,
     forrasTipus: null,
     forrasHivatkozas: null,
+    tempMinC: null,
+    tempMaxC: null,
+    salinityMinSg: null,
+    salinityMaxSg: null,
+    khMinDkh: null,
+    khMaxDkh: null,
+    lifespanYears: null,
+    stingOrVenom: null,
+    handlingWarning: null,
+    quarantineWeeks: null,
+    acclimatization: null,
+    breedsInTank: null,
   };
 }
 
@@ -71,6 +83,18 @@ function completeFacts(): ProductHusbandryFacts {
     kinekNem: "Kis medencébe nem ajánljuk.",
     forrasTipus: "szakirodalom",
     forrasHivatkozas: "https://example.invalid/forras",
+    tempMinC: null,
+    tempMaxC: null,
+    salinityMinSg: null,
+    salinityMaxSg: null,
+    khMinDkh: null,
+    khMaxDkh: null,
+    lifespanYears: null,
+    stingOrVenom: null,
+    handlingWarning: null,
+    quarantineWeeks: null,
+    acclimatization: null,
+    breedsInTank: null,
   };
 }
 
@@ -203,6 +227,96 @@ describe("a tartási blokk írási szabályai", () => {
         true,
       ).length,
       1,
+    );
+  });
+});
+
+/*
+  THE OPTIONAL FACTS' RULES (V2.2 S1b). WHAT TURNS THESE RED: a range whose ends cross (an end written alone is held against the stored
+  other one); a sting or venom stated with no handling warning; a forbidden word in the new texts; an optional fact that counts as
+  required (it must never appear in the missing list); a range checked on the patch alone.
+*/
+describe("a tartási blokk opcionális mezőinek szabályai", () => {
+  const check = (patch: Record<string, unknown>, current = emptyFacts()) =>
+    husbandryWriteErrors({ patch, current }, false);
+
+  it("a tartomány két vége nem fordulhat meg, az egyenlő vég rendben van", () => {
+    assert.equal(check({ tempMinC: 28, tempMaxC: 24 }).length, 1);
+    assert.equal(
+      check({ salinityMinSg: 1.026, salinityMaxSg: 1.023 }).length,
+      1,
+    );
+    assert.equal(check({ khMinDkh: 12, khMaxDkh: 7 }).length, 1);
+    assert.deepEqual(check({ tempMinC: 24, tempMaxC: 24 }), []);
+    assert.deepEqual(check({ tempMinC: 24, tempMaxC: 26 }), []);
+  });
+
+  it("az egyik végét egyedül író a tárolt másik véghez mérődik", () => {
+    const stored = { ...emptyFacts(), tempMinC: "24.0", tempMaxC: "26.0" };
+    assert.equal(check({ tempMaxC: 22 }, stored).length, 1);
+    assert.equal(check({ tempMinC: 27 }, stored).length, 1);
+    assert.deepEqual(check({ tempMaxC: 28 }, stored), []);
+    // a null vég törli a tartományt, nincs mihez mérni
+    assert.deepEqual(check({ tempMaxC: null }, stored), []);
+  });
+
+  it("a csípés vagy méreg kezelési figyelmeztetés nélkül nem állítható, figyelmeztetéssel igen, a nem és az ismeretlen nem kéri", () => {
+    assert.equal(check({ stingOrVenom: true }).length, 1);
+    assert.equal(
+      check({ stingOrVenom: true, handlingWarning: "   " }).length,
+      1,
+    );
+    assert.deepEqual(
+      check({ stingOrVenom: true, handlingWarning: "Kesztyűvel fogd meg." }),
+      [],
+    );
+    assert.deepEqual(check({ stingOrVenom: false }), []);
+    assert.deepEqual(check({ stingOrVenom: null }), []);
+    // a tárolt figyelmeztetés fedi a csak a jelzőt író javítást, de a figyelmeztetés törlése már nem
+    const stored = { ...emptyFacts(), handlingWarning: "Kesztyű." };
+    assert.deepEqual(check({ stingOrVenom: true }, stored), []);
+    assert.equal(
+      check({ stingOrVenom: true, handlingWarning: null }, stored).length,
+      1,
+    );
+  });
+
+  it("a tiltott szó az új szövegekből is kiesik", () => {
+    for (const key of ["handlingWarning", "acclimatization"])
+      assert.equal(
+        check({ [key]: "Problémamentes, mindenkinek." }).length,
+        1,
+        key,
+      );
+  });
+
+  it("az opcionális mező hiánya sosem kötelező-hiány: a teljes blokk opcionális mezők nélkül nem hiányos", () => {
+    assert.deepEqual(missingHusbandryFields(completeFacts(), "FISH", true), []);
+    const missing = missingHusbandryFields(emptyFacts(), "FISH", false);
+    for (const key of [
+      "tempMinC",
+      "tempMaxC",
+      "salinityMinSg",
+      "salinityMaxSg",
+      "khMinDkh",
+      "khMaxDkh",
+      "lifespanYears",
+      "stingOrVenom",
+      "handlingWarning",
+      "quarantineWeeks",
+      "acclimatization",
+      "breedsInTank",
+    ])
+      assert.equal(missing.includes(key), false, key);
+  });
+
+  it("a szöveges opcionális mezők szóköz nélkül mennek tovább, az üres szöveg null", () => {
+    assert.deepEqual(
+      normalizedHusbandryTexts({
+        handlingWarning: "  Kesztyű ",
+        acclimatization: "  ",
+      }),
+      { handlingWarning: "Kesztyű", acclimatization: null },
     );
   });
 });
