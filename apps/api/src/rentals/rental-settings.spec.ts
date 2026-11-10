@@ -9,8 +9,8 @@ import { validateSync } from "class-validator";
 import { PERMISSIONS } from "@acropora/types";
 
 import { REQUIRED_PERMISSIONS_KEY } from "../auth/decorators/require-permissions.decorator.js";
+import { RentalSettingsController } from "./rental-settings.controller.js";
 import {
-  RentalSettingsController,
   RentalSettingsService,
   SaveRentalSettingsDto,
 } from "./rental-settings.js";

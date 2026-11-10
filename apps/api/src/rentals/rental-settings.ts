@@ -1,11 +1,4 @@
-import {
-  BadRequestException,
-  Body,
-  Controller,
-  Get,
-  Injectable,
-  Put,
-} from "@nestjs/common";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import { Type } from "class-transformer";
 import {
   IsInt,
@@ -20,15 +13,11 @@ import {
 
 import { Prisma, prisma } from "@acropora/database";
 import {
-  PERMISSIONS,
   RENTAL_CONTRACT_LIMITS as L,
   unknownRentalContractVariables,
-  type AuthenticatedUser,
   type RentalSettings,
 } from "@acropora/types";
 
-import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
-import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
 import { DEFAULT_RENTAL_CONTRACT_TEMPLATE } from "./rental-contract-default.js";
 
 /** The one settings row's id. */
@@ -113,26 +102,5 @@ export class RentalSettingsService {
       update: data,
     });
     return this.get();
-  }
-}
-
-/** Settings > Bérleti szerződés: the same right as the other Settings master data (`settings.manage`). */
-@Controller("rental-settings")
-export class RentalSettingsController {
-  constructor(private readonly service: RentalSettingsService) {}
-
-  @Get()
-  @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
-  get() {
-    return this.service.get();
-  }
-
-  @Put()
-  @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
-  save(
-    @Body() input: SaveRentalSettingsDto,
-    @CurrentUser() user: AuthenticatedUser,
-  ) {
-    return this.service.save(input, user.id);
   }
 }
