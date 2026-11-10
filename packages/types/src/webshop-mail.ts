@@ -67,6 +67,20 @@ export interface WebshopPlacedOrder extends WebshopMailOrder {
   readonly livestock_kinds?: readonly WebshopLivestockKind[];
 }
 
+/**
+ * One product's usage guide in the shipped mail (V3.3 S3, card 69b5f2ef): the product's name, the first paragraph of its
+ * approved guide (the shop sends only what the OS projected under the VERIFIED gate), and the product page where the whole
+ * guide stands.
+ */
+export interface WebshopUsageGuide {
+  readonly title: string;
+  readonly excerpt: string;
+  readonly url: string | null;
+}
+
+/** At most this many guides, each excerpt at most this long: a mail is not a manual. */
+export const WEBSHOP_USAGE_GUIDE_LIMITS = { count: 10, excerpt: 400 } as const;
+
 /** commerce `ShippedMailFacts`. */
 export interface WebshopShippedFacts {
   readonly display_id: number | string;
@@ -89,6 +103,12 @@ export interface WebshopShippedFacts {
   readonly gls_logo_url?: string | null;
   /** A GLS point's kind, `parcel-shop` / `parcel-locker`: the logo's alt text. */
   readonly gls_point_type?: string | null;
+  /**
+   * The usage guides of the parcel's products that have one (V3.3 S3). OPTIONAL and tolerant, like `livestock_kinds`: a
+   * webshop that does not send it, or sends something else, means no guide section, never a refused mail (`facts_version`
+   * stays 1), so the OS and the webshop can be deployed in either order.
+   */
+  readonly usage_guides?: readonly WebshopUsageGuide[];
 }
 
 /** commerce `RefundMailFacts`. */
@@ -405,6 +425,41 @@ function listBlock(
   };
 }
 
+/**
+ * THE USAGE GUIDES IN THE SHIPPED MAIL (V3.3 S3): per product its name, the first paragraph of the guide, and a link to the
+ * whole guide on the product page; `null` with none, so the mail is word for word today's.
+ */
+function usageGuideBlock(
+  guides: readonly WebshopUsageGuide[],
+  t: WebshopMailText,
+): MailBlock | null {
+  if (guides.length === 0) return null;
+  return {
+    html:
+      `<h2 ${H2}>${escapeHtml(t.usageGuide)}</h2>` +
+      guides
+        .map(
+          (g) =>
+            `<p style="margin:0 0 12px;"><strong>${escapeHtml(g.title)}</strong><br />${escapeHtml(g.excerpt)}` +
+            (g.url
+              ? `<br /><a href="${escapeHtml(g.url)}">${escapeHtml(t.usageGuideLink)}</a>`
+              : "") +
+            "</p>",
+        )
+        .join(""),
+    text: [
+      `${t.usageGuide}:`,
+      ...guides.map((g) =>
+        [
+          g.title,
+          g.excerpt,
+          ...(g.url ? [`${t.usageGuideLink}: ${g.url}`] : []),
+        ].join("\n"),
+      ),
+    ].join("\n\n"),
+  };
+}
+
 /** The orange box: "ÁTVÉTELKOR FIZETENDŐ / 14 000 Ft". */
 function amountBox(label: string, amount: number): MailBlock {
   return {
@@ -443,6 +498,8 @@ export interface WebshopMailText {
   readonly dueBox: string;
   readonly yourOrder: string;
   readonly inYourParcel: string;
+  readonly usageGuide: string;
+  readonly usageGuideLink: string;
   readonly yourOrderNumbered: (id: number | string) => string;
   readonly yourPickupOrderNumbered: (id: number | string) => string;
   readonly shippingNow: (id: number | string) => string;
@@ -501,6 +558,8 @@ const HU_TEXT: WebshopMailText = {
   dueBox: "FIZETENDŐ",
   yourOrder: "A rendelésed",
   inYourParcel: "A csomagban",
+  usageGuide: "Használati útmutató",
+  usageGuideLink: "A teljes útmutató a termékoldalon",
   yourOrderNumbered: (id) => `A rendelésed (#${id})`,
   yourPickupOrderNumbered: (id) => `Bolti átvételes rendelésed (#${id})`,
   shippingNow: (id) => `Most indul (#${id})`,
@@ -566,6 +625,8 @@ const EN_TEXT: WebshopMailText = {
   dueBox: "TO PAY",
   yourOrder: "Your order",
   inYourParcel: "In your parcel",
+  usageGuide: "Usage guide",
+  usageGuideLink: "The full guide on the product page",
   yourOrderNumbered: (id) => `Your order (#${id})`,
   yourPickupOrderNumbered: (id) => `Your pickup order (#${id})`,
   shippingNow: (id) => `Shipping now (#${id})`,
@@ -840,6 +901,7 @@ function templateContent(
               lines: s.items.map((i) => `${i.title} × ${i.quantity}`),
             },
           ]),
+          hasznalati_utmutato: usageGuideBlock(s.usage_guides ?? [], t),
         },
       };
     }
@@ -1487,6 +1549,9 @@ function parseTemplateFacts(
             s.gls_point_type,
             "facts.shipped.gls_point_type",
           ),
+          ...(Array.isArray(s.usage_guides)
+            ? { usage_guides: usageGuides(s.usage_guides) }
+            : {}),
         },
       };
     }
@@ -1643,4 +1708,35 @@ export interface WebshopStuckMailList {
   readonly items: readonly WebshopStuckMail[];
   /** Every stuck mail, not just this page. */
   readonly count: number;
+}
+
+/**
+ * THE USAGE GUIDES, TOLERANTLY (V3.3 S3): an entry without a name or an excerpt is dropped, not refused; the excerpt is cut at
+ * the limit on a word; a link that is not a plain https address is dropped (the guide stays without it). At most the limit's
+ * count.
+ */
+function usageGuides(raw: readonly unknown[]): WebshopUsageGuide[] {
+  const { count, excerpt: max } = WEBSHOP_USAGE_GUIDE_LIMITS;
+  const guides: WebshopUsageGuide[] = [];
+  for (const entry of raw) {
+    if (guides.length >= count) break;
+    if (typeof entry !== "object" || entry === null) continue;
+    const e = entry as Record<string, unknown>;
+    const title = typeof e.title === "string" ? e.title.trim() : "";
+    const text =
+      typeof e.excerpt === "string"
+        ? e.excerpt.replace(/\s+/g, " ").trim()
+        : "";
+    if (!title || !text) continue;
+    const excerpt =
+      text.length <= max
+        ? text
+        : `${text.slice(0, max).replace(/\s+\S*$/, "")}…`;
+    guides.push({
+      title: title.slice(0, 200),
+      excerpt,
+      url: safeOrderViewUrl(e.url),
+    });
+  }
+  return guides;
 }

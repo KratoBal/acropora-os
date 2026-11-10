@@ -8,6 +8,7 @@ import {
 import {
   WEBSHOP_MAIL_KEYS,
   WEBSHOP_MAIL_SAMPLE_FACTS,
+  WEBSHOP_USAGE_GUIDE_LIMITS,
   hungarianDay,
   mailDay,
   safeOrderViewUrl,
@@ -316,6 +317,90 @@ describe("the derived content", () => {
     assert.equal(kindsOf()[0], undefined);
     facts.orders[0]!.livestock_kinds = ["CORAL", "SHRIMP", 3, "FISH"];
     assert.deepEqual(kindsOf()[0], ["CORAL", "FISH"]);
+  });
+
+  /*
+    V3.3 S3 (card 69b5f2ef): the shop sends the parcel's usage guides. WHAT TURNS THIS RED: a missing or odd list refusing the mail
+    (the deploy order is free); an entry without a name or an excerpt let through; a non-https link written into an href; an
+    excerpt over the limit not cut on a word; the block drawn with no guide (the mail would change for every parcel); the
+    variable not declared for the shipped mail or its English twin.
+  */
+  it("usage guides: a missing or odd list leaves them out, bad entries are dropped, never a refused mail", () => {
+    const facts = JSON.parse(
+      JSON.stringify(WEBSHOP_MAIL_SAMPLE_FACTS["order-shipped"]),
+    ) as { shipped: { usage_guides?: unknown } };
+    const guidesOf = () => {
+      const parsed = parseWebshopMailFacts("order-shipped", facts);
+      assert.equal(parsed.ok, true);
+      const f = (parsed as { facts: WebshopMailFacts }).facts;
+      return f.template === "order-shipped" ? f.shipped.usage_guides : null;
+    };
+    assert.equal(guidesOf(), undefined);
+    facts.shipped.usage_guides = "Rázd fel";
+    assert.equal(guidesOf(), undefined);
+    facts.shipped.usage_guides = [
+      {
+        title: "KZ Amino",
+        excerpt: "  Rázd fel.\n Mérd ki.  ",
+        url: "https://shop.example/hu/termek/kz-amino",
+      },
+      { title: "", excerpt: "név nélkül" },
+      { title: "Nincs kivonat" },
+      { title: "Rossz link", excerpt: "Szöveg.", url: "javascript:alert(1)" },
+      7,
+    ];
+    assert.deepEqual(guidesOf(), [
+      {
+        title: "KZ Amino",
+        excerpt: "Rázd fel. Mérd ki.",
+        url: "https://shop.example/hu/termek/kz-amino",
+      },
+      { title: "Rossz link", excerpt: "Szöveg.", url: null },
+    ]);
+    facts.shipped.usage_guides = [
+      { title: "Hosszú", excerpt: "szó ".repeat(200) },
+    ];
+    const long = guidesOf()![0]!.excerpt;
+    assert.ok(
+      long.length <= WEBSHOP_USAGE_GUIDE_LIMITS.excerpt + 1,
+      String(long.length),
+    );
+    assert.match(long, /szó…$/);
+  });
+
+  it("usage guides: drawn after the parcel's content with the product page's link; with none, no block", () => {
+    const shipped = WEBSHOP_MAIL_SAMPLE_FACTS["order-shipped"];
+    if (shipped.template !== "order-shipped") throw new Error("sample");
+    assert.equal(webshopMailContent(shipped).blocks.hasznalati_utmutato, null);
+    const block = webshopMailContent({
+      ...shipped,
+      shipped: {
+        ...shipped.shipped,
+        usage_guides: [
+          {
+            title: "KZ <Amino>",
+            excerpt: "Rázd fel.",
+            url: "https://shop.example/a",
+          },
+          { title: "Másik", excerpt: "Kevesebbel kezdj.", url: null },
+        ],
+      },
+    }).blocks.hasznalati_utmutato;
+    assert.match(block?.html ?? "", /Használati útmutató/);
+    assert.match(block?.html ?? "", /<strong>KZ &lt;Amino&gt;<\/strong>/);
+    assert.match(
+      block?.html ?? "",
+      /<a href="https:\/\/shop\.example\/a">A teljes útmutató a termékoldalon<\/a>/,
+    );
+    assert.equal((block?.html.match(/<a /g) ?? []).length, 1);
+    assert.match(
+      block?.text ?? "",
+      /^Használati útmutató:\n\nKZ <Amino>\nRázd fel\.\nA teljes útmutató a termékoldalon: https:\/\/shop\.example\/a/,
+    );
+    for (const id of ["WEBSHOP_ORDER_SHIPPED", "WEBSHOP_ORDER_SHIPPED_EN"]) {
+      const event = MAIL_TEMPLATE_EVENTS.find((e) => e.id === id);
+      assert.ok(event?.variables.includes("hasznalati_utmutato"), id);
+    }
   });
 
   it("the akklimatizacio value is declared for the order confirmation and its English twin", () => {
