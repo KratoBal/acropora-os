@@ -90,6 +90,7 @@ export function RentalReturnedList({
   const [searched, setSearched] = useState<{
     q: string;
     items: Rental[];
+    truncated: boolean;
   } | null>(null);
   useEffect(() => {
     const q = query.trim();
@@ -101,7 +102,9 @@ export function RentalReturnedList({
     const timer = setTimeout(() => {
       rentalsApi
         .list(token, "RETURNED", controller.signal, q)
-        .then((answer) => setSearched({ q, items: answer.items }))
+        .then((answer) =>
+          setSearched({ q, items: answer.items, truncated: answer.truncated }),
+        )
         .catch((cause) => {
           if (cause instanceof DOMException && cause.name === "AbortError")
             return;
@@ -116,10 +119,11 @@ export function RentalReturnedList({
     };
   }, [token, reloadKey, truncated, query]);
 
+  const active = searched?.q === query.trim() ? searched : null;
   const shown = useMemo(() => {
-    const source = searched?.q === query.trim() ? searched.items : rows;
+    const source = active ? active.items : rows;
     return source.filter((r) => rentalMatches(r, query));
-  }, [rows, searched, query]);
+  }, [rows, active, query]);
 
   return (
     <Card>
@@ -148,7 +152,15 @@ export function RentalReturnedList({
           </p>
         ) : (
           <>
-            {truncated ? (
+            {/* the server's answer to a search can be cut too (barracuda, #2395): then that is the sentence */}
+            {active ? (
+              active.truncated ? (
+                <p className="text-sm font-medium text-amber-700">
+                  A keresés találatai nem teljesek: csak a legutóbbi{" "}
+                  {active.items.length} látszik. Szűkítsd a keresést.
+                </p>
+              ) : null
+            ) : truncated ? (
               <p className="text-sm font-medium text-amber-700">
                 A lista nem teljes: csak a legutóbbi {rows.length} visszahozott
                 bérlés látszik.
