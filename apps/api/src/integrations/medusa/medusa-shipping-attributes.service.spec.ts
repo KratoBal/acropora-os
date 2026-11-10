@@ -391,3 +391,71 @@ describe("az élő állat fajtája a boltba", () => {
     assert.equal(f.kikuldott[0]?.livestock_kind, null);
   });
 });
+
+/*
+  A BOLTBAN MARADT FAJTA (kartya 4b30b373). MI PIROSIT: a proba-futas ir; a torles a tobbi zaszlot is kuldi (egy kozben
+  kezzel atallitott zaszlot visszairna, barracuda #2353); az OS-termek keresese nem a kotes-sorbol megy.
+*/
+describe("a boltban maradt fajta letörlése", () => {
+  const ROW = {
+    id: "sa_1",
+    product_id: "prod_medusa_9",
+    pickup_only: true,
+    foxpost_forbidden: false,
+    is_heavy: true,
+    is_frozen: false,
+    locker_unsuitable: false,
+    livestock_kind: "FISH" as const,
+  };
+
+  function kis() {
+    const kikuldott: {
+      productId: string;
+      flags: Partial<MedusaShippingFlags>;
+    }[] = [];
+    const medusa = {
+      setShippingAttributes: async (
+        productId: string,
+        flags: Partial<MedusaShippingFlags>,
+      ) => {
+        kikuldott.push({ productId, flags });
+        return { id: "sa_1", product_id: productId, ...flags };
+      },
+      listShippingAttributes: async () => [ROW],
+    } as unknown as MedusaAdminClient;
+    const links = {
+      findByMedusaProductId: async (id: string) =>
+        id === "prod_medusa_9"
+          ? { productId: "os-9", medusaProductId: id }
+          : null,
+    } as unknown as MedusaProductLinkRepository;
+    return {
+      service: new MedusaShippingAttributesService(links, medusa),
+      kikuldott,
+    };
+  }
+
+  it("proba-futasnal nem ir, es megmondja, mit kuldene", async () => {
+    const f = kis();
+    const outcome = await f.service.clearLeftoverKind(ROW, false);
+    assert.equal(outcome.action, "planned");
+    assert.match(outcome.flags, /élő állat: hal.*a fajta törlése/);
+    assert.deepEqual(f.kikuldott, []);
+  });
+
+  it("--apply-jal CSAK a fajtat kuldi (reszleges frissites), a tobbi zaszlot nem", async () => {
+    const f = kis();
+    const outcome = await f.service.clearLeftoverKind(ROW, true);
+    assert.equal(outcome.action, "applied");
+    assert.deepEqual(f.kikuldott, [
+      { productId: "prod_medusa_9", flags: { livestock_kind: null } },
+    ]);
+  });
+
+  it("az OS-termeket a kotes-sorbol keresi, es null-t ad, ha nincs", async () => {
+    const f = kis();
+    assert.equal(await f.service.osProductOfShop("prod_medusa_9"), "os-9");
+    assert.equal(await f.service.osProductOfShop("prod_ismeretlen"), null);
+    assert.deepEqual(await f.service.listShopShippingAttributes(), [ROW]);
+  });
+});

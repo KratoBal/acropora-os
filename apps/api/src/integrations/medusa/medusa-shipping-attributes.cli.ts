@@ -15,6 +15,7 @@ import {
   liveAnimalKindSubtrees,
   liveAnimalSubtreeIds,
 } from "./medusa-livestock.policy.js";
+import { rowsCarryingKind } from "./medusa-shipping-attributes.policy.js";
 import { MedusaShippingAttributesService } from "./medusa-shipping-attributes.service.js";
 import {
   listAllShopSkus,
@@ -264,12 +265,82 @@ export async function runShippingAttributesCli(
     }
   }
 
+  /*
+    A BOLTBAN MARADT FAJTA (kartya 4b30b373): egy termek, ami kikerult az elo allat kategoriabol, es nincs
+    profil-sora, nem celpont fent, ezert a boltban a regi `livestock_kind` maradna. A bolti sorokbol keressuk.
+  */
+  await clearLeftoverKinds(
+    futtato,
+    new Set(celok),
+    parositas.osToShop,
+    idk,
+    apply,
+    out,
+  );
+
   if (!apply)
     out.stdout(
       "\nEz a futás semmit nem írt. Az átvitelhez add meg a --apply kapcsolót.\n",
     );
 
   return bukott ? 1 : 0;
+}
+
+/**
+ * A BOLTBAN MARADT ELO ALLAT FAJTA LETORLESE (V2.6 S1b koveto, kartya 4b30b373).
+ *
+ * A bolt sorai kozul azokat nezi, amelyeken fajta all, es amelyek OS-termeke NEM celpont a fo koron (nincs profil-sora
+ * es nincs elo allat besorolasa): az OS mar nem vezeti le a fajtat, ezert a bolt sora null-t kap. Amelyik OS-termek
+ * celpont volt, azt a fo kor mar a levezetett fajtaval irta (vagy mar igy allt). Amelyik bolti sorhoz nem talalunk OS-
+ * termeket (sem kotes-sor, sem egyertelmu SKU-par), ahhoz nem nyulunk, csak megszamoljuk.
+ */
+export async function clearLeftoverKinds(
+  futtato: Pick<
+    MedusaShippingAttributesService,
+    "listShopShippingAttributes" | "osProductOfShop" | "clearLeftoverKind"
+  >,
+  celok: ReadonlySet<string>,
+  osToShop: ReadonlyMap<string, string>,
+  idk: readonly string[],
+  apply: boolean,
+  out: CliOutput,
+): Promise<{
+  rows: number;
+  carrying: number;
+  cleared: number;
+  unpaired: number;
+}> {
+  const rows = await futtato.listShopShippingAttributes();
+  const carrying = rowsCarryingKind(rows);
+  const shopToOs = new Map<string, string>(
+    [...osToShop].map(([os, shop]) => [shop, os]),
+  );
+  let cleared = 0;
+  let unpaired = 0;
+  for (const row of carrying) {
+    const osId =
+      (await futtato.osProductOfShop(row.product_id)) ??
+      shopToOs.get(row.product_id) ??
+      null;
+    if (!osId) {
+      unpaired++;
+      continue;
+    }
+    if (celok.has(osId)) continue;
+    if (idk.length && !idk.includes(osId)) continue;
+    const outcome = await futtato.clearLeftoverKind(row, apply);
+    cleared++;
+    out.stdout(
+      `${osId}: ${
+        outcome.action === "applied" ? "most állítottuk be" : "KIKÜLDENÉNK"
+      } -> ${outcome.medusaProductId} (${outcome.flags})\n`,
+    );
+  }
+  out.stdout(
+    `Boltban maradt élő állat fajta: a bolt ${rows.length} szállítási-jellemző sort adott, ${carrying.length}-n áll fajta, ` +
+      `${cleared} ${apply ? "törölve" : "törlendő"}, ${unpaired} OS-termék nélkül (nem nyúltunk hozzá).\n`,
+  );
+  return { rows: rows.length, carrying: carrying.length, cleared, unpaired };
 }
 
 /**

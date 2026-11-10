@@ -15,6 +15,31 @@ const PROFIL = {
   isFrozen: false,
 };
 
+type ShopRow = {
+  id: string | null;
+  product_id: string;
+  pickup_only: boolean;
+  foxpost_forbidden: boolean;
+  is_heavy: boolean;
+  is_frozen: boolean;
+  locker_unsuitable: boolean;
+  livestock_kind: "FISH" | "INVERTEBRATE" | "CORAL" | null;
+};
+
+const boltSor = (
+  product_id: string,
+  livestock_kind: ShopRow["livestock_kind"],
+): ShopRow => ({
+  id: `sa_${product_id}`,
+  product_id,
+  pickup_only: true,
+  foxpost_forbidden: false,
+  is_heavy: false,
+  is_frozen: false,
+  locker_unsuitable: false,
+  livestock_kind,
+});
+
 const FA = [
   { id: "gy1", name: "Korallok", parentId: null },
   { id: "gy1a", name: "SPS", parentId: "gy1" },
@@ -28,7 +53,12 @@ function fakes(
   unas: { productId: string; rawPayload: unknown }[] = [],
   valtozatok: { sku: string; productId: string }[] = [],
   bolt: { id: string; variants: { sku: string | null }[] }[] = [],
+  /** a bolt szallitasi-jellemzo sorai (a boltban maradt fajta keresesehez) */
+  boltSorok: ShopRow[] = [],
+  /** bolti termek -> OS-termek a kotes-sor szerint */
+  kotesek: Record<string, string> = {},
 ) {
+  const torlesek: { shop: string; apply: boolean }[] = [];
   const ki: string[] = [];
   const hivasok: {
     id: string;
@@ -61,6 +91,16 @@ function fakes(
       products: bolt.slice(offset, offset + limit),
       count: bolt.length,
     }),
+    listShopShippingAttributes: async () => boltSorok,
+    osProductOfShop: async (shop: string) => kotesek[shop] ?? null,
+    clearLeftoverKind: async (row: { product_id: string }, apply: boolean) => {
+      torlesek.push({ shop: row.product_id, apply });
+      return {
+        action: apply ? ("applied" as const) : ("planned" as const),
+        medusaProductId: row.product_id,
+        flags: "élő állat: hal -> a fajta törlése",
+      };
+    },
     project: async (
       id: string,
       _profil: unknown,
@@ -94,6 +134,7 @@ function fakes(
     out,
     database,
     service,
+    torlesek,
     hivasok,
     lekerdezes,
     szoveg: () => ki.join(""),
@@ -311,6 +352,8 @@ describe("a szállítási jellemzők parancsa", () => {
       );
       const service = {
         listShopSkus: async () => ({ products: [], count: 0 }),
+        listShopShippingAttributes: async () => [],
+        osProductOfShop: async () => null,
         project: async (_id: string, profil: unknown) => {
           latott.push(profil);
           return {
@@ -378,6 +421,122 @@ describe("a szállítási jellemzők parancsa", () => {
       assert.deepEqual(
         f.hivasok.map((h) => [h.id, h.bySku]),
         [["os-1", "shop-1"]],
+      );
+    });
+  });
+
+  /*
+  A BOLTBAN MARADT ELO ALLAT FAJTA (kartya 4b30b373). MI PIROSIT: egy bolti sor, amin fajta all, es amelynek OS-termeke
+  mar nem celpont, de a fajtaja marad; egy celpont termek (a fo kor mar kezelte) amit ujra torolne; egy nem parosithato
+  bolti sor, amihez nyulna; egy fajta nelkuli sor, amit torolne; az --apply nelkul irna; az explicit azonositokra szukitest
+  figyelmen kivul hagyna.
+  */
+  describe("a boltban maradt fajta", () => {
+    const sorok = [
+      boltSor("shop-stale", "FISH"), // OS-termeke nem celpont: torlendo
+      boltSor("shop-target", "CORAL"), // OS-termeke celpont (profil-sora van): a fo kor kezeli
+      boltSor("shop-orphan", "FISH"), // nincs OS-termek
+      boltSor("shop-nokind", null), // nincs fajta
+    ];
+    const kotesek = {
+      "shop-stale": "os-stale",
+      "shop-target": "prod-os-1",
+      "shop-nokind": "os-nokind",
+    };
+
+    it("a nem celpont termek fajtajat torli, a tobbihez nem nyul, es megszamolja, mit latott", async () => {
+      const f = fakes([PROFIL], [], [], [], [], sorok, kotesek);
+      await runShippingAttributesCli(
+        [],
+        f.out,
+        undefined,
+        f.database,
+        f.service,
+      );
+      assert.deepEqual(f.torlesek, [{ shop: "shop-stale", apply: false }]);
+      assert.match(f.szoveg(), /os-stale: KIKÜLDENÉNK -> shop-stale/);
+      assert.match(
+        f.szoveg(),
+        /a bolt 4 szállítási-jellemző sort adott, 3-n áll fajta, 1 törlendő, 1 OS-termék nélkül/,
+      );
+    });
+
+    it("--apply nelkul nem ir (apply=false), --apply-jal igen", async () => {
+      const probaF = fakes([PROFIL], [], [], [], [], sorok, kotesek);
+      await runShippingAttributesCli(
+        [],
+        probaF.out,
+        undefined,
+        probaF.database,
+        probaF.service,
+      );
+      assert.equal(probaF.torlesek[0]?.apply, false);
+      const igaziF = fakes([PROFIL], [], [], [], [], sorok, kotesek);
+      await runShippingAttributesCli(
+        ["--apply"],
+        igaziF.out,
+        undefined,
+        igaziF.database,
+        igaziF.service,
+      );
+      assert.deepEqual(igaziF.torlesek, [{ shop: "shop-stale", apply: true }]);
+      assert.match(
+        igaziF.szoveg(),
+        /os-stale: most állítottuk be -> shop-stale/,
+      );
+      assert.match(igaziF.szoveg(), /1 törölve/);
+    });
+
+    it("explicit azonositoknal csak a megadott OS-termekre szukit", async () => {
+      const f = fakes([PROFIL], [], [], [], [], sorok, {
+        ...kotesek,
+        "shop-other": "os-other",
+      });
+      await runShippingAttributesCli(
+        ["os-other"],
+        f.out,
+        undefined,
+        f.database,
+        f.service,
+      );
+      assert.deepEqual(f.torlesek, []);
+    });
+
+    it("a SKU-parositas is megtalalja az OS-termeket, ha nincs kotes-sor", async () => {
+      const f = fakes(
+        [PROFIL],
+        [],
+        [],
+        [{ sku: "STALE-1", productId: "os-stale-sku" }],
+        [{ id: "shop-sku", variants: [{ sku: "STALE-1" }] }],
+        [boltSor("shop-sku", "INVERTEBRATE")],
+        {},
+      );
+      await runShippingAttributesCli(
+        [],
+        f.out,
+        undefined,
+        f.database,
+        f.service,
+      );
+      assert.deepEqual(f.torlesek, [{ shop: "shop-sku", apply: false }]);
+    });
+
+    it("fajta nelkuli boltban nem torol semmit, es ezt ki is mondja", async () => {
+      const f = fakes([PROFIL], [], [], [], [], [boltSor("shop-a", null)], {
+        "shop-a": "os-a",
+      });
+      await runShippingAttributesCli(
+        [],
+        f.out,
+        undefined,
+        f.database,
+        f.service,
+      );
+      assert.deepEqual(f.torlesek, []);
+      assert.match(
+        f.szoveg(),
+        /1 szállítási-jellemző sort adott, 0-n áll fajta, 0 törlendő/,
       );
     });
   });

@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   describeShippingFlags,
+  rowsCarryingKind,
   shippingFlagsDiffer,
   shippingFlagsFromProfile,
 } from "./medusa-shipping-attributes.policy.js";
@@ -219,5 +220,23 @@ describe("az élő állat fajtája a szállítási jelzők között", () => {
       /élő állat: gerinctelen/,
     );
     assert.doesNotMatch(describeShippingFlags(ALAP), /élő állat/);
+  });
+});
+
+/*
+  A BOLTBAN MARADT FAJTA (kartya 4b30b373). MI PIROSIT: a szuro a fajta nelkuli (null vagy hianyzo) sort is atengedi.
+*/
+describe("a boltban maradt élő állat fajta", () => {
+  it("csak a fajtát viselő sorokat adja vissza (a null és a hiányzó nem)", () => {
+    const sorok = [
+      { product_id: "a", livestock_kind: "FISH" as const },
+      { product_id: "b", livestock_kind: null },
+      { product_id: "c" },
+      { product_id: "d", livestock_kind: "CORAL" as const },
+    ];
+    assert.deepEqual(
+      rowsCarryingKind(sorok).map((r) => r.product_id),
+      ["a", "d"],
+    );
   });
 });
