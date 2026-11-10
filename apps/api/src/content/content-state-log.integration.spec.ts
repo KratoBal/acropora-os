@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { after, describe, it } from "node:test";
+import { after, before, describe, it } from "node:test";
 
 import { prisma } from "@acropora/database";
 
@@ -32,6 +32,10 @@ describe(
         where: { contentId },
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       });
+
+    before(() => {
+      if (gate.mode === "refuse") throw new Error(gate.reason);
+    });
 
     after(async () => {
       await prisma.contentItem.deleteMany({ where: { id: { in: ids } } });
