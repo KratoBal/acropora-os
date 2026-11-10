@@ -439,7 +439,9 @@ describe("Magánszemély és módosítás a számla vevő-űrlapján (Luca, 2026
       type: "PERSON",
       displayName: "Kiss Annamária",
       companyName: null,
-      email: "szamla@example.hu",
+      taxNumber: null,
+      euTaxNumber: null,
+      billingEmail: "szamla@example.hu",
       addresses: [
         {
           id: "addr-1",
@@ -486,6 +488,89 @@ describe("Magánszemély és módosítás a számla vevő-űrlapján (Luca, 2026
       displayName: "Kézi Kft.",
       companyName: "Kézi Kft.",
       taxNumber: "12345678-2-42",
+      euTaxNumber: null,
+    });
+  });
+
+  it("a változtatás nélküli mentés egyik e-mail-címet sem cseréli ki: a számlázási címbe írja vissza, az általánost nem érinti", async () => {
+    const both = {
+      ...person,
+      email: "info@example.hu",
+      billingEmail: "szamla@example.hu",
+    };
+    api.customers.update.mockResolvedValue(both);
+    render(
+      <BillingNewCustomerForm
+        token="t"
+        initialSearch=""
+        existing={both as never}
+        onSaved={vi.fn()}
+        onPickExisting={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Módosítás mentése" }));
+    await waitFor(() => expect(api.customers.update).toHaveBeenCalled());
+    const body = api.customers.update.mock.calls[0]![2];
+    expect(body.billingEmail).toBe("szamla@example.hu");
+    expect(body).not.toHaveProperty("email");
+  });
+
+  it("számlázási cím nélküli vevőnél az általános címbe ír (onnan olvasott)", async () => {
+    const onlyGeneral = {
+      ...person,
+      email: "info@example.hu",
+      billingEmail: null,
+    };
+    api.customers.update.mockResolvedValue(onlyGeneral);
+    render(
+      <BillingNewCustomerForm
+        token="t"
+        initialSearch=""
+        existing={onlyGeneral as never}
+        onSaved={vi.fn()}
+        onPickExisting={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Módosítás mentése" }));
+    await waitFor(() => expect(api.customers.update).toHaveBeenCalled());
+    const body = api.customers.update.mock.calls[0]![2];
+    expect(body.email).toBe("info@example.hu");
+    expect(body).not.toHaveProperty("billingEmail");
+  });
+
+  it("cégről magánszemélyre váltáskor az adószám törlődik (null), és a felület kimondja", async () => {
+    const company = {
+      ...person,
+      type: "COMPANY" as const,
+      displayName: "Kézi",
+      companyName: "Kézi Kft.",
+      taxNumber: "12345678-2-42",
+    };
+    api.customers.update.mockResolvedValue({ ...company, type: "PERSON" });
+    render(
+      <BillingNewCustomerForm
+        token="t"
+        initialSearch=""
+        existing={company as never}
+        onSaved={vi.fn()}
+        onPickExisting={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText("Magánszemély"));
+    expect(
+      screen.getByText(
+        /mostani adószáma \(12345678-2-42\) a mentéskor törlődik/,
+      ),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Módosítás mentése" }));
+    await waitFor(() => expect(api.customers.update).toHaveBeenCalled());
+    expect(api.customers.update.mock.calls[0]![2]).toMatchObject({
+      type: "PERSON",
+      companyName: null,
+      taxNumber: null,
       euTaxNumber: null,
     });
   });

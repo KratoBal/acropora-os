@@ -95,6 +95,14 @@ export function BillingNewCustomerForm({
   const [postalCode, setPostalCode] = useState(savedAddress?.postalCode ?? "");
   const [city, setCity] = useState(savedAddress?.city ?? "");
   const [line1, setLine1] = useState(savedAddress?.line1 ?? "");
+  /**
+   * SZERKESZTESNEL ABBA A MEZOBE IRUNK, AMELYIKBOL OLVASTUNK (barracuda, #2355 review): a vevonek lehet altalanos
+   * (`email`, rendeles-ertesitok) ES szamlazasi (`billingEmail`) cime is, es a kettő kulonbozhet. Az urlap a szamlazasit
+   * mutatja, ha van; a mentes ugyanoda irja, egy valtoztatas nelkuli mentes tehat egyik cimet sem cserel ki.
+   */
+  const emailField: "billingEmail" | "email" = existing?.billingEmail?.trim()
+    ? "billingEmail"
+    : "email";
   const [email, setEmail] = useState(
     existing ? existing.billingEmail?.trim() || existing.email || "" : "",
   );
@@ -204,9 +212,10 @@ export function BillingNewCustomerForm({
           type: person ? "PERSON" : "COMPANY",
           displayName: name,
           companyName: person ? null : name,
-          // magánszemélynél az adószám-mezőkhöz nem nyúlunk (nincs kitöltő), cégnél a mostani érték megy
+          // MAGÁNSZEMÉLYNÉL AZ ADÓSZÁM TÖRLŐDIK (barracuda, #2355 review): egy tévesen cégként felvett vevő átállításakor a
+          // régi adószám nem maradhat a soron, mert a számla magánszemély vevővel is elvihetné
           ...(person
-            ? {}
+            ? { taxNumber: null, euTaxNumber: null }
             : {
                 taxNumber: !eu && taxNumber.trim() ? taxNumber.trim() : null,
                 euTaxNumber:
@@ -214,7 +223,7 @@ export function BillingNewCustomerForm({
                     ? (normalizeEuTaxNumber(taxNumber) ?? taxNumber.trim())
                     : null,
               }),
-          email: email.trim() || null,
+          [emailField]: email.trim() || null,
           addresses: [
             {
               ...(savedAddress ? { id: savedAddress.id } : {}),
@@ -328,7 +337,9 @@ export function BillingNewCustomerForm({
       </div>
       {person ? (
         <p className="text-xs text-pilot-grey-600">
-          Magánszemélynek nem kell adószám.
+          {existing?.taxNumber || existing?.euTaxNumber
+            ? `A vevő mostani adószáma (${existing.taxNumber ?? existing.euTaxNumber}) a mentéskor törlődik: magánszemélynek nem kell adószám.`
+            : "Magánszemélynek nem kell adószám."}
         </p>
       ) : (
         <>
