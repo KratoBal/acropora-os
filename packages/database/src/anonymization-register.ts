@@ -1272,6 +1272,12 @@ export const ANONYMIZATION_REGISTER: Readonly<
     origin: "business",
     amitOVeszelyeztet: "business",
     amiOtVeszelyezteti: "business",
+    reefSafeIndok: "business",
+    etetesGyakorisag: "business",
+    kinekNem: "business",
+    forrasTipus: "business",
+    forrasHivatkozas: "business",
+    ellenorizteUserId: "identifier",
   },
   ProductDatasheetFieldRefusal: {
     indok: "freeText",

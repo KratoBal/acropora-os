@@ -1907,3 +1907,22 @@ export type {
   GameOption,
   GameQuestionType,
 } from "./game.js";
+export {
+  HUSBANDRY_DIFFICULTIES,
+  HUSBANDRY_DIFFICULTY_SCALE,
+  HUSBANDRY_MISSING_TEXT,
+} from "./product-husbandry.js";
+export type {
+  HusbandryAggression,
+  HusbandryDifficulty,
+  HusbandryFeeding,
+  HusbandryReefSafe,
+  HusbandrySizeDimension,
+  HusbandrySocialKeeping,
+  HusbandrySourcing,
+  HusbandryZone,
+  ProductHusbandry,
+  ProductHusbandryFacts,
+  ProductHusbandryField,
+  ProductHusbandryInput,
+} from "./product-husbandry.js";
