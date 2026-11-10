@@ -54,7 +54,7 @@ describe("az UpdateProductDto nev-mezoi", () => {
 /*
   A KULON NEV-DTO (kartya 20b0dd47, `PATCH /products/:id/names`): ugyanazok a szabalyok, mint az UpdateProductDto nev-mezoin.
   MI PIROSIT: a szoveg szokozokkal megy tovabb; a hosszkorlat elmarad; a null (torles) elutasitva; egy nem szoveg atmegy;
-  a termek mas mezoje (name) a nev-DTO-n at utat kapna (a validacio nem tilt ismeretlen mezot, ezt a service-teszt meri).
+  a termek mas mezoje (name) a nev-DTO-n at nem tiltott a DTO szintjen: az ismeretlen mezot a globalis ValidationPipe (whitelist + forbidNonWhitelisted, app.configuration.ts) utasitja el, nem ez a spec.
 */
 describe("az UpdateProductNamesDto", () => {
   const names = (body: Record<string, unknown>) =>

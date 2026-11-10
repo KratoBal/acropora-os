@@ -627,7 +627,13 @@ export class ProductRepository extends Repository {
     },
     actorUserId: string | null = null,
   ): Promise<ProductDetail | null> {
-    const patch = datasheetPatchOf(input);
+    // CSAK A HAROM NEV: a belso hivo se irhasson itt elhelyezesi igenyt (fenyIgeny, aramlasIgeny) UNAS-gazdaju termeken
+    // (barracuda, #2361 review); HTTP-n a globalis ValidationPipe (whitelist + forbidNonWhitelisted) amugy is elutasitja
+    const patch = datasheetPatchOf({
+      magyarNev: input.magyarNev,
+      angolNev: input.angolNev,
+      nemetNev: input.nemetNev,
+    });
     return this.productDatabase.$transaction(
       async (transaction) => {
         const existing = await transaction.product.findUnique({

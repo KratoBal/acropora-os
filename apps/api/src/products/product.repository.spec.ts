@@ -1805,6 +1805,25 @@ describe("ProductRepository", () => {
     );
   });
 
+  it("the names write takes only the three names: a placement need handed to it by an internal caller is not written", async () => {
+    const { database, calls } = createDatabase();
+    await new ProductRepository(database).updateDatasheetNames("product-1", {
+      angolNev: "Staghorn coral",
+      fenyIgeny: "EROS",
+      aramlasIgeny: "GYENGE",
+    } as never);
+    const upsert = calls.find((call) => call.operation === "datasheetUpsert")!
+      .args as {
+      create: Record<string, unknown>;
+      update: Record<string, unknown>;
+    };
+    assert.deepEqual(upsert.update, { angolNev: "Staghorn coral" });
+    assert.deepEqual(upsert.create, {
+      productId: "product-1",
+      angolNev: "Staghorn coral",
+    });
+  });
+
   it("resolves a refusal with the writer as the actor, and does nothing for a missing product or an empty write", async () => {
     const refused = createDatabase({
       refusals: [
