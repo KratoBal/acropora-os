@@ -223,9 +223,12 @@ function TurnOn({
         >
           <option value="">Válassz akváriumot</option>
           {aquariums.map((a) => (
-            <option key={a.id} value={a.id}>
+            // the days are counted from the litres: an aquarium without them cannot be chosen (barracuda, #2350), and says why
+            <option key={a.id} value={a.id} disabled={!a.systemVolumeLiters}>
               {a.name}
-              {a.systemVolumeLiters ? ` (${a.systemVolumeLiters} l)` : ""}
+              {a.systemVolumeLiters
+                ? ` (${a.systemVolumeLiters} l)`
+                : " (liter nélkül nem számolható)"}
             </option>
           ))}
         </Select>
