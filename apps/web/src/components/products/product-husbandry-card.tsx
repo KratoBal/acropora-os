@@ -19,6 +19,7 @@ import {
 } from "@acropora/types";
 import { type FormEvent, useEffect, useState } from "react";
 
+import { ApiError } from "@/lib/api/client";
 import { productApi } from "@/lib/api/products";
 
 /**
@@ -264,6 +265,8 @@ export function ProductHusbandryCard({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // the facts changed since this screen loaded them (a 409): a verification of unseen content was refused
+  const [stale, setStale] = useState(false);
   const isLiveAnimal = product.livestockKind !== null;
 
   useEffect(() => {
@@ -301,10 +304,18 @@ export function ProductHusbandryCard({
     }
     setBusy(true);
     try {
+      /*
+        THE VERIFICATION NAMES THE VERSION THIS SCREEN LOADED (barracuda on #2375): the stamp says someone looked at THESE
+        facts, so the server refuses it (409) when they changed since (another tab, a colleague, the names path). A plain
+        save needs no version: it withdraws a verification, it never states one.
+      */
       const saved = await productApi.updateHusbandry(token, product.id, {
         ...input,
-        ...(verify ? { ellenorizve: true } : {}),
+        ...(verify
+          ? { ellenorizve: true, seenVersion: husbandry.version }
+          : {}),
       });
+      setStale(false);
       setHusbandry(saved);
       setForm(formOf(saved.facts));
       setNotice(
@@ -312,6 +323,26 @@ export function ProductHusbandryCard({
           ? "Elmentve és ellenőrizve (a szerverről visszaolvasva)."
           : "Elmentve. A korábbi ellenőrzés ezzel visszavonódott, ha volt.",
       );
+    } catch (cause) {
+      setError(messageOf(cause));
+      if (cause instanceof ApiError && cause.status === 409) setStale(true);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** After a 409: read the facts again (the edits typed on this screen are dropped), and look them over before verifying. */
+  const reload = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const loaded = await productApi.husbandry(token, product.id);
+      setHusbandry(loaded);
+      setForm(formOf(loaded.facts));
+      setStale(false);
+      setNotice("Újratöltve a szerverről. Nézd át, és utána ellenőrizd.");
     } catch (cause) {
       setError(messageOf(cause));
     } finally {
@@ -380,6 +411,25 @@ export function ProductHusbandryCard({
                 Minden kötelező mező kitöltött.
               </p>
             )}
+          </div>
+        ) : null}
+        {husbandry ? (
+          <p className="mt-3 text-sm" data-testid="husbandry-name">
+            Magyar név:{" "}
+            <strong>{husbandry.facts.magyarNev ?? "nincs kitöltve"}</strong> (a
+            Nevek kártyán szerkeszthető; ez is az ellenőrzött blokk része)
+          </p>
+        ) : null}
+        {stale ? (
+          <div className="mt-3">
+            <PilotButton
+              type="button"
+              variant="secondary"
+              disabled={busy}
+              onClick={() => void reload()}
+            >
+              Újratöltés
+            </PilotButton>
           </div>
         ) : null}
         <form className="mt-4 space-y-4" onSubmit={submit}>

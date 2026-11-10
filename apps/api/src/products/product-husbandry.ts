@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import type {
   ProductHusbandryFacts,
   ProductHusbandryField,
@@ -167,4 +169,15 @@ export function normalizedHusbandryTexts(
     if (typeof value === "string") out[key] = value.trim() || null;
   }
   return out;
+}
+
+/**
+ * THE VERSION OF THE FACTS (V2.2 S2, barracuda on #2375): a digest of every fact the block carries, the Hungarian name
+ * included. A verification must name the version its author SAW; the decision compares it with the stored row inside the
+ * serializable transaction, so a fact that changed in between (from another tab, a colleague, the names path or the general
+ * update) cannot be stamped as verified by someone who never saw it. The key order is the facts object's own, fixed by
+ * `husbandryFactsOf`; the verification stamp is not part of it (a stamp is not a fact).
+ */
+export function husbandryVersionOf(facts: ProductHusbandryFacts): string {
+  return createHash("sha256").update(JSON.stringify(facts)).digest("hex");
 }

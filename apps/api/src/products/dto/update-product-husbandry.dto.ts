@@ -183,6 +183,12 @@ export class UpdateProductHusbandryDto {
   @IsOptional()
   @IsBoolean()
   ellenorizve?: boolean;
+
+  /** The version the caller saw (`ProductHusbandry.version`): required with `ellenorizve: true`, checked by the decision. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  seenVersion?: string;
 }
 
 /** The text without the surrounding spaces; what is not text stays (the validator refuses it). */

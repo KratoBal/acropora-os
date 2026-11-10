@@ -6,6 +6,7 @@ import type {
 } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ApiError } from "@/lib/api/client";
 import {
   ProductHusbandryCard,
   husbandryChanges,
@@ -58,6 +59,7 @@ const husbandry = (
   factOverrides: Partial<ProductHusbandryFacts> = {},
 ): ProductHusbandry => ({
   productId: "product-1",
+  version: "ver-1",
   livestockKind: "FISH",
   facts: facts(factOverrides),
   verification: { verified: false, byUserId: null, at: null },
@@ -176,10 +178,84 @@ describe("A tartási blokk szerkesztője", () => {
     await waitFor(() => expect(api.updateHusbandry).toHaveBeenCalled());
     expect(api.updateHusbandry).toHaveBeenCalledWith("t", "product-1", {
       ellenorizve: true,
+      seenVersion: "ver-1",
     });
     expect(
       (await screen.findByTestId("husbandry-status")).textContent,
     ).toContain("Ellenőrizve");
+  });
+
+  it("az ellenőrzés a betöltött verziót küldi vissza, a sima mentés nem küld verziót", async () => {
+    api.husbandry.mockResolvedValue(husbandry({ version: "ver-7" }));
+    api.updateHusbandry.mockResolvedValue(husbandry({ version: "ver-8" }));
+    render(<ProductHusbandryCard token="t" product={product()} canManage />);
+    await screen.findByTestId("husbandry-status");
+    fireEvent.change(screen.getByLabelText("Kinek NEM ajánljuk (egy mondat)"), {
+      target: { value: "x" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Mentés" }));
+    await waitFor(() => expect(api.updateHusbandry).toHaveBeenCalledTimes(1));
+    expect(api.updateHusbandry.mock.calls[0]![2]).toEqual({ kinekNem: "x" });
+    // the next verification names the version the SAVE returned
+    fireEvent.click(
+      screen.getByRole("button", { name: "Mentés és ellenőrzöm" }),
+    );
+    await waitFor(() => expect(api.updateHusbandry).toHaveBeenCalledTimes(2));
+    expect(api.updateHusbandry.mock.calls[1]![2]).toEqual({
+      ellenorizve: true,
+      seenVersion: "ver-8",
+    });
+  });
+
+  it("409-nél a hiba kiírva marad, nem állítja, hogy ellenőrizve, és az Újratöltés a szerver állapotát hozza", async () => {
+    api.husbandry.mockResolvedValueOnce(husbandry({ version: "ver-1" }));
+    render(<ProductHusbandryCard token="t" product={product()} canManage />);
+    await screen.findByTestId("husbandry-status");
+    api.updateHusbandry.mockRejectedValue(
+      new ApiError("Közben módosult a tartási blokk. Töltsd újra.", 409),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Mentés és ellenőrzöm" }),
+    );
+    expect(await screen.findByText(/Közben módosult/)).toBeTruthy();
+    expect(screen.queryByText(/Elmentve és ellenőrizve/)).toBeNull();
+    expect(screen.getByTestId("husbandry-status").textContent).toContain(
+      "Nincs ellenőrizve",
+    );
+    // a reload takes the server's facts and the new version
+    api.husbandry.mockResolvedValueOnce(
+      husbandry({ version: "ver-2" }, { kinekNem: "Közben írták." }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Újratöltés" }));
+    await waitFor(() =>
+      expect(
+        (
+          screen.getByLabelText(
+            "Kinek NEM ajánljuk (egy mondat)",
+          ) as HTMLInputElement
+        ).value,
+      ).toBe("Közben írták."),
+    );
+    expect(screen.queryByRole("button", { name: "Újratöltés" })).toBeNull();
+    api.updateHusbandry.mockResolvedValue(husbandry({ version: "ver-3" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Mentés és ellenőrzöm" }),
+    );
+    await waitFor(() => expect(api.updateHusbandry).toHaveBeenCalledTimes(2));
+    expect(api.updateHusbandry.mock.calls[1]![2]).toEqual({
+      ellenorizve: true,
+      seenVersion: "ver-2",
+    });
+  });
+
+  it("a magyar nevet csak olvashatóan mutatja, a Nevek kártyára utalva", async () => {
+    api.husbandry.mockResolvedValue(
+      husbandry({}, { magyarNev: "Szarvkorall" }),
+    );
+    render(<ProductHusbandryCard token="t" product={product()} canManage />);
+    const row = await screen.findByTestId("husbandry-name");
+    expect(row.textContent).toContain("Szarvkorall");
+    expect(row.textContent).toContain("Nevek kártyán");
   });
 
   it("a hibás szám nem megy el, a szerver elutasítása kiírva marad", async () => {

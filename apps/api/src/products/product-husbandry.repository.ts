@@ -8,7 +8,10 @@ import type {
   ProductLivestockKind,
 } from "@acropora/types";
 
-import { missingHusbandryFields } from "./product-husbandry.js";
+import {
+  husbandryVersionOf,
+  missingHusbandryFields,
+} from "./product-husbandry.js";
 import { livestockKindFromRootNames } from "../integrations/medusa/medusa-livestock.policy.js";
 import { categoryPath } from "./product.types.js";
 
@@ -68,6 +71,8 @@ type StoredProduct = Prisma.ProductGetPayload<{ select: typeof productSelect }>;
 /** What a decision returns: the refusal's messages, or the columns to write and whether the facts are verified after it. */
 export type HusbandryDecision =
   | { refused: string[] }
+  /** The facts changed since the caller looked (a verification of unseen content): HTTP 409, nothing is written. */
+  | { conflict: string }
   | {
       data: Prisma.ProductDatasheetUncheckedUpdateInput;
       /** The key names the write touches, for the log. */
@@ -77,6 +82,7 @@ export type HusbandryDecision =
 export type HusbandryWriteResult =
   | { kind: "not-found" }
   | { kind: "refused"; errors: string[] }
+  | { kind: "conflict"; message: string }
   | { kind: "ok"; husbandry: ProductHusbandry };
 
 const decimalText = (value: Prisma.Decimal | null): string | null =>
@@ -128,6 +134,7 @@ export function toHusbandry(product: StoredProduct): ProductHusbandry {
   const verified = product.datasheet?.ellenorizveAt != null;
   return {
     productId: product.id,
+    version: husbandryVersionOf(facts),
     livestockKind: kind,
     facts,
     verification: {
@@ -175,6 +182,8 @@ export class ProductHusbandryRepository {
         const decision = decide(before);
         if ("refused" in decision)
           return { kind: "refused", errors: decision.refused } as const;
+        if ("conflict" in decision)
+          return { kind: "conflict", message: decision.conflict } as const;
 
         const wasVerifiedAt = stored.datasheet?.ellenorizveAt ?? null;
         const datasheet = await transaction.productDatasheet.upsert({
