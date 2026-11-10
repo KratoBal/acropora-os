@@ -1,5 +1,6 @@
 "use client";
 
+import { uploadAccept } from "@acropora/types";
 import { useEffect, useRef, useState } from "react";
 import {
   Icon,
@@ -240,7 +241,7 @@ export function DocumentPanel<T extends DocumentItem>({
             Fájl
             <input
               type="file"
-              accept="image/jpeg,image/png,application/pdf"
+              accept={uploadAccept(["jpeg", "png", "pdf"])}
               onChange={(event) => setFile(event.target.files?.[0] ?? null)}
               className="cursor-pointer text-sm text-pilot-grey-600 file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-pilot-aqua-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-pilot-aqua-700"
             />

@@ -6,6 +6,7 @@ import {
   hasPermission,
   PERMISSIONS,
   type ContractKind,
+  uploadAccept,
 } from "@acropora/types";
 import type { WorksheetDepartmentSummary } from "@acropora/types";
 import Link from "next/link";
@@ -833,7 +834,7 @@ export function PilotContractsPage() {
                       <input
                         className="sr-only"
                         type="file"
-                        accept="application/pdf"
+                        accept={uploadAccept(["pdf"])}
                         disabled={uploading === contract.id}
                         onChange={(event) =>
                           void upload(contract.id, event.target.files?.[0])
