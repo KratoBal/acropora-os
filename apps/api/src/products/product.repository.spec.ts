@@ -276,6 +276,12 @@ function createDatabase({
         return {};
       },
     },
+    productDatasheetFieldRefusal: {
+      deleteMany: async (args: unknown) => {
+        calls.push({ operation: "refusalDeleteMany", args });
+        return { count: 1 };
+      },
+    },
     domainEvent: {
       create: async (args: unknown) => {
         calls.push({ operation: "event", args });
@@ -1647,6 +1653,52 @@ describe("ProductRepository", () => {
       assert.equal(condition.contains, "geweih");
       assert.equal(condition.mode, "insensitive");
     }
+  });
+
+  /*
+    A MEGTAGADAS ES A KITOLTOTT NEV (barracuda, #2357): egy NEM ures nev feloldja a mezo megtagadasat ugyanabban a
+    tranzakcioban (a "kitoltve ES megtagadva" par nem keletkezhet); a torles (null vagy ures) nem nyul a megtagadashoz;
+    csak a kitoltott nevek mezoi oldodnak fel, a tobbi megtagadas marad.
+  */
+  it("resolves the refusal of a name that is filled, and only of that name's field", async () => {
+    const { database, calls } = createDatabase();
+    const repository = new ProductRepository(database);
+    await repository.update("product-1", {
+      angolNev: "Staghorn coral",
+      nemetNev: "",
+    });
+
+    const refusals = calls.filter(
+      (call) => call.operation === "refusalDeleteMany",
+    );
+    assert.equal(refusals.length, 1);
+    assert.deepEqual(refusals[0]!.args, {
+      where: {
+        datasheet: { productId: "product-1" },
+        mezo: { in: ["ANGOL_NEV"] },
+      },
+    });
+  });
+
+  it("leaves the refusals alone when a name is only cleared or no name is given", async () => {
+    const cleared = createDatabase();
+    await new ProductRepository(cleared.database).update("product-1", {
+      magyarNev: null,
+    });
+    assert.equal(
+      cleared.calls.filter((call) => call.operation === "refusalDeleteMany")
+        .length,
+      0,
+    );
+    const placement = createDatabase();
+    await new ProductRepository(placement.database).update("product-1", {
+      fenyIgeny: "EROS",
+    });
+    assert.equal(
+      placement.calls.filter((call) => call.operation === "refusalDeleteMany")
+        .length,
+      0,
+    );
   });
 
   it("does not touch the datasheet when no datasheet field is given", async () => {

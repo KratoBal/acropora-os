@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { datasheetPatchOf } from "./product-datasheet-patch.js";
+import {
+  datasheetPatchOf,
+  filledNameFields,
+} from "./product-datasheet-patch.js";
 
 /*
   MI PIROSIT (kartya 20b0dd47, S2): egy nem adott mezo is bekerul a patchbe (egy nev-frissites nullazna a tobbit); az ures
@@ -41,6 +44,27 @@ describe("az adatlap-patch a termek-frissitesbol", () => {
         aramlasIgeny: null,
       }),
       { nemetNev: null, fenyIgeny: "GYENGE", aramlasIgeny: null },
+    );
+  });
+});
+
+describe("a kitoltott nev-mezok (a megtagadas feloldasahoz)", () => {
+  it("csak a nem ures szoveggel kitoltott nevek mezo-jelei; a torles es a hianyzo nem", () => {
+    assert.deepEqual(filledNameFields(null), []);
+    assert.deepEqual(
+      filledNameFields(
+        datasheetPatchOf({
+          magyarNev: "Szarvkorall",
+          angolNev: null,
+          nemetNev: "  ",
+          fenyIgeny: "EROS",
+        }),
+      ),
+      ["MAGYAR_NEV"],
+    );
+    assert.deepEqual(
+      filledNameFields(datasheetPatchOf({ angolNev: "a", nemetNev: "b" })),
+      ["ANGOL_NEV", "NEMET_NEV"],
     );
   });
 });

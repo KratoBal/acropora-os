@@ -40,3 +40,24 @@ export function datasheetPatchOf(
   }
   return Object.keys(patch).length > 0 ? patch : null;
 }
+
+/**
+ * A NEV-MEZOK MEGTAGADAS-ALLAPOTA (`DatasheetField`): azok a mezok, amelyeknek a megtagadasat egy NEM ures nev feloldja.
+ * A megtagadas azt mondja, "megneztuk, es nem tudjuk leirni"; egy kitoltott nev ezt cafolja, tehat a megtagadas-sor
+ * megszunik (barracuda kerdese a #2357-en: a "kitoltve ES megtagadva" ellentmondo par az audit hibaja, itt meg sem
+ * keletkezhet). A torles (`null`) nem hoz letre es nem old fel megtagadast.
+ */
+export const NAME_REFUSAL_FIELDS = {
+  magyarNev: "MAGYAR_NEV",
+  angolNev: "ANGOL_NEV",
+  nemetNev: "NEMET_NEV",
+} as const;
+
+export function filledNameFields(
+  patch: DatasheetPatch | null,
+): (typeof NAME_REFUSAL_FIELDS)[keyof typeof NAME_REFUSAL_FIELDS][] {
+  if (!patch) return [];
+  return NAME_KEYS.filter((key) => typeof patch[key] === "string").map(
+    (key) => NAME_REFUSAL_FIELDS[key],
+  );
+}

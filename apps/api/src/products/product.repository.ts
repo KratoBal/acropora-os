@@ -18,7 +18,10 @@ import {
 } from "./takeover-price.js";
 import { recordOwnPrice } from "./price-history/own-price-history.js";
 import { isOwnSaleActive } from "./own-sale.js";
-import { datasheetPatchOf } from "./product-datasheet-patch.js";
+import {
+  datasheetPatchOf,
+  filledNameFields,
+} from "./product-datasheet-patch.js";
 import { retryOnSerializationConflict } from "../common/transaction-retry.util.js";
 import { unasShippingProfile } from "../integrations/medusa/medusa-unas-shipping.policy.js";
 import {
@@ -152,6 +155,10 @@ interface ProductTransaction {
   productCategory: {
     updateMany(args: unknown): Promise<unknown>;
     upsert(args: unknown): Promise<unknown>;
+  };
+  /** Egy kitoltott nev feloldja a mezo megtagadasat (kartya 20b0dd47). */
+  productDatasheetFieldRefusal: {
+    deleteMany(args: unknown): Promise<{ count: number }>;
   };
   domainEvent: {
     create(args: unknown): Promise<unknown>;
@@ -573,6 +580,12 @@ export class ProductRepository extends Repository {
           },
           include: productInclude,
         });
+        // egy kitoltott nev feloldja a mezo megtagadasat: a "kitoltve ES megtagadva" par itt nem keletkezhet
+        const filled = filledNameFields(datasheetPatch);
+        if (filled.length > 0)
+          await transaction.productDatasheetFieldRefusal.deleteMany({
+            where: { datasheet: { productId: id }, mezo: { in: filled } },
+          });
 
         if (primaryWasProvided) {
           await transaction.productCategory.updateMany({
