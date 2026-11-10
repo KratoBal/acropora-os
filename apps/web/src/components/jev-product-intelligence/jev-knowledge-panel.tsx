@@ -261,7 +261,11 @@ export function JevCopyPanel({
             block={block}
             entry={copy.find((entry) => entry.block === block)}
             facts={facts}
-            conflicts={block === "lead" || block === "body" ? conflicts : []}
+            conflicts={
+              block === "lead" || block === "body" || block === "usage"
+                ? conflicts
+                : []
+            }
             canApprove={canApprove}
             busy={busy}
             onSave={onSave}

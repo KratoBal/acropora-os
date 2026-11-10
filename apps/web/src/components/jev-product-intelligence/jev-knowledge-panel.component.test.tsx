@@ -60,7 +60,10 @@ describe("a vevői szöveg ütköző értékre figyelmeztet", () => {
   it("érték nélküli szövegnél csak a mezőt nevezi meg, riasztás nélkül", () => {
     panel("A gyártó forrásai nem egyeznek, most nincs ajánlott adag.");
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.getAllByText(/Ütköző mező: Adagolási rend/).length).toBe(2);
+    // lead, body, and the usage guide (V3.3): each can state a dose
+    expect(screen.getAllByText(/Ütköző mező: Adagolási rend/).length).toBe(3);
+    const usage = document.querySelector('[data-copy-block="usage"]')!;
+    expect(usage.textContent).toContain("Ütköző mező");
   });
 
   it("a SEO blokkok nem kapják a figyelmeztetést", () => {

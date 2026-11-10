@@ -442,6 +442,7 @@ const MAX_COPY: Record<ProductCopyBlock, number> = {
   body: 20000,
   seoTitle: 300,
   metaDescription: 1000,
+  usage: 4000,
 };
 
 /** The copy body as saved: trimmed, `\r\n` as `\n`; one line for SEO. */
@@ -764,8 +765,12 @@ export interface KnowledgeProjectionFact {
   public: boolean;
 }
 
+/** The blocks that go to the shop: the description's two and the usage guide (V3.3); SEO goes with the product itself. */
+const SHOP_BLOCKS = ["lead", "body", "usage"] as const;
+type ShopBlock = (typeof SHOP_BLOCKS)[number];
+
 export interface KnowledgeProjectionCopy {
-  block: "lead" | "body";
+  block: ShopBlock;
   body: string;
   revision: number;
 }
@@ -791,8 +796,8 @@ export interface FactRow extends FactIdentity {
  * builds of the same state are equal. Only the facts the buyer may see go
  * (D5: VERIFIED, and since PR 2 a `public` definition: `canLeave`); the others
  * stay in the OS. The copy carries the APPROVED,
- * NOT STALE `lead` and `body` written against VERIFIED facts only; SEO goes
- * through the normal product projection.
+ * NOT STALE `lead`, `body` and `usage` (V3.3) written against VERIFIED facts
+ * only, in that order; SEO goes through the normal product projection.
  *
  * THE GATE IS ON THE OUTPUT, NOT THE INPUT (nautilus, review point 1). The
  * copy's staleness is measured against the facts as they are (all of them for
@@ -823,11 +828,13 @@ export function knowledgeProjection(
       })),
     copy: copy
       .filter(
-        (row): row is CopyRow & { block: "lead" | "body" } =>
-          (row.block === "lead" || row.block === "body") &&
+        (row): row is CopyRow & { block: ShopBlock } =>
+          (SHOP_BLOCKS as readonly string[]).includes(row.block) &&
           publishable(row, facts),
       )
-      .sort((a, b) => (a.block === b.block ? 0 : a.block === "lead" ? -1 : 1))
+      .sort(
+        (a, b) => SHOP_BLOCKS.indexOf(a.block) - SHOP_BLOCKS.indexOf(b.block),
+      )
       .map((row) => ({
         block: row.block,
         body: row.body,
