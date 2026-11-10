@@ -88,3 +88,67 @@ describe("node-test-gated", () => {
     assert.equal(result.status, 2);
   });
 });
+
+/*
+  THE GATE'S TODO EXEMPTION (barracuda on #2393): a failing `todo` test is `not ok N - name # TODO` with the suite `ok`, and
+  node exits 0 on purpose. A name that contains the words is escaped by node (`\\# TODO`), so a real failure keeps its line.
+  The lines below are the shapes measured on node v22.23.3; the gate runs on a log file, as in CI.
+*/
+describe("tap-stream-gate: todo tests", () => {
+  const GATE = "../../scripts/tap-stream-gate.mjs";
+
+  function gateOn(...lines: string[]) {
+    const path = join(
+      directory,
+      `tap-${Math.random().toString(36).slice(2)}.log`,
+    );
+    writeFileSync(path, `${lines.join("\n")}\n`);
+    return spawnSync(process.execPath, [GATE, path], {
+      encoding: "utf8",
+      env: cleanEnvironment(),
+    });
+  }
+
+  it("lets a failing todo test through, with or without a reason, indented or turbo-prefixed", () => {
+    assert.equal(gateOn("    not ok 1 - failing todo # TODO later").status, 0);
+    assert.equal(gateOn("not ok 2 - later # TODO").status, 0);
+    assert.equal(
+      gateOn("@acropora/api:test:     not ok 3 - x # TODO soon").status,
+      0,
+    );
+    assert.equal(
+      gateOn("2026-11-10T22:00:00.0000000Z     not ok 4 - y # TODO").status,
+      0,
+    );
+  });
+
+  it("still refuses a real failure, a suite failure, and a test whose NAME holds the words (node escapes the hash)", () => {
+    assert.equal(gateOn("    not ok 1 - a failing test").status, 1);
+    assert.equal(gateOn("not ok 2 - the suite").status, 1);
+    assert.equal(
+      gateOn("    not ok 2 - name with a hash \\# TODO in it").status,
+      1,
+    );
+  });
+
+  it("a hook failure is refused even next to a todo line", () => {
+    const result = gateOn(
+      "    not ok 1 - failing todo # TODO",
+      "  failureType: 'hookFailed'",
+    );
+    assert.equal(result.status, 1);
+  });
+
+  it("the premise: node itself exits 0 and keeps the suite ok on a failing todo test", () => {
+    const path = fixture(
+      "todo",
+      'describe("g", () => { it("t", { todo: true }, () => { throw new Error("no"); }); });',
+    );
+    const plain = spawnSync(process.execPath, ["--test", path], {
+      encoding: "utf8",
+      env: cleanEnvironment(),
+    });
+    assert.equal(plain.status, 0);
+    assert.equal(run(path).status, 0);
+  });
+});

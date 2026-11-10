@@ -121,6 +121,17 @@ const TURBO_PREFIX = /^\S*:\s*/;
 
 /** A TAP failure line, whatever indentation or prefix the runner put on it. */
 const NOT_OK = /^not ok \d+ - /;
+/**
+ * A TODO TEST THAT FAILS IS NOT A FAILURE (barracuda on #2393, measured 2026-11-10 on node v22.23.3): node reports
+ * `not ok N - name # TODO` (with an optional reason after it) for a failing `{ todo: true }` or `it.todo` test, keeps the
+ * suite `ok`, counts `# todo`, and exits 0 on purpose. The gate used to read that line as a failure, so the first
+ * failing todo would have turned a unit run red that node itself calls green.
+ *
+ * THE DIRECTIVE IS ` # TODO` WITH A LITERAL HASH. A test NAME that contains the words is escaped by node (`\# TODO`), so
+ * a real failure named "x # TODO y" keeps its `not ok` and is still refused: the pattern wants whitespace right before an
+ * unescaped `#`, and the backslash sits there. (Measured in the same run: `not ok 2 - name with a hash \# TODO in it`.)
+ */
+const TODO_DIRECTIVE = /\s#\sTODO(?:\s|$)/;
 const HOOK_FAILED = /failureType:\s*'?hookFailed'?/;
 
 /**
@@ -165,7 +176,10 @@ const findings = [];
 for (const [index, raw] of text.split("\n").entries()) {
   const tap = tapLine(raw);
   const plain = withoutTimestamp(raw);
-  if (NOT_OK.test(tap) || HOOK_FAILED.test(plain))
+  if (
+    (NOT_OK.test(tap) && !TODO_DIRECTIVE.test(tap)) ||
+    HOOK_FAILED.test(plain)
+  )
     findings.push({ number: index + 1, line: plain.trim() });
 }
 
