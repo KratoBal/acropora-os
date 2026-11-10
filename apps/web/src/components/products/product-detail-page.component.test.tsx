@@ -319,6 +319,23 @@ describe("ProductDetailPage mirror ownership", () => {
     ]);
   });
 
+  // card 20b0dd47, acrobot 46058: the names card on every live animal, the fish included; not on other products
+  it.each(["FISH", "CORAL", "INVERTEBRATE"] as const)(
+    "a Nevek kártya élő állaton megjelenik: %s",
+    async (kind) => {
+      api.detail.mockResolvedValue({ ...detail, livestockKind: kind });
+      render(<ProductDetailPage productId="product-1" />);
+      await screen.findByText("UNAS terméktükör");
+      expect(await screen.findByText("Magyar név")).toBeTruthy();
+    },
+  );
+
+  it("a Nevek kártya nem élő állaton nincs a lapon", async () => {
+    render(<ProductDetailPage productId="product-1" />);
+    await screen.findByText("UNAS terméktükör");
+    expect(screen.queryByText("Magyar név")).toBeNull();
+  });
+
   it("a JEV kártya a szerver kapcsolóját mondja, és az aloldalra visz", async () => {
     render(<ProductDetailPage productId="product-1" />);
     const card = (
