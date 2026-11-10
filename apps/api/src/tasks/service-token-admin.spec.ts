@@ -178,20 +178,16 @@ describe("service token admin: the service", () => {
 });
 
 describe("service token admin: the wiring", () => {
-  const controller = readFileSync(
-    new URL("./service-token-admin.controller.ts", import.meta.url),
-    "utf8",
-  );
-  const repository = readFileSync(
-    new URL("./service-token-admin.repository.ts", import.meta.url),
-    "utf8",
-  );
-  const module = readFileSync(
-    new URL("./tasks.module.ts", import.meta.url),
-    "utf8",
-  );
+  /*
+    THE PATH IS THE PACKAGE ROOT's, NOT `import.meta.url`'s: the compiled run executes from `test-dist/`, where no `.ts`
+    file sits next to the spec (the first form failed there with ENOENT, and a throw in a `describe` body is a silent
+    `not ok` with exit 0 and `# fail 0`). The read is inside the tests, so a missing file is a failing test.
+  */
+  const source = (name: string): string =>
+    readFileSync(`src/tasks/${name}`, "utf8");
 
   it("puts users.manage on every route and never caches", () => {
+    const controller = source("service-token-admin.controller.ts");
     assert.equal(
       (
         controller.match(/@RequirePermissions\(PERMISSIONS\.USERS_MANAGE\)/g) ??
@@ -204,12 +200,14 @@ describe("service token admin: the wiring", () => {
   });
 
   it("is registered in the module", () => {
+    const module = source("tasks.module.ts");
     assert.match(module, /ServiceTokenAdminController/);
     assert.match(module, /ServiceTokenAdminService/);
     assert.match(module, /ServiceTokenAdminRepository/);
   });
 
   it("keeps the raw key and the hash out of the audit rows and the views", () => {
+    const repository = source("service-token-admin.repository.ts");
     const audit = [
       ...repository.matchAll(/auditLog\.create\(\{[\s\S]*?\n {8,10}\}\);/g),
     ].map((match) => match[0]);
@@ -224,11 +222,13 @@ describe("service token admin: the wiring", () => {
   });
 
   it("has no constructor parameter: a typed one is a dependency Nest cannot resolve (the bootstrap spec's failure)", () => {
+    const repository = source("service-token-admin.repository.ts");
     assert.match(repository, /constructor\(\) \{/);
     assert.doesNotMatch(repository, /constructor\([^)]+\)/);
   });
 
   it("writes each row's audit in the same transaction", () => {
+    const repository = source("service-token-admin.repository.ts");
     assert.equal((repository.match(/\$transaction/g) ?? []).length, 2);
     assert.match(repository, /updated\.count === 1/);
   });
