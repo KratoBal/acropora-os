@@ -51,6 +51,22 @@ export interface HusbandrySourceRow {
   meretDimenzio: string | null;
   szarmazas: string | null;
   kinekNem: string | null;
+  /*
+    THE OPTIONAL FACTS (V2.2 S1b): additive keys in the same text, `v` stays 1 (a reader that does not know a key ignores it; a
+    key that is absent is "being checked"). Missing from a row that predates the columns reads as null.
+  */
+  tempMinC?: { toString(): string } | number | null;
+  tempMaxC?: { toString(): string } | number | null;
+  salinityMinSg?: { toString(): string } | number | null;
+  salinityMaxSg?: { toString(): string } | number | null;
+  khMinDkh?: { toString(): string } | number | null;
+  khMaxDkh?: { toString(): string } | number | null;
+  lifespanYears?: number | null;
+  stingOrVenom?: boolean | null;
+  handlingWarning?: string | null;
+  quarantineWeeks?: number | null;
+  acclimatization?: string | null;
+  breedsInTank?: boolean | null;
   ellenorizveAt: Date | null;
 }
 
@@ -109,6 +125,29 @@ export function husbandryMetadata(
     put("max_size", { value: size, dimension: row.meretDimenzio });
   put("sourcing", row.szarmazas);
   put("not_for", text(row.kinekNem));
+  /*
+    THE OPTIONAL FACTS, in a fixed order after the required ones. A RANGE goes only with BOTH ends: "24" and "at least 24" are not
+    the same statement, and a one-sided range would be read as the first. A sting or venom flag goes out as it is stored, with the
+    handling warning when there is one (the OS refuses to store a stated hazard without its warning; the projection does not
+    hide a hazard it finds without one: a shown hazard is safer than a missing one).
+  */
+  const range = (
+    low: { toString(): string } | number | null | undefined,
+    high: { toString(): string } | number | null | undefined,
+  ): { min: number; max: number } | null => {
+    const min = numberOf(low ?? null);
+    const max = numberOf(high ?? null);
+    return min !== null && max !== null ? { min, max } : null;
+  };
+  put("temp_c", range(row.tempMinC, row.tempMaxC));
+  put("salinity_sg", range(row.salinityMinSg, row.salinityMaxSg));
+  put("kh_dkh", range(row.khMinDkh, row.khMaxDkh));
+  put("lifespan_years", row.lifespanYears);
+  put("sting_or_venom", row.stingOrVenom);
+  put("handling_warning", text(row.handlingWarning ?? null));
+  put("quarantine_weeks", row.quarantineWeeks);
+  put("acclimatization", text(row.acclimatization ?? null));
+  put("breeds_in_tank", row.breedsInTank);
 
   // a verified block with no fact to say says nothing
   if (Object.keys(facts).length === 0) return null;
