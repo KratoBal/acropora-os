@@ -216,6 +216,14 @@ function createDatabase({
     oka: string;
     createdAt: Date;
   }[],
+  /** the stored datasheet row the husbandry verification reads (null: no row) */
+  storedDatasheet = null as {
+    magyarNev: string | null;
+    fenyIgeny: string | null;
+    aramlasIgeny: string | null;
+    ellenorizveAt: Date | null;
+    ellenorizteUserId: string | null;
+  } | null,
   authorityUpdateCount = 1,
   /** rows the conditional variant price copy touches (0: a price was typed in between) */
   variantCopyCount = 1,
@@ -288,6 +296,16 @@ function createDatabase({
     productDatasheet: {
       upsert: async (args: unknown) => {
         calls.push({ operation: "datasheetUpsert", args });
+        return {};
+      },
+      findUnique: async (args: unknown) => {
+        calls.push({ operation: "datasheetFind", args });
+        return storedDatasheet;
+      },
+    },
+    auditLog: {
+      create: async (args: unknown) => {
+        calls.push({ operation: "audit", args });
         return {};
       },
     },
@@ -1803,6 +1821,144 @@ describe("ProductRepository", () => {
       calls.filter((call) => call.operation === "transactionUpdate").length,
       0,
     );
+  });
+
+  /*
+    A TARTASI BLOK ELLENORZESE MASIK IRASI UTON (V2.2, barracuda #2374). MI PIROSIT: a nevek vegpontjan a magyar nev cserejekor
+    az ellenorzes megmarad; az altalanos frissiteseben a fenyigeny vagy az aramlasigeny cserejekor megmarad; az angol vagy a
+    nemet nev irasa visszavon (nem tartasi teny); ugyanannak az erteknek a visszairasa visszavon; az ellenorzes nelkuli soron
+    naplosor keletkezik; a visszavonas naplo nelkul marad.
+  */
+  const VERIFIED_SHEET = {
+    magyarNev: "Szarvkorall",
+    fenyIgeny: "KOZEPES",
+    aramlasIgeny: "KOZEPES",
+    ellenorizveAt: new Date("2026-11-10T10:00:00.000Z"),
+    ellenorizteUserId: "user-9",
+  };
+  const upsertOf = (calls: Array<{ operation: string; args: unknown }>) =>
+    calls.find((call) => call.operation === "datasheetUpsert")!.args as {
+      create: Record<string, unknown>;
+      update: Record<string, unknown>;
+    };
+  const WITHDRAWN = { ellenorizveAt: null, ellenorizteUserId: null };
+
+  it("a changed Hungarian name on the names path withdraws the husbandry verification and logs it", async () => {
+    const { database, calls } = createDatabase({
+      storedDatasheet: VERIFIED_SHEET,
+    });
+    await new ProductRepository(database).updateDatasheetNames(
+      "product-1",
+      { magyarNev: "Agancskorall" },
+      "user-1",
+    );
+    const upsert = upsertOf(calls);
+    assert.deepEqual(upsert.update, {
+      magyarNev: "Agancskorall",
+      ...WITHDRAWN,
+    });
+    assert.deepEqual(upsert.create, {
+      productId: "product-1",
+      magyarNev: "Agancskorall",
+      ...WITHDRAWN,
+    });
+    const audit = calls.find((call) => call.operation === "audit")!.args as {
+      data: {
+        userId: string;
+        action: string;
+        metadata: { changed: string[]; via: string };
+      };
+    };
+    assert.equal(audit.data.action, "product_husbandry.verification-withdrawn");
+    assert.equal(audit.data.userId, "user-1");
+    assert.deepEqual(audit.data.metadata.changed, ["magyarNev"]);
+    assert.equal(audit.data.metadata.via, "names");
+    const events = calls.filter(
+      (call) =>
+        call.operation === "event" &&
+        (call.args as { data: { eventType: string } }).data.eventType ===
+          "product.husbandry.verification-withdrawn",
+    );
+    assert.equal(events.length, 1);
+  });
+
+  it("a changed light or flow need on the general update withdraws it too", async () => {
+    const { database, calls } = createDatabase({
+      storedDatasheet: VERIFIED_SHEET,
+    });
+    await new ProductRepository(database).update("product-1", {
+      fenyIgeny: "EROS",
+    });
+    const updateArgs = calls.find(
+      (call) => call.operation === "transactionUpdate",
+    )?.args as {
+      data: {
+        datasheet: {
+          upsert: { create: unknown; update: unknown };
+        };
+      };
+    };
+    assert.deepEqual(updateArgs.data.datasheet.upsert.update, {
+      fenyIgeny: "EROS",
+      ...WITHDRAWN,
+    });
+    assert.deepEqual(updateArgs.data.datasheet.upsert.create, {
+      fenyIgeny: "EROS",
+      ...WITHDRAWN,
+    });
+    assert.equal(calls.filter((call) => call.operation === "audit").length, 1);
+  });
+
+  it("an English or German name write does not withdraw it, and reads nothing", async () => {
+    const { database, calls } = createDatabase({
+      storedDatasheet: VERIFIED_SHEET,
+    });
+    await new ProductRepository(database).updateDatasheetNames(
+      "product-1",
+      { angolNev: "Staghorn coral", nemetNev: "Hirschgeweihkoralle" },
+      "user-1",
+    );
+    assert.deepEqual(upsertOf(calls).update, {
+      angolNev: "Staghorn coral",
+      nemetNev: "Hirschgeweihkoralle",
+    });
+    assert.equal(calls.filter((call) => call.operation === "audit").length, 0);
+    assert.equal(
+      calls.filter((call) => call.operation === "datasheetFind").length,
+      0,
+    );
+  });
+
+  it("writing back the SAME value moves nothing and keeps the verification", async () => {
+    const { database, calls } = createDatabase({
+      storedDatasheet: VERIFIED_SHEET,
+    });
+    await new ProductRepository(database).updateDatasheetNames(
+      "product-1",
+      { magyarNev: "Szarvkorall" },
+      "user-1",
+    );
+    assert.deepEqual(upsertOf(calls).update, { magyarNev: "Szarvkorall" });
+    assert.equal(calls.filter((call) => call.operation === "audit").length, 0);
+  });
+
+  it("a block that was not verified has nothing to withdraw: no columns, no log", async () => {
+    for (const storedDatasheet of [
+      null,
+      { ...VERIFIED_SHEET, ellenorizveAt: null, ellenorizteUserId: null },
+    ]) {
+      const { database, calls } = createDatabase({ storedDatasheet });
+      await new ProductRepository(database).updateDatasheetNames(
+        "product-1",
+        { magyarNev: "Agancskorall" },
+        "user-1",
+      );
+      assert.deepEqual(upsertOf(calls).update, { magyarNev: "Agancskorall" });
+      assert.equal(
+        calls.filter((call) => call.operation === "audit").length,
+        0,
+      );
+    }
   });
 
   it("the names write takes only the three names: a placement need handed to it by an internal caller is not written", async () => {

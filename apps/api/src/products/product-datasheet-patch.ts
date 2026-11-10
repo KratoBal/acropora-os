@@ -61,3 +61,34 @@ export function filledNameFields(
     (key) => NAME_REFUSAL_FIELDS[key],
   );
 }
+
+/**
+ * THE HUSBANDRY FACTS THE OTHER WRITE PATHS CAN CHANGE (V2.2, barracuda on #2374): the Hungarian name, the light need and
+ * the flow need are required facts of the husbandry block (`missingHusbandryFields`), but they are written through the
+ * names path and the general product update, not through `PATCH /products/:id/husbandry`. An edit of ANY husbandry fact
+ * withdraws the block's verification, whichever path it comes through: the new content was verified by nobody. The English
+ * and German names are not husbandry facts, so they do not withdraw it.
+ */
+export const HUSBANDRY_FACT_PATCH_KEYS = [
+  "magyarNev",
+  "fenyIgeny",
+  "aramlasIgeny",
+] as const;
+
+export type HusbandryFactPatchKey = (typeof HUSBANDRY_FACT_PATCH_KEYS)[number];
+
+/**
+ * THE FACTS THIS PATCH ACTUALLY CHANGES: a key counts only when it is given AND differs from the stored value (a save that
+ * writes back the same value moved nothing, and must not cost the block its verification). A row that does not exist yet
+ * stores null for every key.
+ */
+export function changedHusbandryFacts(
+  patch: DatasheetPatch | null,
+  stored: Partial<Record<HusbandryFactPatchKey, unknown>> | null,
+): HusbandryFactPatchKey[] {
+  if (!patch) return [];
+  return HUSBANDRY_FACT_PATCH_KEYS.filter((key) => {
+    if (patch[key] === undefined) return false;
+    return (stored?.[key] ?? null) !== patch[key];
+  });
+}

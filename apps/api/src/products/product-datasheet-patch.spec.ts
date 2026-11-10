@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  changedHusbandryFacts,
   datasheetPatchOf,
   filledNameFields,
 } from "./product-datasheet-patch.js";
@@ -66,5 +67,60 @@ describe("a kitoltott nev-mezok (a megtagadas feloldasahoz)", () => {
       filledNameFields(datasheetPatchOf({ angolNev: "a", nemetNev: "b" })),
       ["ANGOL_NEV", "NEMET_NEV"],
     );
+  });
+});
+
+/*
+  MI PIROSIT (V2.2, barracuda #2374): egy nem adott kulcs valtozasnak szamit; a tarolttal egyezo ertek valtozasnak szamit; az
+  angol vagy a nemet nev valtozasnak szamit; a sor nelkuli termeken a null-null irasa valtozasnak szamit.
+*/
+describe("a tartasi tenyek valtozasa az adatlap-patchben", () => {
+  const stored = {
+    magyarNev: "Szarvkorall",
+    fenyIgeny: "KOZEPES",
+    aramlasIgeny: null,
+  };
+
+  it("csak az adott, a tarolttol elterő tartasi teny szamit", () => {
+    assert.deepEqual(
+      changedHusbandryFacts({ magyarNev: "Agancskorall" }, stored),
+      ["magyarNev"],
+    );
+    assert.deepEqual(
+      changedHusbandryFacts(
+        { fenyIgeny: "EROS", aramlasIgeny: "GYENGE" },
+        stored,
+      ),
+      ["fenyIgeny", "aramlasIgeny"],
+    );
+    assert.deepEqual(changedHusbandryFacts({ magyarNev: null }, stored), [
+      "magyarNev",
+    ]);
+  });
+
+  it("a visszairt azonos ertek, a nem adott kulcs es az angol vagy nemet nev nem szamit", () => {
+    assert.deepEqual(
+      changedHusbandryFacts({ magyarNev: "Szarvkorall" }, stored),
+      [],
+    );
+    assert.deepEqual(
+      changedHusbandryFacts({ fenyIgeny: "KOZEPES" }, stored),
+      [],
+    );
+    assert.deepEqual(
+      changedHusbandryFacts(
+        { angolNev: "Staghorn", nemetNev: "Hirsch" },
+        stored,
+      ),
+      [],
+    );
+    assert.deepEqual(changedHusbandryFacts(null, stored), []);
+  });
+
+  it("sor nelkuli termeken a tarolt ertek null: egy ertek valtozas, a null nem", () => {
+    assert.deepEqual(changedHusbandryFacts({ fenyIgeny: "EROS" }, null), [
+      "fenyIgeny",
+    ]);
+    assert.deepEqual(changedHusbandryFacts({ fenyIgeny: null }, null), []);
   });
 });
