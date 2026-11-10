@@ -552,7 +552,13 @@ export class ContentService {
       throw new BadRequestException("A cim nem lehet ures.");
 
     const item = await this.repository.detail(input.contentId);
-    if (!item) throw new NotFoundException("A tartalom nem található.");
+    /*
+      CSAK A SAJAT TETEL (barracuda a #2381 jovahagyasan): a gepi token azt a fiokot jelenti, amelyik a tetelt BEADTA. Egy masik
+      szerzo (egy ember) tetelet atirni nem szabad, akkor sem, ha az azonositot ismeri: a tetel "nem talalhato", ugyanaz a 404, amit a
+      visszaolvaso ad, es az ELSO ellenorzes, hogy a tetel allapota (409) se szivarogjon egy idegen tetelrol.
+    */
+    if (!item || item.authorId !== input.authorId)
+      throw new NotFoundException("A tartalom nem található.");
 
     if (!AGENT_REVISABLE_STATES.includes(item.state))
       throw new ConflictException(

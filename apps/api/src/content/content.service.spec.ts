@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { ConflictException } from "@nestjs/common";
+import { ConflictException, NotFoundException } from "@nestjs/common";
 
 import { ArticleStepError } from "./article.repository.js";
 import { ContentService } from "./content.service.js";
@@ -922,14 +922,81 @@ describe("the shared review queue, in the query itself", () => {
  *   3. legyen nyoma, mi valtozott.
  */
 describe("a beadott tartalom gepi javitasa", () => {
-  function tetel(allapot: string, torzs = "regi torzs") {
+  function tetel(allapot: string, torzs = "regi torzs", szerzo = "agens-1") {
     return (async () => ({
       id: "c1",
       title: "Regi cim",
       body: torzs,
       state: allapot,
+      authorId: szerzo,
     })) as unknown as ContentRepository["detail"];
   }
+
+  /*
+    CSAK A SAJAT TETEL (barracuda a #2381 jovahagyasan): a gepi javitas masik szerzo tetelet nem irhatja at. MI PIROSIT: egy ember
+    tetele atirhato egy gepi tokennel; az idegen tetel 409-et ad (az allapota szivarog) 404 helyett; az iras megtortenik, mielott
+    a szerzot ellenoriznenk; a hianyzo szerzo (authorId nelkuli tetel) atengedett.
+  */
+  it("masik szerzo tetelet NEM irja at: 404, es semmit nem ir", async () => {
+    for (const allapot of [
+      "DRAFTING",
+      "AWAITING_REVISION",
+      "AWAITING_REVIEW",
+    ]) {
+      const { service, calls } = serviceWith({
+        detail: tetel(allapot, "regi torzs", "ember-7"),
+      });
+      await assert.rejects(
+        () =>
+          service.reviseFromAgent({
+            contentId: "c1",
+            authorId: "agens-1",
+            body: "idegen atiras",
+            title: "Idegen cim",
+          }),
+        NotFoundException,
+        allapot,
+      );
+      assert.equal(calls.length, 0, `${allapot}: nothing may be written`);
+    }
+  });
+
+  it("az idegen tetel allapota nem szivarog: egy jovahagyasra varo, masik szerzoju tetel is 404, nem 409", async () => {
+    const { service } = serviceWith({
+      detail: tetel("AWAITING_APPROVAL", "regi torzs", "ember-7"),
+    });
+    await assert.rejects(
+      () =>
+        service.reviseFromAgent({
+          contentId: "c1",
+          authorId: "agens-1",
+          body: "x",
+        }),
+      NotFoundException,
+    );
+  });
+
+  it("a szerzo nelkuli tetel sem irhato at gepi tokennel", async () => {
+    const { service, calls } = serviceWith({
+      detail: (async () => ({
+        id: "c1",
+        title: "Regi cim",
+        body: "regi",
+        state: "DRAFTING",
+        authorId: null,
+      })) as unknown as ContentRepository["detail"],
+    });
+    await assert.rejects(
+      () =>
+        service.reviseFromAgent({
+          contentId: "c1",
+          authorId: "agens-1",
+          body: "x",
+        }),
+      NotFoundException,
+    );
+    assert.equal(calls.length, 0);
+  });
 
   it("atirja a torzset, es NEM hoz letre uj tetelt", async () => {
     const { service, calls } = serviceWith({
