@@ -53,6 +53,13 @@ import {
   type LandingPageOutcome,
 } from "./medusa-landing-projection.js";
 import {
+  describeLivestockArrivalsProjection,
+  type LivestockArrivalsOutcome,
+  prismaLivestockArrivalSource,
+  projectLivestockArrivals,
+  projectLivestockArrivalsInRound,
+} from "./medusa-livestock-arrivals-projection.js";
+import {
   describeRedirectProjection,
   projectUrlRedirects,
   type RedirectProjectionOutcome,
@@ -267,6 +274,8 @@ export interface MedusaProjectionSchedulerDeps {
   runHomepageContent?: () => Promise<HomepageProjectionOutcome>;
   /** Be van-e kapcsolva a kezdőlap küldése: a változó VAGY az admin kapcsolója. */
   homepageSwitchedOn?: () => Promise<boolean>;
+  /** Az érkező állatok listájának köre (V2.6 S4b). */
+  runLivestockArrivals?: () => Promise<LivestockArrivalsOutcome>;
   /** A boltban maradt élő állat fajta letörlésének köre (kártya 4b30b373). */
   runLeftoverKinds?: () => Promise<LeftoverKindReport>;
 }
@@ -308,6 +317,7 @@ export class MedusaProjectionScheduler
   private readonly runLandingPages: () => Promise<LandingPageOutcome[]>;
   private readonly runHomepageContent: () => Promise<HomepageProjectionOutcome>;
   private readonly homepageOn: () => Promise<boolean>;
+  private readonly runLivestockArrivals: () => Promise<LivestockArrivalsOutcome>;
   private readonly runLeftoverKinds: () => Promise<LeftoverKindReport>;
   /** Az első lefutás összegzést is naplóz (ez a futás látható jele), a többi csak, ha törölt valamit. */
   private fajtaElsoKor = true;
@@ -360,6 +370,17 @@ export class MedusaProjectionScheduler
             stderr: (value) => this.logNemUres(value, "warn"),
           }),
           prismaLandingSource,
+          true,
+        ));
+    this.runLivestockArrivals =
+      deps?.runLivestockArrivals ??
+      (async () =>
+        projectLivestockArrivals(
+          await medusaClientForProjection(storedCredentialProvider(), {
+            stdout: (value) => this.logNemUres(value, "log"),
+            stderr: (value) => this.logNemUres(value, "warn"),
+          }),
+          prismaLivestockArrivalSource,
           true,
         ));
     this.runLeftoverKinds =
@@ -487,6 +508,7 @@ export class MedusaProjectionScheduler
     await this.atiranyitasKor();
     await this.landingKor();
     await this.kezdolapKor();
+    await this.erkezoAllatokKor();
     await this.fajtaKor();
     const kezdet = this.now();
     const akcio = await this.akcioHatarAzonositok();
@@ -658,6 +680,28 @@ export class MedusaProjectionScheduler
     } catch (error) {
       this.naplo.warn(
         `Landing oldalak: a kor nem futott le (${
+          error instanceof Error ? error.message : String(error)
+        })`,
+      );
+    }
+  }
+
+  /**
+   * AZ ÉRKEZŐ ÁLLATOK EGY KÖRE (V2.6 S4b), a kezdőlap után, ugyanazzal a szabállyal: a hiba csak napló, a termék-vetítést
+   * nem állítja meg. Kapcsolóval, alapból KI (a commerce modul, #719, előbb kerül ki).
+   */
+  private async erkezoAllatokKor(): Promise<void> {
+    if (!projectLivestockArrivalsInRound(this.environment)) return;
+    try {
+      const eredmeny = await this.runLivestockArrivals();
+      // a set over the shop's cap is a warning every round, changed or not (barracuda, #2354)
+      if (eredmeny.leftOut)
+        this.naplo.warn(describeLivestockArrivalsProjection(eredmeny));
+      else if (eredmeny.status !== "unchanged")
+        this.naplo.log(describeLivestockArrivalsProjection(eredmeny));
+    } catch (error) {
+      this.naplo.warn(
+        `Erkezo allatok: a kor nem futott le (${
           error instanceof Error ? error.message : String(error)
         })`,
       );

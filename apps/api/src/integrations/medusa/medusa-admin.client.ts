@@ -36,6 +36,7 @@ import type { KnowledgeProjection } from "../../products/knowledge/knowledge.pol
 import type { MedusaShippingFlags } from "./medusa-shipping-attributes.policy.js";
 import type { MedusaBrandRecord } from "./medusa-brand-module.policy.js";
 import type { MedusaHomepageContentRecord } from "./medusa-homepage-projection.js";
+import type { MedusaLivestockArrival } from "./medusa-livestock-arrivals-projection.js";
 import type { MedusaLandingPageRecord } from "./medusa-landing-projection.js";
 
 export interface MedusaProductLookupRow {
@@ -1352,6 +1353,13 @@ export interface MedusaAdminClient {
    * ugyanígy számolja, és csak eltérésnél küld.
    */
   fetchUrlRedirects(): Promise<MedusaUrlRedirectList>;
+  /**
+   * AZ ERKEZO ALLATOK LISTAJA a boltban (V2.6 S4b; a commerce `GET /admin/livestock-arrivals`, #719). Ures lista, ha a
+   * modul meg nincs telepitve (404): akkor az elso kor kuld, es a PUT mondja meg a hibat.
+   */
+  fetchLivestockArrivals(): Promise<MedusaLivestockArrival[]>;
+  /** A TELJES LISTA CSEREJE (`PUT`): ami nincs a torzsben, kikerul. EZ IR A BOLTI OLDALRA. */
+  replaceLivestockArrivals(arrivals: MedusaLivestockArrival[]): Promise<void>;
   /**
    * A TELJES LISTA CSERÉJE (`PUT`): ami nincs a törzsben, az eltűnik. EZ IR A
    * BOLTI OLDALRA.
@@ -2742,6 +2750,28 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
         body: JSON.stringify({ os_brand_id: osBrandId }),
       },
     );
+  }
+
+  async fetchLivestockArrivals(): Promise<MedusaLivestockArrival[]> {
+    try {
+      const body = await this.request<{
+        livestock_arrivals: MedusaLivestockArrival[];
+      }>("/admin/livestock-arrivals");
+      return body.livestock_arrivals ?? [];
+    } catch (error) {
+      if (error instanceof MedusaAdminHttpError && error.status === 404)
+        return [];
+      throw error;
+    }
+  }
+
+  async replaceLivestockArrivals(
+    arrivals: MedusaLivestockArrival[],
+  ): Promise<void> {
+    await this.request("/admin/livestock-arrivals", {
+      method: "PUT",
+      body: JSON.stringify({ arrivals }),
+    });
   }
 
   async fetchUrlRedirects(): Promise<MedusaUrlRedirectList> {

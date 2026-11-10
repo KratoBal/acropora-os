@@ -86,6 +86,10 @@ const detail: ProductDetail = {
   advisorKind: null,
   fenyIgeny: null,
   aramlasIgeny: null,
+  livestockKind: null,
+  magyarNev: null,
+  angolNev: null,
+  nemetNev: null,
   archivedAt: null,
   brand: { id: "brand-1", name: "Acme" },
   primaryCategory: {

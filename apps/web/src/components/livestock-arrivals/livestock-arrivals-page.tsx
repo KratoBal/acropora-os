@@ -300,7 +300,11 @@ function ArrivalDrawer({
           <span>
             Előjegyezhető
             {open ? (
-              ""
+              <span className="block text-xs text-pilot-grey-600">
+                Bepipálva a megnevezés, a fajta, a nap és az állapot a webshop
+                „Érkező állatok” listáján is megjelenik (a darabszám és a
+                megjegyzés nem).
+              </span>
             ) : (
               <span className="block text-xs text-pilot-grey-600">
                 Csak megrendelt vagy úton lévő érkezésre lehet előjegyezni.

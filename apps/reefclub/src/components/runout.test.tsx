@@ -14,7 +14,15 @@ import { RunOutUnsubscribe } from "./runout-unsubscribe";
   as a success.
 */
 const AQUARIUMS = {
-  aquariums: [{ id: "q1", name: "Nappali reef", origin: "OWN" }],
+  aquariums: [
+    { id: "q1", name: "Nappali reef", origin: "OWN", systemVolumeLiters: 300 },
+    {
+      id: "q0",
+      name: "Liter nélküli",
+      origin: "OWN",
+      systemVolumeLiters: null,
+    },
+  ],
 };
 
 beforeEach(() => window.history.replaceState(null, "", "/"));
@@ -157,6 +165,14 @@ describe("RunOutReminders: turning one on", () => {
     const user = userEvent.setup();
     render(<RunOutReminders />);
     expect(await screen.findByText(TEXT)).toBeTruthy();
+    // an aquarium without litres is shown, but cannot be chosen, and says why (barracuda, #2350)
+    const aquarium = screen.getByLabelText("Akvárium") as HTMLSelectElement;
+    const noLitres = [...aquarium.options].find((o) => o.value === "q0")!;
+    expect(noLitres.disabled).toBe(true);
+    expect(noLitres.textContent).toMatch(/liter nélkül nem számolható/);
+    expect([...aquarium.options].find((o) => o.value === "q1")!.disabled).toBe(
+      false,
+    );
     const product = screen.getByLabelText("Termék") as HTMLSelectElement;
     const options = [...product.options].map((o) => o.value);
     expect(options).toEqual(["", "p1"]);
