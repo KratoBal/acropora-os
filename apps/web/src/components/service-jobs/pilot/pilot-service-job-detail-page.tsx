@@ -21,6 +21,7 @@ import {
   type ServiceJobTimelineEntry,
   type WorksheetAttachableItem,
   worksheetListLines,
+  uploadAccept,
 } from "@acropora/types";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -850,7 +851,7 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
                   <input
                     type="file"
                     multiple
-                    accept="image/jpeg,image/png,application/pdf"
+                    accept={uploadAccept(["jpeg", "png", "pdf"])}
                     className="sr-only"
                     disabled={uploading}
                     onChange={(event) => {

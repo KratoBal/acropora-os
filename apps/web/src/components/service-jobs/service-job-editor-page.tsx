@@ -11,6 +11,7 @@ import {
   hasPermission,
   PERMISSIONS,
   type WorksheetSelectablePartner,
+  uploadAccept,
 } from "@acropora/types";
 import type { WorksheetDepartmentSummary } from "@acropora/types";
 import Link from "next/link";
@@ -629,7 +630,7 @@ export function ServiceJobEditorPage({
                 <PilotFileInput
                   id="hibajegy-fajlok"
                   multiple
-                  accept="image/jpeg,image/png,application/pdf"
+                  accept={uploadAccept(["jpeg", "png", "pdf"])}
                   className="text-sm"
                   onChange={(event) =>
                     setFiles(Array.from(event.target.files ?? []))
