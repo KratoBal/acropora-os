@@ -207,6 +207,8 @@ const SALE = {
 };
 
 function createDatabase({
+  /** the product does not exist (the names write finds none) */
+  missingProduct = false,
   /** the datasheet's refusal rows (a filled name resolves its field's one) */
   refusals = [] as {
     mezo: string;
@@ -262,7 +264,7 @@ function createDatabase({
       },
       findUnique: async (args: unknown) => {
         calls.push({ operation: "transactionFind", args });
-        return product;
+        return missingProduct ? null : product;
       },
       update: async (args: unknown) => {
         calls.push({ operation: "transactionUpdate", args });
@@ -280,6 +282,12 @@ function createDatabase({
       },
       upsert: async (args: unknown) => {
         calls.push({ operation: "categoryUpsert", args });
+        return {};
+      },
+    },
+    productDatasheet: {
+      upsert: async (args: unknown) => {
+        calls.push({ operation: "datasheetUpsert", args });
         return {};
       },
     },
@@ -1760,6 +1768,85 @@ describe("ProductRepository", () => {
     assert.equal(
       placement.calls.filter((call) => call.operation === "refusalDeleteMany")
         .length,
+      0,
+    );
+  });
+
+  /*
+    A NEVEK KOZVETLEN IRASA (kartya 20b0dd47). MI PIROSIT: a nev a termek sorara (product.update) megy, es a termek
+    updatedAt-je lep (a vetites esedekesseg-jele: a nev a boltba vinne a termeket); az upsert nem a termek azonositojara
+    kulcsolt; a nev nincs levagva, az ures nev nem null; a kitoltott nev megtagadasa az iro azonositojaval oldodik; a
+    hianyzo termeknel iras tortenik; nev nelkul adatlap-iras jon letre.
+  */
+  it("writes the names straight to the datasheet row, trimmed, without touching the product row", async () => {
+    const { database, calls } = createDatabase();
+    const detail = await new ProductRepository(database).updateDatasheetNames(
+      "product-1",
+      { angolNev: "  Staghorn coral ", nemetNev: "" },
+      "user-1",
+    );
+    assert.ok(detail);
+    const upsert = calls.find((call) => call.operation === "datasheetUpsert")!
+      .args as { where: unknown; create: unknown; update: unknown };
+    assert.deepEqual(upsert.where, { productId: "product-1" });
+    assert.deepEqual(upsert.create, {
+      productId: "product-1",
+      angolNev: "Staghorn coral",
+      nemetNev: null,
+    });
+    assert.deepEqual(upsert.update, {
+      angolNev: "Staghorn coral",
+      nemetNev: null,
+    });
+    // the product row is NOT written: its updatedAt is the projection's due signal
+    assert.equal(
+      calls.filter((call) => call.operation === "transactionUpdate").length,
+      0,
+    );
+  });
+
+  it("resolves a refusal with the writer as the actor, and does nothing for a missing product or an empty write", async () => {
+    const refused = createDatabase({
+      refusals: [
+        {
+          mezo: "NEMET_NEV",
+          indok: "Dontesre var.",
+          oka: "DONTESRE_VAR",
+          createdAt: new Date("2026-09-01T08:00:00.000Z"),
+        },
+      ],
+    });
+    await new ProductRepository(refused.database).updateDatasheetNames(
+      "product-1",
+      { nemetNev: "Steinkoralle" },
+      "user-1",
+    );
+    const event = refused.calls.find((call) => call.operation === "event")!
+      .args as { data: { eventType: string; actorUserId: string | null } };
+    assert.equal(event.data.eventType, "product.datasheet.refusal-resolved");
+    assert.equal(event.data.actorUserId, "user-1");
+
+    const missing = createDatabase({ missingProduct: true });
+    assert.equal(
+      await new ProductRepository(missing.database).updateDatasheetNames(
+        "nope",
+        { magyarNev: "x" },
+      ),
+      null,
+    );
+    assert.equal(
+      missing.calls.filter((call) => call.operation === "datasheetUpsert")
+        .length,
+      0,
+    );
+
+    const empty = createDatabase();
+    await new ProductRepository(empty.database).updateDatasheetNames(
+      "product-1",
+      {},
+    );
+    assert.equal(
+      empty.calls.filter((call) => call.operation === "datasheetUpsert").length,
       0,
     );
   });

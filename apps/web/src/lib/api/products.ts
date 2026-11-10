@@ -332,6 +332,25 @@ export const productApi = {
       { method: "PATCH", body: JSON.stringify(input) },
     );
   },
+  /**
+   * A nevek kozvetlen irasa (kartya 20b0dd47): a UNAS-gazdaju termeken is megy (a nevek Acropora-tulajdonuak), a termek
+   * tobbi mezoje nem erintett. A valasz a frissitett reszletes nezet.
+   */
+  updateNames(
+    token: string,
+    id: string,
+    input: Pick<ProductUpdateInput, "magyarNev" | "angolNev" | "nemetNev">,
+  ) {
+    return apiRequest<ProductDetail>(
+      `/products/${encodeURIComponent(id)}/names`,
+      token,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      },
+    );
+  },
   categoryOptions(token: string) {
     return apiRequest<CatalogOption[]>("/categories/options", token);
   },
