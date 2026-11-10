@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   Param,
   Patch,
   Post,
@@ -48,6 +49,21 @@ import { ContentAgentReviseDto, ContentCreateDto } from "./dto/content.dto.js";
 @Controller("content/agent")
 export class ContentAgentController {
   constructor(private readonly service: ContentService) {}
+
+  /**
+   * A HÍVÓ SAJÁT BEADÁSAI (card c5a8e6d6): a gépi bejárat eddig egyirányú volt, beírni lehetett, a választ nem. CSAK olvas, ugyanaz
+   * az őrző, és csak a hívó tételeit adja.
+   */
+  @Get()
+  list(@CurrentUser() user: AuthenticatedUser) {
+    return this.service.agentItems(user.id);
+  }
+
+  /** EGY SAJÁT BEADÁS: szöveg, állapot, jóváhagyási napló, hozzászólások. Más szerző tétele 404. */
+  @Get(":id")
+  read(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.service.agentItem(id, user.id);
+  }
 
   @Post()
   create(
