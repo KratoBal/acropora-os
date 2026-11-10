@@ -41,6 +41,18 @@ describe("RunOutReminders", () => {
     }
   });
 
+  it("a server without the routes yet (404) reads as not available, not as an error", async () => {
+    mockApi({
+      "GET /runout-reminders": () => reply(404, { message: "Cannot GET" }),
+      "GET /aquariums": () => reply(200, AQUARIUMS),
+    });
+    render(<RunOutReminders />);
+    expect(
+      await screen.findByText("Az emlékeztető még nem érhető el."),
+    ).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("lists the reminders that are on with the product and the aquarium, and a turn-off stops exactly that product", async () => {
     let on = true;
     const { calls } = mockApi({

@@ -3,10 +3,17 @@
 import { Alert, Button } from "@acropora/ui";
 import { useState } from "react";
 
-import { rc } from "@/lib/api";
+import { ReefClubApiError, rc } from "@/lib/api";
 import { formatMoment } from "@/lib/labels";
 import type { ReefClubAquarium, ReefClubRunOutOverview } from "@/lib/types";
 import { useLoad } from "@/lib/use-load";
+
+const NOT_AVAILABLE: ReefClubRunOutOverview = {
+  state: "off",
+  text: null,
+  version: null,
+  reminders: [],
+};
 
 interface Loaded {
   overview: ReefClubRunOutOverview;
@@ -24,7 +31,14 @@ interface Loaded {
 export function RunOutReminders() {
   const { state, reload } = useLoad<Loaded>(async () => {
     const [overview, aquariums] = await Promise.all([
-      rc<ReefClubRunOutOverview>("GET", "/runout-reminders"),
+      // a server without the routes yet (404) is the same as a closed lock: not available, not an error
+      rc<ReefClubRunOutOverview>("GET", "/runout-reminders").catch(
+        (cause: unknown) => {
+          if (cause instanceof ReefClubApiError && cause.status === 404)
+            return NOT_AVAILABLE;
+          throw cause;
+        },
+      ),
       rc<{ aquariums: ReefClubAquarium[] }>("GET", "/aquariums"),
     ]);
     return {

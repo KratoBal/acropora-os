@@ -75,7 +75,7 @@ export function RunOutUnsubscribe() {
     return (
       <Alert
         title={state.already ? "Már korábban leiratkoztál" : "Leiratkoztál"}
-        description="Erről a termékről nem kapsz több kifogyási emlékeztetőt. A fiókodban bármikor újra kérheted."
+        description="Erről a termékről nem kapsz több kifogyási emlékeztetőt. Bármikor újra kérheted."
       />
     );
   return (
