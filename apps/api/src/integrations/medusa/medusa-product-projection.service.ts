@@ -51,6 +51,7 @@ import {
   DISCONTINUED_KEY,
   mergeProductMetadata,
   PRIMARY_CATEGORY_KEY,
+  LIVESTOCK_ARRIVAL_KEY,
   UNIQUE_PIECE_KEY,
 } from "./medusa-metadata-merge.js";
 import {
@@ -156,6 +157,11 @@ export interface ProjectableProduct {
    * termek lapjara "Eladva" feliratot tenne.
    */
   uniquePiece: boolean;
+  /**
+   * A TERMEK KOVETKEZO ELO ALLAT ERKEZESE (V2.6 S3a): a kulcs erteke, mar kesz szovegkent (`livestockArrivalMetadata`), vagy
+   * `null`/hianyzik, ha nincs olyan erkezes, amire a vevo elojegyezhet. A hiany veszi le a kulcsot az osszefesuleskor.
+   */
+  livestockArrival?: string | null;
   /**
    * A GONDOZOTT "HASONLO" KAPCSOLATOK, MAR MEDUSA AZONOSITOKKAL.
    *
@@ -824,6 +830,10 @@ export class MedusaProductProjectionService {
        * OSSZEFESULES veszi le a kulcsot (`medusa-metadata-merge.ts`).
        */
       ...(product.uniquePiece ? { [UNIQUE_PIECE_KEY]: "true" } : {}),
+      // csak akkor kerul be, ha van; a hianya a "nincs ilyen erkezes", az osszefesules veszi le (V2.6 S3a)
+      ...(product.livestockArrival
+        ? { [LIVESTOCK_ARRIVAL_KEY]: product.livestockArrival }
+        : {}),
       ...(isDiscontinued(publication.reason, product.unasProductUrl)
         ? { [DISCONTINUED_KEY]: "true" }
         : {}),

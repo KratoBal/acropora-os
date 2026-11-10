@@ -127,11 +127,24 @@ export const PRIMARY_CATEGORY_KEY = "primary_category_id";
  */
 export const DISCONTINUED_KEY = "discontinued";
 
+/**
+ * THE NEXT LIVE ANIMAL ARRIVAL OF A PRODUCT (V2.6 S3a, card f4e4832b): a JSON text, `{"v":1,"expected_on":"2026-11-13",
+ * "status":"ordered"|"in_transit"}`, only while the product has an arrival that a customer may register for and that has
+ * not arrived. The shop's product page reads it ("Érkezik: várhatóan ...", and the notify sign-up). Owned like
+ * `unique_piece`: an arrival that lands, is cancelled or is taken off the product removes the key in the merge. The text
+ * is built in `medusa-livestock-arrival.ts`; the storefront's reader is the pair of that contract.
+ *
+ * PAIR: acropora-commerce, the storefront's reader (S3b). Two repos, no shared package: if the strings differ, the page
+ * silently shows nothing.
+ */
+export const LIVESTOCK_ARRIVAL_KEY = "livestock_arrival";
+
 export const OWNED_METADATA_KEYS = [
   UNIQUE_PIECE_KEY,
   ACROPORA_IMAGES_KEY,
   PRIMARY_CATEGORY_KEY,
   DISCONTINUED_KEY,
+  LIVESTOCK_ARRIVAL_KEY,
 ] as const;
 
 /**

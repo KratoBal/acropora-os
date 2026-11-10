@@ -1014,6 +1014,14 @@ export class MedusaProjectionScheduler
          * -- a `targetRelations` felvetele folosleges ujravetiteseket hozna.
          */
         sourceRelations: { select: { updatedAt: true } },
+        /**
+         * AZ ERKEZESEK IDOBELYEGE (V2.6 S3a): egy erkezes valtozasa (uj sor, allapot, nap, elojegyezhetoseg, a termekhez
+         * kotes) a termek `livestock_arrival` kulcsat valtoztatja. AZ IRAS EMELLETT A TERMEK `updatedAt`-JET IS MOZGATJA
+         * (`LivestockArrivalsRepository`): ez a lista csak a legutobb modositott termekek ablakat olvassa (`OVERSCAN`),
+         * tehat egy reg modositott termek, aminek CSAK az erkezese valtozott, kimaradna, ha a termek sora nem mozdulna.
+         * Itt a relacio azert is all, hogy a jel a teljes bemenetet lassa (ugyanaz a ket oldal, mint a kapcsolatoknal).
+         */
+        livestockArrivals: { select: { updatedAt: true } },
       },
     });
     if (!termekek.length) return [];
@@ -1039,6 +1047,7 @@ export class MedusaProjectionScheduler
           termek.unasSnapshot?.updatedAt,
           ...termek.channelListings.map((sor) => sor.updatedAt),
           ...termek.sourceRelations.map((sor) => sor.updatedAt),
+          ...termek.livestockArrivals.map((sor) => sor.updatedAt),
         ],
       });
       if (dontes.due) esedekes.push(termek.id);
