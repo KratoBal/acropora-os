@@ -138,10 +138,13 @@ describe("the rental contract PDF", () => {
         line.pageNumber === 1
           ? PDF_FIRST_CONTENT_TOP
           : PDF_CONTINUATION_CONTENT_TOP;
-      assert.ok(line.top >= top - 1, `page ${line.pageNumber} top ${line.top}`);
+      // a line read back without a position fails both checks (NaN compares false)
+      const lineTop = line.top ?? Number.NaN;
+      const lineBottom = lineTop + (line.height ?? Number.NaN);
+      assert.ok(lineTop >= top - 1, `page ${line.pageNumber} top ${lineTop}`);
       assert.ok(
-        line.top + line.height <= PDF_CONTENT_BOTTOM + 1,
-        `page ${line.pageNumber} bottom ${line.top + line.height}`,
+        lineBottom <= PDF_CONTENT_BOTTOM + 1,
+        `page ${line.pageNumber} bottom ${lineBottom}`,
       );
     }
     const count = body
