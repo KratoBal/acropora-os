@@ -10,6 +10,7 @@ import type {
   MedusaUploadedFile,
 } from "./medusa-admin.client.js";
 import { describeMedusaFailure } from "./medusa-admin.client.js";
+import { classifyImageAddress } from "./medusa-image-address.js";
 import type { MedusaImageLinkRepository } from "./medusa-image-link.repository.js";
 import { productImageDocumentId } from "./product-image-storage-key.js";
 
@@ -116,8 +117,19 @@ export async function publishProductImages(
         },
       };
 
+    /**
+     * A TAROLT CIM CSAK PUBLIKUS BESOROLASSAL HASZNALODIK UJRA (kartya 2d3f64d2).
+     *
+     * A cim a FELTOLTES pillanataban rogzul (`medusa-image-address.ts`): egy `backend_url` nelkuli bolt
+     * `http://localhost:9000/static` cimet ad, es ez az ag eddig feltetel nelkul azt kuldte ki minden futasban, tehat a
+     * rossz cim akkor sem gyogyult meg, amikor a bolt beallitasa helyre kerult. Most egy belso vagy olvashatatlan
+     * tarolt cim ugy szamit, mintha nem volna lekepezes: a kep ujra feltoltodik, es a `link` a meglevo sort irja at.
+     */
     const existing = await deps.links.findByImage(productId, image.url);
-    if (existing) {
+    if (
+      existing &&
+      classifyImageAddress(existing.medusaUrl).kind === "public"
+    ) {
       urls.push(existing.medusaUrl);
       reused += 1;
       continue;
@@ -219,6 +231,25 @@ export async function publishProductImages(
      * Forditva egy elhasalt feltoltes utan olyan lekepezes maradna, ami egy
      * nem letezo fajlra mutat -- es a kovetkezo futas azt hinne, kesz.
      */
+    /**
+     * A BOLT BELSO CIMET ADOTT: NEM LINKELJUK ES NEM KULDJUK KI (kartya 2d3f64d2). A vevo tort kepet latna, es a sor
+     * a kovetkezo futasban is visszajonne. Hangos megallas: a termek kepe addig nem cserelodik, az ok a jelentesben all.
+     * Kulon enum-ertek nincs (az migraciot kerne); a reszlet mondja ki, hogy nem a halozat, hanem a bolt beallitasa.
+     */
+    const cim = classifyImageAddress(file.url);
+    if (cim.kind !== "public")
+      return {
+        urls: [],
+        uploaded,
+        reused,
+        blockedBy: {
+          reason: "UPLOAD_FAILED",
+          details:
+            `a bolt kívülről elérhetetlen címet adott a feltöltött képre (${cim.origin}, ${image.url}) -- ` +
+            `a bolt fájl-cím beállítása (backend_url) hiányzik vagy belső`,
+        },
+      };
+
     await deps.links.link(productId, image.url, file.id, file.url, deps.now);
     urls.push(file.url);
     uploaded += 1;

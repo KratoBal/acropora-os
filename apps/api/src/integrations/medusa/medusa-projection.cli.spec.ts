@@ -1428,12 +1428,15 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
   }
 
   /**
-   * A TAROLT BOLTI CIM, ahogy a lekepezes-soron all. SZANDEKOSAN a mert, hibas
-   * alak: ez a ket regi sor cime (2d3f64d2), es a teszt epp azt mutatja meg,
-   * hogy egy ilyen cim MINDEN futasban ujra kimegy.
+   * A TAROLT BOLTI CIM, ahogy a lekepezes-soron all, PUBLIKUS alakban. Ez a
+   * cim 2026-11-10-ig a ket regi sor belso cime volt (2d3f64d2), es a teszt azt
+   * mutatta meg, hogy egy ilyen cim MINDEN futasban ujra kimegy. A kiado azota
+   * belso tarolt cimet nem hasznal ujra (`product-image-publisher.ts`, a sajat
+   * tesztje meri), tehat itt egy publikus cim all: a teszt tovabbra is azt meri,
+   * hogy a tarolt lekepezes valtozatlan forrasnal is kimegy.
    */
   const TAROLT_BOLTI_CIM =
-    "http://localhost:9000/static/1788516704783-156161.jpg";
+    "https://commerce-stage.acropora.hu/static/1788516704783-156161.jpg";
 
   const boltiKornyezet = {
     ...withEnvironmentKey,
