@@ -43,6 +43,7 @@ describe(
     let userId = "";
     let counted = "";
     let massPack = "";
+    let inactive = "";
 
     async function removeLeftovers(): Promise<void> {
       const mine = { product: { name: { startsWith: PREFIX } } };
@@ -105,6 +106,17 @@ describe(
       await accepted(counted, "packSize", "500 ml");
       await accepted(massPack, "dosing", "5 ml/100 L/day");
       await accepted(massPack, "packSize", "500 g");
+      inactive = (
+        await prisma.product.create({
+          data: { name: `${PREFIX}Kifutott ${suffix}` },
+        })
+      ).id;
+      await accepted(inactive, "dosing", "5 ml/100 L/day");
+      await accepted(inactive, "packSize", "500 ml");
+      await prisma.product.update({
+        where: { id: inactive },
+        data: { isActive: false },
+      });
     });
 
     after(async () => {
@@ -125,7 +137,7 @@ describe(
       ]);
     });
 
-    it("az elfogadott adagolás és kiszerelés egy sor, a futás sora; a tömeg-kiszerelésű termék nem kap sort", async () => {
+    it("az elfogadott adagolás és kiszerelés egy sor, a futás sora; a tömeg-kiszerelésű és a kifutott (inaktív) termék nem kap sort", async () => {
       const outcome = await projection.rebuild("SCHEDULE");
       assert.equal(outcome.ok, true, outcome.errorMessage ?? "");
       const run = await prisma.reefClubDoseProjectionRun.findFirstOrThrow({
@@ -133,7 +145,7 @@ describe(
         orderBy: { finishedAt: "desc" },
       });
       const rows = await prisma.reefClubRunOutProduct.findMany({
-        where: { productId: { in: [counted, massPack] } },
+        where: { productId: { in: [counted, massPack, inactive] } },
       });
       assert.equal(rows.length, 1);
       const row = rows[0]!;

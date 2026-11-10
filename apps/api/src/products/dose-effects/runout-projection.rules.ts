@@ -6,11 +6,17 @@ import { runOutDays } from "@acropora/jev/product-enrichment";
  * rebuilds the table with the dose list (`dose-projection.service.ts`), in the same transaction and run.
  *
  * A product is counted when, at the PRODUCT level (a variant's fact is not the product's pack):
+ *   - it is ACTIVE (acrobot 45512: no reminder for what cannot be bought; the schema has no separate discontinued mark, and
+ *     `webshopSellable` is not asked, because a pack bought in the shop counts too),
  *   - its `dosing` fact has a value (an accepted dose; a conflict is NULL and stays out),
  *   - its `packSize` fact has a value,
  *   - its `dosingMode`, when there is one, is FIXED (a test-dependent dose has no fixed ratio to count with),
  *   - and `runOutDays` accepts the pair (a millilitre dose against a pack of one number and one volume unit). It is asked for a
  *     100-litre aquarium only to check the pair: the member's own litres are counted at the reminder, not here.
+ *
+ * A fact whose status is SUGGESTED is not taken (acrobot 45512: a suggestion, not a fact); an accepted rule fact (AUTO_V1) is,
+ * because Balázs's 2026-10-21 permission is exactly about accepting the manufacturer's dose by rule, and a wrong dose only moves
+ * the reminder's day.
  *
  * Everything else is left out WITHOUT a guess: a product the member cannot get a correct reminder for gets no button.
  */
@@ -23,8 +29,11 @@ export const RUN_OUT_FACT_FIELDS = [
 export interface RunOutFact {
   productId: string;
   productName: string;
+  productActive: boolean;
   field: string;
   value: string | null;
+  /** The JEV status the fact was accepted with (VERIFIED, SUGGESTED, CONFLICTING_SOURCES after a person's resolution). */
+  status: string;
 }
 
 export interface RunOutProductRow {
@@ -43,6 +52,8 @@ export function toRunOutProducts(
     { name: string; values: Map<string, string> }
   >();
   for (const fact of facts) {
+    if (!fact.productActive) continue;
+    if (fact.status === "SUGGESTED") continue;
     if (fact.value === null || fact.value.trim() === "") continue;
     const entry = byProduct.get(fact.productId) ?? {
       name: fact.productName,

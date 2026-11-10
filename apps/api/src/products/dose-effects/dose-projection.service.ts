@@ -139,7 +139,8 @@ export class DoseProjectionService implements OnModuleInit, OnModuleDestroy {
               productId: true,
               field: true,
               value: true,
-              product: { select: { name: true } },
+              status: true,
+              product: { select: { name: true, isActive: true } },
             },
           });
           await tx.reefClubRunOutProduct.deleteMany({});
@@ -148,8 +149,10 @@ export class DoseProjectionService implements OnModuleInit, OnModuleDestroy {
               facts.map((fact) => ({
                 productId: fact.productId,
                 productName: fact.product.name,
+                productActive: fact.product.isActive,
                 field: fact.field,
                 value: fact.value,
+                status: fact.status,
               })),
             ).map((row) => ({ ...row, runId: run.id })),
           });
