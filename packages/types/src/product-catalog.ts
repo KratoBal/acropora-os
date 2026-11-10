@@ -169,6 +169,27 @@ export function isShippingFilterValue(
   return (SHIPPING_FILTER_VALUES as readonly string[]).includes(value ?? "");
 }
 
+/**
+ * THE LIST'S HUSBANDRY FILTER (V2.2 S6, card d2fc06e7): of the LIVE ANIMALS, those whose husbandry block is verified, or those whose
+ * block is not (no data at all, or entered and not verified). Either value restricts the list to live animals (the block has no
+ * meaning on another product); the list says which are which through `ProductListItem.husbandry`.
+ */
+export const HUSBANDRY_FILTER_VALUES = ["verified", "unverified"] as const;
+export type HusbandryFilterValue = (typeof HUSBANDRY_FILTER_VALUES)[number];
+
+export function isHusbandryFilterValue(
+  value: string | null | undefined,
+): value is HusbandryFilterValue {
+  return (HUSBANDRY_FILTER_VALUES as readonly string[]).includes(value ?? "");
+}
+
+/** What the list shows of a live animal's husbandry block: verified or not, and how many required fields are still missing. */
+export interface ProductListHusbandry {
+  verified: boolean;
+  /** The required fields still missing, the verification itself and an undecidable kind included (as `missing` of the detail). */
+  missing: number;
+}
+
 export interface ProductListItem {
   id: string;
   name: string;
@@ -186,6 +207,12 @@ export interface ProductListItem {
    * not the same as an empty list (looked at, none applies). Optional: an older server does not send it.
    */
   shippingFlags?: ShippingFlagKey[] | null;
+  /**
+   * The husbandry block's state (V2.2 S6): `null` for a product that is not a live animal (the block has no meaning there);
+   * optional: an older server does not send it. The kind comes from the PRIMARY category's root, so a product that sits under
+   * several roots reads as the primary's here and as undecided on the detail screen (the detail is the exact one).
+   */
+  husbandry?: ProductListHusbandry | null;
   unasListing: ProductChannelListingSummary | null;
   /**
    * UNAS-mirrored list gross price. Null for a purely local product, which has
@@ -321,6 +348,8 @@ export interface ProductListApiQuery {
   brandId?: string;
   /** one shipping flag set, or `none`: never looked at (a82ed229) */
   shipping?: ShippingFilterValue;
+  /** Live animals with a verified (or an unverified) husbandry block (V2.2 S6). */
+  husbandry?: HusbandryFilterValue;
   /**
    * Only products listed on this channel.
    *

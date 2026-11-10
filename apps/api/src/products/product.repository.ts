@@ -25,6 +25,12 @@ import {
   type DatasheetPatch,
 } from "./product-datasheet-patch.js";
 import { retryOnSerializationConflict } from "../common/transaction-retry.util.js";
+import { husbandryDatasheetSelect } from "./product-husbandry.repository.js";
+import {
+  husbandryFilterWhere,
+  husbandryListState,
+  type HusbandryListRow,
+} from "./product-husbandry-list.js";
 import { unasShippingProfile } from "../integrations/medusa/medusa-unas-shipping.policy.js";
 import {
   manualFlagsDifferingFromUnas,
@@ -107,6 +113,8 @@ export function shippingFilterWhere(
 
 const productListInclude = {
   brand: true,
+  // the husbandry block's state for the list (V2.2 S6): the datasheet's husbandry columns, and the stamp
+  datasheet: { select: husbandryDatasheetSelect },
   // the shipping flags for the list's column (a82ed229)
   shippingProfile: {
     select: {
@@ -632,6 +640,7 @@ export class ProductRepository extends Repository {
       ...(query.shipping === "unasDiff"
         ? { id: { in: await this.unasDiffProductIds() } }
         : shippingFilterWhere(query.shipping)),
+      ...husbandryFilterWhere(query.husbandry),
       ...(query.search
         ? {
             OR: [
@@ -687,7 +696,11 @@ export class ProductRepository extends Repository {
     ]);
 
     return {
-      items: items.map(toProductListItem),
+      items: items.map((item) => ({
+        ...toProductListItem(item),
+        // V2.2 S6: the husbandry block's state (null for a product that is not a live animal)
+        husbandry: husbandryListState(item as unknown as HusbandryListRow),
+      })),
       pagination: {
         page: query.page,
         pageSize: query.pageSize,
