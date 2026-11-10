@@ -34,6 +34,7 @@ export type EnableResult =
       code:
         | "FEATURE_OFF"
         | "CONSENT_TEXT_MISSING"
+        | "CONSENT_VERSION_CHANGED"
         | "NO_VOLUME"
         | "PRODUCT_NOT_FOUND"
         | "UNSUBSCRIBE_SECRET_MISSING";
@@ -41,6 +42,23 @@ export type EnableResult =
     };
 
 export type DisableResult = { outcome: "DISABLED" } | { outcome: "NOT_ACTIVE" };
+
+/** One reminder of the member that is on, for the page; the product name is the dose list's (the role reads no product table). */
+export interface RunOutReminderItem {
+  id: string;
+  productId: string;
+  productName: string | null;
+  aquariumId: string;
+  consentAt: string;
+}
+
+/**
+ * What the page may show at the switch: the state of the three locks, and the consent text with its version only when every
+ * lock is open (the page asks for consent only for a text that exists, and sends its version back with the turn-on).
+ */
+export type RunOutStatus =
+  | { state: "available"; text: string; version: string }
+  | { state: "off" | "no-text" | "no-secret"; text: null; version: null };
 
 export type UnsubscribeResult =
   | { outcome: "UNSUBSCRIBED" }
@@ -50,6 +68,8 @@ export type UnsubscribeResult =
 const REFUSAL_MESSAGES = {
   FEATURE_OFF: "Az emlékeztető most nem érhető el.",
   CONSENT_TEXT_MISSING: "Az emlékeztető most nem érhető el.",
+  CONSENT_VERSION_CHANGED:
+    "Az emlékeztető hozzájárulási szövege időközben megváltozott. Töltsd újra az oldalt, és olvasd el az új szöveget.",
   UNSUBSCRIBE_SECRET_MISSING: "Az emlékeztető most nem érhető el.",
   NO_VOLUME: "Az emlékeztetőhöz add meg az akvárium literét.",
   PRODUCT_NOT_FOUND: "Ehhez a termékhez nincs emlékeztető.",
@@ -68,9 +88,43 @@ export class ReefClubRunOutService {
     @Inject(ReefClubDatabase) private readonly database: ReefClubDatabase,
   ) {}
 
+  status(): RunOutStatus {
+    const availability = this.availability();
+    if (availability.kind === "available")
+      return {
+        state: "available",
+        text: availability.text,
+        version: availability.version,
+      };
+    return { state: availability.kind, text: null, version: null };
+  }
+
+  /** The member's reminders that are on, oldest first. */
+  async list(accountId: string): Promise<RunOutReminderItem[]> {
+    const rows = await this.database.reefClubRunOutReminder.findMany({
+      where: { accountId, unsubscribedAt: null },
+      select: { id: true, productId: true, aquariumId: true, consentAt: true },
+      orderBy: [{ consentAt: "asc" }, { id: "asc" }],
+    });
+    if (rows.length === 0) return [];
+    const names = await this.database.reefClubDoseRow.findMany({
+      where: { productId: { in: rows.map((row) => row.productId) } },
+      select: { productId: true, productName: true },
+      distinct: ["productId"],
+    });
+    const nameOf = new Map(names.map((n) => [n.productId, n.productName]));
+    return rows.map((row) => ({
+      id: row.id,
+      productId: row.productId,
+      productName: nameOf.get(row.productId) ?? null,
+      aquariumId: row.aquariumId,
+      consentAt: row.consentAt.toISOString(),
+    }));
+  }
+
   async enable(
     accountId: string,
-    request: { productId: string; aquariumId: string },
+    request: { productId: string; aquariumId: string; consentVersion: string },
     now: Date = new Date(),
   ): Promise<EnableResult> {
     const availability = this.availability();
@@ -78,6 +132,9 @@ export class ReefClubRunOutService {
     if (availability.kind === "no-text") return refused("CONSENT_TEXT_MISSING");
     if (availability.kind === "no-secret")
       return refused("UNSUBSCRIBE_SECRET_MISSING");
+    // the member accepted the text of the version the page showed; a page older than the text records nothing
+    if (request.consentVersion !== availability.version)
+      return refused("CONSENT_VERSION_CHANGED");
 
     // the one 404 for a foreign or missing aquarium (it throws)
     const grant = await this.access.aquariumForAccount(

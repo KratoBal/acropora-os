@@ -79,6 +79,22 @@ function setup(over: { litres?: unknown; fkField?: string } = {}) {
       },
       findUnique: async ({ where }: any) =>
         rows.find((r) => r.id === where.id) ?? null,
+      findMany: async ({ where }: any) =>
+        rows
+          .filter(
+            (r) =>
+              r.accountId === where.accountId &&
+              r.unsubscribedAt === where.unsubscribedAt,
+          )
+          .sort((x, y) => x.consentAt.getTime() - y.consentAt.getTime()),
+    },
+    reefClubDoseRow: {
+      findMany: async ({ where }: any) =>
+        [
+          { productId: "p1", productName: "Kalcium oldat 500 ml" },
+          { productId: "p1", productName: "Kalcium oldat 500 ml" },
+          { productId: "p9", productName: "Másik" },
+        ].filter((row) => where.productId.in.includes(row.productId)),
     },
   };
   const access = {
@@ -159,7 +175,11 @@ describe("turning it on", () => {
     off.service.availability = () => runOutAvailability({}, TEXT);
     const a = await off.service.enable(
       "a1",
-      { productId: "p1", aquariumId: "q1" },
+      {
+        productId: "p1",
+        aquariumId: "q1",
+        consentVersion: RUNOUT_CONSENT_VERSION,
+      },
       NOW,
     );
     assert.deepEqual(a, {
@@ -172,7 +192,11 @@ describe("turning it on", () => {
     noText.service.availability = () => runOutAvailability(ON, null);
     const b = await noText.service.enable(
       "a1",
-      { productId: "p1", aquariumId: "q1" },
+      {
+        productId: "p1",
+        aquariumId: "q1",
+        consentVersion: RUNOUT_CONSENT_VERSION,
+      },
       NOW,
     );
     assert.equal(b.outcome === "REFUSED" && b.code, "CONSENT_TEXT_MISSING");
@@ -182,7 +206,11 @@ describe("turning it on", () => {
     today.service.environment = ON;
     const c = await today.service.enable(
       "a1",
-      { productId: "p1", aquariumId: "q1" },
+      {
+        productId: "p1",
+        aquariumId: "q1",
+        consentVersion: RUNOUT_CONSENT_VERSION,
+      },
       NOW,
     );
     assert.equal(c.outcome === "REFUSED" && c.code, "CONSENT_TEXT_MISSING");
@@ -194,7 +222,11 @@ describe("turning it on", () => {
       runOutAvailability(noSecret.service.environment, TEXT);
     const d = await noSecret.service.enable(
       "a1",
-      { productId: "p1", aquariumId: "q1" },
+      {
+        productId: "p1",
+        aquariumId: "q1",
+        consentVersion: RUNOUT_CONSENT_VERSION,
+      },
       NOW,
     );
     assert.equal(
@@ -209,7 +241,7 @@ describe("turning it on", () => {
     service.availability = () => runOutAvailability(ON, TEXT, "kifogyas-1.0");
     const first = await service.enable(
       "a1",
-      { productId: "p1", aquariumId: "q1" },
+      { productId: "p1", aquariumId: "q1", consentVersion: "kifogyas-1.0" },
       NOW,
     );
     assert.equal(first.outcome, "ENABLED");
@@ -224,7 +256,7 @@ describe("turning it on", () => {
     const later = new Date("2026-11-20T10:00:00Z");
     const again = await service.enable(
       "a1",
-      { productId: "p1", aquariumId: "q2" },
+      { productId: "p1", aquariumId: "q2", consentVersion: "kifogyas-1.0" },
       later,
     );
     assert.equal(rows.length, 1);
@@ -242,7 +274,11 @@ describe("turning it on", () => {
       service.availability = () => runOutAvailability(ON, TEXT);
       const r = await service.enable(
         "a1",
-        { productId: "p1", aquariumId: "q1" },
+        {
+          productId: "p1",
+          aquariumId: "q1",
+          consentVersion: RUNOUT_CONSENT_VERSION,
+        },
         NOW,
       );
       assert.equal(
@@ -257,7 +293,11 @@ describe("turning it on", () => {
     await assert.rejects(
       foreign.service.enable(
         "a1",
-        { productId: "p1", aquariumId: "foreign" },
+        {
+          productId: "p1",
+          aquariumId: "foreign",
+          consentVersion: RUNOUT_CONSENT_VERSION,
+        },
         NOW,
       ),
       /NOT_FOUND_404/,
@@ -270,7 +310,11 @@ describe("turning it on", () => {
       missing.service.availability = () => runOutAvailability(ON, TEXT);
       const m = await missing.service.enable(
         "a1",
-        { productId: "nincs", aquariumId: "q1" },
+        {
+          productId: "nincs",
+          aquariumId: "q1",
+          consentVersion: RUNOUT_CONSENT_VERSION,
+        },
         NOW,
       );
       assert.equal(
@@ -287,18 +331,131 @@ describe("turning it on", () => {
     });
     gone.service.availability = () => runOutAvailability(ON, TEXT);
     await assert.rejects(
-      gone.service.enable("a1", { productId: "p1", aquariumId: "q1" }, NOW),
+      gone.service.enable(
+        "a1",
+        {
+          productId: "p1",
+          aquariumId: "q1",
+          consentVersion: RUNOUT_CONSENT_VERSION,
+        },
+        NOW,
+      ),
       (error: Error) => error.name === "NotFoundException",
     );
     for (const field of ["ReefClubRunOutReminder_accountId_fkey (index)", ""]) {
       const odd = setup({ fkField: field });
       odd.service.availability = () => runOutAvailability(ON, TEXT);
       await assert.rejects(
-        odd.service.enable("a1", { productId: "p1", aquariumId: "q1" }, NOW),
+        odd.service.enable(
+          "a1",
+          {
+            productId: "p1",
+            aquariumId: "q1",
+            consentVersion: RUNOUT_CONSENT_VERSION,
+          },
+          NOW,
+        ),
         /fk/,
         field,
       );
     }
+  });
+});
+
+describe("the page's view and the text version", () => {
+  it("shows the state of the locks, and the text and its version ONLY when every lock is open", () => {
+    const { service } = setup();
+    service.availability = () => runOutAvailability({}, TEXT);
+    assert.deepEqual(service.status(), {
+      state: "off",
+      text: null,
+      version: null,
+    });
+    service.availability = () => runOutAvailability(ON, null);
+    assert.deepEqual(service.status(), {
+      state: "no-text",
+      text: null,
+      version: null,
+    });
+    service.availability = () =>
+      runOutAvailability({ REEFCLUB_RUNOUT_ENABLED: "true" }, TEXT);
+    assert.deepEqual(service.status(), {
+      state: "no-secret",
+      text: null,
+      version: null,
+    });
+    service.availability = () => runOutAvailability(ON, TEXT, "kifogyas-1.0");
+    assert.deepEqual(service.status(), {
+      state: "available",
+      text: TEXT,
+      version: "kifogyas-1.0",
+    });
+    // and today, with the real text (null), the page gets no text to ask consent for
+    service.availability = () => runOutAvailability(ON);
+    assert.equal(service.status().text, null);
+  });
+
+  it("a page that showed another text version records NOTHING, before the aquarium is even looked at", async () => {
+    const { service, rows } = setup();
+    service.availability = () => runOutAvailability(ON, TEXT, "kifogyas-2.0");
+    for (const consentVersion of ["kifogyas-1.0", RUNOUT_CONSENT_VERSION, ""]) {
+      const r = await service.enable(
+        "a1",
+        { productId: "p1", aquariumId: "foreign", consentVersion },
+        NOW,
+      );
+      assert.equal(
+        r.outcome === "REFUSED" && r.code,
+        "CONSENT_VERSION_CHANGED",
+        consentVersion,
+      );
+    }
+    assert.equal(rows.length, 0);
+  });
+
+  it("lists only the member's reminders that are on, with the dose list's product name (null where it has none)", async () => {
+    const { service, rows } = setup();
+    service.availability = () => runOutAvailability(ON, TEXT, "v1");
+    assert.deepEqual(await service.list("a1"), []);
+    const later = new Date("2026-11-10T10:00:00Z");
+    await service.enable(
+      "a1",
+      { productId: "p2", aquariumId: "q1", consentVersion: "v1" },
+      later,
+    );
+    await service.enable(
+      "a1",
+      { productId: "p1", aquariumId: "q2", consentVersion: "v1" },
+      NOW,
+    );
+    await service.enable(
+      "a1",
+      { productId: "p3", aquariumId: "q1", consentVersion: "v1" },
+      NOW,
+    );
+    await service.enable(
+      "masik",
+      { productId: "p1", aquariumId: "q9", consentVersion: "v1" },
+      NOW,
+    );
+    await service.disable("a1", "p3", NOW);
+    assert.equal(rows.length, 4);
+    assert.deepEqual(await service.list("a1"), [
+      {
+        id: rows.find((r) => r.productId === "p1" && r.accountId === "a1")!.id,
+        productId: "p1",
+        productName: "Kalcium oldat 500 ml",
+        aquariumId: "q2",
+        consentAt: NOW.toISOString(),
+      },
+      {
+        id: rows.find((r) => r.productId === "p2")!.id,
+        productId: "p2",
+        productName: null,
+        aquariumId: "q1",
+        consentAt: later.toISOString(),
+      },
+    ]);
   });
 });
 
@@ -311,7 +468,11 @@ describe("turning it off and the unsubscribe link", () => {
     });
     const on = await service.enable(
       "a1",
-      { productId: "p1", aquariumId: "q1" },
+      {
+        productId: "p1",
+        aquariumId: "q1",
+        consentVersion: RUNOUT_CONSENT_VERSION,
+      },
       NOW,
     );
     assert.equal(on.outcome, "ENABLED");
@@ -346,7 +507,11 @@ describe("turning it off and the unsubscribe link", () => {
     service.availability = () => runOutAvailability(ON, TEXT);
     const on = await service.enable(
       "a1",
-      { productId: "p1", aquariumId: "q1" },
+      {
+        productId: "p1",
+        aquariumId: "q1",
+        consentVersion: RUNOUT_CONSENT_VERSION,
+      },
       NOW,
     );
     const id = on.outcome === "ENABLED" ? on.id : "";

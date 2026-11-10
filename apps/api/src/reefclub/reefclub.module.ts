@@ -33,6 +33,8 @@ import {
 } from "./reefclub-mail.js";
 import { ReefClubMeController } from "./reefclub-me.controller.js";
 import { ReefClubRateLimits } from "./reefclub-rate-limits.js";
+import { ReefClubRunOutController } from "./reefclub-runout.controller.js";
+import { ReefClubRunOutService } from "./reefclub-runout.service.js";
 import { ReefClubSessionRepository } from "./reefclub-session.repository.js";
 import { ReefClubShopLinksController } from "./reefclub-shop-links.controller.js";
 import { ReefClubShopLinksService } from "./reefclub-shop-links.service.js";
@@ -80,6 +82,7 @@ export class ReefClubModule {
         ReefClubAquariumsController,
         ReefClubRecommendationsController,
         ReefClubShopLinksController,
+        ReefClubRunOutController,
         ReefClubHealthController,
       ],
       providers: [
@@ -98,6 +101,7 @@ export class ReefClubModule {
         ReefClubDosesService,
         ReefClubShopLinksService,
         ReefClubAccountDeletionService,
+        ReefClubRunOutService,
         {
           provide: REEFCLUB_IDENTITY_KEYS,
           useFactory: () =>

@@ -19,6 +19,7 @@ import { nincsMaradek } from "../common/takaritas-leltar.js";
 import { hashPassword } from "../users/password.util.js";
 import { configureReefClubApp } from "./reefclub-app.configuration.js";
 import { REEFCLUB_SHARE_CONSENT_VERSION } from "./reefclub-consent.js";
+import { ReefClubRunOutService } from "./reefclub-runout.service.js";
 import { ReefClubAppModule } from "./reefclub.module.js";
 
 /**
@@ -86,7 +87,7 @@ const BODIES: Record<string, unknown> = {
 };
 
 /** The path parameters this suite knows how to fill; any other one is red. */
-const KNOWN_PARAMS = new Set(["id", "occasionId", "recId"]);
+const KNOWN_PARAMS = new Set(["id", "occasionId", "recId", "productId"]);
 
 interface Route {
   method: string;
@@ -181,6 +182,14 @@ describe(
     /** An open recommendation of A's on a1, and of B's on b1 (the answer route's ids). */
     let aRec: string;
     let bRec: string;
+    /**
+     * The run-out reminder (V3.2): a product A and B each have an active reminder of, written on the owner connection (the turn-on
+     * is locked today). A's product is the foreign `:productId` of the sweep (B has no reminder of it), B's the control's.
+     */
+    let aProduct: string;
+    let bProduct: string;
+    let aReminder: string;
+    let bReminder: string;
 
     const email = (name: string) => `${name}-${suffix}@${TEST_EMAIL_DOMAIN}`;
 
@@ -313,28 +322,42 @@ describe(
     /** Every row the sweep could touch, in one hash. */
     async function fingerprint(): Promise<string> {
       const ids = [a1, a2, b1, c1, c2, d1, e1];
-      const [aquariums, targets, measurements, links] = await Promise.all([
-        prisma.aquarium.findMany({
-          where: { id: { in: ids } },
-          orderBy: { id: "asc" },
-        }),
-        prisma.aquariumMeasurementTarget.findMany({
-          where: { aquariumId: { in: ids } },
-          orderBy: { id: "asc" },
-        }),
-        prisma.aquariumMeasurement.findMany({
-          where: { aquariumId: { in: ids } },
-          orderBy: { id: "asc" },
-        }),
-        prisma.reefClubCustomerLink.findMany({
-          where: { id: { in: [zLink, bLink] } },
-          orderBy: { id: "asc" },
-        }),
-      ]);
+      const [aquariums, targets, measurements, links, reminders] =
+        await Promise.all([
+          prisma.aquarium.findMany({
+            where: { id: { in: ids } },
+            orderBy: { id: "asc" },
+          }),
+          prisma.aquariumMeasurementTarget.findMany({
+            where: { aquariumId: { in: ids } },
+            orderBy: { id: "asc" },
+          }),
+          prisma.aquariumMeasurement.findMany({
+            where: { aquariumId: { in: ids } },
+            orderBy: { id: "asc" },
+          }),
+          prisma.reefClubCustomerLink.findMany({
+            where: { id: { in: [zLink, bLink] } },
+            orderBy: { id: "asc" },
+          }),
+          prisma.reefClubRunOutReminder.findMany({
+            where: { id: { in: [aReminder, bReminder] } },
+            orderBy: { id: "asc" },
+          }),
+        ]);
       assert.equal(aquariums.length, ids.length);
       assert.equal(links.length, 2);
+      assert.equal(reminders.length, 2);
       return createHash("sha256")
-        .update(JSON.stringify({ aquariums, targets, measurements, links }))
+        .update(
+          JSON.stringify({
+            aquariums,
+            targets,
+            measurements,
+            links,
+            reminders,
+          }),
+        )
         .digest("hex");
     }
 
@@ -486,6 +509,35 @@ describe(
       });
       aRec = await openRecommendation(a1, a.id);
       bRec = await openRecommendation(b1, b.id);
+      const reminder = async (
+        accountId: string,
+        aquariumId: string,
+        name: string,
+      ): Promise<{ productId: string; id: string }> => {
+        const product = await prisma.product.create({
+          data: { name: `${NAME_PREFIX} ${name} ${suffix}` },
+        });
+        const row = await prisma.reefClubRunOutReminder.create({
+          data: {
+            accountId,
+            productId: product.id,
+            aquariumId,
+            consentVersion: "akvarium-proba",
+            consentAt: new Date(),
+          },
+        });
+        return { productId: product.id, id: row.id };
+      };
+      ({ productId: aProduct, id: aReminder } = await reminder(
+        a.id,
+        a1,
+        "A-termek",
+      ));
+      ({ productId: bProduct, id: bReminder } = await reminder(
+        b.id,
+        b1,
+        "B-termek",
+      ));
     });
 
     after(async () => {
@@ -529,6 +581,10 @@ describe(
       await prisma.customer.deleteMany({
         where: { displayName: { startsWith: NAME_PREFIX } },
       });
+      // the run-out reminders' products (their reminders go with them, Cascade)
+      await prisma.product.deleteMany({
+        where: { name: { startsWith: NAME_PREFIX } },
+      });
       await prisma.reefClubAccount.deleteMany({
         where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
       });
@@ -540,43 +596,55 @@ describe(
     it("5.2/1: B munkamenetével minden idegen akvárium-azonosító minden azonosítós útvonalon bájtra a nem létező 404-e, és semmi nem változik", async () => {
       const foreign: Record<
         string,
-        { id: string; occasionId: string; linkId: string; recId: string }
+        {
+          id: string;
+          occasionId: string;
+          linkId: string;
+          recId: string;
+          productId: string;
+        }
       > = {
         "A saját (privát)": {
           id: a1,
           occasionId: a1Occasion,
           linkId: zLink,
           recId: aRec,
+          productId: aProduct,
         },
         "A második saját": {
           id: a2,
           occasionId: a1Occasion,
           linkId: zLink,
           recId: aRec,
+          productId: aProduct,
         },
         "C bolti 1": {
           id: c1,
           occasionId: dOccasion,
           linkId: zLink,
           recId: aRec,
+          productId: aProduct,
         },
         "C bolti 2": {
           id: c2,
           occasionId: dOccasion,
           linkId: zLink,
           recId: aRec,
+          productId: aProduct,
         },
         "D bolti": {
           id: d1,
           occasionId: dOccasion,
           linkId: zLink,
           recId: aRec,
+          productId: aProduct,
         },
         "E cég": {
           id: e1,
           occasionId: dOccasion,
           linkId: zLink,
           recId: aRec,
+          productId: aProduct,
         },
       };
       const before = await fingerprint();
@@ -590,6 +658,7 @@ describe(
             occasionId: MISSING_OCCASION,
             linkId: MISSING_ID,
             recId: MISSING_ID,
+            productId: MISSING_ID,
           },
           sessionB,
         );
@@ -610,6 +679,61 @@ describe(
       assert.deepEqual(mismatches, []);
       assert.ok(compared >= 12 * 6, `${compared} összevetés`);
       assert.equal(await fingerprint(), before, "a sorok megváltoztak");
+    });
+
+    it("5.2/10: a kifogyási emlékeztető bekapcsolása idegen akvárium-azonosítóval (törzsben) bájtra a nem létező 404-e, és semmi nem íródik", async () => {
+      // The three locks are closed today (the consent text is null), and a closed lock answers BEFORE the aquarium is looked at.
+      // To measure the access rule, the availability is opened for this test only, on the running service.
+      const runOut = reefclub.get(ReefClubRunOutService);
+      const closed = runOut.availability;
+      runOut.availability = () => ({
+        kind: "available",
+        text: "Akvárium-próba szöveg.",
+        version: "akvarium-proba-v1",
+      });
+      try {
+        const enable = (aquariumId: string, session: Session) =>
+          rc("/rc/v1/runout-reminders", {
+            method: "POST",
+            body: {
+              productId: aProduct,
+              aquariumId,
+              consentVersion: "akvarium-proba-v1",
+            },
+            session,
+          }).then(async (r) => ({ status: r.status, body: await r.text() }));
+        const before = await fingerprint();
+        const missing = await enable(MISSING_ID, sessionB);
+        assert.equal(missing.status, 404);
+        const mismatches: string[] = [];
+        for (const [who, id] of Object.entries({
+          "A saját": a1,
+          "C bolti": c1,
+          "D bolti": d1,
+          "E cég": e1,
+        })) {
+          const got = await enable(id, sessionB);
+          if (got.status !== 404 || got.body !== missing.body)
+            mismatches.push(`${who}: ${got.status} ${got.body.slice(0, 120)}`);
+        }
+        assert.deepEqual(mismatches, []);
+        assert.equal(
+          await prisma.reefClubRunOutReminder.count({
+            where: { productId: aProduct },
+          }),
+          1,
+          "csak A saját sora áll a termékre, B-nek nem íródott",
+        );
+        assert.equal(await fingerprint(), before, "a sorok megváltoztak");
+        // control: B's own aquarium is accepted (the 404 is the access rule, not a bad request)
+        const own = await enable(b1, sessionB);
+        assert.equal(own.status, 201, own.body);
+      } finally {
+        runOut.availability = closed;
+        await prisma.reefClubRunOutReminder.deleteMany({
+          where: { productId: aProduct, aquariumId: b1 },
+        });
+      }
     });
 
     it("5.2/2: idegen akvárium alkalom-azonosítója a saját akvárium útvonalán a nem létező 404-e, és a másik sora megmarad", async () => {
@@ -657,7 +781,13 @@ describe(
             : b1;
         const got = await answer(
           route,
-          { id: target, occasionId: b1Occasion, linkId: bLink, recId: bRec },
+          {
+            id: target,
+            occasionId: b1Occasion,
+            linkId: bLink,
+            recId: bRec,
+            productId: bProduct,
+          },
           sessionB,
         );
         if (got.status < 200 || got.status > 299)
