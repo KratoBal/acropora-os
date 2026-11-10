@@ -99,6 +99,25 @@ const KIND_BY_ROOT_NAME: Readonly<
   Gerinctelenek: "INVERTEBRATE",
 };
 
+/**
+ * AZ ELO ALLAT FAJTAJA GYOKER-NEVEKBOL (kartya 20b0dd47: a termek reszletes nezete a kategoria-ut gyokerebol mondja meg,
+ * hogy a termek korall vagy gerinctelen-e, hogy a webes felulet a Nevek blokkot csak azoknal mutassa). Ugyanaz a
+ * szabaly, mint a `deriveLivestockKind`-nel: ha a gyokerek TOBB fajtara mutatnak, a fajta null (egy tippelt fajta
+ * rosszabb a hianyzonal); ismeretlen gyoker-nev nem elo allat.
+ */
+export function livestockKindFromRootNames(
+  rootNames: readonly string[],
+): LivestockKind | null {
+  const kinds = new Set<LivestockKind>();
+  for (const name of rootNames) {
+    const kind = (
+      KIND_BY_ROOT_NAME as Readonly<Record<string, LivestockKind | undefined>>
+    )[name];
+    if (kind) kinds.add(kind);
+  }
+  return kinds.size === 1 ? [...kinds][0]! : null;
+}
+
 /** Fajtankent a gyoker teljes reszfaja (a kategoria-azonositok halmaza). */
 export function liveAnimalKindSubtrees(
   categories: readonly WysiwygCategoryNode[],

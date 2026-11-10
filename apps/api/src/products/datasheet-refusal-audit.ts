@@ -34,6 +34,7 @@ export type DatasheetColumns = readonly (keyof DatasheetValueColumns)[];
 export interface DatasheetValueColumns {
   magyarNev: string | null;
   angolNev: string | null;
+  nemetNev: string | null;
   csaladTaxon: string | null;
   elohelySzoveg: string | null;
   akvariumMeretSzoveg: string | null;
@@ -81,6 +82,7 @@ export interface DatasheetValueColumns {
 export const ALL_VALUE_COLUMNS = [
   "magyarNev",
   "angolNev",
+  "nemetNev",
   "csaladTaxon",
   "elohelySzoveg",
   "akvariumMeretSzoveg",
@@ -136,6 +138,7 @@ export const DATASHEET_FIELD_COLUMNS: Record<DatasheetField, DatasheetColumns> =
   {
     MAGYAR_NEV: ["magyarNev"],
     ANGOL_NEV: ["angolNev"],
+    NEMET_NEV: ["nemetNev"],
     CSALAD_TAXON: ["csaladTaxon"],
     ELOHELY: ["elohelySzoveg"],
     /** Négy oszlop hordozza: a két szám, a kategória és a magyarázó szöveg. */

@@ -54,6 +54,8 @@ export function BillingPartnerCard({
     if (customer) setPicking(false);
   }, [customer?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const [creating, setCreating] = useState(false);
+  /** a kiválasztott vevő adatainak módosítása (Luca, 2026-11-10): az űrlap a vevő mostani adataival nyílik */
+  const [editing, setEditing] = useState<CustomerDetail | null>(null);
   const { session } = useAuth();
   // a new customer is a customer record, with that permission (28105)
   const canCreate = Boolean(
@@ -114,7 +116,22 @@ export function BillingPartnerCard({
     setTermsNote(partnerTermsNote(detail));
     setPicking(false);
     setCreating(false);
+    setEditing(null);
     setSearch("");
+  };
+
+  const startEditing = async () => {
+    if (!customer) return;
+    setError(null);
+    try {
+      setEditing(await customersApi.detail(token, customer.id));
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "A vevő adatai nem tölthetők be.",
+      );
+    }
   };
 
   const pick = async (summary: CustomerSummary) => {
@@ -135,7 +152,16 @@ export function BillingPartnerCard({
       title="Vevő és számlázási adatok"
       subtitle="A bizonylat a kiválasztott partner számlázási adataival készül."
     >
-      {customer && !picking ? (
+      {editing ? (
+        <BillingNewCustomerForm
+          token={token}
+          initialSearch=""
+          existing={editing}
+          onSaved={choose}
+          onPickExisting={() => undefined}
+          onClose={() => setEditing(null)}
+        />
+      ) : customer && !picking ? (
         <div className="flex flex-col gap-3 rounded-xl bg-pilot-grey-50 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0 space-y-1 text-sm">
             <p className="font-semibold text-pilot-grey-900">{customer.name}</p>
@@ -162,13 +188,23 @@ export function BillingPartnerCard({
             {customer.taxNumber || customer.email ? (
               <PilotBadge variant="success">Vevő rendben</PilotBadge>
             ) : null}
+            {canCreate && !customer.partnerMirror ? (
+              <PilotButton
+                variant="secondary"
+                size="action"
+                disabled={disabled}
+                onClick={() => void startEditing()}
+              >
+                Adatok szerkesztése
+              </PilotButton>
+            ) : null}
             <PilotButton
               variant="secondary"
               size="action"
               disabled={disabled}
               onClick={() => setPicking(true)}
             >
-              Módosítás
+              Másik partner
             </PilotButton>
           </div>
         </div>

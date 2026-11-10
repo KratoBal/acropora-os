@@ -7930,6 +7930,9 @@ model ProductDatasheet {
   /// egy kulcsszo-kereso a "NEM konnyu" alaku mondatbol "konnyu"-t hozna ki.
   magyarNev           String?
   angolNev            String?
+  /// A nemet nev (Balazs 2026-08-31: a nemet kulfoldi nyitashoz, a korall es gerinctelen adatlapon, a magyar es az angol
+  /// mellett keresheto mezokent). Csak az OS-ben tarolodik es szerkesztheto; a webshop-vetitesbe nem megy.
+  nemetNev            String?
   /// Ma SZOVEG, nem hivatkozas. A taxon-szotar nem letezik, es egy ures
   /// szotarra mutato idegen kulcs MINDEN beszurast elutasitana. Relaciora akkor
   /// valt, ha a taxon-szotar elkeszul es fel van toltve.
@@ -8155,6 +8158,8 @@ enum DatasheetField {
   SOCIAL_KEEPING
   AMIT_O_VESZELYEZTET
   AMI_OT_VESZELYEZTETI
+  /// A nemet nev (a `nemetNev` oszlop). Az enum VEGEN all, mert az `ALTER TYPE ... ADD VALUE` a vegere fuz.
+  NEMET_NEV
 }
 
 /// A tartalom útja, kilenc állapottal. A részletes indoklás és az átmenetek
