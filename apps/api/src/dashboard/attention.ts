@@ -171,6 +171,14 @@ function itemsOf(widgetId: AttentionSource, data: unknown): Item[] {
           href: "/tartalom",
           tone: "warning",
         },
+        // THE REMINDER (T5.1, Balázs 2026-11-10): the ones that have waited 48 hours or more, a line of their own, louder
+        {
+          key: "awaiting-approval-overdue",
+          label: "Jóváhagyásra vár már 2 napja (emlékeztető)",
+          count: d.overdue,
+          href: "/tartalom",
+          tone: "danger",
+        },
       ];
     }
     case "missing-invoices": {

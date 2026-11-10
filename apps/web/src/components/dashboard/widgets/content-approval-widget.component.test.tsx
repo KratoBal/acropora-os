@@ -10,16 +10,26 @@ import { contentApprovalWidget } from "./content-approval-widget";
 describe("a jóváhagyásra váró tartalom kártyája", () => {
   it("a fő szám a váró tételek száma", () => {
     const { Body } = contentApprovalWidget;
-    render(<Body data={{ total: 4 }} />);
+    render(<Body data={{ total: 4, overdue: 0 }} />);
     expect(screen.getByText("4")).toBeTruthy();
     expect(screen.getByText("jóváhagyásra váró tétel")).toBeTruthy();
   });
 
   it("nullánál üres állapot, és a kártya a Tartalom oldalra mutat", () => {
-    expect(contentApprovalWidget.emptyMessage({ total: 0 })).toBe(
+    expect(contentApprovalWidget.emptyMessage({ total: 0, overdue: 0 })).toBe(
       "Nincs jóváhagyásra váró tartalom.",
     );
-    expect(contentApprovalWidget.emptyMessage({ total: 2 })).toBeNull();
+    expect(
+      contentApprovalWidget.emptyMessage({ total: 2, overdue: 0 }),
+    ).toBeNull();
     expect(contentApprovalWidget.href).toBe("/tartalom");
+  });
+
+  it("az emlékeztető sor csak akkor áll ott, ha van 2 napja váró tétel", () => {
+    const { Body } = contentApprovalWidget;
+    const { rerender } = render(<Body data={{ total: 4, overdue: 0 }} />);
+    expect(screen.queryByText(/már legalább 2 napja vár/)).toBeNull();
+    rerender(<Body data={{ total: 4, overdue: 3 }} />);
+    expect(screen.getByText(/Ebből 3 már legalább 2 napja vár/)).toBeTruthy();
   });
 });

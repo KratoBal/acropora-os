@@ -87,17 +87,23 @@ describe("Figyelmet igényel: the figures", () => {
     );
   });
 
-  it("takes the content waiting for approval as one line to Tartalom, and nothing when none waits", () => {
-    assert.deepEqual(
-      attentionItemsOf("content-approval", { total: 4 }).map((i) => [
+  it("takes the content waiting for approval as a line to Tartalom, and the 48-hour reminder as a louder line of its own", () => {
+    const shape = (data: { total: number; overdue: number }) =>
+      attentionItemsOf("content-approval", data).map((i) => [
         i.key,
         i.count,
         i.tone,
         i.href,
-      ]),
-      [["awaiting-approval", 4, "warning", "/tartalom"]],
-    );
-    assert.deepEqual(attentionItemsOf("content-approval", { total: 0 }), []);
+      ]);
+    // nothing overdue: the one line, no reminder line (a count of 0 is not shown)
+    assert.deepEqual(shape({ total: 4, overdue: 0 }), [
+      ["awaiting-approval", 4, "warning", "/tartalom"],
+    ]);
+    assert.deepEqual(shape({ total: 4, overdue: 3 }), [
+      ["awaiting-approval", 4, "warning", "/tartalom"],
+      ["awaiting-approval-overdue", 3, "danger", "/tartalom"],
+    ]);
+    assert.deepEqual(shape({ total: 0, overdue: 0 }), []);
   });
 
   it("takes my open tasks as one line to Feladataim, and nothing when there are none", () => {

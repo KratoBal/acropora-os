@@ -9,6 +9,7 @@ import {
 import type { ContentChannel } from "@acropora/types";
 
 import { ArticleStepError } from "./article.repository.js";
+import { isApprovalOverdue } from "./content-approval-reminder.js";
 import { ContentRepository } from "./content.repository.js";
 import {
   ROLES_THIS_VIEW_CANNOT_COVER,
@@ -138,11 +139,19 @@ export class ContentService {
    * A JÓVÁHAGYÁSRA VÁRÓ TÉTELEK SZÁMA, a jóváhagyók kezdőlapjához és a Figyelmet igényel listához (T5.1 PR2, acrobot 45938).
    *
    * MINDEN ilyen tételt számol, nem a nézőét: a jóváhagyás az a lépés, amit EGY jóváhagyó sem hagyhat félre, és a „Rám vár"
-   * jóváhagyói nézete sem szűr szerzőre. Egy szám és egy link, értesítés nélkül: ez láthatóság, nem emlékeztető (az
-   * emlékeztető napja Balázs döntése).
+   * jóváhagyói nézete sem szűr szerzőre. Egy szám és egy link, és az értesítés CSAK az OS-ben van (Balázs, 2026-11-10 17:43
+   * UTC: levél vagy csatorna-üzenet nincs). AZ EMLÉKEZTETŐ: a tételek közül hány vár már legalább 48 órája (`overdue`), ugyanitt
+   * és a Figyelmet igényel listán látszik; a "2 nap" 48 óra, nem két naptári nap (egy este beérkezett tétel másnap este
+   * esedékes, nem másnap éjfélkor).
    */
-  async awaitingApproval(): Promise<{ total: number }> {
-    return { total: await this.repository.countAwaitingApproval() };
+  async awaitingApproval(
+    now: Date = new Date(),
+  ): Promise<{ total: number; overdue: number }> {
+    const since = await this.repository.awaitingApprovalSince();
+    return {
+      total: since.length,
+      overdue: since.filter((at) => isApprovalOverdue(at, now)).length,
+    };
   }
 
   /**

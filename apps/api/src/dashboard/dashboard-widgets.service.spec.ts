@@ -380,14 +380,14 @@ describe("Jóváhagyásra váró tartalom", () => {
       content: {
         awaitingApproval: async () => {
           asked += 1;
-          return { total: 3 };
+          return { total: 3, overdue: 1 };
         },
       },
     });
     const r = await svc.widgets(user("OWNER"), ["content-approval"]);
     assert.deepEqual(r.results["content-approval"], {
       status: "ok",
-      data: { total: 3 },
+      data: { total: 3, overdue: 1 },
     });
     await svc.widgets(user("ADMIN"), ["content-approval"]);
     assert.equal(asked, 2);
@@ -395,7 +395,7 @@ describe("Jóváhagyásra váró tartalom", () => {
 
   it("is forbidden for a role without content.approve", async () => {
     const { svc } = service({
-      content: { awaitingApproval: async () => ({ total: 3 }) },
+      content: { awaitingApproval: async () => ({ total: 3, overdue: 1 }) },
     });
     for (const role of ["MANAGER", "SALES", "SERVICE", "VIEWER"] as const)
       assert.deepEqual(
