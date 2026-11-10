@@ -2,10 +2,13 @@ import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { spawn } from "node:child_process";
+import { EventEmitter } from "node:events";
+import { createServer } from "node:http";
 import { describe, it } from "node:test";
 
 import type { TrialDatabase } from "./trial-database.js";
-import { freePort, runTrial } from "./trial-run.js";
+import { freePort, portIsFree, runTrial } from "./trial-run.js";
 import type { ConnectionSettingState } from "./trial-integrations.js";
 
 /*
@@ -165,6 +168,65 @@ describe("the instance", () => {
     const api = checks.find((c) => c.name.startsWith("api:"))!;
     assert.equal(api.passed, false);
     assert.match(api.name, /exited with code 3 before it answered/);
+    assert.ok(!checks.some((c) => c.name.startsWith("login:")));
+  });
+
+  /*
+    A FOREIGN ANSWER (card a46fcda6): the one CI failure was a trial that took a /health answer from another process on its port
+    (387 ms, the stand-in's marker file never written). WHAT TURNS THESE RED: a port that is taken and an instance started anyway;
+    a foreign answer taken for the instance's; an instance that exited right after a /health answer counted as up.
+  */
+  it("does not start the instance on a port another process already holds, and does not take that process's /health for its own", async () => {
+    const foreign = createServer((_req, res) => {
+      res.statusCode = 200;
+      res.end("{}");
+    });
+    await new Promise<void>((resolve) =>
+      foreign.listen(0, "127.0.0.1", resolve),
+    );
+    const port = (foreign.address() as { port: number }).port;
+    try {
+      assert.equal(await portIsFree(port), false);
+      const checks = await runTrial({
+        ...base,
+        port,
+        apiMain: standIn("foreign-port"),
+        database: database(),
+        healthTimeoutMs: 5_000,
+      });
+      const api = checks.find((c) => c.name.startsWith("api:"))!;
+      assert.equal(api.passed, false);
+      assert.match(api.name, /already in use/);
+      assert.equal(existsSync(join(dir, "foreign-port")), false);
+      assert.ok(!checks.some((c) => c.name.startsWith("login:")));
+    } finally {
+      await new Promise<void>((resolve) => foreign.close(() => resolve()));
+    }
+    assert.equal(await portIsFree(port), true);
+  });
+
+  it("does not count an instance that exits right after a /health answer as up (another process may have answered)", async () => {
+    // a stand-in child whose exit is DETERMINISTIC (20 ms after the spawn), not a real process whose start-up time varies under load
+    const fake = Object.assign(new EventEmitter(), {
+      exitCode: null as number | null,
+      kill: () => true,
+    });
+    setTimeout(() => {
+      fake.exitCode = 5;
+    }, 20);
+    const checks = await runTrial({
+      ...base,
+      apiMain: standIn("never-spawned"),
+      database: database(),
+      healthTimeoutMs: 10_000,
+      spawnImpl: (() => fake) as unknown as typeof spawn,
+      // an answer that comes at once, as a foreign process on the port would give it
+      fetchImpl: (async () =>
+        new Response("{}", { status: 200 })) as typeof fetch,
+    });
+    const api = checks.find((c) => c.name.startsWith("api:"))!;
+    assert.equal(api.passed, false);
+    assert.match(api.name, /exited with code 5 right after \/health answered/);
     assert.ok(!checks.some((c) => c.name.startsWith("login:")));
   });
 
