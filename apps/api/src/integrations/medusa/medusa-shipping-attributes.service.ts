@@ -73,27 +73,58 @@ export class MedusaShippingAttributesService {
   }
 
   /**
-   * A BOLTBAN MARADT FAJTA LETORLESE (kartya 4b30b373): a bolti sor `livestock_kind`-ja null lesz, a tobbi zaszlo
-   * valtozatlan. Csak olyan sorra hivd, aminek az OS-ben mar nincs elo allat besorolasa (a hivo dont). Proba-futasnal
-   * (`apply` hamis) nem ir, es megmondja, mit kuldene. Csak a fajta mezot kuldi (reszleges frissites).
+   * A BOLTBAN MARADT FAJTA ES SZARMAZTATOTT ATVETEL LETORLESE (kartyak 4b30b373, c603774e): a bolti sor `livestock_kind`-ja
+   * null lesz, es/vagy a `pickup_only` (a jelolovel egyutt) hamis; a tobbi zaszlo valtozatlan. Csak olyan sorra hivd, aminek
+   * az OS-ben mar nincs elo allat besorolasa (a hivo dont). Proba-futasnal (`apply` hamis) nem ir, es megmondja, mit
+   * kuldene. CSAK a kert mezoket kuldi (reszleges frissites).
+   *
+   * Az atvetelt iras ELOTT ujra olvassa a sort: ha kozben mar nem (igaz es jelolt), nem nyul hozza, mert egy ember kozben
+   * atallithatta (`unchanged`). A jelolo nelkuli, kezi ertek igy sem veheto le.
    */
   async clearLeftoverKind(
     row: MedusaShippingFlags & { product_id: string },
     apply: boolean,
+    clear: { kind: boolean; pickup: boolean } = { kind: true, pickup: false },
   ): Promise<{
-    action: "planned" | "applied";
+    action: "planned" | "applied" | "unchanged";
     medusaProductId: string;
     flags: string;
   }> {
-    const flags = `${describeShippingFlags(row)} -> a fajta törlése`;
+    const parts = (what: { kind: boolean; pickup: boolean }) =>
+      [
+        what.kind ? "a fajta törlése" : null,
+        what.pickup ? "a származtatott bolti átvétel levétele" : null,
+      ]
+        .filter((part): part is string => part !== null)
+        .join(", ");
+    const flags = `${describeShippingFlags(row)} -> ${parts(clear)}`;
     if (!apply)
       return { action: "planned", medusaProductId: row.product_id, flags };
-    // CSAK A FAJTA megy (a bolt route-ja reszleges frissitest fogad): a tobbi zaszlot, amit kozben valaki a Medusa
+    let what = clear;
+    if (what.pickup) {
+      const fresh = await this.medusa.fetchShippingAttributes(row.product_id);
+      if (!(fresh.pickup_only === true && fresh.pickup_only_derived === true))
+        what = { ...what, pickup: false };
+    }
+    if (!what.kind && !what.pickup)
+      return {
+        action: "unchanged",
+        medusaProductId: row.product_id,
+        flags,
+      };
+    // CSAK A KERT MEZOK mennek (a bolt route-ja reszleges frissitest fogad): a tobbi zaszlot, amit kozben valaki a Medusa
     // adminban atallitott, nem irjuk vissza (barracuda, #2353 review)
     await this.medusa.setShippingAttributes(row.product_id, {
-      livestock_kind: null,
+      ...(what.kind ? { livestock_kind: null } : {}),
+      ...(what.pickup
+        ? { pickup_only: false, pickup_only_derived: false }
+        : {}),
     });
-    return { action: "applied", medusaProductId: row.product_id, flags };
+    return {
+      action: "applied",
+      medusaProductId: row.product_id,
+      flags: `${describeShippingFlags(row)} -> ${parts(what)}`,
+    };
   }
 
   async project(
@@ -184,10 +215,20 @@ export class MedusaShippingAttributesService {
       livestock_kind: wantedKind,
       ...withoutNewer
     } = wanted;
+    /*
+      A SZARMAZTATAS JELOLOJE (commerce #724, kartya c603774e): az atvetel akkor az OS-e, ha a kategoria mondja, es a
+      profil-sor nem mondja ki maga (egy profilban kimondott ertek tudatos, nem levezetett). UGYANUGY, mint a tobbi uj mezo:
+      csak akkor megy, ha a bolt SAJAT valasza hozza, mert a szigoru validator az egesz irast elutasitana. A jelolot a bolt
+      csak olyan ertekre teszi, amit az iras maga kapcsol be, vagy ami mar jelolt: egy kezzel bekapcsolt erteket az OS
+      ugyanazzal az ertekkel sem vehet at, es azt a jelolo nelkuli sort a kor nem is irja ujra (`shippingFlagsDiffer`).
+    */
+    const shopKnowsMark = "pickup_only_derived" in current;
+    const markWanted = derivedPickupOnly && !(profile?.pickupOnly ?? false);
     const payload: MedusaShippingFlags = {
       ...withoutNewer,
       ...(shopKnowsLocker ? { locker_unsuitable: lockerUnsuitable } : {}),
       ...(shopKnowsKind ? { livestock_kind: wantedKind ?? null } : {}),
+      ...(shopKnowsMark ? { pickup_only_derived: markWanted } : {}),
     };
     const notes = [
       !shopKnowsLocker && lockerUnsuitable
