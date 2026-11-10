@@ -5,6 +5,7 @@ import type { LivestockKind } from "./medusa-livestock.policy.js";
 import { MedusaProductLinkRepository } from "./medusa-product-link.repository.js";
 import {
   describeShippingFlags,
+  flagsWithoutKind,
   shippingFlagsDiffer,
   shippingFlagsFromProfile,
   type MedusaShippingFlags,
@@ -58,6 +59,41 @@ export class MedusaShippingAttributesService {
   /** A bolt termékeinek SKU-ja, lapozva (a CLI párosításához). */
   listShopSkus(offset: number, limit: number) {
     return this.medusa.listProductSkus(offset, limit);
+  }
+
+  /** A bolt minden szallitasi-jellemzo sora (olvasas), a boltban maradt fajtak kereseshez. */
+  listShopShippingAttributes() {
+    return this.medusa.listShippingAttributes();
+  }
+
+  /** Melyik OS-termek tartozik a bolti termekhez a kotes-sor szerint, vagy null. */
+  async osProductOfShop(shopProductId: string): Promise<string | null> {
+    return (
+      (await this.links.findByMedusaProductId(shopProductId))?.productId ?? null
+    );
+  }
+
+  /**
+   * A BOLTBAN MARADT FAJTA LETORLESE (kartya 4b30b373): a bolti sor `livestock_kind`-ja null lesz, a tobbi zaszlo
+   * valtozatlan. Csak olyan sorra hivd, aminek az OS-ben mar nincs elo allat besorolasa (a hivo dont). Proba-futasnal
+   * (`apply` hamis) nem ir, es megmondja, mit kuldene.
+   */
+  async clearLeftoverKind(
+    row: MedusaShippingFlags & { product_id: string },
+    apply: boolean,
+  ): Promise<{
+    action: "planned" | "applied";
+    medusaProductId: string;
+    flags: string;
+  }> {
+    const flags = `${describeShippingFlags(row)} -> a fajta törlése`;
+    if (!apply)
+      return { action: "planned", medusaProductId: row.product_id, flags };
+    await this.medusa.setShippingAttributes(
+      row.product_id,
+      flagsWithoutKind(row),
+    );
+    return { action: "applied", medusaProductId: row.product_id, flags };
   }
 
   async project(

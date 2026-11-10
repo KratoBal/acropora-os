@@ -1275,6 +1275,12 @@ export interface MedusaAdminClient {
   fetchShippingAttributes(
     productId: string,
   ): Promise<MedusaShippingAttributeRow>;
+  /**
+   * A BOLT MINDEN SZALLITASI-JELLEMZO SORA (olvasas). A bolt route-ja `take: null`-lal minden sort ad (a bolt
+   * route-janak `take: null` javitasa elott csak egy lapot: ott a lista csonka, es a hivo nem tudhatja), a CLI ebbol keresi a boltban maradt
+   * elo allat fajtakat.
+   */
+  listShippingAttributes(): Promise<MedusaShippingAttributeRow[]>;
   /** A negy zaszlo kikuldese. EZ IR A BOLTI OLDALRA. */
   setShippingAttributes(
     productId: string,
@@ -2559,6 +2565,13 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
       shipping_attribute: MedusaShippingAttributeRow;
     }>(`/admin/shipping-attributes/${encodeURIComponent(productId)}`);
     return body.shipping_attribute;
+  }
+
+  async listShippingAttributes(): Promise<MedusaShippingAttributeRow[]> {
+    const body = await this.request<{
+      shipping_attributes: MedusaShippingAttributeRow[];
+    }>("/admin/shipping-attributes");
+    return body.shipping_attributes ?? [];
   }
 
   async setShippingAttributes(

@@ -117,3 +117,33 @@ export function describeShippingFlags(flags: MedusaShippingFlags): string {
   ].filter((x): x is string => x !== null);
   return igazak.length ? igazak.join(", ") : "nincs korlátozás";
 }
+
+/**
+ * A BOLTBAN MARADT ELO ALLAT FAJTA (V2.6 S1b koveto, kartya 4b30b373).
+ *
+ * Egy termek, ami kikerult a harom elo allat kategoriabol, es nincs szallitasi-jellemzo sora, nem celpontja a
+ * parancsnak (a celok a profil-sorok es az elo allat besorolasok), ezert a boltban a regi `livestock_kind` marad, es
+ * a vevoi level rossz akklimatizacios utmutatot adna. A bolt sora, amin fajta all, ezzel a szuressel jelolt.
+ */
+export function rowsCarryingKind<
+  T extends { livestock_kind?: LivestockKind | null },
+>(rows: readonly T[]): T[] {
+  return rows.filter((row) => (row.livestock_kind ?? null) !== null);
+}
+
+/**
+ * A bolti sor zaszloi VALTOZATLANUL, csak a fajta nelkul. A tobbi zaszlo nem az OS dontese ezen a termeken (nincs
+ * profil-sora), tehat nem nyulunk hozzajuk: a kikuldes az ELTAROLT ertekeket kuldi vissza.
+ */
+export function flagsWithoutKind(
+  row: MedusaShippingFlags,
+): MedusaShippingFlags {
+  return {
+    pickup_only: row.pickup_only,
+    foxpost_forbidden: row.foxpost_forbidden,
+    is_heavy: row.is_heavy,
+    is_frozen: row.is_frozen,
+    locker_unsuitable: row.locker_unsuitable ?? false,
+    livestock_kind: null,
+  };
+}
