@@ -6,6 +6,8 @@ import { MedusaConnectionService } from "./medusa-connection.service.js";
 import { MedusaConnectionStartupValidator } from "./medusa-connection-startup.validator.js";
 import { MedusaCredentialCryptoService } from "./medusa-credential-crypto.service.js";
 import { MedusaCredentialProvider } from "./medusa-credential.provider.js";
+import { MedusaPickupAdoptionController } from "./medusa-pickup-adoption.controller.js";
+import { MedusaPickupAdoptionService } from "./medusa-pickup-adoption.service.js";
 import { MedusaProjectionScheduler } from "./medusa-projection.scheduler.js";
 import { MedusaProjectionStatusController } from "./medusa-projection-status.controller.js";
 import { MedusaInventoryScheduler } from "./medusa-inventory.scheduler.js";
@@ -29,7 +31,11 @@ import { MedusaInventoryScheduler } from "./medusa-inventory.scheduler.js";
  * indítasi modja csak ott valtozik, ahol valaki a kapcsolot bekapcsolja.
  */
 @Module({
-  controllers: [MedusaConnectionController, MedusaProjectionStatusController],
+  controllers: [
+    MedusaConnectionController,
+    MedusaProjectionStatusController,
+    MedusaPickupAdoptionController,
+  ],
   providers: [
     MedusaConnectionRepository,
     MedusaCredentialCryptoService,
@@ -38,6 +44,7 @@ import { MedusaInventoryScheduler } from "./medusa-inventory.scheduler.js";
     MedusaConnectionStartupValidator,
     MedusaProjectionScheduler,
     MedusaInventoryScheduler,
+    MedusaPickupAdoptionService,
   ],
   exports: [
     MedusaConnectionService,

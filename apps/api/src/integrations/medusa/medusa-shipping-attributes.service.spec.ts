@@ -667,3 +667,75 @@ describe("a származtatott átvétel jelölője", () => {
     });
   });
 });
+
+/*
+  A MULTBELI ATVETEL ADOPTALASA A SZOLGALTATASBAN (kartya c603774e). MI PIROSIT: az adopt a tobbi zaszlot is kuldi (egy kozben
+  kezzel atallitott masik zaszlot visszairna); az adopt-kapcsolo nelkul megy (a bolt nem venne at); iras elott nem olvas ujra, es
+  egy mar jelolt vagy kikapcsolt sorra is ir; a proba-futas ir.
+*/
+describe("a bolti átvétel adoptálása", () => {
+  function kis(friss: Partial<MedusaShippingFlags>) {
+    const kikuldott: { productId: string; flags: unknown }[] = [];
+    const medusa = {
+      fetchShippingAttributes: async (productId: string) => ({
+        id: "sa_1",
+        product_id: productId,
+        ...CSUPA_HAMIS,
+        pickup_only: true,
+        pickup_only_derived: false,
+        ...friss,
+      }),
+      setShippingAttributes: async (productId: string, flags: unknown) => {
+        kikuldott.push({ productId, flags });
+        return { id: "sa_1", product_id: productId };
+      },
+    } as unknown as MedusaAdminClient;
+    return {
+      service: new MedusaShippingAttributesService(
+        {} as unknown as MedusaProductLinkRepository,
+        medusa,
+      ),
+      kikuldott,
+    };
+  }
+
+  it("CSAK a jelölőt és az adopt-kapcsolót küldi", async () => {
+    const f = kis({});
+    const outcome = await f.service.adoptPickupMark(
+      { product_id: "prod_1" },
+      true,
+    );
+    assert.equal(outcome.action, "applied");
+    assert.deepEqual(f.kikuldott, [
+      {
+        productId: "prod_1",
+        flags: { pickup_only_derived: true, adopt_pickup_only_derived: true },
+      },
+    ]);
+  });
+
+  it("iras elott ujra olvas: a mar jelolt vagy kikapcsolt sorra nem ir", async () => {
+    for (const friss of [
+      { pickup_only_derived: true },
+      { pickup_only: false },
+    ]) {
+      const f = kis(friss);
+      const outcome = await f.service.adoptPickupMark(
+        { product_id: "prod_1" },
+        true,
+      );
+      assert.equal(outcome.action, "unchanged");
+      assert.deepEqual(f.kikuldott, []);
+    }
+  });
+
+  it("proba-futasnal nem ir", async () => {
+    const f = kis({});
+    const outcome = await f.service.adoptPickupMark(
+      { product_id: "prod_1" },
+      false,
+    );
+    assert.equal(outcome.action, "planned");
+    assert.deepEqual(f.kikuldott, []);
+  });
+});

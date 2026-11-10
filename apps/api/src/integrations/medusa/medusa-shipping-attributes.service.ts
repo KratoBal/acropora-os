@@ -127,6 +127,30 @@ export class MedusaShippingAttributesService {
     };
   }
 
+  /**
+   * A MAR BEKAPCSOLT ATVETEL JELOLESE AZ OS SAJATJAKENT (kartya c603774e, az egyszeri, atnezett visszatoltes): a bolti sor
+   * `pickup_only`-ja igaz es jelolo nelkuli volt, mostantol az OS jelolt ertekeve valik, es a termek elo allat besorolasanak
+   * megszunesekor a levetel lepese leveszi. Csak a jelolo megy (es a bolt `adopt` kapcsoloja, ami a sorra nem kerul).
+   * Iras elott ujra olvassa a sort: ha kozben mar nem (igaz es jelolo nelkuli), nem nyul hozza.
+   */
+  async adoptPickupMark(
+    row: { product_id: string },
+    apply: boolean,
+  ): Promise<{
+    action: "planned" | "applied" | "unchanged";
+    medusaProductId: string;
+  }> {
+    if (!apply) return { action: "planned", medusaProductId: row.product_id };
+    const fresh = await this.medusa.fetchShippingAttributes(row.product_id);
+    if (!(fresh.pickup_only === true && fresh.pickup_only_derived !== true))
+      return { action: "unchanged", medusaProductId: row.product_id };
+    await this.medusa.setShippingAttributes(row.product_id, {
+      pickup_only_derived: true,
+      adopt_pickup_only_derived: true,
+    });
+    return { action: "applied", medusaProductId: row.product_id };
+  }
+
   async project(
     osProductId: string,
     profile: OsShippingProfile | null,
