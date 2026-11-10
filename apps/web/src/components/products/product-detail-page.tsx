@@ -1243,11 +1243,10 @@ export function ProductDetailPage({ productId }: { productId: string }) {
               ]
             : []),
           /*
-            A KORALL ES A GERINCTELEN NEVEI (kartya 20b0dd47): az adatlap nevei OS-tulajdonuak, a UNAS-szinkron nem ir
-            rajuk, ezert a gazda-allapottol fuggetlenul latszanak; a kartya maga donti el (livestockKind), kell-e.
+            AZ ELO ALLATOK NEVEI (kartya 20b0dd47; a hal is, acrobot 46058): az adatlap nevei OS-tulajdonuak, a UNAS-szinkron
+            nem ir rajuk, ezert a gazda-allapottol fuggetlenul latszanak; minden elo allaton (korall, gerinctelen, hal).
           */
-          ...(product.livestockKind === "CORAL" ||
-          product.livestockKind === "INVERTEBRATE"
+          ...(product.livestockKind !== null
             ? [
                 {
                   id: "names",
