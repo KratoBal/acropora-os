@@ -1246,6 +1246,7 @@ export const ANONYMIZATION_REGISTER: Readonly<
   ProductDatasheet: {
     magyarNev: "business",
     angolNev: "business",
+    nemetNev: "business",
     csaladTaxon: "business",
     elohelySzoveg: "business",
     akvariumMeretSzoveg: "business",
