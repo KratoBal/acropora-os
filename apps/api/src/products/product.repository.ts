@@ -242,6 +242,13 @@ async function husbandryVerificationWithdrawal(
       metadata,
     },
   });
+  // THE WITHDRAWAL CHANGES WHAT THE SHOP MAY SAY (V2.2 S3): the husbandry key goes off at the next round, and the round picks
+  // the product by its own timestamps. The names path does not move the product row (a name write must not send the product
+  // to the shop), so a withdrawal moves it here, and only then.
+  await transaction.product.updateMany({
+    where: { id: productId },
+    data: { updatedAt: new Date() },
+  });
   await transaction.domainEvent.create({
     data: {
       id: randomUUID(),

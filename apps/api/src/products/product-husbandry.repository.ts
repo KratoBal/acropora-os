@@ -189,6 +189,14 @@ export class ProductHusbandryRepository {
           update: decision.data,
           select: husbandryDatasheetSelect,
         });
+        // THE PRODUCT'S `updatedAt` MOVES WITH ITS HUSBANDRY BLOCK (V2.2 S3), as it does with an arrival: the shop's `husbandry`
+        // key is projected from the datasheet, and the projection's due signal is the product's own timestamps (the datasheet
+        // is not one of them), so a verified (or withdrawn) block on a product nobody else touched would never be picked.
+        await transaction.product.update({
+          where: { id: productId },
+          data: { updatedAt: new Date() },
+          select: { id: true },
+        });
         const afterStored: StoredProduct = { ...stored, datasheet };
         const after = husbandryFactsOf(datasheet);
         const changedFacts = decision.changed.filter(

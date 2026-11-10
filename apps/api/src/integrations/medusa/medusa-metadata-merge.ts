@@ -139,12 +139,24 @@ export const DISCONTINUED_KEY = "discontinued";
  */
 export const LIVESTOCK_ARRIVAL_KEY = "livestock_arrival";
 
+/**
+ * THE HUSBANDRY BLOCK OF A LIVE ANIMAL (V2.2 S3, card d2fc06e7): a JSON text, `{"v":1,"kind":"fish","verified_on":"2026-11-10",
+ * "difficulty":"HALADO",...}`, only while the product is a live animal whose husbandry block is VERIFIED, and only the facts
+ * that are filled in. Built in `medusa-husbandry.ts`. Owned like `unique_piece`: a block that is withdrawn (an edit) or never
+ * verified removes the key in the merge.
+ *
+ * PAIR: acropora-commerce, the storefront's reader (S4). Two repos, no shared package: if the strings differ, the page
+ * silently shows "being checked".
+ */
+export const HUSBANDRY_KEY = "husbandry";
+
 export const OWNED_METADATA_KEYS = [
   UNIQUE_PIECE_KEY,
   ACROPORA_IMAGES_KEY,
   PRIMARY_CATEGORY_KEY,
   DISCONTINUED_KEY,
   LIVESTOCK_ARRIVAL_KEY,
+  HUSBANDRY_KEY,
 ] as const;
 
 /**
