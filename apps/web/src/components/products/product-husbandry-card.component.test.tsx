@@ -260,6 +260,63 @@ describe("A tartási blokk szerkesztője", () => {
     });
   });
 
+  /*
+    THE STING OR VENOM BANNER (V2.2 follow-up). WHAT TURNS THESE RED: a stated hazard with no banner; the banner showing the unsaved
+    draft instead of the stored fact; the warning text missing from it; a "no" or an unknown showing it; a hazard without its warning
+    that says nothing about the missing warning.
+  */
+  it("a tárolt csípés vagy méreg figyelmeztető sávot ad a kezelési figyelmeztetéssel, a nem és az ismeretlen nem", async () => {
+    api.husbandry.mockResolvedValue(
+      husbandry(
+        {},
+        { stingOrVenom: true, handlingWarning: "Kesztyűvel fogd meg." },
+      ),
+    );
+    const { unmount } = render(
+      <ProductHusbandryCard token="t" product={product("CORAL")} canManage />,
+    );
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Csípés vagy méreg");
+    expect(alert.textContent).toContain("Kesztyűvel fogd meg.");
+    unmount();
+
+    for (const sting of [false, null]) {
+      api.husbandry.mockResolvedValue(
+        husbandry({}, { stingOrVenom: sting, handlingWarning: "Kesztyű." }),
+      );
+      const view = render(
+        <ProductHusbandryCard token="t" product={product("CORAL")} canManage />,
+      );
+      await screen.findByTestId("husbandry-status");
+      expect(screen.queryByRole("alert")).toBeNull();
+      view.unmount();
+    }
+  });
+
+  it("a figyelmeztetés nélkül talált veszély kimondja, hogy a figyelmeztetés hiányzik", async () => {
+    api.husbandry.mockResolvedValue(
+      husbandry({}, { stingOrVenom: true, handlingWarning: "   " }),
+    );
+    render(
+      <ProductHusbandryCard token="t" product={product("CORAL")} canManage />,
+    );
+    expect(
+      await screen.findByText(/A kezelési figyelmeztetés hiányzik/),
+    ).toBeTruthy();
+  });
+
+  it("a sáv a tárolt állapotot mutatja, nem a még nem mentett piszkozatot", async () => {
+    api.husbandry.mockResolvedValue(husbandry({}, { stingOrVenom: null }));
+    render(
+      <ProductHusbandryCard token="t" product={product("CORAL")} canManage />,
+    );
+    await screen.findByTestId("husbandry-status");
+    fireEvent.change(screen.getByLabelText("Csípés vagy méreg"), {
+      target: { value: "true" },
+    });
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("a magyar nevet csak olvashatóan mutatja, a Nevek kártyára utalva", async () => {
     api.husbandry.mockResolvedValue(
       husbandry({}, { magyarNev: "Szarvkorall" }),
