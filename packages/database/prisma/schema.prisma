@@ -9498,6 +9498,8 @@ enum ProductCopyBlock {
   body
   seoTitle
   metaDescription
+  /// The product's usage guide (V3.3, card 69b5f2ef): its own section on the page, never part of the description.
+  usage
 }
 
 enum ProductCopyStatus {

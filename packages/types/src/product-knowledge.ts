@@ -15,12 +15,17 @@ import type {
  * is OS -> Medusa.
  */
 
-/** The copy blocks. `lead` + `body` become the shop description. */
+/**
+ * The copy blocks. `lead` + `body` become the shop description. `usage` is the product's usage guide (V3.3, card 69b5f2ef,
+ * korall's template): a section of its own on the product page, never part of the description; its numbers come only from
+ * facts it names, under the same VERIFIED gate as the description.
+ */
 export const PRODUCT_COPY_BLOCKS = [
   "lead",
   "body",
   "seoTitle",
   "metaDescription",
+  "usage",
 ] as const;
 export type ProductCopyBlock = (typeof PRODUCT_COPY_BLOCKS)[number];
 

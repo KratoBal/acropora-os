@@ -677,6 +677,45 @@ describe("the projection payload (the PR A / PR B contract)", () => {
     );
   });
 
+  /*
+    THE USAGE GUIDE (V3.3, card 69b5f2ef). WHAT TURNS THIS RED: the approved guide not projected, or put before the
+    description's blocks; a guide built on a fact the buyer cannot see (here the conflicting dosing) let out; a draft guide
+    let out.
+  */
+  it("usage: the approved guide travels after lead and body, under the same VERIFIED gate", () => {
+    const allVerified: FactRow[] = facts.map((fact) => ({
+      ...fact,
+      status: "VERIFIED",
+      value: fact.value ?? "1 csepp/100 l/nap",
+    }));
+    const fresh = { packSize: 1, dosing: 2 };
+    const block = (
+      name: "lead" | "body" | "usage",
+      status: "APPROVED" | "DRAFT" = "APPROVED",
+    ) => ({
+      block: name,
+      body: name.toUpperCase(),
+      status,
+      revision: 1,
+      basedOn: fresh,
+      usedFields: name === "usage" ? ["dosing"] : [],
+    });
+    assert.deepEqual(
+      knowledgeProjection(allVerified, [
+        block("usage"),
+        block("body"),
+        block("lead"),
+      ]).copy.map((c) => c.block),
+      ["lead", "body", "usage"],
+    );
+    assert.deepEqual(
+      knowledgeProjection(allVerified, [block("usage", "DRAFT")]).copy,
+      [],
+    );
+    // built on the dosing, which is a conflict here: held back
+    assert.deepEqual(knowledgeProjection(facts, [block("usage")]).copy, []);
+  });
+
   it("the diff: the same state in another order is unchanged; an empty record needs no write", () => {
     const wanted = knowledgeProjection(
       facts.map((fact) => ({
