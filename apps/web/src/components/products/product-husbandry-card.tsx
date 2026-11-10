@@ -412,6 +412,23 @@ export function ProductHusbandryCard({
             description={notice}
           />
         ) : null}
+        {/*
+          A CSÍPÉS VAGY MÉREG KIEMELVE (V2.2 follow-up, acrobot 46293): a jelző egyébként csak egy választó a többi közt, és aki ellenőrzi a
+          blokkot, ezt nem szabad véletlenül átlapozza. A SZERVEREN TÁROLT állapotot mutatja (nem a még nem mentett piszkozatot), a kezelési
+          figyelmeztetés szövegével; ha az nincs, azt mondja ki (az írási szabály ezt nem engedi, de egy régi vagy megkerült sor igen).
+        */}
+        {husbandry?.facts.stingOrVenom === true ? (
+          <Alert
+            className="mt-3"
+            variant="danger"
+            title="Csípés vagy méreg"
+            description={
+              husbandry.facts.handlingWarning?.trim()
+                ? husbandry.facts.handlingWarning
+                : "A kezelési figyelmeztetés hiányzik: add meg, mielőtt ellenőrzöd."
+            }
+          />
+        ) : null}
         {husbandry ? (
           <div className="mt-3 space-y-2" data-testid="husbandry-status">
             <div>
