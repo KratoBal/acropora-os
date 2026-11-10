@@ -15,7 +15,7 @@ import { ReefClubRunOutService } from "./reefclub-runout.service.js";
   consent text is not given (either one alone must stop it, and today the text IS not given); a row that does not name the text
   version and the time it was given at; an aquarium with no litres taking the reminder; a foreign aquarium answering anything but
   the 404; the unsubscribe key not unique-looking, or a second click on it an error; turning it on again not clearing the
-  unsubscribe; a product that does not exist (the foreign key) not a named refusal, and an aquarium that vanished mid-write reported
+  unsubscribe; a product off the run-out list turned on; a product that does not exist (the foreign key) not a named refusal, and an aquarium that vanished mid-write reported
   as a missing product; the key stored in a row, or an old mail's link ending (a copy of the table must not unsubscribe, and every sent link must work); no secret still recording a consent.
 */
 const NOW = new Date("2026-11-09T10:00:00Z");
@@ -36,7 +36,9 @@ type Row = {
   unsubscribedAt: Date | null;
 };
 
-function setup(over: { litres?: unknown; fkField?: string } = {}) {
+function setup(
+  over: { litres?: unknown; fkField?: string; unlisted?: string[] } = {},
+) {
   const rows: Row[] = [];
   const database = {
     aquarium: {
@@ -88,10 +90,15 @@ function setup(over: { litres?: unknown; fkField?: string } = {}) {
           )
           .sort((x, y) => x.consentAt.getTime() - y.consentAt.getTime()),
     },
-    reefClubDoseRow: {
+    reefClubRunOutProduct: {
+      // the run-out list: p1, p2, p3 and "nincs-fk" (listed, but its foreign key fails) are on it, "nincs" is not
+      findUnique: async ({ where }: any) =>
+        ["p1", "p2", "p3", "nincs-fk"].includes(where.productId) &&
+        !over.unlisted?.includes(where.productId)
+          ? { productId: where.productId }
+          : null,
       findMany: async ({ where }: any) =>
         [
-          { productId: "p1", productName: "Kalcium oldat 500 ml" },
           { productId: "p1", productName: "Kalcium oldat 500 ml" },
           { productId: "p9", productName: "Másik" },
         ].filter((row) => where.productId.in.includes(row.productId)),
@@ -311,7 +318,7 @@ describe("turning it on", () => {
       const m = await missing.service.enable(
         "a1",
         {
-          productId: "nincs",
+          productId: "nincs-fk",
           aquariumId: "q1",
           consentVersion: RUNOUT_CONSENT_VERSION,
         },
@@ -323,6 +330,37 @@ describe("turning it on", () => {
         field,
       );
     }
+  });
+
+  it("a product that is not on the run-out list is refused BEFORE anything is written (barracuda, #2344): the sender could not count it", async () => {
+    const { service, rows } = setup({ unlisted: ["p1"] });
+    service.availability = () => runOutAvailability(ON, TEXT);
+    for (const productId of ["p1", "nincs"]) {
+      const r = await service.enable(
+        "a1",
+        { productId, aquariumId: "q1", consentVersion: RUNOUT_CONSENT_VERSION },
+        NOW,
+      );
+      assert.equal(
+        r.outcome === "REFUSED" && r.code,
+        "PRODUCT_NOT_FOUND",
+        productId,
+      );
+    }
+    assert.equal(rows.length, 0);
+    // a foreign aquarium still answers the one 404 first, whatever the product
+    await assert.rejects(
+      service.enable(
+        "a1",
+        {
+          productId: "nincs",
+          aquariumId: "foreign",
+          consentVersion: RUNOUT_CONSENT_VERSION,
+        },
+        NOW,
+      ),
+      /NOT_FOUND_404/,
+    );
   });
 
   it("a foreign key failure on the AQUARIUM is the 404 (not a missing product), and one it cannot place is rethrown, never labelled", async () => {

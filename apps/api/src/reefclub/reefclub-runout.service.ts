@@ -43,7 +43,7 @@ export type EnableResult =
 
 export type DisableResult = { outcome: "DISABLED" } | { outcome: "NOT_ACTIVE" };
 
-/** One reminder of the member that is on, for the page; the product name is the dose list's (the role reads no product table). */
+/** One reminder of the member that is on, for the page; the product name is the run-out list's (the role reads no product table). */
 export interface RunOutReminderItem {
   id: string;
   productId: string;
@@ -72,7 +72,7 @@ const REFUSAL_MESSAGES = {
     "Az emlékeztető hozzájárulási szövege időközben megváltozott. Töltsd újra az oldalt, és olvasd el az új szöveget.",
   UNSUBSCRIBE_SECRET_MISSING: "Az emlékeztető most nem érhető el.",
   NO_VOLUME: "Az emlékeztetőhöz add meg az akvárium literét.",
-  PRODUCT_NOT_FOUND: "Ehhez a termékhez nincs emlékeztető.",
+  PRODUCT_NOT_FOUND: "Ehhez a termékhez nem kérhető emlékeztető.",
 } as const;
 
 @Injectable()
@@ -107,10 +107,11 @@ export class ReefClubRunOutService {
       orderBy: [{ consentAt: "asc" }, { id: "asc" }],
     });
     if (rows.length === 0) return [];
-    const names = await this.database.reefClubDoseRow.findMany({
+    // the name from the run-out list (barracuda, #2344): the list the reminder was turned on from; a product that left it since
+    // keeps its row, and then has no name here
+    const names = await this.database.reefClubRunOutProduct.findMany({
       where: { productId: { in: rows.map((row) => row.productId) } },
       select: { productId: true, productName: true },
-      distinct: ["productId"],
     });
     const nameOf = new Map(names.map((n) => [n.productId, n.productName]));
     return rows.map((row) => ({
@@ -152,8 +153,15 @@ export class ReefClubRunOutService {
     )
       return refused("NO_VOLUME");
 
-    // The product is NOT read here: the ReefClub role may not read the product tables (the dose list is a projection). A product
-    // that does not exist is the foreign key's refusal on the write (P2003), which the database checks with its own rights.
+    // ONLY A PRODUCT THE REMINDER CAN COUNT (barracuda, #2344; acrobot 45548): the projected list (`ReefClubRunOutProduct`, the
+    // role reads it) is the same list the button comes from, so a direct call cannot turn on a reminder the sender could not
+    // count. The product table itself is not read here (the role may not); a product that vanished between the projection and
+    // the write is still the foreign key's refusal (P2003).
+    const listed = await this.database.reefClubRunOutProduct.findUnique({
+      where: { productId: request.productId },
+      select: { productId: true },
+    });
+    if (!listed) return refused("PRODUCT_NOT_FOUND");
     let row: { id: string };
     try {
       row = await this.database.reefClubRunOutReminder.upsert({
