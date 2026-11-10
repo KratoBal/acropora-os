@@ -156,8 +156,16 @@ interface ProductTransaction {
     updateMany(args: unknown): Promise<unknown>;
     upsert(args: unknown): Promise<unknown>;
   };
-  /** Egy kitoltott nev feloldja a mezo megtagadasat (kartya 20b0dd47). */
+  /** Egy kitoltott nev feloldja a mezo megtagadasat (kartya 20b0dd47): elobb a sor, aztan a torles. */
   productDatasheetFieldRefusal: {
+    findMany(args: unknown): Promise<
+      {
+        mezo: string;
+        indok: string;
+        oka: string;
+        createdAt: Date;
+      }[]
+    >;
     deleteMany(args: unknown): Promise<{ count: number }>;
   };
   domainEvent: {
@@ -580,12 +588,42 @@ export class ProductRepository extends Repository {
           },
           include: productInclude,
         });
-        // egy kitoltott nev feloldja a mezo megtagadasat: a "kitoltve ES megtagadva" par itt nem keletkezhet
+        // egy kitoltott nev feloldja a mezo megtagadasat: a "kitoltve ES megtagadva" par itt nem keletkezhet. A sor NYOM NELKUL
+        // nem torlodik: az indoka es az oka a termek domain-esemenyebe kerul (barracuda, #2357 review)
         const filled = filledNameFields(datasheetPatch);
-        if (filled.length > 0)
-          await transaction.productDatasheetFieldRefusal.deleteMany({
-            where: { datasheet: { productId: id }, mezo: { in: filled } },
-          });
+        if (filled.length > 0) {
+          const where = { datasheet: { productId: id }, mezo: { in: filled } };
+          const refused =
+            await transaction.productDatasheetFieldRefusal.findMany({
+              where,
+              select: { mezo: true, indok: true, oka: true, createdAt: true },
+            });
+          if (refused.length > 0) {
+            await transaction.productDatasheetFieldRefusal.deleteMany({
+              where,
+            });
+            await transaction.domainEvent.create({
+              data: {
+                id: randomUUID(),
+                eventType: "product.datasheet.refusal-resolved",
+                aggregateType: "Product",
+                aggregateId: id,
+                // a megtagadas-sor nem tarolja, ki tagadta meg; az iro a PATCH hivoja, amit ez a metodus nem kap meg
+                actorUserId: null,
+                occurredAt: new Date(),
+                schemaVersion: 1,
+                payload: {
+                  resolved: refused.map((row) => ({
+                    field: row.mezo,
+                    reason: row.indok,
+                    cause: row.oka,
+                    refusedAt: row.createdAt.toISOString(),
+                  })),
+                } satisfies Prisma.JsonObject,
+              },
+            });
+          }
+        }
 
         if (primaryWasProvided) {
           await transaction.productCategory.updateMany({
