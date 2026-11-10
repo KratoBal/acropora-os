@@ -59,7 +59,7 @@ describe(
       const product = async (
         name: string,
         categoryId: string,
-        sheet?: { ellenorizveAt: Date | null },
+        sheet?: { ellenorizveAt: Date | null; stingOrVenom?: boolean },
       ) => {
         const created = await prisma.product.create({
           data: { name, isActive: true },
@@ -82,7 +82,10 @@ describe(
       await product(names.verifiedFish, fish, { ellenorizveAt: new Date() });
       await product(names.unverifiedFish, fish, { ellenorizveAt: null });
       await product(names.noSheetCoral, corals);
-      await product(names.deepCoral, acropora, { ellenorizveAt: null });
+      await product(names.deepCoral, acropora, {
+        ellenorizveAt: null,
+        stingOrVenom: true,
+      });
       await product(names.accessory, filters);
       await product(names.lookAlike, lookAlike);
     });
@@ -147,6 +150,10 @@ describe(
       assert.equal(byName.get(names.unverifiedFish)?.verified, false);
       assert.equal(byName.get(names.noSheetCoral)?.verified, false);
       assert.equal(byName.get(names.deepCoral)?.verified, false);
+      // the stored sting or venom is the row's hazard; no other row has one
+      assert.equal(byName.get(names.deepCoral)?.hazard, true);
+      assert.equal(byName.get(names.verifiedFish)?.hazard, false);
+      assert.equal(byName.get(names.noSheetCoral)?.hazard, false);
       // the missing count is a number for a live animal
       assert.equal(typeof byName.get(names.deepCoral)?.missing, "number");
     });

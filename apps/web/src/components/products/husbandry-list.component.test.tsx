@@ -23,13 +23,53 @@ describe("a tartási adat cellája", () => {
 
   it("az ellenőrzött teljes blokk 'Ellenőrizve', a hiányos ellenőrzött megnevezi a hiányt, a nem ellenőrzött is", () => {
     const { container, rerender } = render(
-      <HusbandryCell husbandry={{ verified: true, missing: 0 }} />,
+      <HusbandryCell
+        husbandry={{ verified: true, missing: 0, hazard: false }}
+      />,
     );
     expect(container.textContent).toBe("Ellenőrizve");
-    rerender(<HusbandryCell husbandry={{ verified: true, missing: 3 }} />);
+    rerender(
+      <HusbandryCell
+        husbandry={{ verified: true, missing: 3, hazard: false }}
+      />,
+    );
     expect(container.textContent).toBe("Ellenőrizve, 3 mező hiányzik");
-    rerender(<HusbandryCell husbandry={{ verified: false, missing: 24 }} />);
+    rerender(
+      <HusbandryCell
+        husbandry={{ verified: false, missing: 24, hazard: false }}
+      />,
+    );
     expect(container.textContent).toBe("Nem ellenőrzött, 24 hiányzik");
+  });
+});
+
+describe("a veszély jelzése a cellában (V2.2 követés)", () => {
+  it("a csípés vagy méreg a állapot mellett jelenik meg, veszély nélkül nincs jelzés, és nem ellenőrzött sorban is látszik", () => {
+    const { container, rerender } = render(
+      <HusbandryCell
+        husbandry={{ verified: true, missing: 0, hazard: true }}
+      />,
+    );
+    expect(container.textContent).toBe("EllenőrizveCsípés vagy méreg");
+    rerender(
+      <HusbandryCell
+        husbandry={{ verified: false, missing: 5, hazard: true }}
+      />,
+    );
+    expect(container.textContent).toBe(
+      "Nem ellenőrzött, 5 hiányzikCsípés vagy méreg",
+    );
+    rerender(
+      <HusbandryCell
+        husbandry={{ verified: false, missing: 5, hazard: false }}
+      />,
+    );
+    expect(container.textContent).toBe("Nem ellenőrzött, 5 hiányzik");
+  });
+
+  it("a nem élő állat sorában a veszély sem jelenik meg", () => {
+    const { container } = render(<HusbandryCell husbandry={null} />);
+    expect(container.textContent).toBe("—");
   });
 });
 

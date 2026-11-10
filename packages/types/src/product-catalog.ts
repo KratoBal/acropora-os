@@ -188,6 +188,8 @@ export interface ProductListHusbandry {
   verified: boolean;
   /** The required fields still missing, the verification itself and an undecidable kind included (as `missing` of the detail). */
   missing: number;
+  /** True when the stored sting or venom fact says so: whoever works the list must not miss a hazard the product page shows. */
+  hazard: boolean;
 }
 
 export interface ProductListItem {
