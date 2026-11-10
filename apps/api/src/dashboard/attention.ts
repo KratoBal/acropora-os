@@ -1,6 +1,7 @@
 import type {
   DashboardAquariumAlertsWidgetData,
   DashboardAttentionItem,
+  DashboardContentApprovalWidgetData,
   DashboardIncomingInvoicesWidgetData,
   DashboardMaterialRequestsWidgetData,
   DashboardMessagesWidgetData,
@@ -28,6 +29,7 @@ import type {
 export const ATTENTION_SOURCES = [
   "webshop-orders",
   "messages",
+  "content-approval",
   "tasks",
   "overdue-invoices",
   "missing-invoices",
@@ -155,6 +157,19 @@ function itemsOf(widgetId: AttentionSource, data: unknown): Item[] {
           count: d.openCount,
           href: "/feladataim",
           tone: "info",
+        },
+      ];
+    }
+    case "content-approval": {
+      const d = data as DashboardContentApprovalWidgetData;
+      return [
+        {
+          key: "awaiting-approval",
+          label: "Jóváhagyásra váró tartalom",
+          count: d.total,
+          // the approver's own view is the default of the Tartalom page
+          href: "/tartalom",
+          tone: "warning",
         },
       ];
     }

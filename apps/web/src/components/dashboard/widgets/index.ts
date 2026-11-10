@@ -2,6 +2,7 @@ import type { DashboardWidgetId } from "@acropora/types";
 
 import { aquariumAlertsWidget } from "./aquarium-alerts-widget";
 import { attentionWidget } from "./attention-widget";
+import { contentApprovalWidget } from "./content-approval-widget";
 import { aquariumEquipmentWidget } from "./aquarium-equipment-widget";
 import { expectedArrivalsWidget } from "./expected-arrivals-widget";
 import { incomingInvoicesWidget } from "./incoming-invoices-widget";
@@ -33,6 +34,7 @@ export const DASHBOARD_WIDGET_VIEWS: Partial<
 > = {
   tasks: tasksWidget,
   messages: messagesWidget,
+  "content-approval": contentApprovalWidget,
   "expected-arrivals": expectedArrivalsWidget,
   "partner-order-backlog": partnerOrderBacklogWidget,
   "service-tickets": serviceTicketsWidget,

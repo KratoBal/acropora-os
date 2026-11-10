@@ -52,6 +52,7 @@ export const DASHBOARD_WIDGET_IDS = [
   "attention",
   "tasks",
   "messages",
+  "content-approval",
   "service-tickets",
   "worksheets",
   "material-requests",
@@ -187,6 +188,19 @@ export const DASHBOARD_WIDGETS: readonly DashboardWidgetDefinition[] = [
     priority: 11,
     dataSource:
       "MessagesService.unread(), the same count as the Üzenetek menu badge (called, not modified).",
+  }),
+  widget({
+    id: "content-approval",
+    title: "Jóváhagyásra váró tartalom",
+    description: "Tartalom",
+    category: "tasks",
+    requiredPermissions: [P.CONTENT_APPROVE],
+    // the approval is two named people's right (Balázs and Luca: OWNER and ADMIN), not a management level
+    recommendedRoles: ["OWNER", "ADMIN"],
+    availability: "active",
+    priority: 12,
+    dataSource:
+      "ContentItem in AWAITING_APPROVAL, all of them (the approver's own Rám vár view is not narrowed by author). A count and a link, no notification (acrobot 45938).",
   }),
   // --- service ---
   widget({
@@ -1224,6 +1238,12 @@ export interface DashboardMessagesWidgetData {
   total: number;
   /** Conversations with at least one unread message. */
   conversations: number;
+}
+
+/** Jóváhagyásra váró tartalom: the items of the content queue that wait for an approver. */
+export interface DashboardContentApprovalWidgetData {
+  /** Items in "jóváhagyásra vár", all channels. */
+  total: number;
 }
 
 /** Bejövő számlák: only what needs someone (NAV invoices and mailbox documents). */

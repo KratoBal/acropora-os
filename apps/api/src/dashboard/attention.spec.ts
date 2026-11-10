@@ -87,6 +87,19 @@ describe("Figyelmet igényel: the figures", () => {
     );
   });
 
+  it("takes the content waiting for approval as one line to Tartalom, and nothing when none waits", () => {
+    assert.deepEqual(
+      attentionItemsOf("content-approval", { total: 4 }).map((i) => [
+        i.key,
+        i.count,
+        i.tone,
+        i.href,
+      ]),
+      [["awaiting-approval", 4, "warning", "/tartalom"]],
+    );
+    assert.deepEqual(attentionItemsOf("content-approval", { total: 0 }), []);
+  });
+
   it("takes my open tasks as one line to Feladataim, and nothing when there are none", () => {
     assert.deepEqual(
       attentionItemsOf("tasks", { openCount: 3, latest: [] }).map((i) => [
