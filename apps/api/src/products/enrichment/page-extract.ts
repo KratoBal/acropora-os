@@ -38,6 +38,8 @@ export const ENRICHED_FIELDS = [
   "dosingMode",
   "dosingGuidance",
   "dosingTests",
+  // a kiszerelés (ReefClub V3.2 kifogyási emlékeztető, kártya cd94ed11): a lap `size`-a vagy nevesített tulajdonsága
+  "packSize",
 ] as const satisfies readonly ProductEnrichmentFieldKey[];
 export type EnrichedField = (typeof ENRICHED_FIELDS)[number];
 
@@ -94,6 +96,10 @@ const PROPERTY_FIELD: readonly [RegExp, EnrichedField][] = [
   [/voltage|feszültség|spannung/i, "voltage"],
   [/^(volume|content|tartalom|inhalt|térfogat)$/i, "volume"],
   [/^(capacity|kapazität|űrtartalom|kapacitás)$/i, "capacity"],
+  [
+    /^(pack ?size|package size|packaging size|kiszerelés|packungsgröße|gebindegröße|füllmenge)$/i,
+    "packSize",
+  ],
 ];
 
 function isObject(value: Json): value is { [key: string]: Json } {
@@ -197,6 +203,8 @@ export function extractPageStatement(html: string): PageStatement {
   put("lengthMm", quantity(product.depth), "depth");
   put("widthMm", quantity(product.width), "width");
   put("heightMm", quantity(product.height), "height");
+  // schema.org `size`: a text ("500 ml") or a QuantitativeValue; a SizeSpecification's own `name` is not read (no unit of its own)
+  put("packSize", quantity(product.size), "size");
 
   const properties = Array.isArray(product.additionalProperty)
     ? product.additionalProperty
