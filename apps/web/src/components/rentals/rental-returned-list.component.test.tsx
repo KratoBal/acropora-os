@@ -194,6 +194,35 @@ describe("RentalReturnedList", () => {
     expect(api.list).toHaveBeenCalledTimes(1);
   });
 
+  // barracuda, #2395: WHAT TURNS THIS RED: a cut search answer shown as complete, or the list's own sentence kept for it
+  it("says when the server's search answer is cut too, in its own sentence", async () => {
+    api.list.mockImplementation(
+      async (_t: string, _s: string, _sig: AbortSignal, q?: string) =>
+        q
+          ? {
+              items: [returned({ id: "r-x", rentalNumber: "BER-3" })],
+              truncated: true,
+            }
+          : { items: [returned()], truncated: true },
+    );
+    render(
+      <RentalReturnedList token="t" reloadKey={0} onPrint={() => undefined} />,
+    );
+    expect(await screen.findByText(/A lista nem teljes/)).toBeTruthy();
+    fireEvent.change(
+      screen.getByLabelText("Keresés a visszahozott bérlések között"),
+      {
+        target: { value: "ber" },
+      },
+    );
+    expect(
+      await screen.findByText(
+        /A keresés találatai nem teljesek: csak a legutóbbi 1 látszik/,
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/A lista nem teljes/)).toBeNull();
+  });
+
   it("reads the list again when a return bumps the key, and says when it is cut", async () => {
     api.list.mockResolvedValue({ items: [returned()], truncated: true });
     const view = render(
