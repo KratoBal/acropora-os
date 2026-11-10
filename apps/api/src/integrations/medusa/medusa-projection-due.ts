@@ -43,11 +43,16 @@
  *      termek kimenete mas lesz. Erre nem idobelyeg kell, hanem egy teljes kor
  *      -- azt a #508 kapcsoloja teszi lehetove. A ket tetel nem alternativa:
  *      ez a jel a NAPI valtozast kezeli, a kapcsolo a SAJAT munkank hatasat.
- *   2. A KATEGORIA-HOZZARENDELES ES A KEP-LISTA valtozasat. A `ProductCategory`
- *      es a `ProductImage` tablan NINCS `updatedAt` (merve), tehat ott nincs mit
- *      osszehasonlitani. A kategoria-valtas ugyan a `Product.updatedAt` mezot is
- *      mozditja, ha a `categoryId` mezon at tortenik, de a kapcsolo-tablan
- *      keresztuli hozzaadas nem.
+ *   2. A KATEGORIA-HOZZARENDELES ES A KEP-LISTA SAJAT IDOBELYEGET. A
+ *      `ProductCategory` es a `ProductImage` tablan ma sincs `updatedAt`. EZ
+ *      MA NEM HAGY KI VALTOZAST (visszamerve 2026-11-10, kartya 6e05f8a4): minden
+ *      iroja ugyanabban a tranzakcioban a `Product` sort is frissiti, tehat a
+ *      `Product.updatedAt` lep. Az irok: a UNAS-alkalmazas (`syncProductDetails`),
+ *      a UNAS-szinkron, a kezi kategoria-valtas (`product.repository` update-je)
+ *      es a kezi kep-muveletek (alt, sorrend, feltoltes, torles: `touchAndRead`).
+ *      Egy UJ iro, ami a ket tablat a `Product` nelkul irja, ezt a szabalyt
+ *      csendben megtorne: annak a `Product` sort is mozditania kell. Kivetel a
+ *      vetito sajat kep-irasa, ami szandekosan nem tesz esedekesse.
  *   3. A BOLT OLDALAN TORTENT VALTOZAST. Ha valaki a Medusaban ir at egy mezot,
  *      a mi idobelyegeink nem mozdulnak. Ezt csak visszaolvasas mutatna meg, es
  *      az mas feladat.
