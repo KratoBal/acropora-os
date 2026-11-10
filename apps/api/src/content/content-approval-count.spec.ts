@@ -33,10 +33,58 @@ describe("awaiting approval", () => {
     assert.deepEqual(asked, [{ where: { state: "AWAITING_APPROVAL" } }]);
   });
 
-  it("the service answers the repository's number as a total", async () => {
+  it("the service counts the items and the ones that have waited 48 hours or more", async () => {
+    const now = new Date("2026-11-10T20:00:00.000Z");
+    const hoursAgo = (hours: number) =>
+      new Date(now.getTime() - hours * 3_600_000);
     const service = new ContentService({
-      countAwaitingApproval: async () => 4,
+      awaitingApprovalSince: async () => [
+        hoursAgo(1),
+        hoursAgo(47.99),
+        hoursAgo(48),
+        hoursAgo(200),
+      ],
     } as unknown as ContentRepository);
-    assert.deepEqual(await service.awaitingApproval(), { total: 4 });
+    assert.deepEqual(await service.awaitingApproval(now), {
+      total: 4,
+      overdue: 2,
+    });
+  });
+
+  it("the repository reads each item's LAST move into the stage from the log, and falls back to its last update", async () => {
+    const asked: unknown[] = [];
+    const delegate = prisma.contentItem as unknown as Record<string, unknown>;
+    const original = delegate.findMany;
+    const logged = new Date("2026-11-08T10:00:00.000Z");
+    const updated = new Date("2026-11-09T10:00:00.000Z");
+    delegate.findMany = async (args: unknown) => {
+      asked.push(args);
+      return [
+        { updatedAt: updated, stateEvents: [{ createdAt: logged }] },
+        { updatedAt: updated, stateEvents: [] },
+      ];
+    };
+    restorers.push(() => {
+      delegate.findMany = original;
+    });
+    assert.deepEqual(await new ContentRepository().awaitingApprovalSince(), [
+      logged,
+      updated,
+    ]);
+    const args = asked[0] as {
+      where: unknown;
+      select: {
+        stateEvents: { where: unknown; orderBy: unknown; take: number };
+      };
+    };
+    assert.deepEqual(args.where, { state: "AWAITING_APPROVAL" });
+    assert.deepEqual(args.select.stateEvents.where, {
+      toState: "AWAITING_APPROVAL",
+    });
+    assert.equal(args.select.stateEvents.take, 1);
+    assert.deepEqual(args.select.stateEvents.orderBy, [
+      { createdAt: "desc" },
+      { id: "desc" },
+    ]);
   });
 });

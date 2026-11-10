@@ -1244,6 +1244,11 @@ export interface DashboardMessagesWidgetData {
 export interface DashboardContentApprovalWidgetData {
   /** Items in "jóváhagyásra vár", all channels. */
   total: number;
+  /**
+   * The reminder (T5.1, Balázs 2026-11-10 17:43 UTC: "emlékeztető 2 nap"): how many of them have waited for an approver for at
+   * least 48 hours since they entered the stage. Seen in the OS only, no message goes out.
+   */
+  overdue: number;
 }
 
 /** Bejövő számlák: only what needs someone (NAV invoices and mailbox documents). */

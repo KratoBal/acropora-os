@@ -50,6 +50,27 @@ export class ContentRepository {
     return prisma.contentItem.count({ where: { state: "AWAITING_APPROVAL" } });
   }
 
+  /**
+   * WHEN EACH ITEM THAT WAITS FOR AN APPROVER ENTERED THE STAGE (T5.1 reminder): the time of its LAST move into
+   * `AWAITING_APPROVAL` from the state log, or, for an item whose entry predates the log, its last update (a floor: it cannot
+   * have waited LESS than that). All channels, nobody's own: the approval is every approver's.
+   */
+  async awaitingApprovalSince(): Promise<Date[]> {
+    const rows = await prisma.contentItem.findMany({
+      where: { state: "AWAITING_APPROVAL" },
+      select: {
+        updatedAt: true,
+        stateEvents: {
+          where: { toState: "AWAITING_APPROVAL" },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          take: 1,
+          select: { createdAt: true },
+        },
+      },
+    });
+    return rows.map((row) => row.stateEvents[0]?.createdAt ?? row.updatedAt);
+  }
+
   /** The item's channel, or `null` when there is no such item. */
   async channelOf(id: string) {
     return (
