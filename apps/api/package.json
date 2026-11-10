@@ -32,6 +32,7 @@
     "store-category:load": "tsc -p tsconfig.json && node --env-file=../../.env dist/products/store-category/store-category-load.cli.js",
     "shipping-profile:fill": "tsc -p tsconfig.json && node --env-file=../../.env dist/products/shipping-profile-fill.cli.js",
     "medusa:inventory": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-inventory.cli.js",
+    "medusa:pickup-adoption": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-pickup-adoption.cli.js",
     "medusa:shipping-profile-link": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-shipping-profile-link.cli.js",
     "medusa:link-by-sku": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-sku-link.cli.js",
     "medusa:pricing": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-pricing.cli.js",

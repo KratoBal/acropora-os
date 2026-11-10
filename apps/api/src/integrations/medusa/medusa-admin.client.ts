@@ -64,6 +64,14 @@ export interface MedusaShippingAttributeRow extends MedusaShippingFlags {
   product_id: string;
 }
 
+/**
+ * A bolt iras-torzsenek NEM tarolt kapcsoloi (commerce #724): `adopt_pickup_only_derived` a mar bekapcsolt `pickup_only`
+ * jelolojet engedi az OS-nek (az atnezett, egyszeri visszatoltes), a sorra nem kerul.
+ */
+export interface ShippingAttributesWriteOptions {
+  adopt_pickup_only_derived?: boolean;
+}
+
 export interface MedusaProductInput {
   title: string;
   /**
@@ -1289,7 +1297,7 @@ export interface MedusaAdminClient {
    */
   setShippingAttributes(
     productId: string,
-    flags: Partial<MedusaShippingFlags>,
+    flags: Partial<MedusaShippingFlags> & ShippingAttributesWriteOptions,
   ): Promise<MedusaShippingAttributeRow>;
   /**
    * A TERMEKISMERET A BOLT OLDALAN, OLVASASRA (#1431, a PR A / PR B
@@ -2588,7 +2596,7 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
 
   async setShippingAttributes(
     productId: string,
-    flags: Partial<MedusaShippingFlags>,
+    flags: Partial<MedusaShippingFlags> & ShippingAttributesWriteOptions,
   ): Promise<MedusaShippingAttributeRow> {
     const body = await this.request<{
       shipping_attribute: MedusaShippingAttributeRow;
