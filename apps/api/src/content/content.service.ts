@@ -10,6 +10,12 @@ import type { ContentChannel } from "@acropora/types";
 
 import { ArticleStepError } from "./article.repository.js";
 import { isApprovalOverdue } from "./content-approval-reminder.js";
+import {
+  agentItemSummary,
+  agentItemView,
+  type AgentItemSummary,
+  type AgentItemView,
+} from "./content-agent-view.js";
 import { ContentRepository } from "./content.repository.js";
 import {
   ROLES_THIS_VIEW_CANNOT_COVER,
@@ -152,6 +158,39 @@ export class ContentService {
       total: since.length,
       overdue: since.filter((at) => isApprovalOverdue(at, now)).length,
     };
+  }
+
+  /**
+   * A GÉPI ÁGENS SAJÁT BEADÁSAI (card c5a8e6d6): a hívó tételei, állapottal. CSAK a hívóéi: a szűrés a lekérdezésben áll, nem
+   * a válasz szűrésében, tehát más szerző tétele nem is kerül a memóriába.
+   */
+  async agentItems(authorId: string): Promise<AgentItemSummary[]> {
+    const items = await this.repository.list({ authorId });
+    return items.map((item) => agentItemSummary(item));
+  }
+
+  /**
+   * EGY BEADOTT TÉTEL VISSZAOLVASÁSA A SZERZŐNEK (card c5a8e6d6): szöveg, állapot, a jóváhagyási napló és a hozzászólások, amelyek
+   * közt ott van a jóváhagyó visszaküldési megjegyzése. Más szerző tétele: "nem található" (404), nem "tiltott": a létezése
+   * nem a hívó dolga. A nézet nevet ad, azonosítót nem (`content-agent-view.ts`).
+   */
+  async agentItem(contentId: string, agentId: string): Promise<AgentItemView> {
+    const item = await this.repository.detail(contentId);
+    if (!item || item.authorId !== agentId)
+      throw new NotFoundException("A tartalom nem található.");
+    const detail = await this.detail(contentId);
+    const names = await this.repository.userNames([
+      ...new Set(
+        item.comments.flatMap((comment) =>
+          comment.authorId ? [comment.authorId] : [],
+        ),
+      ),
+    ]);
+    return agentItemView(
+      { ...item, history: detail.history, comments: item.comments },
+      agentId,
+      names,
+    );
   }
 
   /**
