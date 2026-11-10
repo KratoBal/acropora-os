@@ -268,6 +268,9 @@ export interface ProductListResponse {
   };
 }
 
+/** Az elo allat fajtaja a kategoria-fabol (a harom gyoker egyike); a Nevek blokk a korallnal es a gerinctelennel jelenik meg. */
+export type ProductLivestockKind = "FISH" | "INVERTEBRATE" | "CORAL";
+
 export interface ProductDetail extends ProductListItem {
   description: string | null;
   /**
@@ -283,6 +286,8 @@ export interface ProductDetail extends ProductListItem {
   advisorKind: ProductAdvisorKind | null;
   fenyIgeny: ElhelyezesiIgeny | null;
   aramlasIgeny: ElhelyezesiIgeny | null;
+  /** Az elo allat fajtaja a kategoria-fabol, vagy `null` (nem elo allat, vagy tobb gyoker alatt all). */
+  livestockKind: ProductLivestockKind | null;
   /** A magyar, angol es nemet nev az adatlapon (`null`: nincs kitoltve). */
   magyarNev: string | null;
   angolNev: string | null;

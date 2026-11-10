@@ -54,7 +54,14 @@ const productInclude = {
     },
   },
   categories: {
-    include: { category: true },
+    // the leaf and three ancestors: the detail names the live animal kind from the root of the path (card 20b0dd47)
+    include: {
+      category: {
+        include: {
+          parent: { include: { parent: { include: { parent: true } } } },
+        },
+      },
+    },
     orderBy: [
       { isPrimary: "desc" },
       { sortOrder: "asc" },

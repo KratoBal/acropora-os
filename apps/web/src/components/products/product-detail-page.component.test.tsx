@@ -86,6 +86,7 @@ const detail: ProductDetail = {
   advisorKind: null,
   fenyIgeny: null,
   aramlasIgeny: null,
+  livestockKind: null,
   magyarNev: null,
   angolNev: null,
   nemetNev: null,
