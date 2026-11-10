@@ -1884,12 +1884,16 @@ export type {
   BankTransferRefusalValue,
 } from "./bank-transfer-pairing.js";
 export {
+  HUSBANDRY_FILTER_VALUES,
+  isHusbandryFilterValue,
   isShippingFilterValue,
   SHIPPING_FILTER_VALUES,
   SHIPPING_FLAG_KEYS,
   SHIPPING_FLAG_SHORT_LABELS,
 } from "./product-catalog.js";
 export type {
+  HusbandryFilterValue,
+  ProductListHusbandry,
   ShippingFilterValue,
   ShippingFlagKey,
 } from "./product-catalog.js";

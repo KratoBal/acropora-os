@@ -11,6 +11,8 @@ import {
 
 import {
   SHIPPING_FILTER_VALUES,
+  HUSBANDRY_FILTER_VALUES,
+  type HusbandryFilterValue,
   type ShippingFilterValue,
 } from "@acropora/types";
 import { optionalQueryBoolean } from "../../common/query-boolean.util.js";
@@ -65,4 +67,9 @@ export class ProductListQueryDto {
   @IsOptional()
   @IsIn(SHIPPING_FILTER_VALUES)
   shipping?: ShippingFilterValue;
+
+  /** Live animals with a verified (or an unverified) husbandry block (V2.2 S6). */
+  @IsOptional()
+  @IsIn(HUSBANDRY_FILTER_VALUES)
+  husbandry?: HusbandryFilterValue;
 }

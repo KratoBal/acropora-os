@@ -2119,6 +2119,53 @@ describe("ProductRepository", () => {
     );
   });
 
+  /*
+    THE HUSBANDRY FILTER AND STATE OF THE LIST (V2.2 S6). WHAT TURNS THIS RED: the filter put at the top level where the search's OR
+    stands (one would replace the other); no filter and a condition anyway; a row of a live animal without its husbandry state, or of an
+    accessory with one.
+  */
+  it("puts the husbandry filter in an AND, beside the search's OR, and asks for nothing without it", async () => {
+    const withBoth = createDatabase();
+    await new ProductRepository(withBoth.database).list({
+      page: 1,
+      pageSize: 10,
+      search: "geweih",
+      husbandry: "unverified",
+    });
+    const where = (
+      withBoth.calls.find((call) => call.operation === "findMany")?.args as {
+        where: { OR?: unknown[]; AND?: unknown[] };
+      }
+    ).where;
+    assert.ok(
+      where.OR && where.OR.length > 0,
+      "the search's OR is still there",
+    );
+    assert.equal(where.AND?.length, 2, "the filter is an AND of two members");
+
+    const without = createDatabase();
+    await new ProductRepository(without.database).list({
+      page: 1,
+      pageSize: 10,
+    });
+    const bare = (
+      without.calls.find((call) => call.operation === "findMany")?.args as {
+        where: Record<string, unknown>;
+      }
+    ).where;
+    assert.equal("AND" in bare, false);
+  });
+
+  it("gives each row its husbandry state: null for a product that is not a live animal", async () => {
+    const { database } = createDatabase();
+    const result = await new ProductRepository(database).list({
+      page: 1,
+      pageSize: 10,
+    });
+    assert.ok(result.items.length > 0);
+    for (const item of result.items) assert.ok("husbandry" in item);
+  });
+
   it("leaves the list alone when no channel is asked for", async () => {
     const { database, calls } = createDatabase();
     const repository = new ProductRepository(database);

@@ -23,7 +23,7 @@ import { categoryPath } from "./product.types.js";
  * rules themselves are pure and live in `product-husbandry.ts`; this file only stores.
  */
 
-const husbandryDatasheetSelect = {
+export const husbandryDatasheetSelect = {
   magyarNev: true,
   genus: true,
   species: true,
