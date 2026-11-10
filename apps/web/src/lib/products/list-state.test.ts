@@ -24,6 +24,7 @@ describe("product list URL state", () => {
       categoryId: "cat",
       brandId: "brand",
       shipping: "",
+      husbandry: "",
       page: 1,
       pageSize: 25,
     });
@@ -60,6 +61,25 @@ describe("product list URL state", () => {
       }),
       "szallitas=none",
     );
+  });
+
+  it("V2.2 S6: the husbandry filter goes in the URL as tartas, an unknown value is dropped, the default is omitted", () => {
+    assert.equal(
+      parseProductListState(new URLSearchParams("tartas=unverified")).husbandry,
+      "unverified",
+    );
+    assert.equal(
+      parseProductListState(new URLSearchParams("tartas=semmi")).husbandry,
+      "",
+    );
+    assert.equal(
+      serializeProductListState({
+        ...DEFAULT_PRODUCT_LIST_STATE,
+        husbandry: "verified",
+      }),
+      "tartas=verified",
+    );
+    assert.equal(serializeProductListState(DEFAULT_PRODUCT_LIST_STATE), "");
   });
 
   it("resets the page when filters change and clamps pagination", () => {
