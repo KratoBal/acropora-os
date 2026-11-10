@@ -4,14 +4,17 @@ import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
 import { CreateServiceTokenDto } from "./dto/service-token-admin.dto.js";
+import { ServiceTokenAdminEnabledGuard } from "./service-token-admin-enabled.guard.js";
 import { ServiceTokenAdminService } from "./service-token-admin.service.js";
 
 /**
  * THE AGENTS' KEYS, MADE BY AN ADMIN (card c5a8e6d6; Balázs 2026-11-10 20:59 UTC). Behind `users.manage` on EACH route (the coverage spec reads the route's own decorators), the same
  * permission that makes accounts: whoever can make an account can make its key, and nobody else. API only, no screen.
- * The key leaves in the creation's answer once, and that answer is never cached.
+ * The key leaves in the creation's answer once, and that answer is never cached. The whole controller is shut (404) unless
+ * `SERVICE_TOKEN_ADMIN_ENABLED` is `true` (`service-token-admin-enabled.guard.ts`).
  */
 @Controller("service-tokens")
+@UseGuards(ServiceTokenAdminEnabledGuard)
 export class ServiceTokenAdminController {
   constructor(private readonly service: ServiceTokenAdminService) {}
 
