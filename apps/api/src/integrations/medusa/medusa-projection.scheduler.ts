@@ -375,10 +375,10 @@ export class MedusaProjectionScheduler
         );
         const database = prisma as unknown as ShippingAttributesCliDatabase;
         const eloAllat = await liveAnimalProductIds(database);
-        const parositas = await skuParositas(service, database);
         return clearLeftoverKinds(service, {
           skip: (osProductId) => eloAllat.has(osProductId),
-          osToShop: parositas.osToShop,
+          // lusta: a bolt SKU-listajat csak akkor olvassuk, ha van kotes-sor nelkuli, fajtat viselo bolti sor
+          pairing: async () => (await skuParositas(service, database)).osToShop,
           apply: true,
         });
       });

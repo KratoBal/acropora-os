@@ -61,7 +61,7 @@ describe("a boltban maradt fajta megosztott szabálya", () => {
     const { service, torlesek } = szolgaltatas(rows, kotesek);
     const jelentes = await clearLeftoverKinds(service, {
       skip: (id) => id === "os-live",
-      osToShop: new Map(),
+      pairing: async () => new Map(),
       apply: true,
     });
     assert.deepEqual(torlesek, [{ shop: "shop-stale", apply: true }]);
@@ -78,7 +78,7 @@ describe("a boltban maradt fajta megosztott szabálya", () => {
     const { service, torlesek } = szolgaltatas(rows, kotesek);
     const jelentes = await clearLeftoverKinds(service, {
       skip: () => false,
-      osToShop: new Map(),
+      pairing: async () => new Map(),
       apply: false,
     });
     assert.deepEqual(
@@ -92,18 +92,45 @@ describe("a boltban maradt fajta megosztott szabálya", () => {
     const { service, torlesek } = szolgaltatas([sor("shop-sku", "FISH")], {});
     await clearLeftoverKinds(service, {
       skip: () => false,
-      osToShop: new Map([["os-sku", "shop-sku"]]),
+      pairing: async () => new Map([["os-sku", "shop-sku"]]),
       only: ["os-másik"],
       apply: true,
     });
     assert.deepEqual(torlesek, []);
     await clearLeftoverKinds(service, {
       skip: () => false,
-      osToShop: new Map([["os-sku", "shop-sku"]]),
+      pairing: async () => new Map([["os-sku", "shop-sku"]]),
       only: ["os-sku"],
       apply: true,
     });
     assert.deepEqual(torlesek, [{ shop: "shop-sku", apply: true }]);
+  });
+
+  it("a SKU-párosítást csak akkor kéri, ha van kötés-sor nélküli, fajtát viselő sor, és akkor is egyszer", async () => {
+    let kerte = 0;
+    const pairing = async () => {
+      kerte += 1;
+      return new Map<string, string>();
+    };
+    // nincs fajtát viselő sor: a párosítás sem kell
+    await clearLeftoverKinds(szolgaltatas([sor("a", null)], {}).service, {
+      skip: () => false,
+      pairing,
+      apply: true,
+    });
+    assert.equal(kerte, 0);
+    // minden fajtát viselő sornak van kötés-sora: a párosítás sem kell
+    await clearLeftoverKinds(
+      szolgaltatas([sor("a", "FISH")], { a: "os-a" }).service,
+      { skip: () => false, pairing, apply: true },
+    );
+    assert.equal(kerte, 0);
+    // két kötés nélküli sor: egyszer kéri
+    await clearLeftoverKinds(
+      szolgaltatas([sor("a", "FISH"), sor("b", "CORAL")], {}).service,
+      { skip: () => false, pairing, apply: true },
+    );
+    assert.equal(kerte, 1);
   });
 
   it("a jelentés kimondja, mit látott és mit tett", () => {

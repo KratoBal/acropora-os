@@ -43,8 +43,11 @@ export async function clearLeftoverKinds(
   options: {
     /** az OS-termek NEM torlendo (celpont a fo koron, vagy elo allat besorolasa van) */
     skip(osProductId: string): boolean;
-    /** OS-termek -> bolti termek (SKU-par), a kotes-sor mellett */
-    osToShop: ReadonlyMap<string, string>;
+    /**
+     * OS-termek -> bolti termek (SKU-par), a kotes-sor mellett. LUSTA: csak akkor hivodik (egyszer), ha van fajtat viselo
+     * bolti sor, amihez nincs kotes-sor; a bolt SKU-listaja lapozott olvasas, ures koron nem kell (barracuda, #2353).
+     */
+    pairing: () => Promise<ReadonlyMap<string, string>>;
     /** ha megadott, csak ezekre az OS-termekekre szukit */
     only?: readonly string[];
     apply: boolean;
@@ -52,16 +55,20 @@ export async function clearLeftoverKinds(
 ): Promise<LeftoverKindReport> {
   const rows = await service.listShopShippingAttributes();
   const carrying = rowsCarryingKind(rows);
-  const shopToOs = new Map<string, string>(
-    [...options.osToShop].map(([os, shop]) => [shop, os]),
-  );
+  let shopToOs: Map<string, string> | null = null;
+  const bySku = async (shopProductId: string): Promise<string | null> => {
+    if (!shopToOs)
+      shopToOs = new Map(
+        [...(await options.pairing())].map(([os, shop]) => [shop, os]),
+      );
+    return shopToOs.get(shopProductId) ?? null;
+  };
   const entries: LeftoverKindEntry[] = [];
   let unpaired = 0;
   for (const row of carrying) {
     const osProductId =
       (await service.osProductOfShop(row.product_id)) ??
-      shopToOs.get(row.product_id) ??
-      null;
+      (await bySku(row.product_id));
     if (!osProductId) {
       unpaired++;
       continue;

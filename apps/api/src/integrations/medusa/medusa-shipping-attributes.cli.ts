@@ -314,7 +314,7 @@ export async function clearLeftoverKinds(
   // a szabaly a `medusa-leftover-kind.ts`-ben all, mert a vetitesi kor ugyanazt futtatja
   const report = await leftoverKinds(futtato, {
     skip: (osProductId) => celok.has(osProductId),
-    osToShop,
+    pairing: async () => osToShop,
     only: idk,
     apply,
   });
