@@ -251,8 +251,13 @@ function measure(
 
 /**
  * WHICH STYLE, AND WHERE A SIGNATURE NEEDS COMPANY: the normal spacing when it gives at most two pages with no signature alone,
- * else the compact one; if a signature would still stand alone, the paragraph before it (and its heading) goes over with it.
+ * else the compact one. If a signature would still stand alone, the paragraph before it (and its heading) goes over with it,
+ * and the layout is MEASURED AGAIN with that break (barracuda, #2369): moving one paragraph can push a later signature (the
+ * built-in text has two) onto a page of its own, so each round handles the first lonely signature left, a few rounds at most.
+ * A paragraph already moved that still leaves its signature alone (it is longer than a page) is left as it is.
  */
+const MAX_KEEP_WITH_ROUNDS = 5;
+
 export function contractLayoutPlan(blocks: RentalContractBlock[]): {
   style: ContractStyle;
   breakBefore: Set<number>;
@@ -263,11 +268,19 @@ export function contractLayoutPlan(blocks: RentalContractBlock[]): {
       ? NORMAL
       : COMPACT;
   const breakBefore = new Set<number>();
-  const chosen = style === NORMAL ? normal : measure(blocks, COMPACT);
-  if (chosen.lonelySignature !== null) {
-    let from = chosen.lonelySignature - 1;
+  let layout = style === NORMAL ? normal : measure(blocks, COMPACT);
+  for (let round = 0; round < MAX_KEEP_WITH_ROUNDS; round++) {
+    if (layout.lonelySignature === null) break;
+    let from = layout.lonelySignature - 1;
     if (blocks[from - 1]?.kind === "heading") from -= 1;
-    if (from >= 0 && blocks[from]?.kind !== "signatures") breakBefore.add(from);
+    if (
+      from < 0 ||
+      blocks[from]?.kind === "signatures" ||
+      breakBefore.has(from)
+    )
+      break;
+    breakBefore.add(from);
+    layout = measure(blocks, style, breakBefore);
   }
   return { style, breakBefore };
 }
