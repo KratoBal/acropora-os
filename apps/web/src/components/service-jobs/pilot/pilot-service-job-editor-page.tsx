@@ -20,7 +20,7 @@ import {
   WorksheetAssigneePicker,
 } from "@/components/worksheets/worksheet-assignee-picker";
 import { PilotButton, PilotThemeRoot } from "@/components/pilot/pilot-ui";
-import { hasPermission, PERMISSIONS } from "@acropora/types";
+import { hasPermission, PERMISSIONS, uploadAccept } from "@acropora/types";
 
 /**
  * A FIGMA MAKE TERV ÁTÜLTETÉSE -- ÚJ HIBAJEGY (harmadik, utolsó kör).
@@ -422,7 +422,7 @@ export function PilotServiceJobEditorPage() {
                 <input
                   type="file"
                   multiple
-                  accept="image/jpeg,image/png,application/pdf"
+                  accept={uploadAccept(["jpeg", "png", "pdf"])}
                   className="hidden"
                   onChange={(event) =>
                     setFiles((current) => [

@@ -21,6 +21,7 @@ import {
   type MortalityAquariumOption,
   type MortalityLocationOption,
   type MortalitySourceType,
+  uploadAccept,
 } from "@acropora/types";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -36,7 +37,8 @@ import {
   type PickerOption,
 } from "./mortality-search-picker";
 
-const PHOTO_TYPES = ["image/jpeg", "image/png"];
+/** The photo kinds the server takes for a mortality record (it refuses a PDF there), from the shared upload table. */
+const PHOTO_TYPES = uploadAccept(["jpeg", "png"]).split(",");
 
 /** A helyszín szabálya, a szerverével egyező mondattal. */
 export const MORTALITY_PLACE_REQUIRED =

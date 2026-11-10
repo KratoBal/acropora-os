@@ -1,5 +1,6 @@
 "use client";
 
+import { uploadAccept } from "@acropora/types";
 import { Alert, PilotButton } from "@acropora/ui";
 import { useEffect, useState } from "react";
 
@@ -143,7 +144,7 @@ export function CompletionCertificatePanel({
                 Aláírt PDF feltöltése
                 <input
                   type="file"
-                  accept="application/pdf"
+                  accept={uploadAccept(["pdf"])}
                   className="hidden"
                   onChange={(event) => {
                     const file = event.target.files?.[0];

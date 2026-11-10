@@ -5,6 +5,7 @@ import {
   type ConversationContextCard,
   type ConversationListItem,
   type MessageItem,
+  uploadAccept,
 } from "@acropora/types";
 import { ConfirmDialog, Icon, Textarea } from "@acropora/ui";
 import Link from "next/link";
@@ -82,7 +83,7 @@ const NEAR_BOTTOM_PX = 120;
 
 /** A böngészőben is ugyanaz a keret, mint a szerveren: 10 MB, PDF, JPEG, PNG. */
 const UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
-const UPLOAD_ACCEPT = "application/pdf,image/jpeg,image/png";
+const UPLOAD_ACCEPT = uploadAccept(["pdf", "jpeg", "png"]);
 
 /**
  * Enter küld, Shift+Enter új sort ír (a prompt 7. pontja). Magyar ékezetes

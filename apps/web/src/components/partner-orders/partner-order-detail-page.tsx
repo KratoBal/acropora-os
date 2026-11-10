@@ -18,6 +18,7 @@ import {
   type PartnerOrderDocumentDto,
   type PartnerOrderDocumentStepValue,
   type PartnerOrderSystemDocumentDto,
+  uploadAccept,
 } from "@acropora/types";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -484,7 +485,7 @@ export function PartnerOrderDetailPage({ orderId }: { orderId: string }) {
                           fileInputs.current[step] = element;
                         }}
                         type="file"
-                        accept="application/pdf,image/jpeg,image/png"
+                        accept={uploadAccept(["pdf", "jpeg", "png"])}
                         className="sr-only"
                         aria-label={`${PARTNER_ORDER_STEP[step].label} fájl kiválasztása`}
                         onChange={(event) =>

@@ -20,6 +20,7 @@ import {
   ASSET_POWER_CONSUMPTION_UNIT,
   assetPhaseConnectionLabel,
   withAssetUnit,
+  uploadAccept,
 } from "@acropora/types";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -720,7 +721,7 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
                       <PilotFormField label="Fénykép vagy PDF">
                         <PilotFileInput
                           ref={documentInput}
-                          accept="image/jpeg,image/png,application/pdf"
+                          accept={uploadAccept(["jpeg", "png", "pdf"])}
                           aria-label="Fénykép vagy PDF"
                           onChange={(event) =>
                             setDocumentFile(event.target.files?.[0] ?? null)

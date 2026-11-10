@@ -1,5 +1,6 @@
 "use client";
 
+import { uploadAccept } from "@acropora/types";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -217,7 +218,7 @@ export function CompletionCertificateDetail({ id }: { id: string }) {
                   kattints a tallózáshoz
                   <input
                     type="file"
-                    accept="application/pdf"
+                    accept={uploadAccept(["pdf"])}
                     className="hidden"
                     onChange={(event) =>
                       setFile(event.target.files?.[0] ?? null)

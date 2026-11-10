@@ -281,6 +281,12 @@ export type {
   LivestockArrivalProductOption,
   LivestockArrivalStatus,
 } from "./livestock-arrival.js";
+export {
+  ACCEPTED_UPLOAD_MIMETYPES,
+  uploadAccept,
+  UPLOADED_FILE_TYPES,
+} from "./upload-file-type.js";
+export type { UploadedFileKind } from "./upload-file-type.js";
 export type {
   WebshopMailRender,
   WebshopRenderSteps,

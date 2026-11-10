@@ -6,6 +6,7 @@ import {
   PERMISSIONS,
   type ContractKind,
   type WorksheetDepartmentSummary,
+  uploadAccept,
 } from "@acropora/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -1189,7 +1190,7 @@ export function PilotContractDetailPage({
                         : `Vevő megrendelőlapjának feltöltése (${selectedCount} tétel)`}
                       <input
                         type="file"
-                        accept="application/pdf"
+                        accept={uploadAccept(["pdf"])}
                         className="hidden"
                         disabled={uploadingCustomerForm || selectedCount === 0}
                         onChange={(event) => {
@@ -1250,7 +1251,7 @@ export function PilotContractDetailPage({
                                 Aláírt PDF feltöltése
                                 <input
                                   type="file"
-                                  accept="application/pdf"
+                                  accept={uploadAccept(["pdf"])}
                                   className="hidden"
                                   onChange={(event) => {
                                     const file = event.target.files?.[0];
