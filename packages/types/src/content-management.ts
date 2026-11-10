@@ -108,6 +108,22 @@ export interface ContentComment {
 }
 
 /**
+ * EGY ÁLLAPOTVÁLTÁS A NAPLÓBÓL (T5.1): ki, mikor, honnan, hová, és az indok, ha volt.
+ *
+ * A `fromState` null a létrehozásnál. Az `actorName` a felhasználó hivatalos neve, ha még megvan; az azonosító akkor is
+ * megmarad, hogy a sor ne üres legyen egy törölt felhasználónál.
+ */
+export interface ContentStateEvent {
+  id: string;
+  fromState: ContentState | null;
+  toState: ContentState;
+  actorUserId: string | null;
+  actorName: string | null;
+  note: string | null;
+  createdAt: string;
+}
+
+/**
  * EGY TÉTEL RÉSZLETESEN.
  *
  * MIÉRT KELL, HA A LISTA MÁR MINDENT MUTAT: mert nem mutat mindent, és
@@ -124,6 +140,8 @@ export interface ContentComment {
 export interface ContentDetail extends ContentListItem {
   body: string | null;
   comments: ContentComment[];
+  /** Az állapotváltások naplója, régitől az újig (T5.1). A bevezetés előtti tételeknél hiányos lehet. */
+  history: ContentStateEvent[];
   blockers: {
     waitsOn: { on: string };
     waitsForImage: boolean;

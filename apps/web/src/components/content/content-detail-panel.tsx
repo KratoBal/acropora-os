@@ -7,6 +7,8 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { contentApi } from "@/lib/api/content";
 
+import { describeContentEvent, describeContentSent } from "./content-history";
+
 /**
  * EGY TÉTEL SZÖVEGE ÉS A BESZÉLGETÉSE, A SOR ALATT.
  *
@@ -73,6 +75,8 @@ export function ContentDetailPanel({ id }: { id: string }) {
 
   if (!detail) return null;
 
+  const sent = describeContentSent(detail);
+
   return (
     <div className="w-full space-y-3 rounded-lg border border-dusk-200 bg-dusk-50 p-3">
       <section>
@@ -112,6 +116,39 @@ export function ContentDetailPanel({ id }: { id: string }) {
                   felvetés áll egyszerre (kártya: c057b4db).
                 */}
                 <p className="whitespace-pre-wrap">{comment.body}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {sent ? (
+        <section>
+          <h4 className="text-xs font-semibold uppercase text-dusk-500">
+            Kiküldve
+          </h4>
+          <p className="text-sm">{sent}</p>
+        </section>
+      ) : null}
+
+      {/*
+        KI, MIKOR, MIT CSINÁLT (T5.1): az állapotváltások naplója, régitől az újig. A bevezetés előtti tételnél hiányos lehet,
+        és ezt a felület KIMONDJA, nem találja ki a múltat: az üres napló nem azt jelenti, hogy a tétel soha nem mozdult.
+      */}
+      <section>
+        <h4 className="text-xs font-semibold uppercase text-dusk-500">
+          Ki, mikor, mit csinált ({detail.history.length})
+        </h4>
+        {detail.history.length === 0 ? (
+          <p className="text-sm text-dusk-500">
+            Ehhez a tételhez a napló bevezetése előtti időből nincs bejegyzés. A
+            következő állapotváltástól látszik.
+          </p>
+        ) : (
+          <ul className="space-y-1">
+            {detail.history.map((event) => (
+              <li key={event.id} className="text-sm">
+                {describeContentEvent(event)}
               </li>
             ))}
           </ul>

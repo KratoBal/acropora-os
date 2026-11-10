@@ -1289,6 +1289,10 @@ export const ANONYMIZATION_REGISTER: Readonly<
     authorId: "identifier",
     body: "freeText",
   },
+  ContentStateEvent: {
+    actorUserId: "identifier",
+    note: "freeText",
+  },
   ArticleBody: {
     slug: "business",
     excerpt: "freeText",

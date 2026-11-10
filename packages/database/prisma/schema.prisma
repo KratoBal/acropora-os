@@ -8299,6 +8299,8 @@ model ContentItem {
   discardReason String?
 
   comments  ContentComment[]
+  /// Az állapotváltások kitörölhetetlen naplója: lásd `ContentStateEvent`.
+  stateEvents ContentStateEvent[]
   /// A cikk törzse (csak `ARTICLE` csatornán): lásd `ArticleBody`.
   article   ArticleBody?
   createdAt DateTime         @default(now())
@@ -8306,6 +8308,31 @@ model ContentItem {
 
   @@index([state, plannedFor])
   @@index([channel, state])
+}
+
+/// A TARTALOM ÁLLAPOTVÁLTÁSAINAK NAPLÓJA (T5.1, kártya db640e6a; korall specifikációja 7. pont): ki, mikor, melyik
+/// állapotból melyikbe, és a lépéshez tartozó indok. A lépéssel EGY TRANZAKCIÓBAN születik meg, tehát nem létezhet
+/// napló nélküli váltás, sem váltás nélküli napló.
+///
+/// APPEND-ONLY, ÉS EZT A FELÜLET ŐRZI, NEM A TÁBLA: a tárolóban nincs módosító vagy törlő metódus, és nincs végpont, ami
+/// ilyet hívna. Adatbázis-trigger szándékosan nincs: a stage-anonimizálás (`anonymization-register.ts`) a szabad szöveges
+/// és azonosító mezőket átírja, és egy tiltó trigger ezt is megakadályozná.
+///
+/// A `fromState` NULL a LÉTREHOZÁSNÁL (nincs honnan). A napló a bevezetése után keletkezett tételeknél teljes; a korábbiaknál
+/// az első sor a bevezetés utáni első váltás, és a felület ezt kimondja, nem találja ki a múltat.
+model ContentStateEvent {
+  id          String        @id @default(cuid())
+  contentId   String
+  content     ContentItem   @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  fromState   ContentState?
+  toState     ContentState
+  /// Aki a lépést tette (a felhasználó azonosítója; a gépi szerep is felhasználó).
+  actorUserId String?
+  /// A lépés indoka, ha volt: a visszaküldés felvetése vagy az elvetés oka.
+  note        String?
+  createdAt   DateTime      @default(now())
+
+  @@index([contentId, createdAt])
 }
 
 /// Hol jelenik meg egy cikk. A megjelenítés maga a kirakat dolga (később); itt

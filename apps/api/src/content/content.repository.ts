@@ -62,8 +62,20 @@ export class ContentRepository {
       where: { id },
       include: {
         comments: { orderBy: { createdAt: "asc" } },
+        // A NAPLÓ RÉGITŐL AZ ÚJIG; az azonos időbélyegű sorokat az azonosító rendezi, hogy a sorrend ne ingadozzon.
+        stateEvents: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
       },
     });
+  }
+
+  /** A felhasználók hivatalos neve azonosító szerint, a napló „ki" oszlopához. Aki már nincs meg, kimarad. */
+  async userNames(ids: readonly string[]): Promise<Map<string, string>> {
+    if (ids.length === 0) return new Map();
+    const users = await prisma.user.findMany({
+      where: { id: { in: [...ids] } },
+      select: { id: true, displayName: true },
+    });
+    return new Map(users.map((user) => [user.id, user.displayName]));
   }
 
   /**
@@ -78,7 +90,21 @@ export class ContentRepository {
    * eddig is await-eltek.
    */
   async create(data: Prisma.ContentItemCreateInput) {
-    return prisma.contentItem.create({ data, select: contentListSelect });
+    return prisma.contentItem.create({
+      // A LÉTREHOZÁS A NAPLÓ ELSŐ SORA, ugyanabban az írásban (beágyazott create: egy tranzakció): nincs olyan tétel, aminek
+      // a naplója nem a létrehozásával indul. `fromState` null: nincs honnan.
+      data: {
+        ...data,
+        stateEvents: {
+          create: {
+            fromState: null,
+            toState: data.state ?? "IDEA",
+            actorUserId: data.authorId ?? null,
+          },
+        },
+      },
+      select: contentListSelect,
+    });
   }
 
   /**
@@ -133,6 +159,21 @@ export class ContentRepository {
       });
 
       if (result.count !== 1) return false;
+
+      // AZ ÁLLAPOT-NAPLÓ SORA UGYANABBAN A TRANZAKCIÓBAN: ha a váltás nem sikerül (a feltétel nem illeszkedik, a cikk lépése
+      // nem lehetett), a sor sem születik meg, és fordítva nincs napló nélküli váltás. Az indok a visszaküldés felvetése
+      // vagy az elvetés oka, ha volt.
+      await tx.contentStateEvent.create({
+        data: {
+          contentId: input.id,
+          fromState: input.from,
+          toState: input.to,
+          actorUserId: input.actorUserId,
+          note:
+            (input.to === "AWAITING_REVISION" ? input.note?.body : null) ??
+            (input.to === "DISCARDED" ? (input.discardReason ?? null) : null),
+        },
+      });
 
       // A CIKK RÉSZE UGYANEBBEN A TRANZAKCIÓBAN: jóváhagyáskor pillanatkép,
       // publikáláskor a jóváhagyott változat; ha nem lehet, az egész lépés
