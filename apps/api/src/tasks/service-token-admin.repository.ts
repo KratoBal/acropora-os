@@ -3,7 +3,6 @@ import {
   Prisma,
   Repository,
   prisma,
-  type PrismaClient,
   type ServiceToken,
 } from "@acropora/database";
 import type { UserRole } from "@acropora/types";
@@ -62,8 +61,13 @@ export function toAdminView(token: StoredToken): ServiceTokenAdminView {
  */
 @Injectable()
 export class ServiceTokenAdminRepository extends Repository {
-  constructor(database: PrismaClient = prisma) {
-    super(database);
+  /**
+   * NO constructor parameter on purpose: with `emitDecoratorMetadata` a typed parameter is a dependency Nest must resolve,
+   * and nothing provides the database client (the app.bootstrap spec failed on exactly this on #2391). The unit spec swaps
+   * the client by assigning `database`.
+   */
+  constructor() {
+    super(prisma);
   }
 
   async list(): Promise<ServiceTokenAdminView[]> {

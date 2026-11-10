@@ -223,6 +223,11 @@ describe("service token admin: the wiring", () => {
     assert.doesNotMatch(viewFunction.slice(0, 500), /tokenHash/);
   });
 
+  it("has no constructor parameter: a typed one is a dependency Nest cannot resolve (the bootstrap spec's failure)", () => {
+    assert.match(repository, /constructor\(\) \{/);
+    assert.doesNotMatch(repository, /constructor\([^)]+\)/);
+  });
+
   it("writes each row's audit in the same transaction", () => {
     assert.equal((repository.match(/\$transaction/g) ?? []).length, 2);
     assert.match(repository, /updated\.count === 1/);
@@ -256,7 +261,7 @@ describe("service token admin: a racing revocation", () => {
       $transaction: async (work: (tx: typeof transaction) => unknown) =>
         work(transaction),
     };
-    const repository = new AdminRepository(database as never);
+    const repository = Object.assign(new AdminRepository(), { database });
     const result = await repository.revoke("s", "admin-1");
     assert.equal(result.kind, "revoked");
     assert.equal(result.kind === "revoked" && result.changed, false);
