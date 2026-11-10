@@ -115,5 +115,7 @@ export function husbandryListState(
   return {
     verified,
     missing: missingHusbandryFields(facts, kind, verified).length,
+    // only a stored TRUE is a hazard: a "no" and an unknown are not
+    hazard: facts.stingOrVenom === true,
   };
 }

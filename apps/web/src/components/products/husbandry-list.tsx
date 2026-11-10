@@ -51,17 +51,25 @@ export function HusbandryCell({
   husbandry: ProductListHusbandry | null | undefined;
 }) {
   if (!husbandry) return <span className="text-pilot-grey-600">—</span>;
-  if (husbandry.verified && husbandry.missing === 0)
-    return <PilotBadge variant="success">Ellenőrizve</PilotBadge>;
-  if (husbandry.verified)
-    return (
+  const state =
+    husbandry.verified && husbandry.missing === 0 ? (
+      <PilotBadge variant="success">Ellenőrizve</PilotBadge>
+    ) : husbandry.verified ? (
       <PilotBadge variant="amber">
         Ellenőrizve, {husbandry.missing} mező hiányzik
       </PilotBadge>
+    ) : (
+      <PilotBadge variant="grey">
+        Nem ellenőrzött, {husbandry.missing} hiányzik
+      </PilotBadge>
     );
-  return (
-    <PilotBadge variant="grey">
-      Nem ellenőrzött, {husbandry.missing} hiányzik
-    </PilotBadge>
+  // a stated sting or venom is shown next to the state, so a verifier working the list does not page past it (the product page has the banner)
+  return husbandry.hazard ? (
+    <span className="flex flex-wrap items-center gap-1">
+      {state}
+      <PilotBadge variant="danger">Csípés vagy méreg</PilotBadge>
+    </span>
+  ) : (
+    state
   );
 }

@@ -144,6 +144,27 @@ const baseSheet = {
   ellenorizveAt: null,
 };
 
+describe("a veszély jelzése a lista során (V2.2 követés)", () => {
+  const categories = [{ isPrimary: true, category: category("Korallok") }];
+  const state = (sting: boolean | null) =>
+    husbandryListState({
+      categories,
+      datasheet: { ...baseSheet, stingOrVenom: sting },
+    })!;
+
+  it("csak a tárolt IGAZ csípés vagy méreg veszély, a nem és az ismeretlen nem", () => {
+    assert.equal(state(true).hazard, true);
+    assert.equal(state(false).hazard, false);
+    assert.equal(state(null).hazard, false);
+  });
+
+  it("a datasheet nélküli sor nem veszélyes, és a veszély nem módosítja a hiányszámot", () => {
+    const none = husbandryListState({ categories, datasheet: null })!;
+    assert.equal(none.hazard, false);
+    assert.equal(state(true).missing, state(false).missing);
+  });
+});
+
 describe("a sor gyökér-olvasata (barracuda a #2386-on)", () => {
   const row = (chain: TestCategory) => ({
     categories: [{ isPrimary: true, category: chain }],
