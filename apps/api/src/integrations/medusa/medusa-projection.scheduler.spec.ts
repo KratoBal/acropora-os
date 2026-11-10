@@ -1255,6 +1255,101 @@ describe("az átirányítás-lista köre (SEO P0 PR 7b)", () => {
   });
 });
 
+describe("a boltban maradt élő állat fajta köre (kártya 4b30b373)", () => {
+  /**
+   * MI PIROSIT: a lépés kapcsoló nélkül is fut (a boltba ír); bekapcsolva üres körben is fut, és a törlést a napló
+   * kiírja (az első lefutás az összegzést is); egy hiba a naplóba megy, és a termékek köre fut tovább.
+   */
+  const ures = () =>
+    adatbazis([termek()], [{ entityId: "prod-1", lastSyncedAt: MOST }]).db;
+  const jelentes = (torolt: number) => ({
+    rows: 5,
+    carrying: 2,
+    unpaired: 0,
+    entries: Array.from({ length: torolt }, (_, i) => ({
+      osProductId: `os-${i}`,
+      medusaProductId: `prod_${i}`,
+      flags: "élő állat: hal -> a fajta törlése",
+      action: "applied" as const,
+    })),
+  });
+
+  it("kikapcsolva (alapból) nem fut", async () => {
+    let hivas = 0;
+    const scheduler = new MedusaProjectionScheduler({
+      db: ures(),
+      runProjection: futtato().run,
+      runPricing: arFuttato().run,
+      environment: BEKAPCSOLVA,
+      logger: naplo().logger,
+      runLeftoverKinds: async () => {
+        hivas += 1;
+        return jelentes(1);
+      },
+    });
+    await scheduler.runOnce();
+    assert.equal(hivas, 0);
+  });
+
+  it("bekapcsolva üres körben is fut, a törlést kiírja, és csak az első nulla-törlés kap összegzést", async () => {
+    const hivasok: number[] = [];
+    const n = naplo();
+    const kimenetek = [jelentes(0), jelentes(0), jelentes(2)];
+    const scheduler = new MedusaProjectionScheduler({
+      db: ures(),
+      runProjection: futtato().run,
+      runPricing: arFuttato().run,
+      environment: { ...BEKAPCSOLVA, MEDUSA_CLEAR_LEFTOVER_KIND: "true" },
+      logger: n.logger,
+      runLeftoverKinds: async () => {
+        hivasok.push(hivasok.length);
+        return kimenetek[hivasok.length - 1]!;
+      },
+    });
+    assert.equal(await scheduler.runOnce(), "SKIPPED");
+    const elso = n.sorok.filter((s) =>
+      s.includes("Boltban maradt élő állat fajta"),
+    );
+    assert.equal(elso.length, 1, n.sorok.join("\n"));
+    assert.match(elso[0]!, /0 törölve/);
+    await scheduler.runOnce();
+    assert.equal(
+      n.sorok.filter((s) => s.includes("Boltban maradt élő állat fajta"))
+        .length,
+      1,
+      "a második nulla-törlés kör nem naplóz",
+    );
+    await scheduler.runOnce();
+    const harmadik = n.sorok.filter((s) =>
+      s.includes("Boltban maradt élő állat fajta"),
+    );
+    assert.equal(harmadik.length, 2);
+    assert.match(harmadik[1]!, /os-0: most állítottuk be -> prod_0/);
+    assert.match(harmadik[1]!, /2 törölve/);
+  });
+
+  it("egy hiba a naplóba megy, és a termékek köre fut tovább", async () => {
+    const n = naplo();
+    const { run, kapott } = futtato(0);
+    const scheduler = new MedusaProjectionScheduler({
+      db: adatbazis([termek()], []).db,
+      runProjection: run,
+      runPricing: arFuttato().run,
+      environment: { ...BEKAPCSOLVA, MEDUSA_CLEAR_LEFTOVER_KIND: "true" },
+      logger: n.logger,
+      runLeftoverKinds: async () => {
+        throw new Error("HTTP 404");
+      },
+    });
+    assert.equal(await scheduler.runOnce(), "APPLIED");
+    assert.deepEqual(kapott, [["prod-1"]]);
+    assert.ok(
+      n.sorok.some((s) => s.startsWith("Boltban maradt fajta:")),
+      n.sorok.join("\n"),
+    );
+  });
+});
+
 describe("a tény-változás is esedékessé tesz (SEO P0 PR 8)", () => {
   /**
    * MI PIROSIT: egy, a kötés utolsó vetítése UTÁN változott tény nem teszi

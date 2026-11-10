@@ -10,7 +10,10 @@ import {
 import { prisma } from "@acropora/database";
 
 import { decideProjectionDue } from "./medusa-projection-due.js";
-import { MEDUSA_PRODUCT_REFERENCE } from "./medusa-product-link.repository.js";
+import {
+  MEDUSA_PRODUCT_REFERENCE,
+  MedusaProductLinkRepository,
+} from "./medusa-product-link.repository.js";
 import { runPricingCli } from "./medusa-pricing.cli.js";
 import {
   priceRetryProducts,
@@ -24,6 +27,17 @@ import {
   medusaClientForProjection,
   storedCredentialProvider,
 } from "./medusa-projection.cli.js";
+import {
+  skuParositas,
+  type ShippingAttributesCliDatabase,
+} from "./medusa-shipping-attributes.cli.js";
+import {
+  clearLeftoverKinds,
+  describeLeftoverKinds,
+  liveAnimalProductIds,
+  type LeftoverKindReport,
+} from "./medusa-leftover-kind.js";
+import { MedusaShippingAttributesService } from "./medusa-shipping-attributes.service.js";
 import { prismaRedirectSource } from "./medusa-redirect.cli.js";
 import {
   describeHomepageProjection,
@@ -66,6 +80,15 @@ export const projectRedirectsInRound = (env: NodeJS.ProcessEnv): boolean =>
  */
 export const projectLandingPagesInRound = (env: NodeJS.ProcessEnv): boolean =>
   env.MEDUSA_PROJECT_LANDING_PAGES === "true";
+
+/**
+ * A BOLTBAN MARADT ELO ALLAT FAJTA LETORLESE A KORBEN (V2.6 S1b koveto, kartya 4b30b373, acrobot 2026-11-10), kapcsoloval,
+ * alapbol KI, ugyanugy, mint a tobbi lista-lepes: a lepes a boltba IR, es az iras joga nem engedely. Bekapcsolva egy kor
+ * egy olvasas (a bolt szallitasi-jellemzo sorai), es iras csak ott, ahol a bolti sor fajtat visel, az OS-termeknek
+ * pedig nincs elo allat besorolasa: a fajta mezo null lesz, a tobbi zaszlo valtozatlan.
+ */
+export const clearLeftoverKindInRound = (env: NodeJS.ProcessEnv): boolean =>
+  env.MEDUSA_CLEAR_LEFTOVER_KIND === "true";
 
 /**
  * A VETITES UTEMEZOJE.
@@ -253,6 +276,8 @@ export interface MedusaProjectionSchedulerDeps {
   homepageSwitchedOn?: () => Promise<boolean>;
   /** Az érkező állatok listájának köre (V2.6 S4b). */
   runLivestockArrivals?: () => Promise<LivestockArrivalsOutcome>;
+  /** A boltban maradt élő állat fajta letörlésének köre (kártya 4b30b373). */
+  runLeftoverKinds?: () => Promise<LeftoverKindReport>;
 }
 
 /**
@@ -293,6 +318,9 @@ export class MedusaProjectionScheduler
   private readonly runHomepageContent: () => Promise<HomepageProjectionOutcome>;
   private readonly homepageOn: () => Promise<boolean>;
   private readonly runLivestockArrivals: () => Promise<LivestockArrivalsOutcome>;
+  private readonly runLeftoverKinds: () => Promise<LeftoverKindReport>;
+  /** Az első lefutás összegzést is naplóz (ez a futás látható jele), a többi csak, ha törölt valamit. */
+  private fajtaElsoKor = true;
   /** Hany URES kor telt el egymas utan. A nem-ures kor nullazza. */
   private egymasUtaniUresKorok = 0;
   /** Az inaktivált lista forgó kezdete (`inaktivaltAzonositok`): ahányat egy kör ténylegesen vitt, annyit lép. */
@@ -355,6 +383,26 @@ export class MedusaProjectionScheduler
           prismaLivestockArrivalSource,
           true,
         ));
+    this.runLeftoverKinds =
+      deps?.runLeftoverKinds ??
+      (async () => {
+        const out = {
+          stdout: (value: string) => this.logNemUres(value, "log"),
+          stderr: (value: string) => this.logNemUres(value, "warn"),
+        };
+        const service = new MedusaShippingAttributesService(
+          new MedusaProductLinkRepository(),
+          await medusaClientForProjection(storedCredentialProvider(), out),
+        );
+        const database = prisma as unknown as ShippingAttributesCliDatabase;
+        const eloAllat = await liveAnimalProductIds(database);
+        return clearLeftoverKinds(service, {
+          skip: (osProductId) => eloAllat.has(osProductId),
+          // lusta: a bolt SKU-listajat csak akkor olvassuk, ha van kotes-sor nelkuli, fajtat viselo bolti sor
+          pairing: async () => (await skuParositas(service, database)).osToShop,
+          apply: true,
+        });
+      });
     this.homepageOn =
       deps?.homepageSwitchedOn ??
       (() =>
@@ -461,6 +509,7 @@ export class MedusaProjectionScheduler
     await this.landingKor();
     await this.kezdolapKor();
     await this.erkezoAllatokKor();
+    await this.fajtaKor();
     const kezdet = this.now();
     const akcio = await this.akcioHatarAzonositok();
     const teny = await this.tenyValtozasAzonositok();
@@ -676,6 +725,27 @@ export class MedusaProjectionScheduler
     } catch (error) {
       this.naplo.warn(
         `Kezdolap tartalom: a kor nem futott le (${
+          error instanceof Error ? error.message : String(error)
+        })`,
+      );
+    }
+  }
+
+  /**
+   * A BOLTBAN MARADT FAJTA EGY KORE (kartya 4b30b373): a lista-lepesek szabalya szerint a hibaja csak naplo, a
+   * termek-vetitest nem allitja meg. A kor naploja kiirja, MIT torolt; az elso lefutas az osszegzest is kiirja, hogy
+   * a nulla torles ne nezzen ki ugy, mintha a lepes nem futott volna.
+   */
+  private async fajtaKor(): Promise<void> {
+    if (!clearLeftoverKindInRound(this.environment)) return;
+    try {
+      const jelentes = await this.runLeftoverKinds();
+      if (jelentes.entries.length || this.fajtaElsoKor)
+        this.naplo.log(describeLeftoverKinds(jelentes, true));
+      this.fajtaElsoKor = false;
+    } catch (error) {
+      this.naplo.warn(
+        `Boltban maradt fajta: a kor nem futott le (${
           error instanceof Error ? error.message : String(error)
         })`,
       );
