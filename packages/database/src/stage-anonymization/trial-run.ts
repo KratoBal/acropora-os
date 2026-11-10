@@ -57,6 +57,27 @@ export function freePort(): Promise<number> {
   });
 }
 
+/**
+ * IS THE PORT STILL FREE (card a46fcda6): `freePort` frees the port it measured, so between that moment and the instance's own
+ * bind ANOTHER process can take it. If one answers `/health` there, the trial would take its answer for the instance's and log in
+ * against a foreign process. Measured on the one CI failure: the test ended in 387 ms, while a pass needs at least 500 ms (the
+ * first `/health` try is refused and the wait sleeps), so the first try was ANSWERED, before the stand-in had even written its
+ * first line. A bind attempt right before the spawn closes most of that window; the alive check after `/health` answers (below)
+ * closes the rest.
+ */
+export function portIsFree(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const server = createServer();
+    server.once("error", () => resolve(false));
+    server.listen(port, "127.0.0.1", () => {
+      server.close(() => resolve(true));
+    });
+  });
+}
+
+/** How long the instance gets, after `/health` answered, to show it is still the one that is running (see `waitForHealth`). */
+const SETTLE_MS = 250;
+
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -74,7 +95,16 @@ async function waitForHealth(
       const response = await doFetch(`${baseUrl}/health`, {
         signal: AbortSignal.timeout(3_000),
       });
-      if (response.ok) return null;
+      if (response.ok) {
+        /*
+          THE ANSWER MUST BE THE INSTANCE'S OWN: an instance that could not bind (the port was taken, so another process
+          answered) exits within moments. Give it a moment, and a child that is gone is not the one that answered.
+        */
+        await sleep(SETTLE_MS);
+        if (child.exitCode !== null)
+          return `exited with code ${child.exitCode} right after /health answered (another process on the port may have answered)`;
+        return null;
+      }
     } catch {
       // not up yet
     }
@@ -120,6 +150,15 @@ export async function runTrial(
       ...integration,
       {
         name: "login: an active owner or admin with a password and no partner scope exists (none found)",
+        passed: false,
+      },
+    ];
+
+  if (!(await portIsFree(port)))
+    return [
+      ...integration,
+      {
+        name: `${API_CHECK} (port ${port} is already in use by another process: the instance is not started, and nothing that answers there is taken for it)`,
         passed: false,
       },
     ];
