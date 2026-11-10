@@ -194,6 +194,7 @@ const RAW: Readonly<
       "Megkaptuk az elállási nyilatkozatodat ({{nyilatkozat_azonosito}})",
     bodyHtml: [
       `<p>Megkaptuk az elállási nyilatkozatodat a #${v("rendeles_szam")} rendelésről.</p>`,
+      own("nyilatkozat_tetelek"),
       `<p>A nyilatkozat azonosítója: ${v("nyilatkozat_azonosito")}. A nyilatkozatot ${v("nyilatkozat_neve")} nevével adták le, ${v("nyilatkozat_idopont")} napján érkezett meg.</p>`,
       "<p>A további teendőkről a csapatunk jelentkezik.</p>",
     ].join(""),
@@ -367,6 +368,7 @@ const RAW_EN: typeof RAW = {
       "We have received your withdrawal declaration ({{nyilatkozat_azonosito}})",
     bodyHtml: [
       `<p>We have received your withdrawal declaration about order #${v("rendeles_szam")}.</p>`,
+      own("nyilatkozat_tetelek"),
       `<p>The declaration's reference is ${v("nyilatkozat_azonosito")}. It was made in the name of ${v("nyilatkozat_neve")} and reached us on ${v("nyilatkozat_idopont")}.</p>`,
       "<p>Our team will get in touch about what follows.</p>",
     ].join(""),
