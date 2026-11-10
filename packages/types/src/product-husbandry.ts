@@ -121,6 +121,23 @@ export interface ProductHusbandryFacts {
   kinekNem: string | null;
   forrasTipus: string | null;
   forrasHivatkozas: string | null;
+  /*
+    THE OPTIONAL FACTS (V2.2 S1b; the spec: "Opcionális, ha ismert és megbízható"). Null is "being checked", as everywhere in the
+    block; none of them is required, and none counts in `missing`. They stand under the block's one verification like the rest.
+  */
+  tempMinC: string | null;
+  tempMaxC: string | null;
+  salinityMinSg: string | null;
+  salinityMaxSg: string | null;
+  khMinDkh: string | null;
+  khMaxDkh: string | null;
+  lifespanYears: number | null;
+  /** True: the handling warning is required (the write path refuses a sting or venom without it). */
+  stingOrVenom: boolean | null;
+  handlingWarning: string | null;
+  quarantineWeeks: number | null;
+  acclimatization: string | null;
+  breedsInTank: boolean | null;
 }
 
 export type ProductHusbandryField = keyof ProductHusbandryFacts;

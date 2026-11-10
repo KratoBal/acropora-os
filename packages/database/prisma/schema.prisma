@@ -8081,6 +8081,29 @@ model ProductDatasheet {
   ellenorizteUserId   String?
   ellenorizveAt       DateTime?
 
+  /// A TARTASI BLOKK OPCIONALIS MEZOI (V2.2 S1b, a spec 1. pontja: "Opcionalis, ha ismert es megbizhato"). Mind NULLAZHATO, es a
+  /// NULL itt is "ellenorzes alatt", nem alapertek. A blokk EGY ellenorzese alatt allnak ezek is: barmelyik valtoztatasa
+  /// visszavonja az ellenorzest, es a `version` is fedi oket.
+  ///
+  /// Vizparameterek TARTOMANYKENT (a min egyuttal kozos kikotes: min <= max, az iro utvonal ellenorzi).
+  tempMinC            Decimal? @db.Decimal(4, 1)
+  tempMaxC            Decimal? @db.Decimal(4, 1)
+  salinityMinSg       Decimal? @db.Decimal(5, 3)
+  salinityMaxSg       Decimal? @db.Decimal(5, 3)
+  khMinDkh            Decimal? @db.Decimal(4, 1)
+  khMaxDkh            Decimal? @db.Decimal(4, 1)
+  /// Varhato elettartam, evben.
+  lifespanYears       Int?
+  /// Csipes vagy meregveszely (csalanozo, merges tuske): harom allapot (igen, nem, NULL = ellenorzes alatt). IGAZ eseten a
+  /// kezelesi figyelmeztetes KOTELEZO (az iro utvonal ellenorzi): a veszelyt jelzo allitas figyelmeztetes nelkul nem all.
+  stingOrVenom        Boolean?
+  handlingWarning     String?
+  /// Karantén-ajanlas hetekben, es az akklimatizacio modja (csepegtetes, kb. hany ora) szabad szovegben.
+  quarantineWeeks     Int?
+  acclimatization     String?
+  /// Szaporithato-e a medencében: harom allapot.
+  breedsInTank        Boolean?
+
   product  Product                        @relation(fields: [productId], references: [id], onDelete: Cascade)
   refusals ProductDatasheetFieldRefusal[]
 }

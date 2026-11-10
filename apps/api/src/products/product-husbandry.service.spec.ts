@@ -57,6 +57,18 @@ function emptyFacts(): ProductHusbandryFacts {
     kinekNem: null,
     forrasTipus: "gyártó",
     forrasHivatkozas: "https://example.invalid/x",
+    tempMinC: null,
+    tempMaxC: null,
+    salinityMinSg: null,
+    salinityMaxSg: null,
+    khMinDkh: null,
+    khMaxDkh: null,
+    lifespanYears: null,
+    stingOrVenom: null,
+    handlingWarning: null,
+    quarantineWeeks: null,
+    acclimatization: null,
+    breedsInTank: null,
   };
 }
 
@@ -227,6 +239,37 @@ describe("a tartási DTO alakja", () => {
       assert.equal(invalid({ careDifficulty }), false);
     for (const elhelyezesZona of ["ALSO", "KOZEPSO", "FELSO"])
       assert.equal(invalid({ elhelyezesZona }), false);
+  });
+
+  it("az opcionális mezők alakja: a tartományok és az egészek határai, a logikai, a null törlés", () => {
+    for (const ok of [
+      { tempMinC: 24.5, tempMaxC: 26 },
+      { salinityMinSg: 1.023, salinityMaxSg: 1.026 },
+      { khMinDkh: 7, khMaxDkh: 12.5 },
+      { lifespanYears: 0 },
+      { quarantineWeeks: 4 },
+      { stingOrVenom: true, handlingWarning: "Kesztyű." },
+      { breedsInTank: false },
+      { tempMinC: null, khMaxDkh: null, stingOrVenom: null },
+    ])
+      assert.equal(invalid(ok), false, JSON.stringify(ok));
+    for (const bad of [
+      { tempMinC: -1 },
+      { tempMaxC: 41 },
+      { tempMinC: 24.55 },
+      { salinityMinSg: 0.99 },
+      { salinityMaxSg: 1.05 },
+      { salinityMinSg: 1.0234 },
+      { khMaxDkh: 31 },
+      { lifespanYears: 2.5 },
+      { lifespanYears: -1 },
+      { quarantineWeeks: 53 },
+      { stingOrVenom: "igen" },
+      { breedsInTank: 1 },
+      { handlingWarning: "a".repeat(301) },
+      { acclimatization: ["x"] },
+    ])
+      assert.equal(invalid(bad), true, JSON.stringify(bad));
   });
 
   it("a hosszkorlát: 300 karakter a kinek-nem mondatnál, 301 már nem", () => {

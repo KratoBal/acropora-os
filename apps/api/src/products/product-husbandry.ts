@@ -27,6 +27,8 @@ const TEXT_FACTS = [
   "reefSafeIndok",
   "kinekNem",
   "etetesGyakorisag",
+  "handlingWarning",
+  "acclimatization",
 ] as const satisfies readonly ProductHusbandryField[];
 
 /** The genus the first step may never be given to (spec section 2: "az 1-es fokozat semmilyen Acropora fajra"). */
@@ -45,6 +47,12 @@ function after<K extends Exclude<ProductHusbandryField, "magyarNev">>(
 ): unknown {
   const value = check.patch[key];
   return value === undefined ? check.current[key] : value;
+}
+
+function numberOf(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const parsed = Number(String(value));
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function filled(value: unknown): boolean {
@@ -86,6 +94,29 @@ export function husbandryWriteErrors(
         `A(z) ${key} szövegében tiltott szó áll (tökéletes, mindenkinek, problémamentes).`,
       );
   }
+
+  /*
+    THE OPTIONAL FACTS' RULES (V2.2 S1b). A range is two ends that must not cross (judged on the state AFTER the write, so one end
+    written alone is held against the stored other end); a sting or venom that is stated needs its handling warning (a hazard
+    stated without the warning is the block's one safety hole).
+  */
+  for (const [low, high, label] of [
+    ["tempMinC", "tempMaxC", "hőmérséklet"],
+    ["salinityMinSg", "salinityMaxSg", "sótartalom"],
+    ["khMinDkh", "khMaxDkh", "KH"],
+  ] as const) {
+    const min = numberOf(after(check, low));
+    const max = numberOf(after(check, high));
+    if (min !== null && max !== null && min > max)
+      errors.push(
+        `A(z) ${label} tartomány alsó értéke nem lehet nagyobb a felsőnél.`,
+      );
+  }
+  if (
+    after(check, "stingOrVenom") === true &&
+    !filled(after(check, "handlingWarning"))
+  )
+    errors.push("Csípés vagy méreg jelzéséhez a kezelési figyelmeztetés kell.");
 
   if (verifies) {
     if (!filled(after(check, "forrasTipus")))
@@ -164,6 +195,8 @@ export function normalizedHusbandryTexts(
     "kinekNem",
     "forrasTipus",
     "forrasHivatkozas",
+    "handlingWarning",
+    "acclimatization",
   ] as const) {
     const value = out[key];
     if (typeof value === "string") out[key] = value.trim() || null;
