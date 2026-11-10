@@ -37,6 +37,7 @@ import { ProductDoseEffectsCard } from "@/components/products/product-dose-effec
 import { ProductShippingProfileCard } from "@/components/products/product-shipping-profile-card";
 import { ProductSupplierPricesCard } from "@/components/products/product-supplier-prices-card";
 import { ProductBasicsEditor } from "@/components/products/product-basics-editor";
+import { ProductNamesCard } from "@/components/products/product-names-card";
 import { JevProductCard } from "@/components/jev-product-intelligence/jev-product-card";
 import { productApi } from "@/lib/api/products";
 import { currencyLabel } from "@/lib/format/currency";
@@ -1231,6 +1232,26 @@ export function ProductDetailPage({ productId }: { productId: string }) {
                   id: "basics-editor",
                   main: (
                     <ProductBasicsEditor
+                      token={token}
+                      product={product}
+                      canManage={canManage}
+                      onSaved={setProduct}
+                    />
+                  ),
+                },
+              ]
+            : []),
+          /*
+            A KORALL ES A GERINCTELEN NEVEI (kartya 20b0dd47): az adatlap nevei OS-tulajdonuak, a UNAS-szinkron nem ir
+            rajuk, ezert a gazda-allapottol fuggetlenul latszanak; a kartya maga donti el (livestockKind), kell-e.
+          */
+          ...(product.livestockKind === "CORAL" ||
+          product.livestockKind === "INVERTEBRATE"
+            ? [
+                {
+                  id: "names",
+                  main: (
+                    <ProductNamesCard
                       token={token}
                       product={product}
                       canManage={canManage}
