@@ -18,6 +18,10 @@ import {
 } from "./takeover-price.js";
 import { recordOwnPrice } from "./price-history/own-price-history.js";
 import { isOwnSaleActive } from "./own-sale.js";
+import {
+  datasheetPatchOf,
+  filledNameFields,
+} from "./product-datasheet-patch.js";
 import { retryOnSerializationConflict } from "../common/transaction-retry.util.js";
 import { unasShippingProfile } from "../integrations/medusa/medusa-unas-shipping.policy.js";
 import {
@@ -70,7 +74,13 @@ const productInclude = {
   images: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] },
   unasSnapshot: true,
   datasheet: {
-    select: { fenyIgeny: true, aramlasIgeny: true },
+    select: {
+      fenyIgeny: true,
+      aramlasIgeny: true,
+      magyarNev: true,
+      angolNev: true,
+      nemetNev: true,
+    },
   },
 } as const;
 
@@ -145,6 +155,18 @@ interface ProductTransaction {
   productCategory: {
     updateMany(args: unknown): Promise<unknown>;
     upsert(args: unknown): Promise<unknown>;
+  };
+  /** Egy kitoltott nev feloldja a mezo megtagadasat (kartya 20b0dd47): elobb a sor, aztan a torles. */
+  productDatasheetFieldRefusal: {
+    findMany(args: unknown): Promise<
+      {
+        mezo: string;
+        indok: string;
+        oka: string;
+        createdAt: Date;
+      }[]
+    >;
+    deleteMany(args: unknown): Promise<{ count: number }>;
   };
   domainEvent: {
     create(args: unknown): Promise<unknown>;
@@ -482,6 +504,33 @@ export class ProductRepository extends Repository {
                   },
                 },
               },
+              // a keresheto nevek (kartya 20b0dd47, Balazs 2026-08-31): a magyar, az angol es a nemet nev is talal
+              {
+                datasheet: {
+                  is: {
+                    OR: [
+                      {
+                        magyarNev: {
+                          contains: query.search,
+                          mode: "insensitive",
+                        },
+                      },
+                      {
+                        angolNev: {
+                          contains: query.search,
+                          mode: "insensitive",
+                        },
+                      },
+                      {
+                        nemetNev: {
+                          contains: query.search,
+                          mode: "insensitive",
+                        },
+                      },
+                    ],
+                  },
+                },
+              },
             ],
           }
         : {}),
@@ -516,9 +565,7 @@ export class ProductRepository extends Repository {
         : input.categoryId;
     const primaryWasProvided =
       input.primaryCategoryId !== undefined || input.categoryId !== undefined;
-    const placementNeedsWereProvided =
-      input.fenyIgeny !== undefined || input.aramlasIgeny !== undefined;
-
+    const datasheetPatch = datasheetPatchOf(input);
     return this.productDatabase.$transaction(
       async (transaction) => {
         await transaction.product.update({
@@ -530,27 +577,10 @@ export class ProductRepository extends Repository {
             brandId: input.brandId,
             webshopSellable: input.webshopSellable,
             advisorKind: input.advisorKind,
-            ...(placementNeedsWereProvided
+            ...(datasheetPatch
               ? {
                   datasheet: {
-                    upsert: {
-                      create: {
-                        ...(input.fenyIgeny !== undefined
-                          ? { fenyIgeny: input.fenyIgeny }
-                          : {}),
-                        ...(input.aramlasIgeny !== undefined
-                          ? { aramlasIgeny: input.aramlasIgeny }
-                          : {}),
-                      },
-                      update: {
-                        ...(input.fenyIgeny !== undefined
-                          ? { fenyIgeny: input.fenyIgeny }
-                          : {}),
-                        ...(input.aramlasIgeny !== undefined
-                          ? { aramlasIgeny: input.aramlasIgeny }
-                          : {}),
-                      },
-                    },
+                    upsert: { create: datasheetPatch, update: datasheetPatch },
                   },
                 }
               : {}),
@@ -558,6 +588,42 @@ export class ProductRepository extends Repository {
           },
           include: productInclude,
         });
+        // egy kitoltott nev feloldja a mezo megtagadasat: a "kitoltve ES megtagadva" par itt nem keletkezhet. A sor NYOM NELKUL
+        // nem torlodik: az indoka es az oka a termek domain-esemenyebe kerul (barracuda, #2357 review)
+        const filled = filledNameFields(datasheetPatch);
+        if (filled.length > 0) {
+          const where = { datasheet: { productId: id }, mezo: { in: filled } };
+          const refused =
+            await transaction.productDatasheetFieldRefusal.findMany({
+              where,
+              select: { mezo: true, indok: true, oka: true, createdAt: true },
+            });
+          if (refused.length > 0) {
+            await transaction.productDatasheetFieldRefusal.deleteMany({
+              where,
+            });
+            await transaction.domainEvent.create({
+              data: {
+                id: randomUUID(),
+                eventType: "product.datasheet.refusal-resolved",
+                aggregateType: "Product",
+                aggregateId: id,
+                // a megtagadas-sor nem tarolja, ki tagadta meg; az iro a PATCH hivoja, amit ez a metodus nem kap meg
+                actorUserId: null,
+                occurredAt: new Date(),
+                schemaVersion: 1,
+                payload: {
+                  resolved: refused.map((row) => ({
+                    field: row.mezo,
+                    reason: row.indok,
+                    cause: row.oka,
+                    refusedAt: row.createdAt.toISOString(),
+                  })),
+                } satisfies Prisma.JsonObject,
+              },
+            });
+          }
+        }
 
         if (primaryWasProvided) {
           await transaction.productCategory.updateMany({

@@ -19,7 +19,15 @@ export type ProductWithRelations = Prisma.ProductGetPayload<{
     channelListings: true;
     images: true;
     unasSnapshot: true;
-    datasheet: { select: { fenyIgeny: true; aramlasIgeny: true } };
+    datasheet: {
+      select: {
+        fenyIgeny: true;
+        aramlasIgeny: true;
+        magyarNev: true;
+        angolNev: true;
+        nemetNev: true;
+      };
+    };
     shippingProfile: {
       select: {
         pickupOnly: true;
@@ -185,6 +193,9 @@ export function toProductDetail(
     advisorKind: product.advisorKind,
     fenyIgeny: product.datasheet?.fenyIgeny ?? null,
     aramlasIgeny: product.datasheet?.aramlasIgeny ?? null,
+    magyarNev: product.datasheet?.magyarNev ?? null,
+    angolNev: product.datasheet?.angolNev ?? null,
+    nemetNev: product.datasheet?.nemetNev ?? null,
     categories: product.categories.map((item) => ({
       id: item.category.id,
       name: item.category.name,

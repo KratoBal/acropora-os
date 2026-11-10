@@ -248,6 +248,14 @@ export interface ProductUpdateInput {
   advisorKind?: ProductAdvisorKind | null;
   fenyIgeny?: ElhelyezesiIgeny | null;
   aramlasIgeny?: ElhelyezesiIgeny | null;
+  /**
+   * A NEVEK AZ ADATLAPON (kartya 20b0dd47, Balazs 2026-08-31): a magyar, az angol es a nemet nev, keresheto mezokent a
+   * koralloknal es a gerinctelen allatoknal. Ures szoveg vagy `null`: a nev torlodik. Csak az OS-ben tarolodnak, a
+   * webshop-vetitesbe nem mennek.
+   */
+  magyarNev?: string | null;
+  angolNev?: string | null;
+  nemetNev?: string | null;
 }
 
 export interface ProductListResponse {
@@ -275,6 +283,10 @@ export interface ProductDetail extends ProductListItem {
   advisorKind: ProductAdvisorKind | null;
   fenyIgeny: ElhelyezesiIgeny | null;
   aramlasIgeny: ElhelyezesiIgeny | null;
+  /** A magyar, angol es nemet nev az adatlapon (`null`: nincs kitoltve). */
+  magyarNev: string | null;
+  angolNev: string | null;
+  nemetNev: string | null;
   categories: ProductCategorySummary[];
   variants: ProductVariantSummary[];
   images: ProductImageSummary[];
