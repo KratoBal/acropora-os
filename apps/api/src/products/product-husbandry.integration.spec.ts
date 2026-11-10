@@ -8,6 +8,7 @@ import { nincsMaradek } from "../common/takaritas-leltar.js";
 import { integrationDatabaseGate } from "../common/integration-database.js";
 import { UpdateProductHusbandryDto } from "./dto/update-product-husbandry.dto.js";
 import { ProductHusbandryRepository } from "./product-husbandry.repository.js";
+import { ProductRepository } from "./product.repository.js";
 import { husbandryDecision } from "./product-husbandry.service.js";
 
 const gate = integrationDatabaseGate(process.env);
@@ -183,6 +184,54 @@ describe("husbandry store, on the database", { skip: !runIntegration }, () => {
       where: { aggregateId: productId, eventType: "product.husbandry.updated" },
     });
     assert.equal(events, rows.length);
+  });
+
+  /*
+    THE VERIFICATION ON THE OTHER WRITE PATHS (barracuda on #2374): the Hungarian name (names path) and the light and flow
+    needs (the general update) are required husbandry facts too; changing one withdraws the verification in the same
+    transaction, an English name does not.
+  */
+  describe("the other write paths", () => {
+    const products = new ProductRepository();
+    const verify = () =>
+      write({
+        forrasTipus: "szakirodalom",
+        forrasHivatkozas: "https://example.invalid/x",
+        ellenorizve: true,
+      });
+    const verifiedNow = async () =>
+      (await repository.read(productId))!.verification.verified;
+
+    it("a Hungarian name change on the names path withdraws it, and an English name does not", async () => {
+      await verify();
+      assert.equal(await verifiedNow(), true);
+      await products.updateDatasheetNames(
+        productId,
+        { angolNev: `${PREFIX} english` },
+        userId,
+      );
+      assert.equal(await verifiedNow(), true);
+      await products.updateDatasheetNames(
+        productId,
+        { magyarNev: `${PREFIX} magyar` },
+        userId,
+      );
+      assert.equal(await verifiedNow(), false);
+      const withdrawn = await prisma.auditLog.count({
+        where: {
+          entityId: productId,
+          action: "product_husbandry.verification-withdrawn",
+        },
+      });
+      assert.equal(withdrawn, 1);
+    });
+
+    it("a light need change on the general update withdraws it", async () => {
+      await verify();
+      assert.equal(await verifiedNow(), true);
+      await products.update(productId, { fenyIgeny: "EROS" });
+      assert.equal(await verifiedNow(), false);
+    });
   });
 
   it("an unknown product is not-found", async () => {

@@ -19,6 +19,7 @@ import {
 import { recordOwnPrice } from "./price-history/own-price-history.js";
 import { isOwnSaleActive } from "./own-sale.js";
 import {
+  changedHusbandryFacts,
   datasheetPatchOf,
   filledNameFields,
   type DatasheetPatch,
@@ -194,6 +195,67 @@ async function resolveRefusedNames(
   });
 }
 
+/**
+ * A TARTASI BLOKK ELLENORZESENEK VISSZAVONASA MASIK IRASI UTON (V2.2, barracuda #2374): a magyar nev, a fenyigeny es az
+ * aramlasigeny a blokk KOTELEZO tenyei, de a nevek vegpontja es az altalanos termek-frissites irja oket, nem a
+ * `PATCH /products/:id/husbandry`. Ha az iras valamelyiket TENYLEGESEN megvaltoztatja (a tarolttol elterő ertek), a blokk
+ * ellenorzese UGYANABBAN a tranzakcioban visszavonodik, es a visszavonas naploba kerul (audit sor es domain-esemeny, mint a
+ * tartasi uton). Angol vagy nemet nev nem tartasi teny: nem von vissza. Az oszlopokat csak akkor adja, ha volt ellenorzes.
+ */
+async function husbandryVerificationWithdrawal(
+  transaction: ProductTransaction,
+  productId: string,
+  patch: DatasheetPatch | null,
+  actorUserId: string | null,
+  via: "names" | "product-update",
+): Promise<{ ellenorizveAt: null; ellenorizteUserId: null } | null> {
+  if (!patch) return null;
+  const keys = ["magyarNev", "fenyIgeny", "aramlasIgeny"] as const;
+  if (keys.every((key) => patch[key] === undefined)) return null;
+  const stored = await transaction.productDatasheet.findUnique({
+    where: { productId },
+    select: {
+      magyarNev: true,
+      fenyIgeny: true,
+      aramlasIgeny: true,
+      ellenorizveAt: true,
+      ellenorizteUserId: true,
+    },
+  });
+  const changed = changedHusbandryFacts(patch, stored);
+  if (changed.length === 0 || !stored?.ellenorizveAt) return null;
+  const metadata = {
+    productId,
+    via,
+    changed,
+    withdrawnVerification: {
+      at: stored.ellenorizveAt.toISOString(),
+      byUserId: stored.ellenorizteUserId,
+    },
+  } satisfies Prisma.JsonObject;
+  await transaction.auditLog.create({
+    data: {
+      userId: actorUserId,
+      action: "product_husbandry.verification-withdrawn",
+      entityType: "ProductDatasheet",
+      entityId: productId,
+      metadata,
+    },
+  });
+  await transaction.domainEvent.create({
+    data: {
+      id: randomUUID(),
+      eventType: "product.husbandry.verification-withdrawn",
+      aggregateType: "Product",
+      aggregateId: productId,
+      actorUserId,
+      payload: metadata,
+      occurredAt: new Date(),
+    },
+  });
+  return { ellenorizveAt: null, ellenorizteUserId: null };
+}
+
 interface ProductTransaction {
   product: {
     create(args: unknown): Promise<ProductWithRelations>;
@@ -208,6 +270,17 @@ interface ProductTransaction {
   /** A nevek kozvetlen irasa (kartya 20b0dd47): az adatlap sora, a termek sora NELKUL. */
   productDatasheet: {
     upsert(args: unknown): Promise<unknown>;
+    /** A tartasi blokk ellenorzesenek visszavonasahoz (V2.2): a tarolt tenyek es az ellenorzes. */
+    findUnique(args: unknown): Promise<{
+      magyarNev: string | null;
+      fenyIgeny: string | null;
+      aramlasIgeny: string | null;
+      ellenorizveAt: Date | null;
+      ellenorizteUserId: string | null;
+    } | null>;
+  };
+  auditLog: {
+    create(args: unknown): Promise<unknown>;
   };
   /** Egy kitoltott nev feloldja a mezo megtagadasat (kartya 20b0dd47): elobb a sor, aztan a torles. */
   productDatasheetFieldRefusal: {
@@ -642,10 +715,17 @@ export class ProductRepository extends Repository {
         });
         if (!existing) return null;
         if (patch) {
+          const withdrawal = await husbandryVerificationWithdrawal(
+            transaction,
+            id,
+            patch,
+            actorUserId,
+            "names",
+          );
           await transaction.productDatasheet.upsert({
             where: { productId: id },
-            create: { productId: id, ...patch },
-            update: patch,
+            create: { productId: id, ...patch, ...withdrawal },
+            update: { ...patch, ...withdrawal },
           });
           await resolveRefusedNames(transaction, id, patch, actorUserId);
         }
@@ -669,6 +749,13 @@ export class ProductRepository extends Repository {
     const datasheetPatch = datasheetPatchOf(input);
     return this.productDatabase.$transaction(
       async (transaction) => {
+        const withdrawal = await husbandryVerificationWithdrawal(
+          transaction,
+          id,
+          datasheetPatch,
+          null,
+          "product-update",
+        );
         await transaction.product.update({
           where: { id },
           data: {
@@ -681,7 +768,10 @@ export class ProductRepository extends Repository {
             ...(datasheetPatch
               ? {
                   datasheet: {
-                    upsert: { create: datasheetPatch, update: datasheetPatch },
+                    upsert: {
+                      create: { ...datasheetPatch, ...withdrawal },
+                      update: { ...datasheetPatch, ...withdrawal },
+                    },
                   },
                 }
               : {}),
