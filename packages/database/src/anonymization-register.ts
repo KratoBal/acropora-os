@@ -794,6 +794,13 @@ export const ANONYMIZATION_REGISTER: Readonly<
     source: "business",
     refusals: "business",
   },
+  // ReefClub V3.2: the run-out reminder's product list. The manufacturer's dose and pack size, words of a product page.
+  ReefClubRunOutProduct: {
+    productId: "identifier",
+    productName: "business",
+    dose: "business",
+    packageText: "business",
+  },
   // ReefClub 5a: the share log. The consent version and the read's purpose
   // are fixed words, not free text.
   AquariumShareEvent: {

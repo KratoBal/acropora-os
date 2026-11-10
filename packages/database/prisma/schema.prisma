@@ -11015,8 +11015,30 @@ model ReefClubDoseProjectionRun {
   /// FAILED: a hiba szovege, roviditve; titok vagy szemelyes adat nincs benne.
   errorMessage String?
   rows         ReefClubDoseRow[]
+  runOutRows   ReefClubRunOutProduct[]
 
   @@index([status, finishedAt])
+}
+
+/// A KIFOGYASI EMLEKEZTETO TERMEKLISTAJA (ReefClub V3.2, kartya cd94ed11, 4. szelet). A ReefClub-szerep
+/// nem olvas termek-tablat, ezert az OS ugyanabban a tranzakcioban es ugyanazzal a futasi rekorddal
+/// epiti ujra, mint a termek-adag listat. Termekenkent egy sor, es CSAK ott, ahol a runOutDays nem
+/// utasit el: elfogadott (nem utkozo) gyartoi adagolas es kiszereles, ml-adag ml-kiszereleshez.
+/// A tag csak ezeknel a termekeknel kerhet emlekeztetot.
+model ReefClubRunOutProduct {
+  id          String                    @id @default(cuid())
+  runId       String
+  /// Szandekosan nincs idegen kulcs a termek-tablara (mint a ReefClubDoseRow-nal).
+  productId   String                    @unique
+  productName String
+  /// Az elfogadott `dosing` teny kanonikus alakja, pl. "5 ml/100 L/day".
+  dose        String
+  /// Az elfogadott `packSize` teny, ahogy a gyarto irja, pl. "500 ml".
+  packageText String
+  packageMl   Decimal                   @db.Decimal(19, 6)
+  run         ReefClubDoseProjectionRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
 }
 
 /// A TERMEK-ADAG LISTA EGY SORANAK VETITETT PILLANATKEPE (ReefClub 8. szelet). A forras

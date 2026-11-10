@@ -70,6 +70,8 @@ GRANT UPDATE ("aquariumId", "consentVersion", "consentAt", "unsubscribedAt", "up
 -- process, the table owner, rebuilds both; the role has no INSERT, UPDATE or DELETE on them, so
 -- nothing the ReefClub process does can change a dose number it will then recommend from.
 GRANT SELECT ON "ReefClubDoseRow" TO "reefclub_app";
+-- The run-out reminder's product list (V3.2, slice 4): rebuilt with the dose list in the same run, READ only.
+GRANT SELECT ON "ReefClubRunOutProduct" TO "reefclub_app";
 GRANT SELECT ("id", "status", "finishedAt", "rowCount") ON "ReefClubDoseProjectionRun" TO "reefclub_app";
 
 -- The customer: only what a shop link shows and checks (plan 2.1: never the phone or e-mail).

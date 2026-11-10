@@ -497,6 +497,8 @@ describe(
       for (const sql of [
         'SELECT "sourceId", "sourceVersion", "refusals", "inStock" FROM "ReefClubDoseRow" LIMIT 1',
         'SELECT "id", "status", "finishedAt", "rowCount" FROM "ReefClubDoseProjectionRun" LIMIT 1',
+        // the run-out reminder's product list (V3.2, slice 4)
+        'SELECT "productId", "productName", "dose", "packageText", "packageMl" FROM "ReefClubRunOutProduct" LIMIT 1',
       ])
         assert.equal(await read(sql), "OLVASHATÓ", sql);
     });
