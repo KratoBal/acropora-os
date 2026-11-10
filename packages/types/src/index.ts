@@ -1135,12 +1135,17 @@ export {
   RENTAL_STATUSES,
   rentalFeeHuf,
   rentalPeriodCount,
+  rentalSettlement,
 } from "./rental.js";
 export type {
   Rental,
   RentalCustomerMatchResponse,
   RentalCustomerSummary,
   RentalListResponse,
+  RentalReturnInput,
+  RentalReturnPreview,
+  RentalReturnRecord,
+  RentalSettlement,
   RentalStatus,
 } from "./rental.js";
 export {

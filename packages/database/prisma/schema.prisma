@@ -5275,6 +5275,13 @@ model Rental {
   expectedFeeHuf      Int
   note                String?
   returnedAt          DateTime?
+  /// THE RETURN (S4), all null while the device is out. Started 24-hour periods of the actual time times the daily fee.
+  finalFeeHuf         Int?
+  /// The late surcharge with the multiplier agreed on the rental; null when none was agreed (not charged, not guessed).
+  lateSurchargeHuf    Int?
+  depositKeptHuf      Int?
+  depositKeptReason   String?
+  returnedById        String?
   createdById         String?
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt

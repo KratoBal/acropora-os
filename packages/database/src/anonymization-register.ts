@@ -854,6 +854,8 @@ export const ANONYMIZATION_REGISTER: Readonly<
     contractTemplate: "business",
     accessories: "business",
     note: "freeText",
+    depositKeptReason: "freeText",
+    returnedById: "identifier",
     createdById: "identifier",
   },
   UnitOfMeasure: {
