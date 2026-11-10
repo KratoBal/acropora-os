@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Button } from "@acropora/ui";
+import { Alert, Button, FormField, Select } from "@acropora/ui";
 import { useState } from "react";
 
 import { ReefClubApiError, rc } from "@/lib/api";
@@ -17,13 +17,14 @@ const NOT_AVAILABLE: ReefClubRunOutOverview = {
 
 interface Loaded {
   overview: ReefClubRunOutOverview;
-  aquariumNames: Map<string, string>;
+  aquariums: ReefClubAquarium[];
 }
 
 /**
- * THE RUN-OUT REMINDERS ON THE ACCOUNT PAGE (ReefClub V3.2, slice 3c): the reminders that are on, each with its turn-off, or
- * one sentence when the reminder is not available. Turning one ON belongs to the product (slice 4, where it is known which
- * products can be counted); this section only shows and stops.
+ * THE RUN-OUT REMINDERS ON THE ACCOUNT PAGE (ReefClub V3.2, slices 3c and 6): the reminders that are on, each with its
+ * turn-off, and a form to turn one on: a product of the run-out list (only those the reminder can count), one of the member's
+ * aquariums (the days are counted from its litres), and the consent text with a checkbox; the turn-on sends the text's version
+ * back, so a text changed since the page loaded records nothing.
  *
  * While any of the three locks is closed (the switch, the consent text, the unsubscribe secret) the section says only that the
  * reminder is not available yet: which lock is closed is the operators' business, not the member's.
@@ -41,10 +42,7 @@ export function RunOutReminders() {
       ),
       rc<{ aquariums: ReefClubAquarium[] }>("GET", "/aquariums"),
     ]);
-    return {
-      overview,
-      aquariumNames: new Map(aquariums.aquariums.map((a) => [a.id, a.name])),
-    };
+    return { overview, aquariums: aquariums.aquariums };
   });
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -83,18 +81,21 @@ export function RunOutReminders() {
         <Alert variant="danger" title="Nem sikerült" description={error} />
       ) : null}
       {state.status === "ready" ? (
-        <Content
-          loaded={state.data}
-          busy={busy}
-          onStop={(productId) => void stop(productId)}
-        />
+        <>
+          <Content
+            loaded={state.data}
+            busy={busy}
+            onStop={(productId) => void stop(productId)}
+          />
+          <TurnOn loaded={state.data} onDone={reload} />
+        </>
       ) : null}
     </section>
   );
 }
 
 function Content({
-  loaded: { overview, aquariumNames },
+  loaded: { overview, aquariums },
   busy,
   onStop,
 }: {
@@ -103,6 +104,7 @@ function Content({
   onStop(productId: string): void;
 }) {
   const { reminders } = overview;
+  const aquariumNames = new Map(aquariums.map((a) => [a.id, a.name]));
   return (
     <>
       <p className="text-sm text-pilot-grey-600">
@@ -142,5 +144,110 @@ function Content({
         </p>
       ) : null}
     </>
+  );
+}
+
+/** The turn-on form; nothing while a lock is closed or when no product can be counted. */
+function TurnOn({
+  loaded: { overview, aquariums },
+  onDone,
+}: {
+  loaded: Loaded;
+  onDone(): Promise<void>;
+}) {
+  const on = new Set(overview.reminders.map((r) => r.productId));
+  const products = (overview.products ?? []).filter(
+    (p) => !on.has(p.productId),
+  );
+  const [productId, setProductId] = useState("");
+  const [aquariumId, setAquariumId] = useState("");
+  const [accepted, setAccepted] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (
+    overview.state !== "available" ||
+    !overview.text ||
+    !overview.version ||
+    products.length === 0 ||
+    aquariums.length === 0
+  )
+    return null;
+  const version = overview.version;
+
+  async function turnOn() {
+    setBusy(true);
+    setError(null);
+    try {
+      await rc("POST", "/runout-reminders", {
+        body: { productId, aquariumId, consentVersion: version },
+      });
+      setProductId("");
+      setAccepted(false);
+      await onDone();
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Az emlékeztető bekapcsolása nem sikerült.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3 rounded-xl border border-line bg-white p-4">
+      <h3 className="text-sm font-semibold">Új emlékeztető</h3>
+      {error ? (
+        <Alert variant="danger" title="Nem sikerült" description={error} />
+      ) : null}
+      <FormField label="Termék" htmlFor="runout-product">
+        <Select
+          id="runout-product"
+          value={productId}
+          onChange={(event) => setProductId(event.target.value)}
+        >
+          <option value="">Válassz terméket</option>
+          {products.map((p) => (
+            <option key={p.productId} value={p.productId}>
+              {p.productName} ({p.packageText})
+            </option>
+          ))}
+        </Select>
+      </FormField>
+      <FormField label="Akvárium" htmlFor="runout-aquarium">
+        <Select
+          id="runout-aquarium"
+          value={aquariumId}
+          onChange={(event) => setAquariumId(event.target.value)}
+        >
+          <option value="">Válassz akváriumot</option>
+          {aquariums.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.name}
+              {a.systemVolumeLiters ? ` (${a.systemVolumeLiters} l)` : ""}
+            </option>
+          ))}
+        </Select>
+      </FormField>
+      <p className="whitespace-pre-line rounded-lg border border-line bg-pilot-grey-50 p-3 text-sm text-pilot-grey-700">
+        {overview.text}
+      </p>
+      <label className="flex items-start gap-2 text-sm">
+        <input
+          type="checkbox"
+          className="mt-1"
+          checked={accepted}
+          onChange={(event) => setAccepted(event.target.checked)}
+        />
+        <span>Elolvastam, és kérem az emlékeztetőt.</span>
+      </label>
+      <Button
+        disabled={busy || !accepted || !productId || !aquariumId}
+        onClick={() => void turnOn()}
+      >
+        Emlékeztető kérése
+      </Button>
+    </div>
   );
 }

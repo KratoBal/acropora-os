@@ -55,14 +55,24 @@ describe("the run-out reminder routes", () => {
     const { controller, calls } = setup({
       status: () => ({ state: "no-text", text: null, version: null }),
       list: async () => [],
+      products: async () => [],
     });
     assert.deepEqual(await controller.overview(request("a7")), {
       state: "no-text",
       text: null,
       version: null,
       reminders: [],
+      products: [],
     });
-    assert.deepEqual(calls, [["status"], ["list", "a7"]]);
+    assert.deepEqual(calls.map((c) => c[0]).sort(), [
+      "list",
+      "products",
+      "status",
+    ]);
+    assert.deepEqual(
+      calls.find((c) => c[0] === "list"),
+      ["list", "a7"],
+    );
   });
 
   it("turning on takes the account from the session, and every named refusal keeps its code: a missing product is the 404", async () => {

@@ -147,9 +147,18 @@ export interface ReefClubRunOutReminder {
   consentAt: string;
 }
 
+/** A product a reminder can be turned on for (the run-out list); sent only while every lock is open. */
+export interface ReefClubRunOutProduct {
+  productId: string;
+  productName: string;
+  packageText: string;
+}
+
 export interface ReefClubRunOutOverview {
   state: ReefClubRunOutState;
   text: string | null;
   version: string | null;
   reminders: ReefClubRunOutReminder[];
+  /** Missing from a server before the turn-on slice: read as none. */
+  products?: ReefClubRunOutProduct[];
 }

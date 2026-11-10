@@ -99,9 +99,19 @@ function setup(
           : null,
       findMany: async ({ where }: any) =>
         [
-          { productId: "p1", productName: "Kalcium oldat 500 ml" },
-          { productId: "p9", productName: "Másik" },
-        ].filter((row) => where.productId.in.includes(row.productId)),
+          {
+            productId: "p1",
+            productName: "Kalcium oldat 500 ml",
+            packageText: "500 ml",
+          },
+          { productId: "p9", productName: "Másik", packageText: "1 l" },
+        ]
+          .filter((row) => !where || where.productId.in.includes(row.productId))
+          .map((row) =>
+            where
+              ? { productId: row.productId, productName: row.productName }
+              : row,
+          ),
     },
   };
   const access = {
@@ -449,6 +459,17 @@ describe("the page's view and the text version", () => {
       );
     }
     assert.equal(rows.length, 0);
+  });
+
+  it("offers the run-out list's products only while every lock is open", async () => {
+    const { service } = setup();
+    service.availability = () => runOutAvailability(ON, null);
+    assert.deepEqual(await service.products(), []);
+    service.availability = () => runOutAvailability(ON, TEXT);
+    assert.deepEqual(
+      (await service.products()).map((p) => p.productId),
+      ["p1", "p9"],
+    );
   });
 
   it("lists only the member's reminders that are on, with the dose list's product name (null where it has none)", async () => {

@@ -52,6 +52,13 @@ export interface RunOutReminderItem {
   consentAt: string;
 }
 
+/** A product a reminder can be turned on for: the run-out list's (`ReefClubRunOutProduct`). */
+export interface RunOutProductItem {
+  productId: string;
+  productName: string;
+  packageText: string;
+}
+
 /**
  * What the page may show at the switch: the state of the three locks, and the consent text with its version only when every
  * lock is open (the page asks for consent only for a text that exists, and sends its version back with the turn-on).
@@ -97,6 +104,15 @@ export class ReefClubRunOutService {
         version: availability.version,
       };
     return { state: availability.kind, text: null, version: null };
+  }
+
+  /** The products a reminder can be turned on for, by name; none while a lock is closed (the page offers nothing then). */
+  async products(): Promise<RunOutProductItem[]> {
+    if (this.availability().kind !== "available") return [];
+    return this.database.reefClubRunOutProduct.findMany({
+      select: { productId: true, productName: true, packageText: true },
+      orderBy: [{ productName: "asc" }, { productId: "asc" }],
+    });
   }
 
   /** The member's reminders that are on, oldest first. */
