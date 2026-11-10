@@ -15,7 +15,11 @@ import {
   liveAnimalKindSubtrees,
   liveAnimalSubtreeIds,
 } from "./medusa-livestock.policy.js";
-import { rowsCarryingKind } from "./medusa-shipping-attributes.policy.js";
+import {
+  clearLeftoverKinds as leftoverKinds,
+  describeLeftoverKinds,
+  type LeftoverKindService,
+} from "./medusa-leftover-kind.js";
 import { MedusaShippingAttributesService } from "./medusa-shipping-attributes.service.js";
 import {
   listAllShopSkus,
@@ -295,10 +299,7 @@ export async function runShippingAttributesCli(
  * termeket (sem kotes-sor, sem egyertelmu SKU-par), ahhoz nem nyulunk, csak megszamoljuk.
  */
 export async function clearLeftoverKinds(
-  futtato: Pick<
-    MedusaShippingAttributesService,
-    "listShopShippingAttributes" | "osProductOfShop" | "clearLeftoverKind"
-  >,
+  futtato: LeftoverKindService,
   celok: ReadonlySet<string>,
   osToShop: ReadonlyMap<string, string>,
   idk: readonly string[],
@@ -310,37 +311,20 @@ export async function clearLeftoverKinds(
   cleared: number;
   unpaired: number;
 }> {
-  const rows = await futtato.listShopShippingAttributes();
-  const carrying = rowsCarryingKind(rows);
-  const shopToOs = new Map<string, string>(
-    [...osToShop].map(([os, shop]) => [shop, os]),
-  );
-  let cleared = 0;
-  let unpaired = 0;
-  for (const row of carrying) {
-    const osId =
-      (await futtato.osProductOfShop(row.product_id)) ??
-      shopToOs.get(row.product_id) ??
-      null;
-    if (!osId) {
-      unpaired++;
-      continue;
-    }
-    if (celok.has(osId)) continue;
-    if (idk.length && !idk.includes(osId)) continue;
-    const outcome = await futtato.clearLeftoverKind(row, apply);
-    cleared++;
-    out.stdout(
-      `${osId}: ${
-        outcome.action === "applied" ? "most állítottuk be" : "KIKÜLDENÉNK"
-      } -> ${outcome.medusaProductId} (${outcome.flags})\n`,
-    );
-  }
-  out.stdout(
-    `Boltban maradt élő állat fajta: a bolt ${rows.length} szállítási-jellemző sort adott, ${carrying.length}-n áll fajta, ` +
-      `${cleared} ${apply ? "törölve" : "törlendő"}, ${unpaired} OS-termék nélkül (nem nyúltunk hozzá).\n`,
-  );
-  return { rows: rows.length, carrying: carrying.length, cleared, unpaired };
+  // a szabaly a `medusa-leftover-kind.ts`-ben all, mert a vetitesi kor ugyanazt futtatja
+  const report = await leftoverKinds(futtato, {
+    skip: (osProductId) => celok.has(osProductId),
+    osToShop,
+    only: idk,
+    apply,
+  });
+  out.stdout(describeLeftoverKinds(report, apply));
+  return {
+    rows: report.rows,
+    carrying: report.carrying,
+    cleared: report.entries.length,
+    unpaired: report.unpaired,
+  };
 }
 
 /**
