@@ -135,6 +135,17 @@ export class ContentService {
   }
 
   /**
+   * A JÓVÁHAGYÁSRA VÁRÓ TÉTELEK SZÁMA, a jóváhagyók kezdőlapjához és a Figyelmet igényel listához (T5.1 PR2, acrobot 45938).
+   *
+   * MINDEN ilyen tételt számol, nem a nézőét: a jóváhagyás az a lépés, amit EGY jóváhagyó sem hagyhat félre, és a „Rám vár"
+   * jóváhagyói nézete sem szűr szerzőre. Egy szám és egy link, értesítés nélkül: ez láthatóság, nem emlékeztető (az
+   * emlékeztető napja Balázs döntése).
+   */
+  async awaitingApproval(): Promise<{ total: number }> {
+    return { total: await this.repository.countAwaitingApproval() };
+  }
+
+  /**
    * A NAPTÁR NÉZET: a tervezett kiküldési dátum szerint, egy időszakra.
    *
    * A dátum nélküli tételek NEM szerepelnek benne, és ez szándékos: egy naptár,
@@ -157,17 +168,6 @@ export class ContentService {
    * A SORREND A LEGREGEBBI ELOL: egy otlet, ami het ote all, tobbet mond
    * annal, ami tegnap keletkezett. A tobbi lista ugyanezt az elvet koveti.
    */
-  /**
-   * A JÓVÁHAGYÁSRA VÁRÓ TÉTELEK SZÁMA, a jóváhagyók kezdőlapjához és a Figyelmet igényel listához (T5.1 PR2, acrobot 45938).
-   *
-   * MINDEN ilyen tételt számol, nem a nézőét: a jóváhagyás az a lépés, amit EGY jóváhagyó sem hagyhat félre, és a „Rám vár"
-   * jóváhagyói nézete sem szűr szerzőre. Egy szám és egy link, értesítés nélkül: ez láthatóság, nem emlékeztető (az
-   * emlékeztető napja Balázs döntése).
-   */
-  async awaitingApproval(): Promise<{ total: number }> {
-    return { total: await this.repository.countAwaitingApproval() };
-  }
-
   async ideas() {
     return this.withMoves(await this.repository.list({ state: "IDEA" }));
   }
