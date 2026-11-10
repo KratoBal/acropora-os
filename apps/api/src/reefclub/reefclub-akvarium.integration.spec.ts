@@ -19,6 +19,7 @@ import { nincsMaradek } from "../common/takaritas-leltar.js";
 import { hashPassword } from "../users/password.util.js";
 import { configureReefClubApp } from "./reefclub-app.configuration.js";
 import { REEFCLUB_SHARE_CONSENT_VERSION } from "./reefclub-consent.js";
+import { ReefClubRunOutService } from "./reefclub-runout.service.js";
 import { ReefClubAppModule } from "./reefclub.module.js";
 
 /**
@@ -678,6 +679,61 @@ describe(
       assert.deepEqual(mismatches, []);
       assert.ok(compared >= 12 * 6, `${compared} összevetés`);
       assert.equal(await fingerprint(), before, "a sorok megváltoztak");
+    });
+
+    it("5.2/10: a kifogyási emlékeztető bekapcsolása idegen akvárium-azonosítóval (törzsben) bájtra a nem létező 404-e, és semmi nem íródik", async () => {
+      // The three locks are closed today (the consent text is null), and a closed lock answers BEFORE the aquarium is looked at.
+      // To measure the access rule, the availability is opened for this test only, on the running service.
+      const runOut = reefclub.get(ReefClubRunOutService);
+      const closed = runOut.availability;
+      runOut.availability = () => ({
+        kind: "available",
+        text: "Akvárium-próba szöveg.",
+        version: "akvarium-proba-v1",
+      });
+      try {
+        const enable = (aquariumId: string, session: Session) =>
+          rc("/rc/v1/runout-reminders", {
+            method: "POST",
+            body: {
+              productId: aProduct,
+              aquariumId,
+              consentVersion: "akvarium-proba-v1",
+            },
+            session,
+          }).then(async (r) => ({ status: r.status, body: await r.text() }));
+        const before = await fingerprint();
+        const missing = await enable(MISSING_ID, sessionB);
+        assert.equal(missing.status, 404);
+        const mismatches: string[] = [];
+        for (const [who, id] of Object.entries({
+          "A saját": a1,
+          "C bolti": c1,
+          "D bolti": d1,
+          "E cég": e1,
+        })) {
+          const got = await enable(id, sessionB);
+          if (got.status !== 404 || got.body !== missing.body)
+            mismatches.push(`${who}: ${got.status} ${got.body.slice(0, 120)}`);
+        }
+        assert.deepEqual(mismatches, []);
+        assert.equal(
+          await prisma.reefClubRunOutReminder.count({
+            where: { productId: aProduct },
+          }),
+          1,
+          "csak A saját sora áll a termékre, B-nek nem íródott",
+        );
+        assert.equal(await fingerprint(), before, "a sorok megváltoztak");
+        // control: B's own aquarium is accepted (the 404 is the access rule, not a bad request)
+        const own = await enable(b1, sessionB);
+        assert.equal(own.status, 201, own.body);
+      } finally {
+        runOut.availability = closed;
+        await prisma.reefClubRunOutReminder.deleteMany({
+          where: { productId: aProduct, aquariumId: b1 },
+        });
+      }
     });
 
     it("5.2/2: idegen akvárium alkalom-azonosítója a saját akvárium útvonalán a nem létező 404-e, és a másik sora megmarad", async () => {
