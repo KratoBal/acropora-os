@@ -108,7 +108,7 @@ describe("the mail", () => {
     assert.deepEqual(mail.to, ["tag@example.test"]);
     assert.equal(mail.subject, "ReefClub: hamarosan elfogy: Kitalált kalcium");
     assert.match(mail.text, /2026\. december 21\. körül fogy el/);
-    assert.match(mail.text, /bolti rendelésed 2026\. november 1\. napi/);
+    assert.match(mail.text, /bolti rendelésed 2026\. november 1\. napjától/);
     assert.match(mail.text, /300 literrel/);
     assert.ok(
       mail.text.includes(

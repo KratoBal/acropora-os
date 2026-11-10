@@ -28,18 +28,50 @@ import { REEFCLUB_SHOP_MAIL_SENDER } from "./reefclub-shop-mail-sender.js";
 export const RUNOUT_SWEEP_INTERVAL_MS = 60 * 60_000;
 export const RUNOUT_MAX_ATTEMPTS = 5;
 export const RUNOUT_LEASE_MS = 10 * 60_000;
-const BATCH = 200;
+export const RUNOUT_BATCH = 200;
+/** The sending window, Budapest hours: from 09:00 up to 20:00 (acrobot 45563). */
+export const RUNOUT_WINDOW = { from: 9, until: 20 } as const;
 /** The business statuses that mean the order left the shop (or waits at the counter). */
 const LEFT_THE_SHOP = ["SHIPPING", "READY_FOR_PICKUP", "CLOSED"] as const;
 
 export interface RunOutSweep {
-  /** Why nothing was read: a closed lock, or no ReefClub sender on this process. */
-  closed: "off" | "no-text" | "no-secret" | "no-sender" | null;
+  /** Why nothing was read: a closed lock, no ReefClub sender on this process, or outside the sending window. */
+  closed:
+    "off" | "no-text" | "no-secret" | "no-sender" | "outside-window" | null;
   sent: number;
   failed: number;
   late: number;
   /** Rows the reminder cannot count now (no countable product, no litres). */
   uncountable: number;
+  /** Due rows whose attempts for this run-out day are used up. */
+  givenUp: number;
+}
+
+type SweepRow = {
+  id: string;
+  accountId: string;
+  productId: string;
+  consentAt: Date;
+  remindedForRunOut: Date | null;
+  remindAttempts: number;
+  remindAttemptsFor: Date | null;
+  account: { email: string };
+  aquarium: { name: string; systemVolumeLiters: unknown };
+};
+
+const dayOf = (moment: Date | null): string | null =>
+  moment ? moment.toISOString().slice(0, 10) : null;
+
+/** Whether the moment is inside the sending window, in Budapest hours. */
+export function inSendingWindow(moment: Date): boolean {
+  const hour = Number(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Europe/Budapest",
+      hour: "2-digit",
+      hourCycle: "h23",
+    }).format(moment),
+  );
+  return hour >= RUNOUT_WINDOW.from && hour < RUNOUT_WINDOW.until;
 }
 
 /**
@@ -56,7 +88,9 @@ export interface RunOutSweep {
  * The count is the manufacturer's dose and the pack from the projected product list (`ReefClubRunOutProduct`, the same list the
  * member got the button from), and the aquarium's litres today. One mail per run-out day (`remindedForRunOut`); the claim is a
  * lease like the shop link's notice, so two processes do not both send; a failed send gives the lease back and counts an attempt,
- * and the last one writes `REEFCLUB_RUNOUT_REMINDER_FAILED`. At least once, not exactly once.
+ * and the last one writes `REEFCLUB_RUNOUT_REMINDER_FAILED`; the attempts count for one run-out day, so a new cycle starts with
+ * a full set. At least once, not exactly once. It sends only between 09:00 and 20:00 Budapest time (acrobot 45563); a reminder
+ * due at night goes in the next window.
  */
 @Injectable()
 export class ReefClubRunOutReminderService
@@ -66,6 +100,8 @@ export class ReefClubRunOutReminderService
   private timer: NodeJS.Timeout | null = null;
   /** The test replaces it; production reads the process environment. */
   environment: Record<string, string | undefined> = process.env;
+  /** The page size; the test makes it small, to measure the paging. */
+  batch = RUNOUT_BATCH;
   availability: () => RunOutAvailability = () =>
     runOutAvailability(this.environment);
 
@@ -98,38 +134,68 @@ export class ReefClubRunOutReminderService
       failed: 0,
       late: 0,
       uncountable: 0,
+      givenUp: 0,
     };
     const availability = this.availability();
     if (availability.kind !== "available")
       return { ...result, closed: availability.kind };
     if (!this.sender) return { ...result, closed: "no-sender" };
+    // not at night (acrobot 45563): a reminder due outside the window goes in the next one
+    if (!inSendingWindow(now)) return { ...result, closed: "outside-window" };
 
     const today = budapestDay(now);
-    const rows = await prisma.reefClubRunOutReminder.findMany({
-      where: {
-        unsubscribedAt: null,
-        remindAttempts: { lt: RUNOUT_MAX_ATTEMPTS },
-        account: { deletionRequestedAt: null, emailVerifiedAt: { not: null } },
-        OR: [
-          { remindClaimedAt: null },
-          {
-            remindClaimedAt: { lt: new Date(now.getTime() - RUNOUT_LEASE_MS) },
+    // EVERY ROW, PAGE BY PAGE (barracuda, #2349): a row that sends nothing this round (waiting, sent, late, uncountable) stays
+    // in the query, so one fixed page would bring back the same rows every hour and the ones after them would never be reached.
+    let after: string | null = null;
+    for (;;) {
+      const rows = await prisma.reefClubRunOutReminder.findMany({
+        where: {
+          ...(after ? { id: { gt: after } } : {}),
+          unsubscribedAt: null,
+          account: {
+            deletionRequestedAt: null,
+            emailVerifiedAt: { not: null },
           },
-        ],
-      },
-      select: {
-        id: true,
-        accountId: true,
-        productId: true,
-        consentAt: true,
-        remindedForRunOut: true,
-        account: { select: { email: true } },
-        aquarium: { select: { name: true, systemVolumeLiters: true } },
-      },
-      orderBy: { id: "asc" },
-      take: BATCH,
-    });
-    if (rows.length === 0) return result;
+          OR: [
+            { remindClaimedAt: null },
+            {
+              remindClaimedAt: {
+                lt: new Date(now.getTime() - RUNOUT_LEASE_MS),
+              },
+            },
+          ],
+        },
+        select: {
+          id: true,
+          accountId: true,
+          productId: true,
+          consentAt: true,
+          remindedForRunOut: true,
+          remindAttempts: true,
+          remindAttemptsFor: true,
+          account: { select: { email: true } },
+          aquarium: { select: { name: true, systemVolumeLiters: true } },
+        },
+        orderBy: { id: "asc" },
+        take: this.batch,
+      });
+      if (rows.length > 0) await this.sendPage(rows, today, now, result);
+      if (rows.length < this.batch) break;
+      after = rows[rows.length - 1]!.id;
+    }
+    if (result.late > 0)
+      this.logger.warn(
+        `${result.late} kifogyási emlékeztető késve: a kifogyás napja már elmúlt vagy ma van, levél nem ment.`,
+      );
+    return result;
+  }
+
+  private async sendPage(
+    rows: readonly SweepRow[],
+    today: string,
+    now: Date,
+    result: RunOutSweep,
+  ): Promise<void> {
     const products = new Map(
       (
         await prisma.reefClubRunOutProduct.findMany({
@@ -168,11 +234,19 @@ export class ReefClubRunOutReminderService
         today,
         start,
         days: counted.days,
-        remindedForRunOut:
-          row.remindedForRunOut?.toISOString().slice(0, 10) ?? null,
+        remindedForRunOut: dayOf(row.remindedForRunOut),
       });
       if (step.kind === "LATE") result.late++;
       if (step.kind !== "DUE") continue;
+      // the attempts count for ONE run-out day (barracuda, #2349): a new cycle starts with a full set
+      const attempts =
+        dayOf(row.remindAttemptsFor) === step.runsOutOn
+          ? row.remindAttempts
+          : 0;
+      if (attempts >= RUNOUT_MAX_ATTEMPTS) {
+        result.givenUp++;
+        continue;
+      }
 
       const claimed = await prisma.reefClubRunOutReminder.updateMany({
         where: {
@@ -191,7 +265,7 @@ export class ReefClubRunOutReminderService
       });
       if (claimed.count === 0) continue;
       try {
-        await this.sender.send(
+        await this.sender!.send(
           runOutMail({
             to: row.account.email,
             productName: product.productName,
@@ -215,27 +289,27 @@ export class ReefClubRunOutReminderService
             remindStartSource: start.source,
             remindClaimedAt: null,
             remindAttempts: 0,
+            remindAttemptsFor: null,
           },
         });
         result.sent++;
       } catch (error) {
         result.failed++;
-        const after = await prisma.reefClubRunOutReminder.update({
+        const failed = attempts + 1;
+        await prisma.reefClubRunOutReminder.update({
           where: { id: row.id },
-          data: { remindClaimedAt: null, remindAttempts: { increment: 1 } },
-          select: { remindAttempts: true },
+          data: {
+            remindClaimedAt: null,
+            remindAttempts: failed,
+            remindAttemptsFor: new Date(`${step.runsOutOn}T00:00:00Z`),
+          },
         });
-        if (after.remindAttempts >= RUNOUT_MAX_ATTEMPTS)
+        if (failed >= RUNOUT_MAX_ATTEMPTS)
           this.logger.error(
-            `REEFCLUB_RUNOUT_REMINDER_FAILED reminder=${row.id}: a kifogyási emlékeztető ${after.remindAttempts} próbálkozás után sem ment ki (${error instanceof Error ? error.message : "ismeretlen hiba"}). Több próba nem lesz.`,
+            `REEFCLUB_RUNOUT_REMINDER_FAILED reminder=${row.id} runsOutOn=${step.runsOutOn}: a kifogyási emlékeztető ${failed} próbálkozás után sem ment ki (${error instanceof Error ? error.message : "ismeretlen hiba"}). Erre a kifogyási napra több próba nem lesz.`,
           );
       }
     }
-    if (result.late > 0)
-      this.logger.warn(
-        `${result.late} kifogyási emlékeztető késve: a kifogyás napja már elmúlt vagy ma van, levél nem ment.`,
-      );
-    return result;
   }
 
   /**

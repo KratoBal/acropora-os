@@ -247,6 +247,8 @@ describe(
       const s = new ReefClubRunOutReminderService(sender);
       s.environment = OPEN;
       s.availability = AVAILABLE;
+      // one row a page: every sweep below has to page to reach the second reminder (barracuda, #2349)
+      s.batch = 1;
       return s;
     };
 
@@ -257,6 +259,13 @@ describe(
       // the real availability: the consent text is null today
       assert.equal((await closed.sweep()).closed, "no-text");
       assert.equal((await service(null).sweep()).closed, "no-sender");
+      // not at night: 06:00 and 20:30 Budapest (winter, UTC+1) are outside, 09:00 is inside (acrobot 45563)
+      for (const night of ["2026-12-03T05:00:00Z", "2026-12-03T19:30:00Z"])
+        assert.equal(
+          (await service(sender).sweep(new Date(night))).closed,
+          "outside-window",
+          night,
+        );
       assert.equal(sender.sent.length, 0);
     });
 
@@ -300,8 +309,10 @@ describe(
       assert.ok(sender.sent.length >= count);
     });
 
-    it("rendelés nélkül a hozzájárulás napjától számol, és ezt a sor megnevezi", async () => {
+    it("rendelés nélkül a hozzájárulás napjától számol, és ezt a sor megnevezi; a második oldalon álló sor is sorra kerül", async () => {
       const sender = new CapturingSender();
+      // the consent reminder was created second: with one row a page it is only reached on the second page
+      assert.ok(orderReminder < consentReminder);
       // consent 2026-10-01 + 100 days: runs out 2027-01-09, reminder from 2027-01-02
       await service(sender).sweep(new Date("2027-01-02T10:00:00Z"));
       const mine = sender.sent.filter((m) =>
@@ -332,6 +343,44 @@ describe(
       });
       assert.equal(row.remindClaimedAt, null);
       assert.equal(row.remindAttempts, 1);
+      assert.equal(
+        row.remindAttemptsFor?.toISOString().slice(0, 10),
+        "2026-12-10",
+      );
+      // used up for this run-out day: no more tries for it
+      await prisma.reefClubRunOutReminder.update({
+        where: { id: orderReminder },
+        data: { remindAttempts: 5 },
+      });
+      const usedUp = new CapturingSender();
+      const given = await service(usedUp).sweep(
+        new Date("2026-12-05T10:00:00Z"),
+      );
+      assert.equal(given.givenUp, 1);
+      assert.equal(
+        usedUp.sent.filter((m) => m.text.includes("2026. december 10.")).length,
+        0,
+      );
+      // attempts of an OLD run-out day do not stop a new cycle (barracuda, #2349)
+      await prisma.reefClubRunOutReminder.update({
+        where: { id: orderReminder },
+        data: { remindAttemptsFor: new Date("2026-06-01T00:00:00Z") },
+      });
+      const fresh = new CapturingSender();
+      await service(fresh).sweep(new Date("2026-12-05T10:00:00Z"));
+      assert.equal(
+        fresh.sent.filter((m) => m.text.includes("2026. december 10.")).length,
+        1,
+      );
+      const after = await prisma.reefClubRunOutReminder.findUniqueOrThrow({
+        where: { id: orderReminder },
+      });
+      assert.equal(after.remindAttempts, 0);
+      assert.equal(after.remindAttemptsFor, null);
+      await prisma.reefClubRunOutReminder.update({
+        where: { id: orderReminder },
+        data: { remindedForRunOut: new Date("2026-01-01T00:00:00Z") },
+      });
       await prisma.reefClubRunOutReminder.update({
         where: { id: orderReminder },
         data: { unsubscribedAt: new Date() },

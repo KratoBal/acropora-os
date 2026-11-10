@@ -97,7 +97,7 @@ export function runOutMail(input: {
 }): OutgoingMail {
   const since =
     input.start.source === "ORDER"
-      ? `a bolti rendelésed ${hungarianDay(input.start.day)} napi kiszállításától`
+      ? `a bolti rendelésed ${hungarianDay(input.start.day)} napjától`
       : `${hungarianDay(input.start.day)} napjától, amikor az emlékeztetőt kérted`;
   return {
     to: [input.to],
