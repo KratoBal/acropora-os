@@ -3,7 +3,6 @@ import { describe, it } from "node:test";
 
 import {
   describeShippingFlags,
-  flagsWithoutKind,
   rowsCarryingKind,
   shippingFlagsDiffer,
   shippingFlagsFromProfile,
@@ -225,8 +224,7 @@ describe("az élő állat fajtája a szállítási jelzők között", () => {
 });
 
 /*
-  A BOLTBAN MARADT FAJTA (kartya 4b30b373). MI PIROSIT: a szuro a fajta nelkuli (null vagy hianyzo) sort is atengedi; a
-  fajtatorles elviszi vagy megforditja a TOBBI zaszlot (a termeknek nincs profil-sora, ezek nem az OS dontesei).
+  A BOLTBAN MARADT FAJTA (kartya 4b30b373). MI PIROSIT: a szuro a fajta nelkuli (null vagy hianyzo) sort is atengedi.
 */
 describe("a boltban maradt élő állat fajta", () => {
   it("csak a fajtát viselő sorokat adja vissza (a null és a hiányzó nem)", () => {
@@ -239,26 +237,6 @@ describe("a boltban maradt élő állat fajta", () => {
     assert.deepEqual(
       rowsCarryingKind(sorok).map((r) => r.product_id),
       ["a", "d"],
-    );
-  });
-
-  it("a fajtát null-ra teszi, a többi zászlót változatlanul hagyja (a hiányzó csomagautomata-jelző hamis)", () => {
-    assert.deepEqual(
-      flagsWithoutKind({
-        pickup_only: true,
-        foxpost_forbidden: true,
-        is_heavy: true,
-        is_frozen: true,
-        livestock_kind: "FISH",
-      }),
-      {
-        pickup_only: true,
-        foxpost_forbidden: true,
-        is_heavy: true,
-        is_frozen: true,
-        locker_unsuitable: false,
-        livestock_kind: null,
-      },
     );
   });
 });

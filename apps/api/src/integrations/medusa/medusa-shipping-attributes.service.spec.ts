@@ -393,8 +393,8 @@ describe("az élő állat fajtája a boltba", () => {
 });
 
 /*
-  A BOLTBAN MARADT FAJTA (kartya 4b30b373). MI PIROSIT: a proba-futas ir; a torles elveszi a tobbi zaszlot; az OS-termek
-  keresese nem a kotes-sorbol megy.
+  A BOLTBAN MARADT FAJTA (kartya 4b30b373). MI PIROSIT: a proba-futas ir; a torles a tobbi zaszlot is kuldi (egy kozben
+  kezzel atallitott zaszlot visszairna, barracuda #2353); az OS-termek keresese nem a kotes-sorbol megy.
 */
 describe("a boltban maradt fajta letörlése", () => {
   const ROW = {
@@ -409,11 +409,14 @@ describe("a boltban maradt fajta letörlése", () => {
   };
 
   function kis() {
-    const kikuldott: { productId: string; flags: MedusaShippingFlags }[] = [];
+    const kikuldott: {
+      productId: string;
+      flags: Partial<MedusaShippingFlags>;
+    }[] = [];
     const medusa = {
       setShippingAttributes: async (
         productId: string,
-        flags: MedusaShippingFlags,
+        flags: Partial<MedusaShippingFlags>,
       ) => {
         kikuldott.push({ productId, flags });
         return { id: "sa_1", product_id: productId, ...flags };
@@ -440,22 +443,12 @@ describe("a boltban maradt fajta letörlése", () => {
     assert.deepEqual(f.kikuldott, []);
   });
 
-  it("--apply-jal a tobbi zaszlot valtozatlanul visszakuldi, csak a fajta lesz null", async () => {
+  it("--apply-jal CSAK a fajtat kuldi (reszleges frissites), a tobbi zaszlot nem", async () => {
     const f = kis();
     const outcome = await f.service.clearLeftoverKind(ROW, true);
     assert.equal(outcome.action, "applied");
     assert.deepEqual(f.kikuldott, [
-      {
-        productId: "prod_medusa_9",
-        flags: {
-          pickup_only: true,
-          foxpost_forbidden: false,
-          is_heavy: true,
-          is_frozen: false,
-          locker_unsuitable: false,
-          livestock_kind: null,
-        },
-      },
+      { productId: "prod_medusa_9", flags: { livestock_kind: null } },
     ]);
   });
 
