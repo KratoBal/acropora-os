@@ -200,11 +200,34 @@ export class ContentService {
           )
         : null;
 
+    // A NAPLÓ „KI" OSZLOPA NÉV, NEM AZONOSÍTÓ: egy lekérdezés az összes szereplőre. Az azonosító akkor is megmarad, ha a
+    // felhasználó már nincs meg, hogy a sor ne maradjon üres.
+    const { stateEvents, ...rest } = item;
+    const names = await this.repository.userNames([
+      ...new Set(
+        stateEvents.flatMap((event) =>
+          event.actorUserId ? [event.actorUserId] : [],
+        ),
+      ),
+    ]);
+    const history = stateEvents.map((event) => ({
+      id: event.id,
+      fromState: event.fromState,
+      toState: event.toState,
+      actorUserId: event.actorUserId,
+      actorName: event.actorUserId
+        ? (names.get(event.actorUserId) ?? null)
+        : null,
+      note: event.note,
+      createdAt: event.createdAt.toISOString(),
+    }));
+
     // A RÉSZLET IS MEGKAPJA A LÉPÉSEKET, ugyanabból a forrásból, mint a lista.
     // Ha csak a lista kapná meg, egy részletről nyíló cselekvés megint a
     // felület találgatásán állna.
     return {
-      ...item,
+      ...rest,
+      history,
       blockers,
       schedule,
       moves: moveOptions(item.state, item.channel),

@@ -605,6 +605,7 @@ export type {
   ContentListResponse,
   ContentMoveOption,
   ContentState,
+  ContentStateEvent,
   ContentViewerRole,
   ContentWaitingOnMeResponse,
 } from "./content-management.js";
