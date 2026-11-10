@@ -645,7 +645,10 @@ export class MedusaProjectionScheduler
     if (!projectLivestockArrivalsInRound(this.environment)) return;
     try {
       const eredmeny = await this.runLivestockArrivals();
-      if (eredmeny.status !== "unchanged")
+      // a set over the shop's cap is a warning every round, changed or not (barracuda, #2354)
+      if (eredmeny.leftOut)
+        this.naplo.warn(describeLivestockArrivalsProjection(eredmeny));
+      else if (eredmeny.status !== "unchanged")
         this.naplo.log(describeLivestockArrivalsProjection(eredmeny));
     } catch (error) {
       this.naplo.warn(

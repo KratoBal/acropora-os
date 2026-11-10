@@ -38,6 +38,12 @@ export interface ArrivalSourceRow {
 }
 
 const OPEN = new Set(["ORDERED", "IN_TRANSIT"]);
+/**
+ * The shop takes at most this many rows in one set (commerce `AdminPutLivestockArrivals`, `.max(1000)`; barracuda on #2354):
+ * over it every round would be a 400 and the list would stand still. The earliest days go first, and the round says what it
+ * left out.
+ */
+export const MAX_PUBLIC_ARRIVALS = 1000;
 const KINDS = new Set(["FISH", "INVERTEBRATE", "CORAL"]);
 
 /**
@@ -91,9 +97,26 @@ export function arrivalsDiffer(
   return key(current) !== key(wanted);
 }
 
+/** The set the shop can take: over the cap, the earliest days (then the id), and how many were left out. */
+export function cappedArrivals(
+  rows: readonly MedusaLivestockArrival[],
+  cap: number = MAX_PUBLIC_ARRIVALS,
+): { rows: MedusaLivestockArrival[]; leftOut: number } {
+  if (rows.length <= cap) return { rows: [...rows], leftOut: 0 };
+  const kept = [...rows]
+    .sort(
+      (a, b) =>
+        a.expected_on.localeCompare(b.expected_on) ||
+        a.os_id.localeCompare(b.os_id),
+    )
+    .slice(0, cap)
+    .sort((a, b) => a.os_id.localeCompare(b.os_id));
+  return { rows: kept, leftOut: rows.length - cap };
+}
+
 export type LivestockArrivalsOutcome =
-  | { status: "unchanged"; count: number }
-  | { status: "sent" | "would-send"; count: number };
+  | { status: "unchanged"; count: number; leftOut?: number }
+  | { status: "sent" | "would-send"; count: number; leftOut?: number };
 
 export interface LivestockArrivalSource {
   rows(): Promise<ArrivalSourceRow[]>;
@@ -113,18 +136,29 @@ export async function projectLivestockArrivals(
   const bound = [
     ...new Set(rows.flatMap((r) => (r.productId ? [r.productId] : []))),
   ];
-  const wanted = publicArrivals(rows, await source.medusaIds(bound));
+  const capped = cappedArrivals(
+    publicArrivals(rows, await source.medusaIds(bound)),
+  );
+  const wanted = capped.rows;
+  const leftOut = capped.leftOut ? { leftOut: capped.leftOut } : {};
   const current = await client.fetchLivestockArrivals();
   if (!arrivalsDiffer(current, wanted))
-    return { status: "unchanged", count: wanted.length };
+    return { status: "unchanged", count: wanted.length, ...leftOut };
   if (apply) await client.replaceLivestockArrivals(wanted);
-  return { status: apply ? "sent" : "would-send", count: wanted.length };
+  return {
+    status: apply ? "sent" : "would-send",
+    count: wanted.length,
+    ...leftOut,
+  };
 }
 
 export function describeLivestockArrivalsProjection(
   outcome: LivestockArrivalsOutcome,
 ): string {
-  return `Erkezo allatok: ${outcome.status} (${outcome.count} sor)`;
+  const left = outcome.leftOut
+    ? `, ${outcome.leftOut} sor kimaradt a ${MAX_PUBLIC_ARRIVALS}-es plafon miatt`
+    : "";
+  return `Erkezo allatok: ${outcome.status} (${outcome.count} sor${left})`;
 }
 
 /**
