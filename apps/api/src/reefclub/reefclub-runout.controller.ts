@@ -21,6 +21,7 @@ import {
   ReefClubRunOutUnsubscribeDto,
 } from "./reefclub-runout.dto.js";
 import {
+  type RunOutProductItem,
   type RunOutReminderItem,
   type RunOutStatus,
   ReefClubRunOutService,
@@ -34,8 +35,9 @@ import {
 /**
  * /rc/v1/runout-reminders (ReefClub V3.2, card cd94ed11, slice 3b): the "when does it run out" reminder, per product.
  *
- *   GET     /rc/v1/runout-reminders              the state of the three locks (and the text, only when all are open) and the
- *                                                member's reminders that are on; writes nothing
+ *   GET     /rc/v1/runout-reminders              the state of the three locks (and the text, only when all are open), the
+ *                                                member's reminders that are on, and the products a reminder can be turned
+ *                                                on for (only when all locks are open); writes nothing
  *   POST    /rc/v1/runout-reminders              {productId, aquariumId, consentVersion}: turns it on (the consent record)
  *   DELETE  /rc/v1/runout-reminders/:productId   turns it off (204); no active reminder of the product is the one 404
  *   POST    /rc/v1/runout-reminders/unsubscribe  {key}: the mail's link, WITHOUT a session
@@ -60,13 +62,17 @@ export class ReefClubRunOutController {
   ) {}
 
   @Get()
-  async overview(
-    @Req() request: ReefClubRequest,
-  ): Promise<RunOutStatus & { reminders: RunOutReminderItem[] }> {
-    return {
-      ...this.runOut.status(),
-      reminders: await this.runOut.list(accountOf(request)),
-    };
+  async overview(@Req() request: ReefClubRequest): Promise<
+    RunOutStatus & {
+      reminders: RunOutReminderItem[];
+      products: RunOutProductItem[];
+    }
+  > {
+    const [reminders, products] = await Promise.all([
+      this.runOut.list(accountOf(request)),
+      this.runOut.products(),
+    ]);
+    return { ...this.runOut.status(), reminders, products };
   }
 
   @Post()

@@ -93,6 +93,114 @@ describe("RunOutReminders", () => {
   });
 });
 
+describe("RunOutReminders: turning one on", () => {
+  const TEXT = "Hozzájárulok, hogy a ReefClub e-mailben emlékeztessen.";
+  const overview = (over: Record<string, unknown> = {}) => ({
+    state: "available",
+    text: TEXT,
+    version: "kifogyas-1",
+    reminders: [],
+    products: [
+      { productId: "p1", productName: "Kalcium", packageText: "500 ml" },
+      { productId: "p2", productName: "Magnézium", packageText: "1 l" },
+    ],
+    ...over,
+  });
+
+  it("offers nothing while a lock is closed, even if products came", async () => {
+    mockApi({
+      "GET /runout-reminders": () =>
+        reply(200, overview({ state: "no-text", text: null, version: null })),
+      "GET /aquariums": () => reply(200, AQUARIUMS),
+    });
+    render(<RunOutReminders />);
+    await screen.findByText("Az emlékeztető még nem érhető el.");
+    expect(
+      screen.queryByRole("button", { name: "Emlékeztető kérése" }),
+    ).toBeNull();
+  });
+
+  it("shows the consent text, asks for the checkbox, sends the shown version, and leaves out a product that is already on", async () => {
+    let on: unknown[] = [];
+    const { calls } = mockApi({
+      "GET /runout-reminders": () =>
+        reply(
+          200,
+          overview({
+            reminders: on.length
+              ? on
+              : [
+                  {
+                    id: "r2",
+                    productId: "p2",
+                    productName: "Magnézium",
+                    aquariumId: "q1",
+                    consentAt: "2026-11-09T10:00:00Z",
+                  },
+                ],
+          }),
+        ),
+      "GET /aquariums": () => reply(200, AQUARIUMS),
+      "POST /runout-reminders": () => {
+        on = [
+          {
+            id: "r1",
+            productId: "p1",
+            productName: "Kalcium",
+            aquariumId: "q1",
+            consentAt: "2026-11-10T10:00:00Z",
+          },
+        ];
+        return reply(201, { id: "r1" });
+      },
+    });
+    const user = userEvent.setup();
+    render(<RunOutReminders />);
+    expect(await screen.findByText(TEXT)).toBeTruthy();
+    const product = screen.getByLabelText("Termék") as HTMLSelectElement;
+    const options = [...product.options].map((o) => o.value);
+    expect(options).toEqual(["", "p1"]);
+    const send = screen.getByRole("button", { name: "Emlékeztető kérése" });
+    await user.selectOptions(product, "p1");
+    await user.selectOptions(screen.getByLabelText("Akvárium"), "q1");
+    expect((send as HTMLButtonElement).disabled).toBe(true);
+    await user.click(
+      screen.getByLabelText("Elolvastam, és kérem az emlékeztetőt."),
+    );
+    await user.click(send);
+    await screen.findByText("Kalcium");
+    expect(calls.filter((c) => c.method === "POST").map((c) => c.body)).toEqual(
+      [{ productId: "p1", aquariumId: "q1", consentVersion: "kifogyas-1" }],
+    );
+  });
+
+  it("a refusal of the server is shown in its words", async () => {
+    mockApi({
+      "GET /runout-reminders": () => reply(200, overview()),
+      "GET /aquariums": () => reply(200, AQUARIUMS),
+      "POST /runout-reminders": () =>
+        reply(400, {
+          message: "Az emlékeztetőhöz add meg az akvárium literét.",
+          code: "NO_VOLUME",
+        }),
+    });
+    const user = userEvent.setup();
+    render(<RunOutReminders />);
+    await screen.findByText(TEXT);
+    await user.selectOptions(screen.getByLabelText("Termék"), "p1");
+    await user.selectOptions(screen.getByLabelText("Akvárium"), "q1");
+    await user.click(
+      screen.getByLabelText("Elolvastam, és kérem az emlékeztetőt."),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Emlékeztető kérése" }),
+    );
+    expect(
+      await screen.findByText("Az emlékeztetőhöz add meg az akvárium literét."),
+    ).toBeTruthy();
+  });
+});
+
 describe("RunOutUnsubscribe", () => {
   it("does NOTHING on load, removes the key from the address bar, and unsubscribes on the button with the key alone", async () => {
     window.history.replaceState(
