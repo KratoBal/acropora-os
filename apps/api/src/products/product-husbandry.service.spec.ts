@@ -1,12 +1,17 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { BadRequestException, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from "@nestjs/common";
 import type { ProductHusbandry, ProductHusbandryFacts } from "@acropora/types";
 import { plainToInstance } from "class-transformer";
 import { validateSync } from "class-validator";
 
 import { UpdateProductHusbandryDto } from "./dto/update-product-husbandry.dto.js";
+import { husbandryVersionOf } from "./product-husbandry.js";
 import {
   ProductHusbandryService,
   husbandryDecision,
@@ -66,6 +71,9 @@ const decide = (
     NOW,
   );
 
+/** The version a caller who looked at the default stored facts holds. */
+const SEEN = husbandryVersionOf(emptyFacts());
+
 const dataOf = (decision: HusbandryDecision) => {
   assert.ok("data" in decision, JSON.stringify(decision));
   return decision.data as Record<string, unknown>;
@@ -80,14 +88,16 @@ describe("a tartási írás döntése", () => {
   });
 
   it("az `ellenorizve: true` a hívó azonosítóját és a szerver óráját bélyegzi", () => {
-    const data = dataOf(decide({ kinekNem: "x", ellenorizve: true }));
+    const data = dataOf(
+      decide({ kinekNem: "x", ellenorizve: true, seenVersion: SEEN }),
+    );
     assert.equal(data.ellenorizteUserId, "user-1");
     assert.deepEqual(data.ellenorizveAt, NOW);
     assert.ok(!("ellenorizve" in data));
   });
 
   it("a puszta ellenőrzés (adat nélkül) a mostani tartalmat ellenőrzi", () => {
-    const decision = decide({ ellenorizve: true });
+    const decision = decide({ ellenorizve: true, seenVersion: SEEN });
     const data = dataOf(decision);
     assert.equal(data.ellenorizteUserId, "user-1");
     assert.deepEqual((decision as { changed: string[] }).changed, []);
@@ -100,12 +110,50 @@ describe("a tartási írás döntése", () => {
   });
 
   it("az ellenőrzés forrás nélkül elutasított", () => {
+    const bare = { ...emptyFacts(), forrasTipus: null, forrasHivatkozas: null };
     const decision = decide(
-      { ellenorizve: true },
-      { ...emptyFacts(), forrasTipus: null, forrasHivatkozas: null },
+      { ellenorizve: true, seenVersion: husbandryVersionOf(bare) },
+      bare,
     );
     assert.ok("refused" in decision);
     assert.equal(decision.refused.length, 2);
+  });
+
+  /*
+    A VERIFICATION OF UNSEEN CONTENT (V2.2 S2, barracuda on #2375). MI PIROSIT: an `ellenorizve: true` with no seen version goes
+    through; a seen version that is not the stored one goes through (the stamp would stand on facts the verifier never saw);
+    a plain save is held up for a version it does not need; a changed Hungarian name is not part of the version.
+  */
+  it("az ellenőrzés látott állapot nélkül elutasított", () => {
+    const decision = decide({ kinekNem: "x", ellenorizve: true });
+    assert.ok("refused" in decision);
+    assert.match(decision.refused[0]!, /seenVersion/);
+  });
+
+  it("az ellenőrzés a nem a tárolt állapotra szóló verzióval ütközés, és semmit nem ír", () => {
+    const decision = decide({ ellenorizve: true, seenVersion: "regi-verzio" });
+    assert.ok("conflict" in decision);
+    assert.match(decision.conflict, /Közben módosult/);
+    // a fact changed since the caller looked: the version of the OLD facts no longer matches
+    const changed = { ...emptyFacts(), genus: "Acropora" };
+    assert.ok(
+      "conflict" in decide({ ellenorizve: true, seenVersion: SEEN }, changed),
+    );
+  });
+
+  it("a magyar név változása is új verzió (a nevek útján írt tényt az ellenőrző nem láthatta)", () => {
+    const renamed = { ...emptyFacts(), magyarNev: "Új név" };
+    assert.notEqual(husbandryVersionOf(renamed), SEEN);
+    assert.ok(
+      "conflict" in decide({ ellenorizve: true, seenVersion: SEEN }, renamed),
+    );
+  });
+
+  it("a sima mentés verzió nélkül megy, és a látott verzió a saját változtatást is fedi (az előtte-állapot a mérce)", () => {
+    assert.ok("data" in decide({ kinekNem: "x" }));
+    assert.ok(
+      "data" in decide({ kinekNem: "x", ellenorizve: true, seenVersion: SEEN }),
+    );
   });
 
   it("a null lista üres listává válik, a null szám és szöveg null marad", () => {
@@ -190,6 +238,7 @@ describe("a tartási DTO alakja", () => {
 function husbandryOf(): ProductHusbandry {
   return {
     productId: "p1",
+    version: SEEN,
     livestockKind: "FISH",
     facts: { ...emptyFacts() },
     verification: { verified: false, byUserId: null, at: null },
@@ -237,6 +286,25 @@ describe("a tartási szolgáltatás", () => {
         const body = error.getResponse() as { code: string; errors: string[] };
         assert.equal(body.code, "HUSBANDRY_REFUSED");
         assert.deepEqual(body.errors, ["Egy.", "Kettő."]);
+        return true;
+      },
+    );
+  });
+
+  it("az ütközés 409, kóddal", async () => {
+    const { service } = serviceWith({
+      kind: "conflict",
+      message: "Közben módosult a tartási blokk.",
+    });
+    await assert.rejects(
+      () =>
+        service.update("p1", { ellenorizve: true, seenVersion: "x" }, "user-1"),
+      (error: unknown) => {
+        assert.ok(error instanceof ConflictException);
+        assert.equal(
+          (error.getResponse() as { code: string }).code,
+          "HUSBANDRY_CHANGED",
+        );
         return true;
       },
     );

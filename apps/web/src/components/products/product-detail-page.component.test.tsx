@@ -25,6 +25,14 @@ const api = vi.hoisted(() => ({
     kapjon a duplatol, nem csak azt, amit a teszt allit.
   */
   getShippingProfile: vi.fn(async () => null),
+  // the husbandry card of a live animal (V2.2 S2) asks its own endpoint
+  husbandry: vi.fn(async () => ({
+    productId: "product-1",
+    livestockKind: "FISH",
+    facts: {},
+    verification: { verified: false, byUserId: null, at: null },
+    missing: [],
+  })),
   saveShippingProfile: vi.fn(),
   // the JEV card beside the description (the server's switch off: no run)
   enrichment: vi.fn(async () => ({
@@ -317,6 +325,22 @@ describe("ProductDetailPage mirror ownership", () => {
       "JEV adatellenőrzés",
       "Képek",
     ]);
+  });
+
+  it("az élő állat lapján megjelenik a Tartási adatok kártya, más terméken nem", async () => {
+    render(<ProductDetailPage productId="product-1" />);
+    await screen.findByText("UNAS terméktükör");
+    expect(screen.queryByText("Tartási adatok")).toBeNull();
+    expect(api.husbandry).not.toHaveBeenCalled();
+  });
+
+  it("az élő állat lapján (livestockKind) a kártya megjelenik és lekéri a tartási adatokat", async () => {
+    api.detail.mockResolvedValue({ ...detail, livestockKind: "FISH" });
+    render(<ProductDetailPage productId="product-1" />);
+    expect(await screen.findByText("Tartási adatok")).toBeTruthy();
+    await waitFor(() =>
+      expect(api.husbandry).toHaveBeenCalledWith("token-owner", "product-1"),
+    );
   });
 
   // card 20b0dd47, acrobot 46058: the names card on every live animal, the fish included; not on other products

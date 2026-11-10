@@ -131,10 +131,20 @@ export type ProductHusbandryInput = {
     "minLiter" | "meretMax"
     ? number | null
     : ProductHusbandryFacts[K];
-} & { ellenorizve?: boolean };
+} & {
+  ellenorizve?: boolean;
+  /**
+   * THE VERSION THE CALLER SAW (`ProductHusbandry.version`). REQUIRED with `ellenorizve: true`: a verification states that someone
+   * looked at THESE facts, so the server refuses it (409) when the facts changed since. A plain save does not need it (it
+   * withdraws a verification, it never states one).
+   */
+  seenVersion?: string;
+};
 
 export interface ProductHusbandry {
   productId: string;
+  /** A digest of the facts as they are now (the Hungarian name included); send it back as `seenVersion` to verify. */
+  version: string;
   /** From the category tree; null when it is not a live animal or sits under several roots. */
   livestockKind: ProductLivestockKind | null;
   facts: ProductHusbandryFacts;
