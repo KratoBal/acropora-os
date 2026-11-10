@@ -148,7 +148,7 @@ export class ReefClubRunOutReminderService
     // in the query, so one fixed page would bring back the same rows every hour and the ones after them would never be reached.
     let after: string | null = null;
     for (;;) {
-      const rows = await prisma.reefClubRunOutReminder.findMany({
+      const rows: SweepRow[] = await prisma.reefClubRunOutReminder.findMany({
         where: {
           ...(after ? { id: { gt: after } } : {}),
           unsubscribedAt: null,
