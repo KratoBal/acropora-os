@@ -29,6 +29,8 @@ import { describe, it } from "node:test";
  */
 
 const CONTROLLERS = [
+  // The agents' keys (card c5a8e6d6, 2026-11-10): secret-making, behind users.manage.
+  "src/tasks/service-token-admin.controller.ts",
   "src/service-assets/service-assets.controller.ts",
   "src/worksheets/worksheets.controller.ts",
   "src/suppliers/suppliers.controller.ts",
