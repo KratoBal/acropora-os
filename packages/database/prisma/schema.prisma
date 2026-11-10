@@ -8052,6 +8052,35 @@ model ProductDatasheet {
   amitOVeszelyeztet  String?
   amiOtVeszelyezteti String?
 
+  /// TARTASI BLOKK (V2.2, kartya d2fc06e7). Minden mezo NULLAZHATO, es a NULL jelentese "ellenorzes alatt", NEM alapertek:
+  /// a spec szerint semmi nem talalgathato. A `careDifficulty`, `reefSafe`, `socialKeeping`, `aggression`, `feedingType`,
+  /// `fenyIgeny`, `aramlasIgeny`, `minLiter`, `meretMax` fentebb mar megvan; ezek a HIANYZOK.
+  ///
+  /// A medence legalabb ennyi honapos, stabil legyen (szam, honap).
+  medenceErettsegHonap Int?
+  /// Korallnal a medence-meret helyett: alsó, kozepso vagy felso zona.
+  elhelyezesZona       HusbandryZone?
+  /// Tenyesztett vagy vadfogas: a bolt szallitmanyarol szol, ezert BOLTI adat, nem forrasos.
+  szarmazas            AnimalSourcing?
+  /// A "korallos akvariumban tarthato" valasz egy mondatos indoka (a `reefSafe` mellett).
+  reefSafeIndok        String?
+  /// Korallevo / gerinctelen-evo: harom allapot (igen, nem, NULL = ellenorzes alatt), ezert Boolean?, nem Boolean.
+  korallevo            Boolean?
+  gerinctelenevo       Boolean?
+  /// Etetesi gyakorisag szabad szovegben, es hogy kell-e elo eleseg.
+  etetesGyakorisag     String?
+  eloEleseg            Boolean?
+  /// KINEK NEM AJANLJUK: egy mondat, KOTELEZO mezo (a spec szerint nelkule elo allat nem publikalhato).
+  kinekNem             String?
+
+  /// FORRAS ES ELLENORZES. A forras tipusa es hivatkozasa szabad szoveg (a hivatkozas lehet URL vagy a bolt sajat leirasa).
+  /// Az ELLENORZEST A SZERVER BELYEGZI: aki az ellenorzes kapcsolot kuldi, annak a felhasznalo-azonositoja kerul ide, az ido a
+  /// szerver oraja. Szerkesztes az ellenorzes nelkul visszavonja a korabbi ellenorzest (az uj tartalmat senki nem ellenorizte).
+  forrasTipus         String?
+  forrasHivatkozas    String?
+  ellenorizteUserId   String?
+  ellenorizveAt       DateTime?
+
   product  Product                        @relation(fields: [productId], references: [id], onDelete: Cascade)
   refusals ProductDatasheetFieldRefusal[]
 }
@@ -8098,10 +8127,27 @@ enum MeretDimenzio {
   TELJES_KITERJEDES
 }
 
+/// A negy fokozat (V2.2): KONNYU = 1 "Kezdoknek is", KOZEPES = 2 "Kozepes", HALADO = 3 "Haladoknak", SZAKERTO = 4 "Szakertoknek".
+/// Az uj ertek a VEGEN all, mert az `ALTER TYPE ... ADD VALUE` a vegere fuz. Az 1-es fokozat Acropora nemzetsegre SOSEM adhato
+/// (a datasheet-irasi ut elutasitja).
 enum CareDifficulty {
   KONNYU
   KOZEPES
   HALADO
+  SZAKERTO
+}
+
+/// Hol szeret elni a korall a medenceben (V2.2: korallnal a medence-meret helyett az elhelyezes).
+enum HusbandryZone {
+  ALSO
+  KOZEPSO
+  FELSO
+}
+
+/// Tenyesztett vagy vadfogas (V2.2). A bolt adott szallitmanyarol szol, NEM a fajrol altalaban: nem webes adat.
+enum AnimalSourcing {
+  TENYESZTETT
+  VADFOGAS
 }
 
 enum ReefSafe {

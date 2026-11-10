@@ -48,6 +48,8 @@ const CONTROLLERS = [
   "src/products/product-barcode.controller.ts",
   "src/products/product-extension.controller.ts",
   "src/products/product-shipping-profile.controller.ts",
+  // The husbandry block of a live animal (V2.2, card d2fc06e7): products.view / products.manage.
+  "src/products/product-husbandry.controller.ts",
   "src/products/catalog-options.controller.ts",
   // JEV product enrichment, read only (2026-10-02).
   "src/products/product-enrichment-review.controller.ts",
