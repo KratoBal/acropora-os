@@ -347,6 +347,12 @@ export const MAIL_TEMPLATE_VARIABLES: readonly MailTemplateVariable[] = [
     description: "A nap, amikor az elállási nyilatkozat beérkezett.",
   },
   {
+    name: "nyilatkozat_tetelek",
+    description:
+      "Blokk: az elállási nyilatkozatban megnevezett tételek listája, ahogy a rendelés mutatja őket. A rendszer állítja össze, külön bekezdésben áll; ha a címek nem ismertek, nem jelenik meg.",
+    kind: "block",
+  },
+  {
     name: "hirlevel_megerosito_link",
     description:
       "A hírlevél-feliratkozás megerősítő linkje. Egyszer használható, a lejáratig.",
@@ -824,6 +830,7 @@ const HUNGARIAN_MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
       "nyilatkozat_azonosito",
       "nyilatkozat_neve",
       "nyilatkozat_idopont",
+      "nyilatkozat_tetelek",
     ],
   },
   {

@@ -206,8 +206,10 @@ type WebshopTemplateFacts =
        * acknowledgement goes on a durable medium, without undue delay, and
        * this mail is that medium). The order's number, the declaration's
        * reference, the name it was signed with and the time it came in; the
-       * lines it names go as ids (the shop has no titles in this call, so the
-       * mail does not list them). The wording is a DRAFT on Balázs's list
+       * lines it names go as ids, and as titles when the shop could read them
+       * (`item_titles`, optional: the acknowledgement is a legal one and must
+       * go out without them, so the titles are decoration the parser
+       * normalises, never a reason to refuse the mail). The wording is a DRAFT on Balázs's list
        * (Eldöntendő, 3rd point): no deadline, no outcome, no statutory
        * sentence. Sent only through this renderer, behind the shop's switch.
        */
@@ -216,6 +218,8 @@ type WebshopTemplateFacts =
       readonly withdrawal_id: string;
       readonly declared_name: string;
       readonly item_ids: readonly string[];
+      /** the titles of the lines, as the order shows them; the mail lists them when there are any */
+      readonly item_titles?: readonly string[];
       readonly received_at: string;
     }
   | {
@@ -961,7 +965,15 @@ function templateContent(
           nyilatkozat_neve: facts.declared_name,
           nyilatkozat_idopont: mailDay(facts.received_at, locale),
         },
-        blocks: {},
+        // the lines the declaration names, a plain list (no heading: the words around it are the owner's); no titles, no block
+        blocks: {
+          nyilatkozat_tetelek: facts.item_titles?.length
+            ? {
+                html: `<ul ${UL}>${facts.item_titles.map((title) => `<li>${escapeHtml(title)}</li>`).join("")}</ul>`,
+                text: facts.item_titles.map((title) => `- ${title}`).join("\n"),
+              }
+            : null,
+        },
       };
 
     case "newsletter-confirm":
@@ -1149,6 +1161,7 @@ export const WEBSHOP_MAIL_SAMPLE_FACTS: Readonly<
     withdrawal_id: "ordwd_01SAMPLE",
     declared_name: "Minta Vevő",
     item_ids: ["item_01SAMPLE"],
+    item_titles: ["Minta termék"],
     received_at: "2026-11-09T12:00:00.000Z",
   },
   "newsletter-confirm": {
@@ -1348,6 +1361,22 @@ export function isWebshopMailTemplate(v: unknown): v is WebshopMailTemplate {
   );
 }
 
+/**
+ * THE TITLES OF A WITHDRAWAL'S LINES ARE DECORATION, NEVER A REASON TO REFUSE THE MAIL. The acknowledgement is the durable
+ * medium of a legal declaration and has to go out; a shop that sends a bad `item_titles` (not a list, a title that is not
+ * text, an empty one) must not turn that into a 422. So the parser keeps the titles that are usable text (trimmed, at
+ * most 300 characters, at most 50) and drops the rest; with nothing usable the key is left out and the mail has no list.
+ */
+function withdrawalTitles(value: unknown): { item_titles?: string[] } {
+  if (!Array.isArray(value)) return {};
+  const titles = value
+    .filter((x): x is string => typeof x === "string")
+    .map((x) => x.trim().slice(0, 300))
+    .filter((x) => x !== "")
+    .slice(0, 50);
+  return titles.length ? { item_titles: titles } : {};
+}
+
 export function parseWebshopMailFacts(
   template: unknown,
   raw: unknown,
@@ -1525,6 +1554,7 @@ function parseTemplateFacts(
         withdrawal_id: filled(f.withdrawal_id, "facts.withdrawal_id"),
         declared_name: filled(f.declared_name, "facts.declared_name"),
         item_ids: f.item_ids as string[],
+        ...withdrawalTitles(f.item_titles),
         received_at,
       };
     }
