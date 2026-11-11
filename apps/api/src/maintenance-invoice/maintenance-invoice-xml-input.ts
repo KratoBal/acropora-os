@@ -246,7 +246,9 @@ export function maintenanceInvoiceXmlInputFrom(
     ),
     xmlInput: {
       paymentDueDate: dueDate,
-      fulfillmentDate: isoDate(fulfillmentDate),
+      // the TIG's day in Budapest, not in UTC: one issued after midnight there was the day before in UTC (barracuda
+      // 46870, card 6c957695)
+      fulfillmentDate: budapestDayKey(fulfillmentDate),
       paymentMethod: "Átutalás",
       currency: "HUF",
       orderNumber: certificate.number,
