@@ -53,9 +53,12 @@ export function AiContactRequestsSection({ token }: { token: string }) {
       await aiContactRequestsApi.handled(token, id);
       await load();
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "A jelölés nem sikerült.",
-      );
+      const message =
+        cause instanceof Error ? cause.message : "A jelölés nem sikerült.";
+      // a kolléga közben már kezelhette (a szerver "nincs ilyen, még nem kezelt kérés"): a lista újratöltődik, hogy a gomb ne maradjon,
+      // és a hiba az újratöltés UTÁN íródik ki (a betöltés törli a korábbi hibát)
+      await load();
+      setError(message);
     } finally {
       setBusyId(null);
     }

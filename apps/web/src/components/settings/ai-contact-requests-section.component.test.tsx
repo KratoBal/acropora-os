@@ -142,4 +142,26 @@ describe("AiContactRequestsSection", () => {
       "Nincs ilyen",
     );
   });
+
+  it("a failed marking (a colleague handled it meanwhile) reloads the list, so the button does not stay, and the message stays", async () => {
+    api.list
+      .mockResolvedValueOnce([row({ id: "z" })])
+      .mockResolvedValueOnce([
+        row({ id: "z", handledAt: "2026-11-11T11:00:00.000Z" }),
+      ]);
+    api.handled.mockRejectedValue(
+      new Error("Nincs ilyen, még nem kezelt kérés."),
+    );
+    mount();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Kezeltnek jelölöm" }),
+    );
+    await waitFor(() => expect(api.list).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: "Kezeltnek jelölöm" }),
+      ).toBeNull(),
+    );
+    expect(screen.getByRole("alert").textContent).toContain("Nincs ilyen");
+  });
 });
