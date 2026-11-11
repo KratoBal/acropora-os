@@ -30,6 +30,7 @@ import { MeasurementChart } from "./measurement-chart";
 import { MeasurementForm } from "./measurement-form";
 import { OccasionList } from "./occasion-list";
 import { RecommendationPanel } from "./recommendation-panel";
+import { WaterHintsPanel } from "./water-hints-panel";
 import { SharePanel } from "./share-panel";
 import { TargetsEditor } from "./targets-editor";
 
@@ -143,6 +144,8 @@ export function AquariumDetail({ id }: { id: string }) {
           </>
         ) : null}
       </section>
+
+      <WaterHintsPanel aquarium={data} />
 
       <RecommendationPanel aquarium={data} />
 
