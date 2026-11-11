@@ -72,6 +72,11 @@ function service(options: {
   credentialsError?: Error;
   pdfLookup?: unknown;
   storedPdfBytes?: Uint8Array | null;
+  partnerTerms?: {
+    name: string;
+    taxNumber: string | null;
+    paymentDueDays: number;
+  }[];
 }) {
   const created: unknown[] = [];
   const stored: { key: unknown; bytes: Uint8Array }[] = [];
@@ -81,7 +86,12 @@ function service(options: {
       options.certificate === undefined ? baseCertificate : options.certificate,
   } as unknown as CompletionCertificatesRepository;
 
+  let partnerQueries = 0;
   const repository = {
+    partnerPaymentTerms: async () => {
+      partnerQueries += 1;
+      return options.partnerTerms ?? [];
+    },
     existingInvoice: async () => options.existingInvoice ?? null,
     createDraft: async (input: unknown) => {
       created.push(input);
@@ -143,6 +153,7 @@ function service(options: {
     created,
     stored,
     clientCalls: () => clientCalls,
+    partnerQueries: () => partnerQueries,
     sentXml,
     service: new MaintenanceInvoiceDraftService(
       certificates,
@@ -400,6 +411,122 @@ describe("MaintenanceInvoiceDraftService.draftFor, a fizetési határidő kezdő
     );
     assert.notEqual(due, "2026-10-02", "not the TIG's date plus 8 days");
     assert.equal(fulfilmentTag(sentXml[0]!), "2026-09-24");
+  });
+});
+
+describe("MaintenanceInvoiceDraftService.draftFor, a fizetési napok forrása (kártya os-tig-hatarido-partner-nap)", () => {
+  const plusDays = (day: string, days: number) => {
+    const date = new Date(`${day}T00:00:00.000Z`);
+    date.setUTCDate(date.getUTCDate() + days);
+    return date.toISOString().slice(0, 10);
+  };
+  const dueTag = (xml: string) =>
+    /<fizetesiHataridoDatum>([^<]+)<\/fizetesiHataridoDatum>/.exec(xml)?.[1];
+  const certificateOf = (customer: Record<string, unknown>) =>
+    ({
+      ...baseCertificate,
+      serviceJob: {
+        ...baseCertificate.serviceJob,
+        customer: { ...baseCertificate.serviceJob.customer, ...customer },
+      },
+    }) as never;
+  /** The request's day plus `days`, read from the real clock around the call (a midnight between is allowed for). */
+  async function dueFor(options: Parameters<typeof service>[0], days: number) {
+    const { service: subject, sentXml, partnerQueries } = service(options);
+    const before = budapestDayKey(new Date());
+    await subject.draftFor("cert-1");
+    const after = budapestDayKey(new Date());
+    return {
+      due: dueTag(sentXml[0]!),
+      expected: [plusDays(before, days), plusDays(after, days)],
+      partnerQueries: partnerQueries(),
+    };
+  }
+
+  it("an empty customer row falls back to the days the Partnerek page holds for the same company (tax base match): 30, not 8", async () => {
+    // The measured case of 2026-10-06: the old customer row has no days, the partner (mirror) screen holds 30.
+    const customer = {
+      displayName: "Fővárosi Állat- és Növénykert",
+      companyName: "Fővárosi Állat- és Növénykert",
+      taxNumber: "15509246-2-41",
+      paymentDueDays: null,
+    };
+    const { due, expected } = await dueFor(
+      {
+        certificate: certificateOf(customer),
+        partnerTerms: [
+          {
+            name: "Fővárosi Állat- és Növénykert",
+            taxNumber: "15509246-2-42",
+            paymentDueDays: 30,
+          },
+        ],
+      },
+      30,
+    );
+    assert.ok(expected.includes(due ?? ""), `due ${due}`);
+  });
+
+  it("the customer row's own days win over the partner's, and the partners are not even queried", async () => {
+    const customer = {
+      ...baseCertificate.serviceJob.customer,
+      paymentDueDays: 15,
+    };
+    const { due, expected, partnerQueries } = await dueFor(
+      {
+        certificate: certificateOf(customer),
+        partnerTerms: [
+          {
+            name: customer.displayName,
+            taxNumber: customer.taxNumber,
+            paymentDueDays: 30,
+          },
+        ],
+      },
+      15,
+    );
+    assert.ok(expected.includes(due ?? ""), `due ${due}`);
+    assert.equal(partnerQueries, 0);
+  });
+
+  it("no matching partner: the default 8 days, as before", async () => {
+    const { due, expected } = await dueFor(
+      {
+        certificate: certificateOf({ paymentDueDays: null }),
+        partnerTerms: [
+          {
+            name: "Egész Más Kft.",
+            taxNumber: "99999999-2-42",
+            paymentDueDays: 30,
+          },
+        ],
+      },
+      8,
+    );
+    assert.ok(expected.includes(due ?? ""), `due ${due}`);
+  });
+
+  it("two matching partners with DIFFERENT days: no decision, the default 8 days (partnerTermsFor)", async () => {
+    const customer = baseCertificate.serviceJob.customer;
+    const { due, expected } = await dueFor(
+      {
+        certificate: certificateOf({ paymentDueDays: null }),
+        partnerTerms: [
+          {
+            name: customer.displayName,
+            taxNumber: customer.taxNumber,
+            paymentDueDays: 30,
+          },
+          {
+            name: customer.displayName,
+            taxNumber: customer.taxNumber,
+            paymentDueDays: 15,
+          },
+        ],
+      },
+      8,
+    );
+    assert.ok(expected.includes(due ?? ""), `due ${due}`);
   });
 });
 

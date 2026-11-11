@@ -33,6 +33,7 @@ import {
 } from "./maintenance-invoice-xml-input.js";
 import { customerTaxNumberProblem } from "../billing/buyer-tax-number.js";
 import { maintenanceInvoiceIssueEnabled } from "./maintenance-invoice-issue.config.js";
+import { effectivePaymentDueDays } from "../customers/partner-payment-terms.js";
 import { MaintenanceInvoiceRepository } from "./maintenance-invoice.repository.js";
 
 /** The environment the issue switch is read from (a test hands in its own). */
@@ -259,12 +260,22 @@ export class MaintenanceInvoiceDraftService {
     const taxProblem = customerTaxNumberProblem(customer);
     if (taxProblem) throw new BadRequestException(taxProblem);
 
+    // A FIZETÉSI NAPOK: a vevő-sor sajátja, és ha üres, a Partnerek oldalon párosított partneré, ahogy a számla-szerkesztő és a másolás
+    // számolja (a Partnerek lekérdezése csak üres napoknál indul). Enélkül egy üres vevő-sor 8 napot adott, miközben a partnernél 30 áll.
+    const paymentDueDays =
+      customer.paymentDueDays !== null
+        ? customer.paymentDueDays
+        : effectivePaymentDueDays(
+            customer,
+            await this.repository.partnerPaymentTerms(),
+          );
+
     let mapped;
     try {
       mapped = maintenanceInvoiceXmlInputFrom({
         number: certificate.number,
         issuedAt: certificate.issuedAt,
-        serviceJob: { customer },
+        serviceJob: { customer: { ...customer, paymentDueDays } },
         items: certificate.items,
         // a megrendeléses TIG számlája nem karbantartási: a megjegyzés a megrendelést nevezi
         // meg (barracuda, #2158 review); a karbantartási TIG-é az alapmondat marad
