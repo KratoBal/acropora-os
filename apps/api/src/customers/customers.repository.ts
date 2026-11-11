@@ -384,6 +384,7 @@ export class CustomersRepository extends Repository {
                 euTaxNumber: input.euTaxNumber,
                 email: input.email?.trim(),
                 billingEmail: input.billingEmail?.trim(),
+                paymentDueDays: input.paymentDueDays,
                 phone: input.phone?.trim(),
                 marketingEmailConsent: input.marketingEmailConsent ?? false,
                 marketingSmsConsent: input.marketingSmsConsent ?? false,
@@ -433,6 +434,8 @@ export class CustomersRepository extends Repository {
             euTaxNumber: input.euTaxNumber,
             email: input.email,
             billingEmail: input.billingEmail,
+            // `undefined` leaves it, `null` clears it (the invoice then falls back to the partner's days, else 8)
+            paymentDueDays: input.paymentDueDays,
             phone: input.phone,
             marketingEmailConsent: input.marketingEmailConsent,
             marketingSmsConsent: input.marketingSmsConsent,

@@ -32,6 +32,7 @@ import {
   AddressFields,
   addressHasData,
   emptyAddress,
+  parsePaymentDueDays,
 } from "./customer-form-parts";
 
 const ADDRESS_TITLE: Record<CustomerAddress["type"], string> = {
@@ -106,6 +107,7 @@ export function CustomerDetailPage({ customerId }: { customerId: string }) {
   const [euTaxNumber, setEuTaxNumber] = useState("");
   const [email, setEmail] = useState("");
   const [billingEmail, setBillingEmail] = useState("");
+  const [paymentDueDays, setPaymentDueDays] = useState("");
   const [phone, setPhone] = useState("");
   const [marketingEmailConsent, setMarketingEmailConsent] = useState(false);
   const [marketingSmsConsent, setMarketingSmsConsent] = useState(false);
@@ -123,6 +125,9 @@ export function CustomerDetailPage({ customerId }: { customerId: string }) {
     setEuTaxNumber(detail.euTaxNumber ?? "");
     setEmail(detail.email ?? "");
     setBillingEmail(detail.billingEmail ?? "");
+    setPaymentDueDays(
+      detail.paymentDueDays === null ? "" : String(detail.paymentDueDays),
+    );
     setPhone(detail.phone ?? "");
     setMarketingEmailConsent(detail.marketingEmailConsent);
     setMarketingSmsConsent(detail.marketingSmsConsent);
@@ -241,6 +246,11 @@ export function CustomerDetailPage({ customerId }: { customerId: string }) {
       );
       return;
     }
+    const dueDays = parsePaymentDueDays(paymentDueDays);
+    if (!dueDays.ok) {
+      setSaveError(dueDays.error);
+      return;
+    }
     if (taxChanged && huTaxNumberProblem(taxNumber)) return;
     if (euTaxNumber.trim() && !normalizeEuTaxNumber(euTaxNumber)) return;
     for (const item of addresses) {
@@ -281,6 +291,7 @@ export function CustomerDetailPage({ customerId }: { customerId: string }) {
         euTaxNumber: type === "COMPANY" ? euTaxNumber.trim() || null : null,
         email: email.trim() || null,
         billingEmail: billingEmail.trim() || null,
+        paymentDueDays: dueDays.value,
         phone: phone.trim() || null,
         marketingEmailConsent,
         marketingSmsConsent,
@@ -476,6 +487,22 @@ export function CustomerDetailPage({ customerId }: { customerId: string }) {
                 value={billingEmail}
                 disabled={readOnly}
                 onChange={(event) => setBillingEmail(event.target.value)}
+              />
+            </FormField>
+            <FormField
+              label="Fizetési határidő (nap)"
+              description={
+                mirror
+                  ? "A Partnerek oldalon állítható."
+                  : "Üres: a Partnerek oldalon beállított, ha nincs, 8 nap."
+              }
+            >
+              <Input
+                inputMode="numeric"
+                aria-label="Fizetési határidő (nap)"
+                value={paymentDueDays}
+                disabled={readOnly}
+                onChange={(event) => setPaymentDueDays(event.target.value)}
               />
             </FormField>
             <FormField label="Telefonszám">
