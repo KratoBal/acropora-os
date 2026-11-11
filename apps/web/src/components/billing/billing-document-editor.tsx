@@ -2,7 +2,6 @@
 
 import {
   Alert,
-  ConfirmDialog,
   PilotButton,
   PilotCallout,
   PilotPageHeader,
@@ -19,6 +18,8 @@ import {
   PERMISSIONS,
   type BillingDocumentDetail,
   type BillingDocumentType,
+  type BillingIssueConfirmation,
+  type BillingIssueSummary,
   type InvoiceFormat,
 } from "@acropora/types";
 import Link from "next/link";
@@ -38,6 +39,7 @@ import {
   type BillingEmailDraft,
 } from "./billing-document-email-drawer";
 import { BillingDocumentFields } from "./billing-document-fields";
+import { BillingIssueConfirmDialog } from "./billing-issue-confirm-dialog";
 import {
   BillingCancellationNotice,
   BillingStornoButton,
@@ -191,6 +193,17 @@ export function BillingDocumentEditor({
     enabled: canReadMailImages && drawerOpen,
   });
   const [confirmIssue, setConfirmIssue] = useState(false);
+  /*
+    A MEGERŐSÍTŐ ABLAK (kártya 7ba97e0d): a mentett vázlat, amit kiállítunk, a szerver összesítője róla, és hogy
+    kimegy-e e-mailben. A vázlat az ablak NYITÁSAKOR mentődik, így az összesítő azt mutatja, amit a kiállítás küld.
+  */
+  const [pending, setPending] = useState<{
+    detail: BillingDocumentDetail;
+    created: boolean;
+  } | null>(null);
+  const [summary, setSummary] = useState<BillingIssueSummary | null>(null);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [sendChecked, setSendChecked] = useState(false);
   const [issuing, setIssuing] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   /*
@@ -461,19 +474,52 @@ export function BillingDocumentEditor({
   };
 
   /**
-   * A KIÁLLÍTÁS: előbb a mostani állapot mentése (a szerver azt állítja ki,
-   * amit lát), aztán a kiállítás a friss időbélyeggel. Siker után a bizonylat
-   * csak olvasható, a számot a Számlázz.hu adta.
+   * A MEGERŐSÍTÉS MEGNYITÁSA (kártya 7ba97e0d): előbb a mostani állapot mentése
+   * (a szerver azt állítja ki, amit lát), aztán a szerver összesítője a mentett
+   * vázlatról. Az ablak ezt mutatja; a kiállítás a megerősített dátumokkal megy.
    */
-  const issue = async () => {
+  const openIssueConfirm = async () => {
+    setSaveError(null);
+    setSummary(null);
+    setSummaryError(null);
+    setPending(null);
+    setSendChecked(delivery === "REQUIRED");
+    setConfirmIssue(true);
+    try {
+      const saved = await persist();
+      setPending(saved);
+      setSummary(
+        await billingDocumentsApi.issueSummary(token, saved.detail.id),
+      );
+    } catch (cause) {
+      setSummaryError(
+        cause instanceof Error
+          ? cause.message
+          : "A számla adatai nem tölthetők be.",
+      );
+    }
+  };
+
+  /**
+   * A KIÁLLÍTÁS a megerősítő ablak dátumaival, a mentett vázlat időbélyegével.
+   * Siker után a bizonylat csak olvasható, a számot a Számlázz.hu adta. Ha az
+   * ablakban az „Elküldöm e-mailben” be volt jelölve, a levél az ablakban álló
+   * címre megy ki (Balázs, 2026-11-11 11:20).
+   */
+  const issue = async (
+    confirmation: BillingIssueConfirmation,
+    send: boolean,
+  ) => {
+    if (!pending) return;
     setIssuing(true);
     setSaveError(null);
     try {
-      const { detail: saved, created } = await persist();
+      const { detail: saved, created } = pending;
       const issued = await billingDocumentsApi.issue(
         token,
         saved.id,
         saved.updatedAt,
+        confirmation,
       );
       setState(fromDetail(issued));
       setStatus(issued.status);
@@ -481,8 +527,7 @@ export function BillingDocumentEditor({
       // A KIKÜLDÉS ELŐBB, AZ ÚTVÁLTÁS UTÁNA: az új számla útváltásakor a
       // szerkesztő újra felépül, és a régi példányban befejeződő küldés
       // eredménye elveszne (kártya 7976970f).
-      const result =
-        delivery === "REQUIRED" ? await sendAfterIssue(issued) : null;
+      const result = send ? await sendAfterIssue(issued) : null;
       if (result) setSent(result);
       if (created) {
         if (result)
@@ -500,6 +545,7 @@ export function BillingDocumentEditor({
     } finally {
       setIssuing(false);
       setConfirmIssue(false);
+      setPending(null);
     }
   };
 
@@ -848,7 +894,7 @@ export function BillingDocumentEditor({
               busy: previewing,
             }}
             issue={{
-              onClick: () => setConfirmIssue(true),
+              onClick: () => void openIssueConfirm(),
               disabledReason: issueDisabledReason,
               busy: issuing,
             }}
@@ -928,15 +974,23 @@ export function BillingDocumentEditor({
           }}
         />
       ) : null}
-      <ConfirmDialog
+      <BillingIssueConfirmDialog
         open={confirmIssue}
         title={issueConfirm.question}
         consequence={`A kiállítással valódi ${capabilities.label.toLowerCase()} készül a Számlázz.hu-n, saját számmal. A bizonylat ezután nem szerkeszthető.`}
-        recovery="Egy kiállított bizonylat nem vonható vissza; javítani csak sztornóval vagy helyesbítő bizonylattal lehet."
         confirmLabel={issueConfirm.confirmLabel}
+        summary={summary}
+        loadError={summaryError}
+        recipients={splitAddresses(emailDraft.to)}
+        delivery={delivery}
+        send={sendChecked}
+        onSendChange={setSendChecked}
         busy={issuing}
-        onConfirm={() => void issue()}
-        onCancel={() => setConfirmIssue(false)}
+        onConfirm={(confirmation, send) => void issue(confirmation, send)}
+        onCancel={() => {
+          setConfirmIssue(false);
+          setPending(null);
+        }}
       />
       {issued ? (
         <BillingStornoDialog

@@ -45,6 +45,7 @@ const api = vi.hoisted(() => ({
   update: vi.fn(),
   detail: vi.fn(),
   issue: vi.fn(),
+  issueSummary: vi.fn(),
   preview: vi.fn(),
   email: vi.fn(),
   pdf: vi.fn(),
@@ -54,6 +55,33 @@ const api = vi.hoisted(() => ({
   stornoPdf: vi.fn(),
 }));
 vi.mock("@/lib/api/billing-documents", () => ({ billingDocumentsApi: api }));
+
+/* the server's issue summary (card 7ba97e0d): what the confirmation window shows */
+const SUMMARY = {
+  buyerName: "Kitalált Vevő Kft.",
+  buyerAddress: "1011 Budapest, Fő utca 1.",
+  buyerTaxNumber: "12345678-2-42",
+  buyerEuTaxNumber: null,
+  issueDate: "2026-11-11",
+  fulfillmentDate: "2026-11-05",
+  dueDate: "2026-11-19",
+  paymentMethod: "Átutalás",
+  showsPaymentFields: true,
+  dueDateFollowsIssueDate: false,
+  fingerprint: "f".repeat(64),
+};
+const CONFIRMED = {
+  issueDate: SUMMARY.issueDate,
+  fulfillmentDate: SUMMARY.fulfillmentDate,
+  dueDate: SUMMARY.dueDate,
+  fingerprint: SUMMARY.fingerprint,
+};
+/** The confirmation window, once the summary is in (its buttons wait for it). */
+async function readyDialog() {
+  const dialog = await screen.findByRole("dialog");
+  await within(dialog).findByText(SUMMARY.buyerName);
+  return within(dialog);
+}
 /* a drawer nyitásakor a képtár töltődik; itt üres, hálózat nélkül */
 vi.mock("@/lib/api/mail-images", () => ({
   mailImagesApi: {
@@ -144,6 +172,7 @@ beforeEach(() => {
     .mockReset()
     .mockImplementation(async (_token, id, body) => detailFrom(body, id));
   api.issue.mockReset();
+  api.issueSummary.mockReset().mockResolvedValue(SUMMARY);
   api.preview.mockReset();
   api.email.mockReset();
   api.pdf.mockReset();
@@ -739,6 +768,7 @@ describe("BillingDocumentEditor", () => {
       fireEvent.click(button);
       expect(api.issue).not.toHaveBeenCalled();
       const dialog = await screen.findByRole("dialog");
+      await within(dialog).findByText(SUMMARY.buyerName);
       // Balázs kérdése, betű szerint (hétfői lista M1)
       expect(dialog).toHaveTextContent("Biztos, hogy kiállítod a számlát?");
       expect(dialog).toHaveTextContent("valódi számla készül a Számlázz.hu-n");
@@ -755,6 +785,7 @@ describe("BillingDocumentEditor", () => {
         "token-1",
         created.id,
         "2026-09-30T10:05:00.000Z",
+        CONFIRMED,
       );
       expect(
         await screen.findByText("Kiállítva: AC-2026-000001"),
@@ -762,6 +793,155 @@ describe("BillingDocumentEditor", () => {
       expect(screen.getByText("Csak olvasható")).toBeInTheDocument();
       // A PAPÍR SZÁMLA LEVELE NEM KÖTELEZŐ: a kiállítás nem küld magától.
       expect(api.email).not.toHaveBeenCalled();
+    });
+
+    /*
+      A MEGERŐSÍTŐ ABLAK (kártya 7ba97e0d, Balázs 2026-11-11 11:12-11:20). MI PIROSÍT: ha az ablak nem a szerver
+      összesítőjét mutatja; ha a javított dátumok nem a kiállításba mennek; ha kártyás fizetésnél a határidő
+      külön állítható; ha a bejelölt „Elküldöm e-mailben” nem az ablakban álló címre küld, vagy a jelöletlen küld;
+      ha az e-számla kiküldése kikapcsolható; ha egy elutasított összesítő mellett kiállítható.
+    */
+    const issuedPaperInvoice = () =>
+      api.issue.mockImplementation(async (_token, id) => ({
+        ...detailFrom(api.create.mock.calls[0]![1], id),
+        status: "ISSUED",
+        emailStatus: "NOT_REQUIRED",
+        documentNumber: "AC-2026-000009",
+      }));
+
+    it("the window shows the server's summary, and the edited dates go into the issue", async () => {
+      issuedPaperInvoice();
+      await readyPaperInvoice();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Számla kiállítása" }),
+      );
+      const dialog = await readyDialog();
+      for (const text of [
+        SUMMARY.buyerAddress,
+        SUMMARY.buyerTaxNumber,
+        SUMMARY.paymentMethod,
+      ])
+        expect(screen.getByRole("dialog")).toHaveTextContent(text);
+      expect(api.issueSummary).toHaveBeenCalledWith(
+        "token-1",
+        api.create.mock.calls[0]![1].id,
+      );
+      fireEvent.change(dialog.getByLabelText("Számla kelte"), {
+        target: { value: "2026-11-10" },
+      });
+      fireEvent.change(dialog.getByLabelText("Teljesítés ideje"), {
+        target: { value: "2026-11-03" },
+      });
+      fireEvent.change(dialog.getByLabelText("Fizetési határidő"), {
+        target: { value: "2026-11-25" },
+      });
+      fireEvent.click(dialog.getByRole("button", { name: "Kiállítom" }));
+      await waitFor(() => expect(api.issue).toHaveBeenCalledTimes(1));
+      expect(api.issue.mock.calls[0]![3]).toEqual({
+        issueDate: "2026-11-10",
+        fulfillmentDate: "2026-11-03",
+        dueDate: "2026-11-25",
+        fingerprint: SUMMARY.fingerprint,
+      });
+    });
+
+    it("a date the rule refuses keeps the button off and says why", async () => {
+      await readyPaperInvoice();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Számla kiállítása" }),
+      );
+      const dialog = await readyDialog();
+      fireEvent.change(dialog.getByLabelText("Fizetési határidő"), {
+        target: { value: "2026-11-01" },
+      });
+      expect(dialog.getByRole("alert")).toHaveTextContent(
+        "A fizetési határidő nem lehet korábbi a számla kelténél.",
+      );
+      expect(dialog.getByRole("button", { name: "Kiállítom" })).toBeDisabled();
+    });
+
+    it("a card payment: the due date follows the issue date and cannot be set apart", async () => {
+      issuedPaperInvoice();
+      api.issueSummary.mockResolvedValue({
+        ...SUMMARY,
+        paymentMethod: "Bankkártya",
+        dueDateFollowsIssueDate: true,
+      });
+      await readyPaperInvoice();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Számla kiállítása" }),
+      );
+      const dialog = await readyDialog();
+      expect(dialog.getByLabelText("Fizetési határidő")).toBeDisabled();
+      fireEvent.change(dialog.getByLabelText("Számla kelte"), {
+        target: { value: "2026-11-09" },
+      });
+      // the locked field shows the issue date (in the field's display form)
+      expect(
+        (dialog.getByLabelText("Fizetési határidő") as HTMLInputElement).value,
+      ).toBe("2026. 11. 09.");
+      fireEvent.click(dialog.getByRole("button", { name: "Kiállítom" }));
+      await waitFor(() => expect(api.issue).toHaveBeenCalledTimes(1));
+      expect(api.issue.mock.calls[0]![3].dueDate).toBe("2026-11-09");
+    });
+
+    it('"Elküldöm e-mailben" checked: the issued invoice goes to the address the window shows; unchecked: it does not', async () => {
+      issuedPaperInvoice();
+      api.email.mockImplementation(async (_token, id) => ({
+        ...detailFrom(api.create.mock.calls[0]![1], id),
+        status: "ISSUED",
+        emailStatus: "SENT",
+        documentNumber: "AC-2026-000009",
+      }));
+      await readyPaperInvoice();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Számla kiállítása" }),
+      );
+      const dialog = await readyDialog();
+      expect(screen.getByRole("dialog")).toHaveTextContent(
+        "szamlazas@partner.hu",
+      );
+      const send = dialog.getByLabelText(
+        "Elküldöm e-mailben",
+      ) as HTMLInputElement;
+      expect([send.checked, send.disabled]).toEqual([false, false]);
+      fireEvent.click(send);
+      fireEvent.click(dialog.getByRole("button", { name: "Kiállítom" }));
+      await waitFor(() => expect(api.email).toHaveBeenCalledTimes(1));
+      expect(api.email.mock.calls[0]![2]).toMatchObject({
+        mode: "SEND",
+        to: ["szamlazas@partner.hu"],
+      });
+    });
+
+    it("an e-invoice: the sending is part of the issue and cannot be unchecked", async () => {
+      await readyEInvoice();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Kiállítás és kiküldés" }),
+      );
+      const dialog = await readyDialog();
+      const send = dialog.getByLabelText(
+        "Elküldöm e-mailben",
+      ) as HTMLInputElement;
+      expect([send.checked, send.disabled]).toEqual([true, true]);
+    });
+
+    it("a summary the server refuses shows its reason, and nothing is issued", async () => {
+      api.issueSummary.mockRejectedValue(
+        new Error(
+          "A partner számlázási címe hiányos (hiányzik: irányítószám).",
+        ),
+      );
+      await readyPaperInvoice();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Számla kiállítása" }),
+      );
+      const dialog = within(await screen.findByRole("dialog"));
+      expect(await dialog.findByRole("alert")).toHaveTextContent(
+        "A partner számlázási címe hiányos",
+      );
+      expect(dialog.getByRole("button", { name: "Kiállítom" })).toBeDisabled();
+      expect(api.issue).not.toHaveBeenCalled();
     });
 
     /*
@@ -786,6 +966,7 @@ describe("BillingDocumentEditor", () => {
         screen.getByRole("button", { name: "Kiállítás és kiküldés" }),
       );
       const dialog = await screen.findByRole("dialog");
+      await within(dialog).findByText(SUMMARY.buyerName);
       // a címzett a kérdésben áll: aki megerősít, látja, hová megy a számla
       expect(dialog).toHaveTextContent(
         "Biztos, hogy kiállítod és kiküldöd a számlát a(z) szamlazas@partner.hu címre?",
@@ -1105,7 +1286,7 @@ describe("BillingDocumentEditor", () => {
         screen.getByRole("button", { name: "Számla kiállítása" }),
       );
       fireEvent.click(
-        within(await screen.findByRole("dialog")).getByRole("button", {
+        (await readyDialog()).getByRole("button", {
           name: "Kiállítom",
         }),
       );
@@ -1134,7 +1315,7 @@ describe("BillingDocumentEditor", () => {
         screen.getByRole("button", { name: "Számla kiállítása" }),
       );
       fireEvent.click(
-        within(await screen.findByRole("dialog")).getByRole("button", {
+        (await readyDialog()).getByRole("button", {
           name: "Kiállítom",
         }),
       );
