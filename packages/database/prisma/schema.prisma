@@ -3102,14 +3102,14 @@ model Customer {
 
   /// Az összevonásnál megszűnt sor nem törlődik: `archivedAt` és ez a hivatkozás a megmaradó sorra (3.3). Visszavonáskor
   /// ez törlődik. SEMMI nem olvassa még.
-  mergedIntoId String?
-  mergedInto   Customer?  @relation("CustomerMerge", fields: [mergedIntoId], references: [id], onDelete: Restrict)
-  mergedFrom   Customer[] @relation("CustomerMerge")
+  mergedIntoId      String?
+  mergedInto        Customer?                 @relation("CustomerMerge", fields: [mergedIntoId], references: [id], onDelete: Restrict)
+  mergedFrom        Customer[]                @relation("CustomerMerge")
   /// A régi azonosítók, hogy egy régi VEVO- vagy PARTNER- szám továbbra is megtalálja a cég egyetlen sorát.
   aliases           CustomerAlias[]
   externalAccounts  CustomerExternalAccount[]
-  mergeLogsAsKept   CustomerMergeLog[] @relation("CustomerMergeKept")
-  mergeLogsAsMerged CustomerMergeLog[] @relation("CustomerMergeMerged")
+  mergeLogsAsKept   CustomerMergeLog[]        @relation("CustomerMergeKept")
+  mergeLogsAsMerged CustomerMergeLog[]        @relation("CustomerMergeMerged")
 
   addresses            CustomerAddress[]
   salesOrders          SalesOrder[]
@@ -3196,22 +3196,22 @@ model CustomerExternalAccount {
 /// tábla- és sorazonosítóval), ebből a visszavonás kiolvasható (terv 2.2, 3.3). A sorok nem törlődnek. Additív: SEMMI nem
 /// olvassa még.
 model CustomerMergeLog {
-  id            String    @id @default(cuid())
+  id           String    @id @default(cuid())
   /// A megmaradó sor.
-  keptId        String
+  keptId       String
   /// A megszűnt (archivált) sor.
-  mergedId      String
+  mergedId     String
   /// Ki döntött: a felhasználó azonosítója (nem kapcsolat: a felhasználó törlése nem érintheti a naplót).
-  actorUserId   String?
+  actorUserId  String?
   /// Szabad szöveg: miért, vagy honnan a javaslat ("Balázs, 2026-11-05, állatkert").
-  reason        String?
+  reason       String?
   /// Az áthelyezett hivatkozások: `[{ "table": "Invoice", "id": "...", "field": "customerId" }, ...]`, csak azonosítók.
-  movedRefs     Json
+  movedRefs    Json
   /// A kitöltött és az ütköző mezők, azonosítókkal és mezőnevekkel (nem értékekkel), a visszavonáshoz.
-  fieldChanges  Json?
-  createdAt     DateTime  @default(now())
+  fieldChanges Json?
+  createdAt    DateTime  @default(now())
   /// Ha az összevonást visszavonták, mikor.
-  undoneAt      DateTime?
+  undoneAt     DateTime?
 
   kept    Customer        @relation("CustomerMergeKept", fields: [keptId], references: [id], onDelete: Restrict)
   merged  Customer        @relation("CustomerMergeMerged", fields: [mergedId], references: [id], onDelete: Restrict)
@@ -4360,28 +4360,28 @@ model MaintenanceOrderDocument {
 /// kiállítás gombja, nem egy lista. Ha egyszer újra kell állítani egy
 /// igazolást, az egy KÉSŐBBI döntés, nem ennek a körnek a kérdése.
 model CompletionCertificate {
-  id           String   @id @default(cuid())
+  id             String   @id @default(cuid())
   /// A FORRÁS: karbantartási lap (1:1, ezért egyedi) VAGY megrendelés (egy
   /// megrendeléshez több TIG: részteljesítés, Megrendelések S2). Pontosan egy
   /// van kitöltve (CHECK `CompletionCertificate_exactly_one_source`).
   serviceJobId   String?  @unique
   partnerOrderId String?
-  number       String   @unique
-  issuedAt     DateTime @default(now())
-  issuedByName String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  number         String   @unique
+  issuedAt       DateTime @default(now())
+  issuedByName   String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   serviceJob   ServiceJob?                     @relation(fields: [serviceJobId], references: [id], onDelete: Restrict)
   partnerOrder PartnerOrder?                   @relation(fields: [partnerOrderId], references: [id], onDelete: Restrict)
-  items      CompletionCertificateLineItem[]
-  documents  CompletionCertificateDocument[]
+  items        CompletionCertificateLineItem[]
+  documents    CompletionCertificateDocument[]
   /// A KARBANTARTÁSI PISZKOZAT-SZÁMLA (ADR-014, 4. szelet). Nem
   /// egy-az-egyben mező, mert egy igazoláshoz technikailag TÖBB Invoice sor
   /// is mutathatna (pl. egy sztornó-lánc); a "legfeljebb egy" szabályt az
   /// `Invoice.completionCertificateId @unique` kényszeríti ki, nem ez az
   /// oldal.
-  invoices   Invoice[]
+  invoices     Invoice[]
 
   @@index([serviceJobId])
   @@index([partnerOrderId])
@@ -4672,7 +4672,7 @@ model Aquarium {
   shareEvents             AquariumShareEvent[]
   reefClubRecommendations ReefClubRecommendation[]
   reefClubDoses           ReefClubAdministeredDose[]
-  reefClubRunOutReminders  ReefClubRunOutReminder[]
+  reefClubRunOutReminders ReefClubRunOutReminder[]
 
   @@index([customerId, isActive])
   @@index([departmentId])
@@ -5255,36 +5255,36 @@ enum RentalStatus {
 /// are copied here when the rental is recorded: the contract prints what was agreed that day. At most one OPEN rental per
 /// device, enforced by a partial unique index in the migration (`Rental_equipmentId_open_key`; not expressible here).
 model Rental {
-  id                  String       @id @default(cuid())
-  rentalNumber        String       @unique
-  status              RentalStatus @default(OPEN)
-  customerId          String
-  equipmentId         String
-  startsAt            DateTime
-  plannedReturnAt     DateTime
-  dailyFeeHuf         Int
-  depositHuf          Int
-  replacementValueHuf Int
+  id                   String       @id @default(cuid())
+  rentalNumber         String       @unique
+  status               RentalStatus @default(OPEN)
+  customerId           String
+  equipmentId          String
+  startsAt             DateTime
+  plannedReturnAt      DateTime
+  dailyFeeHuf          Int
+  depositHuf           Int
+  replacementValueHuf  Int
   /// THE CONTRACT AS AGREED (S3): the text and the two late-return settings in force when the rental was recorded, so a
   /// reprint is the signed contract. Null text: a rental recorded before S3 (it prints today's text).
-  contractTemplate    String?
-  lateFeeMultiplier   Decimal?     @db.Decimal(5, 2)
+  contractTemplate     String?
+  lateFeeMultiplier    Decimal?     @db.Decimal(5, 2)
   replacementAfterDays Int?
-  accessories         String?
+  accessories          String?
   /// Started 24-hour periods of the planned span times the daily fee, at recording time.
-  expectedFeeHuf      Int
-  note                String?
-  returnedAt          DateTime?
+  expectedFeeHuf       Int
+  note                 String?
+  returnedAt           DateTime?
   /// THE RETURN (S4), all null while the device is out. Started 24-hour periods of the actual time times the daily fee.
-  finalFeeHuf         Int?
+  finalFeeHuf          Int?
   /// The late surcharge with the multiplier agreed on the rental; null when none was agreed (not charged, not guessed).
-  lateSurchargeHuf    Int?
-  depositKeptHuf      Int?
-  depositKeptReason   String?
-  returnedById        String?
-  createdById         String?
-  createdAt           DateTime     @default(now())
-  updatedAt           DateTime     @updatedAt
+  lateSurchargeHuf     Int?
+  depositKeptHuf       Int?
+  depositKeptReason    String?
+  returnedById         String?
+  createdById          String?
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
 
   customer  Customer        @relation(fields: [customerId], references: [id], onDelete: Restrict)
   equipment RentalEquipment @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
@@ -8076,33 +8076,33 @@ model ProductDatasheet {
   /// FORRAS ES ELLENORZES. A forras tipusa es hivatkozasa szabad szoveg (a hivatkozas lehet URL vagy a bolt sajat leirasa).
   /// Az ELLENORZEST A SZERVER BELYEGZI: aki az ellenorzes kapcsolot kuldi, annak a felhasznalo-azonositoja kerul ide, az ido a
   /// szerver oraja. Szerkesztes az ellenorzes nelkul visszavonja a korabbi ellenorzest (az uj tartalmat senki nem ellenorizte).
-  forrasTipus         String?
-  forrasHivatkozas    String?
-  ellenorizteUserId   String?
-  ellenorizveAt       DateTime?
+  forrasTipus       String?
+  forrasHivatkozas  String?
+  ellenorizteUserId String?
+  ellenorizveAt     DateTime?
 
   /// A TARTASI BLOKK OPCIONALIS MEZOI (V2.2 S1b, a spec 1. pontja: "Opcionalis, ha ismert es megbizhato"). Mind NULLAZHATO, es a
   /// NULL itt is "ellenorzes alatt", nem alapertek. A blokk EGY ellenorzese alatt allnak ezek is: barmelyik valtoztatasa
   /// visszavonja az ellenorzest, es a `version` is fedi oket.
   ///
   /// Vizparameterek TARTOMANYKENT (a min egyuttal kozos kikotes: min <= max, az iro utvonal ellenorzi).
-  tempMinC            Decimal? @db.Decimal(4, 1)
-  tempMaxC            Decimal? @db.Decimal(4, 1)
-  salinityMinSg       Decimal? @db.Decimal(5, 3)
-  salinityMaxSg       Decimal? @db.Decimal(5, 3)
-  khMinDkh            Decimal? @db.Decimal(4, 1)
-  khMaxDkh            Decimal? @db.Decimal(4, 1)
+  tempMinC        Decimal? @db.Decimal(4, 1)
+  tempMaxC        Decimal? @db.Decimal(4, 1)
+  salinityMinSg   Decimal? @db.Decimal(5, 3)
+  salinityMaxSg   Decimal? @db.Decimal(5, 3)
+  khMinDkh        Decimal? @db.Decimal(4, 1)
+  khMaxDkh        Decimal? @db.Decimal(4, 1)
   /// Varhato elettartam, evben.
-  lifespanYears       Int?
+  lifespanYears   Int?
   /// Csipes vagy meregveszely (csalanozo, merges tuske): harom allapot (igen, nem, NULL = ellenorzes alatt). IGAZ eseten a
   /// kezelesi figyelmeztetes KOTELEZO (az iro utvonal ellenorzi): a veszelyt jelzo allitas figyelmeztetes nelkul nem all.
-  stingOrVenom        Boolean?
-  handlingWarning     String?
+  stingOrVenom    Boolean?
+  handlingWarning String?
   /// Karantén-ajanlas hetekben, es az akklimatizacio modja (csepegtetes, kb. hany ora) szabad szovegben.
-  quarantineWeeks     Int?
-  acclimatization     String?
+  quarantineWeeks Int?
+  acclimatization String?
   /// Szaporithato-e a medencében: harom allapot.
-  breedsInTank        Boolean?
+  breedsInTank    Boolean?
 
   product  Product                        @relation(fields: [productId], references: [id], onDelete: Cascade)
   refusals ProductDatasheetFieldRefusal[]
@@ -8367,13 +8367,13 @@ model ContentItem {
   /// táblába, és a két hely külön romlana el.
   discardReason String?
 
-  comments  ContentComment[]
+  comments    ContentComment[]
   /// Az állapotváltások kitörölhetetlen naplója: lásd `ContentStateEvent`.
   stateEvents ContentStateEvent[]
   /// A cikk törzse (csak `ARTICLE` csatornán): lásd `ArticleBody`.
-  article   ArticleBody?
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+  article     ArticleBody?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
 
   @@index([state, plannedFor])
   @@index([channel, state])
@@ -8698,7 +8698,7 @@ model MailImage {
   uploadedById String?
   createdAt    DateTime @default(now())
 
-  uploadedBy User? @relation("MailImageUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+  uploadedBy User?          @relation("MailImageUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
   gamePrizes GameQuestion[] @relation("GamePrizeImage")
 
   @@index([uploadedById])
@@ -9334,27 +9334,27 @@ model BankTransactionSourceKey {
 }
 
 model BankTransaction {
-  id                    String                   @id @default(cuid())
-  bankAccountId         String
-  importId              String
-  direction             BankTransactionDirection
+  id                      String                   @id @default(cuid())
+  bankAccountId           String
+  importId                String
+  direction               BankTransactionDirection
   /// Előjel nélkül; az irány mondja meg, terhelés-e.
-  amount                Decimal                  @db.Decimal(19, 4)
-  currency              String                   @db.VarChar(3)
-  bookingDate           DateTime                 @db.Date
-  valueDate             DateTime?                @db.Date
-  counterpartyAccount   String?
-  counterpartyName      String?
-  narrative             String
-  transactionType       String?
-  transactionKey        String                   @unique
+  amount                  Decimal                  @db.Decimal(19, 4)
+  currency                String                   @db.VarChar(3)
+  bookingDate             DateTime                 @db.Date
+  valueDate               DateTime?                @db.Date
+  counterpartyAccount     String?
+  counterpartyName        String?
+  narrative               String
+  transactionType         String?
+  transactionKey          String                   @unique
   /// A KEZELŐ DÖNTÉSEI (Hiányzó számlák, 4. szelet), auditnaplóval: belső
   /// megjegyzés; kézi átsorolás (NULL: a szabály dönt); és a „papíron megvan”
   /// jelölés, ha a könyvelőnek az eredeti papíron van meg.
-  comment               String?
-  categoryOverride      String?
-  paperOriginalAt       DateTime?
-  paperOriginalByUserId String?
+  comment                 String?
+  categoryOverride        String?
+  paperOriginalAt         DateTime?
+  paperOriginalByUserId   String?
   /// DUPLIKÁTUM-JELÖLÉS (task bank-dupla-import, acrobot 38352): a kezelő egy sort ugyanazon fizetés második
   /// példányának jelöl (az import dupla tétele). A jelölt sort a Hiányzó számlák listái és összegzései, a
   /// párosítások és a banki felismerők kihagyják; az import a sort továbbra is látja (a forrás-kulcsait hordozza,
@@ -9363,7 +9363,7 @@ model BankTransaction {
   duplicateMarkedAt       DateTime?
   duplicateMarkedByUserId String?
   duplicateOfId           String?
-  createdAt             DateTime                 @default(now())
+  createdAt               DateTime                 @default(now())
 
   bankAccount BankAccount                @relation(fields: [bankAccountId], references: [id])
   import      BankStatementImport        @relation(fields: [importId], references: [id])
@@ -10452,24 +10452,24 @@ model QuoteBlock {
 }
 
 model QuoteItem {
-  id             String          @id @default(cuid())
-  versionId      String
-  blockId        String
-  position       Int
-  source         QuoteItemSource
-  variantId      String?
-  name           String
-  description    Json?
-  quantity       Decimal         @db.Decimal(19, 6)
-  unit           String
-  unitNetPrice   Decimal         @db.Decimal(19, 4)
-  vatRatePercent Decimal         @db.Decimal(5, 2)
-  isOptional     Boolean
-  version        QuoteVersion    @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  id                         String                          @id @default(cuid())
+  versionId                  String
+  blockId                    String
+  position                   Int
+  source                     QuoteItemSource
+  variantId                  String?
+  name                       String
+  description                Json?
+  quantity                   Decimal                         @db.Decimal(19, 6)
+  unit                       String
+  unitNetPrice               Decimal                         @db.Decimal(19, 4)
+  vatRatePercent             Decimal                         @db.Decimal(5, 2)
+  isOptional                 Boolean
+  version                    QuoteVersion                    @relation(fields: [versionId], references: [id], onDelete: Restrict)
   /// Composite FK prevents an item from referring to a block in another version.
-  block          QuoteBlock      @relation(fields: [blockId, versionId], references: [id, versionId], onDelete: Restrict)
-  variant        ProductVariant? @relation("QuoteItemVariant", fields: [variantId], references: [id], onDelete: Restrict)
-  bomItems       QuoteBomItem[]
+  block                      QuoteBlock                      @relation(fields: [blockId, versionId], references: [id, versionId], onDelete: Restrict)
+  variant                    ProductVariant?                 @relation("QuoteItemVariant", fields: [variantId], references: [id], onDelete: Restrict)
+  bomItems                   QuoteBomItem[]
   /// a TIG-sorok, amelyek ezt a tételt (részben) igazolják (Megrendelések S2)
   completionCertificateLines CompletionCertificateLineItem[]
 
@@ -11102,31 +11102,31 @@ model ReefClubAdministeredDose {
 /// szamolt HMAC, igy minden kikuldott level linkje mindig mukodik, a tabla masolata pedig nem tud leiratkoztatni senkit.
 /// Ures tablaval indul, a kapcsolo (REEFCLUB_RUNOUT_ENABLED) alapbol ki van.
 model ReefClubRunOutReminder {
-  id             String          @id @default(cuid())
-  accountId      String
-  productId      String
-  aquariumId     String
-  consentVersion String
-  consentAt      DateTime
-  unsubscribedAt DateTime?
+  id                String          @id @default(cuid())
+  accountId         String
+  productId         String
+  aquariumId        String
+  consentVersion    String
+  consentAt         DateTime
+  unsubscribedAt    DateTime?
   /// A KULDO ALLAPOTA (V3.2, 5. szelet; az OS folyamat irja, a ReefClub-szerep nem). Az utolso
   /// kikuldott emlekezteto kifogyasi napja: ugyanarra a napra masodik level nem megy.
-  remindedForRunOut DateTime?     @db.Date
+  remindedForRunOut DateTime?       @db.Date
   remindedAt        DateTime?
   /// Honnan jott az utolso kikuldott emlekezteto kezdonapja: ORDER (a tag bolti rendelesenek
   /// kiszallitasa vagy atadasa) vagy CONSENT (a hozzajarulas napja). acrobot 45493: az arany merheto legyen.
-  remindStartSource String?       @db.VarChar(16)
+  remindStartSource String?         @db.VarChar(16)
   /// A kuldes berlete (mint a bolti kapcsolat ertesitojenel): ket peldany nem kuldi ketszer.
   remindClaimedAt   DateTime?
   /// Sikertelen kuldesek a `remindAttemptsFor` kifogyasi napra; egy UJ kifogyasi nap (uj ciklus) teljes
   /// keszlettel indul, siker utan mindketto nullazodik.
   remindAttempts    Int             @default(0)
   remindAttemptsFor DateTime?       @db.Date
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  account        ReefClubAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  product        Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
-  aquarium       Aquarium        @relation(fields: [aquariumId], references: [id], onDelete: Cascade)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  account           ReefClubAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  product           Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  aquarium          Aquarium        @relation(fields: [aquariumId], references: [id], onDelete: Cascade)
 
   @@unique([accountId, productId])
   @@index([productId])
@@ -11982,12 +11982,12 @@ model PartnerOrder {
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
 
-  quote        Quote                  @relation(fields: [quoteId], references: [id], onDelete: Restrict)
-  quoteVersion QuoteVersion           @relation("PartnerOrderVersion", fields: [quoteVersionId], references: [id], onDelete: Restrict)
-  acceptance   QuoteAcceptance        @relation("PartnerOrderAcceptance", fields: [acceptanceId], references: [id], onDelete: Restrict)
-  customer     Customer?              @relation("PartnerOrderCustomer", fields: [customerId], references: [id], onDelete: SetNull)
-  createdBy    User?                  @relation("PartnerOrderCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  documents    PartnerOrderDocument[]
+  quote                  Quote                   @relation(fields: [quoteId], references: [id], onDelete: Restrict)
+  quoteVersion           QuoteVersion            @relation("PartnerOrderVersion", fields: [quoteVersionId], references: [id], onDelete: Restrict)
+  acceptance             QuoteAcceptance         @relation("PartnerOrderAcceptance", fields: [acceptanceId], references: [id], onDelete: Restrict)
+  customer               Customer?               @relation("PartnerOrderCustomer", fields: [customerId], references: [id], onDelete: SetNull)
+  createdBy              User?                   @relation("PartnerOrderCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  documents              PartnerOrderDocument[]
   /// a megrendelés teljesítési igazolásai: több is lehet (részteljesítés, S2)
   completionCertificates CompletionCertificate[]
 
@@ -11999,6 +11999,23 @@ model PartnerOrder {
 /// hány napja nincs mozgás egy nyitott, teljesítetlen tételű megrendelésen ahhoz, hogy hátralékos legyen. A 0 érvényes
 /// érték (minden nyitott, teljesítetlen tételű megrendelés hátralékos). Sor nélkül az alapérték, 14, érvényes.
 /// `updatedById` csak a napló: nincs kapcsolat, a felhasználó törlése ne érintse a beállítást.
+/// AZ AI CSEVEGÉS BEÁLLÍTÁSAI (kártya f5b8f7ba, 4a szelet): EGY sor (`AI_CHAT_SETTING_ID` az API-ban), az üzenetek és a
+/// kapcsolat-kérések megőrzési ideje, a kapcsolat-kérés kapcsolója és a címzett. Sor nélkül az alapérték érvényes (a terv
+/// javaslata: 180 / 30 / 90 nap), tehát a telepítés után semmit nem kell betölteni. A határokat a szerver érvényesíti
+/// (`@acropora/types` `checkAiChatSettings`), és az adatbázis is (CHECK a migrációban): egy elgépelt 0 ne törölhessen azonnal.
+model AiChatSetting {
+  id                            String   @id
+  offerEnabled                  Boolean  @default(true)
+  contactRequestEnabled         Boolean  @default(false)
+  contactRecipientEmail         String?
+  messageRetentionDays          Int      @default(180)
+  contactHandledRetentionDays   Int      @default(30)
+  contactUnhandledRetentionDays Int      @default(90)
+  updatedById                   String?
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+}
+
 model PartnerOrderSetting {
   id          String   @id
   backlogDays Int      @default(14)
@@ -12029,27 +12046,27 @@ model PartnerOrderDocument {
 /// A KARÁCSONYI NYEREMÉNYJÁTÉK HETI KÉRDÉSE (kártya 31445d0f; Balázs, 2026-11-05). Hetente egy: szabad szöveges (TEXT)
 /// vagy választós (CHOICE). Az elfogadott válaszok soha nem mennek ki a nyilvános végpontra.
 model GameQuestion {
-  id              String      @id @default(cuid())
+  id               String      @id @default(cuid())
   /// A hét kulcsa, például 2026-W46; hetente egy kérdés.
-  week            String      @unique
+  week             String      @unique
   /// TEXT vagy CHOICE.
-  type            String
-  prompt          String
+  type             String
+  prompt           String
   /// CHOICE: [{ id, label }]; TEXT: [].
-  options         Json        @default("[]")
+  options          Json        @default("[]")
   /// TEXT: az elfogadott válaszok (kisbetű, ékezet és szóköz nélkül hasonlítva); CHOICE: a helyes lehetőségek id-je.
-  acceptedAnswers Json        @default("[]")
-  opensAt         DateTime
-  closesAt        DateTime
+  acceptedAnswers  Json        @default("[]")
+  opensAt          DateTime
+  closesAt         DateTime
   /// A hét nyereménye (Balázs, 2026-11-06): neve, rövid leírása és képe (a levélsablon-kép tárolóból). Mind opcionális: a régi kérdéseknek nincs.
   prizeName        String?
   prizeDescription String?
   prizeImageId     String?
   prizeImage       MailImage?  @relation("GamePrizeImage", fields: [prizeImageId], references: [id], onDelete: SetNull)
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-  entries         GameEntry[]
-  draws           GameDraw[]
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  entries          GameEntry[]
+  draws            GameDraw[]
 
   @@index([opensAt])
   @@index([prizeImageId])

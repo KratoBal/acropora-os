@@ -306,6 +306,11 @@ export const PERMISSIONS = {
   /// tételes szerepkör-listákon is - anélkül a SALES, WAREHOUSE, SERVICE és
   /// VIEWER nem kapná meg, és a "mindenki" csendben háromra szűkülne.
   AI_TEST_VIEW: "ai-test.view",
+  /// AZ AI CSEVEGÉS BEÁLLÍTÁSAI (kártya f5b8f7ba, 4a szelet): az üzenetek és a
+  /// kapcsolat-kérések megőrzési ideje, a kapcsolat-kérés kapcsolója és a
+  /// címzett. Személyes adat sorsáról dönt, ezért csak OWNER/ADMIN, a MANAGER
+  /// sem (lásd ROLE_PERMISSIONS lent), egyénileg adható.
+  AI_SETTINGS_MANAGE: "ai-test.settings.manage",
   /// AZ ÜZENETEK MODUL (kártya 51d7aba0). Minden belső emberi szerepkör
   /// megkapja, a VIEWER is; gépi ágens és partnerfiók nem (acrobot döntése,
   /// 26174). A beszélgetésen belüli jogot a tagság adja, nem ez.
@@ -393,6 +398,8 @@ const BASE_ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>> =
         permission !== PERMISSIONS.KNOWLEDGE_RESEARCH_RUN &&
         // A SZAKMAI DÖNTÉS (befogad, kizár, elfogad) A SZERKESZTŐÉ (S4).
         permission !== PERMISSIONS.KNOWLEDGE_MANAGE &&
+        // AZ AI CSEVEGÉS ADATAINAK MEGŐRZÉSE ÉS A KAPCSOLAT-KÉRÉS CÍMZETTJE (f5b8f7ba, 4a).
+        permission !== PERMISSIONS.AI_SETTINGS_MANAGE &&
         // A VÉGLEGES JÓVÁHAGYÁS (szótár-változat, K4) A SZERKESZTŐÉ, BALÁZSÉ (S5).
         permission !== PERMISSIONS.KNOWLEDGE_APPROVE &&
         // A JOVAHAGYAS NEM VEZETOI JOG, HANEM KET NEVESITETT EMBERE. Balazs
