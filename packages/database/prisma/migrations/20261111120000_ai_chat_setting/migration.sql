@@ -1,11 +1,11 @@
 -- AZ AI CSEVEGÉS BEÁLLÍTÁSA (kártya f5b8f7ba, 4a szelet): egy új, üres tábla, meglévő sort nem érint. Sor nélkül az alapérték
--- (180 / 30 / 90 nap, a kapcsolat-kérés kikapcsolva) érvényes, tehát a telepítés után semmit nem kell betölteni. A teljes
+-- (180 / 30 / 90 nap, a felajánlás és a kapcsolat-kérés kikapcsolva: a felajánlás a 4d-ig kimarad) érvényes, tehát a telepítés után semmit nem kell betölteni. A teljes
 -- indoklás a sémában áll. A CHECK-ek a szerver határait ismétlik meg az adatbázisban is: egy elgépelt 0 ne törölhessen azonnal.
 
 -- CreateTable
 CREATE TABLE "AiChatSetting" (
     "id" TEXT NOT NULL,
-    "offerEnabled" BOOLEAN NOT NULL DEFAULT true,
+    "offerEnabled" BOOLEAN NOT NULL DEFAULT false,
     "contactRequestEnabled" BOOLEAN NOT NULL DEFAULT false,
     "contactRecipientEmail" TEXT,
     "messageRetentionDays" INTEGER NOT NULL DEFAULT 180,
