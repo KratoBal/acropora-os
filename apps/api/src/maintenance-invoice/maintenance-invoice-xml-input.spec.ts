@@ -165,6 +165,24 @@ describe("maintenanceInvoiceXmlInputFrom", () => {
     assert.equal(xmlInput.paymentDueDate, "2026-10-13");
   });
 
+  /** Card 6c957695 (barracuda 46870): the TIG's moment is a timestamp, and its day is the Budapest one. Issued after
+   * midnight in Budapest it is still the day before in UTC, in winter (+1) and in summer (+2). */
+  it("takes the fulfilment date as the TIG's day in Budapest, not in UTC", () => {
+    for (const [issuedAt, day] of [
+      ["2026-11-10T23:30:00.000Z", "2026-11-11"],
+      ["2026-07-10T22:30:00.000Z", "2026-07-11"],
+      ["2026-11-10T22:59:00.000Z", "2026-11-10"],
+    ] as const)
+      assert.equal(
+        maintenanceInvoiceXmlInputFrom(
+          { ...baseCertificate, issuedAt: new Date(issuedAt) },
+          NOW,
+        ).xmlInput.fulfillmentDate,
+        day,
+        issuedAt,
+      );
+  });
+
   /** Balazs, 2026-10-03: some partners pay in 8 days, some in 30. The term set
    * on the partner wins; the 8 days above is only what an unset one gets. */
   it("uses the partner's own payment term when it is set", () => {
