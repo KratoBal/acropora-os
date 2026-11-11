@@ -43,6 +43,7 @@
     "knowledge:discover": "tsc -p tsconfig.json && node --env-file=../../.env dist/knowledge-base/discovery/discovery-run.cli.js",
     "knowledge:check-references": "tsc -p tsconfig.json && node --env-file=../../.env dist/knowledge-base/references/reference-check.cli.js",
     "knowledge:auto-accept": "tsc -p tsconfig.json && node --env-file=../../.env dist/products/knowledge/knowledge-auto-accept.cli.js",
+    "customer-candidates:import": "tsc -p tsconfig.json && node --env-file=../../.env dist/customer-candidates/customer-candidates-manual.cli.js",
     "partner:migrate": "tsc -p tsconfig.json && node --env-file=../../.env dist/partner-migration/partner-migration.cli.js",
     "unas:brand-backfill": "tsc -p tsconfig.json && node --env-file=../../.env dist/imports/unas/unas-brand-backfill.cli.js",
     "medusa:image-addresses": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-image-audit.cli.js",
