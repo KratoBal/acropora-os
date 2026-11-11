@@ -12012,6 +12012,27 @@ model AiChatSetting {
   updatedAt                     DateTime @updatedAt
 }
 
+/// AZ AI CSEVEGÉS TÁROLT LINK-FORRÁSAI (kártya 9d060f5c, a terv 4. és 6.3 szakasza): az AI válasz-kapuja alapból
+/// semmilyen külső linket nem enged ki; egy host csak akkor mehet, ha ezen a listán áll ÉS a három kivétel egyike
+/// teljesül (a felhasználó kér; gyártói dokumentum a találat márkájával; hatóság a témához). Üres lista: egyik kivétel
+/// sem aktív. Egy bejegyzés egy sor (nem a beállítás JSON oszlopa), hogy a felvétel és a törlés auditálható legyen
+/// (AuditLog `ai-link-source.added` / `.removed`). A szabályt a szerver érvényesíti (`@acropora/types`
+/// `checkAiLinkSource`), és az adatbázis is (CHECK a migrációban): a host kisbetűs, a márka a kategóriához kötött.
+model AiLinkSource {
+  id          String               @id @default(cuid())
+  host        String               @unique
+  category    AiLinkSourceCategory
+  brand       String?
+  note        String?
+  createdById String?
+  createdAt   DateTime             @default(now())
+}
+
+enum AiLinkSourceCategory {
+  MANUFACTURER_DOCUMENT
+  AUTHORITY
+}
+
 /// A MEGRENDELÉSEK BEÁLLÍTÁSAI (egy sor, az azonosítója a kódban rögzített). S4b (kártya 38caeac2, Luca 2026-11-05):
 /// hány napja nincs mozgás egy nyitott, teljesítetlen tételű megrendelésen ahhoz, hogy hátralékos legyen. A 0 érvényes
 /// érték (minden nyitott, teljesítetlen tételű megrendelés hátralékos). Sor nélkül az alapérték, 14, érvényes.

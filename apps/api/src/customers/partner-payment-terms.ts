@@ -52,6 +52,24 @@ export function partnerTermsFor(
 }
 
 /**
+ * A VEVŐ ÉRVÉNYES FIZETÉSI NAPJAI (kártya os-tig-hatarido-partner-nap): a vevő-sor saját napjai, és ha az üres, a Partnerek oldalon
+ * párosított partneré (`partnerTermsFor`); `null`: nincs, és a hívó az alapértékre (8) esik. A számla-szerkesztő és a másolás ezt
+ * számolja a `customerPaymentDueDays`-ben; a TIG-számla ugyanezt használja, hogy a két út ne térjen el.
+ */
+export function effectivePaymentDueDays(
+  customer: {
+    displayName: string;
+    companyName: string | null;
+    taxNumber: string | null;
+    paymentDueDays: number | null;
+  },
+  partners: readonly PartnerPaymentTerms[],
+): number | null {
+  if (customer.paymentDueDays !== null) return customer.paymentDueDays;
+  return partnerTermsFor(customer, partners)?.paymentDueDays ?? null;
+}
+
+/**
  * A NÉVVEL EGYEZŐ PARTNER ADÓSZÁMA, HA A VEVŐ-SORNAK NINCS (kártya aaf4f09d; Luca,
  * 2026-11-04 13:53 UTC). Ugyanaz az eset, mint fent: a számlán a régi vevő-sort
  * választják (a tükör a Vevők listáján nem szerepel), a sor adószám nélkül áll, a
