@@ -4,11 +4,14 @@ import { describe, it } from "node:test";
 import type { SupplierInvoiceImportResult } from "@acropora/types";
 
 import {
+  hostedInvoiceNumber,
+  hostedInvoiceSupplier,
   parseForeignDate,
   readForeignInvoice,
   supplierNameFromText,
   tableRowFields,
   totalsRow,
+  vatLineEuNumber,
   vatSummaryTable,
   type ForeignReadingInput,
 } from "./foreign-invoice-reading.js";
@@ -1199,5 +1202,112 @@ describe("the VAT summary table (card dbab22cd, second round)", () => {
     const disagree = read(["Subtotal | 1 500", ...lines]);
     assert.equal(disagree.values.netAmount, "1500.00");
     assert.equal(disagree.values.vatAmount, null);
+  });
+});
+
+/**
+ * A STRIPE-ALAPÚ ANGOL SZÁMLA (kártya dbab22cd, harmadik kör). Minden név, szám és adószám KITALÁLT.
+ * MI PIROSÍT: ha a szállító neve a jogi forma hiánya miatt kimaradna; ha a vevő (mi) nevét szállítónak olvasná; ha két eltérő név közül az
+ * egyiket választaná; ha a számlaszám az előtagra csonkulna (az előtag minden számlánkon ugyanaz, nem azonosít), vagy a NUL cellát elnyelné;
+ * ha egy rövid előtag, egy két számjegyű sorszám vagy egy egycellás szám is "Stripe-számla" lenne; ha a "VAT" szó nélküli sor EU-számot adna;
+ * ha a saját (HU) számunk, vagy két eltérő EU-szám közül az egyik kerülne a mezőbe.
+ */
+describe("the hosted (Stripe-style) English invoice (card dbab22cd, third round)", () => {
+  const HOSTED = [
+    "Invoice",
+    "Invoice number | KITALALT | \x00 | 0012",
+    "Date of issue | October 8, 2026",
+    "Date due | October 8, 2026",
+    "VAT Registration | EU VAT | \x00 | IE9999999XX",
+    "Kitalált Eszköz, Inc. | @kitalalt | Bill to | Ship to",
+    "Acropora Kft. | Acropora Kft.",
+    "HU VAT HU23916229",
+    "Description | Qty | Unit price | Amount",
+    "Kitalált csomag | 1 | €135.00 | €135.00",
+    "Subtotal | €135.00",
+    "Total | €135.00",
+  ];
+
+  it("reads the supplier from the header row, with or without a legal form, and never the buyer", () => {
+    assert.equal(hostedInvoiceSupplier(HOSTED), "Kitalált Eszköz, Inc.");
+    assert.equal(
+      hostedInvoiceSupplier(["Kitalált Minta | Bill to", "Acropora Kft. | x"]),
+      "Kitalált Minta",
+    );
+    assert.equal(hostedInvoiceSupplier(["Acropora Kft. | Bill to"]), null);
+    assert.equal(hostedInvoiceSupplier(["Bill to | Ship to"]), null);
+    assert.equal(hostedInvoiceSupplier(["@kitalalt | Bill to"]), null);
+    // a header row whose first cell is a LABEL ("Supplier | Bill to") names nobody
+    assert.equal(hostedInvoiceSupplier(["Supplier | Bill to"]), null);
+    assert.equal(
+      hostedInvoiceSupplier(["Egy Kft. | Bill to", "Másik Kft. | Bill to"]),
+      null,
+    );
+  });
+
+  it("reads the FULL invoice number: the prefix, the NUL cell as a hyphen, the serial", () => {
+    assert.equal(hostedInvoiceNumber(HOSTED), "KITALALT-0012");
+    assert.equal(
+      hostedInvoiceNumber(["Invoice number | KITALALT | - | 0012"]),
+      "KITALALT-0012",
+    );
+    // only this three-cell shape: a plain one-cell number is the other readers'
+    assert.equal(hostedInvoiceNumber(["Invoice number | KITALALT-0012"]), null);
+    assert.equal(
+      hostedInvoiceNumber(["Invoice number | KITALALT | Qty | 0012"]),
+      null,
+    );
+    assert.equal(
+      hostedInvoiceNumber(["Invoice number | ABC | \x00 | 0012"]),
+      null,
+    );
+    assert.equal(
+      hostedInvoiceNumber(["Invoice number | KITALALT | \x00 | 12"]),
+      null,
+    );
+    assert.equal(
+      hostedInvoiceNumber([
+        "Invoice number | KITALALT | \x00 | 0012",
+        "Invoice number | KITALALT | \x00 | 0013",
+      ]),
+      null,
+    );
+  });
+
+  it("reads the supplier's EU VAT number from a VAT-labelled line, and not ours or an ambiguous one", () => {
+    assert.equal(vatLineEuNumber(HOSTED), "IE9999999XX");
+    assert.equal(vatLineEuNumber(["IE VAT IE9999999XX"]), "IE9999999XX");
+    // our own Hungarian number is not a foreign one
+    assert.equal(vatLineEuNumber(["HU VAT HU23916229"]), null);
+    // no VAT word, no number
+    assert.equal(vatLineEuNumber(["Reference IE9999999XX"]), null);
+    // two different numbers decide nothing
+    assert.equal(vatLineEuNumber(["VAT IE9999999XX", "VAT DE999999999"]), null);
+    // a word without a digit is not a number
+    assert.equal(vatLineEuNumber(["VAT ESPRESSOXX"]), null);
+  });
+
+  it("fills the supplier, the full number and the EU VAT number through the reader", () => {
+    const { values, sources } = readForeignInvoice({
+      lines: HOSTED,
+      adapter: null,
+      pairing: pairing({
+        number: "",
+        supplierName: "",
+        date: "",
+        currency: "",
+      }),
+    });
+    assert.equal(values.supplierName, "Kitalált Eszköz, Inc.");
+    assert.equal(values.documentNumber, "KITALALT-0012");
+    assert.equal(values.supplierEuTaxNumber, "IE9999999XX");
+    assert.deepEqual(
+      [
+        sources.supplierName,
+        sources.documentNumber,
+        sources.supplierEuTaxNumber,
+      ],
+      ["TEXT", "TEXT", "TEXT"],
+    );
   });
 });
