@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { szamlazzLineAmounts } from "@acropora/types";
+import {
+  szamlazzLineAmounts,
+  WEBSHOP_INVOICE_DUE_DAYS,
+  WEBSHOP_PROFORMA_DUE_DAYS,
+} from "@acropora/types";
 
 import type { MedusaOrderDetailRow } from "../../integrations/medusa/medusa-admin.client.js";
 import {
@@ -10,6 +14,7 @@ import {
   invoiceDraftOf,
   invoiceRefusal,
   newCustomerOf,
+  proformaDraftOf,
   orderLanguageOf,
 } from "./webshop-order-invoice.rules.js";
 
@@ -152,7 +157,109 @@ describe("the invoice draft from a webshop order", () => {
     assert.equal(draft.paymentMethod, "Utánvét");
     assert.equal(draft.reference, "Webshop rendelés #38");
     assert.equal(draft.fulfillmentDate, "2026-10-05");
-    assert.equal(draft.dueDate, "2026-10-05");
+    assert.equal(draft.dueDate, "2026-10-13", "issue day + 8");
+  });
+
+  /*
+    A WEBSHOPOS SZÁMLA HATÁRIDEJE: A KIÁLLÍTÁS NAPJA + 8 NAP (Balázs, 2026-11-11 12:07 UTC; eddig a kiállítás napja volt). MI PIROSÍT: a
+    határidő újra a kiállítás napja; a vevő napjai bekerülnek (a webshopos számlánál NEM számítanak); a nap UTC szerint számít, nem
+    Budapest szerint; az időszámítás-váltás napot csúsztat; a díjbekérő határideje elmozdul.
+  */
+  const dueOf = (now: Date) => {
+    const result = invoiceDraftOf(order(), { customerId: "cust_1", now });
+    assert.equal(result.ok, true);
+    return result.ok ? result.draft : null;
+  };
+
+  /** An order paid by Stripe (a card) or by another method: the payment provider of the order's payment collection decides. */
+  const paidWith = (provider: string | null) =>
+    order({
+      payment_collections:
+        provider === null
+          ? []
+          : [
+              {
+                status: "authorized",
+                amount: 26840,
+                authorized_amount: 26840,
+                captured_amount: 0,
+                refunded_amount: 0,
+                payments: [{ id: "p", provider_id: provider, data: null }],
+              },
+            ],
+    });
+  const dueFor = (provider: string | null, now: Date) => {
+    const result = invoiceDraftOf(paidWith(provider), {
+      customerId: "cust_1",
+      now,
+    });
+    assert.equal(result.ok, true);
+    return result.ok ? result.draft : null;
+  };
+
+  it("a CARD (Stripe) order: the invoice date, the fulfilment and the due date are the SAME day (Balázs 12:10 UTC)", () => {
+    const draft = dueFor(
+      "pp_stripe_stripe",
+      new Date("2026-11-11T10:00:00.000Z"),
+    )!;
+    assert.equal(draft.paymentMethod, "Bankkártya");
+    assert.equal(draft.fulfillmentDate, "2026-11-11");
+    assert.equal(draft.dueDate, "2026-11-11");
+    // the Budapest day, not the UTC one
+    const late = dueFor(
+      "pp_stripe_stripe",
+      new Date("2026-10-05T22:30:00.000Z"),
+    )!;
+    assert.deepEqual(
+      [late.fulfillmentDate, late.dueDate],
+      ["2026-10-06", "2026-10-06"],
+    );
+  });
+
+  it("every other payment method (cash on delivery, transfer, nothing recorded, an unknown provider): the issue day + 8", () => {
+    for (const [provider, method] of [
+      ["pp_acropora_cod", "Utánvét"],
+      ["pp_system_default", "Átutalás"],
+      ["pp_something_new", "Átutalás"],
+      [null, "Átutalás"],
+    ] as const) {
+      const draft = dueFor(provider, new Date("2026-11-11T10:00:00.000Z"))!;
+      assert.equal(draft.paymentMethod, method, String(provider));
+      assert.equal(draft.dueDate, "2026-11-19", String(provider));
+      assert.equal(draft.fulfillmentDate, "2026-11-11", String(provider));
+    }
+  });
+
+  it("the (default, cash on delivery) webshop invoice's due date is the issue day plus 8 days, the fulfilment is the issue day", () => {
+    const draft = dueOf(new Date("2026-11-11T10:00:00.000Z"))!;
+    assert.equal(draft.fulfillmentDate, "2026-11-11");
+    assert.equal(draft.dueDate, "2026-11-19");
+  });
+
+  it("the issue day is the BUDAPEST day: 00:30 in Budapest on 6 October is 22:30 UTC on 5 October", () => {
+    const draft = dueOf(new Date("2026-10-05T22:30:00.000Z"))!;
+    assert.equal(draft.fulfillmentDate, "2026-10-06");
+    assert.equal(draft.dueDate, "2026-10-14");
+  });
+
+  it("the term crosses the end of daylight saving time (25 October 2026) and a year end by the calendar", () => {
+    assert.equal(
+      dueOf(new Date("2026-10-24T10:00:00.000Z"))!.dueDate,
+      "2026-11-01",
+    );
+    assert.equal(
+      dueOf(new Date("2026-12-28T10:00:00.000Z"))!.dueDate,
+      "2027-01-05",
+    );
+  });
+
+  it("the webshop invoice and the proforma now both run 8 days (the customer's own days play no part: the draft takes none)", () => {
+    const now = new Date("2026-11-11T10:00:00.000Z");
+    const invoice = dueOf(now)!;
+    const proforma = proformaDraftOf(order(), { customerId: "cust_1", now });
+    assert.equal(proforma.ok && proforma.draft.dueDate, invoice.dueDate);
+    assert.equal(WEBSHOP_INVOICE_DUE_DAYS, 8);
+    assert.equal(WEBSHOP_PROFORMA_DUE_DAYS, 8);
   });
 
   it("the VAT rate is the webshop's, line by line", () => {
