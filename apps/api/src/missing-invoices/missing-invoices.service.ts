@@ -345,7 +345,13 @@ export class MissingInvoicesService {
     const outcome = computed.outcomes.get(id);
     return {
       ...item,
-      candidates: (outcome?.candidates ?? []).map((d) => ({
+      candidates: [
+        ...(outcome?.candidates ?? []).map((d) => ({ d, amountOnly: false })),
+        ...(outcome?.amountCandidates ?? []).map((d) => ({
+          d,
+          amountOnly: true,
+        })),
+      ].map(({ d, amountOnly }) => ({
         documentId: d.id,
         number: shownNumber(d),
         date: d.date,
@@ -357,6 +363,8 @@ export class MissingInvoicesService {
         source: d.source,
         payee: d.payee,
         hasOriginal: d.hasOriginal,
+        // a név nem egyezik, csak az összeg: a felület jelölheti, a választás kézi
+        ...(amountOnly ? { amountOnly: true } : {}),
       })),
       payeeDocuments: (outcome?.documents ?? [])
         .filter((d) => d.payee === "UNKNOWN" || d.payeeMarked)
@@ -1092,8 +1100,14 @@ export class MissingInvoicesService {
     // és a lap sora innen jön)
     // (azonosító vagy szám szerint, mint a „papíron megvan” jelölésnél)
     const itemOfDocument = new Map<string, string>();
+    /*
+      A KÉTSZER FIZETETT TÉTEL IS PÁROSÍTOTT (task os-hianyzo-szamlak-unpaid, 2026-11-11, a Vízművek
+      105300361726 októberi eset): a Kétszer fizetett állapot a terhelés felől „nem Megvan”, de a számla
+      mindkét terheléshez párosítva van. Csak a FOUND-ot nézve a számla sora „kifizetetlen” maradt, miközben
+      a terhelés-lista azt mondta, hogy kétszer is fizettük: két nézet ellentmondott egymásnak.
+    */
     for (const item of computed.items)
-      if (item.state === "FOUND")
+      if (item.state === "FOUND" || item.state === "DOUBLE_PAID")
         for (const document of documentsOfItem(item.id)) {
           const numberKeys = document.number
             ? pairingNumberKeys(
@@ -1144,7 +1158,8 @@ export class MissingInvoicesService {
             },
           ],
           source: { kind: "ROW" as const, id: row.id },
-          paid: itemId !== undefined,
+          // a nulla összegű számlát (Telekom, Pólus, október) terhelés nem fizethet, tehát nem „kifizetetlen”
+          paid: itemId !== undefined || row.grossAmount.isZero(),
           itemIds: itemId ? [itemId] : [],
         };
       }),

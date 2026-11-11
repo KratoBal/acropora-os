@@ -267,6 +267,11 @@ export interface MissingInvoiceCandidate {
   source: MissingInvoiceDocumentSource;
   payee: "COMPANY" | "NOT_COMPANY" | "UNKNOWN";
   hasOriginal: boolean;
+  /**
+   * Igaz, ha a jelölt csak az ÖSSZEG miatt szerepel (a kiállító neve nem egyezik a terhelés partnerével, például
+   * kártyás fizetésnél a kereskedő neve): kézi választásra, nem ajánlás.
+   */
+  amountOnly?: true;
 }
 
 /**

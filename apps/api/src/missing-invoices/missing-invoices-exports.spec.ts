@@ -1137,6 +1137,73 @@ describe("the accountant package by invoice date", () => {
     assert.equal(check.lackingCount, 1);
   });
 
+  /*
+    AZ „UNPAID” BLOKK NEM HAMIS TÉTELT MUTAT (task os-hianyzo-szamlak-unpaid). MI PIROSÍT: a kétszer
+    fizetett számla (két terhelés, ugyanaz a fájl) „kifizetetlenként” a blokkban marad; a nulla összegű
+    számla a blokkban marad; a szűrés a nem nulla, valóban kifizetetlen számlát is elvinné.
+  */
+  it("an invoice paired to two debits (DOUBLE_PAID) is not in the unpaid block", async () => {
+    const copy = (id: string) =>
+      document({
+        id,
+        source: "UPLOAD",
+        number: "105300361726",
+        date: "2026-10-01",
+        gross: D(16980),
+        supplierName: "Fővárosi Vízművek Zrt.",
+        identities: ["sha:same-vizmuvek"],
+      });
+    const first = debit("2026-10-05", 16980, "Fővárosi Vízművek Zrt.");
+    const second = debit("2026-10-12", 16980, "Fővárosi Vízművek Zrt.");
+    const { missing } = service({
+      debits: [first, second],
+      documents: [copy("up-1"), copy("up-2")],
+      billing: [
+        billingRow({
+          id: "vizmuvek",
+          documentNumber: "105300361726",
+          supplierName: "Fővárosi Vízművek Zrt.",
+          sourceDocumentId: "up-1",
+          grossAmount: D(16980),
+          pdfIds: [],
+        }),
+      ],
+      files: {},
+    });
+    assert.equal((await missing.item(first.id)).state, "DOUBLE_PAID");
+    const check = await missing.packageCheck("2026-10");
+    assert.deepEqual(check.unpaid, []);
+  });
+
+  it("a zero-amount invoice is never unpaid (no debit can pay it), while a real unpaid one still is", async () => {
+    const { missing } = service({
+      debits: [],
+      documents: [],
+      billing: [
+        billingRow({
+          id: "zero",
+          documentNumber: "KS-ZERO",
+          grossAmount: D(0),
+          pdfIds: [],
+        }),
+        billingRow({
+          id: "real",
+          documentNumber: "KS-REAL",
+          grossAmount: D(1000),
+          pdfIds: [],
+        }),
+      ],
+      files: {},
+    });
+    const check = await missing.packageCheck("2026-10");
+    assert.deepEqual(
+      check.unpaid.map((invoice) => invoice.number),
+      ["KS-REAL"],
+    );
+    // the zero invoice's missing PDF still counts: the accountant package needs it
+    assert.equal(check.lackingCount, 2);
+  });
+
   it("a debit whose invoice only the bank side knows: the PDF is attached through the debit (BANK), and a stored file means it is in", async () => {
     const withFile = debit("2026-10-03", 1000, "Szállító Kft.");
     const noFile = debit("2026-10-04", 2000, "Másik Bt.");

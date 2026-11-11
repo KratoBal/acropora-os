@@ -531,6 +531,51 @@ describe("an insurance premium without a document", () => {
   });
 });
 
+/**
+ * A NÉV NÉLKÜLI JELÖLT (task os-hianyzo-szamlak-unpaid, 2026-11-11): egy kártyás fizetés kereskedő-neve nem a
+ * számla kiállítójáé (XXXLUTZ LEHEL UTCA, MMXH Lakberendezési Kft.), a drawer jelölt-listája üres volt, és a
+ * kézi párosítás nem volt kezdeményezhető. MI PIROSÍT: a pontos összegű, a fizetés ablakában álló számla nem
+ * jelenik meg jelöltként; egy más összegű számla megjelenik; a név szerinti jelölt mellett is megjelenik az
+ * összeg szerinti (zaj); az állapot vagy a név szerinti jelölt-lista (a hiánylista forrása) megváltozik.
+ */
+describe("a candidate that matches only by amount", () => {
+  const COVERAGE = [`${MAIN.id}:2026-10`, `${CARD.id}:2026-10`];
+
+  it("is offered to the drawer for a card payment whose merchant name is not the issuer's, and the state stays the same", async () => {
+    const card = debit("2026-10-26", 24990, "XXXLUTZ LEHEL UTCA");
+    const exactInvoice = nav("2026-10-22", 24990, "MMXH Lakberendezési Kft.");
+    const otherAmount = nav("2026-10-22", 5590, "MMXH Lakberendezési Kft.");
+    const { missing } = service({
+      debits: [card],
+      documents: [exactInvoice, otherAmount],
+      coverage: COVERAGE,
+    });
+    const detail = await missing.item(card.id);
+    assert.deepEqual(
+      detail.candidates.map((c) => [c.documentId, c.amountOnly]),
+      [[exactInvoice.id, true]],
+    );
+    // az állapot ettől nem lett Megvan: a javaslat nem párosít
+    assert.notEqual(detail.state, "FOUND");
+  });
+
+  it("is not added when the partner name already finds candidates", async () => {
+    const payment = debit("2026-10-26", 24990, "MMXH Lakberendezési Kft.");
+    const named = nav("2026-10-22", 11000, "MMXH Lakberendezési Kft.");
+    const strangerSameAmount = nav("2026-10-22", 24990, "Teljesen Más Kft.");
+    const { missing } = service({
+      debits: [payment],
+      documents: [named, strangerSameAmount],
+      coverage: COVERAGE,
+    });
+    const detail = await missing.item(payment.id);
+    assert.deepEqual(
+      detail.candidates.map((c) => [c.documentId, c.amountOnly]),
+      [[named.id, undefined]],
+    );
+  });
+});
+
 describe("a double-paid invoice", () => {
   it("is counted as missing an invoice, and the drawer names the other debit", async () => {
     const sopro = (id: string): CandidateDocument => ({
