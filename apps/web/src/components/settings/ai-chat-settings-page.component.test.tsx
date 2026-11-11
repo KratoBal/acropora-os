@@ -59,6 +59,10 @@ describe("AiChatSettingsPage", () => {
     expect(
       (screen.getByLabelText("Kapcsolat-kérés") as HTMLInputElement).checked,
     ).toBe(false);
+    expect(
+      (screen.getByLabelText("Kollégai felajánlás") as HTMLInputElement)
+        .checked,
+    ).toBe(false);
     expect(screen.getByText(/még nem olvassa/)).toBeTruthy();
     expect(screen.getByText(/nem azonnali hatás/)).toBeTruthy();
   });
@@ -70,6 +74,8 @@ describe("AiChatSettingsPage", () => {
     fireEvent.change(screen.getByLabelText("Címzett e-mail címe"), {
       target: { value: "  ugyfel@acropora.hu " },
     });
+    // The defaults have both switches OFF: the offer is switched on here by hand, so a `true` in the saved body is the user's.
+    fireEvent.click(screen.getByLabelText("Kollégai felajánlás"));
     fireEvent.click(screen.getByLabelText("Kapcsolat-kérés"));
     fireEvent.change(screen.getByLabelText(DAYS), { target: { value: "120" } });
     fireEvent.click(mentes());
