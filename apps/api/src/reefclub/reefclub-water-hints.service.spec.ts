@@ -92,6 +92,7 @@ function fixture(
             category: "Adalékok",
             shopUrl: "https://shop.example/p1",
             evidenceRef: "https://gyarto.example/p1",
+            referenceKind: "MAKER",
             effects: ["KH:EMEL"],
             sideEffects: ["PH:EMEL"],
             rank: 1,

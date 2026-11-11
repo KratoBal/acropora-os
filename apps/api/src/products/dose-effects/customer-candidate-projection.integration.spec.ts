@@ -29,6 +29,7 @@ const candidate = (productId: string, rank: number) => ({
   ],
   sideEffects: [{ parameterCode: "FOSZFAT", direction: "CSOKKENT" as const }],
   evidenceRef: "https://gyarto.example/termek",
+  referenceKind: "MAKER" as const,
   shopUrl: `https://shop.example/${productId}`,
   rank,
 });
@@ -98,6 +99,51 @@ describe(
       // and its effect on a parameter with no approved band, for the panel to print
       assert.deepEqual(rows[0]!.sideEffects, ["FOSZFAT:CSOKKENT"]);
       assert.equal(rows[0]!.evidenceRef, "https://gyarto.example/termek");
+    });
+
+    it("the kind of the reference is stored; a shop-text row is stored only while the switch is on (the maker rows are untouched)", async () => {
+      const mixed: CustomerCandidatesOfMove[] = [
+        {
+          parameterCode: "KALCIUM",
+          direction: "EMEL",
+          candidates: [
+            { ...entries(["m"])[0]!.candidates[0]!, referenceKind: "MAKER" },
+            {
+              ...entries(["s"])[0]!.candidates[0]!,
+              referenceKind: "SHOP_TEXT",
+              evidenceRef: "https://shop.example/s-leiras",
+            },
+          ],
+        },
+      ];
+      const rebuild = (allowShopText: boolean) => {
+        const projection = projectionOf({
+          candidatesByMove: async () => mixed,
+        });
+        projection.shopTextSwitch = () => allowShopText;
+        return projection.rebuild("SCHEDULE");
+      };
+      await rebuild(false);
+      assert.deepEqual(
+        (
+          await prisma.reefClubCustomerCandidate.findMany({
+            orderBy: { rank: "asc" },
+          })
+        ).map((row) => [row.productId, row.referenceKind]),
+        [["m", "MAKER"]],
+      );
+      await rebuild(true);
+      assert.deepEqual(
+        (
+          await prisma.reefClubCustomerCandidate.findMany({
+            orderBy: { rank: "asc" },
+          })
+        ).map((row) => [row.productId, row.referenceKind, row.evidenceRef]),
+        [
+          ["m", "MAKER", "https://gyarto.example/termek"],
+          ["s", "SHOP_TEXT", "https://shop.example/s-leiras"],
+        ],
+      );
     });
 
     it("a rebuild REPLACES the rows (nothing of the old state stays), and the old run's rows are not left beside the new", async () => {

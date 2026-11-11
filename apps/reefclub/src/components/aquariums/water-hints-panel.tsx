@@ -132,12 +132,14 @@ function HintRow({
                   <span className="font-medium">{product.name}</span>
                 )}
                 <a
-                  href={product.manufacturerUrl}
+                  href={product.referenceUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-xs underline"
                 >
-                  Gyártói leírás
+                  {product.referenceKind === "SHOP_TEXT"
+                    ? "Termékleírás a boltban"
+                    : "Gyártói leírás"}
                 </a>
               </div>
               {product.sideEffectsText ? (

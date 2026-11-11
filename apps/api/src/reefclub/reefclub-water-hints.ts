@@ -226,7 +226,7 @@ export function buildWaterHints(input: WaterHintsInput): ReefClubWaterHints {
               name: candidate.productName,
               category: candidate.category,
               shopUrl: candidate.shopUrl,
-              manufacturerUrl: candidate.evidenceRef,
+              referenceUrl: candidate.evidenceRef,
               referenceKind: candidate.referenceKind,
               sideEffectsText: sideEffectsText(candidate.sideEffects),
             }))

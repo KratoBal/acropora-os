@@ -144,9 +144,7 @@ export function customerMatchingRows(
  * A TERMÉK MINDEN VERIFIED HATÁSA, a kívánt mozgástól függetlenül (a kézi jelölt hatásait ezzel egészítjük ki, hogy az ellentétes-hatás
  * szűrő a JEV-ben ismert hatást se hagyja ki). Két részre válik, mint a jelöltben: jóváhagyott paraméterek és a többi.
  */
-export function verifiedEffectsByProduct(
-  rows: readonly JevEffectRow[],
-): Map<
+export function verifiedEffectsByProduct(rows: readonly JevEffectRow[]): Map<
   string,
   {
     effects: CustomerRecommendationCandidate["effects"];
@@ -231,6 +229,9 @@ const PRODUCT_SELECT = {
 export class CustomerCandidateSource {
   private readonly database = prisma;
 
+  /** The switch for the shop text, read at each build (a property, so a test sets it without touching the environment). */
+  shopTextSwitch: () => boolean = () => shopTextAllowed();
+
   /** A kívánt mozgásokhoz a vevő felé használható jelöltek; kívánt mozgás nélkül (vagy csak nem jóváhagyott paraméterrel) nincs lekérdezés. */
   async candidates(input: {
     moves: readonly CustomerWantedMove[];
@@ -262,8 +263,8 @@ export class CustomerCandidateSource {
     wantedLists: ReadonlyArray<ReadonlyMap<string, "EMEL" | "CSOKKENT">>,
   ): Promise<CustomerCandidatesOfMove[]> {
     const rows = await latestJevEffectRows(this.database);
-    const manualEntries = await this.database.customerCandidateManualEntry.findMany(
-      {
+    const manualEntries =
+      await this.database.customerCandidateManualEntry.findMany({
         select: {
           productId: true,
           parameterCode: true,
@@ -273,11 +274,10 @@ export class CustomerCandidateSource {
           sideEffects: true,
           sideEffectsStatus: true,
         },
-      },
-    );
+      });
     const manualInput: ManualEntryInput[] = manualEntries;
     const verifiedByProduct = verifiedEffectsByProduct(rows);
-    const allowShopText = shopTextAllowed();
+    const allowShopText = this.shopTextSwitch();
     const matchesOf = wantedLists.map((wanted) => ({
       wanted,
       matches: mergeCandidateMatches(

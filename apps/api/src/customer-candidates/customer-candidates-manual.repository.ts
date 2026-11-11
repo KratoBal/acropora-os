@@ -64,6 +64,7 @@ export class PrismaManualListStore implements ManualListStore {
     const rows = await this.database.customerCandidateManualEntry.findMany();
     return rows.map((row) => ({
       productId: row.productId,
+      sku: row.sku,
       parameter: row.parameterCode,
       direction: row.direction,
       referenceUrl: row.referenceUrl,
@@ -99,6 +100,7 @@ export class PrismaManualListStore implements ManualListStore {
           sameManualContent(
             {
               productId: existing.productId,
+              sku: existing.sku,
               parameter: existing.parameterCode,
               direction: existing.direction,
               referenceUrl: existing.referenceUrl,

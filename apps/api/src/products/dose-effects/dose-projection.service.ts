@@ -69,6 +69,8 @@ export class DoseProjectionService implements OnModuleInit, OnModuleDestroy {
   private startup: NodeJS.Timeout | null = null;
   private tail: Promise<unknown> = Promise.resolve();
   private queued: Promise<DoseProjectionOutcome> | null = null;
+  /** The switch for the shop text, read at each build (a property, so a test sets it without touching the environment). */
+  shopTextSwitch: () => boolean = () => shopTextAllowed();
 
   constructor(
     private readonly doseEffects: DoseEffectsService,
@@ -171,7 +173,7 @@ export class DoseProjectionService implements OnModuleInit, OnModuleDestroy {
           try {
             candidateRows = toProjectedCandidateRows(
               await this.customerCandidates.candidatesByMove(),
-              { allowShopText: shopTextAllowed() },
+              { allowShopText: this.shopTextSwitch() },
             );
           } catch (error) {
             this.logger.warn(

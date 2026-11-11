@@ -9,6 +9,7 @@ import {
   customerMatchingRows,
   customerWantedMoves,
   limitCustomerCandidates,
+  shopTextAllowed,
   type CustomerRecommendationCandidate,
 } from "./customer-candidate-source.js";
 import type { JevEffectRow } from "./jev-candidate-source.js";
@@ -194,6 +195,7 @@ describe("the cap per parameter", () => {
     sideEffects: [],
     evidenceRef: URL,
     shopUrl: null,
+    referenceKind: "MAKER",
   });
 
   it("at most five per parameter; the ones helping more wanted deviations first, then by name", () => {
@@ -253,6 +255,7 @@ describe("the source", () => {
   ) => {
     const instance = new CustomerCandidateSource();
     (instance as unknown as { database: unknown }).database = {
+      customerCandidateManualEntry: { findMany: async () => [] },
       $queryRaw: async () => {
         counters.queries++;
         return rows;
@@ -301,6 +304,7 @@ describe("the source", () => {
         sideEffects: [],
         evidenceRef: URL,
         shopUrl: null,
+        referenceKind: "MAKER",
       },
     ]);
   });
@@ -330,6 +334,7 @@ describe("the source", () => {
     let where: unknown;
     const instance = new CustomerCandidateSource();
     (instance as unknown as { database: unknown }).database = {
+      customerCandidateManualEntry: { findMany: async () => [] },
       $queryRaw: async () => [
         row({ productId: "ok" }),
         row({ productId: "status3" }),
@@ -381,6 +386,7 @@ describe("the shop address of a candidate (V3.4 S2b)", () => {
   const withListing = (listing: Record<string, unknown>) => {
     const instance = new CustomerCandidateSource();
     (instance as unknown as { database: unknown }).database = {
+      customerCandidateManualEntry: { findMany: async () => [] },
       $queryRaw: async () => [row({})],
       product: {
         findMany: async () => [
@@ -450,6 +456,7 @@ describe("candidatesByMove: every approved parameter in both directions, from on
     const counters = { queries: 0, products: 0 };
     const instance = new CustomerCandidateSource();
     (instance as unknown as { database: unknown }).database = {
+      customerCandidateManualEntry: { findMany: async () => [] },
       $queryRaw: async () => {
         counters.queries++;
         return rows;
@@ -491,6 +498,7 @@ describe("candidatesByMove: every approved parameter in both directions, from on
   it("phosphate is not among the moves, so a phosphate product never appears; an unverified effect appears nowhere", async () => {
     const instance = new CustomerCandidateSource();
     (instance as unknown as { database: unknown }).database = {
+      customerCandidateManualEntry: { findMany: async () => [] },
       $queryRaw: async () => rows,
       product: {
         findMany: async () => ["ca-up", "po4-down", "unverified"].map(product),
@@ -509,6 +517,7 @@ describe("candidatesByMove: every approved parameter in both directions, from on
     let products = 0;
     const instance = new CustomerCandidateSource();
     (instance as unknown as { database: unknown }).database = {
+      customerCandidateManualEntry: { findMany: async () => [] },
       $queryRaw: async () => [],
       product: {
         findMany: async () => {
@@ -521,5 +530,31 @@ describe("candidatesByMove: every approved parameter in both directions, from on
     assert.equal(result.length, 8);
     assert.ok(result.every((entry) => entry.candidates.length === 0));
     assert.equal(products, 0);
+  });
+});
+
+describe("the switch for the shop text (V3.4 S2c)", () => {
+  it("is on only for exactly `true`; unset, empty, other spellings and other values keep it off", () => {
+    assert.equal(
+      shopTextAllowed({ CUSTOMER_CANDIDATES_ALLOW_SHOP_TEXT: "true" }),
+      true,
+    );
+    for (const value of [
+      undefined,
+      "",
+      "TRUE",
+      "True",
+      "1",
+      "yes",
+      "false",
+      " true",
+      "true ",
+    ])
+      assert.equal(
+        shopTextAllowed({ CUSTOMER_CANDIDATES_ALLOW_SHOP_TEXT: value }),
+        false,
+        JSON.stringify(value),
+      );
+    assert.equal(shopTextAllowed({}), false);
   });
 });

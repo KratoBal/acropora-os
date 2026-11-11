@@ -30,6 +30,7 @@ const candidate = (
   sideEffects: [],
   evidenceRef: "https://gyarto.example/termek",
   shopUrl: "https://shop.example/termek",
+  referenceKind: "MAKER",
   ...over,
 });
 const entry = (
@@ -56,6 +57,7 @@ describe("toProjectedCandidateRows", () => {
           (move) => `${move.parameterCode}:${move.direction}`,
         ),
         sideEffects: [],
+        referenceKind: "MAKER",
         rank: 1,
       },
       {
@@ -70,6 +72,7 @@ describe("toProjectedCandidateRows", () => {
           (move) => `${move.parameterCode}:${move.direction}`,
         ),
         sideEffects: [],
+        referenceKind: "MAKER",
         rank: 2,
       },
     ]);
@@ -221,6 +224,59 @@ describe("toProjectedCandidateRows", () => {
         ["a", ["FOSZFAT:CSOKKENT", "PH:EMEL"]],
         ["b", []],
       ],
+    );
+  });
+
+  it("a shop-text reference is projected only with the switch (the second lock after the source), and its absence leaves no gap in the rank", () => {
+    const entries = [
+      entry("KH", "EMEL", [
+        candidate("maker-1"),
+        candidate("shop", { referenceKind: "SHOP_TEXT" }),
+        candidate("maker-2"),
+      ]),
+    ];
+    const off = toProjectedCandidateRows(entries);
+    assert.deepEqual(
+      off.map((row) => [row.productId, row.referenceKind, row.rank]),
+      [
+        ["maker-1", "MAKER", 1],
+        ["maker-2", "MAKER", 2],
+      ],
+    );
+    assert.deepEqual(
+      toProjectedCandidateRows(entries, { allowShopText: false }).map(
+        (row) => row.productId,
+      ),
+      ["maker-1", "maker-2"],
+    );
+    assert.deepEqual(
+      toProjectedCandidateRows(entries, { allowShopText: true }).map((row) => [
+        row.productId,
+        row.referenceKind,
+        row.rank,
+      ]),
+      [
+        ["maker-1", "MAKER", 1],
+        ["shop", "SHOP_TEXT", 2],
+        ["maker-2", "MAKER", 3],
+      ],
+    );
+  });
+
+  it("a shop-text reference with an http address is refused even with the switch", () => {
+    assert.deepEqual(
+      toProjectedCandidateRows(
+        [
+          entry("KH", "EMEL", [
+            candidate("shop", {
+              referenceKind: "SHOP_TEXT",
+              evidenceRef: "http://shop.example/leiras",
+            }),
+          ]),
+        ],
+        { allowShopText: true },
+      ),
+      [],
     );
   });
 

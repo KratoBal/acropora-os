@@ -29,9 +29,9 @@ export interface ReefClubWaterHintProduct {
   category: string;
   /** The product's page in the shop, or null. */
   shopUrl: string | null;
-  /** The maker's https reference: this is what the customer gets about the product, not a dosing sentence. */
-  manufacturerUrl: string;
-  /** What `manufacturerUrl` is: the maker's page (MAKER) or the shop's own product text (SHOP_TEXT, test ReefClub only). The page picks the link label from it. */
+  /** The https reference the customer gets about the product, not a dosing sentence: the maker's page, or the shop's product text (see `referenceKind`). */
+  referenceUrl: string;
+  /** What `referenceUrl` is: the maker's page (MAKER) or the shop's own product text (SHOP_TEXT, test ReefClub only). The page picks the link label from it. */
   referenceKind: "MAKER" | "SHOP_TEXT";
   /** "Emellett hat: foszfát (csökkenti)." or null: the product's effect on a parameter with no approved band, without advice or band. */
   sideEffectsText: string | null;
