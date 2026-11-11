@@ -422,3 +422,144 @@ describe("MaintenanceInvoiceDraftService.issue", () => {
     );
   });
 });
+
+/**
+ * THE TIG INVOICE'S CONFIRMATION WINDOW (card 7ba97e0d, S3; Balázs 2026-11-11 11:12-11:20 UTC). WHAT TURNS IT RED: the
+ * window shows a buyer, a date or an address the issue does not send; a buyer changed after the window opened is issued
+ * anyway; a future issue date reaches Számlázz.hu; the confirmed dates do not reach the request or the stored row.
+ */
+describe("MaintenanceInvoiceDraftService, the confirmation window (card 7ba97e0d, S3)", () => {
+  const NOW = new Date("2026-11-11T09:00:00Z");
+  const tag = (xml: string, name: string) =>
+    new RegExp(`<${name}>([^<]*)</${name}>`).exec(xml)?.[1] ?? null;
+  const withCustomer = (over: Record<string, unknown>) => ({
+    ...certificate,
+    serviceJob: {
+      customer: { ...certificate.serviceJob.customer, ...over },
+    },
+  });
+
+  it("the summary is the issue's mapping: buyer, address, tax number, today, the TIG's fulfilment, the computed due date, the billing address to send to", async () => {
+    const { service } = harness({
+      certificate: withCustomer({
+        email: "info@allatkert.example",
+        billingEmail: " szamla@allatkert.example ",
+      }),
+    });
+    const summary = await service.issueSummary("invoice-1", NOW);
+    assert.deepEqual(
+      { ...summary, fingerprint: summary.fingerprint.length },
+      {
+        buyerName: "Fővárosi Állatkert",
+        buyerAddress: "1146 Budapest, Állatkerti körút 6-12.",
+        buyerTaxNumber: "12345678-2-42",
+        buyerEuTaxNumber: null,
+        buyerEmail: "szamla@allatkert.example",
+        issueDate: "2026-11-11",
+        fulfillmentDate: "2026-09-24",
+        dueDate: "2026-11-19",
+        paymentMethod: "Átutalás",
+        showsPaymentFields: true,
+        dueDateFollowsIssueDate: false,
+        fingerprint: 64,
+      },
+    );
+    const ordering = harness({
+      certificate: withCustomer({
+        email: "info@allatkert.example",
+        billingEmail: null,
+      }),
+    });
+    assert.equal(
+      (await ordering.service.issueSummary("invoice-1", NOW)).buyerEmail,
+      "info@allatkert.example",
+    );
+  });
+
+  it("an issued invoice has nothing to confirm", async () => {
+    await assert.rejects(
+      () =>
+        harness({ status: "ISSUED" }).service.issueSummary("invoice-1", NOW),
+      ConflictException,
+    );
+  });
+
+  it("the confirmed dates go into the request and the stored row; an earlier issue day is stored at its noon", async () => {
+    const { service, sent, row } = harness({});
+    const { fingerprint } = await service.issueSummary("invoice-1", NOW);
+    await service.issue(
+      "invoice-1",
+      {
+        issueDate: "2026-11-10",
+        fulfillmentDate: "2026-11-01",
+        dueDate: "2026-11-30",
+        fingerprint,
+      },
+      NOW,
+    );
+    assert.equal(sent.length, 1);
+    assert.deepEqual(
+      ["keltDatum", "teljesitesDatum", "fizetesiHataridoDatum"].map((name) =>
+        tag(sent[0]!, name),
+      ),
+      ["2026-11-10", "2026-11-01", "2026-11-30"],
+    );
+    const stored = row as unknown as Record<string, Date>;
+    assert.deepEqual(
+      [stored.issueDate, stored.fulfillmentDate, stored.dueDate].map((date) =>
+        date!.toISOString(),
+      ),
+      [
+        "2026-11-10T12:00:00.000Z",
+        "2026-11-01T00:00:00.000Z",
+        "2026-11-30T00:00:00.000Z",
+      ],
+    );
+  });
+
+  it("a buyer changed after the window opened stops the issue, before any call", async () => {
+    const changing = withCustomer({});
+    const { service, sent } = harness({ certificate: changing });
+    const summary = await service.issueSummary("invoice-1", NOW);
+    changing.serviceJob.customer.displayName = "Fővárosi Állat- és Növénykert";
+    await assert.rejects(
+      () =>
+        service.issue(
+          "invoice-1",
+          { ...summary, dueDate: summary.dueDate },
+          NOW,
+        ),
+      /A számla adatai megváltoztak/,
+    );
+    assert.equal(sent.length, 0);
+  });
+
+  it("a future issue date or a due date before it is refused by the shared rule, before any call", async () => {
+    const { service, sent } = harness({});
+    const { fingerprint } = await service.issueSummary("invoice-1", NOW);
+    for (const [dates, error] of [
+      [
+        {
+          issueDate: "2026-11-12",
+          fulfillmentDate: "2026-11-01",
+          dueDate: "2026-11-30",
+        },
+        /nem lehet későbbi a mai napnál/,
+      ],
+      [
+        {
+          issueDate: "2026-11-11",
+          fulfillmentDate: "2026-11-01",
+          dueDate: "2026-11-10",
+        },
+        /nem lehet korábbi a számla kelténél/,
+      ],
+    ] as const)
+      await assert.rejects(
+        () => service.issue("invoice-1", { ...dates, fingerprint }, NOW),
+        (error_: unknown) =>
+          error_ instanceof BadRequestException && error.test(error_.message),
+      );
+    assert.equal(sent.length, 0);
+  });
+});

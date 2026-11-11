@@ -10,7 +10,12 @@ import {
 } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@acropora/database";
-import type { MaintenanceInvoiceSummary } from "@acropora/types";
+import {
+  checkBillingIssueDates,
+  type BillingIssueConfirmation,
+  type BillingIssueSummary,
+  type MaintenanceInvoiceSummary,
+} from "@acropora/types";
 
 import { CompletionCertificatesRepository } from "../completion-certificates/completion-certificates.repository.js";
 import {
@@ -32,6 +37,9 @@ import {
   MaintenanceInvoiceInputError,
 } from "./maintenance-invoice-xml-input.js";
 import { customerTaxNumberProblem } from "../billing/buyer-tax-number.js";
+import { customerSendAddress } from "../billing/billing-document-issue.js";
+import { budapestDayKey } from "../dashboard/budapest-day.js";
+import { maintenanceIssueSummary } from "./maintenance-invoice-confirmation.js";
 import { maintenanceInvoiceIssueEnabled } from "./maintenance-invoice-issue.config.js";
 import { effectivePaymentDueDays } from "../customers/partner-payment-terms.js";
 import { MaintenanceInvoiceRepository } from "./maintenance-invoice.repository.js";
@@ -39,6 +47,9 @@ import { TIG_ISSUED_PDF as ISSUED_PDF } from "../billing/issued-pdf-key.js";
 
 /** The environment the issue switch is read from (a test hands in its own). */
 export const MAINTENANCE_INVOICE_ENV = Symbol("MAINTENANCE_INVOICE_ENV");
+
+const NOT_FROM_CERTIFICATE =
+  "A számla nem teljesítési igazolásból készült, itt nem állítható ki.";
 
 /** Where the two PDFs of one invoice live in the document store. */
 const PREVIEW_PDF = "preview.pdf";
@@ -228,7 +239,10 @@ export class MaintenanceInvoiceDraftService {
    */
   private async prepare(
     certificateId: string,
-    { acknowledgeUnsigned = false }: { acknowledgeUnsigned?: boolean } = {},
+    {
+      acknowledgeUnsigned = false,
+      now = new Date(),
+    }: { acknowledgeUnsigned?: boolean; now?: Date } = {},
   ) {
     const certificate = await this.certificates.detail(certificateId);
     if (!certificate)
@@ -272,19 +286,22 @@ export class MaintenanceInvoiceDraftService {
 
     let mapped;
     try {
-      mapped = maintenanceInvoiceXmlInputFrom({
-        number: certificate.number,
-        issuedAt: certificate.issuedAt,
-        serviceJob: { customer: { ...customer, paymentDueDays } },
-        items: certificate.items,
-        // a megrendeléses TIG számlája nem karbantartási: a megjegyzés a megrendelést nevezi
-        // meg (barracuda, #2158 review); a karbantartási TIG-é az alapmondat marad
-        ...(certificate.serviceJob === null && certificate.partnerOrder
-          ? {
-              comment: `Teljesítési igazolás: ${certificate.number}, megrendelés ${certificate.partnerOrder.orderNumber}`,
-            }
-          : {}),
-      });
+      mapped = maintenanceInvoiceXmlInputFrom(
+        {
+          number: certificate.number,
+          issuedAt: certificate.issuedAt,
+          serviceJob: { customer: { ...customer, paymentDueDays } },
+          items: certificate.items,
+          // a megrendeléses TIG számlája nem karbantartási: a megjegyzés a megrendelést nevezi
+          // meg (barracuda, #2158 review); a karbantartási TIG-é az alapmondat marad
+          ...(certificate.serviceJob === null && certificate.partnerOrder
+            ? {
+                comment: `Teljesítési igazolás: ${certificate.number}, megrendelés ${certificate.partnerOrder.orderNumber}`,
+              }
+            : {}),
+        },
+        now,
+      );
     } catch (error) {
       if (error instanceof MaintenanceInvoiceInputError)
         throw new BadRequestException(
@@ -415,6 +432,31 @@ export class MaintenanceInvoiceDraftService {
   }
 
   /**
+   * THE CONFIRMATION WINDOW'S VALUES (card 7ba97e0d, S3), from the mapping the issue sends (`prepare`). Only for a
+   * draft: an issued or issuing invoice has nothing left to confirm. The same refusals as the issue's.
+   */
+  async issueSummary(
+    invoiceId: string,
+    now = new Date(),
+  ): Promise<BillingIssueSummary> {
+    const invoice = await this.repository.invoiceById(invoiceId);
+    if (!invoice) throw new NotFoundException("A számla nem található.");
+    if (invoice.status !== "DRAFT")
+      throw new ConflictException("Csak piszkozat-számla állítható ki.");
+    if (!invoice.completionCertificateId)
+      throw new ConflictException(NOT_FROM_CERTIFICATE);
+    const { customer, mapped } = await this.prepare(
+      invoice.completionCertificateId,
+      { acknowledgeUnsigned: true, now },
+    );
+    return maintenanceIssueSummary(
+      mapped.xmlInput,
+      customerSendAddress(customer),
+      budapestDayKey(now),
+    );
+  }
+
+  /**
    * A VALÓDI KIÁLLÍTÁS (146ccc61): DRAFT -> ISSUED, a Számlázz.hu Agent API-n,
    * `elonezetpdf` NÉLKÜL -- ez egy valódi, a NAV-nak bejelentett számla.
    *
@@ -432,8 +474,16 @@ export class MaintenanceInvoiceDraftService {
    *      nincs, mert egy második valódi számlát állíthatna ki;
    *   6. sikernél ELŐBB a számlaszám kerül a sorra, a PDF utána: ha a PDF
    *      mentése bukik, a kiállított számla száma akkor sem vész el.
+   *
+   * `confirmation` (card 7ba97e0d, S3): what the window showed and the person confirmed. The shown values are
+   * recomputed and must match, the three dates are checked by the shared rule and go into the invoice. Without it (an
+   * internal caller) the issue is as before: today, the certificate's fulfilment date, the computed due date.
    */
-  async issue(invoiceId: string): Promise<MaintenanceInvoiceSummary> {
+  async issue(
+    invoiceId: string,
+    confirmation?: BillingIssueConfirmation,
+    now = new Date(),
+  ): Promise<MaintenanceInvoiceSummary> {
     if (!maintenanceInvoiceIssueEnabled(this.environment))
       throw new ConflictException(
         "A valódi számla-kiállítás ezen a szerveren nincs bekapcsolva.",
@@ -447,18 +497,44 @@ export class MaintenanceInvoiceDraftService {
         "Ennek a számlának a kiállítása már elindult, és ellenőrzésre vár: nézd meg a Számlázz.hu-n, mielőtt bármit újra próbálsz.",
       );
     if (!invoice.completionCertificateId)
-      throw new ConflictException(
-        "A számla nem teljesítési igazolásból készült, itt nem állítható ki.",
-      );
+      throw new ConflictException(NOT_FROM_CERTIFICATE);
 
     // the draft of an order TIG was made with the confirmation already (draftFor): no second ask
-    const { mapped } = await this.prepare(invoice.completionCertificateId, {
-      acknowledgeUnsigned: true,
-    });
+    const { customer, mapped } = await this.prepare(
+      invoice.completionCertificateId,
+      { acknowledgeUnsigned: true, now },
+    );
     if (!sameAmounts(invoice, mapped.totals))
       throw new ConflictException(
         "A teljesítési igazolás a piszkozat óta megváltozott: az összeg már nem egyezik. Készíts új piszkozatot.",
       );
+
+    // WHAT THE WINDOW SHOWED IS WHAT THE INVOICE CARRIES (card 7ba97e0d, S3), as on the billing editor
+    const today = budapestDayKey(now);
+    const xmlInput = { ...mapped.xmlInput };
+    let issueDay: string | null = null;
+    if (confirmation) {
+      const shown = maintenanceIssueSummary(
+        mapped.xmlInput,
+        customerSendAddress(customer),
+        today,
+      );
+      if (shown.fingerprint !== confirmation.fingerprint)
+        throw new ConflictException(
+          "A számla adatai megváltoztak, mióta megnyitottad a megerősítést (például a partner neve, címe vagy adószáma). Nyisd meg újra, és nézd meg, mi változott.",
+        );
+      const dates = checkBillingIssueDates(confirmation, {
+        today,
+        showsPaymentFields: shown.showsPaymentFields,
+        dueDateFollowsIssueDate: shown.dueDateFollowsIssueDate,
+      });
+      if (!dates.ok) throw new BadRequestException(dates.error);
+      xmlInput.issueDate = dates.value.issueDate;
+      xmlInput.fulfillmentDate = dates.value.fulfillmentDate;
+      if (dates.value.dueDate !== null)
+        xmlInput.paymentDueDate = dates.value.dueDate;
+      issueDay = dates.value.issueDate;
+    }
     const agentKey = await this.agentKey();
 
     if (!(await this.repository.claimForIssue(invoice.id)))
@@ -467,7 +543,7 @@ export class MaintenanceInvoiceDraftService {
       );
 
     const xml = buildSzamlazzAgentInvoiceXml({
-      ...mapped.xmlInput,
+      ...xmlInput,
       agentKey,
       previewOnly: false,
     });
@@ -509,7 +585,15 @@ export class MaintenanceInvoiceDraftService {
       );
     }
 
-    const issuedAt = new Date();
+    // the moment of the issue, as before; a confirmed earlier day is stored at its noon (UTC), as on the billing editor
+    const issuedAt =
+      issueDay === null || issueDay === today
+        ? new Date()
+        : new Date(`${issueDay}T12:00:00Z`);
+    const dates = {
+      fulfillmentDate: new Date(`${xmlInput.fulfillmentDate}T00:00:00Z`),
+      dueDate: new Date(`${xmlInput.paymentDueDate}T00:00:00Z`),
+    };
     let issued;
     try {
       issued = await this.repository.markIssued(invoice.id, {
@@ -517,6 +601,7 @@ export class MaintenanceInvoiceDraftService {
         issueDate: issuedAt,
         pdfStorageKey: null,
         completionCertificateId: invoice.completionCertificateId,
+        ...dates,
       });
     } catch (error) {
       await this.repository
@@ -543,6 +628,7 @@ export class MaintenanceInvoiceDraftService {
           issueDate: issuedAt,
           pdfStorageKey: storageKeyFor(key),
           completionCertificateId: invoice.completionCertificateId,
+          ...dates,
         });
       } catch (error) {
         // The invoice exists and is recorded; only its PDF is missing here.

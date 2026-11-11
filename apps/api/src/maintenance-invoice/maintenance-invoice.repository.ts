@@ -94,6 +94,9 @@ export class MaintenanceInvoiceRepository {
       pdfStorageKey: string | null;
       /** The invoice's own certificate: the issued row's source (`sourceId`). */
       completionCertificateId: string;
+      /** The dates the invoice carries (the confirmed ones, card 7ba97e0d S3): the details page shows them. */
+      fulfillmentDate?: Date;
+      dueDate?: Date;
     },
   ) {
     return this.database.invoice.update({
@@ -108,6 +111,8 @@ export class MaintenanceInvoiceRepository {
         sourceType: "COMPLETION_CERTIFICATE",
         sourceId: issued.completionCertificateId,
         invoiceFormat: "ELECTRONIC",
+        fulfillmentDate: issued.fulfillmentDate,
+        dueDate: issued.dueDate,
         syncStatus: "RECEIVED",
         syncError: null,
       },

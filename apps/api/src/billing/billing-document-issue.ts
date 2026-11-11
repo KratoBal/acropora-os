@@ -245,7 +245,7 @@ export function buildIssueInput(row: BillingDocumentRow): IssueInput {
     // the community tax number goes in <adoszamEU>, never in <adoszam>
     euTaxNumber: euBuyer ? customer.euTaxNumber : null,
     // the invoice goes to the billing address, the ordering one only when there is none (Balázs, 2026-10-26)
-    email: customer.billingEmail?.trim() || customer.email,
+    email: customerSendAddress(customer),
   };
   const countryCode = EU_COUNTRY_NAMES_HU[address.country]
     ? address.country
@@ -309,6 +309,17 @@ export function buildIssueInput(row: BillingDocumentRow): IssueInput {
 }
 
 /**
+ * WHERE AN ISSUED INVOICE IS SENT: the buyer's billing e-mail, the ordering one only when there is none (Balázs,
+ * 2026-10-26). The billing editor's issue and the TIG invoice's window both take it from here.
+ */
+export function customerSendAddress(customer: {
+  billingEmail: string | null;
+  email: string | null;
+}): string | null {
+  return customer.billingEmail?.trim() || customer.email;
+}
+
+/**
  * THE CONFIRMATION WINDOW'S VALUES (card 7ba97e0d), FROM THE SAME BUILDER AS THE ISSUE: `buildIssueInput` is what
  * the issue sends to Számlázz.hu, so the window cannot show one thing while the invoice carries another. A draft
  * that could not be issued is refused here with the same message the issue would give. The issue date proposed is
@@ -362,7 +373,21 @@ export function billingIssueSummary(
  * caught by `expectedUpdatedAt`; this catches the one that does not touch the draft (the partner's name, address, e-mail or
  * tax number edited while the window was open).
  */
-export function issueFingerprint(document: BillingDocumentForIssue): string {
+export function issueFingerprint(
+  document: Pick<BillingDocumentForIssue, "documentType" | "paymentMethod"> & {
+    buyer: Pick<
+      BillingDocumentForIssue["buyer"],
+      | "name"
+      | "country"
+      | "zip"
+      | "city"
+      | "address"
+      | "taxNumber"
+      | "euTaxNumber"
+      | "email"
+    >;
+  },
+): string {
   const { buyer } = document;
   return createHash("sha256")
     .update(
