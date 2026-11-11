@@ -326,6 +326,25 @@ export function vatSummaryTable(
         const values = amountsIn(cells[cells.length - back]!);
         return values.length === 1 ? values[0]! : null;
       });
+      /*
+        A KULCSONKÉNTI SOROK ALATTI "ÖSSZESEN" SOR NEM ÚJ SOR, HANEM ELLENŐRZÉS (barracuda, #2431): a végéről számolva ez is három összeg,
+        és nettó + ÁFA = bruttó, tehát hozzáadva a végösszeg DUPLÁZÓDNA (és ha nincs címkézett bruttó, a duplázott összeg ki is töltődne).
+        Az a sor, amelynek első nem üres cellája "Összesen"-féle, a futó összeggel vetődik össze: egyezik, a tábla itt véget ér; eltér
+        (vagy nincs előtte sor: akkor a nulla sorhoz képest eltér), a táblából semmi nem lesz.
+      */
+      const firstCell = cells.find((cell) => cell !== "") ?? "";
+      if (TOTALS_LABEL.test(firstCell)) {
+        const [tn, tv, tg] = amounts;
+        const agrees =
+          tn !== null &&
+          tv !== null &&
+          tg !== null &&
+          Math.abs(tn - sum.net) <= 0.02 &&
+          Math.abs(tv - sum.vat) <= 0.02 &&
+          Math.abs(tg - sum.gross) <= 0.02;
+        if (!agrees) rows = 0;
+        break;
+      }
       if (amounts.some((value) => value === null)) break;
       const [n, v, g] = amounts as [number, number, number];
       if (v < 0 || Math.abs(n + v - g) > 0.02) {

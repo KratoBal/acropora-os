@@ -1081,6 +1081,40 @@ describe("the VAT summary table (card dbab22cd, second round)", () => {
     );
   });
 
+  it("a total row under the rates is a CHECK, not one more row: one rate plus 'Összesen' is not doubled, two rates plus a matching one are the sum, a different one reads nothing", () => {
+    assert.deepEqual(
+      vatSummaryTable([
+        TABLE_HEADER,
+        "27 | 1 000 | 270 | 1 270",
+        "Összesen | | 1 000 | 270 | 1 270",
+      ]),
+      { net: 1000, vat: 270, gross: 1270 },
+    );
+    assert.deepEqual(
+      vatSummaryTable([
+        TABLE_HEADER,
+        "27 | 1 000 | 270 | 1 270",
+        "5 | 2 000 | 100 | 2 100",
+        "Összesen: | 3 000 | 370 | 3 370",
+      ]),
+      { net: 3000, vat: 370, gross: 3370 },
+    );
+    assert.equal(
+      vatSummaryTable([
+        TABLE_HEADER,
+        "27 | 1 000 | 270 | 1 270",
+        "5 | 2 000 | 100 | 2 100",
+        "Összesen | 9 000 | 370 | 9 370",
+      ]),
+      null,
+    );
+    // a total row with no rate row above it checks nothing, so it fills nothing
+    assert.equal(
+      vatSummaryTable([TABLE_HEADER, "Összesen | 1 000 | 270 | 1 270"]),
+      null,
+    );
+  });
+
   it("reads nothing when a row does not add up (a wrong number is worse than an empty one), even if an earlier row did", () => {
     assert.equal(
       vatSummaryTable([TABLE_HEADER, "27 | 1 000 | 270 | 1 300"]),
