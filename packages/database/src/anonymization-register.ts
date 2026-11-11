@@ -1711,6 +1711,14 @@ export const ANONYMIZATION_REGISTER: Readonly<
     requestKey: "identifier",
     handledById: "identifier",
   },
+  CustomerCandidateManualEntry: {
+    sku: "identifier",
+    parameterCode: "business",
+    referenceUrl: "business",
+    sideEffects: "business",
+    note: "freeText",
+    approvedBy: "business",
+  },
   AiLinkSource: {
     host: "business",
     brand: "business",
