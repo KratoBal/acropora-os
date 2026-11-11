@@ -563,3 +563,39 @@ describe("MaintenanceInvoiceDraftService, the confirmation window (card 7ba97e0d
     assert.equal(sent.length, 0);
   });
 });
+
+/**
+ * WHAT THE INVOICE CARRIES, ON ITS ROW (the 7ba97e0d follow-up): the payment method the request sent, and the buyer as
+ * sent. WHAT TURNS IT RED: the issued row keeps no payment method (the billing page showed it empty), or no buyer
+ * snapshot (a later edit of the partner rewrote the issued invoice's page).
+ */
+describe("MaintenanceInvoiceDraftService.issue, the carried payment method and buyer", () => {
+  it("stores the request's payment method and the buyer it sent", async () => {
+    const { service, row, sent } = harness({
+      certificate: {
+        ...certificate,
+        serviceJob: {
+          customer: {
+            ...certificate.serviceJob.customer,
+            email: "info@allatkert.example",
+            billingEmail: "szamla@allatkert.example",
+          },
+        },
+      },
+    });
+    await service.issue("invoice-1");
+    assert.match(sent[0]!, /<fizmod>Átutalás<\/fizmod>/);
+    const stored = row as unknown as Record<string, unknown>;
+    assert.equal(stored.paymentMethod, "Átutalás");
+    assert.deepEqual(stored.buyerSnapshot, {
+      name: "Fővárosi Állatkert",
+      country: "HU",
+      zip: "1146",
+      city: "Budapest",
+      address: "Állatkerti körút 6-12.",
+      taxNumber: "12345678-2-42",
+      euTaxNumber: null,
+      email: "szamla@allatkert.example",
+    });
+  });
+});

@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { prisma, Prisma } from "@acropora/database";
 
+import type { BuyerSnapshot } from "../billing/billing-document-issue.js";
 import type { CertificateAmounts } from "../completion-certificates/completion-certificate-amounts.js";
 
 @Injectable()
@@ -97,6 +98,9 @@ export class MaintenanceInvoiceRepository {
       /** The dates the invoice carries (the confirmed ones, card 7ba97e0d S3): the details page shows them. */
       fulfillmentDate?: Date;
       dueDate?: Date;
+      /** What the request carried (`fizmod`), and the buyer as sent: the billing page reads them (card 7ba97e0d follow-up). */
+      paymentMethod?: string;
+      buyerSnapshot?: BuyerSnapshot;
     },
   ) {
     return this.database.invoice.update({
@@ -113,6 +117,9 @@ export class MaintenanceInvoiceRepository {
         invoiceFormat: "ELECTRONIC",
         fulfillmentDate: issued.fulfillmentDate,
         dueDate: issued.dueDate,
+        paymentMethod: issued.paymentMethod,
+        buyerSnapshot: issued.buyerSnapshot as
+          Prisma.InputJsonValue | undefined,
         syncStatus: "RECEIVED",
         syncError: null,
       },
