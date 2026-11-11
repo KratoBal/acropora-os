@@ -52,6 +52,8 @@ export interface BillingDocumentForIssue {
   /** yyyy-MM-dd */
   fulfillmentDate: string;
   dueDate: string | null;
+  /** yyyy-MM-dd, the confirmed issue date (card 7ba97e0d); absent: Számlázz.hu takes the day of the request. */
+  issueDate?: string;
   paymentMethod: string | null;
   currency: string;
   language: string | null;
@@ -175,6 +177,7 @@ export function toSzamlazzAgentInput(
     electronic: format.format === "ELECTRONIC",
     externalId: document.id,
     language,
+    ...(document.issueDate ? { issueDate: document.issueDate } : {}),
     fulfillmentDate: document.fulfillmentDate,
     paymentDueDate: dueDate,
     paymentMethod: paymentMethod.trim(),

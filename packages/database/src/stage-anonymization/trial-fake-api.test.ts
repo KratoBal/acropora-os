@@ -36,6 +36,7 @@ const readBody = (request: IncomingMessage): Promise<unknown> =>
 
 export const FAKE_TOKEN = "mobile_fake-token-not-real";
 export const FAKE_UPDATED_AT = "2026-11-09T12:00:00.123Z";
+export const FAKE_FINGERPRINT = "a".repeat(64);
 
 export async function startFakeApi(): Promise<FakeApi> {
   const requests: RecordedRequest[] = [];
@@ -56,6 +57,16 @@ export async function startFakeApi(): Promise<FakeApi> {
         status: "DRAFT",
         updatedAt: FAKE_UPDATED_AT,
         totals: { grossAmount: "12700.0000" },
+      },
+    ],
+    [
+      "GET /billing/documents/inv-1/issue-summary",
+      200,
+      {
+        issueDate: "2026-11-09",
+        fulfillmentDate: "2026-11-09",
+        dueDate: "2026-11-17",
+        fingerprint: FAKE_FINGERPRINT,
       },
     ],
     [
