@@ -687,6 +687,8 @@ describe("the invoice confirmation (card 7ba97e0d)", () => {
         buyerAddress: "1011 Budapest, Fő utca 1.",
         buyerTaxNumber: "12345678-2-42",
         buyerEuTaxNumber: null,
+        // no billing e-mail on the partner: the e-mail it has (S2, the send address)
+        buyerEmail: "vevo@example.com",
         issueDate: "2026-11-11",
         fulfillmentDate: "2026-09-30",
         dueDate: "2026-10-08",
@@ -799,6 +801,35 @@ describe("the invoice confirmation (card 7ba97e0d)", () => {
       /megváltoztak, mióta megnyitottad/,
     );
     assert.deepEqual([changed.calls.generate, changed.calls.claim], [0, 0]);
+  });
+
+  it("an e-mail changed after the window opened stops the issue too: the window showed where it sends", async () => {
+    const { fingerprint } = await setup().service.summary("doc-1", NOW);
+    const changed = setup({
+      over: {
+        customer: {
+          ...(row().customer as object),
+          billingEmail: "masik@example.com",
+        },
+      },
+    });
+    await assert.rejects(
+      () =>
+        changed.service.issue(
+          "doc-1",
+          "2026-09-30T10:00:00.000Z",
+          USER,
+          {
+            issueDate: "2026-11-11",
+            fulfillmentDate: "2026-09-30",
+            dueDate: "2026-11-19",
+            fingerprint,
+          },
+          NOW,
+        ),
+      /megváltoztak, mióta megnyitottad/,
+    );
+    assert.equal(changed.calls.generate, 0);
   });
 
   it("dates the rule refuses never reach Számlázz.hu", async () => {

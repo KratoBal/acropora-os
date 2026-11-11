@@ -1,4 +1,7 @@
 import type {
+  WebshopInvoiceConfirmation,
+  WebshopInvoiceIssueResult,
+  WebshopInvoiceSummary,
   WebshopOrderAttentionResponse,
   WebshopOrderDetail,
   WebshopOrderListQuery,
@@ -237,9 +240,28 @@ export const webshopOrdersApi = {
    * az álszámlázóval). A válasz a friss adatlap; a kiállított számlára a
    * második hívás nem állít ki újat.
    */
-  issueInvoice(token: string, id: string) {
-    return apiRequest<WebshopOrderDetail>(
+  issueInvoice(
+    token: string,
+    id: string,
+    confirmation: WebshopInvoiceConfirmation,
+  ) {
+    return apiRequest<WebshopInvoiceIssueResult<WebshopOrderDetail>>(
       `/webshop-orders/${encodeURIComponent(id)}/invoice`,
+      token,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(confirmation),
+      },
+    );
+  },
+  /**
+   * A SZÁMLA MEGERŐSÍTŐ ABLAKÁNAK ADATAI (kártya 7ba97e0d, S2): a rendelés
+   * számla-vázlata, ahogy a kiállítás építené (elmentve), és az összesítője.
+   */
+  invoiceSummary(token: string, id: string) {
+    return apiRequest<WebshopInvoiceSummary>(
+      `/webshop-orders/${encodeURIComponent(id)}/invoice/summary`,
       token,
       { method: "POST" },
     );

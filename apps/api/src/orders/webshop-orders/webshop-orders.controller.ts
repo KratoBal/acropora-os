@@ -37,6 +37,7 @@ import { WebshopOrderShippingMethodService } from "./webshop-order-shipping-meth
 import { WebshopStaleThresholdsDto } from "./dto/webshop-order-stale-thresholds.dto.js";
 import { WebshopOrderPaymentService } from "./webshop-order-payment.service.js";
 import { WebshopOrderInvoiceService } from "./webshop-order-invoice.service.js";
+import { WebshopOrderInvoiceIssueDto } from "./dto/webshop-order-invoice-issue.dto.js";
 import { WebshopOrderParcelService } from "./webshop-order-parcel.service.js";
 import { WebshopOrdersService } from "./webshop-orders.service.js";
 import { loadTransferPairing } from "./webshop-transfer-pairing.dry-run.js";
@@ -292,9 +293,32 @@ export class WebshopOrdersController {
   @RequirePermissions(PERMISSIONS.ORDERS_MANAGE, PERMISSIONS.BILLING_ISSUE)
   issueInvoice(
     @Param("id") id: string,
+    @Body() input: WebshopOrderInvoiceIssueDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.invoices.issue(id, user);
+    return this.invoices.issue(id, user, new Date(), {
+      issueDate: input.issueDate,
+      fulfillmentDate: input.fulfillmentDate,
+      dueDate: input.dueDate ?? null,
+      fingerprint: input.fingerprint,
+      send: input.send,
+    });
+  }
+
+  /**
+   * THE CONFIRMATION WINDOW'S VALUES FOR THE ORDER'S INVOICE (card 7ba97e0d, S2). POST, not GET: it makes and saves the
+   * order's invoice draft (and the customer, if missing) the way the issue does, so what it shows is what is issued.
+   * The same two rights as the issue.
+   */
+  @Post(":id/invoice/summary")
+  @HttpCode(200)
+  @Header("Cache-Control", "private, no-store")
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE, PERMISSIONS.BILLING_ISSUE)
+  invoiceSummary(
+    @Param("id") id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.invoices.invoiceSummary(id, user);
   }
 
   /**

@@ -1979,4 +1979,7 @@ export type {
   BillingIssueConfirmation,
   BillingIssueDatesCheck,
   BillingIssueSummary,
+  WebshopInvoiceConfirmation,
+  WebshopInvoiceIssueResult,
+  WebshopInvoiceSummary,
 } from "./billing-issue-summary.js";
