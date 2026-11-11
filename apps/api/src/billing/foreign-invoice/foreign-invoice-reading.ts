@@ -486,6 +486,82 @@ function plausibleName(raw: string | undefined): string | null {
   return name;
 }
 
+/**
+ * A STRIPE-ALAPÚ ANGOL SZÁMLA (kártya dbab22cd, harmadik kör: Anthropic, Figma, OpenAI, Magic Patterns). A fejléc-sorban a
+ * SZÁLLÍTÓ az első cella, utána egy kezelő (`@figma`), majd a "Bill to" (és a "Ship to") cella:
+ *   Kitalált Eszköz, Inc. | @kitalalt | Bill to | Ship to
+ * A szerkezet azonosítja a szállítót, ezért jogi forma NÉLKÜL is név ("Magic Patterns", "Anthropic, PBC"). A cella a vevő nevét
+ * nem hordozhatja, nem lehet maga a "Bill to", és legfeljebb 80 karakter; a hívó EGYEDI találatot vár (két eltérő név: semmi).
+ */
+export function hostedInvoiceSupplier(lines: readonly string[]): string | null {
+  const found = new Set<string>();
+  const buyer = ACROPORA_COMPANY.name.toLowerCase().split(/\s+/)[0]!;
+  for (const line of lines) {
+    const cells = line
+      .normalize("NFC")
+      .split(" | ")
+      .map((cell) => cell.trim());
+    const billTo = cells.findIndex((cell) => /^bill\s+to$/i.test(cell));
+    if (billTo < 1) continue;
+    const name = cells[0]!.replace(/\s+/g, " ");
+    if (!name || name.length > 80 || name.startsWith("@")) continue;
+    if (/^(bill|ship)\s+to$/i.test(name)) continue;
+    // a "Supplier | Bill to" fejléc első cellája a CÍMKE, nem a név: a név az alatta álló sor (a fejléc-olvasó dolga)
+    if (SELLER_CELL_START.test(name) || BUYER_CELL_START.test(name)) continue;
+    if (name.toLowerCase().includes(buyer)) continue;
+    found.add(name);
+  }
+  return found.size === 1 ? [...found][0]! : null;
+}
+
+/**
+ * A STRIPE-SZÁMLA SZÁMA (kártya dbab22cd, harmadik kör): "Invoice number | OHCYTT2R | \x00 | 0012". A szövegréteg a kötőjelet NUL cellának
+ * adja, a számla száma a TELJES alak (`OHCYTT2R-0012`): az előtag az ügyfél számla-előtagja, minden számlánkon ugyanaz, tehát egymagában
+ * nem azonosít számlát (acrobot 2026-11-11). Csak ezt a háromcellás alakot olvassa; más számlaszám-alak a meglévő olvasóké.
+ */
+export function hostedInvoiceNumber(lines: readonly string[]): string | null {
+  const found = new Set<string>();
+  for (const line of lines) {
+    const cells = line
+      .normalize("NFC")
+      .split(" | ")
+      .map((cell) => cell.trim());
+    const label = cells.findIndex((cell) => /^invoice\s+number$/i.test(cell));
+    if (label < 0) continue;
+    const [prefix, dash, serial] = cells.slice(label + 1, label + 4);
+    if (
+      prefix !== undefined &&
+      serial !== undefined &&
+      /^[A-Z0-9]{6,12}$/.test(prefix) &&
+      /^(?:\x00|-|–)$/.test(dash ?? "") &&
+      /^\d{3,6}$/.test(serial)
+    )
+      found.add(`${prefix}-${serial}`);
+  }
+  return found.size === 1 ? [...found][0]! : null;
+}
+
+/**
+ * A KÜLFÖLDI (EU) ÁFA-SZÁM A "VAT" CÍMKÉS SORBÓL (kártya dbab22cd, harmadik kör: `IE VAT IE4143435AH`, `VAT Registration | EU VAT | \x00 | IE4276970QH`).
+ * A közös szöveg-olvasó (a begyűjtő is használja) az ilyen alakot nem adja; ezt itt, csak a külföldi számla olvasójában vesszük fel. A saját
+ * (HU) számunk nem EU_NOT_HU; egy EGYEDI, legalább egy számjegyet hordozó, 8-15 karakteres találat kell, különben semmi.
+ */
+export function vatLineEuNumber(lines: readonly string[]): string | null {
+  const found = new Set<string>();
+  for (const line of lines) {
+    if (!/(^|[^A-Za-z])VAT([^A-Za-z]|$)/.test(line)) continue;
+    for (const token of line.replace(/\x00/g, " ").split(/[\s|:]+/))
+      if (
+        token.length >= 8 &&
+        token.length <= 15 &&
+        /\d/.test(token) &&
+        EU_NOT_HU.test(token)
+      )
+        found.add(token);
+  }
+  return found.size === 1 ? [...found][0]! : null;
+}
+
 export function supplierNameFromText(lines: readonly string[]): string | null {
   const candidates = new Set<string>();
   const first = lines.find((line) => line.trim());
@@ -514,6 +590,9 @@ export function supplierNameFromText(lines: readonly string[]): string | null {
     const below = plausibleName(cell);
     if (below) candidates.add(below);
   });
+  // a Stripe-alapú angol számla fejléc-sora: "<szállító> | @kezelő | Bill to | Ship to"
+  const hosted = hostedInvoiceSupplier(lines);
+  if (hosted) candidates.add(hosted);
   // "Eladó neve: | Kitalált Kft.": a szállító-cimke cellája és a név ugyanabban a sorban
   for (const line of lines) {
     const cells = line
@@ -612,7 +691,10 @@ export function readForeignInvoice(input: ForeignReadingInput): ForeignReading {
     set("dueDate", labelledDate(lines, DUE_LABEL), "TEXT");
     set("fulfillmentDate", labelledDate(lines, SUPPLY_LABEL), "TEXT");
     // a számlaszámot a cimkézett olvasás után csak az üres hely tölti
+    set("documentNumber", hostedInvoiceNumber(lines), "TEXT");
     set("documentNumber", table.documentNumber, "TEXT");
+
+    set("supplierEuTaxNumber", vatLineEuNumber(lines), "TEXT");
 
     const total = labelledTotal(lines);
     if (total) {
