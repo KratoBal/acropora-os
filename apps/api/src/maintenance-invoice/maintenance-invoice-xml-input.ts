@@ -8,6 +8,7 @@ import {
 } from "../completion-certificates/completion-certificate-amounts.js";
 import { formatQuantity } from "../completion-certificates/completion-certificate-content.js";
 import { missingAddressParts } from "../customers/address-parts.js";
+import { budapestDayKey } from "../dashboard/budapest-day.js";
 import type { SzamlazzAgentInvoiceInput } from "../integrations/szamlazz/szamlazz-agent-xml.js";
 
 /**
@@ -177,12 +178,19 @@ export interface MaintenanceInvoiceXmlInput {
 }
 
 /**
- * A FIZETÉSI FELTÉTELEK, BALÁZS MEGERŐSÍTÉSÉVEL (2026-10-03).
+ * A FIZETÉSI FELTÉTELEK, BALÁZS MEGERŐSÍTÉSÉVEL (2026-10-03, pontosítva 2026-11-11).
  *
- * A teljesítés dátuma a bizonylat kiállításának napja (ez a "teljesítés"
+ * A teljesítés dátuma a teljesítési igazolás kiállításának napja (ez a "teljesítés"
  * ténye maga), a fizetési mód "Átutalás". A fizetési határidő PARTNERENKÉNT
  * állítható (a Partnerek képernyőn, a vevő-tükörre másolva), mert van, aki 8,
  * és van, aki 30 nap alatt fizet. Ahol nincs megadva, ott 8 nap.
+ *
+ * A HATÁRIDŐ KEZDŐPONTJA A SZÁMLA KELTE, NEM A TIG DÁTUMA (Balázs, 2026-11-10
+ * 10:39 UTC, kártya 27d12a67): Luca egy napokkal korábbi TIG-ből állított ki
+ * számlát, és a 30 napos határidő 24 lett, mert a napokat a TIG dátumához adtuk.
+ * A számla keltét a Számlázz.hu adja (a kérésben nincs `keltDatum`): a kérés
+ * napja, ezért a határidő a kérés napjából indul. A napok száma változatlan: a
+ * partnerből jön.
  */
 export const DEFAULT_PAYMENT_DUE_DAYS = 8;
 
@@ -190,8 +198,17 @@ function isoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+/** `yyyy-MM-dd` + napok, naptári számolással (nincs időzóna-eltolás). */
+function addCalendarDays(day: string, days: number): string {
+  const date = new Date(`${day}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return isoDate(date);
+}
+
 export function maintenanceInvoiceXmlInputFrom(
   certificate: MaintenanceInvoiceCertificateSource,
+  /** A kérés pillanata: a számla kelte (Budapest szerinti napja) ez, a határidő innen indul. */
+  now: Date = new Date(),
 ): MaintenanceInvoiceXmlInput {
   if (certificate.items.length === 0)
     throw new MaintenanceInvoiceInputError("NO_ITEMS");
@@ -209,11 +226,9 @@ export function maintenanceInvoiceXmlInputFrom(
 
   const mapped = certificate.items.map(mapItem);
   const fulfillmentDate = certificate.issuedAt;
-  const dueDate = new Date(fulfillmentDate);
-  dueDate.setDate(
-    dueDate.getDate() +
-      (certificate.serviceJob.customer.paymentDueDays ??
-        DEFAULT_PAYMENT_DUE_DAYS),
+  const dueDate = addCalendarDays(
+    budapestDayKey(now),
+    certificate.serviceJob.customer.paymentDueDays ?? DEFAULT_PAYMENT_DUE_DAYS,
   );
 
   return {
@@ -230,7 +245,7 @@ export function maintenanceInvoiceXmlInputFrom(
       },
     ),
     xmlInput: {
-      paymentDueDate: isoDate(dueDate),
+      paymentDueDate: dueDate,
       fulfillmentDate: isoDate(fulfillmentDate),
       paymentMethod: "Átutalás",
       currency: "HUF",
