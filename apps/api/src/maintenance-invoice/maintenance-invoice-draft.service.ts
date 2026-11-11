@@ -35,13 +35,13 @@ import { customerTaxNumberProblem } from "../billing/buyer-tax-number.js";
 import { maintenanceInvoiceIssueEnabled } from "./maintenance-invoice-issue.config.js";
 import { effectivePaymentDueDays } from "../customers/partner-payment-terms.js";
 import { MaintenanceInvoiceRepository } from "./maintenance-invoice.repository.js";
+import { TIG_ISSUED_PDF as ISSUED_PDF } from "../billing/issued-pdf-key.js";
 
 /** The environment the issue switch is read from (a test hands in its own). */
 export const MAINTENANCE_INVOICE_ENV = Symbol("MAINTENANCE_INVOICE_ENV");
 
 /** Where the two PDFs of one invoice live in the document store. */
 const PREVIEW_PDF = "preview.pdf";
-const ISSUED_PDF = "invoice.pdf";
 
 /**
  * A KLIENSNEK SZÁNT, SZŰK ALAK -- a UNAS-tükör `toInvoiceSummary` mintája
