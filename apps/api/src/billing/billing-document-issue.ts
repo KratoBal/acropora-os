@@ -4,6 +4,7 @@ import {
   EU_COUNTRY_NAMES_HU,
   getDocumentCapabilities,
   isCardPayment,
+  proposedIssueDueDate,
   szamlazzDocumentTotals,
   szamlazzLineAmounts,
   viesCountry,
@@ -311,11 +312,14 @@ export function buildIssueInput(row: BillingDocumentRow): IssueInput {
  * THE CONFIRMATION WINDOW'S VALUES (card 7ba97e0d), FROM THE SAME BUILDER AS THE ISSUE: `buildIssueInput` is what
  * the issue sends to Számlázz.hu, so the window cannot show one thing while the invoice carries another. A draft
  * that could not be issued is refused here with the same message the issue would give. The issue date proposed is
- * today in Budapest (Számlázz.hu would take the day of the request); the other two dates are the draft's.
+ * today in Budapest (Számlázz.hu would take the day of the request); the other two dates are the draft's, except a
+ * due date before today: with `paymentDueDays` it is proposed from today (`proposedIssueDueDate`). Without them (the
+ * issue's own re-check, which reads only the fingerprint and the two flags) the draft's due date stays.
  */
 export function billingIssueSummary(
   row: BillingDocumentRow,
   today: string,
+  paymentDueDays?: number,
 ):
   | { ok: true; summary: BillingIssueSummary }
   | { ok: false; code: string; message: string } {
@@ -339,7 +343,11 @@ export function billingIssueSummary(
       buyerEmail: document.buyer.email?.trim() || null,
       issueDate: today,
       fulfillmentDate: document.fulfillmentDate,
-      dueDate: showsPaymentFields ? document.dueDate : null,
+      dueDate: !showsPaymentFields
+        ? null
+        : paymentDueDays === undefined
+          ? document.dueDate
+          : proposedIssueDueDate(document.dueDate, today, paymentDueDays),
       paymentMethod,
       showsPaymentFields,
       dueDateFollowsIssueDate:

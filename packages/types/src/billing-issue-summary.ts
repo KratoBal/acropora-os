@@ -92,6 +92,28 @@ const isDay = (value: unknown): value is string =>
   !Number.isNaN(Date.parse(`${value}T00:00:00Z`)) &&
   new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
 
+/** `yyyy-MM-dd` moved by whole days or years, on the calendar (no time zone shift). */
+function shiftDay(day: string, by: { days?: number; years?: number }): string {
+  const date = new Date(`${day}T00:00:00.000Z`);
+  if (by.years) date.setUTCFullYear(date.getUTCFullYear() + by.years);
+  if (by.days) date.setUTCDate(date.getUTCDate() + by.days);
+  return date.toISOString().slice(0, 10);
+}
+
+/**
+ * THE DUE DATE THE WINDOW PROPOSES (acrobot 47091, after S1): the draft's, unless it falls before the issue date (a
+ * draft saved days ago and issued today). Then it is the issue date plus the buyer's payment days, as a new invoice
+ * would count it. Null stays null: the issue refuses a missing due date with its own message.
+ */
+export function proposedIssueDueDate(
+  draftDueDate: string | null,
+  issueDate: string,
+  paymentDueDays: number,
+): string | null {
+  if (draftDueDate === null || draftDueDate >= issueDate) return draftDueDate;
+  return shiftDay(issueDate, { days: paymentDueDays });
+}
+
 /** A card or online payment at ordering: the shared classifier of the missing-payments list. */
 export function isCardPayment(
   paymentMethod: string | null | undefined,
@@ -101,7 +123,8 @@ export function isCardPayment(
 
 /**
  * The window's and the server's rule for the three dates, one function, one Hungarian sentence per refusal:
- * every date a real calendar day; the issue date not later than today; the due date not earlier than the issue
+ * every date a real calendar day; the issue date not later than today; the fulfilment date at most a year before or
+ * after the issue date; the due date not earlier than the issue
  * date; for a card payment the due date IS the issue date (whatever was sent). Without payment fields no due date.
  */
 export function checkBillingIssueDates(
@@ -121,6 +144,16 @@ export function checkBillingIssueDates(
     };
   if (!isDay(input.fulfillmentDate))
     return { ok: false, error: "A teljesítés ideje egy naptári nap lehet." };
+  // a sanity bound (acrobot 47091): a mistyped year ("2062") does not reach the invoice
+  if (
+    input.fulfillmentDate < shiftDay(input.issueDate, { years: -1 }) ||
+    input.fulfillmentDate > shiftDay(input.issueDate, { years: 1 })
+  )
+    return {
+      ok: false,
+      error:
+        "A teljesítés ideje legfeljebb egy évvel térhet el a számla keltétől.",
+    };
   if (!context.showsPaymentFields)
     return {
       ok: true,

@@ -555,7 +555,7 @@ export const advanceIdFor = (proformaId: string) => `${proformaId}-eloleg`;
 export const finalIdFor = (advanceId: string) => `${advanceId}-vegszamla`;
 
 /** A fizetési határidő alapértéke: a teljesítés után nyolc nappal (mint a szerkesztőben). */
-const DEFAULT_PAYMENT_DAYS = 8;
+export const DEFAULT_PAYMENT_DAYS = 8;
 
 /** `yyyy-MM-dd` + napok, naptári számolással (nincs időzóna-eltolás). */
 function addDaysTo(day: string, days: number): string {
