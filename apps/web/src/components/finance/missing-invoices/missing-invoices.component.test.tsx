@@ -1401,6 +1401,53 @@ describe("MissingInvoicesDrawer", () => {
     ).toBeInTheDocument();
   });
 
+  /*
+    AZ ÖSSZEG SZERINTI JELÖLT FELIRATA (#2436 barracuda-megjegyzés). MI PIROSÍT: ha a név nélküli, csak
+    összeg szerinti jelölt ugyanúgy látszik, mint a név szerinti (a választó azt hiheti, a kiállító is
+    egyezik); ha a név szerinti jelölt is megkapja a feliratot.
+  */
+  it("an amount-only candidate says so; a name-matched one does not", () => {
+    render(
+      <MissingInvoicesDrawer
+        {...base()}
+        extras={extras({
+          candidates: [
+            {
+              documentId: "amt-1",
+              number: "ARBA26000028402",
+              date: "2026-10-22",
+              gross: "24990",
+              currency: "HUF",
+              source: "MAILBOX",
+              payee: "COMPANY",
+              hasOriginal: true,
+              amountOnly: true,
+            },
+            {
+              documentId: "name-1",
+              number: "KS26/12407",
+              date: "2026-10-22",
+              gross: "56420",
+              currency: "HUF",
+              source: "MAILBOX",
+              payee: "COMPANY",
+              hasOriginal: true,
+            },
+          ],
+        })}
+      />,
+    );
+    const label = /Csak az összeg egyezik, a kiállító neve nem/;
+    expect(
+      within(screen.getByText("ARBA26000028402").closest("li")!).getByText(
+        label,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByText("KS26/12407").closest("li")!).queryByText(label),
+    ).toBeNull();
+  });
+
   it("without an upload handler there is no upload section", () => {
     render(<MissingInvoicesDrawer {...base()} onUpload={undefined} />);
     expect(screen.queryByLabelText("Számla PDF")).toBeNull();
