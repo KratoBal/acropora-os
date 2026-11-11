@@ -12045,6 +12045,32 @@ model AiChatSetting {
   updatedAt                     DateTime @updatedAt
 }
 
+/// AZ AI CSEVEGÉS KAPCSOLAT-KÉRÉSE (kártya f5b8f7ba, 4c szelet): egy vásárló a kolléga-ajánlatra e-mail címet vagy magyar
+/// telefonszámot adott, az AI szolgáltatás átadta, és az elérhetőség EGYETLEN helye az OS (a rekord, az értesítés, a megőrzés;
+/// az AI szolgáltatás a nyers értéket az átadás után a saját soraiból maszkolja). `requestKey` az AI szolgáltatás üzenet-azonosítója:
+/// egy üzenet egy kérést ad, akárhányszor próbálja újra az átadást (az egyediség az adatbázisé, nem egy olvasásé az írás előtt).
+/// `notifiedAt` üres, ha az e-mail nem ment ki (a kérés ettől még a listában van); `handledAt` a kezelés ideje, a megőrzés ezt
+/// nézi (a kezelt és a kezeletlen kérésnek külön napja van a beállításban). A kezelő azonosítója csak napló: nincs kapcsolat,
+/// a felhasználó törlése ne érintse a kérést.
+model AiContactRequest {
+  id              String           @id @default(cuid())
+  channel         AiContactChannel
+  value           String
+  conversationRef String
+  requestKey      String           @unique
+  notifiedAt      DateTime?
+  handledAt       DateTime?
+  handledById     String?
+  createdAt       DateTime         @default(now())
+
+  @@index([createdAt])
+}
+
+enum AiContactChannel {
+  EMAIL
+  PHONE
+}
+
 /// AZ AI CSEVEGÉS TÁROLT LINK-FORRÁSAI (kártya 9d060f5c, a terv 4. és 6.3 szakasza): az AI válasz-kapuja alapból
 /// semmilyen külső linket nem enged ki; egy host csak akkor mehet, ha ezen a listán áll ÉS a három kivétel egyike
 /// teljesül (a felhasználó kér; gyártói dokumentum a találat márkájával; hatóság a témához). Üres lista: egyik kivétel
