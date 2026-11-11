@@ -15,11 +15,13 @@
 --
 -- HOW IT IS APPLIED. Not a Prisma migration: the role is per environment (its password is a secret
 -- of that environment), and a migration naming a role that does not exist would stop every
--- deployment. An operator applies it, after `prisma migrate deploy`, with a role that owns the
--- tables:
+-- deployment. The internal API applies it on every start, right after `prisma migrate deploy`,
+-- wherever the role exists (apps/api/docker-entrypoint-migrate.cjs, card 4f0ad1be), as one
+-- transaction; a failure leaves the rights as they were and is an ERROR line on the API's log.
+-- Creating the role stays a one-time manual step:
 --
 --   CREATE ROLE "reefclub_app" LOGIN PASSWORD '...';      -- once per environment, secret
---   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/database/sql/reefclub-role.sql
+--   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/database/sql/reefclub-role.sql  -- by hand
 --
 -- It is idempotent: it first takes every table right away from the role, then grants this list.
 -- A NEW TABLE OR COLUMN THE REEFCLUB PROCESS USES NEEDS A LINE HERE: the integration spec
