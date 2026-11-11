@@ -1,5 +1,7 @@
 import type {
   BillingDocumentDetail,
+  BillingIssueConfirmation,
+  BillingIssueSummary,
   BillingIssuingCheck,
   BillingIssuingResolveInput,
   BillingDocumentDraftInput,
@@ -449,15 +451,30 @@ export const billingDocumentsApi = {
    * létre; a szerver kapcsolója (`BILLING_ISSUE_ENABLED`) nélkül elutasítja,
    * hívás előtt. Az ütközés-őr ugyanaz, mint a mentésnél.
    */
-  issue(token: string, id: string, expectedUpdatedAt: string) {
+  issue(
+    token: string,
+    id: string,
+    expectedUpdatedAt: string,
+    confirmation: BillingIssueConfirmation,
+  ) {
     return apiRequest<BillingDocumentDetail>(
       `/billing/documents/${encodeURIComponent(id)}/issue`,
       token,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ expectedUpdatedAt }),
+        body: JSON.stringify({ expectedUpdatedAt, ...confirmation }),
       },
+    );
+  },
+  /**
+   * A KIÁLLÍTÁS MEGERŐSÍTŐ ABLAKÁNAK ADATAI (kártya 7ba97e0d): a vevő, a három
+   * dátum és a fizetési mód, ahogy a kiállítás küldené (ugyanabból az építőből).
+   */
+  issueSummary(token: string, id: string) {
+    return apiRequest<BillingIssueSummary>(
+      `/billing/documents/${encodeURIComponent(id)}/issue-summary`,
+      token,
     );
   },
   /**

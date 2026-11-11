@@ -10,9 +10,12 @@ import {
 } from "@nestjs/common";
 import {
   billingEmailDelivery,
+  checkBillingIssueDates,
   type AuthenticatedUser,
   type BillingDocumentDetail,
   type BillingDocumentType,
+  type BillingIssueConfirmation,
+  type BillingIssueSummary,
   type InvoiceFormat,
 } from "@acropora/types";
 
@@ -29,7 +32,9 @@ import { SzamlazzCredentialProvider } from "../integrations/szamlazz/szamlazz-cr
 import { storageKeyFor } from "../service-assets/document-store/document-storage-key.js";
 import { DOCUMENT_STORE } from "../service-assets/document-store/document-store.provider.js";
 import type { DocumentStore } from "../service-assets/document-store/document-store.js";
+import { budapestDayKey } from "../dashboard/budapest-day.js";
 import {
+  billingIssueSummary,
   buildIssueInput,
   finalInvoiceIssueProblem,
 } from "./billing-document-issue.js";
@@ -159,10 +164,31 @@ export class BillingDocumentIssueService {
     return contractOverbillingProblem(facts.items, facts.billed, draft);
   }
 
+  /**
+   * THE CONFIRMATION WINDOW'S VALUES (card 7ba97e0d), from the builder the issue uses. Only for a draft: an issued
+   * or issuing document has nothing left to confirm.
+   */
+  async summary(id: string, now = new Date()): Promise<BillingIssueSummary> {
+    const row = await this.documents.find(id);
+    if (!row) throw new NotFoundException("A bizonylat nem található.");
+    if (row.status !== "DRAFT")
+      throw new ConflictException("Csak vázlat állítható ki.");
+    const result = billingIssueSummary(row, budapestDayKey(now));
+    if (!result.ok) throw new BadRequestException(result.message);
+    return result.summary;
+  }
+
+  /**
+   * `confirmation` is what the window showed and the person confirmed (card 7ba97e0d): the HTTP route requires it,
+   * an internal caller that has not shown a window yet (the webshop, until its slice) passes none and issues as
+   * before. With it, the shown values are recomputed and must match, and the three dates go into the invoice.
+   */
   async issue(
     id: string,
     expectedUpdatedAt: string,
     user: AuthenticatedUser,
+    confirmation?: BillingIssueConfirmation,
+    now = new Date(),
   ): Promise<BillingDocumentDetail> {
     const mode = billingIssueMode(this.environment);
     if (mode === "conflict")
@@ -214,6 +240,30 @@ export class BillingDocumentIssueService {
     // egy szerződés-tétel sem léphet túl a még nem számlázott mennyiségen
     const contractProblem = await this.contractOverbilling(row);
     if (contractProblem) throw new BadRequestException(contractProblem);
+
+    // WHAT THE WINDOW SHOWED IS WHAT THE INVOICE CARRIES (card 7ba97e0d): the same summary again, the shown values
+    // compared by their digest, the three dates checked by the shared rule and put into the invoice
+    const today = budapestDayKey(now);
+    let issueDay: string | null = null;
+    if (confirmation) {
+      const shown = billingIssueSummary(row, today);
+      if (!shown.ok) throw new BadRequestException(shown.message);
+      if (shown.summary.fingerprint !== confirmation.fingerprint)
+        throw new ConflictException(
+          "A számla adatai megváltoztak, mióta megnyitottad a megerősítést (például a partner neve, címe vagy adószáma). Nyisd meg újra, és nézd meg, mi változott.",
+        );
+      const dates = checkBillingIssueDates(confirmation, {
+        today,
+        showsPaymentFields: shown.summary.showsPaymentFields,
+        dueDateFollowsIssueDate: shown.summary.dueDateFollowsIssueDate,
+      });
+      if (!dates.ok) throw new BadRequestException(dates.error);
+      input.document.issueDate = dates.value.issueDate;
+      input.document.fulfillmentDate = dates.value.fulfillmentDate;
+      if (dates.value.dueDate !== null)
+        input.document.dueDate = dates.value.dueDate;
+      issueDay = dates.value.issueDate;
+    }
 
     let agentKey: string;
     try {
@@ -348,7 +398,20 @@ export class BillingDocumentIssueService {
       await this.repository.markIssued({
         id,
         invoiceNumber: response.invoiceNumber,
-        issueDate: new Date(),
+        // the moment of the issue, as before; a confirmed earlier day is stored at its noon (UTC), so it reads as that
+        // day in every time zone a page formats it in
+        issueDate:
+          issueDay === null || issueDay === today
+            ? new Date()
+            : new Date(`${issueDay}T12:00:00Z`),
+        ...(confirmation
+          ? {
+              fulfillmentDate: dayDate(input.document.fulfillmentDate),
+              dueDate: input.document.dueDate
+                ? dayDate(input.document.dueDate)
+                : null,
+            }
+          : {}),
         buyer: input.buyer,
         lines: input.lines,
         totals,
@@ -415,4 +478,9 @@ export class BillingDocumentIssueService {
     if (!issued) throw new NotFoundException("A bizonylat nem található.");
     return toBillingDocumentDetail(issued);
   }
+}
+
+/** A confirmed calendar day as the draft stores its dates (UTC midnight, read back by `toISOString().slice(0, 10)`). */
+function dayDate(day: string): Date {
+  return new Date(`${day}T00:00:00Z`);
 }

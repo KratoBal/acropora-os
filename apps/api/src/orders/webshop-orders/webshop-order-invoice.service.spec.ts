@@ -98,6 +98,10 @@ function setup(
     buyer?: typeof SAME_BUYER;
     /** A rendelés fizetési munkamenetének szolgáltatója (függő fizetés). */
     provider?: string;
+    /** The summary's send address (card 7ba97e0d, S2); null: the partner has none. */
+    buyerEmail?: string | null;
+    /** The mail service throws (a closed gate, a provider error). */
+    sendFails?: boolean;
   } = {},
 ) {
   const calls: string[] = [];
@@ -181,22 +185,59 @@ function setup(
       return doc(id);
     },
   } as unknown as BillingDocumentsService;
+  const confirmations: unknown[] = [];
+  const sent: unknown[] = [];
   const issuing = {
     issueMode: () => over.mode ?? "stub",
-    issue: async (id: string, expected: string) => {
+    issue: async (
+      id: string,
+      expected: string,
+      _user: unknown,
+      confirmation?: unknown,
+    ) => {
       calls.push(`issue ${id} ${expected}`);
+      confirmations.push(confirmation);
+    },
+    summary: async (id: string) => {
+      calls.push(`summary ${id}`);
+      return {
+        buyerName: "Nagy Emese",
+        buyerEmail:
+          over.buyerEmail === undefined ? "emese@example.hu" : over.buyerEmail,
+        issueDate: "2026-10-05",
+        fulfillmentDate: "2026-10-05",
+        dueDate: "2026-10-13",
+        fingerprint: "f".repeat(64),
+      };
     },
   } as unknown as BillingDocumentIssueService;
+  const email = {
+    send: async (id: string, input: unknown) => {
+      calls.push(`send ${id}`);
+      if (over.sendFails)
+        throw new Error("A levelezés ezen a szerveren ki van kapcsolva.");
+      sent.push(input);
+    },
+  };
+  const emailDrafts = {
+    templateDraft: async () => ({
+      subject: "Számla – {{document_number}}",
+      body: "Csatolva.",
+      bodyHtml: null,
+    }),
+  };
   return {
     calls,
+    confirmations,
+    sent,
     service: new WebshopOrderInvoiceService(
       orders,
       repository,
       customers,
       documents,
       issuing,
-      {} as never,
-      {} as never,
+      email as never,
+      emailDrafts as never,
     ),
   };
 }
@@ -601,5 +642,121 @@ describe("WebshopOrderInvoiceService", () => {
       calls.filter((call) => call.startsWith("create customer")).length,
       1,
     );
+  });
+});
+
+/**
+ * THE CONFIRMATION WINDOW ON THE WEBSHOP INVOICE (card 7ba97e0d, S2; Balázs 2026-11-11 11:12-11:20). WHAT TURNS IT RED:
+ * the summary is not the draft the issue makes; the confirmation does not reach the shared issuer; "Elküldöm e-mailben"
+ * sends nowhere, somewhere else than the summary's address, before the issue, or without being asked; an order without
+ * an address is issued anyway when sending was asked; an already issued invoice gets a new window.
+ */
+describe("WebshopOrderInvoiceService, the confirmation window (card 7ba97e0d)", () => {
+  const CONFIRMED = {
+    issueDate: "2026-10-05",
+    fulfillmentDate: "2026-10-05",
+    dueDate: "2026-10-13",
+    fingerprint: "f".repeat(64),
+  };
+
+  it("the summary is the issue's own draft, saved, and the shared summary of it, with the draft's id", async () => {
+    const { calls, service } = setup();
+    const summary = await service.invoiceSummary("order_38", USER, NOW);
+    assert.equal(summary.documentId, "webshop-order_38");
+    assert.equal(summary.buyerEmail, "emese@example.hu");
+    assert.deepEqual(calls, [
+      "source",
+      "customerByKey guest:emese@example.hu",
+      "customersByEmail",
+      "create customer Nagy Emese",
+      "link cust_new guest:emese@example.hu",
+      "create draft webshop-order_38 for cust_new from order_38",
+      "summary webshop-order_38",
+    ]);
+  });
+
+  it("an issued invoice has nothing to confirm", async () => {
+    const { calls, service } = setup({
+      invoice: { id: "webshop-order_38", status: "ISSUED", number: "E-1" },
+    });
+    await assert.rejects(service.invoiceSummary("order_38", USER, NOW), {
+      status: 409,
+    });
+    assert.deepEqual(calls, []);
+  });
+
+  it("the confirmation reaches the shared issuer; unchecked, nothing is sent", async () => {
+    const { calls, confirmations, service } = setup();
+    await service.issue("order_38", USER, NOW, { ...CONFIRMED, send: false });
+    assert.deepEqual(confirmations, [{ ...CONFIRMED, send: false }]);
+    assert.equal(
+      calls.some((call) => call.startsWith("send")),
+      false,
+    );
+  });
+
+  it('"Elküldöm e-mailben": after the issue, to the summary\'s address, with the Levelezés template', async () => {
+    // the partner's billing address, not the order's e-mail: the window showed this one
+    const { calls, sent, service } = setup({
+      buyerEmail: "szamlazas@nagyemese.hu",
+    });
+    await service.issue("order_38", USER, NOW, { ...CONFIRMED, send: true });
+    const issueAt = calls.indexOf(
+      "issue webshop-order_38 2026-10-05T12:00:01.000Z",
+    );
+    const sendAt = calls.indexOf("send webshop-order_38");
+    assert.ok(issueAt >= 0 && sendAt > issueAt, calls.join(" | "));
+    assert.deepEqual(
+      (sent[0] as { to: string[]; mode: string; subject: string }).to,
+      ["szamlazas@nagyemese.hu"],
+    );
+    assert.equal((sent[0] as { mode: string }).mode, "SEND");
+    assert.equal(
+      (sent[0] as { subject: string }).subject,
+      "Számla – {{document_number}}",
+    );
+  });
+
+  it("sending asked with no address stops before the issue", async () => {
+    const { calls, service } = setup({ buyerEmail: null });
+    await assert.rejects(
+      service.issue("order_38", USER, NOW, { ...CONFIRMED, send: true }),
+      /nincs e-mail címe/,
+    );
+    assert.equal(
+      calls.some((call) => call.startsWith("issue")),
+      false,
+    );
+  });
+
+  // barracuda on #2419: the invoice is issued before the letter; a failed send is reported, not thrown
+  it("a failed send after the issue: the answer is the fresh order, the send's failure beside it", async () => {
+    const { calls, service } = setup({ sendFails: true });
+    const result = await service.issue("order_38", USER, NOW, {
+      ...CONFIRMED,
+      send: true,
+    });
+    assert.deepEqual(result.order, { id: "order_38" });
+    assert.deepEqual(result.mail, {
+      to: "emese@example.hu",
+      sent: false,
+      error: "A levelezés ezen a szerveren ki van kapcsolva.",
+    });
+    assert.ok(
+      calls.includes("issue webshop-order_38 2026-10-05T12:00:01.000Z"),
+    );
+  });
+
+  it("a sent invoice says so beside the order; unasked, the mail outcome is null", async () => {
+    const sent = await setup().service.issue("order_38", USER, NOW, {
+      ...CONFIRMED,
+      send: true,
+    });
+    assert.deepEqual(sent.mail, { to: "emese@example.hu", sent: true });
+    const quiet = await setup().service.issue("order_38", USER, NOW, {
+      ...CONFIRMED,
+      send: false,
+    });
+    assert.equal(quiet.mail, null);
   });
 });
