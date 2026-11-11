@@ -850,6 +850,9 @@ enum BillingSourceType {
   WEBSHOP_ORDER
   /// Beszerzési szerződés (hétfői lista M4); a `sourceId` a `Contract.id`.
   CONTRACT
+  /// Teljesítési igazolásból kiállított számla (TIG; Balázs 2026-11-11 13:22 UTC): a `sourceId` a `CompletionCertificate.id`.
+  /// CSAK a kiállításkor kapja meg; a TIG piszkozata forrás nélküli marad, tehát nem saját sor és nem szerkeszthető.
+  COMPLETION_CERTIFICATE
 }
 
 /// Egy bizonylat-sor fajtája. A kedvezmény KÜLÖN, NEGATÍV sor, közvetlenül az

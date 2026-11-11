@@ -300,7 +300,8 @@ describe("listWhere", () => {
       assert.equal(where.direction, "OUTBOUND");
       assert.equal(where.source, "SZAMLAZZ");
       assert.deepEqual(where.sourceType, { not: null });
-      assert.equal(where.completionCertificateId, null);
+      // the issued TIG invoice is an own row (Balázs 2026-11-11 13:22 UTC): its source decides, not the certificate
+      assert.equal("completionCertificateId" in where, false);
     }
   });
 

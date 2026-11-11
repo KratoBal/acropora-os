@@ -1,6 +1,6 @@
 import {
   BILLING_DOCUMENT_TYPES,
-  BILLING_SOURCE_TYPES,
+  BILLING_DRAFT_SOURCE_TYPES,
   INVOICE_FORMATS,
   type BillingDocumentDraftInput,
   type BillingDocumentLineInput,
@@ -56,7 +56,7 @@ export class BillingDocumentDraftDto implements BillingDocumentDraftInput {
   @IsOptional() @IsString() @MaxLength(100) reference!: string | null;
   @IsOptional() @IsString() @MaxLength(2000) note!: string | null;
   @IsOptional()
-  @IsIn(BILLING_SOURCE_TYPES)
+  @IsIn(BILLING_DRAFT_SOURCE_TYPES)
   sourceType!: BillingSourceType | null;
   @IsOptional() @IsString() @MaxLength(100) sourceId!: string | null;
   @IsArray()
