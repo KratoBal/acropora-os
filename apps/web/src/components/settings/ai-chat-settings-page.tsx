@@ -18,6 +18,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { aiChatSettingsApi } from "@/lib/api/ai-chat-settings";
+import { AiContactRequestsSection } from "./ai-contact-requests-section";
 
 /**
  * AZ AI CSEVEGÉS BEÁLLÍTÁSAI (kártya f5b8f7ba, 4a szelet; Balázs 2026-11-11 08:51: a kapcsolatfelvétel címzettje, a tárolás és a
@@ -262,6 +263,7 @@ export function AiChatSettingsPage() {
           </div>
         </PilotCard>
       ) : null}
+      {canManage ? <AiContactRequestsSection token={token} /> : null}
     </PilotThemeRoot>
   );
 }
