@@ -27,6 +27,7 @@ const candidate = (productId: string, rank: number) => ({
     { parameterCode: "KALCIUM", direction: "EMEL" as const },
     { parameterCode: "MAGNEZIUM", direction: "EMEL" as const },
   ],
+  sideEffects: [{ parameterCode: "FOSZFAT", direction: "CSOKKENT" as const }],
   evidenceRef: "https://gyarto.example/termek",
   shopUrl: `https://shop.example/${productId}`,
   rank,
@@ -91,6 +92,8 @@ describe(
       assert.equal(rows[0]!.shopUrl, "https://shop.example/a");
       // the product's effects travel with the row (the reader drops a product that moves another deviation the wrong way)
       assert.deepEqual(rows[0]!.effects, ["KALCIUM:EMEL", "MAGNEZIUM:EMEL"]);
+      // and its effect on a parameter with no approved band, for the panel to print
+      assert.deepEqual(rows[0]!.sideEffects, ["FOSZFAT:CSOKKENT"]);
       assert.equal(rows[0]!.evidenceRef, "https://gyarto.example/termek");
     });
 

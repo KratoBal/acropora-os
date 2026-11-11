@@ -11204,6 +11204,9 @@ model ReefClubCustomerCandidate {
   /// ebbol zarja ki azt a termeket, amelyik a vevo egy MASIK elteresen rossz iranyba visz (alacsony kalcium es magas magnezium mellett
   /// egy mindkettot emelo termek): a vetites nem tudhatja a vevo masik ertekeit, az olvaso igen.
   effects       String[]
+  /// A termek VERIFIED hatasa a NEM jovahagyott parametereken (foszfat, pH ...), "KOD:IRANY" alakban, tanacs es sav nelkul. A felulet kiirja
+  /// ("emellett hat: foszfat, csokkenti"): a foszfat-SAV tiltasa nem tiltja a termek tulajdonsaganak kiirasat (barracuda, #2415).
+  sideEffects   String[]
   /// 1-tol: a sorrend a parameteren es iranyon belul (tobb kivant eltereset javito elol, aztan nev szerint).
   rank          Int
   run           ReefClubDoseProjectionRun @relation(fields: [runId], references: [id], onDelete: Cascade)

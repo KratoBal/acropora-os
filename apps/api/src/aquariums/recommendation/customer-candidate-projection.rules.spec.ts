@@ -27,6 +27,7 @@ const candidate = (
   category: "Adalékok",
   // a fixture serving every move, so the tests are about the other rules; the effect rule has its own test
   effects: ALL_MOVES,
+  sideEffects: [],
   evidenceRef: "https://gyarto.example/termek",
   shopUrl: "https://shop.example/termek",
   ...over,
@@ -54,6 +55,7 @@ describe("toProjectedCandidateRows", () => {
         effects: ALL_MOVES.map(
           (move) => `${move.parameterCode}:${move.direction}`,
         ),
+        sideEffects: [],
         rank: 1,
       },
       {
@@ -67,6 +69,7 @@ describe("toProjectedCandidateRows", () => {
         effects: ALL_MOVES.map(
           (move) => `${move.parameterCode}:${move.direction}`,
         ),
+        sideEffects: [],
         rank: 2,
       },
     ]);
@@ -196,6 +199,27 @@ describe("toProjectedCandidateRows", () => {
       [
         ["MAGNEZIUM", "EMEL", "b", ["KALCIUM:EMEL", "MAGNEZIUM:EMEL"]],
         ["KALCIUM", "EMEL", "b", ["KALCIUM:EMEL", "MAGNEZIUM:EMEL"]],
+      ],
+    );
+  });
+
+  it("the side effects (a phosphate or pH effect with no approved band) travel with the row in the same KOD:IRANY form, and are an empty list when there is none", () => {
+    const rows = toProjectedCandidateRows([
+      entry("NITRAT", "CSOKKENT", [
+        candidate("a", {
+          sideEffects: [
+            { parameterCode: "FOSZFAT", direction: "CSOKKENT" },
+            { parameterCode: "PH", direction: "EMEL" },
+          ],
+        }),
+        candidate("b"),
+      ]),
+    ]);
+    assert.deepEqual(
+      rows.map((row) => [row.productId, row.sideEffects]),
+      [
+        ["a", ["FOSZFAT:CSOKKENT", "PH:EMEL"]],
+        ["b", []],
       ],
     );
   });

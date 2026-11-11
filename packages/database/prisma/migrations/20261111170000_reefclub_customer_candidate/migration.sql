@@ -16,6 +16,7 @@ CREATE TABLE "ReefClubCustomerCandidate" (
     "shopUrl" TEXT,
     "evidenceRef" TEXT NOT NULL,
     "effects" TEXT[],
+    "sideEffects" TEXT[],
     "rank" INTEGER NOT NULL,
 
     CONSTRAINT "ReefClubCustomerCandidate_pkey" PRIMARY KEY ("id"),

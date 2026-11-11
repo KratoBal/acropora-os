@@ -23,6 +23,8 @@ export interface ProjectedCandidateRow {
   evidenceRef: string;
   /** "KOD:IRANY" a termék minden jóváhagyott paraméterre érvényes hatásáról (az olvasó ebből zárja ki a rossz irányba vivő terméket). */
   effects: string[];
+  /** "KOD:IRANY" a NEM jóváhagyott paramétereken mért hatásról (tanács és sáv nélkül): a felület kiírja. */
+  sideEffects: string[];
   rank: number;
 }
 
@@ -63,6 +65,9 @@ export function toProjectedCandidateRows(
             : null,
         evidenceRef: candidate.evidenceRef,
         effects,
+        sideEffects: candidate.sideEffects.map(
+          (effect) => `${effect.parameterCode}:${effect.direction}`,
+        ),
         rank,
       });
     }

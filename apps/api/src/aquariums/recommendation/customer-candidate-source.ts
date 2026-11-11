@@ -48,8 +48,14 @@ export interface CustomerRecommendationCandidate {
   productId: string;
   name: string;
   category: string;
-  /** A mozgatott paraméterek (csak a vevő felé jóváhagyottak). */
+  /** A mozgatott paraméterek, amelyekre van a vevő felé jóváhagyott sáv. */
   effects: { parameterCode: string; direction: "EMEL" | "CSOKKENT" }[];
+  /**
+   * A termék VERIFIED hatása a NEM jóváhagyott paramétereken (foszfát, pH ...), iránnyal, tanács és sáv nélkül (barracuda a #2415-ön): a
+   * foszfát-SÁV tiltása nem tiltja a termék tulajdonságának kiírását. Egy nitrátot ÉS foszfátot csökkentő szer jelöltje egy alacsony
+   * foszfátú medencének ezen át mondja meg, hogy a foszfátra is hat; a felület kiírja, nem hallgatja el.
+   */
+  sideEffects: { parameterCode: string; direction: "EMEL" | "CSOKKENT" }[];
   /** A gyártói forrás (https) hivatkozása: ez megy a vevőnek, nem egy adagolási mondat. */
   evidenceRef: string;
   /** A termék lapja a boltban (`productShopUrl`: a UNAS csatorna-sor címe, csak látható státusznál), vagy null. */
@@ -91,6 +97,7 @@ export function customerMatchingRows(
 ): {
   productId: string;
   effects: CustomerRecommendationCandidate["effects"];
+  sideEffects: CustomerRecommendationCandidate["sideEffects"];
   evidenceRef: string;
 }[] {
   const verified = rows.filter(
@@ -102,9 +109,12 @@ export function customerMatchingRows(
     return [
       {
         productId: match.productId,
-        // csak a vevő felé jóváhagyott paraméterek hatása megy tovább
+        // a hatás két részre válik: ahol van jóváhagyott sáv, és ahol nincs (az utóbbi mellékhatásként megy tovább, NEM hullik ki)
         effects: match.effects.filter((effect) =>
           APPROVED.has(effect.parameterCode),
+        ),
+        sideEffects: match.effects.filter(
+          (effect) => !APPROVED.has(effect.parameterCode),
         ),
         evidenceRef: match.evidenceRef,
       },
@@ -229,6 +239,7 @@ export class CustomerCandidateSource {
               name: product.name,
               category: product.categories[0]?.category.name ?? "",
               effects: match.effects,
+              sideEffects: match.sideEffects,
               evidenceRef: match.evidenceRef,
               shopUrl: productShopUrl(product.channelListings),
             },
