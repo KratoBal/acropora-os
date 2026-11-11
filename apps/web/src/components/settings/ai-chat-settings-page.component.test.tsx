@@ -30,6 +30,13 @@ vi.mock("@/components/auth/auth-provider", () => ({
   }),
 }));
 vi.mock("@/lib/api/ai-chat-settings", () => ({ aiChatSettingsApi: api }));
+// the page also holds the contact request list (its own spec); here it is an empty list
+vi.mock("@/lib/api/ai-contact-requests", () => ({
+  aiContactRequestsApi: {
+    list: vi.fn().mockResolvedValue([]),
+    handled: vi.fn(),
+  },
+}));
 
 const DAYS = "Üzenetek megőrzése (nap)";
 const HANDLED = "Kezelt kérés megőrzése (nap)";

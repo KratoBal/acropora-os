@@ -36,6 +36,7 @@ import { AiProductSearchModule } from "./integrations/ai-product-search/ai-produ
 import { FavoritesModule } from "./favorites/favorites.module.js";
 import { NavigationCountersModule } from "./navigation/navigation-counters.module.js";
 import { AiChatSettingsModule } from "./integrations/ai-chat-settings/ai-chat-settings.module.js";
+import { AiContactRequestsModule } from "./integrations/ai-contact-requests/ai-contact-requests.module.js";
 import { WebshopMailModule } from "./integrations/webshop-mail/webshop-mail.module.js";
 import { WebshopInvoiceModule } from "./integrations/webshop-invoice/webshop-invoice.module.js";
 import { MedusaModule } from "./integrations/medusa/medusa.module.js";
@@ -119,6 +120,7 @@ import { MortalityModule } from "./mortality/mortality.module.js";
     NavigationCountersModule,
     FavoritesModule,
     AiChatSettingsModule,
+    AiContactRequestsModule,
     WebshopMailModule,
     WebshopInvoiceModule,
     AiChatModule,

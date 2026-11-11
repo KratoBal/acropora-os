@@ -260,10 +260,28 @@ export async function runTrialFlows(
     "invoice: the draft is issued in stub mode with a TESZT number (no Számlázz.hu call)",
     [draftOk],
     async () => {
+      // the confirmation window's path (card 7ba97e0d): the summary first, then the issue with what it showed
+      const summary = ok(
+        "invoice issue summary",
+        await call("GET", `/billing/documents/${invoiceId}/issue-summary`),
+      );
       const issued = ok(
         "issue invoice",
         await call("POST", `/billing/documents/${invoiceId}/issue`, {
           expectedUpdatedAt: invoiceUpdatedAt,
+          issueDate: expectField(
+            "the summary's issue date",
+            field(summary.json, "issueDate"),
+          ),
+          fulfillmentDate: expectField(
+            "the summary's fulfilment date",
+            field(summary.json, "fulfillmentDate"),
+          ),
+          dueDate: field(summary.json, "dueDate") ?? null,
+          fingerprint: expectField(
+            "the summary's fingerprint",
+            field(summary.json, "fingerprint"),
+          ),
         }),
       );
       if (field(issued.json, "status") !== "ISSUED")

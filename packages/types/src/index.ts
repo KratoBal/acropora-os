@@ -1959,3 +1959,24 @@ export type {
   AiLinkSourceInput,
   AiLinkSourceServiceEntry,
 } from "./ai-link-sources.js";
+export {
+  AI_CONTACT_CHANNELS,
+  AI_CONTACT_VALUE_MAX_LENGTH,
+  checkAiContactRequestInput,
+} from "./ai-contact-request.js";
+export type {
+  AiContactChannel,
+  AiContactRequestCheck,
+  AiContactRequestInput,
+  AiContactRequestReceipt,
+  AiContactRequestView,
+} from "./ai-contact-request.js";
+export {
+  checkBillingIssueDates,
+  isCardPayment,
+} from "./billing-issue-summary.js";
+export type {
+  BillingIssueConfirmation,
+  BillingIssueDatesCheck,
+  BillingIssueSummary,
+} from "./billing-issue-summary.js";
