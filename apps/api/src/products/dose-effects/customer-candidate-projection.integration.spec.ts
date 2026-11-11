@@ -9,7 +9,11 @@ import { CustomerCandidateSource } from "../../aquariums/recommendation/customer
 import type { CustomerCandidatesOfMove } from "../../aquariums/recommendation/customer-candidate-source.js";
 import { integrationDatabaseGate } from "../../common/integration-database.js";
 import type { DoseEffectsService } from "./dose-effects.service.js";
-import { DoseProjectionService } from "./dose-projection.service.js";
+import { toDoseProjectionHealth } from "./dose-projection.rules.js";
+import {
+  DoseProjectionService,
+  readDoseProjectionStatus,
+} from "./dose-projection.service.js";
 
 /**
  * A VEVŐI JELÖLTEK VETÍTÉSE VALÓDI ADATBÁZISON (V3.4 S2b, kártya ce6c5cc9). MI PIROSÍT: a jelöltek nem a termék-adag listával azonos
@@ -133,6 +137,14 @@ describe(
         [["m", "MAKER"]],
       );
       await rebuild(true);
+      // the same rows seen from /health: the counts, and the time of the rebuild that built them
+      const status = await readDoseProjectionStatus();
+      assert.equal(status.customerCandidates.rows, 2);
+      assert.equal(status.customerCandidates.shopText, 1);
+      assert.equal(
+        toDoseProjectionHealth(status).customerCandidates.builtAt,
+        status.lastSuccess?.finishedAt,
+      );
       assert.deepEqual(
         (
           await prisma.reefClubCustomerCandidate.findMany({

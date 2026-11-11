@@ -310,7 +310,8 @@ export async function runManualImport(
     return 1;
   }
   out.stdout(
-    `Kész: ${result.stored} sor tárolva, ${result.removed} törölve (egy tranzakcióban).\n`,
+    `Kész: ${result.stored} sor tárolva, ${result.removed} törölve (egy tranzakcióban).\n` +
+      "A vevői jelöltek vetítése az óránkénti futással frissül (a végponton át az alkalmazás azonnal újraépíti).\n",
   );
   return 0;
 }

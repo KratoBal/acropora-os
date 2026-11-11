@@ -5,6 +5,7 @@ import { BadRequestException, ConflictException } from "@nestjs/common";
 import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 
 import { REQUIRED_PERMISSIONS_KEY } from "../auth/decorators/require-permissions.decorator.js";
+import type { DoseProjectionService } from "../products/dose-effects/dose-projection.service.js";
 import { ManualListController } from "./customer-candidates-manual.controller.js";
 import type {
   ManualListAudit,
@@ -45,6 +46,13 @@ function fixture(catalogue?: Record<string, ResolvedSku[]>) {
     audit?: ManualListAudit;
   }[] = [];
   const held: ManualPlanCurrent[] = [];
+  const rebuilds: string[] = [];
+  const projection = {
+    rebuild: async (trigger: string) => {
+      rebuilds.push(trigger);
+      return { ok: true, rowCount: 0, errorMessage: null };
+    },
+  } as unknown as DoseProjectionService;
   const store = {
     resolve: async (skus: readonly string[]) =>
       new Map(
@@ -63,7 +71,12 @@ function fixture(catalogue?: Record<string, ResolvedSku[]>) {
       return { stored: rows.length, removed: 0 };
     },
   } as unknown as PrismaManualListStore;
-  return { service: new ManualListService(store), writes, held };
+  return {
+    service: new ManualListService(store, projection),
+    writes,
+    held,
+    rebuilds,
+  };
 }
 
 const rejects = async (
@@ -113,6 +126,19 @@ describe("the dry run over HTTP", () => {
     assert.match(report.fingerprint, /^[0-9a-f]{64}$/);
   });
 
+  it("the report says how many rows CAME IN: accepted + rejected, so one rejected row does not look like a lost one", async () => {
+    const fx = fixture();
+    const report = await fx.service.dryRun({
+      rows: [
+        row(),
+        row({ sku: "unknown" }),
+        row({ sku: "bad", parameter: "PH" }),
+      ],
+    });
+    assert.equal(report.received, 3);
+    assert.equal(report.rows + report.rejected.length, report.received);
+  });
+
   it("a clean list can be applied; a body that is not {rows: [...]} or is too long is a 400, not a crash", async () => {
     const fx = fixture();
     assert.equal((await fx.service.dryRun({ rows: [row()] })).canApply, true);
@@ -155,6 +181,23 @@ describe("the apply over HTTP", () => {
     assert.equal(fx.writes[0]!.audit?.userId, "u-admin");
     assert.equal(fx.writes[0]!.audit?.metadata.source, "http");
     assert.equal(fx.writes[0]!.audit?.metadata.fingerprint, body.fingerprint);
+  });
+
+  it("starts the projection rebuild after a successful write, once, and not on a dry run or on any refusal", async () => {
+    const fx = fixture();
+    const body = await applyBody(fx, [row()]);
+    assert.deepEqual(fx.rebuilds, []); // the dry run did not
+    for (const bad of [
+      { ...body, approvedBy: "  " },
+      { ...body, fingerprint: "0".repeat(64) },
+    ])
+      await rejects(fx.service.apply(bad, user), Error);
+    const rejectedBody = await applyBody(fx, [row(), row({ sku: "unknown" })]);
+    await rejects(fx.service.apply(rejectedBody, user), BadRequestException);
+    assert.deepEqual(fx.rebuilds, []);
+    const result = await fx.service.apply(body, user);
+    assert.equal(result.projectionRebuildStarted, true);
+    assert.deepEqual(fx.rebuilds, ["EDIT"]);
   });
 
   it("refuses without the approver, with a blank or over-long one, and without or with a wrong fingerprint: nothing is written", async () => {

@@ -113,6 +113,11 @@ import { CustomerCandidateSource } from "../aquariums/recommendation/customer-ca
     CategoryRedirectBackfillService,
     { provide: CATEGORY_BACKFILL_DB, useValue: prisma },
   ],
-  exports: [ProductService, ProductExtensionService, ProductBarcodeRepository],
+  exports: [
+    ProductService,
+    ProductExtensionService,
+    ProductBarcodeRepository,
+    DoseProjectionService,
+  ],
 })
 export class ProductModule {}
