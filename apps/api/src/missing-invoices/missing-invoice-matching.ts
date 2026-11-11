@@ -300,7 +300,7 @@ export function inWindow(debitDate: string, documentDate: string): boolean {
  * Az összeg eltérése a terhelés pénznemében, vagy kártyás devizás sornál az
  * eredeti devizában; `null`, ha a kettő nem vethető össze.
  */
-function amountGap(
+export function amountGap(
   debit: MatchableDebit,
   total: Prisma.Decimal | null,
   currency: string,
@@ -313,7 +313,7 @@ function amountGap(
 }
 
 /** PONTOS: HUF-ban 1 Ft, devizában 5 cent (barracuda 4.2). */
-const exact = (gap: Prisma.Decimal | null, currency: string) =>
+export const exact = (gap: Prisma.Decimal | null, currency: string) =>
   gap !== null && gap.lte(currency === "HUF" ? 1 : 0.05);
 /** KEREKÍTÉSSEL: HUF-ban 5 Ft-ig Megvan (acrobot 25265 a). */
 const rounded = (gap: Prisma.Decimal | null, currency: string) =>

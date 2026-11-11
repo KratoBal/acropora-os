@@ -576,6 +576,86 @@ describe("a candidate that matches only by amount", () => {
   });
 });
 
+/**
+ * A JELÖLT-VIZSGÁLAT (task os-hianyzo-szamlak-unpaid, niceshops): egy tárolt számla nem jelent meg a drawerben, és nem látszott,
+ * melyik feltétel bukik. MI PIROSÍT: a be nem töltött dokumentum "betöltve"-nek látszik (vagy fordítva); a pénznem-eltérés
+ * nem látszik; a más terheléshez már párosított dokumentum nem látszik foglaltnak; a név- és az ablak-feltétel vakon igaz.
+ */
+describe("the candidate diagnosis", () => {
+  const COVERAGE = [`${MAIN.id}:2026-11`, `${CARD.id}:2026-11`];
+
+  it("says a document the matching never received is not loaded", async () => {
+    const card = debit("2026-11-01", 338018, "niceshops GmbH");
+    const { missing } = service({
+      debits: [card],
+      documents: [],
+      coverage: COVERAGE,
+    });
+    const diagnosis = await missing.candidateDiagnosis(
+      card.id,
+      "no-such-document",
+    );
+    assert.deepEqual(diagnosis, {
+      loaded: false,
+      viaAlias: false,
+      document: null,
+      checks: null,
+    });
+  });
+
+  it("names the failing condition: the right name and window but a currency that cannot be compared", async () => {
+    const card = debit("2026-11-01", 338018, "niceshops GmbH");
+    const invoice = {
+      ...nav("2026-11-05", 338018, "niceshops GmbH,"),
+      currency: "EUR",
+    };
+    const { missing } = service({
+      debits: [card],
+      documents: [invoice],
+      coverage: COVERAGE,
+    });
+    const diagnosis = await missing.candidateDiagnosis(card.id, invoice.id);
+    assert.equal(diagnosis.loaded, true);
+    assert.deepEqual(diagnosis.checks, {
+      inWindow: true,
+      nameMatches: true,
+      currencyComparable: false,
+      amountExact: false,
+      grossKnown: true,
+      isInvoice: true,
+      pairedWith: [],
+    });
+  });
+
+  it("shows a document that another debit already took, and a name that differs", async () => {
+    const first = debit("2026-11-01", 5000, "Szállító Kft.");
+    const second = debit("2026-11-02", 5000, "Másik Bt.");
+    const invoice = nav("2026-11-01", 5000, "Szállító Kft.");
+    const { missing } = service({
+      debits: [first, second],
+      documents: [invoice],
+      coverage: COVERAGE,
+    });
+    const diagnosis = await missing.candidateDiagnosis(second.id, invoice.id);
+    assert.deepEqual(
+      [diagnosis.checks?.nameMatches, diagnosis.checks?.pairedWith],
+      [false, [first.id]],
+    );
+  });
+
+  it("is a 404 for an unknown debit", async () => {
+    const { missing } = service({
+      debits: [],
+      documents: [],
+      coverage: COVERAGE,
+    });
+    await assert.rejects(
+      () => missing.candidateDiagnosis("nope", "x"),
+      /nem található/,
+    );
+  });
+});
+
 describe("a double-paid invoice", () => {
   it("is counted as missing an invoice, and the drawer names the other debit", async () => {
     const sopro = (id: string): CandidateDocument => ({

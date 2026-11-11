@@ -16,6 +16,7 @@ import {
   type MissingInvoiceAction,
   type MissingInvoiceDuplicateResult,
   type MissingInvoiceDuplicatesResponse,
+  type MissingInvoiceCandidateDiagnosis,
   type MissingInvoiceItemDetail,
   type SupplierInvoiceImportResult,
   type MissingInvoiceItem,
@@ -42,8 +43,12 @@ import {
 } from "./bank-transaction.classify.js";
 import { ownInvoiceRefund } from "./own-invoice-refund.js";
 import {
+  amountGap,
+  exact,
+  inWindow,
   matchMonth,
   mergeManualUploads,
+  samePartner,
   shownNumber,
   type CandidateDocument,
   type ItemState,
@@ -333,6 +338,74 @@ export class MissingInvoicesService {
         pageSize,
         totalItems: filtered.length,
         totalPages: Math.ceil(filtered.length / pageSize),
+      },
+    };
+  }
+
+  /**
+   * MIÉRT (NEM) JELÖLT EGY DOKUMENTUM EGY TERHELÉSNÉL (task os-hianyzo-szamlak-unpaid, niceshops: a tárolt számla nem jelent
+   * meg a drawerben). Csak olvas; ugyanazokat a függvényeket hívja, mint a párosítás (`inWindow`, `samePartner`, `amountGap`).
+   */
+  async candidateDiagnosis(
+    debitId: string,
+    documentId: string,
+  ): Promise<MissingInvoiceCandidateDiagnosis> {
+    const computed = await this.compute();
+    const classified = computed.classified.find((c) => c.debit.id === debitId);
+    if (!classified)
+      throw new NotFoundException("A banki terhelés nem található.");
+    const document = computed.documents.find(
+      (d) => d.id === documentId || d.aliasIds?.includes(documentId),
+    );
+    if (!document)
+      return { loaded: false, viaAlias: false, document: null, checks: null };
+    const debit = {
+      id: classified.debit.id,
+      bookingDate: classified.debit.bookingDate.toISOString().slice(0, 10),
+      amount: classified.debit.amount,
+      currency: classified.debit.currency,
+      original: classified.original,
+      counterpartyName: classified.debit.counterpartyName,
+      counterpartyAccount: normalizeAccount(
+        classified.debit.counterpartyAccount,
+      ),
+      narrative: classified.debit.narrative,
+      category: classified.classification.category,
+    };
+    const gap = amountGap(debit, document.gross, document.currency);
+    const pairedWith = [...computed.outcomes]
+      .filter(
+        ([otherId, outcome]) =>
+          otherId !== debitId &&
+          outcome.documents.some((d) => d.id === document.id),
+      )
+      .map(([otherId]) => otherId);
+    return {
+      loaded: true,
+      viaAlias: document.id !== documentId,
+      document: {
+        documentId: document.id,
+        number: shownNumber(document),
+        source: document.source,
+        date: document.date,
+        gross:
+          document.gross === null
+            ? null
+            : document.gross.toFixed(document.currency === "HUF" ? 0 : 2),
+        currency: document.currency,
+        supplierName: document.supplierName,
+        kind: document.kind,
+      },
+      checks: {
+        inWindow: inWindow(debit.bookingDate, document.date),
+        nameMatches:
+          !!debit.counterpartyName &&
+          samePartner(document.supplierName, debit.counterpartyName, 0.6),
+        currencyComparable: gap !== null,
+        amountExact: exact(gap, document.currency),
+        grossKnown: document.gross !== null,
+        isInvoice: document.kind === "INVOICE",
+        pairedWith,
       },
     };
   }

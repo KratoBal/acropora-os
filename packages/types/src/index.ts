@@ -1244,10 +1244,12 @@ export {
   MISSING_INVOICE_TABS,
   INVOICE_COLLECTION_ITEM_SOURCES,
   INVOICE_COLLECTION_ITEM_VERDICTS,
+  INVOICE_COLLECTION_REASONS,
 } from "./missing-invoices.js";
 export type {
   BankStatementImportResult,
   InvoiceCollectionItemRow,
+  InvoiceCollectionReason,
   InvoiceCollectionItemSource,
   InvoiceCollectionItemVerdict,
   InvoiceCollectionItemsResponse,
@@ -1256,6 +1258,7 @@ export type {
   InvoiceCollectionSuggestionsResponse,
   MissingInvoiceAction,
   MissingInvoiceCandidate,
+  MissingInvoiceCandidateDiagnosis,
   MissingInvoiceCategory,
   MissingInvoiceCategoryInput,
   MissingInvoiceCommentInput,
