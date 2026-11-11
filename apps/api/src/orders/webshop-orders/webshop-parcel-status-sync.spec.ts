@@ -10,6 +10,7 @@ import {
 } from "./webshop-parcel-status-sync.js";
 import {
   glsStatusSyncConfig,
+  parcelStatusSyncConfig,
   WebshopParcelStatusScheduler,
 } from "./webshop-parcel-status.scheduler.js";
 
@@ -30,12 +31,18 @@ const event = (status: string, statusText = status): TrackingEvent => ({
 function fake(
   events: Record<string, TrackingEvent[] | Error>,
   business: Record<string, { status: string; next: string[] } | null> = {},
-): ParcelStatusSyncDeps & { transitions: [string, string][]; asked: string[] } {
+): ParcelStatusSyncDeps & {
+  transitions: [string, string][];
+  asked: string[];
+  notified: boolean[];
+} {
   const transitions: [string, string][] = [];
   const asked: string[] = [];
+  const notified: boolean[] = [];
   return {
     transitions,
     asked,
+    notified,
     parcelOrderIds: async () => Object.keys(events),
     tracking: async (id) => {
       const value = events[id]!;
@@ -52,8 +59,9 @@ function fake(
           }
         : null;
     },
-    transition: async (id, status) => {
+    transition: async (id, status, notifyCustomer) => {
       transitions.push([id, status]);
+      notified.push(notifyCustomer);
     },
   };
 }
@@ -200,6 +208,107 @@ describe("syncParcelStatuses", () => {
   });
 });
 
+/*
+  THE FOXPOST PARCEL AND THE THANK-YOU MAIL (card ef84489d, acrobot 47552). WHAT TURNS THIS RED: a GLS code closing a
+  Foxpost order (or the other way round); the Foxpost run moving an order while its own list is empty; the mail sent
+  without the exact switch value, or not sent with it; the report naming the wrong carrier or the wrong variable.
+*/
+describe("the Foxpost parcel and the mail on closing", () => {
+  const closable = { status: "out_for_delivery", next: ["closed"] };
+
+  it("Foxpost has its own delivered codes: the GLS list does not close a Foxpost order, its own does", async () => {
+    assert.deepEqual(
+      [
+        ...deliveredCodes(
+          { FOXPOST_DELIVERED_STATUS_CODES: " RECEIVE, HDRECEIVE " },
+          "foxpost",
+        ),
+      ].sort(),
+      ["HDRECEIVE", "RECEIVE"],
+    );
+    assert.equal(
+      deliveredCodes({ GLS_DELIVERED_STATUS_CODES: "RECEIVE" }, "foxpost").size,
+      0,
+    );
+    const onlyGls = fake({ o1: [event("RECEIVE")] }, { o1: closable });
+    const observed = await syncParcelStatuses(
+      onlyGls,
+      { GLS_DELIVERED_STATUS_CODES: "RECEIVE" },
+      NOW,
+      "foxpost",
+    );
+    assert.deepEqual(
+      [onlyGls.transitions, observed.carrier, observed.configuredCodes],
+      [[], "foxpost", []],
+    );
+    const own = fake(
+      { o1: [event("CREATE"), event("RECEIVE")] },
+      { o1: closable },
+    );
+    const report = await syncParcelStatuses(
+      own,
+      { FOXPOST_DELIVERED_STATUS_CODES: "RECEIVE" },
+      NOW,
+      "foxpost",
+    );
+    assert.deepEqual(
+      [own.transitions, report.closed],
+      [[["o1", "closed"]], ["o1"]],
+    );
+  });
+
+  it("the customer is mailed on closing only when the switch is exactly true", async () => {
+    for (const [value, expected] of [
+      [undefined, false],
+      ["false", false],
+      ["1", false],
+      ["TRUE", false],
+      ["true", true],
+    ] as const) {
+      const deps = fake({ o1: [event("05")] }, { o1: closable });
+      const report = await syncParcelStatuses(
+        deps,
+        {
+          GLS_DELIVERED_STATUS_CODES: "05",
+          ...(value === undefined
+            ? {}
+            : { PARCEL_STATUS_SYNC_NOTIFY_CUSTOMER: value }),
+        },
+        NOW,
+      );
+      assert.deepEqual(
+        [deps.notified, report.notifyCustomer],
+        [[expected], expected],
+        String(value),
+      );
+    }
+  });
+
+  it("the report names the carrier and its own variable, and says when the customer was mailed", async () => {
+    const foxObserve = await syncParcelStatuses(
+      fake({ o1: [event("CREATE")] }),
+      {},
+      NOW,
+      "foxpost",
+    );
+    const text = describeSyncReport(foxObserve);
+    assert.match(text, /^Foxpost status sync: 1 parcels checked/);
+    assert.match(text, /OBSERVE MODE: FOXPOST_DELIVERED_STATUS_CODES is empty/);
+    const mailed = await syncParcelStatuses(
+      fake({ o1: [event("05")] }, { o1: closable }),
+      {
+        GLS_DELIVERED_STATUS_CODES: "05",
+        PARCEL_STATUS_SYNC_NOTIFY_CUSTOMER: "true",
+      },
+      NOW,
+    );
+    assert.match(
+      describeSyncReport(mailed),
+      /^GLS status sync: 1 parcels checked, 1 closed \(the customer mailed\)/,
+    );
+  });
+});
+
 describe("the batch and the observed text", () => {
   const env = { GLS_DELIVERED_STATUS_CODES: "05" };
 
@@ -342,6 +451,70 @@ describe("the schedule", () => {
     );
   });
 
+  it("Foxpost has its own switch and timing; the GLS switch does not turn it on", () => {
+    assert.equal(
+      parcelStatusSyncConfig({ GLS_STATUS_SYNC_ENABLED: "true" }, "foxpost")
+        .enabled,
+      false,
+    );
+    const on = parcelStatusSyncConfig(
+      {
+        FOXPOST_STATUS_SYNC_ENABLED: "true",
+        FOXPOST_STATUS_SYNC_INTERVAL_MINUTES: "120",
+      },
+      "foxpost",
+    );
+    assert.deepEqual(
+      [on.enabled, on.intervalMs, on.startupDelayMs],
+      [true, 120 * 60_000, 10 * 60_000],
+    );
+    assert.throws(
+      () =>
+        parcelStatusSyncConfig(
+          {
+            FOXPOST_STATUS_SYNC_ENABLED: "true",
+            FOXPOST_STATUS_SYNC_INTERVAL_MINUTES: "5",
+          },
+          "foxpost",
+        ),
+      /FOXPOST_STATUS_SYNC_INTERVAL_INVALID/,
+    );
+  });
+
+  it("each carrier runs on its own: a GLS run still going does not keep the Foxpost run from starting", async () => {
+    const carriers: string[] = [];
+    let release: () => void = () => undefined;
+    const report = (carrier: string) => ({
+      carrier,
+      checked: 0,
+      closed: [],
+      alreadyClosed: 0,
+      waiting: 0,
+      skipped: [],
+      failed: [],
+      observed: [],
+      configuredCodes: [],
+      notifyCustomer: false,
+      truncated: false,
+    });
+    const service = {
+      run: (_env: unknown, _now: unknown, carrier: string) => {
+        carriers.push(carrier);
+        return carrier === "gls"
+          ? new Promise((resolve) => {
+              release = () => resolve(report(carrier));
+            })
+          : Promise.resolve(report(carrier));
+      },
+    };
+    const scheduler = new WebshopParcelStatusScheduler(service as never);
+    const gls = scheduler.runOnce("gls");
+    await scheduler.runOnce("foxpost");
+    assert.deepEqual(carriers, ["gls", "foxpost"]);
+    release();
+    await gls;
+  });
+
   it("a run that is still going is not started twice", async () => {
     let calls = 0;
     let release: () => void = () => undefined;
@@ -354,6 +527,7 @@ describe("the schedule", () => {
       failed: [],
       observed: [],
       configuredCodes: [],
+      notifyCustomer: false,
       truncated: false,
     };
     const service = {

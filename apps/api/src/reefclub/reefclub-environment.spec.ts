@@ -112,6 +112,8 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   "JATEK_ERASE_MAIL",
   "PAID_MARKS_AUTO_DAYS",
   "PAID_MARKS_AUTO_HOUR",
+  // the parcel status sync's thank-you mail on closing (card ef84489d): exactly "true" turns it on, a boolean, not a secret
+  "PARCEL_STATUS_SYNC_NOTIFY_CUSTOMER",
   "PARTNER_URL",
   "PELDA_KOMMENT",
   "PELDA_KOZVETLEN",
