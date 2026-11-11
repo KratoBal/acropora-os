@@ -251,7 +251,8 @@ function labelledAmount(
  * A NEGATÍV ÁFA KIZÁRÁSA A JÓVÁÍRÓ (mind a három összeg negatív) SZÁMLÁT IS ÜRESEN HAGYJA: biztonságos,
  * csak tudni kell róla a mérésnél (barracuda, #1795).
  */
-const TOTALS_LABEL = /^\s*(összesen|osszesen|mind[öo]sszesen|total)\b\s*:?/iu;
+const TOTALS_LABEL =
+  /^\s*(összesen|osszesen|mind[öo]sszesen|total|brutt[óo]\s+sz[áa]mla[ée]rt[ée]k\s+[öo]sszesen)\b\s*:?/iu;
 const NET_HEADER = /nett[óo]|netto/iu;
 const GROSS_HEADER = /brutt[óo]|brutto/iu;
 
@@ -274,6 +275,69 @@ export function totalsRow(
     });
     if (!header) return;
     found.set(`${net}|${vat}|${gross}`, { net, vat, gross });
+  });
+  return found.size === 1 ? [...found.values()][0]! : null;
+}
+
+/**
+ * AZ ÁFA-ÖSSZESÍTŐ TÁBLA (kártya dbab22cd, a második kör): a magyar közműszámlák (a vízmű, a csatornázás) a végösszeget egy külön
+ * táblában adják: egy fejléc (`ÁFA összesítő (Ft) | ÁFA % | Adóalap (Ft) | ÁFA (Ft) | Bruttó összeg (Ft)`) és alatta egy sor
+ * ÁFA-kulcsonként (`27 | 1 000 | 270 | 1 270`). A fejléc első cellája cím, a sorban nincs párja, ezért az oszlopokat a SOR VÉGÉRŐL
+ * számoljuk. A `totalsRow` ezt nem látja: nincs "Összesen" sor.
+ *
+ * A FELTÉTELEK EGYÜTT (mint a `totalsRow`-nál): a fejlécben pontosan egy adóalap/nettó, egy ÁFA-összeg (nem "ÁFA %") és egy bruttó
+ * cella áll ebben a sorrendben; a fejléc alatt legalább egy sor, amelynek e három cellájában PONTOSAN egy összeg van, és soronként
+ * nettó + ÁFA = bruttó (két fillér, nem negatív ÁFA); a sorok összege a végösszeg (több ÁFA-kulcs). Az első nem illeszkedő sor
+ * véget vet a táblának. Több, egymástól eltérő ilyen tábla vagy bármelyik feltétel hiánya: nem döntünk.
+ */
+const SUMMARY_NET = /^(ad[óo]alap|nett[óo]|netto)(?![\p{L}])/iu;
+// "ÁFA (Ft)" and "ÁFA", never "ÁFA %" or "Áfa(%)": the rate column is not the amount
+const SUMMARY_VAT = /^[áa]fa\s*(\((?!\s*%)[^)]*\))?$/iu;
+const SUMMARY_GROSS = /^brutt[óo](?![\p{L}])/iu;
+
+export function vatSummaryTable(
+  lines: readonly string[],
+): { net: number; vat: number; gross: number } | null {
+  const found = new Map<string, { net: number; vat: number; gross: number }>();
+  lines.forEach((raw, index) => {
+    const header = raw
+      .normalize("NFC")
+      .split("|")
+      .map((cell) => cell.trim());
+    const find = (pattern: RegExp) =>
+      header.flatMap((cell, at) => (pattern.test(cell) ? [at] : []));
+    const net = find(SUMMARY_NET);
+    const vat = find(SUMMARY_VAT);
+    const gross = find(SUMMARY_GROSS);
+    if (net.length !== 1 || vat.length !== 1 || gross.length !== 1) return;
+    if (!(net[0]! < vat[0]! && vat[0]! < gross[0]!)) return;
+    const fromEnd = [net[0]!, vat[0]!, gross[0]!].map(
+      (at) => header.length - at,
+    );
+    let sum = { net: 0, vat: 0, gross: 0 };
+    let rows = 0;
+    for (const next of lines.slice(index + 1)) {
+      const cells = next
+        .normalize("NFC")
+        .split("|")
+        .map((cell) => cell.trim());
+      if (cells.length < Math.max(...fromEnd)) break;
+      const amounts = fromEnd.map((back) => {
+        const values = amountsIn(cells[cells.length - back]!);
+        return values.length === 1 ? values[0]! : null;
+      });
+      if (amounts.some((value) => value === null)) break;
+      const [n, v, g] = amounts as [number, number, number];
+      if (v < 0 || Math.abs(n + v - g) > 0.02) {
+        rows = 0;
+        break;
+      }
+      sum = { net: sum.net + n, vat: sum.vat + v, gross: sum.gross + g };
+      rows += 1;
+    }
+    if (rows === 0) return;
+    const key = `${sum.net.toFixed(2)}|${sum.vat.toFixed(2)}|${sum.gross.toFixed(2)}`;
+    found.set(key, sum);
   });
   return found.size === 1 ? [...found.values()][0]! : null;
 }
@@ -547,7 +611,7 @@ export function readForeignInvoice(input: ForeignReadingInput): ForeignReading {
     // a cimkézett olvasás után: ami már megvan, azt az összesítő sor nem írja felül, és ha egy már
     // meglévő érték ELTÉR az összesítő sortól (két táblázat, másik összeg), az sor semmit nem tölt:
     // a három mező nem mondhat ellent egymásnak (barracuda, #1795)
-    const totals = totalsRow(lines);
+    const totals = totalsRow(lines) ?? vatSummaryTable(lines);
     const agrees = (
       field: "netAmount" | "vatAmount" | "grossAmount",
       amount: number,
@@ -563,6 +627,29 @@ export function readForeignInvoice(input: ForeignReadingInput): ForeignReading {
       set("netAmount", decimal(totals.net), "TEXT");
       set("vatAmount", decimal(totals.vat), "TEXT");
       set("grossAmount", decimal(totals.gross), "TEXT");
+    } else if (
+      totals &&
+      values.netAmount !== null &&
+      values.vatAmount !== null &&
+      values.grossAmount !== null &&
+      agrees("grossAmount", totals.gross) &&
+      Math.abs(
+        Number(values.netAmount) +
+          Number(values.vatAmount) -
+          Number(values.grossAmount),
+      ) > 0.02
+    ) {
+      /*
+        A CÍMKÉZETT NETTÓ ÉS ÁFA BIZONYÍTHATÓAN ROSSZ, AZ ÖSSZESÍTŐ SOR NEM (kártya dbab22cd, második kör). A cimkézett olvasás a
+        nettót és az ÁFA-t egy MÁSIK szám mellől is felveheti (egy közműszámlán a "nettó" és az "ÁFA" szó több helyen áll); ha a
+        három érték nem ad ki bruttót, a 4. lépés mindkettőt üresre törölné. Az összesítő sor viszont a három feltételt (fejléc,
+        három összeg, nettó + ÁFA = bruttó) kielégíti, és a bruttója EGYEZIK a már kiolvasottal: ilyenkor a sor váltja a rossz párt.
+        Egy EGYMÁSNAK ELLENT NEM MONDÓ (kijön a bruttó) címkézett pár marad: azt a sor nem írja felül.
+      */
+      values.netAmount = decimal(totals.net);
+      values.vatAmount = decimal(totals.vat);
+      sources.netAmount = "TEXT";
+      sources.vatAmount = "TEXT";
     }
   } else {
     warnings.push(

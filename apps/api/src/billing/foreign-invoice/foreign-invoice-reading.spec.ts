@@ -9,6 +9,7 @@ import {
   supplierNameFromText,
   tableRowFields,
   totalsRow,
+  vatSummaryTable,
   type ForeignReadingInput,
 } from "./foreign-invoice-reading.js";
 
@@ -571,6 +572,79 @@ describe("the totals row of a Hungarian invoice table", () => {
     );
   });
 
+  it("reads the Hungarian utility bill's total row labelled 'Bruttó számlaérték összesen*' (net | VAT | gross)", () => {
+    const { values, sources } = read([
+      "Megnevezés | Mennyiség | Egységár | Nettó | Áfa(%) | Áfa | Bruttó",
+      "Bruttó számlaérték összesen* | 2 000,00 | 540,00 | 2 540,00",
+      "Fizetendő összeg | 2 540,00",
+    ]);
+    assert.equal(values.netAmount, "2000.00");
+    assert.equal(values.vatAmount, "540.00");
+    assert.equal(values.grossAmount, "2540.00");
+    assert.equal(sources.grossAmount, "TEXT");
+  });
+
+  it("the 'Bruttó számlaérték összesen' row obeys the same three conditions: a header above, exactly three amounts, net + VAT = gross", () => {
+    const row = "Bruttó számlaérték összesen* | 2 000,00 | 540,00 | 2 540,00";
+    assert.equal(totalsRow([row]), null);
+    assert.equal(
+      totalsRow([HEADER, "Bruttó számlaérték összesen (Ft) | 2 540"]),
+      null,
+    );
+    assert.equal(
+      totalsRow([HEADER, "Bruttó számlaérték összesen* | 2 000 | 540 | 2 600"]),
+      null,
+    );
+    assert.deepEqual(totalsRow([HEADER, row]), {
+      net: 2000,
+      vat: 540,
+      gross: 2540,
+    });
+  });
+
+  it("replaces a labelled net and VAT that do not add up to the gross with the totals row, whose gross is the same (they were picked from another place)", () => {
+    // "Nettó" and "ÁFA" labels elsewhere on the bill give two numbers that cannot be this invoice's net and VAT
+    const { values, sources, warnings } = read([
+      HEADER,
+      "Nettó díj | 700",
+      "ÁFA | 50",
+      "Bruttó számlaérték összesen* | 2 000 | 540 | 2 540",
+      "Fizetendő összeg | 2 540 Ft",
+    ]);
+    assert.equal(values.netAmount, "2000.00");
+    assert.equal(values.vatAmount, "540.00");
+    assert.equal(values.grossAmount, "2540.00");
+    assert.equal(sources.netAmount, "TEXT");
+    assert.equal(
+      warnings.some((w) => /nem adja ki a bruttót/.test(w)),
+      false,
+    );
+  });
+
+  it("does NOT replace a labelled pair that adds up (it stands even if the row says something else), nor when the gross differs from the row's", () => {
+    // the labelled pair adds up to its own gross: the row does not overwrite it, and the row does not fill either (they disagree)
+    const consistent = read([
+      HEADER,
+      "Subtotal | 1 000",
+      "ÁFA | 270",
+      "Fizetendő összeg | 1 270 Ft",
+      "Bruttó számlaérték összesen* | 2 000 | 540 | 2 540",
+    ]);
+    assert.equal(consistent.values.netAmount, "1000.00");
+    assert.equal(consistent.values.grossAmount, "1270.00");
+    // the labelled pair does not add up, but the gross is NOT the row's gross: nothing is replaced (the row is not trusted over the gross)
+    const otherGross = read([
+      HEADER,
+      "Nettó díj | 700",
+      "ÁFA | 50",
+      "Fizetendő összeg | 9 999 Ft",
+      "Bruttó számlaérték összesen* | 2 000 | 540 | 2 540",
+    ]);
+    assert.notEqual(otherGross.values.netAmount, "2000.00");
+    // and the warning still names the labelled pair that was refused, not the row's numbers
+    assert.ok(otherGross.warnings.some((w) => w.includes("700.00")));
+  });
+
   it("does not decide between two different totals rows", () => {
     const { values } = read([
       HEADER,
@@ -976,5 +1050,120 @@ describe("the value row under a header row", () => {
       "MAS-9999 | átutalás",
     ]);
     assert.equal(v.documentNumber, "KITALALT-0001");
+  });
+});
+
+describe("the VAT summary table (card dbab22cd, second round)", () => {
+  const TABLE_HEADER =
+    "ÁFA összesítő (Ft) | ÁFA % | Adóalap (Ft) | ÁFA (Ft) | Bruttó összeg (Ft)";
+
+  it("reads net, VAT and gross from the row under the header; the first header cell is a title with no cell in the row, so the columns count from the END", () => {
+    assert.deepEqual(
+      vatSummaryTable([TABLE_HEADER, "27 | 1 000 | 270 | 1 270"]),
+      {
+        net: 1000,
+        vat: 270,
+        gross: 1270,
+      },
+    );
+  });
+
+  it("sums the rows of several VAT rates, and the first row that does not fit ends the table", () => {
+    assert.deepEqual(
+      vatSummaryTable([
+        TABLE_HEADER,
+        "27 | 1 000 | 270 | 1 270",
+        "5 | 2 000 | 100 | 2 100",
+        "Gondolta volna, hogy ez itt egy csekk?",
+        "27 | 9 999 | 1 | 10 000",
+      ]),
+      { net: 3000, vat: 370, gross: 3370 },
+    );
+  });
+
+  it("reads nothing when a row does not add up (a wrong number is worse than an empty one), even if an earlier row did", () => {
+    assert.equal(
+      vatSummaryTable([TABLE_HEADER, "27 | 1 000 | 270 | 1 300"]),
+      null,
+    );
+    assert.equal(
+      vatSummaryTable([
+        TABLE_HEADER,
+        "27 | 1 000 | 270 | 1 270",
+        "5 | 2 000 | 100 | 2 500",
+      ]),
+      null,
+    );
+  });
+
+  it("reads nothing without a row under the header, with a negative VAT, or with a row that has too few cells", () => {
+    assert.equal(vatSummaryTable([TABLE_HEADER]), null);
+    assert.equal(vatSummaryTable([TABLE_HEADER, "Valami szöveg"]), null);
+    assert.equal(
+      vatSummaryTable([TABLE_HEADER, "27 | -1 000 | -270 | -1 270"]),
+      null,
+    );
+    assert.equal(vatSummaryTable([TABLE_HEADER, "1 000 | 270"]), null);
+  });
+
+  it("the header needs exactly one net, one VAT amount (not the rate column) and one gross cell, in that order", () => {
+    // two VAT-amount cells: ambiguous
+    assert.equal(
+      vatSummaryTable([
+        "Áfa (Ft) | Nettó (Ft) | Áfa (Ft) | Bruttó (Ft)",
+        "27 | 1 000 | 270 | 1 270",
+      ]),
+      null,
+    );
+    // gross before net
+    assert.equal(
+      vatSummaryTable([
+        "Bruttó (Ft) | Nettó (Ft) | ÁFA (Ft)",
+        "1 270 | 1 000 | 270",
+      ]),
+      null,
+    );
+    // the rate column "Áfa(%)" is not the amount: net, VAT amount and gross are found, and the row aligns from the end
+    assert.deepEqual(
+      vatSummaryTable([
+        "Áfa(%) | Nettó(Ft) | Áfa(Ft) | Bruttó(Ft)",
+        "27 | 1 000 | 270 | 1 270",
+      ]),
+      { net: 1000, vat: 270, gross: 1270 },
+    );
+  });
+
+  it("does not decide between two different tables", () => {
+    assert.equal(
+      vatSummaryTable([
+        TABLE_HEADER,
+        "27 | 1 000 | 270 | 1 270",
+        TABLE_HEADER,
+        "27 | 2 000 | 540 | 2 540",
+      ]),
+      null,
+    );
+  });
+
+  it("fills the three amounts through the reader, and yields to a labelled value that disagrees", () => {
+    const read = (lines: string[]) =>
+      readForeignInvoice({
+        lines,
+        adapter: null,
+        pairing: pairing({
+          number: "",
+          supplierName: "",
+          date: "",
+          currency: "",
+        }),
+      });
+    const lines = [TABLE_HEADER, "27 | 1 000 | 270 | 1 270"];
+    const { values } = read(lines);
+    assert.equal(values.netAmount, "1000.00");
+    assert.equal(values.vatAmount, "270.00");
+    assert.equal(values.grossAmount, "1270.00");
+    const disagree = read(["Subtotal | 1 500", ...lines]);
+    assert.equal(disagree.values.netAmount, "1500.00");
+    assert.equal(disagree.values.vatAmount, null);
   });
 });
