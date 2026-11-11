@@ -458,6 +458,29 @@ describe("WebshopOrderInvoiceService", () => {
     );
   });
 
+  it("the old row of a DELETED partner is no mirror (the repository says so): next to a plain old row it makes two plain rows, and the invoice is refused", async () => {
+    const { calls, service } = setup({
+      orderOverride: COMPANY_ORDER("15509246-2-41"),
+      byTax: [
+        { id: "cust_old", displayName: "FANK régi vevő-sor", linked: false },
+        {
+          id: "cust_deleted",
+          displayName: "FANK megszűnt partner sora",
+          linked: false,
+          partnerMirror: false,
+        },
+      ],
+    });
+    await assert.rejects(service.issue("order_38", USER, NOW), {
+      status: 409,
+      message: /ezzel az adószámmal/,
+    });
+    assert.equal(
+      calls.some((c) => c.startsWith("create") || c.startsWith("link")),
+      false,
+    );
+  });
+
   it("the mirror rule needs EXACTLY ONE mirror: two mirrors, or several rows and no mirror, are still refused", async () => {
     for (const rows of [
       [

@@ -73,6 +73,16 @@ describe(
       await customer("de-other", { euTaxNumber: "DE 123 456 780" });
       await customer("at", { euTaxNumber: "ATU12345678" });
       await customer("none", {});
+      // the old mirror row of a DELETED partner on the same key: a plain customer row again, not a mirror
+      await customer("mirrordeleted", { taxNumber: "15509246-2-43" });
+      await prisma.supplier.create({
+        data: {
+          code: `${PREFIX}sup-deleted-${n}`,
+          name: `${PREFIX}deleted-partner`,
+          customerId: ids["mirrordeleted"]!,
+          deletedAt: new Date(),
+        },
+      });
       // a partner's customer mirror on the same key as the old row (the Állatkert shape)
       await customer("mirror", { taxNumber: "15509246-2-42" });
       await prisma.supplier.create({
@@ -109,6 +119,7 @@ describe(
         "dashed",
         "hu8",
         "mirror",
+        "mirrordeleted",
         "plain11",
       ]);
     });
@@ -159,6 +170,11 @@ describe(
         ]),
       );
       assert.equal(mirror["mirror"], true);
+      assert.equal(
+        mirror["mirrordeleted"],
+        false,
+        "a deleted partner's row is no mirror",
+      );
       assert.equal(mirror["dashed"], false);
       assert.equal(mirror["plain11"], false);
     });

@@ -7,6 +7,7 @@ import {
   type WebshopTransferReceipt,
 } from "@acropora/types";
 
+import { isPartnerMirror } from "../../customers/customers.repository.js";
 import {
   euKey,
   huBase,
@@ -652,7 +653,7 @@ export class WebshopOrdersRepository {
         displayName: true,
         taxNumber: true,
         euTaxNumber: true,
-        partner: { select: { id: true } },
+        partner: { select: { id: true, deletedAt: true } },
       },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     });
@@ -677,7 +678,8 @@ export class WebshopOrdersRepository {
       id,
       displayName,
       linked: linked.has(id),
-      partnerMirror: Boolean(partner),
+      // a TÖRÖLT partner sora ismét sima vevő-sor (ugyanaz a definíció, mint a vevő-listán és a szerkesztés tiltásán)
+      partnerMirror: isPartnerMirror(partner),
     }));
   }
 
