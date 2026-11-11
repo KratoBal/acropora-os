@@ -135,6 +135,90 @@ describe(
       assert.equal((await repository.list(1)).length, 1);
     });
 
+    it("the retention purge: a handled request goes before its cutoff, an unhandled one before its own, strictly (the boundary row stays), and a young one stays", async () => {
+      const now = new Date("2026-11-11T12:00:00.000Z");
+      const day = 24 * 60 * 60 * 1000;
+      const handledCutoff = new Date(now.getTime() - 30 * day);
+      const unhandledCutoff = new Date(now.getTime() - 90 * day);
+      const make = async (
+        key: string,
+        data: { createdAt: Date; handledAt: Date | null },
+      ) => {
+        const stored = await repository.store(input(`purge-${key}`));
+        await prisma.aiContactRequest.update({
+          where: { id: stored.id },
+          data,
+        });
+        return stored.id;
+      };
+      const ms = (base: Date, offset: number) =>
+        new Date(base.getTime() + offset);
+      const old = new Date("2026-01-01T00:00:00.000Z");
+      const ids = {
+        handledOld: await make("handled-old", {
+          createdAt: old,
+          handledAt: ms(handledCutoff, -1000),
+        }),
+        handledBoundary: await make("handled-boundary", {
+          createdAt: old,
+          handledAt: handledCutoff,
+        }),
+        handledYoung: await make("handled-young", {
+          createdAt: old,
+          handledAt: ms(handledCutoff, 1000),
+        }),
+        unhandledOld: await make("unhandled-old", {
+          createdAt: ms(unhandledCutoff, -1000),
+          handledAt: null,
+        }),
+        unhandledBoundary: await make("unhandled-boundary", {
+          createdAt: unhandledCutoff,
+          handledAt: null,
+        }),
+        unhandledYoung: await make("unhandled-young", {
+          createdAt: ms(unhandledCutoff, 1000),
+          handledAt: null,
+        }),
+        // handled recently but CREATED long ago: the handled rule (from handledAt) keeps it, the unhandled rule never sees it
+        handledRecentlyOldCreated: await make("handled-recent", {
+          createdAt: old,
+          handledAt: ms(now, -day),
+        }),
+      };
+      const mine = Object.values(ids);
+      // other rows in the table (another run, a developer's data) must not decide this test: only ours are counted
+      const before = await prisma.aiContactRequest.count({
+        where: { id: { in: mine } },
+      });
+      assert.equal(before, 7);
+      const removed = await repository.purge(handledCutoff, unhandledCutoff);
+      assert.ok(removed.handled >= 1 && removed.unhandled >= 1);
+      const left = new Set(
+        (
+          await prisma.aiContactRequest.findMany({
+            where: { id: { in: mine } },
+            select: { id: true },
+          })
+        ).map((row) => row.id),
+      );
+      assert.equal(left.has(ids.handledOld), false);
+      assert.equal(left.has(ids.unhandledOld), false);
+      for (const key of [
+        "handledBoundary",
+        "handledYoung",
+        "unhandledBoundary",
+        "unhandledYoung",
+        "handledRecentlyOldCreated",
+      ] as const)
+        assert.equal(left.has(ids[key]), true, key);
+      // a second run removes nothing of ours
+      await repository.purge(handledCutoff, unhandledCutoff);
+      assert.equal(
+        await prisma.aiContactRequest.count({ where: { id: { in: mine } } }),
+        5,
+      );
+    });
+
     it("the database refuses an empty value and a value over 254 characters when the server's rule is bypassed", async () => {
       for (const value of ["", "   ", "x".repeat(255)])
         await assert.rejects(
