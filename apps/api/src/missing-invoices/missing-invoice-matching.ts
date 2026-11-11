@@ -189,6 +189,16 @@ export interface MatchOutcome {
   /** A drawer jelöltjei: a partner ablakba eső dokumentumai. */
   candidates: CandidateDocument[];
   /**
+   * A NÉV NÉLKÜLI JAVASLAT (task os-hianyzo-szamlak-unpaid, 2026-11-11): a jelölt-keresés a PARTNER NEVE
+   * szerint megy (`partnerDocs`), és egy kártyás fizetésnél a kereskedő neve nem a számla kiállítójáé
+   * (XXXLUTZ LEHEL UTCA a MMXH Lakberendezési Kft. számláján; SIMPLEP*ugyfelkapu a Merkantil Bank
+   * számláján), így a drawer jelölt-listája üres maradt, és a kézi párosítás („Ilyen számla nincs a jelöltek
+   * között”) nem volt kezdeményezhető. Ha NINCS név szerinti jelölt, a fizetés ablakába eső, szabad, pontos
+   * összegű számlák (legfeljebb 8) ide kerülnek. CSAK a drawer kézi választásához: a párosítás szabályai, az
+   * állapot és a hiánylista számlaszámai (`candidates`) ettől nem változnak.
+   */
+  amountCandidates?: CandidateDocument[];
+  /**
    * A KÖZLEMÉNY ÁLTAL MEGNEVEZETT, DE HIÁNYZÓ SZÁMLÁK, név szerint (Balázs,
    * acrobot 25610: „ki kellene írni melyik hiányzik”): a párosított számla,
    * aminek nincs eredetije, és a megnevezett szám, amihez egyáltalán nincs
@@ -1366,6 +1376,16 @@ export function matchMonth(input: MatchMonthInput): Map<string, MatchOutcome> {
   for (const debit of open) {
     if (outcomes.has(debit.id)) continue;
     const candidates = partnerDocs(debit, 0.6).filter((d) => !zeroTotal(d));
+    const amountCandidates = candidates.length
+      ? []
+      : window(debit)
+          .filter(
+            (d) =>
+              d.kind === "INVOICE" &&
+              d.gross !== null &&
+              exact(amountGap(debit, d.gross, d.currency), d.currency),
+          )
+          .slice(0, 8);
     // A „van-e számla a partnertől” kérdés az ÖSSZES számlára szól, a más
     // fizetés által már elvittekre is (a második Alza-fizetés számlája
     // létezik, csak az elsőé lett): Nem párosodott, nem Nincs számla.
@@ -1429,6 +1449,7 @@ export function matchMonth(input: MatchMonthInput): Map<string, MatchOutcome> {
                 : "a partnertől nincs számla a forrásokban",
       // a neki hagyott számla jelöltként látszik, akkor is, ha már a másiké
       candidates: [...kept, ...candidates.filter((c) => !kept.includes(c))],
+      ...(amountCandidates.length ? { amountCandidates } : {}),
     });
   }
   for (const id of input.paperOriginals ?? []) {

@@ -49,6 +49,65 @@ const run = (
 ) => matchMonth({ debits, documents, manual });
 
 /*
+  A NÉV NÉLKÜLI JAVASLAT (task os-hianyzo-szamlak-unpaid). MI PIROSÍT: a név szerinti `candidates` (a hiánylista
+  számlaszámainak forrása) megtelik az összeg szerinti találattal; az összeg szerinti javaslat a párosítás
+  állapotát elmozdítja; a pontos összeg helyett más összegű számla javaslat lesz; a proforma
+  számla javaslat lesz; legfeljebb 8 javaslat.
+*/
+describe("amount-only candidates: a suggestion for the drawer, never a pairing", () => {
+  const card = () =>
+    debit({
+      bookingDate: "2026-10-26",
+      amount: D(24990),
+      counterpartyName: "XXXLUTZ LEHEL UTCA",
+    });
+  const invoice = (overrides: Partial<CandidateDocument>) =>
+    doc({
+      date: "2026-10-22",
+      gross: D(24990),
+      supplierName: "MMXH Lakberendezési Kft.",
+      ...overrides,
+    });
+
+  it("an exact-amount invoice of another name is a suggestion; the name list and the state are untouched", () => {
+    const d = card();
+    const match = invoice({});
+    const out = run([d], [match, invoice({ gross: D(5590) })]).get(d.id)!;
+    assert.deepEqual(
+      out.amountCandidates?.map((c) => c.id),
+      [match.id],
+    );
+    assert.deepEqual(out.candidates, []);
+    assert.notEqual(out.state, "FOUND");
+    assert.deepEqual(out.documents, []);
+  });
+
+  it("not a proforma or out-of-window invoice, at most eight, and none when the name already finds one", () => {
+    const d = card();
+    const bad = [
+      invoice({ kind: "PROFORMA" }),
+      invoice({ date: "2025-01-05" }),
+    ];
+    assert.equal(run([d], bad).get(d.id)?.amountCandidates, undefined);
+    const many = Array.from({ length: 10 }, () => invoice({}));
+    assert.equal(
+      run([card()], many).values().next().value?.amountCandidates?.length,
+      8,
+    );
+    const named = debit({
+      bookingDate: "2026-10-26",
+      amount: D(24990),
+      counterpartyName: "MMXH Lakberendezési Kft.",
+    });
+    const outNamed = run(
+      [named],
+      [invoice({ gross: D(11000) }), invoice({})],
+    ).get(named.id)!;
+    assert.equal(outNamed.amountCandidates, undefined);
+  });
+});
+
+/*
   BIZTOSÍTÁS (barracuda esetlistája, 2. csoport). MI PIROSÍT: ha egy biztosítási
   díj a partner MÁS számlái miatt „nem párosodott”-nak látszana (az OTP banki
   díjszámlái), vagy ha a biztosító saját, pontos összegű számláját nem találná meg.
