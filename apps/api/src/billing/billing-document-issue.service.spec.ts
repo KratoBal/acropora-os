@@ -857,6 +857,51 @@ describe("the invoice confirmation (card 7ba97e0d)", () => {
     assert.equal(changed.calls.generate, 0);
   });
 
+  it("with a send address of its own (the webshop proforma), the window and the digest are that address, not the buyer's", async () => {
+    const ORDER = "rendeles@example.com";
+    const summary = await setup().service.summary("doc-1", NOW, ORDER);
+    assert.equal(summary.buyerEmail, ORDER);
+    const confirmed = {
+      issueDate: "2026-11-11",
+      fulfillmentDate: "2026-09-30",
+      dueDate: "2026-11-19",
+      fingerprint: summary.fingerprint,
+    };
+    // the buyer's billing address changed: not the one the window named, so the issue goes on
+    const billingChanged = setup({
+      over: {
+        customer: {
+          ...(row().customer as object),
+          billingEmail: "masik@example.com",
+        },
+      },
+    });
+    await billingChanged.service.issue(
+      "doc-1",
+      "2026-09-30T10:00:00.000Z",
+      USER,
+      confirmed,
+      NOW,
+      ORDER,
+    );
+    assert.equal(billingChanged.calls.generate, 1);
+    // the address the window named changed: the issue stops before Számlázz.hu
+    const orderChanged = setup();
+    await assert.rejects(
+      () =>
+        orderChanged.service.issue(
+          "doc-1",
+          "2026-09-30T10:00:00.000Z",
+          USER,
+          confirmed,
+          NOW,
+          "uj-cim@example.com",
+        ),
+      /megváltoztak, mióta megnyitottad/,
+    );
+    assert.equal(orderChanged.calls.generate, 0);
+  });
+
   it("dates the rule refuses never reach Számlázz.hu", async () => {
     const { service, calls } = setup();
     const { fingerprint } = await service.summary("doc-1", NOW);

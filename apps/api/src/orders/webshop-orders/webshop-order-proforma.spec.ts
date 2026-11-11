@@ -114,6 +114,7 @@ function setup(over: {
   const languages: unknown[] = [];
   const sentSubjects: string[] = [];
   const confirmations: unknown[] = [];
+  const sendTos: unknown[] = [];
   const service = new WebshopOrderInvoiceService(
     {
       source: async () => ({
@@ -176,11 +177,13 @@ function setup(over: {
     } as never,
     {
       issueMode: () => "stub",
-      summary: async (id: string) => {
+      summary: async (id: string, _now: unknown, sendTo: unknown) => {
         calls.push(`summary ${id}`);
+        sendTos.push(sendTo);
         return {
           buyerName: "Teszt Elek",
-          buyerEmail: "szamlazasi@example.test",
+          // the shared summary's address is the sendTo it was given, else the buyer's
+          buyerEmail: sendTo === undefined ? "szamlazasi@example.test" : sendTo,
           issueDate: "2026-10-06",
           fulfillmentDate: "2026-10-06",
           dueDate: "2026-10-14",
@@ -192,9 +195,12 @@ function setup(over: {
         _updatedAt: string,
         _user: unknown,
         confirmation: unknown,
+        _now: unknown,
+        sendTo: unknown,
       ) => {
         calls.push(`issue ${id}`);
         confirmations.push(confirmation);
+        sendTos.push(sendTo);
         proforma = {
           id,
           status: over.issueEnds ?? "ISSUED",
@@ -226,7 +232,15 @@ function setup(over: {
       ),
     } as never,
   );
-  return { service, calls, drafts, languages, sentSubjects, confirmations };
+  return {
+    service,
+    calls,
+    drafts,
+    languages,
+    sentSubjects,
+    confirmations,
+    sendTos,
+  };
 }
 
 const status = async (p: Promise<unknown>) => {
@@ -314,6 +328,8 @@ describe("sending the proforma from the order page", () => {
     const confirmed = setup({});
     await confirmed.service.sendProforma("order_55", USER, NOW, CONFIRMED);
     assert.deepEqual(confirmed.confirmations, [CONFIRMED]);
+    // the issue re-checks the digest with the address the window named: the order's (barracuda on #2429)
+    assert.deepEqual(confirmed.sendTos, ["vevo@example.test"]);
 
     const blind = setup({});
     assert.equal(
@@ -472,9 +488,11 @@ describe("the proforma's draft and its place on the page", () => {
 */
 describe("the proforma's confirmation window", () => {
   it("is the saved draft's summary, with the order's e-mail as the send address and the draft's id", async () => {
-    const { service, calls } = setup({});
+    const { service, calls, sendTos } = setup({});
     const summary = await service.proformaSummary("order_55", USER, NOW);
     assert.equal(summary.buyerEmail, "vevo@example.test");
+    // the summary is built with it, so its digest covers the order's e-mail, not the billing one
+    assert.deepEqual(sendTos, ["vevo@example.test"]);
     assert.equal(summary.documentId, "doc_1");
     assert.equal(summary.fingerprint, "f".repeat(64));
     assert.deepEqual(

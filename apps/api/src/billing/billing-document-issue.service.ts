@@ -173,7 +173,12 @@ export class BillingDocumentIssueService {
    * THE CONFIRMATION WINDOW'S VALUES (card 7ba97e0d), from the builder the issue uses. Only for a draft: an issued
    * or issuing document has nothing left to confirm.
    */
-  async summary(id: string, now = new Date()): Promise<BillingIssueSummary> {
+  async summary(
+    id: string,
+    now = new Date(),
+    /** Where the caller sends it instead of the buyer's address (`billingIssueSummary`). */
+    sendTo?: string | null,
+  ): Promise<BillingIssueSummary> {
     const row = await this.documents.find(id);
     if (!row) throw new NotFoundException("A bizonylat nem található.");
     if (row.status !== "DRAFT")
@@ -187,6 +192,7 @@ export class BillingDocumentIssueService {
       row,
       budapestDayKey(now),
       paymentDueDays,
+      sendTo,
     );
     if (!result.ok) throw new BadRequestException(result.message);
     return result.summary;
@@ -203,6 +209,8 @@ export class BillingDocumentIssueService {
     user: AuthenticatedUser,
     confirmation?: BillingIssueConfirmation,
     now = new Date(),
+    /** The same `sendTo` the window's summary had: the re-check recomputes the digest with it. */
+    sendTo?: string | null,
   ): Promise<BillingDocumentDetail> {
     const mode = billingIssueMode(this.environment);
     if (mode === "conflict")
@@ -260,7 +268,7 @@ export class BillingDocumentIssueService {
     const today = budapestDayKey(now);
     let issueDay: string | null = null;
     if (confirmation) {
-      const shown = billingIssueSummary(row, today);
+      const shown = billingIssueSummary(row, today, undefined, sendTo);
       if (!shown.ok) throw new BadRequestException(shown.message);
       if (shown.summary.fingerprint !== confirmation.fingerprint)
         throw new ConflictException(
