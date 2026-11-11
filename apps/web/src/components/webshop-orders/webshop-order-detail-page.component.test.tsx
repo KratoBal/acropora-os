@@ -44,6 +44,7 @@ const api = vi.hoisted(() => ({
   invoiceSummary: vi.fn(),
   issueDeliveryNote: vi.fn(),
   sendProforma: vi.fn(),
+  proformaSummary: vi.fn(),
   recordTransferReceived: vi.fn(),
   syncTransferToShop: vi.fn(),
   createParcel: vi.fn(),
@@ -81,6 +82,18 @@ const CONFIRMED = {
   fingerprint: INVOICE_SUMMARY.fingerprint,
 };
 const ISSUE_DIALOG = "Biztos, hogy kiállítod a számlát?";
+/* the proforma's window (card 7ba97e0d follow-up): its send address is the ORDER's e-mail */
+const PROFORMA_SUMMARY = {
+  ...INVOICE_SUMMARY,
+  documentId: "doc_p1",
+  buyerEmail: "rendeles@example.hu",
+};
+const PROFORMA_CONFIRMED = {
+  issueDate: PROFORMA_SUMMARY.issueDate,
+  fulfillmentDate: PROFORMA_SUMMARY.fulfillmentDate,
+  dueDate: PROFORMA_SUMMARY.dueDate,
+  fingerprint: PROFORMA_SUMMARY.fingerprint,
+};
 /** The window, once the summary is in (its buttons wait for it). */
 async function invoiceDialog() {
   const dialog = await screen.findByRole("dialog", { name: ISSUE_DIALOG });
@@ -308,6 +321,7 @@ beforeEach(() => {
   api.invoiceSummary.mockReset().mockResolvedValue(INVOICE_SUMMARY);
   api.issueDeliveryNote.mockReset();
   api.sendProforma.mockReset();
+  api.proformaSummary.mockReset().mockResolvedValue(PROFORMA_SUMMARY);
   api.recordTransferReceived.mockReset();
   api.syncTransferToShop.mockReset();
   api.createParcel.mockReset();
@@ -2227,7 +2241,7 @@ describe("the proforma on the Fizetés card", () => {
     expect(within(payment).queryByText("Utalásra vár")).toBeNull();
   });
 
-  it("waits for the transfer; the first send asks first, then issues and sends", async () => {
+  it("waits for the transfer; the first send goes through the confirmation window, then issues and sends", async () => {
     api.detail.mockResolvedValue(transfer);
     api.sendProforma.mockResolvedValue(issued());
     render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
@@ -2237,16 +2251,28 @@ describe("the proforma on the Fizetés card", () => {
     fireEvent.click(
       within(payment).getByRole("button", { name: "Díjbekérő kiküldése" }),
     );
-    const confirm = screen.getByRole("dialog", { name: "Díjbekérő kiküldése" });
+    const confirm = await screen.findByRole("dialog", {
+      name: "Díjbekérő kiküldése",
+    });
+    await within(confirm).findByText(PROFORMA_SUMMARY.buyerName);
+    expect(api.proformaSummary).toHaveBeenCalledWith("token", "order_38");
     expect(confirm.textContent).toContain("valódi díjbekérő készül");
     expect(confirm.textContent).toContain("8 napos");
-    expect(confirm.textContent).toContain("emese@example.hu");
+    // where it goes: the order's e-mail, as the send will; the send is the point, so it is checked and fixed
+    expect(confirm.textContent).toContain("rendeles@example.hu");
+    const sendBox = within(confirm).getByLabelText("Elküldöm e-mailben");
+    expect(sendBox).toBeChecked();
+    expect(sendBox).toBeDisabled();
     expect(api.sendProforma).not.toHaveBeenCalled();
     fireEvent.click(
       within(confirm).getByRole("button", { name: "Díjbekérő kiküldése" }),
     );
     expect(await within(payment).findByText("TESZT-D-1")).toBeTruthy();
-    expect(api.sendProforma).toHaveBeenCalledWith("token", "order_38");
+    expect(api.sendProforma).toHaveBeenCalledWith(
+      "token",
+      "order_38",
+      PROFORMA_CONFIRMED,
+    );
     expect(within(payment).getByText("2026-10-14")).toBeTruthy();
     expect(within(payment).getByText("Kiküldve")).toBeTruthy();
     expect(
@@ -2273,6 +2299,8 @@ describe("the proforma on the Fizetés card", () => {
       name: "Díjbekérő újraküldése",
     });
     expect(confirm.textContent).toContain("Új díjbekérő nem készül");
+    // a resend makes no document: no window, no summary
+    expect(api.proformaSummary).not.toHaveBeenCalled();
     fireEvent.click(
       within(confirm).getByRole("button", { name: "Díjbekérő újraküldése" }),
     );
@@ -2544,10 +2572,12 @@ describe("the proforma on the Fizetés card", () => {
     fireEvent.click(
       within(payment).getByRole("button", { name: "Díjbekérő kiküldése" }),
     );
+    const confirm = await screen.findByRole("dialog", {
+      name: "Díjbekérő kiküldése",
+    });
+    await within(confirm).findByText(PROFORMA_SUMMARY.buyerName);
     fireEvent.click(
-      within(
-        screen.getByRole("dialog", { name: "Díjbekérő kiküldése" }),
-      ).getByRole("button", { name: "Díjbekérő kiküldése" }),
+      within(confirm).getByRole("button", { name: "Díjbekérő kiküldése" }),
     );
     expect((await within(payment).findByRole("alert")).textContent).toMatch(
       /nincs e-mail cím/,
