@@ -850,6 +850,9 @@ enum BillingSourceType {
   WEBSHOP_ORDER
   /// Beszerzési szerződés (hétfői lista M4); a `sourceId` a `Contract.id`.
   CONTRACT
+  /// Teljesítési igazolásból kiállított számla (TIG; Balázs 2026-11-11 13:22 UTC): a `sourceId` a `CompletionCertificate.id`.
+  /// CSAK a kiállításkor kapja meg; a TIG piszkozata forrás nélküli marad, tehát nem saját sor és nem szerkeszthető.
+  COMPLETION_CERTIFICATE
 }
 
 /// Egy bizonylat-sor fajtája. A kedvezmény KÜLÖN, NEGATÍV sor, közvetlenül az
@@ -1447,6 +1450,7 @@ model Product {
   brand                   Brand?                  @relation(fields: [brandId], references: [id], onDelete: SetNull)
   legacyCategory          Category?               @relation("LegacyProductCategory", fields: [categoryId], references: [id], onDelete: SetNull)
   createdBy               User?                   @relation("ProductCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  customerCandidateEntries CustomerCandidateManualEntry[]
   categories              ProductCategory[]
   /// SEO P0 PR 10: a termek helye az Acropora-kategoriafaban (`StoreCategory`).
   storeCategories         StoreCategoryProduct[]
@@ -12069,6 +12073,46 @@ model AiContactRequest {
 enum AiContactChannel {
   EMAIL
   PHONE
+}
+
+/// A VEVO FELE AJANLHATO TERMEKEK KEZI LISTAJA (V3.4 S2c, kartya ce6c5cc9; Balazs 2026-11-11 11:44:46 UTC, (e): parameterenkent 3-5 termek
+/// kezzel, kesobb automatikus). Egy sor egy termek egy MOZGASRA (a negy jovahagyott parameter egyike, es az irany). A listat a
+/// `customer-candidates:import` parancs tolti egy ellenorzott JSON fajlbol, a jovahagyo nevevel; a vevo fele CSAK a vetitesen at
+/// jut (V3.4 S2b), es csak ha a `sideEffectsStatus` FILLED, a termek aktiv es vasarolhato, es a `basis` megengedett: a SHOP_TEXT
+/// (a bolti leiras, nem gyartoi forras) csak a `CUSTOMER_CANDIDATES_ALLOW_SHOP_TEXT` kapcsoloval, a TESZT kornyezetben; elesben MAKER kell.
+model CustomerCandidateManualEntry {
+  id                 String                                @id @default(cuid())
+  productId          String
+  /// A fajlban megadott cikkszam (`ProductVariant.sku`), a visszakereshetosegert.
+  sku                String
+  parameterCode      String
+  direction          DoseEffectDirection
+  /// Https cim: a gyartoi oldal (MAKER) vagy a termek bolti lapja (SHOP_TEXT). A vevo ezt kapja a termekrol, nem adagolasi mondatot.
+  referenceUrl       String
+  basis              CustomerCandidateBasis
+  /// A termek VERIFIED/leirt hatasa a NEM jovahagyott parametereken ("KOD:IRANY"). Ures lista FILLED mellett: a leiras kifejezetten nem
+  /// emlit mellekhatast.
+  sideEffects        String[]
+  sideEffectsStatus  CustomerCandidateSideEffectsStatus
+  note               String?
+  approvedBy         String
+  approvedAt         DateTime
+  createdAt          DateTime                              @default(now())
+  updatedAt          DateTime                              @updatedAt
+  product            Product                               @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, parameterCode, direction])
+  @@index([parameterCode, direction])
+}
+
+enum CustomerCandidateBasis {
+  MAKER
+  SHOP_TEXT
+}
+
+enum CustomerCandidateSideEffectsStatus {
+  FILLED
+  PENDING
 }
 
 /// AZ AI CSEVEGÉS TÁROLT LINK-FORRÁSAI (kártya 9d060f5c, a terv 4. és 6.3 szakasza): az AI válasz-kapuja alapból

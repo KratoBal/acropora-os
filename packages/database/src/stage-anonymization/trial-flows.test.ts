@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
 
 import {
+  FAKE_FINGERPRINT,
   FAKE_TOKEN,
   FAKE_UPDATED_AT,
   startFakeApi,
@@ -84,8 +85,14 @@ describe("a trial against an API that answers as the code was read to", () => {
     const line = (draft.lines as Record<string, unknown>[])[0]!;
     assert.ok("discountPercent" in line && line.discountPercent === null);
     assert.equal(typeof line.unitNet, "string");
+    // the confirmation window's path (card 7ba97e0d): the issue carries what the summary showed
+    assert.ok(sent("GET", "/billing/documents/inv-1/issue-summary"));
     assert.deepEqual(sent("POST", "/billing/documents/inv-1/issue")!.body, {
       expectedUpdatedAt: FAKE_UPDATED_AT,
+      issueDate: "2026-11-09",
+      fulfillmentDate: "2026-11-09",
+      dueDate: "2026-11-17",
+      fingerprint: FAKE_FINGERPRINT,
     });
   });
 

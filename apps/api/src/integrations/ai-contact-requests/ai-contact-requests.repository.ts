@@ -69,6 +69,26 @@ export class AiContactRequestsRepository {
     });
   }
 
+  /**
+   * THE RETENTION (plan 2 point 4, approved defaults 30 and 90 days): a HANDLED request goes when it was handled before
+   * `handledCutoff`, an UNHANDLED one when it was created before `unhandledCutoff`. Both are STRICT (`<`): a row exactly at the
+   * boundary stays. One transaction, so a failure leaves both deletes undone. Returns the numbers only.
+   */
+  async purge(
+    handledCutoff: Date,
+    unhandledCutoff: Date,
+  ): Promise<{ handled: number; unhandled: number }> {
+    return prisma.$transaction(async (transaction) => {
+      const handled = await transaction.aiContactRequest.deleteMany({
+        where: { handledAt: { not: null, lt: handledCutoff } },
+      });
+      const unhandled = await transaction.aiContactRequest.deleteMany({
+        where: { handledAt: null, createdAt: { lt: unhandledCutoff } },
+      });
+      return { handled: handled.count, unhandled: unhandled.count };
+    });
+  }
+
   /** The newest requests first, for the Settings list. */
   async list(limit: number): Promise<AiContactRequestView[]> {
     const rows = await prisma.aiContactRequest.findMany({

@@ -45,6 +45,7 @@ export {
   BILLING_NEW_DOCUMENT_TYPES,
   BILLING_EMAIL_STATUSES,
   BILLING_SOURCE_TYPES,
+  BILLING_DRAFT_SOURCE_TYPES,
   BILLING_STORNABLE_TYPES,
   INVOICE_FORMATS,
   INVOICE_FORMAT_LABELS,
@@ -1979,3 +1980,15 @@ export type {
   ReefClubWaterHintsState,
   ReefClubWaterHintStatus,
 } from "./reefclub-water-hints.js";
+export {
+  checkBillingIssueDates,
+  isCardPayment,
+} from "./billing-issue-summary.js";
+export type {
+  BillingIssueConfirmation,
+  BillingIssueDatesCheck,
+  BillingIssueSummary,
+  WebshopInvoiceConfirmation,
+  WebshopInvoiceIssueResult,
+  WebshopInvoiceSummary,
+} from "./billing-issue-summary.js";
