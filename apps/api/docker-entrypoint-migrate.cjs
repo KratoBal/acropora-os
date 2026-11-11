@@ -53,7 +53,11 @@
  *     container, and the rights already in place stay. It is an `ERROR` line
  *     naming the manual command. The file needs a superuser (its definer
  *     part, see the file): a connection that is not one fails here, loudly,
- *     and nothing changes.
+ *     and nothing changes;
+ *   - it never holds the start for long (barracuda, #2437): the file waits at
+ *     most 5 s for a table lock (`lock_timeout`, its policy statements lock
+ *     the aquarium tables), and the run is cut after 60 s. Either is the same
+ *     ERROR line; the next start tries again.
  *
  * NOT ALTER DEFAULT PRIVILEGES: that would give the role every new table,
  * and the point of the role is that it cannot read invoices, worksheets or
@@ -124,6 +128,13 @@ function resolvePrismaPaths() {
 
 const REEFCLUB_ROLE = "reefclub_app";
 
+/**
+ * The second line against a wait (barracuda, #2437): the file sets a 5 s
+ * `lock_timeout` itself; this cuts the run if anything else hangs, so the
+ * internal API's start is never held for long by the ReefClub's grants.
+ */
+const REEFCLUB_ROLE_TIMEOUT_MS = 60_000;
+
 /** Whether the ReefClub role exists in the database DATABASE_URL names. */
 async function reefclubRolePresent(req) {
   const { PrismaClient } = req("@prisma/client");
@@ -139,12 +150,12 @@ async function reefclubRolePresent(req) {
 
 /**
  * The ReefClub role's rights after the migrations (see the header). The two
- * steps come in, so the decision is tested without a database
+ * steps come in (`execute` answers `{ status, timedOut }`), so the decision is tested without a database
  * (docker-entrypoint-migrate.spec.ts). Never throws: the outcome is returned
  * and said on the log.
  */
 async function applyReefclubRole({ rolePresent, execute, log, error }) {
-  const manual = `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/database/sql/reefclub-role.sql`;
+  const manual = `psql "$DATABASE_URL" -1 -v ON_ERROR_STOP=1 -f packages/database/sql/reefclub-role.sql`;
   let present;
   try {
     present = await rolePresent();
@@ -160,10 +171,13 @@ async function applyReefclubRole({ rolePresent, execute, log, error }) {
     );
     return "skipped";
   }
-  const status = execute();
-  if (status !== 0) {
+  const { status, timedOut } = execute();
+  if (timedOut || status !== 0) {
+    const what = timedOut
+      ? `did not finish in ${REEFCLUB_ROLE_TIMEOUT_MS / 1000} s and was stopped`
+      : `failed (exit ${status}; a lock not granted in 5 s is this too)`;
     error(
-      `ERROR reefclub-role: reefclub-role.sql failed (exit ${status}); it runs as one transaction, so the ${REEFCLUB_ROLE} role keeps the rights it had. The ReefClub process may lack a right a new table needs. By hand, as a superuser: ${manual}`,
+      `ERROR reefclub-role: reefclub-role.sql ${what}; it runs as one transaction, so the ${REEFCLUB_ROLE} role keeps the rights it had, and the next start tries again. The ReefClub process may lack a right a new table needs. By hand, as a superuser: ${manual}`,
     );
     return "error";
   }
@@ -235,7 +249,7 @@ async function main() {
     execute: () => {
       if (!reefclubRoleSqlPresent) {
         console.error(`reefclub-role.sql missing at ${reefclubRoleSql}.`);
-        return 2;
+        return { status: 2, timedOut: false };
       }
       const run = spawnSync(
         process.execPath,
@@ -248,9 +262,14 @@ async function main() {
           "--schema",
           schemaPath,
         ],
-        { stdio: "inherit", env: process.env },
+        {
+          stdio: "inherit",
+          env: process.env,
+          timeout: REEFCLUB_ROLE_TIMEOUT_MS,
+        },
       );
-      return run.error ? 1 : (run.status ?? 1);
+      const timedOut = run.error?.code === "ETIMEDOUT";
+      return { status: run.error ? 1 : (run.status ?? 1), timedOut };
     },
     log: (line) => console.log(line),
     error: (line) => console.error(line),

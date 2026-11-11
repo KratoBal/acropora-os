@@ -114,13 +114,17 @@ runs with the API's own connection, as one transaction, so a new ReefClub table 
 with the deployment that creates it. A database without the role is skipped with a log line. A
 failure does not stop the internal API: the role keeps the rights it had, and the log says
 `ERROR reefclub-role: ...` with the manual command. Look for that line after a deployment that
-added a ReefClub table. The one manual step left is creating the role, once per environment:
+added a ReefClub table. The file waits at most 5 seconds for a table lock (`lock_timeout`; it
+changes row-level-security policies, which lock the aquarium tables), and the run is cut after 60
+seconds; either is the same `ERROR` line, and the next start tries again. By hand, **always with
+`-1`**: without it psql commits each statement, and a run that stops halfway has already taken the
+role's rights away. The one manual step left is creating the role, once per environment:
 
 ```bash
 # the role, once (its password is a secret of the environment)
 psql "$DATABASE_URL" -c "CREATE ROLE \"reefclub_app\" LOGIN PASSWORD '...'"
-# by hand only if the log said ERROR reefclub-role (idempotent)
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/database/sql/reefclub-role.sql
+# by hand only if the log said ERROR reefclub-role (idempotent); -1 makes it one transaction
+psql "$DATABASE_URL" -1 -v ON_ERROR_STOP=1 -f packages/database/sql/reefclub-role.sql
 ```
 
 **The file is applied only together with the code redemption function** (migration

@@ -21,7 +21,11 @@
 -- Creating the role stays a one-time manual step:
 --
 --   CREATE ROLE "reefclub_app" LOGIN PASSWORD '...';      -- once per environment, secret
---   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/database/sql/reefclub-role.sql  -- by hand
+--   psql "$DATABASE_URL" -1 -v ON_ERROR_STOP=1 -f packages/database/sql/reefclub-role.sql  -- by hand
+--
+-- BY HAND ALWAYS WITH -1 (--single-transaction; barracuda, #2437): without it psql commits each
+-- statement, and a run that stops halfway has already taken the role's rights away with the REVOKE
+-- below. The automatic run (`prisma db execute`) is one transaction by itself.
 --
 -- It is idempotent: it first takes every table right away from the role, then grants this list.
 -- A NEW TABLE OR COLUMN THE REEFCLUB PROCESS USES NEEDS A LINE HERE: the integration spec
@@ -30,6 +34,13 @@
 --
 -- Foreign-key actions (the account's final deletion cascading to its aquariums and their rows) run
 -- with the table owner's rights, so the cascade needs no DELETE right on the child tables.
+
+-- NO UNBOUNDED WAIT FOR A LOCK (barracuda, #2437). The row-level-security and policy statements
+-- below take ACCESS EXCLUSIVE locks on the aquarium tables, and the file runs at every API start.
+-- Behind a long query or an idle transaction on one of them it would wait, and every later read of
+-- that table would queue behind the wait. A lock not granted in 5 seconds stops the file with an
+-- error instead: one transaction, so nothing changes, and the next start tries again.
+SET lock_timeout = '5s';
 
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM "reefclub_app";
 GRANT USAGE ON SCHEMA public TO "reefclub_app";

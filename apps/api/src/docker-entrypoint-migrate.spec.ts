@@ -9,25 +9,30 @@ import { describe, it } from "node:test";
  * on a PostgreSQL 17 database (see the PR): the file runs as one transaction.
  *
  * What turns these red: the file run where the role does not exist (it would
- * stop on the role's name); the file not run where it does; a failure that
- * throws (the internal API would not start over the ReefClub's grants) or
- * that is not said on the error log; a success or a skip said as an error.
+ * stop on the role's name); the file not run where it does; a failure or a
+ * timeout that throws (the internal API would not start over the ReefClub's
+ * grants) or that is not said on the error log; a manual command that is not
+ * one transaction; a success or a skip said as an error.
  */
 const load = createRequire(import.meta.url);
 const { applyReefclubRole } = load("../docker-entrypoint-migrate.cjs") as {
   applyReefclubRole: (steps: {
     rolePresent: () => Promise<boolean>;
-    execute: () => number;
+    execute: () => { status: number; timedOut: boolean };
     log: (line: string) => void;
     error: (line: string) => void;
   }) => Promise<"applied" | "skipped" | "error">;
 };
 
-function run(rolePresent: () => Promise<boolean>, status = 0) {
+function run(
+  rolePresent: () => Promise<boolean>,
+  status = 0,
+  timedOut = false,
+) {
   const lines = { log: [] as string[], error: [] as string[], executed: 0 };
   const outcome = applyReefclubRole({
     rolePresent,
-    execute: () => (lines.executed++, status),
+    execute: () => (lines.executed++, { status, timedOut }),
     log: (line) => lines.log.push(line),
     error: (line) => lines.error.push(line),
   });
@@ -62,6 +67,16 @@ describe("applyReefclubRole", () => {
       lines.error[0]!,
       /-f packages\/database\/sql\/reefclub-role\.sql/,
     );
+    // by hand it must be one transaction too (barracuda, #2437)
+    assert.match(lines.error[0]!, /psql "\$DATABASE_URL" -1 /);
+  });
+
+  it("a run cut by the timeout is an ERROR line that says so, not a throw", async () => {
+    const { outcome, lines } = run(async () => true, 1, true);
+    assert.equal(await outcome, "error");
+    assert.equal(lines.error.length, 1);
+    assert.match(lines.error[0]!, /did not finish in 60 s and was stopped/);
+    assert.match(lines.error[0]!, /next start tries again/);
   });
 
   it("a role check that fails is an ERROR line too, and the file is not run", async () => {
