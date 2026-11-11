@@ -149,8 +149,17 @@ export const prismaSellableStore: SellableStore = {
        WHERE p."catalogAuthority" = 'UNAS' AND p."mirrorState" = 'ACTIVE'`);
   },
   async set(ids, value) {
+    /*
+      THE WRITE RE-CHECKS WHAT THE READ SAW (barracuda, #2435 review): a product taken over between the
+      read and the write (`takeCatalogAuthority`, UNAS to ACROPORA) is the owner's now and is not written,
+      and a value somebody else already changed is not overwritten with the one decided on the old read.
+    */
     await prisma.product.updateMany({
-      where: { id: { in: ids } },
+      where: {
+        id: { in: ids },
+        catalogAuthority: "UNAS",
+        webshopSellable: !value,
+      },
       data: { webshopSellable: value },
     });
   },

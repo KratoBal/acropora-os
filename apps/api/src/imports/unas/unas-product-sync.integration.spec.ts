@@ -1539,17 +1539,20 @@ describe("UNAS Product Sync database integration", { skip: !enabled }, () => {
       data: { catalogAuthority: "UNAS" },
     });
 
+    const beforeApply = await prisma.product.findUniqueOrThrow({
+      where: { id: variant.productId },
+      select: { updatedAt: true },
+    });
     const applied = await new UnasWebshopSellableReconciler().run({
       apply: true,
     });
     assert.equal(applied.mode, "applied");
-    assert.equal(
-      (
-        await prisma.product.findUniqueOrThrow({
-          where: { id: variant.productId },
-        })
-      ).webshopSellable,
-      true,
-    );
+    const after = await prisma.product.findUniqueOrThrow({
+      where: { id: variant.productId },
+    });
+    assert.equal(after.webshopSellable, true);
+    // the Medusa projection's due list reads `updatedAt` (medusa-projection.scheduler.ts): the write must move it,
+    // or the flipped product is never projected (barracuda, #2435 review)
+    assert.ok(after.updatedAt.getTime() > beforeApply.updatedAt.getTime());
   });
 });
