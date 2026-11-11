@@ -42,7 +42,7 @@ const draft = (certificateId: string) => ({
   partnerTaxNumber: null,
   currency: "HUF",
   totals: { netAmount: zero, vatAmount: zero, grossAmount: zero },
-  pdfStorageKey: null,
+  pdfStorageKey: `${PREFIX}pdf`,
   lines: [],
 });
 
