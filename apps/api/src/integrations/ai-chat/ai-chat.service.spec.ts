@@ -10,6 +10,7 @@ import {
 } from "./ai-chat.config.js";
 import {
   AiChatService,
+  LOCAL_PREFILTER_NOTE,
   PRODUCT_CONTEXT_NOTE,
   productContextSentence,
 } from "./ai-chat.service.js";
@@ -356,6 +357,28 @@ describe("a termékkontextus mondata", () => {
       false,
       "egy kimaradás nem mondhatja azt, hogy nincs ilyen termékünk",
     );
+  });
+
+  it("a helyi előszűrő válaszát NEM a modellismeretes mondattal mondja el, mert ott modell nem futott", () => {
+    const local = productContextSentence({
+      state: "not_asked",
+      hitCount: null,
+      projectionVersion: null,
+      descriptionSources: [],
+    });
+
+    assert.equal(local, LOCAL_PREFILTER_NOTE);
+    assert.notEqual(local, PRODUCT_CONTEXT_NOTE);
+    assert.match(local, /előszűrő/);
+    assert.equal(
+      /modellismeret/i.test(local),
+      false,
+      "egy helyi válasz nem 'modellismeret alapján adott'",
+    );
+    assert.equal(/\d/.test(local), false);
+    // A másik négy állapot mondata változatlan.
+    assert.notEqual(local, productContextSentence({ state: "empty" }));
+    assert.notEqual(local, productContextSentence({ state: "unavailable" }));
   });
 
   it("hiányos jelentésnél nem talál ki számot", () => {
