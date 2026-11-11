@@ -25,10 +25,15 @@ const refused = (over: Record<string, unknown>) =>
   checkAiChatSettings({ ...valid, ...over });
 
 describe("checkAiChatSettings (the server's rule and the form's)", () => {
-  it("the plan's proposed defaults are themselves a valid save", () => {
+  it("the plan's proposed defaults are themselves a valid save, and the offer and the contact request are OFF in them", () => {
     const checked = checkAiChatSettings(AI_CHAT_SETTINGS_DEFAULTS);
     assert.equal(checked.ok, true);
-    assert.deepEqual(AI_CHAT_SETTINGS_DEFAULTS, valid);
+    assert.deepEqual(AI_CHAT_SETTINGS_DEFAULTS, {
+      ...valid,
+      offerEnabled: false,
+    });
+    assert.equal(AI_CHAT_SETTINGS_DEFAULTS.offerEnabled, false);
+    assert.equal(AI_CHAT_SETTINGS_DEFAULTS.contactRequestEnabled, false);
   });
 
   it("S4: the message retention is a whole number from 7 to 365, refused otherwise, never clamped", () => {

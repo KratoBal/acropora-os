@@ -6,7 +6,9 @@
  * THE LIMITS ARE HERE, IN ONE PLACE, because the server enforces them and the Settings form shows them. A retention time with no
  * upper bound is "keep for ever", which is the state this work removes, and one with no lower bound lets a typo of 0 delete the
  * ratings' evidence at once (plan section 3: 7 days at the bottom, 365 for messages and 180 for contact requests at the top).
- * The DEFAULTS are the plan's PROPOSAL (180 / 30 / 90 days), awaiting Balázs; a row that does not exist yet reads as these.
+ * The DEFAULTS are the plan's PROPOSAL (180 / 30 / 90 days), awaiting Balázs; a row that does not exist yet reads as these. The
+ * offer and the contact request are OFF: the colleague offer stays out until the contact request exists (acrobot 2026-11-11 10:38),
+ * so a setting nobody saved must never read as "on".
  */
 export const AI_CHAT_SETTINGS_LIMITS = {
   /** Chat messages: how many days they are kept. */
@@ -30,7 +32,7 @@ export interface AiChatSettings {
 }
 
 export const AI_CHAT_SETTINGS_DEFAULTS: AiChatSettings = {
-  offerEnabled: true,
+  offerEnabled: false,
   contactRequestEnabled: false,
   contactRecipientEmail: null,
   messageRetentionDays: 180,

@@ -82,10 +82,10 @@ describe("AiChatSettingsService", () => {
     assert.equal(view.includes("Handled"), false);
   });
 
-  it("the service view of an unsaved row is the defaults', so the AI service reads something sane before anybody saved", async () => {
+  it("the service view of an unsaved row is the defaults' (offer OFF: a setting nobody saved never reads as on)", async () => {
     const { service } = fakeRepository(null);
     assert.deepEqual(await service.serviceView(), {
-      offerEnabled: true,
+      offerEnabled: false,
       contactRequestEnabled: false,
       messageRetentionDays: 180,
     });
