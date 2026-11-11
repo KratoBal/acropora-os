@@ -516,6 +516,7 @@ export class MaintenanceInvoiceDraftService {
         invoiceNumber: response.invoiceNumber,
         issueDate: issuedAt,
         pdfStorageKey: null,
+        completionCertificateId: invoice.completionCertificateId,
       });
     } catch (error) {
       await this.repository
@@ -541,6 +542,7 @@ export class MaintenanceInvoiceDraftService {
           invoiceNumber: response.invoiceNumber,
           issueDate: issuedAt,
           pdfStorageKey: storageKeyFor(key),
+          completionCertificateId: invoice.completionCertificateId,
         });
       } catch (error) {
         // The invoice exists and is recorded; only its PDF is missing here.
