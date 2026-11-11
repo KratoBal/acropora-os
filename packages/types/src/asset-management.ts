@@ -472,6 +472,23 @@ export interface AssetDocumentText {
   truncated: boolean;
   /** Lines in reading order, table cells joined by " | ", pages ended by "=== oldal vege ===". */
   text: string;
+  /**
+   * Present ONLY when the text is a MACHINE READING of a scanned file (OCR), never for a file that has its own text. The
+   * caller must say so (`notice`), and `stoppedBy` names why the reading is partial (or why there is none).
+   */
+  ocr?: AssetDocumentOcr;
+}
+
+/** Why an OCR reading stopped before the last page: the page limit, the time limit, the memory limit, a busy reader, an error. */
+export type AssetDocumentOcrStop =
+  "pages" | "time" | "memory" | "busy" | "error";
+
+export interface AssetDocumentOcr {
+  pagesRead: number;
+  pagesTotal: number;
+  stoppedBy: AssetDocumentOcrStop | null;
+  /** The sentence the answer must carry: a machine reading can be wrong, numbers and units above all. */
+  notice: string;
 }
 
 export interface AssetEventSummary {

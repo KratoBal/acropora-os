@@ -535,6 +535,8 @@ export type {
   AssetDeletionBlockers,
   AssetPhaseConnection,
   AssetDocumentSummary,
+  AssetDocumentOcr,
+  AssetDocumentOcrStop,
   AssetDocumentText,
   AssetDocumentType,
   AssetEventSummary,

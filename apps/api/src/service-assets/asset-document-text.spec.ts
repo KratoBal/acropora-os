@@ -12,6 +12,7 @@ import {
   isTextReadable,
   textFromLines,
 } from "./asset-document-text.js";
+import { OCR_NOTICE, type OcrReading } from "./asset-document-ocr.js";
 import { InMemoryDocumentStore } from "./document-store/in-memory-document-store.js";
 import { ServiceAssetsService } from "./service-assets.service.js";
 import type { ServiceAssetsRepository } from "./service-assets.repository.js";
@@ -226,6 +227,151 @@ describe("the text shape", () => {
     assert.match(
       source,
       /textReadable: isTextReadable\(document\.contentType\)/,
+    );
+  });
+});
+
+/*
+  THE OCR IN THE TEXT CACHE (card 126f9b92). The scan reader is injected, so what is tested is the cache's side: which files go
+  to the OCR, what the answer carries, and what is remembered. A file with its own text NEVER goes there, and with the OCR off
+  (`null`) the answer is what it was before.
+*/
+describe("AssetDocumentTextCache with the OCR", () => {
+  const scanLines = [PAGE_END_MARKER, PAGE_END_MARKER]; // two pages, no text layer: a scan
+  const reading = (
+    over: Partial<OcrReading["ocr"]> = {},
+    lines: string[] = [
+      "72555 Járókerék",
+      PAGE_END_MARKER,
+      "61804 Tömítés",
+      PAGE_END_MARKER,
+    ],
+  ): OcrReading => ({
+    lines,
+    ocr: {
+      pagesRead: 2,
+      pagesTotal: 2,
+      stoppedBy: null,
+      notice: OCR_NOTICE,
+      ...over,
+    },
+  });
+  const bytes = async () => new Uint8Array([1]);
+
+  it("a file with its own text never goes to the OCR", async () => {
+    let asked = 0;
+    const cache = new AssetDocumentTextCache(
+      async () => ["van szöveg", PAGE_END_MARKER],
+      32,
+      async () => {
+        asked += 1;
+        return reading();
+      },
+    );
+    const text = await cache.text("sha-a", bytes);
+    assert.equal(asked, 0);
+    assert.equal(text.hasText, true);
+    assert.equal(text.ocr, undefined);
+  });
+
+  it("a scan is read as pictures: the text, the page count of the file and the OCR mark come back", async () => {
+    const cache = new AssetDocumentTextCache(
+      async () => scanLines,
+      32,
+      async () => reading(),
+    );
+    const text = await cache.text("sha-b", bytes);
+    assert.equal(text.hasText, true);
+    assert.equal(text.pageCount, 2);
+    assert.match(text.text, /72555 Járókerék/);
+    assert.equal(text.ocr?.notice, OCR_NOTICE);
+    assert.equal(text.ocr?.pagesRead, 2);
+  });
+
+  it("with the OCR off (`null`) a scan answers as it always did: no text, no `ocr` field", async () => {
+    const cache = new AssetDocumentTextCache(
+      async () => scanLines,
+      32,
+      async () => null,
+    );
+    const text = await cache.text("sha-c", bytes);
+    assert.equal(text.hasText, false);
+    assert.equal("ocr" in text, false);
+  });
+
+  it("a file with no pages is not sent to the OCR", async () => {
+    let asked = 0;
+    const cache = new AssetDocumentTextCache(
+      async () => [],
+      32,
+      async () => {
+        asked += 1;
+        return reading();
+      },
+    );
+    await cache.text("sha-d", bytes);
+    assert.equal(asked, 0);
+  });
+
+  it("a finished reading is read once per file (the sha256 key), a stop at the page limit included", async () => {
+    let asked = 0;
+    const cache = new AssetDocumentTextCache(
+      async () => scanLines,
+      32,
+      async () => {
+        asked += 1;
+        return reading({ pagesTotal: 200, stoppedBy: "pages" });
+      },
+    );
+    await cache.text("sha-e", bytes);
+    const again = await cache.text("sha-e", bytes);
+    assert.equal(asked, 1);
+    assert.equal(again.ocr?.stoppedBy, "pages");
+  });
+
+  it("a reading that stopped for time, memory, a busy reader or an error is NOT remembered: the next ask tries again", async () => {
+    for (const stoppedBy of ["time", "memory", "busy", "error"] as const) {
+      let asked = 0;
+      const cache = new AssetDocumentTextCache(
+        async () => scanLines,
+        32,
+        async () => {
+          asked += 1;
+          return reading({ stoppedBy, pagesRead: 0 }, []);
+        },
+      );
+      const first = await cache.text(`sha-${stoppedBy}`, bytes);
+      await cache.text(`sha-${stoppedBy}`, bytes);
+      assert.equal(asked, 2, stoppedBy);
+      // no text came out, so it is still the scan answer, plus WHY the OCR gave none
+      assert.equal(first.hasText, false, stoppedBy);
+      assert.equal(first.ocr?.stoppedBy, stoppedBy);
+    }
+  });
+
+  it("without a sha256 the OCR still runs, nothing is cached", async () => {
+    let asked = 0;
+    const cache = new AssetDocumentTextCache(
+      async () => scanLines,
+      32,
+      async () => {
+        asked += 1;
+        return reading();
+      },
+    );
+    await cache.text(undefined, bytes);
+    await cache.text(undefined, bytes);
+    assert.equal(asked, 2);
+  });
+
+  it("the service builds its cache with the scan reader (the switch is read per call, off by default)", () => {
+    const source = readFileSync(
+      "src/service-assets/service-assets.service.ts",
+      "utf8",
+    );
+    assert.match(
+      source,
+      /new AssetDocumentTextCache\(\s*undefined,\s*undefined,\s*createScanReader\(/,
     );
   });
 });

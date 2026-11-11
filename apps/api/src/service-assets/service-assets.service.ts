@@ -11,6 +11,8 @@ import {
   AssetDocumentTextCache,
   isTextReadable,
 } from "./asset-document-text.js";
+import { OCR_LIMITS, OcrGate, createScanReader } from "./asset-document-ocr.js";
+import { realOcrDeps } from "./asset-document-ocr-engine.js";
 import { SupplierInvoiceImportError } from "../purchasing/supplier-invoice-import/supplier-invoice-import.error.js";
 import { normalizeDocumentCaption } from "../documents/document-caption.js";
 import { describeFieldConflict } from "./asset-field-conflict.js";
@@ -109,7 +111,24 @@ export class ServiceAssetsService {
   ) {}
 
   private readonly logger = new Logger(ServiceAssetsService.name);
-  private readonly documentTexts = new AssetDocumentTextCache();
+  /**
+   * The text of an attachment; a SCAN is read as pictures when `ASSET_DOCUMENT_OCR` is `true` (off by default: then this is
+   * the cache exactly as it was). An OCR failure is logged by name only: the text of a document may hold anything.
+   */
+  private readonly documentTexts = new AssetDocumentTextCache(
+    undefined,
+    undefined,
+    createScanReader(
+      realOcrDeps,
+      new OcrGate(),
+      () => process.env,
+      OCR_LIMITS,
+      (error) =>
+        this.logger.warn(
+          `Szkennelt dokumentum OCR hiba: ${error instanceof Error ? error.name : "ismeretlen"}`,
+        ),
+    ),
+  );
 
   /**
    * A HIVO LATASI HATOKORE, EGY HELYEN FELOLDVA.

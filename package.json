@@ -54,7 +54,8 @@
       "body-parser@2.3.0": "2.4.0",
       "sharp@0.34.5": "0.35.4",
       "proxy-addr@2.0.7": "2.0.8",
-      "deepmerge-ts@7.1.5": "8.0.2"
+      "deepmerge-ts@7.1.5": "8.0.2",
+      "wasm-feature-detect": "1.8.0"
     }
   }
 }
