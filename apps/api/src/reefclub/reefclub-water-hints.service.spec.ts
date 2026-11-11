@@ -289,14 +289,36 @@ describe("the switch and the route", () => {
     return { controller, log, request };
   };
 
-  it("switched off it answers OFF before anything is read (no access check, no limit, no query)", async () => {
+  it("switched off it answers OFF after the access check and before a limit or a query (the access function runs first, switch or not)", async () => {
     delete process.env[WATER_HINTS_SWITCH];
     const { controller, log, request } = route();
     const answer = await controller.waterHints(request, "aq1");
     assert.equal(answer.state, "OFF");
     assert.deepEqual(answer.rows, []);
     assert.equal(answer.disclaimer, null);
-    assert.deepEqual(log, []);
+    assert.deepEqual(log, ["access:acc1|aq1|READ"]);
+  });
+
+  it("switched OFF, a foreign or missing aquarium is still the one 404 (the id-route sweep of plan 5.2/1)", async () => {
+    delete process.env[WATER_HINTS_SWITCH];
+    const controller = new ReefClubWaterHintsController(
+      {
+        aquariumForAccount: async () => {
+          throw new NotFoundException("Nem található.");
+        },
+      } as unknown as ReefClubAquariumAccess,
+      {
+        forGrant: async () => assert.fail("nothing may be read"),
+      } as unknown as ReefClubWaterHintsService,
+      {} as unknown as ReefClubRateLimits,
+    );
+    await assert.rejects(
+      controller.waterHints(
+        { reefClubAccountId: "acc1" } as unknown as ReefClubRequest,
+        "aq-foreign",
+      ),
+      NotFoundException,
+    );
   });
 
   it("switched on: the access function first (READ), then the two limits, then the service with the approved grant", async () => {
