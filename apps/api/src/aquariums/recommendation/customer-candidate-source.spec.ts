@@ -71,6 +71,7 @@ describe("the rows that may reach a customer", () => {
       {
         productId: "p",
         effects: [{ parameterCode: "KALCIUM", direction: "EMEL" }],
+        sideEffects: [],
         evidenceRef: URL,
       },
     ]);
@@ -159,14 +160,23 @@ describe("the rows that may reach a customer", () => {
     );
   });
 
-  it("only the approved parameters' effects go on, even when the product also moves another one (a phosphate effect is dropped, never shown)", () => {
+  it("an effect on a parameter with no approved band (phosphate, pH) is NOT dropped: it goes on as a SIDE EFFECT with its direction, and the effects keep only the approved parameters (barracuda on #2415)", () => {
     const match = customerMatchingRows(
-      [row({ value: "KALCIUM:EMEL;FOSZFAT:CSOKKENT" })],
+      [row({ value: "KALCIUM:EMEL;FOSZFAT:CSOKKENT;PH:EMEL" })],
       wanted,
     );
     assert.deepEqual(match[0]?.effects, [
       { parameterCode: "KALCIUM", direction: "EMEL" },
     ]);
+    assert.deepEqual(match[0]?.sideEffects, [
+      { parameterCode: "FOSZFAT", direction: "CSOKKENT" },
+      { parameterCode: "PH", direction: "EMEL" },
+    ]);
+  });
+
+  it("a product with no effect on an unapproved parameter has no side effects (an empty list, not a missing field)", () => {
+    const match = customerMatchingRows([row({})], wanted);
+    assert.deepEqual(match[0]?.sideEffects, []);
   });
 });
 
@@ -180,6 +190,7 @@ describe("the cap per parameter", () => {
     name,
     category: "K",
     effects,
+    sideEffects: [],
     evidenceRef: URL,
   });
 
@@ -285,6 +296,7 @@ describe("the source", () => {
         name: "Kalcium adalék",
         category: "Adalékok",
         effects: [{ parameterCode: "KALCIUM", direction: "EMEL" }],
+        sideEffects: [],
         evidenceRef: URL,
       },
     ]);
