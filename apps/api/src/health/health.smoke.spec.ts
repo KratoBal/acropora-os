@@ -34,10 +34,21 @@ describe("GET /health HTTP smoke", () => {
       // card 2f0d7acd: the dose-list projection, numbers and flags only
       assert.deepEqual(Object.keys(body.doseProjection ?? {}).sort(), [
         "ageHours",
+        "customerCandidates",
         "failingSinceLastSuccess",
         "rowCount",
         "stale",
       ]);
+      // V3.4: the customer candidates the projection holds, counts and a time, product data only
+      assert.deepEqual(
+        Object.keys(
+          (body.doseProjection?.customerCandidates ?? {}) as Record<
+            string,
+            unknown
+          >,
+        ).sort(),
+        ["builtAt", "rows", "shopText"],
+      );
     } finally {
       await app.close();
     }
