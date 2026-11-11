@@ -248,8 +248,10 @@ export {
   WEBSHOP_LEGAL_BLOCK_IDS,
   WEBSHOP_LEGAL_PLACEHOLDER_MARK,
   WEBSHOP_LEGAL_VERSIONS,
+  WEBSHOP_LEGAL_TEST_VERSION,
   webshopLegalIsComplete,
   webshopLegalPart,
+  webshopLegalSendRefusal,
 } from "./webshop-legal.js";
 export type {
   WebshopLegalBlock,

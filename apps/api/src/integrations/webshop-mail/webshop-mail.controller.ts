@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   HttpCode,
+  Logger,
   Post,
   UnprocessableEntityException,
   UseGuards,
@@ -10,6 +11,7 @@ import {
 import {
   WEBSHOP_MAIL_KEYS,
   parseWebshopMailFacts,
+  webshopLegalSendRefusal,
   webshopMailKey,
 } from "@acropora/types";
 
@@ -41,6 +43,8 @@ import { WebshopMailGuard } from "./webshop-mail.guard.js";
 @Public()
 @UseGuards(WebshopMailGuard)
 export class WebshopMailController {
+  private readonly logger = new Logger(WebshopMailController.name);
+
   constructor(private readonly templates: TicketMailRepository) {}
 
   @Post("render")
@@ -57,6 +61,21 @@ export class WebshopMailController {
     const parsed = parseWebshopMailFacts(request.template, request.facts);
     if (!parsed.ok)
       throw new BadRequestException(`Hibás kérés: ${parsed.error}.`);
+
+    /*
+      NO CONFIRMATION WITH PLACEHOLDER LEGAL TEXTS (card d3ccef2e): a 422, so
+      the shop holds the mail and raises it instead of retrying. Logged here
+      with the version only, no customer data: the shop's queue has the order.
+    */
+    if (parsed.facts.template === "order-placed") {
+      const refusal = webshopLegalSendRefusal(parsed.facts.legal_version);
+      if (refusal) {
+        this.logger.warn(
+          `order-placed held: legal version ${JSON.stringify(parsed.facts.legal_version)} still has placeholders`,
+        );
+        throw new UnprocessableEntityException(refusal);
+      }
+    }
 
     /*
       THE LANGUAGE PICKS THE KEY (card d5c6befd): an English order reads the

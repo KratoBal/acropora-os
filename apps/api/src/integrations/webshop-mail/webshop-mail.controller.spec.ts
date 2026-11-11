@@ -203,11 +203,37 @@ describe("WebshopMailController.render", () => {
     );
   });
 
-  it("the order confirmation with a known legal version carries the legal part", async () => {
+  it("the test shop's confirmation carries the legal part, placeholders marked", async () => {
     const asked = request("order-placed");
-    asked.facts.legal_version = "unas-shop-2026-09-29";
+    asked.facts.legal_version = "teszt-mod";
     const mail = await controller(null).render(asked);
     assert.match(mail.html, /Jogi tájékoztatók/);
     assert.match(mail.text, /AZ ELADÓ ADATAI/);
+    assert.match(mail.text, /\[HELYŐRZŐ\]/);
+  });
+
+  /*
+    Card d3ccef2e: a live version whose texts are still placeholders holds the
+    confirmation with a 422 that names what is missing. MI PIROSIT: ha egy eles
+    verzioju visszaigazolo helyorzovel kimenne; ha a kapu mas levelet is
+    megallitana (a feladott-level itt ugyanazzal a sablonnal at kell menjen).
+  */
+  for (const version of ["unas-shop-2026-09-29", "fogyasztobarat-JPNFMVH0"])
+    it(`422: a confirmation under ${version} while its texts are placeholders`, async () => {
+      const asked = request("order-placed");
+      asked.facts.legal_version = version;
+      await assert.rejects(
+        controller(null).render(asked),
+        (e: unknown) =>
+          e instanceof UnprocessableEntityException &&
+          e.message.includes(version) &&
+          /Általános szerződési feltételek/.test(e.message) &&
+          /Cégjegyzékszám/.test(e.message),
+      );
+    });
+
+  it("the gate is the confirmation's only: a shipped mail still renders", async () => {
+    const mail = await controller(null).render(request("order-shipped"));
+    assert.equal(mail.subject, "Feladtuk a csomagodat (#38)");
   });
 });
