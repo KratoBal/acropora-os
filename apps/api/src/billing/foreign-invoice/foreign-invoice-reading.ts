@@ -334,7 +334,7 @@ export function vatSummaryTable(
       */
       const firstCell = cells.find((cell) => cell !== "") ?? "";
       if (TOTALS_LABEL.test(firstCell)) {
-        const [tn, tv, tg] = amounts;
+        const [tn = null, tv = null, tg = null] = amounts;
         const agrees =
           tn !== null &&
           tv !== null &&
