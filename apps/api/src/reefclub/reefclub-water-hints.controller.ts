@@ -23,10 +23,11 @@ const OFF: ReefClubWaterHints = {
 };
 
 /**
- * GET /rc/v1/aquariums/:id/water-hints (card ce6c5cc9, V3.4 S3): READS ONLY. Switched off (`REEFCLUB_WATER_HINTS_ENABLED`, exactly
- * `true`, off by default) it answers `OFF` before anything is read. Switched on: the access function first (READ: the own aquarium
- * or a linked customer's; anything else is the one 404), then the limits per account and per aquarium, then the service. A GET
- * writes nothing, so a prefetch costs only the limit.
+ * GET /rc/v1/aquariums/:id/water-hints (card ce6c5cc9, V3.4 S3): READS ONLY. THE ACCESS FUNCTION FIRST, whether the switch is on or not
+ * (READ: the own aquarium or a linked customer's; anything else is the one 404, byte for byte like every aquarium-id route). Then the
+ * switch (`REEFCLUB_WATER_HINTS_ENABLED`, exactly `true`, off by default): off, it answers `OFF` before anything else is read and
+ * before a limit is used. On: the limits per account and per aquarium, then the service. A GET writes nothing, so a prefetch costs
+ * only the limit.
  */
 @Controller("rc/v1/aquariums/:id")
 export class ReefClubWaterHintsController {
@@ -41,9 +42,12 @@ export class ReefClubWaterHintsController {
     @Req() request: ReefClubRequest,
     @Param("id") id: string,
   ): Promise<ReefClubWaterHints> {
-    if (!waterHintsEnabled()) return OFF;
     const account = accountOf(request);
+    // THE ACCESS FUNCTION FIRST, SWITCH OR NOT: every aquarium-id route answers a foreign or missing id with the one 404, byte for byte
+    // (plan 5.2/1: the integration spec sweeps every id route with another account's session). A switched-off route that answered OFF
+    // before this would be the one route that does not.
     const grant = await this.access.aquariumForAccount(account, id, "READ");
+    if (!waterHintsEnabled()) return OFF;
     this.limits.waterHintsByAccount.check(account);
     this.limits.waterHintsByAquarium.check(grant.aquariumId);
     return this.hints.forGrant(grant, new Date());
