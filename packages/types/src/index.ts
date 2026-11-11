@@ -45,6 +45,7 @@ export {
   BILLING_NEW_DOCUMENT_TYPES,
   BILLING_EMAIL_STATUSES,
   BILLING_SOURCE_TYPES,
+  BILLING_DRAFT_SOURCE_TYPES,
   BILLING_STORNABLE_TYPES,
   INVOICE_FORMATS,
   INVOICE_FORMAT_LABELS,
@@ -1971,6 +1972,14 @@ export type {
   AiContactRequestReceipt,
   AiContactRequestView,
 } from "./ai-contact-request.js";
+export type {
+  ReefClubWaterHintProduct,
+  ReefClubWaterHintRow,
+  ReefClubWaterHints,
+  ReefClubWaterHintsProductsState,
+  ReefClubWaterHintsState,
+  ReefClubWaterHintStatus,
+} from "./reefclub-water-hints.js";
 export {
   checkBillingIssueDates,
   isCardPayment,

@@ -92,6 +92,8 @@ export class MaintenanceInvoiceRepository {
       invoiceNumber: string;
       issueDate: Date;
       pdfStorageKey: string | null;
+      /** The invoice's own certificate: the issued row's source (`sourceId`). */
+      completionCertificateId: string;
     },
   ) {
     return this.database.invoice.update({
@@ -101,6 +103,11 @@ export class MaintenanceInvoiceRepository {
         invoiceNumber: issued.invoiceNumber,
         issueDate: issued.issueDate,
         pdfStorageKey: issued.pdfStorageKey,
+        // AZ ISSUED TIG-SZÁMLA SAJÁT SOR (Balázs 2026-11-11 13:22 UTC): a forrás a teljesítési igazolás, és e-számla
+        // (a kérés `eszamla` nélkül megy, az alapérték e-számla); a sztornó ebből tudja, mit kérjen
+        sourceType: "COMPLETION_CERTIFICATE",
+        sourceId: issued.completionCertificateId,
+        invoiceFormat: "ELECTRONIC",
         syncStatus: "RECEIVED",
         syncError: null,
       },

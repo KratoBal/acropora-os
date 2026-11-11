@@ -499,6 +499,8 @@ describe(
         'SELECT "id", "status", "finishedAt", "rowCount" FROM "ReefClubDoseProjectionRun" LIMIT 1',
         // the run-out reminder's product list (V3.2, slice 4)
         'SELECT "productId", "productName", "dose", "packageText", "packageMl" FROM "ReefClubRunOutProduct" LIMIT 1',
+        // the products the ReefClub may name to a customer (V3.4 S2b)
+        'SELECT "parameterCode", "direction", "productId", "productName", "category", "shopUrl", "evidenceRef", "rank" FROM "ReefClubCustomerCandidate" LIMIT 1',
       ])
         assert.equal(await read(sql), "OLVASHATÓ", sql);
     });

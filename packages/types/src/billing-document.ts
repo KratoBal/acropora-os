@@ -70,8 +70,17 @@ export const BILLING_SOURCE_TYPES = [
   "MANUAL",
   "WEBSHOP_ORDER",
   "CONTRACT",
+  "COMPLETION_CERTIFICATE",
 ] as const;
 export type BillingSourceType = (typeof BILLING_SOURCE_TYPES)[number];
+
+/**
+ * The sources a draft may name. `COMPLETION_CERTIFICATE` is not one of them: only the TIG issue writes it (Balázs
+ * 2026-11-11 13:22 UTC), so a draft cannot claim to be a completion certificate's invoice.
+ */
+export const BILLING_DRAFT_SOURCE_TYPES = BILLING_SOURCE_TYPES.filter(
+  (type) => type !== "COMPLETION_CERTIFICATE",
+);
 
 /**
  * Az e-mailes kiküldés helye a kiállítási folyamatban.

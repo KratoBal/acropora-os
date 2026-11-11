@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { prisma } from "@acropora/database";
 
+import { productShopUrl } from "./measurement-recommendation.service.js";
 import {
   isRecommendableOnUnas,
   latestJevEffectRows,
@@ -57,6 +58,21 @@ export interface CustomerRecommendationCandidate {
   sideEffects: { parameterCode: string; direction: "EMEL" | "CSOKKENT" }[];
   /** A gyártói forrás (https) hivatkozása: ez megy a vevőnek, nem egy adagolási mondat. */
   evidenceRef: string;
+  /** A termék lapja a boltban (`productShopUrl`: a UNAS csatorna-sor címe, csak látható státusznál), vagy null. */
+  shopUrl: string | null;
+}
+
+/** A vevő felé használható négy paraméter mindkét iránya: a vetítés ezeket építi előre. */
+export const CUSTOMER_CANDIDATE_MOVES: readonly CustomerWantedMove[] =
+  CUSTOMER_CANDIDATE_PARAMETERS.flatMap((parameterCode) => [
+    { parameterCode, direction: "EMEL" as const },
+    { parameterCode, direction: "CSOKKENT" as const },
+  ]);
+
+export interface CustomerCandidatesOfMove {
+  parameterCode: string;
+  direction: "EMEL" | "CSOKKENT";
+  candidates: CustomerRecommendationCandidate[];
 }
 
 const APPROVED = new Set<string>(CUSTOMER_CANDIDATE_PARAMETERS);
@@ -141,6 +157,20 @@ export function limitCustomerCandidates(
   return [...kept.values()].sort((a, b) => a.name.localeCompare(b.name, "hu"));
 }
 
+const PRODUCT_SELECT = {
+  id: true,
+  name: true,
+  categories: {
+    orderBy: [{ isPrimary: "desc" as const }, { sortOrder: "asc" as const }],
+    take: 1,
+    select: { category: { select: { name: true } } },
+  },
+  channelListings: {
+    select: { channel: true, externalStatus: true, productUrl: true },
+  },
+  unasSnapshot: { select: { rawPayload: true } },
+};
+
 @Injectable()
 export class CustomerCandidateSource {
   private readonly database = prisma;
@@ -151,47 +181,86 @@ export class CustomerCandidateSource {
   }): Promise<CustomerRecommendationCandidate[]> {
     const wanted = customerWantedMoves(input.moves);
     if (wanted.size === 0) return [];
+    // one wanted list: every entry of the answer carries the same (already capped) list
+    const [first] = await this.build([wanted]);
+    return first?.candidates ?? [];
+  }
+
+  /**
+   * MINDEN JÓVÁHAGYOTT PARAMÉTER MINDKÉT IRÁNYÁRA, EGY ÁLLAPOTBÓL (a ReefClub-vetítés építi: a ReefClub-szerep nem olvas termék-táblát,
+   * ezért a jelölteket az OS előre kiszámolja). A JEV-sorokat és a termékeket egyszer olvassa, tehát a nyolc lista ugyanabból a
+   * pillanatból való. Mozgásonként (paraméter és irány) legfeljebb `CUSTOMER_CANDIDATES_PER_PARAMETER` termék.
+   */
+  async candidatesByMove(): Promise<CustomerCandidatesOfMove[]> {
+    return this.build(
+      CUSTOMER_CANDIDATE_MOVES.map(
+        (move) =>
+          new Map<string, "EMEL" | "CSOKKENT">([
+            [move.parameterCode, move.direction],
+          ]),
+      ),
+    );
+  }
+
+  private async build(
+    wantedLists: ReadonlyArray<ReadonlyMap<string, "EMEL" | "CSOKKENT">>,
+  ): Promise<CustomerCandidatesOfMove[]> {
     const rows = await latestJevEffectRows(this.database);
-    const matches = customerMatchingRows(rows, wanted);
-    if (matches.length === 0) return [];
+    const matchesOf = wantedLists.map((wanted) => ({
+      wanted,
+      matches: customerMatchingRows(rows, wanted),
+    }));
+    const ids = [
+      ...new Set(
+        matchesOf.flatMap(({ matches }) =>
+          matches.map((match) => match.productId),
+        ),
+      ),
+    ];
+    if (ids.length === 0)
+      return matchesOf.flatMap(({ wanted }) => emptyOf(wanted));
     const products = await this.database.product.findMany({
-      where: {
-        id: { in: matches.map((match) => match.productId) },
-        isActive: true,
-      },
-      select: {
-        id: true,
-        name: true,
-        categories: {
-          orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }],
-          take: 1,
-          select: { category: { select: { name: true } } },
-        },
-        channelListings: { select: { channel: true, externalStatus: true } },
-        unasSnapshot: { select: { rawPayload: true } },
-      },
+      where: { id: { in: ids }, isActive: true },
+      select: PRODUCT_SELECT,
     });
     const byId = new Map(
       products
         .filter((product) => isRecommendableOnUnas(product))
         .map((product) => [product.id, product]),
     );
-    return limitCustomerCandidates(
-      matches.flatMap((match) => {
-        const product = byId.get(match.productId);
-        if (!product) return [];
-        return [
-          {
-            productId: product.id,
-            name: product.name,
-            category: product.categories[0]?.category.name ?? "",
-            effects: match.effects,
-            sideEffects: match.sideEffects,
-            evidenceRef: match.evidenceRef,
-          },
-        ];
-      }),
-      wanted,
-    );
+    return matchesOf.flatMap(({ wanted, matches }) => {
+      const candidates = limitCustomerCandidates(
+        matches.flatMap((match) => {
+          const product = byId.get(match.productId);
+          if (!product) return [];
+          return [
+            {
+              productId: product.id,
+              name: product.name,
+              category: product.categories[0]?.category.name ?? "",
+              effects: match.effects,
+              sideEffects: match.sideEffects,
+              evidenceRef: match.evidenceRef,
+              shopUrl: productShopUrl(product.channelListings),
+            },
+          ];
+        }),
+        wanted,
+      );
+      return [...wanted].map(([parameterCode, direction]) => ({
+        parameterCode,
+        direction,
+        candidates,
+      }));
+    });
   }
 }
+
+const emptyOf = (
+  wanted: ReadonlyMap<string, "EMEL" | "CSOKKENT">,
+): CustomerCandidatesOfMove[] =>
+  [...wanted].map(([parameterCode, direction]) => ({
+    parameterCode,
+    direction,
+    candidates: [],
+  }));

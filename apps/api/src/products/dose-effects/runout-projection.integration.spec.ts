@@ -22,6 +22,7 @@ import { DoseProjectionService } from "./dose-projection.service.js";
  *
  * Invented products, user and URLs only. Runs only on a database named for testing; see integrationDatabaseGate.
  */
+import { CustomerCandidateSource } from "../../aquariums/recommendation/customer-candidate-source.js";
 const gate = integrationDatabaseGate(process.env);
 const PREFIX = "KIFOGYAS-VETITES-PROBA ";
 const EMAIL_DOMAIN = "runout-projection-integration.invalid";
@@ -32,7 +33,10 @@ describe(
   () => {
     const suffix = `${Date.now() % 1_000_000}`;
     const suiteStartedAt = new Date();
-    const projection = new DoseProjectionService(new DoseEffectsService());
+    const projection = new DoseProjectionService(
+      new DoseEffectsService(),
+      new CustomerCandidateSource(),
+    );
     const knowledge = new ProductKnowledgeService(
       {
         getProduct: async (id: string) => ({ id }),
