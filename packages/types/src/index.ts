@@ -1974,6 +1974,7 @@ export type {
 export {
   checkBillingIssueDates,
   isCardPayment,
+  proposedIssueDueDate,
 } from "./billing-issue-summary.js";
 export type {
   BillingIssueConfirmation,
