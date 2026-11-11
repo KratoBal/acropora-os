@@ -14,6 +14,7 @@ import { UnasProductCanonicalizer } from "./unas-product-canonicalizer.js";
 import { UnasProductSyncDiffEngine } from "./unas-product-sync-diff.engine.js";
 import { UnasProductSyncRepository } from "./unas-product-sync.repository.js";
 import { UnasProductSyncService } from "./unas-product-sync.service.js";
+import { UnasWebshopSellableReconciler } from "./unas-webshop-sellable-reconcile.js";
 import { integrationDatabaseGate } from "../../common/integration-database.js";
 
 // This suite writes and deletes rows, so it runs only against a database named
@@ -1464,5 +1465,94 @@ describe("UNAS Product Sync database integration", { skip: !enabled }, () => {
       }),
       0,
     );
+  });
+
+  /**
+   * THE RECOMPUTE'S RAW QUERY, AGAINST A REAL DATABASE (card e1de003d). The pure rule is unit tested; what
+   * only a database can say is whether the two-key JSON read (`rawPayload->'Statuses'`, `->'Inquire'`) and
+   * the UNAS-master / ACTIVE filter return the rows the rule expects. What must fail: the query returning
+   * no row for a synced product (the stale value is never seen); a dry run writing; the apply not writing;
+   * a product whose master is ACROPORA being recomputed.
+   */
+  it("recomputes a stale webshopSellable from the stored snapshot: a dry run reports, apply writes", async () => {
+    const withUnasStatus = (sku: string, externalId: string, base: string) => ({
+      ...product(sku, { externalId }),
+      externalStatus: base,
+      rawPayload: {
+        Id: externalId,
+        Sku: sku,
+        Statuses: { Status: [{ Type: "base", Value: base }] },
+        Inquire: "0",
+      },
+    });
+    liveProducts = [withUnasStatus("SELLABLE-RECOMPUTE-1", "159850901", "2")];
+    await service.runIncremental(
+      "integration-token",
+      new Date("2026-07-27T10:00:00.000Z"),
+      100,
+    );
+    const variant = await prisma.productVariant.findUniqueOrThrow({
+      where: { sku: "SELLABLE-RECOMPUTE-1" },
+    });
+    // the stale state of the measured case: the rule says sellable (base 2), the stored value says not
+    await prisma.product.update({
+      where: { id: variant.productId },
+      data: { webshopSellable: false },
+    });
+
+    const dry = await new UnasWebshopSellableReconciler().run({ apply: false });
+    assert.equal(dry.mode, "dry-run");
+    assert.deepEqual(
+      dry.changes.filter((change) => change.id === variant.productId),
+      [
+        {
+          id: variant.productId,
+          name: dry.changes.find((c) => c.id === variant.productId)?.name,
+          from: false,
+          to: true,
+        },
+      ],
+    );
+    assert.equal(
+      (
+        await prisma.product.findUniqueOrThrow({
+          where: { id: variant.productId },
+        })
+      ).webshopSellable,
+      false,
+    );
+
+    // the ACROPORA master is the owner's decision: not recomputed
+    await prisma.product.update({
+      where: { id: variant.productId },
+      data: { catalogAuthority: "ACROPORA" },
+    });
+    const ownerOwned = await new UnasWebshopSellableReconciler().run({
+      apply: false,
+    });
+    assert.equal(
+      ownerOwned.changes.some((change) => change.id === variant.productId),
+      false,
+    );
+    await prisma.product.update({
+      where: { id: variant.productId },
+      data: { catalogAuthority: "UNAS" },
+    });
+
+    const beforeApply = await prisma.product.findUniqueOrThrow({
+      where: { id: variant.productId },
+      select: { updatedAt: true },
+    });
+    const applied = await new UnasWebshopSellableReconciler().run({
+      apply: true,
+    });
+    assert.equal(applied.mode, "applied");
+    const after = await prisma.product.findUniqueOrThrow({
+      where: { id: variant.productId },
+    });
+    assert.equal(after.webshopSellable, true);
+    // the Medusa projection's due list reads `updatedAt` (medusa-projection.scheduler.ts): the write must move it,
+    // or the flipped product is never projected (barracuda, #2435 review)
+    assert.ok(after.updatedAt.getTime() > beforeApply.updatedAt.getTime());
   });
 });

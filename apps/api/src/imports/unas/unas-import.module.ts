@@ -27,6 +27,7 @@ import { UnasCredentialCryptoService } from "./unas-credential-crypto.service.js
 import { UnasCredentialProvider } from "./unas-credential.provider.js";
 import { UnasConnectionStartupValidator } from "./unas-connection-startup.validator.js";
 import { UnasClock } from "./unas-login-expiry.js";
+import { UnasWebshopSellableReconciler } from "./unas-webshop-sellable-reconcile.js";
 
 @Module({
   controllers: [
@@ -50,6 +51,7 @@ import { UnasClock } from "./unas-login-expiry.js";
     UnasKapcsolatUjraepitesScheduler,
     UnasProductSyncScheduler,
     UnasProductSyncService,
+    UnasWebshopSellableReconciler,
     UnasImportValidator,
     UnasDiffEngine,
     UnasImportRepository,
