@@ -53,3 +53,21 @@ export type {
   RecommendationResult,
   TargetBand,
 } from "./recommendation/index.js";
+export {
+  CUSTOMER_RANGES,
+  CUSTOMER_RANGES_VERSION,
+  CUSTOMER_RANGE_PARAMETERS,
+  PHOSPHATE_NAMED_APPROVAL,
+  customerDeviation,
+  customerDeviations,
+  customerRangeFor,
+} from "./customer-ranges.js";
+export type {
+  CustomerDeviation,
+  CustomerDeviationStatus,
+  CustomerRange,
+  CustomerRangeApproval,
+  CustomerRangeOptions,
+  CustomerRangeParameter,
+  CustomerRangeWaterType,
+} from "./customer-ranges.js";
