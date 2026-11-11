@@ -71,6 +71,8 @@ function service(input: {
   billing?: PackageBillingRow[];
   /** minden bejövő számla-sor hivatkozása, a sztornózott és a nem könyvelendő is */
   refs?: { sourceDocumentId: string | null; documentNumber: string }[];
+  /** az utánvét-elszámolásból levont számlák száma (Foxpost, GLS), normalizálva */
+  deduction?: { foxpost: ReadonlySet<string>; gls: ReadonlySet<string> };
 }) {
   const asked: string[][] = [];
   const askedHeads: string[][] = [];
@@ -88,6 +90,8 @@ function service(input: {
       feed: input.feed ?? [],
       readings: input.readings ?? new Map(),
     }),
+    settledByDeduction: async () =>
+      input.deduction ?? { foxpost: new Set<string>(), gls: new Set<string>() },
     packageBillingRows: async () => ({
       rows: input.billing ?? [],
       refs:
@@ -1173,6 +1177,67 @@ describe("the accountant package by invoice date", () => {
     assert.equal((await missing.item(first.id)).state, "DOUBLE_PAID");
     const check = await missing.packageCheck("2026-10");
     assert.deepEqual(check.unpaid, []);
+  });
+
+  /*
+    AZ UTÁNVÉT-ELSZÁMOLÁSBÓL LEVONT SZÁMLA NEM "KIFIZETETLEN" (task os-hianyzo-szamlak-unpaid; a Foxpost FX és a GLS HU számlák). MI PIROSÍT:
+    a Foxpost-elszámolás által levont számla a blokkban marad; a más szállító azonos számú számlája (a szám nyilvános) is kikerül; a GLS
+    számla, amelyet nem rendezett levél sorol, kikerül; a levonás nélküli Foxpost-számla (nincs elszámolás-sor) is eltűnik; egy másik
+    adószámú sor ugyanazzal a számmal "rendezett".
+  */
+  it("an invoice the COD settlement deducts (Foxpost, GLS) is not unpaid, and only for its own supplier", async () => {
+    const FOX = "32435119-2-13";
+    const GLS = "12369410-2-41";
+    const { missing } = service({
+      debits: [],
+      documents: [],
+      deduction: {
+        foxpost: new Set(["FX0000001"]),
+        gls: new Set(["HU00000001"]),
+      },
+      billing: [
+        billingRow({
+          id: "fox",
+          documentNumber: "FX0000001",
+          supplierTaxNumber: FOX,
+          pdfIds: [],
+        }),
+        billingRow({
+          id: "gls",
+          documentNumber: "HU00000001",
+          supplierTaxNumber: GLS,
+          pdfIds: [],
+        }),
+        // the same number from ANOTHER supplier is not the settlement's invoice
+        billingRow({
+          id: "other",
+          documentNumber: "FX0000001",
+          supplierTaxNumber: "12345678-2-41",
+          pdfIds: [],
+        }),
+        // a Foxpost invoice with no settlement row stays unpaid
+        billingRow({
+          id: "fox-open",
+          documentNumber: "FX0000002",
+          supplierTaxNumber: FOX,
+          pdfIds: [],
+        }),
+        // a GLS invoice that no cleared letter lists stays unpaid
+        billingRow({
+          id: "gls-open",
+          documentNumber: "HU00000002",
+          supplierTaxNumber: GLS,
+          pdfIds: [],
+        }),
+      ],
+      files: {},
+    });
+    const check = await missing.packageCheck("2026-10");
+    assert.deepEqual(check.unpaid.map((invoice) => invoice.number).sort(), [
+      "FX0000001",
+      "FX0000002",
+      "HU00000002",
+    ]);
   });
 
   it("a zero-amount invoice is never unpaid (no debit can pay it), while a real unpaid one still is", async () => {

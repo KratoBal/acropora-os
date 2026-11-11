@@ -56,6 +56,8 @@ import {
   type MatchOutcome,
 } from "./missing-invoice-matching.js";
 import {
+  FOXPOST_TAX_BASE,
+  GLS_TAX_BASE,
   MissingInvoicesRepository,
   normalizeAccount,
 } from "./missing-invoices.repository.js";
@@ -1009,9 +1011,10 @@ export class MissingInvoicesService {
       ids: readonly string[],
     ) => Promise<Map<string, { fileName: string; content: Uint8Array }>>,
   ) {
-    const [computed, billing] = await Promise.all([
+    const [computed, billing, deduction] = await Promise.all([
       this.compute(),
       this.repository.packageBillingRows(month),
+      this.repository.settledByDeduction(),
     ]);
     // az olvasat a fő azonosítón áll, de egy összevont jelöltnél az alias vagy
     // az eredeti is hordozhatja (barracuda visszamérése)
@@ -1217,6 +1220,15 @@ export class MissingInvoicesService {
       );
     };
 
+    const settledByDeduction = (row: (typeof rows)[number]) => {
+      const base = (row.supplierTaxNumber ?? "").replace(/\D/g, "").slice(0, 8);
+      const number = row.documentNumber.replace(/\s+/g, "").toUpperCase();
+      return (
+        (base === FOXPOST_TAX_BASE && deduction.foxpost.has(number)) ||
+        (base === GLS_TAX_BASE && deduction.gls.has(number))
+      );
+    };
+
     const entries = [
       ...rows.map((row) => {
         const file = paperRow(row) ? null : fileOfRow(row);
@@ -1236,8 +1248,12 @@ export class MissingInvoicesService {
             },
           ],
           source: { kind: "ROW" as const, id: row.id },
-          // a nulla összegű számlát (Telekom, Pólus, október) terhelés nem fizethet, tehát nem „kifizetetlen”
-          paid: itemId !== undefined || row.grossAmount.isZero(),
+          // a nulla összegű számlát (Telekom, Pólus, október) terhelés nem fizethet, tehát nem „kifizetetlen”; és amit az utánvét-elszámolás
+          // levon (Foxpost, GLS), azt sem bankból fizetik (settledByDeduction)
+          paid:
+            itemId !== undefined ||
+            row.grossAmount.isZero() ||
+            settledByDeduction(row),
           itemIds: itemId ? [itemId] : [],
         };
       }),
