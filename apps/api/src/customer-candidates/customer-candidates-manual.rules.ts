@@ -177,6 +177,8 @@ export function parseManualEntries(raw: unknown): ManualParseResult {
 
 export interface ManualPlanCurrent {
   productId: string;
+  /** The SKU the row was imported under: a changed SKU on the same product is a change (the stored one is the trail back to the file). */
+  sku: string;
   parameter: string;
   direction: string;
   referenceUrl: string;
@@ -203,6 +205,7 @@ const keyOf = (row: {
   direction: string;
 }) => `${row.productId}|${row.parameter}|${row.direction}`;
 export const sameManualContent = (a: ManualPlanCurrent, b: ManualPlanCurrent) =>
+  a.sku === b.sku &&
   a.referenceUrl === b.referenceUrl &&
   a.basis === b.basis &&
   a.sideEffectsStatus === b.sideEffectsStatus &&

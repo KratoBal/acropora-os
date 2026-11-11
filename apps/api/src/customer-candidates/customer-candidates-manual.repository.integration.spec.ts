@@ -112,6 +112,7 @@ describe("a kézi termékjelölt-lista", { skip: gate.mode === "skip" }, () => {
       current.find((entry) => entry.productId === ids.a),
       {
         productId: ids.a,
+        sku: sku("a"),
         parameter: "KH",
         direction: "EMEL",
         referenceUrl: "https://shop.example.invalid/x",

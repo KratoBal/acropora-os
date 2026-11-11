@@ -71,6 +71,8 @@ export interface WaterHintCandidate {
   category: string;
   shopUrl: string | null;
   evidenceRef: string;
+  /** Mi az `evidenceRef`: a gyártó lapja vagy a bolti termékleírás. */
+  referenceKind: "MAKER" | "SHOP_TEXT";
   /** "KOD:IRANY" entries. */
   effects: readonly string[];
   sideEffects: readonly string[];
@@ -224,7 +226,8 @@ export function buildWaterHints(input: WaterHintsInput): ReefClubWaterHints {
               name: candidate.productName,
               category: candidate.category,
               shopUrl: candidate.shopUrl,
-              manufacturerUrl: candidate.evidenceRef,
+              referenceUrl: candidate.evidenceRef,
+              referenceKind: candidate.referenceKind,
               sideEffectsText: sideEffectsText(candidate.sideEffects),
             }))
         : [];

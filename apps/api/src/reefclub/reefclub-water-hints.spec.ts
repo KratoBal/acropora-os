@@ -43,6 +43,7 @@ const candidate = (
   category: "Adalékok",
   shopUrl: `https://shop.example/${productId}`,
   evidenceRef: `https://gyarto.example/${productId}`,
+  referenceKind: "MAKER" as const,
   effects: [`${parameterCode}:${direction}`],
   sideEffects: [],
   rank: 1,
@@ -133,6 +134,31 @@ describe("the rows: the approved bands, in a fixed order", () => {
     assert.equal(
       kh.text,
       "A(z) KH mért értéke 6,5 dKH, az ajánlott tartomány (7 és 9 dKH) alatt van.",
+    );
+  });
+
+  it("the kind of the reference goes to the product as it is, so the page can tell a shop text from a maker's page", () => {
+    const hints = buildWaterHints(
+      input({
+        measurements: [m("KH", 6.5)],
+        candidates: [
+          candidate("KH", "EMEL", "maker", { rank: 1 }),
+          candidate("KH", "EMEL", "shop", {
+            rank: 2,
+            referenceKind: "SHOP_TEXT",
+          }),
+        ],
+      }),
+    );
+    assert.deepEqual(
+      hints.rows[0]!.products.map((product) => [
+        product.productId,
+        product.referenceKind,
+      ]),
+      [
+        ["maker", "MAKER"],
+        ["shop", "SHOP_TEXT"],
+      ],
     );
   });
 
@@ -252,7 +278,7 @@ describe("the products of a deviation", () => {
     );
     assert.equal(calcium.products[0]!.shopUrl, "https://shop.example/p0");
     assert.equal(
-      calcium.products[0]!.manufacturerUrl,
+      calcium.products[0]!.referenceUrl,
       "https://gyarto.example/p0",
     );
     assert.deepEqual(

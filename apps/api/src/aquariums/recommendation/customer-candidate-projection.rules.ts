@@ -25,6 +25,8 @@ export interface ProjectedCandidateRow {
   effects: string[];
   /** "KOD:IRANY" a NEM jóváhagyott paramétereken mért hatásról (tanács és sáv nélkül): a felület kiírja. */
   sideEffects: string[];
+  /** Mi az `evidenceRef`: a gyártó lapja vagy a bolti termékleírás (a felület ebből választ címkét). */
+  referenceKind: "MAKER" | "SHOP_TEXT";
   rank: number;
 }
 
@@ -34,6 +36,8 @@ const HTTP_OR_HTTPS = /^https?:\/\/\S+$/i;
 
 export function toProjectedCandidateRows(
   entries: readonly CustomerCandidatesOfMove[],
+  /** A bolti szöveg alapú hivatkozás csak a kapcsolóval megy a vevő felé; a MÁSODIK zár a forrás szűrése után (alapból ki). */
+  options: { allowShopText?: boolean } = {},
 ): ProjectedCandidateRow[] {
   const rows: ProjectedCandidateRow[] = [];
   const seen = new Set<string>();
@@ -43,6 +47,8 @@ export function toProjectedCandidateRows(
     for (const candidate of entry.candidates) {
       if (rank >= CUSTOMER_CANDIDATES_PER_PARAMETER) break;
       if (!HTTPS.test(candidate.evidenceRef)) continue;
+      if (candidate.referenceKind === "SHOP_TEXT" && !options.allowShopText)
+        continue;
       const effects = candidate.effects.map(
         (effect) => `${effect.parameterCode}:${effect.direction}`,
       );
@@ -68,6 +74,7 @@ export function toProjectedCandidateRows(
         sideEffects: candidate.sideEffects.map(
           (effect) => `${effect.parameterCode}:${effect.direction}`,
         ),
+        referenceKind: candidate.referenceKind,
         rank,
       });
     }

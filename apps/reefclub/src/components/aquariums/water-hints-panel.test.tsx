@@ -52,7 +52,8 @@ const product = {
   name: "Minta KH+",
   category: "Adalékok",
   shopUrl: "https://shop.example/p1",
-  manufacturerUrl: "https://gyarto.example/p1",
+  referenceUrl: "https://gyarto.example/p1",
+  referenceKind: "MAKER" as const,
   sideEffectsText: null,
 };
 
@@ -192,6 +193,33 @@ describe("a termékek", () => {
       expect(link.getAttribute("rel")).toContain("noopener");
       expect(link.getAttribute("rel")).toContain("noreferrer");
     }
+  });
+
+  it("a hivatkozás fajtája adja a címkét: a bolti termékleírás NEM gyártói leírásként áll ki", async () => {
+    view(() =>
+      reply(
+        200,
+        hints({
+          productsState: "OK",
+          rows: [
+            row({
+              products: [
+                {
+                  ...product,
+                  referenceKind: "SHOP_TEXT",
+                  referenceUrl: "https://shop.example/p1-leiras",
+                },
+              ],
+            }),
+          ],
+        }),
+      ),
+    );
+    const link = await screen.findByRole("link", {
+      name: "Termékleírás a boltban",
+    });
+    expect(link).toHaveAttribute("href", "https://shop.example/p1-leiras");
+    expect(screen.queryByRole("link", { name: "Gyártói leírás" })).toBeNull();
   });
 
   it("bolti lap nélkül a név nem link, a gyártói leírás marad", async () => {

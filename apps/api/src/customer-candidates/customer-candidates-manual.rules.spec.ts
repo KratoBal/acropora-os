@@ -226,6 +226,7 @@ describe("parseManualEntries", () => {
 describe("planManualReplace: the file is the whole list", () => {
   const stored = (productId: string, over: Record<string, unknown> = {}) => ({
     productId,
+    sku: `s${productId}`,
     parameter: "KH",
     direction: "EMEL",
     referenceUrl: "https://shop.example/x",
@@ -252,7 +253,7 @@ describe("planManualReplace: the file is the whole list", () => {
     const base = [
       stored("a", { sideEffects: ["FOSZFAT:CSOKKENT", "PH:EMEL"] }),
     ];
-    const same = [{ ...base[0]!, sku: "x" }];
+    const same = [{ ...base[0]! }];
     assert.equal(planManualReplace(base, same).unchanged, 1);
     for (const change of [
       { referenceUrl: "https://shop.example/y" },
@@ -261,6 +262,8 @@ describe("planManualReplace: the file is the whole list", () => {
       { note: "új" },
       { sideEffects: ["PH:EMEL", "FOSZFAT:CSOKKENT"] },
       { sideEffects: [] },
+      // the SKU the product was imported under is part of the row: a changed SKU is a change, not "unchanged"
+      { sku: "uj-cikkszam" },
     ])
       assert.equal(
         planManualReplace(base, [{ ...same[0]!, ...change }]).update,

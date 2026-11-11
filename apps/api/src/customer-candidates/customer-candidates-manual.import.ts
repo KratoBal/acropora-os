@@ -77,6 +77,7 @@ const byMove = (
   );
 const contentOf = (row: ManualPlanCurrent) => [
   row.productId,
+  row.sku,
   row.parameter,
   row.direction,
   row.referenceUrl,

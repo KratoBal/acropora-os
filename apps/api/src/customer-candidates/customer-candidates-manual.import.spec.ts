@@ -264,6 +264,7 @@ describe("the table's current state is part of what was approved (barracuda, OS 
     over: Partial<ManualPlanCurrent> = {},
   ): ManualPlanCurrent => ({
     productId: "p9",
+    sku: "sku-9",
     parameter: "KH",
     direction: "EMEL",
     referenceUrl: "https://shop.example/held",
@@ -311,6 +312,7 @@ describe("an empty file is the whole list deleted, and it needs --allow-empty", 
     const fx = fixture([]);
     fx.held.push({
       productId: "p9",
+      sku: "sku-9",
       parameter: "KH",
       direction: "EMEL",
       referenceUrl: "https://shop.example/held",
