@@ -22,7 +22,7 @@ const n = String(Date.now() % 1_000_000);
 const BACKFILL = readFileSync(
   join(
     dirname(fileURLToPath(import.meta.url)),
-    "../../../../packages/database/prisma/migrations/20261111200000_tig_invoice_payment_method/migration.sql",
+    "../../../../packages/database/prisma/migrations/20261111210000_tig_invoice_payment_method/migration.sql",
   ),
   "utf8",
 );
