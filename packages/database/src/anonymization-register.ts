@@ -1704,6 +1704,13 @@ export const ANONYMIZATION_REGISTER: Readonly<
     contactRecipientEmail: "email",
     updatedById: "identifier",
   },
+  AiContactRequest: {
+    // an e-mail address or a telephone number, whichever the customer gave: the free-text replacement covers both patterns
+    value: "freeText",
+    conversationRef: "identifier",
+    requestKey: "identifier",
+    handledById: "identifier",
+  },
   AiLinkSource: {
     host: "business",
     brand: "business",

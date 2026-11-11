@@ -50,6 +50,7 @@ describe("AiChatSettingsGuard (S16: the token that reads the settings opens no o
     for (const other of [
       "token-ai-search",
       "token-webshop-mail",
+      "token-ai-contact",
       "token-something-else",
     ]) {
       const guard = new AiChatSettingsGuard(

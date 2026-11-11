@@ -15,5 +15,7 @@ import { AiChatSettingsService } from "./ai-chat-settings.service.js";
     AiChatSettingsService,
     ServiceTokenRepository,
   ],
+  // the contact requests read the settings (switch and recipient) through the same service
+  exports: [AiChatSettingsService],
 })
 export class AiChatSettingsModule {}
