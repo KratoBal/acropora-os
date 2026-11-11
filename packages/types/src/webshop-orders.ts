@@ -111,8 +111,9 @@ export const WEBSHOP_PROFORMA_DUE_DAYS = 8;
 
 /**
  * A WEBSHOPOS RENDELÉSBŐL INDÍTOTT SZÁMLA fizetési határideje napokban: a kiállítás napja + ennyi, a vevő saját napjaitól FÜGGETLENÜL
- * (Balázs, 2026-11-11 12:07 UTC: a webshopos számlán a határidő a kiállítás + 8 nap; eddig a kiállítás napja volt). A TIG és a kézi
- * számla ettől különbözik: ott a vevő (partner) napjai számítanak.
+ * (Balázs, 2026-11-11 12:07 UTC). KIVÉTEL a bankkártyás (Stripe) rendelés (12:10 UTC): ott a Számlázás gombra a Stripe levonja az
+ * összeget, és a kelte, a teljesítés ÉS a határidő ugyanaz a nap (a kiállítás napja). A TIG és a kézi számla ettől különbözik: ott
+ * a vevő (partner) napjai számítanak.
  */
 export const WEBSHOP_INVOICE_DUE_DAYS = 8;
 

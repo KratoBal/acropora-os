@@ -171,7 +171,66 @@ describe("the invoice draft from a webshop order", () => {
     return result.ok ? result.draft : null;
   };
 
-  it("the webshop invoice's due date is the issue day plus 8 days, the fulfilment is the issue day", () => {
+  /** An order paid by Stripe (a card) or by another method: the payment provider of the order's payment collection decides. */
+  const paidWith = (provider: string | null) =>
+    order({
+      payment_collections:
+        provider === null
+          ? []
+          : [
+              {
+                status: "authorized",
+                amount: 26840,
+                authorized_amount: 26840,
+                captured_amount: 0,
+                refunded_amount: 0,
+                payments: [{ id: "p", provider_id: provider, data: null }],
+              },
+            ],
+    });
+  const dueFor = (provider: string | null, now: Date) => {
+    const result = invoiceDraftOf(paidWith(provider), {
+      customerId: "cust_1",
+      now,
+    });
+    assert.equal(result.ok, true);
+    return result.ok ? result.draft : null;
+  };
+
+  it("a CARD (Stripe) order: the invoice date, the fulfilment and the due date are the SAME day (Balázs 12:10 UTC)", () => {
+    const draft = dueFor(
+      "pp_stripe_stripe",
+      new Date("2026-11-11T10:00:00.000Z"),
+    )!;
+    assert.equal(draft.paymentMethod, "Bankkártya");
+    assert.equal(draft.fulfillmentDate, "2026-11-11");
+    assert.equal(draft.dueDate, "2026-11-11");
+    // the Budapest day, not the UTC one
+    const late = dueFor(
+      "pp_stripe_stripe",
+      new Date("2026-10-05T22:30:00.000Z"),
+    )!;
+    assert.deepEqual(
+      [late.fulfillmentDate, late.dueDate],
+      ["2026-10-06", "2026-10-06"],
+    );
+  });
+
+  it("every other payment method (cash on delivery, transfer, nothing recorded, an unknown provider): the issue day + 8", () => {
+    for (const [provider, method] of [
+      ["pp_acropora_cod", "Utánvét"],
+      ["pp_system_default", "Átutalás"],
+      ["pp_something_new", "Átutalás"],
+      [null, "Átutalás"],
+    ] as const) {
+      const draft = dueFor(provider, new Date("2026-11-11T10:00:00.000Z"))!;
+      assert.equal(draft.paymentMethod, method, String(provider));
+      assert.equal(draft.dueDate, "2026-11-19", String(provider));
+      assert.equal(draft.fulfillmentDate, "2026-11-11", String(provider));
+    }
+  });
+
+  it("the (default, cash on delivery) webshop invoice's due date is the issue day plus 8 days, the fulfilment is the issue day", () => {
     const draft = dueOf(new Date("2026-11-11T10:00:00.000Z"))!;
     assert.equal(draft.fulfillmentDate, "2026-11-11");
     assert.equal(draft.dueDate, "2026-11-19");

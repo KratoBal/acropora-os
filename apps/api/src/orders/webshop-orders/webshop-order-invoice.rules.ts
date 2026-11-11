@@ -248,12 +248,15 @@ export function newCustomerOf(order: MedusaOrderDetailRow):
   };
 }
 
+/** A bankkártyás (Stripe) rendelés fizetési módja a számlán: az `invoicePaymentMethodOf` ezt adja a Stripe szolgáltatóra. */
+const CARD_PAYMENT_METHOD = "Bankkártya";
+
 /** A számlán álló fizetési mód (a Számlázz.hu ezt a szöveget írja ki). */
 export function invoicePaymentMethodOf(order: MedusaOrderDetailRow): string {
   // az utánvétnek csak munkamenete van a leadáskor: a rekordra várva a
   // számlán „Átutalás” állt volna (mérve a stage-en, 2026-10-06)
   const provider = orderPaymentProviderId(order.payment_collections?.[0]);
-  if (provider === "pp_stripe_stripe") return "Bankkártya";
+  if (provider === "pp_stripe_stripe") return CARD_PAYMENT_METHOD;
   if (provider === COD_PROVIDER_ID) return "Utánvét";
   return "Átutalás";
 }
@@ -431,6 +434,8 @@ export function invoiceDraftOf(
       message: `A számla tételei (${invoiceGross} ${currency}) nem adják ki a rendelés végösszegét (${orderTotal} ${currency}). Valószínűleg kedvezmény vagy jóváírás áll a rendelésen, amit a tételek nem viselnek; a számla nem készül el.`,
     };
   const today = budapestDayKey(input.now);
+  // a fizetési mód a rendelés fizetési gyűjtőjének szolgáltatójából jön (`invoicePaymentMethodOf`)
+  const paymentMethod = invoicePaymentMethodOf(order);
   return {
     ok: true,
     difference,
@@ -440,12 +445,17 @@ export function invoiceDraftOf(
       invoiceFormat: "ELECTRONIC",
       customerId: input.customerId,
       fulfillmentDate: today,
-      // A HATÁRIDŐ A KIÁLLÍTÁS NAPJA + 8 NAP, a vevő saját napjaitól függetlenül (Balázs, 2026-11-11 12:07 UTC; eddig a kiállítás napja
-      // volt). A nap Budapest szerint számít, mint a díjbekérőnél.
-      dueDate: budapestDayKey(
-        startOfBudapestDay(input.now, WEBSHOP_INVOICE_DUE_DAYS),
-      ),
-      paymentMethod: invoicePaymentMethodOf(order),
+      // A HATÁRIDŐ (Balázs, 2026-11-11 12:07 és 12:10 UTC): bankkártyás (Stripe) rendelésnél a Számlázás gombra a Stripe levonja az
+      // összeget, és a számla kelte, a teljesítés napja ÉS a fizetési határidő UGYANAZ a nap: a kiállítás napja (ahogy eddig). Minden
+      // más fizetési módnál (előreutalás, utánvét ...) a kiállítás napja + 8 nap, a vevő saját napjaitól függetlenül. A nap Budapest
+      // szerint számít, mint a díjbekérőnél.
+      dueDate:
+        paymentMethod === CARD_PAYMENT_METHOD
+          ? today
+          : budapestDayKey(
+              startOfBudapestDay(input.now, WEBSHOP_INVOICE_DUE_DAYS),
+            ),
+      paymentMethod,
       currency,
       language: "hu",
       reference: `Webshop rendelés #${order.display_id}`,
