@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   checkBillingIssueDates,
   isCardPayment,
+  proposedIssueDueDate,
 } from "./billing-issue-summary.js";
 
 /**
@@ -85,6 +86,26 @@ describe("checkBillingIssueDates", () => {
       );
   });
 
+  it("takes a fulfilment date at most a year before or after the issue date, and refuses one further away", () => {
+    const at = (fulfillmentDate: string) =>
+      checkBillingIssueDates(
+        { issueDate: "2026-11-10", fulfillmentDate, dueDate: "2026-11-18" },
+        invoice,
+      );
+    for (const day of ["2025-11-10", "2027-11-10", "2026-01-01"])
+      assert.equal(at(day).ok, true, day);
+    for (const day of ["2025-11-09", "2027-11-11", "2062-11-10"])
+      assert.deepEqual(
+        at(day),
+        {
+          ok: false,
+          error:
+            "A teljesítés ideje legfeljebb egy évvel térhet el a számla keltétől.",
+        },
+        day,
+      );
+  });
+
   it("a card payment is due on the issue date, whatever due date was sent", () => {
     assert.deepEqual(
       checkBillingIssueDates(
@@ -134,5 +155,25 @@ describe("isCardPayment", () => {
       ].map(isCardPayment),
       [true, true, true, false, false, false, false],
     );
+  });
+});
+
+describe("proposedIssueDueDate", () => {
+  it("keeps the draft's due date when it is not before the issue date", () => {
+    assert.equal(proposedIssueDueDate("2026-11-20", today, 30), "2026-11-20");
+    assert.equal(proposedIssueDueDate(today, today, 30), today);
+  });
+
+  it("counts from the issue date with the buyer's payment days when the draft's falls before it", () => {
+    assert.equal(proposedIssueDueDate("2026-11-03", today, 30), "2026-12-11");
+    assert.equal(proposedIssueDueDate("2026-11-10", today, 0), today);
+    assert.equal(
+      proposedIssueDueDate("2026-12-01", "2026-12-28", 8),
+      "2027-01-05",
+    );
+  });
+
+  it("leaves a missing due date missing", () => {
+    assert.equal(proposedIssueDueDate(null, today, 8), null);
   });
 });

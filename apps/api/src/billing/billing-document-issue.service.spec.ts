@@ -55,6 +55,7 @@ function row(status = "DRAFT", invoiceFormat = "ELECTRONIC") {
     note: null,
     sourceType: "MANUAL",
     sourceId: null,
+    customerId: "cust-1",
     netAmount: d("1000"),
     vatAmount: d("270"),
     grossAmount: d("1270"),
@@ -111,6 +112,8 @@ function setup(
     respond?: () => Promise<SzamlazzAgentResponse>;
     stockFails?: boolean;
     over?: Record<string, unknown>;
+    /** The buyer's payment days (`customerPaymentDueDays`); null: none set. */
+    paymentDueDays?: number | null;
     partnerHint?: { partnerName: string; taxNumber: string } | null;
     feedCancelled?: boolean;
     /** A foglalás UTÁN látszó előleg-sztornó (OS: ISSUING/ISSUED; feed). */
@@ -133,6 +136,7 @@ function setup(
     resolve: 0,
     excluded: [] as string[][],
     xml: [] as string[],
+    paymentDaysFor: [] as string[],
   };
   let current = {
     ...row(options.status, options.format),
@@ -141,6 +145,10 @@ function setup(
   const documents = {
     find: async () => current,
     partnerTaxHint: async () => options.partnerHint ?? null,
+    customerPaymentDueDays: async (id: string) => {
+      calls.paymentDaysFor.push(id);
+      return options.paymentDueDays === undefined ? 30 : options.paymentDueDays;
+    },
     feedTwinCancelled: async () =>
       (options.feedCancelled ?? false) ||
       (options.stornoAfterClaim === "FEED" && calls.claim > 0),
@@ -677,7 +685,7 @@ describe("the invoice confirmation (card 7ba97e0d)", () => {
   const tag = (xml: string, name: string) =>
     new RegExp(`<${name}>([^<]*)</${name}>`).exec(xml)?.[1] ?? null;
 
-  it("the summary is the builder's: buyer, address, tax number, today as the issue date, the draft's dates and method", async () => {
+  it("the summary is the builder's: buyer, address, tax number, today as the issue date, the draft's dates and method; a past due date from today", async () => {
     const { service } = setup();
     const summary = await service.summary("doc-1", NOW);
     assert.deepEqual(
@@ -691,13 +699,30 @@ describe("the invoice confirmation (card 7ba97e0d)", () => {
         buyerEmail: "vevo@example.com",
         issueDate: "2026-11-11",
         fulfillmentDate: "2026-09-30",
-        dueDate: "2026-10-08",
+        // the draft's 2026-10-08 is past: today plus the buyer's 30 days (acrobot 47091)
+        dueDate: "2026-12-11",
         paymentMethod: "Átutalás",
         showsPaymentFields: true,
         dueDateFollowsIssueDate: false,
         fingerprint: 64,
       },
     );
+  });
+
+  it("the proposed due date: the draft's when not past; past, today plus the buyer's days, or eight without them", async () => {
+    const later = setup({
+      over: { dueDate: new Date("2026-11-25T00:00:00Z") },
+    });
+    assert.equal(
+      (await later.service.summary("doc-1", NOW)).dueDate,
+      "2026-11-25",
+    );
+    const none = setup({ paymentDueDays: null });
+    assert.equal(
+      (await none.service.summary("doc-1", NOW)).dueDate,
+      "2026-11-19",
+    );
+    assert.deepEqual(none.calls.paymentDaysFor, ["cust-1"]);
   });
 
   it("the summary refuses what the issue would refuse, with the issue's own sentence", async () => {

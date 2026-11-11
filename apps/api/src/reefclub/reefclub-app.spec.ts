@@ -28,6 +28,7 @@ const EXPECTED_ROUTES = [
   "GET /rc/v1/aquariums/:id",
   "GET /rc/v1/aquariums/:id/measurements",
   "GET /rc/v1/aquariums/:id/targets",
+  "GET /rc/v1/aquariums/:id/water-hints",
   "GET /rc/v1/aquariums/:id/recommendations",
   "POST /rc/v1/aquariums/:id/recommendations",
   "POST /rc/v1/aquariums/:id/recommendations/:recId/answer",
