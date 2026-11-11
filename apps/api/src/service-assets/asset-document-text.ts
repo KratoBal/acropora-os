@@ -4,6 +4,7 @@ import {
   PAGE_END_MARKER,
   pdfTextLines,
 } from "../purchasing/supplier-invoice-import/pdf-text-lines.js";
+import { isTransientStop, type OcrReading } from "./asset-document-ocr.js";
 
 /**
  * AN ASSET ATTACHMENT AS TEXT (Balázs, 2026-10-06 10:23 UTC: "tanitsuk").
@@ -16,6 +17,11 @@ import {
  * Only a PDF has text here. A photo has none, and a scanned PDF has none
  * either: that one comes back with `hasText: false`, not as an error, so the
  * caller can say "the file is a scan" instead of "something broke".
+ *
+ * WITH THE OCR SWITCH ON (`asset-document-ocr.ts`, card 126f9b92) a scan is read
+ * as pictures instead, and the answer carries `ocr` (the notice that it is a
+ * machine reading, the pages read, why it stopped). A file with its own text is
+ * never sent to the OCR, and with the switch off nothing here changes.
  */
 export function isTextReadable(contentType: string): boolean {
   return contentType === "application/pdf";
@@ -74,13 +80,27 @@ export class AssetDocumentTextCache {
       bytes: Uint8Array,
     ) => Promise<string[]> = pdfTextLines,
     private readonly capacity = ASSET_DOCUMENT_TEXT_CACHE_ENTRIES,
+    /** Reads a SCAN as pictures; `null` = the OCR is off. Called only for a file with pages and no text. */
+    private readonly scan?: (bytes: Uint8Array) => Promise<OcrReading | null>,
   ) {}
+
+  /** The text layer first; only a scan (pages, no text) goes to the OCR. */
+  private async readOne(content: Uint8Array): Promise<ReadText> {
+    const plain = textFromLines(await this.read(content));
+    if (plain.hasText || plain.pageCount === 0 || !this.scan) return plain;
+    const reading = await this.scan(content);
+    if (!reading) return plain;
+    const read = textFromLines(reading.lines);
+    return read.hasText
+      ? { ...read, pageCount: plain.pageCount, ocr: reading.ocr }
+      : { ...plain, ocr: reading.ocr };
+  }
 
   async text(
     sha256: string | undefined,
     bytes: () => Promise<Uint8Array>,
   ): Promise<ReadText> {
-    if (!sha256) return textFromLines(await this.read(await bytes()));
+    if (!sha256) return this.readOne(await bytes());
     const cached = this.entries.get(sha256);
     if (cached) {
       // Most recently used goes last, so the oldest is evicted first.
@@ -88,12 +108,16 @@ export class AssetDocumentTextCache {
       this.entries.set(sha256, cached);
       return cached;
     }
-    const reading = bytes()
-      .then((content) => this.read(content))
-      .then((lines) => textFromLines(lines));
+    const reading = bytes().then((content) => this.readOne(content));
     this.entries.set(sha256, reading);
-    // A failed read is not remembered: the next ask tries again.
-    reading.catch(() => this.entries.delete(sha256));
+    // A failed read is not remembered: the next ask tries again. Neither is an OCR reading that stopped for a reason
+    // that may not hold next time (time, memory, a busy reader, an error); a stop at the page limit is the file's own.
+    const forget = () => {
+      if (this.entries.get(sha256) === reading) this.entries.delete(sha256);
+    };
+    reading.then((read) => {
+      if (read.ocr && isTransientStop(read.ocr.stoppedBy)) forget();
+    }, forget);
     while (this.entries.size > this.capacity) {
       const oldest = this.entries.keys().next().value as string;
       this.entries.delete(oldest);

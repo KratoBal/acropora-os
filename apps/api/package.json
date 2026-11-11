@@ -91,6 +91,8 @@
     "@nestjs/common": "^11.1.28",
     "@nestjs/core": "^11.1.28",
     "@nestjs/platform-express": "^11.1.28",
+    "@tesseract.js-data/eng": "1.0.0",
+    "@tesseract.js-data/hun": "1.0.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "docxtemplater": "3.71.0",
@@ -105,7 +107,8 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
     "saxes": "^6.0.0",
-    "sharp": "0.35.5"
+    "sharp": "0.35.5",
+    "tesseract.js": "7.0.0"
   },
   "devDependencies": {
     "@acropora/config": "workspace:*",
