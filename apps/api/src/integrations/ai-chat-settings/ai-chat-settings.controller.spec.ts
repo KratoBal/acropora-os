@@ -16,8 +16,14 @@ const meta = (key: string, target: object, property?: string | symbol) =>
     : Reflect.getMetadata(key, target, property);
 
 describe("the AI chat settings routes", () => {
-  it("both admin routes need AI_SETTINGS_MANAGE, and no other permission", () => {
-    for (const name of ["settings", "save"] as const) {
+  it("every admin route (the settings and the link sources) needs AI_SETTINGS_MANAGE, and no other permission", () => {
+    for (const name of [
+      "settings",
+      "save",
+      "linkSources",
+      "addLinkSource",
+      "removeLinkSource",
+    ] as const) {
       const handler = AiChatSettingsAdminController.prototype[name];
       const permissions = Object.values(Reflect.getMetadataKeys(handler))
         .map((key) => meta(String(key), handler))

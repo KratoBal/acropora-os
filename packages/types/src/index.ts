@@ -1944,3 +1944,17 @@ export type {
   AiChatSettingsCheck,
   AiChatSettingsServiceView,
 } from "./ai-chat-settings.js";
+export {
+  AI_LINK_OWN_DOMAIN,
+  AI_LINK_SOURCE_CATEGORIES,
+  AI_LINK_SOURCE_LIMITS,
+  checkAiLinkSource,
+  normalizeAiLinkHost,
+} from "./ai-link-sources.js";
+export type {
+  AiLinkSource,
+  AiLinkSourceCategory,
+  AiLinkSourceCheck,
+  AiLinkSourceInput,
+  AiLinkSourceServiceEntry,
+} from "./ai-link-sources.js";
