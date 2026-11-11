@@ -27,6 +27,12 @@ import {
  * Runs only on a database named for testing; see integrationDatabaseGate.
  */
 const gate = integrationDatabaseGate(process.env);
+import { CustomerCandidateSource } from "../../aquariums/recommendation/customer-candidate-source.js";
+/** A candidate source that finds nothing: these specs are about the dose list. */
+const noCandidates = {
+  candidatesByMove: async () => [],
+} as unknown as CustomerCandidateSource;
+
 const PREFIX = "VETITES-PROBA ";
 
 describe(
@@ -36,7 +42,10 @@ describe(
     const suffix = `${Date.now() % 1_000_000}`;
     const suiteStartedAt = new Date();
     const doseEffects = new DoseEffectsService();
-    const projection = new DoseProjectionService(doseEffects);
+    const projection = new DoseProjectionService(
+      doseEffects,
+      new CustomerCandidateSource(),
+    );
     let product: string;
     let keptId: string;
     let goneId: string;
@@ -176,11 +185,14 @@ describe(
           orderBy: { finishedAt: "desc" },
         });
 
-      const failing = new DoseProjectionService({
-        list: async () => {
-          throw new Error("a lista nem olvasható (próba)");
-        },
-      } as unknown as DoseEffectsService);
+      const failing = new DoseProjectionService(
+        {
+          list: async () => {
+            throw new Error("a lista nem olvasható (próba)");
+          },
+        } as unknown as DoseEffectsService,
+        noCandidates,
+      );
       const outcome = await failing.rebuild("SCHEDULE");
       assert.equal(outcome.ok, false);
 
@@ -229,12 +241,15 @@ describe(
 
     it("a forrást a zár UTÁN olvassa (barracuda, #1754): amíg másik példány tartja a zárat, a lista olvasása nem indul el", async () => {
       let listCalls = 0;
-      const counting = new DoseProjectionService({
-        list: (query: Parameters<DoseEffectsService["list"]>[0]) => {
-          listCalls += 1;
-          return doseEffects.list(query);
-        },
-      } as unknown as DoseEffectsService);
+      const counting = new DoseProjectionService(
+        {
+          list: (query: Parameters<DoseEffectsService["list"]>[0]) => {
+            listCalls += 1;
+            return doseEffects.list(query);
+          },
+        } as unknown as DoseEffectsService,
+        noCandidates,
+      );
 
       let running: Promise<{ ok: boolean }> | null = null;
       await prisma.$transaction(

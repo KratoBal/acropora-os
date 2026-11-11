@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   CUSTOMER_CANDIDATE_PARAMETERS,
   CUSTOMER_CANDIDATES_PER_PARAMETER,
+  CUSTOMER_CANDIDATE_MOVES,
   CustomerCandidateSource,
   customerMatchingRows,
   customerWantedMoves,
@@ -181,6 +182,7 @@ describe("the cap per parameter", () => {
     category: "K",
     effects,
     evidenceRef: URL,
+    shopUrl: null,
   });
 
   it("at most five per parameter; the ones helping more wanted deviations first, then by name", () => {
@@ -286,6 +288,7 @@ describe("the source", () => {
         category: "Adalékok",
         effects: [{ parameterCode: "KALCIUM", direction: "EMEL" }],
         evidenceRef: URL,
+        shopUrl: null,
       },
     ]);
   });
@@ -359,5 +362,152 @@ describe("the source", () => {
       moves: [low("KALCIUM")],
     });
     assert.equal(result.length, CUSTOMER_CANDIDATES_PER_PARAMETER);
+  });
+});
+
+describe("the shop address of a candidate (V3.4 S2b)", () => {
+  const withListing = (listing: Record<string, unknown>) => {
+    const instance = new CustomerCandidateSource();
+    (instance as unknown as { database: unknown }).database = {
+      $queryRaw: async () => [row({})],
+      product: {
+        findMany: async () => [
+          {
+            id: "p",
+            name: "Kalcium",
+            categories: [{ category: { name: "Adalékok" } }],
+            channelListings: [listing],
+            unasSnapshot: null,
+          },
+        ],
+      },
+    };
+    return instance;
+  };
+
+  it("is the UNAS channel row's address when the product is visible in the shop, else null", async () => {
+    const shown = await withListing({
+      channel: "UNAS",
+      externalStatus: "1",
+      productUrl: "https://shop.example/kalcium",
+    }).candidates({ moves: [low("KALCIUM")] });
+    assert.equal(shown[0]?.shopUrl, "https://shop.example/kalcium");
+    for (const listing of [
+      { channel: "UNAS", externalStatus: "1", productUrl: null },
+      {
+        channel: "UNAS",
+        externalStatus: "1",
+        productUrl: "javascript:alert(1)",
+      },
+      {
+        channel: "UNAS",
+        externalStatus: "1",
+        productUrl: "ftp://shop.example/x",
+      },
+    ]) {
+      const result = await withListing(listing).candidates({
+        moves: [low("KALCIUM")],
+      });
+      assert.equal(result[0]?.shopUrl, null, JSON.stringify(listing));
+    }
+  });
+});
+
+describe("candidatesByMove: every approved parameter in both directions, from one state", () => {
+  const rows = [
+    row({ productId: "ca-up", value: "KALCIUM:EMEL" }),
+    row({ productId: "ca-down", value: "KALCIUM:CSOKKENT" }),
+    row({ productId: "no3-down", value: "NITRAT:CSOKKENT" }),
+    row({ productId: "po4-down", value: "FOSZFAT:CSOKKENT" }),
+    row({
+      productId: "unverified",
+      status: "UNVERIFIED",
+      value: null,
+      currentValue: "KH:EMEL",
+    }),
+  ];
+  const product = (id: string) => ({
+    id,
+    name: `Termék ${id}`,
+    categories: [{ category: { name: "K" } }],
+    channelListings: SELLS,
+    unasSnapshot: null,
+  });
+
+  it("covers the four approved parameters and both directions, in the fixed order, and asks the database once for each kind", async () => {
+    const counters = { queries: 0, products: 0 };
+    const instance = new CustomerCandidateSource();
+    (instance as unknown as { database: unknown }).database = {
+      $queryRaw: async () => {
+        counters.queries++;
+        return rows;
+      },
+      product: {
+        findMany: async () => {
+          counters.products++;
+          return ["ca-up", "ca-down", "no3-down", "po4-down", "unverified"].map(
+            product,
+          );
+        },
+      },
+    };
+    const result = await instance.candidatesByMove();
+    assert.equal(CUSTOMER_CANDIDATE_MOVES.length, 8);
+    assert.deepEqual(
+      result.map((entry) => [entry.parameterCode, entry.direction]),
+      CUSTOMER_CANDIDATE_MOVES.map((move) => [
+        move.parameterCode,
+        move.direction,
+      ]),
+    );
+    assert.deepEqual(counters, { queries: 1, products: 1 });
+    const by = (parameter: string, direction: string) =>
+      result
+        .find(
+          (entry) =>
+            entry.parameterCode === parameter && entry.direction === direction,
+        )!
+        .candidates.map((candidate) => candidate.productId);
+    assert.deepEqual(by("KALCIUM", "EMEL"), ["ca-up"]);
+    assert.deepEqual(by("KALCIUM", "CSOKKENT"), ["ca-down"]);
+    assert.deepEqual(by("NITRAT", "CSOKKENT"), ["no3-down"]);
+    assert.deepEqual(by("NITRAT", "EMEL"), []);
+    assert.deepEqual(by("KH", "EMEL"), []);
+    assert.deepEqual(by("MAGNEZIUM", "CSOKKENT"), []);
+  });
+
+  it("phosphate is not among the moves, so a phosphate product never appears; an unverified effect appears nowhere", async () => {
+    const instance = new CustomerCandidateSource();
+    (instance as unknown as { database: unknown }).database = {
+      $queryRaw: async () => rows,
+      product: {
+        findMany: async () => ["ca-up", "po4-down", "unverified"].map(product),
+      },
+    };
+    const result = await instance.candidatesByMove();
+    assert.ok(result.every((entry) => entry.parameterCode !== "FOSZFAT"));
+    const all = result.flatMap((entry) =>
+      entry.candidates.map((candidate) => candidate.productId),
+    );
+    assert.ok(!all.includes("po4-down"));
+    assert.ok(!all.includes("unverified"));
+  });
+
+  it("with no matching effect at all it returns the eight moves with empty lists and makes no product query", async () => {
+    let products = 0;
+    const instance = new CustomerCandidateSource();
+    (instance as unknown as { database: unknown }).database = {
+      $queryRaw: async () => [],
+      product: {
+        findMany: async () => {
+          products++;
+          return [];
+        },
+      },
+    };
+    const result = await instance.candidatesByMove();
+    assert.equal(result.length, 8);
+    assert.ok(result.every((entry) => entry.candidates.length === 0));
+    assert.equal(products, 0);
   });
 });

@@ -797,6 +797,14 @@ export const ANONYMIZATION_REGISTER: Readonly<
     refusals: "business",
   },
   // ReefClub V3.2: the run-out reminder's product list. The manufacturer's dose and pack size, words of a product page.
+  ReefClubCustomerCandidate: {
+    parameterCode: "business",
+    productId: "identifier",
+    productName: "business",
+    category: "business",
+    shopUrl: "business",
+    evidenceRef: "business",
+  },
   ReefClubRunOutProduct: {
     productId: "identifier",
     productName: "business",

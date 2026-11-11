@@ -11158,6 +11158,7 @@ model ReefClubDoseProjectionRun {
   errorMessage String?
   rows         ReefClubDoseRow[]
   runOutRows   ReefClubRunOutProduct[]
+  customerCandidates ReefClubCustomerCandidate[]
 
   @@index([status, finishedAt])
 }
@@ -11181,6 +11182,31 @@ model ReefClubRunOutProduct {
   run         ReefClubDoseProjectionRun @relation(fields: [runId], references: [id], onDelete: Cascade)
 
   @@index([runId])
+}
+
+/// A VEVO FELE AJANLHATO TERMEKEK VETITESE (V3.4 S2b, kartya ce6c5cc9; Balazs 2026-11-11 11:44:46 UTC: a vevo fele csak VERIFIED
+/// termekadat, parameterenkent legfeljebb 5). A ReefClub-szerep nem olvas termek-tablat, ezert az OS ugyanabban a tranzakcioban
+/// es ugyanazzal a futasi rekorddal epiti ujra, mint a termek-adag listat: a negy jovahagyott parameter (KH, kalcium, magnezium,
+/// nitrat) mindket iranyara a `CustomerCandidateSource` eredmenye. Ures tabla = nincs ajanlat (ez a kezdo allapot: ma 100
+/// termekbol 0 VERIFIED). A `evidenceRef` a gyartoi forras https cime (ez megy a vevonek, nem adagolasi mondat), a `shopUrl` a
+/// termek lapja a boltban vagy null. Szandekosan nincs idegen kulcs a termek-tablara (mint a ReefClubDoseRow-nal).
+model ReefClubCustomerCandidate {
+  id            String                    @id @default(cuid())
+  runId         String
+  parameterCode String
+  direction     DoseEffectDirection
+  productId     String
+  productName   String
+  category      String
+  shopUrl       String?
+  evidenceRef   String
+  /// 1-tol: a sorrend a parameteren es iranyon belul (tobb kivant eltereset javito elol, aztan nev szerint).
+  rank          Int
+  run           ReefClubDoseProjectionRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([parameterCode, direction, productId])
+  @@index([runId])
+  @@index([parameterCode, direction, rank])
 }
 
 /// A TERMEK-ADAG LISTA EGY SORANAK VETITETT PILLANATKEPE (ReefClub 8. szelet). A forras
