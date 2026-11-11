@@ -20,7 +20,10 @@ import type {
   MailSender,
   OutgoingMail,
 } from "../notifications/mail/mail.port.js";
-import type { DocumentStore } from "../service-assets/document-store/document-store.js";
+import type {
+  DocumentKey,
+  DocumentStore,
+} from "../service-assets/document-store/document-store.js";
 import type { BillingDocumentEmailRepository } from "./billing-document-email.repository.js";
 import { BillingDocumentEmailService } from "./billing-document-email.service.js";
 import type {
@@ -110,6 +113,7 @@ function setup(
     claim: 0,
     sent: [] as OutgoingMail[],
     finished: [] as Array<Record<string, unknown>>,
+    pdfAsked: [] as DocumentKey[],
   };
   const current = options.row === undefined ? row() : options.row;
   const documents = {
@@ -125,7 +129,12 @@ function setup(
       calls.finished.push(record);
     },
   } as unknown as BillingDocumentEmailRepository;
-  const store = { get: async () => PDF } as unknown as DocumentStore;
+  const store = {
+    get: async (key: DocumentKey) => {
+      calls.pdfAsked.push(key);
+      return PDF;
+    },
+  } as unknown as DocumentStore;
   const sender: MailSender = {
     send: async (mail) => {
       if (options.sendError) throw options.sendError;
@@ -168,6 +177,17 @@ describe("BillingDocumentEmailService", () => {
       ["SEND", "SENT"],
     );
     assert.equal(calls.finished[0]!.previousEmailStatus, "PENDING");
+  });
+
+  it("attaches an issued TIG invoice's PDF from where the TIG issue stored it (an own row since #2421)", async () => {
+    const { service, calls } = setup({
+      row: row({ pdfStorageKey: "invoices/doc-1/invoice.pdf" }),
+    });
+    await service.send("doc-1", input(), USER);
+    assert.deepEqual(calls.pdfAsked, [
+      { owner: "invoice", ownerId: "doc-1", documentId: "invoice.pdf" },
+    ]);
+    assert.equal(calls.sent[0]!.attachments?.[0]?.bytes, PDF);
   });
 
   it("an English document fills the amount and the date the English way (d5c6befd)", async () => {
