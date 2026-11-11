@@ -86,6 +86,14 @@ const order = (
 
 type Row = { id: string; status: string; number: string | null };
 
+/** What the confirmation window showed and the person confirmed (card 7ba97e0d follow-up): the first send needs it. */
+const CONFIRMED = {
+  issueDate: "2026-10-06",
+  fulfillmentDate: "2026-10-06",
+  dueDate: "2026-10-14",
+  fingerprint: "f".repeat(64),
+};
+
 function setup(over: {
   provider?: string | null;
   email?: string | null;
@@ -97,12 +105,15 @@ function setup(over: {
   mailClosed?: string;
   /** The order's `storefront_locale` metadata, as the shop wrote it (d5c6befd, P4). */
   locale?: unknown;
+  /** A registered buyer's id: its key is not the e-mail, so an order without one still finds its customer. */
+  customerId?: string;
 }) {
   const calls: string[] = [];
   let proforma: Row | undefined = over.proforma;
   const drafts: Record<string, unknown>[] = [];
   const languages: unknown[] = [];
   const sentSubjects: string[] = [];
+  const confirmations: unknown[] = [];
   const service = new WebshopOrderInvoiceService(
     {
       source: async () => ({
@@ -113,6 +124,7 @@ function setup(over: {
               : over.provider,
             over.email === undefined ? "vevo@example.test" : over.email,
           ),
+          customer_id: over.customerId ?? null,
           metadata:
             over.locale === undefined
               ? null
@@ -164,8 +176,25 @@ function setup(over: {
     } as never,
     {
       issueMode: () => "stub",
-      issue: async (id: string) => {
+      summary: async (id: string) => {
+        calls.push(`summary ${id}`);
+        return {
+          buyerName: "Teszt Elek",
+          buyerEmail: "szamlazasi@example.test",
+          issueDate: "2026-10-06",
+          fulfillmentDate: "2026-10-06",
+          dueDate: "2026-10-14",
+          fingerprint: "f".repeat(64),
+        };
+      },
+      issue: async (
+        id: string,
+        _updatedAt: string,
+        _user: unknown,
+        confirmation: unknown,
+      ) => {
         calls.push(`issue ${id}`);
+        confirmations.push(confirmation);
         proforma = {
           id,
           status: over.issueEnds ?? "ISSUED",
@@ -197,7 +226,7 @@ function setup(over: {
       ),
     } as never,
   );
-  return { service, calls, drafts, languages, sentSubjects };
+  return { service, calls, drafts, languages, sentSubjects, confirmations };
 }
 
 const status = async (p: Promise<unknown>) => {
@@ -214,7 +243,7 @@ describe("sending the proforma from the order page", () => {
     for (const provider of ["pp_acropora_cod", "pp_stripe_stripe", null]) {
       const { service, calls } = setup({ provider });
       assert.equal(
-        await status(service.sendProforma("order_55", USER, NOW)),
+        await status(service.sendProforma("order_55", USER, NOW, CONFIRMED)),
         409,
       );
       assert.ok(
@@ -231,7 +260,7 @@ describe("sending the proforma from the order page", () => {
     ] as const) {
       const { service, calls } = setup({ orderStatus });
       assert.equal(
-        await status(service.sendProforma("order_55", USER, NOW)),
+        await status(service.sendProforma("order_55", USER, NOW, CONFIRMED)),
         expected,
         String(orderStatus),
       );
@@ -244,7 +273,7 @@ describe("sending the proforma from the order page", () => {
 
   it("the first press issues it and sends it to the buyer's address", async () => {
     const { service, calls, drafts } = setup({});
-    await service.sendProforma("order_55", USER, NOW);
+    await service.sendProforma("order_55", USER, NOW, CONFIRMED);
     assert.deepEqual(
       calls.filter((c) => !c.startsWith("invoices")),
       [
@@ -261,7 +290,7 @@ describe("sending the proforma from the order page", () => {
       proforma: { id: "doc_1", status: "ISSUED", number: "D-1" },
       emailStatus: "SENT",
     });
-    await service.sendProforma("order_55", USER, NOW);
+    await service.sendProforma("order_55", USER, NOW, CONFIRMED);
     assert.deepEqual(
       calls.filter((c) => !c.startsWith("invoices")),
       ["send doc_1 RESEND to vevo@example.test"],
@@ -274,17 +303,42 @@ describe("sending the proforma from the order page", () => {
         proforma: { id: "doc_1", status: s, number: null },
       });
       assert.equal(
-        await status(service.sendProforma("order_55", USER, NOW)),
+        await status(service.sendProforma("order_55", USER, NOW, CONFIRMED)),
         409,
       );
       assert.ok(!calls.some((c) => /^(create|update|issue|send)/.test(c)));
     }
   });
 
+  it("the first send issues what the window confirmed; without the window nothing is issued", async () => {
+    const confirmed = setup({});
+    await confirmed.service.sendProforma("order_55", USER, NOW, CONFIRMED);
+    assert.deepEqual(confirmed.confirmations, [CONFIRMED]);
+
+    const blind = setup({});
+    assert.equal(
+      await status(blind.service.sendProforma("order_55", USER, NOW)),
+      400,
+    );
+    assert.ok(!blind.calls.some((c) => /^(issue|send)/.test(c)));
+  });
+
+  it("an order without e-mail is refused BEFORE anything is made, not after the issue", async () => {
+    // a registered buyer: a guest order without e-mail has no customer key and stops even earlier
+    const { service, calls } = setup({ email: null, customerId: "cus_1" });
+    assert.equal(
+      await status(service.sendProforma("order_55", USER, NOW, CONFIRMED)),
+      409,
+    );
+    assert.ok(!calls.some((c) => /^(create|update|issue|send)/.test(c)));
+  });
+
   it("an issue that did not finish sends nothing; an order without e-mail is refused", async () => {
     const unfinished = setup({ issueEnds: "ISSUING" });
     assert.equal(
-      await status(unfinished.service.sendProforma("order_55", USER, NOW)),
+      await status(
+        unfinished.service.sendProforma("order_55", USER, NOW, CONFIRMED),
+      ),
       409,
     );
     assert.ok(!unfinished.calls.some((c) => c.startsWith("send")));
@@ -294,7 +348,9 @@ describe("sending the proforma from the order page", () => {
       proforma: { id: "doc_1", status: "ISSUED", number: "D-1" },
     });
     assert.equal(
-      await status(noEmail.service.sendProforma("order_55", USER, NOW)),
+      await status(
+        noEmail.service.sendProforma("order_55", USER, NOW, CONFIRMED),
+      ),
       409,
     );
     assert.ok(!noEmail.calls.some((c) => c.startsWith("send")));
@@ -322,7 +378,7 @@ describe("the language of the proforma's mail (d5c6befd, P4)", () => {
       [null, "hu", "Bizonylat"],
     ] as const) {
       const { service, languages, sentSubjects } = setup({ locale });
-      await service.sendProforma("order_55", USER, NOW);
+      await service.sendProforma("order_55", USER, NOW, CONFIRMED);
       assert.deepEqual(languages, [language], String(locale));
       assert.deepEqual(sentSubjects, [subject], String(locale));
     }
@@ -334,7 +390,7 @@ describe("the language of the proforma's mail (d5c6befd, P4)", () => {
       proforma: { id: "doc_1", status: "ISSUED", number: "D-1" },
       emailStatus: "SENT",
     });
-    await service.sendProforma("order_55", USER, NOW);
+    await service.sendProforma("order_55", USER, NOW, CONFIRMED);
     assert.deepEqual(sentSubjects, ["Document"]);
     assert.deepEqual(
       calls.filter((c) => !c.startsWith("invoices")),
@@ -346,8 +402,8 @@ describe("the language of the proforma's mail (d5c6befd, P4)", () => {
   it("the document itself is built the same for an English order (the PDF language is not touched here)", async () => {
     const en = setup({ locale: "en" });
     const hu = setup({});
-    await en.service.sendProforma("order_55", USER, NOW);
-    await hu.service.sendProforma("order_55", USER, NOW);
+    await en.service.sendProforma("order_55", USER, NOW, CONFIRMED);
+    await hu.service.sendProforma("order_55", USER, NOW, CONFIRMED);
     assert.deepEqual(en.drafts, hu.drafts);
   });
 });
@@ -357,10 +413,13 @@ describe("a closed mail gate", () => {
     const closed =
       "A számlázási bizonylatok kiküldése ebben a környezetben ki van kapcsolva (TICKET_MAIL_BILLING_DOCUMENT).";
     const { service, calls } = setup({ mailClosed: closed });
-    await assert.rejects(service.sendProforma("order_55", USER, NOW), {
-      status: 503,
-      message: closed,
-    });
+    await assert.rejects(
+      service.sendProforma("order_55", USER, NOW, CONFIRMED),
+      {
+        status: 503,
+        message: closed,
+      },
+    );
     assert.ok(!calls.some((c) => /^(create|update|issue|send)/.test(c)));
   });
 
@@ -371,7 +430,7 @@ describe("a closed mail gate", () => {
       emailStatus: "SENT",
     });
     assert.equal(
-      await status(service.sendProforma("order_55", USER, NOW)),
+      await status(service.sendProforma("order_55", USER, NOW, CONFIRMED)),
       503,
     );
     assert.ok(!calls.some((c) => c.startsWith("send")));
@@ -404,5 +463,33 @@ describe("the proforma's draft and its place on the page", () => {
     assert.equal(proformaOf(row("2026-10-05"), NOW).expired, false);
     assert.equal(proformaOf(row("2026-10-04", "ISSUING"), NOW).expired, false);
     assert.equal(proformaOf(row("2026-10-13"), NOW).dueDate, "2026-10-13");
+  });
+});
+
+/*
+  THE PROFORMA'S CONFIRMATION WINDOW (card 7ba97e0d follow-up). WHAT TURNS IT RED: the window names another address than
+  the one the proforma goes to (the order's e-mail, not the billing one); an issued proforma opens a window for a resend.
+*/
+describe("the proforma's confirmation window", () => {
+  it("is the saved draft's summary, with the order's e-mail as the send address and the draft's id", async () => {
+    const { service, calls } = setup({});
+    const summary = await service.proformaSummary("order_55", USER, NOW);
+    assert.equal(summary.buyerEmail, "vevo@example.test");
+    assert.equal(summary.documentId, "doc_1");
+    assert.equal(summary.fingerprint, "f".repeat(64));
+    assert.deepEqual(
+      calls.filter((c) => !c.startsWith("invoices")),
+      ["create webshop-proforma-order_55", "summary doc_1"],
+    );
+  });
+
+  it("an issued proforma has nothing to confirm: its button resends", async () => {
+    const { service } = setup({
+      proforma: { id: "doc_1", status: "ISSUED", number: "D-1" },
+    });
+    assert.equal(
+      await status(service.proformaSummary("order_55", USER, NOW)),
+      409,
+    );
   });
 });

@@ -1,4 +1,5 @@
 import type {
+  BillingIssueConfirmation,
   WebshopInvoiceConfirmation,
   WebshopInvoiceIssueResult,
   WebshopInvoiceSummary,
@@ -283,9 +284,28 @@ export const webshopOrdersApi = {
    * Számlázz.hu-n és elküldi, a kiállított díjbekérőt a további hívások csak
    * újraküldik. A válasz a friss adatlap.
    */
-  sendProforma(token: string, id: string) {
+  sendProforma(
+    token: string,
+    id: string,
+    /** What the window showed (card 7ba97e0d follow-up): the first send issues with it; a resend sends none. */
+    confirmation?: BillingIssueConfirmation,
+  ) {
     return apiRequest<WebshopOrderDetail>(
       `/webshop-orders/${encodeURIComponent(id)}/proforma`,
+      token,
+      confirmation
+        ? {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(confirmation),
+          }
+        : { method: "POST" },
+    );
+  },
+  /** The proforma's confirmation window: the draft the first send would issue, and where it goes (the order's e-mail). */
+  proformaSummary(token: string, id: string) {
+    return apiRequest<WebshopInvoiceSummary>(
+      `/webshop-orders/${encodeURIComponent(id)}/proforma/summary`,
       token,
       { method: "POST" },
     );

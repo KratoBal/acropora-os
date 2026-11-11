@@ -32,6 +32,7 @@ import {
   type WebshopPickupPointSearch,
   type WebshopParcelTracking,
   type WebshopTransferReceiptInput,
+  type BillingIssueConfirmation,
   type WebshopInvoiceConfirmation,
   type WebshopInvoiceIssueResult,
   type WebshopInvoiceSummary,
@@ -401,10 +402,15 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
     setOrder(await webshopOrdersApi.issueDeliveryNote(token, id));
     setNow(Date.now());
   };
-  const sendProforma = async () => {
-    setOrder(await webshopOrdersApi.sendProforma(token, id));
+  const sendProforma = async (confirmation?: BillingIssueConfirmation) => {
+    setOrder(
+      await (confirmation
+        ? webshopOrdersApi.sendProforma(token, id, confirmation)
+        : webshopOrdersApi.sendProforma(token, id)),
+    );
     setNow(Date.now());
   };
+  const proformaSummary = () => webshopOrdersApi.proformaSummary(token, id);
   const recordTransfer = async (input: WebshopTransferReceiptInput) => {
     setOrder(await webshopOrdersApi.recordTransferReceived(token, id, input));
     setNow(Date.now());
@@ -575,6 +581,7 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
           canSendProforma={canSendProforma}
           canRecordTransfer={canRecordTransfer}
           onSendProforma={sendProforma}
+          onProformaSummary={proformaSummary}
           onRecordTransfer={recordTransfer}
           onSyncTransferToShop={syncTransferToShop}
           onChangeStatus={changeStatus}
@@ -857,6 +864,7 @@ function ProformaSection({
   canSend,
   canRecord,
   onSend,
+  onSummary,
   onRecord,
   onSyncShop,
 }: {
@@ -865,7 +873,9 @@ function ProformaSection({
   canSend: boolean;
   /** Az „Utalás beérkezett” joga (a rendelés kezelése és a kiállítás joga). */
   canRecord: boolean;
-  onSend: () => Promise<void>;
+  onSend: (confirmation?: BillingIssueConfirmation) => Promise<void>;
+  /** The first send's confirmation window (card 7ba97e0d follow-up). */
+  onSummary: () => Promise<WebshopInvoiceSummary>;
   onRecord: (input: WebshopTransferReceiptInput) => Promise<void>;
   /** A rögzített beérkezés újraküldése a webshopnak (commerce #509). */
   onSyncShop: () => Promise<void>;
@@ -900,11 +910,11 @@ function ProformaSection({
       setBusy(false);
     }
   };
-  const send = async () => {
+  const send = async (confirmation?: BillingIssueConfirmation) => {
     setBusy(true);
     setError(null);
     try {
-      await onSend();
+      await onSend(confirmation);
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "A művelet nem sikerült.",
@@ -912,6 +922,31 @@ function ProformaSection({
     } finally {
       setBusy(false);
       setConfirming(false);
+      setWindowOpen(false);
+    }
+  };
+  /*
+    THE FIRST SEND MAKES A DOCUMENT, SO IT GOES THROUGH THE CONFIRMATION WINDOW (card 7ba97e0d follow-up): the buyer,
+    the three (editable) dates, the payment method and the address, the order's e-mail, where the proforma goes. The
+    send is the point of the button, so "Elküldöm e-mailben" is checked and fixed. A resend makes nothing new and
+    keeps the plain confirmation.
+  */
+  const [windowOpen, setWindowOpen] = useState(false);
+  const [summary, setSummary] = useState<WebshopInvoiceSummary | null>(null);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+  const openWindow = async () => {
+    setError(null);
+    setSummary(null);
+    setSummaryError(null);
+    setWindowOpen(true);
+    try {
+      setSummary(await onSummary());
+    } catch (cause) {
+      setSummaryError(
+        cause instanceof Error
+          ? cause.message
+          : "A díjbekérő adatai nem tölthetők be.",
+      );
     }
   };
   return (
@@ -988,7 +1023,7 @@ function ProformaSection({
           size="regular"
           variant={sentBefore ? "secondary" : "primary"}
           disabled={busy || sending}
-          onClick={() => setConfirming(true)}
+          onClick={() => (issued ? setConfirming(true) : void openWindow())}
         >
           {busy ? "Küldés…" : label}
         </PilotButton>
@@ -1041,14 +1076,25 @@ function ProformaSection({
           {error}
         </p>
       ) : null}
+      <BillingIssueConfirmDialog
+        open={windowOpen}
+        title={label}
+        consequence={`A kiküldéssel valódi díjbekérő készül a Számlázz.hu-n, saját számmal, alapból ${WEBSHOP_PROFORMA_DUE_DAYS} napos fizetési határidővel, és a vevő e-mailben megkapja. A kiment levél nem vonható vissza.`}
+        confirmLabel={label}
+        summary={summary}
+        loadError={summaryError}
+        recipients={summary?.buyerEmail ? [summary.buyerEmail] : []}
+        delivery="REQUIRED"
+        send
+        onSendChange={() => undefined}
+        busy={busy}
+        onConfirm={(confirmation) => void send(confirmation)}
+        onCancel={() => setWindowOpen(false)}
+      />
       <ConfirmDialog
         open={confirming}
         title={label}
-        consequence={
-          issued
-            ? `A vevő (${order.customer.email}) e-mailben újra megkapja a meglévő díjbekérőt. Új díjbekérő nem készül, a határidő nem változik.`
-            : `A kiküldéssel valódi díjbekérő készül a Számlázz.hu-n, saját számmal, ${WEBSHOP_PROFORMA_DUE_DAYS} napos fizetési határidővel, és a vevő (${order.customer.email}) e-mailben megkapja.`
-        }
+        consequence={`A vevő (${order.customer.email}) e-mailben újra megkapja a meglévő díjbekérőt. Új díjbekérő nem készül, a határidő nem változik.`}
         recovery="A kiment levél nem vonható vissza."
         confirmLabel={label}
         busy={busy}
@@ -1835,6 +1881,7 @@ function OrderBody({
   canSendProforma,
   canRecordTransfer,
   onSendProforma,
+  onProformaSummary,
   onRecordTransfer,
   onSyncTransferToShop,
   onChangeStatus,
@@ -1869,7 +1916,8 @@ function OrderBody({
   canIssue: boolean;
   canSendProforma: boolean;
   canRecordTransfer: boolean;
-  onSendProforma: () => Promise<void>;
+  onSendProforma: (confirmation?: BillingIssueConfirmation) => Promise<void>;
+  onProformaSummary: () => Promise<WebshopInvoiceSummary>;
   onRecordTransfer: (input: WebshopTransferReceiptInput) => Promise<void>;
   onSyncTransferToShop: () => Promise<void>;
   onChangeStatus: (
@@ -2423,6 +2471,7 @@ function OrderBody({
                 canSend={canSendProforma}
                 canRecord={canRecordTransfer}
                 onSend={onSendProforma}
+                onSummary={onProformaSummary}
                 onRecord={onRecordTransfer}
                 onSyncShop={onSyncTransferToShop}
               />
