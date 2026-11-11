@@ -1956,3 +1956,12 @@ export type {
   AiLinkSourceInput,
   AiLinkSourceServiceEntry,
 } from "./ai-link-sources.js";
+export {
+  checkBillingIssueDates,
+  isCardPayment,
+} from "./billing-issue-summary.js";
+export type {
+  BillingIssueConfirmation,
+  BillingIssueDatesCheck,
+  BillingIssueSummary,
+} from "./billing-issue-summary.js";

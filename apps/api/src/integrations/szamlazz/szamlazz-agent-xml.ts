@@ -97,6 +97,11 @@ export interface SzamlazzAgentInvoiceInput {
   /** ISO 8601 dátum (yyyy-MM-dd) mind a háromhoz. */
   paymentDueDate: string;
   fulfillmentDate: string;
+  /**
+   * A SZÁMLA KELTE (`keltDatum`, az XSD `fejlecTipus` ELSŐ, opcionális eleme, dátum). Hiányában a Számlázz.hu a kérés
+   * napját adja, ahogy eddig mindig. A kiállítás megerősítő ablaka (kártya 7ba97e0d) ad értéket, ha a kelte javítható.
+   */
+  issueDate?: string;
   paymentMethod: string;
   currency: string;
   comment?: string;
@@ -200,6 +205,7 @@ export function buildSzamlazzAgentInvoiceXml(
   const flag = DOCUMENT_FLAG[input.documentType ?? "INVOICE"];
 
   const header =
+    (input.issueDate === undefined ? "" : tag("keltDatum", input.issueDate)) +
     tag("teljesitesDatum", input.fulfillmentDate) +
     tag("fizetesiHataridoDatum", input.paymentDueDate) +
     tag("fizmod", input.paymentMethod) +

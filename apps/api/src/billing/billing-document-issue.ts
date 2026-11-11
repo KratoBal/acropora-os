@@ -1,9 +1,14 @@
+import { createHash } from "node:crypto";
+
 import {
   EU_COUNTRY_NAMES_HU,
+  getDocumentCapabilities,
+  isCardPayment,
   szamlazzDocumentTotals,
   szamlazzLineAmounts,
   viesCountry,
   type BillingDocumentType,
+  type BillingIssueSummary,
   type InvoiceFormat,
 } from "@acropora/types";
 
@@ -300,4 +305,69 @@ export function buildIssueInput(row: BillingDocumentRow): IssueInput {
     },
     zeroForintLineIds,
   };
+}
+
+/**
+ * THE CONFIRMATION WINDOW'S VALUES (card 7ba97e0d), FROM THE SAME BUILDER AS THE ISSUE: `buildIssueInput` is what
+ * the issue sends to Számlázz.hu, so the window cannot show one thing while the invoice carries another. A draft
+ * that could not be issued is refused here with the same message the issue would give. The issue date proposed is
+ * today in Budapest (Számlázz.hu would take the day of the request); the other two dates are the draft's.
+ */
+export function billingIssueSummary(
+  row: BillingDocumentRow,
+  today: string,
+):
+  | { ok: true; summary: BillingIssueSummary }
+  | { ok: false; code: string; message: string } {
+  const input = buildIssueInput(row);
+  if (!input.ok) return input;
+  const document = input.document;
+  const { showsPaymentFields } = getDocumentCapabilities(document.documentType);
+  const paymentMethod = showsPaymentFields ? document.paymentMethod : null;
+  return {
+    ok: true,
+    summary: {
+      buyerName: document.buyer.name,
+      buyerAddress: [
+        [document.buyer.zip, document.buyer.city].filter(Boolean).join(" "),
+        document.buyer.address,
+      ]
+        .filter(Boolean)
+        .join(", "),
+      buyerTaxNumber: document.buyer.taxNumber,
+      buyerEuTaxNumber: document.buyer.euTaxNumber,
+      issueDate: today,
+      fulfillmentDate: document.fulfillmentDate,
+      dueDate: showsPaymentFields ? document.dueDate : null,
+      paymentMethod,
+      showsPaymentFields,
+      dueDateFollowsIssueDate:
+        showsPaymentFields && isCardPayment(paymentMethod),
+      fingerprint: issueFingerprint(document),
+    },
+  };
+}
+
+/**
+ * THE SHOWN, NOT EDITABLE VALUES AS A DIGEST: what the buyer and the payment are. A change to the draft itself is
+ * caught by `expectedUpdatedAt`; this catches the one that does not touch the draft (the partner's name, address or
+ * tax number edited while the window was open).
+ */
+export function issueFingerprint(document: BillingDocumentForIssue): string {
+  const { buyer } = document;
+  return createHash("sha256")
+    .update(
+      JSON.stringify([
+        document.documentType,
+        buyer.name,
+        buyer.country,
+        buyer.zip,
+        buyer.city,
+        buyer.address,
+        buyer.taxNumber,
+        buyer.euTaxNumber,
+        document.paymentMethod,
+      ]),
+    )
+    .digest("hex");
 }

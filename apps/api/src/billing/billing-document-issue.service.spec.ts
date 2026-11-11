@@ -132,6 +132,7 @@ function setup(
     pdf: [] as unknown[],
     resolve: 0,
     excluded: [] as string[][],
+    xml: [] as string[],
   };
   let current = {
     ...row(options.status, options.format),
@@ -192,6 +193,7 @@ function setup(
   const client: SzamlazzAgentClient = {
     generateInvoice: async (xml: string) => {
       calls.generate++;
+      calls.xml.push(xml);
       assert.match(xml, /<sendEmail>false<\/sendEmail>/);
       assert.match(xml, /<szamlaKulsoAzon>doc-1<\/szamlaKulsoAzon>/);
       assert.doesNotMatch(xml, /elonezetpdf/);
@@ -661,5 +663,205 @@ describe("BillingDocumentIssueService", () => {
     });
     await assert.rejects(() => issue(service), ServiceUnavailableException);
     assert.deepEqual([calls.issued.length, calls.unknown.length], [0, 1]);
+  });
+});
+
+/**
+ * THE CONFIRMATION WINDOW (card 7ba97e0d; Balázs 2026-11-11 11:12-11:14 UTC). WHAT TURNS IT RED: the window shows
+ * values the issue does not send; a buyer changed after the window opened is issued anyway; a future issue date or a
+ * due date before it reaches Számlázz.hu; the confirmed dates do not reach the invoice (XML) or the stored document;
+ * a card payment keeps a due date apart from the issue date; an internal caller without a window gets a changed request.
+ */
+describe("the invoice confirmation (card 7ba97e0d)", () => {
+  const NOW = new Date("2026-11-11T09:00:00Z");
+  const tag = (xml: string, name: string) =>
+    new RegExp(`<${name}>([^<]*)</${name}>`).exec(xml)?.[1] ?? null;
+
+  it("the summary is the builder's: buyer, address, tax number, today as the issue date, the draft's dates and method", async () => {
+    const { service } = setup();
+    const summary = await service.summary("doc-1", NOW);
+    assert.deepEqual(
+      { ...summary, fingerprint: summary.fingerprint.length },
+      {
+        buyerName: "Kitalált Kft.",
+        buyerAddress: "1011 Budapest, Fő utca 1.",
+        buyerTaxNumber: "12345678-2-42",
+        buyerEuTaxNumber: null,
+        issueDate: "2026-11-11",
+        fulfillmentDate: "2026-09-30",
+        dueDate: "2026-10-08",
+        paymentMethod: "Átutalás",
+        showsPaymentFields: true,
+        dueDateFollowsIssueDate: false,
+        fingerprint: 64,
+      },
+    );
+  });
+
+  it("the summary refuses what the issue would refuse, with the issue's own sentence", async () => {
+    await assert.rejects(
+      () => setup({ status: "ISSUED" }).service.summary("doc-1", NOW),
+      ConflictException,
+    );
+    await assert.rejects(
+      () => setup({ over: { customer: null } }).service.summary("doc-1", NOW),
+      /A bizonylathoz nincs partner rendelve\./,
+    );
+  });
+
+  it("the confirmed dates go into the invoice and the stored document; an earlier issue day is stored at its noon", async () => {
+    const { service, calls } = setup();
+    const { fingerprint } = await service.summary("doc-1", NOW);
+    await service.issue(
+      "doc-1",
+      "2026-09-30T10:00:00.000Z",
+      USER,
+      {
+        issueDate: "2026-11-10",
+        fulfillmentDate: "2026-11-05",
+        dueDate: "2026-11-20",
+        fingerprint,
+      },
+      NOW,
+    );
+    const xml = calls.xml[0]!;
+    assert.deepEqual(
+      [
+        tag(xml, "keltDatum"),
+        tag(xml, "teljesitesDatum"),
+        tag(xml, "fizetesiHataridoDatum"),
+      ],
+      ["2026-11-10", "2026-11-05", "2026-11-20"],
+    );
+    // the XSD order: keltDatum is the header's first element
+    assert.ok(xml.indexOf("<keltDatum>") < xml.indexOf("<teljesitesDatum>"));
+    const stored = calls.issued[0] as {
+      issueDate: Date;
+      fulfillmentDate: Date;
+      dueDate: Date;
+    };
+    assert.deepEqual(
+      [
+        stored.issueDate.toISOString(),
+        stored.fulfillmentDate.toISOString(),
+        stored.dueDate.toISOString(),
+      ],
+      [
+        "2026-11-10T12:00:00.000Z",
+        "2026-11-05T00:00:00.000Z",
+        "2026-11-20T00:00:00.000Z",
+      ],
+    );
+  });
+
+  it("today as the issue date keeps the moment of the issue, as before", async () => {
+    const { service, calls } = setup();
+    const { fingerprint } = await service.summary("doc-1", NOW);
+    const before = Date.now();
+    await service.issue(
+      "doc-1",
+      "2026-09-30T10:00:00.000Z",
+      USER,
+      {
+        issueDate: "2026-11-11",
+        fulfillmentDate: "2026-09-30",
+        dueDate: "2026-11-19",
+        fingerprint,
+      },
+      NOW,
+    );
+    assert.ok(
+      (calls.issued[0] as { issueDate: Date }).issueDate.getTime() >= before,
+    );
+  });
+
+  it("a buyer changed after the window opened stops the issue before Számlázz.hu", async () => {
+    const { fingerprint } = await setup().service.summary("doc-1", NOW);
+    const changed = setup({
+      over: {
+        customer: { ...(row().customer as object), companyName: "Másik Kft." },
+      },
+    });
+    await assert.rejects(
+      () =>
+        changed.service.issue(
+          "doc-1",
+          "2026-09-30T10:00:00.000Z",
+          USER,
+          {
+            issueDate: "2026-11-11",
+            fulfillmentDate: "2026-09-30",
+            dueDate: "2026-10-08",
+            fingerprint,
+          },
+          NOW,
+        ),
+      /megváltoztak, mióta megnyitottad/,
+    );
+    assert.deepEqual([changed.calls.generate, changed.calls.claim], [0, 0]);
+  });
+
+  it("dates the rule refuses never reach Számlázz.hu", async () => {
+    const { service, calls } = setup();
+    const { fingerprint } = await service.summary("doc-1", NOW);
+    for (const dates of [
+      {
+        issueDate: "2026-11-12",
+        fulfillmentDate: "2026-11-11",
+        dueDate: "2026-11-20",
+      },
+      {
+        issueDate: "2026-11-11",
+        fulfillmentDate: "2026-11-11",
+        dueDate: "2026-11-10",
+      },
+    ])
+      await assert.rejects(
+        () =>
+          service.issue(
+            "doc-1",
+            "2026-09-30T10:00:00.000Z",
+            USER,
+            { ...dates, fingerprint },
+            NOW,
+          ),
+        BadRequestException,
+        JSON.stringify(dates),
+      );
+    assert.equal(calls.generate, 0);
+  });
+
+  it("a card payment is due on the issue date, whatever due date came", async () => {
+    const { service, calls } = setup({ over: { paymentMethod: "Bankkártya" } });
+    const summary = await service.summary("doc-1", NOW);
+    assert.equal(summary.dueDateFollowsIssueDate, true);
+    await service.issue(
+      "doc-1",
+      "2026-09-30T10:00:00.000Z",
+      USER,
+      {
+        issueDate: "2026-11-10",
+        fulfillmentDate: "2026-11-10",
+        dueDate: "2026-12-31",
+        fingerprint: summary.fingerprint,
+      },
+      NOW,
+    );
+    assert.equal(tag(calls.xml[0]!, "fizetesiHataridoDatum"), "2026-11-10");
+  });
+
+  it("an internal caller without a window issues as before: no keltDatum, the draft's dates", async () => {
+    const { service, calls } = setup();
+    await issue(service);
+    const xml = calls.xml[0]!;
+    assert.deepEqual(
+      [
+        tag(xml, "keltDatum"),
+        tag(xml, "teljesitesDatum"),
+        tag(xml, "fizetesiHataridoDatum"),
+      ],
+      [null, "2026-09-30", "2026-10-08"],
+    );
+    assert.equal("fulfillmentDate" in (calls.issued[0] as object), false);
   });
 });
