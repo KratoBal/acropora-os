@@ -175,6 +175,20 @@ export const SETTINGS_AREAS: SettingsArea[] = [
     ],
   },
   {
+    title: "AI csevegés",
+    icon: "settings",
+    links: [
+      {
+        /** A JOGOT NEVEZI MEG, nem menüpont-azonosítót (mint a Levélsablon): a lapnak nincs menüpontja, a végpontja AI_SETTINGS_MANAGE-et kér. */
+        label: "AI csevegés",
+        description:
+          "A kollégai felajánlás, a kapcsolat-kérés címzettje és az üzenetek, kérések megőrzési ideje.",
+        href: "/beallitasok/ai-cseveges",
+        permission: PERMISSIONS.AI_SETTINGS_MANAGE,
+      },
+    ],
+  },
+  {
     title: "Mértékegységek",
     icon: "settings",
     links: [
