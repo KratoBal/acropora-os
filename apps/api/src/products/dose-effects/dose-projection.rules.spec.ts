@@ -6,6 +6,7 @@ import {
   DOSE_PROJECTION_MAX_AGE_HOURS,
   doseProjectionStatus,
   isDoseProjectionStale,
+  toDoseProjectionHealth,
   toProjectedRow,
 } from "./dose-projection.rules.js";
 
@@ -149,5 +150,45 @@ describe("az állapot, amit a vezérlőpult olvas", () => {
     });
     assert.equal(status.stale, true);
     assert.equal(status.ageHours, 30);
+  });
+});
+
+describe("the customer candidates in the projection status (V3.4)", () => {
+  const success = {
+    trigger: "EDIT",
+    startedAt: hoursAgo(1),
+    finishedAt: hoursAgo(1),
+    rowCount: 3,
+    errorMessage: null,
+  };
+
+  it("carries the counts into the status and the health, with the last successful rebuild's time as `builtAt`", () => {
+    const status = doseProjectionStatus({
+      success,
+      failure: null,
+      rowCount: 3,
+      customerCandidates: { rows: 5, shopText: 4 },
+      now: NOW,
+    });
+    assert.deepEqual(status.customerCandidates, { rows: 5, shopText: 4 });
+    assert.deepEqual(toDoseProjectionHealth(status).customerCandidates, {
+      rows: 5,
+      shopText: 4,
+      builtAt: hoursAgo(1).toISOString(),
+    });
+  });
+
+  it("with no successful rebuild there is no time, and the counts default to zero", () => {
+    const status = doseProjectionStatus({
+      success: null,
+      failure: null,
+      rowCount: 0,
+      now: NOW,
+    });
+    assert.deepEqual(toDoseProjectionHealth(status).customerCandidates, {
+      rows: 0,
+      shopText: 0,
+      builtAt: null,
+    });
   });
 });

@@ -397,6 +397,16 @@ export interface DoseProjectionHealth {
   ageHours: number | null;
   rowCount: number;
   failingSinceLastSuccess: boolean;
+  /**
+   * THE CUSTOMER CANDIDATES the projection holds (V3.4): how many rows, how many of them rest on a shop text (only the test ReefClub
+   * has any, behind the switch), and when the last successful rebuild (the one that built them) finished. Product data only, never a
+   * customer's: so the measurement of a deployment does not depend on a database role.
+   */
+  customerCandidates: {
+    rows: number;
+    shopText: number;
+    builtAt: string | null;
+  };
 }
 
 export interface HealthResponse {

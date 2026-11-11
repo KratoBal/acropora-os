@@ -10,6 +10,7 @@ import {
   applyManualList,
   type ManualListAnalysis,
 } from "./customer-candidates-manual.import.js";
+import { DoseProjectionService } from "../products/dose-effects/dose-projection.service.js";
 import { PrismaManualListStore } from "./customer-candidates-manual.repository.js";
 import { ManualListError } from "./customer-candidates-manual.rules.js";
 import type { ManualPlan } from "./customer-candidates-manual.rules.js";
@@ -19,6 +20,9 @@ export const MANUAL_LIST_MAX_ROWS = 250;
 const APPROVED_BY_MAX = 200;
 
 export interface ManualListReport {
+  /** How many rows came in with the request (accepted + rejected, so nothing seems to go missing). */
+  received: number;
+  /** The accepted rows: the ones that would be stored. */
   rows: number;
   rejected: { row: number; sku: string | null; reason: string }[];
   warnings: string[];
@@ -35,6 +39,8 @@ export interface ManualListApplyResult {
   stored: number;
   removed: number;
   fingerprint: string;
+  /** The projection rebuild was started (it runs on its own; the candidates show on /health when it is done). */
+  projectionRebuildStarted: true;
 }
 
 /**
@@ -48,10 +54,17 @@ export interface ManualListApplyResult {
  */
 @Injectable()
 export class ManualListService {
-  constructor(private readonly store: PrismaManualListStore) {}
+  constructor(
+    private readonly store: PrismaManualListStore,
+    private readonly projection: DoseProjectionService,
+  ) {}
 
   async dryRun(body: unknown): Promise<ManualListReport> {
-    return toReport(await this.analyze(body));
+    const rows = (body as { rows?: unknown[] } | null)?.rows;
+    return toReport(
+      await this.analyze(body),
+      Array.isArray(rows) ? rows.length : 0,
+    );
   }
 
   async apply(
@@ -101,10 +114,14 @@ export class ManualListService {
         );
       throw new BadRequestException("Az alkalmazás nem indítható.");
     }
+    // THE PROJECTION CATCHES UP NOW, not at the next hourly run: without this the list and what a customer sees are an hour apart.
+    // `rebuild` never rejects (a failure is a run record), and the response does not wait for it.
+    void this.projection.rebuild("EDIT");
     return {
       stored: result.stored,
       removed: result.removed,
       fingerprint: analysis.fingerprint,
+      projectionRebuildStarted: true,
     };
   }
 
@@ -129,8 +146,12 @@ export class ManualListService {
   }
 }
 
-function toReport(analysis: ManualListAnalysis): ManualListReport {
+function toReport(
+  analysis: ManualListAnalysis,
+  received: number,
+): ManualListReport {
   return {
+    received,
     rows: analysis.rows.length,
     rejected: [...analysis.problems]
       .sort((a, b) => a.row - b.row)
