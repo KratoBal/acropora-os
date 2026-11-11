@@ -180,6 +180,18 @@ export function webshopLegalPart(
   return { ok: true, html, text };
 }
 
+/** The blocks of a version that still carry no text, by title. */
+const missingBlocks = (known: WebshopLegalVersion): readonly string[] =>
+  known.blocks
+    .filter((b) => b.placeholder || b.paragraphs.length === 0)
+    .map((b) => b.title);
+
+/** The company lines that still carry the mark, by their label ("Adószám"). */
+const missingCompanyLines = (): readonly string[] =>
+  companyLines()
+    .filter((line) => line.includes(WEBSHOP_LEGAL_PLACEHOLDER_MARK))
+    .map((line) => line.split(":")[0]!);
+
 /**
  * Whether a version carries real texts in every block, and its company lines
  * carry no gap: the go-live check (card f6cb0a51). False today, on purpose.
@@ -188,9 +200,45 @@ export function webshopLegalIsComplete(version: string): boolean {
   const known = WEBSHOP_LEGAL_VERSIONS[version];
   if (!known) return false;
   return (
-    known.blocks.every((b) => !b.placeholder && b.paragraphs.length > 0) &&
-    !companyLines().some((line) =>
-      line.includes(WEBSHOP_LEGAL_PLACEHOLDER_MARK),
-    )
+    missingBlocks(known).length === 0 && missingCompanyLines().length === 0
   );
+}
+
+/** The version the TEST shop records (commerce `LEGAL_TEST_MODE_VERSION`). */
+export const WEBSHOP_LEGAL_TEST_VERSION = "teszt-mod";
+
+/**
+ * WHY AN ORDER CONFIRMATION MUST NOT BE SENT YET, or null when it may (card
+ * d3ccef2e, barracuda's re-measurement 2026-11-11, finding 1).
+ *
+ * The placeholder mark keeps a test mail from passing for a finished one, but
+ * nothing stopped a LIVE confirmation from going out with it: the customer
+ * would get "[HELYŐRZŐ]" where the terms, the withdrawal information and form,
+ * the privacy notice and the company's tax and registration numbers belong.
+ * So the render endpoint (the one path a sent mail takes) refuses it, and the
+ * shop holds the mail as a permanent failure: it is raised at once on the
+ * Levélsablonok page and to acrobot, and it can be put back in the queue once
+ * the texts are loaded. The editor's preview does not ask this: it shows the
+ * placeholders, as before.
+ *
+ * KEYED ON THE VERSION, NOT ON THE ENVIRONMENT: `teszt-mod` is recorded only
+ * on the test shop (the commerce grants test mode on its host allowlist alone)
+ * and its mail already says it is the test shop's, so it keeps sending with the
+ * marked placeholders. Every other version is a live one, on any OS.
+ *
+ * A missing version (`null`) and an unknown one are not this function's: the
+ * first gets no legal part (see the header), the second the renderer refuses
+ * with its own reason. `isComplete` is a seam for the test of the passing
+ * branch, which no version reaches today.
+ */
+export function webshopLegalSendRefusal(
+  version: string | null | undefined,
+  isComplete: (version: string) => boolean = webshopLegalIsComplete,
+): string | null {
+  const key = version?.trim();
+  if (!key || key === WEBSHOP_LEGAL_TEST_VERSION) return null;
+  const known = WEBSHOP_LEGAL_VERSIONS[key];
+  if (!known || isComplete(key)) return null;
+  const missing = [...missingBlocks(known), ...missingCompanyLines()];
+  return `A rendelés jogi tájékoztatójában (${key}) még helyőrző áll, ezért a visszaigazoló nem küldhető el. Hiányzik: ${missing.join(", ")}. A szövegek betöltése után a levél újra sorba tehető.`;
 }
