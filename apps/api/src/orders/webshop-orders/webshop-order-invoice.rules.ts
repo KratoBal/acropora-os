@@ -1,4 +1,8 @@
 import {
+  euKey,
+  huBase,
+} from "../../partner-duplicates/partner-duplicate-groups.js";
+import {
   WEBSHOP_PROFORMA_DUE_DAYS,
   szamlazzUnitNetFromGross,
   webshopProformaExpired,
@@ -174,6 +178,24 @@ export function taxNumberOf(
 ): string | null {
   const value = address?.metadata?.tax_id;
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+/**
+ * A RENDELÉS ADÓSZÁMÁNAK KULCSA (kártya c499739d, Balázs 2026-11-11 10:54 UTC): a számlázási cím adószáma, ugyanazzal a két külön
+ * fajta kulccsal, mint az egy-partnertörzs duplikátum-mérése (`partner-duplicates`): a magyar adószám első nyolc számjegye (csak magyar
+ * adószám ALAKÚ értékből), vagy a közösségi adószám országkóddal, normalizálva. `null`: a rendelésen nincs adószám (magánszemély).
+ * Egy `DE123456789` és egy magyar, ugyanazzal a nyolc jeggyel kezdődő szám soha nem azonos kulcs.
+ */
+export type OrderTaxKey =
+  { kind: "HU"; value: string } | { kind: "EU"; value: string };
+
+export function orderTaxKeyOf(order: MedusaOrderDetailRow): OrderTaxKey | null {
+  const taxId = taxNumberOf(order.billing_address ?? order.shipping_address);
+  if (!taxId) return null;
+  const hu = huBase(taxId);
+  if (hu) return { kind: "HU", value: hu };
+  const eu = euKey(taxId);
+  return eu ? { kind: "EU", value: eu } : null;
 }
 
 /** Az új OS-partner adatai a rendelés számlázási címéből. */
