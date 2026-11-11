@@ -1469,6 +1469,7 @@ export type { CashRegisterReceiptListResponse } from "./cash-registers.js";
 export {
   WEBSHOP_ORDER_CLOSED_STATUSES,
   WEBSHOP_ORDER_PAYMENT_STATE_LABELS,
+  WEBSHOP_INVOICE_DUE_DAYS,
   WEBSHOP_PROFORMA_DUE_DAYS,
   WEBSHOP_PROFORMA_MISSING_AFTER_DAYS,
   webshopProformaExpired,
@@ -1958,3 +1959,15 @@ export type {
   AiLinkSourceInput,
   AiLinkSourceServiceEntry,
 } from "./ai-link-sources.js";
+export {
+  AI_CONTACT_CHANNELS,
+  AI_CONTACT_VALUE_MAX_LENGTH,
+  checkAiContactRequestInput,
+} from "./ai-contact-request.js";
+export type {
+  AiContactChannel,
+  AiContactRequestCheck,
+  AiContactRequestInput,
+  AiContactRequestReceipt,
+  AiContactRequestView,
+} from "./ai-contact-request.js";
