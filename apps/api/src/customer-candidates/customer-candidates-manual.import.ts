@@ -4,6 +4,7 @@ import {
   ManualListError,
   parseManualEntries,
   planManualReplace,
+  type ManualPlan,
   type ManualPlanCurrent,
   type ManualPlanNext,
   type ParsedManualEntry,
@@ -105,31 +106,24 @@ const fingerprintOf = (
     )
     .digest("hex");
 
-export async function runManualImport(
-  options: ImportOptions,
-  deps: ImportDeps,
-  out: ImportOutput,
-): Promise<number> {
-  out.stdout(`CÉL-ADATBÁZIS: ${deps.target}\n`);
-  let raw: unknown;
-  try {
-    raw = JSON.parse(await deps.readFile(options.file));
-  } catch {
-    out.stderr("A fájl nem olvasható vagy nem JSON.\n");
-    return 1;
-  }
-  let parsed;
-  try {
-    parsed = parseManualEntries(raw);
-  } catch (error) {
-    if (error instanceof ManualListError) {
-      out.stderr(`${error.message}\n`);
-      return 1;
-    }
-    throw error;
-  }
+/** What the file means against the catalogue and the table, without writing anything: the same for the command and the admin endpoint. */
+export interface ManualListAnalysis {
+  rows: ManualRowToStore[];
+  problems: RejectedRow[];
+  warnings: string[];
+  plan: ManualPlan;
+  pending: number;
+  shopText: number;
+  fingerprint: string;
+}
 
-  const resolved = await deps.store.resolve([
+/** Throws `ManualListError` when the file is not a list at all; a bad row is a problem of the list, not a throw. */
+export async function analyzeManualList(
+  raw: unknown,
+  store: ManualListStore,
+): Promise<ManualListAnalysis> {
+  const parsed = parseManualEntries(raw);
+  const resolved = await store.resolve([
     ...new Set(parsed.entries.map((entry) => entry.sku)),
   ]);
   const problems: RejectedRow[] = [...parsed.rejected];
@@ -172,27 +166,108 @@ export async function runManualImport(
       note: entry.note,
     });
   }
-
-  const current = await deps.store.current();
+  const current = await store.current();
   const plan = planManualReplace(
     current,
     rows.map((row): ManualPlanNext => ({ ...row, parameter: row.parameter })),
   );
-  const fingerprint = fingerprintOf(rows, current);
-  const pending = rows.filter(
-    (row) => row.sideEffectsStatus === "PENDING",
-  ).length;
-  const shopText = rows.filter((row) => row.basis === "SHOP_TEXT").length;
+  return {
+    rows,
+    problems,
+    warnings,
+    plan,
+    pending: rows.filter((row) => row.sideEffectsStatus === "PENDING").length,
+    shopText: rows.filter((row) => row.basis === "SHOP_TEXT").length,
+    fingerprint: fingerprintOf(rows, current),
+  };
+}
+
+export type ApplyRefusal =
+  | "REJECTED_ROWS"
+  | "APPROVER_MISSING"
+  | "EMPTY_NEEDS_ALLOW_EMPTY"
+  | "FINGERPRINT_MISMATCH";
+
+export interface ApplyInput {
+  approvedBy: string | null;
+  fingerprint: string | null;
+  allowEmpty: boolean;
+  /** Who applies it, for the audit row: the admin's user id, or null for the command. */
+  auditUserId: string | null;
+  source: "cli" | "http";
+}
+
+/**
+ * THE CHECKS BEFORE A WRITE, in one place for both ways in: no rejected row, a named approver, an empty file only with the switch, and the
+ * fingerprint the dry run showed. Only then the whole list replaces the table in one transaction, with an audit row in the same one.
+ */
+export async function applyManualList(
+  analysis: ManualListAnalysis,
+  input: ApplyInput,
+  store: ManualListStore,
+  now: Date,
+): Promise<
+  | { ok: true; stored: number; removed: number }
+  | { ok: false; refusal: ApplyRefusal }
+> {
+  if (analysis.problems.length > 0)
+    return { ok: false, refusal: "REJECTED_ROWS" };
+  const approvedBy = input.approvedBy?.trim() ?? "";
+  if (approvedBy === "") return { ok: false, refusal: "APPROVER_MISSING" };
+  if (analysis.rows.length === 0 && !input.allowEmpty)
+    return { ok: false, refusal: "EMPTY_NEEDS_ALLOW_EMPTY" };
+  if (input.fingerprint !== analysis.fingerprint)
+    return { ok: false, refusal: "FINGERPRINT_MISMATCH" };
+  const done = await store.replace(analysis.rows, approvedBy, now, {
+    userId: input.auditUserId,
+    metadata: {
+      source: input.source,
+      approvedBy,
+      fingerprint: analysis.fingerprint,
+      plan: analysis.plan,
+      rows: analysis.rows.length,
+      pending: analysis.pending,
+      shopText: analysis.shopText,
+      allowEmpty: input.allowEmpty,
+    },
+  });
+  return { ok: true, ...done };
+}
+
+export async function runManualImport(
+  options: ImportOptions,
+  deps: ImportDeps,
+  out: ImportOutput,
+): Promise<number> {
+  out.stdout(`CÉL-ADATBÁZIS: ${deps.target}\n`);
+  let raw: unknown;
+  try {
+    raw = JSON.parse(await deps.readFile(options.file));
+  } catch {
+    out.stderr("A fájl nem olvasható vagy nem JSON.\n");
+    return 1;
+  }
+  let analysis: ManualListAnalysis;
+  try {
+    analysis = await analyzeManualList(raw, deps.store);
+  } catch (error) {
+    if (error instanceof ManualListError) {
+      out.stderr(`${error.message}\n`);
+      return 1;
+    }
+    throw error;
+  }
+  const { problems, plan, warnings } = analysis;
   out.stdout(
-    `Sorok: ${rows.length} érvényes; ${problems.length} elutasított; hozzáadott ${plan.add}, módosított ${plan.update}, törölt ${plan.remove}, változatlan ${plan.unchanged}.\n` +
-      `PENDING (a vevő felé nem megy): ${pending}; SHOP_TEXT alap (csak a teszten megy ki): ${shopText}.\n`,
+    `Sorok: ${analysis.rows.length} érvényes; ${problems.length} elutasított; hozzáadott ${plan.add}, módosított ${plan.update}, törölt ${plan.remove}, változatlan ${plan.unchanged}.\n` +
+      `PENDING (a vevő felé nem megy): ${analysis.pending}; SHOP_TEXT alap (csak a teszten megy ki): ${analysis.shopText}.\n`,
   );
   for (const problem of [...problems].sort((a, b) => a.row - b.row))
     out.stdout(
       `  ELUTASÍTVA: ${problem.row}. sor (${problem.sku ?? "sku nélkül"}): ${problem.reason}\n`,
     );
   for (const warning of warnings) out.stdout(`  FIGYELEM: ${warning}\n`);
-  out.stdout(`LENYOMAT: ${fingerprint}\n`);
+  out.stdout(`LENYOMAT: ${analysis.fingerprint}\n`);
 
   if (problems.length > 0) {
     out.stderr("Van elutasított sor: az írás nem indul.\n");
@@ -204,29 +279,38 @@ export async function runManualImport(
     );
     return 0;
   }
-  if (!options.approvedBy || options.approvedBy.trim() === "") {
-    out.stderr("Az --apply-hoz --approved-by kell (ki hagyta jóvá, és hol).\n");
-    return 2;
-  }
-  if (rows.length === 0 && !options.allowEmpty) {
-    out.stderr(
-      "A fájl üres: az --apply a TELJES listát törölné. Ha ez a szándék, add meg az --allow-empty kapcsolót is.\n",
-    );
-    return 2;
-  }
-  if (options.fingerprint !== fingerprint) {
+  const result = await applyManualList(
+    analysis,
+    {
+      approvedBy: options.approvedBy,
+      fingerprint: options.fingerprint,
+      allowEmpty: options.allowEmpty,
+      auditUserId: null,
+      source: "cli",
+    },
+    deps.store,
+    deps.now(),
+  );
+  if (!result.ok) {
+    if (result.refusal === "APPROVER_MISSING") {
+      out.stderr(
+        "Az --apply-hoz --approved-by kell (ki hagyta jóvá, és hol).\n",
+      );
+      return 2;
+    }
+    if (result.refusal === "EMPTY_NEEDS_ALLOW_EMPTY") {
+      out.stderr(
+        "A fájl üres: az --apply a TELJES listát törölné. Ha ez a szándék, add meg az --allow-empty kapcsolót is.\n",
+      );
+      return 2;
+    }
     out.stderr(
       "A --fingerprint hiányzik vagy nem egyezik a mostani fájllal és katalógussal: az írás nem indul.\n",
     );
     return 1;
   }
-  const done = await deps.store.replace(
-    rows,
-    options.approvedBy.trim(),
-    deps.now(),
-  );
   out.stdout(
-    `Kész: ${done.stored} sor tárolva, ${done.removed} törölve (egy tranzakcióban).\n`,
+    `Kész: ${result.stored} sor tárolva, ${result.removed} törölve (egy tranzakcióban).\n`,
   );
   return 0;
 }
