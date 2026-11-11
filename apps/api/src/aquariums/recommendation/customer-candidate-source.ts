@@ -1,7 +1,15 @@
 import { Injectable } from "@nestjs/common";
 import { prisma } from "@acropora/database";
 
+import { parseWaterParameterEffects } from "@acropora/jev/product-enrichment";
+
 import { productShopUrl } from "./measurement-recommendation.service.js";
+import {
+  manualMatches,
+  mergeCandidateMatches,
+  type ManualEntryInput,
+  type ReferenceKind,
+} from "./customer-candidate-manual.rules.js";
 import {
   isRecommendableOnUnas,
   latestJevEffectRows,
@@ -60,7 +68,17 @@ export interface CustomerRecommendationCandidate {
   evidenceRef: string;
   /** A termék lapja a boltban (`productShopUrl`: a UNAS csatorna-sor címe, csak látható státusznál), vagy null. */
   shopUrl: string | null;
+  /** Mi az `evidenceRef`: a gyártó lapja (`MAKER`) vagy a bolti termékleírás (`SHOP_TEXT`, csak a kézi listából, kapcsolóval). */
+  referenceKind: ReferenceKind;
 }
+
+/**
+ * A KAPCSOLÓ A BOLTI SZÖVEGRE (V3.4 S2c, acrobot 47162): a kézi lista `SHOP_TEXT` alapú sora csak akkor lehet jelölt, ha ez PONTOSAN
+ * `true`. Alapból ki; a teszt ReefClubon kapcsolják be. Élesben a vevő felé csak gyártói (`MAKER`) alapú hivatkozás mehet (Balázs (d) pontja).
+ */
+export const shopTextAllowed = (
+  env: Record<string, string | undefined> = process.env,
+): boolean => env.CUSTOMER_CANDIDATES_ALLOW_SHOP_TEXT === "true";
 
 /** A vevő felé használható négy paraméter mindkét iránya: a vetítés ezeket építi előre. */
 export const CUSTOMER_CANDIDATE_MOVES: readonly CustomerWantedMove[] =
@@ -120,6 +138,44 @@ export function customerMatchingRows(
       },
     ];
   });
+}
+
+/**
+ * A TERMÉK MINDEN VERIFIED HATÁSA, a kívánt mozgástól függetlenül (a kézi jelölt hatásait ezzel egészítjük ki, hogy az ellentétes-hatás
+ * szűrő a JEV-ben ismert hatást se hagyja ki). Két részre válik, mint a jelöltben: jóváhagyott paraméterek és a többi.
+ */
+export function verifiedEffectsByProduct(
+  rows: readonly JevEffectRow[],
+): Map<
+  string,
+  {
+    effects: CustomerRecommendationCandidate["effects"];
+    sideEffects: CustomerRecommendationCandidate["sideEffects"];
+  }
+> {
+  const result = new Map<
+    string,
+    {
+      effects: CustomerRecommendationCandidate["effects"];
+      sideEffects: CustomerRecommendationCandidate["sideEffects"];
+    }
+  >();
+  for (const row of rows) {
+    if (row.status !== "VERIFIED" || !row.value) continue;
+    const parsed = parseWaterParameterEffects(row.value);
+    if (!parsed.ok) continue;
+    const mapped = parsed.effects.map((effect) => ({
+      parameterCode: effect.code,
+      direction: effect.direction,
+    }));
+    result.set(row.productId, {
+      effects: mapped.filter((effect) => APPROVED.has(effect.parameterCode)),
+      sideEffects: mapped.filter(
+        (effect) => !APPROVED.has(effect.parameterCode),
+      ),
+    });
+  }
+  return result;
 }
 
 /**
@@ -206,9 +262,30 @@ export class CustomerCandidateSource {
     wantedLists: ReadonlyArray<ReadonlyMap<string, "EMEL" | "CSOKKENT">>,
   ): Promise<CustomerCandidatesOfMove[]> {
     const rows = await latestJevEffectRows(this.database);
+    const manualEntries = await this.database.customerCandidateManualEntry.findMany(
+      {
+        select: {
+          productId: true,
+          parameterCode: true,
+          direction: true,
+          referenceUrl: true,
+          basis: true,
+          sideEffects: true,
+          sideEffectsStatus: true,
+        },
+      },
+    );
+    const manualInput: ManualEntryInput[] = manualEntries;
+    const verifiedByProduct = verifiedEffectsByProduct(rows);
+    const allowShopText = shopTextAllowed();
     const matchesOf = wantedLists.map((wanted) => ({
       wanted,
-      matches: customerMatchingRows(rows, wanted),
+      matches: mergeCandidateMatches(
+        customerMatchingRows(rows, wanted),
+        manualMatches(manualInput, wanted, { allowShopText }),
+        verifiedByProduct,
+        wanted,
+      ),
     }));
     const ids = [
       ...new Set(
@@ -241,6 +318,7 @@ export class CustomerCandidateSource {
               effects: match.effects,
               sideEffects: match.sideEffects,
               evidenceRef: match.evidenceRef,
+              referenceKind: match.referenceKind,
               shopUrl: productShopUrl(product.channelListings),
             },
           ];

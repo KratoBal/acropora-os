@@ -6,7 +6,10 @@ import {
 } from "@nestjs/common";
 import { prisma } from "@acropora/database";
 
-import { CustomerCandidateSource } from "../../aquariums/recommendation/customer-candidate-source.js";
+import {
+  CustomerCandidateSource,
+  shopTextAllowed,
+} from "../../aquariums/recommendation/customer-candidate-source.js";
 import { toProjectedCandidateRows } from "../../aquariums/recommendation/customer-candidate-projection.rules.js";
 import { DoseEffectsService } from "./dose-effects.service.js";
 import {
@@ -168,6 +171,7 @@ export class DoseProjectionService implements OnModuleInit, OnModuleDestroy {
           try {
             candidateRows = toProjectedCandidateRows(
               await this.customerCandidates.candidatesByMove(),
+              { allowShopText: shopTextAllowed() },
             );
           } catch (error) {
             this.logger.warn(

@@ -11211,6 +11211,10 @@ model ReefClubCustomerCandidate {
   /// A termek VERIFIED hatasa a NEM jovahagyott parametereken (foszfat, pH ...), "KOD:IRANY" alakban, tanacs es sav nelkul. A felulet kiirja
   /// ("emellett hat: foszfat, csokkenti"): a foszfat-SAV tiltasa nem tiltja a termek tulajdonsaganak kiirasat (barracuda, #2415).
   sideEffects   String[]
+  /// Mi a `evidenceRef` hivatkozas: MAKER = a gyarto lapja (a JEV VERIFIED forrasa vagy egy kezi, gyartoi alapu sor), SHOP_TEXT = a bolti
+  /// termekleiras (csak a kezi listabol, es csak ha a `CUSTOMER_CANDIDATES_ALLOW_SHOP_TEXT` kapcsolo be van kapcsolva: a teszt ReefClubon).
+  /// A felulet ebbol valaszt cimket ("Gyartoi leiras" vagy "Termekleiras a boltban"): a bolti szoveg nem allhat gyartoi forraskent.
+  referenceKind CustomerCandidateBasis    @default(MAKER)
   /// 1-tol: a sorrend a parameteren es iranyon belul (tobb kivant eltereset javito elol, aztan nev szerint).
   rank          Int
   run           ReefClubDoseProjectionRun @relation(fields: [runId], references: [id], onDelete: Cascade)
