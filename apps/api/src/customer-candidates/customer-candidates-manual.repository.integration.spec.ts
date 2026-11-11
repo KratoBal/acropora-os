@@ -162,6 +162,62 @@ describe("a kézi termékjelölt-lista", { skip: gate.mode === "skip" }, () => {
     assert.equal(b.approvedAt.getTime(), approvedAt.getTime());
   });
 
+  it("the audit row is written in the SAME transaction as the replacement: with the write, and not at all when the write fails", async () => {
+    const marker = `audit-${suffix}`;
+    const auditRows = () =>
+      prisma.auditLog.findMany({
+        where: {
+          action: "customer-candidates.manual-list.applied",
+          metadata: { path: ["approvedBy"], equals: marker },
+        },
+      });
+    try {
+      await store.replace([row("a")], marker, approvedAt, {
+        userId: null,
+        metadata: { source: "cli", approvedBy: marker },
+      });
+      const written = await auditRows();
+      assert.equal(written.length, 1);
+      assert.equal(written[0]!.entityType, "CustomerCandidateManualEntry");
+      assert.equal((written[0]!.metadata as Record<string, unknown>).stored, 1);
+      // a write that fails leaves no audit row behind
+      await assert.rejects(
+        store.replace(
+          [row("a", { referenceUrl: "http://nem-https.example.invalid" })],
+          marker,
+          approvedAt,
+          { userId: null, metadata: { source: "cli", approvedBy: marker } },
+        ),
+      );
+      assert.equal((await auditRows()).length, 1);
+    } finally {
+      await prisma.auditLog.deleteMany({
+        where: {
+          action: "customer-candidates.manual-list.applied",
+          metadata: { path: ["approvedBy"], equals: marker },
+        },
+      });
+    }
+  });
+
+  it("an audit row that cannot be written takes the replacement with it: no write without its audit row", async () => {
+    await store.replace([row("a")], "Balázs", approvedAt);
+    const snapshot = JSON.stringify(await mine());
+    await assert.rejects(
+      store.replace(
+        [row("a", { note: "audit nélkül nem íródhat" })],
+        "Balázs",
+        approvedAt,
+        {
+          // a user id that does not exist: the audit row's foreign key refuses it
+          userId: `nincs-ilyen-${suffix}`,
+          metadata: { source: "http", approvedBy: "Balázs" },
+        },
+      ),
+    );
+    assert.equal(JSON.stringify(await mine()), snapshot);
+  });
+
   it("the replacement is ONE transaction: a bad row in the middle leaves the stored list exactly as it was", async () => {
     await store.replace([row("a"), row("b")], "Balázs", approvedAt);
     const snapshot = JSON.stringify(await mine());

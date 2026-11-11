@@ -1,9 +1,16 @@
-import { prisma } from "@acropora/database";
+import { Injectable } from "@nestjs/common";
+import { prisma, type Prisma } from "@acropora/database";
 
 import {
   sameManualContent,
   type ManualPlanCurrent,
 } from "./customer-candidates-manual.rules.js";
+
+/** The audit row written in the SAME transaction as the replacement (who, how, and what was about to change). */
+export interface ManualListAudit {
+  userId: string | null;
+  metadata: Record<string, unknown>;
+}
 
 export interface ResolvedSku {
   productId: string;
@@ -32,9 +39,11 @@ export interface ManualListStore {
     rows: readonly ManualRowToStore[],
     approvedBy: string,
     approvedAt: Date,
+    audit?: ManualListAudit,
   ): Promise<{ stored: number; removed: number }>;
 }
 
+@Injectable()
 export class PrismaManualListStore implements ManualListStore {
   private readonly database = prisma;
 
@@ -80,6 +89,7 @@ export class PrismaManualListStore implements ManualListStore {
     rows: readonly ManualRowToStore[],
     approvedBy: string,
     approvedAt: Date,
+    audit?: ManualListAudit,
   ): Promise<{ stored: number; removed: number }> {
     return this.database.$transaction(async (tx) => {
       const ids: string[] = [];
@@ -146,6 +156,19 @@ export class PrismaManualListStore implements ManualListStore {
       const removed = await tx.customerCandidateManualEntry.deleteMany({
         where: { id: { notIn: ids } },
       });
+      if (audit)
+        await tx.auditLog.create({
+          data: {
+            userId: audit.userId,
+            action: "customer-candidates.manual-list.applied",
+            entityType: "CustomerCandidateManualEntry",
+            metadata: {
+              ...audit.metadata,
+              stored: ids.length,
+              removed: removed.count,
+            } as Prisma.InputJsonObject,
+          },
+        });
       return { stored: ids.length, removed: removed.count };
     });
   }
