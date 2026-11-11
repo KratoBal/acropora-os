@@ -21,6 +21,22 @@ export class MaintenanceInvoiceRepository {
     });
   }
 
+  /**
+   * A PARTNEREK OLDALON BEÁLLÍTOTT FIZETÉSI NAPOK (nem törölt partnerek): a TIG vevő-sora üres napjainál erre esik vissza a
+   * határidő, mint a számla-szerkesztő (`BillingDocumentsRepository.customerPaymentDueDays`).
+   */
+  async partnerPaymentTerms() {
+    const partners = await this.database.supplier.findMany({
+      where: { paymentDueDays: { not: null }, deletedAt: null },
+      select: { name: true, taxNumber: true, paymentDueDays: true },
+    });
+    return partners.map((partner) => ({
+      name: partner.name,
+      taxNumber: partner.taxNumber,
+      paymentDueDays: partner.paymentDueDays!,
+    }));
+  }
+
   /** A PDF letöltéséhez elég adat: az azonosító és a tárolt kulcs. */
   invoicePdfLookup(invoiceId: string) {
     return this.database.invoice.findUnique({
