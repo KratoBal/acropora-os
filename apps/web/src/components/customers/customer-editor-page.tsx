@@ -20,6 +20,7 @@ import {
   AddressFields,
   addressHasData,
   emptyAddress,
+  parsePaymentDueDays,
 } from "./customer-form-parts";
 
 export function CustomerEditorPage() {
@@ -36,6 +37,7 @@ export function CustomerEditorPage() {
   const [email, setEmail] = useState("");
   // Balázs, 2026-10-26: one record, two addresses; the manual invoice goes to the billing one
   const [billingEmail, setBillingEmail] = useState("");
+  const [paymentDueDays, setPaymentDueDays] = useState("");
   const [phone, setPhone] = useState("");
   const [marketingEmailConsent, setMarketingEmailConsent] = useState(false);
   const [marketingSmsConsent, setMarketingSmsConsent] = useState(false);
@@ -129,6 +131,11 @@ export function CustomerEditorPage() {
       );
       return;
     }
+    const dueDays = parsePaymentDueDays(paymentDueDays);
+    if (!dueDays.ok) {
+      setError(dueDays.error);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -143,6 +150,7 @@ export function CustomerEditorPage() {
             : undefined,
         email: email.trim() || undefined,
         billingEmail: billingEmail.trim() || undefined,
+        ...(dueDays.value === null ? {} : { paymentDueDays: dueDays.value }),
         phone: phone.trim() || undefined,
         marketingEmailConsent,
         marketingSmsConsent,
@@ -294,6 +302,17 @@ export function CustomerEditorPage() {
                 aria-label="Számlázási e-mail"
                 value={billingEmail}
                 onChange={(event) => setBillingEmail(event.target.value)}
+              />
+            </FormField>
+            <FormField
+              label="Fizetési határidő (nap)"
+              description="Üres: a Partnerek oldalon beállított, ha nincs, 8 nap."
+            >
+              <Input
+                inputMode="numeric"
+                aria-label="Fizetési határidő (nap)"
+                value={paymentDueDays}
+                onChange={(event) => setPaymentDueDays(event.target.value)}
               />
             </FormField>
             <FormField label="Telefonszám">

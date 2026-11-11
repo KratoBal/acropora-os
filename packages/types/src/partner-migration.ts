@@ -64,12 +64,27 @@ export interface PartnerMigrationPlan {
  * AZ ÁTVEZETÉS FUTTATÁSA AZ OLDALRÓL (ugyanaz a mag, mint a `partner:migrate` parancs): `POST /admin/partner-migration/preview`
  * (próba, nem ír), `.../apply` (a próba lenyomatával), `.../restore/preview` és `.../restore/apply` (a naplózott eseményekből).
  */
+/**
+ * A KITÖLTÉS: a kötött (vagy most kötődő) vevő-sor ÜRES mezői a partner értékeivel (a Partnerek oldal a forrás, a vevő-sor a tükör).
+ * Csak üres mezőt tölt; kitöltöttet SOHA nem ír felül. Három mező: a fizetési nap, a számlázási e-mail (a partner egyetlen e-mail
+ * mezője) és a szerviz-partnerkód.
+ */
+export type PartnerMigrationFillField =
+  "paymentDueDays" | "billingEmail" | "worksheetPartnerCode";
+
+export interface PartnerMigrationFill {
+  field: PartnerMigrationFillField;
+  value: string | number;
+}
+
 export interface PartnerMigrationRunOperation {
-  kind: "CREATE" | "BIND" | "SKIP";
+  kind: "CREATE" | "BIND" | "FILL" | "SKIP";
   supplierId: string;
   code: string;
-  /** csak a BIND-nál: a vevő-sor, amihez a partner kötődik */
+  /** a BIND-nál: a vevő-sor, amihez a partner kötődik; a FILL-nél: a már kötött vevő-sor, amit kitölt */
   customerId?: string;
+  /** a BIND-nál és a FILL-nél: a kitöltendő üres mezők a partner értékével (a próba mutatja, a lenyomat tartalmazza) */
+  fills?: PartnerMigrationFill[];
   /** csak a SKIP-nél: miért marad ki */
   reason?: string;
 }
@@ -80,7 +95,7 @@ export interface PartnerMigrationRunPreview {
   operations: PartnerMigrationRunOperation[];
   /** a döntések hibái: ha van, az írás nem indul */
   problems: string[];
-  counts: { create: number; bind: number; skip: number };
+  counts: { create: number; bind: number; fill: number; skip: number };
   /** a lenyomat: az `apply` ezt kéri vissza, így csak az hajtódik végre, amit az ember látott */
   fingerprint: string;
 }
@@ -93,7 +108,7 @@ export interface PartnerMigrationApplyInput {
 
 export interface PartnerMigrationApplyOutcome {
   code: string;
-  mode: "CREATED" | "BOUND" | "SKIPPED";
+  mode: "CREATED" | "BOUND" | "FILLED" | "SKIPPED";
   customerId?: string;
   detail?: string;
 }

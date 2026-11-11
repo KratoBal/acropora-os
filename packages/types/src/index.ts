@@ -1859,6 +1859,8 @@ export type {
   PartnerMigrationApplyInput,
   PartnerMigrationApplyOutcome,
   PartnerMigrationApplyResult,
+  PartnerMigrationFill,
+  PartnerMigrationFillField,
   PartnerMigrationCustomer,
   PartnerMigrationPlan,
   PartnerMigrationRestoreInput,

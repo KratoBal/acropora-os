@@ -24,9 +24,17 @@ import { partnerMigrationApi } from "@/lib/api/partner-migration";
  * a szerver 409-et ad, és új próba kell. A VISSZAÁLLÍTÁS ugyanígy: próba, megerősítés, a próba lenyomatával.
  */
 const RESULT_LABEL = { RESTORED: "visszaáll", KEPT: "marad" } as const;
+/** A kitöltendő mezők magyar neve a próbán (csak üres mezőt tölt, kitöltöttet soha nem ír felül). */
+const FILL_LABEL = {
+  paymentDueDays: "fizetési határidő (nap)",
+  billingEmail: "számlázási e-mail",
+  worksheetPartnerCode: "szerviz-partnerkód",
+} as const;
+
 const MODE_LABEL = {
   CREATED: "új vevő-sor készült",
   BOUND: "meglévő vevő-sorhoz kötve",
+  FILLED: "a kötött vevő-sor üres mezői kitöltve",
   SKIPPED: "kimaradt",
 } as const;
 
@@ -133,7 +141,10 @@ export function PartnerMigrationRunSection({
       onChanged();
     });
 
-  const writes = preview ? preview.counts.create + preview.counts.bind : 0;
+  // a kitöltés is írás: egy kötött partner üres vevő-sor-mezői (fizetési nap, számlázási e-mail, partnerkód) miatt a gomb aktív
+  const writes = preview
+    ? preview.counts.create + preview.counts.bind + preview.counts.fill
+    : 0;
 
   return (
     <PilotCard>
@@ -239,7 +250,8 @@ export function PartnerMigrationRunSection({
             </p>
             <p className="text-sm text-pilot-grey-800">
               {preview.counts.create} új vevő-sor, {preview.counts.bind} kötés
-              meglévőhöz, {preview.counts.skip} kimarad.
+              meglévőhöz, {preview.counts.fill} kötött vevő-sor üres mezőinek
+              kitöltése, {preview.counts.skip} kimarad.
             </p>
             {preview.problems.map((problem) => (
               <Alert
@@ -258,9 +270,21 @@ export function PartnerMigrationRunSection({
                       ? "új sor"
                       : op.kind === "BIND"
                         ? "kötés"
-                        : "kimarad"}
+                        : op.kind === "FILL"
+                          ? "kitöltés"
+                          : "kimarad"}
                   </PilotBadge>
                   <span>{op.reason ?? ""}</span>
+                  {op.fills?.length ? (
+                    <span data-testid="migration-fills">
+                      kitölt:{" "}
+                      {op.fills
+                        .map(
+                          (fill) => `${FILL_LABEL[fill.field]} = ${fill.value}`,
+                        )
+                        .join(", ")}
+                    </span>
+                  ) : null}
                 </li>
               ))}
             </ul>
@@ -308,7 +332,7 @@ export function PartnerMigrationRunSection({
       <ConfirmDialog
         open={confirming === "apply" && preview !== null}
         title="Végrehajtod a partnerek átvezetését?"
-        consequence={`A(z) ${preview?.target ?? ""} adatbázison: ${preview?.counts.create ?? 0} új vevő-sor készül, ${preview?.counts.bind ?? 0} partner meglévő vevő-sorhoz kötődik, ${preview?.counts.skip ?? 0} kimarad. Egy tranzakcióban fut: vagy minden megtörténik, vagy semmi.`}
+        consequence={`A(z) ${preview?.target ?? ""} adatbázison: ${preview?.counts.create ?? 0} új vevő-sor készül, ${preview?.counts.bind ?? 0} partner meglévő vevő-sorhoz kötődik, ${preview?.counts.fill ?? 0} kötött vevő-sor üres mezői kitöltődnek (kitöltött mezőt nem ír felül, a visszaállítás a kitöltést nem vonja vissza), ${preview?.counts.skip ?? 0} kimarad. Egy tranzakcióban fut: vagy minden megtörténik, vagy semmi.`}
         recovery="A Visszaállítási próba, majd a Visszaállítás a naplózott eseményekből visszaviszi: a létrehozott sorok törlődnek, ha azóta semmi nem hivatkozik rájuk."
         confirmLabel="Átvezetés végrehajtása"
         busy={busy}
