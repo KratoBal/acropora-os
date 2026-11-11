@@ -152,6 +152,13 @@ const LEGAL_FORM_WORDS = new Set([
   "zrt",
   "nyrt",
   "bt",
+  // a pontozott alakok ("B.V.", "S.r.l.") a pontok torlese utan betu-alakok; a kommandit tarsasag es a spanyol/olasz/cseh/belga alakok (barracuda, #2441)
+  "kg",
+  "nv",
+  "sl",
+  "se",
+  "spa",
+  "sro",
 ]);
 
 export function sameNameWithoutLegalForm(
@@ -162,6 +169,8 @@ export function sameNameWithoutLegalForm(
     value
       .normalize("NFC")
       .toLowerCase()
+      // a pontot ELŐBB toroljuk: "B.V." -> "bv", "S.r.l." -> "srl" (szokozre cserelve "b v" lenne, es egyik betu sincs a listan)
+      .replace(/\./g, "")
       .replace(/[^\p{L}\p{N}]+/gu, " ")
       .split(" ")
       .filter((word) => word && !LEGAL_FORM_WORDS.has(word))

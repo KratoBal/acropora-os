@@ -342,6 +342,28 @@ describe("a jogi formaban elterő szallitonev kulon szamlalo", () => {
     );
     assert.equal(sameNameWithoutLegalForm("Koholt", "Mas Nev"), false);
     assert.equal(sameNameWithoutLegalForm("Inc.", "Inc"), false);
+    // a pontozott es a kommandit alakok (barracuda, #2441): "B.V.", "S.r.l.", "N.V.", "GmbH & Co. KG"
+    assert.equal(
+      sameNameWithoutLegalForm("Koholt Akvarium", "Koholt Akvarium B.V."),
+      true,
+    );
+    assert.equal(
+      sameNameWithoutLegalForm("Koholt Akvarium", "Koholt Akvarium S.r.l."),
+      true,
+    );
+    assert.equal(
+      sameNameWithoutLegalForm("Koholt Akvarium N.V.", "Koholt Akvarium"),
+      true,
+    );
+    assert.equal(
+      sameNameWithoutLegalForm(
+        "Koholt Akvarium",
+        "Koholt Akvarium GmbH & Co. KG",
+      ),
+      true,
+    );
+    // a pont torlese nem von ossze MAS szavakat: "Dr. Koholt" nem "Drkoholt", es egy mas nev marad mas
+    assert.equal(sameNameWithoutLegalForm("Dr. Koholt", "Koholt"), false);
   });
 
   it("az itelet nem valtozik: a rossz rossz marad, a jogi formas reszhalmazt kulon szamolja", () => {
