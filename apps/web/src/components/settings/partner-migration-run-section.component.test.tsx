@@ -70,7 +70,7 @@ const previewOf = (
     { kind: "SKIP", supplierId: "s1", code: "AMB", reason: "több jelölt" },
   ],
   problems: [],
-  counts: { create: 1, bind: 0, skip: 1 },
+  counts: { create: 1, bind: 0, fill: 0, skip: 1 },
   fingerprint: "a".repeat(64),
   ...over,
 });
@@ -102,7 +102,7 @@ describe("PartnerMigrationRunSection", () => {
     const box = await screen.findByTestId("migration-preview");
     expect(box.textContent).toContain("stage-db:5432/acropora");
     expect(box.textContent).toContain(
-      "1 új vevő-sor, 0 kötés meglévőhöz, 1 kimarad",
+      "1 új vevő-sor, 0 kötés meglévőhöz, 0 kötött vevő-sor üres mezőinek kitöltése, 1 kimarad",
     );
     expect(
       (button("Átvezetés végrehajtása") as HTMLButtonElement).disabled,
@@ -138,6 +138,55 @@ describe("PartnerMigrationRunSection", () => {
     ).toBe(true);
   });
 
+  it("a fill-only preview offers the write, lists the values it would put in, and the confirmation says the restore does not undo it", async () => {
+    api.preview.mockResolvedValue(
+      previewOf({
+        operations: [
+          {
+            kind: "FILL",
+            supplierId: "s1",
+            code: "AMB",
+            customerId: "c1",
+            fills: [
+              { field: "paymentDueDays", value: 15 },
+              { field: "billingEmail", value: "szamla@partner.test" },
+            ],
+          },
+        ],
+        counts: { create: 0, bind: 0, fill: 1, skip: 0 },
+      }),
+    );
+    api.apply.mockResolvedValue({
+      target: "stage-db:5432/acropora",
+      outcomes: [{ code: "AMB", mode: "FILLED", customerId: "c1" }],
+    });
+    mount();
+    fireEvent.click(button("Próba"));
+    const box = await screen.findByTestId("migration-preview");
+    expect(box.textContent).toContain("kitöltés");
+    expect(screen.getByTestId("migration-fills").textContent).toContain(
+      "fizetési határidő (nap) = 15",
+    );
+    expect(screen.getByTestId("migration-fills").textContent).toContain(
+      "számlázási e-mail = szamla@partner.test",
+    );
+    expect(
+      (button("Átvezetés végrehajtása") as HTMLButtonElement).disabled,
+    ).toBe(false);
+    fireEvent.click(button("Átvezetés végrehajtása"));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.textContent).toContain(
+      "1 kötött vevő-sor üres mezői kitöltődnek",
+    );
+    expect(dialog.textContent).toContain(
+      "a visszaállítás a kitöltést nem vonja vissza",
+    );
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Átvezetés végrehajtása" }),
+    );
+    await screen.findByText(/üres mezői kitöltve/);
+  });
+
   it("a 409 drops the preview and asks for a new one", async () => {
     api.apply.mockRejectedValue(new ApiError("A terv közben változott.", 409));
     mount();
@@ -167,7 +216,7 @@ describe("PartnerMigrationRunSection", () => {
       (button("Átvezetés végrehajtása") as HTMLButtonElement).disabled,
     ).toBe(true);
     api.preview.mockResolvedValue(
-      previewOf({ counts: { create: 0, bind: 0, skip: 2 } }),
+      previewOf({ counts: { create: 0, bind: 0, fill: 0, skip: 2 } }),
     );
     fireEvent.click(button("Próba"));
     await waitFor(() =>

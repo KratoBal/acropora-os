@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 
+import { WORKSHEET_PARTNER_CODE_PATTERN } from "@acropora/types";
 import type {
   PartnerMigrationFill,
   PartnerMigrationPlan,
@@ -66,11 +67,17 @@ export interface FillFacts {
       paymentDueDays: number | null;
       billingEmail: string | null;
       worksheetPartnerCode: string | null;
-      /** más vevő-soron már áll ez a szerviz-partnerkód (egyedi): a kitöltés nem írhatja még egyszer */
-      partnerCodeTakenElsewhere: boolean;
     }
   >;
+  /**
+   * a szerviz-partnerkód -> azok a vevő-sorok, amiken ma áll (a kód egyedi): a kitöltés nem írhat olyan kódot, amit egy MÁSIK vevő-sor
+   * már visel
+   */
+  codeHolders: ReadonlyMap<string, ReadonlySet<string>>;
 }
+
+/** a vevő-sor szerviz-partnerkód oszlopának szélessége (`Customer.worksheetPartnerCode`, VarChar(4)) */
+export const CUSTOMER_PARTNER_CODE_MAX = 4;
 
 const blank = (value: string | null | undefined) => !value?.trim();
 
@@ -91,16 +98,53 @@ export function fillsFor(
     fills.push({ field: "paymentDueDays", value: supplier.paymentDueDays });
   if (blank(customer.billingEmail) && !blank(supplier.email))
     fills.push({ field: "billingEmail", value: supplier.email!.trim() });
+  const code = supplier.worksheetPartnerCode?.trim() ?? "";
+  const holders = facts.codeHolders.get(code);
+  const heldByAnother = [...(holders ?? [])].some((id) => id !== customerId);
+  // a partner kódja legfeljebb 8 karakter, a vevő-soré legfeljebb 4 (az oszlop szélessége): a hosszabb kód nem fér a vevő-sorba, és
+  // a beírása az egész átvezetés tranzakcióját elvinné, ezért az ilyet NEM töltjük, és a próba sem mutatja
   if (
     blank(customer.worksheetPartnerCode) &&
-    !blank(supplier.worksheetPartnerCode) &&
-    !customer.partnerCodeTakenElsewhere
+    WORKSHEET_PARTNER_CODE_PATTERN.test(code) &&
+    code.length <= CUSTOMER_PARTNER_CODE_MAX &&
+    !heldByAnother
   )
     fills.push({
       field: "worksheetPartnerCode",
       value: supplier.worksheetPartnerCode!.trim(),
     });
   return fills;
+}
+
+/**
+ * A DÖNTÉS KÉT MENETBEN (a lap és a parancs ugyanazt hívja, így ugyanaz a lenyomat): előbb tények nélkül (ebből látszik, mely partnerek
+ * és vevő-sorok jönnek szóba a kitöltéshez), aztán ugyanez a döntés a betöltött tényekkel.
+ */
+export async function decideWithFills(
+  plan: PartnerMigrationPlan,
+  choices: BindChoices,
+  loadFacts: (
+    supplierIds: readonly string[],
+    customerIds: readonly string[],
+  ) => Promise<FillFacts>,
+): Promise<MigrationDecisions> {
+  const first = decideOperations(plan, choices);
+  const supplierIds = new Set<string>();
+  const customerIds = new Set<string>();
+  for (const op of first.operations) {
+    if (op.kind === "BIND") {
+      supplierIds.add(op.supplierId);
+      customerIds.add(op.customerId);
+    } else if (op.kind === "SKIP" && op.linkedCustomerId) {
+      supplierIds.add(op.supplierId);
+      customerIds.add(op.linkedCustomerId);
+    }
+  }
+  return decideOperations(
+    plan,
+    choices,
+    await loadFacts([...supplierIds], [...customerIds]),
+  );
 }
 
 export interface MigrationDecisions {
