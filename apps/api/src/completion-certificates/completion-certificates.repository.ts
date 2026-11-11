@@ -13,6 +13,9 @@ const certificateCustomerArgs = {
     taxNumber: true,
     euTaxNumber: true,
     paymentDueDays: true,
+    // where the issued TIG invoice is sent from the confirmation window (card 7ba97e0d, S3)
+    email: true,
+    billingEmail: true,
     addresses: {
       where: { isDefault: true },
       take: 1,

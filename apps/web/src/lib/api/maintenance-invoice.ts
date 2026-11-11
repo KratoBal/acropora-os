@@ -1,4 +1,9 @@
-import type { MaintenanceInvoiceSummary } from "@acropora/types";
+import type {
+  BillingIssueSummary,
+  MaintenanceInvoiceConfirmation,
+  MaintenanceInvoiceIssueResult,
+  MaintenanceInvoiceSummary,
+} from "@acropora/types";
 
 import { ApiError, apiAuthHeaders, apiRequest } from "./client";
 import { API_PREFIX } from "./api-prefix";
@@ -49,11 +54,27 @@ export const maintenanceInvoiceApi = {
     );
   },
   /** A VALÓDI kiállítás (146ccc61): a szerver csak bekapcsolt kapcsolóval engedi. */
-  issue(token: string, invoiceId: string) {
-    return apiRequest<MaintenanceInvoiceSummary>(
+  /** The confirmation window's values (card 7ba97e0d, S3), from the issue's own mapping. */
+  issueSummary(token: string, invoiceId: string) {
+    return apiRequest<BillingIssueSummary>(
+      `${base}/${encodeURIComponent(invoiceId)}/issue-summary`,
+      token,
+    );
+  },
+  /** The issue with what the window showed and the person confirmed, and "Elküldöm e-mailben". */
+  issue(
+    token: string,
+    invoiceId: string,
+    confirmation: MaintenanceInvoiceConfirmation,
+  ) {
+    return apiRequest<MaintenanceInvoiceIssueResult>(
       `${base}/${encodeURIComponent(invoiceId)}/issue`,
       token,
-      { method: "POST" },
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(confirmation),
+      },
     );
   },
   async downloadPdf(token: string, invoiceId: string): Promise<Blob> {

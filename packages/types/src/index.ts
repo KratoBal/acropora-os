@@ -904,7 +904,11 @@ export type {
   SzamlazzConnectionCredentialInput,
   SzamlazzConnectionView,
 } from "./integrations/szamlazz-connection.js";
-export type { MaintenanceInvoiceSummary } from "./maintenance-invoice.js";
+export type {
+  MaintenanceInvoiceConfirmation,
+  MaintenanceInvoiceIssueResult,
+  MaintenanceInvoiceSummary,
+} from "./maintenance-invoice.js";
 export type {
   NavIncomingInvoiceAddress,
   NavIncomingInvoiceDetail,

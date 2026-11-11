@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type { MaintenanceInvoiceSummary, Session } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -8,6 +14,7 @@ const certificatesApi = vi.hoisted(() => ({ list: vi.fn() }));
 const invoiceApi = vi.hoisted(() => ({
   byCertificate: vi.fn(),
   draft: vi.fn(),
+  issueSummary: vi.fn(),
   issue: vi.fn(),
   downloadPdf: vi.fn(),
 }));
@@ -143,38 +150,151 @@ describe("MaintenanceInvoicePanel", () => {
     ).toBeTruthy();
   });
 
-  it("a bekapcsolt kiállítás megerősítés után hív, és utána a számlaszámot és a valódi PDF-et mutatja", async () => {
+  /* the TIG invoice's confirmation window (card 7ba97e0d, S3): what the server's summary says */
+  const ISSUE_SUMMARY = {
+    buyerName: "Fővárosi Állatkert",
+    buyerAddress: "1146 Budapest, Állatkerti körút 6-12.",
+    buyerTaxNumber: "12345678-2-42",
+    buyerEuTaxNumber: null,
+    buyerEmail: "szamla@allatkert.example",
+    issueDate: "2026-11-11",
+    fulfillmentDate: "2026-09-24",
+    dueDate: "2026-11-19",
+    paymentMethod: "Átutalás",
+    showsPaymentFields: true,
+    dueDateFollowsIssueDate: false,
+    fingerprint: "f".repeat(64),
+  };
+  const ISSUED = {
+    ...invoiceSummary,
+    status: "ISSUED" as const,
+    invoiceNumber: "ACRS-2026-1",
+    issuedAt: "2026-09-29T22:00:00.000Z",
+    issueEnabled: true,
+  };
+  /** The window, once the summary is in (its buttons wait for it). */
+  async function openWindow() {
     certificatesApi.list.mockResolvedValue([signedCertificate]);
     invoiceApi.byCertificate.mockResolvedValue({
       ...invoiceSummary,
       issueEnabled: true,
     });
-    invoiceApi.issue.mockResolvedValue({
-      ...invoiceSummary,
-      status: "ISSUED",
-      invoiceNumber: "ACRS-2026-1",
-      issuedAt: "2026-09-29T22:00:00.000Z",
-      issueEnabled: true,
-    });
-
+    invoiceApi.issueSummary.mockResolvedValue(ISSUE_SUMMARY);
     render(<MaintenanceInvoicePanel serviceJobId="job-1" />);
     fireEvent.click(await screen.findByRole("button", { name: "Kiállítás" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: /^Kiállítod a számlát/,
+    });
+    await within(dialog).findByText(ISSUE_SUMMARY.buyerName);
+    return dialog;
+  }
 
-    // A kattintás még NEM hív: előbb a megerősítés, a következménnyel.
+  it("a bekapcsolt kiállítás a megerősítő ablakon át hív, és utána a számlaszámot és a valódi PDF-et mutatja", async () => {
+    invoiceApi.issue.mockResolvedValue({ invoice: ISSUED, mail: null });
+    const dialog = await openWindow();
+
+    // A kattintás még NEM állít ki: előbb az ablak, a szerver összegzőjével és a következménnyel.
     expect(invoiceApi.issue).not.toHaveBeenCalled();
-    expect(screen.getByText(/NAV-nak bejelentett számla készül/)).toBeTruthy();
+    expect(invoiceApi.issueSummary).toHaveBeenCalledWith(
+      "dev-token",
+      "invoice-1",
+    );
+    expect(dialog.textContent).toContain(ISSUE_SUMMARY.buyerAddress);
+    expect(dialog.textContent).toContain(ISSUE_SUMMARY.buyerEmail);
+    expect(dialog.textContent).toMatch(/NAV-nak bejelentett számla készül/);
     // The amount in the question reads as money, not as the stored "127000 HUF".
-    expect(screen.getByText("Kiállítod a számlát (127 000 Ft)?")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Számla kiállítása" }));
+    expect(
+      within(dialog).getByText("Kiállítod a számlát (127 000 Ft)?"),
+    ).toBeTruthy();
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Számla kiállítása" }),
+    );
 
+    // "Elküldöm e-mailben" starts unchecked: today the TIG invoice is not sent by itself
     await waitFor(() =>
-      expect(invoiceApi.issue).toHaveBeenCalledWith("dev-token", "invoice-1"),
+      expect(invoiceApi.issue).toHaveBeenCalledWith("dev-token", "invoice-1", {
+        issueDate: ISSUE_SUMMARY.issueDate,
+        fulfillmentDate: ISSUE_SUMMARY.fulfillmentDate,
+        dueDate: ISSUE_SUMMARY.dueDate,
+        fingerprint: ISSUE_SUMMARY.fingerprint,
+        send: false,
+      }),
     );
     await screen.findByText("ACRS-2026-1");
     expect(
       screen.getByRole("button", { name: "Számla letöltése" }),
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Kiállítás" })).toBeNull();
+    expect(screen.queryByTestId("invoice-mail")).toBeNull();
+  });
+
+  it("'Elküldöm e-mailben' bejelölve a kiállítás küldést kér, és a panel kiírja, hová ment", async () => {
+    invoiceApi.issue.mockResolvedValue({
+      invoice: ISSUED,
+      mail: { to: ISSUE_SUMMARY.buyerEmail, sent: true },
+    });
+    const dialog = await openWindow();
+    fireEvent.click(within(dialog).getByLabelText("Elküldöm e-mailben"));
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Számla kiállítása" }),
+    );
+
+    await waitFor(() =>
+      expect(invoiceApi.issue).toHaveBeenCalledWith(
+        "dev-token",
+        "invoice-1",
+        expect.objectContaining({ send: true }),
+      ),
+    );
+    expect((await screen.findByTestId("invoice-mail")).textContent).toBe(
+      "A számla elment: szamla@allatkert.example.",
+    );
+  });
+
+  it("kiállítva, de a levél elbukott: a számlaszám látszik, a levél hibája külön", async () => {
+    invoiceApi.issue.mockResolvedValue({
+      invoice: ISSUED,
+      mail: {
+        to: ISSUE_SUMMARY.buyerEmail,
+        sent: false,
+        error: "A levélküldés ki van kapcsolva.",
+      },
+    });
+    const dialog = await openWindow();
+    fireEvent.click(within(dialog).getByLabelText("Elküldöm e-mailben"));
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Számla kiállítása" }),
+    );
+
+    await screen.findByText("ACRS-2026-1");
+    expect(screen.getByTestId("invoice-mail").textContent).toContain(
+      "a levél nem ment ki (szamla@allatkert.example): A levélküldés ki van kapcsolva.",
+    );
+    expect(screen.queryByRole("button", { name: "Kiállítás" })).toBeNull();
+  });
+
+  it("ha az összegző nem készül el, az ablak az okát mondja, és nem állít ki", async () => {
+    certificatesApi.list.mockResolvedValue([signedCertificate]);
+    invoiceApi.byCertificate.mockResolvedValue({
+      ...invoiceSummary,
+      issueEnabled: true,
+    });
+    invoiceApi.issueSummary.mockRejectedValue(
+      new Error(
+        "A teljesítési igazolás a piszkozat óta megváltozott: az összeg már nem egyezik. Készíts új piszkozatot.",
+      ),
+    );
+    render(<MaintenanceInvoicePanel serviceJobId="job-1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Kiállítás" }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: /^Kiállítod a számlát/,
+    });
+    await within(dialog).findByText(/az összeg már nem egyezik/);
+    expect(
+      within(dialog).getByRole("button", { name: "Számla kiállítása" }),
+    ).toBeDisabled();
+    expect(invoiceApi.issue).not.toHaveBeenCalled();
   });
 
   it("pénzügyi jog nélkül a bekapcsolt kiállítás is tiltott, és megmondja, miért", async () => {
