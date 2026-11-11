@@ -58,7 +58,10 @@ describe(
 
     after(async () => {
       if (gate.mode !== "run") return;
-      await prisma.reefClubCustomerCandidate.deleteMany({});
+      // filtered, like every integration cleanup (the rebuild itself replaces the whole table; what stays is this suite's rows)
+      await prisma.reefClubCustomerCandidate.deleteMany({
+        where: { productName: { startsWith: "VEVO-PROBA" } },
+      });
       await prisma.reefClubDoseProjectionRun.deleteMany({
         where: { startedAt: { gte: suiteStartedAt } },
       });
