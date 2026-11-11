@@ -21,7 +21,10 @@ const problems = async (
     Dto === CreateCustomerDto
       ? { type: "COMPANY", displayName: "Teszt" }
       : { expectedUpdatedAt: "2026-11-11T10:00:00.000Z" };
-  const errors = await validate(plainToInstance(Dto, { ...base, ...extra }));
+  // the two classes are one union: one constructor type for `plainToInstance`
+  const errors = await validate(
+    plainToInstance(Dto as new () => object, { ...base, ...extra }),
+  );
   return errors.filter((e) => e.property === "paymentDueDays");
 };
 
