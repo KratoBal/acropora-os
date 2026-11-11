@@ -140,6 +140,27 @@ describe("a kézi termékjelölt-lista", { skip: gate.mode === "skip" }, () => {
     assert.deepEqual(after[0]!.sideEffects, []);
   });
 
+  it("an unchanged row keeps its ORIGINAL approver and time; a changed row gets the new run's", async () => {
+    const first = new Date("2026-11-10T09:00:00.000Z");
+    await store.replace(
+      [row("a"), row("b", { parameter: "KALCIUM" })],
+      "Első jóváhagyó",
+      first,
+    );
+    await store.replace(
+      [row("a"), row("b", { parameter: "KALCIUM", note: "módosult" })],
+      "Második jóváhagyó",
+      approvedAt,
+    );
+    const stored = await mine();
+    const a = stored.find((entry) => entry.productId === ids.a)!;
+    const b = stored.find((entry) => entry.productId === ids.b)!;
+    assert.equal(a.approvedBy, "Első jóváhagyó");
+    assert.equal(a.approvedAt.getTime(), first.getTime());
+    assert.equal(b.approvedBy, "Második jóváhagyó");
+    assert.equal(b.approvedAt.getTime(), approvedAt.getTime());
+  });
+
   it("the replacement is ONE transaction: a bad row in the middle leaves the stored list exactly as it was", async () => {
     await store.replace([row("a"), row("b")], "Balázs", approvedAt);
     const snapshot = JSON.stringify(await mine());
@@ -172,7 +193,10 @@ describe("a kézi termékjelölt-lista", { skip: gate.mode === "skip" }, () => {
       }
       assert.ok(refused, JSON.stringify(over));
     }
-    await assert.rejects(store.replace([row("a")], "   ", approvedAt));
+    // a row that CHANGES, so it is written (an unchanged row is not written and carries no new approver)
+    await assert.rejects(
+      store.replace([row("a", { note: "új jegyzet" })], "   ", approvedAt),
+    );
   });
 
   it("one move of one product is one row: the same product and move twice in one run is one stored row", async () => {

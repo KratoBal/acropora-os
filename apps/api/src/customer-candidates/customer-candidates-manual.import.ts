@@ -4,6 +4,7 @@ import {
   ManualListError,
   parseManualEntries,
   planManualReplace,
+  type ManualPlanCurrent,
   type ManualPlanNext,
   type ParsedManualEntry,
   type RejectedRow,
@@ -27,6 +28,8 @@ export interface ImportOptions {
   apply: boolean;
   approvedBy: string | null;
   fingerprint: string | null;
+  /** An empty file replaces the whole list with nothing: it needs this switch. */
+  allowEmpty: boolean;
 }
 
 export interface ImportDeps {
@@ -49,41 +52,55 @@ export function parseImportArgs(
   let apply = false;
   let approvedBy: string | null = null;
   let fingerprint: string | null = null;
+  let allowEmpty = false;
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]!;
     if (arg === "--apply") apply = true;
     else if (arg === "--approved-by") approvedBy = argv[++index] ?? null;
     else if (arg === "--fingerprint") fingerprint = argv[++index] ?? null;
+    else if (arg === "--allow-empty") allowEmpty = true;
     else if (arg.startsWith("--"))
       return { error: `Ismeretlen kapcsoló: ${arg}` };
     else if (file === null) file = arg;
     else return { error: "Egy fájl adható meg." };
   }
   if (file === null) return { error: "Hiányzik a fájl (egy JSON tömb)." };
-  return { file, apply, approvedBy, fingerprint };
+  return { file, apply, approvedBy, fingerprint, allowEmpty };
 }
 
-const fingerprintOf = (rows: readonly ManualRowToStore[]): string =>
+const byMove = (
+  a: { productId: string; parameter: string; direction: string },
+  b: { productId: string; parameter: string; direction: string },
+) =>
+  `${a.productId}|${a.parameter}|${a.direction}`.localeCompare(
+    `${b.productId}|${b.parameter}|${b.direction}`,
+  );
+const contentOf = (row: ManualPlanCurrent) => [
+  row.productId,
+  row.parameter,
+  row.direction,
+  row.referenceUrl,
+  row.basis,
+  row.sideEffects,
+  row.sideEffectsStatus,
+  row.note,
+];
+
+/**
+ * THE FINGERPRINT COVERS WHAT WOULD BE STORED AND WHAT IS STORED NOW (barracuda, OS #2420): the file with its SKU resolution, AND the table's
+ * current rows. If someone else imports between the dry run and the --apply, the rows this --apply would remove are not the ones the dry run
+ * showed, and the fingerprint no longer matches.
+ */
+const fingerprintOf = (
+  rows: readonly ManualRowToStore[],
+  current: readonly ManualPlanCurrent[],
+): string =>
   createHash("sha256")
     .update(
-      JSON.stringify(
-        [...rows]
-          .sort((a, b) =>
-            `${a.productId}|${a.parameter}|${a.direction}`.localeCompare(
-              `${b.productId}|${b.parameter}|${b.direction}`,
-            ),
-          )
-          .map((row) => [
-            row.productId,
-            row.parameter,
-            row.direction,
-            row.referenceUrl,
-            row.basis,
-            row.sideEffects,
-            row.sideEffectsStatus,
-            row.note,
-          ]),
-      ),
+      JSON.stringify({
+        next: [...rows].sort(byMove).map(contentOf),
+        current: [...current].sort(byMove).map(contentOf),
+      }),
     )
     .digest("hex");
 
@@ -155,11 +172,12 @@ export async function runManualImport(
     });
   }
 
+  const current = await deps.store.current();
   const plan = planManualReplace(
-    await deps.store.current(),
+    current,
     rows.map((row): ManualPlanNext => ({ ...row, parameter: row.parameter })),
   );
-  const fingerprint = fingerprintOf(rows);
+  const fingerprint = fingerprintOf(rows, current);
   const pending = rows.filter(
     (row) => row.sideEffectsStatus === "PENDING",
   ).length;
@@ -187,6 +205,12 @@ export async function runManualImport(
   }
   if (!options.approvedBy || options.approvedBy.trim() === "") {
     out.stderr("Az --apply-hoz --approved-by kell (ki hagyta jóvá, és hol).\n");
+    return 2;
+  }
+  if (rows.length === 0 && !options.allowEmpty) {
+    out.stderr(
+      "A fájl üres: az --apply a TELJES listát törölné. Ha ez a szándék, add meg az --allow-empty kapcsolót is.\n",
+    );
     return 2;
   }
   if (options.fingerprint !== fingerprint) {

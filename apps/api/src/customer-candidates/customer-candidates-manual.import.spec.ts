@@ -6,6 +6,7 @@ import {
   runManualImport,
   type ImportOptions,
 } from "./customer-candidates-manual.import.js";
+import type { ManualPlanCurrent } from "./customer-candidates-manual.rules.js";
 import type {
   ManualListStore,
   ManualRowToStore,
@@ -35,6 +36,7 @@ function fixture(
   },
 ) {
   const stored: ManualRowToStore[][] = [];
+  const held: ManualPlanCurrent[] = [];
   const out: string[] = [];
   const err: string[] = [];
   const store: ManualListStore = {
@@ -44,7 +46,7 @@ function fixture(
           catalogue[sku] ? [[sku, catalogue[sku]!] as const] : [],
         ),
       ),
-    current: async () => [],
+    current: async () => [...held],
     replace: async (rows, approvedBy) => {
       stored.push([...rows]);
       assert.ok(approvedBy.length > 0);
@@ -58,6 +60,7 @@ function fixture(
         apply: false,
         approvedBy: null,
         fingerprint: null,
+        allowEmpty: false,
         ...options,
       },
       {
@@ -71,7 +74,7 @@ function fixture(
     );
   const fingerprint = () =>
     out.join("").match(/LENYOMAT: ([0-9a-f]{64})/)?.[1] ?? null;
-  return { run, stored, out, err, fingerprint };
+  return { run, stored, held, out, err, fingerprint };
 }
 
 describe("parseImportArgs", () => {
@@ -81,6 +84,7 @@ describe("parseImportArgs", () => {
       apply: false,
       approvedBy: null,
       fingerprint: null,
+      allowEmpty: false,
     });
     assert.deepEqual(
       parseImportArgs([
@@ -96,7 +100,14 @@ describe("parseImportArgs", () => {
         apply: true,
         approvedBy: "Balázs",
         fingerprint: "ab",
+        allowEmpty: false,
       },
+    );
+    assert.equal(
+      parseImportArgs(["f.json", "--allow-empty"]) &&
+        (parseImportArgs(["f.json", "--allow-empty"]) as ImportOptions)
+          .allowEmpty,
+      true,
     );
     assert.ok("error" in parseImportArgs([]));
     assert.ok("error" in parseImportArgs(["a", "b"]));
@@ -245,5 +256,87 @@ describe("--apply", () => {
     });
     assert.equal(code, 1);
     assert.equal(fx.stored.length, 0);
+  });
+});
+
+describe("the table's current state is part of what was approved (barracuda, OS #2420)", () => {
+  const stored = (
+    over: Partial<ManualPlanCurrent> = {},
+  ): ManualPlanCurrent => ({
+    productId: "p9",
+    parameter: "KH",
+    direction: "EMEL",
+    referenceUrl: "https://shop.example/held",
+    basis: "SHOP_TEXT",
+    sideEffects: [],
+    sideEffectsStatus: "FILLED",
+    note: null,
+    ...over,
+  });
+
+  it("another import between the dry run and the --apply changes the fingerprint, so the apply refuses and nothing is written", async () => {
+    const fx = fixture([line()]);
+    await fx.run();
+    const shown = fx.fingerprint()!;
+    fx.held.push(stored());
+    assert.equal(
+      await fx.run({ apply: true, approvedBy: "Balázs", fingerprint: shown }),
+      1,
+    );
+    assert.equal(fx.stored.length, 0);
+    // the dry run on the new state shows the new fingerprint, and that one goes through
+    fx.out.length = 0;
+    await fx.run();
+    const now = fx.fingerprint()!;
+    assert.notEqual(now, shown);
+    assert.equal(
+      await fx.run({ apply: true, approvedBy: "Balázs", fingerprint: now }),
+      0,
+    );
+  });
+
+  it("a changed held row (same key, another content) changes the fingerprint too", async () => {
+    const a = fixture([line()]);
+    a.held.push(stored());
+    await a.run();
+    const b = fixture([line()]);
+    b.held.push(stored({ note: "más" }));
+    await b.run();
+    assert.notEqual(a.fingerprint(), b.fingerprint());
+  });
+});
+
+describe("an empty file is the whole list deleted, and it needs --allow-empty", () => {
+  it("the dry run shows the deletions, the apply without the switch refuses, with it the list is emptied", async () => {
+    const fx = fixture([]);
+    fx.held.push({
+      productId: "p9",
+      parameter: "KH",
+      direction: "EMEL",
+      referenceUrl: "https://shop.example/held",
+      basis: "SHOP_TEXT",
+      sideEffects: [],
+      sideEffectsStatus: "FILLED",
+      note: null,
+    });
+    assert.equal(await fx.run(), 0);
+    assert.match(fx.out.join(""), /törölt 1/);
+    const fingerprint = fx.fingerprint()!;
+    assert.equal(
+      await fx.run({ apply: true, approvedBy: "Balázs", fingerprint }),
+      2,
+    );
+    assert.equal(fx.stored.length, 0);
+    assert.match(fx.err.join(""), /--allow-empty/);
+    assert.equal(
+      await fx.run({
+        apply: true,
+        approvedBy: "Balázs",
+        fingerprint,
+        allowEmpty: true,
+      }),
+      0,
+    );
+    assert.deepEqual(fx.stored, [[]]);
   });
 });

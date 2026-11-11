@@ -202,7 +202,7 @@ const keyOf = (row: {
   parameter: string;
   direction: string;
 }) => `${row.productId}|${row.parameter}|${row.direction}`;
-const same = (a: ManualPlanCurrent, b: ManualPlanCurrent) =>
+export const sameManualContent = (a: ManualPlanCurrent, b: ManualPlanCurrent) =>
   a.referenceUrl === b.referenceUrl &&
   a.basis === b.basis &&
   a.sideEffectsStatus === b.sideEffectsStatus &&
@@ -226,7 +226,7 @@ export function planManualReplace(
   for (const row of next) {
     const held = before.get(keyOf(row));
     if (!held) add += 1;
-    else if (same(held, row)) unchanged += 1;
+    else if (sameManualContent(held, row)) unchanged += 1;
     else update += 1;
   }
   const remove = [...before.keys()].filter((key) => !after.has(key)).length;

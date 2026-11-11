@@ -1,6 +1,9 @@
 import { prisma } from "@acropora/database";
 
-import type { ManualPlanCurrent } from "./customer-candidates-manual.rules.js";
+import {
+  sameManualContent,
+  type ManualPlanCurrent,
+} from "./customer-candidates-manual.rules.js";
 
 export interface ResolvedSku {
   productId: string;
@@ -79,7 +82,37 @@ export class PrismaManualListStore implements ManualListStore {
   ): Promise<{ stored: number; removed: number }> {
     return this.database.$transaction(async (tx) => {
       const ids: string[] = [];
+      const held = await tx.customerCandidateManualEntry.findMany();
+      const heldByMove = new Map(
+        held.map((entry) => [
+          `${entry.productId}|${entry.parameterCode}|${entry.direction}`,
+          entry,
+        ]),
+      );
       for (const row of rows) {
+        // An unchanged row keeps its ORIGINAL approver and time: only what this run changes is approved by this run.
+        const existing = heldByMove.get(
+          `${row.productId}|${row.parameter}|${row.direction}`,
+        );
+        if (
+          existing &&
+          sameManualContent(
+            {
+              productId: existing.productId,
+              parameter: existing.parameterCode,
+              direction: existing.direction,
+              referenceUrl: existing.referenceUrl,
+              basis: existing.basis,
+              sideEffects: existing.sideEffects,
+              sideEffectsStatus: existing.sideEffectsStatus,
+              note: existing.note,
+            },
+            row,
+          )
+        ) {
+          ids.push(existing.id);
+          continue;
+        }
         const data = {
           sku: row.sku,
           referenceUrl: row.referenceUrl,
