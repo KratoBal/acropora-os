@@ -40,6 +40,8 @@ export class CreateCustomerDto {
   @IsEmail() @IsOptional() email?: string;
   @IsEmail() @IsOptional() billingEmail?: string;
   @IsString() @IsOptional() phone?: string;
+  /** Napban, egész, 0-365 (mint a Partnereknél); hiányzó: az alapérték. */
+  @IsInt() @Min(0) @Max(365) @IsOptional() paymentDueDays?: number;
   @IsBoolean() @IsOptional() marketingEmailConsent = false;
   @IsBoolean() @IsOptional() marketingSmsConsent = false;
   @IsArray()
@@ -70,6 +72,8 @@ export class UpdateCustomerDto {
   @IsEmail() @IsOptional() email?: string | null;
   @IsEmail() @IsOptional() billingEmail?: string | null;
   @IsString() @IsOptional() phone?: string | null;
+  /** Napban, egész, 0-365 (mint a Partnereknél); `null` törli. */
+  @IsInt() @Min(0) @Max(365) @IsOptional() paymentDueDays?: number | null;
   @IsBoolean() @IsOptional() marketingEmailConsent?: boolean;
   @IsBoolean() @IsOptional() marketingSmsConsent?: boolean;
   @IsArray()
