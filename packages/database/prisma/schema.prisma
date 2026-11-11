@@ -11995,6 +11995,23 @@ model PartnerOrder {
   @@index([customerId])
 }
 
+/// AZ AI CSEVEGÉS BEÁLLÍTÁSAI (kártya f5b8f7ba, 4a szelet): EGY sor (`AI_CHAT_SETTING_ID` az API-ban), az üzenetek és a
+/// kapcsolat-kérések megőrzési ideje, a kapcsolat-kérés kapcsolója és a címzett. Sor nélkül az alapérték érvényes (a terv
+/// javaslata: 180 / 30 / 90 nap, a felajánlás ÉS a kapcsolat-kérés kikapcsolva: a felajánlás a 4d-ig kimarad), tehát a telepítés után semmit nem kell betölteni. A határokat a szerver érvényesíti
+/// (`@acropora/types` `checkAiChatSettings`), és az adatbázis is (CHECK a migrációban): egy elgépelt 0 ne törölhessen azonnal.
+model AiChatSetting {
+  id                            String   @id
+  offerEnabled                  Boolean  @default(false)
+  contactRequestEnabled         Boolean  @default(false)
+  contactRecipientEmail         String?
+  messageRetentionDays          Int      @default(180)
+  contactHandledRetentionDays   Int      @default(30)
+  contactUnhandledRetentionDays Int      @default(90)
+  updatedById                   String?
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+}
+
 /// A MEGRENDELÉSEK BEÁLLÍTÁSAI (egy sor, az azonosítója a kódban rögzített). S4b (kártya 38caeac2, Luca 2026-11-05):
 /// hány napja nincs mozgás egy nyitott, teljesítetlen tételű megrendelésen ahhoz, hogy hátralékos legyen. A 0 érvényes
 /// érték (minden nyitott, teljesítetlen tételű megrendelés hátralékos). Sor nélkül az alapérték, 14, érvényes.

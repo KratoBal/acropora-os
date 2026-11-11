@@ -1932,3 +1932,13 @@ export type {
   ProductHusbandryField,
   ProductHusbandryInput,
 } from "./product-husbandry.js";
+export {
+  AI_CHAT_SETTINGS_DEFAULTS,
+  AI_CHAT_SETTINGS_LIMITS,
+  checkAiChatSettings,
+} from "./ai-chat-settings.js";
+export type {
+  AiChatSettings,
+  AiChatSettingsCheck,
+  AiChatSettingsServiceView,
+} from "./ai-chat-settings.js";

@@ -1699,6 +1699,11 @@ export const ANONYMIZATION_REGISTER: Readonly<
   PartnerOrder: {
     orderNumber: "identifier",
   },
+  AiChatSetting: {
+    id: "identifier",
+    contactRecipientEmail: "email",
+    updatedById: "identifier",
+  },
   PartnerOrderSetting: {
     id: "identifier",
     updatedById: "identifier",
