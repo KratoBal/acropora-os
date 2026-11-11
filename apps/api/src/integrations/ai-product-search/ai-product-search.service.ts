@@ -12,6 +12,11 @@ import {
   chooseDescription,
   chooseParameters,
 } from "./ai-product-search.document.js";
+import {
+  stripExternalLinks,
+  stripExternalLinksDeep,
+  stripLinksEnabled,
+} from "./ai-product-search.links.js";
 import { plainText } from "./ai-product-search.text.js";
 import type {
   AiProductSearchHit,
@@ -42,7 +47,8 @@ export class AiProductSearchService {
     );
 
     const { rows, totalMatched } = await this.repository.search(query, limit);
-    const hits = rows.map((row) => this.project(row));
+    const strip = stripLinksEnabled();
+    const hits = rows.map((row) => this.project(row, strip));
 
     return {
       query,
@@ -50,6 +56,7 @@ export class AiProductSearchService {
       totalMatched,
       oldestSyncedAt: oldestOf(hits),
       projectionVersion: AI_PRODUCT_SEARCH_PROJECTION_VERSION,
+      externalLinks: strip ? "stripped" : "kept",
     };
   }
 
@@ -62,10 +69,20 @@ export class AiProductSearchService {
    * the rule that price and stock stay structured, which is exactly the kind
    * of rule that erodes quietly.
    */
-  private project(row: ProductSearchRow): AiProductSearchHit {
+  private project(row: ProductSearchRow, strip = false): AiProductSearchHit {
     const snapshot = row.unasSnapshot;
     const chosen = chooseDescription(row);
     const parameters = chooseParameters(row);
+    /**
+     * R3 (card 9d060f5c): the text the model reads loses every address that is not our own, AFTER the HTML cleaner
+     * (an address in an attribute is already gone with its tag). A description left empty by it is null, like one
+     * that had nothing to say.
+     */
+    const text = (value: string | null) => {
+      if (!strip || value === null) return value;
+      const stripped = stripExternalLinks(value).text;
+      return stripped === "" ? null : stripped;
+    };
     const net = toNumber(snapshot?.netPrice);
     const gross = toNumber(snapshot?.grossPrice);
     const reported = toNumber(snapshot?.reportedStock);
@@ -84,8 +101,8 @@ export class AiProductSearchService {
        * while claiming to be plain text. `plainText` looks at the content
        * instead of at that claim - see its own file for why.
        */
-      descriptionShort: chosen.short,
-      descriptionLong: chosen.long,
+      descriptionShort: text(chosen.short),
+      descriptionLong: text(chosen.long),
       /**
        * MELYIK LEIRAST HASZNALTUK. A ket forras kozott a tulajdonjog dont, es
        * ha a valasz nem mondja meg, melyiket olvasta, egy tarolt itelet
@@ -93,7 +110,9 @@ export class AiProductSearchService {
        * boltbol jott, es mast, ha valaki itt szerkesztette.
        */
       descriptionSource: chosen.source,
-      parameters: parameters.value,
+      parameters: strip
+        ? stripExternalLinksDeep(parameters.value)
+        : parameters.value,
       /**
        * HONNAN JONNEK A PARAMETEREK -- ES MIERT NEM ELEG, HOGY URESEK.
        *
@@ -148,10 +167,13 @@ export class AiProductSearchService {
       missingSince: row.missingSince?.toISOString() ?? null,
       knowledge: (row.knowledgeFacts ?? []).flatMap((fact) => {
         // cleaned like a description, and no address written in it either
-        const value = plainText(fact.value)
+        const cleaned = plainText(fact.value)
           ?.replace(/https?:\/\/\S+|www\.\S+/gi, "")
           .replace(/\s+/g, " ")
           .trim();
+        // R3: with the switch on, the full recognition too (a bare domain, a bracketed one), our own kept
+        const value =
+          strip && cleaned ? stripExternalLinks(cleaned).text : cleaned;
         return value
           ? [
               {

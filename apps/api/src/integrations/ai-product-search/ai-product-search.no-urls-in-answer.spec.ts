@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { afterEach, describe, it } from "node:test";
 
 import type {
   AiProductSearchRepository,
   ProductSearchRow,
 } from "./ai-product-search.repository.js";
+import { STRIP_LINKS_ENV } from "./ai-product-search.links.js";
 import { AiProductSearchService } from "./ai-product-search.service.js";
 import type { AiProductSearchHit } from "./ai-product-search.types.js";
 
@@ -131,7 +132,11 @@ describe("URL a modell elé kerülő szövegben", () => {
     );
   });
 
-  it("A HIÁNY, AMIT EZ A FÁJL RÖGZÍT: sima szövegként beírt cím ma ÁTMEGY", async () => {
+  afterEach(() => {
+    delete process.env[STRIP_LINKS_ENV];
+  });
+
+  it("A HIÁNY, AMIT EZ A FÁJL RÖGZÍT: sima szövegként beírt cím a KIKAPCSOLT kapcsolóval ma ÁTMEGY", async () => {
     /**
      * NEM azt állítjuk, hogy ez így helyes. Azt állítjuk, hogy ma ez történik,
      * és hogy a mai tisztaság a HTML-tisztító mellékhatása, nem szabály.
@@ -163,5 +168,75 @@ describe("URL a modell elé kerülő szövegben", () => {
       "hit.descriptionShort: https://www.marine-aquatics.eu/termek",
       "hit.parameters.adatlap: http://pelda.hu/adatlap.pdf",
     ]);
+  });
+
+  /**
+   * R3 (kártya 9d060f5c), a terv 5.3 szakasza: a kapcsoló BEKAPCSOLT ágán a fenti hiány megfordul. A sima szövegű
+   * külső cím a rövid és a hosszú leírásból és a `parameters` szöveges értékéből is kikerül, a saját domain marad,
+   * és a válasz kimondja, hogy kiszedte.
+   */
+  it("a BEKAPCSOLT kapcsolóval a sima szövegű külső cím kikerül, a saját domain marad", async () => {
+    process.env[STRIP_LINKS_ENV] = "true";
+    const service = new AiProductSearchService({
+      search: async () => ({
+        rows: [
+          row({
+            unasSnapshot: {
+              descriptionShort:
+                "Részletek: https://www.marine-aquatics.eu/termek, nálunk: https://shop.acropora.hu/termek/x",
+              descriptionLong: "Lásd reefsupplies.ca",
+              parameters: {
+                adatlap: "http://pelda.hu/adatlap.pdf",
+                kiszereles: "1 l",
+              },
+              netPrice: null,
+              grossPrice: null,
+              currency: null,
+              reportedStock: null,
+              reportedStockSyncedAt: new Date("2026-08-27T05:30:00.000Z"),
+              updatedAt: new Date("2026-08-27T06:00:00.000Z"),
+            },
+            // a knowledge fact lost its scheme and www addresses before; with the switch, a bare domain goes too
+            knowledgeFacts: [
+              {
+                field: "dosingGuidance",
+                value: "A gyártó oldala: redseafish.com, nálunk acropora.hu",
+                unit: null,
+                acceptedByRule: null,
+                fieldResult: { sourceType: "MANUFACTURER_PAGE" },
+              },
+            ],
+          }),
+        ],
+        totalMatched: 1,
+      }),
+    } as unknown as AiProductSearchRepository);
+    const result = await service.search({ query: "balling" });
+    const hit = result.hits[0]!;
+
+    assert.deepEqual(findUrls(hit), [
+      "hit.descriptionShort: https://shop.acropora.hu/termek/x",
+    ]);
+    assert.equal(
+      hit.descriptionShort,
+      "Részletek:, nálunk: https://shop.acropora.hu/termek/x",
+    );
+    assert.equal(hit.descriptionLong, "Lásd");
+    assert.deepEqual(hit.parameters, { adatlap: "", kiszereles: "1 l" });
+    assert.equal(
+      hit.knowledge[0]?.value,
+      "A gyártó oldala:, nálunk acropora.hu",
+    );
+    assert.equal(result.externalLinks, "stripped");
+  });
+
+  it("a kikapcsolt kapcsoló a válaszban is látszik", async () => {
+    const service = new AiProductSearchService({
+      search: async () => ({ rows: [row()], totalMatched: 1 }),
+    } as unknown as AiProductSearchRepository);
+    assert.equal(
+      (await service.search({ query: "balling" })).externalLinks,
+      "kept",
+    );
   });
 });

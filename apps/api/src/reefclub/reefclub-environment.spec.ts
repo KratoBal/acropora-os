@@ -48,6 +48,8 @@ function internalEnvironmentNames(): Set<string> {
  * integration), or it is added here with the reason it is harmless.
  */
 const NOT_SECRET_INTERNAL_NAMES = new Set([
+  // the AI projection's link stripping (card 9d060f5c, R3): exactly "true" turns it on, a boolean, not a secret
+  "AI_PRODUCT_SEARCH_STRIP_LINKS",
   "API_KEEP_ALIVE_TIMEOUT_MS",
   "API_URL",
   "APP_URL",

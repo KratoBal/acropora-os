@@ -166,4 +166,10 @@ export interface AiProductSearchResult {
   oldestSyncedAt: string | null;
   /** The shape version of this projection. */
   projectionVersion: string;
+  /**
+   * Whether external addresses were taken out of the descriptions and the parameters' text (card 9d060f5c, R3,
+   * behind `AI_PRODUCT_SEARCH_STRIP_LINKS`). A stored judgement about an answer reads it: "the model linked out"
+   * means one thing if the text handed it an address, and another if it did not.
+   */
+  externalLinks: "stripped" | "kept";
 }
