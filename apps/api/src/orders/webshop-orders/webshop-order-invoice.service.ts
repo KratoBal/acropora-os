@@ -389,7 +389,16 @@ export class WebshopOrderInvoiceService {
     */
     const taxKey = orderTaxKeyOf(order);
     if (taxKey) {
-      const byTax = await this.repository.customersByTaxKey(taxKey);
+      const allByTax = await this.repository.customersByTaxKey(taxKey);
+      /*
+        A TÜKÖR NYER (barracuda, #2405 review; a döntés üzleti, acrobot dönt): ugyanaz a cég rendszerint KÉT soron áll (a régi vevő-sor
+        és a Partnerek tükre, mérve az Állatkertnél), és a számlázás a TÜKRÖT tekinti a jó vevőnek (`customers.repository.ts`: "the
+        mirror IS the right buyer"). Ha a találatok között PONTOSAN EGY partner-tükör van, az az a vevő; több tükör, vagy tükör nélküli
+        több sor: nincs eldöntve, és a számla nem készül el.
+      */
+      const mirrors = allByTax.filter((match) => match.partnerMirror);
+      const byTax =
+        allByTax.length > 1 && mirrors.length === 1 ? mirrors : allByTax;
       if (byTax.length > 1)
         throw new ConflictException(
           `Az OS-ben több partner is ezzel az adószámmal áll (${byTax

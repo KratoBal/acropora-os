@@ -625,18 +625,20 @@ export class WebshopOrdersRepository {
   }
 
   /**
-   * A KÖTÉS. Ha a kulcsot közben más kötötte be (egyedi megkötés), az ő
-   * partnerét adjuk vissza: a két kérés ugyanazt a vevőt kapja.
-   */
-  /**
    * A VEVŐK AZ ADÓSZÁM KULCSA SZERINT (kártya c499739d): a magyar adószám első nyolc számjegye vagy a közösségi adószám, ugyanazzal a
    * szabállyal, mint a duplikátum-mérés. A jelölteket az adatbázis szűri (magyar: a nyolc számjegyet tartalmazó adószám; közösségi: ahol
    * van közösségi adószám), a PONTOS egyezést a `huBase` és az `euKey` dönti el, mert az adószám tárolt alakja szabad (`15509246-2-41`,
    * `HU15509246`, `DE 123 456 789`).
    */
-  async customersByTaxKey(
-    key: OrderTaxKey,
-  ): Promise<{ id: string; displayName: string; linked: boolean }[]> {
+  async customersByTaxKey(key: OrderTaxKey): Promise<
+    {
+      id: string;
+      displayName: string;
+      linked: boolean;
+      /** a sor egy partner vevő-tükre (`Supplier.customerId`): a számla ezt tekinti a jó vevőnek */
+      partnerMirror: boolean;
+    }[]
+  > {
     const candidates = await prisma.customer.findMany({
       where: {
         archivedAt: null,
@@ -650,6 +652,7 @@ export class WebshopOrdersRepository {
         displayName: true,
         taxNumber: true,
         euTaxNumber: true,
+        partner: { select: { id: true } },
       },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     });
@@ -670,12 +673,18 @@ export class WebshopOrdersRepository {
         })
       ).map((row) => row.entityId),
     );
-    return rows.map(({ id, displayName }) => ({
+    return rows.map(({ id, displayName, partner }) => ({
       id,
       displayName,
       linked: linked.has(id),
+      partnerMirror: Boolean(partner),
     }));
   }
+
+  /**
+   * A KÖTÉS. Ha a kulcsot közben más kötötte be (egyedi megkötés), az ő
+   * partnerét adjuk vissza: a két kérés ugyanazt a vevőt kapja.
+   */
   async linkCustomer(customerId: string, key: string): Promise<string> {
     try {
       await prisma.externalReference.create({

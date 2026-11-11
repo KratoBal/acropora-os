@@ -87,7 +87,12 @@ function setup(
     status?: string;
     linked?: string | null;
     byEmail?: { id: string; displayName: string; linked: boolean }[];
-    byTax?: { id: string; displayName: string; linked: boolean }[];
+    byTax?: {
+      id: string;
+      displayName: string;
+      linked: boolean;
+      partnerMirror?: boolean;
+    }[];
     /** A rendelés (alapból a magánszemélyes ORDER). */
     orderOverride?: MedusaOrderDetailRow;
     buyer?: typeof SAME_BUYER;
@@ -139,7 +144,10 @@ function setup(
     },
     customersByTaxKey: async (key: { kind: string; value: string }) => {
       calls.push(`customersByTaxKey ${key.kind} ${key.value}`);
-      return over.byTax ?? [];
+      return (over.byTax ?? []).map((row) => ({
+        partnerMirror: false,
+        ...row,
+      }));
     },
     linkCustomer: async (customerId: string, key: string) => {
       calls.push(`link ${customerId} ${key}`);
@@ -400,17 +408,105 @@ describe("WebshopOrderInvoiceService", () => {
       orderOverride: COMPANY_ORDER("15509246-2-41"),
       byTax: [
         { id: "cust_a", displayName: "FANK régi sor", linked: false },
-        { id: "cust_b", displayName: "FANK partner tükör", linked: true },
+        { id: "cust_b", displayName: "FANK másik régi sor", linked: true },
       ],
     });
     await assert.rejects(service.issue("order_38", USER, NOW), {
       status: 409,
-      message: /ezzel az adószámmal.*FANK régi sor, FANK partner tükör/s,
+      message: /ezzel az adószámmal.*FANK régi sor, FANK másik régi sor/s,
     });
     assert.equal(
       calls.some((c) => c.startsWith("create") || c.startsWith("link")),
       false,
     );
+  });
+
+  it("THE MOTIVATING CASE: the old customer row and the partner's mirror on the same key: the MIRROR is the customer (the invoice's right buyer), no 409", async () => {
+    const { calls, service } = setup({
+      orderOverride: COMPANY_ORDER("15509246-2-41"),
+      byTax: [
+        { id: "cust_old", displayName: "FANK régi vevő-sor", linked: false },
+        {
+          id: "cust_mirror",
+          displayName: "FANK partner tükör",
+          linked: false,
+          partnerMirror: true,
+        },
+      ],
+      buyer: {
+        ...SAME_BUYER,
+        name: "Fővárosi Állat- és Növénykert",
+        taxNumber: "15509246-2-41",
+      },
+    });
+    await service.issue("order_38", USER, NOW);
+    assert.ok(
+      calls.includes("link cust_mirror guest:rendeles.kiss.anna@example.hu"),
+    );
+    assert.ok(
+      calls.some(
+        (c) => c.startsWith("create draft") && c.includes("for cust_mirror"),
+      ),
+    );
+    assert.equal(
+      calls.some((c) => c.includes("cust_old")),
+      false,
+    );
+    assert.equal(
+      calls.some((c) => c.startsWith("create customer")),
+      false,
+    );
+  });
+
+  it("the mirror rule needs EXACTLY ONE mirror: two mirrors, or several rows and no mirror, are still refused", async () => {
+    for (const rows of [
+      [
+        {
+          id: "m1",
+          displayName: "FANK tükör 1",
+          linked: false,
+          partnerMirror: true,
+        },
+        {
+          id: "m2",
+          displayName: "FANK tükör 2",
+          linked: false,
+          partnerMirror: true,
+        },
+      ],
+      [
+        { id: "a", displayName: "FANK régi A", linked: false },
+        { id: "b", displayName: "FANK régi B", linked: false },
+      ],
+      [
+        {
+          id: "m1",
+          displayName: "FANK tükör",
+          linked: false,
+          partnerMirror: true,
+        },
+        {
+          id: "m2",
+          displayName: "FANK tükör 2",
+          linked: false,
+          partnerMirror: true,
+        },
+        { id: "old", displayName: "FANK régi", linked: false },
+      ],
+    ]) {
+      const { calls, service } = setup({
+        orderOverride: COMPANY_ORDER("15509246-2-41"),
+        byTax: rows,
+      });
+      await assert.rejects(service.issue("order_38", USER, NOW), {
+        status: 409,
+        message: /ezzel az adószámmal/,
+      });
+      assert.equal(
+        calls.some((c) => c.startsWith("create") || c.startsWith("link")),
+        false,
+      );
+    }
   });
 
   it("an order WITH a tax number and no match makes a new customer: the e-mail is not asked, even if it matches somebody", async () => {

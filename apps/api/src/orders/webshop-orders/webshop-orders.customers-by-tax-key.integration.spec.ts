@@ -19,6 +19,7 @@ async function removeLeftovers() {
   await prisma.externalReference.deleteMany({
     where: { externalId: { startsWith: PREFIX } },
   });
+  await prisma.supplier.deleteMany({ where: { code: { startsWith: PREFIX } } });
   await prisma.customer.deleteMany({
     where: { customerNumber: { startsWith: PREFIX } },
   });
@@ -72,6 +73,15 @@ describe(
       await customer("de-other", { euTaxNumber: "DE 123 456 780" });
       await customer("at", { euTaxNumber: "ATU12345678" });
       await customer("none", {});
+      // a partner's customer mirror on the same key as the old row (the Állatkert shape)
+      await customer("mirror", { taxNumber: "15509246-2-42" });
+      await prisma.supplier.create({
+        data: {
+          code: `${PREFIX}sup-${n}`,
+          name: `${PREFIX}mirror-partner`,
+          customerId: ids["mirror"]!,
+        },
+      });
       // a customer that already has a webshop link
       await prisma.externalReference.create({
         data: {
@@ -98,6 +108,7 @@ describe(
       assert.deepEqual(await names({ kind: "HU", value: "15509246" }), [
         "dashed",
         "hu8",
+        "mirror",
         "plain11",
       ]);
     });
@@ -134,6 +145,22 @@ describe(
       );
       assert.equal(linked["dashed"], true);
       assert.equal(linked["plain11"], false);
+    });
+
+    it("the answer marks the partner's mirror (Supplier.customerId) and only that row", async () => {
+      const rows = await repository.customersByTaxKey({
+        kind: "HU",
+        value: "15509246",
+      });
+      const mirror = Object.fromEntries(
+        rows.map((row) => [
+          row.displayName.replace(PREFIX, ""),
+          row.partnerMirror,
+        ]),
+      );
+      assert.equal(mirror["mirror"], true);
+      assert.equal(mirror["dashed"], false);
+      assert.equal(mirror["plain11"], false);
     });
 
     it("a customer without any tax number is never found", async () => {
