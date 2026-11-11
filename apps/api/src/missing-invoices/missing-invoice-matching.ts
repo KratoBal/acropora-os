@@ -259,6 +259,12 @@ export function normalizeName(name: string): string {
  * a partnertől” kérdésnél 0,6. Az első-szó feltétel nélkül mért hamis
  * egyezések: Allianz Hungária ~ SOPRO HUNGÁRIA, Hetzner Online ~ UNAS Online.
  */
+/**
+ * A név szerinti jelölt-keresés küszöbe (`partnerDocs` a nem párosodott terheléseknél); a jelölt-vizsgálat (`candidateDiagnosis`)
+ * ugyanezt hívja, hogy a kettő ne válhasson el (barracuda, #2439 review).
+ */
+export const CANDIDATE_NAME_THRESHOLD = 0.6;
+
 export function samePartner(a: string, b: string, threshold = 0.6): boolean {
   const x = normalizeName(a);
   const y = normalizeName(b);
@@ -1375,7 +1381,9 @@ export function matchMonth(input: MatchMonthInput): Map<string, MatchOutcome> {
   }
   for (const debit of open) {
     if (outcomes.has(debit.id)) continue;
-    const candidates = partnerDocs(debit, 0.6).filter((d) => !zeroTotal(d));
+    const candidates = partnerDocs(debit, CANDIDATE_NAME_THRESHOLD).filter(
+      (d) => !zeroTotal(d),
+    );
     const amountCandidates = candidates.length
       ? []
       : window(debit)

@@ -44,6 +44,7 @@ import {
 import { ownInvoiceRefund } from "./own-invoice-refund.js";
 import {
   amountGap,
+  CANDIDATE_NAME_THRESHOLD,
   exact,
   inWindow,
   matchMonth,
@@ -400,7 +401,11 @@ export class MissingInvoicesService {
         inWindow: inWindow(debit.bookingDate, document.date),
         nameMatches:
           !!debit.counterpartyName &&
-          samePartner(document.supplierName, debit.counterpartyName, 0.6),
+          samePartner(
+            document.supplierName,
+            debit.counterpartyName,
+            CANDIDATE_NAME_THRESHOLD,
+          ),
         currencyComparable: gap !== null,
         amountExact: exact(gap, document.currency),
         grossKnown: document.gross !== null,
