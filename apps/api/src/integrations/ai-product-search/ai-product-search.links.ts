@@ -12,7 +12,8 @@ import { IANA_TLDS } from "./ai-product-search.tlds.js";
  * lose every address that is not our own domain. The AI service's answer gate (R2) is the protection for what the
  * model says from its own memory; this only removes what the catalogue would hand it.
  *
- * THE RECOGNITION IS A COPY of acropora-ai-agent `apps/api/src/answer-link-guard.ts` at b3b591a (#75), from
+ * THE RECOGNITION IS A COPY of acropora-ai-agent `apps/api/src/answer-link-guard.ts` at b3b591a (#75), with the
+ * `sourceHostKey` of its follow-up (acrobot 46930: a stored source matches with or without `www.`), from
  * `FILE_EXTENSION_TLDS` to `findLinks`, so both sides read the same text as an address. Two changes, marked "OS
  * addition": every link carries its position, and `findLinks` returns them. A change to the recognition belongs in
  * both places; the ai-agent spec is the matrix, `ai-product-search.links.spec.ts` repeats its rows that matter here.
@@ -129,6 +130,12 @@ export function normalizeHost(raw: string): string {
     labels[labels.length - 1] = last.slice(0, dash);
   return labels.join(".");
 }
+
+/**
+ * The key a host is compared with the stored source list by (acrobot 46930): EXACT, except a leading `www.`, on both
+ * sides, so an entry "redseafish.com" covers "www.redseafish.com" and back; any other subdomain is another host.
+ */
+export const sourceHostKey = (host: string) => host.replace(/^www\./, "");
 
 const isIPv4 = (host: string) =>
   /^(?:\d{1,3}\.){3}\d{1,3}$/.test(host) &&

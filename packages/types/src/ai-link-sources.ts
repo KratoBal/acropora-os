@@ -56,7 +56,8 @@ const LABEL = /^(?!-)[a-z0-9-]{1,63}(?<!-)$/;
  * The host, normalised the way the gate normalises it, or null. `new URL` does the IDN step (it runs in the browser
  * and on the server alike); everything around it is refused rather than cleaned: a scheme, a path, a port, a space
  * or an `@` means the person pasted something other than a host, and guessing which part they meant could store
- * the wrong one. An IP is refused too: the gate never treats an IP as a listed source.
+ * the wrong one. An IP is refused too: the gate never treats an IP as a listed source. A leading `www.` is dropped:
+ * the gate matches an entry with or without it, and no other subdomain (the Settings form says so next to the field).
  */
 export function normalizeAiLinkHost(raw: string): string | null {
   const trimmed = raw.trim().replace(/\.$/, "");
@@ -72,7 +73,11 @@ export function normalizeAiLinkHost(raw: string): string | null {
     return null;
   const tld = labels[labels.length - 1]!;
   if (!/^(?:[a-z]{2,63}|xn--[a-z0-9-]{1,59})$/.test(tld)) return null;
-  return host;
+  // acrobot 46930: a leading "www." is not part of the entry (the gate matches with or without it), so "www.gyarto.com"
+  // and "gyarto.com" are one entry; any other subdomain is kept, it is another host
+  return labels[0] === "www" && labels.length > 2
+    ? labels.slice(1).join(".")
+    : host;
 }
 
 const optionalText = (value: unknown): string | null | undefined => {

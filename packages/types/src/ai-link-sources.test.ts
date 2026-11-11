@@ -28,6 +28,11 @@ describe("normalizeAiLinkHost", () => {
       ["ácropora-gyarto.hu", "xn--cropora-gyarto-ugb.hu"],
       ["docs.tropic-marin.com", "docs.tropic-marin.com"],
       ["gyarto.xn--p1ai", "gyarto.xn--p1ai"],
+      // acrobot 46930: a leading www. is dropped, another subdomain stays; "www.com" itself is a host
+      ["www.RedSeaFish.com", "redseafish.com"],
+      ["docs.redseafish.com", "docs.redseafish.com"],
+      ["www2.redseafish.com", "www2.redseafish.com"],
+      ["www.com", "www.com"],
     ] as const)
       assert.equal(normalizeAiLinkHost(raw), host, raw);
   });
