@@ -48,7 +48,7 @@ import {
 } from "./billing-document-email.js";
 import { BillingDocumentLanguageService } from "./billing-document-language.service.js";
 import { BillingDocumentEmailRepository } from "./billing-document-email.repository.js";
-import { ISSUED_PDF } from "./billing-document-issue.service.js";
+import { issuedPdfKey } from "./issued-pdf-key.js";
 import { BillingDocumentsRepository } from "./billing-documents.repository.js";
 import { toBillingDocumentDetail } from "./billing-documents.service.js";
 
@@ -210,11 +210,7 @@ export class BillingDocumentEmailService {
       `A(z) ${row.invoiceNumber ?? row.id} bizonylat PDF-je nem érhető el nálunk, ezért nincs mit csatolni.`,
     );
     if (!row.pdfStorageKey) throw pdfMissing;
-    const pdf = await this.documentStore.get({
-      owner: "invoice",
-      ownerId: row.id,
-      documentId: ISSUED_PDF,
-    });
+    const pdf = await this.documentStore.get(issuedPdfKey(row));
     if (!pdf) throw pdfMissing;
 
     if (!(await this.repository.claim(id, mode))) {

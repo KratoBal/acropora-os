@@ -47,6 +47,7 @@ import {
 import { BillingDocumentStockRepository } from "./billing-document-stock.repository.js";
 import { BillingDocumentsRepository } from "./billing-documents.repository.js";
 import { toBillingDocumentDetail } from "./billing-documents.service.js";
+import { ISSUED_PDF } from "./issued-pdf-key.js";
 import { billingIssueMode } from "./billing-issue.config.js";
 import { StubSzamlazzAgentClient } from "../integrations/szamlazz/szamlazz-agent-stub.client.js";
 
@@ -55,7 +56,8 @@ export const BILLING_ISSUE_ENV = Symbol("BILLING_ISSUE_ENV");
 /** Injectable for tests: the Számlázz.hu client (a fake never calls out). */
 export const BILLING_SZAMLAZZ_CLIENT = Symbol("BILLING_SZAMLAZZ_CLIENT");
 
-export const ISSUED_PDF = "billing-document.pdf";
+// the name lives with the TIG issue's, which the billing module reads too (`issuedPdfKey`)
+export { ISSUED_PDF };
 
 /**
  * A KIÁLLÍTÁS (Számlázás v0.1). A karbantartási számla kiállításának mintája
