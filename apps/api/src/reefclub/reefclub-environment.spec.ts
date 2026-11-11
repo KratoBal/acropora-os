@@ -68,6 +68,8 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   // the catalog buttons' allowed Medusa host names (second guard): host names, not a secret
   "CATALOG_ACTION_MEDUSA_HOSTS",
   // the stage-only permission to load the demo rows (`stage` or empty): a switch, not a secret
+  // the shop-text switch of the customer candidates (V3.4 S2c): exactly "true" turns it on, a boolean, not a secret
+  "CUSTOMER_CANDIDATES_ALLOW_SHOP_TEXT",
   "DEMO_DATA_ALLOWED",
   // the daily PDF catch-up switches (booleans, #1819 and the cmfx letter fill)
   "EXTERNAL_INVOICE_MAIL_PDF_SCHEDULE",
