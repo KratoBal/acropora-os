@@ -1972,6 +1972,14 @@ export type {
   AiContactRequestReceipt,
   AiContactRequestView,
 } from "./ai-contact-request.js";
+export type {
+  ReefClubWaterHintProduct,
+  ReefClubWaterHintRow,
+  ReefClubWaterHints,
+  ReefClubWaterHintsProductsState,
+  ReefClubWaterHintsState,
+  ReefClubWaterHintStatus,
+} from "./reefclub-water-hints.js";
 export {
   checkBillingIssueDates,
   isCardPayment,
