@@ -12,6 +12,7 @@ import {
   type InvoiceCollectionItemSource,
   type InvoiceCollectionItemVerdict,
   type InvoiceCollectionItemsResponse,
+  type InvoiceCollectionReason,
 } from "@acropora/types";
 import { useCallback, useEffect, useState } from "react";
 
@@ -35,6 +36,23 @@ export const VERDICT_LABELS: Record<InvoiceCollectionItemVerdict, string> = {
 };
 
 /** Egy mondat arról, mit jelent az ítélet és mi történik vele. */
+/** Az ítélet OKA (a begyűjtő jegyzi fel, `InvoiceCollectionItemRow.reason`): hogy ne kelljen a kódot ismerni. */
+export const REASON_LABELS: Record<InvoiceCollectionReason, string> = {
+  NO_TEXT_LAYER: "szkennelt PDF, nincs szövegrétege",
+  NO_NUMBER_READ: "a számlaszám nem olvasható ki",
+  NUMBER_NOT_KNOWN:
+    "a szám nem ismert (nincs hozzá NAV-, feed- vagy beszerzés-sor, banki hivatkozás vagy kártyás fizetés)",
+  NUMBER_NOT_CORROBORATED:
+    "az ismert szám áll benne, de az összeg, a szállító neve és a feladó sem erősíti meg",
+  NOT_PDF_FILE: "a fájl nem PDF",
+  PDF_TEXT_FAILED: "a PDF szövege nem olvasható",
+  NO_INVOICE_WORDS: "nincs benne számla-szó",
+  REMINDER: "fizetési emlékeztető",
+  OTHER_DOCUMENT: "szerződés, ajánlat vagy más dokumentum",
+  OWN_ACCOUNT_IN_TEXT: "a saját bankszámlánk áll benne",
+  SAME_CONTENT: "ugyanez a fájl már megvan",
+};
+
 export const VERDICT_HELP: Record<InvoiceCollectionItemVerdict, string> = {
   STORED: "Tárolva van, és jelölt a párosításhoz.",
   SUGGESTED:
@@ -132,6 +150,11 @@ export function CollectionItemsSection({ token }: { token: string }) {
           <span className="text-xs text-pilot-grey-500">
             {VERDICT_HELP[item.verdict] ?? ""}
           </span>
+          {item.reason ? (
+            <span className="text-xs text-pilot-amber-700">
+              Ok: {REASON_LABELS[item.reason] ?? item.reason}
+            </span>
+          ) : null}
         </span>
       ),
     },
