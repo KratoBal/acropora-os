@@ -326,11 +326,16 @@ export function customerSendAddress(customer: {
  * today in Budapest (Számlázz.hu would take the day of the request); the other two dates are the draft's, except a
  * due date before today: with `paymentDueDays` it is proposed from today (`proposedIssueDueDate`). Without them (the
  * issue's own re-check, which reads only the fingerprint and the two flags) the draft's due date stays.
+ *
+ * `sendTo`: where a caller sends the document instead of the buyer's address (the webshop proforma goes to the order's
+ * e-mail). The window shows it, and the fingerprint covers IT, so a change of the address the window named stops the
+ * issue, and a change of the unused billing address does not (barracuda on #2429). Left out: the buyer's address.
  */
 export function billingIssueSummary(
   row: BillingDocumentRow,
   today: string,
   paymentDueDays?: number,
+  sendTo?: string | null,
 ):
   | { ok: true; summary: BillingIssueSummary }
   | { ok: false; code: string; message: string } {
@@ -339,6 +344,8 @@ export function billingIssueSummary(
   const document = input.document;
   const { showsPaymentFields } = getDocumentCapabilities(document.documentType);
   const paymentMethod = showsPaymentFields ? document.paymentMethod : null;
+  const email =
+    (sendTo === undefined ? document.buyer.email : sendTo)?.trim() || null;
   return {
     ok: true,
     summary: {
@@ -351,7 +358,7 @@ export function billingIssueSummary(
         .join(", "),
       buyerTaxNumber: document.buyer.taxNumber,
       buyerEuTaxNumber: document.buyer.euTaxNumber,
-      buyerEmail: document.buyer.email?.trim() || null,
+      buyerEmail: email,
       issueDate: today,
       fulfillmentDate: document.fulfillmentDate,
       dueDate: !showsPaymentFields
@@ -363,7 +370,11 @@ export function billingIssueSummary(
       showsPaymentFields,
       dueDateFollowsIssueDate:
         showsPaymentFields && isCardPayment(paymentMethod),
-      fingerprint: issueFingerprint(document),
+      fingerprint: issueFingerprint(
+        sendTo === undefined
+          ? document
+          : { ...document, buyer: { ...document.buyer, email } },
+      ),
     },
   };
 }

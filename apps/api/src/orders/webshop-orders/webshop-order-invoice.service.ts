@@ -124,12 +124,13 @@ export class WebshopOrderInvoiceService {
         throw new ConflictException(
           "A díjbekérő már ki van állítva: az újraküldés nem kér megerősítést.",
         );
-      const summary = await this.issuing.summary(prepared.saved.id, now);
-      return {
-        ...summary,
-        buyerEmail: prepared.order.email?.trim() || null,
-        documentId: prepared.saved.id,
-      };
+      // the window names the order's e-mail, and the digest covers it (barracuda on #2429)
+      const summary = await this.issuing.summary(
+        prepared.saved.id,
+        now,
+        prepared.order.email?.trim() || null,
+      );
+      return { ...summary, documentId: prepared.saved.id };
     });
   }
 
@@ -230,6 +231,7 @@ export class WebshopOrderInvoiceService {
         user,
         confirmation,
         now,
+        order.email?.trim() || null,
       );
     }
     const proforma = (
