@@ -10,6 +10,7 @@ import {
   formatReport,
   judge,
   percentages,
+  sameNameWithoutLegalForm,
   sameValue,
   total,
   type EvalSample,
@@ -305,5 +306,102 @@ describe("a kiiras CSAK mezonevet es szazalekot tartalmaz", () => {
         `a kiiras tartalmazza: ${forbidden}`,
       );
     }
+  });
+});
+
+/**
+ * A JOGI FORMÁBAN ELTÉRŐ NÉV KÜLÖN SZÁMLÁLÓ (kártya dbab22cd, harmadik kör, barracuda #2440). MI PIROSÍT: ha az ítélet megváltozna (a rossz
+ * név "helyes"-nek számítana, vagy a rossz% esne); ha egy MÁS név (ország vagy ágazat marad: "Ireland") a jogi formás számlálóba esne; ha egy
+ * másik mező (deviza) bármikor számlálna; ha a MANUAL csoport nem kapná meg; ha a kiírás neveket vagy értéket hordozna; ha a sor
+ * akkor is kiíródna, amikor nincs ilyen név.
+ */
+describe("a jogi formaban elterő szallitonev kulon szamlalo", () => {
+  const named = (
+    n: number,
+    expectedName: string,
+    over: Partial<EvalSample> = {},
+  ) =>
+    sample(n, {
+      lines: ["Koholt Aquaristik GmbH", ...invoiceLines(n).slice(1)],
+      expected: { ...expectedFor(n), supplierName: expectedName },
+      ...over,
+    });
+
+  it("a nev-hasonlitas: csak a jogi forma, az irasjel es a kis-nagybetu nem szamit", () => {
+    assert.equal(
+      sameNameWithoutLegalForm("Koholt Eszkoz", "Koholt Eszkoz, PBC"),
+      true,
+    );
+    assert.equal(
+      sameNameWithoutLegalForm("Koholt Eszkoz, Inc.", "Koholt Eszkoz Inc"),
+      true,
+    );
+    assert.equal(
+      sameNameWithoutLegalForm("Koholt", "Koholt Ireland Limited"),
+      false,
+    );
+    assert.equal(sameNameWithoutLegalForm("Koholt", "Mas Nev"), false);
+    assert.equal(sameNameWithoutLegalForm("Inc.", "Inc"), false);
+    // a pontozott es a kommandit alakok (barracuda, #2441): "B.V.", "S.r.l.", "N.V.", "GmbH & Co. KG"
+    assert.equal(
+      sameNameWithoutLegalForm("Koholt Akvarium", "Koholt Akvarium B.V."),
+      true,
+    );
+    assert.equal(
+      sameNameWithoutLegalForm("Koholt Akvarium", "Koholt Akvarium S.r.l."),
+      true,
+    );
+    assert.equal(
+      sameNameWithoutLegalForm("Koholt Akvarium N.V.", "Koholt Akvarium"),
+      true,
+    );
+    assert.equal(
+      sameNameWithoutLegalForm(
+        "Koholt Akvarium",
+        "Koholt Akvarium GmbH & Co. KG",
+      ),
+      true,
+    );
+    // a pont torlese nem von ossze MAS szavakat: "Dr. Koholt" nem "Drkoholt", es egy mas nev marad mas
+    assert.equal(sameNameWithoutLegalForm("Dr. Koholt", "Koholt"), false);
+  });
+
+  it("az itelet nem valtozik: a rossz rossz marad, a jogi formas reszhalmazt kulon szamolja", () => {
+    const samples = [
+      ...[1, 2, 3, 4, 5, 6, 7].map((n) => named(n, "Koholt Aquaristik")),
+      ...[8, 9, 10].map((n) => named(n, "Teljesen Mas Nev")),
+    ];
+    const report = evaluate(samples, "A");
+    const counts = report.groups.ALL.supplierName;
+    assert.deepEqual(
+      [counts.correct, counts.wrong, counts.wrongLegalForm],
+      [0, 10, 7],
+    );
+    assert.equal(percentages(counts).wrong, 100);
+    // egy MASIK mezo sosem szamlal, akkor sem, ha az erteke csak "jogi forma" szoban ter el (a szamlaszam nem nev)
+    const number = evaluate(
+      [
+        named(1, "Koholt Aquaristik", {
+          expected: { ...expectedFor(1), documentNumber: "KT-2026-0001 PBC" },
+        }),
+      ],
+      "A",
+    ).groups.ALL.documentNumber;
+    assert.deepEqual([number.wrong, number.wrongLegalForm], [1, 0]);
+  });
+
+  it("a MANUAL csoport is megkapja, a kiiras csak darabszamot ir, es csak ha van ilyen nev", () => {
+    const manual = [1, 2].map((n) =>
+      named(n, "Koholt Aquaristik", { manualFields: ["supplierName"] }),
+    );
+    const report = evaluate(manual, "A");
+    assert.equal(report.groups.MANUAL.supplierName.wrongLegalForm, 2);
+    assert.equal(report.groups.AUTO.supplierName.wrongLegalForm, 0);
+    const text = formatReport(report);
+    assert.match(text, /ebbol a rossz kozul csak jogi formaban elter: 2 db/);
+    assert.ok(!text.includes("Koholt Aquaristik"), "a kiiras nevet hordoz");
+    assert.ok(
+      !formatReport(evaluate(ten, "A")).includes("csak jogi formaban elter"),
+    );
   });
 });
