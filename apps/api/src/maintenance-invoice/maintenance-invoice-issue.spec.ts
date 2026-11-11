@@ -11,6 +11,7 @@ import type { CompletionCertificatesRepository } from "../completion-certificate
 import type { SzamlazzAgentClient } from "../integrations/szamlazz/szamlazz-agent.client.js";
 import type { SzamlazzCredentialProvider } from "../integrations/szamlazz/szamlazz-credential.provider.js";
 import type { DocumentStore } from "../service-assets/document-store/document-store.js";
+import { budapestDayKey } from "../dashboard/budapest-day.js";
 import { maintenanceInvoiceIssueEnabled } from "./maintenance-invoice-issue.config.js";
 import { MaintenanceInvoiceDraftService } from "./maintenance-invoice-draft.service.js";
 import type { MaintenanceInvoiceRepository } from "./maintenance-invoice.repository.js";
@@ -197,6 +198,61 @@ describe("maintenanceInvoiceIssueEnabled", () => {
         true,
         value,
       );
+  });
+});
+
+describe("MaintenanceInvoiceDraftService.issue, a fizetési határidő kezdőpontja", () => {
+  /**
+   * THE DUE DATE STARTS FROM THE INVOICE'S DAY (Balázs, 2026-11-10 10:39 UTC, card 27d12a67): the TIG here is dated 2026-09-24, long
+   * before the request, so a due date counted from the TIG (2026-10-02 for the default 8 days) would be in the past. The request's day is
+   * read from the real clock around the call (a midnight in between is allowed for, both days are accepted).
+   */
+  const plusDays = (day: string, days: number) => {
+    const date = new Date(`${day}T00:00:00.000Z`);
+    date.setUTCDate(date.getUTCDate() + days);
+    return date.toISOString().slice(0, 10);
+  };
+  const dueTag = (xml: string) =>
+    /<fizetesiHataridoDatum>([^<]+)<\/fizetesiHataridoDatum>/.exec(xml)?.[1];
+  const fulfilmentTag = (xml: string) =>
+    /<teljesitesDatum>([^<]+)<\/teljesitesDatum>/.exec(xml)?.[1];
+
+  it("the real issue counts the term from the day of the request (the invoice's date), not from the TIG's date", async () => {
+    const { service, sent } = harness({});
+    const before = budapestDayKey(new Date());
+    await service.issue("invoice-1");
+    const after = budapestDayKey(new Date());
+    const due = dueTag(sent[0]!);
+    assert.ok(
+      [plusDays(before, 8), plusDays(after, 8)].includes(due ?? ""),
+      `due ${due}`,
+    );
+    assert.notEqual(due, "2026-10-02");
+    assert.equal(fulfilmentTag(sent[0]!), "2026-09-24");
+  });
+
+  it("the partner's own days count from the request's day: 30 days, 15 days", async () => {
+    for (const days of [30, 15]) {
+      const withTerm = {
+        ...certificate,
+        serviceJob: {
+          customer: {
+            ...certificate.serviceJob.customer,
+            paymentDueDays: days,
+          },
+        },
+      };
+      const { service, sent } = harness({ certificate: withTerm });
+      const before = budapestDayKey(new Date());
+      await service.issue("invoice-1");
+      const after = budapestDayKey(new Date());
+      assert.ok(
+        [plusDays(before, days), plusDays(after, days)].includes(
+          dueTag(sent[0]!) ?? "",
+        ),
+        `${days} days`,
+      );
+    }
   });
 });
 

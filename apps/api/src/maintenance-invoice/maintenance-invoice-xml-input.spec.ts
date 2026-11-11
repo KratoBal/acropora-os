@@ -156,38 +156,123 @@ describe("maintenanceInvoiceXmlInputFrom", () => {
     assert.equal(totals.grossAmount.toNumber(), 889000);
   });
 
-  it("sets fulfillmentDate from issuedAt and paymentDueDate 8 days later", () => {
-    const { xmlInput } = maintenanceInvoiceXmlInputFrom(baseCertificate);
+  /** The request's moment: the invoice's date (Számlázz.hu sets it to the day of the request) and the START of the due date. */
+  const NOW = new Date("2026-10-05T10:00:00.000Z");
+
+  it("sets fulfillmentDate from issuedAt (the TIG) and paymentDueDate 8 days after the INVOICE's day", () => {
+    const { xmlInput } = maintenanceInvoiceXmlInputFrom(baseCertificate, NOW);
     assert.equal(xmlInput.fulfillmentDate, "2026-09-24");
-    assert.equal(xmlInput.paymentDueDate, "2026-10-02");
+    assert.equal(xmlInput.paymentDueDate, "2026-10-13");
   });
 
   /** Balazs, 2026-10-03: some partners pay in 8 days, some in 30. The term set
    * on the partner wins; the 8 days above is only what an unset one gets. */
   it("uses the partner's own payment term when it is set", () => {
-    const { xmlInput } = maintenanceInvoiceXmlInputFrom({
-      ...baseCertificate,
-      serviceJob: {
-        customer: {
-          ...baseCertificate.serviceJob.customer,
-          paymentDueDays: 30,
+    const { xmlInput } = maintenanceInvoiceXmlInputFrom(
+      {
+        ...baseCertificate,
+        serviceJob: {
+          customer: {
+            ...baseCertificate.serviceJob.customer,
+            paymentDueDays: 30,
+          },
         },
       },
-    });
+      NOW,
+    );
     assert.equal(xmlInput.fulfillmentDate, "2026-09-24");
-    assert.equal(xmlInput.paymentDueDate, "2026-10-24");
+    assert.equal(xmlInput.paymentDueDate, "2026-11-04");
   });
 
   /** Zero is a real term (due on the day), not "unset": `||` would turn it
    * into 8 days. */
   it("keeps a zero-day term instead of falling back to the default", () => {
-    const { xmlInput } = maintenanceInvoiceXmlInputFrom({
-      ...baseCertificate,
-      serviceJob: {
-        customer: { ...baseCertificate.serviceJob.customer, paymentDueDays: 0 },
+    const { xmlInput } = maintenanceInvoiceXmlInputFrom(
+      {
+        ...baseCertificate,
+        serviceJob: {
+          customer: {
+            ...baseCertificate.serviceJob.customer,
+            paymentDueDays: 0,
+          },
+        },
       },
-    });
-    assert.equal(xmlInput.paymentDueDate, "2026-09-24");
+      NOW,
+    );
+    assert.equal(xmlInput.paymentDueDate, "2026-10-05");
+  });
+
+  /**
+   * THE MEASURED ERROR (Balázs, 2026-11-10 10:39 UTC, card 27d12a67): an invoice issued days after its TIG got a due date counted
+   * from the TIG. A 30-day partner, TIG on 5 November, invoice on 11 November: 11 December, not 5 December (24 days).
+   */
+  it("counts the term from the invoice's day, not from the TIG's date (30 days: 24 became 30 again)", () => {
+    const { xmlInput } = maintenanceInvoiceXmlInputFrom(
+      {
+        ...baseCertificate,
+        issuedAt: new Date("2026-11-05T00:00:00.000Z"),
+        serviceJob: {
+          customer: {
+            ...baseCertificate.serviceJob.customer,
+            paymentDueDays: 30,
+          },
+        },
+      },
+      new Date("2026-11-11T09:00:00.000Z"),
+    );
+    assert.equal(
+      xmlInput.fulfillmentDate,
+      "2026-11-05",
+      "the fulfilment stays the TIG's date",
+    );
+    assert.equal(xmlInput.paymentDueDate, "2026-12-11");
+  });
+
+  it("the partner's own number of days is what counts: 8, 15 and 30 each give the invoice day plus that many", () => {
+    for (const [days, due] of [
+      [8, "2026-11-19"],
+      [15, "2026-11-26"],
+      [30, "2026-12-11"],
+    ] as const) {
+      const { xmlInput } = maintenanceInvoiceXmlInputFrom(
+        {
+          ...baseCertificate,
+          issuedAt: new Date("2026-11-05T00:00:00.000Z"),
+          serviceJob: {
+            customer: {
+              ...baseCertificate.serviceJob.customer,
+              paymentDueDays: days,
+            },
+          },
+        },
+        new Date("2026-11-11T09:00:00.000Z"),
+      );
+      assert.equal(xmlInput.paymentDueDate, due, `${days} days`);
+    }
+  });
+
+  it("the invoice's day is the BUDAPEST day: 23:30 UTC on 10 November is already 11 November", () => {
+    const { xmlInput } = maintenanceInvoiceXmlInputFrom(
+      baseCertificate,
+      new Date("2026-11-10T23:30:00.000Z"),
+    );
+    assert.equal(xmlInput.paymentDueDate, "2026-11-19");
+  });
+
+  it("the term crosses a month and a year end by the calendar", () => {
+    const { xmlInput } = maintenanceInvoiceXmlInputFrom(
+      {
+        ...baseCertificate,
+        serviceJob: {
+          customer: {
+            ...baseCertificate.serviceJob.customer,
+            paymentDueDays: 30,
+          },
+        },
+      },
+      new Date("2026-12-20T09:00:00.000Z"),
+    );
+    assert.equal(xmlInput.paymentDueDate, "2027-01-19");
   });
 });
 
