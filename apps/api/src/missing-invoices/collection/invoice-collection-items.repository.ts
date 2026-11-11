@@ -8,6 +8,7 @@ export interface CollectionItemRow {
   fileName: string;
   verdict: string;
   documentId: string | null;
+  reason: string | null;
   createdAt: Date;
 }
 
@@ -38,6 +39,7 @@ export class InvoiceCollectionItemsRepository {
         fileName: true,
         verdict: true,
         documentId: true,
+        reason: true,
         createdAt: true,
       },
     });

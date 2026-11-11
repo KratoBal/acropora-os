@@ -8,6 +8,7 @@ import {
   Optional,
 } from "@nestjs/common";
 import type { SyncRunTrigger } from "@acropora/database";
+import type { InvoiceCollectionReason } from "@acropora/types";
 
 import {
   GoogleReadonlyClient,
@@ -329,6 +330,7 @@ export class InvoiceCollectionService {
     fileName: string,
     verdict: Exclude<InvoiceCollectionVerdict, "STORED" | "SUGGESTED">,
     sha256: string | null,
+    reason: InvoiceCollectionReason | null = null,
   ): Promise<void> {
     if (this.dry) {
       const before = await this.repository.verdictOf(
@@ -348,10 +350,18 @@ export class InvoiceCollectionService {
           társ-mellékletre, holott az --apply hozzá sem nyúl.
         */
         after: before === "STORED" || before === "SUGGESTED" ? before : verdict,
+        ...(reason ? { detail: `ok: ${reason}` } : {}),
       });
       return;
     }
-    await this.repository.record(source, externalId, fileName, verdict, sha256);
+    await this.repository.record(
+      source,
+      externalId,
+      fileName,
+      verdict,
+      sha256,
+      reason,
+    );
   }
 
   private ownAccountDigits: Promise<string[]> | null = null;
@@ -494,17 +504,26 @@ export class InvoiceCollectionService {
     const sha256 = createHash("sha256").update(found.content).digest("hex");
     const skip = async (
       verdict: Exclude<InvoiceCollectionVerdict, "STORED" | "SUGGESTED">,
+      reason: InvoiceCollectionReason | null = null,
     ) => {
       if (verdict === "DUPLICATE") counts.duplicateCount++;
       else if (verdict === "NOT_INVOICE") counts.notInvoiceCount++;
       else if (verdict === "UNMATCHED") counts.unmatchedCount++;
       else if (verdict === "OWN_INVOICE") counts.ownInvoiceCount++;
       else counts.failedCount++;
-      await this.record(source, externalId, found.fileName, verdict, sha256);
+      await this.record(
+        source,
+        externalId,
+        found.fileName,
+        verdict,
+        sha256,
+        reason,
+      );
       return verdict;
     };
     const earlier = await this.repository.documentByContent(sha256);
-    if (earlier && earlier.reviewState !== UNASSIGNED) return skip("DUPLICATE");
+    if (earlier && earlier.reviewState !== UNASSIGNED)
+      return skip("DUPLICATE", "SAME_CONTENT");
     // a copy that is stored but not yet tied: the file is read again to see
     // whether it ties NOW (a new feed row, a corrected rule); if it does, the
     // stored document is promoted instead of a second one being created
@@ -530,9 +549,10 @@ export class InvoiceCollectionService {
       reading: InvoiceTextReading | null,
       kind: "INVOICE" | "PROFORMA",
       payee: string,
+      reason: InvoiceCollectionReason,
     ): Promise<InvoiceCollectionVerdict> => {
       if (reassess || this.dry || source === "BALAZS_MAIL")
-        return skip("UNMATCHED");
+        return skip("UNMATCHED", reason);
       await this.repository.store({
         source,
         externalId,
@@ -548,17 +568,18 @@ export class InvoiceCollectionService {
         textReading: reading,
         payee,
         unassigned: true,
+        reason,
       });
       counts.unmatchedCount++;
       return "UNMATCHED";
     };
     if (!found.content.subarray(0, 5).equals(Buffer.from("%PDF-")))
-      return skip("UNREADABLE");
+      return skip("UNREADABLE", "NOT_PDF_FILE");
     let lines: string[];
     try {
       lines = await pdfTextLines(new Uint8Array(found.content));
     } catch {
-      return skip("UNREADABLE");
+      return skip("UNREADABLE", "PDF_TEXT_FAILED");
     }
     const text = lines.join("\n");
     if (!looksLikeInvoice(text)) {
@@ -576,20 +597,28 @@ export class InvoiceCollectionService {
         !reminderFileName(named) &&
         !otherDocumentFileName(named)
       )
-        return keepUnassigned(null, "INVOICE", payeeFromText(text));
-      return skip("NOT_INVOICE");
+        return keepUnassigned(
+          null,
+          "INVOICE",
+          payeeFromText(text),
+          "NO_TEXT_LAYER",
+        );
+      return skip("NOT_INVOICE", "NO_INVOICE_WORDS");
     }
     // a fizetési emlékeztető idézi a számlát, de nem az; a mellette álló
     // számla-melléklet külön fájlként megy tovább
-    if (looksLikeReminder(lines, found.fileName)) return skip("NOT_INVOICE");
+    if (looksLikeReminder(lines, found.fileName))
+      return skip("NOT_INVOICE", "REMINDER");
     // szerződés, ajánlat, vámnyilatkozat: nem számla, és nem lehet jelölt
     if (looksLikeOtherDocument(lines, found.fileName))
-      return skip("NOT_INVOICE");
+      return skip("NOT_INVOICE", "OTHER_DOCUMENT");
 
     const importResult = await this.reader
       .read(new Uint8Array(found.content), { allowProforma: true })
       .catch(() => null);
     let textReading: InvoiceTextReading | null = null;
+    // az ismert szám állt a szövegben, de a második jel hiányzott, ezért elesett (az UNMATCHED oka)
+    let numberNotCorroborated = false;
     if (!importResult) {
       const hints = { fileName: found.fileName, subject: found.subject };
       const supplier = readInvoiceText(lines, hints).supplierTaxNumber;
@@ -604,7 +633,7 @@ export class InvoiceCollectionService {
       });
       if (textReading.numberFrom !== "NAV") {
         if (isOwnInvoiceText(text, await this.ownAccounts()))
-          return skip("OWN_INVOICE");
+          return skip("OWN_INVOICE", "OWN_ACCOUNT_IN_TEXT");
         // a szállító adószáma nélkül is ismert szám (acrobot 26885, Tisza 97):
         // a saját-számla próba UTÁN, hogy egy kimenő számlánk ne legyen bejövő
         textReading = withKnownNumber(
@@ -633,12 +662,14 @@ export class InvoiceCollectionService {
             .replace(/\D/g, "")
             .slice(0, 8),
         );
-        if (!corroboratedBy(lines, facts, found.sender, { normalizeName }))
+        if (!corroboratedBy(lines, facts, found.sender, { normalizeName })) {
+          numberNotCorroborated = true;
           textReading = {
             ...textReading,
             invoiceNumber: null,
             numberFrom: null,
           };
+        }
       }
       if (textReading.numberFrom !== "NAV") {
         const reference = bankReference(
@@ -676,6 +707,11 @@ export class InvoiceCollectionService {
                 withLabelledTotal(textReading, lines),
                 looksLikeProforma(text) ? "PROFORMA" : "INVOICE",
                 payeeFromText(text),
+                numberNotCorroborated
+                  ? "NUMBER_NOT_CORROBORATED"
+                  : textReading.invoiceNumber
+                    ? "NUMBER_NOT_KNOWN"
+                    : "NO_NUMBER_READ",
               );
             // egy közben meghozott emberi döntés nem íródik felül (promote: null)
             if (
@@ -696,7 +732,7 @@ export class InvoiceCollectionService {
                 suggestion,
               }))
             )
-              return skip("DUPLICATE");
+              return skip("DUPLICATE", "SAME_CONTENT");
             counts.suggestedCount++;
             return "SUGGESTED";
           }
@@ -763,7 +799,7 @@ export class InvoiceCollectionService {
         payee: payeeFromText(text),
       }))
     )
-      return skip("DUPLICATE");
+      return skip("DUPLICATE", "SAME_CONTENT");
     counts.storedCount++;
     return "STORED";
   }

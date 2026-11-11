@@ -1408,6 +1408,8 @@ export const ANONYMIZATION_REGISTER: Readonly<
     fileName: "freeText",
     sha256: "identifier",
     verdict: "business",
+    // a rögzített kódkészlet egy eleme (INVOICE_COLLECTION_REASONS), nem tartalom: ugyanúgy, mint a verdict
+    reason: "business",
     documentId: "identifier",
   },
   InvoiceCollectionRun: {

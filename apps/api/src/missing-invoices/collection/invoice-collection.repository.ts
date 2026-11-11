@@ -80,6 +80,8 @@ export interface CollectedDocumentInput {
    * az újraolvasás később még összekötheti.
    */
   unassigned?: boolean;
+  /** Az UNMATCHED sor oka (`INVOICE_COLLECTION_REASONS`), a `unassigned` tároláskor a sorra kerül. */
+  reason?: string;
 }
 
 /** A dokumentum állapota, amíg a gyűjtő egy ember döntésére hagyja (`IncomingSupplierDocument.reviewState`). */
@@ -445,6 +447,7 @@ export class InvoiceCollectionRepository {
     fileName: string,
     verdict: Exclude<InvoiceCollectionVerdict, "STORED" | "SUGGESTED">,
     sha256: string | null,
+    reason: string | null = null,
   ): Promise<void> {
     const key = { source, externalId, fileName };
     const existing = await this.database.invoiceCollectionItem.findUnique({
@@ -459,8 +462,8 @@ export class InvoiceCollectionRepository {
       where: {
         source_externalId_fileName: { source, externalId, fileName },
       },
-      create: { source, externalId, fileName, verdict, sha256 },
-      update: { verdict, sha256 },
+      create: { source, externalId, fileName, verdict, sha256, reason },
+      update: { verdict, sha256, reason },
     });
   }
 
@@ -540,11 +543,13 @@ export class InvoiceCollectionRepository {
           verdict,
           sha256: input.sha256,
           documentId: document.id,
+          reason: verdict === "UNMATCHED" ? (input.reason ?? null) : null,
         },
         update: {
           verdict,
           sha256: input.sha256,
           documentId: document.id,
+          reason: verdict === "UNMATCHED" ? (input.reason ?? null) : null,
         },
       });
       return document.id;
@@ -612,7 +617,10 @@ export class InvoiceCollectionRepository {
         });
       await transaction.invoiceCollectionItem.updateMany({
         where: { documentId: id },
-        data: { verdict: input.suggestion ? "SUGGESTED" : "STORED" },
+        data: {
+          verdict: input.suggestion ? "SUGGESTED" : "STORED",
+          reason: null,
+        },
       });
       return id;
     });

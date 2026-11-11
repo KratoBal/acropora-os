@@ -286,6 +286,45 @@ export interface MissingInvoicePayeeDocument {
   marked: boolean;
 }
 
+/**
+ * AZ EGY DOKUMENTUM ELLENI JELÖLT-VIZSGÁLAT (task os-hianyzo-szamlak-unpaid, a niceshops-eset: egy tárolt számla nem jelent
+ * meg jelöltként). Csak olvas: egy terhelésre és egy dokumentum-azonosítóra megmondja, a keresés miért (nem) hozza a dokumentumot.
+ * `loaded: false`: a dokumentum a párosítás bemenetében sincs (a betöltés kiszűrte: fizetési emlékeztető vagy egyéb dokumentum
+ * fájlneve, a betöltött időtartományon kívüli dátum, olvasat nélküli begyűjtött fájl, a Jev javaslata, egy másik példány ugyanazzal
+ * a tartalommal). Egyébként a `checks` mondja meg, melyik feltétel bukik.
+ */
+export interface MissingInvoiceCandidateDiagnosis {
+  loaded: boolean;
+  /** Igaz, ha az azonosító egy összevont jelölt MÁSIK azonosítója volt (a jelölt `documentId`-ja más). */
+  viaAlias: boolean;
+  document: {
+    documentId: string;
+    number: string;
+    source: MissingInvoiceDocumentSource;
+    date: string;
+    gross: string | null;
+    currency: string;
+    supplierName: string;
+    kind: "INVOICE" | "PROFORMA" | "PREMIUM_NOTICE";
+  } | null;
+  checks: {
+    /** A számla kelte a fizetés előtti 4 hónap és a következő hónap 15-e között van. */
+    inWindow: boolean;
+    /** A kiállító neve a terhelés partnerével egyezik (a név szerinti jelölt feltétele). */
+    nameMatches: boolean;
+    /** A számla pénzneme összevethető a terhelésével (vagy a terhelés eredeti devizájával). */
+    currencyComparable: boolean;
+    /** Az összeg egyezik (HUF-ban 1 Ft, devizában 5 cent), ha összevethető. */
+    amountExact: boolean;
+    /** A számlának ismert a bruttó összege. */
+    grossKnown: boolean;
+    /** Számla (nem díjbekérő vagy díjértesítő): a párosítás a díjbekérőt csak tartalékként használja. */
+    isInvoice: boolean;
+    /** Más terhelések, amelyeknek a párosításában a dokumentum már szerepel (a szabad jelöltek között nem jelenik meg). */
+    pairedWith: string[];
+  } | null;
+}
+
 export interface MissingInvoiceItemDetail extends MissingInvoiceItem {
   /** A partner ablakba eső, még nem párosított számlái (a drawer jelöltjei). */
   candidates: MissingInvoiceCandidate[];
@@ -580,6 +619,34 @@ export const INVOICE_COLLECTION_ITEM_SOURCES = [
 export type InvoiceCollectionItemSource =
   (typeof INVOICE_COLLECTION_ITEM_SOURCES)[number];
 
+/**
+ * AZ ÍTÉLET OKA (task os-hianyzo-szamlak-unpaid): melyik feltétel döntött. UNMATCHED mellett:
+ *   NO_TEXT_LAYER           szkennelt PDF, nincs szövegrétege (a fájlnév vagy a tárgy mondja, hogy számla)
+ *   NO_NUMBER_READ          a szövegből nem olvasható ki számlaszám
+ *   NUMBER_NOT_KNOWN        van olvasott szám, de nem ismert (NAV, Számlázz.hu feed, beszerzés), és nincs banki hivatkozás vagy kártyás fizetés
+ *   NUMBER_NOT_CORROBORATED az ismert szám áll a szövegben, de a második jel (összeg, szállító neve, feladó) hiányzik
+ * Más ítéletek mellett:
+ *   NOT_PDF_FILE, PDF_TEXT_FAILED                  (UNREADABLE)
+ *   NO_INVOICE_WORDS, REMINDER, OTHER_DOCUMENT     (NOT_INVOICE)
+ *   OWN_ACCOUNT_IN_TEXT                            (OWN_INVOICE)
+ *   SAME_CONTENT                                   (DUPLICATE)
+ */
+export const INVOICE_COLLECTION_REASONS = [
+  "NO_TEXT_LAYER",
+  "NO_NUMBER_READ",
+  "NUMBER_NOT_KNOWN",
+  "NUMBER_NOT_CORROBORATED",
+  "NOT_PDF_FILE",
+  "PDF_TEXT_FAILED",
+  "NO_INVOICE_WORDS",
+  "REMINDER",
+  "OTHER_DOCUMENT",
+  "OWN_ACCOUNT_IN_TEXT",
+  "SAME_CONTENT",
+] as const;
+export type InvoiceCollectionReason =
+  (typeof INVOICE_COLLECTION_REASONS)[number];
+
 export interface InvoiceCollectionItemRow {
   id: string;
   source: InvoiceCollectionItemSource;
@@ -595,6 +662,8 @@ export interface InvoiceCollectionItemRow {
   verdict: InvoiceCollectionItemVerdict;
   /** Csak tárolt fájlnál (STORED, SUGGESTED). */
   documentId: string | null;
+  /** Az ítélet oka; `null`: tárolt fájl, vagy az ok bevezetése előtti sor (a nap első futása újraírja az UNMATCHED-et). Nem tartalom: a balazs@ sornál is kimegy. */
+  reason: InvoiceCollectionReason | null;
   createdAt: string;
 }
 

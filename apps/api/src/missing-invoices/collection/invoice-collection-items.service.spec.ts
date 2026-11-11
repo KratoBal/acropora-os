@@ -25,6 +25,7 @@ function row(
     fileName: `file-${n}.pdf`,
     verdict: "UNMATCHED",
     documentId: null,
+    reason: null,
     createdAt: new Date(Date.UTC(2026, 9, 22, 14, n)),
     ...overrides,
   };
@@ -80,8 +81,28 @@ describe("InvoiceCollectionItemsService", () => {
       fileName: "file-1.pdf",
       verdict: "UNMATCHED",
       documentId: null,
+      reason: null,
       createdAt: "2026-10-22T14:01:00.000Z",
     });
+  });
+
+  /*
+    AZ OK KIMEGY, A FÁJLNÉV NEM (task os-hianyzo-szamlak-unpaid). MI PIROSÍT: ha a balazs@ nem tárolt sorának oka is
+    visszatartódik (a november 8 balazs@ UNMATCHED sorának oka így kiolvashatatlan marad); ha az ok mellett a fájlnév is kimegy.
+  */
+  it("gives the reason of a withheld balazs@ row, and still not its file name", async () => {
+    const { service } = setup([
+      row(1, {
+        source: "BALAZS_MAIL",
+        verdict: "UNMATCHED",
+        reason: "NUMBER_NOT_CORROBORATED",
+      }),
+    ]);
+    const { items } = await service.list({});
+    assert.deepEqual(
+      [items[0]!.reason, items[0]!.fileName, items[0]!.externalId],
+      ["NUMBER_NOT_CORROBORATED", null, null],
+    );
   });
 
   /**

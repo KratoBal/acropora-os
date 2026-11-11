@@ -8885,6 +8885,11 @@ model InvoiceCollectionItem {
   verdict    String
   /// STORED-nál a létrehozott IncomingSupplierDocument.
   documentId String?
+  /// A NEM TÁROLT (vagy tárolt, de nem párosodott) ítélet OKA, rövid kódként (`INVOICE_COLLECTION_REASONS`,
+  /// packages/types): az UNMATCHED sor mellett áll, hogy melyik feltétel bukott (a szám nem olvasható, ismeretlen,
+  /// a megerősítő jel hiányzik). A nap első futása az UNMATCHED leveleket újraolvassa, ezért a meglévő sorok is
+  /// megkapják. NULL: STORED, SUGGESTED, vagy a sor az ok bevezetése előtti.
+  reason     String?  @db.VarChar(40)
   createdAt  DateTime @default(now())
 
   @@unique([source, externalId, fileName])

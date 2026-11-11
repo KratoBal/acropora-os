@@ -68,6 +68,8 @@ function toRow(row: CollectionItemRow): InvoiceCollectionItemRow {
     fileName: hide ? null : row.fileName,
     verdict: row.verdict as InvoiceCollectionItemVerdict,
     documentId: row.documentId,
+    // az ok nem tartalom: a balazs@ visszatartott soránál is kimegy (a fájlnév és az azonosító nem)
+    reason: row.reason as InvoiceCollectionItemRow["reason"],
     createdAt: row.createdAt.toISOString(),
   };
 }

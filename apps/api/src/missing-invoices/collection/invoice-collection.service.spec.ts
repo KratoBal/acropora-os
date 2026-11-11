@@ -109,6 +109,7 @@ function setup(input: {
   const stored: CollectedDocumentInput[] = [];
   const promoted: { id: string; document: CollectedDocumentInput }[] = [];
   const recorded: string[] = [];
+  const reasons: string[] = [];
   const fetched: string[] = [];
   const started: string[] = [];
   const touched: string[] = [];
@@ -161,7 +162,12 @@ function setup(input: {
       id: string,
       fileName: string,
       verdict: string,
-    ) => void recorded.push(`${id}/${fileName}:${verdict}`),
+      _sha256?: string | null,
+      reason?: string | null,
+    ) => {
+      recorded.push(`${id}/${fileName}:${verdict}`);
+      reasons.push(`${id}/${fileName}:${verdict}:${reason ?? ""}`);
+    },
     store: async (document: CollectedDocumentInput) => {
       stored.push(document);
       return `doc-${stored.length}`;
@@ -239,6 +245,7 @@ function setup(input: {
     stored,
     promoted,
     recorded,
+    reasons,
     started,
     touched,
     fetched,
@@ -979,6 +986,8 @@ describe("InvoiceCollectionService", () => {
       });
       assert.deepEqual(tied(stored), []);
       assert.equal(untied(stored).length, 1);
+      // and the reason says so: the number WAS known, the second sign was missing
+      assert.equal(untied(stored)[0]!.reason, "NUMBER_NOT_CORROBORATED");
       const reading = untied(stored)[0]!.textReading as {
         invoiceNumber: string | null;
         numberFrom: string | null;
@@ -1257,6 +1266,87 @@ describe("InvoiceCollectionService keeps what nothing ties (UNASSIGNED)", () => 
       [counts.storedCount, counts.unmatchedCount, counts.suggestedCount],
       [0, 1, 0],
     );
+  });
+
+  /*
+    AZ ÍTÉLET OKA (task os-hianyzo-szamlak-unpaid): egy UNMATCHED levél mellett áll, melyik feltétel bukott, hogy a
+    november 8 balazs@ levelének okát ki lehessen olvasni. MI PIROSÍT: az ok nem íródik (a balazs@ nem tárolt sorához sem,
+    az info@ tárolt UNASSIGNED sorához sem); a megerősítés miatt elejtett szám más okot kap, mint az ismeretlen szám;
+    a szám nélküli olvasat nem NO_NUMBER_READ; a nem PDF, a nem számla és az ismétlődés ok nélkül marad.
+  */
+  it("records WHY a balazs@ letter stayed unmatched (the number was read but is not a known one)", async () => {
+    const { collection, reasons } = setup({
+      environment: env(["GMAIL_BALAZS"]),
+      messages: {
+        "m-1": [{ fileName: "RE67456.pdf", buffer: await untiedInvoice() }],
+      },
+    });
+    await collection.run("MANUAL");
+    assert.deepEqual(reasons, ["m-1/RE67456.pdf:UNMATCHED:NUMBER_NOT_KNOWN"]);
+  });
+
+  it("puts the same reason on the stored UNASSIGNED document of an info@ letter", async () => {
+    const { collection, stored } = setup({
+      environment: env(["GMAIL_FOXPOST"]),
+      messages: {
+        "m-1": [{ fileName: "RE67456.pdf", buffer: await untiedInvoice() }],
+      },
+    });
+    await collection.run("MANUAL");
+    assert.deepEqual(
+      untied(stored).map((d) => d.reason),
+      ["NUMBER_NOT_KNOWN"],
+    );
+  });
+
+  it("a PDF with invoice words and no readable number is NO_NUMBER_READ", async () => {
+    const { collection, reasons } = setup({
+      environment: env(["GMAIL_BALAZS"]),
+      messages: {
+        "m-1": [
+          {
+            fileName: "szamla.pdf",
+            buffer: await pdf([
+              "Invoice",
+              "Supplier VAT: DE152405660",
+              "Total 100.00 EUR",
+            ]),
+          },
+        ],
+      },
+    });
+    await collection.run("MANUAL");
+    assert.deepEqual(reasons, ["m-1/szamla.pdf:UNMATCHED:NO_NUMBER_READ"]);
+  });
+
+  it("gives the other verdicts their own reasons: not a PDF, no invoice words, the same file again", async () => {
+    const { collection, reasons } = setup({
+      environment: env(["GMAIL_BALAZS"]),
+      messages: {
+        "m-1": [
+          { fileName: "kep.pdf", buffer: Buffer.from("this is not a pdf") },
+        ],
+        "m-2": [
+          {
+            fileName: "level.pdf",
+            buffer: await pdf(["Hello", "see you tomorrow"]),
+          },
+        ],
+      },
+    });
+    await collection.run("MANUAL");
+    assert.deepEqual(reasons.sort(), [
+      "m-1/kep.pdf:UNREADABLE:NOT_PDF_FILE",
+      "m-2/level.pdf:NOT_INVOICE:NO_INVOICE_WORDS",
+    ]);
+    const duplicate = await untiedInvoice();
+    const again = setup({
+      environment: env(["GMAIL_BALAZS"]),
+      messages: { "m-3": [{ fileName: "RE67456.pdf", buffer: duplicate }] },
+      known: [duplicate],
+    });
+    await again.collection.run("MANUAL");
+    assert.deepEqual(again.reasons, ["m-3/RE67456.pdf:DUPLICATE:SAME_CONTENT"]);
   });
 
   it("does NOT keep an untied file from the balazs@ mailbox (Balázs's own correspondence)", async () => {
