@@ -28,7 +28,7 @@ const ids: Record<string, string> = {};
 const BACKFILL = readFileSync(
   join(
     dirname(fileURLToPath(import.meta.url)),
-    "../../../../packages/database/prisma/migrations/20261111170100_tig_invoice_own_rows/migration.sql",
+    "../../../../packages/database/prisma/migrations/20261111190100_tig_invoice_own_rows/migration.sql",
   ),
   "utf8",
 );
