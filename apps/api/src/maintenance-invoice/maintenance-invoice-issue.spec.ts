@@ -89,6 +89,11 @@ function harness(options: {
   clientDelayMs?: number;
   putError?: Error;
   certificate?: unknown;
+  partnerTerms?: {
+    name: string;
+    taxNumber: string | null;
+    paymentDueDays: number;
+  }[];
 }) {
   const row: Row = {
     id: "invoice-1",
@@ -107,6 +112,7 @@ function harness(options: {
   const sent: string[] = [];
   const stored = new Map<string, Uint8Array>();
   const repository = {
+    partnerPaymentTerms: async () => options.partnerTerms ?? [],
     invoiceById: async () => ({ ...row, lines: [] }),
     claimForIssue: async () => {
       if (row.status !== "DRAFT") return false;
@@ -229,6 +235,27 @@ describe("MaintenanceInvoiceDraftService.issue, a fizetési határidő kezdőpon
     );
     assert.notEqual(due, "2026-10-02");
     assert.equal(fulfilmentTag(sent[0]!), "2026-09-24");
+  });
+
+  it("the real issue too: an empty customer row takes the days the Partnerek page holds for the company (30), not 8", async () => {
+    const customer = certificate.serviceJob.customer;
+    const { service, sent } = harness({
+      partnerTerms: [
+        {
+          name: customer.displayName,
+          taxNumber: customer.taxNumber,
+          paymentDueDays: 30,
+        },
+      ],
+    });
+    const before = budapestDayKey(new Date());
+    await service.issue("invoice-1");
+    const after = budapestDayKey(new Date());
+    assert.ok(
+      [plusDays(before, 30), plusDays(after, 30)].includes(
+        dueTag(sent[0]!) ?? "",
+      ),
+    );
   });
 
   it("the partner's own days count from the request's day: 30 days, 15 days", async () => {

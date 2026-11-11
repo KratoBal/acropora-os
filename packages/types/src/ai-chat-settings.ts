@@ -1,3 +1,5 @@
+import type { AiLinkSourceServiceEntry } from "./ai-link-sources.js";
+
 /**
  * THE AI CHAT SETTINGS (Acropora AI card f5b8f7ba, slice 4a; plan `exchange-out/ai-eloszures-4-szelet-terv-2026-11-11.md`,
  * doc-APPROVE barracuda on the v5 package; Balázs 2026-11-11 08:51: the contact recipient, the storage and the retention time are
@@ -48,6 +50,8 @@ export interface AiChatSettingsServiceView {
   offerEnabled: boolean;
   contactRequestEnabled: boolean;
   messageRetentionDays: number;
+  /** The stored link sources the answer gate's exceptions read (card 9d060f5c); empty means no exception is active. */
+  linkSources: AiLinkSourceServiceEntry[];
 }
 
 export type AiChatSettingsCheck =
