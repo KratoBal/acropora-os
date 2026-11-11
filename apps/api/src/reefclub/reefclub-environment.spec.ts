@@ -120,6 +120,8 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   "REEFCLUB_LINKING_ENABLED",
   // the run-out reminder's switch (V3.2): exactly "true" turns it on, a boolean, not a secret
   "REEFCLUB_RUNOUT_ENABLED",
+  // the "mi lóg ki" switch (V3.4 S3): exactly "true" turns it on, a boolean, not a secret
+  "REEFCLUB_WATER_HINTS_ENABLED",
   "REEFCLUB_WEB_URL",
   "RELEASE_COMMIT_SHA",
   "RELEASE_EVIDENCE_EXPECTED_REPOSITORY",
