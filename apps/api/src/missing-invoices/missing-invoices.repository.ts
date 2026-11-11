@@ -48,8 +48,8 @@ const navGross = (net: Prisma.Decimal | null, vat: Prisma.Decimal | null) =>
  * számlává vonódjon össze. Mérve 2026-09-30 a NAV bejövő exportján (Foxpost
  * 40 sor, GLS 18 sor) és egy augusztusi GLS e-számla XML-jén.
  */
-const FOXPOST_TAX_BASE = "32435119";
-const GLS_TAX_BASE = "12369410";
+export const FOXPOST_TAX_BASE = "32435119";
+export const GLS_TAX_BASE = "12369410";
 
 /** Egy számla azonossága: a száma, és a szállító adószám-törzse, vagy a neve. */
 function invoiceKey(
@@ -1117,6 +1117,66 @@ export class MissingInvoicesRepository {
         ...row,
         pdfIds: incomingPdfIds(row, { attached, collected }),
       })),
+    };
+  }
+
+  /**
+   * A LEVONÁSSAL RENDEZETT SZÁMLÁK (task os-hianyzo-szamlak-unpaid, 2026-11-11: a Foxpost FX és a GLS HU számlák a csomag-ellenőrzés
+   * "kifizetetlen" listáján álltak, holott az utánvét-elszámolásból vonódnak le, nem bankból; Balázs "összevisszaság" kérdése).
+   *
+   *  - FOXPOST: az elszámolás sora maga hordozza a levont számlát (`invoiceNumber`, `invoiceGrossAmount`), a beszedett utánvétet és az
+   *    utalt összeget. Levonásnak CSAK AKKOR számít, ha kijön a számtan: beszedett - számla = utalt (1 Ft tűréssel). Egy sor, aminek az
+   *    összege nem jön ki, vagy hiányzik valamelyik érték, nem bizonyít semmit.
+   *  - GLS: a Kompenzációs értesítő (`GlsCompensationLetter`) a beszámított GLS-számlákat sorolja (`references`). Egy számla VÉGLEGESEN
+   *    levont, ha egy olyan levél sorolja, ahol a maradvány 0 (a levélnek a parser is ellenőrzi a két összegét). A maradványos levél
+   *    számlái NEM kerülnek ide: egy későbbi levél számítja be a hátralékot, és a konzervatív hiba az, hogy fizetetlennek marad.
+   *
+   * A számok normalizáltak (szóköz nélkül, nagybetűvel); a hívó az adószám-törzset is ellenőrzi.
+   * A Foxpost-sor státusza COMPLETED vagy NEEDS_REVIEW (utóbbi: a sorok közül vár ember, a levonás számtana attól még kijön).
+   */
+  async settledByDeduction(): Promise<{
+    foxpost: ReadonlySet<string>;
+    gls: ReadonlySet<string>;
+  }> {
+    const [foxpost, gls] = await Promise.all([
+      this.database.foxpostSettlement.findMany({
+        where: {
+          invoiceNumber: { not: null },
+          // NEEDS_REVIEW IS INCLUDED ON PURPOSE (acrobot 2026-11-11, FX01082949): it means COD LINES wait for a person (an order that is not
+          // matched yet), not that the deduction is doubtful: the invoice, the collected sum and the transferred sum come from the settlement's
+          // own document, and the sum below is checked. PROCESSING (not read yet) and ERROR are not evidence.
+          status: { in: ["COMPLETED", "NEEDS_REVIEW"] },
+        },
+        select: {
+          invoiceNumber: true,
+          collectedAmount: true,
+          invoiceGrossAmount: true,
+          transferredAmount: true,
+        },
+      }),
+      this.database.glsCompensationLetter.findMany({
+        where: { remaining: 0 },
+        select: { references: true },
+      }),
+    ]);
+    const normal = (value: string) => value.replace(/\s+/g, "").toUpperCase();
+    return {
+      foxpost: new Set(
+        foxpost
+          .filter(
+            (row) =>
+              row.collectedAmount !== null &&
+              row.invoiceGrossAmount !== null &&
+              row.transferredAmount !== null &&
+              row.collectedAmount
+                .minus(row.invoiceGrossAmount)
+                .minus(row.transferredAmount)
+                .abs()
+                .lte(1),
+          )
+          .map((row) => normal(row.invoiceNumber!)),
+      ),
+      gls: new Set(gls.flatMap((letter) => letter.references.map(normal))),
     };
   }
 
