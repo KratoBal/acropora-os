@@ -61,6 +61,14 @@ export const PRODUCT_CONTEXT_NOTE =
   "Nincs termékkontextus, általános modellismeret alapján adott válasz.";
 
 /**
+ * Said for an answer the AI service's LOCAL PRE-FILTER gave (Acropora AI card f5b8f7ba, `state: "not_asked"`): no catalogue search
+ * was made and no model ran. The note above would be FALSE here ("általános modellismeret alapján adott válasz": no model was
+ * involved), on the one screen where a human judges the answer.
+ */
+export const LOCAL_PREFILTER_NOTE =
+  "Helyi előszűrő válasza: sem katalógus, sem modell nem futott.";
+
+/**
  * The AI's own report about the search behind this answer.
  *
  * Read defensively: the shape belongs to the AI service, and a field that
@@ -77,10 +85,11 @@ interface ProductContextReport {
 /**
  * One sentence for the surface, from what the AI reported.
  *
- * THE FOUR STATES STAY FOUR. "We looked and found nothing" is a claim about
- * our range, "the search could not run" is a claim about our systems, and the
- * AI service keeps them apart on purpose. Collapsing them here would undo that
- * at the last step - on the one screen where a human reads it.
+ * THE STATES STAY APART. "We looked and found nothing" is a claim about
+ * our range, "the search could not run" is a claim about our systems, "it was
+ * never asked" (a local pre-filter answer) is a claim about the answer itself,
+ * and the AI service keeps them apart on purpose. Collapsing them here would
+ * undo that at the last step - on the one screen where a human reads it.
  */
 export function productContextSentence(report: unknown): string {
   const seen = (
@@ -108,6 +117,10 @@ export function productContextSentence(report: unknown): string {
 
   if (seen.state === "unavailable") {
     return "A termékkeresés nem futott le ehhez a válaszhoz (üzemzavar), tehát a modell nem látta a katalógust.";
+  }
+
+  if (seen.state === "not_asked") {
+    return LOCAL_PREFILTER_NOTE;
   }
 
   return PRODUCT_CONTEXT_NOTE;
