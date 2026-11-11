@@ -9,6 +9,7 @@ import {
   ServiceUnavailableException,
 } from "@nestjs/common";
 
+import { budapestDayKey } from "../dashboard/budapest-day.js";
 import { MaintenanceInvoiceDraftService } from "./maintenance-invoice-draft.service.js";
 import type { CompletionCertificatesRepository } from "../completion-certificates/completion-certificates.repository.js";
 import type { MaintenanceInvoiceRepository } from "./maintenance-invoice.repository.js";
@@ -368,6 +369,37 @@ describe("MaintenanceInvoiceDraftService.draftFor", () => {
     assert.equal(input.completionCertificateId, "cert-1");
     assert.equal(input.customerId, "customer-1");
     assert.equal(input.totals.netAmount.toNumber(), 100000);
+  });
+});
+
+describe("MaintenanceInvoiceDraftService.draftFor, a fizetési határidő kezdőpontja", () => {
+  /**
+   * THE DUE DATE STARTS FROM THE INVOICE'S DAY (Balázs, 2026-11-10 10:39 UTC, card 27d12a67): the TIG here is dated 2026-09-24, long
+   * before the request, so a due date counted from the TIG (2026-10-02 for the default 8 days) would be in the past. The request's day is
+   * read from the real clock around the call (a midnight in between is allowed for, both days are accepted).
+   */
+  const plusDays = (day: string, days: number) => {
+    const date = new Date(`${day}T00:00:00.000Z`);
+    date.setUTCDate(date.getUTCDate() + days);
+    return date.toISOString().slice(0, 10);
+  };
+  const dueTag = (xml: string) =>
+    /<fizetesiHataridoDatum>([^<]+)<\/fizetesiHataridoDatum>/.exec(xml)?.[1];
+  const fulfilmentTag = (xml: string) =>
+    /<teljesitesDatum>([^<]+)<\/teljesitesDatum>/.exec(xml)?.[1];
+
+  it("the preview's due date counts from the day of the request, the fulfilment stays the TIG's date", async () => {
+    const { service: subject, sentXml } = service({});
+    const before = budapestDayKey(new Date());
+    await subject.draftFor("cert-1");
+    const after = budapestDayKey(new Date());
+    const due = dueTag(sentXml[0]!);
+    assert.ok(
+      [plusDays(before, 8), plusDays(after, 8)].includes(due ?? ""),
+      `due ${due}`,
+    );
+    assert.notEqual(due, "2026-10-02", "not the TIG's date plus 8 days");
+    assert.equal(fulfilmentTag(sentXml[0]!), "2026-09-24");
   });
 });
 

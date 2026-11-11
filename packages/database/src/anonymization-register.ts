@@ -1704,6 +1704,12 @@ export const ANONYMIZATION_REGISTER: Readonly<
     contactRecipientEmail: "email",
     updatedById: "identifier",
   },
+  AiLinkSource: {
+    host: "business",
+    brand: "business",
+    note: "freeText",
+    createdById: "identifier",
+  },
   PartnerOrderSetting: {
     id: "identifier",
     updatedById: "identifier",
