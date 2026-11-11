@@ -31,6 +31,7 @@ import {
   invoiceDraftOf,
   invoiceRefusal,
   newCustomerOf,
+  orderTaxKeyOf,
   orderLanguageOf,
   proformaDraftOf,
   proformaRefusal,
@@ -376,9 +377,36 @@ export class WebshopOrderInvoiceService {
       throw new ConflictException(
         "A rendelésen nincs vevő-azonosító és e-mail cím, ezért a számla nem állítható ki.",
       );
+    // (1) a rendelés kulcsa már kötött egy vevőhöz
     const linked = await this.repository.customerByKey(key);
     if (linked) return linked;
 
+    /*
+      (2) A CÉGET AZ ADÓSZÁM AZONOSÍTJA, NEM AZ E-MAIL (kártya c499739d, Balázs 2026-11-11 10:54 UTC, joggal): egy webshopos céges
+      rendelés egy másik e-mail cím miatt új vevő-sort hozott létre, holott az adószám egyértelműen megmondja, melyik cég. Ahol a
+      rendelésen van adószám, az adószám kulcsa (magyar: az első nyolc számjegy; közösségi: országkóddal) dönt: egy találat az a vevő,
+      TÖBB találat nem készül el számla (a vevők összevonása dönt, nem mi), nincs találat: új vevő, az e-mail NEM számít.
+    */
+    const taxKey = orderTaxKeyOf(order);
+    if (taxKey) {
+      const byTax = await this.repository.customersByTaxKey(taxKey);
+      if (byTax.length > 1)
+        throw new ConflictException(
+          `Az OS-ben több partner is ezzel az adószámmal áll (${byTax
+            .map((match) => match.displayName)
+            .join(
+              ", ",
+            )}). Vond össze vagy archiváld a fölöslegeset, utána állítsd ki a számlát.`,
+        );
+      const found = byTax[0];
+      if (found)
+        return found.linked
+          ? found.id
+          : this.repository.linkCustomer(found.id, key);
+      return this.newCustomer(order, user, key);
+    }
+
+    // (3) adószám NÉLKÜL (magánszemély): az e-mail cím, mint eddig
     const email = order.email?.trim();
     const matches = email ? await this.repository.customersByEmail(email) : [];
     if (matches.length > 1)
@@ -395,6 +423,15 @@ export class WebshopOrderInvoiceService {
         ? match.id
         : this.repository.linkCustomer(match.id, key);
 
+    // (4) új vevő csak, ha egyik sem
+    return this.newCustomer(order, user, key);
+  }
+
+  private async newCustomer(
+    order: MedusaOrderDetailRow,
+    user: AuthenticatedUser,
+    key: string,
+  ): Promise<string> {
     const wanted = newCustomerOf(order);
     if (!wanted.ok) throw new ConflictException(wanted.message);
     const created = await this.customers.create(

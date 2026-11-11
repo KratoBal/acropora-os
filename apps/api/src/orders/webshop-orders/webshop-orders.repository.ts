@@ -8,6 +8,12 @@ import {
 } from "@acropora/types";
 
 import {
+  euKey,
+  huBase,
+} from "../../partner-duplicates/partner-duplicate-groups.js";
+import type { OrderTaxKey } from "./webshop-order-invoice.rules.js";
+
+import {
   linkExternalInvoices,
   mentionsNumber,
   type LinkProforma,
@@ -622,6 +628,54 @@ export class WebshopOrdersRepository {
    * A KÖTÉS. Ha a kulcsot közben más kötötte be (egyedi megkötés), az ő
    * partnerét adjuk vissza: a két kérés ugyanazt a vevőt kapja.
    */
+  /**
+   * A VEVŐK AZ ADÓSZÁM KULCSA SZERINT (kártya c499739d): a magyar adószám első nyolc számjegye vagy a közösségi adószám, ugyanazzal a
+   * szabállyal, mint a duplikátum-mérés. A jelölteket az adatbázis szűri (magyar: a nyolc számjegyet tartalmazó adószám; közösségi: ahol
+   * van közösségi adószám), a PONTOS egyezést a `huBase` és az `euKey` dönti el, mert az adószám tárolt alakja szabad (`15509246-2-41`,
+   * `HU15509246`, `DE 123 456 789`).
+   */
+  async customersByTaxKey(
+    key: OrderTaxKey,
+  ): Promise<{ id: string; displayName: string; linked: boolean }[]> {
+    const candidates = await prisma.customer.findMany({
+      where: {
+        archivedAt: null,
+        isActive: true,
+        ...(key.kind === "HU"
+          ? { taxNumber: { contains: key.value } }
+          : { euTaxNumber: { not: null } }),
+      },
+      select: {
+        id: true,
+        displayName: true,
+        taxNumber: true,
+        euTaxNumber: true,
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    });
+    const rows = candidates.filter((row) =>
+      key.kind === "HU"
+        ? huBase(row.taxNumber) === key.value
+        : euKey(row.euTaxNumber) === key.value,
+    );
+    if (!rows.length) return [];
+    const linked = new Set(
+      (
+        await prisma.externalReference.findMany({
+          where: {
+            ...CUSTOMER_REFERENCE,
+            entityId: { in: rows.map((row) => row.id) },
+          },
+          select: { entityId: true },
+        })
+      ).map((row) => row.entityId),
+    );
+    return rows.map(({ id, displayName }) => ({
+      id,
+      displayName,
+      linked: linked.has(id),
+    }));
+  }
   async linkCustomer(customerId: string, key: string): Promise<string> {
     try {
       await prisma.externalReference.create({
