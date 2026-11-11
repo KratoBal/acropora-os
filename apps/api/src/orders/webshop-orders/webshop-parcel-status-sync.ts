@@ -21,6 +21,32 @@ import type { TrackingEvent } from "../../integrations/carriers/carrier.types.js
  */
 export const GLS_DELIVERED_CODES_ENV = "GLS_DELIVERED_STATUS_CODES";
 
+/**
+ * THE FOXPOST PARCEL TOO (card ef84489d, acrobot 47552), the same way. Foxpost offers no webhook (its OpenAPI 1.2.14 has
+ * only tracking endpoints), so it is polled like GLS. Its trace statuses are an enum with no description (RECEIVE and
+ * HDRECEIVE look like "received"), so its delivered codes are configuration too, EMPTY BY DEFAULT: the first real
+ * parcels' observed codes and texts decide which one is "Címzett által átvéve".
+ */
+export type ParcelSyncCarrier = "gls" | "foxpost";
+export const DELIVERED_CODES_ENV: Record<ParcelSyncCarrier, string> = {
+  gls: GLS_DELIVERED_CODES_ENV,
+  foxpost: "FOXPOST_DELIVERED_STATUS_CODES",
+};
+const CARRIER_LABEL: Record<ParcelSyncCarrier, string> = {
+  gls: "GLS",
+  foxpost: "Foxpost",
+};
+
+/**
+ * THE THANK-YOU MAIL ON RECEIPT (Balázs 2026-09-02: when the customer has taken the parcel, the order closes and the
+ * customer is thanked; acrobot 47552): the automatic closing asks the shop to send its "closed" status mail (the
+ * WEBSHOP_ORDER_CLOSED template, editable under the OS mail templates) only when this switch is exactly "true". One
+ * switch for both carriers, OFF by default: a mail from a poller to customers is turned on deliberately.
+ */
+export const PARCEL_SYNC_NOTIFY_ENV = "PARCEL_STATUS_SYNC_NOTIFY_CUSTOMER";
+export const notifyOnClose = (env: NodeJS.ProcessEnv): boolean =>
+  env.PARCEL_STATUS_SYNC_NOTIFY_CUSTOMER === "true";
+
 /** How far back a parcel is still checked: older ones are long settled. */
 export const SYNC_WINDOW_DAYS = 30;
 /** At most this many parcels per run. */
@@ -49,10 +75,17 @@ const shortDescription = (text: string): string =>
     .trim()
     .slice(0, OBSERVED_DESCRIPTION_MAX);
 
-/** The delivered codes the environment names: trimmed, empty entries dropped, compared as written by the carrier. */
-export const deliveredCodes = (env: NodeJS.ProcessEnv): ReadonlySet<string> =>
+/** The delivered codes the environment names for the carrier: trimmed, empty entries dropped, compared as written. */
+export const deliveredCodes = (
+  env: NodeJS.ProcessEnv,
+  carrier: ParcelSyncCarrier = "gls",
+): ReadonlySet<string> =>
   new Set(
-    (env.GLS_DELIVERED_STATUS_CODES ?? "")
+    (
+      (carrier === "foxpost"
+        ? env.FOXPOST_DELIVERED_STATUS_CODES
+        : env.GLS_DELIVERED_STATUS_CODES) ?? ""
+    )
       .split(",")
       .map((code) => code.trim())
       .filter((code) => code !== ""),
@@ -64,15 +97,20 @@ export interface BusinessStatusView {
 }
 
 export interface ParcelStatusSyncDeps {
-  /** The order ids of the confirmed GLS parcels created since the date, newest first, at most `limit`. */
+  /** The order ids of the carrier's confirmed parcels created since the date, newest first, at most `limit`. */
   parcelOrderIds(since: Date, limit: number): Promise<string[]>;
   tracking(orderId: string): Promise<TrackingEvent[]>;
   businessStatus(orderId: string): Promise<BusinessStatusView | null>;
-  /** Moves the order to `status` (the shop checks the rule); a rejection is thrown. */
-  transition(orderId: string, status: string): Promise<void>;
+  /** Moves the order to `status` (the shop checks the rule), mailing the customer when asked; a rejection is thrown. */
+  transition(
+    orderId: string,
+    status: string,
+    notifyCustomer: boolean,
+  ): Promise<void>;
 }
 
 export interface ParcelStatusSyncReport {
+  carrier: ParcelSyncCarrier;
   checked: number;
   /** orders moved to closed by this run */
   closed: string[];
@@ -87,6 +125,8 @@ export interface ParcelStatusSyncReport {
   observed: { code: string; description: string; parcels: number }[];
   /** the delivered codes configured (empty: the run only observes) */
   configuredCodes: string[];
+  /** whether a closing asked the shop to mail the customer (`PARCEL_STATUS_SYNC_NOTIFY_CUSTOMER`) */
+  notifyCustomer: boolean;
   /** there were more parcels in the window than one run takes: the oldest beyond the batch were NOT checked */
   truncated: boolean;
 }
@@ -105,8 +145,10 @@ export async function syncParcelStatuses(
   deps: ParcelStatusSyncDeps,
   env: NodeJS.ProcessEnv,
   now: Date,
+  carrier: ParcelSyncCarrier = "gls",
 ): Promise<ParcelStatusSyncReport> {
-  const codes = deliveredCodes(env);
+  const codes = deliveredCodes(env, carrier);
+  const notifyCustomer = notifyOnClose(env);
   const since = new Date(
     now.getTime() - SYNC_WINDOW_DAYS * 24 * 60 * 60 * 1000,
   );
@@ -115,6 +157,7 @@ export async function syncParcelStatuses(
   const truncated = found.length > SYNC_BATCH;
   const orderIds = found.slice(0, SYNC_BATCH);
   const report: ParcelStatusSyncReport = {
+    carrier,
     checked: 0,
     closed: [],
     alreadyClosed: 0,
@@ -123,6 +166,7 @@ export async function syncParcelStatuses(
     failed: [],
     observed: [],
     configuredCodes: [...codes],
+    notifyCustomer,
     truncated,
   };
   const seen = new Map<
@@ -166,7 +210,7 @@ export async function syncParcelStatuses(
         report.skipped.push({ orderId, status: business.status });
         continue;
       }
-      await deps.transition(orderId, "closed");
+      await deps.transition(orderId, "closed", notifyCustomer);
       report.closed.push(orderId);
     } catch (error) {
       report.failed.push({ orderId, error: errorCode(error) });
@@ -190,11 +234,11 @@ export async function syncParcelStatuses(
 export function describeSyncReport(report: ParcelStatusSyncReport): string {
   if (report.checked === 0) return "";
   const lines = [
-    `GLS status sync: ${report.checked} parcels checked, ${report.closed.length} closed, ${report.alreadyClosed} already closed, ${report.waiting} not delivered yet.`,
+    `${CARRIER_LABEL[report.carrier]} status sync: ${report.checked} parcels checked, ${report.closed.length} closed${report.closed.length && report.notifyCustomer ? " (the customer mailed)" : ""}, ${report.alreadyClosed} already closed, ${report.waiting} not delivered yet.`,
   ];
   if (report.configuredCodes.length === 0)
     lines.push(
-      `OBSERVE MODE: ${GLS_DELIVERED_CODES_ENV} is empty, no order was moved. Statuses seen: ` +
+      `OBSERVE MODE: ${DELIVERED_CODES_ENV[report.carrier]} is empty, no order was moved. Statuses seen: ` +
         (report.observed
           .map(
             (o) =>
