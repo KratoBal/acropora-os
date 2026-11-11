@@ -74,7 +74,7 @@ const ORDER: MedusaOrderDetailRow = {
 
 const SAME_BUYER = {
   name: "Nagy Emese",
-  taxNumber: null,
+  taxNumber: null as string | null,
   postalCode: "1117",
   city: "Budapest",
   line: "Fehérvári út 24.",
@@ -87,6 +87,14 @@ function setup(
     status?: string;
     linked?: string | null;
     byEmail?: { id: string; displayName: string; linked: boolean }[];
+    byTax?: {
+      id: string;
+      displayName: string;
+      linked: boolean;
+      partnerMirror?: boolean;
+    }[];
+    /** A rendelés (alapból a magánszemélyes ORDER). */
+    orderOverride?: MedusaOrderDetailRow;
     buyer?: typeof SAME_BUYER;
     /** A rendelés fizetési munkamenetének szolgáltatója (függő fizetés). */
     provider?: string;
@@ -112,7 +120,7 @@ function setup(
                 },
               ],
             }
-          : ORDER,
+          : (over.orderOverride ?? ORDER),
         status: {
           status: over.status ?? "confirmed",
         } as MedusaOrderBusinessStatus,
@@ -130,7 +138,17 @@ function setup(
       calls.push(`customerByKey ${key}`);
       return over.linked ?? null;
     },
-    customersByEmail: async () => over.byEmail ?? [],
+    customersByEmail: async () => {
+      calls.push("customersByEmail");
+      return over.byEmail ?? [];
+    },
+    customersByTaxKey: async (key: { kind: string; value: string }) => {
+      calls.push(`customersByTaxKey ${key.kind} ${key.value}`);
+      return (over.byTax ?? []).map((row) => ({
+        partnerMirror: false,
+        ...row,
+      }));
+    },
     linkCustomer: async (customerId: string, key: string) => {
       calls.push(`link ${customerId} ${key}`);
       return customerId;
@@ -190,6 +208,7 @@ describe("WebshopOrderInvoiceService", () => {
     assert.deepEqual(calls, [
       "source",
       "customerByKey guest:emese@example.hu",
+      "customersByEmail",
       "create customer Nagy Emese",
       "link cust_new guest:emese@example.hu",
       "create draft webshop-order_38 for cust_new from order_38",
@@ -290,6 +309,275 @@ describe("WebshopOrderInvoiceService", () => {
       message: /eltérnek/,
     });
     assert.ok(!calls.some((call) => call.includes("draft")));
+  });
+
+  /*
+    A CÉGET AZ ADÓSZÁM AZONOSÍTJA, NEM AZ E-MAIL (kártya c499739d, Balázs 2026-11-11 10:54 UTC). MI PIROSÍT: egy céges rendelés más
+    e-mail címmel új vevő-sort hoz létre a meglévő helyett; az adószámos rendelésnél az e-mail dönt; több azonos adószámú vevőnél a
+    szolgáltatás választ; nincs adószám-találat, mégis az e-mail alapján köt; a magánszemély nem az adószám útján megy.
+  */
+  const COMPANY_ORDER = (taxId: string): MedusaOrderDetailRow => ({
+    ...ORDER,
+    email: "rendeles.kiss.anna@example.hu",
+    billing_address: {
+      ...ORDER.billing_address!,
+      company: "Fővárosi Állat- és Növénykert",
+      metadata: { tax_id: taxId },
+    },
+  });
+
+  it("an Állatkert-shaped order: a different e-mail, the SAME tax number: the existing customer row, no new one", async () => {
+    const { calls, service } = setup({
+      orderOverride: COMPANY_ORDER("15509246-2-41"),
+      byTax: [
+        {
+          id: "cust_fank",
+          displayName: "Fővárosi Állat- és Növénykert",
+          linked: false,
+        },
+      ],
+      buyer: {
+        ...SAME_BUYER,
+        name: "Fővárosi Állat- és Növénykert",
+        taxNumber: "15509246-2-41",
+      },
+    });
+    await service.issue("order_38", USER, NOW);
+    assert.ok(calls.includes("customersByTaxKey HU 15509246"));
+    assert.ok(
+      calls.includes("link cust_fank guest:rendeles.kiss.anna@example.hu"),
+    );
+    assert.ok(
+      calls.some(
+        (c) => c.startsWith("create draft") && c.includes("for cust_fank"),
+      ),
+    );
+    assert.equal(
+      calls.some((c) => c.startsWith("create customer")),
+      false,
+      "no new customer",
+    );
+    assert.equal(
+      calls.includes("customersByEmail"),
+      false,
+      "the e-mail does not decide when there is a tax number",
+    );
+  });
+
+  it("the Hungarian key is the first eight digits: any stored shape of the same company is one key", async () => {
+    for (const taxId of [
+      "15509246-2-41",
+      "15509246241",
+      "HU15509246",
+      "hu 15509246-2-41",
+    ]) {
+      const { calls, service } = setup({
+        orderOverride: COMPANY_ORDER(taxId),
+        byTax: [{ id: "cust_fank", displayName: "FANK", linked: true }],
+        buyer: {
+          ...SAME_BUYER,
+          name: "Fővárosi Állat- és Növénykert",
+          taxNumber: taxId,
+        },
+      });
+      await service.issue("order_38", USER, NOW);
+      assert.ok(calls.includes("customersByTaxKey HU 15509246"), taxId);
+    }
+  });
+
+  it("a community tax number is its own kind of key, with the country code (never the Hungarian eight digits)", async () => {
+    const { calls, service } = setup({
+      orderOverride: COMPANY_ORDER("DE 123 456 789"),
+      byTax: [{ id: "cust_de", displayName: "Aquaristik GmbH", linked: true }],
+      buyer: {
+        ...SAME_BUYER,
+        name: "Fővárosi Állat- és Növénykert",
+        taxNumber: "DE 123 456 789",
+      },
+    });
+    await service.issue("order_38", USER, NOW);
+    assert.ok(calls.includes("customersByTaxKey EU DE123456789"));
+    assert.equal(
+      calls.some((c) => c.includes("customersByTaxKey HU")),
+      false,
+    );
+  });
+
+  it("several customers on the same tax key: NO invoice, the reason names them, nothing is created or linked", async () => {
+    const { calls, service } = setup({
+      orderOverride: COMPANY_ORDER("15509246-2-41"),
+      byTax: [
+        { id: "cust_a", displayName: "FANK régi sor", linked: false },
+        { id: "cust_b", displayName: "FANK másik régi sor", linked: true },
+      ],
+    });
+    await assert.rejects(service.issue("order_38", USER, NOW), {
+      status: 409,
+      message: /ezzel az adószámmal.*FANK régi sor, FANK másik régi sor/s,
+    });
+    assert.equal(
+      calls.some((c) => c.startsWith("create") || c.startsWith("link")),
+      false,
+    );
+  });
+
+  it("THE MOTIVATING CASE: the old customer row and the partner's mirror on the same key: the MIRROR is the customer (the invoice's right buyer), no 409", async () => {
+    const { calls, service } = setup({
+      orderOverride: COMPANY_ORDER("15509246-2-41"),
+      byTax: [
+        { id: "cust_old", displayName: "FANK régi vevő-sor", linked: false },
+        {
+          id: "cust_mirror",
+          displayName: "FANK partner tükör",
+          linked: false,
+          partnerMirror: true,
+        },
+      ],
+      buyer: {
+        ...SAME_BUYER,
+        name: "Fővárosi Állat- és Növénykert",
+        taxNumber: "15509246-2-41",
+      },
+    });
+    await service.issue("order_38", USER, NOW);
+    assert.ok(
+      calls.includes("link cust_mirror guest:rendeles.kiss.anna@example.hu"),
+    );
+    assert.ok(
+      calls.some(
+        (c) => c.startsWith("create draft") && c.includes("for cust_mirror"),
+      ),
+    );
+    assert.equal(
+      calls.some((c) => c.includes("cust_old")),
+      false,
+    );
+    assert.equal(
+      calls.some((c) => c.startsWith("create customer")),
+      false,
+    );
+  });
+
+  it("the old row of a DELETED partner is no mirror (the repository says so): next to a plain old row it makes two plain rows, and the invoice is refused", async () => {
+    const { calls, service } = setup({
+      orderOverride: COMPANY_ORDER("15509246-2-41"),
+      byTax: [
+        { id: "cust_old", displayName: "FANK régi vevő-sor", linked: false },
+        {
+          id: "cust_deleted",
+          displayName: "FANK megszűnt partner sora",
+          linked: false,
+          partnerMirror: false,
+        },
+      ],
+    });
+    await assert.rejects(service.issue("order_38", USER, NOW), {
+      status: 409,
+      message: /ezzel az adószámmal/,
+    });
+    assert.equal(
+      calls.some((c) => c.startsWith("create") || c.startsWith("link")),
+      false,
+    );
+  });
+
+  it("the mirror rule needs EXACTLY ONE mirror: two mirrors, or several rows and no mirror, are still refused", async () => {
+    for (const rows of [
+      [
+        {
+          id: "m1",
+          displayName: "FANK tükör 1",
+          linked: false,
+          partnerMirror: true,
+        },
+        {
+          id: "m2",
+          displayName: "FANK tükör 2",
+          linked: false,
+          partnerMirror: true,
+        },
+      ],
+      [
+        { id: "a", displayName: "FANK régi A", linked: false },
+        { id: "b", displayName: "FANK régi B", linked: false },
+      ],
+      [
+        {
+          id: "m1",
+          displayName: "FANK tükör",
+          linked: false,
+          partnerMirror: true,
+        },
+        {
+          id: "m2",
+          displayName: "FANK tükör 2",
+          linked: false,
+          partnerMirror: true,
+        },
+        { id: "old", displayName: "FANK régi", linked: false },
+      ],
+    ]) {
+      const { calls, service } = setup({
+        orderOverride: COMPANY_ORDER("15509246-2-41"),
+        byTax: rows,
+      });
+      await assert.rejects(service.issue("order_38", USER, NOW), {
+        status: 409,
+        message: /ezzel az adószámmal/,
+      });
+      assert.equal(
+        calls.some((c) => c.startsWith("create") || c.startsWith("link")),
+        false,
+      );
+    }
+  });
+
+  it("an order WITH a tax number and no match makes a new customer: the e-mail is not asked, even if it matches somebody", async () => {
+    const { calls, service } = setup({
+      orderOverride: COMPANY_ORDER("15509246-2-41"),
+      byTax: [],
+      byEmail: [
+        { id: "cust_somebody", displayName: "Valaki Más", linked: false },
+      ],
+      buyer: {
+        ...SAME_BUYER,
+        name: "Fővárosi Állat- és Növénykert",
+        taxNumber: "15509246-2-41",
+      },
+    });
+    await service.issue("order_38", USER, NOW);
+    assert.ok(calls.some((c) => c.startsWith("create customer")));
+    assert.equal(calls.includes("customersByEmail"), false);
+  });
+
+  it("an order WITHOUT a tax number (a private person) goes by e-mail as before, and never asks the tax lookup", async () => {
+    const { calls, service } = setup({
+      byEmail: [{ id: "cust_emese", displayName: "Nagy Emese", linked: false }],
+    });
+    await service.issue("order_38", USER, NOW);
+    assert.ok(calls.includes("customersByEmail"));
+    assert.equal(
+      calls.some((c) => c.startsWith("customersByTaxKey")),
+      false,
+    );
+    assert.ok(calls.includes("link cust_emese guest:emese@example.hu"));
+  });
+
+  it("an already linked order key still wins over everything: no tax lookup, no e-mail lookup", async () => {
+    const { calls, service } = setup({
+      orderOverride: COMPANY_ORDER("15509246-2-41"),
+      linked: "cust_7",
+      buyer: {
+        ...SAME_BUYER,
+        name: "Fővárosi Állat- és Növénykert",
+        taxNumber: "15509246-2-41",
+      },
+    });
+    await service.issue("order_38", USER, NOW);
+    assert.equal(
+      calls.some((c) => c.startsWith("customersBy")),
+      false,
+    );
   });
 
   it("two clicks at once make one partner", async () => {

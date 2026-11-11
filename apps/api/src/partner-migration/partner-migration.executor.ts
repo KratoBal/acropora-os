@@ -24,7 +24,7 @@ export class StalePlanError extends Error {}
 
 export interface RegisterOutcome {
   code: string;
-  mode: "CREATED" | "BOUND" | "SKIPPED";
+  mode: "CREATED" | "BOUND" | "FILLED" | "SKIPPED";
   customerId?: string;
   detail?: string;
 }
@@ -67,6 +67,34 @@ export async function applyOperations(
     const supplier = await loadSupplier(tx, op.supplierId);
     if (!supplier)
       throw new StalePlanError(`A partner nem található: ${op.code}.`);
+
+    if (op.kind === "FILL") {
+      // a már kötött vevő-sor üres mezőinek kitöltése: a kötés a próba óta nem változhatott
+      if (supplier.customerId !== op.customerId)
+        throw new StalePlanError(
+          `A(z) ${op.code} partner kötése megváltozott a próba óta: a terv elavult, nézd meg újra a próbafuttatást.`,
+        );
+      const linked = await tx.customer.findUnique({
+        where: { id: op.customerId },
+        select: { id: true, archivedAt: true },
+      });
+      if (!linked || linked.archivedAt)
+        throw new StalePlanError(
+          `A(z) ${op.code} kötött vevő-sora nem található vagy archivált.`,
+        );
+      const written = await applyFills(tx, op.customerId, op.fills);
+      await recordFilled(tx, op, op.customerId, written, actorUserId);
+      outcomes.push({
+        code: op.code,
+        mode: "FILLED",
+        customerId: op.customerId,
+        detail: written.length
+          ? written.join(", ")
+          : "nem íródott semmi (a mezők közben kitöltődtek)",
+      });
+      continue;
+    }
+
     if (supplier.customerId)
       throw new StalePlanError(
         `A(z) ${op.code} partnernek már van kötött vevő-sora: a terv elavult, nézd meg újra a próbafuttatást.`,
@@ -100,9 +128,92 @@ export async function applyOperations(
     });
     await markUnasReferences(tx, customer.id, supplier.id);
     await record(tx, op, customer.id, "BOUND", actorUserId);
-    outcomes.push({ code: op.code, mode: "BOUND", customerId: customer.id });
+    // a kötődő vevő-sor üres mezői a partner értékeivel (ahol a próba kitöltést mutatott)
+    const written = await applyFills(tx, customer.id, op.fills);
+    if (written.length)
+      await recordFilled(tx, op, customer.id, written, actorUserId);
+    outcomes.push({
+      code: op.code,
+      mode: "BOUND",
+      customerId: customer.id,
+      ...(written.length ? { detail: `kitöltve: ${written.join(", ")}` } : {}),
+    });
   }
   return outcomes;
+}
+
+/**
+ * A KITÖLTÉS: a vevő-sor ÜRES mezői a partner értékeivel. Minden mező FELTÉTELES írás (`updateMany` az "üres" feltétellel), tehát egy
+ * közben kitöltött mezőt nem ír felül, akkor sem, ha a lenyomat egyezik. A szerviz-partnerkód egyedi: ha egy MÁSIK vevő-soron már áll,
+ * nem íródik. Visszaadja, mely mezők íródtak tényleg (csak a mezőnevek: az érték személyes adat lehet, az eseménybe nem kerül).
+ */
+async function applyFills(
+  tx: Tx,
+  customerId: string,
+  fills: readonly { field: string; value: string | number }[],
+): Promise<string[]> {
+  const written: string[] = [];
+  for (const fill of fills) {
+    if (fill.field === "paymentDueDays" && typeof fill.value === "number") {
+      const result = await tx.customer.updateMany({
+        where: { id: customerId, paymentDueDays: null },
+        data: { paymentDueDays: fill.value },
+      });
+      if (result.count === 1) written.push(fill.field);
+    } else if (
+      fill.field === "billingEmail" &&
+      typeof fill.value === "string"
+    ) {
+      const result = await tx.customer.updateMany({
+        where: {
+          id: customerId,
+          OR: [{ billingEmail: null }, { billingEmail: "" }],
+        },
+        data: { billingEmail: fill.value },
+      });
+      if (result.count === 1) written.push(fill.field);
+    } else if (
+      fill.field === "worksheetPartnerCode" &&
+      typeof fill.value === "string"
+    ) {
+      const taken = await tx.customer.findFirst({
+        where: { worksheetPartnerCode: fill.value, id: { not: customerId } },
+        select: { id: true },
+      });
+      if (taken) continue;
+      const result = await tx.customer.updateMany({
+        where: {
+          id: customerId,
+          OR: [{ worksheetPartnerCode: null }, { worksheetPartnerCode: "" }],
+        },
+        data: { worksheetPartnerCode: fill.value },
+      });
+      if (result.count === 1) written.push(fill.field);
+    }
+  }
+  return written;
+}
+
+async function recordFilled(
+  tx: Tx,
+  op: MigrationOperation,
+  customerId: string,
+  fields: readonly string[],
+  actorUserId: string | null,
+) {
+  await tx.domainEvent.create({
+    data: {
+      id: randomUUID(),
+      eventType: "partner.filled",
+      aggregateType: "Supplier",
+      aggregateId: op.supplierId,
+      actorUserId,
+      // csak azonosító és mezőnevek: se e-mail cím, se érték
+      payload: { customerId, fields: [...fields] },
+      occurredAt: new Date(),
+      schemaVersion: 1,
+    },
+  });
 }
 
 function loadSupplier(tx: Tx, id: string) {
