@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import type {
+  PartnerMigrationFill,
   PartnerMigrationPlan,
   PartnerMigrationRow,
 } from "@acropora/types";
@@ -12,7 +13,13 @@ import {
   restoreRegistered,
   type Tx,
 } from "./partner-migration.executor.js";
-import { decideOperations, fingerprintOf } from "./partner-migration-run.js";
+import {
+  decideOperations,
+  decideWithFills,
+  fingerprintOf,
+  fillsFor,
+  type FillFacts,
+} from "./partner-migration-run.js";
 
 /**
  * AZ EGYSZERI ÁTVEZETÉS DÖNTÉSEI, VÉGREHAJTÁSA ÉS VISSZAÁLLÍTÁSA (partnertörzs). MI PIROSÍT: ha egy bizonytalan partner
@@ -137,6 +144,207 @@ describe("decideOperations", () => {
       assert.ok(text.includes(code), code);
     assert.match(text, /HIBA/);
     assert.match(text, /LENYOMAT: [0-9a-f]{64}/);
+  });
+});
+
+describe("the fill step (only EMPTY fields of the linked customer row)", () => {
+  const fillRows = [
+    row({ code: "MIR", action: "MARK_ONLY", linkedCustomer: customer("m2") }),
+    row({
+      code: "ZOO",
+      action: "MERGE_CANDIDATES",
+      linkedCustomer: customer("m"),
+      candidates: [customer("u1")],
+    }),
+    row({ code: "ONE", action: "BIND_EXISTING", candidates: [customer("c1")] }),
+    row({ code: "OWN", action: "SKIP_OWN" }),
+    row({ code: "NEW", action: "CREATE_NEW" }),
+  ];
+  type CustomerFact = ReturnType<FillFacts["customers"]["get"]> & object;
+  type SupplierFact = ReturnType<FillFacts["suppliers"]["get"]> & object;
+  const emptyCustomer: CustomerFact = {
+    paymentDueDays: null,
+    billingEmail: null,
+    worksheetPartnerCode: null,
+  };
+  const fullSupplier: SupplierFact = {
+    paymentDueDays: 15,
+    email: " szamla@partner.test ",
+    worksheetPartnerCode: "AB12",
+  };
+  const factsOf = (
+    over: Partial<{
+      suppliers: FillFacts["suppliers"];
+      customers: FillFacts["customers"];
+      codeHolders: FillFacts["codeHolders"];
+    }> = {},
+  ): FillFacts => ({
+    suppliers: new Map<string, SupplierFact>([
+      ["s-MIR", fullSupplier],
+      ["s-ZOO", fullSupplier],
+      ["s-ONE", fullSupplier],
+      ["s-OWN", fullSupplier],
+    ]),
+    customers: new Map<string, CustomerFact>([
+      ["m2", emptyCustomer],
+      ["m", emptyCustomer],
+      ["c1", emptyCustomer],
+    ]),
+    codeHolders: new Map(),
+    ...over,
+  });
+  const opOf = (result: ReturnType<typeof decideOperations>, code: string) =>
+    result.operations.find((op) => op.code === code)!;
+
+  it("without facts nothing is filled: the old behaviour, byte for byte", () => {
+    const plain = decideOperations(plan(fillRows));
+    assert.equal(opOf(plain, "MIR").kind, "SKIP");
+    assert.equal(opOf(plain, "ZOO").kind, "SKIP");
+    const one = opOf(plain, "ONE");
+    assert.equal(one.kind === "BIND" && one.fills.length, 0);
+  });
+
+  it("a linked MARK_ONLY and MERGE_CANDIDATES partner with an empty row field becomes a FILL (the e-mail trimmed); our own company and a new row never do", () => {
+    const result = decideOperations(plan(fillRows), {}, factsOf());
+    for (const code of ["MIR", "ZOO"]) {
+      const op = opOf(result, code);
+      assert.equal(op.kind, "FILL", code);
+      assert.deepEqual(op.kind === "FILL" && op.fills, [
+        { field: "paymentDueDays", value: 15 },
+        { field: "billingEmail", value: "szamla@partner.test" },
+        { field: "worksheetPartnerCode", value: "AB12" },
+      ]);
+    }
+    assert.equal(opOf(result, "OWN").kind, "SKIP");
+    assert.equal(opOf(result, "NEW").kind, "CREATE");
+    // a BIND carries the fills of the row it will be bound to
+    const one = opOf(result, "ONE");
+    assert.equal(one.kind === "BIND" && one.fills.length, 3);
+  });
+
+  it("never overwrites: a filled field is left (zero days IS filled), a blank string counts as empty, and a partner without a value fills nothing", () => {
+    const filled = factsOf({
+      customers: new Map<string, CustomerFact>([
+        [
+          "m2",
+          {
+            paymentDueDays: 0,
+            billingEmail: "mar@van.test",
+            worksheetPartnerCode: "ZZ99",
+          },
+        ],
+        ["m", { ...emptyCustomer, billingEmail: "   " }],
+        ["c1", emptyCustomer],
+      ]),
+      suppliers: new Map<string, SupplierFact>([
+        ["s-MIR", fullSupplier],
+        [
+          "s-ZOO",
+          {
+            paymentDueDays: null,
+            email: "x@y.test",
+            worksheetPartnerCode: null,
+          },
+        ],
+        [
+          "s-ONE",
+          { paymentDueDays: null, email: "  ", worksheetPartnerCode: null },
+        ],
+      ]),
+    });
+    const result = decideOperations(plan(fillRows), {}, filled);
+    // everything already filled: the partner stays a skip, and says which row it is linked to
+    const mir = opOf(result, "MIR");
+    assert.equal(mir.kind, "SKIP");
+    assert.equal(mir.kind === "SKIP" && mir.linkedCustomerId, "m2");
+    // a blank e-mail on the row is empty, so it is filled; the days and the code have no partner value
+    const zoo = opOf(result, "ZOO");
+    assert.deepEqual(zoo.kind === "FILL" && zoo.fills, [
+      { field: "billingEmail", value: "x@y.test" },
+    ]);
+    const one = opOf(result, "ONE");
+    assert.deepEqual(one.kind === "BIND" && one.fills, []);
+  });
+
+  it("the partner code is filled only when no OTHER customer row holds it, and only when it fits the customer column", () => {
+    const base = (code: string, holders: Record<string, string[]>) =>
+      fillsFor(
+        "s-MIR",
+        "m2",
+        factsOf({
+          suppliers: new Map<string, SupplierFact>([
+            [
+              "s-MIR",
+              { paymentDueDays: null, email: null, worksheetPartnerCode: code },
+            ],
+          ]),
+          codeHolders: new Map(
+            Object.entries(holders).map(([k, v]) => [k, new Set(v)]),
+          ),
+        }),
+      );
+    assert.deepEqual(base("AB12", {}), [
+      { field: "worksheetPartnerCode", value: "AB12" },
+    ]);
+    // the code is on another customer row already: unique, so it is not written
+    assert.deepEqual(base("AB12", { AB12: ["other"] }), []);
+    // the code is on THIS row only (a race with the plan): nothing to write, the field is empty in the facts though
+    assert.deepEqual(base("AB12", { AB12: ["m2"] }), [
+      { field: "worksheetPartnerCode", value: "AB12" },
+    ]);
+    // a partner code of five to eight characters does not fit the customer column (4): not filled, so the whole write cannot fail on it
+    assert.deepEqual(base("ABCDE", {}), []);
+    assert.deepEqual(base("ab12", {}), []);
+  });
+
+  it("the fingerprint follows the fill VALUES: the same operations with another value are another fingerprint", () => {
+    const one = decideOperations(plan(fillRows), {}, factsOf());
+    const same = decideOperations(plan(fillRows), {}, factsOf());
+    assert.equal(one.fingerprint, same.fingerprint);
+    const other = decideOperations(
+      plan(fillRows),
+      {},
+      factsOf({
+        suppliers: new Map<string, SupplierFact>([
+          ["s-MIR", { ...fullSupplier, paymentDueDays: 30 }],
+          ["s-ZOO", fullSupplier],
+          ["s-ONE", fullSupplier],
+        ]),
+      }),
+    );
+    assert.notEqual(other.fingerprint, one.fingerprint);
+    // and filling at all is a different fingerprint from not filling
+    assert.notEqual(
+      decideOperations(plan(fillRows)).fingerprint,
+      one.fingerprint,
+    );
+  });
+
+  it("decideWithFills asks for the facts of exactly the BIND and the linked-skip rows, and equals the one-pass decision with those facts", async () => {
+    const asked: { suppliers: string[]; customers: string[] }[] = [];
+    const result = await decideWithFills(plan(fillRows), {}, async (s, c) => {
+      asked.push({ suppliers: [...s].sort(), customers: [...c].sort() });
+      return factsOf();
+    });
+    assert.deepEqual(asked, [
+      {
+        suppliers: ["s-MIR", "s-ONE", "s-ZOO"],
+        customers: ["c1", "m", "m2"],
+      },
+    ]);
+    assert.equal(
+      result.fingerprint,
+      decideOperations(plan(fillRows), {}, factsOf()).fingerprint,
+    );
+  });
+
+  it("the description names the fill, the row and the fields", () => {
+    const text = describeDecisions(
+      decideOperations(plan(fillRows), {}, factsOf()),
+    ).join("\n");
+    assert.match(text, /kitöltés: 2/);
+    assert.match(text, /MIR: .*m2/);
+    assert.match(text, /paymentDueDays/);
   });
 });
 
@@ -356,7 +564,13 @@ describe("applyOperations and restoreRegistered", () => {
       world.tx,
       [
         { kind: "CREATE", supplierId: "s-NEW", code: "NEW" },
-        { kind: "BIND", supplierId: "s-ONE", code: "ONE", customerId: "c1" },
+        {
+          kind: "BIND",
+          supplierId: "s-ONE",
+          code: "ONE",
+          customerId: "c1",
+          fills: [],
+        },
         { kind: "SKIP", supplierId: "s-LINKED", code: "LINKED", reason: "x" },
       ],
       "u1",
@@ -396,7 +610,13 @@ describe("applyOperations and restoreRegistered", () => {
         expect: /már van kötött/,
       },
       {
-        op: { kind: "BIND", supplierId: "s-ONE", code: "ONE", customerId: "m" },
+        op: {
+          kind: "BIND",
+          supplierId: "s-ONE",
+          code: "ONE",
+          customerId: "m",
+          fills: [] as PartnerMigrationFill[],
+        },
         expect: /másik partnerhez/,
       },
       {
@@ -405,6 +625,7 @@ describe("applyOperations and restoreRegistered", () => {
           supplierId: "s-ONE",
           code: "ONE",
           customerId: "gone",
+          fills: [] as PartnerMigrationFill[],
         },
         expect: /nem található/,
       },
@@ -421,7 +642,15 @@ describe("applyOperations and restoreRegistered", () => {
     await assert.rejects(
       applyOperations(
         archived.tx,
-        [{ kind: "BIND", supplierId: "s-ONE", code: "ONE", customerId: "c1" }],
+        [
+          {
+            kind: "BIND",
+            supplierId: "s-ONE",
+            code: "ONE",
+            customerId: "c1",
+            fills: [],
+          },
+        ],
         null,
       ),
       /archivált/,
@@ -434,7 +663,13 @@ describe("applyOperations and restoreRegistered", () => {
       world.tx,
       [
         { kind: "CREATE", supplierId: "s-NEW", code: "NEW" },
-        { kind: "BIND", supplierId: "s-ONE", code: "ONE", customerId: "c1" },
+        {
+          kind: "BIND",
+          supplierId: "s-ONE",
+          code: "ONE",
+          customerId: "c1",
+          fills: [],
+        },
       ],
       null,
       world.createRow,
@@ -608,7 +843,15 @@ describe("applyOperations and restoreRegistered", () => {
     const world = seed();
     await applyOperations(
       world.tx,
-      [{ kind: "BIND", supplierId: "s-ONE", code: "ONE", customerId: "c1" }],
+      [
+        {
+          kind: "BIND",
+          supplierId: "s-ONE",
+          code: "ONE",
+          customerId: "c1",
+          fills: [],
+        },
+      ],
       null,
     );
     const before = JSON.stringify([...world.suppliers.values()]);
@@ -632,7 +875,15 @@ describe("applyOperations and restoreRegistered", () => {
     const world = seed();
     await applyOperations(
       world.tx,
-      [{ kind: "BIND", supplierId: "s-ONE", code: "ONE", customerId: "c1" }],
+      [
+        {
+          kind: "BIND",
+          supplierId: "s-ONE",
+          code: "ONE",
+          customerId: "c1",
+          fills: [],
+        },
+      ],
       null,
     );
     world.suppliers.get("s-ONE")!.customerId = "somewhere-else";
