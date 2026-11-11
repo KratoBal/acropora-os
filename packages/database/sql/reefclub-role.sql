@@ -72,6 +72,8 @@ GRANT UPDATE ("aquariumId", "consentVersion", "consentAt", "unsubscribedAt", "up
 GRANT SELECT ON "ReefClubDoseRow" TO "reefclub_app";
 -- The run-out reminder's product list (V3.2, slice 4): rebuilt with the dose list in the same run, READ only.
 GRANT SELECT ON "ReefClubRunOutProduct" TO "reefclub_app";
+-- The products the ReefClub may name to a customer for a measured deviation (V3.4 S2b): rebuilt with the dose list in the same run, READ only.
+GRANT SELECT ON "ReefClubCustomerCandidate" TO "reefclub_app";
 GRANT SELECT ("id", "status", "finishedAt", "rowCount") ON "ReefClubDoseProjectionRun" TO "reefclub_app";
 
 -- The customer: only what a shop link shows and checks (plan 2.1: never the phone or e-mail).

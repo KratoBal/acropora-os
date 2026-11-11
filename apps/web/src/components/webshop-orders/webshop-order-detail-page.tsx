@@ -32,6 +32,9 @@ import {
   type WebshopPickupPointSearch,
   type WebshopParcelTracking,
   type WebshopTransferReceiptInput,
+  type WebshopInvoiceConfirmation,
+  type WebshopInvoiceIssueResult,
+  type WebshopInvoiceSummary,
 } from "@acropora/types";
 import Link from "next/link";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
@@ -45,6 +48,7 @@ import {
 import { formatStatusAge } from "@/components/webshop/webshop-orders-page";
 import { billingDocumentsApi } from "@/lib/api/billing-documents";
 import { webshopOrdersApi } from "@/lib/api/webshop-orders";
+import { BillingIssueConfirmDialog } from "@/components/billing/billing-issue-confirm-dialog";
 import { useLineSelection } from "./line-selection";
 import {
   AddressDialog,
@@ -383,10 +387,16 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
     setMailNotice(statusMailText(result.mail));
     setNow(Date.now());
   };
-  const issueInvoice = async () => {
-    setOrder(await webshopOrdersApi.issueInvoice(token, id));
+  // the sending's outcome next to the issued invoice (card 7ba97e0d, S2): a failed send is not a failed issue
+  const [invoiceMail, setInvoiceMail] =
+    useState<WebshopInvoiceIssueResult<WebshopOrderDetail>["mail"]>(null);
+  const issueInvoice = async (confirmation: WebshopInvoiceConfirmation) => {
+    const result = await webshopOrdersApi.issueInvoice(token, id, confirmation);
+    setOrder(result.order);
+    setInvoiceMail(result.mail);
     setNow(Date.now());
   };
+  const invoiceSummary = () => webshopOrdersApi.invoiceSummary(token, id);
   const issueDeliveryNote = async () => {
     setOrder(await webshopOrdersApi.issueDeliveryNote(token, id));
     setNow(Date.now());
@@ -571,6 +581,8 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
           mailNotice={mailNotice}
           onResendStatusMail={resendStatusMail}
           onIssueInvoice={issueInvoice}
+          invoiceMail={invoiceMail}
+          onInvoiceSummary={invoiceSummary}
           onIssueDeliveryNote={issueDeliveryNote}
           onOpenPdf={openPdf}
           onCreateParcel={createParcel}
@@ -613,12 +625,17 @@ function InvoiceCard({
   order,
   canIssue,
   onIssue,
+  mail,
+  onSummary,
   onIssueDeliveryNote,
   onOpenPdf,
 }: {
   order: WebshopOrderDetail;
   canIssue: boolean;
-  onIssue: () => Promise<void>;
+  /** What happened to the sending of the invoice just issued; null: no sending was asked. */
+  mail: WebshopInvoiceIssueResult<WebshopOrderDetail>["mail"];
+  onIssue: (confirmation: WebshopInvoiceConfirmation) => Promise<void>;
+  onSummary: () => Promise<WebshopInvoiceSummary>;
   onIssueDeliveryNote: () => Promise<void>;
   onOpenPdf: (documentId: string) => Promise<void>;
 }) {
@@ -629,6 +646,30 @@ function InvoiceCard({
   const [confirming, setConfirming] = useState<
     "invoice" | "deliveryNote" | null
   >(null);
+  /*
+    A SZÁMLA MEGERŐSÍTŐ ABLAKA (kártya 7ba97e0d, S2; Balázs 2026-11-11 11:12-11:20): a vevő, a három (javítható)
+    dátum, a fizetési mód és a küldési cím, ahogy a kiállítás küldené; „Elküldöm e-mailben” a vevő címére küld. A
+    szállítólevél nem számla: annál a régi megerősítés marad.
+  */
+  const [summary, setSummary] = useState<WebshopInvoiceSummary | null>(null);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [send, setSend] = useState(false);
+  const openInvoiceConfirm = async () => {
+    setError(null);
+    setSummary(null);
+    setSummaryError(null);
+    setSend(false);
+    setConfirming("invoice");
+    try {
+      setSummary(await onSummary());
+    } catch (cause) {
+      setSummaryError(
+        cause instanceof Error
+          ? cause.message
+          : "A számla adatai nem tölthetők be.",
+      );
+    }
+  };
   const invoice = order.invoice;
   const run = async (work: () => Promise<void>) => {
     setBusy(true);
@@ -723,7 +764,7 @@ function InvoiceCard({
                 size="regular"
                 variant="primary"
                 disabled={busy}
-                onClick={() => setConfirming("invoice")}
+                onClick={() => void openInvoiceConfirm()}
               >
                 {busy ? "Kiállítás…" : "Számla kiállítása"}
               </PilotButton>
@@ -738,32 +779,52 @@ function InvoiceCard({
             {error}
           </p>
         ) : null}
+        {mail ? (
+          <p
+            role="status"
+            data-testid="invoice-mail"
+            className={
+              mail.sent
+                ? "text-sm text-pilot-grey-700"
+                : "rounded-lg bg-pilot-amber-50 p-3 text-sm text-pilot-amber-700"
+            }
+          >
+            {mail.sent
+              ? `A számla elment: ${mail.to}.`
+              : `A számla elkészült, de a levél nem ment ki (${mail.to}): ${mail.error} A bizonylatnál újra elküldhető.`}
+          </p>
+        ) : null}
       </div>
-      {/* ugyanaz a megerősítés, mint a Számlázás szerkesztőjében (confirmIssue) */}
+      {/* a szállítólevél megerősítése, ugyanaz, mint eddig */}
       <ConfirmDialog
-        open={confirming !== null}
-        title={
-          confirming === "deliveryNote"
-            ? "Szállítólevél kiállítása"
-            : "Számla kiállítása"
-        }
-        consequence={
-          confirming === "deliveryNote"
-            ? "A kiállítással valódi szállítólevél készül a Számlázz.hu-n, saját számmal, a kiállított számla tételeiből."
-            : "A kiállítással valódi számla készül a Számlázz.hu-n, saját számmal, a rendelés tételeiből. A számla ezután nem szerkeszthető."
-        }
+        open={confirming === "deliveryNote"}
+        title="Szállítólevél kiállítása"
+        consequence="A kiállítással valódi szállítólevél készül a Számlázz.hu-n, saját számmal, a kiállított számla tételeiből."
         recovery="Egy kiállított bizonylat nem vonható vissza; javítani csak sztornóval vagy helyesbítő bizonylattal lehet."
-        confirmLabel={
-          confirming === "deliveryNote"
-            ? "Szállítólevél kiállítása"
-            : "Számla kiállítása"
-        }
+        confirmLabel="Szállítólevél kiállítása"
         busy={busy}
-        onConfirm={() => {
-          const work =
-            confirming === "deliveryNote" ? onIssueDeliveryNote : onIssue;
-          void run(work).finally(() => setConfirming(null));
-        }}
+        onConfirm={() =>
+          void run(onIssueDeliveryNote).finally(() => setConfirming(null))
+        }
+        onCancel={() => setConfirming(null)}
+      />
+      <BillingIssueConfirmDialog
+        open={confirming === "invoice"}
+        title="Biztos, hogy kiállítod a számlát?"
+        consequence="A kiállítással valódi számla készül a Számlázz.hu-n, saját számmal, a rendelés tételeiből. A számla ezután nem szerkeszthető."
+        confirmLabel="Kiállítom"
+        summary={summary}
+        loadError={summaryError}
+        recipients={summary?.buyerEmail ? [summary.buyerEmail] : []}
+        delivery="OPTIONAL"
+        send={send}
+        onSendChange={setSend}
+        busy={busy}
+        onConfirm={(confirmation, sendIt) =>
+          void run(() => onIssue({ ...confirmation, send: sendIt })).finally(
+            () => setConfirming(null),
+          )
+        }
         onCancel={() => setConfirming(null)}
       />
     </Card>
@@ -1780,6 +1841,8 @@ function OrderBody({
   mailNotice,
   onResendStatusMail,
   onIssueInvoice,
+  invoiceMail,
+  onInvoiceSummary,
   onIssueDeliveryNote,
   onOpenPdf,
   onCreateParcel,
@@ -1815,7 +1878,9 @@ function OrderBody({
   ) => Promise<void>;
   mailNotice: string | null;
   onResendStatusMail: () => Promise<void>;
-  onIssueInvoice: () => Promise<void>;
+  onIssueInvoice: (confirmation: WebshopInvoiceConfirmation) => Promise<void>;
+  invoiceMail: WebshopInvoiceIssueResult<WebshopOrderDetail>["mail"];
+  onInvoiceSummary: () => Promise<WebshopInvoiceSummary>;
   onIssueDeliveryNote: () => Promise<void>;
   onOpenPdf: (documentId: string) => Promise<void>;
   onCreateParcel: (
@@ -2408,6 +2473,8 @@ function OrderBody({
             order={order}
             canIssue={canIssue}
             onIssue={onIssueInvoice}
+            mail={invoiceMail}
+            onSummary={onInvoiceSummary}
             onIssueDeliveryNote={onIssueDeliveryNote}
             onOpenPdf={onOpenPdf}
           />

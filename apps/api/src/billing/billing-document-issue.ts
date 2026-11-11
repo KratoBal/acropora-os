@@ -336,6 +336,7 @@ export function billingIssueSummary(
         .join(", "),
       buyerTaxNumber: document.buyer.taxNumber,
       buyerEuTaxNumber: document.buyer.euTaxNumber,
+      buyerEmail: document.buyer.email?.trim() || null,
       issueDate: today,
       fulfillmentDate: document.fulfillmentDate,
       dueDate: showsPaymentFields ? document.dueDate : null,
@@ -350,7 +351,7 @@ export function billingIssueSummary(
 
 /**
  * THE SHOWN, NOT EDITABLE VALUES AS A DIGEST: what the buyer and the payment are. A change to the draft itself is
- * caught by `expectedUpdatedAt`; this catches the one that does not touch the draft (the partner's name, address or
+ * caught by `expectedUpdatedAt`; this catches the one that does not touch the draft (the partner's name, address, e-mail or
  * tax number edited while the window was open).
  */
 export function issueFingerprint(document: BillingDocumentForIssue): string {
@@ -366,6 +367,8 @@ export function issueFingerprint(document: BillingDocumentForIssue): string {
         buyer.address,
         buyer.taxNumber,
         buyer.euTaxNumber,
+        // the window shows where it sends (S2): a changed address stops the issue too
+        buyer.email,
         document.paymentMethod,
       ]),
     )
