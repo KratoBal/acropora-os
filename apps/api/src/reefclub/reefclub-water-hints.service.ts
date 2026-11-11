@@ -67,18 +67,21 @@ export class ReefClubWaterHintsService {
           candidates: [],
           builtAt: null,
         };
+      const occasion = await occasionFilter(tx, grant);
       const [measurements, candidates, run] = await Promise.all([
-        tx.aquariumMeasurement.findMany({
-          where: {
-            AND: [
-              await occasionFilter(tx, grant),
-              { parameterCode: { in: parameters } },
-            ],
-          },
-          orderBy: { measuredAt: "desc" },
-          take: 400,
-          select: { parameterCode: true, value: true, measuredAt: true },
-        }),
+        // THE LATEST VALUE OF EACH PARAMETER, ONE QUERY EACH (barracuda on #2417): a single limited query over the four parameters is filled
+        // by a densely logged one (a KH every 15 minutes), and a fresh magnesium would drop out of it without a word. `take: 1` per
+        // parameter is exact.
+        Promise.all(
+          parameters.map(async (parameterCode) =>
+            tx.aquariumMeasurement.findMany({
+              where: { AND: [occasion, { parameterCode }] },
+              orderBy: { measuredAt: "desc" },
+              take: 1,
+              select: { parameterCode: true, value: true, measuredAt: true },
+            }),
+          ),
+        ).then((lists) => lists.flat()),
         tx.reefClubCustomerCandidate.findMany({
           where: { parameterCode: { in: parameters } },
           orderBy: [

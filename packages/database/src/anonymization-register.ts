@@ -796,7 +796,8 @@ export const ANONYMIZATION_REGISTER: Readonly<
     source: "business",
     refusals: "business",
   },
-  // ReefClub V3.2: the run-out reminder's product list. The manufacturer's dose and pack size, words of a product page.
+  // ReefClub V3.4 S2b: the products a customer may be offered for a deviation (the projection of the customer candidates): names, categories and
+  // addresses of product pages, the maker's reference, the effects as KOD:IRANY entries.
   ReefClubCustomerCandidate: {
     parameterCode: "business",
     productId: "identifier",
@@ -807,6 +808,7 @@ export const ANONYMIZATION_REGISTER: Readonly<
     effects: "business",
     sideEffects: "business",
   },
+  // ReefClub V3.2: the run-out reminder's product list. The manufacturer's dose and pack size, words of a product page.
   ReefClubRunOutProduct: {
     productId: "identifier",
     productName: "business",

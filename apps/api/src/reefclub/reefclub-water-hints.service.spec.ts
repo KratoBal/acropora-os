@@ -25,7 +25,8 @@ const HOUR = 3_600_000;
 interface Calls {
   access: unknown[][];
   queries: string[];
-  where: Record<string, unknown>;
+  wheres: Array<{ AND: Array<Record<string, unknown>> }>;
+  takes: unknown[];
   releaseWhere: unknown;
 }
 
@@ -39,7 +40,8 @@ function fixture(
   const calls: Calls = {
     access: [],
     queries: [],
-    where: {},
+    wheres: [],
+    takes: [],
     releaseWhere: null,
   };
   const waterType =
@@ -59,16 +61,23 @@ function fixture(
       },
     },
     aquariumMeasurement: {
-      findMany: async (args: { where: Record<string, unknown> }) => {
+      findMany: async (args: {
+        where: { AND: Array<Record<string, unknown>> };
+        take?: number;
+      }) => {
         calls.queries.push("measurements");
-        calls.where = args.where;
-        return [
-          {
-            parameterCode: "KH",
-            value: { toNumber: () => 6.5 },
-            measuredAt: new Date(NOW.getTime() - HOUR),
-          },
-        ];
+        calls.wheres.push(args.where);
+        calls.takes.push(args.take);
+        // only KH has a row here: one query per parameter, each for its own latest value
+        return args.where.AND[1]?.parameterCode === "KH"
+          ? [
+              {
+                parameterCode: "KH",
+                value: { toNumber: () => 6.5 },
+                measuredAt: new Date(NOW.getTime() - HOUR),
+              },
+            ]
+          : [];
       },
     },
     reefClubCustomerCandidate: {
@@ -141,18 +150,24 @@ describe("ReefClubWaterHintsService", () => {
   it("the sea: the four parameters (never phosphate), the products and the age of the projection are read; the answer is the rules'", async () => {
     const fx = fixture();
     const hints = await fx.service.hints("acc1", "aq1", NOW);
-    assert.deepEqual(fx.calls.queries.sort(), [
+    assert.deepEqual([...new Set(fx.calls.queries)].sort(), [
       "aquarium",
       "candidates",
       "measurements",
       "run",
     ]);
-    assert.deepEqual(fx.calls.where, {
-      AND: [
-        { aquariumId: "aq1" },
-        { parameterCode: { in: ["KH", "KALCIUM", "MAGNEZIUM", "NITRAT"] } },
+    // ONE query per parameter, each for its own LATEST value (take 1), never phosphate: a densely logged parameter cannot push a fresh
+    // one of another out of a shared limit (barracuda on #2417)
+    assert.deepEqual(
+      fx.calls.wheres.map((where) => where.AND[1]),
+      [
+        { parameterCode: "KH" },
+        { parameterCode: "KALCIUM" },
+        { parameterCode: "MAGNEZIUM" },
+        { parameterCode: "NITRAT" },
       ],
-    });
+    );
+    assert.deepEqual(fx.calls.takes, [1, 1, 1, 1]);
     assert.equal(hints.state, "OK");
     assert.equal(hints.rows[0]!.status, "ALATTA");
     assert.equal(hints.rows[0]!.value, 6.5);
@@ -193,15 +208,13 @@ describe("ReefClubWaterHintsService", () => {
   it("a shop aquarium shows only the RELEASED measurements (the access module's filter), an own one all of its own", async () => {
     const shop = fixture({ origin: "SHOP" });
     await shop.service.hints("acc1", "aq1", NOW);
-    assert.deepEqual(shop.calls.where, {
-      AND: [
-        {
-          aquariumId: "aq1",
-          measuredAt: { in: [new Date("2026-11-10T08:00:00.000Z")] },
-        },
-        { parameterCode: { in: ["KH", "KALCIUM", "MAGNEZIUM", "NITRAT"] } },
-      ],
-    });
+    assert.deepEqual(
+      shop.calls.wheres.map((where) => where.AND[0]),
+      Array(4).fill({
+        aquariumId: "aq1",
+        measuredAt: { in: [new Date("2026-11-10T08:00:00.000Z")] },
+      }),
+    );
     assert.ok(shop.calls.queries.includes("release"));
     const own = fixture({ origin: "OWN" });
     await own.service.hints("acc1", "aq1", NOW);
