@@ -6,6 +6,8 @@ import {
 } from "@nestjs/common";
 import { prisma } from "@acropora/database";
 
+import { CustomerCandidateSource } from "../../aquariums/recommendation/customer-candidate-source.js";
+import { toProjectedCandidateRows } from "../../aquariums/recommendation/customer-candidate-projection.rules.js";
 import { DoseEffectsService } from "./dose-effects.service.js";
 import {
   type DoseProjectionStatus,
@@ -65,7 +67,10 @@ export class DoseProjectionService implements OnModuleInit, OnModuleDestroy {
   private tail: Promise<unknown> = Promise.resolve();
   private queued: Promise<DoseProjectionOutcome> | null = null;
 
-  constructor(private readonly doseEffects: DoseEffectsService) {}
+  constructor(
+    private readonly doseEffects: DoseEffectsService,
+    private readonly customerCandidates: CustomerCandidateSource,
+  ) {}
 
   onModuleInit(): void {
     this.startup = setTimeout(() => {
@@ -155,6 +160,23 @@ export class DoseProjectionService implements OnModuleInit, OnModuleDestroy {
                 status: fact.status,
               })),
             ).map((row) => ({ ...row, runId: run.id })),
+          });
+          // THE CUSTOMER CANDIDATES (V3.4 S2b), in the same run: replaced whole like the lists above. THEIR FAILURE DOES NOT TAKE THE DOSE
+          // LIST WITH IT (the dose list is a live feature, this one is new): a failed build empties the table, and an empty table is "no
+          // recommendation", the safe direction, never a stale list.
+          let candidateRows: ReturnType<typeof toProjectedCandidateRows> = [];
+          try {
+            candidateRows = toProjectedCandidateRows(
+              await this.customerCandidates.candidatesByMove(),
+            );
+          } catch (error) {
+            this.logger.warn(
+              `A vevői jelöltek vetítése elbukott, a tábla üres marad: ${error instanceof Error ? error.name : "ismeretlen hiba"}`,
+            );
+          }
+          await tx.reefClubCustomerCandidate.deleteMany({});
+          await tx.reefClubCustomerCandidate.createMany({
+            data: candidateRows.map((row) => ({ ...row, runId: run.id })),
           });
           await tx.reefClubDoseProjectionRun.deleteMany({
             where: {

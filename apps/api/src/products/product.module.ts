@@ -61,6 +61,7 @@ import {
 import { DoseEffectsController } from "./dose-effects/dose-effects.controller.js";
 import { DoseEffectsService } from "./dose-effects/dose-effects.service.js";
 import { DoseProjectionService } from "./dose-effects/dose-projection.service.js";
+import { CustomerCandidateSource } from "../aquariums/recommendation/customer-candidate-source.js";
 @Module({
   controllers: [
     ProductController,
@@ -85,6 +86,8 @@ import { DoseProjectionService } from "./dose-effects/dose-projection.service.js
     AttributeSetAdminService,
     DoseEffectsService,
     DoseProjectionService,
+    // the dose projection also rebuilds the customer candidates (V3.4 S2b); the source has no dependencies of its own
+    CustomerCandidateSource,
     ProductRepository,
     ProductService,
     { provide: PRODUCT_ENVIRONMENT, useValue: process.env },
