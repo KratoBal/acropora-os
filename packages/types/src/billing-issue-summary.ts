@@ -19,6 +19,11 @@ export interface BillingIssueSummary {
   buyerTaxNumber: string | null;
   /** Only for an EU buyer without a Hungarian tax number (the invoice carries it in its own field). */
   buyerEuTaxNumber: string | null;
+  /**
+   * Where the invoice goes when it is sent from the window (Balázs 11:13: "a küldés tényleg erre a címre menjen"): the
+   * buyer's billing e-mail, or the e-mail when there is none, as the issue's own builder takes it. Null: no address.
+   */
+  buyerEmail: string | null;
   /** The proposed issue date: today in Budapest. */
   issueDate: string;
   fulfillmentDate: string;
@@ -41,6 +46,19 @@ export interface BillingIssueConfirmation {
   fulfillmentDate: string;
   dueDate: string | null;
   fingerprint: string;
+}
+
+/**
+ * The webshop invoice's confirmation (card 7ba97e0d, S2): the same, plus "Elküldöm e-mailben" (Balázs 11:20). The
+ * address is the summary's `buyerEmail`, part of the fingerprint, so the invoice goes where the window said.
+ */
+export interface WebshopInvoiceConfirmation extends BillingIssueConfirmation {
+  send: boolean;
+}
+
+/** The webshop invoice's summary: the billing summary of the order's saved draft, and that draft's id. */
+export interface WebshopInvoiceSummary extends BillingIssueSummary {
+  documentId: string;
 }
 
 export type BillingIssueDatesCheck =

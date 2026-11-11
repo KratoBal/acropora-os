@@ -41,6 +41,7 @@ const api = vi.hoisted(() => ({
   split: vi.fn(),
   replacementVariants: vi.fn(),
   issueInvoice: vi.fn(),
+  invoiceSummary: vi.fn(),
   issueDeliveryNote: vi.fn(),
   sendProforma: vi.fn(),
   recordTransferReceived: vi.fn(),
@@ -56,6 +57,36 @@ vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({ session: auth.session, isLoading: false }),
 }));
 vi.mock("@/lib/api/webshop-orders", () => ({ webshopOrdersApi: api }));
+
+/* the order invoice's confirmation window (card 7ba97e0d, S2): what the server's summary says */
+const INVOICE_SUMMARY = {
+  documentId: "webshop-order_38",
+  buyerName: "Nagy Emese",
+  buyerAddress: "1011 Budapest, Fő utca 1.",
+  buyerTaxNumber: null,
+  buyerEuTaxNumber: null,
+  buyerEmail: "emese@example.hu",
+  issueDate: "2026-11-11",
+  fulfillmentDate: "2026-11-11",
+  dueDate: "2026-11-19",
+  paymentMethod: "Átutalás",
+  showsPaymentFields: true,
+  dueDateFollowsIssueDate: false,
+  fingerprint: "f".repeat(64),
+};
+const CONFIRMED = {
+  issueDate: INVOICE_SUMMARY.issueDate,
+  fulfillmentDate: INVOICE_SUMMARY.fulfillmentDate,
+  dueDate: INVOICE_SUMMARY.dueDate,
+  fingerprint: INVOICE_SUMMARY.fingerprint,
+};
+const ISSUE_DIALOG = "Biztos, hogy kiállítod a számlát?";
+/** The window, once the summary is in (its buttons wait for it). */
+async function invoiceDialog() {
+  const dialog = await screen.findByRole("dialog", { name: ISSUE_DIALOG });
+  await within(dialog).findByText(INVOICE_SUMMARY.buyerName);
+  return dialog;
+}
 vi.mock("@/lib/api/billing-documents", () => ({
   billingDocumentsApi: billing,
 }));
@@ -274,6 +305,7 @@ beforeEach(() => {
   api.changeShippingMethod.mockReset();
   api.replacementVariants.mockReset();
   api.issueInvoice.mockReset();
+  api.invoiceSummary.mockReset().mockResolvedValue(INVOICE_SUMMARY);
   api.issueDeliveryNote.mockReset();
   api.sendProforma.mockReset();
   api.recordTransferReceived.mockReset();
@@ -600,15 +632,21 @@ describe("WebshopOrderDetailPage", () => {
       within(card).getByRole("button", { name: "Számla kiállítása" }),
     );
     // MEGERŐSÍTÉS NÉLKÜL NEM ÍR (acrobot 26827): a gomb csak a dialógust nyitja
-    const confirm = screen.getByRole("dialog", { name: "Számla kiállítása" });
+    const confirm = await invoiceDialog();
     expect(confirm.textContent).toContain("valódi számla készül");
     expect(confirm.textContent).toContain("csak sztornóval");
+    // the window shows the server's summary (card 7ba97e0d, S2)
+    expect(confirm.textContent).toContain(INVOICE_SUMMARY.buyerAddress);
+    expect(confirm.textContent).toContain(INVOICE_SUMMARY.buyerEmail);
+    expect(api.invoiceSummary).toHaveBeenCalledWith("token", "order_38");
     expect(api.issueInvoice).not.toHaveBeenCalled();
-    fireEvent.click(
-      within(confirm).getByRole("button", { name: "Számla kiállítása" }),
-    );
+    fireEvent.click(within(confirm).getByRole("button", { name: "Kiállítom" }));
     expect(await within(card).findByText("TESZT-2026-1A2B3C4D")).toBeTruthy();
-    expect(api.issueInvoice).toHaveBeenCalledWith("token", "order_38");
+    // "Elküldöm e-mailben" starts unchecked: today the webshop invoice is not sent by itself
+    expect(api.issueInvoice).toHaveBeenCalledWith("token", "order_38", {
+      ...CONFIRMED,
+      send: false,
+    });
     expect(
       within(card)
         .getByRole("link", { name: "Megnyitás a Számlázásban" })
@@ -640,9 +678,7 @@ describe("WebshopOrderDetailPage", () => {
       within(card).getByRole("button", { name: "Számla kiállítása" }),
     );
     fireEvent.click(
-      within(
-        screen.getByRole("dialog", { name: "Számla kiállítása" }),
-      ).getByRole("button", { name: "Számla kiállítása" }),
+      within(await invoiceDialog()).getByRole("button", { name: "Kiállítom" }),
     );
     expect((await within(card).findByRole("alert")).textContent).toMatch(
       /eltérnek/,
@@ -657,13 +693,80 @@ describe("WebshopOrderDetailPage", () => {
       within(card).getByRole("button", { name: "Számla kiállítása" }),
     );
     fireEvent.click(
-      within(
-        screen.getByRole("dialog", { name: "Számla kiállítása" }),
-      ).getByRole("button", { name: "Mégsem" }),
+      within(await invoiceDialog()).getByRole("button", { name: "Mégsem" }),
+    );
+    expect(screen.queryByRole("dialog", { name: ISSUE_DIALOG })).toBeNull();
+    expect(api.issueInvoice).not.toHaveBeenCalled();
+  });
+
+  /*
+    "ELKÜLDÖM E-MAILBEN" A WEBSHOP-SZÁMLÁN (kártya 7ba97e0d, S2; Balázs 2026-11-11 11:20). MI PIROSÍT: a bejelölés nem
+    jut el a kiállításig; a cím nem az összesítőé; cím nélkül is küldene; egy elutasított összesítő mellett kiállít.
+  */
+  it("'Elküldöm e-mailben' checked: the issue asks to send to the summary's address", async () => {
+    api.detail.mockResolvedValue(detail);
+    api.issueInvoice.mockResolvedValue(detail);
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const card = await screen.findByRole("region", { name: "Számla" });
+    fireEvent.click(
+      within(card).getByRole("button", { name: "Számla kiállítása" }),
+    );
+    const dialog = await invoiceDialog();
+    fireEvent.click(within(dialog).getByLabelText("Elküldöm e-mailben"));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Kiállítom" }));
+    await vi.waitFor(() => expect(api.issueInvoice).toHaveBeenCalledTimes(1));
+    expect(api.issueInvoice).toHaveBeenCalledWith("token", "order_38", {
+      ...CONFIRMED,
+      send: true,
+    });
+  });
+
+  it("no address: sending cannot be asked, the button says why", async () => {
+    api.detail.mockResolvedValue(detail);
+    api.invoiceSummary.mockResolvedValue({
+      ...INVOICE_SUMMARY,
+      buyerEmail: null,
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const card = await screen.findByRole("region", { name: "Számla" });
+    fireEvent.click(
+      within(card).getByRole("button", { name: "Számla kiállítása" }),
+    );
+    const dialog = await invoiceDialog();
+    fireEvent.click(within(dialog).getByLabelText("Elküldöm e-mailben"));
+    expect(within(dialog).getByRole("alert").textContent).toMatch(
+      /Nincs e-mail cím/,
     );
     expect(
-      screen.queryByRole("dialog", { name: "Számla kiállítása" }),
-    ).toBeNull();
+      (
+        within(dialog).getByRole("button", {
+          name: "Kiállítom",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+  });
+
+  it("a summary the server refuses shows its reason, and nothing is issued", async () => {
+    api.detail.mockResolvedValue(detail);
+    api.invoiceSummary.mockRejectedValue(
+      new Error("A rendelés OS-partnere nem található."),
+    );
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const card = await screen.findByRole("region", { name: "Számla" });
+    fireEvent.click(
+      within(card).getByRole("button", { name: "Számla kiállítása" }),
+    );
+    const dialog = await screen.findByRole("dialog", { name: ISSUE_DIALOG });
+    expect((await within(dialog).findByRole("alert")).textContent).toMatch(
+      /nem található/,
+    );
+    expect(
+      (
+        within(dialog).getByRole("button", {
+          name: "Kiállítom",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
     expect(api.issueInvoice).not.toHaveBeenCalled();
   });
 
