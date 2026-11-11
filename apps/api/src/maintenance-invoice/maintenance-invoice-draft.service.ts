@@ -37,7 +37,10 @@ import {
   MaintenanceInvoiceInputError,
 } from "./maintenance-invoice-xml-input.js";
 import { customerTaxNumberProblem } from "../billing/buyer-tax-number.js";
-import { customerSendAddress } from "../billing/billing-document-issue.js";
+import {
+  customerSendAddress,
+  type BuyerSnapshot,
+} from "../billing/billing-document-issue.js";
 import { budapestDayKey } from "../dashboard/budapest-day.js";
 import { maintenanceIssueSummary } from "./maintenance-invoice-confirmation.js";
 import { maintenanceInvoiceIssueEnabled } from "./maintenance-invoice-issue.config.js";
@@ -590,9 +593,22 @@ export class MaintenanceInvoiceDraftService {
       issueDay === null || issueDay === today
         ? new Date()
         : new Date(`${issueDay}T12:00:00Z`);
-    const dates = {
+    // WHAT THE INVOICE CARRIES, ON ITS ROW: the dates, the payment method and the buyer exactly as sent (a later edit of
+    // the partner does not rewrite an issued invoice's page; the billing editor's issue stores the same snapshot)
+    const carried = {
       fulfillmentDate: new Date(`${xmlInput.fulfillmentDate}T00:00:00Z`),
       dueDate: new Date(`${xmlInput.paymentDueDate}T00:00:00Z`),
+      paymentMethod: xmlInput.paymentMethod,
+      buyerSnapshot: {
+        name: xmlInput.buyer.name,
+        country: customer.addresses[0]?.country ?? "HU",
+        zip: xmlInput.buyer.zip,
+        city: xmlInput.buyer.city,
+        address: xmlInput.buyer.address,
+        taxNumber: xmlInput.buyer.taxNumber ?? null,
+        euTaxNumber: xmlInput.buyer.euTaxNumber ?? null,
+        email: customerSendAddress(customer)?.trim() || null,
+      } satisfies BuyerSnapshot,
     };
     let issued;
     try {
@@ -601,7 +617,7 @@ export class MaintenanceInvoiceDraftService {
         issueDate: issuedAt,
         pdfStorageKey: null,
         completionCertificateId: invoice.completionCertificateId,
-        ...dates,
+        ...carried,
       });
     } catch (error) {
       await this.repository
@@ -628,7 +644,7 @@ export class MaintenanceInvoiceDraftService {
           issueDate: issuedAt,
           pdfStorageKey: storageKeyFor(key),
           completionCertificateId: invoice.completionCertificateId,
-          ...dates,
+          ...carried,
         });
       } catch (error) {
         // The invoice exists and is recorded; only its PDF is missing here.
