@@ -110,6 +110,13 @@ export const WEBSHOP_ORDER_STAGE_LABELS: Record<WebshopOrderStage, string> = {
 export const WEBSHOP_PROFORMA_DUE_DAYS = 8;
 
 /**
+ * A WEBSHOPOS RENDELÉSBŐL INDÍTOTT SZÁMLA fizetési határideje napokban: a kiállítás napja + ennyi, a vevő saját napjaitól FÜGGETLENÜL
+ * (Balázs, 2026-11-11 12:07 UTC: a webshopos számlán a határidő a kiállítás + 8 nap; eddig a kiállítás napja volt). A TIG és a kézi
+ * számla ettől különbözik: ott a vevő (partner) napjai számítanak.
+ */
+export const WEBSHOP_INVOICE_DUE_DAYS = 8;
+
+/**
  * „Nincs díjbekérő” jelzés: ennyi nap után áll be egy előre utalásos rendelésnél,
  * amelyhez díjbekérőt nem állítottak ki (acrobot, 2026-10-27 17:01, barracuda
  * kérdésére). NEM a 8 nap: ha senki nem állított ki díjbekérőt, a 8 napos

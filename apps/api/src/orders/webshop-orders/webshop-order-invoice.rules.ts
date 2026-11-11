@@ -1,4 +1,5 @@
 import {
+  WEBSHOP_INVOICE_DUE_DAYS,
   WEBSHOP_PROFORMA_DUE_DAYS,
   szamlazzUnitNetFromGross,
   webshopProformaExpired,
@@ -439,7 +440,11 @@ export function invoiceDraftOf(
       invoiceFormat: "ELECTRONIC",
       customerId: input.customerId,
       fulfillmentDate: today,
-      dueDate: today,
+      // A HATÁRIDŐ A KIÁLLÍTÁS NAPJA + 8 NAP, a vevő saját napjaitól függetlenül (Balázs, 2026-11-11 12:07 UTC; eddig a kiállítás napja
+      // volt). A nap Budapest szerint számít, mint a díjbekérőnél.
+      dueDate: budapestDayKey(
+        startOfBudapestDay(input.now, WEBSHOP_INVOICE_DUE_DAYS),
+      ),
       paymentMethod: invoicePaymentMethodOf(order),
       currency,
       language: "hu",

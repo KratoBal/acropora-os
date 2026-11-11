@@ -1469,6 +1469,7 @@ export type { CashRegisterReceiptListResponse } from "./cash-registers.js";
 export {
   WEBSHOP_ORDER_CLOSED_STATUSES,
   WEBSHOP_ORDER_PAYMENT_STATE_LABELS,
+  WEBSHOP_INVOICE_DUE_DAYS,
   WEBSHOP_PROFORMA_DUE_DAYS,
   WEBSHOP_PROFORMA_MISSING_AFTER_DAYS,
   webshopProformaExpired,
