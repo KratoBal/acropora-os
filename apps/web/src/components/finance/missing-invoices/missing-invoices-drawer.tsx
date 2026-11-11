@@ -541,6 +541,13 @@ export function MissingInvoicesDrawer({
                           </PilotBadge>
                         </span>
                       ) : null}
+                      {candidate.amountOnly ? (
+                        // a név nem egyezik, csak az összeg: a választó ne higgye, hogy a kiállító is egyezik
+                        <span className="col-span-2 text-xs text-pilot-amber-700">
+                          Csak az összeg egyezik, a kiállító neve nem:
+                          ellenőrizd a számlát
+                        </span>
+                      ) : null}
                       {candidate.hasOriginal ? null : (
                         <span className="col-span-2 text-xs text-pilot-amber-700">
                           Csak NAV-adat, eredeti nincs a rendszerben
