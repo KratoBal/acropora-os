@@ -1,5 +1,6 @@
 import type {
   WebshopInvoiceConfirmation,
+  WebshopInvoiceIssueResult,
   WebshopInvoiceSummary,
   WebshopOrderAttentionResponse,
   WebshopOrderDetail,
@@ -244,7 +245,7 @@ export const webshopOrdersApi = {
     id: string,
     confirmation: WebshopInvoiceConfirmation,
   ) {
-    return apiRequest<WebshopOrderDetail>(
+    return apiRequest<WebshopInvoiceIssueResult<WebshopOrderDetail>>(
       `/webshop-orders/${encodeURIComponent(id)}/invoice`,
       token,
       {

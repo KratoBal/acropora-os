@@ -13,6 +13,7 @@ import {
   type BillingDocumentDetail,
   type BillingDocumentDraftInput,
   type WebshopInvoiceConfirmation,
+  type WebshopInvoiceIssueResult,
   type WebshopInvoiceSummary,
   type WebshopOrderDetail,
   type WebshopOrderStatus,
@@ -224,7 +225,7 @@ export class WebshopOrderInvoiceService {
     user: AuthenticatedUser,
     now = new Date(),
     confirmation?: WebshopInvoiceConfirmation,
-  ): Promise<WebshopOrderDetail> {
+  ): Promise<WebshopInvoiceIssueResult<WebshopOrderDetail>> {
     return this.serial(orderId, () =>
       this.issueNow(orderId, user, now, confirmation),
     );
@@ -264,9 +265,10 @@ export class WebshopOrderInvoiceService {
     user: AuthenticatedUser,
     now: Date,
     confirmation?: WebshopInvoiceConfirmation,
-  ): Promise<WebshopOrderDetail> {
+  ): Promise<WebshopInvoiceIssueResult<WebshopOrderDetail>> {
     const prepared = await this.prepareInvoice(orderId, user, now);
-    if (prepared.kind === "issued") return this.orders.detail(orderId, now);
+    if (prepared.kind === "issued")
+      return { order: await this.orders.detail(orderId, now), mail: null };
     const { saved, order } = prepared;
     // the address the window showed (`buyerEmail`, inside the digest the issue checks): read before the issue
     const sendTo = confirmation?.send
@@ -285,28 +287,44 @@ export class WebshopOrderInvoiceService {
     );
     /*
       "ELKÜLDÖM E-MAILBEN" (Balázs 2026-11-11 11:20): the issued invoice goes to the address the window showed, with
-      the Levelezés template, the way the proforma goes out. The invoice is issued already: a failed send is reported
-      on the order, it does not undo the issue.
+      the Levelezés template, the way the proforma goes out. THE INVOICE IS ISSUED ALREADY: whatever the sending does
+      (a closed mail gate, a provider error, a send already running) is reported next to the fresh order, never as a
+      failed issue (barracuda on #2419: a failed request would offer "Számla kiállítása" again on an issued invoice).
     */
-    if (sendTo) {
-      const document = await this.documents.detail(saved.id);
+    const mail = sendTo
+      ? await this.sendIssued(saved.id, sendTo, order, user)
+      : null;
+    return { order: await this.orders.detail(orderId, now), mail };
+  }
+
+  private async sendIssued(
+    documentId: string,
+    to: string,
+    order: MedusaOrderDetailRow,
+    user: AuthenticatedUser,
+  ): Promise<NonNullable<WebshopInvoiceIssueResult<unknown>["mail"]>> {
+    try {
+      const document = await this.documents.detail(documentId);
       const mode = billingEmailModeFor(
         "ISSUED",
         (document.emailStatus ?? null) as BillingEmailStatus | null,
       );
       if (!mode)
-        throw new ConflictException(
-          "A számla elkészült, de a kiküldése épp fut; várd meg az eredményét.",
-        );
+        return {
+          to,
+          sent: false,
+          error:
+            "A számla kiküldése épp fut; várd meg az eredményét a bizonylatnál.",
+        };
       const letter = await this.emailDrafts.templateDraft(
         orderLanguageOf(order.metadata),
       );
       await this.email.send(
-        saved.id,
+        documentId,
         {
           requestId: randomUUID(),
           mode,
-          to: [sendTo],
+          to: [to],
           cc: [],
           bcc: [],
           subject: letter.subject,
@@ -315,8 +333,17 @@ export class WebshopOrderInvoiceService {
         },
         user,
       );
+      return { to, sent: true };
+    } catch (error) {
+      return {
+        to,
+        sent: false,
+        error:
+          error instanceof Error && error.message
+            ? error.message
+            : "A levél nem ment ki.",
+      };
     }
-    return this.orders.detail(orderId, now);
   }
 
   /**

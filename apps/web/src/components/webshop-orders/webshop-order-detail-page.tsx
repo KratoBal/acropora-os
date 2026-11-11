@@ -33,6 +33,7 @@ import {
   type WebshopParcelTracking,
   type WebshopTransferReceiptInput,
   type WebshopInvoiceConfirmation,
+  type WebshopInvoiceIssueResult,
   type WebshopInvoiceSummary,
 } from "@acropora/types";
 import Link from "next/link";
@@ -386,8 +387,13 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
     setMailNotice(statusMailText(result.mail));
     setNow(Date.now());
   };
+  // the sending's outcome next to the issued invoice (card 7ba97e0d, S2): a failed send is not a failed issue
+  const [invoiceMail, setInvoiceMail] =
+    useState<WebshopInvoiceIssueResult<WebshopOrderDetail>["mail"]>(null);
   const issueInvoice = async (confirmation: WebshopInvoiceConfirmation) => {
-    setOrder(await webshopOrdersApi.issueInvoice(token, id, confirmation));
+    const result = await webshopOrdersApi.issueInvoice(token, id, confirmation);
+    setOrder(result.order);
+    setInvoiceMail(result.mail);
     setNow(Date.now());
   };
   const invoiceSummary = () => webshopOrdersApi.invoiceSummary(token, id);
@@ -575,6 +581,7 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
           mailNotice={mailNotice}
           onResendStatusMail={resendStatusMail}
           onIssueInvoice={issueInvoice}
+          invoiceMail={invoiceMail}
           onInvoiceSummary={invoiceSummary}
           onIssueDeliveryNote={issueDeliveryNote}
           onOpenPdf={openPdf}
@@ -618,12 +625,15 @@ function InvoiceCard({
   order,
   canIssue,
   onIssue,
+  mail,
   onSummary,
   onIssueDeliveryNote,
   onOpenPdf,
 }: {
   order: WebshopOrderDetail;
   canIssue: boolean;
+  /** What happened to the sending of the invoice just issued; null: no sending was asked. */
+  mail: WebshopInvoiceIssueResult<WebshopOrderDetail>["mail"];
   onIssue: (confirmation: WebshopInvoiceConfirmation) => Promise<void>;
   onSummary: () => Promise<WebshopInvoiceSummary>;
   onIssueDeliveryNote: () => Promise<void>;
@@ -767,6 +777,21 @@ function InvoiceCard({
             className="rounded-lg bg-pilot-red-50 p-3 text-sm text-pilot-red-700"
           >
             {error}
+          </p>
+        ) : null}
+        {mail ? (
+          <p
+            role="status"
+            data-testid="invoice-mail"
+            className={
+              mail.sent
+                ? "text-sm text-pilot-grey-700"
+                : "rounded-lg bg-pilot-amber-50 p-3 text-sm text-pilot-amber-700"
+            }
+          >
+            {mail.sent
+              ? `A számla elment: ${mail.to}.`
+              : `A számla elkészült, de a levél nem ment ki (${mail.to}): ${mail.error} A bizonylatnál újra elküldhető.`}
           </p>
         ) : null}
       </div>
@@ -1816,6 +1841,7 @@ function OrderBody({
   mailNotice,
   onResendStatusMail,
   onIssueInvoice,
+  invoiceMail,
   onInvoiceSummary,
   onIssueDeliveryNote,
   onOpenPdf,
@@ -1853,6 +1879,7 @@ function OrderBody({
   mailNotice: string | null;
   onResendStatusMail: () => Promise<void>;
   onIssueInvoice: (confirmation: WebshopInvoiceConfirmation) => Promise<void>;
+  invoiceMail: WebshopInvoiceIssueResult<WebshopOrderDetail>["mail"];
   onInvoiceSummary: () => Promise<WebshopInvoiceSummary>;
   onIssueDeliveryNote: () => Promise<void>;
   onOpenPdf: (documentId: string) => Promise<void>;
@@ -2446,6 +2473,7 @@ function OrderBody({
             order={order}
             canIssue={canIssue}
             onIssue={onIssueInvoice}
+            mail={invoiceMail}
             onSummary={onInvoiceSummary}
             onIssueDeliveryNote={onIssueDeliveryNote}
             onOpenPdf={onOpenPdf}

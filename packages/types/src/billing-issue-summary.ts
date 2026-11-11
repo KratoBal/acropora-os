@@ -56,6 +56,19 @@ export interface WebshopInvoiceConfirmation extends BillingIssueConfirmation {
   send: boolean;
 }
 
+/**
+ * What a webshop invoice issue answers (card 7ba97e0d, S2): the fresh order, and what happened to the sending. The
+ * invoice is made before the letter, so a failed send never reads as a failed issue (barracuda on #2419).
+ * `mail` null: no sending was asked.
+ */
+export interface WebshopInvoiceIssueResult<Order> {
+  order: Order;
+  mail:
+    | { to: string; sent: true }
+    | { to: string; sent: false; error: string }
+    | null;
+}
+
 /** The webshop invoice's summary: the billing summary of the order's saved draft, and that draft's id. */
 export interface WebshopInvoiceSummary extends BillingIssueSummary {
   documentId: string;

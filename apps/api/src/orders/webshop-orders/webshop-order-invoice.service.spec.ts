@@ -100,6 +100,8 @@ function setup(
     provider?: string;
     /** The summary's send address (card 7ba97e0d, S2); null: the partner has none. */
     buyerEmail?: string | null;
+    /** The mail service throws (a closed gate, a provider error). */
+    sendFails?: boolean;
   } = {},
 ) {
   const calls: string[] = [];
@@ -212,6 +214,8 @@ function setup(
   const email = {
     send: async (id: string, input: unknown) => {
       calls.push(`send ${id}`);
+      if (over.sendFails)
+        throw new Error("A levelezés ezen a szerveren ki van kapcsolva.");
       sent.push(input);
     },
   };
@@ -723,5 +727,36 @@ describe("WebshopOrderInvoiceService, the confirmation window (card 7ba97e0d)", 
       calls.some((call) => call.startsWith("issue")),
       false,
     );
+  });
+
+  // barracuda on #2419: the invoice is issued before the letter; a failed send is reported, not thrown
+  it("a failed send after the issue: the answer is the fresh order, the send's failure beside it", async () => {
+    const { calls, service } = setup({ sendFails: true });
+    const result = await service.issue("order_38", USER, NOW, {
+      ...CONFIRMED,
+      send: true,
+    });
+    assert.deepEqual(result.order, { id: "order_38" });
+    assert.deepEqual(result.mail, {
+      to: "emese@example.hu",
+      sent: false,
+      error: "A levelezés ezen a szerveren ki van kapcsolva.",
+    });
+    assert.ok(
+      calls.includes("issue webshop-order_38 2026-10-05T12:00:01.000Z"),
+    );
+  });
+
+  it("a sent invoice says so beside the order; unasked, the mail outcome is null", async () => {
+    const sent = await setup().service.issue("order_38", USER, NOW, {
+      ...CONFIRMED,
+      send: true,
+    });
+    assert.deepEqual(sent.mail, { to: "emese@example.hu", sent: true });
+    const quiet = await setup().service.issue("order_38", USER, NOW, {
+      ...CONFIRMED,
+      send: false,
+    });
+    assert.equal(quiet.mail, null);
   });
 });

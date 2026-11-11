@@ -611,13 +611,16 @@ describe("WebshopOrderDetailPage", () => {
   it("issues the invoice, then shows its number, the PDF and the Számlázás link", async () => {
     api.detail.mockResolvedValue(detail);
     api.issueInvoice.mockResolvedValue({
-      ...detail,
-      invoiceNumber: "TESZT-2026-1A2B3C4D",
-      invoice: {
-        id: "webshop-order_38",
-        status: "ISSUED",
-        number: "TESZT-2026-1A2B3C4D",
+      order: {
+        ...detail,
+        invoiceNumber: "TESZT-2026-1A2B3C4D",
+        invoice: {
+          id: "webshop-order_38",
+          status: "ISSUED",
+          number: "TESZT-2026-1A2B3C4D",
+        },
       },
+      mail: null,
     });
     billing.pdf.mockResolvedValue(new Blob(["%PDF"]));
     const open = vi.spyOn(window, "open").mockReturnValue(null);
@@ -705,7 +708,7 @@ describe("WebshopOrderDetailPage", () => {
   */
   it("'Elküldöm e-mailben' checked: the issue asks to send to the summary's address", async () => {
     api.detail.mockResolvedValue(detail);
-    api.issueInvoice.mockResolvedValue(detail);
+    api.issueInvoice.mockResolvedValue({ order: detail, mail: null });
     render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
     const card = await screen.findByRole("region", { name: "Számla" });
     fireEvent.click(
@@ -719,6 +722,42 @@ describe("WebshopOrderDetailPage", () => {
       ...CONFIRMED,
       send: true,
     });
+  });
+
+  // barracuda on #2419: an issued invoice whose letter failed shows both, and no new issue button
+  it("issued, but the letter failed: the number shows, and the send's failure beside it", async () => {
+    api.detail.mockResolvedValue(detail);
+    api.issueInvoice.mockResolvedValue({
+      order: {
+        ...detail,
+        invoiceNumber: "TESZT-2026-1A2B3C4D",
+        invoice: {
+          id: "webshop-order_38",
+          status: "ISSUED",
+          number: "TESZT-2026-1A2B3C4D",
+        },
+      },
+      mail: {
+        to: "emese@example.hu",
+        sent: false,
+        error: "A levelezés ezen a szerveren ki van kapcsolva.",
+      },
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const card = await screen.findByRole("region", { name: "Számla" });
+    fireEvent.click(
+      within(card).getByRole("button", { name: "Számla kiállítása" }),
+    );
+    const dialog = await invoiceDialog();
+    fireEvent.click(within(dialog).getByLabelText("Elküldöm e-mailben"));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Kiállítom" }));
+    expect(await within(card).findByText("TESZT-2026-1A2B3C4D")).toBeTruthy();
+    expect(within(card).getByTestId("invoice-mail").textContent).toMatch(
+      /elkészült, de a levél nem ment ki.*ki van kapcsolva/,
+    );
+    expect(
+      within(card).queryByRole("button", { name: "Számla kiállítása" }),
+    ).toBeNull();
   });
 
   it("no address: sending cannot be asked, the button says why", async () => {
