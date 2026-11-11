@@ -12,6 +12,12 @@ import type {
  * forrás-hivatkozású sor kimegy; egy mozgáshoz 5-nél több sor; a rang nem 1-től a sorrendben; egy termék kétszer ugyanazon a
  * mozgáson; a bolti cím nem http(s)-re szűrt.
  */
+const ALL_MOVES = (
+  ["KH", "KALCIUM", "MAGNEZIUM", "NITRAT", "FOSZFAT", "PH"] as const
+).flatMap((parameterCode) => [
+  { parameterCode, direction: "EMEL" as const },
+  { parameterCode, direction: "CSOKKENT" as const },
+]);
 const candidate = (
   productId: string,
   over: Partial<CustomerRecommendationCandidate> = {},
@@ -19,7 +25,8 @@ const candidate = (
   productId,
   name: `Termék ${productId}`,
   category: "Adalékok",
-  effects: [{ parameterCode: "KALCIUM", direction: "EMEL" }],
+  // a fixture serving every move, so the tests are about the other rules; the effect rule has its own test
+  effects: ALL_MOVES,
   evidenceRef: "https://gyarto.example/termek",
   shopUrl: "https://shop.example/termek",
   ...over,
@@ -44,6 +51,9 @@ describe("toProjectedCandidateRows", () => {
         category: "Adalékok",
         shopUrl: "https://shop.example/termek",
         evidenceRef: "https://gyarto.example/termek",
+        effects: ALL_MOVES.map(
+          (move) => `${move.parameterCode}:${move.direction}`,
+        ),
         rank: 1,
       },
       {
@@ -54,6 +64,9 @@ describe("toProjectedCandidateRows", () => {
         category: "Adalékok",
         shopUrl: "https://shop.example/termek",
         evidenceRef: "https://gyarto.example/termek",
+        effects: ALL_MOVES.map(
+          (move) => `${move.parameterCode}:${move.direction}`,
+        ),
         rank: 2,
       },
     ]);
@@ -155,6 +168,35 @@ describe("toProjectedCandidateRows", () => {
     assert.deepEqual(
       rows.map((row) => row.shopUrl),
       ["http://shop.example/a", null, null, null],
+    );
+  });
+
+  it("a row never claims a move the product's own effects do not hold; the effects of the product travel with the row", () => {
+    const calciumOnly = candidate("a", {
+      effects: [{ parameterCode: "KALCIUM", direction: "EMEL" }],
+    });
+    const both = candidate("b", {
+      effects: [
+        { parameterCode: "KALCIUM", direction: "EMEL" },
+        { parameterCode: "MAGNEZIUM", direction: "EMEL" },
+      ],
+    });
+    const rows = toProjectedCandidateRows([
+      entry("MAGNEZIUM", "EMEL", [calciumOnly, both]),
+      entry("KALCIUM", "EMEL", [both]),
+      entry("KALCIUM", "CSOKKENT", [both]),
+    ]);
+    assert.deepEqual(
+      rows.map((row) => [
+        row.parameterCode,
+        row.direction,
+        row.productId,
+        row.effects,
+      ]),
+      [
+        ["MAGNEZIUM", "EMEL", "b", ["KALCIUM:EMEL", "MAGNEZIUM:EMEL"]],
+        ["KALCIUM", "EMEL", "b", ["KALCIUM:EMEL", "MAGNEZIUM:EMEL"]],
+      ],
     );
   });
 

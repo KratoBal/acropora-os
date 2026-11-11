@@ -21,6 +21,8 @@ export interface ProjectedCandidateRow {
   category: string;
   shopUrl: string | null;
   evidenceRef: string;
+  /** "KOD:IRANY" a termék minden jóváhagyott paraméterre érvényes hatásáról (az olvasó ebből zárja ki a rossz irányba vivő terméket). */
+  effects: string[];
   rank: number;
 }
 
@@ -39,6 +41,12 @@ export function toProjectedCandidateRows(
     for (const candidate of entry.candidates) {
       if (rank >= CUSTOMER_CANDIDATES_PER_PARAMETER) break;
       if (!HTTPS.test(candidate.evidenceRef)) continue;
+      const effects = candidate.effects.map(
+        (effect) => `${effect.parameterCode}:${effect.direction}`,
+      );
+      // a sor azt a mozgást nem állíthatja, amit a termék hatásai nem tartalmaznak
+      if (!effects.includes(`${entry.parameterCode}:${entry.direction}`))
+        continue;
       const key = `${entry.parameterCode}|${entry.direction}|${candidate.productId}`;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -54,6 +62,7 @@ export function toProjectedCandidateRows(
             ? candidate.shopUrl
             : null,
         evidenceRef: candidate.evidenceRef,
+        effects,
         rank,
       });
     }

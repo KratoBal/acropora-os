@@ -11200,6 +11200,10 @@ model ReefClubCustomerCandidate {
   category      String
   shopUrl       String?
   evidenceRef   String
+  /// A termek MINDEN jovahagyott parameterre ervenyes hatasa, "KOD:IRANY" alakban (pl. "KALCIUM:EMEL", "MAGNEZIUM:EMEL"). A ReefClub
+  /// ebbol zarja ki azt a termeket, amelyik a vevo egy MASIK elteresen rossz iranyba visz (alacsony kalcium es magas magnezium mellett
+  /// egy mindkettot emelo termek): a vetites nem tudhatja a vevo masik ertekeit, az olvaso igen.
+  effects       String[]
   /// 1-tol: a sorrend a parameteren es iranyon belul (tobb kivant eltereset javito elol, aztan nev szerint).
   rank          Int
   run           ReefClubDoseProjectionRun @relation(fields: [runId], references: [id], onDelete: Cascade)

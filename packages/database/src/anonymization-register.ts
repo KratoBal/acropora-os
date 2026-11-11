@@ -804,6 +804,7 @@ export const ANONYMIZATION_REGISTER: Readonly<
     category: "business",
     shopUrl: "business",
     evidenceRef: "business",
+    effects: "business",
   },
   ReefClubRunOutProduct: {
     productId: "identifier",
