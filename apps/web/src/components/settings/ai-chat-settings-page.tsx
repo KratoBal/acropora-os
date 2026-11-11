@@ -173,7 +173,7 @@ export function AiChatSettingsPage() {
             />
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div className="space-y-1">
               <label className="text-sm font-medium text-pilot-grey-800">
                 Üzenetek megőrzése (nap)
