@@ -41,6 +41,7 @@ vi.mock("@/lib/api/ai-contact-requests", () => ({
 const DAYS = "Üzenetek megőrzése (nap)";
 const HANDLED = "Kezelt kérés megőrzése (nap)";
 const UNHANDLED = "Kezeletlen kérés megőrzése (nap)";
+const OFF_TOPIC = "Témán kívüli kérdések küszöbe";
 
 beforeEach(() => {
   auth.role = "OWNER";
@@ -52,7 +53,7 @@ beforeEach(() => {
 const mentes = () => screen.getByRole("button", { name: "Mentés" });
 
 describe("AiChatSettingsPage", () => {
-  it("shows the saved settings, and the notice that the AI service does not read them yet", async () => {
+  it("shows the saved settings, and a notice that says what the AI service reads (and the one switch it does not)", async () => {
     render(createElement(AiChatSettingsPage));
     expect(
       ((await screen.findByLabelText(DAYS)) as HTMLInputElement).value,
@@ -70,8 +71,15 @@ describe("AiChatSettingsPage", () => {
       (screen.getByLabelText("Kollégai felajánlás") as HTMLInputElement)
         .checked,
     ).toBe(false);
-    expect(screen.getByText(/még nem olvassa/)).toBeTruthy();
-    expect(screen.getByText(/nem azonnali hatás/)).toBeTruthy();
+    // measured on the AI service's main (#76, #77, #80) and its #82: no sentence may say it reads nothing
+    const notice = screen.getByText(/innen olvassa/);
+    expect(notice.textContent).toMatch(/megőrzési idejét/);
+    expect(notice.textContent).toMatch(/kapcsolat-kérés kapcsolóját/);
+    expect(notice.textContent).toMatch(/küszöbét/);
+    expect(notice.textContent).toMatch(
+      /kollégai felajánlásról ma a szolgáltatás saját\s+kapcsolója dönt/,
+    );
+    expect(screen.queryByText(/még nem olvassa/)).toBeNull();
   });
 
   it("saving sends the checked value: a trimmed recipient, the edited days, nothing the form did not show", async () => {
@@ -85,6 +93,13 @@ describe("AiChatSettingsPage", () => {
     fireEvent.click(screen.getByLabelText("Kollégai felajánlás"));
     fireEvent.click(screen.getByLabelText("Kapcsolat-kérés"));
     fireEvent.change(screen.getByLabelText(DAYS), { target: { value: "120" } });
+    // the off-topic threshold shows Balázs's 5 and travels as edited
+    expect((screen.getByLabelText(OFF_TOPIC) as HTMLInputElement).value).toBe(
+      "5",
+    );
+    fireEvent.change(screen.getByLabelText(OFF_TOPIC), {
+      target: { value: "8" },
+    });
     fireEvent.click(mentes());
     expect(await screen.findByText("Mentve.")).toBeTruthy();
     expect(api.save).toHaveBeenCalledWith("token", {
@@ -94,7 +109,24 @@ describe("AiChatSettingsPage", () => {
       messageRetentionDays: 120,
       contactHandledRetentionDays: 30,
       contactUnhandledRetentionDays: 90,
+      offTopicFirmAt: 8,
     });
+  });
+
+  it("an off-topic threshold outside 2 to 20 shows the shared rule's sentence and cannot be saved", async () => {
+    render(createElement(AiChatSettingsPage));
+    const threshold = await screen.findByLabelText(OFF_TOPIC);
+    for (const value of ["1", "21", "", "4.5"]) {
+      fireEvent.change(threshold, { target: { value } });
+      expect(screen.getByRole("alert").textContent).toMatch(
+        /küszöbe 2 és 20 közötti egész szám lehet/,
+      );
+      expect((mentes() as HTMLButtonElement).disabled).toBe(true);
+    }
+    fireEvent.click(mentes());
+    expect(api.save).not.toHaveBeenCalled();
+    fireEvent.change(threshold, { target: { value: "2" } });
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("a value outside the limits shows the shared rule's sentence and cannot be saved (nothing is clamped)", async () => {

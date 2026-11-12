@@ -47,6 +47,7 @@ export class AiChatSettingsService {
       offerEnabled: settings.offerEnabled,
       contactRequestEnabled: settings.contactRequestEnabled,
       messageRetentionDays: settings.messageRetentionDays,
+      offTopicFirmAt: settings.offTopicFirmAt,
       // what the answer gate compares (card 9d060f5c); the note, the id and the author stay here
       linkSources: sources.map(({ host, category, brand }) => ({
         host,

@@ -75,6 +75,11 @@ export function autoApproval(input: {
   nav: readonly NavConfirmation[];
   /** a kézi jóváhagyás ellenőrzése (`approvalProblems`): ugyanaz a mérce, nem egy második */
   problems: (values: IncomingReadingValues) => string[];
+  /**
+   * A KORÁBBAN, EMBER ÁLTAL JÓVÁHAGYOTT név, ha a PDF szövegéből olvasott szállítónév a `nameKey` után ELTÉR tőle ugyanarra az adószámra (`supplierNameConflict`);
+   * `null` vagy hiányzik: nincs ütközés. Csak a BANK alapot állítja meg (a NAV alapon a név a NAV-é).
+   */
+  nameConflict?: string | null;
 }): AutoApproval {
   const { values, sources } = input;
   /*
@@ -98,7 +103,13 @@ export function autoApproval(input: {
       reason:
         "nincs adószám: sem magyar (NAV), sem külföldi (banki) alapon nem hagyható jóvá",
     };
-  return byBank(values, sources, input.debits, input.problems);
+  return byBank(
+    values,
+    sources,
+    input.debits,
+    input.problems,
+    input.nameConflict ?? null,
+  );
 }
 
 /*
@@ -274,9 +285,19 @@ function byBank(
   sources: Partial<Record<IncomingReadingField, IncomingReadingSource>>,
   debits: readonly AutoApprovalDebit[],
   approvalProblems: (values: IncomingReadingValues) => string[],
+  nameConflict: string | null,
 ): AutoApproval {
   const problems = approvalProblems(values);
   if (problems.length) return { approve: false, reason: problems.join(" ") };
+  /*
+    A NÉV-ÜTKÖZÉS EMBERHEZ MEGY (acrobot 48944): ha a PDF szövegéből olvasott szállítónév ELTÉR attól a névtől, amit ember már jóváhagyott ugyanarra az adószámra, a bank
+    csak a bruttót igazolja, a nevet nem: vagy az olvasó téved (egy nem-küldő címsor), vagy a szállító neve változott; mindkettő emberi döntés.
+  */
+  if (nameConflict !== null)
+    return {
+      approve: false,
+      reason: `a PDF-ből olvasott szállítónév (${values.supplierName ?? "?"}) eltér a korábban, ember által jóváhagyott névtől (${nameConflict}), ugyanazzal az adószámmal: ember döntsön`,
+    };
   if (sources.grossAmount === "PAIRING")
     return {
       approve: false,

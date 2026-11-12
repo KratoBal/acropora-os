@@ -17,6 +17,13 @@ export const AI_CHAT_SETTINGS_LIMITS = {
   messageRetentionDays: { min: 7, max: 365 },
   /** A contact request: how many days it is kept once handled, and (at most) if nobody handled it. */
   contactRetentionDays: { min: 7, max: 180 },
+  /**
+   * THE OFF-TOPIC SERIES THRESHOLD (Balázs 2026-11-11 08:51: 5, settable in the Settings): from this many off-topic questions in a
+   * row the AI's local answer turns firmer. It is a TONE, not a cost guard (no off-topic question reaches the model at all, plan
+   * 2026-08-27), so the bounds keep it a series: 1 would be firm at the first stray question, which the plan names as the
+   * costlier mistake (a real customer); 20 is Balázs's own example of a series.
+   */
+  offTopicFirmAt: { min: 2, max: 20 },
 } as const;
 
 export interface AiChatSettings {
@@ -31,6 +38,8 @@ export interface AiChatSettings {
   contactHandledRetentionDays: number;
   /** Days an UNHANDLED contact request is kept at most; never shorter than the handled one. */
   contactUnhandledRetentionDays: number;
+  /** From this many off-topic questions in a row the local answer is firmer (`AI_CHAT_SETTINGS_LIMITS.offTopicFirmAt`). */
+  offTopicFirmAt: number;
 }
 
 export const AI_CHAT_SETTINGS_DEFAULTS: AiChatSettings = {
@@ -40,6 +49,8 @@ export const AI_CHAT_SETTINGS_DEFAULTS: AiChatSettings = {
   messageRetentionDays: 180,
   contactHandledRetentionDays: 30,
   contactUnhandledRetentionDays: 90,
+  // Balázs 2026-11-11 08:51 (1569997882633748592): 5
+  offTopicFirmAt: 5,
 };
 
 /**
@@ -50,6 +61,8 @@ export interface AiChatSettingsServiceView {
   offerEnabled: boolean;
   contactRequestEnabled: boolean;
   messageRetentionDays: number;
+  /** The off-topic series threshold the local answer reads (`AiChatSettings.offTopicFirmAt`). */
+  offTopicFirmAt: number;
   /** The stored link sources the answer gate's exceptions read (card 9d060f5c); empty means no exception is active. */
   linkSources: AiLinkSourceServiceEntry[];
 }
@@ -77,8 +90,11 @@ export function checkAiChatSettings(input: unknown): AiChatSettingsCheck {
     typeof input === "object" && input !== null
       ? (input as Record<string, unknown>)
       : {};
-  const { messageRetentionDays: m, contactRetentionDays: c } =
-    AI_CHAT_SETTINGS_LIMITS;
+  const {
+    messageRetentionDays: m,
+    contactRetentionDays: c,
+    offTopicFirmAt: o,
+  } = AI_CHAT_SETTINGS_LIMITS;
 
   if (typeof body.offerEnabled !== "boolean")
     return { ok: false, error: "Az ajánlat kapcsolója igen vagy nem lehet." };
@@ -106,6 +122,11 @@ export function checkAiChatSettings(input: unknown): AiChatSettingsCheck {
     return {
       ok: false,
       error: "A kezeletlen kérés megőrzése nem lehet rövidebb a kezelténél.",
+    };
+  if (!wholeDays(body.offTopicFirmAt, o.min, o.max))
+    return {
+      ok: false,
+      error: `A témán kívüli kérdések küszöbe ${o.min} és ${o.max} közötti egész szám lehet.`,
     };
 
   const rawRecipient = body.contactRecipientEmail;
@@ -136,6 +157,7 @@ export function checkAiChatSettings(input: unknown): AiChatSettingsCheck {
       messageRetentionDays: body.messageRetentionDays,
       contactHandledRetentionDays: body.contactHandledRetentionDays,
       contactUnhandledRetentionDays: body.contactUnhandledRetentionDays,
+      offTopicFirmAt: body.offTopicFirmAt,
     },
   };
 }
