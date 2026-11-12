@@ -165,6 +165,7 @@ function harness(input: {
           state?: string;
           documentId?: { in: string[] };
           supplierName?: unknown;
+          reviewedByUserId?: { not: null };
         };
       }) => {
         // the known-supplier lookup is the only reader that filters on the supplier name
@@ -173,6 +174,7 @@ function harness(input: {
         return readings.filter(
           (row) =>
             (!args?.where?.state || row.state === args.where.state) &&
+            (!args?.where?.reviewedByUserId || row.reviewedByUserId !== null) &&
             (!args?.where?.documentId ||
               args.where.documentId.in.includes(row.documentId as string)),
         );
@@ -835,6 +837,8 @@ describe("the supplier name from earlier verified invoices", () => {
     supplierEuTaxNumber: "IE9999999XX",
     supplierTaxNumber: null,
     updatedAt: new Date("2026-09-01T00:00:00Z"),
+    // a person approved it (an automatic approval leaves this null)
+    reviewedByUserId: "user-1",
   });
   const nameless = () => pairing({ supplierName: "" });
 
@@ -893,6 +897,19 @@ describe("the supplier name from earlier verified invoices", () => {
       (await ambiguous.service.review("mailbox:mail-1")).values.supplierName,
       null,
     );
+  });
+
+  it("an automatically approved row (VERIFIED, no author) is no source: the name would confirm itself without a person", async () => {
+    const h = harness({
+      pairings: [nameless()],
+      files: { "mail-1": await textPdf(WITH_VAT) },
+      readings: [
+        { ...earlier("Kitalált Előfizetés Inc."), reviewedByUserId: null },
+      ],
+    });
+    const review = await h.service.review("mailbox:mail-1");
+    assert.equal(review.values.supplierName, null);
+    assert.equal(review.sources.supplierName, undefined);
   });
 
   it("a failing lookup leaves the reading as it would be without it", async () => {

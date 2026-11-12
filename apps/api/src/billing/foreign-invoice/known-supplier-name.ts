@@ -1,5 +1,5 @@
 /**
- * A SZÁLLÍTÓ NEVE A KORÁBBAN JÓVÁHAGYOTT SZÁMLÁKBÓL (kártya dbab22cd, harmadik kör; acrobot 48788 (2), 48791, 48793).
+ * A SZÁLLÍTÓ NEVE A KORÁBBAN, EMBER ÁLTAL JÓVÁHAGYOTT SZÁMLÁKBÓL (kártya dbab22cd, harmadik kör; acrobot 48788 (2), 48791, 48793).
  *
  * MIÉRT: a PDF-ből olvasott szállítónév az új mintán 50-75 százalék, a hézag tipikusan olyan szállító, akinek egy korábbi számláját már ember
  * jóváhagyta (ugyanaz az adószám). Az adószámot az olvasó mindkét mintán 100 százalékban jól olvassa, tehát a kulcs megbízható. A mért lefedettség
@@ -12,6 +12,9 @@
  *     nem tölt. Az "egyértelmű" itt azt jelenti: egy ember sem vitte be máshogy.
  *   - a kiírt alak a leggyakoribb nyers név, döntetlennél a legutóbb jóváhagyotté.
  *   - egyetlen korábbi sor is elég (egy ember már jóváhagyta ezt az adószámot ezzel a névvel); a hivatkozás a figyelmeztetésben áll.
+ *
+ * A SOROKAT A HÍVÓ SZŰRI: csak EMBER által jóváhagyott olvasat jöhet (`reviewedByUserId` nem null). Az automatikusan jóváhagyott sor is VERIFIED, de a neve a PDF-ből
+ * olvasott, amit ember nem nézett meg; ha az is forrás lenne, a név saját magát erősítené ember nélkül (barracuda, #2471). Ez a függvény ezt nem látja.
  *
  * Tiszta függvény: nem olvas adatbázist; a sorokat a hívó adja (`IncomingReviewService`).
  */

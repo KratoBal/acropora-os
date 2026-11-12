@@ -794,7 +794,7 @@ export class IncomingReviewService {
   }
 
   /**
-   * A SZÁLLÍTÓ NEVE A KORÁBBAN JÓVÁHAGYOTT SZÁMLÁKBÓL (kártya dbab22cd, harmadik kör; `known-supplier-name.ts`): CSAK az üres nevet tölti, a
+   * A SZÁLLÍTÓ NEVE A KORÁBBAN, EMBER ÁLTAL JÓVÁHAGYOTT SZÁMLÁKBÓL (kártya dbab22cd, harmadik kör; `known-supplier-name.ts`): CSAK az üres nevet tölti, a
    * kiolvasott, az illesztő és a párosítás neve elsőbbséget élvez. A forrás-érték `KNOWN_SUPPLIER` (az ellenőrző lapon látszik), és egy
    * figyelmeztetés megnevezi az adószámot és a sorok számát. A keresés kényelem: ha az adatbázis-olvasás hibázik, az olvasat úgy marad, ahogy a
    * lookup nélkül lenne (üres név, kézi kitöltés), a hiba az olvasást nem állítja meg.
@@ -811,7 +811,13 @@ export class IncomingReviewService {
       return reading;
     try {
       const rows = await this.database.incomingDocumentReading.findMany({
-        where: { state: "VERIFIED", supplierName: { not: null } },
+        // CSAK EMBER ÁLTAL JÓVÁHAGYOTT SOR: az automatikus jóváhagyás is VERIFIED, de a szerzője null, és a neve a PDF-ből olvasott, amit ember nem nézett meg;
+        // ha az is forrás lenne, a név saját magát erősítené ember nélkül (barracuda, #2471)
+        where: {
+          state: "VERIFIED",
+          reviewedByUserId: { not: null },
+          supplierName: { not: null },
+        },
         select: {
           supplierName: true,
           supplierTaxNumber: true,
