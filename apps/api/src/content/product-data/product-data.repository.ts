@@ -120,7 +120,9 @@ const select = (now: Date) =>
     type: true,
     catalogAuthority: true,
     brand: { select: { name: true } },
-    categories: { select: { category: { select: { name: true } } } },
+    categories: {
+      select: { category: { select: { id: true, name: true } } },
+    },
     channelListings: {
       select: { channel: true, isPublished: true, productUrl: true },
     },
