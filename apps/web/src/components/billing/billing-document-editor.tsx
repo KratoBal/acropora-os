@@ -981,6 +981,9 @@ export function BillingDocumentEditor({
         confirmLabel={issueConfirm.confirmLabel}
         summary={summary}
         loadError={summaryError}
+        customerHref={
+          state.customer ? `/vevok/${state.customer.id}` : undefined
+        }
         recipients={splitAddresses(emailDraft.to)}
         delivery={delivery}
         send={sendChecked}

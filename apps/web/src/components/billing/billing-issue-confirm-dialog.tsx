@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import {
@@ -35,6 +36,7 @@ export function BillingIssueConfirmDialog({
   confirmLabel,
   summary,
   loadError,
+  customerHref,
   recipients,
   delivery,
   send,
@@ -52,6 +54,12 @@ export function BillingIssueConfirmDialog({
   summary: BillingIssueSummary | null;
   /** Why the summary could not be made (the issue would refuse the same way). */
   loadError: string | null;
+  /**
+   * The buyer's own page (Luca, 2026-11-12, card 7dd76d60): the server names a missing or incomplete buyer address in
+   * `loadError`, and the fix lives on the customer, so the error links there. It opens in a new tab, so the dialog
+   * and the draft behind it stay. Absent: no link.
+   */
+  customerHref?: string;
   /** The address(es) the invoice goes to, as the letter will carry them. */
   recipients: readonly string[];
   delivery: BillingIssueDelivery;
@@ -150,9 +158,24 @@ export function BillingIssueConfirmDialog({
         ) : null}
 
         {loadError ? (
-          <p role="alert" className="text-sm text-rose-700">
-            {loadError}
-          </p>
+          <div role="alert" className="space-y-1 text-sm text-rose-700">
+            <p>{loadError}</p>
+            {customerHref ? (
+              <p>
+                Ha a hiba a vevő adatairól szól (például a címről), az
+                adatlapján javítható:{" "}
+                <Link
+                  href={customerHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-semibold underline"
+                >
+                  A vevő adatlapja
+                </Link>{" "}
+                (új lapon nyílik, a számla vázlata itt megmarad).
+              </p>
+            ) : null}
+          </div>
         ) : !summary ? (
           <p className="text-sm text-pilot-grey-500">
             A számla adatainak betöltése…
