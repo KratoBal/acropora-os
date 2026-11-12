@@ -778,8 +778,10 @@ function hintWords(hints: KnownNumberHints | undefined): Set<string> {
  * egy jóváírás, helyesbítés vagy egy „Bezug auf Rechnung …” sor a KORÁBBI, már ismert számlát nevezi meg, és ha a dokumentum saját
  * száma nem ismert, ez az egy ismert szám maradt a szövegben: az olvasat azt vette volna sajátjának. Egy ismert szám ezért csak
  * akkor lehet a saját szám, ha legalább egyszer NEM hivatkozási környezetben áll (`REFERENCE_MARKERS`: ugyanabban a sorban, vagy
- * a fölötte álló, kettősponttal végződő címke-sorban). A KÉTÉRTELMŰSÉG VÁLTOZATLAN: két különböző ismert szám (hivatkozásban is)
- * továbbra sem dönt, tehát ez a szabály csak SZŰKÍT, soha nem ad több találatot, mint előtte. A biztonságos irány a kimaradás: egy meg
+ * a fölötte álló, kettősponttal végződő címke-sorban; a saját szám címkéje mellett a jel a dokumentum fajtáját mondja, nem hivatkozást,
+ * kivéve az ERŐS hivatkozást: „eredeti”, „Bezug”, „zu Rechnung”, „helyesbített”). A KÉTÉRTELMŰSÉG: két különböző ismert szám nem
+ * dönt, DE egy csak erős hivatkozásban álló szám nem számít bele (acrobot 48666): egy helyesbítő számla az eredetit mindig
+ * megnevezi, és az is ismert. A gyenge jel („Hivatkozás:”) továbbra is kétértelművé tesz. A biztonságos irány a kimaradás: egy meg
  * nem kötött PDF egy embernél áll meg, egy rosszul kötött egy másik számla adatával megy tovább.
  */
 export function knownNumberInText(
@@ -798,12 +800,14 @@ export function knownNumberInText(
       .filter(Boolean)
       .map((word) => ({ word, line: index })),
   );
-  // `present`: minden előfordulás, a hivatkozás is (két különböző ismert szám továbbra sem dönt);
+  // `present`: ami a kétértelműségbe számít: minden előfordulás, KIVÉVE ami csak ERŐS hivatkozásban áll (egy helyesbítő számla
+  // „eredeti számla száma” sora nem teszi kétértelművé a saját számot, acrobot 48666); a gyenge jel („Hivatkozás:”) továbbra is számít.
   // `own`: ami legalább egyszer NEM hivatkozási sorban áll, csak ilyen lehet a dokumentum saját száma
   const present = new Set<string>();
   const own = new Set<string>();
   const add = (compact: string, ...lineIndexes: number[]) => {
-    present.add(compact);
+    if (!lineIndexes.every((index) => strongReferenceLine(lines, index)))
+      present.add(compact);
     if (!lineIndexes.every((index) => referenceLine(lines, index)))
       own.add(compact);
   };
@@ -874,16 +878,63 @@ const REFERENCE_MARKERS = [
   "with reference to",
 ];
 
-const hasMarker = (line: string): boolean => {
-  const lower = line.toLocaleLowerCase("hu-HU");
-  return REFERENCE_MARKERS.some((marker) => lower.includes(marker));
-};
+/**
+ * A SAJÁT SZÁM CÍMKÉJE (acrobot 48666, barracuda megjegyzése a #2458-on): egy helyesbítő számla vagy egy jóváírás SAJÁT száma
+ * gyakran a címsorában áll („Helyesbítő számla sorszáma: …”, „Gutschrift Nr. …”). A jel ott a DOKUMENTUM FAJTÁJÁT mondja, nem
+ * hivatkozást; a címke mellett ezért a sor nem hivatkozási.
+ */
+const OWN_NUMBER_LABELS = [
+  "sorszám",
+  "sorszam",
+  "számlaszám",
+  "szamlaszam",
+  "nr.",
+  "nr:",
+  "nummer",
+  "invoice number",
+  "invoice no",
+  "credit note number",
+  "credit note no",
+];
 
-/** A sor hivatkozási: maga hordoz jelet, vagy a fölötte álló, kettősponttal végződő címke-sor („Bezug auf Rechnung:”). */
+/**
+ * AZ ERŐS HIVATKOZÁS: a címke mellett is hivatkozás marad („Az eredeti számla száma: …”, „Bezug auf Rechnung Nr. …”, „zu Rechnung
+ * Nr. …”, „a helyesbített számla sorszáma: …”): ezek egy MÁSIK számla számát címkézik.
+ */
+const STRONG_REFERENCE_MARKERS = [
+  "eredeti",
+  "bezug",
+  "zu rechnung",
+  "zur rechnung",
+  "helyesbített",
+  "helyesbitett",
+  "original invoice",
+  "related invoice",
+  "corrected invoice",
+  "with reference to",
+];
+
+const lowered = (line: string) => line.toLocaleLowerCase("hu-HU");
+const hasAny = (line: string, markers: readonly string[]) =>
+  markers.some((marker) => lowered(line).includes(marker));
+
+/** Egy sor hivatkozási: erős hivatkozás áll benne, VAGY hivatkozás-jel a saját szám címkéje nélkül. */
+const isReferenceText = (line: string): boolean =>
+  hasAny(line, STRONG_REFERENCE_MARKERS) ||
+  (hasAny(line, REFERENCE_MARKERS) && !hasAny(line, OWN_NUMBER_LABELS));
+
+/** A sor hivatkozási: maga az, vagy a fölötte álló, kettősponttal végződő címke-sor az („Bezug auf Rechnung:”). */
 function referenceLine(lines: readonly string[], index: number): boolean {
-  if (hasMarker(lines[index] ?? "")) return true;
+  if (isReferenceText(lines[index] ?? "")) return true;
   const above = (lines[index - 1] ?? "").trim();
-  return above.endsWith(":") && hasMarker(above);
+  return above.endsWith(":") && isReferenceText(above);
+}
+
+/** Ugyanez csak az ERŐS hivatkozásra: egy ilyen sor száma egy másik számláé, és nem teszi kétértelművé a dokumentum saját számát. */
+function strongReferenceLine(lines: readonly string[], index: number): boolean {
+  if (hasAny(lines[index] ?? "", STRONG_REFERENCE_MARKERS)) return true;
+  const above = (lines[index - 1] ?? "").trim();
+  return above.endsWith(":") && hasAny(above, STRONG_REFERENCE_MARKERS);
 }
 
 /**
