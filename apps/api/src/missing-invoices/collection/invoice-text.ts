@@ -1126,7 +1126,11 @@ export function labelledTotal(
         .filter((v) => Number.isFinite(v) && v !== 0);
     let place = line.slice(label.index + label[0].length);
     let values = scan(place);
-    if (values.length === 0 && i + 1 < lines.length && labelStandsAlone(place)) {
+    if (
+      values.length === 0 &&
+      i + 1 < lines.length &&
+      labelStandsAlone(place)
+    ) {
       place = lines[i + 1]!;
       values = scan(place);
     }

@@ -1079,10 +1079,13 @@ describe("labelledTotal", () => {
   });
 
   it("still takes the next line after a label with a colon or a short note", () => {
-    assert.deepEqual(labelledTotal(["Rechnungsbetrag inkl. USt.:", "338.018 Ft"]), {
-      gross: "338018",
-      currency: "HUF",
-    });
+    assert.deepEqual(
+      labelledTotal(["Rechnungsbetrag inkl. USt.:", "338.018 Ft"]),
+      {
+        gross: "338018",
+        currency: "HUF",
+      },
+    );
     assert.deepEqual(labelledTotal(["Végösszeg (HUF)", "12 700"]), {
       gross: "12700",
       currency: "HUF",
