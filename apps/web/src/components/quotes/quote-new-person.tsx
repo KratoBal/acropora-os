@@ -67,7 +67,9 @@ export function QuoteNewPerson({
               search: trimmedEmail,
               status: "ALL",
               page: "1",
-              pageSize: String(CUSTOMER_LIST_PAGE_SIZE.min),
+              // the widest page: the search is substring-based, so "anna@x.hu" also lists "joanna@x.hu" and a short page
+              // could push the exact match off the first page
+              pageSize: String(CUSTOMER_LIST_PAGE_SIZE.max),
               includePartnerMirrors: "true",
             }),
           );
@@ -76,6 +78,16 @@ export function QuoteNewPerson({
               sameEmail(item.email, wanted) ||
               sameEmail(item.billingEmail, wanted),
           );
+          // a truncated page is not "no duplicate" either: without the exact match on it, nothing is created
+          if (
+            !found &&
+            response.pagination.totalItems > response.items.length
+          ) {
+            setError(
+              "Túl sok hasonló e-mail című vevő van, ezért nem dönthető el, hogy létezik-e már. Keresd ki a vevőt a partnerek közül.",
+            );
+            return;
+          }
         } catch (cause) {
           // a failed check is not "no duplicate": nothing is created
           setError(
@@ -161,6 +173,7 @@ export function QuoteNewPerson({
           <span>
             Már van ilyen e-mail című vevő:{" "}
             <span className="font-semibold">{existing.displayName}</span>
+            {existing.isActive && !existing.archivedAt ? null : " (inaktív)"}
           </span>
           <PilotButton onClick={() => onCreated(existing)}>
             Ezt választom

@@ -66,6 +66,12 @@ const list = (items: CustomerSummary[]) => ({
   total: items.length,
   page: 1,
   pageSize: 10,
+  pagination: {
+    page: 1,
+    pageSize: 10,
+    totalItems: items.length,
+    totalPages: 1,
+  },
 });
 
 const createButton = () =>
@@ -264,6 +270,51 @@ describe("az új magánszemély az új árajánlatnál", () => {
         expect.objectContaining({ email: "masik@example.hu" }),
       ),
     );
+  });
+
+  it("asks for the widest page, and creates nothing when the page is truncated without the exact match", async () => {
+    api.customersList.mockResolvedValue({
+      ...list([
+        {
+          id: "c-joanna",
+          displayName: "Joanna",
+          email: "joanna@example.hu",
+        } as unknown as CustomerSummary,
+      ]),
+      pagination: { page: 1, pageSize: 100, totalItems: 11, totalPages: 1 },
+    });
+    render(<QuoteNewPage />);
+    open();
+    type("Név", "Kiss Anna");
+    type("E-mail cím", "anna@example.hu");
+    submitPerson();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Túl sok hasonló e-mail című vevő van",
+    );
+    const query = api.customersList.mock.calls.at(-1)![1] as URLSearchParams;
+    expect(query.get("pageSize")).toBe("100");
+    expect(api.customersCreate).not.toHaveBeenCalled();
+  });
+
+  it("an exact match on a truncated page is still offered, with the inactive state said", async () => {
+    api.customersList.mockResolvedValue({
+      ...list([
+        {
+          id: "c-old",
+          displayName: "Kiss Anna",
+          email: "anna@example.hu",
+          isActive: false,
+        } as unknown as CustomerSummary,
+      ]),
+      pagination: { page: 1, pageSize: 100, totalItems: 11, totalPages: 1 },
+    });
+    render(<QuoteNewPage />);
+    open();
+    type("Név", "Kiss Anna");
+    type("E-mail cím", "anna@example.hu");
+    submitPerson();
+    expect(await screen.findByText(/\(inaktív\)/)).toBeInTheDocument();
+    expect(api.customersCreate).not.toHaveBeenCalled();
   });
 
   it("creates nothing when the duplicate check fails, and says so", async () => {
