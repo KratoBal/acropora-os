@@ -205,6 +205,38 @@ describe("resolveSimplePayRefundOrder", () => {
     );
   });
 
+  it("a full refund: a cancelled credit note credits nothing, the live invoice still needs its storno", () => {
+    assert.equal(
+      code(
+        resolveSimplePayRefundOrder(
+          [paid(30958), refund(-30958)],
+          [theOrder(30958)],
+          [
+            doc("ACR-1", "INVOICE", 30958),
+            doc("ACR-1J", "CORRECTION", -30958, true),
+          ],
+        ),
+      ),
+      "REFUND_INVOICE_NOT_CANCELLED",
+    );
+  });
+
+  it("a partial refund: a cancelled corrective does not reduce the invoice", () => {
+    assert.equal(
+      code(
+        resolveSimplePayRefundOrder(
+          [paid(30958), refund(-10990)],
+          [theOrder(19968)],
+          [
+            doc("ACR-2", "INVOICE", 30958),
+            doc("ACR-2H", "CORRECTION", -10990, true),
+          ],
+        ),
+      ),
+      "REFUND_INVOICE_NOT_CORRECTED",
+    );
+  });
+
   it("the full refund's payment in the same order is settled with it (the refund line alone is not the order)", () => {
     // the refund line alone: net -7007, which no order explains
     assert.equal(

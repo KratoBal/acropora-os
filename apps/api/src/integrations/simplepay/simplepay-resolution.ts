@@ -158,8 +158,9 @@ export function resolveSimplePayRefundOrder(
 
   const invoices = documents.filter((document) => document.kind === "INVOICE");
   const live = invoices.filter((document) => !document.cancelled);
+  // a cancelled corrective credits nothing (barracuda #2467): a storno of a credit note leaves the invoice live
   const corrections = documents.filter(
-    (document) => document.kind === "CORRECTION",
+    (document) => document.kind === "CORRECTION" && !document.cancelled,
   );
   // what the live invoices bill after their correctives; null if a gross is not known
   const billed = [...live, ...corrections].every(
