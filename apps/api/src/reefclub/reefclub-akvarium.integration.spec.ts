@@ -682,7 +682,7 @@ describe(
     });
 
     it("5.2/10: a kifogyási emlékeztető bekapcsolása idegen akvárium-azonosítóval (törzsben) bájtra a nem létező 404-e, és semmi nem íródik", async () => {
-      // The three locks are closed today (the consent text is null), and a closed lock answers BEFORE the aquarium is looked at.
+      // The locks are closed here (the switch is off, and the draft text is not allowed), and a closed lock answers BEFORE the aquarium is looked at.
       // To measure the access rule, the availability is opened for this test only, on the running service.
       const runOut = reefclub.get(ReefClubRunOutService);
       const closed = runOut.availability;

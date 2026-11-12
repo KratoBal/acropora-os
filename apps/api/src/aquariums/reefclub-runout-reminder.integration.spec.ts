@@ -256,7 +256,7 @@ describe(
       const sender = new CapturingSender();
       const closed = new ReefClubRunOutReminderService(sender);
       closed.environment = OPEN;
-      // the real availability: the consent text is null today
+      // the real availability: the consent text is a draft today, and the draft is not allowed here
       assert.equal((await closed.sweep()).closed, "no-text");
       assert.equal((await service(null).sweep()).closed, "no-sender");
       // not at night: 06:00 and 20:30 Budapest (winter, UTC+1) are outside, 09:00 is inside (acrobot 45563)

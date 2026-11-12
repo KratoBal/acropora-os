@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  RUNOUT_CONSENT_IS_DRAFT,
   RUNOUT_CONSENT_TEXT,
   RUNOUT_CONSENT_VERSION,
   reminderIdFromKey,
@@ -126,8 +127,7 @@ function setup(
 }
 
 describe("the two locks: the switch and the consent text", () => {
-  it("is off with the switch unset, with anything but exactly 'true', and while the text is not given (today)", () => {
-    assert.equal(RUNOUT_CONSENT_TEXT, null);
+  it("is off with the switch unset, with anything but exactly 'true', and while there is no text", () => {
     assert.deepEqual(runOutAvailability({}, TEXT), { kind: "off" });
     for (const value of ["1", "True", "on", "yes", ""])
       assert.deepEqual(
@@ -135,8 +135,8 @@ describe("the two locks: the switch and the consent text", () => {
         { kind: "off" },
         value,
       );
-    // the switch on, but today's text (null): still nothing
-    assert.deepEqual(runOutAvailability(ON), { kind: "no-text" });
+    // the switch on, but no text: still nothing
+    assert.deepEqual(runOutAvailability(ON, null), { kind: "no-text" });
     assert.deepEqual(runOutAvailability(ON, "  "), { kind: "no-text" });
     assert.deepEqual(runOutAvailability(ON, TEXT, "kifogyas-1.0"), {
       kind: "available",
@@ -438,7 +438,7 @@ describe("the page's view and the text version", () => {
       text: TEXT,
       version: "kifogyas-1.0",
     });
-    // and today, with the real text (null), the page gets no text to ask consent for
+    // and with the real text (today a draft) where the draft is not allowed, the page gets no text to ask consent for
     service.availability = () => runOutAvailability(ON);
     assert.equal(service.status().text, null);
   });
@@ -596,7 +596,55 @@ describe("turning it off and the unsubscribe link", () => {
     );
   });
 
-  it("the placeholder version label exists and the text is still null (a text is given together with a new version)", () => {
-    assert.equal(RUNOUT_CONSENT_VERSION, "kifogyas-emlekezteto-helyorzo");
+  it("today's text is the DRAFT, with a version that says so (the final text comes with a new version)", () => {
+    assert.equal(RUNOUT_CONSENT_IS_DRAFT, true);
+    assert.match(RUNOUT_CONSENT_VERSION, /tervezet/);
+    assert.match(
+      RUNOUT_CONSENT_TEXT ?? "",
+      /^Kérem, hogy a ReefClub e-mailben szóljon/,
+    );
+  });
+});
+
+/*
+  THE FOURTH LOCK WHILE THE TEXT IS A DRAFT (acrobot 48513): WHAT TURNS THIS RED: the draft text recordable where
+  `REEFCLUB_RUNOUT_ALLOW_DRAFT_TEXT` is not exactly "true" (production never sets it), even with the other three open; the
+  draft not recordable on the test site; the permission changing anything for a text that is not a draft.
+*/
+describe("the draft text: only where the draft is allowed", () => {
+  it("with the switch and the secret set, the draft is still no text without the permission, or with anything but exactly 'true'", () => {
+    assert.deepEqual(runOutAvailability(ON), { kind: "no-text" });
+    for (const value of ["1", "True", "yes", ""])
+      assert.deepEqual(
+        runOutAvailability({ ...ON, REEFCLUB_RUNOUT_ALLOW_DRAFT_TEXT: value }),
+        { kind: "no-text" },
+        value,
+      );
+  });
+
+  it("on the test site (the permission set) the draft is offered, with the draft version", () => {
+    assert.deepEqual(
+      runOutAvailability({ ...ON, REEFCLUB_RUNOUT_ALLOW_DRAFT_TEXT: "true" }),
+      {
+        kind: "available",
+        text: RUNOUT_CONSENT_TEXT,
+        version: RUNOUT_CONSENT_VERSION,
+      },
+    );
+  });
+
+  it("the permission alone opens nothing: the switch still decides", () => {
+    assert.deepEqual(
+      runOutAvailability({ REEFCLUB_RUNOUT_ALLOW_DRAFT_TEXT: "true" }),
+      { kind: "off" },
+    );
+  });
+
+  it("a final text (not a draft) does not need the permission", () => {
+    assert.deepEqual(runOutAvailability(ON, TEXT, "kifogyas-1.0", false), {
+      kind: "available",
+      text: TEXT,
+      version: "kifogyas-1.0",
+    });
   });
 });
