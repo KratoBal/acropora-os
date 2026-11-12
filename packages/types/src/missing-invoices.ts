@@ -313,6 +313,15 @@ export interface MissingInvoiceCandidateDiagnosis {
     | "BILLING_ROW_WITHOUT_SOURCE_DOCUMENT"
     | "DOCUMENT_NOT_LOADED"
     | null;
+  /**
+   * A `DOCUMENT_NOT_LOADED` PONTOS OKA: melyik betöltő-feltétel (a lekérdezés szűrője vagy a betöltő) zárta ki a tárolt
+   * dokumentumot. Kódok: `AWAITING_REVIEW` (emberi döntésre vár: `reviewState`), `NOT_A_CANDIDATE_KIND` (sem az olvasott
+   * ág, sem az eredet nem teszi jelöltté), `UPLOAD_OF_UNPOSTED_PURCHASE`, `COLLECTED_COPY_OF_OTHER_PATH` (ugyanez a fájl
+   * más úton is megvan, és az az út esett ki másért), `NO_DATE`, `NO_READING`, `OUT_OF_WINDOW`, `REMINDER_FILE_NAME`,
+   * `OTHER_DOCUMENT_FILE_NAME`, `NOT_BOOKABLE_MARK` (a „Nem könyvelendő” jelölés, `detail`: `sourceDocumentId`, `key` vagy
+   * `sameKeyAsMarked`). `null`: be van töltve, vagy az ok nem állapítható meg (a dokumentum átment a szűrőkön).
+   */
+  loaderReason: { code: string; detail: string | null } | null;
   document: {
     documentId: string;
     number: string;
@@ -330,6 +339,11 @@ export interface MissingInvoiceCandidateDiagnosis {
     identities: string[];
     /** Az összevont jelölt többi azonosítója (a NAV-sor mögötti továbbított számla, a beolvadt feltöltés). */
     aliasIds: string[];
+    /**
+     * Az összevont jelölt tagjai (a dokumentum, az aliasai, az eredetije) eredettel és `sha256` tartalom-lenyomattal, tartalom
+     * és fájlnév nélkül: melyik tag hozta a közös `sha:` azonosságot.
+     */
+    members: { id: string; origin: string; sha256: string }[];
   } | null;
   checks: {
     /** A számla kelte a fizetés előtti 4 hónap és a következő hónap 15-e között van. */

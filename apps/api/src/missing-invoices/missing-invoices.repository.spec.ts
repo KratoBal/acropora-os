@@ -6,9 +6,13 @@ import { Prisma } from "@acropora/database";
 import { candidateDocument } from "../testing/billing-documents.fixture.js";
 import type { CandidateDocument } from "./missing-invoice-matching.js";
 import {
+  CANDIDATE_ORIGINS,
+  loaderExclusion,
   mergedSupplierTaxNumber,
   mergeSameInvoice,
   normalizeAccount,
+  queryExclusion,
+  splitNotBookable,
   withoutNotBookable,
 } from "./missing-invoices.repository.js";
 
@@ -536,5 +540,152 @@ describe("mergedSupplierTaxNumber", () => {
     );
     assert.equal(merged.length, 1);
     assert.equal(merged[0]!.supplierTaxNumber, null);
+  });
+});
+
+/*
+  A BETÖLTŐ KIZÁRÁSAI OKKAL (niceshops, 2026-11-12). MI PIROSÍT: ha egy kizárás kód nélkül marad (a ciklus és a vizsgálat
+  szétcsúszik); ha az eredeti sorrend megváltozik (a begyűjtött másolat a dátum-ellenőrzés ELŐTT esik ki); ha egy átmenő
+  dokumentum kizárást kap; ha a `where` magyarázata mást mond, mint a `where`.
+*/
+describe("loaderExclusion: why a stored document is not a candidate", () => {
+  const base = {
+    origin: "COLLECTED_MAIL",
+    sha256: "aa",
+    fileName: "Rechnung.pdf",
+    linkedToUnpostedPurchase: false,
+    linked: false,
+    upload: false,
+    otherContent: new Set<string>(),
+    date: "2026-11-05" as string | null,
+    hasResult: false,
+    hasReading: true,
+    from: "2025-09-01",
+    to: "2026-11-15",
+  };
+  const code = (patch: Partial<typeof base>) =>
+    loaderExclusion({ ...base, ...patch })?.code ?? null;
+
+  it("lets an ordinary document through", () => {
+    assert.equal(code({}), null);
+  });
+
+  it("names each exclusion", () => {
+    assert.equal(
+      code({ origin: "UPLOAD", upload: false, linkedToUnpostedPurchase: true }),
+      "UPLOAD_OF_UNPOSTED_PURCHASE",
+    );
+    assert.equal(
+      code({ otherContent: new Set(["aa"]) }),
+      "COLLECTED_COPY_OF_OTHER_PATH",
+    );
+    assert.equal(code({ date: null }), "NO_DATE");
+    assert.equal(code({ hasReading: false }), "NO_READING");
+    assert.equal(code({ date: "2024-01-01" }), "OUT_OF_WINDOW");
+    assert.equal(code({ date: "2026-12-01" }), "OUT_OF_WINDOW");
+    assert.equal(
+      code({ fileName: "Fizetési emlékeztető.pdf" }),
+      "REMINDER_FILE_NAME",
+    );
+  });
+
+  it("a collected copy is judged before the date: a copy of another path with no date is the copy, not NO_DATE", () => {
+    assert.equal(
+      code({ otherContent: new Set(["aa"]), date: null }),
+      "COLLECTED_COPY_OF_OTHER_PATH",
+    );
+  });
+
+  it("a mailbox document (not collected) with the same hash is not a copy; an upload is never windowed or file-name filtered", () => {
+    assert.equal(
+      code({ origin: "MAILBOX", otherContent: new Set(["aa"]) }),
+      null,
+    );
+    assert.equal(
+      code({
+        origin: "UPLOAD",
+        upload: true,
+        date: "2024-01-01",
+        hasReading: false,
+      }),
+      null,
+    );
+  });
+});
+
+describe("queryExclusion: why the query never loaded a document", () => {
+  it("a document waiting for a person is named with its state", () => {
+    assert.deepEqual(
+      queryExclusion({
+        reviewState: "SUGGESTED",
+        status: "READ",
+        kind: "INVOICE",
+        origin: "COLLECTED_MAIL",
+      }),
+      { code: "AWAITING_REVIEW", detail: "reviewState=SUGGESTED" },
+    );
+  });
+
+  it("a document that is neither read nor of a candidate origin is not a candidate kind", () => {
+    assert.equal(
+      queryExclusion({
+        reviewState: null,
+        status: "FAILED",
+        kind: null,
+        origin: "MAILBOX",
+      })?.code,
+      "NOT_A_CANDIDATE_KIND",
+    );
+  });
+
+  it("agrees with the query: a read, kinded mailbox document and every candidate origin pass", () => {
+    assert.equal(
+      queryExclusion({
+        reviewState: null,
+        status: "LATE_CORRECTION",
+        kind: "INVOICE",
+        origin: "MAILBOX",
+      }),
+      null,
+    );
+    for (const origin of CANDIDATE_ORIGINS)
+      assert.equal(
+        queryExclusion({
+          reviewState: null,
+          status: "FAILED",
+          kind: null,
+          origin,
+        }),
+        null,
+        origin,
+      );
+  });
+});
+
+describe("splitNotBookable: what the not-bookable mark removed, and why", () => {
+  it("names the way each document fell out: its own id, its key, or the key of a marked twin", () => {
+    const a = doc({ id: "a", number: "R-1" });
+    const b = doc({ id: "b", number: "R-1" });
+    const c = doc({ id: "c", number: "R-2" });
+    const keys = new Map([
+      ["a", "r-1|niceshops"],
+      ["b", "r-1|niceshops"],
+      ["c", "r-2|other"],
+    ]);
+    const { kept, removed } = splitNotBookable([a, b, c], keys, {
+      sourceDocumentIds: new Set(["a"]),
+      keys: new Set<string>(),
+    });
+    assert.deepEqual(
+      kept.map((d) => d.id),
+      ["c"],
+    );
+    assert.deepEqual(
+      removed.map((r) => [r.document.id, r.via]),
+      [
+        ["a", "sourceDocumentId"],
+        ["b", "sameKeyAsMarked"],
+      ],
+    );
   });
 });
