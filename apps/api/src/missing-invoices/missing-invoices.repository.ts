@@ -584,6 +584,34 @@ export class MissingInvoicesRepository {
     return new Set(rows.map((row) => row.id));
   }
 
+  /**
+   * MILYEN AZONOSÍTÓ EZ (a jelölt-vizsgálathoz): tárolt dokumentum, bejövő számla SORA (és annak forrás-dokumentuma),
+   * vagy egyik sem. A csomagellenőrzés `unpaid` listájának `id`-ja a sor azonosítója, nem a dokumentumé; a kettő külön
+   * azonosító-tér, és a vizsgálat a tárolt dokumentumot kérdezi. Csak olvas, két egyedi kulcsra.
+   */
+  async idKind(
+    id: string,
+  ): Promise<
+    | { kind: "document" }
+    | { kind: "billingRow"; sourceDocumentId: string | null }
+    | { kind: "unknown" }
+  > {
+    const [document, row] = await Promise.all([
+      this.database.incomingSupplierDocument.findUnique({
+        where: { id },
+        select: { id: true },
+      }),
+      this.database.incomingBillingDocument.findUnique({
+        where: { id },
+        select: { sourceDocumentId: true },
+      }),
+    ]);
+    if (document) return { kind: "document" };
+    if (row)
+      return { kind: "billingRow", sourceDocumentId: row.sourceDocumentId };
+    return { kind: "unknown" };
+  }
+
   /** A jelöltek egy dátumablakban, mind a négy forrásból. */
   async candidates(from: string, to: string): Promise<CandidateDocument[]> {
     const range = {
