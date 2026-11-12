@@ -162,7 +162,9 @@ export function QuoteSendDrawer({
   // why the send button is grey, said out loud (a tooltip on a disabled button is never seen). The draft's own
   // recipient list is empty when the customer has no e-mail: then the customer's page is the fix, so it is linked
   const noRecipient = Boolean(draft) && addresses(to).length === 0;
-  const customerHasNoEmail = Boolean(draft) && draft!.to.length === 0;
+  // without a customer there is no "customer's e-mail" to be missing: the plain sentence fits
+  const customerHasNoEmail =
+    Boolean(draft) && draft!.to.length === 0 && Boolean(quote.customerId);
 
   const submit = async () => {
     if (!version || !draft || !ready) return;

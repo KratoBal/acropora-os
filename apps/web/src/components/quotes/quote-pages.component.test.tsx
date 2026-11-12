@@ -1224,9 +1224,10 @@ describe("Az ajánlat kiküldése (P3)", () => {
     api.sendDraft.mockResolvedValue({ ...DRAFT, to: [] });
     render(<QuoteDetailPage quoteId="q1" />);
     fireEvent.click(await screen.findByRole("button", { name: "Kiküldés" }));
-    expect(
-      await screen.findByText("A vevőnek nincs e-mail címe"),
-    ).toBeInTheDocument();
+    // no customer: not "the customer has no e-mail", just no recipient, and no customer page to send anyone to
+    expect(await screen.findByText("Nincs címzett")).toBeInTheDocument();
+    expect(screen.queryByText("A vevőnek nincs e-mail címe")).toBeNull();
+    expect(screen.queryByText(/adatlapján nincs e-mail cím/)).toBeNull();
     expect(screen.queryByRole("link", { name: "A vevő adatlapja" })).toBeNull();
   });
 
