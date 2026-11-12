@@ -1445,3 +1445,54 @@ describe("an own-number label beside the marker: the document's own number binds
     assert.equal(knownNumberInText(lines, [ORIGINAL, CREDIT]), null);
   });
 });
+
+/*
+  A CSOPORTOKBA TÖRDELT BANKSZÁMLA NEM SZÁMLASZÁM (Niceshops / 3DJake, 2026-11-12). Kitalált számok, a valódi PDF sor-alakjával.
+  MI PIROSÍT: a „Számlaszám: 1200 1008 …” lábléc első négyese számlaszám lesz (a két külön számla így egy dokumentummá vonódott
+  össze); a „Rech.-Nr.” sor száma nem olvasódik; ÉS a másik irány: a „Számlaszám:” után álló VALÓDI számlaszám nem olvasódik.
+*/
+describe("a bank account written in groups is not an invoice number", () => {
+  const FOOTER =
+    "IBAN: HU99123456781234567812345678 | BIC: TESZTHUHB | Számlaszám: 1234 5678 1234 5678 1234 5678 |";
+
+  it("the footer's grouped account is skipped, and the Rech.-Nr. line gives the number", () => {
+    const read = readInvoiceText(
+      [
+        "Rechnung",
+        "Rech.-Nr. | R49010000099990001",
+        "Rech.-Datum | 05.11.2026",
+        FOOTER,
+      ],
+      { fileName: "szamla.pdf" },
+    );
+    assert.equal(read.invoiceNumber, "R49010000099990001");
+    assert.equal(read.numberFrom, "LABEL");
+  });
+
+  it("without any other number, the grouped account still gives no number", () => {
+    for (const footer of [
+      FOOTER,
+      "Számlaszám: 1234 5678 1234 5678",
+      "Számlaszám: 12345678 12345678 12345678",
+    ])
+      assert.notEqual(
+        readInvoiceText(["Számla", footer], { fileName: "x.pdf" })
+          .invoiceNumber,
+        "1234",
+        footer,
+      );
+  });
+
+  it("a real invoice number after the same label is still read (the control nearest to the case)", () => {
+    for (const [line, number] of [
+      ["Számlaszám: 2026/001234", "2026/001234"],
+      ["Számlaszám: ABC-1234", "ABC-1234"],
+      ["Számlaszám: 1234 | Kelte: 2026.11.05", "1234"],
+    ] as const)
+      assert.equal(
+        readInvoiceText(["Számla", line], { fileName: "x.pdf" }).invoiceNumber,
+        number,
+        line,
+      );
+  });
+});
