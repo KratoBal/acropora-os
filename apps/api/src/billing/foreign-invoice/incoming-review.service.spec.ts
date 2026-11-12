@@ -932,6 +932,23 @@ describe("the supplier name from earlier verified invoices", () => {
     assert.match(warning!, /IE9999999XX/);
   });
 
+  it("with an ambiguous approved history, a third text name warns too, listing the earlier names", async () => {
+    const h = harness({
+      pairings: [nameless()],
+      files: { "mail-1": await textPdf(["Kitalált Másik Ltd.", ...WITH_VAT]) },
+      readings: [
+        earlier("Kitalált Előfizetés Inc."),
+        earlier("Kitalált Előfizetés Ltd."),
+      ],
+    });
+    const review = await h.service.review("mailbox:mail-1");
+    assert.equal(review.values.supplierName, "Kitalált Másik Ltd.");
+    const warning = review.warnings.find((w) => w.includes("eltér a korábban"));
+    assert.ok(warning);
+    assert.match(warning!, /Kitalált Előfizetés Inc\./);
+    assert.match(warning!, /Kitalált Előfizetés Ltd\./);
+  });
+
   // (the test PDF font cannot draw ő/ű: the names here avoid them)
   it("names that agree after normalisation, and a pairing's name, raise no conflict warning", async () => {
     const same = harness({

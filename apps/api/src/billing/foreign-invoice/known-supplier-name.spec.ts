@@ -201,13 +201,48 @@ describe("supplierNameConflict", () => {
     );
   });
 
-  it("an ambiguous earlier name (two really different approved names) is no reference: no conflict is claimed", () => {
+  /*
+    A KÉTÉRTELMŰ ELŐZMÉNY SZIGORÚBB ALAKJA (barracuda 49013, acrobot 49017): ha az adószámra több, egymástól eltérő ember által jóváhagyott név áll, egy HARMADIK, mindegyiktől eltérő szöveges név is
+    ütközés (a kétértelmű előzmény maga is jel), a nevek egy listában; ha az olvasott név az egyikkel egyezik (a nameKey után), nincs ütközés. A KITÖLTŐ lookup (knownSupplierName) ettől függetlenül
+    kétértelműségnél semmit nem tölt.
+  */
+  it("with an ambiguous earlier history, a third name that matches none of them is a conflict, naming both; one that matches either is not", () => {
+    const history = [
+      row("Kitalált Handel GmbH", EU),
+      row("Kitalált Handel AG", EU),
+    ];
+    const conflict = supplierNameConflict(history, values("Másik Cég Ltd."));
+    assert.equal(conflict?.rows, 2);
+    assert.match(conflict?.name ?? "", /Kitalált Handel GmbH/);
+    assert.match(conflict?.name ?? "", /Kitalált Handel AG/);
+    assert.match(conflict?.name ?? "", / \/ /);
+    // matches the one or the other after normalisation: no conflict
     assert.equal(
-      supplierNameConflict(
-        [row("Kitalált Handel GmbH", EU), row("Kitalált Handel AG", EU)],
-        values("Másik Cég Ltd."),
-      ),
+      supplierNameConflict(history, values("KITALÁLT HANDEL GMBH.")),
       null,
     );
+    assert.equal(
+      supplierNameConflict(history, values("Kitalált Handel AG")),
+      null,
+    );
+    // the filling lookup still gives nothing for the ambiguous history
+    assert.equal(
+      knownSupplierName(history, { euTaxNumber: EU, taxNumber: null }),
+      null,
+    );
+  });
+
+  it("the conflict's earlier-name list is ordered by frequency and shows one form per normalised name", () => {
+    const conflict = supplierNameConflict(
+      [
+        row("Kitalált Handel GmbH", EU),
+        row("kitalált handel gmbh.", EU),
+        row("Kitalált Handel GmbH", EU),
+        row("Kitalált Handel AG", EU),
+      ],
+      values("Másik Cég Ltd."),
+    );
+    assert.equal(conflict?.name, "Kitalált Handel GmbH / Kitalált Handel AG");
+    assert.equal(conflict?.rows, 4);
   });
 });
