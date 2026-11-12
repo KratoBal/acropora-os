@@ -66,6 +66,32 @@ describe("simplePayMarksToWrite", () => {
     });
   });
 
+  // acrobot 48831: whether Számlázz.hu takes a negative payment is not measured; the writer's own guard
+  it("a negative mark is never written, even approved", () => {
+    const negative = {
+      invoiceNumber: "ACRW-H",
+      date: "2026-09-30",
+      amount: "-5000",
+      title: "bankkártya" as const,
+      note: "SimplePay visszatérítés",
+      sourceRef: "R1",
+    };
+    const out = simplePayMarksToWrite({
+      decisions: [
+        {
+          orderKey: "665709",
+          markable: true,
+          marks: [negative],
+          correctivesByHand: [],
+          refundSettled: true,
+        },
+      ],
+      approved: new Set(["ACRW-H"]),
+      markedBefore: new Set(),
+    });
+    assert.deepEqual(out.marks, []);
+  });
+
   it("nothing approved: nothing to write", () => {
     assert.deepEqual(
       simplePayMarksToWrite({

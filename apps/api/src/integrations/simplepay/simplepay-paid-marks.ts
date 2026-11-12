@@ -27,7 +27,10 @@ import { paymentStateOf, type OutgoingMissingPayments } from "@acropora/types";
  *      is marked document by document, as the money moved:
  *        - an invoice of the full sum with its correctives (JS, HS, not
  *          cancelled) adding up to the refund: the invoice is marked with
- *          the payments, each corrective with its own refund (negative);
+ *          the payments; each corrective's own refund (negative) is a task
+ *          BY HAND, never written (acrobot 48831: whether Számlázz.hu takes
+ *          a negative payment is not measured yet), unless it is paid
+ *          already;
  *        - an invoice already of the reduced sum, no corrective: marked with
  *          what stayed paid;
  *        - anything else: CORRECTIVE_MISSING, nothing is marked (marking the
@@ -99,8 +102,16 @@ export type SimplePayOrderDecision =
   | {
       readonly orderKey: string;
       readonly markable: true;
-      /** The invoice's mark, then its correctives' (after a partial refund). */
+      /** What the writer may write: the invoice's own mark, never a negative one. */
       readonly marks: readonly SimplePayPaidMark[];
+      /**
+       * A corrective's refund to mark by hand in Számlázz.hu (acrobot 48831),
+       * shaped as the mark it would be; empty when there is none or it is
+       * paid already.
+       */
+      readonly correctivesByHand: readonly SimplePayPaidMark[];
+      /** A partial refund the documents settle: a refund on this order is not news. */
+      readonly refundSettled: boolean;
     }
   | {
       readonly orderKey: string;
@@ -199,10 +210,14 @@ export function decideSimplePayOrder(input: {
   });
   const marked = (
     marks: readonly SimplePayPaidMark[],
+    refundSettled = false,
+    correctivesByHand: readonly SimplePayPaidMark[] = [],
   ): SimplePayOrderDecision => ({
     orderKey: input.orderKey,
     markable: true,
     marks,
+    correctivesByHand,
+    refundSettled,
   });
 
   if (refundLines.length === 0)
@@ -214,7 +229,7 @@ export function decideSimplePayOrder(input: {
   if (kept.lte(0)) return skip("REFUNDED", number);
   // the invoice was issued for the reduced order: what stayed paid is its gross
   if (correctives.length === 0 && invoice.grossAmount.equals(kept))
-    return marked([paymentMark(kept)]);
+    return marked([paymentMark(kept)], true);
   // the invoice of the full sum, its correctives crediting the refund (their sign is not trusted)
   if (
     correctives.length === 0 ||
@@ -222,18 +237,24 @@ export function decideSimplePayOrder(input: {
     !correctedBy(correctives).equals(refunded)
   )
     return skip("CORRECTIVE_MISSING", number);
+  const open: CardInvoiceInput[] = [];
   for (const corrective of correctives) {
     if (corrective.paymentsKnown === null)
       return skip("PAYMENTS_UNKNOWN", corrective.invoiceNumber);
-    if (!corrective.paidAmount.isZero())
-      return skip("ALREADY_PAID", corrective.invoiceNumber);
     if (corrective.currency.toUpperCase() !== "HUF")
       return skip("FOREIGN_CURRENCY", corrective.invoiceNumber);
+    // marked by hand already, to its full sum: done; nothing yet: a task; anything between: a question
+    if (corrective.paidAmount.abs().equals(corrective.grossAmount.abs()))
+      continue;
+    if (!corrective.paidAmount.isZero())
+      return skip("PARTLY_PAID", corrective.invoiceNumber);
+    open.push(corrective);
   }
   const refundDate = latest(refundLines);
-  return marked([
-    paymentMark(completed),
-    ...[...correctives]
+  return marked(
+    [paymentMark(completed)],
+    true,
+    open
       .sort((a, b) => a.invoiceNumber.localeCompare(b.invoiceNumber))
       .map((corrective) => ({
         invoiceNumber: corrective.invoiceNumber,
@@ -243,5 +264,5 @@ export function decideSimplePayOrder(input: {
         note: `SimplePay visszatérítés, ${refundDate}, tranzakció: ${refundIds.join(", ")}`,
         sourceRef: refundIds.join(","),
       })),
-  ]);
+  );
 }

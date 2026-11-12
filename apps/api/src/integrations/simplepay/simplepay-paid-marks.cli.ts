@@ -82,6 +82,12 @@ async function main(argv: readonly string[]): Promise<number> {
           process.stdout.write(
             `  ${number}\tkimarad: korábban már kapott SimplePay-jelölést, nem írtam\n`,
           );
+        for (const m of decisions.flatMap((d) =>
+          d.markable ? d.correctivesByHand : [],
+        ))
+          process.stdout.write(
+            `  ${m.invoiceNumber}\tkézi teendő: helyesbítő jelölése kézzel, ${m.amount} Ft, ${m.date}; nem írtam\n`,
+          );
         return marks;
       },
       out: (text) => process.stdout.write(text),

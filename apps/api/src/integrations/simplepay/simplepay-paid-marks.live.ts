@@ -35,6 +35,8 @@ export function simplePayMarksToWrite(input: {
   for (const decision of input.decisions) {
     if (!decision.markable) continue;
     for (const mark of decision.marks) {
+      // a negative payment is never written (acrobot 48831): a corrective is marked by hand
+      if (mark.amount.startsWith("-")) continue;
       if (!input.approved.has(mark.invoiceNumber)) continue;
       if (input.markedBefore.has(mark.invoiceNumber)) {
         skipped.push(mark.invoiceNumber);

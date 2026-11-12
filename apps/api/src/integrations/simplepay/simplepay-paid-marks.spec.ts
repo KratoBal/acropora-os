@@ -77,6 +77,8 @@ describe("decideSimplePayOrder: a settled card invoice is marked", () => {
           sourceRef: "504312345",
         },
       ],
+      correctivesByHand: [],
+      refundSettled: false,
     });
   });
 
@@ -142,20 +144,21 @@ describe("decideSimplePayOrder: a refund holds the mark back", () => {
   });
 
   /*
-    A RÉSZLEGES VISSZATÉRÍTÉS (c03e9896; az alak acrobot döntése, 48818 és
-    48823): bizonylatonként a tényleges pénzmozgás. MI PIROSÍT: ha a teljes
+    A RÉSZLEGES VISSZATÉRÍTÉS (c03e9896; az alak acrobot döntése, 48818,
+    48823 és 48831): bizonylatonként a tényleges pénzmozgás, de negatív
+    jelölés nem íródik: a helyesbítőé kézi teendő. MI PIROSÍT: ha a teljes
     összegű számla a nettóval jelölődne (rajta a visszatérítés nyitva
-    maradna); ha a helyesbítő jelöletlen maradna, vagy nem a saját negatív
-    összegével, a visszatérítés napjával és tranzakciójával jelölődne; ha a
-    helyesbítő előjele számítana; ha helyesbítő nélkül, kisebb vagy
-    sztornózott helyesbítővel bármi jelölődne; ha a csökkentett összegű
-    számla nem jelölődne.
+    maradna); ha a helyesbítő az írandók közé kerülne; ha a kézi teendő
+    elmaradna, vagy nem a saját negatív összegével, a visszatérítés napjával
+    és tranzakciójával állna; ha a helyesbítő előjele számítana; ha helyesbítő
+    nélkül, kisebb vagy sztornózott helyesbítővel bármi jelölődne; ha a
+    csökkentett összegű számla nem jelölődne.
   */
   const partial = [
     line("1", "COMPLETED", 30958, "2026-06-10"),
     line("2", "REFUND", -10990, "2026-06-12"),
   ];
-  it("the invoice of the full sum and its corrective: each marked with its own money, either sign", () => {
+  it("the invoice of the full sum and its corrective: the invoice marked with the payment, the corrective's refund a task by hand, either sign", () => {
     for (const [kind, gross] of [
       ["HS", -10990],
       ["HS", 10990],
@@ -175,6 +178,9 @@ describe("decideSimplePayOrder: a refund holds the mark back", () => {
           note: "SimplePay, 2026-06-10, tranzakció: 1, visszatérítés: 2",
           sourceRef: "1",
         },
+      ]);
+      assert.equal(decision.refundSettled, true);
+      assert.deepEqual(decision.correctivesByHand, [
         {
           invoiceNumber: `ACRW-2026/${kind}`,
           date: "2026-06-12",
@@ -193,6 +199,10 @@ describe("decideSimplePayOrder: a refund holds the mark back", () => {
     assert.deepEqual(
       decision.marks.map((m) => [m.invoiceNumber, m.amount, m.date]),
       [["ACRW-2026/00903", "19968", "2026-06-10"]],
+    );
+    assert.deepEqual(
+      [decision.refundSettled, decision.correctivesByHand],
+      [true, []],
     );
   });
 
@@ -227,9 +237,21 @@ describe("decideSimplePayOrder: a refund holds the mark back", () => {
     );
   });
 
-  it("a corrective already paid, or not yet projected: the order waits, named by the corrective", () => {
+  it("a corrective already marked by hand to its sum: the invoice is marked, no task; partly, or not projected: the order waits", () => {
+    const done = decide(partial, [
+      invoice("ACRW-2026/00903", 30958),
+      invoice("ACRW-2026/H", -10990, {
+        corrective: true,
+        paidAmount: D(-10990),
+      }),
+    ]);
+    assert.ok(done.markable);
+    assert.deepEqual(
+      [done.marks.map((m) => m.amount), done.correctivesByHand],
+      [["30958"], []],
+    );
     for (const [overrides, reason] of [
-      [{ paidAmount: D(-10990) }, "ALREADY_PAID"],
+      [{ paidAmount: D(-5000) }, "PARTLY_PAID"],
       [{ paymentsKnown: null }, "PAYMENTS_UNKNOWN"],
     ] as const) {
       const decision = decide(partial, [

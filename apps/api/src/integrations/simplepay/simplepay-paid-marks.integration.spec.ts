@@ -197,7 +197,7 @@ describe(
         report,
         new RegExp(`^${PREFIX}3\\t.*kimarad: visszatérítve`, "m"),
       );
-      // the partial refund, document by document: the invoice with the payment, the corrective with the refund
+      // the partial refund, document by document: the invoice with the payment
       assert.match(
         report,
         new RegExp(
@@ -205,14 +205,15 @@ describe(
           "m",
         ),
       );
+      // the corrective's refund: a task by hand, not a mark (acrobot 48831)
       assert.match(
         report,
         new RegExp(
-          `^${PREFIX}5\\t-10990 Ft\\t2099-03-17\\tbankkártya\\tSimplePay visszatérítés, 2099-03-17, tranzakció: ${PREFIX}${BASE}-6$`,
+          `^${PREFIX}5\\t-10990 Ft\\t2099-03-17\\tkézi teendő: helyesbítő jelölése kézzel \\(SimplePay visszatérítés, 2099-03-17, tranzakció: ${PREFIX}${BASE}-6\\)$`,
           "m",
         ),
       );
-      assert.match(report, /összesen: 3 számla jelölhető, 3 rendelésből/);
+      assert.match(report, /összesen: 2 számla jelölhető, 3 rendelésből/);
     });
 
     it("a written mark whose order got a refund is reported through the invoice's order number", async () => {

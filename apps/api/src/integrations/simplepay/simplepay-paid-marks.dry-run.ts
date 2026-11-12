@@ -183,6 +183,13 @@ export function dryRunReport(
     out.push(
       `${m.invoiceNumber}\t${m.amount} Ft\t${m.date}\t${m.title}\t${m.note}`,
     );
+  const byHand = decisions.flatMap((d) =>
+    d.markable ? d.correctivesByHand : [],
+  );
+  for (const m of byHand)
+    out.push(
+      `${m.invoiceNumber}\t${m.amount} Ft\t${m.date}\tkézi teendő: helyesbítő jelölése kézzel (${m.note})`,
+    );
   for (const d of decisions) {
     if (d.markable) continue;
     const money =

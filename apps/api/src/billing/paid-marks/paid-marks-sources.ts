@@ -111,7 +111,9 @@ export function foxpostPlanFrom(
 
 /**
  * SimplePay: every order not markable, an invoice already marked by SimplePay
- * (counted), and a refund that arrived after a mark (a person must look).
+ * (counted), a corrective to mark by hand (acrobot 48831: no negative payment
+ * is written), and a refund that arrived after a mark (a person must look)
+ * unless the order's documents already settle it.
  */
 export function simplePayPlanFrom(input: {
   decisions: readonly SimplePayOrderDecision[];
@@ -128,6 +130,11 @@ export function simplePayPlanFrom(input: {
     approved: markable,
     markedBefore: input.markedBefore,
   });
+  const settled = new Set(
+    input.decisions.flatMap((d) =>
+      d.markable && d.refundSettled ? [d.orderKey] : [],
+    ),
+  );
   return {
     source: "SIMPLEPAY",
     marks,
@@ -143,14 +150,27 @@ export function simplePayPlanFrom(input: {
               ),
             ],
       ),
-      ...markedBefore.map((number) => exception(number, "MARKED_BEFORE")),
-      ...input.refundsAfter.map((r) =>
-        exception(
-          r.invoiceNumber,
-          r.full ? "REFUNDED_AFTER_MARK" : "PARTLY_REFUNDED_AFTER_MARK",
-          `rendelés ${r.orderKey}, visszatérítve ${r.refunded} (${r.refundDates.join(", ")})`,
-        ),
+      ...input.decisions.flatMap((d) =>
+        d.markable
+          ? d.correctivesByHand.map((m) =>
+              exception(
+                m.invoiceNumber,
+                "CORRECTIVE_BY_HAND",
+                `helyesbítő jelölése kézzel: ${m.amount} Ft, ${m.date}, rendelés ${d.orderKey}`,
+              ),
+            )
+          : [],
       ),
+      ...markedBefore.map((number) => exception(number, "MARKED_BEFORE")),
+      ...input.refundsAfter
+        .filter((r) => !settled.has(r.orderKey))
+        .map((r) =>
+          exception(
+            r.invoiceNumber,
+            r.full ? "REFUNDED_AFTER_MARK" : "PARTLY_REFUNDED_AFTER_MARK",
+            `rendelés ${r.orderKey}, visszatérítve ${r.refunded} (${r.refundDates.join(", ")})`,
+          ),
+        ),
     ],
   };
 }

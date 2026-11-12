@@ -251,6 +251,8 @@ describe("the source plans: what needs a person", () => {
               sourceRef: "t1",
             },
           ],
+          correctivesByHand: [],
+          refundSettled: false,
         },
         {
           orderKey: "47679-2",
@@ -265,6 +267,8 @@ describe("the source plans: what needs a person", () => {
               sourceRef: "t2",
             },
           ],
+          correctivesByHand: [],
+          refundSettled: false,
         },
         {
           orderKey: "47679-3",
@@ -307,6 +311,93 @@ describe("the source plans: what needs a person", () => {
         "W-4:CORRECTIVE_MISSING:true",
         "W-2:MARKED_BEFORE:false",
         "W-5:REFUNDED_AFTER_MARK:true",
+      ],
+    );
+  });
+
+  /*
+    A HELYESBÍTŐ KÉZZEL (acrobot 48831): negatív jelölés nem íródik, amíg kézi
+    próba nem mutatja, mit tesz vele a Számlázz.hu. MI PIROSÍT: ha a
+    helyesbítő az írandók közé kerülne; ha a kézi teendő nem jelenne meg
+    figyelmet kérő sorként, az összeggel; ha a már elrendezett rendelés
+    visszatérítése minden futáskor újra hírként jönne; ha egy más rendelés
+    visszatérítése is eltűnne vele.
+  */
+  it("SimplePay: a corrective is a task by hand with its sum, never a mark; the settled order's refund is not news", () => {
+    const plan = simplePayPlanFrom({
+      decisions: [
+        {
+          orderKey: "47679-6",
+          markable: true,
+          marks: [
+            {
+              invoiceNumber: "W-6",
+              date: "2026-06-10",
+              amount: "30958",
+              title: "bankkártya",
+              note: "SimplePay",
+              sourceRef: "t6",
+            },
+          ],
+          correctivesByHand: [
+            {
+              invoiceNumber: "W-6H",
+              date: "2026-06-12",
+              amount: "-10990",
+              title: "bankkártya",
+              note: "SimplePay visszatérítés",
+              sourceRef: "r6",
+            },
+          ],
+          refundSettled: true,
+        },
+      ],
+      markedBefore: new Set(),
+      refundsAfter: [
+        {
+          invoiceNumber: "W-6",
+          orderKey: "47679-6",
+          markDate: "2026-06-10",
+          markAmount: "30958",
+          refunded: "10990",
+          refundDates: ["2026-06-12"],
+          full: false,
+        },
+        {
+          invoiceNumber: "W-7",
+          orderKey: "47679-7",
+          markDate: "2026-06-10",
+          markAmount: "500",
+          refunded: "100",
+          refundDates: ["2026-06-12"],
+          full: false,
+        },
+      ],
+    });
+    assert.deepEqual(
+      plan.marks.map((m) => [m.invoiceNumber, m.amount]),
+      [["W-6", "30958"]],
+    );
+    assert.deepEqual(
+      plan.exceptions.map((e) => [
+        e.reference,
+        e.reason,
+        e.attention,
+        e.detail,
+      ]),
+      [
+        [
+          "W-6H",
+          "CORRECTIVE_BY_HAND",
+          true,
+          "helyesbítő jelölése kézzel: -10990 Ft, 2026-06-12, rendelés 47679-6",
+        ],
+        [
+          "W-7",
+          "PARTLY_REFUNDED_AFTER_MARK",
+          true,
+          "rendelés 47679-7, visszatérítve 100 (2026-06-12)",
+        ],
       ],
     );
   });
