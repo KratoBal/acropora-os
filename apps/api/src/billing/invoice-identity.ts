@@ -47,3 +47,18 @@ export function sameGross(
     ) <= tolerance
   );
 }
+
+/**
+ * A BEJÖVŐ SOR ADÓSZÁMA AZ AZONOSSÁGHOZ (acrobot 49527, niceshops): a külföldi szállító adószáma a bejövő rekordban a
+ * `supplierEuTaxNumber` mezőben áll, a `supplierTaxNumber` üres (ATU63964918), a dokumentum oldali azonosság viszont
+ * ennek számjegyeiből épül. A `supplierTaxNumber` nyer, ha számjegyet ad; különben az EU-szám; ha az sincs, marad
+ * az eredeti (és a kulcs a névre esik, mint eddig).
+ */
+export function identityTaxNumber(
+  supplierTaxNumber: string | null | undefined,
+  supplierEuTaxNumber: string | null | undefined,
+): string | null | undefined {
+  if (taxBase(supplierTaxNumber)) return supplierTaxNumber;
+  // az EU-szám számjegyek nélkül is jó: a kulcs akkor is a névre esik, mint a másik mezővel
+  return supplierEuTaxNumber ?? supplierTaxNumber;
+}

@@ -75,7 +75,11 @@ import {
   paperOriginalOfRow,
   pairingNumberKeys,
 } from "../billing/incoming-billing-documents.js";
-import { invoiceIdentity, sameGross } from "../billing/invoice-identity.js";
+import {
+  identityTaxNumber,
+  invoiceIdentity,
+  sameGross,
+} from "../billing/invoice-identity.js";
 import {
   packageDataNote,
   storedValues,
@@ -1327,6 +1331,7 @@ export class MissingInvoicesService {
       documentNumber: string;
       supplierName: string;
       supplierTaxNumber: string | null;
+      supplierEuTaxNumber?: string | null;
       grossAmount: Prisma.Decimal;
       currency: string;
     }) => {
@@ -1345,7 +1350,7 @@ export class MissingInvoicesService {
           .get(
             invoiceIdentity(
               row.documentNumber,
-              row.supplierTaxNumber,
+              identityTaxNumber(row.supplierTaxNumber, row.supplierEuTaxNumber),
               row.supplierName,
             ),
           )

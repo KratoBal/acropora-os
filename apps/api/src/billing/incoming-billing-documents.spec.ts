@@ -25,7 +25,7 @@ import {
   toIncomingListItem,
 } from "./incoming-billing-documents.js";
 import { supplierTaxBase } from "./billing-duplicates.js";
-import { invoiceIdentity } from "./invoice-identity.js";
+import { identityTaxNumber, invoiceIdentity } from "./invoice-identity.js";
 
 const D = (value: string | number) => new Prisma.Decimal(value);
 const day = (value: string) => new Date(`${value}T00:00:00Z`);
@@ -1119,6 +1119,52 @@ describe("pairingOfRow: the invoice identity as the second key", () => {
     assert.equal(
       pairingOfRow(row(), new Map([["feed-1", unpaidOwn]])),
       unpaidOwn,
+    );
+  });
+
+  it("a foreign supplier's tax number in the EU field builds the identity when supplierTaxNumber is empty (acrobot 49527)", () => {
+    const euOnly = row({
+      supplierTaxNumber: null,
+      supplierEuTaxNumber: "ATU63964918",
+    });
+    assert.equal(pairingOfRow(euOnly, byIdentity), upload);
+    assert.equal(
+      bankMatchOf({ ...euOnly, kindCode: "SZ" }, byIdentity).state,
+      "PAIRED",
+    );
+    // the supplierTaxNumber wins when it gives digits; the EU field only fills the gap
+    assert.equal(
+      pairingOfRow(
+        row({
+          supplierTaxNumber: "ATU11111111",
+          supplierEuTaxNumber: "ATU63964918",
+        }),
+        byIdentity,
+      ),
+      undefined,
+    );
+    assert.equal(identityTaxNumber(null, "ATU63964918"), "ATU63964918");
+    assert.equal(identityTaxNumber("", "ATU63964918"), "ATU63964918");
+    assert.equal(
+      identityTaxNumber("ATU11111111", "ATU63964918"),
+      "ATU11111111",
+    );
+    assert.equal(identityTaxNumber("n/a", "ATU63964918"), "ATU63964918");
+    assert.equal(identityTaxNumber(null, null), null);
+    // another EU tax number, or none at all (the key falls to the name): not a pair
+    assert.equal(
+      pairingOfRow(
+        row({ supplierTaxNumber: null, supplierEuTaxNumber: "ATU11111111" }),
+        byIdentity,
+      ),
+      undefined,
+    );
+    assert.equal(
+      pairingOfRow(
+        row({ supplierTaxNumber: null, supplierEuTaxNumber: null }),
+        byIdentity,
+      ),
+      undefined,
     );
   });
 

@@ -662,6 +662,7 @@ describe("the accountant package by invoice date", () => {
     documentNumber: `KS-${overrides.id}`,
     supplierName: "Fluidra Magyarország Kft.",
     supplierTaxNumber: "12345678-2-41",
+    supplierEuTaxNumber: null,
     sourceDocumentId: `src-${overrides.id}`,
     grossAmount: D(56420),
     currency: "HUF",
@@ -1123,7 +1124,9 @@ describe("the accountant package by invoice date", () => {
         id: "ns",
         documentNumber: NUMBER,
         supplierName: "niceshops GmbH",
-        supplierTaxNumber: "ATU63964918",
+        // a külföldi szállító adószáma a bejövő rekordban az EU mezőben áll, a supplierTaxNumber üres (acrobot 49527)
+        supplierTaxNumber: null,
+        supplierEuTaxNumber: "ATU63964918",
         sourceDocumentId: "feed-ns",
         grossAmount: D(338018),
         issueDate: new Date("2026-08-03T00:00:00Z"),
@@ -1159,9 +1162,23 @@ describe("the accountant package by invoice date", () => {
       ["R49010000099999999"],
     );
     assert.deepEqual(
-      await unpaidOf([row({ supplierTaxNumber: "ATU11111111" })]),
+      await unpaidOf([row({ supplierEuTaxNumber: "ATU11111111" })]),
       [NUMBER],
     );
+    // a magyar adószám a supplierTaxNumber-ben továbbra is nyer: az EU mező csak a hiányt pótolja
+    assert.deepEqual(
+      await unpaidOf([
+        row({
+          supplierTaxNumber: "ATU63964918",
+          supplierEuTaxNumber: "ATU11111111",
+        }),
+      ]),
+      [],
+    );
+    // egyik mező sem ad adószámot: a kulcs a névre esik, a dokumentuméval nem egyezik, kifizetetlen marad
+    assert.deepEqual(await unpaidOf([row({ supplierEuTaxNumber: null })]), [
+      NUMBER,
+    ]);
     // ugyanaz a szám és adószám, MÁS bruttó: nem a kifizetett számla, kifizetetlen marad
     assert.deepEqual(await unpaidOf([row({ grossAmount: D(5000) })]), [NUMBER]);
     // a forintos tűrésen belül (1 Ft) ugyanaz a számla

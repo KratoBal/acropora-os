@@ -19,7 +19,11 @@ import {
   shownNumber,
 } from "../missing-invoices/missing-invoice-matching.js";
 import { supplierTaxBase } from "./billing-duplicates.js";
-import { invoiceIdentity, sameGross } from "./invoice-identity.js";
+import {
+  identityTaxNumber,
+  invoiceIdentity,
+  sameGross,
+} from "./invoice-identity.js";
 import { externalKindLabel as feedKindLabel } from "./billing-document-list.js";
 
 /**
@@ -94,6 +98,8 @@ export function pairingOfRow<
     documentNumber?: string;
     supplierName?: string;
     supplierTaxNumber?: string | null;
+    /** külföldi szállítónál itt áll az adószám (`identityTaxNumber`) */
+    supplierEuTaxNumber?: string | null;
     /** az azonosság szerinti párosításhoz kell: az összeg és a deviza egyezése nélkül nem fizetett (`sameGross`) */
     grossAmount?: Prisma.Decimal;
     currency?: string;
@@ -109,7 +115,7 @@ export function pairingOfRow<
       ? pairings.get(
           invoiceIdentity(
             row.documentNumber,
-            row.supplierTaxNumber,
+            identityTaxNumber(row.supplierTaxNumber, row.supplierEuTaxNumber),
             row.supplierName ?? "",
           ),
         )
@@ -138,6 +144,7 @@ export function bankMatchOf(
     documentNumber?: string;
     supplierName?: string;
     supplierTaxNumber?: string | null;
+    supplierEuTaxNumber?: string | null;
     kindCode: string;
     grossAmount: Prisma.Decimal;
     currency?: string;
@@ -398,7 +405,7 @@ export function paperOriginalOfRow(
     | "documentNumber"
     | "supplierName"
     | "supplierTaxNumber"
-  >,
+  > & { supplierEuTaxNumber?: string | null },
   pairings: ReadonlyMap<string, Pick<DocumentPairing, "paperOriginal">>,
 ): boolean {
   if (row.paperOriginalAt !== null) return true;
@@ -409,7 +416,7 @@ export function paperOriginalOfRow(
     pairings.get(
       invoiceIdentity(
         row.documentNumber,
-        row.supplierTaxNumber,
+        identityTaxNumber(row.supplierTaxNumber, row.supplierEuTaxNumber),
         row.supplierName,
       ),
     )?.paperOriginal

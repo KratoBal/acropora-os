@@ -36,6 +36,7 @@ function row(
     fulfillmentDate: string | null;
     cancelled?: boolean;
     notBookable?: boolean;
+    euTaxNumber?: string;
   },
 ) {
   return {
@@ -52,6 +53,7 @@ function row(
       : null,
     currency: "HUF",
     supplierName: SUPPLIER,
+    supplierEuTaxNumber: overrides.euTaxNumber ?? null,
     buyerName: "Acropora Kft.",
     netAmount: 100,
     vatAmount: 27,
@@ -97,6 +99,12 @@ describe(
             issueDate: "2099-10-05",
             fulfillmentDate: null,
           }),
+          // külföldi szállító: az adószám az EU mezőben áll (a niceshops alakja), és a sor viszi az azonossághoz
+          row("eu-adoszam", {
+            issueDate: "2099-08-15",
+            fulfillmentDate: null,
+            euTaxNumber: "ATU99999999",
+          }),
           row("sztorno", {
             issueDate: "2099-10-06",
             fulfillmentDate: "2099-10-06",
@@ -129,6 +137,16 @@ describe(
       ]);
     });
 
+    it("a row carries the supplier's EU tax number (the invoice identity of a foreign supplier is built from it)", async () => {
+      const { rows } = await repository.packageBillingRows("2099-08");
+      assert.deepEqual(
+        rows
+          .filter((r) => r.supplierName === SUPPLIER)
+          .map((r) => [r.documentNumber, r.supplierEuTaxNumber]),
+        [["CSOMAGSOR-eu-adoszam", "ATU99999999"]],
+      );
+    });
+
     it("the invoice issued in September but fulfilled in October is in September only", async () => {
       assert.deepEqual(await numbers("2099-09"), ["CSOMAGSOR-kelt-szept"]);
     });
@@ -139,7 +157,8 @@ describe(
         .map((r) => r.documentNumber)
         .filter((n) => n.startsWith("CSOMAGSOR-"))
         .sort();
-      assert.equal(mine.length, 6);
+      // all seven seeded rows, in any month (the EU tax number row of 2099-08 included)
+      assert.equal(mine.length, 7);
       assert.ok(mine.includes("CSOMAGSOR-sztorno"));
       assert.ok(mine.includes("CSOMAGSOR-nem-konyvelendo"));
     });
