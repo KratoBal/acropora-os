@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { CustomerSummary, Session } from "@acropora/types";
+import type { CustomerSummary, Permission, Session } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { QuoteNewPage } from "./quote-new-page";
@@ -16,7 +16,7 @@ vi.mock("next/navigation", () => ({
 
 // per-user permissions (undefined: the role's own set, ADMIN has it all)
 const auth = vi.hoisted(() => ({
-  permissions: undefined as string[] | undefined,
+  permissions: undefined as Permission[] | undefined,
 }));
 const api = vi.hoisted(() => ({
   customersList: vi.fn(),
