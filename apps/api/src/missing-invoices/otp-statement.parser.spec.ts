@@ -133,4 +133,20 @@ describe("originalAmountOf", () => {
     );
     assert.equal(originalAmountOf("Invoice R123"), null);
   });
+
+  it("reads the card form with two decimals and with a thousands dot (Hetzner 100,82EUR, card f7ece26b)", () => {
+    assert.deepEqual(
+      [
+        // the live narrative, word for word (acrobot 49391); 369.15 is the rate, 100,82 x 369,15 = 37 218 Ft
+        originalAmountOf(
+          "2026.11.06 0194683438 HETZNER ONLINE GMBH 100,82EUR 369.15",
+        ),
+        originalAmountOf("KÁRTYA 1.234,50EUR"),
+      ].map((r) => r && [r.amount.toString(), r.currency]),
+      [
+        ["100.82", "EUR"],
+        ["1234.5", "EUR"],
+      ],
+    );
+  });
 });
