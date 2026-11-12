@@ -670,6 +670,20 @@ describe("a számla-begyűjtés tárolása", { skip: gate.mode === "skip" }, () 
       textReading: fresh,
       payeeCheck: "COMPANY",
     });
+    // a kézi vevő-jelölés (markPayee) megmarad: az olvasat frissül, a jelölt vevő nem (barracuda, #2489)
+    const markedAt = new Date("2026-11-12T20:00:00Z");
+    await prisma.incomingSupplierDocument.update({
+      where: { id: docC },
+      data: { payeeCheck: "COMPANY", payeeMarkedAt: markedAt },
+    });
+    await repository.refreshUnassignedReading(docC, fresh, "NOT_COMPANY");
+    assert.deepEqual(
+      await prisma.incomingSupplierDocument.findUniqueOrThrow({
+        where: { id: docC },
+        select: { textReading: true, payeeCheck: true, payeeMarkedAt: true },
+      }),
+      { textReading: fresh, payeeCheck: "COMPANY", payeeMarkedAt: markedAt },
+    );
     const promotedReading = await readingOf(docA);
     await repository.refreshUnassignedReading(
       docA,

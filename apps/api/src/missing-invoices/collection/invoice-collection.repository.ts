@@ -583,13 +583,18 @@ export class InvoiceCollectionRepository {
     textReading: object,
     payee: string,
   ): Promise<void> {
-    await this.database.incomingSupplierDocument.updateMany({
-      where: { id, reviewState: UNASSIGNED },
-      data: {
-        textReading: textReading as Prisma.InputJsonValue,
-        payeeCheck: payee,
-      },
-    });
+    await this.database.$transaction([
+      this.database.incomingSupplierDocument.updateMany({
+        where: { id, reviewState: UNASSIGNED },
+        data: { textReading: textReading as Prisma.InputJsonValue },
+      }),
+      // A KÉZI VEVŐ-JELÖLÉST NEM ÍRJA FELÜL (barracuda, #2489): a `payeeCheck`-be a Hiányzó számlák lapja is ír
+      // (`markPayee`, jelölővel és idővel); a mai olvasás csak ott állítja, ahol ember nem jelölt
+      this.database.incomingSupplierDocument.updateMany({
+        where: { id, reviewState: UNASSIGNED, payeeMarkedAt: null },
+        data: { payeeCheck: payee },
+      }),
+    ]);
   }
 
   /**
