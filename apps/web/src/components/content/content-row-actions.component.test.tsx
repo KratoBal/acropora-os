@@ -90,6 +90,7 @@ beforeEach(() => {
     comments: [],
     history: [],
     blockers: { waitsOn: { on: "approver" }, waitsForImage: false },
+    claims: [],
   });
 });
 

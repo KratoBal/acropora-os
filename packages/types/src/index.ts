@@ -617,6 +617,7 @@ export {
 export type {
   ContentChannel,
   ContentComment,
+  ContentClaimSummary,
   ContentDetail,
   ContentListItem,
   ContentListResponse,

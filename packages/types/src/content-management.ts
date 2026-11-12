@@ -146,6 +146,25 @@ export interface ContentDetail extends ContentListItem {
     waitsOn: { on: string };
     waitsForImage: boolean;
   };
+  /**
+   * The manufacturer claims the item stands on (T5.3), with what each allows: the approver sees an
+   * unchecked or disputed claim before approving. Approval is refused while one is not PUBLISHABLE.
+   */
+  claims: ContentClaimSummary[];
+}
+
+/** A manufacturer claim as the content detail shows it (T5.3; the API's `output` rule). */
+export interface ContentClaimSummary {
+  id: string;
+  productName: string;
+  claimType: string;
+  claimText: string;
+  status: string;
+  output: {
+    mode: "PUBLISHABLE" | "DRAFT_ONLY" | "BLOCKED";
+    attribution: string | null;
+    reasons: string[];
+  };
 }
 
 /**
