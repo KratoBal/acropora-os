@@ -15,6 +15,9 @@ import { ContentClaimsController } from "./content-claims.controller.js";
 import { ContentController } from "./content.controller.js";
 import { ContentRepository } from "./content.repository.js";
 import { ContentService } from "./content.service.js";
+import { ProductDataController } from "./product-data/product-data.controller.js";
+import { ProductDataRepository } from "./product-data/product-data.repository.js";
+import { ProductDataService } from "./product-data/product-data.service.js";
 
 /**
  * A `ServiceTokenRepository` és az `AuthUserResolver` ITT is meg van adva, nem
@@ -32,6 +35,7 @@ import { ContentService } from "./content.service.js";
     ContentAgentClaimsController,
     ContentClaimsController,
     ArticleImagePublicController,
+    ProductDataController,
   ],
   providers: [
     ArticleImageRepository,
@@ -45,6 +49,8 @@ import { ContentService } from "./content.service.js";
     ContentService,
     // Stateless over Prisma, no dependencies: the agent entry's own instance (T5.3).
     ManufacturerClaimsService,
+    ProductDataRepository,
+    ProductDataService,
     ServiceTokenRepository,
   ],
   exports: [ContentService],
