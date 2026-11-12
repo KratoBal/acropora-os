@@ -14,6 +14,7 @@ import {
 
 import { requireInternalWriter } from "../../worksheets/worksheet-internal-write.js";
 import {
+  CLAIM_TYPES,
   claimOutput,
   type ClaimOutput,
   type ClaimSourceKind,
@@ -157,6 +158,15 @@ type Values = {
 };
 
 const LIST_LIMIT = 500;
+/** The review queue's rank groups, in order (`reviewQueueRank`). */
+const RANK_GROUPS: readonly (readonly ClaimType[])[] = (() => {
+  const groups = new Map<number, ClaimType[]>();
+  for (const type of CLAIM_TYPES) {
+    const rank = reviewQueueRank(type);
+    groups.set(rank, [...(groups.get(rank) ?? []), type]);
+  }
+  return [...groups.entries()].sort(([a], [b]) => a - b).map(([, t]) => t);
+})();
 
 /** `YYYY-MM-DD` to the stored calendar day (a `@db.Date`, read back at UTC midnight). */
 function day(value: string): Date {
@@ -228,7 +238,7 @@ export class ManufacturerClaimsService {
   async listForProduct(
     productId: string,
     includeArchived: boolean,
-  ): Promise<ManufacturerClaimView[]> {
+  ): Promise<{ items: ManufacturerClaimView[]; truncated: boolean }> {
     return this.list({ productId, includeArchived });
   }
 
@@ -238,22 +248,34 @@ export class ManufacturerClaimsService {
     status?: ClaimStatus;
     claimType?: ClaimType;
     includeArchived?: boolean;
-  }): Promise<ManufacturerClaimView[]> {
-    const rows = await prisma.productManufacturerClaim.findMany({
-      where: {
-        ...(query.productId ? { productId: query.productId } : {}),
-        ...(query.status ? { status: query.status } : {}),
-        ...(query.claimType ? { claimType: query.claimType } : {}),
-        ...(query.includeArchived ? {} : { archivedAt: null }),
-      },
-      select: CLAIM_SELECT,
-      orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
-      take: LIST_LIMIT,
-    });
-    const views = await this.views(rows);
-    return views.sort(
-      (a, b) => reviewQueueRank(a.claimType) - reviewQueueRank(b.claimType),
-    );
+  }): Promise<{ items: ManufacturerClaimView[]; truncated: boolean }> {
+    const where = {
+      ...(query.productId ? { productId: query.productId } : {}),
+      ...(query.status ? { status: query.status } : {}),
+      ...(query.includeArchived ? {} : { archivedAt: null }),
+    };
+    // THE RANK IS APPLIED BEFORE THE LIMIT (barracuda, #2444 b): one query per rank group, in
+    // rank order, so above the limit it is the old effect claims that fall off, never a newer
+    // dosing claim. `truncated` says that something did.
+    const rows: Row[] = [];
+    for (const types of RANK_GROUPS) {
+      const wanted = query.claimType
+        ? types.filter((type) => type === query.claimType)
+        : types;
+      if (!wanted.length || rows.length > LIST_LIMIT) continue;
+      rows.push(
+        ...(await prisma.productManufacturerClaim.findMany({
+          where: { ...where, claimType: { in: [...wanted] } },
+          select: CLAIM_SELECT,
+          orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
+          take: LIST_LIMIT + 1 - rows.length,
+        })),
+      );
+    }
+    return {
+      items: await this.views(rows.slice(0, LIST_LIMIT)),
+      truncated: rows.length > LIST_LIMIT,
+    };
   }
 
   async create(
@@ -531,11 +553,19 @@ export class ManufacturerClaimsService {
         );
       const fact = await prisma.productKnowledgeFact.findUnique({
         where: { id: factId },
-        select: { productId: true, field: true, value: true, revision: true },
+        select: {
+          productId: true,
+          scopeKey: true,
+          field: true,
+          value: true,
+          revision: true,
+        },
       });
+      // Product level only (barracuda, #2444 a): the missing-link check looks at those too.
       if (
         !fact ||
         fact.productId !== productId ||
+        fact.scopeKey !== "" ||
         !isDosingFactField(fact.field) ||
         fact.value === null
       )

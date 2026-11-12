@@ -39,13 +39,8 @@ export class ManufacturerClaimsController {
   async forProduct(
     @Param("id") id: string,
     @Query() query: ManufacturerClaimListQueryDto,
-  ): Promise<{ items: ManufacturerClaimView[] }> {
-    return {
-      items: await this.claims.listForProduct(
-        id,
-        query.includeArchived === "true",
-      ),
-    };
+  ): Promise<{ items: ManufacturerClaimView[]; truncated: boolean }> {
+    return this.claims.listForProduct(id, query.includeArchived === "true");
   }
 
   @Post("products/:id/manufacturer-claims")
@@ -63,15 +58,13 @@ export class ManufacturerClaimsController {
   @RequirePermissions(PERMISSIONS.CONTENT_VIEW)
   async list(
     @Query() query: ManufacturerClaimListQueryDto,
-  ): Promise<{ items: ManufacturerClaimView[] }> {
-    return {
-      items: await this.claims.list({
-        productId: query.productId,
-        status: query.status,
-        claimType: query.claimType,
-        includeArchived: query.includeArchived === "true",
-      }),
-    };
+  ): Promise<{ items: ManufacturerClaimView[]; truncated: boolean }> {
+    return this.claims.list({
+      productId: query.productId,
+      status: query.status,
+      claimType: query.claimType,
+      includeArchived: query.includeArchived === "true",
+    });
   }
 
   @Patch("manufacturer-claims/:claimId")

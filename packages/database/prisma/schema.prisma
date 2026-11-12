@@ -11054,7 +11054,8 @@ enum ManufacturerClaimEventKind {
 ///
 /// KI ELLENORIZHET (6. pont, acrobot 48148, 2026-11-12): nem az, aki a mostani valtozatot
 /// rogzitette (a CHECK is koti); "fuggetlen forrassal megerositve" allapotot csak ember adhat,
-/// `content.approve` joggal. A tetel BARMELY szerkesztese uj valtozat, es az ellenorzest torli.
+/// `content.approve` joggal. Minden szerkesztes uj valtozat; az allitas szerkesztese (tipus, szoveg,
+/// forras, szam, teny) az ellenorzest torli, a megjegyzese es az ujraellenorzesi datume nem.
 /// Visszavonas archivalassal, torles nincs; minden lepes a `ProductManufacturerClaimEvent` naploba
 /// kerul, a teljes ertekkel.
 model ProductManufacturerClaim {
