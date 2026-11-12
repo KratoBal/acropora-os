@@ -34,6 +34,7 @@ import { ProductAuthorityCard } from "@/components/products/product-authority-ca
 import { ProductHomepageCard } from "@/components/products/product-homepage-card";
 import { ProductImage } from "@/components/products/product-image-source";
 import { ProductDoseEffectsCard } from "@/components/products/product-dose-effects-card";
+import { ProductManufacturerClaimsCard } from "@/components/products/product-manufacturer-claims-card";
 import { ProductShippingProfileCard } from "@/components/products/product-shipping-profile-card";
 import { ProductSupplierPricesCard } from "@/components/products/product-supplier-prices-card";
 import { ProductBasicsEditor } from "@/components/products/product-basics-editor";
@@ -632,6 +633,16 @@ export function ProductDetailPage({ productId }: { productId: string }) {
   );
   const canManage = Boolean(
     session && hasPermission(session.user, PERMISSIONS.PRODUCTS_MANAGE),
+  );
+  // The manufacturer claims (T5.3) serve content writing, so their rights are the content ones.
+  const canViewClaims = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.CONTENT_VIEW),
+  );
+  const canManageClaims = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.CONTENT_MANAGE),
+  );
+  const canApproveClaims = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.CONTENT_APPROVE),
   );
   const canViewPurchasing = Boolean(
     session && hasPermission(session.user, PERMISSIONS.PURCHASING_VIEW),
@@ -1302,6 +1313,15 @@ export function ProductDetailPage({ productId }: { productId: string }) {
                   canManage={canManage}
                   currentUserId={session?.user.id ?? ""}
                 />
+                {canViewClaims ? (
+                  <ProductManufacturerClaimsCard
+                    token={token}
+                    productId={product.id}
+                    canManage={canManageClaims}
+                    canApprove={canApproveClaims}
+                    currentUserId={session?.user.id ?? ""}
+                  />
+                ) : null}
                 <ProductHomepageCard
                   token={token}
                   productId={product.id}
