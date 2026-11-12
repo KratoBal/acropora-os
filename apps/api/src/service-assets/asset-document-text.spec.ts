@@ -358,6 +358,48 @@ describe("AssetDocumentTextCache with the OCR", () => {
     }
   });
 
+  it("a partial reading EXPIRES after the TTL (a short one cut in a slow minute is read again), a complete one and a page-limit stop never do", async () => {
+    const TTL = 1_000;
+    let clock = 10_000;
+    const counts = { partial: 0, complete: 0, pages: 0 };
+    const answers = {
+      partial: () =>
+        reading({ pagesRead: 3, pagesTotal: 20, stoppedBy: "time" }),
+      complete: () => reading({ stoppedBy: null }),
+      pages: () => reading({ pagesTotal: 200, stoppedBy: "pages" }),
+    };
+    let which: keyof typeof answers = "partial";
+    const cache = new AssetDocumentTextCache(
+      async () => scanLines,
+      32,
+      async () => {
+        counts[which] += 1;
+        return answers[which]();
+      },
+      TTL,
+      () => clock,
+    );
+    for (const kind of ["partial", "complete", "pages"] as const) {
+      which = kind;
+      await cache.text(`sha-ttl-${kind}`, bytes);
+    }
+    // inside the TTL: nothing is read again
+    clock += TTL - 1;
+    for (const kind of ["partial", "complete", "pages"] as const)
+      await cache.text(`sha-ttl-${kind}`, bytes);
+    assert.deepEqual(counts, { partial: 1, complete: 1, pages: 1 });
+    // past the TTL: only the partial one is read again
+    clock += 10 * TTL;
+    for (const kind of ["partial", "complete", "pages"] as const) {
+      which = kind;
+      await cache.text(`sha-ttl-${kind}`, bytes);
+    }
+    assert.deepEqual(counts, { partial: 2, complete: 1, pages: 1 });
+    // the new partial reading gets a fresh TTL
+    await cache.text("sha-ttl-partial", bytes);
+    assert.equal(counts.partial, 2);
+  });
+
   it("a memory stop is NOT remembered even with pages read (the pressure may be gone)", async () => {
     let asked = 0;
     const cache = new AssetDocumentTextCache(
