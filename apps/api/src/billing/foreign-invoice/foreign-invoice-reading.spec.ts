@@ -9,6 +9,7 @@ import {
   labelledInvoiceNumber,
   parseForeignDate,
   readForeignInvoice,
+  senderAddressLineName,
   supplierNameFromText,
   tableRowFields,
   totalsRow,
@@ -1711,5 +1712,111 @@ describe("readForeignInvoice: the Hungarian gross label and the reverse charge",
     });
     assert.equal(values.vatAmount, "270.00");
     assert.equal(values.netAmount, null);
+  });
+});
+
+/*
+  A KÜLDŐ CÍMSORA (kártya dbab22cd, harmadik kör, szállítónév-szelet). Minden név és cím KITALÁLT. MI PIROSÍT: ha a vesszős vagy " · "-os címsor első tagja nem lenne a név; ha a vevő
+  (Acropora) saját címsora a szállító neve lenne; ha egy két tagú, házszám nélküli vagy irányítószám nélküli sor nevet adna; ha egy szó ("Rechnung") nevet adna; ha két eltérő
+  címsor közül választana; ha a 15. soron túli sor számítana; ha egy szám-kezdetű tag név lenne; ha a név forrása nem a szöveg lenne, vagy elnyomná a párosítás nevét.
+*/
+describe("senderAddressLineName", () => {
+  it("reads the name from the three-part sender line, comma or middle-dot separated, with or without a legal form", () => {
+    assert.equal(
+      senderAddressLineName([
+        "Kitalált Kereskedő GmbH, Minta-Str. 9, 71000 Teststadt",
+      ]),
+      "Kitalált Kereskedő GmbH",
+    );
+    assert.equal(
+      senderAddressLineName(["kitalalt · Minta Str. 43b · 55000 Teststadt"]),
+      "kitalalt",
+    );
+    // only the first cell counts, the rest after " | " is another column
+    assert.equal(
+      senderAddressLineName([
+        "Kitalált Kereskedő GmbH, Minta-Str. 9, 71000 Teststadt | 6",
+      ]),
+      "Kitalált Kereskedő GmbH",
+    );
+    assert.equal(
+      senderAddressLineName([
+        "Kitalált Töltő GmbH, Beispielstr. 6, D-80000 Teststadt",
+      ]),
+      "Kitalált Töltő GmbH",
+    );
+  });
+
+  it("never reads the buyer's own line, a line without a house number or a postal code, or a label word", () => {
+    assert.equal(
+      senderAddressLineName([
+        "Acropora Kft., Pesti Gábor utca 35, 1106 Budapest",
+      ]),
+      null,
+    );
+    assert.equal(senderAddressLineName(["Kitalált GmbH, Teststadt"]), null);
+    assert.equal(
+      senderAddressLineName(["Kitalált GmbH, Minta-Str., 71000 Teststadt"]),
+      null,
+    );
+    assert.equal(
+      senderAddressLineName(["Kitalált GmbH, Minta-Str. 9, Teststadt"]),
+      null,
+    );
+    assert.equal(
+      senderAddressLineName(["Rechnung, bitte 3 Tage, 71000 Teststadt"]),
+      null,
+    );
+    assert.equal(
+      senderAddressLineName(["12345, Minta-Str. 9, 71000 Teststadt"]),
+      null,
+    );
+  });
+
+  it("two different sender lines decide nothing, and a line after the 15th is not read", () => {
+    assert.equal(
+      senderAddressLineName([
+        "Kitalált Kereskedő GmbH, Minta-Str. 9, 71000 Teststadt",
+        "Másik Cég GmbH, Minta-Str. 1, 80000 Mintaváros",
+      ]),
+      null,
+    );
+    assert.equal(
+      senderAddressLineName([
+        ...Array.from({ length: 15 }, () => "0"),
+        "Kitalált Kereskedő GmbH, Minta-Str. 9, 71000 Teststadt",
+      ]),
+      null,
+    );
+    // the same line twice (a two-page invoice) is one name
+    assert.equal(
+      senderAddressLineName([
+        "Kitalált Kereskedő GmbH, Minta-Str. 9, 71000 Teststadt",
+        "Kitalált Kereskedő GmbH, Minta-Str. 9, 71000 Teststadt",
+      ]),
+      "Kitalált Kereskedő GmbH",
+    );
+  });
+
+  it("in the reading it fills only an empty name, from the text, and the pairing's name still wins", () => {
+    const lines = [
+      "kitalalt · Minta Str. 43b · 55000 Teststadt",
+      "Rechnung - Nr. 40199001",
+      "Gesamt netto: | 100,00 €",
+    ];
+    const empty = readForeignInvoice({
+      lines,
+      adapter: null,
+      pairing: pairing({ supplierName: "" }),
+    });
+    assert.equal(empty.values.supplierName, "kitalalt");
+    assert.equal(empty.sources.supplierName, "TEXT");
+    const paired = readForeignInvoice({
+      lines,
+      adapter: null,
+      pairing: pairing({ supplierName: "Párosítás szerinti Kft." }),
+    });
+    assert.equal(paired.values.supplierName, "Párosítás szerinti Kft.");
+    assert.equal(paired.sources.supplierName, "PAIRING");
   });
 });
