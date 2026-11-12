@@ -357,11 +357,39 @@ export class MissingInvoicesService {
     const classified = computed.classified.find((c) => c.debit.id === debitId);
     if (!classified)
       throw new NotFoundException("A banki terhelés nem található.");
-    const document = computed.documents.find(
-      (d) => d.id === documentId || d.aliasIds?.includes(documentId),
-    );
-    if (!document)
-      return { loaded: false, viaAlias: false, document: null, checks: null };
+    const findLoaded = (id: string) =>
+      computed.documents.find((d) => d.id === id || d.aliasIds?.includes(id));
+    let lookedUp = documentId;
+    let document = findLoaded(documentId);
+    let viaBillingRow = false;
+    if (!document) {
+      /*
+        AZ AZONOSÍTÓ NEM MINDIG TÁROLT DOKUMENTUM (niceshops, 2026-11-12): a csomagellenőrzés `unpaid` listájának `id`-ja a
+        bejövő számla SORÁNAK azonosítója, a sor `sourceDocumentId` mezője mutat a dokumentumra. Egy sor-azonosítóra a
+        `loaded: false` nem a betöltésről szólt, hanem arról, hogy másik azonosító-teret kérdeztek. Ezért előbb megmérjük,
+        milyen azonosítót kaptunk, és a sorét feloldjuk.
+      */
+      const kind = await this.repository.idKind(documentId);
+      if (kind.kind === "billingRow" && kind.sourceDocumentId) {
+        viaBillingRow = true;
+        lookedUp = kind.sourceDocumentId;
+        document = findLoaded(lookedUp);
+      }
+      if (!document)
+        return {
+          loaded: false,
+          viaAlias: false,
+          viaBillingRow,
+          reason:
+            kind.kind === "unknown"
+              ? "NO_SUCH_ID"
+              : kind.kind === "billingRow" && !kind.sourceDocumentId
+                ? "BILLING_ROW_WITHOUT_SOURCE_DOCUMENT"
+                : "DOCUMENT_NOT_LOADED",
+          document: null,
+          checks: null,
+        };
+    }
     const debit = {
       id: classified.debit.id,
       bookingDate: classified.debit.bookingDate.toISOString().slice(0, 10),
@@ -385,7 +413,9 @@ export class MissingInvoicesService {
       .map(([otherId]) => otherId);
     return {
       loaded: true,
-      viaAlias: document.id !== documentId,
+      viaAlias: document.id !== lookedUp,
+      viaBillingRow,
+      reason: null,
       document: {
         documentId: document.id,
         number: shownNumber(document),

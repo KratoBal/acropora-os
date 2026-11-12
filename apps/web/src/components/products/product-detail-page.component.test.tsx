@@ -82,6 +82,12 @@ vi.mock("@/lib/api/dose-effects", () => ({
     })),
   },
 }));
+// The manufacturer claims card (T5.3) asks its own API: no claim.
+vi.mock("@/lib/api/manufacturer-claims", () => ({
+  manufacturerClaimApi: {
+    forProduct: vi.fn(async () => ({ items: [], truncated: false })),
+  },
+}));
 
 const detail: ProductDetail = {
   id: "product-1",
@@ -315,6 +321,8 @@ describe("ProductDetailPage mirror ownership", () => {
       "Szállítási jellemzők",
       // the product dose list (ReefClub slice 7) under the shipping card
       "Adag-hatás",
+      // the manufacturer claims (T5.3) in the same left stack, content rights
+      "Gyártói állítások",
       "Készlet és beszerzés",
       "UNAS terméktükör",
       "Csatornák",

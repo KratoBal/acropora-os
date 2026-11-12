@@ -297,6 +297,22 @@ export interface MissingInvoiceCandidateDiagnosis {
   loaded: boolean;
   /** Igaz, ha az azonosító egy összevont jelölt MÁSIK azonosítója volt (a jelölt `documentId`-ja más). */
   viaAlias: boolean;
+  /**
+   * Igaz, ha az azonosító egy BEJÖVŐ SZÁMLA SORÁNAK azonosítója volt (például a csomagellenőrzés `unpaid` listájáé: az
+   * `id` ott a sor azonosítója, NEM a tárolt dokumentumé), és a sor forrás-dokumentumára oldódott fel.
+   */
+  viaBillingRow: boolean;
+  /**
+   * Miért nincs betöltve (`null`, ha be van töltve): `NO_SUCH_ID` az azonosító sem tárolt dokumentum, sem számlasor;
+   * `BILLING_ROW_WITHOUT_SOURCE_DOCUMENT` számlasor, de nincs forrás-dokumentuma; `DOCUMENT_NOT_LOADED` az azonosító egy
+   * tárolt dokumentumot (vagy egy sor forrás-dokumentumát) nevez, és az nincs a párosítás bemenetében (a betöltés kiszűrte,
+   * lásd fent).
+   */
+  reason:
+    | "NO_SUCH_ID"
+    | "BILLING_ROW_WITHOUT_SOURCE_DOCUMENT"
+    | "DOCUMENT_NOT_LOADED"
+    | null;
   document: {
     documentId: string;
     number: string;
