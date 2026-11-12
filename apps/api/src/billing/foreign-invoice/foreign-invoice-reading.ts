@@ -734,6 +734,8 @@ export function readForeignInvoice(input: ForeignReadingInput): ForeignReading {
   // az első nem tárolható érték mezőnként; a figyelmeztetés a végén megy ki,
   // amikor már látszik, kitöltötte-e egy másik forrás
   const refused: Partial<Record<IncomingReadingField, string>> = {};
+  // a 0 ÁFA, amely NEM egy ÁFA-sorból jön, hanem a fordított adózás jelzéséből (az egész szövegen egyetlen találat): a figyelmeztetés megnevezi
+  let vatFromReverseChargeMarker = false;
   const set = <K extends IncomingReadingField>(
     field: K,
     value: IncomingReadingValues[K] | null | undefined,
@@ -820,8 +822,10 @@ export function readForeignInvoice(input: ForeignReadingInput): ForeignReading {
     if (net !== null) set("netAmount", decimal(net), "TEXT");
     const vat = labelledAmount(lines, VAT_LABEL, NOT_VAT_AMOUNT);
     if (vat !== null) set("vatAmount", decimal(vat), "TEXT");
-    else if (REVERSE_CHARGE.test(lines.join("\n")))
+    else if (REVERSE_CHARGE.test(lines.join("\n"))) {
       set("vatAmount", decimal(0), "TEXT");
+      vatFromReverseChargeMarker = sources.vatAmount === "TEXT";
+    }
     // a cimkézett olvasás után: ami már megvan, azt az összesítő sor nem írja felül, és ha egy már
     // meglévő érték ELTÉR az összesítő sortól (két táblázat, másik összeg), az sor semmit nem tölt:
     // a három mező nem mondhat ellent egymásnak (barracuda, #1795)
@@ -929,6 +933,10 @@ export function readForeignInvoice(input: ForeignReadingInput): ForeignReading {
     // FORDÍTOTT ADÓZÁS: az ÁFA bizonyíthatóan 0 (a számla maga mondja), és a bruttó a számláról jön: a nettó egyenlő vele. Számítás, nem találgatás
     values.netAmount = decimal(gross - vat);
     sources.netAmount = "TEXT";
+    // a jel egyetlen szöveg-találat: a három összeg egymással mindig egyezik, tehát az ellenőrzés itt szerkezetileg zöld; ezért a figyelmeztetés látszatja a jelet
+    warnings.push(
+      `A nettó (${decimal(gross - vat)}) a fordított adózás jelzéséből számolt: a bruttóval egyenlő.${vatFromReverseChargeMarker ? " Az ÁFA 0 is a jelzésből jön, nem egy ÁFA-sorból." : ""} Ellenőrizd a számlán.`,
+    );
   } else if (net !== null && gross !== null && vat === null && !pairingGross) {
     // a hiányzó ÁFA a számlán olvasott bruttó és nettó különbsége: számítás,
     // nem találgatás. A párosítás bruttójából NEM (lásd fent); a fordított

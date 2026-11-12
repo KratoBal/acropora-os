@@ -1576,6 +1576,52 @@ describe("readForeignInvoice: the Hungarian gross label and the reverse charge",
     assert.equal(sources.netAmount, "TEXT");
   });
 
+  it("the derived net comes with a warning that names the marker, and the zero VAT that came from it too (barracuda, #2468)", () => {
+    const { warnings } = readForeignInvoice({
+      lines: REVERSE,
+      adapter: null,
+      pairing: pairing({ date: undefined }),
+    });
+    const warning = warnings.find((w) =>
+      w.includes("fordított adózás jelzéséből"),
+    );
+    assert.ok(warning, "a warning names the reverse-charge marker");
+    assert.match(warning!, /a bruttóval egyenlő/);
+    assert.match(warning!, /Az ÁFA 0 is a jelzésből jön, nem egy ÁFA-sorból/);
+  });
+
+  it("a zero VAT read from a real VAT line: the net is still derived and warned, but the warning does not claim the zero came from the marker", () => {
+    const { values, warnings } = readForeignInvoice({
+      lines: [
+        "Kitalált Szolgáltató Kft.",
+        "ÁFA (0%) | 0,00 HUF",
+        "Teljes bruttó összeg | 1000,00 HUF",
+        "*Fordított adózás.",
+      ],
+      adapter: null,
+      pairing: pairing({ date: undefined }),
+    });
+    assert.equal(values.vatAmount, "0.00");
+    assert.equal(values.netAmount, "1000.00");
+    const warning = warnings.find((w) =>
+      w.includes("fordított adózás jelzéséből"),
+    );
+    assert.ok(warning);
+    assert.doesNotMatch(warning!, /nem egy ÁFA-sorból/);
+  });
+
+  it("no net derivation, no warning", () => {
+    const { warnings } = readForeignInvoice({
+      lines: REVERSE.filter((line) => !line.includes("Fordított")),
+      adapter: null,
+      pairing: pairing({ date: undefined }),
+    });
+    assert.equal(
+      warnings.some((w) => w.includes("fordított adózás")),
+      false,
+    );
+  });
+
   it("the registration number line alone is no VAT amount", () => {
     const { values } = readForeignInvoice({
       lines: [
