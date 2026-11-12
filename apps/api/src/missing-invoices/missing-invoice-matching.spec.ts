@@ -2137,28 +2137,31 @@ describe("a fixed monthly surcharge, for a listed partner", () => {
     }
   });
 
-  it("does not pair another partner, a gap over 1%, an invoice older than 15 days or after the debit", () => {
-    const cases: [string, MatchableDebit, CandidateDocument[]][] = [
-      [
-        "another partner",
+  for (const [name, make] of [
+    [
+      "another partner",
+      () => [
         lease("2026-11-11", 150253, "Más Lízing Zrt."),
-        [invoice("2026-11-02", 149713, "Más Lízing Zrt.")],
+        invoice("2026-11-02", 149713, "Más Lízing Zrt."),
       ],
-      ["over 1%", lease("2026-11-11", 151300), [invoice("2026-11-02", 149713)]],
-      [
-        "16 days before",
-        lease("2026-11-18", 150253),
-        [invoice("2026-11-02", 149713)],
-      ],
-      [
-        "after the debit",
-        lease("2026-11-11", 150253),
-        [invoice("2026-11-12", 149713)],
-      ],
-    ];
-    for (const [name, d, docs] of cases)
-      assert.notEqual(run([d], docs).get(d.id)?.matchedBy, "RULE", name);
-  });
+    ],
+    [
+      "a gap over 1%",
+      () => [lease("2026-11-11", 151300), invoice("2026-11-02", 149713)],
+    ],
+    [
+      "an invoice 16 days before",
+      () => [lease("2026-11-18", 150253), invoice("2026-11-02", 149713)],
+    ],
+    [
+      "an invoice after the debit",
+      () => [lease("2026-11-11", 150253), invoice("2026-11-12", 149713)],
+    ],
+  ] as const)
+    it(`does not pair ${name}`, () => {
+      const [d, document] = make() as [MatchableDebit, CandidateDocument];
+      assert.notEqual(run([d], [document]).get(d.id)?.matchedBy, "RULE");
+    });
 
   it("does not choose between two free invoices in the 15 days", () => {
     const d = lease("2026-11-11", 150253);
