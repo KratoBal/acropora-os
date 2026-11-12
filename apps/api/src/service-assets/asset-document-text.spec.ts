@@ -329,7 +329,51 @@ describe("AssetDocumentTextCache with the OCR", () => {
     assert.equal(again.ocr?.stoppedBy, "pages");
   });
 
-  it("a reading that stopped for time, memory, a busy reader or an error is NOT remembered: the next ask tries again", async () => {
+  it("a time stop that already read pages IS remembered: a long scan is read once per file, and the answer says it is partial", async () => {
+    // the stage case: one page ~6.7 s, the 120 s budget ends a 20 page scan at page 17
+    const pageLines = Array.from({ length: 17 }, (_, i) => [
+      `${i + 1}. oldal szöveg`,
+      PAGE_END_MARKER,
+    ]).flat();
+    let asked = 0;
+    const cache = new AssetDocumentTextCache(
+      async () => scanLines,
+      32,
+      async () => {
+        asked += 1;
+        return reading(
+          { pagesRead: 17, pagesTotal: 20, stoppedBy: "time" },
+          pageLines,
+        );
+      },
+    );
+    const first = await cache.text("sha-long", bytes);
+    const again = await cache.text("sha-long", bytes);
+    assert.equal(asked, 1);
+    for (const answer of [first, again]) {
+      assert.equal(answer.hasText, true);
+      assert.equal(answer.ocr?.stoppedBy, "time");
+      assert.equal(answer.ocr?.pagesRead, 17);
+      assert.equal(answer.ocr?.pagesTotal, 20);
+    }
+  });
+
+  it("a memory stop is NOT remembered even with pages read (the pressure may be gone)", async () => {
+    let asked = 0;
+    const cache = new AssetDocumentTextCache(
+      async () => scanLines,
+      32,
+      async () => {
+        asked += 1;
+        return reading({ pagesRead: 3, pagesTotal: 20, stoppedBy: "memory" });
+      },
+    );
+    await cache.text("sha-mem-partial", bytes);
+    await cache.text("sha-mem-partial", bytes);
+    assert.equal(asked, 2);
+  });
+
+  it("a reading that stopped for time with NO page read, memory, a busy reader or an error is NOT remembered: the next ask tries again", async () => {
     for (const stoppedBy of ["time", "memory", "busy", "error"] as const) {
       let asked = 0;
       const cache = new AssetDocumentTextCache(

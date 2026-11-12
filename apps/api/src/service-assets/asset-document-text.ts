@@ -4,7 +4,7 @@ import {
   PAGE_END_MARKER,
   pdfTextLines,
 } from "../purchasing/supplier-invoice-import/pdf-text-lines.js";
-import { isTransientStop, type OcrReading } from "./asset-document-ocr.js";
+import { keepsReading, type OcrReading } from "./asset-document-ocr.js";
 
 /**
  * AN ASSET ATTACHMENT AS TEXT (Balázs, 2026-10-06 10:23 UTC: "tanitsuk").
@@ -111,12 +111,13 @@ export class AssetDocumentTextCache {
     const reading = bytes().then((content) => this.readOne(content));
     this.entries.set(sha256, reading);
     // A failed read is not remembered: the next ask tries again. Neither is an OCR reading that stopped for a reason
-    // that may not hold next time (time, memory, a busy reader, an error); a stop at the page limit is the file's own.
+    // that may not hold next time (memory, a busy reader, an error, a time stop with no page read); a stop at the page
+    // limit is the file's own, and so is a partial reading the time budget cut (`keepsReading`).
     const forget = () => {
       if (this.entries.get(sha256) === reading) this.entries.delete(sha256);
     };
     reading.then((read) => {
-      if (read.ocr && isTransientStop(read.ocr.stoppedBy)) forget();
+      if (read.ocr && !keepsReading(read.ocr)) forget();
     }, forget);
     while (this.entries.size > this.capacity) {
       const oldest = this.entries.keys().next().value as string;
