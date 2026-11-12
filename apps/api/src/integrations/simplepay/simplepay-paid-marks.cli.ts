@@ -69,7 +69,9 @@ async function main(argv: readonly string[]): Promise<number> {
           (order) => decideSimplePayOrder(order),
         );
         const markable = new Set(
-          decisions.flatMap((d) => (d.markable ? [d.mark.invoiceNumber] : [])),
+          decisions.flatMap((d) =>
+            d.markable ? d.marks.map((mark) => mark.invoiceNumber) : [],
+          ),
         );
         const { marks, markedBefore } = simplePayMarksToWrite({
           decisions,

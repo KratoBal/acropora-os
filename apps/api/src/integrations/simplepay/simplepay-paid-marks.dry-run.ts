@@ -161,8 +161,8 @@ const SKIP_TEXT: Record<SimplePayOrderSkip, string> = {
   UNKNOWN_STATUS: "a SimplePay-sorok között ismeretlen állapotú is van",
   NOT_SETTLED: "nincs teljesült SimplePay-fizetés",
   REFUNDED: "visszatérítve: nem fizetés",
-  PARTLY_REFUNDED:
-    "részben visszatérítve, de a számla (a helyesbítőivel) nem a megmaradt összegről szól",
+  CORRECTIVE_MISSING:
+    "részben visszatérítve: helyesbítő hiányzik (vagy nem a visszatérített összegről szól), és a számla sem a megmaradt összegről",
   AMOUNT_MISMATCH: "a kártyás fizetés nem a számla bruttója",
 };
 
@@ -173,7 +173,7 @@ export function dryRunReport(
 ): string {
   const out: string[] = [];
   const marks = decisions
-    .flatMap((d) => (d.markable ? [d.mark] : []))
+    .flatMap((d) => (d.markable ? d.marks : []))
     .sort(
       (a, b) =>
         a.date.localeCompare(b.date) ||

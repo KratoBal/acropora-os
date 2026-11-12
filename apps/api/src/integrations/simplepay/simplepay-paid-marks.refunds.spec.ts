@@ -73,6 +73,57 @@ describe("refundsAfterMarks", () => {
     );
   });
 
+  /*
+    A RÉSZLEGES VISSZATÉRÍTÉS JELÖLÉSE UTÁN (c03e9896). MI PIROSÍT: ha a
+    csökkentett számla vagy a számla és helyesbítője jelölése után a rendelés
+    hírként jönne (zaj); ha a helyesbítő negatív jelölése külön sort kapna; ha
+    a visszatérítés előtt teljes összeggel beírt számla, helyesbítő-jelölés
+    nélkül, eltűnne a listáról.
+  */
+  it("a partial refund the written marks already show is not news; the full mark without a corrective is", () => {
+    const partial = new Map([
+      [
+        "665709",
+        [
+          line("COMPLETED", 30958, "2026-06-10"),
+          line("REFUND", -10990, "2026-06-12"),
+        ],
+      ],
+    ]);
+    const at = (invoiceNumber: string, amount: string) => ({
+      invoiceNumber,
+      orderKey: "665709",
+      date: "2026-06-10",
+      amount,
+    });
+    assert.deepEqual(refundsAfterMarks([at("R-1", "19968")], partial), []);
+    assert.deepEqual(
+      refundsAfterMarks([at("R-1", "30958"), at("R-1H", "-10990")], partial),
+      [],
+    );
+    assert.deepEqual(
+      refundsAfterMarks([at("R-1", "30958")], partial).map((r) => [
+        r.invoiceNumber,
+        r.refunded,
+        r.full,
+      ]),
+      [["R-1", "10990", false]],
+    );
+    // a second refund after the corrective's mark: news, on the invoice's row only
+    const again = new Map([
+      [
+        "665709",
+        [...partial.get("665709")!, line("REFUND", -5000, "2026-06-20")],
+      ],
+    ]);
+    assert.deepEqual(
+      refundsAfterMarks([at("R-1", "30958"), at("R-1H", "-10990")], again).map(
+        (r) => [r.invoiceNumber, r.refunded],
+      ),
+      [["R-1", "15990"]],
+    );
+  });
+
   it("the report says nothing was written back, one line per invoice; empty when none", () => {
     const report = refundsAfterMarksReport(
       refundsAfterMarks([mark("ACRW-2", "665707")], lines),

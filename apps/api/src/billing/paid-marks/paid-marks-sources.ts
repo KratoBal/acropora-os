@@ -119,7 +119,9 @@ export function simplePayPlanFrom(input: {
   refundsAfter: readonly RefundAfterMark[];
 }): PaidMarkPlan {
   const markable = new Set(
-    input.decisions.flatMap((d) => (d.markable ? [d.mark.invoiceNumber] : [])),
+    input.decisions.flatMap((d) =>
+      d.markable ? d.marks.map((mark) => mark.invoiceNumber) : [],
+    ),
   );
   const { marks, markedBefore } = simplePayMarksToWrite({
     decisions: input.decisions,
@@ -174,7 +176,9 @@ export async function simplePayPaidMarkPlan(
     decideSimplePayOrder(order),
   );
   const markable = new Set(
-    decisions.flatMap((d) => (d.markable ? [d.mark.invoiceNumber] : [])),
+    decisions.flatMap((d) =>
+      d.markable ? d.marks.map((mark) => mark.invoiceNumber) : [],
+    ),
   );
   return simplePayPlanFrom({
     decisions,

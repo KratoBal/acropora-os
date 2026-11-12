@@ -241,26 +241,30 @@ describe("the source plans: what needs a person", () => {
         {
           orderKey: "47679-1",
           markable: true,
-          mark: {
-            invoiceNumber: "W-1",
-            date: "2026-09-28",
-            amount: "29210",
-            title: "bankkártya",
-            note: "SimplePay",
-            sourceRef: "t1",
-          },
+          marks: [
+            {
+              invoiceNumber: "W-1",
+              date: "2026-09-28",
+              amount: "29210",
+              title: "bankkártya",
+              note: "SimplePay",
+              sourceRef: "t1",
+            },
+          ],
         },
         {
           orderKey: "47679-2",
           markable: true,
-          mark: {
-            invoiceNumber: "W-2",
-            date: "2026-09-28",
-            amount: "100",
-            title: "bankkártya",
-            note: "SimplePay",
-            sourceRef: "t2",
-          },
+          marks: [
+            {
+              invoiceNumber: "W-2",
+              date: "2026-09-28",
+              amount: "100",
+              title: "bankkártya",
+              note: "SimplePay",
+              sourceRef: "t2",
+            },
+          ],
         },
         {
           orderKey: "47679-3",
@@ -273,7 +277,7 @@ describe("the source plans: what needs a person", () => {
         {
           orderKey: "47679-4",
           markable: false,
-          reason: "PARTLY_REFUNDED",
+          reason: "CORRECTIVE_MISSING",
           invoiceNumber: "W-4",
           completed: "100",
           refunded: "40",
@@ -300,7 +304,7 @@ describe("the source plans: what needs a person", () => {
       plan.exceptions.map((e) => `${e.reference}:${e.reason}:${e.attention}`),
       [
         "W-3:NOT_CARD:false",
-        "W-4:PARTLY_REFUNDED:true",
+        "W-4:CORRECTIVE_MISSING:true",
         "W-2:MARKED_BEFORE:false",
         "W-5:REFUNDED_AFTER_MARK:true",
       ],

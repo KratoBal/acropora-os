@@ -67,14 +67,16 @@ describe("decideSimplePayOrder: a settled card invoice is marked", () => {
     assert.deepEqual(decision, {
       orderKey: "665706",
       markable: true,
-      mark: {
-        invoiceNumber: "ACRW-2026/00512",
-        date: "2026-09-28",
-        amount: "29210",
-        title: "bankkártya",
-        note: "SimplePay, 2026-09-28, tranzakció: 504312345",
-        sourceRef: "504312345",
-      },
+      marks: [
+        {
+          invoiceNumber: "ACRW-2026/00512",
+          date: "2026-09-28",
+          amount: "29210",
+          title: "bankkártya",
+          note: "SimplePay, 2026-09-28, tranzakció: 504312345",
+          sourceRef: "504312345",
+        },
+      ],
     });
   });
 
@@ -87,12 +89,12 @@ describe("decideSimplePayOrder: a settled card invoice is marked", () => {
       [invoice("ACRW-2026/00512", 29210)],
     );
     assert.ok(decision.markable);
-    assert.equal(decision.mark.date, "2026-09-29");
+    assert.equal(decision.marks[0]!.date, "2026-09-29");
     assert.equal(
-      decision.mark.note,
+      decision.marks[0]!.note,
       "SimplePay, 2026-09-29, tranzakció: 504311111, 504399999",
     );
-    assert.equal(decision.mark.sourceRef, "504311111,504399999");
+    assert.equal(decision.marks[0]!.sourceRef, "504311111,504399999");
   });
 
   it("a cancelled invoice next to the live one on the same order: the live one is marked", () => {
@@ -104,7 +106,7 @@ describe("decideSimplePayOrder: a settled card invoice is marked", () => {
       ],
     );
     assert.ok(decision.markable);
-    assert.equal(decision.mark.invoiceNumber, "ACRW-2026/00512");
+    assert.equal(decision.marks[0]!.invoiceNumber, "ACRW-2026/00512");
   });
 
   it("projected with an empty payments element (known, nothing paid): marked", () => {
@@ -140,31 +142,20 @@ describe("decideSimplePayOrder: a refund holds the mark back", () => {
   });
 
   /*
-    A RÉSZLEGES VISSZATÉRÍTÉS (c03e9896, Balázs 2026-11-12 10:25: kezelni kell).
-    MI PIROSÍT: ha a jelölés a teljes bruttóval menne; ha a csökkentett
-    összegű számla nem jelölődne; ha a helyesbítő előjele számítana; ha egy
-    helyesbítő második számlának számítana; ha egy kisebb helyesbítő mellett
-    is jelölne.
+    A RÉSZLEGES VISSZATÉRÍTÉS (c03e9896; az alak acrobot döntése, 48818 és
+    48823): bizonylatonként a tényleges pénzmozgás. MI PIROSÍT: ha a teljes
+    összegű számla a nettóval jelölődne (rajta a visszatérítés nyitva
+    maradna); ha a helyesbítő jelöletlen maradna, vagy nem a saját negatív
+    összegével, a visszatérítés napjával és tranzakciójával jelölődne; ha a
+    helyesbítő előjele számítana; ha helyesbítő nélkül, kisebb vagy
+    sztornózott helyesbítővel bármi jelölődne; ha a csökkentett összegű
+    számla nem jelölődne.
   */
   const partial = [
     line("1", "COMPLETED", 30958, "2026-06-10"),
     line("2", "REFUND", -10990, "2026-06-12"),
   ];
-  it("a partial refund, the invoice of the reduced sum: marked with what stayed paid", () => {
-    const decision = decide(partial, [invoice("ACRW-2026/00903", 19968)]);
-    assert.ok(decision.markable);
-    assert.deepEqual(
-      [decision.mark.invoiceNumber, decision.mark.amount, decision.mark.date],
-      ["ACRW-2026/00903", "19968", "2026-06-10"],
-    );
-    assert.equal(
-      decision.mark.note,
-      "SimplePay, 2026-06-10, tranzakció: 1, visszatérítés: 2",
-    );
-    assert.equal(decision.mark.sourceRef, "1");
-  });
-
-  it("a partial refund, the invoice of the full sum and its corrective, either sign: marked with what stayed paid", () => {
+  it("the invoice of the full sum and its corrective: each marked with its own money, either sign", () => {
     for (const [kind, gross] of [
       ["HS", -10990],
       ["HS", 10990],
@@ -175,24 +166,82 @@ describe("decideSimplePayOrder: a refund holds the mark back", () => {
         invoice(`ACRW-2026/${kind}`, gross, { corrective: true }),
       ]);
       assert.ok(decision.markable, `${kind} ${gross}`);
-      assert.deepEqual(
-        [decision.mark.invoiceNumber, decision.mark.amount],
-        ["ACRW-2026/00903", "19968"],
-      );
+      assert.deepEqual(decision.marks, [
+        {
+          invoiceNumber: "ACRW-2026/00903",
+          date: "2026-06-10",
+          amount: "30958",
+          title: "bankkártya",
+          note: "SimplePay, 2026-06-10, tranzakció: 1, visszatérítés: 2",
+          sourceRef: "1",
+        },
+        {
+          invoiceNumber: `ACRW-2026/${kind}`,
+          date: "2026-06-12",
+          amount: "-10990",
+          title: "bankkártya",
+          note: "SimplePay visszatérítés, 2026-06-12, tranzakció: 2",
+          sourceRef: "2",
+        },
+      ]);
     }
   });
 
-  it("a partial refund, a corrective for less, or a cancelled one: still a question", () => {
-    for (const corrective of [
-      invoice("ACRW-2026/H", -5000, { corrective: true }),
-      invoice("ACRW-2026/H", -10990, { corrective: true, cancelled: true }),
-    ])
-      assert.equal(
-        reasonOf(
-          decide(partial, [invoice("ACRW-2026/00903", 30958), corrective]),
-        ),
-        "PARTLY_REFUNDED",
+  it("the invoice already of the reduced sum, no corrective: marked with what stayed paid", () => {
+    const decision = decide(partial, [invoice("ACRW-2026/00903", 19968)]);
+    assert.ok(decision.markable);
+    assert.deepEqual(
+      decision.marks.map((m) => [m.invoiceNumber, m.amount, m.date]),
+      [["ACRW-2026/00903", "19968", "2026-06-10"]],
+    );
+  });
+
+  it("the invoice of the full sum without a corrective: nothing is marked, the corrective is missing", () => {
+    assert.equal(
+      reasonOf(decide(partial, [invoice("ACRW-2026/00903", 30958)])),
+      "CORRECTIVE_MISSING",
+    );
+  });
+
+  it("a corrective for less than the refund: nothing is marked", () => {
+    assert.equal(
+      reasonOf(
+        decide(partial, [
+          invoice("ACRW-2026/00903", 30958),
+          invoice("ACRW-2026/H", -5000, { corrective: true }),
+        ]),
+      ),
+      "CORRECTIVE_MISSING",
+    );
+  });
+
+  it("a cancelled corrective credits nothing: nothing is marked", () => {
+    assert.equal(
+      reasonOf(
+        decide(partial, [
+          invoice("ACRW-2026/00903", 30958),
+          invoice("ACRW-2026/H", -10990, { corrective: true, cancelled: true }),
+        ]),
+      ),
+      "CORRECTIVE_MISSING",
+    );
+  });
+
+  it("a corrective already paid, or not yet projected: the order waits, named by the corrective", () => {
+    for (const [overrides, reason] of [
+      [{ paidAmount: D(-10990) }, "ALREADY_PAID"],
+      [{ paymentsKnown: null }, "PAYMENTS_UNKNOWN"],
+    ] as const) {
+      const decision = decide(partial, [
+        invoice("ACRW-2026/00903", 30958),
+        invoice("ACRW-2026/H", -10990, { corrective: true, ...overrides }),
+      ]);
+      assert.ok(!decision.markable);
+      assert.deepEqual(
+        [decision.reason, decision.invoiceNumber],
+        [reason, "ACRW-2026/H"],
       );
+    }
   });
 
   it("a partial refund: a question, and the dry run says how much", () => {
@@ -204,7 +253,7 @@ describe("decideSimplePayOrder: a refund holds the mark back", () => {
       [invoice("ACRW-2026/00512", 29210)],
     );
     assert.ok(!decision.markable);
-    assert.equal(decision.reason, "PARTLY_REFUNDED");
+    assert.equal(decision.reason, "CORRECTIVE_MISSING");
     assert.equal(decision.completed, "29210");
     assert.equal(decision.refunded, "10000");
   });
