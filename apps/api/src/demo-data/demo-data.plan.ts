@@ -79,12 +79,35 @@ export interface DemoPosSale {
   totalGross: string;
 }
 
+/**
+ * A PRODUCT WITH A PRICE HISTORY AND A RUNNING OWN SALE (card 90c54873, V0.2 Omnibus), so the
+ * "lowest price of the 30 days before the reduction" can be looked at on the stage.
+ *
+ * INERT ON PURPOSE: `webshopExcluded` is true and `webshopSellable` false, and the product has
+ * no channel listing, so no projection round (Medusa, UNAS stock push) picks it up. It exists
+ * in the OS only; the OS product page and the Omnibus reader see it.
+ */
+export interface DemoProduct {
+  /** the variant's SKU; carries the `DEMO-` prefix, the key the row is found and removed by */
+  sku: string;
+  name: string;
+  /** the own list price rows, oldest first; whole HUF, gross */
+  history: { at: Date; gross: number }[];
+  /** the own sale that runs on the run day (gross); the history's last row is the list price it runs on */
+  sale: { gross: number; startsAt: Date; endsAt: Date };
+}
+
 export interface DemoPlan {
   customers: Prisma.CustomerUncheckedCreateInput[];
   quotes: DemoQuote[];
   posSales: DemoPosSale[];
   incomingInvoices: Prisma.IncomingBillingDocumentUncheckedCreateInput[];
+  products: DemoProduct[];
 }
+
+/** The instant a demo price row or sale boundary is observed: 10:00 UTC of the offset day. */
+const demoInstant = (today: string, daysFromToday: number): Date =>
+  new Date(`${plusDays(today, daysFromToday)}T10:00:00Z`);
 
 /** `YYYY-MM-DD` plus whole days, in UTC (the input is already a Budapest calendar day). */
 export function plusDays(day: string, days: number): string {
@@ -389,6 +412,29 @@ const SEEDS: InvoiceSeed[] = [
   },
 ];
 
+/*
+  THE OMNIBUS SHAPE: the sale began 10 days ago, so the reference window is the 30 days before that
+  (days -40 to -10). The lowest price in it is 11 200 (from day -35 until day -20); the list price
+  was 12 900 before and after, and the sale price 10 900 is NOT the reference (it is the reduction
+  itself). The history begins at day -60, before the window, so the answer is a complete one.
+*/
+const demoProducts = (today: string): DemoProduct[] => [
+  {
+    sku: `${DEMO_PREFIX}P-001`,
+    name: "DEMO Akciós vízforgató szivattyú",
+    history: [
+      { at: demoInstant(today, -60), gross: 12900 },
+      { at: demoInstant(today, -35), gross: 11200 },
+      { at: demoInstant(today, -20), gross: 12900 },
+    ],
+    sale: {
+      gross: 10900,
+      startsAt: demoInstant(today, -10),
+      endsAt: demoInstant(today, 20),
+    },
+  },
+];
+
 /**
  * THE PLAN FOR ONE DAY. `today` is the Budapest calendar day (`YYYY-MM-DD`); the dates are
  * offsets from it, so the quotes are still valid and the invoices still look recent on the day
@@ -540,5 +586,6 @@ export function demoPlan(today: string): DemoPlan {
     quotes,
     posSales: POS_SEEDS.map((seed) => posSaleRow(today, seed)),
     incomingInvoices: SEEDS.map((seed) => invoiceRow(today, seed)),
+    products: demoProducts(today),
   };
 }

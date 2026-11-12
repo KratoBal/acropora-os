@@ -3,6 +3,7 @@ import { after, before, describe, it } from "node:test";
 
 import { prisma } from "@acropora/database";
 
+import { lowestPriceBeforeCurrentReduction } from "../products/price-history/lowest-price.reader.js";
 import { integrationDatabaseGate } from "../common/integration-database.js";
 import { nincsMaradek } from "../common/takaritas-leltar.js";
 import { prismaDemoStore } from "./demo-data.cli.js";
@@ -16,6 +17,7 @@ import { DEMO_PREFIX, demoPlan } from "./demo-data.plan.js";
  */
 const gate = integrationDatabaseGate(process.env);
 const KEEP_CUSTOMER = "KEEP-demo-data-it-1";
+const KEEP_VARIANT_SKU = "KEEP-demo-data-it-p1";
 const DAY = "2026-11-04";
 
 async function counts() {
@@ -32,6 +34,9 @@ async function counts() {
     incomingInvoices: await prisma.incomingBillingDocument.count({
       where: { externalId: { startsWith: DEMO_PREFIX } },
     }),
+    products: await prisma.product.count({
+      where: { variants: { some: { sku: { startsWith: DEMO_PREFIX } } } },
+    }),
   };
 }
 
@@ -46,6 +51,7 @@ describe(
       quotes: plan.quotes.length,
       posSales: plan.posSales.length,
       incomingInvoices: plan.incomingInvoices.length,
+      products: plan.products.length,
     };
 
     before(async () => {
@@ -53,6 +59,15 @@ describe(
       await store.remove();
       await prisma.customer.deleteMany({
         where: { customerNumber: KEEP_CUSTOMER },
+      });
+      await prisma.product.deleteMany({
+        where: { variants: { some: { sku: KEEP_VARIANT_SKU } } },
+      });
+      await prisma.product.create({
+        data: {
+          name: "Nem demo termék",
+          variants: { create: { sku: KEEP_VARIANT_SKU } },
+        },
       });
       await prisma.customer.create({
         data: {
@@ -68,12 +83,22 @@ describe(
       await prisma.customer.deleteMany({
         where: { customerNumber: KEEP_CUSTOMER },
       });
+      await prisma.product.deleteMany({
+        where: { variants: { some: { sku: KEEP_VARIANT_SKU } } },
+      });
       const left = await counts();
       nincsMaradek([
         { nev: "DEMO ügyfelek", darab: left.customers },
         { nev: "DEMO ajánlatok", darab: left.quotes },
         { nev: "DEMO POS eladások", darab: left.posSales },
         { nev: "DEMO bejövő számlák", darab: left.incomingInvoices },
+        { nev: "DEMO termékek", darab: left.products },
+        {
+          nev: "a kontroll termék (a takarítás elvitte, vagy a törlés nem fogta meg)",
+          darab: await prisma.product.count({
+            where: { variants: { some: { sku: KEEP_VARIANT_SKU } } },
+          }),
+        },
         {
           nev: "a kontroll ügyfél",
           darab: await prisma.customer.count({
@@ -91,8 +116,63 @@ describe(
         quotes: 0,
         posSales: 0,
         incomingInvoices: 0,
+        products: 0,
       });
       assert.deepEqual(await counts(), planned);
+    });
+
+    it("writes the demo product inert, with its own history rows and the running sale", async () => {
+      for (const planned of plan.products) {
+        const variant = await prisma.productVariant.findUniqueOrThrow({
+          where: { sku: planned.sku },
+          include: {
+            product: { include: { channelListings: true } },
+            priceHistory: { where: { source: "OWN" } },
+          },
+        });
+        assert.equal(variant.product.webshopExcluded, true, planned.sku);
+        assert.equal(variant.product.webshopSellable, false, planned.sku);
+        assert.equal(variant.product.channelListings.length, 0, planned.sku);
+        // one row per list price in the plan and one for the sale: nothing else, nothing twice
+        assert.equal(
+          variant.priceHistory.length,
+          planned.history.length + 1,
+          planned.sku,
+        );
+        assert.equal(
+          variant.priceHistory.filter((r) => r.saleGrossPrice !== null).length,
+          1,
+          planned.sku,
+        );
+        // no stock row and no UNAS push behind it
+        assert.equal(
+          await prisma.stockItem.count({ where: { variantId: variant.id } }),
+          0,
+        );
+        assert.equal(
+          await prisma.unasStockSyncOutbox.count({
+            where: { variantId: variant.id },
+          }),
+          0,
+        );
+      }
+    });
+
+    it("answers the Omnibus question for the demo product: the lowest price before the sale, complete", async () => {
+      const planned = plan.products[0]!;
+      const variant = await prisma.productVariant.findUniqueOrThrow({
+        where: { sku: planned.sku },
+        select: { id: true },
+      });
+      // the plan's day is fixed (DAY), the sale runs on it: ask at noon of that day
+      const reference = await lowestPriceBeforeCurrentReduction(
+        prisma,
+        variant.id,
+        new Date(`${DAY}T12:00:00Z`),
+      );
+      assert.ok(reference);
+      assert.equal(reference.amount.toString(), "11200");
+      assert.equal(reference.complete, true);
     });
 
     it("gives every quote its version, blocks, items, milestones and event", async () => {
@@ -164,10 +244,17 @@ describe(
         quotes: 0,
         posSales: 0,
         incomingInvoices: 0,
+        products: 0,
       });
       assert.equal(
         await prisma.customer.count({
           where: { customerNumber: KEEP_CUSTOMER },
+        }),
+        1,
+      );
+      assert.equal(
+        await prisma.product.count({
+          where: { variants: { some: { sku: KEEP_VARIANT_SKU } } },
         }),
         1,
       );
