@@ -1050,10 +1050,17 @@ describe("pairingOfRow: the invoice identity as the second key", () => {
     documentNumber: NUMBER,
     supplierName: "niceshops GmbH",
     supplierTaxNumber: "ATU63964918",
+    grossAmount: D(338018),
+    currency: "HUF",
     ...over,
   });
   const upload = pairing({
-    document: candidate({ id: "upload", identities: [identity] }),
+    document: candidate({
+      id: "upload",
+      identities: [identity],
+      gross: D(338018),
+      currency: "HUF",
+    }),
   });
   const byIdentity = new Map<string, DocumentPairing>([
     ["upload", upload],
@@ -1122,6 +1129,48 @@ describe("pairingOfRow: the invoice identity as the second key", () => {
     );
     assert.equal(
       pairingOfRow(row({ supplierTaxNumber: "ATU11111111" }), byIdentity),
+      undefined,
+    );
+  });
+
+  it("the identity does not look at the amount, so the PAID answer needs the same gross and currency (barracuda, #2490)", () => {
+    // the same number and tax number, another gross (a correction, a typo, a part payment): not the paid invoice
+    assert.equal(
+      pairingOfRow(row({ grossAmount: D(5000) }), byIdentity),
+      undefined,
+    );
+    assert.equal(
+      bankMatchOf(
+        { ...row({ grossAmount: D(5000) }), kindCode: "SZ" },
+        byIdentity,
+      ).state,
+      "UNPAIRED",
+    );
+    // within the forint tolerance it is the same invoice; beyond it, not
+    assert.equal(
+      pairingOfRow(row({ grossAmount: D("338018.6") }), byIdentity),
+      upload,
+    );
+    assert.equal(
+      pairingOfRow(row({ grossAmount: D("338019.5") }), byIdentity),
+      undefined,
+    );
+    // another currency never matches, and a row without an amount cannot be verified
+    assert.equal(pairingOfRow(row({ currency: "EUR" }), byIdentity), undefined);
+    assert.equal(
+      pairingOfRow(row({ grossAmount: undefined }), byIdentity),
+      undefined,
+    );
+    // a document that gives no gross cannot prove the amount: no match
+    const noGross = pairing({
+      document: candidate({
+        id: "upload",
+        identities: [identity],
+        gross: null,
+      }),
+    });
+    assert.equal(
+      pairingOfRow(row(), new Map([[identity, noGross]])),
       undefined,
     );
   });

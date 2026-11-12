@@ -75,7 +75,7 @@ import {
   paperOriginalOfRow,
   pairingNumberKeys,
 } from "../billing/incoming-billing-documents.js";
-import { invoiceIdentity } from "../billing/invoice-identity.js";
+import { invoiceIdentity, sameGross } from "../billing/invoice-identity.js";
 import {
   packageDataNote,
   storedValues,
@@ -1288,7 +1288,10 @@ export class MissingInvoicesService {
       eltérhet). Az összevonás azonossága (`inv:`) viszont számlaszám + adószám-számjegyek, és ugyanezt adja a
       bejövő számla sora: így a rekord fizetettnek látszik, akárhány entitásban áll a számla.
     */
-    const itemOfIdentity = new Map<string, string>();
+    const itemOfIdentity = new Map<
+      string,
+      { itemId: string; gross: Prisma.Decimal | null; currency: string }[]
+    >();
     /*
       A KÉTSZER FIZETETT TÉTEL IS PÁROSÍTOTT (task os-hianyzo-szamlak-unpaid, 2026-11-11, a Vízművek
       105300361726 októberi eset): a Kétszer fizetett állapot a terhelés felől „nem Megvan”, de a számla
@@ -1309,14 +1312,23 @@ export class MissingInvoicesService {
             if (key && !itemOfDocument.has(key))
               itemOfDocument.set(key, item.id);
           for (const identity of document.identities ?? [])
-            if (identity.startsWith("inv:") && !itemOfIdentity.has(identity))
-              itemOfIdentity.set(identity, item.id);
+            if (identity.startsWith("inv:"))
+              itemOfIdentity.set(identity, [
+                ...(itemOfIdentity.get(identity) ?? []),
+                {
+                  itemId: item.id,
+                  gross: document.gross,
+                  currency: document.currency,
+                },
+              ]);
         }
     const itemOfRow = (row: {
       sourceDocumentId: string | null;
       documentNumber: string;
       supplierName: string;
       supplierTaxNumber: string | null;
+      grossAmount: Prisma.Decimal;
+      currency: string;
     }) => {
       const numberKeys = pairingNumberKeys(
         row.documentNumber,
@@ -1328,13 +1340,16 @@ export class MissingInvoicesService {
           ? itemOfDocument.get(row.sourceDocumentId)
           : undefined) ??
         numberKeys.map((key) => itemOfDocument.get(key)).find(Boolean) ??
-        itemOfIdentity.get(
-          invoiceIdentity(
-            row.documentNumber,
-            row.supplierTaxNumber,
-            row.supplierName,
-          ),
-        )
+        // az azonosság az összeget nem nézi: csak egyező bruttónál és devizánál fizetett (`sameGross`)
+        itemOfIdentity
+          .get(
+            invoiceIdentity(
+              row.documentNumber,
+              row.supplierTaxNumber,
+              row.supplierName,
+            ),
+          )
+          ?.find((candidate) => sameGross(row, candidate))?.itemId
       );
     };
 

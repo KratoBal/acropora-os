@@ -1,3 +1,5 @@
+import type { Prisma } from "@acropora/database";
+
 import { taxBase } from "./billing-duplicates.js";
 
 /**
@@ -24,3 +26,24 @@ export const invoiceIdentity = (
   taxNumber: string | null | undefined,
   supplierName: string,
 ): string => `inv:${invoiceIdentityKey(number, taxNumber, supplierName)}`;
+
+/**
+ * AZ AZONOSSÁG ÖSSZEGET NEM NÉZ, EZÉRT A FIZETETTSÉGET EZ VÉDI (barracuda, #2490): egy bejövő rekord, aminek a bruttója
+ * eltér a párosított dokumentuméval (helyesbítés, elírás, részfizetés), nem látszhat csendben fizetettnek. Azonos
+ * deviza kell, és az összeg a párosító `exact` szabályának tűrésén belül (forintnál 1 Ft, devizában 0,05). Ha a
+ * dokumentum nem ad bruttót, az egyezés nem bizonyítható, tehát nem egyezés.
+ */
+export function sameGross(
+  row: { grossAmount: Prisma.Decimal; currency: string },
+  document: { gross: Prisma.Decimal | null; currency: string },
+): boolean {
+  if (document.gross === null) return false;
+  if (row.currency.toUpperCase() !== document.currency.toUpperCase())
+    return false;
+  const tolerance = row.currency.toUpperCase() === "HUF" ? 1 : 0.05;
+  return (
+    Math.abs(
+      Math.abs(Number(row.grossAmount)) - Math.abs(Number(document.gross)),
+    ) <= tolerance
+  );
+}

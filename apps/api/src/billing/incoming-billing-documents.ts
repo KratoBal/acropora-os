@@ -19,7 +19,7 @@ import {
   shownNumber,
 } from "../missing-invoices/missing-invoice-matching.js";
 import { supplierTaxBase } from "./billing-duplicates.js";
-import { invoiceIdentity } from "./invoice-identity.js";
+import { invoiceIdentity, sameGross } from "./invoice-identity.js";
 import { externalKindLabel as feedKindLabel } from "./billing-document-list.js";
 
 /**
@@ -84,12 +84,19 @@ export function paymentStateOf(row: {
  * forrás-dokumentum szerinti keresés nem találta, és a számla „kifizetetlen” maradt egy már kifizetett terhelés mellett.
  * A saját párosítás, ha van terhelése, mindig előbb nyer: az azonosság csak a hiányt pótolja, a meglévőt nem írja felül.
  */
-export function pairingOfRow<T extends Pick<DocumentPairing, "debits">>(
+export function pairingOfRow<
+  T extends Pick<DocumentPairing, "debits"> & {
+    document?: { gross: Prisma.Decimal | null; currency: string };
+  },
+>(
   row: {
     sourceDocumentId: string | null;
     documentNumber?: string;
     supplierName?: string;
     supplierTaxNumber?: string | null;
+    /** az azonosság szerinti párosításhoz kell: az összeg és a deviza egyezése nélkül nem fizetett (`sameGross`) */
+    grossAmount?: Prisma.Decimal;
+    currency?: string;
   },
   pairings: ReadonlyMap<string, T>,
 ): T | undefined {
@@ -97,15 +104,24 @@ export function pairingOfRow<T extends Pick<DocumentPairing, "debits">>(
     ? pairings.get(row.sourceDocumentId)
     : undefined;
   if (direct && direct.debits.length > 0) return direct;
-  const byIdentity = row.documentNumber
-    ? pairings.get(
-        invoiceIdentity(
-          row.documentNumber,
-          row.supplierTaxNumber,
-          row.supplierName ?? "",
-        ),
-      )
-    : undefined;
+  const found =
+    row.documentNumber && row.grossAmount && row.currency
+      ? pairings.get(
+          invoiceIdentity(
+            row.documentNumber,
+            row.supplierTaxNumber,
+            row.supplierName ?? "",
+          ),
+        )
+      : undefined;
+  const byIdentity =
+    found?.document &&
+    sameGross(
+      { grossAmount: row.grossAmount!, currency: row.currency! },
+      found.document,
+    )
+      ? found
+      : undefined;
   if (byIdentity && byIdentity.debits.length > 0) return byIdentity;
   return direct ?? byIdentity;
 }
@@ -124,6 +140,7 @@ export function bankMatchOf(
     supplierTaxNumber?: string | null;
     kindCode: string;
     grossAmount: Prisma.Decimal;
+    currency?: string;
     /** „Nem könyvelendő” (Balázs, 2026-10-26): ez nyer minden más ok előtt. */
     notBookable?: boolean;
   },

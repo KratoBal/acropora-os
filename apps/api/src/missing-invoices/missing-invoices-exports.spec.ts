@@ -1099,7 +1099,9 @@ describe("the accountant package by invoice date", () => {
     „kifizetetlen” maradt egy már kifizetett terhelés mellett.
 
     MI PIROSÍT: ha a niceshops-pár a ki nem fizetett listán marad; ha egy MÁS számlaszám vagy MÁS adószám (ugyanaz
-    a név, ugyanaz az összeg) fizetettnek látszik az azonosság miatt.
+    a név, ugyanaz az összeg) fizetettnek látszik az azonosság miatt; ha ugyanaz a számlaszám és adószám, de MÁS
+    bruttó (helyesbítés, elírás, részfizetés) fizetettnek látszik, mert az azonosság az összeget nem nézi
+    (barracuda, #2490).
   */
   it("an incoming invoice record with the same invoice number and tax number as the PAIRED uploaded document is paid, not unpaid", async () => {
     const NUMBER = "R49010000026240667";
@@ -1160,6 +1162,10 @@ describe("the accountant package by invoice date", () => {
       await unpaidOf([row({ supplierTaxNumber: "ATU11111111" })]),
       [NUMBER],
     );
+    // ugyanaz a szám és adószám, MÁS bruttó: nem a kifizetett számla, kifizetetlen marad
+    assert.deepEqual(await unpaidOf([row({ grossAmount: D(5000) })]), [NUMBER]);
+    // a forintos tűrésen belül (1 Ft) ugyanaz a számla
+    assert.deepEqual(await unpaidOf([row({ grossAmount: D("338018.6") })]), []);
   });
 
   it("an unreadable PDF is the one thing the page cannot see: the page says it is in the package, the cover says it is unreadable", async () => {

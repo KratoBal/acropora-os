@@ -231,16 +231,16 @@ describe(
       // another gross is, with no debit of that amount
       const pairings = await missing.documentPairings();
       assert.deepEqual(diagnoseUnpaired([row], pairings, mine), []);
-      // the niceshops shape: a row of ANOTHER entity (unknown source document) with the same invoice number and
-      // tax number is the same invoice, so it reads as paired through the invoice identity
+      // the niceshops shape: a row of ANOTHER entity (unknown source document) with the same invoice number, tax number
+      // AND gross is the same invoice, so it reads as paired through the invoice identity
       const sameInvoice = { ...row, sourceDocumentId: "nincs-ilyen" };
       assert.equal(bankMatchOf(sameInvoice, pairings).state, "PAIRED");
       assert.deepEqual(diagnoseUnpaired([sameInvoice], pairings, mine), []);
-      // another invoice number: no pairing by identity, so it is listed, with no debit of that amount
+      // the same number and tax number with ANOTHER gross is not the paid invoice (a correction, a typo, a part
+      // payment): it stays listed, with no debit of that amount
       const other = {
         ...row,
         sourceDocumentId: "nincs-ilyen",
-        documentNumber: `${NUMBER}-B`,
         grossAmount: new Prisma.Decimal(5000),
       };
       assert.deepEqual(
@@ -248,7 +248,18 @@ describe(
           line.number,
           line.debits.length,
         ]),
-        [[`${NUMBER}-B`, 0]],
+        [[NUMBER, 0]],
+      );
+      // another invoice number: no pairing by identity either
+      const otherNumber = {
+        ...sameInvoice,
+        documentNumber: `${NUMBER}-B`,
+      };
+      assert.deepEqual(
+        diagnoseUnpaired([otherNumber], pairings, mine).map(
+          (line) => line.number,
+        ),
+        [`${NUMBER}-B`],
       );
     });
   },
