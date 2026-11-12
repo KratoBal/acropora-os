@@ -242,13 +242,17 @@ process.exit(r.status ?? 1);
     const { dir, ir } = repo(BAZIS);
     ir("pkg/src/a.ts", `${BAZIS["pkg/src/a.ts"]}// valtozas\n`);
     const mappa = mkdtempSync(join(tmpdir(), "kapusor-opts-"));
-    const naplo = join(mappa, "node-options.txt");
+    const naplo = join(mappa, "node-options.json");
     const figyelo = join(mappa, "figyelo.mjs");
+    // A tsc alfolyamat SAJAT heap-plafonja (a V8 mondja meg), nem a kornyezeti valtozo szovege: a forras-szurok
+    // (reefclub-environment, env-template-coverage) minden olvasott valtozot a sablonokba vagy listakba kovetelnek.
     writeFileSync(
       figyelo,
       `import { appendFileSync } from "node:fs";
+import { getHeapStatistics } from "node:v8";
 import { spawnSync } from "node:child_process";
-if (process.argv.includes("--listFiles")) appendFileSync(${JSON.stringify(naplo)}, (process.env["NODE_OPTIONS"] ?? "") + "\\n");
+if (process.argv.includes("--listFiles"))
+  appendFileSync(${JSON.stringify(naplo)}, JSON.stringify({ heap: getHeapStatistics().heap_size_limit, maps: process.sourceMapsEnabled }) + "\\n");
 const r = spawnSync(process.execPath, [${JSON.stringify(TSC)}, ...process.argv.slice(2)], { stdio: "inherit" });
 process.exit(r.status ?? 1);
 `,
@@ -258,9 +262,17 @@ process.exit(r.status ?? 1);
       NODE_OPTIONS: "--enable-source-maps",
     });
     assert.equal(r.kod, 0, r.ki);
-    const latott = readFileSync(naplo, "utf8");
-    assert.match(latott, /--enable-source-maps/);
-    assert.match(latott, /--max-old-space-size=1536/);
+    const latott = JSON.parse(readFileSync(naplo, "utf8").trim()) as {
+      heap: number;
+      maps: boolean;
+    };
+    // a hivo opcioja megmaradt (forras-terkepek), es a 1536 MB-os plafon is ott van (a V8 limitje ~1,5-1,7 GB: a
+    // nem-plafonos alapertek ennel jóval nagyobb, ezert a plafon nelkul ez piros)
+    assert.equal(latott.maps, true);
+    assert.ok(
+      latott.heap > 1.3e9 && latott.heap < 1.9e9,
+      `a tsc heap-limitje ${latott.heap}`,
+    );
   });
 
   it("rossz bazis: megnevezi, nem futott semmi, kilepesi kod 2", () => {
