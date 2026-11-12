@@ -15,7 +15,10 @@ import {
   type SimplePayReport,
 } from "./simplepay-report.parser.js";
 import { SimplePayMonthlyReportXlsx } from "./simplepay-monthly-report.xlsx.js";
-import { resolveSimplePayLine } from "./simplepay-resolution.js";
+import {
+  resolveSimplePayLine,
+  resolveSimplePayRefundOrder,
+} from "./simplepay-resolution.js";
 import {
   SimplePaySettlementRepository,
   type UnresolvedSimplePayLine,
@@ -28,6 +31,12 @@ const REVIEW_REASONS: Record<SimplePayLineError, string> = {
   ORDER_AMBIGUOUS: "Több rendelés illik rá",
   AMOUNT_MISMATCH: "A rendelés végösszege más",
   ORDER_NOT_INVOICED: "A rendelésnek még nincs számlája",
+  REFUND_INVOICE_NOT_CANCELLED:
+    "Teljes visszatérítés: a rendelés számlája nincs sztornózva",
+  REFUND_INVOICE_NOT_CORRECTED:
+    "Részleges visszatérítés: a számla nem a csökkentett összegről szól, helyesbítő sincs",
+  REFUND_AMOUNT_UNEXPLAINED:
+    "Visszatérítés: a fizetett és a visszatérített összeg különbsége nem a rendelés végösszege",
 };
 
 /** What the person sees when a file is refused, per reader error. */
@@ -157,23 +166,46 @@ export class SimplePaySettlementService {
     };
   }
 
-  /** Resolves the given open lines; returns how many became resolved. */
+  /**
+   * Resolves the given open lines; returns how many became resolved. A line
+   * whose order has a refund anywhere (this report or another) is decided by
+   * the order's lines together (resolveSimplePayRefundOrder), the payment and
+   * the refund alike; any other line by itself, as before.
+   */
   private async resolve(
     lines: readonly UnresolvedSimplePayLine[],
   ): Promise<number> {
     if (lines.length === 0) return 0;
-    const candidates = await this.repository.orderCandidates(
-      lines.flatMap((line) =>
-        line.orderKeySuffix ? [line.orderKeySuffix] : [],
-      ),
+    const keys = lines.flatMap((line) =>
+      line.orderKeySuffix ? [line.orderKeySuffix] : [],
     );
-    const resolutions = lines.map((line) => ({
-      lineId: line.id,
-      resolution: resolveSimplePayLine(
-        { orderKeySuffix: line.orderKeySuffix, amount: Number(line.amount) },
-        line.orderKeySuffix ? (candidates.get(line.orderKeySuffix) ?? []) : [],
-      ),
-    }));
+    const [candidates, orderLines] = await Promise.all([
+      this.repository.orderCandidates(keys),
+      this.repository.orderLines(keys),
+    ]);
+    const refunded = [...orderLines]
+      .filter(([, all]) =>
+        all.some((line) => line.transactionStatus === "REFUND"),
+      )
+      .map(([key]) => key);
+    const documents = await this.repository.orderDocuments(refunded);
+    const resolutions = lines.map((line) => {
+      const key = line.orderKeySuffix;
+      return {
+        lineId: line.id,
+        resolution:
+          key && refunded.includes(key)
+            ? resolveSimplePayRefundOrder(
+                orderLines.get(key) ?? [],
+                candidates.get(key) ?? [],
+                documents.get(key) ?? [],
+              )
+            : resolveSimplePayLine(
+                { orderKeySuffix: key, amount: Number(line.amount) },
+                key ? (candidates.get(key) ?? []) : [],
+              ),
+      };
+    });
     await this.repository.saveResolutions(resolutions);
     return resolutions.filter(
       ({ resolution }) => resolution.status === "RESOLVED",
