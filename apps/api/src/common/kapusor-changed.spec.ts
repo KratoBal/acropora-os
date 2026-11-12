@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -34,7 +41,7 @@ const TSC = join(
 
 /**
  * A gazda PATH-ja a gyermekfolyamatoknak. BRACKET-ALAKBAN, nem pontos alakban: a `reefclub-environment.spec.ts` a
- * forrasban `env.NEV` alakot keres, es minden talalt valtozonak vagy tiltottnak, vagy nem-titoknak kell lennie a listan.
+ * forrasban (kornyezet).NEV alakot keres, es minden talalt valtozonak vagy tiltottnak, vagy nem-titoknak kell lennie a listan.
  * A PATH nem az alkalmazas beallitasa, csak a teszt alfolyamatanak kornyezete.
  */
 const HOST_PATH = process.env["PATH"] ?? "";
@@ -162,7 +169,8 @@ describe("kapusor --changed", () => {
     const { dir, ir } = repo(BAZIS);
     ir("pkg/README.md", "csak szoveg\n");
     const r = fut(dir);
-    assert.equal(r.kod, 0, r.ki);
+    // 3, nem 0: egy gep (&& lanc, ageens) a kodot nezi, es a "nem futott" nem zold
+    assert.equal(r.kod, 3, r.ki);
     assert.match(r.ki, /NEM FUTOTT TIPUSELLENORZES/);
     assert.match(r.ki, /pkg\/README\.md {2}\[nem TS fajl\]/);
     assert.ok(!r.ki.includes("ZOLD:"));
@@ -209,7 +217,50 @@ process.exit(r.status ?? 1);
       `${BAZIS["pkg/src/a.ts"]}export const rossz: number = "x";\n`,
     );
     fut(dir);
-    assert.ok(!existsSync(join(dir, "pkg", "tsconfig.kapusor-changed.json")));
+    const maradt = readdirSync(join(dir, "pkg")).filter((f) =>
+      f.startsWith("tsconfig.kapusor-changed"),
+    );
+    assert.deepEqual(maradt, []);
+  });
+
+  it("egy TOROLT TS fajl: a szuro nem lat semmit, kimondja a torlest, es 3-mal lep ki (nem 0)", () => {
+    const { dir } = repo(BAZIS);
+    rmSync(join(dir, "pkg", "src", "a.ts"));
+    const r = fut(dir);
+    assert.equal(r.kod, 3, r.ki);
+    assert.match(r.ki, /TOROLT TS FAJL \(1\)/);
+    assert.match(r.ki, /pkg\/src\/a\.ts/);
+    assert.match(r.ki, /NEM FUTOTT TIPUSELLENORZES/);
+    // a kontroll: a torles tenyleg eltori a b.ts-t, a teljes tsc ezt lenne
+    const teljes = spawnSync(process.execPath, [TSC, "-p", join(dir, "pkg")], {
+      encoding: "utf8",
+    });
+    assert.notEqual(teljes.status, 0);
+  });
+
+  it("ha a hivo NODE_OPTIONS-a heap-plafon nelkuli, a plafon a meglevo ele-moge kerul (a tsc is megkapja)", () => {
+    const { dir, ir } = repo(BAZIS);
+    ir("pkg/src/a.ts", `${BAZIS["pkg/src/a.ts"]}// valtozas\n`);
+    const mappa = mkdtempSync(join(tmpdir(), "kapusor-opts-"));
+    const naplo = join(mappa, "node-options.txt");
+    const figyelo = join(mappa, "figyelo.mjs");
+    writeFileSync(
+      figyelo,
+      `import { appendFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+if (process.argv.includes("--listFiles")) appendFileSync(${JSON.stringify(naplo)}, (process.env["NODE_OPTIONS"] ?? "") + "\\n");
+const r = spawnSync(process.execPath, [${JSON.stringify(TSC)}, ...process.argv.slice(2)], { stdio: "inherit" });
+process.exit(r.status ?? 1);
+`,
+    );
+    const r = fut(dir, {
+      KAPUSOR_TSC: `${process.execPath} ${figyelo}`,
+      NODE_OPTIONS: "--enable-source-maps",
+    });
+    assert.equal(r.kod, 0, r.ki);
+    const latott = readFileSync(naplo, "utf8");
+    assert.match(latott, /--enable-source-maps/);
+    assert.match(latott, /--max-old-space-size=1536/);
   });
 
   it("rossz bazis: megnevezi, nem futott semmi, kilepesi kod 2", () => {
@@ -235,6 +286,8 @@ describe("kapusor-changed segedfuggvenyek", () => {
     };
     szabadMemoriaMB: (d?: string) => number | null;
     heapMB: (s?: string) => number | null;
+    nodeOptionsPlafonnal: (s?: string, alapMB?: number) => string;
+    ideiglenesNev: (pid?: number) => string;
     programMerete: (k: string, gyoker: string) => number;
   }>;
 
@@ -275,6 +328,21 @@ describe("kapusor-changed segedfuggvenyek", () => {
       szabadMemoriaMB(join(tmpdir(), "nincs-ilyen-mappa-kapusor")),
       null,
     );
+  });
+
+  it("nodeOptionsPlafonnal: van plafon: valtozatlan; nincs: a meglevo moge, vagy onalloan; az ideiglenes nev pid-es", async () => {
+    const { nodeOptionsPlafonnal, ideiglenesNev } = await modul;
+    assert.equal(
+      nodeOptionsPlafonnal("--max-old-space-size=900 --x"),
+      "--max-old-space-size=900 --x",
+    );
+    assert.equal(
+      nodeOptionsPlafonnal("--enable-source-maps"),
+      "--enable-source-maps --max-old-space-size=1536",
+    );
+    assert.equal(nodeOptionsPlafonnal(undefined), "--max-old-space-size=1536");
+    assert.equal(nodeOptionsPlafonnal(""), "--max-old-space-size=1536");
+    assert.notEqual(ideiglenesNev(1), ideiglenesNev(2));
   });
 
   it("heapMB es programMerete", async () => {

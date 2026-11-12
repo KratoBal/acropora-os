@@ -16,6 +16,12 @@
  * azt, amit a CI is lat. Ebbol egy ideiglenes tsconfig (`extends` a csomag sajat tsconfigjara, `files`: a valtozott
  * fajlok plusz a csomag `.d.ts` fajljai) fordul `--noEmit --listFiles` mellett. A tsc az importokat kovetve beolvassa a
  * valtozott fajlok fuggosegeit, de CSAK azokat; a program meretebol jon a "hanyat fedtunk" szam.
+ *
+ * KILEPESI KODOK (egy gep, egy `&&` lanc vagy egy ageens a kodot nezi, nem a szoveget): 0 = a fedett resz zold; 1 = tipushiba,
+ * megszakadt a tsc, vagy nem indult el (kevés szabad memoria); 2 = hasznalati hiba / rossz bazis; 3 = NEM FUTOTT
+ * TIPUSELLENORZES (nincs valtozott TS fajl, vagy egyik sem esik a csomag fajlkeszletebe). A 3 azert kulon es nem 0: egy
+ * torolt TS fajl vagy egy Prisma-sema valtozas eltorhet raepulo fajlokat, es a szuro ilyenkor "nincs mit nezni"-t mond;
+ * az nem zold, tehat nem lehet 0.
  */
 
 import { spawnSync } from "node:child_process";
@@ -23,7 +29,9 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, relative, sep } from "node:path";
 
-export const IDEIGLENES = "tsconfig.kapusor-changed.json";
+/** FOLYAMAT-AZONOSITOS nev: ket parhuzamos futas ugyanabban a munkafaban nem irja felul egymas ideiglenes konfigjat. */
+export const ideiglenesNev = (pid = process.pid) =>
+  `tsconfig.kapusor-changed-${pid}.json`;
 const TS_KITERJESZTES = /\.(ts|tsx)$/;
 /**
  * A heap-plafon, ha a hivo nem adott sajatot. Merve 2026-11-12 (apps/api, egy valtozott fajl: 7 repo-fajl a
@@ -55,6 +63,20 @@ export function szabadMemoriaMB(cgroupMappa = "/sys/fs/cgroup") {
   } catch {
     return null;
   }
+}
+
+/**
+ * A NODE_OPTIONS HEAP-PLAFONNAL: ha a hivo mar allitott NODE_OPTIONS-t, de nincs benne heap-plafon (pl. csak
+ * `--enable-source-maps`), a plafon a meglevo ele-moge kerul. Enelkul a tsc a V8 sajat plafonjaval futna, a memoria-kapu
+ * viszont a 1,5 GB-os alapertek alapjan dont, es pont az nyilna ki, ami ellen a kapu all.
+ */
+export function nodeOptionsPlafonnal(
+  nodeOptions,
+  alapMB = ALAPERTELMEZETT_HEAP_MB,
+) {
+  if (heapMB(nodeOptions) !== null) return nodeOptions;
+  const plafon = `--max-old-space-size=${alapMB}`;
+  return nodeOptions ? `${nodeOptions} ${plafon}` : plafon;
 }
 
 /** A `--max-old-space-size=<MB>` erteke a NODE_OPTIONS-bol, vagy null. */
@@ -164,14 +186,25 @@ export function valtozottFajlok(gyoker, bazis) {
     mb.ki.trim(),
   ]);
   const uj = git(gyoker, ["ls-files", "--others", "--exclude-standard"]);
-  if (valtozas.kod !== 0 || uj.kod !== 0)
+  const torolt = git(gyoker, [
+    "diff",
+    "--name-only",
+    "--diff-filter=D",
+    mb.ki.trim(),
+  ]);
+  if (valtozas.kod !== 0 || uj.kod !== 0 || torolt.kod !== 0)
     return { hiba: `git hiba: ${(valtozas.hiba + uj.hiba).trim()}` };
   const fajlok = [
     ...new Set(
       [...valtozas.ki.split("\n"), ...uj.ki.split("\n")].filter(Boolean),
     ),
   ].sort();
-  return { fajlok, mergeBase: mb.ki.trim() };
+  return {
+    fajlok,
+    mergeBase: mb.ki.trim(),
+    // a torolt TS fajlok: a szuro NEM nezi, de a rajuk epulok eltorhetnek, ezert kimondja
+    toroltTs: torolt.ki.split("\n").filter((f) => TS_KITERJESZTES.test(f)),
+  };
 }
 
 /**
@@ -192,7 +225,8 @@ function tscParancs(env, cwd) {
 
 /**
  * A futas: kiirja a nyilatkozatot, csomagonkent lefuttatja a szuk ellenorzest, kiirja az osszesitest.
- * Kilepesi kod: 0 tiszta (vagy nem volt mit nezni, azt kimondva), 1 tipushiba vagy megszakadt a tsc, 2 hasznalati hiba.
+ * Kilepesi kod: 0 a fedett resz zold; 1 tipushiba, megszakadt a tsc vagy nem indult el; 2 hasznalati hiba; 3 NEM FUTOTT
+ * tipusellenorzes (lasd a fajl fejleceben).
  */
 export function main(argumentumok, kornyezet = process.env, ki = console.log) {
   let gyoker = process.cwd();
@@ -204,6 +238,9 @@ export function main(argumentumok, kornyezet = process.env, ki = console.log) {
   }
   if (!bazis || !gyoker) {
     ki("HASZNALAT: kapusor.mjs --changed [--base <ref, alap: origin/main>]");
+    ki(
+      "KILEPESI KOD: 0 a fedett resz zold; 1 hiba/megszakadt/nem indult el; 2 hasznalati hiba; 3 NEM FUTOTT tipusellenorzes.",
+    );
     return 2;
   }
 
@@ -225,9 +262,7 @@ export function main(argumentumok, kornyezet = process.env, ki = console.log) {
 
   const env = {
     ...kornyezet,
-    NODE_OPTIONS:
-      kornyezet.NODE_OPTIONS ??
-      `--max-old-space-size=${ALAPERTELMEZETT_HEAP_MB}`,
+    NODE_OPTIONS: nodeOptionsPlafonnal(kornyezet.NODE_OPTIONS),
   };
   // csak akkor van mit nezni, ha van TS fajl; a memoria-kaput a tenyleges futas elott kell atengedni
   if (csomagok.size > 0) {
@@ -299,11 +334,12 @@ export function main(argumentumok, kornyezet = process.env, ki = console.log) {
       continue;
     }
 
-    const ideiglenes = join(cwd, IDEIGLENES);
+    const nev = ideiglenesNev();
+    const ideiglenes = join(cwd, nev);
     writeFileSync(ideiglenes, JSON.stringify(terv.tsconfig, null, 2));
     let r;
     try {
-      r = futtat(cwd, ["-p", IDEIGLENES, "--noEmit", "--listFiles"]);
+      r = futtat(cwd, ["-p", nev, "--noEmit", "--listFiles"]);
     } finally {
       rmSync(ideiglenes, { force: true });
     }
@@ -333,6 +369,13 @@ export function main(argumentumok, kornyezet = process.env, ki = console.log) {
     } else ki("  zold (a fedett resz)");
   }
 
+  if (valtozas.toroltTs.length > 0) {
+    ki("");
+    ki(
+      `TOROLT TS FAJL (${valtozas.toroltTs.length}), a szuro NEM nezi, a rajuk epulo fajlok eltorhetnek:`,
+    );
+    for (const f of valtozas.toroltTs) ki(`  ${f}`);
+  }
   if (kimaradt.length > 0) {
     ki("");
     ki(`NEM FEDETT (${kimaradt.length}):`);
@@ -344,7 +387,8 @@ export function main(argumentumok, kornyezet = process.env, ki = console.log) {
       "NEM FUTOTT TIPUSELLENORZES: nincs TS fajl, amit ez a szuro nezhetne. Ez NEM zold kapu.",
     );
     ki(NYILATKOZAT);
-    return bukott ? 1 : 0;
+    // 3: nem futott tipusellenorzes. Ha kozben valami bukott (pl. egy csomag tsconfigja nem olvashato), az 1.
+    return bukott ? 1 : 3;
   }
   ki(
     bukott
