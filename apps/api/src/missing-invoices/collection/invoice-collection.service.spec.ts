@@ -1227,6 +1227,14 @@ describe("unmatchedRetryDue", () => {
 describe("InvoiceCollectionService keeps what nothing ties (UNASSIGNED)", () => {
   const untiedInvoice = () =>
     pdf(["Invoice", "Supplier VAT: DE152405660", "Invoice number: RE67456"]);
+  // ugyanaz, de a vevő a cég: a balazs@ ágon csak a cégre szóló számla tárolódik
+  const companyInvoice = () =>
+    pdf([
+      "Invoice",
+      "Supplier VAT: DE152405660",
+      "Invoice number: RE67456",
+      "Bill to: Acropora Kft. Budapest",
+    ]);
   const navInvoice = () =>
     pdf([
       "SZÁMLA",
@@ -1285,7 +1293,7 @@ describe("InvoiceCollectionService keeps what nothing ties (UNASSIGNED)", () => 
     const { collection, stored } = setup({
       environment: env(["GMAIL_BALAZS"]),
       messages: {
-        "m-1": [{ fileName: "RE67456.pdf", buffer: await untiedInvoice() }],
+        "m-1": [{ fileName: "RE67456.pdf", buffer: await companyInvoice() }],
       },
     });
     await collection.run("MANUAL");
@@ -1320,6 +1328,7 @@ describe("InvoiceCollectionService keeps what nothing ties (UNASSIGNED)", () => 
               "Invoice",
               "Supplier VAT: DE152405660",
               "Total 100.00 EUR",
+              "Bill to: Acropora Kft. Budapest",
             ]),
           },
         ],
@@ -1362,11 +1371,11 @@ describe("InvoiceCollectionService keeps what nothing ties (UNASSIGNED)", () => 
     assert.deepEqual(again.reasons, ["m-3/RE67456.pdf:DUPLICATE:SAME_CONTENT"]);
   });
 
-  it("keeps an untied INVOICE from the balazs@ mailbox too, like the other mailboxes (Balázs's decision, 2026-11-12)", async () => {
+  it("keeps an untied INVOICE addressed to the company from the balazs@ mailbox too (Balázs's decision, 2026-11-12)", async () => {
     const { collection, stored, recorded } = setup({
       environment: env(["GMAIL_BALAZS"]),
       messages: {
-        "m-1": [{ fileName: "RE67456.pdf", buffer: await untiedInvoice() }],
+        "m-1": [{ fileName: "RE67456.pdf", buffer: await companyInvoice() }],
       },
     });
     const counts = await collection.run("MANUAL");
@@ -1376,6 +1385,30 @@ describe("InvoiceCollectionService keeps what nothing ties (UNASSIGNED)", () => 
     );
     assert.deepEqual(recorded, []);
     assert.equal(counts.unmatchedCount, 1);
+  });
+
+  /*
+    A balazs@ ÁGON A NEM A CÉGRE SZÓLÓ SZÁMLA KIMARAD (acrobot, 2026-11-12). MI PIROSÍT: ha Balázs személyes számlája
+    (a vevő nem a cég) tárolódik a balazs@ ágon; ha ugyanez az info@ ágon is kimarad (ott a nem a cégre szólót is tároljuk).
+  */
+  it("does NOT keep a balazs@ invoice that is not addressed to the company (Balázs's personal invoice), but the info@ mailbox still does", async () => {
+    const balazs = setup({
+      environment: env(["GMAIL_BALAZS"]),
+      messages: {
+        "m-1": [{ fileName: "RE67456.pdf", buffer: await untiedInvoice() }],
+      },
+    });
+    await balazs.collection.run("MANUAL");
+    assert.deepEqual(balazs.stored, []);
+    assert.deepEqual(balazs.recorded, ["m-1/RE67456.pdf:UNMATCHED"]);
+    const info = setup({
+      environment: env(["GMAIL_FOXPOST"]),
+      messages: {
+        "m-1": [{ fileName: "RE67456.pdf", buffer: await untiedInvoice() }],
+      },
+    });
+    await info.collection.run("MANUAL");
+    assert.equal(info.stored.length, 1);
   });
 
   it("the limit of the balazs@ decision: a text PDF with no invoice word is NOT stored, and an unreadable file is not either", async () => {

@@ -555,7 +555,18 @@ export class InvoiceCollectionService {
       payee: string,
       reason: InvoiceCollectionReason,
     ): Promise<InvoiceCollectionVerdict> => {
-      if (reassess || this.dry) return skip("UNMATCHED", reason);
+      /*
+        A balazs@ ÁGON A NEM A CÉGRE SZÓLÓ SZÁMLA KIMARAD (acrobot, 2026-11-12, Balázs (a) döntése mellé): a postafiók
+        Balázs saját levelezése, és egy SZEMÉLYES számla (a vevő nem a cég) nem cégkönyvelés, a többi, finance jogú
+        felhasználó elől a szűkebb irány a biztonságos. A Balázs 1-es válasza a CÉGSZÁMLÁK elvesztése ellen szólt.
+        Csak ez az ág: az info@ és a Drive változatlanul tárolja a nem a cégre szólót is.
+      */
+      if (
+        reassess ||
+        this.dry ||
+        (source === "BALAZS_MAIL" && payee === "NOT_COMPANY")
+      )
+        return skip("UNMATCHED", reason);
       await this.repository.store({
         source,
         externalId,
