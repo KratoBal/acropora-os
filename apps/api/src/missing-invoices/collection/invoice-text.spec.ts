@@ -1064,6 +1064,31 @@ describe("labelledTotal", () => {
     });
   });
 
+  it("takes the next line only after a label that stands alone, not after a sentence (niceshops R49010000026240667)", () => {
+    // the lines of the PDF as pdfTextLines gives them (acrobot 49361): the sentence's "számla összege" is a label, and
+    // its next line is the address, whose numbers made a second labelled value and lost the real total
+    assert.deepEqual(
+      labelledTotal([
+        "Rechnungsbetrag inkl. USt.: | 338.018 Ft",
+        "(€ 931,10)",
+        "A számla összege előreutalással ki lett fizetve.",
+        "Tulajdonos: niceshops GmbH, 3DJake, Saaz 99, 8341 Paldau, Ausztria | E-mail: magyar@3djake.com |",
+      ]),
+      { gross: "338018", currency: "HUF" },
+    );
+  });
+
+  it("still takes the next line after a label with a colon or a short note", () => {
+    assert.deepEqual(labelledTotal(["Rechnungsbetrag inkl. USt.:", "338.018 Ft"]), {
+      gross: "338018",
+      currency: "HUF",
+    });
+    assert.deepEqual(labelledTotal(["Végösszeg (HUF)", "12 700"]), {
+      gross: "12700",
+      currency: "HUF",
+    });
+  });
+
   it("does not decide between two different labelled values", () => {
     assert.equal(
       labelledTotal(["Végösszeg: 37 500 Ft", "Fizetendő: 7 972 Ft"]),

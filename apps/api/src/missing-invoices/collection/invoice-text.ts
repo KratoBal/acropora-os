@@ -1100,7 +1100,18 @@ export function onlyCurrency(lines: readonly string[]): string | null {
   return found.size === 1 ? [...found][0]! : null;
 }
 
-/** A címke utáni összeg (vagy a következő soré), előjellel; a sor utolsó összege. */
+/**
+ * A CÍMKE EGYEDÜL ÁLL-E A SORÁBAN, vagyis a következő sor hozhatja-e az értékét: a címke után csak elválasztó, egy
+ * rövid megjegyzés („(HUF)”) vagy egy kettősponttal záruló kiegészítés („inkl. USt.:”) áll. Egy MONDAT nem az
+ * (niceshops R49010000026240667, acrobot 49361): „A számla összege előreutalással ki lett fizetve.” után a következő
+ * sor a cím volt („Saaz 99, 8341 Paldau”), az a második, eltérő címkés érték lett, és a valódi végösszeg
+ * (338 018 Ft) a döntetlen miatt elveszett.
+ */
+function labelStandsAlone(rest: string): boolean {
+  return /:\s*\|?\s*$/u.test(rest) || !/\p{L}{4,}/u.test(rest);
+}
+
+/** A címke utáni összeg (vagy a következő soré, ha a címke egyedül áll), előjellel; a sor utolsó összege. */
 export function labelledTotal(
   lines: readonly string[],
 ): { gross: string; currency: string } | null {
@@ -1115,7 +1126,7 @@ export function labelledTotal(
         .filter((v) => Number.isFinite(v) && v !== 0);
     let place = line.slice(label.index + label[0].length);
     let values = scan(place);
-    if (values.length === 0 && i + 1 < lines.length) {
+    if (values.length === 0 && i + 1 < lines.length && labelStandsAlone(place)) {
       place = lines[i + 1]!;
       values = scan(place);
     }
