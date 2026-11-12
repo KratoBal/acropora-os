@@ -912,6 +912,54 @@ describe("the supplier name from earlier verified invoices", () => {
     assert.equal(review.sources.supplierName, undefined);
   });
 
+  /*
+    A NÉV-ÜTKÖZÉS JELZÉSE AZ ELLENŐRZŐ LAPON (kártya dbab22cd, acrobot 48944). MI PIROSÍT: ha a szövegből olvasott név a korábbi, ember által jóváhagyott névtől eltérne, és nem lenne figyelmeztetés; ha a
+    név MEGVÁLTOZNA (az olvasott marad, csak jelez); ha a normalizálás után egyező nevek is ütközésnek látszanának; ha a párosítás neve is ütközne.
+  */
+  it("a name read from the text that differs from the human-approved one stays, with a warning that names both", async () => {
+    const h = harness({
+      pairings: [nameless()],
+      files: { "mail-1": await textPdf(["Kitalált Másik Ltd.", ...WITH_VAT]) },
+      readings: [earlier("Kitalált Előfizetés Inc.")],
+    });
+    const review = await h.service.review("mailbox:mail-1");
+    assert.equal(review.values.supplierName, "Kitalált Másik Ltd.");
+    assert.equal(review.sources.supplierName, "TEXT");
+    const warning = review.warnings.find((w) => w.includes("eltér a korábban"));
+    assert.ok(warning);
+    assert.match(warning!, /Kitalált Másik Ltd\./);
+    assert.match(warning!, /Kitalált Előfizetés Inc\./);
+    assert.match(warning!, /IE9999999XX/);
+  });
+
+  // (the test PDF font cannot draw ő/ű: the names here avoid them)
+  it("names that agree after normalisation, and a pairing's name, raise no conflict warning", async () => {
+    const same = harness({
+      pairings: [nameless()],
+      files: {
+        "mail-1": await textPdf(["KITALÁLT SZÁLLÍTÓ INC", ...WITH_VAT]),
+      },
+      readings: [earlier("Kitalált Szállító Inc.")],
+    });
+    assert.equal(
+      (await same.service.review("mailbox:mail-1")).warnings.some((w) =>
+        w.includes("eltér a korábban"),
+      ),
+      false,
+    );
+    const paired = harness({
+      pairings: [pairing({ supplierName: "Párosítás szerinti Kft." })],
+      files: { "mail-1": await textPdf(WITH_VAT) },
+      readings: [earlier("Kitalált Előfizetés Inc.")],
+    });
+    assert.equal(
+      (await paired.service.review("mailbox:mail-1")).warnings.some((w) =>
+        w.includes("eltér a korábban"),
+      ),
+      false,
+    );
+  });
+
   it("a failing lookup leaves the reading as it would be without it", async () => {
     const h = harness({
       pairings: [nameless()],
