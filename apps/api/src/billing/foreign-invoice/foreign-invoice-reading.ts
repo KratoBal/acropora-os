@@ -204,9 +204,18 @@ const NET_LABEL =
   /(subtotal|sub-total|net\s+amount|total\s+excl(\.|uding|usive)?|amount\s+excl(\.|uding)?|nettobetrag|summe\s+netto|zwischensumme|netto|subtotaal|totaal\s+excl|montant\s+ht|total\s+ht|sous-total|nett[óo](\s+[öo]sszesen)?)/iu;
 const VAT_LABEL =
   /(\bvat\b|\btax\b|\bmwst\b|\bust\b|umsatzsteuer|mehrwertsteuer|\bbtw\b|\btva\b|[áa]fa\b)/iu;
-/** ezek a sorok nem ÁFA-ÖSSZEGET hordoznak: adószám, mentesség, nettó vagy bruttó végösszeg */
+/**
+ * ezek a sorok nem ÁFA-ÖSSZEGET hordoznak: adószám, mentesség, nettó vagy bruttó végösszeg. A magyar "ÁFA regisztrációs szám: | 0106 417" sor (kártya dbab22cd,
+ * harmadik kör, Digital Charging Solutions) "417"-et adott ÁFA-összegnek, két mintán is: a regisztrációs, azonosító és adószám szavak kizárják.
+ */
 const NOT_VAT_AMOUNT =
-  /(number|\bno\b\.?|\bnr\b\.?|\bid\b|idnr|ust-?id|identification|nummer|registration|reg\.|excl|incl|zzgl|inkl|including|excluding|\bht\b|\bttc\b|subtotal|total\s+(amount|due)|amount\s+due)/iu;
+  /(number|\bno\b\.?|\bnr\b\.?|\bid\b|idnr|ust-?id|identification|nummer|registration|reg\.|regisztr[áa]ci[óo]s|azonos[íi]t[óo]|ad[óo]sz[áa]m|excl|incl|zzgl|inkl|including|excluding|\bht\b|\bttc\b|subtotal|total\s+(amount|due)|amount\s+due)/iu;
+/**
+ * A MAGYAR "Teljes bruttó összeg" / "Bruttó végösszeg" CÍMKE (kártya dbab22cd, harmadik kör): a sor ELEJÉN áll, így a "Bruttó egységár" és társai nem illeszkednek.
+ * A közös végösszeg-olvasó (labelledTotal, a begyűjtő is használja) ezt nem adja; itt, csak a külföldi számla olvasójában vesszük fel, és csak az ÜRES bruttót tölti.
+ */
+const GROSS_TOTAL_LABEL =
+  /^\s*(?:teljes\s+)?brutt[óo]\s+(?:v[ée]g)?[öo]sszeg\b/iu;
 const REVERSE_CHARGE =
   /(reverse\s+charge|steuerschuldnerschaft\s+des\s+leistungsempf[äa]ngers|btw\s+verlegd|autoliquidation|ford[íi]tott\s+ad[óo]z[áa]s)/iu;
 
@@ -802,6 +811,9 @@ export function readForeignInvoice(input: ForeignReadingInput): ForeignReading {
       set("grossAmount", decimal(Number(total.gross)), "TEXT");
       set("currency", total.currency, "TEXT");
     }
+    const hungarianGross = labelledAmount(lines, GROSS_TOTAL_LABEL);
+    if (hungarianGross !== null)
+      set("grossAmount", decimal(hungarianGross), "TEXT");
     set("currency", onlyCurrency(lines), "TEXT");
 
     const net = labelledAmount(lines, NET_LABEL);
@@ -809,7 +821,8 @@ export function readForeignInvoice(input: ForeignReadingInput): ForeignReading {
     const vat = labelledAmount(lines, VAT_LABEL, NOT_VAT_AMOUNT);
     if (vat !== null) set("vatAmount", decimal(vat), "TEXT");
     else if (REVERSE_CHARGE.test(lines.join("\n")))
-      set("vatAmount", decimal(0), "TEXT");
+      // a 0 ÁFA NEM egy ÁFA-sorból jön, hanem a jelzésből (az egész szövegen egyetlen találat): külön forrás-érték, hogy az automatikus jóváhagyás lássa
+      set("vatAmount", decimal(0), "REVERSE_CHARGE");
     // a cimkézett olvasás után: ami már megvan, azt az összesítő sor nem írja felül, és ha egy már
     // meglévő érték ELTÉR az összesítő sortól (két táblázat, másik összeg), az sor semmit nem tölt:
     // a három mező nem mondhat ellent egymásnak (barracuda, #1795)
@@ -905,6 +918,22 @@ export function readForeignInvoice(input: ForeignReadingInput): ForeignReading {
         delete sources.vatAmount;
       }
     }
+  } else if (
+    net === null &&
+    vat === 0 &&
+    gross !== null &&
+    sources.grossAmount === "TEXT" &&
+    (sources.vatAmount === "TEXT" || sources.vatAmount === "REVERSE_CHARGE") &&
+    hasText &&
+    REVERSE_CHARGE.test(lines.join("\n"))
+  ) {
+    // FORDÍTOTT ADÓZÁS: az ÁFA bizonyíthatóan 0 (a számla maga mondja), és a bruttó a számláról jön: a nettó egyenlő vele. Számítás, nem találgatás
+    values.netAmount = decimal(gross - vat);
+    sources.netAmount = "REVERSE_CHARGE";
+    // a jel egyetlen szöveg-találat: a három összeg egymással mindig egyezik, tehát az ellenőrzés itt szerkezetileg zöld; ezért a figyelmeztetés látszatja a jelet
+    warnings.push(
+      `A nettó (${decimal(gross - vat)}) a fordított adózás jelzéséből számolt: a bruttóval egyenlő.${sources.vatAmount === "REVERSE_CHARGE" ? " Az ÁFA 0 is a jelzésből jön, nem egy ÁFA-sorból." : ""} Ellenőrizd a számlán.`,
+    );
   } else if (net !== null && gross !== null && vat === null && !pairingGross) {
     // a hiányzó ÁFA a számlán olvasott bruttó és nettó különbsége: számítás,
     // nem találgatás. A párosítás bruttójából NEM (lásd fent); a fordított

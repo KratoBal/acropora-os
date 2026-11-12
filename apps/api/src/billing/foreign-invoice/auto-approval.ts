@@ -283,6 +283,20 @@ function byBank(
       reason:
         "a bruttó a banki párosításból jön, nem a számláról: önmagához mérné",
     };
+  /*
+    A FORDÍTOTT ADÓZÁS JELÉBŐL SZÁMOLT NETTÓ ÉS 0 ÁFA EMBERHEZ MEGY (barracuda #2468; ugyanaz az elv, mint a De Jong-döntés, acrobot 34628, 34653). A jel egyetlen
+    szöveg-találat: belőle jön a 0 ÁFA és a nettó is, így a nettó + ÁFA = bruttó ellenőrzés szerkezetileg zöld, és a bank csak a BRUTTÓT igazolja, a bontást nem.
+    Egy valódi ÁFA-sor adta 0 mellett (az ÁFA forrása nem a jel) a sor mehet.
+  */
+  if (
+    sources.netAmount === "REVERSE_CHARGE" &&
+    sources.vatAmount === "REVERSE_CHARGE"
+  )
+    return {
+      approve: false,
+      reason:
+        "a nettó és a 0 ÁFA is a fordított adózás jelzéséből számolt, a bank csak a bruttót igazolja: a bontást ember nézze meg",
+    };
   if (debits.length === 0)
     return { approve: false, reason: "nincs párosított terhelés" };
   const currency = values.currency!.toUpperCase();
