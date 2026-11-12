@@ -192,7 +192,9 @@ export function parseOtpStatement(bytes: Uint8Array): OtpStatementParse {
 /**
  * A DEVIZÁS KÁRTYÁS SOR EREDETI ÖSSZEGE a közleményből, két mért alakban:
  * `55,380EUR` (kártyás, ezres elválasztó nélkül, három tizedessel) és
- * `1.199,75 EUR` (átutalás). Más alak: `null`, nem találgatunk.
+ * `1.199,75 EUR` (átutalás). A kártyás alak két tizedessel és ezres ponttal is
+ * jöhet (Hetzner, `100,82EUR`, kártya f7ece26b): nélküle az EUR számla a HUF
+ * terheléshez nem volt összevethető. Más alak: `null`, nem találgatunk.
  */
 export function originalAmountOf(
   narrative: string,
@@ -207,10 +209,13 @@ export function originalAmountOf(
       ),
       currency: transfer[2]!,
     };
-  const card = /(\d+,\d{3})(EUR|USD|GBP|CHF)\b/.exec(narrative);
+  const card =
+    /(?<![\d.,])(\d{1,3}(?:\.\d{3})+,\d{2,3}|\d+,\d{2,3})(EUR|USD|GBP|CHF)\b/.exec(
+      narrative,
+    );
   if (card)
     return {
-      amount: new Prisma.Decimal(card[1]!.replace(",", ".")),
+      amount: new Prisma.Decimal(card[1]!.replace(/\./g, "").replace(",", ".")),
       currency: card[2]!,
     };
   return null;
