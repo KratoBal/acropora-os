@@ -218,7 +218,32 @@ const NOT_VAT_AMOUNT =
 const GROSS_TOTAL_LABEL =
   /^\s*(?:teljes\s+)?brutt[óo]\s+(?:v[ée]g)?[öo]sszeg\b/iu;
 const REVERSE_CHARGE =
-  /(reverse\s+charge|steuerschuldnerschaft\s+des\s+leistungsempf[äa]ngers|btw\s+verlegd|autoliquidation|ford[íi]tott\s+ad[óo]z[áa]s)/iu;
+  /(reverse\s+charge|steuerschuldnerschaft\s+des\s+leistungsempf[äa]ngers|btw\s+verlegd|autoliquidation|ford[íi]tott\s+ad[óo]z[áa]s|steuerfreie[,\s]+innergemeinschaftliche\s+lieferung|§\s*6a\s*ustg)/iu;
+
+/** A VÉGSŐ NETTÓ német címkéi (kártya dbab22cd, harmadik kör): "Gesamt netto: | 1.698,58 €". A sor ELEJÉN áll, így az "EP (netto)" fejléc és a "Summe netto" / "Versandkosten netto" részösszeg nem illeszkedik. */
+const TOTAL_NET_LABEL = /^\s*(?:gesamt|total|gesamtsumme)\s+netto\b/iu;
+const CHARGE_LINE =
+  /(?<![\p{L}])(shipping|freight|postage|delivery|handling|versand|versandkosten|fracht|porto|szállítás|szállítási)(?![\p{L}])/iu;
+
+/**
+ * A "SUBTOTAL" NEM MINDIG NETTÓ (kártya dbab22cd, harmadik kör; Euro Corals: "Subtotal | 2.141,19€", "Shipping | 169,90€", "Total | 2.311,09€"). Ha az ÖSSZEG, amit a nettó-címke adott, egy
+ * "subtotal" sor összege, és ez után (a következő 6 sorban) egy költség-sor (szállítás, fuvar, postaköltség) áll összeggel, a részösszeg a költségek NÉLKÜL értendő: nem a számla nettója. Ilyenkor a nettó
+ * üresen marad (a bruttóból kivont "ÁFA" is ezért nem születik), egy rossz szám rosszabb, mint egy üres.
+ */
+function subtotalExcludesCharges(
+  lines: readonly string[],
+  net: number,
+): boolean {
+  return lines.some((raw, index) => {
+    const line = raw.normalize("NFC");
+    if (!/^\s*(?:sub-?total|zwischensumme)(?![\p{L}])/iu.test(line))
+      return false;
+    if (!amountsIn(line).includes(net)) return false;
+    return lines
+      .slice(index + 1, index + 7)
+      .some((next) => CHARGE_LINE.test(next) && amountsIn(next).length > 0);
+  });
+}
 
 /** A címke utáni rész ugyanazon a soron, vagy (ha ott semmi) a következő sor. */
 function afterLabel(
@@ -897,8 +922,12 @@ export function readForeignInvoice(input: ForeignReadingInput): ForeignReading {
       set("grossAmount", decimal(hungarianGross), "TEXT");
     set("currency", onlyCurrency(lines), "TEXT");
 
+    // a "Gesamt netto" / "Total netto" sor a végső nettó (a "Summe netto" és a "Versandkosten netto" sorral együtt a sima nettó-címke több eltérő összeget látna, és semmit nem adna)
+    const totalNet = labelledAmount(lines, TOTAL_NET_LABEL);
+    if (totalNet !== null) set("netAmount", decimal(totalNet), "TEXT");
     const net = labelledAmount(lines, NET_LABEL);
-    if (net !== null) set("netAmount", decimal(net), "TEXT");
+    if (net !== null && !subtotalExcludesCharges(lines, net))
+      set("netAmount", decimal(net), "TEXT");
     const vat = labelledAmount(lines, VAT_LABEL, NOT_VAT_AMOUNT);
     if (vat !== null) set("vatAmount", decimal(vat), "TEXT");
     else if (REVERSE_CHARGE.test(lines.join("\n")))
@@ -1015,6 +1044,19 @@ export function readForeignInvoice(input: ForeignReadingInput): ForeignReading {
     // a jel egyetlen szöveg-találat: a három összeg egymással mindig egyezik, tehát az ellenőrzés itt szerkezetileg zöld; ezért a figyelmeztetés látszatja a jelet
     warnings.push(
       `A nettó (${decimal(gross - vat)}) a fordított adózás jelzéséből számolt: a bruttóval egyenlő.${sources.vatAmount === "REVERSE_CHARGE" ? " Az ÁFA 0 is a jelzésből jön, nem egy ÁFA-sorból." : ""} Ellenőrizd a számlán.`,
+    );
+  } else if (
+    gross === null &&
+    net !== null &&
+    vat === 0 &&
+    sources.vatAmount === "REVERSE_CHARGE" &&
+    sources.netAmount === "TEXT"
+  ) {
+    // az ÁFA a jelből 0, a nettó a számláról jön: a bruttó egyenlő a nettóval. Számítás; ugyanaz a látszat-kockázat, mint a nettó levezetésénél, ezért ugyanúgy figyelmeztet és az automatikus jóváhagyást megállítja
+    values.grossAmount = decimal(net + vat);
+    sources.grossAmount = "REVERSE_CHARGE";
+    warnings.push(
+      `A bruttó (${decimal(net + vat)}) az ÁFA jelzéséből (0, nem egy ÁFA-sorból) és a nettóból számolt: a nettóval egyenlő. Ellenőrizd a számlán.`,
     );
   } else if (net !== null && gross !== null && vat === null && !pairingGross) {
     // a hiányzó ÁFA a számlán olvasott bruttó és nettó különbsége: számítás,
