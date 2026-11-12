@@ -1488,6 +1488,29 @@ export function matchMonth(input: MatchMonthInput): Map<string, MatchOutcome> {
   return outcomes;
 }
 
+/** A számlaszám összevetési alakja: csak betűk és számjegyek, kisbetűvel. Üres: nincs szám. */
+const invoiceNumberForm = (number: string | null | undefined): string =>
+  (number ?? "").toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+
+/**
+ * LEHET-E EZ UGYANAZ A SZÁMLA a két párosításban (acrobot, 2026-11-12, a Vízművek 103000716765 és 105300361726).
+ * Két különböző számlaszámú számla KÉT számla, akkor is, ha valami közös azonosságot hordoznak (egy kézi párosításnál
+ * beolvadt feltöltés lenyomata, egy gyűjtő-PDF): a kettős fizetés azt jelenti, hogy UGYANAZT a számlát fizettük kétszer.
+ * Ha bármelyik oldalon NINCS számlaszám (olvashatatlan feltöltés), nem tudjuk kizárni, és a megosztott azonosság marad
+ * a jel (a Sopro eset: ugyanaz a PDF kétszer feltöltve). Két szám egyezőnek számít, ha az egyik tartalmazza a másikat
+ * (a szállító néha előtaggal vagy a számla részét nélkülözve írja).
+ */
+function mayBeSameInvoice(
+  mine: ReadonlySet<string>,
+  theirs: ReadonlySet<string>,
+): boolean {
+  if (mine.size === 0 || theirs.size === 0) return true;
+  for (const a of mine)
+    for (const b of theirs)
+      if (a === b || a.includes(b) || b.includes(a)) return true;
+  return false;
+}
+
 /** Ezek az állapotok számítanának rendezettnek; a kettős fizetés felülírja őket. */
 const SETTLED_LIKE: ReadonlySet<ItemState> = new Set([
   "FOUND",
@@ -1506,25 +1529,37 @@ const SETTLED_LIKE: ReadonlySet<ItemState> = new Set([
  * Mérve 2026-10-01: e nélkül egy Parkl-hónap minden fizetése DOUBLE_PAID lett.
  */
 function markDoublePaid(outcomes: Map<string, MatchOutcome>): void {
-  // azonosság -> párosítás -> a párosítás terhelései
-  const pairingsOf = new Map<string, Map<string, string[]>>();
+  // azonosság -> párosítás -> { a párosítás terhelései, a bennük álló dokumentumok számai }
+  const pairingsOf = new Map<
+    string,
+    Map<string, { debits: string[]; numbers: Set<string> }>
+  >();
   for (const [debitId, outcome] of outcomes)
     for (const document of outcome.documents)
       for (const identity of document.identities ?? []) {
-        const pairings =
-          pairingsOf.get(identity) ?? new Map<string, string[]>();
+        const pairings = pairingsOf.get(identity) ?? new Map();
         const pairing = outcome.pairing ?? debitId;
-        pairings.set(pairing, [...(pairings.get(pairing) ?? []), debitId]);
+        const entry = pairings.get(pairing) ?? {
+          debits: [],
+          numbers: new Set<string>(),
+        };
+        entry.debits.push(debitId);
+        const number = invoiceNumberForm(document.number);
+        if (number) entry.numbers.add(number);
+        pairings.set(pairing, entry);
         pairingsOf.set(identity, pairings);
       }
   const others = new Map<string, Set<string>>();
   for (const pairings of pairingsOf.values()) {
     if (pairings.size < 2) continue;
-    for (const [pairing, debits] of pairings)
-      for (const debitId of debits)
-        for (const [otherPairing, otherDebits] of pairings)
-          if (otherPairing !== pairing)
-            for (const other of otherDebits)
+    for (const [pairing, mine] of pairings)
+      for (const [otherPairing, theirs] of pairings)
+        if (
+          otherPairing !== pairing &&
+          mayBeSameInvoice(mine.numbers, theirs.numbers)
+        )
+          for (const debitId of mine.debits)
+            for (const other of theirs.debits)
               others.set(
                 debitId,
                 new Set([...(others.get(debitId) ?? []), other]),

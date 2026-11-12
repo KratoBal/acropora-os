@@ -662,6 +662,8 @@ describe("a double-paid invoice", () => {
       ...nav("2026-09-20", 172006, "Sopro Hungária Kft."),
       id,
       source: "UPLOAD",
+      // ugyanaz a PDF kétszer: ugyanaz a számla, tehát ugyanaz a szám
+      number: "KB-2855/2026",
       identities: ["sha:same-pdf"],
     });
     const first = debit("2026-09-28", 172006, "Sopro Hungária Kft.");
