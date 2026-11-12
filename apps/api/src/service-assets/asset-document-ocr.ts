@@ -81,6 +81,32 @@ export interface OcrReading {
 export const isTransientStop = (stop: AssetDocumentOcrStop | null): boolean =>
   stop === "time" || stop === "memory" || stop === "busy" || stop === "error";
 
+/**
+ * WHETHER THE TEXT CACHE KEEPS A READING (card 126f9b92, nautilus's stage measurement 2026-11-12).
+ *
+ * A finished reading and a stop at the page limit are the file's own, and are kept. A stop for time, memory, a busy reader or an
+ * error may not hold next time, so those are forgotten: EXCEPT a stop for TIME that already read pages. On the stage one scanned
+ * page takes about 6.7 s, so the 120 s budget ends the reading at page 17 or 18 of a 20 page scan: that is the file on this
+ * machine, not a hiccup, and forgetting it made every opening of a long scan read for two minutes again (with 1.3 s main-thread
+ * blocks per page). The kept answer still says what it is (`pagesRead` of `pagesTotal`, `stoppedBy: "time"`, the notice), and the
+ * cache is in memory: a restart, or eviction by 32 newer files, reads the file again, and so does the first ask after
+ * `OCR_PARTIAL_READING_TTL_MS` (a partial reading expires, a complete one does not).
+ *
+ * A time stop with NO page read is forgotten (nothing worth keeping, and a stuck first page may be a stuck worker); a memory stop
+ * is forgotten even with pages read (the pressure may be gone), as a busy reader and an error are.
+ */
+/**
+ * HOW LONG A PARTIAL READING STAYS (barracuda on #2483): a reading the time budget cut is kept (`keepsReading`), but only for this
+ * long, so a short one cut in a slow minute (3 of 20 on a loaded machine) is read again later instead of staying short until a
+ * restart. A calm run would reach 17 of 20; a 17 of 20 reading is not worsened by it, it is read again once per half hour at most.
+ * Constant like the other OCR limits: a setting nobody tuned is a limit nobody trusts.
+ */
+export const OCR_PARTIAL_READING_TTL_MS = 30 * 60 * 1000;
+
+export const keepsReading = (ocr: AssetDocumentOcr): boolean =>
+  !isTransientStop(ocr.stoppedBy) ||
+  (ocr.stoppedBy === "time" && ocr.pagesRead > 0);
+
 class PageTimeout extends Error {}
 
 function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {

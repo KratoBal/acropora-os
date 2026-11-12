@@ -329,7 +329,93 @@ describe("AssetDocumentTextCache with the OCR", () => {
     assert.equal(again.ocr?.stoppedBy, "pages");
   });
 
-  it("a reading that stopped for time, memory, a busy reader or an error is NOT remembered: the next ask tries again", async () => {
+  it("a time stop that already read pages IS remembered: a long scan is read once per file, and the answer says it is partial", async () => {
+    // the stage case: one page ~6.7 s, the 120 s budget ends a 20 page scan at page 17
+    const pageLines = Array.from({ length: 17 }, (_, i) => [
+      `${i + 1}. oldal szöveg`,
+      PAGE_END_MARKER,
+    ]).flat();
+    let asked = 0;
+    const cache = new AssetDocumentTextCache(
+      async () => scanLines,
+      32,
+      async () => {
+        asked += 1;
+        return reading(
+          { pagesRead: 17, pagesTotal: 20, stoppedBy: "time" },
+          pageLines,
+        );
+      },
+    );
+    const first = await cache.text("sha-long", bytes);
+    const again = await cache.text("sha-long", bytes);
+    assert.equal(asked, 1);
+    for (const answer of [first, again]) {
+      assert.equal(answer.hasText, true);
+      assert.equal(answer.ocr?.stoppedBy, "time");
+      assert.equal(answer.ocr?.pagesRead, 17);
+      assert.equal(answer.ocr?.pagesTotal, 20);
+    }
+  });
+
+  it("a partial reading EXPIRES after the TTL (a short one cut in a slow minute is read again), a complete one and a page-limit stop never do", async () => {
+    const TTL = 1_000;
+    let clock = 10_000;
+    const counts = { partial: 0, complete: 0, pages: 0 };
+    const answers = {
+      partial: () =>
+        reading({ pagesRead: 3, pagesTotal: 20, stoppedBy: "time" }),
+      complete: () => reading({ stoppedBy: null }),
+      pages: () => reading({ pagesTotal: 200, stoppedBy: "pages" }),
+    };
+    let which: keyof typeof answers = "partial";
+    const cache = new AssetDocumentTextCache(
+      async () => scanLines,
+      32,
+      async () => {
+        counts[which] += 1;
+        return answers[which]();
+      },
+      TTL,
+      () => clock,
+    );
+    for (const kind of ["partial", "complete", "pages"] as const) {
+      which = kind;
+      await cache.text(`sha-ttl-${kind}`, bytes);
+    }
+    // inside the TTL: nothing is read again
+    clock += TTL - 1;
+    for (const kind of ["partial", "complete", "pages"] as const)
+      await cache.text(`sha-ttl-${kind}`, bytes);
+    assert.deepEqual(counts, { partial: 1, complete: 1, pages: 1 });
+    // past the TTL: only the partial one is read again
+    clock += 10 * TTL;
+    for (const kind of ["partial", "complete", "pages"] as const) {
+      which = kind;
+      await cache.text(`sha-ttl-${kind}`, bytes);
+    }
+    assert.deepEqual(counts, { partial: 2, complete: 1, pages: 1 });
+    // the new partial reading gets a fresh TTL
+    await cache.text("sha-ttl-partial", bytes);
+    assert.equal(counts.partial, 2);
+  });
+
+  it("a memory stop is NOT remembered even with pages read (the pressure may be gone)", async () => {
+    let asked = 0;
+    const cache = new AssetDocumentTextCache(
+      async () => scanLines,
+      32,
+      async () => {
+        asked += 1;
+        return reading({ pagesRead: 3, pagesTotal: 20, stoppedBy: "memory" });
+      },
+    );
+    await cache.text("sha-mem-partial", bytes);
+    await cache.text("sha-mem-partial", bytes);
+    assert.equal(asked, 2);
+  });
+
+  it("a reading that stopped for time with NO page read, memory, a busy reader or an error is NOT remembered: the next ask tries again", async () => {
     for (const stoppedBy of ["time", "memory", "busy", "error"] as const) {
       let asked = 0;
       const cache = new AssetDocumentTextCache(

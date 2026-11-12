@@ -10,6 +10,7 @@ import {
   createScanReader,
   isOcrEnabled,
   isTransientStop,
+  keepsReading,
   ocrPdf,
   type OcrDeps,
   type OcrLimits,
@@ -183,6 +184,36 @@ describe("OCR: a nem szokásos szélek", () => {
     assert.equal(isTransientStop("pages"), false);
     for (const stop of ["time", "memory", "busy", "error"] as const)
       assert.equal(isTransientStop(stop), true, stop);
+  });
+});
+
+describe("OCR: mit őriz meg a gyorsítótár (keepsReading)", () => {
+  const ocr = (
+    stoppedBy: Parameters<typeof isTransientStop>[0],
+    pagesRead: number,
+  ) => ({
+    pagesRead,
+    pagesTotal: 20,
+    stoppedBy,
+    notice: OCR_NOTICE,
+  });
+
+  it("a befejezett és az oldalhatáron megállt olvasást megőrzi, mint eddig", () => {
+    assert.equal(keepsReading(ocr(null, 20)), true);
+    assert.equal(keepsReading(ocr("pages", 20)), true);
+  });
+
+  it("az időn megállt olvasást megőrzi, ha már olvasott oldalt (a rész a fájl sajátja ezen a gépen)", () => {
+    assert.equal(keepsReading(ocr("time", 17)), true);
+    assert.equal(keepsReading(ocr("time", 1)), true);
+  });
+
+  it("az időn megállt, oldal nélküli olvasást nem őrzi meg, és a memóriát, a foglaltat, a hibát sem, oldalakkal sem", () => {
+    assert.equal(keepsReading(ocr("time", 0)), false);
+    for (const stop of ["memory", "busy", "error"] as const) {
+      assert.equal(keepsReading(ocr(stop, 0)), false, stop);
+      assert.equal(keepsReading(ocr(stop, 5)), false, stop);
+    }
   });
 });
 
