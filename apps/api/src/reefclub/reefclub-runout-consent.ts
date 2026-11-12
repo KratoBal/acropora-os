@@ -12,13 +12,27 @@ import { createHmac, timingSafeEqual } from "node:crypto";
  *      with a NEW `RUNOUT_CONSENT_VERSION`, in one change, so a row always names the text its member saw;
  *   3. the unsubscribe secret `REEFCLUB_RUNOUT_UNSUBSCRIBE_SECRET` (at least 32 characters): without it no mail could carry a
  *      working link, so nothing is recorded.
+ *
+ * AND A FOURTH WHILE THE TEXT IS A DRAFT (acrobot 48513, 2026-11-12): the text below is the DRAFT from the card (cd94ed11,
+ * 11-10), so the reminder can be tried on the test site; the final words are Balázs's (or the lawyer's) decision. A draft
+ * counts as NO TEXT unless `REEFCLUB_RUNOUT_ALLOW_DRAFT_TEXT` is exactly "true", which only the test site sets. So the
+ * code that goes out with it cannot record a consent to a draft anywhere else, even with the other three locks open; and
+ * every row recorded on the test names the draft version. The final text comes with `RUNOUT_CONSENT_IS_DRAFT = false`
+ * and a NEW version, in one change.
  */
 
-/** THE PLACEHOLDER: the text of the consent, not given yet. A string here is the text the member sees at the switch. */
-export const RUNOUT_CONSENT_TEXT: string | null = null;
+/** The text the member sees at the switch: today the DRAFT (see above), `null` would mean none at all. */
+export const RUNOUT_CONSENT_TEXT: string | null =
+  "Kérem, hogy a ReefClub e-mailben szóljon, mielőtt a kiválasztott termékem a becslés szerint elfogy. A becsléshez a ReefClub a kiválasztott akváriumom térfogatát, a termék gyártói adagolását és kiszerelését, valamint – ha van ilyen – az Acropora webshopban ezt a terméket tartalmazó legutóbbi rendelésem feladásának napját használja. Az emlékeztető tájékoztató becslés, a tényleges fogyás ettől eltérhet. A hozzájárulásomat bármikor visszavonhatom a fiókomban, vagy a levelekben található leiratkozó hivatkozással.";
 
 /** The version of the text, stored with every consent. Moves with the text, never alone. */
-export const RUNOUT_CONSENT_VERSION = "kifogyas-emlekezteto-helyorzo";
+export const RUNOUT_CONSENT_VERSION =
+  "kifogyas-emlekezteto-tervezet-2026-11-10";
+
+/** True while the text is the draft: then only the test site (`REEFCLUB_RUNOUT_ALLOW_DRAFT_TEXT`) may use it. */
+export const RUNOUT_CONSENT_IS_DRAFT = true;
+
+export const RUNOUT_DRAFT_ENV = "REEFCLUB_RUNOUT_ALLOW_DRAFT_TEXT";
 
 export const RUNOUT_SWITCH = "REEFCLUB_RUNOUT_ENABLED";
 
@@ -32,9 +46,14 @@ export function runOutAvailability(
   environment: Record<string, string | undefined> = process.env,
   text: string | null = RUNOUT_CONSENT_TEXT,
   version: string = RUNOUT_CONSENT_VERSION,
+  // the draft mark belongs to THIS text: a caller's own text (a test) is not a draft
+  isDraft: boolean = text === RUNOUT_CONSENT_TEXT && RUNOUT_CONSENT_IS_DRAFT,
 ): RunOutAvailability {
   if (environment[RUNOUT_SWITCH] !== "true") return { kind: "off" };
   if (!text?.trim()) return { kind: "no-text" };
+  // a draft is no text where the draft is not allowed: the same answer, so no reader learns a new state
+  if (isDraft && environment[RUNOUT_DRAFT_ENV] !== "true")
+    return { kind: "no-text" };
   // a consent whose mail cannot carry a working unsubscribe link must not be recorded
   if (!hasUsableSecret(environment[RUNOUT_SECRET_ENV]))
     return { kind: "no-secret" };
