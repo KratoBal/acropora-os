@@ -612,6 +612,58 @@ export class MissingInvoicesRepository {
     );
   }
 
+  /** Egy terhelés kézi párosításai, a dokumentum fájlnevével (ha az egy tárolt beszállítói dokumentum). */
+  async manualMatchRows(bankTransactionId: string): Promise<
+    {
+      documentId: string;
+      documentSource: string;
+      createdAt: Date;
+      fileName: string | null;
+    }[]
+  > {
+    const rows = await this.database.bankTransactionMatch.findMany({
+      where: { bankTransactionId },
+      orderBy: { createdAt: "asc" },
+      select: { documentId: true, documentSource: true, createdAt: true },
+    });
+    const files = await this.database.incomingSupplierDocument.findMany({
+      where: { id: { in: rows.map((row) => row.documentId) } },
+      select: { id: true, fileName: true },
+    });
+    const nameOf = new Map(files.map((file) => [file.id, file.fileName]));
+    return rows.map((row) => ({
+      ...row,
+      fileName: nameOf.get(row.documentId) ?? null,
+    }));
+  }
+
+  /** EGY dokumentum kézi párosításának levétele, auditnaplóval; a többi párosítás marad. Hány sor ment (0 vagy 1). */
+  async unpairOne(
+    bankTransactionId: string,
+    userId: string,
+    documentId: string,
+  ): Promise<number> {
+    let removed = 0;
+    await this.decide(
+      bankTransactionId,
+      userId,
+      "missing-invoices.unpaired",
+      { documentIds: [documentId], one: true },
+      async (transaction) => {
+        removed = (
+          await transaction.bankTransactionMatch.deleteMany({
+            where: { bankTransactionId, documentId },
+          })
+        ).count;
+        // nincs mit levenni: ne maradjon audit-sor egy meg nem történt lépésről
+        if (removed === 0) throw new NothingToUnpair();
+      },
+    ).catch((error: unknown) => {
+      if (!(error instanceof NothingToUnpair)) throw error;
+    });
+    return removed;
+  }
+
   unpair(bankTransactionId: string, userId: string, removed: string[]) {
     return this.decide(
       bankTransactionId,
@@ -1680,3 +1732,6 @@ export class MissingInvoicesRepository {
     });
   }
 }
+
+/** Belső jel: az egyenkénti levételnek nem volt mit levennie, a tranzakció (és az audit-sor) visszagördül. */
+class NothingToUnpair extends Error {}

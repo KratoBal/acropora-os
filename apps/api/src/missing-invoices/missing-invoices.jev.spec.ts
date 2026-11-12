@@ -64,6 +64,7 @@ function setup(enabled = true) {
     ownOutgoingDocuments: async () => [],
     statementCoverage: async () => new Set([`${ACCOUNT.id}:2026-05`]),
     manualMatches: async () => new Map(matches),
+    manualMatchRows: async () => [],
     candidates: async () => documents,
     uncheckedMailboxContent: async () => [],
     setPayee: async () => undefined,
