@@ -60,12 +60,15 @@ import {
 } from "./slug/webshop-slug.service.js";
 import { DoseEffectsController } from "./dose-effects/dose-effects.controller.js";
 import { DoseEffectsService } from "./dose-effects/dose-effects.service.js";
+import { ManufacturerClaimsController } from "./manufacturer-claims/manufacturer-claims.controller.js";
+import { ManufacturerClaimsService } from "./manufacturer-claims/manufacturer-claims.service.js";
 import { DoseProjectionService } from "./dose-effects/dose-projection.service.js";
 import { CustomerCandidateSource } from "../aquariums/recommendation/customer-candidate-source.js";
 @Module({
   controllers: [
     ProductController,
     DoseEffectsController,
+    ManufacturerClaimsController,
     ProductBarcodeController,
     ProductExtensionController,
     ProductShippingProfileController,
@@ -85,6 +88,7 @@ import { CustomerCandidateSource } from "../aquariums/recommendation/customer-ca
   providers: [
     AttributeSetAdminService,
     DoseEffectsService,
+    ManufacturerClaimsService,
     DoseProjectionService,
     // the dose projection also rebuilds the customer candidates (V3.4 S2b); the source has no dependencies of its own
     CustomerCandidateSource,
