@@ -124,11 +124,10 @@ export function AiChatSettingsPage() {
         <PilotCard className="space-y-5 p-5">
           <p className="rounded-lg bg-pilot-blue-50 p-3 text-sm text-pilot-blue-700">
             Az AI szolgáltatás innen olvassa az üzenetek megőrzési idejét, a
-            kapcsolat-kérés kapcsolóját és a témán kívüli kérdések küszöbét;
-            mindegyik akkor hat, ha a szolgáltatásban a hozzá tartozó funkció is
-            be van kapcsolva. A címzettet és a kérések megőrzését az OS maga
-            használja. A kollégai felajánlásról ma a szolgáltatás saját
-            kapcsolója dönt, ez a jelölő azt még nem állítja át.
+            kollégai felajánlás és a kapcsolat-kérés kapcsolóját, és a témán
+            kívüli kérdések küszöbét; mindegyik akkor hat, ha a szolgáltatásban
+            a hozzá tartozó funkció is be van kapcsolva. A címzettet és a
+            kérések megőrzését az OS maga használja.
           </p>
 
           <label className="flex items-center gap-2 text-sm text-pilot-grey-800">

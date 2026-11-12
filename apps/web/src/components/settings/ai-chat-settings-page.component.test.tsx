@@ -71,14 +71,14 @@ describe("AiChatSettingsPage", () => {
       (screen.getByLabelText("Kollégai felajánlás") as HTMLInputElement)
         .checked,
     ).toBe(false);
-    // measured on the AI service's main (#76, #77, #80) and its #82: no sentence may say it reads nothing
+    // measured on the AI service's main (#76, #77, #80, #82) and its #83: every box it reads is named, none said unread
     const notice = screen.getByText(/innen olvassa/);
     expect(notice.textContent).toMatch(/megőrzési idejét/);
-    expect(notice.textContent).toMatch(/kapcsolat-kérés kapcsolóját/);
-    expect(notice.textContent).toMatch(/küszöbét/);
     expect(notice.textContent).toMatch(
-      /kollégai felajánlásról ma a szolgáltatás saját\s+kapcsolója dönt/,
+      /kollégai felajánlás és a kapcsolat-kérés kapcsolóját/,
     );
+    expect(notice.textContent).toMatch(/küszöbét/);
+    expect(notice.textContent).not.toMatch(/nem állítja át|még nem olvassa/);
     expect(screen.queryByText(/még nem olvassa/)).toBeNull();
   });
 
