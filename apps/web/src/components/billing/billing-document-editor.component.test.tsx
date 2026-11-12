@@ -945,6 +945,39 @@ describe("BillingDocumentEditor", () => {
     });
 
     /*
+      A VEVO ADATA HIANYZIK (Luca, 2026-11-12, kartya 7dd76d60). MI PIROSIT: ha a szerver elutasitasa mellett nincs link a
+      vevo adatlapjara; ha a link nem a KIVALASZTOTT vevore mutat; ha egy rendben betoltott osszefoglalo mellett is ott
+      marad; ha a link ugyanabban a lapban nyilik meg (a vazlat elvesznel).
+    */
+    it("a refused summary links the chosen customer's page in a new tab, and a good one shows no link", async () => {
+      api.issueSummary.mockRejectedValueOnce(
+        new Error(
+          "A partner számlázási címe hiányos (hiányzik: irányítószám).",
+        ),
+      );
+      await readyPaperInvoice();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Számla kiállítása" }),
+      );
+      const dialog = within(await screen.findByRole("dialog"));
+      await dialog.findByRole("alert");
+      const link = dialog.getByRole("link", { name: "A vevő adatlapja" });
+      expect(link).toHaveAttribute("href", "/vevok/cust-1");
+      expect(link).toHaveAttribute("target", "_blank");
+      expect(api.issue).not.toHaveBeenCalled();
+
+      fireEvent.click(dialog.getByRole("button", { name: "Mégsem" }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Számla kiállítása" }),
+      );
+      const ready = within(await screen.findByRole("dialog"));
+      await ready.findByText(SUMMARY.buyerName);
+      expect(
+        ready.queryByRole("link", { name: "A vevő adatlapja" }),
+      ).toBeNull();
+    });
+
+    /*
       AZ E-SZÁMLA: KIÁLLÍTÁS ÉS KIKÜLDÉS EGY LÉPÉSBEN (acrobot 25291). MI
       PIROSÍT: ha a kiküldés a kiállítás előtt menne, vagy nem a szerkesztett
       levéllel; ha a küldés hibája a kiállítást is hibának mutatná (az már
