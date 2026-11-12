@@ -99,6 +99,7 @@ export async function loadSimplePayOrders(from: string): Promise<{
         )
         .map((d) => ({
           invoiceNumber: d.documentNumber,
+          corrective: ["JS", "HS"].includes(d.kindCode.toUpperCase()),
           grossAmount: d.grossAmount,
           currency: d.currency,
           cancelled: d.cancelled,
@@ -160,7 +161,8 @@ const SKIP_TEXT: Record<SimplePayOrderSkip, string> = {
   UNKNOWN_STATUS: "a SimplePay-sorok között ismeretlen állapotú is van",
   NOT_SETTLED: "nincs teljesült SimplePay-fizetés",
   REFUNDED: "visszatérítve: nem fizetés",
-  PARTLY_REFUNDED: "részben visszatérítve: kérdés, nem jelölés",
+  PARTLY_REFUNDED:
+    "részben visszatérítve, de a számla (a helyesbítőivel) nem a megmaradt összegről szól",
   AMOUNT_MISMATCH: "a kártyás fizetés nem a számla bruttója",
 };
 

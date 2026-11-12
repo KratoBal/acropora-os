@@ -21,6 +21,7 @@ const order = (orderKey: string, invoiceNumber: string, gross: number) =>
     invoices: [
       {
         invoiceNumber,
+        corrective: false,
         grossAmount: new Prisma.Decimal(gross),
         currency: "HUF",
         cancelled: false,

@@ -35,6 +35,7 @@ const invoice = (
   overrides: Partial<CardInvoiceInput> = {},
 ): CardInvoiceInput => ({
   invoiceNumber,
+  corrective: false,
   grossAmount: D(gross),
   currency: "HUF",
   cancelled: false,
@@ -135,6 +136,62 @@ describe("decideSimplePayOrder: a refund holds the mark back", () => {
           ),
         ),
         "REFUNDED",
+      );
+  });
+
+  /*
+    A RÉSZLEGES VISSZATÉRÍTÉS (c03e9896, Balázs 2026-11-12 10:25: kezelni kell).
+    MI PIROSÍT: ha a jelölés a teljes bruttóval menne; ha a csökkentett
+    összegű számla nem jelölődne; ha a helyesbítő előjele számítana; ha egy
+    helyesbítő második számlának számítana; ha egy kisebb helyesbítő mellett
+    is jelölne.
+  */
+  const partial = [
+    line("1", "COMPLETED", 30958, "2026-06-10"),
+    line("2", "REFUND", -10990, "2026-06-12"),
+  ];
+  it("a partial refund, the invoice of the reduced sum: marked with what stayed paid", () => {
+    const decision = decide(partial, [invoice("ACRW-2026/00903", 19968)]);
+    assert.ok(decision.markable);
+    assert.deepEqual(
+      [decision.mark.invoiceNumber, decision.mark.amount, decision.mark.date],
+      ["ACRW-2026/00903", "19968", "2026-06-10"],
+    );
+    assert.equal(
+      decision.mark.note,
+      "SimplePay, 2026-06-10, tranzakció: 1, visszatérítés: 2",
+    );
+    assert.equal(decision.mark.sourceRef, "1");
+  });
+
+  it("a partial refund, the invoice of the full sum and its corrective, either sign: marked with what stayed paid", () => {
+    for (const [kind, gross] of [
+      ["HS", -10990],
+      ["HS", 10990],
+      ["JS", -10990],
+    ] as const) {
+      const decision = decide(partial, [
+        invoice("ACRW-2026/00903", 30958),
+        invoice(`ACRW-2026/${kind}`, gross, { corrective: true }),
+      ]);
+      assert.ok(decision.markable, `${kind} ${gross}`);
+      assert.deepEqual(
+        [decision.mark.invoiceNumber, decision.mark.amount],
+        ["ACRW-2026/00903", "19968"],
+      );
+    }
+  });
+
+  it("a partial refund, a corrective for less, or a cancelled one: still a question", () => {
+    for (const corrective of [
+      invoice("ACRW-2026/H", -5000, { corrective: true }),
+      invoice("ACRW-2026/H", -10990, { corrective: true, cancelled: true }),
+    ])
+      assert.equal(
+        reasonOf(
+          decide(partial, [invoice("ACRW-2026/00903", 30958), corrective]),
+        ),
+        "PARTLY_REFUNDED",
       );
   });
 
