@@ -16,6 +16,7 @@ import type {
   QuoteInternalVersion,
   QuoteSendDraftDto,
 } from "@acropora/types";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { quotesApi } from "@/lib/api/quotes";
@@ -158,6 +159,10 @@ export function QuoteSendDrawer({
   const ready = Boolean(
     draft && addresses(to).length && subject.trim() && body.trim(),
   );
+  // why the send button is grey, said out loud (a tooltip on a disabled button is never seen). The draft's own
+  // recipient list is empty when the customer has no e-mail: then the customer's page is the fix, so it is linked
+  const noRecipient = Boolean(draft) && addresses(to).length === 0;
+  const customerHasNoEmail = Boolean(draft) && draft!.to.length === 0;
 
   const submit = async () => {
     if (!version || !draft || !ready) return;
@@ -214,6 +219,37 @@ export function QuoteSendDrawer({
                 title="Ez a verzió már kiment"
                 description="Az újraküldés ugyanezt a PDF-et küldi el még egyszer."
               />
+            ) : null}
+            {noRecipient ? (
+              <div
+                role="status"
+                className="space-y-1 rounded-lg bg-pilot-amber-50 ring-1 ring-pilot-amber-100 px-3 py-2 text-sm text-pilot-grey-900"
+              >
+                <p className="font-semibold">
+                  {customerHasNoEmail
+                    ? "A vevőnek nincs e-mail címe"
+                    : "Nincs címzett"}
+                </p>
+                <p>
+                  {customerHasNoEmail
+                    ? `${quote.customerName ?? "A vevő"} adatlapján nincs e-mail cím, ezért az ajánlat nem küldhető el. Add meg a címzettet kézzel, vagy vedd fel az e-mail címet a vevő adatlapján.`
+                    : "Az ajánlat addig nem küldhető el, amíg nincs legalább egy címzett."}
+                  {quote.customerId ? (
+                    <>
+                      {" "}
+                      <Link
+                        href={`/vevok/${quote.customerId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-semibold underline"
+                      >
+                        A vevő adatlapja
+                      </Link>{" "}
+                      (új lapon nyílik, a levél vázlata itt megmarad).
+                    </>
+                  ) : null}
+                </p>
+              </div>
             ) : null}
             <PilotFormField
               label="Címzett"

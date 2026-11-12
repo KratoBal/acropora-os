@@ -1153,6 +1153,83 @@ describe("Az ajánlat kiküldése (P3)", () => {
     expect(api.send).not.toHaveBeenCalled();
   });
 
+  /*
+    A VEVONEK NINCS E-MAILJE (Luca, 2026-11-12, kartya 7dd76d60). MI PIROSIT: ha a szurke Elkuldom mellett nem all, MIERT
+    szurke; ha a figyelmeztetes nem a vevo adatlapjara visz; ha egy kitoltott cimzettnel is ott marad; ha egy vevo
+    nelkuli ajanlatnal link keletkezik; ha a kezzel beirt cimzett nem engedi a kuldest.
+  */
+  it("a vevő e-mail címe nélkül megmondja, miért szürke a gomb, és a vevő adatlapjára visz", async () => {
+    api.detail.mockResolvedValue(quote([published()], { status: "DRAFT" }));
+    api.sendDraft.mockResolvedValue({ ...DRAFT, to: [] });
+    api.send.mockResolvedValue(
+      quote([published()], { status: "SENT", deliveries: [DELIVERY] }),
+    );
+    render(<QuoteDetailPage quoteId="q1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Kiküldés" }));
+    expect(
+      await screen.findByText("A vevőnek nincs e-mail címe"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Blue Office Kft\. adatlapján nincs e-mail cím/),
+    ).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: "A vevő adatlapja" });
+    expect(link).toHaveAttribute("href", "/vevok/c1");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(screen.getByRole("button", { name: "Elküldöm" })).toBeDisabled();
+
+    // a typed address is a way out: the warning goes, the button wakes
+    fireEvent.change(screen.getByLabelText("Címzett"), {
+      target: { value: "kezzel@blue.test" },
+    });
+    expect(
+      screen.queryByText("A vevőnek nincs e-mail címe"),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Elküldöm" }));
+    await waitFor(() =>
+      expect(api.send).toHaveBeenCalledWith(
+        "token-1",
+        "q1",
+        "v1",
+        expect.objectContaining({ to: ["kezzel@blue.test"] }),
+      ),
+    );
+  });
+
+  it("says nothing when the customer has an e-mail, and a cleared field gets the plainer sentence", async () => {
+    api.detail.mockResolvedValue(quote([published()], { status: "DRAFT" }));
+    api.sendDraft.mockResolvedValue(DRAFT);
+    render(<QuoteDetailPage quoteId="q1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Kiküldés" }));
+    await waitFor(() =>
+      expect(screen.getByLabelText("Címzett")).toHaveValue("info@blue.test"),
+    );
+    expect(screen.queryByRole("link", { name: "A vevő adatlapja" })).toBeNull();
+    expect(screen.queryByText("Nincs címzett")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Címzett"), {
+      target: { value: "" },
+    });
+    expect(screen.getByText("Nincs címzett")).toBeInTheDocument();
+    expect(screen.queryByText("A vevőnek nincs e-mail címe")).toBeNull();
+    expect(screen.getByRole("button", { name: "Elküldöm" })).toBeDisabled();
+  });
+
+  it("links no customer page when the quote has no customer", async () => {
+    api.detail.mockResolvedValue(
+      quote([published()], {
+        status: "DRAFT",
+        customerId: null,
+        customerName: null,
+      }),
+    );
+    api.sendDraft.mockResolvedValue({ ...DRAFT, to: [] });
+    render(<QuoteDetailPage quoteId="q1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Kiküldés" }));
+    expect(
+      await screen.findByText("A vevőnek nincs e-mail címe"),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "A vevő adatlapja" })).toBeNull();
+  });
+
   it("bizonytalan kiküldés után Újraküldés a gomb, és a napló kiírja a próbacímet", async () => {
     api.detail.mockResolvedValue(
       quote([published()], {
