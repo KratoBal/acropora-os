@@ -73,13 +73,17 @@ export class ProductDataService {
           await this.repository.categoryTree(),
         );
       const where = productDataWhere(query, now);
-      const [totalMatched, rows] = await Promise.all([
+      const identifiers = request.query.identifiers;
+      const [totalMatched, rows, existing] = await Promise.all([
         this.repository.count(where),
         this.repository.rows(
           where,
           { take: request.limit, skip: request.offset },
           now,
         ),
+        identifiers
+          ? this.repository.existing(identifiers)
+          : Promise.resolve([]),
       ]);
 
       const omnibus = await this.omnibusFor(rows, now);
@@ -87,7 +91,7 @@ export class ProductDataService {
         queriedAt: now.toISOString(),
         source: "Acropora OS",
         products: rows.map((row) => buildProductData(row, { now, omnibus })),
-        notFound: notFound(request.query.identifiers, rows),
+        notFound: notFound(identifiers, existing),
         totalMatched,
         truncated: request.offset + rows.length < totalMatched,
       };
@@ -113,14 +117,17 @@ export class ProductDataService {
   }
 }
 
-/** Requested identifiers that matched neither a product id nor a variant SKU. */
+/** Requested identifiers that match NO product id and NO variant SKU anywhere (not "not on this page"). */
 export function notFound(
   requested: readonly string[] | undefined,
-  rows: readonly ProductRow[],
+  existing: readonly { id: string; variants: { sku: string }[] }[],
 ): string[] {
   if (!requested) return [];
   const known = new Set(
-    rows.flatMap((row) => [row.id, ...row.variants.map((v) => v.sku)]),
+    existing.flatMap((product) => [
+      product.id,
+      ...product.variants.map((variant) => variant.sku),
+    ]),
   );
   return requested.filter((identifier) => !known.has(identifier));
 }

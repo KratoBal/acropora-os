@@ -36,6 +36,18 @@ describe("productDataWhere", () => {
     );
   });
 
+  it("a category LISTING leaves out inactive and archived products; naming an identifier hides nothing", () => {
+    const listing = JSON.stringify(
+      productDataWhere({ categoryIds: ["c1"] }, NOW),
+    );
+    assert.ok(listing.includes('"isActive":true'));
+    assert.ok(listing.includes('"archivedAt":null'));
+    const named = JSON.stringify(
+      productDataWhere({ identifiers: ["x"], categoryIds: ["c1"] }, NOW),
+    );
+    assert.ok(!named.includes("archivedAt"));
+  });
+
   it("on sale: active only, and the mirror sale counts for UNAS-owned products only", () => {
     const text = JSON.stringify(productDataWhere({ onSale: true }, NOW));
     assert.ok(text.includes('"archivedAt":null'));

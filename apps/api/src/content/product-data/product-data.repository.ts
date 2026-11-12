@@ -40,13 +40,17 @@ export function productDataWhere(
         { variants: { some: { sku: { in: query.identifiers } } } },
       ],
     });
+  const hasIdentifiers = (query.identifiers?.length ?? 0) > 0;
+  const hasCategories = (query.categoryIds?.length ?? 0) > 0;
+  // A LISTING (a category or the on-sale list, with no identifier named) is about what is sold: inactive and archived
+  // products are left out. A lookup BY IDENTIFIER hides nothing: the agent asked for that one, and `active` tells.
+  if (!hasIdentifiers && (hasCategories || query.onSale))
+    and.push({ isActive: true, archivedAt: null });
   if (query.categoryIds && query.categoryIds.length > 0)
     and.push({
       categories: { some: { categoryId: { in: query.categoryIds } } },
     });
   if (query.onSale) {
-    // a category or on-sale LISTING is about what is sold: inactive and archived products are left out
-    and.push({ isActive: true, archivedAt: null });
     and.push({
       OR: [
         {
@@ -194,6 +198,20 @@ const select = (now: Date) =>
 export class ProductDataRepository {
   async categoryTree(): Promise<{ id: string; parentId: string | null }[]> {
     return prisma.category.findMany({ select: { id: true, parentId: true } });
+  }
+
+  /**
+   * WHICH OF THE REQUESTED IDENTIFIERS EXIST, independent of the page, the offset and every other filter. `notFound` is
+   * computed from this and nothing else: a product that exists but sits on another page, outside the category or off the
+   * sale list is NOT "not found" (a false absence is as wrong as a swallowed one). Only ids and SKUs are selected.
+   */
+  existing(
+    identifiers: readonly string[],
+  ): Promise<{ id: string; variants: { sku: string }[] }[]> {
+    return prisma.product.findMany({
+      where: productDataWhere({ identifiers: [...identifiers] }, new Date()),
+      select: { id: true, variants: { select: { sku: true } } },
+    });
   }
 
   count(where: Prisma.ProductWhereInput): Promise<number> {

@@ -61,7 +61,13 @@ function row(id: string, sku: string, sale: boolean): ProductRow {
 
 function service(
   rows: ProductRow[],
-  opts: { total?: number; fail?: boolean; omnibusCalls?: string[] } = {},
+  opts: {
+    total?: number;
+    fail?: boolean;
+    omnibusCalls?: string[];
+    /** what EXISTS for the requested identifiers, whatever page or filter: defaults to the returned rows */
+    existing?: { id: string; variants: { sku: string }[] }[];
+  } = {},
 ) {
   const repository = {
     categoryTree: async () => [],
@@ -70,6 +76,12 @@ function service(
       return opts.total ?? rows.length;
     },
     rows: async () => rows,
+    existing: async () =>
+      opts.existing ??
+      rows.map((r) => ({
+        id: r.id,
+        variants: r.variants.map((v) => ({ sku: v.sku })),
+      })),
   } as unknown as ProductDataRepository;
   return new ProductDataService(
     repository,
@@ -144,6 +156,34 @@ describe("ProductDataService.read", () => {
     assert.deepEqual(r.notFound, ["ghost"]);
   });
 
+  it("notFound is about EXISTENCE, not the page: 60 existing identifiers with limit 50 leave it empty", async () => {
+    const all = Array.from({ length: 60 }, (_, i) => `p${i}`);
+    const page = all.slice(0, 50).map((id) => row(id, `S-${id}`, false));
+    const r = await service(page, {
+      total: 60,
+      existing: all.map((id) => ({ id, variants: [{ sku: `S-${id}` }] })),
+    }).read({ query: { identifiers: all }, limit: 50, offset: 0 });
+    assert.equal(r.products.length, 50);
+    assert.deepEqual(r.notFound, []);
+    assert.equal(r.truncated, true);
+  });
+
+  it("an existing product outside the category (or on an earlier page) is NOT notFound; a ghost still is", async () => {
+    const r = await service([], {
+      total: 0,
+      existing: [{ id: "elsewhere", variants: [{ sku: "S-E" }] }],
+    }).read({
+      query: {
+        identifiers: ["elsewhere", "S-E", "ghost"],
+        categoryIds: ["c1"],
+      },
+      limit: 50,
+      offset: 0,
+    });
+    assert.deepEqual(r.products, []);
+    assert.deepEqual(r.notFound, ["ghost"]);
+  });
+
   it("says when the list was cut", async () => {
     const r = await service([row("p1", "S1", false)], { total: 7 }).read({
       query: { onSale: true },
@@ -164,5 +204,11 @@ describe("ProductDataService.read", () => {
 describe("notFound", () => {
   it("is empty when no identifiers were asked", () => {
     assert.deepEqual(notFound(undefined, []), []);
+  });
+  it("matches a product id or a variant SKU", () => {
+    assert.deepEqual(
+      notFound(["a", "S1", "x"], [{ id: "a", variants: [{ sku: "S1" }] }]),
+      ["x"],
+    );
   });
 });
