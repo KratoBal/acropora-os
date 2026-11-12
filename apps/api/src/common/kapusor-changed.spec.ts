@@ -27,6 +27,9 @@ import { describe, it } from "node:test";
  * kapu egy fixtura-cgroup mappabol olvas, hogy a teszt ne fuggjon a gep aktualis szabad memoriajatol.
  */
 const MODUL = join(process.cwd(), "..", "..", "scripts", "kapusor-changed.mjs");
+/** A szkript tsc-plafonja (1536 MB) koruli sav: a plafonos folyamat V8-limitje ide esik, a plafon nelkuli alapertek (nagy gepen) nem. */
+const HEAP_SAV_ALSO = 1.3e9;
+const HEAP_SAV_FELSO = 1.9e9;
 /** A BELEPESI PONT a `kapusor.mjs --changed`: a teszt azt hivja, amit egy hivo a parancssorbol. */
 const SZKRIPT = join(process.cwd(), "..", "..", "scripts", "kapusor.mjs");
 const TSC = join(
@@ -238,7 +241,36 @@ process.exit(r.status ?? 1);
     assert.notEqual(teljes.status, 0);
   });
 
-  it("ha a hivo NODE_OPTIONS-a heap-plafon nelkuli, a plafon a meglevo ele-moge kerul (a tsc is megkapja)", () => {
+  it("ha a hivo NODE_OPTIONS-a heap-plafon nelkuli, a plafon a meglevo ele-moge kerul (a tsc is megkapja)", (t) => {
+    /*
+      A TESZT CSAK AKKOR MER, HA A PLAFON NELKULI ALAPERTEK A SAVON KIVUL ESIK (T6.1, 2026-11-12). A V8 alapertelmezett heap-limitje a gep memoriajatol fugg: egy kb. 6 GB
+      alatti gepen (vagy szuk cgroup-korlaton) az alapertek maga is a 1,3-1,9 GB-os savba esik, es ott a tsc plafon NELKUL is "megkapna" egy savba eso limitet: a
+      teszt zold lenne akkor is, ha a szkript egyaltalan nem tenne plafont. Ezert elobb megmerjuk a SAJAT alapertelmezett limitunket egy sima gyerekfolyamatban,
+      ugyanazokkal a hivo-opciokkal, amiket a szkript is kap (csak a forras-terkep), es ha az a savba esik, a teszt nem kulonboztethet: kihagyja magat, nem zold.
+    */
+    const alap = Number(
+      spawnSync(
+        process.execPath,
+        [
+          "-e",
+          'process.stdout.write(String(require("node:v8").getHeapStatistics().heap_size_limit))',
+        ],
+        {
+          encoding: "utf8",
+          env: { PATH: HOST_PATH, NODE_OPTIONS: "--enable-source-maps" },
+        },
+      ).stdout,
+    );
+    assert.ok(
+      Number.isFinite(alap) && alap > 0,
+      "az alapertelmezett heap-limit nem merheto",
+    );
+    if (alap > HEAP_SAV_ALSO && alap < HEAP_SAV_FELSO) {
+      t.skip(
+        `a gep alapertelmezett heap-limitje (${Math.round(alap / 1048576)} MB) a ${Math.round(HEAP_SAV_ALSO / 1048576)}-${Math.round(HEAP_SAV_FELSO / 1048576)} MB-os savba esik: a plafon jelenlete itt nem megkulonboztetheto, ezert nem merunk zoldet`,
+      );
+      return;
+    }
     const { dir, ir } = repo(BAZIS);
     ir("pkg/src/a.ts", `${BAZIS["pkg/src/a.ts"]}// valtozas\n`);
     const mappa = mkdtempSync(join(tmpdir(), "kapusor-opts-"));
@@ -270,7 +302,7 @@ process.exit(r.status ?? 1);
     // nem-plafonos alapertek ennel jóval nagyobb, ezert a plafon nelkul ez piros)
     assert.equal(latott.maps, true);
     assert.ok(
-      latott.heap > 1.3e9 && latott.heap < 1.9e9,
+      latott.heap > HEAP_SAV_ALSO && latott.heap < HEAP_SAV_FELSO,
       `a tsc heap-limitje ${latott.heap}`,
     );
   });
