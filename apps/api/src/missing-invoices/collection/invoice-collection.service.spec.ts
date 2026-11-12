@@ -108,6 +108,7 @@ function setup(input: {
   const classified: string[] = [];
   const stored: CollectedDocumentInput[] = [];
   const promoted: { id: string; document: CollectedDocumentInput }[] = [];
+  const refreshed: { id: string; textReading: object; payee: string }[] = [];
   const recorded: string[] = [];
   const reasons: string[] = [];
   const fetched: string[] = [];
@@ -144,6 +145,11 @@ function setup(input: {
         : unassignedShas.has(sha)
           ? { id: "doc-unassigned", reviewState: "UNASSIGNED" }
           : null,
+    refreshUnassignedReading: async (
+      id: string,
+      textReading: object,
+      payee: string,
+    ) => void refreshed.push({ id, textReading, payee }),
     promote: async (id: string, document: CollectedDocumentInput) => {
       if (input.promoteDecided) return null;
       promoted.push({ id, document });
@@ -244,6 +250,7 @@ function setup(input: {
     classified,
     stored,
     promoted,
+    refreshed,
     recorded,
     reasons,
     started,
@@ -1557,6 +1564,33 @@ describe("InvoiceCollectionService keeps what nothing ties (UNASSIGNED)", () => 
       assert.deepEqual([stored, promoted], [[], []]);
       assert.deepEqual(recorded, ["m-1/RE67456.pdf:UNMATCHED"]);
       assert.deepEqual([counts.storedCount, counts.duplicateCount], [0, 0]);
+    });
+
+    it("keeps the copy UNASSIGNED but gives it today's reading (card f7ece26b: a fixed reader reaches a stored copy)", async () => {
+      const buffer = await untiedInvoice();
+      const { collection, refreshed, promoted } = setup({
+        environment: env(["GMAIL_FOXPOST"]),
+        messages: { "m-1": [{ fileName: "RE67456.pdf", buffer }] },
+        unassigned: [buffer],
+      });
+      await collection.run("MANUAL");
+      assert.deepEqual(promoted, []);
+      assert.deepEqual(
+        refreshed.map((r) => [r.id, typeof r.textReading, r.payee !== ""]),
+        [["doc-unassigned", "object", true]],
+      );
+    });
+
+    it("does not refresh the stored copy in a dry run", async () => {
+      const buffer = await untiedInvoice();
+      const { collection, refreshed } = setup({
+        environment: env(["GMAIL_FOXPOST"]),
+        messages: { "m-1": [{ fileName: "RE67456.pdf", buffer }] },
+        unassigned: [buffer],
+      });
+      // the dry re-evaluation (reevaluate(false)) writes nothing
+      await collection.reevaluate(false);
+      assert.deepEqual(refreshed, []);
     });
 
     it("is PROMOTED, not stored twice, when it ties now (a NAV number appeared)", async () => {

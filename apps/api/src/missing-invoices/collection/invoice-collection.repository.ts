@@ -572,6 +572,27 @@ export class InvoiceCollectionRepository {
   }
 
   /**
+   * A MÉG NEM PÁROSODOTT DOKUMENTUM OLVASATA, FRISSEN (újraolvasás, kártya f7ece26b): amit az újraolvasás most sem
+   * köt, az `UNASSIGNED` marad, de a tárolt olvasata a MAI olvasóé lesz. Enélkül egy javított olvasó (a Hetzner
+   * „Total” sora, #2486) a már tárolt példányon soha nem hatna: a bruttó üres maradna, és a párosító nem vethetné
+   * össze a terheléssel. FELTÉTELES ÍRÁS, mint az előléptetés: csak `UNASSIGNED` dokumentumon hat, egy közben
+   * meghozott emberi döntést nem ír felül.
+   */
+  async refreshUnassignedReading(
+    id: string,
+    textReading: object,
+    payee: string,
+  ): Promise<void> {
+    await this.database.incomingSupplierDocument.updateMany({
+      where: { id, reviewState: UNASSIGNED },
+      data: {
+        textReading: textReading as Prisma.InputJsonValue,
+        payeeCheck: payee,
+      },
+    });
+  }
+
+  /**
    * A MÉG NEM PÁROSODOTT DOKUMENTUM ELŐLÉPTETÉSE (újraolvasás): amit az első
    * olvasás nem tudott kötni, az most köthető (új feed-sor, NAV-sor, terhelés,
    * javított szabály). A dokumentum rendes begyűjtött dokumentum lesz (vagy a Jev
