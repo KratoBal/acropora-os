@@ -157,7 +157,8 @@ describe(
         .map((r) => r.documentNumber)
         .filter((n) => n.startsWith("CSOMAGSOR-"))
         .sort();
-      assert.equal(mine.length, 6);
+      // all seven seeded rows, in any month (the EU tax number row of 2099-08 included)
+      assert.equal(mine.length, 7);
       assert.ok(mine.includes("CSOMAGSOR-sztorno"));
       assert.ok(mine.includes("CSOMAGSOR-nem-konyvelendo"));
     });
