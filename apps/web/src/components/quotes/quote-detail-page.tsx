@@ -43,6 +43,7 @@ import { QuoteHandoffCard, QuoteHandoffDrawer } from "./quote-handoff";
 import { QuoteMilestonesCard } from "./quote-proforma";
 import { QuoteAcceptanceLinkCard } from "./quote-link";
 import { QuoteDeliveryLog, QuoteSendDrawer } from "./quote-send";
+import { canEditQuoteTitle, QuoteTitleEditor } from "./quote-title-editor";
 
 /** A legújabb verzió (a verziók számuk szerint növekvő sorrendben jönnek). */
 export function latestVersion(
@@ -89,6 +90,7 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [quote, setQuote] = useState<QuoteDetailDto | null>(null);
+  const [editingTitle, setEditingTitle] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -315,6 +317,15 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
                   Másolat új ajánlatként
                 </PilotButton>
               ) : null}
+              {canEditQuoteTitle(quote, canManage) ? (
+                <PilotButton
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() => setEditingTitle(true)}
+                >
+                  Cím szerkesztése
+                </PilotButton>
+              ) : null}
               {canManage && deletable ? (
                 <PilotButton
                   variant="ghost"
@@ -348,6 +359,18 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
           ) : undefined
         }
       />
+
+      {editingTitle && canEditQuoteTitle(quote, canManage) ? (
+        <QuoteTitleEditor
+          token={token}
+          quote={quote}
+          onClose={() => setEditingTitle(false)}
+          onSaved={(title) => {
+            setQuote({ ...quote, title });
+            setEditingTitle(false);
+          }}
+        />
+      ) : null}
 
       {error ? (
         <Alert variant="danger" title="Hiba történt" description={error} />
