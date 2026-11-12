@@ -75,6 +75,7 @@ import {
   paperOriginalOfRow,
   pairingNumberKeys,
 } from "../billing/incoming-billing-documents.js";
+import { invoiceIdentity } from "../billing/invoice-identity.js";
 import {
   packageDataNote,
   storedValues,
@@ -614,7 +615,12 @@ export class MissingInvoicesService {
             pairing.document.supplierTaxNumber,
           )
         : [];
-      for (const numberKey of numberKeys) {
+      // a számla AZONOSSÁGA (`inv:`, számlaszám + adószám-számjegyek) is kulcs: a bejövő számla sora, ami más
+      // entitás ugyanazzal a számlával (niceshops), így is megtalálja a párosított dokumentumot
+      const identities = (pairing.document.identities ?? []).filter(
+        (identity) => identity.startsWith("inv:"),
+      );
+      for (const numberKey of [...numberKeys, ...identities]) {
         const existing = result.get(numberKey);
         if (!existing || (pairing.paperOriginal && !existing.paperOriginal))
           result.set(numberKey, pairing);
@@ -1275,6 +1281,15 @@ export class MissingInvoicesService {
     // (azonosító vagy szám szerint, mint a „papíron megvan” jelölésnél)
     const itemOfDocument = new Map<string, string>();
     /*
+      A SZÁMLA AZONOSSÁGA IS KULCS (niceshops, 2026-11-12, acrobot): a terhelés egy FELTÖLTÖTT dokumentumhoz párosodott
+      (`inv:r49010000026240667|63964918`), a bejövő számla-rekord más entitás ugyanazzal a számlaszámmal és
+      adószámmal, és sem az azonosítója, sem a szám-kulcsa nem egyezik a feltöltött dokumentuméval (egy külföldi
+      adószámból nincs adószámos párosítási kulcs: `supplierTaxBase` csak a magyar alakot adja, a név pedig
+      eltérhet). Az összevonás azonossága (`inv:`) viszont számlaszám + adószám-számjegyek, és ugyanezt adja a
+      bejövő számla sora: így a rekord fizetettnek látszik, akárhány entitásban áll a számla.
+    */
+    const itemOfIdentity = new Map<string, string>();
+    /*
       A KÉTSZER FIZETETT TÉTEL IS PÁROSÍTOTT (task os-hianyzo-szamlak-unpaid, 2026-11-11, a Vízművek
       105300361726 októberi eset): a Kétszer fizetett állapot a terhelés felől „nem Megvan”, de a számla
       mindkét terheléshez párosítva van. Csak a FOUND-ot nézve a számla sora „kifizetetlen” maradt, miközben
@@ -1293,6 +1308,9 @@ export class MissingInvoicesService {
           for (const key of [...idsOf(document), ...numberKeys])
             if (key && !itemOfDocument.has(key))
               itemOfDocument.set(key, item.id);
+          for (const identity of document.identities ?? [])
+            if (identity.startsWith("inv:") && !itemOfIdentity.has(identity))
+              itemOfIdentity.set(identity, item.id);
         }
     const itemOfRow = (row: {
       sourceDocumentId: string | null;
@@ -1309,7 +1327,14 @@ export class MissingInvoicesService {
         (row.sourceDocumentId
           ? itemOfDocument.get(row.sourceDocumentId)
           : undefined) ??
-        numberKeys.map((key) => itemOfDocument.get(key)).find(Boolean)
+        numberKeys.map((key) => itemOfDocument.get(key)).find(Boolean) ??
+        itemOfIdentity.get(
+          invoiceIdentity(
+            row.documentNumber,
+            row.supplierTaxNumber,
+            row.supplierName,
+          ),
+        )
       );
     };
 
