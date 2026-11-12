@@ -82,7 +82,7 @@ export interface ProductRow {
   type: "PHYSICAL" | "SERVICE" | "LIVESTOCK";
   catalogAuthority: CatalogAuthority | null;
   brand: { name: string } | null;
-  categories: { category: { name: string } }[];
+  categories: { category: { id: string; name: string } }[];
   channelListings: {
     channel: "UNAS" | "WEBSHOP";
     isPublished: boolean;
@@ -367,7 +367,9 @@ export function buildProductData(
     name: row.name,
     active: row.isActive && row.archivedAt === null,
     brand: row.brand?.name ?? UNKNOWN,
-    categories: row.categories.map((c) => c.category.name).sort(),
+    categories: row.categories
+      .map((c) => ({ id: c.category.id, name: c.category.name }))
+      .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id)),
     livestock: row.type === "LIVESTOCK",
     channels: { unas: channel("UNAS"), webshop: channel("WEBSHOP") },
     variants: row.variants.map((variant): VariantData => ({

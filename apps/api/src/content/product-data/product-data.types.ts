@@ -121,7 +121,11 @@ export interface ProductData {
   /** active and not archived */
   active: boolean;
   brand: OrUnknown<string>;
-  categories: string[];
+  /**
+   * The categories the product is in, with the IDENTIFIER the `category` filter takes (a name alone cannot be fed back:
+   * the filter selects by id, and two categories may share a name under different parents). Sorted by name.
+   */
+  categories: { id: string; name: string }[];
   livestock: boolean;
   /** `unas`: the shop that sells today; `webshop`: the new shop's own channel row */
   channels: { unas: ChannelData; webshop: ChannelData };

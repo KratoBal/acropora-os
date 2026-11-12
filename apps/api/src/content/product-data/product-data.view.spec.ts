@@ -460,6 +460,29 @@ describe("the rest of the product", () => {
     });
   });
 
+  /*
+    A KATEGORIA AZONOSITOJA IS KIMEGY (stage-olvaso, 2026-11-12: a `category` szuro azonositot var, a valasz csak nevet adott,
+    ezert a szuro a valaszbol nem volt hajthato). MI PIROSIT: ha a valasz ujra csak nevet ad; ha a sorrend nem nev szerinti;
+    ha ket azonos nevu, kulonbozo azonositoju kategoria egynek latszik.
+  */
+  it("gives each category with the identifier the `category` filter takes, sorted by name (two same-named ones stay two)", () => {
+    const data = buildProductData(
+      product({
+        categories: [
+          { category: { id: "c-2", name: "Korall" } },
+          { category: { id: "c-9", name: "Akvarium" } },
+          { category: { id: "c-1", name: "Korall" } },
+        ],
+      }),
+      ctx(),
+    );
+    assert.deepEqual(data.categories, [
+      { id: "c-9", name: "Akvarium" },
+      { id: "c-1", name: "Korall" },
+      { id: "c-2", name: "Korall" },
+    ]);
+  });
+
   it("an archived or inactive product is `active: false`; livestock is flagged", () => {
     const data = buildProductData(
       product({ archivedAt: at(-1), type: "LIVESTOCK" }),
