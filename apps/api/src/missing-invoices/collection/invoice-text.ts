@@ -1251,8 +1251,8 @@ export function cardPaymentMatch(
   /*
     AZ ISMÉTLŐDŐ, AZONOS ÖSSZEGŰ ELŐFIZETÉS (acrobot 49566, TypeSafe AI havi 28,05 EUR): a partner-szó és az összeg
     minden hónap fizetésére illik, tehát több találat van, és eddig egyik sem kötött. A számla napjához (vagy a levél
-    érkezéséhez) a gyűjtő ablakán belül LEGKÖZELEBBI fizetés köt, de csak ha az összeg a számla végösszege, és ha
-    egyértelmű: két egyformán közeli fizetés közül nem választunk.
+    érkezéséhez) legfeljebb `NEAREST_PAYMENT_DAYS` napra LEGKÖZELEBBI fizetés köt, de csak ha az összeg a számla
+    végösszege, és ha egyértelmű: két egyformán közeli fizetés közül nem választunk.
   */
   if (matches.length > 1 && invoiceDate) {
     // csak a számla VÉGÖSSZEGÉRE (a legnagyobb pénznemes összeg): egy havidíj-sor vagy a legnagyobb tétel több hónap
@@ -1265,19 +1265,25 @@ export function cardPaymentMatch(
             m.currency === total.currency,
         )
       : [];
-    // és csak ha MINDEN találat a végösszegre szól (azonos havi díj): ha más összegű is van, a halmaz-út dönt, mint eddig
-    const nearest =
-      onTotal.length === matches.length
-        ? nearestPayment(onTotal, debits, invoiceDate)
-        : null;
-    if (nearest) return nearest;
+    // és csak ha MINDEN találat a végösszegre szól (azonos havi díj): ha más összegű is van, a halmaz-út dönt, mint eddig.
+    // Ha mind a végösszegre szól, a halmaz-út sem dönthet jobban: egy elemű halmazként a SZOMSZÉD hónap fizetését adná
+    // (barracuda, #2494: hiányzó júniusi fizetés mellett a júliusi a június 1-jei számlát is kötné), ezért ott a
+    // legközelebbi-szabály dönt egyedül, és ha az nem talál, nincs kötés.
+    if (onTotal.length === matches.length)
+      return nearestPayment(onTotal, debits, invoiceDate);
   }
   return invoiceDate
     ? cardPaymentSet(text, debits, partnerOf, invoiceDate)
     : null;
 }
 
-/** A számla napjához az ablakon belül egyértelműen legközelebbi egyfizetéses találat, vagy `null`. */
+/**
+ * Az ismétlődő előfizetés számlája és a terhelése között legfeljebb ennyi nap lehet: a Stripe-számla a terhelés
+ * napján kel, a levél aznap vagy másnap érkezik (TypeSafe: 09-28 a levél, 09-29 a terhelés).
+ */
+const NEAREST_PAYMENT_DAYS = 3;
+
+/** A számla napjához legfeljebb `NEAREST_PAYMENT_DAYS` napra, egyértelműen legközelebbi egyfizetéses találat, vagy `null`. */
 function nearestPayment(
   matches: readonly CardPaymentMatch[],
   debits: readonly CardDebit[],
@@ -1291,9 +1297,9 @@ function nearestPayment(
         (Date.parse(`${debit.bookingDate}T00:00:00Z`) - day) / DAY_MS;
       return { match, offset, distance: Math.abs(offset) };
     })
-    .filter(
-      (r) => r.offset >= -SET_WINDOW.before && r.offset <= SET_WINDOW.after,
-    )
+    // SZŰK TÁVOLSÁG, nem a gyűjtő teljes ablaka (barracuda, #2494): egy havi előfizetésnél az ablakban a SZOMSZÉD
+    // hónap fizetése is benne van, és egy hiányzó havi fizetés mellett a következő hónapé két számlát kötne
+    .filter((r) => r.distance <= NEAREST_PAYMENT_DAYS)
     .sort((a, b) => a.distance - b.distance);
   if (ranked.length === 0) return null;
   if (ranked.length > 1 && ranked[1]!.distance === ranked[0]!.distance)

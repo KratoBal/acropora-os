@@ -375,6 +375,24 @@ describe("cardPaymentMatch: a NAV-less invoice and the card payment(s) it was pa
     );
   });
 
+  it("does not let a neighbouring month's payment tie when that month's own payment is missing (barracuda, #2494)", () => {
+    // havi előfizetés: a májusi és a júliusi fizetés megvan, a júniusi HIÁNYZIK. A június 1-jei számlához a július 1-jei
+    // terhelés a gyűjtő ablakán belül volna (30 nap), de nem az övé: nem köt. A július 1-jei számla a sajátját köti.
+    const monthly = (date: string) =>
+      typesafe.map((l) => l.replace("September 28", date));
+    const may = sub("2026-05-01");
+    const july = sub("2026-07-01");
+    assert.equal(
+      cardPaymentMatch(monthly("June 1"), [may, july], word, "2026-06-01"),
+      null,
+    );
+    assert.deepEqual(
+      cardPaymentMatch(monthly("July 1"), [may, july], word, "2026-07-01")
+        ?.debitIds,
+      [july.id],
+    );
+  });
+
   it("does not tie a recurring payment outside the window (more than 15 days before the invoice)", () => {
     assert.equal(
       cardPaymentMatch(
