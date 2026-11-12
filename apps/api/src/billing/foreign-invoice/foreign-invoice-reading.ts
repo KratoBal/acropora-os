@@ -189,12 +189,12 @@ export function parseForeignDate(text: string): string | null {
 const ISSUE_LABEL =
   /(invoice\s+date|date\s+of\s+issue|issue\s+date|date\s+issued|issued\s+on|rechnungsdatum|rechungsdatum|rech\.-?\s*datum|ausstellungsdatum|factuurdatum|date\s+de\s+(la\s+)?facture|date\s+d['’][ée]mission|sz[áa]mla\s+kelte|ki[áa]ll[íi]t[áa]s\s+d[áa]tuma)/iu;
 /**
- * A CSUPASZ NÉMET "Datum:" CÍMKE (kártya dbab22cd, harmadik kör): egyes német számlák csak ennyit írnak a kelte elé. Csak a SOR ELEJÉN áll meg,
- * így a "Lieferdatum" és társai nem illeszkednek; a címkézett dátumoknál érvényes szabály marad: ha több különböző dátum áll ilyen címke után,
- * nem döntünk. A MAGYAR "Dátum" SZÁNDÉKOSAN NINCS ITT: a mért mintán (a régi 44-en és az újon) kétszer a számlán nyomtatott dátum 1 és 2 nappal
- * eltért a jóváhagyott kelttől, és egy ellentmondó automatikus érték rosszabb az üresnél (a döntés acrobot elé került).
+ * A CSUPASZ "Datum:" / "Dátum" CÍMKE (kártya dbab22cd, harmadik kör): sok külföldi számla csak ennyit ír a kelte elé. Csak a SOR ELEJÉN áll meg,
+ * így a "Lieferdatum", "Szállítási dátum" és társai nem illeszkednek; a címkézett dátumoknál érvényes szabály marad: ha több különböző dátum áll
+ * ilyen címke után, nem döntünk. A KELTE A SZÁMLÁN NYOMTATOTT DÁTUM (acrobot döntése, 2026-11-12: a könyvelői csomag hónapja a számla kelte): a mért
+ * mintán a jóváhagyott érték néhányszor 1-6 nappal eltért a nyomtatottól, az érkezési vagy rögzítési dátum lehet; az nem olvasói hiba.
  */
-const BARE_DATE_LABEL = /^\s*datum\s*:?/iu;
+const BARE_DATE_LABEL = /^\s*(datum|d[áa]tum)\s*:?/iu;
 const DUE_LABEL =
   /(due\s+date|date\s+due|payment\s+due|due\s+on|f[äa]lligkeitsdatum|f[äa]llig|zahlbar\s+bis|vervaldatum|uiterste\s+betaaldatum|date\s+d['’][ée]ch[ée]ance|[ée]ch[ée]ance|fizet[ée]si\s+hat[áa]rid[őo])/iu;
 const SUPPLY_LABEL =

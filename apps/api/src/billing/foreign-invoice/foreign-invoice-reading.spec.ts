@@ -1442,14 +1442,20 @@ describe("readForeignInvoice: the labelled number and the bare German date", () 
     assert.equal(values.issueDate, null);
   });
 
-  it("the Hungarian Dátum is deliberately not a bare issue label", () => {
+  it("the Hungarian bare Dátum is the printed issue date too, and a Szállítási dátum alone is not", () => {
     const { values } = readForeignInvoice({
       lines: ["Dátum 2026. okt. 31.", "Számla száma", "KH99000123"],
       adapter: null,
       pairing: pairing({ date: null }),
     });
-    assert.equal(values.issueDate, null);
+    assert.equal(values.issueDate, "2026-10-31");
     assert.equal(values.documentNumber, "KH99000123");
+    const delivery = readForeignInvoice({
+      lines: ["Szállítási dátum 2026. okt. 30.", "Számla száma", "KH99000123"],
+      adapter: null,
+      pairing: pairing({ date: null }),
+    });
+    assert.equal(delivery.values.issueDate, null);
   });
 
   it("the labelled number goes before the shared reader: a bank account line (Számlaszám) does not become the number", () => {
