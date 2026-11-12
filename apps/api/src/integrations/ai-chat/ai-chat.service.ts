@@ -57,6 +57,13 @@ export interface AiChatReply {
   httpStatus: number | null;
 }
 
+/**
+ * WHICH CALLER A CONVERSATION BELONGS TO, AS THE AI SERVICE SEES IT (card 7a5ea203). The AI service keeps a conversation and its
+ * ratings under the `x-client-key` header; without it every OS conversation fell back to one shared key, so any OS user could
+ * continue or rate another's. The key is the SESSION user's id, never a value of the request: the browser chooses nothing here.
+ */
+export const aiClientKeyFor = (userId: string): string => `os-user:${userId}`;
+
 export const PRODUCT_CONTEXT_NOTE =
   "Nincs termékkontextus, általános modellismeret alapján adott válasz.";
 
@@ -146,6 +153,8 @@ export class AiChatService {
   async ask(input: {
     message: string;
     conversationId?: string;
+    /** The session user: the conversation is kept under this user's key at the AI service. */
+    userId: string;
   }): Promise<AiChatReply> {
     const startedAt = Date.now();
     const config: AiChatConfig | null = aiChatConfig(this.environment);
@@ -162,6 +171,7 @@ export class AiChatService {
         headers: {
           authorization: `Bearer ${config.token}`,
           "content-type": "application/json",
+          "x-client-key": aiClientKeyFor(input.userId),
         },
         body: JSON.stringify({
           message: input.message,
@@ -254,6 +264,8 @@ export class AiChatService {
           headers: {
             authorization: `Bearer ${config.token}`,
             "content-type": "application/json",
+            // the rater's key: an answer is ratable only in a conversation of the same caller
+            "x-client-key": aiClientKeyFor(input.ratedBy),
           },
           body: JSON.stringify({
             axis: input.axis,
