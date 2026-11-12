@@ -9,6 +9,7 @@ import type {
   PostponeQuoteInput,
   QuoteSendDraftDto,
   QuoteSendInput,
+  UpdateQuoteInput,
   RecordQuoteAcceptanceInput,
   RejectQuoteInput,
   RevokeQuoteAcceptanceInput,
@@ -79,6 +80,14 @@ export const quotesApi = {
       `/quotes/${id(quoteId)}`,
       token,
       { method: "DELETE" },
+    );
+  },
+  /** The head of a quote that was never published (title, customer, owner); the API refuses anything else. */
+  updateHeader(token: string, quoteId: string, input: UpdateQuoteInput) {
+    return apiRequest<QuoteListItemDto>(
+      `/quotes/${id(quoteId)}`,
+      token,
+      json("PATCH", input),
     );
   },
   /** A closed quote as a NEW editable quote (new number, DRAFT, deep copy). */

@@ -12,6 +12,7 @@ import type {
   QuoteInternalVersion,
   QuoteListResponse,
   Session,
+  Permission,
   UserRole,
 } from "@acropora/types";
 import { CUSTOMER_LIST_PAGE_SIZE } from "@acropora/types";
@@ -52,6 +53,7 @@ const api = vi.hoisted(() => ({
   newVersion: vi.fn(),
   deleteDraft: vi.fn(),
   copyAsNew: vi.fn(),
+  updateHeader: vi.fn(),
   updateVersion: vi.fn(),
   costing: vi.fn(),
   addBlock: vi.fn(),
@@ -97,7 +99,11 @@ vi.mock("@/lib/api/quotes", () => ({ quotesApi: api }));
 const customers = vi.hoisted(() => ({ list: vi.fn() }));
 vi.mock("@/lib/api/customers", () => ({ customersApi: customers }));
 
-const auth = vi.hoisted(() => ({ role: "ADMIN" as UserRole }));
+const auth = vi.hoisted(() => ({
+  role: "ADMIN" as UserRole,
+  // per-user permissions (undefined: the role's own set)
+  permissions: undefined as Permission[] | undefined,
+}));
 vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({
     session: {
@@ -109,6 +115,7 @@ vi.mock("@/components/auth/auth-provider", () => ({
         email: "u@acropora.local",
         displayName: "Balázs",
         role: auth.role,
+        ...(auth.permissions ? { permissions: auth.permissions } : {}),
         customerId: null,
         supplierId: null,
       },
@@ -259,6 +266,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   navigation.search = new URLSearchParams();
   auth.role = "ADMIN";
+  auth.permissions = undefined;
   api.list.mockResolvedValue(LIST);
   api.snippets.mockResolvedValue([]);
   api.templates.mockResolvedValue([]);
@@ -1680,5 +1688,144 @@ describe("Ajánlat szövegrészletek (Beállítások)", () => {
       content: { type: "doc", content: [{ type: "paragraph" }] },
       milestones: [{ label: "Teljes", percent: "100" }],
     });
+  });
+});
+
+/*
+  AZ AJÁNLAT CÍME A MÁSOLATON (Luca, 2026-11-12, task quote-masolat-cim). Az ok, mérve: az API (PATCH /quotes/:id) a címet csak piszkozat
+  ajánlaton, soha nem publikált verziókkal engedi, de a felületen NINCS cím-szerkesztő (az új ajánlat oldala egyszer beállítja), ezért a
+  másolat ("... (másolat)") nem nevezhető át. MI PIROSÍT: ha a gomb nem látszik egy soha nem publikált piszkozaton; ha látszik elküldött vagy
+  publikált verziós ajánlaton, vagy jog nélkül; ha a mentés nem a címet, az ajánlat azonosítóját és a tokent küldi; ha az új cím nem jelenik
+  meg; ha az API elutasítása nem látszik; ha üres cím elmenne; ha a Mégse is mentene.
+*/
+describe("Az ajánlat címe: a másolat átnevezhető (quote-masolat-cim)", () => {
+  const draftOnly = () =>
+    quote([version({ id: "v1", versionNumber: 1, status: "DRAFT" })], {
+      status: "DRAFT",
+      title: "180 cm-es irodai bemutató akvárium (másolat)",
+    });
+  const open = async () =>
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Cím szerkesztése" }),
+    );
+  const field = () => screen.getByLabelText("Az ajánlat címe");
+
+  it("renames a never-published draft from the detail page, and the new title shows", async () => {
+    api.detail.mockResolvedValue(draftOnly());
+    api.updateHeader.mockResolvedValue({
+      ...LIST.items[0]!,
+      title: "Cápasuli lámpák, Állatkert",
+    });
+    render(<QuoteDetailPage quoteId="q1" />);
+    expect(
+      await screen.findByText("180 cm-es irodai bemutató akvárium (másolat)"),
+    ).toBeInTheDocument();
+    await open();
+    expect(field()).toHaveValue("180 cm-es irodai bemutató akvárium (másolat)");
+    fireEvent.change(field(), {
+      target: { value: "  Cápasuli lámpák, Állatkert  " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Cím mentése" }));
+    await waitFor(() =>
+      expect(api.updateHeader).toHaveBeenCalledWith("token-1", "q1", {
+        title: "Cápasuli lámpák, Állatkert",
+      }),
+    );
+    expect(
+      await screen.findByText("Cápasuli lámpák, Állatkert"),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Az ajánlat címe")).toBeNull();
+  });
+
+  it("is offered only on a draft that was never published, and only with the manage right", async () => {
+    api.detail.mockResolvedValue(quote([version({ status: "PUBLISHED" })]));
+    const { unmount } = render(<QuoteDetailPage quoteId="q1" />);
+    await screen.findByText("Aktuális verzió: v2", { exact: false });
+    expect(
+      screen.queryByRole("button", { name: "Cím szerkesztése" }),
+    ).toBeNull();
+    unmount();
+
+    // a DRAFT quote that already has a published version (a new draft on a sent one) is refused by the API too
+    api.detail.mockResolvedValue(
+      quote(
+        [
+          version({ id: "v1", versionNumber: 1, status: "PUBLISHED" }),
+          version({ id: "v2", versionNumber: 2, status: "DRAFT" }),
+        ],
+        { status: "DRAFT" },
+      ),
+    );
+    const second = render(<QuoteDetailPage quoteId="q1" />);
+    await screen.findByText("Aktuális verzió: v2", { exact: false });
+    expect(
+      screen.queryByRole("button", { name: "Cím szerkesztése" }),
+    ).toBeNull();
+    second.unmount();
+
+    auth.permissions = ["quotes.view"];
+    api.detail.mockResolvedValue(draftOnly());
+    render(<QuoteDetailPage quoteId="q1" />);
+    await screen.findByText("AJ-2026-0042 · Blue Office Kft.");
+    expect(
+      screen.queryByRole("button", { name: "Cím szerkesztése" }),
+    ).toBeNull();
+  });
+
+  it("shows the API's refusal and keeps the old title", async () => {
+    api.detail.mockResolvedValue(draftOnly());
+    api.updateHeader.mockRejectedValue(
+      new ApiError("Az adat időközben megváltozott. Frissítsd a listát.", 409),
+    );
+    render(<QuoteDetailPage quoteId="q1" />);
+    await open();
+    fireEvent.change(field(), { target: { value: "Más cím" } });
+    fireEvent.click(screen.getByRole("button", { name: "Cím mentése" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Az adat időközben megváltozott.",
+    );
+    expect(
+      screen.getByText("180 cm-es irodai bemutató akvárium (másolat)", {
+        selector: "p",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("an empty title says why the button is grey and sends nothing; Mégse and an unchanged title send nothing", async () => {
+    api.detail.mockResolvedValue(draftOnly());
+    render(<QuoteDetailPage quoteId="q1" />);
+    await open();
+    fireEvent.change(field(), { target: { value: "   " } });
+    expect(screen.getByRole("button", { name: "Cím mentése" })).toBeDisabled();
+    expect(
+      screen.getByText("Az ajánlat címe nem lehet üres."),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Mégse" }));
+    expect(screen.queryByLabelText("Az ajánlat címe")).toBeNull();
+
+    await open();
+    fireEvent.click(screen.getByRole("button", { name: "Cím mentése" }));
+    expect(screen.queryByLabelText("Az ajánlat címe")).toBeNull();
+    expect(api.updateHeader).not.toHaveBeenCalled();
+  });
+
+  it("the editor page renames too, and its header follows", async () => {
+    api.detail.mockResolvedValue(draftOnly());
+    api.updateHeader.mockResolvedValue({
+      ...LIST.items[0]!,
+      title: "Új cím a szerkesztőben",
+    });
+    render(<QuoteEditorPage quoteId="q1" />);
+    await open();
+    fireEvent.change(field(), { target: { value: "Új cím a szerkesztőben" } });
+    fireEvent.click(screen.getByRole("button", { name: "Cím mentése" }));
+    await waitFor(() =>
+      expect(api.updateHeader).toHaveBeenCalledWith("token-1", "q1", {
+        title: "Új cím a szerkesztőben",
+      }),
+    );
+    expect(
+      await screen.findByText("AJ-2026-0042 · Új cím a szerkesztőben"),
+    ).toBeInTheDocument();
   });
 });
