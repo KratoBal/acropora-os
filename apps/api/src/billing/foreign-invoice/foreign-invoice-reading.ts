@@ -669,8 +669,42 @@ export function vatLineEuNumber(lines: readonly string[]): string | null {
   return found.size === 1 ? [...found][0]! : null;
 }
 
+/**
+ * A KÜLDŐ CÍMSORA (a borítékablakos számla; kártya dbab22cd, harmadik kör: "Kitalált Kereskedő GmbH, Minta-Str. 9, 71000 Teststadt", "kitalalt · Minta Str. 43b · 55000
+ * Teststadt"). A számla elején egy sorban áll a küldő: NÉV, UTCA HÁZSZÁMMAL, IRÁNYÍTÓSZÁM VÁROS, vesszővel vagy " · "-tal elválasztva. A szerkezet azonosítja a küldőt, ezért
+ * jogi forma NÉLKÜL is név. Szigorú: pontosan ez a három tagú alak (a második tag számjegyet visz: házszám; a harmadik 4-5 jegyű irányítószámmal indul, "D-" előtaggal
+ * is), a név legfeljebb 60 karakter, nem a vevő (Acropora), nem szám-kezdetű, és a sor ELSŐ cellája (a " | " utáni rész nem számít); csak az első 15 sort nézi (az olvasó
+ * a fejlécet néha szám-sorok mögé teszi). Egyedi találatot vár: két eltérő név: semmi.
+ */
+const SENDER_ADDRESS_LINE =
+  /^(?<name>[^,·|0-9][^,·|]{1,58}?)\s*(?:,|·)\s*[^,·|]*\d[^,·|]*\s*(?:,|·)\s*(?:[A-Z]{1,2}-)?\d{4,5}\s+\p{L}/u;
+
+export function senderAddressLineName(lines: readonly string[]): string | null {
+  const buyer = ACROPORA_COMPANY.name.toLowerCase().split(/\s+/)[0]!;
+  const found = new Set<string>();
+  for (const line of lines.slice(0, 15)) {
+    const cell = line.normalize("NFC").split(" | ")[0]!.trim();
+    const name = SENDER_ADDRESS_LINE.exec(cell)
+      ?.groups?.["name"]?.replace(/\s+/g, " ")
+      .trim();
+    if (
+      !name ||
+      name.toLowerCase().includes(buyer) ||
+      /^(rechnung|invoice|facture|sz[áa]mla|datum|date|seite|page)(?![\p{L}])/iu.test(
+        name,
+      )
+    )
+      continue;
+    found.add(name);
+  }
+  return found.size === 1 ? [...found][0]! : null;
+}
+
 export function supplierNameFromText(lines: readonly string[]): string | null {
   const candidates = new Set<string>();
+  // a boríték-ablakos küldő-címsor (jogi forma nélkül is név): a többi forrással egy halmazban, tehát eltérő név esetén semmi
+  const addressLine = senderAddressLineName(lines);
+  if (addressLine) candidates.add(addressLine);
   const first = lines.find((line) => line.trim());
   const top = plausibleName(first?.split(" | ")[0]);
   if (top) candidates.add(top);
