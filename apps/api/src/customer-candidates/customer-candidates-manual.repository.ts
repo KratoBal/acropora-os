@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { prisma, type Prisma } from "@acropora/database";
 
 import {
+  ManualListChangedError,
   sameManualContent,
   type ManualPlanCurrent,
 } from "./customer-candidates-manual.rules.js";
@@ -30,16 +31,42 @@ export interface ManualRowToStore {
   note: string | null;
 }
 
+const toCurrent = (row: {
+  productId: string;
+  sku: string;
+  parameterCode: string;
+  direction: "EMEL" | "CSOKKENT";
+  referenceUrl: string;
+  basis: "MAKER" | "SHOP_TEXT";
+  sideEffects: string[];
+  sideEffectsStatus: "FILLED" | "PENDING";
+  note: string | null;
+}): ManualPlanCurrent => ({
+  productId: row.productId,
+  sku: row.sku,
+  parameter: row.parameterCode,
+  direction: row.direction,
+  referenceUrl: row.referenceUrl,
+  basis: row.basis,
+  sideEffects: row.sideEffects,
+  sideEffectsStatus: row.sideEffectsStatus,
+  note: row.note,
+});
+
 /** What the import needs from the database (an interface, so the command's logic is tested without one). */
 export interface ManualListStore {
   /** SKU -> the products it belongs to (more than one product for one SKU cannot happen: the SKU is unique, but the answer is a list so a doubt is visible). */
   resolve(skus: readonly string[]): Promise<Map<string, ResolvedSku[]>>;
   current(): Promise<ManualPlanCurrent[]>;
+  /**
+   * `stillCurrent` is asked UNDER THE LOCK with the rows held right then; false throws `ManualListChangedError` and writes nothing.
+   */
   replace(
     rows: readonly ManualRowToStore[],
     approvedBy: string,
     approvedAt: Date,
     audit?: ManualListAudit,
+    stillCurrent?: (current: ManualPlanCurrent[]) => boolean,
   ): Promise<{ stored: number; removed: number }>;
 }
 
@@ -71,29 +98,37 @@ export class PrismaManualListStore implements ManualListStore {
 
   async current(): Promise<ManualPlanCurrent[]> {
     const rows = await this.database.customerCandidateManualEntry.findMany();
-    return rows.map((row) => ({
-      productId: row.productId,
-      sku: row.sku,
-      parameter: row.parameterCode,
-      direction: row.direction,
-      referenceUrl: row.referenceUrl,
-      basis: row.basis,
-      sideEffects: row.sideEffects,
-      sideEffectsStatus: row.sideEffectsStatus,
-      note: row.note,
-    }));
+    return rows.map(toCurrent);
   }
 
-  /** THE WHOLE LIST IN ONE TRANSACTION: each row is an upsert on its product and move, and what is not in the file goes. A failure changes nothing. */
+  /**
+   * A TEST SEAM, a no-op in the app: it runs inside the replacement's transaction, after the lock and the check, before the writes.
+   * The integration spec holds a first apply here to force a second one into the window the lock must close.
+   */
+  afterCheckProbe: () => Promise<void> = async () => {};
+
+  /**
+   * THE WHOLE LIST IN ONE TRANSACTION: each row is an upsert on its product and move, and what is not in the file goes. A failure changes nothing.
+   *
+   * ONE WRITER AT A TIME, AND THE CHECK UNDER THE LOCK (murena's open point on #2428): the transaction first takes a fixed advisory lock,
+   * then reads the rows and asks `stillCurrent` about THEM. Two applies made from the same dry run used to both pass the fingerprint
+   * (each checked before the other wrote) and the later commit silently replaced the earlier list. Now the second waits for the first,
+   * reads what it stored, and is refused.
+   */
   async replace(
     rows: readonly ManualRowToStore[],
     approvedBy: string,
     approvedAt: Date,
     audit?: ManualListAudit,
+    stillCurrent?: (current: ManualPlanCurrent[]) => boolean,
   ): Promise<{ stored: number; removed: number }> {
     return this.database.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('customer-candidates-manual-list'))`;
       const ids: string[] = [];
       const held = await tx.customerCandidateManualEntry.findMany();
+      if (stillCurrent && !stillCurrent(held.map(toCurrent)))
+        throw new ManualListChangedError();
+      await this.afterCheckProbe();
       const heldByMove = new Map(
         held.map((entry) => [
           `${entry.productId}|${entry.parameterCode}|${entry.direction}`,

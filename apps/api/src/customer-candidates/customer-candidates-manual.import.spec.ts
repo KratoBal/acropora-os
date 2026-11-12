@@ -2,11 +2,16 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  analyzeManualList,
+  applyManualList,
   parseImportArgs,
   runManualImport,
   type ImportOptions,
 } from "./customer-candidates-manual.import.js";
-import type { ManualPlanCurrent } from "./customer-candidates-manual.rules.js";
+import {
+  ManualListChangedError,
+  type ManualPlanCurrent,
+} from "./customer-candidates-manual.rules.js";
 import type {
   ManualListStore,
   ManualRowToStore,
@@ -340,5 +345,76 @@ describe("an empty file is the whole list deleted, and it needs --allow-empty", 
       0,
     );
     assert.deepEqual(fx.stored, [[]]);
+  });
+});
+
+/*
+  THE CHECK UNDER THE REPLACEMENT'S LOCK (murena's open point on #2428). WHAT TURNS THIS RED: the apply not handing the store a check
+  for the rows it holds under its lock; that check passing for a table that changed since the dry run; a refused check still writing,
+  or coming back as anything but the fingerprint refusal the endpoint answers 409 to.
+*/
+describe("the fingerprint is checked again under the replacement's lock", () => {
+  const file = [line()];
+  const catalogue = {
+    "sku-1": [{ productId: "p1", productName: "Termék 1", active: true }],
+  };
+
+  async function applyWith(heldUnderLock: ManualPlanCurrent[]) {
+    const writes: ManualRowToStore[][] = [];
+    const store: ManualListStore = {
+      resolve: async (skus) =>
+        new Map(
+          skus.flatMap((sku) =>
+            catalogue[sku as "sku-1"]
+              ? [[sku, catalogue[sku as "sku-1"]] as const]
+              : [],
+          ),
+        ),
+      // what the dry run saw: an empty table
+      current: async () => [],
+      replace: async (rows, _approvedBy, _at, _audit, stillCurrent) => {
+        assert.ok(stillCurrent, "the apply hands the store the check");
+        if (!stillCurrent(heldUnderLock)) throw new ManualListChangedError();
+        writes.push([...rows]);
+        return { stored: rows.length, removed: 0 };
+      },
+    };
+    const analysis = await analyzeManualList(file, store);
+    const result = await applyManualList(
+      analysis,
+      {
+        approvedBy: "Balázs, teszt",
+        fingerprint: analysis.fingerprint,
+        allowEmpty: false,
+        auditUserId: null,
+        source: "http",
+      },
+      store,
+      new Date("2026-11-12T10:00:00.000Z"),
+    );
+    return { result, writes };
+  }
+
+  it("the table as the dry run saw it: the list is written", async () => {
+    const { result, writes } = await applyWith([]);
+    assert.deepEqual(result, { ok: true, stored: 1, removed: 0 });
+    assert.equal(writes.length, 1);
+  });
+
+  it("another apply landed in between: refused as a fingerprint mismatch, and nothing is written", async () => {
+    const other: ManualPlanCurrent = {
+      productId: "p9",
+      sku: "sku-9",
+      parameter: "KH",
+      direction: "EMEL",
+      referenceUrl: "https://shop.example/p9",
+      basis: "SHOP_TEXT",
+      sideEffects: [],
+      sideEffectsStatus: "FILLED",
+      note: null,
+    };
+    const { result, writes } = await applyWith([other]);
+    assert.deepEqual(result, { ok: false, refusal: "FINGERPRINT_MISMATCH" });
+    assert.equal(writes.length, 0);
   });
 });
