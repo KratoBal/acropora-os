@@ -19,6 +19,7 @@ import {
   shownNumber,
 } from "../missing-invoices/missing-invoice-matching.js";
 import { supplierTaxBase } from "./billing-duplicates.js";
+import { invoiceIdentity, sameGross } from "./invoice-identity.js";
 import { externalKindLabel as feedKindLabel } from "./billing-document-list.js";
 
 /**
@@ -77,6 +78,55 @@ export function paymentStateOf(row: {
 }
 
 /**
+ * A BEJÖVŐ SZÁMLA SORÁHOZ PÁROSÍTOTT DOKUMENTUM: elébb a sor forrás-dokumentuma, és ha annak NINCS terhelése, a számla
+ * AZONOSSÁGA (szám + szállító adószám-törzse vagy neve, az `inv:` kulcs). A niceshops-eset (2026-11-12): a terhelés egy
+ * FELTÖLTÖTT dokumentumhoz párosodott, a bejövő számla-rekord más entitás ugyanazzal a számlaszámmal és adószámmal, ezért a
+ * forrás-dokumentum szerinti keresés nem találta, és a számla „kifizetetlen” maradt egy már kifizetett terhelés mellett.
+ * A saját párosítás, ha van terhelése, mindig előbb nyer: az azonosság csak a hiányt pótolja, a meglévőt nem írja felül.
+ */
+export function pairingOfRow<
+  T extends Pick<DocumentPairing, "debits"> & {
+    document?: { gross: Prisma.Decimal | null; currency: string };
+  },
+>(
+  row: {
+    sourceDocumentId: string | null;
+    documentNumber?: string;
+    supplierName?: string;
+    supplierTaxNumber?: string | null;
+    /** az azonosság szerinti párosításhoz kell: az összeg és a deviza egyezése nélkül nem fizetett (`sameGross`) */
+    grossAmount?: Prisma.Decimal;
+    currency?: string;
+  },
+  pairings: ReadonlyMap<string, T>,
+): T | undefined {
+  const direct = row.sourceDocumentId
+    ? pairings.get(row.sourceDocumentId)
+    : undefined;
+  if (direct && direct.debits.length > 0) return direct;
+  const found =
+    row.documentNumber && row.grossAmount && row.currency
+      ? pairings.get(
+          invoiceIdentity(
+            row.documentNumber,
+            row.supplierTaxNumber,
+            row.supplierName ?? "",
+          ),
+        )
+      : undefined;
+  const byIdentity =
+    found?.document &&
+    sameGross(
+      { grossAmount: row.grossAmount!, currency: row.currency! },
+      found.document,
+    )
+      ? found
+      : undefined;
+  if (byIdentity && byIdentity.debits.length > 0) return byIdentity;
+  return direct ?? byIdentity;
+}
+
+/**
  * A BANKI PÁROSÍTÁS a Hiányzó számlák számításából, új logika nélkül. Nem
  * párosítandó CSAK két esetben (acrobot 25879): a számla nem a cégre szól, vagy
  * díjbekérő (a Számlázz.hu típusa D, vagy a párosító PROFORMA-nak olvasta).
@@ -84,8 +134,13 @@ export function paymentStateOf(row: {
 export function bankMatchOf(
   row: {
     sourceDocumentId: string | null;
+    /** a számla azonossága (szám + adószám/név) a `sourceDocumentId` melletti második kulcs: lásd `pairingOfRow` */
+    documentNumber?: string;
+    supplierName?: string;
+    supplierTaxNumber?: string | null;
     kindCode: string;
     grossAmount: Prisma.Decimal;
+    currency?: string;
     /** „Nem könyvelendő” (Balázs, 2026-10-26): ez nyer minden más ok előtt. */
     notBookable?: boolean;
   },
@@ -93,9 +148,7 @@ export function bankMatchOf(
 ): IncomingBankMatch {
   if (row.notBookable)
     return { state: "NOT_TO_PAIR", reason: "NOT_BOOKABLE", debits: [] };
-  const pairing = row.sourceDocumentId
-    ? pairings.get(row.sourceDocumentId)
-    : undefined;
+  const pairing = pairingOfRow(row, pairings);
   if (pairing?.payee === "NOT_COMPANY")
     return { state: "NOT_TO_PAIR", reason: "NOT_COMPANY", debits: [] };
   if (row.kindCode.toUpperCase() === "D" || pairing?.kind === "PROFORMA")
@@ -247,9 +300,7 @@ export function toIncomingListItem(
     ...incomingPaymentOf(
       row,
       bankMatch,
-      (row.sourceDocumentId
-        ? pairings.get(row.sourceDocumentId)?.paidInFull
-        : undefined) ?? false,
+      pairingOfRow(row, pairings)?.paidInFull ?? false,
       row.source === "PURCHASE" ? manualPaid : null,
     ),
     bankMatch,
@@ -352,6 +403,17 @@ export function paperOriginalOfRow(
 ): boolean {
   if (row.paperOriginalAt !== null) return true;
   if (row.sourceDocumentId && pairings.get(row.sourceDocumentId)?.paperOriginal)
+    return true;
+  if (
+    row.documentNumber &&
+    pairings.get(
+      invoiceIdentity(
+        row.documentNumber,
+        row.supplierTaxNumber,
+        row.supplierName,
+      ),
+    )?.paperOriginal
+  )
     return true;
   return pairingNumberKeys(
     row.documentNumber,

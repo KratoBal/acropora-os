@@ -14,6 +14,7 @@ import { MissingInvoicesService } from "../missing-invoices/missing-invoices.ser
 import { SzamlazzFeedsRepository } from "../missing-invoices/szamlazz-feeds.repository.js";
 import { SupplierInvoiceImportService } from "../purchasing/supplier-invoice-import/supplier-invoice-import.service.js";
 import { diagnoseUnpaired } from "./incoming-bank-diagnose.js";
+import { bankMatchOf } from "./incoming-billing-documents.js";
 import { incomingListItems } from "./purchase-incoming.js";
 
 /**
@@ -230,6 +231,13 @@ describe(
       // another gross is, with no debit of that amount
       const pairings = await missing.documentPairings();
       assert.deepEqual(diagnoseUnpaired([row], pairings, mine), []);
+      // the niceshops shape: a row of ANOTHER entity (unknown source document) with the same invoice number, tax number
+      // AND gross is the same invoice, so it reads as paired through the invoice identity
+      const sameInvoice = { ...row, sourceDocumentId: "nincs-ilyen" };
+      assert.equal(bankMatchOf(sameInvoice, pairings).state, "PAIRED");
+      assert.deepEqual(diagnoseUnpaired([sameInvoice], pairings, mine), []);
+      // the same number and tax number with ANOTHER gross is not the paid invoice (a correction, a typo, a part
+      // payment): it stays listed, with no debit of that amount
       const other = {
         ...row,
         sourceDocumentId: "nincs-ilyen",
@@ -241,6 +249,17 @@ describe(
           line.debits.length,
         ]),
         [[NUMBER, 0]],
+      );
+      // another invoice number: no pairing by identity either
+      const otherNumber = {
+        ...sameInvoice,
+        documentNumber: `${NUMBER}-B`,
+      };
+      assert.deepEqual(
+        diagnoseUnpaired([otherNumber], pairings, mine).map(
+          (line) => line.number,
+        ),
+        [`${NUMBER}-B`],
       );
     });
   },

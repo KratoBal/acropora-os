@@ -17,6 +17,7 @@ import {
   reminderFileName,
 } from "./collection/invoice-text.js";
 import { supplierTaxBase } from "../billing/billing-duplicates.js";
+import { invoiceIdentityKey as invoiceKey } from "../billing/invoice-identity.js";
 import type { CandidateDocument, Payee } from "./missing-invoice-matching.js";
 import type { StoredReading } from "../billing/foreign-invoice/reading-values.js";
 
@@ -186,16 +187,6 @@ export function queryExclusion(row: {
       detail: `status=${row.status}, kind=${row.kind ?? "null"}, origin=${row.origin}`,
     };
   return null;
-}
-
-/** Egy számla azonossága: a száma, és a szállító adószám-törzse, vagy a neve. */
-function invoiceKey(
-  number: string,
-  taxNumber: string | null | undefined,
-  supplierName: string,
-): string {
-  const who = taxBase(taxNumber) || supplierName.trim().toLowerCase();
-  return `${number.replace(/\s/g, "").toLowerCase()}|${who}`;
 }
 
 /** Az ÁFA-csoport azonosítója 17-tel kezdődik; a NAV a csoportot adja szállítóként. */
