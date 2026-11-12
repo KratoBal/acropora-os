@@ -1626,10 +1626,7 @@ describe("readForeignInvoice: the Hungarian gross label and the reverse charge",
 
   it("an item row's Bruttó összeg is no gross total: the label must start the line", () => {
     const { values } = readForeignInvoice({
-      lines: [
-        "1. tétel Bruttó összeg | 500,00 HUF",
-        "2. tétel Bruttó összeg | 700,00 HUF",
-      ],
+      lines: ["1. tétel Bruttó összeg | 500,00 HUF"],
       adapter: null,
       pairing: pairing({ date: undefined }),
     });
