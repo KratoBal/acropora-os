@@ -46,6 +46,9 @@ async function removeLeftovers() {
   await prisma.navIncomingInvoice.deleteMany({
     where: { navInvoiceNumber: NAV_NUMBER },
   });
+  await prisma.user.deleteMany({
+    where: { email: `${PREFIX}reviewer@example.invalid` },
+  });
 }
 
 const document = (id: string, number: string, gross: string) =>
@@ -334,6 +337,108 @@ describe(
         }),
         0,
       );
+    });
+
+    /*
+      A NÉV-ÜTKÖZÉS A CIKLUSBAN (kártya dbab22cd, acrobot 48944/48965, #2475). A tiszta függvény, az autoApproval és a lapi figyelmeztetés unit-teszttel védett; ez az eset a CIKLUS BEKÖTÉSÉT méri
+      valódi adatbázison: az `autoApprovePending` a nameConflict-et átadja-e. MI PIROSÍT: ha a PDF szövegéből olvasott, a korábbi ember által jóváhagyott névtől eltérő nevű sor
+      magától jóváhagyódna; ha az ok nem nevezné meg mindkét nevet; ha a NEM szövegből olvasott név (itt: forrás nélküli) is ütközne; ha az AUTOMATIKUSAN jóváhagyott (szerző nélküli) sor
+      is referencia lenne; ha az egyező nevű sor megállna.
+    */
+    it("a name read from the text that differs from the human-approved one for the same tax number is not approved by itself, and the reason names both", async () => {
+      const reviewer = await prisma.user.create({
+        data: {
+          email: `${PREFIX}reviewer@example.invalid`,
+          displayName: `${PREFIX} reviewer`,
+          role: "SERVICE",
+        },
+        select: { id: true },
+      });
+      const euTax = "IE8888888YY";
+      const earlierHuman = `${PREFIX}c-human`;
+      const earlierAuto = `${PREFIX}c-auto`;
+      const differs = `${PREFIX}c-differs`;
+      const agrees = `${PREFIX}c-agrees`;
+      const unsourced = `${PREFIX}c-unsourced`;
+      for (const id of [earlierHuman, earlierAuto, differs, agrees, unsourced])
+        await prisma.incomingSupplierDocument.create({
+          data: {
+            id,
+            gmailMessageId: id,
+            fileName: "invoice.pdf",
+            sizeBytes: 9,
+            sha256: id,
+            content: new Uint8Array(Buffer.from("%PDF-1.4 ")),
+            status: "FAILED",
+            kind: "INVOICE",
+            origin: "COLLECTED_MAIL",
+          },
+        });
+      const reading = (documentId: string, supplierName: string) => ({
+        documentId,
+        documentNumber: `${documentId}-N`,
+        supplierName,
+        supplierEuTaxNumber: euTax,
+        issueDate: new Date("2026-09-19T00:00:00Z"),
+        currency: "HUF",
+        netAmount: new Prisma.Decimal("15900"),
+        vatAmount: new Prisma.Decimal("0"),
+        grossAmount: new Prisma.Decimal("15900"),
+        warnings: [],
+        hasText: true,
+      });
+      // the reference: a person approved this name for the tax number. A later automatic approval with ANOTHER name (no author) must not count as a reference
+      await prisma.incomingDocumentReading.create({
+        data: {
+          ...reading(earlierHuman, "Kitalált Referencia Ltd."),
+          state: "VERIFIED",
+          reviewedByUserId: reviewer.id,
+          sources: { grossAmount: "TEXT" },
+        },
+      });
+      await prisma.incomingDocumentReading.create({
+        data: {
+          ...reading(earlierAuto, "Kitalált Automata Ltd."),
+          state: "VERIFIED",
+          reviewedByUserId: null,
+          sources: { grossAmount: "TEXT" },
+        },
+      });
+      // the three rows to decide: a differing name read from the text, the same name (punctuation differs) read from the text, and a differing name with no recorded source
+      await prisma.incomingDocumentReading.create({
+        data: {
+          ...reading(differs, "Kitalált Másik Cég Ltd."),
+          sources: { grossAmount: "TEXT", supplierName: "TEXT" },
+        },
+      });
+      await prisma.incomingDocumentReading.create({
+        data: {
+          ...reading(agrees, "KITALÁLT REFERENCIA LTD"),
+          sources: { grossAmount: "TEXT", supplierName: "TEXT" },
+        },
+      });
+      await prisma.incomingDocumentReading.create({
+        data: {
+          ...reading(unsourced, "Kitalált Másik Cég Ltd."),
+          sources: { grossAmount: "TEXT" },
+        },
+      });
+      for (const id of [differs, agrees, unsourced])
+        pairings.set(id, pairing(id, `${id}-N`, "15900", "15900"));
+      const report = await reviews.autoApprovePending({ apply: false });
+      const mine = new Map(
+        report.rows
+          .filter((row) => row.documentId.startsWith(`${PREFIX}c-`))
+          .map((row) => [row.documentId, row]),
+      );
+      const conflict = mine.get(differs);
+      assert.equal(conflict?.basis, null);
+      assert.match(conflict?.reason ?? "", /Kitalált Másik Cég Ltd\./);
+      assert.match(conflict?.reason ?? "", /Kitalált Referencia Ltd\./);
+      assert.match(conflict?.reason ?? "", /ember döntsön/);
+      // the same name after normalisation, and a name with no text source, are approvable on the bank basis
+      assert.equal(mine.get(agrees)?.basis, "BANK");
+      assert.equal(mine.get(unsourced)?.basis, "BANK");
     });
   },
 );
