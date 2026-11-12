@@ -1372,3 +1372,76 @@ describe("a known number in a reference is not the document's own number", () =>
     assert.deepEqual(knownNumberInText(lines, KNOWN), KNOWN[0]);
   });
 });
+
+/*
+  A SAJÁT SZÁM CÍMKÉJE A JEL MELLETT (acrobot 48666, barracuda megjegyzése a #2458-on). Kitalált szöveg és szám. MI PIROSÍT: egy
+  helyesbítő számla vagy egy jóváírás SAJÁT, címkézett száma nem kötődik (a címsor jele hivatkozásnak látszott), vagy az ismert
+  eredeti szám miatt kétértelmű marad; ÉS a másik irány: egy erős hivatkozásban (eredeti, Bezug, zu Rechnung) álló idegen szám
+  sajátként kötődik.
+*/
+describe("an own-number label beside the marker: the document's own number binds", () => {
+  const SUPPLIER = "11111111-2-41";
+  const ORIGINAL = {
+    number: "R49010000099990001",
+    supplierTaxNumber: SUPPLIER,
+  };
+  const CORRECTIVE = { number: "HX2026000123", supplierTaxNumber: SUPPLIER };
+  const CREDIT = { number: "GS2026000777", supplierTaxNumber: SUPPLIER };
+
+  it("a Hungarian corrective invoice binds its own number, though the original it names is known too", () => {
+    const lines = [
+      "Helyesbítő számla",
+      "Helyesbítő számla sorszáma: HX2026000123",
+      "Az eredeti számla száma: R49010000099990001",
+    ];
+    assert.deepEqual(
+      knownNumberInText(lines, [ORIGINAL, CORRECTIVE]),
+      CORRECTIVE,
+    );
+  });
+
+  it("a Gutschrift binds its own number, though the invoice it refers to is known too", () => {
+    const lines = [
+      "Gutschrift Nr. GS2026000777",
+      "Bezug auf Rechnung R49010000099990001",
+    ];
+    assert.deepEqual(knownNumberInText(lines, [ORIGINAL, CREDIT]), CREDIT);
+  });
+
+  it("the niceshops shape: an unknown own number and a known referenced one bind nothing", () => {
+    const lines = [
+      "Gutschrift Nr. GS-NEM-ISMERT-1",
+      "Bezug auf Rechnung Nr. R49010000099990001",
+    ];
+    assert.equal(knownNumberInText(lines, [ORIGINAL]), null);
+  });
+
+  it("a strong reference stays a reference beside an own-number label", () => {
+    for (const lines of [
+      ["Az eredeti számla sorszáma: R49010000099990001"],
+      ["Zu Rechnung Nr. R49010000099990001"],
+    ])
+      assert.equal(
+        knownNumberInText(lines, [ORIGINAL]),
+        null,
+        String(lines[0]),
+      );
+  });
+
+  it('an "Eredeti példány" header on the own number\'s line is no reference: with a second known number the text stays undecidable (barracuda, #2460)', () => {
+    const ADVANCE = { number: "EL2026000555", supplierTaxNumber: SUPPLIER };
+    const lines = [
+      "SZÁMLA Eredeti példány Számla sorszáma: HX2026000123",
+      "Előleg-számla: EL2026000555",
+    ];
+    // the old shape (the bare "eredeti" a strong reference) dropped the own number and bound the advance's
+    assert.equal(knownNumberInText(lines, [CORRECTIVE, ADVANCE]), null);
+    // alone, the own number on that line binds
+    assert.deepEqual(knownNumberInText([lines[0]!], [CORRECTIVE]), CORRECTIVE);
+  });
+
+  it("a weak marker without a label still makes two known numbers undecidable", () => {
+    const lines = ["Rechnung GS2026000777", "Storno R49010000099990001"];
+    assert.equal(knownNumberInText(lines, [ORIGINAL, CREDIT]), null);
+  });
+});
