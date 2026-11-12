@@ -21,7 +21,6 @@ export async function lockContentItems(
   const rows = await tx.$queryRaw<{ id: string; state: ContentState }[]>`
     SELECT "id", "state"::text AS "state" FROM "ContentItem"
     WHERE "id" IN (${Prisma.join([...ids])})
-    ORDER BY "id"
-    FOR UPDATE`;
+    ORDER BY "id"`;
   return new Map(rows.map((row) => [row.id, row.state]));
 }
