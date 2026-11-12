@@ -55,13 +55,14 @@ export function nameKey(value: string | null | undefined): string {
     .trim();
 }
 
-export function knownSupplierName(
+/** Az adott adószámú, nem üres nevű korábbi sorok (az EU adószám a kulcs, ennek híján a magyar), vagy null, ha nincs kulcs vagy nincs ilyen sor. */
+function matchingRows(
   rows: readonly VerifiedSupplierRow[],
   keys: {
     euTaxNumber: string | null | undefined;
     taxNumber: string | null | undefined;
   },
-): KnownSupplierName | null {
+): { rows: VerifiedSupplierRow[]; taxNumber: string } | null {
   const eu = taxKey(keys.euTaxNumber);
   const hu = taxKey(keys.taxNumber);
   // az EU adószám a kulcs; csak ha az olvasatnak nincs, jön a magyar (egyik kulcsról sem esünk át a másikra: egy egyértelműtlen EU csoport nem kap magyar mentőövet)
@@ -75,27 +76,64 @@ export function knownSupplierName(
     (row) =>
       taxKey(row[column]) === key && nameKey(row.supplierName).length > 0,
   );
-  if (!matching.length) return null;
-  if (new Set(matching.map((row) => nameKey(row.supplierName))).size > 1)
-    return null;
-  const counts = new Map<string, { count: number; latest: number }>();
-  for (const row of matching) {
+  return matching.length ? { rows: matching, taxNumber: key } : null;
+}
+
+/** A nyers nevek egy listában, a leggyakoribb elöl (döntetlennél a legutóbb jóváhagyott), a normalizált névenként egy alak. */
+function rawNames(rows: readonly VerifiedSupplierRow[]): string[] {
+  const byKey = new Map<
+    string,
+    Map<string, { count: number; latest: number }>
+  >();
+  for (const row of rows) {
     const name = row.supplierName!.trim().replace(/\s+/g, " ");
-    const entry = counts.get(name) ?? { count: 0, latest: 0 };
+    const forms = byKey.get(nameKey(name)) ?? new Map();
+    const entry = forms.get(name) ?? { count: 0, latest: 0 };
     entry.count += 1;
     entry.latest = Math.max(entry.latest, row.updatedAt?.getTime() ?? 0);
-    counts.set(name, entry);
+    forms.set(name, entry);
+    byKey.set(nameKey(name), forms);
   }
-  const [name] = [...counts.entries()].sort(
-    (a, b) => b[1].count - a[1].count || b[1].latest - a[1].latest,
-  )[0]!;
-  return { name, taxNumber: key, rows: matching.length };
+  const best = [...byKey.values()].map((forms) => {
+    const [name, entry] = [...forms.entries()].sort(
+      (a, b) => b[1].count - a[1].count || b[1].latest - a[1].latest,
+    )[0]!;
+    return {
+      name,
+      count: [...forms.values()].reduce((n, e) => n + e.count, 0),
+      latest: entry.latest,
+    };
+  });
+  return best
+    .sort((a, b) => b.count - a.count || b.latest - a.latest)
+    .map((entry) => entry.name);
+}
+
+export function knownSupplierName(
+  rows: readonly VerifiedSupplierRow[],
+  keys: {
+    euTaxNumber: string | null | undefined;
+    taxNumber: string | null | undefined;
+  },
+): KnownSupplierName | null {
+  const group = matchingRows(rows, keys);
+  if (!group) return null;
+  const names = rawNames(group.rows);
+  // két igazán különböző név: nincs egyértelmű név (a töltés semmit nem tölt)
+  if (names.length > 1) return null;
+  return {
+    name: names[0]!,
+    taxNumber: group.taxNumber,
+    rows: group.rows.length,
+  };
 }
 
 /**
- * A NÉV-ÜTKÖZÉS (kártya dbab22cd, harmadik kör; acrobot 48943/48944, barracuda 48941): a PDF SZÖVEGÉBŐL olvasott név és az azonos adószámú, EMBER által jóváhagyott korábbi
- * (egyértelmű) név a `nameKey` után eltér. A visszaadott érték a korábbi név (a figyelmeztetésbe és az automatikus jóváhagyás okába); `null`: nincs ütközés (nincs olvasott név,
- * nincs egyértelmű korábbi név az adószámra, vagy a kettő a normalizálás után egyezik). A hívó dönti el, MELY nevekre kéri (csak a szövegből olvasottra, nem a párosítás vagy a lookup nevére).
+ * A NÉV-ÜTKÖZÉS (kártya dbab22cd, harmadik kör; acrobot 48943/48944, barracuda 48941 és 49013): a PDF SZÖVEGÉBŐL olvasott név és az azonos adószámú, EMBER által jóváhagyott korábbi
+ * nevek a `nameKey` után ütköznek, ha az olvasott név EGYIK korábbi névvel sem egyezik. Egyértelmű előzménynél (egy név) ez az eltérés; KÉTÉRTELMŰ előzménynél (több, egymástól eltérő
+ * ember által jóváhagyott név ugyanarra az adószámra) a szigorúbb alak: egy harmadik, mindegyiktől eltérő szöveges név is ütközés, ha viszont az olvasott név az egyikkel egyezik, nincs.
+ * A visszaadott érték a korábbi név (kétértelmű előzménynél a nevek " / "-lel elválasztva; a figyelmeztetésbe és az automatikus jóváhagyás okába); `null`: nincs ütközés (nincs olvasott
+ * név, nincs korábbi név az adószámra, vagy az olvasott név egyezik valamelyikkel). A hívó dönti el, MELY nevekre kéri (csak a szövegből olvasottra, nem a párosítás vagy a lookup nevére).
  */
 export function supplierNameConflict(
   rows: readonly VerifiedSupplierRow[],
@@ -107,10 +145,15 @@ export function supplierNameConflict(
 ): KnownSupplierName | null {
   const read = nameKey(values.supplierName);
   if (!read) return null;
-  const known = knownSupplierName(rows, {
+  const group = matchingRows(rows, {
     euTaxNumber: values.supplierEuTaxNumber,
     taxNumber: values.supplierTaxNumber,
   });
-  if (!known || nameKey(known.name) === read) return null;
-  return known;
+  if (!group) return null;
+  if (group.rows.some((row) => nameKey(row.supplierName) === read)) return null;
+  return {
+    name: rawNames(group.rows).join(" / "),
+    taxNumber: group.taxNumber,
+    rows: group.rows.length,
+  };
 }
