@@ -29,12 +29,17 @@ import { AiChatService } from "./ai-chat.service.js";
 export class AiChatController {
   constructor(private readonly service: AiChatService) {}
 
+  /**
+   * The conversation is kept under the SESSION user's key at the AI service (card 7a5ea203): another user cannot continue it,
+   * whatever conversation id the browser sends.
+   */
   @Post()
   @RequirePermissions(PERMISSIONS.AI_TEST_VIEW)
-  ask(@Body() body: AiChatRequestDto) {
+  ask(@Body() body: AiChatRequestDto, @CurrentUser() user: AuthenticatedUser) {
     return this.service.ask({
       message: body.message,
       conversationId: body.conversationId,
+      userId: user.id,
     });
   }
 
