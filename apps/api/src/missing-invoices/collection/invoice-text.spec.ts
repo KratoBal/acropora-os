@@ -1469,19 +1469,26 @@ describe("a bank account written in groups is not an invoice number", () => {
     assert.equal(read.numberFrom, "LABEL");
   });
 
-  it("without any other number, the grouped account still gives no number", () => {
-    for (const footer of [
-      FOOTER,
-      "Számlaszám: 1234 5678 1234 5678",
-      "Számlaszám: 12345678 12345678 12345678",
-    ])
-      assert.notEqual(
+  /*
+    SORONKÉNT, PONTOS ÉRTÉKKEL (barracuda, #2464 CHANGES): egy notEqual("1234")
+    a nyolcas csoportokra nem tud elbukni (ott az első token "12345678"), és egy
+    ciklus az első bukásnál megáll. MI PIROSÍT: a négyes ág nélkül a 4x4 és a
+    4x6 sor; a nyolcas ág nélkül a 8x2 és a 8x3 sor (köztük a niceshops-alak).
+  */
+  for (const [name, footer] of [
+    ["4x4", "Számlaszám: 1234 5678 1234 5678"],
+    ["4x6", FOOTER],
+    ["8x2", "Számlaszám: 12345678 12345678"],
+    ["8x3", "Számlaszám: 12345678 12345678 12345678"],
+    ["8x3, the niceshops form", "Számlaszám: 12001008 01472511 00100004 |"],
+  ] as const)
+    it(`without any other number, a ${name} grouped account gives no number`, () => {
+      assert.equal(
         readInvoiceText(["Számla", footer], { fileName: "x.pdf" })
           .invoiceNumber,
-        "1234",
-        footer,
+        null,
       );
-  });
+    });
 
   it("a real invoice number after the same label is still read (the control nearest to the case)", () => {
     for (const [line, number] of [
