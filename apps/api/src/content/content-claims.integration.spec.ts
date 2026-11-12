@@ -344,9 +344,9 @@ describe(
       during: () => Promise<{ status: number; body: any }>,
     ) {
       const service = app.get(ContentService);
-      let concurrent: Promise<{ status: number; body: any }> | null = null;
+      const box: { concurrent?: Promise<{ status: number; body: any }> } = {};
       service.approvalClaimProbe = async () => {
-        concurrent = during();
+        box.concurrent = during();
         await new Promise((resolve) => setTimeout(resolve, 400));
       };
       try {
@@ -354,8 +354,8 @@ describe(
           method: "POST",
           body: { from: "AWAITING_APPROVAL", to: "READY_TO_SEND" },
         });
-        assert.ok(concurrent, "the probe ran");
-        return { approved, concurrent: await concurrent! };
+        assert.ok(box.concurrent, "the probe ran");
+        return { approved, concurrent: await box.concurrent! };
       } finally {
         service.approvalClaimProbe = async () => {};
       }
