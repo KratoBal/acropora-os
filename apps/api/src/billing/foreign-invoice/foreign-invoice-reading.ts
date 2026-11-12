@@ -206,10 +206,11 @@ const VAT_LABEL =
   /(\bvat\b|\btax\b|\bmwst\b|\bust\b|umsatzsteuer|mehrwertsteuer|\bbtw\b|\btva\b|[áa]fa\b)/iu;
 /**
  * ezek a sorok nem ÁFA-ÖSSZEGET hordoznak: adószám, mentesség, nettó vagy bruttó végösszeg. A magyar "ÁFA regisztrációs szám: | 0106 417" sor (kártya dbab22cd,
- * harmadik kör, Digital Charging Solutions) "417"-et adott ÁFA-összegnek, két mintán is: a regisztrációs, azonosító és adószám szavak kizárják.
+ * harmadik kör, Digital Charging Solutions) "417"-et adott ÁFA-összegnek, két mintán is: a regisztrációs, azonosító és adószám szavak kizárják. A "VAT exemption, Article 262 ter-I of the
+ * General Tax Code" sor (francia számla) "262"-t adott: a mentesség és a cikkely szavai is kizárják.
  */
 const NOT_VAT_AMOUNT =
-  /(number|\bno\b\.?|\bnr\b\.?|\bid\b|idnr|ust-?id|identification|nummer|registration|reg\.|regisztr[áa]ci[óo]s|azonos[íi]t[óo]|ad[óo]sz[áa]m|excl|incl|zzgl|inkl|including|excluding|\bht\b|\bttc\b|subtotal|total\s+(amount|due)|amount\s+due)/iu;
+  /(number|\bno\b\.?|\bnr\b\.?|\bid\b|idnr|ust-?id|identification|nummer|registration|reg\.|regisztr[áa]ci[óo]s|azonos[íi]t[óo]|ad[óo]sz[áa]m|exempt|exon[ée]r|article|excl|incl|zzgl|inkl|including|excluding|\bht\b|\bttc\b|subtotal|total\s+(amount|due)|amount\s+due)/iu;
 /**
  * A MAGYAR "Teljes bruttó összeg" / "Bruttó végösszeg" CÍMKE (kártya dbab22cd, harmadik kör): a sor ELEJÉN áll, így a "Bruttó egységár" és társai nem illeszkednek.
  * A közös végösszeg-olvasó (labelledTotal, a begyűjtő is használja) ezt nem adja; itt, csak a külföldi számla olvasójában vesszük fel, és csak az ÜRES bruttót tölti.
@@ -332,6 +333,34 @@ const SUMMARY_NET = /^(ad[óo]alap|nett[óo]|netto)(?![\p{L}])/iu;
 // "ÁFA (Ft)" and "ÁFA", never "ÁFA %" or "Áfa(%)": the rate column is not the amount
 const SUMMARY_VAT = /^[áa]fa\s*(\((?!\s*%)[^)]*\))?$/iu;
 const SUMMARY_GROSS = /^brutt[óo](?![\p{L}])/iu;
+
+/**
+ * AZ ANGOL "EXCLUDING / INCLUDING" ÖSSZESÍTŐ TÁBLA (kártya dbab22cd, harmadik kör, bruttó-szelet: a francia számla angolul):
+ *   Total amount | TVA | Total amount | Total amount due
+ *   excluding tax (€) | (rate) % | VAT (€) | including all taxes (€)
+ *   Bank details | 485,40 € | 0,00 € | 485,40 €
+ * A fejléc KÉT sorban áll, az érték-sor első cellája egy odacsúszott másik oszlop címkéje. A feltételek együtt: a sor előtti HÁROM sor együtt egy "excluding" (excl.) és egy
+ * "including" (incl.) szót tartalmaz ebben a sorrendben, a sor PONTOSAN három összeget ad, nettó + ÁFA = bruttó (két fillér), a nettó pozitív, az ÁFA nem negatív és NEM nagyobb
+ * a nettónál (a (0, x, x) alakú tételsor nem összesítő). Egyedi találat kell: több eltérő: nem döntünk.
+ */
+export function englishTotalsTable(
+  lines: readonly string[],
+): { net: number; vat: number; gross: number } | null {
+  const found = new Map<string, { net: number; vat: number; gross: number }>();
+  lines.forEach((raw, index) => {
+    const values = amountsIn(raw.normalize("NFC"));
+    if (values.length !== 3) return;
+    const [net, vat, gross] = values as [number, number, number];
+    if (net <= 0 || vat < 0 || vat > net || Math.abs(net + vat - gross) > 0.02)
+      return;
+    const header = lines.slice(Math.max(0, index - 3), index).join(" ");
+    const excl = header.search(/excl(?:uding|\.)?\s*(?:all\s+)?(?:tax|vat)/iu);
+    const incl = header.search(/incl(?:uding|\.)?\s*(?:all\s+)?(?:tax|vat)/iu);
+    if (excl < 0 || incl <= excl) return;
+    found.set(`${net}|${vat}|${gross}`, { net, vat, gross });
+  });
+  return found.size === 1 ? [...found.values()][0]! : null;
+}
 
 export function vatSummaryTable(
   lines: readonly string[],
@@ -826,7 +855,8 @@ export function readForeignInvoice(input: ForeignReadingInput): ForeignReading {
     // a cimkézett olvasás után: ami már megvan, azt az összesítő sor nem írja felül, és ha egy már
     // meglévő érték ELTÉR az összesítő sortól (két táblázat, másik összeg), az sor semmit nem tölt:
     // a három mező nem mondhat ellent egymásnak (barracuda, #1795)
-    const totals = totalsRow(lines) ?? vatSummaryTable(lines);
+    const totals =
+      totalsRow(lines) ?? vatSummaryTable(lines) ?? englishTotalsTable(lines);
     const agrees = (
       field: "netAmount" | "vatAmount" | "grossAmount",
       amount: number,
