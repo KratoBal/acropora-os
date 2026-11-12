@@ -1125,6 +1125,12 @@ model User {
   verifiedDoseEffects                 ProductDoseEffect[]                 @relation("DoseEffectVerifiedBy")
   doseEffectVersions                  ProductDoseEffectVersion[]          @relation("DoseEffectVersionBy")
   archivedDoseEffects                 ProductDoseEffect[]                 @relation("DoseEffectArchivedBy")
+  /// The manufacturer claims (T5.3): recorded, checked, withdrawn, and the claim log.
+  recordedManufacturerClaims          ProductManufacturerClaim[]          @relation("ManufacturerClaimRecordedBy")
+  verifiedManufacturerClaims          ProductManufacturerClaim[]          @relation("ManufacturerClaimVerifiedBy")
+  archivedManufacturerClaims          ProductManufacturerClaim[]          @relation("ManufacturerClaimArchivedBy")
+  manufacturerClaimEvents             ProductManufacturerClaimEvent[]     @relation("ManufacturerClaimEventActor")
+  contentClaimLinks                   ContentItemClaim[]                  @relation("ContentItemClaimLinkedBy")
   issuedReefClubLinkCodes             ReefClubLinkCode[]                  @relation("ReefClubLinkCodeIssuer")
   aquariumShareReads                  AquariumShareEvent[]                @relation("AquariumShareReader")
   endedReefClubLinks                  ReefClubCustomerLink[]              @relation("ReefClubLinkEndedBy")
@@ -1496,6 +1502,8 @@ model Product {
   homepageFeatured           HomepageFeaturedProduct?
   /// A termek adag-hatas sorai (ReefClub 7. szelet). Lasd a `ProductDoseEffect` fejlecet.
   doseEffects                ProductDoseEffect[]
+  /// A gyartoi allitasok (T5.3). Lasd a `ProductManufacturerClaim` fejlecet.
+  manufacturerClaims         ProductManufacturerClaim[]
   /// Az ajanlasok es a rogzitett adagok, amelyek ezt a termeket nevezik meg (ReefClub 8. szelet).
   reefClubRecommendations    ReefClubRecommendation[]
   reefClubDoses              ReefClubAdministeredDose[]
@@ -8376,6 +8384,8 @@ model ContentItem {
   stateEvents ContentStateEvent[]
   /// A cikk törzse (csak `ARTICLE` csatornán): lásd `ArticleBody`.
   article   ArticleBody?
+  /// A gyartoi allitasok, amikre a tetel epul (T5.3, 3. pont): lasd `ContentItemClaim`.
+  claimLinks ContentItemClaim[]
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
 
@@ -9592,6 +9602,8 @@ model ProductKnowledgeFact {
   /// Minden elfogadás és feloldás növeli; a szöveg elavultsága ehhez mér.
   revision       Int
   updatedAt      DateTime                     @updatedAt
+  /// A gyartoi adagolas-allitasok, amik erre a tenyre epulnek (T5.3, 3. pont).
+  manufacturerClaims ProductManufacturerClaim[]
 
   @@unique([productId, scopeKey, field])
   @@index([fieldResultId])
@@ -10991,6 +11003,151 @@ model ProductDoseEffectVersion {
 
   @@unique([effectId, version])
   @@index([recordedById])
+}
+
+/// A gyartoi allitas fajtaja (T5.3, 1. pont). A REKLAM kulon fajta (2. pont): tarolhato, de szo
+/// szerint csak fuggetlen megerosites utan kerulhet ki.
+enum ManufacturerClaimType {
+  DOSING
+  EFFECT
+  COMPOSITION
+  APPLICABILITY
+  SAFETY
+  ADVERTISING
+  OTHER
+}
+
+/// Honnan van az allitas: adatlap, gyartoi oldal, cimke, gyartoi utmutato, szerzoi cikk.
+enum ManufacturerClaimSourceKind {
+  DATASHEET
+  MANUFACTURER_PAGE
+  LABEL
+  MANUFACTURER_GUIDE
+  AUTHOR_ARTICLE
+}
+
+/// Az ellenorzes allapota: ellenorizetlen, gyartoi forrassal egyezik, fuggetlen forrassal
+/// megerositve, elter/vitatott.
+enum ManufacturerClaimStatus {
+  UNVERIFIED
+  MATCHES_MANUFACTURER
+  INDEPENDENTLY_CONFIRMED
+  DISPUTED
+}
+
+/// Mi tortent a tetellel; a naplo minden sora egy ilyen.
+enum ManufacturerClaimEventKind {
+  CREATED
+  EDITED
+  STATUS_CHANGED
+  ARCHIVED
+}
+
+/// EGY GYARTOI ALLITAS EGY TERMEKROL, FORRASSAL ES ELLENORZESI ALLAPOTTAL (T5.3, korall
+/// specifikacioja, Balazs jovahagyasa 2026-11-03). A tartalom-iras ebbol veszi a "a gyarto
+/// szerint" jelolest, nem fejbol (2. pont); a kiirasi szabaly `manufacturer-claim.rules.ts`.
+///
+/// A MARKA nincs kulon oszlopban: a termek `brand`-jebol olvassuk, igy nem tud elcsuszni tole.
+///
+/// ADAGOLAS ES A PRODUCT KNOWLEDGE (3. pont): ha a termeknek van elfogadott adagolas-tenye
+/// (`ProductKnowledgeFact`, a `dosing*` mezok), az adagolas-allitas ARRA hivatkozik
+/// (`knowledgeFactId` + a hivatkozaskori `knowledgeFactRevision`), es sajat szam-erteke nincs:
+/// a szam a tenyben el, egy helyen. Ha a teny revizioja azota no, az allitas olvasaskor
+/// ellenorizetlennek szamit (a kiirasi szabaly mondja meg).
+///
+/// KI ELLENORIZHET (6. pont, acrobot 48148, 2026-11-12): nem az, aki a mostani valtozatot
+/// rogzitette (a CHECK is koti); "fuggetlen forrassal megerositve" allapotot csak ember adhat,
+/// `content.approve` joggal. Minden szerkesztes uj valtozat; az allitas szerkesztese (tipus, szoveg,
+/// forras, szam, teny) az ellenorzest torli, a megjegyzese es az ujraellenorzesi datume nem.
+/// Visszavonas archivalassal, torles nincs; minden lepes a `ProductManufacturerClaimEvent` naploba
+/// kerul, a teljes ertekkel.
+model ProductManufacturerClaim {
+  id                    String                          @id @default(cuid())
+  productId             String
+  product               Product                         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  claimType             ManufacturerClaimType
+  /// Az allitas, ahogy a forrasban all (a gyarto megfogalmazasahoz kozel).
+  claimText             String                          @db.Text
+  sourceKind            ManufacturerClaimSourceKind
+  /// Webcim vagy fajl utja.
+  sourceRef             String                          @db.VarChar(1000)
+  /// Amikor a gyarto kozzetette; NULL: a forras nem datumozott (nem talaljuk ki).
+  sourcePublishedOn     DateTime?                       @db.Date
+  /// Amikor kiolvastuk. Kotelezo.
+  sourceReadOn          DateTime                        @db.Date
+  /// Gepileg olvashato szam (pl. adag), mertekegyseggel; a ketto csak egyutt all (CHECK).
+  valueAmount           Decimal?                        @db.Decimal(19, 6)
+  valueUnit             String?                         @db.VarChar(32)
+  note                  String?                         @db.VarChar(1000)
+  /// Ujraellenorzes ideje (termekvaltozat, cimkevaltozas).
+  recheckOn             DateTime?                       @db.Date
+  /// Csak adagolas-allitasnal: a Product Knowledge teny, amire epul, es a revizioja.
+  knowledgeFactId       String?
+  knowledgeFact         ProductKnowledgeFact?           @relation(fields: [knowledgeFactId], references: [id], onDelete: SetNull)
+  knowledgeFactRevision Int?
+  status                ManufacturerClaimStatus         @default(UNVERIFIED)
+  version               Int                             @default(1)
+  recordedById          String?
+  recordedBy            User?                           @relation("ManufacturerClaimRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
+  recordedAt            DateTime
+  verifiedById          String?
+  verifiedBy            User?                           @relation("ManufacturerClaimVerifiedBy", fields: [verifiedById], references: [id], onDelete: SetNull)
+  verifiedAt            DateTime?
+  archivedAt            DateTime?
+  archivedById          String?
+  archivedBy            User?                           @relation("ManufacturerClaimArchivedBy", fields: [archivedById], references: [id], onDelete: SetNull)
+  createdAt             DateTime                        @default(now())
+  updatedAt             DateTime                        @updatedAt
+  events                ProductManufacturerClaimEvent[]
+  /// A tartalom-tetelek, amik erre az allitasra epulnek (T5.3, 3. pont).
+  contentLinks          ContentItemClaim[]
+
+  @@index([productId])
+  @@index([status, claimType])
+  @@index([knowledgeFactId])
+  @@index([recordedById])
+  @@index([verifiedById])
+  @@index([archivedById])
+}
+
+/// A GYARTOI ALLITAS NAPLOJA (T5.3, 2. pont: "ki, mikor, mi volt az ertek"). Csak hozzafuzes:
+/// minden letrehozas, szerkesztes, allapot-valtozas es archivalas egy sor, a tetel TELJES
+/// ertekevel a lepes utan (`snapshot`). A szereplo neve is itt marad, a fiok torlese utan is.
+model ProductManufacturerClaimEvent {
+  id        String                     @id @default(cuid())
+  claimId   String
+  claim     ProductManufacturerClaim   @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  kind      ManufacturerClaimEventKind
+  /// A tetel valtozata a lepes utan.
+  version   Int
+  actorId   String?
+  actor     User?                      @relation("ManufacturerClaimEventActor", fields: [actorId], references: [id], onDelete: SetNull)
+  actorName String
+  /// A tetel mezoi a lepes utan (`claimSnapshot`).
+  snapshot  Json
+  createdAt DateTime                   @default(now())
+
+  @@index([claimId, createdAt])
+  @@index([actorId])
+}
+
+/// EGY TARTALOM-TETEL ES EGY GYARTOI ALLITAS KAPCSOLATA (T5.3, 3. pont): a tetel megnevezi, mely
+/// allitasokra epul. A jovahagyas (`READY_TO_SEND`) csak akkor mehet, ha mind kiirhato; ha egy
+/// allitas kiesik (vitatott, ellenorizetlen lesz, archivaljak), a jovahagyott tetel visszalep
+/// jovahagyasra (`content-claim-links.ts`). Kotni es oldani csak jovahagyas elott lehet.
+model ContentItemClaim {
+  id         String                   @id @default(cuid())
+  contentId  String
+  content    ContentItem              @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  claimId    String
+  claim      ProductManufacturerClaim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  linkedById String?
+  linkedBy   User?                    @relation("ContentItemClaimLinkedBy", fields: [linkedById], references: [id], onDelete: SetNull)
+  linkedAt   DateTime                 @default(now())
+
+  @@unique([contentId, claimId])
+  @@index([claimId])
+  @@index([linkedById])
 }
 
 enum ReefClubRecommendationStatus {

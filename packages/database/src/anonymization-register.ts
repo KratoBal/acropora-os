@@ -758,6 +758,19 @@ export const ANONYMIZATION_REGISTER: Readonly<
     verifiedById: "identifier",
     recordedByName: "personName",
   },
+  // T5.3: the manufacturer's claim about a product and where it stands. The claim and its source
+  // are the manufacturer's words and address; the note is a colleague's free text.
+  ProductManufacturerClaim: {
+    claimText: "business",
+    sourceRef: "business",
+    valueUnit: "business",
+    note: "freeText",
+  },
+  // The claim log: the snapshot is the claim's fields after the step (the note included), walked as JSON.
+  ProductManufacturerClaimEvent: {
+    actorName: "personName",
+    snapshot: "json",
+  },
   // ReefClub 8: the log of the automatic recommendation. The snapshot of the input holds
   // numbers, ids and fixed words (no free text from the customer), and is walked as JSON
   // anyway; the sentence is built from fixed templates and the product's own name.
