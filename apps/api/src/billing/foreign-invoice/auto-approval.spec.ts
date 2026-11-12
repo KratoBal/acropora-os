@@ -270,6 +270,30 @@ describe("automatic approval", () => {
     assert.equal(netRead.approve, true);
   });
 
+  /*
+    A KORÁBBAN JÓVÁHAGYOTT SZÁLLÍTÓ NEVE (kártya dbab22cd, lookup; acrobot 48851, 2026-11-12): a név egy EMBER által jóváhagyott, azonos adószámú sorból jön, ezért a
+    KNOWN_SUPPLIER forrású név MAGA NEM állítja meg az automatikus jóváhagyást: a bank egyezés (a bruttó a számláról, a terhelés pontosan annyi) dönt. MI PIROSÍT:
+    ha egy jövőbeli szabály a nevet forrása miatt emberhez küldené.
+  */
+  it("BANK: a supplier name from an earlier verified invoice (KNOWN_SUPPLIER) does not stop an approval the debit confirms", () => {
+    const result = decide({
+      values: FOREIGN,
+      sources: { grossAmount: "TEXT", supplierName: "KNOWN_SUPPLIER" },
+      debits: [{ amount: "-15900", currency: "HUF" }],
+    });
+    assert.deepEqual(
+      [result.approve, result.approve && result.basis],
+      [true, "BANK"],
+    );
+    // the same reading with a debit that does not pay the gross still stays: the name changes nothing about the proof
+    const unpaid = decide({
+      values: FOREIGN,
+      sources: { grossAmount: "TEXT", supplierName: "KNOWN_SUPPLIER" },
+      debits: [{ amount: "-100", currency: "HUF" }],
+    });
+    assert.equal(unpaid.approve, false);
+  });
+
   it("BANK: in a currency, the amount the bank stated for a forint debit counts; without it, not approved", () => {
     const eur = {
       ...FOREIGN,
