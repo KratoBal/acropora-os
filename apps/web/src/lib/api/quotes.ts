@@ -82,7 +82,6 @@ export const quotesApi = {
       { method: "DELETE" },
     );
   },
-  /** A closed quote as a NEW editable quote (new number, DRAFT, deep copy). */
   /** The head of a quote that was never published (title, customer, owner); the API refuses anything else. */
   updateHeader(token: string, quoteId: string, input: UpdateQuoteInput) {
     return apiRequest<QuoteListItemDto>(
@@ -91,6 +90,7 @@ export const quotesApi = {
       json("PATCH", input),
     );
   },
+  /** A closed quote as a NEW editable quote (new number, DRAFT, deep copy). */
   copyAsNew(token: string, quoteId: string) {
     return apiRequest<{ id: string; quoteNumber: string }>(
       `/quotes/${id(quoteId)}/copy`,
