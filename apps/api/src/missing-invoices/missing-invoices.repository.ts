@@ -453,6 +453,8 @@ export interface PackageBillingRow {
   documentNumber: string;
   supplierName: string;
   supplierTaxNumber: string | null;
+  /** külföldi szállítónál itt áll az adószám: az azonosság ebből épül, ha a `supplierTaxNumber` üres */
+  supplierEuTaxNumber: string | null;
   sourceDocumentId: string | null;
   grossAmount: Prisma.Decimal;
   currency: string;
@@ -1400,6 +1402,7 @@ export class MissingInvoicesRepository {
           documentNumber: true,
           supplierName: true,
           supplierTaxNumber: true,
+          supplierEuTaxNumber: true,
           sourceDocumentId: true,
           grossAmount: true,
           currency: true,
