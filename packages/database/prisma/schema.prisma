@@ -1130,6 +1130,7 @@ model User {
   verifiedManufacturerClaims          ProductManufacturerClaim[]          @relation("ManufacturerClaimVerifiedBy")
   archivedManufacturerClaims          ProductManufacturerClaim[]          @relation("ManufacturerClaimArchivedBy")
   manufacturerClaimEvents             ProductManufacturerClaimEvent[]     @relation("ManufacturerClaimEventActor")
+  contentClaimLinks                   ContentItemClaim[]                  @relation("ContentItemClaimLinkedBy")
   issuedReefClubLinkCodes             ReefClubLinkCode[]                  @relation("ReefClubLinkCodeIssuer")
   aquariumShareReads                  AquariumShareEvent[]                @relation("AquariumShareReader")
   endedReefClubLinks                  ReefClubCustomerLink[]              @relation("ReefClubLinkEndedBy")
@@ -8383,6 +8384,8 @@ model ContentItem {
   stateEvents ContentStateEvent[]
   /// A cikk törzse (csak `ARTICLE` csatornán): lásd `ArticleBody`.
   article   ArticleBody?
+  /// A gyartoi allitasok, amikre a tetel epul (T5.3, 3. pont): lasd `ContentItemClaim`.
+  claimLinks ContentItemClaim[]
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
 
@@ -11054,7 +11057,8 @@ enum ManufacturerClaimEventKind {
 ///
 /// KI ELLENORIZHET (6. pont, acrobot 48148, 2026-11-12): nem az, aki a mostani valtozatot
 /// rogzitette (a CHECK is koti); "fuggetlen forrassal megerositve" allapotot csak ember adhat,
-/// `content.approve` joggal. A tetel BARMELY szerkesztese uj valtozat, es az ellenorzest torli.
+/// `content.approve` joggal. Minden szerkesztes uj valtozat; az allitas szerkesztese (tipus, szoveg,
+/// forras, szam, teny) az ellenorzest torli, a megjegyzese es az ujraellenorzesi datume nem.
 /// Visszavonas archivalassal, torles nincs; minden lepes a `ProductManufacturerClaimEvent` naploba
 /// kerul, a teljes ertekkel.
 model ProductManufacturerClaim {
@@ -11095,6 +11099,8 @@ model ProductManufacturerClaim {
   createdAt             DateTime                        @default(now())
   updatedAt             DateTime                        @updatedAt
   events                ProductManufacturerClaimEvent[]
+  /// A tartalom-tetelek, amik erre az allitasra epulnek (T5.3, 3. pont).
+  contentLinks          ContentItemClaim[]
 
   @@index([productId])
   @@index([status, claimType])
@@ -11123,6 +11129,25 @@ model ProductManufacturerClaimEvent {
 
   @@index([claimId, createdAt])
   @@index([actorId])
+}
+
+/// EGY TARTALOM-TETEL ES EGY GYARTOI ALLITAS KAPCSOLATA (T5.3, 3. pont): a tetel megnevezi, mely
+/// allitasokra epul. A jovahagyas (`READY_TO_SEND`) csak akkor mehet, ha mind kiirhato; ha egy
+/// allitas kiesik (vitatott, ellenorizetlen lesz, archivaljak), a jovahagyott tetel visszalep
+/// jovahagyasra (`content-claim-links.ts`). Kotni es oldani csak jovahagyas elott lehet.
+model ContentItemClaim {
+  id         String                   @id @default(cuid())
+  contentId  String
+  content    ContentItem              @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  claimId    String
+  claim      ProductManufacturerClaim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  linkedById String?
+  linkedBy   User?                    @relation("ContentItemClaimLinkedBy", fields: [linkedById], references: [id], onDelete: SetNull)
+  linkedAt   DateTime                 @default(now())
+
+  @@unique([contentId, claimId])
+  @@index([claimId])
+  @@index([linkedById])
 }
 
 enum ReefClubRecommendationStatus {
