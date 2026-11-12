@@ -183,7 +183,9 @@ export type IncomingReadingSource =
   /** a NAV-adatból, az automatikus jóváhagyásnál (acrobot 34633) */
   | "NAV"
   /** a számlán álló fordított adózás JELÉBŐL: a 0 ÁFA, illetve a belőle (és a bruttóból) számolt nettó (kártya dbab22cd, barracuda #2468) */
-  | "REVERSE_CHARGE";
+  | "REVERSE_CHARGE"
+  /** a szállító neve egy KORÁBBAN JÓVÁHAGYOTT számláról, ugyanazzal az adószámmal (kártya dbab22cd, harmadik kör) */
+  | "KNOWN_SUPPLIER";
 
 /** Honnan jött egy mező értéke, az ellenőrző lapon a mező mellett. */
 export const INCOMING_READING_SOURCE_LABELS: Readonly<
@@ -196,6 +198,7 @@ export const INCOMING_READING_SOURCE_LABELS: Readonly<
   PURCHASE: "Rögzített beszerzésből",
   NAV: "NAV-adatból",
   REVERSE_CHARGE: "Fordított adózás jeléből számolva",
+  KNOWN_SUPPLIER: "Korábban jóváhagyott számláról, ugyanazzal az adószámmal",
 };
 
 export interface IncomingReadingValues {

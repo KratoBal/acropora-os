@@ -94,6 +94,8 @@ function harness(input: {
   notSupplierDocuments?: string[];
   /** reading this document's stored file fails (the store is unreachable) */
   failSourceFor?: string[];
+  /** the lookup of verified readings by supplier fails (the database read throws) */
+  failKnownLookup?: boolean;
 }) {
   const feed: Row[] = [...(input.feed ?? [])];
   const readings: Row[] = [...(input.readings ?? [])];
@@ -159,14 +161,22 @@ function harness(input: {
     },
     incomingDocumentReading: {
       findMany: async (args?: {
-        where?: { state?: string; documentId?: { in: string[] } };
-      }) =>
-        readings.filter(
+        where?: {
+          state?: string;
+          documentId?: { in: string[] };
+          supplierName?: unknown;
+        };
+      }) => {
+        // the known-supplier lookup is the only reader that filters on the supplier name
+        if (input.failKnownLookup && args?.where?.supplierName)
+          throw new Error("database unreachable");
+        return readings.filter(
           (row) =>
             (!args?.where?.state || row.state === args.where.state) &&
             (!args?.where?.documentId ||
               args.where.documentId.in.includes(row.documentId as string)),
-        ),
+        );
+      },
       findUnique: async ({ where }: { where: { documentId: string } }) =>
         readings.find((row) => row.documentId === where.documentId) ?? null,
       create: async ({ data }: { data: Row }) => {
@@ -804,5 +814,97 @@ describe("helpers", () => {
     );
     assert.equal(senderDomain("a@b.example"), "b.example");
     assert.equal(senderDomain(null), null);
+  });
+});
+
+/*
+  A SZÁLLÍTÓ NEVE A KORÁBBAN JÓVÁHAGYOTT SZÁMLÁKBÓL (kártya dbab22cd, harmadik kör), szolgáltatás-szinten. MI PIROSÍT: ha egy üres név nem töltődne
+  egy korábban jóváhagyott, azonos adószámú számláról; ha a forrás nem KNOWN_SUPPLIER és a figyelmeztetés nem nevezné meg az adószámot; ha egy meglévő (párosított
+  vagy olvasott) nevet felülírna; ha egy NEM jóváhagyott olvasat számítana; ha két eltérő névből választana; ha a lookup hibája az olvasást is megállítaná.
+*/
+describe("the supplier name from earlier verified invoices", () => {
+  const WITH_VAT = [...INVOICE, "EU VAT IE9999999XX"];
+  const earlier = (
+    name: string,
+    state = "VERIFIED",
+    documentId = `old-${name}`,
+  ): Row => ({
+    documentId,
+    state,
+    supplierName: name,
+    supplierEuTaxNumber: "IE9999999XX",
+    supplierTaxNumber: null,
+    updatedAt: new Date("2026-09-01T00:00:00Z"),
+  });
+  const nameless = () => pairing({ supplierName: "" });
+
+  it("fills an empty name from a verified invoice with the same tax number, and says so", async () => {
+    const h = harness({
+      pairings: [nameless()],
+      files: { "mail-1": await textPdf(WITH_VAT) },
+      readings: [earlier("Kitalált Előfizetés Inc.")],
+    });
+    const review = await h.service.review("mailbox:mail-1");
+    assert.equal(review.values.supplierEuTaxNumber, "IE9999999XX");
+    assert.equal(review.values.supplierName, "Kitalált Előfizetés Inc.");
+    assert.equal(review.sources.supplierName, "KNOWN_SUPPLIER");
+    assert.ok(
+      review.warnings.some(
+        (w) => w.includes("korábban jóváhagyott") && w.includes("IE9999999XX"),
+      ),
+    );
+    assert.deepEqual(h.writes, []);
+  });
+
+  it("never overwrites a name that is already there (the pairing's)", async () => {
+    const h = harness({
+      pairings: [pairing({ supplierName: "Párosítás szerinti Kft." })],
+      files: { "mail-1": await textPdf(WITH_VAT) },
+      readings: [earlier("Kitalált Előfizetés Inc.")],
+    });
+    const review = await h.service.review("mailbox:mail-1");
+    assert.equal(review.values.supplierName, "Párosítás szerinti Kft.");
+    assert.equal(review.sources.supplierName, "PAIRING");
+    assert.equal(
+      review.warnings.some((w) => w.includes("korábban jóváhagyott")),
+      false,
+    );
+  });
+
+  it("an unverified reading does not count, and two really different names fill nothing", async () => {
+    const unverified = harness({
+      pairings: [nameless()],
+      files: { "mail-1": await textPdf(WITH_VAT) },
+      readings: [earlier("Kitalált Előfizetés Inc.", "TO_REVIEW")],
+    });
+    assert.equal(
+      (await unverified.service.review("mailbox:mail-1")).values.supplierName,
+      null,
+    );
+    const ambiguous = harness({
+      pairings: [nameless()],
+      files: { "mail-1": await textPdf(WITH_VAT) },
+      readings: [
+        earlier("Kitalált Előfizetés Inc."),
+        earlier("Kitalált Előfizetés Ltd."),
+      ],
+    });
+    assert.equal(
+      (await ambiguous.service.review("mailbox:mail-1")).values.supplierName,
+      null,
+    );
+  });
+
+  it("a failing lookup leaves the reading as it would be without it", async () => {
+    const h = harness({
+      pairings: [nameless()],
+      files: { "mail-1": await textPdf(WITH_VAT) },
+      readings: [earlier("Kitalált Előfizetés Inc.")],
+      failKnownLookup: true,
+    });
+    const review = await h.service.review("mailbox:mail-1");
+    assert.equal(review.values.supplierName, null);
+    assert.equal(review.values.supplierEuTaxNumber, "IE9999999XX");
+    assert.equal(review.values.netAmount, "81.30");
   });
 });

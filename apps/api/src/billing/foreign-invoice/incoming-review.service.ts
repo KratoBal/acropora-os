@@ -46,6 +46,7 @@ import {
   type NavConfirmation,
 } from "./auto-approval.js";
 import { prismaErrorSummary } from "./error-summary.js";
+import { knownSupplierName, taxKey } from "./known-supplier-name.js";
 import { storedValues, type StoredReading } from "./reading-values.js";
 import {
   loadManualPurchasePayments,
@@ -776,18 +777,68 @@ export class IncomingReviewService {
       if (lines && !lines.some((line) => line.trim())) lines = null;
     }
     const document = pairing.document;
-    return readForeignInvoice({
-      lines,
-      adapter: source.adapter,
-      pairing: {
-        number: document.number,
-        supplierName: document.supplierName,
-        date: document.date,
-        gross: document.gross?.toFixed(2) ?? null,
-        currency: document.currency,
-        debits: pairing.debits,
-      },
-    });
+    return this.withKnownSupplierName(
+      readForeignInvoice({
+        lines,
+        adapter: source.adapter,
+        pairing: {
+          number: document.number,
+          supplierName: document.supplierName,
+          date: document.date,
+          gross: document.gross?.toFixed(2) ?? null,
+          currency: document.currency,
+          debits: pairing.debits,
+        },
+      }),
+    );
+  }
+
+  /**
+   * A SZÁLLÍTÓ NEVE A KORÁBBAN JÓVÁHAGYOTT SZÁMLÁKBÓL (kártya dbab22cd, harmadik kör; `known-supplier-name.ts`): CSAK az üres nevet tölti, a
+   * kiolvasott, az illesztő és a párosítás neve elsőbbséget élvez. A forrás-érték `KNOWN_SUPPLIER` (az ellenőrző lapon látszik), és egy
+   * figyelmeztetés megnevezi az adószámot és a sorok számát. A keresés kényelem: ha az adatbázis-olvasás hibázik, az olvasat úgy marad, ahogy a
+   * lookup nélkül lenne (üres név, kézi kitöltés), a hiba az olvasást nem állítja meg.
+   */
+  private async withKnownSupplierName(
+    reading: ForeignReading,
+  ): Promise<ForeignReading> {
+    const { values } = reading;
+    if (values.supplierName !== null) return reading;
+    if (
+      !taxKey(values.supplierEuTaxNumber) &&
+      !taxKey(values.supplierTaxNumber)
+    )
+      return reading;
+    try {
+      const rows = await this.database.incomingDocumentReading.findMany({
+        where: { state: "VERIFIED", supplierName: { not: null } },
+        select: {
+          supplierName: true,
+          supplierTaxNumber: true,
+          supplierEuTaxNumber: true,
+          updatedAt: true,
+        },
+        // a legutóbbi jóváhagyottak: a memória kicsi (ma 61 sor), a határ csak a futás védelme
+        orderBy: { updatedAt: "desc" },
+        take: 5000,
+      });
+      const known = knownSupplierName(rows, {
+        euTaxNumber: values.supplierEuTaxNumber,
+        taxNumber: values.supplierTaxNumber,
+      });
+      if (!known) return reading;
+      return {
+        ...reading,
+        values: { ...values, supplierName: known.name },
+        sources: { ...reading.sources, supplierName: "KNOWN_SUPPLIER" },
+        warnings: [
+          ...reading.warnings,
+          `A szállító neve (${known.name}) egy korábban jóváhagyott számláról jön, ugyanazzal az adószámmal (${known.taxNumber}, ${known.rows} számla): ellenőrizd.`,
+        ],
+      };
+    } catch {
+      return reading;
+    }
   }
 
   /**
