@@ -1,0 +1,4 @@
+# meres: a kezi lista apply advisory lock NELKUL; a ket egyideju apply tesztjenek PIROSNAK kell lennie,
+# es a hiba-diff a vart elutasitast nevezi meg (a zold futasban ez a sor nem jelenik meg).
+two applies from the same dry run: the second waits for the first, reads what it stored, and is refused
+refusal: 'FINGERPRINT_MISMATCH'

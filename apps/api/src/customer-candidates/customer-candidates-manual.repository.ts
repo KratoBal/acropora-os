@@ -123,7 +123,6 @@ export class PrismaManualListStore implements ManualListStore {
     stillCurrent?: (current: ManualPlanCurrent[]) => boolean,
   ): Promise<{ stored: number; removed: number }> {
     return this.database.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('customer-candidates-manual-list'))`;
       const ids: string[] = [];
       const held = await tx.customerCandidateManualEntry.findMany();
       if (stillCurrent && !stillCurrent(held.map(toCurrent)))
