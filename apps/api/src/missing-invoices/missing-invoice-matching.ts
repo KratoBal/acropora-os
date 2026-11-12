@@ -643,6 +643,23 @@ const MONTHLY_INVOICE_LAST_DAY = 5;
 const MONTHLY_REMAINDER_SHARE = 0.1;
 
 /**
+ * A RÖGZÍTETT HAVI TÖBBLETTEL FIZETŐ PARTNEREK (a 4b. szabály, acrobot 49449): a lista üzleti döntés, nem
+ * felismerés. Egy új név akkor kerül ide, ha a terhelései rendre ugyanannyival térnek el a havi számlájától.
+ */
+const SURCHARGE_PARTNERS = ["Euroleasing Zrt."] as const;
+/** a havi számla legfeljebb ennyi nappal a terhelés előtt kelhet */
+const SURCHARGE_DAYS = 15;
+/** a terhelés és a számla eltérése legfeljebb ennyi része a számlának */
+const SURCHARGE_SHARE = 0.01;
+
+function surchargePartner(name: string | null): boolean {
+  return (
+    name !== null &&
+    SURCHARGE_PARTNERS.some((partner) => samePartner(partner, name, 0.8))
+  );
+}
+
+/**
  * A KÁRTYÁS FIZETÉSEK HAVI CSOPORTJAI. A kártyás terhelés közleménye így
  * kezdődik: `2026.03.05 7413124583 SIMPLEP*PARKL .NET`, vagyis a VÁSÁRLÁS napja
  * és a kártya. A csoport kulcsa a partner, a kártya és a vásárlás hónapja; a
@@ -1447,6 +1464,36 @@ export function matchMonth(input: MatchMonthInput): Map<string, MatchOutcome> {
         roundings,
         "egyező összeg kerekítési eltéréssel (5 Ft-on belül)",
       );
+  }
+  // 4b. RÖGZÍTETT HAVI TÖBBLET, KIJELÖLT PARTNERNÉL (acrobot 49449, Euroleasing): a terhelés minden hónapban
+  // ugyanannyival tér el a havi számlától (mérve: 10-11 150 429 a 10-02 149 889-re, 11-11 150 253 a 11-02
+  // 149 713-ra, mindkettő pontosan 540 Ft). A párosítás csak a listán álló partnernél, a terhelés ELŐTT legfeljebb
+  // 15 nappal kelt EGYETLEN szabad számlával, és legfeljebb 1% eltéréssel áll; az eltérés a tételen marad
+  // (`amountDifference`), tehát semmi nem tűnik el, csak a kézi párosítás.
+  for (const debit of open) {
+    if (outcomes.has(debit.id) || !surchargePartner(debit.counterpartyName))
+      continue;
+    const invoices = partnerDocs(debit, 0.5).filter(
+      (d) =>
+        d.kind === "INVOICE" &&
+        d.gross !== null &&
+        d.currency === debit.currency &&
+        d.date <= debit.bookingDate &&
+        dayDistance(d.date, debit.bookingDate) <= SURCHARGE_DAYS &&
+        debit.amount.minus(d.gross).abs().lte(d.gross.times(SURCHARGE_SHARE)),
+    );
+    if (invoices.length !== 1) continue;
+    const invoice = invoices[0]!;
+    const difference = debit.amount.minus(invoice.gross!);
+    found(
+      debit,
+      [invoice],
+      `a havi számla a partner rögzített többletével (${difference.toFixed(0)} ${debit.currency}): kijelölt partner, legfeljebb 1% eltérés`,
+    );
+    outcomes.set(debit.id, {
+      ...outcomes.get(debit.id)!,
+      amountDifference: { amount: difference, currency: debit.currency },
+    });
   }
   for (const debit of open) {
     if (outcomes.has(debit.id)) continue;

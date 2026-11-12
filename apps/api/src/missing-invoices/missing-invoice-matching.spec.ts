@@ -2088,6 +2088,105 @@ describe("a zero-total invoice has no payment (card 847bca33)", () => {
 });
 
 /*
+  RÖGZÍTETT HAVI TÖBBLET (4b. szabály, acrobot 49449, Euroleasing). MI PIROSÍT: a két valódi pár (10-11 150 429 a
+  10-02 149 889-re, 11-11 150 253 a 11-02 149 713-ra) nem párosodik, vagy az eltérés (540) nem kerül a tételre; a
+  szabály más partnerre, 1% fölötti eltérésre, 15 napnál régebbi vagy a terhelés utáni számlára, vagy két szabad
+  számla közül választva is párosít; a pontos összeg nem a 3. szabályon megy (eltérés nélkül).
+*/
+describe("a fixed monthly surcharge, for a listed partner", () => {
+  const lease = (
+    bookingDate: string,
+    amount: number,
+    name = "Euroleasing Zrt.",
+  ) =>
+    debit({
+      bookingDate,
+      amount: D(amount),
+      counterpartyName: name,
+      narrative: "70862025177054",
+    });
+  const invoice = (
+    date: string,
+    gross: number,
+    supplierName = "Euroleasing Zrt.",
+  ) => doc({ date, gross: D(gross), supplierName });
+  const history = () => [
+    invoice("2026-07-01", 146920),
+    invoice("2026-08-02", 149265),
+    invoice("2026-10-02", 149889),
+    invoice("2026-11-02", 149713),
+  ];
+
+  it("pairs the two measured months with their own invoice, the 540 Ft on the item", () => {
+    const docs = history();
+    const october = lease("2026-10-11", 150429);
+    const november = lease("2026-11-11", 150253);
+    const out = run([october, november], docs);
+    for (const [d, expected] of [
+      [october, docs[2]!],
+      [november, docs[3]!],
+    ] as const) {
+      const o = out.get(d.id)!;
+      assert.deepEqual(
+        [
+          o.matchedBy,
+          o.documents.map((x) => x.id),
+          o.amountDifference?.amount.toString(),
+          o.amountDifference?.currency,
+        ],
+        ["RULE", [expected.id], "540", "HUF"],
+        d.bookingDate,
+      );
+    }
+  });
+
+  for (const [name, make] of [
+    [
+      "another partner",
+      () => [
+        lease("2026-11-11", 150253, "Más Lízing Zrt."),
+        invoice("2026-11-02", 149713, "Más Lízing Zrt."),
+      ],
+    ],
+    [
+      "a gap over 1%",
+      () => [lease("2026-11-11", 151300), invoice("2026-11-02", 149713)],
+    ],
+    [
+      "an invoice 16 days before",
+      () => [lease("2026-11-18", 150253), invoice("2026-11-02", 149713)],
+    ],
+    [
+      "an invoice after the debit",
+      () => [lease("2026-11-11", 150253), invoice("2026-11-12", 149713)],
+    ],
+  ] as const)
+    it(`does not pair ${name}`, () => {
+      const [d, document] = make() as [MatchableDebit, CandidateDocument];
+      assert.notEqual(run([d], [document]).get(d.id)?.matchedBy, "RULE");
+    });
+
+  it("does not choose between two free invoices in the 15 days", () => {
+    const d = lease("2026-11-11", 150253);
+    const out = run(
+      [d],
+      [invoice("2026-10-30", 149713), invoice("2026-11-02", 149800)],
+    );
+    assert.notEqual(out.get(d.id)?.matchedBy, "RULE");
+  });
+
+  it("an exact amount still goes on the exact rule, with no difference", () => {
+    const d = lease("2026-11-11", 149713);
+    const docs = history();
+    const o = run([d], docs).get(d.id)!;
+    assert.deepEqual(
+      [o.documents.map((x) => x.id), o.amountDifference],
+      [[docs[3]!.id], undefined],
+    );
+  });
+});
+
+/*
   A DIJNET-FIZETÉS (acrobot 49440, 2026-11-12). MI PIROSÍT: ha a „SIMPLEP*dijnet” fizetés a pontos összegű, Dijnet-es
   kiállítótól (MOHU) jövő számlával nem párosodik; ha a fizetés UTÁN kelt számlát visz el (a havi számlát előtte
   állítják ki); ha két azonos összegű számlánál nem a fizetéshez időben legközelebbit; ha egy másik kiállító vagy
