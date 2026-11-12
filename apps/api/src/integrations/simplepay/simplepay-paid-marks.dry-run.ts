@@ -99,6 +99,7 @@ export async function loadSimplePayOrders(from: string): Promise<{
         )
         .map((d) => ({
           invoiceNumber: d.documentNumber,
+          corrective: ["JS", "HS"].includes(d.kindCode.toUpperCase()),
           grossAmount: d.grossAmount,
           currency: d.currency,
           cancelled: d.cancelled,
@@ -160,7 +161,8 @@ const SKIP_TEXT: Record<SimplePayOrderSkip, string> = {
   UNKNOWN_STATUS: "a SimplePay-sorok között ismeretlen állapotú is van",
   NOT_SETTLED: "nincs teljesült SimplePay-fizetés",
   REFUNDED: "visszatérítve: nem fizetés",
-  PARTLY_REFUNDED: "részben visszatérítve: kérdés, nem jelölés",
+  CORRECTIVE_MISSING:
+    "részben visszatérítve: helyesbítő hiányzik (vagy nem a visszatérített összegről szól), és a számla sem a megmaradt összegről",
   AMOUNT_MISMATCH: "a kártyás fizetés nem a számla bruttója",
 };
 
@@ -171,7 +173,7 @@ export function dryRunReport(
 ): string {
   const out: string[] = [];
   const marks = decisions
-    .flatMap((d) => (d.markable ? [d.mark] : []))
+    .flatMap((d) => (d.markable ? d.marks : []))
     .sort(
       (a, b) =>
         a.date.localeCompare(b.date) ||
@@ -180,6 +182,13 @@ export function dryRunReport(
   for (const m of marks)
     out.push(
       `${m.invoiceNumber}\t${m.amount} Ft\t${m.date}\t${m.title}\t${m.note}`,
+    );
+  const byHand = decisions.flatMap((d) =>
+    d.markable ? d.correctivesByHand : [],
+  );
+  for (const m of byHand)
+    out.push(
+      `${m.invoiceNumber}\t${m.amount} Ft\t${m.date}\tkézi teendő: helyesbítő jelölése kézzel (${m.note})`,
     );
   for (const d of decisions) {
     if (d.markable) continue;

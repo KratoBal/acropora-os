@@ -21,6 +21,7 @@ const order = (orderKey: string, invoiceNumber: string, gross: number) =>
     invoices: [
       {
         invoiceNumber,
+        corrective: false,
         grossAmount: new Prisma.Decimal(gross),
         currency: "HUF",
         cancelled: false,
@@ -63,6 +64,32 @@ describe("simplePayMarksToWrite", () => {
       ],
       markedBefore: ["ACRW-2"],
     });
+  });
+
+  // acrobot 48831: whether Számlázz.hu takes a negative payment is not measured; the writer's own guard
+  it("a negative mark is never written, even approved", () => {
+    const negative = {
+      invoiceNumber: "ACRW-H",
+      date: "2026-09-30",
+      amount: "-5000",
+      title: "bankkártya" as const,
+      note: "SimplePay visszatérítés",
+      sourceRef: "R1",
+    };
+    const out = simplePayMarksToWrite({
+      decisions: [
+        {
+          orderKey: "665709",
+          markable: true,
+          marks: [negative],
+          correctivesByHand: [],
+          refundSettled: true,
+        },
+      ],
+      approved: new Set(["ACRW-H"]),
+      markedBefore: new Set(),
+    });
+    assert.deepEqual(out.marks, []);
   });
 
   it("nothing approved: nothing to write", () => {

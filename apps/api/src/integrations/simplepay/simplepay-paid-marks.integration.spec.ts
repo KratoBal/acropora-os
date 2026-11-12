@@ -20,7 +20,12 @@ const gate = integrationDatabaseGate(process.env);
 const PREFIX = "spaymark-it-";
 // unique 6 digits, so that no other test's lines mix in
 const BASE = Number(`8${String(Date.now()).slice(-5)}`);
-const KEY = { paid: String(BASE), refunded: String(BASE + 1) };
+const KEY = {
+  paid: String(BASE),
+  refunded: String(BASE + 1),
+  // partial refund over an invoice of the full sum and its corrective (c03e9896)
+  partial: String(BASE + 2),
+};
 const D = (value: number) => new Prisma.Decimal(value);
 
 async function removeLeftovers() {
@@ -87,6 +92,8 @@ describe(
               line(2, KEY.refunded, "REFUND", 8000, "2099-03-10"),
               line(3, KEY.refunded, "COMPLETED", 8000, "2099-03-17"),
               line(4, null, "COMPLETED", 1500, "2099-03-17"),
+              line(5, KEY.partial, "COMPLETED", 30958, "2099-03-17"),
+              line(6, KEY.partial, "REFUND", -10990, "2099-03-17"),
             ],
           },
         },
@@ -123,6 +130,9 @@ describe(
       // a proforma on the same order is not a second invoice
       await document("2", "D", KEY.paid, 29210);
       await document("3", "SZ", KEY.refunded, 8000);
+      await document("4", "SZ", KEY.partial, 30958);
+      // the corrective by its kind code, whatever its sign
+      await document("5", "HS", KEY.partial, 10990);
     });
 
     after(async () => {
@@ -153,17 +163,25 @@ describe(
     it("the orders by their number, every line of them, and the invoices only", async () => {
       const { orders, unkeyed } = await loadSimplePayOrders("2099-03-15");
       const ours = orders.filter((o) =>
-        [KEY.paid, KEY.refunded].includes(o.orderKey),
+        [KEY.paid, KEY.refunded, KEY.partial].includes(o.orderKey),
       );
       assert.deepEqual(
         ours.map((o) => [
           o.orderKey,
           o.lines.map((l) => l.transactionStatus),
-          o.invoices.map((i) => i.invoiceNumber),
+          o.invoices.map((i) => [i.invoiceNumber, i.corrective]),
         ]),
         [
-          [KEY.paid, ["COMPLETED"], [`${PREFIX}1`]],
-          [KEY.refunded, ["REFUND", "COMPLETED"], [`${PREFIX}3`]],
+          [KEY.paid, ["COMPLETED"], [[`${PREFIX}1`, false]]],
+          [KEY.refunded, ["REFUND", "COMPLETED"], [[`${PREFIX}3`, false]]],
+          [
+            KEY.partial,
+            ["COMPLETED", "REFUND"],
+            [
+              [`${PREFIX}4`, false],
+              [`${PREFIX}5`, true],
+            ],
+          ],
         ],
       );
       assert.ok(unkeyed >= 1);
@@ -179,7 +197,23 @@ describe(
         report,
         new RegExp(`^${PREFIX}3\\t.*kimarad: visszatérítve`, "m"),
       );
-      assert.match(report, /összesen: 1 számla jelölhető, 2 rendelésből/);
+      // the partial refund, document by document: the invoice with the payment
+      assert.match(
+        report,
+        new RegExp(
+          `^${PREFIX}4\\t30958 Ft\\t2099-03-17\\tbankkártya\\tSimplePay, 2099-03-17, tranzakció: ${PREFIX}${BASE}-5, visszatérítés: ${PREFIX}${BASE}-6$`,
+          "m",
+        ),
+      );
+      // the corrective's refund: a task by hand, not a mark (acrobot 48831)
+      assert.match(
+        report,
+        new RegExp(
+          `^${PREFIX}5\\t-10990 Ft\\t2099-03-17\\tkézi teendő: helyesbítő jelölése kézzel \\(SimplePay visszatérítés, 2099-03-17, tranzakció: ${PREFIX}${BASE}-6\\)$`,
+          "m",
+        ),
+      );
+      assert.match(report, /összesen: 2 számla jelölhető, 3 rendelésből/);
     });
 
     it("a written mark whose order got a refund is reported through the invoice's order number", async () => {

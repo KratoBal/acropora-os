@@ -34,20 +34,23 @@ export function simplePayMarksToWrite(input: {
   const skipped: string[] = [];
   for (const decision of input.decisions) {
     if (!decision.markable) continue;
-    const { mark } = decision;
-    if (!input.approved.has(mark.invoiceNumber)) continue;
-    if (input.markedBefore.has(mark.invoiceNumber)) {
-      skipped.push(mark.invoiceNumber);
-      continue;
+    for (const mark of decision.marks) {
+      // a negative payment is never written (acrobot 48831): a corrective is marked by hand
+      if (mark.amount.startsWith("-")) continue;
+      if (!input.approved.has(mark.invoiceNumber)) continue;
+      if (input.markedBefore.has(mark.invoiceNumber)) {
+        skipped.push(mark.invoiceNumber);
+        continue;
+      }
+      marks.push({
+        invoiceNumber: mark.invoiceNumber,
+        date: mark.date,
+        amount: mark.amount,
+        title: mark.title,
+        note: mark.note,
+        sourceRef: mark.sourceRef,
+      });
     }
-    marks.push({
-      invoiceNumber: mark.invoiceNumber,
-      date: mark.date,
-      amount: mark.amount,
-      title: mark.title,
-      note: mark.note,
-      sourceRef: mark.sourceRef,
-    });
   }
   return {
     marks: marks.sort((a, b) => a.invoiceNumber.localeCompare(b.invoiceNumber)),
