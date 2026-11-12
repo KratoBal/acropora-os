@@ -8,6 +8,7 @@ import type { CandidateDocument } from "./missing-invoice-matching.js";
 import {
   CANDIDATE_ORIGINS,
   loaderExclusion,
+  survivingOtherPaths,
   mergedSupplierTaxNumber,
   mergeSameInvoice,
   normalizeAccount,
@@ -556,7 +557,7 @@ describe("loaderExclusion: why a stored document is not a candidate", () => {
     linkedToUnpostedPurchase: false,
     linked: false,
     upload: false,
-    otherContent: new Set<string>(),
+    otherContent: new Map<string, readonly string[]>(),
     date: "2026-11-05" as string | null,
     hasResult: false,
     hasReading: true,
@@ -576,7 +577,7 @@ describe("loaderExclusion: why a stored document is not a candidate", () => {
       "UPLOAD_OF_UNPOSTED_PURCHASE",
     );
     assert.equal(
-      code({ otherContent: new Set(["aa"]) }),
+      code({ otherContent: new Map([["aa", ["up-1"]]]) }),
       "COLLECTED_COPY_OF_OTHER_PATH",
     );
     assert.equal(code({ date: null }), "NO_DATE");
@@ -591,14 +592,14 @@ describe("loaderExclusion: why a stored document is not a candidate", () => {
 
   it("a collected copy is judged before the date: a copy of another path with no date is the copy, not NO_DATE", () => {
     assert.equal(
-      code({ otherContent: new Set(["aa"]), date: null }),
+      code({ otherContent: new Map([["aa", ["up-1"]]]), date: null }),
       "COLLECTED_COPY_OF_OTHER_PATH",
     );
   });
 
   it("a mailbox document (not collected) with the same hash is not a copy; an upload is never windowed or file-name filtered", () => {
     assert.equal(
-      code({ origin: "MAILBOX", otherContent: new Set(["aa"]) }),
+      code({ origin: "MAILBOX", otherContent: new Map([["aa", ["up-1"]]]) }),
       null,
     );
     assert.equal(
@@ -687,5 +688,51 @@ describe("splitNotBookable: what the not-bookable mark removed, and why", () => 
         ["b", "sameKeyAsMarked"],
       ],
     );
+  });
+});
+
+/*
+  A BEGYŰJTÖTT MÁSOLAT CSAK AKKOR KIESIK, HA A MÁSIK ÚT DOKUMENTUMA JELÖLT MARAD (niceshops, 2026-11-12: a 338 018 Ft-os
+  számla gyűjtött példánya kiesett, mert egy nem gyűjtött dokumentum ugyanazt a fájlt hordozta, és az a dokumentum maga sem
+  volt jelölt, tehát a terhelésnek nem maradt jelölt). MI PIROSÍT: ha a másik út kiesett dokumentuma is eltünteti a másolatot;
+  ha a másik út jelölt-képes dokumentuma már NEM tünteti el (a duplikátum-védelem marad); ha a másik út azonosítója nem kerül
+  a kizárás okába.
+*/
+describe("collected copy and the other path", () => {
+  const entries = [
+    { id: "copy", sha256: "aa", collected: true, candidateCapable: true },
+    {
+      id: "other-dead",
+      sha256: "aa",
+      collected: false,
+      candidateCapable: false,
+    },
+    { id: "other-ok", sha256: "bb", collected: false, candidateCapable: true },
+    { id: "copy-2", sha256: "bb", collected: true, candidateCapable: true },
+  ];
+
+  it("only a candidate-capable document of another path counts; a collected one never does", () => {
+    assert.deepEqual([...survivingOtherPaths(entries)], [["bb", ["other-ok"]]]);
+  });
+
+  it("the copy of a file whose other-path document dropped out stays; the copy of a file whose other path stays a candidate falls out, naming it", () => {
+    const survivors = survivingOtherPaths(entries);
+    const base = {
+      origin: "COLLECTED_MAIL",
+      fileName: "Rechnung.pdf",
+      linkedToUnpostedPurchase: false,
+      linked: false,
+      upload: false,
+      otherContent: survivors,
+      date: "2026-11-05" as string | null,
+      hasResult: false,
+      hasReading: true,
+      from: "2025-09-01",
+      to: "2026-11-15",
+    };
+    assert.equal(loaderExclusion({ ...base, sha256: "aa" }), null);
+    const dropped = loaderExclusion({ ...base, sha256: "bb" });
+    assert.equal(dropped?.code, "COLLECTED_COPY_OF_OTHER_PATH");
+    assert.match(dropped?.detail ?? "", /other-ok/);
   });
 });
