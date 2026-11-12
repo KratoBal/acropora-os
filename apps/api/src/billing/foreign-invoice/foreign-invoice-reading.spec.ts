@@ -1544,3 +1544,83 @@ describe("readForeignInvoice: the labelled number and the bare German date", () 
     assert.equal(values.documentNumber, "KITALALT2-0012");
   });
 });
+
+/*
+  A MAGYAR BRUTTÓ CÍMKE ÉS A FORDÍTOTT ADÓZÁS (kártya dbab22cd, harmadik kör, bruttó-szelet). Minden név és szám KITALÁLT. MI PIROSÍT: ha az "ÁFA
+  regisztrációs szám" sor számjegye ÁFA-összeg lenne (a mért hiba: "0106 417" -> 417); ha a "Teljes bruttó összeg" nem adná a bruttót; ha a "Bruttó
+  egységár" bruttó végösszeg lenne; ha a nettó fordított adózási jel NÉLKÜL is kiszámolódna; ha a nettó a bruttótól eltérő ÁFA mellett is a bruttó lenne.
+*/
+describe("readForeignInvoice: the Hungarian gross label and the reverse charge", () => {
+  const REVERSE = [
+    "Kitalált Töltő GmbH Kitalált utca 1 D-80000 Teststadt",
+    "Dátum 2026. okt. 31.",
+    "Szolgáltatási tétel | Összeg",
+    "Havi díj | 1518,00 HUF | 1518,00 HUF",
+    "Teljes összeg* | 1518,00 HUF | 1518,00 HUF",
+    "Teljes bruttó összeg | 1518,00 HUF | 1518,00 HUF",
+    "*Fordított adózás.",
+    "Németország | ÁFA regisztrációs szám: | 0106 417 | Kitalált Igazgató",
+    "Pénznem: HUF",
+  ];
+
+  it("reads the gross by its label, takes the registration number for no VAT, and the reverse charge gives zero VAT and the net equal to the gross", () => {
+    const { values, sources } = readForeignInvoice({
+      lines: REVERSE,
+      adapter: null,
+      pairing: pairing({ date: undefined }),
+    });
+    assert.equal(values.grossAmount, "1518.00");
+    assert.equal(sources.grossAmount, "TEXT");
+    assert.equal(values.vatAmount, "0.00");
+    assert.equal(values.netAmount, "1518.00");
+    assert.equal(sources.netAmount, "TEXT");
+  });
+
+  it("the registration number line alone is no VAT amount", () => {
+    const { values } = readForeignInvoice({
+      lines: [
+        "Németország | ÁFA regisztrációs szám: | 0106 417 | Kitalált Igazgató",
+      ],
+      adapter: null,
+      pairing: pairing({ date: undefined }),
+    });
+    assert.equal(values.vatAmount, null);
+  });
+
+  it("without the reverse-charge marker nothing is derived: no VAT, no net", () => {
+    const { values } = readForeignInvoice({
+      lines: REVERSE.filter((line) => !line.includes("Fordított")),
+      adapter: null,
+      pairing: pairing({ date: undefined }),
+    });
+    assert.equal(values.grossAmount, "1518.00");
+    assert.equal(values.vatAmount, null);
+    assert.equal(values.netAmount, null);
+  });
+
+  it("a Bruttó egységár or a Bruttó ár line is no gross total", () => {
+    const { values } = readForeignInvoice({
+      lines: ["Bruttó egységár | 100,00 HUF", "Bruttó ár | 100,00 HUF"],
+      adapter: null,
+      pairing: pairing({ date: undefined }),
+    });
+    assert.equal(values.grossAmount, null);
+  });
+
+  it("a net that stays with a non-zero VAT is not replaced by the gross", () => {
+    const { values } = readForeignInvoice({
+      lines: [
+        "Kitalált Szolgáltató Kft.",
+        "Nettó összeg | 1000,00 HUF",
+        "ÁFA (27%) | 270,00 HUF",
+        "Teljes bruttó összeg | 1270,00 HUF",
+        "*Fordított adózás.",
+      ],
+      adapter: null,
+      pairing: pairing({ date: undefined }),
+    });
+    assert.equal(values.netAmount, "1000.00");
+    assert.equal(values.vatAmount, "270.00");
+    assert.equal(values.grossAmount, "1270.00");
+  });
+});
