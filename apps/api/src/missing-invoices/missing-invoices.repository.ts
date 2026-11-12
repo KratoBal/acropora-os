@@ -87,7 +87,8 @@ export function loaderExclusion(input: {
   /** a terheléshez feltöltött fájl (nem a számlához csatolt kép) */
   upload: boolean;
   /** az azonos tartalmú, NEM begyűjtött dokumentumok lenyomatai */
-  otherContent: ReadonlySet<string>;
+  /** az azonos tartalmú, NEM begyűjtött, és maguk is jelölt-képes dokumentumok azonosítói, lenyomatonként */
+  otherContent: ReadonlyMap<string, readonly string[]>;
   date: string | null;
   hasResult: boolean;
   hasReading: boolean;
@@ -96,13 +97,13 @@ export function loaderExclusion(input: {
 }): LoaderExclusion | null {
   if (input.linkedToUnpostedPurchase && input.origin === "UPLOAD")
     return { code: "UPLOAD_OF_UNPOSTED_PURCHASE", detail: null };
-  if (
-    input.origin.startsWith("COLLECTED_") &&
-    input.otherContent.has(input.sha256)
-  )
+  const otherPath = input.origin.startsWith("COLLECTED_")
+    ? input.otherContent.get(input.sha256)
+    : undefined;
+  if (otherPath && otherPath.length > 0)
     return {
       code: "COLLECTED_COPY_OF_OTHER_PATH",
-      detail: "another, non-collected document carries the same file",
+      detail: `another, non-collected document carries the same file and stays a candidate: ${otherPath.join(", ")}`,
     };
   if (!input.date) return { code: "NO_DATE", detail: null };
   if (!input.upload) {
@@ -121,6 +122,28 @@ export function loaderExclusion(input: {
     }
   }
   return null;
+}
+
+/**
+ * A MÁSIK ÚT DOKUMENTUMAI, AMELYEK JELÖLT-KÉPESEK, lenyomatonként: a begyűjtött másolat csak akkor esik ki, ha van ilyen.
+ * Egy nem begyűjtött dokumentum, ami maga esett ki (pl. egy nem könyvelt beszerzés feltöltése), nem tartja meg a számlát.
+ */
+export function survivingOtherPaths(
+  entries: readonly {
+    id: string;
+    sha256: string;
+    collected: boolean;
+    candidateCapable: boolean;
+  }[],
+): Map<string, string[]> {
+  const survivors = new Map<string, string[]>();
+  for (const entry of entries)
+    if (!entry.collected && entry.candidateCapable)
+      survivors.set(entry.sha256, [
+        ...(survivors.get(entry.sha256) ?? []),
+        entry.id,
+      ]);
+  return survivors;
 }
 
 /** A betöltő lekérdezésének feltételei: egy helyen, hogy a `where` és a magyarázata ne csússzon szét. */
@@ -961,9 +984,6 @@ export class MissingInvoicesRepository {
       kulcs-névtérben ír (lásd `invoice-collection.repository.ts`).
     */
     const collected = (origin: string) => origin.startsWith("COLLECTED_");
-    const otherContent = new Set(
-      mailbox.filter((d) => !collected(d.origin)).map((d) => d.sha256),
-    );
     /*
       A BESZERZÉSI SZÁMLÁHOZ CSATOLT KÉP (acrobot 28111, kártya 5ec62e35): a
       fájl egy rögzített beszerzési számla eredetije, nem egy terheléshez
@@ -977,7 +997,8 @@ export class MissingInvoicesRepository {
       if (invoice.purchaseInvoiceId && keys.has(invoice.id))
         navKeyByPurchase.set(invoice.purchaseInvoiceId, keys.get(invoice.id)!);
     const pdfIds = await this.pdfContentIds(mailbox.map((d) => d.id));
-    for (const document of mailbox) {
+    // egy dokumentum betöltési adatai: az eredmény, a könyvelt számla, az olvasat, a dátum (tiszta számolás, mellékhatás nélkül)
+    const prepare = (document: (typeof mailbox)[number]) => {
       const result =
         document.importResult as unknown as SupplierInvoiceImportResult | null;
       // A CANCELLED OR DRAFT INVOICE'S SCAN IS NOT A CANDIDATE AT ALL
@@ -1021,21 +1042,51 @@ export class MissingInvoicesRepository {
             : reading
               ? day(document.receivedAt ?? document.createdAt)
               : null));
-      // minden kizárás egy helyen, okkal (`loaderExclusion`); a sorrendjük az eredeti `continue`-ké
-      const exclusion = loaderExclusion({
+      return { result, posted, linked, upload, reading, card, date };
+    };
+    const exclusionOf = (
+      document: (typeof mailbox)[number],
+      p: ReturnType<typeof prepare>,
+      otherContent: ReadonlyMap<string, readonly string[]>,
+    ) =>
+      loaderExclusion({
         origin: document.origin,
         sha256: document.sha256,
         fileName: document.fileName,
-        linkedToUnpostedPurchase: !!document.purchaseInvoice && !posted,
-        linked: !!linked,
-        upload,
+        linkedToUnpostedPurchase: !!document.purchaseInvoice && !p.posted,
+        linked: !!p.linked,
+        upload: p.upload,
         otherContent,
-        date,
-        hasResult: !!result,
-        hasReading: !!reading,
+        date: p.date,
+        hasResult: !!p.result,
+        hasReading: !!p.reading,
         from,
         to,
       });
+    /*
+      A BEGYŰJTÖTT MÁSOLAT CSAK AKKOR KIESIK, HA A MÁSIK ÚT DOKUMENTUMA MARAD JELÖLT. Eddig akkor is kiesett, ha a másik
+      út dokumentuma maga esett ki más okból (pl. egy nem könyvelt beszerzés feltöltése): akkor a számla SEMMILYEN alakban
+      nem maradt jelölt (niceshops, 2026-11-12). A másik utak a begyűjtöttekre sosem hivatkoznak, ezért az ő kizárásuk
+      független a másolatoktól, és előre kiszámolható.
+    */
+    const survivors = survivingOtherPaths(
+      mailbox.map((document) => {
+        const p = prepare(document);
+        return {
+          id: document.id,
+          sha256: document.sha256,
+          collected: collected(document.origin),
+          candidateCapable:
+            !collected(document.origin) &&
+            !exclusionOf(document, p, new Map()) &&
+            !!p.date,
+        };
+      }),
+    );
+    for (const document of mailbox) {
+      const { result, linked, upload, reading, card, date } = prepare(document);
+      // minden kizárás egy helyen, okkal (`loaderExclusion`); a sorrendjük az eredeti `continue`-ké
+      const exclusion = exclusionOf(document, prepare(document), survivors);
       if (exclusion) excluded.set(document.id, exclusion);
       // a `NO_DATE` kizárás a típusnak is: innen a dátum biztosan van
       if (exclusion || !date) continue;
