@@ -657,6 +657,26 @@ describe("a számla-begyűjtés tárolása", { skip: gate.mode === "skip" }, () 
     };
     assert.equal(await repository.promote(docA, tiedInput), docA);
     assert.equal(await repository.promote(docA, tiedInput), null);
+
+    // a friss olvasat (kártya f7ece26b) a még UNASSIGNED példányra ír, az előléptetettre nem
+    const readingOf = async (id: string) =>
+      await prisma.incomingSupplierDocument.findUniqueOrThrow({
+        where: { id },
+        select: { textReading: true, payeeCheck: true },
+      });
+    const fresh = { invoiceNumber: "B-1", gross: "7.04", currency: "EUR" };
+    await repository.refreshUnassignedReading(docB, fresh, "COMPANY");
+    assert.deepEqual(await readingOf(docB), {
+      textReading: fresh,
+      payeeCheck: "COMPANY",
+    });
+    const promotedReading = await readingOf(docA);
+    await repository.refreshUnassignedReading(
+      docA,
+      { invoiceNumber: "NEM-IRHATO", gross: "1", currency: "EUR" },
+      "NOT_COMPANY",
+    );
+    assert.deepEqual(await readingOf(docA), promotedReading);
     assert.equal((await candidates()).includes(docA), true);
     assert.deepEqual(await item("collect-it-un-a"), {
       verdict: "STORED",
