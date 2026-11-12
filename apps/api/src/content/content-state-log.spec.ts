@@ -34,6 +34,11 @@ type Written = { table: string; data: Record<string, unknown> };
 function fakeTransaction(count: number, failEvent = false) {
   const written: Written[] = [];
   const tx = {
+    // the row lock (T5.3, `content-row-lock.ts`): recorded, so its place in the order is visible
+    $queryRaw: async () => {
+      written.push({ table: "ContentItem FOR UPDATE", data: {} });
+      return [{ id: "c1", state: "AWAITING_APPROVAL" }];
+    },
     contentItem: {
       updateMany: async (args: { data: Record<string, unknown> }) => {
         written.push({ table: "contentItem.updateMany", data: args.data });
@@ -77,9 +82,13 @@ describe("a move writes its log row in the same transaction", () => {
     assert.equal(await move(), true);
     assert.deepEqual(
       written.map((w) => w.table),
-      ["contentItem.updateMany", "contentStateEvent.create"],
+      [
+        "ContentItem FOR UPDATE",
+        "contentItem.updateMany",
+        "contentStateEvent.create",
+      ],
     );
-    assert.deepEqual(written[1]!.data, {
+    assert.deepEqual(written[2]!.data, {
       contentId: "c1",
       fromState: "AWAITING_APPROVAL",
       toState: "READY_TO_SEND",
@@ -124,7 +133,7 @@ describe("a move writes its log row in the same transaction", () => {
     assert.equal(await move(), false);
     assert.deepEqual(
       written.map((w) => w.table),
-      ["contentItem.updateMany"],
+      ["ContentItem FOR UPDATE", "contentItem.updateMany"],
     );
   });
 
@@ -192,6 +201,7 @@ describe("the detail carries the history", () => {
         asked.push(ids);
         return names;
       },
+      claimsOf: async () => [],
     } as unknown as ContentRepository;
     return { service: new ContentService(repository), asked };
   }

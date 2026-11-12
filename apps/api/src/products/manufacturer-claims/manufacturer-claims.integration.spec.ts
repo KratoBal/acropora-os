@@ -42,6 +42,7 @@ describe("gyártói állítások (T5.3)", { skip: gate.mode === "skip" }, () => 
   let product: string;
   let dosedProduct: string;
   let factId: string;
+  let variantFactId: string;
   let claimId: string;
 
   const email = (name: string) => `${name}-${suffix}@${EMAIL_DOMAIN}`;
@@ -138,6 +139,27 @@ describe("gyártói állítások (T5.3)", { skip: gate.mode === "skip" }, () => 
       await prisma.productKnowledgeFact.create({
         data: {
           productId: dosedProduct,
+          field: "dosing",
+          value: "5 ml/100 L/day",
+          status: "VERIFIED",
+          fieldResultId: result.id,
+          acceptedById: userId.o!,
+          acceptedAt: new Date(),
+          revision: 1,
+        },
+      })
+    ).id;
+
+    // A variant-level dosing fact on the same product: not what a claim may stand on.
+    const variant = await prisma.productVariant.create({
+      data: { productId: dosedProduct, sku: `GYA-${suffix}` },
+    });
+    variantFactId = (
+      await prisma.productKnowledgeFact.create({
+        data: {
+          productId: dosedProduct,
+          variantId: variant.id,
+          scopeKey: variant.id,
           field: "dosing",
           value: "5 ml/100 L/day",
           status: "VERIFIED",
@@ -342,6 +364,12 @@ describe("gyártói állítások (T5.3)", { skip: gate.mode === "skip" }, () => 
       },
     );
     assert.equal(ownNumber.status, 400);
+    const variantLevel = await call(
+      "a",
+      `/products/${dosedProduct}/manufacturer-claims`,
+      { method: "POST", body: { ...dosing, knowledgeFactId: variantFactId } },
+    );
+    assert.equal(variantLevel.status, 400);
     const linked = await call(
       "a",
       `/products/${dosedProduct}/manufacturer-claims`,

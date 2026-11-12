@@ -2,6 +2,8 @@ import { Injectable } from "@nestjs/common";
 import { prisma, type Prisma } from "@acropora/database";
 
 import { applyArticleStep } from "./article.repository.js";
+import { claimsOfContent } from "./content-claim-links.js";
+import { lockContentItems } from "./content-row-lock.js";
 import type { ContentState } from "./content-state.js";
 
 /**
@@ -69,6 +71,11 @@ export class ContentRepository {
       },
     });
     return rows.map((row) => row.stateEvents[0]?.createdAt ?? row.updatedAt);
+  }
+
+  /** The manufacturer claims the item stands on (T5.3), with their output rule. */
+  claimsOf(id: string, tx?: Prisma.TransactionClient) {
+    return claimsOfContent(id, tx);
   }
 
   /** The item's channel, or `null` when there is no such item. */
@@ -166,8 +173,17 @@ export class ContentRepository {
     note?: { authorId: string; body: string };
     /** Aki lép: a cikk jóváhagyási pillanatképe az ő nevén születik. */
     actorUserId: string;
+    /**
+     * A check that runs UNDER THE ITEM'S ROW LOCK, before the move (T5.3: the manufacturer claims
+     * at approval). It throws to refuse; the transaction then writes nothing.
+     */
+    gate?: (tx: Prisma.TransactionClient) => Promise<void>;
   }): Promise<boolean> {
     return prisma.$transaction(async (tx) => {
+      // THE ROW LOCK FIRST (`content-row-lock.ts`): a claim linked or dropped at the same moment
+      // waits for this step, or this step waits for it and then reads what it did.
+      await lockContentItems(tx, [input.id]);
+      if (input.gate) await input.gate(tx);
       const result = await tx.contentItem.updateMany({
         where: { id: input.id, state: input.from },
         data: {
