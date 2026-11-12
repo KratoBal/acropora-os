@@ -9,6 +9,7 @@ import { ArticleRepository } from "./article.repository.js";
 import { ARTICLE_ENVIRONMENT, ArticleService } from "./article.service.js";
 import { ContentAgentController } from "./content-agent.controller.js";
 import { ContentAgentGuard } from "./content-agent.guard.js";
+import { ContentClaimsController } from "./content-claims.controller.js";
 import { ContentController } from "./content.controller.js";
 import { ContentRepository } from "./content.repository.js";
 import { ContentService } from "./content.service.js";
@@ -26,6 +27,7 @@ import { ContentService } from "./content.service.js";
   controllers: [
     ContentController,
     ContentAgentController,
+    ContentClaimsController,
     ArticleImagePublicController,
   ],
   providers: [

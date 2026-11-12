@@ -20,6 +20,7 @@ function serviceWith(
     create: ContentRepository["create"];
     reviseText: ContentRepository["reviseText"];
     channelOf: ContentRepository["channelOf"];
+    claimsOf: ContentRepository["claimsOf"];
   }> = {},
 ) {
   const calls: unknown[] = [];
@@ -43,6 +44,8 @@ function serviceWith(
       return true;
     }) as ContentRepository["reviseText"],
     channelOf: (async () => "FACEBOOK_POST") as ContentRepository["channelOf"],
+    // No manufacturer claim on the item unless a test names one (T5.3).
+    claimsOf: (async () => []) as ContentRepository["claimsOf"],
     ...overrides,
   } as unknown as ContentRepository;
   return { service: new ContentService(repository), calls };
@@ -1131,5 +1134,74 @@ describe("a beadott tartalom gepi javitasa", () => {
       /legalább egy/,
     );
     assert.equal(calls.length, 0);
+  });
+});
+
+/**
+ * THE MANUFACTURER CLAIMS HOLD THE APPROVAL (T5.3): approval goes only when every claim the item
+ * stands on may go out; the other steps do not ask.
+ */
+describe("approval and the manufacturer claims", () => {
+  const claim = (mode: string, reasons: string[] = []) =>
+    ({
+      id: `claim-${mode}`,
+      claimText: "Növeli a színintenzitást.",
+      output: { mode, reasons },
+    }) as unknown as Awaited<ReturnType<ContentRepository["claimsOf"]>>[number];
+
+  const approve = (service: ContentService) =>
+    service.move({
+      id: "c1",
+      from: "AWAITING_APPROVAL",
+      to: "READY_TO_SEND",
+      actorCanApprove: true,
+      actorUserId: "approver-1",
+    });
+
+  it("refuses the approval while a claim may not go out, names it, and writes nothing", async () => {
+    const { service, calls } = serviceWith({
+      claimsOf: (async () => [
+        claim("PUBLISHABLE"),
+        claim("DRAFT_ONLY", ["UNVERIFIED"]),
+      ]) as ContentRepository["claimsOf"],
+    });
+    await assert.rejects(
+      () => approve(service),
+      (error: unknown) =>
+        error instanceof ConflictException &&
+        /claim-DRAFT_ONLY/.test(error.message) &&
+        /UNVERIFIED/.test(error.message) &&
+        !/claim-PUBLISHABLE/.test(error.message),
+    );
+    assert.equal(calls.length, 0);
+  });
+
+  it("approves when every claim may go out", async () => {
+    const { service, calls } = serviceWith({
+      claimsOf: (async () => [
+        claim("PUBLISHABLE"),
+      ]) as ContentRepository["claimsOf"],
+    });
+    await approve(service);
+    assert.equal(calls.length, 1);
+  });
+
+  it("a step that is not the approval does not ask the claims", async () => {
+    let asked = 0;
+    const { service, calls } = serviceWith({
+      claimsOf: (async () => {
+        asked += 1;
+        return [claim("BLOCKED", ["DISPUTED"])];
+      }) as ContentRepository["claimsOf"],
+    });
+    await service.move({
+      id: "c1",
+      from: "DRAFTING",
+      to: "AWAITING_REVIEW",
+      actorCanApprove: false,
+      actorUserId: "author-1",
+    });
+    assert.equal(asked, 0);
+    assert.equal(calls.length, 1);
   });
 });

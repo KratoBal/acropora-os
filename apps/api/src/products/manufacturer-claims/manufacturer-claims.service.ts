@@ -12,6 +12,7 @@ import {
   type AuthenticatedUser,
 } from "@acropora/types";
 
+import { stepBackContentOnClaimDrop } from "../../content/content-claim-stepback.js";
 import { requireInternalWriter } from "../../worksheets/worksheet-internal-write.js";
 import {
   CLAIM_TYPES,
@@ -46,7 +47,9 @@ import type {
  *   - a dosing claim on a product that has an accepted Product Knowledge dosing fact names that
  *     fact and has no number of its own, so the two places cannot say two things (point 3);
  *   - withdrawn by archiving, never deleted; every step is a row in the claim log, with the full
- *     value after it (`ProductManufacturerClaimEvent`).
+ *     value after it (`ProductManufacturerClaimEvent`);
+ *   - a claim that drops out (disputed, unchecked again, edited, archived) sends the approved
+ *     content standing on it back to approval, in the same transaction (`content-claim-stepback.ts`).
  *
  * Nothing here writes the product, the Product Knowledge, the UNAS or the Medusa.
  */
@@ -233,6 +236,92 @@ function snapshotOf(row: {
   };
 }
 
+/** The product-level dosing facts with a value: what a dosing claim must stand on (point 3). */
+export function dosingFactsOf(productIds: readonly string[]) {
+  return prisma.productKnowledgeFact.findMany({
+    where: {
+      productId: { in: [...productIds] },
+      scopeKey: "",
+      field: { in: [...DOSING_FACT_FIELDS] },
+      value: { not: null },
+    },
+    select: { id: true, productId: true, field: true },
+    orderBy: { field: "asc" },
+  });
+}
+
+/** The API view of claims, with the knowledge link and the output rule. Content reads it too. */
+export async function claimViews(
+  rows: readonly Row[],
+): Promise<ManufacturerClaimView[]> {
+  const dosingProducts = [
+    ...new Set(
+      rows
+        .filter((row) => row.claimType === "DOSING")
+        .map((row) => row.productId),
+    ),
+  ];
+  const withFact = new Set(
+    dosingProducts.length
+      ? (await dosingFactsOf(dosingProducts)).map((fact) => fact.productId)
+      : [],
+  );
+  return rows.map((row) => {
+    const link = knowledgeLinkState(
+      row,
+      row.knowledgeFact,
+      withFact.has(row.productId),
+    );
+    return {
+      id: row.id,
+      productId: row.productId,
+      productName: row.product.name,
+      brand: row.product.brand,
+      claimType: row.claimType,
+      claimText: row.claimText,
+      sourceKind: row.sourceKind,
+      sourceRef: row.sourceRef,
+      sourcePublishedOn: dayText(row.sourcePublishedOn),
+      sourceReadOn: dayText(row.sourceReadOn)!,
+      valueAmount: row.valueAmount?.toNumber() ?? null,
+      valueUnit: row.valueUnit,
+      note: row.note,
+      recheckOn: dayText(row.recheckOn),
+      knowledgeFact: row.knowledgeFact,
+      knowledgeFactRevision: row.knowledgeFactRevision,
+      knowledgeLink: link,
+      status: row.status,
+      version: row.version,
+      recordedBy: row.recordedBy
+        ? { id: row.recordedBy.id, name: row.recordedBy.displayName }
+        : null,
+      recordedAt: row.recordedAt.toISOString(),
+      verifiedBy: row.verifiedBy
+        ? { id: row.verifiedBy.id, name: row.verifiedBy.displayName }
+        : null,
+      verifiedAt: row.verifiedAt?.toISOString() ?? null,
+      archivedAt: row.archivedAt?.toISOString() ?? null,
+      archivedBy: row.archivedBy
+        ? { id: row.archivedBy.id, name: row.archivedBy.displayName }
+        : null,
+      output: claimOutput(row, link),
+    };
+  });
+}
+
+/** The views of the claims a filter selects (no limit: callers pass a bounded filter). */
+export async function claimViewsWhere(
+  where: Prisma.ProductManufacturerClaimWhereInput,
+): Promise<ManufacturerClaimView[]> {
+  return claimViews(
+    await prisma.productManufacturerClaim.findMany({
+      where,
+      select: CLAIM_SELECT,
+      orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
+    }),
+  );
+}
+
 @Injectable()
 export class ManufacturerClaimsService {
   async listForProduct(
@@ -273,7 +362,7 @@ export class ManufacturerClaimsService {
       );
     }
     return {
-      items: await this.views(rows.slice(0, LIST_LIMIT)),
+      items: await claimViews(rows.slice(0, LIST_LIMIT)),
       truncated: rows.length > LIST_LIMIT,
     };
   }
@@ -417,6 +506,12 @@ export class ManufacturerClaimsService {
         where: { id },
       });
       await this.log(tx, id, "EDITED", user, row);
+      if (substance)
+        await stepBackContentOnClaimDrop(tx, {
+          claimId: id,
+          actorUserId: user.id,
+          why: "A gyártói állítást átírták, újra ellenőrizni kell",
+        });
     });
     return this.view(id);
   }
@@ -449,7 +544,7 @@ export class ManufacturerClaimsService {
     });
     if (refusal) throw new BadRequestException(refusal);
     if (input.status !== "UNVERIFIED" && input.status !== "DISPUTED") {
-      const [view] = await this.views([
+      const [view] = await claimViews([
         await prisma.productManufacturerClaim.findUniqueOrThrow({
           where: { id },
           select: CLAIM_SELECT,
@@ -485,6 +580,15 @@ export class ManufacturerClaimsService {
         where: { id },
       });
       await this.log(tx, id, "STATUS_CHANGED", user, row);
+      if (input.status === "DISPUTED" || input.status === "UNVERIFIED")
+        await stepBackContentOnClaimDrop(tx, {
+          claimId: id,
+          actorUserId: user.id,
+          why:
+            input.status === "DISPUTED"
+              ? "A gyártói állítás vitatott lett"
+              : "A gyártói állítás ellenőrzését visszavonták",
+        });
     });
     return this.view(id);
   }
@@ -502,6 +606,11 @@ export class ManufacturerClaimsService {
         where: { id },
       });
       await this.log(tx, id, "ARCHIVED", user, row);
+      await stepBackContentOnClaimDrop(tx, {
+        claimId: id,
+        actorUserId: user.id,
+        why: "A gyártói állítást visszavonták (archiválva)",
+      });
     });
   }
 
@@ -579,7 +688,7 @@ export class ManufacturerClaimsService {
       return { knowledgeFactId: factId, knowledgeFactRevision: fact.revision };
     }
     if (values.claimType === "DOSING") {
-      const facts = await this.dosingFacts([productId]);
+      const facts = await dosingFactsOf([productId]);
       if (facts.length)
         throw new BadRequestException(
           `A termékhez van elfogadott Product Knowledge adagolás (${facts
@@ -602,19 +711,6 @@ export class ManufacturerClaimsService {
       throw new BadRequestException(
         "Product Knowledge tényre épülő állításnak nincs saját szám-értéke: a szám a tényben van.",
       );
-  }
-
-  private dosingFacts(productIds: readonly string[]) {
-    return prisma.productKnowledgeFact.findMany({
-      where: {
-        productId: { in: [...productIds] },
-        scopeKey: "",
-        field: { in: [...DOSING_FACT_FIELDS] },
-        value: { not: null },
-      },
-      select: { id: true, productId: true, field: true },
-      orderBy: { field: "asc" },
-    });
   }
 
   private async log(
@@ -650,62 +746,6 @@ export class ManufacturerClaimsService {
       where: { id },
       select: CLAIM_SELECT,
     });
-    return (await this.views([row]))[0]!;
-  }
-
-  private async views(rows: readonly Row[]): Promise<ManufacturerClaimView[]> {
-    const dosingProducts = [
-      ...new Set(
-        rows
-          .filter((row) => row.claimType === "DOSING")
-          .map((row) => row.productId),
-      ),
-    ];
-    const withFact = new Set(
-      dosingProducts.length
-        ? (await this.dosingFacts(dosingProducts)).map((fact) => fact.productId)
-        : [],
-    );
-    return rows.map((row) => {
-      const link = knowledgeLinkState(
-        row,
-        row.knowledgeFact,
-        withFact.has(row.productId),
-      );
-      return {
-        id: row.id,
-        productId: row.productId,
-        productName: row.product.name,
-        brand: row.product.brand,
-        claimType: row.claimType,
-        claimText: row.claimText,
-        sourceKind: row.sourceKind,
-        sourceRef: row.sourceRef,
-        sourcePublishedOn: dayText(row.sourcePublishedOn),
-        sourceReadOn: dayText(row.sourceReadOn)!,
-        valueAmount: row.valueAmount?.toNumber() ?? null,
-        valueUnit: row.valueUnit,
-        note: row.note,
-        recheckOn: dayText(row.recheckOn),
-        knowledgeFact: row.knowledgeFact,
-        knowledgeFactRevision: row.knowledgeFactRevision,
-        knowledgeLink: link,
-        status: row.status,
-        version: row.version,
-        recordedBy: row.recordedBy
-          ? { id: row.recordedBy.id, name: row.recordedBy.displayName }
-          : null,
-        recordedAt: row.recordedAt.toISOString(),
-        verifiedBy: row.verifiedBy
-          ? { id: row.verifiedBy.id, name: row.verifiedBy.displayName }
-          : null,
-        verifiedAt: row.verifiedAt?.toISOString() ?? null,
-        archivedAt: row.archivedAt?.toISOString() ?? null,
-        archivedBy: row.archivedBy
-          ? { id: row.archivedBy.id, name: row.archivedBy.displayName }
-          : null,
-        output: claimOutput(row, link),
-      };
-    });
+    return (await claimViews([row]))[0]!;
   }
 }

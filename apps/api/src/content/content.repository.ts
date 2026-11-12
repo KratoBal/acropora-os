@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { prisma, type Prisma } from "@acropora/database";
 
 import { applyArticleStep } from "./article.repository.js";
+import { claimsOfContent } from "./content-claim-links.js";
 import type { ContentState } from "./content-state.js";
 
 /**
@@ -69,6 +70,11 @@ export class ContentRepository {
       },
     });
     return rows.map((row) => row.stateEvents[0]?.createdAt ?? row.updatedAt);
+  }
+
+  /** The manufacturer claims the item stands on (T5.3), with their output rule. */
+  claimsOf(id: string) {
+    return claimsOfContent(id);
   }
 
   /** The item's channel, or `null` when there is no such item. */

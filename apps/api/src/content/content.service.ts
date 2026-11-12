@@ -10,6 +10,7 @@ import type { ContentChannel } from "@acropora/types";
 
 import { ArticleStepError } from "./article.repository.js";
 import { isApprovalOverdue } from "./content-approval-reminder.js";
+import { claimApprovalRefusal } from "./content-claim-links.js";
 import {
   agentItemSummary,
   agentItemView,
@@ -273,12 +274,24 @@ export class ContentService {
     // A RÉSZLET IS MEGKAPJA A LÉPÉSEKET, ugyanabból a forrásból, mint a lista.
     // Ha csak a lista kapná meg, egy részletről nyíló cselekvés megint a
     // felület találgatásán állna.
+    // THE CLAIMS THE ITEM STANDS ON (T5.3), with what each allows: the approver sees an unchecked
+    // or disputed claim before approving, not from the refusal.
+    const claims = (await this.repository.claimsOf(id)).map((claim) => ({
+      id: claim.id,
+      productName: claim.productName,
+      claimType: claim.claimType,
+      claimText: claim.claimText,
+      status: claim.status,
+      output: claim.output,
+    }));
+
     return {
       ...rest,
       history,
       blockers,
       schedule,
       moves: moveOptions(item.state, item.channel),
+      claims,
     };
   }
 
@@ -369,6 +382,16 @@ export class ContentService {
       throw new BadRequestException(
         "A visszaküldéshez írd meg, mit kell javítani.",
       );
+    }
+
+    // THE MANUFACTURER CLAIMS (T5.3): approval goes only when every claim the item stands on may
+    // go out as it stands (`claimApprovalRefusal`). A draft may hold unchecked claims; the
+    // approver sees them on the item and here.
+    if (input.from === "AWAITING_APPROVAL" && input.to === "READY_TO_SEND") {
+      const refusal = claimApprovalRefusal(
+        await this.repository.claimsOf(input.id),
+      );
+      if (refusal) throw new ConflictException(refusal);
     }
 
     let moved: boolean;

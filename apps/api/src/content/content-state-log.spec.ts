@@ -192,6 +192,7 @@ describe("the detail carries the history", () => {
         asked.push(ids);
         return names;
       },
+      claimsOf: async () => [],
     } as unknown as ContentRepository;
     return { service: new ContentService(repository), asked };
   }
