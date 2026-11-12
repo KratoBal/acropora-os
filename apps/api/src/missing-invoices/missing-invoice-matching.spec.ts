@@ -5,7 +5,10 @@ import { Prisma } from "@acropora/database";
 
 import { candidateDocument } from "../testing/billing-documents.fixture.js";
 import {
+  DIJNET_ISSUERS,
   inWindow,
+  isDijnetIssuer,
+  isDijnetPayment,
   matchMonth,
   namedMonth,
   normalizeName,
@@ -2180,5 +2183,146 @@ describe("a fixed monthly surcharge, for a listed partner", () => {
       [o.documents.map((x) => x.id), o.amountDifference],
       [[docs[3]!.id], undefined],
     );
+  });
+});
+
+/*
+  A DIJNET-FIZETÉS (acrobot 49440, 2026-11-12). MI PIROSÍT: ha a „SIMPLEP*dijnet” fizetés a pontos összegű, Dijnet-es
+  kiállítótól (MOHU) jövő számlával nem párosodik; ha a fizetés UTÁN kelt számlát visz el (a havi számlát előtte
+  állítják ki); ha két azonos összegű számlánál nem a fizetéshez időben legközelebbit; ha egy másik kiállító vagy
+  egy másik összeg párosodik; ha egy már elvitt számlát kap meg; ha egy nem-Dijnet fizetést érint.
+*/
+describe("Dijnet payment: paired with the exact-amount invoice of a Dijnet-paid issuer", () => {
+  const MOHU = "MOHU MOL Hulladékgazdálkodási Zrt.";
+  const payment = (overrides: Partial<MatchableDebit> = {}) =>
+    debit({
+      bookingDate: "2026-11-05",
+      amount: D(10882),
+      counterpartyName: "SIMPLEP*dijnet",
+      narrative: "2026.11.04 0194683438 SIMPLEP*dijnet",
+      ...overrides,
+    });
+  const mohu = (date: string, overrides: Partial<CandidateDocument> = {}) =>
+    doc({ date, gross: D(10882), supplierName: MOHU, ...overrides });
+
+  it("the measured case: two equal MOHU invoices, the one issued BEFORE the payment is taken, the later one is not", () => {
+    const d = payment();
+    const before = mohu("2026-09-21");
+    const after = mohu("2026-11-12");
+    const out = run([d], [before, after]).get(d.id)!;
+    assert.equal(out.state, "FOUND");
+    assert.deepEqual(
+      out.documents.map((x) => x.id),
+      [before.id],
+    );
+    assert.equal(out.matchedBy, "RULE");
+  });
+
+  it("of two invoices issued before, the one closest to the payment date wins, and the other stays free", () => {
+    const d = payment();
+    const far = mohu("2026-09-21");
+    const near = mohu("2026-10-20");
+    const out = run([d], [far, near]).get(d.id)!;
+    assert.deepEqual(
+      out.documents.map((x) => x.id),
+      [near.id],
+    );
+  });
+
+  it("an invoice dated on the payment day is taken; one dated after the payment alone is not", () => {
+    const sameDay = payment();
+    assert.equal(
+      run([sameDay], [mohu("2026-11-05")]).get(sameDay.id)?.state,
+      "FOUND",
+    );
+    const later = payment();
+    const out = run([later], [mohu("2026-11-12")]).get(later.id)!;
+    assert.notEqual(out.state, "FOUND");
+    assert.deepEqual(out.documents, []);
+  });
+
+  it("only a Dijnet-paid issuer and only the exact amount: another issuer or another amount is not paired", () => {
+    const other = payment();
+    const outOther = run(
+      [other],
+      [mohu("2026-10-20", { supplierName: "Valami Szolgáltató Zrt." })],
+    ).get(other.id)!;
+    assert.notEqual(outOther.state, "FOUND");
+    const wrongAmount = payment();
+    const outAmount = run(
+      [wrongAmount],
+      [mohu("2026-10-20", { gross: D(10990) })],
+    ).get(wrongAmount.id)!;
+    assert.notEqual(outAmount.state, "FOUND");
+    // the 1 Ft HUF tolerance of every exact match holds here too
+    const oneForint = payment();
+    assert.equal(
+      run([oneForint], [mohu("2026-10-20", { gross: D(10883) })]).get(
+        oneForint.id,
+      )?.state,
+      "FOUND",
+    );
+  });
+
+  it("two Dijnet payments of the same amount take two different invoices (an invoice is taken once); a manually paired invoice is not offered", () => {
+    const first = payment({ bookingDate: "2026-10-05", id: "dj-1" });
+    const second = payment({ bookingDate: "2026-11-05", id: "dj-2" });
+    const a = mohu("2026-09-21");
+    const b = mohu("2026-10-02");
+    const out = run([first, second], [a, b]);
+    assert.deepEqual(
+      out.get("dj-1")?.documents.map((x) => x.id),
+      [b.id],
+    );
+    assert.deepEqual(
+      out.get("dj-2")?.documents.map((x) => x.id),
+      [a.id],
+    );
+    // a manually paired invoice belongs to its payment: the Dijnet payment does not take it
+    const manualPaid = mohu("2026-10-20");
+    const mine = payment();
+    const elsewhere = debit({ id: "elsewhere", bookingDate: "2026-10-21" });
+    const taken = run(
+      [mine, elsewhere],
+      [manualPaid],
+      new Map([[elsewhere.id, [manualPaid.id]]]),
+    ).get(mine.id)!;
+    assert.notEqual(taken.state, "FOUND");
+    assert.deepEqual(taken.documents, []);
+  });
+
+  it("a payment that is not a Dijnet payment is not touched, even beside a MOHU invoice of the same amount", () => {
+    const card = debit({
+      bookingDate: "2026-11-05",
+      amount: D(10882),
+      counterpartyName: "VALAMI WEBSHOP",
+      narrative: "2026.11.04 0194683438 VALAMI WEBSHOP",
+    });
+    const out = run([card], [mohu("2026-10-20")]).get(card.id)!;
+    assert.notEqual(out.state, "FOUND");
+  });
+
+  it("the Dijnet detection reads the counterparty and the narrative, and the truncated statement form; the issuer list is MOHU only", () => {
+    assert.equal(
+      isDijnetPayment({ counterpartyName: "SIMPLEP*dijnet", narrative: "" }),
+      true,
+    );
+    assert.equal(
+      isDijnetPayment({
+        counterpartyName: null,
+        narrative: "2026.05.10 SIMPLEP*DIJNE 1234",
+      }),
+      true,
+    );
+    assert.equal(
+      isDijnetPayment({
+        counterpartyName: "SIMPLEP*VIZMUVEK.HU",
+        narrative: "",
+      }),
+      false,
+    );
+    assert.equal(isDijnetIssuer(MOHU), true);
+    assert.equal(isDijnetIssuer("Dijnet Zrt."), false);
+    assert.equal(DIJNET_ISSUERS.length, 1);
   });
 });
