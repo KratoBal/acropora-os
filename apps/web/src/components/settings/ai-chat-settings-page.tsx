@@ -123,10 +123,12 @@ export function AiChatSettingsPage() {
       {settings ? (
         <PilotCard className="space-y-5 p-5">
           <p className="rounded-lg bg-pilot-blue-50 p-3 text-sm text-pilot-blue-700">
-            A mentett értékeket az AI szolgáltatás még nem olvassa: a megőrzési
-            napokat ma a szolgáltatás saját beállításából veszi, a
-            kapcsolat-kérés és a felajánlás pedig a következő változatokban
-            készül. A mentés tehát rögzített döntés, nem azonnali hatás.
+            Az AI szolgáltatás innen olvassa az üzenetek megőrzési idejét, a
+            kapcsolat-kérés kapcsolóját és a témán kívüli kérdések küszöbét;
+            mindegyik akkor hat, ha a szolgáltatásban a hozzá tartozó funkció is
+            be van kapcsolva. A címzettet és a kérések megőrzését az OS maga
+            használja. A kollégai felajánlásról ma a szolgáltatás saját
+            kapcsolója dönt, ez a jelölő azt még nem állítja át.
           </p>
 
           <label className="flex items-center gap-2 text-sm text-pilot-grey-800">

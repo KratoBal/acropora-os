@@ -53,7 +53,7 @@ beforeEach(() => {
 const mentes = () => screen.getByRole("button", { name: "Mentés" });
 
 describe("AiChatSettingsPage", () => {
-  it("shows the saved settings, and the notice that the AI service does not read them yet", async () => {
+  it("shows the saved settings, and a notice that says what the AI service reads (and the one switch it does not)", async () => {
     render(createElement(AiChatSettingsPage));
     expect(
       ((await screen.findByLabelText(DAYS)) as HTMLInputElement).value,
@@ -71,8 +71,15 @@ describe("AiChatSettingsPage", () => {
       (screen.getByLabelText("Kollégai felajánlás") as HTMLInputElement)
         .checked,
     ).toBe(false);
-    expect(screen.getByText(/még nem olvassa/)).toBeTruthy();
-    expect(screen.getByText(/nem azonnali hatás/)).toBeTruthy();
+    // measured on the AI service's main (#76, #77, #80) and its #82: no sentence may say it reads nothing
+    const notice = screen.getByText(/innen olvassa/);
+    expect(notice.textContent).toMatch(/megőrzési idejét/);
+    expect(notice.textContent).toMatch(/kapcsolat-kérés kapcsolóját/);
+    expect(notice.textContent).toMatch(/küszöbét/);
+    expect(notice.textContent).toMatch(
+      /kollégai felajánlásról ma a szolgáltatás saját\s+kapcsolója dönt/,
+    );
+    expect(screen.queryByText(/még nem olvassa/)).toBeNull();
   });
 
   it("saving sends the checked value: a trimmed recipient, the edited days, nothing the form did not show", async () => {
