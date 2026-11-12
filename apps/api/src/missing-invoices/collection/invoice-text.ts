@@ -1248,9 +1248,57 @@ export function cardPaymentMatch(
       });
   }
   if (matches.length === 1) return matches[0]!;
+  /*
+    AZ ISMÉTLŐDŐ, AZONOS ÖSSZEGŰ ELŐFIZETÉS (acrobot 49566, TypeSafe AI havi 28,05 EUR): a partner-szó és az összeg
+    minden hónap fizetésére illik, tehát több találat van, és eddig egyik sem kötött. A számla napjához (vagy a levél
+    érkezéséhez) a gyűjtő ablakán belül LEGKÖZELEBBI fizetés köt, de csak ha az összeg a számla végösszege, és ha
+    egyértelmű: két egyformán közeli fizetés közül nem választunk.
+  */
+  if (matches.length > 1 && invoiceDate) {
+    // csak a számla VÉGÖSSZEGÉRE (a legnagyobb pénznemes összeg): egy havidíj-sor vagy a legnagyobb tétel több hónap
+    // fizetésére is illik, de az nem a számla összege (Kia július, Parkl augusztus)
+    const total = largestMoney(text);
+    const onTotal = total
+      ? matches.filter(
+          (m) =>
+            Math.round(Number(m.amount) * 100) === total.cents &&
+            m.currency === total.currency,
+        )
+      : [];
+    // és csak ha MINDEN találat a végösszegre szól (azonos havi díj): ha más összegű is van, a halmaz-út dönt, mint eddig
+    const nearest =
+      onTotal.length === matches.length
+        ? nearestPayment(onTotal, debits, invoiceDate)
+        : null;
+    if (nearest) return nearest;
+  }
   return invoiceDate
     ? cardPaymentSet(text, debits, partnerOf, invoiceDate)
     : null;
+}
+
+/** A számla napjához az ablakon belül egyértelműen legközelebbi egyfizetéses találat, vagy `null`. */
+function nearestPayment(
+  matches: readonly CardPaymentMatch[],
+  debits: readonly CardDebit[],
+  invoiceDate: string,
+): CardPaymentMatch | null {
+  const day = Date.parse(`${invoiceDate}T00:00:00Z`);
+  const ranked = matches
+    .map((match) => {
+      const debit = debits.find((d) => d.id === match.debitIds[0])!;
+      const offset =
+        (Date.parse(`${debit.bookingDate}T00:00:00Z`) - day) / DAY_MS;
+      return { match, offset, distance: Math.abs(offset) };
+    })
+    .filter(
+      (r) => r.offset >= -SET_WINDOW.before && r.offset <= SET_WINDOW.after,
+    )
+    .sort((a, b) => a.distance - b.distance);
+  if (ranked.length === 0) return null;
+  if (ranked.length > 1 && ranked[1]!.distance === ranked[0]!.distance)
+    return null;
+  return ranked[0]!.match;
 }
 
 /**
