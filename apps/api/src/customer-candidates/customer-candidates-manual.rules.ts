@@ -235,3 +235,14 @@ export function planManualReplace(
   const remove = [...before.keys()].filter((key) => !after.has(key)).length;
   return { add, update, remove, unchanged };
 }
+
+/**
+ * The table changed between the dry run and the write: the rows read UNDER THE REPLACEMENT'S LOCK are not the ones the fingerprint
+ * was made against. Nothing is written (murena's open point on #2428). Here, beside `ManualListError`, so the import stays free of
+ * the database.
+ */
+export class ManualListChangedError extends Error {
+  constructor() {
+    super("the manual list changed since the dry run");
+  }
+}

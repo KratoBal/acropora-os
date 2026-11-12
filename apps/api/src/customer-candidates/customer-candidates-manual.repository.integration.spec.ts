@@ -5,6 +5,10 @@ import { after, before, describe, it } from "node:test";
 import { prisma } from "@acropora/database";
 
 import { integrationDatabaseGate } from "../common/integration-database.js";
+import {
+  analyzeManualList,
+  applyManualList,
+} from "./customer-candidates-manual.import.js";
 import { PrismaManualListStore } from "./customer-candidates-manual.repository.js";
 import type { ManualRowToStore } from "./customer-candidates-manual.repository.js";
 
@@ -283,5 +287,73 @@ describe("a kézi termékjelölt-lista", { skip: gate.mode === "skip" }, () => {
         select: { id: true },
       })
     ).id;
+  });
+
+  /*
+    TWO APPLIES FROM THE SAME DRY RUN (murena's open point on #2428). The probe holds the first apply inside its transaction, after the
+    lock and the check, and the second apply starts there. WHAT TURNS THIS RED: both passing (each checked the fingerprint before the
+    other wrote, and the later commit silently replaced the earlier list), which is what the old shape did.
+  */
+  it("two applies from the same dry run: the second waits for the first, reads what it stored, and is refused", async () => {
+    const marker = `verseny-${suffix}`;
+    const fileLine = (name: string) => ({
+      sku: sku(name),
+      parameter: "KH",
+      direction: "EMEL",
+      referenceUrl: `https://shop.example.invalid/${name}`,
+      basis: "SHOP_TEXT",
+      sideEffects: [],
+      sideEffectsStatus: "FILLED",
+    });
+    const input = (fingerprint: string) => ({
+      approvedBy: marker,
+      fingerprint,
+      allowEmpty: false,
+      auditUserId: null,
+      source: "http" as const,
+    });
+    try {
+      await store.replace([row("a")], "kiindulas", approvedAt);
+      // both dry runs against the same table
+      const first = await analyzeManualList([fileLine("a")], store);
+      const second = await analyzeManualList([fileLine("b")], store);
+      // a box, not a `let`: a closure assignment narrows a `let` to never (TS2339 in CI, #2445)
+      const box: { secondApply?: ReturnType<typeof applyManualList> } = {};
+      store.afterCheckProbe = async () => {
+        store.afterCheckProbe = async () => {};
+        box.secondApply = applyManualList(
+          second,
+          input(second.fingerprint),
+          store,
+          approvedAt,
+        );
+        await new Promise((resolve) => setTimeout(resolve, 400));
+      };
+      const firstResult = await applyManualList(
+        first,
+        input(first.fingerprint),
+        store,
+        approvedAt,
+      );
+      assert.ok(box.secondApply, "the probe ran");
+      const secondResult = await box.secondApply!;
+      assert.equal(firstResult.ok, true);
+      assert.deepEqual(secondResult, {
+        ok: false,
+        refusal: "FINGERPRINT_MISMATCH",
+      });
+      assert.deepEqual(
+        (await mine()).map((entry) => entry.referenceUrl),
+        ["https://shop.example.invalid/a"],
+      );
+    } finally {
+      store.afterCheckProbe = async () => {};
+      await prisma.auditLog.deleteMany({
+        where: {
+          action: "customer-candidates.manual-list.applied",
+          metadata: { path: ["approvedBy"], equals: marker },
+        },
+      });
+    }
   });
 });

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import {
+  ManualListChangedError,
   ManualListError,
   parseManualEntries,
   planManualReplace,
@@ -218,19 +219,34 @@ export async function applyManualList(
     return { ok: false, refusal: "EMPTY_NEEDS_ALLOW_EMPTY" };
   if (input.fingerprint !== analysis.fingerprint)
     return { ok: false, refusal: "FINGERPRINT_MISMATCH" };
-  const done = await store.replace(analysis.rows, approvedBy, now, {
-    userId: input.auditUserId,
-    metadata: {
-      source: input.source,
+  let done: { stored: number; removed: number };
+  try {
+    done = await store.replace(
+      analysis.rows,
       approvedBy,
-      fingerprint: analysis.fingerprint,
-      plan: analysis.plan,
-      rows: analysis.rows.length,
-      pending: analysis.pending,
-      shopText: analysis.shopText,
-      allowEmpty: input.allowEmpty,
-    },
-  });
+      now,
+      {
+        userId: input.auditUserId,
+        metadata: {
+          source: input.source,
+          approvedBy,
+          fingerprint: analysis.fingerprint,
+          plan: analysis.plan,
+          rows: analysis.rows.length,
+          pending: analysis.pending,
+          shopText: analysis.shopText,
+          allowEmpty: input.allowEmpty,
+        },
+      },
+      // the fingerprint again, against the rows held under the replacement's lock: another apply in between is seen here
+      (current) =>
+        fingerprintOf(analysis.rows, current) === analysis.fingerprint,
+    );
+  } catch (error) {
+    if (error instanceof ManualListChangedError)
+      return { ok: false, refusal: "FINGERPRINT_MISMATCH" };
+    throw error;
+  }
   return { ok: true, ...done };
 }
 
