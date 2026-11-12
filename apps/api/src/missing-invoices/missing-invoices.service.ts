@@ -522,6 +522,21 @@ export class MissingInvoicesService {
       driveFolderUrl: httpsOrNull(
         this.environment.MISSING_INVOICES_DRIVE_FOLDER_URL,
       ),
+      manualDocuments: (await this.repository.manualMatchRows(id)).map(
+        (row) => {
+          const shown = computed.documents.find(
+            (d) =>
+              d.id === row.documentId || d.aliasIds?.includes(row.documentId),
+          );
+          return {
+            documentId: row.documentId,
+            documentSource: row.documentSource,
+            number: shown ? shownNumber(shown) : "",
+            fileName: row.fileName,
+            pairedAt: row.createdAt.toISOString(),
+          };
+        },
+      ),
       doublePaidWith: (outcome?.doublePaidWith ?? []).flatMap((other) => {
         const debit = computed.items.find(
           (candidate) => candidate.id === other,
@@ -688,6 +703,24 @@ export class MissingInvoicesService {
       bankTransactionId: id,
       documentId: document.id,
     });
+    return this.item(id);
+  }
+
+  /**
+   * EGY FÁJL LEVÉTELE A SORRÓL (Niceshops, acrobot 48739): egy rossz terheléshez feltöltött fájl kézi párosítása megszűnik,
+   * a terhelés többi párosítása marad. Csak egy MEGLÉVŐ kézi párosítás vehető le: egy szabály szerinti nem (azt a szabály
+   * adja), egy nem ide tartozó dokumentum pedig 404.
+   */
+  async unpairOne(
+    id: string,
+    documentId: string,
+    user: AuthenticatedUser,
+  ): Promise<MissingInvoiceItemDetail> {
+    const removed = await this.repository.unpairOne(id, user.id, documentId);
+    if (removed === 0)
+      throw new NotFoundException(
+        "Ez a dokumentum nincs kézzel ehhez a terheléshez párosítva.",
+      );
     return this.item(id);
   }
 

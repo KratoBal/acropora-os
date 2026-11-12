@@ -79,6 +79,12 @@ const LINE_ERRORS: Record<SimplePayLineError, string> = {
   AMOUNT_MISMATCH: "A rendelés végösszege más",
   // Luca táblájában ez a "még nem teljesített rendelés" sora
   ORDER_NOT_INVOICED: "A rendelésnek még nincs számlája",
+  REFUND_INVOICE_NOT_CANCELLED:
+    "Teljes visszatérítés: a rendelés számlája nincs sztornózva",
+  REFUND_INVOICE_NOT_CORRECTED:
+    "Részleges visszatérítés: a számla nem a csökkentett összegről szól, helyesbítő sincs",
+  REFUND_AMOUNT_UNEXPLAINED:
+    "Visszatérítés: a fizetett és a visszatérített összeg különbsége nem a rendelés végösszege",
 };
 
 function lineResolution(line: SimplePayTransactionLine) {

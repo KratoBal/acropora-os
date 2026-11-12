@@ -185,7 +185,7 @@ describe("readForeignInvoice", () => {
     assert.equal(values.dueDate, "2026-11-02");
     assert.equal(values.netAmount, "250.00");
     assert.equal(values.vatAmount, "0.00");
-    assert.equal(sources.vatAmount, "TEXT");
+    assert.equal(sources.vatAmount, "REVERSE_CHARGE");
     assert.equal(values.grossAmount, "250.00");
     assert.equal(sources.grossAmount, "PAIRING");
   });
@@ -1542,5 +1542,174 @@ describe("readForeignInvoice: the labelled number and the bare German date", () 
       pairing: pairing({}),
     });
     assert.equal(values.documentNumber, "KITALALT2-0012");
+  });
+});
+
+/*
+  A MAGYAR BRUTTÓ CÍMKE ÉS A FORDÍTOTT ADÓZÁS (kártya dbab22cd, harmadik kör, bruttó-szelet). Minden név és szám KITALÁLT. MI PIROSÍT: ha az "ÁFA
+  regisztrációs szám" sor számjegye ÁFA-összeg lenne (a mért hiba: "0106 417" -> 417); ha a "Teljes bruttó összeg" nem adná a bruttót; ha a "Bruttó
+  egységár" bruttó végösszeg lenne; ha a nettó fordított adózási jel NÉLKÜL is kiszámolódna; ha a nettó a bruttótól eltérő ÁFA mellett is a bruttó lenne.
+*/
+describe("readForeignInvoice: the Hungarian gross label and the reverse charge", () => {
+  const REVERSE = [
+    "Kitalált Töltő GmbH Kitalált utca 1 D-80000 Teststadt",
+    "Dátum 2026. okt. 31.",
+    "Szolgáltatási tétel | Összeg",
+    "Havi díj | 1518,00 HUF | 1518,00 HUF",
+    "Teljes összeg* | 1518,00 HUF | 1518,00 HUF",
+    "Teljes bruttó összeg | 1518,00 HUF | 1518,00 HUF",
+    "*Fordított adózás.",
+    "Németország | ÁFA regisztrációs szám: | 0106 417 | Kitalált Igazgató",
+    "Pénznem: HUF",
+  ];
+
+  it("reads the gross by its label, takes the registration number for no VAT, and the reverse charge gives zero VAT and the net equal to the gross", () => {
+    const { values, sources } = readForeignInvoice({
+      lines: REVERSE,
+      adapter: null,
+      pairing: pairing({ date: undefined }),
+    });
+    assert.equal(values.grossAmount, "1518.00");
+    assert.equal(sources.grossAmount, "TEXT");
+    assert.equal(values.vatAmount, "0.00");
+    assert.equal(values.netAmount, "1518.00");
+    assert.equal(sources.netAmount, "REVERSE_CHARGE");
+    // the zero VAT comes from the marker too: its own source value, which the automatic approval reads
+    assert.equal(sources.vatAmount, "REVERSE_CHARGE");
+  });
+
+  it("the derived net comes with a warning that names the marker, and the zero VAT that came from it too (barracuda, #2468)", () => {
+    const { warnings } = readForeignInvoice({
+      lines: REVERSE,
+      adapter: null,
+      pairing: pairing({ date: undefined }),
+    });
+    const warning = warnings.find((w) =>
+      w.includes("fordított adózás jelzéséből"),
+    );
+    assert.ok(warning, "a warning names the reverse-charge marker");
+    assert.match(warning!, /a bruttóval egyenlő/);
+    assert.match(warning!, /Az ÁFA 0 is a jelzésből jön, nem egy ÁFA-sorból/);
+  });
+
+  it("a zero VAT read from a real VAT line: the net is still derived and warned, but the warning does not claim the zero came from the marker", () => {
+    const { values, sources, warnings } = readForeignInvoice({
+      lines: [
+        "Kitalált Szolgáltató Kft.",
+        "ÁFA (0%) | 0,00 HUF",
+        "Teljes bruttó összeg | 1000,00 HUF",
+        "*Fordított adózás.",
+      ],
+      adapter: null,
+      pairing: pairing({ date: undefined }),
+    });
+    assert.equal(values.vatAmount, "0.00");
+    assert.equal(values.netAmount, "1000.00");
+    assert.equal(sources.vatAmount, "TEXT");
+    assert.equal(sources.netAmount, "REVERSE_CHARGE");
+    const warning = warnings.find((w) =>
+      w.includes("fordított adózás jelzéséből"),
+    );
+    assert.ok(warning);
+    assert.doesNotMatch(warning!, /nem egy ÁFA-sorból/);
+  });
+
+  it("no net derivation, no warning", () => {
+    const { warnings } = readForeignInvoice({
+      lines: REVERSE.filter((line) => !line.includes("Fordított")),
+      adapter: null,
+      pairing: pairing({ date: undefined }),
+    });
+    assert.equal(
+      warnings.some((w) => w.includes("fordított adózás")),
+      false,
+    );
+  });
+
+  it("the registration number line alone is no VAT amount", () => {
+    const { values } = readForeignInvoice({
+      lines: [
+        "Németország | ÁFA regisztrációs szám: | 0106 417 | Kitalált Igazgató",
+      ],
+      adapter: null,
+      pairing: pairing({ date: undefined }),
+    });
+    assert.equal(values.vatAmount, null);
+  });
+
+  it("without the reverse-charge marker nothing is derived: no VAT, no net", () => {
+    const { values } = readForeignInvoice({
+      lines: REVERSE.filter((line) => !line.includes("Fordított")),
+      adapter: null,
+      pairing: pairing({ date: undefined }),
+    });
+    assert.equal(values.grossAmount, "1518.00");
+    assert.equal(values.vatAmount, null);
+    assert.equal(values.netAmount, null);
+  });
+
+  it("a Bruttó egységár or a Bruttó ár line is no gross total", () => {
+    const { values } = readForeignInvoice({
+      lines: ["Bruttó egységár | 100,00 HUF", "Bruttó ár | 100,00 HUF"],
+      adapter: null,
+      pairing: pairing({ date: undefined }),
+    });
+    assert.equal(values.grossAmount, null);
+  });
+
+  it("a net that stays with a non-zero VAT is not replaced by the gross", () => {
+    const { values } = readForeignInvoice({
+      lines: [
+        "Kitalált Szolgáltató Kft.",
+        "Nettó összeg | 1000,00 HUF",
+        "ÁFA (27%) | 270,00 HUF",
+        "Teljes bruttó összeg | 1270,00 HUF",
+        "*Fordított adózás.",
+      ],
+      adapter: null,
+      pairing: pairing({ date: undefined }),
+    });
+    assert.equal(values.netAmount, "1000.00");
+    assert.equal(values.vatAmount, "270.00");
+    assert.equal(values.grossAmount, "1270.00");
+  });
+
+  it("an item row's Bruttó összeg is no gross total: the label must start the line", () => {
+    const { values } = readForeignInvoice({
+      lines: ["1. tétel Bruttó összeg | 500,00 HUF"],
+      adapter: null,
+      pairing: pairing({ date: undefined }),
+    });
+    assert.equal(values.grossAmount, null);
+  });
+
+  it("a plain zero VAT line without the reverse-charge marker does not make the net: only a proven reverse charge does", () => {
+    const { values } = readForeignInvoice({
+      lines: [
+        "Kitalált Szolgáltató Kft.",
+        "ÁFA (0%) | 0,00 HUF",
+        "Teljes bruttó összeg | 1000,00 HUF",
+      ],
+      adapter: null,
+      pairing: pairing({ date: undefined }),
+    });
+    assert.equal(values.grossAmount, "1000.00");
+    assert.equal(values.vatAmount, "0.00");
+    assert.equal(values.netAmount, null);
+  });
+
+  it("a non-zero VAT with the marker present does not make the net either", () => {
+    const { values } = readForeignInvoice({
+      lines: [
+        "Kitalált Szolgáltató Kft.",
+        "ÁFA | 270,00 HUF",
+        "Teljes bruttó összeg | 1270,00 HUF",
+        "*Fordított adózás.",
+      ],
+      adapter: null,
+      pairing: pairing({ date: undefined }),
+    });
+    assert.equal(values.vatAmount, "270.00");
+    assert.equal(values.netAmount, null);
   });
 });

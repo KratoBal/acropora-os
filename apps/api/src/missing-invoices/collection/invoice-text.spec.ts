@@ -1445,3 +1445,61 @@ describe("an own-number label beside the marker: the document's own number binds
     assert.equal(knownNumberInText(lines, [ORIGINAL, CREDIT]), null);
   });
 });
+
+/*
+  A CSOPORTOKBA TÖRDELT BANKSZÁMLA NEM SZÁMLASZÁM (Niceshops / 3DJake, 2026-11-12). Kitalált számok, a valódi PDF sor-alakjával.
+  MI PIROSÍT: a „Számlaszám: 1200 1008 …” lábléc első négyese számlaszám lesz (a két külön számla így egy dokumentummá vonódott
+  össze); a „Rech.-Nr.” sor száma nem olvasódik; ÉS a másik irány: a „Számlaszám:” után álló VALÓDI számlaszám nem olvasódik.
+*/
+describe("a bank account written in groups is not an invoice number", () => {
+  const FOOTER =
+    "IBAN: HU99123456781234567812345678 | BIC: TESZTHUHB | Számlaszám: 1234 5678 1234 5678 1234 5678 |";
+
+  it("the footer's grouped account is skipped, and the Rech.-Nr. line gives the number", () => {
+    const read = readInvoiceText(
+      [
+        "Rechnung",
+        "Rech.-Nr. | R49010000099990001",
+        "Rech.-Datum | 05.11.2026",
+        FOOTER,
+      ],
+      { fileName: "szamla.pdf" },
+    );
+    assert.equal(read.invoiceNumber, "R49010000099990001");
+    assert.equal(read.numberFrom, "LABEL");
+  });
+
+  /*
+    SORONKÉNT, PONTOS ÉRTÉKKEL (barracuda, #2464 CHANGES): egy notEqual("1234")
+    a nyolcas csoportokra nem tud elbukni (ott az első token "12345678"), és egy
+    ciklus az első bukásnál megáll. MI PIROSÍT: a négyes ág nélkül a 4x4 és a
+    4x6 sor; a nyolcas ág nélkül a 8x2 és a 8x3 sor (köztük a niceshops-alak).
+  */
+  for (const [name, footer] of [
+    ["4x4", "Számlaszám: 1234 5678 1234 5678"],
+    ["4x6", FOOTER],
+    ["8x2", "Számlaszám: 12345678 12345678"],
+    ["8x3", "Számlaszám: 12345678 12345678 12345678"],
+    ["8x3, the niceshops form", "Számlaszám: 12001008 01472511 00100004 |"],
+  ] as const)
+    it(`without any other number, a ${name} grouped account gives no number`, () => {
+      assert.equal(
+        readInvoiceText(["Számla", footer], { fileName: "x.pdf" })
+          .invoiceNumber,
+        null,
+      );
+    });
+
+  it("a real invoice number after the same label is still read (the control nearest to the case)", () => {
+    for (const [line, number] of [
+      ["Számlaszám: 2026/001234", "2026/001234"],
+      ["Számlaszám: ABC-1234", "ABC-1234"],
+      ["Számlaszám: 1234 | Kelte: 2026.11.05", "1234"],
+    ] as const)
+      assert.equal(
+        readInvoiceText(["Számla", line], { fileName: "x.pdf" }).invoiceNumber,
+        number,
+        line,
+      );
+  });
+});

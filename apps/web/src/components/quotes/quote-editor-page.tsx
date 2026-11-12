@@ -51,6 +51,7 @@ import {
 } from "./quote-format";
 import { QuoteItemDrawer } from "./quote-item-drawer";
 import { QUOTES_PATH } from "./quote-list-page";
+import { canEditQuoteTitle, QuoteTitleEditor } from "./quote-title-editor";
 
 type Item = QuoteInternalBlock["items"][number];
 
@@ -103,6 +104,7 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
   );
 
   const [quote, setQuote] = useState<QuoteDetailDto | null>(null);
+  const [editingTitle, setEditingTitle] = useState(false);
   const [costing, setCosting] = useState<QuoteCostingDto | null>(null);
   const [snippets, setSnippets] = useState<QuoteSnippetDto[]>([]);
   const [snippetId, setSnippetId] = useState("");
@@ -277,6 +279,15 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
       description="Szerkeszd az ügyfélnek látható ajánlati dokumentumot blokkokból, miközben a belső kalkuláció külön marad."
       actions={
         <div className="flex flex-wrap gap-3">
+          {canEditQuoteTitle(quote, canManage) ? (
+            <PilotButton
+              variant="secondary"
+              size="regular"
+              onClick={() => setEditingTitle(true)}
+            >
+              Cím szerkesztése
+            </PilotButton>
+          ) : null}
           <PilotButton
             variant="secondary"
             size="regular"
@@ -338,6 +349,17 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
   return (
     <PilotThemeRoot theme="light" className="space-y-6">
       {header}
+      {editingTitle && canEditQuoteTitle(quote, canManage) ? (
+        <QuoteTitleEditor
+          token={token}
+          quote={quote}
+          onClose={() => setEditingTitle(false)}
+          onSaved={(title) => {
+            setQuote({ ...quote, title });
+            setEditingTitle(false);
+          }}
+        />
+      ) : null}
       {error ? (
         <Alert variant="danger" title="Nem sikerült" description={error} />
       ) : null}

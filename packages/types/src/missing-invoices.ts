@@ -381,6 +381,18 @@ export interface MissingInvoiceItemDetail extends MissingInvoiceItem {
     amount: string;
     currency: string;
   }[];
+  /**
+   * A TERHELÉS KÉZI PÁROSÍTÁSAI, DOKUMENTUMONKÉNT (Niceshops, acrobot 48739): egy rossz sorra feltöltött fájl egyenként
+   * levehető (`DELETE items/:id/match/:documentId`), a többi párosítás marad. A `number` a jelölt-összerakó száma (egy
+   * összevont dokumentumnál a közös szám), a `fileName` a feltöltött vagy begyűjtött fájl neve, ha van.
+   */
+  manualDocuments: {
+    documentId: string;
+    documentSource: string;
+    number: string;
+    fileName: string | null;
+    pairedAt: string;
+  }[];
 }
 
 export interface MissingInvoiceMatchInput {

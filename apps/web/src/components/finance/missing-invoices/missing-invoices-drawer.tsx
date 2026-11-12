@@ -6,7 +6,10 @@ import {
   PilotDrawer,
   PilotSelect,
 } from "@acropora/ui";
-import type { MissingInvoicePayeeDocument } from "@acropora/types";
+import type {
+  MissingInvoiceItemDetail,
+  MissingInvoicePayeeDocument,
+} from "@acropora/types";
 import { useState } from "react";
 
 import {
@@ -40,6 +43,8 @@ export interface ChargeDetailExtras {
   action: ItemAction;
   /** A „Hiányzó számlák” Drive-mappa, ha a szerveren be van állítva. */
   driveFolderUrl: string | null;
+  /** A kézi párosítások dokumentumonként: egy rossz sorra feltöltött fájl egyenként levehető. */
+  manualDocuments: MissingInvoiceItemDetail["manualDocuments"];
 }
 
 /**
@@ -64,6 +69,7 @@ export function MissingInvoicesDrawer({
   jevSuggestion = null,
   onPair,
   onUnpair,
+  onUnpairOne,
   onCategory,
   busy,
   onUpload,
@@ -91,6 +97,8 @@ export function MissingInvoicesDrawer({
   jevSuggestion?: { documentId: string; confidence: number | null } | null;
   onPair: (candidate: CandidateInvoice) => void;
   onUnpair: () => void;
+  /** Egy fájl levétele a sorról; ha nincs megadva, a soronkénti gombok nem jelennek meg. */
+  onUnpairOne?: (document: { documentId: string; label: string }) => void;
   /** `null`: vissza az automatikus besorolásra. */
   onCategory: (category: ChargeCategory | null) => void;
   /** A futó módosítás: `pair:<dokumentum>`, `unpair`, `category`, `upload`. */
@@ -367,6 +375,47 @@ export function MissingInvoicesDrawer({
 
                 {paperCheckbox}
               </div>
+              {/*
+                A KÉZI PÁROSÍTÁSOK DOKUMENTUMONKÉNT (Niceshops, acrobot 48739): ha egy sorra több fájlt párosítottak kézzel,
+                egy rossz fájl egyenként levehető; a teljes visszavonás fent marad.
+              */}
+              {canManage &&
+              onUnpairOne &&
+              extras &&
+              extras.manualDocuments.length > 1 ? (
+                <ul
+                  className="mt-2 space-y-1 text-xs"
+                  aria-label="Kézzel párosított fájlok"
+                >
+                  {extras.manualDocuments.map((doc) => {
+                    const label =
+                      doc.fileName ?? (doc.number || doc.documentId);
+                    return (
+                      <li
+                        key={doc.documentId}
+                        className="flex items-center justify-between gap-2"
+                      >
+                        <span className="break-all text-pilot-grey-700">
+                          {label}
+                          {doc.number && doc.fileName ? ` · ${doc.number}` : ""}
+                        </span>
+                        <PilotButton
+                          variant="secondary"
+                          size="action"
+                          disabled={busy !== null}
+                          onClick={() =>
+                            onUnpairOne({ documentId: doc.documentId, label })
+                          }
+                        >
+                          {busy === `unpair:${doc.documentId}`
+                            ? "Levétel…"
+                            : "Levétel a sorról"}
+                        </PilotButton>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : null}
               {extras && extras.doublePaidWith.length > 0 ? (
                 <p className="mt-2 text-sm text-pilot-red-700">
                   Ugyanez a számla ehhez is párosítva:{" "}

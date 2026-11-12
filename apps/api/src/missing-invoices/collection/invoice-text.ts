@@ -101,6 +101,9 @@ const NUMBER_LABELS = [
   "rechnungsnummer",
   "rechnung nr.",
   "rechnung nr",
+  // a 3DJake / niceshops rövidítése (2026-11-12): „Rech.-Nr. | R49010000026240667”
+  "rech.-nr.",
+  "rech. nr.",
   "numéro de facture",
   "facture n°",
 ];
@@ -111,6 +114,15 @@ const NUMBER_LABELS = [
  * Ez az alak ezért nem számlaszám.
  */
 const BANK_ACCOUNT = /^\d{8}-\d{8}(-\d{8})?$/;
+
+/**
+ * UGYANEZ CSOPORTOKBA TÖRDELVE (Niceshops / 3DJake, 2026-11-12, mérve a két PDF-en a kód saját olvasójával): a lábléc
+ * „Számlaszám: 1200 1008 0147 2511 0010 0004” alakban írja a 24 jegyű bankszámlát, és a „számlaszám” címke az első
+ * négyest, az „1200”-at adta számlaszámnak; a két külön számla így egy dokumentummá vonódott össze. Négyes csoportok
+ * (16 vagy 24 jegy) vagy nyolcasok (16 vagy 24 jegy), szóközzel: egy számla száma így nem néz ki.
+ */
+const GROUPED_BANK_ACCOUNT =
+  /^(?:\d{4}(?:[ \u00a0]\d{4}){3}(?:(?:[ \u00a0]\d{4}){2})?|\d{8}[ \u00a0]\d{8}(?:[ \u00a0]\d{8})?)$/;
 
 /**
  * IBAN: országkód, két ellenőrző számjegy, legalább 11 további jel (a
@@ -237,8 +249,9 @@ function cellValue(text: string): string | null {
   const match = NUMBER_TOKEN.exec(text);
   if (!match) return null;
   const after = text.slice(match[0].length);
-  const cell = `${match[1]}${after.split("|")[0]}`.replace(/\s+/g, "");
-  if (BANK_ACCOUNT.test(cell)) return null;
+  const raw = `${match[1]}${after.split("|")[0]}`.trim();
+  const cell = raw.replace(/\s+/g, "");
+  if (BANK_ACCOUNT.test(cell) || GROUPED_BANK_ACCOUNT.test(raw)) return null;
   // üres: szóköz vagy vezérlőjel (a Stripe-PDF kötőjele NUL-ként jön át)
   if (/^[^|]*\|[\s\u0000-\u001f]*\|/.test(after)) return null;
   return usable(match[1]);

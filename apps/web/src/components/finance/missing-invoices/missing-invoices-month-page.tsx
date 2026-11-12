@@ -138,6 +138,11 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
   const [saving, setSaving] = useState(false);
   const [drawerError, setDrawerError] = useState<string | null>(null);
   const [confirmUnpair, setConfirmUnpair] = useState(false);
+  // egy fájl levétele a sorról: melyik (a kérdés ezt nevezi meg)
+  const [unpairOne, setUnpairOne] = useState<{
+    documentId: string;
+    label: string;
+  } | null>(null);
   // a duplikátumnak jelölt tételek (task bank-dupla-import): a kérdés, a lista és a futó visszavonás
   const [confirmDuplicate, setConfirmDuplicate] = useState(false);
   const [duplicates, setDuplicates] = useState<MissingInvoiceDuplicateItem[]>(
@@ -622,6 +627,7 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
           )
         }
         onUnpair={() => setConfirmUnpair(true)}
+        onUnpairOne={(document) => setUnpairOne(document)}
         onCategory={(next) =>
           open &&
           void mutate("category", () =>
@@ -672,6 +678,23 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
         busy={busy === "duplicate"}
         onConfirm={() => void markDuplicate()}
         onCancel={() => setConfirmDuplicate(false)}
+      />
+      <ConfirmDialog
+        open={unpairOne !== null}
+        title="Leveszed ezt a fájlt a sorról?"
+        consequence={`A(z) ${unpairOne?.label ?? "kiválasztott"} fájl kézi párosítása ezzel a terheléssel megszűnik; a sor többi párosítása marad.`}
+        recovery="A fájl nem törlődik: a jelöltek közül újra párosítható ide vagy a helyes terheléshez."
+        confirmLabel="Levétel"
+        busy={busy !== null && busy.startsWith("unpair:")}
+        onConfirm={() => {
+          const chosen = unpairOne;
+          setUnpairOne(null);
+          if (open && chosen)
+            void mutate(`unpair:${chosen.documentId}`, () =>
+              missingInvoicesApi.unmatchOne(token, open.id, chosen.documentId),
+            );
+        }}
+        onCancel={() => setUnpairOne(null)}
       />
       <ConfirmDialog
         open={confirmUnpair}

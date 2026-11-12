@@ -42,6 +42,7 @@ const api = vi.hoisted(() => ({
   jevSuggestion: vi.fn(),
   match: vi.fn(),
   unmatch: vi.fn(),
+  unmatchOne: vi.fn(),
   comment: vi.fn(),
   category: vi.fn(),
   paperOriginal: vi.fn(),
@@ -146,6 +147,7 @@ const itemDetail = (
   ...item(),
   payeeDocuments: [],
   doublePaidWith: [],
+  manualDocuments: [],
   candidates: [
     {
       documentId: "inv-2",
@@ -752,6 +754,64 @@ describe("MissingInvoicesMonthPage", () => {
     await waitFor(() =>
       expect(api.unmatch).toHaveBeenCalledWith("token-1", "debit-1"),
     );
+  });
+
+  it("one wrongly uploaded file comes off the row alone, after a question that names it (niceshops)", async () => {
+    urlNavigation.reset("/penzugy/hianyzo-szamlak/2026-08");
+    api.item.mockResolvedValue(
+      itemDetail({
+        state: "FOUND",
+        document: {
+          id: "doc-right",
+          number: "R49010000026241578",
+          source: "UPLOAD",
+        },
+        matchedBy: "MANUAL",
+        action: "NONE",
+        manualDocuments: [
+          {
+            documentId: "doc-right",
+            documentSource: "UPLOAD",
+            number: "R49010000026241578",
+            fileName: "3djake-szamla.pdf",
+            pairedAt: "2026-11-11T09:00:00.000Z",
+          },
+          {
+            documentId: "doc-wrong",
+            documentSource: "UPLOAD",
+            number: "R49010000026240667",
+            fileName: "niceshops-szamla.pdf",
+            pairedAt: "2026-11-11T09:05:00.000Z",
+          },
+        ],
+      }),
+    );
+    api.unmatchOne.mockResolvedValue(itemDetail());
+    render(<MissingInvoicesMonthPage month="2026-08" />);
+    const drawer = await openFirstRow();
+    const files = await within(drawer).findByRole("list", {
+      name: "Kézzel párosított fájlok",
+    });
+    const wrong = within(files)
+      .getByText(/niceshops-szamla\.pdf/)
+      .closest("li") as HTMLElement;
+    fireEvent.click(
+      within(wrong).getByRole("button", { name: "Levétel a sorról" }),
+    );
+    expect(api.unmatchOne).not.toHaveBeenCalled();
+    const question = await screen.findByRole("dialog", {
+      name: "Leveszed ezt a fájlt a sorról?",
+    });
+    expect(question).toHaveTextContent("niceshops-szamla.pdf");
+    fireEvent.click(within(question).getByRole("button", { name: "Levétel" }));
+    await waitFor(() =>
+      expect(api.unmatchOne).toHaveBeenCalledWith(
+        "token-1",
+        "debit-1",
+        "doc-wrong",
+      ),
+    );
+    expect(api.unmatch).not.toHaveBeenCalled();
   });
 
   it("a pairing the server refuses (409) says why, and nothing changes", async () => {

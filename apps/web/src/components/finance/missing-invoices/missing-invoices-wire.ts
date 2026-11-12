@@ -87,5 +87,7 @@ export function toExtras(detail: MissingInvoiceItemDetail): ChargeDetailExtras {
     driveFolderUrl: detail.driveFolderUrl,
     // egy a mezőt még nem küldő API (a web előbb települ) ne döntse el a drawert
     doublePaidWith: detail.doublePaidWith ?? [],
+    // egy a mezőt még nem küldő API (a web előbb települ) ne döntse el a drawert
+    manualDocuments: detail.manualDocuments ?? [],
   };
 }

@@ -83,6 +83,24 @@ function setup(env: NodeJS.ProcessEnv = {}, extra: CandidateDocument[] = []) {
       taken = new Set();
       audit.push("unpaired");
     },
+    manualMatchRows: async (id: string) =>
+      (matches.get(id) ?? []).map((documentId) => ({
+        documentId,
+        documentSource: "UPLOAD",
+        createdAt: new Date("2026-08-12T10:00:00Z"),
+        fileName: `${documentId}.pdf`,
+      })),
+    // a valódi tároló: egy (terhelés, dokumentum) sor törlése, és hány ment
+    unpairOne: async (id: string, _user: string, documentId: string) => {
+      const before = matches.get(id) ?? [];
+      const after = before.filter((other) => other !== documentId);
+      if (after.length === before.length) return 0;
+      if (after.length) matches.set(id, after);
+      else matches.delete(id);
+      taken.delete(documentId);
+      audit.push("unpaired-one");
+      return 1;
+    },
     markPayee: async (input: {
       documentIds: string[];
       payee: "COMPANY" | "NOT_COMPANY";
@@ -115,6 +133,7 @@ function setup(env: NodeJS.ProcessEnv = {}, extra: CandidateDocument[] = []) {
     missing: new MissingInvoicesService(repository, READER, env),
     audit,
     marked,
+    matches,
     taken: () => taken,
   };
 }
@@ -168,6 +187,46 @@ describe("the decisions on a debit", () => {
     await missing.pair("debit-1", "nav-1", USER);
     const after = await missing.unpair("debit-1", USER);
     assert.deepEqual([after.matchedBy, after.state], [null, "NOT_MATCHED"]);
+  });
+
+  /*
+    EGY FÁJL LEVÉTELE (niceshops, acrobot 48739): a terhelésre két fájlt
+    párosítottak kézzel, az egyik rossz. MI PIROSÍT: ha a levétel a másikat is
+    viszi; ha a válasz nem a megmaradt fájlt mutatja; ha egy nem ide párosított
+    dokumentum levétele csendben sikerül (404 kell, audit-sor nélkül).
+  */
+  it("takes one manually paired file off the debit and keeps the other", async () => {
+    const wrong = candidateDocument({
+      id: "up-wrong",
+      source: "UPLOAD",
+      number: "R49010000026240667",
+      date: "2026-08-10",
+      gross: new Prisma.Decimal(338018),
+    });
+    const { missing, matches, audit } = setup({}, [wrong]);
+    matches.set("debit-1", ["nav-1", "up-wrong"]);
+    const before = await missing.item("debit-1");
+    assert.deepEqual(
+      before.manualDocuments.map((d) => [d.documentId, d.number, d.fileName]),
+      [
+        ["nav-1", "SZ-1", "nav-1.pdf"],
+        ["up-wrong", "R49010000026240667", "up-wrong.pdf"],
+      ],
+    );
+    const after = await missing.unpairOne("debit-1", "up-wrong", USER);
+    assert.deepEqual(
+      after.manualDocuments.map((d) => d.documentId),
+      ["nav-1"],
+    );
+    assert.deepEqual(
+      [after.matchedBy, after.document?.id],
+      ["MANUAL", "nav-1"],
+    );
+    await assert.rejects(
+      missing.unpairOne("debit-1", "up-wrong", USER),
+      NotFoundException,
+    );
+    assert.deepEqual(audit, ["unpaired-one"]);
   });
 
   it("marks the paper original, and the state follows", async () => {

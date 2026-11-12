@@ -225,6 +225,51 @@ describe("automatic approval", () => {
     );
   });
 
+  /*
+    A FORDÍTOTT ADÓZÁS JELÉBŐL SZÁMOLT NETTÓ (barracuda #2468). MI PIROSÍT: ha a jelből számolt nettó ÉS a jelből jövő 0 ÁFA egyező terheléssel mégis magától
+    jóváhagyódna (a bank csak a bruttót igazolja, a bontást a jel adja, és a nettó + ÁFA = bruttó ellenőrzés szerkezetileg zöld); ha egy valódi ÁFA-sor adta
+    0 mellett is megállna; ha a megállás indoka nem nevezné meg a jelet.
+  */
+  it("BANK: a net and a zero VAT both taken from the reverse-charge marker are not approved, even with the exact debit; the reason names the marker", () => {
+    const result = decide({
+      values: FOREIGN,
+      sources: {
+        grossAmount: "TEXT",
+        vatAmount: "REVERSE_CHARGE",
+        netAmount: "REVERSE_CHARGE",
+      },
+      debits: [{ amount: "-15900", currency: "HUF" }],
+    });
+    assert.equal(result.approve, false);
+    assert.match(
+      result.approve ? "" : result.reason,
+      /fordított adózás jelzéséből/,
+    );
+  });
+
+  it("BANK: the same reading goes when the zero VAT came from a real VAT line (only the net is derived), or when the net was read", () => {
+    const fromVatLine = decide({
+      values: FOREIGN,
+      sources: {
+        grossAmount: "TEXT",
+        vatAmount: "TEXT",
+        netAmount: "REVERSE_CHARGE",
+      },
+      debits: [{ amount: "-15900", currency: "HUF" }],
+    });
+    assert.equal(fromVatLine.approve, true);
+    const netRead = decide({
+      values: FOREIGN,
+      sources: {
+        grossAmount: "TEXT",
+        vatAmount: "REVERSE_CHARGE",
+        netAmount: "TEXT",
+      },
+      debits: [{ amount: "-15900", currency: "HUF" }],
+    });
+    assert.equal(netRead.approve, true);
+  });
+
   it("BANK: in a currency, the amount the bank stated for a forint debit counts; without it, not approved", () => {
     const eur = {
       ...FOREIGN,

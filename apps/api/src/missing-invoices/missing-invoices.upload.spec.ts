@@ -66,6 +66,7 @@ function setup(
     ],
     statementCoverage: async () => new Set(["acc:2026-08"]),
     manualMatches: async () => new Map(),
+    manualMatchRows: async () => [],
     candidates: async () => [],
     uncheckedMailboxContent: async () => [],
     setPayee: async () => undefined,
