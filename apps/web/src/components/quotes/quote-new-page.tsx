@@ -27,6 +27,7 @@ import { customersApi } from "@/lib/api/customers";
 import { quotesApi } from "@/lib/api/quotes";
 
 import { dayAfter, errorText, formatQuoteDay, isAbort } from "./quote-format";
+import { QuoteNewPerson } from "./quote-new-person";
 import { QUOTES_PATH } from "./quote-list-page";
 
 const VALIDITY_DAYS = [15, 30, 60, 90];
@@ -46,6 +47,11 @@ export function QuoteNewPage() {
     session && hasPermission(session.user, PERMISSIONS.QUOTES_MANAGE),
   );
 
+  // the customer form is the person's own to open: it writes to the one customer register
+  const canCreateCustomer = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.CUSTOMERS_MANAGE),
+  );
+  const [creatingPerson, setCreatingPerson] = useState(false);
   const [customer, setCustomer] = useState<CustomerSummary | null>(null);
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<CustomerSummary[]>([]);
@@ -215,6 +221,17 @@ export function QuoteNewPage() {
                   </div>
                 ) : (
                   <div className="space-y-2">
+                    {creatingPerson ? (
+                      <QuoteNewPerson
+                        token={token}
+                        onCancel={() => setCreatingPerson(false)}
+                        onCreated={(created) => {
+                          setCreatingPerson(false);
+                          setCustomer(created);
+                          setResults([]);
+                        }}
+                      />
+                    ) : null}
                     <PilotInput
                       aria-label="Partner keresése"
                       placeholder="Partner neve, e-mail vagy telefon"
@@ -260,6 +277,14 @@ export function QuoteNewPage() {
                           </li>
                         ))}
                       </ul>
+                    ) : null}
+                    {canCreateCustomer && !creatingPerson ? (
+                      <PilotButton
+                        variant="secondary"
+                        onClick={() => setCreatingPerson(true)}
+                      >
+                        Új magánszemély
+                      </PilotButton>
                     ) : null}
                   </div>
                 )}
