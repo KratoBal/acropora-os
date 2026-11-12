@@ -289,13 +289,14 @@ function byBank(
     Egy valódi ÁFA-sor adta 0 mellett (az ÁFA forrása nem a jel) a sor mehet.
   */
   if (
-    sources.netAmount === "REVERSE_CHARGE" &&
-    sources.vatAmount === "REVERSE_CHARGE"
+    sources.vatAmount === "REVERSE_CHARGE" &&
+    (sources.netAmount === "REVERSE_CHARGE" ||
+      sources.grossAmount === "REVERSE_CHARGE")
   )
     return {
       approve: false,
       reason:
-        "a nettó és a 0 ÁFA is a fordított adózás jelzéséből számolt, a bank csak a bruttót igazolja: a bontást ember nézze meg",
+        "a 0 ÁFA és a nettó vagy a bruttó is a fordított adózás jelzéséből (vagy az adómentesség jelzéséből) számolt, a bank csak a bruttót igazolja: a bontást ember nézze meg",
     };
   if (debits.length === 0)
     return { approve: false, reason: "nincs párosított terhelés" };

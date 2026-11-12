@@ -247,6 +247,20 @@ describe("automatic approval", () => {
     );
   });
 
+  it("BANK: a zero VAT and a gross both taken from the tax-free marker are not approved either, even with the exact debit", () => {
+    const result = decide({
+      values: FOREIGN,
+      sources: {
+        grossAmount: "REVERSE_CHARGE",
+        vatAmount: "REVERSE_CHARGE",
+        netAmount: "TEXT",
+      },
+      debits: [{ amount: "-15900", currency: "HUF" }],
+    });
+    assert.equal(result.approve, false);
+    assert.match(result.approve ? "" : result.reason, /adómentesség/);
+  });
+
   it("BANK: the same reading goes when the zero VAT came from a real VAT line (only the net is derived), or when the net was read", () => {
     const fromVatLine = decide({
       values: FOREIGN,

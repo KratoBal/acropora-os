@@ -1965,3 +1965,102 @@ describe("senderAddressLineName", () => {
     assert.equal(paired.sources.supplierName, "PAIRING");
   });
 });
+
+/*
+  A "GESAMT NETTO" CÍMKE, A NÉMET ADÓMENTES KÖZÖSSÉGI SZÁLLÍTÁS JELE ÉS A SZÁLLÍTÁSSAL BŐVÜLŐ "SUBTOTAL" (kártya dbab22cd, harmadik kör). Minden szám KITALÁLT. MI PIROSÍT: ha a "Summe netto" és
+  "Versandkosten netto" mellett a "Gesamt netto" nem adná a nettót; ha az "EP (netto)" fejléc vagy egy részösszeg nettó lenne; ha a "Steuerfreie, innergemeinschaftliche Lieferung" jel nélkül is lenne ÁFA 0
+  és bruttó; ha a jellel levezetett bruttó nem a jelből jövő forrást kapná, vagy nem figyelmeztetne; ha a szállítás-soros "Subtotal" nettó lenne (és belőle egy hamis ÁFA születne); ha a szállítás nélküli "Subtotal"
+  megszűnne nettónak lenni; ha a 6 soron túli vagy a subtotal ELŐTTI szállítás-sor is számítana.
+*/
+describe("readForeignInvoice: Gesamt netto, the German tax-free supply marker, and a subtotal with charges", () => {
+  const GERMAN = [
+    "Pos | Menge | Art.Nr. | Artikelbezeichnung | EP (netto) | GP (netto)",
+    "Summe netto: | 1.400,00 €",
+    "Versandkosten netto: | 300,00 €",
+    "Gesamt netto: | 1.700,00 €",
+    "Steuerfreie, innergemeinschaftliche Lieferung gem. § 6a UStG",
+  ];
+
+  it("takes the net from Gesamt netto, the zero VAT from the tax-free marker, and derives the gross, warning about it", () => {
+    const { values, sources, warnings } = readForeignInvoice({
+      lines: GERMAN,
+      adapter: null,
+      pairing: pairing({ date: undefined }),
+    });
+    assert.equal(values.netAmount, "1700.00");
+    assert.equal(sources.netAmount, "TEXT");
+    assert.equal(values.vatAmount, "0.00");
+    assert.equal(sources.vatAmount, "REVERSE_CHARGE");
+    assert.equal(values.grossAmount, "1700.00");
+    assert.equal(sources.grossAmount, "REVERSE_CHARGE");
+    assert.ok(
+      warnings.some(
+        (w) => w.includes("bruttó") && w.includes("ÁFA jelzéséből"),
+      ),
+    );
+  });
+
+  it("without the marker the net is read, but no VAT and no gross are invented", () => {
+    const { values, warnings } = readForeignInvoice({
+      lines: GERMAN.slice(0, 4),
+      adapter: null,
+      pairing: pairing({ date: undefined }),
+    });
+    assert.equal(values.netAmount, "1700.00");
+    assert.equal(values.vatAmount, null);
+    assert.equal(values.grossAmount, null);
+    assert.equal(
+      warnings.some((w) => w.includes("jelzéséből")),
+      false,
+    );
+  });
+
+  it("a subtotal followed by a shipping line is not the net, and no VAT is made of the difference; a subtotal with no charge is still the net", () => {
+    const withShipping = readForeignInvoice({
+      lines: [
+        "Subtotal | 2.000,00€",
+        "Shipping | 100,00€ | via Kitalált",
+        "Total | 2.100,00€",
+      ],
+      adapter: null,
+      pairing: pairing({ date: undefined }),
+    });
+    assert.equal(withShipping.values.netAmount, null);
+    assert.equal(withShipping.values.vatAmount, null);
+    const plain = readForeignInvoice({
+      lines: ["Subtotal | 2.000,00€", "Total | 2.000,00€"],
+      adapter: null,
+      pairing: pairing({ date: undefined }),
+    });
+    assert.equal(plain.values.netAmount, "2000.00");
+  });
+
+  it("a shipping line before the subtotal, or more than six lines after it, does not disqualify the subtotal", () => {
+    const before = readForeignInvoice({
+      lines: [
+        "Shipping | 100,00€ | via Kitalált",
+        "Subtotal | 2.000,00€",
+        "Total | 2.000,00€",
+      ],
+      adapter: null,
+      pairing: pairing({ date: undefined }),
+    });
+    assert.equal(before.values.netAmount, "2000.00");
+    const far = readForeignInvoice({
+      lines: [
+        "Subtotal | 2.000,00€",
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f",
+        "Shipping | 100,00€ | via Kitalált",
+        "Total | 2.000,00€",
+      ],
+      adapter: null,
+      pairing: pairing({ date: undefined }),
+    });
+    assert.equal(far.values.netAmount, "2000.00");
+  });
+});
