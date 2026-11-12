@@ -834,6 +834,7 @@ describe("MissingInvoicesDrawer", () => {
     doublePaidWith: [],
     action: "REQUEST_REISSUE_TO_COMPANY",
     driveFolderUrl: null,
+    manualDocuments: [],
     ...overrides,
   });
   const base = (): Props => ({
@@ -1040,6 +1041,77 @@ describe("MissingInvoicesDrawer", () => {
     számlánál nincs két gomb; ha a gomb nem a számla azonosítójával hív; ha a
     kézi jelölés nem látszik, és nem fordítható vissza; ha a néző is jelölhet.
   */
+  /*
+    EGY FÁJL LEVÉTELE A SORRÓL (niceshops, acrobot 48739). MI PIROSÍT: ha a
+    lista egyetlen kézi fájlnál is megjelenik (ott a teljes visszavonás
+    ugyanaz); ha a gomb nem a fájl azonosítójával hív; ha a néző is levehet.
+  */
+  it("each manually paired file can come off the row alone, but only when there is more than one", () => {
+    const props = { ...base(), onUnpairOne: vi.fn() };
+    const paired = charge({
+      state: "FOUND",
+      document: { number: "R49010000026241578", source: "UPLOAD" },
+      matchedBy: "MANUAL",
+    });
+    const file = (documentId: string, fileName: string, number: string) => ({
+      documentId,
+      documentSource: "UPLOAD",
+      number,
+      fileName,
+      pairedAt: "2026-11-11T09:00:00.000Z",
+    });
+    const right = file("doc-right", "3djake-szamla.pdf", "R49010000026241578");
+    const wrong = file(
+      "doc-wrong",
+      "niceshops-szamla.pdf",
+      "R49010000026240667",
+    );
+    const { unmount } = render(
+      <MissingInvoicesDrawer
+        {...props}
+        row={paired}
+        extras={extras({ candidates: [], manualDocuments: [right] })}
+      />,
+    );
+    expect(
+      screen.queryByRole("list", { name: "Kézzel párosított fájlok" }),
+    ).toBeNull();
+    unmount();
+    const { unmount: two } = render(
+      <MissingInvoicesDrawer
+        {...props}
+        row={paired}
+        extras={extras({ candidates: [], manualDocuments: [right, wrong] })}
+      />,
+    );
+    const files = screen.getByRole("list", {
+      name: "Kézzel párosított fájlok",
+    });
+    const row = within(files)
+      .getByText(/niceshops-szamla\.pdf/)
+      .closest("li") as HTMLElement;
+    expect(row).toHaveTextContent("R49010000026240667");
+    fireEvent.click(
+      within(row).getByRole("button", { name: "Levétel a sorról" }),
+    );
+    expect(props.onUnpairOne).toHaveBeenCalledWith({
+      documentId: "doc-wrong",
+      label: "niceshops-szamla.pdf",
+    });
+    two();
+    render(
+      <MissingInvoicesDrawer
+        {...props}
+        canManage={false}
+        row={paired}
+        extras={extras({ candidates: [], manualDocuments: [right, wrong] })}
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: "Levétel a sorról" }),
+    ).toBeNull();
+  });
+
   it("an unreadable payee is marked by hand, either way, and a mark shows and turns", () => {
     const props = { ...base(), onPayee: vi.fn() };
     const paired = charge({

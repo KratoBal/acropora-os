@@ -102,6 +102,7 @@ function service(input: {
     ownOutgoingDocuments: async () => input.ownDocuments ?? [],
     statementCoverage: async () => new Set(input.coverage),
     manualMatches: async () => input.manual ?? new Map(),
+    manualMatchRows: async () => [],
     candidates: async (from: string, to: string) => {
       ranges.push([from, to]);
       return input.documents ?? [];

@@ -83,6 +83,7 @@ function service(input: {
     ownOutgoingDocuments: async () => [],
     statementCoverage: async () => new Set([`${ACCOUNT.id}:2026-08`]),
     manualMatches: async () => new Map(),
+    manualMatchRows: async () => [],
     candidates: async () => input.documents,
     uncheckedMailboxContent: async () => [],
     setPayee: async () => undefined,

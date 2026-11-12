@@ -188,6 +188,72 @@ describe("a hiányzó számlák hónapja", { skip: gate.mode === "skip" }, () =>
     assert.equal((await missing.item(payment.id)).document?.id, documentId);
   });
 
+  /*
+    EGY FÁJL LEVÉTELE A VALÓDI TÁROLÓN (niceshops, acrobot 48739): a törlés a
+    (terhelés, dokumentum) sorra szól, auditnaplóval; ha nincs mit levenni, a
+    tranzakció visszagördül, és nem marad audit-sor egy meg nem történt lépésről.
+  */
+  it("takes one manually paired document off a debit, with an audit row only when something came off", async () => {
+    const all = (await missing.month("2026-08", { tab: "ALL" })).items.filter(
+      (item) => item.account.name.startsWith(ACCOUNT),
+    );
+    const payment = all.find((item) => item.partner === SUPPLIER)!;
+    const other = all.find((item) => item.partner === "Ismeretlen Bt.")!;
+    const paired = await missing.pair(other.id, payment.document!.id, actor);
+    assert.equal(paired.manualDocuments.length, 1);
+    const [row] = paired.manualDocuments;
+    assert.equal(row!.number, "HIANYZOTESZT-1");
+    // egy második kézi párosítás ugyanerre a terhelésre (a rossz sorra feltöltött fájl helyett)
+    const SECOND = "missing-invoices-it-masodik-fajl";
+    await prisma.bankTransactionMatch.create({
+      data: {
+        bankTransactionId: other.id,
+        documentSource: "UPLOAD",
+        documentId: SECOND,
+      },
+    });
+    // az előző teszt teljes visszavonása is „unpaired” sort írt: itt csak az egyenkéntiek számítanak
+    const unpairedRows = async () =>
+      (
+        await prisma.auditLog.findMany({
+          where: {
+            entityType: "BankTransaction",
+            entityId: other.id,
+            action: "missing-invoices.unpaired",
+          },
+          select: { metadata: true },
+          orderBy: { createdAt: "asc" },
+        })
+      ).filter((audit) => (audit.metadata as { one?: boolean }).one === true);
+
+    await assert.rejects(
+      missing.unpairOne(other.id, "nem-ide-parositott", actor),
+      /nincs kézzel ehhez a terheléshez párosítva/,
+    );
+    assert.deepEqual(await unpairedRows(), []);
+
+    const kept = await missing.unpairOne(other.id, row!.documentId, actor);
+    // csak a megnevezett sor ment: a másik fájl párosítása marad
+    assert.deepEqual(
+      kept.manualDocuments.map((d) => d.documentId),
+      [SECOND],
+    );
+    const after = await missing.unpairOne(other.id, SECOND, actor);
+    assert.deepEqual([after.matchedBy, after.manualDocuments], [null, []]);
+    assert.deepEqual(
+      (await unpairedRows()).map((audit) => audit.metadata),
+      [
+        { documentIds: [row!.documentId], one: true },
+        { documentIds: [SECOND], one: true },
+      ],
+    );
+    // a szabály visszakapja a számlát
+    assert.equal(
+      (await missing.item(payment.id)).document?.id,
+      payment.document!.id,
+    );
+  });
+
   it("stores an uploaded PDF outside the receipt chain, pairs it, and it counts as the original", async () => {
     const other = (await missing.month("2026-08", { tab: "ALL" })).items.find(
       (item) =>

@@ -168,6 +168,17 @@ export class MissingInvoicesController {
     return this.missing.unpair(id, user);
   }
 
+  /** Egy fájl levétele a sorról: csak ennek a dokumentumnak a kézi párosítása szűnik meg. */
+  @Delete("items/:id/match/:documentId")
+  @RequirePermissions(PERMISSIONS.FINANCE_MANAGE)
+  unpairOne(
+    @Param("id") id: string,
+    @Param("documentId") documentId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.missing.unpairOne(id, documentId, user);
+  }
+
   @Put("items/:id/comment")
   @RequirePermissions(PERMISSIONS.FINANCE_MANAGE)
   comment(
