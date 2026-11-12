@@ -191,10 +191,11 @@ const ISSUE_LABEL =
 /**
  * A CSUPASZ "Datum:" / "Dátum" CÍMKE (kártya dbab22cd, harmadik kör): sok külföldi számla csak ennyit ír a kelte elé. Csak a SOR ELEJÉN áll meg,
  * így a "Lieferdatum", "Szállítási dátum" és társai nem illeszkednek; a címkézett dátumoknál érvényes szabály marad: ha több különböző dátum áll
- * ilyen címke után, nem döntünk. A KELTE A SZÁMLÁN NYOMTATOTT DÁTUM (acrobot döntése, 2026-11-12: a könyvelői csomag hónapja a számla kelte): a mért
+ * ilyen címke után, nem döntünk. A címke VÉGE HATÁR: utána csak a cella vége, egy cellahatár vagy egy szám állhat, így a "Datum der Lieferung",
+ * "Datum Lieferung", "Datumsangabe" és a "Dátum teljesítés" alak nem illeszkedik (barracuda, #2465). A KELTE A SZÁMLÁN NYOMTATOTT DÁTUM (acrobot döntése, 2026-11-12: a könyvelői csomag hónapja a számla kelte): a mért
  * mintán a jóváhagyott érték néhányszor 1-6 nappal eltért a nyomtatottól, az érkezési vagy rögzítési dátum lehet; az nem olvasói hiba.
  */
-const BARE_DATE_LABEL = /^\s*(datum|d[áa]tum)\s*:?/iu;
+const BARE_DATE_LABEL = /^\s*(?:datum|d[áa]tum)\s*:?(?=\s*(?:\||$|\d))/iu;
 const DUE_LABEL =
   /(due\s+date|date\s+due|payment\s+due|due\s+on|f[äa]lligkeitsdatum|f[äa]llig|zahlbar\s+bis|vervaldatum|uiterste\s+betaaldatum|date\s+d['’][ée]ch[ée]ance|[ée]ch[ée]ance|fizet[ée]si\s+hat[áa]rid[őo])/iu;
 const SUPPLY_LABEL =
@@ -553,6 +554,10 @@ export function hostedInvoiceSupplier(lines: readonly string[]): string | null {
 const NUMBER_LABEL =
   /^(rechnung(?:s)?[\s.-]*(?:nr|nummer)|rech\.[\s-]*nr|rechnungs-?nr|invoice\s*(?:n[°o]|no|nr|number)|facture\s*(?:n[°o]|no)|sz[áa]mla\s*(?:sz[áa]ma|sorsz[áa]ma))\.?\s*:?$/iu;
 const NUMBER_SHAPE = /^(?=.*\d)[A-Za-z0-9/-]{4,25}$/;
+/** egy dátum-alak (18/09/2026, 2026-09-18) vagy egy magyar adószám (12345678-2-42) nem számlaszám, akármelyik cellából jön */
+const NOT_A_NUMBER = /^(?:\d{1,4}[/-]\d{1,2}[/-]\d{1,4}|\d{8}-\d-\d{2})$/;
+const isInvoiceNumber = (value: string) =>
+  NUMBER_SHAPE.test(value) && !NOT_A_NUMBER.test(value);
 const NEIGHBOUR_LABEL =
   /\b(address|adresse|adres|adress|c[íi]m|date|datum|d[áa]tum|page|seite|oldal|code|customer|kunde|client|n[°o])\b/iu;
 const INLINE_NUMBER =
@@ -568,7 +573,7 @@ export function labelledInvoiceNumber(lines: readonly string[]): string | null {
       .map((cell) => cell.trim());
   lines.forEach((line, index) => {
     const inline = INLINE_NUMBER.exec(line.normalize("NFC"));
-    if (inline && NUMBER_SHAPE.test(inline[1]!)) found.add(inline[1]!);
+    if (inline && isInvoiceNumber(inline[1]!)) found.add(inline[1]!);
     const cells = cellsOf(line);
     cells.forEach((cell, column) => {
       if (!NUMBER_LABEL.test(cell)) return;
@@ -576,11 +581,11 @@ export function labelledInvoiceNumber(lines: readonly string[]): string | null {
       // a háromcellás Stripe-alak ("Invoice number | ELŐTAG | - | 0012"): a szám a teljes alak, azt a hostedInvoiceNumber adja, az előtag egymagában nem
       if (
         beside !== undefined &&
-        NUMBER_SHAPE.test(beside) &&
+        isInvoiceNumber(beside) &&
         /^(?:|-|–)$/.test(cells[column + 2] ?? "x")
       )
         return;
-      if (beside !== undefined && NUMBER_SHAPE.test(beside)) {
+      if (beside !== undefined && isInvoiceNumber(beside)) {
         found.add(beside);
         return;
       }
@@ -592,10 +597,16 @@ export function labelledInvoiceNumber(lines: readonly string[]): string | null {
         !NEIGHBOUR_LABEL.test(beside)
       )
         return;
-      const below = lines[index + 1]
-        ? cellsOf(lines[index + 1]!)[0]
-        : undefined;
-      if (below !== undefined && NUMBER_SHAPE.test(below)) found.add(below);
+      // a következő sorból a címkével AZONOS OSZLOP cellája az érték (egy fejléc-sor alatti értéksor: "Adószám | Számla száma" + "12345678-2-42 | KH99000123");
+      // más cellaszámú sorból semmi; kivétel az EGYCELLÁS következő sor (valódi mintán látott alak: a címke egy cellás sor végén áll, az érték egyedül a következő sorban)
+      const belowCells = lines[index + 1] ? cellsOf(lines[index + 1]!) : [];
+      const below =
+        belowCells.length === 1
+          ? belowCells[0]
+          : belowCells.length === cells.length
+            ? belowCells[column]
+            : undefined;
+      if (below !== undefined && isInvoiceNumber(below)) found.add(below);
     });
   });
   return found.size === 1 ? [...found][0]! : null;
@@ -782,7 +793,6 @@ export function readForeignInvoice(input: ForeignReadingInput): ForeignReading {
     set("dueDate", labelledDate(lines, DUE_LABEL), "TEXT");
     set("fulfillmentDate", labelledDate(lines, SUPPLY_LABEL), "TEXT");
     // a számlaszámot a cimkézett olvasás után csak az üres hely tölti
-    set("documentNumber", hostedInvoiceNumber(lines), "TEXT");
     set("documentNumber", table.documentNumber, "TEXT");
 
     set("supplierEuTaxNumber", vatLineEuNumber(lines), "TEXT");

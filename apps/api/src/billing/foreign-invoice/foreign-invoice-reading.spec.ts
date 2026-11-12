@@ -1393,6 +1393,52 @@ describe("labelledInvoiceNumber", () => {
     );
   });
 
+  it("reads the next line from the SAME column as the label, and nothing from a line with another cell count", () => {
+    // header row + value row: the label is the last cell, the value is in the same column, not the first cell (the tax number)
+    assert.equal(
+      labelledInvoiceNumber([
+        "Adószám | Számla száma",
+        "12345678-2-42 | KH99000123",
+      ]),
+      "KH99000123",
+    );
+    assert.equal(
+      labelledInvoiceNumber(["Datum | Rechnungs Nr.:", "18/09/2026 | RE99001"]),
+      "RE99001",
+    );
+    // another cell count: the column is unknown, so nothing
+    assert.equal(
+      labelledInvoiceNumber([
+        "Adószám | Számla száma",
+        "12345678-2-42 | KH99000123 | 5",
+      ]),
+      null,
+    );
+    // a one-cell next line is the value (the shape seen on real samples)
+    assert.equal(
+      labelledInvoiceNumber(["Adószám | Számla száma", "KH99000123"]),
+      "KH99000123",
+    );
+  });
+
+  it("a date shape or a Hungarian tax number is no invoice number, from any cell", () => {
+    assert.equal(labelledInvoiceNumber(["Rechnungs Nr.: | 18/09/2026"]), null);
+    assert.equal(labelledInvoiceNumber(["Rechnungs Nr.: | 2026-09-18"]), null);
+    assert.equal(
+      labelledInvoiceNumber(["Rechnungs Nr.: | 12345678-2-42"]),
+      null,
+    );
+    assert.equal(
+      labelledInvoiceNumber(["Számla száma", "12345678-2-42"]),
+      null,
+    );
+    // a number with two parts is still a number
+    assert.equal(
+      labelledInvoiceNumber(["Rechnungsnummer: | 2026/0042"]),
+      "2026/0042",
+    );
+  });
+
   it("decides nothing when two different labelled numbers stand", () => {
     assert.equal(
       labelledInvoiceNumber([
@@ -1440,6 +1486,22 @@ describe("readForeignInvoice: the labelled number and the bare German date", () 
       pairing: pairing({ date: undefined }),
     });
     assert.equal(values.issueDate, null);
+  });
+
+  it("a bare Datum followed by more words is no issue label: Datum der Lieferung, Datum Lieferung, Datumsangabe, Dátum teljesítés", () => {
+    for (const line of [
+      "Datum der Lieferung: | 20.09.2026",
+      "Datum Lieferung | 20.09.2026",
+      "Datumsangabe: | 20.09.2026",
+      "Dátum teljesítés 2026. okt. 30.",
+    ]) {
+      const { values } = readForeignInvoice({
+        lines: [line, "Rechnung - Nr. 40199001"],
+        adapter: null,
+        pairing: pairing({ date: undefined }),
+      });
+      assert.equal(values.issueDate, null, line);
+    }
   });
 
   it("the Hungarian bare Dátum is the printed issue date too, and a Szállítási dátum alone is not", () => {
