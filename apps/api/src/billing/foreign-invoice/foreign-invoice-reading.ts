@@ -78,16 +78,25 @@ const monthNames: [number, string[]][] = [
   [1, ["january", "jan", "januar", "januari", "janvier", "január"]],
   [
     2,
-    ["february", "feb", "februar", "februari", "février", "fevrier", "február"],
+    [
+      "february",
+      "feb",
+      "februar",
+      "februari",
+      "février",
+      "fevrier",
+      "február",
+      "febr",
+    ],
   ],
-  [3, ["march", "mar", "märz", "maerz", "maart", "mars", "március"]],
-  [4, ["april", "apr", "avril", "április"]],
-  [5, ["may", "mai", "mei", "május"]],
-  [6, ["june", "jun", "juni", "juin", "június"]],
-  [7, ["july", "jul", "juli", "juillet", "július"]],
+  [3, ["march", "mar", "märz", "maerz", "maart", "mars", "március", "márc"]],
+  [4, ["april", "apr", "avril", "április", "ápr"]],
+  [5, ["may", "mai", "mei", "május", "máj"]],
+  [6, ["june", "jun", "juni", "juin", "június", "jún"]],
+  [7, ["july", "jul", "juli", "juillet", "július", "júl"]],
   [8, ["august", "aug", "augustus", "août", "aout", "augusztus"]],
-  [9, ["september", "sep", "sept", "septembre", "szeptember"]],
-  [10, ["october", "oct", "oktober", "octobre", "október"]],
+  [9, ["september", "sep", "sept", "septembre", "szeptember", "szept"]],
+  [10, ["october", "oct", "oktober", "octobre", "október", "okt"]],
   [11, ["november", "nov", "novembre"]],
   [12, ["december", "dec", "dezember", "décembre", "decembre"]],
 ];
@@ -129,6 +138,18 @@ export function parseForeignDate(text: string): string | null {
       : validDate(Number(slashed[3]), a, b);
   }
 
+  // „14/09/26”: a kétjegyű év 20xx; ugyanaz a kétértelműségi szabály, mint a négyjegyűnél
+  const shortYear = /(?<![\d/])(\d{1,2})\/(\d{1,2})\/(\d{2})(?![\d/])/.exec(
+    text,
+  );
+  if (shortYear) {
+    const a = Number(shortYear[1]);
+    const b = Number(shortYear[2]);
+    const year = 2000 + Number(shortYear[3]);
+    if (a <= 12 && b <= 12 && a !== b) return null;
+    return a > 12 ? validDate(year, b, a) : validDate(year, a, b);
+  }
+
   const word = String.raw`([\p{L}]{3,10})\.?`;
   // „October 3, 2026” és „Oct 3 2026”
   const monthFirst = new RegExp(
@@ -166,7 +187,14 @@ export function parseForeignDate(text: string): string | null {
 // ---- címkék ---------------------------------------------------------------
 
 const ISSUE_LABEL =
-  /(invoice\s+date|date\s+of\s+issue|issue\s+date|date\s+issued|issued\s+on|rechnungsdatum|ausstellungsdatum|factuurdatum|date\s+de\s+(la\s+)?facture|date\s+d['’][ée]mission|sz[áa]mla\s+kelte|ki[áa]ll[íi]t[áa]s\s+d[áa]tuma)/iu;
+  /(invoice\s+date|date\s+of\s+issue|issue\s+date|date\s+issued|issued\s+on|rechnungsdatum|rechungsdatum|rech\.-?\s*datum|ausstellungsdatum|factuurdatum|date\s+de\s+(la\s+)?facture|date\s+d['’][ée]mission|sz[áa]mla\s+kelte|ki[áa]ll[íi]t[áa]s\s+d[áa]tuma)/iu;
+/**
+ * A CSUPASZ NÉMET "Datum:" CÍMKE (kártya dbab22cd, harmadik kör): egyes német számlák csak ennyit írnak a kelte elé. Csak a SOR ELEJÉN áll meg,
+ * így a "Lieferdatum" és társai nem illeszkednek; a címkézett dátumoknál érvényes szabály marad: ha több különböző dátum áll ilyen címke után,
+ * nem döntünk. A MAGYAR "Dátum" SZÁNDÉKOSAN NINCS ITT: a mért mintán (a régi 44-en és az újon) kétszer a számlán nyomtatott dátum 1 és 2 nappal
+ * eltért a jóváhagyott kelttől, és egy ellentmondó automatikus érték rosszabb az üresnél (a döntés acrobot elé került).
+ */
+const BARE_DATE_LABEL = /^\s*datum\s*:?/iu;
 const DUE_LABEL =
   /(due\s+date|date\s+due|payment\s+due|due\s+on|f[äa]lligkeitsdatum|f[äa]llig|zahlbar\s+bis|vervaldatum|uiterste\s+betaaldatum|date\s+d['’][ée]ch[ée]ance|[ée]ch[ée]ance|fizet[ée]si\s+hat[áa]rid[őo])/iu;
 const SUPPLY_LABEL =
@@ -515,6 +543,65 @@ export function hostedInvoiceSupplier(lines: readonly string[]): string | null {
 }
 
 /**
+ * A CÍMKÉZETT SZÁMLASZÁM A NÉMET, FRANCIA ÉS MAGYAR CÍMKÉKKEL (kártya dbab22cd, harmadik kör): "Rechnung - Nr. 40142365", "Rechnungs Nr.: | RE67900",
+ * "Rech.-Nr. | R49010000026241578", "Invoice n°: | Billing address" + az ÉRTÉK A KÖVETKEZŐ SORBAN, "Számla száma" + a következő sor. A címke a számla
+ * SAJÁT számát nevezi meg (nem a rendelés-, szállítólevél- vagy ügyfélszámot), ezért a közös szöveg-olvasó előtt áll: az egy irányítószámot
+ * ("1200") is számlaszámnak vett. Az érték csak szám-szerű lehet (legalább egy számjegy, 4-25 betű, szám, per vagy kötőjel, szóköz nélkül): a
+ * szomszéd címke-cella ("Billing address") nem az. Csak EGYEDI találat kell; több különböző érték: semmi. A háromcellás Stripe-alak ("Invoice number |
+ * ELŐTAG | - | 0012") nem ez: azt a `hostedInvoiceNumber` adja a teljes alakban.
+ */
+const NUMBER_LABEL =
+  /^(rechnung(?:s)?[\s.-]*(?:nr|nummer)|rech\.[\s-]*nr|rechnungs-?nr|invoice\s*(?:n[°o]|no|nr|number)|facture\s*(?:n[°o]|no)|sz[áa]mla\s*(?:sz[áa]ma|sorsz[áa]ma))\.?\s*:?$/iu;
+const NUMBER_SHAPE = /^(?=.*\d)[A-Za-z0-9/-]{4,25}$/;
+const NEIGHBOUR_LABEL =
+  /\b(address|adresse|adres|adress|c[íi]m|date|datum|d[áa]tum|page|seite|oldal|code|customer|kunde|client|n[°o])\b/iu;
+const INLINE_NUMBER =
+  /(?:^|[\s|])rechnung\s*-\s*nr\.?\s*:?\s*([A-Za-z0-9/-]{4,25})(?![A-Za-z0-9/-])/iu;
+
+export function labelledInvoiceNumber(lines: readonly string[]): string | null {
+  const found = new Set<string>();
+  const cellsOf = (line: string) =>
+    line
+      .normalize("NFC")
+      .replace(/\x00/g, " ")
+      .split(" | ")
+      .map((cell) => cell.trim());
+  lines.forEach((line, index) => {
+    const inline = INLINE_NUMBER.exec(line.normalize("NFC"));
+    if (inline && NUMBER_SHAPE.test(inline[1]!)) found.add(inline[1]!);
+    const cells = cellsOf(line);
+    cells.forEach((cell, column) => {
+      if (!NUMBER_LABEL.test(cell)) return;
+      const beside = cells[column + 1];
+      // a háromcellás Stripe-alak ("Invoice number | ELŐTAG | - | 0012"): a szám a teljes alak, azt a hostedInvoiceNumber adja, az előtag egymagában nem
+      if (
+        beside !== undefined &&
+        NUMBER_SHAPE.test(beside) &&
+        /^(?:|-|–)$/.test(cells[column + 2] ?? "x")
+      )
+        return;
+      if (beside !== undefined && NUMBER_SHAPE.test(beside)) {
+        found.add(beside);
+        return;
+      }
+      // az érték a következő sorban áll: csak ha a címke a sor utolsó cellája, vagy a szomszéd cella egy másik CÍMKE ("Billing address", "Page"):
+      // egy név vagy más érték mellől nem ugrunk a következő sorra (egy "Kitalált Név" alakra nem különböztethető meg a címkétől, ezért a címke-szavak listája áll)
+      if (
+        beside !== undefined &&
+        beside !== "" &&
+        !NEIGHBOUR_LABEL.test(beside)
+      )
+        return;
+      const below = lines[index + 1]
+        ? cellsOf(lines[index + 1]!)[0]
+        : undefined;
+      if (below !== undefined && NUMBER_SHAPE.test(below)) found.add(below);
+    });
+  });
+  return found.size === 1 ? [...found][0]! : null;
+}
+
+/**
  * A STRIPE-SZÁMLA SZÁMA (kártya dbab22cd, harmadik kör): "Invoice number | OHCYTT2R | \x00 | 0012". A szövegréteg a kötőjelet NUL cellának
  * adja, a számla száma a TELJES alak (`OHCYTT2R-0012`): az előtag az ügyfél számla-előtagja, minden számlánkon ugyanaz, tehát egymagában
  * nem azonosít számlát (acrobot 2026-11-11). Csak ezt a háromcellás alakot olvassa; más számlaszám-alak a meglévő olvasóké.
@@ -671,6 +758,9 @@ export function readForeignInvoice(input: ForeignReadingInput): ForeignReading {
   // 2. a PDF szövege
   if (hasText) {
     const text = readInvoiceText(lines);
+    // a címkézett számlaszám a közös szöveg-olvasó előtt áll (az egy irányítószámot is számlaszámnak vett); a Stripe-alak teljes számát semmi nem előzi meg
+    set("documentNumber", hostedInvoiceNumber(lines), "TEXT");
+    set("documentNumber", labelledInvoiceNumber(lines), "TEXT");
     set("documentNumber", text.invoiceNumber, "TEXT");
     if (text.supplierTaxNumber) {
       if (HU_TAX.test(text.supplierTaxNumber))
@@ -688,6 +778,7 @@ export function readForeignInvoice(input: ForeignReadingInput): ForeignReading {
     set("fulfillmentDate", table.fulfillmentDate, "TEXT");
     set("dueDate", table.dueDate, "TEXT");
     set("issueDate", labelledDate(lines, ISSUE_LABEL), "TEXT");
+    set("issueDate", labelledDate(lines, BARE_DATE_LABEL), "TEXT");
     set("dueDate", labelledDate(lines, DUE_LABEL), "TEXT");
     set("fulfillmentDate", labelledDate(lines, SUPPLY_LABEL), "TEXT");
     // a számlaszámot a cimkézett olvasás után csak az üres hely tölti
