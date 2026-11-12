@@ -1623,4 +1623,46 @@ describe("readForeignInvoice: the Hungarian gross label and the reverse charge",
     assert.equal(values.vatAmount, "270.00");
     assert.equal(values.grossAmount, "1270.00");
   });
+
+  it("an item row's Bruttó összeg is no gross total: the label must start the line", () => {
+    const { values } = readForeignInvoice({
+      lines: [
+        "1. tétel Bruttó összeg | 500,00 HUF",
+        "2. tétel Bruttó összeg | 700,00 HUF",
+      ],
+      adapter: null,
+      pairing: pairing({ date: undefined }),
+    });
+    assert.equal(values.grossAmount, null);
+  });
+
+  it("a plain zero VAT line without the reverse-charge marker does not make the net: only a proven reverse charge does", () => {
+    const { values } = readForeignInvoice({
+      lines: [
+        "Kitalált Szolgáltató Kft.",
+        "ÁFA (0%) | 0,00 HUF",
+        "Teljes bruttó összeg | 1000,00 HUF",
+      ],
+      adapter: null,
+      pairing: pairing({ date: undefined }),
+    });
+    assert.equal(values.grossAmount, "1000.00");
+    assert.equal(values.vatAmount, "0.00");
+    assert.equal(values.netAmount, null);
+  });
+
+  it("a non-zero VAT with the marker present does not make the net either", () => {
+    const { values } = readForeignInvoice({
+      lines: [
+        "Kitalált Szolgáltató Kft.",
+        "ÁFA | 270,00 HUF",
+        "Teljes bruttó összeg | 1270,00 HUF",
+        "*Fordított adózás.",
+      ],
+      adapter: null,
+      pairing: pairing({ date: undefined }),
+    });
+    assert.equal(values.vatAmount, "270.00");
+    assert.equal(values.netAmount, null);
+  });
 });
