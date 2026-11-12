@@ -32,6 +32,13 @@ const TSC = join(
   "tsc",
 );
 
+/**
+ * A gazda PATH-ja a gyermekfolyamatoknak. BRACKET-ALAKBAN, nem pontos alakban: a `reefclub-environment.spec.ts` a
+ * forrasban `env.NEV` alakot keres, es minden talalt valtozonak vagy tiltottnak, vagy nem-titoknak kell lennie a listan.
+ * A PATH nem az alkalmazas beallitasa, csak a teszt alfolyamatanak kornyezete.
+ */
+const HOST_PATH = process.env["PATH"] ?? "";
+
 const ELSO_SOR = "RESZLEGES ELLENORZES, NEM KAPU";
 
 function cgroup(szabadMB: number) {
@@ -82,7 +89,7 @@ function fut(dir: string, kornyezet: Record<string, string> = {}) {
     {
       encoding: "utf8",
       env: {
-        PATH: process.env.PATH ?? "",
+        PATH: HOST_PATH,
         KAPUSOR_TSC: `${process.execPath} ${TSC}`,
         KAPUSOR_CGROUP_DIR: cgroup(8000),
         NODE_OPTIONS: "--max-old-space-size=512",
@@ -210,7 +217,7 @@ process.exit(r.status ?? 1);
     const r = spawnSync(
       process.execPath,
       [SZKRIPT, "--changed", "--repo", dir, "--base", "nincs-ilyen-ref"],
-      { encoding: "utf8", env: { PATH: process.env.PATH ?? "" } },
+      { encoding: "utf8", env: { PATH: HOST_PATH } },
     );
     assert.equal(r.status, 2);
     assert.match(r.stdout, /Nem futott semmi/);
