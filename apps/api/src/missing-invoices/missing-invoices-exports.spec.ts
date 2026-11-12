@@ -1140,6 +1140,16 @@ describe("the accountant package by invoice date", () => {
         }).missing.packageCheck("2026-08")
       ).unpaid.map((invoice) => invoice.number);
 
+    // the incoming-invoice list asks the same pairing map: the identity is a key of the paired document there too
+    const pairings = await service({
+      debits: [paidDebit],
+      documents: [upload],
+      billing: [row()],
+      files: {},
+    }).missing.documentPairings();
+    const found = pairings.get("inv:r49010000026240667|63964918");
+    assert.equal(found?.document.id, "upload");
+    assert.equal(found?.debits.length, 1);
     assert.deepEqual(await unpaidOf([row()]), []);
     // a másik szám vagy a másik adószám NEM fizetett (ugyanaz a név, ugyanaz az összeg)
     assert.deepEqual(
