@@ -1437,7 +1437,7 @@ describe("readForeignInvoice: the labelled number and the bare German date", () 
     const { values } = readForeignInvoice({
       lines: ["Lieferdatum: | 20.09.2026", "Rechnung - Nr. 40199001"],
       adapter: null,
-      pairing: pairing({ date: null }),
+      pairing: pairing({ date: undefined }),
     });
     assert.equal(values.issueDate, null);
   });
@@ -1446,14 +1446,14 @@ describe("readForeignInvoice: the labelled number and the bare German date", () 
     const { values } = readForeignInvoice({
       lines: ["Dátum 2026. okt. 31.", "Számla száma", "KH99000123"],
       adapter: null,
-      pairing: pairing({ date: null }),
+      pairing: pairing({ date: undefined }),
     });
     assert.equal(values.issueDate, "2026-10-31");
     assert.equal(values.documentNumber, "KH99000123");
     const delivery = readForeignInvoice({
       lines: ["Szállítási dátum 2026. okt. 30.", "Számla száma", "KH99000123"],
       adapter: null,
-      pairing: pairing({ date: null }),
+      pairing: pairing({ date: undefined }),
     });
     assert.equal(delivery.values.issueDate, null);
   });
