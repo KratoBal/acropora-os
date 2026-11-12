@@ -6,6 +6,7 @@ import type { SupplierInvoiceImportResult } from "@acropora/types";
 import {
   hostedInvoiceNumber,
   hostedInvoiceSupplier,
+  labelledInvoiceNumber,
   parseForeignDate,
   readForeignInvoice,
   supplierNameFromText,
@@ -93,6 +94,23 @@ describe("parseForeignDate", () => {
   it("leaves an ambiguous slashed date and an impossible date empty", () => {
     assert.equal(parseForeignDate("03/04/2026"), null);
     assert.equal(parseForeignDate("31.02.2026"), null);
+  });
+
+  // KÁRTYA dbab22cd, HARMADIK KÖR: a kétjegyű év és a magyar hónap-rövidítés
+  it("reads a two-digit year after the day, and the Hungarian month abbreviations", () => {
+    assert.equal(parseForeignDate("14/09/26"), "2026-09-14");
+    assert.equal(parseForeignDate("2026. okt. 31."), "2026-10-31");
+    assert.equal(parseForeignDate("2026. szept. 30."), "2026-09-30");
+    assert.equal(parseForeignDate("2026. márc. 3."), "2026-03-03");
+  });
+
+  it("keeps the same ambiguity rule for the two-digit year, and does not take a longer number for a date", () => {
+    assert.equal(parseForeignDate("03/04/26"), null);
+    assert.equal(parseForeignDate("12/12/26"), "2026-12-12");
+    assert.equal(parseForeignDate("14/09/2026"), "2026-09-14");
+    // a part number or a fraction is not a date
+    assert.equal(parseForeignDate("7/8/261"), null);
+    assert.equal(parseForeignDate("1/2/3/26"), null);
   });
 });
 
@@ -1309,5 +1327,220 @@ describe("the hosted (Stripe-style) English invoice (card dbab22cd, third round)
       ],
       ["TEXT", "TEXT", "TEXT"],
     );
+  });
+});
+
+/*
+  A CÍMKÉZETT SZÁMLASZÁM ÉS A NÉMET "Datum:" (kártya dbab22cd, harmadik kör). Minden szám és név KITALÁLT. MI PIROSÍT: ha a Rechnung/Rech.-Nr.
+  címkék értéke nem a számlaszám lenne; ha egy másik címke (Auftrags-, Lieferschein-, Kunden-Nr.) számlaszámnak olvasódna; ha a szomszéd
+  CÍMKE-cella ("Billing address") értéknek számítana; ha az érték a következő sorból egy NÉV mellől is átugrana; ha a háromcellás Stripe-alak
+  előtagja egymagában számlaszám lenne; ha két különböző címkézett szám közül az egyik nyerne; ha a "Lieferdatum" kelte lenne; ha a címkézett
+  szám a közös olvasó mögé szorulna (az a magyar "Számlaszám:" bankszámla-sort is számlaszámnak vette).
+*/
+describe("labelledInvoiceNumber", () => {
+  it("reads the German labels: inline, beside, with the Rech.-Nr. abbreviation", () => {
+    assert.equal(
+      labelledInvoiceNumber(["Rechnung - Nr. 40199001"]),
+      "40199001",
+    );
+    assert.equal(
+      labelledInvoiceNumber(["Rechnungs Nr.: | RE99001"]),
+      "RE99001",
+    );
+    assert.equal(
+      labelledInvoiceNumber(["Rech.-Nr. | R49000000099999"]),
+      "R49000000099999",
+    );
+    assert.equal(
+      labelledInvoiceNumber(["Rechnungsnummer: | 2026/0042"]),
+      "2026/0042",
+    );
+  });
+
+  it("reads the value from the next line when the neighbouring cell is another label, or there is none", () => {
+    assert.equal(
+      labelledInvoiceNumber(["Invoice n°: | Billing address", "F9900123"]),
+      "F9900123",
+    );
+    assert.equal(
+      labelledInvoiceNumber(["Adószám | Számla száma", "KH99000123", "Oldal"]),
+      "KH99000123",
+    );
+  });
+
+  it("never reads another reference, a name beside the label, or a bare word", () => {
+    assert.equal(labelledInvoiceNumber(["Auftragsnr.: | 20144999"]), null);
+    assert.equal(labelledInvoiceNumber(["Lieferscheinnr.: | 30113999"]), null);
+    assert.equal(labelledInvoiceNumber(["Kunden-Nr.: | 33999"]), null);
+    // a name beside the label: the next line's number is not the label's value
+    assert.equal(
+      labelledInvoiceNumber(["Rechnungs Nr.: | Kitalált Név", "12345678"]),
+      null,
+    );
+    assert.equal(labelledInvoiceNumber(["Rechnungs Nr.: | Kitalált"]), null);
+    // no digit: not a number
+    assert.equal(labelledInvoiceNumber(["Rechnungs Nr.: | ABCDEFGH"]), null);
+  });
+
+  it("leaves the three-cell hosted shape to hostedInvoiceNumber: the prefix alone is no invoice number", () => {
+    assert.equal(
+      labelledInvoiceNumber(["Invoice number | KITALALT2 | \x00 | 0012"]),
+      null,
+    );
+    assert.equal(
+      labelledInvoiceNumber(["Invoice number | KITALALT2 | - | 0012"]),
+      null,
+    );
+  });
+
+  it("reads the next line from the SAME column as the label, and nothing from a line with another cell count", () => {
+    // header row + value row: the label is the last cell, the value is in the same column, not the first cell (the tax number)
+    assert.equal(
+      labelledInvoiceNumber([
+        "Adószám | Számla száma",
+        "12345678-2-42 | KH99000123",
+      ]),
+      "KH99000123",
+    );
+    assert.equal(
+      labelledInvoiceNumber(["Datum | Rechnungs Nr.:", "18/09/2026 | RE99001"]),
+      "RE99001",
+    );
+    // another cell count: the column is unknown, so nothing
+    assert.equal(
+      labelledInvoiceNumber([
+        "Adószám | Számla száma",
+        "12345678-2-42 | KH99000123 | 5",
+      ]),
+      null,
+    );
+    // a one-cell next line is the value (the shape seen on real samples)
+    assert.equal(
+      labelledInvoiceNumber(["Adószám | Számla száma", "KH99000123"]),
+      "KH99000123",
+    );
+  });
+
+  it("a date shape or a Hungarian tax number is no invoice number, from any cell", () => {
+    assert.equal(labelledInvoiceNumber(["Rechnungs Nr.: | 18/09/2026"]), null);
+    assert.equal(labelledInvoiceNumber(["Rechnungs Nr.: | 2026-09-18"]), null);
+    assert.equal(
+      labelledInvoiceNumber(["Rechnungs Nr.: | 12345678-2-42"]),
+      null,
+    );
+    assert.equal(
+      labelledInvoiceNumber(["Számla száma", "12345678-2-42"]),
+      null,
+    );
+    // a number with two parts is still a number
+    assert.equal(
+      labelledInvoiceNumber(["Rechnungsnummer: | 2026/0042"]),
+      "2026/0042",
+    );
+  });
+
+  it("decides nothing when two different labelled numbers stand", () => {
+    assert.equal(
+      labelledInvoiceNumber([
+        "Rechnungs Nr.: | RE99001",
+        "Rech.-Nr. | RE99002",
+      ]),
+      null,
+    );
+    assert.equal(
+      labelledInvoiceNumber([
+        "Rechnungs Nr.: | RE99001",
+        "Rech.-Nr. | RE99001",
+      ]),
+      "RE99001",
+    );
+  });
+});
+
+describe("readForeignInvoice: the labelled number and the bare German date", () => {
+  const GERMAN = [
+    "Kitalált Handel GmbH, Beispielweg 1, 70000 Teststadt | 6",
+    "Datum: | 18.09.2026",
+    "Lieferdatum: | 20.09.2026",
+    "Kunden-Nr.: | 33999",
+    "Auftragsnr.: | 20144999",
+    "Rechnung - Nr. 40199001",
+    "Summe netto: | 100,00 €",
+  ];
+
+  it("takes the invoice number by its label and the date after the bare Datum, never the delivery date", () => {
+    const { values, sources } = readForeignInvoice({
+      lines: GERMAN,
+      adapter: null,
+      pairing: pairing({}),
+    });
+    assert.equal(values.documentNumber, "40199001");
+    assert.equal(sources.documentNumber, "TEXT");
+    assert.equal(values.issueDate, "2026-09-18");
+  });
+
+  it("a Lieferdatum alone is no issue date", () => {
+    const { values } = readForeignInvoice({
+      lines: ["Lieferdatum: | 20.09.2026", "Rechnung - Nr. 40199001"],
+      adapter: null,
+      pairing: pairing({ date: undefined }),
+    });
+    assert.equal(values.issueDate, null);
+  });
+
+  it("a bare Datum followed by more words is no issue label: Datum der Lieferung, Datum Lieferung, Datumsangabe, Dátum teljesítés", () => {
+    for (const line of [
+      "Datum der Lieferung: | 20.09.2026",
+      "Datum Lieferung | 20.09.2026",
+      "Datumsangabe: | 20.09.2026",
+      "Dátum teljesítés 2026. okt. 30.",
+    ]) {
+      const { values } = readForeignInvoice({
+        lines: [line, "Rechnung - Nr. 40199001"],
+        adapter: null,
+        pairing: pairing({ date: undefined }),
+      });
+      assert.equal(values.issueDate, null, line);
+    }
+  });
+
+  it("the Hungarian bare Dátum is the printed issue date too, and a Szállítási dátum alone is not", () => {
+    const { values } = readForeignInvoice({
+      lines: ["Dátum 2026. okt. 31.", "Számla száma", "KH99000123"],
+      adapter: null,
+      pairing: pairing({ date: undefined }),
+    });
+    assert.equal(values.issueDate, "2026-10-31");
+    assert.equal(values.documentNumber, "KH99000123");
+    const delivery = readForeignInvoice({
+      lines: ["Szállítási dátum 2026. okt. 30.", "Számla száma", "KH99000123"],
+      adapter: null,
+      pairing: pairing({ date: undefined }),
+    });
+    assert.equal(delivery.values.issueDate, null);
+  });
+
+  it("the labelled number goes before the shared reader: a bank account line (Számlaszám) does not become the number", () => {
+    const { values } = readForeignInvoice({
+      lines: [
+        "Kitalált Handel GmbH",
+        "IBAN: HU00 1111 2222 3333 4444 5555 6666 | BIC: KITALALT | Számlaszám: 1111 2222 3333 4444 5555 6666 |",
+        "Rech.-Nr. | R49000000099999",
+        "Rech.-Datum | 06.11.2026",
+      ],
+      adapter: null,
+      pairing: pairing({}),
+    });
+    assert.equal(values.documentNumber, "R49000000099999");
+    assert.equal(values.issueDate, "2026-11-06");
+  });
+
+  it("the hosted full number still wins over the labelled prefix", () => {
+    const { values } = readForeignInvoice({
+      lines: ["Invoice number | KITALALT2 | \x00 | 0012"],
+      adapter: null,
+      pairing: pairing({}),
+    });
+    assert.equal(values.documentNumber, "KITALALT2-0012");
   });
 });
