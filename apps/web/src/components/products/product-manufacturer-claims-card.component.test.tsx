@@ -12,6 +12,7 @@ import { ProductManufacturerClaimsCard } from "./product-manufacturer-claims-car
 const api = vi.hoisted(() => ({
   forProduct: vi.fn(),
   create: vi.fn(),
+  update: vi.fn(),
   setStatus: vi.fn(),
   archive: vi.fn(),
   content: vi.fn(),
@@ -238,5 +239,70 @@ describe("a termék gyártói állításai (T5.3)", () => {
     fireEvent.click(within(sor).getByText("Érintett tartalmak"));
     const link = await within(sor).findByText("Adagolási cikk");
     expect(link.getAttribute("href")).toBe("/tartalom/cikk-1/cikk");
+  });
+
+  it("szerkesztés: a látott változattal megy, és a megjegyzés üresen törlődik", async () => {
+    card();
+    const sor = await screen.findByTestId("manufacturer-claim-allitas-1");
+    fireEvent.click(within(sor).getByText("Szerkesztés"));
+    expect(screen.getByText(/az ellenőrzés törlődik/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Az állítás"), {
+      target: { value: "Napi 6 ml 100 literenként." },
+    });
+    api.update.mockResolvedValue(allitas());
+    fireEvent.click(screen.getByText("Mentés"));
+    await waitFor(() =>
+      expect(api.update).toHaveBeenCalledWith(
+        "t",
+        "allitas-1",
+        expect.objectContaining({
+          expectedVersion: 1,
+          claimText: "Napi 6 ml 100 literenként.",
+          valueAmount: null,
+          valueUnit: null,
+          note: null,
+          sourcePublishedOn: null,
+        }),
+      ),
+    );
+  });
+
+  it("Product Knowledge tényre épülő állításnál a szerkesztés nem kér és nem küld számot", async () => {
+    api.forProduct.mockImplementation(() =>
+      kesobb({
+        items: [
+          allitas({
+            knowledgeFact: {
+              id: "teny-1",
+              field: "dosing",
+              value: "5 ml/100 L/day",
+              unit: null,
+              revision: 1,
+            },
+            knowledgeFactRevision: 1,
+            knowledgeLink: "CURRENT",
+          }),
+        ],
+        truncated: false,
+      }),
+    );
+    card();
+    const sor = await screen.findByTestId("manufacturer-claim-allitas-1");
+    fireEvent.click(within(sor).getByText("Szerkesztés"));
+    expect(screen.queryByLabelText("Szám-érték")).toBeNull();
+    api.update.mockResolvedValue(allitas());
+    fireEvent.click(screen.getByText("Mentés"));
+    await waitFor(() => expect(api.update).toHaveBeenCalled());
+    const sent = api.update.mock.calls[0]![2] as Record<string, unknown>;
+    expect("valueAmount" in sent).toBe(false);
+    expect("valueUnit" in sent).toBe(false);
+  });
+
+  it("ha a lista csonka, kimondja", async () => {
+    api.forProduct.mockImplementation(() =>
+      kesobb({ items: [allitas()], truncated: true }),
+    );
+    card();
+    expect(await screen.findByText("A lista nem teljes")).toBeTruthy();
   });
 });

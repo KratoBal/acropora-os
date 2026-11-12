@@ -89,6 +89,20 @@ export interface ManufacturerClaimInput {
   knowledgeFactId?: string;
 }
 
+/** An edit of the version the editor saw; `null` clears an optional field. */
+export interface ManufacturerClaimEdit {
+  expectedVersion: number;
+  claimType?: ClaimType;
+  claimText?: string;
+  sourceKind?: ClaimSourceKind;
+  sourceRef?: string;
+  sourcePublishedOn?: string | null;
+  sourceReadOn?: string;
+  valueAmount?: number | null;
+  valueUnit?: string | null;
+  note?: string | null;
+}
+
 export interface ClaimContentItem {
   id: string;
   title: string;
@@ -137,6 +151,12 @@ export const manufacturerClaimApi = {
       `${claims}?${params.toString()}`,
       token,
     );
+  },
+  update(token: string, id: string, edit: ManufacturerClaimEdit) {
+    return apiRequest<ManufacturerClaimView>(claimPath(id), token, {
+      method: "PATCH",
+      body: JSON.stringify(edit),
+    });
   },
   setStatus(
     token: string,

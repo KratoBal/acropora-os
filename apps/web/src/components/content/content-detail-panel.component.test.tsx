@@ -35,6 +35,7 @@ const detail = (overrides: Record<string, unknown> = {}) => ({
   updatedAt: new Date().toISOString(),
   moves: [],
   blockers: { waitsOn: { on: "approver" }, waitsForImage: false },
+  claims: [],
   ...overrides,
 });
 
@@ -217,5 +218,41 @@ describe("the state log (T5.1)", () => {
       expect(screen.getByText(/Az első bekezdés/)).toBeTruthy(),
     );
     expect(screen.queryByText(/Kiment:/)).toBeNull();
+  });
+});
+
+describe("the manufacturer claims the item stands on (T5.3)", () => {
+  it("shows each claim with its marking, what it allows and why, before approval", async () => {
+    api.detail.mockResolvedValue(
+      detail({
+        claims: [
+          {
+            id: "a1",
+            productName: "Teszt adalék",
+            claimType: "DOSING",
+            claimText: "Napi 5 ml 100 literenként.",
+            status: "UNVERIFIED",
+            output: {
+              mode: "DRAFT_ONLY",
+              attribution: "a gyártó szerint",
+              reasons: ["UNVERIFIED"],
+            },
+          },
+        ],
+      }),
+    );
+    render(<ContentDetailPanel id="c1" />);
+    const row = await screen.findByTestId("content-claim-a1");
+    expect(row.textContent).toContain("Teszt adalék");
+    expect(row.textContent).toContain("Adagolás");
+    expect(row.textContent).toContain("Csak vázlatba");
+    expect(row.textContent).toContain("(a gyártó szerint)");
+    expect(row.textContent).toContain("még senki nem ellenőrizte");
+  });
+
+  it("no section when the item stands on no claim", async () => {
+    render(<ContentDetailPanel id="c1" />);
+    await screen.findByText("A szöveg");
+    expect(screen.queryByText(/Gyártói állítások/)).toBeNull();
   });
 });

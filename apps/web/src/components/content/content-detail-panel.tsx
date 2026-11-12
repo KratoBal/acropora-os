@@ -7,6 +7,16 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { contentApi } from "@/lib/api/content";
 
+import {
+  CLAIM_TYPE_TEXT,
+  claimReasonText,
+  OUTPUT_MODE_TEXT,
+} from "@/components/products/product-manufacturer-claims-card";
+import type {
+  ClaimOutputReason,
+  ClaimType,
+} from "@/lib/api/manufacturer-claims";
+
 import { describeContentEvent, describeContentSent } from "./content-history";
 
 /**
@@ -121,6 +131,50 @@ export function ContentDetailPanel({ id }: { id: string }) {
           </ul>
         )}
       </section>
+
+      {/*
+        A GYÁRTÓI ÁLLÍTÁSOK, AMIKRE A TÉTEL ÉPÜL (T5.3): a jóváhagyó itt látja, melyik nem írható ki és
+        miért, MIELŐTT jóváhagy; a jóváhagyás addig nem megy át. Olvasás: a kötés az ágens útján
+        és az állítás-kártyán megy, nem itt.
+      */}
+      {detail.claims.length > 0 ? (
+        <section>
+          <h4 className="text-xs font-semibold uppercase text-dusk-500">
+            Gyártói állítások ({detail.claims.length})
+          </h4>
+          <ul className="space-y-1">
+            {detail.claims.map((claim) => (
+              <li
+                key={claim.id}
+                data-testid={`content-claim-${claim.id}`}
+                className="text-sm"
+              >
+                <span className="text-xs text-dusk-500">
+                  {claim.productName} ·{" "}
+                  {CLAIM_TYPE_TEXT[claim.claimType as ClaimType] ??
+                    claim.claimType}{" "}
+                  · {OUTPUT_MODE_TEXT[claim.output.mode]}
+                </span>
+                <p>
+                  „{claim.claimText}”
+                  {claim.output.attribution
+                    ? ` (${claim.output.attribution})`
+                    : ""}
+                </p>
+                {claim.output.reasons.length > 0 ? (
+                  <p className="text-xs text-amber-700">
+                    {claim.output.reasons
+                      .map((reason) =>
+                        claimReasonText(reason as ClaimOutputReason),
+                      )
+                      .join(" · ")}
+                  </p>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {sent ? (
         <section>
