@@ -1290,3 +1290,85 @@ describe("hasNoTextLayer", () => {
     assert.equal(hasNoTextLayer(Array(50).fill(" ")), true);
   });
 });
+
+/*
+  A HIVATKOZOTT ISMERT SZÁM NEM A DOKUMENTUM SAJÁT SZÁMA (niceshops második dokumentuma, task os-hianyzo-szamlak-unpaid). Kitalált
+  szöveg és szám. MI PIROSÍT: egy jóváírás vagy helyesbítés, ami a korábbi, ismert számlát nevezi meg, annak a számát kapja sajátjául;
+  ÉS a másik irány: ugyanaz a szám a dokumentum saját sorában (nem hivatkozásban) nem kötődik többé.
+*/
+describe("a known number in a reference is not the document's own number", () => {
+  const KNOWN: KnownInvoiceNumber[] = [
+    { number: "R49010000099990001", supplierTaxNumber: "11111111-2-41" },
+  ];
+  const read = {
+    invoiceNumber: null,
+    numberFrom: null,
+    supplierTaxNumber: null,
+  } as const;
+
+  for (const [why, lines] of [
+    [
+      "a German reference on the same line",
+      [
+        "Gutschrift",
+        "Bezug auf Rechnung R49010000099990001 vom 05.11.2026",
+        "Betrag: 97 265 Ft",
+      ],
+    ],
+    [
+      "a labelled line above the number",
+      [
+        "Korrekturbeleg",
+        "Zu Rechnung:",
+        "R49010000099990001",
+        "Betrag: 97 265 Ft",
+      ],
+    ],
+    [
+      "a Hungarian corrective invoice",
+      [
+        "Helyesbítő számla",
+        "Az eredeti számla száma: R49010000099990001",
+        "Összesen: 97 265 Ft",
+      ],
+    ],
+    [
+      "an English credit note",
+      [
+        "Credit note",
+        "Original invoice R49010000099990001",
+        "Total: 97 265 HUF",
+      ],
+    ],
+  ] as const)
+    it(`${why}: no hit, and the reading keeps no number`, () => {
+      assert.equal(knownNumberInText(lines, KNOWN), null);
+      assert.deepEqual(withKnownNumber({ ...read }, lines, KNOWN), read);
+    });
+
+  it("the same number on the document's own line is still found (the control nearest to the case)", () => {
+    const lines = [
+      "Rechnung",
+      "Rechnungsnummer: R49010000099990001",
+      "Betrag: 338 018 Ft",
+    ];
+    assert.deepEqual(knownNumberInText(lines, KNOWN), KNOWN[0]);
+    assert.equal(
+      withKnownNumber({ ...read }, lines, KNOWN).invoiceNumber,
+      "R49010000099990001",
+    );
+  });
+
+  it("named both in a reference and on its own line, the number counts", () => {
+    const lines = [
+      "Rechnung R49010000099990001",
+      "Bezug auf Rechnung R49010000099990001",
+    ];
+    assert.deepEqual(knownNumberInText(lines, KNOWN), KNOWN[0]);
+  });
+
+  it("a label above without a colon is not a reference label: the number on the next line counts", () => {
+    const lines = ["Gutschrift Nr", "R49010000099990001"];
+    assert.deepEqual(knownNumberInText(lines, KNOWN), KNOWN[0]);
+  });
+});
