@@ -1335,7 +1335,7 @@ describe("the hosted (Stripe-style) English invoice (card dbab22cd, third round)
   címkék értéke nem a számlaszám lenne; ha egy másik címke (Auftrags-, Lieferschein-, Kunden-Nr.) számlaszámnak olvasódna; ha a szomszéd
   CÍMKE-cella ("Billing address") értéknek számítana; ha az érték a következő sorból egy NÉV mellől is átugrana; ha a háromcellás Stripe-alak
   előtagja egymagában számlaszám lenne; ha két különböző címkézett szám közül az egyik nyerne; ha a "Lieferdatum" kelte lenne; ha a címkézett
-  szám a közös olvasó (irányítószám!) mögé szorulna.
+  szám a közös olvasó mögé szorulna (az a magyar "Számlaszám:" bankszámla-sort is számlaszámnak vette).
 */
 describe("labelledInvoiceNumber", () => {
   it("reads the German labels: inline, beside, with the Rech.-Nr. abbreviation", () => {
@@ -1452,11 +1452,11 @@ describe("readForeignInvoice: the labelled number and the bare German date", () 
     assert.equal(values.documentNumber, "KH99000123");
   });
 
-  it("the labelled number goes before the shared reader: a postal code line does not become the number", () => {
+  it("the labelled number goes before the shared reader: a bank account line (Számlaszám) does not become the number", () => {
     const { values } = readForeignInvoice({
       lines: [
         "Kitalált Handel GmbH",
-        "1200 Wien",
+        "IBAN: HU00 1111 2222 3333 4444 5555 6666 | BIC: KITALALT | Számlaszám: 1111 2222 3333 4444 5555 6666 |",
         "Rech.-Nr. | R49000000099999",
         "Rech.-Datum | 06.11.2026",
       ],
