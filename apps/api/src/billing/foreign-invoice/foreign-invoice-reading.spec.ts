@@ -185,7 +185,7 @@ describe("readForeignInvoice", () => {
     assert.equal(values.dueDate, "2026-11-02");
     assert.equal(values.netAmount, "250.00");
     assert.equal(values.vatAmount, "0.00");
-    assert.equal(sources.vatAmount, "TEXT");
+    assert.equal(sources.vatAmount, "REVERSE_CHARGE");
     assert.equal(values.grossAmount, "250.00");
     assert.equal(sources.grossAmount, "PAIRING");
   });
@@ -1573,7 +1573,9 @@ describe("readForeignInvoice: the Hungarian gross label and the reverse charge",
     assert.equal(sources.grossAmount, "TEXT");
     assert.equal(values.vatAmount, "0.00");
     assert.equal(values.netAmount, "1518.00");
-    assert.equal(sources.netAmount, "TEXT");
+    assert.equal(sources.netAmount, "REVERSE_CHARGE");
+    // the zero VAT comes from the marker too: its own source value, which the automatic approval reads
+    assert.equal(sources.vatAmount, "REVERSE_CHARGE");
   });
 
   it("the derived net comes with a warning that names the marker, and the zero VAT that came from it too (barracuda, #2468)", () => {
@@ -1591,7 +1593,7 @@ describe("readForeignInvoice: the Hungarian gross label and the reverse charge",
   });
 
   it("a zero VAT read from a real VAT line: the net is still derived and warned, but the warning does not claim the zero came from the marker", () => {
-    const { values, warnings } = readForeignInvoice({
+    const { values, sources, warnings } = readForeignInvoice({
       lines: [
         "Kitalált Szolgáltató Kft.",
         "ÁFA (0%) | 0,00 HUF",
@@ -1603,6 +1605,8 @@ describe("readForeignInvoice: the Hungarian gross label and the reverse charge",
     });
     assert.equal(values.vatAmount, "0.00");
     assert.equal(values.netAmount, "1000.00");
+    assert.equal(sources.vatAmount, "TEXT");
+    assert.equal(sources.netAmount, "REVERSE_CHARGE");
     const warning = warnings.find((w) =>
       w.includes("fordított adózás jelzéséből"),
     );
