@@ -343,6 +343,9 @@ const SUMMARY_GROSS = /^brutt[óo](?![\p{L}])/iu;
  * "including" (incl.) szót tartalmaz ebben a sorrendben, a sor PONTOSAN három összeget ad, nettó + ÁFA = bruttó (két fillér), a nettó pozitív, az ÁFA nem negatív és NEM nagyobb
  * a nettónál (a (0, x, x) alakú tételsor nem összesítő). Egyedi találat kell: több eltérő: nem döntünk.
  */
+const EXCLUDING = /excl(?:uding|\.)?\s*(?:all\s+)?(?:tax|vat)/iu;
+const INCLUDING = /incl(?:uding|\.)?\s*(?:all\s+)?(?:tax|vat)/iu;
+
 export function englishTotalsTable(
   lines: readonly string[],
 ): { net: number; vat: number; gross: number } | null {
@@ -353,10 +356,25 @@ export function englishTotalsTable(
     const [net, vat, gross] = values as [number, number, number];
     if (net <= 0 || vat < 0 || vat > net || Math.abs(net + vat - gross) > 0.02)
       return;
-    const header = lines.slice(Math.max(0, index - 3), index).join(" ");
-    const excl = header.search(/excl(?:uding|\.)?\s*(?:all\s+)?(?:tax|vat)/iu);
-    const incl = header.search(/incl(?:uding|\.)?\s*(?:all\s+)?(?:tax|vat)/iu);
-    if (excl < 0 || incl <= excl) return;
+    // a fejléc a sor előtti három sorban áll: az "excluding" szó sora, majd egy későbbi vagy ugyanaz a sor az "including" szóval
+    const window = lines.slice(Math.max(0, index - 3), index);
+    const exclAt = window.findIndex((line) => EXCLUDING.test(line));
+    if (exclAt < 0) return;
+    // az "including" szó az "excluding" UTÁN áll: ugyanabban a sorban a szó utáni részben, vagy egy későbbi sorban
+    const exclPos = window[exclAt]!.search(EXCLUDING);
+    const inclAt = window.findIndex((line, at) =>
+      at < exclAt
+        ? false
+        : INCLUDING.test(at === exclAt ? line.slice(exclPos + 1) : line),
+    );
+    if (inclAt < 0) return;
+    // a fejléc VÉGE és az érték-sor között nem áll újabb összeges sor: egy tételtábla fejléce alatt a több soros tétel egyik (mennyiség nélküli) sora így nem lesz összesítő (barracuda, #2474)
+    if (
+      window
+        .slice(inclAt + 1)
+        .some((line) => amountsIn(line.normalize("NFC")).length > 0)
+    )
+      return;
     found.set(`${net}|${vat}|${gross}`, { net, vat, gross });
   });
   return found.size === 1 ? [...found.values()][0]! : null;

@@ -1787,6 +1787,30 @@ describe("englishTotalsTable", () => {
       assert.equal(englishTotalsTable([...header, row]), null, row);
   });
 
+  it("under an item table's header only a lone item row is the total: a quantity-less row after another amount row is not (barracuda, #2474)", () => {
+    const header = "Description | Price excl. VAT | VAT | Total incl. VAT";
+    // two items: the first has a quantity (four numbers), the second three amounts: the second alone would look like a totals row
+    assert.equal(
+      englishTotalsTable([
+        header,
+        "Widget A | 2 | 100,00 | 21,00 | 121,00",
+        "Widget B | 50,00 | 10,50 | 60,50",
+      ]),
+      null,
+    );
+    // a single item: its three amounts are the document's total
+    assert.deepEqual(
+      englishTotalsTable([header, "Widget B | 50,00 | 10,50 | 60,50"]),
+      { net: 50, vat: 10.5, gross: 60.5 },
+    );
+    // the real totals row after the Amblard-shaped header is untouched by other lines without amounts
+    assert.deepEqual(englishTotalsTable(TWO_LINE), {
+      net: 100,
+      vat: 0,
+      gross: 100,
+    });
+  });
+
   it("two different tables decide nothing, and the same table twice (two pages) is one", () => {
     assert.equal(
       englishTotalsTable([
