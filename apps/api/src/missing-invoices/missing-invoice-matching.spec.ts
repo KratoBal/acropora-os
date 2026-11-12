@@ -1303,6 +1303,11 @@ describe("matchMonth", () => {
       states({ number: "KB-2855/2026" }, { number: "kb 2855 2026" }),
       ["DOUBLE_PAID", "DOUBLE_PAID"],
     );
+    // a szállító néha előtag nélkül írja a számot: az egyik szám a másikat tartalmazza
+    assert.deepEqual(
+      states({ number: "KB-2855/2026" }, { number: "2855/2026" }),
+      ["DOUBLE_PAID", "DOUBLE_PAID"],
+    );
     assert.deepEqual(states({ number: "KB-2855/2026" }, { number: "" }), [
       "DOUBLE_PAID",
       "DOUBLE_PAID",
