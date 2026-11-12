@@ -779,7 +779,7 @@ function hintWords(hints: KnownNumberHints | undefined): Set<string> {
  * száma nem ismert, ez az egy ismert szám maradt a szövegben: az olvasat azt vette volna sajátjának. Egy ismert szám ezért csak
  * akkor lehet a saját szám, ha legalább egyszer NEM hivatkozási környezetben áll (`REFERENCE_MARKERS`: ugyanabban a sorban, vagy
  * a fölötte álló, kettősponttal végződő címke-sorban; a saját szám címkéje mellett a jel a dokumentum fajtáját mondja, nem hivatkozást,
- * kivéve az ERŐS hivatkozást: „eredeti”, „Bezug”, „zu Rechnung”, „helyesbített”). A KÉTÉRTELMŰSÉG: két különböző ismert szám nem
+ * kivéve az ERŐS hivatkozást: „eredeti számla”, „Bezug auf”, „zu Rechnung”, „helyesbített”). A KÉTÉRTELMŰSÉG: két különböző ismert szám nem
  * dönt, DE egy csak erős hivatkozásban álló szám nem számít bele (acrobot 48666): egy helyesbítő számla az eredetit mindig
  * megnevezi, és az is ismert. A gyenge jel („Hivatkozás:”) továbbra is kétértelművé tesz. A biztonságos irány a kimaradás: egy meg
  * nem kötött PDF egy embernél áll meg, egy rosszul kötött egy másik számla adatával megy tovább.
@@ -902,8 +902,13 @@ const OWN_NUMBER_LABELS = [
  * Nr. …”, „a helyesbített számla sorszáma: …”): ezek egy MÁSIK számla számát címkézik.
  */
 const STRONG_REFERENCE_MARKERS = [
-  "eredeti",
-  "bezug",
+  // NOT the bare "eredeti": a Hungarian header says "Eredeti példány" on the document's OWN number line (barracuda, #2460)
+  "eredeti számla",
+  "eredeti szamla",
+  // NOT the bare "bezug": "Bezugsquelle", "Bezugsnummer" are not references
+  "bezug auf",
+  "bezugnehmend",
+  "in bezug",
   "zu rechnung",
   "zur rechnung",
   "helyesbített",

@@ -1428,6 +1428,18 @@ describe("an own-number label beside the marker: the document's own number binds
       );
   });
 
+  it('an "Eredeti példány" header on the own number\'s line is no reference: with a second known number the text stays undecidable (barracuda, #2460)', () => {
+    const ADVANCE = { number: "EL2026000555", supplierTaxNumber: SUPPLIER };
+    const lines = [
+      "SZÁMLA Eredeti példány Számla sorszáma: HX2026000123",
+      "Előleg-számla: EL2026000555",
+    ];
+    // the old shape (the bare "eredeti" a strong reference) dropped the own number and bound the advance's
+    assert.equal(knownNumberInText(lines, [CORRECTIVE, ADVANCE]), null);
+    // alone, the own number on that line binds
+    assert.deepEqual(knownNumberInText([lines[0]!], [CORRECTIVE]), CORRECTIVE);
+  });
+
   it("a weak marker without a label still makes two known numbers undecidable", () => {
     const lines = ["Rechnung GS2026000777", "Storno R49010000099990001"];
     assert.equal(knownNumberInText(lines, [ORIGINAL, CREDIT]), null);
