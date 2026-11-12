@@ -206,10 +206,11 @@ const VAT_LABEL =
   /(\bvat\b|\btax\b|\bmwst\b|\bust\b|umsatzsteuer|mehrwertsteuer|\bbtw\b|\btva\b|[áa]fa\b)/iu;
 /**
  * ezek a sorok nem ÁFA-ÖSSZEGET hordoznak: adószám, mentesség, nettó vagy bruttó végösszeg. A magyar "ÁFA regisztrációs szám: | 0106 417" sor (kártya dbab22cd,
- * harmadik kör, Digital Charging Solutions) "417"-et adott ÁFA-összegnek, két mintán is: a regisztrációs, azonosító és adószám szavak kizárják.
+ * harmadik kör, Digital Charging Solutions) "417"-et adott ÁFA-összegnek, két mintán is: a regisztrációs, azonosító és adószám szavak kizárják. A "VAT exemption, Article 262 ter-I of the
+ * General Tax Code" sor (francia számla) "262"-t adott: a mentesség és a cikkely szavai is kizárják.
  */
 const NOT_VAT_AMOUNT =
-  /(number|\bno\b\.?|\bnr\b\.?|\bid\b|idnr|ust-?id|identification|nummer|registration|reg\.|regisztr[áa]ci[óo]s|azonos[íi]t[óo]|ad[óo]sz[áa]m|excl|incl|zzgl|inkl|including|excluding|\bht\b|\bttc\b|subtotal|total\s+(amount|due)|amount\s+due)/iu;
+  /(number|\bno\b\.?|\bnr\b\.?|\bid\b|idnr|ust-?id|identification|nummer|registration|reg\.|regisztr[áa]ci[óo]s|azonos[íi]t[óo]|ad[óo]sz[áa]m|exempt|exon[ée]r|article|excl|incl|zzgl|inkl|including|excluding|\bht\b|\bttc\b|subtotal|total\s+(amount|due)|amount\s+due)/iu;
 /**
  * A MAGYAR "Teljes bruttó összeg" / "Bruttó végösszeg" CÍMKE (kártya dbab22cd, harmadik kör): a sor ELEJÉN áll, így a "Bruttó egységár" és társai nem illeszkednek.
  * A közös végösszeg-olvasó (labelledTotal, a begyűjtő is használja) ezt nem adja; itt, csak a külföldi számla olvasójában vesszük fel, és csak az ÜRES bruttót tölti.
@@ -332,6 +333,52 @@ const SUMMARY_NET = /^(ad[óo]alap|nett[óo]|netto)(?![\p{L}])/iu;
 // "ÁFA (Ft)" and "ÁFA", never "ÁFA %" or "Áfa(%)": the rate column is not the amount
 const SUMMARY_VAT = /^[áa]fa\s*(\((?!\s*%)[^)]*\))?$/iu;
 const SUMMARY_GROSS = /^brutt[óo](?![\p{L}])/iu;
+
+/**
+ * AZ ANGOL "EXCLUDING / INCLUDING" ÖSSZESÍTŐ TÁBLA (kártya dbab22cd, harmadik kör, bruttó-szelet: a francia számla angolul):
+ *   Total amount | TVA | Total amount | Total amount due
+ *   excluding tax (€) | (rate) % | VAT (€) | including all taxes (€)
+ *   Bank details | 485,40 € | 0,00 € | 485,40 €
+ * A fejléc KÉT sorban áll, az érték-sor első cellája egy odacsúszott másik oszlop címkéje. A feltételek együtt: a sor előtti HÁROM sor együtt egy "excluding" (excl.) és egy
+ * "including" (incl.) szót tartalmaz ebben a sorrendben, a sor PONTOSAN három összeget ad, nettó + ÁFA = bruttó (két fillér), a nettó pozitív, az ÁFA nem negatív és NEM nagyobb
+ * a nettónál (a (0, x, x) alakú tételsor nem összesítő). Egyedi találat kell: több eltérő: nem döntünk.
+ */
+const EXCLUDING = /excl(?:uding|\.)?\s*(?:all\s+)?(?:tax|vat)/iu;
+const INCLUDING = /incl(?:uding|\.)?\s*(?:all\s+)?(?:tax|vat)/iu;
+
+export function englishTotalsTable(
+  lines: readonly string[],
+): { net: number; vat: number; gross: number } | null {
+  const found = new Map<string, { net: number; vat: number; gross: number }>();
+  lines.forEach((raw, index) => {
+    const values = amountsIn(raw.normalize("NFC"));
+    if (values.length !== 3) return;
+    const [net, vat, gross] = values as [number, number, number];
+    if (net <= 0 || vat < 0 || vat > net || Math.abs(net + vat - gross) > 0.02)
+      return;
+    // a fejléc a sor előtti három sorban áll: az "excluding" szó sora, majd egy későbbi vagy ugyanaz a sor az "including" szóval
+    const window = lines.slice(Math.max(0, index - 3), index);
+    const exclAt = window.findIndex((line) => EXCLUDING.test(line));
+    if (exclAt < 0) return;
+    // az "including" szó az "excluding" UTÁN áll: ugyanabban a sorban a szó utáni részben, vagy egy későbbi sorban
+    const exclPos = window[exclAt]!.search(EXCLUDING);
+    const inclAt = window.findIndex((line, at) =>
+      at < exclAt
+        ? false
+        : INCLUDING.test(at === exclAt ? line.slice(exclPos + 1) : line),
+    );
+    if (inclAt < 0) return;
+    // a fejléc VÉGE és az érték-sor között nem áll újabb összeges sor: egy tételtábla fejléce alatt a több soros tétel egyik (mennyiség nélküli) sora így nem lesz összesítő (barracuda, #2474)
+    if (
+      window
+        .slice(inclAt + 1)
+        .some((line) => amountsIn(line.normalize("NFC")).length > 0)
+    )
+      return;
+    found.set(`${net}|${vat}|${gross}`, { net, vat, gross });
+  });
+  return found.size === 1 ? [...found.values()][0]! : null;
+}
 
 export function vatSummaryTable(
   lines: readonly string[],
@@ -669,8 +716,42 @@ export function vatLineEuNumber(lines: readonly string[]): string | null {
   return found.size === 1 ? [...found][0]! : null;
 }
 
+/**
+ * A KÜLDŐ CÍMSORA (a borítékablakos számla; kártya dbab22cd, harmadik kör: "Kitalált Kereskedő GmbH, Minta-Str. 9, 71000 Teststadt", "kitalalt · Minta Str. 43b · 55000
+ * Teststadt"). A számla elején egy sorban áll a küldő: NÉV, UTCA HÁZSZÁMMAL, IRÁNYÍTÓSZÁM VÁROS, vesszővel vagy " · "-tal elválasztva. A szerkezet azonosítja a küldőt, ezért
+ * jogi forma NÉLKÜL is név. Szigorú: pontosan ez a három tagú alak (a második tag számjegyet visz: házszám; a harmadik 4-5 jegyű irányítószámmal indul, "D-" előtaggal
+ * is), a név legfeljebb 60 karakter, nem a vevő (Acropora), nem szám-kezdetű, és a sor ELSŐ cellája (a " | " utáni rész nem számít); csak az első 15 sort nézi (az olvasó
+ * a fejlécet néha szám-sorok mögé teszi). Egyedi találatot vár: két eltérő név: semmi.
+ */
+const SENDER_ADDRESS_LINE =
+  /^(?<name>[^,·|0-9][^,·|]{1,58}?)\s*(?:,|·)\s*[^,·|]*\d[^,·|]*\s*(?:,|·)\s*(?:[A-Z]{1,2}-)?\d{4,5}\s+\p{L}/u;
+
+export function senderAddressLineName(lines: readonly string[]): string | null {
+  const buyer = ACROPORA_COMPANY.name.toLowerCase().split(/\s+/)[0]!;
+  const found = new Set<string>();
+  for (const line of lines.slice(0, 15)) {
+    const cell = line.normalize("NFC").split(" | ")[0]!.trim();
+    const name = SENDER_ADDRESS_LINE.exec(cell)
+      ?.groups?.["name"]?.replace(/\s+/g, " ")
+      .trim();
+    if (
+      !name ||
+      name.toLowerCase().includes(buyer) ||
+      /^(rechnung|invoice|facture|sz[áa]mla|datum|date|seite|page)(?![\p{L}])/iu.test(
+        name,
+      )
+    )
+      continue;
+    found.add(name);
+  }
+  return found.size === 1 ? [...found][0]! : null;
+}
+
 export function supplierNameFromText(lines: readonly string[]): string | null {
   const candidates = new Set<string>();
+  // a boríték-ablakos küldő-címsor (jogi forma nélkül is név): a többi forrással egy halmazban, tehát eltérő név esetén semmi
+  const addressLine = senderAddressLineName(lines);
+  if (addressLine) candidates.add(addressLine);
   const first = lines.find((line) => line.trim());
   const top = plausibleName(first?.split(" | ")[0]);
   if (top) candidates.add(top);
@@ -826,7 +907,8 @@ export function readForeignInvoice(input: ForeignReadingInput): ForeignReading {
     // a cimkézett olvasás után: ami már megvan, azt az összesítő sor nem írja felül, és ha egy már
     // meglévő érték ELTÉR az összesítő sortól (két táblázat, másik összeg), az sor semmit nem tölt:
     // a három mező nem mondhat ellent egymásnak (barracuda, #1795)
-    const totals = totalsRow(lines) ?? vatSummaryTable(lines);
+    const totals =
+      totalsRow(lines) ?? vatSummaryTable(lines) ?? englishTotalsTable(lines);
     const agrees = (
       field: "netAmount" | "vatAmount" | "grossAmount",
       amount: number,

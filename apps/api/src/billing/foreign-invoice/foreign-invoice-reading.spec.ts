@@ -7,8 +7,10 @@ import {
   hostedInvoiceNumber,
   hostedInvoiceSupplier,
   labelledInvoiceNumber,
+  englishTotalsTable,
   parseForeignDate,
   readForeignInvoice,
+  senderAddressLineName,
   supplierNameFromText,
   tableRowFields,
   totalsRow,
@@ -1711,5 +1713,255 @@ describe("readForeignInvoice: the Hungarian gross label and the reverse charge",
     });
     assert.equal(values.vatAmount, "270.00");
     assert.equal(values.netAmount, null);
+  });
+});
+
+/*
+  AZ ANGOL "EXCLUDING / INCLUDING" ÖSSZESÍTŐ TÁBLA ÉS A MENTESSÉGI SOR (kártya dbab22cd, harmadik kör, bruttó-szelet). Minden szám KITALÁLT. MI PIROSÍT: ha a kétsoros fejléc alatti három
+  összeg nem lenne nettó/ÁFA/bruttó; ha fejléc nélkül, fordított sorrendű fejléccel vagy 3 sornál távolabbi fejléccel is összesítő lenne; ha egy (0, x, x) tételsor vagy egy nulla összeg
+  összesítő lenne; ha az ÁFA nagyobb lehetne a nettónál; ha két eltérő tábla közül választana; ha a "VAT exemption, Article 262 ..." sor 262-t adna ÁFA-összegnek; ha az olvasóba nem lenne
+  bekötve.
+*/
+describe("englishTotalsTable", () => {
+  const TWO_LINE = [
+    "Total amount | TVA | Total amount | Total amount due",
+    "excluding tax (€) | (rate) % | VAT (€) | including all taxes (€)",
+    "Bank details | 100,00 € | 0,00 € | 100,00 €",
+  ];
+
+  it("reads net, VAT and gross under a two-line excluding / including header, whatever the odd first cell", () => {
+    assert.deepEqual(englishTotalsTable(TWO_LINE), {
+      net: 100,
+      vat: 0,
+      gross: 100,
+    });
+    assert.deepEqual(
+      englishTotalsTable([
+        "Total excl. VAT | VAT | Total incl. VAT",
+        "Totals | 100,00 | 21,00 | 121,00",
+      ]),
+      { net: 100, vat: 21, gross: 121 },
+    );
+    // the header lines may be split by other cells' lines (Payment date: ...), within three lines
+    assert.deepEqual(
+      englishTotalsTable([
+        "Total amount | TVA | Total amount | Total amount due",
+        "Payment date: | 14/09/26",
+        "excluding tax (€) | (rate) % | VAT (€) | including all taxes (€)",
+        "Payment method: | CB - Credit card",
+        "Bank details | 485,40 € | 0,00 € | 485,40 €",
+      ]),
+      { net: 485.4, vat: 0, gross: 485.4 },
+    );
+  });
+
+  it("is no table without the header, with the words in the wrong order, or with the header more than three lines up", () => {
+    assert.equal(englishTotalsTable([TWO_LINE[2]!]), null);
+    assert.equal(
+      englishTotalsTable([
+        "including all taxes (€) | VAT (€) | excluding tax (€)",
+        "Bank details | 100,00 € | 0,00 € | 100,00 €",
+      ]),
+      null,
+    );
+    assert.equal(
+      englishTotalsTable([
+        TWO_LINE[0]!,
+        TWO_LINE[1]!,
+        "x",
+        "y",
+        "z",
+        TWO_LINE[2]!,
+      ]),
+      null,
+    );
+  });
+
+  it("an item row (0, x, x), a zero row, an inconsistent row or a VAT above the net is no totals row", () => {
+    const header = TWO_LINE.slice(0, 2);
+    for (const row of [
+      "Bank details | 0,00 € | 22,00 € | 22,00 €",
+      "Bank details | 0,00 € | 0,00 € | 0,00 €",
+      "Bank details | 100,00 € | 10,00 € | 120,00 €",
+      "Bank details | 10,00 € | 90,00 € | 100,00 €",
+    ])
+      assert.equal(englishTotalsTable([...header, row]), null, row);
+  });
+
+  it("under an item table's header only a lone item row is the total: a quantity-less row after another amount row is not (barracuda, #2474)", () => {
+    const header = "Description | Price excl. VAT | VAT | Total incl. VAT";
+    // two items: the first has a quantity (four numbers), the second three amounts: the second alone would look like a totals row
+    assert.equal(
+      englishTotalsTable([
+        header,
+        "Widget A | 2 | 100,00 | 21,00 | 121,00",
+        "Widget B | 50,00 | 10,50 | 60,50",
+      ]),
+      null,
+    );
+    // a single item: its three amounts are the document's total
+    assert.deepEqual(
+      englishTotalsTable([header, "Widget B | 50,00 | 10,50 | 60,50"]),
+      { net: 50, vat: 10.5, gross: 60.5 },
+    );
+    // the real totals row after the Amblard-shaped header is untouched by other lines without amounts
+    assert.deepEqual(englishTotalsTable(TWO_LINE), {
+      net: 100,
+      vat: 0,
+      gross: 100,
+    });
+  });
+
+  it("two different tables decide nothing, and the same table twice (two pages) is one", () => {
+    assert.equal(
+      englishTotalsTable([
+        ...TWO_LINE,
+        ...TWO_LINE.slice(0, 2),
+        "Bank details | 200,00 € | 0,00 € | 200,00 €",
+      ]),
+      null,
+    );
+    assert.deepEqual(englishTotalsTable([...TWO_LINE, ...TWO_LINE]), {
+      net: 100,
+      vat: 0,
+      gross: 100,
+    });
+  });
+});
+
+describe("readForeignInvoice: the English totals table and the exemption line", () => {
+  const FRENCH = [
+    "Kitalált Kereskedő S.A.",
+    "Total amount | TVA | Total amount | Total amount due",
+    "excluding tax (€) | (rate) % | VAT (€) | including all taxes (€)",
+    "Bank details | 485,40 € | 0,00 € | 485,40 €",
+    "VAT exemption, Article 262 ter-I of the General Tax Code.",
+  ];
+
+  it("fills net, VAT and gross from the table, and the exemption line's article number is no VAT amount", () => {
+    const { values, sources } = readForeignInvoice({
+      lines: FRENCH,
+      adapter: null,
+      pairing: pairing({ date: undefined }),
+    });
+    assert.equal(values.netAmount, "485.40");
+    assert.equal(values.vatAmount, "0.00");
+    assert.equal(values.grossAmount, "485.40");
+    assert.equal(sources.grossAmount, "TEXT");
+  });
+
+  it("the exemption line alone gives no VAT amount", () => {
+    const { values } = readForeignInvoice({
+      lines: ["VAT exemption, Article 262 ter-I of the General Tax Code."],
+      adapter: null,
+      pairing: pairing({ date: undefined }),
+    });
+    assert.equal(values.vatAmount, null);
+  });
+});
+
+/*
+  A KÜLDŐ CÍMSORA (kártya dbab22cd, harmadik kör, szállítónév-szelet). Minden név és cím KITALÁLT. MI PIROSÍT: ha a vesszős vagy " · "-os címsor első tagja nem lenne a név; ha a vevő
+  (Acropora) saját címsora a szállító neve lenne; ha egy két tagú, házszám nélküli vagy irányítószám nélküli sor nevet adna; ha egy szó ("Rechnung") nevet adna; ha két eltérő
+  címsor közül választana; ha a 15. soron túli sor számítana; ha egy szám-kezdetű tag név lenne; ha a név forrása nem a szöveg lenne, vagy elnyomná a párosítás nevét.
+*/
+describe("senderAddressLineName", () => {
+  it("reads the name from the three-part sender line, comma or middle-dot separated, with or without a legal form", () => {
+    assert.equal(
+      senderAddressLineName([
+        "Kitalált Kereskedő GmbH, Minta-Str. 9, 71000 Teststadt",
+      ]),
+      "Kitalált Kereskedő GmbH",
+    );
+    assert.equal(
+      senderAddressLineName(["kitalalt · Minta Str. 43b · 55000 Teststadt"]),
+      "kitalalt",
+    );
+    // only the first cell counts, the rest after " | " is another column
+    assert.equal(
+      senderAddressLineName([
+        "Kitalált Kereskedő GmbH, Minta-Str. 9, 71000 Teststadt | 6",
+      ]),
+      "Kitalált Kereskedő GmbH",
+    );
+    assert.equal(
+      senderAddressLineName([
+        "Kitalált Töltő GmbH, Beispielstr. 6, D-80000 Teststadt",
+      ]),
+      "Kitalált Töltő GmbH",
+    );
+  });
+
+  it("never reads the buyer's own line, a line without a house number or a postal code, or a label word", () => {
+    assert.equal(
+      senderAddressLineName([
+        "Acropora Kft., Pesti Gábor utca 35, 1106 Budapest",
+      ]),
+      null,
+    );
+    assert.equal(senderAddressLineName(["Kitalált GmbH, Teststadt"]), null);
+    assert.equal(
+      senderAddressLineName(["Kitalált GmbH, Minta-Str., 71000 Teststadt"]),
+      null,
+    );
+    assert.equal(
+      senderAddressLineName(["Kitalált GmbH, Minta-Str. 9, Teststadt"]),
+      null,
+    );
+    assert.equal(
+      senderAddressLineName(["Rechnung, bitte 3 Tage, 71000 Teststadt"]),
+      null,
+    );
+    assert.equal(
+      senderAddressLineName(["12345, Minta-Str. 9, 71000 Teststadt"]),
+      null,
+    );
+  });
+
+  it("two different sender lines decide nothing, and a line after the 15th is not read", () => {
+    assert.equal(
+      senderAddressLineName([
+        "Kitalált Kereskedő GmbH, Minta-Str. 9, 71000 Teststadt",
+        "Másik Cég GmbH, Minta-Str. 1, 80000 Mintaváros",
+      ]),
+      null,
+    );
+    assert.equal(
+      senderAddressLineName([
+        ...Array.from({ length: 15 }, () => "0"),
+        "Kitalált Kereskedő GmbH, Minta-Str. 9, 71000 Teststadt",
+      ]),
+      null,
+    );
+    // the same line twice (a two-page invoice) is one name
+    assert.equal(
+      senderAddressLineName([
+        "Kitalált Kereskedő GmbH, Minta-Str. 9, 71000 Teststadt",
+        "Kitalált Kereskedő GmbH, Minta-Str. 9, 71000 Teststadt",
+      ]),
+      "Kitalált Kereskedő GmbH",
+    );
+  });
+
+  it("in the reading it fills only an empty name, from the text, and the pairing's name still wins", () => {
+    const lines = [
+      "kitalalt · Minta Str. 43b · 55000 Teststadt",
+      "Rechnung - Nr. 40199001",
+      "Gesamt netto: | 100,00 €",
+    ];
+    const empty = readForeignInvoice({
+      lines,
+      adapter: null,
+      pairing: pairing({ supplierName: "" }),
+    });
+    assert.equal(empty.values.supplierName, "kitalalt");
+    assert.equal(empty.sources.supplierName, "TEXT");
+    const paired = readForeignInvoice({
+      lines,
+      adapter: null,
+      pairing: pairing({ supplierName: "Párosítás szerinti Kft." }),
+    });
+    assert.equal(paired.values.supplierName, "Párosítás szerinti Kft.");
+    assert.equal(paired.sources.supplierName, "PAIRING");
   });
 });
