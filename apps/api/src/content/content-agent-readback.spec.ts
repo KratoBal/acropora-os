@@ -76,6 +76,7 @@ function serviceWith(
       return listed;
     },
     detail: async () => item,
+    claimsOf: async () => [],
     userNames: async (ids: readonly string[]) => {
       asked.push({ name: "userNames", args: [...ids].sort() });
       return new Map(
