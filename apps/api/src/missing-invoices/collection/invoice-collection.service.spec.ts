@@ -1204,6 +1204,12 @@ describe("unmatchedRetryDue", () => {
       false,
     );
     assert.equal(unmatchedRetryDue(last, 0, now, "2026-09-30.1"), true);
+    // az a változat, ami a balazs@ szabály ELŐTT élt: az első futás utána újraolvassa az UNMATCHED leveleket (a Hetzner 084001270673-ot is)
+    assert.equal(unmatchedRetryDue(last, 0, now, "2026-10-06.1"), true);
+    assert.equal(
+      unmatchedRetryDue(last, 0, now, INVOICE_COLLECTION_RULES_VERSION),
+      false,
+    );
     assert.equal(unmatchedRetryDue(last, 0, now, null), true);
   });
 });
@@ -1211,8 +1217,9 @@ describe("unmatchedRetryDue", () => {
 /**
  * NEM PÁROSODOTT, DE TÁROLJUK (acrobot 35522/35529; Balázs 12:53 UTC: a PDF a
  * könyvelői csomagba kell). MI PIROSÍT: ha egy számlának ítélt, de semmihez
- * nem kötött PDF eldobódik; ha a balazs@ postafiók (Balázs saját levelezése)
- * ilyen fájlja mégis tárolódik; ha egy beszkennelt PDF a fájlneve ellenére
+ * nem kötött PDF eldobódik; ha a balazs@ postafiók ilyen fájlja (Balázs döntése,
+ * 2026-11-12: az (a) út) NEM tárolódik, vagy ha egy balazs@ szám-szó nélküli szöveges PDF
+ * mégis tárolódik; ha egy beszkennelt PDF a fájlneve ellenére
  * NOT_INVOICE marad, vagy ha egy emlékeztető, szerződés a nevével bekerül; ha
  * az újraolvasás második dokumentumot hoz létre az előléptetés helyett; ha egy
  * közben meghozott emberi döntést az újraolvasás felülír; ha a száraz futás ír.
@@ -1274,15 +1281,18 @@ describe("InvoiceCollectionService keeps what nothing ties (UNASSIGNED)", () => 
     az info@ tárolt UNASSIGNED sorához sem); a megerősítés miatt elejtett szám más okot kap, mint az ismeretlen szám;
     a szám nélküli olvasat nem NO_NUMBER_READ; a nem PDF, a nem számla és az ismétlődés ok nélkül marad.
   */
-  it("records WHY a balazs@ letter stayed unmatched (the number was read but is not a known one)", async () => {
-    const { collection, reasons } = setup({
+  it("records WHY a balazs@ letter stayed untied (the number was read but is not a known one): on its stored UNASSIGNED document", async () => {
+    const { collection, stored } = setup({
       environment: env(["GMAIL_BALAZS"]),
       messages: {
         "m-1": [{ fileName: "RE67456.pdf", buffer: await untiedInvoice() }],
       },
     });
     await collection.run("MANUAL");
-    assert.deepEqual(reasons, ["m-1/RE67456.pdf:UNMATCHED:NUMBER_NOT_KNOWN"]);
+    assert.deepEqual(
+      untied(stored).map((d) => [d.source, d.reason]),
+      [["BALAZS_MAIL", "NUMBER_NOT_KNOWN"]],
+    );
   });
 
   it("puts the same reason on the stored UNASSIGNED document of an info@ letter", async () => {
@@ -1300,7 +1310,7 @@ describe("InvoiceCollectionService keeps what nothing ties (UNASSIGNED)", () => 
   });
 
   it("a PDF with invoice words and no readable number is NO_NUMBER_READ", async () => {
-    const { collection, reasons } = setup({
+    const { collection, stored } = setup({
       environment: env(["GMAIL_BALAZS"]),
       messages: {
         "m-1": [
@@ -1316,7 +1326,10 @@ describe("InvoiceCollectionService keeps what nothing ties (UNASSIGNED)", () => 
       },
     });
     await collection.run("MANUAL");
-    assert.deepEqual(reasons, ["m-1/szamla.pdf:UNMATCHED:NO_NUMBER_READ"]);
+    assert.deepEqual(
+      untied(stored).map((d) => d.reason),
+      ["NO_NUMBER_READ"],
+    );
   });
 
   it("gives the other verdicts their own reasons: not a PDF, no invoice words, the same file again", async () => {
@@ -1349,7 +1362,7 @@ describe("InvoiceCollectionService keeps what nothing ties (UNASSIGNED)", () => 
     assert.deepEqual(again.reasons, ["m-3/RE67456.pdf:DUPLICATE:SAME_CONTENT"]);
   });
 
-  it("does NOT keep an untied file from the balazs@ mailbox (Balázs's own correspondence)", async () => {
+  it("keeps an untied INVOICE from the balazs@ mailbox too, like the other mailboxes (Balázs's decision, 2026-11-12)", async () => {
     const { collection, stored, recorded } = setup({
       environment: env(["GMAIL_BALAZS"]),
       messages: {
@@ -1357,9 +1370,32 @@ describe("InvoiceCollectionService keeps what nothing ties (UNASSIGNED)", () => 
       },
     });
     const counts = await collection.run("MANUAL");
-    assert.deepEqual(stored, []);
-    assert.deepEqual(recorded, ["m-1/RE67456.pdf:UNMATCHED"]);
+    assert.deepEqual(
+      stored.map((d) => [d.source, d.fileName, d.unassigned]),
+      [["BALAZS_MAIL", "RE67456.pdf", true]],
+    );
+    assert.deepEqual(recorded, []);
     assert.equal(counts.unmatchedCount, 1);
+  });
+
+  it("the limit of the balazs@ decision: a text PDF with no invoice word is NOT stored, and an unreadable file is not either", async () => {
+    const { collection, stored, recorded } = setup({
+      environment: env(["GMAIL_BALAZS"]),
+      messages: {
+        "m-1": [
+          { fileName: "level.pdf", buffer: await pdf(["Hello", "see you"]) },
+        ],
+        "m-2": [
+          { fileName: "kep.pdf", buffer: Buffer.from("this is not a pdf") },
+        ],
+      },
+    });
+    await collection.run("MANUAL");
+    assert.deepEqual(stored, []);
+    assert.deepEqual(recorded.sort(), [
+      "m-1/level.pdf:NOT_INVOICE",
+      "m-2/kep.pdf:UNREADABLE",
+    ]);
   });
 
   it("keeps an untied invoice from the Drive folder", async () => {
