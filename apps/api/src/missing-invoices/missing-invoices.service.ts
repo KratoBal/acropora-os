@@ -60,6 +60,7 @@ import {
   GLS_TAX_BASE,
   MissingInvoicesRepository,
   normalizeAccount,
+  queryExclusion,
 } from "./missing-invoices.repository.js";
 import { originalAmountOf } from "./otp-statement.parser.js";
 import { payeeFromText } from "./payee-check.js";
@@ -160,6 +161,12 @@ export interface DocumentPairing {
    */
   document: CandidateDocument;
 }
+
+/** A betöltés ablaka: 12 hónap az első kivonat előtt, a következő hónap 15-éig. Egy helyen: a számítás és a jelölt-vizsgálat is ezt hívja. */
+const candidateWindow = (first: string, last: string) => ({
+  from: `${shiftMonth(first, -12)}-01`,
+  to: `${shiftMonth(last, 1)}-15`,
+});
 
 interface Computed {
   items: (MissingInvoiceItem & { month: string; accountId: string })[];
@@ -386,6 +393,12 @@ export class MissingInvoicesService {
               : kind.kind === "billingRow" && !kind.sourceDocumentId
                 ? "BILLING_ROW_WITHOUT_SOURCE_DOCUMENT"
                 : "DOCUMENT_NOT_LOADED",
+          // a pontos ok: melyik betöltő-feltétel (vagy a lekérdezés szűrője) zárta ki; csak tárolt dokumentumnál van értelme
+          loaderReason:
+            kind.kind === "unknown" ||
+            (kind.kind === "billingRow" && !kind.sourceDocumentId)
+              ? null
+              : await this.loaderReasonOf(lookedUp, computed.months),
           document: null,
           checks: null,
         };
@@ -416,6 +429,7 @@ export class MissingInvoicesService {
       viaAlias: document.id !== lookedUp,
       viaBillingRow,
       reason: null,
+      loaderReason: null,
       document: {
         documentId: document.id,
         number: shownNumber(document),
@@ -432,6 +446,18 @@ export class MissingInvoicesService {
         // jelzés pontosan ezek közös elemén áll, és a memóriában számolódnak (nincs róluk DB-oszlop)
         identities: [...(document.identities ?? [])].sort(),
         aliasIds: [...(document.aliasIds ?? [])].sort(),
+        // az összevont jelölt tagjai tartalom-lenyomattal (tartalom és fájlnév nélkül): melyik tag hozta a közös lenyomatot
+        members: (
+          await this.repository.documentHashes(
+            [
+              ...new Set([
+                document.id,
+                ...(document.aliasIds ?? []),
+                ...(document.originalId ? [document.originalId] : []),
+              ]),
+            ].sort(),
+          )
+        ).sort((a, b) => a.id.localeCompare(b.id)),
       },
       checks: {
         inWindow: inWindow(debit.bookingDate, document.date),
@@ -1321,6 +1347,29 @@ export class MissingInvoicesService {
       .map((account) => account.name);
   }
 
+  /**
+   * MIÉRT NINCS BETÖLTVE EGY TÁROLT DOKUMENTUM: a betöltő kizárási kódja (`loaderExclusion`, „Nem könyvelendő” jelölés), vagy
+   * a lekérdezés szűrője (emberi döntésre vár / nem jelölt fajta). A betöltést itt újra lefuttatjuk, ugyanazzal a kóddal,
+   * csak a jelölt-vizsgálatnál (ritka, csak olvas); `null`, ha egyik sem magyarázza (a dokumentum átment a szűrőkön).
+   */
+  private async loaderReasonOf(
+    id: string,
+    months: readonly string[],
+  ): Promise<{ code: string; detail: string | null } | null> {
+    if (months.length === 0) return null;
+    const window = candidateWindow(months[0]!, months[months.length - 1]!);
+    const { excluded } = await this.repository.candidatesWithExclusions(
+      window.from,
+      window.to,
+    );
+    const excludedHere = excluded.get(id);
+    if (excludedHere)
+      return { code: excludedHere.code, detail: excludedHere.detail };
+    const fields = await this.repository.queryFields(id);
+    const byQuery = fields ? queryExclusion(fields) : null;
+    return byQuery ? { code: byQuery.code, detail: byQuery.detail } : null;
+  }
+
   private async compute(): Promise<Computed> {
     const [accountRows, debits, credits, coverage, manual, ownRows] =
       await Promise.all([
@@ -1367,10 +1416,8 @@ export class MissingInvoicesService {
     // kelt, szeptember 25-én fizettük, a közlemény megnevezi, és a 4 hónapos
     // betöltés kizárta. Decembertől minden dokumentumon mérve a bővítés
     // pontosan ezt az egy párt adja hozzá, hamisat egyet sem.
-    const loaded = await this.repository.candidates(
-      `${shiftMonth(first, -12)}-01`,
-      `${shiftMonth(last, 1)}-15`,
-    );
+    const window = candidateWindow(first, last);
+    const loaded = await this.repository.candidates(window.from, window.to);
     // minden forrás, aminek a vevője még nincs kiszámolva (payeeCheck NULL):
     // a postafiók lustán, és a cégnév-szabály előtti NOT_COMPANY sorok is,
     // amiket a 20261001000800 migráció visszaállított (acrobot 25640)
