@@ -1126,6 +1126,36 @@ describe("labelledTotal", () => {
       );
   });
 
+  it("reads a bare Total at the start of the summary row, the last value being the gross (Hetzner, card f7ece26b)", () => {
+    // the measured shape of the Hetzner invoice, the digits made up: the header row names the columns, and the
+    // summary row (printed twice on the invoice) carries net, VAT and gross
+    const summary = "Total | € 46.64 | € 0.00 | € 46.64";
+    assert.deepEqual(
+      labelledTotal([
+        "Service | Period | Total (excl. VAT) | Tax | Total",
+        "Project Acropora OS | 2026-08 | € 46.64 | € 0.00 | € 46.64",
+        summary,
+        summary,
+      ]),
+      { gross: "46.64", currency: "EUR" },
+    );
+    assert.deepEqual(labelledTotal(["Total: 12 700 Ft"]), {
+      gross: "12700",
+      currency: "HUF",
+    });
+  });
+
+  it("does not take a Total that is not the grand total, or a Total inside the line", () => {
+    for (const line of [
+      "Total (excl. VAT): € 100.00",
+      "Total VAT: € 27.00",
+      "Total net | € 100.00",
+      "Subtotal | € 100.00",
+      "Line total | € 100.00",
+    ])
+      assert.equal(labelledTotal([line]), null, line);
+  });
+
   it("does not decide between two different labelled values", () => {
     assert.equal(
       labelledTotal(["Végösszeg: 37 500 Ft", "Fizetendő: 7 972 Ft"]),

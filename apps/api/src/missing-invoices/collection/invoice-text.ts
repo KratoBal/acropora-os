@@ -1075,8 +1075,14 @@ export function largestMoney(
   esetén nem döntünk, és pénznem nélkül sem (a HUF alapérték devizás számlán
   hamis bruttót adna).
 */
+/*
+  A CSUPASZ „TOTAL” A SOR ELEJÉN (Hetzner, kártya f7ece26b; mérve a 2026-08-05 és 2026-09-05 számlán): az összesítő sor
+  „Total | € nettó | € ÁFA | € bruttó”, és a sor utolsó értéke a bruttó. Csak a sor elején, és csak ha utána elválasztó,
+  pénznem, szám vagy semmi áll: a „Total (excl. VAT)”, a „Total VAT” és a „Total net” így nem címke, mert ott az érték
+  nem a végösszeg.
+*/
 const TOTAL_LABEL =
-  /(v[ée]g[öo]sszeg|fizetend[őo]|brutt[óo]\s+[öo]sszesen|[öo]sszesen\s+fizetend[őo]|sz[áa]mla\s+[öo]sszege|total\s+(amount|due|to\s+pay)|amount\s+due|grand\s+total|invoice\s+total|gesamtbetrag|rechnungsbetrag|endbetrag|zu\s+zahlen|totale\s+(fattura|da\s+pagare)|montant\s+total)/iu;
+  /(^\s*total(?=\s*(?:[|:€$£\d]|(?:HUF|EUR|USD|GBP|Ft)(?!\p{L})|$))|v[ée]g[öo]sszeg|fizetend[őo]|brutt[óo]\s+[öo]sszesen|[öo]sszesen\s+fizetend[őo]|sz[áa]mla\s+[öo]sszege|total\s+(amount|due|to\s+pay)|amount\s+due|grand\s+total|invoice\s+total|gesamtbetrag|rechnungsbetrag|endbetrag|zu\s+zahlen|totale\s+(fattura|da\s+pagare)|montant\s+total)/iu;
 const SIGNED_AMOUNT =
   /(?<![\d.,])([-\u2212]\s?)?(\d{1,3}(?:[ \u00a0.,]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)(?!\d)/gu;
 // a kód nem lehet egy szó része (az „EUROPA” nem euró): előtte, utána nem állhat betű
