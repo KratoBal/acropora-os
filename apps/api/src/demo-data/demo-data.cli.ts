@@ -29,6 +29,12 @@ import { DEMO_PREFIX, demoPlan, type DemoPlan } from "./demo-data.plan.js";
  *
  * IDEMPOTENT: a row whose business key exists is left alone, so a second `--apply` writes
  * nothing and says so. `--remove` deletes the `DEMO-` rows and nothing else.
+ *
+ * ONE LIMIT OF `--remove` (barracuda, #2481 review): the demo product's variant is referenced
+ * with Restrict by quote items, quote BOM lines and POS sale lines. The demo quotes and sales
+ * are deleted first, so only a row WITHOUT the prefix can stop it: if someone put the demo
+ * product on a real quote or sale on the stage, the whole `--remove` transaction fails and
+ * nothing is deleted. Take the product off that quote or sale, then run it again.
  */
 
 export interface DemoCounts {
