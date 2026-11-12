@@ -428,6 +428,10 @@ export class MissingInvoicesService {
         currency: document.currency,
         supplierName: document.supplierName,
         kind: document.kind,
+        // a párosítás azonosságai (`sha:` fájl-lenyomat, `inv:` számlaszám-kulcs) és az összevont társak: a kettős fizetés
+        // jelzés pontosan ezek közös elemén áll, és a memóriában számolódnak (nincs róluk DB-oszlop)
+        identities: [...(document.identities ?? [])].sort(),
+        aliasIds: [...(document.aliasIds ?? [])].sort(),
       },
       checks: {
         inWindow: inWindow(debit.bookingDate, document.date),
