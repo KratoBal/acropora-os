@@ -1207,16 +1207,59 @@ describe("pairingOfRow: the invoice identity as the second key", () => {
       pairingOfRow(row({ grossAmount: undefined }), byIdentity),
       undefined,
     );
-    // a document that gives no gross cannot prove the amount: no match
-    const noGross = pairing({
-      document: candidate({
-        id: "upload",
-        identities: [identity],
-        gross: null,
-      }),
+    // a document that gives no gross cannot prove the amount by itself: the PAID debit's amount is compared instead
+    // (acrobot 49548, the uploaded niceshops document had a null gross), so a debit of ANOTHER amount is no match
+    const noGross = (debits: DocumentPairing["debits"]) =>
+      pairing({
+        document: candidate({
+          id: "upload",
+          identities: [identity],
+          gross: null,
+        }),
+        debits,
+      });
+    const debit = (amount: string, over: Record<string, unknown> = {}) => ({
+      bookingDate: "2026-08-05",
+      amount,
+      currency: "HUF",
+      ...over,
     });
     assert.equal(
-      pairingOfRow(row(), new Map([[identity, noGross]])),
+      pairingOfRow(row(), new Map([[identity, noGross([debit("12700")])]])),
+      undefined,
+    );
+    const paidByDebit = noGross([debit("338018")]);
+    assert.equal(
+      pairingOfRow(row(), new Map([[identity, paidByDebit]])),
+      paidByDebit,
+    );
+    // the same number and tax number with ANOTHER gross stays unpaid even through the debit
+    assert.equal(
+      pairingOfRow(
+        row({ grossAmount: D(5000) }),
+        new Map([[identity, paidByDebit]]),
+      ),
+      undefined,
+    );
+    // two debits add up; a debit converted from the row's currency counts with the original amount the bank reported
+    const split = noGross([debit("300000"), debit("38018")]);
+    assert.equal(pairingOfRow(row(), new Map([[identity, split]])), split);
+    const eur = noGross([
+      debit("130000", { original: { amount: "338.02", currency: "EUR" } }),
+    ]);
+    assert.equal(
+      pairingOfRow(
+        row({ grossAmount: D("338.02"), currency: "EUR" }),
+        new Map([[identity, eur]]),
+      ),
+      eur,
+    );
+    // a debit in another currency without an original amount in the row's currency cannot be compared
+    assert.equal(
+      pairingOfRow(
+        row({ grossAmount: D("338.02"), currency: "EUR" }),
+        new Map([[identity, noGross([debit("130000")])]]),
+      ),
       undefined,
     );
   });

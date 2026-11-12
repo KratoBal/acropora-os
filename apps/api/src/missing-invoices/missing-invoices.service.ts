@@ -76,9 +76,10 @@ import {
   pairingNumberKeys,
 } from "../billing/incoming-billing-documents.js";
 import {
+  type DebitAmount,
+  identityCandidateMatch,
   identityTaxNumber,
   invoiceIdentity,
-  sameGross,
 } from "../billing/invoice-identity.js";
 import {
   packageDataNote,
@@ -1294,7 +1295,13 @@ export class MissingInvoicesService {
     */
     const itemOfIdentity = new Map<
       string,
-      { itemId: string; gross: Prisma.Decimal | null; currency: string }[]
+      {
+        itemId: string;
+        gross: Prisma.Decimal | null;
+        currency: string;
+        /** a terhelés összege: a dokumentum bruttójának hiányában ezt vetjük össze a sorral (`debitsCoverGross`) */
+        debit: DebitAmount;
+      }[]
     >();
     /*
       A KÉTSZER FIZETETT TÉTEL IS PÁROSÍTOTT (task os-hianyzo-szamlak-unpaid, 2026-11-11, a Vízművek
@@ -1323,6 +1330,11 @@ export class MissingInvoicesService {
                   itemId: item.id,
                   gross: document.gross,
                   currency: document.currency,
+                  debit: {
+                    amount: item.amount,
+                    currency: item.currency,
+                    original: item.original,
+                  },
                 },
               ]);
         }
@@ -1345,16 +1357,18 @@ export class MissingInvoicesService {
           ? itemOfDocument.get(row.sourceDocumentId)
           : undefined) ??
         numberKeys.map((key) => itemOfDocument.get(key)).find(Boolean) ??
-        // az azonosság az összeget nem nézi: csak egyező bruttónál és devizánál fizetett (`sameGross`)
-        itemOfIdentity
-          .get(
+        // az azonosság az összeget nem nézi: csak egyező bruttónál és devizánál fizetett (`sameGross`); ha a dokumentum
+        // bruttója ismeretlen, a párosított terhelések összege (`debitsCoverGross`)
+        identityCandidateMatch(
+          itemOfIdentity.get(
             invoiceIdentity(
               row.documentNumber,
               identityTaxNumber(row.supplierTaxNumber, row.supplierEuTaxNumber),
               row.supplierName,
             ),
-          )
-          ?.find((candidate) => sameGross(row, candidate))?.itemId
+          ),
+          row,
+        )?.itemId
       );
     };
 

@@ -1185,6 +1185,53 @@ describe("the accountant package by invoice date", () => {
     assert.deepEqual(await unpaidOf([row({ grossAmount: D("338018.6") })]), []);
   });
 
+  /*
+    A DOKUMENTUM BRUTTÓJA ISMERETLEN (acrobot 49548, élesen mérve a niceshops dokumentumon): a feltöltött dokumentum bruttója
+    `null`, a neve üres, csak az azonossága (`inv:`) van meg. Az összegvédelem ilyenkor a PÁROSÍTOTT TERHELÉS összegét veti össze a
+    sor bruttójával. MI PIROSÍT: ha a niceshops-pár a ki nem fizetett listán marad; ha egy MÁS bruttójú sor a terhelés alapján
+    fizetettnek látszik.
+  */
+  it("a paired document with an UNKNOWN gross: the row is paid when the debit's amount matches the row's gross, and not otherwise", async () => {
+    const NUMBER = "R49010000026240667";
+    const upload = document({
+      id: "upload",
+      source: "UPLOAD",
+      number: NUMBER,
+      date: "2026-08-03",
+      gross: null,
+      supplierName: "",
+      identities: ["inv:r49010000026240667|63964918"],
+    });
+    const paidDebit = debit("2026-08-05", 338018, "NICESHOPS GMBH", {
+      narrative: `${NUMBER} niceshops`,
+    });
+    const row = (over: Partial<PackageBillingRow> = {}) =>
+      billingRow({
+        id: "ns",
+        documentNumber: NUMBER,
+        supplierName: "niceshops GmbH",
+        supplierTaxNumber: null,
+        supplierEuTaxNumber: "ATU63964918",
+        sourceDocumentId: "feed-ns",
+        grossAmount: D(338018),
+        issueDate: new Date("2026-08-03T00:00:00Z"),
+        ...over,
+      });
+    const unpaidOf = async (billing: PackageBillingRow[]) =>
+      (
+        await service({
+          debits: [paidDebit],
+          documents: [upload],
+          billing,
+          files: { "feed-ns": await pdfOfPages(1) },
+        }).missing.packageCheck("2026-08")
+      ).unpaid.map((invoice) => invoice.number);
+    assert.deepEqual(await unpaidOf([row()]), []);
+    assert.deepEqual(await unpaidOf([row({ grossAmount: D(5000) })]), [NUMBER]);
+    assert.deepEqual(await unpaidOf([row({ grossAmount: D("338018.6") })]), []);
+    assert.deepEqual(await unpaidOf([row({ currency: "EUR" })]), [NUMBER]);
+  });
+
   it("an unreadable PDF is the one thing the page cannot see: the page says it is in the package, the cover says it is unreadable", async () => {
     const broken = new TextEncoder().encode("%PDF-1.4 this is not a pdf");
     const input = {

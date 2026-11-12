@@ -48,6 +48,79 @@ export function sameGross(
   );
 }
 
+/** Egy párosított terhelés összege, ahogy a párosítás hordozza (az átváltott terhelésnél a bank közölte eredeti összeggel). */
+export interface DebitAmount {
+  amount: string;
+  currency: string;
+  original?: { amount: string; currency: string } | null;
+}
+
+/**
+ * HA A DOKUMENTUM BRUTTÓJA ISMERETLEN, A MÉRT PÉNZMOZGÁST NÉZZÜK (acrobot 49548, niceshops: a feltöltött dokumentum bruttója
+ * `null`, mert az olvasó a javítás előtt futott): a párosított terhelések összege (a sor devizájában, az átváltott terhelésnél
+ * az eredeti összeggel) egyezzen a sor bruttójával, a `sameGross` tűrésén belül. Terhelés nélkül, vagy ha egy terhelés összege a
+ * sor devizájában nem olvasható ki, nincs egyezés. Az összegvédelem ezzel nem lazul: a hiányzó adat helyett a terhelést veti össze.
+ */
+export function debitsCoverGross(
+  row: { grossAmount: Prisma.Decimal; currency: string },
+  debits: readonly DebitAmount[],
+): boolean {
+  if (debits.length === 0) return false;
+  const currency = row.currency.toUpperCase();
+  let total = 0;
+  for (const debit of debits) {
+    if (debit.currency.toUpperCase() === currency)
+      total += Math.abs(Number(debit.amount));
+    else if (debit.original?.currency.toUpperCase() === currency)
+      total += Math.abs(Number(debit.original.amount));
+    else return false;
+  }
+  const tolerance = currency === "HUF" ? 1 : 0.05;
+  return Math.abs(Math.abs(Number(row.grossAmount)) - total) <= tolerance;
+}
+
+/** Az azonosság szerinti „fizetett” összegvédelme: a dokumentum bruttója, ennek hiányában a párosított terhelések összege. */
+export function identityAmountMatches(
+  row: { grossAmount: Prisma.Decimal; currency: string },
+  document: { gross: Prisma.Decimal | null; currency: string },
+  debits: readonly DebitAmount[],
+): boolean {
+  return document.gross !== null
+    ? sameGross(row, document)
+    : debitsCoverGross(row, debits);
+}
+
+/**
+ * A csomag azonosság szerinti jelöltjei közül az, amelyik a sort fizetetté teszi: előbb az, amelynek a dokumentum bruttója
+ * egyezik (`sameGross`); ha a dokumentum bruttója ismeretlen, az ilyen jelöltek (terhelésenként egyszer) terheléseinek összege
+ * (`debitsCoverGross`).
+ */
+export function identityCandidateMatch<
+  T extends {
+    itemId: string;
+    gross: Prisma.Decimal | null;
+    currency: string;
+    debit: DebitAmount;
+  },
+>(
+  candidates: readonly T[] | undefined,
+  row: { grossAmount: Prisma.Decimal; currency: string },
+): T | undefined {
+  if (!candidates) return undefined;
+  const known = candidates.find(
+    (candidate) => candidate.gross !== null && sameGross(row, candidate),
+  );
+  if (known) return known;
+  const unknown = candidates.filter((candidate) => candidate.gross === null);
+  const byItem = [...new Map(unknown.map((c) => [c.itemId, c])).values()];
+  return debitsCoverGross(
+    row,
+    byItem.map((candidate) => candidate.debit),
+  )
+    ? byItem[0]
+    : undefined;
+}
+
 /**
  * A BEJÖVŐ SOR ADÓSZÁMA AZ AZONOSSÁGHOZ (acrobot 49527, niceshops): a külföldi szállító adószáma a bejövő rekordban a
  * `supplierEuTaxNumber` mezőben áll, a `supplierTaxNumber` üres (ATU63964918), a dokumentum oldali azonosság viszont
