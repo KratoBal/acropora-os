@@ -13,6 +13,7 @@ import { configureApp } from "../app.configuration.js";
 import { integrationDatabaseGate } from "../common/integration-database.js";
 import { nincsMaradek } from "../common/takaritas-leltar.js";
 import { hashPassword } from "../users/password.util.js";
+import { ContentService } from "./content.service.js";
 
 /**
  * CONTENT AND THE MANUFACTURER CLAIMS IT STANDS ON (T5.3, points 3-4), through the OS API.
@@ -280,6 +281,124 @@ describe(
           [scheduled, "SCHEDULED"],
         ].sort(),
       );
+    });
+
+    /**
+     * THE ROW LOCK, WITH THE ORDER FORCED (barracuda, #2445). The probe runs inside the approval's
+     * transaction, after it read the claims and before it moves; there it starts a concurrent
+     * write and gives it time to reach the lock. Without the lock the write goes through in that
+     * window and the item ends approved on a claim that may not go out.
+     */
+    async function claim(text: string, checked: boolean): Promise<string> {
+      const created = await call(
+        "a",
+        `/products/${product}/manufacturer-claims`,
+        {
+          method: "POST",
+          body: {
+            claimType: "DOSING",
+            claimText: text,
+            sourceKind: "LABEL",
+            sourceRef: "https://gyarto.example.invalid/cimke",
+            sourceReadOn: "2026-11-12",
+          },
+        },
+      );
+      assert.equal(created.status, 201, JSON.stringify(created.body));
+      if (checked) {
+        const ok = await call(
+          "b",
+          `/manufacturer-claims/${created.body.id}/status`,
+          {
+            method: "POST",
+            body: { expectedVersion: 1, status: "MATCHES_MANUFACTURER" },
+          },
+        );
+        assert.equal(ok.status, 201, JSON.stringify(ok.body));
+      }
+      return created.body.id;
+    }
+
+    async function itemOn(claimIds: string[], name: string): Promise<string> {
+      const id = (
+        await prisma.contentItem.create({
+          data: {
+            title: `${PREFIX}${name} ${suffix}`,
+            channel: "FACEBOOK_POST",
+            state: "AWAITING_APPROVAL",
+          },
+        })
+      ).id;
+      for (const claimId of claimIds) {
+        const linked = await call("a", `/content/${id}/claims`, {
+          method: "POST",
+          body: { claimId },
+        });
+        assert.equal(linked.status, 201, JSON.stringify(linked.body));
+      }
+      return id;
+    }
+
+    async function approveWhile(
+      item: string,
+      during: () => Promise<{ status: number; body: any }>,
+    ) {
+      const service = app.get(ContentService);
+      let concurrent: Promise<{ status: number; body: any }> | null = null;
+      service.approvalClaimProbe = async () => {
+        concurrent = during();
+        await new Promise((resolve) => setTimeout(resolve, 400));
+      };
+      try {
+        const approved = await call("o", `/content/${item}/approve-move`, {
+          method: "POST",
+          body: { from: "AWAITING_APPROVAL", to: "READY_TO_SEND" },
+        });
+        assert.ok(concurrent, "the probe ran");
+        return { approved, concurrent: await concurrent! };
+      } finally {
+        service.approvalClaimProbe = async () => {};
+      }
+    }
+
+    it("verseny a): kötés a jóváhagyás közben megvárja, és utána elutasítva", async () => {
+      const checked = await claim("Napi 5 ml 100 literenként.", true);
+      const unchecked = await claim("Napi 10 ml 100 literenként.", false);
+      const item = await itemOn([checked], "verseny-a");
+      const { approved, concurrent } = await approveWhile(item, () =>
+        call("a", `/content/${item}/claims`, {
+          method: "POST",
+          body: { claimId: unchecked },
+        }),
+      );
+      assert.equal(approved.status, 201, JSON.stringify(approved.body));
+      assert.equal(concurrent.status, 409, JSON.stringify(concurrent.body));
+      const links = await prisma.contentItemClaim.findMany({
+        where: { contentId: item },
+        select: { claimId: true },
+      });
+      assert.deepEqual(
+        links.map((link) => link.claimId),
+        [checked],
+      );
+    });
+
+    it("verseny b): vita a jóváhagyás közben megvárja, és utána visszaléptet", async () => {
+      const checked = await claim("Kezdőknek is ajánlott adagolás.", true);
+      const item = await itemOn([checked], "verseny-b");
+      const { approved, concurrent } = await approveWhile(item, () =>
+        call("o", `/manufacturer-claims/${checked}/status`, {
+          method: "POST",
+          body: { expectedVersion: 1, status: "DISPUTED" },
+        }),
+      );
+      assert.equal(approved.status, 201, JSON.stringify(approved.body));
+      assert.equal(concurrent.status, 201, JSON.stringify(concurrent.body));
+      const after = await prisma.contentItem.findUniqueOrThrow({
+        where: { id: item },
+        select: { state: true },
+      });
+      assert.equal(after.state, "AWAITING_APPROVAL");
     });
   },
 );

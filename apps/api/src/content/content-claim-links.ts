@@ -3,12 +3,13 @@ import {
   ConflictException,
   NotFoundException,
 } from "@nestjs/common";
-import { prisma } from "@acropora/database";
+import { prisma, type Prisma } from "@acropora/database";
 
 import {
   claimViewsWhere,
   type ManufacturerClaimView,
 } from "../products/manufacturer-claims/manufacturer-claims.service.js";
+import { lockContentItems } from "./content-row-lock.js";
 import type { ContentState } from "./content-state.js";
 
 /**
@@ -32,8 +33,9 @@ export const CLAIM_LINKABLE_STATES: readonly ContentState[] = [
 /** The claims an item stands on, archived ones included (they block, and the approver must see why). */
 export function claimsOfContent(
   contentId: string,
+  db?: Prisma.TransactionClient,
 ): Promise<ManufacturerClaimView[]> {
-  return claimViewsWhere({ contentLinks: { some: { contentId } } });
+  return claimViewsWhere({ contentLinks: { some: { contentId } } }, db);
 }
 
 /**
@@ -77,15 +79,14 @@ export async function linkClaim(input: {
   });
   if (!claim || claim.archivedAt)
     throw new BadRequestException("Az élő gyártói állítás nem található.");
-  // The state is checked again in the write: an item approved in between is not linked.
+  // THE STATE IS READ UNDER THE ROW LOCK (`content-row-lock.ts`): an approval running right now
+  // holds the item, this waits, then sees READY_TO_SEND and refuses; and an approval that comes
+  // after waits for this link and then reads it.
   await prisma.$transaction(async (tx) => {
-    const still = await tx.contentItem.count({
-      where: {
-        id: input.contentId,
-        state: { in: [...CLAIM_LINKABLE_STATES] },
-      },
-    });
-    if (!still)
+    const state = (await lockContentItems(tx, [input.contentId])).get(
+      input.contentId,
+    );
+    if (!state || !CLAIM_LINKABLE_STATES.includes(state))
       throw new ConflictException(
         "A tartalom közben jóváhagyásra került. Töltsd újra.",
       );
@@ -112,17 +113,22 @@ export async function unlinkClaim(input: {
   claimId: string;
 }): Promise<ManufacturerClaimView[]> {
   await linkableItem(input.contentId);
-  const { count } = await prisma.contentItemClaim.deleteMany({
-    where: {
-      contentId: input.contentId,
-      claimId: input.claimId,
-      content: { state: { in: [...CLAIM_LINKABLE_STATES] } },
-    },
-  });
-  if (!count)
-    throw new NotFoundException(
-      "Ez az állítás nincs a tételhez kötve (vagy a tétel közben jóváhagyásra került).",
+  // Under the same row lock: an item approved in between keeps the claim it was approved on, so a
+  // later dispute of that claim still finds it and steps it back.
+  await prisma.$transaction(async (tx) => {
+    const state = (await lockContentItems(tx, [input.contentId])).get(
+      input.contentId,
     );
+    if (!state || !CLAIM_LINKABLE_STATES.includes(state))
+      throw new ConflictException(
+        "A tartalom közben jóváhagyásra került. Töltsd újra.",
+      );
+    const { count } = await tx.contentItemClaim.deleteMany({
+      where: { contentId: input.contentId, claimId: input.claimId },
+    });
+    if (!count)
+      throw new NotFoundException("Ez az állítás nincs a tételhez kötve.");
+  });
   return claimsOfContent(input.contentId);
 }
 

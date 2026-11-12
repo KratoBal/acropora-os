@@ -25,7 +25,11 @@ function serviceWith(
 ) {
   const calls: unknown[] = [];
   const repository = {
-    moveState: (async (input: unknown) => {
+    // The gate runs where the real repository runs it: before the write (here: before the call is recorded).
+    moveState: (async (
+      input: Parameters<ContentRepository["moveState"]>[0],
+    ) => {
+      await input.gate?.(undefined as never);
       calls.push(input);
       return true;
     }) as ContentRepository["moveState"],

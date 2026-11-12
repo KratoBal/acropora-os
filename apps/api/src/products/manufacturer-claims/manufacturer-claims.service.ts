@@ -129,6 +129,7 @@ type Row = Prisma.ProductManufacturerClaimGetPayload<{
   select: typeof CLAIM_SELECT;
 }>;
 type Tx = Prisma.TransactionClient;
+type Db = typeof prisma | Tx;
 
 /** The fields that ARE the claim: a change to one is a new claim to check. */
 const SUBSTANCE_FIELDS = [
@@ -237,8 +238,8 @@ function snapshotOf(row: {
 }
 
 /** The product-level dosing facts with a value: what a dosing claim must stand on (point 3). */
-export function dosingFactsOf(productIds: readonly string[]) {
-  return prisma.productKnowledgeFact.findMany({
+export function dosingFactsOf(productIds: readonly string[], db: Db = prisma) {
+  return db.productKnowledgeFact.findMany({
     where: {
       productId: { in: [...productIds] },
       scopeKey: "",
@@ -253,6 +254,7 @@ export function dosingFactsOf(productIds: readonly string[]) {
 /** The API view of claims, with the knowledge link and the output rule. Content reads it too. */
 export async function claimViews(
   rows: readonly Row[],
+  db: Db = prisma,
 ): Promise<ManufacturerClaimView[]> {
   const dosingProducts = [
     ...new Set(
@@ -263,7 +265,7 @@ export async function claimViews(
   ];
   const withFact = new Set(
     dosingProducts.length
-      ? (await dosingFactsOf(dosingProducts)).map((fact) => fact.productId)
+      ? (await dosingFactsOf(dosingProducts, db)).map((fact) => fact.productId)
       : [],
   );
   return rows.map((row) => {
@@ -312,13 +314,16 @@ export async function claimViews(
 /** The views of the claims a filter selects (no limit: callers pass a bounded filter). */
 export async function claimViewsWhere(
   where: Prisma.ProductManufacturerClaimWhereInput,
+  /** A transaction reads with the locks it holds (the content approval, `content.service.ts`). */
+  db: Db = prisma,
 ): Promise<ManufacturerClaimView[]> {
   return claimViews(
-    await prisma.productManufacturerClaim.findMany({
+    await db.productManufacturerClaim.findMany({
       where,
       select: CLAIM_SELECT,
       orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
     }),
+    db,
   );
 }
 

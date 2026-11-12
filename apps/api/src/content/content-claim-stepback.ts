@@ -1,5 +1,7 @@
 import type { Prisma } from "@acropora/database";
 
+import { lockContentItems } from "./content-row-lock.js";
+
 /**
  * WHEN A MANUFACTURER CLAIM DROPS OUT, THE CONTENT APPROVED ON IT GOES BACK TO APPROVAL (T5.3,
  * point 3: "minden hivatkozó tétel visszalép jóváhagyásra vár állapotba").
@@ -23,16 +25,22 @@ export async function stepBackContentOnClaimDrop(
   tx: Prisma.TransactionClient,
   input: { claimId: string; actorUserId: string; why: string },
 ): Promise<{ steppedBack: string[]; flagged: string[] }> {
+  // THE LOCK BEFORE THE STATE (`content-row-lock.ts`): an approval running right now holds the
+  // item; this waits for it, and then reads READY_TO_SEND and steps it back.
   const links = await tx.contentItemClaim.findMany({
-    where: {
-      claimId: input.claimId,
-      content: { state: { in: ["READY_TO_SEND", "SCHEDULED", "SENT"] } },
-    },
-    select: { content: { select: { id: true, state: true } } },
+    where: { claimId: input.claimId },
+    select: { contentId: true },
   });
+  const states = await lockContentItems(
+    tx,
+    links.map((link) => link.contentId),
+  );
   const steppedBack: string[] = [];
   const flagged: string[] = [];
-  for (const { content } of links) {
+  for (const [id, state] of states) {
+    if (state !== "READY_TO_SEND" && state !== "SCHEDULED" && state !== "SENT")
+      continue;
+    const content = { id, state };
     if (content.state === "READY_TO_SEND") {
       const { count } = await tx.contentItem.updateMany({
         where: { id: content.id, state: "READY_TO_SEND" },

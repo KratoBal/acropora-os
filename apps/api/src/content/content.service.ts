@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 
+import type { Prisma } from "@acropora/database";
 import type { ContentChannel } from "@acropora/types";
 
 import { ArticleStepError } from "./article.repository.js";
@@ -47,6 +48,13 @@ import { scheduleStanding, scheduleTargetFor } from "./content-schedule.js";
 @Injectable()
 export class ContentService {
   constructor(private readonly repository: ContentRepository) {}
+
+  /**
+   * A TEST SEAM, a no-op in the app: it runs inside the approval's transaction, after the claims
+   * were read and before the move. The integration spec puts a concurrent link or dispute here
+   * to force the order the row lock must handle (barracuda, #2445).
+   */
+  approvalClaimProbe: (contentId: string) => Promise<void> = async () => {};
 
   /**
    * MINDEN SORHOZ ODAKERÜL, MIT LEHET BELŐLE LÉPNI.
@@ -386,13 +394,23 @@ export class ContentService {
 
     // THE MANUFACTURER CLAIMS (T5.3): approval goes only when every claim the item stands on may
     // go out as it stands (`claimApprovalRefusal`). A draft may hold unchecked claims; the
-    // approver sees them on the item and here.
-    if (input.from === "AWAITING_APPROVAL" && input.to === "READY_TO_SEND") {
-      const refusal = claimApprovalRefusal(
-        await this.repository.claimsOf(input.id),
-      );
-      if (refusal) throw new ConflictException(refusal);
-    }
+    // approver sees them on the item and here. The claims are read INSIDE the move's transaction,
+    // under the item's row lock (barracuda, #2445): a claim linked or dropped at the same moment
+    // either waits for this approval and then sees it, or is seen by it.
+    //
+    // Only the approval: SCHEDULED and SENT record what happened on Facebook, and refusing to
+    // record it would make our state lie. An approved item whose claim drops out is stepped back
+    // (`content-claim-stepback.ts`), and a scheduled one gets the comment.
+    const claimGate =
+      input.from === "AWAITING_APPROVAL" && input.to === "READY_TO_SEND"
+        ? async (tx: Prisma.TransactionClient) => {
+            const refusal = claimApprovalRefusal(
+              await this.repository.claimsOf(input.id, tx),
+            );
+            if (refusal) throw new ConflictException(refusal);
+            await this.approvalClaimProbe(input.id);
+          }
+        : undefined;
 
     let moved: boolean;
     try {
@@ -401,6 +419,7 @@ export class ContentService {
         from: input.from,
         to: input.to,
         actorUserId: input.actorUserId,
+        gate: claimGate,
         ...(input.to === "DISCARDED"
           ? { discardReason: input.discardReason?.trim() ?? null }
           : {}),
