@@ -392,6 +392,8 @@ describe(
         data: {
           ...reading(earlierHuman, "Kitalált Referencia Ltd."),
           state: "VERIFIED",
+          // the CHECK on a VERIFIED reading wants the review time too
+          reviewedAt: new Date("2026-09-20T00:00:00Z"),
           reviewedByUserId: reviewer.id,
           sources: { grossAmount: "TEXT" },
         },
@@ -400,6 +402,7 @@ describe(
         data: {
           ...reading(earlierAuto, "Kitalált Automata Ltd."),
           state: "VERIFIED",
+          reviewedAt: new Date("2026-09-20T00:00:00Z"),
           reviewedByUserId: null,
           sources: { grossAmount: "TEXT" },
         },
