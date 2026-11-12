@@ -24,6 +24,7 @@ export class AiChatSettingsRepository {
       messageRetentionDays: row.messageRetentionDays,
       contactHandledRetentionDays: row.contactHandledRetentionDays,
       contactUnhandledRetentionDays: row.contactUnhandledRetentionDays,
+      offTopicFirmAt: row.offTopicFirmAt,
     };
   }
 

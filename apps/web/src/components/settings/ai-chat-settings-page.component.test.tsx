@@ -41,6 +41,7 @@ vi.mock("@/lib/api/ai-contact-requests", () => ({
 const DAYS = "Üzenetek megőrzése (nap)";
 const HANDLED = "Kezelt kérés megőrzése (nap)";
 const UNHANDLED = "Kezeletlen kérés megőrzése (nap)";
+const OFF_TOPIC = "Témán kívüli kérdések küszöbe";
 
 beforeEach(() => {
   auth.role = "OWNER";
@@ -85,6 +86,13 @@ describe("AiChatSettingsPage", () => {
     fireEvent.click(screen.getByLabelText("Kollégai felajánlás"));
     fireEvent.click(screen.getByLabelText("Kapcsolat-kérés"));
     fireEvent.change(screen.getByLabelText(DAYS), { target: { value: "120" } });
+    // the off-topic threshold shows Balázs's 5 and travels as edited
+    expect((screen.getByLabelText(OFF_TOPIC) as HTMLInputElement).value).toBe(
+      "5",
+    );
+    fireEvent.change(screen.getByLabelText(OFF_TOPIC), {
+      target: { value: "8" },
+    });
     fireEvent.click(mentes());
     expect(await screen.findByText("Mentve.")).toBeTruthy();
     expect(api.save).toHaveBeenCalledWith("token", {
@@ -94,7 +102,24 @@ describe("AiChatSettingsPage", () => {
       messageRetentionDays: 120,
       contactHandledRetentionDays: 30,
       contactUnhandledRetentionDays: 90,
+      offTopicFirmAt: 8,
     });
+  });
+
+  it("an off-topic threshold outside 2 to 20 shows the shared rule's sentence and cannot be saved", async () => {
+    render(createElement(AiChatSettingsPage));
+    const threshold = await screen.findByLabelText(OFF_TOPIC);
+    for (const value of ["1", "21", "", "4.5"]) {
+      fireEvent.change(threshold, { target: { value } });
+      expect(screen.getByRole("alert").textContent).toMatch(
+        /küszöbe 2 és 20 közötti egész szám lehet/,
+      );
+      expect((mentes() as HTMLButtonElement).disabled).toBe(true);
+    }
+    fireEvent.click(mentes());
+    expect(api.save).not.toHaveBeenCalled();
+    fireEvent.change(threshold, { target: { value: "2" } });
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("a value outside the limits shows the shared rule's sentence and cannot be saved (nothing is clamped)", async () => {

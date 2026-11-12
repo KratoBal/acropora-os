@@ -19,6 +19,7 @@ const valid = {
   messageRetentionDays: 180,
   contactHandledRetentionDays: 30,
   contactUnhandledRetentionDays: 90,
+  offTopicFirmAt: 5,
 };
 
 const refused = (over: Record<string, unknown>) =>
@@ -73,6 +74,29 @@ describe("checkAiChatSettings (the server's rule and the form's)", () => {
       assert.equal(refused({ [key]: min - 1 }).ok, false, key);
       assert.equal(refused({ [key]: max + 1 }).ok, false, key);
       assert.equal(refused({ [key]: 12.5 }).ok, false, key);
+    }
+  });
+
+  /*
+    A TÉMÁN KÍVÜLI KÜSZÖB (Balázs 2026-11-11 08:51: 5, a Beállításokban). MI PIROSÍT: ha az alapérték nem 5; ha az 1 (már
+    az első eltévedt kérdésnél határozott hang) vagy a 21 átmenne; ha egy tört vagy egy szöveges szám csendben elfogadódna
+    vagy kerekedne; ha a határok nem a közös helyről jönnének.
+  */
+  it("the off-topic threshold is 5 by default, a whole number from 2 to 20, refused otherwise, never clamped", () => {
+    assert.equal(AI_CHAT_SETTINGS_DEFAULTS.offTopicFirmAt, 5);
+    const { min, max } = AI_CHAT_SETTINGS_LIMITS.offTopicFirmAt;
+    assert.deepEqual([min, max], [2, 20]);
+    for (const ok of [min, 5, max]) {
+      const checked = checkAiChatSettings({ ...valid, offTopicFirmAt: ok });
+      assert.deepEqual(checked.ok && checked.value.offTopicFirmAt, ok);
+    }
+    for (const bad of [min - 1, max + 1, 4.5, "5", null, undefined]) {
+      const checked = refused({ offTopicFirmAt: bad });
+      assert.equal(checked.ok, false, String(bad));
+      assert.match(
+        !checked.ok ? checked.error : "",
+        /^A témán kívüli kérdések küszöbe 2 és 20 közötti egész szám lehet\.$/,
+      );
     }
   });
 

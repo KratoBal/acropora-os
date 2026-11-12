@@ -12210,6 +12210,9 @@ model AiChatSetting {
   messageRetentionDays          Int      @default(180)
   contactHandledRetentionDays   Int      @default(30)
   contactUnhandledRetentionDays Int      @default(90)
+  /// A témán kívüli sorozat küszöbe: ennyi egymás utáni témán kívüli kérdéstől határozottabb a helyi válasz (Balázs
+  /// 2026-11-11 08:51: 5, a Beállításokban állítható; határ 2 és 20 között, CHECK a migrációban).
+  offTopicFirmAt                Int      @default(5)
   updatedById                   String?
   createdAt                     DateTime @default(now())
   updatedAt                     DateTime @updatedAt

@@ -89,6 +89,7 @@ export function AiChatSettingsPage() {
   const {
     messageRetentionDays: messageLimits,
     contactRetentionDays: requestLimits,
+    offTopicFirmAt: offTopicLimits,
   } = AI_CHAT_SETTINGS_LIMITS;
 
   return (
@@ -241,6 +242,28 @@ export function AiChatSettingsPage() {
                 Legfeljebb ennyi ideig, és nem rövidebb a kezeltnél.
               </p>
             </div>
+          </div>
+
+          <div className="space-y-1 sm:max-w-xs">
+            <label className="text-sm font-medium text-pilot-grey-800">
+              Témán kívüli kérdések küszöbe
+              <PilotInput
+                type="number"
+                aria-label="Témán kívüli kérdések küszöbe"
+                min={offTopicLimits.min}
+                max={offTopicLimits.max}
+                value={
+                  Number.isNaN(settings.offTopicFirmAt)
+                    ? ""
+                    : String(settings.offTopicFirmAt)
+                }
+                onChange={(value) => change({ offTopicFirmAt: days(value) })}
+              />
+            </label>
+            <p className="text-xs text-pilot-grey-500">
+              Ennyi egymás utáni témán kívüli kérdéstől határozottabb a válasz (
+              {offTopicLimits.min} és {offTopicLimits.max} között).
+            </p>
           </div>
 
           {problem ? (
