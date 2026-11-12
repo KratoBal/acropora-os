@@ -773,6 +773,14 @@ function hintWords(hints: KnownNumberHints | undefined): Set<string> {
  * részlete, mert itt ezernyi számot vetünk össze, nem egy szállítóét. Legalább
  * nyolc jel, benne számjegy, és a szöveg dátum-alakú szavai nem számítanak. Csak egyetlen találat számít; két különböző
  * ismert szám egy szövegben (például egy hivatkozott korábbi számla) nem dönt.
+ *
+ * A HIVATKOZOTT SZÁM NEM A DOKUMENTUM SAJÁT SZÁMA (niceshops második dokumentuma, task os-hianyzo-szamlak-unpaid, 2026-11-12):
+ * egy jóváírás, helyesbítés vagy egy „Bezug auf Rechnung …” sor a KORÁBBI, már ismert számlát nevezi meg, és ha a dokumentum saját
+ * száma nem ismert, ez az egy ismert szám maradt a szövegben: az olvasat azt vette volna sajátjának. Egy ismert szám ezért csak
+ * akkor lehet a saját szám, ha legalább egyszer NEM hivatkozási környezetben áll (`REFERENCE_MARKERS`: ugyanabban a sorban, vagy
+ * a fölötte álló, kettősponttal végződő címke-sorban). A KÉTÉRTELMŰSÉG VÁLTOZATLAN: két különböző ismert szám (hivatkozásban is)
+ * továbbra sem dönt, tehát ez a szabály csak SZŰKÍT, soha nem ad több találatot, mint előtte. A biztonságos irány a kimaradás: egy meg
+ * nem kötött PDF egy embernél áll meg, egy rosszul kötött egy másik számla adatával megy tovább.
  */
 export function knownNumberInText(
   lines: readonly string[],
@@ -782,16 +790,32 @@ export function knownNumberInText(
   const ours = ACROPORA_COMPANY.taxNumberBase;
   const named = hintWords(hints);
   // a dátum nem szám: egy 8 jegyű számlaszám a kelte számjegyeivel is egyezhet
-  const words = lines.flatMap((line) =>
+  const words = lines.flatMap((line, index) =>
     line
       .split(/[\s|]+/)
       .filter((word) => !DATE_SHAPE.test(word.replace(/\.$/, "")))
       .map(compactNumber)
-      .filter(Boolean),
+      .filter(Boolean)
+      .map((word) => ({ word, line: index })),
   );
-  const present = new Set(words);
-  for (let i = 0; i + 1 < words.length; i++)
-    present.add(`${words[i]}${words[i + 1]}`);
+  // `present`: minden előfordulás, a hivatkozás is (két különböző ismert szám továbbra sem dönt);
+  // `own`: ami legalább egyszer NEM hivatkozási sorban áll, csak ilyen lehet a dokumentum saját száma
+  const present = new Set<string>();
+  const own = new Set<string>();
+  const add = (compact: string, ...lineIndexes: number[]) => {
+    present.add(compact);
+    if (!lineIndexes.every((index) => referenceLine(lines, index)))
+      own.add(compact);
+  };
+  for (let i = 0; i < words.length; i++) {
+    add(words[i]!.word, words[i]!.line);
+    if (i + 1 < words.length)
+      add(
+        `${words[i]!.word}${words[i + 1]!.word}`,
+        words[i]!.line,
+        words[i + 1]!.line,
+      );
+  }
   const hits = new Map<string, KnownInvoiceNumber>();
   for (const candidate of known) {
     const compact = compactNumber(candidate.number);
@@ -811,7 +835,55 @@ export function knownNumberInText(
     else if (!seen) hits.set(compact, candidate);
   }
   const found = [...hits.values()];
-  return found.length === 1 && found[0]!.number ? found[0]! : null;
+  return found.length === 1 &&
+    found[0]!.number &&
+    own.has(compactNumber(found[0]!.number))
+    ? found[0]!
+    : null;
+}
+
+/**
+ * A HIVATKOZÁS JELEI (kisbetűs részszövegként, nem `\b`-vel: a JS `\b` csak ASCII, és az ékezetes szó szélén hibázik). Német,
+ * magyar és angol, a jóváírás, a helyesbítés, a sztornó és a „vonatkozó számla” alakjai. Egy sor hivatkozási, ha EGY jelet hord.
+ */
+const REFERENCE_MARKERS = [
+  "bezug",
+  "referenz",
+  "zu rechnung",
+  "zur rechnung",
+  "gutschrift",
+  "storno",
+  "stornierung",
+  "rechnungskorrektur",
+  "korrektur",
+  "hivatkoz",
+  "helyesbít",
+  "helyesbit",
+  "sztornó",
+  "sztorno",
+  "jóváír",
+  "jovair",
+  "korrekció",
+  "korrekcio",
+  "eredeti számla",
+  "eredeti szamla",
+  "credit note",
+  "original invoice",
+  "related invoice",
+  "corrected invoice",
+  "with reference to",
+];
+
+const hasMarker = (line: string): boolean => {
+  const lower = line.toLocaleLowerCase("hu-HU");
+  return REFERENCE_MARKERS.some((marker) => lower.includes(marker));
+};
+
+/** A sor hivatkozási: maga hordoz jelet, vagy a fölötte álló, kettősponttal végződő címke-sor („Bezug auf Rechnung:”). */
+function referenceLine(lines: readonly string[], index: number): boolean {
+  if (hasMarker(lines[index] ?? "")) return true;
+  const above = (lines[index - 1] ?? "").trim();
+  return above.endsWith(":") && hasMarker(above);
 }
 
 /**
