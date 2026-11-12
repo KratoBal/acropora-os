@@ -17,7 +17,10 @@ import {
   reminderFileName,
 } from "./collection/invoice-text.js";
 import { supplierTaxBase } from "../billing/billing-duplicates.js";
-import { invoiceIdentityKey as invoiceKey } from "../billing/invoice-identity.js";
+import {
+  identityTaxNumber,
+  invoiceIdentityKey as invoiceKey,
+} from "../billing/invoice-identity.js";
 import type { CandidateDocument, Payee } from "./missing-invoice-matching.js";
 import type { StoredReading } from "../billing/foreign-invoice/reading-values.js";
 
@@ -280,6 +283,24 @@ export function withoutNotBookable(
  * `key` (a dokumentum számla-kulcsa jelölt), `sameKeyAsMarked` (egy másik, jelölt dokumentum kulcsát hordozza: pl. két
  * azonos számú számla közül az egyik jelölt, és a másik is vele esik ki).
  */
+/**
+ * A „NEM KÖNYVELENDŐ” SOR KULCSA, a dokumentum oldali számla-kulccsal egyezően (acrobot 49536, barracuda #2491): a külföldi
+ * szállító adószáma a bejövő rekordban a `supplierEuTaxNumber` mezőben áll, a `supplierTaxNumber` üres, ezért a kulcs a névre
+ * esett, a dokumentumé viszont az adószám-számjegyekre, és a jelölés nem ért el a dokumentumig.
+ */
+export function notBookableKeyOf(row: {
+  documentNumber: string;
+  supplierName: string;
+  supplierTaxNumber: string | null;
+  supplierEuTaxNumber: string | null;
+}): string {
+  return invoiceKey(
+    row.documentNumber,
+    identityTaxNumber(row.supplierTaxNumber, row.supplierEuTaxNumber),
+    row.supplierName,
+  );
+}
+
 export function splitNotBookable(
   documents: readonly CandidateDocument[],
   given: ReadonlyMap<string, string>,
@@ -1286,6 +1307,7 @@ export class MissingInvoicesRepository {
         sourceDocumentId: true,
         documentNumber: true,
         supplierTaxNumber: true,
+        supplierEuTaxNumber: true,
         supplierName: true,
       },
     });
@@ -1293,15 +1315,7 @@ export class MissingInvoicesRepository {
       sourceDocumentIds: new Set(
         notBookable.flatMap((row) => row.sourceDocumentId ?? []),
       ),
-      keys: new Set(
-        notBookable.map((row) =>
-          invoiceKey(
-            row.documentNumber,
-            row.supplierTaxNumber,
-            row.supplierName,
-          ),
-        ),
-      ),
+      keys: new Set(notBookable.map(notBookableKeyOf)),
     });
     for (const { document, via } of removed)
       excluded.set(document.id, { code: "NOT_BOOKABLE_MARK", detail: via });
