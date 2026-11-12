@@ -322,6 +322,14 @@ export interface MissingInvoiceCandidateDiagnosis {
     currency: string;
     supplierName: string;
     kind: "INVOICE" | "PROFORMA" | "PREMIUM_NOTICE";
+    /**
+     * A dokumentum azonosságai a párosításban: `sha:<fájl-lenyomat>` és `inv:<számlaszám|szállító>` kulcsok, az
+     * összevonás után (a kézzel párosított feltöltés lenyomata is rajta van). A kettős fizetés jelzés két párosítás KÖZÖS
+     * azonosságán áll; ez a mező mutatja meg, melyiken. Csak olvas, a fájl tartalma nincs benne.
+     */
+    identities: string[];
+    /** Az összevont jelölt többi azonosítója (a NAV-sor mögötti továbbított számla, a beolvadt feltöltés). */
+    aliasIds: string[];
   } | null;
   checks: {
     /** A számla kelte a fizetés előtti 4 hónap és a következő hónap 15-e között van. */

@@ -670,6 +670,23 @@ describe("the candidate diagnosis", () => {
     assert.deepEqual(await reasonOf("nothing"), ["NO_SUCH_ID", false]);
   });
 
+  it("shows the document's identities and merged ids (what a double-paid flag stands on)", async () => {
+    const card = debit("2026-11-01", 5000, "Szállító Kft.");
+    const invoice = {
+      ...nav("2026-11-01", 5000, "Szállító Kft."),
+      identities: ["sha:b", "inv:x|1"],
+      aliasIds: ["up-2", "up-1"],
+    };
+    const { missing } = service({
+      debits: [card],
+      documents: [invoice],
+      coverage: COVERAGE,
+    });
+    const d = await missing.candidateDiagnosis(card.id, invoice.id);
+    assert.deepEqual(d.document?.identities, ["inv:x|1", "sha:b"]);
+    assert.deepEqual(d.document?.aliasIds, ["up-1", "up-2"]);
+  });
+
   it("a normal document id is unchanged: loaded, not via a row, no reason", async () => {
     const card = debit("2026-11-01", 5000, "Szállító Kft.");
     const invoice = nav("2026-11-01", 5000, "Szállító Kft.");
