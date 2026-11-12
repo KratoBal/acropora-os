@@ -1196,16 +1196,19 @@ describe("matchMonth", () => {
       bookingDate: "2026-09-29",
       amount: D(172006),
     });
+    // egy olvasatlan feltöltésnek nincs száma: a közös lenyomat a jel
     const first = doc({
       id: "up-1",
       source: "UPLOAD",
       gross: null,
+      number: "",
       identities: ["sha:same"],
     });
     const second = doc({
       id: "up-2",
       source: "UPLOAD",
       gross: null,
+      number: "",
       identities: ["sha:same"],
     });
     const outcome = run(
@@ -1228,11 +1231,105 @@ describe("matchMonth", () => {
     );
   });
 
+  /*
+    KET KÜLÖNBÖZŐ SZÁMLASZÁMÚ SZÁMLA NEM KETTŐS FIZETÉS (acrobot, éles 2026-11-12, a Vízművek 16 980 Ft-os havi számlái:
+    103000716765 az október 12-i, 105300361726 a november 9-i terheléshez). Egymás doublePaidWith-jei voltak, holott két
+    külön számla. A közös azonosság itt egy lenyomat; a szám dönt. MI PIROSÍT: ha két külön számlaszámú számla közös
+    azonosság miatt kettős fizetés lesz; ha az egyező számú (írásjelben eltérő), vagy az egyik oldalon számot nem hordó
+    párosítás már nem kettős fizetés.
+  */
+  it("two invoices with DIFFERENT numbers are not double paid, even when they carry a shared identity", () => {
+    const october = debit({
+      id: "vm-oct",
+      bookingDate: "2026-10-12",
+      amount: D(16980),
+    });
+    const november = debit({
+      id: "vm-nov",
+      bookingDate: "2026-11-09",
+      amount: D(16980),
+    });
+    const one = doc({
+      id: "vm-1",
+      number: "103000716765",
+      identities: ["sha:shared", "inv:103000716765|vizmuvek"],
+    });
+    const two = doc({
+      id: "vm-2",
+      number: "105300361726",
+      identities: ["sha:shared", "inv:105300361726|vizmuvek"],
+    });
+    const outcome = run(
+      [october, november],
+      [one, two],
+      new Map([
+        [october.id, ["vm-1"]],
+        [november.id, ["vm-2"]],
+      ]),
+    );
+    assert.deepEqual(
+      [october, november].map((d) => [
+        outcome.get(d.id)?.state,
+        outcome.get(d.id)?.doublePaidWith,
+      ]),
+      [
+        ["FOUND", undefined],
+        ["FOUND", undefined],
+      ],
+    );
+    // a jel nem tűnik el: egy fájl két számlaszámhoz párosítva megnézendő (a rossz helyre vitt lenyomat is ilyen)
+    assert.match(
+      outcome.get(october.id)?.reason ?? "",
+      /ugyanaz a fájl más számlaszámmal egy másik terheléshez is párosítva \(vm-nov\)/,
+    );
+    assert.match(outcome.get(november.id)?.reason ?? "", /\(vm-oct\)/);
+  });
+
+  it("the same number written with other punctuation, or a pairing with no number at all, is still double paid on a shared identity", () => {
+    const a = debit({ id: "dp-1", bookingDate: "2026-09-28" });
+    const b = debit({ id: "dp-2", bookingDate: "2026-09-29" });
+    const states = (
+      first: Partial<CandidateDocument>,
+      second: Partial<CandidateDocument>,
+    ) => {
+      const out = run(
+        [a, b],
+        [
+          doc({ id: "dp-a", identities: ["sha:shared"], ...first }),
+          doc({ id: "dp-b", identities: ["sha:shared"], ...second }),
+        ],
+        new Map([
+          [a.id, ["dp-a"]],
+          [b.id, ["dp-b"]],
+        ]),
+      );
+      return [out.get(a.id)?.state, out.get(b.id)?.state];
+    };
+    assert.deepEqual(
+      states({ number: "KB-2855/2026" }, { number: "kb 2855 2026" }),
+      ["DOUBLE_PAID", "DOUBLE_PAID"],
+    );
+    // a szállító néha előtag nélkül írja a számot: az egyik szám a másikat tartalmazza
+    assert.deepEqual(
+      states({ number: "KB-2855/2026" }, { number: "2855/2026" }),
+      ["DOUBLE_PAID", "DOUBLE_PAID"],
+    );
+    assert.deepEqual(states({ number: "KB-2855/2026" }, { number: "" }), [
+      "DOUBLE_PAID",
+      "DOUBLE_PAID",
+    ]);
+  });
+
   it("the same invoice number paired twice is double paid too; one pairing, or another problem, is not", () => {
     const a = debit({ id: "n-1" });
     const b = debit({ id: "n-2", bookingDate: "2026-08-11" });
     const same = (id: string, payee: CandidateDocument["payee"] = "COMPANY") =>
-      doc({ id, identities: ["inv:kb-2855/2026|12345678"], payee });
+      doc({
+        id,
+        number: "KB-2855/2026",
+        identities: ["inv:kb-2855/2026|12345678"],
+        payee,
+      });
     const twice = run(
       [a, b],
       [same("x-1"), same("x-2")],
