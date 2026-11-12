@@ -225,8 +225,10 @@ const BUDAPEST_DAY = new Intl.DateTimeFormat("en-CA", {
  *   2026-10-01.3  kártyás fizetés-halmaz a végösszeghez (#1347)
  *   2026-10-01.4  a saját bankszámlánk a szövegben: saját kimenő számla (#1315)
  *   2026-10-06.1  a Számlázz.hu feed számai is ismert számok (acrobot 26752)
+ *   2026-11-12.1  a balazs@ nem kötött, számlának ítélt PDF-je is UNASSIGNED-ként tárolódik (Balázs, Eldöntendő szál):
+ *                 az első futás a már látott UNMATCHED balazs@ leveleket újraolvassa, és eltárolja őket
  */
-export const INVOICE_COLLECTION_RULES_VERSION = "2026-10-06.1";
+export const INVOICE_COLLECTION_RULES_VERSION = "2026-11-12.1";
 
 /**
  * Az UNMATCHED újraolvasás döntése: nincs még teljes futás, az utolsó teljes

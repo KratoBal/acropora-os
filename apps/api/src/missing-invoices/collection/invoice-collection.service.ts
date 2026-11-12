@@ -540,8 +540,12 @@ export class InvoiceCollectionService {
       `UNASSIGNED` dokumentumként megmarad, nem jelölt, emberi döntésre vár (a
       Javasolt számlák lapon). A begyűjtés sora UNMATCHED marad, tehát az
       újraolvasás még összekötheti.
-        - a balazs@ postafiók (Balázs saját levelezése) kimarad: ott a nem
-          párosodott fájl továbbra sem tárolódik;
+        - a balazs@ postafiók IS ide tartozik (Balázs döntése, 2026-11-12, Eldöntendő szál: az (a) út): a
+          számlának ítélt, nem kötött PDF ott is UNASSIGNED-ként tárolódik, mint a többi postafiókon. Eddig
+          kimaradt (Balázs saját levelezése, barracuda #1827), és egy nem kötött számla (Hetzner 084001270673,
+          2026-11-05) nyom nélkül elveszett: csak az ítélet-sora maradt, a fájl nem. A határ ugyanaz maradt:
+          csak a SZÁMLÁNAK ÍTÉLT fájl tárolódik; a szövegű PDF számla-szó nélkül NOT_INVOICE és végleges, a
+          saját számlánk, az emlékeztető, a szerződés és az ajánlat sem;
         - a száraz futás nem ír semmit;
         - egy már tárolt, még nem párosodott példány marad, ahogy van.
     */
@@ -551,7 +555,17 @@ export class InvoiceCollectionService {
       payee: string,
       reason: InvoiceCollectionReason,
     ): Promise<InvoiceCollectionVerdict> => {
-      if (reassess || this.dry || source === "BALAZS_MAIL")
+      /*
+        A balazs@ ÁGON A NEM A CÉGRE SZÓLÓ SZÁMLA KIMARAD (acrobot, 2026-11-12, Balázs (a) döntése mellé): a postafiók
+        Balázs saját levelezése, és egy SZEMÉLYES számla (a vevő nem a cég) nem cégkönyvelés, a többi, finance jogú
+        felhasználó elől a szűkebb irány a biztonságos. A Balázs 1-es válasza a CÉGSZÁMLÁK elvesztése ellen szólt.
+        Csak ez az ág: az info@ és a Drive változatlanul tárolja a nem a cégre szólót is.
+      */
+      if (
+        reassess ||
+        this.dry ||
+        (source === "BALAZS_MAIL" && payee === "NOT_COMPANY")
+      )
         return skip("UNMATCHED", reason);
       await this.repository.store({
         source,

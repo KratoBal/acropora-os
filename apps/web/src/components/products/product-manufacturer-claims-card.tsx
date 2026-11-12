@@ -83,6 +83,8 @@ export function claimReasonText(reason: ClaimOutputReason): string {
 }
 
 interface Draft {
+  /** Set when editing: the claim, the version the editor saw, and whether it stands on a fact. */
+  editing: { id: string; version: number; onFact: boolean } | null;
   claimType: ClaimType;
   claimText: string;
   sourceKind: ClaimSourceKind;
@@ -102,6 +104,7 @@ function today(): string {
 }
 
 const emptyDraft = (): Draft => ({
+  editing: null,
   claimType: "EFFECT",
   claimText: "",
   sourceKind: "MANUFACTURER_PAGE",
@@ -133,6 +136,7 @@ export function ProductManufacturerClaimsCard({
   currentUserId: string;
 }) {
   const [claims, setClaims] = useState<ManufacturerClaimView[] | null>(null);
+  const [truncated, setTruncated] = useState(false);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [archiving, setArchiving] = useState<string | null>(null);
   const [content, setContent] = useState<
@@ -143,9 +147,9 @@ export function ProductManufacturerClaimsCard({
 
   const load = useCallback(async () => {
     try {
-      setClaims(
-        (await manufacturerClaimApi.forProduct(token, productId)).items,
-      );
+      const result = await manufacturerClaimApi.forProduct(token, productId);
+      setClaims(result.items);
+      setTruncated(result.truncated);
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -186,6 +190,29 @@ export function ProductManufacturerClaimsCard({
       setError("A szám-érték és a mértékegység csak együtt adható meg.");
       return;
     }
+    if (draft.editing) {
+      const editing = draft.editing;
+      void act(() =>
+        manufacturerClaimApi.update(token, editing.id, {
+          expectedVersion: editing.version,
+          claimType: draft.claimType,
+          claimText: draft.claimText,
+          sourceKind: draft.sourceKind,
+          sourceRef: draft.sourceRef,
+          sourceReadOn: draft.sourceReadOn,
+          sourcePublishedOn: draft.sourcePublishedOn || null,
+          // a claim on a Product Knowledge fact has no number of its own
+          ...(editing.onFact
+            ? {}
+            : {
+                valueAmount: amount ?? null,
+                valueUnit: amount !== undefined ? draft.valueUnit.trim() : null,
+              }),
+          note: draft.note.trim() || null,
+        }),
+      );
+      return;
+    }
     void act(() =>
       manufacturerClaimApi.create(token, productId, {
         claimType: draft.claimType,
@@ -203,6 +230,24 @@ export function ProductManufacturerClaimsCard({
       }),
     );
   };
+
+  const edit = (claim: ManufacturerClaimView) =>
+    setDraft({
+      editing: {
+        id: claim.id,
+        version: claim.version,
+        onFact: claim.knowledgeFact !== null,
+      },
+      claimType: claim.claimType,
+      claimText: claim.claimText,
+      sourceKind: claim.sourceKind,
+      sourceRef: claim.sourceRef,
+      sourcePublishedOn: claim.sourcePublishedOn ?? "",
+      sourceReadOn: claim.sourceReadOn,
+      valueAmount: claim.valueAmount === null ? "" : String(claim.valueAmount),
+      valueUnit: claim.valueUnit ?? "",
+      note: claim.note ?? "",
+    });
 
   const toggleContent = async (claimId: string) => {
     if (content[claimId]) {
@@ -241,6 +286,13 @@ export function ProductManufacturerClaimsCard({
     >
       {error ? (
         <Alert variant="danger" title="Nem sikerült" description={error} />
+      ) : null}
+      {truncated ? (
+        <Alert
+          variant="info"
+          title="A lista nem teljes"
+          description="Ennél a terméknél az első 500 állítás látszik (az adagolás és a biztonság elöl)."
+        />
       ) : null}
 
       {!claims ? (
@@ -415,6 +467,15 @@ export function ProductManufacturerClaimsCard({
                 <PilotButton
                   variant="secondary"
                   disabled={busy}
+                  onClick={() => edit(claim)}
+                >
+                  Szerkesztés
+                </PilotButton>
+              ) : null}
+              {canManage && !draft ? (
+                <PilotButton
+                  variant="secondary"
+                  disabled={busy}
                   onClick={() => setArchiving(claim.id)}
                 >
                   Archiválás
@@ -463,8 +524,9 @@ export function ProductManufacturerClaimsCard({
       {draft ? (
         <div className="space-y-2 rounded-lg border border-dusk-200 p-3 text-sm">
           <p className="text-xs text-dusk-500">
-            Az állítás ellenőrizetlenül kerül fel: ellenőrizni nem az tudja, aki
-            rögzítette.
+            {draft.editing
+              ? "A mentés új változatot nyit. Ha magát az állítást (fajta, szöveg, forrás, szám) módosítod, az ellenőrzés törlődik, a rá épülő jóváhagyott tartalmak visszalépnek jóváhagyásra, és innentől te vagy a rögzítő; a megjegyzés javítása az ellenőrzést megtartja."
+              : "Az állítás ellenőrizetlenül kerül fel: ellenőrizni nem az tudja, aki rögzítette."}
           </p>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <label className="space-y-1">
@@ -525,25 +587,37 @@ export function ProductManufacturerClaimsCard({
                 }
               />
             </label>
-            <label className="space-y-1">
-              <span className="text-xs text-dusk-500">
-                Szám-érték (nem kötelező)
-              </span>
-              <PilotInput
-                aria-label="Szám-érték"
-                inputMode="decimal"
-                value={draft.valueAmount}
-                onChange={(value) => setDraft({ ...draft, valueAmount: value })}
-              />
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs text-dusk-500">Mértékegység</span>
-              <PilotInput
-                aria-label="Mértékegység"
-                value={draft.valueUnit}
-                onChange={(value) => setDraft({ ...draft, valueUnit: value })}
-              />
-            </label>
+            {draft.editing?.onFact ? (
+              <p className="text-xs text-dusk-500 sm:col-span-2">
+                A szám a Product Knowledge tényben van, itt nem adható meg.
+              </p>
+            ) : (
+              <>
+                <label className="space-y-1">
+                  <span className="text-xs text-dusk-500">
+                    Szám-érték (nem kötelező)
+                  </span>
+                  <PilotInput
+                    aria-label="Szám-érték"
+                    inputMode="decimal"
+                    value={draft.valueAmount}
+                    onChange={(value) =>
+                      setDraft({ ...draft, valueAmount: value })
+                    }
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs text-dusk-500">Mértékegység</span>
+                  <PilotInput
+                    aria-label="Mértékegység"
+                    value={draft.valueUnit}
+                    onChange={(value) =>
+                      setDraft({ ...draft, valueUnit: value })
+                    }
+                  />
+                </label>
+              </>
+            )}
           </div>
           <label className="block space-y-1">
             <span className="text-xs text-dusk-500">
@@ -589,6 +663,15 @@ export function ProductManufacturerClaimsCard({
           </div>
         </div>
       ) : null}
+
+      <p className="text-xs">
+        <Link
+          href="/products/gyartoi-allitasok"
+          className="text-brand-600 underline"
+        >
+          Az összes gyártói állítás, ellenőrzésre várók
+        </Link>
+      </p>
 
       <ConfirmDialog
         open={archiving !== null}
