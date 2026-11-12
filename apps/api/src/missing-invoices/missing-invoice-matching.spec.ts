@@ -1277,6 +1277,12 @@ describe("matchMonth", () => {
         ["FOUND", undefined],
       ],
     );
+    // a jel nem tűnik el: egy fájl két számlaszámhoz párosítva megnézendő (a rossz helyre vitt lenyomat is ilyen)
+    assert.match(
+      outcome.get(october.id)?.reason ?? "",
+      /ugyanaz a fájl más számlaszámmal egy másik terheléshez is párosítva \(vm-nov\)/,
+    );
+    assert.match(outcome.get(november.id)?.reason ?? "", /\(vm-oct\)/);
   });
 
   it("the same number written with other punctuation, or a pairing with no number at all, is still double paid on a shared identity", () => {

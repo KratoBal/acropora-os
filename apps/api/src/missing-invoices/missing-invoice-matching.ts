@@ -1550,20 +1550,32 @@ function markDoublePaid(outcomes: Map<string, MatchOutcome>): void {
         pairingsOf.set(identity, pairings);
       }
   const others = new Map<string, Set<string>>();
+  // közös azonosság, de két különböző számlaszám: NEM kettős fizetés, viszont a jel NEM tűnik el, hanem a tétel okába kerül
+  const sharedAcrossNumbers = new Map<string, Set<string>>();
   for (const pairings of pairingsOf.values()) {
     if (pairings.size < 2) continue;
     for (const [pairing, mine] of pairings)
       for (const [otherPairing, theirs] of pairings)
-        if (
-          otherPairing !== pairing &&
-          mayBeSameInvoice(mine.numbers, theirs.numbers)
-        )
+        if (otherPairing !== pairing) {
+          const target = mayBeSameInvoice(mine.numbers, theirs.numbers)
+            ? others
+            : sharedAcrossNumbers;
           for (const debitId of mine.debits)
             for (const other of theirs.debits)
-              others.set(
+              target.set(
                 debitId,
-                new Set([...(others.get(debitId) ?? []), other]),
+                new Set([...(target.get(debitId) ?? []), other]),
               );
+        }
+  }
+  for (const [debitId, with_] of sharedAcrossNumbers) {
+    if (others.has(debitId)) continue;
+    const outcome = outcomes.get(debitId);
+    if (!outcome) continue;
+    outcomes.set(debitId, {
+      ...outcome,
+      reason: `${outcome.reason}; ugyanaz a fájl más számlaszámmal egy másik terheléshez is párosítva (${[...with_].sort().join(", ")}): nem kettős fizetés, de érdemes megnézni`,
+    });
   }
   for (const [debitId, with_] of others) {
     const outcome = outcomes.get(debitId)!;
