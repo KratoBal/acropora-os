@@ -7,6 +7,8 @@ import { ArticleImageRepository } from "./article-image.repository.js";
 import { ArticleImageService } from "./article-image.service.js";
 import { ArticleRepository } from "./article.repository.js";
 import { ARTICLE_ENVIRONMENT, ArticleService } from "./article.service.js";
+import { ManufacturerClaimsService } from "../products/manufacturer-claims/manufacturer-claims.service.js";
+import { ContentAgentClaimsController } from "./content-agent-claims.controller.js";
 import { ContentAgentController } from "./content-agent.controller.js";
 import { ContentAgentGuard } from "./content-agent.guard.js";
 import { ContentClaimsController } from "./content-claims.controller.js";
@@ -30,6 +32,7 @@ import { ProductDataService } from "./product-data/product-data.service.js";
   controllers: [
     ContentController,
     ContentAgentController,
+    ContentAgentClaimsController,
     ContentClaimsController,
     ArticleImagePublicController,
     ProductDataController,
@@ -44,6 +47,8 @@ import { ProductDataService } from "./product-data/product-data.service.js";
     ContentAgentGuard,
     ContentRepository,
     ContentService,
+    // Stateless over Prisma, no dependencies: the agent entry's own instance (T5.3).
+    ManufacturerClaimsService,
     ProductDataRepository,
     ProductDataService,
     ServiceTokenRepository,

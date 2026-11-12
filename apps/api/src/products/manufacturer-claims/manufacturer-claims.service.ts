@@ -746,6 +746,16 @@ export class ManufacturerClaimsService {
     return row;
   }
 
+  /** One claim, archived ones included; 404 when there is none. */
+  async get(id: string): Promise<ManufacturerClaimView> {
+    const row = await prisma.productManufacturerClaim.findUnique({
+      where: { id },
+      select: CLAIM_SELECT,
+    });
+    if (!row) throw new NotFoundException("A gyártói állítás nem található.");
+    return (await claimViews([row]))[0]!;
+  }
+
   private async view(id: string): Promise<ManufacturerClaimView> {
     const row = await prisma.productManufacturerClaim.findUniqueOrThrow({
       where: { id },
