@@ -13,6 +13,7 @@ import {
   mergeSameInvoice,
   normalizeAccount,
   queryExclusion,
+  notBookableKeyOf,
   splitNotBookable,
   withoutNotBookable,
 } from "./missing-invoices.repository.js";
@@ -687,6 +688,60 @@ describe("splitNotBookable: what the not-bookable mark removed, and why", () => 
         ["a", "sourceDocumentId"],
         ["b", "sameKeyAsMarked"],
       ],
+    );
+  });
+});
+
+/*
+  A „NEM KÖNYVELENDŐ” JELÖLÉS A KÜLFÖLDI SZÁLLÍTÓ SORÁN IS ELÉR A DOKUMENTUMIG (acrobot 49536, barracuda #2491): a bejövő rekord
+  adószáma a `supplierEuTaxNumber` mezőben áll, a `supplierTaxNumber` üres; a kulcs korábban a névre esett, a dokumentumé az
+  adószám-számjegyekre. MI PIROSÍT: ha az EU-számos jelölt sor kulcsa nem egyezik a dokumentuméval (a dokumentum a hiányzók között
+  marad); ha egy MÁS EU-számú sor is eltüntetné ugyanazt a dokumentumot; ha a magyar adószám nem nyerne az EU mező fölött.
+*/
+describe("notBookableKeyOf: the mark of a foreign supplier's row meets the document", () => {
+  const NUMBER = "R49010000026240667";
+  const marked = (over: Record<string, string | null> = {}) =>
+    notBookableKeyOf({
+      documentNumber: NUMBER,
+      supplierName: "niceshops GmbH",
+      supplierTaxNumber: null,
+      supplierEuTaxNumber: "ATU63964918",
+      ...over,
+    });
+  // a dokumentum oldali kulcs: számlaszám + az adószám számjegyei (mergeSameInvoice / invoiceKey)
+  const documentKey = "r49010000026240667|63964918";
+
+  it("a row whose tax number is only in the EU field has the document's key, and the mark removes the document", () => {
+    assert.equal(marked(), documentKey);
+    const upload = doc({ id: "upload", number: NUMBER });
+    const { kept, removed } = splitNotBookable(
+      [upload],
+      new Map([["upload", documentKey]]),
+      { sourceDocumentIds: new Set<string>(), keys: new Set([marked()]) },
+    );
+    assert.deepEqual(kept, []);
+    assert.deepEqual(
+      removed.map((r) => [r.document.id, r.via]),
+      [["upload", "key"]],
+    );
+  });
+
+  it("another EU number does not remove it, and the supplierTaxNumber wins when it gives digits", () => {
+    assert.notEqual(
+      marked({ supplierEuTaxNumber: "ATU11111111" }),
+      documentKey,
+    );
+    assert.equal(
+      marked({
+        supplierTaxNumber: "ATU63964918",
+        supplierEuTaxNumber: "ATU11111111",
+      }),
+      documentKey,
+    );
+    // no tax number in either field: the key falls to the name, as before
+    assert.equal(
+      marked({ supplierEuTaxNumber: null }),
+      `${NUMBER.toLowerCase()}|niceshops gmbh`,
     );
   });
 });
