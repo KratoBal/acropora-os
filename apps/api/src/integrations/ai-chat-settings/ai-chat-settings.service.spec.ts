@@ -71,6 +71,7 @@ const body = {
   messageRetentionDays: 120,
   contactHandledRetentionDays: 30,
   contactUnhandledRetentionDays: 60,
+  offTopicFirmAt: 7,
 };
 
 describe("AiChatSettingsService", () => {
@@ -106,12 +107,14 @@ describe("AiChatSettingsService", () => {
     assert.equal(state.saves.length, 0);
   });
 
-  it("the AI service's view holds the three values it acts on and NOTHING else (the recipient never leaves the OS)", async () => {
+  it("the AI service's view holds the values it acts on and NOTHING else (the recipient never leaves the OS)", async () => {
     const { service } = fakeRepository(body);
     assert.deepEqual(await service.serviceView(), {
       offerEnabled: true,
       contactRequestEnabled: true,
       messageRetentionDays: 120,
+      // the saved threshold, not the default (Balázs 2026-11-11: settable)
+      offTopicFirmAt: 7,
       linkSources: [],
     });
     const view = JSON.stringify(await service.serviceView());
@@ -126,6 +129,7 @@ describe("AiChatSettingsService", () => {
       offerEnabled: false,
       contactRequestEnabled: false,
       messageRetentionDays: 180,
+      offTopicFirmAt: 5,
       linkSources: [],
     });
   });
