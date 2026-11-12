@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   knownSupplierName,
   nameKey,
+  supplierNameConflict,
   taxKey,
   type VerifiedSupplierRow,
 } from "./known-supplier-name.js";
@@ -155,6 +156,56 @@ describe("knownSupplierName", () => {
           row("Kitalált Kft.", null, hu),
         ],
         { euTaxNumber: EU, taxNumber: hu },
+      ),
+      null,
+    );
+  });
+});
+
+describe("supplierNameConflict", () => {
+  const values = (supplierName: string | null) => ({
+    supplierName,
+    supplierEuTaxNumber: EU,
+    supplierTaxNumber: null,
+  });
+
+  it("names the earlier approved name when the read one differs after normalisation", () => {
+    assert.deepEqual(
+      supplierNameConflict(
+        [row("Kitalált Handel GmbH", EU)],
+        values("Másik Cég Ltd."),
+      ),
+      { name: "Kitalált Handel GmbH", taxNumber: EU, rows: 1 },
+    );
+  });
+
+  it("is no conflict when the names agree after normalisation, or there is nothing to compare", () => {
+    const rows = [row("Kitalált Handel GmbH", EU)];
+    assert.equal(
+      supplierNameConflict(rows, values("KITALÁLT HANDEL GMBH.")),
+      null,
+    );
+    assert.equal(
+      supplierNameConflict(rows, values("Kitalált-Handel GmbH")),
+      null,
+    );
+    assert.equal(supplierNameConflict(rows, values(null)), null);
+    assert.equal(supplierNameConflict(rows, values("  ")), null);
+    assert.equal(supplierNameConflict([], values("Másik Cég Ltd.")), null);
+    assert.equal(
+      supplierNameConflict(
+        [row("Más Cég Ltd.", "IE0000000XX")],
+        values("Másik Cég Ltd."),
+      ),
+      null,
+    );
+  });
+
+  it("an ambiguous earlier name (two really different approved names) is no reference: no conflict is claimed", () => {
+    assert.equal(
+      supplierNameConflict(
+        [row("Kitalált Handel GmbH", EU), row("Kitalált Handel AG", EU)],
+        values("Másik Cég Ltd."),
       ),
       null,
     );

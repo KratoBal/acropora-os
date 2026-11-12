@@ -294,6 +294,38 @@ describe("automatic approval", () => {
     assert.equal(unpaid.approve, false);
   });
 
+  /*
+    A NÉV-ÜTKÖZÉS EMBERHEZ MEGY (acrobot 48944, kártya dbab22cd). MI PIROSÍT: ha a PDF-ből olvasott név és a korábban, ember által jóváhagyott név eltérése mellett is magától jóváhagyódna
+    egy bank-egyezéses sor; ha az indok nem nevezné meg mindkét nevet; ha az ütközés nélküli sor megállna; ha a NAV alapot is megállítaná (ott a név a NAV-é).
+  */
+  it("BANK: a read name that differs from the earlier human-approved one stops the approval, naming both; without a conflict it goes", () => {
+    const conflict = decide({
+      values: FOREIGN,
+      sources: { grossAmount: "TEXT", supplierName: "TEXT" },
+      debits: [{ amount: "-15900", currency: "HUF" }],
+      nameConflict: "Kitalált Korábbi Kft.",
+    });
+    assert.equal(conflict.approve, false);
+    const reason = conflict.approve ? "" : conflict.reason;
+    assert.match(reason, /Kitalált Előfizetés Ltd\./);
+    assert.match(reason, /Kitalált Korábbi Kft\./);
+    assert.match(reason, /ember döntsön/);
+    for (const nameConflict of [null, undefined]) {
+      const result = decide({
+        values: FOREIGN,
+        sources: { grossAmount: "TEXT", supplierName: "TEXT" },
+        debits: [{ amount: "-15900", currency: "HUF" }],
+        nameConflict,
+      });
+      assert.equal(result.approve, true);
+    }
+  });
+
+  it("NAV: the name conflict does not stop a NAV-based approval (the name is the NAV's there)", () => {
+    const result = decide({ nameConflict: "Kitalált Korábbi Kft." });
+    assert.equal(result.approve, true);
+  });
+
   it("BANK: in a currency, the amount the bank stated for a forint debit counts; without it, not approved", () => {
     const eur = {
       ...FOREIGN,

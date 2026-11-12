@@ -91,3 +91,26 @@ export function knownSupplierName(
   )[0]!;
   return { name, taxNumber: key, rows: matching.length };
 }
+
+/**
+ * A NÉV-ÜTKÖZÉS (kártya dbab22cd, harmadik kör; acrobot 48943/48944, barracuda 48941): a PDF SZÖVEGÉBŐL olvasott név és az azonos adószámú, EMBER által jóváhagyott korábbi
+ * (egyértelmű) név a `nameKey` után eltér. A visszaadott érték a korábbi név (a figyelmeztetésbe és az automatikus jóváhagyás okába); `null`: nincs ütközés (nincs olvasott név,
+ * nincs egyértelmű korábbi név az adószámra, vagy a kettő a normalizálás után egyezik). A hívó dönti el, MELY nevekre kéri (csak a szövegből olvasottra, nem a párosítás vagy a lookup nevére).
+ */
+export function supplierNameConflict(
+  rows: readonly VerifiedSupplierRow[],
+  values: {
+    supplierName: string | null;
+    supplierEuTaxNumber: string | null;
+    supplierTaxNumber: string | null;
+  },
+): KnownSupplierName | null {
+  const read = nameKey(values.supplierName);
+  if (!read) return null;
+  const known = knownSupplierName(rows, {
+    euTaxNumber: values.supplierEuTaxNumber,
+    taxNumber: values.supplierTaxNumber,
+  });
+  if (!known || nameKey(known.name) === read) return null;
+  return known;
+}
