@@ -1092,6 +1092,40 @@ describe("labelledTotal", () => {
     });
   });
 
+  it("takes the next line after a table header with more words, not only after a bare label (barracuda, #2484)", () => {
+    for (const header of [
+      "Fizetendő végösszeg",
+      "Fizetendő összesen",
+      "Végösszeg (bruttó)",
+      "Rechnungsbetrag brutto",
+      "Gesamtbetrag in Euro",
+    ])
+      assert.deepEqual(
+        labelledTotal([header, "12 700 Ft"]),
+        { gross: "12700", currency: "HUF" },
+        header,
+      );
+  });
+
+  it("does not take the next line after a sentence, by its end or by its words", () => {
+    // the real total stands on its own line; a sentence that took the address below it as its value would make a
+    // second, different labelled value, and the tie would lose the total
+    for (const sentence of [
+      "A számla összege előreutalással ki lett fizetve.",
+      "A számla összege átutalással kerül kiegyenlítésre",
+      "A számla összege kifizetve.",
+    ])
+      assert.deepEqual(
+        labelledTotal([
+          "Fizetendő: 338.018 Ft",
+          sentence,
+          "Saaz 99, 8341 Paldau",
+        ]),
+        { gross: "338018", currency: "HUF" },
+        sentence,
+      );
+  });
+
   it("does not decide between two different labelled values", () => {
     assert.equal(
       labelledTotal(["Végösszeg: 37 500 Ft", "Fizetendő: 7 972 Ft"]),

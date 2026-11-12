@@ -1101,14 +1101,23 @@ export function onlyCurrency(lines: readonly string[]): string | null {
 }
 
 /**
- * A CÍMKE EGYEDÜL ÁLL-E A SORÁBAN, vagyis a következő sor hozhatja-e az értékét: a címke után csak elválasztó, egy
- * rövid megjegyzés („(HUF)”) vagy egy kettősponttal záruló kiegészítés („inkl. USt.:”) áll. Egy MONDAT nem az
+ * A CÍMKE EGYEDÜL ÁLL-E A SORÁBAN, vagyis a következő sor hozhatja-e az értékét. NEM, ha a címke után egy MONDAT áll
  * (niceshops R49010000026240667, acrobot 49361): „A számla összege előreutalással ki lett fizetve.” után a következő
  * sor a cím volt („Saaz 99, 8341 Paldau”), az a második, eltérő címkés érték lett, és a valódi végösszeg
  * (338 018 Ft) a döntetlen miatt elveszett.
+ *
+ * A MONDAT ISMÉRVE A MONDAT, NEM A SZÓ HOSSZA (barracuda, #2484): egy táblázat fejléce is hordhat hosszú szót a
+ * címke után („Fizetendő végösszeg”, „Rechnungsbetrag brutto”, „Gesamtbetrag in Euro”), és ott az érték a következő
+ * sorban áll. Mondat az, ami kisbetűs, legalább négybetűs szóval és ponttal zárul („fizetve.”; a „USt.” rövidítés
+ * nem), vagy legalább három négybetűs szót visz. A zárójeles rész nem számít („Végösszeg (bruttó)”), és a
+ * kettősponttal záruló rész mindig címke („inkl. USt.:”).
  */
 function labelStandsAlone(rest: string): boolean {
-  return /:\s*\|?\s*$/u.test(rest) || !/\p{L}{4,}/u.test(rest);
+  if (/:\s*\|?\s*$/u.test(rest)) return true;
+  const outside = rest.replace(/\([^)]*\)/gu, " ");
+  const sentenceEnd = /\p{Ll}{4,}\.\s*\|?\s*$/u.test(outside);
+  const words = outside.match(/\p{L}{4,}/gu)?.length ?? 0;
+  return !sentenceEnd && words < 3;
 }
 
 /** A címke utáni összeg (vagy a következő soré, ha a címke egyedül áll), előjellel; a sor utolsó összege. */
