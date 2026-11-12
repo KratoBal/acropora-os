@@ -1075,14 +1075,20 @@ export function largestMoney(
   esetén nem döntünk, és pénznem nélkül sem (a HUF alapérték devizás számlán
   hamis bruttót adna).
 */
+const TOTAL_LABEL =
+  /(v[ée]g[öo]sszeg|fizetend[őo]|brutt[óo]\s+[öo]sszesen|[öo]sszesen\s+fizetend[őo]|sz[áa]mla\s+[öo]sszege|total\s+(amount|due|to\s+pay)|amount\s+due|grand\s+total|invoice\s+total|gesamtbetrag|rechnungsbetrag|endbetrag|zu\s+zahlen|totale\s+(fattura|da\s+pagare)|montant\s+total)/iu;
 /*
   A CSUPASZ „TOTAL” A SOR ELEJÉN (Hetzner, kártya f7ece26b; mérve a 2026-08-05 és 2026-09-05 számlán): az összesítő sor
   „Total | € nettó | € ÁFA | € bruttó”, és a sor utolsó értéke a bruttó. Csak a sor elején, és csak ha utána elválasztó,
-  pénznem, szám vagy semmi áll: a „Total (excl. VAT)”, a „Total VAT” és a „Total net” így nem címke, mert ott az érték
-  nem a végösszeg.
+  pénznem, szám vagy semmi áll: a „Total (excl. VAT)”, a „Total VAT” és a „Total net” így nem címke.
+
+  CSAK TARTALÉK, HA NINCS MÁS CÍMKE (murena mérése, #2486): egy „Total exc. VAT / Total VAT / Total” táblázatú kiállító
+  szövegrétege több „Total | <összeg>” sort ad (a nettót, az ÁFA-t és a bruttót külön), és ezek a már jól olvasott
+  címkés bruttó mellé eltérő értékeket tettek: a döntetlen két helyes bruttót ürített ki. Ezért a csupasz „Total”
+  sorokat csak akkor nézzük, ha a fenti címkék közül egy sem adott értéket.
 */
-const TOTAL_LABEL =
-  /(^\s*total(?=\s*(?:[|:€$£\d]|(?:HUF|EUR|USD|GBP|Ft)(?!\p{L})|$))|v[ée]g[öo]sszeg|fizetend[őo]|brutt[óo]\s+[öo]sszesen|[öo]sszesen\s+fizetend[őo]|sz[áa]mla\s+[öo]sszege|total\s+(amount|due|to\s+pay)|amount\s+due|grand\s+total|invoice\s+total|gesamtbetrag|rechnungsbetrag|endbetrag|zu\s+zahlen|totale\s+(fattura|da\s+pagare)|montant\s+total)/iu;
+const BARE_TOTAL_LABEL =
+  /^\s*total(?=\s*(?:[|:€$£\d]|(?:HUF|EUR|USD|GBP|Ft)(?!\p{L})|$))/iu;
 const SIGNED_AMOUNT =
   /(?<![\d.,])([-\u2212]\s?)?(\d{1,3}(?:[ \u00a0.,]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)(?!\d)/gu;
 // a kód nem lehet egy szó része (az „EUROPA” nem euró): előtte, utána nem állhat betű
@@ -1130,10 +1136,24 @@ function labelStandsAlone(rest: string): boolean {
 export function labelledTotal(
   lines: readonly string[],
 ): { gross: string; currency: string } | null {
+  const labelled = labelHits(lines, TOTAL_LABEL);
+  const hits = labelled.length ? labelled : labelHits(lines, BARE_TOTAL_LABEL);
+  const distinct = [...new Set(hits.map((h) => h.value))];
+  if (distinct.length !== 1) return null;
+  const currency =
+    hits.find((h) => h.currency)?.currency ?? onlyCurrency(lines);
+  return currency ? { gross: String(distinct[0]), currency } : null;
+}
+
+/** Egy címke-fajta találatai: a címke utáni (vagy, ha a címke egyedül áll, a következő sor) utolsó összege. */
+function labelHits(
+  lines: readonly string[],
+  labelRule: RegExp,
+): { value: number; currency: string | null }[] {
   const hits: { value: number; currency: string | null }[] = [];
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!.normalize("NFC");
-    const label = TOTAL_LABEL.exec(line);
+    const label = labelRule.exec(line);
     if (!label) continue;
     const scan = (text: string) =>
       [...text.matchAll(SIGNED_AMOUNT)]
@@ -1155,11 +1175,7 @@ export function labelledTotal(
       currency: currencyIn(place) ?? currencyIn(line),
     });
   }
-  const distinct = [...new Set(hits.map((h) => h.value))];
-  if (distinct.length !== 1) return null;
-  const currency =
-    hits.find((h) => h.currency)?.currency ?? onlyCurrency(lines);
-  return currency ? { gross: String(distinct[0]), currency } : null;
+  return hits;
 }
 
 /**

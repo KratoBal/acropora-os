@@ -1145,6 +1145,17 @@ describe("labelledTotal", () => {
     });
   });
 
+  it("uses a bare Total only when no other label gave a value (murena, #2486: two good grosses were lost)", () => {
+    // the measured shape, the values made up: the text layer gives net, VAT and gross each on a "Total | ..." row
+    const rows = ["Total | 100,00 €", "Total | 27,00 €", "Total | 127,00 €"];
+    assert.deepEqual(labelledTotal([...rows, "Amount due: 127,00 €"]), {
+      gross: "127",
+      currency: "EUR",
+    });
+    // without another label the three different Total rows still decide nothing
+    assert.equal(labelledTotal(rows), null);
+  });
+
   it("does not take a Total that is not the grand total, or a Total inside the line", () => {
     for (const line of [
       "Total (excl. VAT): € 100.00",
