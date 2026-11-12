@@ -63,6 +63,12 @@ function service(input: {
   mailbox?: { id: string; content: Uint8Array; fileName: string }[];
   /** terhelés -> kézzel párosított dokumentum(ok) */
   manual?: Map<string, string[]>;
+  /** azonosító -> mi az (a jelölt-vizsgálat `idKind`-ja); alapértelmezés: ismeretlen */
+  idKinds?: Map<
+    string,
+    | { kind: "document" }
+    | { kind: "billingRow"; sourceDocumentId: string | null }
+  >;
   /** a saját kimenő számlák a feedből (`ownOutgoingDocuments`) */
   ownDocuments?: {
     documentNumber: string;
@@ -86,6 +92,7 @@ function service(input: {
       ranges.push([from, to]);
       return input.documents ?? [];
     },
+    idKind: async (id: string) => input.idKinds?.get(id) ?? { kind: "unknown" },
     uncheckedMailboxContent: async () => input.mailbox ?? [],
     setPayee: async (id: string, payee: string) =>
       void stored.push([id, payee]),
@@ -598,9 +605,84 @@ describe("the candidate diagnosis", () => {
     assert.deepEqual(diagnosis, {
       loaded: false,
       viaAlias: false,
+      viaBillingRow: false,
+      reason: "NO_SUCH_ID",
       document: null,
       checks: null,
     });
+  });
+
+  /*
+    A NICESHOPS-ESET (2026-11-12): a csomagellenőrzés `unpaid` listájának id-ja a bejövő számla SORÁNAK azonosítója, nem a
+    tárolt dokumentumé. MI PIROSÍT: ha egy sor-azonosítóra a vizsgálat továbbra is csak `loaded: false`-t mond (a hívó azt
+    hiszi, a betöltés hibás); ha a feloldás a sor forrás-dokumentuma helyett a sor azonosítóját keresné; ha egy ismeretlen
+    azonosító és egy betöltetlen dokumentum ugyanazt az okot kapná.
+  */
+  it("resolves a billing-row id to the row's source document and says so", async () => {
+    const card = debit("2026-11-01", 338018, "niceshops GmbH");
+    const invoice = nav("2026-11-05", 338018, "niceshops GmbH");
+    const { missing } = service({
+      debits: [card],
+      documents: [invoice],
+      coverage: COVERAGE,
+      idKinds: new Map([
+        ["row-1", { kind: "billingRow", sourceDocumentId: invoice.id }],
+      ]),
+    });
+    const diagnosis = await missing.candidateDiagnosis(card.id, "row-1");
+    assert.equal(diagnosis.loaded, true);
+    assert.equal(diagnosis.viaBillingRow, true);
+    assert.equal(diagnosis.viaAlias, false);
+    assert.equal(diagnosis.reason, null);
+    assert.equal(diagnosis.document?.documentId, invoice.id);
+    assert.ok(diagnosis.checks);
+  });
+
+  it("names WHY nothing is loaded: row without a source document, a document that is not a candidate, an id of no kind", async () => {
+    const card = debit("2026-11-01", 338018, "niceshops GmbH");
+    const { missing } = service({
+      debits: [card],
+      documents: [],
+      coverage: COVERAGE,
+      idKinds: new Map([
+        ["row-none", { kind: "billingRow", sourceDocumentId: null }],
+        ["row-unloaded", { kind: "billingRow", sourceDocumentId: "doc-x" }],
+        ["doc-unloaded", { kind: "document" }],
+      ]),
+    });
+    const reasonOf = async (id: string) => {
+      const d = await missing.candidateDiagnosis(card.id, id);
+      assert.equal(d.loaded, false);
+      return [d.reason, d.viaBillingRow];
+    };
+    assert.deepEqual(await reasonOf("row-none"), [
+      "BILLING_ROW_WITHOUT_SOURCE_DOCUMENT",
+      false,
+    ]);
+    assert.deepEqual(await reasonOf("row-unloaded"), [
+      "DOCUMENT_NOT_LOADED",
+      true,
+    ]);
+    assert.deepEqual(await reasonOf("doc-unloaded"), [
+      "DOCUMENT_NOT_LOADED",
+      false,
+    ]);
+    assert.deepEqual(await reasonOf("nothing"), ["NO_SUCH_ID", false]);
+  });
+
+  it("a normal document id is unchanged: loaded, not via a row, no reason", async () => {
+    const card = debit("2026-11-01", 5000, "Szállító Kft.");
+    const invoice = nav("2026-11-01", 5000, "Szállító Kft.");
+    const { missing } = service({
+      debits: [card],
+      documents: [invoice],
+      coverage: COVERAGE,
+    });
+    const d = await missing.candidateDiagnosis(card.id, invoice.id);
+    assert.deepEqual(
+      [d.loaded, d.viaBillingRow, d.viaAlias, d.reason],
+      [true, false, false, null],
+    );
   });
 
   it("names the failing condition: the right name and window but a currency that cannot be compared", async () => {
