@@ -20,9 +20,9 @@ import {
 } from "../missing-invoices/missing-invoice-matching.js";
 import { supplierTaxBase } from "./billing-duplicates.js";
 import {
+  identityAmountMatches,
   identityTaxNumber,
   invoiceIdentity,
-  sameGross,
 } from "./invoice-identity.js";
 import { externalKindLabel as feedKindLabel } from "./billing-document-list.js";
 
@@ -122,9 +122,10 @@ export function pairingOfRow<
       : undefined;
   const byIdentity =
     found?.document &&
-    sameGross(
+    identityAmountMatches(
       { grossAmount: row.grossAmount!, currency: row.currency! },
       found.document,
+      found.debits,
     )
       ? found
       : undefined;
