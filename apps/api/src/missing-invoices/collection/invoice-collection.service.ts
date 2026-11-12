@@ -547,7 +547,7 @@ export class InvoiceCollectionService {
           csak a SZÁMLÁNAK ÍTÉLT fájl tárolódik; a szövegű PDF számla-szó nélkül NOT_INVOICE és végleges, a
           saját számlánk, az emlékeztető, a szerződés és az ajánlat sem;
         - a száraz futás nem ír semmit;
-        - egy már tárolt, még nem párosodott példány marad, ahogy van.
+        - egy már tárolt, még nem párosodott példány UNASSIGNED marad, de az olvasata a mai olvasóé lesz.
     */
     const keepUnassigned = async (
       reading: InvoiceTextReading | null,
@@ -561,6 +561,17 @@ export class InvoiceCollectionService {
         felhasználó elől a szűkebb irány a biztonságos. A Balázs 1-es válasza a CÉGSZÁMLÁK elvesztése ellen szólt.
         Csak ez az ág: az info@ és a Drive változatlanul tárolja a nem a cégre szólót is.
       */
+      /*
+        A MÁR TÁROLT, MOST SEM KÖTÖTT PÉLDÁNY a mai olvasó olvasatát kapja (kártya f7ece26b): egy javított olvasó
+        (a bruttó, a szám) így a következő újraolvasásnál magától eljut a tárolt dokumentumig, kézi újraolvasás nélkül.
+      */
+      // egy üres olvasat (nincs mit olvasni) nem írja felül a tárolt, meglévőt
+      if (reassess && !this.dry && reading)
+        await this.repository.refreshUnassignedReading(
+          reassess,
+          reading,
+          payee,
+        );
       if (
         reassess ||
         this.dry ||

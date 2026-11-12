@@ -657,6 +657,40 @@ describe("a számla-begyűjtés tárolása", { skip: gate.mode === "skip" }, () 
     };
     assert.equal(await repository.promote(docA, tiedInput), docA);
     assert.equal(await repository.promote(docA, tiedInput), null);
+
+    // a friss olvasat (kártya f7ece26b) a még UNASSIGNED példányra ír, az előléptetettre nem
+    const readingOf = async (id: string) =>
+      await prisma.incomingSupplierDocument.findUniqueOrThrow({
+        where: { id },
+        select: { textReading: true, payeeCheck: true },
+      });
+    const fresh = { invoiceNumber: "B-1", gross: "7.04", currency: "EUR" };
+    await repository.refreshUnassignedReading(docB, fresh, "COMPANY");
+    assert.deepEqual(await readingOf(docB), {
+      textReading: fresh,
+      payeeCheck: "COMPANY",
+    });
+    // a kézi vevő-jelölés (markPayee) megmarad: az olvasat frissül, a jelölt vevő nem (barracuda, #2489)
+    const markedAt = new Date("2026-11-12T20:00:00Z");
+    await prisma.incomingSupplierDocument.update({
+      where: { id: docC },
+      data: { payeeCheck: "COMPANY", payeeMarkedAt: markedAt },
+    });
+    await repository.refreshUnassignedReading(docC, fresh, "NOT_COMPANY");
+    assert.deepEqual(
+      await prisma.incomingSupplierDocument.findUniqueOrThrow({
+        where: { id: docC },
+        select: { textReading: true, payeeCheck: true, payeeMarkedAt: true },
+      }),
+      { textReading: fresh, payeeCheck: "COMPANY", payeeMarkedAt: markedAt },
+    );
+    const promotedReading = await readingOf(docA);
+    await repository.refreshUnassignedReading(
+      docA,
+      { invoiceNumber: "NEM-IRHATO", gross: "1", currency: "EUR" },
+      "NOT_COMPANY",
+    );
+    assert.deepEqual(await readingOf(docA), promotedReading);
     assert.equal((await candidates()).includes(docA), true);
     assert.deepEqual(await item("collect-it-un-a"), {
       verdict: "STORED",
