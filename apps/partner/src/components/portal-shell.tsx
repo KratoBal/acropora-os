@@ -60,6 +60,13 @@ const MUSZAKI_MENU: {
     icon: "clipboard",
     entryId: "completion-certificates",
   },
+  {
+    // az üzemeltetési napló a partner szemével (task os-uzemeltetesi-naplo, S5): a saját helyszínek havi kimutatása
+    href: "/uzemeltetesi-naplo",
+    label: "Üzemeltetési napló",
+    icon: "clipboard",
+    entryId: "operations-log-partner",
+  },
 ];
 
 /**

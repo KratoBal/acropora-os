@@ -13,6 +13,7 @@ import type {
   CreateAquariumInput,
   CurrentUserResponse,
   MaintenanceOrderPartnerDetail,
+  OperationsReportResponse,
   MaintenanceOrderPartnerListResponse,
   PartnerConversationMessage,
   PartnerConversationPage,
@@ -509,6 +510,22 @@ export const partnerApi = {
       { method: "POST", body: form },
     );
   },
+  /**
+   * AZ ÜZEMELTETÉSI NAPLÓ (S5): a partner SAJÁT, kiosztott helyszínei és azok havi kimutatása. A hatókört a szerver dönti el (nincs
+   * `customerId` paraméter), a nem látható helyszín ugyanazt a 404-et adja, mint a nem létező.
+   */
+  operationsLogSites: () =>
+    request<{
+      items: { id: string; parentId: string | null; name: string }[];
+    }>("/operations-log/partner/sites"),
+  operationsLogReport: (month: string, departmentId: string) =>
+    request<OperationsReportResponse>(
+      `/operations-log/partner/report?${new URLSearchParams({ month, departmentId }).toString()}`,
+    ),
+  operationsLogReportPdfBlob: (month: string, departmentId: string) =>
+    requestBlob(
+      `/operations-log/partner/report/pdf?${new URLSearchParams({ month, departmentId }).toString()}`,
+    ),
   changePassword: (currentPassword: string, newPassword: string) =>
     request<{ updated: true }>("/account/password", {
       method: "POST",

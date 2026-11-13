@@ -260,6 +260,16 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
   },
   {
     /**
+     * AZ ÜZEMELTETÉSI NAPLÓ A PARTNER PORTÁLON (task os-uzemeltetesi-naplo, S5): a partner-fiók a SAJÁT helyszíneinek havi
+     * kimutatását olvassa. Külön jog (`operations-log.partner.view`), nem a belső nézeté: a belső nézet kollégák nevét és belső
+     * megjegyzést is mutat. A látható helyszíneket a szerver a hívó kiosztott helyszínei szerint szűri, nem ez a bejegyzés.
+     */
+    id: "operations-log-partner",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.OPERATIONS_LOG_PARTNER_VIEW),
+  },
+  {
+    /**
      * TELJESÍTÉSI IGAZOLÁSOK, A PARTNER PORTÁLON -- ugyanaz a jóváhagyás és
      * ugyanaz az indok, mint a "maintenance-orders" bejegyzésnél.
      */

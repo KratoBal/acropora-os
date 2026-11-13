@@ -1,4 +1,8 @@
 import { addDays } from "./hungarian-work-calendar.js";
+import {
+  partnerVisibleStatus,
+  type ServiceJobStatusValue,
+} from "./service-job-management.js";
 import type { OperationsTaskFrequency } from "./operations-log.js";
 
 /**
@@ -234,7 +238,19 @@ function entryRow(
         : [...entry.participantNames],
     anomaly: entry.anomaly,
     anomalyNote: entry.anomalyNote,
-    ticket: entry.serviceJob,
+    // A PARTNER A NÉGY LÁTSZÓ ÁLLAPOTOT KAPJA, NEM A BELSŐ NYOLCAT: az állapot-kulcs már a szerver válaszában partner-alakú, mert a
+    // belső érték (például „alkatrészre vár") a partner nyelvén nem létezik, és egy JSON-ban kiolvasható volna
+    ticket: entry.serviceJob
+      ? {
+          ...entry.serviceJob,
+          status:
+            audience === "PARTNER"
+              ? partnerVisibleStatus(
+                  entry.serviceJob.status as ServiceJobStatusValue,
+                )
+              : entry.serviceJob.status,
+        }
+      : null,
     values: entry.values
       .filter(
         (value) =>

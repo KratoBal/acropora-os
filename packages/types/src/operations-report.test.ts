@@ -450,6 +450,39 @@ test("a mért értékek a sorban: a vízóra kivételével, a partner nézetébe
   );
 });
 
+test("a partner nézetében a hibajegy állapota a négy látszó egyike, a belső érték nincs a kimutatásban", () => {
+  const run = (audience: "INTERNAL" | "PARTNER", status: string) =>
+    buildOperationsReport({
+      month: "2026-11",
+      audience,
+      entries: [
+        entry("e1", "2026-11-12T09:00:00.000Z", {
+          anomaly: true,
+          anomalyNote: "Szivárog",
+          serviceJob: { id: "sj1", jobNumber: "HJ-1", status },
+        }),
+      ],
+      schedules: [],
+      now: NOW,
+    });
+  const internal = run("INTERNAL", "WAITING_FOR_PARTS");
+  assert.equal(
+    internal.assets[0]!.entries[0]!.ticket?.status,
+    "WAITING_FOR_PARTS",
+  );
+  const partner = run("PARTNER", "WAITING_FOR_PARTS");
+  assert.equal(partner.assets[0]!.entries[0]!.ticket?.status, "IN_PROGRESS");
+  assert.equal(JSON.stringify(partner).includes("WAITING_FOR_PARTS"), false);
+  assert.equal(
+    run("PARTNER", "CANCELLED").assets[0]!.entries[0]!.ticket?.status,
+    "CLOSED",
+  );
+  assert.equal(
+    run("PARTNER", "NEW").assets[0]!.entries[0]!.ticket?.status,
+    "NEW",
+  );
+});
+
 test("a kimaradt heti feladat a rögzítéskori helyszíntől független bejegyzéssel teljesül, a sorok közé viszont nem kerül", () => {
   const base = {
     month: "2026-11",
