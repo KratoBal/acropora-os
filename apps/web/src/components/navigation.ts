@@ -598,6 +598,14 @@ const mainNavigationGroups: AppNavigationGroup[] = [
         entryId: "asset-categories",
       },
       {
+        // Üzemeltetési napló, S1b (task os-uzemeltetesi-naplo): a rendszeres feladatok sablonjai
+        subgroup: "Törzsadatok",
+        href: "/beallitasok/uzemeltetesi-naplo-sablonok",
+        label: "Üzemeltetési napló sablonjai",
+        icon: "settings",
+        entryId: "operations-log-templates",
+      },
+      {
         // Balazs kerese, 2026-09-22 (kanban 68add892).
         subgroup: "Törzsadatok",
         href: "/beallitasok/eszkoz-funkciok",

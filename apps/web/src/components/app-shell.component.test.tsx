@@ -618,6 +618,7 @@ describe("AppShell the nine main menus", () => {
       "/admin/integrations/szamlazz/connection",
       "/beallitasok/mertekegysegek",
       "/beallitasok/eszkoz-kategoriak",
+      "/beallitasok/uzemeltetesi-naplo-sablonok",
       "/beallitasok/eszkoz-funkciok",
       "/beallitasok/berelheto-eszkozok",
       "/beallitasok/berleti-szerzodes",
