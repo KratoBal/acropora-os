@@ -52,6 +52,21 @@ export class AttendanceRepository {
     });
   }
 
+  /** The accounts of these roles, active first, then by name. */
+  employees(roles: readonly UserRole[]) {
+    return this.database.user.findMany({
+      where: { role: { in: [...roles] } },
+      orderBy: [{ isActive: "desc" }, { displayName: "asc" }],
+      select: {
+        id: true,
+        displayName: true,
+        nickname: true,
+        role: true,
+        isActive: true,
+      },
+    });
+  }
+
   schedules(userId: string): Promise<ScheduleRow[]> {
     return this.database.attendanceSchedule.findMany({
       where: { userId },

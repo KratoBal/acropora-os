@@ -304,3 +304,19 @@ describe("AttendanceService: the month's sheet", () => {
     assert.deepEqual(writes, []);
   });
 });
+
+describe("AttendanceService: the employee picker", () => {
+  it("asks for the roles that have a sheet, not partner or machine accounts", async () => {
+    const asked: unknown[] = [];
+    const repository: Partial<AttendanceRepository> = {
+      employees: async (roles) => {
+        asked.push([...roles]);
+        return [];
+      },
+    };
+    await new AttendanceService(repository as AttendanceRepository).employees();
+    assert.deepEqual(asked, [
+      ["OWNER", "ADMIN", "MANAGER", "SALES", "WAREHOUSE", "SERVICE", "VIEWER"],
+    ]);
+  });
+});
