@@ -404,7 +404,15 @@ export class OperationsLogEntriesRepository {
         startedAt: true,
         serviceJobId: true,
         recordedById: true,
-        asset: { select: { id: true, assetNumber: true, name: true } },
+        asset: {
+          select: {
+            id: true,
+            assetNumber: true,
+            name: true,
+            // a hely partnere: az eszköz saját `customerId` mezője denormalizált és hiányozhat, a helyszín partnere nem
+            department: { select: { customerId: true } },
+          },
+        },
       },
     });
   }
