@@ -1,4 +1,4 @@
-import { BadGatewayException, Injectable } from "@nestjs/common";
+import { BadGatewayException, Injectable, Logger } from "@nestjs/common";
 import type {
   UnasApiCategory,
   UnasApiCustomer,
@@ -8,6 +8,8 @@ import type {
   UnasApiStock,
 } from "@acropora/types";
 import { SaxesParser } from "saxes";
+
+import { stripLostEmoji } from "./description-lost-emoji.js";
 
 const DEFAULT_API_BASE_URL = "https://api.unas.eu/shop";
 const MAX_XML_BYTES = 10 * 1024 * 1024;
@@ -480,7 +482,11 @@ function parameterValue(
   );
 }
 
-export function parseUnasProductResponse(xml: string): UnasApiProduct[] {
+export function parseUnasProductResponse(
+  xml: string,
+  /** Called per product that had a lost-emoji run (`description-lost-emoji.ts`), with the counts. */
+  onLostEmoji?: (sku: string, removed: number, remaining: number) => void,
+): UnasApiProduct[] {
   const root = parseXml(xml);
   if (root.name === "Error") throw new UnasApiError("API_REJECTED");
   if (root.name !== "Products")
@@ -599,6 +605,17 @@ export function parseUnasProductResponse(xml: string): UnasApiProduct[] {
       });
       const meta = child(product, "Meta");
       const description = child(product, "Description");
+      // the UNAS gives an emoji as "????" already (see `description-lost-emoji.ts`): the run is taken out, and a warning counts it
+      const short = stripLostEmoji(
+        description ? (value(description, "Short") ?? null) : null,
+      );
+      const long = stripLostEmoji(
+        description ? (value(description, "Long") ?? null) : null,
+      );
+      const lostRemoved = short.removed + long.removed;
+      const lostRemaining = short.remaining + long.remaining;
+      if (onLostEmoji && lostRemoved + lostRemaining > 0)
+        onLostEmoji(sku, lostRemoved, lostRemaining);
       const prices = child(product, "Prices");
       const packageComponents = children(
         child(product, "PackageComponents"),
@@ -681,12 +698,8 @@ export function parseUnasProductResponse(xml: string): UnasApiProduct[] {
         inquireOnly: flag(value(product, "Inquire")),
         sourceCreatedAt: unixTimestamp(value(product, "CreateTime")),
         sourceUpdatedAt: unixTimestamp(value(product, "LastModTime")),
-        descriptionShort: description
-          ? (value(description, "Short") ?? null)
-          : null,
-        descriptionLong: description
-          ? (value(description, "Long") ?? null)
-          : null,
+        descriptionShort: short.text,
+        descriptionLong: long.text,
         descriptionShortIsHtml: description
           ? flag(value(description, "ShortIsHtml"))
           : null,
@@ -1151,6 +1164,8 @@ export function parseUnasCategoryResponse(xml: string): UnasApiCategory[] {
 
 @Injectable()
 export class UnasApiClient {
+  private readonly logger = new Logger(UnasApiClient.name);
+
   async login(apiKey: string): Promise<UnasLoginResult> {
     const xml = await this.post("login", paramsXml({ ApiKey: apiKey }));
     const root = parseXml(xml);
@@ -1183,7 +1198,11 @@ export class UnasApiClient {
       buildUnasProductPageXml(request),
       token,
     );
-    return parseUnasProductResponse(response);
+    return parseUnasProductResponse(response, (sku, removed, remaining) =>
+      this.logger.warn(
+        `UNAS description of ${sku}: ${removed} lost-emoji run(s) ("????") removed, ${remaining} left in the text`,
+      ),
+    );
   }
 
   async getCategoryPage(
