@@ -320,8 +320,9 @@ function hivasKulcsai(kod: string, kezdet: number): Set<string> {
 // 2026-10-05: 31 -> 33, az Üzenetek 3. fázisa: továbbítás és értesítési beállítás (a szomszéd őr párjai)
 // 2026-10-05: 33 -> 35, az Üzenetek 4. fázisa: kapcsolás és tag felvétele (a szomszéd őr párjai)
 // 2026-10-06: 35 -> 36, a piszkozat elfogadása (kártya 49210cdd; a szomszéd őr párja)
-// 2026-11-13: 36 -> 37, az üzemeltetési napló bejegyzés rögzítése (task os-uzemeltetesi-naplo, S2c; a szomszéd őr párja)
-const IRAS_HIVASOK_A_FAN = 37;
+// 2026-11-13: 36 -> 37, a saját jelenléti jelölés (os-jelenleti-iv, S3b; a szomszéd őr párja)
+// 2026-11-13: 37 -> 38, az üzemeltetési napló bejegyzés rögzítése (task os-uzemeltetesi-naplo, S2c; a szomszéd őr párja)
+const IRAS_HIVASOK_A_FAN = 38;
 
 /** Minden `body: JSON.stringify(` elofordulas a mobil forrasban. */
 function hivasok(konyvtar: string, gyujto: string[] = []): string[] {
