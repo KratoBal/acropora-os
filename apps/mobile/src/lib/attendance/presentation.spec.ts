@@ -10,6 +10,7 @@ import {
   hasAttendanceSheet,
   monthLabel,
   ownMark,
+  rowHours,
   rowNote,
   rowTimes,
   shiftMonth,
@@ -32,6 +33,7 @@ const row = (patch: Partial<AttendanceSheetRow>): AttendanceSheetRow => ({
   mark: null,
   source: "SCHEDULE",
   holiday: null,
+  future: false,
   ...patch,
 });
 
@@ -132,5 +134,37 @@ describe("the phone's attendance sheet", () => {
       "VIEWER",
     ])
       assert.equal(hasAttendanceSheet(role), true, role);
+  });
+
+  it("shows the day up to now, and a later day only as the employee's own plan (Balázs, 2026-11-13)", () => {
+    const today = row({ end: null, minutes: 0 });
+    assert.equal(rowTimes(today), "07:00-");
+    assert.equal(rowHours(today), "");
+    assert.equal(rowHours(row({})), "9:00");
+    const later = row({ future: true, start: null, end: null, minutes: 0 });
+    assert.deepEqual(
+      [rowTimes(later), rowHours(later), rowNote(later)],
+      ["", "", ""],
+    );
+    const plannedLeave = row({
+      future: true,
+      kind: "LEAVE",
+      source: "ENTRY",
+      start: null,
+      end: null,
+      minutes: 0,
+    });
+    assert.equal(rowNote(plannedLeave), "Tervezett: Szabadság");
+    assert.equal(
+      rowNote(
+        row({
+          future: true,
+          kind: "HOLIDAY",
+          holiday: "Karácsony",
+          source: "CALENDAR",
+        }),
+      ),
+      "",
+    );
   });
 });

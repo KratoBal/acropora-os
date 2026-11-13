@@ -24,6 +24,14 @@ import {
  *
  * Hours worked are the full time from arrival to departure, no break deducted (Balázs 2026-11-13 07:59 UTC: 7 to 16 is 9
  * hours).
+ *
+ * AS OF NOW, NEVER AHEAD (Balázs on stage, 2026-11-13, Discord msg 1570790420353515650: "mindig az adott napig legyen
+ * kitöltve"; a printed sheet shown at an inspection must not carry days not yet worked). With the Budapest clock of `now`:
+ *   - a day after today carries no time, no mark and no minutes (`future`); its planned kind stays on the row, for the
+ *     employee's own input screen, but no sheet, PDF or total shows it;
+ *   - today: the arrival shows once it has passed, the departure once it has passed, and the day's minutes count only
+ *     after the departure (no half-passed day in the total);
+ *   - the totals count up to today only. A past month is complete, whatever the clock.
  */
 export const ATTENDANCE_SHEET_ROW_KINDS = [
   "WORK",
@@ -55,6 +63,11 @@ export interface AttendanceSheetRow {
   source: "ENTRY" | "SCHEDULE" | "CALENDAR" | "NONE";
   /** The holiday's name on a HOLIDAY row. */
   holiday: string | null;
+  /**
+   * A day after today (Budapest): no time, no mark, no minutes; `kind` and `source` keep what is planned (an employee's
+   * advance leave), for the own input screen only. Every sheet, PDF and total leaves it empty.
+   */
+  future: boolean;
 }
 
 export interface AttendanceSheet {
@@ -120,6 +133,57 @@ export function scheduleOn(
   return found;
 }
 
+/** The Budapest calendar day and minute of the day at an instant: the sheet's "now". */
+export interface AttendanceClock {
+  today: string;
+  minute: number;
+}
+
+const BUDAPEST_PARTS = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Europe/Budapest",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+export function attendanceClock(now: Date): AttendanceClock {
+  const part = (type: string) =>
+    BUDAPEST_PARTS.formatToParts(now).find((p) => p.type === type)?.value ?? "";
+  return {
+    today: `${part("year")}-${part("month")}-${part("day")}`,
+    minute: Number(part("hour")) * 60 + Number(part("minute")),
+  };
+}
+
+/** The row as the clock allows: nothing after today, and today only what has already happened. */
+function asOf(
+  row: AttendanceSheetRow,
+  clock: AttendanceClock,
+): AttendanceSheetRow {
+  if (row.date > clock.today)
+    return {
+      ...row,
+      start: null,
+      end: null,
+      minutes: 0,
+      mark: null,
+      future: true,
+    };
+  if (row.date < clock.today || row.kind !== "WORK" || !row.start || !row.end)
+    return row;
+  const arrived = clock.minute >= parseAttendanceClock(row.start)!;
+  const left = clock.minute >= parseAttendanceClock(row.end)!;
+  return {
+    ...row,
+    start: arrived ? row.start : null,
+    end: left ? row.end : null,
+    minutes: left ? row.minutes : 0,
+  };
+}
+
 const span = (start: string, end: string) =>
   parseAttendanceClock(end)! - parseAttendanceClock(start)!;
 
@@ -137,6 +201,7 @@ const blank = (
   mark: null,
   source,
   holiday: null,
+  future: false,
 });
 
 function rowOf(
@@ -180,25 +245,31 @@ function rowOf(
   };
 }
 
-/** The sheet of one employee for one month, from the schedule versions and the month's day entries. */
+/**
+ * The sheet of one employee for one month, from the schedule versions and the month's day entries, AS OF `now` (required:
+ * the caller passes the server's clock; there is no default, so no caller fills the future by forgetting it).
+ */
 export function attendanceSheet(input: {
   month: string;
   schedules: readonly AttendanceSchedule[];
   entries: readonly AttendanceDayEntry[];
+  now: Date;
 }): AttendanceSheet {
   if (!isAttendanceMonth(input.month))
     throw new Error(`Nem érvényes hónap: ${input.month}`);
   const entries = new Map(input.entries.map((entry) => [entry.date, entry]));
+  const clock = attendanceClock(input.now);
   const rows = monthDays(input.month).map((date) =>
-    rowOf(date, entries.get(date), input.schedules),
+    asOf(rowOf(date, entries.get(date), input.schedules), clock),
   );
+  const counted = rows.filter((row) => !row.future);
   const year = Number(input.month.slice(0, 4));
   return {
     month: input.month,
     rows,
     totalMinutes: rows.reduce((sum, row) => sum + row.minutes, 0),
-    sickDays: rows.filter((row) => row.kind === "SICK").length,
-    leaveDays: rows.filter((row) => row.kind === "LEAVE").length,
+    sickDays: counted.filter((row) => row.kind === "SICK").length,
+    leaveDays: counted.filter((row) => row.kind === "LEAVE").length,
     swapsDecree: HUNGARIAN_WORKDAY_SWAPS[year]?.decree ?? null,
   };
 }

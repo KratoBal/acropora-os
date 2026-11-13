@@ -31,7 +31,7 @@ export class AttendanceSelfController {
     @Query() query: AttendanceSheetQueryDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.sheet(user.id, query.month);
+    return this.service.sheet(user.id, query.month, new Date());
   }
 
   @Put("days/:date")

@@ -82,6 +82,9 @@ const entry = (
   updatedAt: "2026-11-13T09:00:00.000Z",
 });
 
+/** A clock after the months these tests show: complete months (the "as of now" rule has its own test below). */
+const LATER = new Date("2030-01-01T12:00:00.000Z");
+
 function sheetFor(
   month: string,
   entries: AttendanceDayEntry[],
@@ -89,7 +92,7 @@ function sheetFor(
 ): AttendanceSheetResponse {
   return {
     userId: "u-1",
-    ...attendanceSheet({ month, schedules: [schedule], entries }),
+    ...attendanceSheet({ month, schedules: [schedule], entries, now: LATER }),
     signedCopy,
   };
 }
@@ -373,5 +376,35 @@ describe("AttendanceSheetPage", () => {
     ).toBeTruthy();
     expect(screen.getByText(/Új nyomtatás és aláírás kell/)).toBeTruthy();
     expect(screen.getByText("Nyomtatott példány")).toBeTruthy();
+  });
+
+  it("shows the month up to now: today's arrival before the departure, later days empty (Balázs, 2026-11-13)", async () => {
+    api.sheet
+      .mockReset()
+      .mockImplementation(async (_t: string, _u: string, month: string) => ({
+        userId: "u-1",
+        ...attendanceSheet({
+          month,
+          schedules: [schedule],
+          entries: [entry("2026-11-20", "LEAVE")],
+          now: new Date("2026-11-13T10:00:00.000Z"),
+        }),
+        signedCopy: null,
+      }));
+    const table = await openSheet();
+    const today = within(table)
+      .getByText(/2026\. 11\. 13\./)
+      .closest("tr")!;
+    expect(within(today).getByText("07:00")).toBeTruthy();
+    expect(within(today).queryByText("16:00")).toBeNull();
+    expect(within(today).queryByText("9:00")).toBeNull();
+    const later = within(table)
+      .getByText(/2026\. 11\. 20\./)
+      .closest("tr")!;
+    expect(within(later).queryByText("SZ")).toBeNull();
+    expect(within(later).queryByText(/Szabadság|Tervezett/)).toBeNull();
+    const total = screen.getByLabelText("Összesítés");
+    expect(total.textContent).toContain(formatAttendanceHours(9 * 540));
+    expect(total.textContent).toContain("Szabadság: 0 nap");
   });
 });

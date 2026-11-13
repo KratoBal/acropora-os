@@ -38,6 +38,7 @@ const entry = (
 });
 
 const november = attendanceSheet({
+  now: new Date("2030-01-01T12:00:00.000Z"),
   month: "2026-11",
   schedules: [schedule],
   entries: [
@@ -97,6 +98,7 @@ describe("the attendance sheet PDF", () => {
   it("says so when the year's swapped days are not known", async () => {
     const bytes = await attendanceSheetDocument({
       sheet: attendanceSheet({
+        now: new Date("2030-01-01T12:00:00.000Z"),
         month: "2027-03",
         schedules: [schedule],
         entries: [],
@@ -112,5 +114,35 @@ describe("the attendance sheet PDF", () => {
   it("names the month in Hungarian", () => {
     assert.equal(attendanceMonthLabel("2026-01"), "2026. január");
     assert.equal(attendanceMonthLabel("2026-12"), "2026. december");
+  });
+
+  it("prints the month up to today only: today's arrival before the departure, later days empty (Balázs, 2026-11-13)", async () => {
+    const midday = new Date("2026-11-13T10:00:00.000Z"); // 11:00 in Budapest
+    const bytes = await attendanceSheetDocument({
+      sheet: attendanceSheet({
+        month: "2026-11",
+        schedules: [schedule],
+        entries: [entry("2026-11-20", "LEAVE")],
+        now: midday,
+      }),
+      employeeName: "Kovács Anna",
+      printedAt: midday,
+    });
+    const texts = (await readPdfTextLines(bytes)).map((line) =>
+      line.text.replace(/\s+/g, " ").trim(),
+    );
+    assert.ok(
+      texts.includes("11. 12. Cs 07:00 16:00 9:00"),
+      JSON.stringify(texts),
+    );
+    assert.ok(texts.includes("11. 13. P 07:00"), JSON.stringify(texts));
+    // a later day carries its date and nothing else: no times, no planned leave
+    assert.ok(texts.includes("11. 16. H"), JSON.stringify(texts));
+    assert.ok(texts.includes("11. 20. P"), JSON.stringify(texts));
+    assert.ok(!texts.some((text) => text.includes("SZ SZ")));
+    // 2..12 November: 9 days of 9 hours
+    assert.ok(
+      texts.some((text) => text.includes("Ledolgozott összesen: 81:00 óra")),
+    );
   });
 });

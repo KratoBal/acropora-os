@@ -131,6 +131,7 @@ export function OwnAttendancePage() {
               }) === null
             }
             onEdit={setEditing}
+            showPlanned
           />
         </PilotCard>
       )}

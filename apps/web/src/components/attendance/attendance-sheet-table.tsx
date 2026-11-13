@@ -14,6 +14,8 @@ export function formatAttendanceHours(minutes: number): string {
 
 /** What a row says in place of the times. */
 export function rowNote(row: AttendanceSheetRow): string {
+  // a day after today is empty on every sheet: filled up to today only (Balázs, 2026-11-13)
+  if (row.future) return "";
   switch (row.kind) {
     case "WORK":
       return row.source === "ENTRY" ? "Eltérő munkaidő" : "";
@@ -34,6 +36,20 @@ export function rowNote(row: AttendanceSheetRow): string {
   }
 }
 
+const PLANNED_LABELS: Partial<Record<AttendanceSheetRow["kind"], string>> = {
+  LEAVE: "Szabadság",
+  DAY_OFF: "Szabadnap",
+  SICK: "Betegség",
+  WORK: "Eltérő munkaidő",
+};
+
+/** An advance mark on a future day, for the screen where it is entered (the employee's own sheet); null otherwise. */
+export function plannedNote(row: AttendanceSheetRow): string | null {
+  if (!row.future || row.source !== "ENTRY") return null;
+  const label = PLANNED_LABELS[row.kind];
+  return label ? `Tervezett: ${label}` : null;
+}
+
 /** The rows that are not working days by the calendar or the schedule: leave marked there still counts as a day. */
 export const RESTING: ReadonlySet<AttendanceSheetRow["kind"]> = new Set([
   "HOLIDAY",
@@ -51,10 +67,13 @@ export function AttendanceSheetTable({
   sheet,
   canEdit,
   onEdit,
+  showPlanned = false,
 }: {
   sheet: AttendanceSheet;
   canEdit: (row: AttendanceSheetRow) => boolean;
   onEdit: (row: AttendanceSheetRow) => void;
+  /** The employee's own input screen shows their advance marks on future days; every other sheet leaves them empty. */
+  showPlanned?: boolean;
 }) {
   return (
     <>
@@ -80,7 +99,7 @@ export function AttendanceSheetTable({
               <tr
                 key={row.date}
                 className={
-                  RESTING.has(row.kind)
+                  row.future || RESTING.has(row.kind)
                     ? "border-t border-pilot-grey-100 text-pilot-grey-500"
                     : "border-t border-pilot-grey-100"
                 }
@@ -91,11 +110,13 @@ export function AttendanceSheetTable({
                 <td className="py-1.5 pr-3">{row.start ?? row.mark ?? ""}</td>
                 <td className="py-1.5 pr-3">{row.end ?? row.mark ?? ""}</td>
                 <td className="py-1.5 pr-3">
-                  {row.kind === "WORK"
+                  {row.kind === "WORK" && row.end
                     ? formatAttendanceHours(row.minutes)
                     : ""}
                 </td>
-                <td className="py-1.5 pr-3">{rowNote(row)}</td>
+                <td className="py-1.5 pr-3">
+                  {(showPlanned ? plannedNote(row) : null) ?? rowNote(row)}
+                </td>
                 <td className="py-1.5">
                   {canEdit(row) ? (
                     <PilotButton
