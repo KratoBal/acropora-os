@@ -4973,6 +4973,8 @@ model Asset {
   contractItems   ContractItemAsset[]
   worksheetLines  WorksheetLine[]
   label           AssetLabel?
+  /// Az üzemeltetési napló sablonjai, amelyek erre az eszközre szólnak (task os-uzemeltetesi-naplo).
+  operationsTaskTemplates OperationsTaskTemplate[]
 
   @@index([customerId, status])
   @@index([supplierId, status])
@@ -5157,6 +5159,8 @@ model AssetCategory {
   updatedAt DateTime @updatedAt
 
   assets Asset[] @relation("AssetCategory")
+  /// Az üzemeltetési napló sablonjai, amelyek erre a kategóriára szólnak (minden ilyen kategóriájú eszközre).
+  operationsTaskTemplates OperationsTaskTemplate[]
 
   /// A valaszto lekerdezese: aktivak, sorrendben.
   @@index([isActive, sortOrder])
@@ -12432,4 +12436,93 @@ model GameMailDay {
   /// A budapesti nap, például 2026-11-06.
   day  String @id
   sent Int    @default(0)
+}
+
+// =====================================================================================================================
+// ÜZEMELTETÉSI NAPLÓ (task os-uzemeltetesi-naplo, kártya bcaa0651; Balázs 2026-11-13 07:52 UTC "igen"; brief:
+// exchange/uzemeltetesi-naplo/brief-2026-11-13.md). A RENDSZERES ÜZEMELTETÉSI FELADATOK (napi, heti, alkalmi: például egy
+// homokszűrő visszamosása az állatkertben) rögzítése: ki, mikor, mennyi ideig, mit mért, volt-e rendellenesség.
+//
+// S1 (ez a szelet): a FELADAT-SABLON és a mezői. A bejegyzés (a rögzítés maga), a mobil, a rendellenesség-hibajegy, a havi
+// kimutatás és a partner-nézet a következő szeletek, és ide a saját táblájukkal jönnek.
+//
+// NEM MUNKALAP (`ServiceJob`): az számlázott ügyfélmunka, ez belső rutin. A kettő csak az eszközön és a rendellenesség
+// hibajegyén át kapcsolódik.
+// =====================================================================================================================
+
+/// A sablon gyakorisága: napi, heti vagy alkalmi. A havi kimutatás (S4) a napi és a heti sablon elmaradt példányait is
+/// mutatja; az alkalmi sablonnak nincs esedékessége.
+enum OperationsTaskFrequency {
+  DAILY
+  WEEKLY
+  OCCASIONAL
+}
+
+/// A sablon mezőjének típusa: a felületen, kód nélkül épül fel.
+enum OperationsTaskFieldType {
+  /// Szám, mértékegységgel (például vízóra, m3).
+  NUMBER
+  /// Igen vagy nem.
+  BOOLEAN
+  /// Rövid szöveg.
+  TEXT
+  /// Fénykép (a rögzítéskor, S2).
+  PHOTO
+}
+
+/// Egy szám mező szerepe a havi kimutatásban (S4): a vízóra állás a művelet ELŐTT, illetve UTÁN. A kimutatás a kettő
+/// különbségét (utána mínusz előtte) mutatja. Más mezőnek nincs szerepe.
+enum OperationsMeterRole {
+  BEFORE
+  AFTER
+}
+
+model OperationsTaskTemplate {
+  id              String                  @id @default(cuid())
+  /// A sablon neve, a rögzítéskor ezt látja a szerelő: „Homokszűrő visszamosás”.
+  name            String                  @db.VarChar(120)
+  description     String?                 @db.VarChar(1000)
+  frequency       OperationsTaskFrequency
+  /// A SABLON PONTOSAN EGY CÉLRA SZÓL: egy eszközre VAGY egy eszköz-kategóriára (a kategóriára szóló sablon minden ilyen
+  /// kategóriájú eszköznél megnyílik). A migráció CHECK-je tartja: a kettő közül PONTOSAN egy van kitöltve.
+  assetId         String?
+  assetCategoryId String?
+  /// A kivezetett sablon nem törlődik (a bejegyzések hivatkozni fognak rá): a kínálatból esik ki, a régi bejegyzések mellett
+  /// olvasható marad.
+  isActive        Boolean                 @default(true)
+  createdById     String?
+  updatedById     String?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  asset         Asset?                @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  assetCategory AssetCategory?        @relation(fields: [assetCategoryId], references: [id], onDelete: Restrict)
+  fields        OperationsTaskField[]
+
+  @@index([isActive, frequency])
+  @@index([assetId])
+  @@index([assetCategoryId])
+}
+
+model OperationsTaskField {
+  id         String                  @id @default(cuid())
+  templateId String
+  /// A mező STABIL azonosítója a sablonon belül (a címkéből képzett, `a-z0-9_`): a bejegyzés (S2) az értéket ezzel a kulccsal
+  /// tárolja, így egy átnevezett címke nem veszi el a régi értékeket. A szerkesztéskor a meglévő mező megtartja a kulcsát.
+  key        String                  @db.VarChar(40)
+  label      String                  @db.VarChar(120)
+  type       OperationsTaskFieldType
+  /// Mértékegység, CSAK szám mezőnél (például `m3`); a migráció CHECK-je tartja.
+  unit       String?                 @db.VarChar(16)
+  required   Boolean                 @default(false)
+  /// A vízóra szerep a havi kimutatáshoz (S4), CSAK szám mezőnél; sablononként legfeljebb egy ELŐTT és egy UTÁN mező
+  /// (a szolgáltatás tartja).
+  meterRole  OperationsMeterRole?
+  sortOrder  Int                     @default(0)
+  createdAt  DateTime                @default(now())
+
+  template OperationsTaskTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, key])
+  @@index([templateId, sortOrder])
 }
