@@ -401,6 +401,7 @@ test("a kimutatás szövegei magyarul: tartam, szám, hónap, időszak, előjel"
   assert.equal(operationsSignedNumberText(12.5, "m3"), "+12,5 m3");
   assert.equal(operationsSignedNumberText(-3, null), "-3");
   assert.equal(operationsSignedNumberText(0, "m3"), "0 m3");
+});
 
 test("a mért értékek a sorban: a vízóra kivételével, a partner nézetében a szabad szöveg nélkül", () => {
   const values = [
