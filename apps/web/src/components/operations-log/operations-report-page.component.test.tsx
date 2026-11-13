@@ -175,6 +175,20 @@ describe("az üzemeltetési napló havi kimutatása", () => {
     expect(api.report).not.toHaveBeenCalled();
   });
 
+  it("a partner választó ugyanolyan magas, mint a helyszín mezője (a felirata egy vonalban áll a másik kettőével)", () => {
+    // MI PIROSIT: ha a partner választó a saját (alacsonyabb) magasságán maradna, a sor `items-end` miatt az alja egy vonalon áll, a felirata
+    // viszont ~8 px-szel lejjebb: ezt mérte a stage 1440 px-es képe
+    render(<OperationsReportPage />);
+    const partnerBox = screen.getByText(/^partner:/)
+      .parentElement as HTMLElement;
+    const siteSelect = screen
+      .getByLabelText("Helyszín")
+      .closest("[class*='[&_select]:h-10']") as HTMLElement | null;
+    expect(partnerBox.className).toContain("[&_select]:h-10");
+    // KONTROLL: a helyszín mezője ugyanezt a magasságot hordozza, tehát a kettő egyezése a mérés, nem a véletlen
+    expect(siteSelect).not.toBeNull();
+  });
+
   it("helyszín nélkül kiírja, mit válassz, és nem kér kimutatást", async () => {
     render(<OperationsReportPage />);
     expect(
