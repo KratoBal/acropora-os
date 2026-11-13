@@ -145,8 +145,9 @@ describe("a letöltés után újraolvasandó másolatok", () => {
    * adatlapon. Ot kulcs -- es az otodiket felejti el az ember, miközben a
    * tobbi frissul, tehat a felulet MUKODONEK latszik.
    */
-  it("mind az öt mentett másolat szerepel", () => {
-    assert.equal(LETOLTES_UTAN_UJRAOLVASANDO.length, 5);
+  it("mind a hat mentett másolat szerepel", () => {
+    // 2026-11-13: ötről hatra nőtt az üzemeltetési napló sablonjaival (task os-uzemeltetesi-naplo, S2d)
+    assert.equal(LETOLTES_UTAN_UJRAOLVASANDO.length, 6);
     assert.deepEqual(
       LETOLTES_UTAN_UJRAOLVASANDO.map((kulcs) => kulcs[0] as string).sort(),
       [
@@ -154,6 +155,7 @@ describe("a letöltés után újraolvasandó másolatok", () => {
         "offline-assets",
         "offline-service-job",
         "offline-service-jobs",
+        "operations-templates",
         "worksheet-cache",
       ],
     );
