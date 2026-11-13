@@ -224,4 +224,31 @@ describe("the signed copy's hash (S2d, barracuda on #2513)", () => {
       november("2026-11-13T10:30:00.000Z"),
     );
   });
+
+  it("says whether the employee set an entry themselves, only where the author was read", () => {
+    const row = {
+      date: dateOnly("2026-11-20"),
+      kind: "LEAVE" as const,
+      startMinute: null,
+      endMinute: null,
+      updatedAt: new Date("2026-11-13T09:00:00.000Z"),
+    };
+    assert.equal(
+      dayView({ ...row, updatedById: "u-1" }, "u-1").setByEmployee,
+      true,
+    );
+    assert.equal(
+      dayView({ ...row, updatedById: "admin-1" }, "u-1").setByEmployee,
+      false,
+    );
+    assert.equal(
+      dayView({ ...row, updatedById: null }, "u-1").setByEmployee,
+      false,
+    );
+    assert.equal("setByEmployee" in dayView(row, "u-1"), false);
+    assert.equal(
+      "setByEmployee" in dayView({ ...row, updatedById: "u-1" }),
+      false,
+    );
+  });
 });

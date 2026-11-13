@@ -425,4 +425,28 @@ describe("the sheet as of now (Balázs on stage, 2026-11-13: never filled ahead)
       "08:00",
     );
   });
+
+  it("says which entries the employee set themselves (S3, barracuda on #2516)", () => {
+    const sheet = attendanceSheet({
+      month: "2026-11",
+      schedules,
+      entries: [
+        { ...entry("2026-11-20", "LEAVE"), setByEmployee: true },
+        { ...entry("2026-11-23", "LEAVE"), setByEmployee: false },
+        entry("2026-11-24", "DAY_OFF"),
+      ],
+      now: new Date("2026-11-13T12:00:00.000Z"),
+    });
+    const own = (date: string) =>
+      sheet.rows.find((r) => r.date === date)!.ownEntry;
+    assert.deepEqual(
+      [
+        own("2026-11-20"),
+        own("2026-11-23"),
+        own("2026-11-24"),
+        own("2026-11-16"),
+      ],
+      [true, false, false, false],
+    );
+  });
 });

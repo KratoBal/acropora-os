@@ -90,7 +90,24 @@ describe("the phone's attendance sheet", () => {
     assert.equal(canMarkOwnDay(row({ date: "2026-11-13" }), today), false);
     assert.equal(canMarkOwnDay(row({ date: "2026-11-12" }), today), false);
     for (const kind of ["LEAVE", "DAY_OFF"] as const) {
+      // an admin's booked leave is not offered (barracuda on #2516)
+      assert.equal(
+        canMarkOwnDay(
+          row({
+            date: "2026-11-20",
+            kind,
+            source: "ENTRY",
+            start: null,
+            end: null,
+            ownEntry: false,
+          }),
+          today,
+        ),
+        false,
+        kind,
+      );
       const own = row({
+        ownEntry: true,
         date: "2026-11-20",
         kind,
         source: "ENTRY",

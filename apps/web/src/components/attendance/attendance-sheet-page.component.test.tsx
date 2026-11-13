@@ -433,6 +433,10 @@ describe("AttendanceSheetPage", () => {
     });
     await openSheet();
     fireEvent.click(screen.getByLabelText("2026. 11. 18. módosítása"));
+    // the time fields wait for the stored times (barracuda on #2520)
+    expect(
+      (screen.getByLabelText("Távozás") as HTMLInputElement).disabled,
+    ).toBe(true);
     await waitFor(() =>
       expect((screen.getByLabelText("Távozás") as HTMLInputElement).value).toBe(
         "18:00",
@@ -440,6 +444,11 @@ describe("AttendanceSheetPage", () => {
     );
     expect((screen.getByLabelText("Érkezés") as HTMLInputElement).value).toBe(
       "07:00",
+    );
+    await waitFor(() =>
+      expect(
+        (screen.getByLabelText("Távozás") as HTMLInputElement).disabled,
+      ).toBe(false),
     );
     expect(api.days).toHaveBeenCalledWith(
       "token-1",
