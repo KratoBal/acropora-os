@@ -15,10 +15,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { pickMonth } from "@/test/month-field";
 
-import {
-  AttendanceSheetPage,
-  formatAttendanceHours,
-} from "./attendance-sheet-page";
+import { AttendanceSheetPage } from "./attendance-sheet-page";
+import { formatAttendanceHours } from "./attendance-sheet-table";
 
 const api = vi.hoisted(() => ({
   employees: vi.fn(),
