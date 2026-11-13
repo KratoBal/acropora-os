@@ -182,16 +182,19 @@ export function AttendanceSheetPage() {
     afterwards?: () => void,
   ) => {
     setPdfError(null);
+    // the tab opens in the click itself: one opened after an await is blocked by Safari (barracuda on #2509)
+    const opened = window.open("", "_blank");
     try {
       const url = URL.createObjectURL(await load());
-      const opened = window.open(url, "_blank");
       // the tab keeps its own copy once loaded; the page never holds the PDF for good
       window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-      if (!opened)
+      if (opened) opened.location.href = url;
+      else
         setPdfError(
           "A böngésző nem engedte megnyitni a PDF-et új lapon. Engedélyezd a felugró ablakot erre az oldalra.",
         );
     } catch (cause) {
+      opened?.close();
       setPdfError(
         cause instanceof Error
           ? cause.message

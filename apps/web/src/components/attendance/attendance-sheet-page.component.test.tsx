@@ -304,7 +304,8 @@ describe("AttendanceSheetPage", () => {
     await waitFor(() =>
       expect(api.sheetPdf).toHaveBeenCalledWith("token-1", "u-1", "2026-11"),
     );
-    expect(open).toHaveBeenCalledWith("blob:sheet", "_blank");
+    // the tab is opened in the click, before the PDF arrives (Safari)
+    expect(open).toHaveBeenCalledWith("", "_blank");
     expect(
       await screen.findByText(/nem engedte megnyitni a PDF-et/),
     ).toBeTruthy();
@@ -313,7 +314,10 @@ describe("AttendanceSheetPage", () => {
 
   it("prints for signature, then shows the kept copy", async () => {
     api.printForSignature.mockReset().mockResolvedValue(new Blob(["%PDF-"]));
-    const open = vi.spyOn(window, "open").mockReturnValue({} as Window);
+    const tab = { location: { href: "" }, close: vi.fn() };
+    const open = vi
+      .spyOn(window, "open")
+      .mockReturnValue(tab as unknown as Window);
     Object.assign(URL, {
       createObjectURL: vi.fn(() => "blob:signed"),
       revokeObjectURL: vi.fn(),
@@ -349,6 +353,7 @@ describe("AttendanceSheetPage", () => {
         "copy-1",
       ),
     );
+    await waitFor(() => expect(tab.location.href).toBe("blob:signed"));
     open.mockRestore();
   });
 
