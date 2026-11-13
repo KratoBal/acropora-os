@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import {
@@ -21,6 +22,8 @@ import {
   type OperationsLogEntryFilter,
   type OperationsLogEntryValueWrite,
 } from "./operations-log-entries.repository.js";
+import { ServiceJobsService } from "../service-jobs/service-jobs.service.js";
+import type { CreateServiceJobDto } from "../service-jobs/dto.js";
 import { OperationsLogRepository } from "./operations-log.repository.js";
 
 const DEFAULT_LIMIT = 50;
@@ -40,9 +43,12 @@ const DEFAULT_LIMIT = 50;
  */
 @Injectable()
 export class OperationsLogEntriesService {
+  private readonly logger = new Logger(OperationsLogEntriesService.name);
+
   constructor(
     private readonly entries: OperationsLogEntriesRepository,
     private readonly templates: OperationsLogRepository,
+    private readonly serviceJobs: ServiceJobsService,
   ) {}
 
   /** A rögzítés kínálata egy eszközhöz: az aktív sablonok, amelyek az eszközre vagy a kategóriájára szólnak. */
@@ -91,7 +97,8 @@ export class OperationsLogEntriesService {
     const existing = await this.entries.byClientOperationId(
       input.clientOperationId,
     );
-    if (existing) return this.replay(existing, actorId);
+    if (existing)
+      return this.withTicket(this.replay(existing, actorId), actorId);
 
     const template = await this.templates.templateById(input.templateId);
     if (!template) throw new NotFoundException("A sablon nem található.");
@@ -129,9 +136,63 @@ export class OperationsLogEntriesService {
       values: this.valueRows(fields, input.values),
     };
     const result = await this.entries.create(write, actorId);
-    return result.created
-      ? { entry: result.entry, created: true }
-      : this.replay(result, actorId);
+    return this.withTicket(
+      result.created
+        ? { entry: result.entry, created: true }
+        : this.replay(result, actorId),
+      actorId,
+    );
+  }
+
+  /**
+   * A RENDELLENESSÉGBŐL AUTOMATIKUSAN HIBAJEGY NYÍLIK (S3), a bejegyzéshez és az eszközhöz kötve.
+   *
+   * A BEJEGYZÉS A BIZONYÍTÉK, A JEGY A KÖVETKEZMÉNY: a jegy nyitásának hibája ezért NEM buktatja a rögzítést (a bejegyzés megvan, a
+   * válaszban a `serviceJob` null), és a következő újraküldés (a telefon a megszakadt választ újrapróbálja) PÓTOLJA a jegyet. A
+   * kettő együtt idempotens: a jegy kulcsa a bejegyzés azonosítójából készül (`ops-anomaly:<id>`), tehát ha a jegy létrejött, csak az
+   * összekötés maradt el, az újrapróbálás ugyanazt a jegyet kapja vissza, és nem másodikat nyit.
+   *
+   * A JEGYET A RÖGZÍTŐ NEVÉN NYITJUK (belső hatókör), a partner és a helyszín az eszközből következik (a `ServiceJobsService` vezeti
+   * le), az eszköz felkerül a jegyre. Delegáltat nem állítunk: azt az iroda osztja.
+   */
+  private async withTicket(
+    response: OperationsLogEntryCreateResponse,
+    actorId: string,
+  ): Promise<OperationsLogEntryCreateResponse> {
+    const { entry } = response;
+    if (!entry.anomaly || entry.serviceJob) return response;
+    try {
+      const context = await this.entries.ticketContext(entry.id);
+      if (!context || context.serviceJobId || !context.anomaly) return response;
+      const job = await this.serviceJobs.create(
+        {
+          title:
+            `Rendellenesség: ${context.templateName}, ${context.asset.assetNumber} ${context.asset.name}`.slice(
+              0,
+              300,
+            ),
+          description: [
+            context.anomalyNote ?? "",
+            "",
+            `Üzemeltetési napló: ${context.templateName}`,
+            `Eszköz: ${context.asset.assetNumber} ${context.asset.name}`,
+            `Kezdés: ${context.startedAt.toLocaleString("hu-HU", { timeZone: "Europe/Budapest" })}`,
+          ].join("\n"),
+          kind: "REPAIR",
+          originAssetId: context.asset.id,
+          clientOperationId: `ops-anomaly:${entry.id}`,
+        } as CreateServiceJobDto,
+        context.recordedById || actorId,
+      );
+      await this.entries.linkServiceJob(entry.id, job.id);
+      const refreshed = await this.entries.byId(entry.id);
+      return refreshed ? { ...response, entry: refreshed } : response;
+    } catch (error) {
+      this.logger.warn(
+        `A rendellenesség hibajegye nem nyílt meg (bejegyzés ${entry.id}): ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return response;
+    }
   }
 
   private replay(
