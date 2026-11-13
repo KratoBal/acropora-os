@@ -36,6 +36,19 @@ const daySelect = {
 
 type Tx = Prisma.TransactionClient;
 
+/** The S3 guard, read under the lock: the existing entry's kind must be allowed, and (`onlyOwn`) the actor its author. */
+function guardRefuses(
+  existing: { kind: AttendanceDayKind; updatedById: string | null },
+  input: {
+    actorId: string;
+    onlyOver?: readonly AttendanceDayKind[];
+    onlyOwn?: boolean;
+  },
+): boolean {
+  if (input.onlyOver && !input.onlyOver.includes(existing.kind)) return true;
+  return input.onlyOwn === true && existing.updatedById !== input.actorId;
+}
+
 /** The day already carries a mark the caller may not replace or remove (S3: an employee over an admin's mark). */
 export class AttendanceDayTakenError extends Error {
   constructor(readonly kind: AttendanceDayKind) {
@@ -272,15 +285,17 @@ export class AttendanceRepository {
     actorId: string;
     /** S3: replace only an entry of these kinds (or none); another throws `AttendanceDayTakenError`, read under the lock. */
     onlyOver?: readonly AttendanceDayKind[];
+    /** S3: and only one the actor set themselves (barracuda on #2515: an admin's leave is not the employee's to undo). */
+    onlyOwn?: boolean;
   }): Promise<DayRow> {
     return this.database.$transaction(async (tx) => {
       await this.lockEmployee(tx, input.userId);
       const key = { userId_date: { userId: input.userId, date: input.date } };
       const existing = await tx.attendanceDay.findUnique({
         where: key,
-        select: daySelect,
+        select: { ...daySelect, updatedById: true },
       });
-      if (existing && input.onlyOver && !input.onlyOver.includes(existing.kind))
+      if (existing && guardRefuses(existing, input))
         throw new AttendanceDayTakenError(existing.kind);
       const from = dayAuditValue(existing);
       const to = dayAuditValue(input);
@@ -315,16 +330,18 @@ export class AttendanceRepository {
     actorId: string;
     /** S3: remove only an entry of these kinds; another throws `AttendanceDayTakenError`. */
     onlyOver?: readonly AttendanceDayKind[];
+    /** S3: and only one the actor set themselves. */
+    onlyOwn?: boolean;
   }): Promise<boolean> {
     return this.database.$transaction(async (tx) => {
       await this.lockEmployee(tx, input.userId);
       const key = { userId_date: { userId: input.userId, date: input.date } };
       const existing = await tx.attendanceDay.findUnique({
         where: key,
-        select: daySelect,
+        select: { ...daySelect, updatedById: true },
       });
       if (!existing) return false;
-      if (input.onlyOver && !input.onlyOver.includes(existing.kind))
+      if (guardRefuses(existing, input))
         throw new AttendanceDayTakenError(existing.kind);
       await tx.attendanceDay.delete({ where: key });
       await this.audit(tx, {
