@@ -29,7 +29,11 @@ import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { UserAttendanceSchedule } from "@/components/users/user-attendance-schedule";
 import { attendanceApi } from "@/lib/api/attendance";
-import { budapestDayOf, formatDayHu } from "@/lib/format/date";
+import {
+  budapestDayOf,
+  formatDateTimeHu,
+  formatDayHu,
+} from "@/lib/format/date";
 
 const WEEKDAY_SHORT = ["H", "K", "Sze", "Cs", "P", "Szo", "V"] as const;
 
@@ -169,14 +173,17 @@ export function AttendanceSheetPage() {
   const employee = employees.find((e) => e.id === employeeId) ?? null;
   const [pdfError, setPdfError] = useState<string | null>(null);
 
-  /** The month's PDF in a new tab, as it stands now (S2c): printed and signed at month end, or shown at an inspection. */
-  const openPdf = async () => {
-    if (!employee) return;
+  /**
+   * A PDF in a new tab (S2c, S2d): the month as it stands, the month printed for signature (kept by the server), or a kept
+   * signed copy. A blocked tab is said, not swallowed.
+   */
+  const openPdf = async (
+    load: () => Promise<Blob>,
+    afterwards?: () => void,
+  ) => {
     setPdfError(null);
     try {
-      const url = URL.createObjectURL(
-        await attendanceApi.sheetPdf(token, employee.id, month),
-      );
+      const url = URL.createObjectURL(await load());
       const opened = window.open(url, "_blank");
       // the tab keeps its own copy once loaded; the page never holds the PDF for good
       window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
@@ -190,6 +197,8 @@ export function AttendanceSheetPage() {
           ? cause.message
           : "A jelenléti ív PDF-je nem tölthető le.",
       );
+    } finally {
+      afterwards?.();
     }
   };
 
@@ -262,10 +271,34 @@ export function AttendanceSheetPage() {
             onChange={(value) => choose({ month: value })}
           />
         </PilotFormField>
-        {shown && employee ? (
-          <PilotButton variant="secondary" onClick={() => void openPdf()}>
-            PDF (nyomtatás, aláírás)
-          </PilotButton>
+        {shown ? (
+          <>
+            <PilotButton
+              variant="secondary"
+              onClick={() =>
+                void openPdf(() =>
+                  attendanceApi.sheetPdf(token, shown.userId, shown.month),
+                )
+              }
+            >
+              PDF megtekintése
+            </PilotButton>
+            <PilotButton
+              onClick={() =>
+                void openPdf(
+                  () =>
+                    attendanceApi.printForSignature(
+                      token,
+                      shown.userId,
+                      shown.month,
+                    ),
+                  () => void loadSheet(),
+                )
+              }
+            >
+              Nyomtatás aláírásra
+            </PilotButton>
+          </>
         ) : null}
       </div>
       {pdfError ? (
@@ -287,6 +320,39 @@ export function AttendanceSheetPage() {
         <Skeleton className="h-64 w-full" />
       ) : (
         <PilotCard className="space-y-3 p-4">
+          {shown.signedCopy ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {shown.signedCopy.differs ? (
+                <Alert
+                  variant="danger"
+                  title="Az aláírásra nyomtatott példány óta a hónap megváltozott"
+                  description={`Aláírásra nyomtatva: ${formatDateTimeHu(shown.signedCopy.printedAt)}. Új nyomtatás és aláírás kell; a korábbi példány megmarad.`}
+                />
+              ) : (
+                <p className="text-xs text-pilot-grey-500">
+                  Aláírásra nyomtatva:{" "}
+                  {formatDateTimeHu(shown.signedCopy.printedAt)}, azóta
+                  változatlan.
+                </p>
+              )}
+              <PilotButton
+                variant="secondary"
+                onClick={() => {
+                  const copy = shown.signedCopy;
+                  if (copy)
+                    void openPdf(() =>
+                      attendanceApi.signedSheetPdf(
+                        token,
+                        shown.userId,
+                        copy.id,
+                      ),
+                    );
+                }}
+              >
+                Aláírt példány
+              </PilotButton>
+            </div>
+          ) : null}
           {shown.swapsDecree ? null : (
             <Alert
               title="Az áthelyezett munkanapok erre az évre még nincsenek a rendszerben"
