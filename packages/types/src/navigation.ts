@@ -231,6 +231,16 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
   },
   {
     /**
+     * AZ ÜZEMELTETÉSI NAPLÓ HAVI KIMUTATÁSA (task os-uzemeltetesi-naplo, S4b): a bejegyzések olvasása és a PDF a nézet jogán
+     * (`operations-log.view`: a szerelő és a vezetők). A rögzítés a telefon dolga (`operations-log.record`), a sablonok a
+     * Beállításokban állnak (`operations-log.templates.manage`).
+     */
+    id: "operations-log",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.OPERATIONS_LOG_VIEW),
+  },
+  {
+    /**
      * MEGRENDELÉSEK (KARBANTARTÁSI MEGRENDELŐLAPOK), A PARTNER PORTÁLON --
      * acrobot jóváhagyása, msg_id 23868, 2026-09-25 22:17 UTC, Balázs
      * sorrendjének (emlék 1840) 5. része.

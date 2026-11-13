@@ -217,6 +217,7 @@ describe("navigation", () => {
           "Piszkozatok",
           "Anyagigények",
           "Eszköznyilvántartás",
+          "Üzemeltetési napló",
           "QR-kód nyomtatás",
         ],
       ],
@@ -465,6 +466,7 @@ describe("navigation", () => {
     ["/szerviz/karbantartas", "maintenance", "Karbantartás"],
     ["/szerviz/munkalapok", "worksheets", "Munkalapok"],
     ["/szerviz/eszkozok", "service-assets", "Eszköznyilvántartás"],
+    ["/szerviz/uzemeltetesi-naplo", "operations-log", "Üzemeltetési napló"],
     ["/szerviz/anyagigenyek", "material-requests-pending", "Anyagigények"],
     ["/tartalom", "content", "Tartalom"],
     ["/tartalom/nyeremenyjatek", "game", "Nyereményjáték"],
@@ -689,6 +691,9 @@ describe("navigation", () => {
         // AZ ELHULLÁSI NAPLÓ (kártya 115c9740): acrobot döntése (27141) a
         // SERVICE szerepnek megtekintést és rögzítést is ad.
         "Elhullási napló",
+        // AZ ÜZEMELTETÉSI NAPLÓ HAVI KIMUTATÁSA (task os-uzemeltetesi-naplo, S4b): a SERVICE szerep `operations-log.view`
+        // jogot kap (a szerelő rögzít és olvassa a naplót), a sablonok kezelése nem az övé (az nem ez a menüpont).
+        "Üzemeltetési napló",
       ].sort(),
     );
   });
@@ -768,6 +773,8 @@ describe("navigation", () => {
     "/szerviz/karbantartas": "service.view",
     "/szerviz/munkalapok": "service.view",
     "/szerviz/eszkozok": "service.view",
+    // az üzemeltetési napló havi kimutatása (task os-uzemeltetesi-naplo, S4b): a nézet jog, a szerelő is látja
+    "/szerviz/uzemeltetesi-naplo": "operations-log.view",
     // A BESZERZO SAJAT LISTAJA (2026-09-23) -- `service.manage`, nem
     // `service.view`: a lap tartalma a `MATERIAL_REQUEST_MARK_RECEIVED`
     // kepessegen all (per-felhasznalo jelolo), de a MENUPONT lathatosaga a

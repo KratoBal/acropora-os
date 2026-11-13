@@ -8,6 +8,8 @@ import {
 
 export const OPERATIONS_TEMPLATES_PATH =
   "/beallitasok/uzemeltetesi-naplo-sablonok";
+/** A havi kimutatás oldala (S4b): a Szerviz menüben. */
+export const OPERATIONS_REPORT_PATH = "/szerviz/uzemeltetesi-naplo";
 
 export { OPERATIONS_FIELD_TYPE_LABELS, OPERATIONS_FREQUENCY_LABELS };
 
