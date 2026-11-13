@@ -6,6 +6,7 @@ import { prisma } from "@acropora/database";
 import { integrationDatabaseGate } from "../common/integration-database.js";
 import { OperationsLogEntriesRepository } from "./operations-log-entries.repository.js";
 import { OperationsLogEntriesService } from "./operations-log-entries.service.js";
+import { OperationsLogPhotosService } from "./operations-log-photos.service.js";
 import { OperationsLogRepository } from "./operations-log.repository.js";
 
 /**
@@ -31,6 +32,12 @@ describe(
     const service = new OperationsLogEntriesService(
       new OperationsLogEntriesRepository(),
       templates,
+    );
+    const photos = new OperationsLogPhotosService(
+      new OperationsLogEntriesRepository(),
+      templates,
+      // a tároló be nem kapcsolt környezetben a kép az adatbázisba megy (a közös mag dönt), a tárolóhoz itt nem nyúlunk
+      {} as never,
     );
     const ids = {
       asset: "",
@@ -137,6 +144,12 @@ describe(
                 label: "Megjegyzés",
                 type: "TEXT",
                 sortOrder: 2,
+              },
+              {
+                key: "kep",
+                label: "Fénykép",
+                type: "PHOTO",
+                sortOrder: 3,
               },
             ],
           },
@@ -394,6 +407,95 @@ describe(
           anomalyOnly: true,
         });
         assert.ok(anomalies.items.every((item) => item.anomaly));
+      });
+    });
+
+    describe("a fénykép mezők képei", () => {
+      // 1x1 pixeles PNG
+      const PNG = Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+        "base64",
+      );
+      const png = () =>
+        ({
+          originalname: "kep.png",
+          mimetype: "image/png",
+          buffer: PNG,
+        }) as Express.Multer.File;
+
+      it("a kép a bejegyzéshez kötött, a bájtjai visszaolvashatók, az újraküldés ugyanazt adja", async () => {
+        const { entry } = await service.create(input("kepes"), ids.recorder);
+        const first = await photos.addPhoto(entry.id, png(), ids.recorder, {
+          fieldKey: "kep",
+          clientOperationId: `${PREFIX}kep1-${suffix}`,
+        });
+        assert.equal(first.created, true);
+        assert.equal(first.photo.fieldLabel, "Fénykép");
+        const again = await photos.addPhoto(entry.id, png(), ids.recorder, {
+          fieldKey: "kep",
+          clientOperationId: `${PREFIX}kep1-${suffix}`,
+        });
+        assert.equal(again.created, false);
+        assert.equal(again.photo.id, first.photo.id);
+        assert.equal(
+          await prisma.operationsLogEntryDocument.count({
+            where: { entryId: entry.id },
+          }),
+          1,
+        );
+        const reread = await service.get(entry.id);
+        assert.deepEqual(
+          reread.photos.map((photo) => photo.id),
+          [first.photo.id],
+        );
+        const bytes = await photos.photoBytes(entry.id, first.photo.id);
+        assert.deepEqual(bytes.bytes, PNG);
+        assert.equal(bytes.contentType, "image/png");
+      });
+
+      it("két párhuzamos újraküldés egyetlen képet hagy", async () => {
+        const { entry } = await service.create(
+          input("kepverseny"),
+          ids.recorder,
+        );
+        const send = () =>
+          photos.addPhoto(entry.id, png(), ids.recorder, {
+            fieldKey: "kep",
+            clientOperationId: `${PREFIX}kepverseny-${suffix}`,
+          });
+        const results = await Promise.all([send(), send()]);
+        assert.equal(results[0].photo.id, results[1].photo.id);
+        assert.equal(results.filter((r) => r.created).length, 1);
+        assert.equal(
+          await prisma.operationsLogEntryDocument.count({
+            where: { entryId: entry.id },
+          }),
+          1,
+        );
+      });
+
+      it("idegen rögzítő nem csatolhat, nem fénykép mezőre nem megy, a bejegyzés törlése viszi a képeit", async () => {
+        const { entry } = await service.create(input("kepjog"), ids.recorder);
+        await assert.rejects(
+          photos.addPhoto(entry.id, png(), ids.colleague, { fieldKey: "kep" }),
+          /csak a bejegyzés rögzítője/,
+        );
+        await assert.rejects(
+          photos.addPhoto(entry.id, png(), ids.recorder, {
+            fieldKey: "elotte",
+          }),
+          /nem fénykép mező/,
+        );
+        await photos.addPhoto(entry.id, png(), ids.recorder, {
+          fieldKey: "kep",
+        });
+        await prisma.operationsLogEntry.delete({ where: { id: entry.id } });
+        assert.equal(
+          await prisma.operationsLogEntryDocument.count({
+            where: { entryId: entry.id },
+          }),
+          0,
+        );
       });
     });
   },

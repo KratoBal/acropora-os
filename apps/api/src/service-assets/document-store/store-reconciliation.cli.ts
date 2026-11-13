@@ -256,6 +256,21 @@ const OWNER_QUERIES: Record<DocumentOwner, () => Promise<RowWithSize[]>> = {
       },
       sizeBytes: sor.sizeBytes,
     })),
+  /** Az üzemeltetési napló fénykép mezőinek képei (S2b), az elhullási napló fényképeinek mintájára. */
+  "operations-log": async () =>
+    (
+      await prisma.operationsLogEntryDocument.findMany({
+        where: { storageKey: { not: null } },
+        select: { entryId: true, id: true, sizeBytes: true },
+      })
+    ).map((sor) => ({
+      key: {
+        owner: "operations-log" as const,
+        ownerId: sor.entryId,
+        documentId: sor.id,
+      },
+      sizeBytes: sor.sizeBytes,
+    })),
 };
 
 const fetchFromPrisma: FetchRowsWithStorageKey = async () => {

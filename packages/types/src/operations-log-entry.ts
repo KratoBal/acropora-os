@@ -23,6 +23,8 @@ export const OPERATIONS_ENTRY_LIMITS = {
   /** Egy rögzítés legfeljebb ennyi ideig tarthat (ms): ennél hosszabb általában rossz telefon-óra. */
   maxDurationMs: 24 * 60 * 60 * 1000,
   clientOperationIdPattern: /^[A-Za-z0-9_.:-]{8,128}$/,
+  /** Egy fénykép mezőhöz legfeljebb ennyi kép tartozhat egy bejegyzésen. */
+  photosPerFieldMax: 10,
 } as const;
 
 export type OperationsEntryValue = number | boolean | string;
@@ -62,6 +64,19 @@ export interface OperationsLogEntryPersonDto {
   displayName: string;
 }
 
+/** Egy fénykép mező képe a bejegyzésen; a bájtok az `entries/:id/photos/:documentId` végponton jönnek. */
+export interface OperationsLogEntryPhotoDto {
+  id: string;
+  fieldKey: string;
+  /** A mező címkéje a rögzítéskor (pillanatfelvétel). */
+  fieldLabel: string;
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+  caption: string | null;
+  createdAt: string;
+}
+
 export interface OperationsLogEntryDto {
   id: string;
   clientOperationId: string | null;
@@ -78,6 +93,8 @@ export interface OperationsLogEntryDto {
   anomalyNote: string | null;
   internalNote: string | null;
   values: OperationsLogEntryValueDto[];
+  /** A fénykép mezők képei. A kép a bejegyzés után, külön kérésben érkezik (offline sorban is), ezért a lista később is bővülhet. */
+  photos: OperationsLogEntryPhotoDto[];
   createdAt: string;
 }
 

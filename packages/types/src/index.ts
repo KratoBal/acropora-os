@@ -1177,6 +1177,7 @@ export type {
   OperationsLogEntryInput,
   OperationsLogEntryListResponse,
   OperationsLogEntryPersonDto,
+  OperationsLogEntryPhotoDto,
   OperationsLogEntryValueDto,
 } from "./operations-log-entry.js";
 export { FAVORITE_LIMITS, isFavoriteHref } from "./favorite.js";

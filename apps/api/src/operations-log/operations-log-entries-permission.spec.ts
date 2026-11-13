@@ -41,19 +41,22 @@ describe("az üzemeltetési napló bejegyzés-végpontjainak jogai", () => {
       proto.create,
       proto.templatesForAsset,
       proto.colleagues,
+      proto.uploadPhoto,
     ])
       assert.equal(run(route, record), true);
-    for (const route of [proto.list, proto.get]) denied(route, record);
+    for (const route of [proto.list, proto.get, proto.downloadPhoto])
+      denied(route, record);
   });
 
   it("a nézet jog olvas, de nem rögzít", () => {
     const view = [PERMISSIONS.OPERATIONS_LOG_VIEW];
-    for (const route of [proto.list, proto.get])
+    for (const route of [proto.list, proto.get, proto.downloadPhoto])
       assert.equal(run(route, view), true);
     for (const route of [
       proto.create,
       proto.templatesForAsset,
       proto.colleagues,
+      proto.uploadPhoto,
     ])
       denied(route, view);
   });
@@ -66,6 +69,8 @@ describe("az üzemeltetési napló bejegyzés-végpontjainak jogai", () => {
       proto.colleagues,
       proto.list,
       proto.get,
+      proto.uploadPhoto,
+      proto.downloadPhoto,
     ]) {
       denied(route, manage);
       denied(route, [PERMISSIONS.SERVICE_VIEW]);

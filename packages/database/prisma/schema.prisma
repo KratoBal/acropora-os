@@ -1106,6 +1106,7 @@ model User {
   mortalityRecordsRecorded            MortalityRecord[]                   @relation("MortalityRecordRecordedBy")
   operationsLogEntriesRecorded        OperationsLogEntry[]                @relation("OperationsLogEntryRecordedBy")
   operationsLogEntryParticipations    OperationsLogEntryParticipant[]
+  operationsLogDocumentsUploaded      OperationsLogEntryDocument[]        @relation("OperationsLogEntryDocumentUploadedBy")
   mortalityDocumentsUploaded          MortalityRecordDocument[]           @relation("MortalityRecordDocumentUploadedBy")
   dashboardLayout                     UserDashboardLayout?
   ownedQuotes                         Quote[]                             @relation("QuoteOwner")
@@ -12636,6 +12637,7 @@ model OperationsLogEntry {
   recordedBy   User                            @relation("OperationsLogEntryRecordedBy", fields: [recordedById], references: [id], onDelete: Restrict)
   participants OperationsLogEntryParticipant[]
   values       OperationsLogEntryValue[]
+  documents    OperationsLogEntryDocument[]
 
   @@index([assetId, startedAt])
   @@index([templateId, startedAt])
@@ -12672,4 +12674,32 @@ model OperationsLogEntryValue {
   entry OperationsLogEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
 
   @@unique([entryId, fieldKey])
+}
+
+/// A bejegyzés fénykép mezőinek képei (task os-uzemeltetesi-naplo, S2b). Ugyanaz az alak, mint a `MortalityRecordDocument`: a feltöltés
+/// szabályai a közös magban állnak (`documents/document-intake.ts`), a tároló tulajdonosa az `operations-log`, az `ownerId` a bejegyzés.
+/// A kép a mező KULCSÁHOZ és a rögzítéskori címkéjéhez kötött (pillanatfelvétel, mint az érték), nem a mező sorához.
+model OperationsLogEntryDocument {
+  id                String   @id @default(cuid())
+  entryId           String
+  fieldKey          String   @db.VarChar(40)
+  fieldLabel        String   @db.VarChar(120)
+  /// A kliens által adott azonosító: a telefon offline sorából az újraküldés ugyanazt a képet adja vissza, nem másodikat.
+  clientOperationId String?  @unique
+  fileName          String
+  contentType       String
+  sizeBytes         Int
+  sha256            String   @db.VarChar(64)
+  content           Bytes?
+  storageKey        String?
+  thumbnail         Bytes?
+  uploadedById      String?
+  caption           String?  @db.VarChar(500)
+  createdAt         DateTime @default(now())
+
+  entry      OperationsLogEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  uploadedBy User?              @relation("OperationsLogEntryDocumentUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([entryId, createdAt])
+  @@index([sha256])
 }

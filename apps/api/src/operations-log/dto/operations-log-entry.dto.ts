@@ -14,6 +14,7 @@ import {
   Min,
   ValidateIf,
 } from "class-validator";
+import { DOCUMENT_CAPTION_MAX_LENGTH } from "../../documents/document-caption.js";
 import {
   OPERATIONS_ENTRY_LIMITS,
   OPERATIONS_TEMPLATE_LIMITS,
@@ -77,4 +78,24 @@ export class OperationsLogEntryListQueryDto {
   @Max(200)
   @IsOptional()
   limit?: number;
+}
+
+/** `POST /operations-log/entries/:id/photos`: egy kép egy fénykép mezőhöz; az újraküldés kulcsával. */
+export class UploadOperationsLogPhotoDto {
+  @IsString()
+  @MaxLength(OPERATIONS_TEMPLATE_LIMITS.keyMax)
+  fieldKey!: string;
+
+  @IsString()
+  @Matches(L.clientOperationIdPattern, {
+    message:
+      "A művelet-azonosító 8-128 karakter lehet: betű, szám, pont, kötőjel, aláhúzás vagy kettőspont.",
+  })
+  @IsOptional()
+  clientOperationId?: string;
+
+  @IsString()
+  @MaxLength(DOCUMENT_CAPTION_MAX_LENGTH)
+  @IsOptional()
+  caption?: string;
 }

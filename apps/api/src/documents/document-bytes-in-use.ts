@@ -33,6 +33,7 @@ export async function sumDocumentBytesInUse(): Promise<number> {
     uzenet,
     elhullas,
     megrendeles,
+    uzemeltetes,
   ] = await Promise.all([
     prisma.assetDocument.aggregate({ _sum: { sizeBytes: true } }),
     prisma.worksheetDocument.aggregate({ _sum: { sizeBytes: true } }),
@@ -48,6 +49,8 @@ export async function sumDocumentBytesInUse(): Promise<number> {
     prisma.mortalityRecordDocument.aggregate({ _sum: { sizeBytes: true } }),
     // a megrendelések csatolmányai (Értékesítés > Megrendelések, 2026-11-04)
     prisma.partnerOrderDocument.aggregate({ _sum: { sizeBytes: true } }),
+    // az üzemeltetési napló fénykép mezőinek képei (S2b)
+    prisma.operationsLogEntryDocument.aggregate({ _sum: { sizeBytes: true } }),
   ]);
   return (
     (eszkoz._sum.sizeBytes ?? 0) +
@@ -58,6 +61,7 @@ export async function sumDocumentBytesInUse(): Promise<number> {
     (igazolas._sum.sizeBytes ?? 0) +
     (uzenet._sum.sizeBytes ?? 0) +
     (elhullas._sum.sizeBytes ?? 0) +
-    (megrendeles._sum.sizeBytes ?? 0)
+    (megrendeles._sum.sizeBytes ?? 0) +
+    (uzemeltetes._sum.sizeBytes ?? 0)
   );
 }
