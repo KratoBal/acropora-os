@@ -301,6 +301,11 @@ export const MAIL_TEMPLATE_VARIABLES: readonly MailTemplateVariable[] = [
       "A mondat a vendég rendelés-lapjáról (rendelésszámmal és e-mail-címmel nézhető meg a rendelés), a lap címével. Üres, ha a bolt nem küldte a lap címét.",
   },
   {
+    name: "jogi_linkek_mondat",
+    description:
+      "A mondat a bolt ÁSZF és adatkezelési tájékoztató oldalának címével. Üres, ha a bolt nem küldte a két címet (a Fogyasztóbarát-kapcsoló mögött küldi).",
+  },
+  {
     name: "akklimatizacio",
     description:
       "Az élő állatnak szóló akklimatizációs útmutató, fajtánként (hal, gerinctelen, korall). Üres, ha a rendelésben nincs élő állat, vagy ha a fajtához még nincs jóváhagyott szöveg.",
@@ -716,6 +721,7 @@ const HUNGARIAN_MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
       "ugyfel_neve",
       "rendeles_datum",
       "rendeles_megtekintes_mondat",
+      "jogi_linkek_mondat",
       "rendeles_szamok",
       "vegyes_kosar_mondat",
       "osszesen",
