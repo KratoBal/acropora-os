@@ -560,11 +560,17 @@ describe("PilotContractDetailPage -- tétel szerkesztése és felvétele", () =>
     fireEvent.change(await screen.findByLabelText("2. tétel leírása"), {
       target: { value: "  " },
     });
-    expect(screen.getByText(/minden tétel kitöltése/)).toBeTruthy();
+    // a hiány a lap tetején ÉS a tételek alatti mentés mellett is megjelenik
+    expect(screen.getAllByText(/minden tétel kitöltése/)).toHaveLength(2);
     expect(
       screen
         .getByText("Módosítások mentése")
         .closest("button")!
+        .hasAttribute("disabled"),
+    ).toBe(true);
+    expect(
+      screen
+        .getByRole("button", { name: "Szerződés mentése" })
         .hasAttribute("disabled"),
     ).toBe(true);
   });
@@ -1249,6 +1255,164 @@ describe("PilotContractDetailPage -- lap megrendelőlap nélkül és vevői megr
         })
         .hasAttribute("disabled"),
     ).toBe(true);
+  });
+});
+
+/*
+  AZ ELMENTETLEN VÁLTOZÁS JELZÉSE ÉS A MENTÉS A TÉTELEK ALATT (Luca, 2026-11-13: "nem
+  egyértelmű, hogy ha új tételt viszek fel, akkor mikor menti el a változtatásokat").
+  MI PIROSÍT: ha a tételek alatt nincs mentés-gomb; ha a felvitt sor mellett nem áll, hogy még
+  nincs elmentve; ha a jelzés mentés után is megmarad; ha a böngésző kilépéskor nem kérdez rá.
+*/
+describe("PilotContractDetailPage -- elmentetlen változás", () => {
+  const stored = (): ContractSummary => ({
+    ...contract(),
+    items: [
+      {
+        id: "item-1",
+        position: 1,
+        description: "Szűrőcsere",
+        unitNet: "1000",
+        quantity: "1",
+        occasionsPerYear: 1,
+        vatRatePercent: "27",
+        unitOfMeasureId: null,
+        unitOfMeasure: null,
+        departmentId: null,
+        assets: [],
+        repairFeeWorkdayHours: null,
+        repairFeeWorkdayOffHours: null,
+        repairFeeHoliday: null,
+        repairWeight: null,
+        repairTotal: null,
+      },
+    ],
+  });
+  const afterSave = (): ContractSummary => {
+    const base = stored();
+    return {
+      ...base,
+      items: [
+        ...base.items,
+        {
+          ...base.items[0]!,
+          id: "item-2",
+          position: 2,
+          description: "Pumpacsere",
+          unitNet: "9000",
+        },
+      ],
+    };
+  };
+
+  beforeEach(() => {
+    auth.session = session("dev-token");
+    api.detail.mockReset().mockResolvedValue(stored());
+    api.update.mockReset().mockResolvedValue(afterSave());
+    orderApi.list.mockReset().mockResolvedValue([]);
+    worksheetsApi.departments.mockReset().mockResolvedValue({ items: [] });
+    assetsApi.list.mockReset().mockResolvedValue({ items: [] });
+  });
+
+  const addFilledItem = async () => {
+    await screen.findByLabelText("1. tétel leírása");
+    fireEvent.click(screen.getByText("Tétel hozzáadása"));
+    fireEvent.change(screen.getByLabelText("2. tétel leírása"), {
+      target: { value: "Pumpacsere" },
+    });
+    fireEvent.change(screen.getByLabelText("2. tétel nettó egységára"), {
+      target: { value: "9000" },
+    });
+  };
+
+  it("betöltés után nincs elmentetlen változás, és a tételek alatti gomb tiltva van", async () => {
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    await screen.findByLabelText("1. tétel leírása");
+    expect(screen.getByText("Minden változtatás el van mentve.")).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: "Szerződés mentése" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+  });
+
+  it("a felvitt tétel után kimondja, hogy elmentetlen, és a tételek alatti gomb ment", async () => {
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    await addFilledItem();
+
+    expect(screen.getByText(/Van elmentetlen változtatás/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Szerződés mentése" }));
+
+    await waitFor(() => expect(api.update).toHaveBeenCalledTimes(1));
+    const items = api.update.mock.calls[0]![2].items as Record<
+      string,
+      unknown
+    >[];
+    expect(items).toHaveLength(2);
+    expect(items[1]).toMatchObject({
+      description: "Pumpacsere",
+      unitNet: "9000",
+    });
+    // a mentés után a jelzés elmúlik (a szerver válasza az új alap)
+    expect(
+      await screen.findByText("Minden változtatás el van mentve."),
+    ).toBeTruthy();
+  });
+
+  it("a lap tetején lévő gomb ugyanazt menti, és a jelzés azután is elmúlik", async () => {
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    await addFilledItem();
+    fireEvent.click(screen.getByText("Módosítások mentése"));
+    await waitFor(() => expect(api.update).toHaveBeenCalledTimes(1));
+    expect(
+      await screen.findByText("Minden változtatás el van mentve."),
+    ).toBeTruthy();
+  });
+
+  it("egy meglévő mező átírása is elmentetlen változás, a visszaírás megszünteti", async () => {
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    const field = await screen.findByLabelText("1. tétel nettó egységára");
+    fireEvent.change(field, { target: { value: "1200" } });
+    expect(screen.getByText(/Van elmentetlen változtatás/)).toBeTruthy();
+    fireEvent.change(field, { target: { value: "1000" } });
+    expect(screen.getByText("Minden változtatás el van mentve.")).toBeTruthy();
+  });
+
+  it("a Vissza gomb elmentetlen változásnál a saját kérdésünket nyitja, és csak megerősítésre lép ki", async () => {
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    await addFilledItem();
+    navigation.push.mockClear();
+
+    fireEvent.click(screen.getByText("← Vissza"));
+    expect(
+      screen.getByText("Kilépsz a mentetlen változtatásokkal?"),
+    ).toBeTruthy();
+    expect(navigation.push).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByText("Kilépés mentés nélkül"));
+    expect(navigation.push).toHaveBeenCalledWith("/partnerek/szerzodesek");
+  });
+
+  it("tiszta állapotban a Vissza gomb nem kérdez", async () => {
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    await screen.findByLabelText("1. tétel leírása");
+    fireEvent.click(screen.getByText("← Vissza"));
+    expect(
+      screen.queryByText("Kilépsz a mentetlen változtatásokkal?"),
+    ).toBeNull();
+  });
+
+  it("elmentetlen változásnál a böngésző kilépés előtt rákérdez, tiszta állapotban nem", async () => {
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    await screen.findByLabelText("1. tétel leírása");
+    const clean = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(clean);
+    expect(clean.defaultPrevented).toBe(false);
+
+    await addFilledItem();
+    const dirty = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(dirty);
+    expect(dirty.defaultPrevented).toBe(true);
   });
 });
 

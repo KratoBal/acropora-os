@@ -22,6 +22,7 @@ import { useEffect, useState } from "react";
 import { quotesApi } from "@/lib/api/quotes";
 
 import { errorText, formatQuoteMoney } from "./quote-format";
+import { grossFromNet, netFromGross } from "./quote-gross-price";
 import { QuoteVariantPicker, type PickedVariant } from "./quote-variant-picker";
 
 type Item = QuoteInternalBlock["items"][number];
@@ -100,6 +101,13 @@ export function QuoteItemDrawer({
   const [quantity, setQuantity] = useState("1");
   const [unit, setUnit] = useState("db");
   const [unitNetPrice, setUnitNetPrice] = useState("");
+  /**
+   * A BRUTTÓ EGYSÉGÁR (Luca, 2026-11-13: bolti vásárlónak bruttóban árazunk). A tétel nettót tárol: ha a
+   * bruttót írod, abból az ÁFA-kulccsal visszaszámolt nettó megy el; ha a nettót, a bruttó csak mutatja.
+   * Az utoljára szerkesztett mező marad fix, ha az ÁFA változik.
+   */
+  const [unitGrossPrice, setUnitGrossPrice] = useState("");
+  const [priceBase, setPriceBase] = useState<"net" | "gross">("net");
   const [vat, setVat] = useState("27");
   const [optional, setOptional] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -124,15 +132,38 @@ export function QuoteItemDrawer({
     setQuantity(item?.quantity ?? "1");
     setUnit(item?.unit ?? "db");
     setUnitNetPrice(item?.unitNetPrice ?? "");
+    setUnitGrossPrice(
+      grossFromNet(item?.unitNetPrice ?? "", item?.vatRatePercent ?? "27") ??
+        "",
+    );
+    setPriceBase("net");
     setVat(item?.vatRatePercent ?? "27");
     setOptional(item?.isOptional ?? false);
   }, [item, open]);
+
+  const changeNet = (value: string) => {
+    setPriceBase("net");
+    setUnitNetPrice(value);
+    setUnitGrossPrice(grossFromNet(value, vat) ?? "");
+  };
+  const changeGross = (value: string) => {
+    setPriceBase("gross");
+    setUnitGrossPrice(value);
+    setUnitNetPrice(netFromGross(value, vat) ?? "");
+  };
+  /** Az ÁFA-kulcs változásakor az utoljára szerkesztett ár marad, a másik számolódik újra. */
+  const changeVat = (value: string) => {
+    setVat(value);
+    if (priceBase === "gross")
+      setUnitNetPrice(netFromGross(unitGrossPrice, value) ?? "");
+    else setUnitGrossPrice(grossFromNet(unitNetPrice, value) ?? "");
+  };
 
   const pickVariant = (picked: PickedVariant | null) => {
     setVariant(picked);
     if (picked) {
       setUnit(picked.unit);
-      if (picked.vatRate) setVat(picked.vatRate);
+      if (picked.vatRate) changeVat(picked.vatRate);
     }
   };
 
@@ -293,7 +324,7 @@ export function QuoteItemDrawer({
             {costing.suggestedUnitPrice ? (
               <PilotButton
                 variant="secondary"
-                onClick={() => setUnitNetPrice(costing.suggestedUnitPrice!)}
+                onClick={() => changeNet(costing.suggestedUnitPrice!)}
               >
                 Javasolt ár átvétele
               </PilotButton>
@@ -305,7 +336,7 @@ export function QuoteItemDrawer({
           </section>
         ) : null}
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-5">
           <PilotFormField label="Mennyiség" required>
             <PilotInput
               aria-label="Mennyiség"
@@ -322,7 +353,18 @@ export function QuoteItemDrawer({
               aria-label="Nettó egységár"
               inputMode="decimal"
               value={unitNetPrice}
-              onChange={setUnitNetPrice}
+              onChange={changeNet}
+            />
+          </PilotFormField>
+          <PilotFormField
+            label="Bruttó egységár"
+            help="Ha ezt írod, a nettó az ÁFA-kulccsal visszaszámolva kerül a tételre."
+          >
+            <PilotInput
+              aria-label="Bruttó egységár"
+              inputMode="decimal"
+              value={unitGrossPrice}
+              onChange={changeGross}
             />
           </PilotFormField>
           <PilotFormField label="ÁFA %" required>
@@ -330,7 +372,7 @@ export function QuoteItemDrawer({
               aria-label="ÁFA %"
               inputMode="decimal"
               value={vat}
-              onChange={setVat}
+              onChange={changeVat}
             />
           </PilotFormField>
         </div>

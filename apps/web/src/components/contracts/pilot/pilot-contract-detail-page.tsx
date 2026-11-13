@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, PageHeader, PAGE_GUTTER_X } from "@acropora/ui";
+import { Alert, ConfirmDialog, PageHeader, PAGE_GUTTER_X } from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
@@ -130,6 +130,70 @@ export function missingContractFields(contract: {
   return list;
 }
 
+/**
+ * A MENTÉS TÖRZSE, EGY HELYEN: ugyanez megy a szervernek (`save()`), és ebből készül a
+ * "van-e elmentetlen változás" összevetés is. Két külön leírás előbb-utóbb eltérne, és
+ * akkor a jelzés olyat állítana, amit a mentés nem tesz.
+ *
+ * A TELJES TÉTEL-LISTÁT KÜLDJÜK, MERT AZ `update()` A `items` MEZŐT EGYBEN CSERÉLI
+ * (`contracts.service.ts`: `items: patch.items ?? existing...`): ha csak a helyszínt vagy
+ * az eszközöket küldenénk, a többi mező (leírás, ár, mennyiség) elveszne.
+ */
+export function contractSavePayload(
+  contract: ContractSummary,
+  departmentIdByItem: Record<string, string>,
+  assetIdsByItem: Record<string, string[]>,
+) {
+  return {
+    number: contract.number,
+    title: contract.title,
+    validFrom: contract.validFrom,
+    validTo: contract.validTo ?? null,
+    status: contract.status,
+    kind: contract.kind,
+    notes: contract.notes ?? null,
+    organizationalUnitName: contract.organizationalUnitName ?? null,
+    contactPersonName: contract.contactPersonName ?? null,
+    items: contract.items.map((item) => ({
+      // az új, még el nem mentett tétel azonosító nélkül megy: a szerver
+      // abból új sort hoz létre
+      ...(isUnsavedItem(item.id) ? {} : { id: item.id }),
+      description: item.description,
+      unitNet: item.unitNet,
+      quantity: item.quantity,
+      vatRatePercent: item.vatRatePercent,
+      // a fajta saját mezői (hétfői lista M4); a másikét a szerver üríti
+      ...(contract.kind === "PURCHASE"
+        ? {
+            occasionsPerYear: null,
+            unitOfMeasureId: item.unitOfMeasureId,
+          }
+        : {
+            occasionsPerYear: item.occasionsPerYear,
+            unitOfMeasureId: null,
+            departmentId: departmentIdByItem[item.id] || null,
+            assetIds: assetIdsByItem[item.id] ?? [],
+            ...repairFeesPayload(item),
+          }),
+    })),
+  };
+}
+
+/** A betöltött/mentett szerződés hely- és eszköz-térképe: ugyanaz, amit `applyContractDetail` állít be. */
+function itemMapsOf(detail: ContractSummary) {
+  return {
+    departments: Object.fromEntries(
+      detail.items.map((item) => [item.id, item.departmentId ?? ""]),
+    ) as Record<string, string>,
+    assets: Object.fromEntries(
+      detail.items.map((item) => [
+        item.id,
+        item.assets.map((asset) => asset.assetId),
+      ]),
+    ) as Record<string, string[]>,
+  };
+}
+
 let nextNewItem = 0;
 
 /**
@@ -163,10 +227,18 @@ export function PilotContractDetailPage({
   /** A szerver utolsó válasza: a számla a MENTETT tételekből készül. */
   const [saved, setSaved] = useState<ContractSummary | null>(null);
   const [contract, setContract] = useState<ContractSummary | null>(null);
+  /** A szerver utolsó válaszából készült mentés-törzs: ehhez képest van-e elmentetlen változás. */
+  const [baseline, setBaseline] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [invoiceError, setInvoiceError] = useState<string | null>(null);
   const [numberError, setNumberError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  // a hiba a lap tetején áll, a tételek alatti mentés-gomb pedig messze van tőle: a hibához görgetünk
+  const errorRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView?.({ block: "nearest" });
+  }, [error]);
 
   const [orders, setOrders] = useState<MaintenanceOrderSummary[] | null>(null);
   const [orderError, setOrderError] = useState<string | null>(null);
@@ -230,6 +302,12 @@ export function PilotContractDetailPage({
   const applyContractDetail = (detail: ContractSummary) => {
     setContract(detail);
     setSaved(detail);
+    const maps = itemMapsOf(detail);
+    setBaseline(
+      JSON.stringify(
+        contractSavePayload(detail, maps.departments, maps.assets),
+      ),
+    );
     // ALAPÉRTELMEZÉSBEN AZ ÖSSZES TÉTEL KI VAN VÁLASZTVA -- Balázs
     // döntése (2026-09-24): egy kiállítás a szerződés összes tételéből
     // visz egy-egy alkalmat, de tételenként kivehető.
@@ -322,47 +400,11 @@ export function PilotContractDetailPage({
     setError(null);
     setNumberError(null);
     try {
-      const next = await contractsApi.update(token, contract.id, {
-        number: contract.number,
-        title: contract.title,
-        validFrom: contract.validFrom,
-        validTo: contract.validTo ?? null,
-        status: contract.status,
-        kind: contract.kind,
-        notes: contract.notes ?? null,
-        organizationalUnitName: contract.organizationalUnitName ?? null,
-        contactPersonName: contract.contactPersonName ?? null,
-        /*
-          A TELJES TÉTEL-LISTÁT KÜLDJÜK, MERT AZ `update()` A `items` MEZŐT
-          EGYBEN CSERÉLI (`contracts.service.ts`: `items: patch.items ??
-          existing...`) -- ha csak a helyszínt/eszközöket küldenénk, a
-          többi mező (leírás, ár, mennyiség) elveszne. Az itt küldött érték
-          ezért a betöltött tétel ADATAIT viszi tovább, a helyszín/eszköz
-          mezőt pedig a szerkesztett állapotból.
-        */
-        items: contract.items.map((item) => ({
-          // az új, még el nem mentett tétel azonosító nélkül megy: a szerver
-          // abból új sort hoz létre
-          ...(isUnsavedItem(item.id) ? {} : { id: item.id }),
-          description: item.description,
-          unitNet: item.unitNet,
-          quantity: item.quantity,
-          vatRatePercent: item.vatRatePercent,
-          // a fajta saját mezői (hétfői lista M4); a másikét a szerver üríti
-          ...(contract.kind === "PURCHASE"
-            ? {
-                occasionsPerYear: null,
-                unitOfMeasureId: item.unitOfMeasureId,
-              }
-            : {
-                occasionsPerYear: item.occasionsPerYear,
-                unitOfMeasureId: null,
-                departmentId: itemDepartmentId[item.id] || null,
-                assetIds: itemAssetIds[item.id] ?? [],
-                ...repairFeesPayload(item),
-              }),
-        })),
-      });
+      const next = await contractsApi.update(
+        token,
+        contract.id,
+        contractSavePayload(contract, itemDepartmentId, itemAssetIds),
+      );
       applyContractDetail(next);
     } catch (cause) {
       /*
@@ -621,6 +663,32 @@ export function PilotContractDetailPage({
     () => (contract ? missingContractFields(contract) : []),
     [contract],
   );
+  /**
+   * VAN-E ELMENTETLEN VÁLTOZÁS (Luca, 2026-11-13: "nem egyértelmű, hogy ha új tételt viszek fel,
+   * akkor mikor menti el a változtatásokat"). A tételek és a mezők csak a "Módosítások mentése"
+   * gombra mennek el, és az a lap tetején áll; a tételek alatt eddig semmi nem mondta meg, hogy
+   * a felvitt sor még csak a böngészőben van. Az összevetés a mentés törzsét méri, ugyanazt,
+   * amit a szerver kap (`contractSavePayload`), nem külön mezőlistát.
+   */
+  const dirty = useMemo(
+    () =>
+      contract !== null &&
+      baseline !== null &&
+      JSON.stringify(
+        contractSavePayload(contract, itemDepartmentId, itemAssetIds),
+      ) !== baseline,
+    [contract, baseline, itemDepartmentId, itemAssetIds],
+  );
+  // a lap bezárása vagy újratöltése előtt a böngésző rákérdez, ha van mit elveszíteni
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
   const purchase = contract?.kind === "PURCHASE";
   const quantityUnits = useQuantityUnits(token, purchase);
 
@@ -688,7 +756,15 @@ export function PilotContractDetailPage({
             title={contract.number}
             description={contract.customer.displayName}
             actions={
-              <Link href="/partnerek/szerzodesek">
+              <Link
+                href="/partnerek/szerzodesek"
+                onClick={(event) => {
+                  // az elmentetlen tételek a böngészőben vannak: kilépés előtt rákérdezünk
+                  if (!dirty) return;
+                  event.preventDefault();
+                  setLeaving(true);
+                }}
+              >
                 <PilotButton type="button" variant="secondary">
                   ← Vissza
                 </PilotButton>
@@ -697,9 +773,24 @@ export function PilotContractDetailPage({
           />
         </div>
 
+        <ConfirmDialog
+          open={leaving}
+          title="Kilépsz a mentetlen változtatásokkal?"
+          consequence="A felvitt tételek és az átírt mezők, amelyeket még nem mentettél, elvesznek."
+          recovery="Nem szerezhetők vissza: a szerződés a legutóbbi mentett állapotában marad."
+          confirmLabel="Kilépés mentés nélkül"
+          onConfirm={() => router.push("/partnerek/szerzodesek")}
+          onCancel={() => setLeaving(false)}
+        />
         <div className={`flex flex-1 flex-col gap-4 ${PAGE_GUTTER_X} py-6`}>
           {error ? (
-            <Alert variant="danger" title="Mentési hiba" description={error} />
+            <div ref={errorRef}>
+              <Alert
+                variant="danger"
+                title="Mentési hiba"
+                description={error}
+              />
+            </div>
           ) : null}
           {invoiceError ? (
             <Alert
@@ -1071,6 +1162,29 @@ export function PilotContractDetailPage({
                   Tétel hozzáadása
                 </PilotButton>
               </div>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-pilot-grey-200 pt-4">
+                <p
+                  role="status"
+                  className={`text-sm ${dirty ? "font-semibold text-pilot-amber-700" : "text-pilot-grey-600"}`}
+                >
+                  {dirty
+                    ? "Van elmentetlen változtatás: a tételek addig csak ezen a lapon vannak."
+                    : "Minden változtatás el van mentve."}
+                </p>
+                <PilotButton
+                  type="button"
+                  variant="primary"
+                  disabled={saving || missing.length > 0 || !dirty}
+                  onClick={() => void save()}
+                >
+                  {saving ? "Mentés…" : "Szerződés mentése"}
+                </PilotButton>
+              </div>
+              {missing.length > 0 && dirty ? (
+                <p className="text-right text-xs font-medium text-red-600">
+                  Hiányzik: {missing.join(", ")}.
+                </p>
+              ) : null}
             </div>
           </PilotCard>
           {/* a beszerzési szerződésből számla készül, nem megrendelőlap (hétfői lista M4) */}
