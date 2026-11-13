@@ -262,7 +262,7 @@ export function AttendanceSheetPage() {
             onChange={(value) => choose({ month: value })}
           />
         </PilotFormField>
-        {sheet && employee ? (
+        {shown && employee ? (
           <PilotButton variant="secondary" onClick={() => void openPdf()}>
             PDF (nyomtatás, aláírás)
           </PilotButton>
