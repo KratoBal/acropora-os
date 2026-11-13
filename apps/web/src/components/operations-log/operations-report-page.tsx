@@ -177,15 +177,18 @@ export function OperationsReportPage() {
             <span className="mb-1 block text-xs font-medium text-pilot-grey-600">
               Partner
             </span>
-            <PartnerPicker
-              id="operations-report-partner"
-              variant="pilot"
-              value={partnerId}
-              onPick={(partner) =>
-                update({ partnerId: partner.customerId, departmentId: null })
-              }
-              onClear={() => update({ partnerId: null, departmentId: null })}
-            />
+            {/* a választó ugyanolyan magas, mint a helyszín és a hónap mezője, különben a sor alja egy vonalon, a felirata viszont nem */}
+            <div className="[&_select]:h-10">
+              <PartnerPicker
+                id="operations-report-partner"
+                variant="pilot"
+                value={partnerId}
+                onPick={(partner) =>
+                  update({ partnerId: partner.customerId, departmentId: null })
+                }
+                onClear={() => update({ partnerId: null, departmentId: null })}
+              />
+            </div>
           </div>
           <div className="min-w-[220px] flex-[1_1_240px]">
             <span className="mb-1 block text-xs font-medium text-pilot-grey-600">

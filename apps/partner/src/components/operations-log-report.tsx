@@ -5,8 +5,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Icon,
   PilotBadge,
+  PilotDataTable,
   PilotThemeRoot,
   partnerStatusBadgeVariant,
+  type PilotTableColumn,
 } from "@acropora/ui";
 import {
   OPERATIONS_FREQUENCY_LABELS,
@@ -286,123 +288,14 @@ function AssetSection({ block }: { block: OperationsReportAssetBlock }) {
             : ""}
         </p>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] border-collapse text-sm">
-          <thead>
-            <tr className="border-b border-pilot-grey-100">
-              {["Időpont", "Feladat", "Tartam", "Vízóra", "Megjegyzés"].map(
-                (head) => (
-                  <th
-                    key={head}
-                    className="whitespace-nowrap px-5 py-3 text-left text-xs font-medium uppercase tracking-wide text-pilot-grey-400"
-                  >
-                    {head}
-                  </th>
-                ),
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            {block.entries.map((row, index) => (
-              <EntryRow key={row.id} row={row} stripe={index % 2 === 1} />
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {/* EGY DOM-fa: asztalon táblázat, telefonon (md alatt) kártyalista, mint a belső webes kimutatás (a vízóra és a megjegyzés nem tűnhet el) */}
+      <PilotDataTable
+        columns={COLUMNS}
+        rows={block.entries}
+        rowKey={(row) => row.id}
+        minWidth={720}
+      />
     </section>
-  );
-}
-
-function EntryRow({
-  row,
-  stripe,
-}: {
-  row: OperationsReportEntryRow;
-  stripe: boolean;
-}) {
-  return (
-    <tr
-      className={`border-b border-pilot-grey-100 align-top last:border-0 ${stripe ? "bg-pilot-grey-50/50" : "bg-white"}`}
-    >
-      <td className="whitespace-nowrap px-5 py-3 text-pilot-grey-600">
-        {dateTime(row.startedAt)}
-      </td>
-      <td className="px-5 py-3">
-        <div className="font-medium text-pilot-grey-900">
-          {row.templateName}
-        </div>
-        <div className="text-xs text-pilot-grey-500">
-          {OPERATIONS_FREQUENCY_LABELS[row.frequency]}
-        </div>
-        {row.values.map((value) => (
-          <div key={value.label} className="text-xs text-pilot-grey-700">
-            {value.label}: {valueText(value.value)}
-            {value.unit ? ` ${value.unit}` : ""}
-          </div>
-        ))}
-      </td>
-      <td className="whitespace-nowrap px-5 py-3 text-pilot-grey-600">
-        {operationsDurationText(row.minutes)}
-      </td>
-      <td className="px-5 py-3 text-xs text-pilot-grey-700">
-        {row.meterBefore === null && row.meterAfter === null ? (
-          "—"
-        ) : (
-          <>
-            <div>
-              előtte:{" "}
-              {row.meterBefore === null
-                ? "?"
-                : `${operationsNumberText(row.meterBefore)} ${row.meterUnit ?? ""}`}
-            </div>
-            <div>
-              utána:{" "}
-              {row.meterAfter === null
-                ? "?"
-                : `${operationsNumberText(row.meterAfter)} ${row.meterUnit ?? ""}`}
-            </div>
-            {row.meterDifference !== null ? (
-              <div className="font-medium text-pilot-grey-900">
-                különbség:{" "}
-                {operationsSignedNumberText(row.meterDifference, row.meterUnit)}
-              </div>
-            ) : null}
-          </>
-        )}
-      </td>
-      <td className="px-5 py-3">
-        {row.anomaly ? (
-          <div className="space-y-1">
-            <PilotBadge variant="danger">Rendellenesség</PilotBadge>
-            {row.anomalyNote ? (
-              <p className="text-xs text-pilot-grey-700">{row.anomalyNote}</p>
-            ) : null}
-            {row.ticket ? (
-              <p className="text-xs text-pilot-grey-600">
-                Hibajegy:{" "}
-                <Link
-                  href={`/hibajegyek/${row.ticket.id}`}
-                  className="font-mono text-pilot-aqua-700"
-                >
-                  {row.ticket.jobNumber}
-                </Link>{" "}
-                <PilotBadge
-                  variant={partnerStatusBadgeVariant(
-                    row.ticket.status as ServiceJobPartnerStatus,
-                  )}
-                >
-                  {PARTNER_STATUS_LABELS[
-                    row.ticket.status as ServiceJobPartnerStatus
-                  ] ?? row.ticket.status}
-                </PilotBadge>
-              </p>
-            ) : null}
-          </div>
-        ) : (
-          "—"
-        )}
-      </td>
-    </tr>
   );
 }
 
@@ -422,6 +315,108 @@ function dateTime(iso: string): string {
     hourCycle: "h23",
   }).format(new Date(iso));
 }
+
+const COLUMNS: readonly PilotTableColumn<OperationsReportEntryRow>[] = [
+  {
+    id: "time",
+    header: "Időpont",
+    width: "130px",
+    nowrap: true,
+    cell: (row) => dateTime(row.startedAt),
+  },
+  {
+    id: "task",
+    header: "Feladat",
+    cell: (row) => (
+      <div>
+        <div className="font-medium text-pilot-grey-900">
+          {row.templateName}
+        </div>
+        <div className="text-xs text-pilot-grey-500">
+          {OPERATIONS_FREQUENCY_LABELS[row.frequency]}
+        </div>
+        {row.values.map((value) => (
+          <div key={value.label} className="text-xs text-pilot-grey-700">
+            {value.label}: {valueText(value.value)}
+            {value.unit ? ` ${value.unit}` : ""}
+          </div>
+        ))}
+      </div>
+    ),
+  },
+  {
+    id: "duration",
+    header: "Tartam",
+    width: "100px",
+    nowrap: true,
+    cell: (row) => operationsDurationText(row.minutes),
+  },
+  {
+    id: "meter",
+    header: "Vízóra",
+    width: "170px",
+    cell: (row) =>
+      row.meterBefore === null && row.meterAfter === null ? (
+        "—"
+      ) : (
+        <div className="text-xs text-pilot-grey-700">
+          <div>
+            előtte:{" "}
+            {row.meterBefore === null
+              ? "?"
+              : `${operationsNumberText(row.meterBefore)} ${row.meterUnit ?? ""}`}
+          </div>
+          <div>
+            utána:{" "}
+            {row.meterAfter === null
+              ? "?"
+              : `${operationsNumberText(row.meterAfter)} ${row.meterUnit ?? ""}`}
+          </div>
+          {row.meterDifference !== null ? (
+            <div className="font-medium text-pilot-grey-900">
+              különbség:{" "}
+              {operationsSignedNumberText(row.meterDifference, row.meterUnit)}
+            </div>
+          ) : null}
+        </div>
+      ),
+  },
+  {
+    id: "note",
+    header: "Megjegyzés",
+    cell: (row) =>
+      row.anomaly ? (
+        <div className="space-y-1">
+          <PilotBadge variant="danger">Rendellenesség</PilotBadge>
+          {row.anomalyNote ? (
+            <p className="text-xs text-pilot-grey-700">{row.anomalyNote}</p>
+          ) : null}
+          {row.ticket ? (
+            <p className="text-xs text-pilot-grey-600">
+              Hibajegy:{" "}
+              <Link
+                href={`/hibajegyek/${row.ticket.id}`}
+                className="font-mono text-pilot-aqua-700"
+              >
+                {row.ticket.jobNumber}
+              </Link>{" "}
+              <PilotBadge
+                variant={partnerStatusBadgeVariant(
+                  row.ticket.status as ServiceJobPartnerStatus,
+                )}
+              >
+                {PARTNER_STATUS_LABELS[
+                  row.ticket.status as ServiceJobPartnerStatus
+                ] ?? row.ticket.status}
+              </PilotBadge>
+            </p>
+          ) : null}
+        </div>
+      ) : (
+        "—"
+      ),
+  },
+];
 
 /** The real browser behind `saveBlob`; the helper takes it injected. */
 const browserSurface: FileSurface = {

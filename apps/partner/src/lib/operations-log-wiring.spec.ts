@@ -61,6 +61,23 @@ describe("az üzemeltetési napló partner-oldala", () => {
     assert.match(report, /PARTNER_STATUS_LABELS/);
   });
 
+  it("a bejegyzések táblája a közös, telefonon kártyalistára váltó PilotDataTable, mind az öt oszloppal (a vízóra és a megjegyzés telefonon sem tűnik el)", () => {
+    // MI PIROSIT: ha a képernyő visszaesne a saját, 720 px minimum szélességű táblázatra, amely telefonon vízszintesen vágva marad
+    // (a vízóra-különbség és a rendellenesség a képernyőn kívülre esik, és semmi nem jelzi, hogy görgethető): a stage 390 px-es
+    // képén a Tartam után levágott tábla ilyen volt
+    assert.match(report, /<PilotDataTable\b/);
+    assert.equal(/<table\b/.test(report), false);
+    assert.equal(report.includes("min-w-[720px]"), false);
+    for (const header of [
+      "Időpont",
+      "Feladat",
+      "Tartam",
+      "Vízóra",
+      "Megjegyzés",
+    ])
+      assert.ok(report.includes(`header: "${header}"`), header);
+  });
+
   it("a PDF a partner végponton át jön, a fájl neve a hónapot hordozza", () => {
     assert.match(report, /operationsLogReportPdfBlob\(/);
     assert.match(report, /uzemeltetesi-naplo-\$\{month\}\.pdf/);
