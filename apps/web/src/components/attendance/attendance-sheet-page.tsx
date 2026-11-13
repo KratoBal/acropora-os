@@ -332,10 +332,13 @@ export function AttendanceSheetPage() {
               description="Az ünnepnapokat a lap ismeri, de az évi munkarend-rendelet áthelyezett napjait nem: ezeket addig egyenként kell jelölni."
             />
           )}
+          {/* the office sees an employee's advance marks as planned (screen only: no time, no total, not on the PDF;
+              barracuda on #2520) */}
           <AttendanceSheetTable
             sheet={shown}
             canEdit={() => true}
             onEdit={setEditing}
+            showPlanned
           />
         </PilotCard>
       )}
@@ -387,6 +390,29 @@ function DayEditor({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
+
+  /*
+    A STORED "OTHER TIMES" ENTRY WHOSE TIMES THE SHEET DOES NOT SHOW YET (a later day, or today before the departure):
+    the row is cut to now, so its times are read from the stored entry, not retyped (barracuda on #2520).
+  */
+  useEffect(() => {
+    if (row.source !== "ENTRY" || row.kind !== "WORK" || (row.start && row.end))
+      return;
+    const controller = new AbortController();
+    attendanceApi
+      .days(token, userId, row.date, row.date, controller.signal)
+      .then((list) => {
+        const stored = list.items.find((item) => item.date === row.date);
+        if (stored?.kind === "WORKED") {
+          setStart(stored.start ?? "");
+          setEnd(stored.end ?? "");
+        }
+      })
+      .catch(() => {
+        // the dialog still works: the times are then typed again
+      });
+    return () => controller.abort();
+  }, [row, token, userId]);
 
   /** Back to the schedule removes the day's entry: asked first, like every delete a screen can start. */
   const reset = async () => {
