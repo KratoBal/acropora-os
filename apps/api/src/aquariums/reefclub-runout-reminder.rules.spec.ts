@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   budapestDay,
   hungarianDay,
+  hungarianDayOn,
   reminderStep,
   runOutMail,
   startDay,
@@ -108,7 +109,11 @@ describe("the mail", () => {
     assert.deepEqual(mail.to, ["tag@example.test"]);
     assert.equal(mail.subject, "ReefClub: hamarosan elfogy: Kitalált kalcium");
     assert.match(mail.text, /2026\. december 21\. körül fogy el/);
-    assert.match(mail.text, /bolti rendelésed 2026\. november 1\. napjától/);
+    assert.ok(
+      mail.text.includes(
+        "A számítás a bolti rendelésed 2026. november 1. napjától indul, 300 literrel. Ha kevesebbet adagolsz, tovább tart.",
+      ),
+    );
     assert.match(mail.text, /300 literrel/);
     assert.ok(
       mail.text.includes(
@@ -126,7 +131,54 @@ describe("the mail", () => {
       webUrl: "https://reefclub.example",
       unsubscribeKey: "r1.abc",
     });
-    assert.match(consent.text, /amikor az emlékeztetőt kérted/);
+    // korall's wording (acrobot 50198): the verb right after the day, the clause after it
+    assert.ok(
+      consent.text.includes(
+        "A számítás 2026. november 5-én indul, amikor az emlékeztetőt kérted, 100 literrel. Ha kevesebbet adagolsz, tovább tart.",
+      ),
+    );
     assert.equal(hungarianDay("2026-01-05"), "2026. január 5.");
+  });
+
+  /*
+    THE DAY'S SUFFIX FOLLOWS THE SPOKEN ORDINAL. WHAT TURNS THIS RED: a suffix by the last digit alone (12-án, 22-án instead of
+    12-én, 22-én), 1-én instead of 1-jén, or 20-én and 30-én instead of 20-án and 30-án.
+  */
+  it("the day it happens on: 1-jén, 2-án, 12-én, 13-án, 20-án, 22-én, 31-én", () => {
+    const on = (day: string) =>
+      hungarianDayOn(day).replace(/^2026\. [a-zá-ű]+ /u, "");
+    assert.deepEqual(
+      [
+        "01",
+        "02",
+        "03",
+        "04",
+        "06",
+        "10",
+        "12",
+        "13",
+        "20",
+        "22",
+        "23",
+        "30",
+        "31",
+      ].map((d) => on(`2026-01-${d}`)),
+      [
+        "1-jén",
+        "2-án",
+        "3-án",
+        "4-én",
+        "6-án",
+        "10-én",
+        "12-én",
+        "13-án",
+        "20-án",
+        "22-én",
+        "23-án",
+        "30-án",
+        "31-én",
+      ],
+    );
+    assert.equal(hungarianDayOn("2026-11-13"), "2026. november 13-án");
   });
 });

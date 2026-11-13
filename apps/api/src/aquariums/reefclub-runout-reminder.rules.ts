@@ -84,6 +84,56 @@ export function hungarianDay(day: string): string {
   }).format(new Date(`${day}T00:00:00Z`));
 }
 
+/**
+ * The suffix of a day of the month in "november 13-án": it follows the spoken ordinal (elsején, másodikán, tizenkettedikén),
+ * not the last digit alone (2-án but 12-én and 22-én), so it is a table, not a rule.
+ */
+const DAY_ON_SUFFIX = [
+  "jén",
+  "án",
+  "án",
+  "én",
+  "én",
+  "án",
+  "én",
+  "án",
+  "én",
+  "én",
+  "én",
+  "én",
+  "án",
+  "én",
+  "én",
+  "án",
+  "én",
+  "án",
+  "én",
+  "án",
+  "én",
+  "én",
+  "án",
+  "én",
+  "én",
+  "án",
+  "én",
+  "án",
+  "én",
+  "án",
+  "én",
+] as const;
+
+/** "2026-11-13" as "2026. november 13-án": the day a thing happens on. */
+export function hungarianDayOn(day: string): string {
+  const date = new Date(`${day}T00:00:00Z`);
+  const yearMonth = new Intl.DateTimeFormat("hu-HU", {
+    year: "numeric",
+    month: "long",
+    timeZone: "UTC",
+  }).format(date);
+  const dayOfMonth = date.getUTCDate();
+  return `${yearMonth} ${dayOfMonth}-${DAY_ON_SUFFIX[dayOfMonth - 1]}`;
+}
+
 export function runOutMail(input: {
   to: string;
   productName: string;
@@ -95,10 +145,11 @@ export function runOutMail(input: {
   webUrl: string;
   unsubscribeKey: string;
 }): OutgoingMail {
-  const since =
+  // korall's wording for the consent start (acrobot 50198): the verb right after the day, the clause after it
+  const start =
     input.start.source === "ORDER"
-      ? `a bolti rendelésed ${hungarianDay(input.start.day)} napjától`
-      : `${hungarianDay(input.start.day)} napjától, amikor az emlékeztetőt kérted`;
+      ? `A számítás a bolti rendelésed ${hungarianDay(input.start.day)} napjától indul, ${input.litres} literrel.`
+      : `A számítás ${hungarianDayOn(input.start.day)} indul, amikor az emlékeztetőt kérted, ${input.litres} literrel.`;
   return {
     to: [input.to],
     subject: `ReefClub: hamarosan elfogy: ${input.productName}`,
@@ -106,7 +157,7 @@ export function runOutMail(input: {
       "Szia!",
       "",
       `A(z) ${input.aquariumName} akváriumodban a(z) ${input.productName} (${input.packageText}) a gyártó adagolásával számolva ${hungarianDay(input.runsOutOn)} körül fogy el.`,
-      `A számítás ${since} indul, ${input.litres} literrel. Ha kevesebbet adagolsz, tovább tart.`,
+      `${start} Ha kevesebbet adagolsz, tovább tart.`,
       "",
       "Ezt a levelet azért kapod, mert a ReefClubban emlékeztetőt kértél erre a termékre. Erről a termékről itt iratkozhatsz le:",
       `${input.webUrl}/emlekezteto-leiratkozas#token=${input.unsubscribeKey}`,
