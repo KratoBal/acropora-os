@@ -3,7 +3,12 @@ import { describe, it } from "node:test";
 
 import { assetDeletionRefusal } from "./asset-deletion.js";
 
-const none = { serviceJobs: 0, worksheetLines: 0, childAssets: 0 };
+const none = {
+  serviceJobs: 0,
+  worksheetLines: 0,
+  childAssets: 0,
+  operationsTemplates: 0,
+};
 
 describe("assetDeletionRefusal", () => {
   it("üres eszközre nincs visszatartás", () => {
@@ -31,6 +36,11 @@ describe("assetDeletionRefusal", () => {
       assetDeletionRefusal({ ...none, childAssets: 1 }) ?? "",
       /alárendelt/,
     );
+    // az üzemeltetési napló sablonja (task os-uzemeltetesi-naplo, barracuda #2497): a kivezetett is akadály, és ezt kimondja
+    assert.match(
+      assetDeletionRefusal({ ...none, operationsTemplates: 1 }) ?? "",
+      /1 üzemeltetési naplósablon \(a kivezetett is\)/,
+    );
   });
 
   /** A visszautasitas MEGMONDJA, mi tartja vissza, nem csak azt, hogy valami. */
@@ -40,10 +50,12 @@ describe("assetDeletionRefusal", () => {
         serviceJobs: 2,
         worksheetLines: 3,
         childAssets: 4,
+        operationsTemplates: 5,
       }) ?? "";
     assert.match(message, /2 hibajegy/);
     assert.match(message, /3 munkalapsor/);
     assert.match(message, /4 alárendelt/);
+    assert.match(message, /5 üzemeltetési naplósablon/);
   });
 
   /**

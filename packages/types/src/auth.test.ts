@@ -405,6 +405,9 @@ describe("a MANAGER jogkör-készlete rögzítve van", () => {
         // az Elhullási napló (kártya 115c9740, acrobot 27141): a MANAGER mindkettőt
         "mortality.manage",
         "mortality.view",
+        // az Üzemeltetési napló (task os-uzemeltetesi-naplo): a vezető a sablonokat is kezeli
+        "operations-log.templates.manage",
+        "operations-log.view",
         "orders.manage",
         "orders.view",
         "partners.manage",

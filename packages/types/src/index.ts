@@ -1141,6 +1141,30 @@ export type {
   AssetCategory,
   AssetCategoryListResponse,
 } from "./asset-category.js";
+export {
+  OPERATIONS_FIELD_TYPE_LABELS,
+  OPERATIONS_FIELD_TYPES,
+  OPERATIONS_FREQUENCY_LABELS,
+  OPERATIONS_METER_ROLE_LABELS,
+  OPERATIONS_METER_ROLES,
+  OPERATIONS_TASK_FREQUENCIES,
+  OPERATIONS_TEMPLATE_LIMITS,
+  assignOperationsFieldKeys,
+  normalizeOperationsText,
+  operationsFieldErrors,
+  operationsFieldKeyOf,
+} from "./operations-log.js";
+export type {
+  OperationsMeterRole,
+  OperationsTaskFieldDto,
+  OperationsTaskFieldInput,
+  OperationsTaskFieldType,
+  OperationsTaskFrequency,
+  OperationsTaskTarget,
+  OperationsTaskTemplateDto,
+  OperationsTaskTemplateInput,
+  OperationsTaskTemplateListResponse,
+} from "./operations-log.js";
 export { FAVORITE_LIMITS, isFavoriteHref } from "./favorite.js";
 export type { FavoriteListResponse } from "./favorite.js";
 export { normalizeAssetFunctionName } from "./asset-function.js";

@@ -592,14 +592,20 @@ export interface AssetDetail extends AssetListItem {
 }
 
 /**
- * AMI VISSZATARTJA A TORLEST, TETELESEN. Harom kulon szamlalo, nem egy logikai
- * ertek: a hivo igy meg tudja mondani, MI tartja vissza, es mindharom agra kulon
+ * AMI VISSZATARTJA A TORLEST, TETELESEN. Negy kulon szamlalo, nem egy logikai
+ * ertek: a hivo igy meg tudja mondani, MI tartja vissza, es mindegyik agra kulon
  * allitas irhato.
  */
 export interface AssetDeletionBlockers {
   serviceJobs: number;
   worksheetLines: number;
   childAssets: number;
+  /**
+   * Az uzemeltetesi naplo sablonjai, amelyek erre az eszkozre szolnak (task os-uzemeltetesi-naplo; barracuda, #2497). A
+   * KIVEZETETT sablon is akadaly: a bejegyzesek (S2) ra hivatkoznak majd, es a sema `Restrict`, tehat nyers adatbazis-hibaval
+   * allna meg.
+   */
+  operationsTemplates: number;
 }
 
 export interface AssetListResponse {

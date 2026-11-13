@@ -1793,6 +1793,19 @@ export const ANONYMIZATION_REGISTER: Readonly<
   QuotePaymentMilestone: {
     label: "business",
   },
+  // Üzemeltetési napló (task os-uzemeltetesi-naplo, S1): a sablon neve és mezői üzleti szöveg, a leírás szabad szöveg,
+  // a kulcs a mező stabil azonosítója, az actor azonosítók belső hivatkozások
+  OperationsTaskTemplate: {
+    name: "business",
+    description: "freeText",
+    createdById: "identifier",
+    updatedById: "identifier",
+  },
+  OperationsTaskField: {
+    key: "identifier",
+    label: "business",
+    unit: "business",
+  },
   QuoteTemplate: {
     name: "business",
     blocks: "business",

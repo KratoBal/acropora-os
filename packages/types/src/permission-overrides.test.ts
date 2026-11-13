@@ -383,8 +383,10 @@ describe("permissionOverrideChangeProblem", () => {
   it("a kezelés-megtekintés párok a jogokból jönnek, és egyik sablon sem sérti", () => {
     // 15: a kutatási tudástár (knowledge.manage -> knowledge.view, S4) a 15.; 16: a nyereményjáték (game.manage ->
     // game.view, kártya 31445d0f); 17: az eszközbérlés (rentals.manage -> rentals.view, task eszkozberles);
-    // 18: az AI csevegés beállításai (ai-test.settings.manage -> ai-test.view, kártya f5b8f7ba, kézzel felvett pár)
-    assert.equal(MANAGE_VIEW_PAIRS.length, 18);
+    // 18: az AI csevegés beállításai (ai-test.settings.manage -> ai-test.view, kártya f5b8f7ba, kézzel felvett pár);
+    // 19: az üzemeltetési napló sablonjai (operations-log.templates.manage -> operations-log.view, task os-uzemeltetesi-naplo,
+    // kézzel felvett pár)
+    assert.equal(MANAGE_VIEW_PAIRS.length, 19);
     assert.ok(
       MANAGE_VIEW_PAIRS.some(
         ([manage, view]) =>

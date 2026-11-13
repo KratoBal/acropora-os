@@ -116,6 +116,11 @@ export const MANAGE_VIEW_PAIRS: readonly (readonly [Permission, Permission])[] =
     [PERMISSIONS.BILLING_CREATE, PERMISSIONS.BILLING_VIEW] as const,
     // Az AI csevegés beállításait kezelő látja az AI tesztet is (f5b8f7ba, 4a); a nevekből nem következik, ezért kézzel.
     [PERMISSIONS.AI_SETTINGS_MANAGE, PERMISSIONS.AI_TEST_VIEW] as const,
+    // Az üzemeltetési napló sablonjait kezelő látja a naplót is; a kulcs neve nem `.manage`, ezért kézzel.
+    [
+      PERMISSIONS.OPERATIONS_LOG_TEMPLATES_MANAGE,
+      PERMISSIONS.OPERATIONS_LOG_VIEW,
+    ] as const,
   ];
 
 export interface PermissionOverrideTarget {
