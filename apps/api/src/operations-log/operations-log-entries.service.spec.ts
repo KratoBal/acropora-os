@@ -93,7 +93,11 @@ function input(
 function fixture(
   over: Partial<{
     template: OperationsTaskTemplateDto | null;
-    asset: { id: string; categoryId: string | null } | null;
+    asset: {
+      id: string;
+      categoryId: string | null;
+      departmentId?: string | null;
+    } | null;
     existing: { entry: OperationsLogEntryDto; recordedById: string } | null;
     raceWinner: { entry: OperationsLogEntryDto; recordedById: string } | null;
     selectable: string[];
@@ -114,7 +118,9 @@ function fixture(
   };
   const entries = {
     assetRef: async () =>
-      over.asset === undefined ? { id: "a1", categoryId: "c1" } : over.asset,
+      over.asset === undefined
+        ? { id: "a1", categoryId: "c1", departmentId: "d1" }
+        : over.asset,
     byClientOperationId: async () => over.existing ?? null,
     assignableIds: async (ids: readonly string[]) =>
       new Set(ids.filter((id) => (over.selectable ?? ["u2"]).includes(id))),
@@ -186,6 +192,8 @@ describe("az üzemeltetési napló bejegyzése", () => {
     const write = calls.write!;
     assert.deepEqual(write.participantIds, ["u1", "u2"]);
     assert.equal(write.templateName, "Homokszűrő visszamosás");
+    // a helyszín a rögzítés pillanatában: a kimutatás ezen készül, az áthelyezés a múltat nem mozdítja
+    assert.equal(write.departmentId, "d1");
     assert.equal(write.frequency, "WEEKLY");
     assert.equal(write.internalNote, "belső");
     assert.deepEqual(write.values, [

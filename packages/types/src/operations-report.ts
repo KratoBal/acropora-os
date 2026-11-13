@@ -333,6 +333,12 @@ export function buildOperationsReport(input: {
   month: string;
   audience: OperationsReportAudience;
   entries: readonly OperationsReportEntryInput[];
+  /**
+   * A „KIMARADT" SZÁMÍTÁSÁHOZ HASZNÁLT BEJEGYZÉSEK, ha mások, mint a sorok: a sorok a rögzítéskori helyszín szerint állnak, de egy
+   * ütemezett feladat teljesülését az eszköz minden bejegyzése mutatja (egy áthelyezett eszköz heti feladata a régi helyszínen rögzítve
+   * is teljesítette a hetet). Alapértelmezés: a sorok bejegyzései.
+   */
+  doneEntries?: readonly OperationsReportEntryInput[];
   schedules: readonly OperationsReportScheduleInput[];
   now?: Date;
 }): OperationsReport {
@@ -388,7 +394,7 @@ export function buildOperationsReport(input: {
     month: input.month,
     today,
     schedules: input.schedules,
-    entries: input.entries,
+    entries: [...input.entries, ...(input.doneEntries ?? [])],
   });
 
   return {
@@ -412,5 +418,8 @@ export interface OperationsReportResponse {
   report: OperationsReport;
   /** „Partner · Helyszín" a fejléchez; `null`, ha egy eszközre kértük. */
   siteLabel: string | null;
+  /** A kért hatókör visszhangja: a felület ebből tudja, hogy a válasz arra a helyszínre készült, amit most választott (nem egy korábbira). */
+  departmentId: string | null;
+  assetId: string | null;
   generatedAt: string;
 }

@@ -74,6 +74,8 @@ vi.mock("@/components/auth/auth-provider", () => ({
 
 const REPORT: OperationsReportResponse = {
   siteLabel: "Állatkert · Biodóm",
+  departmentId: "d0",
+  assetId: null,
   generatedAt: "2026-11-20T09:00:00.000Z",
   report: {
     month: "2026-11",
@@ -283,5 +285,40 @@ describe("az üzemeltetési napló havi kimutatása", () => {
     fireEvent.click(screen.getByText("Újrapróbálás"));
     expect(await screen.findByText("Elvégzett feladat")).toBeTruthy();
     expect(api.report).toHaveBeenCalledTimes(2);
+  });
+
+  it("a más helyszínre vagy hónapra készült kimutatás nem látszik, és a PDF-gomb tiltva marad", async () => {
+    query.params = new URLSearchParams(
+      "partnerId=c1&departmentId=d1&month=2026-11",
+    );
+    // a válasz a d0 helyszínre készült, a kiválasztott a d1: az előző kimutatás nem maradhat a képernyőn
+    api.report.mockResolvedValue(REPORT);
+    render(<OperationsReportPage />);
+    await waitFor(() => expect(api.report).toHaveBeenCalled());
+    expect(screen.queryByText("Elvégzett feladat")).toBeNull();
+    expect(
+      (screen.getByText("PDF letöltése").closest("button") as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+  });
+
+  it("a letöltés az objektum-URL-t nem vonja vissza azonnal", async () => {
+    query.params = new URLSearchParams(
+      "partnerId=c1&departmentId=d0&month=2026-11",
+    );
+    const revoke = vi.fn();
+    Object.assign(URL, {
+      createObjectURL: () => "blob:x",
+      revokeObjectURL: revoke,
+    });
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => undefined);
+    render(<OperationsReportPage />);
+    await screen.findByText("Elvégzett feladat");
+    fireEvent.click(screen.getByText("PDF letöltése"));
+    await waitFor(() => expect(click).toHaveBeenCalled());
+    expect(revoke).not.toHaveBeenCalled();
+    click.mockRestore();
   });
 });
