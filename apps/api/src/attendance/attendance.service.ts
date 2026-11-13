@@ -24,6 +24,7 @@ import {
 } from "@acropora/types";
 
 import { dateOnly, dayView, scheduleView } from "./attendance-records.js";
+import { attendanceSheetDocument } from "./attendance-sheet-document.js";
 import { AttendanceRepository } from "./attendance.repository.js";
 
 export const ATTENDANCE_USER_NOT_FOUND = "A felhasználó nem található.";
@@ -172,6 +173,25 @@ export class AttendanceService {
         entries: entries.map(dayView),
       }),
     };
+  }
+
+  /**
+   * THE MONTH'S SHEET AS A PDF (S2c): the same computed sheet, printed with the employee's official name (`displayName`, the
+   * name for documents). Any month, the current one too, as it stands at `printedAt`.
+   */
+  async sheetPdf(
+    userId: string,
+    month: string,
+    printedAt: Date,
+  ): Promise<{ bytes: Buffer; fileName: string }> {
+    const sheet = await this.sheet(userId, month);
+    const user = await this.employee(userId);
+    const bytes = await attendanceSheetDocument({
+      sheet,
+      employeeName: user.displayName,
+      printedAt,
+    });
+    return { bytes, fileName: `Jelenléti ív ${user.displayName} ${month}.pdf` };
   }
 
   async saveDay(

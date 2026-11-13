@@ -167,6 +167,31 @@ export function AttendanceSheetPage() {
   }, [loadSheet]);
 
   const employee = employees.find((e) => e.id === employeeId) ?? null;
+  const [pdfError, setPdfError] = useState<string | null>(null);
+
+  /** The month's PDF in a new tab, as it stands now (S2c): printed and signed at month end, or shown at an inspection. */
+  const openPdf = async () => {
+    if (!employee) return;
+    setPdfError(null);
+    try {
+      const url = URL.createObjectURL(
+        await attendanceApi.sheetPdf(token, employee.id, month),
+      );
+      const opened = window.open(url, "_blank");
+      // the tab keeps its own copy once loaded; the page never holds the PDF for good
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      if (!opened)
+        setPdfError(
+          "A böngésző nem engedte megnyitni a PDF-et új lapon. Engedélyezd a felugró ablakot erre az oldalra.",
+        );
+    } catch (cause) {
+      setPdfError(
+        cause instanceof Error
+          ? cause.message
+          : "A jelenléti ív PDF-je nem tölthető le.",
+      );
+    }
+  };
 
   /**
    * THE SHEET ON SCREEN IS ONLY EVER THE CHOSEN ONE. While another employee's or month's sheet is loading, the previous one
@@ -237,7 +262,15 @@ export function AttendanceSheetPage() {
             onChange={(value) => choose({ month: value })}
           />
         </PilotFormField>
+        {shown && employee ? (
+          <PilotButton variant="secondary" onClick={() => void openPdf()}>
+            PDF (nyomtatás, aláírás)
+          </PilotButton>
+        ) : null}
       </div>
+      {pdfError ? (
+        <Alert variant="danger" title="Nem sikerült" description={pdfError} />
+      ) : null}
 
       {!employeeId ? (
         <EmptyState
