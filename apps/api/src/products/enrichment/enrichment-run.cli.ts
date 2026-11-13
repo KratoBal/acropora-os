@@ -40,6 +40,9 @@ import type { EnrichmentFetch } from "./polite-fetcher.js";
  *   pnpm --filter @acropora/api jev:enrich --input <file.json>
  *       [--max-products N] [--max-requests N] [--apply --actor <userId>]
  *
+ *   --input-env <NAME> in place of --input: the same JSON, base64, from an
+ *   environment variable (`inputFromEnv`; the test API's Coolify task).
+ *
  * The input names a small product set by hand, with the page URL per source:
  *
  *   { "products": [ { "productId": "...", "sources": [
@@ -160,15 +163,37 @@ export function parseRunInput(
   return problems.length ? { ok: false, problems } : { ok: true, products };
 }
 
+/**
+ * THE INPUT FROM AN ENVIRONMENT VARIABLE (`--input-env <NAME>`, the JSON in base64). The test API runs this CLI through a
+ * Coolify scheduled task, whose command holds at most 255 characters (acrobot measured, 2026-11-13: 250 accepted, 300 a
+ * 500), so the input cannot stand in the command, and there is no file in the container to point at. An environment value
+ * has no such limit. Only the standard base64 alphabet is taken, so a mistyped value is refused here, not half-read.
+ */
+export function inputFromEnv(
+  env: NodeJS.ProcessEnv,
+  name: string,
+): { ok: true; text: string } | { ok: false; problem: string } {
+  const value = env[name]?.replace(/\s+/g, "") ?? "";
+  if (!value)
+    return {
+      ok: false,
+      problem: `A(z) ${name} környezeti változó üres vagy nincs beállítva.`,
+    };
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(value) || value.length % 4 !== 0)
+    return { ok: false, problem: `A(z) ${name} értéke nem base64.` };
+  return { ok: true, text: Buffer.from(value, "base64").toString("utf8") };
+}
+
 export async function runEnrichmentCli(
   argv: readonly string[],
   out: Output,
   deps: EnrichmentCliDeps,
 ): Promise<number> {
   const inputPath = option(argv, "--input");
-  if (!inputPath) {
+  const inputEnv = option(argv, "--input-env");
+  if (!inputPath === !inputEnv) {
     out.stderr(
-      "Használat: --input <fájl.json> [--max-products N] [--max-requests N] [--apply --actor <userId>]\n",
+      "Használat: --input <fájl.json> | --input-env <VÁLTOZÓ> [--max-products N] [--max-requests N] [--apply --actor <userId>]\n",
     );
     return 2;
   }
@@ -189,7 +214,17 @@ export async function runEnrichmentCli(
       out.stderr(`${limit}\n`);
       return 2;
     }
-  const parsed = parseRunInput(await deps.readInput(inputPath));
+  let inputText: string;
+  if (inputPath) inputText = await deps.readInput(inputPath);
+  else {
+    const fromEnv = inputFromEnv(deps.env, inputEnv!);
+    if (!fromEnv.ok) {
+      out.stderr(`${fromEnv.problem}\n`);
+      return 2;
+    }
+    inputText = fromEnv.text;
+  }
+  const parsed = parseRunInput(inputText);
   if (!parsed.ok) {
     out.stderr(parsed.problems.map((p) => `- ${p}\n`).join(""));
     return 2;
