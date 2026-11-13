@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import type { Session, UserRole } from "@acropora/types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -18,7 +18,12 @@ vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({ session: auth.session }),
 }));
 
-import { LiveDrawPage, REVEAL_MS } from "./live-draw-page";
+import {
+  LiveDrawPage,
+  nextSpinTicket,
+  REVEAL_MS,
+  spinLabel,
+} from "./live-draw-page";
 
 /*
   AZ ÉLŐ SORSOLÁS OLDALA (acrobot 44363). MI PIROSÍT: ha a nyertes neve a 10 másodperc előtt a képernyőre kerül; ha a
@@ -113,7 +118,9 @@ describe("the live draw page", () => {
       await vi.advanceTimersByTimeAsync(1);
     });
     // 0-based ticket 86 is the 87th ticket
-    expect(screen.getByTestId("live-draw-ticket").textContent).toContain("87");
+    expect(screen.getByTestId("live-draw-reel").textContent).toContain(
+      "Játékos #87",
+    );
     expect(screen.queryByText("Kovács P.")).toBeNull();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(REVEAL_MS.name - REVEAL_MS.settle);
@@ -209,8 +216,8 @@ describe("the live draw page", () => {
       screen.getByRole("button", { name: "Sorsolás" }).click();
       await vi.advanceTimersByTimeAsync(REVEAL_MS.settle + 100);
     });
-    expect(screen.queryByTestId("live-draw-ticket")).toBeNull();
-    expect(screen.queryByText("A nyertes szelvény")).toBeNull();
+    expect(screen.queryByTestId("live-draw-reel")).toBeNull();
+    expect(screen.queryByText(/Játékos #/)).toBeNull();
   });
 
   it("a press that fails on the way back looks again: a draw the server did record shows at once, with no button", async () => {
@@ -261,5 +268,69 @@ describe("the live draw page", () => {
         ?.getAttribute("href"),
     ).toBe("/sorsolas?kind=CHRISTMAS");
     expect(api.liveDraw).not.toHaveBeenCalled();
+  });
+
+  it("spins neutral player labels that change, never a name, and stops on the server's ticket (Balázs, 2026-11-13)", async () => {
+    for (const tickets of [1, 2, 5, 142]) {
+      cleanup();
+      api.liveDraw.mockResolvedValue({
+        ...before,
+        candidates: tickets,
+        tickets,
+      });
+      const ticket = tickets - 1; // the last ticket, 0-based
+      api.runLiveDraw.mockResolvedValue({
+        ...before,
+        candidates: tickets,
+        tickets,
+        drawn: { ...drawn, ticket, tickets },
+      });
+      await mount();
+      await act(async () => {
+        screen.getByRole("button", { name: "Sorsolás" }).click();
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      const seen = new Set<string>();
+      for (let ms = 0; ms < REVEAL_MS.settle - 200; ms += 100) {
+        const label = screen
+          .getByTestId("live-draw-reel")
+          .querySelector("strong")!.textContent!;
+        expect(label, `${tickets}`).toMatch(/^Játékos #\d+$/);
+        const n = Number(label.slice("Játékos #".length));
+        expect(n >= 1 && n <= tickets, `${tickets}: ${label}`).toBe(true);
+        seen.add(label);
+        expect(screen.queryByText("Kovács P.")).toBeNull();
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(100);
+        });
+      }
+      // it visibly spins whenever there is more than one ticket
+      if (tickets === 2) expect(seen.size).toBe(2);
+      if (tickets >= 5)
+        expect(seen.size, `${tickets}`).toBeGreaterThanOrEqual(4);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300);
+      });
+      expect(screen.getByTestId("live-draw-reel").textContent).toContain(
+        spinLabel(tickets),
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(REVEAL_MS.name - REVEAL_MS.settle);
+      });
+      expect(screen.getByTestId("live-draw-winner").textContent).toBe(
+        "Kovács P.",
+      );
+    }
+  });
+
+  it("never shows the same ticket twice in a row when there is more than one", () => {
+    expect(nextSpinTicket(1, 1, () => 0.99)).toBe(1);
+    for (const tickets of [2, 5, 142])
+      for (const previous of [1, Math.ceil(tickets / 2), tickets])
+        for (const r of [0, 0.25, 0.5, 0.999]) {
+          const next = nextSpinTicket(previous, tickets, () => r);
+          expect(next).not.toBe(previous);
+          expect(next >= 1 && next <= tickets).toBe(true);
+        }
   });
 });

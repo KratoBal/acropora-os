@@ -6,6 +6,7 @@ import { type FormEvent, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { DEVELOPMENT_USERS } from "@/lib/auth/development-auth";
+import { safeReturnPath } from "@/lib/auth/return-path";
 import { personDisplayName } from "@acropora/types";
 
 // Matches the check every adapter already makes server- and client-side
@@ -13,6 +14,10 @@ import { personDisplayName } from "@acropora/types";
 // development user selector and its passwordless login must never render
 // in a production build.
 const isProduction = process.env.NODE_ENV === "production";
+
+/** The page that sent us here (`?next=`), if it is an internal one; otherwise the dashboard. */
+const returnPath = () =>
+  safeReturnPath(new URLSearchParams(window.location.search).get("next"));
 
 export default function LoginPage() {
   const { isLoading, login, session } = useAuth();
@@ -25,7 +30,7 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!isLoading && session) router.replace("/");
+    if (!isLoading && session) router.replace(returnPath());
   }, [isLoading, router, session]);
 
   async function handleLogin(event?: FormEvent) {
@@ -34,7 +39,7 @@ export default function LoginPage() {
     setError(undefined);
     try {
       await login(email, isProduction ? password : undefined);
-      router.replace("/");
+      router.replace(returnPath());
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "A bejelentkezés sikertelen.",

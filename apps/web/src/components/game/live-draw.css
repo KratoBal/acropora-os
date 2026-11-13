@@ -18,8 +18,12 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  /* a tall chooser on a phone must not be centred off the top (murena, 390 px, 2026-11-13) */
+  justify-content: safe center;
   gap: 2.2vh;
   padding: 4vh 5vw;
+  /* the brand sits absolute at the top: the content starts below it, also when it is taller than the screen */
+  padding-top: max(4vh, calc(3.2vh + clamp(28px, 2.4vw, 48px) + 20px));
   background:
     radial-gradient(
       ellipse at 50% 120%,
@@ -122,26 +126,29 @@
   color: #ff8a8a;
   font-size: clamp(18px, 1.6vw, 34px);
 }
-.live-draw-ticket {
+.live-draw-reel {
   display: flex;
   flex-direction: column;
   align-items: center;
 }
-.live-draw-ticket small {
+.live-draw-reel small {
   color: var(--ld-muted);
   font-size: clamp(20px, 1.9vw, 40px);
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
-.live-draw-ticket strong {
-  font-size: clamp(120px, 20vw, 420px);
+.live-draw-reel strong {
+  /* a label, not a number: smaller than the old ticket number, so "Játékos #142" fits on one line */
+  font-size: clamp(64px, 9vw, 200px);
+  white-space: nowrap;
+  animation: live-draw-reel-step 0.12s ease-out;
   line-height: 1;
   font-weight: 900;
   font-variant-numeric: tabular-nums;
   color: var(--ld-blue);
   text-shadow: 0 0 60px rgba(98, 199, 247, 0.55);
 }
-.live-draw-ticket-settled strong {
+.live-draw-reel-settled strong {
   color: var(--ld-orange);
   text-shadow: 0 0 90px rgba(255, 128, 62, 0.8);
   animation: live-draw-pop 0.7s ease-out;
@@ -299,5 +306,17 @@
   .live-draw-rings i,
   .live-draw-confetti b {
     animation: none !important;
+  }
+}
+
+/* each step of the reel slides in from above */
+@keyframes live-draw-reel-step {
+  from {
+    opacity: 0.35;
+    transform: translateY(-0.25em);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
