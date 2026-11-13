@@ -71,6 +71,11 @@ export interface PhotoPayload {
    * amire a sor aztan OROKRE varna.
    */
   recordingOperationId?: string;
+  /**
+   * AZ ÜZEMELTETÉSI NAPLÓ KÉPÉNÉL: MELYIK FÉNYKÉP MEZŐHÖZ TARTOZIK (a mező kulcsa a sablonon belül). Más gazdánál nincs.
+   * A kép a bejegyzés MEZŐJÉHEZ kötött, nem csak a bejegyzéshez: a szerver a kulcsot ellenőrzi (400, ha nem fénykép mező).
+   */
+  fieldKey?: string;
 }
 
 /**
