@@ -207,7 +207,7 @@ describe("a fénykép sora", () => {
     );
   });
 
-  it("MIND A HAT FELVITEL idempotens beszúrással megy be", () => {
+  it("MIND A NYOLC FELVITEL idempotens beszúrással megy be", () => {
     /*
       MI PIROSIT: egyetlen sima `INSERT` barmelyik FELVITELI agban. Akkor a
       ketszer megnyomott gomb ket sort tenne a sorba, es ugyanaz a felvitel
@@ -239,7 +239,12 @@ describe("a fénykép sora", () => {
     const beszurasok = [
       ...forras.matchAll(/INSERT OR IGNORE INTO sync_queue/g),
     ].map((m) => m[0]);
-    assert.equal(beszurasok.length, 7);
+    /*
+      2026-11-13: HETRŐL NYOLCRA valtozott az uzemeltetesi naplo bejegyzesevel (task os-uzemeltetesi-naplo, S2c). A bejegyzes UJ
+      entitas (az `entity_id` NULL, mint az eszkoznel): a szerver-azonosito a felmenetelkor lep at a varraton, a sorban allo kepek
+      ezt kapjak meg.
+    */
+    assert.equal(beszurasok.length, 8);
   });
 
   it("a MÓDOSÍTÁS nem ejti el a másodikat, hanem ÖSSZEFÉSÜLI", () => {

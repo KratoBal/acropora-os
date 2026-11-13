@@ -23,6 +23,12 @@ import {
   type CreateAquariumInput,
   type CreateAquariumMeasurementInput,
 } from "@/lib/api/aquariums";
+import {
+  createOperationsEntry,
+  uploadOperationsEntryPhoto,
+  type CreateOperationsEntryInput,
+} from "@/lib/api/operations-log";
+import { operationsPhotoClientKey } from "@/lib/operations-log/photo-key";
 import { readQueuedWorksheetLine } from "@/lib/worksheets/worksheet-line";
 import { ApiError } from "@/lib/api/client";
 
@@ -89,6 +95,8 @@ export function useQueueDrain(isOnline: boolean): string | null {
                 return akvariumotKuld(row);
               case "aquarium-measurement":
                 return meresKuld(row);
+              case "operations-entry":
+                return uzemeltetesiBejegyzestKuld(row);
               case "asset":
                 break;
               default: {
@@ -249,6 +257,24 @@ async function kepetKuld(row: SyncQueueRow): Promise<{
           error:
             "A vízméréshez nem tehető fénykép, ezért ezt a sort nem küldjük el.",
         };
+      case "operations-entry":
+        /**
+         * AZ ÜZEMELTETÉSI NAPLÓ KÉPE EGY FÉNYKÉP MEZŐHÖZ KÖTÖTT: a mező kulcsa a sor payloadjában áll. Kulcs nélkül a kép nem
+         * küldhető (a szerver 400-at adna, és a sor örökre elakadna), ezért 422-vel emberre vár. A szerver-oldali kulcs a sor
+         * azonosítójából számolt (`operationsPhotoClientKey`): a megszakadt válasz utáni újraküldés ugyanazt a képet adja vissza.
+         */
+        if (!payload.fieldKey)
+          return {
+            httpStatus: 422,
+            error:
+              "A kép nem mondja meg, melyik fénykép mezőhöz tartozik, ezért nem küldjük el.",
+          };
+        await uploadOperationsEntryPhoto(row.entityId, {
+          file: files[0]!,
+          fieldKey: payload.fieldKey,
+          clientOperationId: operationsPhotoClientKey(row.id),
+        });
+        break;
       default: {
         const soha: never = row.entityType;
         throw new Error(`Ismeretlen kép-gazda: ${String(soha)}`);
@@ -449,6 +475,36 @@ async function meresKuld(row: SyncQueueRow): Promise<{
       clientOperationId: row.id,
     });
     return { httpStatus: 201, error: null };
+  } catch (cause) {
+    return {
+      httpStatus: cause instanceof ApiError ? cause.status : null,
+      error: cause instanceof Error ? cause.message : String(cause),
+    };
+  }
+}
+
+/**
+ * EGY ÜZEMELTETÉSI NAPLÓ BEJEGYZÉS FELKÜLDÉSE A SORBÓL (task os-uzemeltetesi-naplo, S2c).
+ *
+ * UGYANAZ AZ ALAK, MINT AZ ESZKÖZÉ ÉS A JEGYÉ: ÚJ entitást hoz létre, tehát a szerver azonosítója itt lép át a varraton (a sorban
+ * álló képek ezt kapják meg). A sor azonosítója a szerver idempotencia-kulcsa is: a megszakadt válasz után az újraküldés a MEGLÉVŐ
+ * bejegyzést adja vissza (`created: false`), nem másodikat.
+ */
+async function uzemeltetesiBejegyzestKuld(row: SyncQueueRow): Promise<{
+  httpStatus: number | null;
+  error: string | null;
+  entityId?: string | null;
+}> {
+  try {
+    // a `queueTitle` csak a sor listájának szól (`queue-inspection.ts`), a szervernek nem megy
+    const { queueTitle: _queueTitle, ...input } = JSON.parse(
+      row.payloadJson,
+    ) as CreateOperationsEntryInput & { queueTitle?: string };
+    const letrejott = await createOperationsEntry({
+      ...input,
+      clientOperationId: row.id,
+    });
+    return { httpStatus: 201, error: null, entityId: letrejott.entry.id };
   } catch (cause) {
     return {
       httpStatus: cause instanceof ApiError ? cause.status : null,
