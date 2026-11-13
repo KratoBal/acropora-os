@@ -71,9 +71,20 @@ export interface AttendanceSheet {
   swapsDecree: string | null;
 }
 
+/**
+ * The latest copy of the month printed for signature (S2d), and whether the month changed since: then the signed copy
+ * differs and needs a new print and signature (brief point 8). Null when the month was never printed for signature.
+ */
+export interface AttendanceSignedCopy {
+  id: string;
+  printedAt: string;
+  differs: boolean;
+}
+
 /** The sheet as the API serves it. */
 export interface AttendanceSheetResponse extends AttendanceSheet {
   userId: string;
+  signedCopy: AttendanceSignedCopy | null;
 }
 
 const MONTH = /^(\d{4})-(0[1-9]|1[0-2])$/;

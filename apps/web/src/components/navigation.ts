@@ -570,6 +570,13 @@ const mainNavigationGroups: AppNavigationGroup[] = [
         entryId: "users",
       },
       {
+        // Jelenléti ív (os-jelenleti-iv, S2b): a saját jogán, a felhasználó-kezelés nélkül is
+        href: "/admin/jelenleti-iv",
+        label: "Jelenléti ív",
+        icon: "clipboard",
+        entryId: "attendance",
+      },
+      {
         subgroup: "Kapcsolatok",
         href: "/admin/integrations/nav",
         label: "NAV",

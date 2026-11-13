@@ -27,9 +27,9 @@
  * egy masik elso szot nem.
  */
 
-/** A harom dolog, ami egy helyszinrol lejon. */
+/** Az ot resz, ami egy helyszinrol lejon. */
 export type LetoltesResz =
-  "eszkozok" | "fenykepek" | "hibajegyek" | "munkalapok";
+  "eszkozok" | "fenykepek" | "hibajegyek" | "munkalapok" | "sablonok";
 
 const RESZ_NEVE: Record<LetoltesResz, string> = {
   eszkozok: "eszköz",
@@ -42,6 +42,12 @@ const RESZ_NEVE: Record<LetoltesResz, string> = {
   fenykepek: "bélyegkép",
   hibajegyek: "hibajegy",
   munkalapok: "munkalap",
+  /*
+    AZ ESZKOZ UZEMELTETESI NAPLO SABLONJAI (task os-uzemeltetesi-naplo, S2d): a darabszam az ESZKOZOK szama, amelyeknek a sablon-listaja a
+    keszuleken van (a lista lehet ures is: az "ennek az eszkoznek nincs sablonja" is tudas). A resz CSAK a naplo rogzitesi jogaval
+    rendelkezo szerelonek szerepel, masnak nincs mit hianyolnia.
+  */
+  sablonok: "eszköz üzemeltetési sablonja",
 };
 
 export type ReszEredmeny =
@@ -79,7 +85,7 @@ export type ReszEredmeny =
   | { resz: LetoltesResz; allapot: "elhasalt"; darab: 0 };
 
 export interface LetoltesOsszegzes {
-  /** IGAZ, ha MIND A HAROM resz hiany nelkul jott le. */
+  /** IGAZ, ha MIND AZ OT resz hiany nelkul jott le. */
   teljes: boolean;
   /**
    * AZ ELSO SZO MONDJA MEG, MELYIK ESETROL VAN SZO. Egy szam kulonbseget at
@@ -161,4 +167,6 @@ export const LETOLTES_UTAN_UJRAOLVASANDO = [
   ["offline-service-job"],
   /** Egy munkalap mentett adatlapja (`worksheets/[id].tsx`). */
   ["worksheet-cache"],
+  /** Az eszkoz uzemeltetesi naplo sablonjai (`assets/[id].tsx`, `operations-log/record.tsx`; task os-uzemeltetesi-naplo, S2d). */
+  ["operations-templates"],
 ] as const;
