@@ -27,7 +27,7 @@
  * egy masik elso szot nem.
  */
 
-/** A harom dolog, ami egy helyszinrol lejon. */
+/** Az ot resz, ami egy helyszinrol lejon. */
 export type LetoltesResz =
   "eszkozok" | "fenykepek" | "hibajegyek" | "munkalapok" | "sablonok";
 
@@ -85,7 +85,7 @@ export type ReszEredmeny =
   | { resz: LetoltesResz; allapot: "elhasalt"; darab: 0 };
 
 export interface LetoltesOsszegzes {
-  /** IGAZ, ha MIND A HAROM resz hiany nelkul jott le. */
+  /** IGAZ, ha MIND AZ OT resz hiany nelkul jott le. */
   teljes: boolean;
   /**
    * AZ ELSO SZO MONDJA MEG, MELYIK ESETROL VAN SZO. Egy szam kulonbseget at

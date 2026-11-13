@@ -577,6 +577,25 @@ describe("az eszközök üzemeltetési napló sablonjai", () => {
     );
   });
 
+  it("eszköz nélküli helyszínen (az eszköz-lista SIKERESEN lejött, nulla sorral) a sablon-rész KÉSZ, nem hamisan hiányos", async () => {
+    let sablonHivas = 0;
+    const eredmeny = await futtat(
+      sablonDeps({
+        eszkozLista: async () => eszkozLap([], 1),
+        sablonLista: async () => {
+          sablonHivas += 1;
+          return [];
+        },
+      }),
+    );
+    assert.equal(eredmeny.teljes, true);
+    assert.match(
+      sorAmi(eredmeny.sorok, /üzemeltetési sablon/),
+      /^0 eszköz üzemeltetési sablonja letöltve\.$/,
+    );
+    assert.equal(sablonHivas, 0);
+  });
+
   it("csak az egyik függvény átadása nem kapcsolja be a részt (a jog nélküli hívó nem kap hamis részt)", async () => {
     const eredmeny = await futtat({
       sablonLista: async () => [],

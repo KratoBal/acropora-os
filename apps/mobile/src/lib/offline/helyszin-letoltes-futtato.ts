@@ -292,6 +292,7 @@ export async function letoltHelyszin<
       await sablonok(
         eszkozEredmeny.azonositok,
         eszkozEredmeny.osszesDarab,
+        eszkozEredmeny.resz.allapot === "elhasalt",
         { lista: deps.sablonLista, mentes: deps.sablonokMentese },
         mentesiHibak,
       ),
@@ -602,14 +603,22 @@ async function munkalapok<Tetel extends Sor, Reszlet>(
 async function sablonok(
   azonositok: readonly string[],
   osszesDarab: number,
+  eszkozListaElhasalt: boolean,
   deps: {
     lista: (assetId: string) => Promise<unknown[]>;
     mentes: (assetId: string, items: unknown[]) => Promise<void>;
   },
   mentesiHibak: string[],
 ): Promise<ReszEredmeny> {
+  /*
+    AZ Ures AZONOSITO-LISTA KETFELE LEHET. Ha az eszkoz-lista nem jott le, a sablonokra sincs mit mondani (elhasalt). Ha viszont
+    SIKERESEN lejott, csak nulla sorral (eszkoz nelkuli helyszin), akkor nincs mi hianyozzon: kesz, 0 darab. Az elso eset nelkul a
+    zaro mondat hamisan HIANYOS lenne, es egy soha el nem tuno hamis hianyossag arra tanit, hogy a valodit is atsiklik.
+  */
   if (azonositok.length === 0)
-    return { resz: "sablonok", allapot: "elhasalt", darab: 0 };
+    return eszkozListaElhasalt
+      ? { resz: "sablonok", allapot: "elhasalt", darab: 0 }
+      : { resz: "sablonok", allapot: "kesz", darab: 0 };
   let darab = 0;
   let hibas = false;
   let bukottMentes = 0;
