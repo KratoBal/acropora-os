@@ -19,8 +19,8 @@ import "./live-draw.css";
  *
  * AMIT AZ OLDAL SOHA NEM TESZ: nem választ ki senkit (a gomb a szerver meglévő sorsolását hívja, a szerver dönt a
  * magjával), és NEM mutat más játékost. A szerver nézetében nincs is más játékos: csak számok, a nyeremény, és sorsolás
- * után a nyertes rövidített neve és kitakart címe. A pörgő számok díszek (véletlen számok a szelvények közül), a megállt
- * szám a szerver szelvényszáma.
+ * után a nyertes rövidített neve és kitakart címe. A pörgő „Játékos #N” címkék díszek (a szelvények számaiból, név
+ * nélkül), a megállt címke a szerver szelvényszáma.
  */
 
 /** A látvány idővonala a gomb megnyomásától (ms): a szelvényszám megáll, aztán megjelenik a nyertes. */
@@ -54,8 +54,29 @@ function Brand() {
   );
 }
 
-/** A pörgő szelvényszám: lassuló véletlen számok, a megállás után a szerver szelvényszáma. */
-function RollingTicket({
+/**
+ * THE SPINNING LABEL (Balázs, 2026-11-13: "jo lenne ha a nevek valtakoznanak gyorsan es a vegen derulne ki a nyertes";
+ * his choice of form, 15:10 UTC: "Játékos #17"). The players' names must NOT spin: the giveaway's privacy notice
+ * (adatkezeles-1.2) promises that no other player's name or address appears in the broadcast. So the reel spins neutral
+ * labels made from the ticket numbers, slows down, and stops on the server's winning ticket; the winner's shortened name
+ * comes after, as before. The server still picks; the reel is only the show.
+ */
+export const spinLabel = (ticket: number) => `Játékos #${ticket}`;
+
+/** The next ticket to show: random among `tickets`, never the same twice in a row when there is more than one. */
+export function nextSpinTicket(
+  previous: number,
+  tickets: number,
+  random: () => number = Math.random,
+): number {
+  const count = Math.max(tickets, 1);
+  if (count === 1) return 1;
+  // one of the other count-1 tickets, so every step visibly changes
+  const pick = 1 + Math.floor(random() * (count - 1));
+  return pick >= previous ? pick + 1 : pick;
+}
+
+function SpinningPlayer({
   tickets,
   finalTicket,
   settled,
@@ -65,26 +86,30 @@ function RollingTicket({
   settled: boolean;
 }) {
   const [shown, setShown] = useState(1);
+  const [step, setStep] = useState(0);
   useEffect(() => {
     if (settled) return;
     let timer: ReturnType<typeof setTimeout>;
     const startedAt = Date.now();
     const tick = () => {
-      setShown(1 + Math.floor(Math.random() * Math.max(tickets, 1)));
+      setShown((previous) => nextSpinTicket(previous, tickets));
+      setStep((n) => n + 1);
+      // fast at first (about 20 a second), slowing towards the stop
       const progress = Math.min((Date.now() - startedAt) / REVEAL_MS.settle, 1);
-      timer = setTimeout(tick, 40 + progress * 420);
+      timer = setTimeout(tick, 50 + progress * progress * 520);
     };
     tick();
     return () => clearTimeout(timer);
   }, [settled, tickets]);
-  const value = settled && finalTicket !== null ? finalTicket + 1 : shown;
+  const ticket = settled && finalTicket !== null ? finalTicket + 1 : shown;
   return (
     <div
-      className={`live-draw-ticket${settled ? " live-draw-ticket-settled" : ""}`}
-      data-testid="live-draw-ticket"
+      className={`live-draw-reel${settled ? " live-draw-reel-settled" : ""}`}
+      data-testid="live-draw-reel"
     >
-      <small>{settled ? "A nyertes szelvény" : "Szelvények a kalapban"}</small>
-      <strong>{value}</strong>
+      <small>{settled ? "A nyertes" : "Sorsolás"}</small>
+      {/* a new key per step, so every change slides in */}
+      <strong key={settled ? "settled" : step}>{spinLabel(ticket)}</strong>
     </div>
   );
 }
@@ -272,7 +297,7 @@ function LiveDraw({
         <section className="live-draw-stage" aria-live="polite">
           {/* with no winner there is no ticket to stop on: the number must not settle as "the winning ticket" */}
           {result && result.drawn?.ticket == null ? null : (
-            <RollingTicket
+            <SpinningPlayer
               tickets={view.tickets}
               finalTicket={result?.drawn?.ticket ?? null}
               settled={settleUp && result !== null}
