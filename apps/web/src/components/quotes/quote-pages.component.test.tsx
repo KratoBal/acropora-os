@@ -1558,6 +1558,129 @@ describe("Ajánlat szerkesztő (569:171)", () => {
       ).toBe("900");
     });
 
+    /*
+      A KÉSVE ÉRKEZŐ ÁR-VÁLASZ (barracuda, #2535 review): MI PIROSÍT, ha egy korábbi választás válasza az
+      újabb termék tételére ír; ha a bruttó a régi ÁFA-kulccsal számolódik, miközben a mező már az újat mutatja.
+    */
+    const deferred = <T,>() => {
+      let resolve!: (value: T) => void;
+      const promise = new Promise<T>((r) => (resolve = r));
+      return { promise, resolve };
+    };
+    const twoProducts = (vatB = "27") => {
+      products.list.mockResolvedValue({
+        items: [
+          { id: "pA", name: "Szűrőbetét A" },
+          { id: "pB", name: "Szűrőbetét B" },
+        ],
+      });
+      products.detail.mockImplementation(
+        async (_token: string, id: string) => ({
+          variants: [
+            {
+              id: id === "pA" ? "vA" : "vB",
+              sku: id === "pA" ? "A-1" : "B-1",
+              name: null,
+              unit: "db",
+              isActive: true,
+              vatRate: id === "pA" ? "27" : vatB,
+            },
+          ],
+        }),
+      );
+    };
+    const search = async (productName: RegExp) => {
+      const drawer = screen.getByRole("dialog", { name: "Új ajánlati tétel" });
+      fireEvent.change(within(drawer).getByLabelText("OS-termék keresése"), {
+        target: { value: "szűrő" },
+      });
+      fireEvent.click(await screen.findByRole("button", { name: productName }));
+    };
+
+    it("az A termék késve érkező ára nem írja felül a B termékét", async () => {
+      twoProducts();
+      const a = deferred<unknown>();
+      const b = deferred<unknown>();
+      api.variantListPrice.mockImplementation(
+        async (_t: string, _q: string, _v: string, variantId: string) =>
+          variantId === "vA" ? a.promise : b.promise,
+      );
+      render(<QuoteEditorPage quoteId="q1" />);
+      fireEvent.click(
+        await screen.findByRole("button", { name: "+ Tétel hozzáadása" }),
+      );
+      fireEvent.click(
+        await screen.findByRole("radio", { name: /OS-termékhez kapcsolva/ }),
+      );
+      await search(/Szűrőbetét A/);
+      fireEvent.click(await screen.findByRole("button", { name: "Csere" }));
+      await search(/Szűrőbetét B/);
+
+      b.resolve({
+        variantId: "vB",
+        unitNetPrice: "2000.0000",
+        sale: false,
+        reason: null,
+      });
+      await waitFor(() =>
+        expect(
+          (screen.getByLabelText("Nettó egységár") as HTMLInputElement).value,
+        ).toBe("2000.0000"),
+      );
+      // az A válasza csak most érkezik
+      a.resolve({
+        variantId: "vA",
+        unitNetPrice: "1000.0000",
+        sale: false,
+        reason: null,
+      });
+      await new Promise((r) => setTimeout(r, 20));
+      expect(
+        (screen.getByLabelText("Nettó egységár") as HTMLInputElement).value,
+      ).toBe("2000.0000");
+      expect(
+        (screen.getByLabelText("Megnevezés") as HTMLInputElement).value,
+      ).toBe("Szűrőbetét B");
+    });
+
+    it("eltérő ÁFA-kulcsú változatnál a bruttó az új kulccsal számolódik", async () => {
+      twoProducts("5");
+      api.variantListPrice.mockImplementation(
+        async (_t: string, _q: string, _v: string, variantId: string) => ({
+          variantId,
+          unitNetPrice: "1000.0000",
+          sale: false,
+          reason: null,
+        }),
+      );
+      render(<QuoteEditorPage quoteId="q1" />);
+      fireEvent.click(
+        await screen.findByRole("button", { name: "+ Tétel hozzáadása" }),
+      );
+      fireEvent.click(
+        await screen.findByRole("radio", { name: /OS-termékhez kapcsolva/ }),
+      );
+      await search(/Szűrőbetét A/);
+      await waitFor(() =>
+        expect(
+          (screen.getByLabelText("Bruttó egységár") as HTMLInputElement).value,
+        ).toBe("1270"),
+      );
+      fireEvent.click(await screen.findByRole("button", { name: "Csere" }));
+      await search(/Szűrőbetét B/);
+      // az ár a B-ről jön (1000 nettó), a kulcs 5 %: a bruttó 1050, nem 1270
+      await waitFor(() =>
+        expect((screen.getByLabelText("ÁFA %") as HTMLInputElement).value).toBe(
+          "5",
+        ),
+      );
+      await waitFor(() =>
+        expect(
+          (screen.getByLabelText("Bruttó egységár") as HTMLInputElement).value,
+        ).toBe("1050"),
+      );
+    });
+
     it("ha nincs eladási ár, megnevezi az okot, és az ár üres marad (nem nulla)", async () => {
       api.variantListPrice.mockResolvedValue({
         variantId: "pv1",
