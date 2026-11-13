@@ -193,7 +193,7 @@ describe(
         await field(t.id, { meterRole: "AFTER" });
         await assert.rejects(
           field(t.id, { meterRole: "BEFORE" }),
-          /OperationsTaskField_templateId_meterRole_key/,
+          /Unique constraint failed on the fields: \(`templateId`,`meterRole`\)/,
         );
         // szerep nélküli mezőből több is lehet (a NULL nem számít), és másik sablonon a szerep újra szabad
         await field(t.id);
@@ -209,7 +209,7 @@ describe(
         await field(t.id, { meterRole: "BEFORE" });
         await assert.rejects(
           field(t.id, { meterRole: "BEFORE" }),
-          /OperationsTaskField_templateId_meterRole_key/,
+          /Unique constraint failed on the fields: \(`templateId`,`meterRole`\)/,
         );
         // a kivezetett mező szerepe megmaradt a sorban
         assert.equal(
@@ -229,7 +229,7 @@ describe(
         await field(t.id, { key: "viz" });
         await assert.rejects(
           field(t.id, { key: "viz" }),
-          /OperationsTaskField_templateId_key_key/,
+          /Unique constraint failed on the fields: \(`templateId`,`key`\)/,
         );
         const other = await template("mezo-kulcs-masik");
         await field(other.id, { key: "viz" });
