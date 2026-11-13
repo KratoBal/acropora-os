@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { BadRequestException, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from "@nestjs/common";
 import type { UserRole } from "@acropora/types";
 
 import {
@@ -9,7 +13,10 @@ import {
   type DayRow,
   type ScheduleRow,
 } from "./attendance-records.js";
-import type { AttendanceRepository } from "./attendance.repository.js";
+import {
+  AttendanceDayTakenError,
+  type AttendanceRepository,
+} from "./attendance.repository.js";
 import {
   ATTENDANCE_NOT_AN_EMPLOYEE,
   AttendanceService,
@@ -23,10 +30,14 @@ import {
 */
 const updatedAt = new Date("2026-11-13T09:00:00.000Z");
 
-function build(role: UserRole | null = "SALES") {
+function build(
+  role: UserRole | null = "SALES",
+  signed: { id: string; printedAt: Date; contentHash: string } | null = null,
+) {
   const writes: unknown[] = [];
   const repository: Partial<AttendanceRepository> = {
-    employee: async (id) => (role ? { id, role } : null),
+    employee: async (id) =>
+      role ? { id, role, displayName: "Kovács Anna" } : null,
     schedules: async () => [],
     days: async (_userId, from, to) => {
       writes.push({ read: [from.toISOString(), to.toISOString()] });
@@ -58,6 +69,19 @@ function build(role: UserRole | null = "SALES") {
       writes.push({ deleteDay: input });
       return input.date.getTime() === dateOnly("2026-11-13").getTime();
     },
+    latestSignedSheet: async () => signed,
+    createSignedSheet: async (input) => {
+      writes.push({ createSignedSheet: { ...input, pdf: input.pdf.length } });
+      return { id: "copy-1" };
+    },
+    signedSheetPdf: async (_userId, id) =>
+      id === "copy-1"
+        ? {
+            pdf: Buffer.from("%PDF-stored"),
+            month: "2026-11",
+            printedAt: updatedAt,
+          }
+        : null,
   };
   return {
     service: new AttendanceService(repository as AttendanceRepository),
@@ -262,7 +286,11 @@ describe("AttendanceService: the month's sheet", () => {
   it("reads the whole month and computes it from the versions and the entries", async () => {
     const reads: string[][] = [];
     const repository: Partial<AttendanceRepository> = {
-      employee: async (id) => ({ id, role: "SALES" }),
+      employee: async (id) => ({
+        id,
+        role: "SALES",
+        displayName: "Kovács Anna",
+      }),
       schedules: async () => [
         {
           validFrom: dateOnly("2028-01-01"),
@@ -270,6 +298,7 @@ describe("AttendanceService: the month's sheet", () => {
           days: [{ weekday: 2, startMinute: 420, endMinute: 960 }],
         },
       ],
+      latestSignedSheet: async () => null,
       days: async (_userId, from, to) => {
         reads.push([from.toISOString(), to.toISOString()]);
         return [
@@ -318,5 +347,194 @@ describe("AttendanceService: the employee picker", () => {
     assert.deepEqual(asked, [
       ["OWNER", "ADMIN", "MANAGER", "SALES", "WAREHOUSE", "SERVICE", "VIEWER"],
     ]);
+  });
+});
+
+describe("AttendanceService: the month's PDF", () => {
+  it("prints the computed sheet under the official name", async () => {
+    const { service } = build();
+    const document = await service.sheetPdf(
+      "u-1",
+      "2026-11",
+      new Date("2026-11-13T10:00:00.000Z"),
+    );
+    assert.equal(document.fileName, "Jelenléti ív Kovács Anna 2026-11.pdf");
+    assert.equal(document.bytes.subarray(0, 5).toString(), "%PDF-");
+  });
+
+  it("refuses a bad month before printing", async () => {
+    const { service } = build();
+    await assert.rejects(
+      service.sheetPdf("u-1", "2026-00", new Date()),
+      /hónap/,
+    );
+  });
+});
+
+describe("AttendanceService: the copy printed for signature", () => {
+  const printedAt = new Date("2026-11-30T15:00:00.000Z");
+
+  it("keeps the printed bytes with the hash of the sheet they show", async () => {
+    const { service, writes } = build();
+    const document = await service.printForSignature(
+      "u-1",
+      "2026-11",
+      printedAt,
+      "admin-1",
+    );
+    assert.equal(document.bytes.subarray(0, 5).toString(), "%PDF-");
+    assert.equal(
+      document.fileName,
+      "Jelenléti ív Kovács Anna 2026-11 (aláírásra).pdf",
+    );
+    const stored = writes.find(
+      (write) => "createSignedSheet" in (write as object),
+    ) as { createSignedSheet: Record<string, unknown> };
+    assert.equal(stored.createSignedSheet.userId, "u-1");
+    assert.equal(stored.createSignedSheet.month, "2026-11");
+    assert.equal(stored.createSignedSheet.actorId, "admin-1");
+    assert.equal(stored.createSignedSheet.printedAt, printedAt);
+    assert.equal(stored.createSignedSheet.pdf, document.bytes.length);
+    assert.match(
+      String(stored.createSignedSheet.contentHash),
+      /^[0-9a-f]{64}$/,
+    );
+  });
+
+  it("says whether the month still matches the signed copy", async () => {
+    const print = build();
+    await print.service.printForSignature("u-1", "2026-11", printedAt, "a");
+    const hash = (
+      print.writes.find((w) => "createSignedSheet" in (w as object)) as {
+        createSignedSheet: { contentHash: string };
+      }
+    ).createSignedSheet.contentHash;
+
+    const same = await build("SALES", {
+      id: "copy-1",
+      printedAt,
+      contentHash: hash,
+    }).service.sheet("u-1", "2026-11");
+    assert.deepEqual(same.signedCopy, {
+      id: "copy-1",
+      printedAt: printedAt.toISOString(),
+      differs: false,
+    });
+
+    const changed = await build("SALES", {
+      id: "copy-1",
+      printedAt,
+      contentHash: "0".repeat(64),
+    }).service.sheet("u-1", "2026-11");
+    assert.equal(changed.signedCopy?.differs, true);
+
+    assert.equal(
+      (await build().service.sheet("u-1", "2026-11")).signedCopy,
+      null,
+    );
+  });
+
+  it("serves a kept copy as stored, and nothing for an unknown id", async () => {
+    const { service } = build();
+    const copy = await service.signedSheetPdf("u-1", "copy-1");
+    assert.equal(copy.bytes.toString(), "%PDF-stored");
+    assert.equal(
+      copy.fileName,
+      "Jelenléti ív Kovács Anna 2026-11 (nyomtatott példány).pdf",
+    );
+    await assert.rejects(
+      service.signedSheetPdf("u-1", "copy-2"),
+      NotFoundException,
+    );
+  });
+});
+
+describe("AttendanceService: the employee's own marks (S3)", () => {
+  // 23:30 UTC on 12 November is already 13 November in Budapest: "today" is the Budapest day
+  const now = new Date("2026-11-12T23:30:00.000Z");
+
+  it("sets leave from tomorrow, by the employee, guarded against an admin's other mark", async () => {
+    const { service, writes } = build();
+    const saved = await service.markOwnDay("u-1", "2026-11-14", "LEAVE", now);
+    assert.equal(saved.kind, "LEAVE");
+    assert.deepEqual(writes, [
+      {
+        saveDay: {
+          userId: "u-1",
+          date: dateOnly("2026-11-14"),
+          kind: "LEAVE",
+          startMinute: null,
+          endMinute: null,
+          actorId: "u-1",
+          onlyOver: ["LEAVE", "DAY_OFF"],
+        },
+      },
+    ]);
+  });
+
+  it("refuses today (Budapest), another kind, or a partner account, before writing", async () => {
+    const { service, writes } = build();
+    await assert.rejects(
+      service.markOwnDay("u-1", "2026-11-13", "LEAVE", now),
+      /holnapi/,
+    );
+    await assert.rejects(
+      service.markOwnDay("u-1", "2026-11-14", "SICK", now),
+      /csak szabadságot/,
+    );
+    await assert.rejects(
+      build("PARTNER_SERVICE").service.markOwnDay(
+        "p-1",
+        "2026-11-14",
+        "LEAVE",
+        now,
+      ),
+      BadRequestException,
+    );
+    assert.deepEqual(writes, []);
+  });
+
+  it("answers 409 when an admin's other mark is found under the lock, and 404 when there is nothing to remove", async () => {
+    const taken: Partial<AttendanceRepository> = {
+      employee: async (id) => ({
+        id,
+        role: "SALES",
+        displayName: "Kovács Anna",
+      }),
+      saveDay: async () => {
+        throw new AttendanceDayTakenError("SICK");
+      },
+      deleteDay: async () => {
+        throw new AttendanceDayTakenError("WORKED");
+      },
+    };
+    const service = new AttendanceService(taken as AttendanceRepository);
+    await assert.rejects(
+      service.markOwnDay("u-1", "2026-11-14", "DAY_OFF", now),
+      ConflictException,
+    );
+    await assert.rejects(
+      service.clearOwnDay("u-1", "2026-11-14", now),
+      ConflictException,
+    );
+    const { service: plain, writes } = build();
+    await assert.rejects(
+      plain.clearOwnDay("u-1", "2026-11-14", now),
+      NotFoundException,
+    );
+    // the fake keeps an own mark on 13 November; on the 12th that is tomorrow
+    await plain.clearOwnDay(
+      "u-1",
+      "2026-11-13",
+      new Date("2026-11-12T10:00:00.000Z"),
+    );
+    assert.deepEqual(writes.at(-1), {
+      deleteDay: {
+        userId: "u-1",
+        date: dateOnly("2026-11-13"),
+        actorId: "u-1",
+        onlyOver: ["LEAVE", "DAY_OFF"],
+      },
+    });
   });
 });

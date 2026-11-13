@@ -29,44 +29,18 @@ import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { UserAttendanceSchedule } from "@/components/users/user-attendance-schedule";
 import { attendanceApi } from "@/lib/api/attendance";
-import { budapestDayOf, formatDayHu } from "@/lib/format/date";
 
-const WEEKDAY_SHORT = ["H", "K", "Sze", "Cs", "P", "Szo", "V"] as const;
-
-/** 540 -> "9:00": hours and minutes, the way the paper sheet reads. */
-export function formatAttendanceHours(minutes: number): string {
-  return `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, "0")}`;
-}
-
-/** What a row says in place of the times. */
-function rowNote(row: AttendanceSheetRow): string {
-  switch (row.kind) {
-    case "WORK":
-      return row.source === "ENTRY" ? "Eltérő munkaidő" : "";
-    case "SICK":
-      return "Betegség";
-    case "LEAVE":
-      return "Szabadság";
-    case "DAY_OFF":
-      return "Szabadnap";
-    case "HOLIDAY":
-      return row.holiday ?? "Munkaszüneti nap";
-    case "SWAPPED_REST":
-      return "Áthelyezett pihenőnap";
-    case "FREE":
-      return "Pihenőnap";
-    case "NO_SCHEDULE":
-      return "Nincs érvényes munkarend";
-  }
-}
-
-/** The rows that are not working days by the calendar or the schedule: leave marked there still counts as a day. */
-const RESTING: ReadonlySet<AttendanceSheetRow["kind"]> = new Set([
-  "HOLIDAY",
-  "SWAPPED_REST",
-  "FREE",
-  "NO_SCHEDULE",
-]);
+import {
+  AttendanceSheetTable,
+  RESTING,
+  rowNote,
+  WEEKDAY_SHORT,
+} from "./attendance-sheet-table";
+import {
+  budapestDayOf,
+  formatDateTimeHu,
+  formatDayHu,
+} from "@/lib/format/date";
 
 type Choice = "SCHEDULE" | AttendanceDayKind;
 
@@ -167,6 +141,39 @@ export function AttendanceSheetPage() {
   }, [loadSheet]);
 
   const employee = employees.find((e) => e.id === employeeId) ?? null;
+  const [pdfError, setPdfError] = useState<string | null>(null);
+
+  /**
+   * A PDF in a new tab (S2c, S2d): the month as it stands, the month printed for signature (kept by the server), or a kept
+   * signed copy. A blocked tab is said, not swallowed.
+   */
+  const openPdf = async (
+    load: () => Promise<Blob>,
+    afterwards?: () => void,
+  ) => {
+    setPdfError(null);
+    // the tab opens in the click itself: one opened after an await is blocked by Safari (barracuda on #2509)
+    const opened = window.open("", "_blank");
+    try {
+      const url = URL.createObjectURL(await load());
+      // the tab keeps its own copy once loaded; the page never holds the PDF for good
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      if (opened) opened.location.href = url;
+      else
+        setPdfError(
+          "A böngésző nem engedte megnyitni a PDF-et új lapon. Engedélyezd a felugró ablakot erre az oldalra.",
+        );
+    } catch (cause) {
+      opened?.close();
+      setPdfError(
+        cause instanceof Error
+          ? cause.message
+          : "A jelenléti ív PDF-je nem tölthető le.",
+      );
+    } finally {
+      afterwards?.();
+    }
+  };
 
   /**
    * THE SHEET ON SCREEN IS ONLY EVER THE CHOSEN ONE. While another employee's or month's sheet is loading, the previous one
@@ -237,7 +244,39 @@ export function AttendanceSheetPage() {
             onChange={(value) => choose({ month: value })}
           />
         </PilotFormField>
+        {shown ? (
+          <>
+            <PilotButton
+              variant="secondary"
+              onClick={() =>
+                void openPdf(() =>
+                  attendanceApi.sheetPdf(token, shown.userId, shown.month),
+                )
+              }
+            >
+              PDF megtekintése
+            </PilotButton>
+            <PilotButton
+              onClick={() =>
+                void openPdf(
+                  () =>
+                    attendanceApi.printForSignature(
+                      token,
+                      shown.userId,
+                      shown.month,
+                    ),
+                  () => void loadSheet(),
+                )
+              }
+            >
+              Nyomtatás aláírásra
+            </PilotButton>
+          </>
+        ) : null}
       </div>
+      {pdfError ? (
+        <Alert variant="danger" title="Nem sikerült" description={pdfError} />
+      ) : null}
 
       {!employeeId ? (
         <EmptyState
@@ -254,71 +293,50 @@ export function AttendanceSheetPage() {
         <Skeleton className="h-64 w-full" />
       ) : (
         <PilotCard className="space-y-3 p-4">
+          {shown.signedCopy ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {shown.signedCopy.differs ? (
+                <Alert
+                  variant="danger"
+                  title="Az aláírásra nyomtatott példány óta a hónap megváltozott"
+                  description={`Aláírásra nyomtatva: ${formatDateTimeHu(shown.signedCopy.printedAt)}. Új nyomtatás és aláírás kell; a korábbi példány megmarad.`}
+                />
+              ) : (
+                <p className="text-xs text-pilot-grey-500">
+                  Aláírásra nyomtatva:{" "}
+                  {formatDateTimeHu(shown.signedCopy.printedAt)}, azóta
+                  változatlan.
+                </p>
+              )}
+              <PilotButton
+                variant="secondary"
+                onClick={() => {
+                  const copy = shown.signedCopy;
+                  if (copy)
+                    void openPdf(() =>
+                      attendanceApi.signedSheetPdf(
+                        token,
+                        shown.userId,
+                        copy.id,
+                      ),
+                    );
+                }}
+              >
+                Nyomtatott példány
+              </PilotButton>
+            </div>
+          ) : null}
           {shown.swapsDecree ? null : (
             <Alert
               title="Az áthelyezett munkanapok erre az évre még nincsenek a rendszerben"
               description="Az ünnepnapokat a lap ismeri, de az évi munkarend-rendelet áthelyezett napjait nem: ezeket addig egyenként kell jelölni."
             />
           )}
-          <div className="overflow-x-auto">
-            <table
-              className="w-full text-left text-sm"
-              aria-label="Jelenléti ív"
-            >
-              <thead>
-                <tr className="text-xs text-pilot-grey-500">
-                  <th className="py-2 pr-3 font-medium">Dátum</th>
-                  <th className="py-2 pr-3 font-medium">Érkezés</th>
-                  <th className="py-2 pr-3 font-medium">Távozás</th>
-                  <th className="py-2 pr-3 font-medium">Ledolgozott</th>
-                  <th className="py-2 pr-3 font-medium">Megjegyzés</th>
-                  <th className="py-2 font-medium">
-                    <span className="sr-only">Módosítás</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {shown.rows.map((row) => (
-                  <tr
-                    key={row.date}
-                    className={
-                      RESTING.has(row.kind)
-                        ? "border-t border-pilot-grey-100 text-pilot-grey-500"
-                        : "border-t border-pilot-grey-100"
-                    }
-                  >
-                    <td className="whitespace-nowrap py-1.5 pr-3">
-                      {formatDayHu(row.date)} {WEEKDAY_SHORT[row.weekday - 1]}
-                    </td>
-                    <td className="py-1.5 pr-3">
-                      {row.start ?? row.mark ?? ""}
-                    </td>
-                    <td className="py-1.5 pr-3">{row.end ?? row.mark ?? ""}</td>
-                    <td className="py-1.5 pr-3">
-                      {row.kind === "WORK"
-                        ? formatAttendanceHours(row.minutes)
-                        : ""}
-                    </td>
-                    <td className="py-1.5 pr-3">{rowNote(row)}</td>
-                    <td className="py-1.5">
-                      <PilotButton
-                        variant="secondary"
-                        aria-label={`${formatDayHu(row.date)} módosítása`}
-                        onClick={() => setEditing(row)}
-                      >
-                        Módosítás
-                      </PilotButton>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="text-sm" aria-label="Összesítés">
-            Ledolgozott összesen:{" "}
-            <strong>{formatAttendanceHours(shown.totalMinutes)}</strong> óra ·
-            Betegség: {shown.sickDays} nap · Szabadság: {shown.leaveDays} nap
-          </p>
+          <AttendanceSheetTable
+            sheet={shown}
+            canEdit={() => true}
+            onEdit={setEditing}
+          />
         </PilotCard>
       )}
 

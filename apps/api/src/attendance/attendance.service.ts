@@ -1,10 +1,14 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
 import {
+  ATTENDANCE_SELF_KINDS,
+  ATTENDANCE_SELF_TAKEN,
   attendanceDayProblem,
+  attendanceSelfMarkProblem,
   attendanceSheet,
   isAttendanceMonth,
   monthDays,
@@ -14,17 +18,29 @@ import {
   parseAttendanceClock,
   USER_ROLES,
   type AttendanceDayEntry,
+  type AttendanceDayKind,
   type AttendanceDayInput,
   type AttendanceDayListResponse,
   type AttendanceEmployeeListResponse,
   type AttendanceSchedule,
   type AttendanceScheduleDay,
   type AttendanceScheduleListResponse,
+  type AttendanceSheet,
   type AttendanceSheetResponse,
 } from "@acropora/types";
 
-import { dateOnly, dayView, scheduleView } from "./attendance-records.js";
-import { AttendanceRepository } from "./attendance.repository.js";
+import {
+  dateOnly,
+  dayView,
+  scheduleView,
+  sheetContentHash,
+} from "./attendance-records.js";
+import { attendanceSheetDocument } from "./attendance-sheet-document.js";
+import { budapestDayKey } from "../dashboard/budapest-day.js";
+import {
+  AttendanceDayTakenError,
+  AttendanceRepository,
+} from "./attendance.repository.js";
 
 export const ATTENDANCE_USER_NOT_FOUND = "A felhasználó nem található.";
 export const ATTENDANCE_NOT_AN_EMPLOYEE =
@@ -151,10 +167,14 @@ export class AttendanceService {
    * THE MONTH'S SHEET (S2a), computed from every schedule version and the month's entries by the shared
    * `attendanceSheet`. Any month, the current one too (Luca: downloadable any time, as it stands).
    */
-  async sheet(userId: string, month: string): Promise<AttendanceSheetResponse> {
+  /** The month computed, for one employee (shared by the screen, the PDF and the signed copy). */
+  private async computedSheet(
+    userId: string,
+    month: string,
+  ): Promise<{ sheet: AttendanceSheet; displayName: string }> {
     if (!isAttendanceMonth(month))
       throw new BadRequestException(`Nem érvényes hónap: ${month}`);
-    await this.employee(userId);
+    const user = await this.employee(userId);
     const days = monthDays(month);
     const [schedules, entries] = await Promise.all([
       this.repository.schedules(userId),
@@ -164,13 +184,94 @@ export class AttendanceService {
         dateOnly(days[days.length - 1]!),
       ),
     ]);
+    const sheet = attendanceSheet({
+      month,
+      schedules: schedules.map(scheduleView),
+      entries: entries.map(dayView),
+    });
+    return { sheet, displayName: user.displayName };
+  }
+
+  /**
+   * THE MONTH'S SHEET (S2a), with the latest copy printed for signature (S2d) and whether the month changed since it was
+   * printed: a changed signed month keeps its old PDF and is flagged, never silently replaced (brief point 8).
+   */
+  async sheet(userId: string, month: string): Promise<AttendanceSheetResponse> {
+    const { sheet } = await this.computedSheet(userId, month);
+    const signed = await this.repository.latestSignedSheet(userId, month);
     return {
       userId,
-      ...attendanceSheet({
-        month,
-        schedules: schedules.map(scheduleView),
-        entries: entries.map(dayView),
-      }),
+      ...sheet,
+      signedCopy: signed
+        ? {
+            id: signed.id,
+            printedAt: signed.printedAt.toISOString(),
+            differs: signed.contentHash !== sheetContentHash(sheet),
+          }
+        : null,
+    };
+  }
+
+  /**
+   * THE MONTH'S SHEET AS A PDF (S2c): the same computed sheet, printed with the employee's official name (`displayName`, the
+   * name for documents). Any month, the current one too, as it stands at `printedAt`. Nothing is kept.
+   */
+  async sheetPdf(
+    userId: string,
+    month: string,
+    printedAt: Date,
+  ): Promise<{ bytes: Buffer; fileName: string }> {
+    const { sheet, displayName } = await this.computedSheet(userId, month);
+    const bytes = await attendanceSheetDocument({
+      sheet,
+      employeeName: displayName,
+      printedAt,
+    });
+    return { bytes, fileName: `Jelenléti ív ${displayName} ${month}.pdf` };
+  }
+
+  /**
+   * PRINTED FOR SIGNATURE (S2d): the same PDF, and these exact bytes are kept with the hash of the sheet they show. From then
+   * on the sheet says whether the month still matches the signed copy.
+   */
+  async printForSignature(
+    userId: string,
+    month: string,
+    printedAt: Date,
+    actorId: string,
+  ): Promise<{ bytes: Buffer; fileName: string }> {
+    const { sheet, displayName } = await this.computedSheet(userId, month);
+    const bytes = await attendanceSheetDocument({
+      sheet,
+      employeeName: displayName,
+      printedAt,
+    });
+    await this.repository.createSignedSheet({
+      userId,
+      month,
+      contentHash: sheetContentHash(sheet),
+      pdf: bytes,
+      printedAt,
+      actorId,
+    });
+    return {
+      bytes,
+      fileName: `Jelenléti ív ${displayName} ${month} (aláírásra).pdf`,
+    };
+  }
+
+  /** A kept copy, as it was printed. */
+  async signedSheetPdf(
+    userId: string,
+    id: string,
+  ): Promise<{ bytes: Buffer; fileName: string }> {
+    const user = await this.employee(userId);
+    const copy = await this.repository.signedSheetPdf(userId, id);
+    if (!copy)
+      throw new NotFoundException("Nincs ilyen aláírásra nyomtatott példány.");
+    return {
+      bytes: Buffer.from(copy.pdf),
+      fileName: `Jelenléti ív ${user.displayName} ${copy.month} (nyomtatott példány).pdf`,
     };
   }
 
@@ -213,4 +314,69 @@ export class AttendanceService {
         `${dayText}: ezen a napon nincs eltérés a munkarendtől.`,
       );
   }
+
+  /**
+   * THE EMPLOYEE'S OWN MARKS (S3; brief point 3): leave and day off, in advance, from tomorrow on. The rule is the shared
+   * `attendanceSelfMarkProblem`; the "not over an admin's other mark" half is checked again inside the write, under the
+   * employee's row lock, so a mark set by an admin between the read and the write is not overwritten.
+   */
+  async markOwnDay(
+    userId: string,
+    dayText: string,
+    kind: AttendanceDayKind,
+    now: Date,
+  ): Promise<AttendanceDayEntry> {
+    await this.employee(userId);
+    const problem = attendanceSelfMarkProblem({
+      kind,
+      date: dayText,
+      today: budapestDayKey(now),
+      existing: null,
+    });
+    if (problem) throw new BadRequestException(problem);
+    try {
+      const saved = await this.repository.saveDay({
+        userId,
+        date: dateOnly(dayText),
+        kind,
+        startMinute: null,
+        endMinute: null,
+        actorId: userId,
+        onlyOver: ATTENDANCE_SELF_KINDS,
+      });
+      return dayView(saved);
+    } catch (error) {
+      throw selfConflict(error);
+    }
+  }
+
+  /** Removes the employee's own advance mark; the day follows the schedule again. */
+  async clearOwnDay(userId: string, dayText: string, now: Date): Promise<void> {
+    await this.employee(userId);
+    const problem = attendanceSelfMarkProblem({
+      date: dayText,
+      today: budapestDayKey(now),
+      existing: null,
+    });
+    if (problem) throw new BadRequestException(problem);
+    let removed: boolean;
+    try {
+      removed = await this.repository.deleteDay({
+        userId,
+        date: dateOnly(dayText),
+        actorId: userId,
+        onlyOver: ATTENDANCE_SELF_KINDS,
+      });
+    } catch (error) {
+      throw selfConflict(error);
+    }
+    if (!removed)
+      throw new NotFoundException(`${dayText}: ezen a napon nincs jelölésed.`);
+  }
+}
+
+/** An admin's other mark on the day: a 409 with the shared sentence, not a 500. */
+function selfConflict(error: unknown): unknown {
+  if (!(error instanceof AttendanceDayTakenError)) return error;
+  return new ConflictException(ATTENDANCE_SELF_TAKEN);
 }

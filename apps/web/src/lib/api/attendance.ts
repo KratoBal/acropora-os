@@ -8,10 +8,13 @@ import type {
   AttendanceSheetResponse,
 } from "@acropora/types";
 
-import { apiRequest } from "./client";
+import { API_PREFIX } from "./api-prefix";
+import { pdfBlob } from "./billing-documents";
+import { apiAuthHeaders, apiRequest } from "./client";
 
 const base = "/attendance/users";
 const employeesPath = "/attendance/employees";
+const mePath = "/attendance/me";
 
 /** An employee's attendance inputs (os-jelenleti-iv), all under `attendance.manage`. */
 export const attendanceApi = {
@@ -56,6 +59,46 @@ export const attendanceApi = {
       { signal },
     );
   },
+  /** The month's sheet as a PDF, as it stands now (S2c). */
+  async sheetPdf(token: string, userId: string, month: string): Promise<Blob> {
+    const response = await fetch(
+      `${API_PREFIX}${base}/${encodeURIComponent(userId)}/sheet.pdf?month=${encodeURIComponent(month)}`,
+      { credentials: "same-origin", headers: apiAuthHeaders(token) },
+    );
+    return pdfBlob(response, "A jelenléti ív PDF-je nem tölthető le.");
+  },
+  /** Prints the month for signature (S2d): the PDF, and the server keeps these exact bytes as the signed copy. */
+  async printForSignature(
+    token: string,
+    userId: string,
+    month: string,
+  ): Promise<Blob> {
+    const response = await fetch(
+      `${API_PREFIX}${base}/${encodeURIComponent(userId)}/signed-sheets`,
+      {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          ...apiAuthHeaders(token, "POST"),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ month }),
+      },
+    );
+    return pdfBlob(response, "A jelenléti ív nem nyomtatható aláírásra.");
+  },
+  /** A kept copy, exactly as it was printed for signature (S2d). */
+  async signedSheetPdf(
+    token: string,
+    userId: string,
+    id: string,
+  ): Promise<Blob> {
+    const response = await fetch(
+      `${API_PREFIX}${base}/${encodeURIComponent(userId)}/signed-sheets/${encodeURIComponent(id)}/pdf`,
+      { credentials: "same-origin", headers: apiAuthHeaders(token) },
+    );
+    return pdfBlob(response, "A nyomtatott példány nem tölthető le.");
+  },
   /** Sets the day's entry (sick, leave, day off, or other times). */
   saveDay(
     token: string,
@@ -75,6 +118,32 @@ export const attendanceApi = {
       `${base}/${encodeURIComponent(userId)}/days/${encodeURIComponent(date)}`,
       token,
       { method: "DELETE" },
+    );
+  },
+  /** The signed-in employee's own month (S3). */
+  mySheet(token: string, month: string, signal?: AbortSignal) {
+    return apiRequest<AttendanceSheetResponse>(
+      `${mePath}/sheet?month=${encodeURIComponent(month)}`,
+      token,
+      { signal },
+    );
+  },
+  /** Marks leave or a day off on one of the employee's own future days (S3). */
+  markOwnDay(token: string, date: string, kind: "LEAVE" | "DAY_OFF") {
+    return apiRequest<AttendanceDayEntry>(
+      `${mePath}/days/${encodeURIComponent(date)}`,
+      token,
+      { method: "PUT", body: JSON.stringify({ kind }) },
+    );
+  },
+  /** Removes the employee's own advance mark (S3). */
+  clearOwnDay(token: string, date: string) {
+    return apiRequest<void>(
+      `${mePath}/days/${encodeURIComponent(date)}`,
+      token,
+      {
+        method: "DELETE",
+      },
     );
   },
 };

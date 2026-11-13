@@ -2057,8 +2057,11 @@ export {
   ATTENDANCE_DAY_KIND_LABELS,
   ATTENDANCE_DAY_KINDS,
   ATTENDANCE_WEEKDAYS,
+  ATTENDANCE_SELF_KINDS,
+  ATTENDANCE_SELF_TAKEN,
   attendanceDayProblem,
   attendanceRangeProblem,
+  attendanceSelfMarkProblem,
   attendanceWeekProblem,
   formatAttendanceClock,
   isAttendanceDate,
@@ -2100,4 +2103,5 @@ export type {
   AttendanceSheetResponse,
   AttendanceSheetRow,
   AttendanceSheetRowKind,
+  AttendanceSignedCopy,
 } from "./attendance-sheet.js";
