@@ -313,6 +313,12 @@ export function buildOperationsReport(input: {
   month: string;
   audience: OperationsReportAudience;
   entries: readonly OperationsReportEntryInput[];
+  /**
+   * A „KIMARADT" SZÁMÍTÁSÁHOZ HASZNÁLT BEJEGYZÉSEK, ha mások, mint a sorok: a sorok a rögzítéskori helyszín szerint állnak, de egy
+   * ütemezett feladat teljesülését az eszköz minden bejegyzése mutatja (egy áthelyezett eszköz heti feladata a régi helyszínen rögzítve
+   * is teljesítette a hetet). Alapértelmezés: a sorok bejegyzései.
+   */
+  doneEntries?: readonly OperationsReportEntryInput[];
   schedules: readonly OperationsReportScheduleInput[];
   now?: Date;
 }): OperationsReport {
@@ -368,7 +374,7 @@ export function buildOperationsReport(input: {
     month: input.month,
     today,
     schedules: input.schedules,
-    entries: input.entries,
+    entries: [...input.entries, ...(input.doneEntries ?? [])],
   });
 
   return {

@@ -402,3 +402,26 @@ test("a kimutatás szövegei magyarul: tartam, szám, hónap, időszak, előjel"
   assert.equal(operationsSignedNumberText(-3, null), "-3");
   assert.equal(operationsSignedNumberText(0, "m3"), "0 m3");
 });
+
+test("a kimaradt heti feladat a rögzítéskori helyszíntől független bejegyzéssel teljesül, a sorok közé viszont nem kerül", () => {
+  const base = {
+    month: "2026-11",
+    audience: "INTERNAL" as const,
+    schedules: [
+      schedule({ frequency: "WEEKLY", createdAt: "2026-10-01T08:00:00.000Z" }),
+    ],
+    now: new Date("2026-11-20T09:00:00.000Z"),
+  };
+  // a 11-09 hétben a feladat egy MÁSIK helyszínen rögzítve teljesült (az eszközt azóta áthelyezték)
+  const elsewhere = entry("x1", "2026-11-12T09:00:00.000Z");
+  const without = buildOperationsReport({ ...base, entries: [] });
+  assert.ok(without.missed[0]!.periods.includes("2026-11-09"));
+  const withDone = buildOperationsReport({
+    ...base,
+    entries: [],
+    doneEntries: [elsewhere],
+  });
+  assert.equal(withDone.missed[0]!.periods.includes("2026-11-09"), false);
+  assert.equal(withDone.totals.entries, 0);
+  assert.deepEqual(withDone.assets, []);
+});

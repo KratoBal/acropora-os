@@ -8,10 +8,25 @@ import {
 
 import { collectUnitSubtreeIds } from "../service-assets/unit-subtree.js";
 
+/** Melyik bejegyzések kerülnek a kimutatás SORAI közé. */
+export type OperationsReportEntryFilter =
+  /** A helyszín (részfájával) a RÖGZÍTÉSKOR: az archivált és az áthelyezett eszköz múltja is a helyén marad. */
+  | { departmentIds: readonly string[] }
+  /** Egyetlen eszköz bejegyzései. */
+  | { assetId: string }
+  /** Ezeknek az eszközöknek a bejegyzései, helyszíntől függetlenül (a „kimaradt" számításhoz: a heti feladat egy áthelyezés előtt is teljesült). */
+  | { assetIds: readonly string[] };
+
 export interface OperationsReportScope {
   /** A helyszín (és a partner) neve a kimutatás fejlécéhez; `null`, ha egy eszközre kértük. */
   siteLabel: string | null;
+  /**
+   * AZ ÉLŐ ESZKÖZÖK (az archivált nem): az ütemezett sablonok ezekre bontódnak ki, mert egy archivált eszközön már nincs mi
+   * esedékes. A sorok viszont NEM ebből állnak, hanem a bejegyzések rögzítéskori helyszínéből (`entryFilter`): a kimutatás bizonyíték,
+   * és a múltja nem változhat egy későbbi archiválástól vagy áthelyezéstől.
+   */
   assets: { id: string; label: string; categoryId: string | null }[];
+  entryFilter: OperationsReportEntryFilter;
 }
 
 /**
@@ -42,6 +57,7 @@ export class OperationsReportRepository {
       if (!asset) return null;
       return {
         siteLabel: null,
+        entryFilter: { assetId: asset.id },
         assets: [
           {
             id: asset.id,
@@ -73,6 +89,7 @@ export class OperationsReportRepository {
     });
     return {
       siteLabel: `${root.customer.displayName} · ${root.name}`,
+      entryFilter: { departmentIds: subtree },
       assets: assets.map((asset) => ({
         id: asset.id,
         label: `${asset.assetNumber} ${asset.name}`,
@@ -81,18 +98,25 @@ export class OperationsReportRepository {
     };
   }
 
-  /** A hatókör eszközeinek bejegyzései a megadott időszakban (a kezdés szerint; a vége kizárt). */
+  /** A szűrőnek megfelelő bejegyzések a megadott időszakban (a kezdés szerint; a vége kizárt). */
   async entries(
-    assetIds: readonly string[],
+    filter: OperationsReportEntryFilter,
     from: Date,
     to: Date,
   ): Promise<OperationsReportEntryInput[]> {
-    if (assetIds.length === 0) return [];
+    const where =
+      "departmentIds" in filter
+        ? { departmentId: { in: [...filter.departmentIds] } }
+        : "assetIds" in filter
+          ? { assetId: { in: [...filter.assetIds] } }
+          : { assetId: filter.assetId };
+    if (
+      ("departmentIds" in filter && filter.departmentIds.length === 0) ||
+      ("assetIds" in filter && filter.assetIds.length === 0)
+    )
+      return [];
     const rows = await prisma.operationsLogEntry.findMany({
-      where: {
-        assetId: { in: [...assetIds] },
-        startedAt: { gte: from, lt: to },
-      },
+      where: { ...where, startedAt: { gte: from, lt: to } },
       select: {
         id: true,
         templateId: true,
