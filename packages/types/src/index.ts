@@ -1165,6 +1165,20 @@ export type {
   OperationsTaskTemplateInput,
   OperationsTaskTemplateListResponse,
 } from "./operations-log.js";
+export {
+  OPERATIONS_ENTRY_LIMITS,
+  operationsEntryErrors,
+  operationsEntryValueFilled,
+} from "./operations-log-entry.js";
+export type {
+  OperationsEntryValue,
+  OperationsLogEntryCreateResponse,
+  OperationsLogEntryDto,
+  OperationsLogEntryInput,
+  OperationsLogEntryListResponse,
+  OperationsLogEntryPersonDto,
+  OperationsLogEntryValueDto,
+} from "./operations-log-entry.js";
 export { FAVORITE_LIMITS, isFavoriteHref } from "./favorite.js";
 export type { FavoriteListResponse } from "./favorite.js";
 export { normalizeAssetFunctionName } from "./asset-function.js";
