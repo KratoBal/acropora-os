@@ -130,6 +130,19 @@ export interface EszkozFuggosegek<
   }) => Promise<void>;
 }
 
+/**
+ * AZ ESZKOZOK UZEMELTETESI NAPLO SABLONJAI (task os-uzemeltetesi-naplo, S2d). ELHAGYHATO, es ez nem lazitas: a resz csak annak a
+ * szerelonek all, aki a naplot rogzitheti (`operations-log.record`); a hivo a ket fuggvenyt CSAK AKKOR adja at. Ha nincs atadva, a resz
+ * nem szerepel a zaro mondatban (nem hianyzik semmi, amit a szerelo hasznalna).
+ *
+ * A KET FUGGVENY KULON, mert a hibajuk mas: a lekeres hibaja `hibas-sor`, a keszulekre mentes hibaja `mentes` -- ugyanaz a ketto,
+ * amit a tobbi resznel is kulon mondunk (a szerver felol minden rendben lehetett, a masolat mégis ures).
+ */
+export interface SablonFuggosegek {
+  sablonLista?: (assetId: string) => Promise<unknown[]>;
+  sablonokMentese?: (assetId: string, items: unknown[]) => Promise<void>;
+}
+
 export interface JegyFuggosegek<Tetel extends JegySor, Reszlet> {
   /**
    * A `truncated` a SZERVER vagasarol szol (ketszaz sor). A mobil tukor
@@ -164,7 +177,8 @@ export type HelyszinLetoltesFuggosegek<
   MunkalapReszlet = unknown,
 > = EszkozFuggosegek<Eszkoz, EszkozReszlet> &
   JegyFuggosegek<Jegy, JegyReszlet> &
-  MunkalapFuggosegek<Munkalap, MunkalapReszlet>;
+  MunkalapFuggosegek<Munkalap, MunkalapReszlet> &
+  SablonFuggosegek;
 
 /**
  * HANY RESZLETLAPOT KERUNK LE EGY RESZBEN.
@@ -272,6 +286,16 @@ export async function letoltHelyszin<
     await hibajegyek(input.helyszinUt, deps, mentesiHibak),
     await munkalapok(deps, mentesiHibak),
   ];
+  // az üzemeltetési napló sablonjai: csak annak, aki rögzítheti (a hívó adja át a két függvényt)
+  if (deps.sablonLista && deps.sablonokMentese)
+    reszek.push(
+      await sablonok(
+        eszkozEredmeny.azonositok,
+        eszkozEredmeny.osszesDarab,
+        { lista: deps.sablonLista, mentes: deps.sablonokMentese },
+        mentesiHibak,
+      ),
+    );
   const osszegzes = osszegezHelyszinLetoltes({
     helyszin: input.helyszinNeve,
     reszek,
@@ -301,6 +325,10 @@ async function eszkozok<Tetel extends Sor, Reszlet extends EszkozReszletAlak>(
   resz: ReszEredmeny;
   kepek: ReszEredmeny;
   teljesKepek: TeljesKep[];
+  /** Az eszközök azonosítói, amelyekhez a letöltés a részletlapot kérte (a sablonok ugyanezekre jönnek). */
+  azonositok: string[];
+  /** Az összes eszköz száma a helyszínen (a `RESZLET_HATAR` fölött a lista vágott). */
+  osszesDarab: number;
 }> {
   const elso = await probald(() => deps.eszkozLista(1));
   if (!elso)
@@ -313,6 +341,8 @@ async function eszkozok<Tetel extends Sor, Reszlet extends EszkozReszletAlak>(
       */
       kepek: { resz: "fenykepek", allapot: "elhasalt", darab: 0 },
       teljesKepek: [],
+      azonositok: [],
+      osszesDarab: 0,
     };
 
   const sorok = [...elso.items];
@@ -428,6 +458,8 @@ async function eszkozok<Tetel extends Sor, Reszlet extends EszkozReszletAlak>(
   return {
     resz: eszkozResz,
     teljesKepek,
+    azonositok: kerheto.map((sor) => sor.id),
+    osszesDarab: sorok.length,
     kepek: hibasKep
       ? {
           resz: "fenykepek",
@@ -559,4 +591,51 @@ async function munkalapok<Tetel extends Sor, Reszlet>(
       ok: "vagott",
     };
   return { resz: "munkalapok", allapot: "kesz", darab: reszletek };
+}
+
+/**
+ * AZ ESZKOZOK UZEMELTETESI NAPLO SABLONJAI (task os-uzemeltetesi-naplo, S2d): ugyanazokra az eszkozokre, amelyeknek az adatlapjat kertuk
+ * (a szerelo az adatlapon talalja a sablon-szakaszt, tehat a kettonek egyeznie kell). Eszkozonkent egy hivas; a hiba SORONKENT szamit.
+ * Az eredmeny ugyanazt az otfele allapotot adja, mint a tobbi resz: `mentes` (a lista lejott, a keszulekre mentese nem sikerult),
+ * `hibas-sor` (egy eszkoz listaja nem jott le), `vagott` (a helyszinen tobb eszkoz van, mint amennyit kerunk).
+ */
+async function sablonok(
+  azonositok: readonly string[],
+  osszesDarab: number,
+  deps: {
+    lista: (assetId: string) => Promise<unknown[]>;
+    mentes: (assetId: string, items: unknown[]) => Promise<void>;
+  },
+  mentesiHibak: string[],
+): Promise<ReszEredmeny> {
+  if (azonositok.length === 0)
+    return { resz: "sablonok", allapot: "elhasalt", darab: 0 };
+  let darab = 0;
+  let hibas = false;
+  let bukottMentes = 0;
+  for (const id of azonositok) {
+    const items = await probald(() => deps.lista(id));
+    if (!items) {
+      hibas = true;
+      continue;
+    }
+    if (!(await mentsd(() => deps.mentes(id, items), mentesiHibak))) {
+      bukottMentes += 1;
+      continue;
+    }
+    darab += 1;
+  }
+  if (bukottMentes > 0)
+    return {
+      resz: "sablonok",
+      allapot: "reszleges",
+      darab,
+      ok: "mentes",
+      bukott: bukottMentes,
+    };
+  if (hibas)
+    return { resz: "sablonok", allapot: "reszleges", darab, ok: "hibas-sor" };
+  if (osszesDarab > azonositok.length)
+    return { resz: "sablonok", allapot: "reszleges", darab, ok: "vagott" };
+  return { resz: "sablonok", allapot: "kesz", darab };
 }

@@ -40,20 +40,31 @@ export interface CachedOperationsColleagues {
   syncedAt: string | null;
 }
 
+/**
+ * EGY ESZKÖZ SABLON-LISTÁJA A MÁSOLATBA, A HIBÁVAL EGYÜTT: a helyszín-letöltő ezt hívja (neki tudnia kell, ha a mentés elhasalt, különben a
+ * záró mondat „kész"-et mond egy üres másolatra: Balázs, 2026-09-30, Android). A képernyők a `remember` párt hívják, amelyik elnyeli a hibát.
+ */
+export async function storeOperationsTemplates(
+  assetId: string,
+  items: readonly OperationsTemplate[],
+): Promise<void> {
+  const db = await database();
+  await db.runAsync(
+    `INSERT INTO cached_operations_templates (asset_id, payload_json, synced_at)
+     VALUES (?, ?, ?)
+     ON CONFLICT(asset_id) DO UPDATE SET
+       payload_json = excluded.payload_json,
+       synced_at = excluded.synced_at`,
+    [assetId, JSON.stringify(items), new Date().toISOString()],
+  );
+}
+
 export async function rememberOperationsTemplates(
   assetId: string,
   items: readonly OperationsTemplate[],
 ): Promise<void> {
   try {
-    const db = await database();
-    await db.runAsync(
-      `INSERT INTO cached_operations_templates (asset_id, payload_json, synced_at)
-       VALUES (?, ?, ?)
-       ON CONFLICT(asset_id) DO UPDATE SET
-         payload_json = excluded.payload_json,
-         synced_at = excluded.synced_at`,
-      [assetId, JSON.stringify(items), new Date().toISOString()],
-    );
+    await storeOperationsTemplates(assetId, items);
   } catch {
     // Lásd a modul fejlécét: a másolat kényelem, nem bizonyíték.
   }

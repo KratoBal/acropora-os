@@ -29,7 +29,7 @@
 
 /** A harom dolog, ami egy helyszinrol lejon. */
 export type LetoltesResz =
-  "eszkozok" | "fenykepek" | "hibajegyek" | "munkalapok";
+  "eszkozok" | "fenykepek" | "hibajegyek" | "munkalapok" | "sablonok";
 
 const RESZ_NEVE: Record<LetoltesResz, string> = {
   eszkozok: "eszköz",
@@ -42,6 +42,12 @@ const RESZ_NEVE: Record<LetoltesResz, string> = {
   fenykepek: "bélyegkép",
   hibajegyek: "hibajegy",
   munkalapok: "munkalap",
+  /*
+    AZ ESZKOZ UZEMELTETESI NAPLO SABLONJAI (task os-uzemeltetesi-naplo, S2d): a darabszam az ESZKOZOK szama, amelyeknek a sablon-listaja a
+    keszuleken van (a lista lehet ures is: az "ennek az eszkoznek nincs sablonja" is tudas). A resz CSAK a naplo rogzitesi jogaval
+    rendelkezo szerelonek szerepel, masnak nincs mit hianyolnia.
+  */
+  sablonok: "eszköz üzemeltetési sablonja",
 };
 
 export type ReszEredmeny =
@@ -161,4 +167,6 @@ export const LETOLTES_UTAN_UJRAOLVASANDO = [
   ["offline-service-job"],
   /** Egy munkalap mentett adatlapja (`worksheets/[id].tsx`). */
   ["worksheet-cache"],
+  /** Az eszkoz uzemeltetesi naplo sablonjai (`assets/[id].tsx`, `operations-log/record.tsx`; task os-uzemeltetesi-naplo, S2d). */
+  ["operations-templates"],
 ] as const;
