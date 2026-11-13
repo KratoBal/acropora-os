@@ -1,10 +1,13 @@
 import type {
+  OperationsReportResponse,
   OperationsTaskTemplateDto,
   OperationsTaskTemplateInput,
   OperationsTaskTemplateListResponse,
 } from "@acropora/types";
 
-import { apiRequest } from "./client";
+import { API_PREFIX } from "./api-prefix";
+import { apiAuthHeaders, apiRequest } from "./client";
+import { readExport, type FileExport } from "./file-export";
 
 const base = "/operations-log/templates";
 const json = { "Content-Type": "application/json" };
@@ -54,4 +57,41 @@ export const operationsLogApi = {
       { method: "DELETE" },
     );
   },
+  /** A havi kimutatás (S4): a hónap és a hatókör (helyszín VAGY eszköz). */
+  report(token: string, query: OperationsReportQuery, signal?: AbortSignal) {
+    return apiRequest<OperationsReportResponse>(
+      `/operations-log/report?${reportQueryString(query)}`,
+      token,
+      { signal },
+    );
+  },
+  /** A havi kimutatás PDF-ben: a fájl és a szerver adta név. */
+  async reportPdf(
+    token: string,
+    query: OperationsReportQuery,
+  ): Promise<FileExport> {
+    const response = await fetch(
+      `${API_PREFIX}/operations-log/report/pdf?${reportQueryString(query)}`,
+      { credentials: "same-origin", headers: apiAuthHeaders(token) },
+    );
+    return readExport(
+      response,
+      `uzemeltetesi-naplo-${query.month}.pdf`,
+      "A PDF nem tölthető le.",
+    );
+  },
 };
+
+export interface OperationsReportQuery {
+  /** `ÉÉÉÉ-HH`. */
+  month: string;
+  departmentId?: string;
+  assetId?: string;
+}
+
+function reportQueryString(query: OperationsReportQuery): string {
+  const params = new URLSearchParams({ month: query.month });
+  if (query.departmentId) params.set("departmentId", query.departmentId);
+  if (query.assetId) params.set("assetId", query.assetId);
+  return params.toString();
+}

@@ -1199,8 +1199,16 @@ export type {
   OperationsReportEntryInput,
   OperationsReportEntryRow,
   OperationsReportMissed,
+  OperationsReportResponse,
   OperationsReportScheduleInput,
 } from "./operations-report.js";
+export {
+  operationsDurationText,
+  operationsMonthTitle,
+  operationsNumberText,
+  operationsPeriodText,
+  operationsSignedNumberText,
+} from "./operations-report-format.js";
 export { FAVORITE_LIMITS, isFavoriteHref } from "./favorite.js";
 export type { FavoriteListResponse } from "./favorite.js";
 export { normalizeAssetFunctionName } from "./asset-function.js";

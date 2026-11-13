@@ -7,18 +7,13 @@ import {
   buildOperationsReport,
   isMonthKey,
   monthBounds,
-  type OperationsReport,
+  type OperationsReportResponse,
   type OperationsReportAudience,
 } from "@acropora/types";
 
 import { OperationsReportRepository } from "./operations-report.repository.js";
 
-export interface OperationsReportResult {
-  report: OperationsReport;
-  /** „Partner · Helyszín" a fejléchez; `null`, ha egy eszközre kértük. */
-  siteLabel: string | null;
-  generatedAt: string;
-}
+export type OperationsReportResult = OperationsReportResponse;
 
 /**
  * A HAVI KIMUTATÁS (task os-uzemeltetesi-naplo, S4). A hatókör KÖTELEZŐ: egy helyszín (a részfájával) vagy egy eszköz: egy „minden
@@ -81,6 +76,8 @@ export class OperationsReportService {
         now,
       }),
       siteLabel: scope.siteLabel,
+      departmentId: departmentId ?? null,
+      assetId: assetId ?? null,
       generatedAt: now.toISOString(),
     };
   }

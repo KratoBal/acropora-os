@@ -227,6 +227,13 @@ const mainNavigationGroups: AppNavigationGroup[] = [
         entryId: "service-assets",
       },
       {
+        // Üzemeltetési napló, S4b (task os-uzemeltetesi-naplo): a havi kimutatás helyszínenként, PDF-letöltéssel
+        href: "/szerviz/uzemeltetesi-naplo",
+        label: "Üzemeltetési napló",
+        icon: "clipboard",
+        entryId: "operations-log",
+      },
+      {
         /**
          * A SOR VEGEN, mint a Beallitasokban volt: nem kulso rendszer kulcsa es
          * nem jogosultsag-kezeles, hanem sajat, uzemeltetesi tetel. A lathatosag
