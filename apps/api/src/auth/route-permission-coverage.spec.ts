@@ -105,6 +105,8 @@ const CONTROLLERS = [
   "src/content/article-image-public.controller.ts",
   // The projection queue's state (ca422e92, 2026-11-09): read-only numbers, behind inventory.view (#2340 review).
   "src/integrations/medusa/medusa-projection-status.controller.ts",
+  // The attendance sheet (os-jelenleti-iv, S1): every route behind attendance.manage.
+  "src/attendance/attendance.controller.ts",
 ];
 
 const ROUTE = new RegExp(
