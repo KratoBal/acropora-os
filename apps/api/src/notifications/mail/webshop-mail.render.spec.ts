@@ -915,3 +915,83 @@ describe("the guest order page's address in the order confirmation", () => {
     assert.doesNotMatch(sima.text, /megnézheted|\{\{/);
   });
 });
+
+/*
+  AZ ASZF ES AZ ADATKEZELESI TAJEKOZTATO CIME A VISSZAIGAZOLO LEVELBEN (acrobot 50140). MI PIROSIT: a hely kikerul az
+  alapertelmezett sablonbol (magyar vagy angol); a cimpar nelkuli level kap ures bekezdest vagy nyers {{...}} jelet; csak az egyik
+  cim kerul a levelbe; a mondat a MASIK nyelven jon; egy nem https cim vagy egy tag-jel kijut a levelbe.
+*/
+describe("the legal pages' addresses in the order confirmation", () => {
+  const placed = (extra: Record<string, unknown>): WebshopMailFacts =>
+    ({
+      ...JSON.parse(JSON.stringify(WEBSHOP_MAIL_SAMPLE_FACTS["order-placed"])),
+      ...extra,
+    }) as WebshopMailFacts;
+  const render = (facts: WebshopMailFacts, key: string) => {
+    const mail = renderWebshopMail(template(key), facts);
+    assert.equal(mail.ok, true);
+    if (!mail.ok) throw new Error("not ok");
+    return mail;
+  };
+  const HU = {
+    aszf: "https://shop.example/hu/jogi/aszf",
+    adatkezeles: "https://shop.example/hu/jogi/adatkezeles",
+  };
+  const EN = {
+    aszf: "https://shop.example/en-hu/jogi/aszf",
+    adatkezeles: "https://shop.example/en-hu/jogi/adatkezeles",
+  };
+
+  it("both default order confirmations place the sentence after the guest order page's sentence", () => {
+    for (const key of ["WEBSHOP_ORDER_PLACED", "WEBSHOP_ORDER_PLACED_EN"]) {
+      const html = template(key).bodyHtml;
+      const view = html.indexOf('data-variable="rendeles_megtekintes_mondat"');
+      const legal = html.indexOf('data-variable="jogi_linkek_mondat"');
+      assert.ok(view >= 0 && legal > view, key);
+    }
+  });
+
+  it("the Hungarian mail carries the Hungarian sentence and both addresses, in the html and in the text", () => {
+    const mail = render(placed({ legal_urls: HU }), "WEBSHOP_ORDER_PLACED");
+    for (const part of [mail.html, mail.text]) {
+      assert.ok(part.includes(HU.aszf));
+      assert.ok(part.includes(HU.adatkezeles));
+      assert.ok(part.includes("Az általános szerződési feltételeket"));
+    }
+  });
+
+  it("the English mail carries the English sentence and both addresses", () => {
+    const mail = render(
+      placed({ locale: "en", legal_urls: EN }),
+      "WEBSHOP_ORDER_PLACED_EN",
+    );
+    for (const part of [mail.html, mail.text]) {
+      assert.ok(part.includes(EN.aszf));
+      assert.ok(part.includes(EN.adatkezeles));
+      assert.ok(part.includes("You can read our terms and conditions"));
+    }
+    assert.doesNotMatch(mail.html, /általános szerződési feltételeket/);
+  });
+
+  it("without the pair (none sent, one only, or a not plain https one) the mail has no sentence, no empty paragraph and no placeholder", () => {
+    const sima = render(placed({ legal_urls: null }), "WEBSHOP_ORDER_PLACED");
+    for (const rossz of [
+      undefined,
+      { aszf: HU.aszf },
+      { aszf: HU.aszf, adatkezeles: "http://shop.example/x" },
+      { aszf: "<b>x</b>", adatkezeles: HU.adatkezeles },
+    ]) {
+      const mail = render(
+        placed({ legal_urls: rossz }),
+        "WEBSHOP_ORDER_PLACED",
+      );
+      assert.equal(mail.html, sima.html, JSON.stringify(rossz));
+      assert.equal(mail.text, sima.text, JSON.stringify(rossz));
+    }
+    assert.doesNotMatch(
+      sima.html,
+      /jogi_linkek|általános szerződési feltételeket|<p>\s*<\/p>|\{\{/,
+    );
+    assert.doesNotMatch(sima.text, /általános szerződési feltételeket|\{\{/);
+  });
+});

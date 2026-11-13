@@ -180,6 +180,12 @@ export interface WebshopMailCommonFacts {
 export const WEBSHOP_MAIL_LOCALES = ["hu", "en"] as const;
 export type WebshopMailLocale = (typeof WEBSHOP_MAIL_LOCALES)[number];
 
+/** The two legal pages of the shop the confirmation links to. */
+export interface WebshopLegalUrls {
+  readonly aszf: string;
+  readonly adatkezeles: string;
+}
+
 /** The facts of one mail, by the webshop's own template name. */
 export type WebshopMailFacts = WebshopMailCommonFacts & WebshopTemplateFacts;
 
@@ -194,6 +200,13 @@ type WebshopTemplateFacts =
        * no legal part, as before.
        */
       readonly legal_version?: string | null;
+      /**
+       * The addresses of the shop's ASZF and privacy-notice pages in the mail's language (commerce `legal_urls`), or
+       * null: the shop sends them only behind its Fogyasztóbarát switch. The confirmation carries a sentence with the
+       * two links. OPTIONAL and tolerant, like `order_view_url`: anything that is not a plain https address pair means
+       * no sentence, never a refused mail (`facts_version` stays 1).
+       */
+      readonly legal_urls?: WebshopLegalUrls | null;
     }
   | {
       readonly template: (typeof WEBSHOP_STATUS_TEMPLATES)[number];
@@ -567,6 +580,8 @@ export interface WebshopMailText {
   readonly nextPickup: string;
   /** The sentence that carries the guest order page's address (`order_view_url`). */
   readonly orderViewLine: (url: string) => string;
+  /** The sentence that carries the ASZF and privacy-notice pages' addresses (`legal_urls`). */
+  readonly legalLinksLine: (aszf: string, adatkezeles: string) => string;
   readonly glsPoint: string;
   readonly glsHome: string;
   readonly glsLogoLocker: string;
@@ -629,6 +644,8 @@ const HU_TEXT: WebshopMailText = {
   nextPickup: "Az élő állatos rendelést a boltban veszed át.",
   orderViewLine: (url) =>
     `A rendelésed állapotát bármikor megnézheted a rendelésszámmal és az e-mail-címeddel: ${url}`,
+  legalLinksLine: (aszf, adatkezeles) =>
+    `Az általános szerződési feltételeket (${aszf}) és az adatkezelési tájékoztatót (${adatkezeles}) a webshopunkban olvashatod.`,
   glsPoint: "GLS csomagpont",
   glsHome: "GLS házhozszállítás",
   glsLogoLocker: "GLS Automata",
@@ -693,6 +710,8 @@ const EN_TEXT: WebshopMailText = {
   nextPickup: "You pick up the live-animal order at the store.",
   orderViewLine: (url) =>
     `You can check your order at any time with your order number and e-mail address: ${url}`,
+  legalLinksLine: (aszf, adatkezeles) =>
+    `You can read our terms and conditions (${aszf}) and our privacy notice (${adatkezeles}) in our webshop.`,
   glsPoint: "GLS parcel point",
   glsHome: "GLS home delivery",
   glsLogoLocker: "GLS Parcel Locker",
@@ -768,6 +787,16 @@ export function webshopMailContent(
         const url = safeOrderViewUrl(facts.order_view_url);
         return url ? t.orderViewLine(url) : "";
       })(),
+      // only the confirmation has the variable (the other templates do not declare it); empty (and no paragraph in the
+      // default mail) without a usable address pair
+      ...(facts.template === "order-placed"
+        ? {
+            jogi_linkek_mondat: (() => {
+              const urls = safeLegalUrls(facts.legal_urls);
+              return urls ? t.legalLinksLine(urls.aszf, urls.adatkezeles) : "";
+            })(),
+          }
+        : {}),
     },
     blocks: own.blocks,
   };
@@ -1175,6 +1204,10 @@ export const WEBSHOP_MAIL_SAMPLE_FACTS: Readonly<
     template: "order-placed",
     orders: [{ ...SAMPLE_ORDER, pickup: false }],
     legal_version: "unas-shop-2026-09-29",
+    legal_urls: {
+      aszf: "https://shop.example/hu/jogi/aszf",
+      adatkezeles: "https://shop.example/hu/jogi/adatkezeles",
+    },
   },
   "order-status-confirmed": {
     ...SAMPLE_COMMON,
@@ -1463,6 +1496,18 @@ export function safeOrderViewUrl(v: unknown): string | null {
   }
 }
 
+/**
+ * THE SHOP'S ASZF AND PRIVACY-NOTICE ADDRESSES, if both are ones a mail may carry (`safeOrderViewUrl`'s rule for each). A
+ * missing or half pair is null: the sentence names both pages, so one alone would be a wrong sentence.
+ */
+export function safeLegalUrls(v: unknown): WebshopLegalUrls | null {
+  if (typeof v !== "object" || v === null) return null;
+  const { aszf, adatkezeles } = v as Record<string, unknown>;
+  const a = safeOrderViewUrl(aszf);
+  const b = safeOrderViewUrl(adatkezeles);
+  return a && b ? { aszf: a, adatkezeles: b } : null;
+}
+
 /** `hu` or `en`; missing is `hu`, anything else is refused (400): a wrong language must not become Hungarian silently. */
 function parseLocale(v: unknown): WebshopMailLocale {
   if (v === undefined || v === null) return "hu";
@@ -1551,6 +1596,7 @@ function parseTemplateFacts(
         template,
         orders,
         legal_version: strOrNull(f.legal_version, "facts.legal_version"),
+        legal_urls: safeLegalUrls(f.legal_urls),
       };
     }
     case "order-status-confirmed":

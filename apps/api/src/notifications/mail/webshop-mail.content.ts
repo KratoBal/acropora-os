@@ -117,6 +117,8 @@ const RAW: Readonly<
       own("akklimatizacio"),
       // the guest order page's address; empty (and no paragraph) when the shop sends none
       own("rendeles_megtekintes_mondat"),
+      // the shop's ASZF and privacy-notice pages; empty (and no paragraph) when the shop sends no addresses (its Fogyasztóbarát switch is off)
+      own("jogi_linkek_mondat"),
     ].join(""),
   },
   WEBSHOP_ORDER_CONFIRMED: status(
@@ -285,6 +287,8 @@ const RAW_EN: typeof RAW = {
       own("akklimatizacio"),
       // the guest order page's address; empty (and no paragraph) when the shop sends none
       own("rendeles_megtekintes_mondat"),
+      // the shop's ASZF and privacy-notice pages; empty (and no paragraph) when the shop sends no addresses (its Fogyasztóbarát switch is off)
+      own("jogi_linkek_mondat"),
     ].join(""),
   },
   WEBSHOP_ORDER_CONFIRMED: status(

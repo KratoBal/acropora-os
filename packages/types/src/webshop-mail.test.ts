@@ -11,6 +11,7 @@ import {
   WEBSHOP_USAGE_GUIDE_LIMITS,
   hungarianDay,
   mailDay,
+  safeLegalUrls,
   safeOrderViewUrl,
   mailForint,
   parseWebshopMailFacts,
@@ -846,6 +847,110 @@ describe("the guest order page's address in the mail", () => {
       }).values.rendeles_megtekintes_mondat;
       assert.equal(v, "", String(nincs));
     }
+  });
+});
+
+/*
+  AZ ASZF ES AZ ADATKEZELESI TAJEKOZTATO CIME A VISSZAIGAZOLO LEVELBEN (acrobot 50140; a regi bolt PDF-et csatolt, az nalunk a Fogyasztobarat
+  domain-kotese miatt nem megy). MI PIROSIT: csak az egyik cim kerul a mondatba (a mondat mindkettot nevezi meg); a bolt barmilyen
+  szovege (http, szokoz, tag-jel) egy vevo levelebe jut; a mondat nyelve nem a level nyelve; a cim nelkuli level valamit mutat (a
+  bekezdes nem tunik el); a mas sablon (nem a visszaigazolas) is hordozza; a bolt a cimpar nelkul KUDARCOT kap (kiegeszito, sosem
+  utasitott el level).
+*/
+describe("the legal pages' addresses in the order confirmation", () => {
+  const ASZF = "https://shop.example/hu/jogi/aszf";
+  const AT = "https://shop.example/hu/jogi/adatkezeles";
+
+  it("is declared for the order confirmation and its English twin only", () => {
+    for (const id of ["WEBSHOP_ORDER_PLACED", "WEBSHOP_ORDER_PLACED_EN"]) {
+      const event = MAIL_TEMPLATE_EVENTS.find((e) => e.id === id);
+      assert.ok(event?.variables.includes("jogi_linkek_mondat"), id);
+    }
+    const confirmed = MAIL_TEMPLATE_EVENTS.find(
+      (e) => e.id === "WEBSHOP_ORDER_CONFIRMED",
+    );
+    assert.equal(confirmed?.variables.includes("jogi_linkek_mondat"), false);
+  });
+
+  it("only a pair of plain https addresses passes: one alone, or a bad one, is no sentence", () => {
+    assert.deepEqual(safeLegalUrls({ aszf: ASZF, adatkezeles: AT }), {
+      aszf: ASZF,
+      adatkezeles: AT,
+    });
+    for (const rossz of [
+      undefined,
+      null,
+      "",
+      42,
+      { aszf: ASZF },
+      { adatkezeles: AT },
+      { aszf: ASZF, adatkezeles: "http://shop.example/hu/jogi/adatkezeles" },
+      { aszf: "https://shop.example/<script>", adatkezeles: AT },
+      { aszf: "https://shop.example/ x", adatkezeles: AT },
+      { aszf: 7, adatkezeles: AT },
+    ])
+      assert.equal(safeLegalUrls(rossz), null, JSON.stringify(rossz));
+  });
+
+  it("the parser keeps a good pair, makes a bad or missing one null, and never refuses the mail for it", () => {
+    const sample = JSON.parse(
+      JSON.stringify(WEBSHOP_MAIL_SAMPLE_FACTS["order-placed"]),
+    ) as Record<string, unknown>;
+    const urls = (v: unknown) => {
+      const parsed = parseWebshopMailFacts("order-placed", {
+        ...sample,
+        legal_urls: v,
+      });
+      assert.equal(parsed.ok, true);
+      return (parsed as { facts: { legal_urls?: unknown } }).facts.legal_urls;
+    };
+    assert.deepEqual(urls({ aszf: ASZF, adatkezeles: AT }), {
+      aszf: ASZF,
+      adatkezeles: AT,
+    });
+    for (const rossz of [undefined, null, "x", { aszf: ASZF }, ["x"]])
+      assert.equal(urls(rossz), null, JSON.stringify(rossz));
+  });
+
+  /** The sentence for the sample confirmation with these extra facts (the key is not on the other templates' type). */
+  const sentence = (
+    extra: Record<string, unknown>,
+    template = "order-placed",
+  ) =>
+    webshopMailContent({
+      ...WEBSHOP_MAIL_SAMPLE_FACTS[
+        template as keyof typeof WEBSHOP_MAIL_SAMPLE_FACTS
+      ],
+      ...extra,
+    } as unknown as WebshopMailFacts).values.jogi_linkek_mondat;
+
+  it("the value is a sentence naming both pages in the mail's language, and empty without them", () => {
+    assert.equal(
+      sentence({ legal_urls: { aszf: ASZF, adatkezeles: AT } }),
+      `Az általános szerződési feltételeket (${ASZF}) és az adatkezelési tájékoztatót (${AT}) a webshopunkban olvashatod.`,
+    );
+    assert.equal(
+      sentence({
+        locale: "en",
+        legal_urls: {
+          aszf: "https://shop.example/en-hu/jogi/aszf",
+          adatkezeles: "https://shop.example/en-hu/jogi/adatkezeles",
+        },
+      }),
+      "You can read our terms and conditions (https://shop.example/en-hu/jogi/aszf) and our privacy notice (https://shop.example/en-hu/jogi/adatkezeles) in our webshop.",
+    );
+    for (const nincs of [undefined, null, { aszf: ASZF }])
+      assert.equal(sentence({ legal_urls: nincs }), "", JSON.stringify(nincs));
+  });
+
+  it("another template has no such value at all, even if its facts had the key", () => {
+    assert.equal(
+      sentence(
+        { legal_urls: { aszf: ASZF, adatkezeles: AT } },
+        "order-status-confirmed",
+      ),
+      undefined,
+    );
   });
 });
 
