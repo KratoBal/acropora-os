@@ -38,6 +38,9 @@ import { useUrlQuery } from "@/lib/navigation/use-url-query";
 import { errorText, isAbort } from "./operations-format";
 import { departmentOptions, monthOrDefault } from "./operations-report-view";
 
+/** Az objektum-URL visszavonásának késleltetése (a partner portál `file-download.ts`-ével egyező). */
+const REVOKE_DELAY_MS = 60_000;
+
 /**
  * AZ ÜZEMELTETÉSI NAPLÓ HAVI KIMUTATÁSA (task os-uzemeltetesi-naplo, S4b). A legközelebbi meglévő képernyő az Elhullási napló listája
  * (`mortality/mortality-list-page.tsx`, Figma 535:3): fejléc, négy összesítő kártya, szűrősor, táblázat; a szűrők az URL-ben állnak,
@@ -59,7 +62,6 @@ export function OperationsReportPage() {
     WorksheetDepartmentSummary[] | null
   >(null);
   const [data, setData] = useState<OperationsReportResponse | null>(null);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
 
@@ -87,7 +89,6 @@ export function OperationsReportPage() {
         setData(null);
         return;
       }
-      setLoading(true);
       setError(null);
       try {
         setData(
@@ -98,8 +99,6 @@ export function OperationsReportPage() {
           setData(null);
           setError(errorText(cause, "A kimutatás nem tölthető be."));
         }
-      } finally {
-        if (!signal?.aborted) setLoading(false);
       }
     },
     [canView, departmentId, month, token],
@@ -111,6 +110,12 @@ export function OperationsReportPage() {
     return () => controller.abort();
   }, [load]);
 
+  // A KIMUTATÁS CSAK AKKOR LÁTSZIK ÉS CSAK AKKOR LEHET LETÖLTENI, HA A MOSTANI VÁLASZTÁSRA KÉSZÜLT: helyszín- vagy hónapváltáskor az előző
+  // kimutatás nem maradhat a képernyőn az új választás alatt (és a PDF-gomb nem tölthet le mást, mint amit a képernyő mutat)
+  const shown =
+    data !== null &&
+    data.report.month === month &&
+    data.departmentId === departmentId;
   const options = useMemo(
     () => departmentOptions(departments ?? []),
     [departments],
@@ -129,7 +134,8 @@ export function OperationsReportPage() {
       anchor.href = url;
       anchor.download = file.fileName;
       anchor.click();
-      URL.revokeObjectURL(url);
+      // KÉSLELTETVE, mint a repó többi letöltőjénél: a letöltés az URL-t aszinkron olvassa, és egyes böngészők a szinkron visszavonásnál megszakítják
+      window.setTimeout(() => URL.revokeObjectURL(url), REVOKE_DELAY_MS);
     } catch (cause) {
       setError(errorText(cause, "A PDF nem tölthető le."));
     } finally {
@@ -156,7 +162,7 @@ export function OperationsReportPage() {
           <PilotButton
             size="regular"
             variant="secondary"
-            disabled={!data || downloading}
+            disabled={!shown || downloading}
             onClick={() => void download()}
           >
             <Icon name="download" size={14} />
@@ -240,13 +246,13 @@ export function OperationsReportPage() {
             Válassz partnert és helyszínt a kimutatáshoz
           </p>
         </section>
-      ) : loading && !data ? (
+      ) : shown && data ? (
+        <ReportBody data={data} />
+      ) : !error ? (
         <div aria-label="Kimutatás betöltése" className="space-y-3">
           <Skeleton className="h-24" />
           <Skeleton className="h-64" />
         </div>
-      ) : data ? (
-        <ReportBody data={data} />
       ) : null}
     </PilotThemeRoot>
   );

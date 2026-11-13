@@ -398,5 +398,8 @@ export interface OperationsReportResponse {
   report: OperationsReport;
   /** „Partner · Helyszín" a fejléchez; `null`, ha egy eszközre kértük. */
   siteLabel: string | null;
+  /** A kért hatókör visszhangja: a felület ebből tudja, hogy a válasz arra a helyszínre készült, amit most választott (nem egy korábbira). */
+  departmentId: string | null;
+  assetId: string | null;
   generatedAt: string;
 }

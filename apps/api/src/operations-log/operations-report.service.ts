@@ -76,6 +76,8 @@ export class OperationsReportService {
         now,
       }),
       siteLabel: scope.siteLabel,
+      departmentId: departmentId ?? null,
+      assetId: assetId ?? null,
       generatedAt: now.toISOString(),
     };
   }
