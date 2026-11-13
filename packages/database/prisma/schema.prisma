@@ -5809,6 +5809,8 @@ model WorksheetDepartment {
   @@unique([customerId, parentId, code])
   @@index([customerId, isActive])
   @@index([parentId])
+  /// Az üzemeltetési napló bejegyzései, amelyek ezen a helyszínen készültek (a rögzítéskori pillanatkép, S4a).
+  operationsLogEntries OperationsLogEntry[] @relation("OperationsLogEntryDepartment")
 }
 
 /// KI MELYIK ALEGYSEGET LATJA -- A LATHATOSAGI HOZZARENDELES.
@@ -12628,6 +12630,10 @@ model OperationsLogEntry {
   startedAt         DateTime
   finishedAt        DateTime
   recordedById      String
+  /// A HELYSZÍN A RÖGZÍTÉS PILLANATÁBAN (a havi kimutatás helyszínenként készül, és a múltja nem változhat egy későbbi áthelyezéstől:
+  /// egy áthelyezett eszköz régi bejegyzései a RÉGI helyszín kimutatásában maradnak, a partner-nézetben pedig nem vándorolnak át az új
+  /// partnerhez). `null`, ha az eszköznek nem volt helyszíne.
+  departmentId      String?
   /// A rendellenességből automatikusan nyitott hibajegy (S3); egy bejegyzéshez legfeljebb egy. A bejegyzés a jegyet nem törli, a jegy
   /// törlése (ha valaha lesz) a hivatkozást nullázza.
   serviceJobId      String?  @unique
@@ -12645,11 +12651,13 @@ model OperationsLogEntry {
   values       OperationsLogEntryValue[]
   documents    OperationsLogEntryDocument[]
   serviceJob   ServiceJob?                     @relation("OperationsLogEntryServiceJob", fields: [serviceJobId], references: [id], onDelete: SetNull)
+  department   WorksheetDepartment?            @relation("OperationsLogEntryDepartment", fields: [departmentId], references: [id], onDelete: SetNull)
 
   @@index([assetId, startedAt])
   @@index([templateId, startedAt])
   @@index([startedAt])
   @@index([recordedById])
+  @@index([departmentId, startedAt])
 }
 
 /// A bejegyzés résztvevői: a rögzítő és a megadott kollégák (egy vagy több ember). A partner-nézet (S5) a neveket „Acropora”-ként mutatja.

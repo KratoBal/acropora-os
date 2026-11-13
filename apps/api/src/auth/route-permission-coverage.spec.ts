@@ -33,6 +33,7 @@ const CONTROLLERS = [
   "src/tasks/service-token-admin.controller.ts",
   "src/service-assets/service-assets.controller.ts",
   "src/operations-log/operations-log-entries.controller.ts",
+  "src/operations-log/operations-report.controller.ts",
   "src/operations-log/operations-log.controller.ts",
   "src/worksheets/worksheets.controller.ts",
   "src/suppliers/suppliers.controller.ts",
