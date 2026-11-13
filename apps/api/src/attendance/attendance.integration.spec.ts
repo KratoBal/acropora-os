@@ -12,7 +12,8 @@ import { AttendanceRepository } from "./attendance.repository.js";
   replaced; a resave without a change logged as one; two saves of the same day at once not serialized (the second row's
   "from" must be the first row's "to", or the log loses a value); the CHECK constraints missing (a mark stored with times, a
   WORKED day without them, a weekday 8, a departure before the arrival); two entries for one employee and day; an employee
-  with attendance rows deletable (the record must outlive the account).
+  with attendance rows deletable (the record must outlive the account); the employee picker listing a partner account or
+  leaving out an inactive colleague.
 */
 const gate = integrationDatabaseGate(process.env);
 const TEST_EMAIL_DOMAIN = "attendance-integration.invalid";
@@ -255,6 +256,32 @@ describe("attendance on Postgres", { skip: gate.mode === "skip" }, () => {
         JSON.stringify(day),
       );
     await prisma.attendanceSchedule.delete({ where: { id: schedule.id } });
+  });
+
+  it("lists the employees of the given roles, inactive ones too, not a partner account", async () => {
+    const partner = await prisma.user.create({
+      data: {
+        email: `partner-${suffix}@${TEST_EMAIL_DOMAIN}`,
+        displayName: "Jelenlét Partner",
+        role: "PARTNER_SERVICE",
+      },
+    });
+    const gone = await prisma.user.create({
+      data: {
+        email: `gone-${suffix}@${TEST_EMAIL_DOMAIN}`,
+        displayName: "Jelenlét Régi",
+        role: "WAREHOUSE",
+        isActive: false,
+      },
+    });
+    const ids = (
+      await repository.employees(["OWNER", "ADMIN", "SALES", "WAREHOUSE"])
+    ).map((user) => user.id);
+    assert.ok(ids.includes(employeeId));
+    assert.ok(ids.includes(gone.id));
+    assert.ok(!ids.includes(partner.id));
+    // active first
+    assert.ok(ids.indexOf(employeeId) < ids.indexOf(gone.id));
   });
 
   it("keeps the record when someone tries to delete the employee", async () => {

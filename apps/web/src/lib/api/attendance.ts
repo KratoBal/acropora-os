@@ -1,12 +1,17 @@
 import type {
+  AttendanceDayEntry,
+  AttendanceDayInput,
+  AttendanceEmployeeListResponse,
   AttendanceSchedule,
   AttendanceScheduleDay,
   AttendanceScheduleListResponse,
+  AttendanceSheetResponse,
 } from "@acropora/types";
 
 import { apiRequest } from "./client";
 
 const base = "/attendance/users";
+const employeesPath = "/attendance/employees";
 
 /** An employee's attendance inputs (os-jelenleti-iv), all under `attendance.manage`. */
 export const attendanceApi = {
@@ -33,6 +38,41 @@ export const attendanceApi = {
   deleteSchedule(token: string, userId: string, validFrom: string) {
     return apiRequest<void>(
       `${base}/${encodeURIComponent(userId)}/schedules/${encodeURIComponent(validFrom)}`,
+      token,
+      { method: "DELETE" },
+    );
+  },
+  /** Everyone with a sheet, inactive accounts too (S2b). */
+  employees(token: string, signal?: AbortSignal) {
+    return apiRequest<AttendanceEmployeeListResponse>(employeesPath, token, {
+      signal,
+    });
+  },
+  /** The month's computed sheet ("2026-11"). */
+  sheet(token: string, userId: string, month: string, signal?: AbortSignal) {
+    return apiRequest<AttendanceSheetResponse>(
+      `${base}/${encodeURIComponent(userId)}/sheet?month=${encodeURIComponent(month)}`,
+      token,
+      { signal },
+    );
+  },
+  /** Sets the day's entry (sick, leave, day off, or other times). */
+  saveDay(
+    token: string,
+    userId: string,
+    date: string,
+    input: AttendanceDayInput,
+  ) {
+    return apiRequest<AttendanceDayEntry>(
+      `${base}/${encodeURIComponent(userId)}/days/${encodeURIComponent(date)}`,
+      token,
+      { method: "PUT", body: JSON.stringify(input) },
+    );
+  },
+  /** Removes the day's entry: the day follows the schedule and the calendar again. */
+  deleteDay(token: string, userId: string, date: string) {
+    return apiRequest<void>(
+      `${base}/${encodeURIComponent(userId)}/days/${encodeURIComponent(date)}`,
       token,
       { method: "DELETE" },
     );

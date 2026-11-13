@@ -75,6 +75,20 @@ export interface AttendanceDayListResponse {
   items: AttendanceDayEntry[];
 }
 
+/** An employee in the attendance sheet's picker (S2b): our own human colleagues, the inactive ones too (past months). */
+export interface AttendanceEmployee {
+  id: string;
+  /** The official full name: the sheet and its PDF print this. */
+  displayName: string;
+  nickname: string | null;
+  role: UserRole;
+  isActive: boolean;
+}
+
+export interface AttendanceEmployeeListResponse {
+  items: AttendanceEmployee[];
+}
+
 export interface AttendanceDayInput {
   kind: AttendanceDayKind;
   start?: string | null;

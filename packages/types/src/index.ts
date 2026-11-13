@@ -2068,6 +2068,8 @@ export {
 export type {
   AttendanceDayEntry,
   AttendanceDayInput,
+  AttendanceEmployee,
+  AttendanceEmployeeListResponse,
   AttendanceDayKind,
   AttendanceDayListResponse,
   AttendanceSchedule,
