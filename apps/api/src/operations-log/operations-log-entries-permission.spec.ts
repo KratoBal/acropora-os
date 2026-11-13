@@ -6,6 +6,7 @@ import { PERMISSIONS } from "@acropora/types";
 
 import { PermissionGuard } from "../auth/guards/permission.guard.js";
 import { OperationsLogEntriesController } from "./operations-log-entries.controller.js";
+import { OperationsReportController } from "./operations-report.controller.js";
 
 /*
   A BEJEGYZÉSEK JOGAI (task os-uzemeltetesi-naplo, S2a). MI PIROSIT: ha a rögzítés (és a rögzítő képernyő kínálata) a nézet
@@ -74,6 +75,41 @@ describe("az üzemeltetési napló bejegyzés-végpontjainak jogai", () => {
     ]) {
       denied(route, manage);
       denied(route, [PERMISSIONS.SERVICE_VIEW]);
+    }
+  });
+});
+
+describe("a havi kimutatás végpontjainak jogai", () => {
+  /*
+    MI PIROSIT: ha a kimutatást a rögzítő jog is olvasná (a szerelő a teljes helyszín kimutatását látná), ha a nézet jog nélkül
+    nyitva volna, vagy ha a sablonkezelő jog önmagában olvasna.
+  */
+  const reportRun = (
+    handler: (...args: never[]) => unknown,
+    permissions: string[],
+  ) =>
+    guard.canActivate({
+      getHandler: () => handler,
+      getClass: () => OperationsReportController,
+      switchToHttp: () => ({
+        getRequest: () => ({ user: { id: "u", role: "SERVICE", permissions } }),
+      }),
+    } as never);
+  const reportProto = OperationsReportController.prototype;
+
+  it("a nézet jog olvassa a JSON-t és a PDF-et, a rögzítő és a kezelő jog önmagában nem", () => {
+    for (const route of [reportProto.report, reportProto.pdf]) {
+      assert.equal(reportRun(route, [PERMISSIONS.OPERATIONS_LOG_VIEW]), true);
+      for (const other of [
+        [PERMISSIONS.OPERATIONS_LOG_RECORD],
+        [PERMISSIONS.OPERATIONS_LOG_TEMPLATES_MANAGE],
+        [PERMISSIONS.SERVICE_VIEW],
+      ])
+        assert.throws(
+          () => reportRun(route, other),
+          (error: unknown) =>
+            error instanceof ForbiddenException && error.getStatus() === 403,
+        );
     }
   });
 });

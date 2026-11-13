@@ -99,3 +99,15 @@ export class UploadOperationsLogPhotoDto {
   @IsOptional()
   caption?: string;
 }
+
+/** `GET /operations-log/report` és `/report/pdf`: a hónap és a hatókör (helyszín VAGY eszköz; a szolgáltatás ellenőrzi). */
+export class OperationsReportQueryDto {
+  @IsString()
+  @Matches(/^\d{4}-(0[1-9]|1[0-2])$/, {
+    message: "A hónap alakja ÉÉÉÉ-HH legyen.",
+  })
+  month!: string;
+
+  @IsString() @IsOptional() departmentId?: string;
+  @IsString() @IsOptional() assetId?: string;
+}

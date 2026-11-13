@@ -1,3 +1,4 @@
+import { addDays } from "./hungarian-work-calendar.js";
 import type { OperationsTaskFrequency } from "./operations-log.js";
 
 /**
@@ -137,13 +138,6 @@ export function budapestDayKey(instant: Date | string): string {
 function utcDate(dayKey: string): Date {
   const [y, m, d] = dayKey.split("-").map(Number) as [number, number, number];
   return new Date(Date.UTC(y, m - 1, d));
-}
-
-/** Naptári napok adása egy dátumkulcshoz (a nyári időszámítás nem számít: nem időpontokkal számolunk). */
-export function addDays(dayKey: string, days: number): string {
-  const date = utcDate(dayKey);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
 }
 
 /** A hét hétfője (ISO hét) a napot tartalmazó héthez. */
