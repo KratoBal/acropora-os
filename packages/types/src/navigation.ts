@@ -664,6 +664,15 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
   },
   {
     /**
+     * AZ ÜZEMELTETÉSI NAPLÓ SABLONJAI (task os-uzemeltetesi-naplo, S1b). A menüpont és a végpont ugyanazt a jogot kapja
+     * (`operations-log.templates.manage`): a menedzser is kezeli (nincs `settings.manage`-je), a szerelő nem látja.
+     */
+    id: "operations-log-templates",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.OPERATIONS_LOG_TEMPLATES_MANAGE),
+  },
+  {
+    /**
      * A PARTNER-DUPLIKÁTUMOK LISTÁJA (egy partnertörzs, 1. lépés; acrobot 42536: Balázs a listából dönt a bizonytalan
      * párokról). CSAK OLVAS. Ugyanaz a jog, mint a végponté (`settings.manage`): a lista neveket és adószámokat mutat.
      */

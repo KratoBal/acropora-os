@@ -246,6 +246,7 @@ describe("navigation", () => {
           "Számlázz.hu kapcsolat",
           "Mértékegységek",
           "Eszköz-kategóriák",
+          "Üzemeltetési napló sablonjai",
           "Eszköz-funkciók",
           "Bérelhető eszközök",
           "Bérleti szerződés",
@@ -398,6 +399,7 @@ describe("navigation", () => {
       ["Kapcsolatok", "szamlazz-connection"],
       ["Törzsadatok", "units-of-measure"],
       ["Törzsadatok", "asset-categories"],
+      ["Törzsadatok", "operations-log-templates"],
       ["Törzsadatok", "asset-functions"],
       ["Törzsadatok", "rental-equipment"],
       ["Törzsadatok", "rental-contract"],
@@ -479,6 +481,11 @@ describe("navigation", () => {
     ["/beallitasok/matricak", "asset-labels", "QR-kód nyomtatás"],
     ["/beallitasok/mertekegysegek", "units-of-measure", "Mértékegységek"],
     ["/beallitasok/eszkoz-kategoriak", "asset-categories", "Eszköz-kategóriák"],
+    [
+      "/beallitasok/uzemeltetesi-naplo-sablonok",
+      "operations-log-templates",
+      "Üzemeltetési napló sablonjai",
+    ],
     ["/beallitasok/eszkoz-funkciok", "asset-functions", "Eszköz-funkciók"],
     [
       "/beallitasok/berelheto-eszkozok",
@@ -855,6 +862,9 @@ describe("navigation", () => {
     // lenne, barmelyik felvivo felvehetne uj kategoriat -- es pont az allna
     // vissza, ami miatt a lista letrejott.
     "/beallitasok/eszkoz-kategoriak": "settings.manage",
+    // Üzemeltetési napló sablonjai (task os-uzemeltetesi-naplo, S1b): a menedzser is kezeli (nincs settings.manage-je)
+    "/beallitasok/uzemeltetesi-naplo-sablonok":
+      "operations-log.templates.manage",
     // AZ ESZKOZ-FUNKCIOK UGYANAZ A FAJTA TETEL, ugyanaz a bontas -- kanban
     // 68add892, 2026-09-22.
     "/beallitasok/eszkoz-funkciok": "settings.manage",
