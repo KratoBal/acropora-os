@@ -8,7 +8,9 @@ import type {
   AttendanceSheetResponse,
 } from "@acropora/types";
 
-import { apiRequest } from "./client";
+import { API_PREFIX } from "./api-prefix";
+import { pdfBlob } from "./billing-documents";
+import { apiAuthHeaders, apiRequest } from "./client";
 
 const base = "/attendance/users";
 const employeesPath = "/attendance/employees";
@@ -55,6 +57,14 @@ export const attendanceApi = {
       token,
       { signal },
     );
+  },
+  /** The month's sheet as a PDF, as it stands now (S2c). */
+  async sheetPdf(token: string, userId: string, month: string): Promise<Blob> {
+    const response = await fetch(
+      `${API_PREFIX}${base}/${encodeURIComponent(userId)}/sheet.pdf?month=${encodeURIComponent(month)}`,
+      { credentials: "same-origin", headers: apiAuthHeaders(token) },
+    );
+    return pdfBlob(response, "A jelenléti ív PDF-je nem tölthető le.");
   },
   /** Sets the day's entry (sick, leave, day off, or other times). */
   saveDay(

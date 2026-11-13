@@ -25,6 +25,7 @@ const api = vi.hoisted(() => ({
   sheet: vi.fn(),
   saveDay: vi.fn(),
   deleteDay: vi.fn(),
+  sheetPdf: vi.fn(),
 }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 
@@ -286,5 +287,23 @@ describe("AttendanceSheetPage", () => {
         kind: "LEAVE",
       }),
     );
+  });
+
+  it("opens the month's PDF in a new tab, and says so when the browser blocks it", async () => {
+    api.sheetPdf.mockReset().mockResolvedValue(new Blob(["%PDF-"]));
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const createObjectURL = vi.fn(() => "blob:sheet");
+    const revokeObjectURL = vi.fn();
+    Object.assign(URL, { createObjectURL, revokeObjectURL });
+    await openSheet();
+    fireEvent.click(screen.getByText("PDF (nyomtatás, aláírás)"));
+    await waitFor(() =>
+      expect(api.sheetPdf).toHaveBeenCalledWith("token-1", "u-1", "2026-11"),
+    );
+    expect(open).toHaveBeenCalledWith("blob:sheet", "_blank");
+    expect(
+      await screen.findByText(/nem engedte megnyitni a PDF-et/),
+    ).toBeTruthy();
+    open.mockRestore();
   });
 });
