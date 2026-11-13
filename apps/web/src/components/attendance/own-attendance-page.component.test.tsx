@@ -79,7 +79,9 @@ const sheetFor = (month: string): AttendanceSheetResponse => ({
     entries: [
       entry("2026-11-17", "SICK"),
       entry("2026-11-18", "WORKED", "07:00", "18:00"),
-      entry("2026-11-19", "LEAVE"),
+      { ...entry("2026-11-19", "LEAVE"), setByEmployee: true },
+      // an admin's booked leave: shown, not offered to change (barracuda on #2516)
+      { ...entry("2026-11-24", "LEAVE"), setByEmployee: false },
     ],
   }),
   signedCopy: null,
@@ -107,7 +109,7 @@ describe("OwnAttendancePage", () => {
       "2026-11",
       expect.anything(),
     );
-    for (const day of ["13", "12", "17", "18"])
+    for (const day of ["13", "12", "17", "18", "24"])
       expect(
         screen.queryByLabelText(`2026. 11. ${day}. módosítása`),
         day,

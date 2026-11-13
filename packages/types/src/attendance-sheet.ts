@@ -68,6 +68,8 @@ export interface AttendanceSheetRow {
    * advance leave), for the own input screen only. Every sheet, PDF and total leaves it empty.
    */
   future: boolean;
+  /** The row's entry was set by the employee themselves (S3): only such a day is theirs to change or undo. */
+  ownEntry: boolean;
 }
 
 export interface AttendanceSheet {
@@ -202,6 +204,7 @@ const blank = (
   source,
   holiday: null,
   future: false,
+  ownEntry: false,
 });
 
 function rowOf(
@@ -209,21 +212,30 @@ function rowOf(
   entry: AttendanceDayEntry | undefined,
   schedules: readonly AttendanceSchedule[],
 ): AttendanceSheetRow {
-  if (entry) {
-    if (entry.kind === "WORKED" && entry.start && entry.end)
-      return {
-        ...blank(date, "WORK", "ENTRY"),
-        start: entry.start,
-        end: entry.end,
-        minutes: span(entry.start, entry.end),
-      };
-    if (entry.kind === "SICK")
-      return { ...blank(date, "SICK", "ENTRY"), mark: "B" };
-    if (entry.kind === "LEAVE")
-      return { ...blank(date, "LEAVE", "ENTRY"), mark: "SZ" };
-    return blank(date, "DAY_OFF", "ENTRY");
-  }
+  if (entry)
+    return { ...entryRow(date, entry), ownEntry: entry.setByEmployee === true };
+  return calendarOrScheduleRow(date, schedules);
+}
 
+function entryRow(date: string, entry: AttendanceDayEntry): AttendanceSheetRow {
+  if (entry.kind === "WORKED" && entry.start && entry.end)
+    return {
+      ...blank(date, "WORK", "ENTRY"),
+      start: entry.start,
+      end: entry.end,
+      minutes: span(entry.start, entry.end),
+    };
+  if (entry.kind === "SICK")
+    return { ...blank(date, "SICK", "ENTRY"), mark: "B" };
+  if (entry.kind === "LEAVE")
+    return { ...blank(date, "LEAVE", "ENTRY"), mark: "SZ" };
+  return blank(date, "DAY_OFF", "ENTRY");
+}
+
+function calendarOrScheduleRow(
+  date: string,
+  schedules: readonly AttendanceSchedule[],
+): AttendanceSheetRow {
   const calendar = hungarianCalendarDay(date);
   if (calendar.kind === "HOLIDAY")
     return { ...blank(date, "HOLIDAY", "CALENDAR"), holiday: calendar.name };

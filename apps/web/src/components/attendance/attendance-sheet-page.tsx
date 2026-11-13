@@ -395,9 +395,12 @@ function DayEditor({
     A STORED "OTHER TIMES" ENTRY WHOSE TIMES THE SHEET DOES NOT SHOW YET (a later day, or today before the departure):
     the row is cut to now, so its times are read from the stored entry, not retyped (barracuda on #2520).
   */
+  // the time fields wait for the stored times, so nothing typed meanwhile is overwritten (barracuda on #2520)
+  const needsStored =
+    row.source === "ENTRY" && row.kind === "WORK" && !(row.start && row.end);
+  const [loadingStored, setLoadingStored] = useState(needsStored);
   useEffect(() => {
-    if (row.source !== "ENTRY" || row.kind !== "WORK" || (row.start && row.end))
-      return;
+    if (!needsStored) return;
     const controller = new AbortController();
     attendanceApi
       .days(token, userId, row.date, row.date, controller.signal)
@@ -410,9 +413,12 @@ function DayEditor({
       })
       .catch(() => {
         // the dialog still works: the times are then typed again
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoadingStored(false);
       });
     return () => controller.abort();
-  }, [row, token, userId]);
+  }, [needsStored, row, token, userId]);
 
   /** Back to the schedule removes the day's entry: asked first, like every delete a screen can start. */
   const reset = async () => {
@@ -496,6 +502,7 @@ function DayEditor({
                 value={start}
                 onChange={setStart}
                 aria-label="Érkezés"
+                disabled={loadingStored}
               />
             </PilotFormField>
             <PilotFormField label="Távozás" required>
@@ -504,6 +511,7 @@ function DayEditor({
                 value={end}
                 onChange={setEnd}
                 aria-label="Távozás"
+                disabled={loadingStored}
               />
             </PilotFormField>
           </div>

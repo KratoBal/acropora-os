@@ -160,7 +160,12 @@ export class AttendanceService {
       );
     await this.employee(userId);
     const rows = await this.repository.days(userId, from, to);
-    return { userId, from: fromText, to: toText, items: rows.map(dayView) };
+    return {
+      userId,
+      from: fromText,
+      to: toText,
+      items: rows.map((row) => dayView(row, userId)),
+    };
   }
 
   /**
@@ -188,7 +193,7 @@ export class AttendanceService {
     const sheet = attendanceSheet({
       month,
       schedules: schedules.map(scheduleView),
-      entries: entries.map(dayView),
+      entries: entries.map((row) => dayView(row, userId)),
       now,
     });
     return { sheet, displayName: user.displayName };
@@ -308,7 +313,7 @@ export class AttendanceService {
       endMinute: worked ? minutes(input.end!) : null,
       actorId,
     });
-    return dayView(saved);
+    return dayView(saved, userId);
   }
 
   async deleteDay(
@@ -360,7 +365,7 @@ export class AttendanceService {
         onlyOver: ATTENDANCE_SELF_KINDS,
         onlyOwn: true,
       });
-      return dayView(saved);
+      return dayView(saved, userId);
     } catch (error) {
       throw selfConflict(error);
     }

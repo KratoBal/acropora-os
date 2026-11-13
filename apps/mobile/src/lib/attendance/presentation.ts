@@ -28,6 +28,8 @@ export interface AttendanceSheetRow {
   holiday: string | null;
   /** A day after today (Budapest): the server sends no time, mark or minutes for it (filled up to today only). */
   future: boolean;
+  /** The entry was set by the employee themselves (S3); only such a day is theirs to change. */
+  ownEntry?: boolean;
 }
 
 export interface AttendanceSheet {
@@ -161,4 +163,6 @@ export const canMarkOwnDay = (
   row: AttendanceSheetRow,
   today: string,
 ): boolean =>
-  row.date > today && (row.source !== "ENTRY" || ownMark(row) !== null);
+  row.date > today &&
+  // an admin's booked leave is not the employee's to change (barracuda on #2516; the server refuses it too)
+  (row.source !== "ENTRY" || (ownMark(row) !== null && row.ownEntry === true));

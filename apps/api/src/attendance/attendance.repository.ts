@@ -32,6 +32,8 @@ const daySelect = {
   startMinute: true,
   endMinute: true,
   updatedAt: true,
+  // who set the entry: the own sheet offers to change only the employee's own marks (S3)
+  updatedById: true,
 } as const;
 
 type Tx = Prisma.TransactionClient;

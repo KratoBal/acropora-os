@@ -54,6 +54,11 @@ export interface AttendanceSchedule {
 export interface AttendanceDayEntry {
   /** "YYYY-MM-DD". */
   date: string;
+  /**
+   * Whether the employee set this entry themselves (their own advance mark, S3), as against an admin. Present where the
+   * server knows it; the own sheet offers to change or undo only these (barracuda on #2516).
+   */
+  setByEmployee?: boolean;
   kind: AttendanceDayKind;
   /** Only on a WORKED day; null on the others (they print a mark, not times). */
   start: string | null;

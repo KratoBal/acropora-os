@@ -128,7 +128,10 @@ export function OwnAttendancePage() {
                 date: row.date,
                 today,
                 existing: row.source === "ENTRY" ? entryKind(row) : null,
-              }) === null
+              }) === null &&
+              // only the employee's own mark is theirs to change: an admin's booked leave is not offered (barracuda on
+              // #2516; the server refuses it anyway, with the shared sentence)
+              (row.source !== "ENTRY" || row.ownEntry)
             }
             onEdit={setEditing}
             showPlanned

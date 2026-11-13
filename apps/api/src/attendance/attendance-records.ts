@@ -33,6 +33,8 @@ export interface DayRow {
   startMinute: number | null;
   endMinute: number | null;
   updatedAt: Date;
+  /** Who set the entry last; absent where it was not read. */
+  updatedById?: string | null;
 }
 
 /** "2026-11-13" as the `@db.Date` value Prisma stores (UTC midnight: a date column has no zone). */
@@ -58,8 +60,12 @@ export function scheduleView(row: ScheduleRow): AttendanceSchedule {
   };
 }
 
-export function dayView(row: DayRow): AttendanceDayEntry {
+/** The entry as the API serves it; with `employeeId`, it also says whether the employee set it themselves (S3). */
+export function dayView(row: DayRow, employeeId?: string): AttendanceDayEntry {
   return {
+    ...(employeeId !== undefined && row.updatedById !== undefined
+      ? { setByEmployee: row.updatedById === employeeId }
+      : {}),
     date: dateKey(row.date),
     kind: row.kind,
     start:
