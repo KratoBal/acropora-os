@@ -378,6 +378,12 @@ function AssetSection({ block }: { block: OperationsReportAssetBlock }) {
   );
 }
 
+function valueText(value: number | boolean | string): string {
+  if (typeof value === "number") return operationsNumberText(value);
+  if (typeof value === "boolean") return value ? "igen" : "nem";
+  return value;
+}
+
 function dateTime(iso: string): string {
   return new Intl.DateTimeFormat("hu-HU", {
     timeZone: "Europe/Budapest",
@@ -408,6 +414,12 @@ const COLUMNS: readonly PilotTableColumn<OperationsReportEntryRow>[] = [
         <div className="text-xs text-pilot-grey-500">
           {OPERATIONS_FREQUENCY_LABELS[row.frequency]}
         </div>
+        {row.values.map((value) => (
+          <div key={value.label} className="text-xs text-pilot-grey-700">
+            {value.label}: {valueText(value.value)}
+            {value.unit ? ` ${value.unit}` : ""}
+          </div>
+        ))}
       </div>
     ),
   },

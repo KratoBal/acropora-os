@@ -105,9 +105,13 @@ const REPORT: OperationsReportResponse = {
             meterUnit: "m3",
             meterSuspicious: false,
             performers: ["Kovács Béla", "Őri Ágnes"],
+            values: [
+              { label: "pH", unit: null, value: 7.8 },
+              { label: "Szűrő rendben", unit: null, value: true },
+            ],
             anomaly: true,
             anomalyNote: "Szivárog a szelep",
-            ticket: { jobNumber: "HJ-2026-0042", status: "NEW" },
+            ticket: { id: "sj1", jobNumber: "HJ-2026-0042", status: "NEW" },
           },
           {
             id: "e2",
@@ -122,6 +126,7 @@ const REPORT: OperationsReportResponse = {
             meterUnit: null,
             meterSuspicious: false,
             performers: ["Kovács Béla"],
+            values: [],
             anomaly: false,
             anomalyNote: null,
             ticket: null,
@@ -218,6 +223,8 @@ describe("az üzemeltetési napló havi kimutatása", () => {
     expect(screen.getByText("különbség: +12,5 m3")).toBeTruthy();
     expect(screen.getByText(/előtte: 100 m3/)).toBeTruthy();
     expect(screen.getByText("Kovács Béla, Őri Ágnes")).toBeTruthy();
+    expect(screen.getByText("pH: 7,8")).toBeTruthy();
+    expect(screen.getByText("Szűrő rendben: igen")).toBeTruthy();
     expect(screen.getByText("Szivárog a szelep")).toBeTruthy();
     expect(screen.getByText("Hibajegy: HJ-2026-0042")).toBeTruthy();
     expect(screen.getByText("Kimaradt ütemezett feladatok")).toBeTruthy();

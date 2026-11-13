@@ -193,6 +193,10 @@ export const PERMISSION_AREAS: readonly PermissionArea[] = [
         permission: P.OPERATIONS_LOG_RECORD,
         label: "Bejegyzés rögzítése",
       },
+      {
+        permission: P.OPERATIONS_LOG_PARTNER_VIEW,
+        label: "Partner-nézet (a saját helyszínek)",
+      },
     ],
   },
   {

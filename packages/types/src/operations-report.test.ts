@@ -142,7 +142,7 @@ test("a partner nézete a neveket Acropora-ra cseréli, a számok ugyanazok", ()
       entry("e1", "2026-11-12T09:00:00.000Z", {
         anomaly: true,
         anomalyNote: "Szivárog",
-        serviceJob: { jobNumber: "HJ-1", status: "NEW" },
+        serviceJob: { id: "sj1", jobNumber: "HJ-1", status: "NEW" },
       }),
     ],
     schedules: [],
@@ -401,6 +401,53 @@ test("a kimutatás szövegei magyarul: tartam, szám, hónap, időszak, előjel"
   assert.equal(operationsSignedNumberText(12.5, "m3"), "+12,5 m3");
   assert.equal(operationsSignedNumberText(-3, null), "-3");
   assert.equal(operationsSignedNumberText(0, "m3"), "0 m3");
+});
+
+test("a mért értékek a sorban: a vízóra kivételével, a partner nézetében a szabad szöveg nélkül", () => {
+  const values = [
+    {
+      fieldKey: "elotte",
+      label: "Előtte",
+      unit: "m3",
+      meterRole: "BEFORE" as const,
+      value: 100,
+    },
+    { fieldKey: "ph", label: "pH", unit: null, meterRole: null, value: 7.8 },
+    {
+      fieldKey: "rendben",
+      label: "Rendben",
+      unit: null,
+      meterRole: null,
+      value: true,
+    },
+    {
+      fieldKey: "megj",
+      label: "Megjegyzés",
+      unit: null,
+      meterRole: null,
+      value: "a kolléga szavai",
+    },
+  ];
+  const run = (audience: "INTERNAL" | "PARTNER") =>
+    buildOperationsReport({
+      month: "2026-11",
+      audience,
+      entries: [entry("e1", "2026-11-12T09:00:00.000Z", { values })],
+      schedules: [],
+      now: NOW,
+    }).assets[0]!.entries[0]!;
+  assert.deepEqual(
+    run("INTERNAL").values.map((value) => value.label),
+    ["pH", "Rendben", "Megjegyzés"],
+  );
+  assert.deepEqual(
+    run("PARTNER").values.map((value) => value.label),
+    ["pH", "Rendben"],
+  );
+  assert.equal(
+    JSON.stringify(run("PARTNER")).includes("a kolléga szavai"),
+    false,
+  );
 });
 
 test("a kimaradt heti feladat a rögzítéskori helyszíntől független bejegyzéssel teljesül, a sorok közé viszont nem kerül", () => {

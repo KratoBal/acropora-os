@@ -29,7 +29,7 @@ function entry(
     participantNames: ["Kovács Béla", "Őri Ágnes"],
     anomaly: true,
     anomalyNote: "Szivárog a szelep",
-    serviceJob: { jobNumber: "HJ-2026-0042", status: "NEW" },
+    serviceJob: { id: "sj1", jobNumber: "HJ-2026-0042", status: "NEW" },
     values: [
       {
         fieldKey: "elotte",
@@ -44,6 +44,21 @@ function entry(
         unit: "m3",
         meterRole: "AFTER",
         value: 112.5,
+      },
+      { fieldKey: "ph", label: "pH", unit: null, meterRole: null, value: 7.8 },
+      {
+        fieldKey: "rendben",
+        label: "Szűrő rendben",
+        unit: null,
+        meterRole: null,
+        value: true,
+      },
+      {
+        fieldKey: "megj",
+        label: "Megjegyzés",
+        unit: null,
+        meterRole: null,
+        value: "A kolléga szavai",
       },
     ],
     ...over,
@@ -96,6 +111,9 @@ describe("a havi kimutatás PDF-je", () => {
       "HJ-2026-0042",
       "Új",
       "Biodóm",
+      "pH: 7,8",
+      "Szűrő rendben: igen",
+      "Megjegyzés: A kolléga szavai",
     ])
       assert.ok(text.includes(expected), `hiányzik a lapról: ${expected}`);
   });
@@ -115,6 +133,9 @@ describe("a havi kimutatás PDF-je", () => {
     const { text } = await textOf("PARTNER");
     assert.equal(text.includes("Kovács"), false);
     assert.equal(text.includes("Őri"), false);
+    // a partner nézetében a mért szám és az igen/nem érték áll, a szabad szöveg (a kollégák szava) nem
+    assert.ok(text.includes("pH: 7,8"));
+    assert.equal(text.includes("A kolléga szavai"), false);
     assert.ok(text.includes("Acropora"));
     assert.ok(text.includes("HJ-2026-0042"));
   });

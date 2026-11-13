@@ -31,7 +31,7 @@ export interface OperationsReportEntryInput {
   participantNames: string[];
   anomaly: boolean;
   anomalyNote: string | null;
-  serviceJob: { jobNumber: string; status: string } | null;
+  serviceJob: { id: string; jobNumber: string; status: string } | null;
   /** A bejegyzés értékei, a mező pillanatfelvételével (csak a szám érték számít a vízóránál). */
   values: {
     fieldKey: string;
@@ -73,7 +73,16 @@ export interface OperationsReportEntryRow {
   performers: string[];
   anomaly: boolean;
   anomalyNote: string | null;
-  ticket: { jobNumber: string; status: string } | null;
+  ticket: { id: string; jobNumber: string; status: string } | null;
+  /**
+   * A MÉRT ÉRTÉKEK a vízóra előtte és utána kivételével (azok a saját oszlopaikban állnak), a sablon sorrendjében. A PARTNER nézetében
+   * csak a szám és az igen/nem érték (a szabad szövegű érték a kollégák megjegyzése is lehet, és az nem a partner dolga).
+   */
+  values: {
+    label: string;
+    unit: string | null;
+    value: number | boolean | string;
+  }[];
 }
 
 export interface OperationsReportAssetBlock {
@@ -226,6 +235,17 @@ function entryRow(
     anomaly: entry.anomaly,
     anomalyNote: entry.anomalyNote,
     ticket: entry.serviceJob,
+    values: entry.values
+      .filter(
+        (value) =>
+          value.meterRole === null &&
+          (audience === "INTERNAL" || typeof value.value !== "string"),
+      )
+      .map((value) => ({
+        label: value.label,
+        unit: value.unit,
+        value: value.value,
+      })),
   };
 }
 

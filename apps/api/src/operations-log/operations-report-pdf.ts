@@ -114,6 +114,21 @@ function meterText(row: OperationsReportEntryRow): string {
   return lines.join("\n");
 }
 
+/** A mért értékek sorai („pH: 7,8", „Rendben: igen"); a vízóra a saját oszlopában áll. */
+function valueLines(row: OperationsReportEntryRow): string[] {
+  return row.values.map((value) => {
+    const text =
+      typeof value.value === "number"
+        ? operationsNumberText(value.value)
+        : typeof value.value === "boolean"
+          ? value.value
+            ? "igen"
+            : "nem"
+          : value.value;
+    return `${value.label}: ${text}${value.unit ? ` ${value.unit}` : ""}`;
+  });
+}
+
 function notesText(
   row: OperationsReportEntryRow,
   audience: OperationsReport["audience"],
@@ -349,7 +364,11 @@ function drawAssetBlock(
   block.entries.forEach((row, index) => {
     const cells = [
       dateTimeText(row.startedAt),
-      `${row.templateName}\n${OPERATIONS_FREQUENCY_LABELS[row.frequency]}`,
+      [
+        row.templateName,
+        OPERATIONS_FREQUENCY_LABELS[row.frequency],
+        ...valueLines(row),
+      ].join("\n"),
       operationsDurationText(row.minutes),
       meterText(row),
       row.performers.join("\n"),

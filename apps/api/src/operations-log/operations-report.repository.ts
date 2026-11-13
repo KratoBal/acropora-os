@@ -6,6 +6,7 @@ import {
   type OperationsReportScheduleInput,
 } from "@acropora/types";
 
+import { assignedUnitIdsFor } from "../service-jobs/assigned-units.query.js";
 import { collectUnitSubtreeIds } from "../service-assets/unit-subtree.js";
 
 /** Melyik bejegyzések kerülnek a kimutatás SORAI közé. */
@@ -128,7 +129,7 @@ export class OperationsReportRepository {
         anomaly: true,
         anomalyNote: true,
         asset: { select: { assetNumber: true, name: true } },
-        serviceJob: { select: { jobNumber: true, status: true } },
+        serviceJob: { select: { id: true, jobNumber: true, status: true } },
         participants: {
           select: {
             user: { select: { displayName: true, nickname: true } },
@@ -231,5 +232,27 @@ export class OperationsReportRepository {
           assetLabel: asset.label,
         })),
     );
+  }
+
+  /** A felhasználó hozzárendelt helyszín-csomópontjai a részfájukkal (a meglévő helyszín-szabály: `assignedUnitIdsFor`). */
+  assignedUnitIds(userId: string): Promise<string[]> {
+    return assignedUnitIdsFor(userId);
+  }
+
+  /**
+   * A PARTNER SAJÁT HELYSZÍNEI: a partner helyszínei közül azok, amelyek a felhasználó hozzárendelt egységei (a részfájukkal együtt:
+   * a hozzárendelés csomópontot tárol, a kibontás a hívó dolga, `assignedUnitIdsFor`). Az aktív helyszínek, laposan, a fát a hívó
+   * építi a `parentId`-ból.
+   */
+  async partnerSites(
+    customerId: string,
+    unitIds: readonly string[],
+  ): Promise<{ id: string; parentId: string | null; name: string }[]> {
+    if (unitIds.length === 0) return [];
+    return prisma.worksheetDepartment.findMany({
+      where: { customerId, id: { in: [...unitIds] }, isActive: true },
+      select: { id: true, parentId: true, name: true },
+      orderBy: [{ name: "asc" }, { id: "asc" }],
+    });
   }
 }
