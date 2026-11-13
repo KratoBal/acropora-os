@@ -2081,6 +2081,7 @@ export {
 } from "./attendance-sheet.js";
 export type {
   AttendanceSheet,
+  AttendanceSheetResponse,
   AttendanceSheetRow,
   AttendanceSheetRowKind,
 } from "./attendance-sheet.js";

@@ -71,6 +71,11 @@ export interface AttendanceSheet {
   swapsDecree: string | null;
 }
 
+/** The sheet as the API serves it. */
+export interface AttendanceSheetResponse extends AttendanceSheet {
+  userId: string;
+}
+
 const MONTH = /^(\d{4})-(0[1-9]|1[0-2])$/;
 
 export const isAttendanceMonth = (value: string): boolean => MONTH.test(value);
