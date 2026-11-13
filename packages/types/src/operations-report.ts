@@ -35,7 +35,13 @@ export interface OperationsReportEntryInput {
   participantNames: string[];
   anomaly: boolean;
   anomalyNote: string | null;
-  serviceJob: { id: string; jobNumber: string; status: string } | null;
+  /** A jegy; `hidden`: az iroda elrejtette (a jegylistákból kikerül, a partnernek ezért a kimutatásban sem látszik). */
+  serviceJob: {
+    id: string;
+    jobNumber: string;
+    status: string;
+    hidden: boolean;
+  } | null;
   /** A bejegyzés értékei, a mező pillanatfelvételével (csak a szám érték számít a vízóránál). */
   values: {
     fieldKey: string;
@@ -240,17 +246,20 @@ function entryRow(
     anomalyNote: entry.anomalyNote,
     // A PARTNER A NÉGY LÁTSZÓ ÁLLAPOTOT KAPJA, NEM A BELSŐ NYOLCAT: az állapot-kulcs már a szerver válaszában partner-alakú, mert a
     // belső érték (például „alkatrészre vár") a partner nyelvén nem létezik, és egy JSON-ban kiolvasható volna
-    ticket: entry.serviceJob
-      ? {
-          ...entry.serviceJob,
-          status:
-            audience === "PARTNER"
-              ? partnerVisibleStatus(
-                  entry.serviceJob.status as ServiceJobStatusValue,
-                )
-              : entry.serviceJob.status,
-        }
-      : null,
+    // A REJTETT JEGY A PARTNERNEK JEGY NÉLKÜLI: a jegylistáiból kikerül, a kimutatásban sem derülhet ki róla (a rendellenesség maga marad)
+    ticket:
+      entry.serviceJob && !(audience === "PARTNER" && entry.serviceJob.hidden)
+        ? {
+            id: entry.serviceJob.id,
+            jobNumber: entry.serviceJob.jobNumber,
+            status:
+              audience === "PARTNER"
+                ? partnerVisibleStatus(
+                    entry.serviceJob.status as ServiceJobStatusValue,
+                  )
+                : entry.serviceJob.status,
+          }
+        : null,
     values: entry.values
       .filter(
         (value) =>
