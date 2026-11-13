@@ -3,7 +3,9 @@ import {
   Body,
   Controller,
   HttpCode,
+  Inject,
   Logger,
+  Optional,
   Post,
   UnprocessableEntityException,
   UseGuards,
@@ -19,7 +21,11 @@ import { Public } from "../../auth/decorators/public.decorator.js";
 import { webshopDefaultTemplate } from "../../notifications/mail/webshop-mail.content.js";
 import { renderWebshopMail } from "../../notifications/mail/webshop-mail.render.js";
 import { TicketMailRepository } from "../../notifications/mail/ticket-mail.repository.js";
-import { WEBSHOP_MAIL_FACTS_VERSION } from "./webshop-mail.config.js";
+import {
+  WEBSHOP_MAIL_ENVIRONMENT,
+  WEBSHOP_MAIL_FACTS_VERSION,
+  webshopMailUsageGuidesOn,
+} from "./webshop-mail.config.js";
 import { WebshopMailGuard } from "./webshop-mail.guard.js";
 
 /**
@@ -45,7 +51,16 @@ import { WebshopMailGuard } from "./webshop-mail.guard.js";
 export class WebshopMailController {
   private readonly logger = new Logger(WebshopMailController.name);
 
-  constructor(private readonly templates: TicketMailRepository) {}
+  private readonly environment: NodeJS.ProcessEnv;
+
+  constructor(
+    private readonly templates: TicketMailRepository,
+    @Optional()
+    @Inject(WEBSHOP_MAIL_ENVIRONMENT)
+    environment?: NodeJS.ProcessEnv,
+  ) {
+    this.environment = environment ?? process.env;
+  }
 
   @Post("render")
   @HttpCode(200)
@@ -98,9 +113,27 @@ export class WebshopMailController {
     const useEnglish = english !== null && english.template !== null;
     const key = useEnglish ? englishKey : hungarianKey;
     const found = useEnglish && english ? english : await lookup(hungarianKey);
-    const facts = useEnglish
+    const rendered = useEnglish
       ? parsed.facts
       : { ...parsed.facts, locale: "hu" as const };
+    /*
+      THE USAGE GUIDES (V3.3): only behind the switch, and only for an order
+      placed in Hungarian. The ORDER's language decides, read before the
+      fallback above: an English order rendered with the Hungarian template
+      must not get the Hungarian-only section.
+    */
+    const facts =
+      rendered.template === "order-shipped" &&
+      rendered.shipped.usage_guides !== undefined &&
+      !(
+        webshopMailUsageGuidesOn(this.environment) &&
+        parsed.facts.locale !== "en"
+      )
+        ? {
+            ...rendered,
+            shipped: { ...rendered.shipped, usage_guides: undefined },
+          }
+        : rendered;
     const { stored, template } = found;
     /* every webshop key has a default; a missing one is a code error, a 500 */
     if (!template) throw new Error(`No default template for ${key}`);

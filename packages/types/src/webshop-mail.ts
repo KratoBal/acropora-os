@@ -29,6 +29,10 @@ import {
   type WebshopLivestockKind,
 } from "./webshop-acclimation.js";
 import {
+  WEBSHOP_USAGE_GUIDE_TEXT,
+  webshopDoseLine,
+} from "./webshop-usage-guide.js";
+import {
   WEBSHOP_ENGLISH_KEY_SUFFIX,
   type MailTemplateValues,
 } from "./mail-template.js";
@@ -68,18 +72,42 @@ export interface WebshopPlacedOrder extends WebshopMailOrder {
 }
 
 /**
- * One product's usage guide in the shipped mail (V3.3 S3, card 69b5f2ef): the product's name, the first paragraph of its
- * approved guide (the shop sends only what the OS projected under the VERIFIED gate), and the product page where the whole
- * guide stands.
+ * One product's usage guide in the shipped mail (V3.3, card 69b5f2ef, korall's spec point 3): the product's name, the
+ * "Mire való" part of its approved guide, the manufacturer's dose, and the product page where the whole guide stands. The
+ * spec's four cases come from which of them the shop sends:
+ *
+ *   A  excerpt and dose          the excerpt, the dose line(s), the link
+ *   B  excerpt, no dose          the excerpt, the fallback sentence in place of the dose, the link
+ *   C  dose, no excerpt          the dose line(s), the link
+ *   D  neither                   only a treatment (`fallback_scope`) stays, with the fallback sentence; others are dropped
  */
 export interface WebshopUsageGuide {
   readonly title: string;
+  /** Empty when the product has no approved guide (cases C and D). */
   readonly excerpt: string;
+  /**
+   * The manufacturer's dose in the OS canonical form (`5 ml/100 L/day`, `webshopDoseLine`), from a VERIFIED, public fact
+   * only; at most `WEBSHOP_USAGE_GUIDE_LIMITS.dosing`. Missing or empty: no dose. OPTIONAL: an older shop does not send it.
+   */
+  readonly dosing?: readonly string[];
+  /**
+   * A water treatment, additive or chemical (the Product Knowledge scope, spec point 4): with neither an excerpt nor a dose
+   * it still gets the fallback sentence under its name (case D). OPTIONAL, missing is false.
+   */
+  readonly fallback_scope?: boolean;
   readonly url: string | null;
 }
 
-/** At most this many guides, each excerpt at most this long: a mail is not a manual. */
-export const WEBSHOP_USAGE_GUIDE_LIMITS = { count: 10, excerpt: 400 } as const;
+/**
+ * A mail is not a manual: at most `shown` products get a section (then one "the rest is on the product page" line), and the
+ * reader keeps at most `count`, enough to know there are more; an excerpt at most `excerpt` long, at most `dosing` lines.
+ */
+export const WEBSHOP_USAGE_GUIDE_LIMITS = {
+  count: 10,
+  shown: 8,
+  excerpt: 400,
+  dosing: 2,
+} as const;
 
 /** commerce `ShippedMailFacts`. */
 export interface WebshopShippedFacts {
@@ -426,36 +454,66 @@ function listBlock(
 }
 
 /**
- * THE USAGE GUIDES IN THE SHIPPED MAIL (V3.3 S3): per product its name, the first paragraph of the guide, and a link to the
- * whole guide on the product page; `null` with none, so the mail is word for word today's.
+ * THE USAGE GUIDES IN THE SHIPPED MAIL (V3.3, korall's spec points 2-4): a title and an intro, per product its name, the
+ * excerpt, the dose line(s) or the fallback sentence, and the product page's link, then one closing line. `null` when no
+ * product has an excerpt or a dose (a parcel of treatments with neither gets no section either: the fallback sentence alone
+ * would fill a mail with nothing), so the mail is word for word today's.
  */
 function usageGuideBlock(
   guides: readonly WebshopUsageGuide[],
-  t: WebshopMailText,
 ): MailBlock | null {
-  if (guides.length === 0) return null;
+  const u = WEBSHOP_USAGE_GUIDE_TEXT;
+  const drawn = guides
+    .map((g) => {
+      const doses = (g.dosing ?? [])
+        .map(webshopDoseLine)
+        .filter((line): line is string => line !== null)
+        .slice(0, WEBSHOP_USAGE_GUIDE_LIMITS.dosing)
+        .map((line) => `${u.dosePrefix} ${line}`);
+      const content = g.excerpt !== "" || doses.length > 0;
+      // case D outside the treatments: the product is left out
+      if (!content && g.fallback_scope !== true) return null;
+      return {
+        title: g.title,
+        content,
+        lines: [
+          ...(g.excerpt ? [g.excerpt] : []),
+          ...(doses.length > 0 ? doses : [u.fallback]),
+        ],
+        url: content ? g.url : null,
+      };
+    })
+    .filter((g) => g !== null);
+  if (!drawn.some((g) => g.content)) return null;
+  const shown = drawn.slice(0, WEBSHOP_USAGE_GUIDE_LIMITS.shown);
+  const rest = drawn.length > shown.length;
   return {
     html:
-      `<h2 ${H2}>${escapeHtml(t.usageGuide)}</h2>` +
-      guides
+      `<h2 ${H2}>${escapeHtml(u.title)}</h2>` +
+      `<p>${escapeHtml(u.intro)}</p>` +
+      shown
         .map(
           (g) =>
-            `<p style="margin:0 0 12px;"><strong>${escapeHtml(g.title)}</strong><br />${escapeHtml(g.excerpt)}` +
+            `<p style="margin:0 0 12px;"><strong>${escapeHtml(g.title)}</strong>` +
+            g.lines.map((l) => `<br />${escapeHtml(l)}`).join("") +
             (g.url
-              ? `<br /><a href="${escapeHtml(g.url)}">${escapeHtml(t.usageGuideLink)}</a>`
+              ? `<br /><a href="${escapeHtml(g.url)}">${escapeHtml(u.link)}</a>`
               : "") +
             "</p>",
         )
-        .join(""),
+        .join("") +
+      (rest ? `<p>${escapeHtml(u.rest)}</p>` : "") +
+      `<p>${escapeHtml(u.closing)}</p>`,
     text: [
-      `${t.usageGuide}:`,
-      ...guides.map((g) =>
-        [
-          g.title,
-          g.excerpt,
-          ...(g.url ? [`${t.usageGuideLink}: ${g.url}`] : []),
-        ].join("\n"),
+      u.title,
+      u.intro,
+      ...shown.map((g) =>
+        [g.title, ...g.lines, ...(g.url ? [`${u.link}: ${g.url}`] : [])].join(
+          "\n",
+        ),
       ),
+      ...(rest ? [u.rest] : []),
+      u.closing,
     ].join("\n\n"),
   };
 }
@@ -498,8 +556,6 @@ export interface WebshopMailText {
   readonly dueBox: string;
   readonly yourOrder: string;
   readonly inYourParcel: string;
-  readonly usageGuide: string;
-  readonly usageGuideLink: string;
   readonly yourOrderNumbered: (id: number | string) => string;
   readonly yourPickupOrderNumbered: (id: number | string) => string;
   readonly shippingNow: (id: number | string) => string;
@@ -558,8 +614,6 @@ const HU_TEXT: WebshopMailText = {
   dueBox: "FIZETENDŐ",
   yourOrder: "A rendelésed",
   inYourParcel: "A csomagban",
-  usageGuide: "Használati útmutató",
-  usageGuideLink: "A teljes útmutató a termékoldalon",
   yourOrderNumbered: (id) => `A rendelésed (#${id})`,
   yourPickupOrderNumbered: (id) => `Bolti átvételes rendelésed (#${id})`,
   shippingNow: (id) => `Most indul (#${id})`,
@@ -625,8 +679,6 @@ const EN_TEXT: WebshopMailText = {
   dueBox: "TO PAY",
   yourOrder: "Your order",
   inYourParcel: "In your parcel",
-  usageGuide: "Usage guide",
-  usageGuideLink: "The full guide on the product page",
   yourOrderNumbered: (id) => `Your order (#${id})`,
   yourPickupOrderNumbered: (id) => `Your pickup order (#${id})`,
   shippingNow: (id) => `Shipping now (#${id})`,
@@ -901,7 +953,9 @@ function templateContent(
               lines: s.items.map((i) => `${i.title} × ${i.quantity}`),
             },
           ]),
-          hasznalati_utmutato: usageGuideBlock(s.usage_guides ?? [], t),
+          // Hungarian only (spec points 1 and 7): an English mail never gets the section
+          hasznalati_utmutato:
+            locale === "en" ? null : usageGuideBlock(s.usage_guides ?? []),
         },
       };
     }
@@ -1711,12 +1765,13 @@ export interface WebshopStuckMailList {
 }
 
 /**
- * THE USAGE GUIDES, TOLERANTLY (V3.3 S3): an entry without a name or an excerpt is dropped, not refused; the excerpt is cut at
- * the limit on a word; a link that is not a plain https address is dropped (the guide stays without it). At most the limit's
- * count.
+ * THE USAGE GUIDES, TOLERANTLY (V3.3): an entry without a name is dropped, not refused, and so is one with nothing to show
+ * (no excerpt, no readable dose, not a treatment); the excerpt is cut at the limit on a word; a dose that is not the OS
+ * canonical form is dropped (the guide stays without it); a link that is not a plain https address is dropped (the guide
+ * stays without it). At most the limit's count.
  */
 function usageGuides(raw: readonly unknown[]): WebshopUsageGuide[] {
-  const { count, excerpt: max } = WEBSHOP_USAGE_GUIDE_LIMITS;
+  const { count, excerpt: max, dosing: maxDoses } = WEBSHOP_USAGE_GUIDE_LIMITS;
   const guides: WebshopUsageGuide[] = [];
   for (const entry of raw) {
     if (guides.length >= count) break;
@@ -1727,7 +1782,16 @@ function usageGuides(raw: readonly unknown[]): WebshopUsageGuide[] {
       typeof e.excerpt === "string"
         ? e.excerpt.replace(/\s+/g, " ").trim()
         : "";
-    if (!title || !text) continue;
+    const dosing = Array.isArray(e.dosing)
+      ? e.dosing
+          .filter(
+            (d): d is string =>
+              typeof d === "string" && webshopDoseLine(d) !== null,
+          )
+          .slice(0, maxDoses)
+      : [];
+    const fallbackScope = e.fallback_scope === true;
+    if (!title || (!text && dosing.length === 0 && !fallbackScope)) continue;
     const excerpt =
       text.length <= max
         ? text
@@ -1735,6 +1799,8 @@ function usageGuides(raw: readonly unknown[]): WebshopUsageGuide[] {
     guides.push({
       title: title.slice(0, 200),
       excerpt,
+      ...(dosing.length > 0 ? { dosing } : {}),
+      ...(fallbackScope ? { fallback_scope: true } : {}),
       url: safeOrderViewUrl(e.url),
     });
   }

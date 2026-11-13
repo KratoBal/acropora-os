@@ -460,7 +460,7 @@ export const MAIL_TEMPLATE_VARIABLES: readonly MailTemplateVariable[] = [
   {
     name: "hasznalati_utmutato",
     description:
-      "Blokk: a csomag termékeinek jóváhagyott használati útmutatója, termékenként az első bekezdés és a termékoldal linkje. Ha egyiknek sincs, nem jelenik meg.",
+      "Blokk: a csomag termékeinek használati útmutatója, termékenként a jóváhagyott útmutató „Mire való” része, a gyártói adagolás és a termékoldal linkje, legfeljebb 8 termék. Csak magyar rendelésnél, és csak ha az OS-ben be van kapcsolva (ACROPORA_WEBSHOP_MAIL_USAGE_GUIDES). Ha egyik terméknek sincs útmutatója vagy adagolása, nem jelenik meg.",
     kind: "block",
   },
   // #1582 P3: the quote mail's own variables
