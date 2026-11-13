@@ -25,7 +25,9 @@ import type { ExtractedValue } from "./page-extract.js";
  *   deterministic reader reads the same dose twice: on the excerpt, and on the
  *   WHOLE page (the model picks the excerpt, so on a page with three doses it
  *   could pick the clean one; barracuda, #1805). Anything else goes to a person;
- * - a NO_DATA does not stand next to a dose the reader found on the page;
+ * - a NO_DATA does not stand next to a dose the reader found on the page, nor
+ *   next to a dose sentence it held back (a range, two doses): the page states
+ *   a dose, only not one the machine can take;
  * - the parameters to measure are valid codes.
  * Anything that fails gives no value, only a note on the fetch.
  */
@@ -231,6 +233,16 @@ export function dosingStatement(
       values: [],
       notes: [
         `adagolás (AI): az AI szerint ${answer.mode === "NO_DATA" ? "nincs adat" : "tesztfüggő"}, az olvasó ${found} adagot olvasott`,
+      ],
+    };
+  // "no data" next to a dose sentence the reader held back: the page states a
+  // dose, so a person reads it (Fauna Marin Multi Elements A, card 85c38ab1:
+  // a range dose, the AI said NO_DATA, and NO_DATA went through as a value)
+  if (answer.mode === "NO_DATA" && wholePage.doseOnPage)
+    return {
+      values: [],
+      notes: [
+        "adagolás (AI): az AI szerint nincs adat, az olvasó adag-mondatot talált, amit nem tudott gépi alakra hozni",
       ],
     };
   if (answer.mode === "NO_DATA") {

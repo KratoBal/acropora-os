@@ -30,6 +30,21 @@ describe("a gyártói adagolás a leírásból", () => {
     }
   });
 
+  // card 85c38ab1: whether the page states a dose at all, read or held back. WHAT TURNS THIS RED: a held-back dose
+  // sentence counted as no dose; the pack's reach or a content line counted as one.
+  it("a lap állít-e adagot: olvasott vagy visszatartott adag igen, kiszerelés nem", () => {
+    for (const [text, want] of [
+      ["Dose 1 ml per 100 l daily.", true],
+      ["Dose 2-5 ml per 100 l weekly.", true],
+      ["Dose 1 ml per 100 l.", true],
+      ["Dose 1 ml per 100 l daily, or 5 ml per 100 l weekly.", true],
+      ["Inhalt: 500 ml.", false],
+      ["A 500 ml bottle treats 10000 l.", false],
+      ["Kitalált termék, adagolás nélkül.", false],
+    ] as const)
+      assert.equal(readDosing(text).doseOnPage, want, text);
+  });
+
   it("a kivonat a nyers szövegből jön, ékezettel, a találat mondatából", () => {
     const r = readDosing(
       "Prémium aminosav-koncentrátum. Adagolás: naponta 1 csepp 100 literenként. Tartalom: 100 ml.",

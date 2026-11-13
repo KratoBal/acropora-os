@@ -34,6 +34,13 @@ export interface DosingReading {
   excerpt: string | null;
   /** Why no value: one line per reason, with the text it is about. */
   notes: string[];
+  /**
+   * The page states a dose: one was read, or a dose sentence was held back
+   * (a range, two doses, no period...). True next to `raw: null` too, so a
+   * "no data" answer can be checked against it (card 85c38ab1: Fauna Marin
+   * Multi Elements A, a range dose on the page, the AI said NO_DATA).
+   */
+  doseOnPage: boolean;
 }
 
 const NUM = "(?<![\\d.,])(\\d+(?:[.,]\\d+)?)";
@@ -219,7 +226,8 @@ export function readDosing(text: string): DosingReading {
     notes.push(
       `adagolás: feltételhez kötött adagolás (${conditional[0]}): ${at(conditional.index, conditional.index + conditional[0].length)}`,
     );
+  const doseOnPage = found.length > 0 || unreadDose;
   if (distinct.length !== 1 || conditional || unreadDose)
-    return { raw: null, excerpt: null, notes };
-  return { raw: distinct[0]!, excerpt: found[0]!.excerpt, notes };
+    return { raw: null, excerpt: null, notes, doseOnPage };
+  return { raw: distinct[0]!, excerpt: found[0]!.excerpt, notes, doseOnPage };
 }
