@@ -1181,6 +1181,26 @@ export type {
   OperationsLogEntryServiceJobDto,
   OperationsLogEntryValueDto,
 } from "./operations-log-entry.js";
+export {
+  OPERATIONS_REPORT_PARTNER_PERFORMER,
+  OPERATIONS_REPORT_TIME_ZONE,
+  budapestDayKey,
+  budapestMidnight,
+  buildOperationsReport,
+  isMonthKey,
+  lastDayOfMonth,
+  monthBounds,
+  mondayOf,
+} from "./operations-report.js";
+export type {
+  OperationsReport,
+  OperationsReportAssetBlock,
+  OperationsReportAudience,
+  OperationsReportEntryInput,
+  OperationsReportEntryRow,
+  OperationsReportMissed,
+  OperationsReportScheduleInput,
+} from "./operations-report.js";
 export { FAVORITE_LIMITS, isFavoriteHref } from "./favorite.js";
 export type { FavoriteListResponse } from "./favorite.js";
 export { normalizeAssetFunctionName } from "./asset-function.js";
