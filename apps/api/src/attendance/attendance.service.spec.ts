@@ -26,7 +26,8 @@ const updatedAt = new Date("2026-11-13T09:00:00.000Z");
 function build(role: UserRole | null = "SALES") {
   const writes: unknown[] = [];
   const repository: Partial<AttendanceRepository> = {
-    employee: async (id) => (role ? { id, role } : null),
+    employee: async (id) =>
+      role ? { id, role, displayName: "Kovács Anna" } : null,
     schedules: async () => [],
     days: async (_userId, from, to) => {
       writes.push({ read: [from.toISOString(), to.toISOString()] });
@@ -262,7 +263,11 @@ describe("AttendanceService: the month's sheet", () => {
   it("reads the whole month and computes it from the versions and the entries", async () => {
     const reads: string[][] = [];
     const repository: Partial<AttendanceRepository> = {
-      employee: async (id) => ({ id, role: "SALES" }),
+      employee: async (id) => ({
+        id,
+        role: "SALES",
+        displayName: "Kovács Anna",
+      }),
       schedules: async () => [
         {
           validFrom: dateOnly("2028-01-01"),
@@ -318,5 +323,26 @@ describe("AttendanceService: the employee picker", () => {
     assert.deepEqual(asked, [
       ["OWNER", "ADMIN", "MANAGER", "SALES", "WAREHOUSE", "SERVICE", "VIEWER"],
     ]);
+  });
+});
+
+describe("AttendanceService: the month's PDF", () => {
+  it("prints the computed sheet under the official name", async () => {
+    const { service } = build();
+    const document = await service.sheetPdf(
+      "u-1",
+      "2026-11",
+      new Date("2026-11-13T10:00:00.000Z"),
+    );
+    assert.equal(document.fileName, "Jelenléti ív Kovács Anna 2026-11.pdf");
+    assert.equal(document.bytes.subarray(0, 5).toString(), "%PDF-");
+  });
+
+  it("refuses a bad month before printing", async () => {
+    const { service } = build();
+    await assert.rejects(
+      service.sheetPdf("u-1", "2026-00", new Date()),
+      /hónap/,
+    );
   });
 });

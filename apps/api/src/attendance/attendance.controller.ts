@@ -3,10 +3,12 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   HttpCode,
   Param,
   Put,
   Query,
+  StreamableFile,
 } from "@nestjs/common";
 import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 
@@ -79,6 +81,26 @@ export class AttendanceController {
     @Query() query: AttendanceSheetQueryDto,
   ) {
     return this.service.sheet(userId, query.month);
+  }
+
+  /** The month's sheet as a PDF, inline: printed and signed at month end, downloadable any time (S2c). */
+  @RequirePermissions(PERMISSIONS.ATTENDANCE_MANAGE)
+  @Get("sheet.pdf")
+  @Header("Cache-Control", "private, no-store")
+  async sheetPdf(
+    @Param("userId") userId: string,
+    @Query() query: AttendanceSheetQueryDto,
+  ) {
+    const document = await this.service.sheetPdf(
+      userId,
+      query.month,
+      new Date(),
+    );
+    return new StreamableFile(document.bytes, {
+      type: "application/pdf",
+      length: document.bytes.length,
+      disposition: `inline; filename*=UTF-8''${encodeURIComponent(document.fileName)}`,
+    });
   }
 
   @RequirePermissions(PERMISSIONS.ATTENDANCE_MANAGE)

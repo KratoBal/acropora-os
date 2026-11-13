@@ -49,10 +49,12 @@ type Tx = Prisma.TransactionClient;
 export class AttendanceRepository {
   private readonly database = prisma;
 
-  employee(id: string): Promise<{ id: string; role: UserRole } | null> {
+  employee(
+    id: string,
+  ): Promise<{ id: string; role: UserRole; displayName: string } | null> {
     return this.database.user.findUnique({
       where: { id },
-      select: { id: true, role: true },
+      select: { id: true, role: true, displayName: true },
     });
   }
 
