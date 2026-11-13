@@ -43,8 +43,8 @@ const SOURCES: ReadonlyArray<{
   },
   {
     value: "BOM",
-    label: "Belső BOM-hoz kapcsolva",
-    help: "Több termék, egyedi anyag és szolgáltatás alkotja a háttérkalkulációt.",
+    label: "Belső anyaglistából (BOM) számolva",
+    help: "A tétel mentése után a tétel alatt veszed fel az anyaglistát: termékek, egyedi anyag, szolgáltatás. Az ügyfél csak a sort látja; az anyaglista adja az önköltséget, a javasolt árat és a projekt raktári foglalását.",
   },
 ];
 
