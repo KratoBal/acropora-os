@@ -728,6 +728,8 @@ export async function incomingRowFor(
   number: string,
   key: string,
   excludeSource: string | null = null,
+  /** a saját sor a számjavításnál: a régi kulcson önmagával nem ütközik */
+  excludeId: string | null = null,
 ): Promise<{ id: string; source: string } | null> {
   const ids = excludeSource
     ? await transaction.$queryRaw<{ id: string }[]>`
@@ -750,6 +752,7 @@ export async function incomingRowFor(
   });
   const row = rows.find(
     (candidate) =>
+      candidate.id !== excludeId &&
       incomingKey(
         candidate.documentNumber,
         candidate.supplierTaxNumber ?? candidate.supplierEuTaxNumber,
