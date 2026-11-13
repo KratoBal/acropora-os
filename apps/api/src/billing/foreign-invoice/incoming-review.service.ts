@@ -56,6 +56,7 @@ import { storedValues, type StoredReading } from "./reading-values.js";
 import {
   loadManualPurchasePayments,
   loadPurchaseSubjects,
+  incomingRowFor,
   lockIncomingKey,
   otherSourceRowFor,
   PURCHASE_ITEM_PREFIX,
@@ -252,6 +253,15 @@ export class NoMailboxDocumentError extends Error {
   }
 }
 
+/** Ugyanez a számla (szám és szállító) már sor a bejövő számlák között, egy másik dokumentumból vagy forrásból. */
+export class DuplicateIncomingError extends ConflictException {
+  constructor(source: string) {
+    super(
+      `Ez a számla (ugyanaz a szám és szállító) már bent van a bejövő számlák között (${source}), másodszor nem hagyható jóvá.`,
+    );
+  }
+}
+
 /** Az olvasat a beolvasás óta megváltozott: az automatikus jóváhagyás nem ír rá. */
 class ReadingChangedError extends Error {
   constructor() {
@@ -408,6 +418,17 @@ export class IncomingReviewService {
       });
       if (taken)
         throw new ConflictException("Ez a számla már jóvá van hagyva.");
+      /*
+        UGYANAZ A SZÁMLA MÁSIK DOKUMENTUMBÓL (acrobot 49595, niceshops R49010000026240667 kétszer a bejövő számlák
+        között): a fenti zár a DOKUMENTUMRA szól, tehát egy újrafeltöltés vagy egy második levél ugyanazzal a számlával
+        második sort kapna, és a számla kétszer számolódna. A számla kulcsára (szám és szállító) ugyanaz a zár, amit a
+        Számlázz.hu-vetítés és a beszerzés jóváhagyása vesz, és ha bármely forrásból már sor, nincs második.
+      */
+      const key = await lockIncomingKey(tx, values);
+      const same = key
+        ? await incomingRowFor(tx, values.documentNumber!, key)
+        : null;
+      if (same) throw new DuplicateIncomingError(same.source);
       const now = new Date();
       const row = await tx.incomingBillingDocument.create({
         data: {
@@ -641,7 +662,8 @@ export class IncomingReviewService {
               ...base,
               basis: null,
               reason:
-                error instanceof ReadingChangedError
+                error instanceof ReadingChangedError ||
+                error instanceof DuplicateIncomingError
                   ? error.message
                   : "közben jóváhagyták",
               written: false,
