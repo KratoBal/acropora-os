@@ -29,6 +29,29 @@ describe("the dose line of the shipped mail's usage guide", () => {
   });
 
   /*
+    THE MANUFACTURER'S DOSE, NOT A ROUNDED ONE (barracuda, #2527 review). WHAT TURNS THIS RED: any rounding of the amount or
+    the volume: 0.125 written as "0,13" (more than the manufacturer's dose), 0.004 as "0" (no dose), 2.555 as "2,56".
+  */
+  it("writes the amount and the volume exactly as the canonical form holds them", () => {
+    assert.equal(
+      webshopDoseLine("0.125 ml/100 L/day"),
+      "0,125 ml / 100 liter, naponta",
+    );
+    assert.equal(
+      webshopDoseLine("0.004 ml/1 L/day"),
+      "0,004 ml / 1 liter, naponta",
+    );
+    assert.equal(
+      webshopDoseLine("2.555 ml/0.375 L/week"),
+      "2,555 ml / 0,375 liter, hetente",
+    );
+    assert.equal(
+      webshopDoseLine("1 drop/12500.5 L/day"),
+      "1 csepp / 12\u00a0500,5 liter, naponta",
+    );
+  });
+
+  /*
     WHAT TURNS THIS RED: a second, lenient reading of a value that is not the canonical form (a wrong dose can kill an
     animal): a range in the amount, a human spelling, a zero, a reversed or zero frequency, a fraction of a drop, not a string.
   */

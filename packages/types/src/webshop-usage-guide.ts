@@ -39,12 +39,23 @@ const CANONICAL_DOSE = new RegExp(
   `^${NUMBER} (drop|ml)/${NUMBER} L(?:/(day|week)|, (\\d+)(?:-(\\d+))?/(day|week))$`,
 );
 
-/** Four-digit numbers grouped too ("1 000 liter"), as the shop writes its amounts. */
-const HU_NUMBER = new Intl.NumberFormat("hu-HU", {
-  maximumFractionDigits: 2,
-  // "always" is ES2023 (the hu locale data groups only from five digits); this lib types useGrouping as a boolean
+/**
+ * A canonical decimal in Hungarian, EXACTLY: the integer part grouped (four digits too, "1 000", as the shop writes its
+ * amounts; the hu locale data groups only from five digits), the decimal point a comma, the fraction as it stands. No
+ * rounding: the line says "a gyártó szerint", and 0.125 rounded to "0,13" would be more than the manufacturer's dose, 0.004
+ * rounded to "0" no dose at all (barracuda, #2527 review).
+ */
+const HU_INTEGER = new Intl.NumberFormat("hu-HU", {
+  maximumFractionDigits: 0,
+  // "always" is ES2023; this lib types useGrouping as a boolean
   ...({ useGrouping: "always" } as unknown as Intl.NumberFormatOptions),
 });
+
+const huDecimal = (canonical: string): string => {
+  const [integer = "", fraction] = canonical.split(".");
+  const grouped = HU_INTEGER.format(BigInt(integer));
+  return fraction ? `${grouped},${fraction}` : grouped;
+};
 
 export function webshopDoseLine(canonical: unknown): string | null {
   if (typeof canonical !== "string") return null;
@@ -62,5 +73,5 @@ export function webshopDoseLine(canonical: unknown): string | null {
   const every = (plainPeriod ?? period) === "day" ? "naponta" : "hetente";
   const frequency =
     min === 1 && max === 1 ? every : `${every} ${times} alkalommal`;
-  return `${HU_NUMBER.format(amount)} ${unit === "drop" ? "csepp" : "ml"} / ${HU_NUMBER.format(litres)} liter, ${frequency}`;
+  return `${huDecimal(amountRaw!)} ${unit === "drop" ? "csepp" : "ml"} / ${huDecimal(litresRaw!)} liter, ${frequency}`;
 }
