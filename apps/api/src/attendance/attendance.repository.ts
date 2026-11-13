@@ -1,6 +1,10 @@
 import { Injectable } from "@nestjs/common";
 import { prisma, type Prisma } from "@acropora/database";
-import type { AttendanceDayKind, UserRole } from "@acropora/types";
+import type {
+  AttendanceDayKind,
+  AttendanceEmployee,
+  UserRole,
+} from "@acropora/types";
 
 import {
   ATTENDANCE_AUDIT_ACTIONS,
@@ -53,7 +57,7 @@ export class AttendanceRepository {
   }
 
   /** The accounts of these roles, active first, then by name. */
-  employees(roles: readonly UserRole[]) {
+  employees(roles: readonly UserRole[]): Promise<AttendanceEmployee[]> {
     return this.database.user.findMany({
       where: { role: { in: [...roles] } },
       orderBy: [{ isActive: "desc" }, { displayName: "asc" }],
