@@ -62,6 +62,10 @@ describe(
       await prisma.worksheetDepartment.deleteMany({
         where: { name: { startsWith: PREFIX } },
       });
+      // a partner-fiókok a vevőhöz kötöttek (`User_customerId_fkey`): a vevő törlése ELŐTT mennek
+      await prisma.user.deleteMany({
+        where: { email: { startsWith: PREFIX.toLowerCase() } },
+      });
       await prisma.customer.deleteMany({
         where: { customerNumber: { startsWith: PREFIX } },
       });
@@ -70,9 +74,6 @@ describe(
       });
       await prisma.assetCategory.deleteMany({
         where: { name: { startsWith: PREFIX } },
-      });
-      await prisma.user.deleteMany({
-        where: { email: { startsWith: PREFIX.toLowerCase() } },
       });
     }
 
