@@ -387,7 +387,7 @@ export function BillingIncomingDocumentPage({
             javítható. A régi és az új érték a naplóba kerül. Ha a szám ennél a
             szállítónál már egy másik bent lévő számláé, a javítás nem megy át.
           </p>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <PilotInput
               aria-label="Számlaszám"
               maxLength={100}
