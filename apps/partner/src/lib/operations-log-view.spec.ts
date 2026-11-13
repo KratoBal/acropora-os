@@ -1,20 +1,23 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { helyszinFa } from "./helyszin-fa.js";
 import { defaultMonth, isMonth, siteOptions } from "./operations-log-view.js";
 
 describe("az üzemeltetési napló partner-oldalának logikája", () => {
   it("a helyszín-választó a fa sorrendjében, mélység szerinti előtaggal áll, az árva sor is megjelenik", () => {
-    const options = siteOptions([
-      { id: "c", parentId: "a", name: "Nagy főmedence" },
-      { id: "a", parentId: null, name: "Biodóm" },
-      { id: "o", parentId: "hiányzó-szülő", name: "Kiosztott gyerek" },
-    ]);
+    const options = siteOptions(
+      helyszinFa([
+        { id: "c", parentId: "a", name: "Nagy főmedence" },
+        { id: "a", parentId: null, name: "Biodóm" },
+        { id: "o", parentId: "hiányzó-szülő", name: "Kiosztott gyerek" },
+      ]),
+    );
     assert.deepEqual(
       options.map((option) => option.label),
       ["Biodóm", "— Nagy főmedence", "Kiosztott gyerek"],
     );
-    assert.deepEqual(siteOptions([]), []);
+    assert.deepEqual(siteOptions(helyszinFa([])), []);
   });
 
   it("a hónap: az aktuális az alapérték, a félkész érték érvénytelen", () => {

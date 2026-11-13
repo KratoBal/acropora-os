@@ -24,6 +24,7 @@ import {
 
 import { partnerApi } from "@/lib/api";
 import { saveBlob, type FileSurface } from "@/lib/file-download";
+import { helyszinFa } from "@/lib/helyszin-fa";
 import { defaultMonth, isMonth, siteOptions } from "@/lib/operations-log-view";
 import { Message } from "./ticket-list";
 
@@ -85,7 +86,7 @@ export function OperationsLogReport() {
     void load();
   }, [load]);
 
-  const options = useMemo(() => siteOptions(sites ?? []), [sites]);
+  const options = useMemo(() => siteOptions(helyszinFa(sites ?? [])), [sites]);
 
   async function download() {
     setDownloading(true);

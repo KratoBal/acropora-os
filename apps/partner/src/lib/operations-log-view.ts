@@ -1,5 +1,3 @@
-import { helyszinFa } from "./helyszin-fa.js";
-
 /**
  * AZ ÜZEMELTETÉSI NAPLÓ PARTNER-OLDALÁNAK TISZTA LOGIKÁJA (task os-uzemeltetesi-naplo, S5): a helyszín-választó sorai a fából és az
  * alapértelmezett hónap. Külön fájl, hogy a partner tesztépítés (DOM nélkül, `node --test`) mérni tudja.
@@ -11,13 +9,15 @@ export interface SiteOption {
 }
 
 /**
- * A HELYSZÍN-LISTA LAPOSAN JÖN; a fát a közös `helyszinFa` építi (árva sor is megjelenik: a kiosztott helyszín szülője kimaradhat a
- * válaszból). A felirat a behúzás nyelvén az ág mélységét mutatja („— Nagy főmedence").
+ * A HELYSZÍN-VÁLASZTÓ FELIRATAI A FA SORAIBÓL. A fát a közös `helyszinFa` építi (az árva sor is megjelenik: a kiosztott helyszín szülője
+ * kimaradhat a válaszból), a hívó adja át a sorait: ez a fájl NEM importálja a `helyszin-fa.ts`-t, mert a tesztépítés (node, ESM)
+ * `.js` kiterjesztést kíván a relatív importban, a Next építés viszont a `.ts` forrást oldja fel, és a kettő nem fér meg egy importban.
+ * A felirat a behúzás nyelvén az ág mélységét mutatja („— Nagy főmedence").
  */
 export function siteOptions(
-  items: readonly { id: string; parentId: string | null; name: string }[],
+  rows: readonly { item: { id: string; name: string }; depth: number }[],
 ): SiteOption[] {
-  return helyszinFa(items).map(({ item, depth }) => ({
+  return rows.map(({ item, depth }) => ({
     id: item.id,
     label: `${"— ".repeat(depth)}${item.name}`,
   }));
