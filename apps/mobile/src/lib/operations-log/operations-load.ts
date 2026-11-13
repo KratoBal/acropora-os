@@ -17,7 +17,7 @@ import {
  *
  * `fromCache: true` jelzi a képernyőnek, hogy a lista a legutóbbi sikeres betöltésé: a szerelő tudja, hogy egy időközben módosított
  * sablon még a régi alakjában látszik (a rögzítés a szerveren ettől még érvényes: a kötelező-ellenőrzés a telefon által LÁTOTT
- * mezőkre szól, a kivezetett mező értéke is elfogadott). Ha nincs hálózat ÉS nincs másolat, a hiba az eredeti marad. A MENTETT LISTÁRA CSAK HÁLÓZATI HIBÁNÁL esünk vissza: egy válaszolt 4xx (például elvett jog) nem takarható el az elavult listával.
+ * mezőkre szól, a kivezetett mező értéke is elfogadott). Ha nincs hálózat ÉS nincs másolat, a hiba az eredeti marad. A MENTETT LISTÁRA HÁLÓZATI HIBÁNÁL ÉS SZERVER-KIESÉSNÉL (5xx) esünk vissza: egy válaszolt 4xx (például elvett jog) nem takarható el az elavult listával.
  */
 export interface Loaded<T> {
   items: T[];
@@ -32,8 +32,9 @@ export async function loadOperationsTemplates(
     await rememberOperationsTemplates(assetId, items);
     return { items, fromCache: false };
   } catch (cause) {
-    // a szerver VÁLASZOLT (jogosultság, hiányzó eszköz): az nem hálózati hiba, a mentett lista nem takarhatja el
-    if (cause instanceof ApiError) throw cause;
+    // a szerver VÁLASZOLT a kérésre (jogosultság, hiányzó eszköz): azt a mentett lista nem takarhatja el; az 5xx viszont a szerver
+    // (vagy az átjáró) kiesése, nem válasz a kérdésre, és a térerős helyszínen is a másolat a helyes
+    if (cause instanceof ApiError && cause.status < 500) throw cause;
     const cached = await readCachedOperationsTemplates(assetId);
     if (cached.syncedAt === null) throw cause;
     return { items: cached.items, fromCache: true };
@@ -48,8 +49,9 @@ export async function loadOperationsColleagues(): Promise<
     await rememberOperationsColleagues(items);
     return { items, fromCache: false };
   } catch (cause) {
-    // a szerver VÁLASZOLT (jogosultság, hiányzó eszköz): az nem hálózati hiba, a mentett lista nem takarhatja el
-    if (cause instanceof ApiError) throw cause;
+    // a szerver VÁLASZOLT a kérésre (jogosultság, hiányzó eszköz): azt a mentett lista nem takarhatja el; az 5xx viszont a szerver
+    // (vagy az átjáró) kiesése, nem válasz a kérdésre, és a térerős helyszínen is a másolat a helyes
+    if (cause instanceof ApiError && cause.status < 500) throw cause;
     const cached = await readCachedOperationsColleagues();
     if (cached.syncedAt === null) throw cause;
     return { items: cached.items, fromCache: true };

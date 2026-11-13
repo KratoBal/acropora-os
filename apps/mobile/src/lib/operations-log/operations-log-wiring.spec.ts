@@ -95,4 +95,14 @@ describe("az üzemeltetési napló bekötése", () => {
     assert.match(record, /connectivity: deviceConnectivity,/);
     assert.match(record, /enqueueOperationsEntry\(\{/);
   });
+
+  it("a mentett listára csak a hálózati hiba és az 5xx esik vissza, a válaszolt 4xx nem", () => {
+    const load = read("lib/operations-log/operations-load.ts");
+    assert.equal(
+      load.match(
+        /if \(cause instanceof ApiError && cause\.status < 500\) throw cause;/g,
+      )?.length,
+      2,
+    );
+  });
 });
