@@ -20,10 +20,16 @@ import {
   type AttendanceSchedule,
   type AttendanceScheduleDay,
   type AttendanceScheduleListResponse,
+  type AttendanceSheet,
   type AttendanceSheetResponse,
 } from "@acropora/types";
 
-import { dateOnly, dayView, scheduleView } from "./attendance-records.js";
+import {
+  dateOnly,
+  dayView,
+  scheduleView,
+  sheetContentHash,
+} from "./attendance-records.js";
 import { attendanceSheetDocument } from "./attendance-sheet-document.js";
 import { AttendanceRepository } from "./attendance.repository.js";
 
@@ -152,10 +158,14 @@ export class AttendanceService {
    * THE MONTH'S SHEET (S2a), computed from every schedule version and the month's entries by the shared
    * `attendanceSheet`. Any month, the current one too (Luca: downloadable any time, as it stands).
    */
-  async sheet(userId: string, month: string): Promise<AttendanceSheetResponse> {
+  /** The month computed, for one employee (shared by the screen, the PDF and the signed copy). */
+  private async computedSheet(
+    userId: string,
+    month: string,
+  ): Promise<{ sheet: AttendanceSheet; displayName: string }> {
     if (!isAttendanceMonth(month))
       throw new BadRequestException(`Nem érvényes hónap: ${month}`);
-    await this.employee(userId);
+    const user = await this.employee(userId);
     const days = monthDays(month);
     const [schedules, entries] = await Promise.all([
       this.repository.schedules(userId),
@@ -165,33 +175,95 @@ export class AttendanceService {
         dateOnly(days[days.length - 1]!),
       ),
     ]);
+    const sheet = attendanceSheet({
+      month,
+      schedules: schedules.map(scheduleView),
+      entries: entries.map(dayView),
+    });
+    return { sheet, displayName: user.displayName };
+  }
+
+  /**
+   * THE MONTH'S SHEET (S2a), with the latest copy printed for signature (S2d) and whether the month changed since it was
+   * printed: a changed signed month keeps its old PDF and is flagged, never silently replaced (brief point 8).
+   */
+  async sheet(userId: string, month: string): Promise<AttendanceSheetResponse> {
+    const { sheet } = await this.computedSheet(userId, month);
+    const signed = await this.repository.latestSignedSheet(userId, month);
     return {
       userId,
-      ...attendanceSheet({
-        month,
-        schedules: schedules.map(scheduleView),
-        entries: entries.map(dayView),
-      }),
+      ...sheet,
+      signedCopy: signed
+        ? {
+            id: signed.id,
+            printedAt: signed.printedAt.toISOString(),
+            differs: signed.contentHash !== sheetContentHash(sheet),
+          }
+        : null,
     };
   }
 
   /**
    * THE MONTH'S SHEET AS A PDF (S2c): the same computed sheet, printed with the employee's official name (`displayName`, the
-   * name for documents). Any month, the current one too, as it stands at `printedAt`.
+   * name for documents). Any month, the current one too, as it stands at `printedAt`. Nothing is kept.
    */
   async sheetPdf(
     userId: string,
     month: string,
     printedAt: Date,
   ): Promise<{ bytes: Buffer; fileName: string }> {
-    const sheet = await this.sheet(userId, month);
-    const user = await this.employee(userId);
+    const { sheet, displayName } = await this.computedSheet(userId, month);
     const bytes = await attendanceSheetDocument({
       sheet,
-      employeeName: user.displayName,
+      employeeName: displayName,
       printedAt,
     });
-    return { bytes, fileName: `Jelenléti ív ${user.displayName} ${month}.pdf` };
+    return { bytes, fileName: `Jelenléti ív ${displayName} ${month}.pdf` };
+  }
+
+  /**
+   * PRINTED FOR SIGNATURE (S2d): the same PDF, and these exact bytes are kept with the hash of the sheet they show. From then
+   * on the sheet says whether the month still matches the signed copy.
+   */
+  async printForSignature(
+    userId: string,
+    month: string,
+    printedAt: Date,
+    actorId: string,
+  ): Promise<{ bytes: Buffer; fileName: string }> {
+    const { sheet, displayName } = await this.computedSheet(userId, month);
+    const bytes = await attendanceSheetDocument({
+      sheet,
+      employeeName: displayName,
+      printedAt,
+    });
+    await this.repository.createSignedSheet({
+      userId,
+      month,
+      contentHash: sheetContentHash(sheet),
+      pdf: bytes,
+      printedAt,
+      actorId,
+    });
+    return {
+      bytes,
+      fileName: `Jelenléti ív ${displayName} ${month} (aláírásra).pdf`,
+    };
+  }
+
+  /** A kept copy, as it was printed. */
+  async signedSheetPdf(
+    userId: string,
+    id: string,
+  ): Promise<{ bytes: Buffer; fileName: string }> {
+    const user = await this.employee(userId);
+    const copy = await this.repository.signedSheetPdf(userId, id);
+    if (!copy)
+      throw new NotFoundException("Nincs ilyen aláírásra nyomtatott példány.");
+    return {
+      bytes: Buffer.from(copy.pdf),
+      fileName: `Jelenléti ív ${user.displayName} ${copy.month} (aláírt példány).pdf`,
+    };
   }
 
   async saveDay(

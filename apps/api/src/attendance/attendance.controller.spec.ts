@@ -29,11 +29,13 @@ describe("AttendanceController", () => {
       "days",
       "deleteDay",
       "deleteSchedule",
+      "printForSignature",
       "saveDay",
       "saveSchedule",
       "schedules",
       "sheet",
       "sheetPdf",
+      "signedSheetPdf",
     ]);
     for (const name of handlers)
       assert.deepEqual(required(name), [PERMISSIONS.ATTENDANCE_MANAGE], name);
@@ -62,5 +64,19 @@ describe("AttendanceController", () => {
       ["saveDay", "u-1", "2026-11-13", { kind: "SICK" }, "admin-1"],
       ["deleteDay", "u-1", "2026-11-13", "admin-1"],
     ]);
+  });
+
+  it("hands the signed-in user's id to the print for signature", async () => {
+    const seen: unknown[] = [];
+    const controller = new AttendanceController({
+      printForSignature: async (...args: unknown[]) => {
+        seen.push(args.slice(0, 2).concat(args[3]));
+        return { bytes: Buffer.from("%PDF-"), fileName: "x.pdf" };
+      },
+    } as never);
+    await controller.printForSignature("u-1", { month: "2026-11" }, {
+      id: "admin-1",
+    } as never);
+    assert.deepEqual(seen, [["u-1", "2026-11", "admin-1"]]);
   });
 });
