@@ -86,9 +86,12 @@ function weekSummary(schedule: AttendanceSchedule): string {
 export function UserAttendanceSchedule({
   userId,
   role,
+  onChange,
 }: {
   userId: string;
   role: UserRole;
+  /** After a version is saved or removed: the sheet page recomputes its month (S2b). */
+  onChange?: () => void;
 }) {
   const { session } = useAuth();
   const token = session?.token ?? "";
@@ -163,6 +166,7 @@ export function UserAttendanceSchedule({
       await attendanceApi.saveSchedule(token, userId, validFrom, days);
       setSaved(`Mentve, ${formatDayHu(validFrom)} naptól érvényes.`);
       await load();
+      onChange?.();
     } catch (cause) {
       setActionError(
         cause instanceof Error ? cause.message : "A mentés nem sikerült.",
@@ -180,6 +184,7 @@ export function UserAttendanceSchedule({
     try {
       await attendanceApi.deleteSchedule(token, userId, version.validFrom);
       await load();
+      onChange?.();
     } catch (cause) {
       setActionError(
         cause instanceof Error ? cause.message : "A törlés nem sikerült.",

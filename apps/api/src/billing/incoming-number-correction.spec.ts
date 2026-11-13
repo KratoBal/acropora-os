@@ -41,10 +41,13 @@ function fakeDatabase(rows: Row[]) {
   const readingUpdates: unknown[] = [];
   const audits: { data: Record<string, unknown> }[] = [];
   const locks: string[] = [];
+  /** The order of the row lock, the read and the key locks (barracuda on #2496). */
+  const order: string[] = [];
   const tx = {
     incomingBillingDocument: {
       // a copy, as the database gives: a later update does not change what was read
       findUnique: async (args: { where: { id: string } }) => {
+        order.push("read");
         const row = state.find((r) => r.id === args.where.id);
         return row ? { ...row } : null;
       },
@@ -71,11 +74,18 @@ function fakeDatabase(rows: Row[]) {
     },
     // the key lock: the key is the template's only value
     $executeRaw: async (_strings: TemplateStringsArray, key: string) => {
+      order.push("key-lock");
       locks.push(key);
       return 0;
     },
     // the number lookup gives every row; the key decides in JS, as in the real helper
-    $queryRaw: async () => state.map((row) => ({ id: row.id })),
+    $queryRaw: async (strings: TemplateStringsArray) => {
+      if (strings.join("?").includes("FOR NO KEY UPDATE")) {
+        order.push("row-lock");
+        return [];
+      }
+      return state.map((row) => ({ id: row.id }));
+    },
   };
   const database = {
     $transaction: async (fn: (client: typeof tx) => Promise<unknown>) => fn(tx),
@@ -87,6 +97,7 @@ function fakeDatabase(rows: Row[]) {
     readingUpdates,
     audits,
     locks,
+    order,
   };
 }
 
@@ -181,6 +192,16 @@ describe("correctIncomingNumber", () => {
     await assert.rejects(
       correctIncomingNumber(fakeDatabase([]).database, input),
       IncomingRowNotFoundError,
+    );
+  });
+
+  it("locks the row before reading it, and its keys after (barracuda on #2496)", async () => {
+    const fake = fakeDatabase([niceshops({})]);
+    await correctIncomingNumber(fake.database, input);
+    assert.deepEqual(fake.order.slice(0, 2), ["row-lock", "read"]);
+    assert.ok(
+      fake.order.indexOf("key-lock") > fake.order.indexOf("read"),
+      JSON.stringify(fake.order),
     );
   });
 });

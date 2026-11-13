@@ -9,6 +9,7 @@ import {
   isSyncEntityType,
   operationId,
   SYNC_ENTITY_TYPES,
+  operationsEntryOperationId,
   worksheetOperationId,
 } from "./sync-queue";
 
@@ -197,7 +198,7 @@ describe("az akvárium művelet-azonosítója", () => {
 });
 
 describe("a sor entitás-fajtái", () => {
-  it("a lista a HAT ismert fajtát tartalmazza, ebben a sorrendben", () => {
+  it("a lista a HÉT ismert fajtát tartalmazza, ebben a sorrendben", () => {
     /*
       A SZAM MAGA IS ALLITAS, ugyanabbol az okbol, mint a tarolo beszurasainal:
       egy UJ fajta felvetele PIROSSA teszi ezt a sort, es akkor kell eldonteni,
@@ -220,6 +221,10 @@ describe("a sor entitás-fajtái", () => {
       fajta-nev, a javitas-elutasitas es a fenykep-gazda lekepezes is uj sort
       kapott, a KULDESI switch (mind a ket helyen -- a felvitelnel ES a
       fenykep-gazdanal) uj agat.
+
+      2026-11-13: hatrol HETRE nott az `operations-entry`-vel (uzemeltetesi naplo bejegyzes, task os-uzemeltetesi-naplo, S2c).
+      Ugyanugy elsult, es ugyanazt a harom lekepezest es a ket kuldesi switch-et kerte. A fenykep-gazda lekepezese itt `true`:
+      a bejegyzes fenykep mezoje a rogzites lenyege.
     */
     assert.deepEqual(
       [...SYNC_ENTITY_TYPES],
@@ -230,6 +235,7 @@ describe("a sor entitás-fajtái", () => {
         "service-job",
         "aquarium",
         "aquarium-measurement",
+        "operations-entry",
       ],
     );
   });
@@ -277,5 +283,33 @@ describe("a sor entitás-fajtái", () => {
     // Az akvárium sem, ugyanazért, mint a tétel: ma semmi nem tesz
     // fényképet a sorba ehhez a fajtához -- lásd az entitás-lista fejlécét.
     assert.equal(canOwnPhotos("aquarium"), false);
+  });
+});
+
+describe("az üzemeltetési napló bejegyzés kulcsa", () => {
+  /*
+    MI PIROSIT: ha a kulcs nem a kezdésből készülne (két külön rögzítés egybeesne, vagy ugyanaz kétfelé válna); ha a kulcs a szerver
+    `clientOperationId` mintáján kívülre esne (egy valódi, cuid hosszúságú azonosítókkal és ISO időponttal is 400-at adna, és a
+    bejegyzés a sorban elakadna).
+  */
+  const input = {
+    assetId: "cmw41rwoh00ubqg07og0m9jea",
+    templateId: "cmv2ff3a1hzyp108wlmg8pzq0",
+    startedAt: "2026-11-13T09:30:00.123Z",
+  };
+
+  it("a szerver mintájának megfelel valódi hosszúságú azonosítókkal", () => {
+    assert.match(operationsEntryOperationId(input), /^[A-Za-z0-9_.:-]{8,128}$/);
+  });
+
+  it("ugyanaz a kezdés ugyanazt, más kezdés, eszköz vagy sablon mást ad", () => {
+    const key = operationsEntryOperationId(input);
+    assert.equal(operationsEntryOperationId({ ...input }), key);
+    for (const change of [
+      { startedAt: "2026-11-13T09:30:00.124Z" },
+      { assetId: "cmw41rwoh00ubqg07og0m9jeb" },
+      { templateId: "cmv2ff3a1hzyp108wlmg8pzq1" },
+    ])
+      assert.notEqual(operationsEntryOperationId({ ...input, ...change }), key);
   });
 });

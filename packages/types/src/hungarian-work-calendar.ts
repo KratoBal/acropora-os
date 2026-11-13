@@ -2,10 +2,11 @@
  * THE HUNGARIAN WORK CALENDAR: public holidays and swapped working days (os-jelenleti-iv, S2; the approach agreed with
  * acrobot, 49721/49722). No dependency and no network: the holidays are computed, the swaps come from a small per-year table.
  *
- * PUBLIC HOLIDAYS (Mt. 102. § (1)): 1 January, 15 March, Good Friday, Easter Sunday and Monday, 1 May, Whit Sunday and
- * Monday, 20 August, 23 October, 1 November, 25 and 26 December. Easter and Whitsun move with the Gregorian Easter date.
- * 24 December is NOT on the list: in 2026 it is a swapped rest day by decree (below), which it could not be if it were a
- * holiday.
+ * PUBLIC HOLIDAYS: Mt. 102. § (1) lists eleven days: 1 January, 15 March, Good Friday, Easter Monday, 1 May, Whit
+ * Monday, 20 August, 23 October, 1 November, 25 and 26 December (the start of the list read from net.jogtar.hu on
+ * 2026-11-13). Easter Sunday and Whit Sunday are NOT on it; 102. § (4) applies the holiday's scheduling rules to them, so
+ * the sheet treats them as rest days too and they are in this map, by their own names (barracuda on #2502). The movable
+ * days follow the Gregorian Easter date. 24 December is not a holiday: in 2026 it is a swapped rest day by decree (below).
  *
  * SWAPPED DAYS: each year the minister publishes which bridge days become rest days and which Saturdays are worked instead
  * (the decree under Mt. 102. § (5)). They cannot be computed. A year missing from the table has no decree on the
@@ -52,7 +53,7 @@ const FIXED_HOLIDAYS: readonly { monthDay: string; name: string }[] = [
   { monthDay: "12-26", name: "Karácsony" },
 ];
 
-/** The public holidays of a year, day to name. */
+/** The days the sheet rests on by law, day to name: the eleven of 102. § (1) and the two Sundays of 102. § (4). */
 export function hungarianPublicHolidays(year: number): Map<string, string> {
   const easter = easterSunday(year);
   const days = new Map<string, string>(
