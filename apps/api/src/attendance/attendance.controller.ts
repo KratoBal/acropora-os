@@ -15,6 +15,7 @@ import { RequirePermissions } from "../auth/decorators/require-permissions.decor
 import { AttendanceService } from "./attendance.service.js";
 import {
   AttendanceDayRangeQueryDto,
+  AttendanceSheetQueryDto,
   SaveAttendanceDayDto,
   SaveAttendanceScheduleDto,
 } from "./dto/attendance.dto.js";
@@ -68,6 +69,16 @@ export class AttendanceController {
     @Query() query: AttendanceDayRangeQueryDto,
   ) {
     return this.service.days(userId, query.from, query.to);
+  }
+
+  /** The month's sheet ("2026-11"), computed: the screen and the PDF print it (S2). */
+  @RequirePermissions(PERMISSIONS.ATTENDANCE_MANAGE)
+  @Get("sheet")
+  sheet(
+    @Param("userId") userId: string,
+    @Query() query: AttendanceSheetQueryDto,
+  ) {
+    return this.service.sheet(userId, query.month);
   }
 
   @RequirePermissions(PERMISSIONS.ATTENDANCE_MANAGE)

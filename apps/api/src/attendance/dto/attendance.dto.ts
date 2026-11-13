@@ -40,3 +40,7 @@ export class AttendanceDayRangeQueryDto {
   @IsString() from!: string;
   @IsString() to!: string;
 }
+
+export class AttendanceSheetQueryDto {
+  @IsString() month!: string;
+}

@@ -2075,3 +2075,28 @@ export type {
   AttendanceScheduleDay,
   AttendanceScheduleListResponse,
 } from "./attendance.js";
+export {
+  addDays,
+  easterSunday,
+  HUNGARIAN_WORKDAY_SWAPS,
+  hungarianCalendarDay,
+  hungarianPublicHolidays,
+} from "./hungarian-work-calendar.js";
+export type {
+  HungarianCalendarDay,
+  WorkdaySwap,
+} from "./hungarian-work-calendar.js";
+export {
+  ATTENDANCE_SHEET_ROW_KINDS,
+  attendanceSheet,
+  isAttendanceMonth,
+  isoWeekday,
+  monthDays,
+  scheduleOn,
+} from "./attendance-sheet.js";
+export type {
+  AttendanceSheet,
+  AttendanceSheetResponse,
+  AttendanceSheetRow,
+  AttendanceSheetRowKind,
+} from "./attendance-sheet.js";
