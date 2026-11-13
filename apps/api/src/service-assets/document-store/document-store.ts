@@ -33,6 +33,8 @@ export const DOCUMENT_OWNERS = [
   // az elhullási napló fényképe (kártya 115c9740); ownerId: a bejegyzés
   "mortality",
   "quote",
+  // az üzemeltetési napló fénykép mezőinek képei (task os-uzemeltetesi-naplo, S2b); ownerId: a bejegyzés
+  "operations-log",
 ] as const;
 export type DocumentOwner = (typeof DOCUMENT_OWNERS)[number];
 
@@ -78,6 +80,7 @@ const OWNER_DIRECTORIES: Record<DocumentOwner, string> = {
   message: "messages",
   mortality: "mortality",
   quote: "quotes",
+  "operations-log": "operations-log",
 };
 
 export function ownerDirectory(owner: DocumentOwner): string {

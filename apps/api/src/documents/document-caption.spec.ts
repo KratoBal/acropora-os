@@ -66,8 +66,8 @@ describe("a csatolmany feliratanak szabalya", () => {
 
     assert.equal(
       hosszak.length,
-      4,
-      `Négy caption oszlopot vártam (hibajegy, munkalap, eszköz, elhullási fénykép), ennyit találtam: ${hosszak.length}.`,
+      5,
+      `Öt caption oszlopot vártam (hibajegy, munkalap, eszköz, elhullási fénykép, üzemeltetési napló kép), ennyit találtam: ${hosszak.length}.`,
     );
     for (const hossz of hosszak)
       assert.equal(hossz, DOCUMENT_CAPTION_MAX_LENGTH);

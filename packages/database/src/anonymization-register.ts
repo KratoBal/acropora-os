@@ -1828,6 +1828,19 @@ export const ANONYMIZATION_REGISTER: Readonly<
     anomalyNote: "freeText",
     internalNote: "freeText",
   },
+  // a fénykép mezők képei (S2b): ugyanaz a döntés, mint az elhullási napló fényképeinél
+  OperationsLogEntryDocument: {
+    fieldKey: "identifier",
+    fieldLabel: "business",
+    clientOperationId: "identifier",
+    fileName: "freeText",
+    contentType: "business",
+    sha256: "identifier",
+    content: "fileContent",
+    storageKey: "storageReference",
+    thumbnail: "fileContent",
+    caption: "freeText",
+  },
   OperationsLogEntryValue: {
     fieldKey: "identifier",
     label: "business",

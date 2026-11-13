@@ -3,6 +3,7 @@ import { prisma, type Prisma } from "@acropora/database";
 import {
   personDisplayName,
   type OperationsLogEntryDto,
+  type OperationsLogEntryPhotoDto,
   type OperationsLogEntryValueDto,
   type OperationsMeterRole,
   type OperationsTaskFieldType,
@@ -33,6 +34,19 @@ const ENTRY_SELECT = {
     select: {
       user: { select: { id: true, displayName: true, nickname: true } },
     },
+  },
+  documents: {
+    select: {
+      id: true,
+      fieldKey: true,
+      fieldLabel: true,
+      fileName: true,
+      contentType: true,
+      sizeBytes: true,
+      caption: true,
+      createdAt: true,
+    },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   },
   values: {
     select: {
@@ -103,6 +117,12 @@ function valueOf(row: EntryRow["values"][number]) {
   return row.textValue!;
 }
 
+type PhotoRow = EntryRow["documents"][number];
+
+function photoDto(photo: PhotoRow): OperationsLogEntryPhotoDto {
+  return { ...photo, createdAt: photo.createdAt.toISOString() };
+}
+
 function toDto(row: EntryRow): OperationsLogEntryDto {
   const values: OperationsLogEntryValueDto[] = row.values.map((value) => ({
     fieldKey: value.fieldKey,
@@ -129,6 +149,7 @@ function toDto(row: EntryRow): OperationsLogEntryDto {
     anomalyNote: row.anomalyNote,
     internalNote: row.internalNote,
     values,
+    photos: row.documents.map((photo) => photoDto(photo)),
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -250,5 +271,107 @@ export class OperationsLogEntriesRepository {
       }
       throw error;
     }
+  }
+
+  /** A bejegyzés, amelyhez kép csatolható: ki rögzítette, és melyik sablonból. */
+  async entryRef(id: string) {
+    return prisma.operationsLogEntry.findUnique({
+      where: { id },
+      select: { id: true, recordedById: true, templateId: true },
+    });
+  }
+
+  async photoByClientOperationId(clientOperationId: string) {
+    const row = await prisma.operationsLogEntryDocument.findUnique({
+      where: { clientOperationId },
+      select: {
+        id: true,
+        entryId: true,
+        fieldKey: true,
+        fieldLabel: true,
+        fileName: true,
+        contentType: true,
+        sizeBytes: true,
+        caption: true,
+        createdAt: true,
+        uploadedById: true,
+      },
+    });
+    return row ? { photo: photoDto(row), ...row } : null;
+  }
+
+  async photoCount(entryId: string, fieldKey: string): Promise<number> {
+    return prisma.operationsLogEntryDocument.count({
+      where: { entryId, fieldKey },
+    });
+  }
+
+  async addPhoto(input: {
+    id: string;
+    entryId: string;
+    fieldKey: string;
+    fieldLabel: string;
+    clientOperationId: string | null;
+    fileName: string;
+    contentType: string;
+    sizeBytes: number;
+    sha256: string;
+    content: Buffer | null;
+    storageKey?: string | null;
+    thumbnail: Buffer | null;
+    caption: string | null;
+    actorUserId: string;
+  }): Promise<OperationsLogEntryPhotoDto> {
+    const row = await prisma.operationsLogEntryDocument.create({
+      data: {
+        id: input.id,
+        entryId: input.entryId,
+        fieldKey: input.fieldKey,
+        fieldLabel: input.fieldLabel,
+        clientOperationId: input.clientOperationId,
+        fileName: input.fileName,
+        contentType: input.contentType,
+        sizeBytes: input.sizeBytes,
+        sha256: input.sha256,
+        content: input.content ? Uint8Array.from(input.content) : null,
+        storageKey: input.storageKey ?? null,
+        thumbnail: input.thumbnail ? Uint8Array.from(input.thumbnail) : null,
+        caption: input.caption,
+        uploadedById: input.actorUserId,
+      },
+      select: {
+        id: true,
+        fieldKey: true,
+        fieldLabel: true,
+        fileName: true,
+        contentType: true,
+        sizeBytes: true,
+        caption: true,
+        createdAt: true,
+      },
+    });
+    return photoDto(row);
+  }
+
+  async photo(entryId: string, documentId: string) {
+    return prisma.operationsLogEntryDocument.findFirst({
+      where: { id: documentId, entryId },
+      select: {
+        fileName: true,
+        contentType: true,
+        content: true,
+        storageKey: true,
+      },
+    });
+  }
+
+  async photoThumbnail(entryId: string, documentId: string) {
+    const row = await prisma.operationsLogEntryDocument.findFirst({
+      where: { id: documentId, entryId },
+      select: { fileName: true, thumbnail: true },
+    });
+    return row?.thumbnail
+      ? { fileName: row.fileName, thumbnail: row.thumbnail }
+      : null;
   }
 }
