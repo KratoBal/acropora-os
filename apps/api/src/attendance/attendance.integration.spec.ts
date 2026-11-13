@@ -5,14 +5,19 @@ import { prisma } from "@acropora/database";
 
 import { integrationDatabaseGate } from "../common/integration-database.js";
 import { ATTENDANCE_AUDIT_ACTIONS, dateOnly } from "./attendance-records.js";
-import { AttendanceRepository } from "./attendance.repository.js";
+import {
+  AttendanceDayTakenError,
+  AttendanceRepository,
+} from "./attendance.repository.js";
 
 /*
   ON A REAL POSTGRES. WHAT TURNS THIS RED: a write without its audit row, or an audit row whose "from" is not the value it
   replaced; a resave without a change logged as one; two saves of the same day at once not serialized (the second row's
   "from" must be the first row's "to", or the log loses a value); the CHECK constraints missing (a mark stored with times, a
   WORKED day without them, a weekday 8, a departure before the arrival); two entries for one employee and day; an employee
-  with attendance rows deletable (the record must outlive the account).
+  with attendance rows deletable (the record must outlive the account); the employee picker listing a partner account or
+  leaving out an inactive colleague; a printed copy not kept byte for byte, the older one returned as the latest, a copy
+  readable under another employee, or printed without an audit row.
 */
 const gate = integrationDatabaseGate(process.env);
 const TEST_EMAIL_DOMAIN = "attendance-integration.invalid";
@@ -27,6 +32,9 @@ async function removeLeftovers() {
     where: { entityType: "User", entityId: { in: ids } },
   });
   await prisma.attendanceDay.deleteMany({ where: { userId: { in: ids } } });
+  await prisma.attendanceSignedSheet.deleteMany({
+    where: { userId: { in: ids } },
+  });
   await prisma.attendanceSchedule.deleteMany({
     where: { userId: { in: ids } },
   });
@@ -255,6 +263,129 @@ describe("attendance on Postgres", { skip: gate.mode === "skip" }, () => {
         JSON.stringify(day),
       );
     await prisma.attendanceSchedule.delete({ where: { id: schedule.id } });
+  });
+
+  it("lists the employees of the given roles, inactive ones too, not a partner account", async () => {
+    const partner = await prisma.user.create({
+      data: {
+        email: `partner-${suffix}@${TEST_EMAIL_DOMAIN}`,
+        displayName: "Jelenlét Partner",
+        role: "PARTNER_SERVICE",
+      },
+    });
+    const gone = await prisma.user.create({
+      data: {
+        email: `gone-${suffix}@${TEST_EMAIL_DOMAIN}`,
+        displayName: "Jelenlét Régi",
+        role: "WAREHOUSE",
+        isActive: false,
+      },
+    });
+    const ids = (
+      await repository.employees(["OWNER", "ADMIN", "SALES", "WAREHOUSE"])
+    ).map((user) => user.id);
+    assert.ok(ids.includes(employeeId));
+    assert.ok(ids.includes(gone.id));
+    assert.ok(!ids.includes(partner.id));
+    // active first
+    assert.ok(ids.indexOf(employeeId) < ids.indexOf(gone.id));
+  });
+
+  it("keeps the printed copy as bytes, the latest first, and only under its own employee", async () => {
+    const first = await repository.createSignedSheet({
+      userId: employeeId,
+      month: "2026-09",
+      contentHash: "a".repeat(64),
+      pdf: Buffer.from("%PDF-first"),
+      printedAt: new Date("2026-09-30T15:00:00.000Z"),
+      actorId: adminId,
+    });
+    const second = await repository.createSignedSheet({
+      userId: employeeId,
+      month: "2026-09",
+      contentHash: "b".repeat(64),
+      pdf: Buffer.from("%PDF-second"),
+      printedAt: new Date("2026-10-02T08:00:00.000Z"),
+      actorId: adminId,
+    });
+    const latest = await repository.latestSignedSheet(employeeId, "2026-09");
+    assert.equal(latest?.id, second.id);
+    assert.equal(latest?.contentHash, "b".repeat(64));
+    assert.equal(
+      Buffer.from(
+        (await repository.signedSheetPdf(employeeId, first.id))!.pdf,
+      ).toString(),
+      "%PDF-first",
+    );
+    assert.equal(await repository.signedSheetPdf(adminId, first.id), null);
+    assert.equal(
+      await repository.latestSignedSheet(employeeId, "2026-08"),
+      null,
+    );
+    const logged = (await auditRows(employeeId)).filter(
+      (row) => row.action === ATTENDANCE_AUDIT_ACTIONS.printed,
+    );
+    assert.equal(logged.length, 2);
+    assert.equal(logged[0]!.userId, adminId);
+  });
+
+  it("does not let an employee's own mark replace or remove an admin's other mark", async () => {
+    const date = dateOnly("2026-10-20");
+    await repository.saveDay({
+      userId: employeeId,
+      date,
+      kind: "SICK",
+      startMinute: null,
+      endMinute: null,
+      actorId: adminId,
+    });
+    const before = (await auditRows(employeeId)).length;
+    await assert.rejects(
+      repository.saveDay({
+        userId: employeeId,
+        date,
+        kind: "LEAVE",
+        startMinute: null,
+        endMinute: null,
+        actorId: employeeId,
+        onlyOver: ["LEAVE", "DAY_OFF"],
+      }),
+      AttendanceDayTakenError,
+    );
+    await assert.rejects(
+      repository.deleteDay({
+        userId: employeeId,
+        date,
+        actorId: employeeId,
+        onlyOver: ["LEAVE", "DAY_OFF"],
+      }),
+      AttendanceDayTakenError,
+    );
+    const stored = await prisma.attendanceDay.findUnique({
+      where: { userId_date: { userId: employeeId, date } },
+    });
+    assert.equal(stored?.kind, "SICK");
+    assert.equal((await auditRows(employeeId)).length, before);
+    // over an own mark it goes through
+    const own = dateOnly("2026-10-21");
+    for (const kind of ["LEAVE", "DAY_OFF"] as const)
+      await repository.saveDay({
+        userId: employeeId,
+        date: own,
+        kind,
+        startMinute: null,
+        endMinute: null,
+        actorId: employeeId,
+        onlyOver: ["LEAVE", "DAY_OFF"],
+      });
+    assert.equal(
+      (
+        await prisma.attendanceDay.findUnique({
+          where: { userId_date: { userId: employeeId, date: own } },
+        })
+      )?.kind,
+      "DAY_OFF",
+    );
   });
 
   it("keeps the record when someone tries to delete the employee", async () => {

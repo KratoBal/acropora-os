@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { attendanceSheet } from "@acropora/types";
+
 import {
   dateKey,
   dateOnly,
@@ -8,6 +10,7 @@ import {
   dayView,
   sameAuditValue,
   scheduleView,
+  sheetContentHash,
   weekAuditValue,
 } from "./attendance-records.js";
 
@@ -125,5 +128,59 @@ describe("the attendance records", () => {
       ),
     );
     assert.equal(dayAuditValue(null), null);
+  });
+});
+
+describe("the signed copy's hash (S2d, barracuda on #2513)", () => {
+  const sheet = attendanceSheet({
+    month: "2026-11",
+    schedules: [
+      {
+        validFrom: "2026-10-01",
+        days: [1, 2, 3, 4, 5].map((weekday) => ({
+          weekday,
+          start: "07:00",
+          end: "16:00",
+        })),
+        updatedAt: "2026-10-01T08:00:00.000Z",
+      },
+    ],
+    entries: [],
+  });
+
+  it("follows what the page prints, not the row object", () => {
+    const base = sheetContentHash(sheet);
+    assert.match(base, /^[0-9a-f]{64}$/);
+    // a field the page does not print: the decree's name, an internal source on a rest day
+    assert.equal(
+      sheetContentHash({ ...sheet, swapsDecree: "másik rendelet" }),
+      base,
+    );
+    assert.equal(
+      sheetContentHash({
+        ...sheet,
+        rows: sheet.rows.map((row) =>
+          row.kind === "FREE" ? { ...row, source: "CALENDAR" as const } : row,
+        ),
+      }),
+      base,
+    );
+  });
+
+  it("changes when a printed cell or a total changes", () => {
+    const base = sheetContentHash(sheet);
+    const rows = sheet.rows.map((row) =>
+      row.date === "2026-11-16" ? { ...row, end: "17:00", minutes: 600 } : row,
+    );
+    assert.notEqual(
+      sheetContentHash({
+        ...sheet,
+        rows,
+        totalMinutes: sheet.totalMinutes + 60,
+      }),
+      base,
+    );
+    assert.notEqual(sheetContentHash({ ...sheet, sickDays: 1 }), base);
+    assert.notEqual(sheetContentHash({ ...sheet, swapsDecree: null }), base);
   });
 });

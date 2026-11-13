@@ -1,6 +1,10 @@
 import { Injectable } from "@nestjs/common";
 import { prisma, type Prisma } from "@acropora/database";
-import type { AttendanceDayKind, UserRole } from "@acropora/types";
+import type {
+  AttendanceDayKind,
+  AttendanceEmployee,
+  UserRole,
+} from "@acropora/types";
 
 import {
   ATTENDANCE_AUDIT_ACTIONS,
@@ -32,6 +36,13 @@ const daySelect = {
 
 type Tx = Prisma.TransactionClient;
 
+/** The day already carries a mark the caller may not replace or remove (S3: an employee over an admin's mark). */
+export class AttendanceDayTakenError extends Error {
+  constructor(readonly kind: AttendanceDayKind) {
+    super(`attendance day taken by ${kind}`);
+  }
+}
+
 /**
  * THE ATTENDANCE STORE (os-jelenleti-iv, S1). Every write runs in one transaction with its audit row, under the employee's
  * row lock (`SELECT ... FOR NO KEY UPDATE` on the user): the old value the audit records is read inside the lock, so two
@@ -45,10 +56,27 @@ type Tx = Prisma.TransactionClient;
 export class AttendanceRepository {
   private readonly database = prisma;
 
-  employee(id: string): Promise<{ id: string; role: UserRole } | null> {
+  employee(
+    id: string,
+  ): Promise<{ id: string; role: UserRole; displayName: string } | null> {
     return this.database.user.findUnique({
       where: { id },
-      select: { id: true, role: true },
+      select: { id: true, role: true, displayName: true },
+    });
+  }
+
+  /** The accounts of these roles, active first, then by name. */
+  employees(roles: readonly UserRole[]): Promise<AttendanceEmployee[]> {
+    return this.database.user.findMany({
+      where: { role: { in: [...roles] } },
+      orderBy: [{ isActive: "desc" }, { displayName: "asc" }],
+      select: {
+        id: true,
+        displayName: true,
+        nickname: true,
+        role: true,
+        isActive: true,
+      },
     });
   }
 
@@ -90,6 +118,64 @@ export class AttendanceRepository {
         // the values are JSON by construction (strings, numbers, null); the cast only drops the index signature
         metadata: input.metadata as unknown as Prisma.JsonObject,
       },
+    });
+  }
+
+  /** The month's latest copy printed for signature (S2d), without its bytes. */
+  latestSignedSheet(
+    userId: string,
+    month: string,
+  ): Promise<{ id: string; printedAt: Date; contentHash: string } | null> {
+    return this.database.attendanceSignedSheet.findFirst({
+      where: { userId, month },
+      orderBy: { printedAt: "desc" },
+      select: { id: true, printedAt: true, contentHash: true },
+    });
+  }
+
+  /** A kept copy's PDF, only under its own employee (an id from another person's page reads nothing). */
+  signedSheetPdf(
+    userId: string,
+    id: string,
+  ): Promise<{ pdf: Uint8Array; month: string; printedAt: Date } | null> {
+    return this.database.attendanceSignedSheet.findFirst({
+      where: { id, userId },
+      select: { pdf: true, month: true, printedAt: true },
+    });
+  }
+
+  /** Keeps the PDF handed out for signing, with its audit row, in one transaction. */
+  createSignedSheet(input: {
+    userId: string;
+    month: string;
+    contentHash: string;
+    pdf: Buffer;
+    printedAt: Date;
+    actorId: string;
+  }): Promise<{ id: string }> {
+    return this.database.$transaction(async (tx) => {
+      const saved = await tx.attendanceSignedSheet.create({
+        data: {
+          userId: input.userId,
+          month: input.month,
+          contentHash: input.contentHash,
+          pdf: Uint8Array.from(input.pdf),
+          printedAt: input.printedAt,
+          printedById: input.actorId,
+        },
+        select: { id: true },
+      });
+      await this.audit(tx, {
+        actorId: input.actorId,
+        userId: input.userId,
+        action: ATTENDANCE_AUDIT_ACTIONS.printed,
+        metadata: {
+          month: input.month,
+          signedSheetId: saved.id,
+          contentHash: input.contentHash,
+        },
+      });
+      return saved;
     });
   }
 
@@ -184,6 +270,8 @@ export class AttendanceRepository {
     startMinute: number | null;
     endMinute: number | null;
     actorId: string;
+    /** S3: replace only an entry of these kinds (or none); another throws `AttendanceDayTakenError`, read under the lock. */
+    onlyOver?: readonly AttendanceDayKind[];
   }): Promise<DayRow> {
     return this.database.$transaction(async (tx) => {
       await this.lockEmployee(tx, input.userId);
@@ -192,6 +280,8 @@ export class AttendanceRepository {
         where: key,
         select: daySelect,
       });
+      if (existing && input.onlyOver && !input.onlyOver.includes(existing.kind))
+        throw new AttendanceDayTakenError(existing.kind);
       const from = dayAuditValue(existing);
       const to = dayAuditValue(input);
       if (existing && sameAuditValue(from, to)) return existing;
@@ -223,6 +313,8 @@ export class AttendanceRepository {
     userId: string;
     date: Date;
     actorId: string;
+    /** S3: remove only an entry of these kinds; another throws `AttendanceDayTakenError`. */
+    onlyOver?: readonly AttendanceDayKind[];
   }): Promise<boolean> {
     return this.database.$transaction(async (tx) => {
       await this.lockEmployee(tx, input.userId);
@@ -232,6 +324,8 @@ export class AttendanceRepository {
         select: daySelect,
       });
       if (!existing) return false;
+      if (input.onlyOver && !input.onlyOver.includes(existing.kind))
+        throw new AttendanceDayTakenError(existing.kind);
       await tx.attendanceDay.delete({ where: key });
       await this.audit(tx, {
         actorId: input.actorId,

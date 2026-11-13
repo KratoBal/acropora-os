@@ -242,6 +242,7 @@ describe("navigation", () => {
         [
           "Általános",
           "Felhasználók",
+          "Jelenléti ív",
           "NAV",
           "Számlázz.hu kapcsolat",
           "Mértékegységek",
@@ -395,6 +396,7 @@ describe("navigation", () => {
     ).toEqual([
       [null, "settings-general"],
       [null, "users"],
+      [null, "attendance"],
       ["Kapcsolatok", "nav-integration"],
       ["Kapcsolatok", "szamlazz-connection"],
       ["Törzsadatok", "units-of-measure"],
@@ -478,6 +480,7 @@ describe("navigation", () => {
       "Számlázz.hu kapcsolat",
     ],
     ["/admin/users", "users", "Felhasználók"],
+    ["/admin/jelenleti-iv", "attendance", "Jelenléti ív"],
     ["/beallitasok/matricak", "asset-labels", "QR-kód nyomtatás"],
     ["/beallitasok/mertekegysegek", "units-of-measure", "Mértékegységek"],
     ["/beallitasok/eszkoz-kategoriak", "asset-categories", "Eszköz-kategóriák"],
@@ -844,6 +847,8 @@ describe("navigation", () => {
     "/admin/integrations/nav": "settings.manage",
     "/admin/integrations/szamlazz/connection": "settings.manage",
     "/admin/users": "users.manage",
+    // Jelenléti ív (os-jelenleti-iv, S2b): a saját jogán, a felhasználó-kezelés nélkül is
+    "/admin/jelenleti-iv": "attendance.manage",
     // A matricakiadas ugyanazt a jogot kapja, mint a tobbi Beallitasok-tetel,
     // amit a szervizes nem lat. Balazs, 2026-09-02 21:00:53: "Nem kell hogy
     // lassa".
