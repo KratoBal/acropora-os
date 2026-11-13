@@ -847,9 +847,11 @@ export function PilotContractsPage() {
                   {contract.items.map((item) =>
                     contract.kind === "PURCHASE" ? (
                       <li key={item.id}>
-                        {item.position}. {item.description}: {item.quantity}{" "}
-                        {item.unitOfMeasure?.code ?? ""} × {money(item.unitNet)}{" "}
-                        Ft ={" "}
+                        <strong className="font-semibold">
+                          {item.position}. {item.description}
+                        </strong>
+                        : {item.quantity} {item.unitOfMeasure?.code ?? ""} ×{" "}
+                        {money(item.unitNet)} Ft ={" "}
                         {money(
                           String(Number(item.unitNet) * Number(item.quantity)),
                         )}{" "}
@@ -857,7 +859,10 @@ export function PilotContractsPage() {
                       </li>
                     ) : (
                       <li key={item.id}>
-                        {item.position}. {item.description} —{" "}
+                        <strong className="font-semibold">
+                          {item.position}. {item.description}
+                        </strong>{" "}
+                        —{" "}
                         {money(
                           String(
                             Number(item.unitNet) *
