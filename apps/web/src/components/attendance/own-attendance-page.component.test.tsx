@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import {
   attendanceSheet,
   type AttendanceDayEntry,
@@ -67,6 +73,7 @@ const entry = (
 const sheetFor = (month: string): AttendanceSheetResponse => ({
   userId: "u-1",
   ...attendanceSheet({
+    now: new Date("2026-11-13T09:00:00.000Z"),
     month,
     schedules: [schedule],
     entries: [
@@ -154,5 +161,19 @@ describe("OwnAttendancePage", () => {
     // the scroll box is positioned, so the header's sr-only label cannot widen the page (stage, 390 px)
     expect(table.parentElement?.className).toContain("relative");
     expect(table.parentElement?.className).toContain("overflow-x-auto");
+  });
+
+  it("shows the employee's own advance leave as planned, and no times on later days", async () => {
+    render(<OwnAttendancePage />);
+    const table = await screen.findByRole("table", { name: "Jelenléti ív" });
+    const planned = within(table)
+      .getByText(/2026\. 11\. 19\./)
+      .closest("tr")!;
+    expect(within(planned).getByText("Tervezett: Szabadság")).toBeTruthy();
+    expect(within(planned).queryByText("SZ")).toBeNull();
+    const monday = within(table)
+      .getByText(/2026\. 11\. 16\./)
+      .closest("tr")!;
+    expect(within(monday).queryByText("07:00")).toBeNull();
   });
 });

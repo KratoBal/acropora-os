@@ -2122,6 +2122,7 @@ export type {
 } from "./hungarian-work-calendar.js";
 export {
   ATTENDANCE_SHEET_ROW_KINDS,
+  attendanceClock,
   attendanceSheet,
   isAttendanceMonth,
   isoWeekday,
@@ -2129,6 +2130,7 @@ export {
   scheduleOn,
 } from "./attendance-sheet.js";
 export type {
+  AttendanceClock,
   AttendanceSheet,
   AttendanceSheetResponse,
   AttendanceSheetRow,

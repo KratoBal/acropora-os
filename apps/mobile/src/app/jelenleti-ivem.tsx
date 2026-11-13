@@ -26,6 +26,7 @@ import {
   hasAttendanceSheet,
   monthLabel,
   ownMark,
+  rowHours,
   rowNote,
   rowTimes,
   shiftMonth,
@@ -196,9 +197,7 @@ export default function OwnAttendanceScreen() {
                 >
                   <Text style={styles.dayLabel}>{dayLabel(row)}</Text>
                   <Text style={styles.dayTimes}>{rowTimes(row)}</Text>
-                  <Text style={styles.dayHours}>
-                    {row.kind === "WORK" ? formatHours(row.minutes) : ""}
-                  </Text>
+                  <Text style={styles.dayHours}>{rowHours(row)}</Text>
                   <Text style={styles.dayNote} numberOfLines={1}>
                     {rowNote(row)}
                     {editable ? "  ›" : ""}

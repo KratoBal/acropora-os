@@ -56,6 +56,8 @@ const dayCell = (row: AttendanceSheetRow) =>
 
 /** What the note column says; the marks themselves stand in the time columns, as on Luca's paper sheet. */
 function note(row: AttendanceSheetRow): string {
+  // a day after today prints empty: the sheet is filled up to today only (Balázs, 2026-11-13)
+  if (row.future) return "";
   switch (row.kind) {
     case "WORK":
       return row.source === "ENTRY" ? "eltérő munkaidő" : "";
@@ -92,7 +94,8 @@ export function rowCells(row: AttendanceSheetRow): string[] {
     dayCell(row),
     row.start ?? row.mark ?? "",
     row.end ?? row.mark ?? "",
-    row.kind === "WORK" ? hours(row.minutes) : "",
+    // hours only for a finished day: today before the departure prints the arrival alone
+    row.kind === "WORK" && row.end ? hours(row.minutes) : "",
     note(row),
   ];
 }

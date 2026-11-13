@@ -24,6 +24,7 @@ const api = vi.hoisted(() => ({
   saveDay: vi.fn(),
   deleteDay: vi.fn(),
   sheetPdf: vi.fn(),
+  days: vi.fn(),
   printForSignature: vi.fn(),
   signedSheetPdf: vi.fn(),
 }));
@@ -74,13 +75,18 @@ const schedule = {
 const entry = (
   date: string,
   kind: AttendanceDayEntry["kind"],
+  start: string | null = null,
+  end: string | null = null,
 ): AttendanceDayEntry => ({
   date,
   kind,
-  start: null,
-  end: null,
+  start,
+  end,
   updatedAt: "2026-11-13T09:00:00.000Z",
 });
+
+/** A clock after the months these tests show: complete months (the "as of now" rule has its own test below). */
+const LATER = new Date("2030-01-01T12:00:00.000Z");
 
 function sheetFor(
   month: string,
@@ -89,7 +95,7 @@ function sheetFor(
 ): AttendanceSheetResponse {
   return {
     userId: "u-1",
-    ...attendanceSheet({ month, schedules: [schedule], entries }),
+    ...attendanceSheet({ month, schedules: [schedule], entries, now: LATER }),
     signedCopy,
   };
 }
@@ -373,5 +379,74 @@ describe("AttendanceSheetPage", () => {
     ).toBeTruthy();
     expect(screen.getByText(/Új nyomtatás és aláírás kell/)).toBeTruthy();
     expect(screen.getByText("Nyomtatott példány")).toBeTruthy();
+  });
+
+  it("shows the month up to now: today's arrival before the departure, later days empty (Balázs, 2026-11-13)", async () => {
+    api.sheet
+      .mockReset()
+      .mockImplementation(async (_t: string, _u: string, month: string) => ({
+        userId: "u-1",
+        ...attendanceSheet({
+          month,
+          schedules: [schedule],
+          entries: [entry("2026-11-20", "LEAVE")],
+          now: new Date("2026-11-13T10:00:00.000Z"),
+        }),
+        signedCopy: null,
+      }));
+    const table = await openSheet();
+    const today = within(table)
+      .getByText(/2026\. 11\. 13\./)
+      .closest("tr")!;
+    expect(within(today).getByText("07:00")).toBeTruthy();
+    expect(within(today).queryByText("16:00")).toBeNull();
+    expect(within(today).queryByText("9:00")).toBeNull();
+    const later = within(table)
+      .getByText(/2026\. 11\. 20\./)
+      .closest("tr")!;
+    expect(within(later).queryByText("SZ")).toBeNull();
+    // the office sees the advance leave as planned: no time, no mark, not in the total (barracuda on #2520)
+    expect(within(later).getByText("Tervezett: Szabadság")).toBeTruthy();
+    const total = screen.getByLabelText("Összesítés");
+    expect(total.textContent).toContain(formatAttendanceHours(9 * 540));
+    expect(total.textContent).toContain("Szabadság: 0 nap");
+  });
+
+  it("opens a stored 'other times' day that the sheet cuts with its stored times", async () => {
+    api.sheet
+      .mockReset()
+      .mockImplementation(async (_t: string, _u: string, month: string) => ({
+        userId: "u-1",
+        ...attendanceSheet({
+          month,
+          schedules: [schedule],
+          entries: [entry("2026-11-18", "WORKED", "07:00", "18:00")],
+          now: new Date("2026-11-13T10:00:00.000Z"),
+        }),
+        signedCopy: null,
+      }));
+    api.days.mockReset().mockResolvedValue({
+      userId: "u-1",
+      from: "2026-11-18",
+      to: "2026-11-18",
+      items: [entry("2026-11-18", "WORKED", "07:00", "18:00")],
+    });
+    await openSheet();
+    fireEvent.click(screen.getByLabelText("2026. 11. 18. módosítása"));
+    await waitFor(() =>
+      expect((screen.getByLabelText("Távozás") as HTMLInputElement).value).toBe(
+        "18:00",
+      ),
+    );
+    expect((screen.getByLabelText("Érkezés") as HTMLInputElement).value).toBe(
+      "07:00",
+    );
+    expect(api.days).toHaveBeenCalledWith(
+      "token-1",
+      "u-1",
+      "2026-11-18",
+      "2026-11-18",
+      expect.anything(),
+    );
   });
 });

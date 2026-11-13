@@ -26,6 +26,8 @@ export interface AttendanceSheetRow {
   mark: "B" | "SZ" | null;
   source: "ENTRY" | "SCHEDULE" | "CALENDAR" | "NONE";
   holiday: string | null;
+  /** A day after today (Budapest): the server sends no time, mark or minutes for it (filled up to today only). */
+  future: boolean;
 }
 
 export interface AttendanceSheet {
@@ -97,12 +99,34 @@ export const dayLabel = (
 export const formatHours = (minutes: number): string =>
   `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, "0")}`;
 
-/** What the row shows for the time: "07:00-16:00", the mark ("B", "SZ"), or nothing. */
+/** What the row shows for the time: "07:00-16:00", today's "07:00-" before the departure, the mark, or nothing. */
 export const rowTimes = (row: AttendanceSheetRow): string =>
-  row.start && row.end ? `${row.start}-${row.end}` : (row.mark ?? "");
+  row.start && row.end
+    ? `${row.start}-${row.end}`
+    : row.start
+      ? `${row.start}-`
+      : (row.mark ?? "");
 
-/** The note of a row, as on the web sheet. */
+/** The hours of a finished working day; nothing for today before the departure or a later day. */
+export const rowHours = (row: AttendanceSheetRow): string =>
+  row.kind === "WORK" && row.end ? formatHours(row.minutes) : "";
+
+const PLANNED: Partial<Record<AttendanceSheetRowKind, string>> = {
+  LEAVE: "Szabadság",
+  DAY_OFF: "Szabadnap",
+  SICK: "Betegség",
+  WORK: "Eltérő munkaidő",
+};
+
+/**
+ * The note of a row, as on the web's own sheet: a later day is empty, except the employee's own advance mark, shown as
+ * planned (this screen is where it is entered).
+ */
 export function rowNote(row: AttendanceSheetRow): string {
+  if (row.future) {
+    const planned = row.source === "ENTRY" ? PLANNED[row.kind] : undefined;
+    return planned ? `Tervezett: ${planned}` : "";
+  }
   switch (row.kind) {
     case "WORK":
       return row.source === "ENTRY" ? "Eltérő munkaidő" : "";

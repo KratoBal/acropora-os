@@ -1,6 +1,7 @@
 import type {
   AttendanceDayEntry,
   AttendanceDayInput,
+  AttendanceDayListResponse,
   AttendanceEmployeeListResponse,
   AttendanceSchedule,
   AttendanceScheduleDay,
@@ -50,6 +51,20 @@ export const attendanceApi = {
     return apiRequest<AttendanceEmployeeListResponse>(employeesPath, token, {
       signal,
     });
+  },
+  /** The stored day entries between two days (inclusive). */
+  days(
+    token: string,
+    userId: string,
+    from: string,
+    to: string,
+    signal?: AbortSignal,
+  ) {
+    return apiRequest<AttendanceDayListResponse>(
+      `${base}/${encodeURIComponent(userId)}/days?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+      token,
+      { signal },
+    );
   },
   /** The month's computed sheet ("2026-11"). */
   sheet(token: string, userId: string, month: string, signal?: AbortSignal) {

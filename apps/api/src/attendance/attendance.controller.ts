@@ -89,7 +89,7 @@ export class AttendanceController {
     @Param("userId") userId: string,
     @Query() query: AttendanceSheetQueryDto,
   ) {
-    return this.service.sheet(userId, query.month);
+    return this.service.sheet(userId, query.month, new Date());
   }
 
   /** The month's sheet as a PDF, inline: printed and signed at month end, downloadable any time (S2c). */

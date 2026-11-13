@@ -133,6 +133,7 @@ describe("the attendance records", () => {
 
 describe("the signed copy's hash (S2d, barracuda on #2513)", () => {
   const sheet = attendanceSheet({
+    now: new Date("2030-01-01T12:00:00.000Z"),
     month: "2026-11",
     schedules: [
       {
@@ -182,5 +183,45 @@ describe("the signed copy's hash (S2d, barracuda on #2513)", () => {
     );
     assert.notEqual(sheetContentHash({ ...sheet, sickDays: 1 }), base);
     assert.notEqual(sheetContentHash({ ...sheet, swapsDecree: null }), base);
+  });
+
+  it("keeps a past month's hash as time passes, so a signed month does not turn changed by itself", () => {
+    const october = (iso: string) =>
+      sheetContentHash(
+        attendanceSheet({
+          month: "2026-10",
+          schedules: [
+            {
+              validFrom: "2026-10-01",
+              days: [1, 2, 3, 4, 5].map((weekday) => ({
+                weekday,
+                start: "07:00",
+                end: "16:00",
+              })),
+              updatedAt: "2026-10-01T08:00:00.000Z",
+            },
+          ],
+          entries: [],
+          now: new Date(iso),
+        }),
+      );
+    assert.equal(
+      october("2026-11-01T10:00:00.000Z"),
+      october("2027-08-15T10:00:00.000Z"),
+    );
+    // the current month does change as its days pass: that is a real change of the printed page
+    const november = (iso: string) =>
+      sheetContentHash(
+        attendanceSheet({
+          month: "2026-11",
+          schedules: [],
+          entries: [],
+          now: new Date(iso),
+        }),
+      );
+    assert.equal(
+      november("2026-11-13T10:00:00.000Z"),
+      november("2026-11-13T10:30:00.000Z"),
+    );
   });
 });

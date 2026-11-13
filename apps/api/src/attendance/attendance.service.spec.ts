@@ -28,6 +28,8 @@ import {
   minutes, or stored on a mark; the week not Monday first; the actor not passed as the author; a removal of nothing answered
   as a success; a day range backwards or longer than a year read at all; past dates refused (they are writable on purpose).
 */
+/** A clock after every month these tests read: complete months (the "as of now" rule is tested in @acropora/types). */
+const LATER = new Date("2030-01-01T12:00:00.000Z");
 const updatedAt = new Date("2026-11-13T09:00:00.000Z");
 
 function build(
@@ -314,7 +316,7 @@ describe("AttendanceService: the month's sheet", () => {
     };
     const sheet = await new AttendanceService(
       repository as AttendanceRepository,
-    ).sheet("u-1", "2028-02");
+    ).sheet("u-1", "2028-02", LATER);
     assert.deepEqual(reads, [
       ["2028-02-01T00:00:00.000Z", "2028-02-29T00:00:00.000Z"],
     ]);
@@ -328,8 +330,8 @@ describe("AttendanceService: the month's sheet", () => {
 
   it("refuses a bad month before reading", async () => {
     const { service, writes } = build();
-    await assert.rejects(service.sheet("u-1", "2026-13"), /hónap/);
-    await assert.rejects(service.sheet("u-1", "2026-1"), /hónap/);
+    await assert.rejects(service.sheet("u-1", "2026-13", LATER), /hónap/);
+    await assert.rejects(service.sheet("u-1", "2026-1", LATER), /hónap/);
     assert.deepEqual(writes, []);
   });
 });
@@ -414,7 +416,7 @@ describe("AttendanceService: the copy printed for signature", () => {
       id: "copy-1",
       printedAt,
       contentHash: hash,
-    }).service.sheet("u-1", "2026-11");
+    }).service.sheet("u-1", "2026-11", LATER);
     assert.deepEqual(same.signedCopy, {
       id: "copy-1",
       printedAt: printedAt.toISOString(),
@@ -425,11 +427,11 @@ describe("AttendanceService: the copy printed for signature", () => {
       id: "copy-1",
       printedAt,
       contentHash: "0".repeat(64),
-    }).service.sheet("u-1", "2026-11");
+    }).service.sheet("u-1", "2026-11", LATER);
     assert.equal(changed.signedCopy?.differs, true);
 
     assert.equal(
-      (await build().service.sheet("u-1", "2026-11")).signedCopy,
+      (await build().service.sheet("u-1", "2026-11", LATER)).signedCopy,
       null,
     );
   });

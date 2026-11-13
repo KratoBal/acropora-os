@@ -171,6 +171,7 @@ export class AttendanceService {
   private async computedSheet(
     userId: string,
     month: string,
+    now: Date,
   ): Promise<{ sheet: AttendanceSheet; displayName: string }> {
     if (!isAttendanceMonth(month))
       throw new BadRequestException(`Nem érvényes hónap: ${month}`);
@@ -188,6 +189,7 @@ export class AttendanceService {
       month,
       schedules: schedules.map(scheduleView),
       entries: entries.map(dayView),
+      now,
     });
     return { sheet, displayName: user.displayName };
   }
@@ -196,8 +198,12 @@ export class AttendanceService {
    * THE MONTH'S SHEET (S2a), with the latest copy printed for signature (S2d) and whether the month changed since it was
    * printed: a changed signed month keeps its old PDF and is flagged, never silently replaced (brief point 8).
    */
-  async sheet(userId: string, month: string): Promise<AttendanceSheetResponse> {
-    const { sheet } = await this.computedSheet(userId, month);
+  async sheet(
+    userId: string,
+    month: string,
+    now: Date,
+  ): Promise<AttendanceSheetResponse> {
+    const { sheet } = await this.computedSheet(userId, month, now);
     const signed = await this.repository.latestSignedSheet(userId, month);
     return {
       userId,
@@ -221,7 +227,11 @@ export class AttendanceService {
     month: string,
     printedAt: Date,
   ): Promise<{ bytes: Buffer; fileName: string }> {
-    const { sheet, displayName } = await this.computedSheet(userId, month);
+    const { sheet, displayName } = await this.computedSheet(
+      userId,
+      month,
+      printedAt,
+    );
     const bytes = await attendanceSheetDocument({
       sheet,
       employeeName: displayName,
@@ -240,7 +250,11 @@ export class AttendanceService {
     printedAt: Date,
     actorId: string,
   ): Promise<{ bytes: Buffer; fileName: string }> {
-    const { sheet, displayName } = await this.computedSheet(userId, month);
+    const { sheet, displayName } = await this.computedSheet(
+      userId,
+      month,
+      printedAt,
+    );
     const bytes = await attendanceSheetDocument({
       sheet,
       employeeName: displayName,
