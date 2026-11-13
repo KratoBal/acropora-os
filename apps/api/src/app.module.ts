@@ -85,6 +85,7 @@ import { KnowledgeBaseModule } from "./knowledge-base/knowledge-base.module.js";
 import { ServiceDraftsModule } from "./service-drafts/service-drafts.module.js";
 import { LivestockArrivalsModule } from "./livestock-arrivals/livestock-arrivals.module.js";
 import { MortalityModule } from "./mortality/mortality.module.js";
+import { OperationsLogModule } from "./operations-log/operations-log.module.js";
 
 @Module({
   imports: [
@@ -103,6 +104,7 @@ import { MortalityModule } from "./mortality/mortality.module.js";
     UnitsModule,
     AquariumsModule,
     MortalityModule,
+    OperationsLogModule,
     LivestockArrivalsModule,
     AuthModule,
     BrandsModule,

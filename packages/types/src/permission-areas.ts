@@ -184,6 +184,13 @@ export const PERMISSION_AREAS: readonly PermissionArea[] = [
     extras: [],
   },
   {
+    key: "operations-log",
+    label: "Üzemeltetési napló",
+    view: P.OPERATIONS_LOG_VIEW,
+    manage: P.OPERATIONS_LOG_TEMPLATES_MANAGE,
+    extras: [],
+  },
+  {
     key: "aquariums",
     label: "Akváriumok",
     view: P.AQUARIUMS_VIEW,

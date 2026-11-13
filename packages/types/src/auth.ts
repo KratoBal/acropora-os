@@ -161,6 +161,10 @@ export const PERMISSIONS = {
   /// OWNER, ADMIN, MANAGER, SERVICE mindkettőt, VIEWER a view-t, partner semmit.
   MORTALITY_VIEW: "mortality.view",
   MORTALITY_MANAGE: "mortality.manage",
+  /// Üzemeltetési napló (task os-uzemeltetesi-naplo): a nézet a sablonokat (S1), később a bejegyzéseket olvassa; a sablonok
+  /// kezelése (felvétel, szerkesztés, kivezetés) külön, szűkebb jog. A rögzítés jogát az S2 hozza.
+  OPERATIONS_LOG_VIEW: "operations-log.view",
+  OPERATIONS_LOG_TEMPLATES_MANAGE: "operations-log.templates.manage",
   ICP_VIEW: "icp.view",
   ICP_MANAGE: "icp.manage",
   CONTENT_VIEW: "content.view",
@@ -489,6 +493,8 @@ const BASE_ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>> =
       // az elhullási napló (kártya 115c9740): a bolt élőállatait ők is gondozzák
       PERMISSIONS.MORTALITY_VIEW,
       PERMISSIONS.MORTALITY_MANAGE,
+      // az üzemeltetési napló sablonjai: a szerelő ezekből rögzít (S2); a sablonokat nem ő gondozza
+      PERMISSIONS.OPERATIONS_LOG_VIEW,
     ],
     VIEWER: [...VIEW_PERMISSIONS, PERMISSIONS.MESSAGES_USE],
 

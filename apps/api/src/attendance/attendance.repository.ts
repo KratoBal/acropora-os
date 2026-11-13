@@ -34,8 +34,10 @@ type Tx = Prisma.TransactionClient;
 
 /**
  * THE ATTENDANCE STORE (os-jelenleti-iv, S1). Every write runs in one transaction with its audit row, under the employee's
- * row lock (`SELECT ... FOR UPDATE` on the user): the old value the audit records is read inside the lock, so two admins
- * saving the same day at once are serialized and each log row names the value it really replaced.
+ * row lock (`SELECT ... FOR NO KEY UPDATE` on the user): the old value the audit records is read inside the lock, so two
+ * admins saving the same day at once are serialized and each log row names the value it really replaced. Not FOR UPDATE:
+ * that would also hold up every other insert pointing at the user (a session, a message) through its foreign-key check
+ * (barracuda on #2498).
  *
  * A save that changes nothing writes nothing and logs nothing.
  */
@@ -67,7 +69,7 @@ export class AttendanceRepository {
   }
 
   private async lockEmployee(tx: Tx, userId: string) {
-    await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${userId} FOR UPDATE`;
+    await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${userId} FOR NO KEY UPDATE`;
   }
 
   private async audit(

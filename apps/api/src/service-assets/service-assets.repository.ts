@@ -1030,17 +1030,20 @@ export class ServiceAssetsRepository extends Repository {
   }
 
   /**
-   * A HAROM SZAMLALO, EGY KORBEN. Kulon lekerdezes mindharomra, mert a
+   * A SZAMLALOK, EGY KORBEN. Kulon lekerdezes mindegyikre, mert a
    * `assetDeletionRefusal` kulon ertekeket var -- lasd ott, miert nem egy
    * osszevont logikai ertek.
    */
   async deletionBlockers(assetId: string): Promise<AssetDeletionBlockers> {
-    const [serviceJobs, worksheetLines, childAssets] = await Promise.all([
-      prisma.serviceJobAsset.count({ where: { assetId } }),
-      prisma.worksheetLine.count({ where: { assetId } }),
-      prisma.asset.count({ where: { parentAssetId: assetId } }),
-    ]);
-    return { serviceJobs, worksheetLines, childAssets };
+    const [serviceJobs, worksheetLines, childAssets, operationsTemplates] =
+      await Promise.all([
+        prisma.serviceJobAsset.count({ where: { assetId } }),
+        prisma.worksheetLine.count({ where: { assetId } }),
+        prisma.asset.count({ where: { parentAssetId: assetId } }),
+        // a kivezetett sablon is akadaly (a bejegyzesek ra hivatkoznak majd, a sema `Restrict`)
+        prisma.operationsTaskTemplate.count({ where: { assetId } }),
+      ]);
+    return { serviceJobs, worksheetLines, childAssets, operationsTemplates };
   }
 
   /**
