@@ -9,7 +9,11 @@ import {
   ValidateNested,
 } from "class-validator";
 
-import { ATTENDANCE_DAY_KINDS, type AttendanceDayKind } from "@acropora/types";
+import {
+  ATTENDANCE_DAY_KINDS,
+  ATTENDANCE_SELF_KINDS,
+  type AttendanceDayKind,
+} from "@acropora/types";
 
 /*
   THE SHAPE ONLY. Whether a time is a time of day, a departure after the arrival, a weekday in 1..7 and once, a mark without
@@ -43,4 +47,9 @@ export class AttendanceDayRangeQueryDto {
 
 export class AttendanceSheetQueryDto {
   @IsString() month!: string;
+}
+
+/** S3: what an employee may mark for themselves (leave, day off); the shared rule decides the rest. */
+export class SaveOwnAttendanceDayDto {
+  @IsIn(ATTENDANCE_SELF_KINDS) kind!: (typeof ATTENDANCE_SELF_KINDS)[number];
 }

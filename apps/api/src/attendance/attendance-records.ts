@@ -1,10 +1,15 @@
+import { createHash } from "node:crypto";
+
 import {
   formatAttendanceClock,
+  type AttendanceSheet,
   type AttendanceDayEntry,
   type AttendanceDayKind,
   type AttendanceSchedule,
   type AttendanceScheduleDay,
 } from "@acropora/types";
+
+import { hours, rowCells } from "./attendance-sheet-document.js";
 
 /**
  * THE ATTENDANCE ROWS AND WHAT THE AUDIT LOG SAYS ABOUT THEM (os-jelenleti-iv, S1). Pure, so the shapes and the "did anything
@@ -103,4 +108,27 @@ export const sameAuditValue = (
 export const ATTENDANCE_AUDIT_ACTIONS = {
   schedule: "attendance.schedule-changed",
   day: "attendance.day-changed",
+  /** S2d: a month printed for signature; the PDF itself is kept in AttendanceSignedSheet. */
+  printed: "attendance.sheet-printed-for-signature",
 } as const;
+
+/**
+ * THE CONTENT OF A SHEET, as a hash (S2d): WHAT THE PAGE PRINTS, as a versioned extract (barracuda on #2513). Every row's
+ * printed cells (date, arrival or mark, departure or mark, hours, note), the totals, and whether the year's swapped days
+ * were known. Not the internal row object: a later change to its shape or to a field the page does not print must not
+ * flip every signed month to "changed" at once. A change to what the page prints is a change, and that is what it is for.
+ *
+ * NOT IN IT, on purpose: the print time, and the employee's name. A later name change does not make a signed month
+ * "changed"; the kept PDF shows the name it was signed under. If the printed extract itself ever changes, raise `v`: the
+ * kept copies then all read as changed, which is the safe direction, and the reason is written here.
+ */
+export function sheetContentHash(sheet: AttendanceSheet): string {
+  const printed = {
+    v: 1,
+    month: sheet.month,
+    rows: sheet.rows.map(rowCells),
+    totals: [hours(sheet.totalMinutes), sheet.sickDays, sheet.leaveDays],
+    swapsKnown: sheet.swapsDecree !== null,
+  };
+  return createHash("sha256").update(JSON.stringify(printed)).digest("hex");
+}
