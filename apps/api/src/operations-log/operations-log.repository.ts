@@ -202,6 +202,8 @@ export class OperationsLogRepository {
     actorId: string,
   ): Promise<OperationsTaskTemplateDto | null> {
     return prisma.$transaction(async (tx) => {
+      // a sor zárja: két egyszerre induló módosítás közül a második megvárja az elsőt, és az új `updatedAt`-ot látja (409)
+      await tx.$queryRaw`SELECT "id" FROM "OperationsTaskTemplate" WHERE "id" = ${id} FOR UPDATE`;
       const existing = await tx.operationsTaskTemplate.findUnique({
         where: { id },
         select: {
@@ -219,11 +221,9 @@ export class OperationsLogRepository {
       const active = existing.fields.filter(
         (field) => field.removedAt === null,
       );
-      await tx.operationsTaskField.updateMany({
-        where: { templateId: id, removedAt: null },
-        data: { meterRole: null },
-      });
       const keep = new Set(input.fields.map((field) => field.key));
+      // ELŐBB a kimaradt mezők kivezetése: a kivezetett mező MEGTARTJA a vízóra szerepét (a régi bejegyzések kimutatásához), és
+      // a részleges egyedi index rá már nem szól (barracuda, #2497 v2)
       const dropped = active
         .filter((field) => !keep.has(field.key))
         .map((field) => field.id);
@@ -232,6 +232,11 @@ export class OperationsLogRepository {
           where: { id: { in: dropped } },
           data: { removedAt: new Date() },
         });
+      // UTÁNA a MARADÓ aktív mezők szerepének lenullázása: a szerep-csere köztes állapota nem sértheti az indexet
+      await tx.operationsTaskField.updateMany({
+        where: { templateId: id, removedAt: null },
+        data: { meterRole: null },
+      });
       const idByKey = new Map(active.map((field) => [field.key, field.id]));
       for (const [index, field] of input.fields.entries()) {
         const fieldId = idByKey.get(field.key);

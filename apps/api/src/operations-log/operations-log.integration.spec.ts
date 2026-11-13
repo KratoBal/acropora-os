@@ -378,6 +378,73 @@ describe(
         assert.equal((await service.get(created.id)).isActive, false);
       });
 
+      /*
+        A PUT-TAL KIVEZETETT MEZŐ MEGTARTJA A VÍZÓRA SZEREPÉT (barracuda, #2497 v2): a körút kivezetett mezője BOOLEAN, tehát a
+        szerep-megtartást a szolgáltatáson át külön kell mérni: egy ELŐTTE mezőt kivenni, és ugyanabban a PUT-ban egy újat felvenni.
+        A kivezetés a lenullázás ELŐTT fut: a lenullázás sorrendje fordítva a régi mező szerepét vinné el.
+      */
+      it("a PUT-ban kivett ELŐTTE mező szerepe megmarad, és ugyanabban a PUT-ban egy új ELŐTTE mező felvehető", async () => {
+        const created = await service.create(
+          {
+            name: name("szerep-megtartas"),
+            frequency: "WEEKLY",
+            assetId: ids.asset,
+            fields: [
+              {
+                label: "Vízóra előtte",
+                type: "NUMBER",
+                unit: "m3",
+                meterRole: "BEFORE",
+              },
+              {
+                label: "Vízóra utána",
+                type: "NUMBER",
+                unit: "m3",
+                meterRole: "AFTER",
+              },
+            ],
+          },
+          "system",
+        );
+        const after = created.fields.find((f) => f.meterRole === "AFTER")!;
+        const updated = await service.update(
+          created.id,
+          {
+            expectedUpdatedAt: created.updatedAt,
+            name: name("szerep-megtartas"),
+            frequency: "WEEKLY",
+            assetId: ids.asset,
+            fields: [
+              {
+                key: after.key,
+                label: after.label,
+                type: "NUMBER",
+                unit: "m3",
+                meterRole: "AFTER",
+              },
+              {
+                label: "Vízóra új előtte",
+                type: "NUMBER",
+                unit: "m3",
+                meterRole: "BEFORE",
+              },
+            ],
+          },
+          "system",
+        );
+        assert.deepEqual(
+          updated.retiredFields.map((f) => [f.key, f.meterRole]),
+          [["vizora_elotte", "BEFORE"]],
+        );
+        assert.deepEqual(
+          updated.fields.map((f) => [f.key, f.meterRole]),
+          [
+            ["vizora_utana", "AFTER"],
+            ["vizora_uj_elotte", "BEFORE"],
+          ],
+        );
+      });
+
       it("kategóriára szóló sablon felvehető, és a cél a kategória nevét adja", async () => {
         const created = await service.create(
           {
