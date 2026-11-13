@@ -405,6 +405,96 @@ describe("cardPaymentMatch: a NAV-less invoice and the card payment(s) it was pa
     );
   });
 
+  /*
+    MÁS DEVIZÁJÚ SZÁMLA ÉS FIZETÉS (acrobot 49581, TypeSafe AI: 31,75 USD Stripe-nyugta, 28,05EUR terhelés). MI PIROSÍT:
+    ha a más devizájú számla nem köt; ha két fizetés közül választ; ha a 3 napon túli, az eredeti összeg nélküli, a józan
+    arányon kívüli (300 dollár egy 28 eurós fizetésre), vagy az egyező devizájú (rossz összegű) fizetés köt.
+  */
+  const receipt = [
+    "Receipt from TypeSafe AI",
+    "Receipt #2263-1582",
+    "Date paid September 28, 2026",
+    "Amount paid $31.75",
+  ];
+  const eurCard = (bookingDate: string, original = "28.05") =>
+    card(
+      "TYPESAFE AI, INC.",
+      "10393",
+      { amount: original, currency: "EUR" },
+      bookingDate,
+    );
+
+  it("ties a USD invoice to the one EUR card payment of the partner within 3 days", () => {
+    const september = eurCard("2026-09-29");
+    assert.deepEqual(
+      cardPaymentMatch(
+        receipt,
+        [eurCard("2026-08-29"), september],
+        word,
+        "2026-09-28",
+      ),
+      {
+        amount: "31.75",
+        currency: "USD",
+        partner: "TYPESAFE AI, INC.",
+        debitIds: [september.id],
+      },
+    );
+  });
+
+  it("does not tie a foreign-currency invoice to two candidates, beyond 3 days, or out of proportion", () => {
+    assert.equal(
+      cardPaymentMatch(
+        receipt,
+        [eurCard("2026-09-27"), eurCard("2026-09-29")],
+        word,
+        "2026-09-28",
+      ),
+      null,
+    );
+    assert.equal(
+      cardPaymentMatch(receipt, [eurCard("2026-10-02")], word, "2026-09-28"),
+      null,
+    );
+    assert.equal(
+      cardPaymentMatch(
+        receipt,
+        [eurCard("2026-09-29", "300.00")],
+        word,
+        "2026-09-28",
+      ),
+      null,
+    );
+  });
+
+  it("does not tie a foreign-currency invoice to a payment without an original amount, or one in the invoice's currency", () => {
+    assert.equal(
+      cardPaymentMatch(
+        receipt,
+        [card("TYPESAFE AI, INC.", "10393", null, "2026-09-29")],
+        word,
+        "2026-09-28",
+      ),
+      null,
+    );
+    assert.equal(
+      cardPaymentMatch(
+        receipt,
+        [
+          card(
+            "TYPESAFE AI, INC.",
+            "10393",
+            { amount: "30.00", currency: "USD" },
+            "2026-09-29",
+          ),
+        ],
+        word,
+        "2026-09-28",
+      ),
+      null,
+    );
+  });
+
   it("takes nothing when the amount, the partner word, or the uniqueness is missing, or the partner is us", () => {
     const hetznerCard = (amount: string) =>
       card("HETZNER ONLINE GMBH", "999", { amount, currency: "EUR" });

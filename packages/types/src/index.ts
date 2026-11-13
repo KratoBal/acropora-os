@@ -1254,6 +1254,8 @@ export type {
   InvoiceCollectionItemSource,
   InvoiceCollectionItemVerdict,
   InvoiceCollectionItemsResponse,
+  InvoiceCollectionRunRow,
+  InvoiceCollectionRunsResponse,
   InvoiceCollectionSuggestion,
   InvoiceCollectionSuggestionDecision,
   InvoiceCollectionSuggestionsResponse,
