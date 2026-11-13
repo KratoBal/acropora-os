@@ -1,14 +1,19 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { BadRequestException, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from "@nestjs/common";
 import type {
   OperationsTaskFieldInput,
   OperationsTaskTemplateDto,
   OperationsTaskTemplateInput,
 } from "@acropora/types";
 
-import type {
-  OperationsLogRepository,
+import {
+  OperationsTemplateConflictError,
+  type OperationsLogRepository,
   OperationsTaskTemplateWrite,
 } from "./operations-log.repository.js";
 import { OperationsLogService } from "./operations-log.service.js";
@@ -23,6 +28,7 @@ type FakeRepository = Pick<
   OperationsLogRepository,
   | "listTemplates"
   | "templateById"
+  | "fieldKeys"
   | "assetIsLive"
   | "categoryIsActive"
   | "createTemplate"
@@ -35,6 +41,9 @@ function fixture(
     assetLive: boolean;
     categoryActive: boolean;
     existing: boolean;
+    conflict: boolean;
+    used: string[];
+    active: string[];
   }> = {},
 ) {
   const calls: { write?: OperationsTaskTemplateWrite; replaceId?: string } = {};
@@ -42,6 +51,13 @@ function fixture(
     listTemplates: async () => [],
     templateById: async () =>
       over.existing === false ? null : ({ id: "t1" } as never),
+    fieldKeys: async () =>
+      over.existing === false
+        ? null
+        : {
+            used: new Set(over.used ?? ["viz"]),
+            active: new Set(over.active ?? ["viz"]),
+          },
     assetIsLive: async () => over.assetLive ?? true,
     categoryIsActive: async () => over.categoryActive ?? true,
     createTemplate: async (write) => {
@@ -49,6 +65,7 @@ function fixture(
       return { id: "new" } as OperationsTaskTemplateDto;
     },
     replaceTemplate: async (id, write) => {
+      if (over.conflict) throw new OperationsTemplateConflictError();
       calls.write = write;
       calls.replaceId = id;
       return over.existing === false
@@ -193,7 +210,7 @@ describe("a mezők", () => {
     );
   });
 
-  it("módosításkor a meglévő mező megtartja a kulcsát átnevezve is", async () => {
+  it("módosításkor a meglévő aktív mező megtartja a kulcsát átnevezve is", async () => {
     const { service, calls } = fixture();
     await service.update(
       "t1",
@@ -210,6 +227,81 @@ describe("a mezők", () => {
       calls.write!.fields.map((f) => f.key),
       ["viz", "viz_2"],
     );
+  });
+});
+
+describe("a kulcsok a sablon korábbi mezőihez képest (barracuda, #2497)", () => {
+  it("a korábban elhagyott mező kulcsát egy új, azonos címkéjű mező nem kapja meg", async () => {
+    // a „viz” mező egy korábbi mentésben kikerült (kivezetett): used igen, active nem
+    const { service, calls } = fixture({ used: ["viz"], active: [] });
+    await service.update(
+      "t1",
+      input({ fields: [{ label: "Víz", type: "TEXT" }] }),
+      "u1",
+    );
+    assert.deepEqual(
+      calls.write!.fields.map((f) => f.key),
+      ["viz_2"],
+    );
+  });
+
+  it("a kivezetett mező kulcsát a kliens küldve sem kapja vissza", async () => {
+    const { service, calls } = fixture({ used: ["viz"], active: [] });
+    await service.update(
+      "t1",
+      input({ fields: [{ key: "viz", label: "Víz", type: "TEXT" }] }),
+      "u1",
+    );
+    assert.deepEqual(
+      calls.write!.fields.map((f) => f.key),
+      ["viz_2"],
+    );
+  });
+
+  it("a kliens tetszőleges kulcsa nem lesz kulcs: csak a sablon aktív mezőjéé", async () => {
+    const { service, calls } = fixture({ used: ["viz"], active: ["viz"] });
+    await service.update(
+      "t1",
+      input({
+        fields: [
+          { key: "viz", label: "Víz", type: "TEXT" },
+          { key: "Tetszőleges szöveg", label: "Más", type: "TEXT" },
+          { key: "nem-letezo", label: "Harmadik", type: "TEXT" },
+        ],
+      }),
+      "u1",
+    );
+    assert.deepEqual(
+      calls.write!.fields.map((f) => f.key),
+      ["viz", "mas", "harmadik"],
+    );
+  });
+
+  it("létrehozáskor a kliens kulcsa nem számít, a kulcs a címkéből készül", async () => {
+    const { service, calls } = fixture();
+    await service.create(
+      input({ fields: [{ key: "viz", label: "Vízóra", type: "TEXT" }] }),
+      "u1",
+    );
+    assert.deepEqual(
+      calls.write!.fields.map((f) => f.key),
+      ["vizora"],
+    );
+  });
+});
+
+describe("az egyidejűség-őr", () => {
+  it("ha a sablont közben más módosította, 409, és a mezők nem íródnak felül", async () => {
+    const { service, calls } = fixture({ conflict: true });
+    await assert.rejects(
+      service.update(
+        "t1",
+        { ...input(), expectedUpdatedAt: "2026-11-13T09:00:00.000Z" },
+        "u1",
+      ),
+      ConflictException,
+    );
+    assert.equal(calls.write, undefined);
   });
 });
 

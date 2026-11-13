@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -14,6 +15,7 @@ import {
 
 import {
   OperationsLogRepository,
+  OperationsTemplateConflictError,
   type OperationsTaskTemplateWrite,
 } from "./operations-log.repository.js";
 
@@ -53,14 +55,29 @@ export class OperationsLogService {
     input: OperationsTaskTemplateInput & { isActive?: boolean },
     actorId: string,
   ): Promise<OperationsTaskTemplateDto> {
-    const write = await this.checked(input);
-    const updated = await this.repository.replaceTemplate(
-      id,
-      { ...write, isActive: input.isActive },
-      actorId,
-    );
-    if (!updated) throw new NotFoundException(NEM_TALALHATO);
-    return updated;
+    const keys = await this.repository.fieldKeys(id);
+    if (!keys) throw new NotFoundException(NEM_TALALHATO);
+    const write = await this.checked(input, keys);
+    try {
+      const updated = await this.repository.replaceTemplate(
+        id,
+        {
+          ...write,
+          isActive: input.isActive,
+          expectedUpdatedAt: input.expectedUpdatedAt,
+        },
+        actorId,
+      );
+      if (!updated) throw new NotFoundException(NEM_TALALHATO);
+      return updated;
+    } catch (error) {
+      // a betöltött sablon közben megváltozott: nem írjuk csendben felül a másik szerkesztő mezőit
+      if (error instanceof OperationsTemplateConflictError)
+        throw new ConflictException(
+          "A sablont közben más módosította. Töltsd be újra, és vidd át a változtatásaidat.",
+        );
+      throw error;
+    }
   }
 
   /**
@@ -76,6 +93,10 @@ export class OperationsLogService {
   /** A bemenet ellenőrzése és a tároláshoz kész alakra hozása (a mezők kulcsaival). */
   private async checked(
     input: OperationsTaskTemplateInput,
+    existing: { used: Set<string>; active: Set<string> } = {
+      used: new Set(),
+      active: new Set(),
+    },
   ): Promise<OperationsTaskTemplateWrite> {
     const name = input.name.trim();
     if (name === "")
@@ -101,7 +122,7 @@ export class OperationsLogService {
 
     const errors = operationsFieldErrors(input.fields);
     if (errors.length > 0) throw new BadRequestException(errors.join(" "));
-    const keys = assignOperationsFieldKeys(input.fields);
+    const keys = assignOperationsFieldKeys(input.fields, existing);
 
     return {
       name,

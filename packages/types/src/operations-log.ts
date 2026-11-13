@@ -78,6 +78,8 @@ export interface OperationsTaskFieldDto {
   /** Vízóra szerep a havi kimutatáshoz, csak szám mezőnél. */
   meterRole: OperationsMeterRole | null;
   sortOrder: number;
+  /** A kivezetett mező kivezetésének ideje (a `fields` csak az aktívakat adja; a `retiredFields` a kivezetetteket). */
+  removedAt: string | null;
 }
 
 /** A sablon célja: egy eszköz VAGY egy eszköz-kategória (pontosan az egyik). */
@@ -93,7 +95,13 @@ export interface OperationsTaskTemplateDto {
   target: OperationsTaskTarget;
   /** A kivezetett sablon nem törlődik: a kínálatból esik ki, a régi bejegyzések mellett olvasható marad. */
   isActive: boolean;
+  /** Az AKTÍV mezők, a megadott sorrendben. */
   fields: OperationsTaskFieldDto[];
+  /**
+   * A sablonból kimaradt (kivezetett) mezők: a régi bejegyzések (S2) értékéhez és a havi kimutatáshoz (S4) a definíciójuk
+   * olvasható marad, a kulcsuk soha nem kerül másik mezőhöz (barracuda, #2497).
+   */
+  retiredFields: OperationsTaskFieldDto[];
   updatedAt: string;
 }
 
@@ -112,6 +120,11 @@ export interface OperationsTaskFieldInput {
 }
 
 export interface OperationsTaskTemplateInput {
+  /**
+   * EGYIDEJŰSÉG-ŐR a módosításhoz (barracuda, #2497): a betöltött sablon `updatedAt`-je; ha közben más módosította, a szerver
+   * 409-et ad, és a szerkesztő nem írja csendben felül a másik szerkesztő mezőit.
+   */
+  expectedUpdatedAt?: string | null;
   name: string;
   description?: string | null;
   frequency: OperationsTaskFrequency;
@@ -145,22 +158,30 @@ export function operationsFieldKeyOf(label: string): string {
 }
 
 /**
- * A KULCSOK KIOSZTÁSA A MEZŐLISTÁHOZ: a megadott (meglévő) kulcs megmarad, az újé a címkéből készül, és ütközésnél `_2`,
- * `_3` ... utótagot kap. Egy sablonon belül minden kulcs egyedi. A meglévő kulcs ELŐBB foglalt, mint az újak, hogy egy új mező
- * ne vihesse el egy később álló meglévő mező kulcsát.
+ * A KULCSOK KIOSZTÁSA A MEZŐLISTÁHOZ. A megadott kulcs CSAK akkor marad meg, ha a sablon AKTÍV mezőjének kulcsa (`active`), és még
+ * nem foglalta le másik mező: a kliens által küldött tetszőleges szöveg nem lesz kulcs (barracuda, #2497). Az újé a címkéből
+ * készül, és ütközésnél `_2`, `_3` ... utótagot kap. A `used` a sablon MINDEN VALAHA HASZNÁLT kulcsa (a kivezetetteké is): egy új
+ * mező soha nem kaphatja egy elhagyott mező kulcsát, mert a régi bejegyzések értéke az övé lenne. A meglévő kulcs ELŐBB foglalt,
+ * mint az újak, hogy egy új mező ne vihesse el egy később álló meglévő mező kulcsát. Létrehozáskor nincs egyik sem.
  */
 export function assignOperationsFieldKeys(
   fields: readonly { key?: string | null; label: string }[],
+  existing: {
+    used?: ReadonlySet<string>;
+    active?: ReadonlySet<string>;
+  } = {},
 ): string[] {
-  const used = new Set<string>();
+  const used = new Set<string>(existing.used ?? []);
+  const taken = new Set<string>();
   const result: (string | null)[] = fields.map(() => null);
   fields.forEach((field, index) => {
     const given = field.key?.trim();
-    if (given && !used.has(given)) {
-      used.add(given);
+    if (given && existing.active?.has(given) && !taken.has(given)) {
+      taken.add(given);
       result[index] = given;
     }
   });
+  taken.forEach((key) => used.add(key));
   fields.forEach((field, index) => {
     if (result[index] !== null) return;
     const base = operationsFieldKeyOf(field.label);

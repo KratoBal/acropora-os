@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 
+import { ConflictException } from "@nestjs/common";
+
 import { prisma } from "@acropora/database";
 
 import { integrationDatabaseGate } from "../common/integration-database.js";
@@ -200,6 +202,28 @@ describe(
         await field(other.id, { meterRole: "BEFORE" });
       });
 
+      it("a kivezetett mező megtartja a szerepét, és nem foglalja a helyet: az aktív szerep újra szabad (barracuda, #2497)", async () => {
+        const t = await template("mezo-kivezetett");
+        await field(t.id, { meterRole: "BEFORE", removedAt: new Date() });
+        // a kivezetett ELŐTTE mellett egy aktív ELŐTTE is felvehető, de egy MÁSODIK aktív már nem
+        await field(t.id, { meterRole: "BEFORE" });
+        await assert.rejects(
+          field(t.id, { meterRole: "BEFORE" }),
+          /OperationsTaskField_templateId_meterRole_key/,
+        );
+        // a kivezetett mező szerepe megmaradt a sorban
+        assert.equal(
+          await prisma.operationsTaskField.count({
+            where: {
+              templateId: t.id,
+              meterRole: "BEFORE",
+              removedAt: { not: null },
+            },
+          }),
+          1,
+        );
+      });
+
       it("a kulcs sablononként egyedi", async () => {
         const t = await template("mezo-kulcs");
         await field(t.id, { key: "viz" });
@@ -286,6 +310,63 @@ describe(
           ],
         );
         assert.ok(!updated.fields.some((f) => f.id === anomaly!.id));
+        // a kimaradt mező KIVEZETÉST kap, nem törlődik: a definíciója olvasható marad (barracuda, #2497)
+        assert.deepEqual(
+          updated.retiredFields.map((f) => [f.id, f.key, f.label, f.type]),
+          [[anomaly!.id, "rendellenesseg", "Rendellenesség", "BOOLEAN"]],
+        );
+        assert.notEqual(updated.retiredFields[0]!.removedAt, null);
+        assert.equal(
+          await prisma.operationsTaskField.count({
+            where: { templateId: created.id },
+          }),
+          4,
+        );
+
+        // egy új, azonos címkéjű mező más kulcsot kap, mint a kivezetett: a régi értékek nem az övé lennének
+        const again = await service.update(
+          created.id,
+          {
+            expectedUpdatedAt: updated.updatedAt,
+            name: name("korut"),
+            frequency: "DAILY",
+            assetId: ids.asset,
+            fields: [
+              ...updated.fields.map((f) => ({
+                key: f.key,
+                label: f.label,
+                type: f.type,
+                unit: f.unit,
+                meterRole: f.meterRole,
+              })),
+              { label: "Rendellenesség", type: "TEXT" as const },
+            ],
+          },
+          "system",
+        );
+        const reAdded = again.fields.find((f) => f.label === "Rendellenesség");
+        assert.equal(reAdded?.key, "rendellenesseg_2");
+        assert.deepEqual(
+          again.retiredFields.map((f) => f.key),
+          ["rendellenesseg"],
+        );
+
+        // az egyidejűség-őr: a régi updatedAt-tal küldött módosítás 409, és semmit nem ír felül
+        await assert.rejects(
+          service.update(
+            created.id,
+            {
+              expectedUpdatedAt: updated.updatedAt,
+              name: name("korut-felulirva"),
+              frequency: "DAILY",
+              assetId: ids.asset,
+              fields: [],
+            },
+            "system",
+          ),
+          ConflictException,
+        );
+        assert.equal((await service.get(created.id)).name, name("korut"));
 
         assert.deepEqual(await service.retire(created.id, "system"), {
           retired: true,

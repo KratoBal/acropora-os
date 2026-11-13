@@ -12519,6 +12519,10 @@ model OperationsTaskField {
   /// (a szolgáltatás tartja).
   meterRole  OperationsMeterRole?
   sortOrder  Int                     @default(0)
+  /// A sablonból KIMARADT mező nem törlődik, hanem kivezetést kap (barracuda, #2497): a kulcsa SOHA nem kerül másik mezőhöz
+  /// (a `(templateId, key)` egyedi index a kivezetett sorokra is áll), és a régi bejegyzések (S2) értékéhez a címke, a típus és a
+  /// vízóra szerep olvasható marad a havi kimutatáshoz (S4). A vízóra szerep egyedi indexe csak az AKTÍV mezőkre szól.
+  removedAt  DateTime?
   createdAt  DateTime                @default(now())
 
   template OperationsTaskTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)

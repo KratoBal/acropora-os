@@ -4,6 +4,7 @@ import {
   IsArray,
   IsBoolean,
   IsIn,
+  IsISO8601,
   IsOptional,
   IsString,
   MaxLength,
@@ -102,6 +103,11 @@ class OperationsTaskTemplateBodyDto {
 export class CreateOperationsTaskTemplateDto extends OperationsTaskTemplateBodyDto {}
 
 export class UpdateOperationsTaskTemplateDto extends OperationsTaskTemplateBodyDto {
+  /** Az egyidejűség-őr: a betöltött sablon `updatedAt`-je (ISO); eltérésnél a szerver 409-et ad. */
+  @ValidateIf((_object, value) => value !== undefined && value !== null)
+  @IsISO8601()
+  expectedUpdatedAt?: string | null;
+
   /** A kivezetés ezen a mezőn megy (a `DELETE` is ezt állítja át); a visszaállítás is. */
   @IsBoolean() @IsOptional() isActive?: boolean;
 }

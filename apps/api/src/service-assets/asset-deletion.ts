@@ -36,6 +36,10 @@ export function assetDeletionRefusal(
     reasons.push(`${blockers.worksheetLines} munkalapsor`);
   if (blockers.childAssets > 0)
     reasons.push(`${blockers.childAssets} alárendelt eszköz`);
+  if (blockers.operationsTemplates > 0)
+    reasons.push(
+      `${blockers.operationsTemplates} üzemeltetési naplósablon (a kivezetett is)`,
+    );
   if (reasons.length === 0) return null;
   return `Az eszköz nem törölhető, mert tartozik hozzá: ${reasons.join(", ")}.`;
 }

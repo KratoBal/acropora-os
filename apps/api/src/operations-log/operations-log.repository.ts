@@ -29,6 +29,7 @@ const TEMPLATE_SELECT = {
       required: true,
       meterRole: true,
       sortOrder: true,
+      removedAt: true,
     },
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
   },
@@ -57,8 +58,11 @@ export interface OperationsTaskTemplateWrite {
   fields: OperationsTaskFieldWrite[];
 }
 
+/** A mezőt módosította-e közben más: a betöltött `updatedAt` már nem egyezik (409). */
+export class OperationsTemplateConflictError extends Error {}
+
 function toDto(row: TemplateRow): OperationsTaskTemplateDto {
-  const fields: OperationsTaskFieldDto[] = row.fields.map((field) => ({
+  const all: OperationsTaskFieldDto[] = row.fields.map((field) => ({
     id: field.id,
     key: field.key,
     label: field.label,
@@ -67,7 +71,10 @@ function toDto(row: TemplateRow): OperationsTaskTemplateDto {
     required: field.required,
     meterRole: field.meterRole,
     sortOrder: field.sortOrder,
+    removedAt: field.removedAt ? field.removedAt.toISOString() : null,
   }));
+  const fields = all.filter((field) => field.removedAt === null);
+  const retiredFields = all.filter((field) => field.removedAt !== null);
   return {
     id: row.id,
     name: row.name,
@@ -88,6 +95,7 @@ function toDto(row: TemplateRow): OperationsTaskTemplateDto {
         },
     isActive: row.isActive,
     fields,
+    retiredFields,
     updatedAt: row.updatedAt.toISOString(),
   };
 }
@@ -111,6 +119,26 @@ export class OperationsLogRepository {
       select: TEMPLATE_SELECT,
     });
     return row ? toDto(row) : null;
+  }
+
+  /**
+   * A sablon mezőinek kulcsai: az AKTÍVAK és a VALAHA HASZNÁLTAK (a kivezetetteké is). A kulcs-kiosztás ezekből dolgozik:
+   * egy új mező nem kaphatja egy elhagyott mező kulcsát. `null`: a sablon nem található.
+   */
+  async fieldKeys(
+    id: string,
+  ): Promise<{ used: Set<string>; active: Set<string> } | null> {
+    const row = await prisma.operationsTaskTemplate.findUnique({
+      where: { id },
+      select: { fields: { select: { key: true, removedAt: true } } },
+    });
+    if (!row) return null;
+    return {
+      used: new Set(row.fields.map((field) => field.key)),
+      active: new Set(
+        row.fields.filter((f) => f.removedAt === null).map((f) => f.key),
+      ),
+    };
   }
 
   /** Létezik-e az eszköz, és nem archivált (a sablon csak élő eszközre szólhat). */
@@ -157,37 +185,54 @@ export class OperationsLogRepository {
   }
 
   /**
-   * A SABLON ÉS A TELJES MEZŐKÉSZLET EGY TRANZAKCIÓBAN. A mezőket a KULCSUK szerint egyeztetjük: a meglévő frissül (a kulcsa és
-   * az azonosítója marad), az új létrejön, ami nincs a listában, törlődik. A vízóra szerepet ELŐBB lenullázzuk: a sablononkénti
-   * egyedi (előtte, utána) index egy szerep-cserénél (a két mező felcserélődik) a köztes állapotban sértené magát.
+   * A SABLON ÉS A TELJES MEZŐKÉSZLET EGY TRANZAKCIÓBAN. A mezőket a KULCSUK szerint egyeztetjük: az AKTÍV mező frissül (a kulcsa és
+   * az azonosítója marad), az új létrejön, az aktív, de a listából kimaradt mező KIVEZETÉST kap (`removedAt`), nem törlődik
+   * (barracuda, #2497: a kulcsa soha nem kerül másik mezőhöz, a definíciója olvasható marad a régi bejegyzésekhez). Az AKTÍV
+   * mezők vízóra szerepét ELŐBB lenullázzuk: a sablononkénti egyedi (előtte, utána) index egy szerep-cserénél a köztes állapotban
+   * sértené magát; a kivezetett mező megtartja a szerepét, és az index rá nem szól.
+   * Az `expectedUpdatedAt` az egyidejűség-őr: ha a sablont közben más módosította, `OperationsTemplateConflictError`.
    * `null`: a sablon nem található.
    */
   async replaceTemplate(
     id: string,
-    input: OperationsTaskTemplateWrite & { isActive?: boolean },
+    input: OperationsTaskTemplateWrite & {
+      isActive?: boolean;
+      expectedUpdatedAt?: string | null;
+    },
     actorId: string,
   ): Promise<OperationsTaskTemplateDto | null> {
     return prisma.$transaction(async (tx) => {
       const existing = await tx.operationsTaskTemplate.findUnique({
         where: { id },
-        select: { id: true, fields: { select: { id: true, key: true } } },
+        select: {
+          updatedAt: true,
+          fields: { select: { id: true, key: true, removedAt: true } },
+        },
       });
       if (!existing) return null;
+      if (
+        input.expectedUpdatedAt &&
+        new Date(input.expectedUpdatedAt).getTime() !==
+          existing.updatedAt.getTime()
+      )
+        throw new OperationsTemplateConflictError();
+      const active = existing.fields.filter(
+        (field) => field.removedAt === null,
+      );
       await tx.operationsTaskField.updateMany({
-        where: { templateId: id },
+        where: { templateId: id, removedAt: null },
         data: { meterRole: null },
       });
       const keep = new Set(input.fields.map((field) => field.key));
-      const removable = existing.fields
+      const dropped = active
         .filter((field) => !keep.has(field.key))
         .map((field) => field.id);
-      if (removable.length > 0)
-        await tx.operationsTaskField.deleteMany({
-          where: { id: { in: removable } },
+      if (dropped.length > 0)
+        await tx.operationsTaskField.updateMany({
+          where: { id: { in: dropped } },
+          data: { removedAt: new Date() },
         });
-      const idByKey = new Map(
-        existing.fields.map((field) => [field.key, field.id]),
-      );
+      const idByKey = new Map(active.map((field) => [field.key, field.id]));
       for (const [index, field] of input.fields.entries()) {
         const fieldId = idByKey.get(field.key);
         if (fieldId)

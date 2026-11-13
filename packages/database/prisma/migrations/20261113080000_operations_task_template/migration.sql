@@ -8,7 +8,9 @@
 -- mutat ide):
 --   1. a sablon PONTOSAN egy célra szól: egy eszközre VAGY egy eszköz-kategóriára (a kettő közül pontosan egy kitöltött);
 --   2. a mértékegység és a mérő-szerep CSAK szám mezőnél állhat;
---   3. sablononként legfeljebb egy ELŐTT és egy UTÁN mező (a havi kimutatás vízóra-különbsége egyértelmű legyen).
+--   3. sablononként legfeljebb egy AKTÍV ELŐTT és egy AKTÍV UTÁN mező (a havi kimutatás vízóra-különbsége egyértelmű legyen); a
+--      sablonból kimaradt (kivezetett, `removedAt`) mező megtartja a szerepét a régi bejegyzések kimutatásához, és a kulcsa
+--      soha nem kerül másik mezőhöz (a `(templateId, key)` egyedi index rá is áll).
 
 -- CreateEnum
 CREATE TYPE "OperationsTaskFrequency" AS ENUM ('DAILY', 'WEEKLY', 'OCCASIONAL');
@@ -47,6 +49,7 @@ CREATE TABLE "OperationsTaskField" (
     "required" BOOLEAN NOT NULL DEFAULT false,
     "meterRole" "OperationsMeterRole",
     "sortOrder" INTEGER NOT NULL DEFAULT 0,
+    "removedAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "OperationsTaskField_pkey" PRIMARY KEY ("id")
@@ -91,7 +94,8 @@ ALTER TABLE "OperationsTaskField"
   ADD CONSTRAINT "OperationsTaskField_meter_role_only_number"
   CHECK ("meterRole" IS NULL OR "type" = 'NUMBER');
 
--- SABLONONKÉNT LEGFELJEBB EGY ELŐTT ÉS EGY UTÁN MEZŐ (részleges egyedi index: a NULL szerep nem számít)
+-- SABLONONKÉNT LEGFELJEBB EGY AKTÍV ELŐTT ÉS EGY AKTÍV UTÁN MEZŐ (részleges egyedi index: a NULL szerep és a kivezetett mező
+-- nem számít)
 CREATE UNIQUE INDEX "OperationsTaskField_templateId_meterRole_key"
   ON "OperationsTaskField"("templateId", "meterRole")
-  WHERE "meterRole" IS NOT NULL;
+  WHERE "meterRole" IS NOT NULL AND "removedAt" IS NULL;
