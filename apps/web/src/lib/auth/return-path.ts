@@ -4,7 +4,8 @@
  *
  * ONLY AN INTERNAL, RELATIVE PATH, so the login page cannot be used to send someone elsewhere (no open redirect): it must
  * start with one "/" and no "//" or "/\" (a protocol-relative address), carry no scheme or control character, not point
- * back at the login, and stay short. Anything else is the dashboard.
+ * back at the login, stay short, and be already normal (no dot segment or encoding the URL parser would rewrite). Anything
+ * else is the dashboard.
  */
 const MAX_LENGTH = 512;
 
@@ -24,7 +25,11 @@ export function safeReturnPath(value: string | null | undefined): string {
     if (url.origin !== "https://acropora.invalid") return "/";
     if (url.pathname === "/login" || url.pathname.startsWith("/login/"))
       return "/";
-    return `${url.pathname}${url.search}${url.hash}`;
+    // ONLY AN ALREADY NORMAL PATH (barracuda, #2523): the URL parser resolves dot segments, so "/.//evil.example" comes out
+    // as "//evil.example", a protocol-relative address the raw checks above never saw. A path the parser would change is
+    // refused, so what is returned is exactly what was checked.
+    const normal = `${url.pathname}${url.search}${url.hash}`;
+    return normal === value ? normal : "/";
   } catch {
     return "/";
   }

@@ -4,7 +4,7 @@ import { loginPathFor, safeReturnPath } from "./return-path";
 
 /*
   WHAT TURNS THIS RED. The login sending anyone off our site (an absolute or protocol-relative address, a backslash
-  trick, a scheme, a control character) or back to the login itself; an internal page with its query lost on the way
+  trick, a scheme, a control character, a dot segment the parser turns into "//") or back to the login itself; an internal page with its query lost on the way
   back (the live draw needs ?kind=...&kerdes=...).
 */
 describe("the return path after signing in", () => {
@@ -29,6 +29,12 @@ describe("the return path after signing in", () => {
       "/login",
       "/login?next=/x",
       `/${"a".repeat(600)}`,
+      // dot segments the URL parser turns into a protocol-relative "//" (barracuda, #2523)
+      "/.//evil.example/x",
+      "/..//evil.example/x",
+      "/%2e//evil.example/x",
+      "/a/..//evil.example",
+      "/./login",
     ])
       expect(safeReturnPath(bad), String(bad)).toBe("/");
   });
@@ -39,5 +45,6 @@ describe("the return path after signing in", () => {
     );
     expect(loginPathFor("/")).toBe("/login");
     expect(loginPathFor("//evil.example")).toBe("/login");
+    expect(loginPathFor("/.//evil.example")).toBe("/login");
   });
 });
