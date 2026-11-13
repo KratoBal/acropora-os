@@ -6,6 +6,7 @@ import { PERMISSIONS } from "@acropora/types";
 
 import { PermissionGuard } from "../auth/guards/permission.guard.js";
 import { OperationsLogEntriesController } from "./operations-log-entries.controller.js";
+import { OperationsPartnerController } from "./operations-partner.controller.js";
 import { OperationsReportController } from "./operations-report.controller.js";
 
 /*
@@ -111,5 +112,73 @@ describe("a havi kimutatás végpontjainak jogai", () => {
             error instanceof ForbiddenException && error.getStatus() === 403,
         );
     }
+  });
+});
+
+describe("a partner-nézet végpontjainak jogai", () => {
+  /*
+    MI PIROSIT: ha a partner-végpontot a belső nézet jog is olvashatná (a szerelő a partner nézetét kapná), ha a partner-jog nélkül nyitva
+    volna, vagy ha a partner-jog a belső végpontokat is megnyitná (kollégák neve, belső megjegyzés).
+  */
+  const partnerRun = (
+    controller: { prototype: object },
+    handler: (...args: never[]) => unknown,
+    permissions: string[],
+  ) =>
+    guard.canActivate({
+      getHandler: () => handler,
+      getClass: () => controller,
+      switchToHttp: () => ({
+        getRequest: () => ({
+          user: { id: "u", role: "PARTNER_SERVICE", permissions },
+        }),
+      }),
+    } as never);
+  const partnerProto = OperationsPartnerController.prototype;
+
+  it("a partner-jog olvassa, a belső jogok nem", () => {
+    for (const route of [
+      partnerProto.sites,
+      partnerProto.report,
+      partnerProto.pdf,
+    ]) {
+      assert.equal(
+        partnerRun(OperationsPartnerController, route, [
+          PERMISSIONS.OPERATIONS_LOG_PARTNER_VIEW,
+        ]),
+        true,
+      );
+      for (const other of [
+        [PERMISSIONS.OPERATIONS_LOG_VIEW],
+        [PERMISSIONS.OPERATIONS_LOG_RECORD],
+        [PERMISSIONS.SERVICE_VIEW],
+      ])
+        assert.throws(
+          () => partnerRun(OperationsPartnerController, route, other),
+          ForbiddenException,
+        );
+    }
+  });
+
+  it("a partner-jog a belső kimutatás és bejegyzés végpontjait nem nyitja meg", () => {
+    const partner = [PERMISSIONS.OPERATIONS_LOG_PARTNER_VIEW];
+    for (const route of [
+      OperationsReportController.prototype.report,
+      OperationsReportController.prototype.pdf,
+    ])
+      assert.throws(
+        () => partnerRun(OperationsReportController, route, partner),
+        ForbiddenException,
+      );
+    for (const route of [
+      OperationsLogEntriesController.prototype.list,
+      OperationsLogEntriesController.prototype.get,
+      OperationsLogEntriesController.prototype.create,
+      OperationsLogEntriesController.prototype.downloadPhoto,
+    ])
+      assert.throws(
+        () => partnerRun(OperationsLogEntriesController, route, partner),
+        ForbiddenException,
+      );
   });
 });

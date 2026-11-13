@@ -5,6 +5,8 @@ import { documentStoreProvider } from "../service-assets/document-store/document
 import { OperationsLogEntriesController } from "./operations-log-entries.controller.js";
 import { OperationsLogEntriesRepository } from "./operations-log-entries.repository.js";
 import { OperationsLogEntriesService } from "./operations-log-entries.service.js";
+import { OperationsPartnerController } from "./operations-partner.controller.js";
+import { OperationsPartnerService } from "./operations-partner.service.js";
 import { OperationsReportController } from "./operations-report.controller.js";
 import { OperationsReportRepository } from "./operations-report.repository.js";
 import { OperationsReportService } from "./operations-report.service.js";
@@ -21,6 +23,7 @@ import { OperationsLogService } from "./operations-log.service.js";
     OperationsLogController,
     OperationsLogEntriesController,
     OperationsReportController,
+    OperationsPartnerController,
   ],
   providers: [
     documentStoreProvider,
@@ -31,6 +34,7 @@ import { OperationsLogService } from "./operations-log.service.js";
     OperationsLogPhotosService,
     OperationsReportRepository,
     OperationsReportService,
+    OperationsPartnerService,
   ],
   exports: [OperationsLogRepository],
 })

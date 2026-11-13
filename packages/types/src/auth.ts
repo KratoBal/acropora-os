@@ -166,6 +166,9 @@ export const PERMISSIONS = {
   /// a sablont nem gondozza.
   OPERATIONS_LOG_VIEW: "operations-log.view",
   OPERATIONS_LOG_RECORD: "operations-log.record",
+  /// A partner-fiók látja a SAJÁT helyszíneinek naplóját és havi kimutatását (S5): külön jog, mert a belső nézet (`operations-log.view`)
+  /// kollégák nevét és belső megjegyzést is mutat. A partner a saját, szűkített végpontjait kapja, a belsőket soha.
+  OPERATIONS_LOG_PARTNER_VIEW: "operations-log.partner.view",
   OPERATIONS_LOG_TEMPLATES_MANAGE: "operations-log.templates.manage",
   ICP_VIEW: "icp.view",
   ICP_MANAGE: "icp.manage",
@@ -415,6 +418,9 @@ const BASE_ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>> =
         permission !== PERMISSIONS.KNOWLEDGE_APPROVE &&
         // A SICK DAY IS HEALTH DATA, AND THE SHEET IS AN HR RECORD (os-jelenleti-iv, S1).
         permission !== PERMISSIONS.ATTENDANCE_MANAGE &&
+        // A PARTNER-NÉZET A PARTNER-FIÓKÉ (os-uzemeltetesi-naplo, S5): a vezető a belső nézetet (`operations-log.view`) kapja, a
+        // partner szűkített végpontjait nem; az OWNER és az ADMIN mindent kap, de a végpont a partner-hatókört kéri, tehát nekik üres.
+        permission !== PERMISSIONS.OPERATIONS_LOG_PARTNER_VIEW &&
         // A JOVAHAGYAS NEM VEZETOI JOG, HANEM KET NEVESITETT EMBERE. Balazs
         // szabalya 2026-09-01 14:28-rol: egyelore semmi nem mehet ki nelkule vagy
         // Luca nelkul. Egy MANAGER, aki tartalmat IR, sajat magat hagyna jova --
@@ -586,6 +592,8 @@ const BASE_ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>> =
       PERMISSIONS.SERVICE_MANAGE,
       PERMISSIONS.AQUARIUMS_VIEW,
       PERMISSIONS.AQUARIUMS_MANAGE,
+      // az üzemeltetési napló partner-nézete (task os-uzemeltetesi-naplo, S5): a saját helyszínek bejegyzései és havi kimutatása, olvasva
+      PERMISSIONS.OPERATIONS_LOG_PARTNER_VIEW,
     ],
 
     /**

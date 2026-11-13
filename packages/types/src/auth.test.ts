@@ -107,6 +107,8 @@ describe("role permission mapping", () => {
     assert.deepEqual([...permissions].sort(), [
       PERMISSIONS.AQUARIUMS_MANAGE,
       PERMISSIONS.AQUARIUMS_VIEW,
+      // az üzemeltetési napló partner-nézete (os-uzemeltetesi-naplo, S5)
+      PERMISSIONS.OPERATIONS_LOG_PARTNER_VIEW,
       PERMISSIONS.SERVICE_MANAGE,
       PERMISSIONS.SERVICE_VIEW,
     ]);

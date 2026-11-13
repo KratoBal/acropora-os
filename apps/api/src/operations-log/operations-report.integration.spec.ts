@@ -4,6 +4,7 @@ import { after, before, describe, it } from "node:test";
 import { prisma } from "@acropora/database";
 
 import { integrationDatabaseGate } from "../common/integration-database.js";
+import { OperationsPartnerService } from "./operations-partner.service.js";
 import { OperationsReportRepository } from "./operations-report.repository.js";
 import { OperationsReportService } from "./operations-report.service.js";
 
@@ -23,6 +24,7 @@ describe(
     const suffix = Date.now() % 1_000_000;
     const repository = new OperationsReportRepository();
     const service = new OperationsReportService(repository);
+    const partnerService = new OperationsPartnerService(repository, service);
     const ids = {
       root: "",
       child: "",
@@ -32,6 +34,9 @@ describe(
       outsideAsset: "",
       template: "",
       user: "",
+      customer: "",
+      partnerUser: "",
+      otherPartnerUser: "",
     };
     const name = (label: string) => `${PREFIX}${label}-${suffix}`;
 
@@ -87,6 +92,7 @@ describe(
           },
           select: { id: true },
         });
+      ids.customer = customer.id;
       ids.root = (await department("Biodom")).id;
       ids.child = (await department("Nagy", ids.root)).id;
       ids.other = (await department("Masik")).id;
@@ -124,6 +130,22 @@ describe(
           select: { id: true },
         })
       ).id;
+      // a partner-fiók: a vevőhöz kötve, a ROOT helyszínhez rendelve (a részfájával együtt); a másik fiók a vevőhöz kötött, de hozzárendelés nélkül
+      const partnerUser = (label: string) =>
+        prisma.user.create({
+          data: {
+            email: `${PREFIX.toLowerCase()}${label}-${suffix}@example.invalid`,
+            displayName: `${PREFIX}${label}`,
+            role: "PARTNER_SERVICE",
+            customerId: customer.id,
+          },
+          select: { id: true },
+        });
+      ids.partnerUser = (await partnerUser("partner")).id;
+      ids.otherPartnerUser = (await partnerUser("hozzarendeletlen")).id;
+      await prisma.userWorksheetDepartment.create({
+        data: { userId: ids.partnerUser, departmentId: ids.root },
+      });
       // a KATEGÓRIÁRA szóló napi sablon: minden ilyen kategóriájú eszközre külön esedékes
       ids.template = (
         await prisma.operationsTaskTemplate.create({
@@ -232,6 +254,68 @@ describe(
       assert.equal(byAsset.has(ids.outsideAsset), false);
       assert.equal(report.totals.missed, 58);
       assert.ok(!byAsset.get(ids.insideAsset)!.periods.includes("2026-09-10"));
+    });
+
+    describe("a partner-fiók nézete", () => {
+      const partner = (id: string) =>
+        ({
+          id,
+          email: "p@example.invalid",
+          displayName: "Partner",
+          role: "PARTNER_SERVICE",
+          customerId: ids.customer,
+          supplierId: null,
+        }) as never;
+
+      it("a hozzárendelt helyszínt és a részfáját látja, a másik helyszínt nem", async () => {
+        const sites = await partnerService.sites(partner(ids.partnerUser));
+        assert.deepEqual(
+          sites.items.map((site) => site.id).sort(),
+          [ids.root, ids.child].sort(),
+        );
+        assert.equal(
+          sites.items.some((site) => site.id === ids.other),
+          false,
+        );
+      });
+
+      it("a hozzárendelés nélküli fiók semmit nem lát, és a helyszínre ugyanazt a 404-et kapja", async () => {
+        const user = partner(ids.otherPartnerUser);
+        assert.deepEqual((await partnerService.sites(user)).items, []);
+        await assert.rejects(
+          partnerService.report(user, {
+            month: "2026-09",
+            departmentId: ids.root,
+          }),
+          /A helyszín nem található/,
+        );
+      });
+
+      it("a látható helyszín kimutatása PARTNER nézettel készül: a nevek Acropora, a másik helyszín eszköze nincs benne", async () => {
+        const result = await partnerService.report(partner(ids.partnerUser), {
+          month: "2026-09",
+          departmentId: ids.root,
+        });
+        assert.equal(result.report.audience, "PARTNER");
+        assert.equal(result.report.totals.entries, 2);
+        const text = JSON.stringify(result);
+        assert.equal(text.includes(`${PREFIX}kolléga`), false);
+        assert.ok(text.includes("Acropora"));
+        assert.equal(
+          result.report.assets.some(
+            (block) => block.assetId === ids.outsideAsset,
+          ),
+          false,
+        );
+        // egy hozzá nem rendelt helyszín kérése is 404, nem kimutatás
+        await assert.rejects(
+          partnerService.report(partner(ids.partnerUser), {
+            month: "2026-09",
+            departmentId: ids.other,
+          }),
+          /A helyszín nem található/,
+        );
+      });
     });
   },
 );
