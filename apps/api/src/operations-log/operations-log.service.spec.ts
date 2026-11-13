@@ -321,6 +321,23 @@ describe("a típusváltás új mező, új kulccsal", () => {
     );
   });
 
+  it("a körülvágandó alakban küldött kulcs sem csúszik át a típus-őrön", async () => {
+    const { service, calls } = fixture({
+      used: ["viz"],
+      active: ["viz"],
+      types: { viz: "NUMBER" },
+    });
+    await service.update(
+      "t1",
+      input({ fields: [{ key: " viz ", label: "Víz", type: "TEXT" }] }),
+      "u1",
+    );
+    assert.deepEqual(
+      calls.write!.fields.map((f) => f.key),
+      ["viz_2"],
+    );
+  });
+
   it("az azonos típusú meglévő mező megtartja a kulcsát", async () => {
     const { service, calls } = fixture({
       used: ["viz"],

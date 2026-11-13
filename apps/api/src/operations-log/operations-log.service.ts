@@ -64,13 +64,15 @@ export class OperationsLogService {
     */
     const adjusted: OperationsTaskTemplateInput & { isActive?: boolean } = {
       ...input,
-      fields: input.fields.map((field) =>
-        field.key &&
-        keys.typeOf.get(field.key) !== undefined &&
-        keys.typeOf.get(field.key) !== field.type
+      fields: input.fields.map((field) => {
+        // a kulcsot a kiosztás is körülvágva olvassa (`assignOperationsFieldKeys`): az összevetés ugyanazt a kulcsot nézi
+        const given = field.key?.trim();
+        return given &&
+          keys.typeOf.get(given) !== undefined &&
+          keys.typeOf.get(given) !== field.type
           ? { ...field, key: null }
-          : field,
-      ),
+          : field;
+      }),
     };
     const write = await this.checked(adjusted, keys);
     try {
