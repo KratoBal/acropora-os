@@ -2039,3 +2039,24 @@ export type {
   WebshopInvoiceIssueResult,
   WebshopInvoiceSummary,
 } from "./billing-issue-summary.js";
+export {
+  ATTENDANCE_DAY_KIND_LABELS,
+  ATTENDANCE_DAY_KINDS,
+  ATTENDANCE_WEEKDAYS,
+  attendanceDayProblem,
+  attendanceRangeProblem,
+  attendanceWeekProblem,
+  formatAttendanceClock,
+  isAttendanceDate,
+  isAttendanceEmployeeRole,
+  parseAttendanceClock,
+} from "./attendance.js";
+export type {
+  AttendanceDayEntry,
+  AttendanceDayInput,
+  AttendanceDayKind,
+  AttendanceDayListResponse,
+  AttendanceSchedule,
+  AttendanceScheduleDay,
+  AttendanceScheduleListResponse,
+} from "./attendance.js";

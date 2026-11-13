@@ -248,6 +248,12 @@ export const PERMISSION_AREAS: readonly PermissionArea[] = [
     extras: [],
   },
   { key: "users", label: "Felhasználók", manage: P.USERS_MANAGE, extras: [] },
+  {
+    key: "attendance",
+    label: "Jelenléti ív",
+    manage: P.ATTENDANCE_MANAGE,
+    extras: [],
+  },
 ];
 
 export type PermissionLevel = "none" | "view" | "manage";

@@ -346,6 +346,11 @@ export const PERMISSIONS = {
   /// MANAGER nem kapja (lásd lent), és a `knowledge.manage` sem hozza magával: aki
   /// szerkeszt, a saját szerkesztését e jog nélkül nem hagyhatja jóvá.
   KNOWLEDGE_APPROVE: "knowledge.approve",
+  /// THE ATTENDANCE SHEET (task os-jelenleti-iv, S1): an employee's weekly schedule and the day marks (sick, leave, day off,
+  /// other times), past months included. KEPT APART FROM `users.manage`: who keeps the sheets is an HR job, not account
+  /// administration, and the two may well be different people; a sick day is health data, so the circle is narrow: OWNER
+  /// and ADMIN, not the MANAGER (see below), grantable one by one. The employee's own advance marks (S3) need no right.
+  ATTENDANCE_MANAGE: "attendance.manage",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -406,6 +411,8 @@ const BASE_ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>> =
         permission !== PERMISSIONS.AI_SETTINGS_MANAGE &&
         // A VÉGLEGES JÓVÁHAGYÁS (szótár-változat, K4) A SZERKESZTŐÉ, BALÁZSÉ (S5).
         permission !== PERMISSIONS.KNOWLEDGE_APPROVE &&
+        // A SICK DAY IS HEALTH DATA, AND THE SHEET IS AN HR RECORD (os-jelenleti-iv, S1).
+        permission !== PERMISSIONS.ATTENDANCE_MANAGE &&
         // A JOVAHAGYAS NEM VEZETOI JOG, HANEM KET NEVESITETT EMBERE. Balazs
         // szabalya 2026-09-01 14:28-rol: egyelore semmi nem mehet ki nelkule vagy
         // Luca nelkul. Egy MANAGER, aki tartalmat IR, sajat magat hagyna jova --

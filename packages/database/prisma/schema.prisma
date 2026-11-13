@@ -1004,6 +1004,9 @@ model User {
   updatedAt              DateTime                      @updatedAt
 
   sessions                            Session[]
+  /// The attendance sheet (os-jelenleti-iv): the weekly schedule versions, and the days that differ from them.
+  attendanceSchedules                 AttendanceSchedule[]
+  attendanceDays                      AttendanceDay[]
   /// A LATHATOSAGI HOZZARENDELESEI: melyik alegysegeket latja (a reszfaval egyutt).
   unitAssignments                     UserWorksheetDepartment[]
   notificationRoles                   UserNotificationRole[]              @relation("UserNotificationRole")
@@ -12436,6 +12439,65 @@ model GameMailDay {
   /// A budapesti nap, például 2026-11-06.
   day  String @id
   sent Int    @default(0)
+}
+
+/// A DAY THAT DIFFERS FROM THE WEEKLY SCHEDULE on the attendance sheet (os-jelenleti-iv, S1). WORKED carries other times
+/// (overtime, left early, a day not on the schedule); the three marks carry none, the sheet prints "B", "SZ" or the day off
+/// in place of the times.
+enum AttendanceDayKind {
+  WORKED
+  SICK
+  LEAVE
+  DAY_OFF
+}
+
+/// AN EMPLOYEE'S WEEKLY SCHEDULE, from a date on (os-jelenleti-iv, S1; Balázs 2026-11-13: "kollegankent beallithato heti
+/// rend"). The sheet of a day uses the latest version whose `validFrom` is not after it, so a new schedule never rewrites
+/// an earlier, possibly signed month. Kept with the user (Restrict): an attendance record outlives the account's activity.
+model AttendanceSchedule {
+  id          String   @id @default(cuid())
+  userId      String
+  validFrom   DateTime @db.Date
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User                    @relation(fields: [userId], references: [id], onDelete: Restrict)
+  days AttendanceScheduleDay[]
+
+  @@unique([userId, validFrom])
+}
+
+/// One working weekday of a schedule (ISO weekday, 1 Monday ... 7 Sunday). A weekday without a row is free. Minutes after
+/// midnight; the departure is after the arrival on the same day (CHECK constraint in the migration).
+model AttendanceScheduleDay {
+  scheduleId  String
+  weekday     Int
+  startMinute Int
+  endMinute   Int
+
+  schedule AttendanceSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  @@id([scheduleId, weekday])
+}
+
+/// A DAY THAT DIFFERS FROM THE SCHEDULE (os-jelenleti-iv, S1): at most one per employee and date. Past months stay editable
+/// (the accountant books leave, Luca reconciles later); every change goes to the audit log with the old and the new value.
+/// The times are set exactly on WORKED and on nothing else (CHECK constraint in the migration).
+model AttendanceDay {
+  id          String            @id @default(cuid())
+  userId      String
+  date        DateTime          @db.Date
+  kind        AttendanceDayKind
+  startMinute Int?
+  endMinute   Int?
+  updatedById String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, date])
 }
 
 // =====================================================================================================================
