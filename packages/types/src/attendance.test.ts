@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  ATTENDANCE_SELF_TAKEN,
   attendanceDayProblem,
+  attendanceSelfMarkProblem,
   attendanceRangeProblem,
   attendanceWeekProblem,
   formatAttendanceClock,
@@ -134,5 +136,76 @@ describe("who has a sheet, and who keeps it", () => {
       ),
       ["OWNER", "ADMIN"],
     );
+  });
+});
+
+describe("an employee's own marks (S3)", () => {
+  const today = "2026-11-13";
+
+  it("allows leave and day off from tomorrow, over nothing or over an own mark", () => {
+    for (const kind of ["LEAVE", "DAY_OFF"] as const)
+      for (const existing of [null, "LEAVE", "DAY_OFF"] as const)
+        assert.equal(
+          attendanceSelfMarkProblem({
+            kind,
+            date: "2026-11-14",
+            today,
+            existing,
+          }),
+          null,
+          `${kind} over ${existing}`,
+        );
+    assert.equal(
+      attendanceSelfMarkProblem({
+        date: "2026-12-24",
+        today,
+        existing: "LEAVE",
+      }),
+      null,
+    );
+  });
+
+  it("refuses another kind, today, the past, a bad date, and an admin's other mark", () => {
+    for (const kind of ["SICK", "WORKED"] as const)
+      assert.match(
+        attendanceSelfMarkProblem({
+          kind,
+          date: "2026-11-14",
+          today,
+          existing: null,
+        })!,
+        /csak szabadságot vagy szabadnapot/,
+      );
+    for (const date of ["2026-11-13", "2026-11-12"])
+      assert.match(
+        attendanceSelfMarkProblem({
+          kind: "LEAVE",
+          date,
+          today,
+          existing: null,
+        })!,
+        /holnapi vagy egy későbbi/,
+        date,
+      );
+    assert.match(
+      attendanceSelfMarkProblem({
+        kind: "LEAVE",
+        date: "2026-02-30",
+        today,
+        existing: null,
+      })!,
+      /Nem érvényes dátum/,
+    );
+    for (const existing of ["SICK", "WORKED"] as const)
+      assert.equal(
+        attendanceSelfMarkProblem({
+          kind: "LEAVE",
+          date: "2026-11-14",
+          today,
+          existing,
+        }),
+        ATTENDANCE_SELF_TAKEN,
+        existing,
+      );
   });
 });

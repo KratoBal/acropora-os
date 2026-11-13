@@ -1007,6 +1007,7 @@ model User {
   /// The attendance sheet (os-jelenleti-iv): the weekly schedule versions, and the days that differ from them.
   attendanceSchedules                 AttendanceSchedule[]
   attendanceDays                      AttendanceDay[]
+  attendanceSignedSheets              AttendanceSignedSheet[]
   /// A LATHATOSAGI HOZZARENDELESEI: melyik alegysegeket latja (a reszfaval egyutt).
   unitAssignments                     UserWorksheetDepartment[]
   notificationRoles                   UserNotificationRole[]              @relation("UserNotificationRole")
@@ -12708,4 +12709,24 @@ model OperationsLogEntryDocument {
 
   @@index([entryId, createdAt])
   @@index([sha256])
+}
+
+/// A MONTH'S SHEET PRINTED FOR SIGNATURE (os-jelenleti-iv, S2d; brief point 8). The PDF exactly as it was handed out for
+/// signing, kept as bytes: a later change to the month must not rewrite the signed copy. `contentHash` is the hash of the
+/// computed sheet at that moment (rows and totals, not the print time); when today's sheet hashes differently, the screen
+/// says the signed copy differs and needs a new print and signature. Several per month: the latest is the one that counts.
+model AttendanceSignedSheet {
+  id          String   @id @default(cuid())
+  userId      String
+  /// "YYYY-MM".
+  month       String
+  contentHash String
+  pdf         Bytes
+  printedAt   DateTime
+  printedById String?
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId, month, printedAt])
 }
