@@ -140,7 +140,12 @@ function fixture(
       startedAt: new Date("2026-11-13T09:30:00.000Z"),
       serviceJobId: null,
       recordedById: "u1",
-      asset: { id: "a1", assetNumber: "E-1", name: "Szűrő" },
+      asset: {
+        id: "a1",
+        assetNumber: "E-1",
+        name: "Szűrő",
+        department: { customerId: "c9" },
+      },
     }),
     linkServiceJob: async (entryId: string, serviceJobId: string) => {
       calls.linked.push({ entryId, serviceJobId });
@@ -374,6 +379,8 @@ describe("az üzemeltetési napló bejegyzése", () => {
     const ticket = calls.tickets[0]!;
     assert.equal(ticket.actor, "u1");
     assert.equal(ticket.input.originAssetId, "a1");
+    // a partner a helyszínből jön, nem az eszköz denormalizált mezőjéből
+    assert.equal(ticket.input.customerId, "c9");
     assert.equal(ticket.input.kind, "REPAIR");
     assert.equal(ticket.input.clientOperationId, "ops-anomaly:e1");
     assert.match(

@@ -180,6 +180,12 @@ export class OperationsLogEntriesService {
           ].join("\n"),
           kind: "REPAIR",
           originAssetId: context.asset.id,
+          // a partner a HELYSZÍNBŐL jön: a jegy-szolgáltatás az eszköz saját `customerId` mezőjéből vezetne le, az pedig hiányozhat
+          // (a CI-n mért eset: helyszínes eszköz partner-mező nélkül, "Helyszínt csak partnerrel együtt lehet megadni"); megadva a
+          // szolgáltatás ellentmondás-ellenőrzése a helyszínhez méri
+          ...(context.asset.department?.customerId
+            ? { customerId: context.asset.department.customerId }
+            : {}),
           clientOperationId: `ops-anomaly:${entry.id}`,
         } as CreateServiceJobDto,
         context.recordedById || actorId,
