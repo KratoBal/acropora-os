@@ -1820,6 +1820,20 @@ export const ANONYMIZATION_REGISTER: Readonly<
     label: "business",
     unit: "business",
   },
+  // Üzemeltetési napló, S2a: a bejegyzés a sablon pillanatfelvételét hordozza (név, mező-címke, mértékegység), a szabad szövegek
+  // (rendellenesség, belső megjegyzés, szöveg érték) a kollégák saját szavai
+  OperationsLogEntry: {
+    clientOperationId: "identifier",
+    templateName: "business",
+    anomalyNote: "freeText",
+    internalNote: "freeText",
+  },
+  OperationsLogEntryValue: {
+    fieldKey: "identifier",
+    label: "business",
+    unit: "business",
+    textValue: "freeText",
+  },
   QuoteTemplate: {
     name: "business",
     blocks: "business",

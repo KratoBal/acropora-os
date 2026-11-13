@@ -1105,6 +1105,8 @@ model User {
   billingMailDeliveries               BillingDocumentMailDelivery[]       @relation("BillingMailInitiatedBy")
   simplePayLinesApproved              SimplePayTransactionLine[]          @relation("SimplePayLineManualApprovedBy")
   mortalityRecordsRecorded            MortalityRecord[]                   @relation("MortalityRecordRecordedBy")
+  operationsLogEntriesRecorded        OperationsLogEntry[]                @relation("OperationsLogEntryRecordedBy")
+  operationsLogEntryParticipations    OperationsLogEntryParticipant[]
   mortalityDocumentsUploaded          MortalityRecordDocument[]           @relation("MortalityRecordDocumentUploadedBy")
   dashboardLayout                     UserDashboardLayout?
   ownedQuotes                         Quote[]                             @relation("QuoteOwner")
@@ -4979,6 +4981,8 @@ model Asset {
   label           AssetLabel?
   /// Az üzemeltetési napló sablonjai, amelyek erre az eszközre szólnak (task os-uzemeltetesi-naplo).
   operationsTaskTemplates OperationsTaskTemplate[]
+  /// Az üzemeltetési napló bejegyzései erről az eszközről (task os-uzemeltetesi-naplo, S2).
+  operationsLogEntries    OperationsLogEntry[]
 
   @@index([customerId, status])
   @@index([supplierId, status])
@@ -12561,6 +12565,7 @@ model OperationsTaskTemplate {
   asset         Asset?                @relation(fields: [assetId], references: [id], onDelete: Restrict)
   assetCategory AssetCategory?        @relation(fields: [assetCategoryId], references: [id], onDelete: Restrict)
   fields        OperationsTaskField[]
+  entries       OperationsLogEntry[]
 
   @@index([isActive, frequency])
   @@index([assetId])
@@ -12592,6 +12597,82 @@ model OperationsTaskField {
 
   @@unique([templateId, key])
   @@index([templateId, sortOrder])
+}
+
+// =====================================================================================================================
+// ÜZEMELTETÉSI NAPLÓ, S2a: A BEJEGYZÉS (a rögzítés maga; task os-uzemeltetesi-naplo, brief exchange/uzemeltetesi-naplo/brief-2026-11-13.md).
+// Egy bejegyzés = egy elvégzett rutin-feladat egy eszközön: mikor kezdődött és ért véget (a telefon rögzíti, nem gépelik), kik
+// csinálták, a sablon mezőinek értékei, és volt-e rendellenesség. A fénykép mezők képei és a rendellenesség hibajegye a következő
+// szeletek (S2b, S3); a havi kimutatás (S4) és a partner-nézet (S5) ezekből olvas.
+//
+// A BEJEGYZÉS A SABLON PILLANATFELVÉTELÉT HORDOZZA (sablon neve, gyakorisága, minden érték mellett a mező kulcsa, típusa, címkéje,
+// mértékegysége, vízóra szerepe): a sablon később átnevezhető, a mezője kivezethető, a régi bejegyzés és a belőle készülő kimutatás
+// ettől nem változik (barracuda, #2497 és #2499: egy kulcs alatt nem keveredhet régi szám és új szöveg érték).
+// =====================================================================================================================
+
+model OperationsLogEntry {
+  id                String   @id @default(cuid())
+  /// A kliens által adott művelet-azonosító, a rögzítés idempotencia-kulcsa (offline a telefon sorba teszi, az újraküldés nem
+  /// hozhat létre második bejegyzést). A szabály ugyanaz, mint az akvárium-méréseknél.
+  clientOperationId String?  @unique
+  templateId        String
+  assetId           String
+  /// A sablon neve és gyakorisága a rögzítés pillanatában.
+  templateName      String   @db.VarChar(120)
+  frequency         OperationsTaskFrequency
+  /// A rögzítés kezdete és vége: a „Kezdés” és a „Kész” gomb időpontja (a telefon órája, a szerver nem írja felül); a vége nem lehet a
+  /// kezdet előtt, egyik sem a jövőben (a szolgáltatás őrzi, a vége-kezdet CHECK a migrációban).
+  startedAt         DateTime
+  finishedAt        DateTime
+  recordedById      String
+  /// Volt-e rendellenesség; ha igen, rövid szöveg kötelező (CHECK). A hibajegy az S3.
+  anomaly           Boolean  @default(false)
+  anomalyNote       String?  @db.VarChar(2000)
+  /// Belső megjegyzés: a partner-nézet (S5) nem mutatja.
+  internalNote      String?  @db.VarChar(2000)
+  createdAt         DateTime @default(now())
+
+  template     OperationsTaskTemplate          @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  asset        Asset                           @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  recordedBy   User                            @relation("OperationsLogEntryRecordedBy", fields: [recordedById], references: [id], onDelete: Restrict)
+  participants OperationsLogEntryParticipant[]
+  values       OperationsLogEntryValue[]
+
+  @@index([assetId, startedAt])
+  @@index([templateId, startedAt])
+  @@index([startedAt])
+  @@index([recordedById])
+}
+
+/// A bejegyzés résztvevői: a rögzítő és a megadott kollégák (egy vagy több ember). A partner-nézet (S5) a neveket „Acropora”-ként mutatja.
+model OperationsLogEntryParticipant {
+  entryId String
+  userId  String
+
+  entry OperationsLogEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  user  User               @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@id([entryId, userId])
+  @@index([userId])
+}
+
+/// A bejegyzés egy mezőjének értéke, a mező pillanatfelvételével. Szám, igen/nem és szöveg érték itt áll, a fénykép mező képei az
+/// S2b-ben a saját táblájukban. Pontosan az a érték-oszlop van kitöltve, amelyik a típusnak megfelel (CHECK).
+model OperationsLogEntryValue {
+  id           String                  @id @default(cuid())
+  entryId      String
+  fieldKey     String                  @db.VarChar(40)
+  fieldType    OperationsTaskFieldType
+  label        String                  @db.VarChar(120)
+  unit         String?                 @db.VarChar(16)
+  meterRole    OperationsMeterRole?
+  numberValue  Decimal?                @db.Decimal(19, 6)
+  booleanValue Boolean?
+  textValue    String?                 @db.VarChar(2000)
+
+  entry OperationsLogEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  @@unique([entryId, fieldKey])
 }
 
 /// A MONTH'S SHEET PRINTED FOR SIGNATURE (os-jelenleti-iv, S2d; brief point 8). The PDF exactly as it was handed out for

@@ -21,6 +21,11 @@ test("az üzemeltetési napló jogai", () => {
       role,
     );
   }
+  for (const role of ["OWNER", "ADMIN", "MANAGER", "SERVICE"] as const)
+    assert.ok(
+      ROLE_PERMISSIONS[role].includes(PERMISSIONS.OPERATIONS_LOG_RECORD),
+      role,
+    );
   assert.ok(ROLE_PERMISSIONS.SERVICE.includes(PERMISSIONS.OPERATIONS_LOG_VIEW));
   assert.ok(
     !ROLE_PERMISSIONS.SERVICE.includes(
@@ -35,6 +40,7 @@ test("az üzemeltetési napló jogai", () => {
   ] as const)
     for (const permission of [
       PERMISSIONS.OPERATIONS_LOG_VIEW,
+      PERMISSIONS.OPERATIONS_LOG_RECORD,
       PERMISSIONS.OPERATIONS_LOG_TEMPLATES_MANAGE,
     ])
       assert.ok(!ROLE_PERMISSIONS[role].includes(permission), `${role}`);

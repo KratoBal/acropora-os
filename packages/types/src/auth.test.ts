@@ -406,6 +406,7 @@ describe("a MANAGER jogkör-készlete rögzítve van", () => {
         "mortality.manage",
         "mortality.view",
         // az Üzemeltetési napló (task os-uzemeltetesi-naplo): a vezető a sablonokat is kezeli
+        "operations-log.record",
         "operations-log.templates.manage",
         "operations-log.view",
         "orders.manage",

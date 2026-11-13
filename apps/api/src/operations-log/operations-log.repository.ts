@@ -113,6 +113,28 @@ export class OperationsLogRepository {
     return rows.map(toDto);
   }
 
+  /**
+   * A REGISZTRÁCIÓ KÍNÁLATA EGY ESZKÖZHÖZ: az AKTÍV sablonok, amelyek erre az eszközre VAGY az eszköz kategóriájára szólnak. A
+   * kivezetett sablon kiesik (a régi bejegyzései olvashatók maradnak).
+   */
+  async activeTemplatesForAsset(asset: {
+    id: string;
+    categoryId: string | null;
+  }): Promise<OperationsTaskTemplateDto[]> {
+    const rows = await prisma.operationsTaskTemplate.findMany({
+      where: {
+        isActive: true,
+        OR: [
+          { assetId: asset.id },
+          ...(asset.categoryId ? [{ assetCategoryId: asset.categoryId }] : []),
+        ],
+      },
+      select: TEMPLATE_SELECT,
+      orderBy: [{ name: "asc" }, { id: "asc" }],
+    });
+    return rows.map(toDto);
+  }
+
   async templateById(id: string): Promise<OperationsTaskTemplateDto | null> {
     const row = await prisma.operationsTaskTemplate.findUnique({
       where: { id },

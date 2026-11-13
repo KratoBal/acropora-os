@@ -162,8 +162,10 @@ export const PERMISSIONS = {
   MORTALITY_VIEW: "mortality.view",
   MORTALITY_MANAGE: "mortality.manage",
   /// Üzemeltetési napló (task os-uzemeltetesi-naplo): a nézet a sablonokat (S1), később a bejegyzéseket olvassa; a sablonok
-  /// kezelése (felvétel, szerkesztés, kivezetés) külön, szűkebb jog. A rögzítés jogát az S2 hozza.
+  /// kezelése (felvétel, szerkesztés, kivezetés) külön, szűkebb jog. A bejegyzés rögzítése (S2) a harmadik: a szerelő rögzít, de
+  /// a sablont nem gondozza.
   OPERATIONS_LOG_VIEW: "operations-log.view",
+  OPERATIONS_LOG_RECORD: "operations-log.record",
   OPERATIONS_LOG_TEMPLATES_MANAGE: "operations-log.templates.manage",
   ICP_VIEW: "icp.view",
   ICP_MANAGE: "icp.manage",
@@ -495,6 +497,7 @@ const BASE_ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>> =
       PERMISSIONS.MORTALITY_MANAGE,
       // az üzemeltetési napló sablonjai: a szerelő ezekből rögzít (S2); a sablonokat nem ő gondozza
       PERMISSIONS.OPERATIONS_LOG_VIEW,
+      PERMISSIONS.OPERATIONS_LOG_RECORD,
     ],
     VIEWER: [...VIEW_PERMISSIONS, PERMISSIONS.MESSAGES_USE],
 
