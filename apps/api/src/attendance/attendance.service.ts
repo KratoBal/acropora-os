@@ -317,8 +317,9 @@ export class AttendanceService {
 
   /**
    * THE EMPLOYEE'S OWN MARKS (S3; brief point 3): leave and day off, in advance, from tomorrow on. The rule is the shared
-   * `attendanceSelfMarkProblem`; the "not over an admin's other mark" half is checked again inside the write, under the
-   * employee's row lock, so a mark set by an admin between the read and the write is not overwritten.
+   * `attendanceSelfMarkProblem`; the "not over an admin's mark" half is checked again inside the write, under the employee's
+   * row lock: the existing entry must be leave or a day off AND set by the employee themselves. An admin's booked leave is
+   * not the employee's to change or undo (barracuda on #2515); the answer is the shared 409 sentence.
    */
   async markOwnDay(
     userId: string,
@@ -343,6 +344,7 @@ export class AttendanceService {
         endMinute: null,
         actorId: userId,
         onlyOver: ATTENDANCE_SELF_KINDS,
+        onlyOwn: true,
       });
       return dayView(saved);
     } catch (error) {
@@ -366,6 +368,7 @@ export class AttendanceService {
         date: dateOnly(dayText),
         actorId: userId,
         onlyOver: ATTENDANCE_SELF_KINDS,
+        onlyOwn: true,
       });
     } catch (error) {
       throw selfConflict(error);
