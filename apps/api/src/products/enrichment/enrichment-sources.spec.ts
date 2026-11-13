@@ -136,7 +136,7 @@ describe("a négy engedélyezett forrás, és semmi más", () => {
       brandSitesFromCategories([
         chain("Termékek", "Nyomelemek", "Fauna Marin"),
       ]),
-      ["faunamarin.de"],
+      ["faunamarin.de", "faunamarincorals.de"],
     );
     // the whole name, case aside; a part of a name is not the brand
     assert.deepEqual(
@@ -186,6 +186,35 @@ describe("a négy engedélyezett forrás, és semmi más", () => {
       }),
       "NO_MANUFACTURER_SITE",
     );
+  });
+
+  /*
+    THE PRODUCT'S OWN BRAND (card 85c38ab1, the first Fauna Marin run: Bacto Reef Balls and Dino M, brand set, no brand
+    category, NO_MANUFACTURER_SITE) AND THE BRAND'S SHOP (faunamarincorals.de, the AMIN page HOST_NOT_ALLOWED). WHAT TURNS THIS
+    RED: the brand field not counted; a brand field and a category naming two brands giving any site; the shop's page refused
+    for a Fauna Marin product; a look-alike host let through.
+  */
+  it("a termék saját márkája is kulcs, ugyanazzal az egy-márka szabállyal; a Fauna Marin boltoldala gyártói lap", () => {
+    assert.deepEqual(brandSitesFromCategories([["Termékek"]], "Fauna Marin"), [
+      "faunamarin.de",
+      "faunamarincorals.de",
+    ]);
+    assert.deepEqual(
+      brandSitesFromCategories([["Termékek", "Fauna Marin"]], " fauna marin "),
+      ["faunamarin.de", "faunamarincorals.de"],
+    );
+    assert.deepEqual(brandSitesFromCategories([["Nyomelemek", "Triton"]], "Fauna Marin"), []);
+    assert.deepEqual(brandSitesFromCategories([["Termékek"]], null), []);
+    assert.deepEqual(brandSitesFromCategories([["Termékek"]], "Ismeretlen Márka"), []);
+    assert.deepEqual(brandSitesFromCategories([["Termékek"]], "constructor"), []);
+    const manufacturer = manufacturerSites(null, null, brandSitesFromCategories([["Termékek"]], "Fauna Marin"));
+    for (const [url, expected] of [
+      ["https://www.faunamarincorals.de/en/Amin-1000ml/11135V", null],
+      ["https://www.faunamarin.de/en/elementals-trace-se/", null],
+      ["https://faunamarincorals.de.example.invalid/x", "HOST_NOT_ALLOWED"],
+      ["https://notfaunamarincorals.de/x", "HOST_NOT_ALLOWED"],
+    ] as const)
+      assert.equal(sourceUrlProblem("MANUFACTURER", url, { manufacturer, supplier: null }), expected, url);
   });
 
   it("a gyártó oldala a márka weboldala és a UNAS link; kereskedőre mutató link nem az", () => {

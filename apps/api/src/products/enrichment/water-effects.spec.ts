@@ -262,6 +262,24 @@ describe("a kategória-szabály a UNAS-ágra", () => {
     assert.equal(facts("Kitalált márka").categoryBrandSites, undefined);
   });
 
+  it("a tény-olvasó a termék saját márkáját is kulcsnak veszi, márka-kategória nélkül is (kártya 85c38ab1)", () => {
+    const facts = (brand: string | null, category: string) =>
+      productFactsFrom({
+        id: "p-3",
+        name: "Kitalált nyomelem",
+        brand: brand === null ? null : { name: brand, websiteUrl: null },
+        unasSnapshot: null,
+        categories: [{ category: { name: category, parent: { name: "Termékek" } } }],
+        variants: [],
+      });
+    assert.deepEqual(facts("Fauna Marin", "Nyomelemek").categoryBrandSites, [
+      "faunamarin.de",
+      "faunamarincorals.de",
+    ]);
+    assert.equal(facts("Fauna Marin", "Triton").categoryBrandSites, undefined);
+    assert.equal(facts(null, "Nyomelemek").categoryBrandSites, undefined);
+  });
+
   it("a tény-olvasó a kategória-állítást UNAS_CURRENT forrásként adja", () => {
     const f = productFactsFrom({
       id: "p-1",
