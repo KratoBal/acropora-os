@@ -18,6 +18,7 @@ import {
 } from "../incoming-billing-documents.js";
 import {
   approvalProblems,
+  DuplicateIncomingError,
   IncomingReviewService,
   mergedSources,
   normalizedInput,
@@ -121,9 +122,13 @@ function harness(input: {
   });
   const database = {
     incomingBillingDocument: {
-      findMany: async (args?: { where?: { source?: string } }) =>
+      findMany: async (args?: {
+        where?: { source?: string; id?: { in: string[] } };
+      }) =>
         feed.filter(
-          (row) => !args?.where?.source || row.source === args.where.source,
+          (row) =>
+            (!args?.where?.source || row.source === args.where.source) &&
+            (!args?.where?.id || args.where.id.in.includes(row.id as string)),
         ),
       findUnique: async (args: {
         where: { source_externalId: { source: string; externalId: string } };
@@ -223,6 +228,9 @@ function harness(input: {
       },
     },
     $transaction: async (fn: (tx: unknown) => unknown) => fn(database),
+    // the key lock (pg_advisory_xact_lock) does nothing here; the number lookup gives every row, and the key decides in JS
+    $executeRaw: async () => 0,
+    $queryRaw: async () => feed.map((row) => ({ id: row.id })),
   };
   const map = new Map<string, DocumentPairing>();
   for (const one of input.pairings)
@@ -410,6 +418,86 @@ describe("approval", () => {
     assert.deepEqual(
       mailboxOnlyPaidItems(h.feed as never, new Map([["mail-1", merged]])),
       [],
+    );
+  });
+
+  /*
+    UGYANAZ A SZÁMLA MÁSIK DOKUMENTUMBÓL (acrobot 49595, niceshops R49010000026240667 kétszer). A lista a számot a
+    begyűjtő olvasatából szűri (mailboxOnlyPairings), a jóváhagyás viszont a jóváhagyott értékkel ír: a 11-11-i
+    újrafeltöltés rossz számmal állt a listán, és a jóváhagyott helyes számmal második sor lett. MI PIROSÍT: ha egy második
+    dokumentum ugyanazzal a számlával (szám és szállító) második sort kap; ha egy MÁSIK szállító ugyanolyan számú számlája
+    is elakad; ha a Számlázz.hu-ból már bent lévő számla mellé a postafiókos is sort kap.
+  */
+  it("a second document with the same invoice (number and supplier) gets no second row: 409, named", async () => {
+    const h = harness({
+      pairings: [
+        pairing(),
+        // the list showed it under the collector's misread number (niceshops: the number was fixed later)
+        pairing({ id: "mail-2", number: "KIT-ROSSZUL-OLVASOTT" }),
+      ],
+      files: {},
+    });
+    await h.service.approve("mailbox:mail-1", COMPLETE, "user-1");
+    await assert.rejects(
+      h.service.approve("mailbox:mail-2", COMPLETE, "user-1"),
+      (error: unknown) =>
+        error instanceof DuplicateIncomingError &&
+        error instanceof ConflictException &&
+        /már egy bent lévő számláé/.test(error.message),
+    );
+    assert.equal(
+      h.writes.filter((w) => w === "incomingBillingDocument.create").length,
+      1,
+    );
+  });
+
+  it("a misread number that collides with an invoice already in stops the approval, whatever the amount (niceshops R…1578 as R…0667)", async () => {
+    const h = harness({
+      pairings: [
+        pairing(),
+        pairing({ id: "mail-2", number: "KIT-ROSSZUL-OLVASOTT" }),
+      ],
+      files: {},
+    });
+    await h.service.approve("mailbox:mail-1", COMPLETE, "user-1");
+    await assert.rejects(
+      h.service.approve(
+        "mailbox:mail-2",
+        { ...COMPLETE, netAmount: "26,82", grossAmount: "26.82" },
+        "user-1",
+      ),
+      (error: unknown) =>
+        error instanceof DuplicateIncomingError &&
+        /Ellenőrizd a számot/.test(error.message),
+    );
+    assert.equal(
+      h.writes.filter((w) => w === "incomingBillingDocument.create").length,
+      1,
+    );
+  });
+
+  it("another supplier's invoice with the same number is a different invoice: it gets its own row", async () => {
+    const h = harness({
+      pairings: [
+        pairing(),
+        // the list showed it under the collector's misread number (niceshops: the number was fixed later)
+        pairing({ id: "mail-2", number: "KIT-ROSSZUL-OLVASOTT" }),
+      ],
+      files: {},
+    });
+    await h.service.approve("mailbox:mail-1", COMPLETE, "user-1");
+    await h.service.approve(
+      "mailbox:mail-2",
+      {
+        ...COMPLETE,
+        supplierName: "Más Szállító Ltd.",
+        supplierEuTaxNumber: "IE1111111XX",
+      },
+      "user-1",
+    );
+    assert.equal(
+      h.writes.filter((w) => w === "incomingBillingDocument.create").length,
+      2,
     );
   });
 
