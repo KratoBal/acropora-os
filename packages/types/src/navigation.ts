@@ -627,6 +627,12 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     visibility: permission(PERMISSIONS.USERS_MANAGE),
   },
   {
+    /** THE ATTENDANCE SHEET (os-jelenleti-iv, S2b): its own right, so it works without `users.manage`. */
+    id: "attendance",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.ATTENDANCE_MANAGE),
+  },
+  {
     /**
      * MATRICAKODOK KIADASA ES NYOMTATASA.
      *

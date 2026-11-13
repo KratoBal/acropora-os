@@ -59,7 +59,7 @@ describe("the Hungarian work calendar", () => {
     assert.equal(easterSunday(2038), "2038-04-25");
   });
 
-  it("lists the 13 public holidays of a year, the movable ones from Easter", () => {
+  it("lists the 11 holidays of 102. § (1) and the two Sundays of (4), the movable ones from Easter", () => {
     const days = hungarianPublicHolidays(2026);
     assert.deepEqual([...days.keys()].sort(), [
       "2026-01-01",

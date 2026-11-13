@@ -55,6 +55,7 @@ import { ASSET_KIND_LABELS } from "@/lib/assets/asset-kind";
 import { assetPlacementDetail } from "@/lib/assets/asset-placement";
 import { qrRuns } from "@/lib/assets/qr-runs";
 import { QrMatrix } from "@/components/assets/QrMatrix";
+import { loadOperationsTemplates } from "@/lib/operations-log/operations-load";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 import { OfflineNoticeCard } from "@/components/offline/OfflineNoticeCard";
@@ -84,6 +85,19 @@ export default function AssetDetailScreen() {
     queryFn: () => getAsset(id!),
     enabled:
       status === "authenticated" && Boolean(id && capabilities?.assetsView),
+  });
+
+  /*
+    AZ ESZKÖZHÖZ TARTOZÓ ÜZEMELTETÉSI NAPLÓ SABLONOK (task os-uzemeltetesi-naplo, S2c). A betöltés a legutóbbi sikeres listát
+    menti, így a rögzítés térerő nélkül is elérhető ezen az eszközön (`operations-load.ts`). A szakasz csak akkor látszik, ha van
+    sablon: sablon nélküli eszköznél nincs mit mutatni.
+  */
+  const operationsTemplates = useQuery({
+    queryKey: ["operations-templates", id],
+    queryFn: () => loadOperationsTemplates(id!),
+    enabled:
+      status === "authenticated" &&
+      Boolean(id && capabilities?.operationsLogRecord),
   });
 
   const cached = useQuery({
@@ -683,6 +697,37 @@ export default function AssetDetailScreen() {
                     })
                   }
                 />
+              </Section>
+            ) : null}
+
+            {/*
+              AZ ÜZEMELTETÉSI NAPLÓ SABLONJAI EZEN A GÉPEN (task os-uzemeltetesi-naplo, S2c). A rögzítés térerő nélkül is megy
+              (sorba kerül), ezért itt SINCS `!fromCache` feltétel, ugyanazért, mint a hibajegynél: a gépnél álló szerelő mentett
+              lapról is rögzíthet.
+            */}
+            {capabilities?.operationsLogRecord &&
+            (operationsTemplates.data?.items.length ?? 0) > 0 ? (
+              <Section title="Üzemeltetési napló">
+                {operationsTemplates.data!.items.map((template) => (
+                  <AssetLink
+                    key={template.id}
+                    label={template.name}
+                    meta={
+                      template.description ??
+                      "Rögzítés: kezdés, értékek, fényképek, kész"
+                    }
+                    onPress={() =>
+                      router.push({
+                        pathname: "/operations-log/record",
+                        params: {
+                          assetId: asset.id,
+                          assetName: asset.name,
+                          templateId: template.id,
+                        },
+                      })
+                    }
+                  />
+                ))}
               </Section>
             ) : null}
 

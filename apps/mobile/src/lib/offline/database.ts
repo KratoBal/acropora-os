@@ -144,6 +144,18 @@ export async function initializeOfflineDatabase(): Promise<SQLite.SQLiteDatabase
 
     CREATE INDEX IF NOT EXISTS cached_partner_units_partner
       ON cached_partner_units (partner_id);
+
+    CREATE TABLE IF NOT EXISTS cached_operations_templates (
+      asset_id TEXT PRIMARY KEY NOT NULL,
+      payload_json TEXT NOT NULL,
+      synced_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS cached_operations_colleagues (
+      id TEXT PRIMARY KEY NOT NULL,
+      payload_json TEXT NOT NULL,
+      synced_at TEXT NOT NULL
+    );
   `);
   await applyMigrations(database);
   return database;

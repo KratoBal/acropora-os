@@ -1,4 +1,4 @@
-import { Redirect } from "expo-router";
+import { Redirect, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -16,6 +16,7 @@ import {
   registerDeviceToken,
 } from "@/lib/api/notifications";
 import { BottomNav } from "@/components/home/BottomNav";
+import { hasAttendanceSheet } from "@/lib/attendance/presentation";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { personDisplayName } from "@/lib/auth/person-name";
 import { userRoleLabel } from "@/lib/auth/webshop-authorization";
@@ -58,6 +59,7 @@ import type { ThemeTokens } from "@/lib/theme/tokens";
  */
 export default function SettingsScreen() {
   const { status, user, signOut } = useAuth();
+  const router = useRouter();
   const push = usePushPreference();
   const theme = useAppTheme();
   const styles = useMemo(() => createStyles(theme.tokens), [theme.tokens]);
@@ -163,6 +165,21 @@ export default function SettingsScreen() {
             )}
           </View>
         </View>
+
+        {/* The employee's own attendance sheet (os-jelenleti-iv, S3b): every colleague with a sheet, no right needed. */}
+        {hasAttendanceSheet(user.role) ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Jelenléti ívem"
+            onPress={() => router.push("/jelenleti-ivem")}
+            style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+          >
+            <Text style={styles.rowTitle}>Jelenléti ívem</Text>
+            <Text style={styles.rowHint}>
+              A havi íved, és előre jelölhetsz szabadságot vagy szabadnapot.
+            </Text>
+          </Pressable>
+        ) : null}
 
         <View style={styles.card}>
           <Text style={styles.rowTitle}>Megjelenés</Text>
