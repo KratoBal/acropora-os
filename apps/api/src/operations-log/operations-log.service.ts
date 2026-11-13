@@ -57,7 +57,22 @@ export class OperationsLogService {
   ): Promise<OperationsTaskTemplateDto> {
     const keys = await this.repository.fieldKeys(id);
     if (!keys) throw new NotFoundException(NEM_TALALHATO);
-    const write = await this.checked(input, keys);
+    /*
+      A TÍPUSVÁLTÁS ÚJ MEZŐ (barracuda, #2499): egy meglévő mező más típussal ugyanazt a kulcsot kapná, és a bejegyzések (S2) egy
+      kulcs alatt régi szám és új szöveg értéket keverne. A kulcsot a típusváltó mező nem viheti tovább: új kulcsot kap, a régi
+      mező kivezetést (a bejegyzései a régi típussal olvashatók maradnak).
+    */
+    const adjusted: OperationsTaskTemplateInput & { isActive?: boolean } = {
+      ...input,
+      fields: input.fields.map((field) =>
+        field.key &&
+        keys.typeOf.get(field.key) !== undefined &&
+        keys.typeOf.get(field.key) !== field.type
+          ? { ...field, key: null }
+          : field,
+      ),
+    };
+    const write = await this.checked(adjusted, keys);
     try {
       const updated = await this.repository.replaceTemplate(
         id,

@@ -445,6 +445,54 @@ describe(
         );
       });
 
+      /*
+        A TIPUSVALTAS UJ MEZO (barracuda, #2499): a szam mezo szovegre allitva a szerveren kivezetes es uj mezo uj kulccsal; a
+        regi mezo definicioja (tipus, mertekegyseg, vizora szerep) olvashato marad.
+      */
+      it("egy szám mező típusát szövegre állítva a régi mező kivezetve marad, az új más kulcsot kap", async () => {
+        const created = await service.create(
+          {
+            name: name("tipusvaltas"),
+            frequency: "WEEKLY",
+            assetId: ids.asset,
+            fields: [
+              {
+                label: "Vízóra",
+                type: "NUMBER",
+                unit: "m3",
+                meterRole: "BEFORE",
+              },
+            ],
+          },
+          "system",
+        );
+        const old = created.fields[0]!;
+        const updated = await service.update(
+          created.id,
+          {
+            expectedUpdatedAt: created.updatedAt,
+            name: name("tipusvaltas"),
+            frequency: "WEEKLY",
+            assetId: ids.asset,
+            fields: [{ key: old.key, label: "Vízóra", type: "TEXT" }],
+          },
+          "system",
+        );
+        assert.deepEqual(
+          updated.fields.map((f) => [f.key, f.type]),
+          [["vizora_2", "TEXT"]],
+        );
+        assert.deepEqual(
+          updated.retiredFields.map((f) => [
+            f.key,
+            f.type,
+            f.unit,
+            f.meterRole,
+          ]),
+          [["vizora", "NUMBER", "m3", "BEFORE"]],
+        );
+      });
+
       it("kategóriára szóló sablon felvehető, és a cél a kategória nevét adja", async () => {
         const created = await service.create(
           {
