@@ -44,6 +44,8 @@ function fixture(
     conflict: boolean;
     used: string[];
     active: string[];
+    /** az aktív mezők típusa kulcs szerint (alapértelmezés: minden aktív mező szöveg) */
+    types: Record<string, "NUMBER" | "BOOLEAN" | "TEXT" | "PHOTO">;
   }> = {},
 ) {
   const calls: { write?: OperationsTaskTemplateWrite; replaceId?: string } = {};
@@ -57,6 +59,12 @@ function fixture(
         : {
             used: new Set(over.used ?? ["viz"]),
             active: new Set(over.active ?? ["viz"]),
+            typeOf: new Map(
+              (over.active ?? ["viz"]).map((key) => [
+                key,
+                over.types?.[key] ?? "TEXT",
+              ]),
+            ),
           },
     assetIsLive: async () => over.assetLive ?? true,
     categoryIsActive: async () => over.categoryActive ?? true,
@@ -211,7 +219,7 @@ describe("a mezők", () => {
   });
 
   it("módosításkor a meglévő aktív mező megtartja a kulcsát átnevezve is", async () => {
-    const { service, calls } = fixture();
+    const { service, calls } = fixture({ types: { viz: "NUMBER" } });
     await service.update(
       "t1",
       input({
@@ -286,6 +294,64 @@ describe("a kulcsok a sablon korábbi mezőihez képest (barracuda, #2497)", () 
     assert.deepEqual(
       calls.write!.fields.map((f) => f.key),
       ["vizora"],
+    );
+  });
+});
+
+/*
+  A TIPUSVALTAS UJ MEZO (barracuda, #2499): egy meglevo mezo mas tipussal ugyanazt a kulcsot kapna, es a bejegyzesek (S2) egy
+  kulcs alatt regi szam es uj szoveg erteket kevernek. MI PIROSIT: ha a tipusvalto mezo megtartja a kulcsat; ha a valtozatlan
+  tipusu mezo is uj kulcsot kapna (a kulcs-stabilitas elveszne).
+*/
+describe("a típusváltás új mező, új kulccsal", () => {
+  it("a más típusú meglévő mező nem viszi tovább a kulcsát, a régi kulcs nem kerül újra kiosztásra", async () => {
+    const { service, calls } = fixture({
+      used: ["viz"],
+      active: ["viz"],
+      types: { viz: "NUMBER" },
+    });
+    await service.update(
+      "t1",
+      input({ fields: [{ key: "viz", label: "Víz", type: "TEXT" }] }),
+      "u1",
+    );
+    assert.deepEqual(
+      calls.write!.fields.map((f) => [f.key, f.type]),
+      [["viz_2", "TEXT"]],
+    );
+  });
+
+  it("a körülvágandó alakban küldött kulcs sem csúszik át a típus-őrön", async () => {
+    const { service, calls } = fixture({
+      used: ["viz"],
+      active: ["viz"],
+      types: { viz: "NUMBER" },
+    });
+    await service.update(
+      "t1",
+      input({ fields: [{ key: " viz ", label: "Víz", type: "TEXT" }] }),
+      "u1",
+    );
+    assert.deepEqual(
+      calls.write!.fields.map((f) => f.key),
+      ["viz_2"],
+    );
+  });
+
+  it("az azonos típusú meglévő mező megtartja a kulcsát", async () => {
+    const { service, calls } = fixture({
+      used: ["viz"],
+      active: ["viz"],
+      types: { viz: "TEXT" },
+    });
+    await service.update(
+      "t1",
+      input({ fields: [{ key: "viz", label: "Víz (új név)", type: "TEXT" }] }),
+      "u1",
+    );
+    assert.deepEqual(
+      calls.write!.fields.map((f) => f.key),
+      ["viz"],
     );
   });
 });

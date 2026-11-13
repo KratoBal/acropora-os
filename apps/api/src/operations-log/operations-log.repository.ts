@@ -147,19 +147,24 @@ export class OperationsLogRepository {
    * A sablon mezőinek kulcsai: az AKTÍVAK és a VALAHA HASZNÁLTAK (a kivezetetteké is). A kulcs-kiosztás ezekből dolgozik:
    * egy új mező nem kaphatja egy elhagyott mező kulcsát. `null`: a sablon nem található.
    */
-  async fieldKeys(
-    id: string,
-  ): Promise<{ used: Set<string>; active: Set<string> } | null> {
+  async fieldKeys(id: string): Promise<{
+    used: Set<string>;
+    active: Set<string>;
+    /** Az AKTÍV mezők típusa kulcs szerint: a típusváltás nem írhatja át ugyanazt a kulcsot (barracuda, #2499). */
+    typeOf: Map<string, OperationsTaskFieldType>;
+  } | null> {
     const row = await prisma.operationsTaskTemplate.findUnique({
       where: { id },
-      select: { fields: { select: { key: true, removedAt: true } } },
+      select: {
+        fields: { select: { key: true, type: true, removedAt: true } },
+      },
     });
     if (!row) return null;
+    const active = row.fields.filter((f) => f.removedAt === null);
     return {
       used: new Set(row.fields.map((field) => field.key)),
-      active: new Set(
-        row.fields.filter((f) => f.removedAt === null).map((f) => f.key),
-      ),
+      active: new Set(active.map((f) => f.key)),
+      typeOf: new Map(active.map((f) => [f.key, f.type])),
     };
   }
 

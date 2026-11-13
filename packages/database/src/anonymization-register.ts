@@ -883,6 +883,13 @@ export const ANONYMIZATION_REGISTER: Readonly<
     returnedById: "identifier",
     createdById: "identifier",
   },
+  // The attendance sheet (os-jelenleti-iv): the admin who last changed the row.
+  AttendanceSchedule: {
+    updatedById: "identifier",
+  },
+  AttendanceDay: {
+    updatedById: "identifier",
+  },
   UnitOfMeasure: {
     code: "business",
     name: "business",

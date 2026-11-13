@@ -207,6 +207,13 @@ export const SETTINGS_AREAS: SettingsArea[] = [
         entryId: "asset-categories",
       },
       {
+        label: "Üzemeltetési napló sablonjai",
+        description:
+          "A rendszeres üzemeltetési feladatok (napi, heti, alkalmi) sablonja: melyik eszközre vagy kategóriára szól, és mit kell rögzíteni hozzá.",
+        href: "/beallitasok/uzemeltetesi-naplo-sablonok",
+        entryId: "operations-log-templates",
+      },
+      {
         label: "Eszköz-funkciók",
         description:
           "Az eszköz-felvitel másik legördülő listája: mire való az eszköz, függetlenül a kategóriától.",
