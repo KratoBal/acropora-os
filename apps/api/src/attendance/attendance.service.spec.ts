@@ -257,3 +257,50 @@ describe("AttendanceService: a day entry", () => {
     ]);
   });
 });
+
+describe("AttendanceService: the month's sheet", () => {
+  it("reads the whole month and computes it from the versions and the entries", async () => {
+    const reads: string[][] = [];
+    const repository: Partial<AttendanceRepository> = {
+      employee: async (id) => ({ id, role: "SALES" }),
+      schedules: async () => [
+        {
+          validFrom: dateOnly("2028-01-01"),
+          updatedAt,
+          days: [{ weekday: 2, startMinute: 420, endMinute: 960 }],
+        },
+      ],
+      days: async (_userId, from, to) => {
+        reads.push([from.toISOString(), to.toISOString()]);
+        return [
+          {
+            date: dateOnly("2028-02-08"),
+            kind: "SICK",
+            startMinute: null,
+            endMinute: null,
+            updatedAt,
+          },
+        ];
+      },
+    };
+    const sheet = await new AttendanceService(
+      repository as AttendanceRepository,
+    ).sheet("u-1", "2028-02");
+    assert.deepEqual(reads, [
+      ["2028-02-01T00:00:00.000Z", "2028-02-29T00:00:00.000Z"],
+    ]);
+    assert.equal(sheet.userId, "u-1");
+    assert.equal(sheet.rows.length, 29);
+    // Tuesdays of February 2028: the 1st, 15th, 22nd and 29th work; the 8th is sick
+    assert.equal(sheet.rows.find((r) => r.date === "2028-02-08")!.mark, "B");
+    assert.equal(sheet.totalMinutes, 4 * 540);
+    assert.equal(sheet.swapsDecree, null);
+  });
+
+  it("refuses a bad month before reading", async () => {
+    const { service, writes } = build();
+    await assert.rejects(service.sheet("u-1", "2026-13"), /hónap/);
+    await assert.rejects(service.sheet("u-1", "2026-1"), /hónap/);
+    assert.deepEqual(writes, []);
+  });
+});

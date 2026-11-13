@@ -32,6 +32,7 @@ describe("AttendanceController", () => {
       "saveDay",
       "saveSchedule",
       "schedules",
+      "sheet",
     ]);
     for (const name of handlers)
       assert.deepEqual(required(name), [PERMISSIONS.ATTENDANCE_MANAGE], name);
