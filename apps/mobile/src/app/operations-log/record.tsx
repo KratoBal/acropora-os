@@ -383,12 +383,18 @@ export default function RecordOperationsEntryScreen() {
                   />
                 </View>
                 {form.anomaly ? (
+                  <Text style={styles.hint}>
+                    A leírásból hibajegy nyílik, amelyet a partner is láthat:
+                    ide ne kerüljön belső megjegyzés (az a lenti mezőbe való).
+                  </Text>
+                ) : null}
+                {form.anomaly ? (
                   <TextInput
                     value={form.anomalyNote}
                     onChangeText={(anomalyNote) =>
                       setForm((prev) => ({ ...prev, anomalyNote }))
                     }
-                    placeholder="Mi a rendellenesség?"
+                    placeholder="Mi a rendellenesség? (a hibajegybe kerül)"
                     placeholderTextColor={tokens.textMuted}
                     style={[styles.input, styles.notesInput]}
                     maxLength={ENTRY_LIMITS.noteMax}
