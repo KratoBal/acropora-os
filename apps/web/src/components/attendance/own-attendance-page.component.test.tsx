@@ -147,4 +147,12 @@ describe("OwnAttendancePage", () => {
     ).toBeTruthy();
     expect(api.mySheet).not.toHaveBeenCalled();
   });
+
+  it("keeps the sheet's sideways scroll inside its card on a phone", async () => {
+    render(<OwnAttendancePage />);
+    const table = await screen.findByRole("table", { name: "Jelenléti ív" });
+    // the scroll box is positioned, so the header's sr-only label cannot widen the page (stage, 390 px)
+    expect(table.parentElement?.className).toContain("relative");
+    expect(table.parentElement?.className).toContain("overflow-x-auto");
+  });
 });
