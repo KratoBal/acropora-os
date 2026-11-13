@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  inputFromEnv,
   parseRunInput,
   runEnrichmentCli,
   runReport,
@@ -88,6 +89,61 @@ function capture() {
 }
 
 describe("a kézi indítás parancssora", () => {
+  /*
+    THE INPUT FROM AN ENVIRONMENT VARIABLE (the test API's Coolify task: a command of at most 255 characters, acrobot
+    2026-11-13). WHAT TURNS THIS RED: the env input not read, or read instead of a given file; both or neither option let
+    through; an empty, unset or non-base64 value half-read instead of refused with exit 2.
+  */
+  it("--input-env: a bemenet base64-ben egy környezeti változóból jön, és ugyanúgy tervez", async () => {
+    const env = {
+      JEV_PRODUCT_ENRICHMENT: "review",
+      JEV_RUN_INPUT: Buffer.from(INPUT, "utf8").toString("base64"),
+    };
+    const d = deps(env, "NEM EZ A BEMENET");
+    const c = capture();
+    assert.equal(
+      await runEnrichmentCli(["--input-env", "JEV_RUN_INPUT"], c.out, d.value),
+      0,
+    );
+    assert.match(c.text().stdout, /Kitalált pumpa \(p-1\)/);
+    assert.equal(d.network.requests.length, 0);
+  });
+
+  it("--input-env: egyszerre csak az egyik bemenet; üres, hiányzó vagy nem base64 érték 2-es kilépés", async () => {
+    const c = capture();
+    const d = deps({ JEV_RUN_INPUT: Buffer.from(INPUT).toString("base64") });
+    assert.equal(
+      await runEnrichmentCli(
+        ["--input", "x.json", "--input-env", "JEV_RUN_INPUT"],
+        c.out,
+        d.value,
+      ),
+      2,
+    );
+    assert.equal(await runEnrichmentCli([], c.out, d.value), 2);
+    for (const value of [undefined, "", "nem base64!", "abc"]) {
+      const e = deps(value === undefined ? {} : { JEV_RUN_INPUT: value });
+      const ce = capture();
+      assert.equal(
+        await runEnrichmentCli(
+          ["--input-env", "JEV_RUN_INPUT"],
+          ce.out,
+          e.value,
+        ),
+        2,
+        String(value),
+      );
+      assert.match(ce.text().stderr, /JEV_RUN_INPUT/);
+    }
+    assert.deepEqual(
+      inputFromEnv({ X: Buffer.from("{}").toString("base64") }, "X"),
+      {
+        ok: true,
+        text: "{}",
+      },
+    );
+  });
+
   it("--apply nélkül csak tervez: nem megy ki a hálózatra, nem tárol", async () => {
     const d = deps({ JEV_PRODUCT_ENRICHMENT: "review" });
     const c = capture();

@@ -25,6 +25,11 @@ import {
   PrismaEnrichmentReader,
 } from "./enrichment/enrichment-read.repository.js";
 import { ProductEnrichmentQueueController } from "./product-enrichment-queue.controller.js";
+import { ProductEnrichmentRunsController } from "./product-enrichment-runs.controller.js";
+import {
+  ENRICHMENT_RUNS_READER,
+  PrismaEnrichmentRunsReader,
+} from "./enrichment/enrichment-runs.read.js";
 import { ProductEnrichmentReviewController } from "./product-enrichment-review.controller.js";
 import { ProductEnrichmentReviewService } from "./product-enrichment-review.service.js";
 import {
@@ -78,6 +83,7 @@ import { CustomerCandidateSource } from "../aquariums/recommendation/customer-ca
     CatalogOptionsController,
     ProductEnrichmentReviewController,
     ProductEnrichmentQueueController,
+    ProductEnrichmentRunsController,
     ProductKnowledgeController,
     AttributeController,
     ProductAttributeSetController,
@@ -108,6 +114,7 @@ import { CustomerCandidateSource } from "../aquariums/recommendation/customer-ca
     ProductExtensionService,
     ProductEnrichmentReviewService,
     { provide: ENRICHMENT_READER, useClass: PrismaEnrichmentReader },
+    { provide: ENRICHMENT_RUNS_READER, useClass: PrismaEnrichmentRunsReader },
     ProductKnowledgeService,
     { provide: KNOWLEDGE_STORE, useClass: PrismaKnowledgeStore },
     WebshopSlugService,
