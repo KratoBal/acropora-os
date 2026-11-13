@@ -255,4 +255,36 @@ describe("AttendanceSheetPage", () => {
     fireEvent.click(screen.getByLabelText("Szabadság (SZ)"));
     expect(screen.getByText(/nem munkanap \(pihenőnap\)/)).toBeTruthy();
   });
+
+  it("never leaves the previous employee's sheet editable while the next one loads", async () => {
+    let release: (sheet: AttendanceSheetResponse) => void = () => {};
+    api.sheet
+      .mockReset()
+      .mockImplementation(async (_t: string, userId: string, month: string) =>
+        userId === "u-1"
+          ? sheetFor(month, [entry("2026-11-13", "SICK")])
+          : new Promise<AttendanceSheetResponse>((resolve) => {
+              release = resolve;
+            }),
+      );
+    await openSheet();
+    expect(screen.getByLabelText("2026. 11. 13. módosítása")).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Munkatárs"), {
+      target: { value: "u-2" },
+    });
+    // the first sheet is gone the moment the choice changes, not when the second arrives
+    expect(screen.queryByRole("table", { name: "Jelenléti ív" })).toBeNull();
+    expect(screen.queryByLabelText("2026. 11. 13. módosítása")).toBeNull();
+
+    release({ ...sheetFor("2026-11", []), userId: "u-2" });
+    fireEvent.click(await screen.findByLabelText("2026. 11. 13. módosítása"));
+    fireEvent.click(screen.getByLabelText("Szabadság (SZ)"));
+    fireEvent.click(screen.getByText("Mentés"));
+    await waitFor(() =>
+      expect(api.saveDay).toHaveBeenCalledWith("token-1", "u-2", "2026-11-13", {
+        kind: "LEAVE",
+      }),
+    );
+  });
 });

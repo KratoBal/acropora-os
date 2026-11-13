@@ -112,7 +112,6 @@ export function AttendanceSheetPage() {
   const [sheet, setSheet] = useState<AttendanceSheetResponse | null>(null);
   const [listError, setListError] = useState<string | null>(null);
   const [sheetError, setSheetError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState<AttendanceSheetRow | null>(null);
 
   useEffect(() => {
@@ -138,7 +137,6 @@ export function AttendanceSheetPage() {
   const loadSheet = useCallback(
     async (signal?: AbortSignal) => {
       if (!employeeId || !month) return;
-      setLoading(true);
       try {
         const next = await attendanceApi.sheet(
           token,
@@ -157,8 +155,6 @@ export function AttendanceSheetPage() {
             ? cause.message
             : "A jelenléti ív nem tölthető be.",
         );
-      } finally {
-        if (!signal?.aborted) setLoading(false);
       }
     },
     [employeeId, month, token],
@@ -171,6 +167,24 @@ export function AttendanceSheetPage() {
   }, [loadSheet]);
 
   const employee = employees.find((e) => e.id === employeeId) ?? null;
+
+  /**
+   * THE SHEET ON SCREEN IS ONLY EVER THE CHOSEN ONE. While another employee's or month's sheet is loading, the previous one
+   * must not stay editable: its rows (and the mark a dialog starts from) would be saved to the newly chosen employee
+   * (barracuda on #2505; for a sick day that is health data on the wrong person). So the table shows only a sheet whose
+   * `userId` and `month` are the current choice, and the day dialog writes to the sheet's own `userId`.
+   */
+  const shown =
+    sheet && sheet.userId === employeeId && sheet.month === month
+      ? sheet
+      : null;
+
+  const choose = (next: { employeeId?: string; month?: string }) => {
+    setEditing(null);
+    setSheetError(null);
+    if (next.employeeId !== undefined) setEmployeeId(next.employeeId);
+    if (next.month !== undefined) setMonth(next.month);
+  };
 
   if (!canManage)
     return (
@@ -204,7 +218,7 @@ export function AttendanceSheetPage() {
           <PilotSelect
             aria-label="Munkatárs"
             value={employeeId}
-            onChange={setEmployeeId}
+            onChange={(value) => choose({ employeeId: value })}
             chevron
           >
             <option value="">Válassz munkatársat</option>
@@ -220,7 +234,7 @@ export function AttendanceSheetPage() {
           <PilotMonthField
             aria-label="Hónap"
             value={month}
-            onChange={setMonth}
+            onChange={(value) => choose({ month: value })}
           />
         </PilotFormField>
       </div>
@@ -236,11 +250,11 @@ export function AttendanceSheetPage() {
           title="Nem tölthető be"
           description={sheetError}
         />
-      ) : loading && !sheet ? (
+      ) : !shown ? (
         <Skeleton className="h-64 w-full" />
-      ) : sheet ? (
+      ) : (
         <PilotCard className="space-y-3 p-4">
-          {sheet.swapsDecree ? null : (
+          {shown.swapsDecree ? null : (
             <Alert
               title="Az áthelyezett munkanapok erre az évre még nincsenek a rendszerben"
               description="Az ünnepnapokat a lap ismeri, de az évi munkarend-rendelet áthelyezett napjait nem: ezeket addig egyenként kell jelölni."
@@ -264,7 +278,7 @@ export function AttendanceSheetPage() {
                 </tr>
               </thead>
               <tbody>
-                {sheet.rows.map((row) => (
+                {shown.rows.map((row) => (
                   <tr
                     key={row.date}
                     className={
@@ -302,11 +316,11 @@ export function AttendanceSheetPage() {
           </div>
           <p className="text-sm" aria-label="Összesítés">
             Ledolgozott összesen:{" "}
-            <strong>{formatAttendanceHours(sheet.totalMinutes)}</strong> óra ·
-            Betegség: {sheet.sickDays} nap · Szabadság: {sheet.leaveDays} nap
+            <strong>{formatAttendanceHours(shown.totalMinutes)}</strong> óra ·
+            Betegség: {shown.sickDays} nap · Szabadság: {shown.leaveDays} nap
           </p>
         </PilotCard>
-      ) : null}
+      )}
 
       {employee ? (
         <UserAttendanceSchedule
@@ -317,11 +331,11 @@ export function AttendanceSheetPage() {
         />
       ) : null}
 
-      {editing && employee ? (
+      {editing && shown ? (
         <DayEditor
           row={editing}
           token={token}
-          userId={employee.id}
+          userId={shown.userId}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);
