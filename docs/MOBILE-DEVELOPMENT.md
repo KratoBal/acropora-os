@@ -347,8 +347,10 @@ Four things go into `sync_queue` and leave it when there is signal again:
   id carries a file path the server's key pattern does not accept. The templates of an asset and the colleague list
   are cached on the phone (`offline/operations-cache.ts`) from the last successful load and cleared on sign-out;
   only a network failure falls back to the cache, a responded 4xx never does. Known limits: a started but unfinished
-  recording does not survive an app restart, an entry cannot be edited from the phone, and the cache holds only the
-  assets whose template list was opened with signal;
+  recording does not survive an app restart, and an entry cannot be edited from the phone. The site download
+  (`HelyszinLetolto`) also fetches the template list of every asset whose detail it fetches, but only for a technician
+  with the recording right; it is its own line in the closing sentence (an empty list counts as downloaded, a failed fetch
+  or a failed save makes the download incomplete);
 - **a photo** taken with the recording, which follows its asset OR its
   worksheet: the picture is attached to a server-side record that does not
   exist yet at queueing time. Which one it belongs to is carried by the row
