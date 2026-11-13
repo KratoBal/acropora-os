@@ -377,6 +377,7 @@ describe("attendance on Postgres", { skip: gate.mode === "skip" }, () => {
         endMinute: null,
         actorId: employeeId,
         onlyOver: ["LEAVE", "DAY_OFF"],
+        onlyOwn: true,
       });
     assert.equal(
       (
@@ -385,6 +386,68 @@ describe("attendance on Postgres", { skip: gate.mode === "skip" }, () => {
         })
       )?.kind,
       "DAY_OFF",
+    );
+  });
+
+  it("does not let an employee change or undo leave the admin booked (barracuda on #2515)", async () => {
+    const date = dateOnly("2026-10-22");
+    await repository.saveDay({
+      userId: employeeId,
+      date,
+      kind: "LEAVE",
+      startMinute: null,
+      endMinute: null,
+      actorId: adminId,
+    });
+    const own = { onlyOver: ["LEAVE", "DAY_OFF"] as const, onlyOwn: true };
+    await assert.rejects(
+      repository.saveDay({
+        userId: employeeId,
+        date,
+        kind: "DAY_OFF",
+        startMinute: null,
+        endMinute: null,
+        actorId: employeeId,
+        ...own,
+      }),
+      AttendanceDayTakenError,
+    );
+    await assert.rejects(
+      repository.deleteDay({
+        userId: employeeId,
+        date,
+        actorId: employeeId,
+        ...own,
+      }),
+      AttendanceDayTakenError,
+    );
+    assert.equal(
+      (
+        await prisma.attendanceDay.findUnique({
+          where: { userId_date: { userId: employeeId, date } },
+        })
+      )?.kind,
+      "LEAVE",
+    );
+    // the employee's own mark on the next day they may undo
+    const next = dateOnly("2026-10-23");
+    await repository.saveDay({
+      userId: employeeId,
+      date: next,
+      kind: "DAY_OFF",
+      startMinute: null,
+      endMinute: null,
+      actorId: employeeId,
+      ...own,
+    });
+    assert.equal(
+      await repository.deleteDay({
+        userId: employeeId,
+        date: next,
+        actorId: employeeId,
+        ...own,
+      }),
+      true,
     );
   });
 

@@ -467,6 +467,7 @@ describe("AttendanceService: the employee's own marks (S3)", () => {
           endMinute: null,
           actorId: "u-1",
           onlyOver: ["LEAVE", "DAY_OFF"],
+          onlyOwn: true,
         },
       },
     ]);
@@ -534,6 +535,7 @@ describe("AttendanceService: the employee's own marks (S3)", () => {
         date: dateOnly("2026-11-13"),
         actorId: "u-1",
         onlyOver: ["LEAVE", "DAY_OFF"],
+        onlyOwn: true,
       },
     });
   });
