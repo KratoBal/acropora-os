@@ -1406,8 +1406,17 @@ body {
   .jatek-brand small {
     display: none;
   }
+  /*
+    A FŐDÍJ FELIRATA A KÉP ALATT ÁLL, NEM RÁ (stage 390 px, 2026-11-13: a kék "A JÁTÉK FŐDÍJA" a korallra és a homokra csúszott,
+    a vége alig olvasható). A kép a doboz felső részét tölti ki (340 px), a doboz alja (a feliratnak és a fotó-megjegyzésnek) kép
+    nélküli: 340 + a felirat 121 px + 70 px alsó hely > 470, ezért a doboz 540 px. Asztali nézeten a felirat eddig is a kép sötét
+    alsó részére esett, ott ez nem változik.
+  */
   .jatek-hero-art {
-    height: 470px;
+    height: 540px;
+  }
+  .jatek-hero-art > img {
+    height: 340px;
   }
   .jatek-prize-label {
     bottom: 70px;
