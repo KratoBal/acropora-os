@@ -1,10 +1,14 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
 import {
+  ATTENDANCE_SELF_KINDS,
+  ATTENDANCE_SELF_TAKEN,
   attendanceDayProblem,
+  attendanceSelfMarkProblem,
   attendanceSheet,
   isAttendanceMonth,
   monthDays,
@@ -14,6 +18,7 @@ import {
   parseAttendanceClock,
   USER_ROLES,
   type AttendanceDayEntry,
+  type AttendanceDayKind,
   type AttendanceDayInput,
   type AttendanceDayListResponse,
   type AttendanceEmployeeListResponse,
@@ -31,7 +36,11 @@ import {
   sheetContentHash,
 } from "./attendance-records.js";
 import { attendanceSheetDocument } from "./attendance-sheet-document.js";
-import { AttendanceRepository } from "./attendance.repository.js";
+import { budapestDayKey } from "../dashboard/budapest-day.js";
+import {
+  AttendanceDayTakenError,
+  AttendanceRepository,
+} from "./attendance.repository.js";
 
 export const ATTENDANCE_USER_NOT_FOUND = "A felhasználó nem található.";
 export const ATTENDANCE_NOT_AN_EMPLOYEE =
@@ -305,4 +314,69 @@ export class AttendanceService {
         `${dayText}: ezen a napon nincs eltérés a munkarendtől.`,
       );
   }
+
+  /**
+   * THE EMPLOYEE'S OWN MARKS (S3; brief point 3): leave and day off, in advance, from tomorrow on. The rule is the shared
+   * `attendanceSelfMarkProblem`; the "not over an admin's other mark" half is checked again inside the write, under the
+   * employee's row lock, so a mark set by an admin between the read and the write is not overwritten.
+   */
+  async markOwnDay(
+    userId: string,
+    dayText: string,
+    kind: AttendanceDayKind,
+    now: Date,
+  ): Promise<AttendanceDayEntry> {
+    await this.employee(userId);
+    const problem = attendanceSelfMarkProblem({
+      kind,
+      date: dayText,
+      today: budapestDayKey(now),
+      existing: null,
+    });
+    if (problem) throw new BadRequestException(problem);
+    try {
+      const saved = await this.repository.saveDay({
+        userId,
+        date: dateOnly(dayText),
+        kind,
+        startMinute: null,
+        endMinute: null,
+        actorId: userId,
+        onlyOver: ATTENDANCE_SELF_KINDS,
+      });
+      return dayView(saved);
+    } catch (error) {
+      throw selfConflict(error);
+    }
+  }
+
+  /** Removes the employee's own advance mark; the day follows the schedule again. */
+  async clearOwnDay(userId: string, dayText: string, now: Date): Promise<void> {
+    await this.employee(userId);
+    const problem = attendanceSelfMarkProblem({
+      date: dayText,
+      today: budapestDayKey(now),
+      existing: null,
+    });
+    if (problem) throw new BadRequestException(problem);
+    let removed: boolean;
+    try {
+      removed = await this.repository.deleteDay({
+        userId,
+        date: dateOnly(dayText),
+        actorId: userId,
+        onlyOver: ATTENDANCE_SELF_KINDS,
+      });
+    } catch (error) {
+      throw selfConflict(error);
+    }
+    if (!removed)
+      throw new NotFoundException(`${dayText}: ezen a napon nincs jelölésed.`);
+  }
+}
+
+/** An admin's other mark on the day: a 409 with the shared sentence, not a 500. */
+function selfConflict(error: unknown): unknown {
+  if (!(error instanceof AttendanceDayTakenError)) return error;
+  return new ConflictException(ATTENDANCE_SELF_TAKEN);
 }

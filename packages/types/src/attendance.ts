@@ -183,3 +183,41 @@ export function attendanceDayProblem(input: AttendanceDayInput): string | null {
     return "Betegség, szabadság és szabadnap mellé nem tartozik időpont.";
   return null;
 }
+
+/**
+ * WHAT AN EMPLOYEE MAY MARK FOR THEMSELVES (os-jelenleti-iv, S3; brief point 3): leave and day off, IN ADVANCE, from
+ * tomorrow on. Sick days, other times and anything in the past stay with the admin (`attendance.manage`), and so does a day
+ * an admin already marked otherwise: the employee neither overwrites nor removes it.
+ */
+export const ATTENDANCE_SELF_KINDS = [
+  "LEAVE",
+  "DAY_OFF",
+] as const satisfies readonly AttendanceDayKind[];
+
+/** The sentence for a day an admin already marked otherwise (also the API's 409 when that happens during the write). */
+export const ATTENDANCE_SELF_TAKEN =
+  "Ezen a napon már más jelölés áll; módosítani az adminisztrátor tud.";
+
+const isSelfKind = (kind: AttendanceDayKind | null | undefined) =>
+  kind !== null &&
+  kind !== undefined &&
+  (ATTENDANCE_SELF_KINDS as readonly string[]).includes(kind);
+
+/** Why an employee may not set or remove their own mark on `date`; null when they may. `today` is the Budapest day. */
+export function attendanceSelfMarkProblem(input: {
+  /** The mark to set; undefined when removing. */
+  kind?: AttendanceDayKind;
+  date: string;
+  today: string;
+  /** The kind already on the day, or null. */
+  existing: AttendanceDayKind | null;
+}): string | null {
+  if (input.kind !== undefined && !isSelfKind(input.kind))
+    return "Magadnak csak szabadságot vagy szabadnapot jelölhetsz.";
+  if (!isAttendanceDate(input.date)) return `Nem érvényes dátum: ${input.date}`;
+  if (input.date <= input.today)
+    return "Előre, a holnapi vagy egy későbbi napra jelölhetsz; a mai és a korábbi napokat az adminisztrátor módosítja.";
+  if (input.existing !== null && !isSelfKind(input.existing))
+    return ATTENDANCE_SELF_TAKEN;
+  return null;
+}

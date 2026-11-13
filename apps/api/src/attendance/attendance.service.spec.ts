@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { BadRequestException, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from "@nestjs/common";
 import type { UserRole } from "@acropora/types";
 
 import {
@@ -9,7 +13,10 @@ import {
   type DayRow,
   type ScheduleRow,
 } from "./attendance-records.js";
-import type { AttendanceRepository } from "./attendance.repository.js";
+import {
+  AttendanceDayTakenError,
+  type AttendanceRepository,
+} from "./attendance.repository.js";
 import {
   ATTENDANCE_NOT_AN_EMPLOYEE,
   AttendanceService,
@@ -439,5 +446,95 @@ describe("AttendanceService: the copy printed for signature", () => {
       service.signedSheetPdf("u-1", "copy-2"),
       NotFoundException,
     );
+  });
+});
+
+describe("AttendanceService: the employee's own marks (S3)", () => {
+  // 23:30 UTC on 12 November is already 13 November in Budapest: "today" is the Budapest day
+  const now = new Date("2026-11-12T23:30:00.000Z");
+
+  it("sets leave from tomorrow, by the employee, guarded against an admin's other mark", async () => {
+    const { service, writes } = build();
+    const saved = await service.markOwnDay("u-1", "2026-11-14", "LEAVE", now);
+    assert.equal(saved.kind, "LEAVE");
+    assert.deepEqual(writes, [
+      {
+        saveDay: {
+          userId: "u-1",
+          date: dateOnly("2026-11-14"),
+          kind: "LEAVE",
+          startMinute: null,
+          endMinute: null,
+          actorId: "u-1",
+          onlyOver: ["LEAVE", "DAY_OFF"],
+        },
+      },
+    ]);
+  });
+
+  it("refuses today (Budapest), another kind, or a partner account, before writing", async () => {
+    const { service, writes } = build();
+    await assert.rejects(
+      service.markOwnDay("u-1", "2026-11-13", "LEAVE", now),
+      /holnapi/,
+    );
+    await assert.rejects(
+      service.markOwnDay("u-1", "2026-11-14", "SICK", now),
+      /csak szabadságot/,
+    );
+    await assert.rejects(
+      build("PARTNER_SERVICE").service.markOwnDay(
+        "p-1",
+        "2026-11-14",
+        "LEAVE",
+        now,
+      ),
+      BadRequestException,
+    );
+    assert.deepEqual(writes, []);
+  });
+
+  it("answers 409 when an admin's other mark is found under the lock, and 404 when there is nothing to remove", async () => {
+    const taken: Partial<AttendanceRepository> = {
+      employee: async (id) => ({
+        id,
+        role: "SALES",
+        displayName: "Kovács Anna",
+      }),
+      saveDay: async () => {
+        throw new AttendanceDayTakenError("SICK");
+      },
+      deleteDay: async () => {
+        throw new AttendanceDayTakenError("WORKED");
+      },
+    };
+    const service = new AttendanceService(taken as AttendanceRepository);
+    await assert.rejects(
+      service.markOwnDay("u-1", "2026-11-14", "DAY_OFF", now),
+      ConflictException,
+    );
+    await assert.rejects(
+      service.clearOwnDay("u-1", "2026-11-14", now),
+      ConflictException,
+    );
+    const { service: plain, writes } = build();
+    await assert.rejects(
+      plain.clearOwnDay("u-1", "2026-11-14", now),
+      NotFoundException,
+    );
+    // the fake keeps an own mark on 13 November; on the 12th that is tomorrow
+    await plain.clearOwnDay(
+      "u-1",
+      "2026-11-13",
+      new Date("2026-11-12T10:00:00.000Z"),
+    );
+    assert.deepEqual(writes.at(-1), {
+      deleteDay: {
+        userId: "u-1",
+        date: dateOnly("2026-11-13"),
+        actorId: "u-1",
+        onlyOver: ["LEAVE", "DAY_OFF"],
+      },
+    });
   });
 });

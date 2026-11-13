@@ -5,7 +5,10 @@ import { prisma } from "@acropora/database";
 
 import { integrationDatabaseGate } from "../common/integration-database.js";
 import { ATTENDANCE_AUDIT_ACTIONS, dateOnly } from "./attendance-records.js";
-import { AttendanceRepository } from "./attendance.repository.js";
+import {
+  AttendanceDayTakenError,
+  AttendanceRepository,
+} from "./attendance.repository.js";
 
 /*
   ON A REAL POSTGRES. WHAT TURNS THIS RED: a write without its audit row, or an audit row whose "from" is not the value it
@@ -324,6 +327,65 @@ describe("attendance on Postgres", { skip: gate.mode === "skip" }, () => {
     );
     assert.equal(logged.length, 2);
     assert.equal(logged[0]!.userId, adminId);
+  });
+
+  it("does not let an employee's own mark replace or remove an admin's other mark", async () => {
+    const date = dateOnly("2026-10-20");
+    await repository.saveDay({
+      userId: employeeId,
+      date,
+      kind: "SICK",
+      startMinute: null,
+      endMinute: null,
+      actorId: adminId,
+    });
+    const before = (await auditRows(employeeId)).length;
+    await assert.rejects(
+      repository.saveDay({
+        userId: employeeId,
+        date,
+        kind: "LEAVE",
+        startMinute: null,
+        endMinute: null,
+        actorId: employeeId,
+        onlyOver: ["LEAVE", "DAY_OFF"],
+      }),
+      AttendanceDayTakenError,
+    );
+    await assert.rejects(
+      repository.deleteDay({
+        userId: employeeId,
+        date,
+        actorId: employeeId,
+        onlyOver: ["LEAVE", "DAY_OFF"],
+      }),
+      AttendanceDayTakenError,
+    );
+    const stored = await prisma.attendanceDay.findUnique({
+      where: { userId_date: { userId: employeeId, date } },
+    });
+    assert.equal(stored?.kind, "SICK");
+    assert.equal((await auditRows(employeeId)).length, before);
+    // over an own mark it goes through
+    const own = dateOnly("2026-10-21");
+    for (const kind of ["LEAVE", "DAY_OFF"] as const)
+      await repository.saveDay({
+        userId: employeeId,
+        date: own,
+        kind,
+        startMinute: null,
+        endMinute: null,
+        actorId: employeeId,
+        onlyOver: ["LEAVE", "DAY_OFF"],
+      });
+    assert.equal(
+      (
+        await prisma.attendanceDay.findUnique({
+          where: { userId_date: { userId: employeeId, date: own } },
+        })
+      )?.kind,
+      "DAY_OFF",
+    );
   });
 
   it("keeps the record when someone tries to delete the employee", async () => {
