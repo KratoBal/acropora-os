@@ -18,6 +18,7 @@ import type {
   QuoteBomItemInput,
   QuoteBomItemPatch,
   QuoteCostingDto,
+  QuoteVariantListPriceDto,
   QuoteDetailDto,
   QuoteItemInput,
   QuoteItemPatch,
@@ -265,6 +266,20 @@ export const quotesApi = {
   ) {
     return apiRequest<QuoteCostingDto>(
       `/quotes/${id(quoteId)}/versions/${id(versionId)}/costing`,
+      token,
+      { signal },
+    );
+  },
+  /** A változat mai eladási ára nettóban (a tétel kitöltéséhez, mentés nélkül). */
+  variantListPrice(
+    token: string,
+    quoteId: string,
+    versionId: string,
+    variantId: string,
+    signal?: AbortSignal,
+  ) {
+    return apiRequest<QuoteVariantListPriceDto>(
+      `/quotes/${id(quoteId)}/versions/${id(versionId)}/variants/${id(variantId)}/list-price`,
       token,
       { signal },
     );
