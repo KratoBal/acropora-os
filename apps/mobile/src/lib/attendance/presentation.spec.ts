@@ -37,8 +37,14 @@ const row = (patch: Partial<AttendanceSheetRow>): AttendanceSheetRow => ({
 
 describe("the phone's attendance sheet", () => {
   it("takes today as the Budapest day", () => {
-    assert.equal(budapestToday(new Date("2026-11-12T23:30:00.000Z")), "2026-11-13");
-    assert.equal(budapestToday(new Date("2026-11-12T22:30:00.000Z")), "2026-11-12");
+    assert.equal(
+      budapestToday(new Date("2026-11-12T23:30:00.000Z")),
+      "2026-11-13",
+    );
+    assert.equal(
+      budapestToday(new Date("2026-11-12T22:30:00.000Z")),
+      "2026-11-12",
+    );
   });
 
   it("steps months over the year's end, and names them in Hungarian", () => {
@@ -53,11 +59,27 @@ describe("the phone's attendance sheet", () => {
     assert.equal(rowTimes(row({})), "07:00-16:00");
     assert.equal(formatHours(540), "9:00");
     assert.equal(
-      rowTimes(row({ kind: "SICK", start: null, end: null, mark: "B", source: "ENTRY" })),
+      rowTimes(
+        row({
+          kind: "SICK",
+          start: null,
+          end: null,
+          mark: "B",
+          source: "ENTRY",
+        }),
+      ),
       "B",
     );
-    assert.equal(rowNote(row({ kind: "HOLIDAY", holiday: "Karácsony", start: null, end: null })), "Karácsony");
-    assert.equal(rowNote(row({ kind: "WORK", source: "ENTRY" })), "Eltérő munkaidő");
+    assert.equal(
+      rowNote(
+        row({ kind: "HOLIDAY", holiday: "Karácsony", start: null, end: null }),
+      ),
+      "Karácsony",
+    );
+    assert.equal(
+      rowNote(row({ kind: "WORK", source: "ENTRY" })),
+      "Eltérő munkaidő",
+    );
   });
 
   it("offers only future days without the admin's other mark", () => {
@@ -66,13 +88,22 @@ describe("the phone's attendance sheet", () => {
     assert.equal(canMarkOwnDay(row({ date: "2026-11-13" }), today), false);
     assert.equal(canMarkOwnDay(row({ date: "2026-11-12" }), today), false);
     for (const kind of ["LEAVE", "DAY_OFF"] as const) {
-      const own = row({ date: "2026-11-20", kind, source: "ENTRY", start: null, end: null });
+      const own = row({
+        date: "2026-11-20",
+        kind,
+        source: "ENTRY",
+        start: null,
+        end: null,
+      });
       assert.equal(canMarkOwnDay(own, today), true, kind);
       assert.equal(ownMark(own), kind);
     }
     for (const kind of ["SICK", "WORK"] as const)
       assert.equal(
-        canMarkOwnDay(row({ date: "2026-11-20", kind, source: "ENTRY" }), today),
+        canMarkOwnDay(
+          row({ date: "2026-11-20", kind, source: "ENTRY" }),
+          today,
+        ),
         false,
         kind,
       );
@@ -81,14 +112,25 @@ describe("the phone's attendance sheet", () => {
   it("keeps the roles without a sheet in step with the server's machine and partner roles", () => {
     const source = readFileSync("../../packages/types/src/auth.ts", "utf8");
     const list = (name: string) => {
-      const match = new RegExp(`export const ${name}[^=]*= \\[([^\\]]*)\\]`).exec(source);
+      const match = new RegExp(
+        `export const ${name}[^=]*= \\[([^\\]]*)\\]`,
+      ).exec(source);
       assert.ok(match, `${name} not found in packages/types/src/auth.ts`);
       return [...match[1]!.matchAll(/"([A-Z_]+)"/g)].map((m) => m[1]!);
     };
     const without = [...list("MACHINE_ROLES"), ...list("PARTNER_ROLES")];
     assert.ok(without.length >= 4);
-    for (const role of without) assert.equal(hasAttendanceSheet(role), false, role);
-    for (const role of ["OWNER", "ADMIN", "MANAGER", "SALES", "WAREHOUSE", "SERVICE", "VIEWER"])
+    for (const role of without)
+      assert.equal(hasAttendanceSheet(role), false, role);
+    for (const role of [
+      "OWNER",
+      "ADMIN",
+      "MANAGER",
+      "SALES",
+      "WAREHOUSE",
+      "SERVICE",
+      "VIEWER",
+    ])
       assert.equal(hasAttendanceSheet(role), true, role);
   });
 });

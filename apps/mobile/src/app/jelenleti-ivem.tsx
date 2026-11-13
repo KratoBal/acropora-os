@@ -68,7 +68,9 @@ export default function OwnAttendanceScreen() {
       await sheet.refetch();
     } catch (cause) {
       // the server's own sentence goes out: it names why (a day the admin marked meanwhile, a past day)
-      setError(cause instanceof Error ? cause.message : "A mentés nem sikerült.");
+      setError(
+        cause instanceof Error ? cause.message : "A mentés nem sikerült.",
+      );
     } finally {
       setBusy(false);
     }
@@ -142,8 +144,8 @@ export default function OwnAttendanceScreen() {
       >
         <Text style={styles.title}>Jelenléti ívem</Text>
         <Text style={styles.hint}>
-          Holnaptól előre jelölhetsz szabadságot vagy szabadnapot; minden mást az
-          adminisztrátor rögzít.
+          Holnaptól előre jelölhetsz szabadságot vagy szabadnapot; minden mást
+          az adminisztrátor rögzít.
         </Text>
 
         <View style={styles.monthRow}>
@@ -255,7 +257,12 @@ function createStyles(t: ThemeTokens) {
       gap: 8,
       paddingVertical: 8,
     },
-    dayLabel: { color: t.textPrimary, fontSize: 13, fontWeight: "700", width: 78 },
+    dayLabel: {
+      color: t.textPrimary,
+      fontSize: 13,
+      fontWeight: "700",
+      width: 78,
+    },
     dayTimes: { color: t.textPrimary, fontSize: 13, width: 92 },
     dayHours: { color: t.textSecondary, fontSize: 13, width: 40 },
     dayNote: { color: t.textSecondary, flex: 1, fontSize: 12 },

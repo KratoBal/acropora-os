@@ -78,7 +78,8 @@ export const budapestToday = (now: Date): string => budapestDay.format(now);
 
 /** "2026-11" moved by whole months. */
 export function shiftMonth(month: string, delta: number): string {
-  const index = Number(month.slice(0, 4)) * 12 + Number(month.slice(5, 7)) - 1 + delta;
+  const index =
+    Number(month.slice(0, 4)) * 12 + Number(month.slice(5, 7)) - 1 + delta;
   return `${Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, "0")}`;
 }
 
@@ -87,7 +88,9 @@ export const monthLabel = (month: string): string =>
   `${month.slice(0, 4)}. ${MONTHS[Number(month.slice(5, 7)) - 1]}`;
 
 /** "2026-11-02", 1 -> "11. 02. H". */
-export const dayLabel = (row: Pick<AttendanceSheetRow, "date" | "weekday">): string =>
+export const dayLabel = (
+  row: Pick<AttendanceSheetRow, "date" | "weekday">,
+): string =>
   `${row.date.slice(5, 7)}. ${row.date.slice(8, 10)}. ${WEEKDAYS[row.weekday - 1]}`;
 
 /** 540 -> "9:00". */
@@ -130,5 +133,8 @@ export const ownMark = (row: AttendanceSheetRow): OwnMark | null =>
  * May the employee mark this day: from tomorrow on, and not a day the admin marked otherwise (sick, other times). The
  * same rule as the web's `attendanceSelfMarkProblem`.
  */
-export const canMarkOwnDay = (row: AttendanceSheetRow, today: string): boolean =>
+export const canMarkOwnDay = (
+  row: AttendanceSheetRow,
+  today: string,
+): boolean =>
   row.date > today && (row.source !== "ENTRY" || ownMark(row) !== null);
