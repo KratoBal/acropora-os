@@ -203,18 +203,35 @@ describe("a négy engedélyezett forrás, és semmi más", () => {
       brandSitesFromCategories([["Termékek", "Fauna Marin"]], " fauna marin "),
       ["faunamarin.de", "faunamarincorals.de"],
     );
-    assert.deepEqual(brandSitesFromCategories([["Nyomelemek", "Triton"]], "Fauna Marin"), []);
+    assert.deepEqual(
+      brandSitesFromCategories([["Nyomelemek", "Triton"]], "Fauna Marin"),
+      [],
+    );
     assert.deepEqual(brandSitesFromCategories([["Termékek"]], null), []);
-    assert.deepEqual(brandSitesFromCategories([["Termékek"]], "Ismeretlen Márka"), []);
-    assert.deepEqual(brandSitesFromCategories([["Termékek"]], "constructor"), []);
-    const manufacturer = manufacturerSites(null, null, brandSitesFromCategories([["Termékek"]], "Fauna Marin"));
+    assert.deepEqual(
+      brandSitesFromCategories([["Termékek"]], "Ismeretlen Márka"),
+      [],
+    );
+    assert.deepEqual(
+      brandSitesFromCategories([["Termékek"]], "constructor"),
+      [],
+    );
+    const manufacturer = manufacturerSites(
+      null,
+      null,
+      brandSitesFromCategories([["Termékek"]], "Fauna Marin"),
+    );
     for (const [url, expected] of [
       ["https://www.faunamarincorals.de/en/Amin-1000ml/11135V", null],
       ["https://www.faunamarin.de/en/elementals-trace-se/", null],
       ["https://faunamarincorals.de.example.invalid/x", "HOST_NOT_ALLOWED"],
       ["https://notfaunamarincorals.de/x", "HOST_NOT_ALLOWED"],
     ] as const)
-      assert.equal(sourceUrlProblem("MANUFACTURER", url, { manufacturer, supplier: null }), expected, url);
+      assert.equal(
+        sourceUrlProblem("MANUFACTURER", url, { manufacturer, supplier: null }),
+        expected,
+        url,
+      );
   });
 
   it("a gyártó oldala a márka weboldala és a UNAS link; kereskedőre mutató link nem az", () => {

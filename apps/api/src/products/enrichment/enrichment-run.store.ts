@@ -205,7 +205,10 @@ export function productFactsFrom(product: {
   }
   const chains = (product.categories ?? []).map((c) => lanc(c.category));
   const hatas = waterEffectsFromCategories(chains.map((chain) => ({ chain })));
-  const categoryBrandSites = brandSitesFromCategories(chains, product.brand?.name);
+  const categoryBrandSites = brandSitesFromCategories(
+    chains,
+    product.brand?.name,
+  );
   if (hatas) current.waterParameterEffects = hatas.raw;
   return {
     productId: product.id,

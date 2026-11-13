@@ -269,7 +269,9 @@ describe("a kategória-szabály a UNAS-ágra", () => {
         name: "Kitalált nyomelem",
         brand: brand === null ? null : { name: brand, websiteUrl: null },
         unasSnapshot: null,
-        categories: [{ category: { name: category, parent: { name: "Termékek" } } }],
+        categories: [
+          { category: { name: category, parent: { name: "Termékek" } } },
+        ],
         variants: [],
       });
     assert.deepEqual(facts("Fauna Marin", "Nyomelemek").categoryBrandSites, [
