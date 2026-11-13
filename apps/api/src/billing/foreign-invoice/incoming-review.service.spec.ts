@@ -443,7 +443,32 @@ describe("approval", () => {
       (error: unknown) =>
         error instanceof DuplicateIncomingError &&
         error instanceof ConflictException &&
-        /már bent van/.test(error.message),
+        /már egy bent lévő számláé/.test(error.message),
+    );
+    assert.equal(
+      h.writes.filter((w) => w === "incomingBillingDocument.create").length,
+      1,
+    );
+  });
+
+  it("a misread number that collides with an invoice already in stops the approval, whatever the amount (niceshops R…1578 as R…0667)", async () => {
+    const h = harness({
+      pairings: [
+        pairing(),
+        pairing({ id: "mail-2", number: "KIT-ROSSZUL-OLVASOTT" }),
+      ],
+      files: {},
+    });
+    await h.service.approve("mailbox:mail-1", COMPLETE, "user-1");
+    await assert.rejects(
+      h.service.approve(
+        "mailbox:mail-2",
+        { ...COMPLETE, netAmount: "26,82", grossAmount: "26.82" },
+        "user-1",
+      ),
+      (error: unknown) =>
+        error instanceof DuplicateIncomingError &&
+        /Ellenőrizd a számot/.test(error.message),
     );
     assert.equal(
       h.writes.filter((w) => w === "incomingBillingDocument.create").length,

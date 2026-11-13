@@ -253,11 +253,15 @@ export class NoMailboxDocumentError extends Error {
   }
 }
 
-/** Ugyanez a számla (szám és szállító) már sor a bejövő számlák között, egy másik dokumentumból vagy forrásból. */
+/**
+ * A jóváhagyott számlaszám (a szállítóval együtt) már egy bent lévő számláé, egy másik dokumentumból vagy forrásból: vagy
+ * ugyanaz a számla másodszor, vagy egy ELÍRT szám, ami egy másik számláéval ütközik (niceshops: a 97 265 Ft-os R…1578 a
+ * 338 018 Ft-os R…0667 számával lett jóváhagyva). Az összeget nem nézzük: mindkét esetben a számot kell ellenőrizni.
+ */
 export class DuplicateIncomingError extends ConflictException {
   constructor(source: string) {
     super(
-      `Ez a számla (ugyanaz a szám és szállító) már bent van a bejövő számlák között (${source}), másodszor nem hagyható jóvá.`,
+      `Ez a számlaszám ennél a szállítónál már egy bent lévő számláé (${source}). Ellenőrizd a számot: ha elírás, javítsd; ugyanaz a számla másodszor nem hagyható jóvá.`,
     );
   }
 }
@@ -419,10 +423,11 @@ export class IncomingReviewService {
       if (taken)
         throw new ConflictException("Ez a számla már jóvá van hagyva.");
       /*
-        UGYANAZ A SZÁMLA MÁSIK DOKUMENTUMBÓL (acrobot 49595, niceshops R49010000026240667 kétszer a bejövő számlák
-        között): a fenti zár a DOKUMENTUMRA szól, tehát egy újrafeltöltés vagy egy második levél ugyanazzal a számlával
-        második sort kapna, és a számla kétszer számolódna. A számla kulcsára (szám és szállító) ugyanaz a zár, amit a
-        Számlázz.hu-vetítés és a beszerzés jóváhagyása vesz, és ha bármely forrásból már sor, nincs második.
+        A SZÁM ÜTKÖZIK EGY BENT LÉVŐ SZÁMLÁVAL (acrobot 49595, 49609): a fenti zár a DOKUMENTUMRA szól, tehát egy másik
+        dokumentum ugyanazzal a számmal és szállítóval második sort kapna. Élesen ez egy ELÍRT szám volt: a 97 265 Ft-os
+        niceshops R49010000026241578 a 338 018 Ft-os R49010000026240667 számával lett jóváhagyva, és a két számla egy
+        kulcson állt. A számla kulcsára (szám és szállító) ugyanaz a zár, amit a Számlázz.hu-vetítés és a beszerzés
+        jóváhagyása vesz, és ha bármely forrásból már sor ezzel a kulccsal, a jóváhagyás áll, az összegtől függetlenül.
       */
       const key = await lockIncomingKey(tx, values);
       const same = key
