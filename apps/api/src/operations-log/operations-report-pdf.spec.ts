@@ -6,12 +6,7 @@ import {
 } from "@acropora/types";
 
 import { readPdfTextLines } from "../documents/pdf/pdf-text-readback.js";
-import {
-  durationText,
-  monthTitle,
-  numberText,
-  renderOperationsReportPdf,
-} from "./operations-report-pdf.js";
+import { renderOperationsReportPdf } from "./operations-report-pdf.js";
 
 /*
   A HAVI KIMUTATÁS PDF-JE (task os-uzemeltetesi-naplo, S4). MI PIROSIT: ha a PDF nem PDF; ha a magyar ékezetek (ő, ű) elvesznének;
@@ -185,18 +180,5 @@ describe("a havi kimutatás PDF-je", () => {
       `legalább két oldalt vártam: ${pages?.[0]}`,
     );
     assert.ok(text.includes("Összesen 70 bejegyzés"));
-  });
-});
-
-describe("a PDF szövegsegédei", () => {
-  it("a tartam, a szám és a hónap magyarul", () => {
-    assert.equal(durationText(0), "—");
-    assert.equal(durationText(45), "45 perc");
-    assert.equal(durationText(120), "2 óra");
-    assert.equal(durationText(125), "2 óra 5 perc");
-    assert.equal(numberText(12.5), "12,5");
-    // a magyar formátum a négyjegyű számokat tagolás nélkül írja
-    assert.equal(numberText(1234.5), "1234,5");
-    assert.equal(monthTitle("2026-03"), "2026. március");
   });
 });

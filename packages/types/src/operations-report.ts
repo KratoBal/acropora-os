@@ -386,3 +386,11 @@ export function buildOperationsReport(input: {
     missed,
   };
 }
+
+/** A `GET /operations-log/report` válasza: a kimutatás, a fejléc címkéje és a készítés ideje. */
+export interface OperationsReportResponse {
+  report: OperationsReport;
+  /** „Partner · Helyszín" a fejléchez; `null`, ha egy eszközre kértük. */
+  siteLabel: string | null;
+  generatedAt: string;
+}

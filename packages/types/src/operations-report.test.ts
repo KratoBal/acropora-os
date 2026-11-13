@@ -10,6 +10,13 @@ import {
   type OperationsReportEntryInput,
   type OperationsReportScheduleInput,
 } from "./operations-report.js";
+import {
+  operationsDurationText,
+  operationsMonthTitle,
+  operationsNumberText,
+  operationsPeriodText,
+  operationsSignedNumberText,
+} from "./operations-report-format.js";
 
 /*
   MI PIROSIT: ha a nap határa az UTC-éjfél (a késő esti bejegyzés a másik napra esne); ha a hónap határa nyáron vagy télen eltolódna
@@ -377,4 +384,21 @@ test("az eszközök címke szerint, a sorok időrendben állnak", () => {
     ["a1", "a2"],
   );
   assert.equal(report.assets[0]!.totalMinutes, 50);
+});
+
+test("a kimutatás szövegei magyarul: tartam, szám, hónap, időszak, előjel", () => {
+  assert.equal(operationsDurationText(0), "—");
+  assert.equal(operationsDurationText(45), "45 perc");
+  assert.equal(operationsDurationText(120), "2 óra");
+  assert.equal(operationsDurationText(125), "2 óra 5 perc");
+  assert.equal(operationsNumberText(12.5), "12,5");
+  // a magyar formátum a négyjegyű számokat tagolás nélkül írja
+  assert.equal(operationsNumberText(1234.5), "1234,5");
+  assert.equal(operationsMonthTitle("2026-03"), "2026. március");
+  assert.equal(operationsPeriodText("2026-11-03", "DAILY"), "11.03.");
+  assert.equal(operationsPeriodText("2026-11-02", "WEEKLY"), "11.02.–11.08.");
+  assert.equal(operationsPeriodText("2026-10-26", "WEEKLY"), "10.26.–11.01.");
+  assert.equal(operationsSignedNumberText(12.5, "m3"), "+12,5 m3");
+  assert.equal(operationsSignedNumberText(-3, null), "-3");
+  assert.equal(operationsSignedNumberText(0, "m3"), "0 m3");
 });

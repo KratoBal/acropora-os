@@ -1,7 +1,11 @@
 import {
   ACROPORA_COMPANY,
   OPERATIONS_FREQUENCY_LABELS,
-  addDays,
+  operationsDurationText,
+  operationsMonthTitle,
+  operationsNumberText,
+  operationsPeriodText,
+  operationsSignedNumberText,
   partnerStatusLabel,
   type OperationsReport,
   type OperationsReportAssetBlock,
@@ -65,21 +69,6 @@ const COLUMN_W = [58, 108, 40, 98, 74, 90] as const;
 const HEAD_HEIGHT = 24;
 const MIN_ROW = 22;
 
-const MONTHS = [
-  "január",
-  "február",
-  "március",
-  "április",
-  "május",
-  "június",
-  "július",
-  "augusztus",
-  "szeptember",
-  "október",
-  "november",
-  "december",
-] as const;
-
 /** A BELSŐ NYOLC ÁLLAPOT FELIRATA (ugyanaz, mint a webes `service-job-labels.ts`; a partner a négy látszót kapja a szervertől). */
 const INTERNAL_STATUS_LABEL: Record<ServiceJobStatusValue, string> = {
   NEW: "Új",
@@ -91,27 +80,6 @@ const INTERNAL_STATUS_LABEL: Record<ServiceJobStatusValue, string> = {
   COMPLETED: "Elkészült",
   CANCELLED: "Meghiúsult",
 };
-
-export function monthTitle(month: string): string {
-  const [year, mm] = month.split("-").map(Number) as [number, number];
-  return `${year}. ${MONTHS[mm - 1]}`;
-}
-
-/** „2 óra 5 perc", „45 perc", „—" nullánál. */
-export function durationText(minutes: number): string {
-  if (minutes <= 0) return "—";
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  if (hours === 0) return `${rest} perc`;
-  return rest === 0 ? `${hours} óra` : `${hours} óra ${rest} perc`;
-}
-
-/** Magyar tizedesvesszős szám, legfeljebb 3 tizedesjeggyel, felesleges nullák nélkül. */
-export function numberText(value: number): string {
-  return new Intl.NumberFormat("hu-HU", { maximumFractionDigits: 3 }).format(
-    value,
-  );
-}
 
 function dateTimeText(iso: string): string {
   const date = new Date(iso);
@@ -128,18 +96,6 @@ function dateTimeText(iso: string): string {
   return `${get("month")}.${get("day")}. ${get("hour")}:${get("minute")}`;
 }
 
-function periodText(
-  period: string,
-  frequency: "DAILY" | "WEEKLY" | "OCCASIONAL",
-): string {
-  const [, m, d] = period.split("-");
-  if (frequency === "WEEKLY") {
-    const [, em, ed] = addDays(period, 6).split("-");
-    return `${m}.${d}.–${em}.${ed}.`;
-  }
-  return `${m}.${d}.`;
-}
-
 /**
  * A VÍZÓRA CELLÁJA HÁROM SORBAN (előtte, utána, különbség), NYÍL NÉLKÜL: a Noto Sans nem ismeri a nyilakat, és a pdfkit a hiányzó
  * karaktert szó nélkül üres négyzetként rajzolja (a mérési jelentés fejléce ugyanezt rögzíti). Egy hiányzó érték kérdőjel.
@@ -148,12 +104,12 @@ function meterText(row: OperationsReportEntryRow): string {
   if (row.meterBefore === null && row.meterAfter === null) return "—";
   const unit = row.meterUnit ? ` ${row.meterUnit}` : "";
   const lines = [
-    `előtte: ${row.meterBefore === null ? "?" : `${numberText(row.meterBefore)}${unit}`}`,
-    `utána: ${row.meterAfter === null ? "?" : `${numberText(row.meterAfter)}${unit}`}`,
+    `előtte: ${row.meterBefore === null ? "?" : `${operationsNumberText(row.meterBefore)}${unit}`}`,
+    `utána: ${row.meterAfter === null ? "?" : `${operationsNumberText(row.meterAfter)}${unit}`}`,
   ];
   if (row.meterDifference !== null)
     lines.push(
-      `különbség: ${row.meterDifference > 0 ? "+" : ""}${numberText(row.meterDifference)}${unit}${row.meterSuspicious ? " (ellenőrizendő)" : ""}`,
+      `különbség: ${operationsSignedNumberText(row.meterDifference, row.meterUnit)}${row.meterSuspicious ? " (ellenőrizendő)" : ""}`,
     );
   return lines.join("\n");
 }
@@ -257,7 +213,7 @@ export function renderOperationsReportPdf(
   // összegző dobozok
   const boxes: [string, string][] = [
     ["Elvégzett feladat", String(report.totals.entries)],
-    ["Összes idő", durationText(report.totals.totalMinutes)],
+    ["Összes idő", operationsDurationText(report.totals.totalMinutes)],
     ["Rendellenesség", String(report.totals.anomalies)],
     ["Kimaradt ütemezett", String(report.totals.missed)],
   ];
@@ -311,7 +267,7 @@ export function renderOperationsReportPdf(
     y = heading(doc, "Kimaradt ütemezett feladatok", y);
     for (const item of report.missed) {
       const periods = item.periods
-        .map((period) => periodText(period, item.frequency))
+        .map((period) => operationsPeriodText(period, item.frequency))
         .join(", ");
       const text = `${item.assetLabel} · ${item.templateName} (${OPERATIONS_FREQUENCY_LABELS[item.frequency].toLowerCase()}): ${periods}`;
       const height = measure(doc, text, 8.4, CONTENT_WIDTH - 14);
@@ -345,7 +301,7 @@ export function renderOperationsReportPdf(
     if (i > 0)
       write(
         doc,
-        `ÜZEMELTETÉSI NAPLÓ · ${monthTitle(report.month).toUpperCase()}`,
+        `ÜZEMELTETÉSI NAPLÓ · ${operationsMonthTitle(report.month).toUpperCase()}`,
         LEFT,
         30,
         { size: 11, color: NAVY, bold: true },
@@ -394,7 +350,7 @@ function drawAssetBlock(
     const cells = [
       dateTimeText(row.startedAt),
       `${row.templateName}\n${OPERATIONS_FREQUENCY_LABELS[row.frequency]}`,
-      durationText(row.minutes),
+      operationsDurationText(row.minutes),
       meterText(row),
       row.performers.join("\n"),
       notesText(row, audience),
@@ -426,9 +382,9 @@ function drawAssetBlock(
   // az eszköz összegző sora
   const summary = [
     `Összesen ${block.entries.length} bejegyzés`,
-    durationText(block.totalMinutes),
+    operationsDurationText(block.totalMinutes),
     block.meterTotal !== null
-      ? `vízóra: ${block.meterTotal > 0 ? "+" : ""}${numberText(block.meterTotal)}${block.meterUnit ? ` ${block.meterUnit}` : ""}`
+      ? `vízóra: ${operationsSignedNumberText(block.meterTotal, block.meterUnit)}`
       : null,
     block.anomalies > 0 ? `${block.anomalies} rendellenesség` : null,
   ]
@@ -469,7 +425,7 @@ function drawHeader(
   );
   write(
     doc,
-    monthTitle(input.report.month),
+    operationsMonthTitle(input.report.month),
     132,
     82,
     { size: 9, color: MUTED },
