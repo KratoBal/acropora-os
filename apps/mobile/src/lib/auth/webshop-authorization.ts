@@ -57,6 +57,13 @@ export interface ServiceCapabilities {
    */
   aquariumsView: boolean;
   aquariumsManage: boolean;
+  /**
+   * ÜZEMELTETÉSI NAPLÓ: BEJEGYZÉS RÖGZÍTÉSE (task os-uzemeltetesi-naplo, S2c). Saját jog a szerveren
+   * (`operations-log.record`: SERVICE, OWNER, ADMIN, MANAGER), nem a szerviz kettője és nem az akváriumé; a sablonok kezelése
+   * (`operations-log.templates.manage`) és a bejegyzések olvasása (`operations-log.view`) a webes felület dolga, a telefon csak
+   * rögzít.
+   */
+  operationsLogRecord: boolean;
 }
 
 const FULL_ACCESS: WebshopCapabilities = {
@@ -237,6 +244,7 @@ function serviceFromPermissions(
     serviceJobsManage: canManage,
     aquariumsView: has("aquariums.view"),
     aquariumsManage: has("aquariums.manage"),
+    operationsLogRecord: has("operations-log.record"),
   };
 }
 
@@ -288,6 +296,12 @@ function serviceFromRole(role: UserRole): ServiceCapabilities {
     role === "MANAGER" ||
     role === "SERVICE" ||
     role === "PARTNER_SERVICE";
+  // az üzemeltetési napló rögzítése: a szerver `ROLE_PERMISSIONS`-e szerint a belső emberi szerepek közül a SERVICE és a vezetők
+  const canRecordOperationsLog =
+    role === "OWNER" ||
+    role === "ADMIN" ||
+    role === "MANAGER" ||
+    role === "SERVICE";
   return {
     workspace: canView,
     assetsView: canView,
@@ -298,6 +312,7 @@ function serviceFromRole(role: UserRole): ServiceCapabilities {
     serviceJobsManage: canManage,
     aquariumsView: canViewAquariums,
     aquariumsManage: canManageAquariums,
+    operationsLogRecord: canRecordOperationsLog,
   };
 }
 

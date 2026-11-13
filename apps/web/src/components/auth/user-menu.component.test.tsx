@@ -120,3 +120,29 @@ describe("UserMenu kompakt fejléc-sor", () => {
     expect(auth.logout).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("UserMenu: the own attendance sheet (os-jelenleti-iv, S3)", () => {
+  it("links every colleague with a sheet to it, and no partner or machine account", () => {
+    for (const [role, shown] of [
+      ["OWNER", true],
+      ["SALES", true],
+      ["VIEWER", true],
+      ["PARTNER_SERVICE", false],
+      ["CONTENT_AGENT", false],
+    ] as const) {
+      auth.session = { ...ownerSession, user: { ...ownerSession.user, role } };
+      const { unmount } = render(
+        <UserMenu preference="system" onPreferenceChange={() => undefined} />,
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: "Felhasználói menü" }),
+      );
+      const link = screen.queryByRole("link", { name: "Jelenléti ívem" });
+      expect([role, link?.getAttribute("href") ?? null]).toEqual([
+        role,
+        shown ? "/jelenleti-ivem" : null,
+      ]);
+      unmount();
+    }
+  });
+});

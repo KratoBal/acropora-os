@@ -15,6 +15,12 @@ import { incomingRowFor, lockIncomingKeys } from "./purchase-incoming.js";
  * A RÉGI ÉS AZ ÚJ KULCS ZÁRJA egy rendezett sorrendben (`lockIncomingKeys`, a holtpont ellen), és ha az új kulcson
  * (szám és szállító) már van MÁSIK sor, nem ír: ugyanaz az őr, mint a jóváhagyásnál (#2496). Auditsor a régi és az új
  * értékkel; ugyanazt újra beállítani nem ír semmit.
+ *
+ * A SOR ZÁRJA ELŐBB, AZ OLVASÁS UTÁNA (barracuda a #2496-on): a sor `FOR NO KEY UPDATE` zárja jön az olvasás előtt, a
+ * kulcsoké utána. Enélkül két egyidejű javítás ugyanazon a soron a régi számot olvasta: a második a kulcs zárján várt,
+ * de a naplóba a már felülírt számot írta `from`-nak, és a régi kulcsot zárta a valódi helyett. A sorrend nem okoz
+ * holtpontot: egyik út sem veszi a kulcs zárját úgy, hogy utána egy MEGLÉVŐ postafiókos sort írna (a jóváhagyás új sort
+ * hoz létre, a Számlázz.hu-vetítés a saját sorát írja, a beszerzés a beszerzési sort törli).
  */
 
 /** Csak postafiókos sor száma javítható. */
@@ -56,6 +62,7 @@ export async function correctIncomingNumber(
 ): Promise<{ changed: boolean }> {
   const number = input.documentNumber.trim();
   return database.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "IncomingBillingDocument" WHERE "id" = ${input.rowId} FOR NO KEY UPDATE`;
     const row = await tx.incomingBillingDocument.findUnique({
       where: { id: input.rowId },
       select: {

@@ -60,6 +60,8 @@ const SERVER_PAIR: Record<string, string | null> = {
   // (2026-09-24, murena).
   aquariumsView: PERMISSIONS.AQUARIUMS_VIEW,
   aquariumsManage: PERMISSIONS.AQUARIUMS_MANAGE,
+  // Az üzemeltetési napló rögzítése (task os-uzemeltetesi-naplo, S2c).
+  operationsLogRecord: PERMISSIONS.OPERATIONS_LOG_RECORD,
 };
 
 interface MirrorSubject {

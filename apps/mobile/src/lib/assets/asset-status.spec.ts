@@ -72,6 +72,19 @@ describe("az állapotnevek modulja", () => {
   });
 });
 
+/**
+ * A RÉGI "Üzemel" ÁLLAPOTNÉV CSAK ÖNÁLLÓ SZÓKÉNT SZÁMÍT, A TÖBBI NÉV TOVÁBBRA IS RÉSZSZÖVEGKÉNT.
+ *
+ * Az "Üzemeltetési napló" (a termék neve, task os-uzemeltetesi-naplo) az "Üzemel" előtaggal kezdődik, és egy részszöveg-keresés
+ * minden mobil képernyőn piros lett volna, holott nem állapotnév. Az "Üzemel" egy TELJES régi állapotnév volt, tehát az önálló
+ * szó pontosan azt fogja meg, amit a spec őrzött: egy visszaszivárgó "Üzemel" címkét. A többi szó (Aktív, Kivonva, ...)
+ * változatlanul részszövegként is találat, mert azokra nincs ilyen ütköző szó.
+ */
+function appearsAsWord(source: string, word: string): boolean {
+  if (word !== "Üzemel") return source.includes(word);
+  return /(?<![\p{L}])Üzemel(?![\p{L}])/u.test(source);
+}
+
 describe("az állapotnevek egy helyen állnak", () => {
   /**
    * A KONTROLL, ES ELOL ALL. Ha a kereses nem talalja meg a szavakat OTT, ahol
@@ -103,7 +116,7 @@ describe("az állapotnevek egy helyen állnak", () => {
         const source = readFileSync(path, "utf8");
         const allowed = OTHER_MEANING[path] ?? [];
         return STATUS_WORDS.filter(
-          (word) => source.includes(word) && !allowed.includes(word),
+          (word) => appearsAsWord(source, word) && !allowed.includes(word),
         ).map((word) => `${path}: ${word}`);
       });
     assert.deepEqual(
