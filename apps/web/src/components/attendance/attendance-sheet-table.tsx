@@ -58,7 +58,10 @@ export function AttendanceSheetTable({
 }) {
   return (
     <>
-      <div className="overflow-x-auto">
+      {/* `relative`, as on the other scrolling tables: the header's `sr-only` label is absolutely placed, and without a
+          positioned box it is placed against the page at the table's full width, so on a phone the whole page scrolled
+          sideways (acrobot's 390 px stage shot, 469 px wide). With it the table scrolls inside its card only. */}
+      <div className="relative overflow-x-auto">
         <table className="w-full text-left text-sm" aria-label="Jelenléti ív">
           <thead>
             <tr className="text-xs text-pilot-grey-500">
