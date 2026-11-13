@@ -62,8 +62,13 @@ export class OperationsReportService {
     // a hét-határ miatt a hónap elé hét nap (a legrosszabb eset hat, a hetedik a nyári időszámítás váltásának tartaléka)
     const from = new Date(start.getTime() - 7 * 24 * 3_600_000);
     const assetIds = scope.assets.map((asset) => asset.id);
-    const [entries, schedules] = await Promise.all([
-      this.repository.entries(assetIds, from, end),
+    /*
+      A SOROK A RÖGZÍTÉSKORI HELYSZÍN SZERINT, a „teljesült-e" kérdés az ÉLŐ eszközök minden bejegyzése szerint: egy áthelyezett eszköz
+      heti feladata a régi helyszínen rögzítve is teljesítette a hetet, és nem „maradt ki" az újon.
+    */
+    const [entries, done, schedules] = await Promise.all([
+      this.repository.entries(scope.entryFilter, from, end),
+      this.repository.entries({ assetIds }, from, end),
       this.repository.schedules(scope.assets),
     ]);
     return {
@@ -71,6 +76,7 @@ export class OperationsReportService {
         month: input.month,
         audience,
         entries,
+        doneEntries: done,
         schedules,
         now,
       }),

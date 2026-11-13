@@ -27,6 +27,9 @@ describe(
       root: "",
       child: "",
       other: "",
+      third: "",
+      archivedAsset: "",
+      movedAsset: "",
       insideAsset: "",
       childAsset: "",
       outsideAsset: "",
@@ -90,6 +93,7 @@ describe(
       ids.root = (await department("Biodom")).id;
       ids.child = (await department("Nagy", ids.root)).id;
       ids.other = (await department("Masik")).id;
+      ids.third = (await department("Harmadik")).id;
       const supplier = await prisma.supplier.create({
         data: { code: `UZRI${suffix}`.slice(0, 12), name: name("szállító") },
         select: { id: true },
@@ -98,7 +102,11 @@ describe(
         data: { name: name("kategória") },
         select: { id: true },
       });
-      const asset = (label: string, departmentId: string) =>
+      const asset = (
+        label: string,
+        departmentId: string,
+        archivedAt: Date | null = null,
+      ) =>
         prisma.asset
           .create({
             data: {
@@ -106,6 +114,7 @@ describe(
               name: name(`név-${label}`),
               supplierId: supplier.id,
               departmentId,
+              archivedAt,
               categoryId: category.id,
             },
             select: { id: true },
@@ -114,6 +123,9 @@ describe(
       ids.insideAsset = await asset("BENT", ids.root);
       ids.childAsset = await asset("RESZ", ids.child);
       ids.outsideAsset = await asset("KINT", ids.other);
+      // a harmadik helyszín: egy ARCHIVÁLT eszköz, és egy eszköz, amelyet a harmadik helyszínről a MÁSIKRA helyeztek
+      ids.archivedAsset = await asset("ARCH", ids.third, new Date());
+      ids.movedAsset = await asset("MOZG", ids.third);
       ids.user = (
         await prisma.user.create({
           data: {
@@ -138,6 +150,7 @@ describe(
       ).id;
       const entry = (
         assetId: string,
+        departmentId: string,
         startedAt: string,
         meterBefore: number,
         meterAfter: number,
@@ -146,6 +159,8 @@ describe(
           data: {
             templateId: ids.template,
             assetId,
+            // a helyszín a rögzítés pillanatában (a kimutatás ezen készül)
+            departmentId,
             templateName: name("sablon"),
             frequency: "DAILY",
             startedAt: new Date(startedAt),
@@ -175,9 +190,46 @@ describe(
           },
           select: { id: true },
         });
-      await entry(ids.insideAsset, "2026-09-10T09:00:00.000Z", 100, 112.5);
-      await entry(ids.childAsset, "2026-09-11T09:00:00.000Z", 200, 207.25);
-      await entry(ids.outsideAsset, "2026-09-12T09:00:00.000Z", 1, 2);
+      await entry(
+        ids.insideAsset,
+        ids.root,
+        "2026-09-10T09:00:00.000Z",
+        100,
+        112.5,
+      );
+      await entry(
+        ids.childAsset,
+        ids.child,
+        "2026-09-11T09:00:00.000Z",
+        200,
+        207.25,
+      );
+      await entry(
+        ids.outsideAsset,
+        ids.other,
+        "2026-09-12T09:00:00.000Z",
+        1,
+        2,
+      );
+      await entry(
+        ids.archivedAsset,
+        ids.third,
+        "2026-09-13T09:00:00.000Z",
+        10,
+        11,
+      );
+      await entry(
+        ids.movedAsset,
+        ids.third,
+        "2026-09-14T09:00:00.000Z",
+        20,
+        23,
+      );
+      // az eszközt a harmadik helyszínről a MÁSIKRA helyezik: a bejegyzés a rögzítéskori helyszínen marad
+      await prisma.asset.update({
+        where: { id: ids.movedAsset },
+        data: { departmentId: ids.other },
+      });
     });
 
     after(async () => {
@@ -232,6 +284,48 @@ describe(
       assert.equal(byAsset.has(ids.outsideAsset), false);
       assert.equal(report.totals.missed, 58);
       assert.ok(!byAsset.get(ids.insideAsset)!.periods.includes("2026-09-10"));
+    });
+
+    it("az archivált eszköz múltja a helyén marad, kimaradás viszont nem keletkezik rá", async () => {
+      const { report } = await service.build(
+        { month: "2026-09", departmentId: ids.third },
+        "INTERNAL",
+        NOW,
+      );
+      const labels = report.assets.map((block) => block.assetId).sort();
+      assert.deepEqual(labels, [ids.archivedAsset, ids.movedAsset].sort());
+      // az archivált eszközön nincs mi esedékes: a kimaradás csak az élő eszközökre bontódik ki
+      assert.equal(
+        report.missed.some((item) => item.assetId === ids.archivedAsset),
+        false,
+      );
+    });
+
+    it("az áthelyezett eszköz régi bejegyzése a RÉGI helyszín kimutatásában marad, az újban nincs", async () => {
+      const old = await service.build(
+        { month: "2026-09", departmentId: ids.third },
+        "INTERNAL",
+        NOW,
+      );
+      assert.ok(
+        old.report.assets.some((block) => block.assetId === ids.movedAsset),
+      );
+      const now = await service.build(
+        { month: "2026-09", departmentId: ids.other },
+        "INTERNAL",
+        NOW,
+      );
+      // a másik helyszín saját eszközének bejegyzése megvan, az ide helyezett eszköz régi bejegyzése nincs
+      assert.deepEqual(
+        now.report.assets.map((block) => block.assetId),
+        [ids.outsideAsset],
+      );
+      // a heti/napi esedékesség viszont az eszköz minden bejegyzése szerint számol: a 09-14-i nap az új helyszínen sem "maradt ki"
+      const missedMoved = now.report.missed.find(
+        (item) => item.assetId === ids.movedAsset,
+      );
+      assert.ok(missedMoved);
+      assert.equal(missedMoved.periods.includes("2026-09-14"), false);
     });
   },
 );

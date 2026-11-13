@@ -85,6 +85,8 @@ export interface OperationsLogEntryWrite {
   templateName: string;
   frequency: OperationsTaskFrequency;
   assetId: string;
+  /** A helyszín a rögzítés pillanatában (az eszköz akkori helyszíne): a havi kimutatás ezen készül, az áthelyezés a múltat nem mozdítja. */
+  departmentId: string | null;
   startedAt: Date;
   finishedAt: Date;
   /** A rögzítő is benne van (a szolgáltatás teszi bele). */
@@ -162,7 +164,13 @@ export class OperationsLogEntriesRepository {
   async assetRef(assetId: string) {
     return prisma.asset.findUnique({
       where: { id: assetId },
-      select: { id: true, assetNumber: true, name: true, categoryId: true },
+      select: {
+        id: true,
+        assetNumber: true,
+        name: true,
+        categoryId: true,
+        departmentId: true,
+      },
     });
   }
 
@@ -250,6 +258,7 @@ export class OperationsLogEntriesRepository {
           clientOperationId: input.clientOperationId,
           templateId: input.templateId,
           assetId: input.assetId,
+          departmentId: input.departmentId,
           templateName: input.templateName,
           frequency: input.frequency,
           startedAt: input.startedAt,

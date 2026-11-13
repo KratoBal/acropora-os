@@ -7,6 +7,7 @@ import type {
 } from "@acropora/types";
 
 import type {
+  OperationsReportEntryFilter,
   OperationsReportRepository,
   OperationsReportScope,
 } from "./operations-report.repository.js";
@@ -21,10 +22,14 @@ import { OperationsReportService } from "./operations-report.service.js";
 const SCOPE: OperationsReportScope = {
   siteLabel: "Állatkert · Biodóm",
   assets: [{ id: "a1", label: "E-1 Szűrő", categoryId: "c1" }],
+  entryFilter: { departmentIds: ["d1", "d2"] },
 };
 
 function fixture(over: { scope?: OperationsReportScope | null } = {}) {
-  const calls: { window?: [Date, Date]; assetIds?: readonly string[] } = {};
+  const calls: {
+    window?: [Date, Date];
+    filters: OperationsReportEntryFilter[];
+  } = { filters: [] };
   const entry: OperationsReportEntryInput = {
     id: "e1",
     templateId: "t1",
@@ -42,8 +47,12 @@ function fixture(over: { scope?: OperationsReportScope | null } = {}) {
   };
   const repository = {
     scope: async () => (over.scope === undefined ? SCOPE : over.scope),
-    entries: async (assetIds: readonly string[], from: Date, to: Date) => {
-      calls.assetIds = assetIds;
+    entries: async (
+      filter: OperationsReportEntryFilter,
+      from: Date,
+      to: Date,
+    ) => {
+      calls.filters.push(filter);
       calls.window = [from, to];
       return [entry];
     },
@@ -65,7 +74,11 @@ describe("a havi kimutatás szolgáltatása", () => {
     assert.equal(result.siteLabel, "Állatkert · Biodóm");
     assert.equal(result.generatedAt, NOW.toISOString());
     assert.equal(result.report.totals.entries, 1);
-    assert.deepEqual(calls.assetIds, ["a1"]);
+    // a sorok a rögzítéskori helyszín szerint, a „teljesült-e" az élő eszközök minden bejegyzése szerint
+    assert.deepEqual(calls.filters, [
+      { departmentIds: ["d1", "d2"] },
+      { assetIds: ["a1"] },
+    ]);
     // az ablak a hónap elé hét nappal kezdődik (budapesti november 1. 00:00 = október 31. 23:00 UTC), a hónap végéig tart
     assert.equal(calls.window![0].toISOString(), "2026-10-24T23:00:00.000Z");
     assert.equal(calls.window![1].toISOString(), "2026-11-30T23:00:00.000Z");

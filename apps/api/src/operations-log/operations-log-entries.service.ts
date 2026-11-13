@@ -124,6 +124,7 @@ export class OperationsLogEntriesService {
       templateName: template.name,
       frequency: template.frequency,
       assetId: asset.id,
+      departmentId: asset.departmentId ?? null,
       startedAt: new Date(input.startedAt),
       finishedAt: new Date(input.finishedAt),
       participantIds,
