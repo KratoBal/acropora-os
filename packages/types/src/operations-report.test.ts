@@ -142,7 +142,12 @@ test("a partner nézete a neveket Acropora-ra cseréli, a számok ugyanazok", ()
       entry("e1", "2026-11-12T09:00:00.000Z", {
         anomaly: true,
         anomalyNote: "Szivárog",
-        serviceJob: { id: "sj1", jobNumber: "HJ-1", status: "NEW" },
+        serviceJob: {
+          id: "sj1",
+          jobNumber: "HJ-1",
+          status: "NEW",
+          hidden: false,
+        },
       }),
     ],
     schedules: [],
@@ -459,7 +464,7 @@ test("a partner nézetében a hibajegy állapota a négy látszó egyike, a bels
         entry("e1", "2026-11-12T09:00:00.000Z", {
           anomaly: true,
           anomalyNote: "Szivárog",
-          serviceJob: { id: "sj1", jobNumber: "HJ-1", status },
+          serviceJob: { id: "sj1", jobNumber: "HJ-1", status, hidden: false },
         }),
       ],
       schedules: [],
@@ -504,4 +509,36 @@ test("a kimaradt heti feladat a rögzítéskori helyszíntől független bejegyz
   assert.equal(withDone.missed[0]!.periods.includes("2026-11-09"), false);
   assert.equal(withDone.totals.entries, 0);
   assert.deepEqual(withDone.assets, []);
+});
+
+test("a rejtett hibajegy a partnernek jegy nélküli, az irodának látszik, és a `hidden` jelző egyik válaszban sincs", () => {
+  const run = (audience: "INTERNAL" | "PARTNER", hidden: boolean) =>
+    buildOperationsReport({
+      month: "2026-11",
+      audience,
+      entries: [
+        entry("e1", "2026-11-12T09:00:00.000Z", {
+          anomaly: true,
+          anomalyNote: "Szivárog",
+          serviceJob: { id: "sj1", jobNumber: "HJ-1", status: "NEW", hidden },
+        }),
+      ],
+      schedules: [],
+      now: NOW,
+    });
+  const hiddenPartner = run("PARTNER", true);
+  assert.equal(hiddenPartner.assets[0]!.entries[0]!.ticket, null);
+  // a rendellenesség maga marad: csak a jegy tűnik el
+  assert.equal(hiddenPartner.assets[0]!.entries[0]!.anomaly, true);
+  assert.equal(hiddenPartner.assets[0]!.anomalies, 1);
+  assert.equal(JSON.stringify(hiddenPartner).includes("HJ-1"), false);
+  // KONTROLL: a nem rejtett jegy a partnernek látszik, a rejtett az irodának is
+  assert.equal(
+    run("PARTNER", false).assets[0]!.entries[0]!.ticket?.jobNumber,
+    "HJ-1",
+  );
+  const internalHidden = run("INTERNAL", true);
+  assert.equal(internalHidden.assets[0]!.entries[0]!.ticket?.jobNumber, "HJ-1");
+  for (const report of [internalHidden, run("PARTNER", false)])
+    assert.equal(JSON.stringify(report).includes("hidden"), false);
 });

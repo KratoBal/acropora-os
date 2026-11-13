@@ -29,7 +29,12 @@ function entry(
     participantNames: ["Kovács Béla", "Őri Ágnes"],
     anomaly: true,
     anomalyNote: "Szivárog a szelep",
-    serviceJob: { id: "sj1", jobNumber: "HJ-2026-0042", status: "NEW" },
+    serviceJob: {
+      id: "sj1",
+      jobNumber: "HJ-2026-0042",
+      status: "NEW",
+      hidden: false,
+    },
     values: [
       {
         fieldKey: "elotte",

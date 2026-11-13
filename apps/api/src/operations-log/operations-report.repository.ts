@@ -129,7 +129,9 @@ export class OperationsReportRepository {
         anomaly: true,
         anomalyNote: true,
         asset: { select: { assetNumber: true, name: true } },
-        serviceJob: { select: { id: true, jobNumber: true, status: true } },
+        serviceJob: {
+          select: { id: true, jobNumber: true, status: true, hiddenAt: true },
+        },
         participants: {
           select: {
             user: { select: { displayName: true, nickname: true } },
@@ -164,7 +166,14 @@ export class OperationsReportRepository {
         .sort((a, b) => a.localeCompare(b, "hu")),
       anomaly: row.anomaly,
       anomalyNote: row.anomalyNote,
-      serviceJob: row.serviceJob,
+      serviceJob: row.serviceJob
+        ? {
+            id: row.serviceJob.id,
+            jobNumber: row.serviceJob.jobNumber,
+            status: row.serviceJob.status,
+            hidden: row.serviceJob.hiddenAt !== null,
+          }
+        : null,
       values: row.values.map((value) => ({
         fieldKey: value.fieldKey,
         label: value.label,
