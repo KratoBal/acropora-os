@@ -4168,6 +4168,8 @@ model ServiceJob {
   @@index([departmentId])
   /// MINDEN LISTA EZEN SZUR, ALAPBOL -- ugyanaz az ok, mint a munkalapnal.
   @@index([hiddenAt])
+  /// Az üzemeltetési napló bejegyzése, amelynek a rendellenességéből ez a jegy nyílt (task os-uzemeltetesi-naplo, S3).
+  operationsLogEntry OperationsLogEntry? @relation("OperationsLogEntryServiceJob")
 }
 
 model Contract {
@@ -12626,6 +12628,9 @@ model OperationsLogEntry {
   startedAt         DateTime
   finishedAt        DateTime
   recordedById      String
+  /// A rendellenességből automatikusan nyitott hibajegy (S3); egy bejegyzéshez legfeljebb egy. A bejegyzés a jegyet nem törli, a jegy
+  /// törlése (ha valaha lesz) a hivatkozást nullázza.
+  serviceJobId      String?  @unique
   /// Volt-e rendellenesség; ha igen, rövid szöveg kötelező (CHECK). A hibajegy az S3.
   anomaly           Boolean  @default(false)
   anomalyNote       String?  @db.VarChar(2000)
@@ -12639,6 +12644,7 @@ model OperationsLogEntry {
   participants OperationsLogEntryParticipant[]
   values       OperationsLogEntryValue[]
   documents    OperationsLogEntryDocument[]
+  serviceJob   ServiceJob?                     @relation("OperationsLogEntryServiceJob", fields: [serviceJobId], references: [id], onDelete: SetNull)
 
   @@index([assetId, startedAt])
   @@index([templateId, startedAt])

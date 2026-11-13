@@ -77,6 +77,13 @@ export interface OperationsLogEntryPhotoDto {
   createdAt: string;
 }
 
+/** A rendellenességből automatikusan nyitott hibajegy (S3). A hibajegy állapota a jegy saját állapota, élőben olvasva. */
+export interface OperationsLogEntryServiceJobDto {
+  id: string;
+  jobNumber: string;
+  status: string;
+}
+
 export interface OperationsLogEntryDto {
   id: string;
   clientOperationId: string | null;
@@ -91,6 +98,8 @@ export interface OperationsLogEntryDto {
   participants: OperationsLogEntryPersonDto[];
   anomaly: boolean;
   anomalyNote: string | null;
+  /** A rendellenességből nyílt hibajegy; `null`, ha nem volt rendellenesség, vagy a jegy nyitása még nem sikerült (a következő újraküldés pótolja). */
+  serviceJob: OperationsLogEntryServiceJobDto | null;
   internalNote: string | null;
   values: OperationsLogEntryValueDto[];
   /** A fénykép mezők képei. A kép a bejegyzés után, külön kérésben érkezik (offline sorban is), ezért a lista később is bővülhet. */

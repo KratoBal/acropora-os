@@ -6,6 +6,8 @@ import { prisma } from "@acropora/database";
 import { integrationDatabaseGate } from "../common/integration-database.js";
 import { OperationsLogEntriesRepository } from "./operations-log-entries.repository.js";
 import { OperationsLogEntriesService } from "./operations-log-entries.service.js";
+import { ServiceJobsRepository } from "../service-jobs/service-jobs.repository.js";
+import { ServiceJobsService } from "../service-jobs/service-jobs.service.js";
 import { OperationsLogPhotosService } from "./operations-log-photos.service.js";
 import { OperationsLogRepository } from "./operations-log.repository.js";
 
@@ -32,6 +34,7 @@ describe(
     const service = new OperationsLogEntriesService(
       new OperationsLogEntriesRepository(),
       templates,
+      new ServiceJobsService(new ServiceJobsRepository()),
     );
     const photos = new OperationsLogPhotosService(
       new OperationsLogEntriesRepository(),
@@ -53,6 +56,10 @@ describe(
     async function removeLeftovers() {
       await prisma.operationsLogEntry.deleteMany({
         where: { templateName: { startsWith: PREFIX } },
+      });
+      // a rendellenességből nyílt hibajegyek (S3) a tesztvevőé: a vevő és a helyszín törlése előtt mennek
+      await prisma.serviceJob.deleteMany({
+        where: { customer: { customerNumber: { startsWith: PREFIX } } },
       });
       await prisma.operationsTaskTemplate.deleteMany({
         where: { name: { startsWith: PREFIX } },
@@ -407,6 +414,62 @@ describe(
           anomalyOnly: true,
         });
         assert.ok(anomalies.items.every((item) => item.anomaly));
+      });
+    });
+
+    describe("a rendellenességből nyíló hibajegy", () => {
+      it("a rendellenes bejegyzés hibajegyet nyit az eszközhöz, és az újraküldés nem nyit másodikat", async () => {
+        const body = input("rendellenes", {
+          anomaly: true,
+          anomalyNote: "Szivárog a szelep",
+        });
+        const first = await service.create(body, ids.recorder);
+        const ticket = first.entry.serviceJob;
+        assert.ok(ticket, "a bejegyzésen nincs hibajegy");
+        assert.match(ticket.jobNumber, /^\S+$/);
+        const job = await prisma.serviceJob.findUniqueOrThrow({
+          where: { id: ticket.id },
+          select: {
+            title: true,
+            description: true,
+            assets: { select: { assetId: true } },
+            operationsLogEntry: { select: { id: true } },
+          },
+        });
+        assert.match(job.title, /^Rendellenesség: /);
+        assert.match(job.description ?? "", /^Szivárog a szelep/);
+        assert.deepEqual(
+          job.assets.map((link) => link.assetId),
+          [ids.asset],
+        );
+        assert.equal(job.operationsLogEntry?.id, first.entry.id);
+
+        const again = await service.create(body, ids.recorder);
+        assert.equal(again.created, false);
+        assert.equal(again.entry.serviceJob?.id, ticket.id);
+        assert.equal(
+          await prisma.serviceJob.count({
+            where: { clientOperationId: `ops-anomaly:${first.entry.id}` },
+          }),
+          1,
+        );
+      });
+
+      it("a hiányzó összekötést az újraküldés pótolja, jegy nélkül nincs rendellenesség nélküli jegy", async () => {
+        const body = input("elvalasztott", {
+          anomaly: true,
+          anomalyNote: "Hibás nyomásmérő",
+        });
+        const first = await service.create(body, ids.recorder);
+        // a jegy létrejött, de az összekötés elmaradt (megszakadt kör)
+        await prisma.operationsLogEntry.update({
+          where: { id: first.entry.id },
+          data: { serviceJobId: null },
+        });
+        const healed = await service.create(body, ids.recorder);
+        assert.equal(healed.entry.serviceJob?.id, first.entry.serviceJob?.id);
+        const calm = await service.create(input("nyugodt"), ids.recorder);
+        assert.equal(calm.entry.serviceJob, null);
       });
     });
 

@@ -17,6 +17,7 @@ import type {
   OperationsLogEntryWrite,
 } from "./operations-log-entries.repository.js";
 import { OperationsLogEntriesService } from "./operations-log-entries.service.js";
+import type { ServiceJobsService } from "../service-jobs/service-jobs.service.js";
 import type { OperationsLogRepository } from "./operations-log.repository.js";
 
 /*
@@ -96,10 +97,20 @@ function fixture(
     existing: { entry: OperationsLogEntryDto; recordedById: string } | null;
     raceWinner: { entry: OperationsLogEntryDto; recordedById: string } | null;
     selectable: string[];
+    /** A létrehozott bejegyzés rendellenes-e (a tároló válasza). */
+    anomalous: boolean;
+    ticketFails: boolean;
   }> = {},
 ) {
-  const calls: { write?: OperationsLogEntryWrite; created: number } = {
+  const calls: {
+    write?: OperationsLogEntryWrite;
+    created: number;
+    tickets: { input: Record<string, unknown>; actor: string }[];
+    linked: { entryId: string; serviceJobId: string }[];
+  } = {
     created: 0,
+    tickets: [],
+    linked: [],
   };
   const entries = {
     assetRef: async () =>
@@ -112,18 +123,54 @@ function fixture(
       calls.write = write;
       if (over.raceWinner) return { ...over.raceWinner, created: false };
       return {
-        entry: { id: "e1" } as OperationsLogEntryDto,
+        entry: {
+          id: "e1",
+          anomaly: over.anomalous === true,
+          serviceJob: null,
+        } as OperationsLogEntryDto,
         recordedById: actorId,
         created: true,
       };
     },
+    ticketContext: async () => ({
+      id: "e1",
+      anomaly: true,
+      anomalyNote: "Szivárog a szelep",
+      templateName: "Homokszűrő visszamosás",
+      startedAt: new Date("2026-11-13T09:30:00.000Z"),
+      serviceJobId: null,
+      recordedById: "u1",
+      asset: {
+        id: "a1",
+        assetNumber: "E-1",
+        name: "Szűrő",
+        department: { customerId: "c9" },
+      },
+    }),
+    linkServiceJob: async (entryId: string, serviceJobId: string) => {
+      calls.linked.push({ entryId, serviceJobId });
+      return true;
+    },
+    byId: async () =>
+      ({
+        id: "e1",
+        anomaly: true,
+        serviceJob: { id: "sj1", jobNumber: "HJ-2026-0001", status: "NEW" },
+      }) as unknown as OperationsLogEntryDto,
   } as unknown as OperationsLogEntriesRepository;
+  const serviceJobs = {
+    create: async (input: Record<string, unknown>, actor: string) => {
+      if (over.ticketFails) throw new Error("jegyszám-hiba");
+      calls.tickets.push({ input, actor });
+      return { id: "sj1" };
+    },
+  } as unknown as ServiceJobsService;
   const templates = {
     templateById: async () =>
       over.template === undefined ? template() : over.template,
   } as unknown as OperationsLogRepository;
   return {
-    service: new OperationsLogEntriesService(entries, templates),
+    service: new OperationsLogEntriesService(entries, templates, serviceJobs),
     calls,
   };
 }
@@ -320,5 +367,75 @@ describe("az üzemeltetési napló bejegyzése", () => {
     await service.create(input(), "u1");
     assert.equal(calls.write!.anomaly, false);
     assert.equal(calls.write!.anomalyNote, null);
+  });
+
+  it("a rendellenességből hibajegy nyílik: az eszközhöz, a bejegyzés kulcsával, a rögzítő nevén, és összeköttetik", async () => {
+    const { service, calls } = fixture({ anomalous: true });
+    const result = await service.create(
+      input({ anomaly: true, anomalyNote: "Szivárog a szelep" }),
+      "u1",
+    );
+    assert.equal(calls.tickets.length, 1);
+    const ticket = calls.tickets[0]!;
+    assert.equal(ticket.actor, "u1");
+    assert.equal(ticket.input.originAssetId, "a1");
+    // a partner a helyszínből jön, nem az eszköz denormalizált mezőjéből
+    assert.equal(ticket.input.customerId, "c9");
+    assert.equal(ticket.input.kind, "REPAIR");
+    assert.equal(ticket.input.clientOperationId, "ops-anomaly:e1");
+    assert.match(
+      String(ticket.input.title),
+      /^Rendellenesség: Homokszűrő visszamosás, E-1 Szűrő$/,
+    );
+    assert.match(String(ticket.input.description), /^Szivárog a szelep\n/);
+    assert.match(
+      String(ticket.input.description),
+      /Üzemeltetési napló: Homokszűrő visszamosás/,
+    );
+    assert.deepEqual(calls.linked, [{ entryId: "e1", serviceJobId: "sj1" }]);
+    assert.equal(result.entry.serviceJob?.jobNumber, "HJ-2026-0001");
+  });
+
+  it("rendellenesség nélkül nincs hibajegy", async () => {
+    const { service, calls } = fixture();
+    await service.create(input(), "u1");
+    assert.equal(calls.tickets.length, 0);
+  });
+
+  it("a jegy nyitásának hibája nem buktatja a rögzítést: a bejegyzés megvan, a jegy nélkül", async () => {
+    const { service, calls } = fixture({ anomalous: true, ticketFails: true });
+    const result = await service.create(
+      input({ anomaly: true, anomalyNote: "Szivárog" }),
+      "u1",
+    );
+    assert.equal(result.created, true);
+    assert.equal(result.entry.serviceJob, null);
+    assert.equal(calls.linked.length, 0);
+  });
+
+  it("az újraküldés a hiányzó jegyet pótolja, a meglévőt nem nyitja újra", async () => {
+    const withoutTicket = {
+      entry: {
+        id: "e1",
+        anomaly: true,
+        serviceJob: null,
+      } as OperationsLogEntryDto,
+      recordedById: "u1",
+    };
+    const healed = fixture({ existing: withoutTicket });
+    const result = await healed.service.create(input(), "u1");
+    assert.equal(result.created, false);
+    assert.equal(healed.calls.tickets.length, 1);
+    const withTicket = {
+      entry: {
+        id: "e1",
+        anomaly: true,
+        serviceJob: { id: "sj1", jobNumber: "HJ-1", status: "NEW" },
+      } as OperationsLogEntryDto,
+      recordedById: "u1",
+    };
+    const complete = fixture({ existing: withTicket });
+    await complete.service.create(input(), "u1");
+    assert.equal(complete.calls.tickets.length, 0);
   });
 });

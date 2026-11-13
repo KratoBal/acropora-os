@@ -27,6 +27,7 @@ const ENTRY_SELECT = {
   internalNote: true,
   createdAt: true,
   asset: { select: { id: true, assetNumber: true, name: true } },
+  serviceJob: { select: { id: true, jobNumber: true, status: true } },
   recordedBy: {
     select: { id: true, displayName: true, nickname: true },
   },
@@ -147,6 +148,7 @@ function toDto(row: EntryRow): OperationsLogEntryDto {
       .sort((a, b) => a.displayName.localeCompare(b.displayName, "hu")),
     anomaly: row.anomaly,
     anomalyNote: row.anomalyNote,
+    serviceJob: row.serviceJob,
     internalNote: row.internalNote,
     values,
     photos: row.documents.map((photo) => photoDto(photo)),
@@ -373,5 +375,45 @@ export class OperationsLogEntriesRepository {
     return row?.thumbnail
       ? { fileName: row.fileName, thumbnail: row.thumbnail }
       : null;
+  }
+
+  /**
+   * A BEJEGYZÉS ÉS A HIBAJEGY ÖSSZEKÖTÉSE. Csak akkor ír, ha a bejegyzésnek még nincs jegye (`serviceJobId IS NULL`): két párhuzamos
+   * újraküldés közül a második nem írja át az elsőét. `false`: már volt jegye (a hívó a meglévőt olvassa).
+   */
+  async linkServiceJob(
+    entryId: string,
+    serviceJobId: string,
+  ): Promise<boolean> {
+    const result = await prisma.operationsLogEntry.updateMany({
+      where: { id: entryId, serviceJobId: null },
+      data: { serviceJobId },
+    });
+    return result.count > 0;
+  }
+
+  /** Egy bejegyzés a jegy szövegéhez: amit a jegy leírása hordoz. */
+  async ticketContext(entryId: string) {
+    return prisma.operationsLogEntry.findUnique({
+      where: { id: entryId },
+      select: {
+        id: true,
+        anomaly: true,
+        anomalyNote: true,
+        templateName: true,
+        startedAt: true,
+        serviceJobId: true,
+        recordedById: true,
+        asset: {
+          select: {
+            id: true,
+            assetNumber: true,
+            name: true,
+            // a hely partnere: az eszköz saját `customerId` mezője denormalizált és hiányozhat, a helyszín partnere nem
+            department: { select: { customerId: true } },
+          },
+        },
+      },
+    });
   }
 }
