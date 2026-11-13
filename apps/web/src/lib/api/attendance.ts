@@ -14,6 +14,7 @@ import { apiAuthHeaders, apiRequest } from "./client";
 
 const base = "/attendance/users";
 const employeesPath = "/attendance/employees";
+const mePath = "/attendance/me";
 
 /** An employee's attendance inputs (os-jelenleti-iv), all under `attendance.manage`. */
 export const attendanceApi = {
@@ -96,7 +97,7 @@ export const attendanceApi = {
       `${API_PREFIX}${base}/${encodeURIComponent(userId)}/signed-sheets/${encodeURIComponent(id)}/pdf`,
       { credentials: "same-origin", headers: apiAuthHeaders(token) },
     );
-    return pdfBlob(response, "Az aláírt példány nem tölthető le.");
+    return pdfBlob(response, "A nyomtatott példány nem tölthető le.");
   },
   /** Sets the day's entry (sick, leave, day off, or other times). */
   saveDay(
@@ -117,6 +118,32 @@ export const attendanceApi = {
       `${base}/${encodeURIComponent(userId)}/days/${encodeURIComponent(date)}`,
       token,
       { method: "DELETE" },
+    );
+  },
+  /** The signed-in employee's own month (S3). */
+  mySheet(token: string, month: string, signal?: AbortSignal) {
+    return apiRequest<AttendanceSheetResponse>(
+      `${mePath}/sheet?month=${encodeURIComponent(month)}`,
+      token,
+      { signal },
+    );
+  },
+  /** Marks leave or a day off on one of the employee's own future days (S3). */
+  markOwnDay(token: string, date: string, kind: "LEAVE" | "DAY_OFF") {
+    return apiRequest<AttendanceDayEntry>(
+      `${mePath}/days/${encodeURIComponent(date)}`,
+      token,
+      { method: "PUT", body: JSON.stringify({ kind }) },
+    );
+  },
+  /** Removes the employee's own advance mark (S3). */
+  clearOwnDay(token: string, date: string) {
+    return apiRequest<void>(
+      `${mePath}/days/${encodeURIComponent(date)}`,
+      token,
+      {
+        method: "DELETE",
+      },
     );
   },
 };

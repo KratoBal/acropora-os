@@ -47,7 +47,7 @@ export const attendanceMonthLabel = (month: string): string =>
   `${month.slice(0, 4)}. ${MONTHS[Number(month.slice(5, 7)) - 1]}`;
 
 /** 540 -> "9:00". */
-const hours = (minutes: number) =>
+export const hours = (minutes: number) =>
   `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, "0")}`;
 
 /** "2026-11-02" -> "11. 02. H". */
@@ -86,7 +86,8 @@ const COLUMNS = [
 const ROW_HEIGHT = 13.6;
 const FONT_SIZE = 8.6;
 
-function rowCells(row: AttendanceSheetRow): string[] {
+/** The cells of a row exactly as the PDF prints them (also what the signed copy's hash is taken from, S2d). */
+export function rowCells(row: AttendanceSheetRow): string[] {
   return [
     dayCell(row),
     row.start ?? row.mark ?? "",
