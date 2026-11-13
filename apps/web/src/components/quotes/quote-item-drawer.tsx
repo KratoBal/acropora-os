@@ -118,6 +118,10 @@ export function QuoteItemDrawer({
   const autoFilled = useRef({ name: "", price: "" });
   // az aktuális nettó ár, a válasz megérkezésekor: közben beírt árat nem írunk felül
   const netNow = useRef("");
+  // a legutóbb választott változat és a mai ÁFA-kulcs: a késve érkező ár-válasz ezekhez képest dől el (a
+  // lezárásban rögzített érték a válasz érkezésekor már elavult lehet)
+  const pickedNow = useRef<string | null>(null);
+  const vatNow = useRef("27");
   const [priceNote, setPriceNote] = useState<string | null>(null);
   const [priceBase, setPriceBase] = useState<"net" | "gross">("net");
   const [vat, setVat] = useState("27");
@@ -152,23 +156,26 @@ export function QuoteItemDrawer({
     setPriceBase("net");
     setPriceNote(null);
     autoFilled.current = { name: "", price: "" };
+    pickedNow.current = item?.variantId ?? null;
     setVat(item?.vatRatePercent ?? "27");
     setOptional(item?.isOptional ?? false);
   }, [item, open]);
 
   netNow.current = unitNetPrice;
+  vatNow.current = vat;
   const changeNet = (value: string) => {
     setPriceBase("net");
     setUnitNetPrice(value);
-    setUnitGrossPrice(grossFromNet(value, vat) ?? "");
+    setUnitGrossPrice(grossFromNet(value, vatNow.current) ?? "");
   };
   const changeGross = (value: string) => {
     setPriceBase("gross");
     setUnitGrossPrice(value);
-    setUnitNetPrice(netFromGross(value, vat) ?? "");
+    setUnitNetPrice(netFromGross(value, vatNow.current) ?? "");
   };
   /** Az ÁFA-kulcs változásakor az utoljára szerkesztett ár marad, a másik számolódik újra. */
   const changeVat = (value: string) => {
+    vatNow.current = value;
     setVat(value);
     if (priceBase === "gross")
       setUnitNetPrice(netFromGross(unitGrossPrice, value) ?? "");
@@ -178,6 +185,7 @@ export function QuoteItemDrawer({
   const pickVariant = (picked: PickedVariant | null) => {
     setVariant(picked);
     setPriceNote(null);
+    pickedNow.current = picked?.variantId ?? null;
     if (!picked) return;
     setUnit(picked.unit);
     if (picked.vatRate) changeVat(picked.vatRate);
@@ -190,6 +198,8 @@ export function QuoteItemDrawer({
     void quotesApi
       .variantListPrice(token, quoteId, versionId, picked.variantId)
       .then((answer) => {
+        // egy korábbi választás késve érkező válasza nem írhat az újabb termék tételére
+        if (pickedNow.current !== picked.variantId) return;
         const untouched =
           !netNow.current.trim() || netNow.current === autoFilled.current.price;
         if (answer.unitNetPrice === null) {
@@ -213,9 +223,10 @@ export function QuoteItemDrawer({
             : "Az ár a termék mai eladási ára.",
         );
       })
-      .catch((cause: unknown) =>
-        setPriceNote(errorText(cause, "A termék ára nem tölthető be.")),
-      );
+      .catch((cause: unknown) => {
+        if (pickedNow.current !== picked.variantId) return;
+        setPriceNote(errorText(cause, "A termék ára nem tölthető be."));
+      });
   };
 
   const ready =
