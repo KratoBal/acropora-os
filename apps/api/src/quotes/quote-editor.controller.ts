@@ -112,6 +112,20 @@ export class QuoteEditorController {
     return this.costs.costing(quoteId, versionId);
   }
 
+  /**
+   * A változat mai eladási ára nettóban a tétel kitöltéséhez (Luca, 2026-11-13). A javasolt egységárral azonos
+   * forrás, de mentés nélkül is kérhető: egy még nem mentett tételnek nincs kalkulációs sora.
+   */
+  @Get(":versionId/variants/:variantId/list-price")
+  @RequirePermissions(PERMISSIONS.QUOTES_VIEW, PERMISSIONS.QUOTES_MANAGE)
+  variantListPrice(
+    @Param("quoteId") quoteId: string,
+    @Param("versionId") versionId: string,
+    @Param("variantId") variantId: string,
+  ) {
+    return this.costs.variantListPrice(quoteId, versionId, variantId);
+  }
+
   // ---- blocks --------------------------------------------------------------
 
   @Post(":versionId/blocks")

@@ -17,7 +17,7 @@ import {
   type QuoteItemSourceValue,
   type QuoteRichText,
 } from "@acropora/types";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { quotesApi } from "@/lib/api/quotes";
 
@@ -48,6 +48,13 @@ const SOURCES: ReadonlyArray<{
     help: "Több termék, egyedi anyag és szolgáltatás alkotja a háttérkalkulációt.",
   },
 ];
+
+/** A lista-ár hiányának okkódjai (`loadVariantListPrices`), emberi szóval. */
+const LIST_PRICE_REASON: Record<string, string> = {
+  "price-missing": "a termékhez nincs ár megadva",
+  "vat-rate-missing": "a változatnak nincs ÁFA-kulcsa",
+  "unknown-variant": "ismeretlen változat",
+};
 
 const SUGGESTION_SOURCE = {
   LIST_PRICE: "a termék mai eladási árából",
@@ -107,6 +114,11 @@ export function QuoteItemDrawer({
    * Az utoljára szerkesztett mező marad fix, ha az ÁFA változik.
    */
   const [unitGrossPrice, setUnitGrossPrice] = useState("");
+  /** Mit töltöttünk ki mi magunk a termékválasztáskor: csak azt írjuk felül, amit a felhasználó nem érintett. */
+  const autoFilled = useRef({ name: "", price: "" });
+  // az aktuális nettó ár, a válasz megérkezésekor: közben beírt árat nem írunk felül
+  const netNow = useRef("");
+  const [priceNote, setPriceNote] = useState<string | null>(null);
   const [priceBase, setPriceBase] = useState<"net" | "gross">("net");
   const [vat, setVat] = useState("27");
   const [optional, setOptional] = useState(false);
@@ -124,6 +136,7 @@ export function QuoteItemDrawer({
         ? {
             variantId: item.variantId,
             label: "Kapcsolt OS-termék",
+            name: item.name,
             unit: item.unit,
             vatRate: null,
           }
@@ -137,10 +150,13 @@ export function QuoteItemDrawer({
         "",
     );
     setPriceBase("net");
+    setPriceNote(null);
+    autoFilled.current = { name: "", price: "" };
     setVat(item?.vatRatePercent ?? "27");
     setOptional(item?.isOptional ?? false);
   }, [item, open]);
 
+  netNow.current = unitNetPrice;
   const changeNet = (value: string) => {
     setPriceBase("net");
     setUnitNetPrice(value);
@@ -161,10 +177,45 @@ export function QuoteItemDrawer({
 
   const pickVariant = (picked: PickedVariant | null) => {
     setVariant(picked);
-    if (picked) {
-      setUnit(picked.unit);
-      if (picked.vatRate) changeVat(picked.vatRate);
+    setPriceNote(null);
+    if (!picked) return;
+    setUnit(picked.unit);
+    if (picked.vatRate) changeVat(picked.vatRate);
+    // a megnevezést és az árat a termékből töltjük ki (Luca, 2026-11-13): csak ha a mező üres, vagy az előző
+    // termékválasztás töltötte ki, a kézzel beírtat nem írjuk felül
+    if (!name.trim() || name === autoFilled.current.name) {
+      setName(picked.name);
+      autoFilled.current.name = picked.name;
     }
+    void quotesApi
+      .variantListPrice(token, quoteId, versionId, picked.variantId)
+      .then((answer) => {
+        const untouched =
+          !netNow.current.trim() || netNow.current === autoFilled.current.price;
+        if (answer.unitNetPrice === null) {
+          setPriceNote(
+            `Ehhez a termékhez nincs eladási ár (${LIST_PRICE_REASON[answer.reason ?? ""] ?? answer.reason ?? "ismeretlen ok"}): add meg kézzel.`,
+          );
+          return;
+        }
+        if (!untouched) {
+          setPriceNote(
+            "A beírt árat nem írtam felül. A termék mai eladási ára: " +
+              `${answer.unitNetPrice} Ft nettó.`,
+          );
+          return;
+        }
+        changeNet(answer.unitNetPrice);
+        autoFilled.current.price = answer.unitNetPrice;
+        setPriceNote(
+          answer.sale
+            ? "Az ár a termék most futó akciós árából jött."
+            : "Az ár a termék mai eladási ára.",
+        );
+      })
+      .catch((cause: unknown) =>
+        setPriceNote(errorText(cause, "A termék ára nem tölthető be.")),
+      );
   };
 
   const ready =
@@ -277,6 +328,11 @@ export function QuoteItemDrawer({
               picked={variant}
               onPick={pickVariant}
             />
+            {priceNote ? (
+              <p role="status" className="mt-2 text-xs text-pilot-grey-600">
+                {priceNote}
+              </p>
+            ) : null}
           </PilotFormField>
         ) : null}
 
@@ -358,7 +414,11 @@ export function QuoteItemDrawer({
           </PilotFormField>
           <PilotFormField
             label="Bruttó egységár"
-            help="Ha ezt írod, a nettó az ÁFA-kulccsal visszaszámolva kerül a tételre."
+            help={
+              unitGrossPrice.trim() && !netFromGross(unitGrossPrice, vat)
+                ? "Az összeg csak szám lehet, szóköz nélkül (pl. 1270 vagy 1270,50)."
+                : "Ha ezt írod, a nettó az ÁFA-kulccsal visszaszámolva kerül a tételre."
+            }
           >
             <PilotInput
               aria-label="Bruttó egységár"
