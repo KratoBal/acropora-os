@@ -230,8 +230,10 @@ const BUDAPEST_DAY = new Intl.DateTimeFormat("en-CA", {
  *   2026-11-13.1  a balazs@ nem a cégre szóló számlája is tárolódik (acrobot 49566), és az ismétlődő, azonos összegű
  *                 kártyás előfizetés a számla napjához legközelebbi fizetéshez köt (TypeSafe AI): az első futás a
  *                 150 napos ablak UNMATCHED leveleit újraolvassa, a szeptemberieket is
+ *   2026-11-13.2  más devizájú számla és kártyás fizetés (USD Stripe-számla, EUR terhelés): partner, legfeljebb 3 nap,
+ *                 józan arány, egyetlen jelölt (acrobot 49581); a tárolt UNASSIGNED TypeSafe így előléptethető
  */
-export const INVOICE_COLLECTION_RULES_VERSION = "2026-11-13.1";
+export const INVOICE_COLLECTION_RULES_VERSION = "2026-11-13.2";
 
 /**
  * Az UNMATCHED újraolvasás döntése: nincs még teljes futás, az utolsó teljes

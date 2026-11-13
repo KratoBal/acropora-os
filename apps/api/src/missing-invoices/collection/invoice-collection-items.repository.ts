@@ -12,6 +12,24 @@ export interface CollectionItemRow {
   createdAt: Date;
 }
 
+export interface CollectionRunRecord {
+  id: string;
+  status: string;
+  trigger: string;
+  startedAt: Date;
+  completedAt: Date | null;
+  rulesVersion: string | null;
+  errorCode: string | null;
+  filesSeen: number;
+  storedCount: number;
+  notInvoiceCount: number;
+  unmatchedCount: number;
+  ownInvoiceCount: number;
+  suggestedCount: number;
+  duplicateCount: number;
+  failedCount: number;
+}
+
 /**
  * A GYŰJTŐ ÍTÉLET-SORAINAK OLVASÁSA (acrobot 35522, J55388). Csak olvas, és a
  * fájl tartalmát soha: az `InvoiceCollectionItem` sora a forrás, a fájlnév, az
@@ -41,6 +59,31 @@ export class InvoiceCollectionItemsRepository {
         documentId: true,
         reason: true,
         createdAt: true,
+      },
+    });
+  }
+
+  /** A legutóbbi futások, a legújabb elöl. */
+  runs(take: number): Promise<CollectionRunRecord[]> {
+    return this.database.invoiceCollectionRun.findMany({
+      orderBy: [{ startedAt: "desc" }, { id: "desc" }],
+      take,
+      select: {
+        id: true,
+        status: true,
+        trigger: true,
+        startedAt: true,
+        completedAt: true,
+        rulesVersion: true,
+        errorCode: true,
+        filesSeen: true,
+        storedCount: true,
+        notInvoiceCount: true,
+        unmatchedCount: true,
+        ownInvoiceCount: true,
+        suggestedCount: true,
+        duplicateCount: true,
+        failedCount: true,
       },
     });
   }

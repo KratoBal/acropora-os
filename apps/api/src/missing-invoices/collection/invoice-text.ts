@@ -1272,10 +1272,56 @@ export function cardPaymentMatch(
     if (onTotal.length === matches.length)
       return nearestPayment(onTotal, debits, invoiceDate);
   }
-  return invoiceDate
-    ? cardPaymentSet(text, debits, partnerOf, invoiceDate)
-    : null;
+  if (!invoiceDate) return null;
+  return (
+    cardPaymentSet(text, debits, partnerOf, invoiceDate) ??
+    foreignCurrencyPayment(text, debits, partnerOf, invoiceDate)
+  );
 }
+
+/**
+ * MÁS DEVIZÁJÚ SZÁMLA, MÁS DEVIZÁJÚ FIZETÉS (acrobot 49581, TypeSafe AI): a Stripe-számla USD-ben szól (31,75), a
+ * kártya EUR-ban terhel (28,05EUR, forintra váltva), tehát az összeg egyik devizában sem egyezik, és árfolyam nincs a
+ * kézben. Utolsó út, ha az összeg-utak semmit nem adtak: a partner szava a szövegben, a fizetés legfeljebb
+ * `NEAREST_PAYMENT_DAYS` napra a számla napjától, a fizetés eredeti devizája és a forint is más, mint a számláé, és a
+ * két összeg aránya józan (fele és kétszerese között: egy 300 dolláros számla nem egy 28 eurós fizetésé). Csak ha
+ * EGYETLEN ilyen fizetés van.
+ */
+function foreignCurrencyPayment(
+  text: string,
+  debits: readonly CardDebit[],
+  partnerOf: (debit: CardDebit) => string | null,
+  invoiceDate: string,
+): CardPaymentMatch | null {
+  const total = largestMoney(text);
+  if (!total) return null;
+  const day = Date.parse(`${invoiceDate}T00:00:00Z`);
+  const invoiceAmount = total.cents / 100;
+  const fits = debits.filter((debit) => {
+    if (!debit.original || !partnerOf(debit)) return false;
+    if (
+      debit.original.currency === total.currency ||
+      debit.currency === total.currency
+    )
+      return false;
+    const distance = Math.abs(
+      (Date.parse(`${debit.bookingDate}T00:00:00Z`) - day) / DAY_MS,
+    );
+    if (distance > NEAREST_PAYMENT_DAYS) return false;
+    const ratio = invoiceAmount / Number(debit.original.amount);
+    return ratio >= FOREIGN_RATIO.min && ratio <= FOREIGN_RATIO.max;
+  });
+  if (fits.length !== 1) return null;
+  return {
+    amount: invoiceAmount.toFixed(2),
+    currency: total.currency,
+    partner: fits[0]!.counterpartyName,
+    debitIds: [fits[0]!.id],
+  };
+}
+
+/** A más devizájú számla és a fizetés eredeti összegének józan aránya (a fő devizák között jóval belül). */
+const FOREIGN_RATIO = { min: 0.5, max: 2 };
 
 /**
  * Az ismétlődő előfizetés számlája és a terhelése között legfeljebb ennyi nap lehet: a Stripe-számla a terhelés

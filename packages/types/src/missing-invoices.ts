@@ -717,6 +717,39 @@ export interface InvoiceCollectionItemRow {
   createdAt: string;
 }
 
+/**
+ * EGY BEGYŰJTŐ FUTÁS (acrobot 49579): a szabály-verzió emelése után ebből látszik, lefutott-e az újraolvasás, és mit
+ * hozott. Csak az állapot és a darabszámok, tartalom nincs benne.
+ */
+export interface InvoiceCollectionRunRow {
+  id: string;
+  /** RUNNING, SUCCEEDED, FAILED (a szinkron-futások közös állapota) */
+  status: string;
+  /** SCHEDULED, MANUAL, ... */
+  trigger: string;
+  startedAt: string;
+  completedAt: string | null;
+  /** a futás szabály-változata (`INVOICE_COLLECTION_RULES_VERSION`); `null`: a mező bevezetése előtti futás */
+  rulesVersion: string | null;
+  errorCode: string | null;
+  counts: {
+    filesSeen: number;
+    storedCount: number;
+    notInvoiceCount: number;
+    unmatchedCount: number;
+    ownInvoiceCount: number;
+    suggestedCount: number;
+    duplicateCount: number;
+    failedCount: number;
+  };
+}
+
+/** `GET /missing-invoices/collection-runs` */
+export interface InvoiceCollectionRunsResponse {
+  items: InvoiceCollectionRunRow[];
+  limit: number;
+}
+
 export interface InvoiceCollectionItemsResponse {
   items: InvoiceCollectionItemRow[];
   /** Ítéletenként a darabszám a kért forrásra, a verdikt-szűrőtől FÜGGETLENÜL. */

@@ -5,13 +5,17 @@ import { BadRequestException } from "@nestjs/common";
 
 import type {
   CollectionItemRow,
+  CollectionRunRecord,
   InvoiceCollectionItemsRepository,
 } from "./invoice-collection-items.repository.js";
 import {
   COLLECTION_ITEMS_DEFAULT_LIMIT,
   COLLECTION_ITEMS_MAX_LIMIT,
+  COLLECTION_RUNS_DEFAULT_LIMIT,
+  COLLECTION_RUNS_MAX_LIMIT,
   InvoiceCollectionItemsService,
   parseLimit,
+  parseRunsLimit,
 } from "./invoice-collection-items.service.js";
 
 function row(
@@ -252,5 +256,103 @@ describe("parseLimit", () => {
       "-3",
     ])
       assert.throws(() => parseLimit(bad), BadRequestException, bad);
+  });
+});
+
+/*
+  A GYŰJTŐ FUTÁSAI (acrobot 49579). MI PIROSÍT: a futás-sorok nem a repository sorrendjében, vagy egy mező (állapot,
+  szabály-változat, a darabszámok, a vége) nélkül mennek ki; a limit nem jut el a repositoryig; a korlát rossz.
+*/
+describe("InvoiceCollectionItemsService.runs", () => {
+  const run = (
+    n: number,
+    overrides: Partial<CollectionRunRecord> = {},
+  ): CollectionRunRecord => ({
+    id: `run-${n}`,
+    status: "SUCCEEDED",
+    trigger: "SCHEDULED",
+    startedAt: new Date(Date.UTC(2026, 10, 13, 0, 10 + n)),
+    completedAt: new Date(Date.UTC(2026, 10, 13, 0, 12 + n)),
+    rulesVersion: "2026-11-13.1",
+    errorCode: null,
+    filesSeen: 500,
+    storedCount: 46,
+    notInvoiceCount: 121,
+    unmatchedCount: 52,
+    ownInvoiceCount: 0,
+    suggestedCount: 0,
+    duplicateCount: 12,
+    failedCount: 0,
+    ...overrides,
+  });
+
+  it("gives the runs as the repository orders them, with every field, and passes the limit", async () => {
+    const takes: number[] = [];
+    const rows = [
+      run(2),
+      run(1, {
+        status: "FAILED",
+        completedAt: null,
+        errorCode: "GOOGLE_AUTH_FAILED",
+        rulesVersion: null,
+      }),
+    ];
+    const repository = {
+      runs: async (take: number) => {
+        takes.push(take);
+        return rows;
+      },
+    } as unknown as InvoiceCollectionItemsRepository;
+    const out = await new InvoiceCollectionItemsService(repository).runs("5");
+    assert.deepEqual(takes, [5]);
+    assert.equal(out.limit, 5);
+    assert.deepEqual(out.items, [
+      {
+        id: "run-2",
+        status: "SUCCEEDED",
+        trigger: "SCHEDULED",
+        startedAt: "2026-11-13T00:12:00.000Z",
+        completedAt: "2026-11-13T00:14:00.000Z",
+        rulesVersion: "2026-11-13.1",
+        errorCode: null,
+        counts: {
+          filesSeen: 500,
+          storedCount: 46,
+          notInvoiceCount: 121,
+          unmatchedCount: 52,
+          ownInvoiceCount: 0,
+          suggestedCount: 0,
+          duplicateCount: 12,
+          failedCount: 0,
+        },
+      },
+      {
+        id: "run-1",
+        status: "FAILED",
+        trigger: "SCHEDULED",
+        startedAt: "2026-11-13T00:11:00.000Z",
+        completedAt: null,
+        rulesVersion: null,
+        errorCode: "GOOGLE_AUTH_FAILED",
+        counts: {
+          filesSeen: 500,
+          storedCount: 46,
+          notInvoiceCount: 121,
+          unmatchedCount: 52,
+          ownInvoiceCount: 0,
+          suggestedCount: 0,
+          duplicateCount: 12,
+          failedCount: 0,
+        },
+      },
+    ]);
+  });
+
+  it("limits the runs to 1..50, 10 by default", () => {
+    assert.equal(parseRunsLimit(undefined), COLLECTION_RUNS_DEFAULT_LIMIT);
+    assert.equal(COLLECTION_RUNS_DEFAULT_LIMIT, 10);
+    assert.equal(parseRunsLimit(String(COLLECTION_RUNS_MAX_LIMIT)), 50);
+    for (const bad of ["0", "51", "1.5", "abc"])
+      assert.throws(() => parseRunsLimit(bad), BadRequestException, bad);
   });
 });

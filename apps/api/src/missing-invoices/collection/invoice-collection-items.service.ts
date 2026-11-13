@@ -5,16 +5,20 @@ import {
   type InvoiceCollectionItemSource,
   type InvoiceCollectionItemVerdict,
   type InvoiceCollectionItemsResponse,
+  type InvoiceCollectionRunsResponse,
 } from "@acropora/types";
 import { BadRequestException, Injectable } from "@nestjs/common";
 
 import {
   InvoiceCollectionItemsRepository,
   type CollectionItemRow,
+  type CollectionRunRecord,
 } from "./invoice-collection-items.repository.js";
 
 export const COLLECTION_ITEMS_DEFAULT_LIMIT = 200;
 export const COLLECTION_ITEMS_MAX_LIMIT = 500;
+export const COLLECTION_RUNS_DEFAULT_LIMIT = 10;
+export const COLLECTION_RUNS_MAX_LIMIT = 50;
 
 function oneOf<T extends string>(
   value: string | undefined,
@@ -122,4 +126,50 @@ export class InvoiceCollectionItemsService {
       truncated: rows.length > limit,
     };
   }
+
+  /**
+   * A LEGUTÓBBI FUTÁSOK (acrobot 49579): lefutott-e a szabály-verzió miatti újraolvasás, és mit hozott. A sikeres
+   * futás nem ír naplósort, és a futás-tábla a `fleet_ro`-nak nem olvasható, ezért ez az egyetlen olvasható nyoma.
+   */
+  async runs(limit?: string): Promise<InvoiceCollectionRunsResponse> {
+    const take = parseRunsLimit(limit);
+    const rows = await this.repository.runs(take);
+    return { items: rows.map(toRunRow), limit: take };
+  }
+}
+
+export function parseRunsLimit(value: string | undefined): number {
+  if (value === undefined || value === "") return COLLECTION_RUNS_DEFAULT_LIMIT;
+  const parsed = Number(value);
+  if (
+    !Number.isInteger(parsed) ||
+    parsed < 1 ||
+    parsed > COLLECTION_RUNS_MAX_LIMIT
+  )
+    throw new BadRequestException(
+      `A limit 1 és ${COLLECTION_RUNS_MAX_LIMIT} közötti egész szám.`,
+    );
+  return parsed;
+}
+
+function toRunRow(row: CollectionRunRecord) {
+  return {
+    id: row.id,
+    status: row.status,
+    trigger: row.trigger,
+    startedAt: row.startedAt.toISOString(),
+    completedAt: row.completedAt?.toISOString() ?? null,
+    rulesVersion: row.rulesVersion,
+    errorCode: row.errorCode,
+    counts: {
+      filesSeen: row.filesSeen,
+      storedCount: row.storedCount,
+      notInvoiceCount: row.notInvoiceCount,
+      unmatchedCount: row.unmatchedCount,
+      ownInvoiceCount: row.ownInvoiceCount,
+      suggestedCount: row.suggestedCount,
+      duplicateCount: row.duplicateCount,
+      failedCount: row.failedCount,
+    },
+  };
 }
