@@ -75,7 +75,7 @@ export default function OwnAttendanceScreen() {
   };
 
   const mark = (row: AttendanceSheetRow, kind: OwnMark) =>
-    void run(() => markMyAttendanceDay(row.date, kind));
+    void run(() => markMyAttendanceDay(row.date, { kind }));
 
   const clear = (row: AttendanceSheetRow) =>
     // asked first: a removed mark silently turns the day back into a working day

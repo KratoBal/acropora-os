@@ -13,11 +13,19 @@ export function getMyAttendanceSheet(month: string) {
   );
 }
 
+/** The body of an own mark; the server's `SaveOwnAttendanceDayDto` (paired in `mobile-request-body.spec.ts`). */
+export interface MarkMyAttendanceDayInput {
+  kind: OwnMark;
+}
+
 /** Leave or a day off on one of the employee's own future days. */
-export function markMyAttendanceDay(date: string, kind: OwnMark) {
+export function markMyAttendanceDay(
+  date: string,
+  input: MarkMyAttendanceDayInput,
+) {
   return apiRequest<unknown>(`${ME}/days/${encodeURIComponent(date)}`, {
     method: "PUT",
-    body: JSON.stringify({ kind }),
+    body: JSON.stringify(input),
   });
 }
 
