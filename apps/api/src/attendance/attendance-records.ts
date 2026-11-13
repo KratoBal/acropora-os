@@ -9,6 +9,8 @@ import {
   type AttendanceScheduleDay,
 } from "@acropora/types";
 
+import { hours, rowCells } from "./attendance-sheet-document.js";
+
 /**
  * THE ATTENDANCE ROWS AND WHAT THE AUDIT LOG SAYS ABOUT THEM (os-jelenleti-iv, S1). Pure, so the shapes and the "did anything
  * change" rule are measured without a database; the repository only stores what these return.
@@ -111,16 +113,22 @@ export const ATTENDANCE_AUDIT_ACTIONS = {
 } as const;
 
 /**
- * THE CONTENT OF A SHEET, as a hash (S2d): the month, every row and the totals; not the print time or the decree's name.
- * Two prints of an unchanged month hash the same; any changed time, mark or day hashes differently.
+ * THE CONTENT OF A SHEET, as a hash (S2d): WHAT THE PAGE PRINTS, as a versioned extract (barracuda on #2513). Every row's
+ * printed cells (date, arrival or mark, departure or mark, hours, note), the totals, and whether the year's swapped days
+ * were known. Not the internal row object: a later change to its shape or to a field the page does not print must not
+ * flip every signed month to "changed" at once. A change to what the page prints is a change, and that is what it is for.
+ *
+ * NOT IN IT, on purpose: the print time, and the employee's name. A later name change does not make a signed month
+ * "changed"; the kept PDF shows the name it was signed under. If the printed extract itself ever changes, raise `v`: the
+ * kept copies then all read as changed, which is the safe direction, and the reason is written here.
  */
 export function sheetContentHash(sheet: AttendanceSheet): string {
-  const content = {
+  const printed = {
+    v: 1,
     month: sheet.month,
-    rows: sheet.rows,
-    totalMinutes: sheet.totalMinutes,
-    sickDays: sheet.sickDays,
-    leaveDays: sheet.leaveDays,
+    rows: sheet.rows.map(rowCells),
+    totals: [hours(sheet.totalMinutes), sheet.sickDays, sheet.leaveDays],
+    swapsKnown: sheet.swapsDecree !== null,
   };
-  return createHash("sha256").update(JSON.stringify(content)).digest("hex");
+  return createHash("sha256").update(JSON.stringify(printed)).digest("hex");
 }

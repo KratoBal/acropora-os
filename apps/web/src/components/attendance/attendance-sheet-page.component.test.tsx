@@ -343,7 +343,7 @@ describe("AttendanceSheetPage", () => {
       ),
     ).toBeTruthy();
     api.signedSheetPdf.mockReset().mockResolvedValue(new Blob(["%PDF-"]));
-    fireEvent.click(screen.getByText("Aláírt példány"));
+    fireEvent.click(screen.getByText("Nyomtatott példány"));
     await waitFor(() =>
       expect(api.signedSheetPdf).toHaveBeenCalledWith(
         "token-1",
@@ -372,6 +372,6 @@ describe("AttendanceSheetPage", () => {
       ),
     ).toBeTruthy();
     expect(screen.getByText(/Új nyomtatás és aláírás kell/)).toBeTruthy();
-    expect(screen.getByText("Aláírt példány")).toBeTruthy();
+    expect(screen.getByText("Nyomtatott példány")).toBeTruthy();
   });
 });

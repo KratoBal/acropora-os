@@ -97,7 +97,7 @@ export const attendanceApi = {
       `${API_PREFIX}${base}/${encodeURIComponent(userId)}/signed-sheets/${encodeURIComponent(id)}/pdf`,
       { credentials: "same-origin", headers: apiAuthHeaders(token) },
     );
-    return pdfBlob(response, "Az aláírt példány nem tölthető le.");
+    return pdfBlob(response, "A nyomtatott példány nem tölthető le.");
   },
   /** Sets the day's entry (sick, leave, day off, or other times). */
   saveDay(

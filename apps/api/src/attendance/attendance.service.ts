@@ -271,7 +271,7 @@ export class AttendanceService {
       throw new NotFoundException("Nincs ilyen aláírásra nyomtatott példány.");
     return {
       bytes: Buffer.from(copy.pdf),
-      fileName: `Jelenléti ív ${user.displayName} ${copy.month} (aláírt példány).pdf`,
+      fileName: `Jelenléti ív ${user.displayName} ${copy.month} (nyomtatott példány).pdf`,
     };
   }
 

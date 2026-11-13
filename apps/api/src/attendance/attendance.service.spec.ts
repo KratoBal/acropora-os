@@ -440,7 +440,7 @@ describe("AttendanceService: the copy printed for signature", () => {
     assert.equal(copy.bytes.toString(), "%PDF-stored");
     assert.equal(
       copy.fileName,
-      "Jelenléti ív Kovács Anna 2026-11 (aláírt példány).pdf",
+      "Jelenléti ív Kovács Anna 2026-11 (nyomtatott példány).pdf",
     );
     await assert.rejects(
       service.signedSheetPdf("u-1", "copy-2"),

@@ -322,7 +322,7 @@ export function AttendanceSheetPage() {
                     );
                 }}
               >
-                Aláírt példány
+                Nyomtatott példány
               </PilotButton>
             </div>
           ) : null}
