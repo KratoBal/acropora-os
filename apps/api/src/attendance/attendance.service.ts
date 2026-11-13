@@ -12,9 +12,11 @@ import {
   isAttendanceDate,
   isAttendanceEmployeeRole,
   parseAttendanceClock,
+  USER_ROLES,
   type AttendanceDayEntry,
   type AttendanceDayInput,
   type AttendanceDayListResponse,
+  type AttendanceEmployeeListResponse,
   type AttendanceSchedule,
   type AttendanceScheduleDay,
   type AttendanceScheduleListResponse,
@@ -59,6 +61,18 @@ export class AttendanceService {
     if (!isAttendanceEmployeeRole(user.role))
       throw new BadRequestException(ATTENDANCE_NOT_AN_EMPLOYEE);
     return user;
+  }
+
+  /**
+   * THE PICKER OF THE SHEET PAGE (S2b): every account with a sheet, inactive ones too (a past month stays editable). Its
+   * own route under `attendance.manage`, because the user list is `users.manage`, and someone given only
+   * `attendance.manage` must still reach the sheets (barracuda on #2501).
+   */
+  async employees(): Promise<AttendanceEmployeeListResponse> {
+    const items = await this.repository.employees(
+      USER_ROLES.filter(isAttendanceEmployeeRole),
+    );
+    return { items };
   }
 
   async schedules(userId: string): Promise<AttendanceScheduleListResponse> {
