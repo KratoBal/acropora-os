@@ -556,10 +556,11 @@ export class InvoiceCollectionService {
       reason: InvoiceCollectionReason,
     ): Promise<InvoiceCollectionVerdict> => {
       /*
-        A balazs@ ÁGON A NEM A CÉGRE SZÓLÓ SZÁMLA KIMARAD (acrobot, 2026-11-12, Balázs (a) döntése mellé): a postafiók
-        Balázs saját levelezése, és egy SZEMÉLYES számla (a vevő nem a cég) nem cégkönyvelés, a többi, finance jogú
-        felhasználó elől a szűkebb irány a biztonságos. A Balázs 1-es válasza a CÉGSZÁMLÁK elvesztése ellen szólt.
-        Csak ez az ág: az info@ és a Drive változatlanul tárolja a nem a cégre szólót is.
+        A balazs@ ÁGON A NEM A CÉGRE SZÓLÓ SZÁMLA IS TÁROLÓDIK (acrobot 49566, 2026-11-13, a #2450 szűkítésének
+        visszavonása): Balázs 2026-11-12 08:41 UTC-i 1-es válasza a balazs@ minden számlának látszó, nem kötött PDF-jét
+        kérte, a saját számla-mellékleteit is, az adatvédelmi szempontot tudatosan felülírva; ember dönt a Javasolt
+        számlák lapon. A szűkítés éles kárt okozott: a TypeSafe AI számlája (Stripe, a vevő név és e-mail, nem a cégnév)
+        NOT_COMPANY lett és nyom nélkül kimaradt.
       */
       /*
         A MÁR TÁROLT, MOST SEM KÖTÖTT PÉLDÁNY a mai olvasó olvasatát kapja (kártya f7ece26b): egy javított olvasó
@@ -572,12 +573,7 @@ export class InvoiceCollectionService {
           reading,
           payee,
         );
-      if (
-        reassess ||
-        this.dry ||
-        (source === "BALAZS_MAIL" && payee === "NOT_COMPANY")
-      )
-        return skip("UNMATCHED", reason);
+      if (reassess || this.dry) return skip("UNMATCHED", reason);
       await this.repository.store({
         source,
         externalId,

@@ -1395,27 +1395,24 @@ describe("InvoiceCollectionService keeps what nothing ties (UNASSIGNED)", () => 
   });
 
   /*
-    A balazs@ ÁGON A NEM A CÉGRE SZÓLÓ SZÁMLA KIMARAD (acrobot, 2026-11-12). MI PIROSÍT: ha Balázs személyes számlája
-    (a vevő nem a cég) tárolódik a balazs@ ágon; ha ugyanez az info@ ágon is kimarad (ott a nem a cégre szólót is tároljuk).
+    A balazs@ ÁGON A NEM A CÉGRE SZÓLÓ SZÁMLA IS TÁROLÓDIK (acrobot 49566, a #2450 szűkítésének visszavonása, TypeSafe AI).
+    MI PIROSÍT: ha Balázs nem a cégre szóló számlája a balazs@ ágon kimarad (UNMATCHED, dokumentum nélkül); ha a
+    vevője nem NOT_COMPANY-ként kerül a tárolt dokumentumra (a Javasolt számlák lapon ember dönt, és ezt látnia kell).
   */
-  it("does NOT keep a balazs@ invoice that is not addressed to the company (Balázs's personal invoice), but the info@ mailbox still does", async () => {
-    const balazs = setup({
+  it("keeps a balazs@ invoice that is not addressed to the company too, as NOT_COMPANY, for a person to decide", async () => {
+    const { collection, stored, recorded } = setup({
       environment: env(["GMAIL_BALAZS"]),
       messages: {
         "m-1": [{ fileName: "RE67456.pdf", buffer: await untiedInvoice() }],
       },
     });
-    await balazs.collection.run("MANUAL");
-    assert.deepEqual(balazs.stored, []);
-    assert.deepEqual(balazs.recorded, ["m-1/RE67456.pdf:UNMATCHED"]);
-    const info = setup({
-      environment: env(["GMAIL_FOXPOST"]),
-      messages: {
-        "m-1": [{ fileName: "RE67456.pdf", buffer: await untiedInvoice() }],
-      },
-    });
-    await info.collection.run("MANUAL");
-    assert.equal(info.stored.length, 1);
+    const counts = await collection.run("MANUAL");
+    assert.deepEqual(
+      stored.map((d) => [d.source, d.fileName, d.unassigned, d.payee]),
+      [["BALAZS_MAIL", "RE67456.pdf", true, "NOT_COMPANY"]],
+    );
+    assert.deepEqual(recorded, []);
+    assert.equal(counts.unmatchedCount, 1);
   });
 
   it("the limit of the balazs@ decision: a text PDF with no invoice word is NOT stored, and an unreadable file is not either", async () => {

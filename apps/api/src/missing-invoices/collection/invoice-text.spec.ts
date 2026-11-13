@@ -329,6 +329,82 @@ describe("cardPaymentMatch: a NAV-less invoice and the card payment(s) it was pa
     );
   });
 
+  /*
+    AZ ISMÉTLŐDŐ, AZONOS ÖSSZEGŰ ELŐFIZETÉS (acrobot 49566, TypeSafe AI havi 28,05 EUR). MI PIROSÍT: ha a havi fizetések
+    közül egyik sem köt; ha nem a számla napjához legközelebbi köt; ha két egyformán közeli közül választ; ha az ablakon
+    kívüli (a számla előtt 15 napnál régebbi) fizetés köt.
+  */
+  const typesafe = [
+    "TypeSafe AI, Inc.",
+    "Invoice number TL9NJ7RN-0001",
+    "Date of issue September 28, 2026",
+    "Amount due €28.05",
+  ];
+  const sub = (bookingDate: string) =>
+    card(
+      "TYPESAFE AI, INC.",
+      "10393",
+      { amount: "28.05", currency: "EUR" },
+      bookingDate,
+    );
+
+  it("ties a recurring same-amount subscription to the payment nearest the invoice date", () => {
+    const august = sub("2026-08-29");
+    const september = sub("2026-09-29");
+    const october = sub("2026-10-29");
+    assert.deepEqual(
+      cardPaymentMatch(
+        typesafe,
+        [august, september, october],
+        word,
+        "2026-09-28",
+      )?.debitIds,
+      [september.id],
+    );
+  });
+
+  it("does not choose between two payments equally near the invoice date", () => {
+    assert.equal(
+      cardPaymentMatch(
+        typesafe,
+        [sub("2026-09-27"), sub("2026-09-29")],
+        word,
+        "2026-09-28",
+      ),
+      null,
+    );
+  });
+
+  it("does not let a neighbouring month's payment tie when that month's own payment is missing (barracuda, #2494)", () => {
+    // havi előfizetés: a májusi és a júliusi fizetés megvan, a júniusi HIÁNYZIK. A június 1-jei számlához a július 1-jei
+    // terhelés a gyűjtő ablakán belül volna (30 nap), de nem az övé: nem köt. A július 1-jei számla a sajátját köti.
+    const monthly = (date: string) =>
+      typesafe.map((l) => l.replace("September 28", date));
+    const may = sub("2026-05-01");
+    const july = sub("2026-07-01");
+    assert.equal(
+      cardPaymentMatch(monthly("June 1"), [may, july], word, "2026-06-01"),
+      null,
+    );
+    assert.deepEqual(
+      cardPaymentMatch(monthly("July 1"), [may, july], word, "2026-07-01")
+        ?.debitIds,
+      [july.id],
+    );
+  });
+
+  it("does not tie a recurring payment outside the window (more than 15 days before the invoice)", () => {
+    assert.equal(
+      cardPaymentMatch(
+        typesafe,
+        [sub("2026-08-29"), sub("2026-08-30")],
+        word,
+        "2026-09-28",
+      ),
+      null,
+    );
+  });
+
   it("takes nothing when the amount, the partner word, or the uniqueness is missing, or the partner is us", () => {
     const hetznerCard = (amount: string) =>
       card("HETZNER ONLINE GMBH", "999", { amount, currency: "EUR" });
