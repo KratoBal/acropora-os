@@ -320,10 +320,10 @@ describe("the derived content", () => {
   });
 
   /*
-    V3.3 S3 (card 69b5f2ef): the shop sends the parcel's usage guides. WHAT TURNS THIS RED: a missing or odd list refusing the mail
-    (the deploy order is free); an entry without a name or an excerpt let through; a non-https link written into an href; an
-    excerpt over the limit not cut on a word; the block drawn with no guide (the mail would change for every parcel); the
-    variable not declared for the shipped mail or its English twin.
+    V3.3 (card 69b5f2ef, korall's spec): the shop sends the parcel's usage guides. WHAT TURNS THIS RED: a missing or odd list
+    refusing the mail (the deploy order is free); an entry without a name, or with nothing to show (no excerpt, no readable
+    dose, not a treatment), let through; a dose that is not the OS canonical form kept; more than two doses kept; a non-https
+    link written into an href; an excerpt over the limit not cut on a word.
   */
   it("usage guides: a missing or odd list leaves them out, bad entries are dropped, never a refused mail", () => {
     const facts = JSON.parse(
@@ -345,8 +345,22 @@ describe("the derived content", () => {
         url: "https://shop.example/hu/termek/kz-amino",
       },
       { title: "", excerpt: "név nélkül" },
-      { title: "Nincs kivonat" },
+      { title: "Nincs semmi" },
+      { title: "Nem kezelőszer", excerpt: "", fallback_scope: "true" },
       { title: "Rossz link", excerpt: "Szöveg.", url: "javascript:alert(1)" },
+      {
+        title: "Csak adag",
+        dosing: [
+          "1 ml/100 L/day",
+          "5 ml / 100 liter naponta",
+          7,
+          "2 drop/100 L, 1-2/week",
+          "3 drop/100 L/week",
+        ],
+        url: "https://shop.example/hu/termek/b",
+      },
+      { title: "Csak rossz adag", dosing: ["1-2 ml/100 L/day"] },
+      { title: "Kezelőszer", fallback_scope: true },
       7,
     ];
     assert.deepEqual(guidesOf(), [
@@ -356,6 +370,18 @@ describe("the derived content", () => {
         url: "https://shop.example/hu/termek/kz-amino",
       },
       { title: "Rossz link", excerpt: "Szöveg.", url: null },
+      {
+        title: "Csak adag",
+        excerpt: "",
+        dosing: ["1 ml/100 L/day", "2 drop/100 L, 1-2/week"],
+        url: "https://shop.example/hu/termek/b",
+      },
+      {
+        title: "Kezelőszer",
+        excerpt: "",
+        fallback_scope: true,
+        url: null,
+      },
     ]);
     facts.shipped.usage_guides = [
       { title: "Hosszú", excerpt: "szó ".repeat(200) },
@@ -368,39 +394,161 @@ describe("the derived content", () => {
     assert.match(long, /szó…$/);
   });
 
-  it("usage guides: drawn after the parcel's content with the product page's link; with none, no block", () => {
+  /*
+    THE FOUR CASES AND THE FRAME (spec points 2, 4 and 6). WHAT TURNS THIS RED: case A without its dose line or with the
+    fallback sentence; case B without the fallback sentence in place of the dose; case C without the link or with the fallback;
+    case D drawn outside the treatments or without the fallback inside; the parcel's order not kept; the title, the intro or
+    the closing line missing, or the closing line drawn more than once; the HTML and the text version saying different things.
+  */
+  it("usage guides: the four cases, in the parcel's order, with the title, the intro and one closing line", () => {
     const shipped = WEBSHOP_MAIL_SAMPLE_FACTS["order-shipped"];
     if (shipped.template !== "order-shipped") throw new Error("sample");
-    assert.equal(webshopMailContent(shipped).blocks.hasznalati_utmutato, null);
     const block = webshopMailContent({
       ...shipped,
       shipped: {
         ...shipped.shipped,
         usage_guides: [
           {
-            title: "KZ <Amino>",
-            excerpt: "Rázd fel.",
+            title: "A <termék>",
+            excerpt: "Kalciumot pótol.",
+            dosing: ["0.5 ml/100 L/day"],
             url: "https://shop.example/a",
           },
-          { title: "Másik", excerpt: "Kevesebbel kezdj.", url: null },
+          {
+            title: "B termék",
+            excerpt: "Aminosavat ad.",
+            url: "https://shop.example/b",
+          },
+          {
+            title: "C termék",
+            excerpt: "",
+            dosing: ["2 drop/1000 L, 1-2/week"],
+            url: "https://shop.example/c",
+          },
+          {
+            title: "D kezelőszer",
+            excerpt: "",
+            fallback_scope: true,
+            url: null,
+          },
+          { title: "D berendezés", excerpt: "", url: "https://shop.example/d" },
         ],
       },
     }).blocks.hasznalati_utmutato;
-    assert.match(block?.html ?? "", /Használati útmutató/);
-    assert.match(block?.html ?? "", /<strong>KZ &lt;Amino&gt;<\/strong>/);
-    assert.match(
-      block?.html ?? "",
-      /<a href="https:\/\/shop\.example\/a">A teljes útmutató a termékoldalon<\/a>/,
+    const fallback =
+      "Kövesd a csomagoláson található gyártói utasítást. Kérdés esetén keress minket.";
+    const closing =
+      "A pontos adagolás és a biztonsági tudnivalók a termék oldalán és a csomagoláson vannak. Ha kérdésed van, keress minket.";
+    assert.equal(
+      block?.text,
+      [
+        "Használati útmutató a rendelt termékeidhez",
+        "Röviden összefoglaltuk, hogyan használd a megrendelt termékeket. A teljes útmutató a termék oldalán van.",
+        "A <termék>\nKalciumot pótol.\nAdagolás (a gyártó szerint): 0,5 ml / 100 liter, naponta\nTeljes útmutató a termék oldalán: https://shop.example/a",
+        `B termék\nAminosavat ad.\n${fallback}\nTeljes útmutató a termék oldalán: https://shop.example/b`,
+        "C termék\nAdagolás (a gyártó szerint): 2 csepp / 1\u00a0000 liter, hetente 1-2 alkalommal\nTeljes útmutató a termék oldalán: https://shop.example/c",
+        `D kezelőszer\n${fallback}`,
+        closing,
+      ].join("\n\n"),
     );
-    assert.equal((block?.html.match(/<a /g) ?? []).length, 1);
+    const html = block?.html ?? "";
     assert.match(
-      block?.text ?? "",
-      /^Használati útmutató:\n\nKZ <Amino>\nRázd fel\.\nA teljes útmutató a termékoldalon: https:\/\/shop\.example\/a/,
+      html,
+      /<h2 [^>]*>Használati útmutató a rendelt termékeidhez<\/h2>/,
+    );
+    assert.match(
+      html,
+      /<strong>A &lt;termék&gt;<\/strong><br \/>Kalciumot pótol\.<br \/>Adagolás \(a gyártó szerint\): 0,5 ml \/ 100 liter, naponta<br \/><a href="https:\/\/shop\.example\/a">Teljes útmutató a termék oldalán<\/a>/,
+    );
+    assert.match(
+      html,
+      new RegExp(`<strong>D kezelőszer</strong><br />${fallback}</p>`),
+    );
+    assert.doesNotMatch(html, /D berendezés|shop\.example\/d/);
+    assert.equal(html.split(closing).length - 1, 1);
+    // the same products, in the same order, in both versions
+    const order = (text: string) =>
+      ["A ", "B termék", "C termék", "D kezelőszer"].map((n) =>
+        text.indexOf(n),
+      );
+    assert.deepEqual(
+      order(html.replace(/&lt;/g, "<")).map((i) => i >= 0),
+      [true, true, true, true],
+    );
+    assert.ok(
+      order(block!.text).every((i, n, all) => n === 0 || i > all[n - 1]!),
     );
     for (const id of ["WEBSHOP_ORDER_SHIPPED", "WEBSHOP_ORDER_SHIPPED_EN"]) {
       const event = MAIL_TEMPLATE_EVENTS.find((e) => e.id === id);
       assert.ok(event?.variables.includes("hasznalati_utmutato"), id);
     }
+  });
+
+  /*
+    WHEN THERE IS NO SECTION AT ALL (spec points 1, 4 and 6). WHAT TURNS THIS RED: a block drawn with no guide (the mail would
+    change for every parcel); a parcel of treatments with neither excerpt nor dose getting a block of fallback sentences; an
+    English mail getting the Hungarian section.
+  */
+  it("usage guides: no section without a guide, with only treatments in case D, or in an English mail", () => {
+    const shipped = WEBSHOP_MAIL_SAMPLE_FACTS["order-shipped"];
+    if (shipped.template !== "order-shipped") throw new Error("sample");
+    const withGuides = (
+      usage_guides: NonNullable<typeof shipped.shipped.usage_guides>,
+      locale?: "hu" | "en",
+    ) =>
+      webshopMailContent({
+        ...shipped,
+        ...(locale ? { locale } : {}),
+        shipped: { ...shipped.shipped, usage_guides },
+      }).blocks.hasznalati_utmutato;
+    assert.equal(webshopMailContent(shipped).blocks.hasznalati_utmutato, null);
+    assert.equal(withGuides([]), null);
+    assert.equal(
+      withGuides([
+        { title: "D1", excerpt: "", fallback_scope: true, url: null },
+        { title: "D2", excerpt: "", fallback_scope: true, url: null },
+      ]),
+      null,
+    );
+    const one = [{ title: "A", excerpt: "Szöveg.", url: null }];
+    assert.notEqual(withGuides(one, "hu"), null);
+    assert.equal(withGuides(one, "en"), null);
+  });
+
+  /*
+    AT MOST EIGHT (spec point 4). WHAT TURNS THIS RED: the ninth product drawn; the "rest" line missing after eight, or drawn
+    with exactly eight; a product left out in case D counted towards the eight.
+  */
+  it("usage guides: at most eight products, then one line about the rest", () => {
+    const shipped = WEBSHOP_MAIL_SAMPLE_FACTS["order-shipped"];
+    if (shipped.template !== "order-shipped") throw new Error("sample");
+    const rest = "A többi termék útmutatója a termék oldalán van.";
+    const text = (n: number, leftOut = 0) =>
+      webshopMailContent({
+        ...shipped,
+        shipped: {
+          ...shipped.shipped,
+          usage_guides: [
+            ...Array.from({ length: leftOut }, (_, i) => ({
+              title: `Kimarad ${i + 1}`,
+              excerpt: "",
+              url: null,
+            })),
+            ...Array.from({ length: n }, (_, i) => ({
+              title: `Termék ${i + 1}`,
+              excerpt: "Szöveg.",
+              url: null,
+            })),
+          ],
+        },
+      }).blocks.hasznalati_utmutato?.text ?? "";
+    assert.match(text(9), /Termék 8\n/);
+    assert.doesNotMatch(text(9), /Termék 9/);
+    assert.match(text(9), new RegExp(rest));
+    assert.match(text(8), /Termék 8\n/);
+    assert.doesNotMatch(text(8), new RegExp(rest));
+    assert.match(text(8, 2), /Termék 8\n/);
+    assert.doesNotMatch(text(8, 2), new RegExp(rest));
   });
 
   it("the akklimatizacio value is declared for the order confirmation and its English twin", () => {

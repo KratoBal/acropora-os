@@ -270,6 +270,10 @@ export type {
   WebshopLivestockKind,
 } from "./webshop-acclimation.js";
 export {
+  WEBSHOP_USAGE_GUIDE_TEXT,
+  webshopDoseLine,
+} from "./webshop-usage-guide.js";
+export {
   LIVESTOCK_ARRIVAL_KINDS,
   LIVESTOCK_ARRIVAL_KIND_LABELS,
   LIVESTOCK_ARRIVAL_LIMITS,

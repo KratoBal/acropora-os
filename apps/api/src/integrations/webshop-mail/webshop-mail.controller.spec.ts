@@ -129,6 +129,75 @@ describe("WebshopMailController.render", () => {
     assert.equal(fallback.customized, false);
   });
 
+  /*
+    THE USAGE GUIDES ARE BEHIND THE OS SWITCH (V3.3, acrobot 50127): the texts wait for Balázs's approval, and the shop
+    already sends the guides. WHAT TURNS THIS RED: the section drawn with the switch unset, or with anything but exactly
+    "true"; the mail with the switch off differing in any byte from the one the shop would get without guides; the section
+    missing with the switch on for a Hungarian order; an English order getting the Hungarian-only section.
+  */
+  it('usage guides: only with the switch exactly "true", and only for a Hungarian order', async () => {
+    const withGuides = (locale: "hu" | "en") =>
+      request("order-shipped", {
+        facts: {
+          ...request("order-shipped").facts,
+          locale,
+          shipped: {
+            ...request("order-shipped").facts.shipped,
+            usage_guides: [
+              {
+                title: "KZ Amino",
+                excerpt: "Aminosavat ad a koralloknak.",
+                dosing: ["1 drop/100 L/day"],
+                url: "https://shop.example/hu/termek/kz-amino",
+              },
+            ],
+          },
+        },
+      });
+    const render = (environment: NodeJS.ProcessEnv, locale: "hu" | "en") =>
+      new WebshopMailController(
+        { template: async () => null } as unknown as TicketMailRepository,
+        environment,
+      ).render(withGuides(locale));
+    const section = "Használati útmutató a rendelt termékeidhez";
+
+    const without = await new WebshopMailController(
+      { template: async () => null } as unknown as TicketMailRepository,
+      {},
+    ).render(
+      request("order-shipped", {
+        facts: { ...request("order-shipped").facts, locale: "hu" },
+      }),
+    );
+    for (const value of [undefined, "", "1", "TRUE", "yes"]) {
+      const off = await render(
+        value === undefined
+          ? {}
+          : { ACROPORA_WEBSHOP_MAIL_USAGE_GUIDES: value },
+        "hu",
+      );
+      assert.deepEqual(off, without, String(value));
+    }
+
+    const on = await render(
+      { ACROPORA_WEBSHOP_MAIL_USAGE_GUIDES: "true" },
+      "hu",
+    );
+    assert.match(on.text, new RegExp(section));
+    assert.match(
+      on.text,
+      /Adagolás \(a gyártó szerint\): 1 csepp \/ 100 liter, naponta/,
+    );
+    assert.match(on.html, new RegExp(section));
+
+    const english = await render(
+      { ACROPORA_WEBSHOP_MAIL_USAGE_GUIDES: "true" },
+      "en",
+    );
+    assert.doesNotMatch(english.text, /útmutató|Adagolás/);
+    assert.doesNotMatch(english.html, /útmutató|Adagolás/);
+  });
+
   it("400: a language that is neither hu nor en", async () => {
     await assert.rejects(
       controller(null).render(
