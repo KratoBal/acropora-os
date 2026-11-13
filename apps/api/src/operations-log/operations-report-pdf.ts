@@ -6,7 +6,8 @@ import {
   operationsNumberText,
   operationsPeriodText,
   operationsSignedNumberText,
-  partnerStatusLabel,
+  PARTNER_STATUS_LABELS,
+  type ServiceJobPartnerStatus,
   type OperationsReport,
   type OperationsReportAssetBlock,
   type OperationsReportEntryRow,
@@ -138,7 +139,10 @@ function notesText(
   if (row.ticket) {
     const status =
       audience === "PARTNER"
-        ? partnerStatusLabel(row.ticket.status as ServiceJobStatusValue)
+        ? // a partner-nézet jegyállapota már partner-alakú (`partnerVisibleStatus` a számításban)
+          (PARTNER_STATUS_LABELS[
+            row.ticket.status as ServiceJobPartnerStatus
+          ] ?? row.ticket.status)
         : (INTERNAL_STATUS_LABEL[row.ticket.status as ServiceJobStatusValue] ??
           row.ticket.status);
     parts.push(`Hibajegy: ${row.ticket.jobNumber} (${status})`);
