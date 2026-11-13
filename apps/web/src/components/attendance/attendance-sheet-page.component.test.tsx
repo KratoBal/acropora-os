@@ -26,6 +26,8 @@ const api = vi.hoisted(() => ({
   saveDay: vi.fn(),
   deleteDay: vi.fn(),
   sheetPdf: vi.fn(),
+  printForSignature: vi.fn(),
+  signedSheetPdf: vi.fn(),
 }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 
@@ -85,10 +87,12 @@ const entry = (
 function sheetFor(
   month: string,
   entries: AttendanceDayEntry[],
+  signedCopy: AttendanceSheetResponse["signedCopy"] = null,
 ): AttendanceSheetResponse {
   return {
     userId: "u-1",
     ...attendanceSheet({ month, schedules: [schedule], entries }),
+    signedCopy,
   };
 }
 
@@ -296,14 +300,80 @@ describe("AttendanceSheetPage", () => {
     const revokeObjectURL = vi.fn();
     Object.assign(URL, { createObjectURL, revokeObjectURL });
     await openSheet();
-    fireEvent.click(screen.getByText("PDF (nyomtatás, aláírás)"));
+    fireEvent.click(screen.getByText("PDF megtekintése"));
     await waitFor(() =>
       expect(api.sheetPdf).toHaveBeenCalledWith("token-1", "u-1", "2026-11"),
     );
-    expect(open).toHaveBeenCalledWith("blob:sheet", "_blank");
+    // the tab is opened in the click, before the PDF arrives (Safari)
+    expect(open).toHaveBeenCalledWith("", "_blank");
     expect(
       await screen.findByText(/nem engedte megnyitni a PDF-et/),
     ).toBeTruthy();
     open.mockRestore();
+  });
+
+  it("prints for signature, then shows the kept copy", async () => {
+    api.printForSignature.mockReset().mockResolvedValue(new Blob(["%PDF-"]));
+    const tab = { location: { href: "" }, close: vi.fn() };
+    const open = vi
+      .spyOn(window, "open")
+      .mockReturnValue(tab as unknown as Window);
+    Object.assign(URL, {
+      createObjectURL: vi.fn(() => "blob:signed"),
+      revokeObjectURL: vi.fn(),
+    });
+    await openSheet();
+    api.sheet.mockImplementation(
+      async (_t: string, _u: string, month: string) =>
+        sheetFor(month, [], {
+          id: "copy-1",
+          printedAt: "2026-11-30T15:00:00.000Z",
+          differs: false,
+        }),
+    );
+    fireEvent.click(screen.getByText("Nyomtatás aláírásra"));
+    await waitFor(() =>
+      expect(api.printForSignature).toHaveBeenCalledWith(
+        "token-1",
+        "u-1",
+        "2026-11",
+      ),
+    );
+    expect(
+      await screen.findByText(
+        /Aláírásra nyomtatva: 2026\. 11\. 30\. 16:00, azóta változatlan/,
+      ),
+    ).toBeTruthy();
+    api.signedSheetPdf.mockReset().mockResolvedValue(new Blob(["%PDF-"]));
+    fireEvent.click(screen.getByText("Aláírt példány"));
+    await waitFor(() =>
+      expect(api.signedSheetPdf).toHaveBeenCalledWith(
+        "token-1",
+        "u-1",
+        "copy-1",
+      ),
+    );
+    await waitFor(() => expect(tab.location.href).toBe("blob:signed"));
+    open.mockRestore();
+  });
+
+  it("flags a month that changed since it was printed for signature", async () => {
+    api.sheet
+      .mockReset()
+      .mockImplementation(async (_t: string, _u: string, month: string) =>
+        sheetFor(month, [], {
+          id: "copy-1",
+          printedAt: "2026-11-30T15:00:00.000Z",
+          differs: true,
+        }),
+      );
+    await openSheet();
+    expect(
+      screen.getByText(
+        "Az aláírásra nyomtatott példány óta a hónap megváltozott",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText(/Új nyomtatás és aláírás kell/)).toBeTruthy();
+    expect(screen.getByText("Aláírt példány")).toBeTruthy();
   });
 });

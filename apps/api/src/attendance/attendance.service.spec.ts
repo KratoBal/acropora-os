@@ -23,7 +23,10 @@ import {
 */
 const updatedAt = new Date("2026-11-13T09:00:00.000Z");
 
-function build(role: UserRole | null = "SALES") {
+function build(
+  role: UserRole | null = "SALES",
+  signed: { id: string; printedAt: Date; contentHash: string } | null = null,
+) {
   const writes: unknown[] = [];
   const repository: Partial<AttendanceRepository> = {
     employee: async (id) =>
@@ -59,6 +62,19 @@ function build(role: UserRole | null = "SALES") {
       writes.push({ deleteDay: input });
       return input.date.getTime() === dateOnly("2026-11-13").getTime();
     },
+    latestSignedSheet: async () => signed,
+    createSignedSheet: async (input) => {
+      writes.push({ createSignedSheet: { ...input, pdf: input.pdf.length } });
+      return { id: "copy-1" };
+    },
+    signedSheetPdf: async (_userId, id) =>
+      id === "copy-1"
+        ? {
+            pdf: Buffer.from("%PDF-stored"),
+            month: "2026-11",
+            printedAt: updatedAt,
+          }
+        : null,
   };
   return {
     service: new AttendanceService(repository as AttendanceRepository),
@@ -275,6 +291,7 @@ describe("AttendanceService: the month's sheet", () => {
           days: [{ weekday: 2, startMinute: 420, endMinute: 960 }],
         },
       ],
+      latestSignedSheet: async () => null,
       days: async (_userId, from, to) => {
         reads.push([from.toISOString(), to.toISOString()]);
         return [
@@ -343,6 +360,84 @@ describe("AttendanceService: the month's PDF", () => {
     await assert.rejects(
       service.sheetPdf("u-1", "2026-00", new Date()),
       /hónap/,
+    );
+  });
+});
+
+describe("AttendanceService: the copy printed for signature", () => {
+  const printedAt = new Date("2026-11-30T15:00:00.000Z");
+
+  it("keeps the printed bytes with the hash of the sheet they show", async () => {
+    const { service, writes } = build();
+    const document = await service.printForSignature(
+      "u-1",
+      "2026-11",
+      printedAt,
+      "admin-1",
+    );
+    assert.equal(document.bytes.subarray(0, 5).toString(), "%PDF-");
+    assert.equal(
+      document.fileName,
+      "Jelenléti ív Kovács Anna 2026-11 (aláírásra).pdf",
+    );
+    const stored = writes.find(
+      (write) => "createSignedSheet" in (write as object),
+    ) as { createSignedSheet: Record<string, unknown> };
+    assert.equal(stored.createSignedSheet.userId, "u-1");
+    assert.equal(stored.createSignedSheet.month, "2026-11");
+    assert.equal(stored.createSignedSheet.actorId, "admin-1");
+    assert.equal(stored.createSignedSheet.printedAt, printedAt);
+    assert.equal(stored.createSignedSheet.pdf, document.bytes.length);
+    assert.match(
+      String(stored.createSignedSheet.contentHash),
+      /^[0-9a-f]{64}$/,
+    );
+  });
+
+  it("says whether the month still matches the signed copy", async () => {
+    const print = build();
+    await print.service.printForSignature("u-1", "2026-11", printedAt, "a");
+    const hash = (
+      print.writes.find((w) => "createSignedSheet" in (w as object)) as {
+        createSignedSheet: { contentHash: string };
+      }
+    ).createSignedSheet.contentHash;
+
+    const same = await build("SALES", {
+      id: "copy-1",
+      printedAt,
+      contentHash: hash,
+    }).service.sheet("u-1", "2026-11");
+    assert.deepEqual(same.signedCopy, {
+      id: "copy-1",
+      printedAt: printedAt.toISOString(),
+      differs: false,
+    });
+
+    const changed = await build("SALES", {
+      id: "copy-1",
+      printedAt,
+      contentHash: "0".repeat(64),
+    }).service.sheet("u-1", "2026-11");
+    assert.equal(changed.signedCopy?.differs, true);
+
+    assert.equal(
+      (await build().service.sheet("u-1", "2026-11")).signedCopy,
+      null,
+    );
+  });
+
+  it("serves a kept copy as stored, and nothing for an unknown id", async () => {
+    const { service } = build();
+    const copy = await service.signedSheetPdf("u-1", "copy-1");
+    assert.equal(copy.bytes.toString(), "%PDF-stored");
+    assert.equal(
+      copy.fileName,
+      "Jelenléti ív Kovács Anna 2026-11 (aláírt példány).pdf",
+    );
+    await assert.rejects(
+      service.signedSheetPdf("u-1", "copy-2"),
+      NotFoundException,
     );
   });
 });

@@ -66,6 +66,38 @@ export const attendanceApi = {
     );
     return pdfBlob(response, "A jelenléti ív PDF-je nem tölthető le.");
   },
+  /** Prints the month for signature (S2d): the PDF, and the server keeps these exact bytes as the signed copy. */
+  async printForSignature(
+    token: string,
+    userId: string,
+    month: string,
+  ): Promise<Blob> {
+    const response = await fetch(
+      `${API_PREFIX}${base}/${encodeURIComponent(userId)}/signed-sheets`,
+      {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          ...apiAuthHeaders(token, "POST"),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ month }),
+      },
+    );
+    return pdfBlob(response, "A jelenléti ív nem nyomtatható aláírásra.");
+  },
+  /** A kept copy, exactly as it was printed for signature (S2d). */
+  async signedSheetPdf(
+    token: string,
+    userId: string,
+    id: string,
+  ): Promise<Blob> {
+    const response = await fetch(
+      `${API_PREFIX}${base}/${encodeURIComponent(userId)}/signed-sheets/${encodeURIComponent(id)}/pdf`,
+      { credentials: "same-origin", headers: apiAuthHeaders(token) },
+    );
+    return pdfBlob(response, "Az aláírt példány nem tölthető le.");
+  },
   /** Sets the day's entry (sick, leave, day off, or other times). */
   saveDay(
     token: string,

@@ -13,7 +13,8 @@ import { AttendanceRepository } from "./attendance.repository.js";
   "from" must be the first row's "to", or the log loses a value); the CHECK constraints missing (a mark stored with times, a
   WORKED day without them, a weekday 8, a departure before the arrival); two entries for one employee and day; an employee
   with attendance rows deletable (the record must outlive the account); the employee picker listing a partner account or
-  leaving out an inactive colleague.
+  leaving out an inactive colleague; a printed copy not kept byte for byte, the older one returned as the latest, a copy
+  readable under another employee, or printed without an audit row.
 */
 const gate = integrationDatabaseGate(process.env);
 const TEST_EMAIL_DOMAIN = "attendance-integration.invalid";
@@ -28,6 +29,9 @@ async function removeLeftovers() {
     where: { entityType: "User", entityId: { in: ids } },
   });
   await prisma.attendanceDay.deleteMany({ where: { userId: { in: ids } } });
+  await prisma.attendanceSignedSheet.deleteMany({
+    where: { userId: { in: ids } },
+  });
   await prisma.attendanceSchedule.deleteMany({
     where: { userId: { in: ids } },
   });
@@ -282,6 +286,44 @@ describe("attendance on Postgres", { skip: gate.mode === "skip" }, () => {
     assert.ok(!ids.includes(partner.id));
     // active first
     assert.ok(ids.indexOf(employeeId) < ids.indexOf(gone.id));
+  });
+
+  it("keeps the printed copy as bytes, the latest first, and only under its own employee", async () => {
+    const first = await repository.createSignedSheet({
+      userId: employeeId,
+      month: "2026-09",
+      contentHash: "a".repeat(64),
+      pdf: Buffer.from("%PDF-first"),
+      printedAt: new Date("2026-09-30T15:00:00.000Z"),
+      actorId: adminId,
+    });
+    const second = await repository.createSignedSheet({
+      userId: employeeId,
+      month: "2026-09",
+      contentHash: "b".repeat(64),
+      pdf: Buffer.from("%PDF-second"),
+      printedAt: new Date("2026-10-02T08:00:00.000Z"),
+      actorId: adminId,
+    });
+    const latest = await repository.latestSignedSheet(employeeId, "2026-09");
+    assert.equal(latest?.id, second.id);
+    assert.equal(latest?.contentHash, "b".repeat(64));
+    assert.equal(
+      Buffer.from(
+        (await repository.signedSheetPdf(employeeId, first.id))!.pdf,
+      ).toString(),
+      "%PDF-first",
+    );
+    assert.equal(await repository.signedSheetPdf(adminId, first.id), null);
+    assert.equal(
+      await repository.latestSignedSheet(employeeId, "2026-08"),
+      null,
+    );
+    const logged = (await auditRows(employeeId)).filter(
+      (row) => row.action === ATTENDANCE_AUDIT_ACTIONS.printed,
+    );
+    assert.equal(logged.length, 2);
+    assert.equal(logged[0]!.userId, adminId);
   });
 
   it("keeps the record when someone tries to delete the employee", async () => {

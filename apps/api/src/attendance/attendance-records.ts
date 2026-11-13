@@ -1,5 +1,8 @@
+import { createHash } from "node:crypto";
+
 import {
   formatAttendanceClock,
+  type AttendanceSheet,
   type AttendanceDayEntry,
   type AttendanceDayKind,
   type AttendanceSchedule,
@@ -103,4 +106,21 @@ export const sameAuditValue = (
 export const ATTENDANCE_AUDIT_ACTIONS = {
   schedule: "attendance.schedule-changed",
   day: "attendance.day-changed",
+  /** S2d: a month printed for signature; the PDF itself is kept in AttendanceSignedSheet. */
+  printed: "attendance.sheet-printed-for-signature",
 } as const;
+
+/**
+ * THE CONTENT OF A SHEET, as a hash (S2d): the month, every row and the totals; not the print time or the decree's name.
+ * Two prints of an unchanged month hash the same; any changed time, mark or day hashes differently.
+ */
+export function sheetContentHash(sheet: AttendanceSheet): string {
+  const content = {
+    month: sheet.month,
+    rows: sheet.rows,
+    totalMinutes: sheet.totalMinutes,
+    sickDays: sheet.sickDays,
+    leaveDays: sheet.leaveDays,
+  };
+  return createHash("sha256").update(JSON.stringify(content)).digest("hex");
+}

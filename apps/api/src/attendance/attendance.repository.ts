@@ -114,6 +114,64 @@ export class AttendanceRepository {
     });
   }
 
+  /** The month's latest copy printed for signature (S2d), without its bytes. */
+  latestSignedSheet(
+    userId: string,
+    month: string,
+  ): Promise<{ id: string; printedAt: Date; contentHash: string } | null> {
+    return this.database.attendanceSignedSheet.findFirst({
+      where: { userId, month },
+      orderBy: { printedAt: "desc" },
+      select: { id: true, printedAt: true, contentHash: true },
+    });
+  }
+
+  /** A kept copy's PDF, only under its own employee (an id from another person's page reads nothing). */
+  signedSheetPdf(
+    userId: string,
+    id: string,
+  ): Promise<{ pdf: Uint8Array; month: string; printedAt: Date } | null> {
+    return this.database.attendanceSignedSheet.findFirst({
+      where: { id, userId },
+      select: { pdf: true, month: true, printedAt: true },
+    });
+  }
+
+  /** Keeps the PDF handed out for signing, with its audit row, in one transaction. */
+  createSignedSheet(input: {
+    userId: string;
+    month: string;
+    contentHash: string;
+    pdf: Buffer;
+    printedAt: Date;
+    actorId: string;
+  }): Promise<{ id: string }> {
+    return this.database.$transaction(async (tx) => {
+      const saved = await tx.attendanceSignedSheet.create({
+        data: {
+          userId: input.userId,
+          month: input.month,
+          contentHash: input.contentHash,
+          pdf: Uint8Array.from(input.pdf),
+          printedAt: input.printedAt,
+          printedById: input.actorId,
+        },
+        select: { id: true },
+      });
+      await this.audit(tx, {
+        actorId: input.actorId,
+        userId: input.userId,
+        action: ATTENDANCE_AUDIT_ACTIONS.printed,
+        metadata: {
+          month: input.month,
+          signedSheetId: saved.id,
+          contentHash: input.contentHash,
+        },
+      });
+      return saved;
+    });
+  }
+
   /** Creates or replaces the schedule version starting on `validFrom`. */
   saveSchedule(input: {
     userId: string;

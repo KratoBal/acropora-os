@@ -2086,4 +2086,5 @@ export type {
   AttendanceSheetResponse,
   AttendanceSheetRow,
   AttendanceSheetRowKind,
+  AttendanceSignedCopy,
 } from "./attendance-sheet.js";

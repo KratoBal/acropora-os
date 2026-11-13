@@ -890,6 +890,13 @@ export const ANONYMIZATION_REGISTER: Readonly<
   AttendanceDay: {
     updatedById: "identifier",
   },
+  // The sheet printed for signature (S2d): the PDF carries the employee's name and days, like any stored document.
+  AttendanceSignedSheet: {
+    month: "business",
+    contentHash: "identifier",
+    pdf: "fileContent",
+    printedById: "identifier",
+  },
   UnitOfMeasure: {
     code: "business",
     name: "business",
