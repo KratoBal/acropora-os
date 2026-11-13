@@ -29,6 +29,7 @@ const api = vi.hoisted(() => ({
   attachIncomingPdf: vi.fn(),
   setIncomingNotBookable: vi.fn(),
   setIncomingPaperOriginal: vi.fn(),
+  correctIncomingNumber: vi.fn(),
 }));
 vi.mock("@/lib/api/billing-documents", () => ({ billingDocumentsApi: api }));
 
@@ -134,6 +135,7 @@ beforeEach(() => {
   api.incomingPdf.mockReset().mockResolvedValue(new Blob(["%PDF-1.4"]));
   api.setIncomingNotBookable.mockReset();
   api.setIncomingPaperOriginal.mockReset();
+  api.correctIncomingNumber.mockReset();
 });
 
 // MI PIROSÍT: ha a PDF-gomb ott is megjelenne, ahol nem jött PDF; ha a
@@ -364,6 +366,93 @@ describe("BillingIncomingDocumentPage", () => {
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Papíron megvan" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Mégsem papíron" })).toBeNull();
+  });
+
+  // acrobot 49617 (niceshops: a R…1578 számla a R…0667 számával jóváhagyva). MI PIROSÍT: ha a gomb a Számlázz.hu-s
+  // vagy a még nem jóváhagyott postafiókos soron is megjelenne; ha a form nem a sor saját értékével indulna; ha a
+  // mentés nem a megadott számot és keltet küldené; ha a szerver 409-e nem látszana, vagy a form bezárulna rá.
+  it("an approved mailbox row offers Számlaszám javítása, prefilled, and sends the corrected number and date", async () => {
+    api.incomingDetail.mockResolvedValue(
+      detail({
+        origin: "MAILBOX",
+        documentNumber: "R49010000026240667",
+        issueDate: "2026-11-11",
+      }),
+    );
+    api.correctIncomingNumber.mockResolvedValue(
+      detail({
+        origin: "MAILBOX",
+        documentNumber: "R49010000026241578",
+        issueDate: "2026-11-06",
+      }),
+    );
+    render(<BillingIncomingDocumentPage documentId="in-1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Számlaszám javítása" }),
+    );
+    const group = screen.getByRole("group", { name: "Számlaszám javítása" });
+    const number = within(group).getByLabelText("Számlaszám");
+    const date = within(group).getByLabelText("Kelte");
+    expect(number).toHaveValue("R49010000026240667");
+    // the date field shows the Hungarian form of the ISO value
+    expect(date).toHaveValue("2026. 11. 11.");
+    fireEvent.change(number, { target: { value: " R49010000026241578 " } });
+    fireEvent.change(date, { target: { value: "2026-11-06" } });
+    expect(api.correctIncomingNumber).not.toHaveBeenCalled();
+    fireEvent.click(
+      within(group).getByRole("button", { name: "Javítás mentése" }),
+    );
+    await waitFor(() =>
+      expect(api.correctIncomingNumber).toHaveBeenCalledWith(
+        "token-1",
+        "in-1",
+        { documentNumber: "R49010000026241578", issueDate: "2026-11-06" },
+      ),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("group", { name: "Számlaszám javítása" }),
+      ).toBeNull(),
+    );
+    expect(screen.getAllByText("R49010000026241578").length).toBeGreaterThan(0);
+  });
+
+  it("a taken number shows the server's message and keeps the form open", async () => {
+    api.incomingDetail.mockResolvedValue(detail({ origin: "MAILBOX" }));
+    api.correctIncomingNumber.mockRejectedValue(
+      new Error("Ez a számlaszám ennél a szállítónál már egy másik soré."),
+    );
+    render(<BillingIncomingDocumentPage documentId="in-1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Számlaszám javítása" }),
+    );
+    const group = screen.getByRole("group", { name: "Számlaszám javítása" });
+    fireEvent.click(
+      within(group).getByRole("button", { name: "Javítás mentése" }),
+    );
+    expect(
+      await within(group).findByText(/már egy másik soré/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("group", { name: "Számlaszám javítása" }),
+    ).toBeInTheDocument();
+  });
+
+  it("no number correction on a Számlázz.hu row or on a not yet approved mailbox row", async () => {
+    const { unmount } = render(
+      <BillingIncomingDocumentPage documentId="in-1" />,
+    );
+    await screen.findByText("E-KBOSS-2026-1234");
+    expect(
+      screen.queryByRole("button", { name: "Számlaszám javítása" }),
+    ).toBeNull();
+    unmount();
+    api.incomingDetail.mockResolvedValue(detail({ origin: "MAILBOX" }));
+    render(<BillingIncomingDocumentPage documentId="mailbox:doc-1" />);
+    await screen.findByText("E-KBOSS-2026-1234");
+    expect(
+      screen.queryByRole("button", { name: "Számlaszám javítása" }),
+    ).toBeNull();
   });
 
   it("a mailbox-only row has no table row to mark: no button", async () => {

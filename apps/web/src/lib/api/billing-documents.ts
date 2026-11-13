@@ -191,6 +191,27 @@ export const billingDocumentsApi = {
     );
   },
   /**
+   * A jóváhagyott postafiókos sor számának és keltének javítása (acrobot
+   * 49617): ha a szám elírás, és egy másik bent lévő számla számát viseli.
+   * Csak a `MAILBOX` eredetű soron; a válasz a frissített adatlap, 409, ha a
+   * szám ennél a szállítónál már egy másik soré.
+   */
+  correctIncomingNumber(
+    token: string,
+    id: string,
+    value: { documentNumber: string; issueDate: string },
+  ) {
+    return apiRequest<IncomingDocumentDetail>(
+      `/billing/incoming-documents/${encodeURIComponent(id)}/number`,
+      token,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(value),
+      },
+    );
+  },
+  /**
    * „PAPÍRON MEGVAN” be- vagy kikapcsolása a soron (Balázs, 2026-11-02). Csak
    * a táblába írt soron (nem a `mailbox:` és `purchase:` előtagún); a válasz a
    * frissített adatlap.

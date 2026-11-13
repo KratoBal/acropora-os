@@ -56,6 +56,7 @@ import { storedValues, type StoredReading } from "./reading-values.js";
 import {
   loadManualPurchasePayments,
   loadPurchaseSubjects,
+  incomingRowFor,
   lockIncomingKey,
   otherSourceRowFor,
   PURCHASE_ITEM_PREFIX,
@@ -252,6 +253,19 @@ export class NoMailboxDocumentError extends Error {
   }
 }
 
+/**
+ * A jóváhagyott számlaszám (a szállítóval együtt) már egy bent lévő számláé, egy másik dokumentumból vagy forrásból: vagy
+ * ugyanaz a számla másodszor, vagy egy ELÍRT szám, ami egy másik számláéval ütközik (niceshops: a 97 265 Ft-os R…1578 a
+ * 338 018 Ft-os R…0667 számával lett jóváhagyva). Az összeget nem nézzük: mindkét esetben a számot kell ellenőrizni.
+ */
+export class DuplicateIncomingError extends ConflictException {
+  constructor(source: string) {
+    super(
+      `Ez a számlaszám ennél a szállítónál már egy bent lévő számláé (${source}). Ellenőrizd a számot: ha elírás, javítsd; ugyanaz a számla másodszor nem hagyható jóvá.`,
+    );
+  }
+}
+
 /** Az olvasat a beolvasás óta megváltozott: az automatikus jóváhagyás nem ír rá. */
 class ReadingChangedError extends Error {
   constructor() {
@@ -408,6 +422,18 @@ export class IncomingReviewService {
       });
       if (taken)
         throw new ConflictException("Ez a számla már jóvá van hagyva.");
+      /*
+        A SZÁM ÜTKÖZIK EGY BENT LÉVŐ SZÁMLÁVAL (acrobot 49595, 49609): a fenti zár a DOKUMENTUMRA szól, tehát egy másik
+        dokumentum ugyanazzal a számmal és szállítóval második sort kapna. Élesen ez egy ELÍRT szám volt: a 97 265 Ft-os
+        niceshops R49010000026241578 a 338 018 Ft-os R49010000026240667 számával lett jóváhagyva, és a két számla egy
+        kulcson állt. A számla kulcsára (szám és szállító) ugyanaz a zár, amit a Számlázz.hu-vetítés és a beszerzés
+        jóváhagyása vesz, és ha bármely forrásból már sor ezzel a kulccsal, a jóváhagyás áll, az összegtől függetlenül.
+      */
+      const key = await lockIncomingKey(tx, values);
+      const same = key
+        ? await incomingRowFor(tx, values.documentNumber!, key)
+        : null;
+      if (same) throw new DuplicateIncomingError(same.source);
       const now = new Date();
       const row = await tx.incomingBillingDocument.create({
         data: {
@@ -641,7 +667,8 @@ export class IncomingReviewService {
               ...base,
               basis: null,
               reason:
-                error instanceof ReadingChangedError
+                error instanceof ReadingChangedError ||
+                error instanceof DuplicateIncomingError
                   ? error.message
                   : "közben jóváhagyták",
               written: false,

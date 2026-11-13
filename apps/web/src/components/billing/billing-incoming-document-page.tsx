@@ -6,6 +6,7 @@ import {
   PilotButton,
   PilotDataGrid,
   PilotDataItem,
+  PilotInput,
   PilotSection,
   PilotTotals,
   Skeleton,
@@ -91,6 +92,13 @@ export function BillingIncomingDocumentPage({
   const [confirmingMark, setConfirmingMark] = useState(false);
   const [markBusy, setMarkBusy] = useState(false);
   const [markError, setMarkError] = useState<string | null>(null);
+  // a jóváhagyott postafiókos sor elírt száma (acrobot 49617): szám és kelt, a sor saját értékével kitöltve
+  const [numberForm, setNumberForm] = useState<{
+    documentNumber: string;
+    issueDate: string;
+  } | null>(null);
+  const [numberBusy, setNumberBusy] = useState(false);
+  const [numberError, setNumberError] = useState<string | null>(null);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -171,6 +179,27 @@ export function BillingIncomingDocumentPage({
       );
     } finally {
       setMarkBusy(false);
+    }
+  };
+
+  const correctNumber = async () => {
+    if (!numberForm) return;
+    setNumberBusy(true);
+    setNumberError(null);
+    try {
+      setDetail(
+        await billingDocumentsApi.correctIncomingNumber(token, documentId, {
+          documentNumber: numberForm.documentNumber.trim(),
+          issueDate: numberForm.issueDate,
+        }),
+      );
+      setNumberForm(null);
+    } catch (cause) {
+      setNumberError(
+        cause instanceof Error ? cause.message : "A szám nem javítható.",
+      );
+    } finally {
+      setNumberBusy(false);
     }
   };
 
@@ -297,6 +326,22 @@ export function BillingIncomingDocumentPage({
         actions={
           canAttach ? (
             <>
+              {detail.origin === "MAILBOX" ? (
+                <PilotButton
+                  size="regular"
+                  variant="secondary"
+                  disabled={numberBusy}
+                  onClick={() => {
+                    setNumberError(null);
+                    setNumberForm({
+                      documentNumber: detail.documentNumber,
+                      issueDate: detail.issueDate,
+                    });
+                  }}
+                >
+                  Számlaszám javítása
+                </PilotButton>
+              ) : null}
               {canAttach &&
               (detail.paperOriginalMarkedHere || !detail.paperOriginal) ? (
                 <PilotButton
@@ -331,6 +376,66 @@ export function BillingIncomingDocumentPage({
         }
       />
 
+      {numberForm ? (
+        <div
+          role="group"
+          aria-label="Számlaszám javítása"
+          className="space-y-3 rounded-lg bg-white p-4 text-sm ring-1 ring-pilot-grey-200"
+        >
+          <p className="text-pilot-grey-800">
+            Ha a postafiókból jóváhagyott számla száma vagy kelte elírás, itt
+            javítható. A régi és az új érték a naplóba kerül. Ha a szám ennél a
+            szállítónál már egy másik bent lévő számláé, a javítás nem megy át.
+          </p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <PilotInput
+              aria-label="Számlaszám"
+              maxLength={100}
+              value={numberForm.documentNumber}
+              onChange={(value) =>
+                setNumberForm({ ...numberForm, documentNumber: value })
+              }
+            />
+            <PilotInput
+              aria-label="Kelte"
+              type="date"
+              value={numberForm.issueDate}
+              onChange={(value) =>
+                setNumberForm({ ...numberForm, issueDate: value })
+              }
+            />
+          </div>
+          {numberError ? (
+            <Alert
+              variant="danger"
+              title="A javítás nem sikerült"
+              description={numberError}
+            />
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            <PilotButton
+              size="regular"
+              variant="secondary"
+              disabled={
+                numberBusy ||
+                !numberForm.documentNumber.trim() ||
+                !numberForm.issueDate
+              }
+              onClick={() => void correctNumber()}
+            >
+              Javítás mentése
+            </PilotButton>
+            <PilotButton
+              size="regular"
+              variant="secondary"
+              disabled={numberBusy}
+              onClick={() => setNumberForm(null)}
+            >
+              Mégsem
+            </PilotButton>
+          </div>
+        </div>
+      ) : null}
       {confirmingMark && !detail.notBookable ? (
         <div
           role="group"

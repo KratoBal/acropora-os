@@ -712,10 +712,33 @@ export async function otherSourceRowFor(
   number: string,
   key: string,
 ): Promise<{ id: string; source: string } | null> {
-  const ids = await transaction.$queryRaw<{ id: string }[]>`
+  return incomingRowFor(transaction, number, key, PURCHASE_SOURCE);
+}
+
+/**
+ * BÁRMELY bejövő sor ugyanazzal a kulccsal (szám és szállító), egy forrás kizárásával vagy anélkül. A postafiókos
+ * jóváhagyás ezzel nézi, hogy a számla nincs-e már bent (a niceshops R49010000026240667 kétszer: a 11-05-i levél és a
+ * 11-11-i újrafeltöltés két dokumentum, és mindkettő saját sort kapott).
+ */
+export async function incomingRowFor(
+  transaction: Pick<
+    Prisma.TransactionClient,
+    "incomingBillingDocument" | "$queryRaw"
+  >,
+  number: string,
+  key: string,
+  excludeSource: string | null = null,
+  /** a saját sor a számjavításnál: a régi kulcson önmagával nem ütközik */
+  excludeId: string | null = null,
+): Promise<{ id: string; source: string } | null> {
+  const ids = excludeSource
+    ? await transaction.$queryRaw<{ id: string }[]>`
     SELECT id FROM "IncomingBillingDocument"
-    WHERE source <> ${PURCHASE_SOURCE}
-      AND ${NUMBER_KEY_SQL("documentNumber")} = ${invoiceNumberKey(number)}`;
+    WHERE source <> ${excludeSource}
+      AND ${NUMBER_KEY_SQL("documentNumber")} = ${invoiceNumberKey(number)}`
+    : await transaction.$queryRaw<{ id: string }[]>`
+    SELECT id FROM "IncomingBillingDocument"
+    WHERE ${NUMBER_KEY_SQL("documentNumber")} = ${invoiceNumberKey(number)}`;
   const rows = await transaction.incomingBillingDocument.findMany({
     where: { id: { in: ids.map((row) => row.id) } },
     select: {
@@ -729,6 +752,7 @@ export async function otherSourceRowFor(
   });
   const row = rows.find(
     (candidate) =>
+      candidate.id !== excludeId &&
       incomingKey(
         candidate.documentNumber,
         candidate.supplierTaxNumber ?? candidate.supplierEuTaxNumber,
