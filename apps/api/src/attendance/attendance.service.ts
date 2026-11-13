@@ -5,6 +5,9 @@ import {
 } from "@nestjs/common";
 import {
   attendanceDayProblem,
+  attendanceSheet,
+  isAttendanceMonth,
+  monthDays,
   attendanceWeekProblem,
   isAttendanceDate,
   isAttendanceEmployeeRole,
@@ -15,6 +18,7 @@ import {
   type AttendanceSchedule,
   type AttendanceScheduleDay,
   type AttendanceScheduleListResponse,
+  type AttendanceSheetResponse,
 } from "@acropora/types";
 
 import { dateOnly, dayView, scheduleView } from "./attendance-records.js";
@@ -127,6 +131,33 @@ export class AttendanceService {
     await this.employee(userId);
     const rows = await this.repository.days(userId, from, to);
     return { userId, from: fromText, to: toText, items: rows.map(dayView) };
+  }
+
+  /**
+   * THE MONTH'S SHEET (S2a), computed from every schedule version and the month's entries by the shared
+   * `attendanceSheet`. Any month, the current one too (Luca: downloadable any time, as it stands).
+   */
+  async sheet(userId: string, month: string): Promise<AttendanceSheetResponse> {
+    if (!isAttendanceMonth(month))
+      throw new BadRequestException(`Nem érvényes hónap: ${month}`);
+    await this.employee(userId);
+    const days = monthDays(month);
+    const [schedules, entries] = await Promise.all([
+      this.repository.schedules(userId),
+      this.repository.days(
+        userId,
+        dateOnly(days[0]!),
+        dateOnly(days[days.length - 1]!),
+      ),
+    ]);
+    return {
+      userId,
+      ...attendanceSheet({
+        month,
+        schedules: schedules.map(scheduleView),
+        entries: entries.map(dayView),
+      }),
+    };
   }
 
   async saveDay(
