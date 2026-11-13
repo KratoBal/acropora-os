@@ -2058,8 +2058,11 @@ export {
   ATTENDANCE_DAY_KIND_LABELS,
   ATTENDANCE_DAY_KINDS,
   ATTENDANCE_WEEKDAYS,
+  ATTENDANCE_SELF_KINDS,
+  ATTENDANCE_SELF_TAKEN,
   attendanceDayProblem,
   attendanceRangeProblem,
+  attendanceSelfMarkProblem,
   attendanceWeekProblem,
   formatAttendanceClock,
   isAttendanceDate,
@@ -2069,6 +2072,8 @@ export {
 export type {
   AttendanceDayEntry,
   AttendanceDayInput,
+  AttendanceEmployee,
+  AttendanceEmployeeListResponse,
   AttendanceDayKind,
   AttendanceDayListResponse,
   AttendanceSchedule,
@@ -2099,4 +2104,5 @@ export type {
   AttendanceSheetResponse,
   AttendanceSheetRow,
   AttendanceSheetRowKind,
+  AttendanceSignedCopy,
 } from "./attendance-sheet.js";

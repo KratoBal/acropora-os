@@ -109,6 +109,7 @@ const CONTROLLERS = [
   "src/integrations/medusa/medusa-projection-status.controller.ts",
   // The attendance sheet (os-jelenleti-iv, S1): every route behind attendance.manage.
   "src/attendance/attendance.controller.ts",
+  "src/attendance/attendance-employees.controller.ts",
 ];
 
 const ROUTE = new RegExp(

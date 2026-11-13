@@ -7,7 +7,11 @@ import {
   Icon,
   type ThemePreference,
 } from "@acropora/ui";
-import { isNavigationEntryVisible, personDisplayName } from "@acropora/types";
+import {
+  isAttendanceEmployeeRole,
+  isNavigationEntryVisible,
+  personDisplayName,
+} from "@acropora/types";
 import { useState } from "react";
 
 import { ProfileMonogram } from "../shell-profile";
@@ -90,6 +94,18 @@ export function UserMenu({
             >
               <Icon name="settings" size={16} />
               Beállítások
+            </a>
+          ) : null}
+
+          {/* The employee's own attendance sheet (os-jelenleti-iv, S3): every colleague with a sheet, no right needed. */}
+          {isAttendanceEmployeeRole(user.role) ? (
+            <a
+              href="/jelenleti-ivem"
+              className="mt-2 flex h-10 items-center gap-2 rounded-xl px-2 text-sm font-medium text-pilot-grey-700 hover:bg-pilot-grey-100"
+              onClick={() => setOpen(false)}
+            >
+              <Icon name="clipboard" size={16} />
+              Jelenléti ívem
             </a>
           ) : null}
 
