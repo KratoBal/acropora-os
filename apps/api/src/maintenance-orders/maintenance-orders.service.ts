@@ -356,6 +356,8 @@ export class MaintenanceOrdersService {
       departmentId: item.contractItem.departmentId,
       description: item.description,
       quantity: item.quantity.toNumber(),
+      // az aláírás utáni munkalap a megrendelőlap teljes alkalomszámát viszi
+      occasions: item.occasions,
     }));
     const departmentId = await siteForContractItems(this.repository, items);
 
@@ -654,25 +656,106 @@ export class MaintenanceOrdersService {
       throw new BadRequestException(
         "A megadott tételek között olyan van, ami nem ehhez a szerződéshez tartozik, vagy már nem létezik.",
       );
+    // a kért darab- és alkalomszám (a hiányzó: a szerződés darabszáma, egy alkalom)
+    const chosen = chosenOrderLines(dto, contract.items);
+    const key = dto.clientOperationId?.trim() || randomUUID();
+    const title = dto.title?.trim() || contract.title;
 
-    const items = contract.items.map((item) => ({
+    if (!dto.separate || contract.items.length === 1)
+      return this.createOneContractJob(
+        contract,
+        contract.items,
+        chosen,
+        key,
+        title,
+        actor,
+      );
+
+    /*
+      TÉTELENKÉNT KÜLÖN LAP ÉS MUNKALAP (Luca, 2026-11-13): minden kijelölt tételből önálló lap, a saját
+      munkalapjával. ELŐBB MINDEN ELLENŐRZÉS MINDEN TÉTELRE, írás nélkül: a helyszín-szabály (a tételnek van
+      helyszíne) és a keret (egyszer, a kért alkalmakkal). Ha bármelyik tételen elbukik, nem jön létre az első lap
+      sem, ugyanúgy, mint az egy-lapos módban. Utána tételenként a megszokott út, saját kulccsal
+      (`<kulcs>-<tétel>`), tehát egy újrahívás ugyanazt a lapot kapja vissza, nem újat. A helyszínszabály
+      tételenként érvényes: a külön lapoknak nem kell közös helyszín.
+      A MARADÉK HATÁR, kimondva: egy PÁRHUZAMOS foglalás az előellenőrzés és a ciklus között még elvihet egy
+      alkalmat, és akkor az addig létrejött lapok megmaradnak (a hibás tétel lapja lemondva, lásd
+      `createOneContractJob`); az ugyanazzal a kulccsal küldött újrapróbálás onnan folytatja, a kész lapokat
+      visszakapja, nem újakat nyit.
+    */
+    for (const item of contract.items)
+      await siteForContractItems(this.repository, [
+        {
+          id: item.id,
+          departmentId: item.departmentId,
+          description: item.description,
+          quantity: chosen.get(item.id)!.quantity.toNumber(),
+        },
+      ]);
+    const nowYear = maintenanceOrderOccasionYear(new Date());
+    const existing = await this.repository.serviceJobContractItemState({
+      clientOperationId: `contract-job-${key}-${contract.items[0]!.id}`,
+    });
+    if (!existing || existing.itemCount === 0) {
+      const precheck = await this.repository.reserveOccasions(
+        {
+          contractId: contract.id,
+          year: nowYear,
+          items: contract.items.map((item) => ({
+            contractItemId: item.id,
+            description: item.description,
+            occasionsPerYear: item.occasionsPerYear,
+            requested: chosen.get(item.id)!.occasions,
+          })),
+        },
+        async () => null,
+      );
+      if (!precheck.ok) throw reservationConflict(nowYear, precheck);
+    }
+    const serviceJobIds: string[] = [];
+    for (const item of contract.items) {
+      const { serviceJobId } = await this.createOneContractJob(
+        contract,
+        [item],
+        chosen,
+        `${key}-${item.id}`,
+        `${title}: ${item.description}`,
+        actor,
+      );
+      serviceJobIds.push(serviceJobId);
+    }
+    return { serviceJobId: serviceJobIds[0]!, serviceJobIds };
+  }
+
+  /** EGY LAP A KIVÁLASZTOTT TÉTELEKBŐL: a korábbi `createJobFromContract` törzse, a kért darab- és alkalomszámmal. */
+  private async createOneContractJob(
+    contract: NonNullable<
+      Awaited<ReturnType<MaintenanceOrdersRepository["contractForIssuance"]>>
+    >,
+    contractItems: typeof contract.items,
+    chosen: ReturnType<typeof chosenOrderLines>,
+    key: string,
+    title: string,
+    actor: AuthenticatedUser,
+  ): Promise<{ serviceJobId: string; serviceJobIds: string[] }> {
+    const items = contractItems.map((item) => ({
       id: item.id,
       departmentId: item.departmentId,
       description: item.description,
-      quantity: item.quantity.toNumber(),
+      quantity: chosen.get(item.id)!.quantity.toNumber(),
+      occasions: chosen.get(item.id)!.occasions,
     }));
     const departmentId = await siteForContractItems(this.repository, items);
     const reservation = {
       contractId: contract.id,
-      items: contract.items.map((item) => ({
+      items: contractItems.map((item) => ({
         contractItemId: item.id,
         description: item.description,
         occasionsPerYear: item.occasionsPerYear,
+        requested: chosen.get(item.id)!.occasions,
       })),
     };
     const nowYear = maintenanceOrderOccasionYear(new Date());
-    const key = dto.clientOperationId?.trim() || randomUUID();
-
     /*
       A KULCS ALATTI LAP, MÉG A LÉTREHOZÁS ELŐTT (barracuda 31714, 31720).
       Lemondott lapot nem folytatunk, és egy másik szerződés lapja alá nem
@@ -701,7 +784,7 @@ export class MaintenanceOrdersService {
         worksheets: this.worksheets,
       },
       {
-        title: dto.title?.trim() || contract.title,
+        title,
         contract: { id: contract.id, customerId: contract.customer.id },
         departmentId,
         items,
@@ -722,7 +805,8 @@ export class MaintenanceOrdersService {
     // ugyanaz az ellenőrzés a létrehozás után is: egy párhuzamos kérés
     // ugyanazzal a kulccsal közben hozhatta létre a lapot
     assertContinuable(state, contract.id);
-    if (state.itemCount > 0) return { serviceJobId };
+    if (state.itemCount > 0)
+      return { serviceJobId, serviceJobIds: [serviceJobId] };
 
     const year = maintenanceOrderOccasionYear(state.createdAt);
     const reserved = await this.repository.reserveOccasions(
@@ -731,11 +815,12 @@ export class MaintenanceOrdersService {
         this.repository.insertServiceJobContractItems(
           tx,
           serviceJobId,
-          contract.items.map((item) => ({
+          contractItems.map((item) => ({
             contractItemId: item.id,
             description: item.description,
             unitNet: item.unitNet,
-            quantity: item.quantity,
+            quantity: chosen.get(item.id)!.quantity,
+            occasions: chosen.get(item.id)!.occasions,
             vatRatePercent: item.vatRatePercent,
           })),
         ),
@@ -752,6 +837,6 @@ export class MaintenanceOrdersService {
       );
       throw reservationConflict(year, reserved);
     }
-    return { serviceJobId };
+    return { serviceJobId, serviceJobIds: [serviceJobId] };
   }
 }

@@ -214,3 +214,127 @@ describe("PilotContractDetailPage -- a megrendelőlap darab- és alkalomszáma",
     ).toBe("2");
   });
 });
+
+/*
+  A MUNKALAP A TÉTEL KÉRT DARAB- ÉS ALKALOMSZÁMÁVAL, TÉTELENKÉNT KÜLÖN (Luca, 2026-11-13; acrobot: egy munkalap az
+  egészet fedi). MI PIROSÍT: ha a lap kérése nem viszi a beírt darab- és alkalomszámot; ha a tételenkénti mód
+  nincs a kérésben, vagy alapból be van kapcsolva; ha több önálló lap után a felület egyre visz, ahelyett hogy
+  felsorolná őket; ha érvénytelen érték mellett a lap gombja él.
+*/
+describe("PilotContractDetailPage -- munkalap tételenként, darab- és alkalomszámmal", () => {
+  const item = (id: string, position: number, description: string) => ({
+    id,
+    position,
+    description,
+    unitNet: "410000",
+    quantity: "1.000000",
+    occasionsPerYear: 12,
+    vatRatePercent: "27",
+    unitOfMeasureId: null,
+    unitOfMeasure: null,
+    departmentId: "department-1",
+    assets: [],
+    repairFeeWorkdayHours: null,
+    repairFeeWorkdayOffHours: null,
+    repairFeeHoliday: null,
+    repairWeight: null,
+    repairTotal: null,
+  });
+  const twoItems = (): ContractSummary => ({
+    ...contract(),
+    items: [
+      item("item-1", 1, "Cápasuli nagymedence"),
+      item("item-2", 2, "UV-lámpa csere"),
+    ],
+  });
+
+  beforeEach(() => {
+    auth.session = session("dev-token");
+    api.detail.mockReset().mockResolvedValue(twoItems());
+    api.update.mockReset();
+    orderApi.list.mockReset().mockResolvedValue([]);
+    orderApi.createContractJob.mockReset();
+    navigation.push.mockClear();
+    worksheetsApi.departments.mockReset().mockResolvedValue({ items: [] });
+    assetsApi.list.mockReset().mockResolvedValue({ items: [] });
+  });
+
+  const jobButton = () =>
+    screen
+      .getByText(/Karbantartási lap megrendelőlap nélkül/)
+      .closest("button") as HTMLButtonElement;
+
+  it("a lap kérése viszi a beírt darab- és alkalomszámot, és alapból nem tételenkénti", async () => {
+    orderApi.createContractJob.mockResolvedValue({
+      serviceJobId: "job-9",
+      serviceJobIds: ["job-9"],
+    });
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    fireEvent.change(
+      await screen.findByLabelText("1. tétel alkalma a megrendelőlapon"),
+      {
+        target: { value: "4" },
+      },
+    );
+    fireEvent.change(
+      screen.getByLabelText("2. tétel darabszáma a megrendelőlapon"),
+      {
+        target: { value: "3" },
+      },
+    );
+    fireEvent.click(jobButton());
+    await waitFor(() =>
+      expect(orderApi.createContractJob).toHaveBeenCalledTimes(1),
+    );
+    const sent = orderApi.createContractJob.mock.calls[0]![1];
+    expect(sent.lines).toEqual([
+      { itemId: "item-1", quantity: "1", occasions: 4 },
+      { itemId: "item-2", quantity: "3", occasions: 1 },
+    ]);
+    expect("separate" in sent).toBe(false);
+    await waitFor(() =>
+      expect(navigation.push).toHaveBeenCalledWith("/szerviz/hibajegyek/job-9"),
+    );
+  });
+
+  it("tételenként külön: a kérés jelzi, és több lap után felsorolja őket, nem visz egyre", async () => {
+    orderApi.createContractJob.mockResolvedValue({
+      serviceJobId: "job-1",
+      serviceJobIds: ["job-1", "job-2"],
+    });
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    await screen.findByLabelText("1. tétel alkalma a megrendelőlapon");
+    fireEvent.click(screen.getByLabelText("Tételenként külön lap és munkalap"));
+    fireEvent.click(jobButton());
+    await waitFor(() =>
+      expect(orderApi.createContractJob).toHaveBeenCalledTimes(1),
+    );
+    expect(orderApi.createContractJob.mock.calls[0]![1].separate).toBe(true);
+    expect(await screen.findByText(/Létrejött 2 önálló lap/)).toBeTruthy();
+    expect(screen.getByText("1. karbantartási lap").getAttribute("href")).toBe(
+      "/szerviz/hibajegyek/job-1",
+    );
+    expect(screen.getByText("2. karbantartási lap").getAttribute("href")).toBe(
+      "/szerviz/hibajegyek/job-2",
+    );
+    expect(navigation.push).not.toHaveBeenCalled();
+  });
+
+  it("érvénytelen érték mellett a lap gombja is tiltva van", async () => {
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    fireEvent.change(
+      await screen.findByLabelText("1. tétel alkalma a megrendelőlapon"),
+      {
+        target: { value: "13" },
+      },
+    );
+    expect(jobButton().disabled).toBe(true);
+    fireEvent.change(
+      screen.getByLabelText("1. tétel alkalma a megrendelőlapon"),
+      {
+        target: { value: "2" },
+      },
+    );
+    expect(jobButton().disabled).toBe(false);
+  });
+});

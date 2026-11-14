@@ -234,6 +234,8 @@ export class CompletionCertificatesRepository {
               select: {
                 description: true,
                 unitNet: true,
+                quantity: true,
+                occasions: true,
                 vatRatePercent: true,
               },
             },
@@ -250,6 +252,8 @@ export class CompletionCertificatesRepository {
           select: {
             description: true,
             unitNet: true,
+            quantity: true,
+            occasions: true,
             vatRatePercent: true,
           },
         },

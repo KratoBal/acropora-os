@@ -4351,6 +4351,10 @@ model ServiceJobContractItem {
   description    String
   unitNet        Decimal @db.Decimal(19, 4)
   quantity       Decimal @db.Decimal(19, 6)
+  /// HÁNY ALKALMAT visz ez a megrendelőlap nélküli lap ebből a tételből (Luca, 2026-11-13: a munkalap a tétel
+  /// teljes kért darab- és alkalomszámával készül). Az évi alkalomkeret ezt az értéket számolja, nem a sorok
+  /// számát; a régi sorok alapja 1, mert eddig minden lap egy alkalmat vitt.
+  occasions      Int     @default(1)
   vatRatePercent Decimal @db.Decimal(5, 2)
 
   serviceJob   ServiceJob   @relation(fields: [serviceJobId], references: [id], onDelete: Cascade)

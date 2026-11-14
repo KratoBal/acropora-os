@@ -430,6 +430,63 @@ describe(
       );
     });
 
+    /*
+      A LAP TÉTELE A KÉRT ALKALMAKAT FOGLALJA (Luca, 2026-11-13: a munkalap a tétel teljes kért alkalomszámával):
+      egy 2 alkalmas lap a 3-as keretből kettőt visz el. MI PIROSÍT: ha a lap sora egy alkalomnak számít
+      (`_count` a `_sum` helyett): akkor a 2-es kérés is beférne.
+    */
+    it("a 2 alkalmas megrendelőlap nélküli lap kettőt foglal: utána az 1 alkalom befér, a 2 már nem", async () => {
+      const { customer, department, contract, items } = await setup([3]);
+      const [f] = items as [Item];
+      await prisma.serviceJob.create({
+        data: {
+          jobNumber: next(),
+          title: "Keret teszt munkalap (2 alkalom)",
+          kind: "MAINTENANCE",
+          customerId: customer.id,
+          departmentId: department.id,
+          contractId: contract.id,
+          contractItems: {
+            create: [
+              {
+                contractItemId: f.id,
+                description: f.description,
+                unitNet: f.unitNet,
+                quantity: f.quantity,
+                occasions: 2,
+                vatRatePercent: f.vatRatePercent,
+              },
+            ],
+          },
+        },
+      });
+      let writes = 0;
+      const write = async () => {
+        writes += 1;
+        return "írva";
+      };
+      const one = await repository.reserveOccasions(
+        reserveInput(contract.id, [f], 1),
+        write,
+      );
+      const two = await repository.reserveOccasions(
+        reserveInput(contract.id, [f], 2),
+        write,
+      );
+      assert.deepEqual(
+        [one, two, writes],
+        [
+          { ok: true, value: "írva" },
+          {
+            ok: false,
+            exhausted: [],
+            short: ["Tétel 1 (kért: 2, hátralévő: 1)"],
+          },
+          1,
+        ],
+      );
+    });
+
     it("két egyszerre indított foglalás az utolsó alkalomra: pontosan egy megy át", async () => {
       const { contract, items } = await setup([1]);
       const [c] = items as [Item];

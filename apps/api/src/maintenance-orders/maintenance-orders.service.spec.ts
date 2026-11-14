@@ -929,6 +929,8 @@ describe("MaintenanceOrdersService.createJobFromContract", () => {
     const inserted: unknown[] = [];
     const moved: unknown[] = [];
     const jobInputs: unknown[] = [];
+    const reserveInputs: unknown[] = [];
+    const worksheetInputs: unknown[] = [];
     const queue = [...(opts.reservations ?? [{ ok: true }, { ok: true }])];
     const repository = fakeRepository({
       contractForIssuance: async () => opts.contract ?? contractRow(),
@@ -937,6 +939,7 @@ describe("MaintenanceOrdersService.createJobFromContract", () => {
         write: (tx: unknown) => Promise<unknown>,
       ) => {
         calls.push("reserve");
+        reserveInputs.push(input);
         years.push(input.year);
         const next = queue.shift() ?? { ok: true };
         if (!next.ok) return next;
@@ -994,8 +997,9 @@ describe("MaintenanceOrdersService.createJobFromContract", () => {
         },
       } as never,
       {
-        create: async () => {
+        create: async (input: unknown) => {
           calls.push("worksheet");
+          worksheetInputs.push(input);
           return { id: "worksheet-1" };
         },
       } as never,
@@ -1016,8 +1020,162 @@ describe("MaintenanceOrdersService.createJobFromContract", () => {
           (error: unknown) =>
             `${(error as { getStatus?: () => number }).getStatus?.() ?? "?"}: ${(error as Error).message}`,
         );
-    return { run, calls, years, inserted, moved, jobInputs };
+    return {
+      run,
+      calls,
+      years,
+      inserted,
+      moved,
+      jobInputs,
+      reserveInputs,
+      worksheetInputs,
+    };
   }
+
+  /*
+    A MUNKALAP A TÉTEL TELJES KÉRT DARAB- ÉS ALKALOMSZÁMÁVAL, TÉTELENKÉNT KÜLÖN (Luca, 2026-11-13; acrobot: egy
+    munkalap az egészet fedi). MI PIROSÍT: ha a kért darab- és alkalomszám nem a tételsorba, a munkalapba és a
+    foglalásba kerül; ha a tételenkénti mód egy lapra teszi az összes tételt, vagy az egyik keretét nem előre
+    ellenőrzi (az első lap létrejönne, a második elbukna); ha az egyalkalmas tételnél alkalom-sor kerül a munkalapra.
+  */
+  const twoItems = () =>
+    contractRow({
+      items: [
+        {
+          id: "item-1",
+          position: 1,
+          description: "Cápasuli RO karbantartás",
+          unitNet: "410000",
+          quantity: "1",
+          occasionsPerYear: 12,
+          vatRatePercent: "27",
+          departmentId: "department-1",
+        },
+        {
+          id: "item-2",
+          position: 2,
+          description: "UV-lámpa csere",
+          unitNet: "120000",
+          quantity: "1",
+          occasionsPerYear: 4,
+          vatRatePercent: "27",
+          departmentId: "department-2",
+        },
+      ],
+    });
+
+  it("a kért darab- és alkalomszám a tételsorba, a munkalapra és a foglalásba megy", async () => {
+    const h = harness();
+    await h.run({
+      lines: [{ itemId: "item-1", quantity: "2,5", occasions: 3 }],
+    });
+    const stored = (h.inserted[0] as { items: Array<Record<string, unknown>> })
+      .items[0]!;
+    assert.equal(String(stored.quantity), "2.5");
+    assert.equal(stored.occasions, 3);
+    assert.equal(
+      (h.reserveInputs[0] as { items: Array<{ requested: number }> }).items[0]!
+        .requested,
+      3,
+    );
+    const lines = (
+      h.worksheetInputs[0] as { lines: Array<Record<string, unknown>> }
+    ).lines;
+    assert.deepEqual(
+      lines.map((line) => [line.unit, line.quantity]),
+      [
+        ["db", 2.5],
+        ["alkalom", 3],
+      ],
+    );
+  });
+
+  it("egy alkalomnál nincs alkalom-sor a munkalapon", async () => {
+    const h = harness();
+    await h.run();
+    const lines = (
+      h.worksheetInputs[0] as { lines: Array<Record<string, unknown>> }
+    ).lines;
+    assert.equal(lines.length, 1);
+  });
+
+  it("tételenként külön: minden tételből önálló lap saját kulccsal, a keret előre, és külön helyszínen is mehet", async () => {
+    const h = harness({ contract: twoItems() });
+    const result = (await h.run({
+      itemIds: ["item-1", "item-2"],
+      separate: true,
+      title: "Téli",
+      lines: [
+        { itemId: "item-1", quantity: "1", occasions: 4 },
+        { itemId: "item-2", quantity: "2", occasions: 1 },
+      ],
+    })) as { serviceJobId: string; serviceJobIds: string[] };
+    const jobs = h.jobInputs as Array<Record<string, unknown>>;
+    assert.deepEqual(
+      jobs.map((job) => [job.clientOperationId, job.title, job.departmentId]),
+      [
+        [
+          "contract-job-kulcs-0001-item-1",
+          "Téli: Cápasuli RO karbantartás",
+          "department-1",
+        ],
+        [
+          "contract-job-kulcs-0001-item-2",
+          "Téli: UV-lámpa csere",
+          "department-2",
+        ],
+      ],
+    );
+    assert.equal(result.serviceJobIds.length, 2);
+    // az első foglalás az ELŐRE-ellenőrzés, mindkét tétel kért alkalmával
+    assert.deepEqual(
+      (h.reserveInputs[0] as { items: Array<{ requested: number }> }).items.map(
+        (item) => item.requested,
+      ),
+      [4, 1],
+    );
+    // minden lap a saját tételsorával
+    assert.deepEqual(
+      (
+        h.inserted as Array<{
+          items: Array<{ contractItemId: string; occasions: number }>;
+        }>
+      ).map((entry) =>
+        entry.items.map((item) => [item.contractItemId, item.occasions]),
+      ),
+      [[["item-1", 4]], [["item-2", 1]]],
+    );
+  });
+
+  it("tételenként külön: ha a második tételnek nincs helyszíne, 409, és sem lap, sem foglalás nem jön létre", async () => {
+    const contract = twoItems();
+    contract.items[1] = { ...contract.items[1]!, departmentId: null };
+    const h = harness({ contract });
+    const result = await h.run({
+      itemIds: ["item-1", "item-2"],
+      separate: true,
+    });
+    assert.match(String(result), /^409: .*UV-lámpa csere.*helyszín/);
+    // a helyszín-szabály MINDEN tételre fut, mielőtt bármi létrejönne vagy foglalódna
+    assert.deepEqual(h.calls, []);
+    assert.equal(h.jobInputs.length, 0);
+    assert.equal(h.reserveInputs.length, 0);
+    assert.equal(h.inserted.length, 0);
+  });
+
+  it("tételenként külön: ha az egyik tétel kerete elfogyott, egyetlen lap sem jön létre", async () => {
+    const h = harness({
+      contract: twoItems(),
+      reservations: [{ ok: false, exhausted: ["UV-lámpa csere"], short: [] }],
+    });
+    const result = await h.run({
+      itemIds: ["item-1", "item-2"],
+      separate: true,
+    });
+    assert.match(String(result), /^409: .*UV-lámpa csere/);
+    assert.equal(h.jobInputs.length, 0);
+    assert.equal(h.inserted.length, 0);
+  });
 
   it("csak aktív karbantartási szerződésből, és csak a saját tételeiből", async () => {
     const results = [
@@ -1046,7 +1204,7 @@ describe("MaintenanceOrdersService.createJobFromContract", () => {
         inserted: h.inserted,
       },
       {
-        result: { serviceJobId: "job-1" },
+        result: { serviceJobId: "job-1", serviceJobIds: ["job-1"] },
         calls: [
           "lookup",
           "reserve",
@@ -1077,6 +1235,7 @@ describe("MaintenanceOrdersService.createJobFromContract", () => {
                 description: "Cápasuli RO karbantartás",
                 unitNet: new Prisma.Decimal("410000"),
                 quantity: new Prisma.Decimal("1"),
+                occasions: 1,
                 vatRatePercent: new Prisma.Decimal("27"),
               },
             ],
@@ -1128,7 +1287,10 @@ describe("MaintenanceOrdersService.createJobFromContract", () => {
     const result = await h.run();
     assert.deepEqual(
       [result, h.calls],
-      [{ serviceJobId: "job-1" }, ["lookup", "job", "worksheet", "state"]],
+      [
+        { serviceJobId: "job-1", serviceJobIds: ["job-1"] },
+        ["lookup", "job", "worksheet", "state"],
+      ],
     );
   });
 

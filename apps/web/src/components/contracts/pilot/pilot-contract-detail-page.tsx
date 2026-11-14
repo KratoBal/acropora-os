@@ -252,6 +252,10 @@ export function PilotContractDetailPage({
     new Set(),
   );
   const [issuing, setIssuing] = useState(false);
+  /** Tételenként külön karbantartási lap és munkalap (Luca, 2026-11-13), nem egy közös. */
+  const [separateJobs, setSeparateJobs] = useState(false);
+  /** A tételenként külön létrehozott lapok azonosítói: nem visz tovább egyre, hanem felsorolja őket. */
+  const [createdJobIds, setCreatedJobIds] = useState<string[]>([]);
   /** A megrendelőlap tételenkénti darab- és alkalomszáma; ami nincs benne, az alap (lásd `order-lines.ts`). */
   const [orderLines, setOrderLines] = useState<Record<string, OrderLineDraft>>(
     {},
@@ -574,14 +578,29 @@ export function PilotContractDetailPage({
     setCreatingJob(true);
     setOrderError(null);
     try {
-      const { serviceJobId } = await maintenanceOrdersApi.createContractJob(
-        token,
-        {
+      const { serviceJobId, serviceJobIds } =
+        await maintenanceOrdersApi.createContractJob(token, {
           contractId: contract.id,
           itemIds: [...chosenItemIds],
           clientOperationId: jobOperationId.current,
-        },
-      );
+          lines: contract.items
+            .filter((item) => chosenItemIds.has(item.id))
+            .map((item) =>
+              orderLinePayload(
+                item.id,
+                orderLines[item.id] ?? defaultOrderLine(item),
+              ),
+            ),
+          ...(separateJobs ? { separate: true } : {}),
+        });
+      if (separateJobs && (serviceJobIds?.length ?? 0) > 1) {
+        // több önálló lap: nem visszük el az elsőre, hanem felsoroljuk őket
+        setCreatedJobIds(serviceJobIds!);
+        setOrderLines({});
+        jobOperationId.current = newContractJobOperationId();
+        setCreatingJob(false);
+        return;
+      }
       router.push(`/szerviz/hibajegyek/${serviceJobId}`);
     } catch (cause) {
       const keep = keepsContractJobOperationId(cause);
@@ -1266,10 +1285,11 @@ export function PilotContractDetailPage({
                           </label>
                           {chosenItemIds.has(item.id) ? (
                             <div className="ml-6 flex flex-wrap items-center gap-3 pb-1 text-xs text-pilot-grey-600">
-                              <span>A megrendelőlapra:</span>
+                              <span>A megrendelőlapra és a munkalapra:</span>
                               <label className="flex items-center gap-1">
                                 Darab
                                 <PilotInput
+                                  disabled={pendingJobItemIds !== null}
                                   aria-label={`${item.position}. tétel darabszáma a megrendelőlapon`}
                                   inputMode="decimal"
                                   className="w-20"
@@ -1294,6 +1314,7 @@ export function PilotContractDetailPage({
                               <label className="flex items-center gap-1">
                                 Alkalom
                                 <PilotInput
+                                  disabled={pendingJobItemIds !== null}
                                   aria-label={`${item.position}. tétel alkalma a megrendelőlapon`}
                                   inputMode="numeric"
                                   className="w-20"
@@ -1353,13 +1374,51 @@ export function PilotContractDetailPage({
                       <PilotButton
                         type="button"
                         variant="secondary"
-                        disabled={creatingJob || selectedCount === 0}
+                        disabled={
+                          creatingJob ||
+                          selectedCount === 0 ||
+                          orderLineProblems.length > 0
+                        }
                         onClick={() => void createJob()}
                       >
                         {creatingJob
                           ? "Lap létrehozása…"
                           : `Karbantartási lap megrendelőlap nélkül (${selectedCount} tétel)`}
                       </PilotButton>
+                    ) : null}
+                    {saved?.kind === "MAINTENANCE" ? (
+                      <label className="flex cursor-pointer items-center gap-2 text-xs text-pilot-grey-700">
+                        <input
+                          type="checkbox"
+                          checked={separateJobs}
+                          disabled={pendingJobItemIds !== null}
+                          onChange={(event) =>
+                            setSeparateJobs(event.target.checked)
+                          }
+                          className="h-4 w-4 rounded accent-pilot-aqua-600"
+                        />
+                        Tételenként külön lap és munkalap
+                      </label>
+                    ) : null}
+                    {createdJobIds.length > 0 ? (
+                      <div className="w-full text-xs text-pilot-grey-800">
+                        <p className="font-semibold">
+                          Létrejött {createdJobIds.length} önálló lap, mindegyik
+                          a saját munkalapjával:
+                        </p>
+                        <ul className="mt-1 flex flex-col gap-0.5">
+                          {createdJobIds.map((jobId, index) => (
+                            <li key={jobId}>
+                              <Link
+                                href={`/szerviz/hibajegyek/${jobId}`}
+                                className="font-medium text-pilot-aqua-700 underline"
+                              >
+                                {index + 1}. karbantartási lap
+                              </Link>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
                     ) : null}
                     {pendingJobItemIds ? (
                       <p className="w-full text-xs font-medium text-red-600">

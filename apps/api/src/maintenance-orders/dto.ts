@@ -3,6 +3,7 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsInt,
   IsOptional,
   IsString,
@@ -80,6 +81,21 @@ export class CreateContractJobDto {
   @MaxLength(100)
   @IsOptional()
   clientOperationId?: string | null;
+
+  /** tételenkénti darab- és alkalomszám; a hiányzó tétel az eddigi értékekkel megy (a szerződés darabszáma, 1 alkalom) */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(200)
+  @ValidateNested({ each: true })
+  @Type(() => IssueMaintenanceOrderLineDto)
+  lines?: IssueMaintenanceOrderLineDto[];
+
+  /**
+   * TÉTELENKÉNT KÜLÖN LAP ÉS MUNKALAP (Luca, 2026-11-13: „a tételekből KÜLÖN KÜLÖN dokumentumban"): minden kijelölt
+   * tételből egy önálló karbantartási lap a saját munkalapjával, a tétel teljes kért darab- és alkalomszámával.
+   * Alapból (hamis) az eddigi: egy lap, tételenként egy munkalap.
+   */
+  @IsOptional() @IsBoolean() separate?: boolean;
 }
 
 /**
