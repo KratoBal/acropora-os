@@ -318,14 +318,26 @@ export function productFieldStatement(
           `${ROLE_LABEL[m.role]}: a címben nincs irányítószám és település`,
         );
     }
+    const company = (m: (typeof makers)[number]) =>
+      [
+        m.name,
+        withoutName(m.address, m.name),
+        ...(m.email === null ? [] : [m.email]),
+      ]
+        .map(squash)
+        .join(", ");
+    // the same company, address and e-mail in both roles is one company: the maker stays (pilot-20, sixth run: Grotech
+    // as "Gyártó" and "Felelős" alike, the seventh run as "Gyártó" only; the value must not depend on which run read it)
     const ordered = MANUFACTURER_ROLES.flatMap((role) =>
       makers.filter((m) => m.role === role),
+    ).filter(
+      (m, i, all) =>
+        all.findIndex(
+          (o) => company(o).toLowerCase() === company(m).toLowerCase(),
+        ) === i,
     );
     const raw = ordered
-      .map(
-        (m) =>
-          `${ROLE_LABEL[m.role]}: ${[m.name, withoutName(m.address, m.name), ...(m.email === null ? [] : [m.email])].map(squash).join(", ")}`,
-      )
+      .map((m) => `${ROLE_LABEL[m.role]}: ${company(m)}`)
       .join("; ");
     if (problems.length === 0 && raw.length > MAX_VALUE)
       problems.push("túl hosszú");
@@ -345,9 +357,9 @@ export function productFieldStatement(
           );
       // more companies on the page than the answer names: a person looks (the GPSR block may need another one)
       const companies = companiesOn(pageText);
-      if (companies > makers.length)
+      if (companies > ordered.length)
         notes.push(
-          `termékmezők (AI): manufacturerInfo: a lapon ${companies} cég áll, a válasz ${makers.length}-t nevez`,
+          `termékmezők (AI): manufacturerInfo: a lapon ${companies} cég áll, a válasz ${ordered.length}-t nevez`,
         );
     }
   }
