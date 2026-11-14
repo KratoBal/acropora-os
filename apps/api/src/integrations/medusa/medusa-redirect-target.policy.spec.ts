@@ -3,8 +3,11 @@ import { describe, it } from "node:test";
 
 import type { OsBrandForShop } from "./medusa-brand-module.policy.js";
 import {
+  discontinuedRedirect,
   productRedirectTarget,
   shopRedirects,
+  type DiscontinuedRedirect,
+  type DiscontinuedRedirectInput,
   type RedirectProductState,
   type StoredRedirectRule,
 } from "./medusa-redirect-target.policy.js";
@@ -183,5 +186,270 @@ describe("shopRedirects", () => {
           httpStatus: 301,
         },
       ]);
+  });
+});
+
+/**
+ * A VÉGLEGESEN MEGSZŰNTNEK JELÖLT TERMÉK (V4.2, kártya 9d0523fa). MI PIROSIT: a jelölt, ma nem kapható termék
+ * régi címe és saját lapja nem 301-et kap a helyettesítőre vagy a kategóriára; egy megvehető termék lapját a jelölő
+ * elviszi; egy nem megvehető, megszűnt-jelölt vagy kötés nélküli helyettesítő a célja marad (zsákutca, lánc); a
+ * kategória helyett a helyettesítő nem előz; cél nélkül a jelölő változtat valamit; egy régi cím vagy kézi sor a
+ * termék lapjára mutat marad (lánc, a bolt az egész listát elutasítja).
+ */
+describe("a véglegesen megszűnt termék átirányítása", () => {
+  const REPL = "/hu/termek/uj-szivattyu";
+  const KAT = "/hu/categories/szivattyuk";
+  const OWN = "/hu/termek/jebao-slw-30";
+
+  const jelolt = (
+    o: Partial<DiscontinuedRedirectInput> = {},
+  ): DiscontinuedRedirect =>
+    discontinuedRedirect({
+      pagePath: OWN,
+      replacement: {
+        pagePath: REPL,
+        linked: true,
+        publication: termek().publication,
+        marked: false,
+      },
+      categoryPath: KAT,
+      ...o,
+    });
+
+  describe("discontinuedRedirect: a cél", () => {
+    it("a megvehető helyettesítő lapja előz a kategóriával szemben", () => {
+      assert.deepEqual(jelolt(), { pagePath: OWN, destination: REPL });
+    });
+
+    it("nincs helyettesítő: a kategória", () => {
+      assert.equal(jelolt({ replacement: null }).destination, KAT);
+    });
+
+    it("a helyettesítő ma nem megvehető (inaktív, nem webshopos, kötés nélküli, jelölt, slug nélküli): a kategória", () => {
+      const alap = {
+        pagePath: REPL,
+        linked: true,
+        publication: termek().publication,
+        marked: false,
+      };
+      for (const replacement of [
+        {
+          ...alap,
+          publication: { ...alap.publication, isActive: false },
+        },
+        {
+          ...alap,
+          publication: { ...alap.publication, webshopSellable: false },
+        },
+        { ...alap, linked: false },
+        { ...alap, marked: true },
+        { ...alap, pagePath: null },
+      ])
+        assert.equal(jelolt({ replacement }).destination, KAT);
+    });
+
+    it("sem helyettesítő, sem kategória: nincs cél", () => {
+      assert.equal(
+        jelolt({ replacement: null, categoryPath: null }).destination,
+        null,
+      );
+    });
+  });
+
+  describe("productRedirectTarget", () => {
+    const moved = (o: Partial<DiscontinuedRedirect> = {}) => ({
+      pagePath: OWN,
+      destination: REPL,
+      ...o,
+    });
+
+    it("jelölt, ma nem kapható, van cél: moved (kifutott termék is, kötés nélküli is)", () => {
+      for (const product of [
+        termek({ discontinued: moved() }, { webshopSellable: false }),
+        termek(
+          { discontinued: moved(), linked: false },
+          { webshopSellable: false },
+        ),
+        termek(
+          { discontinued: moved(), unasProductUrl: null },
+          { isActive: false },
+        ),
+      ])
+        assert.equal(productRedirectTarget(product), "moved");
+    });
+
+    it("jelölt, de MÉG értékesíthető: a saját lapja marad", () => {
+      assert.equal(
+        productRedirectTarget(termek({ discontinued: moved() })),
+        "page",
+      );
+    });
+
+    it("jelölt, de cél nélkül: a jelölő semmit nem változtat", () => {
+      const nemKapható = { webshopSellable: false };
+      assert.equal(
+        productRedirectTarget(
+          termek({ discontinued: moved({ destination: null }) }, nemKapható),
+        ),
+        productRedirectTarget(termek({}, nemKapható)),
+      );
+    });
+  });
+
+  describe("shopRedirects: a sorok és a lánc", () => {
+    const szabaly = (
+      o: Partial<StoredRedirectRule> = {},
+    ): StoredRedirectRule => ({
+      sourcePath: "/Jebao-SLW-30",
+      destinationPath: OWN,
+      httpStatus: 301,
+      reason: "UNAS_PRODUCT",
+      entityType: "PRODUCT",
+      entityId: "p1",
+      ...o,
+    });
+    const jeloltTermek = (o: Partial<RedirectProductState> = {}) =>
+      termek(
+        { discontinued: { pagePath: OWN, destination: REPL }, ...o },
+        { webshopSellable: false },
+      );
+
+    it("a régi cím egyenesen a célra megy, és a termék saját lapja is 301-et kap", () => {
+      assert.deepEqual(
+        shopRedirects([szabaly()], new Map([["p1", jeloltTermek()]])),
+        [
+          {
+            sourcePath: "/Jebao-SLW-30",
+            destinationPath: REPL,
+            httpStatus: 301,
+            target: "moved",
+          },
+          {
+            sourcePath: OWN,
+            destinationPath: REPL,
+            httpStatus: 301,
+            target: "moved",
+          },
+        ],
+      );
+    });
+
+    it("a termék saját lapja akkor is kap sort, ha nincs régi címe (nincs szabálya)", () => {
+      assert.deepEqual(shopRedirects([], new Map([["p1", jeloltTermek()]])), [
+        {
+          sourcePath: OWN,
+          destinationPath: REPL,
+          httpStatus: 301,
+          target: "moved",
+        },
+      ]);
+    });
+
+    it("kötés nélküli jelölt termék: a régi cím megy a célra, saját lap-sor nincs (nincs lapja)", () => {
+      const rows = shopRedirects(
+        [szabaly()],
+        new Map([
+          [
+            "p1",
+            jeloltTermek({
+              linked: false,
+              discontinued: { pagePath: null, destination: KAT },
+            }),
+          ],
+        ]),
+      );
+      assert.deepEqual(rows, [
+        {
+          sourcePath: "/Jebao-SLW-30",
+          destinationPath: KAT,
+          httpStatus: 301,
+          target: "moved",
+        },
+      ]);
+    });
+
+    it("a kézi és a másik termék szabálya, ami a jelölt lapjára mutat, egyenesen a célra megy (nincs lánc)", () => {
+      const rows = shopRedirects(
+        [
+          szabaly(),
+          szabaly({
+            sourcePath: "/kezi-regi-cim",
+            reason: "MANUAL",
+            entityId: null,
+            entityType: null,
+          }),
+          szabaly({
+            sourcePath: "/masik-regi",
+            entityId: "p2",
+            destinationPath: OWN,
+          }),
+          szabaly({
+            sourcePath: "/mas-lap",
+            entityId: null,
+            entityType: null,
+            reason: "MANUAL",
+            destinationPath: "/hu/termek/mas",
+          }),
+        ],
+        new Map([
+          ["p1", jeloltTermek()],
+          ["p2", termek()],
+        ]),
+      );
+      const forrasok = new Set(rows.map((r) => r.sourcePath.toLowerCase()));
+      for (const row of rows)
+        assert.equal(
+          forrasok.has(row.destinationPath.toLowerCase()) &&
+            row.httpStatus !== 410,
+          false,
+          `lánc: ${row.sourcePath} -> ${row.destinationPath}`,
+        );
+      assert.equal(
+        rows.find((r) => r.sourcePath === "/kezi-regi-cim")?.destinationPath,
+        REPL,
+      );
+      assert.equal(
+        rows.find((r) => r.sourcePath === "/masik-regi")?.destinationPath,
+        REPL,
+      );
+      assert.equal(
+        rows.find((r) => r.sourcePath === "/mas-lap")?.destinationPath,
+        "/hu/termek/mas",
+      );
+    });
+
+    it("ha a lap címe már forrás egy meglévő sorban, az a sor átíródik az újra (egy forrás, egyszer)", () => {
+      const rows = shopRedirects(
+        [szabaly({ sourcePath: OWN.toUpperCase(), destinationPath: "/hu/x" })],
+        new Map([["p1", jeloltTermek()]]),
+      );
+      assert.equal(
+        rows.filter((r) => r.sourcePath.toLowerCase() === OWN).length,
+        1,
+      );
+      assert.equal(rows[0]?.destinationPath, REPL);
+    });
+
+    it("a még értékesíthető jelölt termék lapja és régi címe változatlan marad", () => {
+      assert.deepEqual(
+        shopRedirects(
+          [szabaly()],
+          new Map([
+            [
+              "p1",
+              termek({ discontinued: { pagePath: OWN, destination: REPL } }),
+            ],
+          ]),
+        ),
+        [
+          {
+            sourcePath: "/Jebao-SLW-30",
+            destinationPath: OWN,
+            httpStatus: 301,
+            target: "page",
+          },
+        ],
+      );
+    });
   });
 });

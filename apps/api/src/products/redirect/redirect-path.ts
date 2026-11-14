@@ -57,6 +57,16 @@ export function webshopCategoryPath(slug: string): string {
 }
 
 /**
+ * A KIRAKAT KATEGÓRIA-LAPJÁNAK TÉNYLEGES CÍME: `/hu/categories/{slug}` (a bolti kategória slugja a Medusa-kategória
+ * handle-je). NEM a `webshopCategoryPath` (`/hu/kategoria/...`): az az útvonal a kirakaton nem létezik, a kirakat
+ * kategória-oldala a `categories/[...category]` (V4.2, a "nem kapható" lap "vissza a kategóriához" hivatkozása is erre
+ * mutat). A végleg megszűnt termék 301-e ide megy.
+ */
+export function storefrontCategoryPath(slug: string): string {
+  return `/hu/categories/${slug}`;
+}
+
+/**
  * A márkaoldal webshop-címe (G2): `/hu/marka/{slug}` (SEO P0 PR 11). A márka
  * átnevezésekor a slug-csere ide ír 301-et (t11, barracuda #1678 C).
  */
