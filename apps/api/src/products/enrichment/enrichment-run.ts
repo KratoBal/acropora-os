@@ -17,6 +17,7 @@ import {
 import { confirmPackSize, nameSize } from "./pack-size-confirm.js";
 import {
   productFieldStatement,
+  type ProductFieldAnswer,
   type ProductFieldExtractor,
 } from "./product-field-extraction.js";
 import { extractMarineAquaticsStatement } from "./marine-aquatics-extract.js";
@@ -278,6 +279,14 @@ export async function runEnrichment(
   });
   const checks: StoredCheck[] = [];
   const failures: ProductFailure[] = [];
+  // ONE AI ANSWER PER IMPRINT PER RUN (pilot-20, sixth and seventh runs, 2026-11-14): one brand's imprint asked once per
+  // product gave "Felelős" for one Aquaforest product and "Gyártó" for two, and the Grotech block for one product and
+  // none for the other, the same way in both runs: the product's name in the request steered it. Asked once, every
+  // product of the brand gets the same block, and the run makes fewer calls. Only an answer that gave a maker block is
+  // kept: an unavailable service, a refused whole answer, or an answer with no block (a company refused, none named) is
+  // asked again at the next product, so a first bad answer does not take the brand's other chances (barracuda on #2567).
+  // Two sound, different blocks still cannot arise: the first sound one is kept.
+  const imprintAnswers = new Map<string, ProductFieldAnswer>();
   let consecutiveFailures = 0;
   let limit: RunSummary["limit"] = null;
 
@@ -288,7 +297,13 @@ export async function runEnrichment(
         break;
       }
       try {
-        const check = await checkProduct(product, facts[index]!, fetcher, deps);
+        const check = await checkProduct(
+          product,
+          facts[index]!,
+          fetcher,
+          deps,
+          imprintAnswers,
+        );
         await deps.store.saveCheck(runId, check);
         checks.push(check);
         consecutiveFailures = 0;
@@ -371,6 +386,7 @@ async function checkProduct(
   facts: ProductFacts,
   fetcher: PoliteFetcher,
   deps: RunDeps,
+  imprintAnswers: Map<string, ProductFieldAnswer>,
 ): Promise<StoredCheck> {
   const checkedAt = deps.now();
   const manufacturer = manufacturerSites(
@@ -491,14 +507,31 @@ async function checkProduct(
       source.kind === "MANUFACTURER" && deps.productFieldExtractor
         ? await (async () => {
             const pageText = visiblePageText(page.html);
-            return productFieldStatement(
-              await deps.productFieldExtractor!.extract({
+            const kept = imprint ? imprintAnswers.get(page.url) : undefined;
+            const answer =
+              kept ??
+              (await deps.productFieldExtractor!.extract({
                 productName: facts.name,
                 pageText,
                 fields: imprint ? ["manufacturerInfo"] : ["application"],
-              }),
-              pageText,
-            );
+              }));
+            // checked against this page's text again: the kept answer is no exception to the guard
+            const checked = productFieldStatement(answer, pageText);
+            if (
+              imprint &&
+              !kept &&
+              checked.values.some((v) => v.field === "manufacturerInfo")
+            )
+              imprintAnswers.set(page.url, answer);
+            return kept
+              ? {
+                  ...checked,
+                  notes: [
+                    "termékmezők (AI): az impresszum válasza a futás korábbi hívásából",
+                    ...checked.notes,
+                  ],
+                }
+              : checked;
           })()
         : null;
     if (

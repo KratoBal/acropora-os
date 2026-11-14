@@ -352,6 +352,27 @@ describe("az OS saját ellenőrzése a lapon", () => {
     );
   });
 
+  // pilot-20, sixth run: Grotech as "Gyártó" and "Felelős" alike, the seventh run as "Gyártó" only. WHAT TURNS THIS RED:
+  // the same company kept in both roles (the value then depends on the run), or two companies merged.
+  it("ugyanaz a cég két szerepben egy cég: a Gyártó marad", () => {
+    const s = productFieldStatement(
+      answer([maker, { ...maker, role: "RESPONSIBLE" }]),
+      PAGE,
+    );
+    assert.deepEqual(
+      s.values.map((v) => v.raw),
+      ["Gyártó: Kitalált Gyártó GmbH, Példa utca 1, 12345 Mintaváros"],
+    );
+    // the page's second company is still named as unnamed by the answer: one company, not two
+    assert.deepEqual(s.notes, [
+      "termékmezők (AI): manufacturerInfo: a lapon 2 cég áll, a válasz 1-t nevez",
+    ]);
+    assert.equal(
+      productFieldStatement(answer([maker, responsible]), PAGE).values[0]!.raw,
+      "Gyártó: Kitalált Gyártó GmbH, Példa utca 1, 12345 Mintaváros; Felelős: Kitalált Felelős AG, Hegyi út 21, CH-6331 Hünenberg, office@kitalalt.example",
+    );
+  });
+
   it("fél GPSR-blokk nem érték: ha az egyik cég elbukik, a másik sem marad", () => {
     const s = productFieldStatement(
       answer([maker, { ...responsible, email: "sales@kitalalt.example" }]),

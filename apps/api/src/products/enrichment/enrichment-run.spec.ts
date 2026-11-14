@@ -487,6 +487,116 @@ describe("egy kézi futás, árnyékban", () => {
     );
   });
 
+  // pilot-20, sixth and seventh runs: one imprint asked once per product gave different blocks for one brand. WHAT TURNS
+  // THIS RED: the imprint asked again for the next product of the run; the kept answer not checked against the page or not
+  // said; a refused whole answer, or an answer that gave no block, kept (the next product must ask again).
+  it("egy impresszumot a futás egyszer kérdez: a márka minden terméke ugyanazt a blokkot kapja", async () => {
+    const asked: string[][] = [];
+    const twoProducts = [
+      {
+        productId: "p-1",
+        sources: [
+          {
+            kind: "MANUFACTURER" as const,
+            url: `${MAKER}/impressum`,
+            imprint: true as const,
+          },
+        ],
+      },
+      {
+        productId: "p-2",
+        sources: [
+          {
+            kind: "MANUFACTURER" as const,
+            url: `${MAKER}/impressum`,
+            imprint: true as const,
+          },
+        ],
+      },
+    ];
+    const both = {
+      "p-1": facts({ brandWebsiteUrl: MAKER }),
+      "p-2": facts({ productId: "p-2", brandWebsiteUrl: MAKER }),
+    };
+    const { checks } = await run(
+      twoProducts,
+      { [`${MAKER}/impressum`]: { status: 200, body: imprintHtml } },
+      { facts: both, productFieldExtractor: fieldsFake(asked) },
+    );
+    assert.deepEqual(asked, [["manufacturerInfo"]]);
+    assert.deepEqual(
+      checks.map(
+        (c) => c.fields.find((f) => f.field === "manufacturerInfo")!.value,
+      ),
+      [
+        "Gyártó: Kitalált Gyártó GmbH, Példa utca 1, 12345 Mintaváros",
+        "Gyártó: Kitalált Gyártó GmbH, Példa utca 1, 12345 Mintaváros",
+      ],
+    );
+    assert.match(
+      checks[1]!.fetches[0]!.reason ?? "",
+      /az impresszum válasza a futás korábbi hívásából/,
+    );
+    assert.doesNotMatch(checks[0]!.fetches[0]!.reason ?? "", /korábbi hívás/);
+
+    // a refused whole answer is not kept: the second product asks again
+    let calls = 0;
+    await run(
+      twoProducts,
+      { [`${MAKER}/impressum`]: { status: 200, body: imprintHtml } },
+      {
+        facts: both,
+        productFieldExtractor: {
+          extract: async () => {
+            calls += 1;
+            return { kind: "REFUSED" as const, refusal: "NOT_JSON" };
+          },
+        },
+      },
+    );
+    assert.equal(calls, 2);
+
+    // an answer that gave no block (here: the anchor is not on the page) is not kept either; the next product's sound
+    // answer stands (barracuda on #2567: the Grotech Új Corall A case, first in the run)
+    let tries = 0;
+    const { checks: second } = await run(
+      twoProducts,
+      { [`${MAKER}/impressum`]: { status: 200, body: imprintHtml } },
+      {
+        facts: both,
+        productFieldExtractor: {
+          extract: async () => {
+            tries += 1;
+            return {
+              kind: "ANSWER" as const,
+              fields: [
+                {
+                  field: "manufacturerInfo" as const,
+                  role: "MAKER" as const,
+                  name: "Kitalált Gyártó GmbH",
+                  address: "Példa utca 1, 12345 Mintaváros",
+                  email: null,
+                  anchor:
+                    tries === 1
+                      ? "Kitalált Gyártó GmbH, Példa utca 9, 12345 Mintaváros"
+                      : "Kitalált Gyártó GmbH, Példa utca 1, 12345 Mintaváros",
+                },
+              ],
+              refused: [],
+            };
+          },
+        },
+      },
+    );
+    assert.equal(tries, 2);
+    assert.deepEqual(
+      second.map(
+        (c) => c.fields.find((f) => f.field === "manufacturerInfo")!.status,
+      ),
+      ["MISSING", "VERIFIED"],
+    );
+  });
+
   // barracuda on #2565. WHAT TURNS THIS RED: a value read deterministically off the imprint page (a shop's legal notice
   // may carry a Product JSON-LD with a barcode, a flow rate or a dose); the run's evidence from it is the maker only.
   it("az impresszum JSON-LD-je sem ad jelöltet: onnan csak a gyártó-blokk", async () => {
