@@ -1,10 +1,12 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
 import type { ProductDiscontinuation } from "@acropora/types";
 
+import { isPrismaErrorCode } from "../common/prisma-error.util.js";
 import {
   MarkRefused,
   ProductDiscontinuationRepository,
@@ -20,6 +22,8 @@ const MESSAGE: Record<MarkRefusal, string> = {
     "A helyettesítő termék most nem értékesíthető a webshopban.",
   REPLACEMENT_ALSO_DISCONTINUED:
     "A helyettesítő termék maga is végleg megszűnt.",
+  PRODUCT_IS_A_REPLACEMENT:
+    "A termék egy másik végleg megszűnt termék jóváhagyott helyettesítője; előbb annál válassz mást.",
 };
 
 @Injectable()
@@ -51,6 +55,11 @@ export class ProductDiscontinuationService {
     try {
       return await operation();
     } catch (error) {
+      // two people saving at once: the Serializable transaction lost, nothing was written, saving again works
+      if (isPrismaErrorCode(error, "P2034"))
+        throw new ConflictException(
+          "Közben más is módosította a jelölést. Próbáld újra.",
+        );
       if (!(error instanceof MarkRefused)) throw error;
       if (
         error.refusal === "PRODUCT_NOT_FOUND" ||

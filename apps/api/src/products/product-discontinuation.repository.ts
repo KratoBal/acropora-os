@@ -23,6 +23,7 @@ interface MarkTransaction {
   product: { findUnique(args: unknown): Promise<ProductRow | null> };
   productDiscontinuation: {
     findUnique(args: unknown): Promise<MarkRow | null>;
+    findFirst(args: unknown): Promise<{ id: string } | null>;
     create(args: unknown): Promise<MarkRow>;
     update(args: unknown): Promise<MarkRow>;
     delete(args: unknown): Promise<unknown>;
@@ -53,6 +54,7 @@ export type MarkRefusal =
   | "REPLACEMENT_NOT_FOUND"
   | "REPLACEMENT_NOT_SELLABLE"
   | "REPLACEMENT_ALSO_DISCONTINUED"
+  | "PRODUCT_IS_A_REPLACEMENT"
   | "MARK_NOT_FOUND";
 
 export class MarkRefused extends Error {
@@ -115,9 +117,13 @@ export class ProductDiscontinuationRepository extends Repository {
    * THE WHOLE CHECK AND THE WRITE ARE ONE SERIALIZABLE TRANSACTION: a replacement that is marked a second
    * later, or a product that is deleted, cannot slip between the check and the write. The checks refuse a
    * replacement that is the product itself, that does not exist, that cannot be bought now (a dead end, as on
-   * the "not available" page), or that is itself marked (a chain: the shop follows one hop). The final
-   * redirect list re-checks the replacement with the shop's own publication rule, because it can stop being
-   * sellable after this write.
+   * the "not available" page), or that is itself marked (a chain: the shop follows one hop).
+   *
+   * THE CHAIN RULE CLOSES FROM BOTH SIDES (barracuda, #2571 review): `set(A, B)` is refused when B is marked,
+   * and `set(B, ...)` is refused when B is already the approved replacement of a marked product, so neither
+   * order of writes can leave A pointing at a discontinued B. The way out for the person is to pick another
+   * replacement for A first. The final redirect list re-checks the replacement with the shop's own
+   * publication rule anyway, because a replacement can also stop being sellable after this write.
    */
   async set(
     productId: string,
@@ -136,6 +142,12 @@ export class ProductDiscontinuationRepository extends Repository {
           },
         });
         if (!product) throw new MarkRefused("PRODUCT_NOT_FOUND");
+        const replacesOther =
+          await transaction.productDiscontinuation.findFirst({
+            where: { replacementProductId: productId },
+            select: { id: true },
+          });
+        if (replacesOther) throw new MarkRefused("PRODUCT_IS_A_REPLACEMENT");
         if (replacementProductId !== null) {
           if (replacementProductId === productId)
             throw new MarkRefused("REPLACEMENT_IS_SELF");

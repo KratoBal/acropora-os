@@ -4,7 +4,11 @@ import "reflect-metadata";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { BadRequestException, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from "@nestjs/common";
 import { plainToInstance } from "class-transformer";
 import { validateSync } from "class-validator";
 
@@ -70,6 +74,13 @@ function fixture(options: {
     ...reads,
     productDiscontinuation: {
       ...reads.productDiscontinuation,
+      findFirst: async (args: { where: { replacementProductId: string } }) => {
+        const found = [...marks.values()].find(
+          (mark) =>
+            mark.replacementProductId === args.where.replacementProductId,
+        );
+        return found ? { id: found.id } : null;
+      },
       create: async (args: {
         data: { productId: string; replacementProductId: string | null };
       }) => {
@@ -268,6 +279,45 @@ describe("the manual permanent-discontinuation mark (V4.2)", () => {
       assert.deepEqual(f.writes, []);
     });
   }
+
+  it("the chain is closed from the other side too: a product that is the approved replacement of a marked one cannot be marked, with or without a replacement of its own", async () => {
+    const third: FakeProduct = { ...NEWER, id: "third", name: "Harmadik" };
+    for (const replacementId of [null, "third"]) {
+      const f = fixture({
+        products: [OLD, NEWER, third],
+        marks: [{ productId: "old", replacementProductId: "newer" }],
+      });
+      await assert.rejects(
+        () => f.service.set("newer", replacementId, "user-1"),
+        (error: unknown) =>
+          error instanceof BadRequestException &&
+          /jóváhagyott helyettesítője/.test(error.message),
+      );
+      assert.deepEqual(f.writes, []);
+      assert.equal(f.marks.has("newer"), false);
+    }
+  });
+
+  it("the other side of the rule does not block an unrelated product, nor the replaced one's own re-save", async () => {
+    const f = fixture({
+      products: [OLD, NEWER, { ...NEWER, id: "free", name: "Szabad" }],
+      marks: [{ productId: "old", replacementProductId: "newer" }],
+    });
+    await f.service.set("free", null, "user-1");
+    await f.service.set("old", "newer", "user-1");
+    assert.equal(f.marks.size, 2);
+  });
+
+  it("a lost Serializable race (P2034) is a 409 that says to try again, not a 500", async () => {
+    const f = fixture({ products: [OLD] });
+    f.repository.set = async () => {
+      throw Object.assign(new Error("write conflict"), { code: "P2034" });
+    };
+    await assert.rejects(
+      () => f.service.set("old", null, "user-1"),
+      ConflictException,
+    );
+  });
 
   it("un-marking deletes the row and logs the removal with the old replacement", async () => {
     const f = fixture({
