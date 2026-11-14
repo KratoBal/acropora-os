@@ -1,6 +1,7 @@
 import type { ProductEnrichmentFieldKey } from "@acropora/types";
 
 import { readDosing } from "./dosing-reader.js";
+import { extractMicrodataStatement } from "./microdata-extract.js";
 import { readWaterEffects } from "./water-effects-lexicon.js";
 
 /**
@@ -175,10 +176,21 @@ export function extractPageStatement(html: string): PageStatement {
       // a broken block states nothing
     }
   }
-  if (blocks.length === 0) return { values: [], note: "NO_STRUCTURED_DATA" };
+  // no JSON-LD Product: the page's schema.org microdata, if it has one
+  // (`microdata-extract.ts`; the Fauna Marin shop states its EAN only there)
+  if (blocks.length === 0)
+    return (
+      extractMicrodataStatement(html) ?? {
+        values: [],
+        note: "NO_STRUCTURED_DATA",
+      }
+    );
   const products: { [key: string]: Json }[] = [];
   for (const block of blocks) collectProducts(block, products);
-  if (products.length === 0) return { values: [], note: "NO_PRODUCT" };
+  if (products.length === 0)
+    return (
+      extractMicrodataStatement(html) ?? { values: [], note: "NO_PRODUCT" }
+    );
   // Several different products on one page (a listing, a bundle): nothing is
   // taken, because we cannot tell which one is ours.
   if (new Set(products.map(identity)).size > 1)
