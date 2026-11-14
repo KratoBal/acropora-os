@@ -15,9 +15,11 @@ import type {
   ProductExtensionUpdateInput,
   ProductHusbandry,
   ProductHusbandryInput,
+  ProductDiscontinuation,
   ProductListApiQuery,
   ProductListResponse,
   ProductUpdateInput,
+  SetProductDiscontinuationInput,
 } from "@acropora/types";
 
 import { API_PREFIX } from "./api-prefix";
@@ -195,6 +197,32 @@ export const productApi = {
       method: "POST",
       body: JSON.stringify({ productIds, changes }),
     });
+  },
+  /** A véglegesen megszűnt jelölő (V4.2): `null`, ha senki nem jelölte meg. */
+  getDiscontinuation(token: string, productId: string) {
+    return apiRequest<ProductDiscontinuation | null>(
+      `/products/${encodeURIComponent(productId)}/discontinuation`,
+      token,
+    );
+  },
+  /** A teljes állapot: a hiányzó helyettesítő a régit is törli. */
+  setDiscontinuation(
+    token: string,
+    productId: string,
+    input: SetProductDiscontinuationInput,
+  ) {
+    return apiRequest<ProductDiscontinuation>(
+      `/products/${encodeURIComponent(productId)}/discontinuation`,
+      token,
+      { method: "PUT", body: JSON.stringify(input) },
+    );
+  },
+  removeDiscontinuation(token: string, productId: string) {
+    return apiRequest<void>(
+      `/products/${encodeURIComponent(productId)}/discontinuation`,
+      token,
+      { method: "DELETE" },
+    );
   },
   /** A változat saját bruttó ára (T4.1-D3); csak OS-gazdájú terméknél, a szerver 409-cel utasítja el a többit. */
   setVariantPrice(
