@@ -282,6 +282,49 @@ describe("a négy engedélyezett forrás, és semmi más", () => {
 });
 
 // barracuda, #1821: one key for the run's read-once check and the rule's shared-page check
+describe("a T4.4 pilot négy márkája a saját domainjét kapja", () => {
+  // card 8639ac2a, T4.4 pilot-20: six products came back NO_MANUFACTURER_SITE. WHAT TURNS THIS RED: one of the four brands
+  // (by category or by brand name) not giving its own domain; a look-alike host let through; Microbe-Lift's European
+  // partner (arka-biotech.de) treated as its maker.
+  it("Korallen-Zucht, Grotech, Blue Life, Tropic Marin: a saját domain, más nem", () => {
+    for (const [brand, domain] of [
+      ["Korallen-Zucht", "korallen-zucht.de"],
+      ["Grotech", "grotech-shop.de"],
+      ["Blue Life", "bluelifeusa.com"],
+      ["Tropic Marin", "tropic-marin.com"],
+    ] as const) {
+      assert.deepEqual(
+        brandSitesFromCategories([["Termékek"]], brand),
+        [domain],
+        brand,
+      );
+      assert.deepEqual(
+        brandSitesFromCategories([["Termékek", brand]]),
+        [domain],
+        brand,
+      );
+      const manufacturer = manufacturerSites(null, null, [domain]);
+      for (const [url, expected] of [
+        [`https://www.${domain}/x`, null],
+        [`https://${domain}.example.invalid/x`, "HOST_NOT_ALLOWED"],
+        [`https://not${domain}/x`, "HOST_NOT_ALLOWED"],
+      ] as const)
+        assert.equal(
+          sourceUrlProblem("MANUFACTURER", url, {
+            manufacturer,
+            supplier: null,
+          }),
+          expected,
+          url,
+        );
+    }
+    assert.deepEqual(
+      brandSitesFromCategories([["Termékek"]], "Microbe-Lift"),
+      [],
+    );
+  });
+});
+
 describe("egy lap, egy kulcs", () => {
   it("fragment, query, kis- és nagybetű, záró perjel nélkül", () => {
     const key = pageKey("https://gyarto.example.invalid/p/mg-plus/");
