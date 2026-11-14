@@ -92,7 +92,7 @@ describe("parseBulkFile", () => {
     ]);
   });
 
-  it("a byte order mark at the start (an Excel TSV) is dropped: the header is still a header and the first SKU is a SKU", () => {
+  it("a byte order mark at the start (an Excel TSV) is harmless: the header is still a header and the first SKU is a SKU (trim() removes U+FEFF)", () => {
     const withHeader = parseBulkFile("\uFEFFsku\treplacement\nOLD-1\tNEW-1\n");
     assert.deepEqual(withHeader.rows, [
       { line: 2, sku: "OLD-1", replacementSku: "NEW-1" },

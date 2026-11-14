@@ -110,26 +110,25 @@ export function parseBulkFile(text: string): {
   const rows: BulkRow[] = [];
   const badLines: { line: number; reason: string }[] = [];
   let sawData = false;
-  // a TSV saved from Excel starts with a byte order mark: without this the header is not recognised and the
-  // first SKU is "\uFEFFSKU-1", which is no SKU (found on the first real file)
-  text
-    .replace(/^\uFEFF/, "")
-    .split("\n")
-    .forEach((raw, index) => {
-      const line = index + 1;
-      const content = raw.replace(/\r$/, "");
-      if (content.trim() === "" || content.trimStart().startsWith("#")) return;
-      const cells = content.split("\t").map((cell) => cell.trim());
-      if (!sawData) {
-        sawData = true;
-        if (HEADER_CELLS.has((cells[0] ?? "").toLowerCase())) return;
-      }
-      if (cells.length > 2 || !cells[0]) {
-        badLines.push({ line, reason: "BAD_ROW" });
-        return;
-      }
-      rows.push({ line, sku: cells[0], replacementSku: cells[1] || null });
-    });
+  // A BYTE ORDER MARK AT THE START (a TSV saved from Excel) NEEDS NO CODE OF ITS OWN: `trim()` removes U+FEFF, and
+  // every cell and the line itself are trimmed, so the header is still a header and the first SKU a SKU. Measured
+  // (barracuda, #2574 review asked for a strip): taking the explicit `replace` out leaves the tests green, so it
+  // was not added; the tests below keep the property.
+  text.split("\n").forEach((raw, index) => {
+    const line = index + 1;
+    const content = raw.replace(/\r$/, "");
+    if (content.trim() === "" || content.trimStart().startsWith("#")) return;
+    const cells = content.split("\t").map((cell) => cell.trim());
+    if (!sawData) {
+      sawData = true;
+      if (HEADER_CELLS.has((cells[0] ?? "").toLowerCase())) return;
+    }
+    if (cells.length > 2 || !cells[0]) {
+      badLines.push({ line, reason: "BAD_ROW" });
+      return;
+    }
+    rows.push({ line, sku: cells[0], replacementSku: cells[1] || null });
+  });
   return { rows, badLines };
 }
 
