@@ -151,6 +151,49 @@ describe("az OS saját ellenőrzése a lapon", () => {
     ]);
   });
 
+  // pilot-20, third run (card 8639ac2a), the two maker values as they came. WHAT TURNS THIS RED: a copyright line
+  // passing as an address (its year looked like a postcode); the company name kept twice when the address repeats it.
+  it("a copyright-sor nem cím; a címben megismételt cégnév nem duplázódik", () => {
+    const red = "Red Sea © 2026 Red Sea. All rights reserved";
+    const s = productFieldStatement(
+      answer([
+        {
+          field: "manufacturerInfo",
+          role: "RESPONSIBLE",
+          name: "Red Sea",
+          address: "© 2026 Red Sea. All rights reserved",
+          email: null,
+          anchor: red,
+        },
+      ]),
+      red,
+    );
+    assert.deepEqual(s.values, []);
+    assert.deepEqual(s.notes, [
+      "termékmezők (AI): manufacturerInfo: Felelős: a cím egy copyright-sor",
+    ]);
+    const kz =
+      "Korallenzucht.de Vertriebs GmbH Schlesierstr. 1 96237 Ebersdorf b. Coburg Deutschland info@korallen-zucht.de";
+    const k = productFieldStatement(
+      answer([
+        {
+          field: "manufacturerInfo",
+          role: "MAKER",
+          name: "Korallenzucht.de Vertriebs GmbH",
+          address:
+            "Korallenzucht.de Vertriebs GmbH Schlesierstr. 1 96237 Ebersdorf b. Coburg Deutschland",
+          email: "info@korallen-zucht.de",
+          anchor: kz,
+        },
+      ]),
+      kz,
+    );
+    assert.equal(
+      k.values[0]?.raw,
+      "Gyártó: Korallenzucht.de Vertriebs GmbH, Schlesierstr. 1 96237 Ebersdorf b. Coburg Deutschland, info@korallen-zucht.de",
+    );
+  });
+
   it("fél GPSR-blokk nem érték: ha az egyik cég elbukik, a másik sem marad", () => {
     const s = productFieldStatement(
       answer([maker, { ...responsible, email: "sales@kitalalt.example" }]),

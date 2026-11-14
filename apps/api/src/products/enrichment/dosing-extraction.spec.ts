@@ -350,5 +350,14 @@ describe("az AI adagolás-válasza az OS-ben", () => {
     );
     // one that never closes stays, like before
     assert.equal(visiblePageText("<header><p>Nyitva</p>"), "Nyitva");
+    // pilot-20, third run (card 8639ac2a): "&reg;" reached the AI undecoded, and its "®" anchor was found nowhere.
+    // WHAT TURNS THIS RED: a named or numeric entity left as written; a double decode ("&amp;reg;" becoming "®"); the
+    // soft hyphen kept inside a word.
+    assert.equal(
+      visiblePageText(
+        "<p>Tropic Marin&reg; All-For-Reef &amp;reg; 5&nbsp;ml &#174; &#xAE; Ger&shy;&auml;t &odblac; &ndash; 35&permil; &unknown;</p>",
+      ),
+      "Tropic Marin® All-For-Reef &reg; 5 ml ® ® Gerät ő – 35‰ &unknown;",
+    );
   });
 });
