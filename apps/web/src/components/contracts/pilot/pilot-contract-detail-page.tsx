@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, ConfirmDialog, PageHeader, PAGE_GUTTER_X } from "@acropora/ui";
+import { Alert, PageHeader, PAGE_GUTTER_X } from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { UnsavedChangesGuard } from "@/components/common/unsaved-changes-guard";
 import {
   keepsContractJobOperationId,
   newContractJobOperationId,
@@ -233,7 +234,6 @@ export function PilotContractDetailPage({
   const [invoiceError, setInvoiceError] = useState<string | null>(null);
   const [numberError, setNumberError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [leaving, setLeaving] = useState(false);
   // a hiba a lap tetején áll, a tételek alatti mentés-gomb pedig messze van tőle: a hibához görgetünk
   const errorRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -679,16 +679,6 @@ export function PilotContractDetailPage({
       ) !== baseline,
     [contract, baseline, itemDepartmentId, itemAssetIds],
   );
-  // a lap bezárása vagy újratöltése előtt a böngésző rákérdez, ha van mit elveszíteni
-  useEffect(() => {
-    if (!dirty) return;
-    const warn = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = "";
-    };
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
-  }, [dirty]);
   const purchase = contract?.kind === "PURCHASE";
   const quantityUnits = useQuantityUnits(token, purchase);
 
@@ -756,15 +746,7 @@ export function PilotContractDetailPage({
             title={contract.number}
             description={contract.customer.displayName}
             actions={
-              <Link
-                href="/partnerek/szerzodesek"
-                onClick={(event) => {
-                  // az elmentetlen tételek a böngészőben vannak: kilépés előtt rákérdezünk
-                  if (!dirty) return;
-                  event.preventDefault();
-                  setLeaving(true);
-                }}
-              >
+              <Link href="/partnerek/szerzodesek">
                 <PilotButton type="button" variant="secondary">
                   ← Vissza
                 </PilotButton>
@@ -773,14 +755,11 @@ export function PilotContractDetailPage({
           />
         </div>
 
-        <ConfirmDialog
-          open={leaving}
-          title="Kilépsz a mentetlen változtatásokkal?"
+        {/* az elmentetlen tételek elvesznek, ha kilépsz: lap-bezárás és az alkalmazáson belüli hivatkozások is */}
+        <UnsavedChangesGuard
+          when={dirty}
           consequence="A felvitt tételek és az átírt mezők, amelyeket még nem mentettél, elvesznek."
           recovery="Nem szerezhetők vissza: a szerződés a legutóbbi mentett állapotában marad."
-          confirmLabel="Kilépés mentés nélkül"
-          onConfirm={() => router.push("/partnerek/szerzodesek")}
-          onCancel={() => setLeaving(false)}
         />
         <div className={`flex flex-1 flex-col gap-4 ${PAGE_GUTTER_X} py-6`}>
           {error ? (
