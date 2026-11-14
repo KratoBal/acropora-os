@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { ConflictException } from "@nestjs/common";
+import { BadRequestException, ConflictException } from "@nestjs/common";
 import { Prisma } from "@acropora/database";
 import type { AuthenticatedUser } from "@acropora/types";
 
@@ -322,7 +322,11 @@ describe("MaintenanceOrdersService.issue", () => {
     const { service } = makeService({
       reserveOccasions: async (input: unknown) => {
         asked = input;
-        return { ok: false, exhausted: ["Cápasuli RO karbantartás"] };
+        return {
+          ok: false,
+          exhausted: ["Cápasuli RO karbantartás"],
+          short: [],
+        };
       },
       issue: async () => {
         issueCalls += 1;
@@ -349,6 +353,7 @@ describe("MaintenanceOrdersService.issue", () => {
               contractItemId: "item-1",
               description: "Cápasuli RO karbantartás",
               occasionsPerYear: 4,
+              requested: 1,
             },
           ],
         },
@@ -904,7 +909,7 @@ describe("MaintenanceOrdersService: állapot-átmenetek", () => {
 describe("MaintenanceOrdersService.createJobFromContract", () => {
   type Reserved =
     | { ok: true }
-    | { ok: false; exhausted: string[] }
+    | { ok: false; exhausted: string[]; short: string[] }
     | { ok: false; busy: true };
 
   function harness(
@@ -1083,7 +1088,9 @@ describe("MaintenanceOrdersService.createJobFromContract", () => {
 
   it("a szokásos túllépés lap létrehozása NÉLKÜL ad 409-et", async () => {
     const h = harness({
-      reservations: [{ ok: false, exhausted: ["Cápasuli RO karbantartás"] }],
+      reservations: [
+        { ok: false, exhausted: ["Cápasuli RO karbantartás"], short: [] },
+      ],
     });
     const result = await h.run();
     assert.deepEqual(
@@ -1099,7 +1106,7 @@ describe("MaintenanceOrdersService.createJobFromContract", () => {
     const h = harness({
       reservations: [
         { ok: true },
-        { ok: false, exhausted: ["Cápasuli RO karbantartás"] },
+        { ok: false, exhausted: ["Cápasuli RO karbantartás"], short: [] },
       ],
     });
     const result = await h.run();
@@ -1154,5 +1161,121 @@ describe("MaintenanceOrdersService.createJobFromContract", () => {
       await h.run(),
       "409: A szerződés alkalomkeretét most egy másik művelet foglalja. Próbáld újra.",
     );
+  });
+});
+
+/*
+  A KIÁLLÍTÁS DARAB- ÉS ALKALOMSZÁMA (Luca, 2026-11-13: „pontosan hány db és hány alkalom számot szeretnék
+  áthúzni a megrendelőbe"). MI PIROSÍT: ha a kért darab- és alkalomszám nem a tárolt sorba és a foglalásba kerül;
+  ha a megadás nélküli kiállítás eltér az eddigitől (a szerződés darabszáma, egy alkalom); ha egy nem kiválasztott
+  tételre szóló sor csendben átmegy; ha a részben beférő kérés „elfogyott"-ként jelenik meg.
+*/
+describe("MaintenanceOrdersService.issue: darab- és alkalomszám", () => {
+  const capture = () => {
+    const seen: { reserve?: any; issue?: any } = {};
+    const made = makeService({
+      reserveOccasions: async (
+        input: unknown,
+        write: (tx: unknown) => Promise<unknown>,
+      ) => {
+        seen.reserve = input;
+        return { ok: true, value: await write({}) };
+      },
+      issue: async (input: unknown) => {
+        seen.issue = input;
+        return { id: "order-1" };
+      },
+    });
+    return { ...made, seen };
+  };
+
+  it("a kért darab- és alkalomszám a tárolt sorba és a foglalásba megy", async () => {
+    const { service, seen } = capture();
+    await service.issue(
+      {
+        contractId: "contract-1",
+        itemIds: ["item-1"],
+        lines: [{ itemId: "item-1", quantity: "3", occasions: 2 }],
+      },
+      ACTOR,
+    );
+    assert.equal(seen.issue.items[0].quantity.toString(), "3");
+    assert.equal(seen.issue.items[0].occasions, 2);
+    assert.equal(seen.reserve.items[0].requested, 2);
+  });
+
+  it("megadás nélkül marad az eddigi: a szerződés darabszáma, egy alkalom", async () => {
+    const { service, seen } = capture();
+    await service.issue(
+      { contractId: "contract-1", itemIds: ["item-1"] },
+      ACTOR,
+    );
+    assert.equal(seen.issue.items[0].quantity.toString(), "1");
+    assert.equal(seen.issue.items[0].occasions, 1);
+    assert.equal(seen.reserve.items[0].requested, 1);
+  });
+
+  it("a tizedesvessző is darabszám, és a hiányzó alkalom egy", async () => {
+    const { service, seen } = capture();
+    await service.issue(
+      {
+        contractId: "contract-1",
+        itemIds: ["item-1"],
+        lines: [{ itemId: "item-1", quantity: "2,5" }],
+      },
+      ACTOR,
+    );
+    assert.equal(seen.issue.items[0].quantity.toString(), "2.5");
+    assert.equal(seen.issue.items[0].occasions, 1);
+  });
+
+  it("nem kiválasztott tételre szóló sor, kettős sor és nulla darab 400, és nem foglal, nem ír", async () => {
+    for (const lines of [
+      [{ itemId: "item-9", quantity: "1", occasions: 1 }],
+      [
+        { itemId: "item-1", occasions: 1 },
+        { itemId: "item-1", occasions: 2 },
+      ],
+      [{ itemId: "item-1", quantity: "0", occasions: 1 }],
+    ]) {
+      const { service, seen } = capture();
+      await assert.rejects(
+        () =>
+          service.issue(
+            { contractId: "contract-1", itemIds: ["item-1"], lines },
+            ACTOR,
+          ),
+        BadRequestException,
+      );
+      assert.equal(seen.reserve, undefined);
+      assert.equal(seen.issue, undefined);
+    }
+  });
+
+  it("a részben beférő kérés nem „elfogyott”, hanem megnevezi a kértet és a hátralévőt", async () => {
+    const { service } = makeService({
+      reserveOccasions: async () => ({
+        ok: false,
+        exhausted: [],
+        short: ["Cápasuli RO karbantartás (kért: 3, hátralévő: 1)"],
+      }),
+    });
+    const message = await service
+      .issue(
+        {
+          contractId: "contract-1",
+          itemIds: ["item-1"],
+          lines: [{ itemId: "item-1", occasions: 3 }],
+        },
+        ACTOR,
+      )
+      .then(
+        () => "nem dobott",
+        (error: unknown) =>
+          error instanceof ConflictException ? error.message : String(error),
+      );
+    assert.match(message, /nem fér bele a kért alkalom az évi keretbe/);
+    assert.match(message, /kért: 3, hátralévő: 1/);
+    assert.doesNotMatch(message, /elfogyott/);
   });
 });

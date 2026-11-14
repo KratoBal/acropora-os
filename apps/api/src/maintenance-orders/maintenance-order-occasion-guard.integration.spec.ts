@@ -156,15 +156,21 @@ describe(
       description: item.description,
       unitNet: item.unitNet,
       quantity: item.quantity,
+      occasions: 1,
       vatRatePercent: item.vatRatePercent,
     });
-    const reserveInput = (contractId: string, items: readonly Item[]) => ({
+    const reserveInput = (
+      contractId: string,
+      items: readonly Item[],
+      requested?: number,
+    ) => ({
       contractId,
       year,
       items: items.map((item) => ({
         contractItemId: item.id,
         description: item.description,
         occasionsPerYear: item.occasionsPerYear,
+        ...(requested === undefined ? {} : { requested }),
       })),
     });
 
@@ -233,7 +239,11 @@ describe(
       );
       assert.deepEqual(
         [exhausted, free, writes],
-        [{ ok: false, exhausted: ["Tétel 1"] }, { ok: true, value: "írva" }, 1],
+        [
+          { ok: false, exhausted: ["Tétel 1"], short: [] },
+          { ok: true, value: "írva" },
+          1,
+        ],
       );
     });
 
@@ -285,7 +295,61 @@ describe(
           stored.map((row) => [row.contractItemId, row.unitNet.toString()]),
           second,
         ],
-        [0, true, 1, [[d.id, "100000"]], { ok: false, exhausted: ["Tétel 1"] }],
+        [
+          0,
+          true,
+          1,
+          [[d.id, "100000"]],
+          { ok: false, exhausted: ["Tétel 1"], short: [] },
+        ],
+      );
+    });
+
+    /*
+      A KÉRT ALKALOMSZÁM SÚLYA (Luca, 2026-11-13): a megrendelőlap tétele annyi alkalmat használ, amennyit a
+      kiállításkor kértek. MI PIROSÍT: ha egy 3 alkalmas lap csak egynek számít; ha a visszavont lap alkalmai
+      megmaradnak; ha a részben beférő kérés átmegy, vagy „elfogyott"-ként jelenik meg.
+    */
+    it("a megrendelőlap tétele a kért alkalmakat használja: a 3 alkalmas lap után 1 fér még, 2 már nem; a visszavont nem számít", async () => {
+      const { contract, items } = await setup([4]);
+      const [e] = items as [Item];
+      const order = (status: "ISSUED" | "REVOKED", occasions: number) =>
+        prisma.maintenanceOrder.create({
+          data: {
+            contractId: contract.id,
+            number: next(),
+            occasionYear: year,
+            status,
+            items: { create: [{ ...orderItem(e), occasions }] },
+          },
+        });
+      await order("ISSUED", 3);
+      await order("REVOKED", 2);
+
+      let writes = 0;
+      const write = async () => {
+        writes += 1;
+        return "írva";
+      };
+      const one = await repository.reserveOccasions(
+        reserveInput(contract.id, [e], 1),
+        write,
+      );
+      const two = await repository.reserveOccasions(
+        reserveInput(contract.id, [e], 2),
+        write,
+      );
+      assert.deepEqual(
+        [one, two, writes],
+        [
+          { ok: true, value: "írva" },
+          {
+            ok: false,
+            exhausted: [],
+            short: ["Tétel 1 (kért: 2, hátralévő: 1)"],
+          },
+          1,
+        ],
       );
     });
 

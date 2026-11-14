@@ -42,6 +42,8 @@ export type MaintenanceOrderItemInput = {
   description: string;
   unitNet: Prisma.Decimal;
   quantity: Prisma.Decimal;
+  /** hány alkalmat visz a lap ebből a tételből (az évi keret ezt számolja) */
+  occasions: number;
   vatRatePercent: Prisma.Decimal;
 };
 
@@ -107,16 +109,17 @@ async function occasionsUsed(
   if (!contractItemIds.length) return used;
   const add = (contractItemId: string, count: number) =>
     used.set(contractItemId, (used.get(contractItemId) ?? 0) + count);
+  // a megrendelőlap tétele annyi alkalmat használ, amennyit a kiállításkor kértek (`occasions`), nem egyet
   const orderItems = await tx.maintenanceOrderItem.groupBy({
     by: ["contractItemId"],
     where: {
       contractItemId: { in: contractItemIds },
       maintenanceOrder: { occasionYear: year, status: { not: "REVOKED" } },
     },
-    _count: { contractItemId: true },
+    _sum: { occasions: true },
   });
   for (const row of orderItems)
-    add(row.contractItemId, row._count.contractItemId);
+    add(row.contractItemId, row._sum.occasions ?? 0);
   const jobItems = await tx.serviceJobContractItem.groupBy({
     by: ["contractItemId"],
     where: {
@@ -310,12 +313,14 @@ export class MaintenanceOrdersRepository {
         contractItemId: string;
         description: string;
         occasionsPerYear: number | null;
+        /** hány alkalmat kér a most létrejövő lap ebből a tételből (alap: 1) */
+        requested?: number;
       }[];
     },
     write: (tx: Prisma.TransactionClient) => Promise<T>,
   ): Promise<
     | { ok: true; value: T }
-    | { ok: false; exhausted: string[] }
+    | { ok: false; exhausted: string[]; short: string[] }
     | { ok: false; busy: true }
   > {
     /*
@@ -345,6 +350,7 @@ export class MaintenanceOrdersRepository {
         contractItemId: string;
         description: string;
         occasionsPerYear: number | null;
+        requested?: number;
       }[];
     },
     write: (tx: Prisma.TransactionClient) => Promise<T>,
@@ -358,16 +364,26 @@ export class MaintenanceOrdersRepository {
           input.items.map((item) => item.contractItemId),
           input.year,
         );
-        const exhausted = input.items.filter(
-          (item) =>
-            (used.get(item.contractItemId) ?? 0) >=
-            (item.occasionsPerYear ?? 0),
-        );
-        if (exhausted.length)
-          return {
-            ok: false as const,
-            exhausted: exhausted.map((item) => item.description),
-          };
+        /*
+          A KÉRT ALKALOMSZÁM IS BELEFÉR-E (Luca, 2026-11-13): a kiállításnál több alkalom is kérhető egy
+          tételből, ezért a mérce `felhasznált + kért <= éves keret`; a régi mérce (`felhasznált >= keret`)
+          ugyanez egy alkalomra. A teljesen elfogyott tétel és a csak részben beférő külön lista, mert a
+          hibaüzenet mást mond rájuk.
+        */
+        const exhausted: string[] = [];
+        const short: string[] = [];
+        for (const item of input.items) {
+          const per = item.occasionsPerYear ?? 0;
+          const usedNow = used.get(item.contractItemId) ?? 0;
+          const requested = item.requested ?? 1;
+          if (usedNow >= per) exhausted.push(item.description);
+          else if (usedNow + requested > per)
+            short.push(
+              `${item.description} (kért: ${requested}, hátralévő: ${per - usedNow})`,
+            );
+        }
+        if (exhausted.length || short.length)
+          return { ok: false as const, exhausted, short };
         return { ok: true as const, value: await write(tx) };
       },
       { maxWait: 10_000, timeout: 20_000 },
@@ -454,6 +470,7 @@ export class MaintenanceOrdersRepository {
             description: item.description,
             unitNet: item.unitNet,
             quantity: item.quantity,
+            occasions: item.occasions,
             vatRatePercent: item.vatRatePercent,
           })),
         },
@@ -528,6 +545,7 @@ export class MaintenanceOrdersRepository {
             description: item.description,
             unitNet: item.unitNet,
             quantity: item.quantity,
+            occasions: item.occasions,
             vatRatePercent: item.vatRatePercent,
           })),
         },

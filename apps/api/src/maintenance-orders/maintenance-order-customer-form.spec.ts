@@ -219,6 +219,7 @@ describe("MaintenanceOrdersService.uploadCustomerForm", () => {
       reserveOccasions: async () => ({
         ok: false,
         exhausted: ["Cápasuli RO karbantartás"],
+        short: [],
       }),
     });
     await assert.rejects(

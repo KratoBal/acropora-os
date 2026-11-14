@@ -36,6 +36,12 @@ import {
   repairFeesValid,
 } from "./contract-items";
 import {
+  defaultOrderLine,
+  orderLinePayload,
+  orderLineProblem,
+  type OrderLineDraft,
+} from "./order-lines";
+import {
   ContractKindSwitch,
   CONTRACT_ITEM_GRID,
   ContractItemDescriptionInput,
@@ -246,6 +252,10 @@ export function PilotContractDetailPage({
     new Set(),
   );
   const [issuing, setIssuing] = useState(false);
+  /** A megrendelőlap tételenkénti darab- és alkalomszáma; ami nincs benne, az alap (lásd `order-lines.ts`). */
+  const [orderLines, setOrderLines] = useState<Record<string, OrderLineDraft>>(
+    {},
+  );
   const [creatingJob, setCreatingJob] = useState(false);
   const [uploadingCustomerForm, setUploadingCustomerForm] = useState(false);
   const jobOperationId = useRef(newContractJobOperationId());
@@ -530,7 +540,17 @@ export function PilotContractDetailPage({
       await maintenanceOrdersApi.issue(token, {
         contractId: contract.id,
         itemIds: [...chosenItemIds],
+        lines: contract.items
+          .filter((item) => chosenItemIds.has(item.id))
+          .map((item) =>
+            orderLinePayload(
+              item.id,
+              orderLines[item.id] ?? defaultOrderLine(item),
+            ),
+          ),
       });
+      // a következő kiállítás újra az alapról indul
+      setOrderLines({});
       await loadOrders();
     } catch (cause) {
       setOrderError(
@@ -651,6 +671,16 @@ export function PilotContractDetailPage({
   };
 
   const selectedCount = chosenItemIds.size;
+  /** a kiválasztott tételek darab- és alkalomszám-hibái (a kiállítás gombja addig tiltott) */
+  const orderLineProblems = (contract?.items ?? [])
+    .filter((item) => chosenItemIds.has(item.id) && !isUnsavedItem(item.id))
+    .flatMap((item) => {
+      const problem = orderLineProblem(
+        orderLines[item.id] ?? defaultOrderLine(item),
+        item,
+      );
+      return problem ? [`${item.position}. tétel: ${problem}`] : [];
+    });
 
   /**
    * UGYANAZ A HIBAOSZTÁLY, MINT AZ ÚJ SZERZŐDÉS ŰRLAPON
@@ -1248,14 +1278,80 @@ export function PilotContractDetailPage({
                               </span>
                             )}
                           </label>
+                          {chosenItemIds.has(item.id) ? (
+                            <div className="ml-6 flex flex-wrap items-center gap-3 pb-1 text-xs text-pilot-grey-600">
+                              <span>A megrendelőlapra:</span>
+                              <label className="flex items-center gap-1">
+                                Darab
+                                <PilotInput
+                                  aria-label={`${item.position}. tétel darabszáma a megrendelőlapon`}
+                                  inputMode="decimal"
+                                  className="w-20"
+                                  value={
+                                    (
+                                      orderLines[item.id] ??
+                                      defaultOrderLine(item)
+                                    ).quantity
+                                  }
+                                  onChange={(value) =>
+                                    setOrderLines((current) => ({
+                                      ...current,
+                                      [item.id]: {
+                                        ...(current[item.id] ??
+                                          defaultOrderLine(item)),
+                                        quantity: value,
+                                      },
+                                    }))
+                                  }
+                                />
+                              </label>
+                              <label className="flex items-center gap-1">
+                                Alkalom
+                                <PilotInput
+                                  aria-label={`${item.position}. tétel alkalma a megrendelőlapon`}
+                                  inputMode="numeric"
+                                  className="w-20"
+                                  value={
+                                    (
+                                      orderLines[item.id] ??
+                                      defaultOrderLine(item)
+                                    ).occasions
+                                  }
+                                  onChange={(value) =>
+                                    setOrderLines((current) => ({
+                                      ...current,
+                                      [item.id]: {
+                                        ...(current[item.id] ??
+                                          defaultOrderLine(item)),
+                                        occasions: value,
+                                      },
+                                    }))
+                                  }
+                                />
+                              </label>
+                            </div>
+                          ) : null}
                         </li>
                       ))}
                   </ul>
+                  {orderLineProblems.length > 0 ? (
+                    <p
+                      role="status"
+                      className="mt-2 text-xs font-medium text-red-600"
+                    >
+                      A megrendelőlap nem állítható ki:{" "}
+                      {orderLineProblems.join("; ")}.
+                    </p>
+                  ) : null}
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <PilotButton
                       type="button"
                       variant="primary"
-                      disabled={issuing || selectedCount === 0}
+                      disabled={
+                        issuing ||
+                        selectedCount === 0 ||
+                        orderLineProblems.length > 0
+                      }
                       onClick={() => void issue()}
                     >
                       {issuing
