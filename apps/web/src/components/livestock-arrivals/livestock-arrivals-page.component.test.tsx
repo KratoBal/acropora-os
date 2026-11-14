@@ -8,6 +8,8 @@ import {
 import type { LivestockArrival, Session, UserRole } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ApiError } from "@/lib/api/client";
+
 const api = vi.hoisted(() => ({
   list: vi.fn(),
   create: vi.fn(),
@@ -284,6 +286,53 @@ describe("a szerkesztés", () => {
       status: "IN_TRANSIT",
       preorderable: true,
     });
+  });
+
+  it("a módosítás a betöltéskori updatedAt-ot küldi (negyedik argumentum), nem a létrehozás idejét, és nem keveri a törzsbe", async () => {
+    api.list.mockResolvedValue({
+      items: [arrival({ updatedAt: "2026-11-06T09:30:00.000Z" })],
+      truncated: false,
+    });
+    render(<LivestockArrivalsPage />);
+    const list = await screen.findByTestId("livestock-arrival-list");
+    fireEvent.click(within(list).getByRole("button"));
+    await screen.findByTestId("livestock-arrival-form");
+    fireEvent.click(screen.getByRole("button", { name: "Mentés" }));
+    await waitFor(() => expect(api.update).toHaveBeenCalledTimes(1));
+    expect(api.update.mock.calls[0]![3]).toBe("2026-11-06T09:30:00.000Z");
+    expect(api.update.mock.calls[0]![2]).not.toHaveProperty(
+      "expectedUpdatedAt",
+    );
+  });
+
+  it("ütközésnél (409) kiírja a szerver szövegét, frissíti a listát, és a mentést lezárja, mert az űrlap a régi verzióból jött", async () => {
+    api.update.mockRejectedValue(
+      new ApiError("Az érkezést közben valaki módosította: töltsd újra.", 409),
+    );
+    render(<LivestockArrivalsPage />);
+    const list = await screen.findByTestId("livestock-arrival-list");
+    fireEvent.click(within(list).getByRole("button"));
+    await screen.findByTestId("livestock-arrival-form");
+    expect(api.list).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Mentés" }));
+    expect(
+      await screen.findByText(/Az érkezést közben valaki módosította/),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(api.list).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole("button", { name: "Mentés" })).toBeDisabled();
+    expect(screen.getByTestId("livestock-arrival-form")).toBeInTheDocument();
+  });
+
+  it("más hibánál a mentés nyitva marad, és a lista nem frissül feleslegesen", async () => {
+    api.update.mockRejectedValue(new ApiError("A dátum nem létező nap.", 400));
+    render(<LivestockArrivalsPage />);
+    const list = await screen.findByTestId("livestock-arrival-list");
+    fireEvent.click(within(list).getByRole("button"));
+    await screen.findByTestId("livestock-arrival-form");
+    fireEvent.click(screen.getByRole("button", { name: "Mentés" }));
+    await screen.findByText("A dátum nem létező nap.");
+    expect(screen.getByRole("button", { name: "Mentés" })).toBeEnabled();
+    expect(api.list).toHaveBeenCalledTimes(1);
   });
 
   it("a lezáró állapot leveszi az Előjegyezhető pipát, és le is tiltja; egy megnyitott állapot visszaadja a választást", async () => {
