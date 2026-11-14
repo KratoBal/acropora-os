@@ -154,8 +154,9 @@ export function sourceUrlProblem(
 
 /**
  * THE MANUFACTURER'S SITES BY BRAND CATEGORY (Product Knowledge, acrobot
- * 35067): `Product.brandId` is empty across the catalogue, and the brand lives
- * in a UNAS category named after it. The brand's own domains, taken from the
+ * 35067): `Product.brandId` was empty across the catalogue, and the brand lived
+ * in a UNAS category named after it; the brand field is filled since, and its
+ * name is the second key (see below). The brand's own domains, taken from the
  * links the manufacturer's dosing pages are on (reeftrak, 2026-10-22). A
  * short list here, not the product master: the JEV does not write that.
  */
@@ -165,11 +166,17 @@ export const BRAND_CATEGORY_SITES: Readonly<Record<string, readonly string[]>> =
     // MANUFACTURER_PAGE, which the AUTO_V1 rule accepts without a person, and
     // a reseller's page carries the product's EAN too. A domain goes here only
     // as the brand's own; the basis is written beside it.
-    // Left out until verified: faunamarincorals.de and triton-reagents.de
-    // (linked from UNAS and reeftrak, which shows someone linked there, not
-    // whose it is; their Impressum was not reachable from here, 2026-10-22).
-    // A page there stays NO_MANUFACTURER_SITE unless UNAS links that product.
-    "fauna marin": ["faunamarin.de"], // the brand's own site, widely known; reeftrak links, 2026-10-22
+    // Left out until verified: triton-reagents.de (linked from UNAS and
+    // reeftrak, which shows someone linked there, not whose it is; its
+    // Impressum was not reachable from here, 2026-10-22). A page there stays
+    // NO_MANUFACTURER_SITE unless UNAS links that product.
+    "fauna marin": [
+      "faunamarin.de", // the brand's own site, widely known; reeftrak links, 2026-10-22
+      // the brand's own shop, where its product pages and doses stand: faunamarin.de's home page lists it
+      // as "faunamarincorals.de", its end-customer shop, and the shop's footer names Fauna Marin GmbH as
+      // its operator (both read through the fleet's quarantine reader, 2026-11-13; card 85c38ab1)
+      "faunamarincorals.de",
+    ],
     triton: ["triton.de"], // the brand's own site, widely known; reeftrak links, 2026-10-22
     "red sea": ["redseafish.com"], // the brand's own site, widely known; reeftrak links, 2026-10-22
     aquaforest: ["aquaforest.eu"], // the brand's own site, widely known; reeftrak links, 2026-10-22
@@ -179,16 +186,22 @@ export const BRAND_CATEGORY_SITES: Readonly<Record<string, readonly string[]>> =
  * The brand domains a product's category chains name: a category whose WHOLE
  * name is a listed brand. Two different brands give none: a product under
  * both cannot tell whose site is the manufacturer's.
+ *
+ * THE PRODUCT'S OWN BRAND COUNTS TOO (card 85c38ab1, 2026-11-14): the brand
+ * field is filled on the test catalogue now, and a product whose category
+ * chain names no brand (Fauna Marin Dino M under "Termékek") got
+ * NO_MANUFACTURER_SITE. Its whole name, with the same "exactly one brand" rule:
+ * a brand field naming one brand and a category naming another give none.
  */
 export function brandSitesFromCategories(
   chains: readonly (readonly string[])[],
+  brandName?: string | null,
 ): string[] {
   const brands = new Set<string>();
-  for (const chain of chains)
-    for (const name of chain) {
-      const key = name.trim().toLowerCase();
-      if (BRAND_CATEGORY_SITES[key]) brands.add(key);
-    }
+  for (const name of [...chains.flat(), brandName ?? ""]) {
+    const key = name.trim().toLowerCase();
+    if (Object.hasOwn(BRAND_CATEGORY_SITES, key)) brands.add(key);
+  }
   return brands.size === 1 ? [...BRAND_CATEGORY_SITES[[...brands][0]!]!] : [];
 }
 
