@@ -1373,6 +1373,66 @@ describe("Ajánlat szerkesztő (569:171)", () => {
     ]);
   });
 
+  it("új tétel bruttó árral: a nettó az ÁFA-kulccsal visszaszámolva megy, és a mezők egymást követik", async () => {
+    api.detail.mockResolvedValue(quote([version()]));
+    api.addItem.mockResolvedValue(quote([version()]));
+    render(<QuoteEditorPage quoteId="q1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "+ Tétel hozzáadása" }),
+    );
+    fireEvent.change(screen.getByLabelText("Megnevezés"), {
+      target: { value: "Szűrőbetét" },
+    });
+    const net = screen.getByLabelText("Nettó egységár") as HTMLInputElement;
+    const gross = screen.getByLabelText("Bruttó egységár") as HTMLInputElement;
+
+    fireEvent.change(gross, { target: { value: "1270" } });
+    expect(net.value).toBe("1000");
+
+    // a nettó átírása a bruttót számolja újra
+    fireEvent.change(net, { target: { value: "2000" } });
+    expect(gross.value).toBe("2540");
+
+    // a bruttó marad fix, ha az ÁFA-kulcs változik (a vevő a bruttót látja)
+    fireEvent.change(gross, { target: { value: "1000" } });
+    fireEvent.change(screen.getByLabelText("ÁFA %"), {
+      target: { value: "5" },
+    });
+    expect(gross.value).toBe("1000");
+    expect(net.value).toBe("952.381");
+
+    fireEvent.click(screen.getByRole("button", { name: "Tétel mentése" }));
+    await waitFor(() => expect(api.addItem).toHaveBeenCalled());
+    expect(api.addItem.mock.calls[0]![4]).toMatchObject({
+      unitNetPrice: "952.381",
+      vatRatePercent: "5",
+    });
+  });
+
+  it("érvénytelen bruttó összegnél a nettó üres, és a tétel nem menthető", async () => {
+    api.detail.mockResolvedValue(quote([version()]));
+    render(<QuoteEditorPage quoteId="q1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "+ Tétel hozzáadása" }),
+    );
+    fireEvent.change(screen.getByLabelText("Megnevezés"), {
+      target: { value: "Szűrőbetét" },
+    });
+    fireEvent.change(screen.getByLabelText("Bruttó egységár"), {
+      target: { value: "12a" },
+    });
+    expect(
+      (screen.getByLabelText("Nettó egységár") as HTMLInputElement).value,
+    ).toBe("");
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Tétel mentése",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+  });
+
   /*
     A BOM FORRÁS FELIRATA (Luca kérdése, 2026-11-13: „mit jelent, hogy BOM belső rendszerből menjen?"). MI
     PIROSÍT: ha a felirat ismét azt sugallja, hogy a tétel már kapcsolódik valamihez; ha a segédszöveg nem
