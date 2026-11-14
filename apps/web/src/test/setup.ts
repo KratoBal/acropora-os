@@ -48,7 +48,9 @@ afterEach(async () => {
  */
 if (SLOW_MOCK_MS > 0) {
   // NOT 0 ms: Testing Library's async wrapper waits one macrotask after every waitFor/findBy, and that absorbs a
-  // 0 ms delay (measured on the guard's control, 2026-11-14). 10 ms is enough to stay behind it.
+  // 0 ms delay (measured on the guard's control, 2026-11-14). 10 ms stays behind it on an idle machine, NOT on a loaded
+  // one (#2552: the answer came first two runs of three), so a test that skips the wait may still go green here and
+  // red on the CI; the guard itself checks with microtasks only.
   const ms = SLOW_MOCK_MS;
   // the REAL timer, taken before any test can fake it
   const realSetTimeout = globalThis.setTimeout;
