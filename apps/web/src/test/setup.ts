@@ -3,6 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
 import { afterEach, beforeAll, vi } from "vitest";
 
+import { SLOW_MOCK_MS } from "./slow-mock-ms.js";
 import { beszurLathatosagShim } from "./visibility-shim.js";
 
 /**
@@ -43,18 +44,37 @@ afterEach(async () => {
  * THE LIMITS, said so nobody reads more into a green run: `mockReturnValue(Promise.resolve(x))` and a hand-written
  * `mockImplementation(async () => x)` are NOT slowed; under fake timers nothing is (a test that drives time by hand
  * cannot wait for real time, and its failure would be this file's, not the test's). The guard over this file:
- * src/test/slow-mock.component.test.tsx. LASSU_MOCK=0 turns it off for a local comparison; LASSU_MOCK_MS sets the delay.
+ * src/test/slow-mock.component.test.tsx. The delay: SLOW_MOCK_MS (src/test/slow-mock-ms.ts).
  */
-if (process.env.LASSU_MOCK !== "0") {
+if (SLOW_MOCK_MS > 0) {
   // NOT 0 ms: Testing Library's async wrapper waits one macrotask after every waitFor/findBy, and that absorbs a
   // 0 ms delay (measured on the guard's control, 2026-11-14). 10 ms is enough to stay behind it.
-  const ms = Number(process.env.LASSU_MOCK_MS ?? 10);
+  const ms = SLOW_MOCK_MS;
   // the REAL timer, taken before any test can fake it
   const realSetTimeout = globalThis.setTimeout;
-  const later = () =>
-    vi.isFakeTimers()
-      ? Promise.resolve()
-      : new Promise<void>((done) => realSetTimeout(done, ms));
+  // every answer still on its way, so a test does not end with one in flight
+  const pending = new Set<Promise<void>>();
+  const later = () => {
+    if (vi.isFakeTimers()) return Promise.resolve();
+    const answer = new Promise<void>((done) => realSetTimeout(done, ms));
+    pending.add(answer);
+    void answer.then(() => pending.delete(answer));
+    return answer;
+  };
+  /**
+   * A LATE ANSWER MUST NOT OUTLIVE ITS TEST. Without this, an answer a test never waited for lands in the NEXT test (its
+   * call counters, its screen), or after the file's environment is gone, where React's setState throws "window is not
+   * defined" as an unhandled rejection and the whole run exits 1 with every test green (measured 2026-11-14:
+   * pos-terminal-page, pilot-worksheet-list-page). The screen is unmounted first, then the answers drain; an answer may
+   * start another call, hence the loop.
+   */
+  afterEach(async () => {
+    cleanup();
+    for (let round = 0; round < 20 && pending.size > 0; round++) {
+      await Promise.allSettled([...pending]);
+      await new Promise((done) => realSetTimeout(done, 0));
+    }
+  });
   const slow = <M extends ReturnType<typeof vi.fn>>(mock: M): M => {
     mock.mockResolvedValue = ((value: unknown) =>
       mock.mockImplementation(() => later().then(() => value))) as never;

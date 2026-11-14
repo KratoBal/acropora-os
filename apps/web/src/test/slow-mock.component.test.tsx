@@ -3,13 +3,14 @@ import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { answered } from "./answered";
+import { SLOW_MOCK_MS } from "./slow-mock-ms";
 
 /**
  * THE GUARD OVER THE LATE MOCK ANSWER (src/test/setup.ts, card e91dc528). Without it a broken setup, a renamed `vi`
  * method or a vitest upgrade that rebuilds `vi.fn` would quietly bring the instant answer back, and every test would stay
  * green while the flaky shape came back unseen.
  */
-const off = process.env.LASSU_MOCK === "0";
+const off = SLOW_MOCK_MS === 0;
 
 function SaveButton({ save }: { save: () => Promise<unknown> }) {
   const [running, setRunning] = useState(false);
