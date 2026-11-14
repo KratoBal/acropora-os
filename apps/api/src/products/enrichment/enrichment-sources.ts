@@ -190,13 +190,14 @@ export const BRAND_CATEGORY_SITES: Readonly<Record<string, readonly string[]>> =
     "modern reef": ["modernreef.eu"],
     // T4.4 pilot-20 (card 8639ac2a, task t-20261114-jev-megbizhato-domainek): the four brands whose products the run
     // left out as NO_MANUFACTURER_SITE. Each one's Impressum read through the fleet's quarantine reader, 2026-11-14:
-    // Korallenzucht.de Vertriebs GmbH (Thomas and Regina Pohl, Ebersdorf b. Coburg), the maker of the Korallen-Zucht and
-    // Pohl's line, runs the shop
+    // Impressum: Korallenzucht.de Vertriebs GmbH (Geschäftsführer Thomas and Regina Pohl, Ebersdorf b. Coburg); the
+    // company name is the brand name; the page itself does not state manufacturing (the same measure as modernreef.eu)
     "korallen-zucht": ["korallen-zucht.de"],
     // Grotech GmbH (Ahorn, info@grotech.de) runs its own shop; it sells other brands too, which this line does not
     // reach: a domain here counts only for a product whose brand is Grotech
     grotech: ["grotech-shop.de"],
-    // Blue Life USA, LLC (Woodland Hills, CA), its own site with its own product line
+    // Blue Life USA, LLC (the footer's copyright); its about page, read by barracuda in the #2555 review: "We create
+    // products that we not only sell, but we use in our own aquariums"
     "blue life": ["bluelifeusa.com"],
     // Tropic Marin AG (Hünenberg, CH) is responsible for the site; Dr. Biener GmbH (Wartenberg) makes the products
     "tropic marin": ["tropic-marin.com"],
