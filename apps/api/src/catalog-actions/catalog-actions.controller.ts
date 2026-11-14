@@ -27,8 +27,12 @@ export class CatalogActionsController {
   }
 
   @Post(":kind/plan")
-  plan(@Param("kind") kind: string, @CurrentUser() user: AuthenticatedUser) {
-    return this.service.plan(kind, user.id);
+  plan(
+    @Param("kind") kind: string,
+    @Body() body: unknown,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.plan(kind, user.id, body);
   }
 
   @Post(":kind/apply")

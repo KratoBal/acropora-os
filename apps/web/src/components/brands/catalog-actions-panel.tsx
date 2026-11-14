@@ -220,25 +220,40 @@ export function CatalogActionsPanel({ token }: { token: string }) {
                 <h3 className="font-medium">{action.title}</h3>
                 <p className="text-sm text-dusk-500">{action.description}</p>
               </div>
-              <div className="flex gap-2">
-                <PilotButton
-                  variant="secondary"
-                  disabled={busy || Boolean(running) || Boolean(hostBlock)}
-                  onClick={() =>
-                    void start(() => catalogActionsApi.plan(token, action.kind))
-                  }
+              {action.requiresInput ? (
+                <p
+                  className="max-w-xs text-xs text-dusk-500"
+                  data-testid="catalog-action-input-note"
                 >
-                  Próba
-                </PilotButton>
-                <PilotButton
-                  disabled={
-                    busy || Boolean(running) || Boolean(hostBlock) || !canApply
-                  }
-                  onClick={() => setConfirming(action.kind)}
-                >
-                  Végrehajtás
-                </PilotButton>
-              </div>
+                  Ez a művelet egy listát kér, ezért nincs gombja: az API-n át
+                  indul, és a végrehajtás a próba listáját írja.
+                </p>
+              ) : (
+                <div className="flex gap-2">
+                  <PilotButton
+                    variant="secondary"
+                    disabled={busy || Boolean(running) || Boolean(hostBlock)}
+                    onClick={() =>
+                      void start(() =>
+                        catalogActionsApi.plan(token, action.kind),
+                      )
+                    }
+                  >
+                    Próba
+                  </PilotButton>
+                  <PilotButton
+                    disabled={
+                      busy ||
+                      Boolean(running) ||
+                      Boolean(hostBlock) ||
+                      !canApply
+                    }
+                    onClick={() => setConfirming(action.kind)}
+                  >
+                    Végrehajtás
+                  </PilotButton>
+                </div>
+              )}
             </div>
             {run ? (
               <div className="space-y-2 text-sm">
