@@ -71,6 +71,40 @@ describe("reconcileField: letter case", () => {
     assert.equal(result.evidence.length, 2);
   });
 
+  // T4.4 pilot-20 run, 2026-11-14 (card 8639ac2a): the maker's own shop said "Grotech GmbH" (its JSON-LD brand), our
+  // catalogue "Grotech", and the brand came out as a conflict. WHAT TURNS THIS RED: a legal form making two spellings of
+  // one brand a conflict; two brands with the same legal form agreeing; a legal form alone emptied into agreement.
+  it("a márka végén álló cégforma nem része az értéknek; két márka ugyanazzal a cégformával kettő marad", () => {
+    const grotech = reconcileField("brand", [
+      src("Grotech", "SUPPLIER_PAGE"),
+      src("Grotech GmbH", "MANUFACTURER_PAGE"),
+    ]);
+    assert.equal(grotech.status, "VERIFIED");
+    assert.equal(grotech.value, "Grotech GmbH");
+    for (const [a, b] of [
+      ["Tropic Marin", "Tropic Marin AG"],
+      ["Blue Life", "Blue Life, LLC"],
+      ["Kitalált", "Kitalált GmbH & Co. KG"],
+      ["Kitalált", "Kitalált Kft."],
+      ["Kitalált", "Kitalált Sp. z o.o."],
+    ])
+      assert.equal(
+        reconcileField("brand", [src(a!, "SUPPLIER_PAGE"), src(b!, "MANUFACTURER_PAGE")]).status,
+        "VERIFIED",
+        `${a} / ${b}`,
+      );
+    for (const [a, b] of [
+      ["Tunze GmbH", "Grotech GmbH"],
+      ["Grotech", "Grotechnik GmbH"],
+      ["AG", "KG"],
+    ])
+      assert.equal(
+        reconcileField("brand", [src(a!, "SUPPLIER_PAGE"), src(b!, "MANUFACTURER_PAGE")]).status,
+        "CONFLICTING_SOURCES",
+        `${a} / ${b}`,
+      );
+  });
+
   // KZ Amino stage run (#1431 comment 5972125293, finding 5): the same
   // package contents, once with a capital at the start of the sentence.
   it("szöveges mezőben a magyar kis- és nagybetű (Ü/ü, Ő/ő) ugyanaz az érték", () => {
