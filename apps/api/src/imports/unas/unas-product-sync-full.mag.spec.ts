@@ -142,6 +142,32 @@ describe("a UNAS teljes ujraolvasas parancsanak teste", () => {
     assert.doesNotMatch(text, /secret-host/);
   });
 
+  it("ha a futas sora a sikeres futas UTAN nem olvashato, 1-gyel lep ki, a run azonositot es csak kodot ir", async () => {
+    const h = harness({
+      readRun: async () => {
+        throw new Error("connect ECONNREFUSED secret-host.example:5432");
+      },
+    });
+    const code = await runUnasProductSyncFull(["--teljes"], h.deps, h.io);
+    assert.equal(code, 1);
+    assert.deepEqual(h.out, []);
+    const text = h.err.join("");
+    // A futas megtortent: az azonosito ott van, hogy senki ne inditson masodikat.
+    assert.match(text, /LEFUTOTT \(run run-1\)/);
+    assert.match(text, /UNAS_PRODUCT_SYNC_FULL_FAILED/);
+    assert.doesNotMatch(text, /secret-host|ECONNREFUSED/);
+  });
+
+  it("a kod alaku hiba a futas sorat olvasva is kodkent megy ki", async () => {
+    const h = harness({
+      readRun: async () => {
+        throw new Error("UNAS_PRODUCT_SYNC_RUN_NOT_FOUND");
+      },
+    });
+    assert.equal(await runUnasProductSyncFull(["--teljes"], h.deps, h.io), 1);
+    assert.match(h.err.join(""), /UNAS_PRODUCT_SYNC_RUN_NOT_FOUND/);
+  });
+
   it("ha a futas ideje hianyzik, null idotartamot ir", async () => {
     const h = harness({ readRun: async () => ({ ...RUN, completedAt: null }) });
     await runUnasProductSyncFull(["--teljes"], h.deps, h.io);
