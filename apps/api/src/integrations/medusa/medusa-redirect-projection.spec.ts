@@ -146,6 +146,42 @@ describe("projectUrlRedirects", () => {
     );
   });
 
+  it("a véglegesen megszűnt termék sorait megszámolja, és a jelentés megnevezi", async () => {
+    const b = bolt([]);
+    const e = await projectUrlRedirects(
+      b.client,
+      {
+        activeRedirects: async () => [
+          {
+            sourcePath: "/Regi",
+            destinationPath: "/hu/termek/uj",
+            httpStatus: 301,
+            target: "moved",
+          },
+          {
+            sourcePath: "/hu/termek/regi",
+            destinationPath: "/hu/termek/uj",
+            httpStatus: 301,
+            target: "moved",
+          },
+          {
+            sourcePath: "/Pumpa",
+            destinationPath: "/hu/termek/p",
+            httpStatus: 301,
+            target: "page",
+          },
+        ],
+      },
+      false,
+    );
+    assert.equal(e.status, "would-send");
+    assert.deepEqual(e.retargeted, { brand: 0, gone: 0, moved: 2 });
+    assert.match(
+      describeRedirectProjection(e),
+      /veglegesen megszunt termek: 2 sor a helyettesitore vagy a kategoriara$/,
+    );
+  });
+
   it("301 egy 410-es forrásra: lánc, nem küld", async () => {
     const b = bolt([]);
     const e = await projectUrlRedirects(
