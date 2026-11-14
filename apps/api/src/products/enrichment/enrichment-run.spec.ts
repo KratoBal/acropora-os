@@ -370,6 +370,48 @@ describe("egy kézi futás, árnyékban", () => {
     assert.equal(field("dosingGuidance").value, guidance);
   });
 
+  // barracuda, #2538: the dose only in the JSON-LD description, held back (a range); the visible text has none, the AI says
+  // NO_DATA. WHAT TURNS THIS RED: the description's flag not passed from the run to the dosing check.
+  it("a leírás visszatartott adagja mellett az AI nincs-adat válasza nem érték", async () => {
+    const { checks } = await run(
+      [
+        {
+          productId: "p-1",
+          sources: [{ kind: "MANUFACTURER", url: `${MAKER}/p/1` }],
+        },
+      ],
+      {
+        [`${MAKER}/p/1`]: {
+          status: 200,
+          body: productPage({
+            name: "Kitalált nyomelem",
+            description: "Dose 2-5 ml per 100 l weekly.",
+          }),
+        },
+      },
+      {
+        facts: { "p-1": facts({ unasManufacturerUrl: `${MAKER}/p/1` }) },
+        dosingExtractor: {
+          extract: async () => ({
+            kind: "ANSWER",
+            mode: "NO_DATA",
+            dose: null,
+            tests: [],
+            guidance: null,
+            excerpt: null,
+            reason: "nincs adag",
+          }),
+        },
+      },
+    );
+    const mode = checks[0]!.fields.find((f) => f.field === "dosingMode");
+    assert.notEqual(mode?.value, "NO_DATA");
+    assert.match(
+      checks[0]!.fetches[0]!.reason ?? "",
+      /az AI szerint nincs adat, az olvasó adag-mondatot talált.*\(a leírásban\)/,
+    );
+  });
+
   // second test round, 2026-10-23: the given URL and the UNAS link lead to one page
   it("ugyanaz a végső lap kétszer: egy olvasás, egy AI-hívás, a második megnevezve", async () => {
     const asked: unknown[] = [];

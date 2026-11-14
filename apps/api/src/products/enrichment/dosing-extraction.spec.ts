@@ -105,6 +105,43 @@ describe("az AI adagolás-válasza az OS-ben", () => {
     );
   });
 
+  // card 85c38ab1, Fauna Marin Multi Elements A: the reader held a range dose back (raw null), the AI said NO_DATA,
+  // and NO_DATA became a value. WHAT TURNS THIS RED: NO_DATA as a value next to a dose sentence the reader refused.
+  it("nincs adat, miközben az olvasó adag-mondatot talált, de nem olvasta: emberhez megy, nem érték", () => {
+    for (const page of [
+      "Kitalált. Dose 2-5 ml per 100 l weekly.",
+      "Kitalált. Dose 1 ml per 100 l daily, or 5 ml per 100 l weekly.",
+      "Kitalált. Dose 1 ml per 100 l.",
+    ]) {
+      const r = dosingStatement(answer({ reason: "nincs" }), page);
+      assert.deepEqual(r.values, [], page);
+      assert.match(
+        r.notes[0]!,
+        /az AI szerint nincs adat, az olvasó adag-mondatot talált/,
+        page,
+      );
+    }
+    // the JSON-LD description's held-back dose counts the same (barracuda, #2538): the page text has no script
+    const described = dosingStatement(
+      answer({ reason: "nincs" }),
+      "Kitalált, adag nélkül.",
+      null,
+      true,
+    );
+    assert.deepEqual(described.values, []);
+    assert.match(described.notes[0]!, /adag-mondatot talált.*\(a leírásban\)/);
+    // the pack's reach is not a dose: NO_DATA stands
+    assert.deepEqual(
+      fields(
+        dosingStatement(
+          answer({ reason: "nincs" }),
+          "Kitalált. A 500 ml bottle treats 10000 l.",
+        ),
+      ),
+      [["dosingMode", "NO_DATA"]],
+    );
+  });
+
   it("tesztfüggő, miközben az olvasó fix adagot talált: ugyanúgy ellentmondás", () => {
     const guidance = "Check KH weekly.";
     const page = `Kitalált. Dose 1 ml per 100 l daily. ${guidance}`;
