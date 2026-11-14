@@ -35,6 +35,8 @@ export type ProductFieldAnswerValue =
       anchor: string;
       /** The AI service dropped an e-mail the page wrote not as an address ("office (a) …"; acropora-ai-agent). */
       emailDropped?: true;
+      /** The AI service shortened the model's anchor (too long, or off the page) inside its own stretch (acropora-ai-agent). */
+      anchorRebuilt?: true;
     };
 
 export const MANUFACTURER_ROLES = ["MAKER", "RESPONSIBLE"] as const;
@@ -102,6 +104,7 @@ export function productFieldAnswerOf(body: unknown): ProductFieldAnswer {
           email: str(f.email),
           anchor,
           ...(f.emailDropped === true ? { emailDropped: true as const } : {}),
+          ...(f.anchorRebuilt === true ? { anchorRebuilt: true as const } : {}),
         });
     }
   }
@@ -354,6 +357,13 @@ export function productFieldStatement(
         if (m.emailDropped)
           notes.push(
             `termékmezők (AI): manufacturerInfo: ${ROLE_LABEL[m.role]}: az e-mail a lapon nem e-mail alakú, kimaradt`,
+          );
+      // the anchor is the AI guard's, shortened inside the model's own stretch: said, the check above is the same
+      // (pilot-20 v5, Grotech and Tropic Marin)
+      for (const m of ordered)
+        if (m.anchorRebuilt)
+          notes.push(
+            `termékmezők (AI): manufacturerInfo: ${ROLE_LABEL[m.role]}: a horgonyt az AI őre rövidítette a modell szakaszán belül`,
           );
       // more companies on the page than the answer names: a person looks (the GPSR block may need another one)
       const companies = companiesOn(pageText);
