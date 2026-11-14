@@ -489,7 +489,7 @@ describe("egy kézi futás, árnyékban", () => {
 
   // pilot-20, sixth and seventh runs: one imprint asked once per product gave different blocks for one brand. WHAT TURNS
   // THIS RED: the imprint asked again for the next product of the run; the kept answer not checked against the page or not
-  // said; a refused whole answer kept (the next product must ask again).
+  // said; a refused whole answer, or an answer that gave no block, kept (the next product must ask again).
   it("egy impresszumot a futás egyszer kérdez: a márka minden terméke ugyanazt a blokkot kapja", async () => {
     const asked: string[][] = [];
     const twoProducts = [
@@ -555,6 +555,46 @@ describe("egy kézi futás, árnyékban", () => {
       },
     );
     assert.equal(calls, 2);
+
+    // an answer that gave no block (here: the anchor is not on the page) is not kept either; the next product's sound
+    // answer stands (barracuda on #2567: the Grotech Új Corall A case, first in the run)
+    let tries = 0;
+    const { checks: second } = await run(
+      twoProducts,
+      { [`${MAKER}/impressum`]: { status: 200, body: imprintHtml } },
+      {
+        facts: both,
+        productFieldExtractor: {
+          extract: async () => {
+            tries += 1;
+            return {
+              kind: "ANSWER" as const,
+              fields: [
+                {
+                  field: "manufacturerInfo" as const,
+                  role: "MAKER" as const,
+                  name: "Kitalált Gyártó GmbH",
+                  address: "Példa utca 1, 12345 Mintaváros",
+                  email: null,
+                  anchor:
+                    tries === 1
+                      ? "Kitalált Gyártó GmbH, Példa utca 9, 12345 Mintaváros"
+                      : "Kitalált Gyártó GmbH, Példa utca 1, 12345 Mintaváros",
+                },
+              ],
+              refused: [],
+            };
+          },
+        },
+      },
+    );
+    assert.equal(tries, 2);
+    assert.deepEqual(
+      second.map(
+        (c) => c.fields.find((f) => f.field === "manufacturerInfo")!.status,
+      ),
+      ["MISSING", "VERIFIED"],
+    );
   });
 
   // barracuda on #2565. WHAT TURNS THIS RED: a value read deterministically off the imprint page (a shop's legal notice
