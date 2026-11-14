@@ -271,6 +271,9 @@ export function productFieldStatement(
     const problems: string[] = [];
     if (new Set(roles).size !== roles.length)
       problems.push("egy szerephez két cég");
+    // the AI service refused one of the companies: the others alone would be half a GPSR block
+    if (answer.refused.some((r) => r.startsWith("manufacturerInfo ")))
+      problems.push("az AI egy céget elutasított, a többi egyedül nem érték");
     for (const m of makers) {
       const parts = [m.name, m.address, ...(m.email === null ? [] : [m.email])];
       const problem = onPage(m.anchor, parts);

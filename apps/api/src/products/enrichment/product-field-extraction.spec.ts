@@ -162,6 +162,18 @@ describe("az OS saját ellenőrzése a lapon", () => {
     ]);
   });
 
+  it("ha az AI egy céget elutasított, a megmaradt sem érték (fél GPSR-blokk)", () => {
+    const s = productFieldStatement(
+      answer([maker], ["manufacturerInfo VALUE_NOT_IN_ANCHOR"]),
+      PAGE,
+    );
+    assert.deepEqual(s.values, []);
+    assert.deepEqual(s.notes, [
+      "termékmezők (AI): az AI őre elutasította (manufacturerInfo VALUE_NOT_IN_ANCHOR)",
+      "termékmezők (AI): manufacturerInfo: az AI egy céget elutasított, a többi egyedül nem érték",
+    ]);
+  });
+
   it("két cég egy szerephez, két használat: egyik sem, a többi mező marad", () => {
     const s = productFieldStatement(
       answer([
