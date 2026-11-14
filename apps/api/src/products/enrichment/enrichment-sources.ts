@@ -188,6 +188,20 @@ export const BRAND_CATEGORY_SITES: Readonly<Record<string, readonly string[]>> =
     // back (not readable from here), so the tie is the page's own statement; its home page sells the brand's
     // own products. The brand is in the catalogue as a category ("Nyomelemek / Modern Reef") and a brand name.
     "modern reef": ["modernreef.eu"],
+    // T4.4 pilot-20 (card 8639ac2a, task t-20261114-jev-megbizhato-domainek): the four brands whose products the run
+    // left out as NO_MANUFACTURER_SITE. Each one's Impressum read through the fleet's quarantine reader, 2026-11-14:
+    // Korallenzucht.de Vertriebs GmbH (Thomas and Regina Pohl, Ebersdorf b. Coburg), the maker of the Korallen-Zucht and
+    // Pohl's line, runs the shop
+    "korallen-zucht": ["korallen-zucht.de"],
+    // Grotech GmbH (Ahorn, info@grotech.de) runs its own shop; it sells other brands too, which this line does not
+    // reach: a domain here counts only for a product whose brand is Grotech
+    grotech: ["grotech-shop.de"],
+    // Blue Life USA, LLC (Woodland Hills, CA), its own site with its own product line
+    "blue life": ["bluelifeusa.com"],
+    // Tropic Marin AG (Hünenberg, CH) is responsible for the site; Dr. Biener GmbH (Wartenberg) makes the products
+    "tropic marin": ["tropic-marin.com"],
+    // Left out: Microbe-Lift. The pages the pilot used are on arka-biotech.de, the brand's European partner, not its
+    // maker (Ecological Laboratories); a distributor's page is not a MANUFACTURER_PAGE.
   };
 
 /**
