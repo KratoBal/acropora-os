@@ -270,6 +270,47 @@ describe("az OS saját ellenőrzése a lapon", () => {
     );
   });
 
+  // pilot-20 v5: the AI guard shortens a too long or slipped maker anchor inside the model's own stretch. WHAT TURNS
+  // THIS RED: the mark lost on the way in (only true counts), or the block accepted without the note.
+  it("az AI őre által rövidített horgony jelölője beér, és a blokk mellé jegyzet kerül", () => {
+    const company = {
+      field: "manufacturerInfo",
+      role: "MAKER",
+      name: "Kitalált Gyártó GmbH",
+      address: "Példa utca 1, 12345 Mintaváros",
+      email: null,
+      anchor: "Kitalált Gyártó GmbH, Példa utca 1, 12345 Mintaváros",
+    };
+    const parsed = (anchorRebuilt: unknown) =>
+      productFieldAnswerOf({
+        fields: [{ ...company, anchorRebuilt }],
+        refusedFields: [],
+      });
+    const rebuilt = parsed(true);
+    assert.deepEqual(
+      rebuilt.kind === "ANSWER" &&
+        rebuilt.fields.map((f) =>
+          f.field === "manufacturerInfo" ? f.anchorRebuilt : null,
+        ),
+      [true],
+    );
+    const loose = parsed("igen");
+    assert.deepEqual(
+      loose.kind === "ANSWER" &&
+        loose.fields.map((f) =>
+          f.field === "manufacturerInfo" ? f.anchorRebuilt : null,
+        ),
+      [undefined],
+    );
+    const s = productFieldStatement(rebuilt, PAGE);
+    assert.equal(s.values.length, 1);
+    assert.ok(
+      s.notes.includes(
+        "termékmezők (AI): manufacturerInfo: Gyártó: a horgonyt az AI őre rövidítette a modell szakaszán belül",
+      ),
+    );
+  });
+
   // barracuda on #90 and #2562. WHAT TURNS THIS RED: a dropped e-mail not said; a contact word in the company name
   // failing a clean address; a German register or representation label passing inside an address.
   it("az elejtett e-mail jegyzetet kap; a cégnév szava nem szennyezés; a német cégadat-címkék kiszűrve", () => {
