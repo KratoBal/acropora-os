@@ -102,7 +102,17 @@ export async function runUnasProductSyncFull(
     return code === "UNAS_PRODUCT_SYNC_ALREADY_RUNNING" ? 3 : 1;
   }
 
-  const run = await deps.readRun(runId);
+  let run: FullSyncRunRow;
+  try {
+    run = await deps.readRun(runId);
+  } catch (error) {
+    // The sync itself already ran (and committed): say so with the run id, so nobody starts a second full run
+    // to find out. Only a code goes out, never the error text or a stack trace.
+    io.stderr(
+      `UNAS teljes szinkron LEFUTOTT (run ${runId}), de a futas sora nem olvashato: ${errorCodeOf(error)}\n`,
+    );
+    return 1;
+  }
   const durationSeconds =
     run.startedAt && run.completedAt
       ? Math.round(
