@@ -443,6 +443,7 @@ async function checkProduct(
               }),
               pageText,
               statement.values.find((v) => v.field === "dosing")?.raw ?? null,
+              statement.descriptionDoseOnPage ?? false,
             );
           })()
         : null;
