@@ -1497,6 +1497,11 @@ model Product {
   aiSearchDocument           AiProductSearchDocument?
   datasheet                  ProductDatasheet?
   shippingProfile            ProductShippingProfile?
+  /// A VEGLEG MEGSZUNT JELOLO (V4.2, kartya 9d0523fa): sor = ember megjelolte. Kulon tabla, hogy a UNAS-szinkronnak
+  /// ne legyen hozza irasi utja (ugyanaz az elv, mint a szallitasi profilnal).
+  discontinuation            ProductDiscontinuation?    @relation("ProductDiscontinued")
+  /// Azok a megszunt termekek, amelyeknek EZ a termek a jovahagyott helyettesitoje.
+  replacesDiscontinued       ProductDiscontinuation[]   @relation("ProductDiscontinuationReplacement")
   invoiceLines               InvoiceLine[]
   /// JEV termékellenőrzés, árnyékban (PD-013): csak olvasott eredmények.
   enrichmentChecks           ProductEnrichmentRunProduct[]
@@ -12745,4 +12750,28 @@ model AttendanceSignedSheet {
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   @@index([userId, month, printedAt])
+}
+
+/// A VEGLEG MEGSZUNT TERMEK KEZI JELOLOJE (V4.2, kartya 9d0523fa; acrobot 2026-11-14: kezi jelolo, ember dont).
+///
+/// A SOR LETE A JEL: nincs "false" allapot, a jel visszavonasa a sor torlese. Az atmenetileg nem kaphato termeket
+/// ez NEM erinti (azt a vetites a UNAS-allapotbol szamolja, `DISCONTINUED_KEY`).
+///
+/// KULON TABLA, NEM OSZLOP A `Product`-on: a UNAS-szinkron a `Product` sort irja, es egy ide tett oszlop minden
+/// irasi utjat atengedne. Ide a szinkronnak nincs irasi utja, csak az emberi vegpont ir.
+///
+/// A HELYETTESITO EMBERI DONTES: egy termek, legfeljebb egy helyettesito, kezzel valasztva. A UNAS-ban kezzel adott
+/// "hasonlo" kapcsolat NEM jovahagyas (acrobot 2026-11-14). Ha a helyettesito torlodik, a mezo `null`, es a 301 a
+/// kategoriara megy.
+model ProductDiscontinuation {
+  id                   String   @id @default(cuid())
+  productId            String   @unique
+  replacementProductId String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  product            Product  @relation("ProductDiscontinued", fields: [productId], references: [id], onDelete: Cascade)
+  replacementProduct Product? @relation("ProductDiscontinuationReplacement", fields: [replacementProductId], references: [id], onDelete: SetNull)
+
+  @@index([replacementProductId])
 }
