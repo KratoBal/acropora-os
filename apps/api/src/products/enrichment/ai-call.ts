@@ -28,8 +28,10 @@ export interface AiCallDeps {
 export function retryAfterMs(header: string | null, now: number): number {
   const value = header?.trim();
   if (value) {
-    if (/^\d+$/.test(value))
-      return Math.min(Number(value) * 1000, AI_RETRY_AFTER_MAX_MS);
+    // a number of seconds, a fraction too: "1.5" must not go to Date.parse, which reads it as the year 2001 and waits 0
+    // (barracuda on #2563)
+    if (/^\d+(?:\.\d+)?$/.test(value))
+      return Math.min(Math.ceil(Number(value) * 1000), AI_RETRY_AFTER_MAX_MS);
     const at = Date.parse(value);
     if (Number.isFinite(at))
       return Math.min(Math.max(at - now, 0), AI_RETRY_AFTER_MAX_MS);
@@ -68,9 +70,12 @@ export async function aiPost(
       };
     }
     if (response.status === 429) {
+      const wait = retryAfterMs(response.headers.get("retry-after"), now());
+      // the 429's body is not read: closed, so the connection is not held until the garbage collector (barracuda #2563)
+      await response.body?.cancel().catch(() => undefined);
       if (attempt >= AI_RATE_LIMIT_RETRIES)
         return { ok: false, reason: "RATE_LIMITED" };
-      await sleep(retryAfterMs(response.headers.get("retry-after"), now()));
+      await sleep(wait);
       continue;
     }
     if (!response.ok) return { ok: false, reason: `HTTP ${response.status}` };

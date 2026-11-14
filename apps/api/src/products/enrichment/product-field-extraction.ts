@@ -33,6 +33,8 @@ export type ProductFieldAnswerValue =
       address: string;
       email: string | null;
       anchor: string;
+      /** The AI service dropped an e-mail the page wrote not as an address ("office (a) …"; acropora-ai-agent). */
+      emailDropped?: true;
     };
 
 export const MANUFACTURER_ROLES = ["MAKER", "RESPONSIBLE"] as const;
@@ -99,6 +101,7 @@ export function productFieldAnswerOf(body: unknown): ProductFieldAnswer {
           address,
           email: str(f.email),
           anchor,
+          ...(f.emailDropped === true ? { emailDropped: true as const } : {}),
         });
     }
   }
@@ -182,7 +185,7 @@ const COPYRIGHT =
  * person's to read, not a value.
  */
 const NOT_AN_ADDRESS =
-  /(?<![\p{L}])(?:tel|telefon|phone|fax|e-?mail|website|web|www|https?|geschäftsführer|geschaeftsfuehrer|managing director|ügyvezető|hrb|ust-?id|vat|is located at)(?![\p{L}])|@/iu;
+  /(?<![\p{L}])(?:tel|telefon|phone|fax|e-?mail|website|web|www|https?|geschäftsführer|geschaeftsfuehrer|geschäftsführung|geschaeftsfuehrung|managing director|ügyvezető|inhaber|vertreten durch|amtsgericht|registergericht|hrb|hra|ust-?id|vat|mobil|is located at)(?![\p{L}])|@/iu;
 /**
  * The address without the company name in front of it, when the page writes them together and the model copied both
  * (pilot-20, third run: "Korallenzucht.de Vertriebs GmbH, Korallenzucht.de Vertriebs GmbH Schlesierstr. 1 ...").
@@ -289,7 +292,8 @@ export function productFieldStatement(
       if (problem) problems.push(`${ROLE_LABEL[m.role]}: ${problem}`);
       else if (COPYRIGHT.test(m.address))
         problems.push(`${ROLE_LABEL[m.role]}: a cím egy copyright-sor`);
-      else if (NOT_AN_ADDRESS.test(m.address))
+      // on the address without the company name: a name like "Aquaristik-Web GmbH" is no contact data (barracuda #2562)
+      else if (NOT_AN_ADDRESS.test(withoutName(m.address, m.name)))
         problems.push(
           `${ROLE_LABEL[m.role]}: a címben elérhetőség vagy cégadat is áll`,
         );
@@ -323,6 +327,12 @@ export function productFieldStatement(
         excerpt: excerpt(ordered.map((m) => m.anchor)),
       });
       // more companies on the page than the answer names: a person looks (the GPSR block may need another one)
+      // an e-mail the page wrote not as an address went: the person who accepts the block sees it (barracuda #90)
+      for (const m of ordered)
+        if (m.emailDropped)
+          notes.push(
+            `termékmezők (AI): manufacturerInfo: ${ROLE_LABEL[m.role]}: az e-mail a lapon nem e-mail alakú, kimaradt`,
+          );
       const companies = companiesOn(pageText);
       if (companies > makers.length)
         notes.push(

@@ -50,6 +50,8 @@ describe("a Retry-After", () => {
     assert.equal(retryAfterMs(null, now), AI_RETRY_AFTER_DEFAULT_MS);
     assert.equal(retryAfterMs("nem szám", now), AI_RETRY_AFTER_DEFAULT_MS);
     assert.equal(retryAfterMs("3600", now), AI_RETRY_AFTER_MAX_MS);
+    // barracuda on #2563: a fraction is seconds, not a date (Date.parse reads "1.5" as the year 2001)
+    assert.equal(retryAfterMs("1.5", now), 1_500);
   });
 });
 
@@ -81,6 +83,22 @@ describe("az AI-hívás ütemezése", () => {
     assert.deepEqual(r, { ok: false, reason: "RATE_LIMITED" });
     assert.equal(s.calls.length, AI_RATE_LIMIT_RETRIES + 1);
     assert.equal(s.waits.length, AI_RATE_LIMIT_RETRIES);
+  });
+
+  it("a 429-es válasz törzse lezárul az újrapróba előtt (barracuda, #2563)", async () => {
+    const cancelled: number[] = [];
+    const limited = (n: number) =>
+      new Response(
+        new ReadableStream({
+          cancel: () => {
+            cancelled.push(n);
+          },
+        }),
+        { status: 429, headers: { "retry-after": "1" } },
+      );
+    const s = scripted([limited(1), limited(2), response(200, { ok: 1 })]);
+    await aiPost("https://ai.example.invalid/v1/x", "t", {}, s.deps);
+    assert.deepEqual(cancelled, [1, 2]);
   });
 
   it("más hiba nem próbálkozik újra", async () => {
