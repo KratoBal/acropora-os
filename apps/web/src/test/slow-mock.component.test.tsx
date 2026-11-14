@@ -1,10 +1,4 @@
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -69,18 +63,19 @@ describe.skipIf(off)("a mockolt válasz késve érkezik", () => {
   });
 
   /**
-   * THE SHAPE ITSELF, as the positive control: once the CALL is made the button stays disabled, so a second click at
-   * that moment is lost, and only waiting for the ANSWER gives the second call. With the instant answer the button is
-   * enabled again after the microtasks (calibrated 2026-11-14 with the delay switched off: this test and the one above
-   * went red, at `toBeDisabled` and at the empty list). React's act asks for a macrotask only when a render is pending,
-   * and with the delay on none is, so the check does not race the delay's timer.
+   * THE SHAPE ITSELF: once the CALL is made the button stays disabled, so a second click at that moment is lost, and
+   * only waiting for the ANSWER gives the second call. The checks before `answered` run with no macrotask in between
+   * (not inside `act`: React 19's async act always ends with a setImmediate, which a loaded runner can let the delay's
+   * timer overtake, barracuda on #2553), so they cannot race the delay. That also means this test does NOT go red with
+   * the delay switched off (the instant answer's render waits outside act); the calibration is the test above, which
+   * goes red at the empty list.
    */
   it("waiting for the call is not waiting for the answer", async () => {
     const save = vi.fn().mockResolvedValue("ok");
     render(<SaveButton save={save} />);
     const button = screen.getByText("Mentés");
     fireEvent.click(button);
-    await act(microtasks);
+    await microtasks();
     expect(save).toHaveBeenCalledTimes(1);
     expect(button).toBeDisabled();
     fireEvent.click(button);
