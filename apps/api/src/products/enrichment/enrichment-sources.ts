@@ -181,10 +181,12 @@ export const BRAND_CATEGORY_SITES: Readonly<Record<string, readonly string[]>> =
     triton: ["triton.de"], // the brand's own site, widely known; reeftrak links, 2026-10-22
     "red sea": ["redseafish.com"], // the brand's own site, widely known; reeftrak links, 2026-10-22
     aquaforest: ["aquaforest.eu"], // the brand's own site, widely known; reeftrak links, 2026-10-22
-    // the brand's own shop and site: its Impressum names the site "Modern Reef", a brand of Euro Corals,
-    // and Euro Corals as the operator (Simbach am Inn, eurocorals.com); its home page sells the brand's own
-    // products (read through the fleet's quarantine reader, 2026-11-14; card 85c38ab1). The brand is in the
-    // catalogue as a category ("Nyomelemek / Modern Reef") and as a brand name.
+    // the brand's own shop and site, as far as the page itself says (quarantine reader, 2026-11-14, read by
+    // nautilus and again by barracuda): the footer reads "Modern Reef by Euro Corals"; the Impressum names
+    // Euro Corals (Passauer Straße 12, Simbach am Inn, with its managing director) as the operator and gives
+    // www.eurocorals.com as plain text; the word brand/Marke is not on it; not measured from eurocorals.com
+    // back (not readable from here), so the tie is the page's own statement; its home page sells the brand's
+    // own products. The brand is in the catalogue as a category ("Nyomelemek / Modern Reef") and a brand name.
     "modern reef": ["modernreef.eu"],
   };
 
