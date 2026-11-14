@@ -307,4 +307,22 @@ describe("az AI adagolás-válasza az OS-ben", () => {
       "Kitalált\nNapi 1 csepp",
     );
   });
+
+  // card 85c38ab1, Fauna Marin Dino M: the dose in a <header> under main > section > article. WHAT TURNS THIS RED: a content
+  // header or footer dropped; the page's own header or footer (no article, section, main or aside around it) kept.
+  it("a lap saját fejléce és lábléce kimarad, a tartalom fejléce megmarad", () => {
+    const page = [
+      '<body><header class="header-main"><section>Kosár 1 ml</section>Menü</header>',
+      "<main><section><article><header><p>Dose 1 ml per 100 l daily.</p></header>",
+      "<p>Leírás.</p><footer><p>Gyártó: Kitalált</p></footer></article></section>",
+      "<aside><header><p>Kapcsolódó</p></header></aside></main>",
+      "<footer>Impresszum</footer></body>",
+    ].join("");
+    assert.equal(
+      visiblePageText(page),
+      "Dose 1 ml per 100 l daily.\nLeírás.\nGyártó: Kitalált\nKapcsolódó",
+    );
+    // one that never closes stays, like before
+    assert.equal(visiblePageText("<header><p>Nyitva</p>"), "Nyitva");
+  });
 });
