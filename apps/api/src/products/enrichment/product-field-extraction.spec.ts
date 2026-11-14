@@ -216,6 +216,60 @@ describe("az OS saját ellenőrzése a lapon", () => {
     ]);
   });
 
+  // pilot-20 fourth run (card 8639ac2a), the two addresses as they came, and barracuda's corner on #2561. WHAT TURNS
+  // THIS RED: a manager, a phone or a web address passing inside an address; "is located at" kept; a name alone, cut to
+  // nothing, given back as the address.
+  it("a cím csak utca, irányítószám, település és ország; a csak-cégnév nem cím", () => {
+    const one = (name: string, address: string) => {
+      const line = `${name}, ${address}`;
+      return productFieldStatement(
+        answer([
+          {
+            field: "manufacturerInfo",
+            role: "RESPONSIBLE",
+            name,
+            address,
+            email: null,
+            anchor: line,
+          },
+        ]),
+        line,
+      );
+    };
+    for (const [name, address] of [
+      [
+        "Euro Corals",
+        "Geschäftsführer: Ali Hussein Akil Ammar Passauer Straße 12 84359 Simbach am Inn DEUTSCHLAND Tel.: 08571 924 95 57",
+      ],
+      [
+        "Blue Life USA",
+        "is located at: 7831 ALABAMA AVE UNIT 12 CANOGA PARK CALIFORNIA 91304",
+      ],
+      ["Kitalált GmbH", "Példa utca 1, 12345 Mintaváros, www.kitalalt.example"],
+    ] as const) {
+      const s = one(name, address);
+      assert.deepEqual(s.values, [], address);
+      assert.deepEqual(
+        s.notes,
+        [
+          "termékmezők (AI): manufacturerInfo: Felelős: a címben elérhetőség vagy cégadat is áll",
+        ],
+        address,
+      );
+    }
+    const nameOnly = one("Aqua 2000 GmbH", "Aqua 2000 GmbH");
+    assert.deepEqual(nameOnly.values, []);
+    assert.deepEqual(nameOnly.notes, [
+      "termékmezők (AI): manufacturerInfo: Felelős: a címben nincs irányítószám és település",
+    ]);
+    // a clean one still passes, words like "Webergasse" or "Telgte" are no contact data
+    assert.equal(
+      one("Kitalált GmbH", "Webergasse 3, 48291 Telgte, Deutschland").values
+        .length,
+      1,
+    );
+  });
+
   it("fél GPSR-blokk nem érték: ha az egyik cég elbukik, a másik sem marad", () => {
     const s = productFieldStatement(
       answer([maker, { ...responsible, email: "sales@kitalalt.example" }]),
