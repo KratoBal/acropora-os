@@ -2,10 +2,17 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { Prisma } from "@acropora/database";
-import { ServiceUnavailableException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ServiceUnavailableException,
+} from "@nestjs/common";
 
 import type { ProductDataRepository } from "./product-data.repository.js";
-import { ProductDataService, notFound } from "./product-data.service.js";
+import {
+  ProductDataService,
+  notFound,
+  unknownNamed,
+} from "./product-data.service.js";
 import type { ProductRow } from "./product-data.view.js";
 
 /*
@@ -67,10 +74,12 @@ function service(
     omnibusCalls?: string[];
     /** what EXISTS for the requested identifiers, whatever page or filter: defaults to the returned rows */
     existing?: { id: string; variants: { sku: string }[] }[];
+    /** the category tree (ids and parents); empty by default, so a category filter needs one */
+    tree?: { id: string; parentId: string | null }[];
   } = {},
 ) {
   const repository = {
-    categoryTree: async () => [],
+    categoryTree: async () => opts.tree ?? [],
     count: async () => {
       if (opts.fail) throw new Error("connection refused");
       return opts.total ?? rows.length;
@@ -172,6 +181,7 @@ describe("ProductDataService.read", () => {
     const r = await service([], {
       total: 0,
       existing: [{ id: "elsewhere", variants: [{ sku: "S-E" }] }],
+      tree: [{ id: "c1", parentId: null }],
     }).read({
       query: {
         identifiers: ["elsewhere", "S-E", "ghost"],
@@ -182,6 +192,43 @@ describe("ProductDataService.read", () => {
     });
     assert.deepEqual(r.products, []);
     assert.deepEqual(r.notFound, ["ghost"]);
+  });
+
+  // acceptance A5: a name in the category filter answered "0 products", which reads as an empty category
+  it("a category value that is not a category id is a 400 that names it, never 0 products", async () => {
+    await assert.rejects(
+      service([], {
+        total: 0,
+        tree: [{ id: "cat_real", parentId: null }],
+      }).read({
+        query: { categoryIds: ["Koralltápok"] },
+        limit: 50,
+        offset: 0,
+      }),
+      (error: unknown) =>
+        error instanceof BadRequestException &&
+        /Koralltápok/.test(error.message) &&
+        /nem üres kategória/.test(error.message),
+    );
+  });
+
+  it("one unknown among valid category ids still fails the whole read, and a real id still answers", async () => {
+    const tree = [{ id: "cat_real", parentId: null }];
+    await assert.rejects(
+      service([], { total: 0, tree }).read({
+        query: { categoryIds: ["cat_real", "nincs"] },
+        limit: 50,
+        offset: 0,
+      }),
+      (error: unknown) =>
+        error instanceof BadRequestException && /nincs/.test(error.message),
+    );
+    const ok = await service([row("p1", "S1", false)], { tree }).read({
+      query: { categoryIds: ["cat_real"] },
+      limit: 50,
+      offset: 0,
+    });
+    assert.equal(ok.products.length, 1);
   });
 
   it("says when the list was cut", async () => {
@@ -209,6 +256,35 @@ describe("notFound", () => {
     assert.deepEqual(
       notFound(["a", "S1", "x"], [{ id: "a", variants: [{ sku: "S1" }] }]),
       ["x"],
+    );
+  });
+});
+
+describe("unknownNamed", () => {
+  it("names up to ten unknown category values, then counts the rest, each cut at 80 characters", () => {
+    assert.equal(unknownNamed(["a", "b"]), "a, b");
+    const many = Array.from({ length: 13 }, (_, i) => `x${i}`);
+    assert.equal(
+      unknownNamed(many),
+      "x0, x1, x2, x3, x4, x5, x6, x7, x8, x9 és még 3",
+    );
+    assert.equal(unknownNamed(["y".repeat(200)]).length, 80);
+  });
+  it("a request with many unknown category values is still a 400 and the message stays short", async () => {
+    const many = Array.from({ length: 500 }, (_, i) => `nincs-${i}`);
+    await assert.rejects(
+      service([], {
+        total: 0,
+        tree: [{ id: "cat_real", parentId: null }],
+      }).read({
+        query: { categoryIds: many },
+        limit: 50,
+        offset: 0,
+      }),
+      (error: unknown) =>
+        error instanceof BadRequestException &&
+        /és még 490/.test(error.message) &&
+        error.message.length < 600,
     );
   });
 });

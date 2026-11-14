@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Inject,
   Injectable,
   Logger,
@@ -17,6 +18,7 @@ import {
   categoryDescendants,
   productDataWhere,
   ProductDataRepository,
+  unknownCategoryIds,
 } from "./product-data.repository.js";
 import type { ProductDataResponse } from "./product-data.types.js";
 import {
@@ -67,11 +69,16 @@ export class ProductDataService {
     const now = (this.clock ?? (() => new Date()))();
     try {
       const query = { ...request.query };
-      if (query.categoryIds)
-        query.categoryIds = categoryDescendants(
-          query.categoryIds,
-          await this.repository.categoryTree(),
-        );
+      if (query.categoryIds) {
+        const tree = await this.repository.categoryTree();
+        // a value that is not a category id is an ERROR, not "0 products": 0 reads as an empty category (acceptance A5)
+        const unknown = unknownCategoryIds(query.categoryIds, tree);
+        if (unknown.length > 0)
+          throw new BadRequestException(
+            `Ismeretlen kategória-azonosító: ${unknownNamed(unknown)}. A category szűrő kategória-AZONOSÍTÓT vár (a termék categories mezőjének id-ja), nem nevet. Ez hiba, nem üres kategória.`,
+          );
+        query.categoryIds = categoryDescendants(query.categoryIds, tree);
+      }
       const where = productDataWhere(query, now);
       const identifiers = request.query.identifiers;
       const [totalMatched, rows, existing] = await Promise.all([
@@ -96,6 +103,8 @@ export class ProductDataService {
         truncated: request.offset + rows.length < totalMatched,
       };
     } catch (error) {
+      // a bad request is the caller's to fix and says so; only a failed READ is the 503 below
+      if (error instanceof BadRequestException) throw error;
       this.logger.error(
         "A friss termékadat olvasása elbukott",
         error instanceof Error ? error.stack : String(error),
@@ -115,6 +124,18 @@ export class ProductDataService {
     );
     return new Map(entries);
   }
+}
+
+/** At most this many unknown category values are named in the 400, the rest are counted: a long query string must not echo back whole. */
+const MAX_UNKNOWN_NAMED = 10;
+
+/** The unknown category values for the 400 message: the first ones (80 characters each), then "és még N". */
+export function unknownNamed(unknown: readonly string[]): string {
+  const named = unknown
+    .slice(0, MAX_UNKNOWN_NAMED)
+    .map((id) => id.slice(0, 80));
+  const rest = unknown.length - named.length;
+  return rest > 0 ? `${named.join(", ")} és még ${rest}` : named.join(", ");
 }
 
 /** Requested identifiers that match NO product id and NO variant SKU anywhere (not "not on this page"). */

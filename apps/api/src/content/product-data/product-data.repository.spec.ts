@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   categoryDescendants,
   productDataWhere,
+  unknownCategoryIds,
 } from "./product-data.repository.js";
 
 /*
@@ -88,5 +89,19 @@ describe("categoryDescendants", () => {
     ];
     assert.deepEqual(categoryDescendants(["x"], loop).sort(), ["x", "y"]);
     assert.deepEqual(categoryDescendants(["ghost"], edges), ["ghost"]);
+  });
+});
+
+describe("unknownCategoryIds", () => {
+  const tree = [{ id: "c1" }, { id: "c2" }];
+  it("names the values that are not a category id, in the order asked", () => {
+    assert.deepEqual(unknownCategoryIds(["Koralltápok", "c1", "nincs"], tree), [
+      "Koralltápok",
+      "nincs",
+    ]);
+  });
+  it("is empty when every value is a category id, and for an empty tree it names them all", () => {
+    assert.deepEqual(unknownCategoryIds(["c1", "c2"], tree), []);
+    assert.deepEqual(unknownCategoryIds(["c1"], []), ["c1"]);
   });
 });
