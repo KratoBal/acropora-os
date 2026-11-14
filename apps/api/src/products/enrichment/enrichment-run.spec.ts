@@ -786,6 +786,58 @@ describe("a vízhatás a futásban", () => {
   });
 });
 
+describe("a kiszerelés a gyártói lapon (S1a)", () => {
+  // card 8639ac2a, T4.4 S1a. WHAT TURNS THIS RED: our name's size not carried as our own value; the manufacturer's h1
+  // naming that size not confirming it; a related product's link confirming it; a reseller's page confirming it.
+  const url = "https://aquaforest.eu/en/product/x/";
+  const adalek = facts({
+    name: "Kitalált adalék 100ml",
+    current: { title: "Kitalált adalék 100ml", packSize: "100 ml" },
+    categoryBrandSites: ["aquaforest.eu"],
+  });
+  const lap = (
+    body: string,
+    kind: "MANUFACTURER" | "BULK_REEF_SUPPLY" = "MANUFACTURER",
+  ) => {
+    const at = kind === "MANUFACTURER" ? url : `${BRS}/p/100`;
+    return run(
+      [{ productId: "p-1", sources: [{ kind, url: at }] }],
+      { [at]: { status: 200, body } },
+      { facts: { "p-1": adalek } },
+    );
+  };
+  const mezo = (checks: StoredCheck[]) =>
+    checks[0]!.fields.find((f) => f.field === "packSize")!;
+
+  it("a gyártó h1-e a mi méretünket mondja: ellenőrzött, a h1 a kivonat", async () => {
+    const { checks } = await lap(
+      "<html><body><h1>Additive 100 ml</h1></body></html>",
+    );
+    assert.equal(mezo(checks).status, "VERIFIED");
+    assert.equal(mezo(checks).value, "100 ml");
+    const page = mezo(checks).evidence.find(
+      (e) => e.sourceKind === "MANUFACTURER",
+    )!;
+    assert.match(page.excerpt!, /Additive 100 ml/);
+  });
+
+  it("csak egy kapcsolódó termék linkjében áll: a saját értékünk marad, ellenőrzés nélkül", async () => {
+    const { checks } = await lap(
+      '<html><body><h1>Additive</h1><a class="woocommerce-LoopProduct-link">Other 100 ml</a></body></html>',
+    );
+    assert.equal(mezo(checks).status, "UNVERIFIED");
+    assert.equal(mezo(checks).currentValue, "100 ml");
+  });
+
+  it("kereskedő lapja nem erősít meg (a megerősítés a gyártóé)", async () => {
+    const { checks } = await lap(
+      "<html><body><h1>Additive 100 ml</h1></body></html>",
+      "BULK_REEF_SUPPLY",
+    );
+    assert.equal(mezo(checks).status, "UNVERIFIED");
+  });
+});
+
 describe("egy termék hibája nem állítja meg az adagot", () => {
   const product = (id: string): RunProductInput => ({
     productId: id,
