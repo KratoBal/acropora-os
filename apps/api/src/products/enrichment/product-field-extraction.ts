@@ -297,7 +297,12 @@ export function productFieldStatement(
       if (problem) problems.push(`${ROLE_LABEL[m.role]}: ${problem}`);
       else if (COPYRIGHT.test(m.address))
         problems.push(`${ROLE_LABEL[m.role]}: a cím egy copyright-sor`);
-      else if (!(POSTCODE.test(m.address) && PLACE.test(m.address)))
+      // the shape on the address without the company name: a number in the name ("Aqua 2000 GmbH") is no postcode
+      // (barracuda on #2560)
+      else if (!(
+        POSTCODE.test(withoutName(m.address, m.name)) &&
+        PLACE.test(withoutName(m.address, m.name))
+      ))
         problems.push(
           `${ROLE_LABEL[m.role]}: a címben nincs irányítószám és település`,
         );

@@ -194,6 +194,28 @@ describe("az OS saját ellenőrzése a lapon", () => {
     );
   });
 
+  // barracuda on #2560. WHAT TURNS THIS RED: a number in the company name read as the address's postcode.
+  it("a cégnév száma nem irányítószám: a cím-alak a név levágása után áll", () => {
+    const line = "Aqua 2000 GmbH, Fő utca 5";
+    const s = productFieldStatement(
+      answer([
+        {
+          field: "manufacturerInfo",
+          role: "MAKER",
+          name: "Aqua 2000 GmbH",
+          address: "Aqua 2000 GmbH, Fő utca 5",
+          email: null,
+          anchor: line,
+        },
+      ]),
+      line,
+    );
+    assert.deepEqual(s.values, []);
+    assert.deepEqual(s.notes, [
+      "termékmezők (AI): manufacturerInfo: Gyártó: a címben nincs irányítószám és település",
+    ]);
+  });
+
   it("fél GPSR-blokk nem érték: ha az egyik cég elbukik, a másik sem marad", () => {
     const s = productFieldStatement(
       answer([maker, { ...responsible, email: "sales@kitalalt.example" }]),
