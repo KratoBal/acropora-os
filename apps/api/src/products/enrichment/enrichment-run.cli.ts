@@ -32,6 +32,11 @@ import {
   dosingExtractorFromEnv,
   type DosingExtractor,
 } from "./dosing-extraction.js";
+import {
+  AI_PRODUCT_FIELDS_PATH_ENV,
+  productFieldExtractorFromEnv,
+  type ProductFieldExtractor,
+} from "./product-field-extraction.js";
 import type { EnrichmentFetch } from "./polite-fetcher.js";
 
 /**
@@ -80,6 +85,8 @@ export interface EnrichmentCliDeps {
   now: () => Date;
   /** The AI dosing reader; absent: from the environment (`ACROPORA_AI_DOSING_PATH`). */
   dosingExtractor?: DosingExtractor | null;
+  /** The AI product field reader (T4.4 S1b); absent: from the environment (`ACROPORA_AI_PRODUCT_FIELDS_PATH`). */
+  productFieldExtractor?: ProductFieldExtractor | null;
 }
 
 type Output = {
@@ -272,6 +279,15 @@ export async function runEnrichmentCli(
       ? "Adagolás (AI): be, gyártói laponként egy hívás.\n"
       : `Adagolás (AI): ki (${AI_DOSING_PATH_ENV} és az AI beállítás nélkül nem hívja).\n`,
   );
+  const productFieldExtractor =
+    deps.productFieldExtractor !== undefined
+      ? deps.productFieldExtractor
+      : productFieldExtractorFromEnv(deps.env);
+  out.stdout(
+    productFieldExtractor
+      ? "Alkalmazás és gyártó (AI): be, gyártói laponként egy hívás.\n"
+      : `Alkalmazás és gyártó (AI): ki (${AI_PRODUCT_FIELDS_PATH_ENV} és az AI beállítás nélkül nem hívja).\n`,
+  );
   if (!argv.includes("--apply")) {
     out.stdout(
       "Terv: semmi nem ment ki a hálózatra, semmi nem tárolódott. Futtatás: --apply --actor <userId>\n",
@@ -305,6 +321,7 @@ export async function runEnrichmentCli(
         sleep: deps.sleep,
         now: deps.now,
         ...(dosingExtractor ? { dosingExtractor } : {}),
+        ...(productFieldExtractor ? { productFieldExtractor } : {}),
       },
     );
   } catch (error) {

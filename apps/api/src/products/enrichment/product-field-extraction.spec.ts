@@ -1,0 +1,226 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+
+import {
+  AUTO_ACCEPT_FIELDS,
+  PACK_FIELD,
+} from "../knowledge/knowledge-auto-accept.js";
+import {
+  PRODUCT_FIELD_KEYS,
+  productFieldAnswerOf,
+  productFieldStatement,
+  type ProductFieldAnswer,
+} from "./product-field-extraction.js";
+
+/*
+  WHAT TURNS THIS RED (T4.4 S1b, card 8639ac2a). An anchor this page does not hold, or a value (the use; the maker's
+  name, address, e-mail) its anchor does not hold, becoming a candidate; a cut address (no postcode, no place) passing;
+  half a GPSR block (one company of two sound) becoming a value; two companies for one role, or two uses, both kept;
+  the AI service's refusal or outage becoming a value; a refusal detail carrying page text into the note; the rule
+  (AUTO_V1) able to accept either field without a person (acrobot 52443). Invented page text only.
+*/
+const PAGE = [
+  "Kitalált Jód 100 ml",
+  "Alkalmazás:   a tengeri akvárium jódszintjének pótlására szolgál.",
+  "Kitalált Felelős AG, Hegyi út 21, CH-6331 Hünenberg, office@kitalalt.example",
+  "Gyártás: Kitalált Gyártó GmbH, Példa utca 1, 12345 Mintaváros",
+].join("\n");
+
+type Item = Extract<ProductFieldAnswer, { kind: "ANSWER" }>["fields"][number];
+const answer = (
+  fields: Item[],
+  refused: string[] = [],
+): ProductFieldAnswer => ({
+  kind: "ANSWER",
+  fields,
+  refused,
+});
+const use: Item = {
+  field: "application",
+  value: "a tengeri akvárium jódszintjének pótlására szolgál.",
+  anchor: "Alkalmazás: a tengeri akvárium jódszintjének pótlására szolgál.",
+};
+const maker: Item = {
+  field: "manufacturerInfo",
+  role: "MAKER",
+  name: "Kitalált Gyártó GmbH",
+  address: "Példa utca 1, 12345 Mintaváros",
+  email: null,
+  anchor: "Kitalált Gyártó GmbH, Példa utca 1, 12345 Mintaváros",
+};
+const responsible: Item = {
+  field: "manufacturerInfo",
+  role: "RESPONSIBLE",
+  name: "Kitalált Felelős AG",
+  address: "Hegyi út 21, CH-6331 Hünenberg",
+  email: "office@kitalalt.example",
+  anchor:
+    "Kitalált Felelős AG, Hegyi út 21, CH-6331 Hünenberg, office@kitalalt.example",
+};
+
+describe("az AI válaszának alakja", () => {
+  it("csak az ismert mezők, szerepek és alakok jönnek át; a lapszöveg a megjegyzésbe nem", () => {
+    const a = productFieldAnswerOf({
+      fields: [
+        { field: "application", value: "jódpótlás", anchor: "jódpótlás" },
+        { ...maker, role: "DISTRIBUTOR" },
+        { ...maker, role: undefined },
+        { ...maker, address: null },
+        { field: "dosing", value: "1 ml", anchor: "1 ml" },
+      ],
+      refusedFields: [
+        {
+          field: "application",
+          refusal: "ANCHOR_NOT_IN_PAGE",
+          detail: "anchor 12/22 U+006A",
+        },
+        { field: "application", refusal: "lapszöveg ide nem jöhet" },
+        { field: "dosing", refusal: "VALUE_NOT_IN_ANCHOR" },
+      ],
+    });
+    assert.deepEqual(a, {
+      kind: "ANSWER",
+      fields: [
+        { field: "application", value: "jódpótlás", anchor: "jódpótlás" },
+      ],
+      refused: ["application ANCHOR_NOT_IN_PAGE anchor 12/22 U+006A"],
+    });
+    assert.deepEqual(productFieldAnswerOf({ refusal: "NOT_JSON" }), {
+      kind: "REFUSED",
+      refusal: "NOT_JSON",
+    });
+    assert.equal(productFieldAnswerOf(null).kind, "UNAVAILABLE");
+    assert.equal(productFieldAnswerOf({ model: "x" }).kind, "UNAVAILABLE");
+  });
+});
+
+describe("az OS saját ellenőrzése a lapon", () => {
+  it("a használat és mindkét szerep: jelölt, a gyártó elöl, a horgonyok a kivonatban", () => {
+    const s = productFieldStatement(answer([use, responsible, maker]), PAGE);
+    assert.deepEqual(
+      s.values.map((v) => [v.field, v.raw]),
+      [
+        ["application", "a tengeri akvárium jódszintjének pótlására szolgál."],
+        [
+          "manufacturerInfo",
+          "Gyártó: Kitalált Gyártó GmbH, Példa utca 1, 12345 Mintaváros; Felelős: Kitalált Felelős AG, Hegyi út 21, CH-6331 Hünenberg, office@kitalalt.example",
+        ],
+      ],
+    );
+    assert.match(s.values[1]!.excerpt, /^AI-horgony = ".* \| .*"$/);
+    assert.deepEqual(s.notes, []);
+  });
+
+  it("egy cég, de a lapon kettő áll: az érték megvan, és a megjegyzés megnevezi a különbséget", () => {
+    const s = productFieldStatement(answer([maker]), PAGE);
+    assert.equal(
+      s.values[0]?.raw,
+      "Gyártó: Kitalált Gyártó GmbH, Példa utca 1, 12345 Mintaváros",
+    );
+    assert.deepEqual(s.notes, [
+      "termékmezők (AI): manufacturerInfo: a lapon 2 cég áll, a válasz 1-t nevez",
+    ]);
+  });
+
+  it("a lapon nem álló horgony, a horgonyban nem álló rész, a csonka cím: nincs érték", () => {
+    const s = productFieldStatement(
+      answer([
+        { ...use, value: "jódpótlás", anchor: "Alkalmazás: jódpótlás." },
+        { ...maker, address: "Másik utca 2, 54321 Másikváros" },
+      ]),
+      PAGE,
+    );
+    assert.deepEqual(s.values, []);
+    assert.deepEqual(s.notes, [
+      "termékmezők (AI): application: a horgony nincs a lapon",
+      "termékmezők (AI): manufacturerInfo: Gyártó: az érték nincs a horgonyban",
+    ]);
+    const cut = productFieldStatement(
+      answer([
+        {
+          ...maker,
+          address: "Példa utca 1",
+          anchor: "Kitalált Gyártó GmbH, Példa utca 1",
+        },
+      ]),
+      PAGE,
+    );
+    assert.deepEqual(cut.values, []);
+    assert.deepEqual(cut.notes, [
+      "termékmezők (AI): manufacturerInfo: Gyártó: a címben nincs irányítószám és település",
+    ]);
+  });
+
+  it("fél GPSR-blokk nem érték: ha az egyik cég elbukik, a másik sem marad", () => {
+    const s = productFieldStatement(
+      answer([maker, { ...responsible, email: "sales@kitalalt.example" }]),
+      PAGE,
+    );
+    assert.deepEqual(s.values, []);
+    assert.deepEqual(s.notes, [
+      "termékmezők (AI): manufacturerInfo: Felelős: az érték nincs a horgonyban",
+    ]);
+  });
+
+  it("két cég egy szerephez, két használat: egyik sem, a többi mező marad", () => {
+    const s = productFieldStatement(
+      answer([
+        use,
+        { ...use, value: "pótlására", anchor: "pótlására" },
+        maker,
+        { ...responsible, role: "MAKER" },
+      ]),
+      PAGE,
+    );
+    assert.deepEqual(s.values, []);
+    assert.deepEqual(s.notes, [
+      "termékmezők (AI): application kétszer, egyik sem",
+      "termékmezők (AI): manufacturerInfo: egy szerephez két cég",
+    ]);
+    const keepsOther = productFieldStatement(
+      answer([maker, responsible, use, { ...use }]),
+      PAGE,
+    );
+    assert.deepEqual(
+      keepsOther.values.map((v) => v.field),
+      ["manufacturerInfo"],
+    );
+  });
+
+  it("az AI elutasítása vagy kiesése nem érték", () => {
+    assert.deepEqual(
+      productFieldStatement({ kind: "REFUSED", refusal: "NOT_JSON" }, PAGE),
+      {
+        values: [],
+        notes: ["termékmezők (AI): az AI őre elutasította (NOT_JSON)"],
+      },
+    );
+    assert.deepEqual(
+      productFieldStatement({ kind: "UNAVAILABLE", reason: "timeout" }, PAGE),
+      { values: [], notes: ["termékmezők (AI): nem elérhető (timeout)"] },
+    );
+    assert.deepEqual(
+      productFieldStatement(
+        answer([], ["application ANCHOR_NOT_IN_PAGE"]),
+        PAGE,
+      ).notes,
+      [
+        "termékmezők (AI): az AI őre elutasította (application ANCHOR_NOT_IN_PAGE)",
+      ],
+    );
+  });
+});
+
+describe("ember nélküli elfogadás", () => {
+  // acrobot 52443: the maker block and the use are candidates only; a person accepts them
+  it("az AUTO_V1 szabály egyik mezőt sem fogadhatja el", () => {
+    for (const field of PRODUCT_FIELD_KEYS) {
+      assert.equal(
+        (AUTO_ACCEPT_FIELDS as readonly string[]).includes(field),
+        false,
+        field,
+      );
+      assert.notEqual(PACK_FIELD, field);
+    }
+  });
+});

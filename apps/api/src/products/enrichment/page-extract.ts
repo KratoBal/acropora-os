@@ -41,6 +41,10 @@ export const ENRICHED_FIELDS = [
   "dosingTests",
   // a kiszerelés (ReefClub V3.2 kifogyási emlékeztető, kártya cd94ed11): a lap `size`-a vagy nevesített tulajdonsága
   "packSize",
+  // az S1 kapu két szöveges kulcsa (T4.4 S1b, kártya 8639ac2a): a gyártói lapról és a márka impresszumáról, az AI
+  // kivonatával, szó szerinti horgonnyal (product-field-extraction.ts)
+  "application",
+  "manufacturerInfo",
 ] as const satisfies readonly ProductEnrichmentFieldKey[];
 export type EnrichedField = (typeof ENRICHED_FIELDS)[number];
 
