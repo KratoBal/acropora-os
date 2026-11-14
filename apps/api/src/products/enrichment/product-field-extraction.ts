@@ -184,6 +184,14 @@ const COPYRIGHT =
  * is located at: 7831 ALABAMA AVE …", both verbatim. A street, a postcode, a town and a country; anything else is a
  * person's to read, not a value.
  */
+/**
+ * Contact data inside the company NAME (barracuda on #2564): with the name cut off the address, "Euro Corals Tel.: 08571 …"
+ * as the name would carry the phone into the value. Narrower than the address filter on purpose: a name may hold "Web"
+ * ("Aquaristik-Web GmbH") or "Tel" ("Tel Aviv …"); a label with its colon or dot, an e-mail, a web address or a phone-like
+ * digit run may not.
+ */
+const CONTACT_IN_NAME =
+  /(?:tel|telefon|phone|fax|mobil|e-?mail)\s*[.:]|@|https?:|www\.|\d{4,}[\s/-]?\d{2,}/iu;
 const NOT_AN_ADDRESS =
   /(?<![\p{L}])(?:tel|telefon|phone|fax|e-?mail|website|web|www|https?|geschäftsführer|geschaeftsfuehrer|geschäftsführung|geschaeftsfuehrung|managing director|ügyvezető|inhaber|vertreten durch|amtsgericht|registergericht|hrb|hra|ust-?id|vat|mobil|is located at)(?![\p{L}])|@/iu;
 /**
@@ -293,7 +301,10 @@ export function productFieldStatement(
       else if (COPYRIGHT.test(m.address))
         problems.push(`${ROLE_LABEL[m.role]}: a cím egy copyright-sor`);
       // on the address without the company name: a name like "Aquaristik-Web GmbH" is no contact data (barracuda #2562)
-      else if (NOT_AN_ADDRESS.test(withoutName(m.address, m.name)))
+      else if (
+        NOT_AN_ADDRESS.test(withoutName(m.address, m.name)) ||
+        CONTACT_IN_NAME.test(m.name)
+      )
         problems.push(
           `${ROLE_LABEL[m.role]}: a címben elérhetőség vagy cégadat is áll`,
         );
@@ -326,13 +337,13 @@ export function productFieldStatement(
         raw,
         excerpt: excerpt(ordered.map((m) => m.anchor)),
       });
-      // more companies on the page than the answer names: a person looks (the GPSR block may need another one)
       // an e-mail the page wrote not as an address went: the person who accepts the block sees it (barracuda #90)
       for (const m of ordered)
         if (m.emailDropped)
           notes.push(
             `termékmezők (AI): manufacturerInfo: ${ROLE_LABEL[m.role]}: az e-mail a lapon nem e-mail alakú, kimaradt`,
           );
+      // more companies on the page than the answer names: a person looks (the GPSR block may need another one)
       const companies = companiesOn(pageText);
       if (companies > makers.length)
         notes.push(
