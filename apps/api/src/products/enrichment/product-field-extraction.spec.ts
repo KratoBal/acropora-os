@@ -270,6 +270,53 @@ describe("az OS saját ellenőrzése a lapon", () => {
     );
   });
 
+  // barracuda on #90 and #2562. WHAT TURNS THIS RED: a dropped e-mail not said; a contact word in the company name
+  // failing a clean address; a German register or representation label passing inside an address.
+  it("az elejtett e-mail jegyzetet kap; a cégnév szava nem szennyezés; a német cégadat-címkék kiszűrve", () => {
+    const one = (name: string, address: string, emailDropped = false) => {
+      const line = `${name}, ${address}`;
+      return productFieldStatement(
+        answer([
+          {
+            field: "manufacturerInfo",
+            role: "RESPONSIBLE",
+            name,
+            address,
+            email: null,
+            anchor: line,
+            ...(emailDropped ? { emailDropped: true as const } : {}),
+          },
+        ]),
+        line,
+      );
+    };
+    const dropped = one(
+      "Kitalált AG",
+      "Rothusstrasse 21, CH-6331 Hünenberg",
+      true,
+    );
+    assert.equal(dropped.values.length, 1);
+    assert.deepEqual(dropped.notes, [
+      "termékmezők (AI): manufacturerInfo: Felelős: az e-mail a lapon nem e-mail alakú, kimaradt",
+    ]);
+    assert.equal(
+      one(
+        "Aquaristik-Web GmbH",
+        "Aquaristik-Web GmbH, Hauptstraße 1, 12345 Musterstadt",
+      ).values.length,
+      1,
+    );
+    for (const address of [
+      "Geschäftsführung: Max Muster, Hauptstraße 1, 12345 Musterstadt",
+      "Inhaber Max Muster, Hauptstraße 1, 12345 Musterstadt",
+      "vertreten durch Max Muster, Hauptstraße 1, 12345 Musterstadt",
+      "Hauptstraße 1, 12345 Musterstadt, Amtsgericht Musterstadt",
+      "Hauptstraße 1, 12345 Musterstadt, HRA 1234",
+      "Hauptstraße 1, 12345 Musterstadt, Mobil 0170 1234567",
+    ])
+      assert.deepEqual(one("Kitalált GmbH", address).values, [], address);
+  });
+
   it("fél GPSR-blokk nem érték: ha az egyik cég elbukik, a másik sem marad", () => {
     const s = productFieldStatement(
       answer([maker, { ...responsible, email: "sales@kitalalt.example" }]),
