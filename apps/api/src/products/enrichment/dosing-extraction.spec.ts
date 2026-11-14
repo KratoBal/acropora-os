@@ -5,6 +5,7 @@ import {
   dosingExtractorFromEnv,
   dosingStatement,
   extractorAnswerOf,
+  heldBackNotes,
   visiblePageText,
   type DosingExtractorAnswer,
 } from "./dosing-extraction.js";
@@ -121,6 +122,31 @@ describe("az AI adagolás-válasza az OS-ben", () => {
         page,
       );
     }
+    // acrobot 51082: the note also carries the reader's reason with the page's own sentence, for the person; the pack-size
+    // remark does not count, and there are at most three. WHAT TURNS THIS RED: the reason or the sentence missing.
+    const withReason = dosingStatement(
+      answer({ reason: "nincs" }),
+      "Kitalált. Dose 2-5 ml per 100 l weekly. A 500 ml bottle treats 10000 l.",
+    );
+    assert.equal(withReason.notes.length, 2);
+    assert.match(
+      withReason.notes[1]!,
+      /^adagolás: tartomány az adagban: .*2-5 ml per 100 l weekly/,
+    );
+    assert.equal(
+      heldBackNotes([
+        "adagolás: a",
+        "adagolás: kiszerelés-mondat, nem adag: x",
+        "adagolás: b",
+        "adagolás: c",
+        "adagolás: d",
+      ]).length,
+      3,
+    );
+    assert.equal(
+      heldBackNotes([`adagolás: ${"x".repeat(400)}`])[0]!.length,
+      300,
+    );
     // the JSON-LD description's held-back dose counts the same (barracuda, #2538): the page text has no script
     const described = dosingStatement(
       answer({ reason: "nincs" }),

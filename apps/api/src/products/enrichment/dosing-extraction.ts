@@ -223,6 +223,19 @@ export function visiblePageText(html: string): string {
 
 const squash = (value: string) => value.replace(/\s+/g, " ").trim();
 
+/** The reader's held-back reasons, without the pack-size remarks, at most three, each capped. */
+export const HELD_BACK_NOTES = { max: 3, length: 300 } as const;
+export function heldBackNotes(notes: readonly string[]): string[] {
+  return notes
+    .filter((note) => !note.startsWith("adagolás: kiszerelés-mondat"))
+    .slice(0, HELD_BACK_NOTES.max)
+    .map((note) =>
+      note.length > HELD_BACK_NOTES.length
+        ? `${note.slice(0, HELD_BACK_NOTES.length - 1)}…`
+        : note,
+    );
+}
+
 export interface DosingStatement {
   values: ExtractedValue[];
   /** Why no value, one line per reason; shown with the fetch. */
@@ -299,6 +312,9 @@ export function dosingStatement(
       values: [],
       notes: [
         `adagolás (AI): az AI szerint nincs adat, az olvasó adag-mondatot talált, amit nem tudott gépi alakra hozni (${wholePage.doseOnPage ? "a lapon" : "a leírásban"})`,
+        // the reader's own reasons with the page's sentence, for the person who reads it next (acrobot 51082: this is the
+        // most frequent outcome of the bulk round); the description's reasons are on the fetch already (page-extract)
+        ...heldBackNotes(wholePage.notes),
       ],
     };
   if (answer.mode === "NO_DATA") {
