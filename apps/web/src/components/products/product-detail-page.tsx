@@ -35,6 +35,7 @@ import { ProductHomepageCard } from "@/components/products/product-homepage-card
 import { ProductImage } from "@/components/products/product-image-source";
 import { ProductDoseEffectsCard } from "@/components/products/product-dose-effects-card";
 import { ProductManufacturerClaimsCard } from "@/components/products/product-manufacturer-claims-card";
+import { ProductDiscontinuationCard } from "@/components/products/product-discontinuation-card";
 import { ProductShippingProfileCard } from "@/components/products/product-shipping-profile-card";
 import { ProductSupplierPricesCard } from "@/components/products/product-supplier-prices-card";
 import { ProductBasicsEditor } from "@/components/products/product-basics-editor";
@@ -1233,6 +1234,20 @@ export function ProductDetailPage({ productId }: { productId: string }) {
               />
             ),
             side: basics,
+          },
+          /*
+            A véglegesen megszűnt jelölő KÉZI törzsadat (V4.2): a UNAS-szinkron nem ír rá, ezért a gazda-állapottól
+            függetlenül látszik.
+          */
+          {
+            id: "discontinuation",
+            main: (
+              <ProductDiscontinuationCard
+                token={token}
+                productId={product.id}
+                canManage={canManage}
+              />
+            ),
           },
           /*
             A szerkesztő csak az Acropora OS tulajdonában lévő terméken jelenik

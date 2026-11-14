@@ -25,6 +25,7 @@ const api = vi.hoisted(() => ({
     kapjon a duplatol, nem csak azt, amit a teszt allit.
   */
   getShippingProfile: vi.fn(async () => null),
+  getDiscontinuation: vi.fn(async () => null),
   // the husbandry card of a live animal (V2.2 S2) asks its own endpoint
   husbandry: vi.fn(async () => ({
     productId: "product-1",
@@ -318,6 +319,8 @@ describe("ProductDetailPage mirror ownership", () => {
     expect(titles).toEqual([
       "Katalógusgazda",
       "Alapadatok",
+      // the manual permanently-discontinued mark (V4.2) in its own row, with no card beside it
+      "Véglegesen megszűnt termék",
       "Szállítási jellemzők",
       // the product dose list (ReefClub slice 7) under the shipping card
       "Adag-hatás",
