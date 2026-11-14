@@ -664,6 +664,8 @@ export class MaintenanceOrdersService {
     const departmentId = await siteForContractItems(this.repository, items);
     const reservation = {
       contractId: contract.id,
+      // megrendelőlap nélküli lap: a tétel megrendelőlapjainak alkalmain ül (lásd a foglalás mércéjét)
+      kind: "job" as const,
       items: contract.items.map((item) => ({
         contractItemId: item.id,
         description: item.description,

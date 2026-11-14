@@ -4,6 +4,7 @@ import { prisma, Prisma } from "@acropora/database";
 import { assetsOutsideDepartment } from "../common/assets-in-department.js";
 import { unitPathsFor, unitRowsFor } from "../common/unit-path-lookup.js";
 import { budapestYearRange } from "./maintenance-order-occasion-year.js";
+import { decideOccasionRequest, type OccasionUse } from "./occasion-frame.js";
 
 const orderInclude = {
   contract: {
@@ -99,17 +100,20 @@ export type PortalMaintenanceOrderRow = Prisma.MaintenanceOrderGetPayload<{
   select: typeof portalOrderSelect;
 }>;
 
-/** A tételek éves felhasználása (lásd `reserveOccasions`), tételenként. */
+/** A tételek éves felhasználása (lásd `reserveOccasions` és `occasion-frame.ts`), tételenként, két részre bontva. */
 async function occasionsUsed(
   tx: Prisma.TransactionClient,
   contractItemIds: string[],
   year: number,
-): Promise<Map<string, number>> {
-  const used = new Map<string, number>();
+): Promise<Map<string, OccasionUse>> {
+  const used = new Map<string, OccasionUse>();
   if (!contractItemIds.length) return used;
-  const add = (contractItemId: string, count: number) =>
-    used.set(contractItemId, (used.get(contractItemId) ?? 0) + count);
-  // a megrendelőlap tétele annyi alkalmat használ, amennyit a kiállításkor kértek (`occasions`), nem egyet
+  const slot = (contractItemId: string) => {
+    let entry = used.get(contractItemId);
+    if (!entry) used.set(contractItemId, (entry = { orders: 0, jobs: 0 }));
+    return entry;
+  };
+  // a megrendelőlap tétele annyi alkalmat foglal, amennyit a kiállításkor kértek (`occasions`), nem egyet
   const orderItems = await tx.maintenanceOrderItem.groupBy({
     by: ["contractItemId"],
     where: {
@@ -119,7 +123,7 @@ async function occasionsUsed(
     _sum: { occasions: true },
   });
   for (const row of orderItems)
-    add(row.contractItemId, row._sum.occasions ?? 0);
+    slot(row.contractItemId).orders += row._sum.occasions ?? 0;
   const jobItems = await tx.serviceJobContractItem.groupBy({
     by: ["contractItemId"],
     where: {
@@ -133,7 +137,7 @@ async function occasionsUsed(
     _count: { contractItemId: true },
   });
   for (const row of jobItems)
-    add(row.contractItemId, row._count.contractItemId);
+    slot(row.contractItemId).jobs += row._count.contractItemId;
   return used;
 }
 
@@ -309,6 +313,8 @@ export class MaintenanceOrdersRepository {
     input: {
       contractId: string;
       year: number;
+      /** mit foglal: megrendelőlap (alap) vagy megrendelőlap nélküli lap (lásd a mércét a foglalásban) */
+      kind?: "order" | "job";
       items: readonly {
         contractItemId: string;
         description: string;
@@ -346,6 +352,7 @@ export class MaintenanceOrdersRepository {
     input: {
       contractId: string;
       year: number;
+      kind?: "order" | "job";
       items: readonly {
         contractItemId: string;
         description: string;
@@ -364,22 +371,21 @@ export class MaintenanceOrdersRepository {
           input.items.map((item) => item.contractItemId),
           input.year,
         );
-        /*
-          A KÉRT ALKALOMSZÁM IS BELEFÉR-E (Luca, 2026-11-13): a kiállításnál több alkalom is kérhető egy
-          tételből, ezért a mérce `felhasznált + kért <= éves keret`; a régi mérce (`felhasznált >= keret`)
-          ugyanez egy alkalomra. A teljesen elfogyott tétel és a csak részben beférő külön lista, mert a
-          hibaüzenet mást mond rájuk.
-        */
+        // a mérce és az indoka: `occasion-frame.ts`
         const exhausted: string[] = [];
         const short: string[] = [];
         for (const item of input.items) {
-          const per = item.occasionsPerYear ?? 0;
-          const usedNow = used.get(item.contractItemId) ?? 0;
-          const requested = item.requested ?? 1;
-          if (usedNow >= per) exhausted.push(item.description);
-          else if (usedNow + requested > per)
+          const decision = decideOccasionRequest({
+            use: used.get(item.contractItemId),
+            occasionsPerYear: item.occasionsPerYear,
+            requested: item.requested,
+            kind: input.kind,
+          });
+          if (decision.fits) continue;
+          if (decision.exhausted) exhausted.push(item.description);
+          else
             short.push(
-              `${item.description} (kért: ${requested}, hátralévő: ${per - usedNow})`,
+              `${item.description} (kért: ${item.requested ?? 1}, hátralévő: ${decision.remaining})`,
             );
         }
         if (exhausted.length || short.length)
