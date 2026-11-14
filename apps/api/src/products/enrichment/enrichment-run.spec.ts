@@ -9,6 +9,7 @@ import {
   scriptedNetwork,
   type ScriptedAnswer,
 } from "./enrichment-test-fixtures.js";
+import type { DosingExtractorAnswer } from "./dosing-extraction.js";
 import {
   MAX_CONSECUTIVE_PRODUCT_FAILURES,
   runEnrichment,
@@ -556,6 +557,65 @@ describe("egy kézi futás, árnyékban", () => {
       checks[0]!.fetches[0]!.reason ?? "",
       /az AI szerint nincs adat, az olvasó 1 drop\/100 L\/day/,
     );
+  });
+
+  // card 85c38ab1, second Fauna Marin run (Trace 1-3): the brand's info page says NO_DATA, the shop page of the same
+  // product has a dose (the AI answer refused) or answers 404. WHAT TURNS THIS RED: one page's NO_DATA as the product's
+  // state while another manufacturer source did not say it; NO_DATA held back although every page said it.
+  it("a nincs-adat csak akkor termékszintű, ha minden gyártói forrás olvasható és mind ezt mondja", async () => {
+    const answers: Record<string, DosingExtractorAnswer> = {
+      Infó: {
+        kind: "ANSWER",
+        mode: "NO_DATA",
+        dose: null,
+        tests: [],
+        guidance: null,
+        excerpt: null,
+        reason: "nincs adag",
+      },
+      Bolt: { kind: "REFUSED", refusal: "TEST_CODE_NOT_IN_TEXT" },
+    };
+    const page = (h1: string) => ({
+      status: 200,
+      body: `<html><body><h1>${h1}</h1><p>Kitalált.</p></body></html>`,
+    });
+    const product = async (shop: ScriptedAnswer, shopSays = "Bolt") => {
+      const { checks } = await run(
+        [
+          {
+            productId: "p-1",
+            sources: [
+              { kind: "MANUFACTURER", url: `${MAKER}/info` },
+              { kind: "MANUFACTURER", url: `${MAKER}/bolt` },
+            ],
+          },
+        ],
+        { [`${MAKER}/info`]: page("Infó"), [`${MAKER}/bolt`]: shop },
+        {
+          facts: { "p-1": facts({ unasManufacturerUrl: `${MAKER}/info` }) },
+          dosingExtractor: {
+            extract: async ({ pageText }) =>
+              answers[pageText.startsWith("Infó") ? "Infó" : shopSays]!,
+          },
+        },
+      );
+      const mode = checks[0]!.fields.find((f) => f.field === "dosingMode")!;
+      return { mode: [mode.status, mode.value], fetches: checks[0]!.fetches };
+    };
+
+    const refused = await product(page("Bolt"));
+    assert.deepEqual(refused.mode, ["MISSING", null]);
+    assert.match(
+      refused.fetches[0]!.reason ?? "",
+      /a nincs-adat csak erre a lapra igaz, 1 másik gyártói forrás/,
+    );
+    assert.equal(refused.fetches[0]!.fieldCount, 0);
+    assert.deepEqual((await product({ status: 404 })).mode, ["MISSING", null]);
+    // every manufacturer page read and each says NO_DATA: the product's state
+    assert.deepEqual((await product(page("Bolt"), "Infó")).mode, [
+      "VERIFIED",
+      "NO_DATA",
+    ]);
   });
 
   // PD-013 calibration: reaching the limit stops the run and says so.

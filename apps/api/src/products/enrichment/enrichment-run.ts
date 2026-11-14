@@ -373,6 +373,12 @@ async function checkProduct(
   // AI calls and two sources, and the two answers' guidance "conflicted" with
   // itself. A product reads a final page once; the second is named, not used.
   const readPages = new Set<string>();
+  // A NO_DATA IS ABOUT THE MANUFACTURER, NOT ONE PAGE (card 85c38ab1, second
+  // Fauna Marin run): the brand's info page had no dose and said NO_DATA, the
+  // shop page of the same product had one (its AI answer refused) or answered
+  // 404, and the one NO_DATA went through as the product's verified state.
+  // Counted here: a manufacturer source not read, or read without a NO_DATA.
+  let manufacturerWithoutNoData = 0;
   for (const source of sourcesFor(input, facts)) {
     const supplier =
       source.kind === "SUPPLIER" && source.supplierId
@@ -397,6 +403,7 @@ async function checkProduct(
       (next) => sourceUrlProblem(source.kind, next, sites) === null,
     );
     if (!page.ok) {
+      if (source.kind === "MANUFACTURER") manufacturerWithoutNoData += 1;
       fetches.push({
         sourceKind: source.kind,
         url: source.url,
@@ -447,6 +454,13 @@ async function checkProduct(
             );
           })()
         : null;
+    if (
+      source.kind === "MANUFACTURER" &&
+      !dosingAi?.values.some(
+        (v) => v.field === "dosingMode" && v.raw === "NO_DATA",
+      )
+    )
+      manufacturerWithoutNoData += 1;
     fetches.push({
       sourceKind: source.kind,
       url: page.url,
@@ -478,6 +492,27 @@ async function checkProduct(
         },
       });
   }
+
+  // ...so a NO_DATA stands only when every manufacturer source was read and
+  // said it; otherwise it is no value, and its page says why
+  if (manufacturerWithoutNoData > 0)
+    for (let i = pageCandidates.length - 1; i >= 0; i--) {
+      const c = pageCandidates[i]!;
+      if (c.field !== "dosingMode" || c.candidate.value !== "NO_DATA") continue;
+      pageCandidates.splice(i, 1);
+      const fetch = fetches.find(
+        (f) => f.outcome === "FETCHED" && f.url === c.candidate.sourceRef,
+      );
+      if (fetch) {
+        fetch.fieldCount -= 1;
+        fetch.reason = [
+          fetch.reason,
+          `adagolás (AI): a nincs-adat csak erre a lapra igaz, ${manufacturerWithoutNoData} másik gyártói forrás nem ezt mondja vagy nem olvasható`,
+        ]
+          .filter(Boolean)
+          .join("; ");
+      }
+    }
 
   const reconciledAt = checkedAt.toISOString();
   const fields = ENRICHED_FIELDS.map((field) =>
