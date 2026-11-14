@@ -18,7 +18,20 @@ import type { ExtractedValue } from "./page-extract.js";
  * product's size, not ours; free text, links and attributes therefore never confirm.
  */
 
-const SIZE = /(?<![\d.,])(\d+(?:[.,]\d+)?)\s?(ml|l|g|kg)\b/gi;
+// A unit followed by "/" is a rate (l/h, l/óra, l/nap: a pump's flow), and one followed by a hyphenated suffix (1500L-es,
+// 100ml-s) is a capacity the product serves, not its pack (barracuda on #2556, three of today's catalogue names). A
+// hyphen with a space after it ("2 kg- magnézium") is punctuation and stays.
+const NOT_A_PACK = String.raw`(?!\s*\/)(?!-\p{L})`;
+// Unicode-aware edges, because \b is ASCII-only in JavaScript: "WS2 légpumpa" would read "2 l" (the "é" counted as a
+// boundary). A unit glued to a letter after it is a model code or a word ("XR15 lámpa"). A hyphen glued to a letter or a
+// digit before the number is a model code or a range's upper end ("CUH-18L", "skimmer (100-400l)"); with a space before
+// it ("ReefClear -500ml") it is punctuation. A letter glued before the number stays ("Triton Nickel100 ml").
+const NOT_A_CODE = String.raw`(?<![\d.,])(?<![\p{L}\d]-)`;
+const UNIT_END = String.raw`(?![\p{L}\d])`;
+const SIZE = new RegExp(
+  String.raw`${NOT_A_CODE}(\d+(?:[.,]\d+)?)\s?(ml|l|g|kg)${UNIT_END}${NOT_A_PACK}`,
+  "giu",
+);
 
 export interface NameSize {
   /** As the reconciler compares it: the amount with a dot, a space, the unit in lower case ("100 ml", "0.5 l"). */
@@ -44,7 +57,10 @@ export function nameSize(name: string): NameSize | null {
   const number = amount.replace(".", "[.,]");
   return {
     raw,
-    pattern: new RegExp(`(?<![\\d.,])${number}\\s?${unit}\\b`, "i"),
+    pattern: new RegExp(
+      NOT_A_CODE + String.raw`${number}\s?${unit}` + UNIT_END + NOT_A_PACK,
+      "iu",
+    ),
   };
 }
 

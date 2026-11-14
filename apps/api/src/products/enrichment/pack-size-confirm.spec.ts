@@ -30,6 +30,40 @@ describe("a név mérete", () => {
     assert.equal(nameSize("Készlet 250 ml + 100 ml"), null);
   });
 
+  it("átfolyás és szűrőkapacitás nem kiszerelés (barracuda, #2556; a mai katalógus nevei)", () => {
+    assert.equal(
+      nameSize("AQAMAI KPM Wi-Fi Smart- Áramoltató 4500-10500 l/h"),
+      null,
+    );
+    assert.equal(nameSize("Octo Pulse4 17000 l/h áramoltató OP-4"), null);
+    assert.equal(nameSize("FLUVAL FX6, 1500L-es külső szűrő"), null);
+    assert.equal(nameSize("Szivattyú 3000 l/óra"), null);
+    assert.equal(nameSize("Szűrő 300l-es akváriumhoz"), null);
+  });
+
+  it("típuskód és ékezetes szó nem méret (a JS \\b csak ASCII)", () => {
+    assert.equal(nameSize("Schego WS2 légpumpa 250l/h"), null);
+    assert.equal(nameSize("CUH-18L - 18W-os UVC pótizzó"), null);
+    assert.equal(nameSize("Lámpa 100 lámpatest"), null);
+    assert.equal(nameSize("Ultra Reef Skimmer 140 lehabzó (100-400l)"), null);
+    assert.equal(nameSize("Vertex Előszűrőzsák tartó 100ml-s"), null);
+  });
+
+  it("a valódi kiszerelés a központozás és a tapadó betű mellett is megmarad (a mai katalógus nevei)", () => {
+    assert.equal(nameSize("Triton Nickel100 ml")?.raw, "100 ml");
+    assert.equal(nameSize("Aquaforest Fluorine10ml")?.raw, "10 ml");
+    assert.equal(
+      nameSize("Grotech ReefClear -500ml szűrőfolyadék")?.raw,
+      "500 ml",
+    );
+    assert.equal(
+      nameSize(
+        "Fauna Marin Balling Magnesium (Mg) Mix 2 kg- magnézium készítmény",
+      )?.raw,
+      "2 kg",
+    );
+  });
+
   it("ugyanaz a méret kétszer a névben egy méret", () => {
     assert.equal(nameSize("Amino 100ml - aminosav 100 ml")?.raw, "100 ml");
   });
