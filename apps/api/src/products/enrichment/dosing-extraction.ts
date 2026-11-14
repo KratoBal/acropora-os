@@ -187,11 +187,15 @@ export interface DosingStatement {
  * The AI's answer, checked against this page, as the run's candidates.
  * `alreadyRead`: the dose the deterministic reader took from the page's JSON-LD
  * description (#1800), if any: a NO_DATA must not stand next to it.
+ * `descriptionDoseOnPage`: that description states a dose the reader read or
+ * held back; `pageText` leaves the script out, so it is passed apart
+ * (barracuda, #2538).
  */
 export function dosingStatement(
   answer: DosingExtractorAnswer,
   pageText: string,
   alreadyRead: string | null = null,
+  descriptionDoseOnPage = false,
 ): DosingStatement {
   if (answer.kind === "UNAVAILABLE")
     return {
@@ -238,11 +242,17 @@ export function dosingStatement(
   // "no data" next to a dose sentence the reader held back: the page states a
   // dose, so a person reads it (Fauna Marin Multi Elements A, card 85c38ab1:
   // a range dose, the AI said NO_DATA, and NO_DATA went through as a value)
-  if (answer.mode === "NO_DATA" && wholePage.doseOnPage)
+  // A TEST_DEPENDENT next to a held-back dose stays allowed on purpose: a range
+  // or an unread sentence is what a measured, adjusted dose looks like, and
+  // its guidance must still stand on the page (above).
+  if (
+    answer.mode === "NO_DATA" &&
+    (wholePage.doseOnPage || descriptionDoseOnPage)
+  )
     return {
       values: [],
       notes: [
-        "adagolás (AI): az AI szerint nincs adat, az olvasó adag-mondatot talált, amit nem tudott gépi alakra hozni",
+        `adagolás (AI): az AI szerint nincs adat, az olvasó adag-mondatot talált, amit nem tudott gépi alakra hozni (${wholePage.doseOnPage ? "a lapon" : "a leírásban"})`,
       ],
     };
   if (answer.mode === "NO_DATA") {

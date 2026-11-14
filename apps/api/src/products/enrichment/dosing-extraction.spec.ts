@@ -121,6 +121,15 @@ describe("az AI adagolás-válasza az OS-ben", () => {
         page,
       );
     }
+    // the JSON-LD description's held-back dose counts the same (barracuda, #2538): the page text has no script
+    const described = dosingStatement(
+      answer({ reason: "nincs" }),
+      "Kitalált, adag nélkül.",
+      null,
+      true,
+    );
+    assert.deepEqual(described.values, []);
+    assert.match(described.notes[0]!, /adag-mondatot talált.*\(a leírásban\)/);
     // the pack's reach is not a dose: NO_DATA stands
     assert.deepEqual(
       fields(

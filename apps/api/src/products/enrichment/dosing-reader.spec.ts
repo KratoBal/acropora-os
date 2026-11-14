@@ -173,5 +173,22 @@ describe("a gyártói adagolás a leírásból", () => {
     const dosing = statement.values.find((v) => v.field === "dosing");
     assert.equal(dosing?.raw, "1 drop/100 L/day");
     assert.match(dosing?.excerpt ?? "", /Product\.description/);
+    assert.equal(statement.descriptionDoseOnPage, true);
+  });
+
+  // barracuda, #2538: a range dose in the description is held back (no value), and the statement says the description
+  // states a dose, so a "no data" answer cannot stand next to it. WHAT TURNS THIS RED: the flag lost on the way out.
+  it("a leírás visszatartott adagja: nincs dosing érték, de a kivonat jelzi", () => {
+    const page = (description: string) =>
+      extractPageStatement(
+        `<script type="application/ld+json">${JSON.stringify({ "@type": "Product", name: "Amino", description })}</script>`,
+      );
+    const held = page("Dose 2-5 ml per 100 l weekly.");
+    assert.equal(
+      held.values.find((v) => v.field === "dosing"),
+      undefined,
+    );
+    assert.equal(held.descriptionDoseOnPage, true);
+    assert.equal(page("Premium amino acids.").descriptionDoseOnPage, undefined);
   });
 });

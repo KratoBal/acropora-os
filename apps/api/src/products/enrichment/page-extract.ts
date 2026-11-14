@@ -58,6 +58,12 @@ export interface PageStatement {
    * both ways), so the run can say it; empty when there is nothing to say.
    */
   lexiconNotes?: string[];
+  /**
+   * The JSON-LD description states a dose, read or held back (`readDosing`'s
+   * `doseOnPage`). The visible page text leaves the script out, so a "no data"
+   * answer is checked against this too (barracuda, #2538). Only set when true.
+   */
+  descriptionDoseOnPage?: true;
   /** Why nothing was taken, when nothing was. */
   note:
     | "NO_STRUCTURED_DATA"
@@ -223,6 +229,7 @@ export function extractPageStatement(html: string): PageStatement {
   }
   // a leírás a szótárral: a kivonat a találat körüli szöveg, nem a leírás eleje
   const lexiconNotes: string[] = [];
+  let descriptionDoseOnPage = false;
   const description = text(product.description);
   if (description) {
     const reading = readWaterEffects(description);
@@ -238,10 +245,12 @@ export function extractPageStatement(html: string): PageStatement {
     const dose = readDosing(description);
     put("dosing", dose.raw, "description", dose.excerpt ?? undefined);
     lexiconNotes.push(...dose.notes);
+    descriptionDoseOnPage = dose.doseOnPage;
   }
   return {
     values: [...values.values()],
     ...(lexiconNotes.length ? { lexiconNotes } : {}),
+    ...(descriptionDoseOnPage ? { descriptionDoseOnPage: true as const } : {}),
     note: values.size ? null : "NO_VALUES",
   };
 }
