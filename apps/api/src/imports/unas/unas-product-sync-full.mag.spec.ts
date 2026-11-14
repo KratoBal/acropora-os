@@ -51,7 +51,10 @@ function harness(overrides: Partial<FullSyncDeps> = {}) {
     out,
     err,
     deps,
-    io: { stdout: (t: string) => out.push(t), stderr: (t: string) => err.push(t) },
+    io: {
+      stdout: (t: string) => out.push(t),
+      stderr: (t: string) => err.push(t),
+    },
   };
 }
 
@@ -68,7 +71,11 @@ describe("a UNAS teljes ujraolvasas parancsanak teste", () => {
 
   it("ismeretlen argumentumnal is megall, es megnevezi", async () => {
     const h = harness();
-    const code = await runUnasProductSyncFull(["--teljes", "--gyors"], h.deps, h.io);
+    const code = await runUnasProductSyncFull(
+      ["--teljes", "--gyors"],
+      h.deps,
+      h.io,
+    );
     assert.equal(code, 2);
     assert.deepEqual(h.calls, []);
     assert.match(h.err.join(""), /--gyors/);
@@ -78,7 +85,11 @@ describe("a UNAS teljes ujraolvasas parancsanak teste", () => {
     const h = harness();
     const code = await runUnasProductSyncFull(["--teljes"], h.deps, h.io);
     assert.equal(code, 0);
-    assert.deepEqual(h.calls, ["getToken", "runFull:token-value", "readRun:run-1"]);
+    assert.deepEqual(h.calls, [
+      "getToken",
+      "runFull:token-value",
+      "readRun:run-1",
+    ]);
     assert.equal(h.out.length, 1);
     assert.ok(h.out[0]!.endsWith("\n"));
     assert.deepEqual(JSON.parse(h.out[0]!), {
@@ -162,7 +173,9 @@ describe("a UNAS teljes ujraolvasas parancsanak INDULASA", () => {
       [],
       "a lefordított parancs RÉGEBBI, mint a forrása -- építsd újra (turbo run test --filter=@acropora/api).",
     );
-    const kimenet = execFileSync("node", [FORDITOTT, "--help"], { encoding: "utf8" });
+    const kimenet = execFileSync("node", [FORDITOTT, "--help"], {
+      encoding: "utf8",
+    });
     assert.ok(kimenet.trim().length > 0);
     assert.equal(kimenet, FULL_SYNC_USAGE);
   });

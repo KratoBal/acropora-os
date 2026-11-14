@@ -105,8 +105,9 @@ export async function runUnasProductSyncFull(
   const run = await deps.readRun(runId);
   const durationSeconds =
     run.startedAt && run.completedAt
-      ? Math.round((run.completedAt.getTime() - run.startedAt.getTime()) / 100) /
-        10
+      ? Math.round(
+          (run.completedAt.getTime() - run.startedAt.getTime()) / 100,
+        ) / 10
       : null;
   io.stdout(
     `${JSON.stringify({
