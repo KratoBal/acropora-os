@@ -24,6 +24,7 @@ import {
   ENRICHED_FIELDS,
   extractPageStatement,
   type EnrichedField,
+  type PageStatement,
 } from "./page-extract.js";
 import {
   PoliteFetcher,
@@ -461,8 +462,11 @@ async function checkProduct(
         : null;
     // marine-aquatics.eu states its data in labelled rows, not JSON-LD.
     // bulkreefsupply.com states its barcode only in a labelled table.
-    const statement =
-      source.kind === "MARINE_AQUATICS" && structured.values.length === 0
+    // An imprint page gives no structured value either: a shop's legal notice may carry a Product JSON-LD with a dose
+    // or a size, and it is not this product's page (barracuda on #2565). Nor a "no product" note: none is expected.
+    const statement: PageStatement = imprint
+      ? { values: [], note: null }
+      : source.kind === "MARINE_AQUATICS" && structured.values.length === 0
         ? extractMarineAquaticsStatement(page.html)
         : source.kind === "BULK_REEF_SUPPLY"
           ? withBulkReefSupplyTable(structured, page.html)
