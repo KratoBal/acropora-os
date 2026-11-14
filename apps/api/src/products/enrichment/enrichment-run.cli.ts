@@ -142,6 +142,9 @@ export function parseRunInput(
       return;
     }
     const parsed: RunProductInput["sources"][number][] = [];
+    // one imprint per product: two would ask for two maker blocks, and which one stands is a person's choice, not the
+    // order of the input (barracuda on #2565)
+    let imprints = 0;
     sources.forEach((source, j) => {
       const s = source as {
         kind?: unknown;
@@ -159,6 +162,10 @@ export function parseRunInput(
       )
         problems.push(
           `products[${i}].sources[${j}]: imprint csak gyártói forrásnál, true értékkel.`,
+        );
+      else if (s.imprint === true && ++imprints > 1)
+        problems.push(
+          `products[${i}].sources[${j}]: termékenként legfeljebb egy impresszum-forrás.`,
         );
       else if (s.kind === "SUPPLIER" && typeof s.supplierId !== "string")
         problems.push(

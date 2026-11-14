@@ -557,6 +557,47 @@ describe("egy kézi futás, árnyékban", () => {
     assert.equal(calls, 2);
   });
 
+  // barracuda on #2565. WHAT TURNS THIS RED: a value read deterministically off the imprint page (a shop's legal notice
+  // may carry a Product JSON-LD with a barcode, a flow rate or a dose); the run's evidence from it is the maker only.
+  it("az impresszum JSON-LD-je sem ad jelöltet: onnan csak a gyártó-blokk", async () => {
+    const asked: string[][] = [];
+    const imprintWithProduct = productPage({
+      name: "Kitalált nyomelem",
+      gtin13: "5901234123457",
+      description: "Dose 2 ml per 100 l daily.",
+      additionalProperty: [{ name: "Flow rate", value: 3000, unitText: "l/h" }],
+    }).replace(
+      "<h1>Kitalált</h1>",
+      "<p>Impressum</p><p>Kitalált Gyártó GmbH, Példa utca 1, 12345 Mintaváros</p>",
+    );
+    const { checks } = await run(
+      [
+        {
+          productId: "p-1",
+          sources: [
+            { kind: "MANUFACTURER", url: `${MAKER}/impressum`, imprint: true },
+          ],
+        },
+      ],
+      { [`${MAKER}/impressum`]: { status: 200, body: imprintWithProduct } },
+      {
+        facts: { "p-1": facts({ brandWebsiteUrl: MAKER }) },
+        productFieldExtractor: fieldsFake(asked),
+      },
+    );
+    assert.deepEqual(asked, [["manufacturerInfo"]]);
+    const fromImprint = checks[0]!.fields
+      .filter((f) =>
+        f.evidence.some((e) => e.sourceRef === `${MAKER}/impressum`),
+      )
+      .map((f) => f.field);
+    assert.deepEqual(fromImprint, ["manufacturerInfo"]);
+    assert.deepEqual(
+      checks[0]!.fetches.map((f) => [f.outcome, f.fieldCount, f.reason]),
+      [["FETCHED", 1, null]],
+    );
+  });
+
   // barracuda, #2538: the dose only in the JSON-LD description, held back (a range); the visible text has none, the AI says
   // NO_DATA. WHAT TURNS THIS RED: the description's flag not passed from the run to the dosing check.
   it("a leírás visszatartott adagja mellett az AI nincs-adat válasza nem érték", async () => {

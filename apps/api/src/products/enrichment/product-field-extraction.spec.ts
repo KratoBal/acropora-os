@@ -317,8 +317,8 @@ describe("az OS saját ellenőrzése a lapon", () => {
       assert.deepEqual(one("Kitalált GmbH", address).values, [], address);
   });
 
-  // barracuda on #2564. WHAT TURNS THIS RED: a phone carried in the company name into the value; "Web" in a company's
-  // own name taken for contact data. (Known limit, not asserted: a town named "Tel …" fails the address filter.)
+  // barracuda on #2564. WHAT TURNS THIS RED: a phone carried in the company name into the value, or its note pointing at
+  // the address; "Web" in a company's own name taken for contact data. (Known limit, not asserted: a town named "Tel …" fails the address filter.)
   it("a cégnévben álló telefon kiszűrve; a névben álló Web szó nem", () => {
     const one = (name: string, address: string) => {
       const line = `${name}, ${address}`;
@@ -336,13 +336,15 @@ describe("az OS saját ellenőrzése a lapon", () => {
         line,
       );
     };
-    assert.deepEqual(
-      one(
-        "Euro Corals Tel.: 08571 924 95 57",
-        "Euro Corals Tel.: 08571 924 95 57 Passauer Straße 12 84359 Simbach am Inn",
-      ).values,
-      [],
+    const phoneInName = one(
+      "Euro Corals Tel.: 08571 924 95 57",
+      "Euro Corals Tel.: 08571 924 95 57 Passauer Straße 12 84359 Simbach am Inn",
     );
+    assert.deepEqual(phoneInName.values, []);
+    // the note points at the name, not the address (barracuda on #2565): the address here is clean
+    assert.deepEqual(phoneInName.notes, [
+      "termékmezők (AI): manufacturerInfo: Felelős: a cégnévben elérhetőség áll",
+    ]);
     assert.equal(
       one("Aquaristik-Web GmbH", "Hauptstraße 1, 12345 Musterstadt").values
         .length,

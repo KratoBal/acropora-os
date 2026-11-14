@@ -179,12 +179,6 @@ const POSTCODE = /(?<![\p{L}\d])\d{3,6}(?!\d)/u;
 const COPYRIGHT =
   /©|\(c\)|copyright|all rights reserved|alle rechte|minden jog/iu;
 /**
- * An address carries no contact or register data: the fourth pilot-20 run (card 8639ac2a) let through "Euro Corals,
- * Geschäftsführer: … Passauer Straße 12 84359 Simbach am Inn DEUTSCHLAND Tel.: … E-Mail: Website: …" and "Blue Life USA,
- * is located at: 7831 ALABAMA AVE …", both verbatim. A street, a postcode, a town and a country; anything else is a
- * person's to read, not a value.
- */
-/**
  * Contact data inside the company NAME (barracuda on #2564): with the name cut off the address, "Euro Corals Tel.: 08571 …"
  * as the name would carry the phone into the value. Narrower than the address filter on purpose: a name may hold "Web"
  * ("Aquaristik-Web GmbH") or "Tel" ("Tel Aviv …"); a label with its colon or dot, an e-mail, a web address or a phone-like
@@ -192,6 +186,12 @@ const COPYRIGHT =
  */
 const CONTACT_IN_NAME =
   /(?:tel|telefon|phone|fax|mobil|e-?mail)\s*[.:]|@|https?:|www\.|\d{4,}[\s/-]?\d{2,}/iu;
+/**
+ * An address carries no contact or register data: the fourth pilot-20 run (card 8639ac2a) let through "Euro Corals,
+ * Geschäftsführer: … Passauer Straße 12 84359 Simbach am Inn DEUTSCHLAND Tel.: … E-Mail: Website: …" and "Blue Life USA,
+ * is located at: 7831 ALABAMA AVE …", both verbatim. A street, a postcode, a town and a country; anything else is a
+ * person's to read, not a value.
+ */
 const NOT_AN_ADDRESS =
   /(?<![\p{L}])(?:tel|telefon|phone|fax|e-?mail|website|web|www|https?|geschäftsführer|geschaeftsfuehrer|geschäftsführung|geschaeftsfuehrung|managing director|ügyvezető|inhaber|vertreten durch|amtsgericht|registergericht|hrb|hra|ust-?id|vat|mobil|is located at)(?![\p{L}])|@/iu;
 /**
@@ -301,13 +301,13 @@ export function productFieldStatement(
       else if (COPYRIGHT.test(m.address))
         problems.push(`${ROLE_LABEL[m.role]}: a cím egy copyright-sor`);
       // on the address without the company name: a name like "Aquaristik-Web GmbH" is no contact data (barracuda #2562)
-      else if (
-        NOT_AN_ADDRESS.test(withoutName(m.address, m.name)) ||
-        CONTACT_IN_NAME.test(m.name)
-      )
+      else if (NOT_AN_ADDRESS.test(withoutName(m.address, m.name)))
         problems.push(
           `${ROLE_LABEL[m.role]}: a címben elérhetőség vagy cégadat is áll`,
         );
+      // the name has its own note: the person reading the run looks where the note points (barracuda on #2565)
+      else if (CONTACT_IN_NAME.test(m.name))
+        problems.push(`${ROLE_LABEL[m.role]}: a cégnévben elérhetőség áll`);
       // the shape on the address without the company name: a number in the name ("Aqua 2000 GmbH") is no postcode
       // (barracuda on #2560)
       else if (!(
