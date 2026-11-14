@@ -91,6 +91,7 @@ async function run(
     suppliers?: Record<string, string>;
     failSave?: (check: StoredCheck) => Error | null;
     dosingExtractor?: RunDeps["dosingExtractor"];
+    productFieldExtractor?: RunDeps["productFieldExtractor"];
   } = {},
 ) {
   const network = scriptedNetwork(table);
@@ -115,6 +116,9 @@ async function run(
       now: clock.now,
       ...(options.dosingExtractor
         ? { dosingExtractor: options.dosingExtractor }
+        : {}),
+      ...(options.productFieldExtractor
+        ? { productFieldExtractor: options.productFieldExtractor }
         : {}),
     },
   );
@@ -369,6 +373,67 @@ describe("egy kézi futás, árnyékban", () => {
     );
     assert.equal(field("dosingTests").value, "KALCIUM;KH");
     assert.equal(field("dosingGuidance").value, guidance);
+  });
+
+  // T4.4 S1b, card 8639ac2a. WHAT TURNS THIS RED: the use or the maker block not asked of the manufacturer's page, a
+  // reseller's page sent to the AI, an answer not checked against the page reaching the field, or the two fields left
+  // out of the run's field list.
+  it("a gyártói lapról az alkalmazás és a gyártó a futás mezője; a kereskedő lapja nem megy az AI-hoz", async () => {
+    const asked: { pageText: string; fields: string[] }[] = [];
+    const page =
+      "<html><body><p>Alkalmazás: jódszint pótlására.</p><p>Kitalált Gyártó GmbH, Példa utca 1, 12345 Mintaváros</p></body></html>";
+    const { checks } = await run(
+      [
+        {
+          productId: "p-1",
+          sources: [{ kind: "BULK_REEF_SUPPLY", url: `${BRS}/p/2` }],
+        },
+      ],
+      {
+        [`${MAKER}/p/2`]: { status: 200, body: page },
+        [`${BRS}/p/2`]: { status: 200, body: productPage({}) },
+      },
+      {
+        facts: { "p-1": facts({ unasManufacturerUrl: `${MAKER}/p/2` }) },
+        productFieldExtractor: {
+          extract: async (input) => {
+            asked.push({ pageText: input.pageText, fields: input.fields });
+            return {
+              kind: "ANSWER",
+              fields: [
+                {
+                  field: "application",
+                  value: "jódszint pótlására.",
+                  anchor: "Alkalmazás: jódszint pótlására.",
+                },
+                {
+                  field: "manufacturerInfo",
+                  role: "MAKER",
+                  name: "Kitalált Gyártó GmbH",
+                  address: "Példa utca 1, 12345 Mintaváros",
+                  email: null,
+                  anchor:
+                    "Kitalált Gyártó GmbH, Példa utca 1, 12345 Mintaváros",
+                },
+              ],
+              refused: [],
+            };
+          },
+        },
+      },
+    );
+    assert.equal(asked.length, 1);
+    assert.deepEqual(asked[0]!.fields, ["application", "manufacturerInfo"]);
+    const field = (key: string) =>
+      checks[0]!.fields.find((f) => f.field === key)!;
+    assert.deepEqual(
+      [field("application").value, field("application").sourceType],
+      ["jódszint pótlására.", "MANUFACTURER_PAGE"],
+    );
+    assert.equal(
+      field("manufacturerInfo").value,
+      "Gyártó: Kitalált Gyártó GmbH, Példa utca 1, 12345 Mintaváros",
+    );
   });
 
   // barracuda, #2538: the dose only in the JSON-LD description, held back (a range); the visible text has none, the AI says

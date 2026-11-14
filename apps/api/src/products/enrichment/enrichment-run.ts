@@ -15,6 +15,11 @@ import {
   type DosingExtractor,
 } from "./dosing-extraction.js";
 import { confirmPackSize, nameSize } from "./pack-size-confirm.js";
+import {
+  PRODUCT_FIELD_KEYS,
+  productFieldStatement,
+  type ProductFieldExtractor,
+} from "./product-field-extraction.js";
 import { extractMarineAquaticsStatement } from "./marine-aquatics-extract.js";
 import {
   ENRICHED_FIELDS,
@@ -194,6 +199,11 @@ export interface RunDeps {
    * absent: not called. Only a MANUFACTURER page is sent.
    */
   dosingExtractor?: DosingExtractor;
+  /**
+   * What the product is for and who makes it, through Acropora AI (`product-field-extraction.ts`, T4.4 S1b); absent:
+   * not called. Only a MANUFACTURER page is sent: the product page gives the use, the brand's imprint page the maker.
+   */
+  productFieldExtractor?: ProductFieldExtractor;
 }
 
 export interface RunSummary {
@@ -463,6 +473,20 @@ async function checkProduct(
             );
           })()
         : null;
+    const fieldsAi =
+      source.kind === "MANUFACTURER" && deps.productFieldExtractor
+        ? await (async () => {
+            const pageText = visiblePageText(page.html);
+            return productFieldStatement(
+              await deps.productFieldExtractor!.extract({
+                productName: facts.name,
+                pageText,
+                fields: [...PRODUCT_FIELD_KEYS],
+              }),
+              pageText,
+            );
+          })()
+        : null;
     if (
       source.kind === "MANUFACTURER" &&
       !dosingAi?.values.some(
@@ -480,6 +504,7 @@ async function checkProduct(
           statement.note,
           ...(statement.lexiconNotes ?? []),
           ...(dosingAi?.notes ?? []),
+          ...(fieldsAi?.notes ?? []),
         ]
           .filter(Boolean)
           .join("; ") || null,
@@ -488,12 +513,14 @@ async function checkProduct(
       fieldCount:
         statement.values.length +
         (dosingAi?.values.length ?? 0) +
-        (sizeConfirmed ? 1 : 0),
+        (sizeConfirmed ? 1 : 0) +
+        (fieldsAi?.values.length ?? 0),
     });
     for (const value of [
       ...statement.values,
       ...(dosingAi?.values ?? []),
       ...(sizeConfirmed ? [sizeConfirmed] : []),
+      ...(fieldsAi?.values ?? []),
     ])
       pageCandidates.push({
         field: value.field,
