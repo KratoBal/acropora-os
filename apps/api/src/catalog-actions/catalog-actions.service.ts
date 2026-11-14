@@ -22,6 +22,7 @@ import {
   CATALOG_ACTION_RUNNERS,
   CATALOG_ACTION_RUNNERS_TOKEN,
   CATALOG_ACTIONS_ENV,
+  CatalogActionInputError,
   catalogActionsEnabled,
   type CatalogActionRunner,
 } from "./catalog-actions.runners.js";
@@ -59,6 +60,8 @@ export class CatalogActionsService {
   private readonly runners: readonly CatalogActionRunner[];
   private readonly environment: NodeJS.ProcessEnv;
   private readonly pending = new Map<string, Promise<void>>();
+  /** The list a plan of an input kind was made from; its apply writes THIS list, never one sent with the apply. */
+  private readonly inputs = new Map<string, unknown>();
   /** The clock; a field so a test can move it. */
   now: () => Date = () => new Date();
 
@@ -91,6 +94,7 @@ export class CatalogActionsService {
         title: runner.title,
         description: runner.description,
         lastRun: this.latest(runner.kind) ?? null,
+        ...(runner.parseInput ? { requiresInput: true } : {}),
       })),
     };
   }
@@ -102,9 +106,12 @@ export class CatalogActionsService {
     return run;
   }
 
-  plan(kind: string, actorUserId: string): CatalogActionRun {
+  plan(kind: string, actorUserId: string, body?: unknown): CatalogActionRun {
     this.requireEnabled();
-    return this.start(this.runner(kind), "plan", actorUserId, null);
+    const runner = this.runner(kind);
+    // a bad list stops here, before the host guard, the lock and a run record
+    const input = this.parse(runner, body);
+    return this.start(runner, "plan", actorUserId, null, input);
   }
 
   apply(
@@ -136,7 +143,14 @@ export class CatalogActionsService {
       throw new BadRequestException(
         "A próba 30 percnél régebbi, az adat azóta változhatott. Futtasd újra.",
       );
-    const run = this.start(runner, "apply", actorUserId, plan.id);
+    // an input kind's apply is bound to the plan's list; a list in the apply request is not read
+    const run = this.start(
+      runner,
+      "apply",
+      actorUserId,
+      plan.id,
+      this.inputs.get(plan.id),
+    );
     plan.appliedByRunId = run.id;
     return run;
   }
@@ -157,6 +171,17 @@ export class CatalogActionsService {
     return runner;
   }
 
+  private parse(runner: CatalogActionRunner, body: unknown): unknown {
+    if (!runner.parseInput) return undefined;
+    try {
+      return runner.parseInput(body);
+    } catch (error) {
+      if (error instanceof CatalogActionInputError)
+        throw new BadRequestException(error.message);
+      throw error;
+    }
+  }
+
   private latest(kind: CatalogActionKind): CatalogActionRun | undefined {
     let latest: CatalogActionRun | undefined;
     for (const run of this.runs.values()) if (run.kind === kind) latest = run;
@@ -168,6 +193,7 @@ export class CatalogActionsService {
     mode: CatalogActionMode,
     actorUserId: string,
     planRunId: string | null,
+    input?: unknown,
   ): CatalogActionRun {
     // the second guard: only a Medusa on the environment's list, plan and apply alike
     const host = checkMedusaHost(this.environment);
@@ -194,6 +220,7 @@ export class CatalogActionsService {
       appliedByRunId: null,
     };
     this.runs.set(run.id, run);
+    if (input !== undefined) this.inputs.set(run.id, input);
     this.forgetOld();
     this.logger.log(
       `catalog action ${run.kind} ${mode} started by user ${actorUserId} (run ${run.id})`,
@@ -204,10 +231,12 @@ export class CatalogActionsService {
     };
     const done = (async () => {
       try {
-        run.exitCode = await runner.run(mode === "apply", actorUserId, {
-          stdout: write,
-          stderr: write,
-        });
+        run.exitCode = await runner.run(
+          mode === "apply",
+          actorUserId,
+          { stdout: write, stderr: write },
+          input,
+        );
         run.status = run.exitCode === 0 ? "succeeded" : "failed";
       } catch (error) {
         run.status = "failed";
@@ -230,7 +259,9 @@ export class CatalogActionsService {
     for (const run of finished.slice(
       0,
       Math.max(0, this.runs.size - KEPT_RUNS),
-    ))
+    )) {
       this.runs.delete(run.id);
+      this.inputs.delete(run.id);
+    }
   }
 }

@@ -126,6 +126,42 @@ describe("CatalogActionsPanel", () => {
     ).toBeEnabled();
   });
 
+  /*
+    A KIND THAT TAKES A LIST (brand-from-list, card 16d06aea): the page has no
+    list to send, so a Próba button would only ever fail. It says so instead,
+    and keeps the other kinds' buttons.
+  */
+  it("a kind that needs a list shows a note instead of buttons, and the other kinds keep theirs", async () => {
+    const base = enabled();
+    api.overview.mockResolvedValue({
+      ...base,
+      actions: [
+        ...base.actions,
+        {
+          kind: "brand-from-list",
+          title: "Márka egy kiválasztott listából",
+          description: "lista",
+          lastRun: null,
+          requiresInput: true,
+        },
+      ],
+    });
+    render(<CatalogActionsPanel token="t" />);
+    const listed = await screen.findByRole("region", {
+      name: "Márka egy kiválasztott listából",
+    });
+    expect(within(listed).queryByRole("button")).toBeNull();
+    expect(
+      within(listed).getByTestId("catalog-action-input-note"),
+    ).toHaveTextContent("az API-n át indul");
+    const backfill = screen.getByRole("region", {
+      name: "Márkák a termékekre",
+    });
+    expect(
+      within(backfill).getByRole("button", { name: "Próba" }),
+    ).toBeEnabled();
+  });
+
   it("renders nothing where the server says the operations do not exist", async () => {
     api.overview.mockResolvedValue({ enabled: false, actions: [] });
     const { container } = render(<CatalogActionsPanel token="t" />);

@@ -2,7 +2,7 @@
  * ONE-OFF CATALOG OPERATIONS STARTED FROM THE OS (kezdolap-marka-sav-os).
  *
  * Each kind is an existing command-line operation (`unas:brand-backfill`,
- * `medusa:brand-links`, `medusa:categories`, `products:brand-from-name`), run by the API with the same code path. A run is
+ * `medusa:brand-links`, `medusa:categories`, `products:brand-from-name`; `brand-from-list` has no command, its input is a list), run by the API with the same code path. A run is
  * either a PLAN (reads, writes nothing) or an APPLY, and an apply is accepted
  * only after a successful plan of the same kind.
  */
@@ -11,6 +11,7 @@ export const CATALOG_ACTION_KINDS = [
   "brand-links",
   "categories",
   "brand-from-name",
+  "brand-from-list",
 ] as const;
 export type CatalogActionKind = (typeof CATALOG_ACTION_KINDS)[number];
 
@@ -43,6 +44,11 @@ export interface CatalogActionView {
   description: string;
   /** The most recent run of this kind, if any since the API started. */
   lastRun: CatalogActionRun | null;
+  /**
+   * True for a kind whose plan needs a list in the request body (`brand-from-list`): there is no button for it,
+   * it is started through the API, and its apply writes the list its plan was made from.
+   */
+  requiresInput?: boolean;
 }
 
 /**
