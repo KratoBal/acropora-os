@@ -419,6 +419,19 @@ export interface QuoteCostingLineDto {
   marginPercent: string | null;
   warnings: string[];
 }
+/**
+ * A VÁLTOZAT MAI ELADÁSI ÁRA NETTÓBAN, egy tétel kitöltéséhez (Luca, 2026-11-13: a termék kiválasztása után
+ * a név és az ár nem töltődött ki, csak mentés és újranyitás után). Ugyanaz az ár, amit a javasolt egységár ad
+ * (`loadVariantListPrices`): a törzsadat gazdája dönt, a nettót a változat áfakulcsa adja. Ha nincs ár,
+ * `unitNetPrice` null és a `reason` megnevezi az okot, soha nem nulla.
+ */
+export interface QuoteVariantListPriceDto {
+  variantId: string;
+  unitNetPrice: string | null;
+  /** futó akciós ár */
+  sale: boolean;
+  reason: string | null;
+}
 export interface QuoteCostingDto {
   versionId: string;
   currency: string;
