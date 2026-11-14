@@ -8,7 +8,11 @@ import {
 } from "@nestjs/common";
 
 import type { ProductDataRepository } from "./product-data.repository.js";
-import { ProductDataService, notFound } from "./product-data.service.js";
+import {
+  ProductDataService,
+  notFound,
+  unknownNamed,
+} from "./product-data.service.js";
 import type { ProductRow } from "./product-data.view.js";
 
 /*
@@ -252,6 +256,35 @@ describe("notFound", () => {
     assert.deepEqual(
       notFound(["a", "S1", "x"], [{ id: "a", variants: [{ sku: "S1" }] }]),
       ["x"],
+    );
+  });
+});
+
+describe("unknownNamed", () => {
+  it("names up to ten unknown category values, then counts the rest, each cut at 80 characters", () => {
+    assert.equal(unknownNamed(["a", "b"]), "a, b");
+    const many = Array.from({ length: 13 }, (_, i) => `x${i}`);
+    assert.equal(
+      unknownNamed(many),
+      "x0, x1, x2, x3, x4, x5, x6, x7, x8, x9 és még 3",
+    );
+    assert.equal(unknownNamed(["y".repeat(200)]).length, 80);
+  });
+  it("a request with many unknown category values is still a 400 and the message stays short", async () => {
+    const many = Array.from({ length: 500 }, (_, i) => `nincs-${i}`);
+    await assert.rejects(
+      service([], {
+        total: 0,
+        tree: [{ id: "cat_real", parentId: null }],
+      }).read({
+        query: { categoryIds: many },
+        limit: 50,
+        offset: 0,
+      }),
+      (error: unknown) =>
+        error instanceof BadRequestException &&
+        /és még 490/.test(error.message) &&
+        error.message.length < 600,
     );
   });
 });

@@ -75,7 +75,7 @@ export class ProductDataService {
         const unknown = unknownCategoryIds(query.categoryIds, tree);
         if (unknown.length > 0)
           throw new BadRequestException(
-            `Ismeretlen kategória-azonosító: ${unknown.map((id) => id.slice(0, 80)).join(", ")}. A category szűrő kategória-AZONOSÍTÓT vár (a termék categories mezőjének id-ja), nem nevet. Ez hiba, nem üres kategória.`,
+            `Ismeretlen kategória-azonosító: ${unknownNamed(unknown)}. A category szűrő kategória-AZONOSÍTÓT vár (a termék categories mezőjének id-ja), nem nevet. Ez hiba, nem üres kategória.`,
           );
         query.categoryIds = categoryDescendants(query.categoryIds, tree);
       }
@@ -124,6 +124,18 @@ export class ProductDataService {
     );
     return new Map(entries);
   }
+}
+
+/** At most this many unknown category values are named in the 400, the rest are counted: a long query string must not echo back whole. */
+const MAX_UNKNOWN_NAMED = 10;
+
+/** The unknown category values for the 400 message: the first ones (80 characters each), then "és még N". */
+export function unknownNamed(unknown: readonly string[]): string {
+  const named = unknown
+    .slice(0, MAX_UNKNOWN_NAMED)
+    .map((id) => id.slice(0, 80));
+  const rest = unknown.length - named.length;
+  return rest > 0 ? `${named.join(", ")} és még ${rest}` : named.join(", ");
 }
 
 /** Requested identifiers that match NO product id and NO variant SKU anywhere (not "not on this page"). */
