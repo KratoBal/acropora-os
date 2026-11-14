@@ -239,6 +239,10 @@ export class MaintenanceOrdersService {
             contractItemId: item.id,
             description: item.description,
             occasionsPerYear: item.occasionsPerYear,
+            // A KIÁLLÍTÁS A KÉRT ÖSSZES ALKALMAT EGYSZERRE FOGLALJA, és az aláíráskor létrejövő EGY karbantartási
+            // lap / munkalap fedi mind az N alkalmat (acrobot, 2026-11-14 01:20: „egy munkalap a tétel teljes kért
+            // darab- és alkalomszámával"). A további kiszállásokhoz nem készül újabb lap, ezért a keretből sem
+            // foglal újra senki: a megrendelőlapos lap sora nem számít külön (`occasionsUsed`).
             requested: chosen.get(item.id)!.occasions,
           })),
         },
