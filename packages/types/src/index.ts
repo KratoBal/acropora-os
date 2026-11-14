@@ -148,6 +148,11 @@ export type {
   BillingLineStockOutcome,
 } from "./billing-document-read.js";
 export { billingProductPrice } from "./billing-product-price.js";
+export type {
+  ProductDiscontinuation,
+  ProductDiscontinuationReplacement,
+  SetProductDiscontinuationInput,
+} from "./product-discontinuation.js";
 export {
   outgoingMissingPayments,
   FIZMODUNIFIED_MISSING_PAYMENTS,

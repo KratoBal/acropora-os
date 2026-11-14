@@ -12,6 +12,9 @@ import { ProductHusbandryController } from "./product-husbandry.controller.js";
 import { ProductHusbandryRepository } from "./product-husbandry.repository.js";
 import { ProductHusbandryService } from "./product-husbandry.service.js";
 import { ProductShippingProfileBulkController } from "./product-shipping-profile-bulk.controller.js";
+import { ProductDiscontinuationController } from "./product-discontinuation.controller.js";
+import { ProductDiscontinuationRepository } from "./product-discontinuation.repository.js";
+import { ProductDiscontinuationService } from "./product-discontinuation.service.js";
 import { ProductShippingProfileController } from "./product-shipping-profile.controller.js";
 import { ShippingProfileFillController } from "./shipping-profile-fill.controller.js";
 import {
@@ -77,6 +80,7 @@ import { CustomerCandidateSource } from "../aquariums/recommendation/customer-ca
     ProductBarcodeController,
     ProductExtensionController,
     ProductShippingProfileController,
+    ProductDiscontinuationController,
     ProductHusbandryController,
     ProductShippingProfileBulkController,
     ShippingProfileFillController,
@@ -106,6 +110,8 @@ import { CustomerCandidateSource } from "../aquariums/recommendation/customer-ca
     ProductBarcodeService,
     ProductExtensionRepository,
     ProductShippingProfileRepository,
+    ProductDiscontinuationRepository,
+    ProductDiscontinuationService,
     ProductHusbandryRepository,
     ProductHusbandryService,
     ShippingProfileFillRepository,
