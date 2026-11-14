@@ -62,6 +62,7 @@
     "unas:webshop-sellable-backfill": "tsc -p tsconfig.json && node --env-file=../../.env dist/imports/unas/unas-webshop-sellable-backfill.cli.js",
     "unas:kapcsolat-ujraepites": "tsc -p tsconfig.json && node --env-file=../../.env dist/imports/unas/unas-kapcsolat-ujraepites.cli.js",
     "unas:termekek-teljes-szinkron": "tsc -p tsconfig.json && node --env-file=../../.env dist/imports/unas/unas-product-sync-full.cli.js",
+    "products:vegleg-megszunt-tomeges": "tsc -p tsconfig.json && node --env-file=../../.env dist/products/product-discontinuation-bulk.cli.js",
     "unas:kapcsolat-futasok": "tsc -p tsconfig.json && node --env-file=../../.env dist/imports/unas/unas-kapcsolat-futasok.cli.js",
     "documents:thumbnails": "tsc -p tsconfig.json && node --env-file=../../.env dist/documents/document-thumbnail-backfill.cli.js",
     "nav:backfill": "tsc -p tsconfig.json && node --env-file=../../.env dist/purchasing/nav-incoming-invoices/nav-incoming-invoice-backfill.cli.js",
