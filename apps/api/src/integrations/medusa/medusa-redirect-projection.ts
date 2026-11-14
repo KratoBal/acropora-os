@@ -52,10 +52,14 @@ export interface RedirectSource {
   >;
 }
 
-/** Hány termék-szabály ment a márkalapra vagy 410-zel, mert a terméknek nincs lapja. */
+/**
+ * Hány termék-szabály ment a márkalapra vagy 410-zel, mert a terméknek nincs lapja, és hány sor megy a
+ * véglegesen megszűnt termék helyettesítőjére vagy kategóriájára (`moved`, a termék saját lapjának sorával együtt).
+ */
 export interface RedirectRetargeted {
   brand: number;
   gone: number;
+  moved: number;
 }
 
 export type RedirectProjectionOutcome =
@@ -88,6 +92,7 @@ export async function projectUrlRedirects(
   const retargeted: RedirectRetargeted = {
     brand: aktiv.filter((r) => r.target === "brand").length,
     gone: aktiv.filter((r) => r.target === "gone").length,
+    moved: aktiv.filter((r) => r.target === "moved").length,
   };
   const sorok: MedusaUrlRedirect[] = aktiv.map((r) => ({
     source_path: r.sourcePath,
@@ -142,6 +147,9 @@ export function describeRedirectProjection(
 }
 
 const lapNelkul = (r: RedirectRetargeted) =>
-  r.brand || r.gone
+  (r.brand || r.gone
     ? `; lap nelkuli termek: ${r.brand} a markalapra, ${r.gone} 410`
-    : "";
+    : "") +
+  (r.moved
+    ? `; veglegesen megszunt termek: ${r.moved} sor a helyettesitore vagy a kategoriara`
+    : "");
