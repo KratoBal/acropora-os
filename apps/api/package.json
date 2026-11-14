@@ -46,6 +46,7 @@
     "customer-candidates:import": "tsc -p tsconfig.json && node --env-file=../../.env dist/customer-candidates/customer-candidates-manual.cli.js",
     "partner:migrate": "tsc -p tsconfig.json && node --env-file=../../.env dist/partner-migration/partner-migration.cli.js",
     "unas:brand-backfill": "tsc -p tsconfig.json && node --env-file=../../.env dist/imports/unas/unas-brand-backfill.cli.js",
+    "products:brand-from-name": "tsc -p tsconfig.json && node --env-file=../../.env dist/products/brand-from-name.cli.js",
     "medusa:image-addresses": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-image-audit.cli.js",
     "medusa:image-blocks": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-image-block-audit.cli.js",
     "datasheet:audit": "tsc -p tsconfig.json && node dist/products/datasheet-audit.cli.js",

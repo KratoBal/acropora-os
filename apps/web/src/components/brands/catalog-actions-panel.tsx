@@ -45,6 +45,12 @@ const APPLY_TEXT: Partial<
     recovery:
       "Egy újabb futás az OS mostani állapotára írja vissza a kötéseket; egy archivált márka kötése ilyenkor törlődik.",
   },
+  "brand-from-name": {
+    consequence:
+      "A márka nélküli termékek a nevük elején álló márkát kapják (a próba kimenetében tételesen). Csak üres márkájú terméket ír; ami közben márkát kapott, kimarad. A napló téged nevez meg felelősként.",
+    recovery:
+      "Nincs egy gombos visszavonás: a termék márkája a termék lapján törölhető; a próba kimenete megmondja, melyik terméket érintette.",
+  },
   categories: {
     consequence:
       "A teszt webshop meglévő kategóriái (azonos név, azonos szülő) megkapják a mi azonosítónkat, a rövid nevet és a webcímet; a termék-hozzárendelésük megmarad. Ami még nincs meg, létrejön. A régi azonosító csak a próba kimenetében marad meg: mentsd el a végrehajtás előtt.",

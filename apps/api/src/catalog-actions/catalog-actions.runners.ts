@@ -6,6 +6,10 @@ import {
 } from "../imports/unas/unas-brand-backfill.cli.js";
 import { runBrandLinkCli } from "../integrations/medusa/medusa-brand-link.cli.js";
 import {
+  brandFromNameDependencies,
+  runBrandFromNameCli,
+} from "../products/brand-from-name.cli.js";
+import {
   categoryCliDependencies,
   runCategoryCli,
 } from "../integrations/medusa/medusa-category.cli.js";
@@ -76,6 +80,18 @@ export const CATALOG_ACTION_RUNNERS: readonly CatalogActionRunner[] = [
     description:
       "A teszt webshop kategóriái közül a régebbi, idegen azonosítójú, azonos nevű és szülőjű kategóriák megkapják a mi azonosítónkat, nevünket és webcímünket (a termék-hozzárendelésük megmarad); ami nincs meg, létrejön. A próba kimenete a régi azonosítót tételesen kiírja. A termékeket nem érinti.",
     run: (apply, _actorUserId, out) => runCategoriesAction(apply, out),
+  },
+  {
+    kind: "brand-from-name",
+    title: "Márka a termék nevéből (csak üres márkájú termékre)",
+    description:
+      "Ahol a terméknek nincs márkája, és a neve elején pontosan egy létező márka neve vagy aliasa áll (az első 1-4 egész szó), azt a márkát írja a termékre. Két illő márka esetén nem ír. A próba tételesen kiírja, mit írna. A végrehajtás felelőse a bejelentkezett felhasználó.",
+    run: (apply, actorUserId, out) =>
+      runBrandFromNameCli(
+        apply ? ["--apply", "--actor", actorUserId] : [],
+        out,
+        brandFromNameDependencies,
+      ),
   },
 ];
 
