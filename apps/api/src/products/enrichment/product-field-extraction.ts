@@ -176,14 +176,23 @@ const POSTCODE = /(?<![\p{L}\d])\d{3,6}(?!\d)/u;
 const COPYRIGHT =
   /©|\(c\)|copyright|all rights reserved|alle rechte|minden jog/iu;
 /**
+ * An address carries no contact or register data: the fourth pilot-20 run (card 8639ac2a) let through "Euro Corals,
+ * Geschäftsführer: … Passauer Straße 12 84359 Simbach am Inn DEUTSCHLAND Tel.: … E-Mail: Website: …" and "Blue Life USA,
+ * is located at: 7831 ALABAMA AVE …", both verbatim. A street, a postcode, a town and a country; anything else is a
+ * person's to read, not a value.
+ */
+const NOT_AN_ADDRESS =
+  /(?<![\p{L}])(?:tel|telefon|phone|fax|e-?mail|website|web|www|https?|geschäftsführer|geschaeftsfuehrer|managing director|ügyvezető|hrb|ust-?id|vat|is located at)(?![\p{L}])|@/iu;
+/**
  * The address without the company name in front of it, when the page writes them together and the model copied both
  * (pilot-20, third run: "Korallenzucht.de Vertriebs GmbH, Korallenzucht.de Vertriebs GmbH Schlesierstr. 1 ...").
  */
 function withoutName(address: string, name: string): string {
   const a = squash(address);
   const n = squash(name);
+  // a name alone is no address: an empty cut stays empty (barracuda on #2561), so the shape check fails on it
   return a.toLowerCase().startsWith(n.toLowerCase())
-    ? a.slice(n.length).replace(/^[\s,;:-]+/, "") || a
+    ? a.slice(n.length).replace(/^[\s,;:-]+/, "")
     : a;
 }
 const PLACE = /\p{L}{3,}/u;
@@ -280,6 +289,10 @@ export function productFieldStatement(
       if (problem) problems.push(`${ROLE_LABEL[m.role]}: ${problem}`);
       else if (COPYRIGHT.test(m.address))
         problems.push(`${ROLE_LABEL[m.role]}: a cím egy copyright-sor`);
+      else if (NOT_AN_ADDRESS.test(m.address))
+        problems.push(
+          `${ROLE_LABEL[m.role]}: a címben elérhetőség vagy cégadat is áll`,
+        );
       // the shape on the address without the company name: a number in the name ("Aqua 2000 GmbH") is no postcode
       // (barracuda on #2560)
       else if (!(
