@@ -68,10 +68,16 @@ function fixture(options: {
     productDiscontinuation: {
       findUnique: async (args: { where: { productId: string } }) =>
         view(args.where.productId),
-      findFirst: async (args: { where: { replacementProductId: string } }) => {
+      findFirst: async (args: {
+        where: {
+          replacementProductId: string;
+          productId?: { notIn: string[] };
+        };
+      }) => {
         const found = [...marks.values()].find(
           (mark) =>
-            mark.replacementProductId === args.where.replacementProductId,
+            mark.replacementProductId === args.where.replacementProductId &&
+            !(args.where.productId?.notIn ?? []).includes(mark.productId),
         );
         return found ? { id: found.id } : null;
       },
@@ -81,10 +87,16 @@ function fixture(options: {
     ...reads,
     productDiscontinuation: {
       ...reads.productDiscontinuation,
-      findFirst: async (args: { where: { replacementProductId: string } }) => {
+      findFirst: async (args: {
+        where: {
+          replacementProductId: string;
+          productId?: { notIn: string[] };
+        };
+      }) => {
         const found = [...marks.values()].find(
           (mark) =>
-            mark.replacementProductId === args.where.replacementProductId,
+            mark.replacementProductId === args.where.replacementProductId &&
+            !(args.where.productId?.notIn ?? []).includes(mark.productId),
         );
         return found ? { id: found.id } : null;
       },
@@ -359,6 +371,39 @@ describe("the manual permanent-discontinuation mark (V4.2)", () => {
       );
     assert.deepEqual(f.writes, []);
     assert.deepEqual(f.isolation, []);
+  });
+
+  it("check() with an ignore list treats those products' marks as already rewritten (the bulk dry run), and only those", async () => {
+    const f = fixture({
+      products: [OLD, NEWER, { ...NEWER, id: "other", name: "Másik" }],
+      marks: [{ productId: "old", replacementProductId: "newer" }],
+    });
+    assert.equal(
+      await f.repository.check("newer", null),
+      "PRODUCT_IS_A_REPLACEMENT",
+    );
+    assert.equal(await f.repository.check("newer", null, ["old"]), null);
+    assert.equal(
+      await f.repository.check("newer", null, ["other"]),
+      "PRODUCT_IS_A_REPLACEMENT",
+    );
+    assert.deepEqual(f.writes, []);
+  });
+
+  it("the audit row and the event carry via only when a path other than the screen wrote it", async () => {
+    const f = fixture({ products: [OLD, NEWER] });
+    await f.repository.set("old", null, "user-1");
+    await f.repository.set("old", "newer", "user-1", "bulk-cli");
+    const audits = f.writes.filter((w) => w.what === "audit") as Array<{
+      args: { data: { metadata: Record<string, unknown> } };
+    }>;
+    const events = f.writes.filter((w) => w.what === "event") as Array<{
+      args: { data: { payload: Record<string, unknown> } };
+    }>;
+    assert.equal("via" in audits[0]!.args.data.metadata, false);
+    assert.equal(audits[1]!.args.data.metadata.via, "bulk-cli");
+    assert.equal("via" in events[0]!.args.data.payload, false);
+    assert.equal(events[1]!.args.data.payload.via, "bulk-cli");
   });
 
   it("un-marking deletes the row and logs the removal with the old replacement", async () => {

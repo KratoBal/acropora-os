@@ -27,7 +27,7 @@ if (
   const repository = new ProductDiscontinuationRepository();
   const code = await runBulkDiscontinuation(
     argv,
-    (path) => readFileSync(path, "utf8"),
+    { readFile: (path) => readFileSync(path, "utf8"), env: process.env },
     {
       actorExists: async (userId) =>
         Boolean(
@@ -57,11 +57,16 @@ if (
           ? { replacementProductId: mark.replacement?.id ?? null }
           : null;
       },
-      check: (productId, replacementProductId) =>
-        repository.check(productId, replacementProductId),
+      check: (productId, replacementProductId, ignoreMarksOf) =>
+        repository.check(productId, replacementProductId, ignoreMarksOf),
       write: async (productId, replacementProductId, actorUserId) => {
         await retryOnSerializationConflict(() =>
-          repository.set(productId, replacementProductId, actorUserId),
+          repository.set(
+            productId,
+            replacementProductId,
+            actorUserId,
+            "bulk-cli",
+          ),
         );
       },
     },

@@ -24,6 +24,7 @@ function harness(
   overrides: Partial<BulkDeps> = {},
   marks: Record<string, string | null> = {},
   refusals: Record<string, string> = {},
+  replacers: Record<string, string[]> = {},
 ) {
   const calls: string[] = [];
   const deps: BulkDeps = {
@@ -43,8 +44,11 @@ function harness(
         ? { replacementProductId: marks[productId]! }
         : null;
     },
-    check: async (productId, replacementId) => {
+    check: async (productId, replacementId, ignoreMarksOf) => {
       calls.push(`check:${productId}>${replacementId}`);
+      // the database's own rule: a product some mark points at is refused, unless those marks are ignored
+      if ((replacers[productId] ?? []).some((m) => !ignoreMarksOf.includes(m)))
+        return "PRODUCT_IS_A_REPLACEMENT";
       return refusals[productId] ?? null;
     },
     write: async (productId, replacementId, actor) => {
@@ -67,7 +71,7 @@ function harness(
 }
 
 const run = (argv: string[], file: string, h: ReturnType<typeof harness>) =>
-  runBulkDiscontinuation(argv, () => file, h.deps, h.io);
+  runBulkDiscontinuation(argv, { readFile: () => file, env: {} }, h.deps, h.io);
 const lines = (h: ReturnType<typeof harness>) => h.out.join("").split("\n");
 const WRITES = (h: ReturnType<typeof harness>) =>
   h.calls.filter((c) => c.startsWith("write:"));
@@ -85,6 +89,17 @@ describe("parseBulkFile", () => {
     assert.deepEqual(parsed.badLines, [
       { line: 7, reason: "BAD_ROW" },
       { line: 8, reason: "BAD_ROW" },
+    ]);
+  });
+
+  it("a byte order mark at the start (an Excel TSV) is harmless: the header is still a header and the first SKU is a SKU (trim() removes U+FEFF)", () => {
+    const withHeader = parseBulkFile("\uFEFFsku\treplacement\nOLD-1\tNEW-1\n");
+    assert.deepEqual(withHeader.rows, [
+      { line: 2, sku: "OLD-1", replacementSku: "NEW-1" },
+    ]);
+    const withoutHeader = parseBulkFile("\uFEFFOLD-1\tNEW-1\n");
+    assert.deepEqual(withoutHeader.rows, [
+      { line: 1, sku: "OLD-1", replacementSku: "NEW-1" },
     ]);
   });
 
@@ -128,14 +143,107 @@ describe("the bulk command: arguments", () => {
     const h = harness();
     const code = await runBulkDiscontinuation(
       ["--file", "/secret/f.tsv", "--actor", "user-1"],
-      () => {
-        throw new Error("ENOENT: /secret/f.tsv");
+      {
+        readFile: () => {
+          throw new Error("ENOENT: /secret/f.tsv");
+        },
+        env: {},
       },
       h.deps,
       h.io,
     );
     assert.equal(code, 2);
     assert.doesNotMatch(h.err.join(""), /secret|ENOENT/);
+  });
+});
+
+describe("the bulk command: --input-env (a base64 TSV in an environment variable)", () => {
+  const TSV = "sku\treplacement\nOLD-1\tNEW-1\nOLD-2\n";
+  const b64 = (text: string) => Buffer.from(text, "utf8").toString("base64");
+  const runEnv = (
+    argv: string[],
+    env: Record<string, string | undefined>,
+    h: ReturnType<typeof harness>,
+  ) =>
+    runBulkDiscontinuation(
+      argv,
+      {
+        readFile: () => {
+          throw new Error("the file must not be read");
+        },
+        env,
+      },
+      h.deps,
+      h.io,
+    );
+  const ARGV = ["--input-env", "BULK_INPUT", "--actor", "user-1"];
+
+  it("reads the TSV from the variable, and the output is the one the same file gives", async () => {
+    const fromEnv = harness();
+    const fromFile = harness();
+    assert.equal(await runEnv(ARGV, { BULK_INPUT: b64(TSV) }, fromEnv), 0);
+    await run(["--file", "f.tsv", "--actor", "user-1"], TSV, fromFile);
+    assert.deepEqual(fromEnv.out, fromFile.out);
+    assert.match(fromEnv.out.join(""), /2\tOLD-1\tNEW-1\tWOULD_WRITE/);
+  });
+
+  it("accepts a base64 wrapped over several lines and a TSV that starts with a byte order mark", async () => {
+    const encoded = b64("\uFEFF" + TSV);
+    const wrapped = (encoded.match(/.{1,20}/g) ?? []).join("\n");
+    const h = harness();
+    assert.equal(await runEnv(ARGV, { BULK_INPUT: wrapped }, h), 0);
+    assert.match(h.out.join(""), /2\tOLD-1\tNEW-1\tWOULD_WRITE/);
+  });
+
+  it("--apply works from the variable too", async () => {
+    const h = harness();
+    assert.equal(
+      await runEnv([...ARGV, "--apply"], { BULK_INPUT: b64(TSV) }, h),
+      0,
+    );
+    assert.deepEqual(WRITES(h), [
+      "write:p-old-1>p-new-1:user-1",
+      "write:p-old-2>null:user-1",
+    ]);
+  });
+
+  it("--file and --input-env together are refused, and so is neither, a bad variable name and a missing value", async () => {
+    for (const argv of [
+      ["--file", "f.tsv", "--input-env", "BULK_INPUT", "--actor", "user-1"],
+      ["--actor", "user-1"],
+      ["--input-env", "bad name", "--actor", "user-1"],
+      ["--input-env"],
+    ]) {
+      const h = harness();
+      assert.equal(await runEnv(argv, { BULK_INPUT: b64(TSV) }, h), 2);
+      assert.deepEqual(h.calls, [], argv.join(" "));
+    }
+    // the "together" case is refused for THAT reason, not because the file happens to be unreadable
+    const both = harness();
+    await runEnv(
+      ["--file", "f.tsv", "--input-env", "BULK_INPUT", "--actor", "user-1"],
+      { BULK_INPUT: b64(TSV) },
+      both,
+    );
+    assert.match(both.err.join(""), /egyutt nem adhato/);
+  });
+
+  it("an unset or empty variable stops with a code and reads nothing", async () => {
+    for (const env of [{}, { BULK_INPUT: "" }, { BULK_INPUT: "   \n" }]) {
+      const h = harness();
+      assert.equal(await runEnv(ARGV, env, h), 2);
+      assert.deepEqual(h.calls, []);
+      assert.match(h.err.join(""), /INPUT_ENV_NOT_SET/);
+    }
+  });
+
+  it("a variable that is not base64 stops with a code and the value is never printed", async () => {
+    const secretish = "OLD-1\tNEW-1 not base64!";
+    const h = harness();
+    assert.equal(await runEnv(ARGV, { BULK_INPUT: secretish }, h), 2);
+    assert.deepEqual(h.calls, []);
+    assert.match(h.err.join(""), /INPUT_ENV_NOT_BASE64/);
+    assert.doesNotMatch(h.err.join("") + h.out.join(""), /OLD-1|not base64/);
   });
 });
 
@@ -220,6 +328,34 @@ describe("the bulk command: dry run and apply", () => {
       );
       assert.equal(WRITES(b).length, apply ? 1 : 0);
     }
+  });
+
+  it("a row that rewrites a mark frees its old replacement for a later row, in the dry run exactly as in apply", async () => {
+    // A (old-1) points at B (new-1); the file moves A to C (new-2), then marks B
+    const marks = { "p-old-1": "p-new-1" };
+    const replacers = { "p-new-1": ["p-old-1"] };
+    const file = "OLD-1\tNEW-2\nNEW-1\n";
+    const dry = harness({}, marks, {}, replacers);
+    const applied = harness({}, marks, {}, replacers);
+    await run(ARGV, file, dry);
+    await run([...ARGV, "--apply"], file, applied);
+    assert.match(dry.out.join(""), /2\tNEW-1\t-\tWOULD_WRITE\t-/);
+    assert.match(applied.out.join(""), /2\tNEW-1\t-\tWRITTEN\t-/);
+    // and without the first row, B is still refused: the free-up comes from the file and nothing else
+    const alone = harness({}, marks, {}, replacers);
+    await run(ARGV, "NEW-1\n", alone);
+    assert.match(
+      alone.out.join(""),
+      /1\tNEW-1\t-\tREFUSED\tPRODUCT_IS_A_REPLACEMENT/,
+    );
+  });
+
+  it("the write is made with the bulk-cli marker in the command (the audit shows the path)", async () => {
+    const source = readFileSync(
+      "src/products/product-discontinuation-bulk.cli.ts",
+      "utf8",
+    );
+    assert.match(source, /"bulk-cli"/);
   });
 
   it("a product that already has exactly this mark is ALREADY: no check and no write; a different replacement is written", async () => {

@@ -132,6 +132,7 @@ export class ProductDiscontinuationRepository extends Repository {
     reads: MarkChecks,
     productId: string,
     replacementProductId: string | null,
+    ignoreMarksOf: readonly string[] = [],
   ): Promise<void> {
     const product = await reads.product.findUnique({
       where: { id: productId },
@@ -139,7 +140,12 @@ export class ProductDiscontinuationRepository extends Repository {
     });
     if (!product) throw new MarkRefused("PRODUCT_NOT_FOUND");
     const replacesOther = await reads.productDiscontinuation.findFirst({
-      where: { replacementProductId: productId },
+      where: {
+        replacementProductId: productId,
+        ...(ignoreMarksOf.length > 0
+          ? { productId: { notIn: [...ignoreMarksOf] } }
+          : {}),
+      },
       select: { id: true },
     });
     if (replacesOther) throw new MarkRefused("PRODUCT_IS_A_REPLACEMENT");
@@ -160,13 +166,26 @@ export class ProductDiscontinuationRepository extends Repository {
     if (replacementMark) throw new MarkRefused("REPLACEMENT_ALSO_DISCONTINUED");
   }
 
-  /** The refusal a write would give for this state, or `null`: it would go through. Writes nothing. */
+  /**
+   * The refusal a write would give for this state, or `null`: it would go through. Writes nothing.
+   *
+   * `ignoreMarksOf` is for the bulk command's dry run (barracuda, #2574 review): the marks of THESE products
+   * are treated as already rewritten away by an earlier row of the same file, so a product that only they
+   * pointed at is not refused as "a replacement" for it. A write needs no such list, because the earlier
+   * row's write has already changed the database.
+   */
   async check(
     productId: string,
     replacementProductId: string | null,
+    ignoreMarksOf: readonly string[] = [],
   ): Promise<MarkRefusal | null> {
     try {
-      await this.validate(this.markDatabase, productId, replacementProductId);
+      await this.validate(
+        this.markDatabase,
+        productId,
+        replacementProductId,
+        ignoreMarksOf,
+      );
       return null;
     } catch (error) {
       if (error instanceof MarkRefused) return error.refusal;
@@ -190,6 +209,7 @@ export class ProductDiscontinuationRepository extends Repository {
     productId: string,
     replacementProductId: string | null,
     actorUserId: string,
+    via?: string,
   ): Promise<ProductDiscontinuation> {
     return this.markDatabase.$transaction(
       async (transaction) => {
@@ -219,6 +239,7 @@ export class ProductDiscontinuationRepository extends Repository {
             ? { replacementProductId: existing.replacementProductId }
             : null,
           after: { replacementProductId: row.replacementProductId },
+          via,
         });
         return toDetail(row);
       },
@@ -261,12 +282,19 @@ export class ProductDiscontinuationRepository extends Repository {
       actorUserId: string;
       before: Prisma.JsonObject | null;
       after: Prisma.JsonObject | null;
+      /**
+       * WHICH PATH WROTE IT, only when it is not the screen (`"bulk-cli"`): the audit row names the `--actor`
+       * the person gave, and the person who ran the command and the person who approved the list can be two
+       * different people, which the log could not show (barracuda, #2574 review). Absent for the API.
+       */
+      via?: string;
     },
   ): Promise<void> {
     const metadata = {
       productId: entry.productId,
       before: entry.before,
       after: entry.after,
+      ...(entry.via ? { via: entry.via } : {}),
     } satisfies Prisma.JsonObject;
     await transaction.auditLog.create({
       data: {
