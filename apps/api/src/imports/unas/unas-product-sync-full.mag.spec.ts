@@ -186,7 +186,7 @@ describe("a UNAS teljes ujraolvasas parancsanak INDULASA", () => {
     // POZITIV KONTROLL: rossz utvonalnal ures szovegen minden allitas zold.
     assert.ok(mag.length > 500 && parancs.length > 500);
     // Csak az IMPORT-sorra illeszkedik: a fejlec-komment a parancs nevet idezi.
-    assert.doesNotMatch(mag, /from\s+"[^"]*full\.cli\.js"/);
+    assert.doesNotMatch(mag, /(?:from|import)\s+"[^"]*full\.cli\.js"/);
     assert.match(parancs, /unas-product-sync-full\.mag\.js/);
   });
 });
