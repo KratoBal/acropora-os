@@ -174,6 +174,19 @@ describe("a terv: a lista a meglévőhöz mérve", () => {
     );
   });
 
+  it("az Acropora név akkor sem jön létre, ha még nincs ilyen márka rekord (a név-védelem külön, nem a találaté)", () => {
+    const withoutOwn = BRANDS.filter((b) => b.id !== "b-own");
+    const result = planBrandList(
+      parseBrandListInput({
+        items: [{ productId: "p1", newBrandName: "Acropora" }],
+      }),
+      PRODUCTS,
+      withoutOwn,
+    );
+    assert.equal(result.newBrands.length, 0);
+    assert.equal(result.rows[0]!.kind, "ERROR");
+  });
+
   it("hiba: ismeretlen termék, ismeretlen vagy inaktív márka, két márkához illő név, üres név", () => {
     const reasons = plan([
       { productId: "nincs", brandId: "b-eco" },
