@@ -673,11 +673,25 @@ export class MaintenanceOrdersService {
 
     /*
       TÉTELENKÉNT KÜLÖN LAP ÉS MUNKALAP (Luca, 2026-11-13): minden kijelölt tételből önálló lap, a saját
-      munkalapjával. ELŐBB MINDEN TÉTEL KERETE EGYSZER, írás nélkül: ha a másodiké elfogyott, nem jön létre az első
-      lap sem. Utána tételenként a megszokott út, saját kulccsal (`<kulcs>-<tétel>`), tehát egy újrahívás ugyanazt a
-      lapot kapja vissza, nem újat. A helyszínszabály is tételenként érvényes: a külön lapoknak nem kell közös
-      helyszín.
+      munkalapjával. ELŐBB MINDEN ELLENŐRZÉS MINDEN TÉTELRE, írás nélkül: a helyszín-szabály (a tételnek van
+      helyszíne) és a keret (egyszer, a kért alkalmakkal). Ha bármelyik tételen elbukik, nem jön létre az első lap
+      sem, ugyanúgy, mint az egy-lapos módban. Utána tételenként a megszokott út, saját kulccsal
+      (`<kulcs>-<tétel>`), tehát egy újrahívás ugyanazt a lapot kapja vissza, nem újat. A helyszínszabály
+      tételenként érvényes: a külön lapoknak nem kell közös helyszín.
+      A MARADÉK HATÁR, kimondva: egy PÁRHUZAMOS foglalás az előellenőrzés és a ciklus között még elvihet egy
+      alkalmat, és akkor az addig létrejött lapok megmaradnak (a hibás tétel lapja lemondva, lásd
+      `createOneContractJob`); az ugyanazzal a kulccsal küldött újrapróbálás onnan folytatja, a kész lapokat
+      visszakapja, nem újakat nyit.
     */
+    for (const item of contract.items)
+      await siteForContractItems(this.repository, [
+        {
+          id: item.id,
+          departmentId: item.departmentId,
+          description: item.description,
+          quantity: chosen.get(item.id)!.quantity.toNumber(),
+        },
+      ]);
     const nowYear = maintenanceOrderOccasionYear(new Date());
     const existing = await this.repository.serviceJobContractItemState({
       clientOperationId: `contract-job-${key}-${contract.items[0]!.id}`,

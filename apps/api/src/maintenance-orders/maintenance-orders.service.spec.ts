@@ -1147,6 +1147,22 @@ describe("MaintenanceOrdersService.createJobFromContract", () => {
     );
   });
 
+  it("tételenként külön: ha a második tételnek nincs helyszíne, 409, és sem lap, sem foglalás nem jön létre", async () => {
+    const contract = twoItems();
+    contract.items[1] = { ...contract.items[1]!, departmentId: null };
+    const h = harness({ contract });
+    const result = await h.run({
+      itemIds: ["item-1", "item-2"],
+      separate: true,
+    });
+    assert.match(String(result), /^409: .*UV-lámpa csere.*helyszín/);
+    // a helyszín-szabály MINDEN tételre fut, mielőtt bármi létrejönne vagy foglalódna
+    assert.deepEqual(h.calls, []);
+    assert.equal(h.jobInputs.length, 0);
+    assert.equal(h.reserveInputs.length, 0);
+    assert.equal(h.inserted.length, 0);
+  });
+
   it("tételenként külön: ha az egyik tétel kerete elfogyott, egyetlen lap sem jön létre", async () => {
     const h = harness({
       contract: twoItems(),
