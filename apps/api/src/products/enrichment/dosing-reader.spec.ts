@@ -30,6 +30,21 @@ describe("a gyártói adagolás a leírásból", () => {
     }
   });
 
+  // card 85c38ab1: whether the page states a dose at all, read or held back. WHAT TURNS THIS RED: a held-back dose
+  // sentence counted as no dose; the pack's reach or a content line counted as one.
+  it("a lap állít-e adagot: olvasott vagy visszatartott adag igen, kiszerelés nem", () => {
+    for (const [text, want] of [
+      ["Dose 1 ml per 100 l daily.", true],
+      ["Dose 2-5 ml per 100 l weekly.", true],
+      ["Dose 1 ml per 100 l.", true],
+      ["Dose 1 ml per 100 l daily, or 5 ml per 100 l weekly.", true],
+      ["Inhalt: 500 ml.", false],
+      ["A 500 ml bottle treats 10000 l.", false],
+      ["Kitalált termék, adagolás nélkül.", false],
+    ] as const)
+      assert.equal(readDosing(text).doseOnPage, want, text);
+  });
+
   it("a kivonat a nyers szövegből jön, ékezettel, a találat mondatából", () => {
     const r = readDosing(
       "Prémium aminosav-koncentrátum. Adagolás: naponta 1 csepp 100 literenként. Tartalom: 100 ml.",
@@ -158,5 +173,22 @@ describe("a gyártói adagolás a leírásból", () => {
     const dosing = statement.values.find((v) => v.field === "dosing");
     assert.equal(dosing?.raw, "1 drop/100 L/day");
     assert.match(dosing?.excerpt ?? "", /Product\.description/);
+    assert.equal(statement.descriptionDoseOnPage, true);
+  });
+
+  // barracuda, #2538: a range dose in the description is held back (no value), and the statement says the description
+  // states a dose, so a "no data" answer cannot stand next to it. WHAT TURNS THIS RED: the flag lost on the way out.
+  it("a leírás visszatartott adagja: nincs dosing érték, de a kivonat jelzi", () => {
+    const page = (description: string) =>
+      extractPageStatement(
+        `<script type="application/ld+json">${JSON.stringify({ "@type": "Product", name: "Amino", description })}</script>`,
+      );
+    const held = page("Dose 2-5 ml per 100 l weekly.");
+    assert.equal(
+      held.values.find((v) => v.field === "dosing"),
+      undefined,
+    );
+    assert.equal(held.descriptionDoseOnPage, true);
+    assert.equal(page("Premium amino acids.").descriptionDoseOnPage, undefined);
   });
 });

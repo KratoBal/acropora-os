@@ -1415,3 +1415,68 @@ describe("PilotContractDetailPage -- elmentetlen változás", () => {
     expect(dirty.defaultPrevented).toBe(true);
   });
 });
+
+/*
+  A TÉTEL NEVE KIEMELVE (Luca, 2026-11-13: „a szerződési tételek neve legyen kiemelve, hogy a felsorolt
+  tételek leírások és összegek között mégis átlátható legyen az adott tétel NEVE"). MI PIROSÍT: ha a név a
+  számok és a leírások között ismét sima szöveg; ha a számsor is bekerül a kiemelésbe; ha a megrendelőlap
+  tétellistájában a név nem kiemelt.
+*/
+describe("PilotContractDetailPage -- a tétel neve kiemelve", () => {
+  const withItems = (): ContractSummary => ({
+    ...contract(),
+    items: [
+      {
+        id: "item-1",
+        position: 1,
+        description: "Cápasuli nagymedence karbantartás",
+        unitNet: "410000",
+        quantity: "1",
+        occasionsPerYear: 4,
+        vatRatePercent: "27",
+        unitOfMeasureId: null,
+        unitOfMeasure: null,
+        departmentId: null,
+        assets: [],
+        repairFeeWorkdayHours: null,
+        repairFeeWorkdayOffHours: null,
+        repairFeeHoliday: null,
+        repairWeight: null,
+        repairTotal: null,
+      },
+    ],
+  });
+
+  beforeEach(() => {
+    auth.session = session("dev-token");
+    api.detail.mockReset().mockResolvedValue(withItems());
+    api.update.mockReset();
+    orderApi.list.mockReset().mockResolvedValue([]);
+    worksheetsApi.departments.mockReset().mockResolvedValue({ items: [] });
+    assetsApi.list.mockReset().mockResolvedValue({ items: [] });
+  });
+
+  it("a tételsorban a név külön, kiemelt elem, a számsor nincs benne", async () => {
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    const name = await screen.findByTestId("contract-item-name");
+    expect(name.tagName).toBe("STRONG");
+    expect(name.textContent).toBe("1. Cápasuli nagymedence karbantartás");
+    expect(name.textContent).not.toMatch(/Ft/);
+    // a számsor ugyanabban a sorban, de a kiemelésen kívül
+    expect(name.parentElement!.textContent).toMatch(
+      /410000 Ft × 1 db × 4 alkalom/,
+    );
+  });
+
+  it("a megrendelőlap tétellistájában is kiemelt a név", async () => {
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    await screen.findByTestId("contract-item-name");
+    const label = screen
+      .getAllByText("1. Cápasuli nagymedence karbantartás")
+      .find(
+        (node) =>
+          node.className.includes("font-semibold") && node.tagName === "SPAN",
+      );
+    expect(label).toBeTruthy();
+  });
+});
