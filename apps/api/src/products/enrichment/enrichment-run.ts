@@ -14,6 +14,7 @@ import {
   visiblePageText,
   type DosingExtractor,
 } from "./dosing-extraction.js";
+import { confirmPackSize, nameSize } from "./pack-size-confirm.js";
 import { extractMarineAquaticsStatement } from "./marine-aquatics-extract.js";
 import {
   ENRICHED_FIELDS,
@@ -430,6 +431,14 @@ async function checkProduct(
     }
     readPages.add(key);
     const structured = extractPageStatement(page.html);
+    // the pack size: our name's size, confirmed where the manufacturer's page names its own product (S1a)
+    const ownSize = nameSize(facts.name);
+    const sizeConfirmed =
+      source.kind === "MANUFACTURER" &&
+      ownSize &&
+      !structured.values.some((v) => v.field === "packSize")
+        ? confirmPackSize(page.html, ownSize)
+        : null;
     // marine-aquatics.eu states its data in labelled rows, not JSON-LD.
     // bulkreefsupply.com states its barcode only in a labelled table.
     const statement =
@@ -476,9 +485,16 @@ async function checkProduct(
           .join("; ") || null,
       httpStatus: page.httpStatus,
       fetchedAt: page.fetchedAt,
-      fieldCount: statement.values.length + (dosingAi?.values.length ?? 0),
+      fieldCount:
+        statement.values.length +
+        (dosingAi?.values.length ?? 0) +
+        (sizeConfirmed ? 1 : 0),
     });
-    for (const value of [...statement.values, ...(dosingAi?.values ?? [])])
+    for (const value of [
+      ...statement.values,
+      ...(dosingAi?.values ?? []),
+      ...(sizeConfirmed ? [sizeConfirmed] : []),
+    ])
       pageCandidates.push({
         field: value.field,
         kind: source.kind,
