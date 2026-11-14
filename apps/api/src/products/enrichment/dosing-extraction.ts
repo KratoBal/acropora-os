@@ -152,13 +152,59 @@ export function dosingExtractorFromEnv(
     : null;
 }
 
-/** A page's visible text: scripts, styles and navigation out, block tags as line breaks. */
-export function visiblePageText(html: string): string {
-  return html
-    .replace(
-      /<(script|style|noscript|svg|nav|header|footer|template)\b[\s\S]*?<\/\1>/gi,
-      " ",
+/** Sectioning and main content: a header or footer inside one belongs to the content. */
+const CONTENT_SCOPES = new Set(["article", "section", "main", "aside"]);
+
+/**
+ * THE PAGE'S OWN HEADER AND FOOTER OUT, A CONTENT HEADER KEPT (card 85c38ab1:
+ * Fauna Marin Dino M states its dose in a <header> under main > section >
+ * article; every header was dropped, the AI never saw the dose, and NO_DATA
+ * went through). As in HTML's banner and contentinfo rule, only a header or
+ * footer with no article, section, main or aside open around it is page
+ * chrome. One that never closes stays, like before.
+ */
+function withoutPageChrome(html: string): string {
+  const cuts: [number, number][] = [];
+  const open: string[] = [];
+  let chrome: { tag: string; start: number; depth: number } | null = null;
+  for (const m of html.matchAll(
+    /<(\/?)(article|section|main|aside|header|footer)\b[^>]*>/gi,
+  )) {
+    const tag = m[2]!.toLowerCase();
+    if (m[1]) {
+      const at = open.lastIndexOf(tag);
+      if (at >= 0) open.splice(at);
+      if (chrome && tag === chrome.tag && open.length === chrome.depth) {
+        cuts.push([chrome.start, m.index + m[0].length]);
+        chrome = null;
+      }
+      continue;
+    }
+    if (
+      !chrome &&
+      (tag === "header" || tag === "footer") &&
+      !open.some((t) => CONTENT_SCOPES.has(t))
     )
+      chrome = { tag, start: m.index, depth: open.length };
+    open.push(tag);
+  }
+  let out = "";
+  let from = 0;
+  for (const [start, end] of cuts) {
+    out += `${html.slice(from, start)} `;
+    from = end;
+  }
+  return out + html.slice(from);
+}
+
+/** A page's visible text: scripts, styles, navigation and the page's own header and footer out, block tags as line breaks. */
+export function visiblePageText(html: string): string {
+  return withoutPageChrome(
+    html.replace(
+      /<(script|style|noscript|svg|nav|template)\b[\s\S]*?<\/\1>/gi,
+      " ",
+    ),
+  )
     .replace(
       /<(br|p|div|li|h\d|tr|td|th|section|article|dd|dt)\b[^>]*>/gi,
       "\n",

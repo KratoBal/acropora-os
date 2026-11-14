@@ -1750,6 +1750,7 @@ export type {
   QuoteReorderInput,
   QuoteCostingLineDto,
   QuoteCostingDto,
+  QuoteVariantListPriceDto,
   QuoteSnippetDto,
   QuoteSnippetInput,
   QuoteSnippetPatch,

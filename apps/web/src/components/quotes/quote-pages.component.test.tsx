@@ -94,8 +94,14 @@ const api = vi.hoisted(() => ({
   handoffPreview: vi.fn(),
   handoff: vi.fn(),
   proformaDraft: vi.fn(),
+  variantListPrice: vi.fn(),
 }));
 vi.mock("@/lib/api/quotes", () => ({ quotesApi: api }));
+const products = vi.hoisted(() => ({ list: vi.fn(), detail: vi.fn() }));
+vi.mock("@/lib/api/products", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api/products")>()),
+  productApi: products,
+}));
 const customers = vi.hoisted(() => ({ list: vi.fn() }));
 vi.mock("@/lib/api/customers", () => ({ customersApi: customers }));
 
@@ -1422,6 +1428,9 @@ describe("Ajánlat szerkesztő (569:171)", () => {
       target: { value: "12a" },
     });
     expect(
+      screen.getByText(/Az összeg csak szám lehet, szóköz nélkül/),
+    ).toBeTruthy();
+    expect(
       (screen.getByLabelText("Nettó egységár") as HTMLInputElement).value,
     ).toBe("");
     expect(
@@ -1452,6 +1461,267 @@ describe("Ajánlat szerkesztő (569:171)", () => {
     expect(label.textContent).toMatch(/mentése után a tétel alatt/);
     expect(label.textContent).toMatch(/Az ügyfél csak a sort látja/);
     expect(label.textContent).not.toMatch(/kapcsolva/);
+  });
+
+  /*
+    A TERMÉK KIVÁLASZTÁSA KITÖLTI A MEGNEVEZÉST ÉS AZ ÁRAT (Luca, 2026-11-13: „kiválasztás után nem adja
+    ki az adott termék nevét és árát"). MI PIROSÍT: ha a kiválasztás után a név vagy a nettó ár üres marad;
+    ha egy kézzel beírt név vagy ár felülíródik; ha az ár hiánya nulla Ft-ként tűnik el az ok nélkül.
+  */
+  describe("termék kiválasztása a tétel ablakában", () => {
+    const pickProduct = async () => {
+      fireEvent.click(
+        await screen.findByRole("button", { name: "+ Tétel hozzáadása" }),
+      );
+      fireEvent.click(
+        await screen.findByRole("radio", { name: /OS-termékhez kapcsolva/ }),
+      );
+      fireEvent.change(
+        within(
+          screen.getByRole("dialog", { name: "Új ajánlati tétel" }),
+        ).getByLabelText("OS-termék keresése"),
+        {
+          target: { value: "szűrő" },
+        },
+      );
+      fireEvent.click(
+        await screen.findByRole("button", { name: /Szűrőbetét/ }),
+      );
+    };
+    beforeEach(() => {
+      api.detail.mockResolvedValue(quote([version()]));
+      products.list.mockResolvedValue({
+        items: [{ id: "p1", name: "Szűrőbetét 20 µm" }],
+      });
+      products.detail.mockResolvedValue({
+        variants: [
+          {
+            id: "pv1",
+            sku: "SZB-20",
+            name: null,
+            unit: "db",
+            isActive: true,
+            vatRate: "27",
+          },
+        ],
+      });
+    });
+
+    it("kitölti a nevet és a nettó árat (a bruttó követi), és az árat a szerver mai eladási árából veszi", async () => {
+      api.variantListPrice.mockResolvedValue({
+        variantId: "pv1",
+        unitNetPrice: "1000.0000",
+        sale: false,
+        reason: null,
+      });
+      render(<QuoteEditorPage quoteId="q1" />);
+      await pickProduct();
+
+      await waitFor(() =>
+        expect(
+          (screen.getByLabelText("Nettó egységár") as HTMLInputElement).value,
+        ).toBe("1000.0000"),
+      );
+      expect(
+        (screen.getByLabelText("Megnevezés") as HTMLInputElement).value,
+      ).toBe("Szűrőbetét 20 µm");
+      expect(
+        (screen.getByLabelText("Bruttó egységár") as HTMLInputElement).value,
+      ).toBe("1270");
+      expect(api.variantListPrice).toHaveBeenCalledWith(
+        "token-1",
+        "q1",
+        "v2",
+        "pv1",
+      );
+    });
+
+    it("a kézzel beírt nevet és árat nem írja felül, de szól a mai árról", async () => {
+      api.variantListPrice.mockResolvedValue({
+        variantId: "pv1",
+        unitNetPrice: "1000.0000",
+        sale: false,
+        reason: null,
+      });
+      render(<QuoteEditorPage quoteId="q1" />);
+      fireEvent.click(
+        await screen.findByRole("button", { name: "+ Tétel hozzáadása" }),
+      );
+      fireEvent.change(screen.getByLabelText("Megnevezés"), {
+        target: { value: "Saját név" },
+      });
+      fireEvent.change(screen.getByLabelText("Nettó egységár"), {
+        target: { value: "900" },
+      });
+      fireEvent.click(
+        screen.getByRole("radio", { name: /OS-termékhez kapcsolva/ }),
+      );
+      fireEvent.change(
+        within(
+          screen.getByRole("dialog", { name: "Új ajánlati tétel" }),
+        ).getByLabelText("OS-termék keresése"),
+        {
+          target: { value: "szűrő" },
+        },
+      );
+      fireEvent.click(
+        await screen.findByRole("button", { name: /Szűrőbetét/ }),
+      );
+
+      expect(
+        await screen.findByText(/A beírt árat nem írtam felül/),
+      ).toBeTruthy();
+      expect(
+        (screen.getByLabelText("Megnevezés") as HTMLInputElement).value,
+      ).toBe("Saját név");
+      expect(
+        (screen.getByLabelText("Nettó egységár") as HTMLInputElement).value,
+      ).toBe("900");
+    });
+
+    /*
+      A KÉSVE ÉRKEZŐ ÁR-VÁLASZ (barracuda, #2535 review): MI PIROSÍT, ha egy korábbi választás válasza az
+      újabb termék tételére ír; ha a bruttó a régi ÁFA-kulccsal számolódik, miközben a mező már az újat mutatja.
+    */
+    const deferred = <T,>() => {
+      let resolve!: (value: T) => void;
+      const promise = new Promise<T>((r) => (resolve = r));
+      return { promise, resolve };
+    };
+    const twoProducts = (vatB = "27") => {
+      products.list.mockResolvedValue({
+        items: [
+          { id: "pA", name: "Szűrőbetét A" },
+          { id: "pB", name: "Szűrőbetét B" },
+        ],
+      });
+      products.detail.mockImplementation(
+        async (_token: string, id: string) => ({
+          variants: [
+            {
+              id: id === "pA" ? "vA" : "vB",
+              sku: id === "pA" ? "A-1" : "B-1",
+              name: null,
+              unit: "db",
+              isActive: true,
+              vatRate: id === "pA" ? "27" : vatB,
+            },
+          ],
+        }),
+      );
+    };
+    const search = async (productName: RegExp) => {
+      const drawer = screen.getByRole("dialog", { name: "Új ajánlati tétel" });
+      fireEvent.change(within(drawer).getByLabelText("OS-termék keresése"), {
+        target: { value: "szűrő" },
+      });
+      fireEvent.click(await screen.findByRole("button", { name: productName }));
+    };
+
+    it("az A termék késve érkező ára nem írja felül a B termékét", async () => {
+      twoProducts();
+      const a = deferred<unknown>();
+      const b = deferred<unknown>();
+      api.variantListPrice.mockImplementation(
+        async (_t: string, _q: string, _v: string, variantId: string) =>
+          variantId === "vA" ? a.promise : b.promise,
+      );
+      render(<QuoteEditorPage quoteId="q1" />);
+      fireEvent.click(
+        await screen.findByRole("button", { name: "+ Tétel hozzáadása" }),
+      );
+      fireEvent.click(
+        await screen.findByRole("radio", { name: /OS-termékhez kapcsolva/ }),
+      );
+      await search(/Szűrőbetét A/);
+      fireEvent.click(await screen.findByRole("button", { name: "Csere" }));
+      await search(/Szűrőbetét B/);
+
+      b.resolve({
+        variantId: "vB",
+        unitNetPrice: "2000.0000",
+        sale: false,
+        reason: null,
+      });
+      await waitFor(() =>
+        expect(
+          (screen.getByLabelText("Nettó egységár") as HTMLInputElement).value,
+        ).toBe("2000.0000"),
+      );
+      // az A válasza csak most érkezik
+      a.resolve({
+        variantId: "vA",
+        unitNetPrice: "1000.0000",
+        sale: false,
+        reason: null,
+      });
+      await new Promise((r) => setTimeout(r, 20));
+      expect(
+        (screen.getByLabelText("Nettó egységár") as HTMLInputElement).value,
+      ).toBe("2000.0000");
+      expect(
+        (screen.getByLabelText("Megnevezés") as HTMLInputElement).value,
+      ).toBe("Szűrőbetét B");
+    });
+
+    it("eltérő ÁFA-kulcsú változatnál a bruttó az új kulccsal számolódik", async () => {
+      twoProducts("5");
+      api.variantListPrice.mockImplementation(
+        async (_t: string, _q: string, _v: string, variantId: string) => ({
+          variantId,
+          unitNetPrice: "1000.0000",
+          sale: false,
+          reason: null,
+        }),
+      );
+      render(<QuoteEditorPage quoteId="q1" />);
+      fireEvent.click(
+        await screen.findByRole("button", { name: "+ Tétel hozzáadása" }),
+      );
+      fireEvent.click(
+        await screen.findByRole("radio", { name: /OS-termékhez kapcsolva/ }),
+      );
+      await search(/Szűrőbetét A/);
+      await waitFor(() =>
+        expect(
+          (screen.getByLabelText("Bruttó egységár") as HTMLInputElement).value,
+        ).toBe("1270"),
+      );
+      fireEvent.click(await screen.findByRole("button", { name: "Csere" }));
+      await search(/Szűrőbetét B/);
+      // az ár a B-ről jön (1000 nettó), a kulcs 5 %: a bruttó 1050, nem 1270
+      await waitFor(() =>
+        expect((screen.getByLabelText("ÁFA %") as HTMLInputElement).value).toBe(
+          "5",
+        ),
+      );
+      await waitFor(() =>
+        expect(
+          (screen.getByLabelText("Bruttó egységár") as HTMLInputElement).value,
+        ).toBe("1050"),
+      );
+    });
+
+    it("ha nincs eladási ár, megnevezi az okot, és az ár üres marad (nem nulla)", async () => {
+      api.variantListPrice.mockResolvedValue({
+        variantId: "pv1",
+        unitNetPrice: null,
+        sale: false,
+        reason: "price-missing",
+      });
+      render(<QuoteEditorPage quoteId="q1" />);
+      await pickProduct();
+
+      expect(
+        await screen.findByText(/a termékhez nincs ár megadva/),
+      ).toBeTruthy();
+      expect(
+        (screen.getByLabelText("Nettó egységár") as HTMLInputElement).value,
+      ).toBe("");
+      expect(
+        (screen.getByLabelText("Megnevezés") as HTMLInputElement).value,
+      ).toBe("Szűrőbetét 20 µm");
+    });
   });
 
   it("BOM: termékké alakítás csak products.manage mellett; költségmező csak költségjoggal", async () => {

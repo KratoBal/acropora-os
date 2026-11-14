@@ -45,6 +45,25 @@ describe("a gyártói adagolás a leírásból", () => {
       assert.equal(readDosing(text).doseOnPage, want, text);
   });
 
+  // card 85c38ab1, Fauna Marin AMIN and Ready 2 Reef: "100 liters (26 US gal)". WHAT TURNS THIS RED: a gallon conversion
+  // that agrees with the litres held back as another unit; one that does not agree, or a gallon volume, let through.
+  it("a liter zárójeles, számra egyező gallon-átváltása nem idegen egység", () => {
+    for (const [text, want] of [
+      ["Dose 0.5 ml / 100 liters (26 US gal) daily.", "0.5 ml/100 L/day"],
+      ["Dose 1 ml per 100 l (26,42 US gal.) per day.", "1 ml/100 L/day"],
+      ["Dose 2 ml per 100 l (approx. 26 gallons) weekly.", "2 ml/100 L/week"],
+      ["Dose 1 ml per 100 l (50 US gal) daily.", null],
+      ["Dose 1 ml per 26 US gal daily.", null],
+      ["Dose 1 ml per 100 l daily, 5 g per week.", null],
+    ] as const)
+      assert.equal(readDosing(text).raw, want, text);
+    // the excerpt is the page's own text, the conversion in it
+    assert.match(
+      readDosing("Dose 0.5 ml / 100 liters (26 US gal) daily.").excerpt ?? "",
+      /\(26 US gal\)/,
+    );
+  });
+
   it("a kivonat a nyers szövegből jön, ékezettel, a találat mondatából", () => {
     const r = readDosing(
       "Prémium aminosav-koncentrátum. Adagolás: naponta 1 csepp 100 literenként. Tartalom: 100 ml.",
