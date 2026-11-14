@@ -85,9 +85,13 @@ export const maintenanceOrdersApi = {
       itemIds: string[];
       title?: string | null;
       clientOperationId: string;
+      /** per-item quantity and occasions for the job's worksheet; a missing item goes with the contract's quantity, one occasion */
+      lines?: { itemId: string; quantity: string; occasions: number }[];
+      /** one job and worksheet per item, instead of one job for all of them */
+      separate?: boolean;
     },
   ) {
-    return apiRequest<{ serviceJobId: string }>(
+    return apiRequest<{ serviceJobId: string; serviceJobIds?: string[] }>(
       `${base}/contract-jobs`,
       token,
       {

@@ -171,12 +171,14 @@ export class CompletionCertificatesService {
       items: source.items.map((item) => ({
         description: item.description,
         contractNumber: source.contractNumber,
-        // EGY MEGRENDELŐLAP-TÉTEL EGY ALKALMAT VISZ (lásd
-        // `MaintenanceOrdersService.issue`) -- a teljesítési igazolás
-        // ugyanazt az egy alkalmat igazolja, nem a szerződés éves keretét.
-        quantity: 1,
+        // A TÉTEL KÉRT ALKALOMSZÁMA ÉS DARABSZÁMA (Luca, 2026-11-13): a megrendelőlap és a munkalap a tétel teljes
+        // kért darab- és alkalomszámával készül, az igazolás ugyanazt igazolja. A sor mennyisége az ALKALOM,
+        // az egységár az egy alkalomra eső díj, vagyis az egységár szorozva a darabszámmal: a sor összege
+        // egységár x darab x alkalom, ugyanaz, mint a megrendelőlapon. Egy darab és egy alkalom (az eddigi eset)
+        // változatlanul 1 alkalom az egységáron.
+        quantity: item.occasions,
         quantityUnit: "alkalom",
-        unitPrice: item.unitNet,
+        unitPrice: item.unitNet.times(item.quantity),
         vatRatePercent: item.vatRatePercent,
       })),
       signerName: actor.displayName,
@@ -216,10 +218,10 @@ export class CompletionCertificatesService {
         issuedByName: actor.displayName,
         items: source.items.map((item) => ({
           description: item.description,
-          // EGY ALKALOM -- lásd a `CompletionCertificateInput` építésénél a
-          // magyarázatot ugyanerre a döntésre.
-          quantity: new Prisma.Decimal(1),
-          unitNet: item.unitNet,
+          // A KÉRT ALKALOMSZÁM, az egységár az egy alkalomra eső díj (egységár x darab) -- lásd a
+          // `CompletionCertificateInput` építésénél a magyarázatot ugyanerre a döntésre.
+          quantity: new Prisma.Decimal(item.occasions),
+          unitNet: item.unitNet.times(item.quantity),
           vatRatePercent: item.vatRatePercent,
         })),
         document: {

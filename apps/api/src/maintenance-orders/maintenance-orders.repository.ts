@@ -134,10 +134,11 @@ async function occasionsUsed(
         createdAt: budapestYearRange(year),
       },
     },
-    _count: { contractItemId: true },
+    _sum: { occasions: true },
   });
+  // a lap tétele annyi alkalmat foglal, amennyit a létrehozáskor kértek (`occasions`), nem egyet
   for (const row of jobItems)
-    slot(row.contractItemId).jobs += row._count.contractItemId;
+    slot(row.contractItemId).jobs += row._sum.occasions ?? 0;
   return used;
 }
 
@@ -435,6 +436,8 @@ export class MaintenanceOrdersRepository {
       description: string;
       unitNet: Prisma.Decimal;
       quantity: Prisma.Decimal;
+      /** hány alkalmat visz a lap ebből a tételből (alap: 1) */
+      occasions?: number;
       vatRatePercent: Prisma.Decimal;
     }[],
   ) {
