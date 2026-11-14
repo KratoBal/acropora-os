@@ -4,86 +4,70 @@ import { describe, it } from "node:test";
 import { decideOccasionRequest, occasionsUsedOf } from "./occasion-frame.js";
 
 /*
-  EGY ALKALOM A KERETBŐL EGYSZER FOGLALÓDIK (acrobot, 2026-11-14 01:21; barracuda #2540 kérése). MI PIROSÍT: ha a
-  megrendelőlap utáni lap a megrendelőlap fölé is foglal (a régi összeadó számolásnál már az első lap elbukna);
-  ha a lapok sora a megrendelőlap után sem áll meg a kereten; ha egy új megrendelőlap a már elvitt alkalmakon ülne;
-  ha a részben beférő kérés „elfogyott"-nak látszik; ha az alkalom nélküli tétel átmegy.
+  AZ ÉVES ALKALOMKERET ÖSSZEADÓ MÉRCÉJE (acrobot, 2026-11-14 01:42; barracuda #2540 kérése). MI PIROSÍT: ha a
+  szerződésből közvetlenül indított munkalap a megrendelőlap alkalmait használná fel (egy 3 alkalmas megrendelőlap után a
+  3-as keretből mind a három lap átmenne, vagyis 6 alkalom menne ki); ha a megrendelőlapok és a lapok nem
+  adódnak össze; ha a részben beférő kérés „elfogyott"-nak látszik; ha az alkalom nélküli tétel átmegy.
 */
 describe("occasionsUsedOf", () => {
-  it("a megrendelőlapok és a lapok maximuma, nem az összege", () => {
-    assert.equal(occasionsUsedOf({ orders: 3, jobs: 2 }), 3);
-    assert.equal(occasionsUsedOf({ orders: 1, jobs: 4 }), 4);
+  it("a megrendelőlapok és a megrendelőlap nélküli lapok összege", () => {
+    assert.equal(occasionsUsedOf({ orders: 3, jobs: 2 }), 5);
+    assert.equal(occasionsUsedOf({ orders: 0, jobs: 4 }), 4);
     assert.equal(occasionsUsedOf(undefined), 0);
   });
 });
 
 describe("decideOccasionRequest", () => {
-  const order = (
+  const decide = (
     use: { orders: number; jobs: number } | undefined,
     per: number | null,
     requested = 1,
-  ) =>
-    decideOccasionRequest({
-      use,
-      occasionsPerYear: per,
-      requested,
-      kind: "order",
-    });
-  const job = (
-    use: { orders: number; jobs: number } | undefined,
-    per: number | null,
-    requested = 1,
-  ) =>
-    decideOccasionRequest({
-      use,
-      occasionsPerYear: per,
-      requested,
-      kind: "job",
-    });
+  ) => decideOccasionRequest({ use, occasionsPerYear: per, requested });
 
-  it("a 3 alkalmas megrendelőlap után három lap a megrendelőlap alkalmain ül, a negyedik új foglalás, és a keret ott megáll", () => {
-    const fits = [0, 1, 2].map((jobs) => job({ orders: 3, jobs }, 3).fits);
-    assert.deepEqual(fits, [true, true, true]);
-    assert.deepEqual(job({ orders: 3, jobs: 3 }, 3), {
+  it("a 3 alkalmas megrendelőlap után a 3-as keret elfogyott: az első szerződésből indított munkalap sem fér be", () => {
+    assert.deepEqual(decide({ orders: 3, jobs: 0 }, 3), {
       fits: false,
       exhausted: true,
     });
   });
 
-  it("megrendelőlap nélkül a lapok foglalnak: a harmadik lap után a negyedik elfogyott", () => {
-    assert.equal(job({ orders: 0, jobs: 2 }, 3).fits, true);
-    assert.deepEqual(job({ orders: 0, jobs: 3 }, 3), {
+  it("4-es keretnél az első munkalap átmegy, a második már nem", () => {
+    assert.equal(decide({ orders: 3, jobs: 0 }, 4).fits, true);
+    assert.deepEqual(decide({ orders: 3, jobs: 1 }, 4), {
       fits: false,
       exhausted: true,
     });
   });
 
-  it("a megrendelőlap saját alkalmakat foglal: a hozzáadódik a mostani felhasználáshoz", () => {
-    assert.equal(order({ orders: 1, jobs: 1 }, 2, 1).fits, true);
-    assert.deepEqual(order({ orders: 1, jobs: 1 }, 2, 2), {
+  it("megrendelőlap nélkül a munkalapok foglalnak: a harmadik után a negyedik elfogyott", () => {
+    assert.equal(decide({ orders: 0, jobs: 2 }, 3).fits, true);
+    assert.deepEqual(decide({ orders: 0, jobs: 3 }, 3), {
+      fits: false,
+      exhausted: true,
+    });
+  });
+
+  it("a megrendelőlapok és a lapok összeadódnak: 1 + 1 a 2-es keretből nem hagy többet", () => {
+    assert.equal(decide({ orders: 1, jobs: 1 }, 3).fits, true);
+    assert.deepEqual(decide({ orders: 1, jobs: 1 }, 2), {
+      fits: false,
+      exhausted: true,
+    });
+  });
+
+  it("a csak részben beférő kérés megnevezi a hátralévőt, nem „elfogyott”", () => {
+    assert.deepEqual(decide({ orders: 1, jobs: 0 }, 2, 2), {
       fits: false,
       exhausted: false,
       remaining: 1,
     });
-    assert.deepEqual(order({ orders: 2, jobs: 0 }, 2), {
-      fits: false,
-      exhausted: true,
-    });
-  });
-
-  it("az új megrendelőlap nem ül a már elvitt lapokon: három lap után az egy alkalmas megrendelőlap sem fér be (keret 3)", () => {
-    assert.deepEqual(order({ orders: 0, jobs: 3 }, 3), {
-      fits: false,
-      exhausted: true,
-    });
   });
 
   it("alkalom nélküli tételnek nincs kerete, és használat nélkül sem fér be semmi", () => {
-    assert.deepEqual(order(undefined, null), { fits: false, exhausted: true });
-    assert.deepEqual(job(undefined, null), { fits: false, exhausted: true });
+    assert.deepEqual(decide(undefined, null), { fits: false, exhausted: true });
   });
 
-  it("a megadás nélküli kérés egy alkalom, és az alap fajta a megrendelőlap", () => {
+  it("a megadás nélküli kérés egy alkalom", () => {
     assert.equal(
       decideOccasionRequest({
         use: { orders: 0, jobs: 0 },

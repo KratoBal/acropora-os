@@ -241,8 +241,8 @@ export class MaintenanceOrdersService {
             occasionsPerYear: item.occasionsPerYear,
             // A KIÁLLÍTÁS A KÉRT ÖSSZES ALKALMAT EGYSZERRE FOGLALJA, és az aláíráskor létrejövő EGY karbantartási
             // lap / munkalap fedi mind az N alkalmat (acrobot, 2026-11-14 01:20: „egy munkalap a tétel teljes kért
-            // darab- és alkalomszámával"). A további kiszállásokhoz nem készül újabb lap, ezért a keretből sem
-            // foglal újra senki: a megrendelőlapos lap sora nem számít külön (`occasionsUsed`).
+            // darab- és alkalomszámával"): az nem foglal külön (`occasionsUsed`: a megrendelőlapos lap sora nem
+            // számít). A szerződésből közvetlenül indított munkalap viszont új alkalom, és önmagát foglalja.
             requested: chosen.get(item.id)!.occasions,
           })),
         },
@@ -664,8 +664,6 @@ export class MaintenanceOrdersService {
     const departmentId = await siteForContractItems(this.repository, items);
     const reservation = {
       contractId: contract.id,
-      // megrendelőlap nélküli lap: a tétel megrendelőlapjainak alkalmain ül (lásd a foglalás mércéjét)
-      kind: "job" as const,
       items: contract.items.map((item) => ({
         contractItemId: item.id,
         description: item.description,

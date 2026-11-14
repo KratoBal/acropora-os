@@ -163,11 +163,9 @@ describe(
       contractId: string,
       items: readonly Item[],
       requested?: number,
-      kind?: "order" | "job",
     ) => ({
       contractId,
       year,
-      ...(kind === undefined ? {} : { kind }),
       items: items.map((item) => ({
         contractItemId: item.id,
         description: item.description,
@@ -176,7 +174,7 @@ describe(
       })),
     });
 
-    it("a megrendelőlap nélküli lap sora beleszámít; a visszavont, a lemondott és a megrendelőlapos nem; a lap a megrendelőlap alkalmán ül", async () => {
+    it("a megrendelőlap nélküli lap sora beleszámít; a visszavont, a lemondott és a megrendelőlapos nem; a megrendelőlap és a lap összeadódik", async () => {
       const { customer, department, contract, items } = await setup([2, 1, 1]);
       const [a, b, c] = items as [Item, Item, Item];
       const order = (status: "ISSUED" | "REVOKED", item: Item) =>
@@ -213,8 +211,7 @@ describe(
           },
         });
 
-      // A tétel (keret 2): 1 kiállított megrendelőlap + 1 megrendelőlap nélküli lap, de a lap a megrendelőlap
-      // alkalmán ül (egy alkalom egyszer foglalódik), tehát a felhasználás 1, nem 2
+      // A tétel (keret 2): 1 kiállított megrendelőlap + 1 megrendelőlap nélküli lap = 2 = a kerete
       await order("ISSUED", a);
       await order("REVOKED", a);
       await job("NEW", a);
@@ -234,12 +231,8 @@ describe(
         writes += 1;
         return "írva";
       };
-      const aFits = await repository.reserveOccasions(
+      const aExhausted = await repository.reserveOccasions(
         reserveInput(contract.id, [a], 1),
-        write,
-      );
-      const aTooMany = await repository.reserveOccasions(
-        reserveInput(contract.id, [a], 2),
         write,
       );
       const bFree = await repository.reserveOccasions(
@@ -250,54 +243,45 @@ describe(
         reserveInput(contract.id, [c]),
         write,
       );
-      const cJob = await repository.reserveOccasions(
-        reserveInput(contract.id, [c], 1, "job"),
-        write,
-      );
       assert.deepEqual(
-        [aFits, aTooMany, bFree, cOrder, cJob, writes],
+        [aExhausted, bFree, cOrder, writes],
         [
-          { ok: true, value: "írva" },
-          {
-            ok: false,
-            exhausted: [],
-            short: ["Tétel 1 (kért: 2, hátralévő: 1)"],
-          },
+          { ok: false, exhausted: ["Tétel 1"], short: [] },
           { ok: true, value: "írva" },
           { ok: false, exhausted: ["Tétel 3"], short: [] },
-          { ok: false, exhausted: ["Tétel 3"], short: [] },
-          2,
+          1,
         ],
       );
     });
 
     /*
-      EGY ALKALOM EGYSZER FOGLALÓDIK (acrobot, 2026-11-14 01:21; barracuda #2540 kérése): egy 3 alkalmas
-      megrendelőlap után a ugyanarra a tételre szerződésből indított lapok a megrendelőlap alkalmain ülnek, a
-      negyedik már új foglalás, és a keret ott áll meg. MI PIROSÍT: ha a lap a megrendelőlap fölé is foglal (a régi
-      összeadó számolással már az első lap is elbukna); ha a keret a negyedik lapnál sem áll meg; ha a visszavont
-      megrendelőlap után a lapok alkalmai eltűnnének a számolásból.
+      A KERET ÖSSZEADÓ (acrobot, 2026-11-14 01:42; barracuda #2540 kérése): a megrendelőlap alkalmai és a megrendelőlap
+      nélküli munkalapok alkalmai együtt nem lehetnek több a tétel évi alkalomszámánál. A megrendelőlapból aláíráskor
+      létrejövő egy munkalap nem foglal külön, a szerződésből közvetlenül indított munkalap új alkalom. MI PIROSÍT:
+      ha a megrendelőlap utáni munkalap nem foglalna saját alkalmat (a 3-as keretből 6 alkalom menne ki); ha a
+      visszavont megrendelőlap alkalmai a számolásban maradnának, vagy a munkalapok kiesnének belőle.
     */
-    it("a 3 alkalmas megrendelőlap után indított lapok nem foglalnak újra, a negyedik igen; a megrendelőlap visszavonása után a lapok magukat foglalják", async () => {
-      const { customer, department, contract, items } = await setup([3]);
-      const [d] = items as [Item];
-      const issued = await prisma.maintenanceOrder.create({
-        data: {
-          contractId: contract.id,
-          number: next(),
-          occasionYear: year,
-          status: "ISSUED",
-          items: { create: [{ ...orderItem(d), occasions: 3 }] },
-        },
-      });
-      const startJob = async () => {
+    it("keret 3, 3 alkalmas megrendelőlap után az első szerződésből indított munkalap elfogyott; keret 4-nél az első átmegy, a második nem", async () => {
+      const { customer, department, contract, items } = await setup([3, 4]);
+      const [three, four] = items as [Item, Item];
+      for (const item of [three, four])
+        await prisma.maintenanceOrder.create({
+          data: {
+            contractId: contract.id,
+            number: next(),
+            occasionYear: year,
+            status: "ISSUED",
+            items: { create: [{ ...orderItem(item), occasions: 3 }] },
+          },
+        });
+      const startJob = async (item: Item) => {
         const result = await repository.reserveOccasions(
-          reserveInput(contract.id, [d], 1, "job"),
+          reserveInput(contract.id, [item]),
           async () =>
             prisma.serviceJob.create({
               data: {
                 jobNumber: next(),
-                title: "Keret teszt lap (a megrendelőlap alkalmán)",
+                title: "Keret teszt munkalap (szerződésből)",
                 kind: "MAINTENANCE",
                 customerId: customer.id,
                 departmentId: department.id,
@@ -305,11 +289,11 @@ describe(
                 contractItems: {
                   create: [
                     {
-                      contractItemId: d.id,
-                      description: d.description,
-                      unitNet: d.unitNet,
-                      quantity: d.quantity,
-                      vatRatePercent: d.vatRatePercent,
+                      contractItemId: item.id,
+                      description: item.description,
+                      unitNet: item.unitNet,
+                      quantity: item.quantity,
+                      vatRatePercent: item.vatRatePercent,
                     },
                   ],
                 },
@@ -318,134 +302,72 @@ describe(
         );
         return result.ok;
       };
-      const first = await startJob();
-      const second = await startJob();
-      const third = await startJob();
-      const fourth = await startJob();
+      const threeFirst = await startJob(three);
+      const fourFirst = await startJob(four);
+      const fourSecond = await startJob(four);
+      assert.deepEqual(
+        [threeFirst, fourFirst, fourSecond],
+        [false, true, false],
+      );
+    });
 
-      // a megrendelőlap visszavonása után a három lap magát foglalja: a keret (3) tele van
+    it("a megrendelőlap visszavonása után a munkalapok csak magukat számolják", async () => {
+      const { customer, department, contract, items } = await setup([2]);
+      const [d] = items as [Item];
+      const issued = await prisma.maintenanceOrder.create({
+        data: {
+          contractId: contract.id,
+          number: next(),
+          occasionYear: year,
+          status: "ISSUED",
+          items: { create: [{ ...orderItem(d), occasions: 1 }] },
+        },
+      });
+      const firstJob = await repository.reserveOccasions(
+        reserveInput(contract.id, [d]),
+        async () =>
+          prisma.serviceJob.create({
+            data: {
+              jobNumber: next(),
+              title: "Keret teszt munkalap (szerződésből)",
+              kind: "MAINTENANCE",
+              customerId: customer.id,
+              departmentId: department.id,
+              contractId: contract.id,
+              contractItems: {
+                create: [
+                  {
+                    contractItemId: d.id,
+                    description: d.description,
+                    unitNet: d.unitNet,
+                    quantity: d.quantity,
+                    vatRatePercent: d.vatRatePercent,
+                  },
+                ],
+              },
+            },
+          }),
+      );
+      // keret 2: 1 megrendelőlap + 1 munkalap: tele
+      const full = await repository.reserveOccasions(
+        reserveInput(contract.id, [d]),
+        async () => "nem kellene lefutnia",
+      );
       await prisma.maintenanceOrder.update({
         where: { id: issued.id },
         data: { status: "REVOKED" },
       });
+      // a visszavont megrendelőlap alkalma felszabadul, a munkalap marad: 1 alkalom szabad
       const afterRevoke = await repository.reserveOccasions(
-        reserveInput(contract.id, [d], 1, "order"),
-        async () => "nem kellene lefutnia",
-      );
-      assert.deepEqual(
-        [first, second, third, fourth, afterRevoke],
-        [
-          true,
-          true,
-          true,
-          false,
-          { ok: false, exhausted: ["Tétel 1"], short: [] },
-        ],
-      );
-    });
-
-    it("S4: a beszúrt tételsor árrögzítéssel áll, az állapot megszámolja, és a következő foglalás már felhasználásnak látja", async () => {
-      const { customer, department, contract, items } = await setup([1]);
-      const [d] = items as [Item];
-      const job = await prisma.serviceJob.create({
-        data: {
-          jobNumber: next(),
-          title: "Keret teszt lap (B út)",
-          kind: "MAINTENANCE",
-          customerId: customer.id,
-          departmentId: department.id,
-          contractId: contract.id,
-        },
-      });
-      const before = await repository.serviceJobContractItemState({
-        id: job.id,
-      });
-      const first = await repository.reserveOccasions(
         reserveInput(contract.id, [d]),
-        (tx) =>
-          repository.insertServiceJobContractItems(tx, job.id, [
-            {
-              contractItemId: d.id,
-              description: d.description,
-              unitNet: d.unitNet,
-              quantity: d.quantity,
-              vatRatePercent: d.vatRatePercent,
-            },
-          ]),
-      );
-      const after = await repository.serviceJobContractItemState({
-        id: job.id,
-      });
-      const stored = await prisma.serviceJobContractItem.findMany({
-        where: { serviceJobId: job.id },
-        select: { contractItemId: true, unitNet: true },
-      });
-      const second = await repository.reserveOccasions(
-        reserveInput(contract.id, [d]),
-        async () => "nem kellene lefutnia",
+        async () => "írva",
       );
       assert.deepEqual(
+        [firstJob.ok, full, afterRevoke],
         [
-          before?.itemCount,
-          first.ok,
-          after?.itemCount,
-          stored.map((row) => [row.contractItemId, row.unitNet.toString()]),
-          second,
-        ],
-        [
-          0,
           true,
-          1,
-          [[d.id, "100000"]],
           { ok: false, exhausted: ["Tétel 1"], short: [] },
-        ],
-      );
-    });
-
-    /*
-      A KÉRT ALKALOMSZÁM SÚLYA (Luca, 2026-11-13): a megrendelőlap tétele annyi alkalmat használ, amennyit a
-      kiállításkor kértek. MI PIROSÍT: ha egy 3 alkalmas lap csak egynek számít; ha a visszavont lap alkalmai
-      megmaradnak; ha a részben beférő kérés átmegy, vagy „elfogyott"-ként jelenik meg.
-    */
-    it("a megrendelőlap tétele a kért alkalmakat használja: a 3 alkalmas lap után 1 fér még, 2 már nem; a visszavont nem számít", async () => {
-      const { contract, items } = await setup([4]);
-      const [e] = items as [Item];
-      const order = (status: "ISSUED" | "REVOKED", occasions: number) =>
-        prisma.maintenanceOrder.create({
-          data: {
-            contractId: contract.id,
-            number: next(),
-            occasionYear: year,
-            status,
-            items: { create: [{ ...orderItem(e), occasions }] },
-          },
-        });
-      await order("ISSUED", 3);
-      await order("REVOKED", 2);
-
-      let writes = 0;
-      const write = async () => {
-        writes += 1;
-        return "írva";
-      };
-      const one = await repository.reserveOccasions(
-        reserveInput(contract.id, [e], 1),
-        write,
-      );
-      const two = await repository.reserveOccasions(
-        reserveInput(contract.id, [e], 2),
-        write,
-      );
-      assert.deepEqual(
-        [one, two, writes],
-        [
           { ok: true, value: "írva" },
-          {
-            ok: false,
-            exhausted: [],
-            short: ["Tétel 1 (kért: 2, hátralévő: 1)"],
-          },
-          1,
         ],
       );
     });

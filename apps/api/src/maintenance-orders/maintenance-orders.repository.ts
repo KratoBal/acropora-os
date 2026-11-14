@@ -313,8 +313,6 @@ export class MaintenanceOrdersRepository {
     input: {
       contractId: string;
       year: number;
-      /** mit foglal: megrendelőlap (alap) vagy megrendelőlap nélküli lap (lásd a mércét a foglalásban) */
-      kind?: "order" | "job";
       items: readonly {
         contractItemId: string;
         description: string;
@@ -352,7 +350,6 @@ export class MaintenanceOrdersRepository {
     input: {
       contractId: string;
       year: number;
-      kind?: "order" | "job";
       items: readonly {
         contractItemId: string;
         description: string;
@@ -379,7 +376,6 @@ export class MaintenanceOrdersRepository {
             use: used.get(item.contractItemId),
             occasionsPerYear: item.occasionsPerYear,
             requested: item.requested,
-            kind: input.kind,
           });
           if (decision.fits) continue;
           if (decision.exhausted) exhausted.push(item.description);
