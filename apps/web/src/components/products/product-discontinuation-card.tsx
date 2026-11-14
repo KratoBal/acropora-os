@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, PilotButton, PilotSection } from "@acropora/ui";
+import { Alert, ConfirmDialog, PilotButton, PilotSection } from "@acropora/ui";
 import type { ProductDiscontinuation, ProductListItem } from "@acropora/types";
 import { useEffect, useState } from "react";
 
@@ -188,32 +188,12 @@ export function ProductDiscontinuationCard({
             )}
           </p>
           {canManage ? (
-            confirmingRemoval ? (
-              <div className="flex items-center gap-2">
-                <span>Biztosan visszavonod a jelölést?</span>
-                <PilotButton
-                  variant="secondary"
-                  disabled={busy}
-                  onClick={() => void removeMark()}
-                >
-                  Igen, visszavonom
-                </PilotButton>
-                <PilotButton
-                  variant="secondary"
-                  disabled={busy}
-                  onClick={() => setConfirmingRemoval(false)}
-                >
-                  Mégsem
-                </PilotButton>
-              </div>
-            ) : (
-              <PilotButton
-                variant="secondary"
-                onClick={() => setConfirmingRemoval(true)}
-              >
-                Jelölés visszavonása
-              </PilotButton>
-            )
+            <PilotButton
+              variant="secondary"
+              onClick={() => setConfirmingRemoval(true)}
+            >
+              Jelölés visszavonása
+            </PilotButton>
           ) : null}
         </div>
       ) : (
@@ -222,6 +202,16 @@ export function ProductDiscontinuationCard({
           a rendszer a UNAS-állapotból jelzi, az nem ez a jelölő.
         </p>
       )}
+      <ConfirmDialog
+        open={confirmingRemoval}
+        title="Visszavonod a „véglegesen megszűnt” jelölést?"
+        consequence="A kirakat a termék lapját többé nem irányítja át a helyettesítőre vagy a kategóriára, és a megadott helyettesítő is törlődik a termékről."
+        recovery="Visszaállítható: a termék újra megjelölhető, de a helyettesítőt újra ki kell választani."
+        confirmLabel="Jelölés visszavonása"
+        busy={busy}
+        onConfirm={() => void removeMark()}
+        onCancel={() => setConfirmingRemoval(false)}
+      />
     </PilotSection>
   );
 }

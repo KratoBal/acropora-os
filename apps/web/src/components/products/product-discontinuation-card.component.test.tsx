@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ProductDiscontinuationCard } from "./product-discontinuation-card";
@@ -144,15 +150,19 @@ describe("ProductDiscontinuationCard", () => {
     );
   });
 
-  it("un-marking asks first, and only the confirmation calls the API", async () => {
+  it("un-marking asks with the shared dialog first, and only its confirmation calls the API", async () => {
     api.getDiscontinuation.mockReturnValue(later(mark()));
     api.removeDiscontinuation.mockReturnValue(later(undefined));
     renderCard();
     fireEvent.click(
       await screen.findByRole("button", { name: "Jelölés visszavonása" }),
     );
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.getAttribute("aria-label")).toMatch(/Visszavonod/);
     expect(api.removeDiscontinuation).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Igen, visszavonom" }));
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Jelölés visszavonása" }),
+    );
     await waitFor(() =>
       expect(api.removeDiscontinuation).toHaveBeenCalledWith(
         "token-1",
@@ -162,6 +172,23 @@ describe("ProductDiscontinuationCard", () => {
     expect(
       await screen.findByText(/Nincs végleg megszűntnek jelölve/),
     ).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("cancelling the un-mark question calls nothing and keeps the mark", async () => {
+    api.getDiscontinuation.mockReturnValue(later(mark()));
+    renderCard();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Jelölés visszavonása" }),
+    );
+    fireEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Mégsem",
+      }),
+    );
+    expect(api.removeDiscontinuation).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByText(/Ez a termék végleg megszűnt/)).toBeTruthy();
   });
 
   it("shows the server's refusal and stays in the editor", async () => {
