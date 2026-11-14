@@ -375,55 +375,88 @@ describe("egy kézi futás, árnyékban", () => {
     assert.equal(field("dosingGuidance").value, guidance);
   });
 
-  // T4.4 S1b, card 8639ac2a. WHAT TURNS THIS RED: the use or the maker block not asked of the manufacturer's page, a
-  // reseller's page sent to the AI, an answer not checked against the page reaching the field, or the two fields left
-  // out of the run's field list.
-  it("a gyártói lapról az alkalmazás és a gyártó a futás mezője; a kereskedő lapja nem megy az AI-hoz", async () => {
-    const asked: { pageText: string; fields: string[] }[] = [];
-    const page =
-      "<html><body><p>Alkalmazás: jódszint pótlására.</p><p>Kitalált Gyártó GmbH, Példa utca 1, 12345 Mintaváros</p></body></html>";
-    const { checks } = await run(
-      [
-        {
-          productId: "p-1",
-          sources: [{ kind: "BULK_REEF_SUPPLY", url: `${BRS}/p/2` }],
-        },
-      ],
-      {
-        [`${MAKER}/p/2`]: { status: 200, body: page },
-        [`${BRS}/p/2`]: { status: 200, body: productPage({}) },
-      },
-      {
-        facts: { "p-1": facts({ unasManufacturerUrl: `${MAKER}/p/2` }) },
-        productFieldExtractor: {
-          extract: async (input) => {
-            asked.push({ pageText: input.pageText, fields: input.fields });
-            return {
-              kind: "ANSWER",
-              fields: [
+  // T4.4 S1b, card 8639ac2a; acrobot 52559 after the fifth pilot run. WHAT TURNS THIS RED: the maker block asked of a
+  // product page, or the use or a dose asked of the imprint; the imprint counted against a product page's NO_DATA; a
+  // reseller's page sent to the AI; with no imprint in the input, a maker block taken from anywhere.
+  const productPageHtml =
+    "<html><body><p>Alkalmazás: jódszint pótlására.</p><p>Forgalmazza a Kitalált Kft.</p></body></html>";
+  const imprintHtml =
+    "<html><body><p>Impressum</p><p>Kitalált Gyártó GmbH, Példa utca 1, 12345 Mintaváros</p></body></html>";
+  const fieldsFake = (asked: string[][]) => ({
+    extract: async (input: { fields: string[] }) => {
+      asked.push(input.fields);
+      return {
+        kind: "ANSWER" as const,
+        fields: [
+          ...(input.fields.includes("application")
+            ? [
                 {
-                  field: "application",
+                  field: "application" as const,
                   value: "jódszint pótlására.",
                   anchor: "Alkalmazás: jódszint pótlására.",
                 },
+              ]
+            : []),
+          ...(input.fields.includes("manufacturerInfo")
+            ? [
                 {
-                  field: "manufacturerInfo",
-                  role: "MAKER",
+                  field: "manufacturerInfo" as const,
+                  role: "MAKER" as const,
                   name: "Kitalált Gyártó GmbH",
                   address: "Példa utca 1, 12345 Mintaváros",
                   email: null,
                   anchor:
                     "Kitalált Gyártó GmbH, Példa utca 1, 12345 Mintaváros",
                 },
-              ],
-              refused: [],
+              ]
+            : []),
+        ],
+        refused: [],
+      };
+    },
+  });
+
+  it("a gyártó-blokk csak az impresszumból, a használat csak a terméklapról; a kereskedő lapja nem megy az AI-hoz", async () => {
+    const asked: string[][] = [];
+    const dosingAsked: string[] = [];
+    const { checks } = await run(
+      [
+        {
+          productId: "p-1",
+          sources: [
+            { kind: "BULK_REEF_SUPPLY", url: `${BRS}/p/2` },
+            { kind: "MANUFACTURER", url: `${MAKER}/impressum`, imprint: true },
+          ],
+        },
+      ],
+      {
+        [`${MAKER}/p/2`]: { status: 200, body: productPageHtml },
+        [`${MAKER}/impressum`]: { status: 200, body: imprintHtml },
+        [`${BRS}/p/2`]: { status: 200, body: productPage({}) },
+      },
+      {
+        facts: { "p-1": facts({ unasManufacturerUrl: `${MAKER}/p/2` }) },
+        productFieldExtractor: fieldsFake(asked),
+        dosingExtractor: {
+          extract: async (input) => {
+            dosingAsked.push(input.pageText);
+            return {
+              kind: "ANSWER",
+              mode: "NO_DATA",
+              dose: null,
+              tests: [],
+              guidance: null,
+              excerpt: null,
+              reason: "",
             };
           },
         },
       },
     );
-    assert.equal(asked.length, 1);
-    assert.deepEqual(asked[0]!.fields, ["application", "manufacturerInfo"]);
+    assert.deepEqual(asked.sort(), [["application"], ["manufacturerInfo"]]);
+    // the dose is asked of the product page only, and its NO_DATA stands: the imprint does not count against it
+    assert.equal(dosingAsked.length, 1);
+    assert.match(dosingAsked[0]!, /Alkalmazás/);
     const field = (key: string) =>
       checks[0]!.fields.find((f) => f.field === key)!;
     assert.deepEqual(
@@ -433,6 +466,24 @@ describe("egy kézi futás, árnyékban", () => {
     assert.equal(
       field("manufacturerInfo").value,
       "Gyártó: Kitalált Gyártó GmbH, Példa utca 1, 12345 Mintaváros",
+    );
+    assert.equal(field("dosingMode").value, "NO_DATA");
+  });
+
+  it("impresszum nélkül a gyártó-blokk hiányzik, a terméklapról sem kérjük", async () => {
+    const asked: string[][] = [];
+    const { checks } = await run(
+      [{ productId: "p-1", sources: [] }],
+      { [`${MAKER}/p/2`]: { status: 200, body: productPageHtml } },
+      {
+        facts: { "p-1": facts({ unasManufacturerUrl: `${MAKER}/p/2` }) },
+        productFieldExtractor: fieldsFake(asked),
+      },
+    );
+    assert.deepEqual(asked, [["application"]]);
+    assert.equal(
+      checks[0]!.fields.find((f) => f.field === "manufacturerInfo")!.status,
+      "MISSING",
     );
   });
 

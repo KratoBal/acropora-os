@@ -315,6 +315,58 @@ describe("a kézi indítás parancssora", () => {
     assert.doesNotMatch(report, /Mérje a KH-t/);
   });
 
+  // acrobot 52559: a source can be marked as the brand's imprint. WHAT TURNS THIS RED: the mark dropped on the way in;
+  // accepted on a non-manufacturer source or with a value other than true.
+  it("az impresszum-jelölő csak gyártói forráson, true értékkel megy át", () => {
+    const ok = parseRunInput(
+      JSON.stringify({
+        products: [
+          {
+            productId: "p",
+            sources: [
+              { kind: "MANUFACTURER", url: "https://a.example.invalid/x" },
+              {
+                kind: "MANUFACTURER",
+                url: "https://a.example.invalid/impressum",
+                imprint: true,
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    assert.deepEqual(ok.ok && ok.products[0]!.sources, [
+      { kind: "MANUFACTURER", url: "https://a.example.invalid/x" },
+      {
+        kind: "MANUFACTURER",
+        url: "https://a.example.invalid/impressum",
+        imprint: true,
+      },
+    ]);
+    const bad = parseRunInput(
+      JSON.stringify({
+        products: [
+          {
+            productId: "p",
+            sources: [
+              {
+                kind: "BULK_REEF_SUPPLY",
+                url: "https://www.bulkreefsupply.com/x",
+                imprint: true,
+              },
+              {
+                kind: "MANUFACTURER",
+                url: "https://a.example.invalid/i",
+                imprint: "igen",
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    assert.equal(!bad.ok && bad.problems.length, 2);
+  });
+
   it("a hibás bemenet minden hibáját felsorolja", () => {
     const parsed = parseRunInput(
       JSON.stringify({

@@ -16,7 +16,6 @@ import {
 } from "./dosing-extraction.js";
 import { confirmPackSize, nameSize } from "./pack-size-confirm.js";
 import {
-  PRODUCT_FIELD_KEYS,
   productFieldStatement,
   type ProductFieldExtractor,
 } from "./product-field-extraction.js";
@@ -67,6 +66,13 @@ export interface RunSourceInput {
   url: string;
   /** For a SUPPLIER source: whose website the URL must be on. */
   supplierId?: string;
+  /**
+   * A MANUFACTURER source that is the brand's imprint (its legal notice), not a product page (acrobot 52559, T4.4 pilot
+   * fifth run): the maker block comes from here only, and nothing else does. A product page's company is incidental,
+   * and two sources gave two blocks (Korallen-Zucht) and a different one from run to run (Grotech, Blue Life). With no
+   * imprint in the input the maker stays missing and goes to a person; a product page is never the fallback.
+   */
+  imprint?: true;
 }
 
 export interface RunProductInput {
@@ -414,7 +420,8 @@ async function checkProduct(
       (next) => sourceUrlProblem(source.kind, next, sites) === null,
     );
     if (!page.ok) {
-      if (source.kind === "MANUFACTURER") manufacturerWithoutNoData += 1;
+      if (source.kind === "MANUFACTURER" && !source.imprint)
+        manufacturerWithoutNoData += 1;
       fetches.push({
         sourceKind: source.kind,
         url: source.url,
@@ -443,8 +450,11 @@ async function checkProduct(
     const structured = extractPageStatement(page.html);
     // the pack size: our name's size, confirmed where the manufacturer's page names its own product (S1a)
     const ownSize = nameSize(facts.name);
+    // the imprint is not a product page: no pack, no dose, no use from it, only the maker block
+    const imprint = source.kind === "MANUFACTURER" && source.imprint === true;
     const sizeConfirmed =
       source.kind === "MANUFACTURER" &&
+      !imprint &&
       ownSize &&
       !structured.values.some((v) => v.field === "packSize")
         ? confirmPackSize(page.html, ownSize)
@@ -459,7 +469,7 @@ async function checkProduct(
           : structured;
     // the three dosing states, from the manufacturer's own page only
     const dosingAi =
-      source.kind === "MANUFACTURER" && deps.dosingExtractor
+      source.kind === "MANUFACTURER" && !imprint && deps.dosingExtractor
         ? await (async () => {
             const pageText = visiblePageText(page.html);
             return dosingStatement(
@@ -481,7 +491,7 @@ async function checkProduct(
               await deps.productFieldExtractor!.extract({
                 productName: facts.name,
                 pageText,
-                fields: [...PRODUCT_FIELD_KEYS],
+                fields: imprint ? ["manufacturerInfo"] : ["application"],
               }),
               pageText,
             );
@@ -489,6 +499,7 @@ async function checkProduct(
         : null;
     if (
       source.kind === "MANUFACTURER" &&
+      !imprint &&
       !dosingAi?.values.some(
         (v) => v.field === "dosingMode" && v.raw === "NO_DATA",
       )

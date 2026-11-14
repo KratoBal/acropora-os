@@ -147,11 +147,19 @@ export function parseRunInput(
         kind?: unknown;
         url?: unknown;
         supplierId?: unknown;
+        imprint?: unknown;
       };
       if (!isEnrichmentSourceKind(s.kind))
         problems.push(`products[${i}].sources[${j}]: ismeretlen forrásfajta.`);
       else if (typeof s.url !== "string" || !s.url.trim())
         problems.push(`products[${i}].sources[${j}]: hiányzó url.`);
+      else if (
+        s.imprint !== undefined &&
+        (s.imprint !== true || s.kind !== "MANUFACTURER")
+      )
+        problems.push(
+          `products[${i}].sources[${j}]: imprint csak gyártói forrásnál, true értékkel.`,
+        );
       else if (s.kind === "SUPPLIER" && typeof s.supplierId !== "string")
         problems.push(
           `products[${i}].sources[${j}]: beszállítói oldalhoz supplierId kell.`,
@@ -163,6 +171,7 @@ export function parseRunInput(
           ...(typeof s.supplierId === "string"
             ? { supplierId: s.supplierId }
             : {}),
+          ...(s.imprint === true ? { imprint: true as const } : {}),
         });
     });
     products.push({ productId: productId.trim(), sources: parsed });
