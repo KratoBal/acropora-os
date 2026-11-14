@@ -89,7 +89,10 @@ describe("reconcileField: letter case", () => {
       ["Kitalált", "Kitalált Sp. z o.o."],
     ])
       assert.equal(
-        reconcileField("brand", [src(a!, "SUPPLIER_PAGE"), src(b!, "MANUFACTURER_PAGE")]).status,
+        reconcileField("brand", [
+          src(a!, "SUPPLIER_PAGE"),
+          src(b!, "MANUFACTURER_PAGE"),
+        ]).status,
         "VERIFIED",
         `${a} / ${b}`,
       );
@@ -99,7 +102,10 @@ describe("reconcileField: letter case", () => {
       ["AG", "KG"],
     ])
       assert.equal(
-        reconcileField("brand", [src(a!, "SUPPLIER_PAGE"), src(b!, "MANUFACTURER_PAGE")]).status,
+        reconcileField("brand", [
+          src(a!, "SUPPLIER_PAGE"),
+          src(b!, "MANUFACTURER_PAGE"),
+        ]).status,
         "CONFLICTING_SOURCES",
         `${a} / ${b}`,
       );
