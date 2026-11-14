@@ -756,7 +756,11 @@ export function PilotContractDetailPage({
         </div>
 
         {/* az elmentetlen tételek elvesznek, ha kilépsz: lap-bezárás és az alkalmazáson belüli hivatkozások is */}
-        <UnsavedChangesGuard when={dirty} />
+        <UnsavedChangesGuard
+          when={dirty}
+          consequence="A felvitt tételek és az átírt mezők, amelyeket még nem mentettél, elvesznek."
+          recovery="Nem szerezhetők vissza: a szerződés a legutóbbi mentett állapotában marad."
+        />
         <div className={`flex flex-1 flex-col gap-4 ${PAGE_GUTTER_X} py-6`}>
           {error ? (
             <div ref={errorRef}>
