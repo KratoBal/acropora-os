@@ -168,8 +168,9 @@ export const BRAND_CATEGORY_SITES: Readonly<Record<string, readonly string[]>> =
     // as the brand's own; the basis is written beside it.
     // Left out until verified: triton-reagents.de (linked from UNAS and
     // reeftrak, which shows someone linked there, not whose it is; its
-    // Impressum was not reachable from here, 2026-10-22). A page there stays
-    // NO_MANUFACTURER_SITE unless UNAS links that product.
+    // Impressum was not reachable from here, 2026-10-22; on 2026-11-14 the
+    // site served an expired certificate, so a run could not read it either).
+    // A page there stays NO_MANUFACTURER_SITE unless UNAS links that product.
     "fauna marin": [
       "faunamarin.de", // the brand's own site, widely known; reeftrak links, 2026-10-22
       // the brand's own shop, where its product pages and doses stand: faunamarin.de's home page lists it
@@ -180,6 +181,13 @@ export const BRAND_CATEGORY_SITES: Readonly<Record<string, readonly string[]>> =
     triton: ["triton.de"], // the brand's own site, widely known; reeftrak links, 2026-10-22
     "red sea": ["redseafish.com"], // the brand's own site, widely known; reeftrak links, 2026-10-22
     aquaforest: ["aquaforest.eu"], // the brand's own site, widely known; reeftrak links, 2026-10-22
+    // the brand's own shop and site, as far as the page itself says (quarantine reader, 2026-11-14, read by
+    // nautilus and again by barracuda): the footer reads "Modern Reef by Euro Corals"; the Impressum names
+    // Euro Corals (Passauer Straße 12, Simbach am Inn, with its managing director) as the operator and gives
+    // www.eurocorals.com as plain text; the word brand/Marke is not on it; not measured from eurocorals.com
+    // back (not readable from here), so the tie is the page's own statement; its home page sells the brand's
+    // own products. The brand is in the catalogue as a category ("Nyomelemek / Modern Reef") and a brand name.
+    "modern reef": ["modernreef.eu"],
   };
 
 /**
