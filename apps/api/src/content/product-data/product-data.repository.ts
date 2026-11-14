@@ -83,6 +83,20 @@ export function productDataWhere(
   return { AND: and };
 }
 
+/**
+ * The requested category values that are NOT a category id in the tree, in the order asked. The `category` filter selects
+ * by IDENTIFIER: a name matches nothing, and a filter that matches nothing answers "0 products", which reads exactly like
+ * an empty category (spec point 4, content agent acceptance A5). Naming the unknown values is what lets the service refuse
+ * instead.
+ */
+export function unknownCategoryIds(
+  requested: readonly string[],
+  edges: readonly { id: string }[],
+): string[] {
+  const known = new Set(edges.map((edge) => edge.id));
+  return requested.filter((id) => !known.has(id));
+}
+
 /** Category ids below (and including) the given ones, from the whole tree (a few hundred rows). */
 export function categoryDescendants(
   rootIds: readonly string[],
