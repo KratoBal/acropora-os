@@ -156,21 +156,27 @@ describe(
       description: item.description,
       unitNet: item.unitNet,
       quantity: item.quantity,
+      occasions: 1,
       vatRatePercent: item.vatRatePercent,
     });
-    const reserveInput = (contractId: string, items: readonly Item[]) => ({
+    const reserveInput = (
+      contractId: string,
+      items: readonly Item[],
+      requested?: number,
+    ) => ({
       contractId,
       year,
       items: items.map((item) => ({
         contractItemId: item.id,
         description: item.description,
         occasionsPerYear: item.occasionsPerYear,
+        ...(requested === undefined ? {} : { requested }),
       })),
     });
 
-    it("a megrendelőlap nélküli lap sora beleszámít; a visszavont, a lemondott és a megrendelőlapos nem", async () => {
-      const { customer, department, contract, items } = await setup([2, 1]);
-      const [a, b] = items as [Item, Item];
+    it("a megrendelőlap nélküli lap sora beleszámít; a visszavont, a lemondott és a megrendelőlapos nem; a megrendelőlap és a lap összeadódik", async () => {
+      const { customer, department, contract, items } = await setup([2, 1, 1]);
+      const [a, b, c] = items as [Item, Item, Item];
       const order = (status: "ISSUED" | "REVOKED", item: Item) =>
         prisma.maintenanceOrder.create({
           data: {
@@ -205,11 +211,11 @@ describe(
           },
         });
 
-      // A tétel: 1 kiállított megrendelőlap + 1 megrendelőlap nélküli lap = 2 = a kerete
+      // A tétel (keret 2): 1 kiállított megrendelőlap + 1 megrendelőlap nélküli lap = 2 = a kerete
       await order("ISSUED", a);
       await order("REVOKED", a);
       await job("NEW", a);
-      // B tétel: csak lemondott lap és megrendelőlapos lap: 0 a felhasználás
+      // B tétel: csak lemondott lap és a visszavont megrendelőlap lapja: 0 a felhasználás
       await job("CANCELLED", b);
       const withOrder = await job("NEW", b);
       const bOrder = await order("ISSUED", b);
@@ -217,23 +223,34 @@ describe(
         where: { id: bOrder.id },
         data: { serviceJobId: withOrder.id, status: "REVOKED" },
       });
+      // C tétel: csak egy megrendelőlap nélküli lap: az foglalja a keretet
+      await job("NEW", c);
 
       let writes = 0;
       const write = async () => {
         writes += 1;
         return "írva";
       };
-      const exhausted = await repository.reserveOccasions(
-        reserveInput(contract.id, [a]),
+      const aExhausted = await repository.reserveOccasions(
+        reserveInput(contract.id, [a], 1),
         write,
       );
-      const free = await repository.reserveOccasions(
+      const bFree = await repository.reserveOccasions(
         reserveInput(contract.id, [b]),
         write,
       );
+      const cOrder = await repository.reserveOccasions(
+        reserveInput(contract.id, [c]),
+        write,
+      );
       assert.deepEqual(
-        [exhausted, free, writes],
-        [{ ok: false, exhausted: ["Tétel 1"] }, { ok: true, value: "írva" }, 1],
+        [aExhausted, bFree, cOrder, writes],
+        [
+          { ok: false, exhausted: ["Tétel 1"], short: [] },
+          { ok: true, value: "írva" },
+          { ok: false, exhausted: ["Tétel 3"], short: [] },
+          1,
+        ],
       );
     });
 
@@ -285,7 +302,131 @@ describe(
           stored.map((row) => [row.contractItemId, row.unitNet.toString()]),
           second,
         ],
-        [0, true, 1, [[d.id, "100000"]], { ok: false, exhausted: ["Tétel 1"] }],
+        [
+          0,
+          true,
+          1,
+          [[d.id, "100000"]],
+          { ok: false, exhausted: ["Tétel 1"], short: [] },
+        ],
+      );
+    });
+
+    /*
+      A KERET ÖSSZEADÓ (acrobot, 2026-11-14 01:42; barracuda #2540 kérése): a megrendelőlap alkalmai és a megrendelőlap
+      nélküli munkalapok alkalmai együtt nem lehetnek több a tétel évi alkalomszámánál. A megrendelőlapból aláíráskor
+      létrejövő egy munkalap nem foglal külön, a szerződésből közvetlenül indított munkalap új alkalom. MI PIROSÍT:
+      ha a megrendelőlap utáni munkalap nem foglalna saját alkalmat (a 3-as keretből 6 alkalom menne ki); ha a
+      visszavont megrendelőlap alkalmai a számolásban maradnának, vagy a munkalapok kiesnének belőle.
+    */
+    it("keret 3, 3 alkalmas megrendelőlap után az első szerződésből indított munkalap elfogyott; keret 4-nél az első átmegy, a második nem", async () => {
+      const { customer, department, contract, items } = await setup([3, 4]);
+      const [three, four] = items as [Item, Item];
+      for (const item of [three, four])
+        await prisma.maintenanceOrder.create({
+          data: {
+            contractId: contract.id,
+            number: next(),
+            occasionYear: year,
+            status: "ISSUED",
+            items: { create: [{ ...orderItem(item), occasions: 3 }] },
+          },
+        });
+      const startJob = async (item: Item) => {
+        const result = await repository.reserveOccasions(
+          reserveInput(contract.id, [item]),
+          async () =>
+            prisma.serviceJob.create({
+              data: {
+                jobNumber: next(),
+                title: "Keret teszt munkalap (szerződésből)",
+                kind: "MAINTENANCE",
+                customerId: customer.id,
+                departmentId: department.id,
+                contractId: contract.id,
+                contractItems: {
+                  create: [
+                    {
+                      contractItemId: item.id,
+                      description: item.description,
+                      unitNet: item.unitNet,
+                      quantity: item.quantity,
+                      vatRatePercent: item.vatRatePercent,
+                    },
+                  ],
+                },
+              },
+            }),
+        );
+        return result.ok;
+      };
+      const threeFirst = await startJob(three);
+      const fourFirst = await startJob(four);
+      const fourSecond = await startJob(four);
+      assert.deepEqual(
+        [threeFirst, fourFirst, fourSecond],
+        [false, true, false],
+      );
+    });
+
+    it("a megrendelőlap visszavonása után a munkalapok csak magukat számolják", async () => {
+      const { customer, department, contract, items } = await setup([2]);
+      const [d] = items as [Item];
+      const issued = await prisma.maintenanceOrder.create({
+        data: {
+          contractId: contract.id,
+          number: next(),
+          occasionYear: year,
+          status: "ISSUED",
+          items: { create: [{ ...orderItem(d), occasions: 1 }] },
+        },
+      });
+      const firstJob = await repository.reserveOccasions(
+        reserveInput(contract.id, [d]),
+        async () =>
+          prisma.serviceJob.create({
+            data: {
+              jobNumber: next(),
+              title: "Keret teszt munkalap (szerződésből)",
+              kind: "MAINTENANCE",
+              customerId: customer.id,
+              departmentId: department.id,
+              contractId: contract.id,
+              contractItems: {
+                create: [
+                  {
+                    contractItemId: d.id,
+                    description: d.description,
+                    unitNet: d.unitNet,
+                    quantity: d.quantity,
+                    vatRatePercent: d.vatRatePercent,
+                  },
+                ],
+              },
+            },
+          }),
+      );
+      // keret 2: 1 megrendelőlap + 1 munkalap: tele
+      const full = await repository.reserveOccasions(
+        reserveInput(contract.id, [d]),
+        async () => "nem kellene lefutnia",
+      );
+      await prisma.maintenanceOrder.update({
+        where: { id: issued.id },
+        data: { status: "REVOKED" },
+      });
+      // a visszavont megrendelőlap alkalma felszabadul, a munkalap marad: 1 alkalom szabad
+      const afterRevoke = await repository.reserveOccasions(
+        reserveInput(contract.id, [d]),
+        async () => "írva",
+      );
+      assert.deepEqual(
+        [firstJob.ok, full, afterRevoke],
+        [
+          true,
+          { ok: false, exhausted: ["Tétel 1"], short: [] },
+          { ok: true, value: "írva" },
+        ],
       );
     });
 

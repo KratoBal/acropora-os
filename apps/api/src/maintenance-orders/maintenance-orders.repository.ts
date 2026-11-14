@@ -4,6 +4,7 @@ import { prisma, Prisma } from "@acropora/database";
 import { assetsOutsideDepartment } from "../common/assets-in-department.js";
 import { unitPathsFor, unitRowsFor } from "../common/unit-path-lookup.js";
 import { budapestYearRange } from "./maintenance-order-occasion-year.js";
+import { decideOccasionRequest, type OccasionUse } from "./occasion-frame.js";
 
 const orderInclude = {
   contract: {
@@ -42,6 +43,8 @@ export type MaintenanceOrderItemInput = {
   description: string;
   unitNet: Prisma.Decimal;
   quantity: Prisma.Decimal;
+  /** hány alkalmat visz a lap ebből a tételből (az évi keret ezt számolja) */
+  occasions: number;
   vatRatePercent: Prisma.Decimal;
 };
 
@@ -97,26 +100,30 @@ export type PortalMaintenanceOrderRow = Prisma.MaintenanceOrderGetPayload<{
   select: typeof portalOrderSelect;
 }>;
 
-/** A tételek éves felhasználása (lásd `reserveOccasions`), tételenként. */
+/** A tételek éves felhasználása (lásd `reserveOccasions` és `occasion-frame.ts`), tételenként, két részre bontva. */
 async function occasionsUsed(
   tx: Prisma.TransactionClient,
   contractItemIds: string[],
   year: number,
-): Promise<Map<string, number>> {
-  const used = new Map<string, number>();
+): Promise<Map<string, OccasionUse>> {
+  const used = new Map<string, OccasionUse>();
   if (!contractItemIds.length) return used;
-  const add = (contractItemId: string, count: number) =>
-    used.set(contractItemId, (used.get(contractItemId) ?? 0) + count);
+  const slot = (contractItemId: string) => {
+    let entry = used.get(contractItemId);
+    if (!entry) used.set(contractItemId, (entry = { orders: 0, jobs: 0 }));
+    return entry;
+  };
+  // a megrendelőlap tétele annyi alkalmat foglal, amennyit a kiállításkor kértek (`occasions`), nem egyet
   const orderItems = await tx.maintenanceOrderItem.groupBy({
     by: ["contractItemId"],
     where: {
       contractItemId: { in: contractItemIds },
       maintenanceOrder: { occasionYear: year, status: { not: "REVOKED" } },
     },
-    _count: { contractItemId: true },
+    _sum: { occasions: true },
   });
   for (const row of orderItems)
-    add(row.contractItemId, row._count.contractItemId);
+    slot(row.contractItemId).orders += row._sum.occasions ?? 0;
   const jobItems = await tx.serviceJobContractItem.groupBy({
     by: ["contractItemId"],
     where: {
@@ -130,7 +137,7 @@ async function occasionsUsed(
     _count: { contractItemId: true },
   });
   for (const row of jobItems)
-    add(row.contractItemId, row._count.contractItemId);
+    slot(row.contractItemId).jobs += row._count.contractItemId;
   return used;
 }
 
@@ -310,12 +317,14 @@ export class MaintenanceOrdersRepository {
         contractItemId: string;
         description: string;
         occasionsPerYear: number | null;
+        /** hány alkalmat kér a most létrejövő lap ebből a tételből (alap: 1) */
+        requested?: number;
       }[];
     },
     write: (tx: Prisma.TransactionClient) => Promise<T>,
   ): Promise<
     | { ok: true; value: T }
-    | { ok: false; exhausted: string[] }
+    | { ok: false; exhausted: string[]; short: string[] }
     | { ok: false; busy: true }
   > {
     /*
@@ -345,6 +354,7 @@ export class MaintenanceOrdersRepository {
         contractItemId: string;
         description: string;
         occasionsPerYear: number | null;
+        requested?: number;
       }[];
     },
     write: (tx: Prisma.TransactionClient) => Promise<T>,
@@ -358,16 +368,24 @@ export class MaintenanceOrdersRepository {
           input.items.map((item) => item.contractItemId),
           input.year,
         );
-        const exhausted = input.items.filter(
-          (item) =>
-            (used.get(item.contractItemId) ?? 0) >=
-            (item.occasionsPerYear ?? 0),
-        );
-        if (exhausted.length)
-          return {
-            ok: false as const,
-            exhausted: exhausted.map((item) => item.description),
-          };
+        // a mérce és az indoka: `occasion-frame.ts`
+        const exhausted: string[] = [];
+        const short: string[] = [];
+        for (const item of input.items) {
+          const decision = decideOccasionRequest({
+            use: used.get(item.contractItemId),
+            occasionsPerYear: item.occasionsPerYear,
+            requested: item.requested,
+          });
+          if (decision.fits) continue;
+          if (decision.exhausted) exhausted.push(item.description);
+          else
+            short.push(
+              `${item.description} (kért: ${item.requested ?? 1}, hátralévő: ${decision.remaining})`,
+            );
+        }
+        if (exhausted.length || short.length)
+          return { ok: false as const, exhausted, short };
         return { ok: true as const, value: await write(tx) };
       },
       { maxWait: 10_000, timeout: 20_000 },
@@ -454,6 +472,7 @@ export class MaintenanceOrdersRepository {
             description: item.description,
             unitNet: item.unitNet,
             quantity: item.quantity,
+            occasions: item.occasions,
             vatRatePercent: item.vatRatePercent,
           })),
         },
@@ -528,6 +547,7 @@ export class MaintenanceOrdersRepository {
             description: item.description,
             unitNet: item.unitNet,
             quantity: item.quantity,
+            occasions: item.occasions,
             vatRatePercent: item.vatRatePercent,
           })),
         },
