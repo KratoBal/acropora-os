@@ -316,7 +316,7 @@ describe("a kézi indítás parancssora", () => {
   });
 
   // acrobot 52559: a source can be marked as the brand's imprint. WHAT TURNS THIS RED: the mark dropped on the way in;
-  // accepted on a non-manufacturer source or with a value other than true.
+  // accepted on a non-manufacturer source or with a value other than true; two on one product.
   it("az impresszum-jelölő csak gyártói forráson, true értékkel megy át", () => {
     const ok = parseRunInput(
       JSON.stringify({
@@ -365,6 +365,59 @@ describe("a kézi indítás parancssora", () => {
       }),
     );
     assert.equal(!bad.ok && bad.problems.length, 2);
+    // one imprint per product (barracuda on #2565); two products with one each pass
+    const twice = (second: string) =>
+      parseRunInput(
+        JSON.stringify({
+          products: [
+            {
+              productId: "p",
+              sources: [
+                {
+                  kind: "MANUFACTURER",
+                  url: "https://a.example.invalid/impressum",
+                  imprint: true,
+                },
+              ],
+            },
+            {
+              productId: second,
+              sources: [
+                {
+                  kind: "MANUFACTURER",
+                  url: "https://b.example.invalid/impressum",
+                  imprint: true,
+                },
+              ],
+            },
+          ],
+        }),
+      );
+    assert.equal(twice("q").ok, true);
+    const doubled = parseRunInput(
+      JSON.stringify({
+        products: [
+          {
+            productId: "p",
+            sources: [
+              {
+                kind: "MANUFACTURER",
+                url: "https://a.example.invalid/impressum",
+                imprint: true,
+              },
+              {
+                kind: "MANUFACTURER",
+                url: "https://a.example.invalid/legal",
+                imprint: true,
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    assert.deepEqual(!doubled.ok && doubled.problems, [
+      "products[0].sources[1]: termékenként legfeljebb egy impresszum-forrás.",
+    ]);
   });
 
   it("a hibás bemenet minden hibáját felsorolja", () => {
