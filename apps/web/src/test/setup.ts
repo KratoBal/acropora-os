@@ -1,7 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 
 import { cleanup } from "@testing-library/react";
-import { afterEach, beforeAll } from "vitest";
+import { afterEach, beforeAll, vi } from "vitest";
 
 import { beszurLathatosagShim } from "./visibility-shim.js";
 
@@ -28,3 +28,52 @@ afterEach(async () => {
   if (typeof document !== "undefined")
     (await import("@acropora/ui")).resetThemeStateForTests();
 });
+
+/**
+ * EVERY MOCKED ANSWER ARRIVES LATE (card e91dc528). A `vi.fn()` / `vi.spyOn()` given `mockResolvedValue`,
+ * `mockRejectedValue` or their `Once` forms settles its value after a short real-time delay, not at once.
+ *
+ * WHY: with an instant answer a test may wait for the CALL (`toHaveBeenCalled`) or for a FIELD (`findByLabelText`) and
+ * then act as if the ANSWER had arrived too: click a button the component disables while the call runs, pick an option
+ * the list has not brought yet, assert a navigation that follows the answer. Locally that passes; on a busy runner it
+ * flakes (#970, 2026-09-22, a sticker-code change held up by an unrelated test). With the answer late, the same test
+ * fails EVERY time, on every machine. Wait for the answer instead: `answered(mock)` (src/test/answered.ts), the option
+ * (`listedSelect`, src/test/listed-option.ts), or the effect itself inside `waitFor`.
+ *
+ * THE LIMITS, said so nobody reads more into a green run: `mockReturnValue(Promise.resolve(x))` and a hand-written
+ * `mockImplementation(async () => x)` are NOT slowed; under fake timers nothing is (a test that drives time by hand
+ * cannot wait for real time, and its failure would be this file's, not the test's). The guard over this file:
+ * src/test/slow-mock.component.test.tsx. LASSU_MOCK=0 turns it off for a local comparison; LASSU_MOCK_MS sets the delay.
+ */
+if (process.env.LASSU_MOCK !== "0") {
+  // NOT 0 ms: Testing Library's async wrapper waits one macrotask after every waitFor/findBy, and that absorbs a
+  // 0 ms delay (measured on the guard's control, 2026-11-14). 10 ms is enough to stay behind it.
+  const ms = Number(process.env.LASSU_MOCK_MS ?? 10);
+  // the REAL timer, taken before any test can fake it
+  const realSetTimeout = globalThis.setTimeout;
+  const later = () =>
+    vi.isFakeTimers()
+      ? Promise.resolve()
+      : new Promise<void>((done) => realSetTimeout(done, ms));
+  const slow = <M extends ReturnType<typeof vi.fn>>(mock: M): M => {
+    mock.mockResolvedValue = ((value: unknown) =>
+      mock.mockImplementation(() => later().then(() => value))) as never;
+    mock.mockResolvedValueOnce = ((value: unknown) =>
+      mock.mockImplementationOnce(() => later().then(() => value))) as never;
+    mock.mockRejectedValue = ((error: unknown) =>
+      mock.mockImplementation(() =>
+        later().then(() => Promise.reject(error)),
+      )) as never;
+    mock.mockRejectedValueOnce = ((error: unknown) =>
+      mock.mockImplementationOnce(() =>
+        later().then(() => Promise.reject(error)),
+      )) as never;
+    return mock;
+  };
+  const fn = vi.fn.bind(vi);
+  const spyOn = vi.spyOn.bind(vi);
+  (vi as { fn: unknown }).fn = (...args: Parameters<typeof vi.fn>) =>
+    slow(fn(...args) as never);
+  (vi as { spyOn: unknown }).spyOn = (...args: Parameters<typeof vi.spyOn>) =>
+    slow((spyOn as never as (...a: unknown[]) => never)(...args));
+}

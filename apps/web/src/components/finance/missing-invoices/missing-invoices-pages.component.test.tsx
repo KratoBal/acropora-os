@@ -821,6 +821,8 @@ describe("MissingInvoicesMonthPage", () => {
     );
     render(<MissingInvoicesMonthPage month="2026-08" />);
     const dialog = await openFirstRow();
+    // "nothing changes" is measured from the click: how many reads the page made before it is not this test's question
+    const reads = api.month.mock.calls.length;
     fireEvent.click(
       await within(dialog).findByRole("button", { name: "Párosítás" }),
     );
@@ -829,7 +831,7 @@ describe("MissingInvoicesMonthPage", () => {
         "Ezt a számlát már egy másik terheléshez párosították.",
       ),
     ).toBeInTheDocument();
-    expect(api.month).toHaveBeenCalledTimes(1);
+    expect(api.month).toHaveBeenCalledTimes(reads);
   });
 
   it("offers the paper original without any digital invoice, and not on a wrong document (Aqua-Light)", async () => {

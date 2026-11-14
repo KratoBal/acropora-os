@@ -14,6 +14,7 @@ import type {
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { KULDES_KIHAGYAS_OKA } from "../handover-mail-skip-reason";
+import { answered } from "@/test/answered";
 import { PilotServiceJobDetailPage } from "./pilot-service-job-detail-page";
 
 /**
@@ -807,6 +808,8 @@ describe("PilotServiceJobDetailPage -- a régi lapról áthozott őrök", () => 
     });
     fireEvent.click(screen.getByRole("button", { name: "Tovább → Ütemezve" }));
     await waitFor(() => expect(api.move).toHaveBeenCalledTimes(1));
+    // the step buttons are off while the first move runs: the second click comes after its (failed) answer
+    await answered(api.move);
 
     fireEvent.click(
       screen.getByRole("button", { name: "Tovább → Meghiúsult" }),

@@ -375,7 +375,9 @@ describe("Új árajánlat (567:190)", () => {
       currency: "HUF",
       templateId: "t1",
     });
-    expect(navigation.push).toHaveBeenCalledWith("/ajanlatok/q9/szerkesztes");
+    await waitFor(() =>
+      expect(navigation.push).toHaveBeenCalledWith("/ajanlatok/q9/szerkesztes"),
+    );
   });
 
   /*
@@ -441,7 +443,9 @@ describe("Ajánlat adatlap (569:504)", () => {
     await waitFor(() =>
       expect(api.newVersion).toHaveBeenCalledWith("token-1", "q1"),
     );
-    expect(navigation.push).toHaveBeenCalledWith("/ajanlatok/q1/szerkesztes");
+    await waitFor(() =>
+      expect(navigation.push).toHaveBeenCalledWith("/ajanlatok/q1/szerkesztes"),
+    );
     expect(screen.queryByRole("button", { name: "Szerkesztés" })).toBeNull();
   });
 });
@@ -473,7 +477,9 @@ describe("Tervezet törlése és másolat (5937bdf2)", () => {
     await waitFor(() =>
       expect(api.deleteDraft).toHaveBeenCalledWith("token-1", "q1"),
     );
-    expect(navigation.push).toHaveBeenCalledWith("/ajanlatok");
+    await waitFor(() =>
+      expect(navigation.push).toHaveBeenCalledWith("/ajanlatok"),
+    );
   });
 
   it("a server refusal is shown and nothing navigates", async () => {
@@ -519,7 +525,9 @@ describe("Tervezet törlése és másolat (5937bdf2)", () => {
     await waitFor(() =>
       expect(api.copyAsNew).toHaveBeenCalledWith("token-1", "q1"),
     );
-    expect(navigation.push).toHaveBeenCalledWith("/ajanlatok/q9");
+    await waitFor(() =>
+      expect(navigation.push).toHaveBeenCalledWith("/ajanlatok/q9"),
+    );
   });
 
   it("a closed quote: Másolat új ajánlatként creates the copy and opens the NEW quote", async () => {
@@ -536,7 +544,9 @@ describe("Tervezet törlése és másolat (5937bdf2)", () => {
     await waitFor(() =>
       expect(api.copyAsNew).toHaveBeenCalledWith("token-1", "q1"),
     );
-    expect(navigation.push).toHaveBeenCalledWith("/ajanlatok/q9");
+    await waitFor(() =>
+      expect(navigation.push).toHaveBeenCalledWith("/ajanlatok/q9"),
+    );
     expect(screen.queryByRole("button", { name: "Törlés" })).toBeNull();
   });
 });
@@ -1022,8 +1032,10 @@ describe("Ajánlatsablonok (579:2243, 579:2562)", () => {
         milestones: TEMPLATE.milestones,
       }),
     );
-    expect(navigation.push).toHaveBeenCalledWith(
-      "/beallitasok/ajanlat-sablonok/t2",
+    await waitFor(() =>
+      expect(navigation.push).toHaveBeenCalledWith(
+        "/beallitasok/ajanlat-sablonok/t2",
+      ),
     );
   });
 
@@ -1036,7 +1048,9 @@ describe("Ajánlatsablonok (579:2243, 579:2562)", () => {
     render(<QuoteTemplateEditorPage templateId="t1" />);
     fireEvent.change(
       await screen.findByLabelText("Ajánlat érvényessége (nap)"),
-      { target: { value: "45" } },
+      {
+        target: { value: "45" },
+      },
     );
     fireEvent.click(screen.getByRole("button", { name: "Sablon mentése" }));
     await waitFor(() => expect(api.updateTemplate).toHaveBeenCalledTimes(1));
@@ -1081,8 +1095,10 @@ describe("Ajánlatsablonok (579:2243, 579:2562)", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Sablon mentése" }));
     await waitFor(() => expect(api.createTemplate).toHaveBeenCalled());
-    expect(navigation.replace).toHaveBeenCalledWith(
-      "/beallitasok/ajanlat-sablonok/t9",
+    await waitFor(() =>
+      expect(navigation.replace).toHaveBeenCalledWith(
+        "/beallitasok/ajanlat-sablonok/t9",
+      ),
     );
   });
 });
@@ -1334,7 +1350,10 @@ describe("Ajánlat szerkesztő (569:171)", () => {
       title: "Szöveg",
       content: { type: "doc", content: [{ type: "paragraph" }] },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Fejezet" }));
+    // the add buttons are off while the first block is being created: the second click waits for them
+    const section = screen.getByRole("button", { name: "Fejezet" });
+    await waitFor(() => expect(section).toBeEnabled());
+    fireEvent.click(section);
     await waitFor(() => expect(api.addBlock).toHaveBeenCalledTimes(2));
     expect(api.addBlock.mock.calls[1]![3]).toEqual({
       kind: "SECTION",
@@ -1976,9 +1995,11 @@ describe("PDF előnézet és publikálás (569:363)", () => {
     await waitFor(() =>
       expect(api.publish).toHaveBeenCalledWith("token-1", "q1", "v2"),
     );
-    expect(
-      screen.queryByRole("button", { name: "Verzió publikálása" }),
-    ).toBeNull();
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: "Verzió publikálása" }),
+      ).toBeNull(),
+    );
   });
 
   it("publikált verziónál nincs publikáló gomb, a kért verzió PDF-je töltődik", async () => {

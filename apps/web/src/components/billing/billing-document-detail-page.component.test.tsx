@@ -8,6 +8,7 @@ import {
 import type { BillingDocumentDetail, Session, UserRole } from "@acropora/types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { answered } from "@/test/answered";
 import { BillingDocumentDetailPage } from "./billing-document-detail-page";
 
 /**
@@ -444,6 +445,8 @@ describe("BillingDocumentDetailPage", () => {
     const submit = within(drawer).getByRole("button", {
       name: "Kiküldés újrapróbálása",
     });
+    // the drawer opens before its template does: the letter is sent with the template, so wait for it
+    await answered(api.emailDraft);
     fireEvent.click(submit);
     expect(
       await within(drawer).findByText("Átmeneti hiba"),
@@ -991,8 +994,10 @@ describe("storno", () => {
     await waitFor(() =>
       expect(api.stornoPdf).toHaveBeenCalledWith("token-1", "doc-1"),
     );
+    await waitFor(() =>
+      expect(openSpy).toHaveBeenCalledWith("blob:pdf", "_blank"),
+    );
     expect(api.pdf).not.toHaveBeenCalled();
-    expect(openSpy).toHaveBeenCalledWith("blob:pdf", "_blank");
   });
 
   it("without a stored storno PDF the two buttons are disabled", async () => {

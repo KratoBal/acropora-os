@@ -3,6 +3,7 @@ import type { FoxpostSettlementListResponse, Session } from "@acropora/types";
 import { createElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { answered } from "@/test/answered";
 import { expectMonth, pickMonth } from "@/test/month-field";
 
 import { FoxpostSettlementsPage } from "./foxpost-settlements-page";
@@ -113,6 +114,7 @@ describe("FoxpostSettlementsPage", () => {
       intervalMinutes: 60,
     });
     render(createElement(FoxpostSettlementsPage));
+    await answered(api.reports);
     expect(
       await screen.findByText("Az automatikus Gmail-behúzás ki van kapcsolva"),
     ).toBeInTheDocument();
@@ -131,6 +133,7 @@ describe("FoxpostSettlementsPage", () => {
       intervalMinutes: 60,
     });
     render(createElement(FoxpostSettlementsPage));
+    await answered(api.reports);
     expect(
       await screen.findByText(/nincs Gmail-kulcs.*kézzel sem/),
     ).toBeInTheDocument();
@@ -168,6 +171,7 @@ describe("FoxpostSettlementsPage", () => {
       },
     });
     render(createElement(FoxpostSettlementsPage));
+    await answered(api.reports);
     expect(
       await screen.findByText(
         /Automatikus Gmail-behúzás: 30 percenként\. Utolsó automatikus futás: .*1 új elszámolás/,
@@ -181,6 +185,7 @@ describe("FoxpostSettlementsPage", () => {
 
   it("when on but no automatic run is recorded, says so, not that it never ran", async () => {
     render(createElement(FoxpostSettlementsPage));
+    await answered(api.reports);
     expect(
       await screen.findByText(/Automatikus futás még nincs rögzítve\./),
     ).toBeInTheDocument();
@@ -188,6 +193,7 @@ describe("FoxpostSettlementsPage", () => {
 
   it("shows the imported settlement and its bookkeeping totals", async () => {
     render(createElement(FoxpostSettlementsPage));
+    await answered(api.reports);
     expect(await screen.findByText("26H31")).toBeInTheDocument();
     expect(screen.getByText("97 500 Ft")).toBeInTheDocument();
     expect(screen.getByText("89 183 Ft")).toBeInTheDocument();
@@ -208,6 +214,7 @@ describe("FoxpostSettlementsPage", () => {
       ],
     });
     render(createElement(FoxpostSettlementsPage));
+    await answered(api.reports);
     expect(
       await screen.findByRole("heading", { name: "Utánvét-utalások" }),
     ).toBeInTheDocument();
@@ -234,6 +241,7 @@ describe("FoxpostSettlementsPage", () => {
       },
     ]);
     render(createElement(FoxpostSettlementsPage));
+    await answered(api.reports);
 
     await screen.findByLabelText("A riport hónapja, év");
     // The picker opens on the latest report, not on the calendar month.
@@ -258,6 +266,7 @@ describe("FoxpostSettlementsPage", () => {
 
   it("runs the Gmail check and reports the result", async () => {
     render(createElement(FoxpostSettlementsPage));
+    await answered(api.reports);
     fireEvent.click(
       await screen.findByRole("button", { name: "Gmail ellenőrzése most" }),
     );
@@ -285,6 +294,7 @@ describe("FoxpostSettlementsPage", () => {
       },
     ]);
     render(createElement(FoxpostSettlementsPage));
+    await answered(api.reports);
 
     const download = await screen.findByRole("button", {
       name: "XLSX letöltése",
@@ -346,6 +356,8 @@ describe("FoxpostSettlementsPage", () => {
     });
 
     render(createElement(FoxpostSettlementsPage));
+
+    await answered(api.reports);
     fireEvent.click(await screen.findByText("26H31"));
     const invoiceInput = await screen.findByRole("textbox", {
       name: "Számlaszám – ACRW-2026/00400",
@@ -403,6 +415,7 @@ describe("FoxpostSettlementsPage", () => {
       ],
     });
     render(createElement(FoxpostSettlementsPage));
+    await answered(api.reports);
     fireEvent.click(await screen.findByText("26H31"));
     expect(
       await screen.findByRole("textbox", { name: "Számlaszám – 2026/00011" }),

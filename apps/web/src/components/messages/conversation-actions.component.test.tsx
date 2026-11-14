@@ -14,6 +14,7 @@ import type {
 } from "@acropora/types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { answered } from "@/test/answered";
 import { MessagesPage } from "./messages-page";
 
 /*
@@ -210,6 +211,7 @@ describe("message actions", () => {
     await waitFor(() =>
       expect(api.edit).toHaveBeenCalledWith("t1", "m2", "Igen, átvettem."),
     );
+    await answered(api.edit);
     expect((await row("m2")).textContent).toContain("szerkesztve");
   });
 
@@ -282,6 +284,7 @@ describe("message actions", () => {
         });
     });
     await waitFor(() => expect(api.message).toHaveBeenCalledWith("t1", "m1"));
+    await answered(api.message);
     expect((await row("m1")).textContent).toContain("Megjött a pumpa!");
   });
 });

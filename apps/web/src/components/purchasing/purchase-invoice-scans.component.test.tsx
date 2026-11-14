@@ -41,7 +41,7 @@ describe("Számlakép (5ec62e35)", () => {
     await waitFor(() =>
       expect(api.attachScan).toHaveBeenCalledWith("t", "pi-1", file),
     );
-    expect(onChange).toHaveBeenCalledWith([SCAN]);
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith([SCAN]));
   });
 
   it("jog nélkül csak a lista látszik, feltöltés nincs", () => {

@@ -615,7 +615,9 @@ describe("űrlap", () => {
       sourceType: "SUPPLIER",
     });
     expect(api.create).not.toHaveBeenCalled();
-    expect(navigation.push).toHaveBeenCalledWith("/elhullasi-naplo/rec-1");
+    await waitFor(() =>
+      expect(navigation.push).toHaveBeenCalledWith("/elhullasi-naplo/rec-1"),
+    );
   });
 
   it("a VIEWER nem nyithatja meg", () => {

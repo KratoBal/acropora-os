@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { RentalSettings, Session } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { answered } from "@/test/answered";
 import {
   parseDays,
   parseMultiplier,
@@ -88,6 +89,8 @@ describe("RentalContractPage", () => {
   it("blocks saving a text with an unknown place, and resets with a null text", async () => {
     render(<RentalContractPage />);
     const text = await screen.findByLabelText("A szerződés szövege");
+    // the field is there before the saved text is: typing first would be overwritten by the late answer
+    await answered(api.get);
     fireEvent.change(text, { target: { value: "Hely: {{kelt_hely}}" } });
 
     expect(
