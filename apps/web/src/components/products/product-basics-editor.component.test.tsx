@@ -341,7 +341,7 @@ describe("ProductBasicsEditor", () => {
     await waitFor(() =>
       expect(api.detail).toHaveBeenCalledWith("token-1", "product-1"),
     );
-    expect(onSaved).toHaveBeenCalledWith(reread);
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(reread));
   });
 
   it("reports a refusal instead of pretending it saved", async () => {

@@ -7,6 +7,7 @@ import type {
 } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { listedSelect } from "@/test/listed-option";
 import { OperationsTemplateEditorPage } from "./operations-template-editor-page";
 import { OperationsTemplatesPage } from "./operations-templates-page";
 
@@ -237,7 +238,7 @@ describe("a sablon szerkesztője", () => {
     // eszköz nélkül (az alapértelmezett cél eszköz) nem menthető
     expect(save.disabled).toBe(true);
     fireEvent.click(screen.getByText("Eszköz-kategória"));
-    fireEvent.change(screen.getByLabelText("Eszköz-kategória"), {
+    fireEvent.change(await listedSelect("Eszköz-kategória", "c1"), {
       target: { value: "c1" },
     });
     expect(save.disabled).toBe(false);
@@ -270,7 +271,7 @@ describe("a sablon szerkesztője", () => {
       target: { value: "Heti rutin" },
     });
     fireEvent.click(screen.getByText("Eszköz-kategória"));
-    fireEvent.change(screen.getByLabelText("Eszköz-kategória"), {
+    fireEvent.change(await listedSelect("Eszköz-kategória", "c1"), {
       target: { value: "c1" },
     });
     fireEvent.click(screen.getByRole("button", { name: "+ Mező hozzáadása" }));
@@ -298,8 +299,10 @@ describe("a sablon szerkesztője", () => {
       },
     ]);
     expect(api.create.mock.calls[0]![1].assetCategoryId).toBe("c1");
-    expect(navigation.replace).toHaveBeenCalledWith(
-      "/beallitasok/uzemeltetesi-naplo-sablonok/t9",
+    await waitFor(() =>
+      expect(navigation.replace).toHaveBeenCalledWith(
+        "/beallitasok/uzemeltetesi-naplo-sablonok/t9",
+      ),
     );
   });
 

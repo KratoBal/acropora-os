@@ -1,10 +1,12 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type {
   DashboardLayoutResponse,
   DashboardWidgetsResponse,
 } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { answered } from "@/test/answered";
 
 vi.mock("@/components/pilot/pilot-ui", async () => {
   const ui = await import("@acropora/ui");
@@ -68,6 +70,10 @@ async function renderHome() {
   await act(async () => {
     render(<DashboardHome />);
   });
+  // the page asks in two steps (the layout, then the enabled widgets' data): wait for both answers, not just for the
+  // first render (card e91dc528). A card whose data never came stays loading, so "nothing busy" is not the signal.
+  await waitFor(() => expect(api.layout).toHaveBeenCalled());
+  await answered(api.layout, api.widgets);
 }
 
 describe("a testreszabható vezérlőpult", () => {

@@ -6,6 +6,7 @@ import type {
 } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { answered } from "@/test/answered";
 import { ApiError } from "@/lib/api/client";
 import {
   ProductHusbandryCard,
@@ -192,9 +193,12 @@ describe("A tartási blokk szerkesztője", () => {
       ellenorizve: true,
       seenVersion: "ver-1",
     });
-    expect(
-      (await screen.findByTestId("husbandry-status")).textContent,
-    ).toContain("Ellenőrizve");
+    // the status line is there before the save's answer: the new state comes with it
+    await waitFor(() =>
+      expect(screen.getByTestId("husbandry-status").textContent).toContain(
+        "Ellenőrizve",
+      ),
+    );
   });
 
   it("az ellenőrzés a betöltött verziót küldi vissza, a sima mentés nem küld verziót", async () => {
@@ -208,7 +212,8 @@ describe("A tartási blokk szerkesztője", () => {
     fireEvent.click(screen.getByRole("button", { name: "Mentés" }));
     await waitFor(() => expect(api.updateHusbandry).toHaveBeenCalledTimes(1));
     expect(api.updateHusbandry.mock.calls[0]![2]).toEqual({ kinekNem: "x" });
-    // the next verification names the version the SAVE returned
+    // the next verification names the version the SAVE returned, so it waits for that answer
+    await answered(api.updateHusbandry);
     fireEvent.click(
       screen.getByRole("button", { name: "Mentés és ellenőrzöm" }),
     );

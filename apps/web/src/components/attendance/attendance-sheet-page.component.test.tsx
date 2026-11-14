@@ -13,6 +13,7 @@ import {
 } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { listedSelect } from "@/test/listed-option";
 import { pickMonth } from "@/test/month-field";
 
 import { AttendanceSheetPage } from "./attendance-sheet-page";
@@ -102,7 +103,7 @@ function sheetFor(
 
 async function openSheet() {
   render(<AttendanceSheetPage />);
-  fireEvent.change(await screen.findByLabelText("Munkatárs"), {
+  fireEvent.change(await listedSelect("Munkatárs", "u-1"), {
     target: { value: "u-1" },
   });
   pickMonth("Hónap", "2026-11");

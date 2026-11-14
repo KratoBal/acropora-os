@@ -1,7 +1,8 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ProductDetail } from "@acropora/types";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { answered } from "@/test/answered";
 import { ProductNamesCard } from "./product-names-card";
 
 const api = vi.hoisted(() => ({
@@ -27,6 +28,9 @@ const product = (overrides: Partial<ProductDetail> = {}): ProductDetail =>
     nemetNev: null,
     ...overrides,
   }) as unknown as ProductDetail;
+
+// a save's re-read runs after its answer: let it finish inside its own test, not in the next one's counters
+afterEach(() => answered(api.updateNames, api.update, api.detail));
 
 beforeEach(() => {
   api.updateNames.mockReset();

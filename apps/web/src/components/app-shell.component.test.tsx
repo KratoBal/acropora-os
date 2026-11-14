@@ -885,8 +885,11 @@ describe("AppShell menu numbers", () => {
     render(<AppShell>Oldaltartalom</AppShell>);
     await szerviz();
     const hibajegyek = await screen.findByRole("link", { name: /Hibajegyek/ });
+    // the numbers come with the counters' answer, after the links
     expect(
-      within(hibajegyek).getByLabelText("3 nekem kiosztott, nyitott hibajegy"),
+      await within(hibajegyek).findByLabelText(
+        "3 nekem kiosztott, nyitott hibajegy",
+      ),
     ).toHaveTextContent("3");
     expect(
       within(screen.getByRole("link", { name: /Munkalapok/ })).queryByText("0"),

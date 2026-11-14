@@ -130,7 +130,7 @@ describe("AllTimeRunPanel", () => {
     await waitFor(() =>
       expect(api.runNow).toHaveBeenCalledWith("t", { allTime: true }),
     );
-    expect(onStarted).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onStarted).toHaveBeenCalledTimes(1));
   });
 
   it("a run already in flight: it says the run did not start", async () => {

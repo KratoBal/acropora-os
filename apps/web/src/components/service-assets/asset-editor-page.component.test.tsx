@@ -6,6 +6,8 @@ import type {
   Session,
 } from "@acropora/types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { listedSelect } from "@/test/listed-option";
+import { answered } from "@/test/answered";
 
 import {
   savotMond,
@@ -201,6 +203,8 @@ describe("AssetEditorPage kategória-választója", () => {
 
     render(<AssetEditorPage assetId="asset-1" />);
 
+    await answered(api.detail, api.owners);
+
     expect(
       await screen.findByRole("option", { name: "Szivattyú" }),
     ).toBeInTheDocument();
@@ -221,6 +225,8 @@ describe("AssetEditorPage kategória-választója", () => {
 
     render(<AssetEditorPage assetId="asset-1" />);
 
+    await answered(api.detail, api.owners);
+
     expect(
       await screen.findByRole("option", {
         name: "Régi világítás (kivezetett)",
@@ -240,6 +246,8 @@ describe("AssetEditorPage kategória-választója", () => {
     api.owners.mockResolvedValue(owners([servicePartner, inheritedCustomer]));
 
     render(<AssetEditorPage assetId="asset-1" />);
+
+    await answered(api.detail, api.owners);
 
     await waitFor(() =>
       expect(screen.getByLabelText("Kategória")).toHaveProperty(
@@ -265,6 +273,8 @@ describe("AssetEditorPage kategória-választója", () => {
 
     render(<AssetEditorPage assetId="asset-1" />);
 
+    await answered(api.detail, api.owners);
+
     expect(
       await screen.findByRole("option", { name: "Kivezetett kategória" }),
     ).toBeInTheDocument();
@@ -277,6 +287,8 @@ describe("AssetEditorPage tulajdonos-listája", () => {
     api.owners.mockResolvedValue(owners([servicePartner, inheritedCustomer]));
 
     render(<AssetEditorPage assetId="asset-1" />);
+
+    await answered(api.detail, api.owners);
 
     await waitFor(() => expect(api.owners).toHaveBeenCalled());
     // A HARMADIK argumentum a lényeg: enélkül a lista a szerviz-partnereké, és
@@ -292,6 +304,8 @@ describe("AssetEditorPage tulajdonos-listája", () => {
     api.owners.mockResolvedValue(owners([servicePartner, inheritedCustomer]));
 
     render(<AssetEditorPage assetId="asset-1" />);
+
+    await answered(api.detail, api.owners);
 
     const option = await screen.findByRole("option", {
       name: /Webshopos Vevő/,
@@ -405,12 +419,12 @@ describe("AssetEditorPage matricakód", () => {
     render(<AssetEditorPage />);
 
     await user.selectOptions(
-      await screen.findByLabelText("Partner"),
+      await listedSelect("Partner", "SUPPLIER:supplier-1"),
       "SUPPLIER:supplier-1",
     );
     await user.type(screen.getByLabelText("Eszköz neve"), "Kompresszor");
     await user.selectOptions(
-      await screen.findByLabelText("Alegység"),
+      await listedSelect("Alegység", "department-1"),
       "department-1",
     );
     await user.type(screen.getByLabelText("Matrica kódja"), " v2196 ");
@@ -434,12 +448,12 @@ describe("AssetEditorPage matricakód", () => {
     render(<AssetEditorPage />);
 
     await user.selectOptions(
-      await screen.findByLabelText("Partner"),
+      await listedSelect("Partner", "SUPPLIER:supplier-1"),
       "SUPPLIER:supplier-1",
     );
     await user.type(screen.getByLabelText("Eszköz neve"), "Kompresszor");
     await user.selectOptions(
-      await screen.findByLabelText("Alegység"),
+      await listedSelect("Alegység", "department-1"),
       "department-1",
     );
     await user.click(
@@ -459,12 +473,12 @@ describe("AssetEditorPage matricakód", () => {
     render(<AssetEditorPage />);
 
     await user.selectOptions(
-      await screen.findByLabelText("Partner"),
+      await listedSelect("Partner", "SUPPLIER:supplier-1"),
       "SUPPLIER:supplier-1",
     );
     await user.type(screen.getByLabelText("Eszköz neve"), "Kompresszor");
     await user.selectOptions(
-      await screen.findByLabelText("Alegység"),
+      await listedSelect("Alegység", "department-1"),
       "department-1",
     );
     await user.type(screen.getByLabelText("Matrica kódja"), "ROSSZ");
@@ -500,6 +514,7 @@ describe("AssetEditorPage matricakód", () => {
     api.owners.mockResolvedValue(owners([servicePartner, inheritedCustomer]));
     api.detail.mockResolvedValue({ ...asset, labelCode: "V2196" });
     render(<AssetEditorPage assetId="asset-1" />);
+    await answered(api.detail, api.owners);
 
     const mezo = await screen.findByLabelText("Matrica kódja");
     // AZ ELOTOLTES A LENYEG, nem a mezo letezese: egy URES doboz azt allitana,
@@ -525,6 +540,7 @@ describe("AssetEditorPage matricakód", () => {
     api.owners.mockResolvedValue(owners([servicePartner, inheritedCustomer]));
     api.detail.mockResolvedValue({ ...asset, labelCode: "V2196" });
     render(<AssetEditorPage assetId="asset-1" />);
+    await answered(api.detail, api.owners);
 
     await screen.findByLabelText("Matrica kódja");
     expect(screen.getByText(/kiürítése nem szedi le/)).toBeTruthy();
@@ -540,6 +556,7 @@ describe("AssetEditorPage matricakód", () => {
     api.detail.mockResolvedValue(asset);
     api.update.mockResolvedValue({ ...asset, labelCode: "V2196" });
     render(<AssetEditorPage assetId="asset-1" />);
+    await answered(api.detail, api.owners);
 
     const user = userEvent.setup();
     await user.type(await screen.findByLabelText("Matrica kódja"), " v2196 ");
@@ -565,6 +582,7 @@ describe("AssetEditorPage matricakód", () => {
     api.detail.mockResolvedValue({ ...asset, labelCode: "V2196" });
     api.update.mockResolvedValue(asset);
     render(<AssetEditorPage assetId="asset-1" />);
+    await answered(api.detail, api.owners);
 
     const user = userEvent.setup();
     await user.clear(await screen.findByLabelText("Matrica kódja"));
@@ -600,6 +618,7 @@ describe("AssetEditorPage matricakód", () => {
     api.owners.mockResolvedValue(owners([servicePartner, inheritedCustomer]));
     api.detail.mockResolvedValue(asset);
     render(<AssetEditorPage assetId="asset-1" />);
+    await answered(api.detail, api.owners);
 
     const user = userEvent.setup();
     await user.type(await screen.findByLabelText("Matrica kódja"), "ROSSZ");
@@ -643,11 +662,11 @@ describe("AssetEditorPage név-ütközés figyelmeztetése", () => {
     render(<AssetEditorPage />);
 
     await user.selectOptions(
-      await screen.findByLabelText("Partner"),
+      await listedSelect("Partner", "SUPPLIER:supplier-1"),
       "SUPPLIER:supplier-1",
     );
     await user.selectOptions(
-      await screen.findByLabelText("Alegység"),
+      await listedSelect("Alegység", "department-1"),
       "department-1",
     );
     await user.type(screen.getByLabelText("Eszköz neve"), "Homokszűrő");
@@ -686,11 +705,11 @@ describe("AssetEditorPage név-ütközés figyelmeztetése", () => {
     render(<AssetEditorPage />);
 
     await user.selectOptions(
-      await screen.findByLabelText("Partner"),
+      await listedSelect("Partner", "SUPPLIER:supplier-1"),
       "SUPPLIER:supplier-1",
     );
     await user.selectOptions(
-      await screen.findByLabelText("Alegység"),
+      await listedSelect("Alegység", "department-1"),
       "department-1",
     );
     await user.type(screen.getByLabelText("Eszköz neve"), "Homokszűrő");
@@ -731,11 +750,11 @@ describe("AssetEditorPage név-ütközés figyelmeztetése", () => {
     render(<AssetEditorPage />);
 
     await user.selectOptions(
-      await screen.findByLabelText("Partner"),
+      await listedSelect("Partner", "SUPPLIER:supplier-1"),
       "SUPPLIER:supplier-1",
     );
     await user.selectOptions(
-      await screen.findByLabelText("Alegység"),
+      await listedSelect("Alegység", "department-1"),
       "department-1",
     );
     await user.type(screen.getByLabelText("Eszköz neve"), "Homokszűrő");
@@ -786,11 +805,11 @@ describe("AssetEditorPage név-ütközés figyelmeztetése", () => {
     render(<AssetEditorPage />);
 
     await user.selectOptions(
-      await screen.findByLabelText("Partner"),
+      await listedSelect("Partner", "SUPPLIER:supplier-1"),
       "SUPPLIER:supplier-1",
     );
     await user.selectOptions(
-      await screen.findByLabelText("Alegység"),
+      await listedSelect("Alegység", "department-1"),
       "department-1",
     );
     const nameField = screen.getByLabelText("Eszköz neve");
@@ -838,11 +857,11 @@ describe("AssetEditorPage név-ütközés figyelmeztetése", () => {
     render(<AssetEditorPage />);
 
     await user.selectOptions(
-      await screen.findByLabelText("Partner"),
+      await listedSelect("Partner", "SUPPLIER:supplier-1"),
       "SUPPLIER:supplier-1",
     );
     await user.selectOptions(
-      await screen.findByLabelText("Alegység"),
+      await listedSelect("Alegység", "department-1"),
       "department-1",
     );
     await user.type(screen.getByLabelText("Eszköz neve"), "Homokszűrő");
@@ -879,6 +898,7 @@ describe("AssetEditorPage teljesítmény-mezője", () => {
   it("a sorozatszám mellett a partner belső kódja áll, a teljesítmény mellett a mértékegység", async () => {
     api.owners.mockResolvedValue(owners([servicePartner, inheritedCustomer]));
     render(<AssetEditorPage assetId="asset-1" />);
+    await answered(api.detail, api.owners);
     await screen.findByLabelText("Sorozatszám");
 
     const sorrend = [
@@ -910,6 +930,8 @@ describe("AssetEditorPage teljesítmény-mezője", () => {
 
     render(<AssetEditorPage assetId="asset-1" />);
 
+    await answered(api.detail, api.owners);
+
     const mezo = await screen.findByLabelText("Teljesítmény");
     await waitFor(() => expect((mezo as HTMLInputElement).value).toBe("500"));
     const egyseg = screen.getByLabelText("Mértékegység") as HTMLSelectElement;
@@ -937,6 +959,8 @@ describe("AssetEditorPage teljesítmény-mezője", () => {
 
     render(<AssetEditorPage assetId="asset-1" />);
 
+    await answered(api.detail, api.owners);
+
     const egyseg = (await screen.findByLabelText(
       "Mértékegység",
     )) as HTMLSelectElement;
@@ -952,6 +976,7 @@ describe("AssetEditorPage teljesítmény-mezője", () => {
 
     const user = userEvent.setup();
     render(<AssetEditorPage assetId="asset-1" />);
+    await answered(api.detail, api.owners);
 
     await user.type(await screen.findByLabelText("Teljesítmény"), "500");
     await user.click(
@@ -971,6 +996,7 @@ describe("AssetEditorPage teljesítmény-mezője", () => {
 
     const user = userEvent.setup();
     render(<AssetEditorPage assetId="asset-1" />);
+    await answered(api.detail, api.owners);
 
     await user.type(await screen.findByLabelText("Teljesítmény"), "0,5");
     await user.selectOptions(screen.getByLabelText("Mértékegység"), "uom-w");
@@ -1001,6 +1027,7 @@ describe("AssetEditorPage teljesítmény-mezője", () => {
 
     const user = userEvent.setup();
     render(<AssetEditorPage assetId="asset-1" />);
+    await answered(api.detail, api.owners);
 
     await user.clear(await screen.findByLabelText("Teljesítmény"));
     await user.selectOptions(screen.getByLabelText("Mértékegység"), "");
@@ -1038,6 +1065,8 @@ describe("a mértékegységek hibája megkülönböztethető az ürestől", () =
 
     render(<AssetEditorPage assetId="asset-1" />);
 
+    await answered(api.detail, api.owners);
+
     expect(await screen.findByText(UZENET)).toBeTruthy();
   });
 
@@ -1047,6 +1076,8 @@ describe("a mértékegységek hibája megkülönböztethető az ürestől", () =
     unitsOfMeasure.list.mockResolvedValue({ items: [] });
 
     render(<AssetEditorPage assetId="asset-1" />);
+
+    await answered(api.detail, api.owners);
 
     /*
       A RENDERRE VARUNK, NEM A HIVASRA (26162440).
@@ -1070,6 +1101,8 @@ describe("a mértékegységek hibája megkülönböztethető az ürestől", () =
 
     render(<AssetEditorPage assetId="asset-1" />);
 
+    await answered(api.detail, api.owners);
+
     // UGYANAZ, MINT FENT: a renderre varunk, es csak azutan allitunk hianyt.
     expect(await screen.findByLabelText("Partner")).toBeTruthy();
     expect(screen.queryByText(UZENET)).toBeNull();
@@ -1092,6 +1125,8 @@ describe("AssetEditorPage electricalCode felirata", () => {
     api.owners.mockResolvedValue(owners([servicePartner]));
 
     render(<AssetEditorPage assetId="asset-1" />);
+
+    await answered(api.detail, api.owners);
 
     expect(await screen.findByLabelText("FP / Elektromos")).toBeTruthy();
     expect(screen.queryByLabelText("MAT kód (elektromos)")).toBeNull();
@@ -1119,7 +1154,7 @@ describe("AssetEditorPage alegység kötelezősége", () => {
     render(<AssetEditorPage />);
 
     await user.selectOptions(
-      await screen.findByLabelText("Partner"),
+      await listedSelect("Partner", "SUPPLIER:supplier-1"),
       "SUPPLIER:supplier-1",
     );
     await user.type(screen.getByLabelText("Eszköz neve"), "Kompresszor");
@@ -1150,12 +1185,12 @@ describe("AssetEditorPage alegység kötelezősége", () => {
     render(<AssetEditorPage />);
 
     await user.selectOptions(
-      await screen.findByLabelText("Partner"),
+      await listedSelect("Partner", "SUPPLIER:supplier-1"),
       "SUPPLIER:supplier-1",
     );
     await user.type(screen.getByLabelText("Eszköz neve"), "Kompresszor");
     await user.selectOptions(
-      await screen.findByLabelText("Alegység"),
+      await listedSelect("Alegység", "department-1"),
       "department-1",
     );
     await user.click(
@@ -1174,7 +1209,7 @@ describe("AssetEditorPage alegység kötelezősége", () => {
     render(<AssetEditorPage />);
 
     await user.selectOptions(
-      await screen.findByLabelText("Partner"),
+      await listedSelect("Partner", "CUSTOMER:customer-9"),
       "CUSTOMER:customer-9",
     );
     await user.type(screen.getByLabelText("Eszköz neve"), "Kompresszor");
@@ -1217,6 +1252,7 @@ describe("AssetEditorPage szülőeszköz-választója", () => {
     api.detail.mockResolvedValue(withParent);
     api.owners.mockResolvedValue(owners([servicePartner]));
     render(<AssetEditorPage assetId="asset-1" />);
+    await answered(api.detail, api.owners);
     await waitFor(() =>
       expect(
         api.list.mock.calls.some(
@@ -1244,6 +1280,7 @@ describe("AssetEditorPage szülőeszköz-választója", () => {
       pagination: { page: 1, pageSize: 500, totalItems: 640, totalPages: 2 },
     });
     render(<AssetEditorPage assetId="asset-1" />);
+    await answered(api.detail, api.owners);
     expect(
       await screen.findByText(
         "640 találatból az első 1 látszik. Szűkíts alegységre vagy keresővel.",
@@ -1260,6 +1297,7 @@ describe("AssetEditorPage szülőeszköz-választója", () => {
     api.detail.mockResolvedValue(withParent);
     api.owners.mockResolvedValue(owners([servicePartner]));
     render(<AssetEditorPage assetId="asset-1" />);
+    await answered(api.detail, api.owners);
     const select = (await screen.findByLabelText(
       "Szülőeszköz",
     )) as HTMLSelectElement;
@@ -1288,6 +1326,7 @@ describe("AssetEditorPage áramfelvétele és bekötése", () => {
       powerConsumptionRaw: "0,75 kW",
     } as unknown as AssetDetail);
     render(<AssetEditorPage assetId="asset-1" />);
+    await answered(api.detail, api.owners);
 
     expect(await screen.findByLabelText("Áramfelvétel")).toHaveProperty(
       "value",
@@ -1315,6 +1354,7 @@ describe("AssetEditorPage áramfelvétele és bekötése", () => {
     api.owners.mockResolvedValue(owners([servicePartner, inheritedCustomer]));
     api.detail.mockResolvedValue(asset);
     render(<AssetEditorPage assetId="asset-1" />);
+    await answered(api.detail, api.owners);
 
     const aram = await screen.findByLabelText("Áramfelvétel");
     const eredeti = screen.getByLabelText("Fogyasztás (eredeti bejegyzés)");
@@ -1329,6 +1369,7 @@ describe("AssetEditorPage áramfelvétele és bekötése", () => {
     api.detail.mockResolvedValue(asset);
     api.update.mockResolvedValue(asset);
     render(<AssetEditorPage assetId="asset-1" />);
+    await answered(api.detail, api.owners);
 
     const user = userEvent.setup();
     await user.type(await screen.findByLabelText("Áramfelvétel"), " 6,15/5,5 ");
@@ -1354,6 +1395,7 @@ describe("AssetEditorPage áramfelvétele és bekötése", () => {
     } as unknown as AssetDetail);
     api.update.mockResolvedValue(asset);
     render(<AssetEditorPage assetId="asset-1" />);
+    await answered(api.detail, api.owners);
 
     const user = userEvent.setup();
     await user.clear(await screen.findByLabelText("Áramfelvétel"));
@@ -1380,6 +1422,7 @@ describe("AssetEditorPage mezők egysége", () => {
     api.owners.mockResolvedValue(owners([servicePartner, inheritedCustomer]));
     api.detail.mockResolvedValue(asset);
     render(<AssetEditorPage assetId="asset-1" />);
+    await answered(api.detail, api.owners);
 
     const aram = await screen.findByLabelText("Áramfelvétel");
     const fogyasztas = screen.getByLabelText("Fogyasztás (eredeti bejegyzés)");
@@ -1396,6 +1439,7 @@ describe("AssetEditorPage mezők egysége", () => {
     api.detail.mockResolvedValue(asset);
     api.update.mockResolvedValue(asset);
     render(<AssetEditorPage assetId="asset-1" />);
+    await answered(api.detail, api.owners);
 
     const user = userEvent.setup();
     await user.type(await screen.findByLabelText("Áramfelvétel"), "6,15/5,5");
@@ -1420,6 +1464,7 @@ describe("AssetEditorPage mezők egysége", () => {
       powerConsumptionRaw: "6,15/5,5",
     } as unknown as AssetDetail);
     render(<AssetEditorPage assetId="asset-1" />);
+    await answered(api.detail, api.owners);
 
     const aram = await screen.findByLabelText("Áramfelvétel");
     await waitFor(() => expect(aram).toHaveProperty("value", "6,15/5,5"));
@@ -1437,6 +1482,7 @@ describe("AssetEditorPage mezők egysége", () => {
       powerConsumptionRaw: "1,5",
     } as unknown as AssetDetail);
     render(<AssetEditorPage assetId="asset-1" />);
+    await answered(api.detail, api.owners);
 
     const fogyasztas = await screen.findByLabelText(
       "Fogyasztás (eredeti bejegyzés)",
