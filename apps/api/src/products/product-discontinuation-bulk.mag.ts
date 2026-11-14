@@ -16,6 +16,10 @@
  * THE ACTOR IS REQUIRED AND HAS NO DEFAULT (`--actor <user-id>`, acrobot): the person running it names whom the
  * audit trail attributes the writes to; a missing or unknown user stops everything before any row is read.
  *
+ * A ROW THAT REWRITES AN EXISTING MARK FREES ITS OLD REPLACEMENT FOR THE LATER ROWS (barracuda, #2574 review):
+ * the file `A -> C`, then `B` (B was A's replacement) goes through in a write, because the first row already moved
+ * A; the dry run knows it too (the repository `check` is told which products' marks the file has rewritten).
+ *
  * ONE BAD ROW DOES NOT STOP THE REST (a refused or a failing product is a line with a reason code), but the
  * exit code is 1 if any row was refused or failed, so a scheduler or a person sees it. A row that already has
  * exactly this mark is `ALREADY` and writes nothing, so a rerun of the same file is quiet.
@@ -54,6 +58,7 @@ export interface BulkDeps {
   check(
     productId: string,
     replacementProductId: string | null,
+    ignoreMarksOf: readonly string[],
   ): Promise<string | null>;
   /** The real write (the same path as the API). A refusal from it comes back as a thrown `{ refusal }`. */
   write(
@@ -61,6 +66,12 @@ export interface BulkDeps {
     replacementProductId: string | null,
     actorUserId: string,
   ): Promise<void>;
+}
+
+/** The two places the TSV can come from, injected so the body stays pure. */
+export interface BulkInput {
+  readFile(path: string): string;
+  env: Readonly<Record<string, string | undefined>>;
 }
 
 export interface BulkIo {
@@ -72,8 +83,11 @@ export const BULK_MAX_ROWS = 2000;
 
 export const BULK_USAGE = `A veglegesen megszunt jelolo TOMEGES bevitele.
 
-  node dist/products/product-discontinuation-bulk.cli.js --file <fajl.tsv> --actor <felhasznalo-azonosito> [--apply]
+  node dist/products/product-discontinuation-bulk.cli.js (--file <fajl.tsv> | --input-env <VALTOZO>) --actor <felhasznalo-azonosito> [--apply]
 
+    --input-env  a bemenet NEM fajlbol, hanem egy kornyezeti valtozobol jon, BASE64-ben kodolt TSV-kent (ahol a
+              futtato csak egy rovid parancsot es kornyezeti valtozokat ad, fajlt nem: pl. egy utemezett feladat);
+              a --file helyett, nem mellette; ugyanaz a formatum, mint lent
     --file    TSV: soronkent a megszunt termek SKU-ja, tab, a jovahagyott helyettesito SKU-ja
               (vagy ures: nincs helyettesito, a kirakat a kategoriara iranyit); #-os sor, ures sor es
               egy fejlecsor (az elso cella: sku) kimarad; legfeljebb ${BULK_MAX_ROWS} sor
@@ -83,7 +97,7 @@ export const BULK_USAGE = `A veglegesen megszunt jelolo TOMEGES bevitele.
 
 Soronkent egy sor a kimeneten: sor, SKU, helyettesito SKU, allapot, ok. Allapot: WOULD_WRITE (szarazfutas),
 WRITTEN, ALREADY (mar pontosan ez a jeloles), REFUSED, ERROR. Kilepesi kodok: 0 minden sor rendben,
-1 volt visszautasitott vagy hibas sor, 2 rossz argumentum, olvashatatlan fajl vagy ismeretlen felhasznalo.
+1 volt visszautasitott vagy hibas sor, 2 rossz argumentum, olvashatatlan fajl vagy bemenet-valtozo,\nismeretlen felhasznalo.
 `;
 
 const HEADER_CELLS = new Set(["sku", "megszunt_sku", "discontinued_sku"]);
@@ -96,45 +110,92 @@ export function parseBulkFile(text: string): {
   const rows: BulkRow[] = [];
   const badLines: { line: number; reason: string }[] = [];
   let sawData = false;
-  text.split("\n").forEach((raw, index) => {
-    const line = index + 1;
-    const content = raw.replace(/\r$/, "");
-    if (content.trim() === "" || content.trimStart().startsWith("#")) return;
-    const cells = content.split("\t").map((cell) => cell.trim());
-    if (!sawData) {
-      sawData = true;
-      if (HEADER_CELLS.has((cells[0] ?? "").toLowerCase())) return;
-    }
-    if (cells.length > 2 || !cells[0]) {
-      badLines.push({ line, reason: "BAD_ROW" });
-      return;
-    }
-    rows.push({ line, sku: cells[0], replacementSku: cells[1] || null });
-  });
+  // a TSV saved from Excel starts with a byte order mark: without this the header is not recognised and the
+  // first SKU is "\uFEFFSKU-1", which is no SKU (found on the first real file)
+  text
+    .replace(/^\uFEFF/, "")
+    .split("\n")
+    .forEach((raw, index) => {
+      const line = index + 1;
+      const content = raw.replace(/\r$/, "");
+      if (content.trim() === "" || content.trimStart().startsWith("#")) return;
+      const cells = content.split("\t").map((cell) => cell.trim());
+      if (!sawData) {
+        sawData = true;
+        if (HEADER_CELLS.has((cells[0] ?? "").toLowerCase())) return;
+      }
+      if (cells.length > 2 || !cells[0]) {
+        badLines.push({ line, reason: "BAD_ROW" });
+        return;
+      }
+      rows.push({ line, sku: cells[0], replacementSku: cells[1] || null });
+    });
   return { rows, badLines };
 }
 
+/** Where the TSV comes from: a file, or a base64 environment variable (`--input-env`, like the JEV run). */
+type BulkSource =
+  { kind: "file"; path: string } | { kind: "env"; name: string };
+
 function parseArgs(
   argv: readonly string[],
-): { file: string; actor: string; apply: boolean } | string {
+): { source: BulkSource; actor: string; apply: boolean } | string {
   let file: string | null = null;
+  let inputEnv: string | null = null;
   let actor: string | null = null;
   let apply = false;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
     if (arg === "--apply") apply = true;
-    else if (arg === "--file" || arg === "--actor") {
+    else if (arg === "--file" || arg === "--actor" || arg === "--input-env") {
       const value = argv[++i];
       if (!value || value.startsWith("--"))
         return `A ${arg} ertekeet kell adni.`;
       if (arg === "--file") file = value;
+      else if (arg === "--input-env") inputEnv = value;
       else actor = value;
     } else return `ISMERETLEN ARGUMENTUM: ${arg}`;
   }
-  if (!file) return "A --file kotelezo.";
+  if (file && inputEnv)
+    return "A --file es az --input-env egyutt nem adhato: egy bemenet kell.";
+  if (inputEnv && !/^[A-Za-z_][A-Za-z0-9_]*$/.test(inputEnv))
+    return "Az --input-env ertekenek kornyezeti valtozo nevenek kell lennie.";
+  if (!file && !inputEnv) return "A --file vagy az --input-env kotelezo.";
   if (!actor)
     return "Az --actor kotelezo, alapertek nelkul: nevezd meg, ki nevebe ir a parancs.";
-  return { file, actor, apply };
+  return {
+    source: file
+      ? { kind: "file", path: file }
+      : { kind: "env", name: inputEnv! },
+    actor,
+    apply,
+  };
+}
+
+/** The input text, or the message to print (never the value, never a path or a system error). */
+function readInput(
+  source: BulkSource,
+  input: BulkInput,
+): { text: string } | { error: string } {
+  if (source.kind === "file") {
+    try {
+      return { text: input.readFile(source.path) };
+    } catch {
+      return { error: "A fajl nem olvashato.\n" };
+    }
+  }
+  const encoded = (input.env[source.name] ?? "").replace(/\s+/g, "");
+  if (encoded === "")
+    return {
+      error:
+        "INPUT_ENV_NOT_SET: a kornyezeti valtozo nincs beallitva vagy ures.\n",
+    };
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(encoded) || encoded.length % 4 !== 0)
+    return {
+      error:
+        "INPUT_ENV_NOT_BASE64: a kornyezeti valtozo nem ervenyes base64.\n",
+    };
+  return { text: Buffer.from(encoded, "base64").toString("utf8") };
 }
 
 /** Same rule as the other commands: only an upper-case code is safe to print, anything else is generic. */
@@ -151,7 +212,7 @@ function codeOf(error: unknown): string {
 
 export async function runBulkDiscontinuation(
   argv: readonly string[],
-  readFile: (path: string) => string,
+  input: BulkInput,
   deps: BulkDeps,
   io: BulkIo,
 ): Promise<number> {
@@ -160,13 +221,12 @@ export async function runBulkDiscontinuation(
     io.stderr(`${args}\n\n${BULK_USAGE}`);
     return 2;
   }
-  let text: string;
-  try {
-    text = readFile(args.file);
-  } catch {
-    io.stderr("A fajl nem olvashato.\n");
+  const read = readInput(args.source, input);
+  if ("error" in read) {
+    io.stderr(read.error);
     return 2;
   }
+  const text = read.text;
   if (!(await deps.actorExists(args.actor))) {
     io.stderr("ACTOR_NOT_FOUND: az --actor felhasznalo nem letezik.\n");
     return 2;
@@ -204,6 +264,9 @@ export async function runBulkDiscontinuation(
   const seenProducts = new Set<string>();
   // the rows of THIS file that went (or would go) through: product to replacement, for the interplay inside the file
   const accepted = new Map<string, string | null>();
+  // the products whose existing mark an earlier row of this file rewrites to another replacement: what they
+  // pointed at is free for a later row (dry run only needs it: a write has already changed the database)
+  const rewritten = new Set<string>();
   for (const row of rows) {
     const base = {
       line: row.line,
@@ -255,19 +318,21 @@ export async function runBulkDiscontinuation(
       results.push({ ...base, status: "ALREADY", reason: null });
       continue;
     }
-    const refusal = await deps.check(productId, replacementId);
+    const refusal = await deps.check(productId, replacementId, [...rewritten]);
     if (refusal) {
       refuse(refusal);
       continue;
     }
     if (!args.apply) {
       accepted.set(productId, replacementId);
+      if (current?.replacementProductId) rewritten.add(productId);
       results.push({ ...base, status: "WOULD_WRITE", reason: null });
       continue;
     }
     try {
       await deps.write(productId, replacementId, args.actor);
       accepted.set(productId, replacementId);
+      if (current?.replacementProductId) rewritten.add(productId);
       results.push({ ...base, status: "WRITTEN", reason: null });
     } catch (error) {
       const code = codeOf(error);
