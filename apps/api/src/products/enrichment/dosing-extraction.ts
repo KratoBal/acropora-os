@@ -3,10 +3,8 @@ import {
   parseWaterParameterCodes,
 } from "@acropora/jev/product-enrichment";
 
-import {
-  AI_CHAT_TIMEOUT_MS,
-  aiChatConfig,
-} from "../../integrations/ai-chat/ai-chat.config.js";
+import { aiChatConfig } from "../../integrations/ai-chat/ai-chat.config.js";
+import { aiPost, type AiCallDeps } from "./ai-call.js";
 import { readDosing } from "./dosing-reader.js";
 import type { ExtractedValue } from "./page-extract.js";
 
@@ -108,36 +106,21 @@ export class HttpDosingExtractor implements DosingExtractor {
     private readonly baseUrl: string,
     private readonly token: string,
     private readonly path: string,
+    private readonly deps: AiCallDeps = {},
   ) {}
 
   async extract(input: {
     productName: string;
     pageText: string;
   }): Promise<DosingExtractorAnswer> {
-    let response: Response;
-    try {
-      response = await fetch(
-        `${this.baseUrl}/${this.path.replace(/^\/+/, "")}`,
-        {
-          method: "POST",
-          headers: {
-            authorization: `Bearer ${this.token}`,
-            "content-type": "application/json",
-          },
-          body: JSON.stringify(input),
-          signal: AbortSignal.timeout(AI_CHAT_TIMEOUT_MS),
-        },
-      );
-    } catch (error) {
-      return {
-        kind: "UNAVAILABLE",
-        reason:
-          (error as Error)?.name === "TimeoutError" ? "timeout" : "unreachable",
-      };
-    }
-    if (!response.ok)
-      return { kind: "UNAVAILABLE", reason: `HTTP ${response.status}` };
-    return extractorAnswerOf(await response.json().catch(() => null));
+    const result = await aiPost(
+      `${this.baseUrl}/${this.path.replace(/^\/+/, "")}`,
+      this.token,
+      input,
+      this.deps,
+    );
+    if (!result.ok) return { kind: "UNAVAILABLE", reason: result.reason };
+    return extractorAnswerOf(result.body);
   }
 }
 
