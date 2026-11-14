@@ -186,6 +186,23 @@ const MAX_VALUE = 400;
  * none of today's brands writes one; when one does, this note names it.
  */
 const POSTCODE = /(?<![\p{L}\d])\d{3,6}(?!\d)/u;
+/**
+ * A copyright line is not an address (pilot-20, third run, 2026-11-14: "Felelős: Red Sea, © 2026 Red Sea. All rights
+ * reserved" passed, the year looked like a postcode; barracuda had named the weakness on #2559).
+ */
+const COPYRIGHT =
+  /©|\(c\)|copyright|all rights reserved|alle rechte|minden jog/iu;
+/**
+ * The address without the company name in front of it, when the page writes them together and the model copied both
+ * (pilot-20, third run: "Korallenzucht.de Vertriebs GmbH, Korallenzucht.de Vertriebs GmbH Schlesierstr. 1 ...").
+ */
+function withoutName(address: string, name: string): string {
+  const a = squash(address);
+  const n = squash(name);
+  return a.toLowerCase().startsWith(n.toLowerCase())
+    ? a.slice(n.length).replace(/^[\s,;:-]+/, "") || a
+    : a;
+}
 const PLACE = /\p{L}{3,}/u;
 
 /**
@@ -278,6 +295,8 @@ export function productFieldStatement(
       const parts = [m.name, m.address, ...(m.email === null ? [] : [m.email])];
       const problem = onPage(m.anchor, parts);
       if (problem) problems.push(`${ROLE_LABEL[m.role]}: ${problem}`);
+      else if (COPYRIGHT.test(m.address))
+        problems.push(`${ROLE_LABEL[m.role]}: a cím egy copyright-sor`);
       else if (!(POSTCODE.test(m.address) && PLACE.test(m.address)))
         problems.push(
           `${ROLE_LABEL[m.role]}: a címben nincs irányítószám és település`,
@@ -289,7 +308,7 @@ export function productFieldStatement(
     const raw = ordered
       .map(
         (m) =>
-          `${ROLE_LABEL[m.role]}: ${[m.name, m.address, ...(m.email === null ? [] : [m.email])].map(squash).join(", ")}`,
+          `${ROLE_LABEL[m.role]}: ${[m.name, withoutName(m.address, m.name), ...(m.email === null ? [] : [m.email])].map(squash).join(", ")}`,
       )
       .join("; ");
     if (problems.length === 0 && raw.length > MAX_VALUE)

@@ -197,6 +197,94 @@ function withoutPageChrome(html: string): string {
   return out + html.slice(from);
 }
 
+/**
+ * THE PAGE'S CHARACTERS, NOT ITS ENTITIES (T4.4 pilot-20, third run, 2026-11-14, card 8639ac2a): only five entities were
+ * decoded, so a page writing "Tropic Marin&reg;" reached the AI as "&reg;", the model copied the anchor with "®", and the
+ * guard rightly found it nowhere on the page (ANCHOR_NOT_IN_PAGE at U+00AE; the Syn-Biotic dose fell the same way). Every
+ * numeric entity and the named ones these pages use are decoded, in ONE pass, so "&amp;reg;" stays the text "&reg;". The
+ * exact character, not an ASCII stand-in (unlike the product search's decoder): the reader and the guard compare it. A
+ * soft hyphen is invisible on the page, so it goes; an unknown name stays as written.
+ */
+const NAMED: Readonly<Record<string, string>> = {
+  nbsp: " ",
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  reg: "®",
+  trade: "™",
+  copy: "©",
+  deg: "°",
+  micro: "µ",
+  // the salinity of a sea salt (‰), seen on the Syn-Biotic page
+  permil: "‰",
+  sup2: "²",
+  sup3: "³",
+  times: "×",
+  plusmn: "±",
+  divide: "÷",
+  euro: "€",
+  middot: "·",
+  bull: "•",
+  hellip: "…",
+  ndash: "–",
+  mdash: "—",
+  shy: "",
+  lsquo: "‘",
+  rsquo: "’",
+  sbquo: "‚",
+  ldquo: "“",
+  rdquo: "”",
+  bdquo: "„",
+  laquo: "«",
+  lsaquo: "‹",
+  rsaquo: "›",
+  raquo: "»",
+  frac12: "½",
+  frac14: "¼",
+  frac34: "¾",
+  auml: "ä",
+  ouml: "ö",
+  uuml: "ü",
+  Auml: "Ä",
+  Ouml: "Ö",
+  Uuml: "Ü",
+  szlig: "ß",
+  aacute: "á",
+  eacute: "é",
+  iacute: "í",
+  oacute: "ó",
+  uacute: "ú",
+  odblac: "ő",
+  udblac: "ű",
+  Aacute: "Á",
+  Eacute: "É",
+  Iacute: "Í",
+  Oacute: "Ó",
+  Uacute: "Ú",
+  Odblac: "Ő",
+  Udblac: "Ű",
+  agrave: "à",
+  egrave: "è",
+  ccedil: "ç",
+  ntilde: "ñ",
+  oslash: "ø",
+  aring: "å",
+};
+const ENTITY = /&(#x[0-9a-f]+|#[0-9]+|[a-z][a-z0-9]*);/gi;
+function decodeEntity(whole: string, body: string): string {
+  if (body.startsWith("#")) {
+    const code =
+      body[1] === "x" || body[1] === "X"
+        ? Number.parseInt(body.slice(2), 16)
+        : Number.parseInt(body.slice(1), 10);
+    if (!Number.isFinite(code) || code < 1 || code > 0x10ffff) return whole;
+    return code === 0xad ? "" : String.fromCodePoint(code);
+  }
+  return NAMED[body] ?? whole;
+}
+
 /** A page's visible text: scripts, styles, navigation and the page's own header and footer out, block tags as line breaks. */
 export function visiblePageText(html: string): string {
   return withoutPageChrome(
@@ -210,11 +298,7 @@ export function visiblePageText(html: string): string {
       "\n",
     )
     .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#0?39;|&apos;/g, "'")
-    .replace(/&#8211;|&ndash;/g, "–")
+    .replace(ENTITY, decodeEntity)
     .split("\n")
     .map((line) => line.replace(/\s+/g, " ").trim())
     .filter(Boolean)
