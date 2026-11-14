@@ -293,14 +293,15 @@ describe("a T4.4 pilot négy márkája a saját domainjét kapja", () => {
       ["Blue Life", "bluelifeusa.com"],
       ["Tropic Marin", "tropic-marin.com"],
     ] as const) {
+      // the first domain is the brand's own; Tropic Marin has its product-information site after it
       assert.deepEqual(
-        brandSitesFromCategories([["Termékek"]], brand),
-        [domain],
+        brandSitesFromCategories([["Termékek"]], brand)[0],
+        domain,
         brand,
       );
       assert.deepEqual(
-        brandSitesFromCategories([["Termékek", brand]]),
-        [domain],
+        brandSitesFromCategories([["Termékek", brand]])[0],
+        domain,
         brand,
       );
       const manufacturer = manufacturerSites(null, null, [domain]);
@@ -321,6 +322,46 @@ describe("a T4.4 pilot négy márkája a saját domainjét kapja", () => {
     assert.deepEqual(
       brandSitesFromCategories([["Termékek"]], "Microbe-Lift"),
       [],
+    );
+  });
+
+  // polip 52429: the pilot's Syn-Biotic source is on the brand's product-information site, which tropic-marin.com
+  // itself redirects to (301, measured 2026-11-14). WHAT TURNS THIS RED: the site missing from the brand's line; a
+  // look-alike host let through; the line reaching another brand.
+  it("a Tropic Marin termékinformációs oldala a márka sora, más márkáé nem", () => {
+    assert.deepEqual(brandSitesFromCategories([["Termékek"]], "Tropic Marin"), [
+      "tropic-marin.com",
+      "tropic-marin-smartinfo.com",
+    ]);
+    const manufacturer = manufacturerSites(
+      null,
+      null,
+      brandSitesFromCategories([["Termékek"]], "Tropic Marin"),
+    );
+    for (const [url, expected] of [
+      ["https://www.tropic-marin-smartinfo.com/syn-biotic", null],
+      [
+        "https://tropic-marin-smartinfo.com.example.invalid/x",
+        "HOST_NOT_ALLOWED",
+      ],
+    ] as const)
+      assert.equal(
+        sourceUrlProblem("MANUFACTURER", url, { manufacturer, supplier: null }),
+        expected,
+        url,
+      );
+    const grotech = manufacturerSites(
+      null,
+      null,
+      brandSitesFromCategories([["Termékek"]], "Grotech"),
+    );
+    assert.equal(
+      sourceUrlProblem(
+        "MANUFACTURER",
+        "https://www.tropic-marin-smartinfo.com/syn-biotic",
+        { manufacturer: grotech, supplier: null },
+      ),
+      "HOST_NOT_ALLOWED",
     );
   });
 });

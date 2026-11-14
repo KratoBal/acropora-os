@@ -200,7 +200,10 @@ export const BRAND_CATEGORY_SITES: Readonly<Record<string, readonly string[]>> =
     // products that we not only sell, but we use in our own aquariums"
     "blue life": ["bluelifeusa.com"],
     // Tropic Marin AG (Hünenberg, CH) is responsible for the site; Dr. Biener GmbH (Wartenberg) makes the products
-    "tropic marin": ["tropic-marin.com"],
+    // tropic-marin-smartinfo.com: the brand's product-information site (no imprint of its own); the basis is that the
+    // brand's verified domain sends its product page there: https://www.tropic-marin.com/syn-biotic answers 301 to
+    // https://www.tropic-marin-smartinfo.com/syn-biotic (measured 2026-11-14; polip 52429, the pilot's Syn-Biotic source)
+    "tropic marin": ["tropic-marin.com", "tropic-marin-smartinfo.com"],
     // Left out: Microbe-Lift. The pages the pilot used are on arka-biotech.de, the brand's European partner, not its
     // maker (Ecological Laboratories); a distributor's page is not a MANUFACTURER_PAGE.
   };
