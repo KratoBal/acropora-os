@@ -41,12 +41,30 @@ interface Scope {
   props: Map<string, (string | Scope)[]>;
 }
 
+// a whole attribute name, after whitespace: not `data-itemprop` or `data-content` (barracuda, #2547)
 const attr = (attrs: string, name: string): string | null => {
-  const m = new RegExp(`\\b${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`, "i").exec(
-    attrs,
-  );
+  const m = new RegExp(
+    `(?:^|\\s)${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`,
+    "i",
+  ).exec(attrs);
   return m ? (m[1] ?? m[2] ?? "") : null;
 };
+/** `itemscope` as an attribute of its own, not a class name or another attribute's value. */
+const ITEMSCOPE = /(?:^|\s)itemscope(?=\s|=|\/|$)/i;
+
+/**
+ * An element's text, only when it is ALL text: right after it comes the
+ * element's own closing tag. With markup inside ("Fauna Marin <span>AMIN</span>
+ * 1000 ml") the text up to the first tag is a truncated value that looks like
+ * a real one, so there is none (barracuda, #2547).
+ */
+function ownText(rest: string, tag: string): string {
+  const end = rest.indexOf("<");
+  if (end < 0) return "";
+  return new RegExp(`^</${tag}\\s*>`, "i").test(rest.slice(end))
+    ? rest.slice(0, end)
+    : "";
+}
 
 const decode = (value: string) =>
   value
@@ -78,7 +96,7 @@ function scopesOf(html: string): Scope[] {
     const owner = current();
     const prop = attr(attrs!, "itemprop");
     let scope: Scope | null = null;
-    if (/\bitemscope\b/i.test(attrs!)) {
+    if (ITEMSCOPE.test(attrs!)) {
       scope = {
         type: (attr(attrs!, "itemtype") ?? "")
           .replace(/^https?:\/\/schema\.org\//i, "")
@@ -93,7 +111,9 @@ function scopesOf(html: string): Scope[] {
           scope ??
           decode(
             attr(attrs!, "content") ??
-              body.slice(m.index + whole.length).split("<", 1)[0]!,
+              (VOID.has(tag)
+                ? ""
+                : ownText(body.slice(m.index + whole.length), tag)),
           );
         if (value === "") continue;
         owner.props.set(name, [...(owner.props.get(name) ?? []), value]);

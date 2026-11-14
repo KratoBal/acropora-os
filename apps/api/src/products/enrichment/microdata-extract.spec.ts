@@ -51,6 +51,22 @@ describe("a lap strukturált adata (schema.org microdata)", () => {
     );
   });
 
+  // barracuda, #2547: a text value with markup inside is truncated at the first tag and looks real; an attribute that
+  // only contains the name (data-itemprop, data-content, class="itemscope") is not microdata.
+  it("belső jelölés mellett nincs szöveges érték; a data- és class-találat nem microdata", () => {
+    const inner = product("5901234123457").replace(
+      '<h1 itemprop="name">Kitalált Amino 1000 ml</h1>',
+      '<h1 itemprop="name">Kitalált <span>Amino</span> 1000 ml</h1>',
+    );
+    assert.deepEqual(fields(shopPage(inner)), [
+      ["ean", "5901234123457"],
+      ["brand", "Kitalált Márka"],
+    ]);
+    const lookalike = `<div class="itemscope" data-itemscope itemtype="https://schema.org/Product"><span data-itemprop="gtin13">5901234123457</span></div>
+<div itemscope itemtype="https://schema.org/Product"><span itemprop="gtin13" data-content="4006381333931">5901234123457</span></div>`;
+    assert.deepEqual(fields(shopPage(lookalike)), [["ean", "5901234123457"]]);
+  });
+
   it("két különböző termék: semmi; egy termék kétszer (azonos azonosító): egy", () => {
     assert.deepEqual(
       extractPageStatement(
