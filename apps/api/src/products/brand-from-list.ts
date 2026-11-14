@@ -17,7 +17,11 @@ import { normalizeBrandName } from "../brands/brands.repository.js";
  *  - "Acropora" is the shop's own brand and a decision of the owner (acrobot 52178): this action refuses it, by id and by
  *    name, whatever the list says.
  */
-export const BRAND_LIST_MAX_ITEMS = 1000;
+/**
+ * 500, not more: Nest's default JSON body limit is 100 kb and this API sets none, and a worst-case item (a long
+ * `newBrandName`) is ~200 bytes, so a bigger list could answer 413 before this message ever shows.
+ */
+export const BRAND_LIST_MAX_ITEMS = 500;
 
 /** The shop's own brand, by its normalized name. A brand that normalizes to this is never assigned by a list. */
 export const OWN_BRAND_NORMALIZED = normalizeBrandName("Acropora");
@@ -64,7 +68,7 @@ export function parseBrandListInput(body: unknown): BrandListInput {
     );
   if (items.length > BRAND_LIST_MAX_ITEMS)
     throw new BrandListInputError(
-      `A lista legfeljebb ${BRAND_LIST_MAX_ITEMS} tételes (ennyi van: ${items.length}). Bontsd több futásra.`,
+      `A lista legfeljebb ${BRAND_LIST_MAX_ITEMS} tételes (ennyi van: ${items.length}), a kérés törzse pedig legfeljebb kb. 100 kb. Bontsd több futásra.`,
     );
   const seen = new Set<string>();
   const parsed: BrandListItem[] = items.map((raw, index) => {
@@ -150,6 +154,12 @@ export type BrandListRow =
   | { kind: "ERROR"; productId: string; productName: string; reason: string };
 
 export interface BrandListPlan {
+  /**
+   * The names of the brands that normalize to "acropora". The protection BY ID reads the brand's normalized name, so
+   * when this is empty (the own brand is stored under another name, e.g. "Acropora Kft.") only the by-name guard
+   * stands, and the plan says so (barracuda, #2554).
+   */
+  ownBrandNames: string[];
   rows: BrandListRow[];
   /** The brands to create: one per distinct normalized name, named as it was first written. */
   newBrands: { name: string; normalizedName: string }[];
@@ -290,7 +300,13 @@ export function planBrandList(
       normalizedName: normalized,
     });
   }
-  return { rows, newBrands: [...newBrands.values()] };
+  return {
+    ownBrandNames: brands
+      .filter((b) => b.normalizedName === OWN_BRAND_NORMALIZED)
+      .map((b) => b.name),
+    rows,
+    newBrands: [...newBrands.values()],
+  };
 }
 
 const line = (value: string) => value.replace(/[\t\r\n]+/g, " ");
@@ -311,6 +327,9 @@ export function describeBrandListPlan(plan: BrandListPlan): string {
     `  létrejön új márka: ${plan.newBrands.length}`,
     `  már van márkája, nem érinti: ${count("HAS_BRAND")}`,
     `  HIBÁS tétel: ${count("ERROR")}`,
+    plan.ownBrandNames.length > 0
+      ? `  Acropora saját márka a márkák közt: igen (${plan.ownBrandNames.join(" | ")}), az azonosító szerinti védelem él`
+      : '  Acropora saját márka a márkák közt: NINCS "acropora" nevű márka, az azonosító szerinti védelem NEM él, csak a név szerinti',
     "",
     ...plan.newBrands.map((b) => `ÚJ MÁRKA\t${line(b.name)}`),
     ...plan.rows.map((row) => {

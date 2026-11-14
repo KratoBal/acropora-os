@@ -321,6 +321,107 @@ describe("a futás", () => {
     assert.match(s.err(), /FÉLBEHAGYVA/);
   });
 
+  /*
+    THE RE-RUN AFTER A HALF-DONE RUN (barracuda, #2554 c): what the PR claims. The first apply dies at the second
+    product; a new plan and apply with the SAME list find the created brand, skip the product that has its brand, and
+    write only the one that is left. A stateful world, so the second run sees what the first one did.
+  */
+  it("a félbehagyott futás ugyanazzal a listával befejezhető: a márka megtalálva, az első termék kihagyva, a második beíródik", async () => {
+    const products: ListProduct[] = PRODUCTS.map((p) => ({ ...p }));
+    const brands: ListBrand[] = BRANDS.map((b) => ({ ...b }));
+    let failAt: string | null = "p2";
+    const createdNames: string[] = [];
+    const deps: BrandFromListDependencies = {
+      products: async () => products.map((p) => ({ ...p })),
+      brands: async () => brands.map((b) => ({ ...b })),
+      actorExists: async () => true,
+      createBrand: async (name) => {
+        createdNames.push(name);
+        const made = brand(`new-${createdNames.length}`, name);
+        brands.push(made);
+        return { id: made.id, name: made.name };
+      },
+      assign: async (productId, brandId) => {
+        if (productId === failAt) throw new Error("kapcsolat megszakadt");
+        const product = products.find((p) => p.id === productId)!;
+        if (product.brandId !== null) return false;
+        product.brandId = brandId;
+        return true;
+      },
+    };
+    const items = [
+      { productId: "p1", newBrandName: "Aqua Connect" },
+      { productId: "p2", newBrandName: "Aqua Connect" },
+    ];
+    const input = parseBrandListInput({ items });
+    const sink = () => {
+      let out = "";
+      return {
+        out: () => out,
+        io: { stdout: (v: string) => (out += v), stderr: () => undefined },
+      };
+    };
+
+    const first = sink();
+    await assert.rejects(
+      runBrandFromListAction(true, "u-actor", input, first.io, deps),
+      /kapcsolat megszakadt/,
+    );
+    assert.deepEqual(createdNames, ["Aqua Connect"]);
+    assert.equal(products.find((p) => p.id === "p1")!.brandId, "new-1");
+    assert.equal(products.find((p) => p.id === "p2")!.brandId, null);
+
+    failAt = null;
+    const second = sink();
+    assert.equal(
+      await runBrandFromListAction(false, "u-actor", input, second.io, deps),
+      0,
+    );
+    assert.match(second.out(), /KIHAGYVA \(van márkája\)\tp1/);
+    assert.match(
+      second.out(),
+      /MÁRKA\tp2\tRadion XR15\tAqua Connect\tnévből megtalált/,
+    );
+
+    const third = sink();
+    assert.equal(
+      await runBrandFromListAction(true, "u-actor", input, third.io, deps),
+      0,
+    );
+    assert.deepEqual(
+      createdNames,
+      ["Aqua Connect"],
+      "a márka nem jön létre másodszor",
+    );
+    assert.equal(products.find((p) => p.id === "p2")!.brandId, "new-1");
+    assert.match(third.out(), /Létrehozott márka: 0\nMárkát kapott termék: 1/);
+  });
+
+  it("a próba kiírja, hogy van-e Acropora nevű márka (az azonosító szerinti védelem csak azzal él)", () => {
+    const withOwn = describeBrandListPlan(
+      planBrandList(
+        parseBrandListInput({ items: [{ productId: "p1", brandId: "b-eco" }] }),
+        PRODUCTS,
+        BRANDS,
+      ),
+    );
+    assert.match(
+      withOwn,
+      /Acropora saját márka a márkák közt: igen \(Acropora\)/,
+    );
+    const withoutOwn = describeBrandListPlan(
+      planBrandList(
+        parseBrandListInput({ items: [{ productId: "p1", brandId: "b-eco" }] }),
+        PRODUCTS,
+        BRANDS.filter((b) => b.id !== "b-own"),
+      ),
+    );
+    assert.match(
+      withoutOwn,
+      /NINCS "acropora" nevű márka, az azonosító szerinti védelem NEM él/,
+    );
+  });
+
   it("a már márkás termék nem íródik felül", async () => {
     const s = setup();
     assert.equal(await s.run(true, [{ productId: "p3", brandId: "b-eco" }]), 0);
