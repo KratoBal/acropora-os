@@ -32,10 +32,20 @@ interface MarkTransaction {
   domainEvent: { create(args: unknown): Promise<unknown> };
 }
 
-export interface ProductDiscontinuationDatabase {
-  product: { findUnique(args: unknown): Promise<{ id: string } | null> };
+/** The reads the checks need; a transaction and the plain database both have them. */
+interface MarkChecks {
+  product: { findUnique(args: unknown): Promise<ProductRow | null> };
   productDiscontinuation: {
     findUnique(args: unknown): Promise<MarkRow | null>;
+    findFirst(args: unknown): Promise<{ id: string } | null>;
+  };
+}
+
+export interface ProductDiscontinuationDatabase {
+  product: { findUnique(args: unknown): Promise<ProductRow | null> };
+  productDiscontinuation: {
+    findUnique(args: unknown): Promise<MarkRow | null>;
+    findFirst(args: unknown): Promise<{ id: string } | null>;
   };
   $transaction<T>(
     operation: (transaction: MarkTransaction) => Promise<T>,
@@ -114,6 +124,57 @@ export class ProductDiscontinuationRepository extends Repository {
   }
 
   /**
+   * THE CHECKS, ONE COPY FOR THE WRITE AND FOR THE DRY RUN. `set` runs them inside its Serializable transaction;
+   * `check` (the bulk command's dry run) runs them on plain reads, so a dry run refuses exactly what a write
+   * would, for the same database state. Nothing is written here.
+   */
+  private async validate(
+    reads: MarkChecks,
+    productId: string,
+    replacementProductId: string | null,
+  ): Promise<void> {
+    const product = await reads.product.findUnique({
+      where: { id: productId },
+      select: { id: true, name: true, isActive: true, webshopSellable: true },
+    });
+    if (!product) throw new MarkRefused("PRODUCT_NOT_FOUND");
+    const replacesOther = await reads.productDiscontinuation.findFirst({
+      where: { replacementProductId: productId },
+      select: { id: true },
+    });
+    if (replacesOther) throw new MarkRefused("PRODUCT_IS_A_REPLACEMENT");
+    if (replacementProductId === null) return;
+    if (replacementProductId === productId)
+      throw new MarkRefused("REPLACEMENT_IS_SELF");
+    const replacement = await reads.product.findUnique({
+      where: { id: replacementProductId },
+      select: { id: true, name: true, isActive: true, webshopSellable: true },
+    });
+    if (!replacement) throw new MarkRefused("REPLACEMENT_NOT_FOUND");
+    if (!replacement.isActive || !replacement.webshopSellable)
+      throw new MarkRefused("REPLACEMENT_NOT_SELLABLE");
+    const replacementMark = await reads.productDiscontinuation.findUnique({
+      where: { productId: replacementProductId },
+      select: MARK_SELECT,
+    });
+    if (replacementMark) throw new MarkRefused("REPLACEMENT_ALSO_DISCONTINUED");
+  }
+
+  /** The refusal a write would give for this state, or `null`: it would go through. Writes nothing. */
+  async check(
+    productId: string,
+    replacementProductId: string | null,
+  ): Promise<MarkRefusal | null> {
+    try {
+      await this.validate(this.markDatabase, productId, replacementProductId);
+      return null;
+    } catch (error) {
+      if (error instanceof MarkRefused) return error.refusal;
+      throw error;
+    }
+  }
+
+  /**
    * THE WHOLE CHECK AND THE WRITE ARE ONE SERIALIZABLE TRANSACTION: a replacement that is marked a second
    * later, or a product that is deleted, cannot slip between the check and the write. The checks refuse a
    * replacement that is the product itself, that does not exist, that cannot be bought now (a dead end, as on
@@ -132,45 +193,7 @@ export class ProductDiscontinuationRepository extends Repository {
   ): Promise<ProductDiscontinuation> {
     return this.markDatabase.$transaction(
       async (transaction) => {
-        const product = await transaction.product.findUnique({
-          where: { id: productId },
-          select: {
-            id: true,
-            name: true,
-            isActive: true,
-            webshopSellable: true,
-          },
-        });
-        if (!product) throw new MarkRefused("PRODUCT_NOT_FOUND");
-        const replacesOther =
-          await transaction.productDiscontinuation.findFirst({
-            where: { replacementProductId: productId },
-            select: { id: true },
-          });
-        if (replacesOther) throw new MarkRefused("PRODUCT_IS_A_REPLACEMENT");
-        if (replacementProductId !== null) {
-          if (replacementProductId === productId)
-            throw new MarkRefused("REPLACEMENT_IS_SELF");
-          const replacement = await transaction.product.findUnique({
-            where: { id: replacementProductId },
-            select: {
-              id: true,
-              name: true,
-              isActive: true,
-              webshopSellable: true,
-            },
-          });
-          if (!replacement) throw new MarkRefused("REPLACEMENT_NOT_FOUND");
-          if (!replacement.isActive || !replacement.webshopSellable)
-            throw new MarkRefused("REPLACEMENT_NOT_SELLABLE");
-          const replacementMark =
-            await transaction.productDiscontinuation.findUnique({
-              where: { productId: replacementProductId },
-              select: MARK_SELECT,
-            });
-          if (replacementMark)
-            throw new MarkRefused("REPLACEMENT_ALSO_DISCONTINUED");
-        }
+        await this.validate(transaction, productId, replacementProductId);
         const existing = await transaction.productDiscontinuation.findUnique({
           where: { productId },
           select: MARK_SELECT,

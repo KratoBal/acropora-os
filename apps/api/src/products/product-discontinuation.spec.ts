@@ -68,6 +68,13 @@ function fixture(options: {
     productDiscontinuation: {
       findUnique: async (args: { where: { productId: string } }) =>
         view(args.where.productId),
+      findFirst: async (args: { where: { replacementProductId: string } }) => {
+        const found = [...marks.values()].find(
+          (mark) =>
+            mark.replacementProductId === args.where.replacementProductId,
+        );
+        return found ? { id: found.id } : null;
+      },
     },
   };
   const transaction = {
@@ -317,6 +324,41 @@ describe("the manual permanent-discontinuation mark (V4.2)", () => {
       () => f.service.set("old", null, "user-1"),
       ConflictException,
     );
+  });
+
+  it("check() gives the refusal a write would give, and writes nothing (the bulk command's dry run)", async () => {
+    const third: FakeProduct = { ...NEWER, id: "third", name: "Harmadik" };
+    const f = fixture({
+      products: [
+        OLD,
+        NEWER,
+        third,
+        { ...NEWER, id: "dead", isActive: false },
+        { ...NEWER, id: "marked", name: "Jelölt" },
+      ],
+      marks: [
+        { productId: "old", replacementProductId: "newer" },
+        { productId: "marked", replacementProductId: null },
+      ],
+    });
+    const cases: Array<[string, string | null, string | null]> = [
+      ["ghost", null, "PRODUCT_NOT_FOUND"],
+      ["third", "third", "REPLACEMENT_IS_SELF"],
+      ["third", "ghost", "REPLACEMENT_NOT_FOUND"],
+      ["third", "dead", "REPLACEMENT_NOT_SELLABLE"],
+      ["third", "marked", "REPLACEMENT_ALSO_DISCONTINUED"],
+      ["newer", null, "PRODUCT_IS_A_REPLACEMENT"],
+      ["third", "newer", null],
+      ["third", null, null],
+    ];
+    for (const [product, replacement, expected] of cases)
+      assert.equal(
+        await f.repository.check(product, replacement),
+        expected,
+        `${product} -> ${replacement}`,
+      );
+    assert.deepEqual(f.writes, []);
+    assert.deepEqual(f.isolation, []);
   });
 
   it("un-marking deletes the row and logs the removal with the old replacement", async () => {
