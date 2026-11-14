@@ -234,6 +234,33 @@ describe("a négy engedélyezett forrás, és semmi más", () => {
       );
   });
 
+  // card 85c38ab1, PK bulk round: Modern Reef's shop (the Impressum names Euro Corals, whose brand it is). WHAT TURNS THIS
+  // RED: the brand's category or brand name not giving modernreef.eu; a look-alike host let through.
+  it("a Modern Reef kategória és márkanév a modernreef.eu-t adja", () => {
+    assert.deepEqual(
+      brandSitesFromCategories([["Termékek", "Nyomelemek", "Modern Reef"]]),
+      ["modernreef.eu"],
+    );
+    assert.deepEqual(brandSitesFromCategories([["Termékek"]], "Modern Reef"), [
+      "modernreef.eu",
+    ]);
+    const manufacturer = manufacturerSites(
+      null,
+      null,
+      brandSitesFromCategories([["Termékek", "Nyomelemek", "Modern Reef"]]),
+    );
+    for (const [url, expected] of [
+      ["https://modernreef.eu/shop/reef-supplements/mg-1000ml/", null],
+      ["https://modernreef.eu.example.invalid/x", "HOST_NOT_ALLOWED"],
+      ["https://notmodernreef.eu/x", "HOST_NOT_ALLOWED"],
+    ] as const)
+      assert.equal(
+        sourceUrlProblem("MANUFACTURER", url, { manufacturer, supplier: null }),
+        expected,
+        url,
+      );
+  });
+
   it("a gyártó oldala a márka weboldala és a UNAS link; kereskedőre mutató link nem az", () => {
     assert.deepEqual(
       manufacturerSites(
