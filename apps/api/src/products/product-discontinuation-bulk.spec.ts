@@ -218,6 +218,14 @@ describe("the bulk command: --input-env (a base64 TSV in an environment variable
       assert.equal(await runEnv(argv, { BULK_INPUT: b64(TSV) }, h), 2);
       assert.deepEqual(h.calls, [], argv.join(" "));
     }
+    // the "together" case is refused for THAT reason, not because the file happens to be unreadable
+    const both = harness();
+    await runEnv(
+      ["--file", "f.tsv", "--input-env", "BULK_INPUT", "--actor", "user-1"],
+      { BULK_INPUT: b64(TSV) },
+      both,
+    );
+    assert.match(both.err.join(""), /egyutt nem adhato/);
   });
 
   it("an unset or empty variable stops with a code and reads nothing", async () => {
