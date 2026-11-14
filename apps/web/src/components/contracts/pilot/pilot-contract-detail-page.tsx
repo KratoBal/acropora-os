@@ -972,10 +972,17 @@ export function PilotContractDetailPage({
                     className="flex flex-col gap-2 border-b border-pilot-grey-100 pb-3 last:border-0"
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <p className="text-pilot-grey-900">
+                      <p className="text-pilot-grey-600">
+                        {/* a tétel NEVE kiemelve, hogy a számok és a leírások között is rögtön látszon (Luca, 2026-11-13) */}
+                        <strong
+                          data-testid="contract-item-name"
+                          className="text-base font-semibold text-pilot-grey-900"
+                        >
+                          {index + 1}. {item.description}
+                        </strong>
                         {purchase
-                          ? `${index + 1}. ${item.description}: ${item.unitNet} Ft × ${item.quantity} ${item.unitOfMeasure?.code ?? ""}, ${item.vatRatePercent}% ÁFA`
-                          : `${index + 1}. ${item.description}: ${item.unitNet} Ft × ${item.quantity} db × ${item.occasionsPerYear ?? "?"} alkalom / év, ${item.vatRatePercent}% ÁFA`}
+                          ? `: ${item.unitNet} Ft × ${item.quantity} ${item.unitOfMeasure?.code ?? ""}, ${item.vatRatePercent}% ÁFA`
+                          : `: ${item.unitNet} Ft × ${item.quantity} db × ${item.occasionsPerYear ?? "?"} alkalom / év, ${item.vatRatePercent}% ÁFA`}
                       </p>
                       {contract.items.length > 1 ? (
                         <PilotButton
@@ -1238,7 +1245,7 @@ export function PilotContractDetailPage({
                               onChange={() => toggleItem(item.id)}
                               className="h-4 w-4 rounded accent-pilot-aqua-600"
                             />
-                            <span className="text-pilot-grey-800">
+                            <span className="font-semibold text-pilot-grey-900">
                               {item.position}. {item.description}
                             </span>
                             {item.departmentId ? null : (
