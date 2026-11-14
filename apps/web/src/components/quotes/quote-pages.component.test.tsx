@@ -1433,6 +1433,27 @@ describe("Ajánlat szerkesztő (569:171)", () => {
     ).toBe(true);
   });
 
+  /*
+    A BOM FORRÁS FELIRATA (Luca kérdése, 2026-11-13: „mit jelent, hogy BOM belső rendszerből menjen?"). MI
+    PIROSÍT: ha a felirat ismét azt sugallja, hogy a tétel már kapcsolódik valamihez; ha a segédszöveg nem
+    mondja ki, hogy az ügyfél nem látja az anyaglistát, és hogy azt a tétel mentése után kell felvenni.
+  */
+  it("a BOM forrás felirata megmondja, mi ez, hol veszed fel, és hogy az ügyfél nem látja", async () => {
+    api.detail.mockResolvedValue(quote([version()]));
+    render(<QuoteEditorPage quoteId="q1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "+ Tétel hozzáadása" }),
+    );
+    const radio = screen.getByRole("radio", {
+      name: /Belső anyaglistából \(BOM\) számolva/,
+    });
+    expect(radio).toBeTruthy();
+    const label = radio.closest("label")!;
+    expect(label.textContent).toMatch(/mentése után a tétel alatt/);
+    expect(label.textContent).toMatch(/Az ügyfél csak a sort látja/);
+    expect(label.textContent).not.toMatch(/kapcsolva/);
+  });
+
   it("BOM: termékké alakítás csak products.manage mellett; költségmező csak költségjoggal", async () => {
     api.detail.mockResolvedValue(quote([version()]));
     api.createProductFromBomItem.mockResolvedValue({
