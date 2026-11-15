@@ -27,6 +27,8 @@ async function readStdin(): Promise<string> {
  *   --form current|legacy|medusa   a kategória-cím képlete (alap: current); lásd a tervezőt
  *   --medusa <fájl>  a `medusa` képlethez: a kirakat kategóriái JSON-ban (a /store/product-categories válasza
  *                    vagy a tömör {handle, name, parent} lista)
+ *   --repoint        a meglévő UNAS_CATEGORY szabály célját a mai handle-re írja át (alapból nem: az eltérő célú
+ *                    szabály a jelentésben marad); kézi szabályhoz nem nyúl
  *   --apply
  */
 export async function main(
@@ -43,9 +45,11 @@ export async function main(
   let form: CategoryHandleForm = "current";
   let medusaFile: string | null = null;
   let apply = false;
+  let repoint = false;
   for (let i = 0; i < args.length; i++) {
     const a = args[i]!;
     if (a === "--apply") apply = true;
+    else if (a === "--repoint") repoint = true;
     else if (a === "--paths") file = args[++i] ?? null;
     else if (a === "--medusa") medusaFile = args[++i] ?? null;
     else if (a === "--form") {
@@ -57,7 +61,7 @@ export async function main(
       form = v;
     } else {
       out.stderr(
-        `Ismeretlen kapcsolo: ${a} (--paths <fajl>, --form current|legacy|medusa, --medusa <fajl>, --apply)\n`,
+        `Ismeretlen kapcsolo: ${a} (--paths <fajl>, --form current|legacy|medusa, --medusa <fajl>, --repoint, --apply)\n`,
       );
       return 1;
     }
@@ -87,6 +91,7 @@ export async function main(
     paths,
     form,
     medusa,
+    repoint,
   );
   out.stdout(describeCategoryRedirectBackfill(report, form));
   if (!apply) {

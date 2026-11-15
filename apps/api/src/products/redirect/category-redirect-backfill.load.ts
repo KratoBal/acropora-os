@@ -25,6 +25,7 @@ export async function planCategoryRedirectsFromDb(
   paths: readonly string[],
   form: CategoryHandleForm,
   medusa?: readonly MedusaCategoryRef[],
+  repoint = false,
 ) {
   const [categories, unasRefs, meglevo] = await Promise.all([
     db.category.findMany({
@@ -41,6 +42,7 @@ export async function planCategoryRedirectsFromDb(
         sourcePath: true,
         destinationPath: true,
         isActive: true,
+        reason: true,
       },
     }),
   ]);
@@ -54,7 +56,7 @@ export async function planCategoryRedirectsFromDb(
       unasId: unasId.get(c.id) ?? null,
     })),
     meglevo,
-    { form, medusa },
+    { form, medusa, repoint },
   );
 }
 
