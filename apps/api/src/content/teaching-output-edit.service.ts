@@ -21,7 +21,10 @@ import {
   type TeachingSlideText,
 } from "@acropora/types";
 
-import { readPdfTextLines } from "../documents/pdf/pdf-text-readback.js";
+import {
+  PdfReadLimitError,
+  readPdfTextLines,
+} from "../documents/pdf/pdf-text-readback.js";
 import {
   TeachingOutputEditRepository,
   type TeachingOutputEditRow,
@@ -38,6 +41,17 @@ import {
 
 /** The largest edited file taken; the multer limit stands at the upload too. */
 export const TEACHING_EDIT_MAX_BYTES = 20 * 1024 * 1024;
+/**
+ * An uploaded PDF is foreign input (barracuda on #2585): no pdf.js eval or
+ * font loading, and bounded. A teaching material's PDF is a few dozen pages
+ * of a few hundred text pieces each.
+ */
+const UPLOADED_PDF = {
+  untrusted: true,
+  maxPages: 200,
+  maxItemsPerPage: 5_000,
+} as const;
+
 /** A narration is plain text: past this it is no narration. */
 const NARRATION_MAX_BYTES = 2 * 1024 * 1024;
 
@@ -179,9 +193,13 @@ export class TeachingOutputEditService {
     if (body.kind === "PRINTABLE") {
       let lines: Awaited<ReturnType<typeof readPdfTextLines>>;
       try {
-        lines = await readPdfTextLines(file.buffer);
-      } catch {
-        throw new BadRequestException("A PDF nem olvasható.");
+        lines = await readPdfTextLines(file.buffer, UPLOADED_PDF);
+      } catch (error) {
+        throw new BadRequestException(
+          error instanceof PdfReadLimitError
+            ? `A PDF nem vethető össze: ${error.message}.`
+            : "A PDF nem olvasható.",
+        );
       }
       // the footer stamp (with its page count) is on every page and is no content
       const text = lines
