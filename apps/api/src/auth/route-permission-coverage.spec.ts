@@ -112,6 +112,8 @@ const CONTROLLERS = [
   // The content calendar (T5.5): the feed behind content.view (S1), the hand-entered events' writes behind content.manage (S2).
   "src/content/calendar/calendar-feed.controller.ts",
   "src/content/calendar/calendar-event.controller.ts",
+  // The calendar's dependency template (S4): read behind content.view, written behind content.manage.
+  "src/content/calendar/content-template.controller.ts",
   // The projection queue's state (ca422e92, 2026-11-09): read-only numbers, behind inventory.view (#2340 review).
   "src/integrations/medusa/medusa-projection-status.controller.ts",
   // The attendance sheet (os-jelenleti-iv, S1): every route behind attendance.manage.

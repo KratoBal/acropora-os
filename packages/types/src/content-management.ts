@@ -22,7 +22,9 @@ export type ContentChannel =
   | "ARTICLE"
   /** A teaching material's source (T5.2): its body is a `TeachingSource`. */
   | "TEACHING_SOURCE"
-  | "OTHER";
+  | "OTHER"
+  /** The newsletter (T5.5 S4): two rows of the calendar template are newsletters. */
+  | "NEWSLETTER";
 
 /** Melyik szerep szemével kérdezzük, hogy „mi vár rám". */
 export type ContentViewerRole = "author" | "reviewer" | "approver" | "sender";
