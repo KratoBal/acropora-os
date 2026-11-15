@@ -74,11 +74,14 @@ function failedAtOf(metadata: unknown): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-/** Azok a termékek, amelyeknek az ára elbukott, és a visszalépési idő letelt. */
+/**
+ * Azok a termékek, amelyeknek az ára elbukott, és a visszalépési idő letelt. A `limit` nélkül mindet adja: az ütemező
+ * előbb kiszűri a nem árazhatókat (inaktivált, kötés nélküli), és csak utána vág, különben azok kiszorítanák a valódiakat.
+ */
 export async function priceRetryProducts(
   db: PriceSyncDatabase,
   now: Date,
-  limit: number,
+  limit = Number.POSITIVE_INFINITY,
 ): Promise<string[]> {
   const rows = await db.externalReference.findMany({
     where: { ...MEDUSA_PRICE_REFERENCE },
@@ -94,6 +97,41 @@ export async function priceRetryProducts(
     )
     .map((row) => row.entityId)
     .slice(0, limit);
+}
+
+/**
+ * EGY ÁR-KUDARC FAJTÁJA (550b80d1), a health számára: csak a kód, a cikkszám és a részletek nélkül. A szövegek az
+ * ár-futás (`medusa-pricing.cli.ts`, `priceTargets`) és az ütemező kudarc-üzenetei; egy új, ismeretlen alak `other`.
+ *
+ *   "<sku>: MEGÁLLT (<ok>) <részlet>"          a feloldó vagy a vetítés megállt:      <ok>
+ *   "<sku>: <ok>"                              a vetítés megállt, vagy az előzmény:   <ok>
+ *   "<argumentum>: nincs aktív változata ..."  nincs aktív változat:                  no-active-variant
+ *   "sku:<x>: nincs ilyen cikkszámú ..."       nincs ilyen cikkszám:                  no-such-sku
+ *   "az ar-futas kivetellel allt le: <név>"    az ár-futás dobott:                    run-threw
+ *   "az ar-futas elbukott (kod <n>)"           termék nélküli bukás (pl. a bolt):     run-failed
+ */
+export function priceFailureKind(reason: string): string {
+  const megallt = /MEGÁLLT \(([a-z0-9-]+)\)/.exec(reason);
+  if (megallt) return megallt[1]!;
+  if (reason.includes("nincs aktív változata")) return "no-active-variant";
+  if (reason.includes("nincs ilyen cikkszámú")) return "no-such-sku";
+  if (reason.startsWith("az ar-futas kivetellel allt le")) return "run-threw";
+  if (reason.startsWith("az ar-futas elbukott")) return "run-failed";
+  const ok = /: ([a-z0-9]+(?:-[a-z0-9]+)+)$/.exec(reason);
+  return ok ? ok[1]! : "other";
+}
+
+/** A kör ár-kudarcai fajtánként: minden üzenet egyszer számít (egy termék több változata többször). */
+export function priceFailureCounts(
+  failures: ReadonlyMap<string, readonly string[]>,
+): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const reasons of failures.values())
+    for (const reason of reasons) {
+      const kind = priceFailureKind(reason);
+      counts[kind] = (counts[kind] ?? 0) + 1;
+    }
+  return counts;
 }
 
 /**
