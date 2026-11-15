@@ -56,6 +56,7 @@ function fake(
       : null,
   });
   let deletes = 0;
+  const order: string[] = [];
   const repo = {
     get: async () => (options.stored === undefined ? STORED : options.stored),
     responsibleCandidate: async (id: string) => {
@@ -72,14 +73,24 @@ function fake(
     },
     delete: async () => {
       deletes += 1;
+      order.push("delete");
       return options.deleted ?? true;
     },
   } as unknown as CalendarEventRepository;
+  const service = new CalendarEventService(repo);
+  const followed: Parameters<CalendarEventService["follow"]>[0][] = [];
+  service.follow = async (input) => {
+    followed.push(input);
+    order.push("follow");
+    return { moved: 0, steppedBack: 0, told: 0 };
+  };
   return {
-    service: new CalendarEventService(repo),
+    service,
     writes,
     userChecks,
     deletes: () => deletes,
+    followed,
+    order,
   };
 }
 
@@ -246,6 +257,45 @@ describe("a machine account reads, a person writes (acrobot 53159)", () => {
 
   it("and it still reads", async () => {
     assert.equal((await fake().service.get("e1")).id, "e1");
+  });
+});
+
+describe("the event's slots follow it (S7)", () => {
+  it("a saved edit hands the new days to the slots, with the editor", async () => {
+    const { service, followed } = fake();
+    await service.update(
+      "e1",
+      { startsOn: "2026-11-22", endsOn: "2026-11-23" },
+      PERSON,
+    );
+    assert.deepEqual(followed, [
+      {
+        eventKey: "event:e1",
+        eventTitle: "Nyílt nap",
+        event: {
+          title: "Nyílt nap",
+          startsOn: "2026-11-22",
+          endsOn: "2026-11-23",
+        },
+        actorUserId: "u1",
+      },
+    ]);
+  });
+
+  it("a delete tells the slots the event is gone BEFORE deleting it", async () => {
+    const { service, followed, order } = fake();
+    await service.delete("e1", PERSON);
+    assert.equal(followed[0]!.event, null);
+    assert.deepEqual(order, ["follow", "delete"]);
+  });
+
+  it("a refused edit or a machine account tells the slots nothing", async () => {
+    const { service, followed } = fake();
+    await assert.rejects(
+      service.update("e1", { startsOn: "2026-11-21" }, PERSON),
+    );
+    await assert.rejects(service.delete("e1", AGENT));
+    assert.deepEqual(followed, []);
   });
 });
 

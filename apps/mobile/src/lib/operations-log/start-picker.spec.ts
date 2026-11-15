@@ -6,9 +6,11 @@ import {
   assetsInLocation,
   cacheNotice,
   emptyText,
+  groupButtonLabel,
   locationsFromAssets,
   partnersFromAssets,
   startStep,
+  toggleGroupSelection,
   templateDecision,
   templatedOnly,
   type StartAsset,
@@ -191,5 +193,27 @@ describe("az üres lista mondata", () => {
 
   it("a másolat felirata kimondja a korlátot", () => {
     assert.match(cacheNotice, /letöltésekor/);
+  });
+});
+
+describe("a csoportos kijelölés", () => {
+  it("a kijelölés sorrendje megmarad, a második koppintás visszavonja, a határon túl nincs új jelölés", () => {
+    let selected: string[] = [];
+    selected = toggleGroupSelection(selected, "b", 3);
+    selected = toggleGroupSelection(selected, "a", 3);
+    assert.deepEqual(selected, ["b", "a"]);
+    selected = toggleGroupSelection(selected, "c", 3);
+    selected = toggleGroupSelection(selected, "d", 3);
+    assert.deepEqual(selected, ["b", "a", "c"]);
+    assert.deepEqual(toggleGroupSelection(selected, "a", 3), ["b", "c"]);
+    // a bemenet nem módosul
+    assert.deepEqual(selected, ["b", "a", "c"]);
+  });
+
+  it("a csoportos gomb két kijelölt eszköztől látszik, a számmal", () => {
+    assert.equal(groupButtonLabel(0), null);
+    assert.equal(groupButtonLabel(1), null);
+    assert.equal(groupButtonLabel(2), "Csoportos rögzítés (2 eszköz)");
+    assert.equal(groupButtonLabel(5), "Csoportos rögzítés (5 eszköz)");
   });
 });

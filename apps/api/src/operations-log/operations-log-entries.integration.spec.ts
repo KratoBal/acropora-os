@@ -434,6 +434,28 @@ describe(
         );
       });
 
+      it("a csoportos rögzítés: a csoport-azonosító mindkét bejegyzésen megvan, és másik rögzítő nem kerülhet a csoportba", async () => {
+        const groupId = `${PREFIX}grp-${suffix}`;
+        const first = await service.create(
+          input("csoport1", { groupId }),
+          ids.recorder,
+        );
+        assert.equal(first.entry.groupId, groupId);
+        const second = await service.create(
+          input("csoport2", { groupId }),
+          ids.recorder,
+        );
+        assert.equal(second.entry.groupId, groupId);
+        // önálló bejegyzésnek nincs csoportja
+        const alone = await service.create(input("onallo"), ids.recorder);
+        assert.equal(alone.entry.groupId, null);
+        // a másik felhasználó ugyanazzal az azonosítóval nem kerülhet az idegen csoportba
+        await assert.rejects(
+          service.create(input("csoport3", { groupId }), ids.colleague),
+          /csoport-azonosító már egy másik rögzítésé/,
+        );
+      });
+
       it("a lista az időrendben legújabbat adja, és a limit felett jelzi, hogy van még", async () => {
         const page = await service.list({ assetId: ids.asset, limit: 1 });
         assert.equal(page.items.length, 1);

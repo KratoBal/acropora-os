@@ -17,6 +17,7 @@ import {
   operationsMonthTitle,
   operationsNumberText,
   operationsPeriodText,
+  operationsMeterSharedNote,
   operationsSignedNumberText,
   type OperationsReportAssetBlock,
   type OperationsReportEntryRow,
@@ -376,6 +377,11 @@ const COLUMNS: readonly PilotTableColumn<OperationsReportEntryRow>[] = [
             <div className="font-medium text-pilot-grey-900">
               különbség:{" "}
               {operationsSignedNumberText(row.meterDifference, row.meterUnit)}
+            </div>
+          ) : null}
+          {operationsMeterSharedNote(row) ? (
+            <div className="text-pilot-grey-500">
+              ({operationsMeterSharedNote(row)})
             </div>
           ) : null}
         </div>

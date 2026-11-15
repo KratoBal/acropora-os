@@ -245,6 +245,25 @@ describe(
         1,
         2,
       );
+      // CSOPORTOS RÖGZÍTÉS (kártya 1a35e8f3): két eszköz egy űrlapról, ugyanaz a közös vízóra (október, hogy a szeptemberi számok ne mozduljanak)
+      for (const [assetId, departmentId] of [
+        [ids.insideAsset, ids.root],
+        [ids.childAsset, ids.child],
+      ] as const)
+        await prisma.operationsLogEntry.update({
+          where: {
+            id: (
+              await entry(
+                assetId,
+                departmentId,
+                "2026-10-10T09:00:00.000Z",
+                300,
+                309,
+              )
+            ).id,
+          },
+          data: { groupId: `uzrgroup-${suffix}` },
+        });
       await entry(
         ids.archivedAsset,
         ids.third,
@@ -301,6 +320,32 @@ describe(
       assert.equal(totals[ids.insideAsset], 12.5);
       assert.equal(totals[ids.childAsset], 7.25);
       assert.equal(totals[ids.outsideAsset], undefined);
+    });
+
+    it("a csoportos rögzítés közös vízórája egyszer számít a helyszín kimutatásában, a sorok viszont mind megvannak", async () => {
+      const { report } = await service.build(
+        { month: "2026-10", departmentId: ids.root },
+        "INTERNAL",
+        NOW,
+      );
+      assert.equal(report.totals.entries, 2);
+      const withTotal = report.assets.filter(
+        (block) => block.meterTotal !== null,
+      );
+      // pontosan egy blokk viszi a csoport 9 m3-ét (a kettő közül melyik, az azonosító sorrendjén múlik), a másiknak nincs összege
+      assert.equal(withTotal.length, 1);
+      assert.equal(withTotal[0]!.meterTotal, 9);
+      const rows = report.assets.flatMap((block) => block.entries);
+      assert.equal(rows.length, 2);
+      assert.deepEqual(
+        rows.map((row) => row.meterDifference),
+        [9, 9],
+      );
+      assert.equal(rows.filter((row) => row.meterCounted).length, 1);
+      assert.equal(
+        rows.every((row) => row.groupId === `uzrgroup-${suffix}`),
+        true,
+      );
     });
 
     it("a kategória-sablon eszközönként külön esedékes: egy eszközön minden nap kimaradt, ahol nincs bejegyzés", async () => {

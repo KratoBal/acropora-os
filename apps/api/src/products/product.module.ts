@@ -54,6 +54,11 @@ import {
   CATEGORY_BACKFILL_DB,
   CategoryRedirectBackfillService,
 } from "./redirect/category-redirect-backfill.service.js";
+import { ProductRedirectBackfillController } from "./redirect/product-redirect-backfill.controller.js";
+import {
+  PRODUCT_BACKFILL_DB,
+  ProductRedirectBackfillService,
+} from "./redirect/product-redirect-backfill.service.js";
 import { UrlRedirectController } from "./redirect/url-redirect.controller.js";
 import {
   REDIRECT_TRANSACTOR,
@@ -94,6 +99,7 @@ import { CustomerCandidateSource } from "../aquariums/recommendation/customer-ca
     WebshopSlugController,
     UrlRedirectController,
     CategoryRedirectBackfillController,
+    ProductRedirectBackfillController,
   ],
   providers: [
     AttributeSetAdminService,
@@ -129,6 +135,8 @@ import { CustomerCandidateSource } from "../aquariums/recommendation/customer-ca
     { provide: REDIRECT_TRANSACTOR, useValue: prismaRedirectTransactor },
     CategoryRedirectBackfillService,
     { provide: CATEGORY_BACKFILL_DB, useValue: prisma },
+    ProductRedirectBackfillService,
+    { provide: PRODUCT_BACKFILL_DB, useValue: prisma },
   ],
   exports: [
     ProductService,

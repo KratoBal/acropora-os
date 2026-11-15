@@ -12867,6 +12867,10 @@ model OperationsLogEntry {
   /// A kliens által adott művelet-azonosító, a rögzítés idempotencia-kulcsa (offline a telefon sorba teszi, az újraküldés nem
   /// hozhat létre második bejegyzést). A szabály ugyanaz, mint az akvárium-méréseknél.
   clientOperationId String?  @unique
+  /// A CSOPORTOS RÖGZÍTÉS azonosítója (kártya 1a35e8f3): ugyanazt a mérést (közös vízóra) egy űrlapról rögzített, azonos sablonú eszközök
+  /// bejegyzései ugyanazt hordozzák. A telefon adja (egy csoport minden bejegyzésén azonos), a bejegyzések ettől függetlenek és teljesek
+  /// maradnak; a havi kimutatás a csoport vízóra-különbségét egyszer számolja. `null`: önálló bejegyzés.
+  groupId           String?  @db.VarChar(64)
   templateId        String
   assetId           String
   /// A sablon neve és gyakorisága a rögzítés pillanatában.
@@ -12905,6 +12909,7 @@ model OperationsLogEntry {
   @@index([startedAt])
   @@index([recordedById])
   @@index([departmentId, startedAt])
+  @@index([groupId])
 }
 
 /// A bejegyzés résztvevői: a rögzítő és a megadott kollégák (egy vagy több ember). A partner-nézet (S5) a neveket „Acropora”-ként mutatja.

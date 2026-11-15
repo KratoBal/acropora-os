@@ -29,6 +29,11 @@ export interface OperationsReportEntryInput {
   frequency: OperationsTaskFrequency;
   assetId: string;
   assetLabel: string;
+  /**
+   * A CSOPORTOS RÖGZÍTÉS azonosítója (kártya 1a35e8f3), ha a bejegyzés egy űrlapról, több azonos sablonú eszközzel együtt jött. Ugyanaz a
+   * közös vízóra a csoport minden bejegyzésén rajta van (az eszköz előzménye teljes), a kimutatás a különbséget a csoportban EGYSZER számolja.
+   */
+  groupId?: string | null;
   startedAt: string;
   finishedAt: string;
   /** A rögzítő és a megadott kollégák nevei. */
@@ -78,6 +83,15 @@ export interface OperationsReportEntryRow {
   /** Utána mínusz előtte; `null`, ha a kettő közül bármelyik hiányzik. */
   meterDifference: number | null;
   meterUnit: string | null;
+  /** A csoportos rögzítés azonosítója; `null`: önálló bejegyzés, és a PARTNER nézetében mindig `null` (a telefon véletlen azonosítója nem a partner dolga). */
+  groupId: string | null;
+  /**
+   * A VÍZÓRA-KÜLÖNBSÉG BELESZÁMÍT-E AZ ESZKÖZ-BLOKK ÖSSZEGÉBE. Önálló bejegyzésnél mindig; csoportnál CSAK annál a bejegyzésnél, amelyik a
+   * csoportból ELŐSZÖR hordoz vízóra-különbséget (kezdés, azonosító szerint): a közös mérés ugyanazt az értéket hordozza a csoport minden
+   * bejegyzésén, és háromszor számolva a helyszín vízhasználata háromszoros lenne. A többi sorban a különbség látszik (az eszköz
+   * előzménye), de nem összegződik. Különbség nélküli sor (hiányzó előtte vagy utána érték) nem foglalja le a csoport helyét.
+   */
+  meterCounted: boolean;
   /** A negatív különbség ellenőrizendő (az óra lenullázódott, vagy rosszul írták be). */
   meterSuspicious: boolean;
   performers: string[];
@@ -237,6 +251,10 @@ function entryRow(
     meterAfter: after ? (after.value as number) : null,
     meterDifference: difference,
     meterUnit: after?.unit ?? before?.unit ?? null,
+    // a partner nem kapja a csoport azonosítóját (a telefon véletlen kulcsa, a partnernek nincs rá szüksége); a megjegyzés a `meterCounted`-ből jön
+    groupId: audience === "PARTNER" ? null : (entry.groupId ?? null),
+    // a csoport-szabályt a hívó (`buildOperationsReport`) alkalmazza a különbség ismeretében
+    meterCounted: true,
     meterSuspicious: difference !== null && difference < 0,
     performers:
       audience === "PARTNER"
@@ -380,8 +398,15 @@ export function buildOperationsReport(input: {
     );
 
   const blocks = new Map<string, OperationsReportAssetBlock>();
+  // a csoport közös vízórája EGYSZER számít: az a bejegyzés viszi, amelyik a csoportból (kezdés, majd azonosító szerint, az `inMonth` rendezett)
+  // ELŐSZÖR hordoz vízóra-különbséget; a különbség nélküli tag nem foglalja le a helyet
+  const countedGroups = new Set<string>();
   for (const entry of inMonth) {
     const row = entryRow(entry, input.audience);
+    if (entry.groupId && row.meterDifference !== null) {
+      row.meterCounted = !countedGroups.has(entry.groupId);
+      countedGroups.add(entry.groupId);
+    }
     const block =
       blocks.get(entry.assetId) ??
       ({
@@ -399,7 +424,10 @@ export function buildOperationsReport(input: {
     blocks.set(entry.assetId, block);
   }
   for (const block of blocks.values()) {
-    const diffs = block.entries.filter((row) => row.meterDifference !== null);
+    // csak a beszámított sorok (a csoport közös mérését a csoport első bejegyzése hordozza az összegben)
+    const diffs = block.entries.filter(
+      (row) => row.meterDifference !== null && row.meterCounted,
+    );
     const units = new Set(diffs.map((row) => row.meterUnit));
     if (diffs.length > 0 && units.size === 1) {
       block.meterTotal =
