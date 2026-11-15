@@ -21,6 +21,8 @@ const row = (overrides: Partial<User> = {}): User => ({
   passwordUpdatedAt: new Date("2026-01-02T00:00:00.000Z"),
   role: "SALES",
   isActive: true,
+  /** A gépi / flotta fiók jelölője (card f6694b49): a fixtura a teljes sort adja, tehát az új oszlop itt fordítási hibát ad. */
+  isServiceAccount: false,
   avatarUrl: null,
   customerId: null,
   supplierId: null,
