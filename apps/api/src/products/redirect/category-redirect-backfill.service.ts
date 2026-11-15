@@ -68,12 +68,14 @@ export class CategoryRedirectBackfillService {
         name: string;
         parent?: string | null;
       }[];
+      repoint?: boolean;
       apply?: boolean;
       planHash?: string;
     },
     userId: string,
   ): Promise<CategoryRedirectBackfillResult> {
     const { paths, form } = input;
+    const repoint = input.repoint === true;
     const medusa = input.medusaCategories?.map((m) => ({
       handle: m.handle,
       name: m.name,
@@ -89,6 +91,7 @@ export class CategoryRedirectBackfillService {
         paths,
         form,
         medusa,
+        repoint,
       );
       return {
         applied: false,
@@ -104,7 +107,13 @@ export class CategoryRedirectBackfillService {
     const planHash = input.planHash;
     return this.db.$transaction(async (tx: Prisma.TransactionClient) => {
       await lockRedirectWrites(tx);
-      const plan = await planCategoryRedirectsFromDb(tx, paths, form, medusa);
+      const plan = await planCategoryRedirectsFromDb(
+        tx,
+        paths,
+        form,
+        medusa,
+        repoint,
+      );
       if (categoryRedirectPlanHash(form, plan) !== planHash)
         throw new ConflictException(
           "the plan is not the one the dry run returned (the data, the list or the form changed): run the dry run again",
@@ -127,8 +136,10 @@ export class CategoryRedirectBackfillService {
           metadata: {
             form,
             paths: paths.length,
+            repoint,
             created: ujak.length,
             updated: modositasok.length,
+            rewritten: report.rewritten.length,
             planHash,
           } as Prisma.InputJsonValue,
         },

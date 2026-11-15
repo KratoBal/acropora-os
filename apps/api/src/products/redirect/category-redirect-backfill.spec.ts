@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import { categoryHandle } from "../../integrations/medusa/medusa-category-handle.js";
 import {
   categoryHandles,
+  describeCategoryRedirectBackfill,
   normalizeMedusaCategories,
   planCategoryRedirectBackfill,
   type CategoryForRedirect,
@@ -420,5 +421,85 @@ describe("the medusa form: the shop's real handle", () => {
     ]);
     assert.deepEqual(normalizeMedusaCategories(mai), mai);
     assert.throws(() => normalizeMedusaCategories({ nincs: 1 }));
+  });
+});
+
+/**
+ * A `repoint` MÓD (kártya f6cb0a51, 2026-11-15): a kategória-átvétel (adopt) óta a teszt Medusa kategóriái a RÖVID handle-t
+ * viszik, a korábban írt kategória-szabályok célja viszont a régi `név---szülő` alak, és a 301 egy 404-re visz (mérve:
+ * 239 mintacímből 77). A betöltő `keep` módban ír, tehát az eltérő célú meglévő szabályt csak jelentette. MI PIROSIT:
+ * a `repoint` nélkül ír a meglévő szabályra; a `repoint` mellett nem írja át a saját eredetű szabályt; kézi vagy
+ * eredet nélküli (nem betöltött) szabályhoz nyúl; az átírás nem szerepel a jelentésben.
+ */
+describe("repoint: a meglévő UNAS_CATEGORY szabály célja a mai handle-re íródik", () => {
+  const regi = (reason: "UNAS_CATEGORY" | "MANUAL" | undefined) => [
+    {
+      id: "r1",
+      sourcePath: "/sct/111/Eledelek",
+      destinationPath: "/hu/categories/eledelek-termekek",
+      isActive: true,
+      ...(reason ? { reason } : {}),
+    },
+  ];
+  const futtat = (
+    existing: Parameters<typeof planCategoryRedirectBackfill>[2],
+    repoint?: boolean,
+  ) =>
+    planCategoryRedirectBackfill(["/sct/111/Eledelek"], fa, existing, {
+      form: "current",
+      repoint,
+    });
+
+  it("alapból (repoint nélkül) nem ír át: eltérő célú meglévő szabály, jelentés, nincs módosítás", async () => {
+    const { store, report } = await futtat(regi("UNAS_CATEGORY"));
+    assert.equal(report.conflicts.length, 1);
+    assert.equal(report.rewritten.length, 0);
+    assert.equal(store.updated().length, 0);
+  });
+
+  it("repoint mellett a saját eredetű szabály célja a mai handle, és a jelentésben áll", async () => {
+    const { store, report } = await futtat(regi("UNAS_CATEGORY"), true);
+    assert.equal(report.conflicts.length, 0);
+    assert.deepEqual(report.rewritten, [
+      {
+        source: "/sct/111/Eledelek",
+        from: "/hu/categories/eledelek-termekek",
+        to: "/hu/categories/eledelek",
+      },
+    ]);
+    const modositas = store.updated();
+    assert.equal(modositas.length, 1);
+    assert.equal(modositas[0]!.id, "r1");
+    assert.equal(modositas[0]!.data.destinationPath, "/hu/categories/eledelek");
+    assert.equal(store.created().length, 0);
+  });
+
+  it("kézi szabályhoz és eredet nélküli (nem betöltött) szabályhoz sem nyúl: konfliktus marad", async () => {
+    for (const reason of ["MANUAL", undefined] as const) {
+      const { store, report } = await futtat(regi(reason), true);
+      assert.equal(report.conflicts.length, 1, String(reason));
+      assert.equal(report.rewritten.length, 0, String(reason));
+      assert.equal(store.updated().length, 0, String(reason));
+    }
+  });
+
+  it("a már mai célú szabály változatlan, a jelentés szövege kiírja az átírást", async () => {
+    const mar = [
+      {
+        ...regi("UNAS_CATEGORY")[0]!,
+        destinationPath: "/hu/categories/eledelek",
+      },
+    ];
+    const egyezik = await futtat(mar, true);
+    assert.equal(egyezik.report.unchanged, 1);
+    assert.equal(egyezik.report.rewritten.length, 0);
+
+    const { report } = await futtat(regi("UNAS_CATEGORY"), true);
+    const szoveg = describeCategoryRedirectBackfill(report, "current");
+    assert.match(szoveg, /atirt cel \(repoint, sajat eredetu szabaly\): 1/);
+    assert.match(
+      szoveg,
+      /atirva: \/sct\/111\/Eledelek: \/hu\/categories\/eledelek-termekek -> \/hu\/categories\/eledelek/,
+    );
   });
 });
