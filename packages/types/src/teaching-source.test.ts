@@ -443,3 +443,50 @@ describe("analyzeTeachingSource", () => {
     assert.deepEqual(a.problems, []);
   });
 });
+
+/*
+  THE NUMBER TYPED INTO THE TEXT (barracuda on #2577): a warning, never a
+  refusal. What turns this red: a typed quantity not warned about; a
+  reference's own digits or an ordinal ("1. lépés") warned about.
+*/
+describe("typed numbers outside a reference", () => {
+  it("warns about a typed quantity, not about a reference or an ordinal", () => {
+    const a = analyzeTeachingSource({
+      parts: [
+        part({
+          key: "a",
+          text: "Az 1. lépésben {szám: n1} kell, a só 35 ppt, vagy 1,026 SG.",
+          checklist: ["a 2. okban nincs szám"],
+        }),
+      ],
+      numbers: [num({ id: "n1" })],
+    });
+    assert.deepEqual(a.problems, []);
+    assert.deepEqual(
+      a.typedNumbers.map((t) => [
+        t.location.field,
+        /35 ppt/.test(t.excerpt) || /1,026/.test(t.excerpt),
+      ]),
+      [
+        ["text", true],
+        ["text", true],
+      ],
+    );
+  });
+});
+
+describe("the document size", () => {
+  it("refuses parts and a table past the limit, by name", () => {
+    const big = input({
+      parts: Array.from({ length: 6 }, (_, i) =>
+        part({ key: `p${i}`, text: "x".repeat(TEACHING_SOURCE_LIMITS.text) }),
+      ),
+    });
+    const parsed = parseTeachingSourceInput(big);
+    assert.equal(parsed.ok, false);
+    assert.match(
+      parsed.ok ? "" : parsed.message,
+      /at most 90000 characters together/,
+    );
+  });
+});
