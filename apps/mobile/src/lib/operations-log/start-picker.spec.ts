@@ -71,6 +71,22 @@ describe("a partnerek és a helyszínek a másolatból", () => {
     ]);
   });
 
+  it("a helyszín nélküli eszköz partnere nem szerepel: egy partner csak akkor, ha van helyszíne is (Balázs, 2026-11-15)", () => {
+    const noUnit: StartAsset = {
+      ...asset("1", { ownerId: "p9", ownerName: "Hely nélküli" }),
+      unit: undefined,
+    };
+    assert.deepEqual(
+      partnersFromAssets([noUnit, asset("2", { ownerId: "p1" })]),
+      [{ id: "p1", name: "Fánk" }],
+    );
+    // és a partner, akit mutat, mindig kap legalább egy helyszínt
+    for (const partner of partnersFromAssets([noUnit, asset("2")]))
+      assert.ok(
+        locationsFromAssets([noUnit, asset("2")], partner.id).length > 0,
+      );
+  });
+
   it("két azonos nevű, távoli helyszín külön sor, teljes úttal", () => {
     const list = [
       asset("1", { unitId: "u1", path: ["Fánk", "Biodóm"] }),

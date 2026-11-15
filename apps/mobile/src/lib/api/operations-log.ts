@@ -43,11 +43,24 @@ export function listOperationsTemplatesForAsset(assetId: string) {
 }
 
 /**
- * AZ ESZKÖZÖK AZONOSÍTÓI, AMELYEKHEZ VAN AKTÍV SABLON (a kezdőképernyő szűrője). Csak azonosítók: a partnert és a helyszínt az
- * eszköz-lista adja a saját láthatósági hatókörén át, ez a lista csak megmondja, melyiknek van mit rögzíteni.
+ * A KEZDŐKÉPERNYŐ KATALÓGUSA: a szerviz-partnerek aktív eszközei, amelyekhez van aktív üzemeltetési sablon, a partnerrel és a helyszín
+ * teljes útjával (kártya f6694b49; a szerver oldalán `OperationsLogRepository.startCatalogue`). A telefon ebből építi a partner-,
+ * helyszín- és eszköz-listát, tehát csak az szerepel, ahol van mit rögzíteni. Az `assetIds` a régebbi, azonosító-lista alak: a
+ * kiadott kiszolgáló mindkettőt adja; egy régebbi kiszolgáló `assets` nélkül válaszol, és azt a hívó hibaként kezeli.
  */
-export function listAssetIdsWithOperationsTemplates() {
-  return apiRequest<{ assetIds: string[] }>(`${BASE}/assets-with-templates`);
+export interface OperationsStartAsset {
+  id: string;
+  assetNumber: string;
+  name: string;
+  category?: string;
+  owner: { id: string; displayName: string };
+  unit: { id: string; path: string[] };
+}
+
+export function listOperationsStartCatalogue() {
+  return apiRequest<{ assetIds: string[]; assets?: OperationsStartAsset[] }>(
+    `${BASE}/assets-with-templates`,
+  );
 }
 
 export function listOperationsColleagues() {

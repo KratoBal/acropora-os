@@ -43,6 +43,7 @@ import {
   loadOperationsColleagues,
   loadOperationsTemplates,
 } from "@/lib/operations-log/operations-load";
+import { selectableColleagues } from "@/lib/operations-log/participants";
 import { operationsPhotoClientKey } from "@/lib/operations-log/photo-key";
 import { useAppTheme } from "@/lib/theme/useAppTheme";
 import type { ThemeTokens } from "@/lib/theme/tokens";
@@ -212,6 +213,11 @@ export default function RecordOperationsEntryScreen() {
   const startedLabel = form.startedAt
     ? form.startedAt.toLocaleTimeString("hu-HU", { timeStyle: "short" })
     : null;
+  // a bejelentkezett felhasználó nem választható résztvevő (a rögzítő mindig résztvevő): lásd `participants.ts`
+  const selectableList = selectableColleagues(
+    colleagues.data?.items ?? [],
+    user?.id,
+  );
   const fromCache =
     templates.data?.fromCache === true || colleagues.data?.fromCache === true;
 
@@ -335,9 +341,9 @@ export default function RecordOperationsEntryScreen() {
                 <Text style={styles.hint}>
                   Te automatikusan szerepelsz. Ki dolgozott még veled?
                 </Text>
-                {colleagues.data && colleagues.data.items.length > 0 ? (
+                {selectableList.length > 0 ? (
                   <View style={styles.chips}>
-                    {colleagues.data.items.map((colleague) => {
+                    {selectableList.map((colleague) => {
                       const selected = form.participantIds.includes(
                         colleague.id,
                       );

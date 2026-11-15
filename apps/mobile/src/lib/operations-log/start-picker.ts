@@ -46,13 +46,15 @@ export function templatedOnly<T extends { id: string }>(
   return assets.filter((asset) => templatedIds.has(asset.id));
 }
 
-/** A partnerek, akiknek van a listában eszköze, név szerint, ismétlés nélkül. */
+/** A partnerek, akiknek van a listában helyszínnel rendelkező eszköze, név szerint, ismétlés nélkül. */
 export function partnersFromAssets(
   assets: readonly StartAsset[],
 ): PartnerChoice[] {
   const byId = new Map<string, PartnerChoice>();
   for (const asset of assets)
-    if (!byId.has(asset.owner.id))
+    // helyszín nélküli eszköz nem választható (nincs hová tenni a listában), tehát a partnerét sem mutatja: egy partner csak akkor
+    // szerepel, ha van legalább egy helyszíne, ahol rögzíthető eszköz áll
+    if (asset.unit && !byId.has(asset.owner.id))
       byId.set(asset.owner.id, {
         id: asset.owner.id,
         name: asset.owner.displayName,
