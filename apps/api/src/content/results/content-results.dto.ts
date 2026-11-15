@@ -6,7 +6,11 @@ import { CONTENT_RESULT_LIMITS } from "@acropora/types";
 const L = CONTENT_RESULT_LIMITS.value;
 const MONTH = /^\d{4}-\d{2}$/;
 
-/** One week's numbers; `null` (or a missing key) is "not entered", never 0. */
+/**
+ * One week's numbers; `null` is "not entered", never 0. THE SAVE REPLACES THE WHOLE WEEK: a key missing from the request is
+ * written as null too, so a number stored earlier is cleared by leaving it out (barracuda, #2611). The web form always
+ * sends all six; a caller that means to change one number sends the others as they are.
+ */
 export class ContentResultWeekDto {
   @ValidateIf((_o, v) => v !== undefined && v !== null)
   @Type(() => Number)
