@@ -59,6 +59,12 @@ export interface CalendarEventResponsible {
   name: string | null;
 }
 
+/** A choice of the responsible picker: an active colleague who sees the content calendar. */
+export interface CalendarEventResponsibleOption {
+  id: string;
+  name: string;
+}
+
 export interface CalendarEvent {
   id: string;
   kind: CalendarEventKind;

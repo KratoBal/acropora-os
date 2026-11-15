@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   NotFoundException,
 } from "@nestjs/common";
 import type { CalendarEvent } from "@acropora/types";
@@ -12,14 +13,20 @@ import type {
   CalendarEventRepository,
   CalendarEventWrite,
 } from "./calendar-event.repository.js";
-import { CalendarEventService } from "./calendar-event.service.js";
+import {
+  CalendarEventService,
+  type CalendarEventActor,
+} from "./calendar-event.service.js";
 
 /*
   THE HAND-ENTERED CALENDAR EVENTS, THE RULES (T5.5 S2). What turns this red: a missing end not taken as a one-day
   event; an impossible day, a reversed or a too long range written; an inactive or unknown person set as responsible;
   an unchanged responsible who left since blocking an unrelated edit; a stale form overwriting a newer record; an
-  empty place stored as blank text instead of nothing.
+  empty place stored as blank text instead of nothing; a machine account (the content agent, which holds content.manage)
+  creating, editing or deleting one.
 */
+const PERSON: CalendarEventActor = { id: "u1", role: "MANAGER" };
+const AGENT: CalendarEventActor = { id: "agent", role: "CONTENT_AGENT" };
 const STORED: CalendarEvent = {
   id: "e1",
   kind: "SHOP_EVENT",
@@ -48,9 +55,10 @@ function fake(
       ? { id: data.responsibleUserId, name: null }
       : null,
   });
+  let deletes = 0;
   const repo = {
     get: async () => (options.stored === undefined ? STORED : options.stored),
-    activeUser: async (id: string) => {
+    responsibleCandidate: async (id: string) => {
       userChecks.push(id);
       return id === "active";
     },
@@ -62,9 +70,17 @@ function fake(
       writes.push(data);
       return options.update === undefined ? view(data) : options.update;
     },
-    delete: async () => options.deleted ?? true,
+    delete: async () => {
+      deletes += 1;
+      return options.deleted ?? true;
+    },
   } as unknown as CalendarEventRepository;
-  return { service: new CalendarEventService(repo), writes, userChecks };
+  return {
+    service: new CalendarEventService(repo),
+    writes,
+    userChecks,
+    deletes: () => deletes,
+  };
 }
 
 const badRequest = (pattern: RegExp) => (error: unknown) =>
@@ -80,7 +96,7 @@ describe("CalendarEventService.create", () => {
         startsOn: "2026-12-24",
         location: "   ",
       },
-      "u1",
+      PERSON,
     );
     assert.deepEqual(writes, [
       {
@@ -110,7 +126,7 @@ describe("CalendarEventService.create", () => {
     [
       "an inactive or unknown responsible",
       { responsibleUserId: "nobody" },
-      /nem aktív/,
+      /nem tartalom-kezelő/,
     ],
   ] as const)
     it(`refuses ${what} with a 400 that names it, and writes nothing`, async () => {
@@ -123,7 +139,7 @@ describe("CalendarEventService.create", () => {
             startsOn: "2026-11-20",
             ...input,
           },
-          "u1",
+          PERSON,
         ),
         badRequest(pattern),
       );
@@ -140,7 +156,7 @@ describe("CalendarEventService.create", () => {
         endsOn: "2026-04-02",
         responsibleUserId: "active",
       },
-      "u1",
+      PERSON,
     );
     assert.equal(writes[0]!.endsOn, "2026-04-02");
     assert.equal(writes[0]!.responsibleUserId, "active");
@@ -150,7 +166,11 @@ describe("CalendarEventService.create", () => {
 describe("CalendarEventService.update", () => {
   it("merges over the stored record; an unchanged responsible who left is not asked again; null clears the place", async () => {
     const { service, writes, userChecks } = fake();
-    await service.update("e1", { title: "Nyílt nap 2", location: null }, "u1");
+    await service.update(
+      "e1",
+      { title: "Nyílt nap 2", location: null },
+      PERSON,
+    );
     assert.deepEqual(writes, [
       {
         kind: "SHOP_EVENT",
@@ -167,8 +187,8 @@ describe("CalendarEventService.update", () => {
   it("a NEW responsible is checked", async () => {
     const { service, writes } = fake();
     await assert.rejects(
-      service.update("e1", { responsibleUserId: "nobody" }, "u1"),
-      badRequest(/nem aktív/),
+      service.update("e1", { responsibleUserId: "nobody" }, PERSON),
+      badRequest(/nem tartalom-kezelő/),
     );
     assert.deepEqual(writes, []);
   });
@@ -176,7 +196,7 @@ describe("CalendarEventService.update", () => {
   it("a moved start is checked against the stored end", async () => {
     const { service } = fake();
     await assert.rejects(
-      service.update("e1", { startsOn: "2026-11-21" }, "u1"),
+      service.update("e1", { startsOn: "2026-11-21" }, PERSON),
       badRequest(/nem lehet a kezdete előtt/),
     );
   });
@@ -187,7 +207,7 @@ describe("CalendarEventService.update", () => {
       service.update(
         "e1",
         { title: "X", expectedUpdatedAt: "2026-11-15T09:00:00.000Z" },
-        "u1",
+        PERSON,
       ),
       ConflictException,
     );
@@ -196,20 +216,43 @@ describe("CalendarEventService.update", () => {
 
   it("a row that moved between the read and the write is a 409, a missing one a 404", async () => {
     await assert.rejects(
-      fake({ update: "changed" }).service.update("e1", { title: "X" }, "u1"),
+      fake({ update: "changed" }).service.update("e1", { title: "X" }, PERSON),
       ConflictException,
     );
     await assert.rejects(
-      fake({ stored: null }).service.update("e1", { title: "X" }, "u1"),
+      fake({ stored: null }).service.update("e1", { title: "X" }, PERSON),
       NotFoundException,
     );
+  });
+});
+
+describe("a machine account reads, a person writes (acrobot 53159)", () => {
+  it("the content agent is refused create, edit and delete with a 403, and nothing is written or deleted", async () => {
+    const { service, writes, deletes } = fake();
+    const refused = (error: unknown) =>
+      error instanceof ForbiddenException && /gépi fiók/.test(error.message);
+    await assert.rejects(
+      service.create(
+        { kind: "HOLIDAY", title: "Zárva", startsOn: "2026-12-24" },
+        AGENT,
+      ),
+      refused,
+    );
+    await assert.rejects(service.update("e1", { title: "X" }, AGENT), refused);
+    await assert.rejects(service.delete("e1", AGENT), refused);
+    assert.deepEqual(writes, []);
+    assert.equal(deletes(), 0);
+  });
+
+  it("and it still reads", async () => {
+    assert.equal((await fake().service.get("e1")).id, "e1");
   });
 });
 
 describe("CalendarEventService.delete and get", () => {
   it("a missing event is a 404 on both", async () => {
     await assert.rejects(
-      fake({ deleted: false }).service.delete("e1", "u1"),
+      fake({ deleted: false }).service.delete("e1", PERSON),
       NotFoundException,
     );
     await assert.rejects(
