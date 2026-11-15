@@ -16,6 +16,7 @@ import {
 } from "./medusa-product-link.repository.js";
 import { runPricingCli } from "./medusa-pricing.cli.js";
 import {
+  priceFailureCounts,
   priceRetryProducts,
   recordPriceAttempt,
   type PriceSyncDatabase,
@@ -249,6 +250,18 @@ export type ProjectionRoundStatus = {
     taken: Record<ProjectionRoundSource, number> | null;
     inactiveDueTotal: number | null;
     priceRetry: number | null;
+    /**
+     * az ujraprobalasbol kimaradt ar-kudarcok (550b80d1): a termek azota inaktivalt, nem webshopos, torolt, vagy nincs
+     * Medusa kotese. Az ilyen termek ara nem kell (draftkent all, vagy nincs a boltban), es az ar-futas minden
+     * ujraproban ugyanazzal bukna; ha a termek visszater, a termek-vetites esedekesse teszi, es az ara azzal megy ki.
+     */
+    priceRetryDropped: number | null;
+    /**
+     * az ar-futas kudarcai okfajtankent (550b80d1): a stage naploja a flottanak nem olvashato, a tarolt ok pedig csak az
+     * adatbazisban all. Csak a fajta kodja (`own-price-missing`, `variant-not-found`, `run-threw` ...), cikkszam es
+     * termek-azonosito nelkul; egy termek tobb valtozata tobbszor szamit. null = a korben nem futott ar.
+     */
+    priceFailures: Record<string, number> | null;
     /** a lista-lepesek szamai (csak szamok, azonosito nincs); null = a lepes ebben a korben nem futott (kapcsolo ki) */
     steps: RoundStepCounts;
   } | null;
@@ -510,6 +523,7 @@ export class MedusaProjectionScheduler
             ...kor,
             candidates: kor.candidates && { ...kor.candidates },
             taken: kor.taken && { ...kor.taken },
+            priceFailures: kor.priceFailures && { ...kor.priceFailures },
             steps: {
               leftoverKind: kor.steps.leftoverKind && {
                 ...kor.steps.leftoverKind,
@@ -544,6 +558,8 @@ export class MedusaProjectionScheduler
       taken: null,
       inactiveDueTotal: null,
       priceRetry: null,
+      priceRetryDropped: null,
+      priceFailures: null,
       steps: { leftoverKind: null, arrivals: null },
     };
     this.utolsoKor = kor;
@@ -617,14 +633,19 @@ export class MedusaProjectionScheduler
       forrás-változásig nem került volna sorra. Ezek a termékek CSAK az ár-futásba
       mennek: a termék-vetítésük sikerült, nincs mit megismételni.
     */
-    const arUjra = (
-      await priceRetryProducts(
-        this.db as unknown as PriceSyncDatabase,
-        kezdet,
-        limit,
-      )
+    /*
+      CSAK AZ ÁRAZHATÓ PRÓBÁL ÚJRA (550b80d1). Az inaktivált és a nem webshopos termék a termék-vetítésből sem kap árat
+      (lent: `arra`), a kötés nélküli pedig nincs a boltban: az ilyen újrapróba visszalépésenként ugyanazzal bukna, és
+      a kört FAILED-dé tenné. A soruk marad; ha a termék visszatér, a forrása változik, és az ára a termék-vetítéssel
+      megy ki. A szűrés a vágás ELŐTT áll, hogy a kimaradók ne szorítsák ki az árazhatókat.
+    */
+    const arUjraJeloltek = (
+      await priceRetryProducts(this.db as unknown as PriceSyncDatabase, kezdet)
     ).filter((id) => !esedekes.includes(id));
+    const arUjraArazhato = await this.arazhatoUjra(arUjraJeloltek);
+    const arUjra = arUjraArazhato.slice(0, limit);
     allapot.priceRetry = arUjra.length;
+    allapot.priceRetryDropped = arUjraJeloltek.length - arUjraArazhato.length;
     if (!esedekes.length && !arUjra.length) {
       this.uresKorNaploja();
       return "SKIPPED";
@@ -711,6 +732,7 @@ export class MedusaProjectionScheduler
     if (arKod !== 0 && kudarc.size === 0)
       for (const id of arazhato)
         kudarc.set(id, [`az ar-futas elbukott (kod ${arKod})`]);
+    if (arazhato.length) allapot.priceFailures = priceFailureCounts(kudarc);
     for (const id of arazhato)
       await recordPriceAttempt(this.db as unknown as PriceSyncDatabase, {
         productId: id,
@@ -1138,6 +1160,36 @@ export class MedusaProjectionScheduler
       0,
       limit,
     );
+  }
+
+  /**
+   * AZ ÚJRAPRÓBÁLHATÓ ÁR-KUDARCOK (550b80d1): aktív, webshopos, létező és kötött termék, a bemenet sorrendjében. A
+   * lekérdezés szeletenként megy (`KOTES_SZELET`), és a szűrés a kódban is megvan: egy tágabb válasz se vigyen
+   * inaktivált terméket az ár-futásba.
+   */
+  private async arazhatoUjra(jeloltek: string[]): Promise<string[]> {
+    if (!jeloltek.length) return [];
+    const aktiv = new Set<string>();
+    for (let i = 0; i < jeloltek.length; i += KOTES_SZELET) {
+      const termekek = await this.db.product.findMany({
+        where: {
+          id: { in: jeloltek.slice(i, i + KOTES_SZELET) },
+          isActive: true,
+          webshopSellable: true,
+        },
+        select: { id: true, isActive: true, webshopSellable: true },
+      });
+      for (const t of termekek as {
+        id: string;
+        isActive: boolean;
+        webshopSellable: boolean;
+      }[])
+        if (t.isActive && t.webshopSellable) aktiv.add(t.id);
+    }
+    const kotott = await this.kotottAzonositok(
+      jeloltek.filter((id) => aktiv.has(id)),
+    );
+    return jeloltek.filter((id) => kotott.has(id));
   }
 
   /**
