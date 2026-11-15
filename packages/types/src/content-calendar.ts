@@ -133,6 +133,81 @@ export interface ContentCalendarSlotsResult {
   };
 }
 
+/**
+ * THE GAP AND COLLISION SIGNALS (T5.5 S6, spec 3.): for the next 14 days, every event's slots and where each stands,
+ * the days with more than two items on one channel, and newsletters closer than the set frequency.
+ */
+export const CONTENT_CALENDAR_GAP_DAYS = 14;
+
+/**
+ * Where a template slot stands. NOT_OPENED: the slot was never opened (S5); IDEA: opened, nobody wrote it; DRAFT: in
+ * writing or review; APPROVED: ready or scheduled; SENT; DISCARDED: decided not to.
+ */
+export type ContentCalendarSlotStatus =
+  "NOT_OPENED" | "IDEA" | "DRAFT" | "APPROVED" | "SENT" | "DISCARDED";
+
+export interface ContentCalendarGapSlot {
+  ruleId: string;
+  label: string;
+  channel: ContentChannel;
+  plannedOn: CalendarDay;
+  /** Days from today to the planned day; negative when late. */
+  daysLeft: number;
+  status: ContentCalendarSlotStatus;
+  contentId: string | null;
+  /**
+   * Done: sent, decided against, or approved, but an approved slot of a sale with an unknown Omnibus value is NOT
+   * done: a sale price cannot go out without it (spec 8B, T5.4).
+   */
+  done: boolean;
+}
+
+export interface ContentCalendarGapEvent {
+  eventKey: string;
+  kind: ContentTemplateEventKind;
+  title: string;
+  startsOn: CalendarDayOrUnknown;
+  endsOn: CalendarDayOrUnknown | null;
+  slots: ContentCalendarGapSlot[];
+  /** A running sale's products whose Omnibus value is unknown; 0 for anything else. */
+  omnibusUnknown: number;
+  /** At least one slot is not done. */
+  missing: boolean;
+}
+
+export interface ContentCalendarGaps {
+  queriedAt: string;
+  from: CalendarDay;
+  to: CalendarDay;
+  /** The events with a template slot, the missing ones first, then by start. */
+  events: ContentCalendarGapEvent[];
+  /** Days with MORE than two planned items on one channel (spec 3.). */
+  collisions: {
+    day: CalendarDay;
+    channel: ContentChannel;
+    items: { contentId: string; title: string }[];
+  }[];
+  newsletter: {
+    /** Balázs's setting; null: not set, and the rule says nothing. */
+    minDaysBetween: number | null;
+    tooClose: {
+      first: { contentId: string; title: string; day: CalendarDay };
+      second: { contentId: string; title: string; day: CalendarDay };
+      days: number;
+    }[];
+  };
+}
+
+export interface ContentCalendarSettings {
+  /** The fewest days between two newsletters; null until set. */
+  newsletterMinDays: number | null;
+  updatedAt: string | null;
+}
+
+export const CONTENT_CALENDAR_SETTING_LIMITS = {
+  newsletterMinDays: { min: 1, max: 60 },
+} as const;
+
 /** A choice of the responsible picker: an active colleague who sees the content calendar. */
 export interface CalendarEventResponsibleOption {
   id: string;

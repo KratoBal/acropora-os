@@ -9127,6 +9127,17 @@ model ContentTemplateRule {
   @@index([eventKind, active])
 }
 
+/// The content calendar's settings, one row (id fixed in code; T5.5 S6). `newsletterMinDays` is Balázs's value (spec 3.):
+/// NULL until he gives it, and while NULL the "newsletters too close" rule says nothing, instead of a number nobody
+/// agreed to. `updatedById` is only a record: no relation.
+model ContentCalendarSetting {
+  id                String   @id
+  newsletterMinDays Int?
+  updatedById       String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
 /// Egy levélből jött PDF (proforma vagy számla), a bájtjaival együtt, hogy a
 /// szerkesztő és egy újraolvasás is elérje. Egy levél egy mellékletét egyszer
 /// tároljuk (`gmailMessageId` + `fileName`); egy újra csatolt számla (a De Jong

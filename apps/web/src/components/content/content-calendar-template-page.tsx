@@ -14,10 +14,12 @@ import {
 import {
   CONTENT_TEMPLATE_EVENT_KINDS,
   CONTENT_TEMPLATE_EVENT_KIND_LABELS,
+  CONTENT_CALENDAR_SETTING_LIMITS,
   CONTENT_TEMPLATE_LIMITS,
   CONTENT_TEMPLATE_ONE_DAY_KINDS,
   hasPermission,
   PERMISSIONS,
+  type ContentCalendarSettings,
   type ContentChannel,
   type ContentTemplateEventKind,
   type ContentTemplateRule,
@@ -126,6 +128,7 @@ export function ContentCalendarTemplatePage() {
           </Link>
         }
       />
+      <NewsletterSetting token={token} canManage={canManage} />
       {error ? (
         <Alert
           variant="danger"
@@ -419,5 +422,115 @@ function TemplateRuleForm({
         </Button>
       </div>
     </div>
+  );
+}
+
+/**
+ * A HÍRLEVÉL-GYAKORISÁG (spec 3., S6): Balázs értéke, hány nap teljen el legalább két hírlevél között. Üresen a szabály
+ * nem jelez, és ezt ki is mondja: egy kitalált szám helyett a hiányát mutatja.
+ */
+function NewsletterSetting({
+  token,
+  canManage,
+}: {
+  token: string;
+  canManage: boolean;
+}) {
+  const N = CONTENT_CALENDAR_SETTING_LIMITS.newsletterMinDays;
+  const [settings, setSettings] = useState<ContentCalendarSettings | null>(
+    null,
+  );
+  const [value, setValue] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    contentCalendarApi
+      .settings(token, controller.signal)
+      .then((loaded) => {
+        setSettings(loaded);
+        setValue(loaded.newsletterMinDays?.toString() ?? "");
+      })
+      .catch((cause: unknown) => {
+        if (cause instanceof DOMException && cause.name === "AbortError")
+          return;
+        setError(cause instanceof Error ? cause.message : "Ismeretlen hiba.");
+      });
+    return () => controller.abort();
+  }, [token]);
+
+  const trimmed = value.trim();
+  const number = Number(trimmed);
+  const valid =
+    trimmed === "" ||
+    (Number.isInteger(number) && number >= N.min && number <= N.max);
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    try {
+      const saved = await contentCalendarApi.saveSettings(
+        token,
+        trimmed === "" ? null : number,
+      );
+      setSettings(saved);
+      setValue(saved.newsletterMinDays?.toString() ?? "");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Ismeretlen hiba.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="space-y-3 p-4" data-testid="newsletter-setting">
+      <h2 className="text-base font-semibold text-dusk-900">
+        Hírlevél-gyakoriság
+      </h2>
+      {error ? (
+        <Alert
+          variant="danger"
+          title="A beállítás hibája"
+          description={error}
+        />
+      ) : null}
+      <p className="text-sm text-dusk-600">
+        {settings === null
+          ? "Betöltés…"
+          : settings.newsletterMinDays === null
+            ? "Nincs beállítva: a naptár nem figyelmeztet a túl sűrű hírlevélre."
+            : `Két hírlevél között legalább ${settings.newsletterMinDays} nap.`}
+      </p>
+      {canManage && settings !== null ? (
+        <div className="flex flex-wrap items-end gap-2">
+          <FormField
+            label="Legalább ennyi nap két hírlevél között"
+            htmlFor="newsletter-min-days"
+            error={
+              valid
+                ? undefined
+                : `${N.min} és ${N.max} közötti egész szám, vagy üres.`
+            }
+          >
+            <Input
+              id="newsletter-min-days"
+              type="number"
+              min={N.min}
+              max={N.max}
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+            />
+          </FormField>
+          <Button
+            size="sm"
+            onClick={() => void save()}
+            disabled={busy || !valid}
+          >
+            Gyakoriság mentése
+          </Button>
+        </div>
+      ) : null}
+    </Card>
   );
 }

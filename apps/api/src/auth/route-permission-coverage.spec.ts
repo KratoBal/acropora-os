@@ -116,6 +116,8 @@ const CONTROLLERS = [
   "src/content/calendar/content-template.controller.ts",
   // Opening the calendar's content slots (S5): behind content.manage.
   "src/content/calendar/calendar-slots.controller.ts",
+  // The calendar's gap signals and its one setting (S6): read behind content.view, the setting written behind content.manage.
+  "src/content/calendar/calendar-gaps.controller.ts",
   // The projection queue's state (ca422e92, 2026-11-09): read-only numbers, behind inventory.view (#2340 review).
   "src/integrations/medusa/medusa-projection-status.controller.ts",
   // The attendance sheet (os-jelenleti-iv, S1): every route behind attendance.manage.

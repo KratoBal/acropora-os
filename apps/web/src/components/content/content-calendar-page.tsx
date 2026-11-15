@@ -41,6 +41,7 @@ import {
   type CalendarView,
 } from "./content-calendar-days";
 import { ContentCalendarEventForm } from "./content-calendar-event-form";
+import { ContentCalendarGapsPanel } from "./content-calendar-gaps-panel";
 import { CHANNEL_LABELS } from "./content-history";
 import { CONTENT_STATE_LABELS } from "./content-labels";
 
@@ -220,6 +221,8 @@ export function ContentCalendarPage() {
     { result: ContentCalendarSlotsResult } | { error: string } | null
   >(null);
   const [opening, setOpening] = useState(false);
+  // a write (an event, opened slots) changes what is missing: the gap panel reads again
+  const [gapsRefresh, setGapsRefresh] = useState(0);
 
   const user = session?.user ?? null;
   const canView = Boolean(
@@ -262,6 +265,7 @@ export function ContentCalendarPage() {
     try {
       setSlots({ result: await contentCalendarApi.openSlots(token, from, to) });
       void load();
+      setGapsRefresh((n) => n + 1);
     } catch (cause) {
       setSlots({
         error: cause instanceof Error ? cause.message : "Ismeretlen hiba.",
@@ -384,6 +388,7 @@ export function ContentCalendarPage() {
           onSaved={() => {
             setEditing(null);
             void load();
+            setGapsRefresh((n) => n + 1);
           }}
         />
       ) : null}
@@ -408,6 +413,8 @@ export function ContentCalendarPage() {
           />
         )
       ) : null}
+
+      <ContentCalendarGapsPanel token={token} refresh={gapsRefresh} />
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex rounded-lg border border-dusk-200 p-0.5">

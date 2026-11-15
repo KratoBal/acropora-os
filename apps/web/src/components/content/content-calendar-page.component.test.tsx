@@ -27,6 +27,7 @@ const api = vi.hoisted(() => ({
   updateEvent: vi.fn(),
   deleteEvent: vi.fn(),
   openSlots: vi.fn(),
+  gaps: vi.fn(),
 }));
 vi.mock("@/lib/api/content-calendar", () => ({ contentCalendarApi: api }));
 
@@ -135,6 +136,15 @@ beforeEach(() => {
   api.feed.mockClear();
   api.updateEvent.mockClear();
   api.responsibleOptions.mockResolvedValue([{ id: "u2", name: "Luca" }]);
+  api.gaps.mockClear();
+  api.gaps.mockResolvedValue({
+    queriedAt: "2026-11-15T09:30:00.000Z",
+    from: "2026-11-15",
+    to: "2026-11-28",
+    events: [],
+    collisions: [],
+    newsletter: { minDaysBetween: null, tooClose: [] },
+  });
 });
 
 describe("ContentCalendarPage", () => {
@@ -351,6 +361,8 @@ describe("ContentCalendarPage", () => {
     expect(summary).toMatch(/1 nem nyílt, mert az akció nyitott végű/);
     expect(summary).not.toMatch(/ismeretlen/);
     await waitFor(() => expect(api.feed).toHaveBeenCalledTimes(2));
+    // what is missing changed: the gap panel reads again too
+    await waitFor(() => expect(api.gaps).toHaveBeenCalledTimes(2));
   });
 
   it("a full month day names how many more entries it holds", async () => {

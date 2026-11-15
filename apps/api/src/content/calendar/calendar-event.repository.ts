@@ -47,6 +47,8 @@ const RESPONSIBLE_ROLES = HUMAN_ROLES.filter(
 );
 const RESPONSIBLE_WHERE = {
   isActive: true,
+  // a service account sits under a person's role but is a machine (#2599): it answers for nothing
+  isServiceAccount: false,
   ...usersWithPermissionWhere(PERMISSIONS.CONTENT_VIEW, RESPONSIBLE_ROLES),
 } satisfies Prisma.UserWhereInput;
 
