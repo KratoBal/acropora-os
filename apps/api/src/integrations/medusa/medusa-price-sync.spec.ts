@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  addPriceConflictShape,
   decidePriceRetry,
   PRICE_RETRY_AFTER_MS,
   priceFailureCounts,
   priceFailureKind,
+  priceConflictShape,
   priceRetryProducts,
   recordPriceAttempt,
 } from "./medusa-price-sync.js";
@@ -181,5 +183,36 @@ describe("priceFailureKind és priceFailureCounts", () => {
       ),
       { "own-price-missing": 2, "variant-not-found": 1 },
     );
+  });
+});
+
+describe("priceConflictShape és addPriceConflictShape (550b80d1)", () => {
+  it("jelenként számol, egy sor több jelben is, a jel nélküli válasz unknown", () => {
+    assert.deepEqual(
+      priceConflictShape([
+        { price_list_id: null, rules_count: 0, min_quantity: null },
+        { price_list_id: "pl", rules_count: 2 },
+        { rules_count: 0, max_quantity: 10 },
+        {},
+      ]),
+      { rows: 4, priceList: 1, rules: 1, quantity: 1, plain: 1, unknown: 1 },
+    );
+  });
+
+  it("az összeg mezőnként ad össze, és az első alakot nem írja át", () => {
+    const elso = priceConflictShape([{ price_list_id: "pl" }]);
+    const osszeg = addPriceConflictShape(
+      addPriceConflictShape(null, elso),
+      priceConflictShape([{ rules_count: 1 }, {}]),
+    );
+    assert.deepEqual(osszeg, {
+      rows: 3,
+      priceList: 1,
+      rules: 1,
+      quantity: 0,
+      plain: 0,
+      unknown: 1,
+    });
+    assert.equal(elso.rows, 1);
   });
 });

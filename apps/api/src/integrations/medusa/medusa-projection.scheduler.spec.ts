@@ -1221,6 +1221,57 @@ describe("MedusaProjectionScheduler, az elbukott ár", () => {
     assert.deepEqual(kor.priceFailures, {});
   });
 
+  it("a kétértelmű árak ütköző sorai összeadva a health-ben, és null, ha nem volt ilyen (550b80d1)", async () => {
+    const alak = (priceList: number, plain: number) => ({
+      rows: priceList + plain,
+      priceList,
+      rules: 0,
+      quantity: 0,
+      plain,
+      unknown: 0,
+    });
+    const { db } = adatbazis([termek(), termek({ id: "prod-2" })], [], [
+      { entityId: "prod-1", externalId: "prod_m1" },
+      { entityId: "prod-2", externalId: "prod_m2" },
+    ] as never);
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: futtato().run,
+      runPricing: async (_ids, out) => {
+        out.failed?.("prod-1", "SKU-1: ambiguous-price", alak(1, 1));
+        out.failed?.("prod-2", "SKU-2: ambiguous-price", alak(0, 2));
+        out.failed?.("prod-2", "SKU-3: variant-not-found");
+        return 1;
+      },
+      environment: BEKAPCSOLVA,
+      logger: naplo().logger,
+      now: () => MOST,
+    });
+    assert.equal(await scheduler.runOnce(), "FAILED");
+    assert.deepEqual(scheduler.allapot().lastRound!.priceConflictRows, {
+      rows: 4,
+      priceList: 1,
+      rules: 0,
+      quantity: 0,
+      plain: 3,
+      unknown: 0,
+    });
+
+    const masik = adatbazis([termek()], [], [
+      { entityId: "prod-1", externalId: "prod_m1" },
+    ] as never);
+    const tiszta = new MedusaProjectionScheduler({
+      db: masik.db,
+      runProjection: futtato().run,
+      runPricing: arFuttato().run,
+      environment: BEKAPCSOLVA,
+      logger: naplo().logger,
+      now: () => MOST,
+    });
+    await tiszta.runOnce();
+    assert.equal(tiszta.allapot().lastRound!.priceConflictRows, null);
+  });
+
   it("a kör ár-kudarcai fajtánként a health-ben, cikkszám nélkül", async () => {
     const { db } = adatbazis([termek(), termek({ id: "prod-2" })], [], [
       { entityId: "prod-1", externalId: "prod_m1" },

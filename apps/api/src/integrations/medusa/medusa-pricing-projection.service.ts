@@ -8,6 +8,10 @@ import {
 } from "./medusa-admin.client.js";
 import type { Prisma as PrismaTypes } from "@acropora/database";
 
+import {
+  priceConflictShape,
+  type PriceConflictShape,
+} from "./medusa-price-sync.js";
 import type { PriceOwner } from "./medusa-price-source.js";
 import type { MedusaProductLinkRepository } from "./medusa-product-link.repository.js";
 import {
@@ -156,6 +160,8 @@ export type PricingProjectionOutcome =
       action: "stopped";
       reason: PricingProjectionStopReason;
       details: string;
+      /** csak az `ambiguous-price` hozza: az ütköző sorok alakja, azonosító nélkül (550b80d1) */
+      conflict?: PriceConflictShape;
     };
 
 @Injectable()
@@ -200,7 +206,13 @@ export class MedusaPricingProjectionService {
     const stop = (
       reason: PricingProjectionStopReason,
       details: string,
-    ): PricingProjectionOutcome => ({ action: "stopped", reason, details });
+      conflict?: PriceConflictShape,
+    ): PricingProjectionOutcome => ({
+      action: "stopped",
+      reason,
+      details,
+      ...(conflict ? { conflict } : {}),
+    });
 
     const decision = decidePricingProjection(variant.price);
     if (!decision.send)
@@ -294,6 +306,7 @@ export class MedusaPricingProjectionService {
           `forint ár áll (${ours.map((row) => row.id).join(", ")}). Nem ` +
           `dönthető el, melyik a miénk, és a rossz választás a másikat ` +
           `törölné.`,
+        priceConflictShape(ours),
       );
 
     const existing = ours[0];

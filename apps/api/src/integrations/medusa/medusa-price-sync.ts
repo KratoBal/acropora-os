@@ -100,6 +100,83 @@ export async function priceRetryProducts(
 }
 
 /**
+ * A KÉTÉRTELMŰ ÁR ÜTKÖZŐ SORAINAK ALAKJA (550b80d1), azonosító nélkül. A stage-en az `ambiguous-price` a leggyakoribb
+ * ár-kudarc, és az nem látszik, hogy a második forint sor árlistás, szabályos (régió), mennyiségi, vagy egy sima
+ * kettőzés: ettől függ, hogy a vetítés számlálása téved-e, vagy a megállás véd. EZ CSAK MÉRÉS: hogy melyik sor a
+ * miénk, azt nem változtatja.
+ *
+ *   rows       az ütköző forint sorok száma
+ *   priceList  van `price_list_id`-je
+ *   rules      `rules_count` > 0
+ *   quantity   van `min_quantity` vagy `max_quantity`
+ *   plain      a három jel ismert, és egyik sem áll
+ *   unknown    a válasz egyik jelet sem hozta: a `*prices` alak nem adja, ezt kell tudni
+ *
+ * Egy sor több jelben is számíthat (árlistás ÉS szabályos), tehát a jelek összege nem a `rows`.
+ */
+export type PriceConflictShape = {
+  rows: number;
+  priceList: number;
+  rules: number;
+  quantity: number;
+  plain: number;
+  unknown: number;
+};
+
+export function priceConflictShape(
+  rows: readonly {
+    price_list_id?: string | null;
+    rules_count?: number | null;
+    min_quantity?: number | null;
+    max_quantity?: number | null;
+  }[],
+): PriceConflictShape {
+  const shape: PriceConflictShape = {
+    rows: rows.length,
+    priceList: 0,
+    rules: 0,
+    quantity: 0,
+    plain: 0,
+    unknown: 0,
+  };
+  for (const row of rows) {
+    if (
+      row.price_list_id === undefined &&
+      row.rules_count === undefined &&
+      row.min_quantity === undefined &&
+      row.max_quantity === undefined
+    ) {
+      shape.unknown += 1;
+      continue;
+    }
+    const list = row.price_list_id != null;
+    const rules = (row.rules_count ?? 0) > 0;
+    const quantity = row.min_quantity != null || row.max_quantity != null;
+    if (list) shape.priceList += 1;
+    if (rules) shape.rules += 1;
+    if (quantity) shape.quantity += 1;
+    if (!list && !rules && !quantity) shape.plain += 1;
+  }
+  return shape;
+}
+
+/** Két alak összege (a kör több kétértelmű változatáé). */
+export function addPriceConflictShape(
+  sum: PriceConflictShape | null,
+  next: PriceConflictShape,
+): PriceConflictShape {
+  if (!sum) return { ...next };
+  return {
+    rows: sum.rows + next.rows,
+    priceList: sum.priceList + next.priceList,
+    rules: sum.rules + next.rules,
+    quantity: sum.quantity + next.quantity,
+    plain: sum.plain + next.plain,
+    unknown: sum.unknown + next.unknown,
+  };
+}
+
+/**
  * EGY ÁR-KUDARC FAJTÁJA (550b80d1), a health számára: csak a kód, a cikkszám és a részletek nélkül. A szövegek az
  * ár-futás (`medusa-pricing.cli.ts`, `priceTargets`) és az ütemező kudarc-üzenetei; egy új, ismeretlen alak `other`.
  *
