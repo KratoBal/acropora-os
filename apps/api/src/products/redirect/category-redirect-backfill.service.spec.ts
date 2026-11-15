@@ -21,8 +21,12 @@ const fa: CategoryForRedirect[] = [
   { id: "k-triton", unasId: "555", name: "Triton", parentId: "k-root" },
 ];
 
-function fake(categories: CategoryForRedirect[] = fa) {
+function fake(
+  categories: CategoryForRedirect[] = fa,
+  existing: unknown[] = [],
+) {
   const writes: string[] = [];
+  const updates: unknown[] = [];
   const created: unknown[] = [];
   const audit: unknown[] = [];
   let tx = false;
@@ -43,12 +47,15 @@ function fake(categories: CategoryForRedirect[] = fa) {
           .map((c) => ({ entityId: c.id, externalId: c.unasId! })),
     },
     urlRedirect: {
-      findMany: async () => [],
+      findMany: async () => existing,
       createMany: async (a: { data: unknown[] }) => {
         writes.push("createMany");
         created.push(...a.data);
       },
-      update: async () => writes.push("update"),
+      update: async (a: unknown) => {
+        writes.push("update");
+        updates.push(a);
+      },
     },
     auditLog: {
       create: async (a: { data: unknown }) => {
@@ -76,7 +83,7 @@ function fake(categories: CategoryForRedirect[] = fa) {
       }
     },
   };
-  return { db, writes, created, audit, options, inTx: () => tx };
+  return { db, writes, created, updates, audit, options, inTx: () => tx };
 }
 
 const service = (f: ReturnType<typeof fake>) =>
@@ -143,8 +150,10 @@ describe("CategoryRedirectBackfillService", () => {
       metadata: {
         form: "current",
         paths: 3,
+        repoint: false,
         created: 1,
         updated: 0,
+        rewritten: 0,
         planHash: sz.planHash,
       },
     });
@@ -232,5 +241,80 @@ describe("CategoryRedirectBackfillService", () => {
     );
     assert.notEqual(a.planHash, b.planHash);
     assert.deepEqual(f.writes, []);
+  });
+
+  // kártya f6cb0a51: a kategória-átvétel óta a régi `név---szülő` cél 404; a `repoint` a meglévő UNAS_CATEGORY szabályt írja át.
+  // MI PIROSIT: a repoint nélkül ír a meglévő szabályra; a lenyomat nem függ a repoint-tól (a szárazfutás nélkül is mehet az írás);
+  // az írás nem a szárazfutás szerinti szabályt írja át; az AuditLog nem jelzi az átírást.
+  it("repoint: a meglévő UNAS_CATEGORY szabály célja átíródik, a lenyomat más, és az írás csak a repoint-os lenyomattal megy", async () => {
+    const meglevo = [
+      {
+        id: "r1",
+        sourcePath: "/sct/111/Eledelek",
+        destinationPath: "/hu/categories/eledelek-termekek",
+        isActive: true,
+        reason: "UNAS_CATEGORY",
+      },
+    ];
+    const f = fake(fa, meglevo);
+    const nelkul = await service(f).run(
+      { paths: ["/sct/111/Eledelek"], form: "current" },
+      "u1",
+    );
+    assert.equal(nelkul.report.conflicts.length, 1);
+    assert.equal(nelkul.report.rewritten.length, 0);
+    const repoint = await service(f).run(
+      { paths: ["/sct/111/Eledelek"], form: "current", repoint: true },
+      "u1",
+    );
+    assert.equal(repoint.report.rewritten.length, 1);
+    assert.equal(repoint.report.conflicts.length, 0);
+    assert.notEqual(repoint.planHash, nelkul.planHash);
+    assert.deepEqual(f.writes, []); // egyik szárazfutás sem írt
+
+    // a repoint nélküli lenyomattal repoint-os írás: 409 (más a terv), nem ír
+    await assert.rejects(
+      service(f).run(
+        {
+          paths: ["/sct/111/Eledelek"],
+          form: "current",
+          repoint: true,
+          apply: true,
+          planHash: nelkul.planHash,
+        },
+        "u1",
+      ),
+      ConflictException,
+    );
+    assert.deepEqual(f.writes, ["lock"]);
+
+    const r = await service(f).run(
+      {
+        paths: ["/sct/111/Eledelek"],
+        form: "current",
+        repoint: true,
+        apply: true,
+        planHash: repoint.planHash,
+      },
+      "u1",
+    );
+    assert.equal(r.applied, true);
+    assert.equal(f.updates.length, 1);
+    assert.deepEqual(f.updates[0], {
+      where: { id: "r1" },
+      data: {
+        destinationPath: "/hu/categories/eledelek",
+        destinationPathLower: "/hu/categories/eledelek",
+        reason: "UNAS_CATEGORY",
+        entityType: null,
+        entityId: null,
+        isActive: true,
+        createdById: null,
+      },
+    });
+    const naplo = f.audit[0] as { metadata: Record<string, unknown> };
+    assert.equal(naplo.metadata.repoint, true);
+    assert.equal(naplo.metadata.rewritten, 1);
+    assert.equal(naplo.metadata.updated, 1);
   });
 });
