@@ -131,15 +131,45 @@ export interface CategoryRedirectReport {
   refused: { source: string; kind: string; message: string }[];
   /** `/spl/` vagy `/sct/` út, amelynek azonosítója nem kategóriánk. */
   unknownId: string[];
-  /** Névszlugos út, amihez több kategória illik. */
-  ambiguous: { source: string; candidates: string[] }[];
+  /** Névszlugos út, amihez több kategória illik. A `fallback` a meglévő szabály régi kezelőjének ítélete (lásd `LegacyVerdict`). */
+  ambiguous: {
+    source: string;
+    candidates: string[];
+    fallback?: LegacyVerdict;
+  }[];
   /** Nem kategória-szerű út (termék, blog, statikus lap): nem érintjük. */
   skipped: number;
+  /**
+   * A KIHAGYOTT UTAK SORONKÉNT (card f6cb0a51, a #2595 szárazfutása után): MIÉRT maradt ki, mi áll az úton a meglévő szabályok közt
+   * (cél, eredet, aktív-e), és mit mondott a régi kezelős tartalék. Egy szám nem mondja meg, melyik ágon akadt el a 21 kategória-célú út.
+   */
+  skippedDetails: SkippedDetail[];
   /** Két kategória ugyanazt a handle-t kapná: a cél nem egyedi, egyik sem íródik. */
   handleCollisions: string[];
   /** `medusa` képletnél: az út kategóriájához nincs (vagy kettő) Medusa-kategória, nincs szabály. */
   noMedusaCategory: string[];
   invariantViolations: RedirectRule[];
+}
+
+/** Miért nem döntött a meglévő szabály régi kezelője (vagy hogy döntött). */
+export type LegacyVerdict =
+  /** A tartalékot nem kérdeztük meg: az út a névtől függetlenül kimaradt (nem út, spg/spd lap, statikus lap). */
+  | "not-consulted"
+  | "no-rule"
+  | "rule-inactive"
+  | `rule-reason-${string}`
+  | "destination-not-category-path"
+  | "legacy-no-match"
+  | "legacy-multiple"
+  | "legacy-found";
+
+export interface SkippedDetail {
+  source: string;
+  /** Az ok: nem út, spg/spd lap, statikus lap, vagy hogy a név nem talált kategóriát. */
+  why: "not-a-path" | "spg-spd-page" | "static-page" | "no-name-match";
+  /** A meglévő szabály ezen az úton (nincs: hiányzik). */
+  rule?: { destination: string; reason: string; isActive: boolean };
+  fallback: LegacyVerdict;
 }
 
 interface Resolved {
@@ -268,6 +298,7 @@ export async function planCategoryRedirectBackfill(
     unknownId: [],
     ambiguous: [],
     skipped: 0,
+    skippedDetails: [],
     handleCollisions: [],
     noMedusaCategory: [],
     invariantViolations: [],
@@ -318,19 +349,51 @@ export async function planCategoryRedirectBackfill(
     );
     byLegacyHandle.set(key, [...(byLegacyHandle.get(key) ?? []), c]);
   }
-  /** A meglevo, SAJAT eredetu szabaly celjabol a kategoriak, amelyeknek a regi kezeloje az. Nincs szabaly vagy nem illik: ures. */
-  const viaExistingRule = (source: string): CategoryForRedirect[] => {
+  /**
+   * A meglevo, SAJAT eredetu szabaly celjabol a kategoriak, amelyeknek a regi kezeloje az, ES az itelet, hogy miert (nem) talalt:
+   * a jelentes ebbol mondja meg, melyik agon akadt el egy ut.
+   */
+  const legacyLookup = (
+    source: string,
+  ): { categories: CategoryForRedirect[]; verdict: LegacyVerdict } => {
     const rule = existingBySource.get(redirectPathLower(source));
-    if (!rule?.isActive || rule.reason !== "UNAS_CATEGORY") return [];
+    if (!rule) return { categories: [], verdict: "no-rule" };
+    if (!rule.isActive) return { categories: [], verdict: "rule-inactive" };
+    if (rule.reason !== "UNAS_CATEGORY")
+      return {
+        categories: [],
+        verdict: `rule-reason-${rule.reason ?? "none"}`,
+      };
     const match = /^\/hu\/categories\/(.+)$/.exec(rule.destinationPath);
-    if (!match) return [];
+    if (!match)
+      return { categories: [], verdict: "destination-not-category-path" };
     let handle = match[1]!;
     try {
       handle = decodeURIComponent(handle);
     } catch {
       // nem dekodolhato alak: a nyers szoveg marad, es valoszinuleg nem talal
     }
-    return byLegacyHandle.get(handle.toLowerCase()) ?? [];
+    const found = byLegacyHandle.get(handle.toLowerCase()) ?? [];
+    return {
+      categories: found,
+      verdict:
+        found.length === 0
+          ? "legacy-no-match"
+          : found.length > 1
+            ? "legacy-multiple"
+            : "legacy-found",
+    };
+  };
+  const viaExistingRule = (source: string): CategoryForRedirect[] =>
+    legacyLookup(source).categories;
+  /** Miert maradt ki egy ut: ugyanazok a feltetelek, mint a `resolve`-ban, sorrendben. */
+  const whySkipped = (source: string): SkippedDetail["why"] => {
+    const segs = source.split("/").filter(Boolean).map(szegmens);
+    if (segs.length === 0 || segs.some((x) => x === "")) return "not-a-path";
+    if (/^(spg|spd|sct|spl)$/i.test(source.split("/")[1] ?? ""))
+      return "spg-spd-page";
+    if (source.toLowerCase().includes(".php")) return "static-page";
+    return "no-name-match";
   };
 
   const resolve = (
@@ -384,6 +447,25 @@ export async function planCategoryRedirectBackfill(
     const found = resolve(source);
     if (found === null) {
       report.skipped += 1;
+      const rule = existingBySource.get(redirectPathLower(source));
+      const why = whySkipped(source);
+      report.skippedDetails.push({
+        source,
+        why,
+        ...(rule
+          ? {
+              rule: {
+                destination: rule.destinationPath,
+                reason: rule.reason ?? "none",
+                isActive: rule.isActive,
+              },
+            }
+          : {}),
+        fallback:
+          why === "no-name-match"
+            ? legacyLookup(source).verdict
+            : "not-consulted",
+      });
       continue;
     }
     if (found === "unknown") {
@@ -400,6 +482,7 @@ export async function planCategoryRedirectBackfill(
         candidates: found
           .map((c) => handles.get(c.id) ?? `(nincs Medusa: ${c.name})`)
           .sort(),
+        fallback: legacyLookup(source).verdict,
       });
       continue;
     }
@@ -471,7 +554,12 @@ export function describeCategoryRedirectBackfill(
     ...r.unknownId.map((s) => `  ismeretlen azonosito: ${s}`),
     ...r.noMedusaCategory.map((s) => `  nincs Medusa-kategoria: ${s}`),
     ...r.ambiguous.map(
-      (a) => `  ketertelmu: ${a.source} -> ${a.candidates.join(" | ")}`,
+      (a) =>
+        `  ketertelmu: ${a.source} -> ${a.candidates.join(" | ")}${a.fallback ? ` (tartalek: ${a.fallback})` : ""}`,
+    ),
+    ...r.skippedDetails.map(
+      (d) =>
+        `  kihagyva: ${d.source} [${d.why}] szabaly: ${d.rule ? `${d.rule.destination} (${d.rule.reason}${d.rule.isActive ? "" : ", inaktiv"})` : "nincs"}; tartalek: ${d.fallback}`,
     ),
     ...r.conflicts.map(
       (c) =>

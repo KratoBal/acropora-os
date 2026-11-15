@@ -109,6 +109,7 @@ describe("planCategoryRedirectBackfill", () => {
       {
         source: "/aquaforest",
         candidates: ["aquaforest-koralltapok", "aquaforest-szurok"],
+        fallback: "no-rule",
       },
     ]);
   });
@@ -630,5 +631,115 @@ describe("a meglévő szabály régi kezelője dönt, ha a név nem", () => {
       report.rewritten[0]?.to,
       `/hu/categories/${handleOf("k-aram")}`,
     );
+  });
+});
+
+/*
+  A KIHAGYOTT UTAK SORONKENTI OKA (card f6cb0a51, a #2595 masodik szarazfutasa utan: a tartalek nem oldott fel semmit, es a riport csak
+  egy szamot adott a 53 kihagyott utrol). MI PIROSIT: ha a riportbol hianyzik az ok (nev, spg/spd lap, statikus lap), a meglevo
+  szabaly (cel, eredet, aktiv-e), vagy a tartalek itelete (nincs szabaly, inaktiv, mas eredet, nem kategoria-cel, nincs talalat);
+  ha a kihagyott ut kulonbozo okai ugyanazt az itelet kapnak; ha a szoveges riport nem listazza a sorokat.
+*/
+describe("a kihagyott utak soronkénti oka", () => {
+  const fa3: CategoryForRedirect[] = [
+    { id: "k-root", unasId: "1", name: "Termékek", parentId: null },
+    { id: "k-aram", unasId: "2", name: "Áramoltatók", parentId: "k-root" },
+  ];
+  const szabaly = (
+    sourcePath: string,
+    destinationPath: string,
+    over: { reason?: "UNAS_CATEGORY" | "MANUAL"; isActive?: boolean } = {},
+  ) => ({
+    id: `r-${sourcePath}`,
+    sourcePath,
+    destinationPath,
+    isActive: over.isActive ?? true,
+    reason: over.reason ?? ("UNAS_CATEGORY" as const),
+  });
+  const futtat = (
+    paths: string[],
+    existing: Parameters<typeof planCategoryRedirectBackfill>[2],
+  ) =>
+    planCategoryRedirectBackfill(paths, fa3, existing, {
+      form: "current",
+      repoint: true,
+    });
+  const detail = async (
+    source: string,
+    existing: Parameters<typeof planCategoryRedirectBackfill>[2],
+  ) => {
+    const { report } = await futtat([source], existing);
+    assert.equal(report.skipped, 1, source);
+    assert.equal(report.skippedDetails.length, 1, source);
+    return report.skippedDetails[0]!;
+  };
+
+  it("az ok: spg/spd lap, statikus lap, és a név, amely nem talált kategóriát", async () => {
+    assert.equal((await detail("/spg/1/blog", [])).why, "spg-spd-page");
+    assert.equal((await detail("/shop_help.php", [])).why, "static-page");
+    assert.equal((await detail("/ismeretlen-marka", [])).why, "no-name-match");
+  });
+
+  it("a tartalékot csak a névvel nem talált út kérdezi: spg/spd és statikus lapnál nem megkérdezett", async () => {
+    // a szabály létezik és érvényes, mégsem kérdezzük: az út a névtől függetlenül kimaradt
+    const rule = szabaly("/spg/1/blog", "/hu/categories/valami---szulo");
+    const spg = await detail("/spg/1/blog", [rule]);
+    assert.equal(spg.fallback, "not-consulted");
+    assert.equal(spg.rule?.destination, "/hu/categories/valami---szulo");
+    const php = await detail("/shop_help.php", []);
+    assert.equal(php.fallback, "not-consulted");
+  });
+
+  it("szabály nélkül: nincs szabály, és a tartalék ezt mondja", async () => {
+    const d = await detail("/ismeretlen-marka", []);
+    assert.equal(d.rule, undefined);
+    assert.equal(d.fallback, "no-rule");
+  });
+
+  it("a tartalék ítélete: inaktív, más eredet, nem kategória-cél, nincs találat", async () => {
+    const dest = "/hu/categories/nincs-ilyen---semmi";
+    const cases: [string, ReturnType<typeof szabaly>, string][] = [
+      ["/a", szabaly("/a", dest, { isActive: false }), "rule-inactive"],
+      ["/b", szabaly("/b", dest, { reason: "MANUAL" }), "rule-reason-MANUAL"],
+      [
+        "/c",
+        szabaly("/c", "/hu/kategoria/valami"),
+        "destination-not-category-path",
+      ],
+      ["/d", szabaly("/d", dest), "legacy-no-match"],
+    ];
+    for (const [source, rule, verdict] of cases) {
+      const d = await detail(source, [rule]);
+      assert.equal(d.fallback, verdict, source);
+      assert.deepEqual(d.rule, {
+        destination: rule.destinationPath,
+        reason: rule.reason,
+        isActive: rule.isActive,
+      });
+    }
+  });
+
+  it("a kétértelmű úton is áll az ítélet, és a szöveges riport soronként listázza a kihagyottat", async () => {
+    const fa4: CategoryForRedirect[] = [
+      { id: "k-root", unasId: "1", name: "Termékek", parentId: null },
+      { id: "k-a", unasId: "2", name: "A", parentId: "k-root" },
+      { id: "k-b", unasId: "3", name: "B", parentId: "k-root" },
+      { id: "k-r1", unasId: "4", name: "Ragasztók", parentId: "k-a" },
+      { id: "k-r2", unasId: "5", name: "Ragasztók", parentId: "k-b" },
+    ];
+    const { report } = await planCategoryRedirectBackfill(
+      ["/ragasztok", "/ismeretlen-marka"],
+      fa4,
+      [],
+      { form: "current", repoint: true },
+    );
+    assert.equal(report.ambiguous.length, 1);
+    assert.equal(report.ambiguous[0]!.fallback, "no-rule");
+    const szoveg = describeCategoryRedirectBackfill(report, "current");
+    assert.match(
+      szoveg,
+      /kihagyva: \/ismeretlen-marka \[no-name-match\] szabaly: nincs; tartalek: no-rule/,
+    );
+    assert.match(szoveg, /ketertelmu: \/ragasztok .*\(tartalek: no-rule\)/);
   });
 });
