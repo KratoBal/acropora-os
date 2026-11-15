@@ -1415,6 +1415,17 @@ export const ANONYMIZATION_REGISTER: Readonly<
     sentTo: "freeText",
     sentById: "identifier",
   },
+  // An edited output file (T5.2): the editor's copy of a generated deck.
+  TeachingOutputEdit: {
+    fileName: "freeText",
+    contentType: "business",
+    sha256: "identifier",
+    content: "fileContent",
+    slides: "json",
+    uploadedById: "identifier",
+    decisionNote: "freeText",
+    decidedById: "identifier",
+  },
   TicketMailDelivery: {
     serviceJobId: "identifier",
     jobNumber: "identifier",

@@ -11,6 +11,8 @@ import type {
   ContentWaitingOnMeResponse,
   TeachingOutputBody,
   TeachingOutputDetail,
+  TeachingOutputEditDetail,
+  TeachingOutputEditSummary,
   TeachingOutputKind,
   TeachingOutputSummary,
   TeachingSourceEditorData,
@@ -324,6 +326,64 @@ export const contentApi = {
     document.body.appendChild(link);
     link.click();
     link.remove();
-    URL.revokeObjectURL(url);
+    // delayed, as the other downloaders do: the download reads the URL
+    // asynchronously, and some browsers abort it on a synchronous revoke
+    // (barracuda on #2581)
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  },
+
+  /** The edited copies of an output (the "differs from the source" mark). */
+  teachingOutputEdits(
+    token: string,
+    id: string,
+    outputId: string,
+    signal?: AbortSignal,
+  ) {
+    return apiRequest<TeachingOutputEditSummary[]>(
+      `/content/${encodeURIComponent(id)}/teaching-source/outputs/${encodeURIComponent(outputId)}/edits`,
+      token,
+      { signal },
+    );
+  },
+
+  teachingOutputEdit(
+    token: string,
+    id: string,
+    outputId: string,
+    editId: string,
+  ) {
+    return apiRequest<TeachingOutputEditDetail>(
+      `/content/${encodeURIComponent(id)}/teaching-source/outputs/${encodeURIComponent(outputId)}/edits/${encodeURIComponent(editId)}`,
+      token,
+    );
+  },
+
+  uploadTeachingOutputEdit(
+    token: string,
+    id: string,
+    outputId: string,
+    file: File,
+  ) {
+    const form = new FormData();
+    form.append("file", file);
+    return apiRequest<TeachingOutputEditDetail>(
+      `/content/${encodeURIComponent(id)}/teaching-source/outputs/${encodeURIComponent(outputId)}/edits`,
+      token,
+      { method: "POST", body: form },
+    );
+  },
+
+  decideTeachingOutputEdit(
+    token: string,
+    id: string,
+    outputId: string,
+    editId: string,
+    decision: { toSource: boolean; note: string | null },
+  ) {
+    return apiRequest<TeachingOutputEditDetail>(
+      `/content/${encodeURIComponent(id)}/teaching-source/outputs/${encodeURIComponent(outputId)}/edits/${encodeURIComponent(editId)}/decision`,
+      token,
+      { method: "POST", body: JSON.stringify(decision) },
+    );
   },
 };

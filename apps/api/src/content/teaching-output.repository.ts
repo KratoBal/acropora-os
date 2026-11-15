@@ -28,6 +28,8 @@ export interface TeachingOutputRow {
   sentPublic: boolean | null;
   sentById: string | null;
   sentAt: Date | null;
+  /** When each edited copy was decided on (null: still waiting). */
+  edits: { decidedAt: Date | null }[];
 }
 
 const OUTPUT_SELECT = {
@@ -41,6 +43,7 @@ const OUTPUT_SELECT = {
   sentPublic: true,
   sentById: true,
   sentAt: true,
+  edits: { select: { decidedAt: true } },
 } as const;
 
 /**

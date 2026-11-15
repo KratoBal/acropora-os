@@ -15,6 +15,8 @@ import { ContentClaimsController } from "./content-claims.controller.js";
 import { ContentController } from "./content.controller.js";
 import { ContentRepository } from "./content.repository.js";
 import { ContentService } from "./content.service.js";
+import { TeachingOutputEditRepository } from "./teaching-output-edit.repository.js";
+import { TeachingOutputEditService } from "./teaching-output-edit.service.js";
 import { TeachingOutputRepository } from "./teaching-output.repository.js";
 import {
   TEACHING_OUTPUT_CLOCK,
@@ -59,6 +61,8 @@ import { ProductDataService } from "./product-data/product-data.service.js";
     ProductDataRepository,
     ProductDataService,
     ServiceTokenRepository,
+    TeachingOutputEditRepository,
+    TeachingOutputEditService,
     TeachingOutputRepository,
     TeachingOutputService,
     { provide: TEACHING_OUTPUT_CLOCK, useValue: () => new Date() },

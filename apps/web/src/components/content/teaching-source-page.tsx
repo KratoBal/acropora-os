@@ -36,6 +36,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { contentApi } from "@/lib/api/content";
 
 import { CONTENT_STATE_LABELS } from "./content-labels";
+import { TeachingOutputEdits } from "./teaching-output-edits";
 import {
   parseTeachingInflections,
   parseTeachingPairs,
@@ -1169,6 +1170,14 @@ export function TeachingSourcePage({ contentId }: { contentId: string }) {
                         kiment: {output.sent.to}
                       </PilotBadge>
                     ) : null}
+                    {output.edits ? (
+                      <PilotBadge variant="amber">
+                        eltér a forrástól
+                        {output.undecidedEdits
+                          ? `, ${output.undecidedEdits} döntésre vár`
+                          : ""}
+                      </PilotBadge>
+                    ) : null}
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <PilotButton
@@ -1195,6 +1204,15 @@ export function TeachingSourcePage({ contentId }: { contentId: string }) {
                       </PilotButton>
                     ) : null}
                   </div>
+                  {output.kind === "SLIDES" ? (
+                    <TeachingOutputEdits
+                      token={token}
+                      contentId={contentId}
+                      outputId={output.id}
+                      canManage={canManage}
+                      onChanged={() => void loadOutputs()}
+                    />
+                  ) : null}
                   {sending?.id === output.id ? (
                     <div className="space-y-2">
                       <PilotFormField

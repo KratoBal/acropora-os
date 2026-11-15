@@ -141,6 +141,8 @@ export class TeachingOutputService {
       stale: (state.version ?? 0) > row.sourceVersion,
       approved: state.approvedVersion === row.sourceVersion,
       ...teachingOutputFlags(row.body),
+      edits: row.edits.length,
+      undecidedEdits: row.edits.filter((e) => e.decidedAt === null).length,
       sent:
         row.sentAt && row.sentTo !== null
           ? {

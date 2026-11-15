@@ -8680,8 +8680,38 @@ model TeachingOutput {
   sentPublic    Boolean?
   sentById      String?
   sentAt        DateTime?
+  /// A kézzel szerkesztett változatai (az "eltér a forrástól" jelzés): lásd `TeachingOutputEdit`.
+  edits         TeachingOutputEdit[]
 
   @@index([contentId, kind, generatedAt])
+}
+
+/// EGY KIMENET KÉZZEL SZERKESZTETT VÁLTOZATA (T5.2, spec v2 3. és 6. pont):
+/// amikor valaki a generált fájlt közvetlenül szerkeszti (Luca a diasort), a
+/// kimenet "eltér a forrástól". A feltöltött fájl és a belőle olvasott
+/// dia-szöveg itt áll, az eltérés ebből és a kimenet szerkezetéből látszik.
+/// A szerkesztő dönt, hogy a változás visszamegy-e a forrásba (`toSource`); az
+/// átvezetés a forrásban történik, kézzel vagy a tartalom-ágenssel, és az
+/// újragenerált kimenet már nem tér el. Egy döntés egyszer születik.
+model TeachingOutputEdit {
+  id           String         @id @default(cuid())
+  outputId     String
+  output       TeachingOutput @relation(fields: [outputId], references: [id], onDelete: Cascade)
+  fileName     String
+  contentType  String
+  sizeBytes    Int
+  sha256       String         @db.VarChar(64)
+  content      Bytes
+  /// A fájlból olvasott diák szövege (`TeachingSlideText[]`).
+  slides       Json
+  uploadedById String?
+  uploadedAt   DateTime       @default(now())
+  toSource     Boolean?
+  decisionNote String?
+  decidedById  String?
+  decidedAt    DateTime?
+
+  @@index([outputId, uploadedAt])
 }
 
 /// A beszélgetés a tételen belül, hogy a felvetésre ott lehessen válaszolni, ne

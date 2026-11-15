@@ -489,6 +489,10 @@ export interface TeachingOutputSummary {
   overFrame: number;
   chaptersWithoutNarration: number;
   sent: TeachingOutputSent | null;
+  /** Edited copies uploaded: the output "differs from the source" (T5.2, spec v2, point 3). */
+  edits: number;
+  /** Of those, how many still wait for the editor's decision. */
+  undecidedEdits: number;
 }
 
 export interface TeachingOutputDetail extends TeachingOutputSummary {

@@ -27,6 +27,10 @@ import {
 } from "./article-image.service.js";
 import { ArticleService } from "./article.service.js";
 import { ContentService } from "./content.service.js";
+import {
+  TEACHING_EDIT_MAX_BYTES,
+  TeachingOutputEditService,
+} from "./teaching-output-edit.service.js";
 import { TeachingOutputService } from "./teaching-output.service.js";
 import { TeachingSourceService } from "./teaching-source.service.js";
 import {
@@ -60,7 +64,63 @@ export class ContentController {
     private readonly articleImages: ArticleImageService,
     private readonly teachingSources: TeachingSourceService,
     private readonly teachingOutputs: TeachingOutputService,
+    private readonly teachingEdits: TeachingOutputEditService,
   ) {}
+
+  /**
+   * A KIMENET SZERKESZTETT VÁLTOZATAI (T5.2, az „eltér a forrástól" jelzés):
+   * a kézzel szerkesztett diasor feltöltése a kimenethez, a diák szövegének
+   * eltérése a generálttól, és a szerkesztő döntése, egyszer, hogy a változás
+   * visszamegy-e a forrásba. A forrást ez nem írja.
+   */
+  @Get(":id/teaching-source/outputs/:outputId/edits")
+  @RequirePermissions(PERMISSIONS.CONTENT_VIEW)
+  teachingOutputEdits(
+    @Param("id") id: string,
+    @Param("outputId") outputId: string,
+  ) {
+    return this.teachingEdits.list(id, outputId);
+  }
+
+  @Post(":id/teaching-source/outputs/:outputId/edits")
+  @RequirePermissions(PERMISSIONS.CONTENT_MANAGE)
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: memoryStorage(),
+      limits: { fileSize: TEACHING_EDIT_MAX_BYTES, files: 1 },
+    }),
+  )
+  uploadTeachingOutputEdit(
+    @Param("id") id: string,
+    @Param("outputId") outputId: string,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    if (!file) throw new BadRequestException("A feltöltendő diasor kötelező.");
+    return this.teachingEdits.upload(id, outputId, file, user.id);
+  }
+
+  @Get(":id/teaching-source/outputs/:outputId/edits/:editId")
+  @RequirePermissions(PERMISSIONS.CONTENT_VIEW)
+  teachingOutputEdit(
+    @Param("id") id: string,
+    @Param("outputId") outputId: string,
+    @Param("editId") editId: string,
+  ) {
+    return this.teachingEdits.detail(id, outputId, editId);
+  }
+
+  @Post(":id/teaching-source/outputs/:outputId/edits/:editId/decision")
+  @RequirePermissions(PERMISSIONS.CONTENT_MANAGE)
+  decideTeachingOutputEdit(
+    @Param("id") id: string,
+    @Param("outputId") outputId: string,
+    @Param("editId") editId: string,
+    @Body() body: unknown,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.teachingEdits.decide(id, outputId, editId, body, user.id);
+  }
 
   /**
    * AN OKTATÓANYAG FORRÁSA (csak `TEACHING_SOURCE` csatornán, T5.2): részek,

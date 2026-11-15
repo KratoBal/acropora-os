@@ -63,6 +63,7 @@ const row = (over: Partial<TeachingOutputRow> = {}): TeachingOutputRow => ({
   sentPublic: null,
   sentById: null,
   sentAt: null,
+  edits: [],
   ...over,
 });
 

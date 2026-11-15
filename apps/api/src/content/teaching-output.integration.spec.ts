@@ -9,6 +9,7 @@ import type { TeachingSourceInput } from "@acropora/types";
 import { integrationDatabaseGate } from "../common/integration-database.js";
 import { nincsMaradek } from "../common/takaritas-leltar.js";
 import { ContentRepository } from "./content.repository.js";
+import { TeachingOutputEditRepository } from "./teaching-output-edit.repository.js";
 import { TeachingOutputRepository } from "./teaching-output.repository.js";
 import { TeachingOutputService } from "./teaching-output.service.js";
 import { TeachingSourceRepository } from "./teaching-source.repository.js";
@@ -193,6 +194,62 @@ describe(
         2,
         "a preview stores nothing",
       );
+    });
+
+    it("T52O-INT-EDIT: an edited copy is stored with its text, counted on the output, and decided once", async () => {
+      const item = await prisma.contentItem.create({
+        data: {
+          title: `${prefix}szerkesztett`,
+          channel: "TEACHING_SOURCE",
+          state: "DRAFTING",
+        },
+      });
+      ids.push(item.id);
+      const id = item.id;
+      assert.equal(
+        (await sources.save(id, input(null, "Első változat."), actor)).kind,
+        "ok",
+      );
+      for (const [from, to] of [
+        ["DRAFTING", "AWAITING_REVIEW"],
+        ["AWAITING_REVIEW", "AWAITING_APPROVAL"],
+        ["AWAITING_APPROVAL", "READY_TO_SEND"],
+      ])
+        assert.equal(await move(id, from!, to!), true, `${from} -> ${to}`);
+      const deck = await service.generate(id, "SLIDES", actor);
+
+      const edits = new TeachingOutputEditRepository();
+      const editId = await edits.create({
+        outputId: deck.id,
+        fileName: "diasor.pptx",
+        contentType: "application/zip",
+        sha256: "a".repeat(64),
+        bytes: new Uint8Array([0x50, 0x4b, 3, 4]),
+        slides: [{ title: "Első rész", points: ["Átírt pont."] }],
+        userId: actor,
+      });
+      const stored = await edits.get(deck.id, editId);
+      assert.deepEqual(stored?.slides, [
+        { title: "Első rész", points: ["Átírt pont."] },
+      ]);
+      const listed = (await service.list(id)).find((o) => o.id === deck.id);
+      assert.equal(listed?.edits, 1);
+      assert.equal(listed?.undecidedEdits, 1);
+
+      const decide = (toSource: boolean) =>
+        edits.decide({
+          outputId: deck.id,
+          id: editId,
+          decision: { toSource, note: null },
+          userId: actor,
+          at: new Date(),
+        });
+      const results = await Promise.all([decide(true), decide(false)]);
+      assert.deepEqual(results.filter(Boolean).length, 1, "one decision wins");
+      const after = (await service.list(id)).find((o) => o.id === deck.id);
+      assert.equal(after?.undecidedEdits, 0);
+      // another output's id does not reach this edit
+      assert.equal(await edits.get("c" + "z".repeat(24), editId), null);
     });
   },
 );
