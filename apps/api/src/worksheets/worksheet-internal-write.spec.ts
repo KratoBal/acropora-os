@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { ForbiddenException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException } from "@nestjs/common";
 import { describe, it } from "node:test";
 import { requireInternalWriter } from "./worksheet-internal-write.js";
 import { WorksheetsService } from "./worksheets.service.js";
@@ -208,6 +208,57 @@ describe("a munkanapló belsős", () => {
         error instanceof Error &&
         !(error instanceof ForbiddenException) &&
         /nem található/.test(error.message),
+    );
+  });
+});
+
+/*
+  AZ IDEGEN SZÜLŐ-HELYSZÍN A HÍVÓ HIBÁJA (mérve 2026-11-15, acrobot 53389): a tároló sima hibát dob, ha a megadott szülő nem
+  a vevőé, és ebből 500 lett. MI PIROSÍT: ha a szolgáltatás nem fordítja 400-ra, vagy egy MÁS hibát is 400-ra fordít.
+*/
+describe("alegység létrehozása idegen szülővel", () => {
+  const BELSOS_KERO = {
+    id: "szerelo-1",
+    role: "MANAGER",
+    customerId: null,
+    supplierId: null,
+  } as never;
+  const service = (error: Error) =>
+    new WorksheetsService({
+      customer: async () => ({ id: "customer-1" }),
+      createDepartment: async () => {
+        throw error;
+      },
+    } as unknown as WorksheetsRepository);
+
+  it("a nem a vevőhöz tartozó szülő 400, a hibaüzenet megmondja, mi a baj", async () => {
+    await assert.rejects(
+      () =>
+        service(
+          new Error("WORKSHEET_DEPARTMENT_PARENT_NOT_FOUND"),
+        ).createDepartment(BELSOS_KERO, "customer-1", {
+          name: "Üres",
+          code: "URES",
+          parentId: "idegen",
+        } as never),
+      (error: unknown) =>
+        error instanceof BadRequestException &&
+        /nem ehhez a partnerhez tartozik/.test(error.message),
+    );
+  });
+
+  it("más hiba nem lesz 400", async () => {
+    await assert.rejects(
+      () =>
+        service(new Error("valami más")).createDepartment(
+          BELSOS_KERO,
+          "customer-1",
+          { name: "Üres", code: "URES" } as never,
+        ),
+      (error: unknown) =>
+        !(error instanceof BadRequestException) &&
+        error instanceof Error &&
+        error.message === "valami más",
     );
   });
 });
