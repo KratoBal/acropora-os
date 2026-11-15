@@ -16,9 +16,11 @@ import {
 } from "./medusa-product-link.repository.js";
 import { runPricingCli } from "./medusa-pricing.cli.js";
 import {
+  addPriceConflictShape,
   priceFailureCounts,
   priceRetryProducts,
   recordPriceAttempt,
+  type PriceConflictShape,
   type PriceSyncDatabase,
 } from "./medusa-price-sync.js";
 import { nativeFieldKeys } from "../../products/attributes/public-fields.js";
@@ -206,8 +208,12 @@ export type ProjectionRunner = (
   out: {
     stdout(value: string): void;
     stderr(value: string): void;
-    /** Termékenkénti kudarc (az ár-futás adja; a termék-vetítés nem). */
-    failed?(productId: string, reason: string): void;
+    /** Termékenkénti kudarc (az ár-futás adja; a termék-vetítés nem). A `conflict` csak a kétértelmű árnál jön. */
+    failed?(
+      productId: string,
+      reason: string,
+      conflict?: PriceConflictShape,
+    ): void;
   },
 ) => Promise<number>;
 
@@ -262,6 +268,11 @@ export type ProjectionRoundStatus = {
      * termek-azonosito nelkul; egy termek tobb valtozata tobbszor szamit. null = a korben nem futott ar.
      */
     priceFailures: Record<string, number> | null;
+    /**
+     * a kor `ambiguous-price` kudarcainak utkozo forint sorai alakonkent (550b80d1), azonosito nelkul: arlistas,
+     * szabalyos, mennyisegi, sima, vagy a valasz nem hozta a jelet (`unknown`). null = nem volt ketertelmu ar.
+     */
+    priceConflictRows: PriceConflictShape | null;
     /** a lista-lepesek szamai (csak szamok, azonosito nincs); null = a lepes ebben a korben nem futott (kapcsolo ki) */
     steps: RoundStepCounts;
   } | null;
@@ -524,6 +535,9 @@ export class MedusaProjectionScheduler
             candidates: kor.candidates && { ...kor.candidates },
             taken: kor.taken && { ...kor.taken },
             priceFailures: kor.priceFailures && { ...kor.priceFailures },
+            priceConflictRows: kor.priceConflictRows && {
+              ...kor.priceConflictRows,
+            },
             steps: {
               leftoverKind: kor.steps.leftoverKind && {
                 ...kor.steps.leftoverKind,
@@ -560,6 +574,7 @@ export class MedusaProjectionScheduler
       priceRetry: null,
       priceRetryDropped: null,
       priceFailures: null,
+      priceConflictRows: null,
       steps: { leftoverKind: null, arrivals: null },
     };
     this.utolsoKor = kor;
@@ -709,8 +724,14 @@ export class MedusaProjectionScheduler
       try {
         arKod = await this.runPricing(arazhato, {
           ...kimenet,
-          failed: (productId, reason) =>
-            kudarc.set(productId, [...(kudarc.get(productId) ?? []), reason]),
+          failed: (productId, reason, conflict) => {
+            kudarc.set(productId, [...(kudarc.get(productId) ?? []), reason]);
+            if (conflict)
+              allapot.priceConflictRows = addPriceConflictShape(
+                allapot.priceConflictRows,
+                conflict,
+              );
+          },
         });
       } catch (error) {
         const fajta = error instanceof Error ? error.name : "UNKNOWN";

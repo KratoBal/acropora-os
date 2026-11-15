@@ -272,6 +272,68 @@ describe("MedusaPricingProjectionService", () => {
     assert.equal(outcome.action, "stopped");
     if (outcome.action !== "stopped") return;
     assert.equal(outcome.reason, "ambiguous-price");
+    // a jelek nélküli válasz alakja "unknown": ebből látszik, ha a `*prices` nem hozza őket
+    assert.deepEqual(outcome.conflict, {
+      rows: 2,
+      priceList: 0,
+      rules: 0,
+      quantity: 0,
+      plain: 0,
+      unknown: 2,
+    });
+  });
+
+  /*
+    AZ ÜTKÖZŐ SOROK ALAKJA (550b80d1): csak mérés. MI PIROSIT: az árlistás vagy a szabályos sor máshová számít, vagy
+    a mérés miatt megváltozik, melyik sor a miénk (itt: a vetítés ír, ahelyett hogy megállna).
+  */
+  it("a kétértelmű ár megállása az ütköző sorok alakját is viszi, és nem ír", async () => {
+    const { service, writes } = fakes({
+      prices: [
+        {
+          id: "price_a",
+          currency_code: "huf",
+          amount: 12990,
+          price_list_id: null,
+          rules_count: 0,
+          min_quantity: null,
+          max_quantity: null,
+        },
+        {
+          id: "price_b",
+          currency_code: "huf",
+          amount: 11990,
+          price_list_id: "plist_1",
+          rules_count: 1,
+          min_quantity: null,
+          max_quantity: null,
+        },
+        {
+          id: "price_c",
+          currency_code: "huf",
+          amount: 10990,
+          price_list_id: null,
+          rules_count: 0,
+          min_quantity: 5,
+          max_quantity: null,
+        },
+      ],
+    });
+
+    const outcome = await service.project(priced("14990"));
+
+    assert.equal(outcome.action, "stopped");
+    if (outcome.action !== "stopped") return;
+    assert.equal(outcome.reason, "ambiguous-price");
+    assert.deepEqual(outcome.conflict, {
+      rows: 3,
+      priceList: 1,
+      rules: 1,
+      quantity: 1,
+      plain: 1,
+      unknown: 0,
+    });
+    assert.equal(writes.length, 0);
   });
 
   it("tells a missing prices field from an empty one", async () => {

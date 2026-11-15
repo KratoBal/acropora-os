@@ -1568,6 +1568,14 @@ export interface MedusaPriceRow {
   id: string;
   currency_code: string;
   amount: number;
+  /**
+   * A sor fajtájának jelei (550b80d1): árlista, szabály, mennyiségi sáv. Csak a kétértelmű ár MÉRÉSÉHEZ olvassuk
+   * (`priceConflictShape`), a döntéshez nem. A `?` szándékos: hogy a `*prices` alak hozza-e őket, épp az a mérés része.
+   */
+  price_list_id?: string | null;
+  rules_count?: number | null;
+  min_quantity?: number | null;
+  max_quantity?: number | null;
 }
 
 /** Egy változat az áraival. */
