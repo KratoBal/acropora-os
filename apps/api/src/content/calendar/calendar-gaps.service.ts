@@ -15,7 +15,10 @@ import {
 
 import { budapestDayKey } from "../../dashboard/budapest-day.js";
 import { ProductDataService } from "../product-data/product-data.service.js";
-import { UNKNOWN } from "../product-data/product-data.types.js";
+import {
+  UNKNOWN,
+  type ProductData,
+} from "../product-data/product-data.types.js";
 import type { CalendarEventActor } from "./calendar-event.service.js";
 import {
   CALENDAR_FEED_CLOCK,
@@ -30,6 +33,31 @@ const MACHINE =
   "A tartalomnaptár beállítását ember módosítja: gépi fiók nem írhatja.";
 /** One product-data read names at most this many products (the reader's own limit). */
 const OMNIBUS_BATCH = 100;
+
+/**
+ * The asked products whose Omnibus value is not known: a running sale variant without one, OR a product the reader did
+ * not answer for at all (barracuda's #2605 note: a missing answer must not read as "known"; today the ids come from the
+ * same database, so it should not happen, and when it does the safe side is "unknown").
+ */
+export function unknownOmnibus(
+  asked: readonly string[],
+  products: readonly ProductData[],
+): string[] {
+  const answered = new Set(products.map((product) => product.id));
+  return [
+    ...products
+      .filter((product) =>
+        product.variants.some(
+          (variant) =>
+            variant.price.status !== UNKNOWN &&
+            variant.price.sale?.state === "fut" &&
+            variant.price.omnibus.status === UNKNOWN,
+        ),
+      )
+      .map((product) => product.id),
+    ...asked.filter((id) => !answered.has(id)),
+  ];
+}
 
 /** A sale whose window holds today: the only kind with an Omnibus reference to check (T5.4 computes it for those). */
 function runningSale(entry: ContentCalendarEntry, today: string): boolean {
@@ -119,16 +147,7 @@ export class CalendarGapsService {
         limit: OMNIBUS_BATCH,
         offset: 0,
       });
-      for (const product of answer.products)
-        if (
-          product.variants.some(
-            (variant) =>
-              variant.price.status !== UNKNOWN &&
-              variant.price.sale?.state === "fut" &&
-              variant.price.omnibus.status === UNKNOWN,
-          )
-        )
-          unknown.add(product.id);
+      for (const id of unknownOmnibus(batch, answer.products)) unknown.add(id);
     }
     return new Map(
       sales.map((entry) => [
