@@ -14,6 +14,7 @@ import type {
 import { headerSafe } from "./mail-header.js";
 import { TICKET_MAIL_ENV, TicketMailError } from "./gmail-mail.sender.js";
 import { MAIL_SENDER, type MailSender } from "./mail.port.js";
+import { partnerTicketLink } from "./partner-portal-link.js";
 import {
   isMailEnvironmentReason,
   mailModeOf,
@@ -22,6 +23,7 @@ import {
 import {
   handoverMailBody,
   handoverMailDefaultSubject,
+  handoverMailPortalLinkLine,
 } from "./handover-mail.content.js";
 import {
   handoverMailAuditNote,
@@ -206,7 +208,25 @@ export class HandoverMailService {
         email: cimzett.email,
       })),
       subject: handoverMailDefaultSubject(job.jobNumber),
+      // a kezelo LATJA a mondatot, ami a szovege ala kerul, szo szerint (ures: nem kerul semmi)
+      portalLinkLine: ((link) =>
+        link ? handoverMailPortalLinkLine(link) : "")(
+        this.portalLinkOf(job.id, false),
+      ),
     };
+  }
+
+  /** A jegy linkje a partner-portalon, vagy ures string (es egy figyelmeztetes), ha a `PARTNER_URL` nincs beallitva. */
+  private portalLinkOf(serviceJobId: string, warn = true): string {
+    const link = partnerTicketLink({
+      partnerUrl: this.environment.PARTNER_URL,
+      serviceJobId,
+    });
+    if (!link && warn)
+      this.logger.warn(
+        `A hibajegy portal-linkje kimaradt a levélből: PARTNER_URL nincs beállítva (hibajegy ${serviceJobId}).`,
+      );
+    return link;
   }
 
   async send(input: {
@@ -260,7 +280,10 @@ export class HandoverMailService {
     const subject = headerSafe(
       input.subject?.trim() || handoverMailDefaultSubject(job.jobNumber),
     );
-    const text = handoverMailBody({ message: input.message });
+    // A hibajegy linkje a partner-portalon (Balazs 2026-10-08: "2 igen"). Hianyzo PARTNER_URL: a level link nelkul
+    // megy ki, es a jegy naploja megnevezi (lasd `handoverMailAuditNote`).
+    const portalLink = this.portalLinkOf(job.id);
+    const text = handoverMailBody({ message: input.message, portalLink });
 
     if (!this.sender) return this.skip(job, decision, input, "no-sender");
 
@@ -355,6 +378,7 @@ export class HandoverMailService {
       note: handoverMailAuditNote(
         decision,
         mailRedirect(this.environment.TICKET_MAIL_REDIRECT_TO),
+        portalLink === "",
       ),
       actorUserId: input.actorUserId,
     });

@@ -115,6 +115,8 @@ export function HandoverMailDialog({
   if (!open) return null;
 
   const cimzettek = preview?.kind === "send" ? preview.recipients : [];
+  const portalLinkLine =
+    preview?.kind === "send" ? (preview.portalLinkLine ?? "") : "";
   const kuldheto = preview?.kind === "send" && vanSzoveg;
 
   return (
@@ -192,7 +194,11 @@ export function HandoverMailDialog({
             <PilotFormField
               label="Üzenet"
               htmlFor="handover-mail-message"
-              help="Ez lesz a levél törzse, pontosan így. A rendszer semmit nem fűz hozzá."
+              help={
+                portalLinkLine
+                  ? "Ez a levél törzse, pontosan így. Alatta a rendszer egy sort ad hozzá, a hibajegy linkjével (lent látod)."
+                  : "Ez lesz a levél törzse, pontosan így. A rendszer semmit nem fűz hozzá."
+              }
             >
               <Textarea
                 id="handover-mail-message"
@@ -203,6 +209,22 @@ export function HandoverMailDialog({
                 onChange={(event) => setMessage(event.target.value)}
               />
             </PilotFormField>
+
+            {/*
+              A SOR, AMIT A SZERVER FUZ A SZOVEG ALA (Balazs 2026-10-08: a portal-link bekerul az atadasi levelbe).
+              A kezelo LATJA, szo szerint, a kikuldes elott; a mondatot a szerver adja, a felulet nem epiti ujra.
+            */}
+            {portalLinkLine ? (
+              <p
+                className="rounded-md border border-pilot-grey-200 bg-pilot-grey-50 px-3 py-2 text-sm text-dusk-700"
+                data-testid="handover-mail-portal-line"
+              >
+                <span className="block text-xs text-dusk-500">
+                  A levél végére automatikusan bekerül:
+                </span>
+                {portalLinkLine}
+              </p>
+            ) : null}
           </>
         ) : null}
 

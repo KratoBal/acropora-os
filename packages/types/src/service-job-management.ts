@@ -1090,6 +1090,12 @@ export type ServiceJobHandoverMailPreview =
       readonly recipients: readonly ServiceJobHandoverMailRecipient[];
       /** Az elotoltott targy. A kezelo atirhatja, es akkor az ove megy ki. */
       readonly subject: string;
+      /**
+       * A mondat a hibajegy linkjevel a partner-portalon, SZO SZERINT, ahogy a level a kezelo szovege ala kerul
+       * (Balazs 2026-10-08). A szerver adja, a felulet nem epiti ujra: egy forras. Ures string, ha a szerver nem
+       * ismeri a portal webcimet: akkor nem kerul a levelbe semmi.
+       */
+      readonly portalLinkLine?: string;
     }
   | {
       readonly kind: "skip";

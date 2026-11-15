@@ -35,6 +35,8 @@ function felallit(be?: {
   kuldesDob?: boolean;
   /** A KULDO EZT A HIBAT dobja -- igy a KET ag kulon merheto. */
   kuldesHiba?: Error;
+  /** A partner-portal webcime (`PARTNER_URL`). Alapbol HIANYZIK, mint a termelesben az ELSO bekapcsolasig. */
+  partnerUrl?: string;
 }) {
   const kuldott: OutgoingMail[] = [];
   const nyomok: { outcome: string; recipients: unknown; bytes: number }[] = [];
@@ -98,6 +100,7 @@ function felallit(be?: {
       cimzettnek megy.
     */
     TICKET_MAIL_REDIRECT_TO: be?.redirect ?? "off",
+    ...(be?.partnerUrl !== undefined ? { PARTNER_URL: be.partnerUrl } : {}),
   } as NodeJS.ProcessEnv);
 
   const csomag = {
@@ -158,11 +161,64 @@ describe("a lezárt hibajegy kiküldése", () => {
   });
 
   /**
+   * A PORTAL-LINK A LEVELBE KERUL (Balazs, 2026-10-08 06:54 UTC: "2 igen"; card 193a6f29), ES EZ A LEGKOZELEBBI
+   * ALLITAS ALATT ALLO KAPU FELOLDASA: acrobot 2026-09-22-i dontese ("nem megy ki olyan link a vevonek, amit nem
+   * ellenoriztunk") a LETOLTESI linkre szolt, amit a portal nem hivott. Ez a link a partner SAJAT, mar letezo
+   * `hibajegyek/[id]` oldalara visz, es a cimzettek a vevo portal-fiokjai: van belepesuk.
+   */
+  it("PARTNER_URL mellett a kezelő szövege alá kerül a hibajegy portál-linkje, egy üres sorral elválasztva", async () => {
+    const t = felallit({ partnerUrl: "https://ticket.example.hu/" });
+    await t.service.send({
+      serviceJobId: "job-1",
+      message: "  Köszönjük a bizalmat.  ",
+      actorUserId: "user-1",
+      package: t.csomag,
+    });
+    assert.equal(
+      t.kuldott[0]?.text,
+      "Köszönjük a bizalmat.\n\nA hibajegy a partnerportálon is megnézhető: https://ticket.example.hu/hibajegyek/job-1",
+    );
+    // a link nem kerult kiegeszito szovegkent a jegy naplojaba, es a naplo nem jelzi hianyanak
+    assert.doesNotMatch(t.naplo[0] ?? "", /kimaradt/);
+  });
+
+  it("PARTNER_URL nélkül a levél link nélkül megy ki, és a jegy naplója megnevezi, hogy a link kimaradt", async () => {
+    const t = felallit();
+    const eredmeny = await t.service.send({
+      serviceJobId: "job-1",
+      message: "Köszönjük a bizalmat.",
+      actorUserId: "user-1",
+      package: t.csomag,
+    });
+    assert.deepEqual(eredmeny, { kind: "sent", recipients: 1 });
+    assert.equal(t.kuldott[0]?.text, "Köszönjük a bizalmat.");
+    assert.match(
+      t.naplo[0] ?? "",
+      /A partnerportál linkje kimaradt a levélből: a PARTNER_URL nincs beállítva\./,
+    );
+    assert.doesNotMatch(t.naplo[0] ?? "", /@/);
+  });
+
+  it("az üres (csak szóköz) PARTNER_URL is hiányzónak számít", async () => {
+    const t = felallit({ partnerUrl: "   " });
+    await t.service.send({
+      serviceJobId: "job-1",
+      message: "Köszönjük.",
+      actorUserId: "user-1",
+      package: t.csomag,
+    });
+    assert.equal(t.kuldott[0]?.text, "Köszönjük.");
+    assert.match(t.naplo[0] ?? "", /kimaradt/);
+  });
+
+  /**
    * A TORZS A KEZELO SZOVEGE, ES SEMMI MAS -- EZ acrobot DONTESENEK A KAPUJA.
    *
    * A dontes (2026-09-22 00:57): "NEM MEGY KI OLYAN LINK A VEVONEK, AMIT NEM
-   * ELLENORIZTUNK." Ma ez SZERKEZETILEG all, mert a rendszer SEMMIT nem fuz a
-   * kezelo szovegehez -- nincs mibe linket tenni.
+   * ELLENORIZTUNK." PARTNER_URL NELKUL ez SZERKEZETILEG all: a rendszer SEMMIT
+   * nem fuz a kezelo szovegehez. (2026-11-15: Balazs 10-08-i dontesevel a
+   * konfiguralt portal-cimbol epitett hibajegy-link kulon sorban hozzaadhato;
+   * azt a kovetkezo tesztek rogzitik.)
    *
    * EZ AZ ALLITAS AZT ORZI, hogy igy is maradjon. Ha valaki kesobb egy
    * generalt mondatot (letoltesi linket, lablecet, aláírást) fuz a torzs vegere,
@@ -298,7 +354,37 @@ describe("a kiküldés előnézete", () => {
       kind: "send",
       recipients: [{ name: "Üzemeltető Ubul", email: "uzem@partner.hu" }],
       subject: "A HJ-2026-009 számú hibajegyet lezártuk.",
+      portalLinkLine: "",
     });
+  });
+
+  it("a mondatot is mutatja, szó szerint, hogy a kezelő lássa, mi kerül a szövege alá; PARTNER_URL nélkül üres", async () => {
+    const t = felallit({ partnerUrl: "https://ticket.example.hu" });
+    const elonezet = await t.service.preview("job-1");
+    assert.equal(
+      elonezet?.kind === "send" ? elonezet.portalLinkLine : null,
+      "A hibajegy a partnerportálon is megnézhető: https://ticket.example.hu/hibajegyek/job-1",
+    );
+    // az előnézet nem ír nyomot és nem küld
+    assert.deepEqual(
+      [t.kuldott.length, t.nyomok.length, t.naplo.length],
+      [0, 0, 0],
+    );
+  });
+
+  it("amit az előnézet mondata mutat, pontosan az kerül a levél végére", async () => {
+    const t = felallit({ partnerUrl: "https://ticket.example.hu" });
+    const elonezet = await t.service.preview("job-1");
+    const link =
+      elonezet?.kind === "send" ? (elonezet.portalLinkLine ?? "") : "";
+    await t.service.send({
+      serviceJobId: "job-1",
+      message: "Köszönjük.",
+      actorUserId: "user-1",
+      package: t.csomag,
+    });
+    assert.ok(link.length > 0);
+    assert.ok(t.kuldott[0]?.text.endsWith(link));
   });
 
   it("NEM küld levelet, és EGYIK nyomot sem írja", async () => {
