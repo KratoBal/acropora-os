@@ -3158,6 +3158,8 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
       REGI_LINKES("shop.acropora.hu"),
     );
     assert.doesNotMatch(stdout.join(""), /régi-bolt link/i);
+    // a dupla adatbázis mellé a futtató NEM nyúl a globális adatbázishoz: a betöltés meg sem próbálkozik (nincs bukás-sor)
+    assert.doesNotMatch(stderr.join(""), /nem töltődtek be/);
   });
 
   it("a szabályok betöltésének bukása nem állítja le a vetítést: a linkek érintetlenek, és a hiba kimondva", async () => {
