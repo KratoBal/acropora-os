@@ -101,6 +101,8 @@ function fixture(
     existing: { entry: OperationsLogEntryDto; recordedById: string } | null;
     raceWinner: { entry: OperationsLogEntryDto; recordedById: string } | null;
     selectable: string[];
+    /** Van-e MÁS rögzítőtől bejegyzés a csoport-azonosítóval (kártya 1a35e8f3). */
+    groupOther: boolean;
     /** A létrehozott bejegyzés rendellenes-e (a tároló válasza). */
     anomalous: boolean;
     ticketFails: boolean;
@@ -122,6 +124,7 @@ function fixture(
         ? { id: "a1", categoryId: "c1", departmentId: "d1" }
         : over.asset,
     byClientOperationId: async () => over.existing ?? null,
+    groupRecordedByOther: async () => over.groupOther === true,
     assignableIds: async (ids: readonly string[]) =>
       new Set(ids.filter((id) => (over.selectable ?? ["u2"]).includes(id))),
     create: async (write: OperationsLogEntryWrite, actorId: string) => {
@@ -277,6 +280,44 @@ describe("az üzemeltetési napló bejegyzése", () => {
     };
     const result = await fixture({ raceWinner: same }).service.create(
       input(),
+      "u1",
+    );
+    assert.equal(result.created, false);
+  });
+
+  // kártya 1a35e8f3: csoportos rögzítés. MI PIROSIT: ha a csoport-azonosító nem kerül a tárba; ha önálló bejegyzés kap csoport-azonosítót;
+  // ha egy másik felhasználó ugyanazzal az azonosítóval egy idegen csoportba kerülhetne (409); ha az újraküldés (ismert kulcs) a csoport-
+  // ellenőrzés miatt elbukna.
+  it("a csoport-azonosító a bejegyzéssel tárolódik, az önálló bejegyzés null-t kap", async () => {
+    const withGroup = fixture();
+    await withGroup.service.create(input({ groupId: "grp-egy-0001" }), "u1");
+    assert.equal(withGroup.calls.write?.groupId, "grp-egy-0001");
+    const alone = fixture();
+    await alone.service.create(input(), "u1");
+    assert.equal(alone.calls.write?.groupId, null);
+  });
+
+  it("más rögzítő csoport-azonosítójával 409, és nem ír; az újraküldés a csoport-ellenőrzés előtt visszatér", async () => {
+    const taken = fixture({ groupOther: true });
+    await assert.rejects(
+      taken.service.create(input({ groupId: "grp-egy-0001" }), "u1"),
+      ConflictException,
+    );
+    assert.equal(taken.calls.created, 0);
+    // az ismert kulcs újraküldése nem esik a csoport-ellenőrzésbe (a bejegyzés már megvan)
+    const replay = fixture({
+      groupOther: true,
+      existing: {
+        entry: {
+          id: "e1",
+          anomaly: false,
+          serviceJob: null,
+        } as OperationsLogEntryDto,
+        recordedById: "u1",
+      },
+    });
+    const result = await replay.service.create(
+      input({ groupId: "grp-egy-0001" }),
       "u1",
     );
     assert.equal(result.created, false);

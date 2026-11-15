@@ -12,6 +12,7 @@ import {
 } from "./operations-report.js";
 import {
   operationsDurationText,
+  operationsMeterSharedNote,
   operationsMonthTitle,
   operationsNumberText,
   operationsPeriodText,
@@ -541,4 +542,103 @@ test("a rejtett hibajegy a partnernek jegy nélküli, az irodának látszik, és
   assert.equal(internalHidden.assets[0]!.entries[0]!.ticket?.jobNumber, "HJ-1");
   for (const report of [internalHidden, run("PARTNER", false)])
     assert.equal(JSON.stringify(report).includes("hidden"), false);
+});
+
+/*
+  A CSOPORTOS RÖGZÍTÉS (kártya 1a35e8f3): azonos sablonú eszközök egy űrlapról, KÖZÖS vízóra. MI PIROSIT: ha a közös vízóra-különbség a
+  csoport minden eszköz-blokkjának összegébe belekerülne (háromszoros helyszíni vízhasználat); ha az önálló bejegyzés (groupId nélkül)
+  összegzése változna; ha két csoport egymás beszámítását zavarná; ha a csoport nem a legkorábbi bejegyzésén (kezdés, azonosító szerint)
+  számolódna, vagy ha a nem beszámított sor eltűnne (az eszköz előzménye teljes marad); ha a csoport egyetlen tagja (hiányos csoport)
+  kiesne az összegből; ha a megjegyzés önálló vagy beszámított sorra is kiíródna.
+*/
+const grouped = (id: string, assetId: string, groupId: string | null) =>
+  entry(id, "2026-11-12T09:00:00.000Z", {
+    assetId,
+    assetLabel: `${assetId.toUpperCase()} Szűrő`,
+    groupId,
+  });
+
+test("a csoport közös vízórája egyszer számít: a három eszköz közül csak az első blokkja viszi az összeget", () => {
+  const report = buildOperationsReport({
+    month: "2026-11",
+    audience: "INTERNAL",
+    entries: [
+      grouped("e3", "a3", "grp-egy-0001"),
+      grouped("e1", "a1", "grp-egy-0001"),
+      grouped("e2", "a2", "grp-egy-0001"),
+    ],
+    schedules: [],
+    now: NOW,
+  });
+  const byAsset = new Map(report.assets.map((block) => [block.assetId, block]));
+  // azonos kezdés: az azonosító dönt, az e1 a csoport első bejegyzése
+  assert.equal(byAsset.get("a1")!.meterTotal, 12.5);
+  assert.equal(byAsset.get("a2")!.meterTotal, null);
+  assert.equal(byAsset.get("a3")!.meterTotal, null);
+  const total = report.assets.reduce(
+    (sum, block) => sum + (block.meterTotal ?? 0),
+    0,
+  );
+  assert.equal(total, 12.5);
+  // a nem beszámított sor megvan, és a különbség látszik rajta (az eszköz előzménye teljes)
+  const second = byAsset.get("a2")!.entries[0]!;
+  assert.equal(second.meterDifference, 12.5);
+  assert.equal(second.meterCounted, false);
+  assert.equal(second.groupId, "grp-egy-0001");
+  assert.equal(byAsset.get("a1")!.entries[0]!.meterCounted, true);
+});
+
+test("az önálló bejegyzés összegzése változatlan, és két csoport külön számít", () => {
+  const report = buildOperationsReport({
+    month: "2026-11",
+    audience: "INTERNAL",
+    entries: [
+      grouped("e1", "a1", null),
+      grouped("e2", "a1", null),
+      grouped("e3", "a2", "grp-egy-0001"),
+      grouped("e4", "a3", "grp-egy-0001"),
+      grouped("e5", "a4", "grp-ketto-002"),
+      grouped("e6", "a5", "grp-ketto-002"),
+    ],
+    schedules: [],
+    now: NOW,
+  });
+  const byAsset = new Map(report.assets.map((block) => [block.assetId, block]));
+  // két önálló bejegyzés ugyanazon az eszközön: mindkettő számít (25)
+  assert.equal(byAsset.get("a1")!.meterTotal, 25);
+  assert.equal(byAsset.get("a2")!.meterTotal, 12.5);
+  assert.equal(byAsset.get("a3")!.meterTotal, null);
+  assert.equal(byAsset.get("a4")!.meterTotal, 12.5);
+  assert.equal(byAsset.get("a5")!.meterTotal, null);
+  for (const row of byAsset.get("a1")!.entries) {
+    assert.equal(row.meterCounted, true);
+    assert.equal(row.groupId, null);
+  }
+});
+
+test("hiányos csoport (egy tagja érkezett meg): az az egy beszámít", () => {
+  const report = buildOperationsReport({
+    month: "2026-11",
+    audience: "INTERNAL",
+    entries: [grouped("e2", "a2", "grp-egy-0001")],
+    schedules: [],
+    now: NOW,
+  });
+  assert.equal(report.assets[0]!.meterTotal, 12.5);
+  assert.equal(report.assets[0]!.entries[0]!.meterCounted, true);
+});
+
+test("a közös mérés megjegyzése csak a nem beszámított csoport-soron áll", () => {
+  assert.equal(
+    operationsMeterSharedNote({ groupId: "grp-egy-0001", meterCounted: false }),
+    "közös mérés: a csoportban egyszer számít",
+  );
+  assert.equal(
+    operationsMeterSharedNote({ groupId: "grp-egy-0001", meterCounted: true }),
+    null,
+  );
+  assert.equal(
+    operationsMeterSharedNote({ groupId: null, meterCounted: true }),
+    null,
+  );
 });

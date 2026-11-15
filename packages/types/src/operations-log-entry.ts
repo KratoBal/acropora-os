@@ -23,6 +23,8 @@ export const OPERATIONS_ENTRY_LIMITS = {
   /** Egy rögzítés legfeljebb ennyi ideig tarthat (ms): ennél hosszabb általában rossz telefon-óra. */
   maxDurationMs: 24 * 60 * 60 * 1000,
   clientOperationIdPattern: /^[A-Za-z0-9_.:-]{8,128}$/,
+  /** A csoportos rögzítés azonosítója (kártya 1a35e8f3): a telefon adja, egy csoport minden bejegyzésén azonos. */
+  groupIdPattern: /^[A-Za-z0-9_.:-]{8,64}$/,
   /** Egy fénykép mezőhöz legfeljebb ennyi kép tartozhat egy bejegyzésen. */
   photosPerFieldMax: 10,
 } as const;
@@ -32,6 +34,11 @@ export type OperationsEntryValue = number | boolean | string;
 export interface OperationsLogEntryInput {
   /** A rögzítés idempotencia-kulcsa: az újraküldés ugyanazt a bejegyzést adja vissza, nem újat hoz létre. */
   clientOperationId: string;
+  /**
+   * A CSOPORTOS RÖGZÍTÉS azonosítója (kártya 1a35e8f3), ha a bejegyzés egy űrlapról, több azonos sablonú eszközzel együtt jött: a
+   * csoport minden bejegyzésén azonos. Elhagyva a bejegyzés önálló. A csoport tagjait a szerver nem hívja elő: a kimutatás számolja.
+   */
+  groupId?: string;
   templateId: string;
   assetId: string;
   /**
@@ -87,6 +94,8 @@ export interface OperationsLogEntryServiceJobDto {
 export interface OperationsLogEntryDto {
   id: string;
   clientOperationId: string | null;
+  /** A csoportos rögzítés azonosítója; `null`: önálló bejegyzés. */
+  groupId: string | null;
   templateId: string;
   templateName: string;
   frequency: OperationsTaskFrequency;

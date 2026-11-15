@@ -1250,6 +1250,7 @@ export type {
 } from "./operations-report.js";
 export {
   operationsDurationText,
+  operationsMeterSharedNote,
   operationsMonthTitle,
   operationsNumberText,
   operationsPeriodText,
