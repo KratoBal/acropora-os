@@ -203,13 +203,16 @@ export class TeachingOutputService {
     const marked = await this.outputs.markSent({
       contentId,
       id,
+      sourceVersion: row.sourceVersion,
       to: parsed.value.to,
       public: parsed.value.public,
       userId,
       at: this.now(),
     });
     if (!marked)
-      throw new ConflictException("Ez a kimenet időközben ki lett küldve.");
+      throw new ConflictException(
+        "Időközben változott: a kimenet ki lett küldve, vagy a forrás jóváhagyása megváltozott. Töltsd újra.",
+      );
     return this.detail(contentId, id);
   }
 }
