@@ -1,3 +1,4 @@
+import { inflateRawSync } from "node:zlib";
 import PizZip from "pizzip";
 import { SaxesParser } from "saxes";
 import type { TeachingSlideText } from "@acropora/types";
@@ -41,25 +42,63 @@ function xmlEvents(
   parser.write(xml).close();
 }
 
+/** The zip entry fields this reader takes from PizZip's loaded entry. */
+interface LoadedEntry {
+  compressionMethod?: string;
+  getCompressedContent?: () => unknown;
+}
+
+const STORED = "\x00\x00";
+const DEFLATE = "\x08\x00";
+
+function asBytes(content: unknown): Buffer {
+  if (typeof content === "string") return Buffer.from(content, "binary");
+  if (content instanceof Uint8Array) return Buffer.from(content);
+  if (Array.isArray(content)) return Buffer.from(content as number[]);
+  throw new TeachingPptxError("A diasor egy része nem olvasható.");
+}
+
 /**
- * One part of the package as text, refused BEFORE inflating when its declared
- * size is past the limit. The declared size can lie; then the inflater's own
- * length check fails after the fact, and the upload limit (the controller's)
- * bounds what an upload can carry. The uploader is a content manager, not the
- * public.
+ * ONE PART OF THE PACKAGE AS TEXT, INFLATED WITH A BOUND (barracuda on
+ * #2582). PizZip would inflate a part in full and only then compare it with
+ * the size its header declares; a header that lies lets a 20 MB upload grow
+ * into gigabytes inside the API process. So the raw deflate data is taken
+ * from the entry and inflated here with `maxOutputLength`: past the limit
+ * node stops and throws before the memory fills. A stored (uncompressed)
+ * part is no larger than the upload itself.
  */
 function read(zip: PizZip, path: string): string {
   const file = zip.file(path);
   if (!file)
     throw new TeachingPptxError(`A fájlban nincs ${path}: nem diasor.`);
-  const declared = (
-    file as unknown as { _data?: { uncompressedSize?: number } }
-  )._data?.uncompressedSize;
-  if (typeof declared === "number" && declared > TEACHING_PPTX_LIMITS.xmlBytes)
+  const entry = (file as unknown as { _data?: LoadedEntry })._data;
+  if (!entry?.getCompressedContent || entry.compressionMethod === undefined)
+    throw new TeachingPptxError("A diasor egy része nem olvasható.");
+  const raw = asBytes(entry.getCompressedContent());
+  let bytes: Buffer;
+  if (entry.compressionMethod === STORED) bytes = raw;
+  else if (entry.compressionMethod === DEFLATE)
+    try {
+      bytes = inflateRawSync(raw, {
+        maxOutputLength: TEACHING_PPTX_LIMITS.xmlBytes,
+      });
+    } catch (error) {
+      throw new TeachingPptxError(
+        error instanceof RangeError ||
+          (error as { code?: string }).code === "ERR_BUFFER_TOO_LARGE"
+          ? "A diasor egy része túl nagy az összevetéshez."
+          : "A diasor egy része nem bontható ki.",
+      );
+    }
+  else
+    throw new TeachingPptxError(
+      "A diasor egy része ismeretlen tömörítésű: nem .pptx.",
+    );
+  if (bytes.length > TEACHING_PPTX_LIMITS.xmlBytes)
     throw new TeachingPptxError(
       "A diasor egy része túl nagy az összevetéshez.",
     );
-  return file.asText();
+  return bytes.toString("utf8");
 }
 
 /** The slide part paths in the order the presentation shows them. */
