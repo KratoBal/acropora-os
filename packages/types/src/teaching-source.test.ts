@@ -486,7 +486,24 @@ describe("the document size", () => {
     assert.equal(parsed.ok, false);
     assert.match(
       parsed.ok ? "" : parsed.message,
-      /at most 90000 characters together/,
+      /at most 90000 bytes together/,
     );
+  });
+
+  it("counts bytes, not characters: an accented source under the character count is still refused (barracuda on #2578)", () => {
+    // 3 x 15 000 "ő" = 45 000 characters, 90 000 bytes of text alone
+    const accented = input({
+      parts: Array.from({ length: 3 }, (_, i) =>
+        part({ key: `p${i}`, text: "ő".repeat(15_000) }),
+      ),
+    });
+    assert.equal(parseTeachingSourceInput(accented).ok, false);
+    // the same shape in plain letters is half the bytes, and passes
+    const plain = input({
+      parts: Array.from({ length: 3 }, (_, i) =>
+        part({ key: `p${i}`, text: "o".repeat(15_000) }),
+      ),
+    });
+    assert.ok(parseTeachingSourceInput(plain).ok);
   });
 });

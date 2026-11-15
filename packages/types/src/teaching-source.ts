@@ -52,10 +52,13 @@ export const TEACHING_SOURCE_LIMITS = {
   unit: 40,
   form: 200,
   /**
-   * The parts and the table together, as JSON characters. The API takes a
-   * request body of at most 100 kB (the framework's default); a source past
-   * this is refused by name here instead of a bare 413 there. The measured
-   * Akil source is about 14 kB.
+   * The parts and the table together, as UTF-8 BYTES of their JSON. The API
+   * takes a request body of at most 100 kB (the framework's default), counted
+   * in bytes, and an accented letter is two of them (barracuda on #2578: a
+   * character count let an accented source past the body limit). A source
+   * past this is refused by name here instead of a bare 413 there; the header
+   * fields stay well inside the remaining 10 kB. The measured Akil source is
+   * about 14 kB.
    */
   document: 90_000,
 } as const;
@@ -552,6 +555,16 @@ function parsePart(v: unknown, where: string): Check<TeachingPart> {
   };
 }
 
+/** The UTF-8 byte length of a string, without a platform encoder. */
+function utf8Length(value: string): number {
+  let bytes = 0;
+  for (const char of value) {
+    const code = char.codePointAt(0) ?? 0;
+    bytes += code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4;
+  }
+  return bytes;
+}
+
 /**
  * The editor's input, strictly: an unknown field, a bad key, a doubled key or
  * id, an over-long text or a PUBLIC audience without its basis is refused. The
@@ -629,10 +642,10 @@ export function parseTeachingSourceInput(body: unknown): TeachingSourceParse {
     numbers.push(n.value);
   }
 
-  const size = JSON.stringify({ parts, numbers }).length;
+  const size = utf8Length(JSON.stringify({ parts, numbers }));
   if (size > L.document)
     return fail(
-      `the parts and the number table: at most ${L.document} characters together (now ${size}); split the material into two sources`,
+      `the parts and the number table: at most ${L.document} bytes together (now ${size}); split the material into two sources`,
     );
 
   return {
