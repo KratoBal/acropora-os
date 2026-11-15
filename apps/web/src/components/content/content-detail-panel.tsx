@@ -18,6 +18,7 @@ import type {
 } from "@/lib/api/manufacturer-claims";
 
 import { describeContentEvent, describeContentSent } from "./content-history";
+import { ContentResultsPanel } from "./content-results-panel";
 
 /**
  * EGY TÉTEL SZÖVEGE ÉS A BESZÉLGETÉSE, A SOR ALATT.
@@ -219,6 +220,12 @@ export function ContentDetailPanel({ id }: { id: string }) {
           </p>
         </section>
       ) : null}
+
+      <ContentResultsPanel
+        contentId={detail.id}
+        channel={detail.channel}
+        sentAt={detail.sentAt}
+      />
     </div>
   );
 }

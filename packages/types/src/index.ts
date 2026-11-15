@@ -2278,3 +2278,17 @@ export type {
   AttendanceSheetRowKind,
   AttendanceSignedCopy,
 } from "./attendance-sheet.js";
+export {
+  CONTENT_RESULT_FIELDS,
+  CONTENT_RESULT_FIELD_LABELS,
+  CONTENT_RESULT_LIMITS,
+  contentDaypart,
+  contentTrackingUrl,
+} from "./content-results.js";
+export type {
+  ContentDaypart,
+  ContentResultValues,
+  ContentResultWeek,
+  ContentResults,
+  ContentResultsSummary,
+} from "./content-results.js";

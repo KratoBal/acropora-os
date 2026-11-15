@@ -111,6 +111,8 @@ const CONTROLLERS = [
   "src/content/article-image-public.controller.ts",
   // The content calendar (T5.5): the feed behind content.view (S1), the hand-entered events' writes behind content.manage (S2).
   "src/content/calendar/calendar-feed.controller.ts",
+  // The content's results (T5.5 S8): read behind content.view, a week written behind content.manage.
+  "src/content/results/content-results.controller.ts",
   "src/content/calendar/calendar-event.controller.ts",
   // The calendar's dependency template (S4): read behind content.view, written behind content.manage.
   "src/content/calendar/content-template.controller.ts",

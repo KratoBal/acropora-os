@@ -28,6 +28,9 @@ import { CalendarEventController } from "./calendar/calendar-event.controller.js
 import { CalendarEventRepository } from "./calendar/calendar-event.repository.js";
 import { CalendarEventService } from "./calendar/calendar-event.service.js";
 import { CalendarFeedController } from "./calendar/calendar-feed.controller.js";
+import { ContentResultsController } from "./results/content-results.controller.js";
+import { ContentResultsRepository } from "./results/content-results.repository.js";
+import { ContentResultsService } from "./results/content-results.service.js";
 import { CalendarSlotsController } from "./calendar/calendar-slots.controller.js";
 import { CalendarSlotsRepository } from "./calendar/calendar-slots.repository.js";
 import { CalendarSlotsService } from "./calendar/calendar-slots.service.js";
@@ -58,11 +61,14 @@ import { ProductDataService } from "./product-data/product-data.service.js";
     ArticleImagePublicController,
     ProductDataController,
     CalendarFeedController,
+    ContentResultsController,
     CalendarEventController,
     ContentTemplateController,
     CalendarSlotsController,
   ],
   providers: [
+    ContentResultsRepository,
+    ContentResultsService,
     CalendarEventRepository,
     CalendarEventService,
     ContentTemplateRepository,
