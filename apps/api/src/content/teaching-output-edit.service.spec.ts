@@ -20,7 +20,11 @@ import type {
   TeachingOutputEditRow,
 } from "./teaching-output-edit.repository.js";
 import { TeachingOutputEditService } from "./teaching-output-edit.service.js";
-import { renderTeachingPptx } from "./teaching-output-files.js";
+import {
+  renderTeachingNarrationText,
+  renderTeachingPdf,
+  renderTeachingPptx,
+} from "./teaching-output-files.js";
 import {
   readTeachingPptxText,
   TeachingPptxError,
@@ -178,7 +182,11 @@ function setup(
   const repository = {
     output: async (_c: string, id: string) =>
       id === "o1" ? { kind, body } : null,
-    create: async (input: { slides: TeachingSlideText[]; sha256: string }) => {
+    create: async (input: {
+      slides: TeachingSlideText[];
+      text: string | null;
+      sha256: string;
+    }) => {
       created.push(input);
       rows.push({
         id: `e-new-${rows.length + 1}`,
@@ -187,6 +195,7 @@ function setup(
         sizeBytes: 1,
         sha256: input.sha256,
         slides: input.slides,
+        text: input.text,
         uploadedById: "u1",
         uploadedAt: NOW,
         toSource: null,
@@ -245,12 +254,27 @@ describe("TeachingOutputEditService", () => {
       "u1",
     );
     assert.equal(changed.diff.changed, 1);
+    if (changed.diff.kind !== "SLIDES") throw new Error("a slide diff");
     const slide = changed.diff.slides.find((d) => d.change === "CHANGED");
     assert.deepEqual(slide?.removedPoints, ["Várj 4 hetet."]);
     assert.deepEqual(slide?.addedPoints, ["Várj 6 hetet."]);
   });
 
-  it("compares a slide deck only, and only a .pptx", async () => {
+  it("takes each output's own file kind, and refuses the others", async () => {
+    const { service, created } = setup();
+    for (const [file, type] of [
+      [upload(Buffer.from("x"), "diasor.pdf"), BadRequestException],
+      [
+        upload(Buffer.from("x"), "diasor.pptx", "text/plain"),
+        BadRequestException,
+      ],
+      [upload(Buffer.from("nem zip")), BadRequestException],
+    ] as const)
+      await assert.rejects(service.upload("c1", "o1", file, "u1"), type);
+    await assert.rejects(
+      service.upload("c1", "nincs", upload(Buffer.from("x")), "u1"),
+      NotFoundException,
+    );
     await assert.rejects(
       setup("PRINTABLE").service.upload(
         "c1",
@@ -258,31 +282,69 @@ describe("TeachingOutputEditService", () => {
         upload(Buffer.from("x")),
         "u1",
       ),
-      ConflictException,
-    );
-    const { service, created } = setup();
-    await assert.rejects(
-      service.upload("c1", "o1", upload(Buffer.from("x"), "diasor.pdf"), "u1"),
       BadRequestException,
+      "a .pptx to a PDF output",
     );
     await assert.rejects(
-      service.upload(
+      setup("NARRATION").service.upload(
         "c1",
         "o1",
-        upload(Buffer.from("x"), "diasor.pptx", "text/plain"),
+        upload(Buffer.from([0xff, 0xfe, 0x00]), "narracio.txt", "text/plain"),
         "u1",
       ),
       BadRequestException,
-    );
-    await assert.rejects(
-      service.upload("c1", "o1", upload(Buffer.from("nem zip")), "u1"),
-      BadRequestException,
-    );
-    await assert.rejects(
-      service.upload("c1", "nincs", upload(Buffer.from("x")), "u1"),
-      NotFoundException,
+      "no UTF-8",
     );
     assert.equal(created.length, 0);
+  });
+
+  it("an edited PDF: our own reads back unchanged, an edited one names the sentence", async () => {
+    const { service, body } = setup("PRINTABLE");
+    const printable = body as Extract<
+      TeachingOutputBody,
+      { kind: "PRINTABLE" }
+    >;
+    const pdf = async (b: typeof printable) =>
+      upload(await renderTeachingPdf(b), "anyag.pdf", "application/pdf");
+    const same = await service.upload("c1", "o1", await pdf(printable), "u1");
+    assert.equal(same.diff.kind, "TEXT");
+    assert.equal(same.changes, 0);
+
+    const edited = {
+      ...printable,
+      parts: printable.parts.map((p) => ({
+        ...p,
+        paragraphs: ["Várj 6 hetet. Mérd a sót."],
+      })),
+    };
+    const changed = await service.upload("c1", "o1", await pdf(edited), "u1");
+    assert.equal(changed.diff.kind, "TEXT");
+    if (changed.diff.kind !== "TEXT") return;
+    // a heading without a full stop joins the sentence under it, on both sides
+    assert.deepEqual(changed.diff.removed, ["Indulás Várj 4 hetet."]);
+    assert.deepEqual(changed.diff.added, ["Indulás Várj 6 hetet."]);
+  });
+
+  it("an edited narration: the text as generated differs in nothing, a changed sentence is named", async () => {
+    const { service, body } = setup("NARRATION");
+    const text = renderTeachingNarrationText(
+      body as Extract<TeachingOutputBody, { kind: "NARRATION" }>,
+    );
+    const asFile = (t: string) =>
+      upload(Buffer.from(t, "utf8"), "narracio.txt", "text/plain");
+    assert.equal(
+      (await service.upload("c1", "o1", asFile(text), "u1")).changes,
+      0,
+    );
+    const changed = await service.upload(
+      "c1",
+      "o1",
+      asFile(text.replace("Gyártói állítás.", "A gyártó szerint, nem mértük.")),
+      "u1",
+    );
+    if (changed.diff.kind !== "TEXT") throw new Error("a text diff");
+    assert.deepEqual(changed.diff.removed, ["Gyártói állítás."]);
+    assert.deepEqual(changed.diff.added, ["A gyártó szerint, nem mértük."]);
   });
 
   it("decides once; a second decision, or a lost race, is a conflict", async () => {
@@ -318,6 +380,7 @@ describe("TeachingOutputEditService", () => {
         sizeBytes: 1,
         sha256: "h",
         slides: [],
+        text: null,
         uploadedById: "u1",
         uploadedAt: NOW,
         toSource: false,
@@ -342,6 +405,7 @@ describe("TeachingOutputEditService", () => {
           sizeBytes: 1,
           sha256: "h",
           slides: [],
+          text: null,
           uploadedById: "u1",
           uploadedAt: NOW,
           toSource: null,

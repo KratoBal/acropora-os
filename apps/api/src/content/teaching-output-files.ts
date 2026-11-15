@@ -72,6 +72,77 @@ export function teachingFileSlug(title: string): string {
   );
 }
 
+interface PrintableLineStyle {
+  size: number;
+  bold?: boolean;
+  color?: string;
+  indent?: number;
+  gap?: number;
+}
+
+/** One line the PDF draws, in order: the text, its style, and the space above it. */
+export interface TeachingPrintableLine {
+  text: string;
+  style: PrintableLineStyle;
+  before?: number;
+}
+
+/**
+ * THE PRINTABLE TEXT IN THE ORDER THE PDF DRAWS IT (the footer aside). The
+ * renderer draws these lines, and an edited PDF is compared with these same
+ * lines (T5.2, "differs from the source"), so the two can never drift apart.
+ */
+export function teachingPrintableLines(
+  printable: TeachingPrintable,
+): TeachingPrintableLine[] {
+  const { stamp } = printable;
+  const lines: TeachingPrintableLine[] = [];
+  // the space after a number table goes above whatever line comes next
+  let pending = 0;
+  const add = (text: string, style: PrintableLineStyle, before = 0) => {
+    const space = before + pending;
+    pending = 0;
+    lines.push({ text, style, ...(space ? { before: space } : {}) });
+  };
+  // the cover: the source line and the disclaimer stand here, and in the footer
+  add(stamp.title, { size: 22, bold: true, gap: 8 });
+  if (printable.subtitle) add(printable.subtitle, { size: 14, gap: 14 });
+  add(`Forrás: ${stamp.author}`, { size: 11, color: PDF_MUTED });
+  if (stamp.editor)
+    add(`Fordító, szerkesztő: ${stamp.editor}`, { size: 11, color: PDF_MUTED });
+  add(`${stamp.sourceVersion}. verzió, generálva ${stamp.generatedAt}`, {
+    size: 11,
+    color: PDF_MUTED,
+    gap: 14,
+  });
+  if (printable.disclaimer)
+    add(printable.disclaimer, { size: 11, bold: true, gap: 18 });
+  printable.parts.forEach((part, i) => {
+    add(`${i + 1}. ${part.title}`, { size: 15, bold: true, gap: 8 }, 8);
+    for (const p of part.paragraphs) add(p, { size: 11 });
+    for (const sub of part.subparts) {
+      add(sub.title, { size: 12, bold: true, gap: 4 });
+      for (const p of sub.paragraphs) add(p, { size: 11, indent: 12 });
+    }
+    if (part.numbers.length) {
+      add("Számok", { size: 11, bold: true, gap: 2 });
+      part.numbers.forEach((n) =>
+        add(
+          `${n.name}${n.context ? ` (${n.context})` : ""}: ${n.value}${n.open ? ` ${TEACHING_OPEN_MARK}` : ""}`,
+          { size: 10, indent: 12, gap: 2 },
+        ),
+      );
+      pending = 4;
+    }
+    if (part.checklist.length) {
+      add("Ellenőrzőlista", { size: 11, bold: true, gap: 2 });
+      for (const item of part.checklist)
+        add(`• ${item}`, { size: 10, indent: 12, gap: 2 });
+    }
+  });
+  return lines;
+}
+
 export function renderTeachingPdf(
   printable: TeachingPrintable,
 ): Promise<Buffer> {
@@ -87,16 +158,7 @@ export function renderTeachingPdf(
   });
 
   let y = TOP;
-  const write = (
-    text: string,
-    style: {
-      size: number;
-      bold?: boolean;
-      color?: string;
-      indent?: number;
-      gap?: number;
-    },
-  ) => {
+  const write = (text: string, style: PrintableLineStyle) => {
     const x = PDF_LEFT + (style.indent ?? 0);
     const width = PDF_CONTENT_WIDTH - (style.indent ?? 0);
     doc
@@ -111,47 +173,10 @@ export function renderTeachingPdf(
     y += height + (style.gap ?? 6);
   };
 
-  // the cover: the source line and the disclaimer stand here, and in the footer
-  const { stamp } = printable;
-  write(stamp.title, { size: 22, bold: true, gap: 8 });
-  if (printable.subtitle) write(printable.subtitle, { size: 14, gap: 14 });
-  write(`Forrás: ${stamp.author}`, { size: 11, color: PDF_MUTED });
-  if (stamp.editor)
-    write(`Fordító, szerkesztő: ${stamp.editor}`, {
-      size: 11,
-      color: PDF_MUTED,
-    });
-  write(`${stamp.sourceVersion}. verzió, generálva ${stamp.generatedAt}`, {
-    size: 11,
-    color: PDF_MUTED,
-    gap: 14,
-  });
-  if (printable.disclaimer)
-    write(printable.disclaimer, { size: 11, bold: true, gap: 18 });
-
-  printable.parts.forEach((part, i) => {
-    y += 8;
-    write(`${i + 1}. ${part.title}`, { size: 15, bold: true, gap: 8 });
-    for (const p of part.paragraphs) write(p, { size: 11 });
-    for (const sub of part.subparts) {
-      write(sub.title, { size: 12, bold: true, gap: 4 });
-      for (const p of sub.paragraphs) write(p, { size: 11, indent: 12 });
-    }
-    if (part.numbers.length) {
-      write("Számok", { size: 11, bold: true, gap: 2 });
-      for (const n of part.numbers)
-        write(
-          `${n.name}${n.context ? ` (${n.context})` : ""}: ${n.value}${n.open ? ` ${TEACHING_OPEN_MARK}` : ""}`,
-          { size: 10, indent: 12, gap: 2 },
-        );
-      y += 4;
-    }
-    if (part.checklist.length) {
-      write("Ellenőrzőlista", { size: 11, bold: true, gap: 2 });
-      for (const item of part.checklist)
-        write(`• ${item}`, { size: 10, indent: 12, gap: 2 });
-    }
-  });
+  for (const line of teachingPrintableLines(printable)) {
+    y += line.before ?? 0;
+    write(line.text, line.style);
+  }
 
   // the footer on every page, written after the content so the page count is known
   const range = doc.bufferedPageRange();
@@ -168,7 +193,7 @@ export function renderTeachingPdf(
       .fontSize(8)
       .fillColor(PDF_MUTED)
       .text(
-        `${stamp.footer} · ${i - range.start + 1}/${range.count}`,
+        `${printable.stamp.footer} · ${i - range.start + 1}/${range.count}`,
         PDF_LEFT,
         FOOTER_Y,
         { width: PDF_CONTENT_WIDTH, lineBreak: false },

@@ -14,6 +14,8 @@ export interface TeachingOutputEditRow {
   sizeBytes: number;
   sha256: string;
   slides: TeachingSlideText[];
+  /** The text read from an edited PDF or narration; null for a deck. */
+  text: string | null;
   uploadedById: string | null;
   uploadedAt: Date;
   toSource: boolean | null;
@@ -29,6 +31,7 @@ const EDIT_SELECT = {
   sizeBytes: true,
   sha256: true,
   slides: true,
+  text: true,
   uploadedById: true,
   uploadedAt: true,
   toSource: true,
@@ -76,6 +79,7 @@ export class TeachingOutputEditRepository {
     sha256: string;
     bytes: Uint8Array;
     slides: TeachingSlideText[];
+    text: string | null;
     userId: string;
   }): Promise<string> {
     const created = await prisma.teachingOutputEdit.create({
@@ -87,6 +91,7 @@ export class TeachingOutputEditRepository {
         sha256: input.sha256,
         content: Buffer.from(input.bytes),
         slides: input.slides as unknown as Prisma.InputJsonValue,
+        text: input.text,
         uploadedById: input.userId,
       },
       select: { id: true },

@@ -226,6 +226,7 @@ describe(
         sha256: "a".repeat(64),
         bytes: new Uint8Array([0x50, 0x4b, 3, 4]),
         slides: [{ title: "Első rész", points: ["Átírt pont."] }],
+        text: null,
         userId: actor,
       });
       const stored = await edits.get(deck.id, editId);

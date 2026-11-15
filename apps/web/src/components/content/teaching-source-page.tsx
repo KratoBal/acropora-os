@@ -1204,15 +1204,14 @@ export function TeachingSourcePage({ contentId }: { contentId: string }) {
                       </PilotButton>
                     ) : null}
                   </div>
-                  {output.kind === "SLIDES" ? (
-                    <TeachingOutputEdits
-                      token={token}
-                      contentId={contentId}
-                      outputId={output.id}
-                      canManage={canManage}
-                      onChanged={() => void loadOutputs()}
-                    />
-                  ) : null}
+                  <TeachingOutputEdits
+                    token={token}
+                    contentId={contentId}
+                    outputId={output.id}
+                    kind={output.kind}
+                    canManage={canManage}
+                    onChanged={() => void loadOutputs()}
+                  />
                   {sending?.id === output.id ? (
                     <div className="space-y-2">
                       <PilotFormField
