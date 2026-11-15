@@ -1076,10 +1076,11 @@ describe("MedusaProjectionScheduler, az elbukott ár", () => {
   it("egy óránál régebbi ár-kudarc forrás-változás nélkül újrapróbál, CSAK az árat", async () => {
     const ketOraja = new Date(MOST.getTime() - 2 * 60 * 60 * 1000);
     // egy forrás szerint esedékes termék is van a körben, hogy a termék-vetítés
-    // fusson: a próba az, hogy a prod-9 NEM kerül bele
+    // fusson: a próba az, hogy a prod-9 NEM kerül bele. A prod-9 aktív, webshopos
+    // és vetített (az újrapróba csak az árazhatóra szól, 550b80d1)
     const { db, hivasok } = adatbazis(
-      [termek()],
-      [],
+      [termek(), termek({ id: "prod-9" })],
+      [{ entityId: "prod-9", lastSyncedAt: new Date(MOST.getTime() + 1000) }],
       [
         { entityId: "prod-1", externalId: "prod_m1" },
         { entityId: "prod-9", externalId: "prod_m9" },
@@ -1139,6 +1140,102 @@ describe("MedusaProjectionScheduler, az elbukott ár", () => {
     });
     assert.equal(await scheduler.runOnce(), "SKIPPED");
     assert.deepEqual(ar.kapott, []);
+  });
+
+  /*
+    CSAK AZ ÁRAZHATÓ PRÓBÁL ÚJRA (550b80d1; stage 2026-11-15: 15 termék, minden második kör FAILED). MI PIROSIT: az
+    inaktivált, a nem webshopos, a törölt vagy a kötés nélküli termék ára újrapróbál (minden körben ugyanazzal bukna),
+    a kimaradók száma nem látszik a health-ben, vagy a kimaradó sora íródik.
+  */
+  it("az inaktivált, a nem webshopos, a törölt és a kötés nélküli ár-kudarc kimarad, az árazható újrapróbál", async () => {
+    const ketOraja = new Date(
+      MOST.getTime() - 2 * 60 * 60 * 1000,
+    ).toISOString();
+    const kudarc = (entityId: string) => ({
+      entityId,
+      lastSyncedAt: null,
+      metadata: { failedAt: ketOraja },
+    });
+    const { db, hivasok } = adatbazis(
+      [
+        termek({ id: "p-ok" }),
+        termek({ id: "p-inaktiv", isActive: false }),
+        termek({ id: "p-nem-webshop", webshopSellable: false }),
+        termek({ id: "p-kotetlen" }),
+      ],
+      // mind vetítve, a forrásuk nem változott, és a kifutott jelölő (2026-11-09) után:
+      // a termék-vetítésbe egyik sem esedékes, tehát a kimaradást az ár szűrője adja
+      ["p-ok", "p-inaktiv", "p-nem-webshop", "p-kotetlen"].map((entityId) => ({
+        entityId,
+        lastSyncedAt: new Date("2026-11-10T00:00:00.000Z"),
+      })),
+      [
+        { entityId: "p-ok", externalId: "prod_ok" },
+        { entityId: "p-inaktiv", externalId: "prod_in" },
+        { entityId: "p-nem-webshop", externalId: "prod_nw" },
+      ] as never,
+      [],
+      ["p-ok", "p-inaktiv", "p-nem-webshop", "p-kotetlen", "p-torolt"].map(
+        kudarc,
+      ),
+    );
+    const termekVetites = futtato();
+    const ar = arFuttato();
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: termekVetites.run,
+      runPricing: ar.run,
+      environment: BEKAPCSOLVA,
+      logger: naplo().logger,
+      now: () => MOST,
+    });
+    assert.equal(await scheduler.runOnce(), "APPLIED");
+    assert.deepEqual(termekVetites.kapott, []);
+    assert.deepEqual(ar.kapott, [["p-ok"]]);
+    assert.deepEqual(
+      hivasok
+        .filter((h) => h.metodus === "externalReference.upsert")
+        .map(
+          (h) =>
+            (
+              h.args as {
+                where: { system_entityType_entityId: { entityId: string } };
+              }
+            ).where.system_entityType_entityId.entityId,
+        ),
+      ["p-ok"],
+    );
+    const kor = scheduler.allapot().lastRound!;
+    assert.equal(kor.priceRetry, 1);
+    assert.equal(kor.priceRetryDropped, 4);
+    assert.deepEqual(kor.priceFailures, {});
+  });
+
+  it("a kör ár-kudarcai fajtánként a health-ben, cikkszám nélkül", async () => {
+    const { db } = adatbazis([termek(), termek({ id: "prod-2" })], [], [
+      { entityId: "prod-1", externalId: "prod_m1" },
+      { entityId: "prod-2", externalId: "prod_m2" },
+    ] as never);
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: futtato().run,
+      runPricing: async (_ids, out) => {
+        out.failed?.("prod-1", "SKU-1: MEGÁLLT (own-price-missing) üres");
+        out.failed?.("prod-2", "SKU-2: MEGÁLLT (own-price-missing) üres");
+        out.failed?.("prod-2", "SKU-3: variant-not-found");
+        return 1;
+      },
+      environment: BEKAPCSOLVA,
+      logger: naplo().logger,
+      now: () => MOST,
+    });
+    assert.equal(await scheduler.runOnce(), "FAILED");
+    const kudarcok = scheduler.allapot().lastRound!.priceFailures;
+    assert.deepEqual(kudarcok, {
+      "own-price-missing": 2,
+      "variant-not-found": 1,
+    });
+    assert.ok(!JSON.stringify(kudarcok).includes("SKU"));
   });
 });
 
