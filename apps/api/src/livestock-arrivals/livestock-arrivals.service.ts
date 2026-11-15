@@ -18,6 +18,7 @@ import type {
   LivestockArrivalListQueryDto,
   UpdateLivestockArrivalDto,
 } from "./dto/livestock-arrival.dto.js";
+import { followCalendarEvent } from "../content/calendar/calendar-slot-follow.js";
 import {
   LivestockArrivalsRepository,
   type LivestockArrivalWrite,
@@ -64,6 +65,9 @@ export class LivestockArrivalsService {
 
   /** A seam for the tests: the clock. */
   now = (): Date => new Date();
+
+  /** A seam for the tests: the content calendar's follow-up of a moved or cancelled arrival (T5.5 S7). */
+  followCalendar = followCalendarEvent;
 
   async list(
     query: LivestockArrivalListQueryDto,
@@ -112,6 +116,7 @@ export class LivestockArrivalsService {
   async update(
     id: string,
     patch: UpdateLivestockArrivalDto,
+    actorUserId: string | null = null,
   ): Promise<LivestockArrival> {
     const current = await this.repository.get(id);
     if (!current) throw new NotFoundException(NOT_FOUND);
@@ -149,6 +154,24 @@ export class LivestockArrivalsService {
     const updated = await this.repository.update(id, data, current.updatedAt);
     if (updated === "changed") throw new ConflictException(CHANGED);
     if (!updated) throw new NotFoundException(NOT_FOUND);
+    /*
+      THE CONTENT CALENDAR FOLLOWS THE ARRIVAL (T5.5 S7, spec 5.: "pl. az import érkezése csúszik"): the slots the template
+      opened for it move with its day, an approved one steps back to approval, a cancelled arrival tells them it is gone. After
+      every saved edit: the follow-up skips a slot already on its day, so a repeated save heals a failed one.
+    */
+    await this.followCalendar({
+      eventKey: `livestock:${id}`,
+      eventTitle: updated.label,
+      event:
+        updated.status === "CANCELLED"
+          ? null
+          : {
+              title: updated.label,
+              startsOn: updated.expectedOn,
+              endsOn: updated.expectedOn,
+            },
+      actorUserId,
+    });
     return updated;
   }
 

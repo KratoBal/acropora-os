@@ -25,7 +25,7 @@ export interface SlotPlan {
 }
 
 const DAY_MS = 86_400_000;
-const addDays = (day: string, days: number) =>
+export const addDays = (day: string, days: number) =>
   new Date(new Date(`${day}T00:00:00Z`).getTime() + days * DAY_MS)
     .toISOString()
     .slice(0, 10);
