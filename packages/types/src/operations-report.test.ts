@@ -628,17 +628,59 @@ test("hiányos csoport (egy tagja érkezett meg): az az egy beszámít", () => {
   assert.equal(report.assets[0]!.entries[0]!.meterCounted, true);
 });
 
-test("a közös mérés megjegyzése csak a nem beszámított csoport-soron áll", () => {
+test("a közös mérés megjegyzése csak a nem beszámított sorra áll", () => {
   assert.equal(
-    operationsMeterSharedNote({ groupId: "grp-egy-0001", meterCounted: false }),
+    operationsMeterSharedNote({ meterCounted: false }),
     "közös mérés: a csoportban egyszer számít",
   );
+  assert.equal(operationsMeterSharedNote({ meterCounted: true }), null);
+});
+
+test("ha a csoport első tagjának nincs vízóra-különbsége, a következő, amelyiknek van, viszi a csoport mérését", () => {
+  const withoutMeter = entry("e1", "2026-11-12T09:00:00.000Z", {
+    assetId: "a1",
+    groupId: "grp-egy-0001",
+    values: [],
+  });
+  const report = buildOperationsReport({
+    month: "2026-11",
+    audience: "INTERNAL",
+    entries: [
+      withoutMeter,
+      grouped("e2", "a2", "grp-egy-0001"),
+      grouped("e3", "a3", "grp-egy-0001"),
+    ],
+    schedules: [],
+    now: NOW,
+  });
+  const byAsset = new Map(report.assets.map((block) => [block.assetId, block]));
+  assert.equal(byAsset.get("a1")!.meterTotal, null);
+  assert.equal(byAsset.get("a2")!.meterTotal, 12.5);
+  assert.equal(byAsset.get("a3")!.meterTotal, null);
+  // a különbség nélküli sor beszámított (nincs mit számolni), és nem kap megjegyzést
+  assert.equal(byAsset.get("a1")!.entries[0]!.meterCounted, true);
+  assert.equal(byAsset.get("a3")!.entries[0]!.meterCounted, false);
+});
+
+test("a PARTNER nézetben a csoport azonosítója nem szerepel, a megjegyzés és a beszámítás viszont ugyanaz", () => {
+  const report = buildOperationsReport({
+    month: "2026-11",
+    audience: "PARTNER",
+    entries: [
+      grouped("e1", "a1", "grp-egy-0001"),
+      grouped("e2", "a2", "grp-egy-0001"),
+    ],
+    schedules: [],
+    now: NOW,
+  });
+  const rows = report.assets.flatMap((block) => block.entries);
   assert.equal(
-    operationsMeterSharedNote({ groupId: "grp-egy-0001", meterCounted: true }),
-    null,
+    rows.every((row) => row.groupId === null),
+    true,
   );
+  assert.deepEqual(rows.map((row) => row.meterCounted).sort(), [false, true]);
   assert.equal(
-    operationsMeterSharedNote({ groupId: null, meterCounted: true }),
-    null,
+    report.assets.reduce((sum, block) => sum + (block.meterTotal ?? 0), 0),
+    12.5,
   );
 });

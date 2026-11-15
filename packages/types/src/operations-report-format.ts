@@ -72,10 +72,8 @@ export function operationsSignedNumberText(
  * a sorokat összeadná, tudja, miért nem szerepel az összegben. `null`: önálló bejegyzés vagy a csoport beszámított sora.
  */
 export function operationsMeterSharedNote(row: {
-  groupId: string | null;
   meterCounted: boolean;
 }): string | null {
-  return row.groupId && !row.meterCounted
-    ? "közös mérés: a csoportban egyszer számít"
-    : null;
+  // `meterCounted` csak a csoport nem beszámított, különbséget hordozó soránál hamis: a partner nézetében a `groupId` null, a megjegyzés mégis áll
+  return row.meterCounted ? null : "közös mérés: a csoportban egyszer számít";
 }
