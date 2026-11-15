@@ -117,6 +117,7 @@ describe(
     let datedOrder = "";
 
     before(async () => {
+      if (gate.mode === "refuse") throw new Error(gate.reason);
       supplierId = (
         await prisma.supplier.create({
           data: { code: tag, name: tag },
