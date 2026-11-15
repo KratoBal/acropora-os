@@ -53,6 +53,8 @@ describe(
         // the effective permission decides, not the role template alone
         ["granted", null, "SERVICE", true],
         ["revoked", null, "MANAGER", true],
+        // a service account under a person's role (#2599): a machine, never responsible
+        ["service", null, "MANAGER", true],
       ] as const) {
         const user = await prisma.user.create({
           data: {
@@ -61,6 +63,7 @@ describe(
             nickname,
             role,
             isActive,
+            isServiceAccount: key === "service",
           },
           select: { id: true },
         });
@@ -199,7 +202,13 @@ describe(
       // a colleague granted content.view one by one is offered; one whose role has it but who lost it is not
       assert.ok(offered.includes(others.granted!));
       assert.ok(!offered.includes(others.revoked!));
-      for (const id of [others.agent!, others.inactive!, others.revoked!])
+      assert.ok(!offered.includes(others.service!));
+      for (const id of [
+        others.agent!,
+        others.inactive!,
+        others.revoked!,
+        others.service!,
+      ])
         await assert.rejects(
           service.create(
             {
