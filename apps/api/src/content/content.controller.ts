@@ -269,6 +269,16 @@ export class ContentController {
   }
 
   /**
+   * AZ OKTATÓANYAG-FORRÁSOK LISTÁJA (T5.2, spec v2 4. pont): cím, verzió,
+   * felhasználási kör és a kimenetek állapota. Statikus út a `:id` előtt.
+   */
+  @Get("teaching-sources")
+  @RequirePermissions(PERMISSIONS.CONTENT_VIEW)
+  teachingSourceList() {
+    return this.teachingSources.list();
+  }
+
+  /**
    * A LISTA ALAPÉRTELMEZETT NÉZETE: ami RÁM vár. Balázs kérése szó szerint:
    * „minden felkerul ami rank var".
    */

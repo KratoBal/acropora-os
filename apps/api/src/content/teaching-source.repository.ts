@@ -3,7 +3,10 @@ import { Injectable } from "@nestjs/common";
 import { prisma, type Prisma } from "@acropora/database";
 import {
   analyzeTeachingSource,
+  teachingOutputFlags,
+  type TeachingOutputBody,
   type TeachingSourceDetail,
+  type TeachingSourceListItem,
   type TeachingSourceDocument,
   type TeachingSourceInput,
 } from "@acropora/types";
@@ -261,6 +264,82 @@ export class TeachingSourceRepository {
         },
       });
       return { kind: "ok" as const, version, changed: true };
+    });
+  }
+
+  /**
+   * THE SOURCE LIST (spec v2, point 4): every teaching source not discarded,
+   * newest change first, with its outputs counted by state. An output is
+   * stale when the source has a newer version; it differs when an edited
+   * copy was uploaded to it; over the frame when its deck says so.
+   */
+  async list(limit = 200): Promise<TeachingSourceListItem[]> {
+    const items = await prisma.contentItem.findMany({
+      where: { channel: "TEACHING_SOURCE", state: { not: "DISCARDED" } },
+      orderBy: { updatedAt: "desc" },
+      take: limit,
+      select: {
+        id: true,
+        title: true,
+        state: true,
+        updatedAt: true,
+        teachingSource: {
+          select: {
+            version: true,
+            approvedVersion: true,
+            audience: true,
+            document: true,
+            updatedAt: true,
+            outputs: {
+              select: {
+                sourceVersion: true,
+                body: true,
+                sentAt: true,
+                // only the edited copies still waiting for a decision: those
+                // ask for work (whether one differs is measured on reading it)
+                _count: { select: { edits: { where: { decidedAt: null } } } },
+              },
+            },
+          },
+        },
+      },
+    });
+    return items.map((item) => {
+      const source = item.teachingSource;
+      const outputs = source?.outputs ?? [];
+      // the same rules as the output list (teaching-output.service.ts):
+      // stale when the source is newer, approved when its version is the approved one
+      const isStale = (o: { sourceVersion: number }) =>
+        o.sourceVersion < (source?.version ?? 0);
+      const isApproved = (o: { sourceVersion: number }) =>
+        o.sourceVersion === source?.approvedVersion;
+      return {
+        contentId: item.id,
+        title: item.title,
+        state: item.state,
+        version: source?.version ?? null,
+        approvedVersion: source?.approvedVersion ?? null,
+        audience: source?.audience ?? null,
+        openQuestions: source
+          ? analyzeTeachingSource(source.document as unknown as StoredDocument)
+              .openQuestions.length
+          : 0,
+        outputs: {
+          total: outputs.length,
+          current: outputs.filter((o) => !isStale(o) && isApproved(o)).length,
+          stale: outputs.filter(isStale).length,
+          withdrawn: outputs.filter((o) => !isStale(o) && !isApproved(o))
+            .length,
+          awaitingDecision: outputs.filter((o) => o._count.edits > 0).length,
+          overFrame: outputs.filter(
+            (o) =>
+              teachingOutputFlags(o.body as unknown as TeachingOutputBody)
+                .overFrame > 0,
+          ).length,
+          sent: outputs.filter((o) => o.sentAt).length,
+        },
+        updatedAt: (source?.updatedAt ?? item.updatedAt).toISOString(),
+      };
     });
   }
 }
