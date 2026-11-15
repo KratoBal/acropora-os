@@ -123,6 +123,12 @@ const NO_INVOICE_NEEDED_TILE: ReadonlySet<ItemState> = new Set([
   "NO_INVOICE_NEEDED",
   "REFUND_EXPECTED",
 ]);
+// A HÓNAP NEM KÉSZ, amíg gyűjtőszámlára vár valami: nem hiány (nincs a
+// Hiányzik fülön, nincs teendő), de a könyvelőnek sem kész (Balázs, 2026-11-15)
+const MONTH_OPEN_STATES: ReadonlySet<ItemState> = new Set([
+  ...MISSING_STATES,
+  "AWAITING_COLLECTOR",
+]);
 
 /** A tétel-lista lapmérete, ha a kérés nem ad (szerződés: 1..100, 25). */
 const DEFAULT_PAGE_SIZE = 25;
@@ -261,7 +267,7 @@ export class MissingInvoicesService {
           status: statusOf(
             missingAccounts.length,
             computed.accounts.length,
-            count(MISSING_STATES),
+            count(MONTH_OPEN_STATES),
           ),
           missingStatementAccounts: missingAccounts,
         };
@@ -333,7 +339,7 @@ export class MissingInvoicesService {
       status: statusOf(
         missingAccounts.length,
         computed.accounts.length,
-        count((s) => MISSING_STATES.has(s)),
+        count((s) => MONTH_OPEN_STATES.has(s)),
       ),
       accounts: computed.accounts.map((account) => ({
         ...account,
@@ -1735,6 +1741,7 @@ const ACTION: Record<ItemState, MissingInvoiceAction> = {
   NO_INVOICE_NEEDED: "NONE",
   REFUND_EXPECTED: "NONE",
   REFUND_MISSING: "CHASE_REFUND",
+  AWAITING_COLLECTOR: "NONE",
 };
 
 /** A Drive-mappa hivatkozása csak https alakban; fiktív link nem lehet (brief 11). */

@@ -178,7 +178,9 @@ export type ItemState =
   /** Sztornózva (jóváíró van), a visszatérítés még a határidőn belül. */
   | "REFUND_EXPECTED"
   /** Sztornózva, de a visszatérítés a határidőig nem jött meg. */
-  | "REFUND_MISSING";
+  | "REFUND_MISSING"
+  /** Kártyás fizetés, a havi gyűjtőszámlája a határidején belül még jöhet. */
+  | "AWAITING_COLLECTOR";
 
 export interface MatchOutcome {
   state: ItemState;
@@ -1600,8 +1602,71 @@ export function matchMonth(input: MatchMonthInput): Map<string, MatchOutcome> {
         reason: `${outcome.reason}; nincs digitális számla, az eredeti papíron megvan`,
       });
   }
+  markAwaitingCollector(outcomes, input.debits, input.asOf);
   markDoublePaid(outcomes);
   return outcomes;
+}
+
+/** The reason of a payment that simply did not pair (no ambiguity, no named number). */
+const PLAIN_NOT_MATCHED =
+  "a partnertől van számla, de ez a fizetés nem párosodott";
+
+/**
+ * GYŰJTŐSZÁMLÁRA VÁR (Balázs, 2026-11-15, Acropora OS szál: „hogy lehetne azt elérni, hogy a banki
+ * párosodások ne legyenek ennyire gyatrák?”). Mérve aznap az éles lapon: a „van jelölt, mégsem párosodott”
+ * 20 sorból 18 a novemberi Parkl-fizetés volt, egy kártyáé, és mind a december 1-5. között kelő havi
+ * gyűjtőszámlára várt (3b/3c szabály). Ilyen számla még nem létezett, tehát a sor nem párosodhatott, a lap
+ * mégis hiánynak mutatta: a lista háromnegyede zaj volt, és eltemette a valódi hiányt.
+ *
+ * Egy NEM PÁROSODOTT kártyás fizetés akkor vár, ha MIND:
+ *   - a partnere ugyanebben a számításban már párosodott gyűjtőszámlával (egy korábbi hónapja, `group:`
+ *     párosítás): a gyűjtőszámla a partner szokása, nem feltevés;
+ *   - a vásárlás hónapjának gyűjtőszámla-határideje (a következő hónap 5-e) a kivonat utolsó napja
+ *     (`asOf`) után van: ami a határidő után sem jött, az újra hiány;
+ *   - a nem-párosodás oka a sima „nincs pontos összegű számla” (nem kétértelműség, nem elírás-gyanú).
+ * Nincs `asOf`: semmi nem vár (a hívó nem mondta meg, meddig ér a kivonat).
+ */
+function markAwaitingCollector(
+  outcomes: Map<string, MatchOutcome>,
+  debits: readonly MatchableDebit[],
+  asOf: string | undefined,
+): void {
+  if (!asOf) return;
+  const byId = new Map(debits.map((debit) => [debit.id, debit]));
+  const collectorPartners = new Set<string>();
+  for (const [id, outcome] of outcomes) {
+    const name = byId.get(id)?.counterpartyName;
+    if (outcome.pairing?.startsWith("group:") && name)
+      collectorPartners.add(normalizeName(name));
+  }
+  if (!collectorPartners.size) return;
+  for (const debit of debits) {
+    const outcome = outcomes.get(debit.id);
+    if (
+      outcome?.state !== "NOT_MATCHED" ||
+      outcome.matchedBy !== null ||
+      outcome.reason !== PLAIN_NOT_MATCHED ||
+      !debit.counterpartyName ||
+      !collectorPartners.has(normalizeName(debit.counterpartyName))
+    )
+      continue;
+    const card = /^(\d{4})\.(\d{2})\.\d{2}\s+\d{6,}\s/.exec(
+      `${debit.narrative.trim()} `,
+    );
+    if (!card) continue;
+    const next = new Date(`${card[1]}-${card[2]}-01T00:00:00Z`);
+    next.setUTCMonth(next.getUTCMonth() + 1);
+    const due = `${next.toISOString().slice(0, 7)}-${String(MONTHLY_INVOICE_LAST_DAY).padStart(2, "0")}`;
+    // on the due day itself the invoice may still come
+    if (asOf > due) continue;
+    outcomes.set(debit.id, {
+      ...outcome,
+      state: "AWAITING_COLLECTOR",
+      reason:
+        `gyűjtőszámlára vár: a ${card[1]}-${card[2]} havi kártyás fizetések számlája ` +
+        `${due}-ig kel (a partner korábbi hónapja is így párosodott)`,
+    });
+  }
 }
 
 /** A számlaszám összevetési alakja: csak betűk és számjegyek, kisbetűvel. Üres: nincs szám. */

@@ -62,6 +62,13 @@ export const MISSING_INVOICE_ITEM_STATES = [
    * a Nincs számla mellé kerül, hogy ne maradjon csendben.
    */
   "REFUND_MISSING",
+  /**
+   * GYŰJTŐSZÁMLÁRA VÁR (Balázs, 2026-11-15): kártyás fizetés egy olyan
+   * partnernek, akinek a havi gyűjtőszámlája egy korábbi hónapban már
+   * párosodott, és a vásárlás hónapjának számlája a határidején (a következő
+   * hónap 5-e) belül még jöhet. Nem hiány, de a hónap sem kész.
+   */
+  "AWAITING_COLLECTOR",
 ] as const;
 export type MissingInvoiceItemState =
   (typeof MISSING_INVOICE_ITEM_STATES)[number];
@@ -83,6 +90,7 @@ export const MISSING_INVOICE_STATE_LABELS: Readonly<
   NO_INVOICE_NEEDED: "Nem kell számla",
   REFUND_EXPECTED: "Sztornózva, visszatérítés várható",
   REFUND_MISSING: "Visszatérítés elmaradt",
+  AWAITING_COLLECTOR: "Gyűjtőszámlára vár",
 };
 
 export const MISSING_INVOICE_MONTH_STATUSES = [
