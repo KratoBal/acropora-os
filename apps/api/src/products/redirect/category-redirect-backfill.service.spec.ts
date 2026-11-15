@@ -346,6 +346,21 @@ describe("CategoryRedirectBackfillService", () => {
       BadRequestException,
     );
 
+    // egy érvénytelen lista-elem (elgépelés) elutasítva: hibásan nem fut, nem ír
+    await assert.rejects(
+      service(f).run(
+        {
+          paths: ["/sct/111/Eledelek"],
+          form: "current",
+          repoint: true,
+          repointManual: ["/sct/111/Eledelek", "/elgepelt ut"],
+        },
+        "u1",
+      ),
+      BadRequestException,
+    );
+    assert.deepEqual(f.writes, []);
+
     const listaNelkul = await service(f).run(
       { paths: ["/sct/111/Eledelek"], form: "current", repoint: true },
       "u1",

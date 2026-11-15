@@ -15,6 +15,7 @@ import {
   categoryRedirectPlanHash,
   planCategoryRedirectsFromDb,
 } from "./category-redirect-backfill.load.js";
+import { normalizeRedirectPath } from "./redirect-path.js";
 import { lockRedirectWrites } from "./redirect.repository.js";
 
 export const CATEGORY_BACKFILL_DB = Symbol("CATEGORY_BACKFILL_DB");
@@ -81,6 +82,14 @@ export class CategoryRedirectBackfillService {
     if (repointManual.length > 0 && !repoint)
       throw new BadRequestException(
         "repointManual needs repoint: true (the list only widens what the repoint may rewrite)",
+      );
+    // a lista egy ember döntése: egy érvénytelen elemmel (elgépelés) nem fut, hibásan nem megy tovább
+    const invalidManual = repointManual.filter(
+      (p) => normalizeRedirectPath(p) === null,
+    );
+    if (invalidManual.length > 0)
+      throw new BadRequestException(
+        `repointManual has invalid paths: ${invalidManual.map((p) => JSON.stringify(p)).join(", ")}`,
       );
     const medusa = input.medusaCategories?.map((m) => ({
       handle: m.handle,

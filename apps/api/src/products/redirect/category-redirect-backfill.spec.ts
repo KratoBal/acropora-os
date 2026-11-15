@@ -926,6 +926,25 @@ describe("a MANUAL szabály kifejezett engedélylistája", () => {
     );
   });
 
+  it("az érvénytelen lista-elem (üres, szóközös) nem tűnik el: a jelentés változatlan alakban kiírja", async () => {
+    const { report } = await run(["/aramoltatok/aqualight"], existing, {
+      repoint: true,
+      repointManual: ["/aramoltatok/aqualight", "", "/elgepelt ut"],
+    });
+    assert.deepEqual(
+      report.rewritten.map((r) => r.source),
+      ["/aramoltatok/aqualight"],
+    );
+    assert.deepEqual(report.repointManualUnmatched, [
+      '(ervenytelen ut) ""',
+      '(ervenytelen ut) "/elgepelt ut"',
+    ]);
+    assert.match(
+      describeCategoryRedirectBackfill(report, "current"),
+      /engedelylista, nem irt at semmit: \(ervenytelen ut\) "\/elgepelt ut"/,
+    );
+  });
+
   it("repoint nélkül a lista nem hat, és a MANUAL-tól eltérő eredetű szabályra a lista sem", async () => {
     const nemRepoint = await run(["/aramoltatok/aqualight"], existing, {
       repointManual: ["/aramoltatok/aqualight"],

@@ -309,12 +309,14 @@ export async function planCategoryRedirectBackfill(
   } = { form: "current" },
 ): Promise<{ store: MemoryRedirectStore; report: CategoryRedirectReport }> {
   const store = new MemoryRedirectStore(existing);
-  const manualAllowed = new Set(
-    (options.repointManual ?? [])
-      .map((p) => normalizeRedirectPath(p))
-      .filter((p): p is string => p !== null)
-      .map((p) => redirectPathLower(p)),
-  );
+  const manualAllowed = new Set<string>();
+  // az ÉRVÉNYTELEN lista-elem (üres, szóközt tartalmazó, vezérlőkarakteres) nem tűnhet el nyomtalanul: a jelentés változatlan alakban kiírja
+  const manualInvalid: string[] = [];
+  for (const raw of options.repointManual ?? []) {
+    const normalized = normalizeRedirectPath(raw);
+    if (normalized === null) manualInvalid.push(raw);
+    else manualAllowed.add(redirectPathLower(normalized));
+  }
   /** Átírhatja-e a `repoint` ezt a meglévő szabályt: saját eredetű, vagy MANUAL és kifejezetten engedélyezett. */
   const rewritable = (
     rule: RedirectRule | undefined,
@@ -602,9 +604,10 @@ export async function planCategoryRedirectBackfill(
   const rewrittenLower = new Set(
     report.rewritten.map((r) => redirectPathLower(r.source)),
   );
-  report.repointManualUnmatched = [...manualAllowed]
-    .filter((p) => !rewrittenLower.has(p))
-    .sort();
+  report.repointManualUnmatched = [
+    ...[...manualAllowed].filter((p) => !rewrittenLower.has(p)).sort(),
+    ...manualInvalid.map((raw) => `(ervenytelen ut) ${JSON.stringify(raw)}`),
+  ];
   report.invariantViolations = await redirectInvariantViolations(store);
   return { store, report };
 }
