@@ -19,7 +19,15 @@ const QUANTITY = new RegExp(
 );
 
 const toNumber = (text: string) => Number(text.replace(",", "."));
-const fromNumber = (n: number) => String(n).replace(".", ",");
+/**
+ * Never in exponent form: `String(1e-7)` is "1e-7", which the value pattern
+ * would not read back (barracuda on #2581). No grouping either, so "10000"
+ * stays one number; a comma for the decimal point.
+ */
+const fromNumber = (n: number) =>
+  n
+    .toLocaleString("en-US", { useGrouping: false, maximumFractionDigits: 12 })
+    .replace(".", ",");
 
 /** "50", "1,026", "2-4" or "2–4" (a range); null when it is neither. */
 export function parseTeachingValue(text: string): TeachingValue | null {

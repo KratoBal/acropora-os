@@ -37,6 +37,10 @@ const api = vi.hoisted(() => ({
   generateTeachingOutput: vi.fn(),
   markTeachingOutputSent: vi.fn(),
   downloadTeachingOutput: vi.fn(),
+  teachingOutputEdits: vi.fn(),
+  teachingOutputEdit: vi.fn(),
+  uploadTeachingOutputEdit: vi.fn(),
+  decideTeachingOutputEdit: vi.fn(),
 }));
 let role: UserRole = "OWNER";
 
@@ -135,6 +139,8 @@ const output = (
   approved: true,
   overFrame: 0,
   chaptersWithoutNarration: 0,
+  edits: 0,
+  undecidedEdits: 0,
   sent: null,
   ...over,
 });
@@ -145,6 +151,7 @@ beforeEach(() => {
   api.detail.mockResolvedValue(item());
   api.teachingSource.mockResolvedValue(data(stored()));
   api.teachingOutputs.mockResolvedValue([]);
+  api.teachingOutputEdits.mockResolvedValue([]);
 });
 
 describe("the number text fields", () => {
@@ -166,6 +173,12 @@ describe("the number text fields", () => {
     expect(parseTeachingValue("4-2")).toBeNull();
     expect(parseTeachingValue("kb. 4")).toBeNull();
     expect(teachingValueText({ kind: "exact", value: 1.026 })).toBe("1,026");
+    // never in exponent form (barracuda on #2581), and read back
+    expect(teachingValueText({ kind: "exact", value: 1e-7 })).toBe("0,0000001");
+    expect(parseTeachingValue("0,0000001")).toEqual({
+      kind: "exact",
+      value: 1e-7,
+    });
     expect(parseTeachingPairs("35 PSU; 2-3 ppt")).toEqual([
       { value: { kind: "exact", value: 35 }, unit: "PSU" },
       { value: { kind: "range", min: 2, max: 3 }, unit: "ppt" },
@@ -294,5 +307,90 @@ describe("TeachingSourcePage", () => {
         "SLIDES",
       ),
     );
+  });
+
+  it("an edited deck: the upload, the slide that differs, and the decision once", async () => {
+    api.teachingOutputs.mockResolvedValue([
+      output({ id: "o1", edits: 1, undecidedEdits: 1 }),
+    ]);
+    const detail = {
+      id: "e1",
+      outputId: "o1",
+      fileName: "luca.pptx",
+      sizeBytes: 10,
+      sha256: "h",
+      uploadedById: "user-1",
+      uploadedAt: "2026-11-15T09:00:00.000Z",
+      changedSlides: 1,
+      decision: null,
+      diff: {
+        changed: 1,
+        slides: [
+          {
+            position: 2,
+            change: "CHANGED",
+            generated: { title: "Indulás", points: ["Várj 4 hetet."] },
+            edited: { title: "Indulás", points: ["Várj 6 hetet."] },
+            removedPoints: ["Várj 4 hetet."],
+            addedPoints: ["Várj 6 hetet."],
+            titleChanged: false,
+          },
+        ],
+      },
+    };
+    api.teachingOutputEdits.mockResolvedValue([detail]);
+    api.uploadTeachingOutputEdit.mockResolvedValue(detail);
+    api.decideTeachingOutputEdit.mockResolvedValue({
+      ...detail,
+      decision: {
+        toSource: true,
+        note: null,
+        byId: "user-1",
+        at: "2026-11-15T09:05:00.000Z",
+      },
+    });
+    const { container } = render(<TeachingSourcePage contentId="c1" />);
+    expect(
+      await screen.findByText(/eltér a forrástól, 1 döntésre vár/),
+    ).toBeTruthy();
+    const input = container.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement;
+    const file = new File(["x"], "luca.pptx");
+    fireEvent.change(input, { target: { files: [file] } });
+    await waitFor(() =>
+      expect(api.uploadTeachingOutputEdit).toHaveBeenCalledWith(
+        "token-1",
+        "c1",
+        "o1",
+        file,
+      ),
+    );
+    expect(await screen.findByText("Várj 4 hetet.")).toBeTruthy();
+    expect(screen.getByText("Várj 6 hetet.")).toBeTruthy();
+    const toSource = screen.getByRole("button", {
+      name: "A forrásba átvezetendő",
+    }) as HTMLButtonElement;
+    // the upload step still reloads the lists; the buttons wait for it
+    await waitFor(() => expect(toSource.disabled).toBe(false));
+    fireEvent.click(toSource);
+    await waitFor(() =>
+      expect(api.decideTeachingOutputEdit).toHaveBeenCalledWith(
+        "token-1",
+        "c1",
+        "o1",
+        "e1",
+        {
+          toSource: true,
+          note: null,
+        },
+      ),
+    );
+    expect(
+      await screen.findByText(/Döntés: a változás a forrásba átvezetendő/),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "A forrásba átvezetendő" }),
+    ).toBeNull();
   });
 });
