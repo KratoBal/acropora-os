@@ -6,6 +6,8 @@ import { ContentDetailPanel } from "./content-detail-panel";
 const api = vi.hoisted(() => ({ detail: vi.fn() }));
 
 vi.mock("@/lib/api/content", () => ({ contentApi: api }));
+// the results section has its own test (content-results-panel.component.test.tsx)
+vi.mock("./content-results-panel", () => ({ ContentResultsPanel: () => null }));
 vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({
     session: {

@@ -1346,6 +1346,9 @@ export const ANONYMIZATION_REGISTER: Readonly<
     discardReason: "freeText",
     calendarEventKey: "identifier",
   },
+  ContentResultWeek: {
+    enteredById: "identifier",
+  },
   ContentComment: {
     authorId: "identifier",
     body: "freeText",
