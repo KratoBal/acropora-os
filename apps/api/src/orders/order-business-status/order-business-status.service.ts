@@ -56,6 +56,16 @@ export interface ChangeOrderBusinessStatus {
 /// The sole business-status write path. A future carrier callback and the
 /// eventual email dispatcher attach after this method's transaction commits;
 /// neither receives a second way to edit the status.
+///
+/// LEGACY SNAPSHOT, FOR UNAS AND POS ORDERS ONLY (ADR-015). `SalesOrder.businessStatus`
+/// was seeded from the UNAS labels (migration 20260903150000) and belongs to the
+/// orders the OS stores itself. A webshop (Medusa) order is not a SalesOrder here:
+/// its one business status is the shop's `order_business_status`, which the OS reads
+/// and changes through the shop's admin API (`MedusaAdminClient.orderBusinessStatus`
+/// and `transitionBusinessStatus`). The two state machines differ (names and allowed
+/// steps), so never write this one for a Medusa order. The guard in
+/// `order-status-source.spec.ts` fails if a SalesOrder creation site appears that is
+/// not on its list.
 @Injectable()
 export class OrderBusinessStatusService {
   async change(

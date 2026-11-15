@@ -46,6 +46,13 @@ export interface RecordCarrierShipmentEvent {
  * Shared persistence seam for every eventual carrier integration. It accepts
  * carrier status as supplied; no provider API shape or status vocabulary is
  * invented here.
+ *
+ * LEGACY, FOR UNAS AND POS ORDERS ONLY (ADR-015). It changes `SalesOrder.businessStatus`
+ * through `OrderBusinessStatusService`, the OS's own snapshot. A webshop (Medusa)
+ * order's business status is the shop's, so a carrier callback for a Medusa order must
+ * go to the shop's admin API (`MedusaAdminClient.transitionBusinessStatus`, as the
+ * webshop parcel status sync already does), not through this service. As of
+ * 2026-11-15 nothing in the application calls it.
  */
 @Injectable()
 export class CarrierShipmentService {

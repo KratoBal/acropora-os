@@ -763,3 +763,81 @@ számlázásról szól. Nem érinti és nem módosítja: a webshop-rendelések
 read-only UNAS-tükrét (ADR-006, változatlan), a Számlázz.hu bejövő/pénzügyi
 adatkapcsolatot (M8.3, önálló, még nyitott, nem ehhez a munkához kell), és
 a NAV Online Számla egyeztetést (M9).
+
+## ADR-015 – A webshop-rendelés üzleti státuszának egyetlen forrása a webshop; az OS saját mezője UNAS és POS rendelések örökölt pillanatképe
+
+**Dátum:** 2026-11-15
+
+**Kontextus.** Az üzleti rendelésstátusz (a hét állapot: Feldolgozásra vár,
+Visszaigazolva, Készletezés alatt, Kiszállítás, Átvehető, Megrendelés
+lezárva, Sikertelenül lezárt rendelés) mindkét repóban megvan, külön
+modellel és külön migrációval (commerce: `Migration20260902120000`, OS:
+`20260903150000_order_business_status`; a kanban kártya a79f3456,
+2026-09-08). A kártya kérdése az volt, hogy az átálláskor egy rendelésnek
+nem lesz-e két állapota két helyen. A két állapotgép NEM egyezik:
+
+|                                                                                        | commerce (webshop) | OS (`SalesOrder.businessStatus`) |
+| -------------------------------------------------------------------------------------- | ------------------ | -------------------------------- |
+| a szállítás állapota                                                                   | `out_for_delivery` | `SHIPPING`                       |
+| Feldolgozásra vár -> Készletezés alatt közvetlenül                                     | engedett           | nem                              |
+| visszalépés (Visszaigazolva -> Feldolgozásra vár, Készletezés alatt -> Visszaigazolva) | nincs              | van                              |
+| a sikertelenül lezárt rendelés innen folytatható                                       | Készletezés alatt  | Feldolgozásra vár                |
+
+**Mérés a két `main` ágon (OS 2e12f2b15, commerce 4a78ff1d, 2026-11-15,
+forráskódból olvasva):**
+
+- A webshop (Medusa) rendelés **nem `SalesOrder` sor** az OS-ben:
+  `SalesOrder`-t csak az UNAS rendelés-szinkron, a POS-eladás és a demó-adat
+  CLI hoz létre, mind rögzített csatornával (`UNAS`, `POS`). A `MEDUSA`
+  csatornájú `SalesOrder`-t semmi nem készít.
+- A webshop rendelés státuszát az OS élőben a webshop admin végpontján olvassa
+  és váltja (`MedusaAdminClient.orderBusinessStatus`,
+  `transitionBusinessStatus`; `POST /admin/order-business-status/:id`), a
+  „ki nyomta meg" nyomot az `AuditLog` őrzi. A webshop csomag-státusz szinkronja
+  is ezt a végpontot használja.
+- Az OS saját `SalesOrder.businessStatus` mezeje a 2026-09-03-i migrációban
+  töltődött fel az UNAS szövegekből (soronként egy `MIGRATION` esemény). Az
+  egyetlen író, a `CarrierShipmentService`, regisztrált, de az alkalmazásban
+  semmi nem hívja. Az UNAS-szinkron és a POS új rendelése a mező alapértékét
+  (`PENDING_FULFILLMENT`) kapja.
+
+_Stage adat (acrobot lekérdezése, a számok beillesztésre várnak):_ a
+`SalesOrder` darabszáma csatornánként és státuszonként, az
+`OrderBusinessStatusEvent` darabszáma forrásonként az első és az utolsó
+nappal, és hogy van-e `MEDUSA` csatornájú `SalesOrder`.
+
+**Döntés.**
+
+1. **A webshop (Medusa) rendelés üzleti státuszának egyetlen forrása a
+   webshop** (`order_business_status`). Ez ma is így működik; az ADR kimondja.
+   Az OS ezt a webshop admin API-ján keresztül olvassa és váltja, és nem tart
+   róla második másolatot.
+2. **Az OS `SalesOrder.businessStatus` mezeje az OS által tárolt rendelések
+   (UNAS, POS) örökölt pillanatképe**, és ezen a körön belül marad. A két
+   rendeléshalmaz diszjunkt, ezért a két állapotgép nem ütközhet; az eltérésük
+   csak akkor számítana, ha valaki ugyanarra a rendelésre mindkettőbe írna.
+3. **A diszjunktságot forrás-őrző teszt védi**
+   (`apps/api/src/orders/order-business-status/order-status-source.spec.ts`):
+   minden `SalesOrder`-t létrehozó hely egy névvel felsorolt listán áll, és
+   egyik sem ír `MEDUSA` csatornát. Új létrehozási hely a teszten elbukik, és
+   addig nem megy át, amíg valaki nem dönt: UNAS/POS út (a listára kerül), vagy
+   webshop rendelés (akkor új döntés kell, mert két igazság keletkezne).
+4. A két szolgáltatás (`OrderBusinessStatusService`, `CarrierShipmentService`)
+   kommentje jelzi, hogy örökölt és csak UNAS/POS rendelésre való.
+
+**Nincs migráció és nincs viselkedés-változás.**
+
+**Amit ez NEM dönt el (külön, nagyobb kérdések):**
+
+- az OS mező törlése, vagy a két állapotgép összeolvasztása;
+- a ReefClub fogyás-emlékeztető (`reefclub-runout-reminder.service.ts`): csak
+  `SalesOrder` sorokat és azok `OrderBusinessStatusEvent` eseményeit nézi (a
+  „kilépett a boltból" napot a `SHIPPING`, `READY_FOR_PICKUP`, `CLOSED`
+  eseményekből veszi, POS-nál a lezárás idejéből), tehát a webshop
+  rendeléseket nem látja, és az UNAS rendelések is csak a migráció napjáig
+  adnak ilyen eseményt. Hogy a Medusa rendeléseket a webshop státusz-előzményéből
+  hogyan kapja meg, az külön döntés;
+- az UNAS lekapcsolás utáni sorsa az OS mezőnek.
+
+**Hatály.** A webshop-rendelések read-only UNAS-tükrét (ADR-006) és a webshop
+saját átmeneti szabályait (commerce `transitions.ts`) nem érinti.
