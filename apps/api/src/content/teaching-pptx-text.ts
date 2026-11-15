@@ -66,6 +66,12 @@ function asBytes(content: unknown): Buffer {
  * from the entry and inflated here with `maxOutputLength`: past the limit
  * node stops and throws before the memory fills. A stored (uncompressed)
  * part is no larger than the upload itself.
+ *
+ * THE BOUND HOLDS ONLY WHILE LOADING INFLATES NOTHING (barracuda on #2583):
+ * `new PizZip(bytes)` reads the directory and leaves every part compressed
+ * until asked; this reader asks only here. PizZip's own `checkCRC32` option,
+ * or a library that inflates on load, would inflate every part unbounded
+ * before this function runs. The "loading inflates nothing" test guards it.
  */
 function read(zip: PizZip, path: string): string {
   const file = zip.file(path);

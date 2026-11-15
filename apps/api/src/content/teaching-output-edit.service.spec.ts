@@ -123,6 +123,36 @@ describe("readTeachingPptxText", () => {
     );
   });
 
+  it("loading inflates nothing: a corrupt part that is never read does not stop the reader (barracuda on #2583)", async () => {
+    const zip = new PizZip(
+      await renderTeachingPptx(buildTeachingSlides(source, AT)),
+    );
+    const name = "ppt/nem-olvasott.bin";
+    zip.file(name, "x".repeat(10_000));
+    const bytes = Buffer.from(
+      zip.generate({ type: "uint8array", compression: "DEFLATE" }),
+    );
+    // the part's deflate data overwritten with 0xFF: a reserved block type
+    const nameBytes = Buffer.from(name, "latin1");
+    let local = bytes.indexOf(nameBytes);
+    while (local !== -1 && bytes.readUInt32LE(local - 30) !== 0x04034b50)
+      local = bytes.indexOf(nameBytes, local + 1);
+    assert.ok(local !== -1, "the part's local header");
+    const header = local - 30;
+    const start =
+      header +
+      30 +
+      bytes.readUInt16LE(header + 26) +
+      bytes.readUInt16LE(header + 28);
+    bytes.fill(0xff, start, start + bytes.readUInt32LE(header + 18));
+
+    // the control: the corruption is real, reading that part fails
+    assert.throws(() => new PizZip(bytes).file(name)?.asText());
+    // loading does not touch it, and the deck reads as before
+    assert.doesNotThrow(() => new PizZip(bytes));
+    assert.equal(readTeachingPptxText(bytes)[0]?.title, "Az első hat hét");
+  });
+
   it("refuses what is no deck", () => {
     assert.throws(
       () => readTeachingPptxText(new TextEncoder().encode("nem zip")),
