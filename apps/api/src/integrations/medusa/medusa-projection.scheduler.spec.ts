@@ -2254,3 +2254,151 @@ describe("a vetítő sorának állapota kívülről (ca422e92, acrobot 45402)", 
     assert.equal(scheduler.allapot().lastRound!.taken!.general, 1);
   });
 });
+
+/**
+ * A LAPOZOTT ESEDEKESSEG (kartya 550b80d1; merve 2026-11-15 a stage-en). Az altalanos jelolt-lekerdezes eddig a
+ * legutobb modositott `batchSize * 4` termek kozul valasztott: ha az ablak minden termeke naprakesz volt, a kor
+ * jelolt nelkul allt meg, es a mogotte allo esedekes termek SOHA nem kerult be. Egy teljes UNAS-futas pont ezt
+ * csinalja (az ablakot a mar kivitt termekekkel tolti meg).
+ *
+ * A DUPLA ITT KOVETI A `skip`-ET ES A `take`-ET, mert az altalanos `adatbazis` duplaja mindig ugyanazt a listat
+ * adja: egy ilyen dupla a lapozast nem tudna megkulonboztetni az ablaktol, es a teszt akkor is zold lenne, ha a
+ * lapozas hibas.
+ */
+describe("MedusaProjectionScheduler altalanos esedekessege lapozva", () => {
+  const KORE = {
+    ...BEKAPCSOLVA,
+    MEDUSA_PROJECTION_SCHEDULE_BATCH_SIZE: "5",
+  } as NodeJS.ProcessEnv;
+  const ABLAK = 5 * 4;
+
+  type Lapozo = {
+    skip?: number;
+    take?: number;
+    where?: { isActive?: boolean };
+  };
+
+  /** A termekek `updatedAt` szerint csokkenoen, ahogy a lekerdezes rendezi oket; az also: a regi, esedekes termek. */
+  function lapozottDb(naprakeszDarab: number, esedekesDarab: number) {
+    const naprakesz = Array.from({ length: naprakeszDarab }, (_, i) =>
+      termek({
+        id: `friss-${String(i).padStart(3, "0")}`,
+        updatedAt: new Date(MOST.getTime() - i * 1000),
+      }),
+    );
+    const esedekes = Array.from({ length: esedekesDarab }, (_, i) =>
+      termek({
+        id: `regi-${String(i).padStart(3, "0")}`,
+        updatedAt: new Date(REGEN.getTime() + 86_400_000 - i * 1000),
+      }),
+    );
+    const termekek = [...naprakesz, ...esedekes];
+    const lekepezesek = [
+      // naprakesz: az utolso vetites KESOBBI, mint barmelyik forras-idobelyeg
+      ...naprakesz.map((t) => ({
+        entityId: t.id as string,
+        lastSyncedAt: new Date(MOST.getTime() + 60_000),
+      })),
+      // esedekes: az utolso vetites a forras ELOTT volt
+      ...esedekes.map((t) => ({
+        entityId: t.id as string,
+        lastSyncedAt: new Date(REGEN.getTime() - 86_400_000),
+      })),
+    ];
+    const { db, hivasok } = adatbazis(termekek, lekepezesek);
+    const oldalak: (number | undefined)[] = [];
+    (
+      db as unknown as {
+        product: { findMany: (a: Lapozo) => Promise<unknown> };
+      }
+    ).product.findMany = async (args: Lapozo) => {
+      // csak az altalanos jelolt-lekerdezes (aktiv termekek) szamit lapozasnak
+      if (args.where?.isActive === true) oldalak.push(args.skip);
+      const kezdet = args.skip ?? 0;
+      return termekek.slice(kezdet, kezdet + (args.take ?? termekek.length));
+    };
+    return { db, hivasok, oldalak };
+  }
+
+  it("az ablak MOGOTTI esedekes termek is sorra kerul (ez a kalibralt eset: 25 naprakesz termek egy 20-as ablak elott)", async () => {
+    const { db, oldalak } = lapozottDb(25, 1);
+    const { run, kapott } = futtato();
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: run,
+      runPricing: arFuttato().run,
+      environment: KORE,
+      logger: naplo().logger,
+    });
+
+    assert.equal(await scheduler.runOnce(), "APPLIED");
+    assert.deepEqual(kapott, [["regi-000"]]);
+    assert.deepEqual(oldalak, [0, ABLAK]);
+  });
+
+  it("megall, amint osszejon a batchSize: nem olvassa vegig a katalogust", async () => {
+    // 40 esedekes termek, az elso lapon mind: az elso ot kerul a koreb, a masodik lapot nem is kerdezi le
+    const { db, oldalak } = lapozottDb(0, 40);
+    const { run, kapott } = futtato();
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: run,
+      runPricing: arFuttato().run,
+      environment: KORE,
+      logger: naplo().logger,
+    });
+
+    assert.equal(await scheduler.runOnce(), "APPLIED");
+    assert.equal(kapott[0]?.length, 5);
+    assert.deepEqual(oldalak, [0]);
+  });
+
+  it("ha minden termek naprakesz, vegigmegy a lapokon, es SKIPPED-del er veget (a rovid utolso lap allitja meg)", async () => {
+    const { db, oldalak } = lapozottDb(45, 0);
+    const { run, kapott } = futtato();
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: run,
+      runPricing: arFuttato().run,
+      environment: KORE,
+      logger: naplo().logger,
+    });
+
+    assert.equal(await scheduler.runOnce(), "SKIPPED");
+    assert.deepEqual(kapott, []);
+    assert.deepEqual(oldalak, [0, ABLAK, 2 * ABLAK]);
+  });
+
+  it("a felso korlat megallitja a lapozast, ha a lekerdezes sosem er veget (nincs vegtelen ciklus)", async () => {
+    const naprakesz = Array.from({ length: ABLAK }, (_, i) =>
+      termek({ id: `friss-${i}` }),
+    );
+    const { db } = adatbazis(
+      naprakesz,
+      naprakesz.map((t) => ({
+        entityId: t.id as string,
+        lastSyncedAt: new Date(MOST.getTime() + 60_000),
+      })),
+    );
+    let hivasok = 0;
+    // egy hibas lekerdezes, ami minden lapra ugyanazt a teljes lapot adja
+    (
+      db as unknown as {
+        product: { findMany: (a: Lapozo) => Promise<unknown> };
+      }
+    ).product.findMany = async (args: Lapozo) => {
+      if (args.where?.isActive === true) hivasok += 1;
+      return naprakesz;
+    };
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: futtato().run,
+      runPricing: arFuttato().run,
+      environment: KORE,
+      logger: naplo().logger,
+    });
+
+    assert.equal(await scheduler.runOnce(), "SKIPPED");
+    assert.equal(hivasok, 50);
+  });
+});
