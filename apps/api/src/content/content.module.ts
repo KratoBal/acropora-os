@@ -28,6 +28,9 @@ import { CalendarEventController } from "./calendar/calendar-event.controller.js
 import { CalendarEventRepository } from "./calendar/calendar-event.repository.js";
 import { CalendarEventService } from "./calendar/calendar-event.service.js";
 import { CalendarFeedController } from "./calendar/calendar-feed.controller.js";
+import { CalendarGapsController } from "./calendar/calendar-gaps.controller.js";
+import { CalendarGapsRepository } from "./calendar/calendar-gaps.repository.js";
+import { CalendarGapsService } from "./calendar/calendar-gaps.service.js";
 import { ContentResultsController } from "./results/content-results.controller.js";
 import { ContentResultsRepository } from "./results/content-results.repository.js";
 import { ContentResultsService } from "./results/content-results.service.js";
@@ -65,6 +68,7 @@ import { ProductDataService } from "./product-data/product-data.service.js";
     CalendarEventController,
     ContentTemplateController,
     CalendarSlotsController,
+    CalendarGapsController,
   ],
   providers: [
     ContentResultsRepository,
@@ -75,6 +79,8 @@ import { ProductDataService } from "./product-data/product-data.service.js";
     ContentTemplateService,
     CalendarSlotsRepository,
     CalendarSlotsService,
+    CalendarGapsRepository,
+    CalendarGapsService,
     CalendarFeedRepository,
     CalendarFeedService,
     ArticleImageRepository,

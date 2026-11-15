@@ -3,6 +3,8 @@ import type {
   CalendarEventKind,
   CalendarEventResponsibleOption,
   ContentCalendarFeed,
+  ContentCalendarGaps,
+  ContentCalendarSettings,
   ContentCalendarSlotsResult,
   ContentChannel,
   ContentTemplateAnchor,
@@ -120,6 +122,27 @@ export const contentCalendarApi = {
       `/content/calendar/slots/open`,
       token,
       { method: "POST", body: JSON.stringify({ from, to }) },
+    );
+  },
+  /** A következő 14 nap hiányai, ütközései és a hírlevél-gyakoriság (S6). */
+  gaps(token: string, signal?: AbortSignal) {
+    return apiRequest<ContentCalendarGaps>(`/content/calendar/gaps`, token, {
+      signal,
+    });
+  },
+  settings(token: string, signal?: AbortSignal) {
+    return apiRequest<ContentCalendarSettings>(
+      `/content/calendar/settings`,
+      token,
+      { signal },
+    );
+  },
+  /** `null` törli a beállítást: a hírlevél-szabály akkor nem jelez. */
+  saveSettings(token: string, newsletterMinDays: number | null) {
+    return apiRequest<ContentCalendarSettings>(
+      `/content/calendar/settings`,
+      token,
+      { method: "PUT", body: JSON.stringify({ newsletterMinDays }) },
     );
   },
   deleteEvent(token: string, id: string) {

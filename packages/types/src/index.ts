@@ -639,6 +639,8 @@ export type {
   ContentWaitingOnMeResponse,
 } from "./content-management.js";
 export {
+  CONTENT_CALENDAR_GAP_DAYS,
+  CONTENT_CALENDAR_SETTING_LIMITS,
   CONTENT_TEMPLATE_ANCHORS,
   CONTENT_TEMPLATE_EVENT_KINDS,
   CONTENT_TEMPLATE_EVENT_KIND_LABELS,
@@ -671,6 +673,11 @@ export type {
   ContentCalendarSaleEntry,
   ContentCalendarSaleSource,
   ContentCalendarSlotsResult,
+  ContentCalendarGapEvent,
+  ContentCalendarGapSlot,
+  ContentCalendarGaps,
+  ContentCalendarSettings,
+  ContentCalendarSlotStatus,
   LivestockArrivalCalendarState,
 } from "./content-calendar.js";
 export type {

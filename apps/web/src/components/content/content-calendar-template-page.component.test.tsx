@@ -18,6 +18,8 @@ const api = vi.hoisted(() => ({
   template: vi.fn(),
   createTemplateRule: vi.fn(),
   updateTemplateRule: vi.fn(),
+  settings: vi.fn(),
+  saveSettings: vi.fn(),
 }));
 vi.mock("@/lib/api/content-calendar", () => ({ contentCalendarApi: api }));
 const auth = vi.hoisted(() => ({ user: {} as Partial<AuthenticatedUser> }));
@@ -75,6 +77,8 @@ beforeEach(() => {
   api.template.mockClear();
   api.updateTemplateRule.mockClear();
   api.createTemplateRule.mockClear();
+  api.saveSettings.mockClear();
+  api.settings.mockResolvedValue({ newsletterMinDays: null, updatedAt: null });
 });
 
 describe("templateTimingLabel", () => {
@@ -189,6 +193,33 @@ describe("ContentCalendarTemplatePage", () => {
     await screen.findByText("Előjegyzés-felhívás");
     expect(screen.queryByRole("button", { name: /szerkesztése/ })).toBeNull();
     expect(screen.queryByRole("button", { name: "Új sor" })).toBeNull();
+  });
+
+  it("the newsletter frequency says when it is not set, and saves a number or clears with an empty field", async () => {
+    api.template.mockResolvedValue(SEEDED);
+    api.saveSettings.mockResolvedValue({
+      newsletterMinDays: 7,
+      updatedAt: "2026-11-15T11:00:00.000Z",
+    });
+    render(<ContentCalendarTemplatePage />);
+    expect(await screen.findByText(/Nincs beállítva/)).toBeTruthy();
+    fireEvent.change(
+      screen.getByLabelText("Legalább ennyi nap két hírlevél között"),
+      { target: { value: "7" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Gyakoriság mentése" }));
+    expect(
+      await screen.findByText("Két hírlevél között legalább 7 nap."),
+    ).toBeTruthy();
+    expect(api.saveSettings).toHaveBeenCalledWith("token-1", 7);
+    fireEvent.change(
+      screen.getByLabelText("Legalább ennyi nap két hírlevél között"),
+      { target: { value: "" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Gyakoriság mentése" }));
+    await waitFor(() =>
+      expect(api.saveSettings).toHaveBeenLastCalledWith("token-1", null),
+    );
   });
 
   it("a failed read is an error, not an empty template", async () => {

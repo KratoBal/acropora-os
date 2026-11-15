@@ -46,13 +46,25 @@ export function templateKindOf(
   }
 }
 
-export function planSlots(
+/**
+ * THE SLOTS THE TEMPLATE EXPECTS for the entries, whatever their day: what S5 opens (minus the past days) and what S6
+ * checks (a past day counts there: a late slot is missing, not forgiven). Rows that cannot have a day are counted.
+ */
+export function expectedSlots(
   entries: readonly ContentCalendarEntry[],
   rules: readonly ContentTemplateRule[],
-  today: string,
-): { slots: SlotPlan[]; skipped: ContentCalendarSlotsResult["skipped"] } {
-  const skipped = { pastDay: 0, openEnded: 0, unknownDay: 0 };
-  const slots: SlotPlan[] = [];
+): {
+  slots: (SlotPlan & {
+    entry: ContentCalendarEntry;
+    rule: ContentTemplateRule;
+  })[];
+  skipped: Omit<ContentCalendarSlotsResult["skipped"], "pastDay">;
+} {
+  const skipped = { openEnded: 0, unknownDay: 0 };
+  const slots: (SlotPlan & {
+    entry: ContentCalendarEntry;
+    rule: ContentTemplateRule;
+  })[] = [];
   for (const entry of entries) {
     const kind = templateKindOf(entry);
     if (!kind) continue;
@@ -67,19 +79,39 @@ export function planSlots(
         skipped.unknownDay += 1;
         continue;
       }
-      const plannedOn = addDays(anchor, rule.offsetDays);
-      if (plannedOn < today) {
-        skipped.pastDay += 1;
-        continue;
-      }
       slots.push({
         eventKey: entry.key,
         ruleId: rule.id,
         title: `${rule.label}: ${entry.title}`,
         channel: rule.channel,
-        plannedOn,
+        plannedOn: addDays(anchor, rule.offsetDays),
+        entry,
+        rule,
       });
     }
   }
   return { slots, skipped };
+}
+
+/** What S5 opens: the expected slots whose day has not passed. */
+export function planSlots(
+  entries: readonly ContentCalendarEntry[],
+  rules: readonly ContentTemplateRule[],
+  today: string,
+): { slots: SlotPlan[]; skipped: ContentCalendarSlotsResult["skipped"] } {
+  const expected = expectedSlots(entries, rules);
+  const slots: SlotPlan[] = [];
+  let pastDay = 0;
+  for (const slot of expected.slots) {
+    if (slot.plannedOn < today) pastDay += 1;
+    else
+      slots.push({
+        eventKey: slot.eventKey,
+        ruleId: slot.ruleId,
+        title: slot.title,
+        channel: slot.channel,
+        plannedOn: slot.plannedOn,
+      });
+  }
+  return { slots, skipped: { pastDay, ...expected.skipped } };
 }
