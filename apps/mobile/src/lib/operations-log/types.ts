@@ -42,6 +42,11 @@ export type OperationsEntryValue = number | boolean | string;
 export interface CreateOperationsEntryInput {
   /** A rögzítés idempotencia-kulcsa: az újraküldés ugyanazt a bejegyzést adja vissza. */
   clientOperationId: string;
+  /**
+   * A CSOPORTOS RÖGZÍTÉS azonosítója (kártya 1a35e8f3): az egy űrlapról, több azonos sablonú eszközzel együtt rögzített bejegyzések mind
+   * ugyanazt hordozzák. Önálló bejegyzésnél hiányzik.
+   */
+  groupId?: string;
   templateId: string;
   assetId: string;
   /** A mezők kulcsai, amelyeket a telefon a rögzítéskor LÁTOTT: a kötelező-ellenőrzés csak ezekre szól. */

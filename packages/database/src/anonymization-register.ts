@@ -1876,6 +1876,8 @@ export const ANONYMIZATION_REGISTER: Readonly<
   // (rendellenesség, belső megjegyzés, szöveg érték) a kollégák saját szavai
   OperationsLogEntry: {
     clientOperationId: "identifier",
+    // a csoportos rögzítés azonosítója (kártya 1a35e8f3): a telefon adja, kulcs, nem személyes adat
+    groupId: "identifier",
     templateName: "business",
     anomalyNote: "freeText",
     internalNote: "freeText",

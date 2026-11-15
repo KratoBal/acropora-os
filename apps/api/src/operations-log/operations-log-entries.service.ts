@@ -140,9 +140,18 @@ export class OperationsLogEntriesService {
       input.participantIds ?? [],
       actorId,
     );
+    // a csoport-azonosítót a telefon adja: egy másik felhasználó ugyanazzal az azonosítóval nem kerülhet egy idegen csoportba
+    if (
+      input.groupId &&
+      (await this.entries.groupRecordedByOther(input.groupId, actorId))
+    )
+      throw new ConflictException(
+        "Ez a csoport-azonosító már egy másik rögzítésé.",
+      );
 
     const write = {
       clientOperationId: input.clientOperationId,
+      groupId: input.groupId ?? null,
       templateId: template.id,
       templateName: template.name,
       frequency: template.frequency,

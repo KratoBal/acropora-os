@@ -103,6 +103,8 @@ const REPORT: OperationsReportResponse = {
             meterAfter: 112.5,
             meterDifference: 12.5,
             meterUnit: "m3",
+            groupId: null,
+            meterCounted: true,
             meterSuspicious: false,
             performers: ["Kovács Béla", "Őri Ágnes"],
             values: [
@@ -124,6 +126,8 @@ const REPORT: OperationsReportResponse = {
             meterAfter: null,
             meterDifference: null,
             meterUnit: null,
+            groupId: null,
+            meterCounted: true,
             meterSuspicious: false,
             performers: ["Kovács Béla"],
             values: [],

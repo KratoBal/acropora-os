@@ -16,6 +16,7 @@ import { isPrismaUniqueConstraintViolation } from "../common/prisma-error.util.j
 const ENTRY_SELECT = {
   id: true,
   clientOperationId: true,
+  groupId: true,
   templateId: true,
   templateName: true,
   frequency: true,
@@ -81,6 +82,8 @@ export interface OperationsLogEntryValueWrite {
 
 export interface OperationsLogEntryWrite {
   clientOperationId: string;
+  /** A csoportos rögzítés azonosítója; `null`: önálló bejegyzés. */
+  groupId: string | null;
   templateId: string;
   templateName: string;
   frequency: OperationsTaskFrequency;
@@ -138,6 +141,7 @@ function toDto(row: EntryRow): OperationsLogEntryDto {
   return {
     id: row.id,
     clientOperationId: row.clientOperationId,
+    groupId: row.groupId,
     templateId: row.templateId,
     templateName: row.templateName,
     frequency: row.frequency,
@@ -199,6 +203,21 @@ export class OperationsLogEntriesRepository {
       select: { id: true },
     });
     return new Set(rows.map((row) => row.id));
+  }
+
+  /**
+   * VAN-E MÁS RÖGZÍTŐTŐL BEJEGYZÉS EZZEL A CSOPORT-AZONOSÍTÓVAL (kártya 1a35e8f3). A csoport-azonosítót a telefon adja, ezért egy másik
+   * felhasználó ugyanazt az azonosítót használva egy idegen csoport kimutatás-számításába kerülhetne: ezt a szolgáltatás elutasítja.
+   */
+  async groupRecordedByOther(
+    groupId: string,
+    actorId: string,
+  ): Promise<boolean> {
+    const other = await prisma.operationsLogEntry.findFirst({
+      where: { groupId, recordedById: { not: actorId } },
+      select: { id: true },
+    });
+    return other !== null;
   }
 
   async byClientOperationId(
@@ -263,6 +282,7 @@ export class OperationsLogEntriesRepository {
       const row = await prisma.operationsLogEntry.create({
         data: {
           clientOperationId: input.clientOperationId,
+          groupId: input.groupId,
           templateId: input.templateId,
           assetId: input.assetId,
           departmentId: input.departmentId,

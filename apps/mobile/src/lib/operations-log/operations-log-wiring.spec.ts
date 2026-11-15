@@ -110,6 +110,26 @@ describe("az üzemeltetési napló bekötése", () => {
     assert.match(start, /pathname: "\/operations-log\/record"/);
   });
 
+  it("a csoportos rögzítés be van kötve: az útvonal be van jegyezve, az eszközlistáról nyílik, jog nélkül kidob, és a közös logikát és a sort használja", () => {
+    const group = read("app/operations-log/group.tsx");
+    const start = read("app/operations-log/index.tsx");
+    assert.match(layout, /name="operations-log\/group"/);
+    assert.match(start, /pathname: "\/operations-log\/group"/);
+    assert.match(start, /toggleGroupSelection\(/);
+    assert.match(
+      group,
+      /if \(!capabilities\?\.operationsLogRecord\) return <Redirect/,
+    );
+    // minden bejegyzés a közös, tesztelt építőn megy át (ugyanaz a validáció), és a sorba állító úton ment
+    assert.match(group, /buildGroupEntries\(\{/);
+    assert.match(group, /connectivity: deviceConnectivity,/);
+    assert.match(group, /enqueueOperationsEntry\(\{/);
+    assert.match(group, /createOperationsEntry\(input\)/);
+    // a csoportos űrlap és az egy eszközös rögzítő UGYANAZT a mezősort használja
+    assert.match(group, /FieldRow/);
+    assert.match(record, /FieldRow/);
+  });
+
   it("a kezdőképernyő katalógusa ugyanazt a visszaesési szabályt követi: csak a hálózati hiba és az 5xx", () => {
     const load = read("lib/operations-log/start-load.ts");
     assert.match(load, /!\(cause instanceof ApiError && cause\.status < 500\)/);

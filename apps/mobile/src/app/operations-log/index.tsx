@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -21,11 +21,14 @@ import {
   assetsInLocation,
   cacheNotice,
   emptyText,
+  groupButtonLabel,
   locationsFromAssets,
   partnersFromAssets,
   startStep,
   templateDecision,
+  toggleGroupSelection,
 } from "@/lib/operations-log/start-picker";
+import { GROUP_MAX_ASSETS } from "@/lib/operations-log/group-form";
 import type { ThemeTokens } from "@/lib/theme/tokens";
 import { useAppTheme } from "@/lib/theme/useAppTheme";
 
@@ -44,6 +47,8 @@ export default function OperationsLogStartScreen() {
   const { status, user } = useAuth();
   const { tokens } = useAppTheme();
   const styles = useMemo(() => createStyles(tokens), [tokens]);
+  // az eszközlistán kipipált eszközök a csoportos rögzítéshez (kártya 1a35e8f3); a lépés saját képernyő-példány, tehát a jelölés lépésenként új
+  const [selected, setSelected] = useState<string[]>([]);
   const capabilities = user ? getServiceCapabilities(user) : null;
   const params = useLocalSearchParams<{
     partnerId?: string;
@@ -127,6 +132,8 @@ export default function OperationsLogStartScreen() {
     title: string;
     meta?: string;
     onPress: () => void;
+    /** Az eszköz azonosítója, ha a sor kipipálható a csoportos rögzítéshez (csak az eszközlistán). */
+    selectId?: string;
   };
   let rows: Row[] = [];
   const assets = catalogue.data?.assets ?? [];
@@ -159,6 +166,7 @@ export default function OperationsLogStartScreen() {
     rows = assetsInLocation(assets, params.partnerId!, params.locationId!).map(
       (asset) => ({
         key: asset.id,
+        selectId: asset.id,
         title: asset.name,
         meta: assetMeta(asset),
         onPress: () =>
@@ -231,20 +239,84 @@ export default function OperationsLogStartScreen() {
           <Text style={styles.empty}>{emptyText(step, fromCache)}</Text>
         ) : null}
 
-        {rows.map((row) => (
-          <Pressable
-            key={row.key}
-            accessibilityRole="button"
-            accessibilityLabel={row.title}
-            onPress={row.onPress}
-            style={({ pressed }) => [styles.row, pressed && styles.pressed]}
-          >
-            <View>
-              <Text style={styles.rowTitle}>{row.title}</Text>
-              {row.meta ? <Text style={styles.rowMeta}>{row.meta}</Text> : null}
+        {rows.map((row) => {
+          const checked = row.selectId
+            ? selected.includes(row.selectId)
+            : false;
+          return (
+            <View key={row.key} style={styles.rowLine}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={row.title}
+                onPress={row.onPress}
+                style={({ pressed }) => [
+                  styles.row,
+                  styles.rowGrow,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <View>
+                  <Text style={styles.rowTitle}>{row.title}</Text>
+                  {row.meta ? (
+                    <Text style={styles.rowMeta}>{row.meta}</Text>
+                  ) : null}
+                </View>
+              </Pressable>
+              {row.selectId ? (
+                <Pressable
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked }}
+                  accessibilityLabel={`${row.title}: kijelölés a csoportos rögzítéshez`}
+                  onPress={() =>
+                    setSelected((prev) =>
+                      toggleGroupSelection(
+                        prev,
+                        row.selectId!,
+                        GROUP_MAX_ASSETS,
+                      ),
+                    )
+                  }
+                  style={[styles.check, checked && styles.checkOn]}
+                >
+                  <Text
+                    style={[styles.checkText, checked && styles.checkTextOn]}
+                  >
+                    {checked ? "✓" : ""}
+                  </Text>
+                </Pressable>
+              ) : null}
             </View>
+          );
+        })}
+        {step === "devices" && groupButtonLabel(selected.length) ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() =>
+              router.push({
+                pathname: "/operations-log/group",
+                params: {
+                  assets: JSON.stringify(
+                    selected.map((id) => ({
+                      id,
+                      name: assets.find((asset) => asset.id === id)?.name ?? "",
+                    })),
+                  ),
+                },
+              })
+            }
+            style={styles.groupButton}
+          >
+            <Text style={styles.groupButtonText}>
+              {groupButtonLabel(selected.length)}
+            </Text>
           </Pressable>
-        ))}
+        ) : null}
+        {step === "devices" && rows.length > 1 && selected.length === 0 ? (
+          <Text style={styles.groupHint}>
+            Több azonos sablonú eszközt együtt is rögzíthetsz: jelöld ki őket a
+            jobb oldali négyzettel.
+          </Text>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -269,6 +341,28 @@ function createStyles(t: ThemeTokens) {
       borderRadius: 10,
       fontSize: 12,
     },
+    rowLine: { flexDirection: "row", alignItems: "stretch", gap: 10 },
+    rowGrow: { flex: 1 },
+    check: {
+      width: 48,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: t.border,
+      backgroundColor: t.surface,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    checkOn: { backgroundColor: t.accent, borderColor: t.accent },
+    checkText: { color: t.textPrimary, fontSize: 18, fontWeight: "900" },
+    checkTextOn: { color: t.background },
+    groupButton: {
+      backgroundColor: t.accent,
+      borderRadius: 14,
+      paddingVertical: 14,
+      alignItems: "center",
+    },
+    groupButtonText: { color: t.background, fontSize: 15, fontWeight: "800" },
+    groupHint: { color: t.textMuted, fontSize: 12 },
     row: {
       backgroundColor: t.surface,
       borderColor: t.border,

@@ -18,6 +18,7 @@ import {
   operationsMonthTitle,
   operationsNumberText,
   operationsPeriodText,
+  operationsMeterSharedNote,
   operationsSignedNumberText,
   OPERATIONS_FREQUENCY_LABELS,
   PERMISSIONS,
@@ -461,6 +462,11 @@ const COLUMNS: readonly PilotTableColumn<OperationsReportEntryRow>[] = [
               különbség:{" "}
               {operationsSignedNumberText(row.meterDifference, row.meterUnit)}
               {row.meterSuspicious ? " (ellenőrizendő)" : ""}
+            </div>
+          ) : null}
+          {operationsMeterSharedNote(row) ? (
+            <div className="text-pilot-grey-500">
+              ({operationsMeterSharedNote(row)})
             </div>
           ) : null}
         </div>
