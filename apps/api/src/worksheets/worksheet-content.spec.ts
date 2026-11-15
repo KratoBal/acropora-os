@@ -87,6 +87,16 @@ describe("worksheet content normalisation", () => {
     assert.throws(() => toDateOnly("2026.06.15"));
   });
 
+  // t-20261115-munkalap-datum: a new Date a lehetetlen napot a következő hónapba fordítja
+  it("refuses an impossible day instead of rolling it into the next month", () => {
+    for (const day of ["2026-02-30", "2026-04-31", "2026-02-29T10:00:00.000Z"])
+      assert.throws(() => toDateOnly(day), /WORKSHEET_DATE_INVALID/, day);
+    assert.equal(
+      toDateOnly("2028-02-29")?.toISOString(),
+      "2028-02-29T00:00:00.000Z",
+    );
+  });
+
   it("totals an empty worksheet to zero", () => {
     const normalized = normalizeWorksheetContent(content({ lines: [] }));
     assert.equal(normalized.lines.length, 0);

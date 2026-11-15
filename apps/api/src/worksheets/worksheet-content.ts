@@ -51,6 +51,10 @@ function optionalText(value: string | null | undefined): string | null {
  * A keltezés, a teljesítés és a határidő a dokumentumon dátum, nem időpont.
  * Ha időpontos érték érkezik, a napját tartjuk meg: egy időzóna-eltolás
  * különben egy nappal odébb tolhatná a teljesítést a nyomtatott lapon.
+ *
+ * A LEHETETLEN NAP NEM FORDUL ÁT (t-20261115-munkalap-datum): a `new Date` a
+ * 2026-02-30-at csendben 2026-03-02-nek olvassa, és az a számla alapjára
+ * kerülne. Csak az a nap fogadható el, ami visszaolvasva ugyanaz.
  */
 export function toDateOnly(value: string | null | undefined): Date | null {
   if (!value) return null;
@@ -59,7 +63,11 @@ export function toDateOnly(value: string | null | undefined): Date | null {
     throw new Error("WORKSHEET_DATE_INVALID");
   }
   const parsed = new Date(`${day}T00:00:00.000Z`);
-  if (Number.isNaN(parsed.getTime())) throw new Error("WORKSHEET_DATE_INVALID");
+  if (
+    Number.isNaN(parsed.getTime()) ||
+    parsed.toISOString().slice(0, 10) !== day
+  )
+    throw new Error("WORKSHEET_DATE_INVALID");
   return parsed;
 }
 
