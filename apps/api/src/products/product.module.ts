@@ -55,6 +55,11 @@ import {
   CategoryRedirectBackfillService,
 } from "./redirect/category-redirect-backfill.service.js";
 import { ProductRedirectBackfillController } from "./redirect/product-redirect-backfill.controller.js";
+import { RedirectUndoController } from "./redirect/redirect-undo.controller.js";
+import {
+  REDIRECT_UNDO_DB,
+  RedirectUndoService,
+} from "./redirect/redirect-undo.service.js";
 import {
   PRODUCT_BACKFILL_DB,
   ProductRedirectBackfillService,
@@ -100,6 +105,7 @@ import { CustomerCandidateSource } from "../aquariums/recommendation/customer-ca
     UrlRedirectController,
     CategoryRedirectBackfillController,
     ProductRedirectBackfillController,
+    RedirectUndoController,
   ],
   providers: [
     AttributeSetAdminService,
@@ -137,6 +143,8 @@ import { CustomerCandidateSource } from "../aquariums/recommendation/customer-ca
     { provide: CATEGORY_BACKFILL_DB, useValue: prisma },
     ProductRedirectBackfillService,
     { provide: PRODUCT_BACKFILL_DB, useValue: prisma },
+    RedirectUndoService,
+    { provide: REDIRECT_UNDO_DB, useValue: prisma },
   ],
   exports: [
     ProductService,

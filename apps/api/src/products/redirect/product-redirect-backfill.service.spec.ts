@@ -65,6 +65,7 @@ function fake(
       create: async (a: { data: unknown }) => {
         writes.push("auditLog");
         audit.push(a.data);
+        return { id: "audit-1" };
       },
     },
     $executeRaw: async () => {
@@ -185,6 +186,19 @@ describe("ProductRedirectBackfillService", () => {
     };
     assert.equal(naplo.action, "seo.redirects.product-backfill");
     assert.equal(naplo.metadata.created, 1);
+    // a köteg azonosítója és a változás-nyilvántartás: a visszavonás ebből dolgozik
+    assert.equal(r.batchId, "audit-1");
+    const valtozasok = (
+      naplo.metadata as unknown as {
+        changes: {
+          created: { source: string; destination: string }[];
+          updated: unknown[];
+        };
+      }
+    ).changes;
+    assert.deepEqual(valtozasok.updated, []);
+    assert.equal(valtozasok.created.length, 1);
+    assert.equal(valtozasok.created[0]!.destination, "/hu/termek/uj-termek-1");
   });
 
   it("az elutasítást tartalmazó terv nem íródik (422)", async () => {

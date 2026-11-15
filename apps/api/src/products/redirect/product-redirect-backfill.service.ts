@@ -26,6 +26,8 @@ export interface ProductRedirectBackfillResult {
   report: RedirectBackfillReport;
   /** Az `inspect` címek vizsgálata (csak szárazfutásnál és ha kértek ilyet). */
   inspections: RedirectInspection[];
+  /** Az írás köteg-azonosítója (az AuditLog sora), a visszavonás ezt kéri; csak az írásnál van. */
+  batchId?: string;
 }
 
 type Db = Pick<PrismaClient, "$transaction" | "product" | "urlRedirect">;
@@ -76,7 +78,8 @@ export class ProductRedirectBackfillService {
       if (ujak.length) await tx.urlRedirect.createMany({ data: ujak });
       for (const m of modositasok)
         await tx.urlRedirect.update({ where: { id: m.id }, data: m.data });
-      await tx.auditLog.create({
+      const audit = await tx.auditLog.create({
+        select: { id: true },
         data: {
           userId,
           action: "seo.redirects.product-backfill",
@@ -86,10 +89,18 @@ export class ProductRedirectBackfillService {
             created: ujak.length,
             updated: modositasok.length,
             planHash,
-          } as Prisma.InputJsonValue,
+            // a változások a régi állapottal együtt: a visszavonás (`POST /seo/redirects/undo`) ebből dolgozik
+            changes: store.changes(),
+          } as unknown as Prisma.InputJsonValue,
         },
       });
-      return { applied: true, planHash, report, inspections: [] };
+      return {
+        applied: true,
+        planHash,
+        report,
+        inspections: [],
+        batchId: audit.id,
+      };
     }, TRANSACTION_OPTIONS);
   }
 }

@@ -61,6 +61,7 @@ function fake(
       create: async (a: { data: unknown }) => {
         writes.push("auditLog");
         audit.push(a.data);
+        return { id: "audit-1" };
       },
     },
     $executeRaw: async () => {
@@ -143,6 +144,12 @@ describe("CategoryRedirectBackfillService", () => {
     assert.deepEqual(f.options, [{ timeout: 60_000, maxWait: 10_000 }]);
     assert.deepEqual(f.writes, ["lock", "createMany", "auditLog"]);
     assert.equal(f.created.length, 1);
+    // a köteg azonosítója az AuditLog sora: a visszavonás ezt kéri
+    assert.equal(r.batchId, "audit-1");
+    const made = f.created[0] as {
+      sourcePath: string;
+      destinationPath: string;
+    };
     assert.deepEqual(f.audit[0], {
       userId: "u1",
       action: "seo.redirects.category-backfill",
@@ -156,6 +163,13 @@ describe("CategoryRedirectBackfillService", () => {
         rewritten: 0,
         manualRewritten: [],
         planHash: sz.planHash,
+        // a változások a régi állapottal: itt egy új szabály, forrással és céllal
+        changes: {
+          created: [
+            { source: made.sourcePath, destination: made.destinationPath },
+          ],
+          updated: [],
+        },
       },
     });
   });
@@ -301,6 +315,38 @@ describe("CategoryRedirectBackfillService", () => {
     );
     assert.equal(r.applied, true);
     assert.equal(f.updates.length, 1);
+    // a visszavonás ebből dolgozik: a régi cél és az új is a köteg változásai közt áll
+    const valtozasok = (
+      f.audit[0] as {
+        metadata: {
+          changes: {
+            created: unknown[];
+            updated: {
+              id: string;
+              source: string;
+              from: Record<string, unknown>;
+              to: Record<string, unknown>;
+            }[];
+          };
+        };
+      }
+    ).metadata.changes;
+    assert.equal(valtozasok.created.length, 0);
+    assert.equal(valtozasok.updated.length, 1);
+    assert.equal(valtozasok.updated[0]!.id, "r1");
+    assert.equal(valtozasok.updated[0]!.source, "/sct/111/Eledelek");
+    assert.equal(
+      valtozasok.updated[0]!.from.destinationPath,
+      "/hu/categories/eledelek-termekek",
+    );
+    assert.equal(
+      valtozasok.updated[0]!.from.destinationPathLower,
+      "/hu/categories/eledelek-termekek",
+    );
+    assert.equal(
+      valtozasok.updated[0]!.to.destinationPath,
+      "/hu/categories/eledelek",
+    );
     assert.deepEqual(f.updates[0], {
       where: { id: "r1" },
       data: {

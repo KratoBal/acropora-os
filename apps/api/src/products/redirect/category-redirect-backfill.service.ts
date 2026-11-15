@@ -35,6 +35,8 @@ export interface CategoryRedirectBackfillResult {
   planHash: string;
   form: CategoryHandleForm;
   report: CategoryRedirectReport;
+  /** Az írás köteg-azonosítója (az AuditLog sora), a visszavonás ezt kéri; csak az írásnál van. */
+  batchId?: string;
 }
 
 type Db = Pick<
@@ -145,7 +147,8 @@ export class CategoryRedirectBackfillService {
       if (ujak.length) await tx.urlRedirect.createMany({ data: ujak });
       for (const m of modositasok)
         await tx.urlRedirect.update({ where: { id: m.id }, data: m.data });
-      await tx.auditLog.create({
+      const audit = await tx.auditLog.create({
+        select: { id: true },
         data: {
           userId,
           action: "seo.redirects.category-backfill",
@@ -162,10 +165,12 @@ export class CategoryRedirectBackfillService {
               .filter((r) => r.via === "manual-allowlist")
               .map((r) => r.source),
             planHash,
-          } as Prisma.InputJsonValue,
+            // a változások a régi állapottal együtt: a visszavonás (`POST /seo/redirects/undo`) ebből dolgozik
+            changes: store.changes(),
+          } as unknown as Prisma.InputJsonValue,
         },
       });
-      return { applied: true, planHash, form, report };
+      return { applied: true, planHash, form, report, batchId: audit.id };
     }, TRANSACTION_OPTIONS);
   }
 }

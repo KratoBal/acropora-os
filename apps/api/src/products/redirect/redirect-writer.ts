@@ -17,6 +17,9 @@ export interface RedirectRule {
   /** Mikor és ki hozta létre, ha az olvasó betöltötte (a kategória-backfill riportja ebből mondja meg, hogy tömeges importból vagy kézzel jött). */
   createdAt?: Date | string;
   createdById?: string | null;
+  /** A szabály tárgya, ha az olvasó betöltötte (a visszavonáshoz: a régi érték visszaírható). */
+  entityType?: SlugEntityType | null;
+  entityId?: string | null;
 }
 
 export interface RedirectRuleData {
