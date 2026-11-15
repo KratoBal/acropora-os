@@ -3080,4 +3080,119 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
     /** A zaro sor megnevezi, hogy a mester atkerult. */
     assert.match(stdout.join(""), /1 kép mestere került át/);
   });
+
+  /**
+   * A RÉGI BOLTRA MUTATÓ LEÍRÁS-LINKEK ÁTÍRÁSA A VETÍTÉSKOR (card aaf002d3). MI PIROSIT: a futtató nem a szabályok szerinti
+   * Commerce-címet küldi a boltba; a jóváhagyott szöveget is átírja; a szabályok nélkül (dupla adatbázis, nincs betöltő) a
+   * leírás NEM ugyanaz, mint a mai; a betöltés bukása leállítja a vetítést; az átírás nem látszik a kimeneten.
+   */
+  const REGI_LINKES = (host: string) =>
+    `<p>Lásd: <a href="https://${host}/Valenciennea-bella">Valenciennea</a> és <a href="https://${host}/spg/821031,2630685/Doktorhalak">cikk</a>.</p>`;
+
+  it("a leírás régi-bolt linkje a szabály szerinti Commerce-címre megy ki, a leképezetlen érintetlen, a kimenet megmondja", async () => {
+    const { out, stdout, stderr } = collector();
+    const { db } = adatbazis(
+      termek({ description: REGI_LINKES("shop.acropora.hu") }),
+    );
+    const keresek: { url: string; method: string; body: unknown }[] = [];
+
+    const code = await boltiKorben(() =>
+      runProjectionCli(
+        ["prod-1"],
+        out,
+        provider(environmentSetting),
+        boltiKornyezet,
+        db,
+        boltiFetchTorzzsel(keresek),
+        undefined,
+        async () =>
+          new Map([["/valenciennea-bella", "/hu/termek/valenciennea-bella"]]),
+      ),
+    );
+
+    assert.equal(code, 0, stderr.join("") + stdout.join(""));
+    const letrehozas = keresek.find(
+      (k) => k.url.endsWith("/admin/products") && k.method === "POST",
+    );
+    const leiras = (letrehozas?.body as { description?: string }).description;
+    assert.match(leiras ?? "", /href="\/hu\/termek\/valenciennea-bella"/);
+    // a leképezetlen cikk-link érintetlen
+    assert.match(
+      leiras ?? "",
+      /href="https:\/\/shop\.acropora\.hu\/spg\/821031,2630685\/Doktorhalak"/,
+    );
+    assert.match(
+      stdout.join(""),
+      /régi-bolt link a leírásban: 1 átírva, 1 nem leképezett \(\/spg\/821031,2630685\/Doktorhalak\)/,
+    );
+    assert.match(
+      stdout.join(""),
+      /Régi-bolt linkek a leírásokban: 1 átírva a Commerce-címre, 1 különböző út nem leképezett/,
+    );
+  });
+
+  it("szabályok nélkül (dupla adatbázis, nincs betöltő) a leírás a mai marad: a régi link nem íródik át", async () => {
+    const { out, stdout, stderr } = collector();
+    const { db } = adatbazis(
+      termek({ description: REGI_LINKES("shop.acropora.hu") }),
+    );
+    const keresek: { url: string; method: string; body: unknown }[] = [];
+
+    const code = await boltiKorben(() =>
+      runProjectionCli(
+        ["prod-1"],
+        out,
+        provider(environmentSetting),
+        boltiKornyezet,
+        db,
+        boltiFetchTorzzsel(keresek),
+      ),
+    );
+
+    assert.equal(code, 0, stderr.join("") + stdout.join(""));
+    const letrehozas = keresek.find(
+      (k) => k.url.endsWith("/admin/products") && k.method === "POST",
+    );
+    assert.equal(
+      (letrehozas?.body as { description?: string }).description,
+      REGI_LINKES("shop.acropora.hu"),
+    );
+    assert.doesNotMatch(stdout.join(""), /régi-bolt link/i);
+  });
+
+  it("a szabályok betöltésének bukása nem állítja le a vetítést: a linkek érintetlenek, és a hiba kimondva", async () => {
+    const { out, stdout, stderr } = collector();
+    const { db } = adatbazis(
+      termek({ description: REGI_LINKES("shop.acropora.hu") }),
+    );
+    const keresek: { url: string; method: string; body: unknown }[] = [];
+
+    const code = await boltiKorben(() =>
+      runProjectionCli(
+        ["prod-1"],
+        out,
+        provider(environmentSetting),
+        boltiKornyezet,
+        db,
+        boltiFetchTorzzsel(keresek),
+        undefined,
+        async () => {
+          throw new Error("db down");
+        },
+      ),
+    );
+
+    assert.equal(code, 0, stderr.join("") + stdout.join(""));
+    const letrehozas = keresek.find(
+      (k) => k.url.endsWith("/admin/products") && k.method === "POST",
+    );
+    assert.equal(
+      (letrehozas?.body as { description?: string }).description,
+      REGI_LINKES("shop.acropora.hu"),
+    );
+    assert.match(
+      stderr.join(""),
+      /A régi bolt linkjeinek szabályai nem töltődtek be/,
+    );
+  });
 });

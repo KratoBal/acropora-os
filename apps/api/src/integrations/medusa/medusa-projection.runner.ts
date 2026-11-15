@@ -127,6 +127,11 @@ import {
 } from "./medusa-product-knowledge.service.js";
 import { PrismaWebshopSlugStore } from "../../products/slug/webshop-slug.repository.js";
 import { WebshopSlugService } from "../../products/slug/webshop-slug.service.js";
+import {
+  loadOldShopLinkRules,
+  rewriteOldShopLinks,
+  type OldShopLinkRules,
+} from "./medusa-description-links.js";
 import { copyProductImages } from "./product-image-copier.js";
 import { publishProductImages } from "./product-image-publisher.js";
 import {
@@ -557,6 +562,13 @@ export async function runProjectionCli(
    * adatbázis-dupla mellé a futtató nem nyúl a globális adatbázishoz.
    */
   ensureWebshopSlug?: (productId: string) => Promise<string>,
+  /**
+   * A RÉGI BOLTRA MUTATÓ LEÍRÁS-LINKEK ÁTÍRÁSÁNAK SZABÁLYAI (card aaf002d3): kisbetűs forrás-út -> cél az aktív
+   * átirányítások közül. Megadva ez fut; megadás nélkül a valódi adatbázisból tölt, de CSAK a valódi adatbázissal
+   * (ugyanaz a rend, mint a webshop-slugnál: egy adatbázis-dupla mellé a futtató nem nyúl a globális adatbázishoz).
+   * Ha a betöltés elbukik, a linkek érintetlenek maradnak, és a kimenet kimondja.
+   */
+  loadLinkRules?: () => Promise<OldShopLinkRules>,
 ): Promise<number> {
   const slugKepzes =
     ensureWebshopSlug ??
@@ -566,6 +578,27 @@ export async function runProjectionCli(
             productId,
           )
       : null);
+  const linkSzabalyok =
+    loadLinkRules ??
+    (db === (prisma as unknown as ProjectionDatabase)
+      ? () => loadOldShopLinkRules(prisma)
+      : null);
+  /** `undefined`: még nem töltöttük; `null`: nincs (nincs betöltő, vagy elbukott): a linkek érintetlenek. */
+  let linkSzabalyKeszlet: OldShopLinkRules | null | undefined;
+  const linkSzabalyokMost = async (): Promise<OldShopLinkRules | null> => {
+    if (linkSzabalyKeszlet !== undefined) return linkSzabalyKeszlet;
+    try {
+      linkSzabalyKeszlet = linkSzabalyok ? await linkSzabalyok() : null;
+    } catch {
+      linkSzabalyKeszlet = null;
+      out.stderr(
+        "A régi bolt linkjeinek szabályai nem töltődtek be: a leírás linkjei érintetlenek.\n",
+      );
+    }
+    return linkSzabalyKeszlet;
+  };
+  let linkAtirt = 0;
+  const linkNemLekepezett = new Set<string>();
   if (!productIds.length) {
     out.stderr("Adj meg legalább egy termékazonosítót.\n");
     return 1;
@@ -1620,13 +1653,29 @@ export async function runProjectionCli(
       product.variants,
       env,
     );
+    // a UNAS-leírás régi-bolt linkjei a Commerce-címre (a jóváhagyott termékismeret-szöveget nem érinti)
+    const linkSzabaly = await linkSzabalyokMost();
+    const rovidLink = linkSzabaly
+      ? rewriteOldShopLinks(product.description, linkSzabaly)
+      : null;
+    const hosszuLink = linkSzabaly
+      ? rewriteOldShopLinks(product.descriptionLong, linkSzabaly)
+      : null;
+    const termekLinkAtirt =
+      (rovidLink?.rewritten ?? 0) + (hosszuLink?.rewritten ?? 0);
+    const termekLinkNemLekepezett = [
+      ...(rovidLink?.unmapped ?? []),
+      ...(hosszuLink?.unmapped ?? []),
+    ];
+    linkAtirt += termekLinkAtirt;
+    for (const ut of termekLinkNemLekepezett) linkNemLekepezett.add(ut);
     const outcome = await service!.project(
       {
         id: product.id,
         name: product.name,
         knowledgeCopy: tudasSzoveg,
-        description: product.description,
-        descriptionLong: product.descriptionLong,
+        description: rovidLink ? rovidLink.text : product.description,
+        descriptionLong: hosszuLink ? hosszuLink.text : product.descriptionLong,
         primarySku: product.variants[0]?.sku ?? null,
         /**
          * MIND AZ AKTIV VALTOZAT, es nem csak az elso.
@@ -1794,6 +1843,13 @@ export async function runProjectionCli(
           ? `      nem került rá: ${kimaradt.join(", ")}\n`
           : "") +
         describeKepMasolas(masolas) +
+        (termekLinkAtirt || termekLinkNemLekepezett.length
+          ? `      régi-bolt link a leírásban: ${termekLinkAtirt} átírva` +
+            (termekLinkNemLekepezett.length
+              ? `, ${termekLinkNemLekepezett.length} nem leképezett (${termekLinkNemLekepezett.join(", ")})`
+              : "") +
+            "\n"
+          : "") +
         describeCimValtozas(outcome.cim) +
         (outcome.action !== "created" && outcome.barcodes
           ? describeVariantBarcodes(outcome.barcodes)
@@ -1930,6 +1986,15 @@ export async function runProjectionCli(
       `${tiltottVonalkod} vonalkód maradt ki a vetítési szűrő miatt. ` +
         `Ezek megmért, bizonyíthatóan téves értékek: a kód nem ezé a terméké. ` +
         `A javítás helye a forrás (UNAS); a szűrő addig tartja vissza.\n`,
+    );
+
+  if (linkAtirt || linkNemLekepezett.size)
+    out.stdout(
+      `Régi-bolt linkek a leírásokban: ${linkAtirt} átírva a Commerce-címre` +
+        (linkNemLekepezett.size
+          ? `, ${linkNemLekepezett.size} különböző út nem leképezett (érintetlen)`
+          : "") +
+        ".\n",
     );
 
   if (webshopbolKihagyott)
