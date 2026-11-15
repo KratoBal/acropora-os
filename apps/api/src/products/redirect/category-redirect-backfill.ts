@@ -136,6 +136,7 @@ export interface CategoryRedirectReport {
     source: string;
     candidates: string[];
     fallback?: LegacyVerdict;
+    rule?: RuleOrigin;
   }[];
   /** Nem kategória-szerű út (termék, blog, statikus lap): nem érintjük. */
   skipped: number;
@@ -163,12 +164,24 @@ export type LegacyVerdict =
   | "legacy-multiple"
   | "legacy-found";
 
+/**
+ * EGY MEGLÉVŐ SZABÁLY EREDETE, ahogy a riport kiírja (card f6cb0a51): a cél, az eredet-jelölő, az aktív-e, és KI és MIKOR hozta létre. A
+ * keletkezés ideje és szerzője mondja meg, hogy egy MANUAL szabály tömeges importból jött (egy szerző, egy időablak) vagy kézzel (szétszórva).
+ */
+export interface RuleOrigin {
+  destination: string;
+  reason: string;
+  isActive: boolean;
+  createdAt?: string;
+  createdById?: string | null;
+}
+
 export interface SkippedDetail {
   source: string;
   /** Az ok: nem út, spg/spd lap, statikus lap, vagy hogy a név nem talált kategóriát. */
   why: "not-a-path" | "spg-spd-page" | "static-page" | "no-name-match";
   /** A meglévő szabály ezen az úton (nincs: hiányzik). */
-  rule?: { destination: string; reason: string; isActive: boolean };
+  rule?: RuleOrigin;
   fallback: LegacyVerdict;
 }
 
@@ -386,6 +399,24 @@ export async function planCategoryRedirectBackfill(
   };
   const viaExistingRule = (source: string): CategoryForRedirect[] =>
     legacyLookup(source).categories;
+  /** A meglevo szabaly eredete a riporthoz (nincs szabaly: nincs mezo). */
+  const ruleOrigin = (source: string): { rule?: RuleOrigin } => {
+    const rule = existingBySource.get(redirectPathLower(source));
+    if (!rule) return {};
+    return {
+      rule: {
+        destination: rule.destinationPath,
+        reason: rule.reason ?? "none",
+        isActive: rule.isActive,
+        ...(rule.createdAt !== undefined
+          ? { createdAt: new Date(rule.createdAt).toISOString() }
+          : {}),
+        ...(rule.createdById !== undefined
+          ? { createdById: rule.createdById }
+          : {}),
+      },
+    };
+  };
   /** Miert maradt ki egy ut: ugyanazok a feltetelek, mint a `resolve`-ban, sorrendben. */
   const whySkipped = (source: string): SkippedDetail["why"] => {
     const segs = source.split("/").filter(Boolean).map(szegmens);
@@ -447,20 +478,11 @@ export async function planCategoryRedirectBackfill(
     const found = resolve(source);
     if (found === null) {
       report.skipped += 1;
-      const rule = existingBySource.get(redirectPathLower(source));
       const why = whySkipped(source);
       report.skippedDetails.push({
         source,
         why,
-        ...(rule
-          ? {
-              rule: {
-                destination: rule.destinationPath,
-                reason: rule.reason ?? "none",
-                isActive: rule.isActive,
-              },
-            }
-          : {}),
+        ...ruleOrigin(source),
         fallback:
           why === "no-name-match"
             ? legacyLookup(source).verdict
@@ -483,6 +505,7 @@ export async function planCategoryRedirectBackfill(
           .map((c) => handles.get(c.id) ?? `(nincs Medusa: ${c.name})`)
           .sort(),
         fallback: legacyLookup(source).verdict,
+        ...ruleOrigin(source),
       });
       continue;
     }
@@ -539,6 +562,20 @@ export async function planCategoryRedirectBackfill(
   return { store, report };
 }
 
+/** A szabaly eredete egy sorban: eredet, aktiv-e, keszito es ido (ha az olvaso betoltotte). */
+function describeRuleOrigin(rule: RuleOrigin): string {
+  return [
+    rule.reason,
+    rule.isActive ? "" : "inaktiv",
+    rule.createdById !== undefined
+      ? `keszito: ${rule.createdById ?? "nincs"}`
+      : "",
+    rule.createdAt ? `letrehozva: ${rule.createdAt}` : "",
+  ]
+    .filter(Boolean)
+    .join(", ");
+}
+
 export function describeCategoryRedirectBackfill(
   r: CategoryRedirectReport,
   form: CategoryHandleForm,
@@ -555,11 +592,11 @@ export function describeCategoryRedirectBackfill(
     ...r.noMedusaCategory.map((s) => `  nincs Medusa-kategoria: ${s}`),
     ...r.ambiguous.map(
       (a) =>
-        `  ketertelmu: ${a.source} -> ${a.candidates.join(" | ")}${a.fallback ? ` (tartalek: ${a.fallback})` : ""}`,
+        `  ketertelmu: ${a.source} -> ${a.candidates.join(" | ")}${a.fallback ? ` (tartalek: ${a.fallback})` : ""}${a.rule ? `; szabaly: ${a.rule.destination} (${describeRuleOrigin(a.rule)})` : ""}`,
     ),
     ...r.skippedDetails.map(
       (d) =>
-        `  kihagyva: ${d.source} [${d.why}] szabaly: ${d.rule ? `${d.rule.destination} (${d.rule.reason}${d.rule.isActive ? "" : ", inaktiv"})` : "nincs"}; tartalek: ${d.fallback}`,
+        `  kihagyva: ${d.source} [${d.why}] szabaly: ${d.rule ? `${d.rule.destination} (${describeRuleOrigin(d.rule)})` : "nincs"}; tartalek: ${d.fallback}`,
     ),
     ...r.conflicts.map(
       (c) =>

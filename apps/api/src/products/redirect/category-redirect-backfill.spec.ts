@@ -743,3 +743,86 @@ describe("a kihagyott utak soronkénti oka", () => {
     assert.match(szoveg, /ketertelmu: \/ragasztok .*\(tartalek: no-rule\)/);
   });
 });
+
+/*
+  A SZABALY ERETEDE A RIPORTBAN (card f6cb0a51, a #2597 harmadik szarazfutasa utan: a 21 kategoria-celu ut meglevo szabalya MANUAL, es a
+  riport nem mondta meg, ki es mikor hozta letre). MI PIROSIT: ha a keszito es a letrehozas ideje nem kerul a kihagyott es a ketertelmu
+  utak szabalyahoz; ha a Date nem ISO szovegkent jon vissza (a valasz JSON, a hash a szoveg); ha az olvaso altal be nem toltott mezo
+  `undefined`-kent szivarog a riportba; ha a szoveges riport nem irja ki a keszitot es az idot.
+*/
+describe("a meglévő szabály készítője és ideje a riportban", () => {
+  const fa5: CategoryForRedirect[] = [
+    { id: "k-root", unasId: "1", name: "Termékek", parentId: null },
+    { id: "k-a", unasId: "2", name: "A", parentId: "k-root" },
+    { id: "k-b", unasId: "3", name: "B", parentId: "k-root" },
+    { id: "k-r1", unasId: "4", name: "Ragasztók", parentId: "k-a" },
+    { id: "k-r2", unasId: "5", name: "Ragasztók", parentId: "k-b" },
+  ];
+  const at = new Date("2026-10-02T09:15:30.000Z");
+
+  it("a kihagyott és a kétértelmű út szabálya hordozza a készítőt és az időt (Date ISO szövegként)", async () => {
+    const { report } = await planCategoryRedirectBackfill(
+      ["/ismeretlen-marka", "/ragasztok"],
+      fa5,
+      [
+        {
+          id: "r1",
+          sourcePath: "/ismeretlen-marka",
+          destinationPath: "/hu/categories/x---y",
+          isActive: true,
+          reason: "MANUAL",
+          createdAt: at,
+          createdById: "u-import",
+        },
+        {
+          id: "r2",
+          sourcePath: "/ragasztok",
+          destinationPath: "/hu/categories/ragasztók---a",
+          isActive: true,
+          reason: "MANUAL",
+          createdAt: "2026-10-02T09:15:31.000Z",
+          createdById: null,
+        },
+      ],
+      { form: "current", repoint: true },
+    );
+    assert.deepEqual(report.skippedDetails[0]!.rule, {
+      destination: "/hu/categories/x---y",
+      reason: "MANUAL",
+      isActive: true,
+      createdAt: "2026-10-02T09:15:30.000Z",
+      createdById: "u-import",
+    });
+    assert.equal(report.ambiguous[0]!.rule?.createdById, null);
+    assert.equal(
+      report.ambiguous[0]!.rule?.createdAt,
+      "2026-10-02T09:15:31.000Z",
+    );
+    const szoveg = describeCategoryRedirectBackfill(report, "current");
+    assert.match(
+      szoveg,
+      /kihagyva: \/ismeretlen-marka .*\(MANUAL, keszito: u-import, letrehozva: 2026-10-02T09:15:30.000Z\)/,
+    );
+    assert.match(szoveg, /ketertelmu: \/ragasztok .*keszito: nincs/);
+  });
+
+  it("betöltetlen mező nem szivárog: az olvasó nélküli szabály nem kap createdAt és createdById kulcsot", async () => {
+    const { report } = await planCategoryRedirectBackfill(
+      ["/ismeretlen-marka"],
+      fa5,
+      [
+        {
+          id: "r1",
+          sourcePath: "/ismeretlen-marka",
+          destinationPath: "/hu/categories/x---y",
+          isActive: true,
+          reason: "MANUAL",
+        },
+      ],
+      { form: "current", repoint: true },
+    );
+    const rule = report.skippedDetails[0]!.rule!;
+    assert.equal("createdAt" in rule, false);
+    assert.equal("createdById" in rule, false);
+  });
+});

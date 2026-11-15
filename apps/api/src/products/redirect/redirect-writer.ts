@@ -14,6 +14,9 @@ export interface RedirectRule {
   isActive: boolean;
   /** A szabály eredete, ha az olvasó betöltötte (a kategória-betöltő `repoint` módja csak az `UNAS_CATEGORY` szabályt írja át). */
   reason?: RedirectReason;
+  /** Mikor és ki hozta létre, ha az olvasó betöltötte (a kategória-backfill riportja ebből mondja meg, hogy tömeges importból vagy kézzel jött). */
+  createdAt?: Date | string;
+  createdById?: string | null;
 }
 
 export interface RedirectRuleData {
