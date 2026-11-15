@@ -8427,6 +8427,8 @@ model ContentItem {
   teachingSource TeachingSource?
   /// A gyartoi allitasok, amikre a tetel epul (T5.3, 3. pont): lasd `ContentItemClaim`.
   claimLinks ContentItemClaim[]
+  /// A kiment tétel heti, kézzel felvitt eredménye (T5.5 S8): lásd `ContentResultWeek`.
+  resultWeeks ContentResultWeek[]
 
   /// A TARTALOMNAPTÁR HELYE (T5.5 S5): a naptár-esemény kulcsa (a feed `key`-e: `livestock:<id>`, `event:<id>`,
   /// `sale:...`, `purchase:<rendelés>:<nap>`), és a sablon-sor, ami ezt a helyet nyitotta. Mindkettő üres a kézzel
@@ -8442,6 +8444,28 @@ model ContentItem {
   @@unique([calendarEventKey, templateRuleId])
   @@index([state, plannedFor])
   @@index([channel, state])
+}
+
+/// A SENT ITEM'S NUMBERS FOR ONE WEEK (T5.5 S8, spec 4.), entered by hand until the channels' own statistics are
+/// connected (a separate decision: a new outside access). One row per item and Budapest week (`weekStart` is the
+/// Monday). A number nobody entered is NULL, never 0: "not measured" and "nobody saw it" are different answers.
+/// `enteredById` is only a record: no relation.
+model ContentResultWeek {
+  id          String      @id @default(cuid())
+  contentId   String
+  content     ContentItem @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  weekStart   DateTime    @db.Date
+  reach       Int?
+  reactions   Int?
+  opens       Int?
+  clicks      Int?
+  preorders   Int?
+  orders      Int?
+  enteredById String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@unique([contentId, weekStart])
 }
 
 /// A TARTALOM ÁLLAPOTVÁLTÁSAINAK NAPLÓJA (T5.1, kártya db640e6a; korall specifikációja 7. pont): ki, mikor, melyik
