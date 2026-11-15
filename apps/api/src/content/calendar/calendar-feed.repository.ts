@@ -1,8 +1,13 @@
 import { Injectable } from "@nestjs/common";
 import { prisma } from "@acropora/database";
 
+import {
+  calendarEventDay,
+  responsibleNames,
+} from "./calendar-event.repository.js";
 import type {
   ContentRow,
+  EventRow,
   LivestockRow,
   PurchaseLineRow,
   SaleRow,
@@ -13,8 +18,8 @@ import type { CalendarRange } from "./calendar-range.js";
 const OPEN_ORDER = ["SENT", "PARTIALLY_RECEIVED"] as const;
 
 /**
- * The five reads of the calendar feed (T5.5 S1). Each one cuts to the range in the database; the view maps and
- * groups. Nothing here writes.
+ * The six reads of the calendar feed (T5.5 S1, the events S2). Each one cuts to the range in the database; the view
+ * maps and groups. Nothing here writes.
  */
 @Injectable()
 export class CalendarFeedRepository {
@@ -37,6 +42,47 @@ export class CalendarFeedRepository {
     return rows.flatMap((row) =>
       row.plannedFor ? [{ ...row, plannedFor: row.plannedFor }] : [],
     );
+  }
+
+  /**
+   * The hand-entered events that TOUCH the range: one that starts before it and ends in it is on the calendar too.
+   * Both are date columns, compared with the range's days.
+   */
+  async events(range: CalendarRange): Promise<EventRow[]> {
+    const rows = await prisma.calendarEvent.findMany({
+      where: {
+        startsOn: { lte: range.lastDate },
+        endsOn: { gte: range.firstDate },
+      },
+      select: {
+        id: true,
+        kind: true,
+        title: true,
+        startsOn: true,
+        endsOn: true,
+        location: true,
+        responsibleUserId: true,
+      },
+    });
+    const names = await responsibleNames(
+      rows.flatMap((row) =>
+        row.responsibleUserId ? [row.responsibleUserId] : [],
+      ),
+    );
+    return rows.map((row) => ({
+      id: row.id,
+      kind: row.kind,
+      title: row.title,
+      startsOn: calendarEventDay(row.startsOn),
+      endsOn: calendarEventDay(row.endsOn),
+      location: row.location,
+      responsible: row.responsibleUserId
+        ? {
+            id: row.responsibleUserId,
+            name: names.get(row.responsibleUserId) ?? null,
+          }
+        : null,
+    }));
   }
 
   /** `expectedOn` is a date column: compared with the range's days, not its instants. */

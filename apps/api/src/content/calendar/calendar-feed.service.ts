@@ -11,6 +11,7 @@ import type { ContentCalendarFeed } from "@acropora/types";
 import { CalendarFeedRepository } from "./calendar-feed.repository.js";
 import {
   contentEntry,
+  eventEntry,
   livestockEntry,
   orderEntries,
   purchaseEntries,
@@ -41,13 +42,14 @@ export class CalendarFeedService {
     if ("problem" in range) throw new BadRequestException(range.problem);
     const now = (this.clock ?? (() => new Date()))();
     try {
-      const [content, livestock, purchaseLines, undated, sales] =
+      const [content, livestock, purchaseLines, undated, sales, events] =
         await Promise.all([
           this.repository.content(range),
           this.repository.livestock(range),
           this.repository.purchaseLines(range),
           this.repository.undatedOpenOrders(),
           this.repository.sales(range),
+          this.repository.events(range),
         ]);
       return {
         queriedAt: now.toISOString(),
@@ -58,6 +60,7 @@ export class CalendarFeedService {
           ...livestock.map(livestockEntry),
           ...purchaseEntries(purchaseLines),
           ...saleEntries(sales),
+          ...events.map(eventEntry),
         ]),
         withoutDay: { purchaseOrders: undated },
       };
