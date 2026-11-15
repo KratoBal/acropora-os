@@ -680,6 +680,16 @@ describe("a kihagyott utak soronkénti oka", () => {
     assert.equal((await detail("/ismeretlen-marka", [])).why, "no-name-match");
   });
 
+  it("a tartalékot csak a névvel nem talált út kérdezi: spg/spd és statikus lapnál nem megkérdezett", async () => {
+    // a szabály létezik és érvényes, mégsem kérdezzük: az út a névtől függetlenül kimaradt
+    const rule = szabaly("/spg/1/blog", "/hu/categories/valami---szulo");
+    const spg = await detail("/spg/1/blog", [rule]);
+    assert.equal(spg.fallback, "not-consulted");
+    assert.equal(spg.rule?.destination, "/hu/categories/valami---szulo");
+    const php = await detail("/shop_help.php", []);
+    assert.equal(php.fallback, "not-consulted");
+  });
+
   it("szabály nélkül: nincs szabály, és a tartalék ezt mondja", async () => {
     const d = await detail("/ismeretlen-marka", []);
     assert.equal(d.rule, undefined);

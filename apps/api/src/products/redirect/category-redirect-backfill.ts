@@ -153,6 +153,8 @@ export interface CategoryRedirectReport {
 
 /** Miért nem döntött a meglévő szabály régi kezelője (vagy hogy döntött). */
 export type LegacyVerdict =
+  /** A tartalékot nem kérdeztük meg: az út a névtől függetlenül kimaradt (nem út, spg/spd lap, statikus lap). */
+  | "not-consulted"
   | "no-rule"
   | "rule-inactive"
   | `rule-reason-${string}`
@@ -446,9 +448,10 @@ export async function planCategoryRedirectBackfill(
     if (found === null) {
       report.skipped += 1;
       const rule = existingBySource.get(redirectPathLower(source));
+      const why = whySkipped(source);
       report.skippedDetails.push({
         source,
-        why: whySkipped(source),
+        why,
         ...(rule
           ? {
               rule: {
@@ -458,7 +461,10 @@ export async function planCategoryRedirectBackfill(
               },
             }
           : {}),
-        fallback: legacyLookup(source).verdict,
+        fallback:
+          why === "no-name-match"
+            ? legacyLookup(source).verdict
+            : "not-consulted",
       });
       continue;
     }
