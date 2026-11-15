@@ -264,7 +264,15 @@ describe(
       );
       const told = await item(idea);
       assert.equal(told.comments.length, 2);
-      assert.match(told.comments[1]!.body, /megszűnt/);
+      assert.ok(told.comments.some((c) => /megszűnt/.test(c.body)));
+      // a later save of the cancelled arrival tells nobody again
+      const cancelledNow = await arrivalsService.get(arrival.id);
+      await arrivalsService.update(
+        arrival.id,
+        { note: "javított", expectedUpdatedAt: cancelledNow.updatedAt },
+        actor.id,
+      );
+      assert.equal((await item(idea)).comments.length, 2);
     });
   },
 );

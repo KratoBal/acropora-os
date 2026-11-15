@@ -378,6 +378,14 @@ describe("the content calendar follows the arrival (T5.5 S7)", () => {
     assert.equal(calls.followed[0]!.event, null);
   });
 
+  it("a cancelled arrival is said gone ONCE: a later save of it tells the calendar nothing (barracuda, #2610)", async () => {
+    const { service, calls } = setup(
+      stored({ status: "CANCELLED", preorderable: false }),
+    );
+    await service.update("a1", { note: "javított megjegyzés" }, "u9");
+    assert.deepEqual(calls.followed, []);
+  });
+
   it("a refused edit tells the calendar nothing", async () => {
     const { service, calls } = setup();
     await assert.rejects(service.update("a1", { productId: "ghost" }, "u9"));

@@ -156,22 +156,25 @@ export class LivestockArrivalsService {
     if (!updated) throw new NotFoundException(NOT_FOUND);
     /*
       THE CONTENT CALENDAR FOLLOWS THE ARRIVAL (T5.5 S7, spec 5.: "pl. az import érkezése csúszik"): the slots the template
-      opened for it move with its day, an approved one steps back to approval, a cancelled arrival tells them it is gone. After
-      every saved edit: the follow-up skips a slot already on its day, so a repeated save heals a failed one.
+      opened for it move with its day, an approved one steps back to approval, a cancelled arrival tells them it is gone.
+      A LIVE arrival is followed after every saved edit: the follow-up skips a slot already on its day, so a repeated save
+      heals a failed one. "It is gone" has no such day to compare, so it is said ONCE, at the cancelling save; a later save of
+      an already cancelled arrival (a note fixed) tells nobody again (barracuda, #2610).
     */
-    await this.followCalendar({
-      eventKey: `livestock:${id}`,
-      eventTitle: updated.label,
-      event:
-        updated.status === "CANCELLED"
+    const cancelled = updated.status === "CANCELLED";
+    if (!cancelled || current.status !== "CANCELLED")
+      await this.followCalendar({
+        eventKey: `livestock:${id}`,
+        eventTitle: updated.label,
+        event: cancelled
           ? null
           : {
               title: updated.label,
               startsOn: updated.expectedOn,
               endsOn: updated.expectedOn,
             },
-      actorUserId,
-    });
+        actorUserId,
+      });
     return updated;
   }
 
