@@ -317,33 +317,57 @@ describe("stock", () => {
     assert.equal(s.lastUpdatedAt, at(-1).toISOString());
   });
 
-  it("a zero is `nincs` but stays `nem leltározott` until a corrected count includes the variant", () => {
+  it("a zero before the stocktake is unknown with its reason, never `nincs`; after a corrected count it is `nincs` (T5.4 B2, B3)", () => {
     const zero = [{ onHand: D("0"), reserved: D("0"), updatedAt: at(-1) }];
     const before = stock({ stockItems: zero });
     assert.equal(before.quantity, 0);
-    assert.equal(before.state, "nincs");
+    assert.equal(before.state, "ismeretlen");
+    assert.equal(before.reason, "zero-not-counted");
     assert.equal(before.reliability, "nem leltározott");
     const after = stock({
       stockItems: zero,
       countedLines: [{ inventoryCount: { correctedAt: at(-72) } }],
     });
+    assert.equal(after.state, "nincs");
+    assert.equal(after.reason, undefined);
     assert.equal(after.reliability, "leltározott");
     assert.equal(after.lastCountedAt, at(-72).toISOString());
   });
 
-  it("NO stock row is unknown, never zero", () => {
+  it("NO stock row is unknown, never zero, and says why", () => {
     const s = stock({ stockItems: [] });
     assert.equal(s.quantity, "ismeretlen");
     assert.equal(s.state, "ismeretlen");
+    assert.equal(s.reason, "no-stock-row");
     assert.equal(s.lastUpdatedAt, "ismeretlen");
   });
 
-  it("a negative sum is unknown, not `nincs` and not a negative number", () => {
+  it("a negative sum is unknown with its reason, not `nincs` and not a negative number (T5.4 B13)", () => {
     const s = stock({
       stockItems: [{ onHand: D("1"), reserved: D("4"), updatedAt: at(-1) }],
     });
     assert.equal(s.quantity, "ismeretlen");
     assert.equal(s.state, "ismeretlen");
+    assert.equal(s.reason, "negative-available");
+  });
+
+  it("every stock section says the number is the free quantity, reservations deducted (T5.4 B12)", () => {
+    for (const s of [
+      stock({
+        stockItems: [{ onHand: D("5"), reserved: D("2"), updatedAt: at(-1) }],
+      }),
+      stock({ stockItems: [] }),
+      stock({ extension: { stockTrackingEnabled: false } }),
+    ])
+      assert.equal(s.quantityBasis, "szabad, foglalás levonva");
+  });
+
+  it("a known state carries no reason", () => {
+    const s = stock({
+      stockItems: [{ onHand: D("3"), reserved: D("0"), updatedAt: at(-1) }],
+    });
+    assert.equal(s.state, "van");
+    assert.equal("reason" in s, false);
   });
 
   it("an untracked variant is `nem követett` with no number; a MISSING extension row is not untracked", () => {
@@ -357,7 +381,13 @@ describe("stock", () => {
 describe("arrivals", () => {
   it("an empty list says it is not exhaustive", () => {
     const a = buildProductData(product(), ctx()).variants[0]!.arrivals;
-    assert.deepEqual(a, { status: "ismert", complete: false, recorded: [] });
+    // korall, T5.4 B8: the answer itself says "none known" and that the record is not complete
+    assert.deepEqual(a, {
+      status: "nincs ismert érkezés",
+      note: "a nyilvántartás nem teljes: csak a saját megrendelések és a kézzel rögzített élőállat-érkezések",
+      complete: false,
+      recorded: [],
+    });
   });
 
   it("order lines: remaining quantity, the line date over the order date, no supplier", () => {
