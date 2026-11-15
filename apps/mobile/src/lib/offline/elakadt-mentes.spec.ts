@@ -326,7 +326,7 @@ describe("a képernyők bekötése", () => {
       osszes += hivasok.length;
     }
     // KONTROLL: a bejaras tenyleg megtalalta a menteseket (2026-10-01-en 9, 2026-11-13-an 10: az uzemeltetesi naplo rogzito
-    // kepernyoje), kulonben egy ures bejaras mellett a fenti ciklus semmit nem allitana.
-    assert.equal(osszes, 10);
+    // kepernyoje, 2026-11-15-en 11: a csoportos rogzites kepernyoje), kulonben egy ures bejaras mellett a fenti ciklus semmit nem allitana.
+    assert.equal(osszes, 11);
   });
 });

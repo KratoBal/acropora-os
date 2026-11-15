@@ -197,3 +197,21 @@ export function emptyText(kind: StartEmptyKind, fromCache: boolean): string {
       return "Ehhez az eszközhöz nincs aktív üzemeltetési sablon.";
   }
 }
+
+/**
+ * A CSOPORTOS RÖGZÍTÉSHEZ KIJELÖLT ESZKÖZÖK (kártya 1a35e8f3): az eszközlistán kipipálható; a sorrend a kijelölés sorrendje, egy eszköz
+ * egyszer, és legfeljebb `max` (a csoportos űrlap eszközönként egy kártya). A határon túli jelölés nem történik meg (a lista változatlan).
+ */
+export function toggleGroupSelection(
+  selected: readonly string[],
+  id: string,
+  max: number,
+): string[] {
+  if (selected.includes(id)) return selected.filter((item) => item !== id);
+  return selected.length >= max ? [...selected] : [...selected, id];
+}
+
+/** A csoportos gomb felirata a kijelölés darabszámával; `null`, amíg kevesebb mint két eszköz van kijelölve (egy eszköz a sima rögzítés). */
+export function groupButtonLabel(count: number): string | null {
+  return count >= 2 ? `Csoportos rögzítés (${count} eszköz)` : null;
+}
