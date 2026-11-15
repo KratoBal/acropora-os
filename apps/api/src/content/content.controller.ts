@@ -7,6 +7,7 @@ import {
   Post,
   Put,
   Query,
+  StreamableFile,
   UploadedFile,
   UseInterceptors,
 } from "@nestjs/common";
@@ -102,6 +103,23 @@ export class ContentController {
     @Query("version") version: unknown,
   ) {
     return this.teachingOutputs.preview(id, kind, version);
+  }
+
+  @Get(":id/teaching-source/outputs/:outputId/file")
+  @RequirePermissions(PERMISSIONS.CONTENT_VIEW)
+  async teachingOutputFile(
+    @Param("id") id: string,
+    @Param("outputId") outputId: string,
+  ) {
+    const { filename, type, buffer } = await this.teachingOutputs.file(
+      id,
+      outputId,
+    );
+    return new StreamableFile(buffer, {
+      type,
+      disposition: `attachment; filename="${filename}"`,
+      length: buffer.length,
+    });
   }
 
   @Get(":id/teaching-source/outputs/:outputId")

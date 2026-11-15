@@ -18,6 +18,10 @@ import {
 } from "@acropora/types";
 
 import {
+  renderTeachingOutputFile,
+  type TeachingOutputFile,
+} from "./teaching-output-files.js";
+import {
   TeachingOutputRepository,
   type TeachingOutputRow,
   type TeachingOutputSourceState,
@@ -161,6 +165,14 @@ export class TeachingOutputService {
     const row = await this.outputs.get(contentId, id);
     if (!row) throw new NotFoundException("Nincs ilyen kimenet.");
     return { ...this.summary(row, state), body: row.body };
+  }
+
+  /** The output drawn as its file: PDF, PPTX or the narration as text. */
+  async file(contentId: string, id: string): Promise<TeachingOutputFile> {
+    await this.source(contentId);
+    const row = await this.outputs.get(contentId, id);
+    if (!row) throw new NotFoundException("Nincs ilyen kimenet.");
+    return renderTeachingOutputFile(row.body);
   }
 
   async markSent(
