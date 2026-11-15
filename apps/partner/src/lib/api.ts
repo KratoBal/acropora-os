@@ -512,11 +512,13 @@ export const partnerApi = {
   },
   /**
    * AZ ÜZEMELTETÉSI NAPLÓ (S5): a partner SAJÁT, kiosztott helyszínei és azok havi kimutatása. A hatókört a szerver dönti el (nincs
-   * `customerId` paraméter), a nem látható helyszín ugyanazt a 404-et adja, mint a nem létező.
+   * `customerId` paraméter), a nem látható helyszín ugyanazt a 404-et adja, mint a nem létező. A lista csak azokat a helyszíneket
+   * hozza, amelyeknek a kimutatása nem üres (sablonos eszköz vagy bejegyzés a részfában); `withoutActivity` a kimaradtak száma.
    */
   operationsLogSites: () =>
     request<{
       items: { id: string; parentId: string | null; name: string }[];
+      withoutActivity: number;
     }>("/operations-log/partner/sites"),
   operationsLogReport: (month: string, departmentId: string) =>
     request<OperationsReportResponse>(

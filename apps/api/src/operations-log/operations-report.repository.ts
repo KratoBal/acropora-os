@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { prisma } from "@acropora/database";
+import { Prisma, prisma } from "@acropora/database";
 import {
   personDisplayName,
   type OperationsReportEntryInput,
@@ -8,6 +8,7 @@ import {
 
 import { assignedUnitIdsFor } from "../service-jobs/assigned-units.query.js";
 import { collectUnitSubtreeIds } from "../service-assets/unit-subtree.js";
+import { templateTargets } from "./operations-log.repository.js";
 
 /** Melyik bejegyzések kerülnek a kimutatás SORAI közé. */
 export type OperationsReportEntryFilter =
@@ -248,6 +249,62 @@ export class OperationsReportRepository {
   /** A felhasználó hozzárendelt helyszín-csomópontjai a részfájukkal (a meglévő helyszín-szabály: `assignedUnitIdsFor`). */
   assignedUnitIds(userId: string): Promise<string[]> {
     return assignedUnitIdsFor(userId);
+  }
+
+  /**
+   * AZ ÜGYFÉL HELYSZÍN-FÁJA (minden egysége, a kimutatás részfa-számításához: ugyanaz a lekérdezés, mint a `scope`-é).
+   */
+  customerUnits(
+    customerId: string,
+  ): Promise<{ id: string; name: string; parentId: string | null }[]> {
+    return prisma.worksheetDepartment.findMany({
+      where: { customerId },
+      select: { id: true, name: true, parentId: true },
+    });
+  }
+
+  /**
+   * AZ EGYSÉGEK, AHOL A KIMUTATÁSNAK VAN MIBŐL ÁLLNIA (kártya f6694b49, partner portál): ahol élő (nem archivált) eszköz áll, amelyre
+   * aktív sablon szól (az eszközre vagy a kategóriájára; a `scope` ezekre bontja ki a sablonokat), VAGY ahol naplóbejegyzést
+   * rögzítettek (a `scope` sorai: a rögzítéskori helyszín). A második azért kell, mert egy kivezetett sablon vagy egy áthelyezett
+   * eszköz múltja a régi helyszín kimutatásában marad: annak a helyszínnek van mit mutatnia.
+   */
+  async departmentsWithActivity(
+    unitIds: readonly string[],
+  ): Promise<Set<string>> {
+    if (unitIds.length === 0) return new Set();
+    const templates = await prisma.operationsTaskTemplate.findMany({
+      where: { isActive: true },
+      select: { assetId: true, assetCategoryId: true },
+    });
+    const { assetIds, categoryIds } = templateTargets(templates);
+    const targets: Prisma.AssetWhereInput[] = [
+      ...(assetIds.length ? [{ id: { in: assetIds } }] : []),
+      ...(categoryIds.length ? [{ categoryId: { in: categoryIds } }] : []),
+    ];
+    const [assets, entries] = await Promise.all([
+      targets.length
+        ? prisma.asset.findMany({
+            where: {
+              departmentId: { in: [...unitIds] },
+              archivedAt: null,
+              OR: targets,
+            },
+            select: { departmentId: true },
+            distinct: ["departmentId"],
+          })
+        : Promise.resolve([]),
+      prisma.operationsLogEntry.findMany({
+        where: { departmentId: { in: [...unitIds] } },
+        select: { departmentId: true },
+        distinct: ["departmentId"],
+      }),
+    ]);
+    return new Set(
+      [...assets, ...entries].flatMap((row) =>
+        row.departmentId ? [row.departmentId] : [],
+      ),
+    );
   }
 
   /**
