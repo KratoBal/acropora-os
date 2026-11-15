@@ -17,7 +17,12 @@ export type ContentState =
   | "DISCARDED";
 
 export type ContentChannel =
-  "FACEBOOK_POST" | "FACEBOOK_AD" | "ARTICLE" | "OTHER";
+  | "FACEBOOK_POST"
+  | "FACEBOOK_AD"
+  | "ARTICLE"
+  /** A teaching material's source (T5.2): its body is a `TeachingSource`. */
+  | "TEACHING_SOURCE"
+  | "OTHER";
 
 /** Melyik szerep szemével kérdezzük, hogy „mi vár rám". */
 export type ContentViewerRole = "author" | "reviewer" | "approver" | "sender";

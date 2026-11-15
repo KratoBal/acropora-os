@@ -10,6 +10,7 @@ import type { Prisma } from "@acropora/database";
 import type { ContentChannel } from "@acropora/types";
 
 import { ArticleStepError } from "./article.repository.js";
+import { TeachingSourceStepError } from "./teaching-source.repository.js";
 import { isApprovalOverdue } from "./content-approval-reminder.js";
 import { claimApprovalRefusal } from "./content-claim-links.js";
 import {
@@ -444,7 +445,10 @@ export class ContentService {
     } catch (error) {
       // A CIKK LÉPÉSE NEM LEHETETT (nincs törzs, nincs jóváhagyott változat):
       // az állapot sem mozdult, mert ugyanaz a tranzakció.
-      if (error instanceof ArticleStepError)
+      if (
+        error instanceof ArticleStepError ||
+        error instanceof TeachingSourceStepError
+      )
         throw new ConflictException(error.message);
       throw error;
     }
@@ -487,7 +491,7 @@ export class ContentService {
    */
   async create(input: {
     title: string;
-    channel: "FACEBOOK_POST" | "FACEBOOK_AD" | "ARTICLE" | "OTHER";
+    channel: ContentChannel;
     authorId: string;
     body?: string;
     imageRequired?: boolean;
@@ -512,7 +516,7 @@ export class ContentService {
    */
   async createIdea(input: {
     title: string;
-    channel: "FACEBOOK_POST" | "FACEBOOK_AD" | "ARTICLE" | "OTHER";
+    channel: ContentChannel;
     authorId: string;
   }) {
     return this.beveszSorba(input, "IDEA");
@@ -551,7 +555,7 @@ export class ContentService {
    */
   async createForReview(input: {
     title: string;
-    channel: "FACEBOOK_POST" | "FACEBOOK_AD" | "ARTICLE" | "OTHER";
+    channel: ContentChannel;
     authorId: string;
     body?: string;
     imageRequired?: boolean;
@@ -563,7 +567,7 @@ export class ContentService {
   private async beveszSorba(
     input: {
       title: string;
-      channel: "FACEBOOK_POST" | "FACEBOOK_AD" | "ARTICLE" | "OTHER";
+      channel: ContentChannel;
       authorId: string;
       body?: string;
       imageRequired?: boolean;

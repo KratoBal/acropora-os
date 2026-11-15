@@ -85,6 +85,7 @@ const CONTENT_CHANNELS = [
   "FACEBOOK_POST",
   "FACEBOOK_AD",
   "ARTICLE",
+  "TEACHING_SOURCE",
   "OTHER",
 ] as const;
 

@@ -499,3 +499,33 @@ describe("a published article's correction", () => {
     assert.deepEqual(moveOptions("SENT", "FACEBOOK_POST"), []);
   });
 });
+
+/*
+  A TEACHING SOURCE STOPS AT ITS APPROVAL (T5.2, spec v2, point 3): its
+  outputs go out, each recorded on its own, the source itself is never
+  scheduled or sent. What turns this red: a source offered SCHEDULED or SENT
+  from any state; another channel losing those moves.
+*/
+describe("a teaching source's path", () => {
+  it("never reaches SCHEDULED or SENT, and keeps every other move", () => {
+    for (const state of ALL_STATES) {
+      const moves = allowedMoves(state, "TEACHING_SOURCE");
+      assert.ok(!moves.includes("SCHEDULED"), state);
+      assert.ok(!moves.includes("SENT"), state);
+      assert.deepEqual(
+        [...moves],
+        allowedMoves(state).filter((to) => to !== "SCHEDULED" && to !== "SENT"),
+        state,
+      );
+    }
+    assert.deepEqual(allowedMoves("READY_TO_SEND", "TEACHING_SOURCE"), [
+      "AWAITING_REVISION",
+      "DISCARDED",
+    ]);
+    assert.equal(canMove("READY_TO_SEND", "SENT", "FACEBOOK_POST"), true);
+    assert.equal(
+      planTransition("READY_TO_SEND", "SENT", "TEACHING_SOURCE").kind,
+      "refused",
+    );
+  });
+});

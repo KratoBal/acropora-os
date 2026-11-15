@@ -32,6 +32,7 @@ const CHANNEL_LABELS: Record<ContentChannel, string> = {
   FACEBOOK_POST: "Facebook poszt",
   FACEBOOK_AD: "Facebook hirdetés",
   ARTICLE: "Cikk",
+  TEACHING_SOURCE: "Oktatóanyag",
   OTHER: "Egyéb",
 };
 

@@ -26,6 +26,7 @@ import {
 } from "./article-image.service.js";
 import { ArticleService } from "./article.service.js";
 import { ContentService } from "./content.service.js";
+import { TeachingSourceService } from "./teaching-source.service.js";
 import {
   ContentCalendarQueryDto,
   ContentCommentDto,
@@ -55,7 +56,30 @@ export class ContentController {
     private readonly service: ContentService,
     private readonly articles: ArticleService,
     private readonly articleImages: ArticleImageService,
+    private readonly teachingSources: TeachingSourceService,
   ) {}
+
+  /**
+   * AN OKTATÓANYAG FORRÁSA (csak `TEACHING_SOURCE` csatornán, T5.2): részek,
+   * számtábla, és amit a kettő egymásról mond (hol szerepel, nyitott kérdés).
+   * Olvasás `content.view`, írás `content.manage`; a jóváhagyás a meglévő
+   * `approve-move` lépés, és nyitott kérdéssel nem megy át.
+   */
+  @Get(":id/teaching-source")
+  @RequirePermissions(PERMISSIONS.CONTENT_VIEW)
+  teachingSource(@Param("id") id: string) {
+    return this.teachingSources.get(id);
+  }
+
+  @Put(":id/teaching-source")
+  @RequirePermissions(PERMISSIONS.CONTENT_MANAGE)
+  saveTeachingSource(
+    @Param("id") id: string,
+    @Body() body: unknown,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.teachingSources.save(id, body, user.id);
+  }
 
   /**
    * A CIKK TÖRZSE (csak `ARTICLE` csatornán). Olvasás `content.view`, írás

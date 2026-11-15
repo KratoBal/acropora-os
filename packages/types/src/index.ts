@@ -1895,6 +1895,41 @@ export type {
   ArticleRevisionSummary,
   ArticleTaxonOption,
 } from "./article.js";
+export {
+  analyzeTeachingSource,
+  findTeachingReferences,
+  parseTeachingSourceInput,
+  TEACHING_AUDIENCES,
+  TEACHING_KEY,
+  TEACHING_NOTE_STATES,
+  TEACHING_NUMBER_STATES,
+  TEACHING_SOURCE_LIMITS,
+} from "./teaching-source.js";
+export type {
+  TeachingAudience,
+  TeachingFormKey,
+  TeachingInflection,
+  TeachingLocation,
+  TeachingNoteState,
+  TeachingNumber,
+  TeachingNumberState,
+  TeachingOpenQuestion,
+  TeachingPart,
+  TeachingProblem,
+  TeachingProblemCode,
+  TeachingQuantity,
+  TeachingReference,
+  TeachingSourceAnalysis,
+  TeachingSourceDetail,
+  TeachingSourceDocument,
+  TeachingSourceEditorData,
+  TeachingSourceInput,
+  TeachingSourceParse,
+  TeachingSourceVersionSummary,
+  TeachingSpeakerNote,
+  TeachingSubpart,
+  TeachingValue,
+} from "./teaching-source.js";
 export { parseSeoLandingInput, SEO_LANDING_LIMITS } from "./seo-landing.js";
 export type {
   SeoLandingAttributeFilter,
