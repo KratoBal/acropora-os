@@ -55,8 +55,8 @@ export class OperationsLogEntriesController {
 
   @Get("colleagues")
   @RequirePermissions(PERMISSIONS.OPERATIONS_LOG_RECORD)
-  colleagues() {
-    return this.service.colleagues();
+  colleagues(@CurrentUser() user: AuthenticatedUser) {
+    return this.service.colleagues(user.id);
   }
 
   @Post("entries")

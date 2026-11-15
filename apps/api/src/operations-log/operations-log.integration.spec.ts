@@ -558,6 +558,29 @@ describe(
           isActive: false,
         });
 
+        // a katalógus csak a SZERVIZ-partnerek eszközeit adja (mint az eszköz-lista ownerScope=SERVICE_PARTNER)
+        const notService = await repository.startCatalogue();
+        assert.equal(
+          notService.some((x) => x.id === direct.id),
+          false,
+          "nem szerviz partner eszköze nem kerülhet a katalógusba",
+        );
+        await prisma.supplier.update({
+          where: { id: supplier.id },
+          data: { isService: true },
+        });
+        const catalogue = await repository.startCatalogue();
+        const byId = new Map(catalogue.map((x) => [x.id, x]));
+        assert.deepEqual(byId.get(direct.id)?.owner, {
+          id: supplier.id,
+          displayName: name("szállító"),
+        });
+        assert.deepEqual(byId.get(direct.id)?.unit.path, [name("hely")]);
+        assert.equal(byId.has(byCategory.id), true);
+        assert.equal(byId.has(retired.id), false);
+        assert.equal(byId.has(bare.id), false);
+        assert.equal(byId.has(archived.id), false);
+
         const found = new Set(await repository.assetIdsWithActiveTemplates());
         assert.equal(found.has(direct.id), true);
         assert.equal(found.has(byCategory.id), true);

@@ -24,7 +24,10 @@ import {
 } from "./operations-log-entries.repository.js";
 import { ServiceJobsService } from "../service-jobs/service-jobs.service.js";
 import type { CreateServiceJobDto } from "../service-jobs/dto.js";
-import { OperationsLogRepository } from "./operations-log.repository.js";
+import {
+  OperationsLogRepository,
+  type OperationsStartAsset,
+} from "./operations-log.repository.js";
 
 const DEFAULT_LIMIT = 50;
 
@@ -61,15 +64,27 @@ export class OperationsLogEntriesService {
   }
 
   /**
-   * A KEZDŐKÉPERNYŐ SZŰRŐJE: azok az eszközök, amelyekhez van aktív sablon. A válasz csak azonosító-lista (lásd a tárolót): a
-   * telefon a láthatósági hatókörön átment eszköz-listából metszi.
+   * A KEZDŐKÉPERNYŐ: azok az eszközök, amelyekhez van aktív sablon. `assetIds` a korábbi, azonosító-lista alak (a már kiadott telefonos
+   * build ezt olvassa, ezért marad); `assets` a katalógus (partner, helyszín-út, eszköz), amelyből a telefon a három listát építi.
    */
-  async assetsWithTemplates(): Promise<{ assetIds: string[] }> {
-    return { assetIds: await this.templates.assetIdsWithActiveTemplates() };
+  async assetsWithTemplates(): Promise<{
+    assetIds: string[];
+    assets: OperationsStartAsset[];
+  }> {
+    const [assetIds, assets] = await Promise.all([
+      this.templates.assetIdsWithActiveTemplates(),
+      this.templates.startCatalogue(),
+    ]);
+    return { assetIds, assets };
   }
 
-  async colleagues() {
-    return { items: await this.entries.assignableColleagues() };
+  /**
+   * A RÖGZÍTÉS RÉSZTVEVŐI: a kollégák, A HÍVÓ NÉLKÜL. A rögzítő mindig résztvevő, ezért a listán nem szerepelhet (Balázs, 2026-11-15:
+   * „a bejelentkezett felhasználó ne legyen a listában").
+   */
+  async colleagues(callerId: string) {
+    const items = await this.entries.assignableColleagues();
+    return { items: items.filter((item) => item.id !== callerId) };
   }
 
   async get(id: string): Promise<OperationsLogEntryDto> {
