@@ -26,6 +26,7 @@ import {
 } from "./article-image.service.js";
 import { ArticleService } from "./article.service.js";
 import { ContentService } from "./content.service.js";
+import { TeachingOutputService } from "./teaching-output.service.js";
 import { TeachingSourceService } from "./teaching-source.service.js";
 import {
   ContentCalendarQueryDto,
@@ -57,6 +58,7 @@ export class ContentController {
     private readonly articles: ArticleService,
     private readonly articleImages: ArticleImageService,
     private readonly teachingSources: TeachingSourceService,
+    private readonly teachingOutputs: TeachingOutputService,
   ) {}
 
   /**
@@ -79,6 +81,58 @@ export class ContentController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.teachingSources.save(id, body, user.id);
+  }
+
+  /**
+   * A FORRÁS KIMENETEI (T5.2, 2b szelet): a lista az elavult jelzéssel, az
+   * előnézet bármely verzióból (nem tárolódik), a generálás csak a jóváhagyott
+   * verzióból, és a "kiment" rögzítése kimenetenként, egyszer.
+   */
+  @Get(":id/teaching-source/outputs")
+  @RequirePermissions(PERMISSIONS.CONTENT_VIEW)
+  listTeachingOutputs(@Param("id") id: string) {
+    return this.teachingOutputs.list(id);
+  }
+
+  @Get(":id/teaching-source/outputs/preview")
+  @RequirePermissions(PERMISSIONS.CONTENT_VIEW)
+  teachingOutputPreview(
+    @Param("id") id: string,
+    @Query("kind") kind: unknown,
+    @Query("version") version: unknown,
+  ) {
+    return this.teachingOutputs.preview(id, kind, version);
+  }
+
+  @Get(":id/teaching-source/outputs/:outputId")
+  @RequirePermissions(PERMISSIONS.CONTENT_VIEW)
+  teachingOutput(@Param("id") id: string, @Param("outputId") outputId: string) {
+    return this.teachingOutputs.detail(id, outputId);
+  }
+
+  @Post(":id/teaching-source/outputs")
+  @RequirePermissions(PERMISSIONS.CONTENT_MANAGE)
+  generateTeachingOutput(
+    @Param("id") id: string,
+    @Body() body: unknown,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const kind =
+      typeof body === "object" && body !== null
+        ? (body as { kind?: unknown }).kind
+        : undefined;
+    return this.teachingOutputs.generate(id, kind, user.id);
+  }
+
+  @Post(":id/teaching-source/outputs/:outputId/sent")
+  @RequirePermissions(PERMISSIONS.CONTENT_MANAGE)
+  markTeachingOutputSent(
+    @Param("id") id: string,
+    @Param("outputId") outputId: string,
+    @Body() body: unknown,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.teachingOutputs.markSent(id, outputId, body, user.id);
   }
 
   /**

@@ -1408,6 +1408,13 @@ export const ANONYMIZATION_REGISTER: Readonly<
     contentHash: "business",
     createdById: "identifier",
   },
+  // A generated output (T5.2): the source's text in another shape, and where it went.
+  TeachingOutput: {
+    body: "json",
+    generatedById: "identifier",
+    sentTo: "freeText",
+    sentById: "identifier",
+  },
   TicketMailDelivery: {
     serviceJobId: "identifier",
     jobNumber: "identifier",
