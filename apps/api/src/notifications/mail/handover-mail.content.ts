@@ -27,7 +27,13 @@ export function handoverMailDefaultSubject(jobNumber: string): string {
 }
 
 /**
- * A LEVEL TORZSE: A KEZELO SZOVEGE, ES SEMMI MAS.
+ * A LEVEL TORZSE: A KEZELO SZOVEGE, ES (HA VAN BEALLITVA PORTAL-CIM) EGY SOR A HIBAJEGY LINKJEVEL.
+ *
+ * === 2026-11-15: A FENTI "SEMMI MAS" EGY SORRAL BOVULT (Balazs, 2026-10-08, "2 igen") ===
+ *
+ * A link NEM a letoltes (az tovabbra sincs), hanem a partner-portal MEGLEVO hibajegy-oldala, a konfiguralt
+ * `PARTNER_URL`-bol epitve (`partnerTicketLink`). Ures `PARTNER_URL` mellett a level link nelkul megy ki, es a
+ * jegy naploja megnevezi, miert maradt ki. Az alabbi tortenet a MEGSZUNT `note` parameterrol szol.
  *
  * === ITT ALLT EGY `note` PARAMETER, ES ELKERULT ===
  *
@@ -52,6 +58,23 @@ export function handoverMailDefaultSubject(jobNumber: string): string {
  * attol, hogy az elettartamrol (orak, napok, a jegy lezarasaig) Balazs mit
  * dont. A ket kerdes kulon all.
  */
-export function handoverMailBody(input: { message: string }): string {
-  return input.message.trim();
+export function handoverMailBody(input: {
+  message: string;
+  /** A hibajegy linkje a partner-portalon (`partnerTicketLink`); ures vagy hianyzo: nem kerul a levelbe. */
+  portalLink?: string;
+}): string {
+  const message = input.message.trim();
+  return input.portalLink
+    ? `${message}\n\n${handoverMailPortalLinkLine(input.portalLink)}`
+    : message;
+}
+
+/**
+ * A PORTAL-LINK MONDATA (Balazs, 2026-10-08: "2 igen"): a kezelo szovege UTAN all, egy ures sorral elvalasztva, es a
+ * kikuldes elott a kezelo LATJA (az elonezet visszaadja). Ez az EGYETLEN dolog, ami a kezelo szoveget kiegesziti,
+ * es a kezelo nem tudja kivenni: a hibajegy linkje a vevo sajat portal-felületére visz, a vevo ugyanazt az
+ * esemenyt (a lezaras) ott is latja.
+ */
+export function handoverMailPortalLinkLine(portalLink: string): string {
+  return `A hibajegy a partnerportálon is megnézhető: ${portalLink}`;
 }

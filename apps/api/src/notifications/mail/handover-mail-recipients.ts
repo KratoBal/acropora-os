@@ -149,8 +149,14 @@ export function handoverMailDecision(input: {
 export function handoverMailAuditNote(
   decision: HandoverMailDecision,
   redirect: MailRedirect,
+  portalLinkOmitted = false,
 ): string {
   if (decision.kind === "skip")
     return `A lezárt hibajegy nem ment ki e-mailben (${decision.reason}).`;
-  return `A lezárt hibajegy kiküldve e-mailben, ${decision.to.length} címzettnek.${redirectAuditSuffix(redirect)}`;
+  // A KIHAGYOTT LINK NYOMOT HAGY: a level kiment, de a portal-link nelkul (a `PARTNER_URL` nincs beallitva), es ez a
+  // jegy naplojabol olvashato, nem csak a szerver naplojabol (card 193a6f29).
+  const omitted = portalLinkOmitted
+    ? " A partnerportál linkje kimaradt a levélből: a PARTNER_URL nincs beállítva."
+    : "";
+  return `A lezárt hibajegy kiküldve e-mailben, ${decision.to.length} címzettnek.${redirectAuditSuffix(redirect)}${omitted}`;
 }
