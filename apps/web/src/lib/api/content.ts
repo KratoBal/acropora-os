@@ -17,6 +17,7 @@ import type {
   TeachingOutputSummary,
   TeachingSourceEditorData,
   TeachingSourceInput,
+  TeachingSourceListItem,
 } from "@acropora/types";
 
 import { API_PREFIX } from "./api-prefix";
@@ -237,6 +238,15 @@ export const contentApi = {
       `/content/${encodeURIComponent(id)}/article/images`,
       token,
       { method: "POST", body: form },
+    );
+  },
+
+  /** The teaching sources with their outputs' states (T5.2, the source list). */
+  teachingSources(token: string, signal?: AbortSignal) {
+    return apiRequest<TeachingSourceListItem[]>(
+      "/content/teaching-sources",
+      token,
+      { signal },
     );
   },
 

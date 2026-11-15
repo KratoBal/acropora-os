@@ -1924,6 +1924,7 @@ export type {
   TeachingSourceDocument,
   TeachingSourceEditorData,
   TeachingSourceInput,
+  TeachingSourceListItem,
   TeachingSourceParse,
   TeachingSourceVersionSummary,
   TeachingSpeakerNote,
