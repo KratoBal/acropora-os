@@ -1,6 +1,7 @@
 import type { prisma } from "@acropora/database";
 
 import {
+  isOwnPath,
   normalizeRedirectPath,
   redirectPathLower,
 } from "../../products/redirect/redirect-path.js";
@@ -43,6 +44,17 @@ export interface OldShopLinkResult {
 const HREF = /(\bhref\s*=\s*)(["'])([^"']*)\2/gi;
 const URL_PARTS = /^(?:https?:)?\/\/([^/?#]+)([^?#]*)(\?[^#]*)?(#.*)?$/i;
 
+/**
+ * A CÉL, AMI A LEÍRÁS HTML-JÉBE KERÜLHET (barracuda, #2619). A szabály célja eddig csak a 301 `Location` fejlécébe ment; itt a vetített
+ * leírás HTML-jébe kerül, amit a kirakat nyersen renderel. Egy kézzel megadott cél (`repoint`, `MANUAL`) a normalizálás
+ * dekódolása miatt idézőjelet is tartalmazhat (`%22`), és kitörne az attribútumból. Ezért a cél csak a KÖZÖS saját-út ellenőrzésen
+ * (`isOwnPath`: a `//x` és a `/\x` sem, mert a böngésző másik domainnek veszi) és egy karakter-ellenőrzésen megy át: a `" ' < > &` és a
+ * szóköz/vezérlő karakter kizárja. Ami kimarad, leképezetlenként számol, és a jelentés megnevezi; escape-elés helyett a kihagyás, mert egyszerűbb.
+ */
+function safeTarget(target: string): boolean {
+  return isOwnPath(target) && !/["'<>&\s\u0000-\u001f\u007f]/.test(target);
+}
+
 export function rewriteOldShopLinks(
   html: string | null,
   rules: OldShopLinkRules,
@@ -64,12 +76,7 @@ export function rewriteOldShopLinks(
         ? rules.get(redirectPathLower(normalized))
         : undefined;
       // lekérdezés-szöveges link: az átirányítás az útra szól, nem írjuk át
-      if (
-        !target ||
-        parts[3] ||
-        !target.startsWith("/") ||
-        target.startsWith("//")
-      ) {
+      if (!target || parts[3] || !safeTarget(target)) {
         unmapped.push(path);
         return whole;
       }

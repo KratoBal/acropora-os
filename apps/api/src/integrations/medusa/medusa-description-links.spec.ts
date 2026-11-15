@@ -149,6 +149,42 @@ describe("rewriteOldShopLinks", () => {
     assert.equal(eredmeny.unmapped.length, 2);
   });
 
+  it("a HTML-be nem biztonságos cél (idézőjel, `<`, `>`, `&`, szóköz, százalékkódolt idézőjel) nem kerül a leírásba: a link leképezetlen", () => {
+    const veszelyes: OldShopLinkRules = new Map([
+      ["/a", '/x"onmouseover="alert(1)'],
+      ["/b", "/x'y"],
+      ["/c", "/x<y"],
+      ["/d", "/x>y"],
+      ["/e", "/x?a=1&b=2"],
+      ["/f", "/x y"],
+      ["/g", "/x\ty"],
+    ]);
+    const html = ["a", "b", "c", "d", "e", "f", "g"]
+      .map((betu) => link(`https://shop.acropora.hu/${betu}`))
+      .join("");
+
+    const eredmeny = rewriteOldShopLinks(html, veszelyes);
+
+    assert.equal(eredmeny.text, html);
+    assert.equal(eredmeny.rewritten, 0);
+    assert.equal(eredmeny.unmapped.length, 7);
+  });
+
+  it("a böngésző által másik domainnek vett cél (`/\\masik.example`, `/x\\y`) a KÖZÖS saját-út ellenőrzésen elbukik", () => {
+    const html =
+      link("https://shop.acropora.hu/h") + link("https://shop.acropora.hu/i");
+    const eredmeny = rewriteOldShopLinks(
+      html,
+      new Map([
+        ["/h", "/\\masik.example"],
+        ["/i", "/x\\y"],
+      ]),
+    );
+
+    assert.equal(eredmeny.text, html);
+    assert.equal(eredmeny.rewritten, 0);
+  });
+
   it("idempotens: az átírt szövegen a második futás nem ír át semmit", () => {
     const egyszer = rewriteOldShopLinks(
       link("https://shop.acropora.hu/Valenciennea-bella"),
