@@ -93,6 +93,36 @@ describe("readTeachingPptxText", () => {
     assert.equal(read[1]?.title, "Az első hat hét");
   });
 
+  it("stops inflating at the limit, even when the part's header lies about its size (barracuda on #2582)", async () => {
+    const zip = new PizZip(
+      await renderTeachingPptx(buildTeachingSlides(source, AT)),
+    );
+    const name = "ppt/slides/slide1.xml";
+    // 25 MB of the same byte: a few kB once deflated, past the 20 MB limit inflated
+    zip.file(name, " ".repeat(25_000_000));
+    const bytes = Buffer.from(
+      zip.generate({ type: "uint8array", compression: "DEFLATE" }),
+    );
+    // the header says 100 bytes: in the local header (offset 22) and in the
+    // central directory (offset 24), both found by the part's name
+    const nameBytes = Buffer.from(name, "latin1");
+    for (
+      let at = bytes.indexOf(nameBytes);
+      at !== -1;
+      at = bytes.indexOf(nameBytes, at + 1)
+    ) {
+      if (bytes.readUInt32LE(at - 30) === 0x04034b50)
+        bytes.writeUInt32LE(100, at - 30 + 22);
+      if (bytes.readUInt32LE(at - 46) === 0x02014b50)
+        bytes.writeUInt32LE(100, at - 46 + 24);
+    }
+    assert.throws(
+      () => readTeachingPptxText(bytes),
+      (error: unknown) =>
+        error instanceof TeachingPptxError && /túl nagy/.test(error.message),
+    );
+  });
+
   it("refuses what is no deck", () => {
     assert.throws(
       () => readTeachingPptxText(new TextEncoder().encode("nem zip")),
