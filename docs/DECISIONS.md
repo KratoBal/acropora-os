@@ -870,7 +870,15 @@ elsőbbséget élvez, a forgás csak a maradék keretet tölti. A kapcsoló
 (`MEDUSA_PROJECTION_REFRESH_ENABLED=true`) alapból KI; a jelentésben külön
 szám (`candidates.refresh`, `taken.refresh`). Egy termék, amelynek a kötés
 időbélyege a kiválasztás után sem lép (megállt vetítés), a sor végére kerül,
-hogy ne szorítsa ki a többit.
+hogy ne szorítsa ki a többit. Mivel a beragadt termék időbélyege nem lép,
+örökre a legrégebbiek között marad, ezért a lekérdezés ablaka a jegyzetben álló
+(kipróbált, még nem lépett) termékek számával szélesedik, és a jegyzetet minden
+kör a kötések mai `lastSyncedAt`-jével veti össze: a lépett vagy törölt termék
+kiesik, így az ablak a katalógus méreténél nem lehet szélesebb (barracuda
+észrevétele a #2623 review-ján: az ablak nélküli változat 4R beragadt termék
+fölött megállt, miközben a jelentés `taken.refresh = R`-t mutatott). A
+forgás beállítását az ütemező indulásakor is ellenőrizzük: egy elgépelt
+darabszám az indulást állítja meg, nem minden kört.
 
 **Elvetett változat: elvárt állapot összehasonlítása a bolt olvasásával.** Az
 elvárt leírást a futtató (`medusa-projection.runner.ts`) állítja össze a
