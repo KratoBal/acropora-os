@@ -100,6 +100,22 @@ function toDto(row: TemplateRow): OperationsTaskTemplateDto {
   };
 }
 
+/**
+ * A SABLONOK CÉLJAI: az eszközök és a kategóriák azonosítói, ismétlés nélkül. A sablon PONTOSAN egy célra szól (a migráció CHECK-je
+ * tartja), de a függvény a mindkettő-null sort is elbírja: egyiket sem veszi fel.
+ */
+export function templateTargets(
+  rows: readonly { assetId: string | null; assetCategoryId: string | null }[],
+): { assetIds: string[]; categoryIds: string[] } {
+  const assetIds = new Set<string>();
+  const categoryIds = new Set<string>();
+  for (const row of rows) {
+    if (row.assetId) assetIds.add(row.assetId);
+    if (row.assetCategoryId) categoryIds.add(row.assetCategoryId);
+  }
+  return { assetIds: [...assetIds], categoryIds: [...categoryIds] };
+}
+
 @Injectable()
 export class OperationsLogRepository {
   async listTemplates(
@@ -133,6 +149,35 @@ export class OperationsLogRepository {
       orderBy: [{ name: "asc" }, { id: "asc" }],
     });
     return rows.map(toDto);
+  }
+
+  /**
+   * AZ ESZKÖZÖK, AMELYEKHEZ VAN AKTÍV SABLON: a telefon üzemeltetési napló kezdőképernyője ebből szűri a választható gépeket
+   * (task f6694b49). UGYANAZ A SZABÁLY, mint az `activeTemplatesForAsset`-é: az eszközre VAGY az eszköz kategóriájára szóló, AKTÍV
+   * sablon számít, a kivezetett nem. Az archivált eszköz nem szerepel (a sablonja sem kínál rá semmit).
+   *
+   * CSAK AZONOSÍTÓKAT ADUNK, és ez szándékos: a láthatóságot (partner, helyszín) a telefon az eszköz-listából hozza, ami a saját
+   * hatókör-szűrőjén megy át; ez a lista csak azt mondja meg, melyik azonosítónak van mit rögzíteni. Egy azonosító-halmaz
+   * nem hordoz nevet, partnert vagy helyszínt.
+   */
+  async assetIdsWithActiveTemplates(): Promise<string[]> {
+    const templates = await prisma.operationsTaskTemplate.findMany({
+      where: { isActive: true },
+      select: { assetId: true, assetCategoryId: true },
+    });
+    const { assetIds, categoryIds } = templateTargets(templates);
+    const targets: Prisma.AssetWhereInput[] = [
+      ...(assetIds.length ? [{ id: { in: assetIds } }] : []),
+      ...(categoryIds.length ? [{ categoryId: { in: categoryIds } }] : []),
+    ];
+    // `OR: []` mindent átengedne, ezért a célok nélküli eset külön ág: nincs aktív sablon, nincs eszköz
+    if (targets.length === 0) return [];
+    const rows = await prisma.asset.findMany({
+      where: { archivedAt: null, OR: targets },
+      select: { id: true },
+      orderBy: { id: "asc" },
+    });
+    return rows.map((row) => row.id);
   }
 
   async templateById(id: string): Promise<OperationsTaskTemplateDto | null> {

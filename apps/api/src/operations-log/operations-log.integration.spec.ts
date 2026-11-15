@@ -510,5 +510,61 @@ describe(
         });
       });
     });
+
+    /*
+      A KEZDŐKÉPERNYŐ SZŰRŐJE (task f6694b49). MINDEN KIZÁRT ESETNEK VAN BEFOGADOTT PÁRJA ugyanabban a fixtúrában: az eszközre szóló
+      és a kategóriára szóló aktív sablon is felvesz egy eszközt, a kivezetett sablon, a sablon nélküli eszköz és az archivált eszköz
+      pedig nem. Ha a kategória-ág hiányozna, a kategóriás eszköz hiányozna a listából; ha az `isActive` szűrő, a kivezetett sablon
+      eszköze benne maradna.
+    */
+    describe("a sablonnal rendelkező eszközök azonosítói", () => {
+      it("az eszközre és a kategóriára szóló aktív sablon felvesz, a kivezetett, a sablon nélküli és az archivált nem", async () => {
+        const department = await prisma.worksheetDepartment.findFirstOrThrow({
+          where: { name: name("hely") },
+          select: { id: true },
+        });
+        const supplier = await prisma.supplier.findFirstOrThrow({
+          where: { code: { startsWith: "UZNI" } },
+          select: { id: true },
+        });
+        const make = (label: string, over: Record<string, unknown> = {}) =>
+          prisma.asset.create({
+            data: {
+              assetNumber: name(label),
+              name: name(label),
+              departmentId: department.id,
+              supplierId: supplier.id,
+              ...over,
+            },
+            select: { id: true },
+          });
+        const direct = await make("SZ-KOZVETLEN");
+        const byCategory = await make("SZ-KATEGORIA", {
+          categoryId: ids.category,
+        });
+        const retired = await make("SZ-KIVEZETETT");
+        const bare = await make("SZ-SABLONNELKUL");
+        const archived = await make("SZ-ARCHIVALT", {
+          categoryId: ids.category,
+          archivedAt: new Date(),
+        });
+        await template("sz-kozvetlen", { assetId: direct.id });
+        await template("sz-kategoria", {
+          assetId: null,
+          assetCategoryId: ids.category,
+        });
+        await template("sz-kivezetett", {
+          assetId: retired.id,
+          isActive: false,
+        });
+
+        const found = new Set(await repository.assetIdsWithActiveTemplates());
+        assert.equal(found.has(direct.id), true);
+        assert.equal(found.has(byCategory.id), true);
+        assert.equal(found.has(retired.id), false);
+        assert.equal(found.has(bare.id), false);
+        assert.equal(found.has(archived.id), false);
+      });
+    });
   },
 );
