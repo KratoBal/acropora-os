@@ -42,6 +42,7 @@ describe("az üzemeltetési napló bejegyzés-végpontjainak jogai", () => {
     for (const route of [
       proto.create,
       proto.templatesForAsset,
+      proto.assetsWithTemplates,
       proto.colleagues,
       proto.uploadPhoto,
     ])
@@ -57,6 +58,7 @@ describe("az üzemeltetési napló bejegyzés-végpontjainak jogai", () => {
     for (const route of [
       proto.create,
       proto.templatesForAsset,
+      proto.assetsWithTemplates,
       proto.colleagues,
       proto.uploadPhoto,
     ])
@@ -68,6 +70,7 @@ describe("az üzemeltetési napló bejegyzés-végpontjainak jogai", () => {
     for (const route of [
       proto.create,
       proto.templatesForAsset,
+      proto.assetsWithTemplates,
       proto.colleagues,
       proto.list,
       proto.get,

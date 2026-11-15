@@ -46,6 +46,13 @@ export class OperationsLogEntriesController {
     return this.service.templatesForAsset(assetId);
   }
 
+  /** A telefon üzemeltetési napló kezdőképernyője: mely eszközökhöz van aktív sablon (csak azonosítók). */
+  @Get("assets-with-templates")
+  @RequirePermissions(PERMISSIONS.OPERATIONS_LOG_RECORD)
+  assetsWithTemplates() {
+    return this.service.assetsWithTemplates();
+  }
+
   @Get("colleagues")
   @RequirePermissions(PERMISSIONS.OPERATIONS_LOG_RECORD)
   colleagues() {
