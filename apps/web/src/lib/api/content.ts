@@ -241,10 +241,6 @@ export const contentApi = {
     );
   },
 
-  /**
-   * AN OKTATÓANYAG FORRÁSA (T5.2): the source, what its table and text say
-   * about each other, and whether it may change now.
-   */
   /** The teaching sources with their outputs' states (T5.2, the source list). */
   teachingSources(token: string, signal?: AbortSignal) {
     return apiRequest<TeachingSourceListItem[]>(
@@ -254,6 +250,10 @@ export const contentApi = {
     );
   },
 
+  /**
+   * AN OKTATÓANYAG FORRÁSA (T5.2): the source, what its table and text say
+   * about each other, and whether it may change now.
+   */
   teachingSource(token: string, id: string, signal?: AbortSignal) {
     return apiRequest<TeachingSourceEditorData>(
       `/content/${encodeURIComponent(id)}/teaching-source`,

@@ -8,6 +8,9 @@ import type { TeachingNumber, TeachingSourceInput } from "@acropora/types";
 import { integrationDatabaseGate } from "../common/integration-database.js";
 import { nincsMaradek } from "../common/takaritas-leltar.js";
 import { ContentRepository } from "./content.repository.js";
+import { TeachingOutputEditRepository } from "./teaching-output-edit.repository.js";
+import { TeachingOutputRepository } from "./teaching-output.repository.js";
+import { TeachingOutputService } from "./teaching-output.service.js";
 import {
   TeachingSourceRepository,
   TeachingSourceStepError,
@@ -279,7 +282,8 @@ describe(
         total: 0,
         current: 0,
         stale: 0,
-        differing: 0,
+        withdrawn: 0,
+        awaitingDecision: 0,
         overFrame: 0,
         sent: 0,
       });
@@ -287,6 +291,92 @@ describe(
         list.find((r) => r.contentId === discarded),
         undefined,
       );
+    });
+
+    it("T52-INT-LIST-COUNTS: each output counted by its state: current, stale, withdrawn, waiting for a decision, over the frame, sent (barracuda on #2588)", async () => {
+      const outputs = new TeachingOutputRepository();
+      const service = new TeachingOutputService(outputs, () => new Date());
+      const edits = new TeachingOutputEditRepository();
+      const approve = async (id: string, from: string) => {
+        for (const [a, b] of [
+          [from, "AWAITING_REVIEW"],
+          ["AWAITING_REVIEW", "AWAITING_APPROVAL"],
+          ["AWAITING_APPROVAL", "READY_TO_SEND"],
+        ])
+          assert.equal(await move(id, a!, b!), true, `${a} -> ${b}`);
+      };
+      // a part without sub-parts over 4 slides: 21 sentences
+      const long = Array.from(
+        { length: 21 },
+        (_, i) => `Állítás ${i + 1}.`,
+      ).join(" ");
+
+      // A: v1 printable sent, then v2 approved: a deck over the frame and a narration with an undecided edit
+      const a = await item("TEACHING_SOURCE");
+      assert.equal((await sources.save(a, input(null), actor)).kind, "ok");
+      await approve(a, "DRAFTING");
+      const printable = await service.generate(a, "PRINTABLE", actor);
+      await service.markSent(
+        a,
+        printable.id,
+        { to: "Belső oktatás", public: false },
+        actor,
+      );
+      assert.equal(await move(a, "READY_TO_SEND", "AWAITING_REVISION"), true);
+      const v2 = input(1, {
+        parts: [
+          {
+            key: "elso",
+            title: "Első rész",
+            text: `${long} Adag: {szám: adag}.`,
+            subparts: [],
+            checklist: [],
+            speakerNote: null,
+          },
+        ],
+      });
+      assert.equal((await sources.save(a, v2, actor)).kind, "ok");
+      await approve(a, "AWAITING_REVISION");
+      const deck = await service.generate(a, "SLIDES", actor);
+      assert.equal(deck.overFrame, 1, "the deck is over its frame");
+      const narration = await service.generate(a, "NARRATION", actor);
+      await edits.create({
+        outputId: narration.id,
+        fileName: "narracio.txt",
+        contentType: "text/plain",
+        sha256: "b".repeat(64),
+        bytes: new Uint8Array([0x41]),
+        slides: [],
+        text: "A",
+        userId: actor,
+      });
+
+      // B: v1 approved, one output, then the approval withdrawn without a new version
+      const b = await item("TEACHING_SOURCE");
+      assert.equal((await sources.save(b, input(null), actor)).kind, "ok");
+      await approve(b, "DRAFTING");
+      await service.generate(b, "PRINTABLE", actor);
+      assert.equal(await move(b, "READY_TO_SEND", "AWAITING_REVISION"), true);
+
+      const list = await sources.list(1_000);
+      assert.deepEqual(list.find((r) => r.contentId === a)?.outputs, {
+        total: 3,
+        current: 2,
+        stale: 1,
+        withdrawn: 0,
+        awaitingDecision: 1,
+        overFrame: 1,
+        sent: 1,
+      });
+      assert.deepEqual(list.find((r) => r.contentId === b)?.outputs, {
+        total: 1,
+        current: 0,
+        stale: 0,
+        withdrawn: 1,
+        awaitingDecision: 0,
+        overFrame: 0,
+        sent: 0,
+      });
     });
   },
 );

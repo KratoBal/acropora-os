@@ -103,9 +103,15 @@ export function TeachingSourceListPage() {
                         {item.outputs.stale} elavult
                       </PilotBadge>
                     ) : null}
-                    {item.outputs.differing ? (
+                    {item.outputs.withdrawn ? (
                       <PilotBadge variant="amber">
-                        {item.outputs.differing} eltér a forrástól
+                        {item.outputs.withdrawn} visszavont jóváhagyású
+                      </PilotBadge>
+                    ) : null}
+                    {item.outputs.awaitingDecision ? (
+                      <PilotBadge variant="amber">
+                        {item.outputs.awaitingDecision} szerkesztett változat
+                        döntésre vár
                       </PilotBadge>
                     ) : null}
                     {item.outputs.overFrame ? (

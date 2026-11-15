@@ -295,7 +295,9 @@ export class TeachingSourceRepository {
                 sourceVersion: true,
                 body: true,
                 sentAt: true,
-                _count: { select: { edits: true } },
+                // only the edited copies still waiting for a decision: those
+                // ask for work (whether one differs is measured on reading it)
+                _count: { select: { edits: { where: { decidedAt: null } } } },
               },
             },
           },
@@ -305,9 +307,12 @@ export class TeachingSourceRepository {
     return items.map((item) => {
       const source = item.teachingSource;
       const outputs = source?.outputs ?? [];
-      const stale = outputs.filter(
-        (o) => o.sourceVersion < (source?.version ?? 0),
-      ).length;
+      // the same rules as the output list (teaching-output.service.ts):
+      // stale when the source is newer, approved when its version is the approved one
+      const isStale = (o: { sourceVersion: number }) =>
+        o.sourceVersion < (source?.version ?? 0);
+      const isApproved = (o: { sourceVersion: number }) =>
+        o.sourceVersion === source?.approvedVersion;
       return {
         contentId: item.id,
         title: item.title,
@@ -321,9 +326,11 @@ export class TeachingSourceRepository {
           : 0,
         outputs: {
           total: outputs.length,
-          current: outputs.length - stale,
-          stale,
-          differing: outputs.filter((o) => o._count.edits > 0).length,
+          current: outputs.filter((o) => !isStale(o) && isApproved(o)).length,
+          stale: outputs.filter(isStale).length,
+          withdrawn: outputs.filter((o) => !isStale(o) && !isApproved(o))
+            .length,
+          awaitingDecision: outputs.filter((o) => o._count.edits > 0).length,
           overFrame: outputs.filter(
             (o) =>
               teachingOutputFlags(o.body as unknown as TeachingOutputBody)

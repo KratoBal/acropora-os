@@ -39,7 +39,8 @@ const item = (
     total: 0,
     current: 0,
     stale: 0,
-    differing: 0,
+    withdrawn: 0,
+    awaitingDecision: 0,
     overFrame: 0,
     sent: 0,
   },
@@ -56,10 +57,11 @@ describe("TeachingSourceListPage", () => {
       item({
         openQuestions: 2,
         outputs: {
-          total: 4,
+          total: 5,
           current: 2,
           stale: 2,
-          differing: 1,
+          withdrawn: 1,
+          awaitingDecision: 1,
           overFrame: 1,
           sent: 1,
         },
@@ -80,7 +82,8 @@ describe("TeachingSourceListPage", () => {
       "2 nyitott kérdés",
       "2 naprakész",
       "2 elavult",
-      "1 eltér a forrástól",
+      "1 visszavont jóváhagyású",
+      "1 szerkesztett változat döntésre vár",
       "1 keret felett",
       "1 kiment",
     ])

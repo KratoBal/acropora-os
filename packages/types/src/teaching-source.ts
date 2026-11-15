@@ -872,10 +872,17 @@ export interface TeachingSourceListItem {
   openQuestions: number;
   outputs: {
     total: number;
+    /** Not stale and made from the version approved now: these may go out. */
     current: number;
+    /** The source has a newer version. */
     stale: number;
-    /** Outputs with an edited copy uploaded. */
-    differing: number;
+    /**
+     * Not stale, but the approval of their version was withdrawn (the source
+     * went back for revision): the server refuses to record them as sent.
+     */
+    withdrawn: number;
+    /** Outputs with an edited copy still waiting for the editor's decision. */
+    awaitingDecision: number;
     overFrame: number;
     sent: number;
   };
