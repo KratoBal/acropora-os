@@ -23,6 +23,7 @@ import {
   type CalendarEventWrite,
 } from "./calendar-event.repository.js";
 import { calendarDate } from "./calendar-range.js";
+import { followCalendarEvent } from "./calendar-slot-follow.js";
 
 const NOT_FOUND = "Az esemény nem található.";
 const CHANGED =
@@ -60,6 +61,9 @@ const clean = (value: string | null | undefined): string | null => {
 @Injectable()
 export class CalendarEventService {
   constructor(private readonly repository: CalendarEventRepository) {}
+
+  /** A seam for the tests: the slot follow-up of an event change (S7), which writes through Prisma. */
+  follow = followCalendarEvent;
 
   async get(id: string): Promise<CalendarEvent> {
     const found = await this.repository.get(id);
@@ -128,11 +132,35 @@ export class CalendarEventService {
     );
     if (updated === "changed") throw new ConflictException(CHANGED);
     if (!updated) throw new NotFoundException(NOT_FOUND);
+    // after EVERY saved edit, not only a moved day: the follow-up skips a slot already on its day, so a save repeated after
+    // a failed follow-up heals it (S7)
+    await this.follow({
+      eventKey: `event:${id}`,
+      eventTitle: updated.title,
+      event: {
+        title: updated.title,
+        startsOn: updated.startsOn,
+        endsOn: updated.endsOn,
+      },
+      actorUserId: actor.id,
+    });
     return updated;
   }
 
+  /**
+   * The slots are told BEFORE the delete: a failed follow-up leaves the event in place, and deleting again does both. The
+   * other order would leave approved slots of a deleted event with no way back to them.
+   */
   async delete(id: string, actor: CalendarEventActor): Promise<void> {
     this.humanOnly(actor);
+    const current = await this.repository.get(id);
+    if (!current) throw new NotFoundException(NOT_FOUND);
+    await this.follow({
+      eventKey: `event:${id}`,
+      eventTitle: current.title,
+      event: null,
+      actorUserId: actor.id,
+    });
     if (!(await this.repository.delete(id, actor.id)))
       throw new NotFoundException(NOT_FOUND);
   }

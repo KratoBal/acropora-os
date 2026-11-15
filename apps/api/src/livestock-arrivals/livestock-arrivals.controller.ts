@@ -59,7 +59,11 @@ export class LivestockArrivalsController {
 
   @Patch(":id")
   @RequirePermissions(PERMISSIONS.INVENTORY_MANAGE)
-  update(@Param("id") id: string, @Body() input: UpdateLivestockArrivalDto) {
-    return this.service.update(id, input);
+  update(
+    @Param("id") id: string,
+    @Body() input: UpdateLivestockArrivalDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.update(id, input, user.id);
   }
 }
