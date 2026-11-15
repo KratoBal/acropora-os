@@ -2326,3 +2326,124 @@ describe("Dijnet payment: paired with the exact-amount invoice of a Dijnet-paid 
     assert.equal(DIJNET_ISSUERS.length, 1);
   });
 });
+
+/*
+  GYŰJTŐSZÁMLÁRA VÁR (Balázs, 2026-11-15: „hogy lehetne azt elérni, hogy a banki párosodások ne legyenek
+  ennyire gyatrák?”). Az éles eset, mérve aznap: a szeptemberi Parkl-fizetések a 10-01-i gyűjtőszámlához
+  párosodtak, a novemberiek (11-03 .. 11-13, egy kártya) a december elején kelő számlára várnak, és a lap
+  mindet hiánynak mutatta. MI PIROSÍT: a novemberi fizetés hiány marad a határidő előtt; a határidő után
+  nem esik vissza hiányba; egy gyűjtőszámla-előzmény nélküli partner kártyás fizetése is vár; egy kétes
+  (kézi választást kérő) sor vár, ahelyett hogy döntést kérne; `asOf` nélkül bármi vár.
+*/
+describe("a card payment waits for its monthly summary invoice until the deadline", () => {
+  const card = (date: string, amount: number, partner = "SIMPLEP*PARKL.NET") =>
+    debit({
+      bookingDate: date,
+      amount: D(amount),
+      counterpartyName: partner,
+      narrative: `${date.replace(/-/g, ".")} 0194683438 ${partner.replace(".NET", " .NET")}`,
+      category: "CARD_SUBSCRIPTION",
+    });
+  const parkl = doc({
+    number: "E-PAR-2026-46439",
+    date: "2026-10-01",
+    gross: D(1200),
+    supplierName: "Parkl Digital Technologies Kft.",
+  });
+  const setup = () => {
+    const september = [card("2026-09-05", 400), card("2026-09-17", 800)];
+    const november = [card("2026-11-03", 382), card("2026-11-13", 373)];
+    return { september, november };
+  };
+  const decide = (debits: MatchableDebit[], asOf?: string) =>
+    matchMonth({
+      debits,
+      documents: [parkl],
+      manual: new Map(),
+      ...(asOf ? { asOf } : {}),
+    });
+
+  it("a partner whose earlier month paired with a summary invoice: this month waits until the 5th of the next", () => {
+    const { september, november } = setup();
+    const out = decide([...september, ...november], "2026-11-13");
+    for (const d of september) assert.equal(out.get(d.id)?.state, "FOUND");
+    for (const d of november) {
+      assert.equal(out.get(d.id)?.state, "AWAITING_COLLECTOR");
+      assert.match(
+        out.get(d.id)?.reason ?? "",
+        /^gyűjtőszámlára vár: a 2026-11 havi .* 2026-12-05-ig kel/,
+      );
+    }
+  });
+
+  it("after the deadline, or with no statement day given, it is missing again", () => {
+    for (const asOf of ["2026-12-06", undefined]) {
+      const { september, november } = setup();
+      const out = decide([...september, ...november], asOf);
+      for (const d of november)
+        assert.equal(out.get(d.id)?.state, "NOT_MATCHED", String(asOf));
+    }
+    const { september, november } = setup();
+    const onDue = decide([...september, ...november], "2026-12-05");
+    for (const d of november)
+      assert.equal(onDue.get(d.id)?.state, "AWAITING_COLLECTOR", "the due day");
+  });
+
+  it("a partner with no summary invoice before is not assumed to send one", () => {
+    const lone = [
+      card("2026-11-03", 990, "SIMPLEP*MASIK.NET"),
+      card("2026-11-04", 500, "SIMPLEP*MASIK.NET"),
+    ];
+    const other = doc({
+      number: "M-1",
+      date: "2026-10-20",
+      gross: D(77),
+      supplierName: "SIMPLEP*MASIK.NET",
+    });
+    const out = matchMonth({
+      debits: [...setup().september, ...lone],
+      documents: [parkl, other],
+      manual: new Map(),
+      asOf: "2026-11-13",
+    });
+    for (const d of lone) assert.equal(out.get(d.id)?.state, "NOT_MATCHED");
+  });
+
+  it("a row asking for a manual choice stays on the missing tab, not waiting (barracuda on #2586)", () => {
+    const november = card("2026-11-03", 382);
+    // two invoices, each a few forints off: "több kerekítési találat: kézi választás"
+    const near = [384, 385].map((gross, i) =>
+      doc({
+        number: `E-PAR-2026-9${i}`,
+        date: "2026-10-20",
+        gross: D(gross),
+        supplierName: "Parkl Digital Technologies Kft.",
+      }),
+    );
+    const out = matchMonth({
+      debits: [...setup().september, november],
+      documents: [parkl, ...near],
+      manual: new Map(),
+      asOf: "2026-11-13",
+    });
+    assert.equal(out.get(november.id)?.state, "NOT_MATCHED");
+    assert.match(out.get(november.id)?.reason ?? "", /kézi választás/);
+  });
+
+  it("a transfer to the same partner that is no card payment does not wait", () => {
+    const transfer = debit({
+      bookingDate: "2026-11-05",
+      amount: D(990),
+      counterpartyName: "SIMPLEP*PARKL.NET",
+      narrative: "PARKL HAVIDIJ NOVEMBER",
+      category: "CARD_SUBSCRIPTION",
+    });
+    const out = matchMonth({
+      debits: [...setup().september, transfer],
+      documents: [parkl],
+      manual: new Map(),
+      asOf: "2026-11-13",
+    });
+    assert.equal(out.get(transfer.id)?.state, "NOT_MATCHED");
+  });
+});
