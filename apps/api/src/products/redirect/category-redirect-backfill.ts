@@ -127,7 +127,15 @@ export interface CategoryRedirectReport {
    * `repoint` módban: a meglévő `UNAS_CATEGORY` szabály, aminek a célját a mai handle-re írtuk át (a kategória-átvétel
    * (adopt) óta a régi `név---szülő` handle-alak 404-et ad). Kézi vagy más eredetű szabályhoz nem nyúl: az a `conflicts`-ban marad.
    */
-  rewritten: { source: string; from: string; to: string }[];
+  rewritten: {
+    source: string;
+    from: string;
+    to: string;
+    /** `manual-allowlist`: a szabály MANUAL eredetű volt, és a kérés kifejezett `repointManual` listáján állt (lásd `RepointOptions`). */
+    via?: "manual-allowlist";
+  }[];
+  /** A `repointManual` lista azon forrásai, amelyekre a terv nem írt át semmit (elírás, nincs szabály, nem MANUAL, nem oldódik fel): olvasható, nem néma. */
+  repointManualUnmatched: string[];
   refused: { source: string; kind: string; message: string }[];
   /** `/spl/` vagy `/sct/` út, amelynek azonosítója nem kategóriánk. */
   unknownId: string[];
@@ -292,9 +300,33 @@ export async function planCategoryRedirectBackfill(
     medusa?: readonly MedusaCategoryRef[];
     /** A meglévő `UNAS_CATEGORY` szabály célját átírja a mai handle-re (alapból hamis: felülírás nincs). */
     repoint?: boolean;
+    /**
+     * KIFEJEZETT ENGEDÉLYLISTA a MANUAL szabályokra (card f6cb0a51): azok a pontos források, amelyek MANUAL eredetű szabályának célját a
+     * `repoint` is átírhatja. A MANUAL-kizárás általában áll (egy kézi szabály Balázsé lehet); a lista egy ember döntése, forrásonként,
+     * és CSAK `repoint` mellett él. Más eredetű (UNAS_PRODUCT, SLUG_CHANGE) szabályra a lista sem hat.
+     */
+    repointManual?: readonly string[];
   } = { form: "current" },
 ): Promise<{ store: MemoryRedirectStore; report: CategoryRedirectReport }> {
   const store = new MemoryRedirectStore(existing);
+  const manualAllowed = new Set<string>();
+  // az ÉRVÉNYTELEN lista-elem (üres, szóközt tartalmazó, vezérlőkarakteres) nem tűnhet el nyomtalanul: a jelentés változatlan alakban kiírja
+  const manualInvalid: string[] = [];
+  for (const raw of options.repointManual ?? []) {
+    const normalized = normalizeRedirectPath(raw);
+    if (normalized === null) manualInvalid.push(raw);
+    else manualAllowed.add(redirectPathLower(normalized));
+  }
+  /** Átírhatja-e a `repoint` ezt a meglévő szabályt: saját eredetű, vagy MANUAL és kifejezetten engedélyezett. */
+  const rewritable = (
+    rule: RedirectRule | undefined,
+    source: string,
+  ): rule is RedirectRule =>
+    options.repoint === true &&
+    rule?.isActive === true &&
+    (rule.reason === "UNAS_CATEGORY" ||
+      (rule.reason === "MANUAL" &&
+        manualAllowed.has(redirectPathLower(source))));
   const existingBySource = new Map(
     existing.map((r) => [redirectPathLower(r.sourcePath), r]),
   );
@@ -307,6 +339,7 @@ export async function planCategoryRedirectBackfill(
     repointed: 0,
     conflicts: [],
     rewritten: [],
+    repointManualUnmatched: [],
     refused: [],
     unknownId: [],
     ambiguous: [],
@@ -372,7 +405,14 @@ export async function planCategoryRedirectBackfill(
     const rule = existingBySource.get(redirectPathLower(source));
     if (!rule) return { categories: [], verdict: "no-rule" };
     if (!rule.isActive) return { categories: [], verdict: "rule-inactive" };
-    if (rule.reason !== "UNAS_CATEGORY")
+    if (
+      rule.reason !== "UNAS_CATEGORY" &&
+      !(
+        rule.reason === "MANUAL" &&
+        options.repoint === true &&
+        manualAllowed.has(redirectPathLower(source))
+      )
+    )
       return {
         categories: [],
         verdict: `rule-reason-${rule.reason ?? "none"}`,
@@ -520,16 +560,15 @@ export async function planCategoryRedirectBackfill(
     const destination = `/hu/categories/${found.handle}`;
     // csak a SAJAT eredetű (UNAS_CATEGORY) szabály írható át; a kézi vagy más eredetű marad, és a `conflicts`-ba kerül
     const meglevo = existingBySource.get(redirectPathLower(source));
-    const atirhato =
-      options.repoint === true &&
-      meglevo?.isActive === true &&
-      meglevo.reason === "UNAS_CATEGORY";
+    const atirhato = rewritable(meglevo, source);
     try {
       const eredmeny = await writeRedirect(store, {
         source,
         destination,
         reason: "UNAS_CATEGORY",
         onExisting: atirhato ? "replace" : "keep",
+        // az átírás a KÉSZÍTŐT megőrzi (egy MANUAL szabály szerzője a riportban és a táblán is megmarad; eddig az írás nullázta)
+        ...(atirhato ? { createdById: meglevo!.createdById ?? null } : {}),
       });
       report.repointed += eredmeny.repointed;
       if (eredmeny.status === "unchanged") report.unchanged += 1;
@@ -538,6 +577,9 @@ export async function planCategoryRedirectBackfill(
           source,
           from: meglevo.destinationPath,
           to: destination,
+          ...(meglevo.reason === "MANUAL"
+            ? { via: "manual-allowlist" as const }
+            : {}),
         });
       else if (eredmeny.status === "conflict")
         report.conflicts.push({
@@ -558,6 +600,14 @@ export async function planCategoryRedirectBackfill(
       });
     }
   }
+  // a lista azon forrásai, amelyekre nem íródott át semmi: elírás, nincs szabály, nem MANUAL vagy nem oldódott fel
+  const rewrittenLower = new Set(
+    report.rewritten.map((r) => redirectPathLower(r.source)),
+  );
+  report.repointManualUnmatched = [
+    ...[...manualAllowed].filter((p) => !rewrittenLower.has(p)).sort(),
+    ...manualInvalid.map((raw) => `(ervenytelen ut) ${JSON.stringify(raw)}`),
+  ];
   report.invariantViolations = await redirectInvariantViolations(store);
   return { store, report };
 }
@@ -602,7 +652,13 @@ export function describeCategoryRedirectBackfill(
       (c) =>
         `  elteroen meglevo: ${c.source} -> ${c.existing} (kellene: ${c.wanted})`,
     ),
-    ...r.rewritten.map((c) => `  atirva: ${c.source}: ${c.from} -> ${c.to}`),
+    ...r.rewritten.map(
+      (c) =>
+        `  atirva: ${c.source}: ${c.from} -> ${c.to}${c.via ? " (MANUAL, kifejezett engedelylista)" : ""}`,
+    ),
+    ...r.repointManualUnmatched.map(
+      (u) => `  engedelylista, nem irt at semmit: ${u}`,
+    ),
     ...r.refused.map(
       (x) => `  elutasitva: ${x.source} ${x.kind}: ${x.message}`,
     ),
