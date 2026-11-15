@@ -130,15 +130,19 @@ export async function followCalendarEvent(input: {
   for (const step of followPlan(slots, input.event, input.eventTitle)) {
     const from = stateOf.get(step.id)!;
     const changed = await prisma.$transaction(async (tx) => {
-      const { count } = await tx.contentItem.updateMany({
-        where: { id: step.id, state: from },
-        data: {
-          ...(step.plannedOn
-            ? { plannedFor: plannedInstant(step.plannedOn) }
-            : {}),
-          ...(step.stepBack ? { state: "AWAITING_APPROVAL" as const } : {}),
-        },
-      });
+      const where = { id: step.id, state: from };
+      const data = {
+        ...(step.plannedOn
+          ? { plannedFor: plannedInstant(step.plannedOn) }
+          : {}),
+        ...(step.stepBack ? { state: "AWAITING_APPROVAL" as const } : {}),
+      };
+      // a gone event's open slot only gets the comment: an `updateMany` with no field to set writes nothing and counts 0
+      // (CI #2610), so the condition is checked with a count there, not with a write
+      const count =
+        Object.keys(data).length === 0
+          ? await tx.contentItem.count({ where })
+          : (await tx.contentItem.updateMany({ where, data })).count;
       if (count !== 1) return false;
       if (step.stepBack)
         await tx.contentStateEvent.create({
