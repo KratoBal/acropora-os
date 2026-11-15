@@ -38,6 +38,14 @@ import {
   condition, and the default import is the class itself. This takes whichever
   is there.
 */
+/*
+  IMAGES ON A SLIDE NEED A DEPENDENCY BACK FIRST: the root package.json removes
+  pptxgenjs's declared image-size ("pptxgenjs>image-size": "-", two HIGH
+  advisories in 1.2.1, unused by every build of pptxgenjs 4.0.1). Text is all
+  that goes on a slide today; before an image does, take the override out and
+  pin a fixed image-size (2.0.3 or later), or the failure shows at runtime,
+  not at compile time (barracuda on #2580).
+*/
 const PptxGenJS = ((pptxgenModule as unknown as { default?: unknown })
   .default ?? pptxgenModule) as typeof pptxgenModule.default;
 
