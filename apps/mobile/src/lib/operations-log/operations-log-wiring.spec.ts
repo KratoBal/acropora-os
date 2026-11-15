@@ -110,15 +110,17 @@ describe("az üzemeltetési napló bekötése", () => {
     assert.match(start, /pathname: "\/operations-log\/record"/);
   });
 
-  it("a kezdőképernyő három listája ugyanazt a visszaesési szabályt követi: csak a hálózati hiba és az 5xx", () => {
+  it("a kezdőképernyő katalógusa ugyanazt a visszaesési szabályt követi: csak a hálózati hiba és az 5xx", () => {
     const load = read("lib/operations-log/start-load.ts");
     assert.match(load, /!\(cause instanceof ApiError && cause\.status < 500\)/);
     assert.equal(
       load.match(/if \(!mayUseCopy\(cause\)\) throw cause;/g)?.length,
-      3,
+      1,
     );
+    // a partner, a helyszín és az eszköz egy katalógusból épül, nem három külön lekérdezésből (Balázs, 2026-11-15)
+    assert.equal(load.match(/export async function load/g)?.length, 1);
     // a másolat nélküli, hálózat nélküli eset az eredeti hiba marad
-    assert.equal(load.match(/if \(cached === null\) throw cause;/g)?.length, 3);
+    assert.equal(load.match(/if \(cached === null\) throw cause;/g)?.length, 1);
   });
 
   it("a mentett listára csak a hálózati hiba és az 5xx esik vissza, a válaszolt 4xx nem", () => {

@@ -15,15 +15,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 import { loadOperationsTemplates } from "@/lib/operations-log/operations-load";
-import {
-  loadStartDevices,
-  loadStartLocations,
-  loadStartPartners,
-} from "@/lib/operations-log/start-load";
+import { loadStartCatalogue } from "@/lib/operations-log/start-load";
 import {
   assetMeta,
+  assetsInLocation,
   cacheNotice,
   emptyText,
+  locationsFromAssets,
+  partnersFromAssets,
   startStep,
   templateDecision,
 } from "@/lib/operations-log/start-picker";
@@ -58,25 +57,11 @@ export default function OperationsLogStartScreen() {
   const enabled =
     Boolean(capabilities?.operationsLogRecord) && status === "authenticated";
 
-  const partners = useQuery({
-    queryKey: ["operations-start", "partners"],
-    queryFn: loadStartPartners,
-    enabled: enabled && step === "partners",
-  });
-  const locations = useQuery({
-    queryKey: ["operations-start", "locations", params.partnerId],
-    queryFn: () => loadStartLocations(params.partnerId!),
-    enabled: enabled && step === "locations",
-  });
-  const devices = useQuery({
-    queryKey: [
-      "operations-start",
-      "devices",
-      params.partnerId,
-      params.locationId,
-    ],
-    queryFn: () => loadStartDevices(params.partnerId!, params.locationId!),
-    enabled: enabled && step === "devices",
+  // EGY katalógus, három lista: a partner, a helyszín és az eszköz ugyanabból a halmazból épül (`start-picker.ts`)
+  const catalogue = useQuery({
+    queryKey: ["operations-start", "catalogue"],
+    queryFn: loadStartCatalogue,
+    enabled: enabled && step !== "templates",
   });
   // ugyanaz a kulcs és betöltő, mint az eszköz lapján: a már betöltött lista ott is, itt is él
   const templates = useQuery({
@@ -105,14 +90,7 @@ export default function OperationsLogStartScreen() {
   if (status !== "authenticated" || !user) return <Redirect href="/login" />;
   if (!capabilities?.operationsLogRecord) return <Redirect href="/" />;
 
-  const active =
-    step === "partners"
-      ? partners
-      : step === "locations"
-        ? locations
-        : step === "devices"
-          ? devices
-          : templates;
+  const active = step === "templates" ? templates : catalogue;
   const fromCache = active.data?.fromCache ?? false;
 
   const title =
@@ -151,8 +129,9 @@ export default function OperationsLogStartScreen() {
     onPress: () => void;
   };
   let rows: Row[] = [];
-  if (step === "partners" && partners.data)
-    rows = partners.data.items.map((partner) => ({
+  const assets = catalogue.data?.assets ?? [];
+  if (step === "partners" && catalogue.data)
+    rows = partnersFromAssets(assets).map((partner) => ({
       key: partner.id,
       title: partner.name,
       onPress: () =>
@@ -161,8 +140,8 @@ export default function OperationsLogStartScreen() {
           params: { partnerId: partner.id, partnerName: partner.name },
         }),
     }));
-  if (step === "locations" && locations.data)
-    rows = locations.data.items.map((location) => ({
+  if (step === "locations" && catalogue.data)
+    rows = locationsFromAssets(assets, params.partnerId!).map((location) => ({
       key: location.id,
       title: location.label,
       onPress: () =>
@@ -176,24 +155,26 @@ export default function OperationsLogStartScreen() {
           },
         }),
     }));
-  if (step === "devices" && devices.data)
-    rows = devices.data.items.map((asset) => ({
-      key: asset.id,
-      title: asset.name,
-      meta: assetMeta(asset),
-      onPress: () =>
-        router.push({
-          pathname: "/operations-log",
-          params: {
-            partnerId: params.partnerId,
-            partnerName: params.partnerName,
-            locationId: params.locationId,
-            locationLabel: params.locationLabel,
-            assetId: asset.id,
-            assetName: asset.name,
-          },
-        }),
-    }));
+  if (step === "devices" && catalogue.data)
+    rows = assetsInLocation(assets, params.partnerId!, params.locationId!).map(
+      (asset) => ({
+        key: asset.id,
+        title: asset.name,
+        meta: assetMeta(asset),
+        onPress: () =>
+          router.push({
+            pathname: "/operations-log",
+            params: {
+              partnerId: params.partnerId,
+              partnerName: params.partnerName,
+              locationId: params.locationId,
+              locationLabel: params.locationLabel,
+              assetId: asset.id,
+              assetName: asset.name,
+            },
+          }),
+      }),
+    );
   if (decision?.kind === "choose" && templates.data)
     rows = templates.data.items.map((template) => ({
       key: template.id,
