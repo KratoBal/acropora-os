@@ -503,3 +503,132 @@ describe("repoint: a meglévő UNAS_CATEGORY szabály célja a mai handle-re ír
     );
   });
 });
+
+/*
+  A REGI KEZELO TARTALEKA (card f6cb0a51, a #2591 szarazfutasa utan). A tervezo a regi UNAS utat a kategoria NEVEBOL kepzett
+  szluggal keresi. Ez a kirakat mintaban 18 kategoria-celu utat nem talalt meg (marka-alutak: /aramoltatok/aquamedic, atnevezett nev:
+  aqualight kontra AquaLight) es 3 utat kettenek talalt (/ragasztok). MI PIROSIT: ha egy ilyen ut tovabbra is kimarad; ha a
+  tartalek kitalal egy kategoriat (nem pontosan egyet jelolo regi kezelo, kezi vagy eredet nelkuli szabaly); ha a nev ELSOBBSEGE
+  megszunik (egy nev szerint egyertelmu utat a szabaly celja ne irjon felul).
+*/
+describe("a meglévő szabály régi kezelője dönt, ha a név nem", () => {
+  const fa2: CategoryForRedirect[] = [
+    { id: "k-root", unasId: "1", name: "Termékek", parentId: null },
+    { id: "k-aram", unasId: "2", name: "Áramoltatók", parentId: "k-root" },
+    { id: "k-aql", unasId: "3", name: "AquaLight", parentId: "k-aram" },
+    {
+      id: "k-epit",
+      unasId: "4",
+      name: "Akvárium-építési eszközök",
+      parentId: "k-root",
+    },
+    {
+      id: "k-karb",
+      unasId: "5",
+      name: "Akvárium-karbantartás eszközök",
+      parentId: "k-root",
+    },
+    { id: "k-rag1", unasId: "6", name: "Ragasztók", parentId: "k-epit" },
+    { id: "k-rag2", unasId: "7", name: "Ragasztók", parentId: "k-karb" },
+  ];
+  const szabaly = (
+    sourcePath: string,
+    destinationPath: string,
+    reason: "UNAS_CATEGORY" | "MANUAL" = "UNAS_CATEGORY",
+  ) => ({
+    id: `r-${sourcePath}`,
+    sourcePath,
+    destinationPath,
+    isActive: true,
+    reason,
+  });
+  const futtat = (
+    paths: string[],
+    existing: Parameters<typeof planCategoryRedirectBackfill>[2],
+  ) =>
+    planCategoryRedirectBackfill(paths, fa2, existing, {
+      form: "current",
+      repoint: true,
+    });
+  const handleOf = (id: string) => categoryHandles(fa2, "current").get(id);
+
+  it("az átnevezett név (aqualight kontra AquaLight) a szabály régi kezelőjéből a kategóriára köt, és átíródik", async () => {
+    const { report } = await futtat(
+      ["/aramoltatok/aqualight"],
+      [
+        szabaly(
+          "/aramoltatok/aqualight",
+          "/hu/categories/aqua-light---áramoltatók",
+        ),
+      ],
+    );
+    assert.equal(report.skipped, 0);
+    assert.deepEqual(report.rewritten, [
+      {
+        source: "/aramoltatok/aqualight",
+        from: "/hu/categories/aqua-light---áramoltatók",
+        to: `/hu/categories/${handleOf("k-aql")}`,
+      },
+    ]);
+  });
+
+  it("a kétértelmű nevet (két Ragasztók) a régi kezelő szűkíti egyre; régi kezelő nélkül kétértelmű marad", async () => {
+    const dont = await futtat(
+      ["/ragasztok"],
+      [
+        szabaly(
+          "/ragasztok",
+          "/hu/categories/ragasztók---akvárium-építési-eszközök",
+        ),
+      ],
+    );
+    assert.equal(dont.report.ambiguous.length, 0);
+    assert.equal(
+      dont.report.rewritten[0]?.to,
+      `/hu/categories/${handleOf("k-rag1")}`,
+    );
+
+    const nincs = await futtat(["/ragasztok"], []);
+    assert.equal(nincs.report.ambiguous.length, 1);
+    assert.equal(nincs.report.rewritten.length, 0);
+  });
+
+  it("nem találgat: kézi szabály, ismeretlen régi kezelő és két kategóriát jelölő kezelő mellett az ut kimarad", async () => {
+    const kezi = await futtat(
+      ["/aramoltatok/aqualight"],
+      [
+        szabaly(
+          "/aramoltatok/aqualight",
+          "/hu/categories/aqua-light---áramoltatók",
+          "MANUAL",
+        ),
+      ],
+    );
+    assert.equal(kezi.report.skipped, 1);
+    assert.equal(kezi.report.rewritten.length, 0);
+
+    const ismeretlen = await futtat(
+      ["/aramoltatok/aqualight"],
+      [szabaly("/aramoltatok/aqualight", "/hu/categories/nincs-ilyen---semmi")],
+    );
+    assert.equal(ismeretlen.report.skipped, 1);
+    assert.equal(ismeretlen.report.rewritten.length, 0);
+  });
+
+  it("a név elsőbbséget élvez: egy név szerint egyértelmű utat a szabály célja nem írhat át másik kategóriára", async () => {
+    // /aramoltatok név szerint egy kategória (Áramoltatók); a szabály célja a RAGASZTÓK régi kezelője: a név dönt
+    const { report } = await futtat(
+      ["/aramoltatok"],
+      [
+        szabaly(
+          "/aramoltatok",
+          "/hu/categories/ragasztók---akvárium-építési-eszközök",
+        ),
+      ],
+    );
+    assert.equal(
+      report.rewritten[0]?.to,
+      `/hu/categories/${handleOf("k-aram")}`,
+    );
+  });
+});

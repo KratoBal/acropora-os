@@ -1,4 +1,7 @@
-import { categoryHandle } from "../../integrations/medusa/medusa-category-handle.js";
+import {
+  categoryHandle,
+  medusaDefaultHandle,
+} from "../../integrations/medusa/medusa-category-handle.js";
 import {
   categoryRowsFromOurTree,
   categoryTitle,
@@ -302,6 +305,34 @@ export async function planCategoryRedirectBackfill(
     return out;
   };
 
+  /**
+   * A REGI KEZELO: a kategoria cime a szuloveles (`{nev} - {szulo}`), a Medusa sajat kebab-alakjaban. A meglevo UNAS_CATEGORY
+   * szabaly celja (`/hu/categories/<regi kezelo>`) ezt hordozza, tehat egy olyan utat is vissza lehet vele keresni, amelynek a neve
+   * nem egyezik a kategoriaeval (marka-alut: `/aramoltatok/aquamedic`; atnevezes: `aqualight` kontra `AquaLight`).
+   */
+  const byLegacyHandle = new Map<string, CategoryForRedirect[]>();
+  for (const c of categories) {
+    const parent = c.parentId ? byId.get(c.parentId) : undefined;
+    const key = medusaDefaultHandle(
+      legacyCategoryTitle(c.name, parent?.name ?? null),
+    );
+    byLegacyHandle.set(key, [...(byLegacyHandle.get(key) ?? []), c]);
+  }
+  /** A meglevo, SAJAT eredetu szabaly celjabol a kategoriak, amelyeknek a regi kezeloje az. Nincs szabaly vagy nem illik: ures. */
+  const viaExistingRule = (source: string): CategoryForRedirect[] => {
+    const rule = existingBySource.get(redirectPathLower(source));
+    if (!rule?.isActive || rule.reason !== "UNAS_CATEGORY") return [];
+    const match = /^\/hu\/categories\/(.+)$/.exec(rule.destinationPath);
+    if (!match) return [];
+    let handle = match[1]!;
+    try {
+      handle = decodeURIComponent(handle);
+    } catch {
+      // nem dekodolhato alak: a nyers szoveg marad, es valoszinuleg nem talal
+    }
+    return byLegacyHandle.get(handle.toLowerCase()) ?? [];
+  };
+
   const resolve = (
     source: string,
   ): Resolved | "unknown" | "no-medusa" | CategoryForRedirect[] | null => {
@@ -326,13 +357,19 @@ export async function planCategoryRedirectBackfill(
         .reverse()
         .every((s, i) => chain[i] === s);
     });
-    if (candidates.length === 0) return null;
-    if (candidates.length === 1) {
-      const c = candidates[0]!;
+    const pick = (c: CategoryForRedirect) => {
       const handle = handles.get(c.id);
-      return handle ? { id: c.id, handle } : "no-medusa";
-    }
-    return candidates;
+      return handle ? { id: c.id, handle } : ("no-medusa" as const);
+    };
+    if (candidates.length === 1) return pick(candidates[0]!);
+    // a NEV nem dont (nincs vagy tobb jelolt): a meglevo szabaly regi kezeloje dont, CSAK ha pontosan egy kategoriat jelol
+    const viaRule = viaExistingRule(source);
+    if (candidates.length === 0)
+      return viaRule.length === 1 ? pick(viaRule[0]!) : null;
+    const narrowed = candidates.filter((c) =>
+      viaRule.some((v) => v.id === c.id),
+    );
+    return narrowed.length === 1 ? pick(narrowed[0]!) : candidates;
   };
 
   // a sorrend rögzített: kétszer ugyanaz a lista ugyanazt a jelentést adja
