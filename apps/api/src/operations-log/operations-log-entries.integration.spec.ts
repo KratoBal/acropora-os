@@ -48,6 +48,7 @@ describe(
       recorder: "",
       colleague: "",
       stranger: "",
+      machine: "",
     };
     const name = (label: string) => `${PREFIX}${label}-${suffix}`;
     const at = (minutesAgo: number) =>
@@ -97,6 +98,18 @@ describe(
       ids.colleague = (await user("kollega")).id;
       // a nézőből nem lehet kiosztott kolléga: a szolgáltatás elutasítja
       ids.stranger = (await user("nezo", "VIEWER")).id;
+      // gépi / flotta fiók: a szerepe és a jogai a kollégáéi, mégsem választható résztvevő (isServiceAccount)
+      ids.machine = (
+        await prisma.user.create({
+          data: {
+            email: `${PREFIX.toLowerCase()}gep-${suffix}@example.invalid`,
+            displayName: `${PREFIX}gep`,
+            role: "SERVICE",
+            isServiceAccount: true,
+          },
+          select: { id: true },
+        })
+      ).id;
       const customer = await prisma.customer.create({
         data: {
           customerNumber: `${PREFIX}${suffix}`,
@@ -396,7 +409,29 @@ describe(
           ),
           /nem választható kolléga/,
         );
+        // a gépi / flotta fiók sem választható, pedig szerepben és jogban a kollégával azonos
+        await assert.rejects(
+          service.create(
+            input("gep", { participantIds: [ids.machine] }),
+            ids.recorder,
+          ),
+          /nem választható kolléga/,
+        );
         assert.equal(await prisma.operationsLogEntry.count(), before);
+      });
+
+      it("a résztvevők listája: a kolléga igen, a hívó és a gépi fiók nem", async () => {
+        const forRecorder = await service.colleagues(ids.recorder);
+        const listed = new Set(forRecorder.items.map((item) => item.id));
+        assert.equal(listed.has(ids.colleague), true);
+        assert.equal(listed.has(ids.recorder), false);
+        assert.equal(listed.has(ids.machine), false);
+        // a kolléga listáján viszont a rögzítő szerepel (nem a hívó)
+        const forColleague = await service.colleagues(ids.colleague);
+        assert.equal(
+          forColleague.items.some((item) => item.id === ids.recorder),
+          true,
+        );
       });
 
       it("a lista az időrendben legújabbat adja, és a limit felett jelzi, hogy van még", async () => {

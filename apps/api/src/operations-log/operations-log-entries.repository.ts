@@ -176,7 +176,7 @@ export class OperationsLogEntriesRepository {
 
   async assignableColleagues(): Promise<{ id: string; name: string }[]> {
     const rows = await prisma.user.findMany({
-      where: assignableUserWhere(),
+      where: { ...assignableUserWhere(), isServiceAccount: false },
       select: { id: true, displayName: true, nickname: true },
     });
     return rows
@@ -184,11 +184,18 @@ export class OperationsLogEntriesRepository {
       .sort((a, b) => a.name.localeCompare(b.name, "hu"));
   }
 
-  /** A megadottak közül azok, akik választhatók (aktív belső kolléga). */
+  /**
+   * A megadottak közül azok, akik választhatók (aktív belső KOLLÉGA, nem gépi fiók): a lista és az ellenőrzés ugyanazt a szabályt
+   * követi, különben egy kézzel küldött azonosítóval a gépi fiók mégis résztvevő lehetne.
+   */
   async assignableIds(ids: readonly string[]): Promise<Set<string>> {
     if (ids.length === 0) return new Set();
     const rows = await prisma.user.findMany({
-      where: { id: { in: [...ids] }, ...assignableUserWhere() },
+      where: {
+        id: { in: [...ids] },
+        ...assignableUserWhere(),
+        isServiceAccount: false,
+      },
       select: { id: true },
     });
     return new Set(rows.map((row) => row.id));

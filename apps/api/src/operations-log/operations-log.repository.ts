@@ -1,5 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { prisma, type Prisma } from "@acropora/database";
+import { assetOwnerScopeWhere } from "../service-assets/service-assets.types.js";
+import { buildUnitPaths } from "../service-assets/unit-path.js";
 import type {
   OperationsMeterRole,
   OperationsTaskFieldDto,
@@ -116,6 +118,20 @@ export function templateTargets(
   return { assetIds: [...assetIds], categoryIds: [...categoryIds] };
 }
 
+/**
+ * A KEZDŐKÉPERNYŐ KATALÓGUSÁNAK EGY ESZKÖZE (kártya f6694b49): amit a telefon a partner, helyszín, eszköz választáshoz olvas. Ugyanaz az
+ * alak, mint az eszköz-lista sora azokon a mezőkön (a `unit.path` a gyökértől a helyszínig tartó nevek), hogy a telefon a mentett
+ * másolatból (helyszín-letöltés) is ugyanezt a szerkezetet építse.
+ */
+export interface OperationsStartAsset {
+  id: string;
+  assetNumber: string;
+  name: string;
+  category?: string;
+  owner: { id: string; displayName: string };
+  unit: { id: string; path: string[] };
+}
+
 @Injectable()
 export class OperationsLogRepository {
   async listTemplates(
@@ -178,6 +194,77 @@ export class OperationsLogRepository {
       orderBy: { id: "asc" },
     });
     return rows.map((row) => row.id);
+  }
+
+  /**
+   * A KEZDŐKÉPERNYŐ KATALÓGUSA: a szerviz-partnerek AKTÍV, nem archivált eszközei, amelyekhez van aktív sablon (az eszközre vagy a
+   * kategóriájára), a partnerrel és a helyszín teljes útjával. A telefon ebből építi a három listát: így a partner és a helyszín
+   * is csak akkor szerepel, ha van ott rögzíthető eszköz (Balázs, 2026-11-15: "az OSSZES helyszin megjelenik").
+   *
+   * A HATÓKÖR UGYANAZ, mint az eszköz-listáé a telefonon (`ownerScope=SERVICE_PARTNER`, `status=ACTIVE`): a rögzítő jog belső
+   * szerepeké, és a partner neve és a helyszín útja azokat a mezőket adja, amelyeket az eszköz-lista úgyis. Hely nélküli (nem
+   * partner-alegységen álló) eszköz kimarad: nincs mit választani.
+   */
+  async startCatalogue(): Promise<OperationsStartAsset[]> {
+    const templates = await prisma.operationsTaskTemplate.findMany({
+      where: { isActive: true },
+      select: { assetId: true, assetCategoryId: true },
+    });
+    const { assetIds, categoryIds } = templateTargets(templates);
+    const targets: Prisma.AssetWhereInput[] = [
+      ...(assetIds.length ? [{ id: { in: assetIds } }] : []),
+      ...(categoryIds.length ? [{ categoryId: { in: categoryIds } }] : []),
+    ];
+    if (targets.length === 0) return [];
+    const rows = await prisma.asset.findMany({
+      where: {
+        archivedAt: null,
+        status: "ACTIVE",
+        ...assetOwnerScopeWhere("SERVICE_PARTNER"),
+        OR: targets,
+      },
+      select: {
+        id: true,
+        assetNumber: true,
+        name: true,
+        categoryRef: { select: { name: true } },
+        supplier: { select: { id: true, name: true } },
+        department: {
+          select: { id: true, name: true, parentId: true, customerId: true },
+        },
+      },
+      orderBy: { id: "asc" },
+    });
+    const customerIds = [
+      ...new Set(
+        rows
+          .map((row) => row.department?.customerId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    const units = customerIds.length
+      ? await prisma.worksheetDepartment.findMany({
+          where: { customerId: { in: customerIds } },
+          select: { id: true, name: true, parentId: true },
+        })
+      : [];
+    const paths = buildUnitPaths(units);
+    const out: OperationsStartAsset[] = [];
+    for (const row of rows) {
+      if (!row.supplier || !row.department) continue;
+      out.push({
+        id: row.id,
+        assetNumber: row.assetNumber,
+        name: row.name,
+        ...(row.categoryRef ? { category: row.categoryRef.name } : {}),
+        owner: { id: row.supplier.id, displayName: row.supplier.name },
+        unit: {
+          id: row.department.id,
+          path: paths.get(row.department.id) ?? [row.department.name],
+        },
+      });
+    }
+    return out;
   }
 
   async templateById(id: string): Promise<OperationsTaskTemplateDto | null> {

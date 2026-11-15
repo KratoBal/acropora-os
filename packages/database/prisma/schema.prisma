@@ -984,6 +984,11 @@ model User {
   signatureCodeHash      String?
   role                   UserRole
   isActive               Boolean                       @default(true)
+  /// GÉPI / FLOTTA FIÓK, nem ember (kártya f6694b49, Balázs 2026-11-15: az "Acrobot (flotta)" és az "Acrobot Szerviz" ne legyen választható
+  /// résztvevő). KIFEJEZETT JELÖLŐ, nem szerep és nem név: a flotta fiókja ADMIN, ugyanaz, mint egy ember-adminé, és a névre szűrés a
+  /// következő átnevezésnél csendben elromlik. Ma csak az üzemeltetési napló résztvevő-listája olvassa; a munkalap- és hibajegy-kiosztás
+  /// (`assignableUserWhere`) szándékosan nem, az más döntés.
+  isServiceAccount       Boolean                       @default(false)
   avatarUrl              String?
   /// A felület témája, a fiókhoz mentve (Balázs, 2026-11-09: a telefon böngészője minden alkalommal elfelejtette).
   /// NULL: még nem választott, ilyenkor a böngésző saját (helyi) beállítása dönt. A localStorage csak gyorsítótár.
