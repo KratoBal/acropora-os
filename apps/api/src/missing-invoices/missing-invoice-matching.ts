@@ -1619,8 +1619,9 @@ const PLAIN_NOT_MATCHED =
  * mégis hiánynak mutatta: a lista háromnegyede zaj volt, és eltemette a valódi hiányt.
  *
  * Egy NEM PÁROSODOTT kártyás fizetés akkor vár, ha MIND:
- *   - a partnere ugyanebben a számításban már párosodott gyűjtőszámlával (egy korábbi hónapja, `group:`
- *     párosítás): a gyűjtőszámla a partner szokása, nem feltevés;
+ *   - a partnere ugyanebben a számításban már párosodott gyűjtőszámlával (BÁRMELY hónapja, ugyanez is,
+ *     `group:` párosítás): a gyűjtőszámla a partner szokása, nem feltevés. Ha a hónap számlája már
+ *     megjött, a maradék sor legfeljebb a határidőig vár (barracuda, #2586);
  *   - a vásárlás hónapjának gyűjtőszámla-határideje (a következő hónap 5-e) a kivonat utolsó napja
  *     (`asOf`) után van: ami a határidő után sem jött, az újra hiány;
  *   - a nem-párosodás oka a sima „nincs pontos összegű számla” (nem kétértelműség, nem elírás-gyanú).

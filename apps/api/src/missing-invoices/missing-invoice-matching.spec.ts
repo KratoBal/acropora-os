@@ -2408,4 +2408,42 @@ describe("a card payment waits for its monthly summary invoice until the deadlin
     });
     for (const d of lone) assert.equal(out.get(d.id)?.state, "NOT_MATCHED");
   });
+
+  it("a row asking for a manual choice stays on the missing tab, not waiting (barracuda on #2586)", () => {
+    const november = card("2026-11-03", 382);
+    // two invoices, each a few forints off: "több kerekítési találat: kézi választás"
+    const near = [384, 385].map((gross, i) =>
+      doc({
+        number: `E-PAR-2026-9${i}`,
+        date: "2026-10-20",
+        gross: D(gross),
+        supplierName: "Parkl Digital Technologies Kft.",
+      }),
+    );
+    const out = matchMonth({
+      debits: [...setup().september, november],
+      documents: [parkl, ...near],
+      manual: new Map(),
+      asOf: "2026-11-13",
+    });
+    assert.equal(out.get(november.id)?.state, "NOT_MATCHED");
+    assert.match(out.get(november.id)?.reason ?? "", /kézi választás/);
+  });
+
+  it("a transfer to the same partner that is no card payment does not wait", () => {
+    const transfer = debit({
+      bookingDate: "2026-11-05",
+      amount: D(990),
+      counterpartyName: "SIMPLEP*PARKL.NET",
+      narrative: "PARKL HAVIDIJ NOVEMBER",
+      category: "CARD_SUBSCRIPTION",
+    });
+    const out = matchMonth({
+      debits: [...setup().september, transfer],
+      documents: [parkl],
+      manual: new Map(),
+      asOf: "2026-11-13",
+    });
+    assert.equal(out.get(transfer.id)?.state, "NOT_MATCHED");
+  });
 });
