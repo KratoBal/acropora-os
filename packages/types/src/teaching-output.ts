@@ -429,3 +429,95 @@ export function buildTeachingNarration(
     }),
   };
 }
+
+export const TEACHING_OUTPUT_KINDS = [
+  "PRINTABLE",
+  "SLIDES",
+  "NARRATION",
+] as const;
+export type TeachingOutputKind = (typeof TEACHING_OUTPUT_KINDS)[number];
+
+export type TeachingOutputBody =
+  TeachingPrintable | TeachingSlideDeck | TeachingNarration;
+
+/** One output of a kind, from one source version, at one time. */
+export function buildTeachingOutput(
+  kind: TeachingOutputKind,
+  source: TeachingOutputSource,
+  generatedAt: string,
+  openIds: ReadonlySet<string> = new Set(),
+): TeachingOutputBody {
+  if (kind === "PRINTABLE")
+    return buildTeachingPrintable(source, generatedAt, openIds);
+  if (kind === "SLIDES")
+    return buildTeachingSlides(source, generatedAt, openIds);
+  return buildTeachingNarration(source, generatedAt, openIds);
+}
+
+/** What an output needs the editor's eye for, read off its body. */
+export function teachingOutputFlags(body: TeachingOutputBody): {
+  overFrame: number;
+  chaptersWithoutNarration: number;
+} {
+  return {
+    overFrame: body.kind === "SLIDES" ? body.overFrame.length : 0,
+    chaptersWithoutNarration:
+      body.kind === "NARRATION"
+        ? body.chapters.filter((c) => c.text === null).length
+        : 0,
+  };
+}
+
+export interface TeachingOutputSent {
+  to: string;
+  /** Whether the place is a public channel (newsletter, social post, product page). */
+  public: boolean;
+  byId: string | null;
+  at: string;
+}
+
+export interface TeachingOutputSummary {
+  id: string;
+  kind: TeachingOutputKind;
+  sourceVersion: number;
+  generatedById: string | null;
+  generatedAt: string;
+  /** The source has a newer version than this output was made from. */
+  stale: boolean;
+  /** This output was made from the version approved now. */
+  approved: boolean;
+  overFrame: number;
+  chaptersWithoutNarration: number;
+  sent: TeachingOutputSent | null;
+}
+
+export interface TeachingOutputDetail extends TeachingOutputSummary {
+  body: TeachingOutputBody;
+}
+
+export const TEACHING_SENT_TO_MAX = 300;
+
+/** Where an output went: a named place and whether it is public. */
+export function parseTeachingSentInput(
+  body: unknown,
+):
+  | { ok: true; value: { to: string; public: boolean } }
+  | { ok: false; message: string } {
+  if (typeof body !== "object" || body === null || Array.isArray(body))
+    return { ok: false, message: "the record is an object" };
+  const record = body as Record<string, unknown>;
+  const stray = Object.keys(record).find((k) => k !== "to" && k !== "public");
+  if (stray) return { ok: false, message: `unknown field ${stray}` };
+  if (
+    typeof record.to !== "string" ||
+    !record.to.trim() ||
+    record.to.length > TEACHING_SENT_TO_MAX
+  )
+    return {
+      ok: false,
+      message: `to: where it went, at most ${TEACHING_SENT_TO_MAX} characters`,
+    };
+  if (typeof record.public !== "boolean")
+    return { ok: false, message: "public: true or false" };
+  return { ok: true, value: { to: record.to.trim(), public: record.public } };
+}

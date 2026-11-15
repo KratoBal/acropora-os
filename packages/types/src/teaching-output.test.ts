@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  buildTeachingOutput,
+  parseTeachingSentInput,
+  teachingOutputFlags,
   buildTeachingNarration,
   buildTeachingPrintable,
   buildTeachingSlides,
@@ -323,5 +326,54 @@ describe("buildTeachingNarration", () => {
       new Set(["celso"]),
     );
     assert.deepEqual(out.chapters[0]?.openNumbers, ["celso"]);
+  });
+});
+
+describe("output records", () => {
+  it("builds each kind, and reads the flags off the body", () => {
+    const src = source({
+      parts: [
+        part({
+          key: "a",
+          text: Array.from({ length: 21 }, (_, i) => `Állítás ${i}.`).join(" "),
+        }),
+      ],
+    });
+    assert.equal(buildTeachingOutput("PRINTABLE", src, AT).kind, "PRINTABLE");
+    assert.deepEqual(
+      teachingOutputFlags(buildTeachingOutput("SLIDES", src, AT)),
+      {
+        overFrame: 1,
+        chaptersWithoutNarration: 0,
+      },
+    );
+    assert.deepEqual(
+      teachingOutputFlags(buildTeachingOutput("NARRATION", src, AT)),
+      {
+        overFrame: 0,
+        chaptersWithoutNarration: 1,
+      },
+    );
+  });
+
+  it("parses where an output went, strictly", () => {
+    assert.deepEqual(
+      parseTeachingSentInput({ to: "  Hírlevél ", public: true }),
+      {
+        ok: true,
+        value: { to: "Hírlevél", public: true },
+      },
+    );
+    for (const bad of [
+      null,
+      [],
+      {},
+      { to: " ", public: false },
+      { to: "x" },
+      { to: "x", public: "igen" },
+      { to: "x", public: false, y: 1 },
+      { to: "x".repeat(301), public: false },
+    ])
+      assert.equal(parseTeachingSentInput(bad).ok, false, JSON.stringify(bad));
   });
 });

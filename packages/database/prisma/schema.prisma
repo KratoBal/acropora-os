@@ -8623,6 +8623,7 @@ model TeachingSource {
   approvedVersion Int?
   updatedById     String?
   versions        TeachingSourceVersion[]
+  outputs         TeachingOutput[]
   createdAt       DateTime                @default(now())
   updatedAt       DateTime                @updatedAt
 }
@@ -8649,6 +8650,38 @@ model TeachingSourceVersion {
   createdAt   DateTime         @default(now())
 
   @@unique([contentId, version])
+}
+
+/// Egy forrásból generált kimenet fajtája (T5.2, spec v2 2. pont).
+enum TeachingOutputKind {
+  PRINTABLE
+  SLIDES
+  NARRATION
+}
+
+/// EGY GENERÁLT KIMENET, A FORRÁS EGY JÓVÁHAGYOTT VERZIÓJÁBÓL (T5.2, 2b szelet).
+/// A `body` a generált szerkezet (`TeachingPrintable`, `TeachingSlideDeck` vagy
+/// `TeachingNarration`), a fájl (PDF, PPT) ebből rajzolódik. ELAVULT, ha a
+/// forrás azóta újabb verziójú; ezt a lista a forrás verziójából méri, nem
+/// tárolja. A "kiment" kimenetenként rögzül (spec v2 3. pont), és belső
+/// forrásból nyilvános csatornára nem rögzíthető.
+model TeachingOutput {
+  id            String             @id @default(cuid())
+  contentId     String
+  source        TeachingSource     @relation(fields: [contentId], references: [contentId], onDelete: Cascade)
+  kind          TeachingOutputKind
+  /// A forrás verziója, amiből készült (a jóváhagyott).
+  sourceVersion Int
+  body          Json
+  generatedById String?
+  generatedAt   DateTime           @default(now())
+  /// Hová ment és mikor; null, amíg nem ment ki.
+  sentTo        String?
+  sentPublic    Boolean?
+  sentById      String?
+  sentAt        DateTime?
+
+  @@index([contentId, kind, generatedAt])
 }
 
 /// A beszélgetés a tételen belül, hogy a felvetésre ott lehessen válaszolni, ne
