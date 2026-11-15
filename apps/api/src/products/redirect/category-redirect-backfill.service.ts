@@ -69,6 +69,7 @@ export class CategoryRedirectBackfillService {
         parent?: string | null;
       }[];
       repoint?: boolean;
+      repointManual?: string[];
       apply?: boolean;
       planHash?: string;
     },
@@ -76,6 +77,11 @@ export class CategoryRedirectBackfillService {
   ): Promise<CategoryRedirectBackfillResult> {
     const { paths, form } = input;
     const repoint = input.repoint === true;
+    const repointManual = input.repointManual ?? [];
+    if (repointManual.length > 0 && !repoint)
+      throw new BadRequestException(
+        "repointManual needs repoint: true (the list only widens what the repoint may rewrite)",
+      );
     const medusa = input.medusaCategories?.map((m) => ({
       handle: m.handle,
       name: m.name,
@@ -92,6 +98,7 @@ export class CategoryRedirectBackfillService {
         form,
         medusa,
         repoint,
+        repointManual,
       );
       return {
         applied: false,
@@ -113,6 +120,7 @@ export class CategoryRedirectBackfillService {
         form,
         medusa,
         repoint,
+        repointManual,
       );
       if (categoryRedirectPlanHash(form, plan) !== planHash)
         throw new ConflictException(
@@ -140,6 +148,10 @@ export class CategoryRedirectBackfillService {
             created: ujak.length,
             updated: modositasok.length,
             rewritten: report.rewritten.length,
+            // a MANUAL szabályok, amelyeknek a célját a kifejezett engedélylista alapján írtuk át (forrásonként, az utólagos olvasáshoz)
+            manualRewritten: report.rewritten
+              .filter((r) => r.via === "manual-allowlist")
+              .map((r) => r.source),
             planHash,
           } as Prisma.InputJsonValue,
         },

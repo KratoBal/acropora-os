@@ -58,6 +58,18 @@ export class CategoryRedirectBackfillDto {
   @IsBoolean()
   repoint?: boolean;
 
+  /**
+   * KIFEJEZETT ENGEDÉLYLISTA a MANUAL szabályokra: a pontos források, amelyek MANUAL eredetű szabályának célját a `repoint` is átírhatja
+   * (card f6cb0a51). Csak `repoint` mellett érvényes. A MANUAL-kizárás nem enyhül: a lista egy ember döntése, forrásonként, és a
+   * jelentés kiírja, melyik elemére nem írt át semmit. A szárazfutás és az írás ugyanazzal a listával megy, különben a `planHash` nem egyezik.
+   */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(500)
+  @IsString({ each: true })
+  @MaxLength(1000, { each: true })
+  repointManual?: string[];
+
   @IsOptional()
   @IsBoolean()
   apply?: boolean;

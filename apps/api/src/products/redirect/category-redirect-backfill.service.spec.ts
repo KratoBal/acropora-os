@@ -154,6 +154,7 @@ describe("CategoryRedirectBackfillService", () => {
         created: 1,
         updated: 0,
         rewritten: 0,
+        manualRewritten: [],
         planHash: sz.planHash,
       },
     });
@@ -316,5 +317,94 @@ describe("CategoryRedirectBackfillService", () => {
     assert.equal(naplo.metadata.repoint, true);
     assert.equal(naplo.metadata.rewritten, 1);
     assert.equal(naplo.metadata.updated, 1);
+  });
+
+  // kártya f6cb0a51: a MANUAL szabály kifejezett engedélylistája. MI PIROSIT: a lista repoint nélkül elfogadódik (és hallgat); az írás a lista
+  // nélküli lenyomattal megy; a MANUAL szabály célja átíródik, de a készítője elvész; az AuditLog nem nevezi meg az átírt MANUAL forrásokat.
+  it("repointManual: repoint nélkül 400; a listával a MANUAL szabály átíródik, a készítő megmarad, az AuditLog megnevezi; a lista nélküli lenyomat 409", async () => {
+    const meglevo = [
+      {
+        id: "r1",
+        sourcePath: "/sct/111/Eledelek",
+        destinationPath: "/hu/categories/eledelek-termekek",
+        isActive: true,
+        reason: "MANUAL",
+        createdAt: new Date("2026-10-30T09:37:00.000Z"),
+        createdById: "u-flotta",
+      },
+    ];
+    const f = fake(fa, meglevo);
+    await assert.rejects(
+      service(f).run(
+        {
+          paths: ["/sct/111/Eledelek"],
+          form: "current",
+          repointManual: ["/sct/111/Eledelek"],
+        },
+        "u1",
+      ),
+      BadRequestException,
+    );
+
+    const listaNelkul = await service(f).run(
+      { paths: ["/sct/111/Eledelek"], form: "current", repoint: true },
+      "u1",
+    );
+    assert.equal(listaNelkul.report.rewritten.length, 0);
+    const listaval = await service(f).run(
+      {
+        paths: ["/sct/111/Eledelek"],
+        form: "current",
+        repoint: true,
+        repointManual: ["/sct/111/Eledelek"],
+      },
+      "u1",
+    );
+    assert.equal(listaval.report.rewritten[0]?.via, "manual-allowlist");
+    assert.notEqual(listaval.planHash, listaNelkul.planHash);
+    assert.deepEqual(f.writes, []); // egyik szárazfutás sem írt
+
+    // a lista nélküli lenyomattal a listás írás: 409
+    await assert.rejects(
+      service(f).run(
+        {
+          paths: ["/sct/111/Eledelek"],
+          form: "current",
+          repoint: true,
+          repointManual: ["/sct/111/Eledelek"],
+          apply: true,
+          planHash: listaNelkul.planHash,
+        },
+        "u1",
+      ),
+      ConflictException,
+    );
+
+    const r = await service(f).run(
+      {
+        paths: ["/sct/111/Eledelek"],
+        form: "current",
+        repoint: true,
+        repointManual: ["/sct/111/Eledelek"],
+        apply: true,
+        planHash: listaval.planHash,
+      },
+      "u1",
+    );
+    assert.equal(r.applied, true);
+    assert.deepEqual(f.updates[0], {
+      where: { id: "r1" },
+      data: {
+        destinationPath: "/hu/categories/eledelek",
+        destinationPathLower: "/hu/categories/eledelek",
+        reason: "UNAS_CATEGORY",
+        entityType: null,
+        entityId: null,
+        isActive: true,
+        createdById: "u-flotta",
+      },
+    });
+    const naplo = f.audit[0] as { metadata: Record<string, unknown> };
+    assert.deepEqual(naplo.metadata.manualRewritten, ["/sct/111/Eledelek"]);
   });
 });

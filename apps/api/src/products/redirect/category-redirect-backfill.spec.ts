@@ -826,3 +826,126 @@ describe("a meglévő szabály készítője és ideje a riportban", () => {
     assert.equal("createdById" in rule, false);
   });
 });
+
+/*
+  A KIFEJEZETT ENGEDELYLISTA A MANUAL SZABALYOKRA (card f6cb0a51, acrobot dontese 2026-11-15: a 21 MANUAL szabaly a flotta egyszeri
+  importja, nem Balazs kezi szabalya). MI PIROSIT: ha a lista nelkul a MANUAL szabaly atirodna (a kizaras nem all); ha a lista
+  `repoint` nelkul hatna; ha a listan NEM szereplo MANUAL szabaly is atirodna; ha a listan szereplo, de MANUAL-tol eltero eredetu szabaly
+  (UNAS_PRODUCT) atirodna; ha az atiras a keszitot nullazna; ha a lista egy elemere nem irt at semmit, es a riport ezt elhallgatja; ha a nev
+  elsobbsege megszunik.
+*/
+describe("a MANUAL szabály kifejezett engedélylistája", () => {
+  const fa6: CategoryForRedirect[] = [
+    { id: "k-root", unasId: "1", name: "Termékek", parentId: null },
+    { id: "k-aram", unasId: "2", name: "Áramoltatók", parentId: "k-root" },
+    { id: "k-aql", unasId: "3", name: "AquaLight", parentId: "k-aram" },
+    { id: "k-eled", unasId: "4", name: "Eledelek", parentId: "k-root" },
+    { id: "k-hal", unasId: "5", name: "Haltápok", parentId: "k-eled" },
+  ];
+  const rule = (
+    sourcePath: string,
+    destinationPath: string,
+    reason: "MANUAL" | "UNAS_CATEGORY" | "UNAS_PRODUCT" = "MANUAL",
+  ) => ({
+    id: `r-${sourcePath}`,
+    sourcePath,
+    destinationPath,
+    isActive: true,
+    reason,
+    createdAt: "2026-10-30T09:37:00.000Z",
+    createdById: "u-flotta",
+  });
+  const existing = [
+    rule("/aramoltatok/aqualight", "/hu/categories/aqua-light---áramoltatók"),
+    rule("/haltapok", "/hu/categories/haltápok---eledelek"),
+  ];
+  const run = (
+    paths: string[],
+    rules: typeof existing,
+    options: { repoint?: boolean; repointManual?: string[] } = {},
+  ) =>
+    planCategoryRedirectBackfill(paths, fa6, rules, {
+      form: "current",
+      ...options,
+    });
+  const handleOf = (id: string) => categoryHandles(fa6, "current").get(id);
+
+  it("lista nélkül a MANUAL szabály nem íródik át (a kizárás áll), és a jelentés megmondja, miért", async () => {
+    const { store, report } = await run(["/aramoltatok/aqualight"], existing, {
+      repoint: true,
+    });
+    assert.equal(store.updated().length, 0);
+    assert.equal(report.rewritten.length, 0);
+    assert.equal(report.skippedDetails[0]!.fallback, "rule-reason-MANUAL");
+  });
+
+  it("a listán szereplő MANUAL szabály célja átíródik, a készítője megmarad, és a jelentés jelöli", async () => {
+    const { store, report } = await run(["/aramoltatok/aqualight"], existing, {
+      repoint: true,
+      repointManual: ["/aramoltatok/aqualight"],
+    });
+    assert.deepEqual(report.rewritten, [
+      {
+        source: "/aramoltatok/aqualight",
+        from: "/hu/categories/aqua-light---áramoltatók",
+        to: `/hu/categories/${handleOf("k-aql")}`,
+        via: "manual-allowlist",
+      },
+    ]);
+    const modositas = store.updated();
+    assert.equal(modositas.length, 1);
+    assert.equal(modositas[0]!.data.createdById, "u-flotta");
+    assert.equal(modositas[0]!.data.reason, "UNAS_CATEGORY");
+    assert.deepEqual(report.repointManualUnmatched, []);
+    assert.match(
+      describeCategoryRedirectBackfill(report, "current"),
+      /atirva: \/aramoltatok\/aqualight: .* \(MANUAL, kifejezett engedelylista\)/,
+    );
+  });
+
+  it("a listán KÍVÜLI MANUAL szabály érintetlen, és a lista elírt eleme a jelentésben marad (nem néma)", async () => {
+    const { store, report } = await run(
+      ["/aramoltatok/aqualight", "/haltapok"],
+      existing,
+      {
+        repoint: true,
+        repointManual: ["/aramoltatok/aqualight", "/aramoltatok/elirt"],
+      },
+    );
+    assert.deepEqual(
+      report.rewritten.map((r) => r.source),
+      ["/aramoltatok/aqualight"],
+    );
+    assert.equal(store.updated().length, 1);
+    assert.deepEqual(report.repointManualUnmatched, ["/aramoltatok/elirt"]);
+    // a /haltapok név szerint feloldódik (Haltápok), a szabálya MANUAL és nincs a listán: marad
+    assert.equal(
+      report.conflicts.some((c) => c.source === "/haltapok") ||
+        report.skippedDetails.some((d) => d.source === "/haltapok"),
+      true,
+    );
+  });
+
+  it("repoint nélkül a lista nem hat, és a MANUAL-tól eltérő eredetű szabályra a lista sem", async () => {
+    const nemRepoint = await run(["/aramoltatok/aqualight"], existing, {
+      repointManual: ["/aramoltatok/aqualight"],
+    });
+    assert.equal(nemRepoint.store.updated().length, 0);
+    assert.equal(nemRepoint.report.rewritten.length, 0);
+    const mas = await run(
+      ["/aramoltatok/aqualight"],
+      [
+        rule(
+          "/aramoltatok/aqualight",
+          "/hu/categories/aqua-light---áramoltatók",
+          "UNAS_PRODUCT",
+        ),
+      ],
+      { repoint: true, repointManual: ["/aramoltatok/aqualight"] },
+    );
+    assert.equal(mas.store.updated().length, 0);
+    assert.deepEqual(mas.report.repointManualUnmatched, [
+      "/aramoltatok/aqualight",
+    ]);
+  });
+});
