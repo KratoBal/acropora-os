@@ -24,6 +24,9 @@ import {
 } from "./teaching-output.service.js";
 import { TeachingSourceRepository } from "./teaching-source.repository.js";
 import { TeachingSourceService } from "./teaching-source.service.js";
+import { CalendarFeedController } from "./calendar/calendar-feed.controller.js";
+import { CalendarFeedRepository } from "./calendar/calendar-feed.repository.js";
+import { CalendarFeedService } from "./calendar/calendar-feed.service.js";
 import { ProductDataController } from "./product-data/product-data.controller.js";
 import { ProductDataRepository } from "./product-data/product-data.repository.js";
 import { ProductDataService } from "./product-data/product-data.service.js";
@@ -45,8 +48,11 @@ import { ProductDataService } from "./product-data/product-data.service.js";
     ContentClaimsController,
     ArticleImagePublicController,
     ProductDataController,
+    CalendarFeedController,
   ],
   providers: [
+    CalendarFeedRepository,
+    CalendarFeedService,
     ArticleImageRepository,
     ArticleImageService,
     ArticleRepository,
