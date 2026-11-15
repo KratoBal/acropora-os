@@ -65,3 +65,15 @@ export function operationsSignedNumberText(
 ): string {
   return `${value > 0 ? "+" : ""}${operationsNumberText(value)}${unit ? ` ${unit}` : ""}`;
 }
+
+/**
+ * A KÖZÖS VÍZÓRA MEGJEGYZÉSE (kártya 1a35e8f3): a csoportos rögzítés minden bejegyzésén rajta van ugyanaz a vízóra-különbség (az eszköz
+ * előzménye teljes), az eszköz-blokk összegébe viszont csak a csoport első bejegyzése számít. A többi sorban ez a mondat áll, hogy aki
+ * a sorokat összeadná, tudja, miért nem szerepel az összegben. `null`: önálló bejegyzés vagy a csoport beszámított sora.
+ */
+export function operationsMeterSharedNote(row: {
+  meterCounted: boolean;
+}): string | null {
+  // `meterCounted` csak a csoport nem beszámított, különbséget hordozó soránál hamis: a partner nézetében a `groupId` null, a megjegyzés mégis áll
+  return row.meterCounted ? null : "közös mérés: a csoportban egyszer számít";
+}

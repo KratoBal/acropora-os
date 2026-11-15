@@ -5,6 +5,7 @@ import {
   operationsMonthTitle,
   operationsNumberText,
   operationsPeriodText,
+  operationsMeterSharedNote,
   operationsSignedNumberText,
   PARTNER_STATUS_LABELS,
   type ServiceJobPartnerStatus,
@@ -112,6 +113,8 @@ function meterText(row: OperationsReportEntryRow): string {
     lines.push(
       `különbség: ${operationsSignedNumberText(row.meterDifference, row.meterUnit)}${row.meterSuspicious ? " (ellenőrizendő)" : ""}`,
     );
+  const shared = operationsMeterSharedNote(row);
+  if (shared) lines.push(`(${shared})`);
   return lines.join("\n");
 }
 

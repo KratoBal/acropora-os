@@ -120,6 +120,7 @@ export class OperationsReportRepository {
       where: { ...where, startedAt: { gte: from, lt: to } },
       select: {
         id: true,
+        groupId: true,
         templateId: true,
         templateName: true,
         frequency: true,
@@ -154,6 +155,7 @@ export class OperationsReportRepository {
     });
     return rows.map((row) => ({
       id: row.id,
+      groupId: row.groupId,
       templateId: row.templateId,
       templateName: row.templateName,
       frequency: row.frequency,

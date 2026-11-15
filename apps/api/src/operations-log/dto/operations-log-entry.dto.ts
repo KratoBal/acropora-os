@@ -35,6 +35,14 @@ export class CreateOperationsLogEntryDto {
   })
   clientOperationId!: string;
 
+  @IsOptional()
+  @IsString()
+  @Matches(L.groupIdPattern, {
+    message:
+      "A csoport-azonosító 8-64 karakter lehet: betű, szám, pont, kötőjel, aláhúzás vagy kettőspont.",
+  })
+  groupId?: string;
+
   @IsString() templateId!: string;
   @IsString() assetId!: string;
 
