@@ -43,9 +43,13 @@ const CREATION_PATTERNS: readonly RegExp[] = [
   /INSERT\s+INTO\s+"?SalesOrder"?/i,
 ];
 
-/** A SalesOrder written with the MEDUSA channel: a literal, or the enum member. */
+/**
+ * A SalesOrder written with the MEDUSA channel: a literal, the enum member, or a
+ * literal inside the `channel:` value (a ternary). The value ends at the first
+ * comma, so `channel: "POS", system: "MEDUSA"` is not a hit.
+ */
 const MEDUSA_CHANNEL =
-  /\bchannel\s*:\s*["']MEDUSA["']|\bSalesChannel\.MEDUSA\b|\bchannel\b[^\n;]{0,60}["']MEDUSA["']/;
+  /\bchannel\s*:\s*[^,\n;{}]{0,60}["']MEDUSA["']|\bSalesChannel\.MEDUSA\b/;
 
 function createsSalesOrder(text: string): boolean {
   return CREATION_PATTERNS.some((pattern) => pattern.test(text));
@@ -142,7 +146,15 @@ describe("the OS creates a SalesOrder only for UNAS and POS orders, never for a 
     assert.equal(createsSalesOrder("await tx.salesOrder.findMany({})"), false);
     assert.equal(writesMedusaChannel('data: { channel: "MEDUSA" }'), true);
     assert.equal(writesMedusaChannel("channel: SalesChannel.MEDUSA"), true);
+    assert.equal(
+      writesMedusaChannel('channel: isShop ? "MEDUSA" : "POS",'),
+      true,
+    );
     assert.equal(writesMedusaChannel('data: { channel: "POS" }'), false);
+    assert.equal(
+      writesMedusaChannel('{ channel: "POS", system: "MEDUSA" }'),
+      false,
+    );
     assert.equal(
       writesMedusaChannel(
         'const ref = { system: "MEDUSA", entityType: "Customer" }',
