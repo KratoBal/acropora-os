@@ -549,7 +549,9 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
         month={month}
         accounts={detail?.accounts ?? []}
         state={detail?.status ?? null}
-        summary={detail ? toSummary(detail.tiles) : null}
+        summary={
+          detail ? toSummary(detail.tiles, detail.awaitingCollector) : null
+        }
         tab={tab}
         onTab={(next) =>
           update({ tab: next === "MISSING" ? null : next, page: null })

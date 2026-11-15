@@ -57,6 +57,8 @@ const base = (over: Partial<Props> = {}): Props => ({
     noInvoice: 0,
     originalMissing: 0,
     noInvoiceNeeded: 0,
+    awaitingCollector: 0,
+    awaitingPartners: [],
   },
   tab: "FOUND",
   onTab: vi.fn(),

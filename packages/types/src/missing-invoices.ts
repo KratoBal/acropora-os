@@ -467,7 +467,15 @@ export interface MissingInvoiceMonthDetail {
     notMatched: number;
     noInvoice: number;
     noInvoiceNeeded: number;
+    /** Gyűjtőszámlára vár: nem hiány, de a hónap nem kész (Balázs, 2026-11-15). */
+    awaitingCollector: number;
   };
+  /**
+   * A GYŰJTŐSZÁMLÁRA VÁRÓ TÉTELEK PARTNERENKÉNT (Balázs, 2026-11-15, acrobot
+   * 53030): hány tétel vár, melyik partnertől, mennyi összegben (HUF-sorok
+   * összege, tizedes szöveg). A legtöbb tételes partner elöl.
+   */
+  awaitingCollector: { partner: string; count: number; amountHuf: string }[];
   items: MissingInvoiceItem[];
   pagination: {
     page: number;
