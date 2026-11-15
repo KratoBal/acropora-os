@@ -1020,3 +1020,47 @@ describe("MissingInvoicesService refund of one of our own invoices", () => {
     assert.equal(result.missing.length, 1);
   });
 });
+
+/*
+  GYŰJTŐSZÁMLÁRA VÁR A HÓNAP LAPJÁN (Balázs, 2026-11-15, acrobot 53030). MI PIROSÍT: a várakozó tétel a
+  Hiányzik fülre kerül; a hónap kész, pedig vár valami; a csempe vagy a partnerenkénti sor nem a várakozó
+  tételeket számolja, vagy rossz összeget ad.
+*/
+describe("MissingInvoicesService: the month says what waits for a summary invoice", () => {
+  const card = (date: string, amount: number) =>
+    debit(date, amount, "SIMPLEP*PARKL.NET", {
+      bankAccountId: CARD.id,
+      narrative: `${date.replace(/-/g, ".")} 0194683438 SIMPLEP*PARKL .NET`,
+      transactionType: "KÁRTYATRANZAKCIÓ",
+    });
+
+  it("counts the waiting card payments by partner, keeps them off the missing tab, and the month is not ready", async () => {
+    const { missing } = service({
+      debits: [
+        card("2026-09-05", 400),
+        card("2026-09-17", 800),
+        card("2026-11-03", 382),
+        card("2026-11-13", 373),
+      ],
+      documents: [nav("2026-10-01", 1200, "Parkl Digital Technologies Kft.")],
+      coverage: ["2026-09", "2026-10", "2026-11"].flatMap((m) => [
+        `${MAIN.id}:${m}`,
+        `${CARD.id}:${m}`,
+      ]),
+    });
+    const detail = await missing.month("2026-11", { tab: "ALL" });
+    assert.equal(detail.tiles.awaitingCollector, 2);
+    assert.deepEqual(detail.awaitingCollector, [
+      { partner: "SIMPLEP*PARKL.NET", count: 2, amountHuf: "755" },
+    ]);
+    assert.equal(detail.status, "INCOMPLETE");
+    assert.deepEqual(
+      (await missing.month("2026-11", { tab: "MISSING" })).items,
+      [],
+    );
+    // the September month: paired, nothing waits
+    const september = await missing.month("2026-09", {});
+    assert.equal(september.tiles.awaitingCollector, 0);
+    assert.deepEqual(september.awaitingCollector, []);
+  });
+});

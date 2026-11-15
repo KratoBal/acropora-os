@@ -135,7 +135,9 @@ const monthDetail = (
     noInvoice: 25,
     originalMissing: 0,
     noInvoiceNeeded: 24,
+    awaitingCollector: 0,
   },
+  awaitingCollector: [],
   items: [item()],
   pagination: { page: 1, pageSize: 25, totalItems: 1, totalPages: 1 },
   ...overrides,
@@ -629,6 +631,7 @@ describe("MissingInvoicesMonthPage", () => {
           noInvoice: 24,
           originalMissing: 0,
           noInvoiceNeeded: 24,
+          awaitingCollector: 0,
         },
       }),
     );

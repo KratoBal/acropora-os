@@ -440,6 +440,8 @@ describe("MissingInvoicesMonthDetail", () => {
       noInvoice: 25,
       originalMissing: 3,
       noInvoiceNeeded: 24,
+      awaitingCollector: 0,
+      awaitingPartners: [],
     },
     tab: "MISSING",
     onTab: vi.fn(),
@@ -716,6 +718,8 @@ describe("MissingInvoicesMonthDetail", () => {
           noInvoice: 0,
           originalMissing: 0,
           noInvoiceNeeded: 2,
+          awaitingCollector: 0,
+          awaitingPartners: [],
         }}
       />,
     );
@@ -725,6 +729,49 @@ describe("MissingInvoicesMonthDetail", () => {
       }),
     ).toBeNull();
     expect(screen.getByText(/^Részleges kivonat:/)).toBeInTheDocument();
+  });
+
+  it("says how many items wait for a summary invoice and from whom, only when some do (Balázs, 2026-11-15)", () => {
+    const { rerender } = render(
+      <MissingInvoicesMonthDetail
+        {...base()}
+        month="2026-11"
+        state="INCOMPLETE"
+        summary={{
+          found: 3,
+          notMatched: 0,
+          noInvoice: 0,
+          originalMissing: 0,
+          noInvoiceNeeded: 1,
+          awaitingCollector: 18,
+          awaitingPartners: [
+            { partner: "SIMPLEP*PARKL.NET", count: 18, amountHuf: "14570" },
+          ],
+        }}
+      />,
+    );
+    expect(
+      screen.getByText(
+        /Gyűjtőszámlára vár: 18 tétel \(SIMPLEP\*PARKL\.NET: 18, 14\s570\sFt\)/,
+      ),
+    ).toBeInTheDocument();
+    rerender(
+      <MissingInvoicesMonthDetail
+        {...base()}
+        month="2026-11"
+        state="INCOMPLETE"
+        summary={{
+          found: 3,
+          notMatched: 1,
+          noInvoice: 0,
+          originalMissing: 0,
+          noInvoiceNeeded: 1,
+          awaitingCollector: 0,
+          awaitingPartners: [],
+        }}
+      />,
+    );
+    expect(screen.queryByText(/Gyűjtőszámlára vár/)).toBeNull();
   });
 
   it("all found: the green page and only the accountant package", () => {
@@ -739,6 +786,8 @@ describe("MissingInvoicesMonthDetail", () => {
           noInvoice: 0,
           originalMissing: 0,
           noInvoiceNeeded: 3,
+          awaitingCollector: 0,
+          awaitingPartners: [],
         }}
       />,
     );

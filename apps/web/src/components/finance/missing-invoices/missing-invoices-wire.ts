@@ -73,8 +73,14 @@ export function toChargeRow(item: MissingInvoiceItem): ChargeRow {
 
 export function toSummary(
   tiles: MissingInvoiceMonthDetail["tiles"],
+  awaitingCollector?: MissingInvoiceMonthDetail["awaitingCollector"],
 ): MonthSummary {
-  return { ...tiles };
+  return {
+    ...tiles,
+    // egy a mezőt még nem küldő API (a web előbb települ): nincs várakozó
+    awaitingCollector: tiles.awaitingCollector ?? 0,
+    awaitingPartners: awaitingCollector ?? [],
+  };
 }
 
 /** A drawer második kérésből jövő része (`GET /missing-invoices/items/:id`). */

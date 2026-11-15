@@ -351,7 +351,9 @@ export class MissingInvoicesService {
         notMatched: count((s) => s === "NOT_MATCHED"),
         noInvoice: count((s) => NO_INVOICE_TILE.has(s)),
         noInvoiceNeeded: count((s) => NO_INVOICE_NEEDED_TILE.has(s)),
+        awaitingCollector: count((s) => s === "AWAITING_COLLECTOR"),
       },
+      awaitingCollector: awaitingByPartner(all),
       items: sorted
         .slice((page - 1) * pageSize, page * pageSize)
         .map(({ month: _month, accountId: _accountId, ...item }) => item),
@@ -1727,6 +1729,41 @@ function statusOf(
     return "STATEMENT_MISSING";
   if (missingStatementCount > 0) return "STATEMENT_PARTIAL";
   return missingItems > 0 ? "INCOMPLETE" : "READY";
+}
+
+/**
+ * A GYŰJTŐSZÁMLÁRA VÁRÓ TÉTELEK PARTNERENKÉNT (Balázs, 2026-11-15, acrobot
+ * 53030): a hónap lapján egy sor mondja meg, hány tétel vár és kitől, mert a
+ * Hiányzik fül ezeket nem mutatja, a hónap mégsem kész. A partner a banki
+ * partnernév (ugyanaz, ami a sorban áll); az összeg a HUF-sorok összege.
+ */
+export function awaitingByPartner(
+  items: readonly {
+    state: ItemState;
+    partner: string | null;
+    amount: Prisma.Decimal.Value;
+    currency: string;
+  }[],
+): { partner: string; count: number; amountHuf: string }[] {
+  const byPartner = new Map<string, { count: number; huf: Prisma.Decimal }>();
+  for (const item of items) {
+    if (item.state !== "AWAITING_COLLECTOR") continue;
+    const partner = item.partner?.trim() || "?";
+    const row = byPartner.get(partner) ?? {
+      count: 0,
+      huf: new Prisma.Decimal(0),
+    };
+    row.count += 1;
+    if (item.currency === "HUF") row.huf = row.huf.plus(item.amount);
+    byPartner.set(partner, row);
+  }
+  return [...byPartner.entries()]
+    .map(([partner, row]) => ({
+      partner,
+      count: row.count,
+      amountHuf: row.huf.toFixed(0),
+    }))
+    .sort((a, b) => b.count - a.count || a.partner.localeCompare(b.partner));
 }
 
 /** A „Mit kell tenni” kulcsa állapotonként. */
