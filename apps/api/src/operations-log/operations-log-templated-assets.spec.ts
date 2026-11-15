@@ -42,16 +42,46 @@ describe("a sablonok céljai", () => {
 });
 
 describe("a sablonnal rendelkező eszközök szolgáltatása", () => {
-  it("a tároló azonosítóit assetIds alakban adja vissza", async () => {
-    const service = new OperationsLogEntriesService(
-      {} as OperationsLogEntriesRepository,
+  const catalogue = [
+    {
+      id: "a1",
+      assetNumber: "E-1",
+      name: "Homokszűrő",
+      owner: { id: "p1", displayName: "Fánk" },
+      unit: { id: "u1", path: ["Fánk", "Biodóm"] },
+    },
+  ];
+  const make = (colleagues: { id: string; name: string }[] = []) =>
+    new OperationsLogEntriesService(
+      {
+        assignableColleagues: async () => colleagues,
+      } as unknown as OperationsLogEntriesRepository,
       {
         assetIdsWithActiveTemplates: async () => ["a1", "a2"],
+        startCatalogue: async () => catalogue,
       } as unknown as OperationsLogRepository,
       {} as ServiceJobsService,
     );
-    assert.deepEqual(await service.assetsWithTemplates(), {
+
+  it("az azonosítókat és a katalógust is visszaadja (a régi assetIds alak megmarad)", async () => {
+    assert.deepEqual(await make().assetsWithTemplates(), {
       assetIds: ["a1", "a2"],
+      assets: catalogue,
+    });
+  });
+
+  it("a rögzítés résztvevői: a hívó nem szerepel a listán, a többiek igen, a sorrend megmarad", async () => {
+    const list = [
+      { id: "u-balazs", name: "Balázs" },
+      { id: "u-david", name: "Dávid" },
+      { id: "u-feri", name: "Feri" },
+    ];
+    assert.deepEqual(await make(list).colleagues("u-balazs"), {
+      items: [list[1], list[2]],
+    });
+    // ismeretlen hívó: senkit nem veszünk ki
+    assert.deepEqual(await make(list).colleagues("u-masvalaki"), {
+      items: list,
     });
   });
 });
