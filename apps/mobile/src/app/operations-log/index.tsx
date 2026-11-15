@@ -132,6 +132,18 @@ export default function OperationsLogStartScreen() {
           ? "3. LÉPÉS: ESZKÖZ"
           : "4. LÉPÉS: SABLON";
 
+  // a cím az utolsó szint: a felette állók a morzsa (a cím nem ismétlődik benne)
+  const trail =
+    step === "partners"
+      ? "Válaszd ki a partnert, a helyszínt és az eszközt, amelyhez bejegyzést rögzítesz."
+      : step === "locations"
+        ? null
+        : step === "devices"
+          ? params.partnerName
+          : [params.partnerName, params.locationLabel]
+              .filter(Boolean)
+              .join(" › ");
+
   type Row = {
     key: string;
     title: string;
@@ -220,18 +232,7 @@ export default function OperationsLogStartScreen() {
       >
         <Text style={styles.eyebrow}>{eyebrow}</Text>
         <Text style={styles.title}>{title}</Text>
-        {step !== "partners" ? (
-          <Text style={styles.trail}>
-            {[params.partnerName, params.locationLabel]
-              .filter(Boolean)
-              .join(" › ")}
-          </Text>
-        ) : (
-          <Text style={styles.trail}>
-            Válaszd ki a partnert, a helyszínt és az eszközt, amelyhez
-            bejegyzést rögzítesz.
-          </Text>
-        )}
+        {trail ? <Text style={styles.trail}>{trail}</Text> : null}
 
         {fromCache ? <Text style={styles.notice}>{cacheNotice}</Text> : null}
 
