@@ -3,11 +3,12 @@ import { Prisma, prisma } from "@acropora/database";
 import {
   HUMAN_ROLES,
   PERMISSIONS,
-  ROLE_PERMISSIONS,
   type CalendarEvent,
   type CalendarEventKind,
   type CalendarEventResponsibleOption,
 } from "@acropora/types";
+
+import { usersWithPermissionWhere } from "../../auth/permission-holders.js";
 
 /** What the service writes: the two days as `YYYY-MM-DD`, everything already checked and trimmed. */
 export interface CalendarEventWrite {
@@ -36,12 +37,17 @@ type Row = Prisma.CalendarEventGetPayload<{ select: typeof SELECT }>;
 const ENTITY = "CalendarEvent";
 
 /** Who may answer for an event: a person (no machine role) whose role sees the content calendar. */
-const RESPONSIBLE_ROLES = HUMAN_ROLES.filter((role) =>
-  ROLE_PERMISSIONS[role].includes(PERMISSIONS.CONTENT_VIEW),
+/**
+ * Who may answer for an event: an active colleague (a person, not a partner account) who sees content by the
+ * EFFECTIVE permission: the role's template with the person's own overrides (a granted content.view counts, a revoked
+ * one does not; barracuda's #2598 note). The same helper the other people pickers use.
+ */
+const RESPONSIBLE_ROLES = HUMAN_ROLES.filter(
+  (role) => role !== "PARTNER_SERVICE",
 );
 const RESPONSIBLE_WHERE = {
   isActive: true,
-  role: { in: [...RESPONSIBLE_ROLES] },
+  ...usersWithPermissionWhere(PERMISSIONS.CONTENT_VIEW, RESPONSIBLE_ROLES),
 } satisfies Prisma.UserWhereInput;
 
 const personName = (user: { displayName: string; nickname: string | null }) =>

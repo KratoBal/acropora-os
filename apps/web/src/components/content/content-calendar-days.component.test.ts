@@ -6,6 +6,7 @@ import {
   coversDay,
   mondayOf,
   shiftAnchor,
+  spanDays,
   validDay,
   viewDays,
 } from "./content-calendar-days";
@@ -45,6 +46,20 @@ describe("calendar days", () => {
 
   it("Budapest's today, late in the UTC evening, is already the next day", () => {
     expect(budapestToday(new Date("2026-11-15T23:30:00Z"))).toBe("2026-11-16");
+  });
+
+  it("a span says the year only when it is not this year's, or runs into another one", () => {
+    expect(spanDays("2026-11-02", "2026-12-02", "2026-11-15")).toEqual([
+      "nov. 2.",
+      "dec. 2.",
+    ]);
+    expect(spanDays("2026-01-17", "2027-12-31", "2026-11-15")).toEqual([
+      "2026. jan. 17.",
+      "2027. dec. 31.",
+    ]);
+    expect(spanDays("2025-01-17", "2025-12-31", "2026-11-15")[0]).toBe(
+      "2025. jan. 17.",
+    );
   });
 
   it("an impossible URL day falls back", () => {

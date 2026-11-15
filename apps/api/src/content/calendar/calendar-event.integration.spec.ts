@@ -20,7 +20,7 @@ import { CalendarEventService } from "./calendar-event.service.js";
   What turns this red: a day stored shifted by the time zone (a date column read back as the day before); a write or a
   delete without its audit row, or an audit row that does not say what changed or what was deleted; a stale edit
   overwriting a newer record; an edit that changes nothing still logged; a machine or inactive account offered or
-  accepted as responsible; a deleted event still readable.
+  accepted as responsible; the responsible set taken from the role template instead of the effective permission; a deleted event still readable.
 */
 const gate = integrationDatabaseGate(process.env);
 
@@ -50,6 +50,9 @@ describe(
         ["responsible", "Luca", "MANAGER", true],
         ["agent", null, "CONTENT_AGENT", true],
         ["inactive", null, "MANAGER", false],
+        // the effective permission decides, not the role template alone
+        ["granted", null, "SERVICE", true],
+        ["revoked", null, "MANAGER", true],
       ] as const) {
         const user = await prisma.user.create({
           data: {
@@ -66,6 +69,20 @@ describe(
         else if (key === "responsible") responsible = user.id;
         else others[key] = user.id;
       }
+      await prisma.userPermissionOverride.createMany({
+        data: [
+          {
+            userId: others.granted!,
+            permission: "content.view",
+            effect: "GRANT",
+          },
+          {
+            userId: others.revoked!,
+            permission: "content.view",
+            effect: "REVOKE",
+          },
+        ],
+      });
     });
 
     after(async () => {
@@ -179,7 +196,10 @@ describe(
       assert.ok(offered.includes(responsible));
       assert.ok(!offered.includes(others.agent!));
       assert.ok(!offered.includes(others.inactive!));
-      for (const id of [others.agent!, others.inactive!])
+      // a colleague granted content.view one by one is offered; one whose role has it but who lost it is not
+      assert.ok(offered.includes(others.granted!));
+      assert.ok(!offered.includes(others.revoked!));
+      for (const id of [others.agent!, others.inactive!, others.revoked!])
         await assert.rejects(
           service.create(
             {

@@ -43,6 +43,8 @@ export async function planCategoryRedirectsFromDb(
         destinationPath: true,
         isActive: true,
         reason: true,
+        createdAt: true,
+        createdById: true,
       },
     }),
   ]);

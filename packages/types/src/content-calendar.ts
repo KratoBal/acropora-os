@@ -59,6 +59,57 @@ export interface CalendarEventResponsible {
   name: string | null;
 }
 
+/**
+ * THE DEPENDENCY TEMPLATE (T5.5 S4, spec 2. and 7.): which content belongs to which calendar event, and when. Data, not
+ * code: the days are rows Balázs and Luca change on the page. A row is switched off, never deleted.
+ */
+export const CONTENT_TEMPLATE_EVENT_KINDS = [
+  "LIVESTOCK_ARRIVAL",
+  "PURCHASE_ARRIVAL",
+  "SALE",
+  "SHOP_EVENT",
+  "HOLIDAY",
+] as const;
+export type ContentTemplateEventKind =
+  (typeof CONTENT_TEMPLATE_EVENT_KINDS)[number];
+
+export const CONTENT_TEMPLATE_EVENT_KIND_LABELS: Record<
+  ContentTemplateEventKind,
+  string
+> = {
+  LIVESTOCK_ARRIVAL: "Élőállat-érkezés",
+  PURCHASE_ARRIVAL: "Beszerzés érkezése",
+  SALE: "Akció",
+  SHOP_EVENT: "Bolti esemény",
+  HOLIDAY: "Ünnep, nyitvatartás-változás",
+};
+
+/** The one-day events: their start is their end, so a row counts from the start. */
+export const CONTENT_TEMPLATE_ONE_DAY_KINDS: readonly ContentTemplateEventKind[] =
+  ["LIVESTOCK_ARRIVAL", "PURCHASE_ARRIVAL"];
+
+export const CONTENT_TEMPLATE_ANCHORS = ["START", "END"] as const;
+export type ContentTemplateAnchor = (typeof CONTENT_TEMPLATE_ANCHORS)[number];
+
+export const CONTENT_TEMPLATE_LIMITS = {
+  label: { min: 1, max: 80 },
+  /** Two months either way: further is a typo, not a plan. */
+  offsetDays: { min: -60, max: 60 },
+} as const;
+
+export interface ContentTemplateRule {
+  id: string;
+  eventKind: ContentTemplateEventKind;
+  label: string;
+  channel: ContentChannel;
+  anchor: ContentTemplateAnchor;
+  offsetDays: number;
+  active: boolean;
+  sortOrder: number;
+  /** Send it back as `expectedUpdatedAt` on an edit: a row changed since is refused (409). */
+  updatedAt: string;
+}
+
 /** A choice of the responsible picker: an active colleague who sees the content calendar. */
 export interface CalendarEventResponsibleOption {
   id: string;
