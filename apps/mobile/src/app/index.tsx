@@ -13,7 +13,7 @@ import { ModuleTile } from "@/components/home/ModuleTile";
 import { useNavigationCounters } from "@/components/home/useNavigationCounters";
 import { tileBadge } from "@/lib/navigation/counters";
 import { runningVersionLine } from "@/lib/app-version";
-import { HOME_MODULES } from "@/lib/home/modules";
+import { HOME_MODULES, OPERATIONS_LOG_HOME_TILE } from "@/lib/home/modules";
 import {
   defaultPresetFor,
   HOME_PRESETS,
@@ -281,6 +281,13 @@ export default function HomeScreen() {
                   />
                 );
               })}
+              {/* az üzemeltetési napló belépője: nem szerver-menü csempe, hanem a rögzítés jogához kötött (lásd `OPERATIONS_LOG_HOME_TILE`) */}
+              {serviceCapabilities.operationsLogRecord ? (
+                <ModuleTile
+                  module={OPERATIONS_LOG_HOME_TILE}
+                  onPress={() => router.push("/operations-log")}
+                />
+              ) : null}
             </View>
 
             {lathatoCsempek === 0 ? (

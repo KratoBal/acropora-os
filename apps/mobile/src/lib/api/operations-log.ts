@@ -42,6 +42,14 @@ export function listOperationsTemplatesForAsset(assetId: string) {
   );
 }
 
+/**
+ * AZ ESZKÖZÖK AZONOSÍTÓI, AMELYEKHEZ VAN AKTÍV SABLON (a kezdőképernyő szűrője). Csak azonosítók: a partnert és a helyszínt az
+ * eszköz-lista adja a saját láthatósági hatókörén át, ez a lista csak megmondja, melyiknek van mit rögzíteni.
+ */
+export function listAssetIdsWithOperationsTemplates() {
+  return apiRequest<{ assetIds: string[] }>(`${BASE}/assets-with-templates`);
+}
+
 export function listOperationsColleagues() {
   return apiRequest<{ items: OperationsColleague[] }>(`${BASE}/colleagues`);
 }

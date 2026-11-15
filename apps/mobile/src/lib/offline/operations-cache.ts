@@ -92,6 +92,36 @@ export async function readCachedOperationsTemplates(
   }
 }
 
+/**
+ * AZ ESZKÖZÖK, AMELYEKNEK A MÁSOLATBAN VAN SABLONJUK (a kezdőképernyő térerő nélküli szűrője). Az üres lista is mentett tudás („ennek az
+ * eszköznek nincs sablonja”), de itt nem számít: a kezdőképernyő csak azt kínálja, amihez rögzíteni lehet.
+ */
+export async function readAssetIdsWithCachedTemplates(): Promise<{
+  assetIds: string[];
+  syncedAt: string | null;
+}> {
+  try {
+    const db = await database();
+    const rows = await db.getAllAsync<{
+      asset_id: string;
+      payload_json: string;
+      synced_at: string;
+    }>(
+      `SELECT asset_id, payload_json, synced_at FROM cached_operations_templates`,
+    );
+    const assetIds = rows
+      .filter((row) => (parse<unknown[]>(row.payload_json)?.length ?? 0) > 0)
+      .map((row) => row.asset_id);
+    return {
+      assetIds,
+      syncedAt:
+        rows.map((row) => row.synced_at).sort()[rows.length - 1] ?? null,
+    };
+  } catch {
+    return { assetIds: [], syncedAt: null };
+  }
+}
+
 /** A kollégák TELJES CSERÉVEL frissülnek: egy időközben kilépett kolléga nem maradhat választható. */
 export async function rememberOperationsColleagues(
   items: readonly OperationsColleague[],
