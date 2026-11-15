@@ -2534,6 +2534,8 @@ describe("MedusaProjectionScheduler lassu frissitesi forgasa", () => {
   const felallit = (
     sorok: { termek: Record<string, unknown>; kotes: object }[],
     env: NodeJS.ProcessEnv,
+    /** Az adatbazis valodi viselkedese: a forgas lekerdezeset rendezi es a `take`-nel vagja (a dupla alapbol nem). */
+    ablakkal = false,
   ) => {
     const { db, hivasok } = adatbazis(
       sorok.map((s) => s.termek),
@@ -2541,6 +2543,27 @@ describe("MedusaProjectionScheduler lassu frissitesi forgasa", () => {
         (s) => s.kotes as { entityId: string; lastSyncedAt: Date | null },
       ),
     );
+    if (ablakkal) {
+      type Sor = { entityId: string; lastSyncedAt: Date | null };
+      const tarolt = db.externalReference as unknown as {
+        findMany: (args: unknown) => Promise<Sor[]>;
+      };
+      const eredeti = tarolt.findMany.bind(tarolt);
+      tarolt.findMany = async (args: unknown) => {
+        const sorok = await eredeti(args);
+        const { orderBy, take } = args as { orderBy?: unknown; take?: number };
+        if (!JSON.stringify(orderBy ?? null).includes('"lastSyncedAt":"asc"'))
+          return sorok;
+        return sorok
+          .filter((sor) => sor.lastSyncedAt !== null)
+          .sort(
+            (a, b) =>
+              a.lastSyncedAt!.getTime() - b.lastSyncedAt!.getTime() ||
+              (a.entityId < b.entityId ? -1 : 1),
+          )
+          .slice(0, take);
+      };
+    }
     const { run, kapott } = futtato(0);
     const scheduler = new MedusaProjectionScheduler({
       db,
@@ -2714,5 +2737,70 @@ describe("MedusaProjectionScheduler lassu frissitesi forgasa", () => {
       ["n1", "n2"],
       ["n3", "n4"],
     ]);
+  });
+  it("4R+1 beragadt termek a legregebbiek kozott sem allitja meg a forgast: a mogottuk allo jo termek sorra kerul", async () => {
+    // R=2, ablak 8: kilenc beragadt (a kotes nem lep) elol, mogottuk egy jo termek
+    const sorok = [
+      ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => naprakesz(`n${n}`, n)),
+      naprakesz("jo", 20),
+    ];
+    const { scheduler, kapott } = felallit(sorok, FORGAS("2"), true);
+
+    for (let i = 0; i < 5; i += 1) await scheduler.runOnce();
+
+    // a beragadtak sorban, utolsonak a jo termek: az ablak a beragadtak szamaval szelesedik
+    assert.deepEqual(kapott, [
+      ["n1", "n2"],
+      ["n3", "n4"],
+      ["n5", "n6"],
+      ["n7", "n8"],
+      ["n9", "jo"],
+    ]);
+  });
+
+  it("a lepett termek jegyzete kitisztul: az ablak nem szelesedik a mar nem beragadtakkal", async () => {
+    const sorok = [1, 2, 3, 4].map((n) => naprakesz(`n${n}`, n));
+    const { scheduler, kapott, hivasok } = felallit(sorok, FORGAS("2"), true);
+
+    await scheduler.runOnce();
+    // a vetites most mar leptette a kotest: az elso ket termek a lista vegere kerult
+    for (const sor of sorok.slice(0, 2))
+      (sor.kotes as { lastSyncedAt: Date }).lastSyncedAt = napokUtan(30);
+    await scheduler.runOnce();
+
+    assert.deepEqual(kapott, [
+      ["n1", "n2"],
+      ["n3", "n4"],
+    ]);
+    const ablakok = hivasok
+      .filter(forgasHivas)
+      .map((h) => (h.args as { take: number }).take);
+    // R*4 = 8, esedekes nincs, es a jegyzetben nincs beragadt: mind a ket korben 8
+    assert.deepEqual(ablakok, [8, 8]);
+  });
+
+  it("a forgas hibas beallitasa az inditaskor bukik, nem minden korben; kikapcsolt utemezonel nem dob", () => {
+    const keszit = (environment: NodeJS.ProcessEnv) =>
+      new MedusaProjectionScheduler({
+        db: adatbazis([]).db,
+        runProjection: futtato(0).run,
+        runPricing: arFuttato().run,
+        environment,
+        logger: naplo().logger,
+      });
+
+    for (const rossz of ["0", "100", "x"])
+      assert.throws(
+        () => keszit(FORGAS(rossz)).onModuleInit(),
+        /MEDUSA_PROJECTION_REFRESH_INVALID/,
+        rossz,
+      );
+    // az utemezo maga ki van kapcsolva: a forgas beallitasa nem szamit, az inditas nem dob
+    assert.doesNotThrow(() =>
+      keszit({
+        MEDUSA_PROJECTION_REFRESH_ENABLED: "true",
+        MEDUSA_PROJECTION_REFRESH_PER_ROUND: "100",
+      } as NodeJS.ProcessEnv).onModuleInit(),
+    );
   });
 });

@@ -559,6 +559,16 @@ export class MedusaProjectionScheduler
   onModuleInit(): void {
     const config = medusaProjectionScheduleConfig(this.environment);
     if (!config.enabled) return;
+    /*
+      A FORGÁS BEÁLLÍTÁSA IS INDULÁSKOR BUKJON (barracuda, #2623): a kör csak a forgás forrásánál értékelné, és egy
+      elgépelt darabszám (0, 100) bekapcsolt forgásnál MINDEN kört ERROR-ra futtatna, vagyis a teljes vetítést megállítaná.
+      Itt az indulást állítja meg, ami látható.
+    */
+    const forgas = projectionRefreshConfig(this.environment);
+    if (forgas.enabled)
+      this.naplo.log(
+        `Medusa projection refresh rotation enabled (${forgas.perRound} per round)`,
+      );
     this.naplo.log(
       `Medusa projection scheduler enabled (${config.intervalMs / 60_000} min, ` +
         `batch ${config.batchSize})`,
@@ -1248,6 +1258,30 @@ export class MedusaProjectionScheduler
   }
 
   /**
+   * A KIPRÓBÁLT-JEGYZET TISZTÍTÁSA: csak az marad, aminek a kötése `lastSyncedAt`-je a kiválasztás óta NEM lépett. A lépett
+   * termék a lista végére került, az ablakon kívül, ezért az ablakból nem is tisztulna ki; egy lekérdezés a jegyzet
+   * azonosítóira (szeletenként) megmondja, melyik lépett. A hiányzó kötés (törölt termék) is kiesik.
+   */
+  private async frissitesJegyzetTisztit(): Promise<void> {
+    if (!this.frissitesProbalt.size) return;
+    const azonositok = [...this.frissitesProbalt.keys()];
+    const mostani = new Map<string, number | null>();
+    for (let i = 0; i < azonositok.length; i += KOTES_SZELET) {
+      const sorok = await this.db.externalReference.findMany({
+        where: {
+          ...MEDUSA_PRODUCT_REFERENCE,
+          entityId: { in: azonositok.slice(i, i + KOTES_SZELET) },
+        },
+        select: { entityId: true, lastSyncedAt: true },
+      });
+      for (const sor of sorok)
+        mostani.set(sor.entityId, sor.lastSyncedAt?.getTime() ?? null);
+    }
+    for (const [id, mikor] of this.frissitesProbalt)
+      if (mostani.get(id) !== mikor) this.frissitesProbalt.delete(id);
+  }
+
+  /**
    * A LASSU FRISSITESI FORGAS JELOLTJEI (kartya d8b512cb): a legregebben vetitett, de NEM esedekes termekek.
    *
    * CSAK A KOTOTT, MAR VETITETT, AKTIV, WEBSHOPOS, NEM KIZART TERMEK. A soha nem vetitett (`lastSyncedAt` nincs) az
@@ -1267,11 +1301,19 @@ export class MedusaProjectionScheduler
     this.frissitesValasztott = new Map();
     const config = projectionRefreshConfig(this.environment);
     if (!config.enabled) return [];
+    await this.frissitesJegyzetTisztit();
+    /*
+      AZ ABLAK A BERAGADTAKKAL IS SZÉLESEDIK (barracuda, #2623, blokkoló): a beragadt termék `lastSyncedAt`-je nem lép, tehát
+      örökre a legrégebbiek között, az ablak ELEJÉN marad. Ha ezekből `perRound * OVERSCAN` vagy több áll ott, az ablakban csak
+      beragadt van, a sor végére tétel nem talál mást, és a mögöttük állók soha nem kerülnek sorra, miközben a jelentés
+      `taken.refresh = perRound`-ot mutat. A jegyzet (`frissitesProbalt`) a tisztítás után csak a ténylegesen beragadtakat (és az
+      előző kör választását) tartalmazza, tehát az ablak a katalógus méreténél nem lehet szélesebb.
+    */
     // az esedékes termékek a legrégebben vetítettek között is állhatnak: az ablak annyival szélesebb
     const kotesek = await this.db.externalReference.findMany({
       where: { ...MEDUSA_PRODUCT_REFERENCE, lastSyncedAt: { not: null } },
       orderBy: [{ lastSyncedAt: "asc" }, { entityId: "asc" }],
-      take: config.perRound * OVERSCAN + mar.size,
+      take: config.perRound * OVERSCAN + mar.size + this.frissitesProbalt.size,
       select: { entityId: true, lastSyncedAt: true },
     });
     // a rendezés a kódban is megvan: a lekérdezés az ablakot jelöli ki, a sorrend viszont egy tágabb válasznál se múlhat rajta
@@ -1313,9 +1355,6 @@ export class MedusaProjectionScheduler
       ...sorrendben.filter((k) => !megallt(k)),
       ...sorrendben.filter(megallt),
     ].slice(0, config.perRound);
-    // a már lépett termék jegyzete elavult: a térkép a katalógus méreténél nem nő
-    for (const k of sorrendben)
-      if (!megallt(k)) this.frissitesProbalt.delete(k.entityId);
     this.frissitesValasztott = new Map(
       valasztott.map((k) => [k.entityId, k.lastSyncedAt!.getTime()]),
     );
