@@ -1163,7 +1163,8 @@ export class MedusaProjectionScheduler
   }
 
   /**
-   * AZ ÚJRAPRÓBÁLHATÓ ÁR-KUDARCOK (550b80d1): aktív, webshopos, létező és kötött termék, a bemenet sorrendjében. A
+   * AZ ÚJRAPRÓBÁLHATÓ ÁR-KUDARCOK (550b80d1): aktív, webshopos, nem kihagyott (`webshopExcluded`), létező és kötött
+   * termék, a bemenet sorrendjében; a kihagyott a termék-vetítésben sem esedékes, tehát árat sem kap. A
    * lekérdezés szeletenként megy (`KOTES_SZELET`), és a szűrés a kódban is megvan: egy tágabb válasz se vigyen
    * inaktivált terméket az ár-futásba.
    */
@@ -1176,15 +1177,23 @@ export class MedusaProjectionScheduler
           id: { in: jeloltek.slice(i, i + KOTES_SZELET) },
           isActive: true,
           webshopSellable: true,
+          webshopExcluded: false,
         },
-        select: { id: true, isActive: true, webshopSellable: true },
+        select: {
+          id: true,
+          isActive: true,
+          webshopSellable: true,
+          webshopExcluded: true,
+        },
       });
       for (const t of termekek as {
         id: string;
         isActive: boolean;
         webshopSellable: boolean;
+        webshopExcluded?: boolean;
       }[])
-        if (t.isActive && t.webshopSellable) aktiv.add(t.id);
+        if (t.isActive && t.webshopSellable && !t.webshopExcluded)
+          aktiv.add(t.id);
     }
     const kotott = await this.kotottAzonositok(
       jeloltek.filter((id) => aktiv.has(id)),
