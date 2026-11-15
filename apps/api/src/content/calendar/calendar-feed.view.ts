@@ -3,6 +3,7 @@ import {
   type CalendarDayOrUnknown,
   type ContentCalendarContentEntry,
   type ContentCalendarEntry,
+  type ContentCalendarEventEntry,
   type ContentCalendarLivestockEntry,
   type ContentCalendarPurchaseEntry,
   type ContentCalendarSaleEntry,
@@ -53,6 +54,17 @@ export interface PurchaseLineRow {
   product: { id: string; name: string };
 }
 
+/** A hand-entered event (S2); the two days are `YYYY-MM-DD` already (date columns), the name resolved. */
+export interface EventRow {
+  id: string;
+  kind: ContentCalendarEventEntry["eventKind"];
+  title: string;
+  startsOn: string;
+  endsOn: string;
+  location: string | null;
+  responsible: ContentCalendarEventEntry["responsible"];
+}
+
 export interface SaleRow {
   source: ContentCalendarSaleSource;
   product: { id: string; name: string };
@@ -79,6 +91,20 @@ export function contentEntry(row: ContentRow): ContentCalendarContentEntry {
     channel: row.channel,
     state: row.state,
     scheduledFor: row.scheduledFor ? row.scheduledFor.toISOString() : null,
+  };
+}
+
+export function eventEntry(row: EventRow): ContentCalendarEventEntry {
+  return {
+    kind: "EVENT",
+    key: `event:${row.id}`,
+    title: row.title,
+    startsOn: row.startsOn,
+    endsOn: row.endsOn,
+    eventId: row.id,
+    eventKind: row.kind,
+    location: row.location,
+    responsible: row.responsible,
   };
 }
 
@@ -181,11 +207,13 @@ function titleOf(what: string, products: { name: string }[]): string {
   return `${what}: ${products.length} termék`;
 }
 
+/** A holiday or a shop event first on its day: it frames the day (a closed shop, an open day) for everything else. */
 const KIND_ORDER: Record<ContentCalendarEntry["kind"], number> = {
-  SALE: 0,
-  LIVESTOCK_ARRIVAL: 1,
-  PURCHASE_ARRIVAL: 2,
-  CONTENT: 3,
+  EVENT: 0,
+  SALE: 1,
+  LIVESTOCK_ARRIVAL: 2,
+  PURCHASE_ARRIVAL: 3,
+  CONTENT: 4,
 };
 
 /** By start day (an unknown start first: it is already running), then the events before the content, then the title. */

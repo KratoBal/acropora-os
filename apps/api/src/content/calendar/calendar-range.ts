@@ -19,8 +19,11 @@ export interface CalendarRange {
 const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const DAY_MS = 86_400_000;
 
-/** A real calendar day: 2026-02-30 is not one, though it has the shape. */
-function dateOf(day: string): Date | null {
+/**
+ * A real calendar day as a date column stores it (UTC midnight), or null: 2026-02-30 is not one, though it has the
+ * shape. The hand-entered events (S2) use it for their two days.
+ */
+export function calendarDate(day: string): Date | null {
   if (!DAY_PATTERN.test(day)) return null;
   const date = new Date(`${day}T00:00:00Z`);
   return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== day
@@ -33,8 +36,8 @@ export function calendarRange(
   fromDay: string,
   toDay: string,
 ): CalendarRange | { problem: string } {
-  const firstDate = dateOf(fromDay);
-  const lastDate = dateOf(toDay);
+  const firstDate = calendarDate(fromDay);
+  const lastDate = calendarDate(toDay);
   if (!firstDate || !lastDate)
     return { problem: "A from és a to egy-egy nap, ÉÉÉÉ-HH-NN alakban." };
   if (lastDate < firstDate) return { problem: "A to nem lehet a from előtt." };

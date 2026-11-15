@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   contentEntry,
   livestockEntry,
+  eventEntry,
   orderEntries,
   purchaseEntries,
   saleEntries,
@@ -147,8 +148,33 @@ describe("content and livestock entries", () => {
   });
 });
 
+describe("eventEntry", () => {
+  it("a hand-entered event keeps its own days, its place and the person, and its key is the event's", () => {
+    const entry = eventEntry({
+      id: "e1",
+      kind: "SHOP_EVENT",
+      title: "Nyílt nap",
+      startsOn: "2026-11-20",
+      endsOn: "2026-11-21",
+      location: "Bolt",
+      responsible: { id: "u1", name: "Luca" },
+    });
+    assert.deepEqual(entry, {
+      kind: "EVENT",
+      key: "event:e1",
+      title: "Nyílt nap",
+      startsOn: "2026-11-20",
+      endsOn: "2026-11-21",
+      eventId: "e1",
+      eventKind: "SHOP_EVENT",
+      location: "Bolt",
+      responsible: { id: "u1", name: "Luca" },
+    });
+  });
+});
+
 describe("orderEntries", () => {
-  it("a sale with an unknown start comes first, then by day, the events before the content of the same day", () => {
+  it("a sale with an unknown start comes first, then by day, a hand-entered event first on its day, the events before the content of the same day", () => {
     const sale = saleEntries([
       { source: "UNAS tükör", product: P1, startsAt: null, endsAt: null },
     ])[0]!;
@@ -171,9 +197,20 @@ describe("orderEntries", () => {
       expectedOn: new Date("2026-11-20T00:00:00Z"),
     });
     const earlier = { ...content, key: "content:c0", startsOn: "2026-11-19" };
+    const holiday = eventEntry({
+      id: "e1",
+      kind: "HOLIDAY",
+      title: "Zárva",
+      startsOn: "2026-11-20",
+      endsOn: "2026-11-20",
+      location: null,
+      responsible: null,
+    });
     assert.deepEqual(
-      orderEntries([content, arrival, earlier, sale]).map((e) => e.key),
-      [sale.key, "content:c0", "livestock:a1", "content:c1"],
+      orderEntries([content, arrival, earlier, sale, holiday]).map(
+        (e) => e.key,
+      ),
+      [sale.key, "content:c0", "event:e1", "livestock:a1", "content:c1"],
     );
   });
 });

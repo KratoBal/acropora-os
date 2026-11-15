@@ -1239,6 +1239,12 @@ export const ANONYMIZATION_REGISTER: Readonly<
     note: "freeText",
     createdById: "identifier",
   },
+  CalendarEvent: {
+    title: "freeText",
+    location: "business",
+    responsibleUserId: "identifier",
+    createdById: "identifier",
+  },
   OutgoingPaymentMark: {
     invoiceNumber: "identifier",
     sourceRef: "identifier",

@@ -12,7 +12,7 @@ import { CalendarFeedService } from "./calendar-feed.service.js";
 /*
   THE CALENDAR FEED SERVICE (T5.5 S1). What turns this red: a failed read of ANY source answered as a feed without it
   (an empty calendar reads "nothing happens", spec 8B); a bad range read anyway; the read time not stamped; the
-  undated orders dropped instead of counted.
+  undated orders dropped instead of counted; the hand-entered events (S2) not read or not placed.
 */
 const NOW = new Date("2026-11-15T10:00:00Z");
 const SOURCES = [
@@ -21,6 +21,7 @@ const SOURCES = [
   "purchaseLines",
   "undatedOpenOrders",
   "sales",
+  "events",
 ] as const;
 
 function repository(failing?: (typeof SOURCES)[number]) {
@@ -36,6 +37,17 @@ function repository(failing?: (typeof SOURCES)[number]) {
         product: { id: "p1", name: "Egyik" },
         startsAt: null,
         endsAt: null,
+      },
+    ],
+    events: [
+      {
+        id: "e1",
+        kind: "HOLIDAY",
+        title: "Zárva",
+        startsOn: "2026-11-10",
+        endsOn: "2026-11-11",
+        location: null,
+        responsible: null,
       },
     ],
   } as const;
@@ -70,7 +82,10 @@ describe("CalendarFeedService.feed", () => {
     assert.deepEqual(feed.withoutDay, { purchaseOrders: 2 });
     assert.deepEqual(
       feed.entries.map((e) => [e.kind, e.startsOn]),
-      [["SALE", "ismeretlen"]],
+      [
+        ["SALE", "ismeretlen"],
+        ["EVENT", "2026-11-10"],
+      ],
     );
   });
 
