@@ -6,7 +6,7 @@ import {
   utkozoNevek,
 } from "../../integrations/medusa/medusa-category-tree.js";
 import { MemoryRedirectStore } from "./redirect-memory-store.js";
-import { normalizeRedirectPath } from "./redirect-path.js";
+import { normalizeRedirectPath, redirectPathLower } from "./redirect-path.js";
 import {
   RedirectError,
   redirectInvariantViolations,
@@ -120,6 +120,11 @@ export interface CategoryRedirectReport {
   repointed: number;
   /** Egy út, amihez már van MÁS célú szabály: nem írtuk felül. */
   conflicts: { source: string; existing: string; wanted: string }[];
+  /**
+   * `repoint` módban: a meglévő `UNAS_CATEGORY` szabály, aminek a célját a mai handle-re írtuk át (a kategória-átvétel
+   * (adopt) óta a régi `név---szülő` handle-alak 404-et ad). Kézi vagy más eredetű szabályhoz nem nyúl: az a `conflicts`-ban marad.
+   */
+  rewritten: { source: string; from: string; to: string }[];
   refused: { source: string; kind: string; message: string }[];
   /** `/spl/` vagy `/sct/` út, amelynek azonosítója nem kategóriánk. */
   unknownId: string[];
@@ -239,9 +244,14 @@ export async function planCategoryRedirectBackfill(
   options: {
     form: CategoryHandleForm;
     medusa?: readonly MedusaCategoryRef[];
+    /** A meglévő `UNAS_CATEGORY` szabály célját átírja a mai handle-re (alapból hamis: felülírás nincs). */
+    repoint?: boolean;
   } = { form: "current" },
 ): Promise<{ store: MemoryRedirectStore; report: CategoryRedirectReport }> {
   const store = new MemoryRedirectStore(existing);
+  const existingBySource = new Map(
+    existing.map((r) => [redirectPathLower(r.sourcePath), r]),
+  );
   const report: CategoryRedirectReport = {
     paths: paths.length,
     categories: categories.length,
@@ -250,6 +260,7 @@ export async function planCategoryRedirectBackfill(
     unchanged: 0,
     repointed: 0,
     conflicts: [],
+    rewritten: [],
     refused: [],
     unknownId: [],
     ambiguous: [],
@@ -364,15 +375,27 @@ export async function planCategoryRedirectBackfill(
       continue;
     }
     const destination = `/hu/categories/${found.handle}`;
+    // csak a SAJAT eredetű (UNAS_CATEGORY) szabály írható át; a kézi vagy más eredetű marad, és a `conflicts`-ba kerül
+    const meglevo = existingBySource.get(redirectPathLower(source));
+    const atirhato =
+      options.repoint === true &&
+      meglevo?.isActive === true &&
+      meglevo.reason === "UNAS_CATEGORY";
     try {
       const eredmeny = await writeRedirect(store, {
         source,
         destination,
         reason: "UNAS_CATEGORY",
-        onExisting: "keep",
+        onExisting: atirhato ? "replace" : "keep",
       });
       report.repointed += eredmeny.repointed;
       if (eredmeny.status === "unchanged") report.unchanged += 1;
+      else if (eredmeny.status === "updated" && meglevo)
+        report.rewritten.push({
+          source,
+          from: meglevo.destinationPath,
+          to: destination,
+        });
       else if (eredmeny.status === "conflict")
         report.conflicts.push({
           source,
@@ -405,7 +428,7 @@ export function describeCategoryRedirectBackfill(
     `Utak: ${r.paths}; kategoria: ${r.categories}; nem kategoria-szeru (termek, blog, statikus lap): ${r.skipped}`,
     `Uj szabaly: ${r.created}; valtozatlan: ${r.unchanged}; atirt korabbi cel (lanc-osszevonas): ${r.repointed}`,
     `Ismeretlen UNAS-azonosito (nincs szabaly): ${r.unknownId.length}; ketertelmu (nincs szabaly): ${r.ambiguous.length}; nincs hozza Medusa-kategoria (nincs szabaly): ${r.noMedusaCategory.length}`,
-    `Elteroen mar meglevo (nem irtuk felul): ${r.conflicts.length}; elutasitva: ${r.refused.length}; kozos handle: ${r.handleCollisions.length}`,
+    `Elteroen mar meglevo (nem irtuk felul): ${r.conflicts.length}; atirt cel (repoint, sajat eredetu szabaly): ${r.rewritten.length}; elutasitva: ${r.refused.length}; kozos handle: ${r.handleCollisions.length}`,
     `Invarians (aktiv cel, ami forras): ${r.invariantViolations.length}`,
     ...r.createdRules.map((c) => `  uj: ${c.source} -> ${c.destination}`),
     ...r.unknownId.map((s) => `  ismeretlen azonosito: ${s}`),
@@ -417,6 +440,7 @@ export function describeCategoryRedirectBackfill(
       (c) =>
         `  elteroen meglevo: ${c.source} -> ${c.existing} (kellene: ${c.wanted})`,
     ),
+    ...r.rewritten.map((c) => `  atirva: ${c.source}: ${c.from} -> ${c.to}`),
     ...r.refused.map(
       (x) => `  elutasitva: ${x.source} ${x.kind}: ${x.message}`,
     ),
