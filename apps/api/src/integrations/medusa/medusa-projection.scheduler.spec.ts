@@ -2667,6 +2667,41 @@ describe("MedusaProjectionScheduler lassu frissitesi forgasa", () => {
     assert.equal(kor.candidates!.refresh, 1);
   });
 
+  it("a termek nelkuli kotes (arva), akar van lastSyncedAt-je, akar nincs, nem forgas-jelolt es nem dob", async () => {
+    const sorok = [
+      naprakesz("n1", 1),
+      naprakesz("n2", 2),
+      // a kotes termek nelkul: a termek-lekerdezes nem adja vissza, az altalanos sor sem latja
+      {
+        termek: termek({ id: "arva-datummal" }),
+        kotes: { entityId: "arva-datummal", lastSyncedAt: napokUtan(0.5) },
+      },
+      {
+        termek: termek({ id: "arva-datum-nelkul" }),
+        kotes: { entityId: "arva-datum-nelkul", lastSyncedAt: null },
+      },
+    ];
+    const { db } = adatbazis(
+      // a dupla minden termek-lekerdezesre ezt adja: az arvak termekei kimaradnak
+      sorok.slice(0, 2).map((s) => s.termek),
+      sorok.map(
+        (s) => s.kotes as { entityId: string; lastSyncedAt: Date | null },
+      ),
+    );
+    const { run, kapott } = futtato(0);
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: run,
+      runPricing: arFuttato().run,
+      environment: FORGAS("5"),
+      logger: naplo().logger,
+    });
+
+    await scheduler.runOnce();
+
+    assert.deepEqual(kapott, [["n1", "n2"]]);
+  });
+
   it("a beragadt termek (a lastSyncedAt nem lep) a sor vegere kerul, a mogotte allok sorra kerulnek", async () => {
     const sorok = [1, 2, 3, 4].map((n) => naprakesz(`n${n}`, n));
     // a dupla kotesei nem valtoznak: ugy tunik, mintha a vetites nem leptetne a kotest
