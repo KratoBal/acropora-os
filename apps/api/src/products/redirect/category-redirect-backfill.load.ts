@@ -46,6 +46,8 @@ export async function planCategoryRedirectsFromDb(
         reason: true,
         createdAt: true,
         createdById: true,
+        entityType: true,
+        entityId: true,
       },
     }),
   ]);

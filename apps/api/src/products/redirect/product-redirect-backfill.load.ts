@@ -70,6 +70,9 @@ export async function planProductRedirectsFromDb(
         isActive: true,
         reason: true,
         createdAt: true,
+        createdById: true,
+        entityType: true,
+        entityId: true,
       },
     }),
   ]);

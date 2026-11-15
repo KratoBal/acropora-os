@@ -22,6 +22,8 @@ export class MemoryRedirectStore implements RedirectStore {
     string,
     Partial<Omit<RedirectRuleData, "sourcePath" | "sourcePathLower">>
   >();
+  /** A meglévő szabály ÁLLAPOTA az első módosítás előtt: a visszavonás ebből tudja, mi volt a régi cél. */
+  private readonly elozo = new Map<string, Sor>();
   private szamlalo = 0;
 
   constructor(meglevo: readonly RedirectRule[] = []) {
@@ -59,6 +61,8 @@ export class MemoryRedirectStore implements RedirectStore {
   ): Promise<void> {
     const sor = this.sorok.get(id);
     if (!sor) throw new Error(`no redirect ${id}`);
+    if (!this.ujak.has(id) && !this.elozo.has(id))
+      this.elozo.set(id, { ...sor });
     Object.assign(sor, data);
     if (!this.ujak.has(id))
       this.modositottak.set(id, { ...this.modositottak.get(id), ...data });
@@ -85,4 +89,46 @@ export class MemoryRedirectStore implements RedirectStore {
   }[] {
     return [...this.modositottak].map(([id, data]) => ({ id, data }));
   }
+
+  /**
+   * A VISSZAVONÁS NYILVÁNTARTÁSA (card f6cb0a51, az éles lánc előtt): minden változás, a régi állapottal együtt.
+   * Az új szabály forrással és céllal áll (a `createMany` nem ad azonosítót, a forrás egyedi); a módosítotté
+   * a régi (`from`) és az új (`to`) érték, CSAK azokon a mezőkön, amelyeket a terv módosít. A `from` hiányzó értéke `null`.
+   * NEM része a terv lenyomatának: a nyilvántartás a tervet nem változtatja.
+   */
+  changes(): RedirectBatchChanges {
+    return {
+      created: this.created().map((r) => ({
+        source: r.sourcePath,
+        destination: r.destinationPath,
+      })),
+      updated: [...this.modositottak].map(([id, to]) => {
+        const regi = this.elozo.get(id)!;
+        const from: Record<string, unknown> = {};
+        for (const kulcs of Object.keys(to))
+          // a betöltött sor nem hordozza a kisbetűs cél-kulcsot: a régi célból számolódik, ahogy az író is számolja
+          from[kulcs] =
+            kulcs === "destinationPathLower"
+              ? redirectPathLower(regi.destinationPath)
+              : ((regi as unknown as Record<string, unknown>)[kulcs] ?? null);
+        return {
+          id,
+          source: regi.sourcePath,
+          from,
+          to: to as Record<string, unknown>,
+        };
+      }),
+    };
+  }
+}
+
+/** Egy írási köteg változásai, ahogy az AuditLog tárolja (`metadata.changes`). */
+export interface RedirectBatchChanges {
+  created: { source: string; destination: string }[];
+  updated: {
+    id: string;
+    source: string;
+    from: Record<string, unknown>;
+    to: Record<string, unknown>;
+  }[];
 }
