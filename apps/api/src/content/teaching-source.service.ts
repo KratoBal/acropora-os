@@ -8,6 +8,7 @@ import {
   analyzeTeachingSource,
   parseTeachingSourceInput,
   type TeachingSourceEditorData,
+  type TeachingSourceListItem,
 } from "@acropora/types";
 
 import { TeachingSourceRepository } from "./teaching-source.repository.js";
@@ -26,6 +27,11 @@ const PROBLEMS_SHOWN = 10;
 @Injectable()
 export class TeachingSourceService {
   constructor(private readonly sources: TeachingSourceRepository) {}
+
+  /** The source list (spec v2, point 4). */
+  list(): Promise<TeachingSourceListItem[]> {
+    return this.sources.list();
+  }
 
   /** The source, what its table and text say about each other, and whether it may change now. */
   async get(contentId: string): Promise<TeachingSourceEditorData> {

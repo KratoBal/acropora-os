@@ -265,5 +265,28 @@ describe(
         { kind: "missing" },
       );
     });
+
+    it("T52-INT-LIST: the list shows a source with its version and audience, and no discarded one", async () => {
+      const id = await item("TEACHING_SOURCE");
+      assert.equal((await sources.save(id, input(null), actor)).kind, "ok");
+      const discarded = await item("TEACHING_SOURCE", "DISCARDED");
+      const list = await sources.list(1_000);
+      const row = list.find((r) => r.contentId === id);
+      assert.equal(row?.version, 1);
+      assert.equal(row?.audience, "INTERNAL");
+      assert.equal(row?.openQuestions, 0);
+      assert.deepEqual(row?.outputs, {
+        total: 0,
+        current: 0,
+        stale: 0,
+        differing: 0,
+        overFrame: 0,
+        sent: 0,
+      });
+      assert.equal(
+        list.find((r) => r.contentId === discarded),
+        undefined,
+      );
+    });
   },
 );

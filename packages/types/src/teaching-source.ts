@@ -853,3 +853,31 @@ export function analyzeTeachingSource(
     typedNumbers,
   };
 }
+
+/**
+ * ONE ROW OF THE SOURCE LIST (T5.2, spec v2, point 4): title, version,
+ * audience, and the state of its outputs, counted per state the spec names
+ * (current, stale, differs from the source, over the frame) plus the open
+ * questions of the source itself.
+ */
+export interface TeachingSourceListItem {
+  contentId: string;
+  title: string;
+  /** The content item's state (`ContentState`). */
+  state: string;
+  /** null while the item has no saved source yet. */
+  version: number | null;
+  approvedVersion: number | null;
+  audience: TeachingAudience | null;
+  openQuestions: number;
+  outputs: {
+    total: number;
+    current: number;
+    stale: number;
+    /** Outputs with an edited copy uploaded. */
+    differing: number;
+    overFrame: number;
+    sent: number;
+  };
+  updatedAt: string;
+}
