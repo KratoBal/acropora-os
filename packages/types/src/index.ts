@@ -638,6 +638,24 @@ export type {
   ContentViewerRole,
   ContentWaitingOnMeResponse,
 } from "./content-management.js";
+export {
+  CONTENT_CALENDAR_ENTRY_KINDS,
+  CONTENT_CALENDAR_MAX_DAYS,
+  CONTENT_CALENDAR_UNKNOWN,
+} from "./content-calendar.js";
+export type {
+  CalendarDay,
+  CalendarDayOrUnknown,
+  ContentCalendarContentEntry,
+  ContentCalendarEntry,
+  ContentCalendarEntryKind,
+  ContentCalendarFeed,
+  ContentCalendarLivestockEntry,
+  ContentCalendarPurchaseEntry,
+  ContentCalendarSaleEntry,
+  ContentCalendarSaleSource,
+  LivestockArrivalCalendarState,
+} from "./content-calendar.js";
 export type {
   AquariumDetail,
   AquariumEquipment,
