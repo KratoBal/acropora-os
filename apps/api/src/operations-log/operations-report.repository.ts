@@ -252,11 +252,6 @@ export class OperationsReportRepository {
   }
 
   /**
-   * A PARTNER SAJÁT HELYSZÍNEI: a partner helyszínei közül azok, amelyek a felhasználó hozzárendelt egységei (a részfájukkal együtt:
-   * a hozzárendelés csomópontot tárol, a kibontás a hívó dolga, `assignedUnitIdsFor`). Az aktív helyszínek, laposan, a fát a hívó
-   * építi a `parentId`-ból.
-   */
-  /**
    * AZ ÜGYFÉL HELYSZÍN-FÁJA (minden egysége, a kimutatás részfa-számításához: ugyanaz a lekérdezés, mint a `scope`-é).
    */
   customerUnits(
@@ -312,6 +307,11 @@ export class OperationsReportRepository {
     );
   }
 
+  /**
+   * A PARTNER SAJÁT HELYSZÍNEI: a partner helyszínei közül azok, amelyek a felhasználó hozzárendelt egységei (a részfájukkal együtt:
+   * a hozzárendelés csomópontot tárol, a kibontás a hívó dolga, `assignedUnitIdsFor`). Az aktív helyszínek, laposan, a fát a hívó
+   * építi a `parentId`-ból.
+   */
   async partnerSites(
     customerId: string,
     unitIds: readonly string[],
