@@ -19,6 +19,7 @@ import {
   type CalendarEvent,
   type ContentCalendarEntry,
   type ContentCalendarFeed,
+  type ContentCalendarSlotsResult,
 } from "@acropora/types";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -137,6 +138,24 @@ function details(entry: ContentCalendarEntry, queriedAt: string): string[] {
   }
 }
 
+/** A nyitás eredménye egy mondatban: mi volt már meg, és mi nem nyílt, miért. Nem hallgatja el a kimaradtat. */
+export function slotsSummary(result: ContentCalendarSlotsResult): string {
+  const parts = [
+    `${shortDayLabel(result.from)} – ${shortDayLabel(result.to)} eseményeihez.`,
+    `${result.existing} már megvolt.`,
+  ];
+  const { pastDay, openEnded, unknownDay } = result.skipped;
+  if (pastDay) parts.push(`${pastDay} nem nyílt, mert a napja elmúlt.`);
+  if (openEnded)
+    parts.push(
+      `${openEnded} nem nyílt, mert az akció nyitott végű (nincs utolsó napja).`,
+    );
+  if (unknownDay)
+    parts.push(`${unknownDay} nem nyílt, mert az esemény napja ismeretlen.`);
+  parts.push("Az új helyek ötletként állnak, a Tartalom „ötletek” nézetében.");
+  return parts.join(" ");
+}
+
 /** A bejegyzés teljes másodlagos sora: a tartama (ha több nap vagy ismeretlen), és a részletei. */
 function describe(entry: ContentCalendarEntry, queriedAt: string): string[] {
   const span = spanLabel(entry);
@@ -197,6 +216,10 @@ export function ContentCalendarPage() {
     day: string;
   } | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
+  const [slots, setSlots] = useState<
+    { result: ContentCalendarSlotsResult } | { error: string } | null
+  >(null);
+  const [opening, setOpening] = useState(false);
 
   const user = session?.user ?? null;
   const canView = Boolean(
@@ -231,6 +254,22 @@ export function ContentCalendarPage() {
     void load(controller.signal);
     return () => controller.abort();
   }, [load]);
+
+  /** A sablon szerinti helyek a látott napok eseményeihez (S5); utána a naptár újraolvas, és a helyek ötletként látszanak. */
+  async function openSlots() {
+    setOpening(true);
+    setSlots(null);
+    try {
+      setSlots({ result: await contentCalendarApi.openSlots(token, from, to) });
+      void load();
+    } catch (cause) {
+      setSlots({
+        error: cause instanceof Error ? cause.message : "Ismeretlen hiba.",
+      });
+    } finally {
+      setOpening(false);
+    }
+  }
 
   async function openEvent(eventId: string) {
     setOpenError(null);
@@ -311,6 +350,16 @@ export function ContentCalendarPage() {
             {canManage ? (
               <Button
                 size="sm"
+                variant="secondary"
+                disabled={opening}
+                onClick={() => void openSlots()}
+              >
+                Tartalom-helyek nyitása
+              </Button>
+            ) : null}
+            {canManage ? (
+              <Button
+                size="sm"
                 onClick={() =>
                   setEditing({
                     event: null,
@@ -344,6 +393,20 @@ export function ContentCalendarPage() {
           title="Az esemény nem nyitható meg"
           description={openError}
         />
+      ) : null}
+      {slots ? (
+        "error" in slots ? (
+          <Alert
+            variant="danger"
+            title="A tartalom-helyek nem nyithatók meg"
+            description={slots.error}
+          />
+        ) : (
+          <Alert
+            title={`${slots.result.opened.length} új tartalom-hely nyílt`}
+            description={slotsSummary(slots.result)}
+          />
+        )
       ) : null}
 
       <div className="flex flex-wrap items-center gap-2">

@@ -670,6 +670,7 @@ export type {
   ContentCalendarPurchaseEntry,
   ContentCalendarSaleEntry,
   ContentCalendarSaleSource,
+  ContentCalendarSlotsResult,
   LivestockArrivalCalendarState,
 } from "./content-calendar.js";
 export type {

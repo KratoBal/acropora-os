@@ -1340,6 +1340,7 @@ export const ANONYMIZATION_REGISTER: Readonly<
     externalPostId: "identifier",
     externalUrl: "business",
     discardReason: "freeText",
+    calendarEventKey: "identifier",
   },
   ContentComment: {
     authorId: "identifier",

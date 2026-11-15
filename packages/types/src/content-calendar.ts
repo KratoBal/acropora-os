@@ -110,6 +110,29 @@ export interface ContentTemplateRule {
   updatedAt: string;
 }
 
+/**
+ * OPENING THE CONTENT SLOTS OF A RANGE (T5.5 S5): for every event of the range and every active template row of its
+ * kind, one IDEA item at the row's day, unless it exists already. The range selects the EVENTS; a slot's own day may
+ * fall outside it (a pre-registration call a week before an arrival on the range's first day).
+ */
+export interface ContentCalendarSlotsResult {
+  from: CalendarDay;
+  to: CalendarDay;
+  /** The slots this call opened. */
+  opened: { contentId: string; title: string; plannedOn: CalendarDay }[];
+  /** Slots that were open already: the call is safe to repeat. */
+  existing: number;
+  /** Rows that opened nothing, by the reason: said, not dropped. */
+  skipped: {
+    /** The row's day is before today. */
+    pastDay: number;
+    /** An end-anchored row on an open-ended sale: it has no last day (spec 8B). */
+    openEnded: number;
+    /** The anchor day is not known (a mirror sale's start). */
+    unknownDay: number;
+  };
+}
+
 /** A choice of the responsible picker: an active colleague who sees the content calendar. */
 export interface CalendarEventResponsibleOption {
   id: string;

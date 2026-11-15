@@ -16,7 +16,8 @@ import { ContentCalendarPage } from "./content-calendar-page";
   lead to its source, or a link to a page the viewer may not open; an event edit that does not send the record's
   updatedAt (a stale form would overwrite a newer one); the new-event button shown to someone who cannot write; a full
   month day that hides its extra entries without saying so; a running sale repeated on every day instead of once in
-  the band above the days (acrobot 53185); a multi-day entry repeated on every day of the phone list.
+  the band above the days (acrobot 53185); a multi-day entry repeated on every day of the phone list; opening the slots
+  without saying what did not open and why.
 */
 const api = vi.hoisted(() => ({
   feed: vi.fn(),
@@ -25,6 +26,7 @@ const api = vi.hoisted(() => ({
   createEvent: vi.fn(),
   updateEvent: vi.fn(),
   deleteEvent: vi.fn(),
+  openSlots: vi.fn(),
 }));
 vi.mock("@/lib/api/content-calendar", () => ({ contentCalendarApi: api }));
 
@@ -268,6 +270,9 @@ describe("ContentCalendarPage", () => {
       screen.queryByRole("link", { name: "Beszerzés érkezik: Só" }),
     ).toBeNull();
     expect(screen.queryByRole("button", { name: "Új esemény" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Tartalom-helyek nyitása" }),
+    ).toBeNull();
     // the event is not editable either: plain text, no button
     expect(screen.queryByRole("button", { name: "Zárva: leltár" })).toBeNull();
   });
@@ -314,6 +319,38 @@ describe("ContentCalendarPage", () => {
     await screen.findByLabelText("Cím");
     fireEvent.click(screen.getByRole("button", { name: "Mentés" }));
     expect(await screen.findByText(/közben valaki módosította/)).toBeTruthy();
+  });
+
+  it("opening the slots asks for the week shown, says what opened, what existed and what did not open and why, and reads the calendar again", async () => {
+    api.feed.mockResolvedValue(feed([HOLIDAY]));
+    api.openSlots.mockResolvedValue({
+      from: "2026-11-09",
+      to: "2026-11-15",
+      opened: [
+        {
+          contentId: "c9",
+          title: "Bejelentés: Akció",
+          plannedOn: "2026-11-17",
+        },
+      ],
+      existing: 2,
+      skipped: { pastDay: 1, openEnded: 1, unknownDay: 0 },
+    });
+    render(<ContentCalendarPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Tartalom-helyek nyitása" }),
+    );
+    expect(await screen.findByText("1 új tartalom-hely nyílt")).toBeTruthy();
+    expect(api.openSlots).toHaveBeenCalledWith(
+      "token-1",
+      "2026-11-09",
+      "2026-11-15",
+    );
+    const summary = screen.getByText(/2 már megvolt/).textContent ?? "";
+    expect(summary).toMatch(/1 nem nyílt, mert a napja elmúlt/);
+    expect(summary).toMatch(/1 nem nyílt, mert az akció nyitott végű/);
+    expect(summary).not.toMatch(/ismeretlen/);
+    await waitFor(() => expect(api.feed).toHaveBeenCalledTimes(2));
   });
 
   it("a full month day names how many more entries it holds", async () => {

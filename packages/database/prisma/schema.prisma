@@ -8422,9 +8422,19 @@ model ContentItem {
   teachingSource TeachingSource?
   /// A gyartoi allitasok, amikre a tetel epul (T5.3, 3. pont): lasd `ContentItemClaim`.
   claimLinks ContentItemClaim[]
+
+  /// A TARTALOMNAPTÁR HELYE (T5.5 S5): a naptár-esemény kulcsa (a feed `key`-e: `livestock:<id>`, `event:<id>`,
+  /// `sale:...`, `purchase:<rendelés>:<nap>`), és a sablon-sor, ami ezt a helyet nyitotta. Mindkettő üres a kézzel
+  /// felvett tételnél. A kettő együtt egyedi: egy eseményhez sablon-soronként legfeljebb egy hely (újrafuttatás nem
+  /// duplikál, két egyszerre futó nyitás sem).
+  calendarEventKey String?
+  templateRuleId   String?
+  templateRule     ContentTemplateRule? @relation(fields: [templateRuleId], references: [id], onDelete: Restrict)
+
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
 
+  @@unique([calendarEventKey, templateRuleId])
   @@index([state, plannedFor])
   @@index([channel, state])
 }
@@ -9105,6 +9115,9 @@ model ContentTemplateRule {
   sortOrder   Int                      @default(0)
   createdAt   DateTime                 @default(now())
   updatedAt   DateTime                 @updatedAt
+
+  /// The content slots this row opened (S5): a row with slots is switched off, never deleted.
+  slots ContentItem[]
 
   @@index([eventKind, active])
 }

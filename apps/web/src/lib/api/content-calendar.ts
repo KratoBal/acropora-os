@@ -3,6 +3,7 @@ import type {
   CalendarEventKind,
   CalendarEventResponsibleOption,
   ContentCalendarFeed,
+  ContentCalendarSlotsResult,
   ContentChannel,
   ContentTemplateAnchor,
   ContentTemplateEventKind,
@@ -111,6 +112,14 @@ export const contentCalendarApi = {
         method: "PATCH",
         body: JSON.stringify({ ...input, expectedUpdatedAt }),
       },
+    );
+  },
+  /** A látott időszak eseményeihez a sablon szerinti tartalom-helyek; ismételhető, a meglévőt nem nyitja újra. */
+  openSlots(token: string, from: string, to: string) {
+    return apiRequest<ContentCalendarSlotsResult>(
+      `/content/calendar/slots/open`,
+      token,
+      { method: "POST", body: JSON.stringify({ from, to }) },
     );
   },
   deleteEvent(token: string, id: string) {
