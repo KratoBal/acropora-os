@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { prisma, type Prisma } from "@acropora/database";
 
 import { applyArticleStep } from "./article.repository.js";
+import { applyTeachingSourceStep } from "./teaching-source.repository.js";
 import { claimsOfContent } from "./content-claim-links.js";
 import { lockContentItems } from "./content-row-lock.js";
 import type { ContentState } from "./content-state.js";
@@ -225,6 +226,13 @@ export class ContentRepository {
         from: input.from,
         to: input.to,
         actorUserId: input.actorUserId,
+      });
+      // AZ OKTATÓANYAG-FORRÁS RÉSZE ugyanígy: nyitott kérdéssel nincs jóváhagyás
+      // (`TeachingSourceStepError`), és a jóváhagyott verzió a lépéssel együtt rögzül.
+      await applyTeachingSourceStep(tx, {
+        contentId: input.id,
+        from: input.from,
+        to: input.to,
       });
 
       if (input.note)

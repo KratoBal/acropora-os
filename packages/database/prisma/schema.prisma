@@ -8327,6 +8327,8 @@ enum ContentChannel {
   FACEBOOK_POST
   FACEBOOK_AD
   ARTICLE
+  /// Egy oktatóanyag forrása (T5.2): a törzse a `TeachingSource`.
+  TEACHING_SOURCE
   OTHER
 }
 
@@ -8414,6 +8416,8 @@ model ContentItem {
   stateEvents ContentStateEvent[]
   /// A cikk törzse (csak `ARTICLE` csatornán): lásd `ArticleBody`.
   article   ArticleBody?
+  /// Az oktatóanyag forrása (csak `TEACHING_SOURCE` csatornán): lásd `TeachingSource`.
+  teachingSource TeachingSource?
   /// A gyartoi allitasok, amikre a tetel epul (T5.3, 3. pont): lasd `ContentItemClaim`.
   claimLinks ContentItemClaim[]
   createdAt DateTime         @default(now())
@@ -8572,6 +8576,79 @@ model ArticleImage {
 
   @@index([contentId])
   @@index([sha256])
+}
+
+/// Kinek szólhat egy oktatóanyag kimenete (T5.2, spec v2 1. pont). Idegen
+/// szerzőjű anyag alapértelmezésben belső; belső forrásból nyilvános csatornára
+/// szóló kimenet nem készül.
+enum TeachingAudience {
+  INTERNAL
+  PUBLIC
+}
+
+/// EGY OKTATÓANYAG FORRÁSA (T5.2, kártya e8eca513; spec:
+/// exchange/otletek-2026-11-03/t5-2-egy-forras-tobb-kimenet-spec-v2.md), 1:1
+/// egy `TEACHING_SOURCE` csatornájú `ContentItem`-mel, ahogy az `ArticleBody`.
+/// A jóváhagyás útja, a hozzászólások és a gyártói állítás-kapcsolat a tételé.
+///
+/// MIÉRT NEM AZ ARTICLE BŐVÍTÉSE (mérve 2026-11-15, a kártyán): a cikk egyetlen
+/// HTML-törzs, és csak jóváhagyáskor kap változatot; a forrásnak részek,
+/// alrészek, ellenőrzőlisták, dia-jegyzetek, egy számtábla és mentésenkénti
+/// verzió kell, amire a későbbi kimenetek hivatkoznak.
+///
+/// A `document` A RÉSZEKET ÉS A SZÁMTÁBLÁT tartja (`TeachingSourceDocument`
+/// alakban, a `@acropora/types` szigorú elemzőjén átment JSON-ként): a forrás
+/// egészben szerkesztődik, egészben verziózódik, és a hivatkozások ellenőrzése
+/// is az egészen fut. A szöveg a számot hivatkozásként tartja (`{szám: id,
+/// alak}`), soha nem beírva.
+model TeachingSource {
+  contentId       String                  @id
+  content         ContentItem             @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  subtitle        String?
+  /// Szerző és forrás, pl. "Akil, Modern Reef blog, 2026. 10. 15.".
+  author          String
+  /// A fordító vagy szerkesztő.
+  editor          String?
+  audience        TeachingAudience        @default(INTERNAL)
+  /// Ami a nyilvános kört megengedi (a szerző vagy jogtulajdonos engedélye).
+  publicBasis     String?
+  /// A forrás-szintű kitétel, az egész anyagra érvényes.
+  disclaimer      String?
+  document        Json
+  /// A mostani verzió; minden tartalmi változás eggyel növeli.
+  version         Int                     @default(1)
+  /// sha256 a címen, a fejléc-mezőkön és a dokumentumon.
+  contentHash     String
+  /// A jóváhagyáskor rögzített verzió; visszaküldéskor vagy elvetéskor törlődik.
+  approvedVersion Int?
+  updatedById     String?
+  versions        TeachingSourceVersion[]
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+}
+
+/// A FORRÁS EGY VERZIÓJA, VÁLTOZATLANUL: minden tartalmi mentés egy sort ír, a
+/// mostanit is. A kimenetek (2. szelet) egy konkrét verzióhoz tartoznak, és ebből
+/// mérhető, hogy elavultak-e. Append-only: a tárolóban nincs módosító vagy
+/// törlő út.
+model TeachingSourceVersion {
+  id          String           @id @default(cuid())
+  contentId   String
+  source      TeachingSource   @relation(fields: [contentId], references: [contentId], onDelete: Cascade)
+  version     Int
+  title       String
+  subtitle    String?
+  author      String
+  editor      String?
+  audience    TeachingAudience
+  publicBasis String?
+  disclaimer  String?
+  document    Json
+  contentHash String
+  createdById String?
+  createdAt   DateTime         @default(now())
+
+  @@unique([contentId, version])
 }
 
 /// A beszélgetés a tételen belül, hogy a felvetésre ott lehessen válaszolni, ne

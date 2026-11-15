@@ -1385,6 +1385,29 @@ export const ANONYMIZATION_REGISTER: Readonly<
     content: "ownCompany",
     uploadedById: "identifier",
   },
+  // A teaching material's source (T5.2): the text is the author's and the
+  // editor's; the document holds the parts and the number table as JSON.
+  TeachingSource: {
+    subtitle: "freeText",
+    author: "freeText",
+    editor: "freeText",
+    publicBasis: "freeText",
+    disclaimer: "freeText",
+    document: "json",
+    contentHash: "business",
+    updatedById: "identifier",
+  },
+  TeachingSourceVersion: {
+    title: "freeText",
+    subtitle: "freeText",
+    author: "freeText",
+    editor: "freeText",
+    publicBasis: "freeText",
+    disclaimer: "freeText",
+    document: "json",
+    contentHash: "business",
+    createdById: "identifier",
+  },
   TicketMailDelivery: {
     serviceJobId: "identifier",
     jobNumber: "identifier",
