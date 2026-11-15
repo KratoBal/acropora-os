@@ -48,6 +48,15 @@ describe("az üzemeltetési napló partner-oldala", () => {
     assert.match(page, /OperationsLogReport/);
   });
 
+  it("az üres lista két okát külön mondja ki: nincs hozzárendelés, vagy van, de még nincs mit mutatni (f6694b49)", () => {
+    // a válasz `withoutActivity` mezője dönt; nélküle a tevékenység nélküli partner azt olvasná, hogy nincs helyszíne
+    assert.match(api, /withoutActivity: number/);
+    assert.match(report, /setWithoutActivity\(response\.withoutActivity/);
+    assert.match(report, /withoutActivity > 0 \?/);
+    assert.ok(report.includes("Nincs hozzád rendelt helyszín"));
+    assert.ok(report.includes("Még nincs üzemeltetési napló a helyszíneiden"));
+  });
+
   it("a képernyő nem ír ki kollégát, belső megjegyzést vagy belső jegyállapotot", () => {
     for (const forbidden of [
       "performers",

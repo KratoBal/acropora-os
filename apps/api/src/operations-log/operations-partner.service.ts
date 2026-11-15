@@ -9,6 +9,8 @@ import type {
 } from "@acropora/types";
 
 import { partnerScopeOf } from "../auth/partner-scope.util.js";
+import type { UnitRow } from "../service-assets/unit-path.js";
+import { collectUnitSubtreeIds } from "../service-assets/unit-subtree.js";
 import { OperationsReportRepository } from "./operations-report.repository.js";
 import { OperationsReportService } from "./operations-report.service.js";
 
@@ -16,6 +18,22 @@ export interface OperationsPartnerSite {
   id: string;
   parentId: string | null;
   name: string;
+}
+
+/**
+ * A HELYSZÍNEK, AMELYEKNEK A KIMUTATÁSA NEM ÜRES (kártya f6694b49, Balázs 2026-11-15 15:21 UTC: a partner az ÖSSZES helyszínét
+ * látta): egy helyszín akkor marad, ha a RÉSZFÁJÁBAN van aktív egység (sablonos élő eszköz vagy bejegyzés). Ugyanaz a részfa,
+ * amire a kimutatás készül (`scope`), tehát egy szülő akkor is marad, ha csak a gyerekén van mit mutatni; és a fa nem szakad
+ * szét: ha egy gyerek marad, a szülője is.
+ */
+export function sitesWithActivity(
+  sites: readonly OperationsPartnerSite[],
+  units: readonly UnitRow[],
+  active: ReadonlySet<string>,
+): OperationsPartnerSite[] {
+  return sites.filter((site) =>
+    collectUnitSubtreeIds(units, site.id).some((id) => active.has(id)),
+  );
 }
 
 /**
@@ -47,10 +65,30 @@ export class OperationsPartnerService {
     return this.repository.partnerSites(scope.customerId, unitIds);
   }
 
+  /**
+   * A HELYSZÍN-VÁLASZTÓ LISTÁJA: a látható helyszínek közül azok, amelyeknek a kimutatása nem üres (`sitesWithActivity`). A
+   * kimaradtak SZÁMA is megy (`withoutActivity`): a portál így meg tudja különböztetni a „nincs hozzád rendelt helyszín" és a „van,
+   * de még nincs mit mutatni" állapotot. A SZŰRÉS A LISTÁRA SZÓL, NEM A LÁTHATÓSÁGRA: a `report` a szűretlen helyszínekkel dönt, egy
+   * könyvjelzőzött, még tevékenység nélküli helyszín kimutatása tehát megnyílik (üresen).
+   */
   async sites(
     user: AuthenticatedUser,
-  ): Promise<{ items: OperationsPartnerSite[] }> {
-    return { items: await this.visibleSites(user) };
+  ): Promise<{ items: OperationsPartnerSite[]; withoutActivity: number }> {
+    const visible = await this.visibleSites(user);
+    if (visible.length === 0) return { items: [], withoutActivity: 0 };
+    const scope = partnerScopeOf(user);
+    const units =
+      scope.kind === "customer"
+        ? await this.repository.customerUnits(scope.customerId)
+        : [];
+    const subtreeIds = [
+      ...new Set(
+        visible.flatMap((site) => collectUnitSubtreeIds(units, site.id)),
+      ),
+    ];
+    const active = await this.repository.departmentsWithActivity(subtreeIds);
+    const items = sitesWithActivity(visible, units, active);
+    return { items, withoutActivity: visible.length - items.length };
   }
 
   /**

@@ -38,7 +38,9 @@ import { Message } from "./ticket-list";
  *
  * AMIT A PARTNER NEM LÁT, és ez a SZERVEREN dől el (a végpont már szűrt választ ad, ez a képernyő nem szűr semmit): a kollégák neve
  * („Acropora" áll helyette), a belső megjegyzés, a szabad szövegű értékek, és a hibajegy belső állapota (a négy látszó egyike jön).
- * A helyszín-lista a hozzárendelt helyszínek; hozzárendelés nélkül üres, és az oldal ezt kimondja.
+ * A helyszín-lista a hozzárendelt helyszínek közül azok, amelyeknek a kimutatása nem üres (sablonos eszköz vagy bejegyzés a
+ * részfában, kártya f6694b49); hozzárendelés nélkül üres, és az oldal ezt kimondja, ahogy azt is, ha van helyszín, de még nincs
+ * rajta mit mutatni.
  *
  * Az elrendezés a Megrendelések listájának mintáját követi (`maintenance-order-list.tsx`): fejléc, kártyák, táblázat.
  */
@@ -46,6 +48,8 @@ export function OperationsLogReport() {
   const [sites, setSites] = useState<
     { id: string; parentId: string | null; name: string }[] | null
   >(null);
+  // a hozzárendelt, de még tevékenység nélküli helyszínek száma: az üres listának két különböző oka lehet
+  const [withoutActivity, setWithoutActivity] = useState(0);
   const [departmentId, setDepartmentId] = useState("");
   const [month, setMonth] = useState(defaultMonth());
   const [data, setData] = useState<OperationsReportResponse | null>(null);
@@ -57,6 +61,7 @@ export function OperationsLogReport() {
       .operationsLogSites()
       .then((response) => {
         setSites(response.items);
+        setWithoutActivity(response.withoutActivity ?? 0);
         // egyetlen helyszínnél nincs mit választani
         if (response.items.length === 1) setDepartmentId(response.items[0]!.id);
       })
@@ -166,13 +171,28 @@ export function OperationsLogReport() {
 
       {sites !== null && sites.length === 0 && !error ? (
         <div className="flex flex-col items-center justify-center gap-2 rounded-xl bg-white py-24 text-center ring-1 ring-pilot-grey-200">
-          <p className="text-base font-semibold text-pilot-grey-700">
-            Nincs hozzád rendelt helyszín
-          </p>
-          <p className="text-sm text-pilot-grey-500">
-            Az üzemeltetési napló a hozzád rendelt helyszínek bejegyzéseit
-            mutatja. Kérd az Acropora ügyfélszolgálatát a hozzárendelésre.
-          </p>
+          {withoutActivity > 0 ? (
+            <>
+              <p className="text-base font-semibold text-pilot-grey-700">
+                Még nincs üzemeltetési napló a helyszíneiden
+              </p>
+              <p className="text-sm text-pilot-grey-500">
+                A hozzád rendelt helyszíneken még nincs rögzített napló, és
+                nincs olyan eszköz, amelyhez rendszeres feladat tartozik. Amint
+                lesz, a helyszín itt megjelenik.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-base font-semibold text-pilot-grey-700">
+                Nincs hozzád rendelt helyszín
+              </p>
+              <p className="text-sm text-pilot-grey-500">
+                Az üzemeltetési napló a hozzád rendelt helyszínek bejegyzéseit
+                mutatja. Kérd az Acropora ügyfélszolgálatát a hozzárendelésre.
+              </p>
+            </>
+          )}
         </div>
       ) : !departmentId ? (
         sites !== null && sites.length > 0 ? (
