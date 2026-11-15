@@ -12,6 +12,8 @@ export interface RedirectRule {
   sourcePath: string;
   destinationPath: string;
   isActive: boolean;
+  /** A szabály eredete, ha az olvasó betöltötte (a kategória-betöltő `repoint` módja csak az `UNAS_CATEGORY` szabályt írja át). */
+  reason?: RedirectReason;
 }
 
 export interface RedirectRuleData {
