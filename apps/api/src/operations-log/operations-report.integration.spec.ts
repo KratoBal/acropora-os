@@ -27,6 +27,7 @@ describe(
     const partnerService = new OperationsPartnerService(repository, service);
     const ids = {
       root: "",
+      bare: "",
       child: "",
       other: "",
       third: "",
@@ -103,6 +104,8 @@ describe(
       ids.child = (await department("Nagy", ids.root)).id;
       ids.other = (await department("Masik")).id;
       ids.third = (await department("Harmadik")).id;
+      // a root alatt egy egység, ahol se sablonos eszköz, se bejegyzés nincs: a partner választójában nem szerepelhet (f6694b49)
+      ids.bare = (await department("Ures", ids.root)).id;
       const supplier = await prisma.supplier.create({
         data: { code: `UZRI${suffix}`.slice(0, 12), name: name("szállító") },
         select: { id: true },
@@ -340,6 +343,27 @@ describe(
         assert.equal(
           sites.items.some((site) => site.id === ids.other),
           false,
+        );
+      });
+
+      it("a választóban nincs az üres egység, de a kimutatása megnyílik; a csak múlttal bíró helyszín marad (f6694b49)", async () => {
+        const sites = await partnerService.sites(partner(ids.partnerUser));
+        assert.equal(
+          sites.items.some((site) => site.id === ids.bare),
+          false,
+        );
+        assert.equal(sites.withoutActivity, 1);
+        // a szűrés a listára szól: a kimutatás a láthatóság szerint nyílik
+        const report = await partnerService.report(partner(ids.partnerUser), {
+          month: "2026-09",
+          departmentId: ids.bare,
+        });
+        assert.equal(report.report.totals.missed, 0);
+        // a harmadik helyszínen csak archivált és áthelyezett eszköz van, de a szeptemberi bejegyzés ott készült: marad
+        const third = await partnerService.sites(partner(ids.partnerOfThird));
+        assert.deepEqual(
+          third.items.map((site) => site.id),
+          [ids.third],
         );
       });
 

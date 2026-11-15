@@ -3,7 +3,10 @@ import { describe, it } from "node:test";
 import { ForbiddenException, NotFoundException } from "@nestjs/common";
 import type { AuthenticatedUser } from "@acropora/types";
 
-import { OperationsPartnerService } from "./operations-partner.service.js";
+import {
+  OperationsPartnerService,
+  sitesWithActivity,
+} from "./operations-partner.service.js";
 import type { OperationsReportRepository } from "./operations-report.repository.js";
 import type { OperationsReportService } from "./operations-report.service.js";
 
@@ -12,6 +15,9 @@ import type { OperationsReportService } from "./operations-report.service.js";
   olvashatna; ha a hozzárendelés nélküli partner-fiók látna helyszínt; ha a hozzá nem rendelt vagy idegen helyszín 404 helyett
   kimutatást adna (vagy másfajta választ, mint a nem létező: a válasz nem árulhatja el, hogy létezik); ha a kimutatás nem PARTNER
   nézővel készülne (a nevek kiszivárognának); ha a partner a saját ügyfelén kívüli egységeket kapná.
+  A HELYSZÍN-LISTA (kártya f6694b49): ha egy helyszín, aminek a részfájában se sablonos eszköz, se bejegyzés nincs, a választóban
+  maradna; ha egy szülő kiesne, pedig csak a gyerekén van tevékenység; ha a kiesett helyszín kimutatása 404-et adna (a szűrés a
+  listára szól, nem a láthatóságra); ha a kimaradtak száma nem menne vissza.
 */
 function user(over: Partial<AuthenticatedUser> = {}): AuthenticatedUser {
   return {
@@ -29,6 +35,7 @@ function fixture(
   over: {
     unitIds?: string[];
     sites?: { id: string; parentId: string | null; name: string }[];
+    active?: string[];
   } = {},
 ) {
   const calls: {
@@ -37,6 +44,12 @@ function fixture(
   } = {};
   const repository = {
     assignedUnitIds: async () => over.unitIds ?? ["d1", "d2"],
+    customerUnits: async () => [
+      { id: "d1", name: "Biodóm", parentId: null },
+      { id: "d2", name: "Nagy medence", parentId: "d1" },
+      { id: "d3", name: "Üres sarok", parentId: "d1" },
+    ],
+    departmentsWithActivity: async () => new Set(over.active ?? ["d1", "d2"]),
     partnerSites: async (customerId: string, unitIds: readonly string[]) => {
       calls.partnerSites = [customerId, unitIds];
       return (
@@ -73,11 +86,72 @@ describe("az üzemeltetési napló partner-nézete", () => {
 
   it("hozzárendelés nélkül a lista üres, és a kimutatás 404", async () => {
     const empty = fixture({ unitIds: [], sites: [] });
-    assert.deepEqual(await empty.service.sites(user()), { items: [] });
+    assert.deepEqual(await empty.service.sites(user()), {
+      items: [],
+      withoutActivity: 0,
+    });
     await assert.rejects(
       () =>
         empty.service.report(user(), { month: "2026-11", departmentId: "d1" }),
       NotFoundException,
+    );
+  });
+
+  it("a választóban csak a nem üres kimutatású helyszín marad; a szülő a gyereke miatt is; a kimaradtak száma visszamegy", async () => {
+    const sites = [
+      { id: "d1", parentId: null, name: "Biodóm" },
+      { id: "d2", parentId: "d1", name: "Nagy medence" },
+      { id: "d3", parentId: "d1", name: "Üres sarok" },
+    ];
+    const { service } = fixture({
+      unitIds: ["d1", "d2", "d3"],
+      sites,
+      active: ["d2"],
+    });
+    const result = await service.sites(user());
+    assert.deepEqual(
+      result.items.map((site) => site.id),
+      ["d1", "d2"],
+    );
+    assert.equal(result.withoutActivity, 1);
+    // a kiesett helyszín kimutatása ettől még megnyílik: a szűrés a listára szól
+    const report = await service.report(user(), {
+      month: "2026-11",
+      departmentId: "d3",
+    });
+    assert.ok(report);
+  });
+
+  it("ha egyik helyszínen sincs mit mutatni, a lista üres, és mind a kimaradtak között számol", async () => {
+    const { service } = fixture({ active: [] });
+    assert.deepEqual(await service.sites(user()), {
+      items: [],
+      withoutActivity: 2,
+    });
+  });
+
+  it("sitesWithActivity: a részfa dönt, nem a helyszín maga", () => {
+    const units = [
+      { id: "a", name: "a", parentId: null },
+      { id: "b", name: "b", parentId: "a" },
+      { id: "c", name: "c", parentId: "b" },
+    ];
+    const site = (id: string) => ({ id, parentId: null, name: id });
+    assert.deepEqual(
+      sitesWithActivity(
+        [site("a"), site("b"), site("c")],
+        units,
+        new Set(["c"]),
+      ).map((s) => s.id),
+      ["a", "b", "c"],
+    );
+    assert.deepEqual(
+      sitesWithActivity(
+        [site("a"), site("b"), site("c")],
+        units,
+        new Set(["a"]),
+      ).map((s) => s.id),
+      ["a"],
     );
   });
 
