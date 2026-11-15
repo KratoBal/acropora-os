@@ -1,6 +1,13 @@
 import { Injectable } from "@nestjs/common";
 import { Prisma, prisma } from "@acropora/database";
-import type { CalendarEvent, CalendarEventKind } from "@acropora/types";
+import {
+  HUMAN_ROLES,
+  PERMISSIONS,
+  ROLE_PERMISSIONS,
+  type CalendarEvent,
+  type CalendarEventKind,
+  type CalendarEventResponsibleOption,
+} from "@acropora/types";
 
 /** What the service writes: the two days as `YYYY-MM-DD`, everything already checked and trimmed. */
 export interface CalendarEventWrite {
@@ -28,6 +35,18 @@ type Row = Prisma.CalendarEventGetPayload<{ select: typeof SELECT }>;
 
 const ENTITY = "CalendarEvent";
 
+/** Who may answer for an event: a person (no machine role) whose role sees the content calendar. */
+const RESPONSIBLE_ROLES = HUMAN_ROLES.filter((role) =>
+  ROLE_PERMISSIONS[role].includes(PERMISSIONS.CONTENT_VIEW),
+);
+const RESPONSIBLE_WHERE = {
+  isActive: true,
+  role: { in: [...RESPONSIBLE_ROLES] },
+} satisfies Prisma.UserWhereInput;
+
+const personName = (user: { displayName: string; nickname: string | null }) =>
+  user.nickname?.trim() || user.displayName;
+
 /** A `@db.Date` value back to its day: the column stores UTC midnight, so the UTC date IS the day. */
 export const calendarEventDay = (value: Date) =>
   value.toISOString().slice(0, 10);
@@ -43,9 +62,7 @@ export async function responsibleNames(
     where: { id: { in: [...new Set(ids)] } },
     select: { id: true, displayName: true, nickname: true },
   });
-  return new Map(
-    users.map((user) => [user.id, user.nickname?.trim() || user.displayName]),
-  );
+  return new Map(users.map((user) => [user.id, personName(user)]));
 }
 
 /** Exported for the test: the row as the API returns it. */
@@ -124,13 +141,27 @@ export class CalendarEventRepository {
     return row ? this.view(row) : null;
   }
 
-  /** Whether the id belongs to a user who can still answer for something (active). */
-  async activeUser(id: string): Promise<boolean> {
-    const user = await prisma.user.findUnique({
-      where: { id },
-      select: { isActive: true },
+  /** The form's choices, by the name the team uses. */
+  async responsibleCandidates(): Promise<CalendarEventResponsibleOption[]> {
+    const users = await prisma.user.findMany({
+      where: RESPONSIBLE_WHERE,
+      select: { id: true, displayName: true, nickname: true },
     });
-    return user?.isActive === true;
+    return users
+      .map((user) => ({ id: user.id, name: personName(user) }))
+      .sort(
+        (a, b) =>
+          a.name.localeCompare(b.name, "hu") || a.id.localeCompare(b.id),
+      );
+  }
+
+  /** Whether the id is one of the form's choices: the write accepts exactly the set the form offers. */
+  async responsibleCandidate(id: string): Promise<boolean> {
+    const user = await prisma.user.findFirst({
+      where: { id, ...RESPONSIBLE_WHERE },
+      select: { id: true },
+    });
+    return user !== null;
   }
 
   async create(
@@ -178,6 +209,12 @@ export class CalendarEventRepository {
         select: SELECT,
       });
       if (!before) return null;
+      const changes = changedFields(snapshot(before), snapshot(data));
+      // an edit that changes nothing writes nothing: no empty log line, no new updatedAt for the next form to trip on
+      if (Object.keys(changes).length === 0)
+        return before.updatedAt.getTime() === new Date(readAt).getTime()
+          ? before
+          : ("changed" as const);
       const { count } = await tx.calendarEvent.updateMany({
         where: { id, updatedAt: new Date(readAt) },
         data: {
@@ -193,7 +230,7 @@ export class CalendarEventRepository {
           action: "calendar_event.updated",
           entityType: ENTITY,
           entityId: id,
-          metadata: changedFields(snapshot(before), snapshot(data)),
+          metadata: changes,
         },
       });
       return tx.calendarEvent.findUniqueOrThrow({

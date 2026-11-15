@@ -192,6 +192,12 @@ export function ContentListPage() {
         actions={
           <div className="flex flex-wrap items-center gap-4">
             <Link
+              href="/tartalom/naptar"
+              className="text-sm font-medium text-brand-700 underline-offset-4 hover:underline"
+            >
+              Naptár →
+            </Link>
+            <Link
               href="/tartalom/oktatoanyagok"
               className="text-sm font-medium text-brand-700 underline-offset-4 hover:underline"
             >
