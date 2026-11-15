@@ -1966,6 +1966,22 @@ export type {
   TeachingSlideDeck,
   TeachingSlideKind,
 } from "./teaching-output.js";
+export {
+  cleanEditedSlides,
+  compareTeachingDecks,
+  parseTeachingEditDecision,
+  TEACHING_EDIT_NOTE_MAX,
+  teachingDeckText,
+} from "./teaching-edit.js";
+export type {
+  TeachingDeckDiff,
+  TeachingEditDecision,
+  TeachingOutputEditDetail,
+  TeachingOutputEditSummary,
+  TeachingSlideChange,
+  TeachingSlideDiff,
+  TeachingSlideText,
+} from "./teaching-edit.js";
 export { parseSeoLandingInput, SEO_LANDING_LIMITS } from "./seo-landing.js";
 export type {
   SeoLandingAttributeFilter,
