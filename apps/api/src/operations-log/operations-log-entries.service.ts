@@ -60,6 +60,14 @@ export class OperationsLogEntriesService {
     return { items: await this.templates.activeTemplatesForAsset(asset) };
   }
 
+  /**
+   * A KEZDŐKÉPERNYŐ SZŰRŐJE: azok az eszközök, amelyekhez van aktív sablon. A válasz csak azonosító-lista (lásd a tárolót): a
+   * telefon a láthatósági hatókörön átment eszköz-listából metszi.
+   */
+  async assetsWithTemplates(): Promise<{ assetIds: string[] }> {
+    return { assetIds: await this.templates.assetIdsWithActiveTemplates() };
+  }
+
   async colleagues() {
     return { items: await this.entries.assignableColleagues() };
   }
