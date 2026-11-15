@@ -1147,7 +1147,7 @@ describe("MedusaProjectionScheduler, az elbukott ár", () => {
     inaktivált, a nem webshopos, a törölt vagy a kötés nélküli termék ára újrapróbál (minden körben ugyanazzal bukna),
     a kimaradók száma nem látszik a health-ben, vagy a kimaradó sora íródik.
   */
-  it("az inaktivált, a nem webshopos, a törölt és a kötés nélküli ár-kudarc kimarad, az árazható újrapróbál", async () => {
+  it("az inaktivált, a nem webshopos, a kihagyott, a törölt és a kötés nélküli ár-kudarc kimarad, az árazható újrapróbál", async () => {
     const ketOraja = new Date(
       MOST.getTime() - 2 * 60 * 60 * 1000,
     ).toISOString();
@@ -1161,23 +1161,33 @@ describe("MedusaProjectionScheduler, az elbukott ár", () => {
         termek({ id: "p-ok" }),
         termek({ id: "p-inaktiv", isActive: false }),
         termek({ id: "p-nem-webshop", webshopSellable: false }),
+        // aktív és webshopos, de kihagyott: a termék-vetítés sem esedékesíti (barracuda, #2616)
+        termek({ id: "p-kizart", webshopExcluded: true }),
         termek({ id: "p-kotetlen" }),
       ],
       // mind vetítve, a forrásuk nem változott, és a kifutott jelölő (2026-11-09) után:
       // a termék-vetítésbe egyik sem esedékes, tehát a kimaradást az ár szűrője adja
-      ["p-ok", "p-inaktiv", "p-nem-webshop", "p-kotetlen"].map((entityId) => ({
-        entityId,
-        lastSyncedAt: new Date("2026-11-10T00:00:00.000Z"),
-      })),
+      ["p-ok", "p-inaktiv", "p-nem-webshop", "p-kizart", "p-kotetlen"].map(
+        (entityId) => ({
+          entityId,
+          lastSyncedAt: new Date("2026-11-10T00:00:00.000Z"),
+        }),
+      ),
       [
         { entityId: "p-ok", externalId: "prod_ok" },
         { entityId: "p-inaktiv", externalId: "prod_in" },
         { entityId: "p-nem-webshop", externalId: "prod_nw" },
+        { entityId: "p-kizart", externalId: "prod_kz" },
       ] as never,
       [],
-      ["p-ok", "p-inaktiv", "p-nem-webshop", "p-kotetlen", "p-torolt"].map(
-        kudarc,
-      ),
+      [
+        "p-ok",
+        "p-inaktiv",
+        "p-nem-webshop",
+        "p-kizart",
+        "p-kotetlen",
+        "p-torolt",
+      ].map(kudarc),
     );
     const termekVetites = futtato();
     const ar = arFuttato();
@@ -1207,7 +1217,7 @@ describe("MedusaProjectionScheduler, az elbukott ár", () => {
     );
     const kor = scheduler.allapot().lastRound!;
     assert.equal(kor.priceRetry, 1);
-    assert.equal(kor.priceRetryDropped, 4);
+    assert.equal(kor.priceRetryDropped, 5);
     assert.deepEqual(kor.priceFailures, {});
   });
 
