@@ -309,7 +309,12 @@ function RootNavigator() {
         name="aquariums/[id]/measurement"
         options={{ title: "Vízmérés rögzítése" }}
       />
-      {/* Üzemeltetési napló: bejegyzés rögzítése (task os-uzemeltetesi-naplo, S2c); az eszköz lapjáról nyílik. */}
+      {/* Üzemeltetési napló kezdőképernyő: partner, helyszín, eszköz, sablon (kártya f6694b49); a kezdőlap csempéjéről nyílik. */}
+      <Stack.Screen
+        name="operations-log/index"
+        options={{ title: "Üzemeltetési napló" }}
+      />
+      {/* Üzemeltetési napló: bejegyzés rögzítése (task os-uzemeltetesi-naplo, S2c); az eszköz lapjáról és a kezdőképernyőről nyílik. */}
       <Stack.Screen
         name="operations-log/record"
         options={{ title: "Üzemeltetési napló" }}

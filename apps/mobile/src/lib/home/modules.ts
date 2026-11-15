@@ -27,6 +27,18 @@ export interface HomeModule {
   route: string | null;
 }
 
+/**
+ * THE OPERATIONS LOG START TILE (card f6694b49). It is NOT one of the server-served navigation tiles: the server's navigation has
+ * no entry for it, and the capability that shows it (`operations-log.record`) is the one the log's own screens check. So the home
+ * screen adds it after the served tiles, behind that capability, instead of through `HOME_MODULES` and `TILE_ENTRY`.
+ */
+export const OPERATIONS_LOG_HOME_TILE: HomeModule = {
+  title: "Üzemeltetési napló",
+  description: "Partner, helyszín, eszköz: bejegyzés rögzítése",
+  icon: "clipboard-outline",
+  route: "/operations-log",
+};
+
 export const HOME_MODULES: Readonly<Record<TileCode, HomeModule>> = {
   HJ: {
     title: "Hibajegyek",

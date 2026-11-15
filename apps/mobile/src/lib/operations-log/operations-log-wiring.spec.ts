@@ -96,6 +96,31 @@ describe("az üzemeltetési napló bekötése", () => {
     assert.match(record, /enqueueOperationsEntry\(\{/);
   });
 
+  it("a kezdőképernyő be van jegyezve, a jog mögül nyílik a kezdőlapról, és a jog nélkül kidob", () => {
+    const home = read("app/index.tsx");
+    const start = read("app/operations-log/index.tsx");
+    assert.match(layout, /name="operations-log\/index"/);
+    assert.match(home, /serviceCapabilities\.operationsLogRecord \? \(/);
+    assert.match(home, /router\.push\("\/operations-log"\)/);
+    assert.match(
+      start,
+      /if \(!capabilities\?\.operationsLogRecord\) return <Redirect/,
+    );
+    // minden szint a rögzítő képernyőre vezet, a sablon azonosítójával
+    assert.match(start, /pathname: "\/operations-log\/record"/);
+  });
+
+  it("a kezdőképernyő három listája ugyanazt a visszaesési szabályt követi: csak a hálózati hiba és az 5xx", () => {
+    const load = read("lib/operations-log/start-load.ts");
+    assert.match(load, /!\(cause instanceof ApiError && cause\.status < 500\)/);
+    assert.equal(
+      load.match(/if \(!mayUseCopy\(cause\)\) throw cause;/g)?.length,
+      3,
+    );
+    // a másolat nélküli, hálózat nélküli eset az eredeti hiba marad
+    assert.equal(load.match(/if \(cached === null\) throw cause;/g)?.length, 3);
+  });
+
   it("a mentett listára csak a hálózati hiba és az 5xx esik vissza, a válaszolt 4xx nem", () => {
     const load = read("lib/operations-log/operations-load.ts");
     assert.equal(
