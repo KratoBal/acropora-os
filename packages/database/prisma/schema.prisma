@@ -8335,6 +8335,8 @@ enum ContentChannel {
   /// Egy oktatóanyag forrása (T5.2): a törzse a `TeachingSource`.
   TEACHING_SOURCE
   OTHER
+  /// A hírlevél (T5.5 S4): a tartalomnaptár sablonjának két sora hírlevél.
+  NEWSLETTER
 }
 
 /// Egy tartalom-tétel: poszt, hirdetésszöveg vagy cikk, a keletkezésétől a
@@ -9075,6 +9077,41 @@ model CalendarEvent {
   updatedAt         DateTime          @updatedAt
 
   @@index([startsOn, endsOn])
+}
+
+/// The calendar entry a template row opens content for (T5.5 S4): the feed's event kinds, the content itself excluded.
+enum ContentTemplateEventKind {
+  LIVESTOCK_ARRIVAL
+  PURCHASE_ARRIVAL
+  SALE
+  SHOP_EVENT
+  HOLIDAY
+}
+
+/// Which day of the event the offset counts from: its first or its last.
+enum ContentTemplateAnchor {
+  START
+  END
+}
+
+/// THE DEPENDENCY TEMPLATE AS DATA (T5.5 S4, spec 2. and 7.): which content belongs to which calendar event, on which
+/// channel, how many days before or after its start or end. Balázs and Luca change the days without a code change; the
+/// migration seeds the spec's six rows. A row is switched off, not deleted: the slots of S5 will point to it.
+model ContentTemplateRule {
+  id          String                   @id @default(cuid())
+  eventKind   ContentTemplateEventKind
+  /// What content, in a word or two: "Előjegyzés-felhívás".
+  label       String
+  channel     ContentChannel
+  anchor      ContentTemplateAnchor
+  /// Days from the anchor: negative before, 0 the day itself, positive after.
+  offsetDays  Int
+  active      Boolean                  @default(true)
+  sortOrder   Int                      @default(0)
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+
+  @@index([eventKind, active])
 }
 
 /// Egy levélből jött PDF (proforma vagy számla), a bájtjaival együtt, hogy a

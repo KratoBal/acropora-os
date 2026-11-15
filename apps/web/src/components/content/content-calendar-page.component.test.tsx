@@ -15,7 +15,8 @@ import { ContentCalendarPage } from "./content-calendar-page";
   loading state shown as "nothing this week"; a sale without the time of its data (spec 8A); an entry that does not
   lead to its source, or a link to a page the viewer may not open; an event edit that does not send the record's
   updatedAt (a stale form would overwrite a newer one); the new-event button shown to someone who cannot write; a full
-  month day that hides its extra entries without saying so; a running sale repeated on every day of the phone list.
+  month day that hides its extra entries without saying so; a running sale repeated on every day instead of once in
+  the band above the days (acrobot 53185); a multi-day entry repeated on every day of the phone list.
 */
 const api = vi.hoisted(() => ({
   feed: vi.fn(),
@@ -219,22 +220,39 @@ describe("ContentCalendarPage", () => {
     ).toBeTruthy();
   });
 
-  it("on the phone list a running sale stands once, on the first day shown, not on every day of the week", async () => {
+  it("a sale that runs through the whole week stands once, in the band above the days, and in no day", async () => {
     api.feed.mockResolvedValue(feed([SALE, CONTENT]));
     render(<ContentCalendarPage />);
     await screen.findAllByText("Új halak a héten");
-    const list = screen.getByTestId("calendar-list");
-    const saleRows = Array.from(list.querySelectorAll("a")).filter(
-      (a) => a.textContent === "Akció: Energy 50 ml",
-    );
-    expect(saleRows).toHaveLength(1);
-    // the desktop week grid still marks every day it runs on
-    const grid = screen.getByTestId("calendar-grid");
-    expect(
-      Array.from(grid.querySelectorAll("a")).filter(
+    const links = (id: string) =>
+      Array.from(screen.getByTestId(id).querySelectorAll("a")).filter(
         (a) => a.textContent === "Akció: Energy 50 ml",
-      ),
-    ).toHaveLength(7);
+      );
+    expect(links("calendar-throughout")).toHaveLength(1);
+    expect(screen.getByText("Az egész héten")).toBeTruthy();
+    expect(links("calendar-list")).toHaveLength(0);
+    expect(links("calendar-grid")).toHaveLength(0);
+  });
+
+  it("a multi-day entry inside the week stands once on the phone list, on its first day, and on each of its days in the grid", async () => {
+    const event: ContentCalendarEntry = {
+      ...HOLIDAY,
+      key: "event:e9",
+      eventId: "e9",
+      title: "Nyílt napok",
+      startsOn: "2026-11-12",
+      endsOn: "2026-11-14",
+    };
+    api.feed.mockResolvedValue(feed([event]));
+    render(<ContentCalendarPage />);
+    await screen.findAllByText("Nyílt napok");
+    const titles = (id: string) =>
+      Array.from(screen.getByTestId(id).querySelectorAll("button")).filter(
+        (b) => b.textContent === "Nyílt napok",
+      );
+    expect(titles("calendar-list")).toHaveLength(1);
+    expect(titles("calendar-grid")).toHaveLength(3);
+    expect(screen.queryByTestId("calendar-throughout")).toBeNull();
   });
 
   it("no link to a page the viewer may not open, and no new-event button without content.manage", async () => {

@@ -15,6 +15,7 @@ import {
   hasPermission,
   PERMISSIONS,
   type AuthenticatedUser,
+  type CalendarDayOrUnknown,
   type CalendarEvent,
   type ContentCalendarEntry,
   type ContentCalendarFeed,
@@ -33,6 +34,7 @@ import {
   monthLabel,
   shiftAnchor,
   shortDayLabel,
+  spanDays,
   validDay,
   viewDays,
   type CalendarView,
@@ -143,16 +145,29 @@ function describe(entry: ContentCalendarEntry, queriedAt: string): string[] {
 
 function spanLabel(entry: ContentCalendarEntry): string | null {
   if (entry.startsOn === entry.endsOn) return null;
+  const known = (day: CalendarDayOrUnknown | null): day is string =>
+    day !== null && day !== CONTENT_CALENDAR_UNKNOWN;
+  // the year shows when a known day is not this year's (spanDays); an unknown end counts as this year
+  const [fromDay, toDay] = spanDays(
+    known(entry.startsOn)
+      ? entry.startsOn
+      : known(entry.endsOn)
+        ? entry.endsOn
+        : "0000-01-01",
+    known(entry.endsOn)
+      ? entry.endsOn
+      : known(entry.startsOn)
+        ? entry.startsOn
+        : "0000-01-01",
+  );
   const from =
-    entry.startsOn === CONTENT_CALENDAR_UNKNOWN
-      ? "ismeretlen kezdet"
-      : shortDayLabel(entry.startsOn);
+    entry.startsOn === CONTENT_CALENDAR_UNKNOWN ? "ismeretlen kezdet" : fromDay;
   const to =
     entry.endsOn === null
       ? "nyitott vég"
       : entry.endsOn === CONTENT_CALENDAR_UNKNOWN
         ? "ismeretlen vég"
-        : shortDayLabel(entry.endsOn);
+        : toDay;
   return `${from} – ${to}`;
 }
 
@@ -243,7 +258,16 @@ export function ContentCalendarPage() {
   const setAnchor = (next: string) =>
     update({ nap: next === today ? null : next });
   const entries = feed?.entries ?? [];
-  const onDay = (day: string) => entries.filter((e) => coversDay(e, day));
+  /**
+   * AMI A NÉZET MINDEN NAPJÁN FUT (acrobot 53185): egy nyitott végű, ismeretlen kezdetű akció hét oszlopban ismételve a
+   * hét legnagyobb tétele lett, és elnyomta azt, ami aznap történik. Ezek egyszer állnak, a rács fölötti sávban, és
+   * kimaradnak a napokból. Az első és az utolsó napot lefedő bejegyzés a köztes napokat is lefedi (egy tartam).
+   */
+  const spansView = (entry: ContentCalendarEntry) =>
+    coversDay(entry, from) && coversDay(entry, to);
+  const throughout = entries.filter(spansView);
+  const onDay = (day: string) =>
+    entries.filter((e) => !spansView(e) && coversDay(e, day));
   // a telefonos listában egy többnapos bejegyzés EGYSZER áll, az első látható napján, a tartamával: hétszer ismételve
   // egy futó akció kitöltené a képernyőt, és elnyomná azt, ami aznap kezdődik
   const firstShown = (entry: ContentCalendarEntry) =>
@@ -277,6 +301,12 @@ export function ContentCalendarPage() {
               className="text-sm font-medium text-brand-700 underline-offset-4 hover:underline"
             >
               ← Tartalom
+            </Link>
+            <Link
+              href="/tartalom/naptar/sablon"
+              className="text-sm font-medium text-brand-700 underline-offset-4 hover:underline"
+            >
+              Sablon →
             </Link>
             {canManage ? (
               <Button
@@ -372,6 +402,23 @@ export function ContentCalendarPage() {
               {feed.withoutDay.purchaseOrders} nyitott beszerzési rendelésnek
               nincs várt napja, ezért a naptáron nem látszik.
             </p>
+          ) : null}
+          {throughout.length > 0 ? (
+            <div
+              className="space-y-2 rounded-lg border border-dusk-200 bg-dusk-50 p-3"
+              data-testid="calendar-throughout"
+            >
+              <p className="text-xs font-medium text-dusk-600">
+                {view === "het" ? "Az egész héten" : "Az egész időszakban"}
+              </p>
+              {throughout.map((entry) => (
+                <CalendarEntryRow
+                  key={entry.key}
+                  {...entryProps(entry)}
+                  queriedAt={feed.queriedAt}
+                />
+              ))}
+            </div>
           ) : null}
           {entries.length === 0 ? (
             <EmptyState

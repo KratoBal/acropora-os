@@ -639,6 +639,11 @@ export type {
   ContentWaitingOnMeResponse,
 } from "./content-management.js";
 export {
+  CONTENT_TEMPLATE_ANCHORS,
+  CONTENT_TEMPLATE_EVENT_KINDS,
+  CONTENT_TEMPLATE_EVENT_KIND_LABELS,
+  CONTENT_TEMPLATE_LIMITS,
+  CONTENT_TEMPLATE_ONE_DAY_KINDS,
   CALENDAR_EVENT_KINDS,
   CALENDAR_EVENT_KIND_LABELS,
   CALENDAR_EVENT_LIMITS,
@@ -657,6 +662,9 @@ export type {
   ContentCalendarEntry,
   ContentCalendarEntryKind,
   ContentCalendarEventEntry,
+  ContentTemplateAnchor,
+  ContentTemplateEventKind,
+  ContentTemplateRule,
   ContentCalendarFeed,
   ContentCalendarLivestockEntry,
   ContentCalendarPurchaseEntry,
