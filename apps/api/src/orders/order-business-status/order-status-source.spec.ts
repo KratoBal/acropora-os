@@ -36,9 +36,12 @@ const CREATION_SITES: Readonly<Record<string, string>> = {
   "demo-data/demo-data.cli.ts": "POS",
 };
 
-/** The shapes that create a SalesOrder: the Prisma call, a nested create, raw SQL. */
+/**
+ * The shapes that create a SalesOrder: the Prisma call (whitespace and line breaks
+ * allowed around the dot, as a formatter may wrap the chain), a nested create, raw SQL.
+ */
 const CREATION_PATTERNS: readonly RegExp[] = [
-  /\bsalesOrder\.(?:create|createMany|createManyAndReturn|upsert)\s*\(/,
+  /\bsalesOrder\s*\.\s*(?:create|createMany|createManyAndReturn|upsert)\s*\(/,
   /\bsalesOrders\s*:\s*\{\s*(?:create|createMany|connectOrCreate)\b/,
   /INSERT\s+INTO\s+"?SalesOrder"?/i,
 ];
@@ -141,6 +144,10 @@ describe("the OS creates a SalesOrder only for UNAS and POS orders, never for a 
     );
     assert.equal(
       createsSalesOrder('INSERT INTO "SalesOrder" (id) VALUES ($1)'),
+      true,
+    );
+    assert.equal(
+      createsSalesOrder("await tx.salesOrder\n  .create({ data })"),
       true,
     );
     assert.equal(createsSalesOrder("await tx.salesOrder.findMany({})"), false);
