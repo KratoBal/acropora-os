@@ -44,7 +44,7 @@ export class BillingDocumentDraftDto implements BillingDocumentDraftInput {
   /** Csak létrehozáskor: a kliens adja, és ettől idempotens a létrehozás. */
   @IsOptional() @IsString() @MinLength(8) @MaxLength(64) id?: string;
   /** Csak mentéskor, kötelezően (a szolgáltatás ellenőrzi). */
-  @IsOptional() @IsISO8601() expectedUpdatedAt?: string;
+  @IsOptional() @IsISO8601({ strict: true }) expectedUpdatedAt?: string;
   @IsIn(BILLING_DOCUMENT_TYPES) documentType!: BillingDocumentType;
   @IsOptional() @IsIn(INVOICE_FORMATS) invoiceFormat!: InvoiceFormat | null;
   @IsString() @MinLength(1) @MaxLength(64) customerId!: string;

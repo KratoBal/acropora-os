@@ -52,8 +52,8 @@ export class CreateOperationsLogEntryDto {
   @MaxLength(OPERATIONS_TEMPLATE_LIMITS.keyMax, { each: true })
   templateFieldKeys!: string[];
 
-  @IsISO8601() startedAt!: string;
-  @IsISO8601() finishedAt!: string;
+  @IsISO8601({ strict: true }) startedAt!: string;
+  @IsISO8601({ strict: true }) finishedAt!: string;
 
   @IsArray()
   @IsOptional()
@@ -77,8 +77,8 @@ export class CreateOperationsLogEntryDto {
 export class OperationsLogEntryListQueryDto {
   @IsString() @IsOptional() assetId?: string;
   @IsString() @IsOptional() templateId?: string;
-  @IsISO8601() @IsOptional() from?: string;
-  @IsISO8601() @IsOptional() to?: string;
+  @IsISO8601({ strict: true }) @IsOptional() from?: string;
+  @IsISO8601({ strict: true }) @IsOptional() to?: string;
   @Type(() => Boolean) @IsBoolean() @IsOptional() anomalyOnly?: boolean;
   @Type(() => Number)
   @IsInt()

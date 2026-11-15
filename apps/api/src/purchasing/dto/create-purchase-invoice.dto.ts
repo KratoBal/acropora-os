@@ -75,10 +75,10 @@ export class CreatePurchaseInvoiceDto {
   @IsString() @MinLength(1) supplierInvoiceNumber!: string;
   @IsString() @MinLength(3) currency!: string;
   @IsNumber() @Min(0) @IsOptional() exchangeRate?: number;
-  @IsISO8601() invoiceDate!: string;
-  @IsISO8601() @IsOptional() dueDate?: string;
+  @IsISO8601({ strict: true }) invoiceDate!: string;
+  @IsISO8601({ strict: true }) @IsOptional() dueDate?: string;
   @IsBoolean() @IsOptional() isPaid = false;
-  @IsISO8601() @IsOptional() paidAt?: string;
+  @IsISO8601({ strict: true }) @IsOptional() paidAt?: string;
   // Belföldi (HU_MANUAL/HU_NAV) számla-szintű ÁFA-kulcsa, pl. 27. EU-s
   // számlánál nem használt.
   @IsNumber() @Min(0) @Max(100) @IsOptional() vatRate?: number;
