@@ -34,6 +34,7 @@ export const CHANNEL_LABELS: Record<ContentChannel, string> = {
   ARTICLE: "Cikk",
   TEACHING_SOURCE: "Oktatóanyag",
   OTHER: "Egyéb",
+  NEWSLETTER: "Hírlevél",
 };
 
 /**

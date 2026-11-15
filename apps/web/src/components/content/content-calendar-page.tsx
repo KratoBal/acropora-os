@@ -15,6 +15,7 @@ import {
   hasPermission,
   PERMISSIONS,
   type AuthenticatedUser,
+  type CalendarDayOrUnknown,
   type CalendarEvent,
   type ContentCalendarEntry,
   type ContentCalendarFeed,
@@ -33,6 +34,7 @@ import {
   monthLabel,
   shiftAnchor,
   shortDayLabel,
+  spanDays,
   validDay,
   viewDays,
   type CalendarView,
@@ -143,16 +145,29 @@ function describe(entry: ContentCalendarEntry, queriedAt: string): string[] {
 
 function spanLabel(entry: ContentCalendarEntry): string | null {
   if (entry.startsOn === entry.endsOn) return null;
+  const known = (day: CalendarDayOrUnknown | null): day is string =>
+    day !== null && day !== CONTENT_CALENDAR_UNKNOWN;
+  // the year shows when a known day is not this year's (spanDays); an unknown end counts as this year
+  const [fromDay, toDay] = spanDays(
+    known(entry.startsOn)
+      ? entry.startsOn
+      : known(entry.endsOn)
+        ? entry.endsOn
+        : "0000-01-01",
+    known(entry.endsOn)
+      ? entry.endsOn
+      : known(entry.startsOn)
+        ? entry.startsOn
+        : "0000-01-01",
+  );
   const from =
-    entry.startsOn === CONTENT_CALENDAR_UNKNOWN
-      ? "ismeretlen kezdet"
-      : shortDayLabel(entry.startsOn);
+    entry.startsOn === CONTENT_CALENDAR_UNKNOWN ? "ismeretlen kezdet" : fromDay;
   const to =
     entry.endsOn === null
       ? "nyitott vég"
       : entry.endsOn === CONTENT_CALENDAR_UNKNOWN
         ? "ismeretlen vég"
-        : shortDayLabel(entry.endsOn);
+        : toDay;
   return `${from} – ${to}`;
 }
 
@@ -286,6 +301,12 @@ export function ContentCalendarPage() {
               className="text-sm font-medium text-brand-700 underline-offset-4 hover:underline"
             >
               ← Tartalom
+            </Link>
+            <Link
+              href="/tartalom/naptar/sablon"
+              className="text-sm font-medium text-brand-700 underline-offset-4 hover:underline"
+            >
+              Sablon →
             </Link>
             {canManage ? (
               <Button

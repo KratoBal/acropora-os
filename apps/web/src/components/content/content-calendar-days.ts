@@ -100,5 +100,30 @@ const monthFormatter = new Intl.DateTimeFormat("hu-HU", {
 
 export const dayLabel = (day: string) => dayFormatter.format(at(day));
 export const shortDayLabel = (day: string) => shortFormatter.format(at(day));
+const yearFormatter = new Intl.DateTimeFormat("hu-HU", {
+  year: "numeric",
+  month: "short",
+  day: "numeric",
+  timeZone: "UTC",
+});
+
+/**
+ * Egy tartam két napja. Az év csak akkor áll ki, ha nem az idei, vagy a két nap két évre esik: a stage-en egy
+ * „jan. 17. – dec. 31." akció nem mondta meg, melyik január.
+ */
+export function spanDays(
+  from: string,
+  to: string,
+  today: string = budapestToday(),
+): [string, string] {
+  const year = today.slice(0, 4);
+  const withYear =
+    from.slice(0, 4) !== to.slice(0, 4) ||
+    from.slice(0, 4) !== year ||
+    to.slice(0, 4) !== year;
+  const label = (day: string) =>
+    withYear ? yearFormatter.format(at(day)) : shortDayLabel(day);
+  return [label(from), label(to)];
+}
 export const monthLabel = (day: string) => monthFormatter.format(at(day));
 export const dayOfMonth = (day: string) => Number(day.slice(8, 10));

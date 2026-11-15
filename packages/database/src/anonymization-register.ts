@@ -1239,6 +1239,9 @@ export const ANONYMIZATION_REGISTER: Readonly<
     note: "freeText",
     createdById: "identifier",
   },
+  ContentTemplateRule: {
+    label: "business",
+  },
   CalendarEvent: {
     title: "freeText",
     location: "business",
