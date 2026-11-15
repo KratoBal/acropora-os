@@ -182,6 +182,44 @@ export function medusaProjectionScheduleConfig(
 }
 
 /**
+ * A LASSU FRISSITESI FORGAS KAPCSOLOJA (kartya d8b512cb, acrobot 53592).
+ *
+ * AZ ESEDEKESSEG IDOBELYEG-ALAPU (`decideProjectionDue`): egy termek, amelynek az OS-sora az utolso vetites ota nem
+ * valtozott, sosem esedekes, akarmi all a boltban. Mert egy rossz ertek a bolt oldalan (korabbi hibas iras, kezi atiras)
+ * igy nem javul ki magatol (merve 2026-11-15, teszt Medusa: hat termek leirasaban kerdojeles futas allt 2026-10-07 ota,
+ * pedig az OS leirasa tiszta volt; egy kezi vetites javitotta ki mind a hatot).
+ *
+ * A FORGAS NEM OSSZEHASONLIT, HANEM UJRAVETIT: nincs elvart allapot, amit ki kellene szamolni (azt a futtato allitja
+ * ossze a termekbol, es az osszehasonlito annak a masolata lenne, tehat eltérne tole). Korankent legfeljebb `perRound`
+ * olyan termek kerul a lista VEGERE, amelyik nem esedekes, a legregebben vetitettek kozul. Az esedekes termek
+ * elsobbseget elvez: a forgas csak a maradek keretet toltheti.
+ *
+ * ALAPBOL KI, mert a vetites IR egy kulso rendszerbe: kornkent `perRound` idempotens iras. A teszt kornyezetben
+ * bekapcsolhato, acrobot dontesevel; az ELES bolt ellen bekapcsolni KULON dontes, es az BALAZSE.
+ */
+export interface ProjectionRefreshConfig {
+  enabled: boolean;
+  perRound: number;
+}
+
+export function projectionRefreshConfig(
+  environment: NodeJS.ProcessEnv = process.env,
+): ProjectionRefreshConfig {
+  if (environment.MEDUSA_PROJECTION_REFRESH_ENABLED !== "true")
+    return { enabled: false, perRound: 0 };
+  return {
+    enabled: true,
+    perRound: boundedInteger(
+      environment.MEDUSA_PROJECTION_REFRESH_PER_ROUND,
+      5,
+      1,
+      50,
+      "MEDUSA_PROJECTION_REFRESH_INVALID",
+    ),
+  };
+}
+
+/**
  * AZ ADATBAZIS-HOZZAFERES PARAMETERKENT, ugyanabbol az okbol, mint a
  * futtatonal: enelkul a `runOnce` eles adatbazis nelkul nem merheto.
  */
@@ -226,6 +264,8 @@ export const PROJECTION_ROUND_SOURCES = [
   "brand",
   "general",
   "inactive",
+  /** A lassu frissitesi forgas (d8b512cb): a sor VEGEN, csak a maradek keretet toltheti. */
+  "refresh",
 ] as const;
 export type ProjectionRoundSource = (typeof PROJECTION_ROUND_SOURCES)[number];
 
@@ -389,6 +429,14 @@ export class MedusaProjectionScheduler
   private egymasUtaniUresKorok = 0;
   /** Az inaktivált lista forgó kezdete (`inaktivaltAzonositok`): ahányat egy kör ténylegesen vitt, annyit lép. */
   private inaktivEltolas = 0;
+  /**
+   * A forgasbol mar kivalasztott termek -> a `lastSyncedAt` (ms) a kivalasztaskor. Ha a termek legkozelebb UGYANAZZAL
+   * az ertekkel jelentkezik, a vetitese nem lepteti a kotest (megallt, vagy nem sikerult): a sor vegere kerul, hogy
+   * a mogotte allok sorra keruljenek. Memoriaban el, ujrainduláskor nullazodik (a vesztes egy ujabb proba).
+   */
+  private frissitesProbalt = new Map<string, number>();
+  /** Az utolso `frissitesAzonositok` valasztasa (id -> `lastSyncedAt` ms): a kor a ténylegesen vitt tagokat jegyzi fel. */
+  private frissitesValasztott = new Map<string, number>();
 
   /**
    * EGY OPCIONALIS FUGGOSEG-OBJEKTUM, ES EZ A REPO MINTAJA, NEM ROGTONZES: a
@@ -615,9 +663,24 @@ export class MedusaProjectionScheduler
     */
     const altalanos = await this.esedekesAzonositok(limit);
     const inaktivalt = await this.inaktivaltAzonositok(limit);
+    const frissites = await this.frissitesAzonositok(
+      new Set([...akcio, ...teny, ...marka, ...altalanos, ...inaktivalt]),
+    );
     const esedekes = [
-      ...new Set([...akcio, ...teny, ...marka, ...altalanos, ...inaktivalt]),
+      ...new Set([
+        ...akcio,
+        ...teny,
+        ...marka,
+        ...altalanos,
+        ...inaktivalt,
+        ...frissites,
+      ]),
     ].slice(0, limit);
+    // a forgásból CSAK a ténylegesen vitt termék számít kipróbáltnak (a keret által levágott nem)
+    for (const id of esedekes) {
+      const mikor = this.frissitesValasztott.get(id);
+      if (mikor !== undefined) this.frissitesProbalt.set(id, mikor);
+    }
     // a forgás annyit lép, ahány inaktivált termék ebben a körben ténylegesen sorra került
     const elotte = new Set([...akcio, ...teny, ...marka, ...altalanos]);
     this.inaktivEltolas += esedekes.filter(
@@ -629,6 +692,7 @@ export class MedusaProjectionScheduler
       brand: marka,
       general: altalanos,
       inactive: inaktivalt,
+      refresh: frissites,
     };
     allapot.candidates = {} as Record<ProjectionRoundSource, number>;
     allapot.taken = {} as Record<ProjectionRoundSource, number>;
@@ -1181,6 +1245,81 @@ export class MedusaProjectionScheduler
       0,
       limit,
     );
+  }
+
+  /**
+   * A LASSU FRISSITESI FORGAS JELOLTJEI (kartya d8b512cb): a legregebben vetitett, de NEM esedekes termekek.
+   *
+   * CSAK A KOTOTT, MAR VETITETT, AKTIV, WEBSHOPOS, NEM KIZART TERMEK. A soha nem vetitett (`lastSyncedAt` nincs) az
+   * altalanos esedekessegnel megy ki; az inaktivalt es a nem webshopos az `inaktivaltAzonositok` dolga; a kizart soha
+   * nem vetitodik. A szures a kodban is megvan: egy tagabb valasz se vigyen a forgasba olyan termeket, amit a futtato
+   * megtagad.
+   *
+   * A KIVALASZTAS NEM FORGO KEZDET, HANEM "KIPROBALT" JELOLES. A kotes `lastSyncedAt`-jet csak egy sikeres vetites
+   * lepteti, es a vetites utan a termek a lista VEGERE kerul: a forgo kezdet itt a legregebbi termekeket hagyna ki.
+   * Egy termek viszont, amelyik megall (pl. ellentmondo valtozat-opciok), nem lep, tehat minden korben az elen
+   * maradna, es kiszoritana a tobbit: az ilyet a `frissitesProbalt` felismeri (a `lastSyncedAt` a legutobbi
+   * kivalasztas ota ugyanaz), es a sor vegere teszi.
+   */
+  private async frissitesAzonositok(
+    mar: ReadonlySet<string>,
+  ): Promise<string[]> {
+    this.frissitesValasztott = new Map();
+    const config = projectionRefreshConfig(this.environment);
+    if (!config.enabled) return [];
+    // az esedékes termékek a legrégebben vetítettek között is állhatnak: az ablak annyival szélesebb
+    const kotesek = await this.db.externalReference.findMany({
+      where: { ...MEDUSA_PRODUCT_REFERENCE, lastSyncedAt: { not: null } },
+      orderBy: [{ lastSyncedAt: "asc" }, { entityId: "asc" }],
+      take: config.perRound * OVERSCAN + mar.size,
+      select: { entityId: true, lastSyncedAt: true },
+    });
+    // a rendezés a kódban is megvan: a lekérdezés az ablakot jelöli ki, a sorrend viszont egy tágabb válasznál se múlhat rajta
+    const jeloltek = kotesek
+      .filter((k) => k.lastSyncedAt !== null && !mar.has(k.entityId))
+      .sort(
+        (a, b) =>
+          a.lastSyncedAt!.getTime() - b.lastSyncedAt!.getTime() ||
+          (a.entityId < b.entityId ? -1 : a.entityId > b.entityId ? 1 : 0),
+      );
+    if (!jeloltek.length) return [];
+    const megfelel = new Set<string>();
+    for (let i = 0; i < jeloltek.length; i += KOTES_SZELET) {
+      const termekek = await this.db.product.findMany({
+        where: {
+          id: {
+            in: jeloltek.slice(i, i + KOTES_SZELET).map((k) => k.entityId),
+          },
+          isActive: true,
+          webshopSellable: true,
+          webshopExcluded: false,
+        },
+        select: {
+          id: true,
+          isActive: true,
+          webshopSellable: true,
+          webshopExcluded: true,
+        },
+      });
+      for (const t of termekek)
+        if (t.isActive && t.webshopSellable && !t.webshopExcluded)
+          megfelel.add(t.id);
+    }
+    const sorrendben = jeloltek.filter((k) => megfelel.has(k.entityId));
+    const megallt = (k: (typeof sorrendben)[number]) =>
+      this.frissitesProbalt.get(k.entityId) === k.lastSyncedAt!.getTime();
+    // a kipróbált, de nem lépett termékek a végére; egyébként a régi sorrend marad
+    const valasztott = [
+      ...sorrendben.filter((k) => !megallt(k)),
+      ...sorrendben.filter(megallt),
+    ].slice(0, config.perRound);
+    // a már lépett termék jegyzete elavult: a térkép a katalógus méreténél nem nő
+    for (const k of sorrendben)
+      if (!megallt(k)) this.frissitesProbalt.delete(k.entityId);
+    this.frissitesValasztott = new Map(
+      valasztott.map((k) => [k.entityId, k.lastSyncedAt!.getTime()]),
+    );
+    return valasztott.map((k) => k.entityId);
   }
 
   /**
