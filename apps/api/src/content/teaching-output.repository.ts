@@ -146,17 +146,32 @@ export class TeachingOutputRepository {
   /**
    * THE "WENT OUT" RECORD, ONCE: a conditional update on a row not yet sent,
    * so two records at the same time leave one, and the second is told.
+   *
+   * The source's state stands in the SAME statement (barracuda on #2579): the
+   * output's version must still be the source's current and approved one. The
+   * service checks these before, on its own read, to say why; this condition
+   * keeps an approval withdrawn in between from letting the record through.
    */
   async markSent(input: {
     contentId: string;
     id: string;
+    sourceVersion: number;
     to: string;
     public: boolean;
     userId: string;
     at: Date;
   }): Promise<boolean> {
     const result = await prisma.teachingOutput.updateMany({
-      where: { id: input.id, contentId: input.contentId, sentAt: null },
+      where: {
+        id: input.id,
+        contentId: input.contentId,
+        sourceVersion: input.sourceVersion,
+        sentAt: null,
+        source: {
+          version: input.sourceVersion,
+          approvedVersion: input.sourceVersion,
+        },
+      },
       data: {
         sentTo: input.to,
         sentPublic: input.public,

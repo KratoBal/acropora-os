@@ -142,8 +142,34 @@ describe(
             ConflictException,
       );
 
+      // an output made while approved, recorded only after the approval is gone
+      const unsent = await service.generate(id, "SLIDES", actor);
+
       // the source goes back for revision and gets a second version
       assert.equal(await move(id, "READY_TO_SEND", "AWAITING_REVISION"), true);
+
+      // the store's own condition refuses it, without the service's earlier read
+      // (barracuda on #2579: the window between that read and the update)
+      assert.equal(
+        await outputs.markSent({
+          contentId: id,
+          id: unsent.id,
+          sourceVersion: 1,
+          to: "Belső oktatás",
+          public: false,
+          userId: actor,
+          at: new Date(),
+        }),
+        false,
+      );
+      assert.equal(
+        (
+          await prisma.teachingOutput.findUniqueOrThrow({
+            where: { id: unsent.id },
+          })
+        ).sentAt,
+        null,
+      );
       assert.equal(
         (await sources.save(id, input(1, "Második változat."), actor)).kind,
         "ok",
@@ -164,7 +190,7 @@ describe(
       assert.equal(preview.stamp.sourceVersion, 2);
       assert.equal(
         await prisma.teachingOutput.count({ where: { contentId: id } }),
-        1,
+        2,
         "a preview stores nothing",
       );
     });

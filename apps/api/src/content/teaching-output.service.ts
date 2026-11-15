@@ -18,6 +18,10 @@ import {
 } from "@acropora/types";
 
 import {
+  renderTeachingOutputFile,
+  type TeachingOutputFile,
+} from "./teaching-output-files.js";
+import {
   TeachingOutputRepository,
   type TeachingOutputRow,
   type TeachingOutputSourceState,
@@ -163,6 +167,14 @@ export class TeachingOutputService {
     return { ...this.summary(row, state), body: row.body };
   }
 
+  /** The output drawn as its file: PDF, PPTX or the narration as text. */
+  async file(contentId: string, id: string): Promise<TeachingOutputFile> {
+    await this.source(contentId);
+    const row = await this.outputs.get(contentId, id);
+    if (!row) throw new NotFoundException("Nincs ilyen kimenet.");
+    return renderTeachingOutputFile(row.body);
+  }
+
   async markSent(
     contentId: string,
     id: string,
@@ -191,13 +203,16 @@ export class TeachingOutputService {
     const marked = await this.outputs.markSent({
       contentId,
       id,
+      sourceVersion: row.sourceVersion,
       to: parsed.value.to,
       public: parsed.value.public,
       userId,
       at: this.now(),
     });
     if (!marked)
-      throw new ConflictException("Ez a kimenet időközben ki lett küldve.");
+      throw new ConflictException(
+        "Időközben változott: a kimenet ki lett küldve, vagy a forrás jóváhagyása megváltozott. Töltsd újra.",
+      );
     return this.detail(contentId, id);
   }
 }
