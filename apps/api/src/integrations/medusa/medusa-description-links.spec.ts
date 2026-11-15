@@ -191,6 +191,8 @@ describe("rewriteOldShopLinks", () => {
       SZABALYOK,
     );
 
+    // az idempotencia csak akkor jelent valamit, ha az első futás tényleg átírt (különben a második is üresen futna)
+    assert.equal(egyszer.rewritten, 1);
     const ketszer = rewriteOldShopLinks(egyszer.text, SZABALYOK);
 
     assert.equal(ketszer.text, egyszer.text);
