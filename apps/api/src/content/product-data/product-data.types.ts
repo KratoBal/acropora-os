@@ -65,11 +65,31 @@ export interface PriceData {
   priceSource: "UNAS tükör" | "Acropora OS";
 }
 
+export const STOCK_QUANTITY_BASIS = "szabad, foglalás levonva";
+
+export type StockUnknownReason =
+  "no-stock-row" | "negative-available" | "zero-not-counted";
+
 export interface StockData {
   status: "ismert";
   /** units that can be sold (on hand minus reserved); `"ismeretlen"` when there is no row or it is negative */
   quantity: OrUnknown<number>;
+  /**
+   * `nincs` only for a COUNTED variant (T5.4 B2, B3): before a corrected stock count a zero is `"ismeretlen"`, since
+   * it does not mean the item ran out (memory 340).
+   */
   state: "van" | "nincs" | "nem követett" | typeof UNKNOWN;
+  /**
+   * Why the state is `"ismeretlen"` (T5.4 B13, spec 1b: "ha ismeretlen, a szakasz mellett az ok áll"), a short code:
+   * `no-stock-row`, `negative-available` (reservations above what is on the shelf), `zero-not-counted`. Only present
+   * when the state is unknown.
+   */
+  reason?: StockUnknownReason;
+  /**
+   * What the number is (korall, T5.4 B12): the free quantity, reservations deducted, said ON the wire, since a reader
+   * without the content agent's skill would read "5" as five on the shelf.
+   */
+  quantityBasis: typeof STOCK_QUANTITY_BASIS;
   /**
    * `leltározott` only when a CORRECTED stock count includes the variant. Before that the zero is NOT "sold out"
    * (Balázs, memory 340: until the stocktake, a zero does not mean it ran out).
@@ -88,8 +108,17 @@ export interface ArrivalEntry {
   updatedAt: string;
 }
 
+/** The note every arrivals section carries (korall, T5.4 B8): what the record covers, so "none known" is not "none coming". */
+export const ARRIVALS_NOTE =
+  "a nyilvántartás nem teljes: csak a saját megrendelések és a kézzel rögzített élőállat-érkezések";
+
 export interface ArrivalsData {
-  status: "ismert";
+  /**
+   * `nincs ismert érkezés` when nothing is recorded (korall, T5.4 B8): "ismert" with an empty list read as "nothing is
+   * coming", and the `complete: false` beside it was easy to miss.
+   */
+  status: "ismert" | "nincs ismert érkezés";
+  note: typeof ARRIVALS_NOTE;
   /**
    * ALWAYS false, and it is on the wire on purpose: only orders we booked and live-animal arrivals entered by hand are
    * here. A supplier's pro forma that is not booked yet is not tied to a variant. An EMPTY list therefore means "none

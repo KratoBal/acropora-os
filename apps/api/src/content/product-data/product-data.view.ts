@@ -12,6 +12,8 @@ import type { CatalogAuthority } from "../../products/catalog-authority.js";
 import type { LowestPrice } from "../../products/price-history/lowest-price.js";
 import { isOwnSaleActive } from "../../products/own-sale.js";
 import {
+  ARRIVALS_NOTE,
+  STOCK_QUANTITY_BASIS,
   UNKNOWN,
   type ArrivalEntry,
   type ArrivalsData,
@@ -245,7 +247,12 @@ function stockOf(variant: VariantRow): StockData | UnknownSection {
       ? UNKNOWN
       : iso(new Date(Math.max(...counted.map((at) => at.getTime()))));
 
-  const base = { status: "ismert", reliability, lastCountedAt } as const;
+  const base = {
+    status: "ismert",
+    quantityBasis: STOCK_QUANTITY_BASIS,
+    reliability,
+    lastCountedAt,
+  } as const;
 
   if (variant.extension?.stockTrackingEnabled === false)
     return {
@@ -261,6 +268,7 @@ function stockOf(variant: VariantRow): StockData | UnknownSection {
       ...base,
       quantity: UNKNOWN,
       state: UNKNOWN,
+      reason: "no-stock-row",
       lastUpdatedAt: UNKNOWN,
     };
 
@@ -273,7 +281,23 @@ function stockOf(variant: VariantRow): StockData | UnknownSection {
   );
   // a negative sum is reservations above what we know is on the shelf: neither "none" nor a number to print
   if (total.isNegative())
-    return { ...base, quantity: UNKNOWN, state: UNKNOWN, lastUpdatedAt };
+    return {
+      ...base,
+      quantity: UNKNOWN,
+      state: UNKNOWN,
+      reason: "negative-available",
+      lastUpdatedAt,
+    };
+  // a zero is "none" only once a corrected count includes the variant (T5.4 B2): before the stocktake a zero does not
+  // mean it ran out (memory 340), and an agent would print "elfogyott" from a `nincs`
+  if (total.isZero() && reliability === "nem leltározott")
+    return {
+      ...base,
+      quantity: 0,
+      state: UNKNOWN,
+      reason: "zero-not-counted",
+      lastUpdatedAt,
+    };
   return {
     ...base,
     quantity: total.toNumber(),
@@ -327,7 +351,12 @@ function arrivalsOf(
             ? -1
             : 1,
   );
-  return { status: "ismert", complete: false, recorded };
+  return {
+    status: recorded.length ? "ismert" : "nincs ismert érkezés",
+    note: ARRIVALS_NOTE,
+    complete: false,
+    recorded,
+  };
 }
 
 function fulfilmentOf(row: ProductRow): VariantData["fulfilment"] {
