@@ -41,8 +41,55 @@ export interface PdfTextLine {
 /** Két darab akkor van egy soron, ha a függőleges helyük ennél közelebb van. */
 const SAME_LINE_TOLERANCE = 1;
 
+/**
+ * HOW TO READ A PDF THAT IS NOT OURS (barracuda on #2585): an uploaded file
+ * (an edited teaching output) is foreign input. `untrusted` turns off the two
+ * pdf.js paths that are not needed for text and are risky on foreign input:
+ * the font code generator (`isEvalSupported`, a known code-execution family)
+ * and the browser font loading (`disableFontFace`). `maxPages` refuses a file
+ * that declares more pages, BEFORE any page is read; `maxItemsPerPage` bounds
+ * the per-page line grouping, which is quadratic in the items of a page. With
+ * no options the reader behaves as before (it reads back our own output).
+ */
+export interface PdfReadOptions {
+  untrusted?: boolean;
+  maxPages?: number;
+  maxItemsPerPage?: number;
+}
+
+/** A limit of `PdfReadOptions` was hit: the file is refused, not cut. */
+export class PdfReadLimitError extends Error {
+  constructor(
+    readonly what: "pages" | "items",
+    readonly found: number,
+    readonly limit: number,
+  ) {
+    super(
+      what === "pages"
+        ? `a PDF ${found} oldalas; legfeljebb ${limit} olvasható`
+        : `a PDF egy oldalán ${found} szövegdarab áll; legfeljebb ${limit} olvasható`,
+    );
+  }
+}
+
+/** The pdf.js document parameters for a read (exported for the test). */
+export function pdfDocumentParams(
+  bytes: Uint8Array,
+  options: PdfReadOptions = {},
+): Parameters<typeof getDocument>[0] {
+  return {
+    data: new Uint8Array(bytes),
+    useWorkerFetch: false,
+    useSystemFonts: false,
+    ...(options.untrusted
+      ? { isEvalSupported: false, disableFontFace: true }
+      : {}),
+  };
+}
+
 export async function readPdfTextLines(
   bytes: Uint8Array,
+  options: PdfReadOptions = {},
 ): Promise<PdfTextLine[]> {
   // A `pdfjs` a kapott puffert magához veszi; másolattal hívjuk, hogy a hívó
   // sajátja használható maradjon (a Buffer ugyanúgy Uint8Array).
@@ -52,20 +99,27 @@ export async function readPdfTextLines(
   // rendszer betűi segítenek; ITT viszont azt mérjük, mit hordoz a SAJÁT
   // kimenetünk. Ha a megjelenítő a hiányzó betűt a rendszeréből pótolhatná, épp
   // azt a hibát fedné el, amiért ez a függvény létezik.
-  const loadingTask = getDocument({
-    data: new Uint8Array(bytes),
-    useWorkerFetch: false,
-    useSystemFonts: false,
-  });
+  const loadingTask = getDocument(pdfDocumentParams(bytes, options));
 
   const lines: PdfTextLine[] = [];
 
   try {
     const doc = await loadingTask.promise;
+    if (options.maxPages !== undefined && doc.numPages > options.maxPages)
+      throw new PdfReadLimitError("pages", doc.numPages, options.maxPages);
 
     for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber++) {
       const page = await doc.getPage(pageNumber);
       const content = await page.getTextContent();
+      if (
+        options.maxItemsPerPage !== undefined &&
+        content.items.length > options.maxItemsPerPage
+      )
+        throw new PdfReadLimitError(
+          "items",
+          content.items.length,
+          options.maxItemsPerPage,
+        );
 
       const buckets: {
         y: number;
