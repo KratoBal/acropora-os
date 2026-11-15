@@ -1181,75 +1181,92 @@ export class MedusaProjectionScheduler
    * eszrevennie.
    */
   private async esedekesAzonositok(limit: number): Promise<string[]> {
-    const termekek = await this.db.product.findMany({
-      // A kihagyott termek (webshopExcluded, 2026-09-29) soha nem esedekes:
-      // kulonben orokre "meg nem vetitett" maradna, es minden kor elore hozna.
-      where: { isActive: true, webshopExcluded: false },
-      orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
-      take: limit * OVERSCAN,
-      select: {
-        id: true,
-        updatedAt: true,
-        variants: { select: { updatedAt: true } },
-        unasSnapshot: { select: { updatedAt: true } },
-        /*
-          CSAK A UNAS-SOR (SEO P0 PR 5): a WEBSHOP-sor slugját a PR 7 előtt a
-          vetítés nem viszi ki, tehát a változása nem tesz esedékessé. Szűrés
-          nélkül a slug-backfill 1909 új sora az egész katalógust egyszerre
-          esedékessé tenné, egy semmit nem változtató körre. A PR 7 veszi fel.
-        */
-        channelListings: {
-          where: { channel: "UNAS" },
-          select: { updatedAt: true },
-        },
-        /**
-         * A KAPCSOLATOK IDOBELYEGE -- ES A `sourceRelations`, NEM A
-         * `targetRelations`.
-         *
-         * A vetites a termek SAJAT metaadataba irja a kapcsolatok azonositoit,
-         * tehat csak azok a sorok szamitanak, ahol EZ a termek a FORRAS. Ha B
-         * csak celpontja A egyik kapcsolatanak, B sajat metaadata nem valtozik
-         * -- a `targetRelations` felvetele folosleges ujravetiteseket hozna.
-         */
-        sourceRelations: { select: { updatedAt: true } },
-        /**
-         * AZ ERKEZESEK IDOBELYEGE (V2.6 S3a): egy erkezes valtozasa (uj sor, allapot, nap, elojegyezhetoseg, a termekhez
-         * kotes) a termek `livestock_arrival` kulcsat valtoztatja. AZ IRAS EMELLETT A TERMEK `updatedAt`-JET IS MOZGATJA
-         * (`LivestockArrivalsRepository`): ez a lista csak a legutobb modositott termekek ablakat olvassa (`OVERSCAN`),
-         * tehat egy reg modositott termek, aminek CSAK az erkezese valtozott, kimaradna, ha a termek sora nem mozdulna.
-         * Itt a relacio azert is all, hogy a jel a teljes bemenetet lassa (ugyanaz a ket oldal, mint a kapcsolatoknal).
-         */
-        livestockArrivals: { select: { updatedAt: true } },
-      },
-    });
-    if (!termekek.length) return [];
-
-    const lekepezesek = await this.db.externalReference.findMany({
-      where: {
-        ...MEDUSA_PRODUCT_REFERENCE,
-        entityId: { in: termekek.map((termek) => termek.id) },
-      },
-      select: { entityId: true, lastSyncedAt: true },
-    });
-    const utoljara = new Map(
-      lekepezesek.map((sor) => [sor.entityId, sor.lastSyncedAt]),
-    );
-
+    const ablak = limit * OVERSCAN;
     const esedekes: string[] = [];
-    for (const termek of termekek) {
-      const dontes = decideProjectionDue({
-        lastProjectedAt: utoljara.get(termek.id) ?? null,
-        sourceTimestamps: [
-          termek.updatedAt,
-          ...termek.variants.map((valtozat) => valtozat.updatedAt),
-          termek.unasSnapshot?.updatedAt,
-          ...termek.channelListings.map((sor) => sor.updatedAt),
-          ...termek.sourceRelations.map((sor) => sor.updatedAt),
-          ...termek.livestockArrivals.map((sor) => sor.updatedAt),
-        ],
+    /*
+      LAPOZVA, NEM EGY RÖGZÍTETT ABLAKBÓL (kártya 550b80d1, nautilus 27350; mérve 2026-11-15 a stage-en: a
+      vetítő körei nulla jelölttel futottak, miközben a 11-14-i teljes futás után 8 vetített termék leírása
+      a Medusában régi maradt). Eddig a lekérdezés a legutóbb módosított `limit * OVERSCAN` termék közül
+      választott, és ha az ablak minden terméke naprakész volt, a kör üresen ért véget: a mögötte álló
+      esedékes termék SOHA nem került be az ablakba. Egy tömeges módosítás (teljes UNAS-futás) pont ezt
+      csinálja: az ablakot a saját, már kivitt termékeivel tölti meg.
+      Most az ablakok egymás után jönnek (a sorrend változatlan: `updatedAt` csökkenően, `id` növekvően,
+      tehát a lapozás stabil), amíg össze nem gyűlik a `limit` esedékes termék, vagy el nem fogytak a
+      termékek. A felső korlát (`MAX_OLDAL`) védelem, nem cél: az aktív katalógus ma kb. 1900 termék.
+    */
+    for (let oldal = 0; oldal < MAX_OLDAL; oldal += 1) {
+      const termekek = await this.db.product.findMany({
+        // A kihagyott termek (webshopExcluded, 2026-09-29) soha nem esedekes:
+        // kulonben orokre "meg nem vetitett" maradna, es minden kor elore hozna.
+        where: { isActive: true, webshopExcluded: false },
+        orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+        skip: oldal * ablak,
+        take: ablak,
+        select: {
+          id: true,
+          updatedAt: true,
+          variants: { select: { updatedAt: true } },
+          unasSnapshot: { select: { updatedAt: true } },
+          /*
+            CSAK A UNAS-SOR (SEO P0 PR 5): a WEBSHOP-sor slugját a PR 7 előtt a
+            vetítés nem viszi ki, tehát a változása nem tesz esedékessé. Szűrés
+            nélkül a slug-backfill 1909 új sora az egész katalógust egyszerre
+            esedékessé tenné, egy semmit nem változtató körre. A PR 7 veszi fel.
+          */
+          channelListings: {
+            where: { channel: "UNAS" },
+            select: { updatedAt: true },
+          },
+          /**
+           * A KAPCSOLATOK IDOBELYEGE -- ES A `sourceRelations`, NEM A
+           * `targetRelations`.
+           *
+           * A vetites a termek SAJAT metaadataba irja a kapcsolatok azonositoit,
+           * tehat csak azok a sorok szamitanak, ahol EZ a termek a FORRAS. Ha B
+           * csak celpontja A egyik kapcsolatanak, B sajat metaadata nem valtozik
+           * -- a `targetRelations` felvetele folosleges ujravetiteseket hozna.
+           */
+          sourceRelations: { select: { updatedAt: true } },
+          /**
+           * AZ ERKEZESEK IDOBELYEGE (V2.6 S3a): egy erkezes valtozasa (uj sor, allapot, nap, elojegyezhetoseg, a termekhez
+           * kotes) a termek `livestock_arrival` kulcsat valtoztatja. AZ IRAS EMELLETT A TERMEK `updatedAt`-JET IS MOZGATJA
+           * (`LivestockArrivalsRepository`): ez a lista csak a legutobb modositott termekek ablakat olvassa (`OVERSCAN`),
+           * tehat egy reg modositott termek, aminek CSAK az erkezese valtozott, kimaradna, ha a termek sora nem mozdulna.
+           * Itt a relacio azert is all, hogy a jel a teljes bemenetet lassa (ugyanaz a ket oldal, mint a kapcsolatoknal).
+           */
+          livestockArrivals: { select: { updatedAt: true } },
+        },
       });
-      if (dontes.due) esedekes.push(termek.id);
-      if (esedekes.length >= limit) break;
+      if (!termekek.length) break;
+
+      const lekepezesek = await this.db.externalReference.findMany({
+        where: {
+          ...MEDUSA_PRODUCT_REFERENCE,
+          entityId: { in: termekek.map((termek) => termek.id) },
+        },
+        select: { entityId: true, lastSyncedAt: true },
+      });
+      const utoljara = new Map(
+        lekepezesek.map((sor) => [sor.entityId, sor.lastSyncedAt]),
+      );
+
+      for (const termek of termekek) {
+        const dontes = decideProjectionDue({
+          lastProjectedAt: utoljara.get(termek.id) ?? null,
+          sourceTimestamps: [
+            termek.updatedAt,
+            ...termek.variants.map((valtozat) => valtozat.updatedAt),
+            termek.unasSnapshot?.updatedAt,
+            ...termek.channelListings.map((sor) => sor.updatedAt),
+            ...termek.sourceRelations.map((sor) => sor.updatedAt),
+            ...termek.livestockArrivals.map((sor) => sor.updatedAt),
+          ],
+        });
+        if (dontes.due) esedekes.push(termek.id);
+        if (esedekes.length >= limit) return esedekes;
+      }
+      // az utolsó (rövid) lap után nincs több termék
+      if (termekek.length < ablak) break;
     }
     return esedekes;
   }
@@ -1327,6 +1344,8 @@ const DEFAULT_BATCH = 25;
  * beolvasasa utan tudjuk eldonteni: egy naprakesz termek nem tolti a keretet.
  */
 const OVERSCAN = 4;
+/** Az általános esedékesség lapozásának felső korlátja (ablakok száma): védelem egy hibás lapozás ellen, nem a katalógus mérete. */
+const MAX_OLDAL = 50;
 /** Az inaktivált termékek lekérdezésének szelete: messze a Postgres kötött-paraméter határa (32767) alatt. */
 const KOTES_SZELET = 1000;
 /**
