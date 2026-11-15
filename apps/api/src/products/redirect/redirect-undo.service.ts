@@ -165,7 +165,10 @@ export class RedirectUndoService {
       },
       select: { id: true },
     });
-    if (already) throw new ConflictException("this batch was already undone");
+    if (already)
+      throw new ConflictException(
+        "this batch was already undone (a batch undone only in part cannot be finished: undo the later batch first, then restore the skipped rules by hand)",
+      );
     const sourceLowers = changes.created.map((c) =>
       redirectPathLower(c.source),
     );
