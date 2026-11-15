@@ -32,8 +32,7 @@ function xmlEvents(
   const parser = new SaxesParser({ xmlns: false });
   parser.on("opentag", (tag) => {
     const attrs: Record<string, string> = {};
-    for (const [k, v] of Object.entries(tag.attributes))
-      attrs[k] = String(v);
+    for (const [k, v] of Object.entries(tag.attributes)) attrs[k] = String(v);
     handlers.open?.(tag.name, attrs);
   });
   parser.on("closetag", (tag) => handlers.close?.(tag.name));
