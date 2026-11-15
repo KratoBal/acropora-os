@@ -91,7 +91,8 @@ export class CalendarGapsService {
     return this.repository.settings();
   }
 
-  saveSettings(
+  /** `async` on purpose: the refusal is a rejected promise like every other failure, not a throw before one exists. */
+  async saveSettings(
     newsletterMinDays: number | null,
     actor: CalendarEventActor,
   ): Promise<ContentCalendarSettings> {
