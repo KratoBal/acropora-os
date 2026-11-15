@@ -202,6 +202,14 @@ export function ContentRowActions({
             Cikk szerkesztése
           </Link>
         ) : null}
+        {item.channel === "TEACHING_SOURCE" ? (
+          <Link
+            href={`/tartalom/${encodeURIComponent(item.id)}/forras`}
+            className={`${QUIET_CONTROL} text-sm`}
+          >
+            Forrás szerkesztése
+          </Link>
+        ) : null}
 
         <Button
           variant="ghost"

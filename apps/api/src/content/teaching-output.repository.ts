@@ -151,6 +151,9 @@ export class TeachingOutputRepository {
    * output's version must still be the source's current and approved one. The
    * service checks these before, on its own read, to say why; this condition
    * keeps an approval withdrawn in between from letting the record through.
+   * Measured (2026-11-15, Postgres 17, log_statement): Prisma sends it as one
+   * `UPDATE ... WHERE ... AND EXISTS (SELECT ... FROM "TeachingSource" ...)`,
+   * with no separate read of the ids first.
    */
   async markSent(input: {
     contentId: string;

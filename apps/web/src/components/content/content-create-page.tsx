@@ -34,6 +34,7 @@ const CSATORNAK: { ertek: ContentChannel; cimke: string }[] = [
   { ertek: "FACEBOOK_POST", cimke: "Facebook poszt" },
   { ertek: "FACEBOOK_AD", cimke: "Facebook hirdetés" },
   { ertek: "ARTICLE", cimke: "Cikk" },
+  { ertek: "TEACHING_SOURCE", cimke: "Oktatóanyag" },
   { ertek: "OTHER", cimke: "Egyéb" },
 ];
 
