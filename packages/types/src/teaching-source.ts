@@ -51,6 +51,13 @@ export const TEACHING_SOURCE_LIMITS = {
   inflections: 10,
   unit: 40,
   form: 200,
+  /**
+   * The parts and the table together, as JSON characters. The API takes a
+   * request body of at most 100 kB (the framework's default); a source past
+   * this is refused by name here instead of a bare 413 there. The measured
+   * Akil source is about 14 kB.
+   */
+  document: 90_000,
 } as const;
 
 /** A part, sub-part or number id: lower-case letters and digits in hyphen-separated groups. */
@@ -189,6 +196,12 @@ export interface TeachingOpenQuestion {
   note: string | null;
 }
 
+export interface TeachingTypedNumber {
+  /** The digits as written, with a few characters around them. */
+  excerpt: string;
+  location: TeachingLocation;
+}
+
 export interface TeachingSourceAnalysis {
   /** A save with any of these is refused. */
   problems: TeachingProblem[];
@@ -197,6 +210,12 @@ export interface TeachingSourceAnalysis {
   openQuestions: TeachingOpenQuestion[];
   /** Numbers no text refers to. Not an error: a table may hold a number before its sentence. */
   unused: string[];
+  /**
+   * Digits typed into the text outside a reference ("35 ppt"): the spec builds
+   * against exactly this, but a year or a product name may carry digits, so it
+   * is a warning for the editor, never a refusal.
+   */
+  typedNumbers: TeachingTypedNumber[];
 }
 
 export interface TeachingSourceVersionSummary {
@@ -610,6 +629,12 @@ export function parseTeachingSourceInput(body: unknown): TeachingSourceParse {
     numbers.push(n.value);
   }
 
+  const size = JSON.stringify({ parts, numbers }).length;
+  if (size > L.document)
+    return fail(
+      `the parts and the number table: at most ${L.document} characters together (now ${size}); split the material into two sources`,
+    );
+
   return {
     ok: true,
     value: {
@@ -628,6 +653,12 @@ export function parseTeachingSourceInput(body: unknown): TeachingSourceParse {
 
 /** `{szám: id}` or `{szám: id, alak}`; "szam" without the accent too. */
 const REFERENCE = /\{\s*sz[aá]m\s*:\s*([^,{}]*?)\s*(?:,\s*([^,{}]*?)\s*)?\}/giu;
+/**
+ * A digit run outside a reference, with its decimal part ("1,026", "35").
+ * An ordinal ("1. lépés", "a 2. okban") is no quantity and is left out: a
+ * number followed by a full stop, a space and a lower-case letter.
+ */
+const TYPED_NUMBER = /\d+(?:[.,]\d+)*(?!\.\s+[a-záéíóöőúüű])(?![\d.,]*\d)/gu;
 /** Anything that starts like a reference, to catch the ones the pattern does not take. */
 const REFERENCE_START = /\{\s*sz[aá]m(?![\p{L}\p{N}])/giu;
 
@@ -701,8 +732,25 @@ export function analyzeTeachingSource(
         location: null,
       });
 
+  const typedNumbers: TeachingTypedNumber[] = [];
   const scan = (value: string, location: TeachingLocation) => {
     const { references, malformed } = findTeachingReferences(value);
+    let outside = value;
+    for (const ref of [...references].reverse())
+      outside =
+        outside.slice(0, ref.start) +
+        " ".repeat(ref.end - ref.start) +
+        outside.slice(ref.end);
+    for (const match of outside.matchAll(TYPED_NUMBER))
+      typedNumbers.push({
+        excerpt: value
+          .slice(
+            Math.max(0, (match.index ?? 0) - 15),
+            (match.index ?? 0) + match[0].length + 15,
+          )
+          .trim(),
+        location,
+      });
     for (const bad of malformed)
       problems.push({
         code: "MALFORMED_REFERENCE",
@@ -789,5 +837,6 @@ export function analyzeTeachingSource(
     usages,
     openQuestions,
     unused: usages.filter((u) => !u.locations.length).map((u) => u.numberId),
+    typedNumbers,
   };
 }

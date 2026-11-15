@@ -1928,8 +1928,34 @@ export type {
   TeachingSourceVersionSummary,
   TeachingSpeakerNote,
   TeachingSubpart,
+  TeachingTypedNumber,
   TeachingValue,
 } from "./teaching-source.js";
+export {
+  buildTeachingNarration,
+  buildTeachingPrintable,
+  buildTeachingSlides,
+  fillTeachingText,
+  TEACHING_OPEN_MARK,
+  TEACHING_PART_SLIDES,
+  TEACHING_SLIDE_POINTS,
+  TEACHING_SUBPART_SLIDES,
+  teachingOutputStamp,
+  teachingSentences,
+} from "./teaching-output.js";
+export type {
+  TeachingNarration,
+  TeachingNarrationChapter,
+  TeachingOutputSource,
+  TeachingOutputStamp,
+  TeachingOverFrame,
+  TeachingPrintable,
+  TeachingPrintableNumberRow,
+  TeachingPrintablePart,
+  TeachingSlide,
+  TeachingSlideDeck,
+  TeachingSlideKind,
+} from "./teaching-output.js";
 export { parseSeoLandingInput, SEO_LANDING_LIMITS } from "./seo-landing.js";
 export type {
   SeoLandingAttributeFilter,
