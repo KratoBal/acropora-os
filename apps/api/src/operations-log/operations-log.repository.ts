@@ -170,7 +170,7 @@ export class OperationsLogRepository {
       ...(assetIds.length ? [{ id: { in: assetIds } }] : []),
       ...(categoryIds.length ? [{ categoryId: { in: categoryIds } }] : []),
     ];
-    // `OR: []` mindent átengedne, ezért a célok nélküli eset külön ág: nincs aktív sablon, nincs eszköz
+    // az üres `OR` a Prismában semmire sem illeszkedik (nem mindenre), tehát az eredmény ugyanaz lenne; a korai kilépés a felesleges lekérdezést spórolja
     if (targets.length === 0) return [];
     const rows = await prisma.asset.findMany({
       where: { archivedAt: null, OR: targets },
