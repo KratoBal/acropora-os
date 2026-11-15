@@ -59,6 +59,16 @@ function kebabCase(szoveg: string): string {
     .toLowerCase();
 }
 
+/**
+ * A HANDLE, AMIT A MEDUSA A CIMBOL MAGA KEPEZ, ha nem kuldunk sajatot: a `kebabCase` betuhiven, tisztitas nelkul (az ekezet, a vesszo
+ * es a perjel marad, a " - " harom kotojel). Ilyen volt a teszt Medusa minden kategoriaja az atvetel (adopt) elott, es a regi
+ * kategoria-atiranyitasok celja ma is ilyen alakot hordoz (`/hu/categories/aqua-light---aramoltatok`): a regi cimbol a kategoriat
+ * ezzel lehet visszakeresni.
+ */
+export function medusaDefaultHandle(title: string): string {
+  return kebabCase(title);
+}
+
 /** Az ekezetet a kombinalo jelek eltavolitasaval bontjuk le (NFD). */
 function ekezetNelkul(szoveg: string): string {
   return szoveg.normalize("NFD").replace(/\p{Mn}+/gu, "");
