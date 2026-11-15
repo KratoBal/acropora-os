@@ -454,6 +454,15 @@ export class WorksheetsService {
           "Ehhez a partnerhez már tartozik ilyen kódú alegység.",
         );
       }
+      // a szülő nem ennek a vevőnek a helyszíne: a hívó hibája, nem a szerveré (eddig 500 lett belőle; a
+      // `suppliers.service.ts` ugyanezt a hibát ugyanígy fordítja; mérve 2026-11-15, acrobot 53389)
+      if (
+        error instanceof Error &&
+        error.message === "WORKSHEET_DEPARTMENT_PARENT_NOT_FOUND"
+      )
+        throw new BadRequestException(
+          "A megadott szülő helyszín nem ehhez a partnerhez tartozik. Frissítsd az oldalt, és válaszd ki újra.",
+        );
       throw error;
     }
   }
