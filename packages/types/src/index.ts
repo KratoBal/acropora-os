@@ -639,6 +639,9 @@ export type {
   ContentWaitingOnMeResponse,
 } from "./content-management.js";
 export {
+  CALENDAR_EVENT_KINDS,
+  CALENDAR_EVENT_KIND_LABELS,
+  CALENDAR_EVENT_LIMITS,
   CONTENT_CALENDAR_ENTRY_KINDS,
   CONTENT_CALENDAR_MAX_DAYS,
   CONTENT_CALENDAR_UNKNOWN,
@@ -646,9 +649,13 @@ export {
 export type {
   CalendarDay,
   CalendarDayOrUnknown,
+  CalendarEvent,
+  CalendarEventKind,
+  CalendarEventResponsible,
   ContentCalendarContentEntry,
   ContentCalendarEntry,
   ContentCalendarEntryKind,
+  ContentCalendarEventEntry,
   ContentCalendarFeed,
   ContentCalendarLivestockEntry,
   ContentCalendarPurchaseEntry,

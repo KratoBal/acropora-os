@@ -9046,6 +9046,32 @@ model LivestockArrival {
   @@index([productId])
 }
 
+/// What a hand-entered calendar event is (T5.5 S2): a shop event (open day, talk) or a holiday or opening-hours change.
+enum CalendarEventKind {
+  SHOP_EVENT
+  HOLIDAY
+}
+
+/// A HAND-ENTERED ENTRY OF THE CONTENT CALENDAR (T5.5 S2): what no other table knows, a shop event or a holiday.
+/// Days, not instants (the shop's day is Budapest's, the same as `LivestockArrival.expectedOn`). Every write and the
+/// delete leave an `AuditLog` row with what was there, so a deleted event is still accounted for.
+model CalendarEvent {
+  id                String            @id @default(cuid())
+  kind              CalendarEventKind
+  title             String
+  startsOn          DateTime          @db.Date
+  /// The LAST day the event covers (inclusive); the start day for a one-day event.
+  endsOn            DateTime          @db.Date
+  location          String?
+  /// The person in the team who answers for it; a user id, like `ContentItem.authorId` (no relation).
+  responsibleUserId String?
+  createdById       String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@index([startsOn, endsOn])
+}
+
 /// Egy levélből jött PDF (proforma vagy számla), a bájtjaival együtt, hogy a
 /// szerkesztő és egy újraolvasás is elérje. Egy levél egy mellékletét egyszer
 /// tároljuk (`gmailMessageId` + `fileName`); egy újra csatolt számla (a De Jong

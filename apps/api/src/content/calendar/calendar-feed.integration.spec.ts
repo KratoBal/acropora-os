@@ -13,7 +13,8 @@ import { CalendarFeedService } from "./calendar-feed.service.js";
   THE CALENDAR FEED ON THE DATABASE (T5.5 S1). The range is 2031-05-10..12 (summer time, UTC+2), far from any other
   test's data; the feed reads everything, so each assertion looks only at this file's own rows.
 
-  What turns this red: a discarded item, a cancelled arrival, a received order, an archived product's sale or a sale
+  What turns this red: a hand-entered event that started before the range and runs into it left out, or one that
+  ended the day before shown (S2); a discarded item, a cancelled arrival, a received order, an archived product's sale or a sale
   that ended at the range's first instant shown; the last Budapest hour of the last day or the first of the first day
   cut off; an order line's own day ignored; two variants of one sale shown twice; an open order without a day dropped
   silently instead of counted.
@@ -34,6 +35,7 @@ describe(
       orders: [] as string[],
       suppliers: [] as string[],
       warehouses: [] as string[],
+      events: [] as string[],
     };
     const p: Record<string, { id: string; variantId: string }> = {};
     let supplierId = "";
@@ -177,6 +179,30 @@ describe(
           ).id,
         );
 
+      for (const [title, startsOn, endsOn] of [
+        // started before the range and runs into its first day
+        ["eventIntoRange", "2031-05-08", "2031-05-10"],
+        // ended the day before the range
+        ["eventBefore", "2031-05-08", "2031-05-09"],
+        // the range's last day
+        ["eventLastDay", "2031-05-12", "2031-05-12"],
+        // the day after
+        ["eventAfter", "2031-05-13", "2031-05-14"],
+      ] as const)
+        ids.events.push(
+          (
+            await prisma.calendarEvent.create({
+              data: {
+                kind: "SHOP_EVENT",
+                title: `${tag} ${title}`,
+                startsOn: at(`${startsOn}T00:00:00Z`),
+                endsOn: at(`${endsOn}T00:00:00Z`),
+              },
+              select: { id: true },
+            })
+          ).id,
+        );
+
       for (const [title, state, plannedFor] of [
         // Budapest 2031-05-10 00:30: the first hour of the first day
         ["firstHour", "IDEA", "2031-05-09T22:30:00Z"],
@@ -219,7 +245,16 @@ describe(
         where: { id: { in: ids.content } },
       });
       await prisma.product.deleteMany({ where: { id: { in: ids.products } } });
+      await prisma.calendarEvent.deleteMany({
+        where: { id: { in: ids.events } },
+      });
       nincsMaradek([
+        {
+          nev: "CalendarEvent (calendar feed test)",
+          darab: await prisma.calendarEvent.count({
+            where: { id: { in: ids.events } },
+          }),
+        },
         {
           nev: "PurchaseOrder (calendar feed test)",
           darab: await prisma.purchaseOrder.count({
@@ -320,6 +355,22 @@ describe(
         "products" in open &&
           open.products.some((x) => x.id === p.mirrorOpen!.id) &&
           !open.products.some((x) => x.id === p.mirrorEnded!.id),
+      );
+    });
+
+    it("the hand-entered events that touch the range, with their own days; the one ended before and the one after out", async () => {
+      const feed = await service.feed("2031-05-10", "2031-05-12");
+      const events = ours(feed.entries).filter((e) => e.kind === "EVENT");
+      assert.deepEqual(
+        events.map((e) => [
+          e.title.replace(`${tag} `, ""),
+          e.startsOn,
+          e.endsOn,
+        ]),
+        [
+          ["eventIntoRange", "2031-05-08", "2031-05-10"],
+          ["eventLastDay", "2031-05-12", "2031-05-12"],
+        ],
       );
     });
 
