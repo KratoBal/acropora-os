@@ -321,9 +321,10 @@ describe("TeachingSourcePage", () => {
       sha256: "h",
       uploadedById: "user-1",
       uploadedAt: "2026-11-15T09:00:00.000Z",
-      changedSlides: 1,
+      changes: 1,
       decision: null,
       diff: {
+        kind: "SLIDES",
         changed: 1,
         slides: [
           {
@@ -392,5 +393,41 @@ describe("TeachingSourcePage", () => {
     expect(
       screen.queryByRole("button", { name: "A forrásba átvezetendő" }),
     ).toBeNull();
+  });
+
+  it("an edited PDF: the upload takes a .pdf, and the difference is shown by sentence", async () => {
+    api.teachingOutputs.mockResolvedValue([
+      output({ id: "o2", kind: "PRINTABLE", edits: 1, undecidedEdits: 1 }),
+    ]);
+    const detail = {
+      id: "e2",
+      outputId: "o2",
+      fileName: "anyag.pdf",
+      sizeBytes: 10,
+      sha256: "h",
+      uploadedById: "user-1",
+      uploadedAt: "2026-11-15T09:00:00.000Z",
+      changes: 1,
+      decision: null,
+      diff: {
+        kind: "TEXT",
+        removed: ["Indulás Várj 4 hetet."],
+        added: ["Indulás Várj 6 hetet."],
+        same: 5,
+        changed: 1,
+      },
+    };
+    api.teachingOutputEdits.mockResolvedValue([detail]);
+    api.teachingOutputEdit.mockResolvedValue(detail);
+    render(<TeachingSourcePage contentId="c1" />);
+    const input = (await screen.findByLabelText(
+      "Szerkesztett PDF feltöltése (.pdf)",
+    )) as HTMLInputElement;
+    expect(input.accept).toBe(".pdf,application/pdf");
+    expect(await screen.findByText("1 mondat eltér")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Eltérés megnézése" }));
+    expect(await screen.findByText("Indulás Várj 4 hetet.")).toBeTruthy();
+    expect(screen.getByText("Indulás Várj 6 hetet.")).toBeTruthy();
+    expect(screen.getByText(/1 mondat tér el a generálttól/)).toBeTruthy();
   });
 });

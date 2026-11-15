@@ -149,12 +149,105 @@ export interface TeachingOutputEditSummary {
   sha256: string;
   uploadedById: string | null;
   uploadedAt: string;
-  changedSlides: number;
+  /** How many slides (a deck) or sentences (a text) differ. */
+  changes: number;
   decision: (TeachingEditDecision & { byId: string | null; at: string }) | null;
 }
 
+/** A deck is compared slide by slide, a PDF or a narration sentence by sentence. */
+export type TeachingEditDiff =
+  | ({ kind: "SLIDES" } & TeachingDeckDiff)
+  | ({ kind: "TEXT" } & TeachingTextDiff);
+
 export interface TeachingOutputEditDetail extends TeachingOutputEditSummary {
-  diff: TeachingDeckDiff;
+  diff: TeachingEditDiff;
+}
+
+/**
+ * A TEXT COMPARED SENTENCE BY SENTENCE (an edited PDF or narration, T5.2).
+ * Both sides are joined and cut into sentences the same way, so a line the
+ * PDF wrapped differently is no difference; then the longest common sequence
+ * of sentences is kept, and what is left over on either side is reported in
+ * order: removed from the generated text, added in the edited one. A changed
+ * sentence shows as one removed and one added.
+ *
+ * A HEADING WITHOUT A FULL STOP JOINS THE SENTENCE UNDER IT ("Indulás Várj 4
+ * hetet."), on both sides alike, so it is never a false difference; the
+ * changed sentence is then shown with its heading. Line breaks cannot mark
+ * the heading: a PDF wraps lines wherever the width ends.
+ */
+export interface TeachingTextDiff {
+  removed: string[];
+  added: string[];
+  /** Sentences found on both sides, in order. */
+  same: number;
+  changed: number;
+}
+
+/**
+ * At most this many sentences per side are compared; past it the text is
+ * refused, not cut. The comparison keeps a table of both counts multiplied
+ * (1 500 x 1 500 cells is about 9 MB); a teaching material is a few hundred.
+ */
+export const TEACHING_TEXT_SENTENCES_MAX = 1_500;
+
+/**
+ * Sentences of a text: lines joined, whitespace collapsed, cut after . ! ?
+ * before an upper-case letter or a digit-free start (the same rule on both
+ * sides, which is what matters).
+ */
+export function teachingTextSentences(text: string): string[] {
+  return text
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(/(?<=[.!?])\s+(?=[A-ZÁÉÍÓÖŐÚÜŰ•#])/u)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+export function compareTeachingTexts(
+  generated: readonly string[],
+  edited: readonly string[],
+): TeachingTextDiff {
+  const a = generated.map(norm);
+  const b = edited.map(norm);
+  // the classic table of common-sequence lengths, from the end
+  const rows = a.length + 1;
+  const cols = b.length + 1;
+  const table = new Uint32Array(rows * cols);
+  for (let i = a.length - 1; i >= 0; i--)
+    for (let j = b.length - 1; j >= 0; j--)
+      table[i * cols + j] =
+        a[i] === b[j]
+          ? (table[(i + 1) * cols + j + 1] ?? 0) + 1
+          : Math.max(
+              table[(i + 1) * cols + j] ?? 0,
+              table[i * cols + j + 1] ?? 0,
+            );
+  const removed: string[] = [];
+  const added: string[] = [];
+  let same = 0;
+  let i = 0;
+  let j = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      same++;
+      i++;
+      j++;
+    } else if (
+      (table[(i + 1) * cols + j] ?? 0) >= (table[i * cols + j + 1] ?? 0)
+    )
+      removed.push(generated[i++] as string);
+    else added.push(edited[j++] as string);
+  }
+  while (i < a.length) removed.push(generated[i++] as string);
+  while (j < b.length) added.push(edited[j++] as string);
+  return {
+    removed,
+    added,
+    same,
+    changed: Math.max(removed.length, added.length),
+  };
 }
 
 export const TEACHING_EDIT_NOTE_MAX = 1_000;

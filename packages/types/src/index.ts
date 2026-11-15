@@ -1969,13 +1969,18 @@ export type {
 export {
   cleanEditedSlides,
   compareTeachingDecks,
+  compareTeachingTexts,
   parseTeachingEditDecision,
   TEACHING_EDIT_NOTE_MAX,
+  TEACHING_TEXT_SENTENCES_MAX,
   teachingDeckText,
+  teachingTextSentences,
 } from "./teaching-edit.js";
 export type {
   TeachingDeckDiff,
   TeachingEditDecision,
+  TeachingEditDiff,
+  TeachingTextDiff,
   TeachingOutputEditDetail,
   TeachingOutputEditSummary,
   TeachingSlideChange,

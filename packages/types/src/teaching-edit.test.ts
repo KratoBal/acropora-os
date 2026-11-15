@@ -4,6 +4,8 @@ import { describe, it } from "node:test";
 import {
   cleanEditedSlides,
   compareTeachingDecks,
+  compareTeachingTexts,
+  teachingTextSentences,
   parseTeachingEditDecision,
   teachingDeckText,
   type TeachingSlideText,
@@ -135,5 +137,45 @@ describe("parseTeachingEditDecision", () => {
         false,
         JSON.stringify(bad),
       );
+  });
+});
+
+/*
+  THE TEXT DIFF (an edited PDF or narration). What turns these red: a line
+  wrapped differently counted as a change; a changed sentence not shown as
+  removed and added; the order of what changed lost; a kept sentence counted
+  as changed.
+*/
+describe("compareTeachingTexts", () => {
+  const sentences = teachingTextSentences;
+
+  it("a text wrapped differently is the same text", () => {
+    const a = sentences("Várj 4 hetet. Mérd a sót.\nKész.");
+    const b = sentences("Várj 4\nhetet.   Mérd a\nsót. Kész.");
+    assert.deepEqual(compareTeachingTexts(a, b), {
+      removed: [],
+      added: [],
+      same: 3,
+      changed: 0,
+    });
+  });
+
+  it("names a changed sentence as removed and added, in order, and keeps the rest", () => {
+    const diff = compareTeachingTexts(
+      sentences("Első. Várj 4 hetet. Mérd a sót. Utolsó."),
+      sentences("Első. Várj 6 hetet. Mérd a sót. Új mondat. Utolsó."),
+    );
+    assert.deepEqual(diff.removed, ["Várj 4 hetet."]);
+    assert.deepEqual(diff.added, ["Várj 6 hetet.", "Új mondat."]);
+    assert.equal(diff.same, 3);
+    assert.equal(diff.changed, 2);
+  });
+
+  it("does not cut at kb. or a decimal comma, and cuts before a bullet or a heading", () => {
+    assert.deepEqual(sentences("Várj kb. 4 hetet. • Mérd. # 2. rész: Só"), [
+      "Várj kb. 4 hetet.",
+      "• Mérd.",
+      "# 2. rész: Só",
+    ]);
   });
 });

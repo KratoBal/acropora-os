@@ -1422,6 +1422,7 @@ export const ANONYMIZATION_REGISTER: Readonly<
     sha256: "identifier",
     content: "fileContent",
     slides: "json",
+    text: "freeText",
     uploadedById: "identifier",
     decisionNote: "freeText",
     decidedById: "identifier",

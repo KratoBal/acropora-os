@@ -8702,8 +8702,10 @@ model TeachingOutputEdit {
   sizeBytes    Int
   sha256       String         @db.VarChar(64)
   content      Bytes
-  /// A fájlból olvasott diák szövege (`TeachingSlideText[]`).
+  /// A fájlból olvasott diák szövege (`TeachingSlideText[]`); PDF-nél és narrációnál üres.
   slides       Json
+  /// PDF-nél és narrációnál a fájlból olvasott szöveg; diasornál null.
+  text         String?
   uploadedById String?
   uploadedAt   DateTime       @default(now())
   toSource     Boolean?

@@ -1,6 +1,7 @@
 "use client";
 
 import type {
+  TeachingOutputKind,
   TeachingOutputEditDetail,
   TeachingOutputEditSummary,
   TeachingSlideChange,
@@ -24,6 +25,29 @@ import { contentApi } from "@/lib/api/content";
  * (kézzel vagy a tartalom-ágenssel), utána a forrás újra jóváhagyásra megy.
  */
 
+/** What each output takes back, and how a difference is counted. */
+const FILE: Record<
+  TeachingOutputKind,
+  { label: string; accept: string; unit: string }
+> = {
+  SLIDES: {
+    label: "Szerkesztett diasor feltöltése (.pptx)",
+    accept:
+      ".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    unit: "dia",
+  },
+  PRINTABLE: {
+    label: "Szerkesztett PDF feltöltése (.pdf)",
+    accept: ".pdf,application/pdf",
+    unit: "mondat",
+  },
+  NARRATION: {
+    label: "Szerkesztett narráció feltöltése (.txt, .md)",
+    accept: ".txt,.md,text/plain,text/markdown",
+    unit: "mondat",
+  },
+};
+
 const CHANGE_LABELS: Record<TeachingSlideChange, string> = {
   SAME: "változatlan",
   CHANGED: "módosult",
@@ -35,12 +59,14 @@ export function TeachingOutputEdits({
   token,
   contentId,
   outputId,
+  kind,
   canManage,
   onChanged,
 }: {
   token: string;
   contentId: string;
   outputId: string;
+  kind: TeachingOutputKind;
   canManage: boolean;
   onChanged: () => void;
 }) {
@@ -132,10 +158,10 @@ export function TeachingOutputEdits({
       ) : null}
       {canManage ? (
         <label className="flex flex-wrap items-center gap-2">
-          <span>Szerkesztett diasor feltöltése (.pptx):</span>
+          <span>{FILE[kind].label}:</span>
           <PilotFileInput
-            accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation"
-            aria-label="Szerkesztett diasor feltöltése"
+            accept={FILE[kind].accept}
+            aria-label={FILE[kind].label}
             disabled={busy}
             onChange={(event) => {
               const file = event.target.files?.[0];
@@ -150,9 +176,9 @@ export function TeachingOutputEdits({
           {edits.map((edit) => (
             <li key={edit.id} className="flex flex-wrap items-center gap-2">
               <span>{edit.fileName}</span>
-              <PilotBadge variant={edit.changedSlides ? "amber" : "success"}>
-                {edit.changedSlides
-                  ? `${edit.changedSlides} dia eltér`
+              <PilotBadge variant={edit.changes ? "amber" : "success"}>
+                {edit.changes
+                  ? `${edit.changes} ${FILE[kind].unit} eltér`
                   : "nem tér el"}
               </PilotBadge>
               {edit.decision ? (
@@ -184,49 +210,72 @@ export function TeachingOutputEdits({
           <p className="font-medium">
             {open.fileName}:{" "}
             {open.diff.changed
-              ? `${open.diff.changed} dia tér el a generálttól`
-              : "a diák szövege nem tér el a generálttól"}
+              ? `${open.diff.changed} ${FILE[kind].unit} tér el a generálttól`
+              : "a szövege nem tér el a generálttól"}
           </p>
-          <ol className="space-y-2">
-            {open.diff.slides
-              .filter((slide) => slide.change !== "SAME")
-              .map((slide) => (
-                <li key={slide.position}>
-                  <span className="font-medium">
-                    {slide.position}. dia ({CHANGE_LABELS[slide.change]})
-                    {slide.titleChanged
-                      ? `: „${slide.generated?.title ?? ""}” helyett „${slide.edited?.title ?? ""}”`
-                      : `: ${(slide.edited ?? slide.generated)?.title ?? ""}`}
-                  </span>
-                  {slide.removedPoints.length ? (
-                    <ul className="list-disc pl-5 text-pilot-grey-600">
-                      {slide.removedPoints.map((p) => (
-                        <li key={`-${p}`}>
-                          <del>{p}</del>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                  {slide.addedPoints.length ? (
-                    <ul className="list-disc pl-5">
-                      {slide.addedPoints.map((p) => (
-                        <li key={`+${p}`}>
-                          <ins>{p}</ins>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                  {slide.change === "CHANGED" &&
-                  !slide.titleChanged &&
-                  !slide.removedPoints.length &&
-                  !slide.addedPoints.length ? (
-                    <p className="text-pilot-grey-600">
-                      A pontok sorrendje változott.
-                    </p>
-                  ) : null}
-                </li>
-              ))}
-          </ol>
+          {open.diff.kind === "TEXT" ? (
+            <div className="space-y-1">
+              {open.diff.removed.length ? (
+                <ul className="list-disc pl-5 text-pilot-grey-600">
+                  {open.diff.removed.map((sentence, i) => (
+                    <li key={`-${i}`}>
+                      <del>{sentence}</del>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {open.diff.added.length ? (
+                <ul className="list-disc pl-5">
+                  {open.diff.added.map((sentence, i) => (
+                    <li key={`+${i}`}>
+                      <ins>{sentence}</ins>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : (
+            <ol className="space-y-2">
+              {open.diff.slides
+                .filter((slide) => slide.change !== "SAME")
+                .map((slide) => (
+                  <li key={slide.position}>
+                    <span className="font-medium">
+                      {slide.position}. dia ({CHANGE_LABELS[slide.change]})
+                      {slide.titleChanged
+                        ? `: „${slide.generated?.title ?? ""}” helyett „${slide.edited?.title ?? ""}”`
+                        : `: ${(slide.edited ?? slide.generated)?.title ?? ""}`}
+                    </span>
+                    {slide.removedPoints.length ? (
+                      <ul className="list-disc pl-5 text-pilot-grey-600">
+                        {slide.removedPoints.map((p) => (
+                          <li key={`-${p}`}>
+                            <del>{p}</del>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    {slide.addedPoints.length ? (
+                      <ul className="list-disc pl-5">
+                        {slide.addedPoints.map((p) => (
+                          <li key={`+${p}`}>
+                            <ins>{p}</ins>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    {slide.change === "CHANGED" &&
+                    !slide.titleChanged &&
+                    !slide.removedPoints.length &&
+                    !slide.addedPoints.length ? (
+                      <p className="text-pilot-grey-600">
+                        A pontok sorrendje változott.
+                      </p>
+                    ) : null}
+                  </li>
+                ))}
+            </ol>
+          )}
           {open.decision ? (
             <p>
               Döntés:{" "}
