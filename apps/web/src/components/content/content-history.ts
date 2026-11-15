@@ -28,7 +28,7 @@ export function describeContentEvent(event: ContentStateEvent): string {
   return `${when} ${who}: ${step}${event.note?.trim() ? `, „${event.note.trim()}”` : ""}`;
 }
 
-const CHANNEL_LABELS: Record<ContentChannel, string> = {
+export const CHANNEL_LABELS: Record<ContentChannel, string> = {
   FACEBOOK_POST: "Facebook poszt",
   FACEBOOK_AD: "Facebook hirdetés",
   ARTICLE: "Cikk",

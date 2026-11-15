@@ -652,6 +652,7 @@ export type {
   CalendarEvent,
   CalendarEventKind,
   CalendarEventResponsible,
+  CalendarEventResponsibleOption,
   ContentCalendarContentEntry,
   ContentCalendarEntry,
   ContentCalendarEntryKind,

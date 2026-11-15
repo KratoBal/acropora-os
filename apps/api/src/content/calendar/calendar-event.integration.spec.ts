@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 
-import { ConflictException, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from "@nestjs/common";
 import { prisma } from "@acropora/database";
 
 import { integrationDatabaseGate } from "../../common/integration-database.js";
@@ -15,7 +19,8 @@ import { CalendarEventService } from "./calendar-event.service.js";
 
   What turns this red: a day stored shifted by the time zone (a date column read back as the day before); a write or a
   delete without its audit row, or an audit row that does not say what changed or what was deleted; a stale edit
-  overwriting a newer record; a deleted event still readable.
+  overwriting a newer record; an edit that changes nothing still logged; a machine or inactive account offered or
+  accepted as responsible; a deleted event still readable.
 */
 const gate = integrationDatabaseGate(process.env);
 
@@ -26,8 +31,9 @@ describe(
     const tag = `t55s2-int-${Date.now() % 1_000_000}`;
     const events: string[] = [];
     const users: string[] = [];
-    let actor = "";
+    let actor = { id: "", role: "MANAGER" as const };
     let responsible = "";
+    const others: Record<string, string> = {};
     const service = new CalendarEventService(new CalendarEventRepository());
 
     const audit = (entityId: string) =>
@@ -39,22 +45,26 @@ describe(
 
     before(async () => {
       if (gate.mode === "refuse") throw new Error(gate.reason);
-      for (const [key, nickname] of [
-        ["actor", null],
-        ["responsible", "Luca"],
+      for (const [key, nickname, role, isActive] of [
+        ["actor", null, "MANAGER", true],
+        ["responsible", "Luca", "MANAGER", true],
+        ["agent", null, "CONTENT_AGENT", true],
+        ["inactive", null, "MANAGER", false],
       ] as const) {
         const user = await prisma.user.create({
           data: {
             email: `${tag}-${key}@example.invalid`,
             displayName: `${tag} ${key}`,
             nickname,
-            role: "SERVICE",
+            role,
+            isActive,
           },
           select: { id: true },
         });
         users.push(user.id);
-        if (key === "actor") actor = user.id;
-        else responsible = user.id;
+        if (key === "actor") actor = { id: user.id, role: "MANAGER" };
+        else if (key === "responsible") responsible = user.id;
+        else others[key] = user.id;
       }
     });
 
@@ -105,7 +115,7 @@ describe(
       assert.deepEqual(await audit(created.id), [
         {
           action: "calendar_event.created",
-          userId: actor,
+          userId: actor.id,
           metadata: {
             kind: "SHOP_EVENT",
             title: `${tag} nyílt nap`,
@@ -137,7 +147,7 @@ describe(
       const log = await audit(created.id);
       assert.deepEqual(log[1], {
         action: "calendar_event.updated",
-        userId: actor,
+        userId: actor.id,
         metadata: {
           endsOn: { from: "2031-06-20", to: "2031-06-21" },
           location: { from: null, to: "Mindkét bolt" },
@@ -151,8 +161,37 @@ describe(
         ),
         ConflictException,
       );
-      assert.equal((await service.get(created.id)).title, `${tag} zárva`);
+      const current = await service.get(created.id);
+      assert.equal(current.title, `${tag} zárva`);
       assert.equal((await audit(created.id)).length, 2);
+      // an edit that changes nothing writes nothing: no log line, the same updatedAt
+      const same = await service.update(
+        created.id,
+        { expectedUpdatedAt: current.updatedAt, title: current.title },
+        actor,
+      );
+      assert.equal(same.updatedAt, current.updatedAt);
+      assert.equal((await audit(created.id)).length, 2);
+    });
+
+    it("the responsible choices are the active people who see content: the machine account and the inactive one are neither offered nor accepted", async () => {
+      const offered = (await service.responsibleOptions()).map((o) => o.id);
+      assert.ok(offered.includes(responsible));
+      assert.ok(!offered.includes(others.agent!));
+      assert.ok(!offered.includes(others.inactive!));
+      for (const id of [others.agent!, others.inactive!])
+        await assert.rejects(
+          service.create(
+            {
+              kind: "SHOP_EVENT",
+              title: `${tag} nem mehet`,
+              startsOn: "2031-06-26",
+              responsibleUserId: id,
+            },
+            actor,
+          ),
+          BadRequestException,
+        );
     });
 
     it("a delete removes the event, and the log keeps what it was", async () => {
