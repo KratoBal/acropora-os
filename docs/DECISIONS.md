@@ -801,10 +801,16 @@ forráskódból olvasva):**
   semmi nem hívja. Az UNAS-szinkron és a POS új rendelése a mező alapértékét
   (`PENDING_FULFILLMENT`) kapja.
 
-_Stage adat (acrobot lekérdezése, a számok beillesztésre várnak):_ a
-`SalesOrder` darabszáma csatornánként és státuszonként, az
-`OrderBusinessStatusEvent` darabszáma forrásonként az első és az utolsó
-nappal, és hogy van-e `MEDUSA` csatornájú `SalesOrder`.
+_Az adatbázis oldala NEM mért (2026-11-15), és az ok megnevezve:_ hogy a
+migráció napja (2026-09-03) után van-e `OrderBusinessStatusEvent` bármely
+forrásból, hogy van-e `MEDUSA` csatornájú `SalesOrder`, és hogy az UNAS-szinkron
+és a POS új rendelései valóban az alapértéken állnak-e, adaton nem mértük. A
+stage-en a lekérdezést a Coolify-feladat lefuttatta, de az API nem adja vissza a
+feladat kimenetét; az éles adatbázison a csak olvasó szerep (`fleet_ro`)
+„permission denied for table SalesOrder" hibát kapott (jogosultsági korlát,
+mérve 2026-11-15). A fenti állítások tehát a kódból következnek, nem az
+adatból, és az őrző-teszt is a forrást védi, nem az adatot. Ha az adat
+megmérhetővé válik, a három szám ide kerül.
 
 **Döntés.**
 
