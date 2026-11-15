@@ -847,3 +847,43 @@ megmérhetővé válik, a három szám ide kerül.
 
 **Hatály.** A webshop-rendelések read-only UNAS-tükrét (ADR-006) és a webshop
 saját átmeneti szabályait (commerce `transitions.ts`) nem érinti.
+
+## ADR-016 – A vetítés önjavítása lassú frissítési forgással, nem elvárt-állapot összehasonlítással
+
+**Dátum:** 2026-11-15
+
+**Kontextus.** A Medusa-vetítő ütemező esedékessége időbélyeg-alapú
+(`decideProjectionDue`): egy termék akkor esedékes, ha a bemeneti sorainak
+legkésőbbi módosítása újabb az utolsó vetítésénél. Ami innen kimarad, az a
+bolt oldalán álló rossz érték: egy korábbi hibás írás vagy kézi átírás addig
+marad, amíg az OS-sor véletlenül meg nem mozdul. Mérve 2026-11-15-én a teszt
+Medusán: hat termék leírásában négy kérdőjeles futás (elveszett emoji) állt
+2026-10-07 óta, miközben a stage OS leírása mind a 13 érintett SKU-n tiszta
+volt (0 kérdőjel); egy kézi vetítés a hat azonosítóra mind a hatot kijavította
+(a mérés 22:45-kor: 0 futás az olvasott 1500 termék között).
+
+**Döntés.** Új esedékességi forrás (`refresh`), a körben utolsó: körönként
+legfeljebb R (alap 5, 1..50) olyan termék kerül a lista végére, amely nem
+esedékes, aktív, webshopos, nem kizárt, kötött és már vetített, a
+legrégebben vetítettek közül (`lastSyncedAt` növekvő). Az esedékes termék
+elsőbbséget élvez, a forgás csak a maradék keretet tölti. A kapcsoló
+(`MEDUSA_PROJECTION_REFRESH_ENABLED=true`) alapból KI; a jelentésben külön
+szám (`candidates.refresh`, `taken.refresh`). Egy termék, amelynek a kötés
+időbélyege a kiválasztás után sem lép (megállt vetítés), a sor végére kerül,
+hogy ne szorítsa ki a többit.
+
+**Elvetett változat: elvárt állapot összehasonlítása a bolt olvasásával.** Az
+elvárt leírást a futtató (`medusa-projection.runner.ts`) állítja össze a
+termékből (régi-bolt linkek átírása, termékismeret felülírás, összefűzés).
+Egy olvasó-összehasonlító ennek az összeszerelésnek a MÁSOLATA lenne, tehát
+eltérne tőle, és épp azt a hibát keltené, amit észlelni akar. A forgás ezt
+megkerüli: nem számol elvárt állapotot, hanem újravetít, és az újravetítés
+ugyanaz a kód, ami a rendes körben fut.
+
+**Következmények.** Körönként R idempotens írás a boltba (a katalógus
+~1900 termék: R=5 és 30 perces kör mellett kb. 8 nap alatt körbeér, ha egyéb
+esedékes nincs). Ha a forgás be van kapcsolva, a kör már nem lesz `SKIPPED`
+egészséges állapotban: a `SKIPPED` mostantól azt jelenti, hogy a forgás is
+üres. Az éles boltnál bekapcsolni KÜLÖN döntés, és az Balázsé; a kapcsoló
+ott kikapcsolva marad. Az eltérés-olvasó egy későbbi kártya, ha a forgás
+drága volna.
