@@ -2112,7 +2112,7 @@ describe("BillingDocumentEditor", () => {
       finalInvoiceNotice: {
         code: "MULTIPLE_ADVANCES",
         message:
-          "Az ajánlatnak több előleg-mérföldköve van díjbekérővel, ezért a végszámla tételei üresen indultak.",
+          "Az ajánlatnak több előleg-mérföldköve van díjbekérővel. A végszámlára csak a még nem kiszámlázott rész kerüljön.",
       },
     });
     render(<BillingDocumentEditor documentId="fin-2" />);
@@ -2120,7 +2120,7 @@ describe("BillingDocumentEditor", () => {
       await screen.findByText("Több előleg-mérföldkő az ajánlaton"),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/ezért a végszámla tételei üresen indultak/),
+      screen.getByText(/csak a még nem kiszámlázott rész kerüljön/),
     ).toBeInTheDocument();
     expect(screen.queryByText(/A tételek a TELJES ellenérték/)).toBeNull();
     expect(screen.getByText(/E-ELO-1 előleget/)).toBeInTheDocument();

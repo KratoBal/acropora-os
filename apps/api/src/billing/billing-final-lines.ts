@@ -129,7 +129,7 @@ export type FinalLinesSource =
   | { kind: "EMPTY"; reason: "MULTIPLE_ADVANCES" }
   | { kind: "REFUSED"; message: string };
 
-/** A végszámla-vázlat üres tételeinek magyarázata a felületnek (kártya 02fc4b7f): csak a több előleg-mérföldköves esetben van. */
+/** A végszámla-vázlat figyelmeztetése a felületnek (kártya 02fc4b7f): csak a több előleg-mérföldköves esetben van; a szöveg a tényt és a teendőt mondja, nem a tételek állapotát. */
 export function finalInvoiceNoticeOf(
   source: FinalLinesSource,
 ): BillingDocumentFinalInvoiceNotice | null {
@@ -137,7 +137,7 @@ export function finalInvoiceNoticeOf(
   return {
     code: "MULTIPLE_ADVANCES",
     message:
-      "Az ajánlatnak több előleg-mérföldköve van díjbekérővel, ezért a végszámla tételei üresen indultak. A végszámlára csak a még nem kiszámlázott rész kerüljön: a Számlázz.hu ennél az előlegnél csak ezt az egyet vonja le, és az ajánlat teljes tételeivel a többi előleg része kétszer lenne kiszámlázva.",
+      "Az ajánlatnak több előleg-mérföldköve van díjbekérővel. A végszámlára csak a még nem kiszámlázott rész kerüljön: a Számlázz.hu ennél az előlegnél csak ezt az egyet vonja le, és az ajánlat teljes tételeivel a többi előleg része kétszer lenne kiszámlázva.",
   };
 }
 
