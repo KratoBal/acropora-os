@@ -188,7 +188,11 @@ describe("Ticket mailbox intake store", { skip: gate.mode === "skip" }, () => {
   });
 
   it("stores the AI's title, summary and model label on an AI draft, and nothing on an AI-less one", async () => {
-    const m = message("msg-ai");
+    // another address: the counting test below counts the anna address's mail, and this one must not join it
+    const m = message("msg-ai", {
+      from: `ai-${suffix}@example.test`,
+      fromAddress: `ai-${suffix}@example.test`,
+    });
     await repository.record({
       mailbox,
       message: m,
