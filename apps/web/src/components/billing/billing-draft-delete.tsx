@@ -43,7 +43,7 @@ export function BillingDraftDelete({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const confirm = async () => {
+  const deleteNow = async () => {
     setBusy(true);
     setError(null);
     try {
@@ -86,7 +86,7 @@ export function BillingDraftDelete({
         recovery="A törlés nem vonható vissza: ha mégis kell, újra létre kell hozni."
         confirmLabel="Törlöm"
         busy={busy}
-        onConfirm={() => void confirm()}
+        onConfirm={() => void deleteNow()}
         onCancel={() => setOpen(false)}
       />
     </div>
