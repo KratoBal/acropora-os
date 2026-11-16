@@ -6,6 +6,14 @@ export type ServiceDraftStatus = "PENDING" | "ACCEPTED" | "REJECTED";
  */
 export type ServiceDraftFilterState =
   "UNFILTERED" | "PASSED" | "UNCERTAIN" | "FILTERED" | "PROMOTED";
+/**
+ * Hogyan került a vázlat a listára (kártya ec7b947b): RULE_DRAFT a szabályalapú
+ * (Cápasuli) feldolgozó vázlata, AI_DRAFT az AI töltötte ki, AI_UNAVAILABLE az AI
+ * nem válaszolt (a levél vázlat nélkül látszik), WATCH_OFF ismert felhasználó
+ * kikapcsolt figyeléssel, UNKNOWN_SENDER nem felhasználó vagy elbukott feladó-hitelesítés.
+ */
+export type ServiceDraftIntakeState =
+  "RULE_DRAFT" | "AI_DRAFT" | "AI_UNAVAILABLE" | "WATCH_OFF" | "UNKNOWN_SENDER";
 /** A Jev három osztálya (`CAPASULI_ITEM_CLASSES`). */
 export type ServiceDraftJevClass =
   "OUR_TECHNICAL_FAULT" | "NOT_OURS" | "NOT_A_FAULT";
@@ -29,6 +37,7 @@ export interface ServiceDraftItem {
     sizeBytes: number;
   }>;
   filterState: ServiceDraftFilterState;
+  intakeState: ServiceDraftIntakeState;
   jevClass: string | null;
   jevConfidence: number | null;
   occurrence: number;

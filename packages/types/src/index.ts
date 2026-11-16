@@ -1554,6 +1554,7 @@ export type {
   ServiceDraftItem,
   ServiceDraftListResponse,
   ServiceDraftFilterState,
+  ServiceDraftIntakeState,
   ServiceDraftFilteredItem,
   ServiceDraftJevClass,
   ServiceDraftStatus,
