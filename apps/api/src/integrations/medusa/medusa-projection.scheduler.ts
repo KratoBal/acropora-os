@@ -309,6 +309,14 @@ export type ProjectionRoundStatus = {
      */
     priceFailures: Record<string, number> | null;
     /**
+     * a termek-vetites MEGALLT termekei okfajtankent (2026-11-16, acrobot 53685): a stage naploja a flottanak nem
+     * olvashato, a FAILED kor oka (a futtato minden megallt termekre `failed`-et noveli, es a kilepesi kod 1) pedig csak
+     * ott allt. Csak a MEGALLT sor zarojeles okanak kodja (`no-sku`, `ambiguous` ...), `[a-z0-9-]`-re szurve, termek-azonosito
+     * es reszlet nelkul. Egy megallt termek a koteset nem leptetni, tehat minden korben esedekes marad: ebbol latszik, hogy
+     * ugyanazok foglaljak-e a keretet. null = a korben nem futott termek-vetites.
+     */
+    stopped: Record<string, number> | null;
+    /**
      * a kor `ambiguous-price` kudarcainak utkozo forint sorai alakonkent (550b80d1), azonosito nelkul: arlistas,
      * szabalyos, mennyisegi, sima, vagy a valasz nem hozta a jelet (`unknown`). null = nem volt ketertelmu ar.
      */
@@ -348,6 +356,21 @@ export type RoundStepCounts = {
 };
 
 type KorAllapot = NonNullable<ProjectionRoundStatus["lastRound"]>;
+
+/**
+ * A MEGALLT SOROK SZAMLALASA (acrobot 53685). A futtato minden megallt termekre egy `<azonosito>: MEGÁLLT (<ok>) <reszlet>`
+ * sort ir a hibakimenetre; innen CSAK az ok kodja kerul a szamlaloba: kisbetusre es `[a-z0-9-]`-re szurve (egy szabad szoveg
+ * nem lehet kulcs), ures marad `unknown`. Az azonositot es a reszletet nem olvassa. Egy hivasban tobb sor is johet.
+ */
+export function countStoppedLines(
+  text: string,
+  into: Record<string, number>,
+): void {
+  for (const m of text.matchAll(/: MEGÁLLT \(([^)\n]{0,60})\)/g)) {
+    const kod = m[1]!.toLowerCase().replace(/[^a-z0-9-]/g, "") || "unknown";
+    into[kod] = (Object.hasOwn(into, kod) ? into[kod]! : 0) + 1;
+  }
+}
 
 /**
  * A NAPLO IS PARAMETER, UGYANABBOL AZ OKBOL, MINT AZ ADATBAZIS ES A FUTTATO:
@@ -593,6 +616,7 @@ export class MedusaProjectionScheduler
             candidates: kor.candidates && { ...kor.candidates },
             taken: kor.taken && { ...kor.taken },
             priceFailures: kor.priceFailures && { ...kor.priceFailures },
+            stopped: kor.stopped && { ...kor.stopped },
             priceConflictRows: kor.priceConflictRows && {
               ...kor.priceConflictRows,
             },
@@ -632,6 +656,7 @@ export class MedusaProjectionScheduler
       priceRetry: null,
       priceRetryDropped: null,
       priceFailures: null,
+      stopped: null,
       priceConflictRows: null,
       steps: { leftoverKind: null, arrivals: null },
     };
@@ -745,8 +770,23 @@ export class MedusaProjectionScheduler
       stdout: (value: string) => this.logNemUres(value, "log"),
       stderr: (value: string) => this.logNemUres(value, "warn"),
     };
+    /*
+      A MEGALLT SOROKAT CSAK A TERMEK-VETITES KIMENETE SZAMOLJA (barracuda, #2624, blokkolo): az ar-futtato (lent) ugyanezt a
+      `kimenet`-et kapja, es ugyanilyen alaku `<cikkszam>: MEGÁLLT (<ok>)` sort ir (`ambiguous-price`, `own-price-missing`); az a
+      `priceFailures`-ben mar szerepel, a `stopped` pedig a TERMEK-vetites megallt termekeit mondja. A szamolo ezert a termek-
+      vetites SAJAT kimenet-objektumara kerul, nem a kozosre.
+    */
+    const termekKimenet = {
+      ...kimenet,
+      // a megallt termekek okfajtankent (a sor tovabbra is a naploba megy, valtozatlanul)
+      stderr: (value: string) => {
+        if (allapot.stopped) countStoppedLines(value, allapot.stopped);
+        kimenet.stderr(value);
+      },
+    };
+    if (esedekes.length) allapot.stopped = {};
     const kod = esedekes.length
-      ? await this.runProjection(esedekes, kimenet)
+      ? await this.runProjection(esedekes, termekKimenet)
       : 0;
     if (arUjra.length)
       this.naplo.log(
