@@ -12,3 +12,19 @@ ALTER TABLE "ServiceTicketDraft" ADD COLUMN "senderUserId" TEXT;
 
 -- CreateIndex
 CREATE INDEX "ServiceDraftMail_source_fromAddress_createdAt_idx" ON "ServiceDraftMail"("source", "fromAddress", "createdAt");
+
+-- CreateTable
+CREATE TABLE "ServiceDraftMailFailure" (
+    "id" TEXT NOT NULL,
+    "mailbox" TEXT NOT NULL,
+    "messageId" TEXT NOT NULL,
+    "attempts" INTEGER NOT NULL DEFAULT 1,
+    "lastCode" VARCHAR(60) NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "ServiceDraftMailFailure_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "ServiceDraftMailFailure_mailbox_messageId_key" ON "ServiceDraftMailFailure"("mailbox", "messageId");

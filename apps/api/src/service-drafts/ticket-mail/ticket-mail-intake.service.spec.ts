@@ -7,6 +7,7 @@ import { ConflictException, ForbiddenException } from "@nestjs/common";
 import type { AuthenticatedUser } from "@acropora/types";
 
 import type { TicketMailMessage } from "./ticket-mail-gmail.client.js";
+import { TicketMailGmailError } from "./ticket-mail-gmail.client.js";
 import { TicketMailIntakeService } from "./ticket-mail-intake.service.js";
 import type { ResolvedSender } from "./ticket-mail-intake.js";
 
@@ -65,24 +66,49 @@ interface Recorded {
   outcome: { kind: string; [key: string]: unknown };
 }
 
+/** The persistent side of the fake store (the database's rows): what a restarted service still sees. */
+function newStoreState() {
+  return {
+    attempts: new Map<string, number>(),
+    sealed: [] as string[],
+    seen: new Set<string>(),
+  };
+}
+
 function rig(options: {
   ids: string[];
   messages: Record<string, TicketMailMessage | Error>;
   seen?: string[];
   senders?: Record<string, ResolvedSender | null>;
   recent?: number;
+  recentTotal?: number;
+  /** a store that survives a service restart: pass the one a first rig made */
+  shared?: ReturnType<typeof newStoreState>;
 }) {
   const recorded: Recorded[] = [];
   const lookups: string[] = [];
   const fetched: string[] = [];
+  const state = options.shared ?? newStoreState();
+  for (const id of options.seen ?? []) state.seen.add(id);
   const store = {
     hasMessage: async (_m: string, id: string) =>
-      (options.seen ?? []).includes(id) ? { id } : null,
+      state.seen.has(id) ? { id } : null,
     resolveSender: async (address: string) => {
       lookups.push(address);
       return options.senders?.[address] ?? null;
     },
     unknownCountSince: async () => options.recent ?? 0,
+    unknownTotalSince: async () => options.recentTotal ?? 0,
+    noteFailure: async (_m: string, id: string) => {
+      const attempts = (state.attempts.get(id) ?? 0) + 1;
+      state.attempts.set(id, attempts);
+      return attempts;
+    },
+    sealFailed: async (_m: string, id: string) => {
+      state.sealed.push(id);
+      state.seen.add(id);
+      state.attempts.delete(id);
+    },
     record: async (input: Recorded) => {
       recorded.push(input);
       return { recorded: true, drafts: input.outcome.kind === "DRAFT" ? 1 : 0 };
@@ -98,7 +124,7 @@ function rig(options: {
     },
   };
   const service = new TicketMailIntakeService(store as never, gmail as never);
-  return { service, recorded, lookups, fetched };
+  return { service, recorded, lookups, fetched, state };
 }
 
 const colleague = (
@@ -329,6 +355,137 @@ describe("TicketMailIntakeService.run", () => {
     await assert.rejects(service.run(), ConflictException);
     release();
     await first;
+  });
+});
+
+describe("TicketMailIntakeService.run: the poisoned message guard", () => {
+  const poison = () => new Error("could not store the message");
+
+  it("a message that fails every run is sealed after the allowed attempts, and then the good newer message gets its turn (barracuda, #2646)", async () => {
+    process.env.TICKET_MAIL_MAX_PER_RUN = "2";
+    // Gmail lists newest first: good is the newest; bad1 and bad2 are older and ALWAYS fail
+    const options = {
+      ids: ["good", "bad2", "bad1"],
+      messages: { good: mail("good"), bad1: poison(), bad2: poison() },
+      senders: { "anna@acropora.hu": colleague() },
+    };
+    const first = rig(options);
+    const state = first.state;
+    // runs 1 and 2: the two bad ones take both places, nothing else is read, nothing is sealed yet
+    for (let run = 1; run <= 2; run++) {
+      const summary = await rig({ ...options, shared: state }).service.run();
+      assert.equal(summary.failed, 2, `run ${run}`);
+      assert.equal(summary.sealed, 0, `run ${run}`);
+      assert.equal(summary.drafts, 0, `run ${run}`);
+    }
+    // run 3: the third failure seals both
+    const third = rig({ ...options, shared: state });
+    const sealedRun = await third.service.run();
+    assert.equal(sealedRun.sealed, 2);
+    assert.deepEqual([...state.sealed].sort(), ["bad1", "bad2"]);
+    assert.equal(third.fetched.includes("good"), false);
+    // run 4: the places are free, the good message becomes a draft
+    const fourth = rig({ ...options, shared: state });
+    const summary = await fourth.service.run();
+    assert.equal(summary.drafts, 1);
+    assert.deepEqual(fourth.fetched, ["good"]);
+  });
+
+  it("the failure count is the store's, so a restart (a new service on the same store) does not reset it", async () => {
+    const options = { ids: ["bad"], messages: { bad: poison() } };
+    const state = newStoreState();
+    await rig({ ...options, shared: state }).service.run();
+    await rig({ ...options, shared: state }).service.run();
+    assert.equal(state.attempts.get("bad"), 2);
+    await rig({ ...options, shared: state }).service.run();
+    assert.deepEqual(state.sealed, ["bad"]);
+  });
+
+  it("the number of attempts is configurable", async () => {
+    process.env.TICKET_MAIL_MAX_ATTEMPTS = "1";
+    const state = newStoreState();
+    const summary = await rig({
+      ids: ["bad"],
+      messages: { bad: poison() },
+      shared: state,
+    }).service.run();
+    assert.equal(summary.sealed, 1);
+  });
+
+  it("CONTROL: a failure of the mailbox connection ends the run and counts against NO message (one outage must not seal the mailbox)", async () => {
+    for (const code of [
+      "TICKET_MAIL_GMAIL_AUTH_FAILED",
+      "TICKET_MAIL_GMAIL_RATE_LIMITED",
+      "TICKET_MAIL_GMAIL_TIMEOUT",
+      "TICKET_MAIL_GMAIL_NETWORK_FAILED",
+      "TICKET_MAIL_GMAIL_HTTP_503",
+    ]) {
+      const state = newStoreState();
+      const { service } = rig({
+        ids: ["a"],
+        messages: { a: new TicketMailGmailError(code) },
+        shared: state,
+      });
+      await assert.rejects(
+        service.run(),
+        (error: Error) => error.message === code,
+        code,
+      );
+      assert.equal(state.attempts.size, 0, code);
+      assert.equal(service.status(admin).lastError, code);
+    }
+  });
+
+  it("a 4xx Gmail answer for one message belongs to that message and is counted", async () => {
+    const state = newStoreState();
+    const { service } = rig({
+      ids: ["gone"],
+      messages: {
+        gone: new TicketMailGmailError("TICKET_MAIL_GMAIL_HTTP_404"),
+      },
+      shared: state,
+    });
+    const summary = await service.run();
+    assert.equal(summary.failed, 1);
+    assert.equal(state.attempts.get("gone"), 1);
+  });
+});
+
+describe("TicketMailIntakeService.run: the unknown senders' total guard", () => {
+  const outsider = (id: string, address: string) =>
+    mail(id, {
+      from: address,
+      fromAddress: address,
+      headers: {
+        autoSubmitted: null,
+        precedence: null,
+        listId: null,
+        authenticationResults: [],
+      },
+    });
+
+  it("unknown senders over the mailbox-wide hourly total are capped, whatever their addresses (rotating addresses pass the per-address guard)", async () => {
+    process.env.TICKET_MAIL_UNKNOWN_TOTAL_PER_HOUR = "3";
+    const { service, recorded } = rig({
+      ids: ["a"],
+      messages: { a: outsider("a", "fresh@masik.hu") },
+      recent: 0,
+      recentTotal: 3,
+    });
+    const summary = await service.run();
+    assert.equal(summary.capped, 1);
+    assert.equal(recorded[0]!.outcome.kind, "CAPPED");
+  });
+
+  it("below the total the unknown sender is listed", async () => {
+    process.env.TICKET_MAIL_UNKNOWN_TOTAL_PER_HOUR = "3";
+    const { service } = rig({
+      ids: ["a"],
+      messages: { a: outsider("a", "fresh@masik.hu") },
+      recent: 0,
+      recentTotal: 2,
+    });
+    assert.equal((await service.run()).drafts, 1);
   });
 });
 
