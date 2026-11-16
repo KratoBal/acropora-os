@@ -32,6 +32,7 @@ describe("Ticket mailbox intake store", { skip: gate.mode === "skip" }, () => {
   const mailbox = `ticket-test-${suffix}@example.test`;
   let customerId: string;
   let departments: string[] = [];
+  let inactivePlaceId = "";
   const userIds: string[] = [];
 
   const message = (
@@ -153,13 +154,20 @@ describe("Ticket mailbox intake store", { skip: gate.mode === "skip" }, () => {
       },
       content: draftContentOf(m),
     };
-    assert.deepEqual(await repository.record(input), {
-      recorded: true,
-      drafts: 1,
-    });
+    // the result also names the mail row (the push's target); a message already recorded names none
+    const filed = await repository.record(input);
+    assert.deepEqual(
+      { ...filed, mailId: typeof filed.mailId },
+      {
+        recorded: true,
+        drafts: 1,
+        mailId: "string",
+      },
+    );
     assert.deepEqual(await repository.record(input), {
       recorded: false,
       drafts: 0,
+      mailId: null,
     });
     assert.ok(await repository.hasMessage(mailbox, "msg-draft"));
     const drafts = await prisma.serviceTicketDraft.findMany({
@@ -366,7 +374,7 @@ describe("Ticket mailbox intake store", { skip: gate.mode === "skip" }, () => {
   });
 
   it("CONTROL: a missing, unknown or inactive place is refused and nothing is created", async () => {
-    const inactiveDepartment = (
+    inactivePlaceId = (
       await prisma.worksheetDepartment.create({
         data: { customerId, code: "TX", name: "Inaktív hely", isActive: false },
       })
@@ -375,7 +383,7 @@ describe("Ticket mailbox intake store", { skip: gate.mode === "skip" }, () => {
       userId: null,
       name: null,
     });
-    for (const bad of [undefined, "no-such-department", inactiveDepartment])
+    for (const bad of [undefined, "no-such-department", inactivePlaceId])
       await assert.rejects(
         drafts.decide(draft.id, userIds[4]!, "accept", bad),
         (error: unknown) => error instanceof BadRequestException,
@@ -393,6 +401,31 @@ describe("Ticket mailbox intake store", { skip: gate.mode === "skip" }, () => {
         where: { clientOperationId: `service-draft:${draft.id}` },
       }),
       0,
+    );
+  });
+
+  it("lists the drafts by source with the sender address and the dropped count, and the places with the customer's name", async () => {
+    const ticketOnly = await drafts.list("ACCEPTED", undefined, "TICKET_MAIL");
+    const mine = ticketOnly.items.filter((item) => item.mailbox === mailbox);
+    assert.ok(mine.length >= 1);
+    assert.ok(mine.every((item) => item.source === "TICKET_MAIL"));
+    assert.equal(mine[0]!.mail.fromAddress !== null, true);
+    assert.equal(typeof mine[0]!.mail.droppedAttachments, "number");
+    const none = await drafts.list(
+      "ACCEPTED",
+      undefined,
+      "CAPASULI_DAILY_REPORT",
+    );
+    assert.equal(
+      none.items.filter((item) => item.mailbox === mailbox).length,
+      0,
+    );
+    const places = await drafts.places();
+    const hit = places.find((place) => place.id === departments[0]);
+    assert.equal(hit?.customerName, "Ticket intake test");
+    assert.equal(
+      places.some((place) => place.id === inactivePlaceId),
+      false,
     );
   });
 

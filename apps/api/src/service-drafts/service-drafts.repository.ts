@@ -182,17 +182,31 @@ export class ServiceDraftsRepository {
    * listából kimaradnak, és a `filtered()` adja őket a "Kiszűrve" szakasznak.
    * Az elfogadott és az elutasított fül változatlan.
    */
-  async list(status: "PENDING" | "ACCEPTED" | "REJECTED", cursor?: string) {
+  async list(
+    status: "PENDING" | "ACCEPTED" | "REJECTED",
+    cursor?: string,
+    source?: "TICKET_MAIL" | "CAPASULI_DAILY_REPORT",
+  ) {
     const rows = await prisma.serviceTicketDraft.findMany({
       where: {
         status,
+        // A FORRAS SZERINTI SZURES (kartya ec7b947b, S4): a ticket@ vazlat ranezesre mas es kulon is listazhato
+        ...(source ? { source } : {}),
         ...(status === "PENDING" ? { filterState: { not: "FILTERED" } } : {}),
       },
       orderBy: [{ reportDate: "desc" }, { id: "desc" }],
       take: 51,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       include: {
-        mail: { select: { originalText: true, subject: true, mailbox: true } },
+        mail: {
+          select: {
+            originalText: true,
+            subject: true,
+            mailbox: true,
+            fromAddress: true,
+            droppedAttachments: true,
+          },
+        },
         attachments: {
           select: {
             id: true,
@@ -506,6 +520,29 @@ export class ServiceDraftsRepository {
       title: draft.title,
       openedById: openerId,
     };
+  }
+  /**
+   * A TICKET@ VAZLAT ELFOGADASANAK HELYSZIN-KESZLETE (kartya ec7b947b, S4): minden aktiv helyszin aktiv, nem archivalt ugyfelnel, az ugyfel nevevel,
+   * ugyfel es helyszin szerint rendezve. A Capasuli vazlat a sajat gyokeregyseg-fajat kapja (`locations`), ez attol fuggetlen.
+   */
+  async places() {
+    const rows = await prisma.worksheetDepartment.findMany({
+      where: { isActive: true, customer: { isActive: true, archivedAt: null } },
+      select: {
+        id: true,
+        name: true,
+        customerId: true,
+        customer: { select: { displayName: true } },
+      },
+      orderBy: [{ customer: { displayName: "asc" } }, { name: "asc" }],
+      take: 2000,
+    });
+    return rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      customerId: row.customerId,
+      customerName: row.customer.displayName,
+    }));
   }
   attachment(id: string) {
     return prisma.serviceDraftAttachment.findUnique({ where: { id } });

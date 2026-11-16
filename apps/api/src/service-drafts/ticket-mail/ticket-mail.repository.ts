@@ -21,6 +21,8 @@ export interface RecordedMail {
   /** false: the message was already recorded (a second run, or two at once). */
   recorded: boolean;
   drafts: number;
+  /** The `ServiceDraftMail` row of a message recorded now (the push's target); null when it was already recorded. */
+  mailId: string | null;
 }
 
 /**
@@ -196,7 +198,7 @@ export class TicketMailRepository {
           },
           select: { id: true },
         });
-        if (previous) return { recorded: false, drafts: 0 };
+        if (previous) return { recorded: false, drafts: 0, mailId: null };
         const mail = await tx.serviceDraftMail.create({
           data: {
             source: TICKET_MAIL_SOURCE,
@@ -220,7 +222,8 @@ export class TicketMailRepository {
             droppedAttachments: message.droppedAttachments.length,
           },
         });
-        if (outcome.kind !== "DRAFT") return { recorded: true, drafts: 0 };
+        if (outcome.kind !== "DRAFT")
+          return { recorded: true, drafts: 0, mailId: mail.id };
         const unique = new Map(
           message.attachments.map((a) => [
             createHash("sha256").update(a.buffer).digest("hex"),
@@ -251,7 +254,7 @@ export class TicketMailRepository {
             },
           },
         });
-        return { recorded: true, drafts: 1 };
+        return { recorded: true, drafts: 1, mailId: mail.id };
       },
       { timeout: 30_000 },
     );

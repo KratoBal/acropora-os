@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 
+import type { ServiceDraftIntakeState } from "@acropora/types";
+
 import { budapestDayKey } from "../../dashboard/budapest-day.js";
 import {
   cleanMailBody,
@@ -86,6 +88,14 @@ export function decideIntake(input: {
     reporterPersonName: null,
     proposedDepartmentId: null,
   };
+}
+
+/**
+ * WHICH DRAFTS ANNOUNCE THEMSELVES WITH A PUSH (Balázs, 2026-09-18): only the ones of a SWITCHED-ON colleague, with or without the AI's answer. A
+ * switched-off or unknown sender's mail "csak egy felületen jelzi" (the list), and a mail that is no draft sends nothing.
+ */
+export function announcesArrival(state: ServiceDraftIntakeState): boolean {
+  return state === "AI_DRAFT" || state === "AI_UNAVAILABLE";
 }
 
 /**

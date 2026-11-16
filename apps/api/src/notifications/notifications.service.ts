@@ -651,6 +651,30 @@ export class NotificationsService {
   }
 
   /**
+   * A TICKET@ POSTAFIOKBA ERKEZETT, BEKAPCSOLT FELADOTOL VALO LEVELEK (kartya ec7b947b, S4a): ugyanaz a push, mint a Capasuli piszkozatoke
+   * (`deliverServiceDraftsArrived`): a celpont a Piszkozatok lista, az azonosito a levele, a naplo-bejegyzes ugyanaz a fajta; csak a cim es a
+   * szoveg mas, es a hiba-sor. KIKAPCSOLT vagy ISMERETLEN felado leveleire nem megy push ("csak egy feluleten jelzi", Balazs 2026-09-18).
+   */
+  deliverTicketMailDraftsArrived(notice: {
+    mailId: string;
+    userIds: readonly string[];
+    count: number;
+  }) {
+    return this.deliver({
+      userIds: notice.userIds,
+      title: "Új hibabejelentés a ticket@ címről",
+      body: `${notice.count} bejelentés vár elbírálásra a Szerviz / Piszkozatok oldalon.`,
+      data: { targetType: "serviceDrafts", targetId: notice.mailId },
+      record: (attempts) =>
+        this.log.recordServiceDraftsArrived({
+          mailId: notice.mailId,
+          attempts,
+        }),
+      failureLine: () => "Ticket levél piszkozat értesítése sikertelen.",
+    });
+  }
+
+  /**
    * ÚJ ÜZENET (Üzenetek modul, kártya 51d7aba0). A push már az 1. fázisban megy
    * (acrobot döntése, 26174). A célpont a beszélgetés: egy régebbi telefon-köteg
    * a `conversation` típust nem ismeri, és ilyenkor nem navigál sehova -- nincs
