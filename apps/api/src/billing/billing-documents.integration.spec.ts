@@ -23,6 +23,23 @@ const gate = integrationDatabaseGate(process.env);
 const PREFIX = "SZAMLVAZ";
 
 async function removeLeftovers() {
+  // az ajánlat-fixtúra (a törlés kártya 6a75f15c mérföldkő-tesztje) előbb: a mérföldkő a díjbekérőre mutat, `Restrict`-tel
+  await prisma.quotePaymentMilestone.deleteMany({
+    where: { version: { quote: { quoteNumber: { startsWith: PREFIX } } } },
+  });
+  await prisma.quoteVersion.deleteMany({
+    where: { quote: { quoteNumber: { startsWith: PREFIX } } },
+  });
+  await prisma.quote.deleteMany({
+    where: { quoteNumber: { startsWith: PREFIX } },
+  });
+  const actors = await prisma.user.findMany({
+    where: { email: { startsWith: PREFIX.toLowerCase() } },
+    select: { id: true },
+  });
+  await prisma.auditLog.deleteMany({
+    where: { userId: { in: actors.map((actor) => actor.id) } },
+  });
   await prisma.invoice.deleteMany({
     where: { customer: { customerNumber: { startsWith: PREFIX } } },
   });
@@ -111,6 +128,12 @@ describe("a számlázási vázlat tárolása", { skip: gate.mode === "skip" }, (
           where: { partnerName: { startsWith: PREFIX } },
         }),
       },
+      {
+        nev: "a suite ajánlatai bent maradtak",
+        darab: await prisma.quote.count({
+          where: { quoteNumber: { startsWith: PREFIX } },
+        }),
+      },
     ]);
   });
 
@@ -181,6 +204,158 @@ describe("a számlázási vázlat tárolása", { skip: gate.mode === "skip" }, (
         dto({ expectedUpdatedAt: issued.updatedAt.toISOString() }),
       ),
       (error: Error) => error.constructor.name === "ConflictException",
+    );
+  });
+  /*
+    A VÁZLAT TÖRLÉSE (kártya 6a75f15c, Balázs kérdése): a feltételes írás, a kapcsolatok rendezése és a mérföldkő idegen kulcsa
+    csak valódi adatbázison mérhető. MI PIROSÍT: ha a törölt vázlat vagy a tételei megmaradnak; ha a kiállított, sorszámos, hivatkozott
+    vagy közben mentett vázlat törölhető; ha a mérföldkő lóg (a `Restrict` miatt a törlés el sem indul, vagy a mérföldkő a törölt sorra mutat);
+    ha az előleg-vázlat azonosítója a törlés után nem szabadul fel (a második "előleg készítése" nem hozna újat).
+  */
+  it("a vázlat és a tételei törlődnek, a törlésről auditsor marad", async () => {
+    const created = await service.create(dto({ id: randomUUID() }), user);
+    assert.deepEqual(
+      await service.deleteDraft(created.id, created.updatedAt, user),
+      { deleted: true },
+    );
+    assert.equal(await prisma.invoice.count({ where: { id: created.id } }), 0);
+    assert.equal(
+      await prisma.invoiceLine.count({ where: { invoiceId: created.id } }),
+      0,
+    );
+    const audit = await prisma.auditLog.findFirst({
+      where: { action: "billing.draft_deleted", entityId: created.id },
+      select: { userId: true },
+    });
+    assert.equal(audit?.userId, user.id);
+  });
+
+  it("a kiállított, a sorszámos és a közben mentett vázlat nem törölhető, és megmarad", async () => {
+    const conflict = (error: Error) =>
+      error.constructor.name === "ConflictException";
+    const issued = await service.create(dto({ id: randomUUID() }), user);
+    const after = await prisma.invoice.update({
+      where: { id: issued.id },
+      data: { status: "ISSUED", invoiceNumber: `${PREFIX}-DEL-1` },
+      select: { updatedAt: true },
+    });
+    await assert.rejects(
+      service.deleteDraft(issued.id, after.updatedAt.toISOString(), user),
+      conflict,
+    );
+
+    const numbered = await service.create(dto({ id: randomUUID() }), user);
+    const numberedAfter = await prisma.invoice.update({
+      where: { id: numbered.id },
+      data: { invoiceNumber: `${PREFIX}-DEL-2` },
+      select: { updatedAt: true },
+    });
+    await assert.rejects(
+      service.deleteDraft(
+        numbered.id,
+        numberedAfter.updatedAt.toISOString(),
+        user,
+      ),
+      conflict,
+    );
+
+    const saved = await service.create(dto({ id: randomUUID() }), user);
+    await service.update(saved.id, dto({ expectedUpdatedAt: saved.updatedAt }));
+    await assert.rejects(
+      service.deleteDraft(saved.id, saved.updatedAt, user),
+      conflict,
+    );
+
+    for (const id of [issued.id, numbered.id, saved.id])
+      assert.equal(await prisma.invoice.count({ where: { id } }), 1);
+  });
+
+  it("a másik bizonylat által hivatkozott vázlat nem törölhető", async () => {
+    const proforma = await service.create(
+      dto({ id: randomUUID(), documentType: "PROFORMA", invoiceFormat: null }),
+      user,
+    );
+    const child = await service.create(dto({ id: randomUUID() }), user);
+    await prisma.invoice.update({
+      where: { id: child.id },
+      data: { proformaInvoiceId: proforma.id },
+    });
+    await assert.rejects(
+      service.deleteDraft(proforma.id, proforma.updatedAt, user),
+      (error: Error) => error.constructor.name === "ConflictException",
+    );
+    assert.equal(await prisma.invoice.count({ where: { id: proforma.id } }), 1);
+    // és a hivatkozás nem szakadt el
+    const stored = await prisma.invoice.findUniqueOrThrow({
+      where: { id: child.id },
+      select: { proformaInvoiceId: true },
+    });
+    assert.equal(stored.proformaInvoiceId, proforma.id);
+  });
+
+  it("az előleg-vázlat törölhető, és ugyanabból a díjbekérőből újra készíthető", async () => {
+    const proforma = await service.create(
+      dto({ id: randomUUID(), documentType: "PROFORMA", invoiceFormat: null }),
+      user,
+    );
+    await prisma.invoice.update({
+      where: { id: proforma.id },
+      data: { status: "ISSUED", invoiceNumber: `${PREFIX}-DEL-P` },
+    });
+    const first = await service.advanceFromProforma(proforma.id, user);
+    await service.deleteDraft(first.id, first.updatedAt, user);
+    assert.equal(await prisma.invoice.count({ where: { id: first.id } }), 0);
+    const second = await service.advanceFromProforma(proforma.id, user);
+    assert.equal(second.id, first.id);
+    assert.equal(second.status, "DRAFT");
+    assert.equal(await prisma.invoice.count({ where: { id: second.id } }), 1);
+  });
+
+  it("a mérföldkő díjbekérőjének törlése felszabadítja a mérföldkövet, nem hagyja lógni", async () => {
+    const proforma = await service.create(
+      dto({ id: randomUUID(), documentType: "PROFORMA", invoiceFormat: null }),
+      user,
+    );
+    const quote = await prisma.quote.create({
+      data: { quoteNumber: `${PREFIX}-Q1`, title: `${PREFIX} ajánlat` },
+    });
+    const version = await prisma.quoteVersion.create({
+      data: {
+        quoteId: quote.id,
+        versionNumber: 1,
+        status: "PUBLISHED",
+        validUntil: new Date("2099-12-31T00:00:00Z"),
+        priceDisplay: "NET",
+        pdfStorageKey: "v1-test",
+        pdfSha256: "0".repeat(64),
+        pageCount: 1,
+        publishedAt: new Date(),
+      },
+    });
+    const milestone = await prisma.quotePaymentMilestone.create({
+      data: {
+        versionId: version.id,
+        position: 0,
+        label: "Előleg",
+        percent: "60",
+        proformaInvoiceId: proforma.id,
+      },
+    });
+    await service.deleteDraft(proforma.id, proforma.updatedAt, user);
+    assert.equal(await prisma.invoice.count({ where: { id: proforma.id } }), 0);
+    const stored = await prisma.quotePaymentMilestone.findUniqueOrThrow({
+      where: { id: milestone.id },
+      select: { proformaInvoiceId: true },
+    });
+    assert.equal(stored.proformaInvoiceId, null);
+    const audit = await prisma.auditLog.findFirst({
+      where: { action: "billing.draft_deleted", entityId: proforma.id },
+      select: { metadata: true },
+    });
+    assert.equal(
+      (audit?.metadata as { releasedQuoteMilestoneId?: string } | null)
+        ?.releasedQuoteMilestoneId,
+      milestone.id,
     );
   });
 });

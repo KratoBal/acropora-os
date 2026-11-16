@@ -383,6 +383,32 @@ export class BillingDocumentsService {
     return this.detail(id);
   }
 
+  /**
+   * EGY KIMENŐ VÁZLAT TÖRLÉSE (kártya 6a75f15c, Balázs kérdése): a szabály a `draftDeleteRefusal`-ban (csak sorszám nélküli vázlat, amire
+   * nem hivatkozik másik bizonylat), az írás a tárolóban, egy tranzakcióban a kapcsolatok rendezésével. A `expectedUpdatedAt` a legutóbb
+   * betöltött állapot: ha közben mentették, 409, ahogy a mentésnél.
+   */
+  async deleteDraft(
+    id: string,
+    expectedUpdatedAt: string | undefined,
+    user: AuthenticatedUser,
+  ): Promise<{ deleted: true }> {
+    const expected = expectedUpdatedAt ? new Date(expectedUpdatedAt) : null;
+    if (!expected || Number.isNaN(expected.getTime()))
+      throw new BadRequestException(
+        "A törléshez a legutóbb betöltött állapot időbélyege kell.",
+      );
+    const refusal = await this.repository.deleteDraft({
+      id,
+      expectedUpdatedAt: expected,
+      actorUserId: user.id,
+    });
+    if (!refusal) return { deleted: true };
+    if (refusal.code === "NOT_FOUND")
+      throw new NotFoundException(refusal.message);
+    throw new ConflictException(refusal.message);
+  }
+
   async update(
     id: string,
     input: BillingDocumentDraftDto,

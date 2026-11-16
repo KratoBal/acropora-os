@@ -18,6 +18,13 @@ import {
 // the own-row scope lives in one place; re-exported for the existing importers
 export { OWN_ROWS } from "./billing-own-rows.js";
 import { OWN_ROWS } from "./billing-own-rows.js";
+import {
+  draftDeleteRefusal,
+  type DraftDeleteRefusal,
+} from "./billing-draft-delete.js";
+
+/** A törlés tranzakciója közben megváltozott a vázlat: visszagördítés (a hívó `STALE`-t mond). */
+class DraftChangedDuringDelete extends Error {}
 
 /** Mentés csak vázlaton és elutasított kiállításon (#1267 állapotgépe). */
 const EDITABLE = ["DRAFT", "ISSUE_FAILED"] as const;
@@ -392,6 +399,95 @@ export class BillingDocumentsRepository {
         cancelled: true,
       },
     });
+  }
+
+  /**
+   * EGY VÁZLAT TÖRLÉSE (kártya 6a75f15c): a döntés a `draftDeleteRefusal`-é, itt az olvasás és az írás egy tranzakcióban. A sor
+   * KAPCSOLATAI NEM MARADNAK LÓGVA: a mérföldkő, amelynek ez a díjbekérője volt, felszabadul (új díjbekérő készülhet rá; a mérföldkő
+   * hivatkozása `Restrict`, tehát nélküle a törlés el sem indulna), a tételek és a levelezési rekordok vele mennek, és a törlésről
+   * auditnapló-sor készül. Az írás feltételes (állapot, sorszám, `updatedAt`): ha közben mentették vagy kiállítás indult, a tranzakció
+   * visszagördül, és `STALE` a válasz.
+   */
+  async deleteDraft(input: {
+    id: string;
+    expectedUpdatedAt: Date;
+    actorUserId: string;
+  }): Promise<DraftDeleteRefusal | null> {
+    try {
+      return await this.database.$transaction(async (transaction) => {
+        const row = await transaction.invoice.findFirst({
+          where: { id: input.id, ...OWN_ROWS },
+          select: {
+            id: true,
+            status: true,
+            invoiceNumber: true,
+            updatedAt: true,
+            documentType: true,
+            partnerName: true,
+            reference: true,
+            quoteMilestone: { select: { id: true } },
+          },
+        });
+        if (!row)
+          return { code: "NOT_FOUND", message: "A bizonylat nem található." };
+        const referencedBy = await transaction.invoice.count({
+          where: {
+            OR: [
+              { referencedInvoiceId: input.id },
+              { proformaInvoiceId: input.id },
+            ],
+          },
+        });
+        const refusal = draftDeleteRefusal(
+          row,
+          referencedBy,
+          input.expectedUpdatedAt,
+        );
+        if (refusal) return refusal;
+        if (row.quoteMilestone)
+          await transaction.quotePaymentMilestone.update({
+            where: { id: row.quoteMilestone.id },
+            data: { proformaInvoiceId: null },
+          });
+        await transaction.invoiceLine.deleteMany({
+          where: { invoiceId: input.id },
+        });
+        const removed = await transaction.invoice.deleteMany({
+          where: {
+            id: input.id,
+            ...OWN_ROWS,
+            status: "DRAFT",
+            invoiceNumber: null,
+            updatedAt: input.expectedUpdatedAt,
+          },
+        });
+        // közben mentették vagy kiállítás indult: a mérföldkő-felszabadítás és a tételek törlése is visszagördül
+        if (removed.count !== 1) throw new DraftChangedDuringDelete();
+        await transaction.auditLog.create({
+          data: {
+            action: "billing.draft_deleted",
+            entityType: "Invoice",
+            entityId: input.id,
+            userId: input.actorUserId,
+            metadata: {
+              documentType: row.documentType,
+              partnerName: row.partnerName,
+              reference: row.reference,
+              releasedQuoteMilestoneId: row.quoteMilestone?.id ?? null,
+            },
+          },
+        });
+        return null;
+      });
+    } catch (error) {
+      if (error instanceof DraftChangedDuringDelete)
+        return {
+          code: "STALE",
+          message:
+            "A vázlatot időközben más is mentette, vagy a kiállítása elindult. Töltsd újra, és nézd meg, mi változott.",
+        };
+      throw error;
+    }
   }
 
   /**

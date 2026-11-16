@@ -50,6 +50,7 @@ import {
 import { BillingDocumentLineEditor } from "./billing-document-line-editor";
 import { BillingDocumentSummary } from "./billing-document-summary";
 import { BILLING_LIST_PATH } from "./billing-document-table";
+import { BillingDraftDelete, deleteOffered } from "./billing-draft-delete";
 import { BillingDocumentTypeSelector } from "./billing-document-type-selector";
 import {
   billingPreview,
@@ -983,6 +984,20 @@ export function BillingDocumentEditor({
               </>
             }
           />
+          {deleteOffered({
+            documentId,
+            status,
+            savedUpdatedAt: state.savedUpdatedAt,
+            issued: issued !== null,
+            canManage,
+          }) ? (
+            <BillingDraftDelete
+              token={token}
+              id={state.id}
+              updatedAt={state.savedUpdatedAt ?? ""}
+              onDeleted={() => router.replace(BILLING_LIST_PATH)}
+            />
+          ) : null}
         </aside>
       </div>
 

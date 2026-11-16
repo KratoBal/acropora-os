@@ -409,6 +409,17 @@ export const billingDocumentsApi = {
     });
   },
   /**
+   * EGY VÁZLAT TÖRLÉSE (kártya 6a75f15c): csak sorszám nélküli vázlat, amire nem hivatkozik másik bizonylat. Az `expectedUpdatedAt` a
+   * legutóbb betöltött állapot; ha közben mentették, 409 (a szerver mondata az okkal).
+   */
+  deleteDraft(token: string, id: string, expectedUpdatedAt: string) {
+    return apiRequest<{ deleted: true }>(
+      `/billing/documents/${encodeURIComponent(id)}?expectedUpdatedAt=${encodeURIComponent(expectedUpdatedAt)}`,
+      token,
+      { method: "DELETE" },
+    );
+  },
+  /**
    * DÍJBEKÉRŐBŐL ELŐLEGSZÁMLA (számlázási brief, 2. pont, #1670): kitöltött
    * előleg-vázlat, díjbekérőnként egy; a második hívás ugyanazt adja.
    */

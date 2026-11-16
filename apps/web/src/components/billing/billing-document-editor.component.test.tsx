@@ -14,6 +14,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BillingDocumentEditor } from "./billing-document-editor";
+import { BILLING_LIST_PATH } from "./billing-document-table";
 import {
   readPosInvoiceHandoff,
   writePosInvoiceHandoff,
@@ -53,6 +54,7 @@ const api = vi.hoisted(() => ({
   templateDraft: vi.fn(),
   storno: vi.fn(),
   stornoPdf: vi.fn(),
+  deleteDraft: vi.fn(),
 }));
 vi.mock("@/lib/api/billing-documents", () => ({ billingDocumentsApi: api }));
 
@@ -2134,5 +2136,65 @@ describe("BillingDocumentEditor", () => {
       expect(screen.queryByText(/Autokasszája/)).toBeNull();
       view.unmount();
     }
+  });
+  /*
+    A VÁZLAT TÖRLÉSE A SZERKESZTŐBEN (kártya 6a75f15c, Balázs kérdése). MI PIROSÍT: ha a gomb egy betöltött vázlaton hiányzik; ha egy
+    kiállított bizonylaton is megjelenne; ha a megerősítés után a kérés nem a betöltött azonosítóval és időbélyeggel menne; ha siker után
+    nem a bizonylatlistára lépne a lap.
+  */
+  it("a loaded draft can be deleted: the confirmed request carries its id and timestamp, then the list opens", async () => {
+    api.detail.mockReset().mockResolvedValue(
+      detailFrom(
+        {
+          documentType: "INVOICE",
+          invoiceFormat: "PAPER",
+          currency: "HUF",
+          language: "hu",
+          lines: [],
+        },
+        "draft-del",
+      ),
+    );
+    api.deleteDraft.mockReset().mockResolvedValue({ deleted: true });
+    navigation.replace.mockReset();
+    render(<BillingDocumentEditor documentId="draft-del" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Vázlat törlése" }),
+    );
+    expect(api.deleteDraft).not.toHaveBeenCalled();
+    const dialog = screen.getByRole("dialog", {
+      name: "Biztos, hogy törlöd ezt a vázlatot?",
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Törlöm" }));
+    await waitFor(() => expect(api.deleteDraft).toHaveBeenCalledTimes(1));
+    expect(api.deleteDraft).toHaveBeenCalledWith(
+      "token-1",
+      "draft-del",
+      "2026-09-30T10:05:00.000Z",
+    );
+    await waitFor(() =>
+      expect(navigation.replace).toHaveBeenCalledWith(BILLING_LIST_PATH),
+    );
+  });
+
+  it("an issued document is never offered the delete button", async () => {
+    api.detail.mockReset().mockResolvedValue({
+      ...detailFrom(
+        {
+          documentType: "INVOICE",
+          invoiceFormat: "PAPER",
+          currency: "HUF",
+          language: "hu",
+          lines: [],
+        },
+        "doc-issued-del",
+      ),
+      status: "ISSUED",
+      documentNumber: "AC-2026-000009",
+      pdf: { available: true },
+    });
+    render(<BillingDocumentEditor documentId="doc-issued-del" />);
+    await screen.findByText("Kiállítva: AC-2026-000009");
+    expect(screen.queryByRole("button", { name: "Vázlat törlése" })).toBeNull();
   });
 });
