@@ -89,6 +89,8 @@ export class QuoteItemPatchDto implements QuoteItemPatch {
   @IsOptional() @IsString() @Matches(DECIMAL) unitNetPrice?: string;
   @IsOptional() @IsString() @Matches(DECIMAL) vatRatePercent?: string;
   @IsOptional() @IsBoolean() isOptional?: boolean;
+  /** see QuoteItemPatch.dropBomItems: the switch to STANDALONE takes the item's BOM lines with it */
+  @IsOptional() @IsBoolean() dropBomItems?: boolean;
 }
 export class QuoteItemDto implements QuoteItemInput {
   @IsIn(ITEM_SOURCES) source!: QuoteItemSourceValue;

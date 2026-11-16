@@ -2,6 +2,7 @@
 
 import {
   Alert,
+  ConfirmDialog,
   PilotButton,
   PilotDrawer,
   PilotFormField,
@@ -84,6 +85,7 @@ export function QuoteItemDrawer({
   blockId,
   item,
   costing,
+  bomCount = 0,
   onSaved,
 }: {
   open: boolean;
@@ -97,6 +99,8 @@ export function QuoteItemDrawer({
   item: Item | null;
   /** a tétel kalkulációs sora, csak `quotes.costs.view` mellett */
   costing: QuoteCostingLineDto | null;
+  /** a meglévő tétel BOM-sorainak száma: önállóra váltáskor a váltás ezeket törli, megerősítés után */
+  bomCount?: number;
   onSaved: (quote: QuoteDetailDto) => void;
 }) {
   const [name, setName] = useState("");
@@ -127,6 +131,9 @@ export function QuoteItemDrawer({
   const [vat, setVat] = useState("27");
   const [optional, setOptional] = useState(false);
   const [saving, setSaving] = useState(false);
+  // BOM -> ÖNÁLLÓ (Luca): a váltás a BOM-sorokat is viszi, de csak kimondott megerősítés után
+  const [confirmDrop, setConfirmDrop] = useState(false);
+  const dropsBom = Boolean(item) && source === "STANDALONE" && bomCount > 0;
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -237,7 +244,7 @@ export function QuoteItemDrawer({
     vat.trim() &&
     (source !== "PRODUCT" || variant);
 
-  const save = async () => {
+  const save = async (dropBomItems = false) => {
     setSaving(true);
     setError(null);
     let parsed: QuoteRichText | null = null;
@@ -256,6 +263,7 @@ export function QuoteItemDrawer({
       unitNetPrice: unitNetPrice.trim(),
       vatRatePercent: vat.trim(),
       isOptional: optional,
+      ...(dropBomItems ? { dropBomItems: true } : {}),
     };
     try {
       const quote = item
@@ -282,7 +290,10 @@ export function QuoteItemDrawer({
           <PilotButton variant="secondary" onClick={onClose}>
             Mégse
           </PilotButton>
-          <PilotButton disabled={!ready || saving} onClick={() => void save()}>
+          <PilotButton
+            disabled={!ready || saving}
+            onClick={() => (dropsBom ? setConfirmDrop(true) : void save())}
+          >
             Tétel mentése
           </PilotButton>
         </div>
@@ -464,6 +475,19 @@ export function QuoteItemDrawer({
           </span>
         </label>
       </div>
+      <ConfirmDialog
+        open={confirmDrop}
+        title="Váltás önálló tételre"
+        consequence={`Az önálló tételnek nincs BOM-ja: a tétel ${bomCount} BOM-sora és a hozzájuk tartozó költség-pillanatkép kikerül ebből a piszkozatból.`}
+        recovery="A korábbi, publikált verziókban a BOM-sorok megmaradnak; ebben a piszkozatban újra felvehetők, a költség ekkor a mai utolsó beszerzésből jön."
+        confirmLabel="Váltás és a BOM-sorok törlése"
+        busy={saving}
+        onConfirm={() => {
+          setConfirmDrop(false);
+          void save(true);
+        }}
+        onCancel={() => setConfirmDrop(false)}
+      />
     </PilotDrawer>
   );
 }

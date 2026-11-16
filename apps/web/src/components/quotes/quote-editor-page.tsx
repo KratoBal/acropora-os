@@ -653,6 +653,12 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
         blockId={itemDrawer?.blockId ?? null}
         item={itemDrawer?.item ?? null}
         costing={itemDrawer?.item ? lineFor(itemDrawer.item.id) : null}
+        bomCount={
+          itemDrawer?.item
+            ? v.bomItems.filter((b) => b.quoteItemId === itemDrawer.item!.id)
+                .length
+            : 0
+        }
         onSaved={saved}
       />
       <QuoteBomDrawer

@@ -369,7 +369,14 @@ export interface QuoteItemInput {
   isOptional?: boolean;
   position?: number;
 }
-export type QuoteItemPatch = Partial<Omit<QuoteItemInput, "position">>;
+export type QuoteItemPatch = Partial<Omit<QuoteItemInput, "position">> & {
+  /**
+   * BOM -> STANDALONE IN ONE STEP (Luca, task t-20261116-bom-tetel-visszavaltas): a standalone item has no BOM, so the
+   * switch was refused while the item had BOM lines. With this the switch deletes the item's BOM lines in the same
+   * write, after the user confirmed it on the screen. Only the draft's lines go; a published version keeps its own.
+   */
+  dropBomItems?: boolean;
+};
 
 export interface QuoteBomItemInput {
   kind: QuoteBomKindValue;
