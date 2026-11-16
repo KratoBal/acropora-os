@@ -717,26 +717,48 @@ describe("BillingDocumentEditor", () => {
       ).toBeEnabled();
     });
 
-    it("shows the server's sentence and closes the empty tab when the preview fails", async () => {
+    it("shows the server's sentence under the preview's OWN title (the save succeeded) and closes the empty tab when the preview fails", async () => {
       api.preview.mockRejectedValue(
         new Error("Az előnézet ezen a szerveren nincs bekapcsolva."),
       );
       await readyDraft();
       fireEvent.click(screen.getByRole("button", { name: "Előnézet" }));
-      expect(await screen.findByRole("alert")).toHaveTextContent(
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent("Az előnézet nem készült el");
+      expect(alert).toHaveTextContent(
         "Az előnézet ezen a szerveren nincs bekapcsolva.",
       );
+      // the draft WAS saved: the box must not say that the save failed
+      expect(alert).not.toHaveTextContent("A mentés nem sikerült");
+      expect(api.create).toHaveBeenCalledTimes(1);
       expect(tab.close).toHaveBeenCalledTimes(1);
       expect(tab.location.href).toBe("");
     });
 
-    it("asks for no preview when the save fails", async () => {
-      api.create.mockRejectedValue(new Error("A mentés nem sikerült."));
+    it("the preview's error goes away with the next save, and a failed save keeps the save's title", async () => {
+      api.preview.mockRejectedValue(
+        new Error("A partnernek nincs számlázási címe."),
+      );
       await readyDraft();
       fireEvent.click(screen.getByRole("button", { name: "Előnézet" }));
-      expect(await screen.findByRole("alert")).toHaveTextContent(
-        "A mentés nem sikerült.",
+      expect(
+        await screen.findByText("Az előnézet nem készült el"),
+      ).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: /Vázlat mentése/ }));
+      await waitFor(() => expect(api.update).toHaveBeenCalledTimes(1));
+      await waitFor(() =>
+        expect(screen.queryByText("Az előnézet nem készült el")).toBeNull(),
       );
+    });
+
+    it("asks for no preview when the save fails, and the box says the SAVE failed", async () => {
+      api.create.mockRejectedValue(new Error("Az adatbázis nem érhető el."));
+      await readyDraft();
+      fireEvent.click(screen.getByRole("button", { name: "Előnézet" }));
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent("A mentés nem sikerült");
+      expect(alert).toHaveTextContent("Az adatbázis nem érhető el.");
+      expect(alert).not.toHaveTextContent("Az előnézet nem készült el");
       expect(api.preview).not.toHaveBeenCalled();
       expect(tab.close).toHaveBeenCalledTimes(1);
     });
