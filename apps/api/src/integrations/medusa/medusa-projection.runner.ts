@@ -538,7 +538,16 @@ export function csatornaBemenet(
 
 export async function runProjectionCli(
   productIds: string[],
-  out: { stdout(value: string): void; stderr(value: string): void } = {
+  out: {
+    stdout(value: string): void;
+    stderr(value: string): void;
+    /**
+     * A FUTAS KILEPESI KODJAT NOVELO TERMEK-KUDARCOK FAJTAJA (task t-20261116-vetito-felkodok, acrobot 53800): minden `failed += 1`
+     * helyen egy KOD (`sku-lookup`, `product-not-found`, `unknown-authority`, `stopped`, `knowledge-projection`, `brand-link`), termek-
+     * azonositoval, de a hivo csak a fajtat szamolja. Opcionalis: a CLI nem adja. A hibasor szovege valtozatlanul a `stderr`-re megy.
+     */
+    failed?(productId: string, kind: string): void;
+  } = {
     stdout: (value) => process.stdout.write(value),
     stderr: (value) => process.stderr.write(value),
   },
@@ -895,6 +904,7 @@ export async function runProjectionCli(
           `${describeSkuLookupFailure(argument.slice(4), lookup.reason)}\n`,
         );
         failed += 1;
+        out.failed?.(argument, "sku-lookup");
         continue;
       }
       productId = lookup.productId;
@@ -1067,6 +1077,7 @@ export async function runProjectionCli(
     if (!betoltott) {
       out.stderr(`${argument}: nincs ilyen termék (${productId})\n`);
       failed += 1;
+      out.failed?.(productId, "product-not-found");
       continue;
     }
 
@@ -1101,6 +1112,7 @@ export async function runProjectionCli(
         `${productId}: a törzsadat gazdája ismeretlen (${product.catalogAuthority ?? "nincs megadva"}), kihagyva\n`,
       );
       failed += 1;
+      out.failed?.(productId, "unknown-authority");
       continue;
     }
 
@@ -1803,7 +1815,10 @@ export async function runProjectionCli(
         `${productId}: MEGÁLLT (${outcome.reason}) ${outcome.details}\n`,
       );
       // az `orphaned-link` ismert allapot, emberi dontest ker: nem teszi a futast hibassa (a sora kimegy, a kor `stopped`-jaba szamit)
-      if (stoppedProductIsRunFailure(outcome.reason)) failed += 1;
+      if (stoppedProductIsRunFailure(outcome.reason)) {
+        failed += 1;
+        out.failed?.(productId, "stopped");
+      }
       continue;
     }
 
@@ -1906,6 +1921,7 @@ export async function runProjectionCli(
         })\n`,
       );
       failed += 1;
+      out.failed?.(productId, "knowledge-projection");
     }
 
     /**
@@ -1934,6 +1950,7 @@ export async function runProjectionCli(
         })\n`,
       );
       failed += 1;
+      out.failed?.(productId, "brand-link");
     }
   }
 

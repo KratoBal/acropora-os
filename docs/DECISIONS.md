@@ -904,8 +904,16 @@ drága volna.
 (az update HTTP 404-et ad). A vetítés szándékosan megáll: nem törli a kötést és nem hoz létre újat, mert egy 404 mögött rendszerint
 szándékos bolti törlés áll, amit egy csendes újralétrehozás visszacsinálna; a döntés emberé (`--forget-link`, csak a kötés sorát törli).
 A kötés a megállás helyén jelet kap (`medusaOrphan` a metaadatban). A stage-en 2026-11-16 07:44Z-kor egyetlen ilyen termék volt
-(`stopped {"orphaned-link": 1}`, `general` 41), és minden kört FAILED-dé tett, mert a futtató minden megállt termékre növeli a
-`failed`-et és 1-gyel lép ki, a termék pedig a kötés időbélyegének megállása miatt minden körben újra esedékes maradt.
+(`stopped {"orphaned-link": 1}`, `general` 41), a kör pedig FAILED volt. A megállt termék a kötés időbélyegének megállása miatt
+minden körben újra esedékes maradt, és a futtató minden megállt termékre növeli a `failed`-et és 1-gyel lép ki.
+
+**PONTOSÍTÁS (2026-11-16, mért adattal, acrobot 53800).** Az eredeti szöveg azt állította, hogy az árva kötés tette FAILED-dé a
+köröket. Ezt a 07:44Z-i mérés nem bizonyította: a `stopped` csak azt mutatta, hogy egy árva van, az ár-futás kudarcait nem
+olvastuk. A #2625 telepítése után (08:15:29Z, a teljes health) a kör továbbra is FAILED volt, miközben `stopped {}`,
+`orphanedLinks 1` és `priceFailures {"ambiguous-price": 1}` állt: a kört az ÁR-FEL buktatta (egy ismert ár-adat probléma, kártya
+550b80d1), az árva már nem buktat. Az árva kezelésének döntése változatlanul áll (egy megállás, ami embert kér, nem futási hiba),
+de nem ez oldotta meg a FAILED kört. A kör két felének kilépési kódja (`projectionExit`, `pricingExit`) és a termék-kudarcok
+fajtánként (`productFailures`) azért kerültek a `lastRound`-ba, hogy egy pillantásra látszódjon, melyik fél bukott.
 
 **Döntés** (acrobot 53748). (1) A futtató az `orphaned-link` megállást NEM számolja futási hibának (`stoppedProductIsRunFailure`); a sora
 tovább kimegy a hibakimenetre és a `lastRound.stopped`-be számít. (2) A jelölt árva kötések kimaradnak a general, az inaktivált és a
