@@ -135,6 +135,12 @@ export class TicketMailGmailClient {
     const topHeaders = m.payload?.headers ?? [];
     const header = (name: string) =>
       topHeaders.find((h) => h.name?.toLowerCase() === name)?.value ?? null;
+    // A SECOND `From` header makes the sender ambiguous: none is taken (fail closed), however the first one reads
+    const fromHeaders = topHeaders.filter(
+      (h) => h.name?.toLowerCase() === "from",
+    );
+    const from =
+      fromHeaders.length === 1 ? (fromHeaders[0]!.value ?? null) : null;
     const parts = allParts(m.payload);
     const decoded = (type: string) =>
       parts
@@ -189,7 +195,6 @@ export class TicketMailGmailClient {
       attachments.push({ fileName, contentType, buffer });
     }
 
-    const from = header("from");
     const received = Number(m.internalDate);
     return {
       id: m.id,
