@@ -435,7 +435,7 @@ function buildReport(
  * eltemetett változaton, és a kettőt egy halmazban számolni téves „több
  * egyezés" választ adna.
  */
-function matchVariant(
+export function matchVariant(
   rows: MedusaVariantPriceRow[],
   sku: string,
 ):

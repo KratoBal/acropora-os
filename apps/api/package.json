@@ -37,6 +37,7 @@
     "medusa:shipping-profile-link": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-shipping-profile-link.cli.js",
     "medusa:link-by-sku": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-sku-link.cli.js",
     "medusa:pricing": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-pricing.cli.js",
+    "medusa:price-audit": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-price-audit.cli.js",
     "brands:merge": "tsc -p tsconfig.json && node --env-file=../../.env dist/brands/brand-merge.cli.js",
     "unas:brand-master": "tsc -p tsconfig.json && node --env-file=../../.env dist/imports/unas/unas-brand-master.cli.js",
     "jev:enrich": "tsc -p tsconfig.json && node --env-file=../../.env dist/products/enrichment/enrichment-run.cli.js",
