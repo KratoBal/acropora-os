@@ -289,64 +289,74 @@ export type ProjectionRoundStatus = {
   /** a folyamat (és az időzítő) indulása: újraindításkor ez is újraindul */
   schedulerStartedAt: string | null;
   nextRoundAt: string | null;
-  lastRound: {
-    startedAt: string;
-    finishedAt: string | null;
-    outcome: ProjectionRunOutcome | "ERROR" | null;
-    candidates: Record<ProjectionRoundSource, number> | null;
-    taken: Record<ProjectionRoundSource, number> | null;
-    inactiveDueTotal: number | null;
-    priceRetry: number | null;
-    /**
-     * az ujraprobalasbol kimaradt ar-kudarcok (550b80d1): a termek azota inaktivalt, nem webshopos, torolt, vagy nincs
-     * Medusa kotese. Az ilyen termek ara nem kell (draftkent all, vagy nincs a boltban), es az ar-futas minden
-     * ujraproban ugyanazzal bukna; ha a termek visszater, a termek-vetites esedekesse teszi, es az ara azzal megy ki.
-     */
-    priceRetryDropped: number | null;
-    /**
-     * az ar-futas kudarcai okfajtankent (550b80d1): a stage naploja a flottanak nem olvashato, a tarolt ok pedig csak az
-     * adatbazisban all. Csak a fajta kodja (`own-price-missing`, `variant-not-found`, `run-threw` ...), cikkszam es
-     * termek-azonosito nelkul; egy termek tobb valtozata tobbszor szamit. null = a korben nem futott ar.
-     */
-    priceFailures: Record<string, number> | null;
-    /**
-     * a termek-vetites MEGALLT termekei okfajtankent (2026-11-16, acrobot 53685): a stage naploja a flottanak nem
-     * olvashato, a FAILED kor oka (a futtato minden megallt termekre `failed`-et noveli, es a kilepesi kod 1) pedig csak
-     * ott allt. Csak a MEGALLT sor zarojeles okanak kodja (`no-sku`, `ambiguous` ...), `[a-z0-9-]`-re szurve, termek-azonosito
-     * es reszlet nelkul. Egy megallt termek a koteset nem leptetni, tehat minden korben esedekes marad: ebbol latszik, hogy
-     * ugyanazok foglaljak-e a keretet. null = a korben nem futott termek-vetites.
-     */
-    stopped: Record<string, number> | null;
-    /**
-     * a JELOLT ARVA kotesek szama (2026-11-16, acrobot 53748): olyan bolti termekre mutat a kotes, ami a boltban mar nincs (HTTP 404).
-     * A vetites az ilyet NEM probalja ujra (a general, az inaktivalt es a forgas listabol kimarad, es a kor nem lesz tole FAILED):
-     * egy 404 rendszerint szandekos bolti torlest jelent, amirol ember dont (`--forget-link`). A jel igy nem tunik el, csak nem
-     * bukat: ez a szam mutatja. null = a kotesek olvasasa elbukott (a kor ilyenkor semmit nem hagy ki).
-     */
-    orphanedLinks: number | null;
-    /**
-     * a KOR KET FELENEK KILEPESI KODJA (task t-20261116-vetito-felkodok, acrobot 53800): a kor `FAILED`, ha a termek-vetites VAGY az ar-
-     * futas nem 0-val lep ki; 2026-11-16-an a stage-en a `stopped` ures volt es a kor mégis FAILED, mert az ar-fel bukott (egy
-     * `ambiguous-price`). Igy egy pillantasra latszik, MELYIK fel. `projectionExit` null, ha nem futott termek-vetites a korben;
-     * `pricingExit` null, ha nem futott ar-futas.
-     */
-    projectionExit: number | null;
-    pricingExit: number | null;
-    /**
-     * a termek-vetites KILEPESI KODOT NOVELO termek-kudarcai fajtankent (ugyanabbol a feladatbol): a `stopped` csak a MEGÁLLT sorokat
-     * latja, ez a futtato MINDEN `failed` helyet (`stopped`, `product-not-found`, `unknown-authority`, `knowledge-projection`,
-     * `brand-link`, `sku-lookup`), strukturaltan, szoveg-elemzes nelkul. Az `orphaned-link` megallas nem kudarc, ezert nincs benne.
-     * Az ar-kudarcok a `priceFailures`-ben allnak, nem itt. null = nem futott termek-vetites.
-     */
-    productFailures: Record<string, number> | null;
-    /**
-     * a kor `ambiguous-price` kudarcainak utkozo forint sorai alakonkent (550b80d1), azonosito nelkul: arlistas,
-     * szabalyos, mennyisegi, sima, vagy a valasz nem hozta a jelet (`unknown`). null = nem volt ketertelmu ar.
-     */
-    priceConflictRows: PriceConflictShape | null;
-    /** a lista-lepesek szamai (csak szamok, azonosito nincs); null = a lepes ebben a korben nem futott (kapcsolo ki) */
-    steps: RoundStepCounts;
-  } | null;
+  lastRound: ProjectionRoundSnapshot | null;
+  /**
+   * AZ UTOLSO FAILED VAGY ERROR KOR (task t-20261117-vetito-failed-ok, acrobot 54451): a `lastRound` MINDEN kornel felulirodik, a SKIPPED
+   * (ures) korok is felulirjak, tehat egy FAILED kor bizonyiteka a kovetkezo, fel orara ervenyes ures korig tart. A FAILED okat (melyik fel
+   * bukott, milyen fajta kudarccal) igy nem lehetett utolag kiolvasni. Ez a mezo az utolso nem sikeres kor teljes pillanatkepe marad, amig egy
+   * ujabb nem sikeres kor fel nem cserel; egy sikeres kor NEM torli (a sikeres kor nem bizonyitja, hogy a hiba megszunt, csak azt, hogy az
+   * ujabb kor nem bukott). A folyamat ujrainditasa torli. null = a folyamat indulasa ota nem volt sikertelen kor.
+   */
+  lastFailedRound: ProjectionRoundSnapshot | null;
+};
+
+export type ProjectionRoundSnapshot = {
+  startedAt: string;
+  finishedAt: string | null;
+  outcome: ProjectionRunOutcome | "ERROR" | null;
+  candidates: Record<ProjectionRoundSource, number> | null;
+  taken: Record<ProjectionRoundSource, number> | null;
+  inactiveDueTotal: number | null;
+  priceRetry: number | null;
+  /**
+   * az ujraprobalasbol kimaradt ar-kudarcok (550b80d1): a termek azota inaktivalt, nem webshopos, torolt, vagy nincs
+   * Medusa kotese. Az ilyen termek ara nem kell (draftkent all, vagy nincs a boltban), es az ar-futas minden
+   * ujraproban ugyanazzal bukna; ha a termek visszater, a termek-vetites esedekesse teszi, es az ara azzal megy ki.
+   */
+  priceRetryDropped: number | null;
+  /**
+   * az ar-futas kudarcai okfajtankent (550b80d1): a stage naploja a flottanak nem olvashato, a tarolt ok pedig csak az
+   * adatbazisban all. Csak a fajta kodja (`own-price-missing`, `variant-not-found`, `run-threw` ...), cikkszam es
+   * termek-azonosito nelkul; egy termek tobb valtozata tobbszor szamit. null = a korben nem futott ar.
+   */
+  priceFailures: Record<string, number> | null;
+  /**
+   * a termek-vetites MEGALLT termekei okfajtankent (2026-11-16, acrobot 53685): a stage naploja a flottanak nem
+   * olvashato, a FAILED kor oka (a futtato minden megallt termekre `failed`-et noveli, es a kilepesi kod 1) pedig csak
+   * ott allt. Csak a MEGALLT sor zarojeles okanak kodja (`no-sku`, `ambiguous` ...), `[a-z0-9-]`-re szurve, termek-azonosito
+   * es reszlet nelkul. Egy megallt termek a koteset nem leptetni, tehat minden korben esedekes marad: ebbol latszik, hogy
+   * ugyanazok foglaljak-e a keretet. null = a korben nem futott termek-vetites.
+   */
+  stopped: Record<string, number> | null;
+  /**
+   * a JELOLT ARVA kotesek szama (2026-11-16, acrobot 53748): olyan bolti termekre mutat a kotes, ami a boltban mar nincs (HTTP 404).
+   * A vetites az ilyet NEM probalja ujra (a general, az inaktivalt es a forgas listabol kimarad, es a kor nem lesz tole FAILED):
+   * egy 404 rendszerint szandekos bolti torlest jelent, amirol ember dont (`--forget-link`). A jel igy nem tunik el, csak nem
+   * bukat: ez a szam mutatja. null = a kotesek olvasasa elbukott (a kor ilyenkor semmit nem hagy ki).
+   */
+  orphanedLinks: number | null;
+  /**
+   * a KOR KET FELENEK KILEPESI KODJA (task t-20261116-vetito-felkodok, acrobot 53800): a kor `FAILED`, ha a termek-vetites VAGY az ar-
+   * futas nem 0-val lep ki; 2026-11-16-an a stage-en a `stopped` ures volt es a kor mégis FAILED, mert az ar-fel bukott (egy
+   * `ambiguous-price`). Igy egy pillantasra latszik, MELYIK fel. `projectionExit` null, ha nem futott termek-vetites a korben;
+   * `pricingExit` null, ha nem futott ar-futas.
+   */
+  projectionExit: number | null;
+  pricingExit: number | null;
+  /**
+   * a termek-vetites KILEPESI KODOT NOVELO termek-kudarcai fajtankent (ugyanabbol a feladatbol): a `stopped` csak a MEGÁLLT sorokat
+   * latja, ez a futtato MINDEN `failed` helyet (`stopped`, `product-not-found`, `unknown-authority`, `knowledge-projection`,
+   * `brand-link`, `sku-lookup`), strukturaltan, szoveg-elemzes nelkul. Az `orphaned-link` megallas nem kudarc, ezert nincs benne.
+   * Az ar-kudarcok a `priceFailures`-ben allnak, nem itt. null = nem futott termek-vetites.
+   */
+  productFailures: Record<string, number> | null;
+  /**
+   * a kor `ambiguous-price` kudarcainak utkozo forint sorai alakonkent (550b80d1), azonosito nelkul: arlistas,
+   * szabalyos, mennyisegi, sima, vagy a valasz nem hozta a jelet (`unknown`). null = nem volt ketertelmu ar.
+   */
+  priceConflictRows: PriceConflictShape | null;
+  /** a lista-lepesek szamai (csak szamok, azonosito nincs); null = a lepes ebben a korben nem futott (kapcsolo ki) */
+  steps: RoundStepCounts;
 };
 
 /**
@@ -378,7 +388,24 @@ export type RoundStepCounts = {
     | null;
 };
 
-type KorAllapot = NonNullable<ProjectionRoundStatus["lastRound"]>;
+type KorAllapot = ProjectionRoundSnapshot;
+
+/** A kor pillanatkepe MASOLATKENT: a health olvasoja nem kaphat elo hivatkozast a futo kor szamlaloira. */
+function korMasolat(kor: KorAllapot): ProjectionRoundSnapshot {
+  return {
+    ...kor,
+    candidates: kor.candidates && { ...kor.candidates },
+    taken: kor.taken && { ...kor.taken },
+    priceFailures: kor.priceFailures && { ...kor.priceFailures },
+    stopped: kor.stopped && { ...kor.stopped },
+    productFailures: kor.productFailures && { ...kor.productFailures },
+    priceConflictRows: kor.priceConflictRows && { ...kor.priceConflictRows },
+    steps: {
+      leftoverKind: kor.steps.leftoverKind && { ...kor.steps.leftoverKind },
+      arrivals: kor.steps.arrivals && { ...kor.steps.arrivals },
+    },
+  };
+}
 
 /**
  * A MEGALLT SOROK SZAMLALASA (acrobot 53685). A futtato minden megallt termekre egy `<azonosito>: MEGÁLLT (<ok>) <reszlet>`
@@ -454,6 +481,8 @@ export class MedusaProjectionScheduler
   private indulas: Date | null = null;
   private kovetkezoKor: Date | null = null;
   private utolsoKor: KorAllapot | null = null;
+  /** az utolso FAILED vagy ERROR kor teljes pillanatkepe: a kovetkezo (akar ures) kor nem irja felul */
+  private utolsoHibasKor: KorAllapot | null = null;
   /** Az utolsó `inaktivaltAzonositok` hívás összes esedékese, a vágás előtt. */
   private inaktivEsedekesOsszesen = 0;
 
@@ -633,25 +662,8 @@ export class MedusaProjectionScheduler
       intervalMinutes: config.intervalMs / 60_000,
       schedulerStartedAt: this.indulas?.toISOString() ?? null,
       nextRoundAt: this.kovetkezoKor?.toISOString() ?? null,
-      lastRound: kor
-        ? {
-            ...kor,
-            candidates: kor.candidates && { ...kor.candidates },
-            taken: kor.taken && { ...kor.taken },
-            priceFailures: kor.priceFailures && { ...kor.priceFailures },
-            stopped: kor.stopped && { ...kor.stopped },
-            productFailures: kor.productFailures && { ...kor.productFailures },
-            priceConflictRows: kor.priceConflictRows && {
-              ...kor.priceConflictRows,
-            },
-            steps: {
-              leftoverKind: kor.steps.leftoverKind && {
-                ...kor.steps.leftoverKind,
-              },
-              arrivals: kor.steps.arrivals && { ...kor.steps.arrivals },
-            },
-          }
-        : null,
+      lastRound: kor && korMasolat(kor),
+      lastFailedRound: this.utolsoHibasKor && korMasolat(this.utolsoHibasKor),
     };
   }
 
@@ -697,6 +709,9 @@ export class MedusaProjectionScheduler
       throw error;
     } finally {
       kor.finishedAt = this.now().toISOString();
+      // a bizonyitek megmarad: a kovetkezo (akar ures) kor a `lastRound`-ot felulirja, ezt nem
+      if (kor.outcome === "FAILED" || kor.outcome === "ERROR")
+        this.utolsoHibasKor = kor;
     }
   }
 
