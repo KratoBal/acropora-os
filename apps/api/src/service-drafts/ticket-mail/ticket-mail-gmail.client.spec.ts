@@ -287,6 +287,25 @@ describe("TicketMailGmailClient", () => {
     );
   });
 
+  it("CONTROL: two From headers are no sender (fail closed), however the first one reads", async () => {
+    const { fetcher } = fakeGmail({
+      message: {
+        id: "m8",
+        payload: {
+          headers: [
+            header("From", "anna@acropora.hu"),
+            header("From", "evil@tamado.hu"),
+          ],
+          mimeType: "text/plain",
+          body: { data: b64("x") },
+        },
+      },
+    });
+    const message = await new TicketMailGmailClient(fetcher).getMessage("m8");
+    assert.equal(message.from, null);
+    assert.equal(message.fromAddress, null);
+  });
+
   it("CONTROL: an attachment-less mail with a missing From has no sender address", async () => {
     const { fetcher } = fakeGmail({
       message: {

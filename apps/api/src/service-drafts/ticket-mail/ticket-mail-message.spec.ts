@@ -84,6 +84,85 @@ describe("authenticationVerdict", () => {
       "DMARC_NOT_PASS",
     );
   });
+  it("CONTROL (barracuda, #2645): a dmarc=pass and a header.from written by the SENDER into the spf comment or smtp.mailfrom are not the verdict", () => {
+    // the envelope sender's local part is the attacker's: in the Gmail comment, and as the smtp.mailfrom value
+    const inComment =
+      "mx.google.com; dkim=pass header.i=@acropora.hu header.s=g; spf=pass (google.com: domain of x; dmarc=pass header.from=acropora.hu@tamado.hu designates 1.2.3.4 as permitted sender) smtp.mailfrom=x@tamado.hu; dmarc=fail (p=NONE sp=NONE dis=NONE) header.from=acropora.hu";
+    assert.equal(
+      authenticationVerdict([inComment], "anna@acropora.hu").verified,
+      false,
+    );
+    assert.equal(
+      authenticationVerdict([inComment], "anna@acropora.hu").reason,
+      "DMARC_NOT_PASS",
+    );
+    const quotedMailfrom =
+      'mx.google.com; spf=pass (google.com: domain of "x" designates 1.2.3.4 as permitted sender) smtp.mailfrom="x; dmarc=pass header.from=acropora.hu"@tamado.hu; dmarc=fail (p=NONE) header.from=acropora.hu';
+    assert.equal(
+      authenticationVerdict([quotedMailfrom], "anna@acropora.hu").verified,
+      false,
+    );
+    assert.equal(
+      authenticationVerdict([quotedMailfrom], "anna@acropora.hu").reason,
+      "DMARC_NOT_PASS",
+    );
+  });
+  it("CONTROL: a dmarc=pass inside a dkim selector value is not a dmarc result", () => {
+    const selector =
+      'mx.google.com; dkim=fail header.i=@acropora.hu header.s="a; dmarc=pass header.from=acropora.hu"; dmarc=fail header.from=acropora.hu';
+    assert.equal(
+      authenticationVerdict([selector], "anna@acropora.hu").verified,
+      false,
+    );
+    const bare =
+      "mx.google.com; dkim=fail header.s=sel header.b=dmarc=pass; dmarc=fail header.from=acropora.hu";
+    assert.equal(
+      authenticationVerdict([bare], "anna@acropora.hu").verified,
+      false,
+    );
+  });
+  it("CONTROL: the header.from must stand in the dmarc result itself, not in another one", () => {
+    const elsewhere =
+      "mx.google.com; dmarc=pass; spf=pass header.from=acropora.hu";
+    assert.equal(
+      authenticationVerdict([elsewhere], "anna@acropora.hu").reason,
+      "FROM_DOMAIN_MISMATCH",
+    );
+  });
+  it("CONTROL: zero or several dmarc results is not verified, and several is named", () => {
+    assert.equal(
+      authenticationVerdict(
+        ["mx.google.com; spf=pass smtp.mailfrom=a@acropora.hu"],
+        "anna@acropora.hu",
+      ).verified,
+      false,
+    );
+    const two =
+      "mx.google.com; dmarc=pass header.from=acropora.hu; dmarc=fail header.from=acropora.hu";
+    assert.deepEqual(authenticationVerdict([two], "anna@acropora.hu"), {
+      verified: false,
+      reason: "DMARC_AMBIGUOUS",
+    });
+  });
+  it("CONTROL: an unbalanced comment, a stray closing parenthesis or an unclosed quote is malformed, never believed", () => {
+    for (const broken of [
+      "mx.google.com; spf=pass (google.com: domain of x ( designates 1.2.3.4); dmarc=pass header.from=acropora.hu",
+      "mx.google.com; dmarc=pass header.from=acropora.hu)",
+      'mx.google.com; spf=pass smtp.mailfrom="x; dmarc=pass header.from=acropora.hu',
+    ])
+      assert.deepEqual(authenticationVerdict([broken], "anna@acropora.hu"), {
+        verified: false,
+        reason: "MALFORMED",
+      });
+  });
+  it("reads nested comments and quoted text as RFC 8601 does, and still believes a real pass", () => {
+    const nested =
+      'mx.google.com; spf=pass (google.com: domain of "a;b"@acropora.hu designates (1.2.3.4) as permitted sender) smtp.mailfrom=anna@acropora.hu; dmarc=pass (p=REJECT sp=REJECT (x) dis=NONE) header.from=acropora.hu';
+    assert.deepEqual(authenticationVerdict([nested], "anna@acropora.hu"), {
+      verified: true,
+      reason: "DMARC_PASS",
+    });
+  });
   it("CONTROL: no From address is no verdict", () => {
     assert.equal(authenticationVerdict([PASS], null).reason, "NO_FROM");
   });
