@@ -3226,3 +3226,111 @@ describe("a kör két felének kilépési kódja és a termék-kudarcok fajtánk
     assert.equal(scheduler.allapot().lastRound!.productFailures!.badkind, 1);
   });
 });
+
+describe("a health az utolso sikertelen kor pillanatkepet megorzi (lastFailedRound)", () => {
+  const kor = (
+    projekcio: ProjectionRunner,
+    ar: ProjectionRunner,
+    lekepezesek: { entityId: string; lastSyncedAt: Date | null }[] = [],
+  ) => {
+    const { db } = adatbazis([termek()], lekepezesek, [
+      { entityId: "prod-1" },
+    ] as never);
+    return new MedusaProjectionScheduler({
+      db,
+      runProjection: projekcio,
+      runPricing: ar,
+      environment: BEKAPCSOLVA,
+      logger: naplo().logger,
+    });
+  };
+
+  it("egy FAILED kort a kovetkezo UR kor (SKIPPED) nem ir felul: a lastRound az ures kor, a lastFailedRound a FAILED", async () => {
+    const lekepezesek: { entityId: string; lastSyncedAt: Date | null }[] = [];
+    const scheduler = kor(
+      async (_ids, out) => {
+        out.failed?.("prod-1", "stopped");
+        return 1;
+      },
+      async () => 0,
+      lekepezesek,
+    );
+
+    assert.equal(await scheduler.runOnce(), "FAILED");
+    const elso = scheduler.allapot().lastRound!.startedAt;
+    lekepezesek.push({ entityId: "prod-1", lastSyncedAt: MOST });
+    assert.equal(await scheduler.runOnce(), "SKIPPED");
+
+    const allapot = scheduler.allapot();
+    assert.equal(allapot.lastRound!.outcome, "SKIPPED");
+    assert.equal(allapot.lastFailedRound!.outcome, "FAILED");
+    assert.equal(allapot.lastFailedRound!.startedAt, elso);
+    assert.equal(allapot.lastFailedRound!.projectionExit, 1);
+    assert.deepEqual(allapot.lastFailedRound!.productFailures, { stopped: 1 });
+  });
+
+  it("egy sikeres (APPLIED) kor sem torli: a sikeres kor nem bizonyitja, hogy a hiba megszunt", async () => {
+    let kilepes = 1;
+    const scheduler = kor(
+      async () => kilepes,
+      async () => 0,
+    );
+
+    assert.equal(await scheduler.runOnce(), "FAILED");
+    kilepes = 0;
+    assert.equal(await scheduler.runOnce(), "APPLIED");
+
+    const allapot = scheduler.allapot();
+    assert.equal(allapot.lastRound!.outcome, "APPLIED");
+    assert.equal(allapot.lastFailedRound!.outcome, "FAILED");
+    assert.equal(allapot.lastFailedRound!.projectionExit, 1);
+  });
+
+  it("az ERROR kor (a futtato dob) is megmarad", async () => {
+    let dob = true;
+    const scheduler = kor(
+      async () => {
+        if (dob) throw new Error("kapcsolat megszakadt");
+        return 0;
+      },
+      async () => 0,
+    );
+
+    await assert.rejects(() => scheduler.runOnce());
+    dob = false;
+    assert.equal(await scheduler.runOnce(), "APPLIED");
+
+    const allapot = scheduler.allapot();
+    assert.equal(allapot.lastFailedRound!.outcome, "ERROR");
+    assert.equal(allapot.lastRound!.outcome, "APPLIED");
+  });
+
+  it("CONTROL: ha nem volt sikertelen kor, a mezo null (a folyamat indulasa ota nem bukott semmi)", async () => {
+    const scheduler = kor(
+      async () => 0,
+      async () => 0,
+    );
+    assert.equal(scheduler.allapot().lastFailedRound, null);
+    assert.equal(await scheduler.runOnce(), "APPLIED");
+    assert.equal(scheduler.allapot().lastFailedRound, null);
+  });
+
+  it("a visszaadott lastFailedRound masolat, nem elo hivatkozas", async () => {
+    const scheduler = kor(
+      async (_ids, out) => {
+        out.failed?.("prod-1", "stopped");
+        return 1;
+      },
+      async () => 0,
+    );
+    await scheduler.runOnce();
+
+    const elso = scheduler.allapot().lastFailedRound!.productFailures!;
+    elso.stopped = 99;
+
+    assert.equal(
+      scheduler.allapot().lastFailedRound!.productFailures!.stopped,
+      1,
+    );
+  });
+});
