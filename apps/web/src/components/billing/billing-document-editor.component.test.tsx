@@ -2086,6 +2086,70 @@ describe("BillingDocumentEditor", () => {
     ).toBeInTheDocument();
   });
 
+  /*
+    AZ ÜRESEN INDULT VÉGSZÁMLA-VÁZLAT MAGYARÁZATA (kártya 02fc4b7f, barracuda #2639). MI PIROSÍT: ha a kezelő nem látja, MIÉRT üres a vázlat és
+    mi kerüljön rá; ha a "TELJES ellenérték" mondat ilyenkor is áll (ellentmondana a magyarázatnak); ha magyarázat nélküli végszámlán megjelenne
+    a sáv; ha a sáv a számlán nyomtatott megjegyzés mezőbe kerülne.
+  */
+  it("a final draft that started empty for several advance milestones shows the band, and not the 'full price' sentence", async () => {
+    api.detail.mockReset().mockResolvedValue({
+      ...detailFrom(
+        {
+          documentType: "FINAL_INVOICE",
+          invoiceFormat: "ELECTRONIC",
+          currency: "HUF",
+          language: "hu",
+          lines: [],
+          note: null,
+        },
+        "fin-2",
+      ),
+      deductedAdvance: {
+        id: "adv-1",
+        number: "E-ELO-1",
+        grossAmount: "38100.0000",
+      },
+      finalInvoiceNotice: {
+        code: "MULTIPLE_ADVANCES",
+        message:
+          "Az ajánlatnak több előleg-mérföldköve van díjbekérővel, ezért a végszámla tételei üresen indultak.",
+      },
+    });
+    render(<BillingDocumentEditor documentId="fin-2" />);
+    expect(
+      await screen.findByText("Több előleg-mérföldkő az ajánlaton"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/ezért a végszámla tételei üresen indultak/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/A tételek a TELJES ellenérték/)).toBeNull();
+    expect(screen.getByText(/E-ELO-1 előleget/)).toBeInTheDocument();
+    // a magyarázat a felület sávja, NEM a számlán nyomtatott megjegyzés
+    expect(screen.queryByDisplayValue(/több előleg-mérföldkö/)).toBeNull();
+  });
+
+  it("a final draft without the notice keeps the 'full price' sentence and shows no band", async () => {
+    api.detail.mockReset().mockResolvedValue({
+      ...detailFrom(
+        {
+          documentType: "FINAL_INVOICE",
+          invoiceFormat: "ELECTRONIC",
+          currency: "HUF",
+          language: "hu",
+          lines: [],
+        },
+        "fin-3",
+      ),
+      deductedAdvance: { id: "adv-1", number: "E-ELO-1", grossAmount: null },
+      finalInvoiceNotice: null,
+    });
+    render(<BillingDocumentEditor documentId="fin-3" />);
+    expect(
+      await screen.findByText(/A tételek a TELJES ellenérték/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Több előleg-mérföldkő az ajánlaton")).toBeNull();
+  });
+
   it("an invoice's draft carries no final-invoice note", async () => {
     api.detail.mockReset().mockResolvedValue(
       detailFrom(
