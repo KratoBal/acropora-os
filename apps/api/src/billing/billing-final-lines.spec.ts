@@ -163,6 +163,8 @@ describe("finalInvoiceNoticeOf", () => {
     assert.equal(notice?.code, "MULTIPLE_ADVANCES");
     assert.match(notice!.message, /több előleg-mérföldköve van díjbekérővel/);
     assert.match(notice!.message, /még nem kiszámlázott rész/);
+    // a szöveg a tényt és a teendőt mondja, NEM a tételek állapotát: olvasáskor számított, egy teljes tételekkel készült vázlaton is megjelenhet
+    assert.doesNotMatch(notice!.message, /üresen|üres/);
     for (const source of [
       { kind: "PROFORMA" as const },
       { kind: "QUOTE" as const, items: [] },

@@ -175,17 +175,17 @@ export interface BillingDocumentAdvanceLink {
   status: BillingDocumentStatus;
 }
 
-/**
- * VÉGSZÁMLA ÉS ELŐLEG (számlázási brief, 3. pont). A végszámlán az
- * előlegszámla, amelyet a Számlázz.hu levon (`elolegSzamlaszam`); a bruttó
- * összege a levonás mértéke, ahogy az előleg kiállításakor rögzült.
- */
-/** A végszámla-vázlat üres tételeinek magyarázata (`BillingDocumentDetail.finalInvoiceNotice`). */
+/** A végszámla-vázlat figyelmeztetése a több előleg-mérföldkőről (`BillingDocumentDetail.finalInvoiceNotice`). */
 export interface BillingDocumentFinalInvoiceNotice {
   code: "MULTIPLE_ADVANCES";
   message: string;
 }
 
+/**
+ * VÉGSZÁMLA ÉS ELŐLEG (számlázási brief, 3. pont). A végszámlán az
+ * előlegszámla, amelyet a Számlázz.hu levon (`elolegSzamlaszam`); a bruttó
+ * összege a levonás mértéke, ahogy az előleg kiállításakor rögzült.
+ */
 export interface BillingDocumentDeductedAdvance {
   id: string;
   number: string | null;
@@ -280,8 +280,10 @@ export interface BillingDocumentDetail {
   /** Végszámlán a levont előlegszámla; máshol `null`. */
   deductedAdvance?: BillingDocumentDeductedAdvance | null;
   /**
-   * VÉGSZÁMLA-VÁZLATON A MAGYARÁZAT, ha a tételek azért indultak üresen, mert az ajánlatnak TÖBB előleg-mérföldköve van díjbekérővel (kártya 02fc4b7f,
-   * barracuda #2639). Olvasáskor számított, nem tárolt, és NEM a számlán nyomtatott megjegyzés; kiállítás után és máshol `null`.
+   * VÉGSZÁMLA-VÁZLATON A FIGYELMEZTETÉS, ha az ajánlatnak TÖBB előleg-mérföldköve van díjbekérővel (kártya 02fc4b7f, barracuda #2639): a végszámlára
+   * csak a még nem kiszámlázott rész kerülhet. Olvasáskor számított, nem tárolt, és NEM a számlán nyomtatott megjegyzés; a szövege a tényt és a
+   * teendőt mondja, a vázlat tételeinek állapotát nem (egy vázlat teljes tételekkel is készülhetett, mielőtt egy másik mérföldkő díjbekérőt kapott).
+   * Kiállítás után és máshol `null`.
    */
   finalInvoiceNotice?: BillingDocumentFinalInvoiceNotice | null;
   /** Előlegszámlán a belőle készült végszámla; máshol `null`. */
