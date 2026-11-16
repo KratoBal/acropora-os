@@ -39,6 +39,7 @@ function data(): ServiceDraftListResponse {
         },
         attachments: [],
         filterState: "PASSED",
+        intakeState: "RULE_DRAFT",
         jevClass: "OUR_TECHNICAL_FAULT",
         jevConfidence: 0.93,
         occurrence: 2,
