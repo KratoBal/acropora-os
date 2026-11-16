@@ -373,6 +373,88 @@ describe(
       ).id;
     });
 
+    /*
+      BOM -> STANDALONE IN ONE STEP (Luca, task t-20261116-bom-tetel-visszavaltas). The switch was refused while the
+      item had BOM lines, and the message did not say where they could be deleted: a dead end on the screen (measured
+      on stage, the server's delete worked). What turns this red: the switch without the flag passing, or its message
+      not naming both ways; the flag not deleting the lines in the same write; a line of another item touched; the
+      audit not saying how many lines went.
+    */
+    it("BOM -> STANDALONE: refused with both ways named, then done with dropBomItems in one write", async () => {
+      const created = await request(v(`/blocks/${blockId}/items`), "POST", {
+        source: "BOM",
+        name: "Visszaváltandó",
+        quantity: "1",
+        unit: "db",
+        unitNetPrice: "1000",
+        vatRatePercent: "27",
+      });
+      assert.equal(created.status, 201);
+      const items = version(created.body).blocks[0].items as Json[];
+      const itemId = items[items.length - 1]!.id as string;
+      for (const customName of ["Egyik", "Másik"])
+        assert.equal(
+          (
+            await request(
+              v(`/items/${itemId}/bom`),
+              "POST",
+              { kind: "CUSTOM", customName, quantity: "1", unit: "db" },
+              WRITER,
+            )
+          ).status,
+          201,
+        );
+      const others = await prisma.quoteBomItem.count({
+        where: { versionId, NOT: { quoteItemId: itemId } },
+      });
+
+      const refused = await request(v(`/items/${itemId}`), "PATCH", {
+        source: "STANDALONE",
+      });
+      assert.equal(refused.status, 409);
+      assert.match(String(refused.body.message), /2 BOM-sora/);
+      assert.match(String(refused.body.message), /Belső BOM/);
+      assert.equal(
+        await prisma.quoteBomItem.count({ where: { quoteItemId: itemId } }),
+        2,
+      );
+
+      const switched = await request(v(`/items/${itemId}`), "PATCH", {
+        source: "STANDALONE",
+        dropBomItems: true,
+      });
+      assert.equal(switched.status, 200);
+      const row = await prisma.quoteItem.findUniqueOrThrow({
+        where: { id: itemId },
+      });
+      assert.equal(row.source, "STANDALONE");
+      assert.equal(
+        await prisma.quoteBomItem.count({ where: { quoteItemId: itemId } }),
+        0,
+      );
+      assert.equal(
+        await prisma.quoteBomItem.count({
+          where: { versionId, NOT: { quoteItemId: itemId } },
+        }),
+        others,
+      );
+      const log = await prisma.auditLog.findFirstOrThrow({
+        where: {
+          entityType: "QuoteItem",
+          entityId: itemId,
+          action: "quote.item_updated",
+        },
+        orderBy: { createdAt: "desc" },
+      });
+      assert.equal((log.metadata as Json).droppedBomItems, 2);
+
+      // the later tests read this block's items: the measuring item goes
+      assert.equal(
+        (await request(v(`/items/${itemId}`), "DELETE")).status,
+        200,
+      );
+    });
+
     it("without quotes.costs.view: no cost field in any answer", async () => {
       const read = await request(
         `/quotes/${quoteId}`,
