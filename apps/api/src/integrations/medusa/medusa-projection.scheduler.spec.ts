@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  countStoppedLines,
   medusaProjectionScheduleConfig,
   MedusaProjectionScheduler,
   projectionRefreshConfig,
@@ -2802,5 +2803,95 @@ describe("MedusaProjectionScheduler lassu frissitesi forgasa", () => {
         MEDUSA_PROJECTION_REFRESH_PER_ROUND: "100",
       } as NodeJS.ProcessEnv).onModuleInit(),
     );
+  });
+});
+
+/**
+ * A MEGALLT TERMEKEK OKFAJTANKENT A KOR ALLAPOTABAN (acrobot 53685): a stage naploja a flottanak nem olvashato, a FAILED kor oka
+ * (a futtato minden megallt termekre `failed`-et noveli) viszont csak ott allt. MI PIROSIT: a megallt sor nem szamlalodik, vagy
+ * a termek-azonosito/reszlet kulcs lesz, vagy egy szabad szoveg kulcsnak megy at (szuretlenul); egy `constructor` nevu ok
+ * elrontja a szamlalot; a megallt nelkuli kor `null`-t ad `{}` helyett (vagy forditva az ures kor); a visszaadott allapot elo
+ * hivatkozas; a hibasor a naplobol kimarad.
+ */
+describe("a megallt termekek okfajtankent a kor allapotaban", () => {
+  const MEGALLT = [
+    "prod-a: MEGÁLLT (no-sku) a termék-azonosító és a részlet nem kerülhet a számlálóba\n",
+    "prod-b: MEGÁLLT (ambiguous) x\n",
+    "prod-c: MEGÁLLT (no-sku) y\n",
+    "prod-d: kész (frissítve)\n",
+    "figyelmeztetés: MEGÁLLT valami zárójel nélkül\n",
+  ];
+  const kesz = (
+    sorok: string[],
+    kotesek: { entityId: string; lastSyncedAt: Date | null }[] = [],
+  ) => {
+    const { db } = adatbazis([termek()], kotesek);
+    const n = naplo();
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: async (_ids, out) => {
+        for (const sor of sorok) out.stderr(sor);
+        return sorok.some((sor) => sor.includes("MEGÁLLT")) ? 1 : 0;
+      },
+      runPricing: arFuttato().run,
+      environment: BEKAPCSOLVA,
+      logger: n.logger,
+    });
+    return { scheduler, naploSorok: n.sorok };
+  };
+
+  it("okfajtankent szamol, az azonositot es a reszletet nem, a nem megallt sort nem; a sor a naploba tovabbra is megy", async () => {
+    const { scheduler, naploSorok } = kesz(MEGALLT);
+
+    assert.equal(await scheduler.runOnce(), "FAILED");
+
+    const stopped = scheduler.allapot().lastRound!.stopped;
+    assert.deepEqual(stopped, { "no-sku": 2, ambiguous: 1 });
+    assert.ok(!JSON.stringify(stopped).includes("prod-"));
+    assert.ok(naploSorok.some((sor) => sor.includes("prod-a: MEGÁLLT")));
+  });
+
+  it("megallt nelkul a kor `{}`, a kor nelkuli (SKIPPED) allapot `null`", async () => {
+    const tiszta = kesz(["prod-d: kész\n"]);
+    assert.equal(await tiszta.scheduler.runOnce(), "APPLIED");
+    assert.deepEqual(tiszta.scheduler.allapot().lastRound!.stopped, {});
+
+    // minden termek naprakesz: nincs mit vetiteni, a vetites nem fut
+    const ures = kesz(MEGALLT, [{ entityId: "prod-1", lastSyncedAt: MOST }]);
+    assert.equal(await ures.scheduler.runOnce(), "SKIPPED");
+    assert.equal(ures.scheduler.allapot().lastRound!.stopped, null);
+  });
+
+  it("egy szabad szoveg nem lehet kulcs: kisbetusre es [a-z0-9-]-re szurve megy, az ures `unknown`", () => {
+    const into: Record<string, number> = {};
+    countStoppedLines(
+      "p1: MEGÁLLT (Bad Reason!) r\np2: MEGÁLLT () r\np3: MEGÁLLT (variant-options) r\n",
+      into,
+    );
+    assert.deepEqual(into, {
+      badreason: 1,
+      unknown: 1,
+      "variant-options": 1,
+    });
+  });
+
+  it("egy `constructor` nevu ok sem rontja el a szamlalot", () => {
+    const into: Record<string, number> = {};
+    countStoppedLines("p1: MEGÁLLT (constructor) r\n", into);
+    countStoppedLines("p2: MEGÁLLT (constructor) r\n", into);
+    assert.deepEqual(into, { constructor: 2 });
+  });
+
+  it("egy hivasban tobb sor is szamlalodik, es a visszaadott allapot masolat", async () => {
+    const { scheduler } = kesz([MEGALLT.slice(0, 3).join("")]);
+    await scheduler.runOnce();
+
+    const elso = scheduler.allapot().lastRound!.stopped!;
+    assert.deepEqual(elso, { "no-sku": 2, ambiguous: 1 });
+    elso["no-sku"] = 99;
+    assert.deepEqual(scheduler.allapot().lastRound!.stopped, {
+      "no-sku": 2,
+      ambiguous: 1,
+    });
   });
 });
