@@ -81,6 +81,23 @@ export interface BillingDocumentForIssue {
   lines: readonly BillingDocumentLineForIssue[];
 }
 
+/**
+ * A KIÁLLÍTÁSI HIBA MONDATA A KEZELŐNEK. A kód zárójelben marad (keresni arra lehet), de a fizetési feltétel hiányánál megmondjuk,
+ * mit kell tenni: ez az a hiba, amit egy ajánlatból készült díjbekérő (üres fizetési móddal indul) a kezelő felé hozott.
+ */
+export function adapterErrorSentence(
+  error: BillingDocumentAdapterError,
+  action: "issue" | "preview",
+): string {
+  const head =
+    action === "issue"
+      ? "A bizonylat nem küldhető a Számlázz.hu-ra"
+      : "Az előnézet nem kérhető a Számlázz.hu-tól";
+  if (error.code === "BILLING_PAYMENT_TERMS_REQUIRED")
+    return `${head}: a fizetési határidő vagy a fizetési mód hiányzik a mentett vázlatból. Add meg mindkettőt, mentsd a vázlatot, és próbáld újra (${error.code}).`;
+  return `${head} (${error.code}).`;
+}
+
 export class BillingDocumentAdapterError extends Error {
   constructor(
     readonly code:
