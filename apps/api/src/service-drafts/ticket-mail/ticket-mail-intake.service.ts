@@ -161,11 +161,11 @@ export class TicketMailIntakeService {
     this.running = true;
     this.lastError = null;
     const summary: TicketMailRunSummary = { ...EMPTY };
+    // the drafts of a SWITCHED-ON colleague (the AI branch, with or without the AI's answer) announce themselves; the others do not
+    const announce = { count: 0, mailId: null as string | null };
     try {
       const ids = await this.gmail.listMessageIds();
       let processed = 0;
-      // the drafts of a SWITCHED-ON colleague (the AI branch, with or without the AI's answer) announce themselves; the others do not
-      const announce = { count: 0, mailId: null as string | null };
       // Gmail lists newest first; file the oldest first, so the hourly guard and the order of the list follow the order of arrival.
       for (const id of [...ids].reverse()) {
         if (await this.store.hasMessage(c.user, id)) {
@@ -265,6 +265,9 @@ export class TicketMailIntakeService {
       return summary;
     } catch (error) {
       this.lastError = safeCode(error, "TICKET_MAIL_RUN_FAILED");
+      // a connection failure ends the run, but the drafts filed before it are recorded: their push goes out now, since the next run will not
+      // find them new (barracuda, #2648)
+      await this.announce(announce);
       throw error;
     } finally {
       this.running = false;

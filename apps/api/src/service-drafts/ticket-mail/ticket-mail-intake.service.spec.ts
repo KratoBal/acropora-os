@@ -542,6 +542,25 @@ describe("TicketMailIntakeService.run: the arrival push", () => {
     assert.deepEqual(roles, ["SERVICE_TICKET_AI_DRAFT"]);
   });
 
+  it("a connection failure that ends the run still announces the drafts filed before it (the next run will not find them new)", async () => {
+    // Gmail lists newest first: a is filed first, then the connection fails on b
+    const { service, pushes } = rig({
+      ids: ["b", "a"],
+      messages: {
+        a: mail("a"),
+        b: new TicketMailGmailError("TICKET_MAIL_GMAIL_AUTH_FAILED"),
+      },
+      senders: { "anna@acropora.hu": colleague() },
+    });
+    await assert.rejects(service.run(), /TICKET_MAIL_GMAIL_AUTH_FAILED/);
+    assert.equal(pushes.length, 1);
+    assert.deepEqual(pushes[0], {
+      mailId: "mail-a",
+      userIds: ["manager-1"],
+      count: 1,
+    });
+  });
+
   it("CONTROL: a switched-off colleague's and an unknown sender's drafts send NO push", async () => {
     const outsider = mail("o", {
       from: "x@masik.hu",
