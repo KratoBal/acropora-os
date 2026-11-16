@@ -257,7 +257,7 @@ export class AssetListQueryDto {
   @IsOptional()
   status: (typeof ASSET_STATUSES)[number] | AssetListStatusFilter = "ACTIVE";
   @IsIn(ASSET_KINDS) @IsOptional() kind?: (typeof ASSET_KINDS)[number];
-  @IsISO8601() @IsOptional() dueBefore?: string;
+  @IsISO8601({ strict: true }) @IsOptional() dueBefore?: string;
 }
 
 /**
@@ -447,17 +447,17 @@ export class CreateAssetDto {
    */
   @IsString() @IsOptional() electricalCode?: string;
   @IsString() @IsOptional() description?: string;
-  @IsISO8601() @IsOptional() installedAt?: string;
-  @IsISO8601() @IsOptional() purchasedAt?: string;
-  @IsISO8601() @IsOptional() warrantyExpiresAt?: string;
+  @IsISO8601({ strict: true }) @IsOptional() installedAt?: string;
+  @IsISO8601({ strict: true }) @IsOptional() purchasedAt?: string;
+  @IsISO8601({ strict: true }) @IsOptional() warrantyExpiresAt?: string;
   @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(3650)
   @IsOptional()
   serviceIntervalDays?: number;
-  @IsISO8601() @IsOptional() lastServicedAt?: string;
-  @IsISO8601() @IsOptional() nextServiceAt?: string;
+  @IsISO8601({ strict: true }) @IsOptional() lastServicedAt?: string;
+  @IsISO8601({ strict: true }) @IsOptional() nextServiceAt?: string;
   @IsString() @IsOptional() notes?: string;
 }
 
@@ -625,19 +625,19 @@ export class UpdateAssetDto {
    */
   @IsString() @IsOptional() electricalCode?: string | null;
   @IsString() @IsOptional() description?: string | null;
-  @IsISO8601() @IsOptional() installedAt?: string | null;
-  @IsISO8601() @IsOptional() purchasedAt?: string | null;
-  @IsISO8601() @IsOptional() warrantyExpiresAt?: string | null;
+  @IsISO8601({ strict: true }) @IsOptional() installedAt?: string | null;
+  @IsISO8601({ strict: true }) @IsOptional() purchasedAt?: string | null;
+  @IsISO8601({ strict: true }) @IsOptional() warrantyExpiresAt?: string | null;
   @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(3650)
   @IsOptional()
   serviceIntervalDays?: number | null;
-  @IsISO8601() @IsOptional() lastServicedAt?: string | null;
-  @IsISO8601() @IsOptional() nextServiceAt?: string | null;
+  @IsISO8601({ strict: true }) @IsOptional() lastServicedAt?: string | null;
+  @IsISO8601({ strict: true }) @IsOptional() nextServiceAt?: string | null;
   @IsString() @IsOptional() notes?: string | null;
-  @IsISO8601() expectedUpdatedAt!: string;
+  @IsISO8601({ strict: true }) expectedUpdatedAt!: string;
 }
 
 /**
@@ -663,7 +663,7 @@ export class AssignAssetAquariumDto {
   @IsString()
   @MinLength(1)
   aquariumId!: string | null;
-  @IsISO8601() expectedUpdatedAt!: string;
+  @IsISO8601({ strict: true }) expectedUpdatedAt!: string;
 }
 
 export class UploadAssetDocumentDto {

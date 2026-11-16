@@ -105,7 +105,7 @@ export class CreateOperationsTaskTemplateDto extends OperationsTaskTemplateBodyD
 export class UpdateOperationsTaskTemplateDto extends OperationsTaskTemplateBodyDto {
   /** Az egyidejűség-őr: a betöltött sablon `updatedAt`-je (ISO); eltérésnél a szerver 409-et ad. */
   @ValidateIf((_object, value) => value !== undefined && value !== null)
-  @IsISO8601()
+  @IsISO8601({ strict: true })
   expectedUpdatedAt?: string | null;
 
   /** A kivezetés ezen a mezőn megy (a `DELETE` is ezt állítja át); a visszaállítás is. */
