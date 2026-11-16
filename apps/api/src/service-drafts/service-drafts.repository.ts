@@ -287,6 +287,12 @@ export class ServiceDraftsRepository {
                 openedById: null,
               };
             }
+            // A TICKET@ LEVELBOL KESZULT VAZLAT ELFOGADASA MEG NINCS BEKOTVE (kartya ec7b947b, S2c): ez az ut a Capasuli gyokeregyseget es a
+            // Capasuli partner-felhasznalot hasznalja, ami egy ticket@ vazlathoz hibas helyszint es nyitot adna. Hangos elutasitas, nem csendes rossz jegy.
+            if (draft.source !== "CAPASULI_DAILY_REPORT")
+              throw new ConflictException(
+                "Ennek a vázlatnak az elfogadása még nincs bekötve (ticket@ levélből készült).",
+              );
             const locations = await this.locations(c.departmentId, tx);
             const department = locations.find((d) => d.id === departmentId);
             if (!department)

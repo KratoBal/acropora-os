@@ -10001,9 +10001,18 @@ model ServiceDraftMail {
   originalText String
   createdAt    DateTime             @default(now())
   notifiedAt   DateTime?
+  /// A TICKET@ LEVEL ADATAI (kartya ec7b947b, S2b). A felado cime (a `From` fejlecbol, kisbetus; NULL: nincs vagy tobb cim),
+  /// a hitelesites eredmenye (`AuthenticationReason`: DMARC_PASS, NO_HEADER, ...), a kihagyas oka (`SkipReason`: gepi level,
+  /// vazlat nelkul rogzitve, hogy ujra ne olvassuk), es hany csatolmany maradt ki (tipus, meret vagy darabszam miatt).
+  fromAddress        String?
+  authVerdict        String?  @db.VarChar(40)
+  skipReason         String?  @db.VarChar(40)
+  droppedAttachments Int      @default(0)
   drafts       ServiceTicketDraft[]
 
   @@unique([source, mailbox, messageId])
+  /// A FELADONKENTI OROS KORLAT OLVASASA: egy ismeretlen felado levelei az utolso orara.
+  @@index([source, fromAddress, createdAt])
 }
 
 model ServiceTicketDraft {
@@ -10033,6 +10042,9 @@ model ServiceTicketDraft {
   /// Hogyan kerult a listara (lasd `ServiceDraftIntakeState`). Alapertek RULE_DRAFT:
   /// a meglevo (Capasuli) sorok valtozatlanok.
   intakeState          ServiceDraftIntakeState  @default(RULE_DRAFT)
+  /// A TICKET@ VAZLAT FELADOJA, ha ismert belso felhasznalo (kartya ec7b947b, S2b): a kikeresett felhasznalo, nem kovetkeztetes.
+  /// Sima szoveg, mint a tobbi dontes-azonosito ezen a tablan; NULL az ismeretlen feladonal es a Capasuli soroknal.
+  senderUserId         String?
   /// A Jev osztálya (`CAPASULI_ITEM_CLASSES`) és bizonyossága; NULL, ha nem futott.
   jevClass             String?                  @db.VarChar(40)
   jevConfidence        Float?

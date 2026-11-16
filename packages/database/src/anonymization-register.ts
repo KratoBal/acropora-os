@@ -1667,6 +1667,9 @@ export const ANONYMIZATION_REGISTER: Readonly<
     messageId: "identifier",
     subject: "freeText",
     originalText: "rawMessage",
+    fromAddress: "email",
+    authVerdict: "business",
+    skipReason: "business",
   },
   ServiceTicketDraft: {
     source: "business",
@@ -1682,6 +1685,7 @@ export const ANONYMIZATION_REGISTER: Readonly<
     repeatedFromId: "identifier",
     jevClass: "business",
     decisionRunId: "identifier",
+    senderUserId: "identifier",
   },
   ServiceDraftAttachment: {
     fileName: "freeText",
