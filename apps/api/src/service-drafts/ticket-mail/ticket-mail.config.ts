@@ -37,6 +37,15 @@ export function ticketMailConfig(env: NodeJS.ProcessEnv = process.env) {
       : raw === "false"
         ? "OFF"
         : "UNRECOGNISED";
+  // the AI step has a switch of its OWN, off by default (Balázs, 2026-11-16: only filtered text goes to the model): the intake can be on without it
+  const aiRaw = env.TICKET_MAIL_AI_ENABLED?.trim().toLowerCase();
+  const aiSwitchReason = !aiRaw
+    ? "NOT_SET"
+    : aiRaw === "true"
+      ? "ON"
+      : aiRaw === "false"
+        ? "OFF"
+        : "UNRECOGNISED";
   const credentials = {
     clientId: env.GMAIL_TICKET_READ_CLIENT_ID?.trim() || "",
     clientSecret: env.GMAIL_TICKET_READ_CLIENT_SECRET?.trim() || "",
@@ -78,6 +87,14 @@ export function ticketMailConfig(env: NodeJS.ProcessEnv = process.env) {
       1,
       1000,
     ),
+    /** The AI step: the switch (off by default), and the AI service's path. It needs `ACROPORA_AI_BASE_URL` and `ACROPORA_AI_ACCESS_TOKEN` too. */
+    aiSwitchReason,
+    aiEnabled: aiSwitchReason === "ON",
+    aiPath: env.ACROPORA_AI_TICKET_DRAFT_PATH?.trim() || "/v1/ticket-drafts",
+    /** At most this many AI calls in one run: a call waits up to 47 s, and a flood must not turn into a run of hours. */
+    aiMaxPerRun: boundedInteger(env.TICKET_MAIL_AI_MAX_PER_RUN, 10, 1, 100),
+    /** After this many unavailable answers in a row the run stops calling (the service is down: the rest are filed without the AI). */
+    aiMaxFailures: boundedInteger(env.TICKET_MAIL_AI_MAX_FAILURES, 2, 1, 10),
     /** A message that fails this many runs is sealed as FAILED (recorded without its text) so it stops taking a run's places. */
     maxAttempts: boundedInteger(env.TICKET_MAIL_MAX_ATTEMPTS, 3, 1, 10),
   };

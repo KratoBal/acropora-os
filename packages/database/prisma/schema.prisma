@@ -10060,6 +10060,10 @@ model ServiceTicketDraft {
   /// A TICKET@ VAZLAT FELADOJA, ha ismert belso felhasznalo (kartya ec7b947b, S2b): a kikeresett felhasznalo, nem kovetkeztetes.
   /// Sima szoveg, mint a tobbi dontes-azonosito ezen a tablan; NULL az ismeretlen feladonal es a Capasuli soroknal.
   senderUserId         String?
+  /// AZ AI OSSZEFOGLALOJA (kartya ec7b947b, S3b): a modell a REDAKTALT level szovegebol irt rovid osszefoglalo, CSAK megjelenitesre; a jegy leirasa
+  /// az eredeti (olvasopeldany) szoveg marad. NULL: nem futott az AI. `aiExtractedBy`: a modell es a prompt verzioja (pl. "gpt-5.1 ticket-draft/v1").
+  aiSummary            String?                  @db.VarChar(1000)
+  aiExtractedBy        String?                  @db.VarChar(128)
   /// A Jev osztálya (`CAPASULI_ITEM_CLASSES`) és bizonyossága; NULL, ha nem futott.
   jevClass             String?                  @db.VarChar(40)
   jevConfidence        Float?

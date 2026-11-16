@@ -84,6 +84,10 @@ function rig(options: {
   recipients?: Array<{ id: string }>;
   pushFails?: boolean;
   recentTotal?: number;
+  /** every name the redaction knows (the users' names) */
+  names?: string[];
+  /** the AI client's answer for one call; absent: no AI client at all */
+  ai?: (input: { subject: string; text: string }) => Promise<unknown>;
   /** a store that survives a service restart: pass the one a first rig made */
   shared?: ReturnType<typeof newStoreState>;
 }) {
@@ -107,6 +111,7 @@ function rig(options: {
     },
     unknownCountSince: async () => options.recent ?? 0,
     unknownTotalSince: async () => options.recentTotal ?? 0,
+    personNames: async () => options.names ?? [],
     noteFailure: async (_m: string, id: string) => {
       const attempts = (state.attempts.get(id) ?? 0) + 1;
       state.attempts.set(id, attempts);
@@ -147,13 +152,23 @@ function rig(options: {
       return options.recipients ?? [{ id: "manager-1" }];
     },
   };
+  const aiCalls: Array<{ subject: string; text: string }> = [];
+  const ai = options.ai
+    ? {
+        draft: async (input: { subject: string; text: string }) => {
+          aiCalls.push(input);
+          return options.ai!(input);
+        },
+      }
+    : null;
   const service = new TicketMailIntakeService(
     store as never,
     gmail as never,
     notifications as never,
     jobs as never,
+    ai as never,
   );
-  return { service, recorded, lookups, fetched, pushes, roles, state };
+  return { service, recorded, lookups, fetched, pushes, roles, state, aiCalls };
 }
 
 const colleague = (
@@ -626,6 +641,247 @@ describe("TicketMailIntakeService.run: the arrival push", () => {
     assert.equal(quiet.drafts, 1);
     assert.equal(nobody.pushes.length, 0);
     assert.equal(quiet.notified, 0);
+  });
+});
+
+describe("TicketMailIntakeService.run: the AI step", () => {
+  const filled = {
+    kind: "DRAFT",
+    title: "A szűrő csöpög",
+    summary: "A szűrő a hétvége óta csöpög.",
+    extractedBy: "gpt-5.1 ticket-draft/v1",
+  };
+  const aiOn = () => {
+    process.env.TICKET_MAIL_AI_ENABLED = "true";
+  };
+  const withText = (id: string, text: string, subject = "Szűrő hiba") =>
+    mail(id, { text, subject });
+  const outsider = (id: string) =>
+    mail(id, {
+      from: "x@masik.hu",
+      fromAddress: "x@masik.hu",
+      headers: {
+        autoSubmitted: null,
+        precedence: null,
+        listId: null,
+        authenticationResults: [],
+      },
+    });
+
+  it("a switched-on colleague's mail goes to the AI REDACTED, and the draft becomes an AI draft with the AI's title and summary", async () => {
+    aiOn();
+    const { service, recorded, aiCalls, pushes } = rig({
+      ids: ["a"],
+      messages: {
+        a: withText(
+          "a",
+          "Szia Gábor,\nKovács Péter (+36 20 555 1234, peter.kovacs@pelda.hu) szerint a szűrő csöpög, lásd https://pelda.example/12345678.",
+          "Hiba: Kovács Péter jelzése",
+        ),
+      },
+      senders: { "anna@acropora.hu": colleague({ displayName: "Szabó Anna" }) },
+      names: ["Kovács Péter", "Szabó Anna"],
+      ai: async () => filled,
+    });
+    const summary = await service.run();
+    assert.equal(aiCalls.length, 1);
+    const sent = JSON.stringify(aiCalls[0]);
+    for (const trace of [
+      "Gábor",
+      "Kovács",
+      "Péter",
+      "+36",
+      "555",
+      "peter.kovacs",
+      "pelda",
+      "12345678",
+    ])
+      assert.equal(sent.includes(trace), false, trace);
+    assert.match(aiCalls[0]!.text, /szerint a szűrő csöpög/);
+    assert.equal(summary.aiDrafts, 1);
+    assert.equal(summary.aiCalls, 1);
+    assert.equal(recorded[0]!.outcome.intakeState, "AI_DRAFT");
+    const content = (
+      recorded[0] as unknown as { content: Record<string, string> }
+    ).content;
+    assert.equal(content.title, "A szűrő csöpög");
+    assert.equal(content.aiSummary, "A szűrő a hétvége óta csöpög.");
+    assert.equal(content.aiExtractedBy, "gpt-5.1 ticket-draft/v1");
+    // an AI draft announces itself like an AI-less one
+    assert.equal(pushes.length, 1);
+  });
+
+  it("CONTROL: the AI is asked ONLY for a verified switched-on colleague: not for a switched-off one, an unknown sender, a forged sender or a machine's mail", async () => {
+    aiOn();
+    const forged = mail("f", {
+      headers: {
+        autoSubmitted: null,
+        precedence: null,
+        listId: null,
+        authenticationResults: [FAIL("acropora.hu")],
+      },
+    });
+    const auto = mail("m", {
+      headers: {
+        autoSubmitted: "auto-replied",
+        precedence: null,
+        listId: null,
+        authenticationResults: [PASS("acropora.hu")],
+      },
+    });
+    const off = rig({
+      ids: ["a"],
+      messages: { a: mail("a") },
+      senders: { "anna@acropora.hu": colleague({ watching: false }) },
+      ai: async () => filled,
+    });
+    const unknown = rig({
+      ids: ["o"],
+      messages: { o: outsider("o") },
+      ai: async () => filled,
+    });
+    const fake = rig({
+      ids: ["f"],
+      messages: { f: forged },
+      senders: { "anna@acropora.hu": colleague() },
+      ai: async () => filled,
+    });
+    const machine = rig({
+      ids: ["m"],
+      messages: { m: auto },
+      senders: { "anna@acropora.hu": colleague() },
+      ai: async () => filled,
+    });
+    for (const one of [off, unknown, fake, machine]) {
+      await one.service.run();
+      assert.equal(one.aiCalls.length, 0);
+    }
+  });
+
+  it("without the AI switch, or without an AI client, nothing is called and the draft stays AI-less", async () => {
+    const noSwitch = rig({
+      ids: ["a"],
+      messages: { a: mail("a") },
+      senders: { "anna@acropora.hu": colleague() },
+      ai: async () => filled,
+    });
+    await noSwitch.service.run();
+    assert.equal(noSwitch.aiCalls.length, 0);
+    assert.equal(noSwitch.recorded[0]!.outcome.intakeState, "AI_UNAVAILABLE");
+    aiOn();
+    const noClient = rig({
+      ids: ["a"],
+      messages: { a: mail("a") },
+      senders: { "anna@acropora.hu": colleague() },
+    });
+    await noClient.service.run();
+    assert.equal(noClient.recorded[0]!.outcome.intakeState, "AI_UNAVAILABLE");
+    assert.equal(noClient.service.status(admin).ai.enabled, false);
+  });
+
+  it("a refusal keeps the draft AI-less with the original title, and is counted", async () => {
+    aiOn();
+    const { service, recorded } = rig({
+      ids: ["a"],
+      messages: { a: mail("a") },
+      senders: { "anna@acropora.hu": colleague() },
+      ai: async () => ({ kind: "REFUSED", refusal: "UNSAFE_OUTPUT" }),
+    });
+    const summary = await service.run();
+    assert.equal(summary.aiRefused, 1);
+    assert.equal(recorded[0]!.outcome.intakeState, "AI_UNAVAILABLE");
+    const content = (
+      recorded[0] as unknown as { content: Record<string, string | undefined> }
+    ).content;
+    assert.equal(content.title, "Hiba a");
+    assert.equal(content.aiSummary, undefined);
+  });
+
+  it("CONTROL: after the allowed unavailable answers in a row the run stops calling, and the rest are filed without the AI", async () => {
+    aiOn();
+    const { service, aiCalls, recorded } = rig({
+      ids: ["c", "b", "a"],
+      messages: { a: mail("a"), b: mail("b"), c: mail("c") },
+      senders: { "anna@acropora.hu": colleague() },
+      ai: async () => ({ kind: "UNAVAILABLE", reason: "HTTP 502" }),
+    });
+    const summary = await service.run();
+    assert.equal(aiCalls.length, 2);
+    assert.equal(summary.aiUnavailable, 2);
+    assert.equal(summary.drafts, 3);
+    assert.equal(recorded.length, 3);
+    assert.equal(
+      recorded.every((r) => r.outcome.intakeState === "AI_UNAVAILABLE"),
+      true,
+    );
+  });
+
+  it("an answer in between resets the failure count", async () => {
+    aiOn();
+    const answers = [
+      { kind: "UNAVAILABLE", reason: "HTTP 502" },
+      filled,
+      { kind: "UNAVAILABLE", reason: "HTTP 502" },
+      filled,
+    ];
+    let call = 0;
+    const { service, aiCalls } = rig({
+      ids: ["d", "c", "b", "a"],
+      messages: { a: mail("a"), b: mail("b"), c: mail("c"), d: mail("d") },
+      senders: { "anna@acropora.hu": colleague() },
+      ai: async () => answers[call++],
+    });
+    await service.run();
+    assert.equal(aiCalls.length, 4);
+  });
+
+  it("at most the configured number of AI calls in one run", async () => {
+    aiOn();
+    process.env.TICKET_MAIL_AI_MAX_PER_RUN = "1";
+    const { service, aiCalls, recorded } = rig({
+      ids: ["b", "a"],
+      messages: { a: mail("a"), b: mail("b") },
+      senders: { "anna@acropora.hu": colleague() },
+      ai: async () => filled,
+    });
+    await service.run();
+    assert.equal(aiCalls.length, 1);
+    assert.deepEqual(
+      recorded.map((r) => r.outcome.intakeState),
+      ["AI_DRAFT", "AI_UNAVAILABLE"],
+    );
+  });
+
+  it("CONTROL: a client that throws is an unavailable AI, not a failed message", async () => {
+    aiOn();
+    const { service, recorded } = rig({
+      ids: ["a"],
+      messages: { a: mail("a") },
+      senders: { "anna@acropora.hu": colleague() },
+      ai: async () => {
+        throw new Error("token SECRET");
+      },
+    });
+    const summary = await service.run();
+    assert.equal(summary.failed, 0);
+    assert.equal(summary.aiUnavailable, 1);
+    assert.equal(recorded[0]!.outcome.intakeState, "AI_UNAVAILABLE");
+    assert.doesNotMatch(JSON.stringify(service.status(admin)), /SECRET/);
+  });
+
+  it("a mail that is nothing but names and numbers once redacted is not sent", async () => {
+    aiOn();
+    const { service, aiCalls } = rig({
+      ids: ["a"],
+      messages: {
+        a: withText("a", "Szabó Anna +36 30 123 4567 12345678", "Kovács Péter"),
+      },
+      senders: { "anna@acropora.hu": colleague({ displayName: "Szabó Anna" }) },
+      names: ["Kovács Péter", "Szabó Anna"],
+      ai: async () => filled,
+    });
+    await service.run();
+    assert.equal(aiCalls.length, 0);
   });
 });
 

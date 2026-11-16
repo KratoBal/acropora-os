@@ -2,7 +2,7 @@
 
 Kártya: ec7b947b. Terv: a flotta `agents/murena/ticket-ai-terv-2026-11-16.md` fájlja. A ticket@acropora.hu postafiókba érkező hibabejelentések a Szerviz / Piszkozatok listára kerülnek, ugyanabba a `ServiceTicketDraft` táblába, amelyet a Cápasuli napi jelentők is használnak. **Hibajegy csak akkor jön létre, ha egy belső OWNER vagy ADMIN elfogadja a vázlatot** (az elvetett vázlat nem foglal jegyszámot, és a lista „Elvetett” fülén megmarad). A beolvasás alapból **ki van kapcsolva**.
 
-Állapot ebben a változatban: a beolvasás, az elfogadás, a lista és a push kész; az AI-kitöltés (S3) **még nincs**, ezért a bekapcsolt feladó vázlata `AI nélkül` jelzéssel áll, a levél szövegével.
+Állapot: a beolvasás, az elfogadás, a lista, a push és az AI-kitöltés kész; az AI-kitöltés **külön kapcsolóval, alapból kikapcsolva** fut (lásd „Az AI lépés”). Ha az AI nem fut vagy nem válaszol, a bekapcsolt feladó vázlata `AI nélkül` jelzéssel áll, a levél szövegével.
 
 ## A három bejövő ág, egy listában
 
@@ -14,9 +14,18 @@ A levél feladója a `From` fejlécből jön, **de csak akkor hiszünk neki, ha 
 | `WATCH_OFF` (`Figyelés kikapcsolva`)   | igazolt feladó, belső aktív felhasználó, a jelölés **nincs** bekapcsolva             | a felhasználó neve, helyszín nélkül, push nélkül                                                                |
 | `UNKNOWN_SENDER` (`Ismeretlen feladó`) | bárki más, és minden feladó, akinek a `From` fejléce nem igazolható                  | se név, se helyszín, push nélkül                                                                                |
 
-Az `AI_DRAFT` az AI-kitöltés (S3) állapota lesz; a `RULE_DRAFT` a Cápasuli sorok jele. Ugyanaz a lista mind: a különbség a jelvény, és forrás szerint szűrhető (Minden forrás / Ticket levelek / Cápasuli jelentők).
+Az `AI_DRAFT` az AI-kitöltés állapota (lásd lent); a `RULE_DRAFT` a Cápasuli sorok jele. Ugyanaz a lista mind: a különbség a jelvény, és forrás szerint szűrhető (Minden forrás / Ticket levelek / Cápasuli jelentők).
 
 Az „E-mail AI figyelése” a felhasználó adatlapján jelölhető (`TICKET_MAIL_AI_WATCH` képesség), **csak a felhasználó-szerkesztővel** (`users.manage`: OWNER, ADMIN), a felhasználó a sajátját nem jelölheti. Alapérték: ki. A push szerepe: „AI hibajegy-vázlat felelős” (`SERVICE_TICKET_AI_DRAFT`), szintén a felhasználó adatlapján.
+
+## Az AI lépés
+
+Csak a **hitelesített, bekapcsolt kolléga** levelére fut: kikapcsolt vagy ismeretlen feladó, hamisított feladó és gépi levél szövege **soha nem megy a modellhez**. Külön kapcsolója van (`TICKET_MAIL_AI_ENABLED`, alapból ki; a beolvasás kapcsolója nem kapcsolja be), és az AI szolgáltatás elérése kell hozzá (`ACROPORA_AI_BASE_URL`, `ACROPORA_AI_ACCESS_TOKEN`).
+
+- **Csak szűrt szöveg megy ki** (Balázs, 2026-11-16: a PD-001 elv él: név és azonosító nem megy a modellhez). A hívás előtt a levél tárgya és szövege (az idézett válasz és az aláírás már levágva) átesik a redakción (`ticket-mail-redact.ts`): az e-mail címek `[E-MAIL]`, a linkek `[LINK]`, az adószám, bankszámla, IBAN és minden öt vagy több számjegyű szám `[SZÁM]`, a telefonszámok `[TELEFON]`, a köszönés és a záró sor utáni név, valamint **minden ismert név** (a felhasználók neve, az ékezetes ragos alakokkal együtt: Annának, Kovácsékkal) `[NÉV]`. A mérések, a rövid számok, a dátumok és a közönséges szavak maradnak. **Amit nem tud:** egy általunk nem ismert, köszönés vagy záró sor nélkül szereplő személynév a szövegben marad; a szabály a nevet nem különbözteti meg egy terméktől vagy helytől. Ezért van külön kapcsoló, és ezért olvassa ember minden vázlatot. Egy levél, amiből a redakció után csak helyőrző és rövid szó marad, nem megy ki.
+- **A modell csak két mezőt tölt ki** (cím, rövid összefoglaló), és semmit nem dönt el; a levél szövege idegen szöveg, ezért csak JSON-adatként megy a bemenetben, az utasításban soha, és az AI szolgáltatás elutasít minden kimenetet, ami nem két sima szöveg (link, e-mail, HTML, hosszú szám, láthatatlan karakter, túl hosszú). Az OS **újra ellenőrzi** a választ, mielőtt eltárolná.
+- **Mit kap a vázlat:** a cím az AI címe, az összefoglaló a vázlat `aiSummary` mezőjébe kerül (csak megjelenítésre, **szövegként, soha HTML-ként**, „csak segítség” jelzéssel), a modell és a prompt verziója az `aiExtractedBy` mezőbe. **A jegy leírása az eredeti levélszöveg marad**, és az a kártyán az AI összefoglaló alatt mindig látszik, hogy egy félrevezető összefoglaló összevethető legyen.
+- **Korlátok:** egy futásban legfeljebb 10 AI-hívás (`TICKET_MAIL_AI_MAX_PER_RUN`), és ha az AI két egymás utáni hívásra nem érhető el (`TICKET_MAIL_AI_MAX_FAILURES`), a futás többi levelét AI nélkül veszi fel. Egy elutasított vagy elbukott AI-válasz nem hiba: a vázlat `AI nélkül` marad, a levél szövegével.
 
 ## Elfogadás
 
@@ -36,22 +45,26 @@ A kezelő az összes aktív helyszínből választ (aktív, nem archivált ügyf
 
 A bekapcsolás acrobot lépése, a valódi tesztlevél mérése után (az S2 vége).
 
-| Változó                                                           | Jelentés                                      | Alapérték                                                                |
-| ----------------------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------ |
-| `GMAIL_TICKET_INTAKE_ENABLED`                                     | a beolvasás kapcsolója                        | `false` (ismeretlen érték is ki)                                         |
-| `GMAIL_TICKET_READ_CLIENT_ID`, `_CLIENT_SECRET`, `_REFRESH_TOKEN` | az olvasó OAuth hármasa                       | nincs                                                                    |
-| `GMAIL_TICKET_READ_USER`                                          | a postafiók                                   | `ticket@acropora.hu`                                                     |
-| `GMAIL_TICKET_READ_QUERY`                                         | a lekérdezés                                  | `in:inbox -in:spam -category:promotions -category:social newer_than:14d` |
-| `TICKET_MAIL_INTERVAL_MINUTES`                                    | a futás gyakorisága                           | 10 (5 és 1440 között)                                                    |
-| `TICKET_MAIL_MAX_PER_RUN`                                         | új levél futásonként                          | 50                                                                       |
-| `TICKET_MAIL_UNKNOWN_SENDER_PER_HOUR`                             | egy ismeretlen cím óránként                   | 5                                                                        |
-| `TICKET_MAIL_UNKNOWN_TOTAL_PER_HOUR`                              | az összes ismeretlen feladó együtt óránként   | 30                                                                       |
-| `TICKET_MAIL_MAX_ATTEMPTS`                                        | hány futás után zárjuk le a mérgezett levelet | 3                                                                        |
+| Változó                                                           | Jelentés                                                             | Alapérték                                                                |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `GMAIL_TICKET_INTAKE_ENABLED`                                     | a beolvasás kapcsolója                                               | `false` (ismeretlen érték is ki)                                         |
+| `GMAIL_TICKET_READ_CLIENT_ID`, `_CLIENT_SECRET`, `_REFRESH_TOKEN` | az olvasó OAuth hármasa                                              | nincs                                                                    |
+| `GMAIL_TICKET_READ_USER`                                          | a postafiók                                                          | `ticket@acropora.hu`                                                     |
+| `GMAIL_TICKET_READ_QUERY`                                         | a lekérdezés                                                         | `in:inbox -in:spam -category:promotions -category:social newer_than:14d` |
+| `TICKET_MAIL_INTERVAL_MINUTES`                                    | a futás gyakorisága                                                  | 10 (5 és 1440 között)                                                    |
+| `TICKET_MAIL_MAX_PER_RUN`                                         | új levél futásonként                                                 | 50                                                                       |
+| `TICKET_MAIL_UNKNOWN_SENDER_PER_HOUR`                             | egy ismeretlen cím óránként                                          | 5                                                                        |
+| `TICKET_MAIL_UNKNOWN_TOTAL_PER_HOUR`                              | az összes ismeretlen feladó együtt óránként                          | 30                                                                       |
+| `TICKET_MAIL_MAX_ATTEMPTS`                                        | hány futás után zárjuk le a mérgezett levelet                        | 3                                                                        |
+| `TICKET_MAIL_AI_ENABLED`                                          | az AI lépés kapcsolója (a beolvasás kapcsolójától független)         | `false` (ismeretlen érték is ki)                                         |
+| `ACROPORA_AI_TICKET_DRAFT_PATH`                                   | az AI szolgáltatás útvonala                                          | `/v1/ticket-drafts`                                                      |
+| `TICKET_MAIL_AI_MAX_PER_RUN`                                      | AI-hívás futásonként                                                 | 10                                                                       |
+| `TICKET_MAIL_AI_MAX_FAILURES`                                     | hány egymás utáni elérhetetlen válasz után hagyja ki a futás az AI-t | 2                                                                        |
 
 Állapot a vezérlőpulton: a Piszkozatok oldal „Ticket postafiók feldolgozás” része (`GET /service/drafts/ticket-mail/status`, belső OWNER és ADMIN).
 
 ## Nem mért, nyitott
 
 - **A beolvasás bekapcsolásának FELTÉTELE egy valódi tesztlevél mérése** (az S2 vége): nem mértük, hogy a Gmail API a ticket@ postafiókban a fenti alakú, Gmail-azonosítójú `Authentication-Results` fejlécet adja-e. Ha ilyen fejléc nincs, minden levél ismeretlen feladó lesz (ez a biztonságos irány). A szabály a sorrendtől független, ezért a sorrend mérése már nem a biztonságot dönti el. Ami a szabályon kívül marad: ha a Gmail saját fejléce hiányozna a levélről, egy hamis fejléc egyedül átmenne; a Gmail mindig hozzáadja a sajátját, és a tesztlevél ezt méri.
-- Az AI-kitöltés (S3) nincs meg; a `PD-001` elvhez a szűrt szöveg Balázs döntése szerint megy.
+- **Az AI lépést nem mértük a valódi szolgáltató ellen** (a tesztek hamis klienssel mennek): a prompt magyar levélre adott minősége és az elutasítások aránya ismeretlen. Az első mérés egy kitalált, redaktált levél stage-en, és a redakció kimenetét (a számlálókat) ellenőrizni kell, mielőtt a kapcsolót bekapcsoljuk. A redakció az ismeretlen személynevet nem fogja meg (lásd fent).
 - Egy meglévő levélre érkező válasz külön tételként jelenik meg; összefésülés nincs.

@@ -49,6 +49,7 @@ function data(): ServiceDraftListResponse {
         attachments: [],
         filterState: "PASSED",
         intakeState: "RULE_DRAFT",
+        aiSummary: null,
         jevClass: "OUR_TECHNICAL_FAULT",
         jevConfidence: 0.93,
         occurrence: 2,
@@ -423,6 +424,37 @@ describe("Service draft review -- ticket mailbox drafts", () => {
     expect(
       (screen.getByLabelText("Jelentő szerzője") as HTMLInputElement).value,
     ).toBe("Kovács Anna");
+  });
+
+  it("shows the AI summary as TEXT, marked as a help, with the original mail text beside it (barracuda, ai#106)", async () => {
+    mock.list.mockResolvedValue(
+      ticketData({
+        intakeState: "AI_DRAFT",
+        aiSummary: "A szűrő csöpög <b>sürgős</b> https://tamado.example",
+      }),
+    );
+    render(<ServiceDraftsPage />);
+    await screen.findByText("Szűrő csöpög");
+    expect(screen.getByText("AI vázlat")).toBeTruthy();
+    expect(screen.getByText(/AI összefoglaló \(csak segítség/)).toBeTruthy();
+    // the summary is a text node: the tags and the link are shown as characters, not rendered
+    const summary = screen.getByText(
+      /A szűrő csöpög <b>sürgős<\/b> https:\/\/tamado\.example/,
+    );
+    expect(summary.querySelector("b")).toBeNull();
+    expect(summary.querySelector("a")).toBeNull();
+    // and the original text of the mail is on the same card
+    expect(screen.getByText("A levél szövege")).toBeTruthy();
+    expect(
+      screen.getAllByText("A 3-as medence szűrője csöpög.").length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("no AI summary block when the AI did not run", async () => {
+    mock.list.mockResolvedValue(ticketData());
+    render(<ServiceDraftsPage />);
+    await screen.findByText("Szűrő csöpög");
+    expect(screen.queryByText(/AI összefoglaló/)).toBeNull();
   });
 
   it("the source filter sends the source to the list", async () => {

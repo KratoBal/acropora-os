@@ -1691,6 +1691,8 @@ export const ANONYMIZATION_REGISTER: Readonly<
     jevClass: "business",
     decisionRunId: "identifier",
     senderUserId: "identifier",
+    aiSummary: "freeText",
+    aiExtractedBy: "business",
   },
   ServiceDraftAttachment: {
     fileName: "freeText",
