@@ -307,6 +307,27 @@ export class BillingDocumentsRepository {
   }
 
   /**
+   * A DÍJBEKÉRŐ FIZETÉSI TÉNYEI A FEEDBŐL (kártya 00926d89): a kifizetett összeg, a bruttó, a pénznem és a sztornó jele. `null`: nincs
+   * feed-sora. A döntést (teljes fedezet-e) NEM ez hozza: azt `advancePaidByProforma` az előlegszámla saját bruttójával veti össze.
+   */
+  async proformaPaymentFacts(documentNumber: string): Promise<{
+    paidAmount: Prisma.Decimal;
+    grossAmount: Prisma.Decimal;
+    currency: string;
+    cancelled: boolean;
+  } | null> {
+    return this.database.externalBillingDocument.findFirst({
+      where: { documentNumber },
+      select: {
+        paidAmount: true,
+        grossAmount: true,
+        currency: true,
+        cancelled: true,
+      },
+    });
+  }
+
+  /**
    * Kifizették-e a számot a Számlázz.hu feedje szerint: `true` kifizetés van,
    * `false` a feed tudja, és nincs, `null` nincs feed-sora vagy nem vetített.
    */

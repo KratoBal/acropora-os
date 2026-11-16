@@ -105,8 +105,8 @@ function setup(
     /** Replaces the request builder (a test drops the preview marker with it). */
     buildXml?: typeof buildSzamlazzAgentInvoiceXml;
     strayFails?: boolean;
-    /** What the Számlázz.hu feed says about the proforma's payment (`feedPaid`): true, false, null (unknown); default null. */
-    feedPaid?: boolean | null;
+    /** The feed's payment facts of the proforma (`proformaPaymentFacts`); the draft's gross is 1270; null: no feed row (the default). */
+    proformaFacts?: { paid: string; cancelled?: boolean } | null;
   } = {},
 ) {
   const calls = {
@@ -118,8 +118,15 @@ function setup(
   const documents = {
     find: async () => (options.found === undefined ? row() : options.found),
     partnerTaxHint: async () => null,
-    feedPaid: async () =>
-      options.feedPaid === undefined ? null : options.feedPaid,
+    proformaPaymentFacts: async () =>
+      options.proformaFacts
+        ? {
+            paidAmount: d(options.proformaFacts.paid),
+            grossAmount: d("1270"),
+            currency: "HUF",
+            cancelled: options.proformaFacts.cancelled ?? false,
+          }
+        : null,
   } as unknown as BillingDocumentsRepository;
   const credentials = {
     resolve: async () => {
@@ -328,8 +335,11 @@ describe("BillingDocumentPreviewService", () => {
       ...over,
     });
 
-  it("a paid proforma's advance previews with fizetve and today as the due date", async () => {
-    const { service, calls } = setup({ found: advance(), feedPaid: true });
+  it("an advance fully covered by its proforma's payment previews with fizetve and today as the due date", async () => {
+    const { service, calls } = setup({
+      found: advance(),
+      proformaFacts: { paid: "1270" },
+    });
     const before = budapestDayKey(new Date());
     await service.preview("doc-1");
     const after = budapestDayKey(new Date());
@@ -339,12 +349,16 @@ describe("BillingDocumentPreviewService", () => {
     assert.ok(due === before || due === after, `due ${due}`);
   });
 
-  it("an unpaid or unknown-state proforma's advance previews as before", async () => {
-    for (const feedPaid of [false, null] as const) {
-      const { service, calls } = setup({ found: advance(), feedPaid });
+  it("a part payment, a cancelled proforma or no feed row previews as before", async () => {
+    for (const proformaFacts of [
+      { paid: "1000" },
+      { paid: "1270", cancelled: true },
+      null,
+    ]) {
+      const { service, calls } = setup({ found: advance(), proformaFacts });
       await service.preview("doc-1");
       const xml = calls.xml[0]!;
-      assert.doesNotMatch(xml, /fizetve/);
+      assert.doesNotMatch(xml, /fizetve/, JSON.stringify(proformaFacts));
       assert.match(xml, /<fizetesiHataridoDatum>2026-10-08</);
     }
   });

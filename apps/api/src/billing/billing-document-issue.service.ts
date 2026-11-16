@@ -34,6 +34,7 @@ import { DOCUMENT_STORE } from "../service-assets/document-store/document-store.
 import type { DocumentStore } from "../service-assets/document-store/document-store.js";
 import { budapestDayKey } from "../dashboard/budapest-day.js";
 import {
+  advancePaidByProforma,
   billingIssueSummary,
   buildIssueInput,
   finalInvoiceIssueProblem,
@@ -46,7 +47,10 @@ import {
   toSzamlazzAgentInput,
 } from "./billing-document-szamlazz.adapter.js";
 import { BillingDocumentStockRepository } from "./billing-document-stock.repository.js";
-import { BillingDocumentsRepository } from "./billing-documents.repository.js";
+import {
+  BillingDocumentsRepository,
+  type BillingDocumentRow,
+} from "./billing-documents.repository.js";
 import {
   DEFAULT_PAYMENT_DAYS,
   toBillingDocumentDetail,
@@ -171,17 +175,17 @@ export class BillingDocumentIssueService {
   }
 
   /**
-   * IS THE PROFORMA THIS ADVANCE INVOICE IS MADE FROM PAID (card 00926d89). Only an advance invoice with a proforma asks; the answer is
-   * the Számlázz.hu feed's (`feedPaid`: true only when a payment is on the proforma), so an unknown state (`null`) is "not paid" and the
-   * invoice goes out as before.
+   * IS THE PROFORMA THIS ADVANCE INVOICE IS MADE FROM PAID IN FULL (card 00926d89). Only an advance invoice with a proforma asks; the
+   * answer is the Számlázz.hu feed's payment compared with THIS invoice's gross (`advancePaidByProforma`): a part payment, another
+   * currency, a cancelled proforma or an unknown state is "not paid" and the invoice goes out as before.
    */
-  private async proformaPaidOf(row: {
-    documentType: string;
-    proformaInvoice?: { invoiceNumber: string | null } | null;
-  }): Promise<boolean> {
+  private async proformaPaidOf(row: BillingDocumentRow): Promise<boolean> {
     const number = row.proformaInvoice?.invoiceNumber;
     if (row.documentType !== "ADVANCE_INVOICE" || !number) return false;
-    return (await this.documents.feedPaid(number)) === true;
+    return advancePaidByProforma(
+      row,
+      await this.documents.proformaPaymentFacts(number),
+    );
   }
 
   /**

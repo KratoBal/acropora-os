@@ -19,7 +19,10 @@ import { buildSzamlazzAgentInvoiceXml } from "../integrations/szamlazz/szamlazz-
 import { SzamlazzConnectionError } from "../integrations/szamlazz/szamlazz-connection.types.js";
 import { SzamlazzCredentialProvider } from "../integrations/szamlazz/szamlazz-credential.provider.js";
 import { budapestDayKey } from "../dashboard/budapest-day.js";
-import { buildIssueInput } from "./billing-document-issue.js";
+import {
+  advancePaidByProforma,
+  buildIssueInput,
+} from "./billing-document-issue.js";
 import { customerTaxNumberProblem } from "./buyer-tax-number.js";
 import { BillingDocumentIssueRepository } from "./billing-document-issue.repository.js";
 import {
@@ -112,7 +115,10 @@ export class BillingDocumentPreviewService {
     const proformaNumber = row.proformaInvoice?.invoiceNumber ?? null;
     const proformaPaid =
       row.documentType === "ADVANCE_INVOICE" && proformaNumber !== null
-        ? (await this.documents.feedPaid(proformaNumber)) === true
+        ? advancePaidByProforma(
+            row,
+            await this.documents.proformaPaymentFacts(proformaNumber),
+          )
         : false;
     const taxProblem =
       row.customer && customerTaxNumberProblem(row.customer)

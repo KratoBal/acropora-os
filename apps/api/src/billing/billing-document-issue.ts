@@ -308,6 +308,33 @@ export function buildIssueInput(row: BillingDocumentRow): IssueInput {
   };
 }
 
+/** What the Számlázz.hu feed knows about a proforma's payment (`BillingDocumentsRepository.proformaPaymentFacts`). */
+export interface ProformaPaymentFacts {
+  paidAmount: Prisma.Decimal;
+  grossAmount: Prisma.Decimal;
+  currency: string;
+  cancelled: boolean;
+}
+
+/**
+ * IS THIS ADVANCE INVOICE FULLY COVERED BY ITS PROFORMA'S PAYMENT (card 00926d89, barracuda on #2638). `fizetve=true` states that the
+ * invoice is SETTLED, so "the proforma has a payment on it" is not enough: the feed's paid amount must reach the advance invoice's own
+ * gross (the totals the issue sends), in the same currency, and the proforma must not be cancelled. A part payment, another currency, a
+ * cancelled proforma, no feed row and an unbuildable draft are all "not paid": the invoice goes out as it always did.
+ */
+export function advancePaidByProforma(
+  row: BillingDocumentRow,
+  facts: ProformaPaymentFacts | null,
+): boolean {
+  if (row.documentType !== "ADVANCE_INVOICE" || facts === null) return false;
+  if (facts.cancelled) return false;
+  if (facts.currency.trim().toUpperCase() !== row.currency.trim().toUpperCase())
+    return false;
+  const input = buildIssueInput(row);
+  if (!input.ok) return false;
+  return facts.paidAmount.gte(new Prisma.Decimal(input.totals.grossAmount));
+}
+
 /**
  * WHERE AN ISSUED INVOICE IS SENT: the buyer's billing e-mail, the ordering one only when there is none (Balázs,
  * 2026-10-26). The billing editor's issue and the TIG invoice's window both take it from here.
