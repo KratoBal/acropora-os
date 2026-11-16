@@ -895,3 +895,29 @@ egészséges állapotban: a `SKIPPED` mostantól azt jelenti, hogy a forgás is
 üres. Az éles boltnál bekapcsolni KÜLÖN döntés, és az Balázsé; a kapcsoló
 ott kikapcsolva marad. Az eltérés-olvasó egy későbbi kártya, ha a forgás
 drága volna.
+
+## ADR-017 – Egy jelölt árva kötés nem esedékes, és nem teszi FAILED-dé a vetítő kört
+
+**Dátum:** 2026-11-16
+
+**Kontextus.** Az `orphaned-link` megállás azt jelenti, hogy az OS termék kötése egy Medusa termékre mutat, amely a boltban már nincs
+(az update HTTP 404-et ad). A vetítés szándékosan megáll: nem törli a kötést és nem hoz létre újat, mert egy 404 mögött rendszerint
+szándékos bolti törlés áll, amit egy csendes újralétrehozás visszacsinálna; a döntés emberé (`--forget-link`, csak a kötés sorát törli).
+A kötés a megállás helyén jelet kap (`medusaOrphan` a metaadatban). A stage-en 2026-11-16 07:44Z-kor egyetlen ilyen termék volt
+(`stopped {"orphaned-link": 1}`, `general` 41), és minden kört FAILED-dé tett, mert a futtató minden megállt termékre növeli a
+`failed`-et és 1-gyel lép ki, a termék pedig a kötés időbélyegének megállása miatt minden körben újra esedékes maradt.
+
+**Döntés** (acrobot 53748). (1) A futtató az `orphaned-link` megállást NEM számolja futási hibának (`stoppedProductIsRunFailure`); a sora
+tovább kimegy a hibakimenetre és a `lastRound.stopped`-be számít. (2) A jelölt árva kötések kimaradnak a general, az inaktivált és a
+forgás listából (és a tény-, akció- és márkaváltozás listájából): a 404 egy MÁSIK Medusa azonosítóra is 404 marad, tehát az újrapróba
+semmit nem old meg, és tömeges bolti törlésnél az árvák a batch keretét töltenék. (3) A jel nem tűnik el, csak nem buktat: a
+`lastRound.orphanedLinks` a jelölt árva kötések száma (`null`, ha a kötések olvasása elbukott: ilyenkor semmi nem marad ki). A kötések
+jelét a kód szűri, nem Prisma JSON-út szűrő, mert az helyi adatbázis nélkül nem mérhető.
+
+**Amit nem teszünk:** automatikus `--forget-link`. Az árva kötés megszüntetése emberi döntés marad; a szám azt mondja meg, mikor kell
+ránézni.
+
+**Következmény.** A FAILED kör mostantól a valódi futási hibát jelenti, árva kötés nélkül; a kézi `medusa-projection.cli` az árva
+termékre is 0-val lép ki, a MEGÁLLT sor (és benne a `--forget-link` útmutatás) viszont a hibakimeneten ott van. A futtató bekötése
+(`if (stoppedProductIsRunFailure(...)) failed += 1`) kód-olvasat, nem unit-tesztelt: a `runProjectionCli` teljes láncát (leképezés,
+Medusa-kliens, 404) helyben nem lehet kis dublákkal futtatni; a predikátum tesztelt.

@@ -561,6 +561,19 @@ export type ProjectionStopReason =
   | "orphaned-link";
 
 /**
+ * A MEGALLT TERMEK HIBA-E A FUTASNAK (task t-20261116-arva-kotes, acrobot 53748). Az `orphaned-link` NEM: a kotes egy olyan bolti
+ * termekre mutat, ami nincs meg (HTTP 404), es ez egy ismert allapot, ami EMBERI dontest ker (`--forget-link`), nem futasi hiba. Ha az
+ * ilyen termek a futast `failed`-re (kilepesi kod 1, FAILED kor) tenne, egy egyetlen ilyen termek minden kort bukottnak mutatna, es
+ * elfedne a valodi hibakat (mert 2026-11-16-an a stage-en pontosan ez tortent: `stopped {"orphaned-link": 1}`). A sora tovabbra is
+ * kimegy a hibakimenetre es a `lastRound.stopped`-be szamit; a jelolt arvak szama a `lastRound.orphanedLinks`.
+ */
+export function stoppedProductIsRunFailure(
+  reason: ProjectionStopReason,
+): boolean {
+  return reason !== "orphaned-link";
+}
+
+/**
  * MIÉRT nincs átvihető cikkszám - és a szolgáltatás EZT MEG TUDJA MONDANI.
  *
  * Az első változatom azt írta, hogy „a terméknek nincs cikkszáma". Ezt innen

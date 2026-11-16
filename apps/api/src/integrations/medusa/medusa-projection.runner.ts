@@ -90,6 +90,7 @@ import {
 import { MedusaShippingOnCreate } from "./medusa-shipping-on-create.js";
 import {
   MedusaProductProjectionService,
+  stoppedProductIsRunFailure,
   type ProjectionPublicationReport,
 } from "./medusa-product-projection.service.js";
 import {
@@ -1801,7 +1802,8 @@ export async function runProjectionCli(
       out.stderr(
         `${productId}: MEGÁLLT (${outcome.reason}) ${outcome.details}\n`,
       );
-      failed += 1;
+      // az `orphaned-link` ismert allapot, emberi dontest ker: nem teszi a futast hibassa (a sora kimegy, a kor `stopped`-jaba szamit)
+      if (stoppedProductIsRunFailure(outcome.reason)) failed += 1;
       continue;
     }
 

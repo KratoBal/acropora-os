@@ -11,6 +11,7 @@ import { prisma } from "@acropora/database";
 
 import { decideProjectionDue } from "./medusa-projection-due.js";
 import {
+  MEDUSA_ORPHAN_METADATA_KEY,
   MEDUSA_PRODUCT_REFERENCE,
   MedusaProductLinkRepository,
 } from "./medusa-product-link.repository.js";
@@ -316,6 +317,13 @@ export type ProjectionRoundStatus = {
      * ugyanazok foglaljak-e a keretet. null = a korben nem futott termek-vetites.
      */
     stopped: Record<string, number> | null;
+    /**
+     * a JELOLT ARVA kotesek szama (2026-11-16, acrobot 53748): olyan bolti termekre mutat a kotes, ami a boltban mar nincs (HTTP 404).
+     * A vetites az ilyet NEM probalja ujra (a general, az inaktivalt es a forgas listabol kimarad, es a kor nem lesz tole FAILED):
+     * egy 404 rendszerint szandekos bolti torlest jelent, amirol ember dont (`--forget-link`). A jel igy nem tunik el, csak nem
+     * bukat: ez a szam mutatja. null = a kotesek olvasasa elbukott (a kor ilyenkor semmit nem hagy ki).
+     */
+    orphanedLinks: number | null;
     /**
      * a kor `ambiguous-price` kudarcainak utkozo forint sorai alakonkent (550b80d1), azonosito nelkul: arlistas,
      * szabalyos, mennyisegi, sima, vagy a valasz nem hozta a jelet (`unknown`). null = nem volt ketertelmu ar.
@@ -657,6 +665,7 @@ export class MedusaProjectionScheduler
       priceRetryDropped: null,
       priceFailures: null,
       stopped: null,
+      orphanedLinks: null,
       priceConflictRows: null,
       steps: { leftoverKind: null, arrivals: null },
     };
@@ -688,18 +697,23 @@ export class MedusaProjectionScheduler
     await this.erkezoAllatokKor(allapot);
     await this.fajtaKor(allapot);
     const kezdet = this.now();
-    const akcio = await this.akcioHatarAzonositok();
-    const teny = await this.tenyValtozasAzonositok();
-    const marka = await this.markaValtozasAzonositok();
+    // a jelolt arva kotesek: nem esedekesek sehol (lasd a `orphanedLinks` mezo)
+    const arvak = await this.arvaKotesek();
+    allapot.orphanedLinks = arvak ? arvak.size : null;
+    const nemArva = (id: string) => !arvak?.has(id);
+    const akcio = (await this.akcioHatarAzonositok()).filter(nemArva);
+    const teny = (await this.tenyValtozasAzonositok()).filter(nemArva);
+    const marka = (await this.markaValtozasAzonositok()).filter(nemArva);
     /*
       AZ INAKTIVÁLT TERMÉK A SOR VÉGÉN (ca422e92): a kifutott lap késése kisebb
       kár, mint egy értékesíthető terméké, és az első körök visszamenőleges
       halmazát így a napi változások nem várják ki.
     */
-    const altalanos = await this.esedekesAzonositok(limit);
-    const inaktivalt = await this.inaktivaltAzonositok(limit);
+    const altalanos = await this.esedekesAzonositok(limit, arvak);
+    const inaktivalt = await this.inaktivaltAzonositok(limit, arvak);
     const frissites = await this.frissitesAzonositok(
       new Set([...akcio, ...teny, ...marka, ...altalanos, ...inaktivalt]),
+      arvak,
     );
     const esedekes = [
       ...new Set([
@@ -1218,7 +1232,10 @@ export class MedusaProjectionScheduler
    * terméket kötés nélkül nem vetíti, tehát kötött kizárt termék ma nem
    * keletkezhet.
    */
-  private async inaktivaltAzonositok(limit: number): Promise<string[]> {
+  private async inaktivaltAzonositok(
+    limit: number,
+    arvak: ReadonlySet<string> | null = null,
+  ): Promise<string[]> {
     const kotesek = await this.db.externalReference.findMany({
       where: MEDUSA_PRODUCT_REFERENCE,
       // stabil sorrend: a forgó kezdet (lent) csak így jelent minden körben ugyanazt a helyet
@@ -1269,6 +1286,7 @@ export class MedusaProjectionScheduler
       utána a kötés a pont után áll.
     */
     const esedekes = kotesek
+      .filter((k) => !arvak?.has(k.entityId))
       .filter((k) => {
         const mikor = valtozas.get(k.entityId);
         return (
@@ -1295,6 +1313,30 @@ export class MedusaProjectionScheduler
       0,
       limit,
     );
+  }
+
+  /**
+   * A JELOLT ARVA KOTESEK (task t-20261116-arva-kotes, acrobot 53748): azok a Medusa termek-kotesek, amelyeken a vetites a
+   * `medusaOrphan` jelet hagyta (a bolti termek 404-et adott). A kotes metaadatat KODBAN szuri, nem JSON-ut szurovel: egy ilyen
+   * Prisma-szuro helyi adatbazis nelkul nem merheto, es ~1500 sor egyszeru olvasasa olcso. Ha az olvasas elbukik, `null`: a kor
+   * semmit nem hagy ki (egy hianyzo szuro csak egy felesleges probalkozas, egy hibas szuro eltuntetne a termeket).
+   */
+  private async arvaKotesek(): Promise<Set<string> | null> {
+    try {
+      const sorok = await this.db.externalReference.findMany({
+        where: MEDUSA_PRODUCT_REFERENCE,
+        select: { entityId: true, metadata: true },
+      });
+      const arvak = new Set<string>();
+      for (const sor of sorok) {
+        const meta = sor.metadata as Record<string, unknown> | null | undefined;
+        const jel = meta?.[MEDUSA_ORPHAN_METADATA_KEY];
+        if (typeof jel === "object" && jel !== null) arvak.add(sor.entityId);
+      }
+      return arvak;
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -1337,6 +1379,7 @@ export class MedusaProjectionScheduler
    */
   private async frissitesAzonositok(
     mar: ReadonlySet<string>,
+    arvak: ReadonlySet<string> | null = null,
   ): Promise<string[]> {
     this.frissitesValasztott = new Map();
     const config = projectionRefreshConfig(this.environment);
@@ -1358,7 +1401,12 @@ export class MedusaProjectionScheduler
     });
     // a rendezés a kódban is megvan: a lekérdezés az ablakot jelöli ki, a sorrend viszont egy tágabb válasznál se múlhat rajta
     const jeloltek = kotesek
-      .filter((k) => k.lastSyncedAt !== null && !mar.has(k.entityId))
+      .filter(
+        (k) =>
+          k.lastSyncedAt !== null &&
+          !mar.has(k.entityId) &&
+          !arvak?.has(k.entityId),
+      )
       .sort(
         (a, b) =>
           a.lastSyncedAt!.getTime() - b.lastSyncedAt!.getTime() ||
@@ -1480,7 +1528,10 @@ export class MedusaProjectionScheduler
    * el a kerdes, hogy "megallt-e a vetites" -- nem allt meg, csak nem volt MIN
    * eszrevennie.
    */
-  private async esedekesAzonositok(limit: number): Promise<string[]> {
+  private async esedekesAzonositok(
+    limit: number,
+    arvak: ReadonlySet<string> | null = null,
+  ): Promise<string[]> {
     const ablak = limit * OVERSCAN;
     const esedekes: string[] = [];
     /*
@@ -1551,6 +1602,8 @@ export class MedusaProjectionScheduler
       );
 
       for (const termek of termekek) {
+        // a jelolt arva kotes nem esedekes: a 404 emberi dontest ker, es a keretet sem szabad foglalnia
+        if (arvak?.has(termek.id)) continue;
         const dontes = decideProjectionDue({
           lastProjectedAt: utoljara.get(termek.id) ?? null,
           sourceTimestamps: [
