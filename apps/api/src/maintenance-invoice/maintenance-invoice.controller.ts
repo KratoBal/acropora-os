@@ -8,11 +8,19 @@ import {
   StreamableFile,
 } from "@nestjs/common";
 import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
-import { IsBoolean, IsOptional } from "class-validator";
+import {
+  IsBoolean,
+  IsOptional,
+  IsString,
+  Length,
+  Matches,
+  ValidateIf,
+} from "class-validator";
 
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
 import { MaintenanceInvoiceDraftService } from "./maintenance-invoice-draft.service.js";
+import { MaintenanceInvoiceIssueService } from "./maintenance-invoice-issue.service.js";
 
 /**
  * A piszkozat kérése: a megrendeléses (munkalap nélküli) TIG aláírt példány nélkül csak a
@@ -20,6 +28,33 @@ import { MaintenanceInvoiceDraftService } from "./maintenance-invoice-draft.serv
  */
 export class MaintenanceInvoiceDraftDto {
   @IsOptional() @IsBoolean() acknowledgeUnsigned?: boolean;
+}
+
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * The TIG invoice's issue (card 7ba97e0d, S3): what the confirmation window showed and the person confirmed, the three
+ * dates and the digest of the shown values (`GET :invoiceId/issue-summary` gives them), and "Elküldöm e-mailben". The
+ * dates' own rule (`checkBillingIssueDates`) runs in the issue.
+ */
+export class MaintenanceInvoiceIssueDto {
+  @Matches(DAY)
+  issueDate!: string;
+
+  @Matches(DAY)
+  fulfillmentDate!: string;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @Matches(DAY)
+  dueDate?: string | null;
+
+  @IsString()
+  @Length(64, 64)
+  fingerprint!: string;
+
+  @IsBoolean()
+  send!: boolean;
 }
 
 /**
@@ -31,7 +66,10 @@ export class MaintenanceInvoiceDraftDto {
 @Controller("partners/maintenance-invoice")
 @RequirePermissions(PERMISSIONS.PARTNERS_MANAGE)
 export class MaintenanceInvoiceController {
-  constructor(private readonly draftService: MaintenanceInvoiceDraftService) {}
+  constructor(
+    private readonly draftService: MaintenanceInvoiceDraftService,
+    private readonly issuing: MaintenanceInvoiceIssueService,
+  ) {}
 
   /**
    * CSAK OLVASÁS, Számlázz.hu-hívás nélkül -- a panel ezt hívja
@@ -67,10 +105,24 @@ export class MaintenanceInvoiceController {
    * szerepek közül az OWNER, az ADMIN és a MANAGER kapja; a WAREHOUSE-nak
    * `PARTNERS_MANAGE`-e van, tehát piszkozatot készíthet, kiállítani nem.
    */
+  @Get(":invoiceId/issue-summary")
+  @RequirePermissions(PERMISSIONS.FINANCE_MANAGE)
+  issueSummary(@Param("invoiceId") invoiceId: string) {
+    return this.draftService.issueSummary(invoiceId);
+  }
+
   @Post(":invoiceId/issue")
   @RequirePermissions(PERMISSIONS.FINANCE_MANAGE)
-  issue(@Param("invoiceId") invoiceId: string) {
-    return this.draftService.issue(invoiceId);
+  issue(
+    @Param("invoiceId") invoiceId: string,
+    @Body() body: MaintenanceInvoiceIssueDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.issuing.issue(
+      invoiceId,
+      { ...body, dueDate: body.dueDate ?? null },
+      user,
+    );
   }
 
   @Get(":invoiceId/pdf")

@@ -2,12 +2,14 @@ import {
   Body,
   ConflictException,
   Controller,
+  Delete,
   Get,
   HttpCode,
   NotFoundException,
   Param,
   Post,
   Put,
+  Query,
 } from "@nestjs/common";
 import { prisma } from "@acropora/database";
 import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
@@ -56,6 +58,21 @@ export class BillingDocumentsController {
   @RequirePermissions(PERMISSIONS.BILLING_CREATE)
   update(@Param("id") id: string, @Body() input: BillingDocumentDraftDto) {
     return this.service.update(id, input);
+  }
+
+  /**
+   * EGY KIMENŐ VÁZLAT TÖRLÉSE (kártya 6a75f15c). Csak sorszám nélküli vázlat, amire nem hivatkozik másik bizonylat; ugyanaz a jog, mint a
+   * vázlat mentéséé. A `expectedUpdatedAt` a legutóbb betöltött állapot (lekérdezési paraméter: a törlésnek nincs törzse).
+   */
+  @Delete(":id")
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.BILLING_CREATE)
+  deleteDraft(
+    @Param("id") id: string,
+    @Query("expectedUpdatedAt") expectedUpdatedAt: string | undefined,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.deleteDraft(id, expectedUpdatedAt, user);
   }
 
   /**

@@ -157,6 +157,15 @@ describe("ProductDoseEffectsCard", () => {
     expect(
       (screen.getByLabelText("Hatás 100 literre") as HTMLInputElement).value,
     ).toBe("");
+    // the pilot field hands the number keyboards on to the real inputs
+    expect(screen.getByLabelText("Hatás 100 literre")).toHaveAttribute(
+      "inputmode",
+      "decimal",
+    );
+    expect(screen.getByLabelText("Hatásidő")).toHaveAttribute(
+      "inputmode",
+      "numeric",
+    );
 
     fireEvent.click(screen.getByText("Mentés"));
     expect(

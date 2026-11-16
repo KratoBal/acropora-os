@@ -46,10 +46,17 @@ import {
   type NavConfirmation,
 } from "./auto-approval.js";
 import { prismaErrorSummary } from "./error-summary.js";
+import {
+  knownSupplierName,
+  supplierNameConflict,
+  taxKey,
+  type VerifiedSupplierRow,
+} from "./known-supplier-name.js";
 import { storedValues, type StoredReading } from "./reading-values.js";
 import {
   loadManualPurchasePayments,
   loadPurchaseSubjects,
+  incomingRowFor,
   lockIncomingKey,
   otherSourceRowFor,
   PURCHASE_ITEM_PREFIX,
@@ -246,6 +253,19 @@ export class NoMailboxDocumentError extends Error {
   }
 }
 
+/**
+ * A jóváhagyott számlaszám (a szállítóval együtt) már egy bent lévő számláé, egy másik dokumentumból vagy forrásból: vagy
+ * ugyanaz a számla másodszor, vagy egy ELÍRT szám, ami egy másik számláéval ütközik (niceshops: a 97 265 Ft-os R…1578 a
+ * 338 018 Ft-os R…0667 számával lett jóváhagyva). Az összeget nem nézzük: mindkét esetben a számot kell ellenőrizni.
+ */
+export class DuplicateIncomingError extends ConflictException {
+  constructor(source: string) {
+    super(
+      `Ez a számlaszám ennél a szállítónál már egy bent lévő számláé (${source}). Ellenőrizd a számot: ha elírás, javítsd; ugyanaz a számla másodszor nem hagyható jóvá.`,
+    );
+  }
+}
+
 /** Az olvasat a beolvasás óta megváltozott: az automatikus jóváhagyás nem ír rá. */
 class ReadingChangedError extends Error {
   constructor() {
@@ -402,6 +422,18 @@ export class IncomingReviewService {
       });
       if (taken)
         throw new ConflictException("Ez a számla már jóvá van hagyva.");
+      /*
+        A SZÁM ÜTKÖZIK EGY BENT LÉVŐ SZÁMLÁVAL (acrobot 49595, 49609): a fenti zár a DOKUMENTUMRA szól, tehát egy másik
+        dokumentum ugyanazzal a számmal és szállítóval második sort kapna. Élesen ez egy ELÍRT szám volt: a 97 265 Ft-os
+        niceshops R49010000026241578 a 338 018 Ft-os R49010000026240667 számával lett jóváhagyva, és a két számla egy
+        kulcson állt. A számla kulcsára (szám és szállító) ugyanaz a zár, amit a Számlázz.hu-vetítés és a beszerzés
+        jóváhagyása vesz, és ha bármely forrásból már sor ezzel a kulccsal, a jóváhagyás áll, az összegtől függetlenül.
+      */
+      const key = await lockIncomingKey(tx, values);
+      const same = key
+        ? await incomingRowFor(tx, values.documentNumber!, key)
+        : null;
+      if (same) throw new DuplicateIncomingError(same.source);
       const now = new Date();
       const row = await tx.incomingBillingDocument.create({
         data: {
@@ -551,15 +583,22 @@ export class IncomingReviewService {
       failed: 0,
       rows: [],
     };
+    // az ember által jóváhagyott nevek, egyszer a futásra: a név-ütközés (szövegből olvasott név a korábbi, ember által jóváhagyott névtől eltér) emberhez küldi a sort
+    const humanVerified = await this.humanVerifiedSuppliers();
     for (const { pairing, reading } of pending) {
       const values = storedValues(reading);
+      const sources = (reading.sources ?? {}) as ForeignReading["sources"];
       const decision = autoApproval({
         values,
-        sources: (reading.sources ?? {}) as ForeignReading["sources"],
+        sources,
         kind: pairing.kind,
         debits: pairing.debits,
         nav: confirmations,
         problems: approvalProblems,
+        nameConflict:
+          sources.supplierName === "TEXT"
+            ? (supplierNameConflict(humanVerified, values)?.name ?? null)
+            : null,
       });
       const base = {
         documentId: pairing.document.id,
@@ -628,7 +667,8 @@ export class IncomingReviewService {
               ...base,
               basis: null,
               reason:
-                error instanceof ReadingChangedError
+                error instanceof ReadingChangedError ||
+                error instanceof DuplicateIncomingError
                   ? error.message
                   : "közben jóváhagyták",
               written: false,
@@ -776,18 +816,94 @@ export class IncomingReviewService {
       if (lines && !lines.some((line) => line.trim())) lines = null;
     }
     const document = pairing.document;
-    return readForeignInvoice({
-      lines,
-      adapter: source.adapter,
-      pairing: {
-        number: document.number,
-        supplierName: document.supplierName,
-        date: document.date,
-        gross: document.gross?.toFixed(2) ?? null,
-        currency: document.currency,
-        debits: pairing.debits,
+    return this.withKnownSupplierName(
+      readForeignInvoice({
+        lines,
+        adapter: source.adapter,
+        pairing: {
+          number: document.number,
+          supplierName: document.supplierName,
+          date: document.date,
+          gross: document.gross?.toFixed(2) ?? null,
+          currency: document.currency,
+          debits: pairing.debits,
+        },
+      }),
+    );
+  }
+
+  /**
+   * A KORÁBBAN, EMBER ÁLTAL JÓVÁHAGYOTT SOROK (a szállító-név forrása: kitöltéshez és az ütközés jelzéséhez; kártya dbab22cd).
+   * CSAK EMBER ÁLTAL JÓVÁHAGYOTT SOR: az automatikus jóváhagyás is VERIFIED, de a szerzője null, és a neve a PDF-ből olvasott, amit ember nem nézett meg;
+   * ha az is forrás lenne, a név saját magát erősítené ember nélkül (barracuda, #2471).
+   */
+  private async humanVerifiedSuppliers(): Promise<VerifiedSupplierRow[]> {
+    return this.database.incomingDocumentReading.findMany({
+      where: {
+        state: "VERIFIED",
+        reviewedByUserId: { not: null },
+        supplierName: { not: null },
       },
+      select: {
+        supplierName: true,
+        supplierTaxNumber: true,
+        supplierEuTaxNumber: true,
+        updatedAt: true,
+      },
+      // a legutóbbi jóváhagyottak: a memória kicsi (ma 61 sor), a határ csak a futás védelme
+      orderBy: { updatedAt: "desc" },
+      take: 5000,
     });
+  }
+
+  /**
+   * A SZÁLLÍTÓ NEVE A KORÁBBAN, EMBER ÁLTAL JÓVÁHAGYOTT SZÁMLÁKBÓL (kártya dbab22cd, harmadik kör; `known-supplier-name.ts`): CSAK az üres nevet tölti, a
+   * kiolvasott, az illesztő és a párosítás neve elsőbbséget élvez. A forrás-érték `KNOWN_SUPPLIER` (az ellenőrző lapon látszik), és egy
+   * figyelmeztetés megnevezi az adószámot és a sorok számát. A PDF SZÖVEGÉBŐL olvasott névnél, ha az a korábbi névtől a `nameKey` után eltér, a név MARAD, de egy
+   * figyelmeztetés jelzi az ütközést (az automatikus jóváhagyás ezt külön állítja meg, `autoApprovePending`). A keresés kényelem: ha az adatbázis-olvasás hibázik, az olvasat úgy
+   * marad, ahogy a lookup nélkül lenne, a hiba az olvasást nem állítja meg.
+   */
+  private async withKnownSupplierName(
+    reading: ForeignReading,
+  ): Promise<ForeignReading> {
+    const { values } = reading;
+    if (
+      !taxKey(values.supplierEuTaxNumber) &&
+      !taxKey(values.supplierTaxNumber)
+    )
+      return reading;
+    const fromText = reading.sources.supplierName === "TEXT";
+    if (values.supplierName !== null && !fromText) return reading;
+    try {
+      const rows = await this.humanVerifiedSuppliers();
+      if (values.supplierName !== null) {
+        const conflict = supplierNameConflict(rows, values);
+        if (!conflict) return reading;
+        return {
+          ...reading,
+          warnings: [
+            ...reading.warnings,
+            `A PDF-ből olvasott szállítónév (${values.supplierName}) eltér a korábban, ember által jóváhagyott névtől (${conflict.name}), ugyanazzal az adószámmal (${conflict.taxNumber}): ellenőrizd, melyik a helyes.`,
+          ],
+        };
+      }
+      const known = knownSupplierName(rows, {
+        euTaxNumber: values.supplierEuTaxNumber,
+        taxNumber: values.supplierTaxNumber,
+      });
+      if (!known) return reading;
+      return {
+        ...reading,
+        values: { ...values, supplierName: known.name },
+        sources: { ...reading.sources, supplierName: "KNOWN_SUPPLIER" },
+        warnings: [
+          ...reading.warnings,
+          `A szállító neve (${known.name}) egy korábban jóváhagyott számláról jön, ugyanazzal az adószámmal (${known.taxNumber}, ${known.rows} számla): ellenőrizd.`,
+        ],
+      };
+    } catch {
+      return reading;
+    }
   }
 
   /**

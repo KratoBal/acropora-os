@@ -141,6 +141,7 @@ export const CHARGE_STATE_BADGES: Record<
   NO_INVOICE_NEEDED: "grey",
   REFUND_EXPECTED: "grey",
   REFUND_MISSING: "danger",
+  AWAITING_COLLECTOR: "grey",
 };
 
 export const MONTH_STATE_LABELS: Record<MonthState, string> = {
@@ -228,6 +229,7 @@ export const TAB_STATES: Record<ChargeTab, readonly ChargeInvoiceState[]> = {
     "NO_INVOICE_NEEDED",
     "REFUND_EXPECTED",
     "REFUND_MISSING",
+    "AWAITING_COLLECTOR",
   ],
 };
 

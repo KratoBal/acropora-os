@@ -76,6 +76,8 @@ describe("a keret minden kötetet foglaló táblát számol", () => {
         "MessageAttachment",
         // az elhullási napló fényképei (kártya 115c9740)
         "MortalityRecordDocument",
+        // az üzemeltetési napló fénykép mezőinek képei (S2b)
+        "OperationsLogEntryDocument",
         // a megrendelések csatolmányai (Értékesítés > Megrendelések)
         "PartnerOrderDocument",
         "ServiceJobDocument",

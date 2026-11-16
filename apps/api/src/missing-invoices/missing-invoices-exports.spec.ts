@@ -71,6 +71,8 @@ function service(input: {
   billing?: PackageBillingRow[];
   /** minden bejövő számla-sor hivatkozása, a sztornózott és a nem könyvelendő is */
   refs?: { sourceDocumentId: string | null; documentNumber: string }[];
+  /** az utánvét-elszámolásból levont számlák száma (Foxpost, GLS), normalizálva */
+  deduction?: { foxpost: ReadonlySet<string>; gls: ReadonlySet<string> };
 }) {
   const asked: string[][] = [];
   const askedHeads: string[][] = [];
@@ -81,6 +83,7 @@ function service(input: {
     ownOutgoingDocuments: async () => [],
     statementCoverage: async () => new Set([`${ACCOUNT.id}:2026-08`]),
     manualMatches: async () => new Map(),
+    manualMatchRows: async () => [],
     candidates: async () => input.documents,
     uncheckedMailboxContent: async () => [],
     setPayee: async () => undefined,
@@ -88,6 +91,8 @@ function service(input: {
       feed: input.feed ?? [],
       readings: input.readings ?? new Map(),
     }),
+    settledByDeduction: async () =>
+      input.deduction ?? { foxpost: new Set<string>(), gls: new Set<string>() },
     packageBillingRows: async () => ({
       rows: input.billing ?? [],
       refs:
@@ -657,6 +662,7 @@ describe("the accountant package by invoice date", () => {
     documentNumber: `KS-${overrides.id}`,
     supplierName: "Fluidra Magyarország Kft.",
     supplierTaxNumber: "12345678-2-41",
+    supplierEuTaxNumber: null,
     sourceDocumentId: `src-${overrides.id}`,
     grossAmount: D(56420),
     currency: "HUF",
@@ -1087,6 +1093,145 @@ describe("the accountant package by invoice date", () => {
     assert.ok(cover.includes("KS-PAPER: papíron megvan"), cover);
   });
 
+  /*
+    A SZÁMLA AZONOSSÁGA IS KULCS (niceshops, 2026-11-12, acrobot): a terhelés egy FELTÖLTÖTT dokumentumhoz párosodott
+    (`inv:<szám>|<adószám-számjegyek>`), a bejövő számla-rekord más entitás ugyanazzal a számlaszámmal és adószámmal.
+    A külföldi adószámból (ATU...) nincs adószámos párosítási kulcs, a név eltér, a forrás-azonosító más: a rekord
+    „kifizetetlen” maradt egy már kifizetett terhelés mellett.
+
+    MI PIROSÍT: ha a niceshops-pár a ki nem fizetett listán marad; ha egy MÁS számlaszám vagy MÁS adószám (ugyanaz
+    a név, ugyanaz az összeg) fizetettnek látszik az azonosság miatt; ha ugyanaz a számlaszám és adószám, de MÁS
+    bruttó (helyesbítés, elírás, részfizetés) fizetettnek látszik, mert az azonosság az összeget nem nézi
+    (barracuda, #2490).
+  */
+  it("an incoming invoice record with the same invoice number and tax number as the PAIRED uploaded document is paid, not unpaid", async () => {
+    const NUMBER = "R49010000026240667";
+    const upload = document({
+      id: "upload",
+      source: "UPLOAD",
+      number: NUMBER,
+      date: "2026-08-03",
+      gross: D(338018),
+      supplierName: "Nicehops Handels",
+      supplierTaxNumber: "ATU63964918",
+      identities: ["inv:r49010000026240667|63964918"],
+    });
+    const paidDebit = debit("2026-08-05", 338018, "NICESHOPS GMBH", {
+      narrative: `${NUMBER} niceshops`,
+    });
+    const row = (over: Partial<PackageBillingRow> = {}) =>
+      billingRow({
+        id: "ns",
+        documentNumber: NUMBER,
+        supplierName: "niceshops GmbH",
+        // a külföldi szállító adószáma a bejövő rekordban az EU mezőben áll, a supplierTaxNumber üres (acrobot 49527)
+        supplierTaxNumber: null,
+        supplierEuTaxNumber: "ATU63964918",
+        sourceDocumentId: "feed-ns",
+        grossAmount: D(338018),
+        issueDate: new Date("2026-08-03T00:00:00Z"),
+        ...over,
+      });
+    const unpaidOf = async (
+      billing: PackageBillingRow[],
+      documents: CandidateDocument[] = [upload],
+    ) =>
+      (
+        await service({
+          debits: [paidDebit],
+          documents,
+          billing,
+          files: { "feed-ns": await pdfOfPages(1) },
+        }).missing.packageCheck("2026-08")
+      ).unpaid.map((invoice) => invoice.number);
+
+    // the incoming-invoice list asks the same pairing map: the identity is a key of the paired document there too
+    const pairings = await service({
+      debits: [paidDebit],
+      documents: [upload],
+      billing: [row()],
+      files: {},
+    }).missing.documentPairings();
+    const found = pairings.get("inv:r49010000026240667|63964918");
+    assert.equal(found?.document.id, "upload");
+    assert.equal(found?.debits.length, 1);
+    assert.deepEqual(await unpaidOf([row()]), []);
+    // a másik szám vagy a másik adószám NEM fizetett (ugyanaz a név, ugyanaz az összeg)
+    assert.deepEqual(
+      await unpaidOf([row({ documentNumber: "R49010000099999999" })]),
+      ["R49010000099999999"],
+    );
+    assert.deepEqual(
+      await unpaidOf([row({ supplierEuTaxNumber: "ATU11111111" })]),
+      [NUMBER],
+    );
+    // a magyar adószám a supplierTaxNumber-ben továbbra is nyer: az EU mező csak a hiányt pótolja
+    assert.deepEqual(
+      await unpaidOf([
+        row({
+          supplierTaxNumber: "ATU63964918",
+          supplierEuTaxNumber: "ATU11111111",
+        }),
+      ]),
+      [],
+    );
+    // egyik mező sem ad adószámot: a kulcs a névre esik, a dokumentuméval nem egyezik, kifizetetlen marad
+    assert.deepEqual(await unpaidOf([row({ supplierEuTaxNumber: null })]), [
+      NUMBER,
+    ]);
+    // ugyanaz a szám és adószám, MÁS bruttó: nem a kifizetett számla, kifizetetlen marad
+    assert.deepEqual(await unpaidOf([row({ grossAmount: D(5000) })]), [NUMBER]);
+    // a forintos tűrésen belül (1 Ft) ugyanaz a számla
+    assert.deepEqual(await unpaidOf([row({ grossAmount: D("338018.6") })]), []);
+  });
+
+  /*
+    A DOKUMENTUM BRUTTÓJA ISMERETLEN (acrobot 49548, élesen mérve a niceshops dokumentumon): a feltöltött dokumentum bruttója
+    `null`, a neve üres, csak az azonossága (`inv:`) van meg. Az összegvédelem ilyenkor a PÁROSÍTOTT TERHELÉS összegét veti össze a
+    sor bruttójával. MI PIROSÍT: ha a niceshops-pár a ki nem fizetett listán marad; ha egy MÁS bruttójú sor a terhelés alapján
+    fizetettnek látszik.
+  */
+  it("a paired document with an UNKNOWN gross: the row is paid when the debit's amount matches the row's gross, and not otherwise", async () => {
+    const NUMBER = "R49010000026240667";
+    const upload = document({
+      id: "upload",
+      source: "UPLOAD",
+      number: NUMBER,
+      date: "2026-08-03",
+      gross: null,
+      supplierName: "",
+      identities: ["inv:r49010000026240667|63964918"],
+    });
+    const paidDebit = debit("2026-08-05", 338018, "NICESHOPS GMBH", {
+      narrative: `${NUMBER} niceshops`,
+    });
+    const row = (over: Partial<PackageBillingRow> = {}) =>
+      billingRow({
+        id: "ns",
+        documentNumber: NUMBER,
+        supplierName: "niceshops GmbH",
+        supplierTaxNumber: null,
+        supplierEuTaxNumber: "ATU63964918",
+        sourceDocumentId: "feed-ns",
+        grossAmount: D(338018),
+        issueDate: new Date("2026-08-03T00:00:00Z"),
+        ...over,
+      });
+    const unpaidOf = async (billing: PackageBillingRow[]) =>
+      (
+        await service({
+          debits: [paidDebit],
+          documents: [upload],
+          billing,
+          files: { "feed-ns": await pdfOfPages(1) },
+        }).missing.packageCheck("2026-08")
+      ).unpaid.map((invoice) => invoice.number);
+    assert.deepEqual(await unpaidOf([row()]), []);
+    assert.deepEqual(await unpaidOf([row({ grossAmount: D(5000) })]), [NUMBER]);
+    assert.deepEqual(await unpaidOf([row({ grossAmount: D("338018.6") })]), []);
+    assert.deepEqual(await unpaidOf([row({ currency: "EUR" })]), [NUMBER]);
+  });
+
   it("an unreadable PDF is the one thing the page cannot see: the page says it is in the package, the cover says it is unreadable", async () => {
     const broken = new TextEncoder().encode("%PDF-1.4 this is not a pdf");
     const input = {
@@ -1135,6 +1280,134 @@ describe("the accountant package by invoice date", () => {
     ]);
     assert.deepEqual(check.unpaid, []);
     assert.equal(check.lackingCount, 1);
+  });
+
+  /*
+    AZ „UNPAID” BLOKK NEM HAMIS TÉTELT MUTAT (task os-hianyzo-szamlak-unpaid). MI PIROSÍT: a kétszer
+    fizetett számla (két terhelés, ugyanaz a fájl) „kifizetetlenként” a blokkban marad; a nulla összegű
+    számla a blokkban marad; a szűrés a nem nulla, valóban kifizetetlen számlát is elvinné.
+  */
+  it("an invoice paired to two debits (DOUBLE_PAID) is not in the unpaid block", async () => {
+    const copy = (id: string) =>
+      document({
+        id,
+        source: "UPLOAD",
+        number: "105300361726",
+        date: "2026-10-01",
+        gross: D(16980),
+        supplierName: "Fővárosi Vízművek Zrt.",
+        identities: ["sha:same-vizmuvek"],
+      });
+    const first = debit("2026-10-05", 16980, "Fővárosi Vízművek Zrt.");
+    const second = debit("2026-10-12", 16980, "Fővárosi Vízművek Zrt.");
+    const { missing } = service({
+      debits: [first, second],
+      documents: [copy("up-1"), copy("up-2")],
+      billing: [
+        billingRow({
+          id: "vizmuvek",
+          documentNumber: "105300361726",
+          supplierName: "Fővárosi Vízművek Zrt.",
+          sourceDocumentId: "up-1",
+          grossAmount: D(16980),
+          pdfIds: [],
+        }),
+      ],
+      files: {},
+    });
+    assert.equal((await missing.item(first.id)).state, "DOUBLE_PAID");
+    const check = await missing.packageCheck("2026-10");
+    assert.deepEqual(check.unpaid, []);
+  });
+
+  /*
+    AZ UTÁNVÉT-ELSZÁMOLÁSBÓL LEVONT SZÁMLA NEM "KIFIZETETLEN" (task os-hianyzo-szamlak-unpaid; a Foxpost FX és a GLS HU számlák). MI PIROSÍT:
+    a Foxpost-elszámolás által levont számla a blokkban marad; a más szállító azonos számú számlája (a szám nyilvános) is kikerül; a GLS
+    számla, amelyet nem rendezett levél sorol, kikerül; a levonás nélküli Foxpost-számla (nincs elszámolás-sor) is eltűnik; egy másik
+    adószámú sor ugyanazzal a számmal "rendezett".
+  */
+  it("an invoice the COD settlement deducts (Foxpost, GLS) is not unpaid, and only for its own supplier", async () => {
+    const FOX = "32435119-2-13";
+    const GLS = "12369410-2-41";
+    const { missing } = service({
+      debits: [],
+      documents: [],
+      deduction: {
+        foxpost: new Set(["FX0000001"]),
+        gls: new Set(["HU00000001"]),
+      },
+      billing: [
+        billingRow({
+          id: "fox",
+          documentNumber: "FX0000001",
+          supplierTaxNumber: FOX,
+          pdfIds: [],
+        }),
+        billingRow({
+          id: "gls",
+          documentNumber: "HU00000001",
+          supplierTaxNumber: GLS,
+          pdfIds: [],
+        }),
+        // the same number from ANOTHER supplier is not the settlement's invoice
+        billingRow({
+          id: "other",
+          documentNumber: "FX0000001",
+          supplierTaxNumber: "12345678-2-41",
+          pdfIds: [],
+        }),
+        // a Foxpost invoice with no settlement row stays unpaid
+        billingRow({
+          id: "fox-open",
+          documentNumber: "FX0000002",
+          supplierTaxNumber: FOX,
+          pdfIds: [],
+        }),
+        // a GLS invoice that no cleared letter lists stays unpaid
+        billingRow({
+          id: "gls-open",
+          documentNumber: "HU00000002",
+          supplierTaxNumber: GLS,
+          pdfIds: [],
+        }),
+      ],
+      files: {},
+    });
+    const check = await missing.packageCheck("2026-10");
+    assert.deepEqual(check.unpaid.map((invoice) => invoice.number).sort(), [
+      "FX0000001",
+      "FX0000002",
+      "HU00000002",
+    ]);
+  });
+
+  it("a zero-amount invoice is never unpaid (no debit can pay it), while a real unpaid one still is", async () => {
+    const { missing } = service({
+      debits: [],
+      documents: [],
+      billing: [
+        billingRow({
+          id: "zero",
+          documentNumber: "KS-ZERO",
+          grossAmount: D(0),
+          pdfIds: [],
+        }),
+        billingRow({
+          id: "real",
+          documentNumber: "KS-REAL",
+          grossAmount: D(1000),
+          pdfIds: [],
+        }),
+      ],
+      files: {},
+    });
+    const check = await missing.packageCheck("2026-10");
+    assert.deepEqual(
+      check.unpaid.map((invoice) => invoice.number),
+      ["KS-REAL"],
+    );
+    // the zero invoice's missing PDF still counts: the accountant package needs it
+    assert.equal(check.lackingCount, 2);
   });
 
   it("a debit whose invoice only the bank side knows: the PDF is attached through the debit (BANK), and a stored file means it is in", async () => {

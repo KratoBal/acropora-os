@@ -10,6 +10,8 @@ export type MaintenanceOrderItemSummary = {
   description: string;
   unitNet: string;
   quantity: string;
+  /** how many occasions the sheet takes from this item (counted against the yearly frame) */
+  occasions: number;
   vatRatePercent: string;
   contractItem: { id: string; position: number; departmentId: string | null };
 };
@@ -56,7 +58,15 @@ export const maintenanceOrdersApi = {
       token,
     );
   },
-  issue(token: string, input: { contractId: string; itemIds: string[] }) {
+  issue(
+    token: string,
+    input: {
+      contractId: string;
+      itemIds: string[];
+      /** per-item quantity and occasions for the sheet; a missing item goes with the contract's quantity, one occasion */
+      lines?: { itemId: string; quantity: string; occasions: number }[];
+    },
+  ) {
     return apiRequest<MaintenanceOrderSummary>(base, token, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -75,9 +85,13 @@ export const maintenanceOrdersApi = {
       itemIds: string[];
       title?: string | null;
       clientOperationId: string;
+      /** per-item quantity and occasions for the job's worksheet; a missing item goes with the contract's quantity, one occasion */
+      lines?: { itemId: string; quantity: string; occasions: number }[];
+      /** one job and worksheet per item, instead of one job for all of them */
+      separate?: boolean;
     },
   ) {
-    return apiRequest<{ serviceJobId: string }>(
+    return apiRequest<{ serviceJobId: string; serviceJobIds?: string[] }>(
       `${base}/contract-jobs`,
       token,
       {

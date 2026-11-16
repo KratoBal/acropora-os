@@ -2,7 +2,6 @@
 
 import {
   Alert,
-  Button,
   EmptyState,
   Icon,
   Pagination,
@@ -34,6 +33,10 @@ import {
   PilotThemeRoot,
 } from "@/components/pilot/pilot-ui";
 import { useProductImageSrc } from "@/components/products/product-image-source";
+import {
+  HusbandryCell,
+  HusbandryFilterSelect,
+} from "@/components/products/husbandry-list";
 import { ShippingBulkDialog } from "@/components/products/shipping-bulk-dialog";
 import {
   ShippingFilterSelect,
@@ -221,6 +224,7 @@ export function ProductListPage() {
         categoryId: state.categoryId || undefined,
         brandId: state.brandId || undefined,
         shipping: state.shipping || undefined,
+        husbandry: state.husbandry || undefined,
       })
       .then((response) => {
         if (!active) return;
@@ -295,7 +299,8 @@ export function ProductListPage() {
     state.active !== "all" ||
     state.categoryId ||
     state.brandId ||
-    state.shipping,
+    state.shipping ||
+    state.husbandry,
   );
   const viewState = deriveProductListViewState({
     loading: loading && !data,
@@ -482,6 +487,13 @@ export function ProductListPage() {
       cell: (product) => <ShippingFlagsCell flags={product.shippingFlags} />,
     },
     {
+      // V2.2 S6: the husbandry block's state of a live animal; "—" for any other product
+      id: "husbandry",
+      header: "Tartási adat",
+      width: "190px",
+      cell: (product) => <HusbandryCell husbandry={product.husbandry} />,
+    },
+    {
       id: "status",
       header: "Állapot",
       width: "104px",
@@ -593,6 +605,11 @@ export function ProductListPage() {
             onChange={(value) => updateFilter({ shipping: value })}
             className="min-w-[160px] flex-[1_1_180px] [&_select]:h-10"
           />
+          <HusbandryFilterSelect
+            value={state.husbandry}
+            onChange={(value) => updateFilter({ husbandry: value })}
+            className="min-w-[160px] flex-[1_1_180px] [&_select]:h-10"
+          />
           {/*
             A SÁV "SZŰRŐK TÖRLÉSE" LINKJE (Figma "Clear", meleg szöveg) CSAK
             AKKOR, HA VAN MIT TÖRÖLNI, ÉS NEM A "NINCS TALÁLAT" ÁLLAPOTBAN: ott
@@ -616,13 +633,12 @@ export function ProductListPage() {
           variant="info"
           title={bulkNotice}
           action={
-            <Button
+            <PilotButton
               variant="secondary"
-              size="sm"
               onClick={() => setBulkNotice(null)}
             >
               Bezárás
-            </Button>
+            </PilotButton>
           }
         />
       ) : null}
@@ -639,13 +655,12 @@ export function ProductListPage() {
           title="A lista frissítése nem sikerült"
           description={error}
           action={
-            <Button
+            <PilotButton
               variant="secondary"
-              size="sm"
               onClick={() => setRequestVersion((value) => value + 1)}
             >
               Újrapróbálás
-            </Button>
+            </PilotButton>
           }
         />
       ) : null}
@@ -657,13 +672,12 @@ export function ProductListPage() {
           title="A terméklista nem tölthető be"
           description={error ?? undefined}
           action={
-            <Button
+            <PilotButton
               variant="secondary"
-              size="sm"
               onClick={() => setRequestVersion((value) => value + 1)}
             >
               Újrapróbálás
-            </Button>
+            </PilotButton>
           }
         />
       ) : null}

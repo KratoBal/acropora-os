@@ -14,11 +14,18 @@ import {
   visiblePageText,
   type DosingExtractor,
 } from "./dosing-extraction.js";
+import { confirmPackSize, nameSize } from "./pack-size-confirm.js";
+import {
+  productFieldStatement,
+  type ProductFieldAnswer,
+  type ProductFieldExtractor,
+} from "./product-field-extraction.js";
 import { extractMarineAquaticsStatement } from "./marine-aquatics-extract.js";
 import {
   ENRICHED_FIELDS,
   extractPageStatement,
   type EnrichedField,
+  type PageStatement,
 } from "./page-extract.js";
 import {
   PoliteFetcher,
@@ -61,6 +68,13 @@ export interface RunSourceInput {
   url: string;
   /** For a SUPPLIER source: whose website the URL must be on. */
   supplierId?: string;
+  /**
+   * A MANUFACTURER source that is the brand's imprint (its legal notice), not a product page (acrobot 52559, T4.4 pilot
+   * fifth run): the maker block comes from here only, and nothing else does. A product page's company is incidental,
+   * and two sources gave two blocks (Korallen-Zucht) and a different one from run to run (Grotech, Blue Life). With no
+   * imprint in the input the maker stays missing and goes to a person; a product page is never the fallback.
+   */
+  imprint?: true;
 }
 
 export interface RunProductInput {
@@ -193,6 +207,11 @@ export interface RunDeps {
    * absent: not called. Only a MANUFACTURER page is sent.
    */
   dosingExtractor?: DosingExtractor;
+  /**
+   * What the product is for and who makes it, through Acropora AI (`product-field-extraction.ts`, T4.4 S1b); absent:
+   * not called. Only a MANUFACTURER page is sent: the product page gives the use, the brand's imprint page the maker.
+   */
+  productFieldExtractor?: ProductFieldExtractor;
 }
 
 export interface RunSummary {
@@ -260,6 +279,14 @@ export async function runEnrichment(
   });
   const checks: StoredCheck[] = [];
   const failures: ProductFailure[] = [];
+  // ONE AI ANSWER PER IMPRINT PER RUN (pilot-20, sixth and seventh runs, 2026-11-14): one brand's imprint asked once per
+  // product gave "Felelős" for one Aquaforest product and "Gyártó" for two, and the Grotech block for one product and
+  // none for the other, the same way in both runs: the product's name in the request steered it. Asked once, every
+  // product of the brand gets the same block, and the run makes fewer calls. Only an answer that gave a maker block is
+  // kept: an unavailable service, a refused whole answer, or an answer with no block (a company refused, none named) is
+  // asked again at the next product, so a first bad answer does not take the brand's other chances (barracuda on #2567).
+  // Two sound, different blocks still cannot arise: the first sound one is kept.
+  const imprintAnswers = new Map<string, ProductFieldAnswer>();
   let consecutiveFailures = 0;
   let limit: RunSummary["limit"] = null;
 
@@ -270,7 +297,13 @@ export async function runEnrichment(
         break;
       }
       try {
-        const check = await checkProduct(product, facts[index]!, fetcher, deps);
+        const check = await checkProduct(
+          product,
+          facts[index]!,
+          fetcher,
+          deps,
+          imprintAnswers,
+        );
         await deps.store.saveCheck(runId, check);
         checks.push(check);
         consecutiveFailures = 0;
@@ -353,6 +386,7 @@ async function checkProduct(
   facts: ProductFacts,
   fetcher: PoliteFetcher,
   deps: RunDeps,
+  imprintAnswers: Map<string, ProductFieldAnswer>,
 ): Promise<StoredCheck> {
   const checkedAt = deps.now();
   const manufacturer = manufacturerSites(
@@ -373,6 +407,12 @@ async function checkProduct(
   // AI calls and two sources, and the two answers' guidance "conflicted" with
   // itself. A product reads a final page once; the second is named, not used.
   const readPages = new Set<string>();
+  // A NO_DATA IS ABOUT THE MANUFACTURER, NOT ONE PAGE (card 85c38ab1, second
+  // Fauna Marin run): the brand's info page had no dose and said NO_DATA, the
+  // shop page of the same product had one (its AI answer refused) or answered
+  // 404, and the one NO_DATA went through as the product's verified state.
+  // Counted here: a manufacturer source not read, or read without a NO_DATA.
+  let manufacturerWithoutNoData = 0;
   for (const source of sourcesFor(input, facts)) {
     const supplier =
       source.kind === "SUPPLIER" && source.supplierId
@@ -397,6 +437,8 @@ async function checkProduct(
       (next) => sourceUrlProblem(source.kind, next, sites) === null,
     );
     if (!page.ok) {
+      if (source.kind === "MANUFACTURER" && !source.imprint)
+        manufacturerWithoutNoData += 1;
       fetches.push({
         sourceKind: source.kind,
         url: source.url,
@@ -423,17 +465,31 @@ async function checkProduct(
     }
     readPages.add(key);
     const structured = extractPageStatement(page.html);
+    // the pack size: our name's size, confirmed where the manufacturer's page names its own product (S1a)
+    const ownSize = nameSize(facts.name);
+    // the imprint is not a product page: no pack, no dose, no use from it, only the maker block
+    const imprint = source.kind === "MANUFACTURER" && source.imprint === true;
+    const sizeConfirmed =
+      source.kind === "MANUFACTURER" &&
+      !imprint &&
+      ownSize &&
+      !structured.values.some((v) => v.field === "packSize")
+        ? confirmPackSize(page.html, ownSize)
+        : null;
     // marine-aquatics.eu states its data in labelled rows, not JSON-LD.
     // bulkreefsupply.com states its barcode only in a labelled table.
-    const statement =
-      source.kind === "MARINE_AQUATICS" && structured.values.length === 0
+    // An imprint page gives no structured value either: a shop's legal notice may carry a Product JSON-LD with a dose
+    // or a size, and it is not this product's page (barracuda on #2565). Nor a "no product" note: none is expected.
+    const statement: PageStatement = imprint
+      ? { values: [], note: null }
+      : source.kind === "MARINE_AQUATICS" && structured.values.length === 0
         ? extractMarineAquaticsStatement(page.html)
         : source.kind === "BULK_REEF_SUPPLY"
           ? withBulkReefSupplyTable(structured, page.html)
           : structured;
     // the three dosing states, from the manufacturer's own page only
     const dosingAi =
-      source.kind === "MANUFACTURER" && deps.dosingExtractor
+      source.kind === "MANUFACTURER" && !imprint && deps.dosingExtractor
         ? await (async () => {
             const pageText = visiblePageText(page.html);
             return dosingStatement(
@@ -443,9 +499,49 @@ async function checkProduct(
               }),
               pageText,
               statement.values.find((v) => v.field === "dosing")?.raw ?? null,
+              statement.descriptionDoseOnPage ?? false,
             );
           })()
         : null;
+    const fieldsAi =
+      source.kind === "MANUFACTURER" && deps.productFieldExtractor
+        ? await (async () => {
+            const pageText = visiblePageText(page.html);
+            const kept = imprint ? imprintAnswers.get(page.url) : undefined;
+            const answer =
+              kept ??
+              (await deps.productFieldExtractor!.extract({
+                productName: facts.name,
+                pageText,
+                fields: imprint ? ["manufacturerInfo"] : ["application"],
+              }));
+            // checked against this page's text again: the kept answer is no exception to the guard
+            const checked = productFieldStatement(answer, pageText);
+            if (
+              imprint &&
+              !kept &&
+              checked.values.some((v) => v.field === "manufacturerInfo")
+            )
+              imprintAnswers.set(page.url, answer);
+            return kept
+              ? {
+                  ...checked,
+                  notes: [
+                    "termékmezők (AI): az impresszum válasza a futás korábbi hívásából",
+                    ...checked.notes,
+                  ],
+                }
+              : checked;
+          })()
+        : null;
+    if (
+      source.kind === "MANUFACTURER" &&
+      !imprint &&
+      !dosingAi?.values.some(
+        (v) => v.field === "dosingMode" && v.raw === "NO_DATA",
+      )
+    )
+      manufacturerWithoutNoData += 1;
     fetches.push({
       sourceKind: source.kind,
       url: page.url,
@@ -456,14 +552,24 @@ async function checkProduct(
           statement.note,
           ...(statement.lexiconNotes ?? []),
           ...(dosingAi?.notes ?? []),
+          ...(fieldsAi?.notes ?? []),
         ]
           .filter(Boolean)
           .join("; ") || null,
       httpStatus: page.httpStatus,
       fetchedAt: page.fetchedAt,
-      fieldCount: statement.values.length + (dosingAi?.values.length ?? 0),
+      fieldCount:
+        statement.values.length +
+        (dosingAi?.values.length ?? 0) +
+        (sizeConfirmed ? 1 : 0) +
+        (fieldsAi?.values.length ?? 0),
     });
-    for (const value of [...statement.values, ...(dosingAi?.values ?? [])])
+    for (const value of [
+      ...statement.values,
+      ...(dosingAi?.values ?? []),
+      ...(sizeConfirmed ? [sizeConfirmed] : []),
+      ...(fieldsAi?.values ?? []),
+    ])
       pageCandidates.push({
         field: value.field,
         kind: source.kind,
@@ -477,6 +583,27 @@ async function checkProduct(
         },
       });
   }
+
+  // ...so a NO_DATA stands only when every manufacturer source was read and
+  // said it; otherwise it is no value, and its page says why
+  if (manufacturerWithoutNoData > 0)
+    for (let i = pageCandidates.length - 1; i >= 0; i--) {
+      const c = pageCandidates[i]!;
+      if (c.field !== "dosingMode" || c.candidate.value !== "NO_DATA") continue;
+      pageCandidates.splice(i, 1);
+      const fetch = fetches.find(
+        (f) => f.outcome === "FETCHED" && f.url === c.candidate.sourceRef,
+      );
+      if (fetch) {
+        fetch.fieldCount -= 1;
+        fetch.reason = [
+          fetch.reason,
+          `adagolás (AI): a nincs-adat csak erre a lapra igaz, ${manufacturerWithoutNoData} másik gyártói forrás nem ezt mondja vagy nem olvasható`,
+        ]
+          .filter(Boolean)
+          .join("; ");
+      }
+    }
 
   const reconciledAt = checkedAt.toISOString();
   const fields = ENRICHED_FIELDS.map((field) =>

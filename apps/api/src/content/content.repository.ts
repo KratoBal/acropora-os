@@ -2,6 +2,9 @@ import { Injectable } from "@nestjs/common";
 import { prisma, type Prisma } from "@acropora/database";
 
 import { applyArticleStep } from "./article.repository.js";
+import { applyTeachingSourceStep } from "./teaching-source.repository.js";
+import { claimsOfContent } from "./content-claim-links.js";
+import { lockContentItems } from "./content-row-lock.js";
 import type { ContentState } from "./content-state.js";
 
 /**
@@ -45,6 +48,37 @@ export class ContentRepository {
     });
   }
 
+  /** How many items wait for an approver, all channels: the count the approvers' home page shows. */
+  countAwaitingApproval() {
+    return prisma.contentItem.count({ where: { state: "AWAITING_APPROVAL" } });
+  }
+
+  /**
+   * WHEN EACH ITEM THAT WAITS FOR AN APPROVER ENTERED THE STAGE (T5.1 reminder): the time of its LAST move into
+   * `AWAITING_APPROVAL` from the state log, or, for an item whose entry predates the log, its last update (a floor: it cannot
+   * have waited LESS than that). All channels, nobody's own: the approval is every approver's.
+   */
+  async awaitingApprovalSince(): Promise<Date[]> {
+    const rows = await prisma.contentItem.findMany({
+      where: { state: "AWAITING_APPROVAL" },
+      select: {
+        updatedAt: true,
+        stateEvents: {
+          where: { toState: "AWAITING_APPROVAL" },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          take: 1,
+          select: { createdAt: true },
+        },
+      },
+    });
+    return rows.map((row) => row.stateEvents[0]?.createdAt ?? row.updatedAt);
+  }
+
+  /** The manufacturer claims the item stands on (T5.3), with their output rule. */
+  claimsOf(id: string, tx?: Prisma.TransactionClient) {
+    return claimsOfContent(id, tx);
+  }
+
   /** The item's channel, or `null` when there is no such item. */
   async channelOf(id: string) {
     return (
@@ -62,8 +96,20 @@ export class ContentRepository {
       where: { id },
       include: {
         comments: { orderBy: { createdAt: "asc" } },
+        // A NAPLÓ RÉGITŐL AZ ÚJIG; az azonos időbélyegű sorokat az azonosító rendezi, hogy a sorrend ne ingadozzon.
+        stateEvents: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
       },
     });
+  }
+
+  /** A felhasználók hivatalos neve azonosító szerint, a napló „ki" oszlopához. Aki már nincs meg, kimarad. */
+  async userNames(ids: readonly string[]): Promise<Map<string, string>> {
+    if (ids.length === 0) return new Map();
+    const users = await prisma.user.findMany({
+      where: { id: { in: [...ids] } },
+      select: { id: true, displayName: true },
+    });
+    return new Map(users.map((user) => [user.id, user.displayName]));
   }
 
   /**
@@ -78,7 +124,21 @@ export class ContentRepository {
    * eddig is await-eltek.
    */
   async create(data: Prisma.ContentItemCreateInput) {
-    return prisma.contentItem.create({ data, select: contentListSelect });
+    return prisma.contentItem.create({
+      // A LÉTREHOZÁS A NAPLÓ ELSŐ SORA, ugyanabban az írásban (beágyazott create: egy tranzakció): nincs olyan tétel, aminek
+      // a naplója nem a létrehozásával indul. `fromState` null: nincs honnan.
+      data: {
+        ...data,
+        stateEvents: {
+          create: {
+            fromState: null,
+            toState: data.state ?? "IDEA",
+            actorUserId: data.authorId ?? null,
+          },
+        },
+      },
+      select: contentListSelect,
+    });
   }
 
   /**
@@ -114,8 +174,17 @@ export class ContentRepository {
     note?: { authorId: string; body: string };
     /** Aki lép: a cikk jóváhagyási pillanatképe az ő nevén születik. */
     actorUserId: string;
+    /**
+     * A check that runs UNDER THE ITEM'S ROW LOCK, before the move (T5.3: the manufacturer claims
+     * at approval). It throws to refuse; the transaction then writes nothing.
+     */
+    gate?: (tx: Prisma.TransactionClient) => Promise<void>;
   }): Promise<boolean> {
     return prisma.$transaction(async (tx) => {
+      // THE ROW LOCK FIRST (`content-row-lock.ts`): a claim linked or dropped at the same moment
+      // waits for this step, or this step waits for it and then reads what it did.
+      await lockContentItems(tx, [input.id]);
+      if (input.gate) await input.gate(tx);
       const result = await tx.contentItem.updateMany({
         where: { id: input.id, state: input.from },
         data: {
@@ -134,6 +203,21 @@ export class ContentRepository {
 
       if (result.count !== 1) return false;
 
+      // AZ ÁLLAPOT-NAPLÓ SORA UGYANABBAN A TRANZAKCIÓBAN: ha a váltás nem sikerül (a feltétel nem illeszkedik, a cikk lépése
+      // nem lehetett), a sor sem születik meg, és fordítva nincs napló nélküli váltás. Az indok a visszaküldés felvetése
+      // vagy az elvetés oka, ha volt.
+      await tx.contentStateEvent.create({
+        data: {
+          contentId: input.id,
+          fromState: input.from,
+          toState: input.to,
+          actorUserId: input.actorUserId,
+          note:
+            (input.to === "AWAITING_REVISION" ? input.note?.body : null) ??
+            (input.to === "DISCARDED" ? (input.discardReason ?? null) : null),
+        },
+      });
+
       // A CIKK RÉSZE UGYANEBBEN A TRANZAKCIÓBAN: jóváhagyáskor pillanatkép,
       // publikáláskor a jóváhagyott változat; ha nem lehet, az egész lépés
       // visszagördül (`ArticleStepError`).
@@ -142,6 +226,13 @@ export class ContentRepository {
         from: input.from,
         to: input.to,
         actorUserId: input.actorUserId,
+      });
+      // AZ OKTATÓANYAG-FORRÁS RÉSZE ugyanígy: nyitott kérdéssel nincs jóváhagyás
+      // (`TeachingSourceStepError`), és a jóváhagyott verzió a lépéssel együtt rögzül.
+      await applyTeachingSourceStep(tx, {
+        contentId: input.id,
+        from: input.from,
+        to: input.to,
       });
 
       if (input.note)

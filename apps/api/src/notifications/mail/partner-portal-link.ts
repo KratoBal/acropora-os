@@ -33,3 +33,20 @@ export function partnerWorksheetLink(input: {
   if (!alap) return "";
   return `${alap.replace(/\/+$/, "")}/munkalapok/${input.worksheetId}`;
 }
+
+/**
+ * A HIBAJEGY LINKJE A PARTNER-PORTALON (Balazs, 2026-10-08 06:54 UTC: "2 igen", a portal-link bekerul az atadasi
+ * levelbe; card 193a6f29). A portal `hibajegyek/[id]` oldala a hibajegy azonositojat kapja. A lezart jegy
+ * levelenek cimzettjei a vevo PORTAL-FIOKJAI, tehat van belepesuk: a link bejelentkezes utan a sajat jegyukre visz.
+ *
+ * URES STRING, HA A `PARTNER_URL` HIANYZIK, ugyanaz a szabaly, mint a munkalap-linknel: a hianyzo link nem allitja
+ * meg a kuldest, a level link nelkul megy ki, es a jegy naploja megnevezi, hogy a link kimaradt.
+ */
+export function partnerTicketLink(input: {
+  readonly partnerUrl: string | undefined;
+  readonly serviceJobId: string;
+}): string {
+  const alap = input.partnerUrl?.trim();
+  if (!alap) return "";
+  return `${alap.replace(/\/+$/, "")}/hibajegyek/${input.serviceJobId}`;
+}

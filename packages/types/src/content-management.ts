@@ -17,7 +17,14 @@ export type ContentState =
   | "DISCARDED";
 
 export type ContentChannel =
-  "FACEBOOK_POST" | "FACEBOOK_AD" | "ARTICLE" | "OTHER";
+  | "FACEBOOK_POST"
+  | "FACEBOOK_AD"
+  | "ARTICLE"
+  /** A teaching material's source (T5.2): its body is a `TeachingSource`. */
+  | "TEACHING_SOURCE"
+  | "OTHER"
+  /** The newsletter (T5.5 S4): two rows of the calendar template are newsletters. */
+  | "NEWSLETTER";
 
 /** Melyik szerep szemével kérdezzük, hogy „mi vár rám". */
 export type ContentViewerRole = "author" | "reviewer" | "approver" | "sender";
@@ -108,6 +115,22 @@ export interface ContentComment {
 }
 
 /**
+ * EGY ÁLLAPOTVÁLTÁS A NAPLÓBÓL (T5.1): ki, mikor, honnan, hová, és az indok, ha volt.
+ *
+ * A `fromState` null a létrehozásnál. Az `actorName` a felhasználó hivatalos neve, ha még megvan; az azonosító akkor is
+ * megmarad, hogy a sor ne üres legyen egy törölt felhasználónál.
+ */
+export interface ContentStateEvent {
+  id: string;
+  fromState: ContentState | null;
+  toState: ContentState;
+  actorUserId: string | null;
+  actorName: string | null;
+  note: string | null;
+  createdAt: string;
+}
+
+/**
  * EGY TÉTEL RÉSZLETESEN.
  *
  * MIÉRT KELL, HA A LISTA MÁR MINDENT MUTAT: mert nem mutat mindent, és
@@ -124,9 +147,30 @@ export interface ContentComment {
 export interface ContentDetail extends ContentListItem {
   body: string | null;
   comments: ContentComment[];
+  /** Az állapotváltások naplója, régitől az újig (T5.1). A bevezetés előtti tételeknél hiányos lehet. */
+  history: ContentStateEvent[];
   blockers: {
     waitsOn: { on: string };
     waitsForImage: boolean;
+  };
+  /**
+   * The manufacturer claims the item stands on (T5.3), with what each allows: the approver sees an
+   * unchecked or disputed claim before approving. Approval is refused while one is not PUBLISHABLE.
+   */
+  claims: ContentClaimSummary[];
+}
+
+/** A manufacturer claim as the content detail shows it (T5.3; the API's `output` rule). */
+export interface ContentClaimSummary {
+  id: string;
+  productName: string;
+  claimType: string;
+  claimText: string;
+  status: string;
+  output: {
+    mode: "PUBLISHABLE" | "DRAFT_ONLY" | "BLOCKED";
+    attribution: string | null;
+    reasons: string[];
   };
 }
 

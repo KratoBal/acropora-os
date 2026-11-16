@@ -46,3 +46,14 @@ export function normalizeOptionalRentalText(
   const trimmed = raw.trim();
   return trimmed === "" ? null : trimmed;
 }
+
+/**
+ * A serial number as stored: no spaces, upper case (barracuda, #2270 review). One physical piece is one row, and the unique
+ * index compares the stored text: without this "SN-123", "sn-123" and "SN 123" would be three devices. `null` when blank.
+ */
+export function normalizeRentalSerialNumber(
+  raw: string | null | undefined,
+): string | null {
+  const compact = (raw ?? "").replace(/\s+/g, "").toUpperCase();
+  return compact === "" ? null : compact;
+}

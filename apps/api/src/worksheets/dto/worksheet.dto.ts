@@ -183,9 +183,11 @@ export class WorksheetContentDto {
   // első tagja és a lapon látható egység elcsúszhatna egymástól, pedig
   // ez egy fogalom.
   @IsString() @MaxLength(4000) @IsOptional() description?: string | null;
-  @IsISO8601() @IsOptional() issueDate?: string | null;
-  @IsISO8601() @IsOptional() fulfillmentDate?: string | null;
-  @IsISO8601() @IsOptional() dueDate?: string | null;
+  // SZIGORÚ (t-20261115-munkalap-datum): a nem szigorú alak a lehetetlen napot (2026-02-30) is átengedi, és az
+  // csendben a következő hónapba fordult volna a számla alapján
+  @IsISO8601({ strict: true }) @IsOptional() issueDate?: string | null;
+  @IsISO8601({ strict: true }) @IsOptional() fulfillmentDate?: string | null;
+  @IsISO8601({ strict: true }) @IsOptional() dueDate?: string | null;
   @IsArray()
   @ArrayMaxSize(200)
   @ValidateNested({ each: true })

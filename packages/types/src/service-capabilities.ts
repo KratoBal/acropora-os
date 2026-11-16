@@ -17,7 +17,8 @@ export interface ServiceCapabilityInfo {
     | "MATERIAL_REQUEST_MARK_RECEIVED"
     | "AQUARIUM_ASSET_ASSIGN"
     | "MAINTENANCE_ORDER_UPLOAD_SIGNED"
-    | "COMPLETION_CERTIFICATE_UPLOAD_SIGNED";
+    | "COMPLETION_CERTIFICATE_UPLOAD_SIGNED"
+    | "TICKET_MAIL_AI_WATCH";
   /** A jelolonegyzet felirata. */
   readonly label: string;
   /** Mit jelent, ha be van jelolve -- a felirat ala. */
@@ -89,6 +90,19 @@ export const SERVICE_CAPABILITIES: readonly ServiceCapabilityInfo[] = [
     description:
       "A partner portálon feltöltheti egy teljesítési igazolás aláírt, visszaküldött példányát. Az igazolás adatait és a letöltést enélkül is látja mindenki, akinek a helyszíne a hatókörébe esik.",
     audience: "partner",
+  },
+  /**
+   * AZ "E-MAIL AI FIGYELÉSE" KAPCSOLÓ (kártya ec7b947b, Balázs 2026-09-18 12:50
+   * UTC). NEM beállítás, hanem ENGEDÉLY: a gép a felhasználó nevében érkező
+   * levélből vázlatot ír. Csak a felhasználó-szerkesztő (`users.manage`: OWNER,
+   * ADMIN) jelölheti, a felhasználó a sajátját nem. Alapérték: KI.
+   */
+  {
+    value: "TICKET_MAIL_AI_WATCH",
+    label: "E-mail AI figyelése",
+    description:
+      "A ticket@ postafiókba tőle érkező levélből az AI hibajegy-vázlatot készít, és erről push megy a felelősöknek. Ha nincs bejelölve, a levele csak a vázlatok listáján jelenik meg, vázlat nélkül.",
+    audience: "internal",
   },
 ] as const;
 

@@ -69,6 +69,11 @@ export {
 export {
   readThemePreference,
   writeThemePreference,
+  applyServerThemePreference,
+  chooseThemePreference,
+  holdThemeForServer,
+  setThemePreferencePersistence,
+  resetThemeStateForTests,
   systemPrefersDark,
   resolveEffectiveTheme,
 } from "./theme-preference";

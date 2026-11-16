@@ -309,6 +309,21 @@ function RootNavigator() {
         name="aquariums/[id]/measurement"
         options={{ title: "Vízmérés rögzítése" }}
       />
+      {/* Üzemeltetési napló kezdőképernyő: partner, helyszín, eszköz, sablon (kártya f6694b49); a kezdőlap csempéjéről nyílik. */}
+      <Stack.Screen
+        name="operations-log/index"
+        options={{ title: "Üzemeltetési napló" }}
+      />
+      {/* Üzemeltetési napló csoportos rögzítés: több azonos sablonú eszköz egy űrlapon (kártya 1a35e8f3); az eszközlistáról nyílik. */}
+      <Stack.Screen
+        name="operations-log/group"
+        options={{ title: "Csoportos rögzítés" }}
+      />
+      {/* Üzemeltetési napló: bejegyzés rögzítése (task os-uzemeltetesi-naplo, S2c); az eszköz lapjáról és a kezdőképernyőről nyílik. */}
+      <Stack.Screen
+        name="operations-log/record"
+        options={{ title: "Üzemeltetési napló" }}
+      />
     </Stack>
   );
 }

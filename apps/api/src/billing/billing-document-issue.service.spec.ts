@@ -11,6 +11,7 @@ import {
 import { Prisma } from "@acropora/database";
 import type { AuthenticatedUser } from "@acropora/types";
 
+import { budapestDayKey } from "../dashboard/budapest-day.js";
 import type { SzamlazzAgentClient } from "../integrations/szamlazz/szamlazz-agent.client.js";
 import type { SzamlazzAgentResponse } from "../integrations/szamlazz/szamlazz-agent-xml.js";
 import type { SzamlazzCredentialProvider } from "../integrations/szamlazz/szamlazz-credential.provider.js";
@@ -55,6 +56,7 @@ function row(status = "DRAFT", invoiceFormat = "ELECTRONIC") {
     note: null,
     sourceType: "MANUAL",
     sourceId: null,
+    customerId: "cust-1",
     netAmount: d("1000"),
     vatAmount: d("270"),
     grossAmount: d("1270"),
@@ -111,8 +113,19 @@ function setup(
     respond?: () => Promise<SzamlazzAgentResponse>;
     stockFails?: boolean;
     over?: Record<string, unknown>;
+    /** The buyer's payment days (`customerPaymentDueDays`); null: none set. */
+    paymentDueDays?: number | null;
     partnerHint?: { partnerName: string; taxNumber: string } | null;
     feedCancelled?: boolean;
+    /**
+     * What the Számlázz.hu feed knows about the proforma's payment (`proformaPaymentFacts`): the paid amount (the draft's gross is 1270),
+     * optionally another currency or a cancelled flag; null: no feed row (the default).
+     */
+    proformaFacts?: {
+      paid: string;
+      currency?: string;
+      cancelled?: boolean;
+    } | null;
     /** A foglalás UTÁN látszó előleg-sztornó (OS: ISSUING/ISSUED; feed). */
     stornoAfterClaim?: "OS" | "FEED";
     /** A forrás-szerződés tételei és a MÁSHOL számlázott sorai, a foglalás előtt / után. */
@@ -132,6 +145,9 @@ function setup(
     pdf: [] as unknown[],
     resolve: 0,
     excluded: [] as string[][],
+    xml: [] as string[],
+    paymentDaysFor: [] as string[],
+    proformaFactsFor: [] as string[],
   };
   let current = {
     ...row(options.status, options.format),
@@ -140,6 +156,22 @@ function setup(
   const documents = {
     find: async () => current,
     partnerTaxHint: async () => options.partnerHint ?? null,
+    customerPaymentDueDays: async (id: string) => {
+      calls.paymentDaysFor.push(id);
+      return options.paymentDueDays === undefined ? 30 : options.paymentDueDays;
+    },
+    proformaPaymentFacts: async (number: string) => {
+      calls.proformaFactsFor.push(number);
+      const facts = options.proformaFacts;
+      return facts
+        ? {
+            paidAmount: d(facts.paid),
+            grossAmount: d("1270"),
+            currency: facts.currency ?? "HUF",
+            cancelled: facts.cancelled ?? false,
+          }
+        : null;
+    },
     feedTwinCancelled: async () =>
       (options.feedCancelled ?? false) ||
       (options.stornoAfterClaim === "FEED" && calls.claim > 0),
@@ -192,6 +224,7 @@ function setup(
   const client: SzamlazzAgentClient = {
     generateInvoice: async (xml: string) => {
       calls.generate++;
+      calls.xml.push(xml);
       assert.match(xml, /<sendEmail>false<\/sendEmail>/);
       assert.match(xml, /<szamlaKulsoAzon>doc-1<\/szamlaKulsoAzon>/);
       assert.doesNotMatch(xml, /elonezetpdf/);
@@ -661,5 +694,402 @@ describe("BillingDocumentIssueService", () => {
     });
     await assert.rejects(() => issue(service), ServiceUnavailableException);
     assert.deepEqual([calls.issued.length, calls.unknown.length], [0, 1]);
+  });
+});
+
+/**
+ * THE CONFIRMATION WINDOW (card 7ba97e0d; Balázs 2026-11-11 11:12-11:14 UTC). WHAT TURNS IT RED: the window shows
+ * values the issue does not send; a buyer changed after the window opened is issued anyway; a future issue date or a
+ * due date before it reaches Számlázz.hu; the confirmed dates do not reach the invoice (XML) or the stored document;
+ * a card payment keeps a due date apart from the issue date; an internal caller without a window gets a changed request.
+ */
+describe("the invoice confirmation (card 7ba97e0d)", () => {
+  const NOW = new Date("2026-11-11T09:00:00Z");
+  const tag = (xml: string, name: string) =>
+    new RegExp(`<${name}>([^<]*)</${name}>`).exec(xml)?.[1] ?? null;
+
+  it("the summary is the builder's: buyer, address, tax number, today as the issue date, the draft's dates and method; a past due date from today", async () => {
+    const { service } = setup();
+    const summary = await service.summary("doc-1", NOW);
+    assert.deepEqual(
+      { ...summary, fingerprint: summary.fingerprint.length },
+      {
+        buyerName: "Kitalált Kft.",
+        buyerAddress: "1011 Budapest, Fő utca 1.",
+        buyerTaxNumber: "12345678-2-42",
+        buyerEuTaxNumber: null,
+        // no billing e-mail on the partner: the e-mail it has (S2, the send address)
+        buyerEmail: "vevo@example.com",
+        issueDate: "2026-11-11",
+        fulfillmentDate: "2026-09-30",
+        // the draft's 2026-10-08 is past: today plus the buyer's 30 days (acrobot 47091)
+        dueDate: "2026-12-11",
+        paymentMethod: "Átutalás",
+        showsPaymentFields: true,
+        dueDateFollowsIssueDate: false,
+        fingerprint: 64,
+      },
+    );
+  });
+
+  it("the proposed due date: the draft's when not past; past, today plus the buyer's days, or eight without them", async () => {
+    const later = setup({
+      over: { dueDate: new Date("2026-11-25T00:00:00Z") },
+    });
+    assert.equal(
+      (await later.service.summary("doc-1", NOW)).dueDate,
+      "2026-11-25",
+    );
+    const none = setup({ paymentDueDays: null });
+    assert.equal(
+      (await none.service.summary("doc-1", NOW)).dueDate,
+      "2026-11-19",
+    );
+    assert.deepEqual(none.calls.paymentDaysFor, ["cust-1"]);
+  });
+
+  it("the summary refuses what the issue would refuse, with the issue's own sentence", async () => {
+    await assert.rejects(
+      () => setup({ status: "ISSUED" }).service.summary("doc-1", NOW),
+      ConflictException,
+    );
+    await assert.rejects(
+      () => setup({ over: { customer: null } }).service.summary("doc-1", NOW),
+      /A bizonylathoz nincs partner rendelve\./,
+    );
+  });
+
+  it("the confirmed dates go into the invoice and the stored document; an earlier issue day is stored at its noon", async () => {
+    const { service, calls } = setup();
+    const { fingerprint } = await service.summary("doc-1", NOW);
+    await service.issue(
+      "doc-1",
+      "2026-09-30T10:00:00.000Z",
+      USER,
+      {
+        issueDate: "2026-11-10",
+        fulfillmentDate: "2026-11-05",
+        dueDate: "2026-11-20",
+        fingerprint,
+      },
+      NOW,
+    );
+    const xml = calls.xml[0]!;
+    assert.deepEqual(
+      [
+        tag(xml, "keltDatum"),
+        tag(xml, "teljesitesDatum"),
+        tag(xml, "fizetesiHataridoDatum"),
+      ],
+      ["2026-11-10", "2026-11-05", "2026-11-20"],
+    );
+    // the XSD order: keltDatum is the header's first element
+    assert.ok(xml.indexOf("<keltDatum>") < xml.indexOf("<teljesitesDatum>"));
+    const stored = calls.issued[0] as {
+      issueDate: Date;
+      fulfillmentDate: Date;
+      dueDate: Date;
+    };
+    assert.deepEqual(
+      [
+        stored.issueDate.toISOString(),
+        stored.fulfillmentDate.toISOString(),
+        stored.dueDate.toISOString(),
+      ],
+      [
+        "2026-11-10T12:00:00.000Z",
+        "2026-11-05T00:00:00.000Z",
+        "2026-11-20T00:00:00.000Z",
+      ],
+    );
+  });
+
+  it("today as the issue date keeps the moment of the issue, as before", async () => {
+    const { service, calls } = setup();
+    const { fingerprint } = await service.summary("doc-1", NOW);
+    const before = Date.now();
+    await service.issue(
+      "doc-1",
+      "2026-09-30T10:00:00.000Z",
+      USER,
+      {
+        issueDate: "2026-11-11",
+        fulfillmentDate: "2026-09-30",
+        dueDate: "2026-11-19",
+        fingerprint,
+      },
+      NOW,
+    );
+    assert.ok(
+      (calls.issued[0] as { issueDate: Date }).issueDate.getTime() >= before,
+    );
+  });
+
+  it("a buyer changed after the window opened stops the issue before Számlázz.hu", async () => {
+    const { fingerprint } = await setup().service.summary("doc-1", NOW);
+    const changed = setup({
+      over: {
+        customer: { ...(row().customer as object), companyName: "Másik Kft." },
+      },
+    });
+    await assert.rejects(
+      () =>
+        changed.service.issue(
+          "doc-1",
+          "2026-09-30T10:00:00.000Z",
+          USER,
+          {
+            issueDate: "2026-11-11",
+            fulfillmentDate: "2026-09-30",
+            dueDate: "2026-10-08",
+            fingerprint,
+          },
+          NOW,
+        ),
+      /megváltoztak, mióta megnyitottad/,
+    );
+    assert.deepEqual([changed.calls.generate, changed.calls.claim], [0, 0]);
+  });
+
+  it("an e-mail changed after the window opened stops the issue too: the window showed where it sends", async () => {
+    const { fingerprint } = await setup().service.summary("doc-1", NOW);
+    const changed = setup({
+      over: {
+        customer: {
+          ...(row().customer as object),
+          billingEmail: "masik@example.com",
+        },
+      },
+    });
+    await assert.rejects(
+      () =>
+        changed.service.issue(
+          "doc-1",
+          "2026-09-30T10:00:00.000Z",
+          USER,
+          {
+            issueDate: "2026-11-11",
+            fulfillmentDate: "2026-09-30",
+            dueDate: "2026-11-19",
+            fingerprint,
+          },
+          NOW,
+        ),
+      /megváltoztak, mióta megnyitottad/,
+    );
+    assert.equal(changed.calls.generate, 0);
+  });
+
+  it("with a send address of its own (the webshop proforma), the window and the digest are that address, not the buyer's", async () => {
+    const ORDER = "rendeles@example.com";
+    const summary = await setup().service.summary("doc-1", NOW, ORDER);
+    assert.equal(summary.buyerEmail, ORDER);
+    const confirmed = {
+      issueDate: "2026-11-11",
+      fulfillmentDate: "2026-09-30",
+      dueDate: "2026-11-19",
+      fingerprint: summary.fingerprint,
+    };
+    // the buyer's billing address changed: not the one the window named, so the issue goes on
+    const billingChanged = setup({
+      over: {
+        customer: {
+          ...(row().customer as object),
+          billingEmail: "masik@example.com",
+        },
+      },
+    });
+    await billingChanged.service.issue(
+      "doc-1",
+      "2026-09-30T10:00:00.000Z",
+      USER,
+      confirmed,
+      NOW,
+      ORDER,
+    );
+    assert.equal(billingChanged.calls.generate, 1);
+    // the address the window named changed: the issue stops before Számlázz.hu
+    const orderChanged = setup();
+    await assert.rejects(
+      () =>
+        orderChanged.service.issue(
+          "doc-1",
+          "2026-09-30T10:00:00.000Z",
+          USER,
+          confirmed,
+          NOW,
+          "uj-cim@example.com",
+        ),
+      /megváltoztak, mióta megnyitottad/,
+    );
+    assert.equal(orderChanged.calls.generate, 0);
+  });
+
+  it("dates the rule refuses never reach Számlázz.hu", async () => {
+    const { service, calls } = setup();
+    const { fingerprint } = await service.summary("doc-1", NOW);
+    for (const dates of [
+      {
+        issueDate: "2026-11-12",
+        fulfillmentDate: "2026-11-11",
+        dueDate: "2026-11-20",
+      },
+      {
+        issueDate: "2026-11-11",
+        fulfillmentDate: "2026-11-11",
+        dueDate: "2026-11-10",
+      },
+    ])
+      await assert.rejects(
+        () =>
+          service.issue(
+            "doc-1",
+            "2026-09-30T10:00:00.000Z",
+            USER,
+            { ...dates, fingerprint },
+            NOW,
+          ),
+        BadRequestException,
+        JSON.stringify(dates),
+      );
+    assert.equal(calls.generate, 0);
+  });
+
+  it("a card payment is due on the issue date, whatever due date came", async () => {
+    const { service, calls } = setup({ over: { paymentMethod: "Bankkártya" } });
+    const summary = await service.summary("doc-1", NOW);
+    assert.equal(summary.dueDateFollowsIssueDate, true);
+    await service.issue(
+      "doc-1",
+      "2026-09-30T10:00:00.000Z",
+      USER,
+      {
+        issueDate: "2026-11-10",
+        fulfillmentDate: "2026-11-10",
+        dueDate: "2026-12-31",
+        fingerprint: summary.fingerprint,
+      },
+      NOW,
+    );
+    assert.equal(tag(calls.xml[0]!, "fizetesiHataridoDatum"), "2026-11-10");
+  });
+
+  it("an internal caller without a window issues as before: no keltDatum, the draft's dates", async () => {
+    const { service, calls } = setup();
+    await issue(service);
+    const xml = calls.xml[0]!;
+    assert.deepEqual(
+      [
+        tag(xml, "keltDatum"),
+        tag(xml, "teljesitesDatum"),
+        tag(xml, "fizetesiHataridoDatum"),
+      ],
+      [null, "2026-09-30", "2026-10-08"],
+    );
+    assert.equal("fulfillmentDate" in (calls.issued[0] as object), false);
+  });
+  /*
+    A KIFIZETETT DÍJBEKÉRŐBŐL KÉSZÜLŐ ELŐLEGSZÁMLA (kártya 00926d89, Balázs kérése; barracuda #2638: a `fizetve` a TELJES kiegyenlítést
+    állítja). MI PIROSÍT: ha a jelző kimarad egy teljesen kifizetett díjbekérőből; ha RÉSZFIZETÉSNÉL, más pénznemnél, sztornózott vagy
+    ismeretlen állapotú díjbekérőnél is menne (a "van rajta fizetés" alak); ha a határidő a vázlaté marad; ha a nem előleg-bizonylat
+    (számla) egyáltalán megkérdezné a feedet; ha az ablak összesítője nem követné a kiállítás napját.
+  */
+  const advance = (over: Record<string, unknown> = {}) => ({
+    documentType: "ADVANCE_INVOICE",
+    proformaInvoice: { invoiceNumber: "D-CRPR-7" },
+    ...over,
+  });
+  const confirmed = (fingerprint: string) => ({
+    issueDate: "2026-11-10",
+    fulfillmentDate: "2026-11-10",
+    dueDate: "2026-12-31",
+    fingerprint,
+  });
+
+  it("an advance whose gross the proforma's payment REACHES (exact or more): fizetve, due on the confirmed issue date", async () => {
+    for (const paid of ["1270", "2000"]) {
+      const { service, calls } = setup({
+        over: advance(),
+        proformaFacts: { paid },
+      });
+      const summary = await service.summary("doc-1", NOW);
+      assert.equal(summary.dueDateFollowsIssueDate, true, paid);
+      assert.equal(summary.dueDate, summary.issueDate, paid);
+      await service.issue(
+        "doc-1",
+        "2026-09-30T10:00:00.000Z",
+        USER,
+        confirmed(summary.fingerprint),
+        NOW,
+      );
+      const xml = calls.xml[0]!;
+      assert.equal(tag(xml, "fizetve"), "true", paid);
+      assert.equal(tag(xml, "fizetesiHataridoDatum"), "2026-11-10", paid);
+      assert.equal(tag(xml, "elolegszamla"), "true", paid);
+      assert.deepEqual(calls.proformaFactsFor, ["D-CRPR-7", "D-CRPR-7"], paid);
+      assert.equal(
+        (calls.issued[0] as { dueDate: Date }).dueDate
+          .toISOString()
+          .slice(0, 10),
+        "2026-11-10",
+        paid,
+      );
+    }
+  });
+
+  it("a part payment, another currency, a cancelled proforma or no feed row: nothing changes (no fizetve, the draft's due date)", async () => {
+    const cases = [
+      { name: "part payment", facts: { paid: "1000" } },
+      { name: "one forint short", facts: { paid: "1269.99" } },
+      { name: "nothing paid", facts: { paid: "0" } },
+      { name: "other currency", facts: { paid: "1270", currency: "EUR" } },
+      { name: "cancelled", facts: { paid: "1270", cancelled: true } },
+      { name: "no feed row", facts: null },
+    ];
+    for (const { name, facts } of cases) {
+      const { service, calls } = setup({
+        over: advance(),
+        proformaFacts: facts,
+      });
+      const summary = await service.summary("doc-1", NOW);
+      assert.equal(summary.dueDateFollowsIssueDate, false, name);
+      await service.issue(
+        "doc-1",
+        "2026-09-30T10:00:00.000Z",
+        USER,
+        confirmed(summary.fingerprint),
+        NOW,
+      );
+      const xml = calls.xml[0]!;
+      assert.equal(tag(xml, "fizetve"), null, name);
+      assert.equal(tag(xml, "fizetesiHataridoDatum"), "2026-12-31", name);
+    }
+  });
+
+  it("an internal caller without a window: a fully paid advance is dated today all the same", async () => {
+    const { service, calls } = setup({
+      over: advance(),
+      proformaFacts: { paid: "1270" },
+    });
+    await service.issue(
+      "doc-1",
+      "2026-09-30T10:00:00.000Z",
+      USER,
+      undefined,
+      NOW,
+    );
+    const xml = calls.xml[0]!;
+    assert.equal(tag(xml, "fizetve"), "true");
+    assert.equal(tag(xml, "fizetesiHataridoDatum"), budapestDayKey(NOW));
+  });
+
+  it("an invoice (not an advance) never asks the feed and never carries fizetve", async () => {
+    const { service, calls } = setup({
+      over: { proformaInvoice: { invoiceNumber: "D-CRPR-7" } },
+      proformaFacts: { paid: "1270" },
+    });
+    await issue(service);
+    assert.deepEqual(calls.proformaFactsFor, []);
+    assert.equal(tag(calls.xml[0]!, "fizetve"), null);
   });
 });

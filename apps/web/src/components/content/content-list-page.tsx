@@ -190,14 +190,34 @@ export function ContentListPage() {
         title="Tartalom"
         description="Ami rád vár, és ami képre vár."
         actions={
-          canCreate ? (
+          <div className="flex flex-wrap items-center gap-4">
             <Link
-              href="/tartalom/uj"
+              href="/tartalom/eredmenyek"
               className="text-sm font-medium text-brand-700 underline-offset-4 hover:underline"
             >
-              Új tétel felvitele →
+              Eredmények →
             </Link>
-          ) : undefined
+            <Link
+              href="/tartalom/naptar"
+              className="text-sm font-medium text-brand-700 underline-offset-4 hover:underline"
+            >
+              Naptár →
+            </Link>
+            <Link
+              href="/tartalom/oktatoanyagok"
+              className="text-sm font-medium text-brand-700 underline-offset-4 hover:underline"
+            >
+              Oktatóanyagok →
+            </Link>
+            {canCreate ? (
+              <Link
+                href="/tartalom/uj"
+                className="text-sm font-medium text-brand-700 underline-offset-4 hover:underline"
+              >
+                Új tétel felvitele →
+              </Link>
+            ) : null}
+          </div>
         }
       />
 

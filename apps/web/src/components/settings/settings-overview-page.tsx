@@ -175,6 +175,20 @@ export const SETTINGS_AREAS: SettingsArea[] = [
     ],
   },
   {
+    title: "AI csevegés",
+    icon: "settings",
+    links: [
+      {
+        /** A JOGOT NEVEZI MEG, nem menüpont-azonosítót (mint a Levélsablon): a lapnak nincs menüpontja, a végpontja AI_SETTINGS_MANAGE-et kér. */
+        label: "AI csevegés",
+        description:
+          "A kollégai felajánlás, a kapcsolat-kérés címzettje és az üzenetek, kérések megőrzési ideje.",
+        href: "/beallitasok/ai-cseveges",
+        permission: PERMISSIONS.AI_SETTINGS_MANAGE,
+      },
+    ],
+  },
+  {
     title: "Mértékegységek",
     icon: "settings",
     links: [
@@ -193,6 +207,13 @@ export const SETTINGS_AREAS: SettingsArea[] = [
         entryId: "asset-categories",
       },
       {
+        label: "Üzemeltetési napló sablonjai",
+        description:
+          "A rendszeres üzemeltetési feladatok (napi, heti, alkalmi) sablonja: melyik eszközre vagy kategóriára szól, és mit kell rögzíteni hozzá.",
+        href: "/beallitasok/uzemeltetesi-naplo-sablonok",
+        entryId: "operations-log-templates",
+      },
+      {
         label: "Eszköz-funkciók",
         description:
           "Az eszköz-felvitel másik legördülő listája: mire való az eszköz, függetlenül a kategóriától.",
@@ -205,6 +226,13 @@ export const SETTINGS_AREAS: SettingsArea[] = [
           "A kölcsönzött eszközök darabonként: gyári szám, napi díj, kaució, pótlási érték, tartozékok.",
         href: "/beallitasok/berelheto-eszkozok",
         entryId: "rental-equipment",
+      },
+      {
+        label: "Bérleti szerződés",
+        description:
+          "A bérléskor nyomtatott szerződés szövege, és a késedelmes visszahozás két száma.",
+        href: "/beallitasok/berleti-szerzodes",
+        entryId: "rental-contract",
       },
       {
         label: "Partner-duplikátumok",

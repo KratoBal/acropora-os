@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { prisma, Prisma } from "@acropora/database";
 
+import type { BuyerSnapshot } from "../billing/billing-document-issue.js";
 import type { CertificateAmounts } from "../completion-certificates/completion-certificate-amounts.js";
 
 @Injectable()
@@ -19,6 +20,22 @@ export class MaintenanceInvoiceRepository {
       where: { completionCertificateId: certificateId },
       include: { lines: true },
     });
+  }
+
+  /**
+   * A PARTNEREK OLDALON BEÁLLÍTOTT FIZETÉSI NAPOK (nem törölt partnerek): a TIG vevő-sora üres napjainál erre esik vissza a
+   * határidő, mint a számla-szerkesztő (`BillingDocumentsRepository.customerPaymentDueDays`).
+   */
+  async partnerPaymentTerms() {
+    const partners = await this.database.supplier.findMany({
+      where: { paymentDueDays: { not: null }, deletedAt: null },
+      select: { name: true, taxNumber: true, paymentDueDays: true },
+    });
+    return partners.map((partner) => ({
+      name: partner.name,
+      taxNumber: partner.taxNumber,
+      paymentDueDays: partner.paymentDueDays!,
+    }));
   }
 
   /** A PDF letöltéséhez elég adat: az azonosító és a tárolt kulcs. */
@@ -76,6 +93,14 @@ export class MaintenanceInvoiceRepository {
       invoiceNumber: string;
       issueDate: Date;
       pdfStorageKey: string | null;
+      /** The invoice's own certificate: the issued row's source (`sourceId`). */
+      completionCertificateId: string;
+      /** The dates the invoice carries (the confirmed ones, card 7ba97e0d S3): the details page shows them. */
+      fulfillmentDate?: Date;
+      dueDate?: Date;
+      /** What the request carried (`fizmod`), and the buyer as sent: the billing page reads them (card 7ba97e0d follow-up). */
+      paymentMethod?: string;
+      buyerSnapshot?: BuyerSnapshot;
     },
   ) {
     return this.database.invoice.update({
@@ -85,6 +110,16 @@ export class MaintenanceInvoiceRepository {
         invoiceNumber: issued.invoiceNumber,
         issueDate: issued.issueDate,
         pdfStorageKey: issued.pdfStorageKey,
+        // AZ ISSUED TIG-SZÁMLA SAJÁT SOR (Balázs 2026-11-11 13:22 UTC): a forrás a teljesítési igazolás, és e-számla
+        // (a kérés `eszamla` nélkül megy, az alapérték e-számla); a sztornó ebből tudja, mit kérjen
+        sourceType: "COMPLETION_CERTIFICATE",
+        sourceId: issued.completionCertificateId,
+        invoiceFormat: "ELECTRONIC",
+        fulfillmentDate: issued.fulfillmentDate,
+        dueDate: issued.dueDate,
+        paymentMethod: issued.paymentMethod,
+        buyerSnapshot: issued.buyerSnapshot as
+          Prisma.InputJsonValue | undefined,
         syncStatus: "RECEIVED",
         syncError: null,
       },

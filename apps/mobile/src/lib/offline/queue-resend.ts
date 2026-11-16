@@ -214,6 +214,9 @@ const JAVITAS_ELUTASITAS: Record<SyncEntityType, string | null> = {
   /** UGYANAZ A SZUKITES, mint az akvarium sajat felvitelenel. */
   "aquarium-measurement":
     "Ezt a vízmérést egyelőre csak az irodából lehet feloldani. Szándékos szűkítés: ma az eszköz-felvitel javítható a telefonon. Amit beírtál, addig itt marad.",
+  /** UGYANAZ A SZŰKÍTÉS: az üzemeltetési napló bejegyzése ma nem javítható a telefonon, csak az irodából. */
+  "operations-entry":
+    "Ezt az üzemeltetési naplóbejegyzést egyelőre csak az irodából lehet feloldani. Szándékos szűkítés: ma az eszköz-felvitel javítható a telefonon. Amit beírtál, addig itt marad.",
 };
 
 /** Amit az ujrakuldes a soron megvaltoztat. */

@@ -10,10 +10,11 @@ import {
   restoreRegistered,
 } from "./partner-migration.executor.js";
 import {
-  decideOperations,
+  decideWithFills,
   type BindChoices,
   type MigrationDecisions,
 } from "./partner-migration-run.js";
+import { PartnerMigrationRunRepository } from "./partner-migration-run.service.js";
 import {
   PartnerMigrationPlanService,
   PartnerMigrationSuppliers,
@@ -92,21 +93,32 @@ export function parseArgs(
 const OPERATION_LABEL = {
   CREATE: "ÚJ vevő-sor készül",
   BIND: "meglévő vevő-sorhoz kötjük",
+  FILL: "a kötött vevő-sor üres mezői kitöltődnek",
   SKIP: "kimarad",
 } as const;
+
+/** A kitöltendő mezők a próba kimenetén: név és érték (a próba az, ahol az ember látja, mi íródik). */
+const fillsText = (
+  fills: readonly { field: string; value: string | number }[],
+) =>
+  fills.length
+    ? ` [kitölt: ${fills.map((fill) => `${fill.field}=${fill.value}`).join(", ")}]`
+    : "";
 
 export function describeDecisions(decisions: MigrationDecisions): string[] {
   const lines = decisions.operations.map((op) =>
     op.kind === "BIND"
-      ? `  ${op.code}: ${OPERATION_LABEL.BIND}: ${op.customerId}`
-      : op.kind === "SKIP"
-        ? `  ${op.code}: ${OPERATION_LABEL.SKIP}: ${op.reason}`
-        : `  ${op.code}: ${OPERATION_LABEL.CREATE}`,
+      ? `  ${op.code}: ${OPERATION_LABEL.BIND}: ${op.customerId}${fillsText(op.fills)}`
+      : op.kind === "FILL"
+        ? `  ${op.code}: ${OPERATION_LABEL.FILL}: ${op.customerId}${fillsText(op.fills)}`
+        : op.kind === "SKIP"
+          ? `  ${op.code}: ${OPERATION_LABEL.SKIP}: ${op.reason}`
+          : `  ${op.code}: ${OPERATION_LABEL.CREATE}`,
   );
   const count = (kind: string) =>
     decisions.operations.filter((op) => op.kind === kind).length;
   return [
-    `Partnerek: ${decisions.operations.length}; új vevő-sor: ${count("CREATE")}; kötés meglévőhöz: ${count("BIND")}; kimarad: ${count("SKIP")}.`,
+    `Partnerek: ${decisions.operations.length}; új vevő-sor: ${count("CREATE")}; kötés meglévőhöz: ${count("BIND")}; kitöltés: ${count("FILL")}; kimarad: ${count("SKIP")}.`,
     ...lines,
     ...decisions.problems.map((problem) => `  HIBA: ${problem}`),
     `LENYOMAT: ${decisions.fingerprint}`,
@@ -148,7 +160,12 @@ export async function runPartnerMigrationCli(
     new PartnerMigrationSuppliers(),
     new PartnerDuplicateRepository(),
   ).build();
-  const decisions = decideOperations(plan, options.binds);
+  const decisions = await decideWithFills(
+    plan,
+    options.binds,
+    (supplierIds, customerIds) =>
+      new PartnerMigrationRunRepository().fillFacts(supplierIds, customerIds),
+  );
   for (const line of describeDecisions(decisions)) out.stdout(`${line}\n`);
   if (decisions.problems.length) {
     out.stderr("A döntések hibásak: az írás nem indul.\n");

@@ -7,6 +7,9 @@
  * A TERMEKFOTO (`/nano.jpg`) az Aquaforest hivatalos fotoja (a designcsomagbol; forras: aquaforest.eu). A felhasznalasi
  * engedelyt NEM tudom: a kerdes a tulajdonosnak szol (lasd a PR-torzset).
  */
+import type { LezartHet, Nyertes } from "../lib/jatek-api.ts";
+import { hetCimke } from "./heti-kerdes.tsx";
+
 export function Hero() {
   return (
     <section className="jatek-hero jatek-wrap" id="fodij">
@@ -26,7 +29,7 @@ export function Hero() {
           </em>
         </h1>
         <p>
-          Játssz velünk hétről hétre, nyerj heti ajándékokat,
+          Játssz velünk hétről hétre, nyerj heti nyereményeket,
           <br className="jatek-desktop" /> és álmodj egy saját tengeri világot.
         </p>
         <div className="jatek-hero-actions">
@@ -42,7 +45,7 @@ export function Hero() {
           <div>
             <strong>Indulás: november 7., szombat</strong>
             <small>
-              Az Acropora YouTube élő adásában · a pontos időpont hamarosan
+              Az élő adás 21:00-kor kezdődik, az első kérdés 22:00-kor nyílik.
             </small>
           </div>
         </div>
@@ -54,13 +57,14 @@ export function Hero() {
           alt="Aquaforest AF Nano Tank tengeri akvárium színes korallokkal, hivatalos termékfotó"
         />
         <div className="jatek-prize-label">
-          <span className="jatek-eyebrow">A KAMPÁNY FŐDÍJA</span>
+          <span className="jatek-eyebrow">A JÁTÉK FŐDÍJA</span>
           <h2>AF Nano Tank</h2>
           <span>AQUAFOREST</span>
           <a href="/fodij">Ismerd meg az akváriumot ↗</a>
         </div>
         <span className="jatek-photo-note">
-          Gyártói illusztráció · a dekoráció és az élővilág nem ígért nyeremény
+          Gyártói illusztráció · a dekoráció és az élővilág nem része a
+          nyereménynek
         </span>
       </div>
     </section>
@@ -106,9 +110,9 @@ export function Lepesek() {
           </span>
           <h3>Küldd be a válaszod</h3>
           <p>
-            Egy heted van válaszolni. Add meg az e-mail-címedet, fogadd el a
-            játékszabályzatot, és erősítsd meg a részvételed a levélben kapott
-            linkkel.
+            Egy heted van válaszolni. Add meg a nevedet és az e-mail címedet,
+            fogadd el a játékszabályzatot, és erősítsd meg a részvételed a
+            levélben kapott linkkel.
           </p>
         </article>
         <article>
@@ -117,8 +121,8 @@ export function Lepesek() {
           </span>
           <h3>Várd a heti sorsolást</h3>
           <p>
-            A válaszadási időszak után heti ajándékot sorsolunk a helyes
-            válaszok között. A kampány fődíja az Aquaforest AF Nano Tank.
+            A válaszadási időszak után heti nyereményt sorsolunk a helyes
+            válaszok között. A játék fődíja az Aquaforest AF Nano Tank.
           </p>
         </article>
       </div>
@@ -126,27 +130,88 @@ export function Lepesek() {
   );
 }
 
-export function Nyertesek() {
+export function Nyertesek({
+  nyertesek = [],
+}: {
+  /** a korábbi sorsolások nyertesei, CSAK rövidített névvel (az api így adja) */
+  nyertesek?: readonly Nyertes[];
+}) {
   return (
     <section className="jatek-winners jatek-wrap" id="nyertesek">
       <div className="jatek-section-heading">
         <div>
           <div className="jatek-eyebrow">AKIKNEK KEDVEZETT A SZERENCSE</div>
-          <h2>A reef következő szerencsései.</h2>
+          <h2>Az eddigi sorsolások nyertesei.</h2>
         </div>
-        <span className="jatek-pill">Még a rajt előtt vagyunk</span>
+        {nyertesek.length === 0 ? (
+          <span className="jatek-pill">Még a rajt előtt vagyunk</span>
+        ) : null}
       </div>
-      <div className="jatek-empty-winners">
-        <span className="jatek-trophy">♧</span>
+      {nyertesek.length > 0 ? (
+        <ul className="jatek-winner-list" data-testid="nyertesek">
+          {nyertesek.map((nyertes) => (
+            <li key={`${nyertes.drawnAt}-${nyertes.name}`}>
+              <b>
+                {nyertes.name} <i>({nyertes.emailMasked})</i>
+              </b>
+              <span>
+                {nyertes.kind === "CHRISTMAS"
+                  ? "Karácsonyi fődíj"
+                  : nyertes.week
+                    ? hetCimke(nyertes.week)
+                    : "Heti sorsolás"}
+                {nyertes.prizeName ? ` · ${nyertes.prizeName}` : ""}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="jatek-empty-winners">
+          <span className="jatek-trophy">♧</span>
+          <div>
+            <h3>Az első nyertes helye már megvan.</h3>
+            <p>
+              Az első sorsolás után itt találod a korábbi nyerteseket és a heti
+              nyereményeket. Jelenleg nincs kihirdetett eredmény.
+            </p>
+          </div>
+          <span className="jatek-empty-number">01</span>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/**
+ * A LEZÁRT HETEK HELYES VÁLASZAI (szabályzat 6. pont, Balázs 2026-11-06): a forduló zárása után a lap kiírja a kérdést és a
+ * helyes választ. A szerver csak lezárt hét válaszát adja (a zárás pillanatától), ezért itt nincs mit rejteni: ami
+ * megjön, az nyilvános. Nincs lezárt hét: a szakasz nem jelenik meg.
+ */
+export function HelyesValaszok({
+  hetek = [],
+}: {
+  hetek?: readonly LezartHet[];
+}) {
+  if (hetek.length === 0) return null;
+  return (
+    <section className="jatek-answers jatek-wrap" id="helyes-valaszok">
+      <div className="jatek-section-heading">
         <div>
-          <h3>Az első nyertes helye már megvan.</h3>
-          <p>
-            Az első sorsolás után itt találod a korábbi nyerteseket és a heti
-            ajándékokat. Jelenleg nincs kihirdetett eredmény.
-          </p>
+          <div className="jatek-eyebrow">A LEZÁRT FORDULÓK</div>
+          <h2>A helyes válaszok.</h2>
         </div>
-        <span className="jatek-empty-number">01</span>
       </div>
+      <ul className="jatek-winner-list" data-testid="helyes-valaszok">
+        {hetek.map((het) => (
+          <li key={het.week}>
+            <b>{hetCimke(het.week)}</b>
+            <span>{het.prompt}</span>
+            <span>
+              Helyes válasz: <b>{het.answer}</b>
+            </span>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
@@ -155,7 +220,7 @@ const KERDESEK: readonly { kerdes: string; valasz: string }[] = [
   {
     kerdes: "Mikor indul a nyereményjáték?",
     valasz:
-      "2026. november 7-én, szombaton, az Acropora YouTube élő adásában. A pontos kezdési idő még nincs megadva.",
+      "2026. november 7-én, szombaton. Az Acropora YouTube élő adása 21:00-kor kezdődik, az első kérdés 22:00-kor nyílik.",
   },
   {
     kerdes: "Meddig válaszolhatok egy kérdésre?",
@@ -171,6 +236,11 @@ const KERDESEK: readonly { kerdes: string; valasz: string }[] = [
     kerdes: "Mire használjátok az e-mail-címemet?",
     valasz:
       "Csak a játékra és a nyertes értesítésére. Hírlevélre nem iratkozol fel, és a részvételnek nem feltétele semmilyen feliratkozás.",
+  },
+  {
+    kerdes: "Honnan tudom meg, hogy nyertem?",
+    valasz:
+      "A heti sorsolások a játék indulása után minden szombaton este 9 órakor történnek. A kisorsolt nyertes neve megjelenik itt az oldalon, de e-mailben is felvesszük Veled a kapcsolatot.",
   },
 ];
 

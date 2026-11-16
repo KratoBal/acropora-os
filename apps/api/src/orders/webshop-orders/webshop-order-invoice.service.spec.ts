@@ -74,7 +74,7 @@ const ORDER: MedusaOrderDetailRow = {
 
 const SAME_BUYER = {
   name: "Nagy Emese",
-  taxNumber: null,
+  taxNumber: null as string | null,
   postalCode: "1117",
   city: "Budapest",
   line: "Fehérvári út 24.",
@@ -87,9 +87,21 @@ function setup(
     status?: string;
     linked?: string | null;
     byEmail?: { id: string; displayName: string; linked: boolean }[];
+    byTax?: {
+      id: string;
+      displayName: string;
+      linked: boolean;
+      partnerMirror?: boolean;
+    }[];
+    /** A rendelés (alapból a magánszemélyes ORDER). */
+    orderOverride?: MedusaOrderDetailRow;
     buyer?: typeof SAME_BUYER;
     /** A rendelés fizetési munkamenetének szolgáltatója (függő fizetés). */
     provider?: string;
+    /** The summary's send address (card 7ba97e0d, S2); null: the partner has none. */
+    buyerEmail?: string | null;
+    /** The mail service throws (a closed gate, a provider error). */
+    sendFails?: boolean;
   } = {},
 ) {
   const calls: string[] = [];
@@ -112,7 +124,7 @@ function setup(
                 },
               ],
             }
-          : ORDER,
+          : (over.orderOverride ?? ORDER),
         status: {
           status: over.status ?? "confirmed",
         } as MedusaOrderBusinessStatus,
@@ -130,7 +142,17 @@ function setup(
       calls.push(`customerByKey ${key}`);
       return over.linked ?? null;
     },
-    customersByEmail: async () => over.byEmail ?? [],
+    customersByEmail: async () => {
+      calls.push("customersByEmail");
+      return over.byEmail ?? [];
+    },
+    customersByTaxKey: async (key: { kind: string; value: string }) => {
+      calls.push(`customersByTaxKey ${key.kind} ${key.value}`);
+      return (over.byTax ?? []).map((row) => ({
+        partnerMirror: false,
+        ...row,
+      }));
+    },
     linkCustomer: async (customerId: string, key: string) => {
       calls.push(`link ${customerId} ${key}`);
       return customerId;
@@ -163,22 +185,59 @@ function setup(
       return doc(id);
     },
   } as unknown as BillingDocumentsService;
+  const confirmations: unknown[] = [];
+  const sent: unknown[] = [];
   const issuing = {
     issueMode: () => over.mode ?? "stub",
-    issue: async (id: string, expected: string) => {
+    issue: async (
+      id: string,
+      expected: string,
+      _user: unknown,
+      confirmation?: unknown,
+    ) => {
       calls.push(`issue ${id} ${expected}`);
+      confirmations.push(confirmation);
+    },
+    summary: async (id: string) => {
+      calls.push(`summary ${id}`);
+      return {
+        buyerName: "Nagy Emese",
+        buyerEmail:
+          over.buyerEmail === undefined ? "emese@example.hu" : over.buyerEmail,
+        issueDate: "2026-10-05",
+        fulfillmentDate: "2026-10-05",
+        dueDate: "2026-10-13",
+        fingerprint: "f".repeat(64),
+      };
     },
   } as unknown as BillingDocumentIssueService;
+  const email = {
+    send: async (id: string, input: unknown) => {
+      calls.push(`send ${id}`);
+      if (over.sendFails)
+        throw new Error("A levelezés ezen a szerveren ki van kapcsolva.");
+      sent.push(input);
+    },
+  };
+  const emailDrafts = {
+    templateDraft: async () => ({
+      subject: "Számla – {{document_number}}",
+      body: "Csatolva.",
+      bodyHtml: null,
+    }),
+  };
   return {
     calls,
+    confirmations,
+    sent,
     service: new WebshopOrderInvoiceService(
       orders,
       repository,
       customers,
       documents,
       issuing,
-      {} as never,
-      {} as never,
+      email as never,
+      emailDrafts as never,
     ),
   };
 }
@@ -190,6 +249,7 @@ describe("WebshopOrderInvoiceService", () => {
     assert.deepEqual(calls, [
       "source",
       "customerByKey guest:emese@example.hu",
+      "customersByEmail",
       "create customer Nagy Emese",
       "link cust_new guest:emese@example.hu",
       "create draft webshop-order_38 for cust_new from order_38",
@@ -292,6 +352,275 @@ describe("WebshopOrderInvoiceService", () => {
     assert.ok(!calls.some((call) => call.includes("draft")));
   });
 
+  /*
+    A CÉGET AZ ADÓSZÁM AZONOSÍTJA, NEM AZ E-MAIL (kártya c499739d, Balázs 2026-11-11 10:54 UTC). MI PIROSÍT: egy céges rendelés más
+    e-mail címmel új vevő-sort hoz létre a meglévő helyett; az adószámos rendelésnél az e-mail dönt; több azonos adószámú vevőnél a
+    szolgáltatás választ; nincs adószám-találat, mégis az e-mail alapján köt; a magánszemély nem az adószám útján megy.
+  */
+  const COMPANY_ORDER = (taxId: string): MedusaOrderDetailRow => ({
+    ...ORDER,
+    email: "rendeles.kiss.anna@example.hu",
+    billing_address: {
+      ...ORDER.billing_address!,
+      company: "Fővárosi Állat- és Növénykert",
+      metadata: { tax_id: taxId },
+    },
+  });
+
+  it("an Állatkert-shaped order: a different e-mail, the SAME tax number: the existing customer row, no new one", async () => {
+    const { calls, service } = setup({
+      orderOverride: COMPANY_ORDER("15509246-2-41"),
+      byTax: [
+        {
+          id: "cust_fank",
+          displayName: "Fővárosi Állat- és Növénykert",
+          linked: false,
+        },
+      ],
+      buyer: {
+        ...SAME_BUYER,
+        name: "Fővárosi Állat- és Növénykert",
+        taxNumber: "15509246-2-41",
+      },
+    });
+    await service.issue("order_38", USER, NOW);
+    assert.ok(calls.includes("customersByTaxKey HU 15509246"));
+    assert.ok(
+      calls.includes("link cust_fank guest:rendeles.kiss.anna@example.hu"),
+    );
+    assert.ok(
+      calls.some(
+        (c) => c.startsWith("create draft") && c.includes("for cust_fank"),
+      ),
+    );
+    assert.equal(
+      calls.some((c) => c.startsWith("create customer")),
+      false,
+      "no new customer",
+    );
+    assert.equal(
+      calls.includes("customersByEmail"),
+      false,
+      "the e-mail does not decide when there is a tax number",
+    );
+  });
+
+  it("the Hungarian key is the first eight digits: any stored shape of the same company is one key", async () => {
+    for (const taxId of [
+      "15509246-2-41",
+      "15509246241",
+      "HU15509246",
+      "hu 15509246-2-41",
+    ]) {
+      const { calls, service } = setup({
+        orderOverride: COMPANY_ORDER(taxId),
+        byTax: [{ id: "cust_fank", displayName: "FANK", linked: true }],
+        buyer: {
+          ...SAME_BUYER,
+          name: "Fővárosi Állat- és Növénykert",
+          taxNumber: taxId,
+        },
+      });
+      await service.issue("order_38", USER, NOW);
+      assert.ok(calls.includes("customersByTaxKey HU 15509246"), taxId);
+    }
+  });
+
+  it("a community tax number is its own kind of key, with the country code (never the Hungarian eight digits)", async () => {
+    const { calls, service } = setup({
+      orderOverride: COMPANY_ORDER("DE 123 456 789"),
+      byTax: [{ id: "cust_de", displayName: "Aquaristik GmbH", linked: true }],
+      buyer: {
+        ...SAME_BUYER,
+        name: "Fővárosi Állat- és Növénykert",
+        taxNumber: "DE 123 456 789",
+      },
+    });
+    await service.issue("order_38", USER, NOW);
+    assert.ok(calls.includes("customersByTaxKey EU DE123456789"));
+    assert.equal(
+      calls.some((c) => c.includes("customersByTaxKey HU")),
+      false,
+    );
+  });
+
+  it("several customers on the same tax key: NO invoice, the reason names them, nothing is created or linked", async () => {
+    const { calls, service } = setup({
+      orderOverride: COMPANY_ORDER("15509246-2-41"),
+      byTax: [
+        { id: "cust_a", displayName: "FANK régi sor", linked: false },
+        { id: "cust_b", displayName: "FANK másik régi sor", linked: true },
+      ],
+    });
+    await assert.rejects(service.issue("order_38", USER, NOW), {
+      status: 409,
+      message: /ezzel az adószámmal.*FANK régi sor, FANK másik régi sor/s,
+    });
+    assert.equal(
+      calls.some((c) => c.startsWith("create") || c.startsWith("link")),
+      false,
+    );
+  });
+
+  it("THE MOTIVATING CASE: the old customer row and the partner's mirror on the same key: the MIRROR is the customer (the invoice's right buyer), no 409", async () => {
+    const { calls, service } = setup({
+      orderOverride: COMPANY_ORDER("15509246-2-41"),
+      byTax: [
+        { id: "cust_old", displayName: "FANK régi vevő-sor", linked: false },
+        {
+          id: "cust_mirror",
+          displayName: "FANK partner tükör",
+          linked: false,
+          partnerMirror: true,
+        },
+      ],
+      buyer: {
+        ...SAME_BUYER,
+        name: "Fővárosi Állat- és Növénykert",
+        taxNumber: "15509246-2-41",
+      },
+    });
+    await service.issue("order_38", USER, NOW);
+    assert.ok(
+      calls.includes("link cust_mirror guest:rendeles.kiss.anna@example.hu"),
+    );
+    assert.ok(
+      calls.some(
+        (c) => c.startsWith("create draft") && c.includes("for cust_mirror"),
+      ),
+    );
+    assert.equal(
+      calls.some((c) => c.includes("cust_old")),
+      false,
+    );
+    assert.equal(
+      calls.some((c) => c.startsWith("create customer")),
+      false,
+    );
+  });
+
+  it("the old row of a DELETED partner is no mirror (the repository says so): next to a plain old row it makes two plain rows, and the invoice is refused", async () => {
+    const { calls, service } = setup({
+      orderOverride: COMPANY_ORDER("15509246-2-41"),
+      byTax: [
+        { id: "cust_old", displayName: "FANK régi vevő-sor", linked: false },
+        {
+          id: "cust_deleted",
+          displayName: "FANK megszűnt partner sora",
+          linked: false,
+          partnerMirror: false,
+        },
+      ],
+    });
+    await assert.rejects(service.issue("order_38", USER, NOW), {
+      status: 409,
+      message: /ezzel az adószámmal/,
+    });
+    assert.equal(
+      calls.some((c) => c.startsWith("create") || c.startsWith("link")),
+      false,
+    );
+  });
+
+  it("the mirror rule needs EXACTLY ONE mirror: two mirrors, or several rows and no mirror, are still refused", async () => {
+    for (const rows of [
+      [
+        {
+          id: "m1",
+          displayName: "FANK tükör 1",
+          linked: false,
+          partnerMirror: true,
+        },
+        {
+          id: "m2",
+          displayName: "FANK tükör 2",
+          linked: false,
+          partnerMirror: true,
+        },
+      ],
+      [
+        { id: "a", displayName: "FANK régi A", linked: false },
+        { id: "b", displayName: "FANK régi B", linked: false },
+      ],
+      [
+        {
+          id: "m1",
+          displayName: "FANK tükör",
+          linked: false,
+          partnerMirror: true,
+        },
+        {
+          id: "m2",
+          displayName: "FANK tükör 2",
+          linked: false,
+          partnerMirror: true,
+        },
+        { id: "old", displayName: "FANK régi", linked: false },
+      ],
+    ]) {
+      const { calls, service } = setup({
+        orderOverride: COMPANY_ORDER("15509246-2-41"),
+        byTax: rows,
+      });
+      await assert.rejects(service.issue("order_38", USER, NOW), {
+        status: 409,
+        message: /ezzel az adószámmal/,
+      });
+      assert.equal(
+        calls.some((c) => c.startsWith("create") || c.startsWith("link")),
+        false,
+      );
+    }
+  });
+
+  it("an order WITH a tax number and no match makes a new customer: the e-mail is not asked, even if it matches somebody", async () => {
+    const { calls, service } = setup({
+      orderOverride: COMPANY_ORDER("15509246-2-41"),
+      byTax: [],
+      byEmail: [
+        { id: "cust_somebody", displayName: "Valaki Más", linked: false },
+      ],
+      buyer: {
+        ...SAME_BUYER,
+        name: "Fővárosi Állat- és Növénykert",
+        taxNumber: "15509246-2-41",
+      },
+    });
+    await service.issue("order_38", USER, NOW);
+    assert.ok(calls.some((c) => c.startsWith("create customer")));
+    assert.equal(calls.includes("customersByEmail"), false);
+  });
+
+  it("an order WITHOUT a tax number (a private person) goes by e-mail as before, and never asks the tax lookup", async () => {
+    const { calls, service } = setup({
+      byEmail: [{ id: "cust_emese", displayName: "Nagy Emese", linked: false }],
+    });
+    await service.issue("order_38", USER, NOW);
+    assert.ok(calls.includes("customersByEmail"));
+    assert.equal(
+      calls.some((c) => c.startsWith("customersByTaxKey")),
+      false,
+    );
+    assert.ok(calls.includes("link cust_emese guest:emese@example.hu"));
+  });
+
+  it("an already linked order key still wins over everything: no tax lookup, no e-mail lookup", async () => {
+    const { calls, service } = setup({
+      orderOverride: COMPANY_ORDER("15509246-2-41"),
+      linked: "cust_7",
+      buyer: {
+        ...SAME_BUYER,
+        name: "Fővárosi Állat- és Növénykert",
+        taxNumber: "15509246-2-41",
+      },
+    });
+    await service.issue("order_38", USER, NOW);
+    assert.equal(
+      calls.some((c) => c.startsWith("customersBy")),
+      false,
+    );
+  });
+
   it("two clicks at once make one partner", async () => {
     let linkedKey: string | null = null;
     const { calls, service } = setup();
@@ -313,5 +642,121 @@ describe("WebshopOrderInvoiceService", () => {
       calls.filter((call) => call.startsWith("create customer")).length,
       1,
     );
+  });
+});
+
+/**
+ * THE CONFIRMATION WINDOW ON THE WEBSHOP INVOICE (card 7ba97e0d, S2; Balázs 2026-11-11 11:12-11:20). WHAT TURNS IT RED:
+ * the summary is not the draft the issue makes; the confirmation does not reach the shared issuer; "Elküldöm e-mailben"
+ * sends nowhere, somewhere else than the summary's address, before the issue, or without being asked; an order without
+ * an address is issued anyway when sending was asked; an already issued invoice gets a new window.
+ */
+describe("WebshopOrderInvoiceService, the confirmation window (card 7ba97e0d)", () => {
+  const CONFIRMED = {
+    issueDate: "2026-10-05",
+    fulfillmentDate: "2026-10-05",
+    dueDate: "2026-10-13",
+    fingerprint: "f".repeat(64),
+  };
+
+  it("the summary is the issue's own draft, saved, and the shared summary of it, with the draft's id", async () => {
+    const { calls, service } = setup();
+    const summary = await service.invoiceSummary("order_38", USER, NOW);
+    assert.equal(summary.documentId, "webshop-order_38");
+    assert.equal(summary.buyerEmail, "emese@example.hu");
+    assert.deepEqual(calls, [
+      "source",
+      "customerByKey guest:emese@example.hu",
+      "customersByEmail",
+      "create customer Nagy Emese",
+      "link cust_new guest:emese@example.hu",
+      "create draft webshop-order_38 for cust_new from order_38",
+      "summary webshop-order_38",
+    ]);
+  });
+
+  it("an issued invoice has nothing to confirm", async () => {
+    const { calls, service } = setup({
+      invoice: { id: "webshop-order_38", status: "ISSUED", number: "E-1" },
+    });
+    await assert.rejects(service.invoiceSummary("order_38", USER, NOW), {
+      status: 409,
+    });
+    assert.deepEqual(calls, []);
+  });
+
+  it("the confirmation reaches the shared issuer; unchecked, nothing is sent", async () => {
+    const { calls, confirmations, service } = setup();
+    await service.issue("order_38", USER, NOW, { ...CONFIRMED, send: false });
+    assert.deepEqual(confirmations, [{ ...CONFIRMED, send: false }]);
+    assert.equal(
+      calls.some((call) => call.startsWith("send")),
+      false,
+    );
+  });
+
+  it('"Elküldöm e-mailben": after the issue, to the summary\'s address, with the Levelezés template', async () => {
+    // the partner's billing address, not the order's e-mail: the window showed this one
+    const { calls, sent, service } = setup({
+      buyerEmail: "szamlazas@nagyemese.hu",
+    });
+    await service.issue("order_38", USER, NOW, { ...CONFIRMED, send: true });
+    const issueAt = calls.indexOf(
+      "issue webshop-order_38 2026-10-05T12:00:01.000Z",
+    );
+    const sendAt = calls.indexOf("send webshop-order_38");
+    assert.ok(issueAt >= 0 && sendAt > issueAt, calls.join(" | "));
+    assert.deepEqual(
+      (sent[0] as { to: string[]; mode: string; subject: string }).to,
+      ["szamlazas@nagyemese.hu"],
+    );
+    assert.equal((sent[0] as { mode: string }).mode, "SEND");
+    assert.equal(
+      (sent[0] as { subject: string }).subject,
+      "Számla – {{document_number}}",
+    );
+  });
+
+  it("sending asked with no address stops before the issue", async () => {
+    const { calls, service } = setup({ buyerEmail: null });
+    await assert.rejects(
+      service.issue("order_38", USER, NOW, { ...CONFIRMED, send: true }),
+      /nincs e-mail címe/,
+    );
+    assert.equal(
+      calls.some((call) => call.startsWith("issue")),
+      false,
+    );
+  });
+
+  // barracuda on #2419: the invoice is issued before the letter; a failed send is reported, not thrown
+  it("a failed send after the issue: the answer is the fresh order, the send's failure beside it", async () => {
+    const { calls, service } = setup({ sendFails: true });
+    const result = await service.issue("order_38", USER, NOW, {
+      ...CONFIRMED,
+      send: true,
+    });
+    assert.deepEqual(result.order, { id: "order_38" });
+    assert.deepEqual(result.mail, {
+      to: "emese@example.hu",
+      sent: false,
+      error: "A levelezés ezen a szerveren ki van kapcsolva.",
+    });
+    assert.ok(
+      calls.includes("issue webshop-order_38 2026-10-05T12:00:01.000Z"),
+    );
+  });
+
+  it("a sent invoice says so beside the order; unasked, the mail outcome is null", async () => {
+    const sent = await setup().service.issue("order_38", USER, NOW, {
+      ...CONFIRMED,
+      send: true,
+    });
+    assert.deepEqual(sent.mail, { to: "emese@example.hu", sent: true });
+    const quiet = await setup().service.issue("order_38", USER, NOW, {
+      ...CONFIRMED,
+      send: false,
+    });
+    assert.equal(quiet.mail, null);
   });
 });

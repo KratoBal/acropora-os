@@ -334,12 +334,23 @@ printing and editing need the API.
 
 ### What CAN be recorded without signal (the queue)
 
-Three things go into `sync_queue` and leave it when there is signal again:
+Four things go into `sync_queue` and leave it when there is signal again:
 
 - **an asset**, recorded on site (`app/assets/new.tsx`);
 - **a worksheet**, opened on site (`app/worksheets/new.tsx`) — three fields, no
   lines and no dates, because `lines` defaults to empty on the server and the
   dates are decided at the office;
+- **an operations log entry** (`app/operations-log/record.tsx`, opened from the asset's page; task
+  `os-uzemeltetesi-naplo`): the time is the phone's (the Start and Done buttons, not typed), the values come from
+  the template's fields, and the photo fields' pictures follow the entry like an asset's photos do. The
+  server-side key of a picture is computed from its queue row id (`lib/operations-log/photo-key.ts`), because the row
+  id carries a file path the server's key pattern does not accept. The templates of an asset and the colleague list
+  are cached on the phone (`offline/operations-cache.ts`) from the last successful load and cleared on sign-out;
+  only a network failure falls back to the cache, a responded 4xx never does. Known limits: a started but unfinished
+  recording does not survive an app restart, and an entry cannot be edited from the phone. The site download
+  (`HelyszinLetolto`) also fetches the template list of every asset whose detail it fetches, but only for a technician
+  with the recording right; it is its own line in the closing sentence (an empty list counts as downloaded, a failed fetch
+  or a failed save makes the download incomplete);
 - **a photo** taken with the recording, which follows its asset OR its
   worksheet: the picture is attached to a server-side record that does not
   exist yet at queueing time. Which one it belongs to is carried by the row

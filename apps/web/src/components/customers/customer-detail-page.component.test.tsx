@@ -357,6 +357,83 @@ describe("a vevő adatlapja", () => {
     expect(screen.queryByRole("button", { name: /NAV lekérdezés/ })).toBeNull();
   });
 
+  /*
+    A FIZETÉSI HATÁRIDŐ A VEVŐ ADATLAPJÁN (Balázs 2026-11-11 10:58 UTC: a vevőnél nincs is ilyen mező). MI PIROSÍT: a mező nem mutatja
+    a tárolt napot; az üres mező nem törli (null) a tárolt napot; a nulla "nincs"-ként megy el; határon kívüli vagy tört szám elmegy a
+    szerverre; a partner tükör-sora szerkeszthető; a lap nem mondja meg, mi az alapérték.
+  */
+  it("shows the stored payment days, and says what an empty field means", async () => {
+    api.detail.mockResolvedValue(customer({ paymentDueDays: 30 }));
+    await render_();
+    expect(
+      (screen.getByLabelText("Fizetési határidő (nap)") as HTMLInputElement)
+        .value,
+    ).toBe("30");
+    expect(
+      screen.getByText(
+        "Üres: a Partnerek oldalon beállított, ha nincs, 8 nap.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("saves the payment days as a number; an empty field clears them (null); zero is zero", async () => {
+    await render_();
+    const field = screen.getByLabelText("Fizetési határidő (nap)");
+    fireEvent.change(field, { target: { value: "15" } });
+    save();
+    await waitFor(() => expect(api.update).toHaveBeenCalledTimes(1));
+    expect(api.update.mock.calls[0]![2]).toMatchObject({ paymentDueDays: 15 });
+
+    fireEvent.change(field, { target: { value: "0" } });
+    save();
+    await waitFor(() => expect(api.update).toHaveBeenCalledTimes(2));
+    expect(api.update.mock.calls[1]![2]).toMatchObject({ paymentDueDays: 0 });
+
+    fireEvent.change(field, { target: { value: "" } });
+    save();
+    await waitFor(() => expect(api.update).toHaveBeenCalledTimes(3));
+    expect(api.update.mock.calls[2]![2].paymentDueDays).toBeNull();
+  });
+
+  it("refuses payment days of another shape on the page (366, -1, 1.5, 1e2, text) and sends nothing", async () => {
+    await render_();
+    const field = screen.getByLabelText("Fizetési határidő (nap)");
+    for (const value of ["366", "-1", "1.5", "1e2", "tizenöt"]) {
+      fireEvent.change(field, { target: { value } });
+      save();
+      expect(
+        await screen.findByText(
+          "A fizetési határidő 0 és 365 közötti egész szám lehet.",
+        ),
+        value,
+      ).toBeTruthy();
+    }
+    expect(api.update).not.toHaveBeenCalled();
+  });
+
+  it("a partner's customer mirror shows the days but cannot change them, and says where", async () => {
+    api.detail.mockResolvedValue(
+      customer({ partnerMirror: true, paymentDueDays: 30 }),
+    );
+    await render_();
+    const field = screen.getByLabelText(
+      "Fizetési határidő (nap)",
+    ) as HTMLInputElement;
+    expect(field.value).toBe("30");
+    expect(field.disabled).toBe(true);
+    expect(screen.getByText("A Partnerek oldalon állítható.")).toBeTruthy();
+  });
+
+  it("a user who may only view customers sees the days and cannot change them", async () => {
+    auth.role = "VIEWER";
+    api.detail.mockResolvedValue(customer({ paymentDueDays: 8 }));
+    await render_();
+    expect(
+      (screen.getByLabelText("Fizetési határidő (nap)") as HTMLInputElement)
+        .disabled,
+    ).toBe(true);
+  });
+
   it("offers no Save to a user who may only view customers", async () => {
     auth.role = "VIEWER";
     await render_();

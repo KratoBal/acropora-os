@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Input, Textarea } from "@acropora/ui";
+import { PilotButton, PilotInput, Textarea } from "@acropora/ui";
 import { useEffect, useState } from "react";
 
 import {
@@ -112,9 +112,9 @@ export function ServiceJobFieldsEditor({
 
   if (!nyitva)
     return iranyitott ? null : (
-      <Button variant="secondary" onClick={() => setNyitva(true)}>
+      <PilotButton variant="secondary" onClick={() => setNyitva(true)}>
         Bejelentés szerkesztése
-      </Button>
+      </PilotButton>
     );
 
   return (
@@ -127,11 +127,11 @@ export function ServiceJobFieldsEditor({
       ) : null}
       <label className="block space-y-1">
         <span className="text-sm font-medium text-dusk-700">Cím</span>
-        <Input
+        <PilotInput
           aria-label="A hibajegy címe"
           value={cim}
           maxLength={300}
-          onChange={(event) => setCim(event.target.value)}
+          onChange={setCim}
         />
       </label>
       <label className="block space-y-1">
@@ -150,19 +150,19 @@ export function ServiceJobFieldsEditor({
           semaban KOTELEZO, tehat az ures mezo BIZTOSAN elutasitas. Egy halozati
           kor arra, amirol mar itt tudjuk, hogy nem mehet, csak varakozas.
         */}
-        <Button
+        <PilotButton
           disabled={ment || cim.trim() === ""}
           onClick={() => void mentes()}
         >
           {ment ? "Mentés…" : "Mentés"}
-        </Button>
-        <Button
+        </PilotButton>
+        <PilotButton
           variant="secondary"
           disabled={ment}
           onClick={() => setNyitva(false)}
         >
           Mégsem
-        </Button>
+        </PilotButton>
       </div>
     </ServicePanel>
   );

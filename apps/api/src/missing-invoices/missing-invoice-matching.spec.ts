@@ -5,7 +5,10 @@ import { Prisma } from "@acropora/database";
 
 import { candidateDocument } from "../testing/billing-documents.fixture.js";
 import {
+  DIJNET_ISSUERS,
   inWindow,
+  isDijnetIssuer,
+  isDijnetPayment,
   matchMonth,
   namedMonth,
   normalizeName,
@@ -47,6 +50,65 @@ const run = (
   documents: CandidateDocument[],
   manual = new Map<string, string[]>(),
 ) => matchMonth({ debits, documents, manual });
+
+/*
+  A NÉV NÉLKÜLI JAVASLAT (task os-hianyzo-szamlak-unpaid). MI PIROSÍT: a név szerinti `candidates` (a hiánylista
+  számlaszámainak forrása) megtelik az összeg szerinti találattal; az összeg szerinti javaslat a párosítás
+  állapotát elmozdítja; a pontos összeg helyett más összegű számla javaslat lesz; a proforma
+  számla javaslat lesz; legfeljebb 8 javaslat.
+*/
+describe("amount-only candidates: a suggestion for the drawer, never a pairing", () => {
+  const card = () =>
+    debit({
+      bookingDate: "2026-10-26",
+      amount: D(24990),
+      counterpartyName: "XXXLUTZ LEHEL UTCA",
+    });
+  const invoice = (overrides: Partial<CandidateDocument>) =>
+    doc({
+      date: "2026-10-22",
+      gross: D(24990),
+      supplierName: "MMXH Lakberendezési Kft.",
+      ...overrides,
+    });
+
+  it("an exact-amount invoice of another name is a suggestion; the name list and the state are untouched", () => {
+    const d = card();
+    const match = invoice({});
+    const out = run([d], [match, invoice({ gross: D(5590) })]).get(d.id)!;
+    assert.deepEqual(
+      out.amountCandidates?.map((c) => c.id),
+      [match.id],
+    );
+    assert.deepEqual(out.candidates, []);
+    assert.notEqual(out.state, "FOUND");
+    assert.deepEqual(out.documents, []);
+  });
+
+  it("not a proforma or out-of-window invoice, at most eight, and none when the name already finds one", () => {
+    const d = card();
+    const bad = [
+      invoice({ kind: "PROFORMA" }),
+      invoice({ date: "2025-01-05" }),
+    ];
+    assert.equal(run([d], bad).get(d.id)?.amountCandidates, undefined);
+    const many = Array.from({ length: 10 }, () => invoice({}));
+    assert.equal(
+      run([card()], many).values().next().value?.amountCandidates?.length,
+      8,
+    );
+    const named = debit({
+      bookingDate: "2026-10-26",
+      amount: D(24990),
+      counterpartyName: "MMXH Lakberendezési Kft.",
+    });
+    const outNamed = run(
+      [named],
+      [invoice({ gross: D(11000) }), invoice({})],
+    ).get(named.id)!;
+    assert.equal(outNamed.amountCandidates, undefined);
+  });
+});
 
 /*
   BIZTOSÍTÁS (barracuda esetlistája, 2. csoport). MI PIROSÍT: ha egy biztosítási
@@ -1137,16 +1199,19 @@ describe("matchMonth", () => {
       bookingDate: "2026-09-29",
       amount: D(172006),
     });
+    // egy olvasatlan feltöltésnek nincs száma: a közös lenyomat a jel
     const first = doc({
       id: "up-1",
       source: "UPLOAD",
       gross: null,
+      number: "",
       identities: ["sha:same"],
     });
     const second = doc({
       id: "up-2",
       source: "UPLOAD",
       gross: null,
+      number: "",
       identities: ["sha:same"],
     });
     const outcome = run(
@@ -1169,11 +1234,105 @@ describe("matchMonth", () => {
     );
   });
 
+  /*
+    KET KÜLÖNBÖZŐ SZÁMLASZÁMÚ SZÁMLA NEM KETTŐS FIZETÉS (acrobot, éles 2026-11-12, a Vízművek 16 980 Ft-os havi számlái:
+    103000716765 az október 12-i, 105300361726 a november 9-i terheléshez). Egymás doublePaidWith-jei voltak, holott két
+    külön számla. A közös azonosság itt egy lenyomat; a szám dönt. MI PIROSÍT: ha két külön számlaszámú számla közös
+    azonosság miatt kettős fizetés lesz; ha az egyező számú (írásjelben eltérő), vagy az egyik oldalon számot nem hordó
+    párosítás már nem kettős fizetés.
+  */
+  it("two invoices with DIFFERENT numbers are not double paid, even when they carry a shared identity", () => {
+    const october = debit({
+      id: "vm-oct",
+      bookingDate: "2026-10-12",
+      amount: D(16980),
+    });
+    const november = debit({
+      id: "vm-nov",
+      bookingDate: "2026-11-09",
+      amount: D(16980),
+    });
+    const one = doc({
+      id: "vm-1",
+      number: "103000716765",
+      identities: ["sha:shared", "inv:103000716765|vizmuvek"],
+    });
+    const two = doc({
+      id: "vm-2",
+      number: "105300361726",
+      identities: ["sha:shared", "inv:105300361726|vizmuvek"],
+    });
+    const outcome = run(
+      [october, november],
+      [one, two],
+      new Map([
+        [october.id, ["vm-1"]],
+        [november.id, ["vm-2"]],
+      ]),
+    );
+    assert.deepEqual(
+      [october, november].map((d) => [
+        outcome.get(d.id)?.state,
+        outcome.get(d.id)?.doublePaidWith,
+      ]),
+      [
+        ["FOUND", undefined],
+        ["FOUND", undefined],
+      ],
+    );
+    // a jel nem tűnik el: egy fájl két számlaszámhoz párosítva megnézendő (a rossz helyre vitt lenyomat is ilyen)
+    assert.match(
+      outcome.get(october.id)?.reason ?? "",
+      /ugyanaz a fájl más számlaszámmal egy másik terheléshez is párosítva \(vm-nov\)/,
+    );
+    assert.match(outcome.get(november.id)?.reason ?? "", /\(vm-oct\)/);
+  });
+
+  it("the same number written with other punctuation, or a pairing with no number at all, is still double paid on a shared identity", () => {
+    const a = debit({ id: "dp-1", bookingDate: "2026-09-28" });
+    const b = debit({ id: "dp-2", bookingDate: "2026-09-29" });
+    const states = (
+      first: Partial<CandidateDocument>,
+      second: Partial<CandidateDocument>,
+    ) => {
+      const out = run(
+        [a, b],
+        [
+          doc({ id: "dp-a", identities: ["sha:shared"], ...first }),
+          doc({ id: "dp-b", identities: ["sha:shared"], ...second }),
+        ],
+        new Map([
+          [a.id, ["dp-a"]],
+          [b.id, ["dp-b"]],
+        ]),
+      );
+      return [out.get(a.id)?.state, out.get(b.id)?.state];
+    };
+    assert.deepEqual(
+      states({ number: "KB-2855/2026" }, { number: "kb 2855 2026" }),
+      ["DOUBLE_PAID", "DOUBLE_PAID"],
+    );
+    // a szállító néha előtag nélkül írja a számot: az egyik szám a másikat tartalmazza
+    assert.deepEqual(
+      states({ number: "KB-2855/2026" }, { number: "2855/2026" }),
+      ["DOUBLE_PAID", "DOUBLE_PAID"],
+    );
+    assert.deepEqual(states({ number: "KB-2855/2026" }, { number: "" }), [
+      "DOUBLE_PAID",
+      "DOUBLE_PAID",
+    ]);
+  });
+
   it("the same invoice number paired twice is double paid too; one pairing, or another problem, is not", () => {
     const a = debit({ id: "n-1" });
     const b = debit({ id: "n-2", bookingDate: "2026-08-11" });
     const same = (id: string, payee: CandidateDocument["payee"] = "COMPANY") =>
-      doc({ id, identities: ["inv:kb-2855/2026|12345678"], payee });
+      doc({
+        id,
+        number: "KB-2855/2026",
+        identities: ["inv:kb-2855/2026|12345678"],
+        payee,
+      });
     const twice = run(
       [a, b],
       [same("x-1"), same("x-2")],
@@ -1925,5 +2084,366 @@ describe("a zero-total invoice has no payment (card 847bca33)", () => {
       [outcome.matchedBy, outcome.documents.map((d) => d.id)],
       ["MANUAL", ["polus-0"]],
     );
+  });
+});
+
+/*
+  RÖGZÍTETT HAVI TÖBBLET (4b. szabály, acrobot 49449, Euroleasing). MI PIROSÍT: a két valódi pár (10-11 150 429 a
+  10-02 149 889-re, 11-11 150 253 a 11-02 149 713-ra) nem párosodik, vagy az eltérés (540) nem kerül a tételre; a
+  szabály más partnerre, 1% fölötti eltérésre, 15 napnál régebbi vagy a terhelés utáni számlára, vagy két szabad
+  számla közül választva is párosít; a pontos összeg nem a 3. szabályon megy (eltérés nélkül).
+*/
+describe("a fixed monthly surcharge, for a listed partner", () => {
+  const lease = (
+    bookingDate: string,
+    amount: number,
+    name = "Euroleasing Zrt.",
+  ) =>
+    debit({
+      bookingDate,
+      amount: D(amount),
+      counterpartyName: name,
+      narrative: "70862025177054",
+    });
+  const invoice = (
+    date: string,
+    gross: number,
+    supplierName = "Euroleasing Zrt.",
+  ) => doc({ date, gross: D(gross), supplierName });
+  const history = () => [
+    invoice("2026-07-01", 146920),
+    invoice("2026-08-02", 149265),
+    invoice("2026-10-02", 149889),
+    invoice("2026-11-02", 149713),
+  ];
+
+  it("pairs the two measured months with their own invoice, the 540 Ft on the item", () => {
+    const docs = history();
+    const october = lease("2026-10-11", 150429);
+    const november = lease("2026-11-11", 150253);
+    const out = run([october, november], docs);
+    for (const [d, expected] of [
+      [october, docs[2]!],
+      [november, docs[3]!],
+    ] as const) {
+      const o = out.get(d.id)!;
+      assert.deepEqual(
+        [
+          o.matchedBy,
+          o.documents.map((x) => x.id),
+          o.amountDifference?.amount.toString(),
+          o.amountDifference?.currency,
+        ],
+        ["RULE", [expected.id], "540", "HUF"],
+        d.bookingDate,
+      );
+    }
+  });
+
+  for (const [name, make] of [
+    [
+      "another partner",
+      () => [
+        lease("2026-11-11", 150253, "Más Lízing Zrt."),
+        invoice("2026-11-02", 149713, "Más Lízing Zrt."),
+      ],
+    ],
+    [
+      "a gap over 1%",
+      () => [lease("2026-11-11", 151300), invoice("2026-11-02", 149713)],
+    ],
+    [
+      "an invoice 16 days before",
+      () => [lease("2026-11-18", 150253), invoice("2026-11-02", 149713)],
+    ],
+    [
+      "an invoice after the debit",
+      () => [lease("2026-11-11", 150253), invoice("2026-11-12", 149713)],
+    ],
+  ] as const)
+    it(`does not pair ${name}`, () => {
+      const [d, document] = make() as [MatchableDebit, CandidateDocument];
+      assert.notEqual(run([d], [document]).get(d.id)?.matchedBy, "RULE");
+    });
+
+  it("does not choose between two free invoices in the 15 days", () => {
+    const d = lease("2026-11-11", 150253);
+    const out = run(
+      [d],
+      [invoice("2026-10-30", 149713), invoice("2026-11-02", 149800)],
+    );
+    assert.notEqual(out.get(d.id)?.matchedBy, "RULE");
+  });
+
+  it("an exact amount still goes on the exact rule, with no difference", () => {
+    const d = lease("2026-11-11", 149713);
+    const docs = history();
+    const o = run([d], docs).get(d.id)!;
+    assert.deepEqual(
+      [o.documents.map((x) => x.id), o.amountDifference],
+      [[docs[3]!.id], undefined],
+    );
+  });
+});
+
+/*
+  A DIJNET-FIZETÉS (acrobot 49440, 2026-11-12). MI PIROSÍT: ha a „SIMPLEP*dijnet” fizetés a pontos összegű, Dijnet-es
+  kiállítótól (MOHU) jövő számlával nem párosodik; ha a fizetés UTÁN kelt számlát visz el (a havi számlát előtte
+  állítják ki); ha két azonos összegű számlánál nem a fizetéshez időben legközelebbit; ha egy másik kiállító vagy
+  egy másik összeg párosodik; ha egy már elvitt számlát kap meg; ha egy nem-Dijnet fizetést érint.
+*/
+describe("Dijnet payment: paired with the exact-amount invoice of a Dijnet-paid issuer", () => {
+  const MOHU = "MOHU MOL Hulladékgazdálkodási Zrt.";
+  const payment = (overrides: Partial<MatchableDebit> = {}) =>
+    debit({
+      bookingDate: "2026-11-05",
+      amount: D(10882),
+      counterpartyName: "SIMPLEP*dijnet",
+      narrative: "2026.11.04 0194683438 SIMPLEP*dijnet",
+      ...overrides,
+    });
+  const mohu = (date: string, overrides: Partial<CandidateDocument> = {}) =>
+    doc({ date, gross: D(10882), supplierName: MOHU, ...overrides });
+
+  it("the measured case: two equal MOHU invoices, the one issued BEFORE the payment is taken, the later one is not", () => {
+    const d = payment();
+    const before = mohu("2026-09-21");
+    const after = mohu("2026-11-12");
+    const out = run([d], [before, after]).get(d.id)!;
+    assert.equal(out.state, "FOUND");
+    assert.deepEqual(
+      out.documents.map((x) => x.id),
+      [before.id],
+    );
+    assert.equal(out.matchedBy, "RULE");
+  });
+
+  it("of two invoices issued before, the one closest to the payment date wins, and the other stays free", () => {
+    const d = payment();
+    const far = mohu("2026-09-21");
+    const near = mohu("2026-10-20");
+    const out = run([d], [far, near]).get(d.id)!;
+    assert.deepEqual(
+      out.documents.map((x) => x.id),
+      [near.id],
+    );
+  });
+
+  it("an invoice dated on the payment day is taken; one dated after the payment alone is not", () => {
+    const sameDay = payment();
+    assert.equal(
+      run([sameDay], [mohu("2026-11-05")]).get(sameDay.id)?.state,
+      "FOUND",
+    );
+    const later = payment();
+    const out = run([later], [mohu("2026-11-12")]).get(later.id)!;
+    assert.notEqual(out.state, "FOUND");
+    assert.deepEqual(out.documents, []);
+  });
+
+  it("only a Dijnet-paid issuer and only the exact amount: another issuer or another amount is not paired", () => {
+    const other = payment();
+    const outOther = run(
+      [other],
+      [mohu("2026-10-20", { supplierName: "Valami Szolgáltató Zrt." })],
+    ).get(other.id)!;
+    assert.notEqual(outOther.state, "FOUND");
+    const wrongAmount = payment();
+    const outAmount = run(
+      [wrongAmount],
+      [mohu("2026-10-20", { gross: D(10990) })],
+    ).get(wrongAmount.id)!;
+    assert.notEqual(outAmount.state, "FOUND");
+    // the 1 Ft HUF tolerance of every exact match holds here too
+    const oneForint = payment();
+    assert.equal(
+      run([oneForint], [mohu("2026-10-20", { gross: D(10883) })]).get(
+        oneForint.id,
+      )?.state,
+      "FOUND",
+    );
+  });
+
+  it("two Dijnet payments of the same amount take two different invoices (an invoice is taken once); a manually paired invoice is not offered", () => {
+    const first = payment({ bookingDate: "2026-10-05", id: "dj-1" });
+    const second = payment({ bookingDate: "2026-11-05", id: "dj-2" });
+    const a = mohu("2026-09-21");
+    const b = mohu("2026-10-02");
+    const out = run([first, second], [a, b]);
+    assert.deepEqual(
+      out.get("dj-1")?.documents.map((x) => x.id),
+      [b.id],
+    );
+    assert.deepEqual(
+      out.get("dj-2")?.documents.map((x) => x.id),
+      [a.id],
+    );
+    // a manually paired invoice belongs to its payment: the Dijnet payment does not take it
+    const manualPaid = mohu("2026-10-20");
+    const mine = payment();
+    const elsewhere = debit({ id: "elsewhere", bookingDate: "2026-10-21" });
+    const taken = run(
+      [mine, elsewhere],
+      [manualPaid],
+      new Map([[elsewhere.id, [manualPaid.id]]]),
+    ).get(mine.id)!;
+    assert.notEqual(taken.state, "FOUND");
+    assert.deepEqual(taken.documents, []);
+  });
+
+  it("a payment that is not a Dijnet payment is not touched, even beside a MOHU invoice of the same amount", () => {
+    const card = debit({
+      bookingDate: "2026-11-05",
+      amount: D(10882),
+      counterpartyName: "VALAMI WEBSHOP",
+      narrative: "2026.11.04 0194683438 VALAMI WEBSHOP",
+    });
+    const out = run([card], [mohu("2026-10-20")]).get(card.id)!;
+    assert.notEqual(out.state, "FOUND");
+  });
+
+  it("the Dijnet detection reads the counterparty and the narrative, and the truncated statement form; the issuer list is MOHU only", () => {
+    assert.equal(
+      isDijnetPayment({ counterpartyName: "SIMPLEP*dijnet", narrative: "" }),
+      true,
+    );
+    assert.equal(
+      isDijnetPayment({
+        counterpartyName: null,
+        narrative: "2026.05.10 SIMPLEP*DIJNE 1234",
+      }),
+      true,
+    );
+    assert.equal(
+      isDijnetPayment({
+        counterpartyName: "SIMPLEP*VIZMUVEK.HU",
+        narrative: "",
+      }),
+      false,
+    );
+    assert.equal(isDijnetIssuer(MOHU), true);
+    assert.equal(isDijnetIssuer("Dijnet Zrt."), false);
+    assert.equal(DIJNET_ISSUERS.length, 1);
+  });
+});
+
+/*
+  GYŰJTŐSZÁMLÁRA VÁR (Balázs, 2026-11-15: „hogy lehetne azt elérni, hogy a banki párosodások ne legyenek
+  ennyire gyatrák?”). Az éles eset, mérve aznap: a szeptemberi Parkl-fizetések a 10-01-i gyűjtőszámlához
+  párosodtak, a novemberiek (11-03 .. 11-13, egy kártya) a december elején kelő számlára várnak, és a lap
+  mindet hiánynak mutatta. MI PIROSÍT: a novemberi fizetés hiány marad a határidő előtt; a határidő után
+  nem esik vissza hiányba; egy gyűjtőszámla-előzmény nélküli partner kártyás fizetése is vár; egy kétes
+  (kézi választást kérő) sor vár, ahelyett hogy döntést kérne; `asOf` nélkül bármi vár.
+*/
+describe("a card payment waits for its monthly summary invoice until the deadline", () => {
+  const card = (date: string, amount: number, partner = "SIMPLEP*PARKL.NET") =>
+    debit({
+      bookingDate: date,
+      amount: D(amount),
+      counterpartyName: partner,
+      narrative: `${date.replace(/-/g, ".")} 0194683438 ${partner.replace(".NET", " .NET")}`,
+      category: "CARD_SUBSCRIPTION",
+    });
+  const parkl = doc({
+    number: "E-PAR-2026-46439",
+    date: "2026-10-01",
+    gross: D(1200),
+    supplierName: "Parkl Digital Technologies Kft.",
+  });
+  const setup = () => {
+    const september = [card("2026-09-05", 400), card("2026-09-17", 800)];
+    const november = [card("2026-11-03", 382), card("2026-11-13", 373)];
+    return { september, november };
+  };
+  const decide = (debits: MatchableDebit[], asOf?: string) =>
+    matchMonth({
+      debits,
+      documents: [parkl],
+      manual: new Map(),
+      ...(asOf ? { asOf } : {}),
+    });
+
+  it("a partner whose earlier month paired with a summary invoice: this month waits until the 5th of the next", () => {
+    const { september, november } = setup();
+    const out = decide([...september, ...november], "2026-11-13");
+    for (const d of september) assert.equal(out.get(d.id)?.state, "FOUND");
+    for (const d of november) {
+      assert.equal(out.get(d.id)?.state, "AWAITING_COLLECTOR");
+      assert.match(
+        out.get(d.id)?.reason ?? "",
+        /^gyűjtőszámlára vár: a 2026-11 havi .* 2026-12-05-ig kel/,
+      );
+    }
+  });
+
+  it("after the deadline, or with no statement day given, it is missing again", () => {
+    for (const asOf of ["2026-12-06", undefined]) {
+      const { september, november } = setup();
+      const out = decide([...september, ...november], asOf);
+      for (const d of november)
+        assert.equal(out.get(d.id)?.state, "NOT_MATCHED", String(asOf));
+    }
+    const { september, november } = setup();
+    const onDue = decide([...september, ...november], "2026-12-05");
+    for (const d of november)
+      assert.equal(onDue.get(d.id)?.state, "AWAITING_COLLECTOR", "the due day");
+  });
+
+  it("a partner with no summary invoice before is not assumed to send one", () => {
+    const lone = [
+      card("2026-11-03", 990, "SIMPLEP*MASIK.NET"),
+      card("2026-11-04", 500, "SIMPLEP*MASIK.NET"),
+    ];
+    const other = doc({
+      number: "M-1",
+      date: "2026-10-20",
+      gross: D(77),
+      supplierName: "SIMPLEP*MASIK.NET",
+    });
+    const out = matchMonth({
+      debits: [...setup().september, ...lone],
+      documents: [parkl, other],
+      manual: new Map(),
+      asOf: "2026-11-13",
+    });
+    for (const d of lone) assert.equal(out.get(d.id)?.state, "NOT_MATCHED");
+  });
+
+  it("a row asking for a manual choice stays on the missing tab, not waiting (barracuda on #2586)", () => {
+    const november = card("2026-11-03", 382);
+    // two invoices, each a few forints off: "több kerekítési találat: kézi választás"
+    const near = [384, 385].map((gross, i) =>
+      doc({
+        number: `E-PAR-2026-9${i}`,
+        date: "2026-10-20",
+        gross: D(gross),
+        supplierName: "Parkl Digital Technologies Kft.",
+      }),
+    );
+    const out = matchMonth({
+      debits: [...setup().september, november],
+      documents: [parkl, ...near],
+      manual: new Map(),
+      asOf: "2026-11-13",
+    });
+    assert.equal(out.get(november.id)?.state, "NOT_MATCHED");
+    assert.match(out.get(november.id)?.reason ?? "", /kézi választás/);
+  });
+
+  it("a transfer to the same partner that is no card payment does not wait", () => {
+    const transfer = debit({
+      bookingDate: "2026-11-05",
+      amount: D(990),
+      counterpartyName: "SIMPLEP*PARKL.NET",
+      narrative: "PARKL HAVIDIJ NOVEMBER",
+      category: "CARD_SUBSCRIPTION",
+    });
+    const out = matchMonth({
+      debits: [...setup().september, transfer],
+      documents: [parkl],
+      manual: new Map(),
+      asOf: "2026-11-13",
+    });
+    assert.equal(out.get(transfer.id)?.state, "NOT_MATCHED");
   });
 });

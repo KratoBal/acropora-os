@@ -73,10 +73,13 @@ function setup(
     order?: MedusaOrderDetailRow;
     tracking?: TrackingEvent[];
     trackingError?: CarrierError;
+    /** a táblába írás hibája (az audit nem változtathatja meg a választ) */
+    auditError?: Error;
   } = {},
 ) {
   const calls: string[] = [];
   const created: CreateWebshopParcelInput[] = [];
+  const recorded: Record<string, unknown>[] = [];
   const notices: MedusaShippingNotice[] = [];
   const orders = {
     source: async () => ({
@@ -102,6 +105,10 @@ function setup(
           ? [[ids[0]!, { ...over.external, link: "ORDER_NUMBER", paid: true }]]
           : [],
       ),
+    recordCarrierUnexpectedResponse: async (input: Record<string, unknown>) => {
+      if (over.auditError) throw over.auditError;
+      recorded.push(input);
+    },
     recordParcelReleased: async (input: { orderId: string }) => {
       calls.push(`audit release ${input.orderId}`);
     },
@@ -137,6 +144,7 @@ function setup(
     calls,
     created,
     notices,
+    recorded,
     service: new WebshopOrderParcelService(orders, repository, parcels),
   };
 }
@@ -375,6 +383,75 @@ describe("WebshopOrderParcelService", () => {
       (error) => {
         assert.equal((error as { status: number }).status, 422);
         assert.doesNotMatch((error as Error).message, /raw provider text/);
+        return true;
+      },
+    );
+  });
+
+  it("an unexpected carrier answer is kept in the table, and nothing else is", async () => {
+    const keys =
+      "no barcode in the create answer; answer keys: valid, parcels; parcel keys: clFox=set";
+    const unexpected = setup({
+      invoice: ISSUED,
+      createError: new CarrierError("UNEXPECTED_RESPONSE", "foxpost", keys),
+    });
+    await assert.rejects(
+      unexpected.service.create("order_38", undefined, USER),
+      { status: 503 },
+    );
+    assert.deepEqual(unexpected.recorded, [
+      {
+        userId: "user_1",
+        orderId: "order_38",
+        operation: "create",
+        carrier: "foxpost",
+        detail: keys,
+      },
+    ]);
+
+    const other = setup({
+      invoice: ISSUED,
+      createError: new CarrierError("DUPLICATE", "foxpost", "x"),
+    });
+    await assert.rejects(other.service.create("order_38", undefined, USER), {
+      status: 409,
+    });
+    assert.deepEqual(other.recorded, []);
+
+    // the label and tracking calls pass no audit context: the table gets only the create answer
+    const tracking = setup({
+      trackingError: new CarrierError("UNEXPECTED_RESPONSE", "foxpost", "t"),
+    });
+    await assert.rejects(tracking.service.tracking("order_38"), {
+      status: 503,
+    });
+    assert.deepEqual(tracking.recorded, []);
+  });
+
+  it("the audit detail is cut to 500 characters, and a failed audit write does not change the answer", async () => {
+    const long = setup({
+      invoice: ISSUED,
+      createError: new CarrierError(
+        "UNEXPECTED_RESPONSE",
+        "foxpost",
+        "k".repeat(900),
+      ),
+    });
+    await assert.rejects(long.service.create("order_38", undefined, USER), {
+      status: 503,
+    });
+    assert.equal((long.recorded[0]!.detail as string).length, 500);
+
+    const failing = setup({
+      invoice: ISSUED,
+      createError: new CarrierError("UNEXPECTED_RESPONSE", "foxpost", "k"),
+      auditError: new Error("db down"),
+    });
+    await assert.rejects(
+      failing.service.create("order_38", undefined, USER),
+      (error) => {
+        assert.equal((error as { status: number }).status, 503);
+        assert.doesNotMatch((error as Error).message, /db down/);
         return true;
       },
     );

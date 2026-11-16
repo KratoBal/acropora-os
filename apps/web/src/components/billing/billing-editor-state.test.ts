@@ -11,6 +11,7 @@ import {
   hiddenFilledFields,
   missingForSave,
   newEditorState,
+  paymentMethodShown,
   toDraftInput,
   trimDecimal,
   variantOptionsOf,
@@ -187,6 +188,65 @@ describe("billing editor state", () => {
       "2026-09-30T10:05:00.000Z",
       "PAPER",
     ]);
+  });
+
+  it("a proforma made from a quote opens with no payment method, but the save sends the one the select shows", () => {
+    // quote-proforma.ts stores fulfillmentDate, dueDate and paymentMethod as null (the operator fills them); the select has no
+    // empty option, so the browser shows the first one while the state stays empty (Luca, 2026-11-16, BILLING_PAYMENT_TERMS_REQUIRED)
+    const loaded = fromDetail({
+      id: "doc-1",
+      documentType: "PROFORMA",
+      invoiceFormat: null,
+      status: "DRAFT",
+      customer: null,
+      fulfillmentDate: null,
+      dueDate: null,
+      paymentMethod: null,
+      currency: "HUF",
+      language: "hu",
+      reference: "AJ-2026-0015",
+      note: null,
+      sourceType: "PROJECT",
+      sourceId: "proj-1",
+      lines: [],
+      updatedAt: "2026-11-16T12:40:00.000Z",
+    } as unknown as BillingDocumentDetail);
+    expect(loaded.paymentMethod).toBe("");
+    expect(paymentMethodShown(loaded)).toBe("Átutalás");
+    const sent = toDraftInput(
+      { ...loaded, dueDate: "2026-11-18", fulfillmentDate: "2026-11-16" },
+      "update",
+    );
+    expect(sent.paymentMethod).toBe("Átutalás");
+    expect(sent.dueDate).toBe("2026-11-18");
+  });
+
+  it("the payment method that was chosen or stored is sent as it is, and a type without payment fields sends none", () => {
+    expect(
+      toDraftInput(
+        state({ documentType: "PROFORMA", paymentMethod: "Készpénz" }),
+        "create",
+      ).paymentMethod,
+    ).toBe("Készpénz");
+    // a stored text outside the list is not rewritten
+    expect(
+      toDraftInput(
+        state({ documentType: "PROFORMA", paymentMethod: "Utalás 8 napra" }),
+        "create",
+      ).paymentMethod,
+    ).toBe("Utalás 8 napra");
+    expect(
+      toDraftInput(
+        state({ documentType: "PROFORMA", paymentMethod: "   " }),
+        "create",
+      ).paymentMethod,
+    ).toBe("Átutalás");
+    expect(
+      toDraftInput(
+        state({ documentType: "DELIVERY_NOTE", paymentMethod: "" }),
+        "create",
+      ).paymentMethod,
+    ).toBeNull();
   });
 
   it("names what is missing for a save", () => {

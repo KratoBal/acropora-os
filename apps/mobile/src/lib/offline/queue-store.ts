@@ -411,6 +411,36 @@ export async function enqueueAquariumMeasurement(input: {
   }
 }
 
+/**
+ * SORBA TESZ EGY ÜZEMELTETÉSI NAPLÓ BEJEGYZÉST (task os-uzemeltetesi-naplo, S2c).
+ *
+ * UGYANAZ AZ ALAK, MINT AZ ESZKÖZ FELVITELÉNÉL: a bejegyzés ÚJ entitás, az `entity_id` ezért `NULL`, és a szerver-azonosító a
+ * felmenetelkor lép át a varraton (a sorban álló képek ezt kapják meg). Az eszköz és a sablon azonosítója a payloadban van, mert a
+ * szerver a törzsből olvassa.
+ */
+export async function enqueueOperationsEntry(input: {
+  /** A bejegyzés művelet-azonosítója, egyben a sor kulcsa. */
+  id: string;
+  payload: unknown;
+  createdAt: string;
+}): Promise<EnqueueResult> {
+  try {
+    const db = await offlineDatabase();
+    await db.runAsync(
+      `INSERT OR IGNORE INTO sync_queue
+         (id, operation, entity_type, entity_id, payload_json, created_at, attempt_count, last_error, state)
+       VALUES (?, 'create', 'operations-entry', NULL, ?, ?, 0, NULL, 'pending')`,
+      [input.id, JSON.stringify(input.payload), input.createdAt],
+    );
+    return { ok: true, operationId: input.id };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 export async function enqueueWorksheetLine(input: {
   /** A tetel azonositoja, egyben a sor kulcsa. */
   id: string;

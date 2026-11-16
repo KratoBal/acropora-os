@@ -1076,6 +1076,7 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
       brandId: null,
       variants: [
         {
+          isActive: true,
           sku: "SKU-1",
           manufacturerPartNumber: null,
           unit: null,
@@ -1427,12 +1428,15 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
   }
 
   /**
-   * A TAROLT BOLTI CIM, ahogy a lekepezes-soron all. SZANDEKOSAN a mert, hibas
-   * alak: ez a ket regi sor cime (2d3f64d2), es a teszt epp azt mutatja meg,
-   * hogy egy ilyen cim MINDEN futasban ujra kimegy.
+   * A TAROLT BOLTI CIM, ahogy a lekepezes-soron all, PUBLIKUS alakban. Ez a
+   * cim 2026-11-10-ig a ket regi sor belso cime volt (2d3f64d2), es a teszt azt
+   * mutatta meg, hogy egy ilyen cim MINDEN futasban ujra kimegy. A kiado azota
+   * belso tarolt cimet nem hasznal ujra (`product-image-publisher.ts`, a sajat
+   * tesztje meri), tehat itt egy publikus cim all: a teszt tovabbra is azt meri,
+   * hogy a tarolt lekepezes valtozatlan forrasnal is kimegy.
    */
   const TAROLT_BOLTI_CIM =
-    "http://localhost:9000/static/1788516704783-156161.jpg";
+    "https://commerce-stage.acropora.hu/static/1788516704783-156161.jpg";
 
   const boltiKornyezet = {
     ...withEnvironmentKey,
@@ -1516,6 +1520,7 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
         {
           // a `ProductBarcode` sorok ehhez kotnek (SEO P0 PR 4)
           id: "valtozat-1",
+          isActive: true,
           sku,
           // A futtato a vonalkodot a ELSO valtozat `manufacturerPartNumber`
           // mezojebol veszi, ha a ProductBarcode forras ki van kapcsolva.
@@ -2397,6 +2402,179 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
   });
 
   /**
+   * AZ INAKTIVALT TERMEK AKTIV VALTOZAT NELKUL (kartya ca422e92).
+   *
+   * MI PIROSIT: az inaktiv termek, amelynek a valtozata is inaktiv, `no-sku`
+   * okkal megall (a bolt published vagy jelolo nelkuli draft marad, a kotes nem
+   * lep, es az utemezo minden korben ujra elovenne); vagy a kikuldott torzsben
+   * nem draft, csatorna nelkul, kifutott jelolovel megy. A KONTROLL az aktiv
+   * termek ugyanazzal az inaktiv valtozattal: az tovabbra is megall, mert ott
+   * az inaktiv valtozat nem mehet ki.
+   */
+  it("az inaktiv termek aktiv valtozat nelkul is kimegy, draftkent, kifutott jelolovel", async () => {
+    for (const [aktiv, vartKod] of [
+      [false, 0],
+      [true, 1],
+    ] as const) {
+      const { out, stdout, stderr } = collector();
+      const alap = termek();
+      const { db } = adatbazis(
+        termek({
+          isActive: aktiv,
+          variants: [{ ...alap.variants[0]!, isActive: false }],
+          channelListings: [
+            {
+              channel: "UNAS",
+              slug: "teszt-termek",
+              seoRobots: null,
+              seoTitle: null,
+              seoDescription: null,
+              seoKeywords: null,
+              productUrl: "https://www.acropora.hu/Teszt-termek",
+            },
+          ],
+        }),
+      );
+      const keresek: { url: string; method: string; body: unknown }[] = [];
+
+      const code = await boltiKorben(() =>
+        runProjectionCli(
+          ["prod-1"],
+          out,
+          provider(environmentSetting),
+          boltiKornyezet,
+          db,
+          boltiFetchTorzzsel(keresek),
+        ),
+      );
+
+      const naplo = stderr.join("") + stdout.join("");
+      assert.equal(code, vartKod, `aktiv=${aktiv}: ${naplo}`);
+      const letrehozas = keresek.find(
+        (k) => k.url.endsWith("/admin/products") && k.method === "POST",
+      );
+      if (aktiv) {
+        assert.match(naplo, /MEGÁLLT \(no-sku\)/);
+        assert.equal(letrehozas, undefined);
+        continue;
+      }
+      assert.ok(letrehozas, naplo);
+      const torzs = letrehozas.body as {
+        status: string;
+        sales_channels: unknown[];
+        metadata?: Record<string, unknown>;
+        variants: { sku: string }[];
+      };
+      assert.equal(torzs.status, "draft");
+      assert.deepEqual(torzs.sales_channels, []);
+      assert.equal(torzs.metadata?.discontinued, "true");
+      assert.deepEqual(
+        torzs.variants.map((v) => v.sku),
+        ["SKU-1"],
+      );
+      assert.match(naplo, /a termék inaktív/);
+    }
+  });
+
+  /**
+   * A WEBSHOP-SLUG AZ ELSŐ VETÍTÉSKOR (SEO D2, seo-d2-slug-bekotes).
+   *
+   * MI PIROSÍT: a WEBSHOP-slug nélküli termék nem kér slugot (a kézzel felvitt termék
+   * handle-je a Medusa ékezetes névből képzett alakja marad); a kapott slug nem lesz
+   * handle a kapcsoló mellett; a meglévő slugot újra kéri; vagy egy elbukó képzés a
+   * vetítést is megállítja.
+   */
+  const unasSor = {
+    channel: "UNAS",
+    slug: "teszt-termek",
+    seoRobots: null,
+    seoTitle: null,
+    seoDescription: null,
+    seoKeywords: null,
+    productUrl: null,
+  };
+  const futas = async (
+    channelListings: unknown[],
+    env: Record<string, string>,
+    ensure: (productId: string) => Promise<string>,
+  ) => {
+    const { out, stdout, stderr } = collector();
+    const { db } = adatbazis(termek({ channelListings }));
+    const keresek: { url: string; method: string; body: unknown }[] = [];
+    const code = await boltiKorben(() =>
+      runProjectionCli(
+        ["prod-1"],
+        out,
+        provider(environmentSetting),
+        { ...boltiKornyezet, ...env },
+        db,
+        boltiFetchTorzzsel(keresek),
+        ensure,
+      ),
+    );
+    const letrehozas = keresek.find(
+      (k) => k.url.endsWith("/admin/products") && k.method === "POST",
+    );
+    return {
+      code,
+      naplo: stderr.join("") + stdout.join(""),
+      stderr: stderr.join(""),
+      handle: (letrehozas?.body as { handle?: string } | undefined)?.handle,
+    };
+  };
+
+  it("a WEBSHOP-slug nélküli termék az első vetítéskor slugot kap, és a kapcsolóval az lesz a handle", async () => {
+    const kert: string[] = [];
+    const ensure = async (id: string) => (kert.push(id), "teszt-termek-sku-1");
+    const be = await futas(
+      [unasSor],
+      { MEDUSA_HANDLE_FROM_WEBSHOP_SLUG: "true" },
+      ensure,
+    );
+    assert.equal(be.code, 0, be.naplo);
+    assert.deepEqual(kert, ["prod-1"]);
+    assert.equal(be.handle, "teszt-termek-sku-1");
+    assert.match(be.naplo, /webshop-slug képezve: teszt-termek-sku-1/);
+    // a kapcsoló nélkül a slug képződik, a handle a mai (UNAS) marad
+    const ki = await futas([unasSor], {}, ensure);
+    assert.equal(ki.code, 0, ki.naplo);
+    assert.equal(ki.handle, "teszt-termek");
+    // a kézzel felvitt termék: se UNAS-, se WEBSHOP-sor; a kapcsolóval a handle a slug
+    const kezi = await futas(
+      [],
+      { MEDUSA_HANDLE_FROM_WEBSHOP_SLUG: "true" },
+      ensure,
+    );
+    assert.equal(kezi.handle, "teszt-termek-sku-1");
+  });
+
+  it("a meglévő WEBSHOP-slugot nem kéri újra", async () => {
+    const kert: string[] = [];
+    const meglevo = await futas(
+      [unasSor, { ...unasSor, channel: "WEBSHOP", slug: "mar-van" }],
+      { MEDUSA_HANDLE_FROM_WEBSHOP_SLUG: "true" },
+      async (id) => (kert.push(id), "uj"),
+    );
+    assert.equal(meglevo.code, 0, meglevo.naplo);
+    assert.deepEqual(kert, []);
+    assert.equal(meglevo.handle, "mar-van");
+  });
+
+  it("az elbukó slug-képzés nem állítja meg a vetítést: a mai úton megy, egy naplósorral", async () => {
+    const r = await futas(
+      [unasSor],
+      { MEDUSA_HANDLE_FROM_WEBSHOP_SLUG: "true" },
+      async () => {
+        throw new TypeError("a@b.hu");
+      },
+    );
+    assert.equal(r.code, 0, r.naplo);
+    assert.equal(r.handle, "teszt-termek");
+    assert.match(r.stderr, /a webshop-slug nem képződött \(TypeError\)/);
+    assert.doesNotMatch(r.stderr, /a@b\.hu/);
+  });
+
+  /**
    * A SIKER NULLAZ, ES EZ NEM MELLEKES: EGY OTTFELEJTETT OK HAZUDIK.
    *
    * A kep itt UGY megy ki, hogy a taroloig el sem jutunk: a lekepezes MAR
@@ -2901,5 +3079,122 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
     );
     /** A zaro sor megnevezi, hogy a mester atkerult. */
     assert.match(stdout.join(""), /1 kép mestere került át/);
+  });
+
+  /**
+   * A RÉGI BOLTRA MUTATÓ LEÍRÁS-LINKEK ÁTÍRÁSA A VETÍTÉSKOR (card aaf002d3). MI PIROSIT: a futtató nem a szabályok szerinti
+   * Commerce-címet küldi a boltba; a jóváhagyott szöveget is átírja; a szabályok nélkül (dupla adatbázis, nincs betöltő) a
+   * leírás NEM ugyanaz, mint a mai; a betöltés bukása leállítja a vetítést; az átírás nem látszik a kimeneten.
+   */
+  const REGI_LINKES = (host: string) =>
+    `<p>Lásd: <a href="https://${host}/Valenciennea-bella">Valenciennea</a> és <a href="https://${host}/spg/821031,2630685/Doktorhalak">cikk</a>.</p>`;
+
+  it("a leírás régi-bolt linkje a szabály szerinti Commerce-címre megy ki, a leképezetlen érintetlen, a kimenet megmondja", async () => {
+    const { out, stdout, stderr } = collector();
+    const { db } = adatbazis(
+      termek({ description: REGI_LINKES("shop.acropora.hu") }),
+    );
+    const keresek: { url: string; method: string; body: unknown }[] = [];
+
+    const code = await boltiKorben(() =>
+      runProjectionCli(
+        ["prod-1"],
+        out,
+        provider(environmentSetting),
+        boltiKornyezet,
+        db,
+        boltiFetchTorzzsel(keresek),
+        undefined,
+        async () =>
+          new Map([["/valenciennea-bella", "/hu/termek/valenciennea-bella"]]),
+      ),
+    );
+
+    assert.equal(code, 0, stderr.join("") + stdout.join(""));
+    const letrehozas = keresek.find(
+      (k) => k.url.endsWith("/admin/products") && k.method === "POST",
+    );
+    const leiras = (letrehozas?.body as { description?: string }).description;
+    assert.match(leiras ?? "", /href="\/hu\/termek\/valenciennea-bella"/);
+    // a leképezetlen cikk-link érintetlen
+    assert.match(
+      leiras ?? "",
+      /href="https:\/\/shop\.acropora\.hu\/spg\/821031,2630685\/Doktorhalak"/,
+    );
+    assert.match(
+      stdout.join(""),
+      /régi-bolt link a leírásban: 1 átírva, 1 nem leképezett \(\/spg\/821031,2630685\/Doktorhalak\)/,
+    );
+    assert.match(
+      stdout.join(""),
+      /Régi-bolt linkek a leírásokban: 1 átírva a Commerce-címre, 1 különböző út nem leképezett/,
+    );
+  });
+
+  it("szabályok nélkül (dupla adatbázis, nincs betöltő) a leírás a mai marad: a régi link nem íródik át", async () => {
+    const { out, stdout, stderr } = collector();
+    const { db } = adatbazis(
+      termek({ description: REGI_LINKES("shop.acropora.hu") }),
+    );
+    const keresek: { url: string; method: string; body: unknown }[] = [];
+
+    const code = await boltiKorben(() =>
+      runProjectionCli(
+        ["prod-1"],
+        out,
+        provider(environmentSetting),
+        boltiKornyezet,
+        db,
+        boltiFetchTorzzsel(keresek),
+      ),
+    );
+
+    assert.equal(code, 0, stderr.join("") + stdout.join(""));
+    const letrehozas = keresek.find(
+      (k) => k.url.endsWith("/admin/products") && k.method === "POST",
+    );
+    assert.equal(
+      (letrehozas?.body as { description?: string }).description,
+      REGI_LINKES("shop.acropora.hu"),
+    );
+    assert.doesNotMatch(stdout.join(""), /régi-bolt link/i);
+    // a dupla adatbázis mellé a futtató NEM nyúl a globális adatbázishoz: a betöltés meg sem próbálkozik (nincs bukás-sor)
+    assert.doesNotMatch(stderr.join(""), /nem töltődtek be/);
+  });
+
+  it("a szabályok betöltésének bukása nem állítja le a vetítést: a linkek érintetlenek, és a hiba kimondva", async () => {
+    const { out, stdout, stderr } = collector();
+    const { db } = adatbazis(
+      termek({ description: REGI_LINKES("shop.acropora.hu") }),
+    );
+    const keresek: { url: string; method: string; body: unknown }[] = [];
+
+    const code = await boltiKorben(() =>
+      runProjectionCli(
+        ["prod-1"],
+        out,
+        provider(environmentSetting),
+        boltiKornyezet,
+        db,
+        boltiFetchTorzzsel(keresek),
+        undefined,
+        async () => {
+          throw new Error("db down");
+        },
+      ),
+    );
+
+    assert.equal(code, 0, stderr.join("") + stdout.join(""));
+    const letrehozas = keresek.find(
+      (k) => k.url.endsWith("/admin/products") && k.method === "POST",
+    );
+    assert.equal(
+      (letrehozas?.body as { description?: string }).description,
+      REGI_LINKES("shop.acropora.hu"),
+    );
+    assert.match(
+      stderr.join(""),
+      /A régi bolt linkjeinek szabályai nem töltődtek be/,
+    );
   });
 });

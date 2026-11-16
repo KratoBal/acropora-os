@@ -7,6 +7,8 @@ import { useState, type FormEvent } from "react";
 import { rc } from "@/lib/api";
 import { useSession } from "@/lib/session";
 
+import { RunOutReminders } from "./runout-reminders";
+
 const METHOD_LABEL = {
   PASSWORD: "jelszó",
   GOOGLE: "Google",
@@ -27,6 +29,7 @@ export function Account() {
       <h1 className="text-2xl font-semibold">Fiók</h1>
       <Details />
       <Notifications />
+      <RunOutReminders />
       <Deletion />
     </div>
   );

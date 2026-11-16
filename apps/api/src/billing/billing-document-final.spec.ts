@@ -25,6 +25,7 @@ import {
   BillingDocumentsService,
   finalIdFor,
 } from "./billing-documents.service.js";
+import type { QuoteBasis } from "./billing-final-lines.js";
 import type { BillingDocumentDraftDto } from "./dto/billing-document-draft.dto.js";
 
 /**
@@ -90,7 +91,11 @@ function doc(over: Record<string, unknown> = {}) {
 
 function setup(
   start: Record<string, BillingDocumentRow>,
-  options: { feedCancelled?: boolean } = {},
+  options: {
+    feedCancelled?: boolean;
+    /** The quote basis of a proforma id (`quoteBasisOfProforma`); missing: not a milestone proforma. */
+    quoteBasis?: Record<string, QuoteBasis | null>;
+  } = {},
 ) {
   const rows = { ...start };
   const created: Record<string, unknown>[] = [];
@@ -110,7 +115,7 @@ function setup(
         documentType: "FINAL_INVOICE",
         invoiceNumber: null,
         referencedInvoice: {
-          id: "adv-1",
+          id: (input.referencedInvoiceId as string | undefined) ?? "adv-1",
           documentType: "ADVANCE_INVOICE",
           invoiceNumber: "E-ELO-1",
           grossAmount: d("381"),
@@ -123,6 +128,8 @@ function setup(
       return "ok";
     },
     feedPaid: async () => null,
+    quoteBasisOfProforma: async (id: string) =>
+      options.quoteBasis?.[id] ?? null,
     related: async () => ({ documents: [], truncated: false }),
     feedTwinCancelled: async () => options.feedCancelled ?? false,
     finalInvoiceOf: async (advanceId: string) => {
@@ -245,6 +252,167 @@ describe("a final invoice from an advance", () => {
       input.draft.lines.map((l) => l.description),
       ["Akvárium", "Szűrő"],
     );
+  });
+
+  /*
+    A MÉRFÖLDKŐ-DÍJBEKÉRŐBŐL KÉSZÜLT ELŐLEG VÉGSZÁMLÁJA (kártya 2650d371, Balázs kérdése): a mérföldkő-díjbekérő a százalékos rész, tehát a
+    végszámla az AJÁNLAT teljes elfogadott tételeivel készül, különben a Számlázz.hu a levont előleg után nullát hagy. MI PIROSÍT: ha egy
+    60%-os mérföldkő díjbekérőjének tétele kerül a végszámlára; ha a 100%-os mérföldkő, a kézi (kötés nélküli) díjbekérő vagy a teljes
+    ellenértékű díjbekérő az ajánlat tételeit kapná; ha a kötött, de tétel nélküli ajánlatnál csendben a százalékos sor maradna.
+  */
+  describe("from the advance of a quote milestone's proforma (card 2650d371)", () => {
+    const basis = (
+      percent: string,
+      names: string[],
+      otherProformaMilestones = 0,
+    ): QuoteBasis => ({
+      quoteNumber: "AJ-2026-0015",
+      percent: d(percent),
+      otherProformaMilestones,
+      items: names.map((name) => ({
+        name,
+        quantity: d("1"),
+        unit: "db",
+        unitNetPrice: d("1000"),
+        vatRatePercent: d("27"),
+      })),
+    });
+    const withProforma = (quoteBasis: Record<string, QuoteBasis | null>) =>
+      setup(
+        {
+          "pro-1": doc({
+            id: "pro-1",
+            documentType: "PROFORMA",
+            invoiceNumber: "D-CRPR-7",
+            lines: [line("a", "Előleg (60%), AJ-2026-0015", "600")],
+          }),
+          [advanceIdFor("pro-1")]: doc({
+            id: advanceIdFor("pro-1"),
+            proformaInvoiceId: "pro-1",
+          }),
+        },
+        { quoteBasis },
+      );
+    const linesOf = (s: ReturnType<typeof setup>) =>
+      (
+        s.created[0] as {
+          draft: { lines: { description: string; unitNet: string }[] };
+        }
+      ).draft.lines.map((l) => [l.description, l.unitNet]);
+
+    it("a 60 percent milestone proforma: the quote's full items, not the proforma's percentage line", async () => {
+      const s = withProforma({
+        "pro-1": basis("60", ["Akvárium", "Szűrő"]),
+      });
+      await s.service.finalFromAdvance(advanceIdFor("pro-1"), USER);
+      assert.deepEqual(linesOf(s), [
+        ["Akvárium", "1000"],
+        ["Szűrő", "1000"],
+      ]);
+    });
+
+    it("a 100 percent milestone proforma, a hand-made proforma with no milestone, and the full-price proforma keep the proforma's items", async () => {
+      const cases: Record<string, QuoteBasis | null>[] = [
+        { "pro-1": basis("100", ["Akvárium", "Szűrő"]) },
+        { "pro-1": null },
+        {},
+      ];
+      for (const quoteBasis of cases) {
+        const s = withProforma(quoteBasis);
+        await s.service.finalFromAdvance(advanceIdFor("pro-1"), USER);
+        assert.deepEqual(
+          linesOf(s),
+          [["Előleg (60%), AJ-2026-0015", "600"]],
+          JSON.stringify(Object.keys(quoteBasis)),
+        );
+      }
+    });
+
+    it("a quote with another proforma milestone: an empty draft, neither the percentage line nor the full items (barracuda, #2639)", async () => {
+      const s = withProforma({
+        "pro-1": basis("30", ["Akvárium", "Szűrő"], 1),
+      });
+      await s.service.finalFromAdvance(advanceIdFor("pro-1"), USER);
+      assert.equal(s.created.length, 1);
+      assert.deepEqual(linesOf(s), []);
+    });
+
+    it("the empty draft says why on the page: the detail carries the notice only for the multiple-advance case (card 02fc4b7f)", async () => {
+      const multiple = withProforma({
+        "pro-1": basis("30", ["Akvárium", "Szűrő"], 1),
+      });
+      const detail = await multiple.service.finalFromAdvance(
+        advanceIdFor("pro-1"),
+        USER,
+      );
+      assert.equal(detail.finalInvoiceNotice?.code, "MULTIPLE_ADVANCES");
+      assert.match(detail.finalInvoiceNotice!.message, /több előleg-mérföldkö/);
+      for (const quoteBasis of [
+        { "pro-1": basis("60", ["Akvárium"], 0) },
+        { "pro-1": basis("100", ["Akvárium"], 1) },
+        { "pro-1": null },
+      ]) {
+        const single = withProforma(quoteBasis);
+        const other = await single.service.finalFromAdvance(
+          advanceIdFor("pro-1"),
+          USER,
+        );
+        assert.equal(other.finalInvoiceNotice ?? null, null);
+      }
+    });
+
+    it("an issued final invoice carries no notice, even for the multiple-advance quote", async () => {
+      const finalId = finalIdFor(advanceIdFor("pro-1"));
+      const s = setup(
+        {
+          "pro-1": doc({
+            id: "pro-1",
+            documentType: "PROFORMA",
+            invoiceNumber: "D-CRPR-7",
+            lines: [line("a", "Előleg (30%), AJ-2026-0015", "300")],
+          }),
+          [advanceIdFor("pro-1")]: doc({
+            id: advanceIdFor("pro-1"),
+            proformaInvoiceId: "pro-1",
+          }),
+          [finalId]: doc({
+            id: finalId,
+            documentType: "FINAL_INVOICE",
+            status: "ISSUED",
+            invoiceNumber: "E-FIN-1",
+            referencedInvoice: {
+              id: advanceIdFor("pro-1"),
+              documentType: "ADVANCE_INVOICE",
+              invoiceNumber: "E-ELO-1",
+              grossAmount: d("381"),
+            },
+          }),
+        },
+        { quoteBasis: { "pro-1": basis("30", ["Akvárium"], 1) } },
+      );
+      const detail = await s.service.detail(finalId);
+      assert.equal(detail.finalInvoiceNotice ?? null, null);
+    });
+
+    it("a milestone with a proforma next to one with none yet (the closing part): the quote's full items", async () => {
+      const s = withProforma({
+        "pro-1": basis("60", ["Akvárium", "Szűrő"], 0),
+      });
+      await s.service.finalFromAdvance(advanceIdFor("pro-1"), USER);
+      assert.deepEqual(linesOf(s), [
+        ["Akvárium", "1000"],
+        ["Szűrő", "1000"],
+      ]);
+    });
+
+    it("a tied quote with no accepted items refuses, makes no draft and does not fall back to the percentage line", async () => {
+      const s = withProforma({ "pro-1": basis("60", []) });
+      await assert.rejects(
+        s.service.finalFromAdvance(advanceIdFor("pro-1"), USER),
+        ConflictException,
+      );
+      assert.equal(s.created.length, 0);
+    });
   });
 
   it("a second click gets the same draft, and makes no second one", async () => {

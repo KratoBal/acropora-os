@@ -34,6 +34,13 @@ export interface DosingReading {
   excerpt: string | null;
   /** Why no value: one line per reason, with the text it is about. */
   notes: string[];
+  /**
+   * The page states a dose: one was read, or a dose sentence was held back
+   * (a range, two doses, no period...). True next to `raw: null` too, so a
+   * "no data" answer can be checked against it (card 85c38ab1: Fauna Marin
+   * Multi Elements A, a range dose on the page, the AI said NO_DATA).
+   */
+  doseOnPage: boolean;
 }
 
 const NUM = "(?<![\\d.,])(\\d+(?:[.,]\\d+)?)";
@@ -76,6 +83,34 @@ const OTHER_PERIOD =
 /** A unit a person has to interpret, next to a number. */
 const OTHER_UNIT =
   /\d\s*(?:gallons?|gal\b|us gal|g\b|gramm?s?\b|grams?\b|capful|caps?\b|scoops?|spoons?|teaspoons?|tablespoons?|tsp\b|messloffel|loffel|messbecher|kupak[a-z]*|merokanal[a-z]*|kanal[a-z]*|pump[a-z]*|spritz[a-z]*)/;
+/**
+ * A GALLON CONVERSION OF THE WATER VOLUME, IN BRACKETS ("0.5 ml / 100 liters
+ * (26 US gal) daily": Fauna Marin AMIN and Ready 2 Reef, card 85c38ab1): the
+ * same volume said twice, not a second unit, and OTHER_UNIT held a clean dose
+ * back. Blanked with spaces (the excerpt offsets hold) only right after a litre
+ * volume and only when the numbers agree, litres / 3.785 within 5 %. Any other
+ * gallon still holds the dose back.
+ */
+const GALLON_CONVERSION =
+  /(\d+(?:[.,]\d+)?)\s*(?:l|ltr|liters?|litres?|liter[a-z]*)(\s*\(\s*(?:approx\.?\s*|ca\.?\s*|~\s*)?(\d+(?:[.,]\d+)?)\s*(?:us\s*)?(?:gallons?|gal)\.?\s*\))/g;
+const LITRES_PER_US_GALLON = 3.785;
+
+function withoutGallonConversion(norm: string): string {
+  return norm.replace(
+    GALLON_CONVERSION,
+    (whole, litres: string, bracket: string, gallons: string) => {
+      const l = Number(litres.replace(",", "."));
+      const g = Number(gallons.replace(",", "."));
+      const agrees =
+        g > 0 && Math.abs(l / LITRES_PER_US_GALLON - g) / g <= 0.05;
+      return agrees
+        ? whole.slice(0, whole.length - bracket.length) +
+            " ".repeat(bracket.length)
+        : whole;
+    },
+  );
+}
+
 /** A dose that depends on something: then the page's number is not THE dose. */
 const CONDITIONAL =
   /\b(?:depending on|according to (?:the )?(?:test|measur|consumption|need)|based on (?:test|measur|consumption)|as needed|if needed|if necessary|first (?:week|weeks|days|day|month)|initially|start(?:ing)? (?:with|dose)|ramp|gradually|half (?:the )?dose|double (?:the )?dose|je nach|bei bedarf|anfangs|zu beginn|in der ersten|erste woche|ersten woche|kezdetben|eleinte|az elso het|elso heten|meres(?:ek)? alapjan|meresi eredmeny|fogyasztas(?:tol|nak megfelelo)|igeny szerint|szukseg szerint|szukseg eseten)\b/;
@@ -113,7 +148,7 @@ function sentences(norm: string): [number, number][] {
 const all = (pattern: RegExp, text: string) => [...text.matchAll(pattern)];
 
 export function readDosing(text: string): DosingReading {
-  const norm = normalizalt(text);
+  const norm = withoutGallonConversion(normalizalt(text));
   const notes: string[] = [];
   // a sentence that states a dose we could not read: then no value at all
   let unreadDose = false;
@@ -219,7 +254,8 @@ export function readDosing(text: string): DosingReading {
     notes.push(
       `adagolás: feltételhez kötött adagolás (${conditional[0]}): ${at(conditional.index, conditional.index + conditional[0].length)}`,
     );
+  const doseOnPage = found.length > 0 || unreadDose;
   if (distinct.length !== 1 || conditional || unreadDose)
-    return { raw: null, excerpt: null, notes };
-  return { raw: distinct[0]!, excerpt: found[0]!.excerpt, notes };
+    return { raw: null, excerpt: null, notes, doseOnPage };
+  return { raw: distinct[0]!, excerpt: found[0]!.excerpt, notes, doseOnPage };
 }

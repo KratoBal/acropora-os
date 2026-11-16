@@ -21,8 +21,12 @@ const fa: CategoryForRedirect[] = [
   { id: "k-triton", unasId: "555", name: "Triton", parentId: "k-root" },
 ];
 
-function fake(categories: CategoryForRedirect[] = fa) {
+function fake(
+  categories: CategoryForRedirect[] = fa,
+  existing: unknown[] = [],
+) {
   const writes: string[] = [];
+  const updates: unknown[] = [];
   const created: unknown[] = [];
   const audit: unknown[] = [];
   let tx = false;
@@ -43,17 +47,21 @@ function fake(categories: CategoryForRedirect[] = fa) {
           .map((c) => ({ entityId: c.id, externalId: c.unasId! })),
     },
     urlRedirect: {
-      findMany: async () => [],
+      findMany: async () => existing,
       createMany: async (a: { data: unknown[] }) => {
         writes.push("createMany");
         created.push(...a.data);
       },
-      update: async () => writes.push("update"),
+      update: async (a: unknown) => {
+        writes.push("update");
+        updates.push(a);
+      },
     },
     auditLog: {
       create: async (a: { data: unknown }) => {
         writes.push("auditLog");
         audit.push(a.data);
+        return { id: "audit-1" };
       },
     },
     $executeRaw: async () => {
@@ -76,7 +84,7 @@ function fake(categories: CategoryForRedirect[] = fa) {
       }
     },
   };
-  return { db, writes, created, audit, options, inTx: () => tx };
+  return { db, writes, created, updates, audit, options, inTx: () => tx };
 }
 
 const service = (f: ReturnType<typeof fake>) =>
@@ -136,6 +144,12 @@ describe("CategoryRedirectBackfillService", () => {
     assert.deepEqual(f.options, [{ timeout: 60_000, maxWait: 10_000 }]);
     assert.deepEqual(f.writes, ["lock", "createMany", "auditLog"]);
     assert.equal(f.created.length, 1);
+    // a köteg azonosítója az AuditLog sora: a visszavonás ezt kéri
+    assert.equal(r.batchId, "audit-1");
+    const made = f.created[0] as {
+      sourcePath: string;
+      destinationPath: string;
+    };
     assert.deepEqual(f.audit[0], {
       userId: "u1",
       action: "seo.redirects.category-backfill",
@@ -143,9 +157,19 @@ describe("CategoryRedirectBackfillService", () => {
       metadata: {
         form: "current",
         paths: 3,
+        repoint: false,
         created: 1,
         updated: 0,
+        rewritten: 0,
+        manualRewritten: [],
         planHash: sz.planHash,
+        // a változások a régi állapottal: itt egy új szabály, forrással és céllal
+        changes: {
+          created: [
+            { source: made.sourcePath, destination: made.destinationPath },
+          ],
+          updated: [],
+        },
       },
     });
   });
@@ -232,5 +256,216 @@ describe("CategoryRedirectBackfillService", () => {
     );
     assert.notEqual(a.planHash, b.planHash);
     assert.deepEqual(f.writes, []);
+  });
+
+  // kártya f6cb0a51: a kategória-átvétel óta a régi `név---szülő` cél 404; a `repoint` a meglévő UNAS_CATEGORY szabályt írja át.
+  // MI PIROSIT: a repoint nélkül ír a meglévő szabályra; a lenyomat nem függ a repoint-tól (a szárazfutás nélkül is mehet az írás);
+  // az írás nem a szárazfutás szerinti szabályt írja át; az AuditLog nem jelzi az átírást.
+  it("repoint: a meglévő UNAS_CATEGORY szabály célja átíródik, a lenyomat más, és az írás csak a repoint-os lenyomattal megy", async () => {
+    const meglevo = [
+      {
+        id: "r1",
+        sourcePath: "/sct/111/Eledelek",
+        destinationPath: "/hu/categories/eledelek-termekek",
+        isActive: true,
+        reason: "UNAS_CATEGORY",
+      },
+    ];
+    const f = fake(fa, meglevo);
+    const nelkul = await service(f).run(
+      { paths: ["/sct/111/Eledelek"], form: "current" },
+      "u1",
+    );
+    assert.equal(nelkul.report.conflicts.length, 1);
+    assert.equal(nelkul.report.rewritten.length, 0);
+    const repoint = await service(f).run(
+      { paths: ["/sct/111/Eledelek"], form: "current", repoint: true },
+      "u1",
+    );
+    assert.equal(repoint.report.rewritten.length, 1);
+    assert.equal(repoint.report.conflicts.length, 0);
+    assert.notEqual(repoint.planHash, nelkul.planHash);
+    assert.deepEqual(f.writes, []); // egyik szárazfutás sem írt
+
+    // a repoint nélküli lenyomattal repoint-os írás: 409 (más a terv), nem ír
+    await assert.rejects(
+      service(f).run(
+        {
+          paths: ["/sct/111/Eledelek"],
+          form: "current",
+          repoint: true,
+          apply: true,
+          planHash: nelkul.planHash,
+        },
+        "u1",
+      ),
+      ConflictException,
+    );
+    assert.deepEqual(f.writes, ["lock"]);
+
+    const r = await service(f).run(
+      {
+        paths: ["/sct/111/Eledelek"],
+        form: "current",
+        repoint: true,
+        apply: true,
+        planHash: repoint.planHash,
+      },
+      "u1",
+    );
+    assert.equal(r.applied, true);
+    assert.equal(f.updates.length, 1);
+    // a visszavonás ebből dolgozik: a régi cél és az új is a köteg változásai közt áll
+    const valtozasok = (
+      f.audit[0] as {
+        metadata: {
+          changes: {
+            created: unknown[];
+            updated: {
+              id: string;
+              source: string;
+              from: Record<string, unknown>;
+              to: Record<string, unknown>;
+            }[];
+          };
+        };
+      }
+    ).metadata.changes;
+    assert.equal(valtozasok.created.length, 0);
+    assert.equal(valtozasok.updated.length, 1);
+    assert.equal(valtozasok.updated[0]!.id, "r1");
+    assert.equal(valtozasok.updated[0]!.source, "/sct/111/Eledelek");
+    assert.equal(
+      valtozasok.updated[0]!.from.destinationPath,
+      "/hu/categories/eledelek-termekek",
+    );
+    assert.equal(
+      valtozasok.updated[0]!.from.destinationPathLower,
+      "/hu/categories/eledelek-termekek",
+    );
+    assert.equal(
+      valtozasok.updated[0]!.to.destinationPath,
+      "/hu/categories/eledelek",
+    );
+    assert.deepEqual(f.updates[0], {
+      where: { id: "r1" },
+      data: {
+        destinationPath: "/hu/categories/eledelek",
+        destinationPathLower: "/hu/categories/eledelek",
+        reason: "UNAS_CATEGORY",
+        entityType: null,
+        entityId: null,
+        isActive: true,
+        createdById: null,
+      },
+    });
+    const naplo = f.audit[0] as { metadata: Record<string, unknown> };
+    assert.equal(naplo.metadata.repoint, true);
+    assert.equal(naplo.metadata.rewritten, 1);
+    assert.equal(naplo.metadata.updated, 1);
+  });
+
+  // kártya f6cb0a51: a MANUAL szabály kifejezett engedélylistája. MI PIROSIT: a lista repoint nélkül elfogadódik (és hallgat); az írás a lista
+  // nélküli lenyomattal megy; a MANUAL szabály célja átíródik, de a készítője elvész; az AuditLog nem nevezi meg az átírt MANUAL forrásokat.
+  it("repointManual: repoint nélkül 400; a listával a MANUAL szabály átíródik, a készítő megmarad, az AuditLog megnevezi; a lista nélküli lenyomat 409", async () => {
+    const meglevo = [
+      {
+        id: "r1",
+        sourcePath: "/sct/111/Eledelek",
+        destinationPath: "/hu/categories/eledelek-termekek",
+        isActive: true,
+        reason: "MANUAL",
+        createdAt: new Date("2026-10-30T09:37:00.000Z"),
+        createdById: "u-flotta",
+      },
+    ];
+    const f = fake(fa, meglevo);
+    await assert.rejects(
+      service(f).run(
+        {
+          paths: ["/sct/111/Eledelek"],
+          form: "current",
+          repointManual: ["/sct/111/Eledelek"],
+        },
+        "u1",
+      ),
+      BadRequestException,
+    );
+
+    // egy érvénytelen lista-elem (elgépelés) elutasítva: hibásan nem fut, nem ír
+    await assert.rejects(
+      service(f).run(
+        {
+          paths: ["/sct/111/Eledelek"],
+          form: "current",
+          repoint: true,
+          repointManual: ["/sct/111/Eledelek", "/elgepelt ut"],
+        },
+        "u1",
+      ),
+      BadRequestException,
+    );
+    assert.deepEqual(f.writes, []);
+
+    const listaNelkul = await service(f).run(
+      { paths: ["/sct/111/Eledelek"], form: "current", repoint: true },
+      "u1",
+    );
+    assert.equal(listaNelkul.report.rewritten.length, 0);
+    const listaval = await service(f).run(
+      {
+        paths: ["/sct/111/Eledelek"],
+        form: "current",
+        repoint: true,
+        repointManual: ["/sct/111/Eledelek"],
+      },
+      "u1",
+    );
+    assert.equal(listaval.report.rewritten[0]?.via, "manual-allowlist");
+    assert.notEqual(listaval.planHash, listaNelkul.planHash);
+    assert.deepEqual(f.writes, []); // egyik szárazfutás sem írt
+
+    // a lista nélküli lenyomattal a listás írás: 409
+    await assert.rejects(
+      service(f).run(
+        {
+          paths: ["/sct/111/Eledelek"],
+          form: "current",
+          repoint: true,
+          repointManual: ["/sct/111/Eledelek"],
+          apply: true,
+          planHash: listaNelkul.planHash,
+        },
+        "u1",
+      ),
+      ConflictException,
+    );
+
+    const r = await service(f).run(
+      {
+        paths: ["/sct/111/Eledelek"],
+        form: "current",
+        repoint: true,
+        repointManual: ["/sct/111/Eledelek"],
+        apply: true,
+        planHash: listaval.planHash,
+      },
+      "u1",
+    );
+    assert.equal(r.applied, true);
+    assert.deepEqual(f.updates[0], {
+      where: { id: "r1" },
+      data: {
+        destinationPath: "/hu/categories/eledelek",
+        destinationPathLower: "/hu/categories/eledelek",
+        reason: "UNAS_CATEGORY",
+        entityType: null,
+        entityId: null,
+        isActive: true,
+        createdById: "u-flotta",
+      },
+    });
+    const naplo = f.audit[0] as { metadata: Record<string, unknown> };
+    assert.deepEqual(naplo.metadata.manualRewritten, ["/sct/111/Eledelek"]);
   });
 });

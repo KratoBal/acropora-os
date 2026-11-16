@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { MAX_VALASZ, bekuldesKeres, megerositesKeres } from "./ervenyesites.ts";
+import {
+  MAX_NEV,
+  MAX_VALASZ,
+  bekuldesKeres,
+  megerositesKeres,
+} from "./ervenyesites.ts";
 
 /*
   WHAT TURNS THIS RED. A request with a missing or non-string field reaching the api; an answer over 200
@@ -11,6 +16,11 @@ import { MAX_VALASZ, bekuldesKeres, megerositesKeres } from "./ervenyesites.ts";
 const jo = {
   questionId: "q1",
   email: "jatekos@example.com",
+  name: "Kovács Péter",
+  rulesAccepted: true,
+  consentGiven: true,
+  rulesVersion: "szabalyzat-1.0",
+  privacyVersion: "adatkezeles-1.0",
   answer: "acropora",
   website: "",
 };
@@ -21,6 +31,7 @@ describe("bekuldesKeres", () => {
       ...jo,
       answer: "  acropora  ",
       email: " jatekos@example.com ",
+      name: "  Kovács   Péter ",
     });
     assert.deepEqual(r, { ok: true, value: { ...jo } });
     const csali = bekuldesKeres({ ...jo, website: "http://spam.example" });
@@ -47,6 +58,54 @@ describe("bekuldesKeres", () => {
         { ok: false, code: "INVALID_EMAIL" },
         email,
       );
+  });
+
+  it("refuses a missing name, one character, no letter in it, or an over-long one, with its own code", () => {
+    for (const name of [
+      undefined,
+      "",
+      "   ",
+      "K",
+      "123",
+      "--",
+      42,
+      "x".repeat(MAX_NEV + 1),
+    ])
+      assert.deepEqual(
+        bekuldesKeres({ ...jo, name }),
+        { ok: false, code: "INVALID_NAME" },
+        String(name),
+      );
+    assert.ok(bekuldesKeres({ ...jo, name: "Nagy Éva" }).ok);
+    assert.ok(bekuldesKeres({ ...jo, name: "x".repeat(MAX_NEV) }).ok);
+  });
+
+  it("refuses an entry without BOTH acceptances, each a real true, with its own code", () => {
+    for (const over of [
+      { rulesAccepted: false },
+      { consentGiven: false },
+      { rulesAccepted: undefined },
+      { consentGiven: undefined },
+      { rulesAccepted: "true" },
+      { consentGiven: 1 },
+    ])
+      assert.deepEqual(
+        bekuldesKeres({ ...jo, ...over }),
+        { ok: false, code: "CONSENT_REQUIRED" },
+        JSON.stringify(over),
+      );
+  });
+
+  it("passes the two text versions on as they came (the api decides if they are current), capped in length; a missing one becomes empty", () => {
+    const hosszu = "x".repeat(100);
+    const r = bekuldesKeres({
+      ...jo,
+      rulesVersion: hosszu,
+      privacyVersion: undefined,
+    });
+    assert.ok(r.ok);
+    assert.equal(r.value.rulesVersion.length, 40);
+    assert.equal(r.value.privacyVersion, "");
   });
 
   it("refuses an empty, blank or over-long answer", () => {

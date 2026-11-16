@@ -1,5 +1,6 @@
 "use client";
 
+import { uploadAccept } from "@acropora/types";
 import { Alert, PilotButton, PilotInput, PilotSection } from "@acropora/ui";
 import { useEffect, useMemo, useState } from "react";
 
@@ -254,7 +255,7 @@ export function PartnerOrderCertificatesPanel({
                     Aláírt PDF feltöltése
                     <input
                       type="file"
-                      accept="application/pdf"
+                      accept={uploadAccept(["pdf"])}
                       className="hidden"
                       aria-label={`${certificate.number}: aláírt PDF feltöltése`}
                       onChange={(event) => {

@@ -16,6 +16,7 @@ import {
   type MissingInvoiceAction,
   type MissingInvoiceDuplicateResult,
   type MissingInvoiceDuplicatesResponse,
+  type MissingInvoiceCandidateDiagnosis,
   type MissingInvoiceItemDetail,
   type SupplierInvoiceImportResult,
   type MissingInvoiceItem,
@@ -42,16 +43,24 @@ import {
 } from "./bank-transaction.classify.js";
 import { ownInvoiceRefund } from "./own-invoice-refund.js";
 import {
+  amountGap,
+  CANDIDATE_NAME_THRESHOLD,
+  exact,
+  inWindow,
   matchMonth,
   mergeManualUploads,
+  samePartner,
   shownNumber,
   type CandidateDocument,
   type ItemState,
   type MatchOutcome,
 } from "./missing-invoice-matching.js";
 import {
+  FOXPOST_TAX_BASE,
+  GLS_TAX_BASE,
   MissingInvoicesRepository,
   normalizeAccount,
+  queryExclusion,
 } from "./missing-invoices.repository.js";
 import { originalAmountOf } from "./otp-statement.parser.js";
 import { payeeFromText } from "./payee-check.js";
@@ -66,6 +75,12 @@ import {
   paperOriginalOfRow,
   pairingNumberKeys,
 } from "../billing/incoming-billing-documents.js";
+import {
+  type DebitAmount,
+  identityCandidateMatch,
+  identityTaxNumber,
+  invoiceIdentity,
+} from "../billing/invoice-identity.js";
 import {
   packageDataNote,
   storedValues,
@@ -107,6 +122,12 @@ const NO_INVOICE_TILE: ReadonlySet<ItemState> = new Set([
 const NO_INVOICE_NEEDED_TILE: ReadonlySet<ItemState> = new Set([
   "NO_INVOICE_NEEDED",
   "REFUND_EXPECTED",
+]);
+// A HÓNAP NEM KÉSZ, amíg gyűjtőszámlára vár valami: nem hiány (nincs a
+// Hiányzik fülön, nincs teendő), de a könyvelőnek sem kész (Balázs, 2026-11-15)
+const MONTH_OPEN_STATES: ReadonlySet<ItemState> = new Set([
+  ...MISSING_STATES,
+  "AWAITING_COLLECTOR",
 ]);
 
 /** A tétel-lista lapmérete, ha a kérés nem ad (szerződés: 1..100, 25). */
@@ -152,6 +173,12 @@ export interface DocumentPairing {
    */
   document: CandidateDocument;
 }
+
+/** A betöltés ablaka: 12 hónap az első kivonat előtt, a következő hónap 15-éig. Egy helyen: a számítás és a jelölt-vizsgálat is ezt hívja. */
+const candidateWindow = (first: string, last: string) => ({
+  from: `${shiftMonth(first, -12)}-01`,
+  to: `${shiftMonth(last, 1)}-15`,
+});
 
 interface Computed {
   items: (MissingInvoiceItem & { month: string; accountId: string })[];
@@ -240,7 +267,7 @@ export class MissingInvoicesService {
           status: statusOf(
             missingAccounts.length,
             computed.accounts.length,
-            count(MISSING_STATES),
+            count(MONTH_OPEN_STATES),
           ),
           missingStatementAccounts: missingAccounts,
         };
@@ -312,7 +339,7 @@ export class MissingInvoicesService {
       status: statusOf(
         missingAccounts.length,
         computed.accounts.length,
-        count((s) => MISSING_STATES.has(s)),
+        count((s) => MONTH_OPEN_STATES.has(s)),
       ),
       accounts: computed.accounts.map((account) => ({
         ...account,
@@ -324,7 +351,9 @@ export class MissingInvoicesService {
         notMatched: count((s) => s === "NOT_MATCHED"),
         noInvoice: count((s) => NO_INVOICE_TILE.has(s)),
         noInvoiceNeeded: count((s) => NO_INVOICE_NEEDED_TILE.has(s)),
+        awaitingCollector: count((s) => s === "AWAITING_COLLECTOR"),
       },
+      awaitingCollector: awaitingByPartner(all),
       items: sorted
         .slice((page - 1) * pageSize, page * pageSize)
         .map(({ month: _month, accountId: _accountId, ...item }) => item),
@@ -337,6 +366,131 @@ export class MissingInvoicesService {
     };
   }
 
+  /**
+   * MIÉRT (NEM) JELÖLT EGY DOKUMENTUM EGY TERHELÉSNÉL (task os-hianyzo-szamlak-unpaid, niceshops: a tárolt számla nem jelent
+   * meg a drawerben). Csak olvas; ugyanazokat a függvényeket hívja, mint a párosítás (`inWindow`, `samePartner`, `amountGap`).
+   */
+  async candidateDiagnosis(
+    debitId: string,
+    documentId: string,
+  ): Promise<MissingInvoiceCandidateDiagnosis> {
+    const computed = await this.compute();
+    const classified = computed.classified.find((c) => c.debit.id === debitId);
+    if (!classified)
+      throw new NotFoundException("A banki terhelés nem található.");
+    const findLoaded = (id: string) =>
+      computed.documents.find((d) => d.id === id || d.aliasIds?.includes(id));
+    let lookedUp = documentId;
+    let document = findLoaded(documentId);
+    let viaBillingRow = false;
+    if (!document) {
+      /*
+        AZ AZONOSÍTÓ NEM MINDIG TÁROLT DOKUMENTUM (niceshops, 2026-11-12): a csomagellenőrzés `unpaid` listájának `id`-ja a
+        bejövő számla SORÁNAK azonosítója, a sor `sourceDocumentId` mezője mutat a dokumentumra. Egy sor-azonosítóra a
+        `loaded: false` nem a betöltésről szólt, hanem arról, hogy másik azonosító-teret kérdeztek. Ezért előbb megmérjük,
+        milyen azonosítót kaptunk, és a sorét feloldjuk.
+      */
+      const kind = await this.repository.idKind(documentId);
+      if (kind.kind === "billingRow" && kind.sourceDocumentId) {
+        viaBillingRow = true;
+        lookedUp = kind.sourceDocumentId;
+        document = findLoaded(lookedUp);
+      }
+      if (!document)
+        return {
+          loaded: false,
+          viaAlias: false,
+          viaBillingRow,
+          reason:
+            kind.kind === "unknown"
+              ? "NO_SUCH_ID"
+              : kind.kind === "billingRow" && !kind.sourceDocumentId
+                ? "BILLING_ROW_WITHOUT_SOURCE_DOCUMENT"
+                : "DOCUMENT_NOT_LOADED",
+          // a pontos ok: melyik betöltő-feltétel (vagy a lekérdezés szűrője) zárta ki; csak tárolt dokumentumnál van értelme
+          loaderReason:
+            kind.kind === "unknown" ||
+            (kind.kind === "billingRow" && !kind.sourceDocumentId)
+              ? null
+              : await this.loaderReasonOf(lookedUp, computed.months),
+          document: null,
+          checks: null,
+        };
+    }
+    const debit = {
+      id: classified.debit.id,
+      bookingDate: classified.debit.bookingDate.toISOString().slice(0, 10),
+      amount: classified.debit.amount,
+      currency: classified.debit.currency,
+      original: classified.original,
+      counterpartyName: classified.debit.counterpartyName,
+      counterpartyAccount: normalizeAccount(
+        classified.debit.counterpartyAccount,
+      ),
+      narrative: classified.debit.narrative,
+      category: classified.classification.category,
+    };
+    const gap = amountGap(debit, document.gross, document.currency);
+    const pairedWith = [...computed.outcomes]
+      .filter(
+        ([otherId, outcome]) =>
+          otherId !== debitId &&
+          outcome.documents.some((d) => d.id === document.id),
+      )
+      .map(([otherId]) => otherId);
+    return {
+      loaded: true,
+      viaAlias: document.id !== lookedUp,
+      viaBillingRow,
+      reason: null,
+      loaderReason: null,
+      document: {
+        documentId: document.id,
+        number: shownNumber(document),
+        source: document.source,
+        date: document.date,
+        gross:
+          document.gross === null
+            ? null
+            : document.gross.toFixed(document.currency === "HUF" ? 0 : 2),
+        currency: document.currency,
+        supplierName: document.supplierName,
+        kind: document.kind,
+        // a párosítás azonosságai (`sha:` fájl-lenyomat, `inv:` számlaszám-kulcs) és az összevont társak: a kettős fizetés
+        // jelzés pontosan ezek közös elemén áll, és a memóriában számolódnak (nincs róluk DB-oszlop)
+        identities: [...(document.identities ?? [])].sort(),
+        aliasIds: [...(document.aliasIds ?? [])].sort(),
+        // az összevont jelölt tagjai tartalom-lenyomattal (tartalom és fájlnév nélkül): melyik tag hozta a közös lenyomatot
+        members: (
+          await this.repository.documentHashes(
+            [
+              ...new Set([
+                document.id,
+                ...(document.aliasIds ?? []),
+                ...(document.originalId ? [document.originalId] : []),
+              ]),
+            ].sort(),
+          )
+        ).sort((a, b) => a.id.localeCompare(b.id)),
+      },
+      checks: {
+        inWindow: inWindow(debit.bookingDate, document.date),
+        nameMatches:
+          !!debit.counterpartyName &&
+          samePartner(
+            document.supplierName,
+            debit.counterpartyName,
+            CANDIDATE_NAME_THRESHOLD,
+          ),
+        currencyComparable: gap !== null,
+        amountExact: exact(gap, document.currency),
+        grossKnown: document.gross !== null,
+        isInvoice: document.kind === "INVOICE",
+        pairedWith,
+      },
+    };
+  }
+
   async item(id: string): Promise<MissingInvoiceItemDetail> {
     const computed = await this.compute();
     const found = computed.items.find((item) => item.id === id);
@@ -345,7 +499,13 @@ export class MissingInvoicesService {
     const outcome = computed.outcomes.get(id);
     return {
       ...item,
-      candidates: (outcome?.candidates ?? []).map((d) => ({
+      candidates: [
+        ...(outcome?.candidates ?? []).map((d) => ({ d, amountOnly: false })),
+        ...(outcome?.amountCandidates ?? []).map((d) => ({
+          d,
+          amountOnly: true,
+        })),
+      ].map(({ d, amountOnly }) => ({
         documentId: d.id,
         number: shownNumber(d),
         date: d.date,
@@ -357,6 +517,8 @@ export class MissingInvoicesService {
         source: d.source,
         payee: d.payee,
         hasOriginal: d.hasOriginal,
+        // a név nem egyezik, csak az összeg: a felület jelölheti, a választás kézi
+        ...(amountOnly ? { amountOnly: true } : {}),
       })),
       payeeDocuments: (outcome?.documents ?? [])
         .filter((d) => d.payee === "UNKNOWN" || d.payeeMarked)
@@ -373,6 +535,21 @@ export class MissingInvoicesService {
           : ACTION[item.state],
       driveFolderUrl: httpsOrNull(
         this.environment.MISSING_INVOICES_DRIVE_FOLDER_URL,
+      ),
+      manualDocuments: (await this.repository.manualMatchRows(id)).map(
+        (row) => {
+          const shown = computed.documents.find(
+            (d) =>
+              d.id === row.documentId || d.aliasIds?.includes(row.documentId),
+          );
+          return {
+            documentId: row.documentId,
+            documentSource: row.documentSource,
+            number: shown ? shownNumber(shown) : "",
+            fileName: row.fileName,
+            pairedAt: row.createdAt.toISOString(),
+          };
+        },
       ),
       doublePaidWith: (outcome?.doublePaidWith ?? []).flatMap((other) => {
         const debit = computed.items.find(
@@ -451,7 +628,12 @@ export class MissingInvoicesService {
             pairing.document.supplierTaxNumber,
           )
         : [];
-      for (const numberKey of numberKeys) {
+      // a számla AZONOSSÁGA (`inv:`, számlaszám + adószám-számjegyek) is kulcs: a bejövő számla sora, ami más
+      // entitás ugyanazzal a számlával (niceshops), így is megtalálja a párosított dokumentumot
+      const identities = (pairing.document.identities ?? []).filter(
+        (identity) => identity.startsWith("inv:"),
+      );
+      for (const numberKey of [...numberKeys, ...identities]) {
         const existing = result.get(numberKey);
         if (!existing || (pairing.paperOriginal && !existing.paperOriginal))
           result.set(numberKey, pairing);
@@ -540,6 +722,24 @@ export class MissingInvoicesService {
       bankTransactionId: id,
       documentId: document.id,
     });
+    return this.item(id);
+  }
+
+  /**
+   * EGY FÁJL LEVÉTELE A SORRÓL (Niceshops, acrobot 48739): egy rossz terheléshez feltöltött fájl kézi párosítása megszűnik,
+   * a terhelés többi párosítása marad. Csak egy MEGLÉVŐ kézi párosítás vehető le: egy szabály szerinti nem (azt a szabály
+   * adja), egy nem ide tartozó dokumentum pedig 404.
+   */
+  async unpairOne(
+    id: string,
+    documentId: string,
+    user: AuthenticatedUser,
+  ): Promise<MissingInvoiceItemDetail> {
+    const removed = await this.repository.unpairOne(id, user.id, documentId);
+    if (removed === 0)
+      throw new NotFoundException(
+        "Ez a dokumentum nincs kézzel ehhez a terheléshez párosítva.",
+      );
     return this.item(id);
   }
 
@@ -923,9 +1123,10 @@ export class MissingInvoicesService {
       ids: readonly string[],
     ) => Promise<Map<string, { fileName: string; content: Uint8Array }>>,
   ) {
-    const [computed, billing] = await Promise.all([
+    const [computed, billing, deduction] = await Promise.all([
       this.compute(),
       this.repository.packageBillingRows(month),
+      this.repository.settledByDeduction(),
     ]);
     // az olvasat a fő azonosítón áll, de egy összevont jelöltnél az alias vagy
     // az eredeti is hordozhatja (barracuda visszamérése)
@@ -1092,8 +1293,32 @@ export class MissingInvoicesService {
     // és a lap sora innen jön)
     // (azonosító vagy szám szerint, mint a „papíron megvan” jelölésnél)
     const itemOfDocument = new Map<string, string>();
+    /*
+      A SZÁMLA AZONOSSÁGA IS KULCS (niceshops, 2026-11-12, acrobot): a terhelés egy FELTÖLTÖTT dokumentumhoz párosodott
+      (`inv:r49010000026240667|63964918`), a bejövő számla-rekord más entitás ugyanazzal a számlaszámmal és
+      adószámmal, és sem az azonosítója, sem a szám-kulcsa nem egyezik a feltöltött dokumentuméval (egy külföldi
+      adószámból nincs adószámos párosítási kulcs: `supplierTaxBase` csak a magyar alakot adja, a név pedig
+      eltérhet). Az összevonás azonossága (`inv:`) viszont számlaszám + adószám-számjegyek, és ugyanezt adja a
+      bejövő számla sora: így a rekord fizetettnek látszik, akárhány entitásban áll a számla.
+    */
+    const itemOfIdentity = new Map<
+      string,
+      {
+        itemId: string;
+        gross: Prisma.Decimal | null;
+        currency: string;
+        /** a terhelés összege: a dokumentum bruttójának hiányában ezt vetjük össze a sorral (`debitsCoverGross`) */
+        debit: DebitAmount;
+      }[]
+    >();
+    /*
+      A KÉTSZER FIZETETT TÉTEL IS PÁROSÍTOTT (task os-hianyzo-szamlak-unpaid, 2026-11-11, a Vízművek
+      105300361726 októberi eset): a Kétszer fizetett állapot a terhelés felől „nem Megvan”, de a számla
+      mindkét terheléshez párosítva van. Csak a FOUND-ot nézve a számla sora „kifizetetlen” maradt, miközben
+      a terhelés-lista azt mondta, hogy kétszer is fizettük: két nézet ellentmondott egymásnak.
+    */
     for (const item of computed.items)
-      if (item.state === "FOUND")
+      if (item.state === "FOUND" || item.state === "DOUBLE_PAID")
         for (const document of documentsOfItem(item.id)) {
           const numberKeys = document.number
             ? pairingNumberKeys(
@@ -1105,12 +1330,30 @@ export class MissingInvoicesService {
           for (const key of [...idsOf(document), ...numberKeys])
             if (key && !itemOfDocument.has(key))
               itemOfDocument.set(key, item.id);
+          for (const identity of document.identities ?? [])
+            if (identity.startsWith("inv:"))
+              itemOfIdentity.set(identity, [
+                ...(itemOfIdentity.get(identity) ?? []),
+                {
+                  itemId: item.id,
+                  gross: document.gross,
+                  currency: document.currency,
+                  debit: {
+                    amount: item.amount,
+                    currency: item.currency,
+                    original: item.original,
+                  },
+                },
+              ]);
         }
     const itemOfRow = (row: {
       sourceDocumentId: string | null;
       documentNumber: string;
       supplierName: string;
       supplierTaxNumber: string | null;
+      supplierEuTaxNumber?: string | null;
+      grossAmount: Prisma.Decimal;
+      currency: string;
     }) => {
       const numberKeys = pairingNumberKeys(
         row.documentNumber,
@@ -1121,7 +1364,28 @@ export class MissingInvoicesService {
         (row.sourceDocumentId
           ? itemOfDocument.get(row.sourceDocumentId)
           : undefined) ??
-        numberKeys.map((key) => itemOfDocument.get(key)).find(Boolean)
+        numberKeys.map((key) => itemOfDocument.get(key)).find(Boolean) ??
+        // az azonosság az összeget nem nézi: csak egyező bruttónál és devizánál fizetett (`sameGross`); ha a dokumentum
+        // bruttója ismeretlen, a párosított terhelések összege (`debitsCoverGross`)
+        identityCandidateMatch(
+          itemOfIdentity.get(
+            invoiceIdentity(
+              row.documentNumber,
+              identityTaxNumber(row.supplierTaxNumber, row.supplierEuTaxNumber),
+              row.supplierName,
+            ),
+          ),
+          row,
+        )?.itemId
+      );
+    };
+
+    const settledByDeduction = (row: (typeof rows)[number]) => {
+      const base = (row.supplierTaxNumber ?? "").replace(/\D/g, "").slice(0, 8);
+      const number = row.documentNumber.replace(/\s+/g, "").toUpperCase();
+      return (
+        (base === FOXPOST_TAX_BASE && deduction.foxpost.has(number)) ||
+        (base === GLS_TAX_BASE && deduction.gls.has(number))
       );
     };
 
@@ -1144,7 +1408,12 @@ export class MissingInvoicesService {
             },
           ],
           source: { kind: "ROW" as const, id: row.id },
-          paid: itemId !== undefined,
+          // a nulla összegű számlát (Telekom, Pólus, október) terhelés nem fizethet, tehát nem „kifizetetlen”; és amit az utánvét-elszámolás
+          // levon (Foxpost, GLS), azt sem bankból fizetik (settledByDeduction)
+          paid:
+            itemId !== undefined ||
+            row.grossAmount.isZero() ||
+            settledByDeduction(row),
           itemIds: itemId ? [itemId] : [],
         };
       }),
@@ -1176,6 +1445,29 @@ export class MissingInvoicesService {
     return computed.accounts
       .filter((account) => !computed.coverage.has(`${account.id}:${month}`))
       .map((account) => account.name);
+  }
+
+  /**
+   * MIÉRT NINCS BETÖLTVE EGY TÁROLT DOKUMENTUM: a betöltő kizárási kódja (`loaderExclusion`, „Nem könyvelendő” jelölés), vagy
+   * a lekérdezés szűrője (emberi döntésre vár / nem jelölt fajta). A betöltést itt újra lefuttatjuk, ugyanazzal a kóddal,
+   * csak a jelölt-vizsgálatnál (ritka, csak olvas); `null`, ha egyik sem magyarázza (a dokumentum átment a szűrőkön).
+   */
+  private async loaderReasonOf(
+    id: string,
+    months: readonly string[],
+  ): Promise<{ code: string; detail: string | null } | null> {
+    if (months.length === 0) return null;
+    const window = candidateWindow(months[0]!, months[months.length - 1]!);
+    const { excluded } = await this.repository.candidatesWithExclusions(
+      window.from,
+      window.to,
+    );
+    const excludedHere = excluded.get(id);
+    if (excludedHere)
+      return { code: excludedHere.code, detail: excludedHere.detail };
+    const fields = await this.repository.queryFields(id);
+    const byQuery = fields ? queryExclusion(fields) : null;
+    return byQuery ? { code: byQuery.code, detail: byQuery.detail } : null;
   }
 
   private async compute(): Promise<Computed> {
@@ -1224,10 +1516,8 @@ export class MissingInvoicesService {
     // kelt, szeptember 25-én fizettük, a közlemény megnevezi, és a 4 hónapos
     // betöltés kizárta. Decembertől minden dokumentumon mérve a bővítés
     // pontosan ezt az egy párt adja hozzá, hamisat egyet sem.
-    const loaded = await this.repository.candidates(
-      `${shiftMonth(first, -12)}-01`,
-      `${shiftMonth(last, 1)}-15`,
-    );
+    const window = candidateWindow(first, last);
+    const loaded = await this.repository.candidates(window.from, window.to);
     // minden forrás, aminek a vevője még nincs kiszámolva (payeeCheck NULL):
     // a postafiók lustán, és a cégnév-szabály előtti NOT_COMPANY sorok is,
     // amiket a 20261001000800 migráció visszaállított (acrobot 25640)
@@ -1441,6 +1731,41 @@ function statusOf(
   return missingItems > 0 ? "INCOMPLETE" : "READY";
 }
 
+/**
+ * A GYŰJTŐSZÁMLÁRA VÁRÓ TÉTELEK PARTNERENKÉNT (Balázs, 2026-11-15, acrobot
+ * 53030): a hónap lapján egy sor mondja meg, hány tétel vár és kitől, mert a
+ * Hiányzik fül ezeket nem mutatja, a hónap mégsem kész. A partner a banki
+ * partnernév (ugyanaz, ami a sorban áll); az összeg a HUF-sorok összege.
+ */
+export function awaitingByPartner(
+  items: readonly {
+    state: ItemState;
+    partner: string | null;
+    amount: Prisma.Decimal.Value;
+    currency: string;
+  }[],
+): { partner: string; count: number; amountHuf: string }[] {
+  const byPartner = new Map<string, { count: number; huf: Prisma.Decimal }>();
+  for (const item of items) {
+    if (item.state !== "AWAITING_COLLECTOR") continue;
+    const partner = item.partner?.trim() || "?";
+    const row = byPartner.get(partner) ?? {
+      count: 0,
+      huf: new Prisma.Decimal(0),
+    };
+    row.count += 1;
+    if (item.currency === "HUF") row.huf = row.huf.plus(item.amount);
+    byPartner.set(partner, row);
+  }
+  return [...byPartner.entries()]
+    .map(([partner, row]) => ({
+      partner,
+      count: row.count,
+      amountHuf: row.huf.toFixed(0),
+    }))
+    .sort((a, b) => b.count - a.count || a.partner.localeCompare(b.partner));
+}
+
 /** A „Mit kell tenni” kulcsa állapotonként. */
 const ACTION: Record<ItemState, MissingInvoiceAction> = {
   FOUND: "NONE",
@@ -1453,6 +1778,7 @@ const ACTION: Record<ItemState, MissingInvoiceAction> = {
   NO_INVOICE_NEEDED: "NONE",
   REFUND_EXPECTED: "NONE",
   REFUND_MISSING: "CHASE_REFUND",
+  AWAITING_COLLECTOR: "NONE",
 };
 
 /** A Drive-mappa hivatkozása csak https alakban; fiktív link nem lehet (brief 11). */

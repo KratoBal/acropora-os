@@ -11,7 +11,7 @@ import { BeadasUrlap } from "./beadas-urlap.tsx";
   any kind (Balázs, 2026-11-05 20:51: "nem kérem"; the design's "Szeretnék Acropora-híreket" option is deliberately
   left out); a rules-acceptance checkbox that is not required or arrives pre-checked; a honeypot that is a type=hidden field, is not out of the tab order, or can
   be autofilled; a text answer without the 200 character limit, or a choice question without its options; a form
-  that gives the api's address away; a note that does not link the rules and the privacy notice.
+  that gives the api's address away; a note that does not link the rules and the privacy notice; no name field, or one that is not required.
 */
 const SZOVEG: Kerdes = {
   ...HAMIS_KERDES,
@@ -24,14 +24,50 @@ const html = (kerdes: Kerdes) =>
   renderToStaticMarkup(<BeadasUrlap kerdes={kerdes} />);
 
 describe("a beküldő űrlap", () => {
-  it("has exactly one checkbox: the required, unchecked rules acceptance; never a newsletter", () => {
+  it("has exactly two checkboxes, the rules acceptance and the data consent, each required and unticked; never a newsletter", () => {
     for (const kerdes of [SZOVEG, HAMIS_KERDES]) {
       const h = html(kerdes);
       const dobozok = h.match(/<input[^>]*type="checkbox"[^>]*>/g) ?? [];
-      assert.equal(dobozok.length, 1);
-      assert.match(dobozok[0]!, /required/);
-      assert.doesNotMatch(dobozok[0]!, /checked/);
+      assert.equal(dobozok.length, 2);
+      for (const doboz of dobozok) {
+        assert.match(doboz, /required/);
+        assert.doesNotMatch(doboz, /checked/);
+      }
+      assert.match(dobozok[0]!, /id="jatek-szabalyzat-elfogadas"/);
+      assert.match(dobozok[1]!, /id="jatek-hozzajarulas"/);
       assert.doesNotMatch(h, /hírlevél|newsletter|Acropora-hír|marketing/i);
+    }
+  });
+
+  // WHAT TURNS THIS RED (Balázs "A", 2026-11-06 14:29 UTC): the publication of the winner's data back inside the CONSENT box
+  // (it is a condition of the rules, GDPR 6(1)(b), not a consent), or missing from the RULES box (the player must see it
+  // at the box that makes it a condition); the two boxes merged; a link missing.
+  it("the two acceptances read as the privacy notice says: the rules box carries the publication condition, the consent box only the processing, both linking their documents", () => {
+    const h = html(SZOVEG).replace(/<!-- -->/g, "");
+    assert.match(
+      h,
+      /Elfogadom a <a href="\/jatekszabalyzat"[^>]*>játékszabályzatot<\/a>, beleértve, hogy nyertesség esetén a rövidített nevem, részben kitakart e-mail-címem és a nyereményem megjelenik a játék oldalán és a fődíj élő sorsolásán\./,
+    );
+    assert.match(
+      h,
+      /Hozzájárulok, hogy az <a href="\/adatkezeles"[^>]*>adatkezelési tájékoztató<\/a> szerint kezeljétek az adataimat\./,
+    );
+    const szabalyzat = /Elfogadom a [\s\S]*?<\/label>/.exec(h)![0];
+    const hozzajarulas = /Hozzájárulok, hogy [\s\S]*?<\/label>/.exec(h)![0];
+    // the rules box does not carry the consent (apart, as the notice 3.1 requires) ...
+    assert.doesNotMatch(szabalyzat, /Hozzájárulok|adatkezelési tájékoztató/);
+    // ... and the consent box does not carry the publication
+    assert.doesNotMatch(hozzajarulas, /megjelen|nyertes|kitakart|sorsol/);
+  });
+
+  it("asks for the name in a required text field the browser can fill, and says the winner is shown shortened", () => {
+    for (const kerdes of [SZOVEG, HAMIS_KERDES]) {
+      const h = html(kerdes);
+      const mezo = h.match(/<input[^>]*id="jatek-nev"[^>]*>/)?.[0] ?? "";
+      assert.match(mezo, /required/);
+      assert.match(mezo, /autoComplete="name"|autocomplete="name"/i);
+      assert.match(mezo, /maxLength="120"|maxlength="120"/i);
+      assert.match(h, /rövidítve \(például Kovács P\.\)/);
     }
   });
 

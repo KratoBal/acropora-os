@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { UnasProductSyncQueryDto } from "./dto/unas-product-sync-query.dto.js";
+import { UnasWebshopSellableReconcileQueryDto } from "./dto/unas-webshop-sellable-reconcile-query.dto.js";
 import type { UnasAuthService } from "./unas-auth.service.js";
 import { UnasProductSyncController } from "./unas-product-sync.controller.js";
 import type { UnasProductSyncRepository } from "./unas-product-sync.repository.js";
 import type { UnasProductSyncService } from "./unas-product-sync.service.js";
+import type { UnasWebshopSellableReconciler } from "./unas-webshop-sellable-reconcile.js";
 
 describe("UnasProductSyncController", () => {
   it("obtains the token internally and returns only the sync result", async () => {
@@ -19,6 +21,7 @@ describe("UnasProductSyncController", () => {
         },
       } as unknown as UnasProductSyncService,
       {} as UnasProductSyncRepository,
+      {} as UnasWebshopSellableReconciler,
     );
 
     const result = await controller.run(new UnasProductSyncQueryDto());
@@ -55,6 +58,7 @@ describe("UnasProductSyncController", () => {
         },
       } as unknown as UnasProductSyncService,
       {} as UnasProductSyncRepository,
+      {} as UnasWebshopSellableReconciler,
     );
 
     await controller.run(new UnasProductSyncQueryDto());
@@ -78,6 +82,7 @@ describe("UnasProductSyncController", () => {
         },
       } as unknown as UnasProductSyncService,
       {} as UnasProductSyncRepository,
+      {} as UnasWebshopSellableReconciler,
     );
 
     const query = new UnasProductSyncQueryDto();
@@ -93,6 +98,7 @@ describe("UnasProductSyncController", () => {
       {} as UnasAuthService,
       {} as UnasProductSyncService,
       { getRun: async () => expected } as unknown as UnasProductSyncRepository,
+      {} as UnasWebshopSellableReconciler,
     );
     assert.equal(await controller.getRun("run-1"), expected);
   });
@@ -109,8 +115,48 @@ describe("UnasProductSyncController", () => {
           return expected;
         },
       } as unknown as UnasProductSyncRepository,
+      {} as UnasWebshopSellableReconciler,
     );
     assert.equal(await controller.listRuns({ limit: 10 }), expected);
     assert.equal(receivedLimit, 10);
+  });
+
+  /**
+   * THE ROUTE IS A DRY RUN UNLESS IT IS ASKED TO WRITE (card e1de003d). What must fail: a call with no
+   * query writing the recomputed values; `apply=true` not reaching the reconciler; the query text
+   * "false" read as true.
+   */
+  it("webshop-sellable/reconcile: a dry run without the switch, a write only with apply=true", async () => {
+    const asked: { apply: boolean }[] = [];
+    const controller = new UnasProductSyncController(
+      {} as UnasAuthService,
+      {} as UnasProductSyncService,
+      {} as UnasProductSyncRepository,
+      {
+        run: async (options: { apply: boolean }) => {
+          asked.push(options);
+          return { mode: options.apply ? "applied" : "dry-run" };
+        },
+      } as unknown as UnasWebshopSellableReconciler,
+    );
+
+    await controller.reconcileSellable(
+      new UnasWebshopSellableReconcileQueryDto(),
+    );
+    await controller.reconcileSellable(
+      Object.assign(new UnasWebshopSellableReconcileQueryDto(), {
+        apply: true,
+      }),
+    );
+    assert.deepEqual(asked, [{ apply: false }, { apply: true }]);
+  });
+
+  it("the apply query text is parsed: only the text true switches the write on", async () => {
+    const { plainToInstance } = await import("class-transformer");
+    const parse = (apply: string) =>
+      plainToInstance(UnasWebshopSellableReconcileQueryDto, { apply }).apply;
+    assert.equal(parse("true"), true);
+    assert.equal(parse("false"), false);
+    assert.equal(parse(""), false);
   });
 });

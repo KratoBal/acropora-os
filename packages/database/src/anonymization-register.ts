@@ -544,6 +544,10 @@ export const ANONYMIZATION_REGISTER: Readonly<
     // an old customer number or row id: an identifier, kept so references keep matching
     value: "identifier",
   },
+  CustomerExternalAccount: {
+    // a further UNAS account of the same company: an identifier, like `ExternalReference.externalId`
+    externalId: "identifier",
+  },
   CustomerMergeLog: {
     actorUserId: "identifier",
     reason: "freeText",
@@ -754,6 +758,19 @@ export const ANONYMIZATION_REGISTER: Readonly<
     verifiedById: "identifier",
     recordedByName: "personName",
   },
+  // T5.3: the manufacturer's claim about a product and where it stands. The claim and its source
+  // are the manufacturer's words and address; the note is a colleague's free text.
+  ProductManufacturerClaim: {
+    claimText: "business",
+    sourceRef: "business",
+    valueUnit: "business",
+    note: "freeText",
+  },
+  // The claim log: the snapshot is the claim's fields after the step (the note included), walked as JSON.
+  ProductManufacturerClaimEvent: {
+    actorName: "personName",
+    snapshot: "json",
+  },
   // ReefClub 8: the log of the automatic recommendation. The snapshot of the input holds
   // numbers, ids and fixed words (no free text from the customer), and is walked as JSON
   // anyway; the sentence is built from fixed templates and the product's own name.
@@ -771,6 +788,13 @@ export const ANONYMIZATION_REGISTER: Readonly<
     parameterCode: "business",
     clientOperationId: "identifier",
   },
+  // ReefClub V3.2: the per-product consent of the run-out reminder. A version label, and nothing else: the unsubscribe link's key is
+  // computed from the row id and a secret, and stored nowhere.
+  ReefClubRunOutReminder: {
+    consentVersion: "business",
+    // the sender's start-day source: ORDER or CONSENT, a fixed word
+    remindStartSource: "business",
+  },
   // ReefClub 8: the projection of the product dose list. Numbers, names and fixed refusal codes
   // of products; the run's error text is free text (a database or network error message).
   ReefClubDoseProjectionRun: {
@@ -784,6 +808,25 @@ export const ANONYMIZATION_REGISTER: Readonly<
     parameterCode: "business",
     source: "business",
     refusals: "business",
+  },
+  // ReefClub V3.4 S2b: the products a customer may be offered for a deviation (the projection of the customer candidates): names, categories and
+  // addresses of product pages, the maker's reference, the effects as KOD:IRANY entries.
+  ReefClubCustomerCandidate: {
+    parameterCode: "business",
+    productId: "identifier",
+    productName: "business",
+    category: "business",
+    shopUrl: "business",
+    evidenceRef: "business",
+    effects: "business",
+    sideEffects: "business",
+  },
+  // ReefClub V3.2: the run-out reminder's product list. The manufacturer's dose and pack size, words of a product page.
+  ReefClubRunOutProduct: {
+    productId: "identifier",
+    productName: "business",
+    dose: "business",
+    packageText: "business",
   },
   // ReefClub 5a: the share log. The consent version and the read's purpose
   // are fixed words, not free text.
@@ -825,6 +868,34 @@ export const ANONYMIZATION_REGISTER: Readonly<
     serialNumber: "identifier",
     accessories: "business",
     note: "freeText",
+  },
+  RentalSetting: {
+    id: "identifier",
+    contractTemplate: "business",
+    updatedById: "identifier",
+  },
+  Rental: {
+    rentalNumber: "identifier",
+    contractTemplate: "business",
+    accessories: "business",
+    note: "freeText",
+    depositKeptReason: "freeText",
+    returnedById: "identifier",
+    createdById: "identifier",
+  },
+  // The attendance sheet (os-jelenleti-iv): the admin who last changed the row.
+  AttendanceSchedule: {
+    updatedById: "identifier",
+  },
+  AttendanceDay: {
+    updatedById: "identifier",
+  },
+  // The sheet printed for signature (S2d): the PDF carries the employee's name and days, like any stored document.
+  AttendanceSignedSheet: {
+    month: "business",
+    contentHash: "identifier",
+    pdf: "fileContent",
+    printedById: "identifier",
   },
   UnitOfMeasure: {
     code: "business",
@@ -1140,12 +1211,18 @@ export const ANONYMIZATION_REGISTER: Readonly<
     prompt: "business",
     options: "json",
     acceptedAnswers: "json",
+    prizeName: "business",
+    prizeDescription: "business",
   },
   GameEntry: {
     email: "email",
+    name: "personName",
+    rulesVersion: "business",
+    privacyVersion: "business",
     answer: "freeText",
     manualById: "identifier",
     confirmTokenHash: "passwordHash",
+    sentMailIds: "identifier",
   },
   GameMailDay: {
     day: "business",
@@ -1160,6 +1237,19 @@ export const ANONYMIZATION_REGISTER: Readonly<
   LivestockArrival: {
     label: "business",
     note: "freeText",
+    createdById: "identifier",
+  },
+  ContentTemplateRule: {
+    label: "business",
+  },
+  ContentCalendarSetting: {
+    id: "identifier",
+    updatedById: "identifier",
+  },
+  CalendarEvent: {
+    title: "freeText",
+    location: "business",
+    responsibleUserId: "identifier",
     createdById: "identifier",
   },
   OutgoingPaymentMark: {
@@ -1216,6 +1306,7 @@ export const ANONYMIZATION_REGISTER: Readonly<
   ProductDatasheet: {
     magyarNev: "business",
     angolNev: "business",
+    nemetNev: "business",
     csaladTaxon: "business",
     elohelySzoveg: "business",
     akvariumMeretSzoveg: "business",
@@ -1233,6 +1324,14 @@ export const ANONYMIZATION_REGISTER: Readonly<
     origin: "business",
     amitOVeszelyeztet: "business",
     amiOtVeszelyezteti: "business",
+    reefSafeIndok: "business",
+    etetesGyakorisag: "business",
+    kinekNem: "business",
+    forrasTipus: "business",
+    forrasHivatkozas: "business",
+    ellenorizteUserId: "identifier",
+    handlingWarning: "business",
+    acclimatization: "business",
   },
   ProductDatasheetFieldRefusal: {
     indok: "freeText",
@@ -1245,10 +1344,18 @@ export const ANONYMIZATION_REGISTER: Readonly<
     externalPostId: "identifier",
     externalUrl: "business",
     discardReason: "freeText",
+    calendarEventKey: "identifier",
+  },
+  ContentResultWeek: {
+    enteredById: "identifier",
   },
   ContentComment: {
     authorId: "identifier",
     body: "freeText",
+  },
+  ContentStateEvent: {
+    actorUserId: "identifier",
+    note: "freeText",
   },
   ArticleBody: {
     slug: "business",
@@ -1294,6 +1401,48 @@ export const ANONYMIZATION_REGISTER: Readonly<
     sha256: "identifier",
     content: "ownCompany",
     uploadedById: "identifier",
+  },
+  // A teaching material's source (T5.2): the text is the author's and the
+  // editor's; the document holds the parts and the number table as JSON.
+  TeachingSource: {
+    subtitle: "freeText",
+    author: "freeText",
+    editor: "freeText",
+    publicBasis: "freeText",
+    disclaimer: "freeText",
+    document: "json",
+    contentHash: "business",
+    updatedById: "identifier",
+  },
+  TeachingSourceVersion: {
+    title: "freeText",
+    subtitle: "freeText",
+    author: "freeText",
+    editor: "freeText",
+    publicBasis: "freeText",
+    disclaimer: "freeText",
+    document: "json",
+    contentHash: "business",
+    createdById: "identifier",
+  },
+  // A generated output (T5.2): the source's text in another shape, and where it went.
+  TeachingOutput: {
+    body: "json",
+    generatedById: "identifier",
+    sentTo: "freeText",
+    sentById: "identifier",
+  },
+  // An edited output file (T5.2): the editor's copy of a generated deck.
+  TeachingOutputEdit: {
+    fileName: "freeText",
+    contentType: "business",
+    sha256: "identifier",
+    content: "fileContent",
+    slides: "json",
+    text: "freeText",
+    uploadedById: "identifier",
+    decisionNote: "freeText",
+    decidedById: "identifier",
   },
   TicketMailDelivery: {
     serviceJobId: "identifier",
@@ -1345,6 +1494,8 @@ export const ANONYMIZATION_REGISTER: Readonly<
     fileName: "freeText",
     sha256: "identifier",
     verdict: "business",
+    // a rögzített kódkészlet egy eleme (INVOICE_COLLECTION_REASONS), nem tartalom: ugyanúgy, mint a verdict
+    reason: "business",
     documentId: "identifier",
   },
   InvoiceCollectionRun: {
@@ -1648,6 +1799,32 @@ export const ANONYMIZATION_REGISTER: Readonly<
   PartnerOrder: {
     orderNumber: "identifier",
   },
+  AiChatSetting: {
+    id: "identifier",
+    contactRecipientEmail: "email",
+    updatedById: "identifier",
+  },
+  AiContactRequest: {
+    // an e-mail address or a telephone number, whichever the customer gave: the free-text replacement covers both patterns
+    value: "freeText",
+    conversationRef: "identifier",
+    requestKey: "identifier",
+    handledById: "identifier",
+  },
+  CustomerCandidateManualEntry: {
+    sku: "identifier",
+    parameterCode: "business",
+    referenceUrl: "business",
+    sideEffects: "business",
+    note: "freeText",
+    approvedBy: "business",
+  },
+  AiLinkSource: {
+    host: "business",
+    brand: "business",
+    note: "freeText",
+    createdById: "identifier",
+  },
   PartnerOrderSetting: {
     id: "identifier",
     updatedById: "identifier",
@@ -1688,6 +1865,48 @@ export const ANONYMIZATION_REGISTER: Readonly<
   },
   QuotePaymentMilestone: {
     label: "business",
+  },
+  // Üzemeltetési napló (task os-uzemeltetesi-naplo, S1): a sablon neve és mezői üzleti szöveg, a leírás szabad szöveg,
+  // a kulcs a mező stabil azonosítója, az actor azonosítók belső hivatkozások
+  OperationsTaskTemplate: {
+    name: "business",
+    description: "freeText",
+    createdById: "identifier",
+    updatedById: "identifier",
+  },
+  OperationsTaskField: {
+    key: "identifier",
+    label: "business",
+    unit: "business",
+  },
+  // Üzemeltetési napló, S2a: a bejegyzés a sablon pillanatfelvételét hordozza (név, mező-címke, mértékegység), a szabad szövegek
+  // (rendellenesség, belső megjegyzés, szöveg érték) a kollégák saját szavai
+  OperationsLogEntry: {
+    clientOperationId: "identifier",
+    // a csoportos rögzítés azonosítója (kártya 1a35e8f3): a telefon adja, kulcs, nem személyes adat
+    groupId: "identifier",
+    templateName: "business",
+    anomalyNote: "freeText",
+    internalNote: "freeText",
+  },
+  // a fénykép mezők képei (S2b): ugyanaz a döntés, mint az elhullási napló fényképeinél
+  OperationsLogEntryDocument: {
+    fieldKey: "identifier",
+    fieldLabel: "business",
+    clientOperationId: "identifier",
+    fileName: "freeText",
+    contentType: "business",
+    sha256: "identifier",
+    content: "fileContent",
+    storageKey: "storageReference",
+    thumbnail: "fileContent",
+    caption: "freeText",
+  },
+  OperationsLogEntryValue: {
+    fieldKey: "identifier",
+    label: "business",
+    unit: "business",
+    textValue: "freeText",
   },
   QuoteTemplate: {
     name: "business",

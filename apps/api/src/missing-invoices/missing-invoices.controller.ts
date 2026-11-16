@@ -125,6 +125,23 @@ export class MissingInvoicesController {
   }
 
   /**
+   * MIÉRT (NEM) JELÖLT EGY DOKUMENTUM EGY TERHELÉSNÉL: csak olvas, a jelölt-lista üres vagy hiányos voltát magyarázza
+   * (`?documentId=` a tárolt dokumentum azonosítója).
+   */
+  @Get("items/:id/candidate-diagnosis")
+  @RequirePermissions(PERMISSIONS.FINANCE_VIEW)
+  candidateDiagnosis(
+    @Param("id") id: string,
+    @Query("documentId") documentId?: string,
+  ) {
+    if (!documentId || documentId.length > 64)
+      throw new BadRequestException(
+        "A documentId kötelező (legfeljebb 64 karakter).",
+      );
+    return this.missing.candidateDiagnosis(id, documentId);
+  }
+
+  /**
    * A JEV-JAVASLAT (csak javaslat: az elfogadás a mai kézi párosítás). A
    * módosító jog kell hozzá, mert külső hívást indít és futást rögzít.
    */
@@ -149,6 +166,17 @@ export class MissingInvoicesController {
   @RequirePermissions(PERMISSIONS.FINANCE_MANAGE)
   unpair(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.missing.unpair(id, user);
+  }
+
+  /** Egy fájl levétele a sorról: csak ennek a dokumentumnak a kézi párosítása szűnik meg. */
+  @Delete("items/:id/match/:documentId")
+  @RequirePermissions(PERMISSIONS.FINANCE_MANAGE)
+  unpairOne(
+    @Param("id") id: string,
+    @Param("documentId") documentId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.missing.unpairOne(id, documentId, user);
   }
 
   @Put("items/:id/comment")

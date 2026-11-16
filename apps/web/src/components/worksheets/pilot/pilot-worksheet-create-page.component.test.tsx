@@ -2,6 +2,8 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Session } from "@acropora/types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { answered } from "@/test/answered";
+import { listedSelect } from "@/test/listed-option";
 
 import {
   savotMond,
@@ -230,11 +232,11 @@ describe("PilotWorksheetCreatePage assignees", () => {
     render(<PilotWorksheetCreatePage />);
 
     await user.selectOptions(
-      await screen.findByLabelText("Partner"),
+      await listedSelect("Partner", "customer-42"),
       "customer-42",
     );
     await user.selectOptions(
-      await screen.findByLabelText("Alegység"),
+      await listedSelect("Alegység", "department-1"),
       "department-1",
     );
     await user.type(screen.getByLabelText("Tárgy"), "Havi karbantartás");
@@ -308,11 +310,11 @@ describe("PilotWorksheetCreatePage assignees", () => {
     render(<PilotWorksheetCreatePage />);
 
     await user.selectOptions(
-      await screen.findByLabelText("Partner"),
+      await listedSelect("Partner", "customer-42"),
       "customer-42",
     );
     await user.selectOptions(
-      await screen.findByLabelText("Alegység"),
+      await listedSelect("Alegység", "department-1"),
       "department-1",
     );
     await user.type(screen.getByLabelText("Tárgy"), "Havi karbantartás");
@@ -556,7 +558,7 @@ describe("PilotWorksheetCreatePage assignees", () => {
     render(<PilotWorksheetCreatePage />);
 
     await user.selectOptions(
-      await screen.findByLabelText("Partner"),
+      await listedSelect("Partner", "customer-42"),
       "customer-42",
     );
 
@@ -571,11 +573,11 @@ describe("PilotWorksheetCreatePage assignees", () => {
     render(<PilotWorksheetCreatePage />);
 
     await user.selectOptions(
-      await screen.findByLabelText("Partner"),
+      await listedSelect("Partner", "customer-42"),
       "customer-42",
     );
     await user.selectOptions(
-      await screen.findByLabelText("Alegység"),
+      await listedSelect("Alegység", "department-1"),
       "department-1",
     );
     await user.type(screen.getByLabelText("Tárgy"), "Havi karbantartás");
@@ -662,9 +664,11 @@ describe("PilotWorksheetCreatePage site tree", () => {
     render(<PilotWorksheetCreatePage />);
 
     await user.selectOptions(
-      await screen.findByLabelText("Partner"),
+      await listedSelect("Partner", "customer-42"),
       "customer-42",
     );
+    // the units come with the chosen partner's answer, after the field
+    await answered(worksheets.departments);
 
     const picker = within(await screen.findByLabelText("Alegység"));
     expect(
@@ -684,12 +688,12 @@ describe("PilotWorksheetCreatePage site tree", () => {
     render(<PilotWorksheetCreatePage />);
 
     await user.selectOptions(
-      await screen.findByLabelText("Partner"),
+      await listedSelect("Partner", "customer-42"),
       "customer-42",
     );
     await nyisdKiAzUjAlegysegett(user);
     await user.selectOptions(
-      await screen.findByLabelText("Szülő helyszín"),
+      await listedSelect("Szülő helyszín", "bio-fank"),
       "bio-fank",
     );
     await user.type(screen.getByLabelText("Új alegység kódja"), "fnm");
@@ -759,9 +763,10 @@ describe("PilotWorksheetCreatePage: archived units in the two pickers", () => {
     const user = userEvent.setup();
     render(<PilotWorksheetCreatePage />);
     await user.selectOptions(
-      await screen.findByLabelText("Partner"),
+      await listedSelect("Partner", "customer-42"),
       "customer-42",
     );
+    await answered(worksheets.departments);
 
     const offered = await optionsOf("Alegység");
     expect(offered.some((text) => text.includes("Biodóm"))).toBe(true);
@@ -772,9 +777,10 @@ describe("PilotWorksheetCreatePage: archived units in the two pickers", () => {
     const user = userEvent.setup();
     render(<PilotWorksheetCreatePage />);
     await user.selectOptions(
-      await screen.findByLabelText("Partner"),
+      await listedSelect("Partner", "customer-42"),
       "customer-42",
     );
+    await answered(worksheets.departments);
     await nyisdKiAzUjAlegysegett(user);
 
     const offered = await optionsOf("Szülő helyszín");

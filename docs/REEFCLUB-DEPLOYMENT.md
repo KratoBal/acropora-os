@@ -106,14 +106,25 @@ a narrower scope, no.
 `packages/database/sql/reefclub-role.sql` grants the ReefClub role exactly what the process
 uses: its own tables, the own-aquarium side of the aquarium tables, and four columns of the
 customer. Invoices, worksheets, products, internal users, the customer's phone and e-mail and the
-aquarium's internal columns are not readable. Applying it, once per environment, after
-`prisma migrate deploy`:
+aquarium's internal columns are not readable.
+
+**The internal API applies it itself, on every start, after `prisma migrate deploy`** (card
+4f0ad1be; `apps/api/docker-entrypoint-migrate.cjs`): where the `reefclub_app` role exists, the file
+runs with the API's own connection, as one transaction, so a new ReefClub table gets its grant
+with the deployment that creates it. A database without the role is skipped with a log line. A
+failure does not stop the internal API: the role keeps the rights it had, and the log says
+`ERROR reefclub-role: ...` with the manual command. Look for that line after a deployment that
+added a ReefClub table. The file waits at most 5 seconds for a table lock (`lock_timeout`; it
+changes row-level-security policies, which lock the aquarium tables), and the run is cut after 60
+seconds; either is the same `ERROR` line, and the next start tries again. By hand, **always with
+`-1`**: without it psql commits each statement, and a run that stops halfway has already taken the
+role's rights away. The one manual step left is creating the role, once per environment:
 
 ```bash
 # the role, once (its password is a secret of the environment)
 psql "$DATABASE_URL" -c "CREATE ROLE \"reefclub_app\" LOGIN PASSWORD '...'"
-# the grants, after every migration that adds a ReefClub table or column (idempotent)
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/database/sql/reefclub-role.sql
+# by hand only if the log said ERROR reefclub-role (idempotent); -1 makes it one transaction
+psql "$DATABASE_URL" -1 -v ON_ERROR_STOP=1 -f packages/database/sql/reefclub-role.sql
 ```
 
 **The file is applied only together with the code redemption function** (migration
@@ -127,7 +138,9 @@ The function runs with its owner's rights (SECURITY DEFINER). The file gives it 
 `reefclub_definer`: no login, no superuser, no BYPASSRLS, nobody is its member, and only the column
 rights the function's statements use (card b6133bd8). Creating that role and changing the
 function's owner need a superuser, so **run this file as a superuser** (it stops with Postgres's
-message otherwise). **A PR that changes the function changes the definer's grants in the same PR**;
+message otherwise). For the automatic run that means the internal API's `DATABASE_URL` is a
+superuser, as the one that owns the tables and runs the migrations is on the stage; where it is
+not, the start logs `ERROR reefclub-role` and the file stays a manual step. **A PR that changes the function changes the definer's grants in the same PR**;
 a column used without a grant stops the function with a permission error. The file also revokes
 `CREATE` on the `public` schema from `PUBLIC` (a no-op from PostgreSQL 15). That revoke applies to
 every role: **before the first run, check who owns the `public` schema**

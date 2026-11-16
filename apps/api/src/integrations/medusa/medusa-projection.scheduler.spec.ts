@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { stoppedProductIsRunFailure } from "./medusa-product-projection.service.js";
 import {
+  countStoppedLines,
   medusaProjectionScheduleConfig,
   MedusaProjectionScheduler,
+  projectionRefreshConfig,
   type ProjectionRunner,
   type ProjectionSchedulerDatabase,
 } from "./medusa-projection.scheduler.js";
@@ -19,6 +22,8 @@ const REGEN = new Date("2026-09-01T10:00:00.000Z");
 function termek(overrides: Record<string, unknown> = {}) {
   return {
     id: "prod-1",
+    isActive: true,
+    webshopSellable: true,
     updatedAt: MOST,
     variants: [{ updatedAt: REGEN }],
     unasSnapshot: { updatedAt: REGEN },
@@ -31,6 +36,8 @@ function termek(overrides: Record<string, unknown> = {}) {
      * de a teszt nem allit, az a dupla biztos hibaja.
      */
     sourceRelations: [] as { updatedAt: Date }[],
+    /** AZ ERKEZESEK IDOBELYEGE (V2.6 S3a): ugyanaz az indok, a hivo `termek.livestockArrivals.map(...)`-et hiv. */
+    livestockArrivals: [] as { updatedAt: Date }[],
     ...overrides,
   };
 }
@@ -359,7 +366,10 @@ describe("MedusaProjectionScheduler ar-vetitese", () => {
       return (
         hivas.metodus === "externalReference.findMany" &&
         args.where?.entityType === "Product" &&
-        !args.select?.lastSyncedAt
+        !args.select?.lastSyncedAt &&
+        // a jelolt arva kotesek kulon, a kor ELEJEN futo olvasasa (`entityId`, `metadata`) is `lastSyncedAt` nelkuli: a kor vegi
+        // lekerdezest az `externalId` kulonbozteti meg (task t-20261116-arva-kotes)
+        args.select?.externalId
       );
     })?.args;
     assert.deepEqual(kotesLekerdezes, {
@@ -666,6 +676,58 @@ describe("a kapcsolatok idobelyege esedekesse tesz", () => {
     assert.deepEqual((lekerdezes.args as { where: unknown }).where, {
       isActive: true,
       webshopExcluded: false,
+    });
+  });
+
+  /**
+   * AZ ERKEZES IDOBELYEGE (V2.6 S3a): a termek `livestock_arrival` kulcsa az erkezesbol jon, tehat az erkezes valtozasa
+   * esedekesse teszi a termeket, akkor is, ha maga a termek es minden mas bemenete regi.
+   */
+  describe("az erkezes idobelyege esedekesse tesz", () => {
+    const KOZBEN = new Date("2026-09-02T10:00:00.000Z");
+    const igy = async (erkezesek: { updatedAt: Date }[]) => {
+      const { db } = adatbazis(
+        [termek({ updatedAt: REGEN, livestockArrivals: erkezesek })],
+        [{ entityId: "prod-1", lastSyncedAt: KOZBEN }],
+      );
+      const { run, kapott } = futtato();
+      const scheduler = new MedusaProjectionScheduler({
+        db,
+        runProjection: run,
+        runPricing: arFuttato().run,
+        environment: BEKAPCSOLVA,
+      });
+      await scheduler.runOnce();
+      return kapott;
+    };
+
+    it("CSAK az erkezes mozdult: a termek esedekes", async () => {
+      assert.deepEqual(await igy([{ updatedAt: MOST }]), [["prod-1"]]);
+    });
+
+    it("az erkezes REGEBBI a vetitesnel: nem esedekes", async () => {
+      assert.deepEqual(await igy([{ updatedAt: REGEN }]), []);
+    });
+
+    it("a lekerdezes az erkezeseket is keri", async () => {
+      const { db, hivasok } = adatbazis(
+        [termek()],
+        [{ entityId: "prod-1", lastSyncedAt: MOST }],
+      );
+      const { run } = futtato();
+      const scheduler = new MedusaProjectionScheduler({
+        db,
+        runProjection: run,
+        runPricing: arFuttato().run,
+        environment: BEKAPCSOLVA,
+      });
+      await scheduler.runOnce();
+      const lekerdezes = hivasok.find(
+        (hivas) => hivas.metodus === "product.findMany",
+      );
+      const select = (lekerdezes!.args as { select: Record<string, unknown> })
+        .select;
+      assert.ok(select.livestockArrivals, "az erkezeseket kerni kell");
     });
   });
 
@@ -1020,10 +1082,11 @@ describe("MedusaProjectionScheduler, az elbukott ár", () => {
   it("egy óránál régebbi ár-kudarc forrás-változás nélkül újrapróbál, CSAK az árat", async () => {
     const ketOraja = new Date(MOST.getTime() - 2 * 60 * 60 * 1000);
     // egy forrás szerint esedékes termék is van a körben, hogy a termék-vetítés
-    // fusson: a próba az, hogy a prod-9 NEM kerül bele
+    // fusson: a próba az, hogy a prod-9 NEM kerül bele. A prod-9 aktív, webshopos
+    // és vetített (az újrapróba csak az árazhatóra szól, 550b80d1)
     const { db, hivasok } = adatbazis(
-      [termek()],
-      [],
+      [termek(), termek({ id: "prod-9" })],
+      [{ entityId: "prod-9", lastSyncedAt: new Date(MOST.getTime() + 1000) }],
       [
         { entityId: "prod-1", externalId: "prod_m1" },
         { entityId: "prod-9", externalId: "prod_m9" },
@@ -1084,6 +1147,163 @@ describe("MedusaProjectionScheduler, az elbukott ár", () => {
     assert.equal(await scheduler.runOnce(), "SKIPPED");
     assert.deepEqual(ar.kapott, []);
   });
+
+  /*
+    CSAK AZ ÁRAZHATÓ PRÓBÁL ÚJRA (550b80d1; stage 2026-11-15: 15 termék, minden második kör FAILED). MI PIROSIT: az
+    inaktivált, a nem webshopos, a törölt vagy a kötés nélküli termék ára újrapróbál (minden körben ugyanazzal bukna),
+    a kimaradók száma nem látszik a health-ben, vagy a kimaradó sora íródik.
+  */
+  it("az inaktivált, a nem webshopos, a kihagyott, a törölt és a kötés nélküli ár-kudarc kimarad, az árazható újrapróbál", async () => {
+    const ketOraja = new Date(
+      MOST.getTime() - 2 * 60 * 60 * 1000,
+    ).toISOString();
+    const kudarc = (entityId: string) => ({
+      entityId,
+      lastSyncedAt: null,
+      metadata: { failedAt: ketOraja },
+    });
+    const { db, hivasok } = adatbazis(
+      [
+        termek({ id: "p-ok" }),
+        termek({ id: "p-inaktiv", isActive: false }),
+        termek({ id: "p-nem-webshop", webshopSellable: false }),
+        // aktív és webshopos, de kihagyott: a termék-vetítés sem esedékesíti (barracuda, #2616)
+        termek({ id: "p-kizart", webshopExcluded: true }),
+        termek({ id: "p-kotetlen" }),
+      ],
+      // mind vetítve, a forrásuk nem változott, és a kifutott jelölő (2026-11-09) után:
+      // a termék-vetítésbe egyik sem esedékes, tehát a kimaradást az ár szűrője adja
+      ["p-ok", "p-inaktiv", "p-nem-webshop", "p-kizart", "p-kotetlen"].map(
+        (entityId) => ({
+          entityId,
+          lastSyncedAt: new Date("2026-11-10T00:00:00.000Z"),
+        }),
+      ),
+      [
+        { entityId: "p-ok", externalId: "prod_ok" },
+        { entityId: "p-inaktiv", externalId: "prod_in" },
+        { entityId: "p-nem-webshop", externalId: "prod_nw" },
+        { entityId: "p-kizart", externalId: "prod_kz" },
+      ] as never,
+      [],
+      [
+        "p-ok",
+        "p-inaktiv",
+        "p-nem-webshop",
+        "p-kizart",
+        "p-kotetlen",
+        "p-torolt",
+      ].map(kudarc),
+    );
+    const termekVetites = futtato();
+    const ar = arFuttato();
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: termekVetites.run,
+      runPricing: ar.run,
+      environment: BEKAPCSOLVA,
+      logger: naplo().logger,
+      now: () => MOST,
+    });
+    assert.equal(await scheduler.runOnce(), "APPLIED");
+    assert.deepEqual(termekVetites.kapott, []);
+    assert.deepEqual(ar.kapott, [["p-ok"]]);
+    assert.deepEqual(
+      hivasok
+        .filter((h) => h.metodus === "externalReference.upsert")
+        .map(
+          (h) =>
+            (
+              h.args as {
+                where: { system_entityType_entityId: { entityId: string } };
+              }
+            ).where.system_entityType_entityId.entityId,
+        ),
+      ["p-ok"],
+    );
+    const kor = scheduler.allapot().lastRound!;
+    assert.equal(kor.priceRetry, 1);
+    assert.equal(kor.priceRetryDropped, 5);
+    assert.deepEqual(kor.priceFailures, {});
+  });
+
+  it("a kétértelmű árak ütköző sorai összeadva a health-ben, és null, ha nem volt ilyen (550b80d1)", async () => {
+    const alak = (priceList: number, plain: number) => ({
+      rows: priceList + plain,
+      priceList,
+      rules: 0,
+      quantity: 0,
+      plain,
+      unknown: 0,
+    });
+    const { db } = adatbazis([termek(), termek({ id: "prod-2" })], [], [
+      { entityId: "prod-1", externalId: "prod_m1" },
+      { entityId: "prod-2", externalId: "prod_m2" },
+    ] as never);
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: futtato().run,
+      runPricing: async (_ids, out) => {
+        out.failed?.("prod-1", "SKU-1: ambiguous-price", alak(1, 1));
+        out.failed?.("prod-2", "SKU-2: ambiguous-price", alak(0, 2));
+        out.failed?.("prod-2", "SKU-3: variant-not-found");
+        return 1;
+      },
+      environment: BEKAPCSOLVA,
+      logger: naplo().logger,
+      now: () => MOST,
+    });
+    assert.equal(await scheduler.runOnce(), "FAILED");
+    assert.deepEqual(scheduler.allapot().lastRound!.priceConflictRows, {
+      rows: 4,
+      priceList: 1,
+      rules: 0,
+      quantity: 0,
+      plain: 3,
+      unknown: 0,
+    });
+
+    const masik = adatbazis([termek()], [], [
+      { entityId: "prod-1", externalId: "prod_m1" },
+    ] as never);
+    const tiszta = new MedusaProjectionScheduler({
+      db: masik.db,
+      runProjection: futtato().run,
+      runPricing: arFuttato().run,
+      environment: BEKAPCSOLVA,
+      logger: naplo().logger,
+      now: () => MOST,
+    });
+    await tiszta.runOnce();
+    assert.equal(tiszta.allapot().lastRound!.priceConflictRows, null);
+  });
+
+  it("a kör ár-kudarcai fajtánként a health-ben, cikkszám nélkül", async () => {
+    const { db } = adatbazis([termek(), termek({ id: "prod-2" })], [], [
+      { entityId: "prod-1", externalId: "prod_m1" },
+      { entityId: "prod-2", externalId: "prod_m2" },
+    ] as never);
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: futtato().run,
+      runPricing: async (_ids, out) => {
+        out.failed?.("prod-1", "SKU-1: MEGÁLLT (own-price-missing) üres");
+        out.failed?.("prod-2", "SKU-2: MEGÁLLT (own-price-missing) üres");
+        out.failed?.("prod-2", "SKU-3: variant-not-found");
+        return 1;
+      },
+      environment: BEKAPCSOLVA,
+      logger: naplo().logger,
+      now: () => MOST,
+    });
+    assert.equal(await scheduler.runOnce(), "FAILED");
+    const kudarcok = scheduler.allapot().lastRound!.priceFailures;
+    assert.deepEqual(kudarcok, {
+      "own-price-missing": 2,
+      "variant-not-found": 1,
+    });
+    assert.ok(!JSON.stringify(kudarcok).includes("SKU"));
+  });
 });
 
 /*
@@ -1131,7 +1351,12 @@ describe("az átirányítás-lista köre (SEO P0 PR 7b)", () => {
       logger: naplo().logger,
       runRedirects: async () => {
         hivas += 1;
-        return { status: "unchanged", count: 0, hash: "h" };
+        return {
+          status: "unchanged",
+          count: 0,
+          hash: "h",
+          retargeted: { brand: 0, gone: 0, moved: 0 },
+        };
       },
     });
     await scheduler.runOnce();
@@ -1155,6 +1380,7 @@ describe("az átirányítás-lista köre (SEO P0 PR 7b)", () => {
           hash: "h",
           remoteCount: 0,
           remoteHash: "r",
+          retargeted: { brand: 0, gone: 0, moved: 0 },
         };
       },
     });
@@ -1190,6 +1416,267 @@ describe("az átirányítás-lista köre (SEO P0 PR 7b)", () => {
         n.sorok.join("\n"),
       );
     }
+  });
+});
+
+describe("a boltban maradt élő állat fajta köre (kártya 4b30b373)", () => {
+  /**
+   * MI PIROSIT: a lépés kapcsoló nélkül is fut (a boltba ír); bekapcsolva üres körben is fut, és a törlést a napló
+   * kiírja (az első lefutás az összegzést is); egy hiba a naplóba megy, és a termékek köre fut tovább.
+   */
+  const ures = () =>
+    adatbazis([termek()], [{ entityId: "prod-1", lastSyncedAt: MOST }]).db;
+  const jelentes = (torolt: number) => ({
+    rows: 5,
+    carrying: 2,
+    derivedPickup: 0,
+    unpaired: 0,
+    entries: Array.from({ length: torolt }, (_, i) => ({
+      osProductId: `os-${i}`,
+      medusaProductId: `prod_${i}`,
+      flags: "élő állat: hal -> a fajta törlése",
+      action: "applied" as const,
+    })),
+  });
+
+  it("kikapcsolva (alapból) nem fut", async () => {
+    let hivas = 0;
+    const scheduler = new MedusaProjectionScheduler({
+      db: ures(),
+      runProjection: futtato().run,
+      runPricing: arFuttato().run,
+      environment: BEKAPCSOLVA,
+      logger: naplo().logger,
+      runLeftoverKinds: async () => {
+        hivas += 1;
+        return jelentes(1);
+      },
+    });
+    await scheduler.runOnce();
+    assert.equal(hivas, 0);
+  });
+
+  it("bekapcsolva üres körben is fut, a törlést kiírja, és csak az első nulla-törlés kap összegzést", async () => {
+    const hivasok: number[] = [];
+    const n = naplo();
+    const kimenetek = [jelentes(0), jelentes(0), jelentes(2)];
+    const scheduler = new MedusaProjectionScheduler({
+      db: ures(),
+      runProjection: futtato().run,
+      runPricing: arFuttato().run,
+      environment: { ...BEKAPCSOLVA, MEDUSA_CLEAR_LEFTOVER_KIND: "true" },
+      logger: n.logger,
+      runLeftoverKinds: async () => {
+        hivasok.push(hivasok.length);
+        return kimenetek[hivasok.length - 1]!;
+      },
+    });
+    assert.equal(await scheduler.runOnce(), "SKIPPED");
+    const elso = n.sorok.filter((s) =>
+      s.includes("Boltban maradt élő állat fajta"),
+    );
+    assert.equal(elso.length, 1, n.sorok.join("\n"));
+    assert.match(elso[0]!, /0 törölve/);
+    await scheduler.runOnce();
+    assert.equal(
+      n.sorok.filter((s) => s.includes("Boltban maradt élő állat fajta"))
+        .length,
+      1,
+      "a második nulla-törlés kör nem naplóz",
+    );
+    await scheduler.runOnce();
+    const harmadik = n.sorok.filter((s) =>
+      s.includes("Boltban maradt élő állat fajta"),
+    );
+    assert.equal(harmadik.length, 2);
+    assert.match(harmadik[1]!, /os-0: most állítottuk be -> prod_0/);
+    assert.match(harmadik[1]!, /2 törölve/);
+  });
+
+  it("egy hiba a naplóba megy, és a termékek köre fut tovább", async () => {
+    const n = naplo();
+    const { run, kapott } = futtato(0);
+    const scheduler = new MedusaProjectionScheduler({
+      db: adatbazis([termek()], []).db,
+      runProjection: run,
+      runPricing: arFuttato().run,
+      environment: { ...BEKAPCSOLVA, MEDUSA_CLEAR_LEFTOVER_KIND: "true" },
+      logger: n.logger,
+      runLeftoverKinds: async () => {
+        throw new Error("HTTP 404");
+      },
+    });
+    assert.equal(await scheduler.runOnce(), "APPLIED");
+    assert.deepEqual(kapott, [["prod-1"]]);
+    assert.ok(
+      n.sorok.some((s) => s.startsWith("Boltban maradt fajta:")),
+      n.sorok.join("\n"),
+    );
+  });
+});
+
+describe("a származtatott átvétel levételének kapcsolója (kartya c603774e)", () => {
+  /**
+   * MI PIROSIT: a lepes a fajta kapcsolojatol fuggetlenul nem indul (a fajta kapcsolo a teszten mar be van kapcsolva, es ez
+   * a kapcsolo nem inditjuk vele); az atvetel kapcsoloja egyedul nem inditja a lepest; alapbol (egyik sem) nem fut.
+   */
+  const ures = () =>
+    adatbazis([termek()], [{ entityId: "prod-1", lastSyncedAt: MOST }]).db;
+  const hivasok = async (environment: Record<string, string>) => {
+    let hivas = 0;
+    const scheduler = new MedusaProjectionScheduler({
+      db: ures(),
+      runProjection: futtato().run,
+      runPricing: arFuttato().run,
+      environment: { ...BEKAPCSOLVA, ...environment } as NodeJS.ProcessEnv,
+      logger: naplo().logger,
+      runLeftoverKinds: async () => {
+        hivas += 1;
+        return {
+          rows: 0,
+          carrying: 0,
+          derivedPickup: 0,
+          entries: [],
+          unpaired: 0,
+        };
+      },
+    });
+    await scheduler.runOnce();
+    return hivas;
+  };
+
+  it("a lépés fut, ha a fajta VAGY az átvétel kapcsolója be van kapcsolva, és nem fut, ha egyik sem", async () => {
+    assert.equal(await hivasok({}), 0);
+    assert.equal(await hivasok({ MEDUSA_CLEAR_LEFTOVER_KIND: "true" }), 1);
+    assert.equal(await hivasok({ MEDUSA_CLEAR_LEFTOVER_PICKUP: "true" }), 1);
+    assert.equal(await hivasok({ MEDUSA_CLEAR_LEFTOVER_PICKUP: "false" }), 0);
+  });
+});
+
+describe("a lista-lépések számai a kör állapotában (acrobot 45814)", () => {
+  /**
+   * MI PIROSIT: a fajta-lépés vagy az érkezési kör számai nem kerülnek a `lastRound.steps` alá (a stage-en csak a
+   * naplóból látszanának); egy kikapcsolt lépés számot mutat (null kell); egy dobó lépés nem `failed`; az üres
+   * (SKIPPED) kör nem hoz számot, holott a lépések előtte futnak; az állapot nem másolat.
+   */
+  const ures = () =>
+    adatbazis([termek()], [{ entityId: "prod-1", lastSyncedAt: MOST }]).db;
+  const fajta = {
+    rows: 5,
+    carrying: 2,
+    derivedPickup: 3,
+    unpaired: 1,
+    entries: [
+      {
+        osProductId: "os-1",
+        medusaProductId: "prod_1",
+        flags: "x",
+        action: "applied" as const,
+      },
+      {
+        osProductId: "os-2",
+        medusaProductId: "prod_2",
+        flags: "x",
+        action: "planned" as const,
+      },
+    ],
+  };
+  const indit = (
+    environment: Record<string, string>,
+    deps: Record<string, unknown>,
+  ) =>
+    new MedusaProjectionScheduler({
+      db: ures(),
+      runProjection: futtato().run,
+      runPricing: arFuttato().run,
+      environment: { ...BEKAPCSOLVA, ...environment } as NodeJS.ProcessEnv,
+      logger: naplo().logger,
+      ...deps,
+    });
+
+  it("üres (SKIPPED) körben is hoz számot: sor, fajtás, törölt (csak az alkalmazott), páratlan; az érkezési kör db és kimaradt", async () => {
+    const scheduler = indit(
+      {
+        MEDUSA_CLEAR_LEFTOVER_KIND: "true",
+        MEDUSA_PROJECT_LIVESTOCK_ARRIVALS: "true",
+      },
+      {
+        runLeftoverKinds: async () => fajta,
+        runLivestockArrivals: async () => ({
+          status: "unchanged" as const,
+          count: 7,
+          leftOut: 3,
+        }),
+      },
+    );
+    assert.equal(await scheduler.runOnce(), "SKIPPED");
+    assert.deepEqual(scheduler.allapot().lastRound!.steps, {
+      leftoverKind: {
+        failed: false,
+        rows: 5,
+        carrying: 2,
+        derivedPickup: 3,
+        cleared: 1,
+        unpaired: 1,
+      },
+      arrivals: { failed: false, status: "unchanged", count: 7, leftOut: 3 },
+    });
+  });
+
+  it("kikapcsolt lépés null; egy dobó lépés failed, és a másik lépés száma megmarad", async () => {
+    const kikapcsolt = indit({}, {});
+    await kikapcsolt.runOnce();
+    assert.deepEqual(kikapcsolt.allapot().lastRound!.steps, {
+      leftoverKind: null,
+      arrivals: null,
+    });
+    const dobo = indit(
+      {
+        MEDUSA_CLEAR_LEFTOVER_KIND: "true",
+        MEDUSA_PROJECT_LIVESTOCK_ARRIVALS: "true",
+      },
+      {
+        runLeftoverKinds: async () => {
+          throw new Error("HTTP 404");
+        },
+        runLivestockArrivals: async () => ({
+          status: "sent" as const,
+          count: 2,
+        }),
+      },
+    );
+    await dobo.runOnce();
+    assert.deepEqual(dobo.allapot().lastRound!.steps, {
+      leftoverKind: { failed: true },
+      arrivals: { failed: false, status: "sent", count: 2, leftOut: 0 },
+    });
+  });
+
+  it("a következő kör nem viszi tovább az előző számait, és az állapot másolat", async () => {
+    let kor = 0;
+    const scheduler = indit(
+      { MEDUSA_CLEAR_LEFTOVER_KIND: "true" },
+      {
+        runLeftoverKinds: async () => {
+          kor += 1;
+          return kor === 1 ? fajta : { ...fajta, rows: 9 };
+        },
+      },
+    );
+    await scheduler.runOnce();
+    const elso = scheduler.allapot();
+    (elso.lastRound!.steps.leftoverKind as { rows: number }).rows = 99;
+    assert.equal(
+      (scheduler.allapot().lastRound!.steps.leftoverKind as { rows: number })
+        .rows,
+      5,
+    );
+    await scheduler.runOnce();
+    assert.equal(
+      (scheduler.allapot().lastRound!.steps.leftoverKind as { rows: number })
+        .rows,
+      9,
+    );
   });
 });
 
@@ -1386,6 +1873,233 @@ describe("a márka változása is esedékessé teszi a termékeit (t11)", () => 
   });
 });
 
+/** Egy kötés, amit a kifutott-jelölő pontja (2026-11-09) UTÁN vetítettek. */
+const JELOLO_UTAN = new Date("2026-11-09T12:00:00.000Z");
+
+/** A dupla `product.findMany`-je az `isActive` szűrőt is alkalmazza (lásd lent, ca422e92). */
+function csakAKertAllapot(db: ProjectionSchedulerDatabase) {
+  const eredeti = db.product.findMany.bind(db.product);
+  (db.product as { findMany: unknown }).findMany = async (args: {
+    where?: {
+      isActive?: boolean;
+      OR?: { isActive?: boolean; webshopSellable?: boolean }[];
+    };
+  }) => {
+    const sorok = (await eredeti(args as never)) as unknown as {
+      isActive: boolean;
+      webshopSellable: boolean;
+    }[];
+    const illik = (
+      t: { isActive: boolean; webshopSellable: boolean },
+      f: { isActive?: boolean; webshopSellable?: boolean },
+    ) =>
+      (f.isActive === undefined || t.isActive === f.isActive) &&
+      (f.webshopSellable === undefined ||
+        t.webshopSellable === f.webshopSellable);
+    const kert = args.where?.isActive;
+    const vagy = args.where?.OR;
+    return sorok.filter(
+      (t) =>
+        (typeof kert !== "boolean" || t.isActive === kert) &&
+        (!vagy || vagy.some((f) => illik(t, f))),
+    );
+  };
+}
+
+describe("a vetítés után inaktivált termék is esedékes (ca422e92)", () => {
+  /**
+   * MI PIROSÍT: a kötött termék, amit a legutóbbi vetítése UTÁN inaktiváltak,
+   * nem kerül sorra (a bolt published vagy jelölő nélküli draft marad); egy
+   * kötés nélküli vagy a vetítése óta nem változott inaktív termék sorra kerül
+   * (minden körben újra vetítene); vagy az inaktivált termék az ár-futásba is
+   * megy (aktív változat nélkül ott minden körben kudarcot írna).
+   *
+   * A DUPLA ITT ALKALMAZZA az `isActive` szűrőt: enélkül az általános
+   * esedékesség is visszakapná az inaktív terméket, és a teszt a javítás
+   * nélkül is zöld lenne.
+   */
+  it("csak a kötött, a vetítése után változott inaktív termék esedékes, és ára nem megy", async () => {
+    const korabban = new Date(MOST.getTime() - 60_000);
+    const { run, kapott } = futtato(0);
+    const ar = arFuttato(0);
+    const { db } = adatbazis(
+      [
+        termek({ id: "aktiv-friss", updatedAt: REGEN }),
+        termek({ id: "inaktivalt", isActive: false, updatedAt: MOST }),
+        termek({
+          id: "inaktiv-kotes-nelkul",
+          isActive: false,
+          updatedAt: MOST,
+        }),
+        termek({ id: "inaktiv-regi", isActive: false, updatedAt: REGEN }),
+      ],
+      [
+        { entityId: "aktiv-friss", lastSyncedAt: korabban },
+        { entityId: "inaktivalt", lastSyncedAt: korabban },
+        // a jelölő-pont (2026-11-09) UTÁN vetítve: a változása régebbi, nem esedékes
+        { entityId: "inaktiv-regi", lastSyncedAt: JELOLO_UTAN },
+      ],
+    );
+    csakAKertAllapot(db);
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: run,
+      runPricing: ar.run,
+      environment: BEKAPCSOLVA,
+      logger: naplo().logger,
+      now: () => new Date(MOST.getTime() + 1_000),
+    });
+    await scheduler.runOnce();
+    assert.deepEqual(kapott, [["inaktivalt"]]);
+    assert.deepEqual(ar.kapott, []);
+  });
+
+  /**
+   * A JELÖLŐ ELŐTT VETÍTETT INAKTÍV TERMÉK (acrobot mérése, 2026-11-09 19:00: a 129 régi
+   * cím). MI PIROSÍT: a kifutott-jelölő (V4.2) előtt draftként kivitt inaktív termék nem
+   * kerül újra sorra, mert a változása régebbi a kötésnél; vagy a pont után vetített is
+   * minden körben újra esedékes.
+   */
+  it("a jelölő előtt vetített inaktív termék egyszer újra esedékes, a pont után vetített nem", async () => {
+    const { run, kapott } = futtato(0);
+    const { db } = adatbazis(
+      [
+        termek({ id: "jelolo-elott", isActive: false, updatedAt: REGEN }),
+        termek({ id: "jelolo-utan", isActive: false, updatedAt: REGEN }),
+      ],
+      [
+        {
+          entityId: "jelolo-elott",
+          lastSyncedAt: new Date("2026-10-27T10:00:00.000Z"),
+        },
+        { entityId: "jelolo-utan", lastSyncedAt: JELOLO_UTAN },
+      ],
+    );
+    csakAKertAllapot(db);
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: run,
+      runPricing: arFuttato().run,
+      environment: BEKAPCSOLVA,
+      logger: naplo().logger,
+      now: () => new Date(MOST.getTime() + 1_000),
+    });
+    await scheduler.runOnce();
+    assert.deepEqual(kapott, [["jelolo-elott"]]);
+  });
+
+  /**
+   * AZ AKTÍV, DE NEM WEBSHOPOS TERMÉK IS KIFUTOTT (ca422e92, a 129 régi cím, 2026-11-09
+   * este). MI PIROSÍT: a vetítő csak az inaktívat nézi, így egy aktív, nem webshopos
+   * termék, amelyik a jelölő előtt ment ki, sosem kapja meg a jelölőt, pedig az
+   * átirányítás-lista a lapjára küldi; vagy egy értékesíthető, a jelölő előtt vetített
+   * termék is sorra kerül (minden kötött termék egyszer újra menne).
+   */
+  it("a jelölő előtt vetített aktív, nem webshopos termék is esedékes, az értékesíthető nem", async () => {
+    const { run, kapott } = futtato(0);
+    const regiKotes = new Date("2026-10-27T10:00:00.000Z");
+    const { db } = adatbazis(
+      [
+        termek({
+          id: "nem-webshopos",
+          webshopSellable: false,
+          updatedAt: REGEN,
+        }),
+        termek({ id: "ertekesitheto", updatedAt: REGEN }),
+      ],
+      [
+        { entityId: "nem-webshopos", lastSyncedAt: regiKotes },
+        { entityId: "ertekesitheto", lastSyncedAt: regiKotes },
+      ],
+    );
+    csakAKertAllapot(db);
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: run,
+      runPricing: arFuttato().run,
+      environment: BEKAPCSOLVA,
+      logger: naplo().logger,
+      now: () => new Date(MOST.getTime() + 1_000),
+    });
+    await scheduler.runOnce();
+    assert.deepEqual(kapott, [["nem-webshopos"]]);
+    assert.equal(scheduler.allapot().lastRound!.inactiveDueTotal, 1);
+  });
+
+  /**
+   * A BERAGADT INAKTÍV TERMÉK NEM SZORÍTJA KI A TÖBBIT (barracuda, #2332 review, 2.).
+   * MI PIROSÍT: rögzített kezdettel minden kör ugyanazt a két terméket viszi, ha a
+   * futtató nem lépteti őket (itt a futtató dupla nem ír `lastSyncedAt`-et, mint egy
+   * megálló vetítés); a kezdet nem annyit lép, ahányat a kör vitt.
+   */
+  it("a kör forgó kezdettel viszi az inaktiváltakat, ha azok nem lépnek tovább", async () => {
+    const korabban = new Date(MOST.getTime() - 60_000);
+    const azonositok = ["a", "b", "c", "d"];
+    const { run, kapott } = futtato(1);
+    const { db } = adatbazis(
+      azonositok.map((id) => termek({ id, isActive: false, updatedAt: MOST })),
+      azonositok.map((id) => ({ entityId: id, lastSyncedAt: korabban })),
+    );
+    csakAKertAllapot(db);
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: run,
+      runPricing: arFuttato().run,
+      environment: {
+        ...BEKAPCSOLVA,
+        MEDUSA_PROJECTION_SCHEDULE_BATCH_SIZE: "2",
+      } as NodeJS.ProcessEnv,
+      logger: naplo().logger,
+      now: () => new Date(MOST.getTime() + 1_000),
+    });
+    for (let kor = 0; kor < 3; kor++) await scheduler.runOnce();
+    assert.deepEqual(kapott, [
+      ["a", "b"],
+      ["c", "d"],
+      ["a", "b"],
+    ]);
+  });
+
+  /**
+   * SZELETENKÉNT KÉRDEZ (barracuda, #2332 review, 1.). MI PIROSÍT: a teljes kötés-lista
+   * egyetlen `in`-be megy (a Postgres 32767-es határán elhasalna), vagy egy szelet
+   * kimarad.
+   */
+  it("a kötés-listát ezres szeletekben kérdezi", async () => {
+    const kotesek = Array.from({ length: 2500 }, (_, i) => ({
+      entityId: `p${String(i).padStart(4, "0")}`,
+      lastSyncedAt: MOST,
+    }));
+    const { db, hivasok } = adatbazis([], kotesek);
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: futtato(0).run,
+      runPricing: arFuttato().run,
+      environment: BEKAPCSOLVA,
+      logger: naplo().logger,
+      now: () => new Date(MOST.getTime() + 1_000),
+    });
+    await scheduler.runOnce();
+    const szeletek = hivasok
+      .filter((h) => h.metodus === "product.findMany")
+      .map(
+        (h) => (h.args as { where: { id?: { in?: string[] } } }).where.id?.in,
+      )
+      .filter(
+        (lista): lista is string[] =>
+          Array.isArray(lista) && lista.length > 0 && lista[0]!.startsWith("p"),
+      );
+    assert.deepEqual(
+      szeletek.map((lista) => lista.length),
+      [1000, 1000, 500],
+    );
+    assert.deepEqual(
+      szeletek.flat(),
+      kotesek.map((k) => k.entityId),
+    );
+  });
+});
+
 /**
  * A KEZDŐLAP TARTALMÁNAK KÖRE (Balázs, 2026-10-20), kapcsolóval: a változó VAGY
  * az admin szerkesztő-oldali kapcsolója (egy adatbázis-sor) kapcsolja be; a
@@ -1490,5 +2204,1025 @@ describe("MedusaProjectionScheduler kezdolap kore", () => {
       n.sorok.some((s) => s.includes("a bolt nem valaszol")),
       n.sorok.join("\n"),
     );
+  });
+});
+
+describe("a vetítő sorának állapota kívülről (ca422e92, acrobot 45402)", () => {
+  /**
+   * MI PIROSÍT: a kör számai nem a kör döntését mondják (egy termék két
+   * forrásnál is számít, vagy a vágás utáni szám áll a jelöltek helyén); az
+   * inaktív esedékesek összes száma helyett a körbe vágott szám jön; a kiéheztetés
+   * (az általános sor kitölti a keretet, az inaktív 0) nem látszik; egy dobó kör
+   * befejezetlennek marad; az állapot élő hivatkozás, amit a hívó átírhat.
+   */
+  const korabban = new Date(MOST.getTime() - 60_000);
+  const kesz = (
+    termekek: Record<string, unknown>[],
+    kotesek: { entityId: string; lastSyncedAt: Date | null }[],
+    over: Partial<{ batch: string; run: ProjectionRunner }> = {},
+  ) => {
+    const { db } = adatbazis(termekek, kotesek);
+    csakAKertAllapot(db);
+    return new MedusaProjectionScheduler({
+      db,
+      runProjection: over.run ?? futtato(0).run,
+      runPricing: arFuttato().run,
+      environment: {
+        ...BEKAPCSOLVA,
+        ...(over.batch
+          ? { MEDUSA_PROJECTION_SCHEDULE_BATCH_SIZE: over.batch }
+          : {}),
+      } as NodeJS.ProcessEnv,
+      logger: naplo().logger,
+      now: () => new Date(MOST.getTime() + 1_000),
+    });
+  };
+
+  it("kör előtt: a beállítás látszik, az utolsó kör null", () => {
+    const allapot = kesz([], []).allapot();
+    assert.equal(allapot.enabled, true);
+    assert.equal(allapot.lastRound, null);
+    assert.equal(typeof allapot.batchSize, "number");
+    assert.equal(typeof allapot.intervalMinutes, "number");
+  });
+
+  it("egy kör után forrásonként a jelöltek és a körbe vittek, és az összes inaktív esedékes", async () => {
+    const inaktiv = ["i1", "i2", "i3", "i4"];
+    const scheduler = kesz(
+      [
+        termek({ id: "g1", updatedAt: MOST }),
+        ...inaktiv.map((id) =>
+          termek({ id, isActive: false, updatedAt: MOST }),
+        ),
+      ],
+      ["g1", ...inaktiv].map((id) => ({
+        entityId: id,
+        lastSyncedAt: korabban,
+      })),
+      { batch: "3" },
+    );
+    await scheduler.runOnce();
+    const kor = scheduler.allapot().lastRound!;
+    assert.equal(kor.outcome, "APPLIED");
+    assert.ok(kor.finishedAt);
+    assert.deepEqual(kor.candidates, {
+      sale: 0,
+      fact: 0,
+      brand: 0,
+      general: 1,
+      inactive: 3,
+      refresh: 0,
+    });
+    assert.deepEqual(kor.taken, {
+      sale: 0,
+      fact: 0,
+      brand: 0,
+      general: 1,
+      inactive: 2,
+      refresh: 0,
+    });
+    // a vágás előtt: mind a négy esedékes, nem csak a körbe vágott három
+    assert.equal(kor.inactiveDueTotal, 4);
+  });
+
+  it("a kiéheztetés látszik: ha az általános sor kitölti a keretet, az inaktív 0, az esedékes áll", async () => {
+    const scheduler = kesz(
+      [
+        termek({ id: "g1", updatedAt: MOST }),
+        termek({ id: "g2", updatedAt: MOST }),
+        termek({ id: "i1", isActive: false, updatedAt: MOST }),
+      ],
+      ["g1", "g2", "i1"].map((id) => ({
+        entityId: id,
+        lastSyncedAt: korabban,
+      })),
+      { batch: "2" },
+    );
+    await scheduler.runOnce();
+    const kor = scheduler.allapot().lastRound!;
+    assert.equal(kor.taken!.general, 2);
+    assert.equal(kor.taken!.inactive, 0);
+    assert.equal(kor.inactiveDueTotal, 1);
+  });
+
+  it("egy dobó kör ERROR-ral és befejezési idővel áll; az állapot másolat", async () => {
+    const scheduler = kesz(
+      [termek({ id: "g1", updatedAt: MOST })],
+      [{ entityId: "g1", lastSyncedAt: korabban }],
+      {
+        run: async () => {
+          throw new Error("BOOM");
+        },
+      },
+    );
+    await assert.rejects(scheduler.runOnce());
+    const allapot = scheduler.allapot();
+    assert.equal(allapot.lastRound!.outcome, "ERROR");
+    assert.ok(allapot.lastRound!.finishedAt);
+    allapot.lastRound!.taken!.general = 99;
+    assert.equal(scheduler.allapot().lastRound!.taken!.general, 1);
+  });
+});
+
+/**
+ * A LAPOZOTT ESEDEKESSEG (kartya 550b80d1; merve 2026-11-15 a stage-en). Az altalanos jelolt-lekerdezes eddig a
+ * legutobb modositott `batchSize * 4` termek kozul valasztott: ha az ablak minden termeke naprakesz volt, a kor
+ * jelolt nelkul allt meg, es a mogotte allo esedekes termek SOHA nem kerult be. Egy teljes UNAS-futas pont ezt
+ * csinalja (az ablakot a mar kivitt termekekkel tolti meg).
+ *
+ * A DUPLA ITT KOVETI A `skip`-ET ES A `take`-ET, mert az altalanos `adatbazis` duplaja mindig ugyanazt a listat
+ * adja: egy ilyen dupla a lapozast nem tudna megkulonboztetni az ablaktol, es a teszt akkor is zold lenne, ha a
+ * lapozas hibas.
+ */
+describe("MedusaProjectionScheduler altalanos esedekessege lapozva", () => {
+  const KORE = {
+    ...BEKAPCSOLVA,
+    MEDUSA_PROJECTION_SCHEDULE_BATCH_SIZE: "5",
+  } as NodeJS.ProcessEnv;
+  const ABLAK = 5 * 4;
+
+  type Lapozo = {
+    skip?: number;
+    take?: number;
+    where?: { isActive?: boolean };
+  };
+
+  /** A termekek `updatedAt` szerint csokkenoen, ahogy a lekerdezes rendezi oket; az also: a regi, esedekes termek. */
+  function lapozottDb(naprakeszDarab: number, esedekesDarab: number) {
+    const naprakesz = Array.from({ length: naprakeszDarab }, (_, i) =>
+      termek({
+        id: `friss-${String(i).padStart(3, "0")}`,
+        updatedAt: new Date(MOST.getTime() - i * 1000),
+      }),
+    );
+    const esedekes = Array.from({ length: esedekesDarab }, (_, i) =>
+      termek({
+        id: `regi-${String(i).padStart(3, "0")}`,
+        updatedAt: new Date(REGEN.getTime() + 86_400_000 - i * 1000),
+      }),
+    );
+    const termekek = [...naprakesz, ...esedekes];
+    const lekepezesek = [
+      // naprakesz: az utolso vetites KESOBBI, mint barmelyik forras-idobelyeg
+      ...naprakesz.map((t) => ({
+        entityId: t.id as string,
+        lastSyncedAt: new Date(MOST.getTime() + 60_000),
+      })),
+      // esedekes: az utolso vetites a forras ELOTT volt
+      ...esedekes.map((t) => ({
+        entityId: t.id as string,
+        lastSyncedAt: new Date(REGEN.getTime() - 86_400_000),
+      })),
+    ];
+    const { db, hivasok } = adatbazis(termekek, lekepezesek);
+    const oldalak: (number | undefined)[] = [];
+    (
+      db as unknown as {
+        product: { findMany: (a: Lapozo) => Promise<unknown> };
+      }
+    ).product.findMany = async (args: Lapozo) => {
+      // csak az altalanos jelolt-lekerdezes (aktiv termekek) szamit lapozasnak
+      if (args.where?.isActive === true) oldalak.push(args.skip);
+      const kezdet = args.skip ?? 0;
+      return termekek.slice(kezdet, kezdet + (args.take ?? termekek.length));
+    };
+    return { db, hivasok, oldalak };
+  }
+
+  it("az ablak MOGOTTI esedekes termek is sorra kerul (ez a kalibralt eset: 25 naprakesz termek egy 20-as ablak elott)", async () => {
+    const { db, oldalak } = lapozottDb(25, 1);
+    const { run, kapott } = futtato();
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: run,
+      runPricing: arFuttato().run,
+      environment: KORE,
+      logger: naplo().logger,
+    });
+
+    assert.equal(await scheduler.runOnce(), "APPLIED");
+    assert.deepEqual(kapott, [["regi-000"]]);
+    assert.deepEqual(oldalak, [0, ABLAK]);
+  });
+
+  it("megall, amint osszejon a batchSize: nem olvassa vegig a katalogust", async () => {
+    // 40 esedekes termek, az elso lapon mind: az elso ot kerul a koreb, a masodik lapot nem is kerdezi le
+    const { db, oldalak } = lapozottDb(0, 40);
+    const { run, kapott } = futtato();
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: run,
+      runPricing: arFuttato().run,
+      environment: KORE,
+      logger: naplo().logger,
+    });
+
+    assert.equal(await scheduler.runOnce(), "APPLIED");
+    assert.equal(kapott[0]?.length, 5);
+    assert.deepEqual(oldalak, [0]);
+  });
+
+  it("ha minden termek naprakesz, vegigmegy a lapokon, es SKIPPED-del er veget (a rovid utolso lap allitja meg)", async () => {
+    const { db, oldalak } = lapozottDb(45, 0);
+    const { run, kapott } = futtato();
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: run,
+      runPricing: arFuttato().run,
+      environment: KORE,
+      logger: naplo().logger,
+    });
+
+    assert.equal(await scheduler.runOnce(), "SKIPPED");
+    assert.deepEqual(kapott, []);
+    assert.deepEqual(oldalak, [0, ABLAK, 2 * ABLAK]);
+  });
+
+  it("a felso korlat megallitja a lapozast, ha a lekerdezes sosem er veget (nincs vegtelen ciklus)", async () => {
+    const naprakesz = Array.from({ length: ABLAK }, (_, i) =>
+      termek({ id: `friss-${i}` }),
+    );
+    const { db } = adatbazis(
+      naprakesz,
+      naprakesz.map((t) => ({
+        entityId: t.id as string,
+        lastSyncedAt: new Date(MOST.getTime() + 60_000),
+      })),
+    );
+    let hivasok = 0;
+    // egy hibas lekerdezes, ami minden lapra ugyanazt a teljes lapot adja
+    (
+      db as unknown as {
+        product: { findMany: (a: Lapozo) => Promise<unknown> };
+      }
+    ).product.findMany = async (args: Lapozo) => {
+      if (args.where?.isActive === true) hivasok += 1;
+      return naprakesz;
+    };
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: futtato().run,
+      runPricing: arFuttato().run,
+      environment: KORE,
+      logger: naplo().logger,
+    });
+
+    assert.equal(await scheduler.runOnce(), "SKIPPED");
+    assert.equal(hivasok, 50);
+  });
+});
+
+/**
+ * A LASSU FRISSITESI FORGAS (kartya d8b512cb, acrobot 53592). MI PIROSIT: a forgas kapcsolo nelkul is fut, vagy kapcsolo
+ * nelkul is lekerdez; nem a legregebben vetitettek mennek (a sorrend a lekerdezes sorrendjetol fugg, a dupla viszont
+ * osszekeverve adja a sorokat); egy esedekes termek ketszer megy, vagy a forgas kiszoritja az esedekest; inaktiv, nem
+ * webshopos, kizart, kotes nelkuli vagy soha nem vetitett termek kerul a forgasba mint forgas-jelolt; egy beragadt
+ * (a `lastSyncedAt`-et nem leptető) termek minden korben az elen marad; a jelentes forgas-szama nem kulon latszik.
+ */
+describe("projectionRefreshConfig", () => {
+  it("alapbol KI; bekapcsolva R alap 5, korlat 1..50, ervenytelen ertek kivetel", () => {
+    assert.deepEqual(projectionRefreshConfig({}), {
+      enabled: false,
+      perRound: 0,
+    });
+    // a darabszam onmagaban nem kapcsol be semmit
+    assert.deepEqual(
+      projectionRefreshConfig({
+        MEDUSA_PROJECTION_REFRESH_PER_ROUND: "7",
+      } as NodeJS.ProcessEnv),
+      { enabled: false, perRound: 0 },
+    );
+    const be = { MEDUSA_PROJECTION_REFRESH_ENABLED: "true" };
+    assert.deepEqual(projectionRefreshConfig(be as NodeJS.ProcessEnv), {
+      enabled: true,
+      perRound: 5,
+    });
+    for (const ertek of ["1", "50"])
+      assert.equal(
+        projectionRefreshConfig({
+          ...be,
+          MEDUSA_PROJECTION_REFRESH_PER_ROUND: ertek,
+        } as NodeJS.ProcessEnv).perRound,
+        Number(ertek),
+      );
+    for (const ertek of ["0", "51", "x", "2.5"])
+      assert.throws(
+        () =>
+          projectionRefreshConfig({
+            ...be,
+            MEDUSA_PROJECTION_REFRESH_PER_ROUND: ertek,
+          } as NodeJS.ProcessEnv),
+        /MEDUSA_PROJECTION_REFRESH_INVALID/,
+      );
+  });
+});
+
+describe("MedusaProjectionScheduler lassu frissitesi forgasa", () => {
+  const napokUtan = (napok: number) =>
+    new Date(MOST.getTime() + napok * 86_400_000);
+  const FORGAS = (perRound: string, extra: Record<string, string> = {}) =>
+    ({
+      ...BEKAPCSOLVA,
+      MEDUSA_PROJECTION_REFRESH_ENABLED: "true",
+      MEDUSA_PROJECTION_REFRESH_PER_ROUND: perRound,
+      ...extra,
+    }) as NodeJS.ProcessEnv;
+  /** A forgas SAJAT lekerdezese: a kotesek, a legregebben vetitettek elol (mas forras ilyen rendezest nem hasznal). */
+  const forgasHivas = (h: { metodus: string; args: unknown }) =>
+    h.metodus === "externalReference.findMany" &&
+    JSON.stringify(h.args).includes('"lastSyncedAt":"asc"');
+  /** `n` naprakesz termek: a kotes `lastSyncedAt`-je a `napok` szerint kesobbi, mint minden forras-idobelyeg. */
+  const naprakesz = (id: string, napok: number) => ({
+    termek: termek({ id }),
+    kotes: { entityId: id, lastSyncedAt: napokUtan(napok) },
+  });
+  const felallit = (
+    sorok: { termek: Record<string, unknown>; kotes: object }[],
+    env: NodeJS.ProcessEnv,
+    /** Az adatbazis valodi viselkedese: a forgas lekerdezeset rendezi es a `take`-nel vagja (a dupla alapbol nem). */
+    ablakkal = false,
+  ) => {
+    const { db, hivasok } = adatbazis(
+      sorok.map((s) => s.termek),
+      sorok.map(
+        (s) => s.kotes as { entityId: string; lastSyncedAt: Date | null },
+      ),
+    );
+    if (ablakkal) {
+      type Sor = { entityId: string; lastSyncedAt: Date | null };
+      const tarolt = db.externalReference as unknown as {
+        findMany: (args: unknown) => Promise<Sor[]>;
+      };
+      const eredeti = tarolt.findMany.bind(tarolt);
+      tarolt.findMany = async (args: unknown) => {
+        const sorok = await eredeti(args);
+        const { orderBy, take } = args as { orderBy?: unknown; take?: number };
+        if (!JSON.stringify(orderBy ?? null).includes('"lastSyncedAt":"asc"'))
+          return sorok;
+        return sorok
+          .filter((sor) => sor.lastSyncedAt !== null)
+          .sort(
+            (a, b) =>
+              a.lastSyncedAt!.getTime() - b.lastSyncedAt!.getTime() ||
+              (a.entityId < b.entityId ? -1 : 1),
+          )
+          .slice(0, take);
+      };
+    }
+    const { run, kapott } = futtato(0);
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: run,
+      runPricing: arFuttato().run,
+      environment: env,
+      logger: naplo().logger,
+    });
+    return { scheduler, kapott, hivasok };
+  };
+
+  it("kapcsolo nelkul nem ker le semmit, es a jelentesben a forgas 0", async () => {
+    const { scheduler, kapott, hivasok } = felallit(
+      [naprakesz("a", 1), naprakesz("b", 2)],
+      BEKAPCSOLVA,
+    );
+
+    assert.equal(await scheduler.runOnce(), "SKIPPED");
+    assert.deepEqual(kapott, []);
+    const forgasLekerdezes = hivasok.filter(forgasHivas);
+    assert.equal(
+      forgasLekerdezes.length,
+      0,
+      JSON.stringify(forgasLekerdezes.map((h) => h.args)),
+    );
+    const kor = scheduler.allapot().lastRound!;
+    assert.equal(kor.candidates!.refresh, 0);
+    assert.equal(kor.taken!.refresh, 0);
+  });
+
+  it("bekapcsolva a legregebben vetitett, nem esedekes termekek mennek, R db, regitol ujig", async () => {
+    // a dupla a sorokat osszekeverve adja: a sorrend nem a lekerdezestol fugg
+    const sorok = [
+      naprakesz("p3", 3),
+      naprakesz("p1", 1),
+      naprakesz("p6", 6),
+      naprakesz("p2", 2),
+      naprakesz("p5", 5),
+      naprakesz("p4", 4),
+    ];
+    const { scheduler, kapott, hivasok } = felallit(sorok, FORGAS("3"));
+
+    assert.equal(await scheduler.runOnce(), "APPLIED");
+    assert.deepEqual(kapott, [["p1", "p2", "p3"]]);
+    const lekerdezes = hivasok.find(forgasHivas)!;
+    const args = lekerdezes.args as { orderBy: unknown; take: number };
+    assert.deepEqual(args.orderBy, [
+      { lastSyncedAt: "asc" },
+      { entityId: "asc" },
+    ]);
+    // az ablak: R * 4, es az esedekesek szama (itt 0)
+    assert.equal(args.take, 12);
+    const kor = scheduler.allapot().lastRound!;
+    assert.equal(kor.candidates!.refresh, 3);
+    assert.equal(kor.taken!.refresh, 3);
+    assert.equal(kor.candidates!.general, 0);
+  });
+
+  it("R alapbol 5 darab", async () => {
+    const sorok = [1, 2, 3, 4, 5, 6, 7].map((n) => naprakesz(`p${n}`, n));
+    const { scheduler, kapott } = felallit(sorok, {
+      ...BEKAPCSOLVA,
+      MEDUSA_PROJECTION_REFRESH_ENABLED: "true",
+    } as NodeJS.ProcessEnv);
+
+    await scheduler.runOnce();
+
+    assert.deepEqual(kapott, [["p1", "p2", "p3", "p4", "p5"]]);
+  });
+
+  it("az esedekes termek elsobbseget elvez, ketszer nem szerepel, a forgas csak a maradek keretet tolti", async () => {
+    const sorok = [
+      {
+        termek: termek({ id: "d1", updatedAt: MOST }),
+        // regebbi a vetites a forras-idobelyegnel: esedekes, es az ablak ELEJEN all
+        kotes: { entityId: "d1", lastSyncedAt: REGEN },
+      },
+      naprakesz("n1", 1),
+      naprakesz("n2", 2),
+      naprakesz("n3", 3),
+    ];
+    const { scheduler, kapott } = felallit(
+      sorok,
+      FORGAS("5", { MEDUSA_PROJECTION_SCHEDULE_BATCH_SIZE: "3" }),
+    );
+
+    await scheduler.runOnce();
+
+    // a keret 3: az esedekes d1 elol (egyszer), mogotte a legregebbi ket forgas-termek
+    assert.deepEqual(kapott, [["d1", "n1", "n2"]]);
+    const kor = scheduler.allapot().lastRound!;
+    assert.equal(kor.candidates!.general, 1);
+    assert.equal(kor.candidates!.refresh, 3);
+    assert.equal(kor.taken!.general, 1);
+    assert.equal(kor.taken!.refresh, 2);
+  });
+
+  it("inaktiv, nem webshopos, kizart termek nem forgas-jelolt; a soha nem vetitett az altalanos soron megy", async () => {
+    // a lastSyncedAt a kifutott-jelolo (2026-11-09) UTAN all: az inaktiv/nem webshopos sor ezeket nem tartja esedekesnek
+    const sorok = [
+      naprakesz("regi-inaktiv", 80),
+      naprakesz("regi-nem-webshopos", 81),
+      naprakesz("regi-kizart", 82),
+      naprakesz("jo", 90),
+      {
+        termek: termek({ id: "soha" }),
+        kotes: { entityId: "soha", lastSyncedAt: null },
+      },
+    ];
+    sorok[0]!.termek = termek({ id: "regi-inaktiv", isActive: false });
+    sorok[1]!.termek = termek({
+      id: "regi-nem-webshopos",
+      webshopSellable: false,
+    });
+    sorok[2]!.termek = termek({ id: "regi-kizart", webshopExcluded: true });
+    const { scheduler, kapott } = felallit(sorok, FORGAS("5"));
+
+    await scheduler.runOnce();
+
+    // a "soha" az altalanos soron (elol), a forgasbol CSAK a "jo"
+    assert.deepEqual(kapott, [["soha", "jo"]]);
+    const kor = scheduler.allapot().lastRound!;
+    assert.equal(kor.candidates!.general, 1);
+    assert.equal(kor.candidates!.refresh, 1);
+  });
+
+  it("a termek nelkuli kotes (arva), akar van lastSyncedAt-je, akar nincs, nem forgas-jelolt es nem dob", async () => {
+    const sorok = [
+      naprakesz("n1", 1),
+      naprakesz("n2", 2),
+      // a kotes termek nelkul: a termek-lekerdezes nem adja vissza, az altalanos sor sem latja
+      {
+        termek: termek({ id: "arva-datummal" }),
+        kotes: { entityId: "arva-datummal", lastSyncedAt: napokUtan(0.5) },
+      },
+      {
+        termek: termek({ id: "arva-datum-nelkul" }),
+        kotes: { entityId: "arva-datum-nelkul", lastSyncedAt: null },
+      },
+    ];
+    const { db } = adatbazis(
+      // a dupla minden termek-lekerdezesre ezt adja: az arvak termekei kimaradnak
+      sorok.slice(0, 2).map((s) => s.termek),
+      sorok.map(
+        (s) => s.kotes as { entityId: string; lastSyncedAt: Date | null },
+      ),
+    );
+    const { run, kapott } = futtato(0);
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: run,
+      runPricing: arFuttato().run,
+      environment: FORGAS("5"),
+      logger: naplo().logger,
+    });
+
+    await scheduler.runOnce();
+
+    assert.deepEqual(kapott, [["n1", "n2"]]);
+  });
+
+  it("a beragadt termek (a lastSyncedAt nem lep) a sor vegere kerul, a mogotte allok sorra kerulnek", async () => {
+    const sorok = [1, 2, 3, 4].map((n) => naprakesz(`n${n}`, n));
+    // a dupla kotesei nem valtoznak: ugy tunik, mintha a vetites nem leptetne a kotest
+    const { scheduler, kapott } = felallit(sorok, FORGAS("2"));
+
+    await scheduler.runOnce();
+    await scheduler.runOnce();
+
+    assert.deepEqual(kapott, [
+      ["n1", "n2"],
+      ["n3", "n4"],
+    ]);
+  });
+  it("4R+1 beragadt termek a legregebbiek kozott sem allitja meg a forgast: a mogottuk allo jo termek sorra kerul", async () => {
+    // R=2, ablak 8: kilenc beragadt (a kotes nem lep) elol, mogottuk egy jo termek
+    const sorok = [
+      ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => naprakesz(`n${n}`, n)),
+      naprakesz("jo", 20),
+    ];
+    const { scheduler, kapott } = felallit(sorok, FORGAS("2"), true);
+
+    for (let i = 0; i < 5; i += 1) await scheduler.runOnce();
+
+    // a beragadtak sorban, utolsonak a jo termek: az ablak a beragadtak szamaval szelesedik
+    assert.deepEqual(kapott, [
+      ["n1", "n2"],
+      ["n3", "n4"],
+      ["n5", "n6"],
+      ["n7", "n8"],
+      ["n9", "jo"],
+    ]);
+  });
+
+  it("a lepett termek jegyzete kitisztul: az ablak nem szelesedik a mar nem beragadtakkal", async () => {
+    const sorok = [1, 2, 3, 4].map((n) => naprakesz(`n${n}`, n));
+    const { scheduler, kapott, hivasok } = felallit(sorok, FORGAS("2"), true);
+
+    await scheduler.runOnce();
+    // a vetites most mar leptette a kotest: az elso ket termek a lista vegere kerult
+    for (const sor of sorok.slice(0, 2))
+      (sor.kotes as { lastSyncedAt: Date }).lastSyncedAt = napokUtan(30);
+    await scheduler.runOnce();
+
+    assert.deepEqual(kapott, [
+      ["n1", "n2"],
+      ["n3", "n4"],
+    ]);
+    const ablakok = hivasok
+      .filter(forgasHivas)
+      .map((h) => (h.args as { take: number }).take);
+    // R*4 = 8, esedekes nincs, es a jegyzetben nincs beragadt: mind a ket korben 8
+    assert.deepEqual(ablakok, [8, 8]);
+  });
+
+  it("a forgas hibas beallitasa az inditaskor bukik, nem minden korben; kikapcsolt utemezonel nem dob", () => {
+    const keszit = (environment: NodeJS.ProcessEnv) =>
+      new MedusaProjectionScheduler({
+        db: adatbazis([]).db,
+        runProjection: futtato(0).run,
+        runPricing: arFuttato().run,
+        environment,
+        logger: naplo().logger,
+      });
+
+    for (const rossz of ["0", "100", "x"])
+      assert.throws(
+        () => keszit(FORGAS(rossz)).onModuleInit(),
+        /MEDUSA_PROJECTION_REFRESH_INVALID/,
+        rossz,
+      );
+    // az utemezo maga ki van kapcsolva: a forgas beallitasa nem szamit, az inditas nem dob
+    assert.doesNotThrow(() =>
+      keszit({
+        MEDUSA_PROJECTION_REFRESH_ENABLED: "true",
+        MEDUSA_PROJECTION_REFRESH_PER_ROUND: "100",
+      } as NodeJS.ProcessEnv).onModuleInit(),
+    );
+  });
+});
+
+/**
+ * A MEGALLT TERMEKEK OKFAJTANKENT A KOR ALLAPOTABAN (acrobot 53685): a stage naploja a flottanak nem olvashato, a FAILED kor oka
+ * (a futtato minden megallt termekre `failed`-et noveli) viszont csak ott allt. MI PIROSIT: a megallt sor nem szamlalodik, vagy
+ * a termek-azonosito/reszlet kulcs lesz, vagy egy szabad szoveg kulcsnak megy at (szuretlenul); egy `constructor` nevu ok
+ * elrontja a szamlalot; a megallt nelkuli kor `null`-t ad `{}` helyett (vagy forditva az ures kor); a visszaadott allapot elo
+ * hivatkozas; a hibasor a naplobol kimarad.
+ */
+describe("a megallt termekek okfajtankent a kor allapotaban", () => {
+  const MEGALLT = [
+    "prod-a: MEGÁLLT (no-sku) a termék-azonosító és a részlet nem kerülhet a számlálóba\n",
+    "prod-b: MEGÁLLT (ambiguous) x\n",
+    "prod-c: MEGÁLLT (no-sku) y\n",
+    "prod-d: kész (frissítve)\n",
+    "figyelmeztetés: MEGÁLLT valami zárójel nélkül\n",
+  ];
+  const kesz = (
+    sorok: string[],
+    kotesek: { entityId: string; lastSyncedAt: Date | null }[] = [],
+  ) => {
+    const { db } = adatbazis([termek()], kotesek);
+    const n = naplo();
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: async (_ids, out) => {
+        for (const sor of sorok) out.stderr(sor);
+        return sorok.some((sor) => sor.includes("MEGÁLLT")) ? 1 : 0;
+      },
+      runPricing: arFuttato().run,
+      environment: BEKAPCSOLVA,
+      logger: n.logger,
+    });
+    return { scheduler, naploSorok: n.sorok };
+  };
+
+  it("okfajtankent szamol, az azonositot es a reszletet nem, a nem megallt sort nem; a sor a naploba tovabbra is megy", async () => {
+    const { scheduler, naploSorok } = kesz(MEGALLT);
+
+    assert.equal(await scheduler.runOnce(), "FAILED");
+
+    const stopped = scheduler.allapot().lastRound!.stopped;
+    assert.deepEqual(stopped, { "no-sku": 2, ambiguous: 1 });
+    assert.ok(!JSON.stringify(stopped).includes("prod-"));
+    assert.ok(naploSorok.some((sor) => sor.includes("prod-a: MEGÁLLT")));
+  });
+
+  it("megallt nelkul a kor `{}`, a kor nelkuli (SKIPPED) allapot `null`", async () => {
+    const tiszta = kesz(["prod-d: kész\n"]);
+    assert.equal(await tiszta.scheduler.runOnce(), "APPLIED");
+    assert.deepEqual(tiszta.scheduler.allapot().lastRound!.stopped, {});
+
+    // minden termek naprakesz: nincs mit vetiteni, a vetites nem fut
+    const ures = kesz(MEGALLT, [{ entityId: "prod-1", lastSyncedAt: MOST }]);
+    assert.equal(await ures.scheduler.runOnce(), "SKIPPED");
+    assert.equal(ures.scheduler.allapot().lastRound!.stopped, null);
+  });
+
+  it("egy szabad szoveg nem lehet kulcs: kisbetusre es [a-z0-9-]-re szurve megy, az ures `unknown`", () => {
+    const into: Record<string, number> = {};
+    countStoppedLines(
+      "p1: MEGÁLLT (Bad Reason!) r\np2: MEGÁLLT () r\np3: MEGÁLLT (variant-options) r\n",
+      into,
+    );
+    assert.deepEqual(into, {
+      badreason: 1,
+      unknown: 1,
+      "variant-options": 1,
+    });
+  });
+
+  it("egy `constructor` nevu ok sem rontja el a szamlalot", () => {
+    const into: Record<string, number> = {};
+    countStoppedLines("p1: MEGÁLLT (constructor) r\n", into);
+    countStoppedLines("p2: MEGÁLLT (constructor) r\n", into);
+    assert.deepEqual(into, { constructor: 2 });
+  });
+
+  it("az ar-futtato megallt sora NEM szamlalodik: a stopped a termek-vetites megallt termekeit mondja (a priceFailures az arakat)", async () => {
+    const { db } = adatbazis([termek()], [], [{ entityId: "prod-1" }]);
+    const n = naplo();
+    const arKapott: string[][] = [];
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: async (_ids, out) => {
+        out.stderr("prod-1: MEGÁLLT (no-sku) r\n");
+        return 1;
+      },
+      runPricing: async (ids, out) => {
+        arKapott.push(ids);
+        out.stderr("SKU-1: MEGÁLLT (ambiguous-price) x\n");
+        out.stderr("SKU-2: MEGÁLLT (own-price-missing) x\n");
+        return 1;
+      },
+      environment: BEKAPCSOLVA,
+      logger: n.logger,
+    });
+
+    await scheduler.runOnce();
+
+    // az ar-futas LEFUTOTT (különben a teszt semmit nem bizonyit), es a sorai a naploba mentek
+    assert.deepEqual(arKapott, [["prod-1"]]);
+    assert.ok(n.sorok.some((sor) => sor.includes("ambiguous-price")));
+    // de a stopped csak a termek-vetites megallt termeke
+    assert.deepEqual(scheduler.allapot().lastRound!.stopped, { "no-sku": 1 });
+  });
+
+  it("egy hivasban tobb sor is szamlalodik, es a visszaadott allapot masolat", async () => {
+    const { scheduler } = kesz([MEGALLT.slice(0, 3).join("")]);
+    await scheduler.runOnce();
+
+    const elso = scheduler.allapot().lastRound!.stopped!;
+    assert.deepEqual(elso, { "no-sku": 2, ambiguous: 1 });
+    elso["no-sku"] = 99;
+    assert.deepEqual(scheduler.allapot().lastRound!.stopped, {
+      "no-sku": 2,
+      ambiguous: 1,
+    });
+  });
+});
+
+/**
+ * A JELOLT ARVA KOTES NEM ESEDEKES, ES NEM BUKTAT (task t-20261116-arva-kotes, acrobot 53748). A stage-en egyetlen `orphaned-link` termek
+ * (a bolti termek 404-et ad) minden kort FAILED-re tett, es minden korben elfoglalt egy helyet. MI PIROSIT: a jelolt arva a general, az
+ * inaktivalt vagy a forgas listaba bekerul; a tenyvaltozas listaja visszahozza; a szam nem latszik a statuszban (a jel eltunne); a
+ * kotesek olvasasanak bukasa kihagyja a termeket (egy hianyzo szuro helyett egy hibas); a futtato az `orphaned-link`-et hibanak szamolja.
+ */
+describe("a jelölt árva kötés nem esedékes, és nem buktat", () => {
+  const JEL = {
+    medusaOrphan: {
+      firstObservedAt: "2026-11-15T20:00:00.000Z",
+      lastObservedAt: "2026-11-16T07:00:00.000Z",
+      medusaProductId: "prod_regi",
+    },
+  };
+  const arva = (entityId: string) => ({ entityId, metadata: JEL });
+  const ep = (entityId: string) => ({ entityId, metadata: {} });
+  const kor = (
+    db: ProjectionSchedulerDatabase,
+    environment: NodeJS.ProcessEnv = BEKAPCSOLVA,
+  ) => {
+    const { run, kapott } = futtato(0);
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: run,
+      runPricing: arFuttato().run,
+      environment,
+      logger: naplo().logger,
+      now: () => new Date(MOST.getTime() + 1_000),
+    });
+    return { scheduler, kapott };
+  };
+
+  it("a general listabol kimarad, az ep termek megy, es a szam a statuszban latszik", async () => {
+    const { db } = adatbazis(
+      [termek({ id: "prod-1" }), termek({ id: "prod-2" })],
+      [],
+      [arva("prod-1"), ep("prod-2")] as { entityId: string }[],
+    );
+    const { scheduler, kapott } = kor(db);
+
+    assert.equal(await scheduler.runOnce(), "APPLIED");
+
+    assert.deepEqual(kapott, [["prod-2"]]);
+    assert.equal(scheduler.allapot().lastRound!.orphanedLinks, 1);
+  });
+
+  it("az inaktivalt listabol es a forgasbol is kimarad", async () => {
+    const regen = new Date("2026-11-01T00:00:00.000Z");
+    const { db } = adatbazis(
+      [
+        termek({ id: "i-arva", isActive: false, updatedAt: MOST }),
+        termek({ id: "i-ep", isActive: false, updatedAt: MOST }),
+      ],
+      [
+        { entityId: "i-arva", lastSyncedAt: regen },
+        { entityId: "i-ep", lastSyncedAt: regen },
+      ],
+      [arva("i-arva"), ep("i-ep")] as { entityId: string }[],
+    );
+    const inaktiv = kor(db);
+    await inaktiv.scheduler.runOnce();
+    assert.deepEqual(inaktiv.kapott, [["i-ep"]]);
+
+    const kesobb = (n: number) => new Date(MOST.getTime() + n * 86_400_000);
+    const { db: forgasDb } = adatbazis(
+      [termek({ id: "n1" }), termek({ id: "n2" })],
+      [
+        { entityId: "n1", lastSyncedAt: kesobb(1) },
+        { entityId: "n2", lastSyncedAt: kesobb(2) },
+      ],
+      [arva("n1"), ep("n2")] as { entityId: string }[],
+    );
+    const forgas = kor(forgasDb, {
+      ...BEKAPCSOLVA,
+      MEDUSA_PROJECTION_REFRESH_ENABLED: "true",
+      MEDUSA_PROJECTION_REFRESH_PER_ROUND: "5",
+    } as NodeJS.ProcessEnv);
+    await forgas.scheduler.runOnce();
+    assert.deepEqual(forgas.kapott, [["n2"]]);
+  });
+
+  it("a tenyvaltozas listajabol is kimarad (jel nelkul bekerulne)", async () => {
+    const kotes = [
+      { entityId: "prod-1", lastSyncedAt: new Date(MOST.getTime() - 60_000) },
+    ];
+    const tenyek = [{ productId: "prod-1", updatedAt: MOST }];
+    const kerdezett = async (kotesek: { entityId: string }[]) => {
+      const { db } = adatbazis(
+        [termek({ updatedAt: REGEN })],
+        kotes,
+        kotesek,
+        [],
+        [],
+        tenyek,
+      );
+      const eredmeny = kor(db, ISMERETTEL);
+      await eredmeny.scheduler.runOnce();
+      return eredmeny.kapott;
+    };
+
+    assert.deepEqual(await kerdezett([ep("prod-1")] as never), [["prod-1"]]);
+    assert.deepEqual(await kerdezett([arva("prod-1")] as never), []);
+  });
+
+  it("ha a kotesek olvasasa elbukik, semmi nem marad ki, es a szam null (egy hibas szuro eltuntetne a termeket)", async () => {
+    const { db } = adatbazis([termek({ id: "prod-1" })], [], [
+      arva("prod-1"),
+    ] as { entityId: string }[]);
+    const tarolt = db.externalReference as unknown as {
+      findMany: (args: unknown) => Promise<unknown[]>;
+    };
+    const eredeti = tarolt.findMany.bind(tarolt);
+    tarolt.findMany = async (args: unknown) => {
+      const a = args as {
+        where?: { entityType?: string };
+        select?: { metadata?: unknown };
+      };
+      // csak a kotesek (Product) jelolt-arva olvasasa bukik: az ar-sorok (ProductPrice) metaadat-olvasasa mas kerdes
+      if (a.where?.entityType === "Product" && a.select?.metadata)
+        throw new Error("olvasas elbukott");
+      return eredeti(args);
+    };
+    const { scheduler, kapott } = kor(db);
+
+    await scheduler.runOnce();
+
+    assert.deepEqual(kapott, [["prod-1"]]);
+    assert.equal(scheduler.allapot().lastRound!.orphanedLinks, null);
+  });
+
+  it("a futtato csak az orphaned-link megallast nem szamolja futasi hibanak", () => {
+    assert.equal(stoppedProductIsRunFailure("orphaned-link"), false);
+    for (const ok of [
+      "no-sku",
+      "ambiguous",
+      "medusa-write-failed",
+      "medusa-read-failed",
+      "broken-identity-chain",
+    ] as const)
+      assert.equal(stoppedProductIsRunFailure(ok), true, ok);
+  });
+});
+
+/**
+ * A KOR KET FELENEK KILEPESI KODJA ES A TERMEK-KUDARCOK FAJTANKENT (task t-20261116-vetito-felkodok, acrobot 53800). 2026-11-16-an a
+ * stage-en a `stopped` ures volt, a kor mégis FAILED (az ar-fel bukott: egy ambiguous-price). MI PIROSIT: a ket fel kodja nem
+ * latszik, vagy felcserelodik, vagy nem-futott felnel 0 all null helyett; az ar-futtato kudarcai a TERMEK-kudarcok koze keverednek
+ * (ugyanaz a hiba, mint az elso valtozat `stopped`-je); a fajta kulcsa szuretlen szoveg lehet; a `constructor` kulcs elrontja a
+ * szamlalot; a visszaadott allapot elo hivatkozas.
+ */
+describe("a kör két felének kilépési kódja és a termék-kudarcok fajtánként", () => {
+  const kor = (
+    projekcio: ProjectionRunner,
+    ar: ProjectionRunner,
+    kotesek: { entityId: string; lastSyncedAt?: Date | null }[] = [
+      { entityId: "prod-1" },
+    ],
+    lekepezesek: { entityId: string; lastSyncedAt: Date | null }[] = [],
+  ) => {
+    const { db } = adatbazis([termek()], lekepezesek, kotesek as never);
+    return new MedusaProjectionScheduler({
+      db,
+      runProjection: projekcio,
+      runPricing: ar,
+      environment: BEKAPCSOLVA,
+      logger: naplo().logger,
+    });
+  };
+  const kod =
+    (n: number): ProjectionRunner =>
+    async () =>
+      n;
+
+  it("a termek-fel bukik: projectionExit 1, pricingExit 0", async () => {
+    const scheduler = kor(kod(1), kod(0));
+
+    assert.equal(await scheduler.runOnce(), "FAILED");
+
+    const k = scheduler.allapot().lastRound!;
+    assert.equal(k.projectionExit, 1);
+    assert.equal(k.pricingExit, 0);
+  });
+
+  it("az ar-fel bukik (a termek-fel tiszta): projectionExit 0, pricingExit 1, es a termek-kudarcok ures", async () => {
+    const scheduler = kor(kod(0), kod(1));
+
+    assert.equal(await scheduler.runOnce(), "FAILED");
+
+    const k = scheduler.allapot().lastRound!;
+    assert.equal(k.projectionExit, 0);
+    assert.equal(k.pricingExit, 1);
+    assert.deepEqual(k.productFailures, {});
+  });
+
+  it("ami nem futott, az null (nem 0): minden termek naprakesz, nincs termek-vetites es ar-futas sem", async () => {
+    const scheduler = kor(
+      kod(1),
+      kod(1),
+      [{ entityId: "prod-1" }],
+      [{ entityId: "prod-1", lastSyncedAt: MOST }],
+    );
+
+    assert.equal(await scheduler.runOnce(), "SKIPPED");
+
+    const k = scheduler.allapot().lastRound!;
+    assert.equal(k.projectionExit, null);
+    assert.equal(k.pricingExit, null);
+    assert.equal(k.productFailures, null);
+  });
+
+  it("ha nem futott ar-futas (nincs kotott termek), a pricingExit null, a termek-fel kodja viszont megvan", async () => {
+    const scheduler = kor(kod(0), kod(1), []);
+
+    assert.equal(await scheduler.runOnce(), "APPLIED");
+
+    const k = scheduler.allapot().lastRound!;
+    assert.equal(k.projectionExit, 0);
+    assert.equal(k.pricingExit, null);
+  });
+
+  it("csak ar-ujraproba van (nincs esedekes termek): a termek-fel nem futott (projectionExit, productFailures null), az ar-fel igen (pricingExit 0)", async () => {
+    const ketOraja = new Date(MOST.getTime() - 2 * 60 * 60 * 1000);
+    const { db } = adatbazis(
+      [termek({ id: "prod-9" })],
+      [{ entityId: "prod-9", lastSyncedAt: new Date(MOST.getTime() + 1000) }],
+      [{ entityId: "prod-9", externalId: "prod_m9" }] as never,
+      [],
+      [
+        {
+          entityId: "prod-9",
+          lastSyncedAt: null,
+          metadata: { failedAt: ketOraja.toISOString() },
+        },
+      ],
+    );
+    const termekVetites = futtato(1);
+    const ar = arFuttato(0);
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: termekVetites.run,
+      runPricing: ar.run,
+      environment: BEKAPCSOLVA,
+      logger: naplo().logger,
+      now: () => MOST,
+    });
+
+    assert.equal(await scheduler.runOnce(), "APPLIED");
+
+    assert.deepEqual(termekVetites.kapott, []);
+    assert.deepEqual(ar.kapott, [["prod-9"]]);
+    const k = scheduler.allapot().lastRound!;
+    assert.equal(k.projectionExit, null);
+    assert.equal(k.productFailures, null);
+    assert.equal(k.pricingExit, 0);
+  });
+
+  it("a termek-kudarcok fajtankent szamolnak, az ar-futtato kudarcai NEM kerulnek ide (azok a priceFailures-ben allnak)", async () => {
+    const scheduler = kor(
+      async (_ids, out) => {
+        out.failed?.("prod-1", "stopped");
+        out.failed?.("prod-1", "stopped");
+        out.failed?.("prod-1", "knowledge-projection");
+        return 1;
+      },
+      async (_ids, out) => {
+        out.failed?.("prod-1", "SKU-1: MEGÁLLT (ambiguous-price) x");
+        return 1;
+      },
+    );
+
+    await scheduler.runOnce();
+
+    const k = scheduler.allapot().lastRound!;
+    assert.deepEqual(k.productFailures, {
+      stopped: 2,
+      "knowledge-projection": 1,
+    });
+    assert.ok(k.priceFailures);
+    assert.equal(k.priceFailures!["ambiguous-price"], 1);
+  });
+
+  it("a fajta kulcsa szurt, az ures `unknown`, a `constructor` is szamolodik, es a visszaadott allapot masolat", async () => {
+    const scheduler = kor(async (_ids, out) => {
+      out.failed?.("p", "Bad Kind!");
+      out.failed?.("p", "");
+      out.failed?.("p", "constructor");
+      out.failed?.("p", "constructor");
+      return 1;
+    }, kod(0));
+    await scheduler.runOnce();
+
+    const elso = scheduler.allapot().lastRound!.productFailures!;
+    assert.deepEqual(elso, { badkind: 1, unknown: 1, constructor: 2 });
+    elso.badkind = 99;
+    assert.equal(scheduler.allapot().lastRound!.productFailures!.badkind, 1);
   });
 });

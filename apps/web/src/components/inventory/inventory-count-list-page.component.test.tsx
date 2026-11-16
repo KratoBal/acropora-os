@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type { InventoryCountListResponse, Session } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -99,6 +105,17 @@ describe("InventoryCountListPage -- állapot az URL-ben", () => {
     ]);
     fireEvent.keyDown(row, { key: "Enter" });
     expect(urlNavigation.push).toHaveBeenCalledWith("/raktar/count-1");
+  });
+
+  // A SOR IS KATTINTHATÓ: a "Megnyitás" gomb a saját kattintását megállítja, különben a sor is navigálna, és ugyanaz
+  // a lap kétszer kerülne az előzményekbe (T1.3: a pilot gomb ezért adja tovább az eseményt).
+  it("a Megnyitás gomb egyszer nyit, a sor nem navigál mellé", async () => {
+    render(<InventoryCountListPage />);
+    await screen.findByText("LELT-2026-001");
+    const row = screen.getAllByTestId("inventory-count-row")[0]!;
+    urlNavigation.push.mockClear();
+    fireEvent.click(within(row).getByRole("button", { name: "Megnyitás" }));
+    expect(urlNavigation.push.mock.calls).toEqual([["/raktar/count-1"]]);
   });
 
   it("a rögzített oszlopok összege belefér a tábla minimumába", () => {

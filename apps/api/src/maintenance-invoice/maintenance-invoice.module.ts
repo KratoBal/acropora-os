@@ -1,10 +1,12 @@
 import { Module } from "@nestjs/common";
 
+import { BillingModule } from "../billing/billing.module.js";
 import { CompletionCertificatesModule } from "../completion-certificates/completion-certificates.module.js";
 import { SzamlazzModule } from "../integrations/szamlazz/szamlazz.module.js";
 import { documentStoreProvider } from "../service-assets/document-store/document-store.provider.js";
 import { MaintenanceInvoiceController } from "./maintenance-invoice.controller.js";
 import { MaintenanceInvoiceDraftService } from "./maintenance-invoice-draft.service.js";
+import { MaintenanceInvoiceIssueService } from "./maintenance-invoice-issue.service.js";
 import { MaintenanceInvoiceRepository } from "./maintenance-invoice.repository.js";
 
 /**
@@ -14,11 +16,13 @@ import { MaintenanceInvoiceRepository } from "./maintenance-invoice.repository.j
  * függőségi gráf építésekor hasalna el.
  */
 @Module({
-  imports: [CompletionCertificatesModule, SzamlazzModule],
+  // the issued TIG invoice is sent the billing page's way (card 7ba97e0d, S3)
+  imports: [CompletionCertificatesModule, SzamlazzModule, BillingModule],
   controllers: [MaintenanceInvoiceController],
   providers: [
     MaintenanceInvoiceRepository,
     MaintenanceInvoiceDraftService,
+    MaintenanceInvoiceIssueService,
     documentStoreProvider,
   ],
   /**

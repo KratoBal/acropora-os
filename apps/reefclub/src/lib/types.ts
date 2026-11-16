@@ -131,3 +131,34 @@ export interface ReefClubDoseRecorded {
   doseId: string | null;
   warnings: { code: string; message: string }[];
 }
+
+/**
+ * GET /rc/v1/runout-reminders (apps/api/src/reefclub/reefclub-runout.service.ts `RunOutStatus`, `RunOutReminderItem`). The
+ * consent text and its version come only when every lock is open; a page never asks for consent to a text it was not given.
+ */
+export type ReefClubRunOutState = "available" | "off" | "no-text" | "no-secret";
+
+export interface ReefClubRunOutReminder {
+  id: string;
+  productId: string;
+  /** The dose list's name; null where the dose list has none. */
+  productName: string | null;
+  aquariumId: string;
+  consentAt: string;
+}
+
+/** A product a reminder can be turned on for (the run-out list); sent only while every lock is open. */
+export interface ReefClubRunOutProduct {
+  productId: string;
+  productName: string;
+  packageText: string;
+}
+
+export interface ReefClubRunOutOverview {
+  state: ReefClubRunOutState;
+  text: string | null;
+  version: string | null;
+  reminders: ReefClubRunOutReminder[];
+  /** Missing from a server before the turn-on slice: read as none. */
+  products?: ReefClubRunOutProduct[];
+}

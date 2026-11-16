@@ -14,7 +14,8 @@ export interface NotificationRoleInfo {
   readonly value:
     | "SERVICE_JOB_OPENED"
     | "MATERIAL_REQUEST_CREATED"
-    | "WEBSHOP_TRANSFER_RECEIVED";
+    | "WEBSHOP_TRANSFER_RECEIVED"
+    | "SERVICE_TICKET_AI_DRAFT";
   /** A jelolonegyzet felirata. */
   readonly label: string;
   /** Mit jelent, ha be van jelolve -- a felirat ala. */
@@ -39,6 +40,12 @@ export const NOTIFICATION_ROLES: readonly NotificationRoleInfo[] = [
     label: "Webshop befizetés-felelős",
     description:
       "Push értesítést kap, amikor egy előre utalásos webshop rendelés pénze megjön (a banki párosításból vagy kézi rögzítésből).",
+  },
+  {
+    value: "SERVICE_TICKET_AI_DRAFT",
+    label: "AI hibajegy-vázlat felelős",
+    description:
+      "Push értesítést kap, amikor a ticket@ postafiókba érkezett levélből AI hibajegy-vázlat készült. A kikapcsolt vagy ismeretlen feladó levele push nélkül, a vázlatok listáján jelenik meg.",
   },
 ] as const;
 

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  formatMoney,
   type MissingInvoicePackageCheck,
   type MissingInvoicePackageCheckItem,
   type MissingInvoicePackageUnpaidInvoice,
@@ -26,7 +27,6 @@ import {
   FILTER_CATEGORIES,
   INVOICE_SOURCE_LABELS,
   chargeAmountText,
-  formatAmount,
   formatDay,
   formatMonth,
   type BankAccountOption,
@@ -52,6 +52,9 @@ export interface MonthSummary {
   /** Csak NAV-adat, eredeti nincs: az ÖTÖDIK csempe (acrobot 25328). */
   originalMissing: number;
   noInvoiceNeeded: number;
+  /** Gyűjtőszámlára vár (Balázs, 2026-11-15): a csempék alatti sor, ha van. */
+  awaitingCollector: number;
+  awaitingPartners: { partner: string; count: number; amountHuf: string }[];
 }
 
 export interface MonthFilters {
@@ -233,7 +236,10 @@ export function MissingInvoicesMonthDetail({
           </span>
           {row.original ? (
             <span className="block text-xs text-pilot-grey-500">
-              {formatAmount(row.original.amount, row.original.currency)}
+              {chargeAmountText({
+                ...row.original,
+                category: row.category,
+              })}
             </span>
           ) : null}
         </span>
@@ -485,6 +491,25 @@ export function MissingInvoicesMonthDetail({
               </article>
             ))}
           </div>
+
+          {/*
+            GYŰJTŐSZÁMLÁRA VÁR (Balázs, 2026-11-15, acrobot 53030): ezek a
+            tételek nincsenek a Hiányzik fülön, a hónap mégsem kész. Ez a sor
+            mondja meg, hány tétel vár és kitől; a tételek a Mind fülön.
+          */}
+          {summary && summary.awaitingCollector > 0 ? (
+            <p className="text-sm text-pilot-grey-700">
+              Gyűjtőszámlára vár: {summary.awaitingCollector} tétel (
+              {summary.awaitingPartners
+                .map(
+                  (p) =>
+                    `${p.partner}: ${p.count}, ${formatMoney(p.amountHuf, "HUF")}`,
+                )
+                .join("; ")}
+              ). A számla a következő hónap 5-ig jöhet; a tételek a Mind fülön
+              látszanak.
+            </p>
+          ) : null}
 
           {packageCheck ? (
             <PackageCheckBanner

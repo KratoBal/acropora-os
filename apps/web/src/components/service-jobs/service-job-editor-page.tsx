@@ -2,15 +2,16 @@
 
 import {
   Alert,
-  Input,
-  PilotFileInput,
-  PilotSelect,
   PilotButton,
+  PilotFileInput,
+  PilotInput,
+  PilotSelect,
 } from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
   type WorksheetSelectablePartner,
+  uploadAccept,
 } from "@acropora/types";
 import type { WorksheetDepartmentSummary } from "@acropora/types";
 import Link from "next/link";
@@ -560,11 +561,11 @@ export function ServiceJobEditorPage({
               <label className="text-sm font-semibold" htmlFor="hibajegy-cim">
                 Mi a baj?
               </label>
-              <Input
+              <PilotInput
                 id="hibajegy-cim"
                 value={title}
                 disabled={contractUnresolved}
-                onChange={(event) => setTitle(event.target.value)}
+                onChange={setTitle}
                 placeholder="Például: a hármas medence szivattyúja nem indul"
               />
             </div>
@@ -629,7 +630,7 @@ export function ServiceJobEditorPage({
                 <PilotFileInput
                   id="hibajegy-fajlok"
                   multiple
-                  accept="image/jpeg,image/png,application/pdf"
+                  accept={uploadAccept(["jpeg", "png", "pdf"])}
                   className="text-sm"
                   onChange={(event) =>
                     setFiles(Array.from(event.target.files ?? []))

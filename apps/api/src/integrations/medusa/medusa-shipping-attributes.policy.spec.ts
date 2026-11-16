@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 
 import {
   describeShippingFlags,
+  rowsCarryingDerivedPickup,
+  rowsCarryingKind,
   shippingFlagsDiffer,
   shippingFlagsFromProfile,
 } from "./medusa-shipping-attributes.policy.js";
@@ -219,5 +221,84 @@ describe("az élő állat fajtája a szállítási jelzők között", () => {
       /élő állat: gerinctelen/,
     );
     assert.doesNotMatch(describeShippingFlags(ALAP), /élő állat/);
+  });
+});
+
+/*
+  A BOLTBAN MARADT FAJTA (kartya 4b30b373). MI PIROSIT: a szuro a fajta nelkuli (null vagy hianyzo) sort is atengedi.
+*/
+describe("a boltban maradt élő állat fajta", () => {
+  it("csak a fajtát viselő sorokat adja vissza (a null és a hiányzó nem)", () => {
+    const sorok = [
+      { product_id: "a", livestock_kind: "FISH" as const },
+      { product_id: "b", livestock_kind: null },
+      { product_id: "c" },
+      { product_id: "d", livestock_kind: "CORAL" as const },
+    ];
+    assert.deepEqual(
+      rowsCarryingKind(sorok).map((r) => r.product_id),
+      ["a", "d"],
+    );
+  });
+});
+
+/*
+  A SZARMAZTATAS JELOLOJE (commerce #724, kartya c603774e). MI PIROSIT: a kulonbseg-jel a jelolo felvetelet is kulonbsegnek
+  veszi (a kezzel bekapcsolt, jelolo nelkuli bolti sorra minden kor ujra irna, es a bolt minden korben "valtozott" sort
+  jelentene); a jelolo levetele nem kulonbseg (a profil kimondja az atvetelt, a bolti sor meg jelolt: a jelolot le kell venni);
+  a jelolo nelkuli regi bolt hianya kulonbseg; a kezi sort (jelolo nelkul) a torlo szuro megfogja.
+*/
+describe("a származtatás jelölője a különbség-jelben", () => {
+  const alap = {
+    pickup_only: true,
+    foxpost_forbidden: false,
+    is_heavy: false,
+    is_frozen: false,
+  };
+
+  it("a bolt jelölő nélküli sorára a mi jelölőnk NEM különbség: nem írjuk újra minden körben", () => {
+    assert.equal(
+      shippingFlagsDiffer(
+        { ...alap, pickup_only_derived: false },
+        { ...alap, pickup_only_derived: true },
+      ),
+      false,
+    );
+  });
+
+  it("a bolt jelölt sora, amit már nem mi vezetünk le (a profil kimondja): a jelölő levétele különbség", () => {
+    assert.equal(
+      shippingFlagsDiffer(
+        { ...alap, pickup_only_derived: true },
+        { ...alap, pickup_only_derived: false },
+      ),
+      true,
+    );
+  });
+
+  it("jelölt sor, ugyanaz a jelölő: nincs különbség; a régi bolt (nincs jelölő mező) sem hoz különbséget", () => {
+    assert.equal(
+      shippingFlagsDiffer(
+        { ...alap, pickup_only_derived: true },
+        { ...alap, pickup_only_derived: true },
+      ),
+      false,
+    );
+    assert.equal(shippingFlagsDiffer(alap, alap), false);
+  });
+});
+
+describe("a boltban maradt származtatott átvétel szűrője", () => {
+  it("csak az igaz átvételű ÉS az OS által jelölt sort adja: a kézi (jelölő nélküli) és a hamis átvételű nem tartozik ide", () => {
+    const sorok = [
+      { product_id: "jelolt", pickup_only: true, pickup_only_derived: true },
+      { product_id: "kezi", pickup_only: true, pickup_only_derived: false },
+      { product_id: "regi", pickup_only: true },
+      { product_id: "ki", pickup_only: false, pickup_only_derived: true },
+    ];
+    assert.deepEqual(
+      rowsCarryingDerivedPickup(sorok).map((r) => r.product_id),
+      ["jelolt"],
+    );
   });
 });

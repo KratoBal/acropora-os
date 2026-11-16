@@ -5,6 +5,7 @@ import {
   ConfirmDialog,
   EmptyState,
   PilotDateField,
+  PilotFileInput,
   PilotPageHeader,
   Skeleton,
 } from "@acropora/ui";
@@ -24,18 +25,21 @@ import {
   gameApi,
   type GameDrawView,
   type GameEntryView,
+  type GameErasurePreview,
   type GameMailQueue,
+  type GameTestMailResult,
   type GameQuestionView,
 } from "@/lib/api/game";
+import { budapestInstant, budapestParts } from "@/lib/format/budapest-time";
 import { formatDateTimeHu } from "@/lib/format/date";
 
 const errorText = (cause: unknown) =>
   cause instanceof Error ? cause.message : "Ismeretlen hiba";
 
-/** A nap a böngésző (budapesti) idejében: a nyitás a nap eleje, a zárás a nap vége. */
-const dayStart = (day: string) => new Date(`${day}T00:00:00`).toISOString();
-const dayEnd = (day: string) => new Date(`${day}T23:59:59`).toISOString();
-
+/**
+ * A nyitás és a zárás a nap ÉS az óra:perc, budapesti idő szerint (a boltban érvényes idő, nem a gép zónája). Az üres
+ * óra:perc a régi űrlap értékét adja: a nyitás a nap eleje (00:00), a zárás a nap vége (23:59).
+ */
 const EMPTY_FORM = {
   week: "",
   type: "TEXT" as "TEXT" | "CHOICE",
@@ -43,21 +47,128 @@ const EMPTY_FORM = {
   options: "",
   accepted: "",
   opens: "",
+  opensTime: "00:00",
   closes: "",
+  closesTime: "23:59",
+  prizeName: "",
+  prizeDescription: "",
+  prizeImageId: "",
 };
 
-/**
- * Az új kérdés űrlapja. CHOICE-nál a lehetőségek soronként (`a: Acropora`), a helyes válasz a lehetőség betűje;
- * TEXT-nél az elfogadott válaszok soronként (a kis- és nagybetű, az ékezet és a szóköz nem számít).
- */
-function NewQuestion({
+/** A nyeremény képe: feltöltés a kép-tárolóba, előnézettel; a kérdés az azonosítót őrzi. */
+function PrizeImage({
   token,
-  onCreated,
+  imageId,
+  onChange,
 }: {
   token: string;
-  onCreated: () => void;
+  imageId: string;
+  onChange: (id: string) => void;
 }) {
-  const [form, setForm] = useState(EMPTY_FORM);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!imageId) {
+      setPreview(null);
+      return;
+    }
+    let url: string | null = null;
+    let cancelled = false;
+    void gameApi
+      .prizeImageContent(token, imageId)
+      .then((blob) => {
+        if (cancelled) return;
+        url = URL.createObjectURL(blob);
+        setPreview(url);
+      })
+      .catch(() => setPreview(null));
+    return () => {
+      cancelled = true;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [token, imageId]);
+  const upload = async (file: File | undefined) => {
+    if (!file) return;
+    setBusy(true);
+    setError(null);
+    try {
+      onChange((await gameApi.uploadPrizeImage(token, file)).id);
+    } catch (cause) {
+      setError(errorText(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <PilotFormField
+      label="Képe"
+      help="PNG, JPEG, GIF vagy WebP, legfeljebb 1 MB."
+    >
+      <div className="space-y-2">
+        <PilotFileInput
+          accept="image/png,image/jpeg,image/gif,image/webp"
+          aria-label="Nyeremény képe"
+          disabled={busy}
+          onChange={(event) => void upload(event.target.files?.[0])}
+        />
+        {preview ? (
+          <div className="flex items-center gap-3">
+            <img
+              src={preview}
+              alt="A nyeremény képe"
+              className="h-24 w-24 rounded-lg object-cover ring-1 ring-pilot-grey-200"
+            />
+            <PilotButton variant="secondary" onClick={() => onChange("")}>
+              Kép törlése
+            </PilotButton>
+          </div>
+        ) : null}
+        {error ? <p className="text-sm text-rose-600">{error}</p> : null}
+      </div>
+    </PilotFormField>
+  );
+}
+
+/** Egy meglévő kérdés az űrlap mezőiben (a nyitás és a zárás budapesti nap és óra:perc). */
+function formOf(question: GameQuestionView): typeof EMPTY_FORM {
+  const opens = budapestParts(question.opensAt);
+  const closes = budapestParts(question.closesAt);
+  return {
+    week: question.week,
+    type: question.type,
+    prompt: question.prompt,
+    options: question.options
+      .map((option) => `${option.id}: ${option.label}`)
+      .join("\n"),
+    accepted: question.acceptedAnswers.join("\n"),
+    opens: opens?.day ?? "",
+    opensTime: opens?.time ?? "00:00",
+    closes: closes?.day ?? "",
+    closesTime: closes?.time ?? "23:59",
+    prizeName: question.prizeName ?? "",
+    prizeDescription: question.prizeDescription ?? "",
+    prizeImageId: question.prizeImageId ?? "",
+  };
+}
+
+/**
+ * Az új kérdés űrlapja, és (a `question` megadva) egy meglévő kérdés javítása ugyanezzel az űrlappal: a hét nem változik,
+ * a többi (szöveg, válaszok, nyitás és zárás, nyeremény) igen. CHOICE-nál a lehetőségek soronként (`a: Acropora`), a helyes válasz a lehetőség betűje;
+ * TEXT-nél az elfogadott válaszok soronként (a kis- és nagybetű, az ékezet és a szóköz nem számít).
+ */
+function QuestionForm({
+  token,
+  question,
+  onDone,
+  onCancel,
+}: {
+  token: string;
+  question?: GameQuestionView;
+  onDone: () => void;
+  onCancel?: () => void;
+}) {
+  const [form, setForm] = useState(question ? formOf(question) : EMPTY_FORM);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const set = (key: keyof typeof EMPTY_FORM) => (value: string) =>
@@ -79,17 +190,35 @@ function NewQuestion({
               return { id: id!.trim(), label: label.join(":").trim() };
             })
           : [];
-      await gameApi.createQuestion(token, {
+      const input = {
         week: form.week.trim(),
         type: form.type,
         prompt: form.prompt.trim(),
         options,
         acceptedAnswers: lines(form.accepted),
-        opensAt: form.opens ? dayStart(form.opens) : "",
-        closesAt: form.closes ? dayEnd(form.closes) : "",
-      });
-      setForm(EMPTY_FORM);
-      onCreated();
+        // az érintetlen időpont a tárolt marad (a másodperc is): a javítás nem csúsztatja el a régi zárást
+        opensAt:
+          question &&
+          form.opens === formOf(question).opens &&
+          form.opensTime === formOf(question).opensTime
+            ? question.opensAt
+            : (budapestInstant(form.opens, form.opensTime) ?? ""),
+        closesAt:
+          question &&
+          form.closes === formOf(question).closes &&
+          form.closesTime === formOf(question).closesTime
+            ? question.closesAt
+            : (budapestInstant(form.closes, form.closesTime) ?? ""),
+        prizeName: form.prizeName.trim() || null,
+        prizeDescription: form.prizeDescription.trim() || null,
+        prizeImageId: form.prizeImageId || null,
+      };
+      if (question) await gameApi.updateQuestion(token, question.id, input);
+      else {
+        await gameApi.createQuestion(token, input);
+        setForm(EMPTY_FORM);
+      }
+      onDone();
     } catch (cause) {
       setError(errorText(cause));
     } finally {
@@ -100,12 +229,19 @@ function NewQuestion({
   return (
     <section
       className="space-y-3 rounded-2xl border border-pilot-grey-200 bg-white px-5 py-4"
-      data-testid="game-new-question"
+      data-testid={question ? "game-edit-question" : "game-new-question"}
     >
-      <p className="text-sm font-semibold">Új heti kérdés</p>
+      <p className="text-sm font-semibold">
+        {question ? `Kérdés javítása (${question.week})` : "Új heti kérdés"}
+      </p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <PilotFormField label="Hét (például 2026-W46)" required>
-          <PilotInput value={form.week} onChange={set("week")} />
+          <PilotInput
+            value={form.week}
+            onChange={set("week")}
+            disabled={Boolean(question)}
+            aria-label="Hét"
+          />
         </PilotFormField>
         <PilotFormField label="Típus" required>
           <PilotSelect
@@ -123,16 +259,64 @@ function NewQuestion({
             aria-label="Nyitás napja"
           />
         </PilotFormField>
-        <PilotFormField label="Zárás napja (a nap végéig)" required>
+        <PilotFormField label="Nyitás ideje (budapesti)" required>
+          <PilotInput
+            type="time"
+            value={form.opensTime}
+            onChange={set("opensTime")}
+            aria-label="Nyitás ideje"
+          />
+        </PilotFormField>
+        <PilotFormField label="Zárás napja" required>
           <PilotDateField
             value={form.closes}
             onChange={set("closes")}
             aria-label="Zárás napja"
           />
         </PilotFormField>
+        <PilotFormField label="Zárás ideje (budapesti)" required>
+          <PilotInput
+            type="time"
+            value={form.closesTime}
+            onChange={set("closesTime")}
+            aria-label="Zárás ideje"
+          />
+        </PilotFormField>
+      </div>
+      <div className="space-y-3 rounded-xl border border-pilot-grey-100 px-4 py-3">
+        <p className="text-sm font-semibold">A hét nyereménye</p>
+        <PilotFormField
+          label="Neve"
+          help="Nem kötelező, de a leírás és a kép csak névvel menthető."
+        >
+          <PilotInput
+            value={form.prizeName}
+            onChange={set("prizeName")}
+            maxLength={120}
+            aria-label="Nyeremény neve"
+          />
+        </PilotFormField>
+        <PilotFormField label="Rövid leírása">
+          <textarea
+            className="min-h-16 w-full rounded-xl border border-pilot-grey-200 px-3 py-2 text-sm"
+            value={form.prizeDescription}
+            onChange={(event) => set("prizeDescription")(event.target.value)}
+            maxLength={500}
+            aria-label="Nyeremény leírása"
+          />
+        </PilotFormField>
+        <PrizeImage
+          token={token}
+          imageId={form.prizeImageId}
+          onChange={set("prizeImageId")}
+        />
       </div>
       <PilotFormField label="A kérdés" required>
-        <PilotInput value={form.prompt} onChange={set("prompt")} />
+        <PilotInput
+          value={form.prompt}
+          onChange={set("prompt")}
+          aria-label="Kérdés szövege"
+        />
       </PilotFormField>
       {form.type === "CHOICE" ? (
         <PilotFormField
@@ -174,9 +358,16 @@ function NewQuestion({
           description={error}
         />
       ) : null}
-      <PilotButton disabled={busy} onClick={() => void save()}>
-        Kérdés mentése
-      </PilotButton>
+      <div className="flex gap-2">
+        <PilotButton disabled={busy} onClick={() => void save()}>
+          Kérdés mentése
+        </PilotButton>
+        {onCancel ? (
+          <PilotButton variant="secondary" onClick={onCancel}>
+            Mégse
+          </PilotButton>
+        ) : null}
+      </div>
     </section>
   );
 }
@@ -247,7 +438,10 @@ function Entries({
           key={entry.id}
           className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-2"
         >
-          <span className="font-medium">{entry.email}</span>
+          <span className="font-medium">
+            {entry.name ? `${entry.name} · ` : ""}
+            {entry.email}
+          </span>
           <span>{entry.answer}</span>
           <span className="inline-flex flex-wrap items-center gap-2">
             {entry.confirmedAt ? (
@@ -305,6 +499,26 @@ function Entries({
   );
 }
 
+/** A próbalevél eredménye egy mondatban: elment, vagy melyik kapcsoló, küldő vagy beállítás miatt nem. */
+export function testMailText(result: GameTestMailResult): string {
+  if (result.outcome === "SENT")
+    return "Elment. Nézd meg a postafiókot (a spamet is), és kattints a linkre: az „Ez próbalevél volt: a link működik.” szöveget kell látnod.";
+  const reason = result.reason ?? "ismeretlen ok";
+  const text =
+    reason === "mail-off"
+      ? "a fő levél-kapcsoló (TICKET_MAIL_MODE) nem „live”"
+      : reason === "path-off"
+        ? "a játék levél-kapcsolója (TICKET_MAIL_GAME) nem „live”"
+        : reason === "no-redirect"
+          ? "nincs megadva az átirányítás (TICKET_MAIL_REDIRECT_TO)"
+          : reason.startsWith("no-game-sender")
+            ? `a játéknak nincs saját levélküldője, és nem esik vissza másikra (a JATEK_SMTP_* és JATEK_MAIL_FROM beállítás hiányos${reason.slice("no-game-sender".length)})`
+            : reason === "no-JATEK_PUBLIC_URL"
+              ? "a játék oldalának címe (JATEK_PUBLIC_URL) nincs beállítva"
+              : `a küldő hibája: ${reason}`;
+  return `Nem ment el: ${text}.`;
+}
+
 /** A napi levél-plafon fölött várakozó megerősítő levelek, és a kiküldésük (acrobot, 2026-11-05). */
 function MailQueue({
   token,
@@ -316,6 +530,8 @@ function MailQueue({
   const [queue, setQueue] = useState<GameMailQueue | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [testTo, setTestTo] = useState("");
+  const [testResult, setTestResult] = useState<GameTestMailResult | null>(null);
   const load = useCallback(async () => {
     try {
       setQueue(await gameApi.mailQueue(token));
@@ -331,6 +547,18 @@ function MailQueue({
     setError(null);
     try {
       setQueue(await gameApi.sendQueued(token));
+    } catch (cause) {
+      setError(errorText(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const sendTest = async () => {
+    setBusy(true);
+    setError(null);
+    setTestResult(null);
+    try {
+      setTestResult(await gameApi.testMail(token, testTo.trim()));
     } catch (cause) {
       setError(errorText(cause));
     } finally {
@@ -368,8 +596,127 @@ function MailQueue({
           Várakozó levelek kiküldése
         </PilotButton>
       ) : null}
+      {canManage ? (
+        <div className="space-y-2" data-testid="game-test-mail">
+          <p className="text-sm font-medium">Próbalevél</p>
+          <p className="text-xs text-pilot-grey-600">
+            Egy valódi megerősítő levél a megadott címre, ugyanazon a kapun és
+            küldőn át, mint a nevezéseké. Nem hoz létre nevezést; a levél linkje
+            azt mutatja, hogy működik.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <PilotInput
+              type="email"
+              aria-label="Próbalevél címzettje"
+              placeholder="cim@pelda.hu"
+              value={testTo}
+              onChange={setTestTo}
+            />
+            <PilotButton
+              disabled={busy || !/^\S+@\S+\.\S+$/.test(testTo.trim())}
+              onClick={() => void sendTest()}
+            >
+              Próbalevél küldése
+            </PilotButton>
+          </div>
+          {testResult ? (
+            <p
+              className={`text-sm ${testResult.outcome === "SENT" ? "text-pilot-grey-800" : "text-red-700"}`}
+              data-testid="game-test-mail-result"
+              role="status"
+            >
+              {testMailText(testResult)}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       {error ? (
         <Alert variant="danger" title="Hiba történt" description={error} />
+      ) : null}
+    </section>
+  );
+}
+
+/** Mit tehet a küldő kulcsa a kiment levelekkel, egy mondatban (kártya jatek-level-torles). */
+export function mailErasureText(
+  capability: GameErasurePreview["mail"]["capability"],
+): string {
+  switch (capability.kind) {
+    case "DELETE":
+      return "lehetséges (végleges törlés)";
+    case "TRASH":
+      return "csak kukába (a Gmail 30 nap után üríti; a 12-11 után kukázott leveleknél a kukát a határidő előtt üríteni kell)";
+    case "SEND_ONLY":
+      return "nem lehetséges: a kulcs csak küldésre szól";
+    case "NOT_CONFIGURED":
+      return "nem lehetséges: nincs levélküldő kulcs";
+    case "ERROR":
+      return `nem mérhető (${capability.code})`;
+  }
+}
+
+/**
+ * AZ ADATTÖRLÉS ÁLLAPOTA (kártyák bc0ca668, jatek-level-torles; a tájékoztató: 2027-01-10): mikor törlődnek a játékosok
+ * adatai, és törölhetők-e a kiment levelek elküldött példányai. Csak olvas.
+ */
+function ErasureStatus({ token }: { token: string }) {
+  const [preview, setPreview] = useState<GameErasurePreview | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    gameApi
+      .erasure(token)
+      .then(setPreview)
+      .catch((cause: unknown) => setError(errorText(cause)));
+  }, [token]);
+  if (error)
+    return (
+      <Alert
+        variant="danger"
+        title="Az adattörlés állapota nem tölthető be"
+        description={error}
+      />
+    );
+  if (!preview) return null;
+  return (
+    <section
+      className="space-y-1 rounded-2xl border border-pilot-grey-200 bg-white px-5 py-4 text-sm"
+      data-testid="game-erasure"
+    >
+      <p>
+        Adatok törlése:{" "}
+        {preview.due ? "esedékes" : formatDateTimeHu(preview.dueAt)}
+        {preview.waitingForGrandDraw
+          ? " (a fődíj sorsolása még nem futott le)"
+          : ""}
+      </p>
+      {preview.mail.gameSender === "BREVO" ? (
+        <p data-testid="game-mail-sender">
+          A játék levelei Brevón mennek (jatek@): azok nem a ticket@
+          postafiókban vannak. Az alábbi sor csak a váltás előtt a ticket@-ről
+          kiment levelekre vonatkozik.
+        </p>
+      ) : null}
+      <p data-testid="game-mail-erasure">
+        {preview.mail.gameSender === "BREVO"
+          ? "A ticket@-ről korábban kiment levelek törlése: "
+          : "Levelek törlése: "}
+        {mailErasureText(preview.mail.capability)}
+        {preview.mail.enabled ? "" : " · a törlés kikapcsolva, csak számol"}
+        {preview.mail.tracked > 0
+          ? ` · lezárt hetek levelei törlésre várnak: ${preview.mail.tracked}`
+          : ""}
+      </p>
+      {preview.mail.lastRun ? (
+        <p
+          className="text-xs text-pilot-grey-600"
+          data-testid="game-mail-erasure-run"
+        >
+          Utolsó futás ({formatDateTimeHu(preview.mail.lastRun.at)}
+          {preview.mail.lastRun.dryRun ? ", csak számolt" : ""}): nyilvántartott{" "}
+          {preview.mail.lastRun.tracked}, régebbi {preview.mail.lastRun.legacy},
+          törölve {preview.mail.lastRun.removed}; a játék{" "}
+          {preview.mail.lastRun.sentByDays} megerősítő levelet küldött
+        </p>
       ) : null}
     </section>
   );
@@ -391,6 +738,18 @@ function Draws({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [verified, setVerified] = useState<Record<string, string>>({});
+  /**
+   * A SORSOLÁS CSAK A ZÁRÁS UTÁN (barracuda, #2279; acrobot 44326): egy hét ELSŐ sorsolása végleges a nyilvános listán, ezért a
+   * heti sorsolás a kérdés zárásáig, a karácsonyi az utolsó kérdés zárásáig nem indítható. A szerver is megtagadja (409);
+   * itt a gomb áll le, és a szöveg megmondja, mire vár.
+   */
+  const now = Date.now();
+  const picked = questions.find((q) => q.id === questionId);
+  const weeklyWaitsFor =
+    picked && new Date(picked.closesAt).getTime() > now ? picked : null;
+  const christmasWaitsFor = questions.some(
+    (q) => new Date(q.closesAt).getTime() > now,
+  );
   const load = useCallback(async () => {
     try {
       setRows(await gameApi.draws(token));
@@ -460,19 +819,30 @@ function Draws({
             </PilotSelect>
           </PilotFormField>
           <PilotButton
-            disabled={busy || !questionId}
+            disabled={busy || !questionId || weeklyWaitsFor !== null}
             onClick={() => setConfirm("WEEKLY")}
           >
             Heti sorsolás
           </PilotButton>
           <PilotButton
             variant="secondary"
-            disabled={busy}
+            disabled={busy || christmasWaitsFor}
             onClick={() => setConfirm("CHRISTMAS")}
           >
             Karácsonyi sorsolás
           </PilotButton>
         </div>
+      ) : null}
+      {canManage && (weeklyWaitsFor || christmasWaitsFor) ? (
+        <p className="text-xs text-pilot-grey-600" data-testid="game-draw-wait">
+          {weeklyWaitsFor
+            ? `A heti sorsolás a kérdés zárása után indítható (${formatDateTimeHu(weeklyWaitsFor.closesAt)}). `
+            : ""}
+          {christmasWaitsFor
+            ? "A karácsonyi sorsolás az utolsó kérdés zárása után indítható. "
+            : ""}
+          Az első sorsolás végleges: az kerül ki a nyilvános oldalra.
+        </p>
       ) : null}
       {error ? (
         <Alert variant="danger" title="Hiba történt" description={error} />
@@ -492,8 +862,10 @@ function Draws({
                     : "Karácsonyi"}
                 </span>
                 {": "}
-                {row.winnerEmail ?? "nincs jelölt"} · {row.candidates.length}{" "}
-                jelölt, {row.tickets} sorsjegy ·{" "}
+                {row.winnerEmail
+                  ? `${row.names[row.winnerEmail] ? `${row.names[row.winnerEmail]} · ` : ""}${row.winnerEmail}`
+                  : "nincs jelölt"}{" "}
+                · {row.candidates.length} jelölt, {row.tickets} sorsjegy ·{" "}
                 {formatDateTimeHu(row.createdAt)}
               </p>
               <p className="text-xs text-pilot-grey-600">
@@ -541,6 +913,7 @@ export function GameAdminPage() {
   );
   const [questions, setQuestions] = useState<GameQuestionView[] | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -592,10 +965,18 @@ export function GameAdminPage() {
                 <button
                   type="button"
                   className={`flex w-full flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-2 text-left ${q.id === selected ? "bg-pilot-grey-50" : ""}`}
-                  onClick={() => setSelected(q.id)}
+                  onClick={() => {
+                    setSelected(q.id);
+                    setEditing(false);
+                  }}
                 >
                   <span className="font-medium">{q.week}</span>
                   <span className="min-w-0 flex-1 truncate">{q.prompt}</span>
+                  {q.prizeName ? (
+                    <span className="text-xs text-pilot-grey-600">
+                      nyeremény: {q.prizeName}
+                    </span>
+                  ) : null}
                   <span className="text-xs text-pilot-grey-600">
                     {q.entryCount} beküldés, {q.confirmedCount} megerősítve,{" "}
                     {q.candidateCount} jelölt
@@ -604,6 +985,24 @@ export function GameAdminPage() {
               </li>
             ))}
           </ul>
+          {question && canManage ? (
+            editing ? (
+              <QuestionForm
+                key={question.id}
+                token={token}
+                question={question}
+                onDone={() => {
+                  setEditing(false);
+                  void load();
+                }}
+                onCancel={() => setEditing(false)}
+              />
+            ) : (
+              <PilotButton variant="secondary" onClick={() => setEditing(true)}>
+                Kérdés javítása ({question.week})
+              </PilotButton>
+            )
+          ) : null}
           {question ? (
             <Entries
               token={token}
@@ -615,11 +1014,12 @@ export function GameAdminPage() {
         </section>
       )}
       <MailQueue token={token} canManage={canManage} />
+      <ErasureStatus token={token} />
       {questions ? (
         <Draws token={token} questions={questions} canManage={canManage} />
       ) : null}
       {canManage ? (
-        <NewQuestion token={token} onCreated={() => void load()} />
+        <QuestionForm token={token} onDone={() => void load()} />
       ) : null}
     </PilotThemeRoot>
   );

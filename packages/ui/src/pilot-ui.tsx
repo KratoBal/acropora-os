@@ -1,5 +1,11 @@
 "use client";
-import type { InputHTMLAttributes, ReactNode, Ref } from "react";
+import type {
+  InputHTMLAttributes,
+  KeyboardEventHandler,
+  MouseEvent,
+  ReactNode,
+  Ref,
+} from "react";
 import { useEffect, useId, useRef, useState } from "react";
 
 import { Icon } from "./icon";
@@ -280,8 +286,13 @@ export function PilotButton({
   title,
 }: {
   children: ReactNode;
-  variant?: "primary" | "secondary" | "ghost" | "danger";
-  onClick?: () => void;
+  /** `accent`: ADDITÍV (T1.3, az Üzenetek): a beszélgetések meleg kiemelőszíne, a modul elsődleges gombjain. */
+  variant?: "primary" | "secondary" | "ghost" | "danger" | "accent";
+  /**
+   * ADDITÍV (T1.3, a leltárlista): the click event reaches the handler, as on the dusk `Button`, so a button inside a
+   * clickable table row can stop the row's own activation (`event.stopPropagation()`).
+   */
+  onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
   type?: "button" | "submit";
   disabled?: boolean;
   fullWidth?: boolean;
@@ -342,6 +353,7 @@ export function PilotButton({
     ghost:
       "bg-transparent text-pilot-grey-500 hover:bg-pilot-grey-100 hover:text-pilot-grey-900",
     danger: "bg-white text-red-600 ring-1 ring-red-200 hover:bg-red-50",
+    accent: "bg-pilot-accent-warm text-white hover:bg-pilot-accent-warm-text",
   };
   return (
     <button
@@ -582,9 +594,15 @@ export function PilotInput({
   required,
   step,
   "aria-invalid": ariaInvalid,
+  onKeyDown,
+  autoFocus,
 }: {
   value?: string;
   onChange?: (value: string) => void;
+  /** ADDITÍV (T1.3, a matricakód-mező): az Enter hozzáad és nem küld be űrlapot, ugyanaz, mint a dusk `Input`-on. */
+  onKeyDown?: KeyboardEventHandler<HTMLInputElement>;
+  /** ADDITÍV (T1.3, az új beszélgetés ablaka): nyitáskor ide kerül a fókusz, ugyanaz, mint a dusk `Input`-on. */
+  autoFocus?: boolean;
   type?: string;
   placeholder?: string;
   readOnly?: boolean;
@@ -657,6 +675,8 @@ export function PilotInput({
       step={step}
       aria-invalid={ariaInvalid || undefined}
       onChange={(event) => onChange?.(event.target.value)}
+      onKeyDown={onKeyDown}
+      autoFocus={autoFocus}
       className={`${leadingIcon ? "w-full" : classes.widthClass} rounded-md px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ${
         ariaInvalid ? "ring-red-400" : "ring-pilot-grey-200"
       } placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500 disabled:cursor-not-allowed disabled:bg-pilot-grey-50 disabled:text-pilot-grey-400 ${
@@ -739,12 +759,16 @@ export function PilotSelect({
 export function PilotCard({
   children,
   className = "",
+  "aria-label": ariaLabel,
 }: {
   children: ReactNode;
   className?: string;
+  /** ADDITÍV (T1.3, a katalógus-műveletek): a kártya neve, ugyanaz, mint a dusk `Card`-on. */
+  "aria-label"?: string;
 }) {
   return (
     <div
+      aria-label={ariaLabel}
       className={`rounded-xl bg-white ring-1 ring-pilot-grey-200 ${className}`}
     >
       {children}

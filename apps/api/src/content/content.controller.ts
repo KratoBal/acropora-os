@@ -7,6 +7,7 @@ import {
   Post,
   Put,
   Query,
+  StreamableFile,
   UploadedFile,
   UseInterceptors,
 } from "@nestjs/common";
@@ -26,6 +27,12 @@ import {
 } from "./article-image.service.js";
 import { ArticleService } from "./article.service.js";
 import { ContentService } from "./content.service.js";
+import {
+  TEACHING_EDIT_MAX_BYTES,
+  TeachingOutputEditService,
+} from "./teaching-output-edit.service.js";
+import { TeachingOutputService } from "./teaching-output.service.js";
+import { TeachingSourceService } from "./teaching-source.service.js";
 import {
   ContentCalendarQueryDto,
   ContentCommentDto,
@@ -55,7 +62,156 @@ export class ContentController {
     private readonly service: ContentService,
     private readonly articles: ArticleService,
     private readonly articleImages: ArticleImageService,
+    private readonly teachingSources: TeachingSourceService,
+    private readonly teachingOutputs: TeachingOutputService,
+    private readonly teachingEdits: TeachingOutputEditService,
   ) {}
+
+  /**
+   * A KIMENET SZERKESZTETT VÁLTOZATAI (T5.2, az „eltér a forrástól" jelzés):
+   * a kézzel szerkesztett diasor feltöltése a kimenethez, a diák szövegének
+   * eltérése a generálttól, és a szerkesztő döntése, egyszer, hogy a változás
+   * visszamegy-e a forrásba. A forrást ez nem írja.
+   */
+  @Get(":id/teaching-source/outputs/:outputId/edits")
+  @RequirePermissions(PERMISSIONS.CONTENT_VIEW)
+  teachingOutputEdits(
+    @Param("id") id: string,
+    @Param("outputId") outputId: string,
+  ) {
+    return this.teachingEdits.list(id, outputId);
+  }
+
+  @Post(":id/teaching-source/outputs/:outputId/edits")
+  @RequirePermissions(PERMISSIONS.CONTENT_MANAGE)
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: memoryStorage(),
+      limits: { fileSize: TEACHING_EDIT_MAX_BYTES, files: 1 },
+    }),
+  )
+  uploadTeachingOutputEdit(
+    @Param("id") id: string,
+    @Param("outputId") outputId: string,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    if (!file) throw new BadRequestException("A feltöltendő diasor kötelező.");
+    return this.teachingEdits.upload(id, outputId, file, user.id);
+  }
+
+  @Get(":id/teaching-source/outputs/:outputId/edits/:editId")
+  @RequirePermissions(PERMISSIONS.CONTENT_VIEW)
+  teachingOutputEdit(
+    @Param("id") id: string,
+    @Param("outputId") outputId: string,
+    @Param("editId") editId: string,
+  ) {
+    return this.teachingEdits.detail(id, outputId, editId);
+  }
+
+  @Post(":id/teaching-source/outputs/:outputId/edits/:editId/decision")
+  @RequirePermissions(PERMISSIONS.CONTENT_MANAGE)
+  decideTeachingOutputEdit(
+    @Param("id") id: string,
+    @Param("outputId") outputId: string,
+    @Param("editId") editId: string,
+    @Body() body: unknown,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.teachingEdits.decide(id, outputId, editId, body, user.id);
+  }
+
+  /**
+   * AN OKTATÓANYAG FORRÁSA (csak `TEACHING_SOURCE` csatornán, T5.2): részek,
+   * számtábla, és amit a kettő egymásról mond (hol szerepel, nyitott kérdés).
+   * Olvasás `content.view`, írás `content.manage`; a jóváhagyás a meglévő
+   * `approve-move` lépés, és nyitott kérdéssel nem megy át.
+   */
+  @Get(":id/teaching-source")
+  @RequirePermissions(PERMISSIONS.CONTENT_VIEW)
+  teachingSource(@Param("id") id: string) {
+    return this.teachingSources.get(id);
+  }
+
+  @Put(":id/teaching-source")
+  @RequirePermissions(PERMISSIONS.CONTENT_MANAGE)
+  saveTeachingSource(
+    @Param("id") id: string,
+    @Body() body: unknown,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.teachingSources.save(id, body, user.id);
+  }
+
+  /**
+   * A FORRÁS KIMENETEI (T5.2, 2b szelet): a lista az elavult jelzéssel, az
+   * előnézet bármely verzióból (nem tárolódik), a generálás csak a jóváhagyott
+   * verzióból, és a "kiment" rögzítése kimenetenként, egyszer.
+   */
+  @Get(":id/teaching-source/outputs")
+  @RequirePermissions(PERMISSIONS.CONTENT_VIEW)
+  listTeachingOutputs(@Param("id") id: string) {
+    return this.teachingOutputs.list(id);
+  }
+
+  @Get(":id/teaching-source/outputs/preview")
+  @RequirePermissions(PERMISSIONS.CONTENT_VIEW)
+  teachingOutputPreview(
+    @Param("id") id: string,
+    @Query("kind") kind: unknown,
+    @Query("version") version: unknown,
+  ) {
+    return this.teachingOutputs.preview(id, kind, version);
+  }
+
+  @Get(":id/teaching-source/outputs/:outputId/file")
+  @RequirePermissions(PERMISSIONS.CONTENT_VIEW)
+  async teachingOutputFile(
+    @Param("id") id: string,
+    @Param("outputId") outputId: string,
+  ) {
+    const { filename, type, buffer } = await this.teachingOutputs.file(
+      id,
+      outputId,
+    );
+    return new StreamableFile(buffer, {
+      type,
+      disposition: `attachment; filename="${filename}"`,
+      length: buffer.length,
+    });
+  }
+
+  @Get(":id/teaching-source/outputs/:outputId")
+  @RequirePermissions(PERMISSIONS.CONTENT_VIEW)
+  teachingOutput(@Param("id") id: string, @Param("outputId") outputId: string) {
+    return this.teachingOutputs.detail(id, outputId);
+  }
+
+  @Post(":id/teaching-source/outputs")
+  @RequirePermissions(PERMISSIONS.CONTENT_MANAGE)
+  generateTeachingOutput(
+    @Param("id") id: string,
+    @Body() body: unknown,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const kind =
+      typeof body === "object" && body !== null
+        ? (body as { kind?: unknown }).kind
+        : undefined;
+    return this.teachingOutputs.generate(id, kind, user.id);
+  }
+
+  @Post(":id/teaching-source/outputs/:outputId/sent")
+  @RequirePermissions(PERMISSIONS.CONTENT_MANAGE)
+  markTeachingOutputSent(
+    @Param("id") id: string,
+    @Param("outputId") outputId: string,
+    @Body() body: unknown,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.teachingOutputs.markSent(id, outputId, body, user.id);
+  }
 
   /**
    * A CIKK TÖRZSE (csak `ARTICLE` csatornán). Olvasás `content.view`, írás
@@ -110,6 +266,16 @@ export class ContentController {
   ) {
     if (!file) throw new BadRequestException("A feltöltendő kép kötelező.");
     return this.articleImages.upload(id, file, user.id);
+  }
+
+  /**
+   * AZ OKTATÓANYAG-FORRÁSOK LISTÁJA (T5.2, spec v2 4. pont): cím, verzió,
+   * felhasználási kör és a kimenetek állapota. Statikus út a `:id` előtt.
+   */
+  @Get("teaching-sources")
+  @RequirePermissions(PERMISSIONS.CONTENT_VIEW)
+  teachingSourceList() {
+    return this.teachingSources.list();
   }
 
   /**

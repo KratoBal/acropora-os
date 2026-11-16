@@ -109,6 +109,8 @@ function setup(
     final?: { status: string; stornoed?: boolean } | null;
     /** A sztornó foglalása UTÁN látszó végszámla (a kettő egyszerre indult). */
     finalAfterClaim?: { status: string } | null;
+    /** The original's own fields (a TIG invoice: Balázs 2026-11-11 13:22 UTC). */
+    originalOver?: Record<string, unknown>;
   } = {},
 ) {
   const state = {
@@ -140,6 +142,7 @@ function setup(
       mailDeliveries: [],
       createdAt: new Date("2026-10-01T10:00:00Z"),
       updatedAt: new Date("2026-10-01T10:00:00Z"),
+      ...options.originalOver,
     }) as unknown as BillingDocumentRow;
   const documents = {
     find: async () => original(),
@@ -329,6 +332,28 @@ describe("a sztornó szolgáltatás", () => {
       ],
       ["OS", "ISSUED", "E-STORNO-1"],
     );
+  });
+
+  /*
+    A TELJESÍTÉSI IGAZOLÁS SZÁMLÁJA (Balázs 2026-11-11 13:22 UTC: „nem tudom sztornózni”): a kiállított TIG-számla
+    saját sor, és UGYANAZ a sztornó-út viszi, ahogy a sora valójában áll (forrás a TIG, e-számla jelölés, fizetési mód
+    és vevő-pillanatkép nélkül). MI PIROSÍT: ha a TIG-sor nem sztornózható, vagy a sztornó nem e-számlaként kér.
+  */
+  it("a TIG invoice (its source the certificate, an e-invoice) is cancelled the same way, as an e-invoice", async () => {
+    const s = setup({
+      originalOver: {
+        sourceType: "COMPLETION_CERTIFICATE",
+        sourceId: "cert-1",
+        completionCertificateId: "cert-1",
+        paymentMethod: null,
+        buyerSnapshot: null,
+      },
+    });
+    await s.service.storno("doc-1", "rossz tétel", USER);
+    assert.equal(s.state.calls.length, 1);
+    assert.match(s.state.calls[0]!, /<eszamla>true<\/eszamla>/);
+    assert.match(s.state.calls[0]!, /<szamlaszam>E-1<\/szamlaszam>/);
+    assert.equal(s.state.created?.documentType, "STORNO");
   });
 
   it("elutasítva ISSUE_FAILED, és újra próbálható ugyanazzal a sorral", async () => {

@@ -46,6 +46,8 @@ export interface ReefClubSmtpConfig {
   password: string;
   from: string;
   fromName: string;
+  /** An optional Reply-To (the game's mail uses it; the ReefClub's does not set one). */
+  replyTo?: string;
 }
 
 /** Whether the SMTP sender is chosen: any `REEFCLUB_SMTP_*` name has a value. */
@@ -154,6 +156,7 @@ export class ReefClubSmtpMailSender implements MailSender {
         // The sender is the configured one. `mail.from` is ignored on purpose:
         // no caller of the public process may choose the identity it sends as.
         from: { name: this.config.fromName, address: this.config.from },
+        ...(this.config.replyTo ? { replyTo: this.config.replyTo } : {}),
         to: [...mail.to],
         ...(mail.cc ? { cc: [...mail.cc] } : {}),
         ...(mail.bcc ? { bcc: [...mail.bcc] } : {}),

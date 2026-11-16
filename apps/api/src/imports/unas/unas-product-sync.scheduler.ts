@@ -8,6 +8,10 @@ import {
 
 import { UnasAuthService } from "./unas-auth.service.js";
 import { UnasProductSyncService } from "./unas-product-sync.service.js";
+import {
+  AUTOMATIC_MAX_TO_FALSE,
+  UnasWebshopSellableReconciler,
+} from "./unas-webshop-sellable-reconcile.js";
 
 export interface UnasSyncScheduleConfig {
   enabled: boolean;
@@ -64,6 +68,7 @@ export class UnasProductSyncScheduler implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly auth: UnasAuthService,
     private readonly sync: UnasProductSyncService,
+    private readonly sellable: UnasWebshopSellableReconciler,
   ) {}
 
   onModuleInit() {
@@ -85,6 +90,7 @@ export class UnasProductSyncScheduler implements OnModuleInit, OnModuleDestroy {
     try {
       const token = await this.auth.getToken();
       await this.sync.runIncremental(token);
+      await this.reconcileSellable();
       return "APPLIED";
     } catch (error) {
       if (
@@ -100,6 +106,32 @@ export class UnasProductSyncScheduler implements OnModuleInit, OnModuleDestroy {
           : "UNAS_PRODUCT_SYNC_SCHEDULED_FAILED";
       this.logger.error(`Scheduled UNAS product sync failed: ${errorCode}`);
       return "FAILED";
+    }
+  }
+
+  /**
+   * THE STORED `webshopSellable` IS RECOMPUTED AFTER EVERY SYNC (card e1de003d; the reasons and the
+   * guards are in `unas-webshop-sellable-reconcile.ts`). It never fails the sync run: the sync itself
+   * succeeded, and a failure here is logged loudly instead of turning a good run red.
+   */
+  private async reconcileSellable() {
+    try {
+      const result = await this.sellable.run({
+        apply: true,
+        maxToFalse: AUTOMATIC_MAX_TO_FALSE,
+      });
+      if (result.mode === "held")
+        this.logger.error(
+          `webshopSellable reconcile held: ${result.heldReason}`,
+        );
+      else if (result.toTrue + result.toFalse > 0)
+        this.logger.log(
+          `webshopSellable reconciled: ${result.toTrue} to sellable, ${result.toFalse} to not sellable (${result.skippedNoBaseStatus} skipped, no base status)`,
+        );
+    } catch (error) {
+      this.logger.error(
+        `webshopSellable reconcile failed: ${error instanceof Error ? error.message.slice(0, 200) : "unknown"}`,
+      );
     }
   }
 

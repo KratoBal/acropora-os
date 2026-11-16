@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { ConflictException } from "@nestjs/common";
+import { ConflictException, NotFoundException } from "@nestjs/common";
 
 import { ArticleStepError } from "./article.repository.js";
 import { ContentService } from "./content.service.js";
@@ -20,11 +20,16 @@ function serviceWith(
     create: ContentRepository["create"];
     reviseText: ContentRepository["reviseText"];
     channelOf: ContentRepository["channelOf"];
+    claimsOf: ContentRepository["claimsOf"];
   }> = {},
 ) {
   const calls: unknown[] = [];
   const repository = {
-    moveState: (async (input: unknown) => {
+    // The gate runs where the real repository runs it: before the write (here: before the call is recorded).
+    moveState: (async (
+      input: Parameters<ContentRepository["moveState"]>[0],
+    ) => {
+      await input.gate?.(undefined as never);
       calls.push(input);
       return true;
     }) as ContentRepository["moveState"],
@@ -43,6 +48,8 @@ function serviceWith(
       return true;
     }) as ContentRepository["reviseText"],
     channelOf: (async () => "FACEBOOK_POST") as ContentRepository["channelOf"],
+    // No manufacturer claim on the item unless a test names one (T5.3).
+    claimsOf: (async () => []) as ContentRepository["claimsOf"],
     ...overrides,
   } as unknown as ContentRepository;
   return { service: new ContentService(repository), calls };
@@ -922,14 +929,81 @@ describe("the shared review queue, in the query itself", () => {
  *   3. legyen nyoma, mi valtozott.
  */
 describe("a beadott tartalom gepi javitasa", () => {
-  function tetel(allapot: string, torzs = "regi torzs") {
+  function tetel(allapot: string, torzs = "regi torzs", szerzo = "agens-1") {
     return (async () => ({
       id: "c1",
       title: "Regi cim",
       body: torzs,
       state: allapot,
+      authorId: szerzo,
     })) as unknown as ContentRepository["detail"];
   }
+
+  /*
+    CSAK A SAJAT TETEL (barracuda a #2381 jovahagyasan): a gepi javitas masik szerzo tetelet nem irhatja at. MI PIROSIT: egy ember
+    tetele atirhato egy gepi tokennel; az idegen tetel 409-et ad (az allapota szivarog) 404 helyett; az iras megtortenik, mielott
+    a szerzot ellenoriznenk; a hianyzo szerzo (authorId nelkuli tetel) atengedett.
+  */
+  it("masik szerzo tetelet NEM irja at: 404, es semmit nem ir", async () => {
+    for (const allapot of [
+      "DRAFTING",
+      "AWAITING_REVISION",
+      "AWAITING_REVIEW",
+    ]) {
+      const { service, calls } = serviceWith({
+        detail: tetel(allapot, "regi torzs", "ember-7"),
+      });
+      await assert.rejects(
+        () =>
+          service.reviseFromAgent({
+            contentId: "c1",
+            authorId: "agens-1",
+            body: "idegen atiras",
+            title: "Idegen cim",
+          }),
+        NotFoundException,
+        allapot,
+      );
+      assert.equal(calls.length, 0, `${allapot}: nothing may be written`);
+    }
+  });
+
+  it("az idegen tetel allapota nem szivarog: egy jovahagyasra varo, masik szerzoju tetel is 404, nem 409", async () => {
+    const { service } = serviceWith({
+      detail: tetel("AWAITING_APPROVAL", "regi torzs", "ember-7"),
+    });
+    await assert.rejects(
+      () =>
+        service.reviseFromAgent({
+          contentId: "c1",
+          authorId: "agens-1",
+          body: "x",
+        }),
+      NotFoundException,
+    );
+  });
+
+  it("a szerzo nelkuli tetel sem irhato at gepi tokennel", async () => {
+    const { service, calls } = serviceWith({
+      detail: (async () => ({
+        id: "c1",
+        title: "Regi cim",
+        body: "regi",
+        state: "DRAFTING",
+        authorId: null,
+      })) as unknown as ContentRepository["detail"],
+    });
+    await assert.rejects(
+      () =>
+        service.reviseFromAgent({
+          contentId: "c1",
+          authorId: "agens-1",
+          body: "x",
+        }),
+      NotFoundException,
+    );
+    assert.equal(calls.length, 0);
+  });
 
   it("atirja a torzset, es NEM hoz letre uj tetelt", async () => {
     const { service, calls } = serviceWith({
@@ -1064,5 +1138,74 @@ describe("a beadott tartalom gepi javitasa", () => {
       /legalább egy/,
     );
     assert.equal(calls.length, 0);
+  });
+});
+
+/**
+ * THE MANUFACTURER CLAIMS HOLD THE APPROVAL (T5.3): approval goes only when every claim the item
+ * stands on may go out; the other steps do not ask.
+ */
+describe("approval and the manufacturer claims", () => {
+  const claim = (mode: string, reasons: string[] = []) =>
+    ({
+      id: `claim-${mode}`,
+      claimText: "Növeli a színintenzitást.",
+      output: { mode, reasons },
+    }) as unknown as Awaited<ReturnType<ContentRepository["claimsOf"]>>[number];
+
+  const approve = (service: ContentService) =>
+    service.move({
+      id: "c1",
+      from: "AWAITING_APPROVAL",
+      to: "READY_TO_SEND",
+      actorCanApprove: true,
+      actorUserId: "approver-1",
+    });
+
+  it("refuses the approval while a claim may not go out, names it, and writes nothing", async () => {
+    const { service, calls } = serviceWith({
+      claimsOf: (async () => [
+        claim("PUBLISHABLE"),
+        claim("DRAFT_ONLY", ["UNVERIFIED"]),
+      ]) as ContentRepository["claimsOf"],
+    });
+    await assert.rejects(
+      () => approve(service),
+      (error: unknown) =>
+        error instanceof ConflictException &&
+        /claim-DRAFT_ONLY/.test(error.message) &&
+        /UNVERIFIED/.test(error.message) &&
+        !/claim-PUBLISHABLE/.test(error.message),
+    );
+    assert.equal(calls.length, 0);
+  });
+
+  it("approves when every claim may go out", async () => {
+    const { service, calls } = serviceWith({
+      claimsOf: (async () => [
+        claim("PUBLISHABLE"),
+      ]) as ContentRepository["claimsOf"],
+    });
+    await approve(service);
+    assert.equal(calls.length, 1);
+  });
+
+  it("a step that is not the approval does not ask the claims", async () => {
+    let asked = 0;
+    const { service, calls } = serviceWith({
+      claimsOf: (async () => {
+        asked += 1;
+        return [claim("BLOCKED", ["DISPUTED"])];
+      }) as ContentRepository["claimsOf"],
+    });
+    await service.move({
+      id: "c1",
+      from: "DRAFTING",
+      to: "AWAITING_REVIEW",
+      actorCanApprove: false,
+      actorUserId: "author-1",
+    });
+    assert.equal(asked, 0);
+    assert.equal(calls.length, 1);
   });
 });

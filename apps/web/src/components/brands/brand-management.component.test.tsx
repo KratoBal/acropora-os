@@ -161,8 +161,10 @@ describe("Brand management UI", () => {
         }),
       ),
     );
-    expect(router.push).toHaveBeenCalledWith(
-      expect.stringContaining("brandCreated=b1"),
+    await waitFor(() =>
+      expect(router.push).toHaveBeenCalledWith(
+        expect.stringContaining("brandCreated=b1"),
+      ),
     );
   });
   /*

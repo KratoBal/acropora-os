@@ -231,6 +231,16 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
   },
   {
     /**
+     * AZ ÜZEMELTETÉSI NAPLÓ HAVI KIMUTATÁSA (task os-uzemeltetesi-naplo, S4b): a bejegyzések olvasása és a PDF a nézet jogán
+     * (`operations-log.view`: a szerelő és a vezetők). A rögzítés a telefon dolga (`operations-log.record`), a sablonok a
+     * Beállításokban állnak (`operations-log.templates.manage`).
+     */
+    id: "operations-log",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.OPERATIONS_LOG_VIEW),
+  },
+  {
+    /**
      * MEGRENDELÉSEK (KARBANTARTÁSI MEGRENDELŐLAPOK), A PARTNER PORTÁLON --
      * acrobot jóváhagyása, msg_id 23868, 2026-09-25 22:17 UTC, Balázs
      * sorrendjének (emlék 1840) 5. része.
@@ -247,6 +257,16 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     id: "maintenance-orders",
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.SERVICE_VIEW),
+  },
+  {
+    /**
+     * AZ ÜZEMELTETÉSI NAPLÓ A PARTNER PORTÁLON (task os-uzemeltetesi-naplo, S5): a partner-fiók a SAJÁT helyszíneinek havi
+     * kimutatását olvassa. Külön jog (`operations-log.partner.view`), nem a belső nézeté: a belső nézet kollégák nevét és belső
+     * megjegyzést is mutat. A látható helyszíneket a szerver a hívó kiosztott helyszínei szerint szűri, nem ez a bejegyzés.
+     */
+    id: "operations-log-partner",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.OPERATIONS_LOG_PARTNER_VIEW),
   },
   {
     /**
@@ -398,6 +418,15 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.QUOTES_VIEW),
     feature: "quotes",
+  },
+  {
+    /**
+     * BÉRLÉS (task eszkozberles, S2; Balázs, 2026-11-06): the rental desk under Értékesítés. The same right as its endpoints'
+     * reads (`rentals.view`); recording asks for `rentals.manage` on the server. No feature switch: Balázs asked for it now.
+     */
+    id: "rentals",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.RENTALS_VIEW),
   },
   {
     /**
@@ -598,6 +627,12 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     visibility: permission(PERMISSIONS.USERS_MANAGE),
   },
   {
+    /** THE ATTENDANCE SHEET (os-jelenleti-iv, S2b): its own right, so it works without `users.manage`. */
+    id: "attendance",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.ATTENDANCE_MANAGE),
+  },
+  {
     /**
      * MATRICAKODOK KIADASA ES NYOMTATASA.
      *
@@ -652,6 +687,15 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     id: "asset-categories",
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.SETTINGS_MANAGE),
+  },
+  {
+    /**
+     * AZ ÜZEMELTETÉSI NAPLÓ SABLONJAI (task os-uzemeltetesi-naplo, S1b). A menüpont és a végpont ugyanazt a jogot kapja
+     * (`operations-log.templates.manage`): a menedzser is kezeli (nincs `settings.manage`-je), a szerelő nem látja.
+     */
+    id: "operations-log-templates",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.OPERATIONS_LOG_TEMPLATES_MANAGE),
   },
   {
     /**
@@ -723,6 +767,12 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
      * The same right as its endpoints (`settings.manage`), so the menu and the calls cannot drift apart.
      */
     id: "rental-equipment",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.SETTINGS_MANAGE),
+  },
+  {
+    /** THE RENTAL CONTRACT TEXT (task eszkozberles, S3): the same right as its endpoints (`settings.manage`). */
+    id: "rental-contract",
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.SETTINGS_MANAGE),
   },

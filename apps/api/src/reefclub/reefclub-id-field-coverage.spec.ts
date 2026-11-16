@@ -43,6 +43,10 @@ const KNOWN: Record<string, string> = {
     "5.2/1: az akvárium-útvonalak idegen azonosítóval, bájtra a nem létező 404-e",
   "param:occasionId": "5.2/1 és 5.2/2: alkalom-azonosító idegen szülő alatt",
   "param:recId": "5.2/1: az ajánlás-azonosító idegen akváriumon",
+  "param:productId":
+    "5.2/1: a kifogyási emlékeztető kikapcsolása idegen vagy nem létező termékre, bájtra a nem létező 404-e (reefclub-akvarium.integration.spec)",
+  "body:aquariumId":
+    "5.2/10: a kifogyási emlékeztető bekapcsolása idegen akvárium-azonosítóval, bájtra a nem létező 404-e, és semmi nem íródik (reefclub-akvarium.integration.spec)",
   // body fields that are not another account's row
   "body:clientOperationId":
     "a hívó saját ismétlés-kulcsa; a visszajátszás az engedélyezett akvárium ALATT keres (reefclub-aquariums.service occasionByOperation, reefclub-doses.service)",

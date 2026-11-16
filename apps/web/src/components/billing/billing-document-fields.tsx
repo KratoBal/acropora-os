@@ -48,7 +48,7 @@ export function BillingDocumentFields({
   return (
     <PilotSection
       title={`${capabilities.label} adatai`}
-      subtitle="A kiállítás dátuma automatikusan a tényleges kiállítás napja."
+      subtitle="A számla keltét a kiállításkor, a megerősítő ablakban adod meg; alapból a mai nap."
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <PilotFormField label="Teljesítés dátuma">

@@ -101,6 +101,9 @@ const NUMBER_LABELS = [
   "rechnungsnummer",
   "rechnung nr.",
   "rechnung nr",
+  // a 3DJake / niceshops rövidítése (2026-11-12): „Rech.-Nr. | R49010000026240667”
+  "rech.-nr.",
+  "rech. nr.",
   "numéro de facture",
   "facture n°",
 ];
@@ -111,6 +114,15 @@ const NUMBER_LABELS = [
  * Ez az alak ezért nem számlaszám.
  */
 const BANK_ACCOUNT = /^\d{8}-\d{8}(-\d{8})?$/;
+
+/**
+ * UGYANEZ CSOPORTOKBA TÖRDELVE (Niceshops / 3DJake, 2026-11-12, mérve a két PDF-en a kód saját olvasójával): a lábléc
+ * „Számlaszám: 1200 1008 0147 2511 0010 0004” alakban írja a 24 jegyű bankszámlát, és a „számlaszám” címke az első
+ * négyest, az „1200”-at adta számlaszámnak; a két külön számla így egy dokumentummá vonódott össze. Négyes csoportok
+ * (16 vagy 24 jegy) vagy nyolcasok (16 vagy 24 jegy), szóközzel: egy számla száma így nem néz ki.
+ */
+const GROUPED_BANK_ACCOUNT =
+  /^(?:\d{4}(?:[ \u00a0]\d{4}){3}(?:(?:[ \u00a0]\d{4}){2})?|\d{8}[ \u00a0]\d{8}(?:[ \u00a0]\d{8})?)$/;
 
 /**
  * IBAN: országkód, két ellenőrző számjegy, legalább 11 további jel (a
@@ -237,8 +249,9 @@ function cellValue(text: string): string | null {
   const match = NUMBER_TOKEN.exec(text);
   if (!match) return null;
   const after = text.slice(match[0].length);
-  const cell = `${match[1]}${after.split("|")[0]}`.replace(/\s+/g, "");
-  if (BANK_ACCOUNT.test(cell)) return null;
+  const raw = `${match[1]}${after.split("|")[0]}`.trim();
+  const cell = raw.replace(/\s+/g, "");
+  if (BANK_ACCOUNT.test(cell) || GROUPED_BANK_ACCOUNT.test(raw)) return null;
   // üres: szóköz vagy vezérlőjel (a Stripe-PDF kötőjele NUL-ként jön át)
   if (/^[^|]*\|[\s\u0000-\u001f]*\|/.test(after)) return null;
   return usable(match[1]);
@@ -773,6 +786,16 @@ function hintWords(hints: KnownNumberHints | undefined): Set<string> {
  * részlete, mert itt ezernyi számot vetünk össze, nem egy szállítóét. Legalább
  * nyolc jel, benne számjegy, és a szöveg dátum-alakú szavai nem számítanak. Csak egyetlen találat számít; két különböző
  * ismert szám egy szövegben (például egy hivatkozott korábbi számla) nem dönt.
+ *
+ * A HIVATKOZOTT SZÁM NEM A DOKUMENTUM SAJÁT SZÁMA (niceshops második dokumentuma, task os-hianyzo-szamlak-unpaid, 2026-11-12):
+ * egy jóváírás, helyesbítés vagy egy „Bezug auf Rechnung …” sor a KORÁBBI, már ismert számlát nevezi meg, és ha a dokumentum saját
+ * száma nem ismert, ez az egy ismert szám maradt a szövegben: az olvasat azt vette volna sajátjának. Egy ismert szám ezért csak
+ * akkor lehet a saját szám, ha legalább egyszer NEM hivatkozási környezetben áll (`REFERENCE_MARKERS`: ugyanabban a sorban, vagy
+ * a fölötte álló, kettősponttal végződő címke-sorban; a saját szám címkéje mellett a jel a dokumentum fajtáját mondja, nem hivatkozást,
+ * kivéve az ERŐS hivatkozást: „eredeti számla”, „Bezug auf”, „zu Rechnung”, „helyesbített”). A KÉTÉRTELMŰSÉG: két különböző ismert szám nem
+ * dönt, DE egy csak erős hivatkozásban álló szám nem számít bele (acrobot 48666): egy helyesbítő számla az eredetit mindig
+ * megnevezi, és az is ismert. A gyenge jel („Hivatkozás:”) továbbra is kétértelművé tesz. A biztonságos irány a kimaradás: egy meg
+ * nem kötött PDF egy embernél áll meg, egy rosszul kötött egy másik számla adatával megy tovább.
  */
 export function knownNumberInText(
   lines: readonly string[],
@@ -782,16 +805,34 @@ export function knownNumberInText(
   const ours = ACROPORA_COMPANY.taxNumberBase;
   const named = hintWords(hints);
   // a dátum nem szám: egy 8 jegyű számlaszám a kelte számjegyeivel is egyezhet
-  const words = lines.flatMap((line) =>
+  const words = lines.flatMap((line, index) =>
     line
       .split(/[\s|]+/)
       .filter((word) => !DATE_SHAPE.test(word.replace(/\.$/, "")))
       .map(compactNumber)
-      .filter(Boolean),
+      .filter(Boolean)
+      .map((word) => ({ word, line: index })),
   );
-  const present = new Set(words);
-  for (let i = 0; i + 1 < words.length; i++)
-    present.add(`${words[i]}${words[i + 1]}`);
+  // `present`: ami a kétértelműségbe számít: minden előfordulás, KIVÉVE ami csak ERŐS hivatkozásban áll (egy helyesbítő számla
+  // „eredeti számla száma” sora nem teszi kétértelművé a saját számot, acrobot 48666); a gyenge jel („Hivatkozás:”) továbbra is számít.
+  // `own`: ami legalább egyszer NEM hivatkozási sorban áll, csak ilyen lehet a dokumentum saját száma
+  const present = new Set<string>();
+  const own = new Set<string>();
+  const add = (compact: string, ...lineIndexes: number[]) => {
+    if (!lineIndexes.every((index) => strongReferenceLine(lines, index)))
+      present.add(compact);
+    if (!lineIndexes.every((index) => referenceLine(lines, index)))
+      own.add(compact);
+  };
+  for (let i = 0; i < words.length; i++) {
+    add(words[i]!.word, words[i]!.line);
+    if (i + 1 < words.length)
+      add(
+        `${words[i]!.word}${words[i + 1]!.word}`,
+        words[i]!.line,
+        words[i + 1]!.line,
+      );
+  }
   const hits = new Map<string, KnownInvoiceNumber>();
   for (const candidate of known) {
     const compact = compactNumber(candidate.number);
@@ -811,7 +852,107 @@ export function knownNumberInText(
     else if (!seen) hits.set(compact, candidate);
   }
   const found = [...hits.values()];
-  return found.length === 1 && found[0]!.number ? found[0]! : null;
+  return found.length === 1 &&
+    found[0]!.number &&
+    own.has(compactNumber(found[0]!.number))
+    ? found[0]!
+    : null;
+}
+
+/**
+ * A HIVATKOZÁS JELEI (kisbetűs részszövegként, nem `\b`-vel: a JS `\b` csak ASCII, és az ékezetes szó szélén hibázik). Német,
+ * magyar és angol, a jóváírás, a helyesbítés, a sztornó és a „vonatkozó számla” alakjai. Egy sor hivatkozási, ha EGY jelet hord.
+ */
+const REFERENCE_MARKERS = [
+  "bezug",
+  "referenz",
+  "zu rechnung",
+  "zur rechnung",
+  "gutschrift",
+  "storno",
+  "stornierung",
+  "rechnungskorrektur",
+  "korrektur",
+  "hivatkoz",
+  "helyesbít",
+  "helyesbit",
+  "sztornó",
+  "sztorno",
+  "jóváír",
+  "jovair",
+  "korrekció",
+  "korrekcio",
+  "eredeti számla",
+  "eredeti szamla",
+  "credit note",
+  "original invoice",
+  "related invoice",
+  "corrected invoice",
+  "with reference to",
+];
+
+/**
+ * A SAJÁT SZÁM CÍMKÉJE (acrobot 48666, barracuda megjegyzése a #2458-on): egy helyesbítő számla vagy egy jóváírás SAJÁT száma
+ * gyakran a címsorában áll („Helyesbítő számla sorszáma: …”, „Gutschrift Nr. …”). A jel ott a DOKUMENTUM FAJTÁJÁT mondja, nem
+ * hivatkozást; a címke mellett ezért a sor nem hivatkozási.
+ */
+const OWN_NUMBER_LABELS = [
+  "sorszám",
+  "sorszam",
+  "számlaszám",
+  "szamlaszam",
+  "nr.",
+  "nr:",
+  "nummer",
+  "invoice number",
+  "invoice no",
+  "credit note number",
+  "credit note no",
+];
+
+/**
+ * AZ ERŐS HIVATKOZÁS: a címke mellett is hivatkozás marad („Az eredeti számla száma: …”, „Bezug auf Rechnung Nr. …”, „zu Rechnung
+ * Nr. …”, „a helyesbített számla sorszáma: …”): ezek egy MÁSIK számla számát címkézik.
+ */
+const STRONG_REFERENCE_MARKERS = [
+  // NOT the bare "eredeti": a Hungarian header says "Eredeti példány" on the document's OWN number line (barracuda, #2460)
+  "eredeti számla",
+  "eredeti szamla",
+  // NOT the bare "bezug": "Bezugsquelle", "Bezugsnummer" are not references
+  "bezug auf",
+  "bezugnehmend",
+  "in bezug",
+  "zu rechnung",
+  "zur rechnung",
+  "helyesbített",
+  "helyesbitett",
+  "original invoice",
+  "related invoice",
+  "corrected invoice",
+  "with reference to",
+];
+
+const lowered = (line: string) => line.toLocaleLowerCase("hu-HU");
+const hasAny = (line: string, markers: readonly string[]) =>
+  markers.some((marker) => lowered(line).includes(marker));
+
+/** Egy sor hivatkozási: erős hivatkozás áll benne, VAGY hivatkozás-jel a saját szám címkéje nélkül. */
+const isReferenceText = (line: string): boolean =>
+  hasAny(line, STRONG_REFERENCE_MARKERS) ||
+  (hasAny(line, REFERENCE_MARKERS) && !hasAny(line, OWN_NUMBER_LABELS));
+
+/** A sor hivatkozási: maga az, vagy a fölötte álló, kettősponttal végződő címke-sor az („Bezug auf Rechnung:”). */
+function referenceLine(lines: readonly string[], index: number): boolean {
+  if (isReferenceText(lines[index] ?? "")) return true;
+  const above = (lines[index - 1] ?? "").trim();
+  return above.endsWith(":") && isReferenceText(above);
+}
+
+/** Ugyanez csak az ERŐS hivatkozásra: egy ilyen sor száma egy másik számláé, és nem teszi kétértelművé a dokumentum saját számát. */
+function strongReferenceLine(lines: readonly string[], index: number): boolean {
+  if (hasAny(lines[index] ?? "", STRONG_REFERENCE_MARKERS)) return true;
+  const above = (lines[index - 1] ?? "").trim();
+  return above.endsWith(":") && hasAny(above, STRONG_REFERENCE_MARKERS);
 }
 
 /**
@@ -936,6 +1077,18 @@ export function largestMoney(
 */
 const TOTAL_LABEL =
   /(v[ée]g[öo]sszeg|fizetend[őo]|brutt[óo]\s+[öo]sszesen|[öo]sszesen\s+fizetend[őo]|sz[áa]mla\s+[öo]sszege|total\s+(amount|due|to\s+pay)|amount\s+due|grand\s+total|invoice\s+total|gesamtbetrag|rechnungsbetrag|endbetrag|zu\s+zahlen|totale\s+(fattura|da\s+pagare)|montant\s+total)/iu;
+/*
+  A CSUPASZ „TOTAL” A SOR ELEJÉN (Hetzner, kártya f7ece26b; mérve a 2026-08-05 és 2026-09-05 számlán): az összesítő sor
+  „Total | € nettó | € ÁFA | € bruttó”, és a sor utolsó értéke a bruttó. Csak a sor elején, és csak ha utána elválasztó,
+  pénznem, szám vagy semmi áll: a „Total (excl. VAT)”, a „Total VAT” és a „Total net” így nem címke.
+
+  CSAK TARTALÉK, HA NINCS MÁS CÍMKE (murena mérése, #2486): egy „Total exc. VAT / Total VAT / Total” táblázatú kiállító
+  szövegrétege több „Total | <összeg>” sort ad (a nettót, az ÁFA-t és a bruttót külön), és ezek a már jól olvasott
+  címkés bruttó mellé eltérő értékeket tettek: a döntetlen két helyes bruttót ürített ki. Ezért a csupasz „Total”
+  sorokat csak akkor nézzük, ha a fenti címkék közül egy sem adott értéket.
+*/
+const BARE_TOTAL_LABEL =
+  /^\s*total(?=\s*(?:[|:€$£\d]|(?:HUF|EUR|USD|GBP|Ft)(?!\p{L})|$))/iu;
 const SIGNED_AMOUNT =
   /(?<![\d.,])([-\u2212]\s?)?(\d{1,3}(?:[ \u00a0.,]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)(?!\d)/gu;
 // a kód nem lehet egy szó része (az „EUROPA” nem euró): előtte, utána nem állhat betű
@@ -959,14 +1112,48 @@ export function onlyCurrency(lines: readonly string[]): string | null {
   return found.size === 1 ? [...found][0]! : null;
 }
 
-/** A címke utáni összeg (vagy a következő soré), előjellel; a sor utolsó összege. */
+/**
+ * A CÍMKE EGYEDÜL ÁLL-E A SORÁBAN, vagyis a következő sor hozhatja-e az értékét. NEM, ha a címke után egy MONDAT áll
+ * (niceshops R49010000026240667, acrobot 49361): „A számla összege előreutalással ki lett fizetve.” után a következő
+ * sor a cím volt („Saaz 99, 8341 Paldau”), az a második, eltérő címkés érték lett, és a valódi végösszeg
+ * (338 018 Ft) a döntetlen miatt elveszett.
+ *
+ * A MONDAT ISMÉRVE A MONDAT, NEM A SZÓ HOSSZA (barracuda, #2484): egy táblázat fejléce is hordhat hosszú szót a
+ * címke után („Fizetendő végösszeg”, „Rechnungsbetrag brutto”, „Gesamtbetrag in Euro”), és ott az érték a következő
+ * sorban áll. Mondat az, ami kisbetűs, legalább négybetűs szóval és ponttal zárul („fizetve.”; a „USt.” rövidítés
+ * nem), vagy legalább három négybetűs szót visz. A zárójeles rész nem számít („Végösszeg (bruttó)”), és a
+ * kettősponttal záruló rész mindig címke („inkl. USt.:”).
+ */
+function labelStandsAlone(rest: string): boolean {
+  if (/:\s*\|?\s*$/u.test(rest)) return true;
+  const outside = rest.replace(/\([^)]*\)/gu, " ");
+  const sentenceEnd = /\p{Ll}{4,}\.\s*\|?\s*$/u.test(outside);
+  const words = outside.match(/\p{L}{4,}/gu)?.length ?? 0;
+  return !sentenceEnd && words < 3;
+}
+
+/** A címke utáni összeg (vagy a következő soré, ha a címke egyedül áll), előjellel; a sor utolsó összege. */
 export function labelledTotal(
   lines: readonly string[],
 ): { gross: string; currency: string } | null {
+  const labelled = labelHits(lines, TOTAL_LABEL);
+  const hits = labelled.length ? labelled : labelHits(lines, BARE_TOTAL_LABEL);
+  const distinct = [...new Set(hits.map((h) => h.value))];
+  if (distinct.length !== 1) return null;
+  const currency =
+    hits.find((h) => h.currency)?.currency ?? onlyCurrency(lines);
+  return currency ? { gross: String(distinct[0]), currency } : null;
+}
+
+/** Egy címke-fajta találatai: a címke utáni (vagy, ha a címke egyedül áll, a következő sor) utolsó összege. */
+function labelHits(
+  lines: readonly string[],
+  labelRule: RegExp,
+): { value: number; currency: string | null }[] {
   const hits: { value: number; currency: string | null }[] = [];
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!.normalize("NFC");
-    const label = TOTAL_LABEL.exec(line);
+    const label = labelRule.exec(line);
     if (!label) continue;
     const scan = (text: string) =>
       [...text.matchAll(SIGNED_AMOUNT)]
@@ -974,7 +1161,11 @@ export function labelledTotal(
         .filter((v) => Number.isFinite(v) && v !== 0);
     let place = line.slice(label.index + label[0].length);
     let values = scan(place);
-    if (values.length === 0 && i + 1 < lines.length) {
+    if (
+      values.length === 0 &&
+      i + 1 < lines.length &&
+      labelStandsAlone(place)
+    ) {
       place = lines[i + 1]!;
       values = scan(place);
     }
@@ -984,11 +1175,7 @@ export function labelledTotal(
       currency: currencyIn(place) ?? currencyIn(line),
     });
   }
-  const distinct = [...new Set(hits.map((h) => h.value))];
-  if (distinct.length !== 1) return null;
-  const currency =
-    hits.find((h) => h.currency)?.currency ?? onlyCurrency(lines);
-  return currency ? { gross: String(distinct[0]), currency } : null;
+  return hits;
 }
 
 /**
@@ -1061,9 +1248,109 @@ export function cardPaymentMatch(
       });
   }
   if (matches.length === 1) return matches[0]!;
-  return invoiceDate
-    ? cardPaymentSet(text, debits, partnerOf, invoiceDate)
-    : null;
+  /*
+    AZ ISMÉTLŐDŐ, AZONOS ÖSSZEGŰ ELŐFIZETÉS (acrobot 49566, TypeSafe AI havi 28,05 EUR): a partner-szó és az összeg
+    minden hónap fizetésére illik, tehát több találat van, és eddig egyik sem kötött. A számla napjához (vagy a levél
+    érkezéséhez) legfeljebb `NEAREST_PAYMENT_DAYS` napra LEGKÖZELEBBI fizetés köt, de csak ha az összeg a számla
+    végösszege, és ha egyértelmű: két egyformán közeli fizetés közül nem választunk.
+  */
+  if (matches.length > 1 && invoiceDate) {
+    // csak a számla VÉGÖSSZEGÉRE (a legnagyobb pénznemes összeg): egy havidíj-sor vagy a legnagyobb tétel több hónap
+    // fizetésére is illik, de az nem a számla összege (Kia július, Parkl augusztus)
+    const total = largestMoney(text);
+    const onTotal = total
+      ? matches.filter(
+          (m) =>
+            Math.round(Number(m.amount) * 100) === total.cents &&
+            m.currency === total.currency,
+        )
+      : [];
+    // és csak ha MINDEN találat a végösszegre szól (azonos havi díj): ha más összegű is van, a halmaz-út dönt, mint eddig.
+    // Ha mind a végösszegre szól, a halmaz-út sem dönthet jobban: egy elemű halmazként a SZOMSZÉD hónap fizetését adná
+    // (barracuda, #2494: hiányzó júniusi fizetés mellett a júliusi a június 1-jei számlát is kötné), ezért ott a
+    // legközelebbi-szabály dönt egyedül, és ha az nem talál, nincs kötés.
+    if (onTotal.length === matches.length)
+      return nearestPayment(onTotal, debits, invoiceDate);
+  }
+  if (!invoiceDate) return null;
+  return (
+    cardPaymentSet(text, debits, partnerOf, invoiceDate) ??
+    foreignCurrencyPayment(text, debits, partnerOf, invoiceDate)
+  );
+}
+
+/**
+ * MÁS DEVIZÁJÚ SZÁMLA, MÁS DEVIZÁJÚ FIZETÉS (acrobot 49581, TypeSafe AI): a Stripe-számla USD-ben szól (31,75), a
+ * kártya EUR-ban terhel (28,05EUR, forintra váltva), tehát az összeg egyik devizában sem egyezik, és árfolyam nincs a
+ * kézben. Utolsó út, ha az összeg-utak semmit nem adtak: a partner szava a szövegben, a fizetés legfeljebb
+ * `NEAREST_PAYMENT_DAYS` napra a számla napjától, a fizetés eredeti devizája és a forint is más, mint a számláé, és a
+ * két összeg aránya józan (fele és kétszerese között: egy 300 dolláros számla nem egy 28 eurós fizetésé). Csak ha
+ * EGYETLEN ilyen fizetés van.
+ */
+function foreignCurrencyPayment(
+  text: string,
+  debits: readonly CardDebit[],
+  partnerOf: (debit: CardDebit) => string | null,
+  invoiceDate: string,
+): CardPaymentMatch | null {
+  const total = largestMoney(text);
+  if (!total) return null;
+  const day = Date.parse(`${invoiceDate}T00:00:00Z`);
+  const invoiceAmount = total.cents / 100;
+  const fits = debits.filter((debit) => {
+    if (!debit.original || !partnerOf(debit)) return false;
+    if (
+      debit.original.currency === total.currency ||
+      debit.currency === total.currency
+    )
+      return false;
+    const distance = Math.abs(
+      (Date.parse(`${debit.bookingDate}T00:00:00Z`) - day) / DAY_MS,
+    );
+    if (distance > NEAREST_PAYMENT_DAYS) return false;
+    const ratio = invoiceAmount / Number(debit.original.amount);
+    return ratio >= FOREIGN_RATIO.min && ratio <= FOREIGN_RATIO.max;
+  });
+  if (fits.length !== 1) return null;
+  return {
+    amount: invoiceAmount.toFixed(2),
+    currency: total.currency,
+    partner: fits[0]!.counterpartyName,
+    debitIds: [fits[0]!.id],
+  };
+}
+
+/** A más devizájú számla és a fizetés eredeti összegének józan aránya (a fő devizák között jóval belül). */
+const FOREIGN_RATIO = { min: 0.5, max: 2 };
+
+/**
+ * Az ismétlődő előfizetés számlája és a terhelése között legfeljebb ennyi nap lehet: a Stripe-számla a terhelés
+ * napján kel, a levél aznap vagy másnap érkezik (TypeSafe: 09-28 a levél, 09-29 a terhelés).
+ */
+const NEAREST_PAYMENT_DAYS = 3;
+
+/** A számla napjához legfeljebb `NEAREST_PAYMENT_DAYS` napra, egyértelműen legközelebbi egyfizetéses találat, vagy `null`. */
+function nearestPayment(
+  matches: readonly CardPaymentMatch[],
+  debits: readonly CardDebit[],
+  invoiceDate: string,
+): CardPaymentMatch | null {
+  const day = Date.parse(`${invoiceDate}T00:00:00Z`);
+  const ranked = matches
+    .map((match) => {
+      const debit = debits.find((d) => d.id === match.debitIds[0])!;
+      const offset =
+        (Date.parse(`${debit.bookingDate}T00:00:00Z`) - day) / DAY_MS;
+      return { match, offset, distance: Math.abs(offset) };
+    })
+    // SZŰK TÁVOLSÁG, nem a gyűjtő teljes ablaka (barracuda, #2494): egy havi előfizetésnél az ablakban a SZOMSZÉD
+    // hónap fizetése is benne van, és egy hiányzó havi fizetés mellett a következő hónapé két számlát kötne
+    .filter((r) => r.distance <= NEAREST_PAYMENT_DAYS)
+    .sort((a, b) => a.distance - b.distance);
+  if (ranked.length === 0) return null;
+  if (ranked.length > 1 && ranked[1]!.distance === ranked[0]!.distance)
+    return null;
+  return ranked[0]!.match;
 }
 
 /**

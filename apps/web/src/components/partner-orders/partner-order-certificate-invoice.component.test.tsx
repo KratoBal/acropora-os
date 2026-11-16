@@ -1,9 +1,16 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const invoices = vi.hoisted(() => ({
   byCertificate: vi.fn(),
   draft: vi.fn(),
+  issueSummary: vi.fn(),
   issue: vi.fn(),
   downloadPdf: vi.fn(),
 }));
@@ -152,5 +159,61 @@ describe("PartnerOrderCertificateInvoice", () => {
       screen.getByRole("button", { name: "Számla letöltése" }),
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Számlázás" })).toBeNull();
+  });
+
+  it("a kiállítás a megerősítő ablakon át megy, bejelölt küldéssel a vevő címére (kártya 7ba97e0d, S3)", async () => {
+    invoices.byCertificate.mockResolvedValue(draftSummary);
+    invoices.issueSummary.mockResolvedValue({
+      buyerName: "Kitalált Kft.",
+      buyerAddress: "1011 Budapest, Fő utca 1.",
+      buyerTaxNumber: "12345678-2-42",
+      buyerEuTaxNumber: null,
+      buyerEmail: "szamla@kitalalt.example",
+      issueDate: "2026-11-11",
+      fulfillmentDate: "2026-11-04",
+      dueDate: "2026-11-19",
+      paymentMethod: "Átutalás",
+      showsPaymentFields: true,
+      dueDateFollowsIssueDate: false,
+      fingerprint: "f".repeat(64),
+    });
+    invoices.issue.mockResolvedValue({
+      invoice: {
+        ...draftSummary,
+        status: "ISSUED",
+        invoiceNumber: "ACRS-2026-9",
+      },
+      mail: { to: "szamla@kitalalt.example", sent: true },
+    });
+    render(
+      <PartnerOrderCertificateInvoice
+        certificateId="cert-1"
+        certificateNumber="TI-2026-008"
+        signed
+      />,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Kiállítás" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: /^Kiállítod a számlát/,
+    });
+    await within(dialog).findByText("Kitalált Kft.");
+    fireEvent.click(within(dialog).getByLabelText("Elküldöm e-mailben"));
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Számla kiállítása" }),
+    );
+
+    await waitFor(() =>
+      expect(invoices.issue).toHaveBeenCalledWith("token-1", "inv-1", {
+        issueDate: "2026-11-11",
+        fulfillmentDate: "2026-11-04",
+        dueDate: "2026-11-19",
+        fingerprint: "f".repeat(64),
+        send: true,
+      }),
+    );
+    expect(await screen.findByText(/ACRS-2026-9/)).toBeInTheDocument();
+    expect(screen.getByTestId("invoice-mail").textContent).toBe(
+      "A számla elment: szamla@kitalalt.example.",
+    );
   });
 });

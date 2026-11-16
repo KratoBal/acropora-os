@@ -3,11 +3,15 @@ import { Prisma } from "@acropora/database";
 import type { SimplePaySettlementLineInput } from "./simplepay-paid-marks.js";
 
 /**
- * A REFUND THAT ARRIVED AFTER THE MARK WAS WRITTEN (acrobot 25997). A mark is
- * written only when the order had no REFUND line, so ANY refund on a marked
- * order is news: the weekly report came after the write. It is REPORTED, never
- * written back: whether the answer is a negative payment, a corrective invoice
- * or a cancellation is Balázs's call, not ours.
+ * A REFUND THAT ARRIVED AFTER THE MARK WAS WRITTEN (acrobot 25997). It is
+ * REPORTED, never written back: whether the answer is a negative payment, a
+ * corrective invoice or a cancellation is Balázs's call, not ours.
+ *
+ * Since a partial refund is marked too (c03e9896: the invoice of the reduced
+ * sum with what stayed paid, or the full invoice and its corrective each with
+ * its own money), a refund on a marked order is news only when the order's
+ * written marks, signed, do not add up to the payments less the refunds. A
+ * corrective's (negative) mark is the refund itself, never a row here.
  */
 export interface WrittenSimplePayMark {
   readonly invoiceNumber: string;
@@ -34,7 +38,16 @@ export function refundsAfterMarks(
   linesByOrder: ReadonlyMap<string, readonly SimplePaySettlementLineInput[]>,
 ): RefundAfterMark[] {
   const out: RefundAfterMark[] = [];
+  const markedOn = new Map<string, Prisma.Decimal>();
+  for (const mark of marks)
+    markedOn.set(
+      mark.orderKey,
+      (markedOn.get(mark.orderKey) ?? new Prisma.Decimal(0)).plus(
+        new Prisma.Decimal(mark.amount),
+      ),
+    );
   for (const mark of marks) {
+    if (new Prisma.Decimal(mark.amount).isNegative()) continue;
     const lines = linesByOrder.get(mark.orderKey) ?? [];
     const refunds = lines.filter((l) => l.transactionStatus === "REFUND");
     if (refunds.length === 0) continue;
@@ -44,6 +57,9 @@ export function refundsAfterMarks(
     const completed = abs(
       lines.filter((l) => l.transactionStatus === "COMPLETED"),
     );
+    // the marks already show the refund: the reduced invoice, or the invoice and its corrective
+    if (markedOn.get(mark.orderKey)!.equals(completed.minus(refunded)))
+      continue;
     out.push({
       invoiceNumber: mark.invoiceNumber,
       orderKey: mark.orderKey,

@@ -130,6 +130,11 @@ const LEKERDEZESEK: Record<DocumentOwner, () => Promise<SorOsszegzes | null>> =
     message: async () => null,
     mortality: () =>
       tablaOsszegzes("mortality", Prisma.sql`"MortalityRecordDocument"`),
+    "operations-log": () =>
+      tablaOsszegzes(
+        "operations-log",
+        Prisma.sql`"OperationsLogEntryDocument"`,
+      ),
   };
 
 export async function inlineDokumentumJelentes() {

@@ -1,3 +1,9 @@
+import {
+  ACCEPTED_UPLOAD_MIMETYPES,
+  UPLOADED_FILE_TYPES,
+  type UploadedFileKind,
+} from "@acropora/types";
+
 /**
  * MIT TÖLTÖTTEK FEL VALÓJÁBAN: a bejelentett típus ÉS az első bájtok együtt.
  *
@@ -21,7 +27,23 @@
  * - SVG: szándékosan KIMARAD. Nem fénykép, viszont futtatható tartalmat vihet,
  *   és a letöltésnél a böngésző értelmezné.
  */
-export type UploadedFileKind = "pdf" | "jpeg" | "png";
+export type { UploadedFileKind };
+
+/**
+ * A FÁJL ELSŐ BÁJTJAI, ahogy a formátum előírja. A bejelentett típusok és a
+ * letöltéskor visszaadott szabványos típus NEM itt állnak, hanem a közös
+ * `UPLOADED_FILE_TYPES` táblában (`@acropora/types`, b68357b7 kártya): abból
+ * olvas a web és a partner portál fájlválasztója is, tehát a kettő nem tud
+ * elcsúszni egymástól. Az `image/jpg` elfogadásának oka is ott áll. A
+ * `Record` miatt egy új fajta a közös táblában itt fordítási hibát ad, amíg
+ * az aláírása hiányzik.
+ */
+const MAGIC: Record<UploadedFileKind, readonly number[]> = {
+  // "%PDF-"
+  pdf: [0x25, 0x50, 0x44, 0x46, 0x2d],
+  jpeg: [0xff, 0xd8, 0xff],
+  png: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
+};
 
 interface Signature {
   kind: UploadedFileKind;
@@ -33,34 +55,17 @@ interface Signature {
    * kell, különben a böngésző azon akadna fenn, amit mi engedtünk át.
    */
   canonicalMimetype: string;
-  /** A fájl első bájtjai, ahogy a formátum előírja. */
   magic: readonly number[];
 }
 
-const SIGNATURES: readonly Signature[] = [
-  {
-    kind: "pdf",
-    mimetypes: ["application/pdf"],
-    canonicalMimetype: "application/pdf",
-    // "%PDF-"
-    magic: [0x25, 0x50, 0x44, 0x46, 0x2d],
-  },
-  {
-    kind: "jpeg",
-    // A `image/jpg` nem szabványos, de a régebbi klienseknél előfordul, és a
-    // tartalom-ellenőrzés úgyis külön véd: elfogadni olcsóbb, mint egy valódi
-    // fényképet elutasítani egy elgépelt fejléc miatt.
-    mimetypes: ["image/jpeg", "image/jpg"],
-    canonicalMimetype: "image/jpeg",
-    magic: [0xff, 0xd8, 0xff],
-  },
-  {
-    kind: "png",
-    mimetypes: ["image/png"],
-    canonicalMimetype: "image/png",
-    magic: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
-  },
-];
+const SIGNATURES: readonly Signature[] = (
+  Object.keys(UPLOADED_FILE_TYPES) as UploadedFileKind[]
+).map((kind) => ({
+  kind,
+  mimetypes: UPLOADED_FILE_TYPES[kind].mimetypes,
+  canonicalMimetype: UPLOADED_FILE_TYPES[kind].canonicalMimetype,
+  magic: MAGIC[kind],
+}));
 
 /**
  * A felismert fajta, vagy `null`, ha a bejelentett típus és a tartalom nem
@@ -83,10 +88,8 @@ export function detectUploadedFileKind(
   return null;
 }
 
-/** Amit a feltöltő felületnek fel szabad kínálnia, egy `accept` attribútumhoz. */
-export const ACCEPTED_UPLOAD_MIMETYPES: readonly string[] = SIGNATURES.flatMap(
-  (signature) => signature.mimetypes,
-);
+/** Minden bejelentett típus, amit a szerver elfogad; a közös táblából. */
+export { ACCEPTED_UPLOAD_MIMETYPES };
 
 /**
  * A LETÖLTÉSKOR VISSZAADANDÓ TÍPUS. Külön áll a felismeréstől, mert a tárolt

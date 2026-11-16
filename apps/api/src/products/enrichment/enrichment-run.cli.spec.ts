@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  inputFromEnv,
   parseRunInput,
   runEnrichmentCli,
   runReport,
@@ -88,6 +89,61 @@ function capture() {
 }
 
 describe("a kézi indítás parancssora", () => {
+  /*
+    THE INPUT FROM AN ENVIRONMENT VARIABLE (the test API's Coolify task: a command of at most 255 characters, acrobot
+    2026-11-13). WHAT TURNS THIS RED: the env input not read, or read instead of a given file; both or neither option let
+    through; an empty, unset or non-base64 value half-read instead of refused with exit 2.
+  */
+  it("--input-env: a bemenet base64-ben egy környezeti változóból jön, és ugyanúgy tervez", async () => {
+    const env = {
+      JEV_PRODUCT_ENRICHMENT: "review",
+      JEV_RUN_INPUT: Buffer.from(INPUT, "utf8").toString("base64"),
+    };
+    const d = deps(env, "NEM EZ A BEMENET");
+    const c = capture();
+    assert.equal(
+      await runEnrichmentCli(["--input-env", "JEV_RUN_INPUT"], c.out, d.value),
+      0,
+    );
+    assert.match(c.text().stdout, /Kitalált pumpa \(p-1\)/);
+    assert.equal(d.network.requests.length, 0);
+  });
+
+  it("--input-env: egyszerre csak az egyik bemenet; üres, hiányzó vagy nem base64 érték 2-es kilépés", async () => {
+    const c = capture();
+    const d = deps({ JEV_RUN_INPUT: Buffer.from(INPUT).toString("base64") });
+    assert.equal(
+      await runEnrichmentCli(
+        ["--input", "x.json", "--input-env", "JEV_RUN_INPUT"],
+        c.out,
+        d.value,
+      ),
+      2,
+    );
+    assert.equal(await runEnrichmentCli([], c.out, d.value), 2);
+    for (const value of [undefined, "", "nem base64!", "abc"]) {
+      const e = deps(value === undefined ? {} : { JEV_RUN_INPUT: value });
+      const ce = capture();
+      assert.equal(
+        await runEnrichmentCli(
+          ["--input-env", "JEV_RUN_INPUT"],
+          ce.out,
+          e.value,
+        ),
+        2,
+        String(value),
+      );
+      assert.match(ce.text().stderr, /JEV_RUN_INPUT/);
+    }
+    assert.deepEqual(
+      inputFromEnv({ X: Buffer.from("{}").toString("base64") }, "X"),
+      {
+        ok: true,
+        text: "{}",
+      },
+    );
+  });
+
   it("--apply nélkül csak tervez: nem megy ki a hálózatra, nem tárol", async () => {
     const d = deps({ JEV_PRODUCT_ENRICHMENT: "review" });
     const c = capture();
@@ -257,6 +313,111 @@ describe("a kézi indítás parancssora", () => {
       /\n {4}adagolás: mód VERIFIED TEST_DEPENDENT; adag MISSING; mérendő VERIFIED KALCIUM;KH; útmutató VERIFIED \(21 jel\)\n/,
     );
     assert.doesNotMatch(report, /Mérje a KH-t/);
+  });
+
+  // acrobot 52559: a source can be marked as the brand's imprint. WHAT TURNS THIS RED: the mark dropped on the way in;
+  // accepted on a non-manufacturer source or with a value other than true; two on one product.
+  it("az impresszum-jelölő csak gyártói forráson, true értékkel megy át", () => {
+    const ok = parseRunInput(
+      JSON.stringify({
+        products: [
+          {
+            productId: "p",
+            sources: [
+              { kind: "MANUFACTURER", url: "https://a.example.invalid/x" },
+              {
+                kind: "MANUFACTURER",
+                url: "https://a.example.invalid/impressum",
+                imprint: true,
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    assert.deepEqual(ok.ok && ok.products[0]!.sources, [
+      { kind: "MANUFACTURER", url: "https://a.example.invalid/x" },
+      {
+        kind: "MANUFACTURER",
+        url: "https://a.example.invalid/impressum",
+        imprint: true,
+      },
+    ]);
+    const bad = parseRunInput(
+      JSON.stringify({
+        products: [
+          {
+            productId: "p",
+            sources: [
+              {
+                kind: "BULK_REEF_SUPPLY",
+                url: "https://www.bulkreefsupply.com/x",
+                imprint: true,
+              },
+              {
+                kind: "MANUFACTURER",
+                url: "https://a.example.invalid/i",
+                imprint: "igen",
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    assert.equal(!bad.ok && bad.problems.length, 2);
+    // one imprint per product (barracuda on #2565); two products with one each pass
+    const twice = (second: string) =>
+      parseRunInput(
+        JSON.stringify({
+          products: [
+            {
+              productId: "p",
+              sources: [
+                {
+                  kind: "MANUFACTURER",
+                  url: "https://a.example.invalid/impressum",
+                  imprint: true,
+                },
+              ],
+            },
+            {
+              productId: second,
+              sources: [
+                {
+                  kind: "MANUFACTURER",
+                  url: "https://b.example.invalid/impressum",
+                  imprint: true,
+                },
+              ],
+            },
+          ],
+        }),
+      );
+    assert.equal(twice("q").ok, true);
+    const doubled = parseRunInput(
+      JSON.stringify({
+        products: [
+          {
+            productId: "p",
+            sources: [
+              {
+                kind: "MANUFACTURER",
+                url: "https://a.example.invalid/impressum",
+                imprint: true,
+              },
+              {
+                kind: "MANUFACTURER",
+                url: "https://a.example.invalid/legal",
+                imprint: true,
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    assert.deepEqual(!doubled.ok && doubled.problems, [
+      "products[0].sources[1]: termékenként legfeljebb egy impresszum-forrás.",
+    ]);
   });
 
   it("a hibás bemenet minden hibáját felsorolja", () => {

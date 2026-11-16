@@ -5,7 +5,7 @@ import {
   RICH_TEXT_IMAGE_SCHEME,
   richImageId,
 } from "@acropora/rich-text";
-import { Button, PilotFileInput, PilotButton } from "@acropora/ui";
+import { PilotFileInput, PilotButton } from "@acropora/ui";
 import type { RichTextImage } from "@acropora/ui/rich-text-editor";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -284,7 +284,7 @@ export function MailImagePicker(props: {
       ) : null}
 
       <div className="flex gap-2">
-        <Button
+        <PilotButton
           onClick={() => {
             if (!kep || !ervenyesSzelesseg) return;
             onInsert({
@@ -297,7 +297,7 @@ export function MailImagePicker(props: {
           disabled={!kep || !ervenyesSzelesseg}
         >
           Beszúrás
-        </Button>
+        </PilotButton>
         <PilotButton variant="secondary" onClick={onClose}>
           Mégse
         </PilotButton>

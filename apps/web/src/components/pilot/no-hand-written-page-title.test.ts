@@ -25,6 +25,10 @@ const KIVETELEK = new Map<string, string>([
     "nyomtatási nézet, papírra méretezett címmel",
   ],
   [
+    "components/game/live-draw-page.tsx",
+    "az élő sorsolás teljes képernyős adásnézete, a héjon kívül: a címe a látvány része, nem az OS fejléce",
+  ],
+  [
     "components/billing/billing-detail-header.tsx",
     "a számla-adatlapok fejléce: a PageHeader osztályait viseli (PAGE_HEADER_CLASSES), csak az elrendezése saját",
   ],

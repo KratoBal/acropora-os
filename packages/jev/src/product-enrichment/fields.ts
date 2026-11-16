@@ -70,6 +70,12 @@ export interface FieldSpec {
    * title keeps the #1427 rule.
    */
   caseSensitive?: true;
+  /**
+   * A trailing legal form is not part of the value (a brand: "Grotech GmbH" on the maker's own shop and "Grotech" in
+   * our catalogue came out as CONFLICTING_SOURCES on the T4.4 pilot-20 run, 2026-11-14, card 8639ac2a). Only for the
+   * comparison: the stored value keeps the spelling of the highest-precedence source.
+   */
+  legalFormInsensitive?: true;
 }
 
 const text = { kind: "text" } as const;
@@ -237,6 +243,7 @@ export const FIELD_SPECS = {
     claims: "value",
     tierFromDecision: false,
     caseInsensitive: true,
+    legalFormInsensitive: true,
   },
   capacity: {
     tier: "C",
@@ -447,8 +454,21 @@ export function comparisonKey(field: FieldKey, normalized: string): string {
   const insensitive =
     spec.caseInsensitive === true ||
     (spec.kind.kind === "text" && spec.caseSensitive !== true);
-  return insensitive ? normalized.toLocaleLowerCase("hu") : normalized;
+  const key = insensitive ? normalized.toLocaleLowerCase("hu") : normalized;
+  if (spec.legalFormInsensitive !== true) return key;
+  // the legal form at the end, possibly several ("GmbH & Co. KG"), after a space or a comma; never the whole value
+  const bare = key.replace(LEGAL_FORM_TAIL, "");
+  return bare === "" ? key : bare;
 }
+
+/**
+ * The legal forms a company name ends in, as the brands we buy from write them (DE, AT, CH, IT, NL, PL, HU, US, UK and
+ * the Nordic ones). A whole word only: "Grotechnik" keeps its letters, and "Tunze GmbH" and "Grotech GmbH" stay two.
+ */
+const LEGAL_FORM_TAIL = new RegExp(
+  String.raw`(?:[\s,]+(?:gmbh(?:\s*&\s*co\.?\s*kg)?|ag|kg|e\.\s?k\.?|ltd\.?|limited|llc|inc\.?|corp\.?|co\.?|s\.\s?r\.\s?l\.?|srl|s\.\s?p\.\s?a\.?|spa|b\.\s?v\.?|bv|sp\.\s?z\s?o\.\s?o\.?|kft\.?|zrt\.?|bt\.?|s\.\s?a\.?|sa|sas|ab|as|aps|oy))+$`,
+  "iu",
+);
 
 function collapse(raw: string): string {
   return raw.normalize("NFC").trim().replace(/\s+/g, " ");

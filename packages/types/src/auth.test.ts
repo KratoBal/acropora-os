@@ -107,6 +107,8 @@ describe("role permission mapping", () => {
     assert.deepEqual([...permissions].sort(), [
       PERMISSIONS.AQUARIUMS_MANAGE,
       PERMISSIONS.AQUARIUMS_VIEW,
+      // az üzemeltetési napló partner-nézete (os-uzemeltetesi-naplo, S5)
+      PERMISSIONS.OPERATIONS_LOG_PARTNER_VIEW,
       PERMISSIONS.SERVICE_MANAGE,
       PERMISSIONS.SERVICE_VIEW,
     ]);
@@ -405,6 +407,10 @@ describe("a MANAGER jogkör-készlete rögzítve van", () => {
         // az Elhullási napló (kártya 115c9740, acrobot 27141): a MANAGER mindkettőt
         "mortality.manage",
         "mortality.view",
+        // az Üzemeltetési napló (task os-uzemeltetesi-naplo): a vezető a sablonokat is kezeli
+        "operations-log.record",
+        "operations-log.templates.manage",
+        "operations-log.view",
         "orders.manage",
         "orders.view",
         "partners.manage",
@@ -423,6 +429,9 @@ describe("a MANAGER jogkör-készlete rögzítve van", () => {
         "quotes.send",
         "quotes.templates.manage",
         "quotes.view",
+        // eszközbérlés (task eszkozberles): a vezető is rögzít bérlést (acrobot 44216)
+        "rentals.manage",
+        "rentals.view",
         "service.manage",
         "service.view",
         "tasks.view",

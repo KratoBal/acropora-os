@@ -329,6 +329,172 @@ describe("cardPaymentMatch: a NAV-less invoice and the card payment(s) it was pa
     );
   });
 
+  /*
+    AZ ISMÉTLŐDŐ, AZONOS ÖSSZEGŰ ELŐFIZETÉS (acrobot 49566, TypeSafe AI havi 28,05 EUR). MI PIROSÍT: ha a havi fizetések
+    közül egyik sem köt; ha nem a számla napjához legközelebbi köt; ha két egyformán közeli közül választ; ha az ablakon
+    kívüli (a számla előtt 15 napnál régebbi) fizetés köt.
+  */
+  const typesafe = [
+    "TypeSafe AI, Inc.",
+    "Invoice number TL9NJ7RN-0001",
+    "Date of issue September 28, 2026",
+    "Amount due €28.05",
+  ];
+  const sub = (bookingDate: string) =>
+    card(
+      "TYPESAFE AI, INC.",
+      "10393",
+      { amount: "28.05", currency: "EUR" },
+      bookingDate,
+    );
+
+  it("ties a recurring same-amount subscription to the payment nearest the invoice date", () => {
+    const august = sub("2026-08-29");
+    const september = sub("2026-09-29");
+    const october = sub("2026-10-29");
+    assert.deepEqual(
+      cardPaymentMatch(
+        typesafe,
+        [august, september, october],
+        word,
+        "2026-09-28",
+      )?.debitIds,
+      [september.id],
+    );
+  });
+
+  it("does not choose between two payments equally near the invoice date", () => {
+    assert.equal(
+      cardPaymentMatch(
+        typesafe,
+        [sub("2026-09-27"), sub("2026-09-29")],
+        word,
+        "2026-09-28",
+      ),
+      null,
+    );
+  });
+
+  it("does not let a neighbouring month's payment tie when that month's own payment is missing (barracuda, #2494)", () => {
+    // havi előfizetés: a májusi és a júliusi fizetés megvan, a júniusi HIÁNYZIK. A június 1-jei számlához a július 1-jei
+    // terhelés a gyűjtő ablakán belül volna (30 nap), de nem az övé: nem köt. A július 1-jei számla a sajátját köti.
+    const monthly = (date: string) =>
+      typesafe.map((l) => l.replace("September 28", date));
+    const may = sub("2026-05-01");
+    const july = sub("2026-07-01");
+    assert.equal(
+      cardPaymentMatch(monthly("June 1"), [may, july], word, "2026-06-01"),
+      null,
+    );
+    assert.deepEqual(
+      cardPaymentMatch(monthly("July 1"), [may, july], word, "2026-07-01")
+        ?.debitIds,
+      [july.id],
+    );
+  });
+
+  it("does not tie a recurring payment outside the window (more than 15 days before the invoice)", () => {
+    assert.equal(
+      cardPaymentMatch(
+        typesafe,
+        [sub("2026-08-29"), sub("2026-08-30")],
+        word,
+        "2026-09-28",
+      ),
+      null,
+    );
+  });
+
+  /*
+    MÁS DEVIZÁJÚ SZÁMLA ÉS FIZETÉS (acrobot 49581, TypeSafe AI: 31,75 USD Stripe-nyugta, 28,05EUR terhelés). MI PIROSÍT:
+    ha a más devizájú számla nem köt; ha két fizetés közül választ; ha a 3 napon túli, az eredeti összeg nélküli, a józan
+    arányon kívüli (300 dollár egy 28 eurós fizetésre), vagy az egyező devizájú (rossz összegű) fizetés köt.
+  */
+  const receipt = [
+    "Receipt from TypeSafe AI",
+    "Receipt #2263-1582",
+    "Date paid September 28, 2026",
+    "Amount paid $31.75",
+  ];
+  const eurCard = (bookingDate: string, original = "28.05") =>
+    card(
+      "TYPESAFE AI, INC.",
+      "10393",
+      { amount: original, currency: "EUR" },
+      bookingDate,
+    );
+
+  it("ties a USD invoice to the one EUR card payment of the partner within 3 days", () => {
+    const september = eurCard("2026-09-29");
+    assert.deepEqual(
+      cardPaymentMatch(
+        receipt,
+        [eurCard("2026-08-29"), september],
+        word,
+        "2026-09-28",
+      ),
+      {
+        amount: "31.75",
+        currency: "USD",
+        partner: "TYPESAFE AI, INC.",
+        debitIds: [september.id],
+      },
+    );
+  });
+
+  it("does not tie a foreign-currency invoice to two candidates, beyond 3 days, or out of proportion", () => {
+    assert.equal(
+      cardPaymentMatch(
+        receipt,
+        [eurCard("2026-09-27"), eurCard("2026-09-29")],
+        word,
+        "2026-09-28",
+      ),
+      null,
+    );
+    assert.equal(
+      cardPaymentMatch(receipt, [eurCard("2026-10-02")], word, "2026-09-28"),
+      null,
+    );
+    assert.equal(
+      cardPaymentMatch(
+        receipt,
+        [eurCard("2026-09-29", "300.00")],
+        word,
+        "2026-09-28",
+      ),
+      null,
+    );
+  });
+
+  it("does not tie a foreign-currency invoice to a payment without an original amount, or one in the invoice's currency", () => {
+    assert.equal(
+      cardPaymentMatch(
+        receipt,
+        [card("TYPESAFE AI, INC.", "10393", null, "2026-09-29")],
+        word,
+        "2026-09-28",
+      ),
+      null,
+    );
+    assert.equal(
+      cardPaymentMatch(
+        receipt,
+        [
+          card(
+            "TYPESAFE AI, INC.",
+            "10393",
+            { amount: "30.00", currency: "USD" },
+            "2026-09-29",
+          ),
+        ],
+        word,
+        "2026-09-28",
+      ),
+      null,
+    );
+  });
+
   it("takes nothing when the amount, the partner word, or the uniqueness is missing, or the partner is us", () => {
     const hetznerCard = (amount: string) =>
       card("HETZNER ONLINE GMBH", "999", { amount, currency: "EUR" });
@@ -1064,6 +1230,109 @@ describe("labelledTotal", () => {
     });
   });
 
+  it("takes the next line only after a label that stands alone, not after a sentence (niceshops R49010000026240667)", () => {
+    // the lines of the PDF as pdfTextLines gives them (acrobot 49361): the sentence's "számla összege" is a label, and
+    // its next line is the address, whose numbers made a second labelled value and lost the real total
+    assert.deepEqual(
+      labelledTotal([
+        "Rechnungsbetrag inkl. USt.: | 338.018 Ft",
+        "(€ 931,10)",
+        "A számla összege előreutalással ki lett fizetve.",
+        "Tulajdonos: niceshops GmbH, 3DJake, Saaz 99, 8341 Paldau, Ausztria | E-mail: magyar@3djake.com |",
+      ]),
+      { gross: "338018", currency: "HUF" },
+    );
+  });
+
+  it("still takes the next line after a label with a colon or a short note", () => {
+    assert.deepEqual(
+      labelledTotal(["Rechnungsbetrag inkl. USt.:", "338.018 Ft"]),
+      {
+        gross: "338018",
+        currency: "HUF",
+      },
+    );
+    assert.deepEqual(labelledTotal(["Végösszeg (HUF)", "12 700"]), {
+      gross: "12700",
+      currency: "HUF",
+    });
+  });
+
+  it("takes the next line after a table header with more words, not only after a bare label (barracuda, #2484)", () => {
+    for (const header of [
+      "Fizetendő végösszeg",
+      "Fizetendő összesen",
+      "Végösszeg (bruttó)",
+      "Rechnungsbetrag brutto",
+      "Gesamtbetrag in Euro",
+    ])
+      assert.deepEqual(
+        labelledTotal([header, "12 700 Ft"]),
+        { gross: "12700", currency: "HUF" },
+        header,
+      );
+  });
+
+  it("does not take the next line after a sentence, by its end or by its words", () => {
+    // the real total stands on its own line; a sentence that took the address below it as its value would make a
+    // second, different labelled value, and the tie would lose the total
+    for (const sentence of [
+      "A számla összege előreutalással ki lett fizetve.",
+      "A számla összege átutalással kerül kiegyenlítésre",
+      "A számla összege kifizetve.",
+    ])
+      assert.deepEqual(
+        labelledTotal([
+          "Fizetendő: 338.018 Ft",
+          sentence,
+          "Saaz 99, 8341 Paldau",
+        ]),
+        { gross: "338018", currency: "HUF" },
+        sentence,
+      );
+  });
+
+  it("reads a bare Total at the start of the summary row, the last value being the gross (Hetzner, card f7ece26b)", () => {
+    // the measured shape of the Hetzner invoice, the digits made up: the header row names the columns, and the
+    // summary row (printed twice on the invoice) carries net, VAT and gross
+    const summary = "Total | € 46.64 | € 0.00 | € 46.64";
+    assert.deepEqual(
+      labelledTotal([
+        "Service | Period | Total (excl. VAT) | Tax | Total",
+        "Project Acropora OS | 2026-08 | € 46.64 | € 0.00 | € 46.64",
+        summary,
+        summary,
+      ]),
+      { gross: "46.64", currency: "EUR" },
+    );
+    assert.deepEqual(labelledTotal(["Total: 12 700 Ft"]), {
+      gross: "12700",
+      currency: "HUF",
+    });
+  });
+
+  it("uses a bare Total only when no other label gave a value (murena, #2486: two good grosses were lost)", () => {
+    // the measured shape, the values made up: the text layer gives net, VAT and gross each on a "Total | ..." row
+    const rows = ["Total | 100,00 €", "Total | 27,00 €", "Total | 127,00 €"];
+    assert.deepEqual(labelledTotal([...rows, "Amount due: 127,00 €"]), {
+      gross: "127",
+      currency: "EUR",
+    });
+    // without another label the three different Total rows still decide nothing
+    assert.equal(labelledTotal(rows), null);
+  });
+
+  it("does not take a Total that is not the grand total, or a Total inside the line", () => {
+    for (const line of [
+      "Total (excl. VAT): € 100.00",
+      "Total VAT: € 27.00",
+      "Total net | € 100.00",
+      "Subtotal | € 100.00",
+      "Line total | € 100.00",
+    ])
+      assert.equal(labelledTotal([line]), null, line);
+  });
+
   it("does not decide between two different labelled values", () => {
     assert.equal(
       labelledTotal(["Végösszeg: 37 500 Ft", "Fizetendő: 7 972 Ft"]),
@@ -1288,5 +1557,218 @@ describe("hasNoTextLayer", () => {
 
   it("counts signs, not lines: many blank-ish lines stay textless", () => {
     assert.equal(hasNoTextLayer(Array(50).fill(" ")), true);
+  });
+});
+
+/*
+  A HIVATKOZOTT ISMERT SZÁM NEM A DOKUMENTUM SAJÁT SZÁMA (niceshops második dokumentuma, task os-hianyzo-szamlak-unpaid). Kitalált
+  szöveg és szám. MI PIROSÍT: egy jóváírás vagy helyesbítés, ami a korábbi, ismert számlát nevezi meg, annak a számát kapja sajátjául;
+  ÉS a másik irány: ugyanaz a szám a dokumentum saját sorában (nem hivatkozásban) nem kötődik többé.
+*/
+describe("a known number in a reference is not the document's own number", () => {
+  const KNOWN: KnownInvoiceNumber[] = [
+    { number: "R49010000099990001", supplierTaxNumber: "11111111-2-41" },
+  ];
+  const read = {
+    invoiceNumber: null,
+    numberFrom: null,
+    supplierTaxNumber: null,
+  } as const;
+
+  for (const [why, lines] of [
+    [
+      "a German reference on the same line",
+      [
+        "Gutschrift",
+        "Bezug auf Rechnung R49010000099990001 vom 05.11.2026",
+        "Betrag: 97 265 Ft",
+      ],
+    ],
+    [
+      "a labelled line above the number",
+      [
+        "Korrekturbeleg",
+        "Zu Rechnung:",
+        "R49010000099990001",
+        "Betrag: 97 265 Ft",
+      ],
+    ],
+    [
+      "a Hungarian corrective invoice",
+      [
+        "Helyesbítő számla",
+        "Az eredeti számla száma: R49010000099990001",
+        "Összesen: 97 265 Ft",
+      ],
+    ],
+    [
+      "an English credit note",
+      [
+        "Credit note",
+        "Original invoice R49010000099990001",
+        "Total: 97 265 HUF",
+      ],
+    ],
+  ] as const)
+    it(`${why}: no hit, and the reading keeps no number`, () => {
+      assert.equal(knownNumberInText(lines, KNOWN), null);
+      assert.deepEqual(withKnownNumber({ ...read }, lines, KNOWN), read);
+    });
+
+  it("the same number on the document's own line is still found (the control nearest to the case)", () => {
+    const lines = [
+      "Rechnung",
+      "Rechnungsnummer: R49010000099990001",
+      "Betrag: 338 018 Ft",
+    ];
+    assert.deepEqual(knownNumberInText(lines, KNOWN), KNOWN[0]);
+    assert.equal(
+      withKnownNumber({ ...read }, lines, KNOWN).invoiceNumber,
+      "R49010000099990001",
+    );
+  });
+
+  it("named both in a reference and on its own line, the number counts", () => {
+    const lines = [
+      "Rechnung R49010000099990001",
+      "Bezug auf Rechnung R49010000099990001",
+    ];
+    assert.deepEqual(knownNumberInText(lines, KNOWN), KNOWN[0]);
+  });
+
+  it("a label above without a colon is not a reference label: the number on the next line counts", () => {
+    const lines = ["Gutschrift Nr", "R49010000099990001"];
+    assert.deepEqual(knownNumberInText(lines, KNOWN), KNOWN[0]);
+  });
+});
+
+/*
+  A SAJÁT SZÁM CÍMKÉJE A JEL MELLETT (acrobot 48666, barracuda megjegyzése a #2458-on). Kitalált szöveg és szám. MI PIROSÍT: egy
+  helyesbítő számla vagy egy jóváírás SAJÁT, címkézett száma nem kötődik (a címsor jele hivatkozásnak látszott), vagy az ismert
+  eredeti szám miatt kétértelmű marad; ÉS a másik irány: egy erős hivatkozásban (eredeti, Bezug, zu Rechnung) álló idegen szám
+  sajátként kötődik.
+*/
+describe("an own-number label beside the marker: the document's own number binds", () => {
+  const SUPPLIER = "11111111-2-41";
+  const ORIGINAL = {
+    number: "R49010000099990001",
+    supplierTaxNumber: SUPPLIER,
+  };
+  const CORRECTIVE = { number: "HX2026000123", supplierTaxNumber: SUPPLIER };
+  const CREDIT = { number: "GS2026000777", supplierTaxNumber: SUPPLIER };
+
+  it("a Hungarian corrective invoice binds its own number, though the original it names is known too", () => {
+    const lines = [
+      "Helyesbítő számla",
+      "Helyesbítő számla sorszáma: HX2026000123",
+      "Az eredeti számla száma: R49010000099990001",
+    ];
+    assert.deepEqual(
+      knownNumberInText(lines, [ORIGINAL, CORRECTIVE]),
+      CORRECTIVE,
+    );
+  });
+
+  it("a Gutschrift binds its own number, though the invoice it refers to is known too", () => {
+    const lines = [
+      "Gutschrift Nr. GS2026000777",
+      "Bezug auf Rechnung R49010000099990001",
+    ];
+    assert.deepEqual(knownNumberInText(lines, [ORIGINAL, CREDIT]), CREDIT);
+  });
+
+  it("the niceshops shape: an unknown own number and a known referenced one bind nothing", () => {
+    const lines = [
+      "Gutschrift Nr. GS-NEM-ISMERT-1",
+      "Bezug auf Rechnung Nr. R49010000099990001",
+    ];
+    assert.equal(knownNumberInText(lines, [ORIGINAL]), null);
+  });
+
+  it("a strong reference stays a reference beside an own-number label", () => {
+    for (const lines of [
+      ["Az eredeti számla sorszáma: R49010000099990001"],
+      ["Zu Rechnung Nr. R49010000099990001"],
+    ])
+      assert.equal(
+        knownNumberInText(lines, [ORIGINAL]),
+        null,
+        String(lines[0]),
+      );
+  });
+
+  it('an "Eredeti példány" header on the own number\'s line is no reference: with a second known number the text stays undecidable (barracuda, #2460)', () => {
+    const ADVANCE = { number: "EL2026000555", supplierTaxNumber: SUPPLIER };
+    const lines = [
+      "SZÁMLA Eredeti példány Számla sorszáma: HX2026000123",
+      "Előleg-számla: EL2026000555",
+    ];
+    // the old shape (the bare "eredeti" a strong reference) dropped the own number and bound the advance's
+    assert.equal(knownNumberInText(lines, [CORRECTIVE, ADVANCE]), null);
+    // alone, the own number on that line binds
+    assert.deepEqual(knownNumberInText([lines[0]!], [CORRECTIVE]), CORRECTIVE);
+  });
+
+  it("a weak marker without a label still makes two known numbers undecidable", () => {
+    const lines = ["Rechnung GS2026000777", "Storno R49010000099990001"];
+    assert.equal(knownNumberInText(lines, [ORIGINAL, CREDIT]), null);
+  });
+});
+
+/*
+  A CSOPORTOKBA TÖRDELT BANKSZÁMLA NEM SZÁMLASZÁM (Niceshops / 3DJake, 2026-11-12). Kitalált számok, a valódi PDF sor-alakjával.
+  MI PIROSÍT: a „Számlaszám: 1200 1008 …” lábléc első négyese számlaszám lesz (a két külön számla így egy dokumentummá vonódott
+  össze); a „Rech.-Nr.” sor száma nem olvasódik; ÉS a másik irány: a „Számlaszám:” után álló VALÓDI számlaszám nem olvasódik.
+*/
+describe("a bank account written in groups is not an invoice number", () => {
+  const FOOTER =
+    "IBAN: HU99123456781234567812345678 | BIC: TESZTHUHB | Számlaszám: 1234 5678 1234 5678 1234 5678 |";
+
+  it("the footer's grouped account is skipped, and the Rech.-Nr. line gives the number", () => {
+    const read = readInvoiceText(
+      [
+        "Rechnung",
+        "Rech.-Nr. | R49010000099990001",
+        "Rech.-Datum | 05.11.2026",
+        FOOTER,
+      ],
+      { fileName: "szamla.pdf" },
+    );
+    assert.equal(read.invoiceNumber, "R49010000099990001");
+    assert.equal(read.numberFrom, "LABEL");
+  });
+
+  /*
+    SORONKÉNT, PONTOS ÉRTÉKKEL (barracuda, #2464 CHANGES): egy notEqual("1234")
+    a nyolcas csoportokra nem tud elbukni (ott az első token "12345678"), és egy
+    ciklus az első bukásnál megáll. MI PIROSÍT: a négyes ág nélkül a 4x4 és a
+    4x6 sor; a nyolcas ág nélkül a 8x2 és a 8x3 sor (köztük a niceshops-alak).
+  */
+  for (const [name, footer] of [
+    ["4x4", "Számlaszám: 1234 5678 1234 5678"],
+    ["4x6", FOOTER],
+    ["8x2", "Számlaszám: 12345678 12345678"],
+    ["8x3", "Számlaszám: 12345678 12345678 12345678"],
+    ["8x3, the niceshops form", "Számlaszám: 12001008 01472511 00100004 |"],
+  ] as const)
+    it(`without any other number, a ${name} grouped account gives no number`, () => {
+      assert.equal(
+        readInvoiceText(["Számla", footer], { fileName: "x.pdf" })
+          .invoiceNumber,
+        null,
+      );
+    });
+
+  it("a real invoice number after the same label is still read (the control nearest to the case)", () => {
+    for (const [line, number] of [
+      ["Számlaszám: 2026/001234", "2026/001234"],
+      ["Számlaszám: ABC-1234", "ABC-1234"],
+      ["Számlaszám: 1234 | Kelte: 2026.11.05", "1234"],
+    ] as const)
+      assert.equal(
+        readInvoiceText(["Számla", line], { fileName: "x.pdf" }).invoiceNumber,
+        number,
+        line,
+      );
   });
 });

@@ -12,6 +12,7 @@ import {
   isTextReadable,
   textFromLines,
 } from "./asset-document-text.js";
+import { OCR_NOTICE, type OcrReading } from "./asset-document-ocr.js";
 import { InMemoryDocumentStore } from "./document-store/in-memory-document-store.js";
 import { ServiceAssetsService } from "./service-assets.service.js";
 import type { ServiceAssetsRepository } from "./service-assets.repository.js";
@@ -226,6 +227,237 @@ describe("the text shape", () => {
     assert.match(
       source,
       /textReadable: isTextReadable\(document\.contentType\)/,
+    );
+  });
+});
+
+/*
+  THE OCR IN THE TEXT CACHE (card 126f9b92). The scan reader is injected, so what is tested is the cache's side: which files go
+  to the OCR, what the answer carries, and what is remembered. A file with its own text NEVER goes there, and with the OCR off
+  (`null`) the answer is what it was before.
+*/
+describe("AssetDocumentTextCache with the OCR", () => {
+  const scanLines = [PAGE_END_MARKER, PAGE_END_MARKER]; // two pages, no text layer: a scan
+  const reading = (
+    over: Partial<OcrReading["ocr"]> = {},
+    lines: string[] = [
+      "72555 Járókerék",
+      PAGE_END_MARKER,
+      "61804 Tömítés",
+      PAGE_END_MARKER,
+    ],
+  ): OcrReading => ({
+    lines,
+    ocr: {
+      pagesRead: 2,
+      pagesTotal: 2,
+      stoppedBy: null,
+      notice: OCR_NOTICE,
+      ...over,
+    },
+  });
+  const bytes = async () => new Uint8Array([1]);
+
+  it("a file with its own text never goes to the OCR", async () => {
+    let asked = 0;
+    const cache = new AssetDocumentTextCache(
+      async () => ["van szöveg", PAGE_END_MARKER],
+      32,
+      async () => {
+        asked += 1;
+        return reading();
+      },
+    );
+    const text = await cache.text("sha-a", bytes);
+    assert.equal(asked, 0);
+    assert.equal(text.hasText, true);
+    assert.equal(text.ocr, undefined);
+  });
+
+  it("a scan is read as pictures: the text, the page count of the file and the OCR mark come back", async () => {
+    const cache = new AssetDocumentTextCache(
+      async () => scanLines,
+      32,
+      async () => reading(),
+    );
+    const text = await cache.text("sha-b", bytes);
+    assert.equal(text.hasText, true);
+    assert.equal(text.pageCount, 2);
+    assert.match(text.text, /72555 Járókerék/);
+    assert.equal(text.ocr?.notice, OCR_NOTICE);
+    assert.equal(text.ocr?.pagesRead, 2);
+  });
+
+  it("with the OCR off (`null`) a scan answers as it always did: no text, no `ocr` field", async () => {
+    const cache = new AssetDocumentTextCache(
+      async () => scanLines,
+      32,
+      async () => null,
+    );
+    const text = await cache.text("sha-c", bytes);
+    assert.equal(text.hasText, false);
+    assert.equal("ocr" in text, false);
+  });
+
+  it("a file with no pages is not sent to the OCR", async () => {
+    let asked = 0;
+    const cache = new AssetDocumentTextCache(
+      async () => [],
+      32,
+      async () => {
+        asked += 1;
+        return reading();
+      },
+    );
+    await cache.text("sha-d", bytes);
+    assert.equal(asked, 0);
+  });
+
+  it("a finished reading is read once per file (the sha256 key), a stop at the page limit included", async () => {
+    let asked = 0;
+    const cache = new AssetDocumentTextCache(
+      async () => scanLines,
+      32,
+      async () => {
+        asked += 1;
+        return reading({ pagesTotal: 200, stoppedBy: "pages" });
+      },
+    );
+    await cache.text("sha-e", bytes);
+    const again = await cache.text("sha-e", bytes);
+    assert.equal(asked, 1);
+    assert.equal(again.ocr?.stoppedBy, "pages");
+  });
+
+  it("a time stop that already read pages IS remembered: a long scan is read once per file, and the answer says it is partial", async () => {
+    // the stage case: one page ~6.7 s, the 120 s budget ends a 20 page scan at page 17
+    const pageLines = Array.from({ length: 17 }, (_, i) => [
+      `${i + 1}. oldal szöveg`,
+      PAGE_END_MARKER,
+    ]).flat();
+    let asked = 0;
+    const cache = new AssetDocumentTextCache(
+      async () => scanLines,
+      32,
+      async () => {
+        asked += 1;
+        return reading(
+          { pagesRead: 17, pagesTotal: 20, stoppedBy: "time" },
+          pageLines,
+        );
+      },
+    );
+    const first = await cache.text("sha-long", bytes);
+    const again = await cache.text("sha-long", bytes);
+    assert.equal(asked, 1);
+    for (const answer of [first, again]) {
+      assert.equal(answer.hasText, true);
+      assert.equal(answer.ocr?.stoppedBy, "time");
+      assert.equal(answer.ocr?.pagesRead, 17);
+      assert.equal(answer.ocr?.pagesTotal, 20);
+    }
+  });
+
+  it("a partial reading EXPIRES after the TTL (a short one cut in a slow minute is read again), a complete one and a page-limit stop never do", async () => {
+    const TTL = 1_000;
+    let clock = 10_000;
+    const counts = { partial: 0, complete: 0, pages: 0 };
+    const answers = {
+      partial: () =>
+        reading({ pagesRead: 3, pagesTotal: 20, stoppedBy: "time" }),
+      complete: () => reading({ stoppedBy: null }),
+      pages: () => reading({ pagesTotal: 200, stoppedBy: "pages" }),
+    };
+    let which: keyof typeof answers = "partial";
+    const cache = new AssetDocumentTextCache(
+      async () => scanLines,
+      32,
+      async () => {
+        counts[which] += 1;
+        return answers[which]();
+      },
+      TTL,
+      () => clock,
+    );
+    for (const kind of ["partial", "complete", "pages"] as const) {
+      which = kind;
+      await cache.text(`sha-ttl-${kind}`, bytes);
+    }
+    // inside the TTL: nothing is read again
+    clock += TTL - 1;
+    for (const kind of ["partial", "complete", "pages"] as const)
+      await cache.text(`sha-ttl-${kind}`, bytes);
+    assert.deepEqual(counts, { partial: 1, complete: 1, pages: 1 });
+    // past the TTL: only the partial one is read again
+    clock += 10 * TTL;
+    for (const kind of ["partial", "complete", "pages"] as const) {
+      which = kind;
+      await cache.text(`sha-ttl-${kind}`, bytes);
+    }
+    assert.deepEqual(counts, { partial: 2, complete: 1, pages: 1 });
+    // the new partial reading gets a fresh TTL
+    await cache.text("sha-ttl-partial", bytes);
+    assert.equal(counts.partial, 2);
+  });
+
+  it("a memory stop is NOT remembered even with pages read (the pressure may be gone)", async () => {
+    let asked = 0;
+    const cache = new AssetDocumentTextCache(
+      async () => scanLines,
+      32,
+      async () => {
+        asked += 1;
+        return reading({ pagesRead: 3, pagesTotal: 20, stoppedBy: "memory" });
+      },
+    );
+    await cache.text("sha-mem-partial", bytes);
+    await cache.text("sha-mem-partial", bytes);
+    assert.equal(asked, 2);
+  });
+
+  it("a reading that stopped for time with NO page read, memory, a busy reader or an error is NOT remembered: the next ask tries again", async () => {
+    for (const stoppedBy of ["time", "memory", "busy", "error"] as const) {
+      let asked = 0;
+      const cache = new AssetDocumentTextCache(
+        async () => scanLines,
+        32,
+        async () => {
+          asked += 1;
+          return reading({ stoppedBy, pagesRead: 0 }, []);
+        },
+      );
+      const first = await cache.text(`sha-${stoppedBy}`, bytes);
+      await cache.text(`sha-${stoppedBy}`, bytes);
+      assert.equal(asked, 2, stoppedBy);
+      // no text came out, so it is still the scan answer, plus WHY the OCR gave none
+      assert.equal(first.hasText, false, stoppedBy);
+      assert.equal(first.ocr?.stoppedBy, stoppedBy);
+    }
+  });
+
+  it("without a sha256 the OCR still runs, nothing is cached", async () => {
+    let asked = 0;
+    const cache = new AssetDocumentTextCache(
+      async () => scanLines,
+      32,
+      async () => {
+        asked += 1;
+        return reading();
+      },
+    );
+    await cache.text(undefined, bytes);
+    await cache.text(undefined, bytes);
+    assert.equal(asked, 2);
+  });
+
+  it("the service builds its cache with the scan reader (the switch is read per call, off by default)", () => {
+    const source = readFileSync(
+      "src/service-assets/service-assets.service.ts",
+      "utf8",
+    );
+    assert.match(
+      source,
+      /new AssetDocumentTextCache\(\s*undefined,\s*undefined,\s*createScanReader\(/,
     );
   });
 });

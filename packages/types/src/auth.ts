@@ -116,6 +116,10 @@ export const PERMISSIONS = {
   QUOTES_ACCEPTANCE_LINK_MANAGE: "quotes.acceptance_link.manage",
   QUOTES_TEMPLATES_MANAGE: "quotes.templates.manage",
   QUOTES_HANDOFF: "quotes.handoff",
+  /// Eszközbérlés (task eszkozberles, S2): the rental desk. View lists the rentals, manage records one (and, in S4, the
+  /// return). Granted to the shop's sales role (acrobot 44216: the role that sees the till and the partner orders).
+  RENTALS_VIEW: "rentals.view",
+  RENTALS_MANAGE: "rentals.manage",
   DASHBOARD_VIEW: "dashboard.view",
   TASKS_VIEW: "tasks.view",
   ORDERS_VIEW: "orders.view",
@@ -157,6 +161,15 @@ export const PERMISSIONS = {
   /// OWNER, ADMIN, MANAGER, SERVICE mindkettőt, VIEWER a view-t, partner semmit.
   MORTALITY_VIEW: "mortality.view",
   MORTALITY_MANAGE: "mortality.manage",
+  /// Üzemeltetési napló (task os-uzemeltetesi-naplo): a nézet a sablonokat (S1), később a bejegyzéseket olvassa; a sablonok
+  /// kezelése (felvétel, szerkesztés, kivezetés) külön, szűkebb jog. A bejegyzés rögzítése (S2) a harmadik: a szerelő rögzít, de
+  /// a sablont nem gondozza.
+  OPERATIONS_LOG_VIEW: "operations-log.view",
+  OPERATIONS_LOG_RECORD: "operations-log.record",
+  /// A partner-fiók látja a SAJÁT helyszíneinek naplóját és havi kimutatását (S5): külön jog, mert a belső nézet (`operations-log.view`)
+  /// kollégák nevét és belső megjegyzést is mutat. A partner a saját, szűkített végpontjait kapja, a belsőket soha.
+  OPERATIONS_LOG_PARTNER_VIEW: "operations-log.partner.view",
+  OPERATIONS_LOG_TEMPLATES_MANAGE: "operations-log.templates.manage",
   ICP_VIEW: "icp.view",
   ICP_MANAGE: "icp.manage",
   CONTENT_VIEW: "content.view",
@@ -302,6 +315,11 @@ export const PERMISSIONS = {
   /// tételes szerepkör-listákon is - anélkül a SALES, WAREHOUSE, SERVICE és
   /// VIEWER nem kapná meg, és a "mindenki" csendben háromra szűkülne.
   AI_TEST_VIEW: "ai-test.view",
+  /// AZ AI CSEVEGÉS BEÁLLÍTÁSAI (kártya f5b8f7ba, 4a szelet): az üzenetek és a
+  /// kapcsolat-kérések megőrzési ideje, a kapcsolat-kérés kapcsolója és a
+  /// címzett. Személyes adat sorsáról dönt, ezért csak OWNER/ADMIN, a MANAGER
+  /// sem (lásd ROLE_PERMISSIONS lent), egyénileg adható.
+  AI_SETTINGS_MANAGE: "ai-test.settings.manage",
   /// AZ ÜZENETEK MODUL (kártya 51d7aba0). Minden belső emberi szerepkör
   /// megkapja, a VIEWER is; gépi ágens és partnerfiók nem (acrobot döntése,
   /// 26174). A beszélgetésen belüli jogot a tagság adja, nem ez.
@@ -333,6 +351,11 @@ export const PERMISSIONS = {
   /// MANAGER nem kapja (lásd lent), és a `knowledge.manage` sem hozza magával: aki
   /// szerkeszt, a saját szerkesztését e jog nélkül nem hagyhatja jóvá.
   KNOWLEDGE_APPROVE: "knowledge.approve",
+  /// THE ATTENDANCE SHEET (task os-jelenleti-iv, S1): an employee's weekly schedule and the day marks (sick, leave, day off,
+  /// other times), past months included. KEPT APART FROM `users.manage`: who keeps the sheets is an HR job, not account
+  /// administration, and the two may well be different people; a sick day is health data, so the circle is narrow: OWNER
+  /// and ADMIN, not the MANAGER (see below), grantable one by one. The employee's own advance marks (S3) need no right.
+  ATTENDANCE_MANAGE: "attendance.manage",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -389,8 +412,15 @@ const BASE_ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>> =
         permission !== PERMISSIONS.KNOWLEDGE_RESEARCH_RUN &&
         // A SZAKMAI DÖNTÉS (befogad, kizár, elfogad) A SZERKESZTŐÉ (S4).
         permission !== PERMISSIONS.KNOWLEDGE_MANAGE &&
+        // AZ AI CSEVEGÉS ADATAINAK MEGŐRZÉSE ÉS A KAPCSOLAT-KÉRÉS CÍMZETTJE (f5b8f7ba, 4a).
+        permission !== PERMISSIONS.AI_SETTINGS_MANAGE &&
         // A VÉGLEGES JÓVÁHAGYÁS (szótár-változat, K4) A SZERKESZTŐÉ, BALÁZSÉ (S5).
         permission !== PERMISSIONS.KNOWLEDGE_APPROVE &&
+        // A SICK DAY IS HEALTH DATA, AND THE SHEET IS AN HR RECORD (os-jelenleti-iv, S1).
+        permission !== PERMISSIONS.ATTENDANCE_MANAGE &&
+        // A PARTNER-NÉZET A PARTNER-FIÓKÉ (os-uzemeltetesi-naplo, S5): a vezető a belső nézetet (`operations-log.view`) kapja, a
+        // partner szűkített végpontjait nem; az OWNER és az ADMIN mindent kap, de a végpont a partner-hatókört kéri, tehát nekik üres.
+        permission !== PERMISSIONS.OPERATIONS_LOG_PARTNER_VIEW &&
         // A JOVAHAGYAS NEM VEZETOI JOG, HANEM KET NEVESITETT EMBERE. Balazs
         // szabalya 2026-09-01 14:28-rol: egyelore semmi nem mehet ki nelkule vagy
         // Luca nelkul. Egy MANAGER, aki tartalmat IR, sajat magat hagyna jova --
@@ -398,6 +428,8 @@ const BASE_ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>> =
         permission !== PERMISSIONS.CONTENT_APPROVE,
     ),
     SALES: [
+      PERMISSIONS.RENTALS_VIEW,
+      PERMISSIONS.RENTALS_MANAGE,
       PERMISSIONS.QUOTES_VIEW,
       PERMISSIONS.QUOTES_MANAGE,
       PERMISSIONS.QUOTES_PUBLISH,
@@ -469,6 +501,9 @@ const BASE_ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>> =
       // az elhullási napló (kártya 115c9740): a bolt élőállatait ők is gondozzák
       PERMISSIONS.MORTALITY_VIEW,
       PERMISSIONS.MORTALITY_MANAGE,
+      // az üzemeltetési napló sablonjai: a szerelő ezekből rögzít (S2); a sablonokat nem ő gondozza
+      PERMISSIONS.OPERATIONS_LOG_VIEW,
+      PERMISSIONS.OPERATIONS_LOG_RECORD,
     ],
     VIEWER: [...VIEW_PERMISSIONS, PERMISSIONS.MESSAGES_USE],
 
@@ -557,6 +592,8 @@ const BASE_ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>> =
       PERMISSIONS.SERVICE_MANAGE,
       PERMISSIONS.AQUARIUMS_VIEW,
       PERMISSIONS.AQUARIUMS_MANAGE,
+      // az üzemeltetési napló partner-nézete (task os-uzemeltetesi-naplo, S5): a saját helyszínek bejegyzései és havi kimutatása, olvasva
+      PERMISSIONS.OPERATIONS_LOG_PARTNER_VIEW,
     ],
 
     /**
@@ -705,7 +742,18 @@ export interface AuthenticatedUser {
    * exceptions must make every construction site fill it.
    */
   permissions?: readonly Permission[];
+  /**
+   * THE THEME THE PERSON CHOSE, saved on the account (Balázs, 2026-11-09: the phone's browser forgot it every time).
+   * `null`: not chosen yet, the browser's own setting decides. Optional: an older server leaves it out, which reads
+   * the same as `null`.
+   */
+  themePreference?: ThemePreference | null;
 }
+
+/** A person's theme: light, dark, or the device's own mode. */
+export type ThemePreference = "light" | "dark" | "system";
+
+export const THEME_PREFERENCES = ["light", "dark", "system"] as const;
 
 /**
  * WHOSE PERMISSIONS ARE ASKED ABOUT: a role (its template) and, when known, the

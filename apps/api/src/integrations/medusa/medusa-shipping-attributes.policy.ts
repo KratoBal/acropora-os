@@ -44,6 +44,12 @@ export interface MedusaShippingFlags {
   /** commerce #677 óta; egy régebbi bolt nem adja vissza, és ott a hiánya hamis */
   locker_unsuitable?: boolean;
   /**
+   * A `pickup_only` ERTEKET AZ OS SZARMAZTATTA a kategoriabol (commerce #724, kartya c603774e): csak az OS irja. A bolt
+   * csak olyan erteket jelol meg, amit az iras maga kapcsol be, vagy ami mar jelolt: egy kezzel bekapcsolt ertek
+   * jelolo nelkul marad, es az OS azt soha nem veszi le. Egy regebbi bolt nem adja vissza, es ott a hianya NEM "kezi".
+   */
+  pickup_only_derived?: boolean;
+  /**
    * Az elo allat fajtaja (commerce V2.6): a kategoria-fabol szarmaztatott, a
    * profil-sor nem tarolja. Egy regebbi bolt nem adja vissza, es ott a hianya
    * NEM "nincs fajta", csak azt jelenti, hogy a bolt meg nem ismeri.
@@ -88,7 +94,26 @@ export function shippingFlagsDiffer(
     current.is_frozen !== wanted.is_frozen ||
     (current.locker_unsuitable ?? false) !==
       (wanted.locker_unsuitable ?? false) ||
-    (current.livestock_kind ?? null) !== (wanted.livestock_kind ?? null)
+    (current.livestock_kind ?? null) !== (wanted.livestock_kind ?? null) ||
+    /*
+      A JELOLO CSAK LEVEHETO ITT, FELVENNI NEM: ha a bolti sor jelolt, de mar nem mi vezetjuk le (a profil is kimondja),
+      a jelolot le kell venni. A fordito eset (a mi jelolonk igaz, a boltie hamis) NEM kulonbseg: egy kezzel bekapcsolt
+      ertek jelolo nelkul marad, es ha ezert minden kor ujra irna, a bolt minden korben "valtozott" sort jelentene.
+    */
+    (current.pickup_only_derived === true &&
+      wanted.pickup_only_derived === false)
+  );
+}
+
+/**
+ * A BOLTBAN MARADT, AZ OS ALTAL SZARMAZTATOTT CSAK BOLTI ATVETEL (kartya c603774e): a bolti sor `pickup_only` igaz es az OS
+ * jelolte. Egy ember altal bekapcsolt ertek (jelolo nelkul) soha nem ide tartozik.
+ */
+export function rowsCarryingDerivedPickup<
+  T extends { pickup_only?: boolean; pickup_only_derived?: boolean },
+>(rows: readonly T[]): T[] {
+  return rows.filter(
+    (row) => row.pickup_only === true && row.pickup_only_derived === true,
   );
 }
 
@@ -116,4 +141,17 @@ export function describeShippingFlags(flags: MedusaShippingFlags): string {
       : null,
   ].filter((x): x is string => x !== null);
   return igazak.length ? igazak.join(", ") : "nincs korlátozás";
+}
+
+/**
+ * A BOLTBAN MARADT ELO ALLAT FAJTA (V2.6 S1b koveto, kartya 4b30b373).
+ *
+ * Egy termek, ami kikerult a harom elo allat kategoriabol, es nincs szallitasi-jellemzo sora, nem celpontja a
+ * parancsnak (a celok a profil-sorok es az elo allat besorolasok), ezert a boltban a regi `livestock_kind` marad, es
+ * a vevoi level rossz akklimatizacios utmutatot adna. A bolt sora, amin fajta all, ezzel a szuressel jelolt.
+ */
+export function rowsCarryingKind<
+  T extends { livestock_kind?: LivestockKind | null },
+>(rows: readonly T[]): T[] {
+  return rows.filter((row) => (row.livestock_kind ?? null) !== null);
 }

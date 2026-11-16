@@ -278,6 +278,21 @@ describe("the detail", () => {
     );
   });
 
+  it("the store pickup comes from the option id, the name is the fallback", () => {
+    const pick = (method: { name: string; shipping_option_id?: string }) =>
+      shippingOf([{ ...method, data: null }], "so_pickup").storePickup;
+    assert.deepEqual(
+      [
+        pick({ name: "Átvétel az üzletben", shipping_option_id: "so_pickup" }),
+        pick({ name: "Bolti átvétel" }),
+        pick({ name: "GLS csomagpont", shipping_option_id: "so_gls" }),
+        pick({ name: "Bolti átvétel", shipping_option_id: "so_gls" }),
+      ],
+      [true, true, false, false],
+    );
+    assert.equal(shippingOf([], "so_pickup").storePickup, false);
+  });
+
   it("a GLS point is GLS, and an empty address is no address", () => {
     assert.equal(
       shippingOf([

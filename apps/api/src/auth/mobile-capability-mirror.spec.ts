@@ -58,6 +58,8 @@ const SERVER_PAIR: Record<string, string | null> = {
   // (2026-09-24, murena).
   aquariumsView: PERMISSIONS.AQUARIUMS_VIEW,
   aquariumsManage: PERMISSIONS.AQUARIUMS_MANAGE,
+  // Az üzemeltetési napló rögzítése (task os-uzemeltetesi-naplo, S2c).
+  operationsLogRecord: PERMISSIONS.OPERATIONS_LOG_RECORD,
   // A Számlák csak olvasó csempéje (2026-11-03, kártya 050e138b).
   billingView: PERMISSIONS.BILLING_VIEW,
 };

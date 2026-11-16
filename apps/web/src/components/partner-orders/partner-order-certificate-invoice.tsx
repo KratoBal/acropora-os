@@ -5,11 +5,16 @@ import {
   formatMoney,
   hasPermission,
   PERMISSIONS,
+  type MaintenanceInvoiceIssueResult,
   type MaintenanceInvoiceSummary,
 } from "@acropora/types";
 import { useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import {
+  InvoiceMailNotice,
+  useMaintenanceInvoiceIssue,
+} from "@/components/service-jobs/maintenance-invoice-issue-confirm";
 import { maintenanceInvoiceApi } from "@/lib/api/maintenance-invoice";
 
 /**
@@ -42,7 +47,24 @@ export function PartnerOrderCertificateInvoice({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmUnsigned, setConfirmUnsigned] = useState(false);
-  const [confirmIssue, setConfirmIssue] = useState(false);
+  const [mail, setMail] = useState<MaintenanceInvoiceIssueResult["mail"]>(null);
+  // the issue goes through the confirmation window (card 7ba97e0d, S3)
+  const issuing = useMaintenanceInvoiceIssue({
+    token,
+    invoice: invoice ?? null,
+    onIssued: (result) => {
+      setInvoice(result.invoice);
+      setMail(result.mail);
+    },
+    onFailed: (message) => {
+      setError(message);
+      // the server decides the state (back to a draft, or waiting for a check): read it again
+      void maintenanceInvoiceApi
+        .byCertificate(token, certificateId)
+        .then((found) => setInvoice(found ?? null))
+        .catch(() => undefined);
+    },
+  });
 
   useEffect(() => {
     let live = true;
@@ -79,7 +101,6 @@ export function PartnerOrderCertificateInvoice({
     } finally {
       setBusy(false);
       setConfirmUnsigned(false);
-      setConfirmIssue(false);
     }
   };
 
@@ -172,10 +193,15 @@ export function PartnerOrderCertificateInvoice({
               <>
                 <PilotButton
                   size="action"
-                  disabled={!invoice.issueEnabled || !canIssue || busy}
-                  onClick={() => setConfirmIssue(true)}
+                  disabled={
+                    !invoice.issueEnabled || !canIssue || busy || issuing.busy
+                  }
+                  onClick={() => {
+                    setError(null);
+                    void issuing.start();
+                  }}
                 >
-                  {busy ? "Kiállítás…" : "Kiállítás"}
+                  {issuing.busy ? "Kiállítás…" : "Kiállítás"}
                 </PilotButton>
                 {!invoice.issueEnabled ? (
                   <span className="text-xs text-pilot-grey-500">
@@ -189,21 +215,8 @@ export function PartnerOrderCertificateInvoice({
               </>
             ) : null}
           </div>
-          <ConfirmDialog
-            open={confirmIssue}
-            title={`Kiállítod a számlát (${formatMoney(invoice.grossAmount, invoice.currency)})?`}
-            consequence="Valódi, a NAV-nak bejelentett számla készül a Számlázz.hu-n, pontosan a piszkozat tételeivel és összegével."
-            recovery="Nem vonható vissza: egy kiállított számla csak sztornó számlával javítható."
-            confirmLabel="Számla kiállítása"
-            busy={busy}
-            onConfirm={() =>
-              void run(
-                () => maintenanceInvoiceApi.issue(token, invoice.id),
-                "A számla kiállítása nem sikerült.",
-              )
-            }
-            onCancel={() => setConfirmIssue(false)}
-          />
+          <InvoiceMailNotice mail={mail} />
+          {issuing.dialog}
         </div>
       )}
       <ConfirmDialog

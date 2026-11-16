@@ -2,14 +2,21 @@
 
 import type { Session } from "@acropora/types";
 import {
+  applyServerThemePreference,
+  holdThemeForServer,
+  setThemePreferencePersistence,
+} from "@acropora/ui";
+import {
   createContext,
   type ReactNode,
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
+import { authPreferencesApi } from "@/lib/api/auth-preferences";
 import { DevelopmentAuthAdapter } from "@/lib/auth/development-auth";
 import { ProductionAuthAdapter } from "@/lib/auth/production-auth";
 
@@ -21,6 +28,13 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+
+/*
+  THE THEME COMES FROM THE ACCOUNT (Balázs, 2026-11-09: the phone's browser forgot it every time). Before the first
+  render: without a cached theme the views wait for the account's, in light, instead of following the phone's dark mode
+  ahead of it.
+*/
+holdThemeForServer();
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   // Next.js sets NODE_ENV to "production" for a real `next build`/`next
@@ -43,6 +57,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     });
   }, [adapter]);
+
+  // the account's theme once the session is known (null: not chosen, or signed out), and where a choice is saved
+  const themeAppliedFor = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (isLoading) return;
+    // once per account (barracuda, #2310): a later session object of the same person must not carry an older value
+    // back over a choice made since
+    const accountId = session?.user.id ?? null;
+    if (themeAppliedFor.current !== accountId) {
+      themeAppliedFor.current = accountId;
+      applyServerThemePreference(
+        session?.user.themePreference ?? null,
+        accountId,
+      );
+    }
+    setThemePreferencePersistence(
+      session
+        ? (preference) =>
+            // a cookie session has no readable token: the request carries the cookie (production-auth.ts)
+            authPreferencesApi.setTheme(session.token ?? "", preference)
+        : null,
+    );
+  }, [isLoading, session]);
 
   const value = useMemo<AuthContextValue>(
     () => ({

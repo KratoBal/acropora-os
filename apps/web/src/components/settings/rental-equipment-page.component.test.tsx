@@ -2,6 +2,8 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { RentalEquipment, Session } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { answered } from "@/test/answered";
+
 import { parseHufInput, rentalEquipmentPayload } from "./rental-equipment-form";
 import { RentalEquipmentPage } from "./rental-equipment-page";
 
@@ -153,7 +155,9 @@ describe("RentalEquipmentPage", () => {
     );
     expect(api.create).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Kivezetés" }));
+    // the save's answer reloads the list, and the list is hidden while it loads: the button is the reloaded one
+    await answered(api.update);
+    fireEvent.click(await screen.findByRole("button", { name: "Kivezetés" }));
     await waitFor(() =>
       expect(api.update).toHaveBeenLastCalledWith("token-1", "eq-1", {
         isActive: false,

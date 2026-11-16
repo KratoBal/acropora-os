@@ -92,6 +92,31 @@ describe("the create body", () => {
   });
 });
 
+describe("a blank amount (barracuda, #2270 review)", () => {
+  it("is refused, not stored as 0 Ft, on create and on update", () => {
+    const ok = {
+      name: "Ozmózis víztisztító",
+      dailyFeeHuf: 2500,
+      depositHuf: 30000,
+      replacementValueHuf: 120000,
+    };
+    for (const blank of ["", "  "]) {
+      assert.ok(
+        errors(CreateRentalEquipmentDto, { ...ok, dailyFeeHuf: blank }).some(
+          (e) => e.startsWith("dailyFeeHuf:"),
+        ),
+        JSON.stringify(blank),
+      );
+      assert.ok(
+        errors(UpdateRentalEquipmentDto, { depositHuf: blank }).some((e) =>
+          e.startsWith("depositHuf:"),
+        ),
+        JSON.stringify(blank),
+      );
+    }
+  });
+});
+
 describe("the update body", () => {
   it("takes an empty body and nulls on the three optional texts", () => {
     assert.deepEqual(errors(UpdateRentalEquipmentDto, {}), []);

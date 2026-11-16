@@ -218,6 +218,14 @@ export interface PilotTableSort {
 }
 
 /**
+ * A TELEFONOS CÍMKE OSZTÁLYA KÜLÖN, IDÉZETT SZÖVEGKÉNT ÁLL, NEM SABLON-ÁGBAN. A Tailwind a forrásszövegből szedi ki az osztályokat, és a
+ * `...content-[attr(data-label)]${...}` alakból a szomszédos `${` miatt NEM veszi ki a nevet: a webes alkalmazásban ez csak azért
+ * működött, mert egy webes tesztfájl ugyanezt a nevet külön is leírja. A partner portálon (nincs ilyen fájl) a kártya sorai címkék
+ * nélkül jelentek meg (stage 390 px, 2026-11-13: a "FELADAT / TARTAM / VÍZÓRA" felirat hiányzott).
+ */
+const PHONE_LABEL_CONTENT = "max-md:before:content-[attr(data-label)]";
+
+/**
  * A KÖZÖS TÁBLÁZAT-RÁCS (a brief 5. pontja: "a header és a data row
  * ugyanazt az oszloprácsot használja", "ne legyen kézzel egymástól
  * függetlenül pozicionált header/data grid").
@@ -293,7 +301,7 @@ export function PilotDataTable<Row>({
     if (column.id === titleId) {
       return `${base} max-md:justify-start max-md:pb-2 max-md:text-left max-md:font-semibold max-md:before:hidden`;
     }
-    return `${base} max-md:before:shrink-0 max-md:before:text-left max-md:before:text-[11px] max-md:before:font-semibold max-md:before:uppercase max-md:before:tracking-[0.05em] max-md:before:text-pilot-grey-500 max-md:before:content-[attr(data-label)]${
+    return `${base} max-md:before:shrink-0 max-md:before:text-left max-md:before:text-[11px] max-md:before:font-semibold max-md:before:uppercase max-md:before:tracking-[0.05em] max-md:before:text-pilot-grey-500 ${PHONE_LABEL_CONTENT}${
       typeof column.header === "string" && column.header
         ? ""
         : " max-md:before:hidden"

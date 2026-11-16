@@ -48,6 +48,8 @@ function internalEnvironmentNames(): Set<string> {
  * integration), or it is added here with the reason it is harmless.
  */
 const NOT_SECRET_INTERNAL_NAMES = new Set([
+  // the AI projection's link stripping (card 9d060f5c, R3): exactly "true" turns it on, a boolean, not a secret
+  "AI_PRODUCT_SEARCH_STRIP_LINKS",
   "API_KEEP_ALIVE_TIMEOUT_MS",
   "API_URL",
   "APP_URL",
@@ -56,6 +58,8 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   // the article images' public address base (2026-10-26): an origin, not a secret
   "ARTICLE_IMAGE_PUBLIC_BASE_URL",
   "ASSET_QR_BASE_URL",
+  // the OCR of a scanned asset document (card 126f9b92): exactly "true" turns it on, a boolean, not a secret
+  "ASSET_DOCUMENT_OCR",
   "BILLING_ISSUE_ENABLED",
   // the daily buyer tax-number check of the issued invoices (card aaf4f09d): a switch, not a secret
   "BUYER_TAX_CHECK_ENABLED",
@@ -66,6 +70,8 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   // the catalog buttons' allowed Medusa host names (second guard): host names, not a secret
   "CATALOG_ACTION_MEDUSA_HOSTS",
   // the stage-only permission to load the demo rows (`stage` or empty): a switch, not a secret
+  // the shop-text switch of the customer candidates (V3.4 S2c): exactly "true" turns it on, a boolean, not a secret
+  "CUSTOMER_CANDIDATES_ALLOW_SHOP_TEXT",
   "DEMO_DATA_ALLOWED",
   // the daily PDF catch-up switches (booleans, #1819 and the cmfx letter fill)
   "EXTERNAL_INVOICE_MAIL_PDF_SCHEDULE",
@@ -92,10 +98,22 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   "JATEK_PUBLIC_URL",
   // the giveaway's daily mail cap (acrobot, 2026-11-05): a number, not a secret
   "JATEK_MAIL_DAILY_CAP",
+  // the giveaway's sender and Reply-To addresses (acrobot 44556): addresses, not secrets (its SMTP login and key are under
+  // JATEK_SMTP_, which the ReefClub rule refuses as an internal integration)
+  "JATEK_MAIL_FROM",
+  "JATEK_MAIL_REPLY_TO",
   // the stage-only switch for a confirmation link without the mail: a switch, not a secret
   "JATEK_TEST_LINKS",
+  // the giveaway's data erasure (card bc0ca668): days after the grand prize draw, and its dry-run switch, not secrets
+  "JATEK_ERASE_AFTER_DAYS",
+  "JATEK_ERASE_DRY_RUN",
+  "JATEK_ERASE_DEADLINE",
+  // the switch for removing the sent mails from the sender's mailbox (card jatek-level-torles): a switch, not a secret
+  "JATEK_ERASE_MAIL",
   "PAID_MARKS_AUTO_DAYS",
   "PAID_MARKS_AUTO_HOUR",
+  // the parcel status sync's thank-you mail on closing (card ef84489d): exactly "true" turns it on, a boolean, not a secret
+  "PARCEL_STATUS_SYNC_NOTIFY_CUSTOMER",
   "PARTNER_URL",
   "PELDA_KOMMENT",
   "PELDA_KOZVETLEN",
@@ -106,6 +124,12 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   // the internal API's switch for issuing ReefClub codes (#1778): a boolean, and the ReefClub's own
   // web address, which the ReefClub process reads anyway (`REEFCLUB_WEB_URL`); neither is a secret
   "REEFCLUB_LINKING_ENABLED",
+  // the run-out reminder's draft-text permission (V3.2): exactly "true" on the test site only, a boolean, not a secret
+  "REEFCLUB_RUNOUT_ALLOW_DRAFT_TEXT",
+  // the run-out reminder's switch (V3.2): exactly "true" turns it on, a boolean, not a secret
+  "REEFCLUB_RUNOUT_ENABLED",
+  // the "mi lóg ki" switch (V3.4 S3): exactly "true" turns it on, a boolean, not a secret
+  "REEFCLUB_WATER_HINTS_ENABLED",
   "REEFCLUB_WEB_URL",
   "RELEASE_COMMIT_SHA",
   "RELEASE_EVIDENCE_EXPECTED_REPOSITORY",
@@ -178,6 +202,20 @@ describe("ReefClub környezet-lista (terv v6.1, 2.1)", () => {
       "MASTER_KEY_V2",
     ])
       assert.ok(forbiddenReason(name), name);
+  });
+
+  // WHAT TURNS THIS RED (acrobot 44556): the game's SMTP login and key (JATEK_SMTP_USER, JATEK_SMTP_PASS: "PASS" is not in the
+  // secret shape) reaching the public process without being refused; the game's two addresses being refused for no reason.
+  it("a játék SMTP-belépése és kulcsa tiltott a ReefClub-folyamatban, a két címe nem titok", () => {
+    for (const name of [
+      "JATEK_SMTP_HOST",
+      "JATEK_SMTP_PORT",
+      "JATEK_SMTP_USER",
+      "JATEK_SMTP_PASS",
+    ])
+      assert.match(forbiddenReason(name) ?? "", /JATEK_SMTP_/, name);
+    for (const name of ["JATEK_MAIL_FROM", "JATEK_MAIL_REPLY_TO"])
+      assert.equal(forbiddenReason(name), null, name);
   });
 
   it("a REEFCLUB_ előtag alatti titok megengedett, az az övé", () => {

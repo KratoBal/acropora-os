@@ -12,6 +12,7 @@ import type {
   QuoteInternalVersion,
   QuoteListResponse,
   Session,
+  Permission,
   UserRole,
 } from "@acropora/types";
 import { CUSTOMER_LIST_PAGE_SIZE } from "@acropora/types";
@@ -52,6 +53,7 @@ const api = vi.hoisted(() => ({
   newVersion: vi.fn(),
   deleteDraft: vi.fn(),
   copyAsNew: vi.fn(),
+  updateHeader: vi.fn(),
   updateVersion: vi.fn(),
   costing: vi.fn(),
   addBlock: vi.fn(),
@@ -92,12 +94,22 @@ const api = vi.hoisted(() => ({
   handoffPreview: vi.fn(),
   handoff: vi.fn(),
   proformaDraft: vi.fn(),
+  variantListPrice: vi.fn(),
 }));
 vi.mock("@/lib/api/quotes", () => ({ quotesApi: api }));
+const products = vi.hoisted(() => ({ list: vi.fn(), detail: vi.fn() }));
+vi.mock("@/lib/api/products", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api/products")>()),
+  productApi: products,
+}));
 const customers = vi.hoisted(() => ({ list: vi.fn() }));
 vi.mock("@/lib/api/customers", () => ({ customersApi: customers }));
 
-const auth = vi.hoisted(() => ({ role: "ADMIN" as UserRole }));
+const auth = vi.hoisted(() => ({
+  role: "ADMIN" as UserRole,
+  // per-user permissions (undefined: the role's own set)
+  permissions: undefined as Permission[] | undefined,
+}));
 vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({
     session: {
@@ -109,6 +121,7 @@ vi.mock("@/components/auth/auth-provider", () => ({
         email: "u@acropora.local",
         displayName: "Balázs",
         role: auth.role,
+        ...(auth.permissions ? { permissions: auth.permissions } : {}),
         customerId: null,
         supplierId: null,
       },
@@ -259,6 +272,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   navigation.search = new URLSearchParams();
   auth.role = "ADMIN";
+  auth.permissions = undefined;
   api.list.mockResolvedValue(LIST);
   api.snippets.mockResolvedValue([]);
   api.templates.mockResolvedValue([]);
@@ -361,7 +375,9 @@ describe("Új árajánlat (567:190)", () => {
       currency: "HUF",
       templateId: "t1",
     });
-    expect(navigation.push).toHaveBeenCalledWith("/ajanlatok/q9/szerkesztes");
+    await waitFor(() =>
+      expect(navigation.push).toHaveBeenCalledWith("/ajanlatok/q9/szerkesztes"),
+    );
   });
 
   /*
@@ -427,7 +443,9 @@ describe("Ajánlat adatlap (569:504)", () => {
     await waitFor(() =>
       expect(api.newVersion).toHaveBeenCalledWith("token-1", "q1"),
     );
-    expect(navigation.push).toHaveBeenCalledWith("/ajanlatok/q1/szerkesztes");
+    await waitFor(() =>
+      expect(navigation.push).toHaveBeenCalledWith("/ajanlatok/q1/szerkesztes"),
+    );
     expect(screen.queryByRole("button", { name: "Szerkesztés" })).toBeNull();
   });
 });
@@ -459,7 +477,9 @@ describe("Tervezet törlése és másolat (5937bdf2)", () => {
     await waitFor(() =>
       expect(api.deleteDraft).toHaveBeenCalledWith("token-1", "q1"),
     );
-    expect(navigation.push).toHaveBeenCalledWith("/ajanlatok");
+    await waitFor(() =>
+      expect(navigation.push).toHaveBeenCalledWith("/ajanlatok"),
+    );
   });
 
   it("a server refusal is shown and nothing navigates", async () => {
@@ -505,7 +525,9 @@ describe("Tervezet törlése és másolat (5937bdf2)", () => {
     await waitFor(() =>
       expect(api.copyAsNew).toHaveBeenCalledWith("token-1", "q1"),
     );
-    expect(navigation.push).toHaveBeenCalledWith("/ajanlatok/q9");
+    await waitFor(() =>
+      expect(navigation.push).toHaveBeenCalledWith("/ajanlatok/q9"),
+    );
   });
 
   it("a closed quote: Másolat új ajánlatként creates the copy and opens the NEW quote", async () => {
@@ -522,7 +544,9 @@ describe("Tervezet törlése és másolat (5937bdf2)", () => {
     await waitFor(() =>
       expect(api.copyAsNew).toHaveBeenCalledWith("token-1", "q1"),
     );
-    expect(navigation.push).toHaveBeenCalledWith("/ajanlatok/q9");
+    await waitFor(() =>
+      expect(navigation.push).toHaveBeenCalledWith("/ajanlatok/q9"),
+    );
     expect(screen.queryByRole("button", { name: "Törlés" })).toBeNull();
   });
 });
@@ -1008,8 +1032,10 @@ describe("Ajánlatsablonok (579:2243, 579:2562)", () => {
         milestones: TEMPLATE.milestones,
       }),
     );
-    expect(navigation.push).toHaveBeenCalledWith(
-      "/beallitasok/ajanlat-sablonok/t2",
+    await waitFor(() =>
+      expect(navigation.push).toHaveBeenCalledWith(
+        "/beallitasok/ajanlat-sablonok/t2",
+      ),
     );
   });
 
@@ -1022,7 +1048,9 @@ describe("Ajánlatsablonok (579:2243, 579:2562)", () => {
     render(<QuoteTemplateEditorPage templateId="t1" />);
     fireEvent.change(
       await screen.findByLabelText("Ajánlat érvényessége (nap)"),
-      { target: { value: "45" } },
+      {
+        target: { value: "45" },
+      },
     );
     fireEvent.click(screen.getByRole("button", { name: "Sablon mentése" }));
     await waitFor(() => expect(api.updateTemplate).toHaveBeenCalledTimes(1));
@@ -1067,8 +1095,10 @@ describe("Ajánlatsablonok (579:2243, 579:2562)", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Sablon mentése" }));
     await waitFor(() => expect(api.createTemplate).toHaveBeenCalled());
-    expect(navigation.replace).toHaveBeenCalledWith(
-      "/beallitasok/ajanlat-sablonok/t9",
+    await waitFor(() =>
+      expect(navigation.replace).toHaveBeenCalledWith(
+        "/beallitasok/ajanlat-sablonok/t9",
+      ),
     );
   });
 });
@@ -1151,6 +1181,84 @@ describe("Az ajánlat kiküldése (P3)", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Újraküldöm" }));
     await waitFor(() => expect(api.resend).toHaveBeenCalledTimes(1));
     expect(api.send).not.toHaveBeenCalled();
+  });
+
+  /*
+    A VEVONEK NINCS E-MAILJE (Luca, 2026-11-12, kartya 7dd76d60). MI PIROSIT: ha a szurke Elkuldom mellett nem all, MIERT
+    szurke; ha a figyelmeztetes nem a vevo adatlapjara visz; ha egy kitoltott cimzettnel is ott marad; ha egy vevo
+    nelkuli ajanlatnal link keletkezik; ha a kezzel beirt cimzett nem engedi a kuldest.
+  */
+  it("a vevő e-mail címe nélkül megmondja, miért szürke a gomb, és a vevő adatlapjára visz", async () => {
+    api.detail.mockResolvedValue(quote([published()], { status: "DRAFT" }));
+    api.sendDraft.mockResolvedValue({ ...DRAFT, to: [] });
+    api.send.mockResolvedValue(
+      quote([published()], { status: "SENT", deliveries: [DELIVERY] }),
+    );
+    render(<QuoteDetailPage quoteId="q1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Kiküldés" }));
+    expect(
+      await screen.findByText("A vevőnek nincs e-mail címe"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Blue Office Kft\. adatlapján nincs e-mail cím/),
+    ).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: "A vevő adatlapja" });
+    expect(link).toHaveAttribute("href", "/vevok/c1");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(screen.getByRole("button", { name: "Elküldöm" })).toBeDisabled();
+
+    // a typed address is a way out: the warning goes, the button wakes
+    fireEvent.change(screen.getByLabelText("Címzett"), {
+      target: { value: "kezzel@blue.test" },
+    });
+    expect(
+      screen.queryByText("A vevőnek nincs e-mail címe"),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Elküldöm" }));
+    await waitFor(() =>
+      expect(api.send).toHaveBeenCalledWith(
+        "token-1",
+        "q1",
+        "v1",
+        expect.objectContaining({ to: ["kezzel@blue.test"] }),
+      ),
+    );
+  });
+
+  it("says nothing when the customer has an e-mail, and a cleared field gets the plainer sentence", async () => {
+    api.detail.mockResolvedValue(quote([published()], { status: "DRAFT" }));
+    api.sendDraft.mockResolvedValue(DRAFT);
+    render(<QuoteDetailPage quoteId="q1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Kiküldés" }));
+    await waitFor(() =>
+      expect(screen.getByLabelText("Címzett")).toHaveValue("info@blue.test"),
+    );
+    expect(screen.queryByRole("link", { name: "A vevő adatlapja" })).toBeNull();
+    expect(screen.queryByText("Nincs címzett")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Címzett"), {
+      target: { value: "" },
+    });
+    expect(screen.getByText("Nincs címzett")).toBeInTheDocument();
+    expect(screen.queryByText("A vevőnek nincs e-mail címe")).toBeNull();
+    expect(screen.getByRole("button", { name: "Elküldöm" })).toBeDisabled();
+  });
+
+  it("links no customer page when the quote has no customer", async () => {
+    api.detail.mockResolvedValue(
+      quote([published()], {
+        status: "DRAFT",
+        customerId: null,
+        customerName: null,
+      }),
+    );
+    api.sendDraft.mockResolvedValue({ ...DRAFT, to: [] });
+    render(<QuoteDetailPage quoteId="q1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Kiküldés" }));
+    // no customer: not "the customer has no e-mail", just no recipient, and no customer page to send anyone to
+    expect(await screen.findByText("Nincs címzett")).toBeInTheDocument();
+    expect(screen.queryByText("A vevőnek nincs e-mail címe")).toBeNull();
+    expect(screen.queryByText(/adatlapján nincs e-mail cím/)).toBeNull();
+    expect(screen.queryByRole("link", { name: "A vevő adatlapja" })).toBeNull();
   });
 
   it("bizonytalan kiküldés után Újraküldés a gomb, és a napló kiírja a próbacímet", async () => {
@@ -1242,7 +1350,10 @@ describe("Ajánlat szerkesztő (569:171)", () => {
       title: "Szöveg",
       content: { type: "doc", content: [{ type: "paragraph" }] },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Fejezet" }));
+    // the add buttons are off while the first block is being created: the second click waits for them
+    const section = screen.getByRole("button", { name: "Fejezet" });
+    await waitFor(() => expect(section).toBeEnabled());
+    fireEvent.click(section);
     await waitFor(() => expect(api.addBlock).toHaveBeenCalledTimes(2));
     expect(api.addBlock.mock.calls[1]![3]).toEqual({
       kind: "SECTION",
@@ -1285,6 +1396,351 @@ describe("Ajánlat szerkesztő (569:171)", () => {
         isOptional: false,
       },
     ]);
+  });
+
+  it("új tétel bruttó árral: a nettó az ÁFA-kulccsal visszaszámolva megy, és a mezők egymást követik", async () => {
+    api.detail.mockResolvedValue(quote([version()]));
+    api.addItem.mockResolvedValue(quote([version()]));
+    render(<QuoteEditorPage quoteId="q1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "+ Tétel hozzáadása" }),
+    );
+    fireEvent.change(screen.getByLabelText("Megnevezés"), {
+      target: { value: "Szűrőbetét" },
+    });
+    const net = screen.getByLabelText("Nettó egységár") as HTMLInputElement;
+    const gross = screen.getByLabelText("Bruttó egységár") as HTMLInputElement;
+
+    fireEvent.change(gross, { target: { value: "1270" } });
+    expect(net.value).toBe("1000");
+
+    // a nettó átírása a bruttót számolja újra
+    fireEvent.change(net, { target: { value: "2000" } });
+    expect(gross.value).toBe("2540");
+
+    // a bruttó marad fix, ha az ÁFA-kulcs változik (a vevő a bruttót látja)
+    fireEvent.change(gross, { target: { value: "1000" } });
+    fireEvent.change(screen.getByLabelText("ÁFA %"), {
+      target: { value: "5" },
+    });
+    expect(gross.value).toBe("1000");
+    expect(net.value).toBe("952.381");
+
+    fireEvent.click(screen.getByRole("button", { name: "Tétel mentése" }));
+    await waitFor(() => expect(api.addItem).toHaveBeenCalled());
+    expect(api.addItem.mock.calls[0]![4]).toMatchObject({
+      unitNetPrice: "952.381",
+      vatRatePercent: "5",
+    });
+  });
+
+  it("érvénytelen bruttó összegnél a nettó üres, és a tétel nem menthető", async () => {
+    api.detail.mockResolvedValue(quote([version()]));
+    render(<QuoteEditorPage quoteId="q1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "+ Tétel hozzáadása" }),
+    );
+    fireEvent.change(screen.getByLabelText("Megnevezés"), {
+      target: { value: "Szűrőbetét" },
+    });
+    fireEvent.change(screen.getByLabelText("Bruttó egységár"), {
+      target: { value: "12a" },
+    });
+    expect(
+      screen.getByText(/Az összeg csak szám lehet, szóköz nélkül/),
+    ).toBeTruthy();
+    expect(
+      (screen.getByLabelText("Nettó egységár") as HTMLInputElement).value,
+    ).toBe("");
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Tétel mentése",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+  });
+
+  /*
+    A BOM FORRÁS FELIRATA (Luca kérdése, 2026-11-13: „mit jelent, hogy BOM belső rendszerből menjen?"). MI
+    PIROSÍT: ha a felirat ismét azt sugallja, hogy a tétel már kapcsolódik valamihez; ha a segédszöveg nem
+    mondja ki, hogy az ügyfél nem látja az anyaglistát, és hogy azt a tétel mentése után kell felvenni.
+  */
+  it("a BOM forrás felirata megmondja, mi ez, hol veszed fel, és hogy az ügyfél nem látja", async () => {
+    api.detail.mockResolvedValue(quote([version()]));
+    render(<QuoteEditorPage quoteId="q1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "+ Tétel hozzáadása" }),
+    );
+    const radio = screen.getByRole("radio", {
+      name: /Belső anyaglistából \(BOM\) számolva/,
+    });
+    expect(radio).toBeTruthy();
+    const label = radio.closest("label")!;
+    expect(label.textContent).toMatch(/mentése után a tétel alatt/);
+    expect(label.textContent).toMatch(/Az ügyfél csak a sort látja/);
+    expect(label.textContent).not.toMatch(/kapcsolva/);
+  });
+
+  /*
+    A TERMÉK KIVÁLASZTÁSA KITÖLTI A MEGNEVEZÉST ÉS AZ ÁRAT (Luca, 2026-11-13: „kiválasztás után nem adja
+    ki az adott termék nevét és árát"). MI PIROSÍT: ha a kiválasztás után a név vagy a nettó ár üres marad;
+    ha egy kézzel beírt név vagy ár felülíródik; ha az ár hiánya nulla Ft-ként tűnik el az ok nélkül.
+  */
+  describe("termék kiválasztása a tétel ablakában", () => {
+    const pickProduct = async () => {
+      fireEvent.click(
+        await screen.findByRole("button", { name: "+ Tétel hozzáadása" }),
+      );
+      fireEvent.click(
+        await screen.findByRole("radio", { name: /OS-termékhez kapcsolva/ }),
+      );
+      fireEvent.change(
+        within(
+          screen.getByRole("dialog", { name: "Új ajánlati tétel" }),
+        ).getByLabelText("OS-termék keresése"),
+        {
+          target: { value: "szűrő" },
+        },
+      );
+      fireEvent.click(
+        await screen.findByRole("button", { name: /Szűrőbetét/ }),
+      );
+    };
+    beforeEach(() => {
+      api.detail.mockResolvedValue(quote([version()]));
+      products.list.mockResolvedValue({
+        items: [{ id: "p1", name: "Szűrőbetét 20 µm" }],
+      });
+      products.detail.mockResolvedValue({
+        variants: [
+          {
+            id: "pv1",
+            sku: "SZB-20",
+            name: null,
+            unit: "db",
+            isActive: true,
+            vatRate: "27",
+          },
+        ],
+      });
+    });
+
+    it("kitölti a nevet és a nettó árat (a bruttó követi), és az árat a szerver mai eladási árából veszi", async () => {
+      api.variantListPrice.mockResolvedValue({
+        variantId: "pv1",
+        unitNetPrice: "1000.0000",
+        sale: false,
+        reason: null,
+      });
+      render(<QuoteEditorPage quoteId="q1" />);
+      await pickProduct();
+
+      await waitFor(() =>
+        expect(
+          (screen.getByLabelText("Nettó egységár") as HTMLInputElement).value,
+        ).toBe("1000.0000"),
+      );
+      expect(
+        (screen.getByLabelText("Megnevezés") as HTMLInputElement).value,
+      ).toBe("Szűrőbetét 20 µm");
+      expect(
+        (screen.getByLabelText("Bruttó egységár") as HTMLInputElement).value,
+      ).toBe("1270");
+      expect(api.variantListPrice).toHaveBeenCalledWith(
+        "token-1",
+        "q1",
+        "v2",
+        "pv1",
+      );
+    });
+
+    it("a kézzel beírt nevet és árat nem írja felül, de szól a mai árról", async () => {
+      api.variantListPrice.mockResolvedValue({
+        variantId: "pv1",
+        unitNetPrice: "1000.0000",
+        sale: false,
+        reason: null,
+      });
+      render(<QuoteEditorPage quoteId="q1" />);
+      fireEvent.click(
+        await screen.findByRole("button", { name: "+ Tétel hozzáadása" }),
+      );
+      fireEvent.change(screen.getByLabelText("Megnevezés"), {
+        target: { value: "Saját név" },
+      });
+      fireEvent.change(screen.getByLabelText("Nettó egységár"), {
+        target: { value: "900" },
+      });
+      fireEvent.click(
+        screen.getByRole("radio", { name: /OS-termékhez kapcsolva/ }),
+      );
+      fireEvent.change(
+        within(
+          screen.getByRole("dialog", { name: "Új ajánlati tétel" }),
+        ).getByLabelText("OS-termék keresése"),
+        {
+          target: { value: "szűrő" },
+        },
+      );
+      fireEvent.click(
+        await screen.findByRole("button", { name: /Szűrőbetét/ }),
+      );
+
+      expect(
+        await screen.findByText(/A beírt árat nem írtam felül/),
+      ).toBeTruthy();
+      expect(
+        (screen.getByLabelText("Megnevezés") as HTMLInputElement).value,
+      ).toBe("Saját név");
+      expect(
+        (screen.getByLabelText("Nettó egységár") as HTMLInputElement).value,
+      ).toBe("900");
+    });
+
+    /*
+      A KÉSVE ÉRKEZŐ ÁR-VÁLASZ (barracuda, #2535 review): MI PIROSÍT, ha egy korábbi választás válasza az
+      újabb termék tételére ír; ha a bruttó a régi ÁFA-kulccsal számolódik, miközben a mező már az újat mutatja.
+    */
+    const deferred = <T,>() => {
+      let resolve!: (value: T) => void;
+      const promise = new Promise<T>((r) => (resolve = r));
+      return { promise, resolve };
+    };
+    const twoProducts = (vatB = "27") => {
+      products.list.mockResolvedValue({
+        items: [
+          { id: "pA", name: "Szűrőbetét A" },
+          { id: "pB", name: "Szűrőbetét B" },
+        ],
+      });
+      products.detail.mockImplementation(
+        async (_token: string, id: string) => ({
+          variants: [
+            {
+              id: id === "pA" ? "vA" : "vB",
+              sku: id === "pA" ? "A-1" : "B-1",
+              name: null,
+              unit: "db",
+              isActive: true,
+              vatRate: id === "pA" ? "27" : vatB,
+            },
+          ],
+        }),
+      );
+    };
+    const search = async (productName: RegExp) => {
+      const drawer = screen.getByRole("dialog", { name: "Új ajánlati tétel" });
+      fireEvent.change(within(drawer).getByLabelText("OS-termék keresése"), {
+        target: { value: "szűrő" },
+      });
+      fireEvent.click(await screen.findByRole("button", { name: productName }));
+    };
+
+    it("az A termék késve érkező ára nem írja felül a B termékét", async () => {
+      twoProducts();
+      const a = deferred<unknown>();
+      const b = deferred<unknown>();
+      api.variantListPrice.mockImplementation(
+        async (_t: string, _q: string, _v: string, variantId: string) =>
+          variantId === "vA" ? a.promise : b.promise,
+      );
+      render(<QuoteEditorPage quoteId="q1" />);
+      fireEvent.click(
+        await screen.findByRole("button", { name: "+ Tétel hozzáadása" }),
+      );
+      fireEvent.click(
+        await screen.findByRole("radio", { name: /OS-termékhez kapcsolva/ }),
+      );
+      await search(/Szűrőbetét A/);
+      fireEvent.click(await screen.findByRole("button", { name: "Csere" }));
+      await search(/Szűrőbetét B/);
+
+      b.resolve({
+        variantId: "vB",
+        unitNetPrice: "2000.0000",
+        sale: false,
+        reason: null,
+      });
+      await waitFor(() =>
+        expect(
+          (screen.getByLabelText("Nettó egységár") as HTMLInputElement).value,
+        ).toBe("2000.0000"),
+      );
+      // az A válasza csak most érkezik
+      a.resolve({
+        variantId: "vA",
+        unitNetPrice: "1000.0000",
+        sale: false,
+        reason: null,
+      });
+      await new Promise((r) => setTimeout(r, 20));
+      expect(
+        (screen.getByLabelText("Nettó egységár") as HTMLInputElement).value,
+      ).toBe("2000.0000");
+      expect(
+        (screen.getByLabelText("Megnevezés") as HTMLInputElement).value,
+      ).toBe("Szűrőbetét B");
+    });
+
+    it("eltérő ÁFA-kulcsú változatnál a bruttó az új kulccsal számolódik", async () => {
+      twoProducts("5");
+      api.variantListPrice.mockImplementation(
+        async (_t: string, _q: string, _v: string, variantId: string) => ({
+          variantId,
+          unitNetPrice: "1000.0000",
+          sale: false,
+          reason: null,
+        }),
+      );
+      render(<QuoteEditorPage quoteId="q1" />);
+      fireEvent.click(
+        await screen.findByRole("button", { name: "+ Tétel hozzáadása" }),
+      );
+      fireEvent.click(
+        await screen.findByRole("radio", { name: /OS-termékhez kapcsolva/ }),
+      );
+      await search(/Szűrőbetét A/);
+      await waitFor(() =>
+        expect(
+          (screen.getByLabelText("Bruttó egységár") as HTMLInputElement).value,
+        ).toBe("1270"),
+      );
+      fireEvent.click(await screen.findByRole("button", { name: "Csere" }));
+      await search(/Szűrőbetét B/);
+      // az ár a B-ről jön (1000 nettó), a kulcs 5 %: a bruttó 1050, nem 1270
+      await waitFor(() =>
+        expect((screen.getByLabelText("ÁFA %") as HTMLInputElement).value).toBe(
+          "5",
+        ),
+      );
+      await waitFor(() =>
+        expect(
+          (screen.getByLabelText("Bruttó egységár") as HTMLInputElement).value,
+        ).toBe("1050"),
+      );
+    });
+
+    it("ha nincs eladási ár, megnevezi az okot, és az ár üres marad (nem nulla)", async () => {
+      api.variantListPrice.mockResolvedValue({
+        variantId: "pv1",
+        unitNetPrice: null,
+        sale: false,
+        reason: "price-missing",
+      });
+      render(<QuoteEditorPage quoteId="q1" />);
+      await pickProduct();
+
+      expect(
+        await screen.findByText(/a termékhez nincs ár megadva/),
+      ).toBeTruthy();
+      expect(
+        (screen.getByLabelText("Nettó egységár") as HTMLInputElement).value,
+      ).toBe("");
+      expect(
+        (screen.getByLabelText("Megnevezés") as HTMLInputElement).value,
+      ).toBe("Szűrőbetét 20 µm");
+    });
   });
 
   it("BOM: termékké alakítás csak products.manage mellett; költségmező csak költségjoggal", async () => {
@@ -1539,9 +1995,11 @@ describe("PDF előnézet és publikálás (569:363)", () => {
     await waitFor(() =>
       expect(api.publish).toHaveBeenCalledWith("token-1", "q1", "v2"),
     );
-    expect(
-      screen.queryByRole("button", { name: "Verzió publikálása" }),
-    ).toBeNull();
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: "Verzió publikálása" }),
+      ).toBeNull(),
+    );
   });
 
   it("publikált verziónál nincs publikáló gomb, a kért verzió PDF-je töltődik", async () => {
@@ -1602,5 +2060,144 @@ describe("Ajánlat szövegrészletek (Beállítások)", () => {
       content: { type: "doc", content: [{ type: "paragraph" }] },
       milestones: [{ label: "Teljes", percent: "100" }],
     });
+  });
+});
+
+/*
+  AZ AJÁNLAT CÍME A MÁSOLATON (Luca, 2026-11-12, task quote-masolat-cim). Az ok, mérve: az API (PATCH /quotes/:id) a címet csak piszkozat
+  ajánlaton, soha nem publikált verziókkal engedi, de a felületen NINCS cím-szerkesztő (az új ajánlat oldala egyszer beállítja), ezért a
+  másolat ("... (másolat)") nem nevezhető át. MI PIROSÍT: ha a gomb nem látszik egy soha nem publikált piszkozaton; ha látszik elküldött vagy
+  publikált verziós ajánlaton, vagy jog nélkül; ha a mentés nem a címet, az ajánlat azonosítóját és a tokent küldi; ha az új cím nem jelenik
+  meg; ha az API elutasítása nem látszik; ha üres cím elmenne; ha a Mégse is mentene.
+*/
+describe("Az ajánlat címe: a másolat átnevezhető (quote-masolat-cim)", () => {
+  const draftOnly = () =>
+    quote([version({ id: "v1", versionNumber: 1, status: "DRAFT" })], {
+      status: "DRAFT",
+      title: "180 cm-es irodai bemutató akvárium (másolat)",
+    });
+  const open = async () =>
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Cím szerkesztése" }),
+    );
+  const field = () => screen.getByLabelText("Az ajánlat címe");
+
+  it("renames a never-published draft from the detail page, and the new title shows", async () => {
+    api.detail.mockResolvedValue(draftOnly());
+    api.updateHeader.mockResolvedValue({
+      ...LIST.items[0]!,
+      title: "Cápasuli lámpák, Állatkert",
+    });
+    render(<QuoteDetailPage quoteId="q1" />);
+    expect(
+      await screen.findByText("180 cm-es irodai bemutató akvárium (másolat)"),
+    ).toBeInTheDocument();
+    await open();
+    expect(field()).toHaveValue("180 cm-es irodai bemutató akvárium (másolat)");
+    fireEvent.change(field(), {
+      target: { value: "  Cápasuli lámpák, Állatkert  " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Cím mentése" }));
+    await waitFor(() =>
+      expect(api.updateHeader).toHaveBeenCalledWith("token-1", "q1", {
+        title: "Cápasuli lámpák, Állatkert",
+      }),
+    );
+    expect(
+      await screen.findByText("Cápasuli lámpák, Állatkert"),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Az ajánlat címe")).toBeNull();
+  });
+
+  it("is offered only on a draft that was never published, and only with the manage right", async () => {
+    api.detail.mockResolvedValue(quote([version({ status: "PUBLISHED" })]));
+    const { unmount } = render(<QuoteDetailPage quoteId="q1" />);
+    await screen.findByText("Aktuális verzió: v2", { exact: false });
+    expect(
+      screen.queryByRole("button", { name: "Cím szerkesztése" }),
+    ).toBeNull();
+    unmount();
+
+    // a DRAFT quote that already has a published version (a new draft on a sent one) is refused by the API too
+    api.detail.mockResolvedValue(
+      quote(
+        [
+          version({ id: "v1", versionNumber: 1, status: "PUBLISHED" }),
+          version({ id: "v2", versionNumber: 2, status: "DRAFT" }),
+        ],
+        { status: "DRAFT" },
+      ),
+    );
+    const second = render(<QuoteDetailPage quoteId="q1" />);
+    await screen.findByText("Aktuális verzió: v2", { exact: false });
+    expect(
+      screen.queryByRole("button", { name: "Cím szerkesztése" }),
+    ).toBeNull();
+    second.unmount();
+
+    auth.permissions = ["quotes.view"];
+    api.detail.mockResolvedValue(draftOnly());
+    render(<QuoteDetailPage quoteId="q1" />);
+    await screen.findByText("AJ-2026-0042 · Blue Office Kft.");
+    expect(
+      screen.queryByRole("button", { name: "Cím szerkesztése" }),
+    ).toBeNull();
+  });
+
+  it("shows the API's refusal and keeps the old title", async () => {
+    api.detail.mockResolvedValue(draftOnly());
+    api.updateHeader.mockRejectedValue(
+      new ApiError("Az adat időközben megváltozott. Frissítsd a listát.", 409),
+    );
+    render(<QuoteDetailPage quoteId="q1" />);
+    await open();
+    fireEvent.change(field(), { target: { value: "Más cím" } });
+    fireEvent.click(screen.getByRole("button", { name: "Cím mentése" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Az adat időközben megváltozott.",
+    );
+    expect(
+      screen.getByText("180 cm-es irodai bemutató akvárium (másolat)", {
+        selector: "p",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("an empty title says why the button is grey and sends nothing; Mégse and an unchanged title send nothing", async () => {
+    api.detail.mockResolvedValue(draftOnly());
+    render(<QuoteDetailPage quoteId="q1" />);
+    await open();
+    fireEvent.change(field(), { target: { value: "   " } });
+    expect(screen.getByRole("button", { name: "Cím mentése" })).toBeDisabled();
+    expect(
+      screen.getByText("Az ajánlat címe nem lehet üres."),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Mégse" }));
+    expect(screen.queryByLabelText("Az ajánlat címe")).toBeNull();
+
+    await open();
+    fireEvent.click(screen.getByRole("button", { name: "Cím mentése" }));
+    expect(screen.queryByLabelText("Az ajánlat címe")).toBeNull();
+    expect(api.updateHeader).not.toHaveBeenCalled();
+  });
+
+  it("the editor page renames too, and its header follows", async () => {
+    api.detail.mockResolvedValue(draftOnly());
+    api.updateHeader.mockResolvedValue({
+      ...LIST.items[0]!,
+      title: "Új cím a szerkesztőben",
+    });
+    render(<QuoteEditorPage quoteId="q1" />);
+    await open();
+    fireEvent.change(field(), { target: { value: "Új cím a szerkesztőben" } });
+    fireEvent.click(screen.getByRole("button", { name: "Cím mentése" }));
+    await waitFor(() =>
+      expect(api.updateHeader).toHaveBeenCalledWith("token-1", "q1", {
+        title: "Új cím a szerkesztőben",
+      }),
+    );
+    expect(
+      await screen.findByText("AJ-2026-0042 · Új cím a szerkesztőben"),
+    ).toBeInTheDocument();
   });
 });

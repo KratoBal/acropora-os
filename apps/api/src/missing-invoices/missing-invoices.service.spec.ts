@@ -63,6 +63,26 @@ function service(input: {
   mailbox?: { id: string; content: Uint8Array; fileName: string }[];
   /** terhelés -> kézzel párosított dokumentum(ok) */
   manual?: Map<string, string[]>;
+  /** azonosító -> mi az (a jelölt-vizsgálat `idKind`-ja); alapértelmezés: ismeretlen */
+  idKinds?: Map<
+    string,
+    | { kind: "document" }
+    | { kind: "billingRow"; sourceDocumentId: string | null }
+  >;
+  /** a betöltő kizárásai azonosítónként (`candidatesWithExclusions`) */
+  excluded?: Map<string, { code: string; detail: string | null }>;
+  /** a tárolt dokumentum lekérdezés-mezői azonosítónként (`queryFields`) */
+  queryFields?: Map<
+    string,
+    {
+      reviewState: string | null;
+      status: string;
+      kind: string | null;
+      origin: string;
+    }
+  >;
+  /** az összevont tagok lenyomatai (`documentHashes`) */
+  hashes?: { id: string; origin: string; sha256: string }[];
   /** a saját kimenő számlák a feedből (`ownOutgoingDocuments`) */
   ownDocuments?: {
     documentNumber: string;
@@ -82,10 +102,19 @@ function service(input: {
     ownOutgoingDocuments: async () => input.ownDocuments ?? [],
     statementCoverage: async () => new Set(input.coverage),
     manualMatches: async () => input.manual ?? new Map(),
+    manualMatchRows: async () => [],
     candidates: async (from: string, to: string) => {
       ranges.push([from, to]);
       return input.documents ?? [];
     },
+    idKind: async (id: string) => input.idKinds?.get(id) ?? { kind: "unknown" },
+    candidatesWithExclusions: async () => ({
+      documents: input.documents ?? [],
+      excluded: input.excluded ?? new Map(),
+    }),
+    queryFields: async (id: string) => input.queryFields?.get(id) ?? null,
+    documentHashes: async (ids: string[]) =>
+      (input.hashes ?? []).filter((h) => ids.includes(h.id)),
     uncheckedMailboxContent: async () => input.mailbox ?? [],
     setPayee: async (id: string, payee: string) =>
       void stored.push([id, payee]),
@@ -531,12 +560,327 @@ describe("an insurance premium without a document", () => {
   });
 });
 
+/**
+ * A NÉV NÉLKÜLI JELÖLT (task os-hianyzo-szamlak-unpaid, 2026-11-11): egy kártyás fizetés kereskedő-neve nem a
+ * számla kiállítójáé (XXXLUTZ LEHEL UTCA, MMXH Lakberendezési Kft.), a drawer jelölt-listája üres volt, és a
+ * kézi párosítás nem volt kezdeményezhető. MI PIROSÍT: a pontos összegű, a fizetés ablakában álló számla nem
+ * jelenik meg jelöltként; egy más összegű számla megjelenik; a név szerinti jelölt mellett is megjelenik az
+ * összeg szerinti (zaj); az állapot vagy a név szerinti jelölt-lista (a hiánylista forrása) megváltozik.
+ */
+describe("a candidate that matches only by amount", () => {
+  const COVERAGE = [`${MAIN.id}:2026-10`, `${CARD.id}:2026-10`];
+
+  it("is offered to the drawer for a card payment whose merchant name is not the issuer's, and the state stays the same", async () => {
+    const card = debit("2026-10-26", 24990, "XXXLUTZ LEHEL UTCA");
+    const exactInvoice = nav("2026-10-22", 24990, "MMXH Lakberendezési Kft.");
+    const otherAmount = nav("2026-10-22", 5590, "MMXH Lakberendezési Kft.");
+    const { missing } = service({
+      debits: [card],
+      documents: [exactInvoice, otherAmount],
+      coverage: COVERAGE,
+    });
+    const detail = await missing.item(card.id);
+    assert.deepEqual(
+      detail.candidates.map((c) => [c.documentId, c.amountOnly]),
+      [[exactInvoice.id, true]],
+    );
+    // az állapot ettől nem lett Megvan: a javaslat nem párosít
+    assert.notEqual(detail.state, "FOUND");
+  });
+
+  it("is not added when the partner name already finds candidates", async () => {
+    const payment = debit("2026-10-26", 24990, "MMXH Lakberendezési Kft.");
+    const named = nav("2026-10-22", 11000, "MMXH Lakberendezési Kft.");
+    const strangerSameAmount = nav("2026-10-22", 24990, "Teljesen Más Kft.");
+    const { missing } = service({
+      debits: [payment],
+      documents: [named, strangerSameAmount],
+      coverage: COVERAGE,
+    });
+    const detail = await missing.item(payment.id);
+    assert.deepEqual(
+      detail.candidates.map((c) => [c.documentId, c.amountOnly]),
+      [[named.id, undefined]],
+    );
+  });
+});
+
+/**
+ * A JELÖLT-VIZSGÁLAT (task os-hianyzo-szamlak-unpaid, niceshops): egy tárolt számla nem jelent meg a drawerben, és nem látszott,
+ * melyik feltétel bukik. MI PIROSÍT: a be nem töltött dokumentum "betöltve"-nek látszik (vagy fordítva); a pénznem-eltérés
+ * nem látszik; a más terheléshez már párosított dokumentum nem látszik foglaltnak; a név- és az ablak-feltétel vakon igaz.
+ */
+describe("the candidate diagnosis", () => {
+  const COVERAGE = [`${MAIN.id}:2026-11`, `${CARD.id}:2026-11`];
+
+  it("says a document the matching never received is not loaded", async () => {
+    const card = debit("2026-11-01", 338018, "niceshops GmbH");
+    const { missing } = service({
+      debits: [card],
+      documents: [],
+      coverage: COVERAGE,
+    });
+    const diagnosis = await missing.candidateDiagnosis(
+      card.id,
+      "no-such-document",
+    );
+    assert.deepEqual(diagnosis, {
+      loaded: false,
+      viaAlias: false,
+      viaBillingRow: false,
+      reason: "NO_SUCH_ID",
+      loaderReason: null,
+      document: null,
+      checks: null,
+    });
+  });
+
+  /*
+    A NICESHOPS-ESET (2026-11-12): a csomagellenőrzés `unpaid` listájának id-ja a bejövő számla SORÁNAK azonosítója, nem a
+    tárolt dokumentumé. MI PIROSÍT: ha egy sor-azonosítóra a vizsgálat továbbra is csak `loaded: false`-t mond (a hívó azt
+    hiszi, a betöltés hibás); ha a feloldás a sor forrás-dokumentuma helyett a sor azonosítóját keresné; ha egy ismeretlen
+    azonosító és egy betöltetlen dokumentum ugyanazt az okot kapná.
+  */
+  it("resolves a billing-row id to the row's source document and says so", async () => {
+    const card = debit("2026-11-01", 338018, "niceshops GmbH");
+    const invoice = nav("2026-11-05", 338018, "niceshops GmbH");
+    const { missing } = service({
+      debits: [card],
+      documents: [invoice],
+      coverage: COVERAGE,
+      idKinds: new Map([
+        ["row-1", { kind: "billingRow", sourceDocumentId: invoice.id }],
+      ]),
+    });
+    const diagnosis = await missing.candidateDiagnosis(card.id, "row-1");
+    assert.equal(diagnosis.loaded, true);
+    assert.equal(diagnosis.viaBillingRow, true);
+    assert.equal(diagnosis.viaAlias, false);
+    assert.equal(diagnosis.reason, null);
+    assert.equal(diagnosis.document?.documentId, invoice.id);
+    assert.ok(diagnosis.checks);
+  });
+
+  it("names WHY nothing is loaded: row without a source document, a document that is not a candidate, an id of no kind", async () => {
+    const card = debit("2026-11-01", 338018, "niceshops GmbH");
+    const { missing } = service({
+      debits: [card],
+      documents: [],
+      coverage: COVERAGE,
+      idKinds: new Map([
+        ["row-none", { kind: "billingRow", sourceDocumentId: null }],
+        ["row-unloaded", { kind: "billingRow", sourceDocumentId: "doc-x" }],
+        ["doc-unloaded", { kind: "document" }],
+      ]),
+    });
+    const reasonOf = async (id: string) => {
+      const d = await missing.candidateDiagnosis(card.id, id);
+      assert.equal(d.loaded, false);
+      return [d.reason, d.viaBillingRow];
+    };
+    assert.deepEqual(await reasonOf("row-none"), [
+      "BILLING_ROW_WITHOUT_SOURCE_DOCUMENT",
+      false,
+    ]);
+    assert.deepEqual(await reasonOf("row-unloaded"), [
+      "DOCUMENT_NOT_LOADED",
+      true,
+    ]);
+    assert.deepEqual(await reasonOf("doc-unloaded"), [
+      "DOCUMENT_NOT_LOADED",
+      false,
+    ]);
+    assert.deepEqual(await reasonOf("nothing"), ["NO_SUCH_ID", false]);
+  });
+
+  /*
+    A DOCUMENT_NOT_LOADED PONTOS OKA (niceshops, 2026-11-12: egy tárolt, BALAZS_MAIL-ből jött számla nem jelölt, és a
+    vizsgálat csak annyit mondott, hogy nincs betöltve). MI PIROSÍT: ha a betöltő kizárási kódja nem kerül a válaszba; ha a
+    lekérdezés szűrője által eleve nem betöltött dokumentum (emberi döntésre vár) ok nélkül marad; ha egy átment dokumentum
+    kitalált okot kap; ha az azonosítótlan sor is okot kap.
+  */
+  it("names the loader's reason for a stored document that is not a candidate, and the query's when the query never loaded it", async () => {
+    const card = debit("2026-11-01", 338018, "niceshops GmbH");
+    const { missing } = service({
+      debits: [card],
+      documents: [],
+      coverage: COVERAGE,
+      idKinds: new Map([
+        ["doc-copy", { kind: "document" }],
+        ["doc-waiting", { kind: "document" }],
+        ["doc-passed", { kind: "document" }],
+        ["row-1", { kind: "billingRow", sourceDocumentId: "doc-copy" }],
+        ["row-none", { kind: "billingRow", sourceDocumentId: null }],
+      ]),
+      excluded: new Map([
+        [
+          "doc-copy",
+          {
+            code: "COLLECTED_COPY_OF_OTHER_PATH",
+            detail: "another, non-collected document carries the same file",
+          },
+        ],
+      ]),
+      queryFields: new Map([
+        [
+          "doc-waiting",
+          {
+            reviewState: "UNASSIGNED",
+            status: "READ",
+            kind: "INVOICE",
+            origin: "COLLECTED_MAIL",
+          },
+        ],
+        [
+          "doc-passed",
+          {
+            reviewState: null,
+            status: "READ",
+            kind: "INVOICE",
+            origin: "COLLECTED_MAIL",
+          },
+        ],
+      ]),
+    });
+    const loaderOf = async (id: string) =>
+      (await missing.candidateDiagnosis(card.id, id)).loaderReason;
+    assert.deepEqual(await loaderOf("doc-copy"), {
+      code: "COLLECTED_COPY_OF_OTHER_PATH",
+      detail: "another, non-collected document carries the same file",
+    });
+    // a számlasor azonosítóján át is ugyanaz az ok (a sor forrás-dokumentumára oldódik)
+    assert.equal(
+      (await loaderOf("row-1"))?.code,
+      "COLLECTED_COPY_OF_OTHER_PATH",
+    );
+    assert.deepEqual(await loaderOf("doc-waiting"), {
+      code: "AWAITING_REVIEW",
+      detail: "reviewState=UNASSIGNED",
+    });
+    // átment a szűrőkön: nincs kitalált ok
+    assert.equal(await loaderOf("doc-passed"), null);
+    // forrás-dokumentum nélküli sor és ismeretlen azonosító: nincs betöltő-ok
+    assert.equal(await loaderOf("row-none"), null);
+    assert.equal(await loaderOf("nothing"), null);
+  });
+
+  it("gives each member of the merged candidate with its origin and content hash (which member brought the shared sha)", async () => {
+    const card = debit("2026-11-01", 5000, "Szállító Kft.");
+    const invoice = {
+      ...nav("2026-11-01", 5000, "Szállító Kft."),
+      aliasIds: ["up-1", "feed-1"],
+      originalId: "up-1",
+    };
+    const { missing } = service({
+      debits: [card],
+      documents: [invoice],
+      coverage: COVERAGE,
+      hashes: [
+        { id: "up-1", origin: "UPLOAD", sha256: "aa" },
+        { id: "feed-1", origin: "SZAMLAZZ_FEED", sha256: "bb" },
+        { id: "unrelated", origin: "UPLOAD", sha256: "cc" },
+      ],
+    });
+    const d = await missing.candidateDiagnosis(card.id, invoice.id);
+    assert.deepEqual(d.document?.members, [
+      { id: "feed-1", origin: "SZAMLAZZ_FEED", sha256: "bb" },
+      { id: "up-1", origin: "UPLOAD", sha256: "aa" },
+    ]);
+  });
+
+  it("shows the document's identities and merged ids (what a double-paid flag stands on)", async () => {
+    const card = debit("2026-11-01", 5000, "Szállító Kft.");
+    const invoice = {
+      ...nav("2026-11-01", 5000, "Szállító Kft."),
+      identities: ["sha:b", "inv:x|1"],
+      aliasIds: ["up-2", "up-1"],
+    };
+    const { missing } = service({
+      debits: [card],
+      documents: [invoice],
+      coverage: COVERAGE,
+    });
+    const d = await missing.candidateDiagnosis(card.id, invoice.id);
+    assert.deepEqual(d.document?.identities, ["inv:x|1", "sha:b"]);
+    assert.deepEqual(d.document?.aliasIds, ["up-1", "up-2"]);
+  });
+
+  it("a normal document id is unchanged: loaded, not via a row, no reason", async () => {
+    const card = debit("2026-11-01", 5000, "Szállító Kft.");
+    const invoice = nav("2026-11-01", 5000, "Szállító Kft.");
+    const { missing } = service({
+      debits: [card],
+      documents: [invoice],
+      coverage: COVERAGE,
+    });
+    const d = await missing.candidateDiagnosis(card.id, invoice.id);
+    assert.deepEqual(
+      [d.loaded, d.viaBillingRow, d.viaAlias, d.reason],
+      [true, false, false, null],
+    );
+  });
+
+  it("names the failing condition: the right name and window but a currency that cannot be compared", async () => {
+    const card = debit("2026-11-01", 338018, "niceshops GmbH");
+    const invoice = {
+      ...nav("2026-11-05", 338018, "niceshops GmbH,"),
+      currency: "EUR",
+    };
+    const { missing } = service({
+      debits: [card],
+      documents: [invoice],
+      coverage: COVERAGE,
+    });
+    const diagnosis = await missing.candidateDiagnosis(card.id, invoice.id);
+    assert.equal(diagnosis.loaded, true);
+    assert.deepEqual(diagnosis.checks, {
+      inWindow: true,
+      nameMatches: true,
+      currencyComparable: false,
+      amountExact: false,
+      grossKnown: true,
+      isInvoice: true,
+      pairedWith: [],
+    });
+  });
+
+  it("shows a document that another debit already took, and a name that differs", async () => {
+    const first = debit("2026-11-01", 5000, "Szállító Kft.");
+    const second = debit("2026-11-02", 5000, "Másik Bt.");
+    const invoice = nav("2026-11-01", 5000, "Szállító Kft.");
+    const { missing } = service({
+      debits: [first, second],
+      documents: [invoice],
+      coverage: COVERAGE,
+    });
+    const diagnosis = await missing.candidateDiagnosis(second.id, invoice.id);
+    assert.deepEqual(
+      [diagnosis.checks?.nameMatches, diagnosis.checks?.pairedWith],
+      [false, [first.id]],
+    );
+  });
+
+  it("is a 404 for an unknown debit", async () => {
+    const { missing } = service({
+      debits: [],
+      documents: [],
+      coverage: COVERAGE,
+    });
+    await assert.rejects(
+      () => missing.candidateDiagnosis("nope", "x"),
+      /nem található/,
+    );
+  });
+});
+
 describe("a double-paid invoice", () => {
   it("is counted as missing an invoice, and the drawer names the other debit", async () => {
     const sopro = (id: string): CandidateDocument => ({
       ...nav("2026-09-20", 172006, "Sopro Hungária Kft."),
       id,
       source: "UPLOAD",
+      // ugyanaz a PDF kétszer: ugyanaz a számla, tehát ugyanaz a szám
+      number: "KB-2855/2026",
       identities: ["sha:same-pdf"],
     });
     const first = debit("2026-09-28", 172006, "Sopro Hungária Kft.");
@@ -674,5 +1018,49 @@ describe("MissingInvoicesService refund of one of our own invoices", () => {
     const result = await run(false);
     assert.deepEqual(result.notNeeded, []);
     assert.equal(result.missing.length, 1);
+  });
+});
+
+/*
+  GYŰJTŐSZÁMLÁRA VÁR A HÓNAP LAPJÁN (Balázs, 2026-11-15, acrobot 53030). MI PIROSÍT: a várakozó tétel a
+  Hiányzik fülre kerül; a hónap kész, pedig vár valami; a csempe vagy a partnerenkénti sor nem a várakozó
+  tételeket számolja, vagy rossz összeget ad.
+*/
+describe("MissingInvoicesService: the month says what waits for a summary invoice", () => {
+  const card = (date: string, amount: number) =>
+    debit(date, amount, "SIMPLEP*PARKL.NET", {
+      bankAccountId: CARD.id,
+      narrative: `${date.replace(/-/g, ".")} 0194683438 SIMPLEP*PARKL .NET`,
+      transactionType: "KÁRTYATRANZAKCIÓ",
+    });
+
+  it("counts the waiting card payments by partner, keeps them off the missing tab, and the month is not ready", async () => {
+    const { missing } = service({
+      debits: [
+        card("2026-09-05", 400),
+        card("2026-09-17", 800),
+        card("2026-11-03", 382),
+        card("2026-11-13", 373),
+      ],
+      documents: [nav("2026-10-01", 1200, "Parkl Digital Technologies Kft.")],
+      coverage: ["2026-09", "2026-10", "2026-11"].flatMap((m) => [
+        `${MAIN.id}:${m}`,
+        `${CARD.id}:${m}`,
+      ]),
+    });
+    const detail = await missing.month("2026-11", { tab: "ALL" });
+    assert.equal(detail.tiles.awaitingCollector, 2);
+    assert.deepEqual(detail.awaitingCollector, [
+      { partner: "SIMPLEP*PARKL.NET", count: 2, amountHuf: "755" },
+    ]);
+    assert.equal(detail.status, "INCOMPLETE");
+    assert.deepEqual(
+      (await missing.month("2026-11", { tab: "MISSING" })).items,
+      [],
+    );
+    // the September month: paired, nothing waits
+    const september = await missing.month("2026-09", {});
+    assert.equal(september.tiles.awaitingCollector, 0);
+    assert.deepEqual(september.awaitingCollector, []);
   });
 });

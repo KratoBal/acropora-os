@@ -5,6 +5,7 @@ import {
 } from "@nestjs/common";
 import {
   normalizeOptionalRentalText,
+  normalizeRentalSerialNumber,
   type RentalEquipmentListResponse,
 } from "@acropora/types";
 
@@ -37,7 +38,7 @@ export class RentalEquipmentService {
     try {
       return await this.repository.create({
         name,
-        serialNumber: normalizeOptionalRentalText(input.serialNumber),
+        serialNumber: normalizeRentalSerialNumber(input.serialNumber),
         dailyFeeHuf: input.dailyFeeHuf,
         depositHuf: input.depositHuf,
         replacementValueHuf: input.replacementValueHuf,
@@ -57,7 +58,9 @@ export class RentalEquipmentService {
       if (name === "") throw new BadRequestException(EMPTY_NAME);
       data.name = name;
     }
-    for (const key of ["serialNumber", "accessories", "note"] as const)
+    if (input.serialNumber !== undefined)
+      data.serialNumber = normalizeRentalSerialNumber(input.serialNumber);
+    for (const key of ["accessories", "note"] as const)
       if (input[key] !== undefined)
         data[key] = normalizeOptionalRentalText(input[key]);
     for (const key of [

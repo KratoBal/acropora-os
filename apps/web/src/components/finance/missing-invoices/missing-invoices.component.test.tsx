@@ -440,6 +440,8 @@ describe("MissingInvoicesMonthDetail", () => {
       noInvoice: 25,
       originalMissing: 3,
       noInvoiceNeeded: 24,
+      awaitingCollector: 0,
+      awaitingPartners: [],
     },
     tab: "MISSING",
     onTab: vi.fn(),
@@ -587,6 +589,36 @@ describe("MissingInvoicesMonthDetail", () => {
     expect(within(card).queryByText(/^[-\u2212]/)).toBeNull();
   });
 
+  // WHAT TURNS THIS RED (a116ec70, acrobot 44678): the second line of the Összeg cell (the amount in the card's own currency)
+  // staying unsigned while the first line shows the refund negative: one cell, two signs.
+  it("a customer refund's original-currency line is negative too, a charge's stays unsigned", () => {
+    const refund = charge({
+      id: "c-refund-eur",
+      partner: "von Wussow",
+      narrative: "Rückerstattung",
+      amount: "21990",
+      original: { amount: "55.38", currency: "EUR" },
+      category: "CUSTOMER_REFUND",
+      state: "NO_INVOICE_NEEDED",
+    });
+    render(
+      <MissingInvoicesMonthDetail
+        {...base()}
+        rows={[charge({ id: "c-plain" }), refund]}
+      />,
+    );
+    const row = screen.getByRole("row", { name: /^von Wussow/ });
+    expect(
+      within(row).getByText((t) => /^[-\u2212]21\s990\sFt$/.test(t)),
+    ).toBeInTheDocument();
+    expect(
+      within(row).getByText((t) => /^[-\u2212]55,38\sEUR$/.test(t)),
+    ).toBeInTheDocument();
+    const card = screen.getByRole("row", { name: /^OPENAI/ });
+    expect(within(card).getByText("55,38 EUR")).toBeInTheDocument();
+    expect(within(card).queryByText(/^[-\u2212]/)).toBeNull();
+  });
+
   it("tabs, filters, a row and paging report back to the caller", () => {
     const props = base();
     render(<MissingInvoicesMonthDetail {...props} />);
@@ -686,6 +718,8 @@ describe("MissingInvoicesMonthDetail", () => {
           noInvoice: 0,
           originalMissing: 0,
           noInvoiceNeeded: 2,
+          awaitingCollector: 0,
+          awaitingPartners: [],
         }}
       />,
     );
@@ -695,6 +729,49 @@ describe("MissingInvoicesMonthDetail", () => {
       }),
     ).toBeNull();
     expect(screen.getByText(/^Részleges kivonat:/)).toBeInTheDocument();
+  });
+
+  it("says how many items wait for a summary invoice and from whom, only when some do (Balázs, 2026-11-15)", () => {
+    const { rerender } = render(
+      <MissingInvoicesMonthDetail
+        {...base()}
+        month="2026-11"
+        state="INCOMPLETE"
+        summary={{
+          found: 3,
+          notMatched: 0,
+          noInvoice: 0,
+          originalMissing: 0,
+          noInvoiceNeeded: 1,
+          awaitingCollector: 18,
+          awaitingPartners: [
+            { partner: "SIMPLEP*PARKL.NET", count: 18, amountHuf: "14570" },
+          ],
+        }}
+      />,
+    );
+    expect(
+      screen.getByText(
+        /Gyűjtőszámlára vár: 18 tétel \(SIMPLEP\*PARKL\.NET: 18, 14\s570\sFt\)/,
+      ),
+    ).toBeInTheDocument();
+    rerender(
+      <MissingInvoicesMonthDetail
+        {...base()}
+        month="2026-11"
+        state="INCOMPLETE"
+        summary={{
+          found: 3,
+          notMatched: 1,
+          noInvoice: 0,
+          originalMissing: 0,
+          noInvoiceNeeded: 1,
+          awaitingCollector: 0,
+          awaitingPartners: [],
+        }}
+      />,
+    );
+    expect(screen.queryByText(/Gyűjtőszámlára vár/)).toBeNull();
   });
 
   it("all found: the green page and only the accountant package", () => {
@@ -709,6 +786,8 @@ describe("MissingInvoicesMonthDetail", () => {
           noInvoice: 0,
           originalMissing: 0,
           noInvoiceNeeded: 3,
+          awaitingCollector: 0,
+          awaitingPartners: [],
         }}
       />,
     );
@@ -804,6 +883,7 @@ describe("MissingInvoicesDrawer", () => {
     doublePaidWith: [],
     action: "REQUEST_REISSUE_TO_COMPANY",
     driveFolderUrl: null,
+    manualDocuments: [],
     ...overrides,
   });
   const base = (): Props => ({
@@ -840,6 +920,20 @@ describe("MissingInvoicesDrawer", () => {
     ).toHaveTextContent(
       "A számla a magánszemély nevére szól: kérd újra az Próba Kft. nevére.",
     );
+  });
+
+  it("the drawer's amount line signs the original-currency part of a refund too (a116ec70)", () => {
+    const refund = charge({
+      partner: "von Wussow",
+      amount: "21990",
+      original: { amount: "55.38", currency: "EUR" },
+      category: "CUSTOMER_REFUND",
+      state: "NO_INVOICE_NEEDED",
+    });
+    render(<MissingInvoicesDrawer {...base()} row={refund} />);
+    const dialog = screen.getByRole("dialog", { name: "von Wussow" });
+    const text = (dialog.textContent ?? "").replace(/\s/g, " ");
+    expect(text).toMatch(/[-\u2212]21 990 Ft · [-\u2212]55,38 EUR/);
   });
 
   it("the drawer shows a customer refund's amount negative too, and a plain charge's unsigned (a116ec70)", () => {
@@ -996,6 +1090,77 @@ describe("MissingInvoicesDrawer", () => {
     számlánál nincs két gomb; ha a gomb nem a számla azonosítójával hív; ha a
     kézi jelölés nem látszik, és nem fordítható vissza; ha a néző is jelölhet.
   */
+  /*
+    EGY FÁJL LEVÉTELE A SORRÓL (niceshops, acrobot 48739). MI PIROSÍT: ha a
+    lista egyetlen kézi fájlnál is megjelenik (ott a teljes visszavonás
+    ugyanaz); ha a gomb nem a fájl azonosítójával hív; ha a néző is levehet.
+  */
+  it("each manually paired file can come off the row alone, but only when there is more than one", () => {
+    const props = { ...base(), onUnpairOne: vi.fn() };
+    const paired = charge({
+      state: "FOUND",
+      document: { number: "R49010000026241578", source: "UPLOAD" },
+      matchedBy: "MANUAL",
+    });
+    const file = (documentId: string, fileName: string, number: string) => ({
+      documentId,
+      documentSource: "UPLOAD",
+      number,
+      fileName,
+      pairedAt: "2026-11-11T09:00:00.000Z",
+    });
+    const right = file("doc-right", "3djake-szamla.pdf", "R49010000026241578");
+    const wrong = file(
+      "doc-wrong",
+      "niceshops-szamla.pdf",
+      "R49010000026240667",
+    );
+    const { unmount } = render(
+      <MissingInvoicesDrawer
+        {...props}
+        row={paired}
+        extras={extras({ candidates: [], manualDocuments: [right] })}
+      />,
+    );
+    expect(
+      screen.queryByRole("list", { name: "Kézzel párosított fájlok" }),
+    ).toBeNull();
+    unmount();
+    const { unmount: two } = render(
+      <MissingInvoicesDrawer
+        {...props}
+        row={paired}
+        extras={extras({ candidates: [], manualDocuments: [right, wrong] })}
+      />,
+    );
+    const files = screen.getByRole("list", {
+      name: "Kézzel párosított fájlok",
+    });
+    const row = within(files)
+      .getByText(/niceshops-szamla\.pdf/)
+      .closest("li") as HTMLElement;
+    expect(row).toHaveTextContent("R49010000026240667");
+    fireEvent.click(
+      within(row).getByRole("button", { name: "Levétel a sorról" }),
+    );
+    expect(props.onUnpairOne).toHaveBeenCalledWith({
+      documentId: "doc-wrong",
+      label: "niceshops-szamla.pdf",
+    });
+    two();
+    render(
+      <MissingInvoicesDrawer
+        {...props}
+        canManage={false}
+        row={paired}
+        extras={extras({ candidates: [], manualDocuments: [right, wrong] })}
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: "Levétel a sorról" }),
+    ).toBeNull();
+  });
+
   it("an unreadable payee is marked by hand, either way, and a mark shows and turns", () => {
     const props = { ...base(), onPayee: vi.fn() };
     const paired = charge({
@@ -1355,6 +1520,53 @@ describe("MissingInvoicesDrawer", () => {
     expect(
       within(candidate).getByText("Csak NAV-adat, eredeti nincs a rendszerben"),
     ).toBeInTheDocument();
+  });
+
+  /*
+    AZ ÖSSZEG SZERINTI JELÖLT FELIRATA (#2436 barracuda-megjegyzés). MI PIROSÍT: ha a név nélküli, csak
+    összeg szerinti jelölt ugyanúgy látszik, mint a név szerinti (a választó azt hiheti, a kiállító is
+    egyezik); ha a név szerinti jelölt is megkapja a feliratot.
+  */
+  it("an amount-only candidate says so; a name-matched one does not", () => {
+    render(
+      <MissingInvoicesDrawer
+        {...base()}
+        extras={extras({
+          candidates: [
+            {
+              documentId: "amt-1",
+              number: "ARBA26000028402",
+              date: "2026-10-22",
+              gross: "24990",
+              currency: "HUF",
+              source: "MAILBOX",
+              payee: "COMPANY",
+              hasOriginal: true,
+              amountOnly: true,
+            },
+            {
+              documentId: "name-1",
+              number: "KS26/12407",
+              date: "2026-10-22",
+              gross: "56420",
+              currency: "HUF",
+              source: "MAILBOX",
+              payee: "COMPANY",
+              hasOriginal: true,
+            },
+          ],
+        })}
+      />,
+    );
+    const label = /Csak az összeg egyezik, a kiállító neve nem/;
+    expect(
+      within(screen.getByText("ARBA26000028402").closest("li")!).getByText(
+        label,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByText("KS26/12407").closest("li")!).queryByText(label),
+    ).toBeNull();
   });
 
   it("without an upload handler there is no upload section", () => {

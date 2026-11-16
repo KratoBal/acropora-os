@@ -5,9 +5,11 @@ import { ACROPORA_COMPANY } from "./company.js";
 import {
   WEBSHOP_LEGAL_BLOCK_IDS,
   WEBSHOP_LEGAL_PLACEHOLDER_MARK,
+  WEBSHOP_LEGAL_TEST_VERSION,
   WEBSHOP_LEGAL_VERSIONS,
   webshopLegalIsComplete,
   webshopLegalPart,
+  webshopLegalSendRefusal,
 } from "./webshop-legal.js";
 import { parseWebshopMailFacts } from "./webshop-mail.js";
 
@@ -88,6 +90,46 @@ describe("webshopLegalPart", () => {
     const part = webshopLegalPart("  fogyasztobarat-JPNFMVH0  ");
     assert.ok(part && part.ok);
     assert.doesNotMatch(part.html, /<script/);
+  });
+});
+
+/*
+  THE SEND GATE (card d3ccef2e). What turns these red: a live version sending
+  with placeholders; the refusal not naming what is missing; the test shop's
+  version held (it sends marked placeholders on purpose); a missing or unknown
+  version answered here instead of by the renderer; a complete version held.
+*/
+describe("webshopLegalSendRefusal", () => {
+  it("holds every live version today, naming the documents and the company gaps", () => {
+    for (const version of Object.keys(WEBSHOP_LEGAL_VERSIONS)) {
+      if (version === WEBSHOP_LEGAL_TEST_VERSION) continue;
+      const refusal = webshopLegalSendRefusal(` ${version} `);
+      assert.ok(refusal, version);
+      assert.ok(refusal.includes(version), version);
+      for (const block of WEBSHOP_LEGAL_VERSIONS[version]!.blocks)
+        assert.ok(refusal.includes(block.title), `${version}: ${block.title}`);
+      assert.match(refusal, /Adószám, Cégjegyzékszám/);
+    }
+  });
+
+  it("lets the test shop's version through, and leaves a missing or unknown one to the renderer", () => {
+    assert.equal(WEBSHOP_LEGAL_TEST_VERSION, "teszt-mod");
+    assert.ok(WEBSHOP_LEGAL_VERSIONS[WEBSHOP_LEGAL_TEST_VERSION]);
+    for (const version of [
+      WEBSHOP_LEGAL_TEST_VERSION,
+      null,
+      undefined,
+      "",
+      "regi-bolt-2020",
+    ])
+      assert.equal(webshopLegalSendRefusal(version), null, String(version));
+  });
+
+  it("lets a complete version through", () => {
+    assert.equal(
+      webshopLegalSendRefusal("fogyasztobarat-JPNFMVH0", () => true),
+      null,
+    );
   });
 });
 

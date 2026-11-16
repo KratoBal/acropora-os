@@ -1,5 +1,6 @@
 "use client";
 
+import { uploadAccept } from "@acropora/types";
 import {
   useCallback,
   useEffect,
@@ -343,7 +344,7 @@ export function NewTicket() {
             <input
               type="file"
               multiple
-              accept="image/jpeg,image/png,application/pdf"
+              accept={uploadAccept(["jpeg", "png", "pdf"])}
               onChange={(event) =>
                 setFiles(Array.from(event.target.files ?? []))
               }

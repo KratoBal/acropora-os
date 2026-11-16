@@ -168,6 +168,13 @@ There is no schedule and no whole-catalogue mode.
   - 50 per page, with a cursor.
   - A summary gives the count per filter, plus the number of checked
     products.
+- `GET /products/enrichment/runs?limit=` (`products.view`, default 5, at most 20) returns the newest runs: per product every fetch (source kind, URL,
+  outcome, reason, HTTP code) and the field summary (field, status, value,
+  source type). The way to see what a run did when its output is not readable
+  where it ran (the test API's Coolify scheduled task keeps no stdout).
+- The CLI takes the input either from a file (`--input <file.json>`) or, as
+  base64, from an environment variable (`--input-env <NAME>`): a Coolify
+  scheduled task's command holds at most 255 characters.
 - The catalogue page (`/products/adatminoseg`) reads the queue.
 
 Both endpoints only read. Neither writes, nor calls anything outside.

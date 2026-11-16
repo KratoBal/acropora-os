@@ -448,3 +448,161 @@ describe("a teljes méretű képek listája", () => {
     assert.deepEqual(eredmeny.teljesKepek, []);
   });
 });
+
+/**
+ * AZ ESZKOZOK UZEMELTETESI NAPLO SABLONJAI (task os-uzemeltetesi-naplo, S2d). MI PIROSIT: ha a resz a naplot nem rogzito szerelonek is
+ * megjelenne (a hianya nem hiba: nincs mit hianyolnia); ha a joggal rendelkezonel kimaradna; ha a lekeres vagy a mentes hibaja
+ * "kesz"-nek latszana; ha a sablon olyan eszkozre is jonne, amelynek az adatlapjat nem kertuk (az adatlap es a sablon-szakasz nem
+ * egyezne); ha az ures sablon-lista nem szamitana "letoltottnek" (az ures is tudas).
+ */
+describe("az eszközök üzemeltetési napló sablonjai", () => {
+  const sablonDeps = (felulir: Partial<HelyszinLetoltesFuggosegek> = {}) => ({
+    sablonLista: async (assetId: string) =>
+      assetId === "a2" ? [] : [{ id: `t-${assetId}` }],
+    sablonokMentese: async () => {},
+    ...felulir,
+  });
+
+  it("a jog nélküli szerelőnek a rész nincs a zárómondatban (nem hiányzik semmi)", async () => {
+    const eredmeny = await futtat();
+    assert.equal(eredmeny.teljes, true);
+    assert.equal(
+      eredmeny.sorok.some((sor) => /üzemeltetési sablon/.test(sor)),
+      false,
+    );
+  });
+
+  it("a joggal rendelkezőnek a rész szerepel, az üres lista is letöltöttnek számít", async () => {
+    const mentett: string[] = [];
+    const eredmeny = await futtat(
+      sablonDeps({
+        sablonokMentese: async (assetId: string) => {
+          mentett.push(assetId);
+        },
+      }),
+    );
+    assert.equal(eredmeny.teljes, true);
+    assert.match(
+      sorAmi(eredmeny.sorok, /üzemeltetési sablon/),
+      /^2 eszköz üzemeltetési sablonja letöltve\.$/,
+    );
+    // mindkét eszköz listája mentődik, az ÜRES (a2) is
+    assert.deepEqual(mentett.sort(), ["a1", "a2"]);
+  });
+
+  it("csak azokra az eszközökre jön, amelyeknek az adatlapját kértük", async () => {
+    const kertek: string[] = [];
+    await futtat(
+      sablonDeps({
+        eszkozLista: async () =>
+          eszkozLap(
+            Array.from({ length: RESZLET_HATAR + 5 }, (_, i) =>
+              eszkozSor(`e${i}`),
+            ),
+            1,
+          ),
+        sablonLista: async (assetId: string) => {
+          kertek.push(assetId);
+          return [];
+        },
+      }),
+    );
+    assert.equal(kertek.length, RESZLET_HATAR);
+    assert.equal(kertek.includes(`e${RESZLET_HATAR}`), false);
+  });
+
+  it("a határ fölött a sablon-rész is HIÁNYOS (vágott), mint az eszköz-rész", async () => {
+    const eredmeny = await futtat(
+      sablonDeps({
+        eszkozLista: async () =>
+          eszkozLap(
+            Array.from({ length: RESZLET_HATAR + 1 }, (_, i) =>
+              eszkozSor(`e${i}`),
+            ),
+            1,
+          ),
+      }),
+    );
+    assert.equal(eredmeny.teljes, false);
+    assert.match(
+      sorAmi(eredmeny.sorok, /üzemeltetési sablon/),
+      /de a lista ennél hosszabb/,
+    );
+  });
+
+  it("egy eszköz sablon-listájának lekérési hibája HIÁNYOSSÁ teszi, és kimondja", async () => {
+    const eredmeny = await futtat(
+      sablonDeps({
+        sablonLista: async (assetId: string) => {
+          if (assetId === "a2") throw new Error("nincs térerő");
+          return [];
+        },
+      }),
+    );
+    assert.equal(eredmeny.teljes, false);
+    assert.match(
+      sorAmi(eredmeny.sorok, /üzemeltetési sablon/),
+      /1 eszköz üzemeltetési sablonja jött le, a többi nem sikerült\./,
+    );
+  });
+
+  it("a MENTÉS hibája nem számít letöltöttnek, és a szöveg megjelenik a záró sorokban", async () => {
+    const eredmeny = await futtat(
+      sablonDeps({
+        sablonokMentese: async () => {
+          throw new Error("SQLITE_FULL");
+        },
+      }),
+    );
+    assert.equal(eredmeny.teljes, false);
+    assert.match(
+      sorAmi(eredmeny.sorok, /üzemeltetési sablon/),
+      /0 eszköz üzemeltetési sablonja került a készülékre, de 2 mentés a készülékre NEM sikerült/,
+    );
+    assert.match(sorAmi(eredmeny.sorok, /első mentési hiba/), /SQLITE_FULL/);
+  });
+
+  it("ha az eszközök sem jöttek le, a sablon-rész is hiányzik, és nem állít semmit", async () => {
+    const eredmeny = await futtat(
+      sablonDeps({
+        eszkozLista: async () => {
+          throw new Error("nincs térerő");
+        },
+      }),
+    );
+    assert.equal(eredmeny.teljes, false);
+    assert.match(
+      sorAmi(eredmeny.sorok, /üzemeltetési sablon/),
+      /egy sem jött le/,
+    );
+  });
+
+  it("eszköz nélküli helyszínen (az eszköz-lista SIKERESEN lejött, nulla sorral) a sablon-rész KÉSZ, nem hamisan hiányos", async () => {
+    let sablonHivas = 0;
+    const eredmeny = await futtat(
+      sablonDeps({
+        eszkozLista: async () => eszkozLap([], 1),
+        sablonLista: async () => {
+          sablonHivas += 1;
+          return [];
+        },
+      }),
+    );
+    assert.equal(eredmeny.teljes, true);
+    assert.match(
+      sorAmi(eredmeny.sorok, /üzemeltetési sablon/),
+      /^0 eszköz üzemeltetési sablonja letöltve\.$/,
+    );
+    assert.equal(sablonHivas, 0);
+  });
+
+  it("csak az egyik függvény átadása nem kapcsolja be a részt (a jog nélküli hívó nem kap hamis részt)", async () => {
+    const eredmeny = await futtat({
+      sablonLista: async () => [],
+    });
+    assert.equal(
+      eredmeny.sorok.some((sor) => /üzemeltetési sablon/.test(sor)),
+      false,
+    );
+  });
+});

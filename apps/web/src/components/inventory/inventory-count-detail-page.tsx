@@ -2,11 +2,6 @@
 
 import {
   Alert,
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
   PageHeader,
   Skeleton,
   PilotDataTable,
@@ -14,6 +9,8 @@ import {
   type PilotTableColumn,
   PilotBadge,
   PilotButton,
+  PilotCard,
+  PilotCardHeader,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -33,14 +30,12 @@ const STATUS_LABEL: Record<InventoryCountStatus, string> = {
   CORRECTED: "Korrigálva",
 };
 
-const STATUS_BADGE: Record<
-  InventoryCountStatus,
-  "warning" | "info" | "success"
-> = {
-  DRAFT: "warning",
-  UPLOADED: "info",
-  CORRECTED: "success",
-};
+const STATUS_BADGE: Record<InventoryCountStatus, "amber" | "blue" | "success"> =
+  {
+    DRAFT: "amber",
+    UPLOADED: "blue",
+    CORRECTED: "success",
+  };
 
 type CountLine = InventoryCountDetail["lines"][number];
 
@@ -194,13 +189,13 @@ export function countLineColumns({
       width: "180px",
       cell: (line) => (
         <div>
-          <Badge
+          <PilotBadge
             variant={
               line.syncStatus === "OK"
                 ? "success"
                 : line.syncStatus === "FAILED"
                   ? "danger"
-                  : "neutral"
+                  : "grey"
             }
           >
             {line.syncStatus === "OK"
@@ -208,7 +203,7 @@ export function countLineColumns({
               : line.syncStatus === "FAILED"
                 ? "Hiba"
                 : "Függőben"}
-          </Badge>
+          </PilotBadge>
           {line.syncError ? (
             <p className="mt-1 text-xs text-rose-600">{line.syncError}</p>
           ) : null}
@@ -393,9 +388,9 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
       />
 
       {loading ? (
-        <Card className="p-5">
+        <PilotCard className="p-5">
           <Skeleton className="h-4 w-1/3" />
-        </Card>
+        </PilotCard>
       ) : null}
 
       {error ? (
@@ -404,14 +399,16 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
 
       {detail ? (
         <>
-          <Card>
-            <CardHeader>
-              <h2 className="text-sm font-semibold text-dusk-900">Állapot</h2>
-              <Badge variant={STATUS_BADGE[detail.status]}>
-                {STATUS_LABEL[detail.status]}
-              </Badge>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          <PilotCard>
+            <PilotCardHeader
+              title="Állapot"
+              action={
+                <PilotBadge variant={STATUS_BADGE[detail.status]}>
+                  {STATUS_LABEL[detail.status]}
+                </PilotBadge>
+              }
+            />
+            <div className="space-y-4 p-5">
               <dl className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-3">
                 <div>
                   <dt className="text-dusk-400">Indította</dt>
@@ -452,14 +449,13 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
                     </p>
                   </div>
                   <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
-                    <Button
+                    <PilotButton
                       variant="secondary"
-                      size="sm"
                       onClick={downloadTemplate}
                       disabled={downloading}
                     >
                       {downloading ? "Letöltés…" : "Sablon letöltése"}
-                    </Button>
+                    </PilotButton>
                     <div className="flex flex-col gap-1">
                       <PilotFileInput
                         ref={fileInputRef}
@@ -468,9 +464,9 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
                         className="text-xs"
                       />
                     </div>
-                    <Button size="sm" onClick={uploadFile} disabled={uploading}>
+                    <PilotButton onClick={uploadFile} disabled={uploading}>
                       {uploading ? "Feltöltés…" : "Feltöltés"}
-                    </Button>
+                    </PilotButton>
                   </div>
                 </div>
               ) : null}
@@ -509,16 +505,18 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
                   </PilotButton>
                 </div>
               ) : null}
-            </CardContent>
-          </Card>
+            </div>
+          </PilotCard>
 
-          <Card className="overflow-hidden">
-            <CardHeader>
-              <h2 className="text-sm font-semibold text-dusk-900">Tételek</h2>
-              <span className="text-xs text-dusk-500">
-                {detail.lines.length.toLocaleString("hu-HU")} tétel
-              </span>
-            </CardHeader>
+          <PilotCard className="overflow-hidden">
+            <PilotCardHeader
+              title="Tételek"
+              action={
+                <span className="text-xs text-dusk-500">
+                  {detail.lines.length.toLocaleString("hu-HU")} tétel
+                </span>
+              }
+            />
             <PilotDataTable
               columns={countLineColumns({
                 status: detail.status,
@@ -540,7 +538,7 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
               }
               minWidth={COUNT_LINE_TABLE_MIN_WIDTH}
             />
-          </Card>
+          </PilotCard>
         </>
       ) : null}
     </div>

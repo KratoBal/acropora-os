@@ -9,6 +9,7 @@ import {
   scriptedNetwork,
   type ScriptedAnswer,
 } from "./enrichment-test-fixtures.js";
+import type { DosingExtractorAnswer } from "./dosing-extraction.js";
 import {
   MAX_CONSECUTIVE_PRODUCT_FAILURES,
   runEnrichment,
@@ -90,6 +91,7 @@ async function run(
     suppliers?: Record<string, string>;
     failSave?: (check: StoredCheck) => Error | null;
     dosingExtractor?: RunDeps["dosingExtractor"];
+    productFieldExtractor?: RunDeps["productFieldExtractor"];
   } = {},
 ) {
   const network = scriptedNetwork(table);
@@ -114,6 +116,9 @@ async function run(
       now: clock.now,
       ...(options.dosingExtractor
         ? { dosingExtractor: options.dosingExtractor }
+        : {}),
+      ...(options.productFieldExtractor
+        ? { productFieldExtractor: options.productFieldExtractor }
         : {}),
     },
   );
@@ -370,6 +375,311 @@ describe("egy kézi futás, árnyékban", () => {
     assert.equal(field("dosingGuidance").value, guidance);
   });
 
+  // T4.4 S1b, card 8639ac2a; acrobot 52559 after the fifth pilot run. WHAT TURNS THIS RED: the maker block asked of a
+  // product page, or the use or a dose asked of the imprint; the imprint counted against a product page's NO_DATA; a
+  // reseller's page sent to the AI; with no imprint in the input, a maker block taken from anywhere.
+  const productPageHtml =
+    "<html><body><p>Alkalmazás: jódszint pótlására.</p><p>Forgalmazza a Kitalált Kft.</p></body></html>";
+  const imprintHtml =
+    "<html><body><p>Impressum</p><p>Kitalált Gyártó GmbH, Példa utca 1, 12345 Mintaváros</p></body></html>";
+  const fieldsFake = (asked: string[][]) => ({
+    extract: async (input: { fields: string[] }) => {
+      asked.push(input.fields);
+      return {
+        kind: "ANSWER" as const,
+        fields: [
+          ...(input.fields.includes("application")
+            ? [
+                {
+                  field: "application" as const,
+                  value: "jódszint pótlására.",
+                  anchor: "Alkalmazás: jódszint pótlására.",
+                },
+              ]
+            : []),
+          ...(input.fields.includes("manufacturerInfo")
+            ? [
+                {
+                  field: "manufacturerInfo" as const,
+                  role: "MAKER" as const,
+                  name: "Kitalált Gyártó GmbH",
+                  address: "Példa utca 1, 12345 Mintaváros",
+                  email: null,
+                  anchor:
+                    "Kitalált Gyártó GmbH, Példa utca 1, 12345 Mintaváros",
+                },
+              ]
+            : []),
+        ],
+        refused: [],
+      };
+    },
+  });
+
+  it("a gyártó-blokk csak az impresszumból, a használat csak a terméklapról; a kereskedő lapja nem megy az AI-hoz", async () => {
+    const asked: string[][] = [];
+    const dosingAsked: string[] = [];
+    const { checks } = await run(
+      [
+        {
+          productId: "p-1",
+          sources: [
+            { kind: "BULK_REEF_SUPPLY", url: `${BRS}/p/2` },
+            { kind: "MANUFACTURER", url: `${MAKER}/impressum`, imprint: true },
+          ],
+        },
+      ],
+      {
+        [`${MAKER}/p/2`]: { status: 200, body: productPageHtml },
+        [`${MAKER}/impressum`]: { status: 200, body: imprintHtml },
+        [`${BRS}/p/2`]: { status: 200, body: productPage({}) },
+      },
+      {
+        facts: { "p-1": facts({ unasManufacturerUrl: `${MAKER}/p/2` }) },
+        productFieldExtractor: fieldsFake(asked),
+        dosingExtractor: {
+          extract: async (input) => {
+            dosingAsked.push(input.pageText);
+            return {
+              kind: "ANSWER",
+              mode: "NO_DATA",
+              dose: null,
+              tests: [],
+              guidance: null,
+              excerpt: null,
+              reason: "",
+            };
+          },
+        },
+      },
+    );
+    assert.deepEqual(asked.sort(), [["application"], ["manufacturerInfo"]]);
+    // the dose is asked of the product page only, and its NO_DATA stands: the imprint does not count against it
+    assert.equal(dosingAsked.length, 1);
+    assert.match(dosingAsked[0]!, /Alkalmazás/);
+    const field = (key: string) =>
+      checks[0]!.fields.find((f) => f.field === key)!;
+    assert.deepEqual(
+      [field("application").value, field("application").sourceType],
+      ["jódszint pótlására.", "MANUFACTURER_PAGE"],
+    );
+    assert.equal(
+      field("manufacturerInfo").value,
+      "Gyártó: Kitalált Gyártó GmbH, Példa utca 1, 12345 Mintaváros",
+    );
+    assert.equal(field("dosingMode").value, "NO_DATA");
+  });
+
+  it("impresszum nélkül a gyártó-blokk hiányzik, a terméklapról sem kérjük", async () => {
+    const asked: string[][] = [];
+    const { checks } = await run(
+      [{ productId: "p-1", sources: [] }],
+      { [`${MAKER}/p/2`]: { status: 200, body: productPageHtml } },
+      {
+        facts: { "p-1": facts({ unasManufacturerUrl: `${MAKER}/p/2` }) },
+        productFieldExtractor: fieldsFake(asked),
+      },
+    );
+    assert.deepEqual(asked, [["application"]]);
+    assert.equal(
+      checks[0]!.fields.find((f) => f.field === "manufacturerInfo")!.status,
+      "MISSING",
+    );
+  });
+
+  // pilot-20, sixth and seventh runs: one imprint asked once per product gave different blocks for one brand. WHAT TURNS
+  // THIS RED: the imprint asked again for the next product of the run; the kept answer not checked against the page or not
+  // said; a refused whole answer, or an answer that gave no block, kept (the next product must ask again).
+  it("egy impresszumot a futás egyszer kérdez: a márka minden terméke ugyanazt a blokkot kapja", async () => {
+    const asked: string[][] = [];
+    const twoProducts = [
+      {
+        productId: "p-1",
+        sources: [
+          {
+            kind: "MANUFACTURER" as const,
+            url: `${MAKER}/impressum`,
+            imprint: true as const,
+          },
+        ],
+      },
+      {
+        productId: "p-2",
+        sources: [
+          {
+            kind: "MANUFACTURER" as const,
+            url: `${MAKER}/impressum`,
+            imprint: true as const,
+          },
+        ],
+      },
+    ];
+    const both = {
+      "p-1": facts({ brandWebsiteUrl: MAKER }),
+      "p-2": facts({ productId: "p-2", brandWebsiteUrl: MAKER }),
+    };
+    const { checks } = await run(
+      twoProducts,
+      { [`${MAKER}/impressum`]: { status: 200, body: imprintHtml } },
+      { facts: both, productFieldExtractor: fieldsFake(asked) },
+    );
+    assert.deepEqual(asked, [["manufacturerInfo"]]);
+    assert.deepEqual(
+      checks.map(
+        (c) => c.fields.find((f) => f.field === "manufacturerInfo")!.value,
+      ),
+      [
+        "Gyártó: Kitalált Gyártó GmbH, Példa utca 1, 12345 Mintaváros",
+        "Gyártó: Kitalált Gyártó GmbH, Példa utca 1, 12345 Mintaváros",
+      ],
+    );
+    assert.match(
+      checks[1]!.fetches[0]!.reason ?? "",
+      /az impresszum válasza a futás korábbi hívásából/,
+    );
+    assert.doesNotMatch(checks[0]!.fetches[0]!.reason ?? "", /korábbi hívás/);
+
+    // a refused whole answer is not kept: the second product asks again
+    let calls = 0;
+    await run(
+      twoProducts,
+      { [`${MAKER}/impressum`]: { status: 200, body: imprintHtml } },
+      {
+        facts: both,
+        productFieldExtractor: {
+          extract: async () => {
+            calls += 1;
+            return { kind: "REFUSED" as const, refusal: "NOT_JSON" };
+          },
+        },
+      },
+    );
+    assert.equal(calls, 2);
+
+    // an answer that gave no block (here: the anchor is not on the page) is not kept either; the next product's sound
+    // answer stands (barracuda on #2567: the Grotech Új Corall A case, first in the run)
+    let tries = 0;
+    const { checks: second } = await run(
+      twoProducts,
+      { [`${MAKER}/impressum`]: { status: 200, body: imprintHtml } },
+      {
+        facts: both,
+        productFieldExtractor: {
+          extract: async () => {
+            tries += 1;
+            return {
+              kind: "ANSWER" as const,
+              fields: [
+                {
+                  field: "manufacturerInfo" as const,
+                  role: "MAKER" as const,
+                  name: "Kitalált Gyártó GmbH",
+                  address: "Példa utca 1, 12345 Mintaváros",
+                  email: null,
+                  anchor:
+                    tries === 1
+                      ? "Kitalált Gyártó GmbH, Példa utca 9, 12345 Mintaváros"
+                      : "Kitalált Gyártó GmbH, Példa utca 1, 12345 Mintaváros",
+                },
+              ],
+              refused: [],
+            };
+          },
+        },
+      },
+    );
+    assert.equal(tries, 2);
+    assert.deepEqual(
+      second.map(
+        (c) => c.fields.find((f) => f.field === "manufacturerInfo")!.status,
+      ),
+      ["MISSING", "VERIFIED"],
+    );
+  });
+
+  // barracuda on #2565. WHAT TURNS THIS RED: a value read deterministically off the imprint page (a shop's legal notice
+  // may carry a Product JSON-LD with a barcode, a flow rate or a dose); the run's evidence from it is the maker only.
+  it("az impresszum JSON-LD-je sem ad jelöltet: onnan csak a gyártó-blokk", async () => {
+    const asked: string[][] = [];
+    const imprintWithProduct = productPage({
+      name: "Kitalált nyomelem",
+      gtin13: "5901234123457",
+      description: "Dose 2 ml per 100 l daily.",
+      additionalProperty: [{ name: "Flow rate", value: 3000, unitText: "l/h" }],
+    }).replace(
+      "<h1>Kitalált</h1>",
+      "<p>Impressum</p><p>Kitalált Gyártó GmbH, Példa utca 1, 12345 Mintaváros</p>",
+    );
+    const { checks } = await run(
+      [
+        {
+          productId: "p-1",
+          sources: [
+            { kind: "MANUFACTURER", url: `${MAKER}/impressum`, imprint: true },
+          ],
+        },
+      ],
+      { [`${MAKER}/impressum`]: { status: 200, body: imprintWithProduct } },
+      {
+        facts: { "p-1": facts({ brandWebsiteUrl: MAKER }) },
+        productFieldExtractor: fieldsFake(asked),
+      },
+    );
+    assert.deepEqual(asked, [["manufacturerInfo"]]);
+    const fromImprint = checks[0]!.fields
+      .filter((f) =>
+        f.evidence.some((e) => e.sourceRef === `${MAKER}/impressum`),
+      )
+      .map((f) => f.field);
+    assert.deepEqual(fromImprint, ["manufacturerInfo"]);
+    assert.deepEqual(
+      checks[0]!.fetches.map((f) => [f.outcome, f.fieldCount, f.reason]),
+      [["FETCHED", 1, null]],
+    );
+  });
+
+  // barracuda, #2538: the dose only in the JSON-LD description, held back (a range); the visible text has none, the AI says
+  // NO_DATA. WHAT TURNS THIS RED: the description's flag not passed from the run to the dosing check.
+  it("a leírás visszatartott adagja mellett az AI nincs-adat válasza nem érték", async () => {
+    const { checks } = await run(
+      [
+        {
+          productId: "p-1",
+          sources: [{ kind: "MANUFACTURER", url: `${MAKER}/p/1` }],
+        },
+      ],
+      {
+        [`${MAKER}/p/1`]: {
+          status: 200,
+          body: productPage({
+            name: "Kitalált nyomelem",
+            description: "Dose 2-5 ml per 100 l weekly.",
+          }),
+        },
+      },
+      {
+        facts: { "p-1": facts({ unasManufacturerUrl: `${MAKER}/p/1` }) },
+        dosingExtractor: {
+          extract: async () => ({
+            kind: "ANSWER",
+            mode: "NO_DATA",
+            dose: null,
+            tests: [],
+            guidance: null,
+            excerpt: null,
+            reason: "nincs adag",
+          }),
+        },
+      },
+    );
+    const mode = checks[0]!.fields.find((f) => f.field === "dosingMode");
+    assert.notEqual(mode?.value, "NO_DATA");
+    assert.match(
+      checks[0]!.fetches[0]!.reason ?? "",
+      /az AI szerint nincs adat, az olvasó adag-mondatot talált.*\(a leírásban\)/,
+    );
+  });
+
   // second test round, 2026-10-23: the given URL and the UNAS link lead to one page
   it("ugyanaz a végső lap kétszer: egy olvasás, egy AI-hívás, a második megnevezve", async () => {
     const asked: unknown[] = [];
@@ -514,6 +824,65 @@ describe("egy kézi futás, árnyékban", () => {
       checks[0]!.fetches[0]!.reason ?? "",
       /az AI szerint nincs adat, az olvasó 1 drop\/100 L\/day/,
     );
+  });
+
+  // card 85c38ab1, second Fauna Marin run (Trace 1-3): the brand's info page says NO_DATA, the shop page of the same
+  // product has a dose (the AI answer refused) or answers 404. WHAT TURNS THIS RED: one page's NO_DATA as the product's
+  // state while another manufacturer source did not say it; NO_DATA held back although every page said it.
+  it("a nincs-adat csak akkor termékszintű, ha minden gyártói forrás olvasható és mind ezt mondja", async () => {
+    const answers: Record<string, DosingExtractorAnswer> = {
+      Infó: {
+        kind: "ANSWER",
+        mode: "NO_DATA",
+        dose: null,
+        tests: [],
+        guidance: null,
+        excerpt: null,
+        reason: "nincs adag",
+      },
+      Bolt: { kind: "REFUSED", refusal: "TEST_CODE_NOT_IN_TEXT" },
+    };
+    const page = (h1: string) => ({
+      status: 200,
+      body: `<html><body><h1>${h1}</h1><p>Kitalált.</p></body></html>`,
+    });
+    const product = async (shop: ScriptedAnswer, shopSays = "Bolt") => {
+      const { checks } = await run(
+        [
+          {
+            productId: "p-1",
+            sources: [
+              { kind: "MANUFACTURER", url: `${MAKER}/info` },
+              { kind: "MANUFACTURER", url: `${MAKER}/bolt` },
+            ],
+          },
+        ],
+        { [`${MAKER}/info`]: page("Infó"), [`${MAKER}/bolt`]: shop },
+        {
+          facts: { "p-1": facts({ unasManufacturerUrl: `${MAKER}/info` }) },
+          dosingExtractor: {
+            extract: async ({ pageText }) =>
+              answers[pageText.startsWith("Infó") ? "Infó" : shopSays]!,
+          },
+        },
+      );
+      const mode = checks[0]!.fields.find((f) => f.field === "dosingMode")!;
+      return { mode: [mode.status, mode.value], fetches: checks[0]!.fetches };
+    };
+
+    const refused = await product(page("Bolt"));
+    assert.deepEqual(refused.mode, ["MISSING", null]);
+    assert.match(
+      refused.fetches[0]!.reason ?? "",
+      /a nincs-adat csak erre a lapra igaz, 1 másik gyártói forrás/,
+    );
+    assert.equal(refused.fetches[0]!.fieldCount, 0);
+    assert.deepEqual((await product({ status: 404 })).mode, ["MISSING", null]);
+    // every manufacturer page read and each says NO_DATA: the product's state
+    assert.deepEqual((await product(page("Bolt"), "Infó")).mode, [
+      "VERIFIED",
+      "NO_DATA",
+    ]);
   });
 
   // PD-013 calibration: reaching the limit stops the run and says so.
@@ -681,6 +1050,58 @@ describe("a vízhatás a futásban", () => {
     );
     assert.equal(mezo(checks).status, "VERIFIED");
     assert.match(checks[0]!.fetches[0]!.reason ?? "", /tagadva: PH:CSOKKENT/);
+  });
+});
+
+describe("a kiszerelés a gyártói lapon (S1a)", () => {
+  // card 8639ac2a, T4.4 S1a. WHAT TURNS THIS RED: our name's size not carried as our own value; the manufacturer's h1
+  // naming that size not confirming it; a related product's link confirming it; a reseller's page confirming it.
+  const url = "https://aquaforest.eu/en/product/x/";
+  const adalek = facts({
+    name: "Kitalált adalék 100ml",
+    current: { title: "Kitalált adalék 100ml", packSize: "100 ml" },
+    categoryBrandSites: ["aquaforest.eu"],
+  });
+  const lap = (
+    body: string,
+    kind: "MANUFACTURER" | "BULK_REEF_SUPPLY" = "MANUFACTURER",
+  ) => {
+    const at = kind === "MANUFACTURER" ? url : `${BRS}/p/100`;
+    return run(
+      [{ productId: "p-1", sources: [{ kind, url: at }] }],
+      { [at]: { status: 200, body } },
+      { facts: { "p-1": adalek } },
+    );
+  };
+  const mezo = (checks: StoredCheck[]) =>
+    checks[0]!.fields.find((f) => f.field === "packSize")!;
+
+  it("a gyártó h1-e a mi méretünket mondja: ellenőrzött, a h1 a kivonat", async () => {
+    const { checks } = await lap(
+      "<html><body><h1>Additive 100 ml</h1></body></html>",
+    );
+    assert.equal(mezo(checks).status, "VERIFIED");
+    assert.equal(mezo(checks).value, "100 ml");
+    const page = mezo(checks).evidence.find(
+      (e) => e.sourceKind === "MANUFACTURER",
+    )!;
+    assert.match(page.excerpt!, /Additive 100 ml/);
+  });
+
+  it("csak egy kapcsolódó termék linkjében áll: a saját értékünk marad, ellenőrzés nélkül", async () => {
+    const { checks } = await lap(
+      '<html><body><h1>Additive</h1><a class="woocommerce-LoopProduct-link">Other 100 ml</a></body></html>',
+    );
+    assert.equal(mezo(checks).status, "UNVERIFIED");
+    assert.equal(mezo(checks).currentValue, "100 ml");
+  });
+
+  it("kereskedő lapja nem erősít meg (a megerősítés a gyártóé)", async () => {
+    const { checks } = await lap(
+      "<html><body><h1>Additive 100 ml</h1></body></html>",
+      "BULK_REEF_SUPPLY",
+    );
+    assert.equal(mezo(checks).status, "UNVERIFIED");
   });
 });
 

@@ -403,6 +403,7 @@ describe("ProductListPage", () => {
       "Akciós ár",
       "Készlet",
       "Szállítás",
+      "Tartási adat",
       "Állapot",
       "Művelet",
     ]);
@@ -416,6 +417,7 @@ describe("ProductListPage", () => {
       true,
       true,
       true,
+      false,
       false,
       false,
       true,

@@ -62,6 +62,13 @@ export const MISSING_INVOICE_ITEM_STATES = [
    * a Nincs számla mellé kerül, hogy ne maradjon csendben.
    */
   "REFUND_MISSING",
+  /**
+   * GYŰJTŐSZÁMLÁRA VÁR (Balázs, 2026-11-15): kártyás fizetés egy olyan
+   * partnernek, akinek a havi gyűjtőszámlája egy korábbi hónapban már
+   * párosodott, és a vásárlás hónapjának számlája a határidején (a következő
+   * hónap 5-e) belül még jöhet. Nem hiány, de a hónap sem kész.
+   */
+  "AWAITING_COLLECTOR",
 ] as const;
 export type MissingInvoiceItemState =
   (typeof MISSING_INVOICE_ITEM_STATES)[number];
@@ -83,6 +90,7 @@ export const MISSING_INVOICE_STATE_LABELS: Readonly<
   NO_INVOICE_NEEDED: "Nem kell számla",
   REFUND_EXPECTED: "Sztornózva, visszatérítés várható",
   REFUND_MISSING: "Visszatérítés elmaradt",
+  AWAITING_COLLECTOR: "Gyűjtőszámlára vár",
 };
 
 export const MISSING_INVOICE_MONTH_STATUSES = [
@@ -267,6 +275,11 @@ export interface MissingInvoiceCandidate {
   source: MissingInvoiceDocumentSource;
   payee: "COMPANY" | "NOT_COMPANY" | "UNKNOWN";
   hasOriginal: boolean;
+  /**
+   * Igaz, ha a jelölt csak az ÖSSZEG miatt szerepel (a kiállító neve nem egyezik a terhelés partnerével, például
+   * kártyás fizetésnél a kereskedő neve): kézi választásra, nem ajánlás.
+   */
+  amountOnly?: true;
 }
 
 /**
@@ -279,6 +292,83 @@ export interface MissingInvoicePayeeDocument {
   payee: "COMPANY" | "NOT_COMPANY" | "UNKNOWN";
   /** Kézzel jelölték (és ezért kézzel át is jelölhető). */
   marked: boolean;
+}
+
+/**
+ * AZ EGY DOKUMENTUM ELLENI JELÖLT-VIZSGÁLAT (task os-hianyzo-szamlak-unpaid, a niceshops-eset: egy tárolt számla nem jelent
+ * meg jelöltként). Csak olvas: egy terhelésre és egy dokumentum-azonosítóra megmondja, a keresés miért (nem) hozza a dokumentumot.
+ * `loaded: false`: a dokumentum a párosítás bemenetében sincs (a betöltés kiszűrte: fizetési emlékeztető vagy egyéb dokumentum
+ * fájlneve, a betöltött időtartományon kívüli dátum, olvasat nélküli begyűjtött fájl, a Jev javaslata, egy másik példány ugyanazzal
+ * a tartalommal). Egyébként a `checks` mondja meg, melyik feltétel bukik.
+ */
+export interface MissingInvoiceCandidateDiagnosis {
+  loaded: boolean;
+  /** Igaz, ha az azonosító egy összevont jelölt MÁSIK azonosítója volt (a jelölt `documentId`-ja más). */
+  viaAlias: boolean;
+  /**
+   * Igaz, ha az azonosító egy BEJÖVŐ SZÁMLA SORÁNAK azonosítója volt (például a csomagellenőrzés `unpaid` listájáé: az
+   * `id` ott a sor azonosítója, NEM a tárolt dokumentumé), és a sor forrás-dokumentumára oldódott fel.
+   */
+  viaBillingRow: boolean;
+  /**
+   * Miért nincs betöltve (`null`, ha be van töltve): `NO_SUCH_ID` az azonosító sem tárolt dokumentum, sem számlasor;
+   * `BILLING_ROW_WITHOUT_SOURCE_DOCUMENT` számlasor, de nincs forrás-dokumentuma; `DOCUMENT_NOT_LOADED` az azonosító egy
+   * tárolt dokumentumot (vagy egy sor forrás-dokumentumát) nevez, és az nincs a párosítás bemenetében (a betöltés kiszűrte,
+   * lásd fent).
+   */
+  reason:
+    | "NO_SUCH_ID"
+    | "BILLING_ROW_WITHOUT_SOURCE_DOCUMENT"
+    | "DOCUMENT_NOT_LOADED"
+    | null;
+  /**
+   * A `DOCUMENT_NOT_LOADED` PONTOS OKA: melyik betöltő-feltétel (a lekérdezés szűrője vagy a betöltő) zárta ki a tárolt
+   * dokumentumot. Kódok: `AWAITING_REVIEW` (emberi döntésre vár: `reviewState`), `NOT_A_CANDIDATE_KIND` (sem az olvasott
+   * ág, sem az eredet nem teszi jelöltté), `UPLOAD_OF_UNPOSTED_PURCHASE`, `COLLECTED_COPY_OF_OTHER_PATH` (ugyanez a fájl
+   * más úton is megvan, és az az út esett ki másért), `NO_DATE`, `NO_READING`, `OUT_OF_WINDOW`, `REMINDER_FILE_NAME`,
+   * `OTHER_DOCUMENT_FILE_NAME`, `NOT_BOOKABLE_MARK` (a „Nem könyvelendő” jelölés, `detail`: `sourceDocumentId`, `key` vagy
+   * `sameKeyAsMarked`). `null`: be van töltve, vagy az ok nem állapítható meg (a dokumentum átment a szűrőkön).
+   */
+  loaderReason: { code: string; detail: string | null } | null;
+  document: {
+    documentId: string;
+    number: string;
+    source: MissingInvoiceDocumentSource;
+    date: string;
+    gross: string | null;
+    currency: string;
+    supplierName: string;
+    kind: "INVOICE" | "PROFORMA" | "PREMIUM_NOTICE";
+    /**
+     * A dokumentum azonosságai a párosításban: `sha:<fájl-lenyomat>` és `inv:<számlaszám|szállító>` kulcsok, az
+     * összevonás után (a kézzel párosított feltöltés lenyomata is rajta van). A kettős fizetés jelzés két párosítás KÖZÖS
+     * azonosságán áll; ez a mező mutatja meg, melyiken. Csak olvas, a fájl tartalma nincs benne.
+     */
+    identities: string[];
+    /** Az összevont jelölt többi azonosítója (a NAV-sor mögötti továbbított számla, a beolvadt feltöltés). */
+    aliasIds: string[];
+    /**
+     * Az összevont jelölt tagjai (a dokumentum, az aliasai, az eredetije) eredettel és `sha256` tartalom-lenyomattal, tartalom
+     * és fájlnév nélkül: melyik tag hozta a közös `sha:` azonosságot.
+     */
+    members: { id: string; origin: string; sha256: string }[];
+  } | null;
+  checks: {
+    /** A számla kelte a fizetés előtti 4 hónap és a következő hónap 15-e között van. */
+    inWindow: boolean;
+    /** A kiállító neve a terhelés partnerével egyezik (a név szerinti jelölt feltétele). */
+    nameMatches: boolean;
+    /** A számla pénzneme összevethető a terhelésével (vagy a terhelés eredeti devizájával). */
+    currencyComparable: boolean;
+    /** Az összeg egyezik (HUF-ban 1 Ft, devizában 5 cent), ha összevethető. */
+    amountExact: boolean;
+    /** A számlának ismert a bruttó összege. */
+    grossKnown: boolean;
+    /** Számla (nem díjbekérő vagy díjértesítő): a párosítás a díjbekérőt csak tartalékként használja. */
+    isInvoice: boolean;
+    /** Más terhelések, amelyeknek a párosításában a dokumentum már szerepel (a szabad jelöltek között nem jelenik meg). */
+    pairedWith: string[];
+  } | null;
 }
 
 export interface MissingInvoiceItemDetail extends MissingInvoiceItem {
@@ -298,6 +388,18 @@ export interface MissingInvoiceItemDetail extends MissingInvoiceItem {
     bookingDate: string;
     amount: string;
     currency: string;
+  }[];
+  /**
+   * A TERHELÉS KÉZI PÁROSÍTÁSAI, DOKUMENTUMONKÉNT (Niceshops, acrobot 48739): egy rossz sorra feltöltött fájl egyenként
+   * levehető (`DELETE items/:id/match/:documentId`), a többi párosítás marad. A `number` a jelölt-összerakó száma (egy
+   * összevont dokumentumnál a közös szám), a `fileName` a feltöltött vagy begyűjtött fájl neve, ha van.
+   */
+  manualDocuments: {
+    documentId: string;
+    documentSource: string;
+    number: string;
+    fileName: string | null;
+    pairedAt: string;
   }[];
 }
 
@@ -365,7 +467,15 @@ export interface MissingInvoiceMonthDetail {
     notMatched: number;
     noInvoice: number;
     noInvoiceNeeded: number;
+    /** Gyűjtőszámlára vár: nem hiány, de a hónap nem kész (Balázs, 2026-11-15). */
+    awaitingCollector: number;
   };
+  /**
+   * A GYŰJTŐSZÁMLÁRA VÁRÓ TÉTELEK PARTNERENKÉNT (Balázs, 2026-11-15, acrobot
+   * 53030): hány tétel vár, melyik partnertől, mennyi összegben (HUF-sorok
+   * összege, tizedes szöveg). A legtöbb tételes partner elöl.
+   */
+  awaitingCollector: { partner: string; count: number; amountHuf: string }[];
   items: MissingInvoiceItem[];
   pagination: {
     page: number;
@@ -575,6 +685,34 @@ export const INVOICE_COLLECTION_ITEM_SOURCES = [
 export type InvoiceCollectionItemSource =
   (typeof INVOICE_COLLECTION_ITEM_SOURCES)[number];
 
+/**
+ * AZ ÍTÉLET OKA (task os-hianyzo-szamlak-unpaid): melyik feltétel döntött. UNMATCHED mellett:
+ *   NO_TEXT_LAYER           szkennelt PDF, nincs szövegrétege (a fájlnév vagy a tárgy mondja, hogy számla)
+ *   NO_NUMBER_READ          a szövegből nem olvasható ki számlaszám
+ *   NUMBER_NOT_KNOWN        van olvasott szám, de nem ismert (NAV, Számlázz.hu feed, beszerzés), és nincs banki hivatkozás vagy kártyás fizetés
+ *   NUMBER_NOT_CORROBORATED az ismert szám áll a szövegben, de a második jel (összeg, szállító neve, feladó) hiányzik
+ * Más ítéletek mellett:
+ *   NOT_PDF_FILE, PDF_TEXT_FAILED                  (UNREADABLE)
+ *   NO_INVOICE_WORDS, REMINDER, OTHER_DOCUMENT     (NOT_INVOICE)
+ *   OWN_ACCOUNT_IN_TEXT                            (OWN_INVOICE)
+ *   SAME_CONTENT                                   (DUPLICATE)
+ */
+export const INVOICE_COLLECTION_REASONS = [
+  "NO_TEXT_LAYER",
+  "NO_NUMBER_READ",
+  "NUMBER_NOT_KNOWN",
+  "NUMBER_NOT_CORROBORATED",
+  "NOT_PDF_FILE",
+  "PDF_TEXT_FAILED",
+  "NO_INVOICE_WORDS",
+  "REMINDER",
+  "OTHER_DOCUMENT",
+  "OWN_ACCOUNT_IN_TEXT",
+  "SAME_CONTENT",
+] as const;
+export type InvoiceCollectionReason =
+  (typeof INVOICE_COLLECTION_REASONS)[number];
+
 export interface InvoiceCollectionItemRow {
   id: string;
   source: InvoiceCollectionItemSource;
@@ -590,7 +728,42 @@ export interface InvoiceCollectionItemRow {
   verdict: InvoiceCollectionItemVerdict;
   /** Csak tárolt fájlnál (STORED, SUGGESTED). */
   documentId: string | null;
+  /** Az ítélet oka; `null`: tárolt fájl, vagy az ok bevezetése előtti sor (a nap első futása újraírja az UNMATCHED-et). Nem tartalom: a balazs@ sornál is kimegy. */
+  reason: InvoiceCollectionReason | null;
   createdAt: string;
+}
+
+/**
+ * EGY BEGYŰJTŐ FUTÁS (acrobot 49579): a szabály-verzió emelése után ebből látszik, lefutott-e az újraolvasás, és mit
+ * hozott. Csak az állapot és a darabszámok, tartalom nincs benne.
+ */
+export interface InvoiceCollectionRunRow {
+  id: string;
+  /** RUNNING, SUCCEEDED, FAILED (a szinkron-futások közös állapota) */
+  status: string;
+  /** SCHEDULED, MANUAL, ... */
+  trigger: string;
+  startedAt: string;
+  completedAt: string | null;
+  /** a futás szabály-változata (`INVOICE_COLLECTION_RULES_VERSION`); `null`: a mező bevezetése előtti futás */
+  rulesVersion: string | null;
+  errorCode: string | null;
+  counts: {
+    filesSeen: number;
+    storedCount: number;
+    notInvoiceCount: number;
+    unmatchedCount: number;
+    ownInvoiceCount: number;
+    suggestedCount: number;
+    duplicateCount: number;
+    failedCount: number;
+  };
+}
+
+/** `GET /missing-invoices/collection-runs` */
+export interface InvoiceCollectionRunsResponse {
+  items: InvoiceCollectionRunRow[];
+  limit: number;
 }
 
 export interface InvoiceCollectionItemsResponse {

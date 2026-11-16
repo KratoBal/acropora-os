@@ -10,6 +10,9 @@ import {
 } from "./demo-data.cli.js";
 import { POS_MANUAL_VAT_RATES } from "@acropora/types";
 
+import { Prisma } from "@acropora/database";
+
+import { lowestPriceInWindow } from "../products/price-history/lowest-price.js";
 import { DEMO_PREFIX, demoPlan, plusDays } from "./demo-data.plan.js";
 
 /*
@@ -34,6 +37,7 @@ function fakeStore(counts: Partial<DemoCounts> = {}) {
     quotes: 0,
     posSales: 0,
     incomingInvoices: 0,
+    products: 0,
     ...counts,
   };
   const store: DemoStore = {
@@ -75,6 +79,42 @@ async function run(
 
 describe("the demo plan", () => {
   const plan = demoPlan(DAY);
+
+  it("carries the demo product under a DEMO- SKU, inert for the shop, with a sale that runs on the day", () => {
+    assert.ok(plan.products.length > 0);
+    const today = new Date(`${DAY}T12:00:00Z`);
+    for (const p of plan.products) {
+      assert.ok(p.sku.startsWith(DEMO_PREFIX), p.sku);
+      assert.ok(p.sale.startsAt <= today && today < p.sale.endsAt, p.sku);
+      assert.ok(p.sale.gross < p.history[p.history.length - 1]!.gross, p.sku);
+      const times = p.history.map((h) => h.at.getTime());
+      assert.deepEqual(
+        times,
+        [...times].sort((a, b) => a - b),
+        "oldest first",
+      );
+    }
+  });
+
+  it("gives the demo product a complete Omnibus answer: the lowest price before the sale, not the sale price", () => {
+    const p = plan.products[0]!;
+    const points = [
+      ...p.history.map((h) => ({
+        at: h.at,
+        amount: new Prisma.Decimal(h.gross),
+        currency: "HUF",
+      })),
+      {
+        at: p.sale.startsAt,
+        amount: new Prisma.Decimal(p.sale.gross),
+        currency: "HUF",
+      },
+    ];
+    const found = lowestPriceInWindow(points, p.sale.startsAt);
+    assert.ok(found);
+    assert.equal(found.amount.toString(), "11200");
+    assert.equal(found.complete, true);
+  });
 
   it("carries the DEMO- marker on every business key it will be found by", () => {
     for (const c of plan.customers)
@@ -290,11 +330,20 @@ describe("the command", () => {
 
   it("applies once the named host matches (case does not matter)", async () => {
     const r = await run(["--apply", "--db-host", "DB-STAGE.internal"], {
-      counts: { customers: 3, quotes: 3, posSales: 4, incomingInvoices: 5 },
+      counts: {
+        customers: 3,
+        quotes: 3,
+        posSales: 4,
+        incomingInvoices: 5,
+        products: 1,
+      },
     });
     assert.equal(r.code, 0);
     assert.deepEqual(r.calls, ["apply"]);
-    assert.match(r.out, /3 ügyfél, 3 ajánlat, 4 POS eladás, 5 bejövő számla/);
+    assert.match(
+      r.out,
+      /3 ügyfél, 3 ajánlat, 4 POS eladás, 5 bejövő számla, 1 termék árelőzménnyel/,
+    );
   });
 
   it("says so when everything was already there, and removes on --remove", async () => {
@@ -306,6 +355,7 @@ describe("the command", () => {
       { quotes: 1 },
       { posSales: 1 },
       { incomingInvoices: 1 },
+      { products: 1 },
     ]) {
       const partial = await run(["--apply", "--db-host", "db-stage.internal"], {
         counts: only,
@@ -313,7 +363,13 @@ describe("the command", () => {
       assert.match(partial.out, /Létrehozva/, JSON.stringify(only));
     }
     const gone = await run(["--remove", "--db-host", "db-stage.internal"], {
-      counts: { customers: 3, quotes: 3, posSales: 4, incomingInvoices: 5 },
+      counts: {
+        customers: 3,
+        quotes: 3,
+        posSales: 4,
+        incomingInvoices: 5,
+        products: 1,
+      },
     });
     assert.deepEqual(gone.calls, ["remove"]);
     assert.match(gone.out, /Törölve: 3 ügyfél/);

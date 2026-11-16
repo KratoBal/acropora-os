@@ -225,6 +225,121 @@ describe("automatic approval", () => {
     );
   });
 
+  /*
+    A FORDÍTOTT ADÓZÁS JELÉBŐL SZÁMOLT NETTÓ (barracuda #2468). MI PIROSÍT: ha a jelből számolt nettó ÉS a jelből jövő 0 ÁFA egyező terheléssel mégis magától
+    jóváhagyódna (a bank csak a bruttót igazolja, a bontást a jel adja, és a nettó + ÁFA = bruttó ellenőrzés szerkezetileg zöld); ha egy valódi ÁFA-sor adta
+    0 mellett is megállna; ha a megállás indoka nem nevezné meg a jelet.
+  */
+  it("BANK: a net and a zero VAT both taken from the reverse-charge marker are not approved, even with the exact debit; the reason names the marker", () => {
+    const result = decide({
+      values: FOREIGN,
+      sources: {
+        grossAmount: "TEXT",
+        vatAmount: "REVERSE_CHARGE",
+        netAmount: "REVERSE_CHARGE",
+      },
+      debits: [{ amount: "-15900", currency: "HUF" }],
+    });
+    assert.equal(result.approve, false);
+    assert.match(
+      result.approve ? "" : result.reason,
+      /fordított adózás jelzéséből/,
+    );
+  });
+
+  it("BANK: a zero VAT and a gross both taken from the tax-free marker are not approved either, even with the exact debit", () => {
+    const result = decide({
+      values: FOREIGN,
+      sources: {
+        grossAmount: "REVERSE_CHARGE",
+        vatAmount: "REVERSE_CHARGE",
+        netAmount: "TEXT",
+      },
+      debits: [{ amount: "-15900", currency: "HUF" }],
+    });
+    assert.equal(result.approve, false);
+    assert.match(result.approve ? "" : result.reason, /adómentesség/);
+  });
+
+  it("BANK: the same reading goes when the zero VAT came from a real VAT line (only the net is derived), or when the net was read", () => {
+    const fromVatLine = decide({
+      values: FOREIGN,
+      sources: {
+        grossAmount: "TEXT",
+        vatAmount: "TEXT",
+        netAmount: "REVERSE_CHARGE",
+      },
+      debits: [{ amount: "-15900", currency: "HUF" }],
+    });
+    assert.equal(fromVatLine.approve, true);
+    const netRead = decide({
+      values: FOREIGN,
+      sources: {
+        grossAmount: "TEXT",
+        vatAmount: "REVERSE_CHARGE",
+        netAmount: "TEXT",
+      },
+      debits: [{ amount: "-15900", currency: "HUF" }],
+    });
+    assert.equal(netRead.approve, true);
+  });
+
+  /*
+    A KORÁBBAN JÓVÁHAGYOTT SZÁLLÍTÓ NEVE (kártya dbab22cd, lookup; acrobot 48851, 2026-11-12): a név egy EMBER által jóváhagyott, azonos adószámú sorból jön, ezért a
+    KNOWN_SUPPLIER forrású név MAGA NEM állítja meg az automatikus jóváhagyást: a bank egyezés (a bruttó a számláról, a terhelés pontosan annyi) dönt. MI PIROSÍT:
+    ha egy jövőbeli szabály a nevet forrása miatt emberhez küldené.
+  */
+  it("BANK: a supplier name from an earlier verified invoice (KNOWN_SUPPLIER) does not stop an approval the debit confirms", () => {
+    const result = decide({
+      values: FOREIGN,
+      sources: { grossAmount: "TEXT", supplierName: "KNOWN_SUPPLIER" },
+      debits: [{ amount: "-15900", currency: "HUF" }],
+    });
+    assert.deepEqual(
+      [result.approve, result.approve && result.basis],
+      [true, "BANK"],
+    );
+    // the same reading with a debit that does not pay the gross still stays: the name changes nothing about the proof
+    const unpaid = decide({
+      values: FOREIGN,
+      sources: { grossAmount: "TEXT", supplierName: "KNOWN_SUPPLIER" },
+      debits: [{ amount: "-100", currency: "HUF" }],
+    });
+    assert.equal(unpaid.approve, false);
+  });
+
+  /*
+    A NÉV-ÜTKÖZÉS EMBERHEZ MEGY (acrobot 48944, kártya dbab22cd). MI PIROSÍT: ha a PDF-ből olvasott név és a korábban, ember által jóváhagyott név eltérése mellett is magától jóváhagyódna
+    egy bank-egyezéses sor; ha az indok nem nevezné meg mindkét nevet; ha az ütközés nélküli sor megállna; ha a NAV alapot is megállítaná (ott a név a NAV-é).
+  */
+  it("BANK: a read name that differs from the earlier human-approved one stops the approval, naming both; without a conflict it goes", () => {
+    const conflict = decide({
+      values: FOREIGN,
+      sources: { grossAmount: "TEXT", supplierName: "TEXT" },
+      debits: [{ amount: "-15900", currency: "HUF" }],
+      nameConflict: "Kitalált Korábbi Kft.",
+    });
+    assert.equal(conflict.approve, false);
+    const reason = conflict.approve ? "" : conflict.reason;
+    assert.match(reason, /Kitalált Előfizetés Ltd\./);
+    assert.match(reason, /Kitalált Korábbi Kft\./);
+    assert.match(reason, /ember döntsön/);
+    for (const nameConflict of [null, undefined]) {
+      const result = decide({
+        values: FOREIGN,
+        sources: { grossAmount: "TEXT", supplierName: "TEXT" },
+        debits: [{ amount: "-15900", currency: "HUF" }],
+        nameConflict,
+      });
+      assert.equal(result.approve, true);
+    }
+  });
+
+  it("NAV: the name conflict does not stop a NAV-based approval (the name is the NAV's there)", () => {
+    const result = decide({ nameConflict: "Kitalált Korábbi Kft." });
+    assert.equal(result.approve, true);
+  });
+
   it("BANK: in a currency, the amount the bank stated for a forint debit counts; without it, not approved", () => {
     const eur = {
       ...FOREIGN,

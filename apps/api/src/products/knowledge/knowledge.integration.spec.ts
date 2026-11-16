@@ -441,6 +441,25 @@ describe("Termékismeret, adatbázison", { skip: gate.mode === "skip" }, () => {
 
   // Product Knowledge 4. szelet: the AI search carries the AI-visible facts, from
   // real rows, through the repository's own query; no address, no hidden field
+  // V3.3 (card 69b5f2ef): the enum value exists in the database, not only in the schema
+  it("a használati útmutató (usage) blokk az adatbázisban is tárolható", async () => {
+    const row = await prisma.productCopy.create({
+      data: {
+        productId,
+        block: "usage",
+        body: "Rázd fel.\n\nMérd ki.",
+        revision: 1,
+        basedOn: {},
+        editedById: userId,
+      },
+      select: { block: true },
+    });
+    assert.equal(row.block, "usage");
+    await prisma.productCopy.deleteMany({
+      where: { productId, block: "usage" },
+    });
+  });
+
   it("az AI keresés a termék AI-nak látható tényeit hozza, a többit nem", async () => {
     const service = knowledge();
     const actor = { id: userId };

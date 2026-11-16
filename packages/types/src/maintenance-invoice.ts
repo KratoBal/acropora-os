@@ -1,3 +1,8 @@
+import type {
+  WebshopInvoiceConfirmation,
+  WebshopInvoiceIssueResult,
+} from "./billing-issue-summary.js";
+
 /**
  * A KARBANTARTÁSI PISZKOZAT-SZÁMLA ÖSSZEGZÉSE (ADR-014, 4. szelet).
  *
@@ -32,4 +37,17 @@ export interface MaintenanceInvoiceSummary {
   issueEnabled: boolean;
   /** `ISSUING` állapotban: mi történt, amiért kézi ellenőrzés kell. */
   issueNote?: string;
+}
+
+/**
+ * THE TIG INVOICE'S CONFIRMATION (card 7ba97e0d, S3): the same as the webshop's, the three dates, the digest of the shown
+ * values and "Elküldöm e-mailben" (Balázs 2026-11-11 11:20 UTC: checked, the invoice goes to the address the window
+ * shows, the TIG invoice included).
+ */
+export type MaintenanceInvoiceConfirmation = WebshopInvoiceConfirmation;
+
+/** What the TIG invoice's issue answers: the invoice, and what happened to the letter (null: none was asked). */
+export interface MaintenanceInvoiceIssueResult {
+  invoice: MaintenanceInvoiceSummary;
+  mail: WebshopInvoiceIssueResult<unknown>["mail"];
 }

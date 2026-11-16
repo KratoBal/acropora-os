@@ -61,6 +61,7 @@ export const REFERENCE_SPECS: readonly ReferenceSpec[] = [
   { table: "Contract", delegate: "contract", field: "customerId" },
   { table: "Quote", delegate: "quote", field: "customerId" },
   { table: "PartnerOrder", delegate: "partnerOrder", field: "customerId" },
+  { table: "Rental", delegate: "rental", field: "customerId" },
   {
     table: "ReefClubCustomerLink",
     delegate: "reefClubCustomerLink",

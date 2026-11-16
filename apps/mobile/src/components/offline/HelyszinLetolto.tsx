@@ -17,6 +17,10 @@ import {
   listWorksheets,
 } from "@/lib/api/worksheets";
 import { storeAssetDetail, storeAssets } from "@/lib/offline/asset-cache";
+import { storeOperationsTemplates } from "@/lib/offline/operations-cache";
+import { listOperationsTemplatesForAsset } from "@/lib/api/operations-log";
+import { useAuth } from "@/lib/auth/AuthProvider";
+import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 import { environment } from "@/config/env";
 import {
   documentCacheFileName,
@@ -71,6 +75,11 @@ import type { ThemeTokens } from "@/lib/theme/tokens";
  */
 export function HelyszinLetolto() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  // az üzemeltetési napló sablonjai csak annak a szerelőnek jönnek le, aki a naplót rögzítheti (task os-uzemeltetesi-naplo, S2d)
+  const sablonokKellenek = Boolean(
+    user && getServiceCapabilities(user).operationsLogRecord,
+  );
   const [customerId, setCustomerId] = useState("");
   const [departmentId, setDepartmentId] = useState("");
   const [nyitva, setNyitva] = useState(false);
@@ -171,6 +180,22 @@ export function HelyszinLetolto() {
             listWorksheets({ page: oldal, pageSize: 100, departmentId }),
           munkalapReszlet: getWorksheet,
           munkalapMentese: storeWorksheet,
+          /*
+            AZ ESZKOZOK UZEMELTETESI NAPLO SABLONJAI (S2d): a rogzites a helyszinen, terero nelkul tortenik, es a sablon-lista nelkul az
+            urlap ures. A KET FUGGVENY CSAK A JOGGAL RENDELKEZONEK KERUL ATADASRA: masnak a resz nem szerepel a zaro mondatban. A mentes a
+            hibat TOVABBADO `storeOperationsTemplates`, nem a `remember` par.
+          */
+          ...(sablonokKellenek
+            ? {
+                sablonLista: async (assetId: string) =>
+                  (await listOperationsTemplatesForAsset(assetId)).items,
+                sablonokMentese: (assetId: string, items: unknown[]) =>
+                  storeOperationsTemplates(
+                    assetId,
+                    items as Parameters<typeof storeOperationsTemplates>[1],
+                  ),
+              }
+            : {}),
         },
       );
     },

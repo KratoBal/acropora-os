@@ -15,6 +15,7 @@ const SOURCE_LABELS: Record<string, string> = {
   POS_TRANSACTION: "POS tranzakció",
   WEBSHOP_ORDER: "Webshop rendelés",
   SERVICE_JOB: "Szerviz munka",
+  COMPLETION_CERTIFICATE: "Teljesítési igazolás",
   MANUAL: "Manuális",
   CONTRACT: "Beszerzési szerződés",
 };

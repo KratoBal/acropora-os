@@ -7,6 +7,19 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { contentApi } from "@/lib/api/content";
 
+import {
+  CLAIM_TYPE_TEXT,
+  claimReasonText,
+  OUTPUT_MODE_TEXT,
+} from "@/components/products/product-manufacturer-claims-card";
+import type {
+  ClaimOutputReason,
+  ClaimType,
+} from "@/lib/api/manufacturer-claims";
+
+import { describeContentEvent, describeContentSent } from "./content-history";
+import { ContentResultsPanel } from "./content-results-panel";
+
 /**
  * EGY TÉTEL SZÖVEGE ÉS A BESZÉLGETÉSE, A SOR ALATT.
  *
@@ -73,6 +86,8 @@ export function ContentDetailPanel({ id }: { id: string }) {
 
   if (!detail) return null;
 
+  const sent = describeContentSent(detail);
+
   return (
     <div className="w-full space-y-3 rounded-lg border border-dusk-200 bg-dusk-50 p-3">
       <section>
@@ -118,6 +133,83 @@ export function ContentDetailPanel({ id }: { id: string }) {
         )}
       </section>
 
+      {/*
+        A GYÁRTÓI ÁLLÍTÁSOK, AMIKRE A TÉTEL ÉPÜL (T5.3): a jóváhagyó itt látja, melyik nem írható ki és
+        miért, MIELŐTT jóváhagy; a jóváhagyás addig nem megy át. Olvasás: a kötés az ágens útján
+        és az állítás-kártyán megy, nem itt.
+      */}
+      {detail.claims.length > 0 ? (
+        <section>
+          <h4 className="text-xs font-semibold uppercase text-dusk-500">
+            Gyártói állítások ({detail.claims.length})
+          </h4>
+          <ul className="space-y-1">
+            {detail.claims.map((claim) => (
+              <li
+                key={claim.id}
+                data-testid={`content-claim-${claim.id}`}
+                className="text-sm"
+              >
+                <span className="text-xs text-dusk-500">
+                  {claim.productName} ·{" "}
+                  {CLAIM_TYPE_TEXT[claim.claimType as ClaimType] ??
+                    claim.claimType}{" "}
+                  · {OUTPUT_MODE_TEXT[claim.output.mode]}
+                </span>
+                <p>
+                  „{claim.claimText}”
+                  {claim.output.attribution
+                    ? ` (${claim.output.attribution})`
+                    : ""}
+                </p>
+                {claim.output.reasons.length > 0 ? (
+                  <p className="text-xs text-amber-700">
+                    {claim.output.reasons
+                      .map((reason) =>
+                        claimReasonText(reason as ClaimOutputReason),
+                      )
+                      .join(" · ")}
+                  </p>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {sent ? (
+        <section>
+          <h4 className="text-xs font-semibold uppercase text-dusk-500">
+            Kiküldve
+          </h4>
+          <p className="text-sm">{sent}</p>
+        </section>
+      ) : null}
+
+      {/*
+        KI, MIKOR, MIT CSINÁLT (T5.1): az állapotváltások naplója, régitől az újig. A bevezetés előtti tételnél hiányos lehet,
+        és ezt a felület KIMONDJA, nem találja ki a múltat: az üres napló nem azt jelenti, hogy a tétel soha nem mozdult.
+      */}
+      <section>
+        <h4 className="text-xs font-semibold uppercase text-dusk-500">
+          Ki, mikor, mit csinált ({detail.history.length})
+        </h4>
+        {detail.history.length === 0 ? (
+          <p className="text-sm text-dusk-500">
+            Ehhez a tételhez a napló bevezetése előtti időből nincs bejegyzés. A
+            következő állapotváltástól látszik.
+          </p>
+        ) : (
+          <ul className="space-y-1">
+            {detail.history.map((event) => (
+              <li key={event.id} className="text-sm">
+                {describeContentEvent(event)}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
       {detail.imageRequired ? (
         <section>
           <h4 className="text-xs font-semibold uppercase text-dusk-500">Kép</h4>
@@ -128,6 +220,12 @@ export function ContentDetailPanel({ id }: { id: string }) {
           </p>
         </section>
       ) : null}
+
+      <ContentResultsPanel
+        contentId={detail.id}
+        channel={detail.channel}
+        sentAt={detail.sentAt}
+      />
     </div>
   );
 }

@@ -7,11 +7,44 @@ import { ArticleImageRepository } from "./article-image.repository.js";
 import { ArticleImageService } from "./article-image.service.js";
 import { ArticleRepository } from "./article.repository.js";
 import { ARTICLE_ENVIRONMENT, ArticleService } from "./article.service.js";
+import { ManufacturerClaimsService } from "../products/manufacturer-claims/manufacturer-claims.service.js";
+import { ContentAgentClaimsController } from "./content-agent-claims.controller.js";
 import { ContentAgentController } from "./content-agent.controller.js";
 import { ContentAgentGuard } from "./content-agent.guard.js";
+import { ContentClaimsController } from "./content-claims.controller.js";
 import { ContentController } from "./content.controller.js";
 import { ContentRepository } from "./content.repository.js";
 import { ContentService } from "./content.service.js";
+import { TeachingOutputEditRepository } from "./teaching-output-edit.repository.js";
+import { TeachingOutputEditService } from "./teaching-output-edit.service.js";
+import { TeachingOutputRepository } from "./teaching-output.repository.js";
+import {
+  TEACHING_OUTPUT_CLOCK,
+  TeachingOutputService,
+} from "./teaching-output.service.js";
+import { TeachingSourceRepository } from "./teaching-source.repository.js";
+import { TeachingSourceService } from "./teaching-source.service.js";
+import { CalendarEventController } from "./calendar/calendar-event.controller.js";
+import { CalendarEventRepository } from "./calendar/calendar-event.repository.js";
+import { CalendarEventService } from "./calendar/calendar-event.service.js";
+import { CalendarFeedController } from "./calendar/calendar-feed.controller.js";
+import { CalendarGapsController } from "./calendar/calendar-gaps.controller.js";
+import { CalendarGapsRepository } from "./calendar/calendar-gaps.repository.js";
+import { CalendarGapsService } from "./calendar/calendar-gaps.service.js";
+import { ContentResultsController } from "./results/content-results.controller.js";
+import { ContentResultsRepository } from "./results/content-results.repository.js";
+import { ContentResultsService } from "./results/content-results.service.js";
+import { CalendarSlotsController } from "./calendar/calendar-slots.controller.js";
+import { CalendarSlotsRepository } from "./calendar/calendar-slots.repository.js";
+import { CalendarSlotsService } from "./calendar/calendar-slots.service.js";
+import { ContentTemplateController } from "./calendar/content-template.controller.js";
+import { ContentTemplateRepository } from "./calendar/content-template.repository.js";
+import { ContentTemplateService } from "./calendar/content-template.service.js";
+import { CalendarFeedRepository } from "./calendar/calendar-feed.repository.js";
+import { CalendarFeedService } from "./calendar/calendar-feed.service.js";
+import { ProductDataController } from "./product-data/product-data.controller.js";
+import { ProductDataRepository } from "./product-data/product-data.repository.js";
+import { ProductDataService } from "./product-data/product-data.service.js";
 
 /**
  * A `ServiceTokenRepository` és az `AuthUserResolver` ITT is meg van adva, nem
@@ -26,9 +59,30 @@ import { ContentService } from "./content.service.js";
   controllers: [
     ContentController,
     ContentAgentController,
+    ContentAgentClaimsController,
+    ContentClaimsController,
     ArticleImagePublicController,
+    ProductDataController,
+    CalendarFeedController,
+    ContentResultsController,
+    CalendarEventController,
+    ContentTemplateController,
+    CalendarSlotsController,
+    CalendarGapsController,
   ],
   providers: [
+    ContentResultsRepository,
+    ContentResultsService,
+    CalendarEventRepository,
+    CalendarEventService,
+    ContentTemplateRepository,
+    ContentTemplateService,
+    CalendarSlotsRepository,
+    CalendarSlotsService,
+    CalendarGapsRepository,
+    CalendarGapsService,
+    CalendarFeedRepository,
+    CalendarFeedService,
     ArticleImageRepository,
     ArticleImageService,
     ArticleRepository,
@@ -38,7 +92,18 @@ import { ContentService } from "./content.service.js";
     ContentAgentGuard,
     ContentRepository,
     ContentService,
+    // Stateless over Prisma, no dependencies: the agent entry's own instance (T5.3).
+    ManufacturerClaimsService,
+    ProductDataRepository,
+    ProductDataService,
     ServiceTokenRepository,
+    TeachingOutputEditRepository,
+    TeachingOutputEditService,
+    TeachingOutputRepository,
+    TeachingOutputService,
+    { provide: TEACHING_OUTPUT_CLOCK, useValue: () => new Date() },
+    TeachingSourceRepository,
+    TeachingSourceService,
   ],
   exports: [ContentService],
 })

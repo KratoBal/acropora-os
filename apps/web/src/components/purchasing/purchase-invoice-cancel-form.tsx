@@ -2,10 +2,9 @@
 
 import {
   Alert,
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
+  PilotButton,
+  PilotCard,
+  PilotCardHeader,
   Textarea,
 } from "@acropora/ui";
 import type { PurchaseInvoiceDetail } from "@acropora/types";
@@ -51,13 +50,9 @@ export function PurchaseInvoiceCancelForm({
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <h2 className="text-sm font-semibold text-dusk-900">
-          A rögzítés sztornója
-        </h2>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <PilotCard>
+      <PilotCardHeader title="A rögzítés sztornója" />
+      <div className="space-y-4 p-5">
         <p className="text-sm text-dusk-600">
           A számlával érkezett készlet kimegy a raktárból, a projektfoglalásai
           felszabadulnak, és ha NAV-sorból vagy várható beérkezésből jött, azok
@@ -81,18 +76,18 @@ export function PurchaseInvoiceCancelForm({
           />
         </label>
         <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={onClose}>
+          <PilotButton variant="ghost" onClick={onClose}>
             Mégse
-          </Button>
-          <Button
+          </PilotButton>
+          <PilotButton
             variant="danger"
             disabled={busy || reason.trim().length < 3}
             onClick={() => void submit()}
           >
             Sztornózás
-          </Button>
+          </PilotButton>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </PilotCard>
   );
 }

@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { partnerWorksheetLink } from "./partner-portal-link.js";
+import {
+  partnerTicketLink,
+  partnerWorksheetLink,
+} from "./partner-portal-link.js";
 
 describe("a munkalap linkje a partner-portalon", () => {
   it("a PARTNER_URL alapjan epiti fel az utvonalat", () => {
@@ -38,6 +41,34 @@ describe("a munkalap linkje a partner-portalon", () => {
     assert.equal(
       partnerWorksheetLink({ partnerUrl: "   ", worksheetId: "worksheet-1" }),
       "",
+    );
+  });
+});
+
+describe("a hibajegy linkje a partner-portalon", () => {
+  it("a PARTNER_URL alapjan epiti fel az utvonalat, a zaro perjelt levagja", () => {
+    for (const partnerUrl of [
+      "https://ticket.acropora.hu",
+      "https://ticket.acropora.hu//",
+    ])
+      assert.equal(
+        partnerTicketLink({ partnerUrl, serviceJobId: "job-1" }),
+        "https://ticket.acropora.hu/hibajegyek/job-1",
+      );
+  });
+
+  it("hianyzo vagy csak szokozbol allo PARTNER_URL eseten ures stringet ad, nem dob", () => {
+    for (const partnerUrl of [undefined, "", "   "])
+      assert.equal(
+        partnerTicketLink({ partnerUrl, serviceJobId: "job-1" }),
+        "",
+      );
+  });
+
+  it("a hibajegy utvonala nem a munkalape", () => {
+    assert.notEqual(
+      partnerTicketLink({ partnerUrl: "https://t.hu", serviceJobId: "x" }),
+      partnerWorksheetLink({ partnerUrl: "https://t.hu", worksheetId: "x" }),
     );
   });
 });

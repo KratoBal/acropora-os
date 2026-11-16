@@ -3,7 +3,7 @@ import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 
 import { TICKET_MAIL_ENV } from "./gmail-mail.sender.js";
 import { InlineImageMailSender } from "./inline-image.mail-sender.js";
-import type { MailSender, OutgoingMail } from "./mail.port.js";
+import type { MailSender, MailSent, OutgoingMail } from "./mail.port.js";
 import { mailRedirect } from "./ticket-mail.rules.js";
 
 /**
@@ -61,7 +61,7 @@ export class RedirectingMailSender implements MailSender {
     private readonly environment: NodeJS.ProcessEnv = process.env,
   ) {}
 
-  async send(mail: OutgoingMail): Promise<void> {
+  async send(mail: OutgoingMail): Promise<MailSent | void> {
     const redirect = mailRedirect(this.environment.TICKET_MAIL_REDIRECT_TO);
 
     /*

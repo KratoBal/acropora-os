@@ -9,6 +9,7 @@ import {
 import type {
   AuthenticatedUser,
   BillingDocumentDetail,
+  BillingDocumentFinalInvoiceNotice,
   BillingDocumentStatus,
   BillingDocumentType,
   BillingEmailStatus,
@@ -34,6 +35,12 @@ import {
   type BillingDocumentRow,
 } from "./billing-documents.repository.js";
 import { budapestDayKey } from "../dashboard/budapest-day.js";
+import {
+  finalInvoiceNoticeOf,
+  finalLineOfQuoteItem,
+  finalLinesSource,
+  type FinalDraftLine,
+} from "./billing-final-lines.js";
 import type { BillingDocumentDraftDto } from "./dto/billing-document-draft.dto.js";
 
 /**
@@ -46,6 +53,21 @@ import type { BillingDocumentDraftDto } from "./dto/billing-document-draft.dto.j
 @Injectable()
 export class BillingDocumentsService {
   constructor(private readonly repository: BillingDocumentsRepository) {}
+
+  /** A végszámla-vázlat magyarázata: az előlegének díjbekérője alapján, a `finalFromAdvance` döntésével. */
+  private async finalInvoiceNoticeOf(
+    row: BillingDocumentRow,
+  ): Promise<BillingDocumentFinalInvoiceNotice | null> {
+    const advanceId = row.referencedInvoice?.id;
+    if (!advanceId) return null;
+    const advance = await this.repository.find(advanceId);
+    if (!advance?.proformaInvoiceId) return null;
+    return finalInvoiceNoticeOf(
+      finalLinesSource(
+        await this.repository.quoteBasisOfProforma(advance.proformaInvoiceId),
+      ),
+    );
+  }
 
   async detail(id: string): Promise<BillingDocumentDetail> {
     const row = await this.repository.find(id);
@@ -74,10 +96,17 @@ export class BillingDocumentsService {
         ? await this.repository.finalInvoiceOf(id)
         : null;
     const related = await this.repository.related(id);
+    // A VÉGSZÁMLA-VÁZLAT ÜRES TÉTELEINEK MAGYARÁZATA (kártya 02fc4b7f): olvasáskor számítjuk, ugyanabból a döntésből, amelyből a vázlat tételei
+    // készültek (`finalLinesSource`); kiállított végszámlán nincs
+    const finalInvoiceNotice =
+      row.documentType === "FINAL_INVOICE" && row.status === "DRAFT"
+        ? await this.finalInvoiceNoticeOf(row)
+        : null;
     return {
       ...detail,
       relatedDocuments: related.documents,
       relatedDocumentsTruncated: related.truncated,
+      ...(row.documentType === "FINAL_INVOICE" ? { finalInvoiceNotice } : {}),
       ...(row.documentType === "ADVANCE_INVOICE"
         ? {
             finalInvoice: final
@@ -332,6 +361,21 @@ export class BillingDocumentsService {
     const proforma = advance.proformaInvoiceId
       ? await this.repository.find(advance.proformaInvoiceId)
       : null;
+    // A TÉTELEK (kártya 2650d371): egy ajánlat MÉRFÖLDKŐ-díjbekérője a százalékos rész, tehát a végszámla az ajánlat teljes
+    // tételeivel készül, különben a Számlázz.hu a levont előleg után nullát hagyna. A döntés a tiszta `finalLinesSource`-é (a több
+    // előleg-mérföldkős ajánlat üres vázlatot ad, kézi kitöltésre); minden más díjbekérőnél a díjbekérő tételei.
+    const source = finalLinesSource(
+      proforma ? await this.repository.quoteBasisOfProforma(proforma.id) : null,
+    );
+    if (source.kind === "REFUSED") throw new ConflictException(source.message);
+    const finalLines: ReturnType<typeof draftLinesOf> | FinalDraftLine[] =
+      source.kind === "QUOTE"
+        ? source.items.map(finalLineOfQuoteItem)
+        : source.kind === "EMPTY"
+          ? []
+          : proforma
+            ? draftLinesOf(proforma)
+            : [];
     const { draft, partner } = await this.prepare({
       id,
       documentType: "FINAL_INVOICE",
@@ -350,7 +394,7 @@ export class BillingDocumentsService {
       note: null,
       sourceType: advance.sourceType as BillingSourceType | null,
       sourceId: advance.sourceId,
-      lines: proforma ? draftLinesOf(proforma) : [],
+      lines: finalLines,
     });
     await this.repository.create({
       id,
@@ -361,6 +405,32 @@ export class BillingDocumentsService {
       referencedInvoiceId: advanceId,
     });
     return this.detail(id);
+  }
+
+  /**
+   * EGY KIMENŐ VÁZLAT TÖRLÉSE (kártya 6a75f15c, Balázs kérdése): a szabály a `draftDeleteRefusal`-ban (csak sorszám nélküli vázlat, amire
+   * nem hivatkozik másik bizonylat), az írás a tárolóban, egy tranzakcióban a kapcsolatok rendezésével. A `expectedUpdatedAt` a legutóbb
+   * betöltött állapot: ha közben mentették, 409, ahogy a mentésnél.
+   */
+  async deleteDraft(
+    id: string,
+    expectedUpdatedAt: string | undefined,
+    user: AuthenticatedUser,
+  ): Promise<{ deleted: true }> {
+    const expected = expectedUpdatedAt ? new Date(expectedUpdatedAt) : null;
+    if (!expected || Number.isNaN(expected.getTime()))
+      throw new BadRequestException(
+        "A törléshez a legutóbb betöltött állapot időbélyege kell.",
+      );
+    const refusal = await this.repository.deleteDraft({
+      id,
+      expectedUpdatedAt: expected,
+      actorUserId: user.id,
+    });
+    if (!refusal) return { deleted: true };
+    if (refusal.code === "NOT_FOUND")
+      throw new NotFoundException(refusal.message);
+    throw new ConflictException(refusal.message);
   }
 
   async update(
@@ -555,7 +625,7 @@ export const advanceIdFor = (proformaId: string) => `${proformaId}-eloleg`;
 export const finalIdFor = (advanceId: string) => `${advanceId}-vegszamla`;
 
 /** A fizetési határidő alapértéke: a teljesítés után nyolc nappal (mint a szerkesztőben). */
-const DEFAULT_PAYMENT_DAYS = 8;
+export const DEFAULT_PAYMENT_DAYS = 8;
 
 /** `yyyy-MM-dd` + napok, naptári számolással (nincs időzóna-eltolás). */
 function addDaysTo(day: string, days: number): string {

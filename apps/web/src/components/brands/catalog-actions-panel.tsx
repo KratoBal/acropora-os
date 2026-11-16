@@ -1,5 +1,11 @@
 "use client";
-import { Alert, Badge, Button, Card, ConfirmDialog } from "@acropora/ui";
+import {
+  Alert,
+  ConfirmDialog,
+  PilotBadge,
+  PilotButton,
+  PilotCard,
+} from "@acropora/ui";
 import type {
   CatalogActionKind,
   CatalogActionRun,
@@ -39,6 +45,12 @@ const APPLY_TEXT: Partial<
     recovery:
       "Egy újabb futás az OS mostani állapotára írja vissza a kötéseket; egy archivált márka kötése ilyenkor törlődik.",
   },
+  "brand-from-name": {
+    consequence:
+      "A márka nélküli termékek a nevük elején álló márkát kapják (a próba kimenetében tételesen). Csak üres márkájú terméket ír; ami közben márkát kapott, kimarad. A napló téged nevez meg felelősként.",
+    recovery:
+      "Nincs egy gombos visszavonás: a termék márkája a termék lapján törölhető; a próba kimenete megmondja, melyik terméket érintette.",
+  },
   categories: {
     consequence:
       "A teszt webshop meglévő kategóriái (azonos név, azonos szülő) megkapják a mi azonosítónkat, a rövid nevet és a webcímet; a termék-hozzárendelésük megmarad. Ami még nincs meg, létrejön. A régi azonosító csak a próba kimenetében marad meg: mentsd el a végrehajtás előtt.",
@@ -66,11 +78,11 @@ function statusBadge(run: CatalogActionRun) {
   }`;
   const variant =
     run.status === "running"
-      ? "neutral"
+      ? "grey"
       : run.status === "succeeded"
         ? "success"
         : "danger";
-  return <Badge variant={variant}>{label}</Badge>;
+  return <PilotBadge variant={variant}>{label}</PilotBadge>;
 }
 
 /**
@@ -173,7 +185,7 @@ export function CatalogActionsPanel({ token }: { token: string }) {
   const confirmRun = confirming ? runs[confirming] : undefined;
 
   return (
-    <Card className="space-y-4 p-4" aria-label="Katalógus-műveletek">
+    <PilotCard className="space-y-4 p-4" aria-label="Katalógus-műveletek">
       <div>
         <h2 className="text-base font-semibold">Katalógus-műveletek</h2>
         <p className="text-sm text-dusk-500">
@@ -208,25 +220,40 @@ export function CatalogActionsPanel({ token }: { token: string }) {
                 <h3 className="font-medium">{action.title}</h3>
                 <p className="text-sm text-dusk-500">{action.description}</p>
               </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="secondary"
-                  disabled={busy || Boolean(running) || Boolean(hostBlock)}
-                  onClick={() =>
-                    void start(() => catalogActionsApi.plan(token, action.kind))
-                  }
+              {action.requiresInput ? (
+                <p
+                  className="max-w-xs text-xs text-dusk-500"
+                  data-testid="catalog-action-input-note"
                 >
-                  Próba
-                </Button>
-                <Button
-                  disabled={
-                    busy || Boolean(running) || Boolean(hostBlock) || !canApply
-                  }
-                  onClick={() => setConfirming(action.kind)}
-                >
-                  Végrehajtás
-                </Button>
-              </div>
+                  Ez a művelet egy listát kér, ezért nincs gombja: az API-n át
+                  indul, és a végrehajtás a próba listáját írja.
+                </p>
+              ) : (
+                <div className="flex gap-2">
+                  <PilotButton
+                    variant="secondary"
+                    disabled={busy || Boolean(running) || Boolean(hostBlock)}
+                    onClick={() =>
+                      void start(() =>
+                        catalogActionsApi.plan(token, action.kind),
+                      )
+                    }
+                  >
+                    Próba
+                  </PilotButton>
+                  <PilotButton
+                    disabled={
+                      busy ||
+                      Boolean(running) ||
+                      Boolean(hostBlock) ||
+                      !canApply
+                    }
+                    onClick={() => setConfirming(action.kind)}
+                  >
+                    Végrehajtás
+                  </PilotButton>
+                </div>
+              )}
             </div>
             {run ? (
               <div className="space-y-2 text-sm">
@@ -306,6 +333,6 @@ export function CatalogActionsPanel({ token }: { token: string }) {
           </pre>
         ) : null}
       </ConfirmDialog>
-    </Card>
+    </PilotCard>
   );
 }

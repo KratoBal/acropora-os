@@ -71,6 +71,9 @@ const PARTNERI_JOGOK = [
   "SERVICE_MANAGE",
   "AQUARIUMS_VIEW",
   "AQUARIUMS_MANAGE",
+  // az üzemeltetési napló partner-nézete (task os-uzemeltetesi-naplo, S5): CSAK OLVAS, tehát a jog alatt nincs író útvonal, és ez a lista
+  // épp azt őrzi, hogy ha valaha lesz, kérőt kapjon
+  "OPERATIONS_LOG_PARTNER_VIEW",
 ] as const;
 
 /**

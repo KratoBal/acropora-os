@@ -125,7 +125,8 @@ describe("eszköz-akvárium hozzárendelés: jog, kapacitás és DTO", () => {
     const src = olvas(DTO);
     const i = src.indexOf("export class AssignAssetAquariumDto");
     assert.notEqual(i, -1, "AssignAssetAquariumDto nincs a fájlban");
-    const end = src.indexOf("}", i);
+    // a záró kapocs a sor elején: egy dekorátor-argumentum `{ ... }` kapcsa nem vághatja el a blokkot
+    const end = src.indexOf("\n}", i);
     const block = src.slice(i, end);
     const mezok = [...block.matchAll(/(\w+)!:/g)].map((m) => m[1]);
     assert.deepEqual(mezok.sort(), ["aquariumId", "expectedUpdatedAt"]);
@@ -141,7 +142,7 @@ describe("eszköz-akvárium hozzárendelés: jog, kapacitás és DTO", () => {
   it("az aquariumId @ValidateIf-fel megy, nem @IsOptional()-lel", () => {
     const src = olvas(DTO);
     const i = src.indexOf("export class AssignAssetAquariumDto");
-    const end = src.indexOf("}", i);
+    const end = src.indexOf("\n}", i);
     const block = src.slice(i, end);
     assert.match(block, /@ValidateIf\(\(_object, value\) => value !== null\)/);
     assert.doesNotMatch(block, /@IsOptional\(\)/);

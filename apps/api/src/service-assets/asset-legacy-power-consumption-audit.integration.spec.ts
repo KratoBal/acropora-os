@@ -191,8 +191,13 @@ describe(
         branch: "create",
         userAgent: "AcroporaMobile/1.0 (test)",
       });
-      // the value the client sent is nowhere in the row
-      assert.equal(JSON.stringify(rows[0]).includes("0.75"), false);
+      // the value the client sent is nowhere in the row. `createdAt` is left out of the text on purpose: its ISO
+      // milliseconds made this a time-dependent flake (a row created at 12:58:10.750 to 12:58:10.759 holds "0.75" in
+      // "10.75x"; about one run in a thousand, verify-db 2026-11-16 12:58). Every other column is still searched.
+      assert.equal(
+        JSON.stringify({ ...rows[0], createdAt: null }).includes("0.75"),
+        false,
+      );
     });
 
     it("módosítás: a régi kulcs (null is) egy sort ír az update ággal", async () => {

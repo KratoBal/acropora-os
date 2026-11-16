@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   Header,
   HttpCode,
   Param,
@@ -39,7 +40,23 @@ export class BillingDocumentIssueController {
     @Body() input: BillingDocumentIssueDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.issuing.issue(id, input.expectedUpdatedAt, user);
+    return this.issuing.issue(id, input.expectedUpdatedAt, user, {
+      issueDate: input.issueDate,
+      fulfillmentDate: input.fulfillmentDate,
+      dueDate: input.dueDate ?? null,
+      fingerprint: input.fingerprint,
+    });
+  }
+
+  /**
+   * THE CONFIRMATION WINDOW'S VALUES (card 7ba97e0d): the buyer, the three dates and the payment method as the issue
+   * would send them, from the same builder. `billing.issue`, like the issue it precedes.
+   */
+  @Get(":id/issue-summary")
+  @Header("Cache-Control", "private, no-store")
+  @RequirePermissions(PERMISSIONS.BILLING_ISSUE)
+  summary(@Param("id") id: string) {
+    return this.issuing.summary(id);
   }
 
   /**

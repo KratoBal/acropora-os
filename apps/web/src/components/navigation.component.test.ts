@@ -182,7 +182,14 @@ describe("navigation", () => {
       ],
       [
         "Értékesítés",
-        ["POS", "Árajánlatok", "Megrendelések", "Partnerek", "Szerződések"],
+        [
+          "POS",
+          "Árajánlatok",
+          "Megrendelések",
+          "Bérlés",
+          "Partnerek",
+          "Szerződések",
+        ],
       ],
       [
         "Pénzügy",
@@ -210,6 +217,7 @@ describe("navigation", () => {
           "Piszkozatok",
           "Anyagigények",
           "Eszköznyilvántartás",
+          "Üzemeltetési napló",
           "QR-kód nyomtatás",
         ],
       ],
@@ -235,12 +243,15 @@ describe("navigation", () => {
         [
           "Általános",
           "Felhasználók",
+          "Jelenléti ív",
           "NAV",
           "Számlázz.hu kapcsolat",
           "Mértékegységek",
           "Eszköz-kategóriák",
+          "Üzemeltetési napló sablonjai",
           "Eszköz-funkciók",
           "Bérelhető eszközök",
+          "Bérleti szerződés",
           "Partner-duplikátumok",
           "Partner-átvezetés",
           "Szállítási jelzők feltöltése",
@@ -386,12 +397,15 @@ describe("navigation", () => {
     ).toEqual([
       [null, "settings-general"],
       [null, "users"],
+      [null, "attendance"],
       ["Kapcsolatok", "nav-integration"],
       ["Kapcsolatok", "szamlazz-connection"],
       ["Törzsadatok", "units-of-measure"],
       ["Törzsadatok", "asset-categories"],
+      ["Törzsadatok", "operations-log-templates"],
       ["Törzsadatok", "asset-functions"],
       ["Törzsadatok", "rental-equipment"],
+      ["Törzsadatok", "rental-contract"],
       ["Törzsadatok", "partner-duplicates"],
       ["Törzsadatok", "partner-migration"],
       ["Törzsadatok", "shipping-fill"],
@@ -438,6 +452,7 @@ describe("navigation", () => {
     ["/penzugy/szamlazas", "billing", "Számlázás"],
     ["/ajanlatok", "quotes", "Árajánlatok"],
     ["/megrendelesek", "partner-orders", "Megrendelések"],
+    ["/berles", "rentals", "Bérlés"],
     ["/penzugy/elszamolasok", "settlements", "Elszámolások"],
     ["/penzugy/hianyzo-szamlak", "missing-invoices", "Hiányzó számlák"],
     ["/raktar", "inventory", "Leltár"],
@@ -453,6 +468,7 @@ describe("navigation", () => {
     ["/szerviz/karbantartas", "maintenance", "Karbantartás"],
     ["/szerviz/munkalapok", "worksheets", "Munkalapok"],
     ["/szerviz/eszkozok", "service-assets", "Eszköznyilvántartás"],
+    ["/szerviz/uzemeltetesi-naplo", "operations-log", "Üzemeltetési napló"],
     ["/szerviz/anyagigenyek", "material-requests-pending", "Anyagigények"],
     ["/tartalom", "content", "Tartalom"],
     ["/tartalom/nyeremenyjatek", "game", "Nyereményjáték"],
@@ -466,15 +482,22 @@ describe("navigation", () => {
       "Számlázz.hu kapcsolat",
     ],
     ["/admin/users", "users", "Felhasználók"],
+    ["/admin/jelenleti-iv", "attendance", "Jelenléti ív"],
     ["/beallitasok/matricak", "asset-labels", "QR-kód nyomtatás"],
     ["/beallitasok/mertekegysegek", "units-of-measure", "Mértékegységek"],
     ["/beallitasok/eszkoz-kategoriak", "asset-categories", "Eszköz-kategóriák"],
+    [
+      "/beallitasok/uzemeltetesi-naplo-sablonok",
+      "operations-log-templates",
+      "Üzemeltetési napló sablonjai",
+    ],
     ["/beallitasok/eszkoz-funkciok", "asset-functions", "Eszköz-funkciók"],
     [
       "/beallitasok/berelheto-eszkozok",
       "rental-equipment",
       "Bérelhető eszközök",
     ],
+    ["/beallitasok/berleti-szerzodes", "rental-contract", "Bérleti szerződés"],
     [
       "/beallitasok/partner-duplikatumok",
       "partner-duplicates",
@@ -671,6 +694,9 @@ describe("navigation", () => {
         // AZ ELHULLÁSI NAPLÓ (kártya 115c9740): acrobot döntése (27141) a
         // SERVICE szerepnek megtekintést és rögzítést is ad.
         "Elhullási napló",
+        // AZ ÜZEMELTETÉSI NAPLÓ HAVI KIMUTATÁSA (task os-uzemeltetesi-naplo, S4b): a SERVICE szerep `operations-log.view`
+        // jogot kap (a szerelő rögzít és olvassa a naplót), a sablonok kezelése nem az övé (az nem ez a menüpont).
+        "Üzemeltetési napló",
       ].sort(),
     );
   });
@@ -750,6 +776,8 @@ describe("navigation", () => {
     "/szerviz/karbantartas": "service.view",
     "/szerviz/munkalapok": "service.view",
     "/szerviz/eszkozok": "service.view",
+    // az üzemeltetési napló havi kimutatása (task os-uzemeltetesi-naplo, S4b): a nézet jog, a szerelő is látja
+    "/szerviz/uzemeltetesi-naplo": "operations-log.view",
     // A BESZERZO SAJAT LISTAJA (2026-09-23) -- `service.manage`, nem
     // `service.view`: a lap tartalma a `MATERIAL_REQUEST_MARK_RECEIVED`
     // kepessegen all (per-felhasznalo jelolo), de a MENUPONT lathatosaga a
@@ -800,6 +828,8 @@ describe("navigation", () => {
     "/ajanlatok": "quotes.view",
     // Megrendelések (2026-11-04): ugyanaz a jog és kapcsoló, mint az ajánlatoké.
     "/megrendelesek": "quotes.view",
+    // Eszközbérlés S2: a bérlési pult, ugyanaz a jog, mint az olvasó végpontoké
+    "/berles": "rentals.view",
     "/penzugy/elszamolasok": "finance.view",
     // A Hiányzó számlák 2026-09-30-án jött, a bevezetés UTÁN; a jog az
     // Elszámolásoké (`finance.view`).
@@ -824,6 +854,8 @@ describe("navigation", () => {
     "/admin/integrations/nav": "settings.manage",
     "/admin/integrations/szamlazz/connection": "settings.manage",
     "/admin/users": "users.manage",
+    // Jelenléti ív (os-jelenleti-iv, S2b): a saját jogán, a felhasználó-kezelés nélkül is
+    "/admin/jelenleti-iv": "attendance.manage",
     // A matricakiadas ugyanazt a jogot kapja, mint a tobbi Beallitasok-tetel,
     // amit a szervizes nem lat. Balazs, 2026-09-02 21:00:53: "Nem kell hogy
     // lassa".
@@ -842,11 +874,15 @@ describe("navigation", () => {
     // lenne, barmelyik felvivo felvehetne uj kategoriat -- es pont az allna
     // vissza, ami miatt a lista letrejott.
     "/beallitasok/eszkoz-kategoriak": "settings.manage",
+    // Üzemeltetési napló sablonjai (task os-uzemeltetesi-naplo, S1b): a menedzser is kezeli (nincs settings.manage-je)
+    "/beallitasok/uzemeltetesi-naplo-sablonok":
+      "operations-log.templates.manage",
     // AZ ESZKOZ-FUNKCIOK UGYANAZ A FAJTA TETEL, ugyanaz a bontas -- kanban
     // 68add892, 2026-09-22.
     "/beallitasok/eszkoz-funkciok": "settings.manage",
     // Eszközbérlés S1: a bérelhető eszközök törzse, ugyanaz a jog, mint a végpontoké
     "/beallitasok/berelheto-eszkozok": "settings.manage",
+    "/beallitasok/berleti-szerzodes": "settings.manage",
     // Az ajánlati szövegrészletek (#1582 P1): ugyanaz a jog, ami az írást védi.
     "/beallitasok/ajanlat-szovegreszletek": "quotes.templates.manage",
     // Az ajánlatsablonok (#1582): ugyanaz a jog, ami az írást védi.

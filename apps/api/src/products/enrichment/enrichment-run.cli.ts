@@ -32,6 +32,11 @@ import {
   dosingExtractorFromEnv,
   type DosingExtractor,
 } from "./dosing-extraction.js";
+import {
+  AI_PRODUCT_FIELDS_PATH_ENV,
+  productFieldExtractorFromEnv,
+  type ProductFieldExtractor,
+} from "./product-field-extraction.js";
 import type { EnrichmentFetch } from "./polite-fetcher.js";
 
 /**
@@ -39,6 +44,9 @@ import type { EnrichmentFetch } from "./polite-fetcher.js";
  *
  *   pnpm --filter @acropora/api jev:enrich --input <file.json>
  *       [--max-products N] [--max-requests N] [--apply --actor <userId>]
+ *
+ *   --input-env <NAME> in place of --input: the same JSON, base64, from an
+ *   environment variable (`inputFromEnv`; the test API's Coolify task).
  *
  * The input names a small product set by hand, with the page URL per source:
  *
@@ -77,6 +85,8 @@ export interface EnrichmentCliDeps {
   now: () => Date;
   /** The AI dosing reader; absent: from the environment (`ACROPORA_AI_DOSING_PATH`). */
   dosingExtractor?: DosingExtractor | null;
+  /** The AI product field reader (T4.4 S1b); absent: from the environment (`ACROPORA_AI_PRODUCT_FIELDS_PATH`). */
+  productFieldExtractor?: ProductFieldExtractor | null;
 }
 
 type Output = {
@@ -132,16 +142,31 @@ export function parseRunInput(
       return;
     }
     const parsed: RunProductInput["sources"][number][] = [];
+    // one imprint per product: two would ask for two maker blocks, and which one stands is a person's choice, not the
+    // order of the input (barracuda on #2565)
+    let imprints = 0;
     sources.forEach((source, j) => {
       const s = source as {
         kind?: unknown;
         url?: unknown;
         supplierId?: unknown;
+        imprint?: unknown;
       };
       if (!isEnrichmentSourceKind(s.kind))
         problems.push(`products[${i}].sources[${j}]: ismeretlen forrásfajta.`);
       else if (typeof s.url !== "string" || !s.url.trim())
         problems.push(`products[${i}].sources[${j}]: hiányzó url.`);
+      else if (
+        s.imprint !== undefined &&
+        (s.imprint !== true || s.kind !== "MANUFACTURER")
+      )
+        problems.push(
+          `products[${i}].sources[${j}]: imprint csak gyártói forrásnál, true értékkel.`,
+        );
+      else if (s.imprint === true && ++imprints > 1)
+        problems.push(
+          `products[${i}].sources[${j}]: termékenként legfeljebb egy impresszum-forrás.`,
+        );
       else if (s.kind === "SUPPLIER" && typeof s.supplierId !== "string")
         problems.push(
           `products[${i}].sources[${j}]: beszállítói oldalhoz supplierId kell.`,
@@ -153,11 +178,33 @@ export function parseRunInput(
           ...(typeof s.supplierId === "string"
             ? { supplierId: s.supplierId }
             : {}),
+          ...(s.imprint === true ? { imprint: true as const } : {}),
         });
     });
     products.push({ productId: productId.trim(), sources: parsed });
   });
   return problems.length ? { ok: false, problems } : { ok: true, products };
+}
+
+/**
+ * THE INPUT FROM AN ENVIRONMENT VARIABLE (`--input-env <NAME>`, the JSON in base64). The test API runs this CLI through a
+ * Coolify scheduled task, whose command holds at most 255 characters (acrobot measured, 2026-11-13: 250 accepted, 300 a
+ * 500), so the input cannot stand in the command, and there is no file in the container to point at. An environment value
+ * has no such limit. Only the standard base64 alphabet is taken, so a mistyped value is refused here, not half-read.
+ */
+export function inputFromEnv(
+  env: NodeJS.ProcessEnv,
+  name: string,
+): { ok: true; text: string } | { ok: false; problem: string } {
+  const value = env[name]?.replace(/\s+/g, "") ?? "";
+  if (!value)
+    return {
+      ok: false,
+      problem: `A(z) ${name} környezeti változó üres vagy nincs beállítva.`,
+    };
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(value) || value.length % 4 !== 0)
+    return { ok: false, problem: `A(z) ${name} értéke nem base64.` };
+  return { ok: true, text: Buffer.from(value, "base64").toString("utf8") };
 }
 
 export async function runEnrichmentCli(
@@ -166,9 +213,10 @@ export async function runEnrichmentCli(
   deps: EnrichmentCliDeps,
 ): Promise<number> {
   const inputPath = option(argv, "--input");
-  if (!inputPath) {
+  const inputEnv = option(argv, "--input-env");
+  if (!inputPath === !inputEnv) {
     out.stderr(
-      "Használat: --input <fájl.json> [--max-products N] [--max-requests N] [--apply --actor <userId>]\n",
+      "Használat: --input <fájl.json> | --input-env <VÁLTOZÓ> [--max-products N] [--max-requests N] [--apply --actor <userId>]\n",
     );
     return 2;
   }
@@ -189,7 +237,17 @@ export async function runEnrichmentCli(
       out.stderr(`${limit}\n`);
       return 2;
     }
-  const parsed = parseRunInput(await deps.readInput(inputPath));
+  let inputText: string;
+  if (inputPath) inputText = await deps.readInput(inputPath);
+  else {
+    const fromEnv = inputFromEnv(deps.env, inputEnv!);
+    if (!fromEnv.ok) {
+      out.stderr(`${fromEnv.problem}\n`);
+      return 2;
+    }
+    inputText = fromEnv.text;
+  }
+  const parsed = parseRunInput(inputText);
   if (!parsed.ok) {
     out.stderr(parsed.problems.map((p) => `- ${p}\n`).join(""));
     return 2;
@@ -237,6 +295,15 @@ export async function runEnrichmentCli(
       ? "Adagolás (AI): be, gyártói laponként egy hívás.\n"
       : `Adagolás (AI): ki (${AI_DOSING_PATH_ENV} és az AI beállítás nélkül nem hívja).\n`,
   );
+  const productFieldExtractor =
+    deps.productFieldExtractor !== undefined
+      ? deps.productFieldExtractor
+      : productFieldExtractorFromEnv(deps.env);
+  out.stdout(
+    productFieldExtractor
+      ? "Alkalmazás és gyártó (AI): be, gyártói laponként egy hívás.\n"
+      : `Alkalmazás és gyártó (AI): ki (${AI_PRODUCT_FIELDS_PATH_ENV} és az AI beállítás nélkül nem hívja).\n`,
+  );
   if (!argv.includes("--apply")) {
     out.stdout(
       "Terv: semmi nem ment ki a hálózatra, semmi nem tárolódott. Futtatás: --apply --actor <userId>\n",
@@ -270,6 +337,7 @@ export async function runEnrichmentCli(
         sleep: deps.sleep,
         now: deps.now,
         ...(dosingExtractor ? { dosingExtractor } : {}),
+        ...(productFieldExtractor ? { productFieldExtractor } : {}),
       },
     );
   } catch (error) {

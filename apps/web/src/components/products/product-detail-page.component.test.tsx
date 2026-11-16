@@ -25,6 +25,15 @@ const api = vi.hoisted(() => ({
     kapjon a duplatol, nem csak azt, amit a teszt allit.
   */
   getShippingProfile: vi.fn(async () => null),
+  getDiscontinuation: vi.fn(async () => null),
+  // the husbandry card of a live animal (V2.2 S2) asks its own endpoint
+  husbandry: vi.fn(async () => ({
+    productId: "product-1",
+    livestockKind: "FISH",
+    facts: {},
+    verification: { verified: false, byUserId: null, at: null },
+    missing: [],
+  })),
   saveShippingProfile: vi.fn(),
   // the JEV card beside the description (the server's switch off: no run)
   enrichment: vi.fn(async () => ({
@@ -74,6 +83,12 @@ vi.mock("@/lib/api/dose-effects", () => ({
     })),
   },
 }));
+// The manufacturer claims card (T5.3) asks its own API: no claim.
+vi.mock("@/lib/api/manufacturer-claims", () => ({
+  manufacturerClaimApi: {
+    forProduct: vi.fn(async () => ({ items: [], truncated: false })),
+  },
+}));
 
 const detail: ProductDetail = {
   id: "product-1",
@@ -86,6 +101,10 @@ const detail: ProductDetail = {
   advisorKind: null,
   fenyIgeny: null,
   aramlasIgeny: null,
+  livestockKind: null,
+  magyarNev: null,
+  angolNev: null,
+  nemetNev: null,
   archivedAt: null,
   brand: { id: "brand-1", name: "Acme" },
   primaryCategory: {
@@ -300,9 +319,13 @@ describe("ProductDetailPage mirror ownership", () => {
     expect(titles).toEqual([
       "Katalógusgazda",
       "Alapadatok",
+      // the manual permanently-discontinued mark (V4.2) in its own row, with no card beside it
+      "Véglegesen megszűnt termék",
       "Szállítási jellemzők",
       // the product dose list (ReefClub slice 7) under the shipping card
       "Adag-hatás",
+      // the manufacturer claims (T5.3) in the same left stack, content rights
+      "Gyártói állítások",
       "Készlet és beszerzés",
       "UNAS terméktükör",
       "Csatornák",
@@ -313,6 +336,39 @@ describe("ProductDetailPage mirror ownership", () => {
       "JEV adatellenőrzés",
       "Képek",
     ]);
+  });
+
+  it("az élő állat lapján megjelenik a Tartási adatok kártya, más terméken nem", async () => {
+    render(<ProductDetailPage productId="product-1" />);
+    await screen.findByText("UNAS terméktükör");
+    expect(screen.queryByText("Tartási adatok")).toBeNull();
+    expect(api.husbandry).not.toHaveBeenCalled();
+  });
+
+  it("az élő állat lapján (livestockKind) a kártya megjelenik és lekéri a tartási adatokat", async () => {
+    api.detail.mockResolvedValue({ ...detail, livestockKind: "FISH" });
+    render(<ProductDetailPage productId="product-1" />);
+    expect(await screen.findByText("Tartási adatok")).toBeTruthy();
+    await waitFor(() =>
+      expect(api.husbandry).toHaveBeenCalledWith("token-owner", "product-1"),
+    );
+  });
+
+  // card 20b0dd47, acrobot 46058: the names card on every live animal, the fish included; not on other products
+  it.each(["FISH", "CORAL", "INVERTEBRATE"] as const)(
+    "a Nevek kártya élő állaton megjelenik: %s",
+    async (kind) => {
+      api.detail.mockResolvedValue({ ...detail, livestockKind: kind });
+      render(<ProductDetailPage productId="product-1" />);
+      await screen.findByText("UNAS terméktükör");
+      expect(await screen.findByText("Magyar név")).toBeTruthy();
+    },
+  );
+
+  it("a Nevek kártya nem élő állaton nincs a lapon", async () => {
+    render(<ProductDetailPage productId="product-1" />);
+    await screen.findByText("UNAS terméktükör");
+    expect(screen.queryByText("Magyar név")).toBeNull();
   });
 
   it("a JEV kártya a szerver kapcsolóját mondja, és az aloldalra visz", async () => {
@@ -711,6 +767,14 @@ describe("ProductDetailPage mirror ownership", () => {
     expect(
       await screen.findByText("Utolsó beszerzési nettó ár"),
     ).toBeInTheDocument();
+    // the pilot field hands the number keyboard and the spacing on to the real input (barracuda, #2312)
+    expect(screen.getByLabelText("Utolsó beszerzési nettó ár")).toHaveAttribute(
+      "inputmode",
+      "decimal",
+    );
+    expect(screen.getByLabelText("Utolsó beszerzési nettó ár")).toHaveClass(
+      "mt-1",
+    );
     fireEvent.change(screen.getByLabelText("Utolsó beszerzési nettó ár"), {
       target: { value: "1000" },
     });

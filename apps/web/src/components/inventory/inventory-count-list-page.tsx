@@ -2,18 +2,17 @@
 
 import {
   Alert,
-  Badge,
-  Button,
-  Card,
   EmptyState,
   Icon,
   PageHeader,
   Pagination,
+  PilotBadge,
+  PilotButton,
+  PilotCard,
   PilotDataTable,
-  Select,
+  PilotSelect,
   Skeleton,
   type PilotTableColumn,
-  PilotButton,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -38,18 +37,16 @@ const STATUS_LABEL: Record<InventoryCountStatus, string> = {
   CORRECTED: "Korrigálva",
 };
 
-const STATUS_BADGE: Record<
-  InventoryCountStatus,
-  "warning" | "info" | "success"
-> = {
-  DRAFT: "warning",
-  UPLOADED: "info",
-  CORRECTED: "success",
-};
+const STATUS_BADGE: Record<InventoryCountStatus, "amber" | "blue" | "success"> =
+  {
+    DRAFT: "amber",
+    UPLOADED: "blue",
+    CORRECTED: "success",
+  };
 
 function InventoryCountTableSkeleton() {
   return (
-    <Card className="overflow-hidden" aria-label="Leltárak betöltése">
+    <PilotCard className="overflow-hidden">
       <div className="border-b border-dusk-200 bg-dusk-50 px-5 py-3">
         <Skeleton className="h-4 w-48" />
       </div>
@@ -62,7 +59,7 @@ function InventoryCountTableSkeleton() {
           </div>
         ))}
       </div>
-    </Card>
+    </PilotCard>
   );
 }
 
@@ -130,9 +127,9 @@ export const countColumns = (
     header: "Állapot",
     width: "130px",
     cell: (count) => (
-      <Badge variant={STATUS_BADGE[count.status]}>
+      <PilotBadge variant={STATUS_BADGE[count.status]}>
         {STATUS_LABEL[count.status]}
-      </Badge>
+      </PilotBadge>
     ),
   },
   {
@@ -142,16 +139,15 @@ export const countColumns = (
     align: "right",
     phone: "hide",
     cell: (count) => (
-      <Button
+      <PilotButton
         variant="ghost"
-        size="sm"
         onClick={(event) => {
           event.stopPropagation();
           open(`/raktar/${count.id}`);
         }}
       >
         Megnyitás
-      </Button>
+      </PilotButton>
     ),
   },
 ];
@@ -259,23 +255,22 @@ export function InventoryCountListPage() {
         }
       />
 
-      <Card className="p-4">
+      <PilotCard className="p-4">
         <div className="max-w-xs">
-          <Select
+          <PilotSelect
             aria-label="Állapot szűrő"
             value={status}
-            onChange={(event) => {
-              const next = event.target.value;
-              update({ status: next === "all" ? null : next, page: null });
-            }}
+            onChange={(next) =>
+              update({ status: next === "all" ? null : next, page: null })
+            }
           >
             <option value="all">Minden állapot</option>
             <option value="DRAFT">Piszkozat</option>
             <option value="UPLOADED">Feltöltve</option>
             <option value="CORRECTED">Korrigálva</option>
-          </Select>
+          </PilotSelect>
         </div>
-      </Card>
+      </PilotCard>
 
       {error ? (
         <Alert
@@ -283,13 +278,12 @@ export function InventoryCountListPage() {
           title="A leltárlista nem tölthető be"
           description={error}
           action={
-            <Button
+            <PilotButton
               variant="secondary"
-              size="sm"
               onClick={() => setRequestVersion((value) => value + 1)}
             >
               Újrapróbálás
-            </Button>
+            </PilotButton>
           }
         />
       ) : null}
@@ -305,7 +299,7 @@ export function InventoryCountListPage() {
       ) : null}
 
       {data && data.items.length > 0 ? (
-        <Card className="overflow-hidden">
+        <PilotCard className="overflow-hidden">
           <div className="flex justify-end px-5 py-3">
             <Pagination
               position="top"
@@ -330,7 +324,7 @@ export function InventoryCountListPage() {
             totalPages={data.pagination.totalPages}
             onPageChange={setPage}
           />
-        </Card>
+        </PilotCard>
       ) : null}
     </div>
   );

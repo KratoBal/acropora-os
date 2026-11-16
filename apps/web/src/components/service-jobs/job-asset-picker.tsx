@@ -5,7 +5,7 @@ import {
   ASSET_LABEL_CODE_SHAPE_MESSAGE,
   normalizeAssetLabelCode,
 } from "@acropora/types";
-import { Button, Input } from "@acropora/ui";
+import { PilotButton, PilotInput } from "@acropora/ui";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -269,12 +269,12 @@ export function JobAssetPicker({
     <div className="space-y-2">
       <div className="flex items-end gap-2">
         <div className="w-40">
-          <Input
+          <PilotInput
             aria-label="Matricakód"
             placeholder="V2196"
             value={code}
             disabled={codeBusy}
-            onChange={(event) => setCode(event.target.value)}
+            onChange={setCode}
             onKeyDown={(event) => {
               /**
                * AZ ENTER HOZZAAD, ES NEM KULD BE AZ URLAPOT.
@@ -290,9 +290,9 @@ export function JobAssetPicker({
             }}
           />
         </div>
-        <Button size="sm" disabled={codeBusy} onClick={() => void addByCode()}>
+        <PilotButton disabled={codeBusy} onClick={() => void addByCode()}>
           Hozzáadás
-        </Button>
+        </PilotButton>
       </div>
       {codeState ? (
         <p

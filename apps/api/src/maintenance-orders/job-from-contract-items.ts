@@ -31,6 +31,8 @@ export interface ContractItemForJob {
   departmentId: string | null;
   description: string;
   quantity: number;
+  /** hány alkalmat fed a lap ebből a tételből (alap: 1); a munkalap külön sorban kiírja, ha több */
+  occasions?: number;
 }
 
 type SiteRepository = Pick<
@@ -175,6 +177,18 @@ export async function createJobFromContractItems(
             unit: "db",
             kind: "OTHER",
           },
+          // a tétel teljes kért alkalomszáma egy munkalapon (Luca, 2026-11-13; acrobot: a munkalap az egészet
+          // fedi); a munkalapnak nincs külön alkalom-mezője, ezért külön sor viszi
+          ...((item.occasions ?? 1) > 1
+            ? [
+                {
+                  description: `${item.description}: alkalmak száma`,
+                  quantity: item.occasions as number,
+                  unit: "alkalom",
+                  kind: "OTHER" as const,
+                },
+              ]
+            : []),
         ],
       },
       actor,

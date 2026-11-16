@@ -16,6 +16,7 @@ import {
   MORTALITY_SOURCE_LABELS,
   PERMISSIONS,
   type MortalityDetail,
+  uploadAccept,
 } from "@acropora/types";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -241,7 +242,7 @@ export function MortalityDetailPage({ recordId }: { recordId: string }) {
                     ref={fileInput}
                     type="file"
                     multiple
-                    accept="image/jpeg,image/png"
+                    accept={uploadAccept(["jpeg", "png"])}
                     className="hidden"
                     onChange={(event) => {
                       void upload(event.target.files);

@@ -24,7 +24,16 @@ function rogzitoApi(valaszok: {
   const api: JatekApi = {
     hamis: false,
     async aktualis() {
-      return { ok: true, question: null };
+      return { ok: true, question: null, next: null };
+    },
+    async nyertesek() {
+      return { ok: true, winners: [] };
+    },
+    async lezart() {
+      return { ok: true, weeks: [] };
+    },
+    async kep() {
+      return { ok: false, status: 404, code: "NO_IMAGE", message: "" };
     },
     async bekuldes(bemenet, ip) {
       r.bekuldes.push({ bemenet, ip });
@@ -47,6 +56,11 @@ function rogzitoApi(valaszok: {
 const JO = {
   questionId: "q1",
   email: "j@example.com",
+  name: "Kovács Péter",
+  rulesAccepted: true as const,
+  consentGiven: true as const,
+  rulesVersion: "szabalyzat-1.0",
+  privacyVersion: "adatkezeles-1.0",
   answer: "acropora",
   website: "",
 };

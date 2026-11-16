@@ -178,7 +178,9 @@ export type ItemState =
   /** Sztornózva (jóváíró van), a visszatérítés még a határidőn belül. */
   | "REFUND_EXPECTED"
   /** Sztornózva, de a visszatérítés a határidőig nem jött meg. */
-  | "REFUND_MISSING";
+  | "REFUND_MISSING"
+  /** Kártyás fizetés, a havi gyűjtőszámlája a határidején belül még jöhet. */
+  | "AWAITING_COLLECTOR";
 
 export interface MatchOutcome {
   state: ItemState;
@@ -188,6 +190,16 @@ export interface MatchOutcome {
   reason: string;
   /** A drawer jelöltjei: a partner ablakba eső dokumentumai. */
   candidates: CandidateDocument[];
+  /**
+   * A NÉV NÉLKÜLI JAVASLAT (task os-hianyzo-szamlak-unpaid, 2026-11-11): a jelölt-keresés a PARTNER NEVE
+   * szerint megy (`partnerDocs`), és egy kártyás fizetésnél a kereskedő neve nem a számla kiállítójáé
+   * (XXXLUTZ LEHEL UTCA a MMXH Lakberendezési Kft. számláján; SIMPLEP*ugyfelkapu a Merkantil Bank
+   * számláján), így a drawer jelölt-listája üres maradt, és a kézi párosítás („Ilyen számla nincs a jelöltek
+   * között”) nem volt kezdeményezhető. Ha NINCS név szerinti jelölt, a fizetés ablakába eső, szabad, pontos
+   * összegű számlák (legfeljebb 8) ide kerülnek. CSAK a drawer kézi választásához: a párosítás szabályai, az
+   * állapot és a hiánylista számlaszámai (`candidates`) ettől nem változnak.
+   */
+  amountCandidates?: CandidateDocument[];
   /**
    * A KÖZLEMÉNY ÁLTAL MEGNEVEZETT, DE HIÁNYZÓ SZÁMLÁK, név szerint (Balázs,
    * acrobot 25610: „ki kellene írni melyik hiányzik”): a párosított számla,
@@ -249,6 +261,12 @@ export function normalizeName(name: string): string {
  * a partnertől” kérdésnél 0,6. Az első-szó feltétel nélkül mért hamis
  * egyezések: Allianz Hungária ~ SOPRO HUNGÁRIA, Hetzner Online ~ UNAS Online.
  */
+/**
+ * A név szerinti jelölt-keresés küszöbe (`partnerDocs` a nem párosodott terheléseknél); a jelölt-vizsgálat (`candidateDiagnosis`)
+ * ugyanezt hívja, hogy a kettő ne válhasson el (barracuda, #2439 review).
+ */
+export const CANDIDATE_NAME_THRESHOLD = 0.6;
+
 export function samePartner(a: string, b: string, threshold = 0.6): boolean {
   const x = normalizeName(a);
   const y = normalizeName(b);
@@ -290,7 +308,7 @@ export function inWindow(debitDate: string, documentDate: string): boolean {
  * Az összeg eltérése a terhelés pénznemében, vagy kártyás devizás sornál az
  * eredeti devizában; `null`, ha a kettő nem vethető össze.
  */
-function amountGap(
+export function amountGap(
   debit: MatchableDebit,
   total: Prisma.Decimal | null,
   currency: string,
@@ -303,8 +321,34 @@ function amountGap(
 }
 
 /** PONTOS: HUF-ban 1 Ft, devizában 5 cent (barracuda 4.2). */
-const exact = (gap: Prisma.Decimal | null, currency: string) =>
+export const exact = (gap: Prisma.Decimal | null, currency: string) =>
   gap !== null && gap.lte(currency === "HUF" ? 1 : 0.05);
+/**
+ * DIJNET-FIZETÉS: a bank közleménye a Dijnet fizető-portált nevezi meg („SIMPLEP*dijnet”, a kivonatban csonkán is:
+ * „SIMPLEP*DIJNE”), nem a számla kiállítóját. Ugyanaz a felismerés, mint a jev-jelölteké (`isUtilityPayment`),
+ * de csak a Dijnet: a Vízművek (SIMPLEP*VIZMUVEK.HU) kiállítója a saját partnernevén párosodik, és ide nem tartozik.
+ */
+const DIJNET_PAYMENT = /simplep\*dijne/i;
+
+export function isDijnetPayment(
+  debit: Pick<MatchableDebit, "counterpartyName" | "narrative">,
+): boolean {
+  return DIJNET_PAYMENT.test(
+    `${debit.counterpartyName ?? ""} ${debit.narrative}`,
+  );
+}
+
+/**
+ * A DIJNET-EN ÁT FIZETETT KIÁLLÍTÓK. Szűk lista, szándékosan: a Dijnet fizető-portál, a számlák kiállítóit a kivonatból
+ * nem lehet kiolvasni, és egy összeg-egyezés bármely számlával (a név ismerete nélkül) tévedne. Egy szolgáltató a
+ * listára akkor kerül, ha a Dijnet-fizetései megvannak a kivonatban (a név az első szóra illeszkedik, kis- és nagybetű
+ * nélkül). Ma: MOHU MOL Hulladékgazdálkodási Zrt. (mérve 2026-11-12, 10 882 Ft).
+ */
+export const DIJNET_ISSUERS: readonly RegExp[] = [/^\s*mohu\b/i];
+
+export const isDijnetIssuer = (supplierName: string): boolean =>
+  DIJNET_ISSUERS.some((issuer) => issuer.test(supplierName));
+
 /** KEREKÍTÉSSEL: HUF-ban 5 Ft-ig Megvan (acrobot 25265 a). */
 const rounded = (gap: Prisma.Decimal | null, currency: string) =>
   gap !== null && currency === "HUF" && gap.gt(1) && gap.lte(5);
@@ -599,6 +643,23 @@ const MONTHLY_INVOICE_LAST_DAY = 5;
  * (Tesla: a terhelésenkénti számlák, nem havi összesítő).
  */
 const MONTHLY_REMAINDER_SHARE = 0.1;
+
+/**
+ * A RÖGZÍTETT HAVI TÖBBLETTEL FIZETŐ PARTNEREK (a 4b. szabály, acrobot 49449): a lista üzleti döntés, nem
+ * felismerés. Egy új név akkor kerül ide, ha a terhelései rendre ugyanannyival térnek el a havi számlájától.
+ */
+const SURCHARGE_PARTNERS = ["Euroleasing Zrt."] as const;
+/** a havi számla legfeljebb ennyi nappal a terhelés előtt kelhet */
+const SURCHARGE_DAYS = 15;
+/** a terhelés és a számla eltérése legfeljebb ennyi része a számlának */
+const SURCHARGE_SHARE = 0.01;
+
+function surchargePartner(name: string | null): boolean {
+  return (
+    name !== null &&
+    SURCHARGE_PARTNERS.some((partner) => samePartner(partner, name, 0.8))
+  );
+}
 
 /**
  * A KÁRTYÁS FIZETÉSEK HAVI CSOPORTJAI. A kártyás terhelés közleménye így
@@ -1346,6 +1407,49 @@ export function matchMonth(input: MatchMonthInput): Map<string, MatchOutcome> {
         `kártyás vásárlás: a kereskedő („${debit.counterpartyName ?? ""}”) egy másik párosítás szerint a(z) ${invoices[0]!.supplierName} számláját hozza`,
       );
   }
+  // 3d. DIJNET-FIZETÉS A DIJNETES KIÁLLÍTÓ SZÁMLÁJÁVAL (acrobot 49440, Balázs 2026-11-12 este: „ezek maguktól
+  // párosodjanak”). A Dijnet fizető-portál: a bank közleménye („SIMPLEP*dijnet”) a PORTÁLT nevezi meg, a számla
+  // kiállítóját soha, ezért a név szerinti szabályok (3., 4., 5.) nem látnak jelöltet, és a fizetés „Nincs számla”
+  // marad, holott a szolgáltató számlája megvan (mérve: MOHU MOL Hulladékgazdálkodási Zrt., 10 882 Ft, két azonos
+  // összegű számla). A szabály szűk: a fizetés Dijnet-fizetés, a számla kiállítója a Dijnet-en át fizetett
+  // szolgáltatók ismert listáján áll (`DIJNET_ISSUERS`), az összeg pontos, és a számla a fizetés napján vagy ELŐTTE
+  // kelt (a havi számlát a fizetés előtt állítják ki, az utána kelt a KÖVETKEZŐ hónapé: a jev-jelöltek szabálya,
+  // `missing-invoice-jev-candidates.ts`). Több azonos összegű számlánál a fizetéshez időben legközelebbi nyer, a
+  // már elvitt (`used`) számla ki van zárva, és a rangsor globális, mint a 3.-ban (egy számlát egy fizetés visz).
+  const dijnetPairs = open
+    .filter((debit) => !outcomes.has(debit.id) && isDijnetPayment(debit))
+    .flatMap((debit) =>
+      window(debit)
+        .filter(
+          (d) =>
+            d.gross !== null &&
+            !zeroTotal(d) &&
+            d.date <= debit.bookingDate &&
+            isDijnetIssuer(d.supplierName) &&
+            exact(amountGap(debit, d.gross, d.currency), d.currency),
+        )
+        .map((d) => ({
+          debit,
+          document: d,
+          days: dayDistance(d.date, debit.bookingDate),
+        })),
+    )
+    .sort(
+      (x, y) =>
+        proformaLast(x.document, y.document) ||
+        x.days - y.days ||
+        x.debit.bookingDate.localeCompare(y.debit.bookingDate) ||
+        x.debit.id.localeCompare(y.debit.id) ||
+        x.document.id.localeCompare(y.document.id),
+    );
+  for (const pair of dijnetPairs) {
+    if (outcomes.has(pair.debit.id) || used.has(pair.document.id)) continue;
+    found(
+      pair.debit,
+      [pair.document],
+      "Dijnet-fizetés: egyező összegű, a fizetés napján vagy előtte kelt számla a Dijnet-en át fizetett kiállítótól",
+    );
+  }
   for (const debit of open) {
     if (outcomes.has(debit.id)) continue;
     // 4. kerekítéssel (2-5 Ft), csak ha EGY jelölt van: többől nem választunk
@@ -1363,9 +1467,51 @@ export function matchMonth(input: MatchMonthInput): Map<string, MatchOutcome> {
         "egyező összeg kerekítési eltéréssel (5 Ft-on belül)",
       );
   }
+  // 4b. RÖGZÍTETT HAVI TÖBBLET, KIJELÖLT PARTNERNÉL (acrobot 49449, Euroleasing): a terhelés minden hónapban
+  // ugyanannyival tér el a havi számlától (mérve: 10-11 150 429 a 10-02 149 889-re, 11-11 150 253 a 11-02
+  // 149 713-ra, mindkettő pontosan 540 Ft). A párosítás csak a listán álló partnernél, a terhelés ELŐTT legfeljebb
+  // 15 nappal kelt EGYETLEN szabad számlával, és legfeljebb 1% eltéréssel áll; az eltérés a tételen marad
+  // (`amountDifference`), tehát semmi nem tűnik el, csak a kézi párosítás.
+  for (const debit of open) {
+    if (outcomes.has(debit.id) || !surchargePartner(debit.counterpartyName))
+      continue;
+    const invoices = partnerDocs(debit, 0.5).filter(
+      (d) =>
+        d.kind === "INVOICE" &&
+        d.gross !== null &&
+        d.currency === debit.currency &&
+        d.date <= debit.bookingDate &&
+        dayDistance(d.date, debit.bookingDate) <= SURCHARGE_DAYS &&
+        debit.amount.minus(d.gross).abs().lte(d.gross.times(SURCHARGE_SHARE)),
+    );
+    if (invoices.length !== 1) continue;
+    const invoice = invoices[0]!;
+    const difference = debit.amount.minus(invoice.gross!);
+    found(
+      debit,
+      [invoice],
+      `a havi számla a partner rögzített többletével (${difference.toFixed(0)} ${debit.currency}): kijelölt partner, legfeljebb 1% eltérés`,
+    );
+    outcomes.set(debit.id, {
+      ...outcomes.get(debit.id)!,
+      amountDifference: { amount: difference, currency: debit.currency },
+    });
+  }
   for (const debit of open) {
     if (outcomes.has(debit.id)) continue;
-    const candidates = partnerDocs(debit, 0.6).filter((d) => !zeroTotal(d));
+    const candidates = partnerDocs(debit, CANDIDATE_NAME_THRESHOLD).filter(
+      (d) => !zeroTotal(d),
+    );
+    const amountCandidates = candidates.length
+      ? []
+      : window(debit)
+          .filter(
+            (d) =>
+              d.kind === "INVOICE" &&
+              d.gross !== null &&
+              exact(amountGap(debit, d.gross, d.currency), d.currency),
+          )
+          .slice(0, 8);
     // A „van-e számla a partnertől” kérdés az ÖSSZES számlára szól, a más
     // fizetés által már elvittekre is (a második Alza-fizetés számlája
     // létezik, csak az elsőé lett): Nem párosodott, nem Nincs számla.
@@ -1429,6 +1575,7 @@ export function matchMonth(input: MatchMonthInput): Map<string, MatchOutcome> {
                 : "a partnertől nincs számla a forrásokban",
       // a neki hagyott számla jelöltként látszik, akkor is, ha már a másiké
       candidates: [...kept, ...candidates.filter((c) => !kept.includes(c))],
+      ...(amountCandidates.length ? { amountCandidates } : {}),
     });
   }
   for (const id of input.paperOriginals ?? []) {
@@ -1455,8 +1602,95 @@ export function matchMonth(input: MatchMonthInput): Map<string, MatchOutcome> {
         reason: `${outcome.reason}; nincs digitális számla, az eredeti papíron megvan`,
       });
   }
+  markAwaitingCollector(outcomes, input.debits, input.asOf);
   markDoublePaid(outcomes);
   return outcomes;
+}
+
+/** The reason of a payment that simply did not pair (no ambiguity, no named number). */
+const PLAIN_NOT_MATCHED =
+  "a partnertől van számla, de ez a fizetés nem párosodott";
+
+/**
+ * GYŰJTŐSZÁMLÁRA VÁR (Balázs, 2026-11-15, Acropora OS szál: „hogy lehetne azt elérni, hogy a banki
+ * párosodások ne legyenek ennyire gyatrák?”). Mérve aznap az éles lapon: a „van jelölt, mégsem párosodott”
+ * 20 sorból 18 a novemberi Parkl-fizetés volt, egy kártyáé, és mind a december 1-5. között kelő havi
+ * gyűjtőszámlára várt (3b/3c szabály). Ilyen számla még nem létezett, tehát a sor nem párosodhatott, a lap
+ * mégis hiánynak mutatta: a lista háromnegyede zaj volt, és eltemette a valódi hiányt.
+ *
+ * Egy NEM PÁROSODOTT kártyás fizetés akkor vár, ha MIND:
+ *   - a partnere ugyanebben a számításban már párosodott gyűjtőszámlával (BÁRMELY hónapja, ugyanez is,
+ *     `group:` párosítás): a gyűjtőszámla a partner szokása, nem feltevés. Ha a hónap számlája már
+ *     megjött, a maradék sor legfeljebb a határidőig vár (barracuda, #2586);
+ *   - a vásárlás hónapjának gyűjtőszámla-határideje (a következő hónap 5-e) a kivonat utolsó napja
+ *     (`asOf`) után van: ami a határidő után sem jött, az újra hiány;
+ *   - a nem-párosodás oka a sima „nincs pontos összegű számla” (nem kétértelműség, nem elírás-gyanú).
+ * Nincs `asOf`: semmi nem vár (a hívó nem mondta meg, meddig ér a kivonat).
+ */
+function markAwaitingCollector(
+  outcomes: Map<string, MatchOutcome>,
+  debits: readonly MatchableDebit[],
+  asOf: string | undefined,
+): void {
+  if (!asOf) return;
+  const byId = new Map(debits.map((debit) => [debit.id, debit]));
+  const collectorPartners = new Set<string>();
+  for (const [id, outcome] of outcomes) {
+    const name = byId.get(id)?.counterpartyName;
+    if (outcome.pairing?.startsWith("group:") && name)
+      collectorPartners.add(normalizeName(name));
+  }
+  if (!collectorPartners.size) return;
+  for (const debit of debits) {
+    const outcome = outcomes.get(debit.id);
+    if (
+      outcome?.state !== "NOT_MATCHED" ||
+      outcome.matchedBy !== null ||
+      outcome.reason !== PLAIN_NOT_MATCHED ||
+      !debit.counterpartyName ||
+      !collectorPartners.has(normalizeName(debit.counterpartyName))
+    )
+      continue;
+    const card = /^(\d{4})\.(\d{2})\.\d{2}\s+\d{6,}\s/.exec(
+      `${debit.narrative.trim()} `,
+    );
+    if (!card) continue;
+    const next = new Date(`${card[1]}-${card[2]}-01T00:00:00Z`);
+    next.setUTCMonth(next.getUTCMonth() + 1);
+    const due = `${next.toISOString().slice(0, 7)}-${String(MONTHLY_INVOICE_LAST_DAY).padStart(2, "0")}`;
+    // on the due day itself the invoice may still come
+    if (asOf > due) continue;
+    outcomes.set(debit.id, {
+      ...outcome,
+      state: "AWAITING_COLLECTOR",
+      reason:
+        `gyűjtőszámlára vár: a ${card[1]}-${card[2]} havi kártyás fizetések számlája ` +
+        `${due}-ig kel (a partner korábbi hónapja is így párosodott)`,
+    });
+  }
+}
+
+/** A számlaszám összevetési alakja: csak betűk és számjegyek, kisbetűvel. Üres: nincs szám. */
+const invoiceNumberForm = (number: string | null | undefined): string =>
+  (number ?? "").toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+
+/**
+ * LEHET-E EZ UGYANAZ A SZÁMLA a két párosításban (acrobot, 2026-11-12, a Vízművek 103000716765 és 105300361726).
+ * Két különböző számlaszámú számla KÉT számla, akkor is, ha valami közös azonosságot hordoznak (egy kézi párosításnál
+ * beolvadt feltöltés lenyomata, egy gyűjtő-PDF): a kettős fizetés azt jelenti, hogy UGYANAZT a számlát fizettük kétszer.
+ * Ha bármelyik oldalon NINCS számlaszám (olvashatatlan feltöltés), nem tudjuk kizárni, és a megosztott azonosság marad
+ * a jel (a Sopro eset: ugyanaz a PDF kétszer feltöltve). Két szám egyezőnek számít, ha az egyik tartalmazza a másikat
+ * (a szállító néha előtaggal vagy a számla részét nélkülözve írja).
+ */
+function mayBeSameInvoice(
+  mine: ReadonlySet<string>,
+  theirs: ReadonlySet<string>,
+): boolean {
+  if (mine.size === 0 || theirs.size === 0) return true;
+  for (const a of mine)
+    for (const b of theirs)
+      if (a === b || a.includes(b) || b.includes(a)) return true;
+  return false;
 }
 
 /** Ezek az állapotok számítanának rendezettnek; a kettős fizetés felülírja őket. */
@@ -1477,29 +1711,53 @@ const SETTLED_LIKE: ReadonlySet<ItemState> = new Set([
  * Mérve 2026-10-01: e nélkül egy Parkl-hónap minden fizetése DOUBLE_PAID lett.
  */
 function markDoublePaid(outcomes: Map<string, MatchOutcome>): void {
-  // azonosság -> párosítás -> a párosítás terhelései
-  const pairingsOf = new Map<string, Map<string, string[]>>();
+  // azonosság -> párosítás -> { a párosítás terhelései, a bennük álló dokumentumok számai }
+  const pairingsOf = new Map<
+    string,
+    Map<string, { debits: string[]; numbers: Set<string> }>
+  >();
   for (const [debitId, outcome] of outcomes)
     for (const document of outcome.documents)
       for (const identity of document.identities ?? []) {
-        const pairings =
-          pairingsOf.get(identity) ?? new Map<string, string[]>();
+        const pairings = pairingsOf.get(identity) ?? new Map();
         const pairing = outcome.pairing ?? debitId;
-        pairings.set(pairing, [...(pairings.get(pairing) ?? []), debitId]);
+        const entry = pairings.get(pairing) ?? {
+          debits: [],
+          numbers: new Set<string>(),
+        };
+        entry.debits.push(debitId);
+        const number = invoiceNumberForm(document.number);
+        if (number) entry.numbers.add(number);
+        pairings.set(pairing, entry);
         pairingsOf.set(identity, pairings);
       }
   const others = new Map<string, Set<string>>();
+  // közös azonosság, de két különböző számlaszám: NEM kettős fizetés, viszont a jel NEM tűnik el, hanem a tétel okába kerül
+  const sharedAcrossNumbers = new Map<string, Set<string>>();
   for (const pairings of pairingsOf.values()) {
     if (pairings.size < 2) continue;
-    for (const [pairing, debits] of pairings)
-      for (const debitId of debits)
-        for (const [otherPairing, otherDebits] of pairings)
-          if (otherPairing !== pairing)
-            for (const other of otherDebits)
-              others.set(
+    for (const [pairing, mine] of pairings)
+      for (const [otherPairing, theirs] of pairings)
+        if (otherPairing !== pairing) {
+          const target = mayBeSameInvoice(mine.numbers, theirs.numbers)
+            ? others
+            : sharedAcrossNumbers;
+          for (const debitId of mine.debits)
+            for (const other of theirs.debits)
+              target.set(
                 debitId,
-                new Set([...(others.get(debitId) ?? []), other]),
+                new Set([...(target.get(debitId) ?? []), other]),
               );
+        }
+  }
+  for (const [debitId, with_] of sharedAcrossNumbers) {
+    if (others.has(debitId)) continue;
+    const outcome = outcomes.get(debitId);
+    if (!outcome) continue;
+    outcomes.set(debitId, {
+      ...outcome,
+      reason: `${outcome.reason}; ugyanaz a fájl más számlaszámmal egy másik terheléshez is párosítva (${[...with_].sort().join(", ")}): nem kettős fizetés, de érdemes megnézni`,
+    });
   }
   for (const [debitId, with_] of others) {
     const outcome = outcomes.get(debitId)!;

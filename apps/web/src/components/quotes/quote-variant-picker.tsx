@@ -11,6 +11,8 @@ import { errorText } from "./quote-format";
 export interface PickedVariant {
   variantId: string;
   label: string;
+  /** a tétel megnevezéséhez: a termék neve és a változaté, a cikkszám nélkül */
+  name: string;
   unit: string;
   vatRate: string | null;
 }
@@ -68,6 +70,7 @@ export function QuoteVariantPicker({
     onPick({
       variantId: variant.id,
       label: `${product.name}${variant.name ? ` · ${variant.name}` : ""} (${variant.sku})`,
+      name: `${product.name}${variant.name ? ` · ${variant.name}` : ""}`,
       unit: variant.unit,
       vatRate: variant.vatRate,
     });

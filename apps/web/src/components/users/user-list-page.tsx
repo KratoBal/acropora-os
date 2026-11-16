@@ -1,17 +1,17 @@
 "use client";
 import {
   Alert,
-  Card,
   EmptyState,
-  Input,
   PageHeader,
   Pagination,
   PilotDataTable,
   type PilotTableColumn,
-  Select,
   Skeleton,
   PilotButton,
   PilotBadge,
+  PilotCard,
+  PilotInput,
+  PilotSelect,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -175,18 +175,18 @@ export function UserListPage() {
       ) : null}
       {data ? (
         <>
-          <Card className="p-4">
+          <PilotCard className="p-4">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <Input
+              <PilotInput
                 aria-label="Felhasználó keresése"
                 value={search}
-                onChange={(event) => setSearch(event.target.value)}
+                onChange={setSearch}
                 placeholder="Név, e-mail"
               />
-              <Select
+              <PilotSelect
                 aria-label="Szerepkör"
                 value={params.get("role") ?? ""}
-                onChange={(event) => filter("role", event.target.value)}
+                onChange={(value) => filter("role", value)}
               >
                 <option value="">Minden szerepkör</option>
                 {ROLE_OPTIONS.map((option) => (
@@ -194,20 +194,20 @@ export function UserListPage() {
                     {option.label}
                   </option>
                 ))}
-              </Select>
-              <Select
+              </PilotSelect>
+              <PilotSelect
                 aria-label="Státusz"
                 value={params.get("status") ?? "ACTIVE"}
-                onChange={(event) => filter("status", event.target.value)}
+                onChange={(value) => filter("status", value)}
               >
                 <option value="ACTIVE">Aktív</option>
                 <option value="INACTIVE">Inaktív</option>
                 <option value="ALL">Mind</option>
-              </Select>
+              </PilotSelect>
             </div>
-          </Card>
+          </PilotCard>
           {data.items.length ? (
-            <Card className="overflow-x-auto">
+            <PilotCard className="overflow-x-auto">
               <div className="flex justify-end px-3 py-2">
                 <Pagination
                   position="top"
@@ -223,7 +223,7 @@ export function UserListPage() {
                 rowTestId="user-row"
                 minWidth={700}
               />
-            </Card>
+            </PilotCard>
           ) : (
             <EmptyState
               title={

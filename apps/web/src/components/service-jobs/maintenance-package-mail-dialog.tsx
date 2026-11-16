@@ -2,7 +2,13 @@
 
 import { useEffect, useState } from "react";
 
-import { Alert, Button, FormField, Input, Textarea } from "@acropora/ui";
+import {
+  Alert,
+  PilotButton,
+  PilotFormField,
+  PilotInput,
+  Textarea,
+} from "@acropora/ui";
 import type { MaintenancePackageMailPreview } from "@acropora/types";
 
 import { KIHAGYAS_OKA } from "./maintenance-package-mail-skip-reason";
@@ -113,7 +119,7 @@ export function MaintenancePackageMailDialog({
 
         {preview?.kind === "send" ? (
           <>
-            <FormField label="Címzettek">
+            <PilotFormField label="Címzettek">
               <ul
                 className="space-y-1"
                 data-testid="maintenance-package-mail-recipients"
@@ -125,22 +131,25 @@ export function MaintenancePackageMailDialog({
                   </li>
                 ))}
               </ul>
-            </FormField>
+            </PilotFormField>
 
-            <FormField label="Tárgy" htmlFor="maintenance-package-mail-subject">
-              <Input
+            <PilotFormField
+              label="Tárgy"
+              htmlFor="maintenance-package-mail-subject"
+            >
+              <PilotInput
                 id="maintenance-package-mail-subject"
                 value={subject}
                 maxLength={200}
                 disabled={busy}
-                onChange={(event) => setSubject(event.target.value)}
+                onChange={setSubject}
               />
-            </FormField>
+            </PilotFormField>
 
-            <FormField
+            <PilotFormField
               label="Üzenet"
               htmlFor="maintenance-package-mail-message"
-              description="Ez lesz a levél törzse, pontosan így. A rendszer semmit nem fűz hozzá."
+              help="Ez lesz a levél törzse, pontosan így. A rendszer semmit nem fűz hozzá."
             >
               <Textarea
                 id="maintenance-package-mail-message"
@@ -150,7 +159,7 @@ export function MaintenancePackageMailDialog({
                 disabled={busy}
                 onChange={(event) => setMessage(event.target.value)}
               />
-            </FormField>
+            </PilotFormField>
           </>
         ) : null}
 
@@ -163,15 +172,15 @@ export function MaintenancePackageMailDialog({
         ) : null}
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button
+          <PilotButton
             disabled={!kuldheto || busy}
             onClick={() => onSend({ subject, message })}
           >
             {busy ? "Kiküldés…" : `Elküldés ${cimzettek.length} címzettnek`}
-          </Button>
-          <Button variant="secondary" disabled={busy} onClick={onCancel}>
+          </PilotButton>
+          <PilotButton variant="secondary" disabled={busy} onClick={onCancel}>
             Mégsem
-          </Button>
+          </PilotButton>
         </div>
         {preview?.kind === "send" ? (
           <p className="text-sm text-dusk-500">

@@ -6,6 +6,8 @@ import { ReefClubAccountRepository } from "./reefclub-account.repository.js";
 import { ReefClubAquariumAccess } from "./reefclub-aquarium-access.js";
 import { ReefClubAquariumsController } from "./reefclub-aquariums.controller.js";
 import { ReefClubRecommendationsController } from "./reefclub-recommendations.controller.js";
+import { ReefClubWaterHintsController } from "./reefclub-water-hints.controller.js";
+import { ReefClubWaterHintsService } from "./reefclub-water-hints.service.js";
 import { ReefClubAquariumsService } from "./reefclub-aquariums.service.js";
 import { ReefClubDosesService } from "./reefclub-doses.service.js";
 import { ReefClubRecommendationService } from "./reefclub-recommendation.service.js";
@@ -33,6 +35,8 @@ import {
 } from "./reefclub-mail.js";
 import { ReefClubMeController } from "./reefclub-me.controller.js";
 import { ReefClubRateLimits } from "./reefclub-rate-limits.js";
+import { ReefClubRunOutController } from "./reefclub-runout.controller.js";
+import { ReefClubRunOutService } from "./reefclub-runout.service.js";
 import { ReefClubSessionRepository } from "./reefclub-session.repository.js";
 import { ReefClubShopLinksController } from "./reefclub-shop-links.controller.js";
 import { ReefClubShopLinksService } from "./reefclub-shop-links.service.js";
@@ -79,7 +83,9 @@ export class ReefClubModule {
         ReefClubMeController,
         ReefClubAquariumsController,
         ReefClubRecommendationsController,
+        ReefClubWaterHintsController,
         ReefClubShopLinksController,
+        ReefClubRunOutController,
         ReefClubHealthController,
       ],
       providers: [
@@ -96,8 +102,10 @@ export class ReefClubModule {
         ReefClubAquariumsService,
         ReefClubRecommendationService,
         ReefClubDosesService,
+        ReefClubWaterHintsService,
         ReefClubShopLinksService,
         ReefClubAccountDeletionService,
+        ReefClubRunOutService,
         {
           provide: REEFCLUB_IDENTITY_KEYS,
           useFactory: () =>

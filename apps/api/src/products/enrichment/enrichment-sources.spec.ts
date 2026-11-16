@@ -136,7 +136,7 @@ describe("a négy engedélyezett forrás, és semmi más", () => {
       brandSitesFromCategories([
         chain("Termékek", "Nyomelemek", "Fauna Marin"),
       ]),
-      ["faunamarin.de"],
+      ["faunamarin.de", "faunamarincorals.de"],
     );
     // the whole name, case aside; a part of a name is not the brand
     assert.deepEqual(
@@ -188,6 +188,79 @@ describe("a négy engedélyezett forrás, és semmi más", () => {
     );
   });
 
+  /*
+    THE PRODUCT'S OWN BRAND (card 85c38ab1, the first Fauna Marin run: Bacto Reef Balls and Dino M, brand set, no brand
+    category, NO_MANUFACTURER_SITE) AND THE BRAND'S SHOP (faunamarincorals.de, the AMIN page HOST_NOT_ALLOWED). WHAT TURNS THIS
+    RED: the brand field not counted; a brand field and a category naming two brands giving any site; the shop's page refused
+    for a Fauna Marin product; a look-alike host let through.
+  */
+  it("a termék saját márkája is kulcs, ugyanazzal az egy-márka szabállyal; a Fauna Marin boltoldala gyártói lap", () => {
+    assert.deepEqual(brandSitesFromCategories([["Termékek"]], "Fauna Marin"), [
+      "faunamarin.de",
+      "faunamarincorals.de",
+    ]);
+    assert.deepEqual(
+      brandSitesFromCategories([["Termékek", "Fauna Marin"]], " fauna marin "),
+      ["faunamarin.de", "faunamarincorals.de"],
+    );
+    assert.deepEqual(
+      brandSitesFromCategories([["Nyomelemek", "Triton"]], "Fauna Marin"),
+      [],
+    );
+    assert.deepEqual(brandSitesFromCategories([["Termékek"]], null), []);
+    assert.deepEqual(
+      brandSitesFromCategories([["Termékek"]], "Ismeretlen Márka"),
+      [],
+    );
+    assert.deepEqual(
+      brandSitesFromCategories([["Termékek"]], "constructor"),
+      [],
+    );
+    const manufacturer = manufacturerSites(
+      null,
+      null,
+      brandSitesFromCategories([["Termékek"]], "Fauna Marin"),
+    );
+    for (const [url, expected] of [
+      ["https://www.faunamarincorals.de/en/Amin-1000ml/11135V", null],
+      ["https://www.faunamarin.de/en/elementals-trace-se/", null],
+      ["https://faunamarincorals.de.example.invalid/x", "HOST_NOT_ALLOWED"],
+      ["https://notfaunamarincorals.de/x", "HOST_NOT_ALLOWED"],
+    ] as const)
+      assert.equal(
+        sourceUrlProblem("MANUFACTURER", url, { manufacturer, supplier: null }),
+        expected,
+        url,
+      );
+  });
+
+  // card 85c38ab1, PK bulk round: Modern Reef's shop (the Impressum names Euro Corals, whose brand it is). WHAT TURNS THIS
+  // RED: the brand's category or brand name not giving modernreef.eu; a look-alike host let through.
+  it("a Modern Reef kategória és márkanév a modernreef.eu-t adja", () => {
+    assert.deepEqual(
+      brandSitesFromCategories([["Termékek", "Nyomelemek", "Modern Reef"]]),
+      ["modernreef.eu"],
+    );
+    assert.deepEqual(brandSitesFromCategories([["Termékek"]], "Modern Reef"), [
+      "modernreef.eu",
+    ]);
+    const manufacturer = manufacturerSites(
+      null,
+      null,
+      brandSitesFromCategories([["Termékek", "Nyomelemek", "Modern Reef"]]),
+    );
+    for (const [url, expected] of [
+      ["https://modernreef.eu/shop/reef-supplements/mg-1000ml/", null],
+      ["https://modernreef.eu.example.invalid/x", "HOST_NOT_ALLOWED"],
+      ["https://notmodernreef.eu/x", "HOST_NOT_ALLOWED"],
+    ] as const)
+      assert.equal(
+        sourceUrlProblem("MANUFACTURER", url, { manufacturer, supplier: null }),
+        expected,
+        url,
+      );
+  });
+
   it("a gyártó oldala a márka weboldala és a UNAS link; kereskedőre mutató link nem az", () => {
     assert.deepEqual(
       manufacturerSites(
@@ -209,6 +282,90 @@ describe("a négy engedélyezett forrás, és semmi más", () => {
 });
 
 // barracuda, #1821: one key for the run's read-once check and the rule's shared-page check
+describe("a T4.4 pilot négy márkája a saját domainjét kapja", () => {
+  // card 8639ac2a, T4.4 pilot-20: six products came back NO_MANUFACTURER_SITE. WHAT TURNS THIS RED: one of the four brands
+  // (by category or by brand name) not giving its own domain; a look-alike host let through; Microbe-Lift's European
+  // partner (arka-biotech.de) treated as its maker.
+  it("Korallen-Zucht, Grotech, Blue Life, Tropic Marin: a saját domain, más nem", () => {
+    for (const [brand, domain] of [
+      ["Korallen-Zucht", "korallen-zucht.de"],
+      ["Grotech", "grotech-shop.de"],
+      ["Blue Life", "bluelifeusa.com"],
+      ["Tropic Marin", "tropic-marin.com"],
+    ] as const) {
+      // the first domain is the brand's own; Tropic Marin has its product-information site after it
+      assert.deepEqual(
+        brandSitesFromCategories([["Termékek"]], brand)[0],
+        domain,
+        brand,
+      );
+      assert.deepEqual(
+        brandSitesFromCategories([["Termékek", brand]])[0],
+        domain,
+        brand,
+      );
+      const manufacturer = manufacturerSites(null, null, [domain]);
+      for (const [url, expected] of [
+        [`https://www.${domain}/x`, null],
+        [`https://${domain}.example.invalid/x`, "HOST_NOT_ALLOWED"],
+        [`https://not${domain}/x`, "HOST_NOT_ALLOWED"],
+      ] as const)
+        assert.equal(
+          sourceUrlProblem("MANUFACTURER", url, {
+            manufacturer,
+            supplier: null,
+          }),
+          expected,
+          url,
+        );
+    }
+    assert.deepEqual(
+      brandSitesFromCategories([["Termékek"]], "Microbe-Lift"),
+      [],
+    );
+  });
+
+  // polip 52429: the pilot's Syn-Biotic source is on the brand's product-information site, which tropic-marin.com
+  // itself redirects to (301, measured 2026-11-14). WHAT TURNS THIS RED: the site missing from the brand's line; a
+  // look-alike host let through; the line reaching another brand.
+  it("a Tropic Marin termékinformációs oldala a márka sora, más márkáé nem", () => {
+    assert.deepEqual(brandSitesFromCategories([["Termékek"]], "Tropic Marin"), [
+      "tropic-marin.com",
+      "tropic-marin-smartinfo.com",
+    ]);
+    const manufacturer = manufacturerSites(
+      null,
+      null,
+      brandSitesFromCategories([["Termékek"]], "Tropic Marin"),
+    );
+    for (const [url, expected] of [
+      ["https://www.tropic-marin-smartinfo.com/syn-biotic", null],
+      [
+        "https://tropic-marin-smartinfo.com.example.invalid/x",
+        "HOST_NOT_ALLOWED",
+      ],
+    ] as const)
+      assert.equal(
+        sourceUrlProblem("MANUFACTURER", url, { manufacturer, supplier: null }),
+        expected,
+        url,
+      );
+    const grotech = manufacturerSites(
+      null,
+      null,
+      brandSitesFromCategories([["Termékek"]], "Grotech"),
+    );
+    assert.equal(
+      sourceUrlProblem(
+        "MANUFACTURER",
+        "https://www.tropic-marin-smartinfo.com/syn-biotic",
+        { manufacturer: grotech, supplier: null },
+      ),
+      "HOST_NOT_ALLOWED",
+    );
+  });
+});
+
 describe("egy lap, egy kulcs", () => {
   it("fragment, query, kis- és nagybetű, záró perjel nélkül", () => {
     const key = pageKey("https://gyarto.example.invalid/p/mg-plus/");

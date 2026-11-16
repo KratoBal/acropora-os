@@ -29,6 +29,10 @@ import {
   type WebshopLivestockKind,
 } from "./webshop-acclimation.js";
 import {
+  WEBSHOP_USAGE_GUIDE_TEXT,
+  webshopDoseLine,
+} from "./webshop-usage-guide.js";
+import {
   WEBSHOP_ENGLISH_KEY_SUFFIX,
   type MailTemplateValues,
 } from "./mail-template.js";
@@ -67,6 +71,44 @@ export interface WebshopPlacedOrder extends WebshopMailOrder {
   readonly livestock_kinds?: readonly WebshopLivestockKind[];
 }
 
+/**
+ * One product's usage guide in the shipped mail (V3.3, card 69b5f2ef, korall's spec point 3): the product's name, the
+ * "Mire való" part of its approved guide, the manufacturer's dose, and the product page where the whole guide stands. The
+ * spec's four cases come from which of them the shop sends:
+ *
+ *   A  excerpt and dose          the excerpt, the dose line(s), the link
+ *   B  excerpt, no dose          the excerpt, the fallback sentence in place of the dose, the link
+ *   C  dose, no excerpt          the dose line(s), the link
+ *   D  neither                   only a treatment (`fallback_scope`) stays, with the fallback sentence; others are dropped
+ */
+export interface WebshopUsageGuide {
+  readonly title: string;
+  /** Empty when the product has no approved guide (cases C and D). */
+  readonly excerpt: string;
+  /**
+   * The manufacturer's dose in the OS canonical form (`5 ml/100 L/day`, `webshopDoseLine`), from a VERIFIED, public fact
+   * only; at most `WEBSHOP_USAGE_GUIDE_LIMITS.dosing`. Missing or empty: no dose. OPTIONAL: an older shop does not send it.
+   */
+  readonly dosing?: readonly string[];
+  /**
+   * A water treatment, additive or chemical (the Product Knowledge scope, spec point 4): with neither an excerpt nor a dose
+   * it still gets the fallback sentence under its name (case D). OPTIONAL, missing is false.
+   */
+  readonly fallback_scope?: boolean;
+  readonly url: string | null;
+}
+
+/**
+ * A mail is not a manual: at most `shown` products get a section (then one "the rest is on the product page" line), and the
+ * reader keeps at most `count`, enough to know there are more; an excerpt at most `excerpt` long, at most `dosing` lines.
+ */
+export const WEBSHOP_USAGE_GUIDE_LIMITS = {
+  count: 10,
+  shown: 8,
+  excerpt: 400,
+  dosing: 2,
+} as const;
+
 /** commerce `ShippedMailFacts`. */
 export interface WebshopShippedFacts {
   readonly display_id: number | string;
@@ -89,6 +131,12 @@ export interface WebshopShippedFacts {
   readonly gls_logo_url?: string | null;
   /** A GLS point's kind, `parcel-shop` / `parcel-locker`: the logo's alt text. */
   readonly gls_point_type?: string | null;
+  /**
+   * The usage guides of the parcel's products that have one (V3.3 S3). OPTIONAL and tolerant, like `livestock_kinds`: a
+   * webshop that does not send it, or sends something else, means no guide section, never a refused mail (`facts_version`
+   * stays 1), so the OS and the webshop can be deployed in either order.
+   */
+  readonly usage_guides?: readonly WebshopUsageGuide[];
 }
 
 /** commerce `RefundMailFacts`. */
@@ -132,6 +180,12 @@ export interface WebshopMailCommonFacts {
 export const WEBSHOP_MAIL_LOCALES = ["hu", "en"] as const;
 export type WebshopMailLocale = (typeof WEBSHOP_MAIL_LOCALES)[number];
 
+/** The two legal pages of the shop the confirmation links to. */
+export interface WebshopLegalUrls {
+  readonly aszf: string;
+  readonly adatkezeles: string;
+}
+
 /** The facts of one mail, by the webshop's own template name. */
 export type WebshopMailFacts = WebshopMailCommonFacts & WebshopTemplateFacts;
 
@@ -146,6 +200,13 @@ type WebshopTemplateFacts =
        * no legal part, as before.
        */
       readonly legal_version?: string | null;
+      /**
+       * The addresses of the shop's ASZF and privacy-notice pages in the mail's language (commerce `legal_urls`), or
+       * null: the shop sends them only behind its Fogyasztóbarát switch. The confirmation carries a sentence with the
+       * two links. OPTIONAL and tolerant, like `order_view_url`: anything that is not a plain https address pair means
+       * no sentence, never a refused mail (`facts_version` stays 1).
+       */
+      readonly legal_urls?: WebshopLegalUrls | null;
     }
   | {
       readonly template: (typeof WEBSHOP_STATUS_TEMPLATES)[number];
@@ -198,6 +259,76 @@ type WebshopTemplateFacts =
       readonly template: "problem-report-received";
       readonly display_id: number | string;
       readonly report_id: string;
+    }
+  | {
+      /**
+       * The acknowledgement of a withdrawal declaration the customer made
+       * (commerce V0.3 slice 2; 45/2014. Korm. rendelet 22. §: the
+       * acknowledgement goes on a durable medium, without undue delay, and
+       * this mail is that medium). The order's number, the declaration's
+       * reference, the name it was signed with and the time it came in; the
+       * lines it names go as ids, and as titles when the shop could read them
+       * (`item_titles`, optional: the acknowledgement is a legal one and must
+       * go out without them, so the titles are decoration the parser
+       * normalises, never a reason to refuse the mail). The wording is a DRAFT on Balázs's list
+       * (Eldöntendő, 3rd point): no deadline, no outcome, no statutory
+       * sentence. Sent only through this renderer, behind the shop's switch.
+       */
+      readonly template: "withdrawal-received";
+      readonly display_id: number | string;
+      readonly withdrawal_id: string;
+      readonly declared_name: string;
+      readonly item_ids: readonly string[];
+      /** the titles of the lines, as the order shows them; the mail lists them when there are any */
+      readonly item_titles?: readonly string[];
+      readonly received_at: string;
+    }
+  | {
+      /**
+       * The newsletter's confirmation (double opt-in, commerce card
+       * d707cf5f): the link that confirms the sign-up (it works once, until
+       * `expires_at`), and the link that leaves the list. There is no order
+       * behind it: the common `order_created_at` and `order_view_url` are
+       * null, `customer_name` is the name typed into the sign-up. The text is
+       * a proposal on Balázs's list; the shop sends it only behind its switch.
+       */
+      readonly template: "newsletter-confirm";
+      readonly confirm_url: string;
+      readonly unsubscribe_url: string;
+      readonly expires_at: string;
+    }
+  | {
+      /**
+       * The stock alert's confirmation ("Szólj, ha jön hasonló", commerce
+       * card 0c1265d2, acropora-commerce #701): the newsletter's double
+       * opt-in, plus what the address signed up for (`subject_label`, a
+       * species "Acropora abrolhosensis" or a product's title). No name was
+       * asked: `customer_name`, `order_created_at` and `order_view_url` are
+       * null. The text is a proposal; the shop sends it only behind
+       * ACROPORA_STOCK_ALERT on the test shop.
+       */
+      readonly template: "stock-alert-confirm";
+      readonly confirm_url: string;
+      readonly unsubscribe_url: string;
+      readonly expires_at: string;
+      readonly subject_label: string;
+    }
+  | {
+      /**
+       * The stock alert's arrival (commerce card 0c1265d2): ONE mail to a
+       * confirmed sign-up when a piece of what it waits for can be bought.
+       * `subject_label` is what was waited for (a species or a product's
+       * title), `product_title` and `product_url` the piece that came and its
+       * storefront page, `unsubscribe_url` the leaving link. No name, no order:
+       * `customer_name`, `order_created_at` and `order_view_url` are null. The
+       * text is a proposal; the shop sends it only behind ACROPORA_STOCK_ALERT
+       * on the test shop.
+       */
+      readonly template: "stock-alert-arrival";
+      readonly subject_label: string;
+      readonly product_title: string;
+      readonly product_url: string;
+      readonly unsubscribe_url: string;
     };
 
 /** How a split order is paid, from the original order (murena 26656). */
@@ -229,6 +360,10 @@ export const WEBSHOP_MAIL_KEYS = {
   "order-status-closed": "WEBSHOP_ORDER_CLOSED",
   "order-split": "WEBSHOP_ORDER_SPLIT",
   "problem-report-received": "WEBSHOP_PROBLEM_REPORT_RECEIVED",
+  "withdrawal-received": "WEBSHOP_WITHDRAWAL_RECEIVED",
+  "newsletter-confirm": "WEBSHOP_NEWSLETTER_CONFIRM",
+  "stock-alert-confirm": "WEBSHOP_STOCK_ALERT_CONFIRM",
+  "stock-alert-arrival": "WEBSHOP_STOCK_ALERT_ARRIVAL",
 } as const satisfies Record<WebshopMailTemplate, string>;
 
 export const SHOP_NAME = "Acropora tengeri akvarisztika";
@@ -331,6 +466,71 @@ function listBlock(
   };
 }
 
+/**
+ * THE USAGE GUIDES IN THE SHIPPED MAIL (V3.3, korall's spec points 2-4): a title and an intro, per product its name, the
+ * excerpt, the dose line(s) or the fallback sentence, and the product page's link, then one closing line. `null` when no
+ * product has an excerpt or a dose (a parcel of treatments with neither gets no section either: the fallback sentence alone
+ * would fill a mail with nothing), so the mail is word for word today's.
+ */
+function usageGuideBlock(
+  guides: readonly WebshopUsageGuide[],
+): MailBlock | null {
+  const u = WEBSHOP_USAGE_GUIDE_TEXT;
+  const drawn = guides
+    .map((g) => {
+      const doses = (g.dosing ?? [])
+        .map(webshopDoseLine)
+        .filter((line): line is string => line !== null)
+        .slice(0, WEBSHOP_USAGE_GUIDE_LIMITS.dosing)
+        .map((line) => `${u.dosePrefix} ${line}`);
+      const content = g.excerpt !== "" || doses.length > 0;
+      // case D outside the treatments: the product is left out
+      if (!content && g.fallback_scope !== true) return null;
+      return {
+        title: g.title,
+        content,
+        lines: [
+          ...(g.excerpt ? [g.excerpt] : []),
+          ...(doses.length > 0 ? doses : [u.fallback]),
+        ],
+        url: content ? g.url : null,
+      };
+    })
+    .filter((g) => g !== null);
+  if (!drawn.some((g) => g.content)) return null;
+  const shown = drawn.slice(0, WEBSHOP_USAGE_GUIDE_LIMITS.shown);
+  const rest = drawn.length > shown.length;
+  return {
+    html:
+      `<h2 ${H2}>${escapeHtml(u.title)}</h2>` +
+      `<p>${escapeHtml(u.intro)}</p>` +
+      shown
+        .map(
+          (g) =>
+            `<p style="margin:0 0 12px;"><strong>${escapeHtml(g.title)}</strong>` +
+            g.lines.map((l) => `<br />${escapeHtml(l)}`).join("") +
+            (g.url
+              ? `<br /><a href="${escapeHtml(g.url)}">${escapeHtml(u.link)}</a>`
+              : "") +
+            "</p>",
+        )
+        .join("") +
+      (rest ? `<p>${escapeHtml(u.rest)}</p>` : "") +
+      `<p>${escapeHtml(u.closing)}</p>`,
+    text: [
+      u.title,
+      u.intro,
+      ...shown.map((g) =>
+        [g.title, ...g.lines, ...(g.url ? [`${u.link}: ${g.url}`] : [])].join(
+          "\n",
+        ),
+      ),
+      ...(rest ? [u.rest] : []),
+      u.closing,
+    ].join("\n\n"),
+  };
+}
+
 /** The orange box: "ÁTVÉTELKOR FIZETENDŐ / 14 000 Ft". */
 function amountBox(label: string, amount: number): MailBlock {
   return {
@@ -380,6 +580,8 @@ export interface WebshopMailText {
   readonly nextPickup: string;
   /** The sentence that carries the guest order page's address (`order_view_url`). */
   readonly orderViewLine: (url: string) => string;
+  /** The sentence that carries the ASZF and privacy-notice pages' addresses (`legal_urls`). */
+  readonly legalLinksLine: (aszf: string, adatkezeles: string) => string;
   readonly glsPoint: string;
   readonly glsHome: string;
   readonly glsLogoLocker: string;
@@ -442,6 +644,8 @@ const HU_TEXT: WebshopMailText = {
   nextPickup: "Az élő állatos rendelést a boltban veszed át.",
   orderViewLine: (url) =>
     `A rendelésed állapotát bármikor megnézheted a rendelésszámmal és az e-mail-címeddel: ${url}`,
+  legalLinksLine: (aszf, adatkezeles) =>
+    `Az általános szerződési feltételeket (${aszf}) és az adatkezelési tájékoztatót (${adatkezeles}) a webshopunkban olvashatod.`,
   glsPoint: "GLS csomagpont",
   glsHome: "GLS házhozszállítás",
   glsLogoLocker: "GLS Automata",
@@ -506,6 +710,8 @@ const EN_TEXT: WebshopMailText = {
   nextPickup: "You pick up the live-animal order at the store.",
   orderViewLine: (url) =>
     `You can check your order at any time with your order number and e-mail address: ${url}`,
+  legalLinksLine: (aszf, adatkezeles) =>
+    `You can read our terms and conditions (${aszf}) and our privacy notice (${adatkezeles}) in our webshop.`,
   glsPoint: "GLS parcel point",
   glsHome: "GLS home delivery",
   glsLogoLocker: "GLS Parcel Locker",
@@ -581,6 +787,16 @@ export function webshopMailContent(
         const url = safeOrderViewUrl(facts.order_view_url);
         return url ? t.orderViewLine(url) : "";
       })(),
+      // only the confirmation has the variable (the other templates do not declare it); empty (and no paragraph in the
+      // default mail) without a usable address pair
+      ...(facts.template === "order-placed"
+        ? {
+            jogi_linkek_mondat: (() => {
+              const urls = safeLegalUrls(facts.legal_urls);
+              return urls ? t.legalLinksLine(urls.aszf, urls.adatkezeles) : "";
+            })(),
+          }
+        : {}),
     },
     blocks: own.blocks,
   };
@@ -766,6 +982,9 @@ function templateContent(
               lines: s.items.map((i) => `${i.title} × ${i.quantity}`),
             },
           ]),
+          // Hungarian only (spec points 1 and 7): an English mail never gets the section
+          hasznalati_utmutato:
+            locale === "en" ? null : usageGuideBlock(s.usage_guides ?? []),
         },
       };
     }
@@ -883,6 +1102,57 @@ function templateContent(
         blocks: {},
       };
 
+    case "withdrawal-received":
+      return {
+        values: {
+          rendeles_szam: String(facts.display_id),
+          nyilatkozat_azonosito: facts.withdrawal_id,
+          nyilatkozat_neve: facts.declared_name,
+          nyilatkozat_idopont: mailDay(facts.received_at, locale),
+        },
+        // the lines the declaration names, a plain list (no heading: the words around it are the owner's); no titles, no block
+        blocks: {
+          nyilatkozat_tetelek: facts.item_titles?.length
+            ? {
+                html: `<ul ${UL}>${facts.item_titles.map((title) => `<li>${escapeHtml(title)}</li>`).join("")}</ul>`,
+                text: facts.item_titles.map((title) => `- ${title}`).join("\n"),
+              }
+            : null,
+        },
+      };
+
+    case "newsletter-confirm":
+      return {
+        values: {
+          hirlevel_megerosito_link: facts.confirm_url,
+          hirlevel_leiratkozo_link: facts.unsubscribe_url,
+          megerosites_lejarat: mailDay(facts.expires_at, locale),
+        },
+        blocks: {},
+      };
+
+    case "stock-alert-confirm":
+      return {
+        values: {
+          ertesites_megerosito_link: facts.confirm_url,
+          ertesites_leiratkozo_link: facts.unsubscribe_url,
+          megerosites_lejarat: mailDay(facts.expires_at, locale),
+          ertesites_targya: facts.subject_label,
+        },
+        blocks: {},
+      };
+
+    case "stock-alert-arrival":
+      return {
+        values: {
+          ertesites_targya: facts.subject_label,
+          ertesites_termek_neve: facts.product_title,
+          ertesites_termek_link: facts.product_url,
+          ertesites_leiratkozo_link: facts.unsubscribe_url,
+        },
+        blocks: {},
+      };
+
     case "payment-refunded": {
       const r = facts.refund;
       return {
@@ -934,6 +1204,10 @@ export const WEBSHOP_MAIL_SAMPLE_FACTS: Readonly<
     template: "order-placed",
     orders: [{ ...SAMPLE_ORDER, pickup: false }],
     legal_version: "unas-shop-2026-09-29",
+    legal_urls: {
+      aszf: "https://shop.example/hu/jogi/aszf",
+      adatkezeles: "https://shop.example/hu/jogi/adatkezeles",
+    },
   },
   "order-status-confirmed": {
     ...SAMPLE_COMMON,
@@ -1029,6 +1303,49 @@ export const WEBSHOP_MAIL_SAMPLE_FACTS: Readonly<
     display_id: 38,
     report_id: "ordprb_01SAMPLE",
   },
+  "withdrawal-received": {
+    ...SAMPLE_COMMON,
+    template: "withdrawal-received",
+    display_id: 38,
+    withdrawal_id: "ordwd_01SAMPLE",
+    declared_name: "Minta Vevő",
+    item_ids: ["item_01SAMPLE"],
+    item_titles: ["Minta termék"],
+    received_at: "2026-11-09T12:00:00.000Z",
+  },
+  "newsletter-confirm": {
+    ...SAMPLE_COMMON,
+    order_created_at: null,
+    order_view_url: null,
+    template: "newsletter-confirm",
+    confirm_url: "https://shop.example/hu/hirlevel/megerosites?token=minta",
+    unsubscribe_url: "https://shop.example/hu/hirlevel/leiratkozas?token=minta",
+    expires_at: "2026-10-12T09:21:00.000Z",
+  },
+  "stock-alert-confirm": {
+    ...SAMPLE_COMMON,
+    customer_name: null,
+    order_created_at: null,
+    order_view_url: null,
+    template: "stock-alert-confirm",
+    confirm_url: "https://shop.example/hu/ertesites/megerosites?token=minta",
+    unsubscribe_url:
+      "https://shop.example/hu/ertesites/leiratkozas?token=minta",
+    expires_at: "2026-10-12T09:21:00.000Z",
+    subject_label: "Acropora abrolhosensis",
+  },
+  "stock-alert-arrival": {
+    ...SAMPLE_COMMON,
+    customer_name: null,
+    order_created_at: null,
+    order_view_url: null,
+    template: "stock-alert-arrival",
+    subject_label: "Acropora abrolhosensis",
+    product_title: "Acropora abrolhosensis ULTRA",
+    product_url: "https://shop.example/hu/termek/acropora-abrolhosensis-ultra",
+    unsubscribe_url:
+      "https://shop.example/hu/ertesites/leiratkozas?token=minta",
+  },
   "payment-refunded": {
     ...SAMPLE_COMMON,
     template: "payment-refunded",
@@ -1097,6 +1414,13 @@ function str(v: unknown, path: string): string {
       `${path}: szöveg kell (legfeljebb ${MAX_TEXT} karakter)`,
     );
   return v;
+}
+/** Text that must say something: an empty reference or name would leave the mail's sentence without its subject. */
+function filled(v: unknown, path: string): string {
+  const text = str(v, path);
+  if (text.trim() === "")
+    throw new FactsError(`${path}: nem lehet üres szöveg`);
+  return text;
 }
 function strOrNull(v: unknown, path: string): string | null {
   return v === null || v === undefined ? null : str(v, path);
@@ -1172,6 +1496,18 @@ export function safeOrderViewUrl(v: unknown): string | null {
   }
 }
 
+/**
+ * THE SHOP'S ASZF AND PRIVACY-NOTICE ADDRESSES, if both are ones a mail may carry (`safeOrderViewUrl`'s rule for each). A
+ * missing or half pair is null: the sentence names both pages, so one alone would be a wrong sentence.
+ */
+export function safeLegalUrls(v: unknown): WebshopLegalUrls | null {
+  if (typeof v !== "object" || v === null) return null;
+  const { aszf, adatkezeles } = v as Record<string, unknown>;
+  const a = safeOrderViewUrl(aszf);
+  const b = safeOrderViewUrl(adatkezeles);
+  return a && b ? { aszf: a, adatkezeles: b } : null;
+}
+
 /** `hu` or `en`; missing is `hu`, anything else is refused (400): a wrong language must not become Hungarian silently. */
 function parseLocale(v: unknown): WebshopMailLocale {
   if (v === undefined || v === null) return "hu";
@@ -1184,6 +1520,22 @@ export function isWebshopMailTemplate(v: unknown): v is WebshopMailTemplate {
     typeof v === "string" &&
     Object.prototype.hasOwnProperty.call(WEBSHOP_MAIL_KEYS, v)
   );
+}
+
+/**
+ * THE TITLES OF A WITHDRAWAL'S LINES ARE DECORATION, NEVER A REASON TO REFUSE THE MAIL. The acknowledgement is the durable
+ * medium of a legal declaration and has to go out; a shop that sends a bad `item_titles` (not a list, a title that is not
+ * text, an empty one) must not turn that into a 422. So the parser keeps the titles that are usable text (trimmed, at
+ * most 300 characters, at most 50) and drops the rest; with nothing usable the key is left out and the mail has no list.
+ */
+function withdrawalTitles(value: unknown): { item_titles?: string[] } {
+  if (!Array.isArray(value)) return {};
+  const titles = value
+    .filter((x): x is string => typeof x === "string")
+    .map((x) => x.trim().slice(0, 300))
+    .filter((x) => x !== "")
+    .slice(0, 50);
+  return titles.length ? { item_titles: titles } : {};
 }
 
 export function parseWebshopMailFacts(
@@ -1244,6 +1596,7 @@ function parseTemplateFacts(
         template,
         orders,
         legal_version: strOrNull(f.legal_version, "facts.legal_version"),
+        legal_urls: safeLegalUrls(f.legal_urls),
       };
     }
     case "order-status-confirmed":
@@ -1296,6 +1649,9 @@ function parseTemplateFacts(
             s.gls_point_type,
             "facts.shipped.gls_point_type",
           ),
+          ...(Array.isArray(s.usage_guides)
+            ? { usage_guides: usageGuides(s.usage_guides) }
+            : {}),
         },
       };
     }
@@ -1346,6 +1702,71 @@ function parseTemplateFacts(
         display_id: id(f.display_id, "facts.display_id"),
         report_id: str(f.report_id, "facts.report_id"),
       };
+    case "withdrawal-received": {
+      const received_at = str(f.received_at, "facts.received_at");
+      if (Number.isNaN(new Date(received_at).getTime()))
+        throw new FactsError("facts.received_at: ISO időpont kell");
+      if (
+        !Array.isArray(f.item_ids) ||
+        f.item_ids.length === 0 ||
+        f.item_ids.length > 50 ||
+        f.item_ids.some((x) => typeof x !== "string" || x === "")
+      )
+        throw new FactsError("facts.item_ids: 1-50 azonosító kell");
+      return {
+        template,
+        display_id: id(f.display_id, "facts.display_id"),
+        withdrawal_id: filled(f.withdrawal_id, "facts.withdrawal_id"),
+        declared_name: filled(f.declared_name, "facts.declared_name"),
+        item_ids: f.item_ids as string[],
+        ...withdrawalTitles(f.item_titles),
+        received_at,
+      };
+    }
+    case "newsletter-confirm":
+    case "stock-alert-confirm": {
+      // the two links go into an href: a clean https address or the mail is refused (422), never sent without them
+      const link = (value: unknown, at: string) => {
+        const url = safeOrderViewUrl(value);
+        if (!url) throw new FactsError(`${at}: tiszta https cím kell`);
+        return url;
+      };
+      const expires_at = str(f.expires_at, "facts.expires_at");
+      if (Number.isNaN(new Date(expires_at).getTime()))
+        throw new FactsError("facts.expires_at: ISO időpont kell");
+      const links = {
+        confirm_url: link(f.confirm_url, "facts.confirm_url"),
+        unsubscribe_url: link(f.unsubscribe_url, "facts.unsubscribe_url"),
+        expires_at,
+      };
+      if (template === "newsletter-confirm") return { template, ...links };
+      // the stock alert names what was signed up for; an empty one would leave the mail's sentence without its subject
+      const subject_label = str(f.subject_label, "facts.subject_label").trim();
+      if (!subject_label)
+        throw new FactsError("facts.subject_label: nem lehet üres");
+      return { template, ...links, subject_label };
+    }
+    case "stock-alert-arrival": {
+      // the product's page and the leaving link go into an href: a clean https address or the mail is refused (422)
+      const link = (value: unknown, at: string) => {
+        const url = safeOrderViewUrl(value);
+        if (!url) throw new FactsError(`${at}: tiszta https cím kell`);
+        return url;
+      };
+      // the mail's sentence names both: an empty one would leave it without its subject or its piece
+      const named = (value: unknown, at: string) => {
+        const text = str(value, at).trim();
+        if (!text) throw new FactsError(`${at}: nem lehet üres`);
+        return text;
+      };
+      return {
+        template,
+        subject_label: named(f.subject_label, "facts.subject_label"),
+        product_title: named(f.product_title, "facts.product_title"),
+        product_url: link(f.product_url, "facts.product_url"),
+        unsubscribe_url: link(f.unsubscribe_url, "facts.unsubscribe_url"),
+      };
+    }
     case "payment-refunded": {
       const r = obj(f.refund, "facts.refund");
       return {
@@ -1387,4 +1808,47 @@ export interface WebshopStuckMailList {
   readonly items: readonly WebshopStuckMail[];
   /** Every stuck mail, not just this page. */
   readonly count: number;
+}
+
+/**
+ * THE USAGE GUIDES, TOLERANTLY (V3.3): an entry without a name is dropped, not refused, and so is one with nothing to show
+ * (no excerpt, no readable dose, not a treatment); the excerpt is cut at the limit on a word; a dose that is not the OS
+ * canonical form is dropped (the guide stays without it); a link that is not a plain https address is dropped (the guide
+ * stays without it). At most the limit's count.
+ */
+function usageGuides(raw: readonly unknown[]): WebshopUsageGuide[] {
+  const { count, excerpt: max, dosing: maxDoses } = WEBSHOP_USAGE_GUIDE_LIMITS;
+  const guides: WebshopUsageGuide[] = [];
+  for (const entry of raw) {
+    if (guides.length >= count) break;
+    if (typeof entry !== "object" || entry === null) continue;
+    const e = entry as Record<string, unknown>;
+    const title = typeof e.title === "string" ? e.title.trim() : "";
+    const text =
+      typeof e.excerpt === "string"
+        ? e.excerpt.replace(/\s+/g, " ").trim()
+        : "";
+    const dosing = Array.isArray(e.dosing)
+      ? e.dosing
+          .filter(
+            (d): d is string =>
+              typeof d === "string" && webshopDoseLine(d) !== null,
+          )
+          .slice(0, maxDoses)
+      : [];
+    const fallbackScope = e.fallback_scope === true;
+    if (!title || (!text && dosing.length === 0 && !fallbackScope)) continue;
+    const excerpt =
+      text.length <= max
+        ? text
+        : `${text.slice(0, max).replace(/\s+\S*$/, "")}…`;
+    guides.push({
+      title: title.slice(0, 200),
+      excerpt,
+      ...(dosing.length > 0 ? { dosing } : {}),
+      ...(fallbackScope ? { fallback_scope: true } : {}),
+      url: safeOrderViewUrl(e.url),
+    });
+  }
+  return guides;
 }

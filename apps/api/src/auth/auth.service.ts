@@ -5,7 +5,11 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
-import type { AuthenticatedUser, Session } from "@acropora/types";
+import type {
+  AuthenticatedUser,
+  Session,
+  ThemePreference,
+} from "@acropora/types";
 
 import { DEVELOPMENT_USERS } from "./development-users.js";
 import { developmentLoginRefusal } from "./development-login.guard.js";
@@ -204,6 +208,14 @@ export class AuthService {
       token,
       expiresAt: stored.expiresAt.toISOString(),
     };
+  }
+
+  /** The person's own theme on the account; see `AuthController.setThemePreference`. */
+  setThemePreference(
+    userId: string,
+    preference: ThemePreference,
+  ): Promise<ThemePreference> {
+    return this.users.setThemePreference(userId, preference);
   }
 
   async logout(token: string): Promise<void> {

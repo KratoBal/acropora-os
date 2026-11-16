@@ -113,6 +113,7 @@ const REEFCLUB_OPEN_ROUTES = [
   "POST /rc/v1/auth/password-reset/confirm",
   "POST /rc/v1/auth/register",
   "POST /rc/v1/auth/verify-email",
+  "POST /rc/v1/runout-reminders/unsubscribe",
   "GET /rc/v1/auth/privacy-consent",
   "GET /rc/v1/health",
 ];

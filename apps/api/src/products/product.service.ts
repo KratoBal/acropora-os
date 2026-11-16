@@ -23,6 +23,7 @@ import type {
 import type { SetVariantPriceDto } from "./dto/set-variant-price.dto.js";
 import type { SetVariantSaleDto } from "./dto/set-variant-sale.dto.js";
 import type { UpdateProductDto } from "./dto/update-product.dto.js";
+import type { UpdateProductNamesDto } from "./dto/update-product-names.dto.js";
 import { richTextImageHosts } from "../homepage-content/homepage-content.service.js";
 import {
   detectImageContentType,
@@ -133,6 +134,35 @@ export class ProductService {
       id,
       withSanitizedDescription(input, richTextImageHosts(this.environment)),
     );
+  }
+
+  /**
+   * A NEVEK (kartya 20b0dd47): a magyar, angol es nemet nev az adatlapon. NINCS `assertLocallyManaged`: a nevek
+   * Acropora-tulajdonuak, a UNAS-szinkron nem irja oket, ezert a UNAS-gazdaju termeken is irhatok (a termek tobbi
+   * mezoje ott tovabbra is 409). A termek sorat az iras nem erinti, tehat a boltba sem viszi (lasd a repository metodust).
+   * A hianyzo termek 404; a nev nelkuli torzs 400 (nincs mit irni).
+   */
+  async updateProductNames(
+    id: string,
+    input: UpdateProductNamesDto,
+    actorUserId?: string,
+  ) {
+    if (
+      input.magyarNev === undefined &&
+      input.angolNev === undefined &&
+      input.nemetNev === undefined
+    )
+      throw new BadRequestException("Legalább egy nevet adj meg.");
+    const detail = await this.products.updateDatasheetNames(
+      id,
+      input,
+      actorUserId ?? null,
+    );
+    if (!detail) throw new NotFoundException("A termék nem található.");
+    return {
+      ...detail,
+      descriptionImageHosts: richTextImageHosts(this.environment),
+    };
   }
 
   /**

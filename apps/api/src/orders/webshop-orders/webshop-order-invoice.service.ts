@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   ServiceUnavailableException,
@@ -11,7 +12,11 @@ import {
   type AuthenticatedUser,
   type BillingEmailStatus,
   type BillingDocumentDetail,
+  type BillingIssueConfirmation,
   type BillingDocumentDraftInput,
+  type WebshopInvoiceConfirmation,
+  type WebshopInvoiceIssueResult,
+  type WebshopInvoiceSummary,
   type WebshopOrderDetail,
   type WebshopOrderStatus,
 } from "@acropora/types";
@@ -31,6 +36,7 @@ import {
   invoiceDraftOf,
   invoiceRefusal,
   newCustomerOf,
+  orderTaxKeyOf,
   orderLanguageOf,
   proformaDraftOf,
   proformaRefusal,
@@ -95,15 +101,55 @@ export class WebshopOrderInvoiceService {
     orderId: string,
     user: AuthenticatedUser,
     now = new Date(),
+    confirmation?: BillingIssueConfirmation,
   ): Promise<WebshopOrderDetail> {
-    return this.serial(orderId, () => this.sendProformaNow(orderId, user, now));
+    return this.serial(orderId, () =>
+      this.sendProformaNow(orderId, user, now, confirmation),
+    );
   }
 
-  private async sendProformaNow(
+  /**
+   * THE PROFORMA'S CONFIRMATION WINDOW (card 7ba97e0d follow-up, acrobot 47358): the draft the send would issue, saved,
+   * and the shared summary of it. Only before the first issue: a resend makes no new document and asks no window. The
+   * send address is the ORDER's e-mail, where the proforma has always gone, so the summary's `buyerEmail` says that.
+   */
+  proformaSummary(
+    orderId: string,
+    user: AuthenticatedUser,
+    now = new Date(),
+  ): Promise<WebshopInvoiceSummary> {
+    return this.serial(orderId, async () => {
+      const prepared = await this.prepareProforma(orderId, user, now);
+      if (prepared.kind === "issued")
+        throw new ConflictException(
+          "A díjbekérő már ki van állítva: az újraküldés nem kér megerősítést.",
+        );
+      // the window names the order's e-mail, and the digest covers it (barracuda on #2429)
+      const summary = await this.issuing.summary(
+        prepared.saved.id,
+        now,
+        prepared.order.email?.trim() || null,
+      );
+      return { ...summary, documentId: prepared.saved.id };
+    });
+  }
+
+  /**
+   * Everything the send checks before it issues, and the saved draft when there is none issued yet: the refusals, the
+   * mail gate, the address (a proforma that could not go out is not made), the customer, the buyer check.
+   */
+  private async prepareProforma(
     orderId: string,
     user: AuthenticatedUser,
     now: Date,
-  ): Promise<WebshopOrderDetail> {
+  ): Promise<
+    | { kind: "issued"; order: MedusaOrderDetailRow }
+    | {
+        kind: "draft";
+        saved: BillingDocumentDetail;
+        order: MedusaOrderDetailRow;
+      }
+  > {
     this.requireIssuing();
     const { order, status } = await this.orders.source(orderId);
     if (
@@ -123,10 +169,15 @@ export class WebshopOrderInvoiceService {
     */
     const mailClosed = this.email.gateRefusal();
     if (mailClosed) throw new ServiceUnavailableException(mailClosed);
+    // the address too, for the same reason: it was checked only after the issue
+    if (!order.email?.trim())
+      throw new ConflictException(
+        "A rendelésen nincs e-mail cím, ezért a díjbekérő nem küldhető ki.",
+      );
 
-    let proforma = (await this.repository.invoices([orderId], "PROFORMA")).get(
-      orderId,
-    );
+    const proforma = (
+      await this.repository.invoices([orderId], "PROFORMA")
+    ).get(orderId);
     if (proforma?.status === "ISSUING")
       throw new ConflictException(
         "A díjbekérő már kiállítás alatt van, és ellenőrzésre vár: nézd meg a Számlázz.hu-n, mielőtt újra próbálod.",
@@ -135,35 +186,61 @@ export class WebshopOrderInvoiceService {
       throw new ConflictException(
         "A díjbekérő kiállítása elutasítva maradt. Nyisd meg a bizonylatot a Számlázásban, ott látod az okát.",
       );
-    if (proforma?.status !== "ISSUED") {
-      const customerId = await this.customerFor(order, user);
-      const buyer = await this.repository.customerBuyer(customerId);
-      if (!buyer)
-        throw new ConflictException("A rendelés OS-partnere nem található.");
-      const mismatch = buyerMismatch(order, buyer);
-      if (mismatch) throw new ConflictException(mismatch);
-      const draft = proformaDraftOf(order, { customerId, now });
-      if (!draft.ok) throw new UnprocessableEntityException(draft.message);
-      const saved: BillingDocumentDetail = proforma
-        ? await this.documents.update(
-            proforma.id,
-            this.dto({
-              ...draft.draft,
-              id: undefined,
-              expectedUpdatedAt: (await this.documents.detail(proforma.id))
-                .updatedAt,
-            }),
-          )
-        : await this.documents.create(this.dto(draft.draft), user);
-      await this.issuing.issue(saved.id, saved.updatedAt, user);
-      proforma = (await this.repository.invoices([orderId], "PROFORMA")).get(
-        orderId,
-      );
-      if (proforma?.status !== "ISSUED")
-        throw new ConflictException(
-          "A díjbekérő kiállítása nem fejeződött be, ezért nem ment ki. Nézd meg a bizonylatot a Számlázásban.",
+    if (proforma?.status === "ISSUED") return { kind: "issued", order };
+
+    const customerId = await this.customerFor(order, user);
+    const buyer = await this.repository.customerBuyer(customerId);
+    if (!buyer)
+      throw new ConflictException("A rendelés OS-partnere nem található.");
+    const mismatch = buyerMismatch(order, buyer);
+    if (mismatch) throw new ConflictException(mismatch);
+    const draft = proformaDraftOf(order, { customerId, now });
+    if (!draft.ok) throw new UnprocessableEntityException(draft.message);
+    const saved: BillingDocumentDetail = proforma
+      ? await this.documents.update(
+          proforma.id,
+          this.dto({
+            ...draft.draft,
+            id: undefined,
+            expectedUpdatedAt: (await this.documents.detail(proforma.id))
+              .updatedAt,
+          }),
+        )
+      : await this.documents.create(this.dto(draft.draft), user);
+    return { kind: "draft", saved, order };
+  }
+
+  private async sendProformaNow(
+    orderId: string,
+    user: AuthenticatedUser,
+    now: Date,
+    confirmation?: BillingIssueConfirmation,
+  ): Promise<WebshopOrderDetail> {
+    const prepared = await this.prepareProforma(orderId, user, now);
+    const { order } = prepared;
+    if (prepared.kind === "draft") {
+      // a new proforma is made only through the window (a resend needs none): the route's one caller is the page
+      if (!confirmation)
+        throw new BadRequestException(
+          "A díjbekérő kiállítása előtt nyisd meg a megerősítést.",
         );
+      // what the window showed is what the proforma carries (the shared issuer re-checks the digest and the dates)
+      await this.issuing.issue(
+        prepared.saved.id,
+        prepared.saved.updatedAt,
+        user,
+        confirmation,
+        now,
+        order.email?.trim() || null,
+      );
     }
+    const proforma = (
+      await this.repository.invoices([orderId], "PROFORMA")
+    ).get(orderId);
+    if (proforma?.status !== "ISSUED")
+      throw new ConflictException(
+        "A díjbekérő kiállítása nem fejeződött be, ezért nem ment ki. Nézd meg a bizonylatot a Számlázásban.",
+      );
 
     const document = await this.documents.detail(proforma.id);
     const mode = billingEmailModeFor(
@@ -174,10 +251,6 @@ export class WebshopOrderInvoiceService {
       throw new ConflictException(
         "Épp fut a díjbekérő kiküldése; várd meg az eredményét.",
       );
-    if (!order.email)
-      throw new ConflictException(
-        "A rendelésen nincs e-mail cím, ezért a díjbekérő nem küldhető ki.",
-      );
     const letter = await this.emailDrafts.templateDraft(
       orderLanguageOf(order.metadata),
     );
@@ -186,7 +259,7 @@ export class WebshopOrderInvoiceService {
       {
         requestId: randomUUID(),
         mode,
-        to: [order.email],
+        to: [order.email!.trim()],
         cc: [],
         bcc: [],
         subject: letter.subject,
@@ -211,12 +284,39 @@ export class WebshopOrderInvoiceService {
     return next;
   }
 
+  /**
+   * `confirmation` is what the confirmation window showed (card 7ba97e0d, S2): the HTTP route requires it. Without it
+   * the invoice is issued as before (the draft's dates, no sending); nothing calls it so today, the parameter keeps the
+   * internal call shape of the shared issuer.
+   */
   issue(
     orderId: string,
     user: AuthenticatedUser,
     now = new Date(),
-  ): Promise<WebshopOrderDetail> {
-    return this.serial(orderId, () => this.issueNow(orderId, user, now));
+    confirmation?: WebshopInvoiceConfirmation,
+  ): Promise<WebshopInvoiceIssueResult<WebshopOrderDetail>> {
+    return this.serial(orderId, () =>
+      this.issueNow(orderId, user, now, confirmation),
+    );
+  }
+
+  /**
+   * THE CONFIRMATION WINDOW'S VALUES FOR THE ORDER'S INVOICE (card 7ba97e0d, S2): the very draft the issue makes (the
+   * same refusals, the same customer, the same rules), saved, and the shared summary of it. The issue that follows
+   * rebuilds the draft from the order the same way, so an unchanged order gives the same values and the same digest.
+   */
+  invoiceSummary(
+    orderId: string,
+    user: AuthenticatedUser,
+    now = new Date(),
+  ): Promise<WebshopInvoiceSummary> {
+    return this.serial(orderId, async () => {
+      const prepared = await this.prepareInvoice(orderId, user, now);
+      if (prepared.kind === "issued")
+        throw new ConflictException("A rendelés számlája már ki van állítva.");
+      const summary = await this.issuing.summary(prepared.saved.id, now);
+      return { ...summary, documentId: prepared.saved.id };
+    });
   }
 
   private requireIssuing(): void {
@@ -233,11 +333,108 @@ export class WebshopOrderInvoiceService {
     orderId: string,
     user: AuthenticatedUser,
     now: Date,
-  ): Promise<WebshopOrderDetail> {
+    confirmation?: WebshopInvoiceConfirmation,
+  ): Promise<WebshopInvoiceIssueResult<WebshopOrderDetail>> {
+    const prepared = await this.prepareInvoice(orderId, user, now);
+    if (prepared.kind === "issued")
+      return { order: await this.orders.detail(orderId, now), mail: null };
+    const { saved, order } = prepared;
+    // the address the window showed (`buyerEmail`, inside the digest the issue checks): read before the issue
+    const sendTo = confirmation?.send
+      ? (await this.issuing.summary(saved.id, now)).buyerEmail
+      : null;
+    if (confirmation?.send && !sendTo)
+      throw new ConflictException(
+        "A partnernek nincs e-mail címe, ezért a számla nem küldhető ki: add meg a partnernél, vagy ne küldd ki.",
+      );
+    await this.issuing.issue(
+      saved.id,
+      saved.updatedAt,
+      user,
+      confirmation,
+      now,
+    );
+    /*
+      "ELKÜLDÖM E-MAILBEN" (Balázs 2026-11-11 11:20): the issued invoice goes to the address the window showed, with
+      the Levelezés template, the way the proforma goes out. THE INVOICE IS ISSUED ALREADY: whatever the sending does
+      (a closed mail gate, a provider error, a send already running) is reported next to the fresh order, never as a
+      failed issue (barracuda on #2419: a failed request would offer "Számla kiállítása" again on an issued invoice).
+    */
+    const mail = sendTo
+      ? await this.sendIssued(saved.id, sendTo, order, user)
+      : null;
+    return { order: await this.orders.detail(orderId, now), mail };
+  }
+
+  private async sendIssued(
+    documentId: string,
+    to: string,
+    order: MedusaOrderDetailRow,
+    user: AuthenticatedUser,
+  ): Promise<NonNullable<WebshopInvoiceIssueResult<unknown>["mail"]>> {
+    try {
+      const document = await this.documents.detail(documentId);
+      const mode = billingEmailModeFor(
+        "ISSUED",
+        (document.emailStatus ?? null) as BillingEmailStatus | null,
+      );
+      if (!mode)
+        return {
+          to,
+          sent: false,
+          error:
+            "A számla kiküldése épp fut; várd meg az eredményét a bizonylatnál.",
+        };
+      const letter = await this.emailDrafts.templateDraft(
+        orderLanguageOf(order.metadata),
+      );
+      await this.email.send(
+        documentId,
+        {
+          requestId: randomUUID(),
+          mode,
+          to: [to],
+          cc: [],
+          bcc: [],
+          subject: letter.subject,
+          body: letter.body,
+          bodyHtml: letter.bodyHtml,
+        },
+        user,
+      );
+      return { to, sent: true };
+    } catch (error) {
+      return {
+        to,
+        sent: false,
+        error:
+          error instanceof Error && error.message
+            ? error.message
+            : "A levél nem ment ki.",
+      };
+    }
+  }
+
+  /**
+   * The order's invoice draft, made and saved exactly as the issue needs it: the refusals, the customer (made if
+   * missing), the buyer check, the draft rules. "issued" when the order already has its invoice.
+   */
+  private async prepareInvoice(
+    orderId: string,
+    user: AuthenticatedUser,
+    now: Date,
+  ): Promise<
+    | { kind: "issued" }
+    | {
+        kind: "draft";
+        saved: BillingDocumentDetail;
+        order: MedusaOrderDetailRow;
+      }
+  > {
     this.requireIssuing();
 
     const existing = (await this.repository.invoices([orderId])).get(orderId);
-    if (existing?.status === "ISSUED") return this.orders.detail(orderId, now);
+    if (existing?.status === "ISSUED") return { kind: "issued" };
     if (existing?.status === "ISSUING")
       throw new ConflictException(
         "Ennek a rendelésnek a számlája már kiállítás alatt van, és ellenőrzésre vár: nézd meg a Számlázz.hu-n, mielőtt újra próbálod.",
@@ -286,8 +483,7 @@ export class WebshopOrderInvoiceService {
           }),
         )
       : await this.documents.create(this.dto(draft.draft), user);
-    await this.issuing.issue(saved.id, saved.updatedAt, user);
-    return this.orders.detail(orderId, now);
+    return { kind: "draft", saved, order };
   }
 
   /**
@@ -376,9 +572,45 @@ export class WebshopOrderInvoiceService {
       throw new ConflictException(
         "A rendelésen nincs vevő-azonosító és e-mail cím, ezért a számla nem állítható ki.",
       );
+    // (1) a rendelés kulcsa már kötött egy vevőhöz
     const linked = await this.repository.customerByKey(key);
     if (linked) return linked;
 
+    /*
+      (2) A CÉGET AZ ADÓSZÁM AZONOSÍTJA, NEM AZ E-MAIL (kártya c499739d, Balázs 2026-11-11 10:54 UTC, joggal): egy webshopos céges
+      rendelés egy másik e-mail cím miatt új vevő-sort hozott létre, holott az adószám egyértelműen megmondja, melyik cég. Ahol a
+      rendelésen van adószám, az adószám kulcsa (magyar: az első nyolc számjegy; közösségi: országkóddal) dönt: egy találat az a vevő,
+      TÖBB találat nem készül el számla (a vevők összevonása dönt, nem mi), nincs találat: új vevő, az e-mail NEM számít.
+    */
+    const taxKey = orderTaxKeyOf(order);
+    if (taxKey) {
+      const allByTax = await this.repository.customersByTaxKey(taxKey);
+      /*
+        A TÜKÖR NYER (barracuda, #2405 review; a döntés üzleti, acrobot dönt): ugyanaz a cég rendszerint KÉT soron áll (a régi vevő-sor
+        és a Partnerek tükre, mérve az Állatkertnél), és a számlázás a TÜKRÖT tekinti a jó vevőnek (`customers.repository.ts`: "the
+        mirror IS the right buyer"). Ha a találatok között PONTOSAN EGY partner-tükör van, az az a vevő; több tükör, vagy tükör nélküli
+        több sor: nincs eldöntve, és a számla nem készül el.
+      */
+      const mirrors = allByTax.filter((match) => match.partnerMirror);
+      const byTax =
+        allByTax.length > 1 && mirrors.length === 1 ? mirrors : allByTax;
+      if (byTax.length > 1)
+        throw new ConflictException(
+          `Az OS-ben több partner is ezzel az adószámmal áll (${byTax
+            .map((match) => match.displayName)
+            .join(
+              ", ",
+            )}). Vond össze vagy archiváld a fölöslegeset, utána állítsd ki a számlát.`,
+        );
+      const found = byTax[0];
+      if (found)
+        return found.linked
+          ? found.id
+          : this.repository.linkCustomer(found.id, key);
+      return this.newCustomer(order, user, key);
+    }
+
+    // (3) adószám NÉLKÜL (magánszemély): az e-mail cím, mint eddig
     const email = order.email?.trim();
     const matches = email ? await this.repository.customersByEmail(email) : [];
     if (matches.length > 1)
@@ -395,6 +627,15 @@ export class WebshopOrderInvoiceService {
         ? match.id
         : this.repository.linkCustomer(match.id, key);
 
+    // (4) új vevő csak, ha egyik sem
+    return this.newCustomer(order, user, key);
+  }
+
+  private async newCustomer(
+    order: MedusaOrderDetailRow,
+    user: AuthenticatedUser,
+    key: string,
+  ): Promise<string> {
     const wanted = newCustomerOf(order);
     if (!wanted.ok) throw new ConflictException(wanted.message);
     const created = await this.customers.create(

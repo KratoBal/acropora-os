@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   partnerTaxNumberFor,
   partnerTermsFor,
+  effectivePaymentDueDays,
 } from "./partner-payment-terms.js";
 
 /*
@@ -129,6 +130,55 @@ describe("partnerTaxNumberFor", () => {
         { name: "Fővárosi Állat- és Növénykert", taxNumber: "HU15490658" },
       ])?.taxNumber,
       "15490658-2-42",
+    );
+  });
+});
+
+describe("effectivePaymentDueDays (the customer's own days, else the matching partner's, else null)", () => {
+  const company = {
+    displayName: "Fővárosi Állat- és Növénykert",
+    companyName: null,
+    taxNumber: "15509246-2-41",
+  };
+  const partners = [
+    {
+      name: "Fővárosi Állat- és Növénykert",
+      taxNumber: "15509246-2-42",
+      paymentDueDays: 30,
+    },
+  ];
+
+  it("the customer's own days win, zero included", () => {
+    assert.equal(
+      effectivePaymentDueDays({ ...company, paymentDueDays: 15 }, partners),
+      15,
+    );
+    assert.equal(
+      effectivePaymentDueDays({ ...company, paymentDueDays: 0 }, partners),
+      0,
+    );
+  });
+
+  it("an empty customer takes the matching partner's days, and null when nothing matches", () => {
+    assert.equal(
+      effectivePaymentDueDays({ ...company, paymentDueDays: null }, partners),
+      30,
+    );
+    assert.equal(
+      effectivePaymentDueDays(
+        {
+          ...company,
+          taxNumber: "99999999-2-42",
+          displayName: "Más",
+          paymentDueDays: null,
+        },
+        partners,
+      ),
+      null,
+    );
+    assert.equal(
+      effectivePaymentDueDays({ ...company, paymentDueDays: null }, []),
+      null,
     );
   });
 });

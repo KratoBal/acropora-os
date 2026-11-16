@@ -4,6 +4,10 @@ import type {
   MedusaAdminClient,
   MedusaUrlRedirect,
 } from "./medusa-admin.client.js";
+import {
+  GONE_STATUS,
+  type RedirectTarget,
+} from "./medusa-redirect-target.policy.js";
 
 /**
  * AZ ÁTIRÁNYÍTÁS-LISTA VETÍTÉSE A BOLTBA (SEO P0 PR 7b). Az OS a gazda
@@ -33,21 +37,45 @@ export function urlRedirectsHash(rows: readonly MedusaUrlRedirect[]): string {
     .digest("hex");
 }
 
-/** Az aktív szabályok, a bolt szerződésének alakjában. */
+/**
+ * Az aktív szabályok, a bolt szerződésének alakjában. A `target` a termék-szabály
+ * döntése (`medusa-redirect-target.policy.ts`); csak a jelentés számolja.
+ */
 export interface RedirectSource {
   activeRedirects(): Promise<
-    { sourcePath: string; destinationPath: string; httpStatus: number }[]
+    {
+      sourcePath: string;
+      destinationPath: string;
+      httpStatus: number;
+      target?: RedirectTarget;
+    }[]
   >;
 }
 
+/**
+ * Hány termék-szabály ment a márkalapra vagy 410-zel, mert a terméknek nincs lapja, és hány sor megy a
+ * véglegesen megszűnt termék helyettesítőjére vagy kategóriájára (`moved`, a termék saját lapjának sorával együtt).
+ */
+export interface RedirectRetargeted {
+  brand: number;
+  gone: number;
+  moved: number;
+}
+
 export type RedirectProjectionOutcome =
-  | { status: "unchanged"; count: number; hash: string }
+  | {
+      status: "unchanged";
+      count: number;
+      hash: string;
+      retargeted: RedirectRetargeted;
+    }
   | {
       status: "sent" | "would-send";
       count: number;
       hash: string;
       remoteCount: number;
       remoteHash: string;
+      retargeted: RedirectRetargeted;
     }
   | { status: "refused"; reason: string };
 
@@ -60,16 +88,23 @@ export async function projectUrlRedirects(
   source: RedirectSource,
   apply: boolean,
 ): Promise<RedirectProjectionOutcome> {
-  const sorok: MedusaUrlRedirect[] = (await source.activeRedirects()).map(
-    (r) => ({
-      source_path: r.sourcePath,
-      destination_path: r.destinationPath,
-      status: r.httpStatus,
-    }),
-  );
+  const aktiv = await source.activeRedirects();
+  const retargeted: RedirectRetargeted = {
+    brand: aktiv.filter((r) => r.target === "brand").length,
+    gone: aktiv.filter((r) => r.target === "gone").length,
+    moved: aktiv.filter((r) => r.target === "moved").length,
+  };
+  const sorok: MedusaUrlRedirect[] = aktiv.map((r) => ({
+    source_path: r.sourcePath,
+    destination_path: r.destinationPath,
+    status: r.httpStatus,
+  }));
   const forrasok = new Set(sorok.map(kis));
-  const lanc = sorok.find((r) =>
-    forrasok.has(r.destination_path.toLowerCase()),
+  // a 410-es sor nem ugrás: a célja önmaga, és a bolt nem követi
+  const lanc = sorok.find(
+    (r) =>
+      r.status !== GONE_STATUS &&
+      forrasok.has(r.destination_path.toLowerCase()),
   );
   if (lanc)
     return {
@@ -79,7 +114,7 @@ export async function projectUrlRedirects(
   const hash = urlRedirectsHash(sorok);
   const bolt = await client.fetchUrlRedirects();
   if (bolt.hash === hash)
-    return { status: "unchanged", count: sorok.length, hash };
+    return { status: "unchanged", count: sorok.length, hash, retargeted };
   if (apply) await client.replaceUrlRedirects(sorok);
   return {
     status: apply ? "sent" : "would-send",
@@ -87,6 +122,7 @@ export async function projectUrlRedirects(
     hash,
     remoteCount: bolt.count,
     remoteHash: bolt.hash,
+    retargeted,
   };
 }
 
@@ -97,11 +133,23 @@ export function describeRedirectProjection(
     case "refused":
       return `Atiranyitasok: NEM KULDTEM, ${outcome.reason}`;
     case "unchanged":
-      return `Atiranyitasok: valtozatlan (${outcome.count} szabaly)`;
+      return (
+        `Atiranyitasok: valtozatlan (${outcome.count} szabaly)` +
+        lapNelkul(outcome.retargeted)
+      );
     default:
       return (
         `Atiranyitasok: ${outcome.status === "sent" ? "ELKULDVE" : "kuldendo"} ` +
-        `${outcome.count} szabaly (a bolt: ${outcome.remoteCount})`
+        `${outcome.count} szabaly (a bolt: ${outcome.remoteCount})` +
+        lapNelkul(outcome.retargeted)
       );
   }
 }
+
+const lapNelkul = (r: RedirectRetargeted) =>
+  (r.brand || r.gone
+    ? `; lap nelkuli termek: ${r.brand} a markalapra, ${r.gone} 410`
+    : "") +
+  (r.moved
+    ? `; veglegesen megszunt termek: ${r.moved} sor a helyettesitore vagy a kategoriara`
+    : "");

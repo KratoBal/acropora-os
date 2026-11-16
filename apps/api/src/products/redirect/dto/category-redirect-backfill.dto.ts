@@ -49,6 +49,27 @@ export class CategoryRedirectBackfillDto {
   @Type(() => MedusaCategoryDto)
   medusaCategories?: MedusaCategoryDto[];
 
+  /**
+   * A meglévő `UNAS_CATEGORY` szabály célját a mai handle-re írja át (a kategória-átvétel óta a régi `név---szülő`
+   * alak 404-et ad). Alapból hamis: felülírás nincs, az eltérő célú szabály a jelentésben marad. Kézi szabályhoz nem nyúl.
+   * A szárazfutás és az írás ugyanazzal az értékkel megy, különben a `planHash` nem egyezik.
+   */
+  @IsOptional()
+  @IsBoolean()
+  repoint?: boolean;
+
+  /**
+   * KIFEJEZETT ENGEDÉLYLISTA a MANUAL szabályokra: a pontos források, amelyek MANUAL eredetű szabályának célját a `repoint` is átírhatja
+   * (card f6cb0a51). Csak `repoint` mellett érvényes. A MANUAL-kizárás nem enyhül: a lista egy ember döntése, forrásonként, és a
+   * jelentés kiírja, melyik elemére nem írt át semmit. A szárazfutás és az írás ugyanazzal a listával megy, különben a `planHash` nem egyezik.
+   */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(500)
+  @IsString({ each: true })
+  @MaxLength(1000, { each: true })
+  repointManual?: string[];
+
   @IsOptional()
   @IsBoolean()
   apply?: boolean;

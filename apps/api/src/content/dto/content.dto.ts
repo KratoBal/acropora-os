@@ -30,10 +30,10 @@ export class ContentWaitingQueryDto {
 }
 
 export class ContentCalendarQueryDto {
-  @IsISO8601()
+  @IsISO8601({ strict: true })
   from!: string;
 
-  @IsISO8601()
+  @IsISO8601({ strict: true })
   to!: string;
 }
 
@@ -81,11 +81,13 @@ export class ContentCommentDto {
   body!: string;
 }
 
-const CONTENT_CHANNELS = [
+export const CONTENT_CHANNELS = [
   "FACEBOOK_POST",
   "FACEBOOK_AD",
   "ARTICLE",
+  "TEACHING_SOURCE",
   "OTHER",
+  "NEWSLETTER",
 ] as const;
 
 /**
@@ -142,7 +144,7 @@ export class ContentCreateDto {
   imageRequired?: boolean;
 
   @IsOptional()
-  @IsISO8601()
+  @IsISO8601({ strict: true })
   plannedFor?: string;
 }
 

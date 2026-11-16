@@ -8,6 +8,7 @@ import {
   Optional,
 } from "@nestjs/common";
 import type { SyncRunTrigger } from "@acropora/database";
+import type { InvoiceCollectionReason } from "@acropora/types";
 
 import {
   GoogleReadonlyClient,
@@ -329,6 +330,7 @@ export class InvoiceCollectionService {
     fileName: string,
     verdict: Exclude<InvoiceCollectionVerdict, "STORED" | "SUGGESTED">,
     sha256: string | null,
+    reason: InvoiceCollectionReason | null = null,
   ): Promise<void> {
     if (this.dry) {
       const before = await this.repository.verdictOf(
@@ -348,10 +350,18 @@ export class InvoiceCollectionService {
           társ-mellékletre, holott az --apply hozzá sem nyúl.
         */
         after: before === "STORED" || before === "SUGGESTED" ? before : verdict,
+        ...(reason ? { detail: `ok: ${reason}` } : {}),
       });
       return;
     }
-    await this.repository.record(source, externalId, fileName, verdict, sha256);
+    await this.repository.record(
+      source,
+      externalId,
+      fileName,
+      verdict,
+      sha256,
+      reason,
+    );
   }
 
   private ownAccountDigits: Promise<string[]> | null = null;
@@ -494,17 +504,26 @@ export class InvoiceCollectionService {
     const sha256 = createHash("sha256").update(found.content).digest("hex");
     const skip = async (
       verdict: Exclude<InvoiceCollectionVerdict, "STORED" | "SUGGESTED">,
+      reason: InvoiceCollectionReason | null = null,
     ) => {
       if (verdict === "DUPLICATE") counts.duplicateCount++;
       else if (verdict === "NOT_INVOICE") counts.notInvoiceCount++;
       else if (verdict === "UNMATCHED") counts.unmatchedCount++;
       else if (verdict === "OWN_INVOICE") counts.ownInvoiceCount++;
       else counts.failedCount++;
-      await this.record(source, externalId, found.fileName, verdict, sha256);
+      await this.record(
+        source,
+        externalId,
+        found.fileName,
+        verdict,
+        sha256,
+        reason,
+      );
       return verdict;
     };
     const earlier = await this.repository.documentByContent(sha256);
-    if (earlier && earlier.reviewState !== UNASSIGNED) return skip("DUPLICATE");
+    if (earlier && earlier.reviewState !== UNASSIGNED)
+      return skip("DUPLICATE", "SAME_CONTENT");
     // a copy that is stored but not yet tied: the file is read again to see
     // whether it ties NOW (a new feed row, a corrected rule); if it does, the
     // stored document is promoted instead of a second one being created
@@ -521,18 +540,40 @@ export class InvoiceCollectionService {
       `UNASSIGNED` dokumentumként megmarad, nem jelölt, emberi döntésre vár (a
       Javasolt számlák lapon). A begyűjtés sora UNMATCHED marad, tehát az
       újraolvasás még összekötheti.
-        - a balazs@ postafiók (Balázs saját levelezése) kimarad: ott a nem
-          párosodott fájl továbbra sem tárolódik;
+        - a balazs@ postafiók IS ide tartozik (Balázs döntése, 2026-11-12, Eldöntendő szál: az (a) út): a
+          számlának ítélt, nem kötött PDF ott is UNASSIGNED-ként tárolódik, mint a többi postafiókon. Eddig
+          kimaradt (Balázs saját levelezése, barracuda #1827), és egy nem kötött számla (Hetzner 084001270673,
+          2026-11-05) nyom nélkül elveszett: csak az ítélet-sora maradt, a fájl nem. A határ ugyanaz maradt:
+          csak a SZÁMLÁNAK ÍTÉLT fájl tárolódik; a szövegű PDF számla-szó nélkül NOT_INVOICE és végleges, a
+          saját számlánk, az emlékeztető, a szerződés és az ajánlat sem;
         - a száraz futás nem ír semmit;
-        - egy már tárolt, még nem párosodott példány marad, ahogy van.
+        - egy már tárolt, még nem párosodott példány UNASSIGNED marad, de az olvasata a mai olvasóé lesz.
     */
     const keepUnassigned = async (
       reading: InvoiceTextReading | null,
       kind: "INVOICE" | "PROFORMA",
       payee: string,
+      reason: InvoiceCollectionReason,
     ): Promise<InvoiceCollectionVerdict> => {
-      if (reassess || this.dry || source === "BALAZS_MAIL")
-        return skip("UNMATCHED");
+      /*
+        A balazs@ ÁGON A NEM A CÉGRE SZÓLÓ SZÁMLA IS TÁROLÓDIK (acrobot 49566, 2026-11-13, a #2450 szűkítésének
+        visszavonása): Balázs 2026-11-12 08:41 UTC-i 1-es válasza a balazs@ minden számlának látszó, nem kötött PDF-jét
+        kérte, a saját számla-mellékleteit is, az adatvédelmi szempontot tudatosan felülírva; ember dönt a Javasolt
+        számlák lapon. A szűkítés éles kárt okozott: a TypeSafe AI számlája (Stripe, a vevő név és e-mail, nem a cégnév)
+        NOT_COMPANY lett és nyom nélkül kimaradt.
+      */
+      /*
+        A MÁR TÁROLT, MOST SEM KÖTÖTT PÉLDÁNY a mai olvasó olvasatát kapja (kártya f7ece26b): egy javított olvasó
+        (a bruttó, a szám) így a következő újraolvasásnál magától eljut a tárolt dokumentumig, kézi újraolvasás nélkül.
+      */
+      // egy üres olvasat (nincs mit olvasni) nem írja felül a tárolt, meglévőt
+      if (reassess && !this.dry && reading)
+        await this.repository.refreshUnassignedReading(
+          reassess,
+          reading,
+          payee,
+        );
+      if (reassess || this.dry) return skip("UNMATCHED", reason);
       await this.repository.store({
         source,
         externalId,
@@ -548,17 +589,18 @@ export class InvoiceCollectionService {
         textReading: reading,
         payee,
         unassigned: true,
+        reason,
       });
       counts.unmatchedCount++;
       return "UNMATCHED";
     };
     if (!found.content.subarray(0, 5).equals(Buffer.from("%PDF-")))
-      return skip("UNREADABLE");
+      return skip("UNREADABLE", "NOT_PDF_FILE");
     let lines: string[];
     try {
       lines = await pdfTextLines(new Uint8Array(found.content));
     } catch {
-      return skip("UNREADABLE");
+      return skip("UNREADABLE", "PDF_TEXT_FAILED");
     }
     const text = lines.join("\n");
     if (!looksLikeInvoice(text)) {
@@ -576,20 +618,28 @@ export class InvoiceCollectionService {
         !reminderFileName(named) &&
         !otherDocumentFileName(named)
       )
-        return keepUnassigned(null, "INVOICE", payeeFromText(text));
-      return skip("NOT_INVOICE");
+        return keepUnassigned(
+          null,
+          "INVOICE",
+          payeeFromText(text),
+          "NO_TEXT_LAYER",
+        );
+      return skip("NOT_INVOICE", "NO_INVOICE_WORDS");
     }
     // a fizetési emlékeztető idézi a számlát, de nem az; a mellette álló
     // számla-melléklet külön fájlként megy tovább
-    if (looksLikeReminder(lines, found.fileName)) return skip("NOT_INVOICE");
+    if (looksLikeReminder(lines, found.fileName))
+      return skip("NOT_INVOICE", "REMINDER");
     // szerződés, ajánlat, vámnyilatkozat: nem számla, és nem lehet jelölt
     if (looksLikeOtherDocument(lines, found.fileName))
-      return skip("NOT_INVOICE");
+      return skip("NOT_INVOICE", "OTHER_DOCUMENT");
 
     const importResult = await this.reader
       .read(new Uint8Array(found.content), { allowProforma: true })
       .catch(() => null);
     let textReading: InvoiceTextReading | null = null;
+    // az ismert szám állt a szövegben, de a második jel hiányzott, ezért elesett (az UNMATCHED oka)
+    let numberNotCorroborated = false;
     if (!importResult) {
       const hints = { fileName: found.fileName, subject: found.subject };
       const supplier = readInvoiceText(lines, hints).supplierTaxNumber;
@@ -604,7 +654,7 @@ export class InvoiceCollectionService {
       });
       if (textReading.numberFrom !== "NAV") {
         if (isOwnInvoiceText(text, await this.ownAccounts()))
-          return skip("OWN_INVOICE");
+          return skip("OWN_INVOICE", "OWN_ACCOUNT_IN_TEXT");
         // a szállító adószáma nélkül is ismert szám (acrobot 26885, Tisza 97):
         // a saját-számla próba UTÁN, hogy egy kimenő számlánk ne legyen bejövő
         textReading = withKnownNumber(
@@ -633,12 +683,14 @@ export class InvoiceCollectionService {
             .replace(/\D/g, "")
             .slice(0, 8),
         );
-        if (!corroboratedBy(lines, facts, found.sender, { normalizeName }))
+        if (!corroboratedBy(lines, facts, found.sender, { normalizeName })) {
+          numberNotCorroborated = true;
           textReading = {
             ...textReading,
             invoiceNumber: null,
             numberFrom: null,
           };
+        }
       }
       if (textReading.numberFrom !== "NAV") {
         const reference = bankReference(
@@ -676,6 +728,11 @@ export class InvoiceCollectionService {
                 withLabelledTotal(textReading, lines),
                 looksLikeProforma(text) ? "PROFORMA" : "INVOICE",
                 payeeFromText(text),
+                numberNotCorroborated
+                  ? "NUMBER_NOT_CORROBORATED"
+                  : textReading.invoiceNumber
+                    ? "NUMBER_NOT_KNOWN"
+                    : "NO_NUMBER_READ",
               );
             // egy közben meghozott emberi döntés nem íródik felül (promote: null)
             if (
@@ -696,7 +753,7 @@ export class InvoiceCollectionService {
                 suggestion,
               }))
             )
-              return skip("DUPLICATE");
+              return skip("DUPLICATE", "SAME_CONTENT");
             counts.suggestedCount++;
             return "SUGGESTED";
           }
@@ -763,7 +820,7 @@ export class InvoiceCollectionService {
         payee: payeeFromText(text),
       }))
     )
-      return skip("DUPLICATE");
+      return skip("DUPLICATE", "SAME_CONTENT");
     counts.storedCount++;
     return "STORED";
   }

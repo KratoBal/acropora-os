@@ -18,6 +18,20 @@ export const WEBSHOP_MAIL_ENVIRONMENT = Symbol("WEBSHOP_MAIL_ENVIRONMENT");
 /** The version of the facts contract this endpoint reads (commerce `facts.ts`). */
 export const WEBSHOP_MAIL_FACTS_VERSION = 1;
 
+/**
+ * THE USAGE GUIDE SECTION OF THE SHIPPED MAIL IS OFF UNLESS THIS IS EXACTLY "true" (V3.3, card 69b5f2ef; acrobot 50127):
+ * the texts are on Balázs's approval list, so no customer gets the section before he says so. Off, the section is
+ * dropped from the facts before rendering, whatever the shop sends, so the mail is word for word the one without it.
+ */
+export const WEBSHOP_MAIL_USAGE_GUIDES_ENV =
+  "ACROPORA_WEBSHOP_MAIL_USAGE_GUIDES";
+
+export function webshopMailUsageGuidesOn(
+  environment: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return environment[WEBSHOP_MAIL_USAGE_GUIDES_ENV]?.trim() === "true";
+}
+
 export function webshopMailTokenId(
   environment: NodeJS.ProcessEnv = process.env,
 ): string | null {

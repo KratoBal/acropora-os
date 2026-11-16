@@ -163,6 +163,23 @@ export function isRecommendableOnUnas(product: {
   return !inquiryOnly(raw as Record<string, unknown>);
 }
 
+/**
+ * A TERMÉKENKÉNTI LEGUTÓBBI JEV-EREDMÉNY a vízparaméter-hatásra (a sikeres futásokból): közös a belső jelölt-forrásban és a vevői
+ * jelölt-forrásban (V3.4 S2), hogy a két út ne térjen el abban, MELYIK eredmény számít.
+ */
+export function latestJevEffectRows(database: {
+  $queryRaw: typeof prisma.$queryRaw;
+}): Promise<JevEffectRow[]> {
+  return database.$queryRaw<JevEffectRow[]>`
+      SELECT DISTINCT ON (c."productId") c."productId", f.status, f.value, f."currentValue", f."sourceRef"
+      FROM "ProductEnrichmentFieldResult" f
+      JOIN "ProductEnrichmentRunProduct" c ON c.id = f."checkId"
+      JOIN "ProductEnrichmentRun" r ON r.id = c."runId"
+      WHERE f.field = 'waterParameterEffects'
+        AND r.status IN ('COMPLETED', 'LIMIT_REACHED')
+      ORDER BY c."productId", c."checkedAt" DESC, f.id DESC`;
+}
+
 @Injectable()
 export class JevRecommendationCandidateSource implements RecommendationCandidateSource {
   private readonly database = prisma;
@@ -172,14 +189,7 @@ export class JevRecommendationCandidateSource implements RecommendationCandidate
   }): Promise<MeasurementRecommendationCandidate[]> {
     const wanted = wantedMoves(input.deviations);
     if (wanted.size === 0) return [];
-    const rows = await this.database.$queryRaw<JevEffectRow[]>`
-      SELECT DISTINCT ON (c."productId") c."productId", f.status, f.value, f."currentValue", f."sourceRef"
-      FROM "ProductEnrichmentFieldResult" f
-      JOIN "ProductEnrichmentRunProduct" c ON c.id = f."checkId"
-      JOIN "ProductEnrichmentRun" r ON r.id = c."runId"
-      WHERE f.field = 'waterParameterEffects'
-        AND r.status IN ('COMPLETED', 'LIMIT_REACHED')
-      ORDER BY c."productId", c."checkedAt" DESC, f.id DESC`;
+    const rows = await latestJevEffectRows(this.database);
     const matches = matchingJevRows(rows, wanted);
     if (matches.length === 0) return [];
     const products = await this.database.product.findMany({

@@ -175,6 +175,12 @@ export interface BillingDocumentAdvanceLink {
   status: BillingDocumentStatus;
 }
 
+/** A végszámla-vázlat figyelmeztetése a több előleg-mérföldkőről (`BillingDocumentDetail.finalInvoiceNotice`). */
+export interface BillingDocumentFinalInvoiceNotice {
+  code: "MULTIPLE_ADVANCES";
+  message: string;
+}
+
 /**
  * VÉGSZÁMLA ÉS ELŐLEG (számlázási brief, 3. pont). A végszámlán az
  * előlegszámla, amelyet a Számlázz.hu levon (`elolegSzamlaszam`); a bruttó
@@ -273,6 +279,13 @@ export interface BillingDocumentDetail {
   advance?: BillingDocumentAdvanceLink | null;
   /** Végszámlán a levont előlegszámla; máshol `null`. */
   deductedAdvance?: BillingDocumentDeductedAdvance | null;
+  /**
+   * VÉGSZÁMLA-VÁZLATON A FIGYELMEZTETÉS, ha az ajánlatnak TÖBB előleg-mérföldköve van díjbekérővel (kártya 02fc4b7f, barracuda #2639): a végszámlára
+   * csak a még nem kiszámlázott rész kerülhet. Olvasáskor számított, nem tárolt, és NEM a számlán nyomtatott megjegyzés; a szövege a tényt és a
+   * teendőt mondja, a vázlat tételeinek állapotát nem (egy vázlat teljes tételekkel is készülhetett, mielőtt egy másik mérföldkő díjbekérőt kapott).
+   * Kiállítás után és máshol `null`.
+   */
+  finalInvoiceNotice?: BillingDocumentFinalInvoiceNotice | null;
   /** Előlegszámlán a belőle készült végszámla; máshol `null`. */
   finalInvoice?: BillingDocumentFinalInvoiceLink | null;
   /** A teljes lánc, ha a bizonylatnak van kapcsolódója; egyébként üres. */

@@ -41,28 +41,71 @@ const taxKey = (value: string) =>
 export function BillingNewCustomerForm({
   token,
   initialSearch,
+  existing = null,
   onSaved,
   onPickExisting,
   onClose,
 }: {
   token: string;
   initialSearch: string;
+  /**
+   * A MEGLÉVŐ VEVŐ ADATAINAK MÓDOSÍTÁSA (Luca, 2026-11-10): ha meg van adva, az űrlap a vevő mostani adataival töltődik
+   * ki, és a mentés a vevő sorát módosítja (nem vesz fel újat). Enélkül a „Módosítás” csak a partner-keresőt nyitotta, és
+   * a beírt név, cím és e-mail eltűnt a képernyőről.
+   */
+  existing?: CustomerDetail | null;
   onSaved: (detail: CustomerDetail) => void;
   onPickExisting: (summary: CustomerSummary) => void;
   onClose: () => void;
 }) {
-  const typedTax = /\d/.test(initialSearch) ? initialSearch.trim() : "";
+  const editing = existing !== null;
+  const typedTax = editing
+    ? ""
+    : /\d/.test(initialSearch)
+      ? initialSearch.trim()
+      : "";
+  /** a vevő címe az űrlapon: a számlázási, ennek hiányában az alapértelmezett vagy az első */
+  const savedAddress = existing
+    ? (existing.addresses.find((a) => a.type === "BILLING") ??
+      existing.addresses.find((a) => a.isDefault) ??
+      existing.addresses[0] ??
+      null)
+    : null;
+  /**
+   * MAGÁNSZEMÉLY (Luca, 2026-11-10): az űrlap eddig mindig CÉGET vett fel („Cégnév” felirat), ezért egy magánszemély
+   * soha nem lehetett magánszemélynek jelölt vevő, és a számla kapuja (`buyerTaxNumberProblem`: adószám kell, hacsak a
+   * vevő nincs kifejezetten magánszemélynek jelölve) adószám nélkül nem engedte kiállítani.
+   */
+  const [person, setPerson] = useState(existing?.type === "PERSON");
   const [eu, setEu] = useState(
-    /^[A-Za-z]{2}/.test(typedTax) && !/^hu/i.test(typedTax),
+    existing
+      ? Boolean(existing.euTaxNumber) && !existing.taxNumber
+      : /^[A-Za-z]{2}/.test(typedTax) && !/^hu/i.test(typedTax),
   );
-  const [taxNumber, setTaxNumber] = useState(typedTax);
+  const [taxNumber, setTaxNumber] = useState(
+    existing ? (existing.taxNumber ?? existing.euTaxNumber ?? "") : typedTax,
+  );
   const [companyName, setCompanyName] = useState(
-    typedTax ? "" : initialSearch.trim(),
+    existing
+      ? existing.companyName?.trim() || existing.displayName
+      : typedTax
+        ? ""
+        : initialSearch.trim(),
   );
-  const [postalCode, setPostalCode] = useState("");
-  const [city, setCity] = useState("");
-  const [line1, setLine1] = useState("");
-  const [email, setEmail] = useState("");
+  const [postalCode, setPostalCode] = useState(savedAddress?.postalCode ?? "");
+  const [city, setCity] = useState(savedAddress?.city ?? "");
+  const [line1, setLine1] = useState(savedAddress?.line1 ?? "");
+  /**
+   * SZERKESZTESNEL ABBA A MEZOBE IRUNK, AMELYIKBOL OLVASTUNK (barracuda, #2355 review): a vevonek lehet altalanos
+   * (`email`, rendeles-ertesitok) ES szamlazasi (`billingEmail`) cime is, es a kettő kulonbozhet. Az urlap a szamlazasit
+   * mutatja, ha van; a mentes ugyanoda irja, egy valtoztatas nelkuli mentes tehat egyik cimet sem cserel ki.
+   */
+  const emailField: "billingEmail" | "email" = existing?.billingEmail?.trim()
+    ? "billingEmail"
+    : "email";
+  const [email, setEmail] = useState(
+    existing ? existing.billingEmail?.trim() || existing.email || "" : "",
+  );
   const [vies, setVies] = useState<ViesVatLookupResult | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -161,7 +204,42 @@ export function BillingNewCustomerForm({
     setBusy(true);
     setError(null);
     try {
-      if (!confirmedNew) {
+      if (existing) {
+        // a meglévő vevő módosítása: a sor frissül, nem jön létre új (és nincs azonos-adószám ajánlat)
+        const name = companyName.trim();
+        const country = eu ? euCountry! : (savedAddress?.country ?? "HU");
+        const detail = await customersApi.update(token, existing.id, {
+          type: person ? "PERSON" : "COMPANY",
+          displayName: name,
+          companyName: person ? null : name,
+          // MAGÁNSZEMÉLYNÉL AZ ADÓSZÁM TÖRLŐDIK (barracuda, #2355 review): egy tévesen cégként felvett vevő átállításakor a
+          // régi adószám nem maradhat a soron, mert a számla magánszemély vevővel is elvihetné
+          ...(person
+            ? { taxNumber: null, euTaxNumber: null }
+            : {
+                taxNumber: !eu && taxNumber.trim() ? taxNumber.trim() : null,
+                euTaxNumber:
+                  eu && taxNumber.trim()
+                    ? (normalizeEuTaxNumber(taxNumber) ?? taxNumber.trim())
+                    : null,
+              }),
+          [emailField]: email.trim() || null,
+          addresses: [
+            {
+              ...(savedAddress ? { id: savedAddress.id } : {}),
+              type: savedAddress?.type ?? "BILLING",
+              country,
+              postalCode: postalCode.trim(),
+              city: city.trim(),
+              line1: line1.trim(),
+            },
+          ],
+          expectedUpdatedAt: existing.updatedAt,
+        });
+        onSaved(detail);
+        return;
+      }
+      if (!confirmedNew && !person) {
         const found = await sameTaxNumber();
         if (found.length > 0) {
           setDuplicates(found);
@@ -170,15 +248,18 @@ export function BillingNewCustomerForm({
         }
       }
       const name = companyName.trim();
-      const country = eu ? euCountry! : "HU";
+      const country = eu && !person ? euCountry! : "HU";
       const detail = await customersApi.create(token, {
-        type: "COMPANY",
+        type: person ? "PERSON" : "COMPANY",
         displayName: name,
-        companyName: name,
+        // a magánszemélynek nincs cégneve: a neve a megjelenítési név
+        ...(person ? {} : { companyName: name }),
         // an EU number has its own field: in <adoszam> it would be sent as a
         // Hungarian one (acrobot 28145); it goes in <adoszamEU>
-        ...(!eu && taxNumber.trim() ? { taxNumber: taxNumber.trim() } : {}),
-        ...(eu && taxNumber.trim()
+        ...(!person && !eu && taxNumber.trim()
+          ? { taxNumber: taxNumber.trim() }
+          : {}),
+        ...(!person && eu && taxNumber.trim()
           ? { euTaxNumber: normalizeEuTaxNumber(taxNumber) ?? taxNumber.trim() }
           : {}),
         ...(email.trim() ? { email: email.trim() } : {}),
@@ -215,67 +296,95 @@ export function BillingNewCustomerForm({
     postalCode.trim() &&
     city.trim() &&
     line1.trim() &&
-    (!eu || euCountry !== null);
+    (person || !eu || euCountry !== null);
 
   return (
     <div className="space-y-3 rounded-xl bg-pilot-grey-50 px-5 py-4">
       <div className="flex items-center justify-between">
         <p className="text-sm font-semibold text-pilot-grey-900">
-          Új vevő felvétele
+          {editing ? "Vevő adatainak módosítása" : "Új vevő felvétele"}
         </p>
-        <label className="flex items-center gap-2 text-xs text-pilot-grey-600">
-          <input
-            type="checkbox"
-            checked={eu}
-            onChange={(event) => {
-              setEu(event.target.checked);
-              setVies(null);
-              setNotice(null);
-            }}
-          />
-          EU-s cég
-        </label>
-      </div>
-      <div className="flex gap-2">
-        <div className="flex-1">
-          <PilotInput
-            aria-label={eu ? "Közösségi adószám" : "Adószám"}
-            placeholder={eu ? "pl. SK2020123456" : "12345678-2-42"}
-            value={taxNumber}
-            onChange={(value) => {
-              setTaxNumber(value);
-              setDuplicates(null);
-            }}
-          />
+        <div className="flex items-center gap-4">
+          <label className="flex items-center gap-2 text-xs text-pilot-grey-600">
+            <input
+              type="checkbox"
+              checked={person}
+              onChange={(event) => {
+                setPerson(event.target.checked);
+                if (event.target.checked) setEu(false);
+                setVies(null);
+                setNotice(null);
+                setDuplicates(null);
+              }}
+            />
+            Magánszemély
+          </label>
+          {person ? null : (
+            <label className="flex items-center gap-2 text-xs text-pilot-grey-600">
+              <input
+                type="checkbox"
+                checked={eu}
+                onChange={(event) => {
+                  setEu(event.target.checked);
+                  setVies(null);
+                  setNotice(null);
+                }}
+              />
+              EU-s cég
+            </label>
+          )}
         </div>
-        <PilotButton
-          variant="secondary"
-          size="action"
-          disabled={busy || !taxNumber.trim()}
-          onClick={() => void lookup()}
-        >
-          {eu ? "Ellenőrzés a VIES-ben" : "Kitöltés a NAV-ból"}
-        </PilotButton>
       </div>
-      {eu ? (
+      {person ? (
+        <p className="text-xs text-pilot-grey-600">
+          {existing?.taxNumber || existing?.euTaxNumber
+            ? `A vevő mostani adószáma (${existing.taxNumber ?? existing.euTaxNumber}) a mentéskor törlődik: magánszemélynek nem kell adószám.`
+            : "Magánszemélynek nem kell adószám."}
+        </p>
+      ) : (
         <>
-          <ViesMissingDetails taxNumber={taxNumber} result={vies} />
-          <p className="text-xs text-pilot-grey-600">
-            A közösségi adószám a vevő saját mezőjébe kerül, és a számlán a
-            közösségi adószám helyén szerepel.
-          </p>
-          {taxNumber.trim() && !euCountry ? (
-            <p className="text-xs text-pilot-red-700">
-              A közösségi adószám az ország kódjával kezdődik (például
-              SK2020123456).
-            </p>
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <PilotInput
+                aria-label={eu ? "Közösségi adószám" : "Adószám"}
+                placeholder={eu ? "pl. SK2020123456" : "12345678-2-42"}
+                value={taxNumber}
+                onChange={(value) => {
+                  setTaxNumber(value);
+                  setDuplicates(null);
+                }}
+              />
+            </div>
+            <PilotButton
+              variant="secondary"
+              size="action"
+              disabled={busy || !taxNumber.trim()}
+              onClick={() => void lookup()}
+            >
+              {eu ? "Ellenőrzés a VIES-ben" : "Kitöltés a NAV-ból"}
+            </PilotButton>
+          </div>
+          {eu ? (
+            <>
+              <ViesMissingDetails taxNumber={taxNumber} result={vies} />
+              <p className="text-xs text-pilot-grey-600">
+                A közösségi adószám a vevő saját mezőjébe kerül, és a számlán a
+                közösségi adószám helyén szerepel.
+              </p>
+              {taxNumber.trim() && !euCountry ? (
+                <p className="text-xs text-pilot-red-700">
+                  A közösségi adószám az ország kódjával kezdődik (például
+                  SK2020123456).
+                </p>
+              ) : null}
+            </>
           ) : null}
         </>
-      ) : null}
+      )}
       {notice ? <p className="text-xs text-pilot-grey-600">{notice}</p> : null}
       <PilotInput
-        aria-label="Cégnév"
-        placeholder="Cégnév"
+        aria-label={person ? "Név" : "Cégnév"}
+        placeholder={person ? "Név" : "Cégnév"}
         value={companyName}
         onChange={setCompanyName}
       />
@@ -350,7 +459,7 @@ export function BillingNewCustomerForm({
           disabled={busy || !complete || duplicates !== null}
           onClick={() => void save(false)}
         >
-          Vevő mentése és kiválasztása
+          {editing ? "Módosítás mentése" : "Vevő mentése és kiválasztása"}
         </PilotButton>
       </div>
     </div>

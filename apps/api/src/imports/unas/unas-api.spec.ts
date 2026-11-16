@@ -37,6 +37,40 @@ const response = `<?xml version="1.0" encoding="UTF-8"?>
 <Meta><Title>SEO title</Title><Description>SEO description</Description><Keywords>reef,pump</Keywords><Robots>index,follow</Robots></Meta>
 </Product></Products>`;
 
+describe("UNAS product descriptions with a lost emoji (card 7d63e55c)", () => {
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<Products><Product><State>live</State><Id>1</Id><Sku>AMIN_1</Sku>
+<Description><Short><![CDATA[<p>???? Gyors felszívódás</p>]]></Short><Long><![CDATA[<h3>???? Ajánlott adagolás</h3><p>Miért ????</p>]]></Long></Description>
+</Product><Product><State>live</State><Id>2</Id><Sku>CLEAN_1</Sku>
+<Description><Short><![CDATA[<p>Tiszta</p>]]></Short><Long><![CDATA[<p>Szöveg?</p>]]></Long></Description>
+</Product></Products>`;
+
+  it("takes the run out of both descriptions, keeps the raw payload as received, and reports only the affected product", () => {
+    const calls: [string, number, number][] = [];
+    const [amin, clean] = parseUnasProductResponse(
+      xml,
+      (sku, removed, remaining) => calls.push([sku, removed, remaining]),
+    );
+    assert.equal(amin!.descriptionShort, "<p>Gyors felszívódás</p>");
+    assert.equal(
+      amin!.descriptionLong,
+      "<h3>Ajánlott adagolás</h3><p>Miért ????</p>",
+    );
+    // the raw payload is what the UNAS sent
+    assert.match(
+      JSON.stringify(amin!.rawPayload),
+      /\?\?\?\? Ajánlott adagolás/,
+    );
+    assert.equal(clean!.descriptionLong, "<p>Szöveg?</p>");
+    // two removed (one in each description), one four-run left ("Miért ????" has no space after)
+    assert.deepEqual(calls, [["AMIN_1", 2, 1]]);
+  });
+
+  it("parses the same without a callback", () => {
+    assert.equal(parseUnasProductResponse(xml).length, 2);
+  });
+});
+
 describe("UNAS API XML contract", () => {
   it("builds a bounded incremental page request", () => {
     const xml = buildUnasProductPageXml({

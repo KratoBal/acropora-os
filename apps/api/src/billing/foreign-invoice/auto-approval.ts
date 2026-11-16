@@ -75,6 +75,11 @@ export function autoApproval(input: {
   nav: readonly NavConfirmation[];
   /** a kézi jóváhagyás ellenőrzése (`approvalProblems`): ugyanaz a mérce, nem egy második */
   problems: (values: IncomingReadingValues) => string[];
+  /**
+   * A KORÁBBAN, EMBER ÁLTAL JÓVÁHAGYOTT név, ha a PDF szövegéből olvasott szállítónév a `nameKey` után ELTÉR tőle ugyanarra az adószámra (`supplierNameConflict`);
+   * `null` vagy hiányzik: nincs ütközés. Csak a BANK alapot állítja meg (a NAV alapon a név a NAV-é).
+   */
+  nameConflict?: string | null;
 }): AutoApproval {
   const { values, sources } = input;
   /*
@@ -98,7 +103,13 @@ export function autoApproval(input: {
       reason:
         "nincs adószám: sem magyar (NAV), sem külföldi (banki) alapon nem hagyható jóvá",
     };
-  return byBank(values, sources, input.debits, input.problems);
+  return byBank(
+    values,
+    sources,
+    input.debits,
+    input.problems,
+    input.nameConflict ?? null,
+  );
 }
 
 /*
@@ -274,14 +285,39 @@ function byBank(
   sources: Partial<Record<IncomingReadingField, IncomingReadingSource>>,
   debits: readonly AutoApprovalDebit[],
   approvalProblems: (values: IncomingReadingValues) => string[],
+  nameConflict: string | null,
 ): AutoApproval {
   const problems = approvalProblems(values);
   if (problems.length) return { approve: false, reason: problems.join(" ") };
+  /*
+    A NÉV-ÜTKÖZÉS EMBERHEZ MEGY (acrobot 48944): ha a PDF szövegéből olvasott szállítónév ELTÉR attól a névtől, amit ember már jóváhagyott ugyanarra az adószámra, a bank
+    csak a bruttót igazolja, a nevet nem: vagy az olvasó téved (egy nem-küldő címsor), vagy a szállító neve változott; mindkettő emberi döntés.
+  */
+  if (nameConflict !== null)
+    return {
+      approve: false,
+      reason: `a PDF-ből olvasott szállítónév (${values.supplierName ?? "?"}) eltér a korábban, ember által jóváhagyott névtől (${nameConflict}), ugyanazzal az adószámmal: ember döntsön`,
+    };
   if (sources.grossAmount === "PAIRING")
     return {
       approve: false,
       reason:
         "a bruttó a banki párosításból jön, nem a számláról: önmagához mérné",
+    };
+  /*
+    A FORDÍTOTT ADÓZÁS JELÉBŐL SZÁMOLT NETTÓ ÉS 0 ÁFA EMBERHEZ MEGY (barracuda #2468; ugyanaz az elv, mint a De Jong-döntés, acrobot 34628, 34653). A jel egyetlen
+    szöveg-találat: belőle jön a 0 ÁFA és a nettó is, így a nettó + ÁFA = bruttó ellenőrzés szerkezetileg zöld, és a bank csak a BRUTTÓT igazolja, a bontást nem.
+    Egy valódi ÁFA-sor adta 0 mellett (az ÁFA forrása nem a jel) a sor mehet.
+  */
+  if (
+    sources.vatAmount === "REVERSE_CHARGE" &&
+    (sources.netAmount === "REVERSE_CHARGE" ||
+      sources.grossAmount === "REVERSE_CHARGE")
+  )
+    return {
+      approve: false,
+      reason:
+        "a 0 ÁFA és a nettó vagy a bruttó is a fordított adózás jelzéséből (vagy az adómentesség jelzéséből) számolt, a bank csak a bruttót igazolja: a bontást ember nézze meg",
     };
   if (debits.length === 0)
     return { approve: false, reason: "nincs párosított terhelés" };

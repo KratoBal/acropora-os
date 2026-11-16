@@ -32,6 +32,12 @@ import { RequirePermissions } from "../auth/decorators/require-permissions.decor
 import { MissingInvoicesService } from "../missing-invoices/missing-invoices.service.js";
 import { IncomingAssignDocumentDto } from "./dto/incoming-assign-document.dto.js";
 import { IncomingNotBookableDto } from "./dto/incoming-not-bookable.dto.js";
+import { IncomingNumberDto } from "./dto/incoming-number.dto.js";
+import {
+  correctIncomingNumber,
+  IncomingNumberNotCorrectableError,
+  IncomingNumberTakenError,
+} from "./incoming-number-correction.js";
 import { IncomingPaperOriginalDto } from "./dto/incoming-paper-original.dto.js";
 import { IncomingDocumentListQueryDto } from "./dto/incoming-document-list-query.dto.js";
 import { IncomingReviewDto } from "./dto/incoming-review.dto.js";
@@ -357,6 +363,47 @@ export class IncomingBillingDocumentsController {
       throw error;
     }
     return this.detail(row.id);
+  }
+
+  /**
+   * A JÓVÁHAGYOTT POSTAFIÓKOS SZÁMLA SZÁMÁNAK ÉS KELTÉNEK JAVÍTÁSA (acrobot 49617): a `finance.manage` jogával, mint a
+   * többi bejövő írás, csak a táblába írt, MAILBOX forrású soron (más forrás 400, a még jóvá nem hagyott, előtagú sor
+   * 404). Ha az új szám a szállítóval már egy másik sorhoz tartozik, 409. Lásd `correctIncomingNumber`.
+   */
+  @Post("incoming-documents/:id/number")
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.FINANCE_MANAGE)
+  async correctNumber(
+    @Param("id") id: string,
+    @Body() input: IncomingNumberDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<IncomingDocumentDetail> {
+    const issueDate = new Date(`${input.issueDate}T00:00:00Z`);
+    if (
+      Number.isNaN(issueDate.getTime()) ||
+      issueDate.toISOString().slice(0, 10) !== input.issueDate
+    )
+      throw new BadRequestException("A kelte nem valós dátum.");
+    // the DTO lets a number of spaces through, and the helper trims it to nothing
+    if (!input.documentNumber.trim())
+      throw new BadRequestException("A számlaszám nem lehet üres.");
+    try {
+      await correctIncomingNumber(this.database, {
+        rowId: id,
+        documentNumber: input.documentNumber,
+        issueDate,
+        userId: user.id,
+      });
+    } catch (error) {
+      if (error instanceof IncomingRowNotFoundError)
+        throw new NotFoundException(error.message);
+      if (error instanceof IncomingNumberNotCorrectableError)
+        throw new BadRequestException(error.message);
+      if (error instanceof IncomingNumberTakenError)
+        throw new ConflictException(error.message);
+      throw error;
+    }
+    return this.detail(id);
   }
 
   /**

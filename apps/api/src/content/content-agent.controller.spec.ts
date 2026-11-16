@@ -35,6 +35,14 @@ function controllerWith() {
       calls.push({ method: "reviseFromAgent", input });
       return { id: "c1" };
     },
+    agentItems: async (authorId: string) => {
+      calls.push({ method: "agentItems", input: authorId });
+      return [];
+    },
+    agentItem: async (id: string, authorId: string) => {
+      calls.push({ method: "agentItem", input: { id, authorId } });
+      return { id };
+    },
   } as unknown as ContentService;
   return { controller: new ContentAgentController(service), calls };
 }
@@ -100,5 +108,19 @@ describe("the machine entry point's wiring", () => {
     const input = calls[0]!.input as { contentId: string; authorId: string };
     assert.equal(input.contentId, "c1");
     assert.equal(input.authorId, "agent-1");
+  });
+
+  /*
+    A VISSZAOLVASAS BEKOTESE (card c5a8e6d6): a lista es az egy tetel a HIVO azonositojaval keri a szolgaltatast (nem egy torzsbol vagy
+    egy lekerdezes-parameterbol vett szerzovel: a szerzo a tokenbol feloldott fiok), es mindketto csak olvas.
+  */
+  it("reads back only as the caller: the list and the one item ask the service with the caller's id", async () => {
+    const { controller, calls } = controllerWith();
+    await controller.list(AGENT);
+    await controller.read("c9", AGENT);
+    assert.deepEqual(calls, [
+      { method: "agentItems", input: "agent-1" },
+      { method: "agentItem", input: { id: "c9", authorId: "agent-1" } },
+    ]);
   });
 });

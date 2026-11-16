@@ -18,7 +18,19 @@ import {
 } from "./takeover-price.js";
 import { recordOwnPrice } from "./price-history/own-price-history.js";
 import { isOwnSaleActive } from "./own-sale.js";
+import {
+  changedHusbandryFacts,
+  datasheetPatchOf,
+  filledNameFields,
+  type DatasheetPatch,
+} from "./product-datasheet-patch.js";
 import { retryOnSerializationConflict } from "../common/transaction-retry.util.js";
+import { husbandryDatasheetSelect } from "./product-husbandry.repository.js";
+import {
+  husbandryFilterMembers,
+  husbandryListState,
+  type HusbandryListRow,
+} from "./product-husbandry-list.js";
 import { unasShippingProfile } from "../integrations/medusa/medusa-unas-shipping.policy.js";
 import {
   manualFlagsDifferingFromUnas,
@@ -50,7 +62,14 @@ const productInclude = {
     },
   },
   categories: {
-    include: { category: true },
+    // the leaf and three ancestors: the detail names the live animal kind from the root of the path (card 20b0dd47)
+    include: {
+      category: {
+        include: {
+          parent: { include: { parent: { include: { parent: true } } } },
+        },
+      },
+    },
     orderBy: [
       { isPrimary: "desc" },
       { sortOrder: "asc" },
@@ -70,7 +89,13 @@ const productInclude = {
   images: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] },
   unasSnapshot: true,
   datasheet: {
-    select: { fenyIgeny: true, aramlasIgeny: true },
+    select: {
+      fenyIgeny: true,
+      aramlasIgeny: true,
+      magyarNev: true,
+      angolNev: true,
+      nemetNev: true,
+    },
   },
 } as const;
 
@@ -88,6 +113,8 @@ export function shippingFilterWhere(
 
 const productListInclude = {
   brand: true,
+  // the husbandry block's state for the list (V2.2 S6): the datasheet's husbandry columns, and the stamp
+  datasheet: { select: husbandryDatasheetSelect },
   // the shipping flags for the list's column (a82ed229)
   shippingProfile: {
     select: {
@@ -135,6 +162,121 @@ const productListInclude = {
   },
 } as const;
 
+/**
+ * EGY KITOLTOTT NEV FELOLDJA A MEZO MEGTAGADASAT (kartya 20b0dd47, barracuda #2357): a "kitoltve ES megtagadva" par itt nem
+ * keletkezhet. A sor NYOM NELKUL nem torlodik: az indoka, az oka es a megtagadas napja a termek domain-esemenyebe kerul,
+ * ugyanabban a tranzakcioban. A megtagadas-sor nem tarolja, ki tagadta meg; az esemeny actorja az iro (ha ismert).
+ */
+async function resolveRefusedNames(
+  transaction: ProductTransaction,
+  productId: string,
+  patch: DatasheetPatch | null,
+  actorUserId: string | null,
+): Promise<void> {
+  const filled = filledNameFields(patch);
+  if (filled.length === 0) return;
+  const where = { datasheet: { productId }, mezo: { in: filled } };
+  const refused = await transaction.productDatasheetFieldRefusal.findMany({
+    where,
+    select: { mezo: true, indok: true, oka: true, createdAt: true },
+  });
+  if (refused.length === 0) return;
+  await transaction.productDatasheetFieldRefusal.deleteMany({ where });
+  await transaction.domainEvent.create({
+    data: {
+      id: randomUUID(),
+      eventType: "product.datasheet.refusal-resolved",
+      aggregateType: "Product",
+      aggregateId: productId,
+      actorUserId,
+      occurredAt: new Date(),
+      schemaVersion: 1,
+      payload: {
+        resolved: refused.map((row) => ({
+          field: row.mezo,
+          reason: row.indok,
+          cause: row.oka,
+          refusedAt: row.createdAt.toISOString(),
+        })),
+      } satisfies Prisma.JsonObject,
+    },
+  });
+}
+
+/**
+ * A TARTASI BLOKK ELLENORZESENEK VISSZAVONASA MASIK IRASI UTON (V2.2, barracuda #2374): a magyar nev, a fenyigeny es az
+ * aramlasigeny a blokk KOTELEZO tenyei, de a nevek vegpontja es az altalanos termek-frissites irja oket, nem a
+ * `PATCH /products/:id/husbandry`. Ha az iras valamelyiket TENYLEGESEN megvaltoztatja (a tarolttol elterő ertek), a blokk
+ * ellenorzese UGYANABBAN a tranzakcioban visszavonodik, es a visszavonas naploba kerul (audit sor es domain-esemeny, mint a
+ * tartasi uton). Angol vagy nemet nev nem tartasi teny: nem von vissza. Az oszlopokat csak akkor adja, ha volt ellenorzes.
+ */
+async function husbandryVerificationWithdrawal(
+  transaction: ProductTransaction,
+  productId: string,
+  patch: DatasheetPatch | null,
+  actorUserId: string | null,
+  via: "names" | "product-update",
+): Promise<{ ellenorizveAt: null; ellenorizteUserId: null } | null> {
+  if (!patch) return null;
+  const keys = ["magyarNev", "fenyIgeny", "aramlasIgeny"] as const;
+  if (keys.every((key) => patch[key] === undefined)) return null;
+  const stored = await transaction.productDatasheet.findUnique({
+    where: { productId },
+    select: {
+      magyarNev: true,
+      fenyIgeny: true,
+      aramlasIgeny: true,
+      ellenorizveAt: true,
+      ellenorizteUserId: true,
+    },
+  });
+  const changed = changedHusbandryFacts(patch, stored);
+  if (changed.length === 0) return null;
+  // THE COLUMNS ARE NULLED WHENEVER A FACT CHANGES, not only when the read saw a verification (barracuda, #2374 approval):
+  // the general update runs at the default isolation, and a verification committed between this read and the write would
+  // otherwise survive the edit; nulling a row that was never verified is harmless. The LOG is written only for a
+  // verification that was actually withdrawn.
+  if (!stored?.ellenorizveAt)
+    return { ellenorizveAt: null, ellenorizteUserId: null };
+  const metadata = {
+    productId,
+    via,
+    changed,
+    withdrawnVerification: {
+      at: stored.ellenorizveAt.toISOString(),
+      byUserId: stored.ellenorizteUserId,
+    },
+  } satisfies Prisma.JsonObject;
+  await transaction.auditLog.create({
+    data: {
+      userId: actorUserId,
+      action: "product_husbandry.verification-withdrawn",
+      entityType: "ProductDatasheet",
+      entityId: productId,
+      metadata,
+    },
+  });
+  // THE WITHDRAWAL CHANGES WHAT THE SHOP MAY SAY (V2.2 S3): the husbandry key goes off at the next round, and the round picks
+  // the product by its own timestamps. The names path does not move the product row (a name write must not send the product
+  // to the shop), so a withdrawal moves it here, and only then.
+  await transaction.product.updateMany({
+    where: { id: productId },
+    data: { updatedAt: new Date() },
+  });
+  await transaction.domainEvent.create({
+    data: {
+      id: randomUUID(),
+      eventType: "product.husbandry.verification-withdrawn",
+      aggregateType: "Product",
+      aggregateId: productId,
+      actorUserId,
+      payload: metadata,
+      occurredAt: new Date(),
+    },
+  });
+  return { ellenorizveAt: null, ellenorizteUserId: null };
+}
+
 interface ProductTransaction {
   product: {
     create(args: unknown): Promise<ProductWithRelations>;
@@ -145,6 +287,33 @@ interface ProductTransaction {
   productCategory: {
     updateMany(args: unknown): Promise<unknown>;
     upsert(args: unknown): Promise<unknown>;
+  };
+  /** A nevek kozvetlen irasa (kartya 20b0dd47): az adatlap sora, a termek sora NELKUL. */
+  productDatasheet: {
+    upsert(args: unknown): Promise<unknown>;
+    /** A tartasi blokk ellenorzesenek visszavonasahoz (V2.2): a tarolt tenyek es az ellenorzes. */
+    findUnique(args: unknown): Promise<{
+      magyarNev: string | null;
+      fenyIgeny: string | null;
+      aramlasIgeny: string | null;
+      ellenorizveAt: Date | null;
+      ellenorizteUserId: string | null;
+    } | null>;
+  };
+  auditLog: {
+    create(args: unknown): Promise<unknown>;
+  };
+  /** Egy kitoltott nev feloldja a mezo megtagadasat (kartya 20b0dd47): elobb a sor, aztan a torles. */
+  productDatasheetFieldRefusal: {
+    findMany(args: unknown): Promise<
+      {
+        mezo: string;
+        indok: string;
+        oka: string;
+        createdAt: Date;
+      }[]
+    >;
+    deleteMany(args: unknown): Promise<{ count: number }>;
   };
   domainEvent: {
     create(args: unknown): Promise<unknown>;
@@ -455,6 +624,9 @@ export class ProductRepository extends Repository {
   }
 
   async list(query: ProductListQueryDto): Promise<ProductListResponse> {
+    const and: Prisma.ProductWhereInput[] = [
+      ...husbandryFilterMembers(query.husbandry),
+    ];
     const where: Prisma.ProductWhereInput = {
       ...(query.active === undefined ? {} : { isActive: query.active }),
       ...(query.brandId ? { brandId: query.brandId } : {}),
@@ -471,6 +643,8 @@ export class ProductRepository extends Repository {
       ...(query.shipping === "unasDiff"
         ? { id: { in: await this.unasDiffProductIds() } }
         : shippingFilterWhere(query.shipping)),
+      // ONE `AND` array: every filter that needs an AND puts its members here (a second top-level AND key would replace this one)
+      ...(and.length > 0 ? { AND: and } : {}),
       ...(query.search
         ? {
             OR: [
@@ -479,6 +653,33 @@ export class ProductRepository extends Repository {
                 variants: {
                   some: {
                     sku: { contains: query.search, mode: "insensitive" },
+                  },
+                },
+              },
+              // a keresheto nevek (kartya 20b0dd47, Balazs 2026-08-31): a magyar, az angol es a nemet nev is talal
+              {
+                datasheet: {
+                  is: {
+                    OR: [
+                      {
+                        magyarNev: {
+                          contains: query.search,
+                          mode: "insensitive",
+                        },
+                      },
+                      {
+                        angolNev: {
+                          contains: query.search,
+                          mode: "insensitive",
+                        },
+                      },
+                      {
+                        nemetNev: {
+                          contains: query.search,
+                          mode: "insensitive",
+                        },
+                      },
+                    ],
                   },
                 },
               },
@@ -499,7 +700,11 @@ export class ProductRepository extends Repository {
     ]);
 
     return {
-      items: items.map(toProductListItem),
+      items: items.map((item) => ({
+        ...toProductListItem(item),
+        // V2.2 S6: the husbandry block's state (null for a product that is not a live animal)
+        husbandry: husbandryListState(item as unknown as HusbandryListRow),
+      })),
       pagination: {
         page: query.page,
         pageSize: query.pageSize,
@@ -509,6 +714,61 @@ export class ProductRepository extends Repository {
     };
   }
 
+  /**
+   * A NEVEK KOZVETLEN IRASA (kartya 20b0dd47, acrobot stage-probaja): a magyar, az angol es a nemet nev az ADATLAP sorara
+   * kerul, a termek sorat nem erinti. Ez az ut a UNAS-gazdaju termeken is megy (a nevek Acropora-tulajdonuak, a UNAS-
+   * szinkron nem irja oket), es ezert a `Product.updatedAt` sem lep: a vetites esedekesseg-jele az, tehat egy nev-iras
+   * nem viszi a termeket a boltba (a vetites ugyanugy nem olvassa a neveket). Csak az adott mezok irodnak, az ures nev
+   * torol, egy kitoltott nev feloldja a mezo megtagadasat. `null`, ha nincs ilyen termek.
+   */
+  updateDatasheetNames(
+    id: string,
+    input: {
+      magyarNev?: string | null;
+      angolNev?: string | null;
+      nemetNev?: string | null;
+    },
+    actorUserId: string | null = null,
+  ): Promise<ProductDetail | null> {
+    // CSAK A HAROM NEV: a belso hivo se irhasson itt elhelyezesi igenyt (fenyIgeny, aramlasIgeny) UNAS-gazdaju termeken
+    // (barracuda, #2361 review); HTTP-n a globalis ValidationPipe (whitelist + forbidNonWhitelisted) amugy is elutasitja
+    const patch = datasheetPatchOf({
+      magyarNev: input.magyarNev,
+      angolNev: input.angolNev,
+      nemetNev: input.nemetNev,
+    });
+    return this.productDatabase.$transaction(
+      async (transaction) => {
+        const existing = await transaction.product.findUnique({
+          where: { id },
+          select: { id: true },
+        });
+        if (!existing) return null;
+        if (patch) {
+          const withdrawal = await husbandryVerificationWithdrawal(
+            transaction,
+            id,
+            patch,
+            actorUserId,
+            "names",
+          );
+          await transaction.productDatasheet.upsert({
+            where: { productId: id },
+            create: { productId: id, ...patch, ...withdrawal },
+            update: { ...patch, ...withdrawal },
+          });
+          await resolveRefusedNames(transaction, id, patch, actorUserId);
+        }
+        const product = await transaction.product.findUnique({
+          where: { id },
+          include: productInclude,
+        });
+        return product ? toProductDetail(product) : null;
+      },
+      { isolationLevel: "Serializable" },
+    );
+  }
+
   update(id: string, input: UpdateProductDto): Promise<ProductDetail> {
     const primaryCategoryId =
       input.primaryCategoryId !== undefined
@@ -516,11 +776,16 @@ export class ProductRepository extends Repository {
         : input.categoryId;
     const primaryWasProvided =
       input.primaryCategoryId !== undefined || input.categoryId !== undefined;
-    const placementNeedsWereProvided =
-      input.fenyIgeny !== undefined || input.aramlasIgeny !== undefined;
-
+    const datasheetPatch = datasheetPatchOf(input);
     return this.productDatabase.$transaction(
       async (transaction) => {
+        const withdrawal = await husbandryVerificationWithdrawal(
+          transaction,
+          id,
+          datasheetPatch,
+          null,
+          "product-update",
+        );
         await transaction.product.update({
           where: { id },
           data: {
@@ -530,26 +795,12 @@ export class ProductRepository extends Repository {
             brandId: input.brandId,
             webshopSellable: input.webshopSellable,
             advisorKind: input.advisorKind,
-            ...(placementNeedsWereProvided
+            ...(datasheetPatch
               ? {
                   datasheet: {
                     upsert: {
-                      create: {
-                        ...(input.fenyIgeny !== undefined
-                          ? { fenyIgeny: input.fenyIgeny }
-                          : {}),
-                        ...(input.aramlasIgeny !== undefined
-                          ? { aramlasIgeny: input.aramlasIgeny }
-                          : {}),
-                      },
-                      update: {
-                        ...(input.fenyIgeny !== undefined
-                          ? { fenyIgeny: input.fenyIgeny }
-                          : {}),
-                        ...(input.aramlasIgeny !== undefined
-                          ? { aramlasIgeny: input.aramlasIgeny }
-                          : {}),
-                      },
+                      create: { ...datasheetPatch, ...withdrawal },
+                      update: { ...datasheetPatch, ...withdrawal },
                     },
                   },
                 }
@@ -558,6 +809,7 @@ export class ProductRepository extends Repository {
           },
           include: productInclude,
         });
+        await resolveRefusedNames(transaction, id, datasheetPatch, null);
 
         if (primaryWasProvided) {
           await transaction.productCategory.updateMany({

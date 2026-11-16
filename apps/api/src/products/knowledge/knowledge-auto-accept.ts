@@ -1,3 +1,5 @@
+import { parseQuantity } from "@acropora/jev/product-enrichment";
+
 /**
  * ACCEPTING A JEV RESULT BY RULE, NOT BY A PERSON (Product Knowledge step 2,
  * card 85c38ab1). Balázs, 2026-10-21 20:44 UTC: the manufacturer's dosing is
@@ -34,6 +36,16 @@ export const AUTO_ACCEPT_FIELDS = [
   "dosingGuidance",
   "dosingTests",
 ] as const;
+
+/**
+ * THE PACK SIZE (ReefClub V3.2 run-out reminder, card cd94ed11; acrobot 45501, within Balázs's 2026-10-21 water-treatment
+ * permission). Decided on its own, after the dosing group, with every check of `autoAcceptDecision` (the manufacturer's own page,
+ * the product proven ours on it, not a page of another product too: the sizes of one agent share a page, and a shared page never
+ * gives a pack by rule), and two more (`packDecision`): only for a product with a dose (a water-treatment agent; the permission
+ * covers those), and only in the STRICT form, one number and one volume or mass unit ("500 ml", "1 l", "250 g"); "2 x 500 ml",
+ * "~500 ml" or a bare number goes to a person.
+ */
+export const PACK_FIELD = "packSize";
 
 const MANUFACTURER_SOURCES = new Set([
   "MANUFACTURER_PAGE",
@@ -176,6 +188,31 @@ export function autoAcceptDecision(input: AutoInput): AutoDecision {
 
 type DosingField = (typeof AUTO_ACCEPT_FIELDS)[number];
 
+/** One number and one volume or mass unit, read as strictly as the run-out count reads it. */
+export function isStrictPack(value: string): boolean {
+  return parseQuantity(value, "volume").ok || parseQuantity(value, "mass").ok;
+}
+
+/** The pack size's own two conditions on top of the common decision (`PACK_FIELD`). */
+export function packDecision(
+  decision: AutoDecision,
+  hasDose: boolean,
+): AutoDecision {
+  if (decision.kind === "SKIP") return decision;
+  if (!hasDose)
+    return {
+      kind: "SKIP",
+      reason: "adagolás nélküli termék: a kiszerelést ember fogadja el",
+    };
+  if (!isStrictPack(decision.value))
+    return {
+      kind: "SKIP",
+      reason:
+        "nem szigorú alak (egy szám és egy térfogat- vagy tömegegység): ember nézi meg",
+    };
+  return decision;
+}
+
 /**
  * THE DOSING FIELDS DECIDED AS ONE GROUP (barracuda, #1807). Field by field, the
  * rule could leave contradicting facts behind, across runs or pages: a fixed
@@ -286,9 +323,10 @@ export async function runAutoAccept(
     const results = new Map<DosingField, AutoResult | null>();
     for (const field of AUTO_ACCEPT_FIELDS)
       results.set(field, await deps.latestResult(productId, field));
+    const packResult = await deps.latestResult(productId, PACK_FIELD);
     // the pages these results stand on, asked once per product
     const refs = new Set<string>();
-    for (const r of results.values())
+    for (const r of [...results.values(), packResult])
       for (const e of evidenceOf(r?.evidence))
         if (e.accepted && isReadPage(e) && e.sourceRef) refs.add(e.sourceRef);
     const sharedPages =
@@ -317,8 +355,30 @@ export async function runAutoAccept(
       );
     }
     const grouped = dosingGroup(single, facts);
-    for (const field of AUTO_ACCEPT_FIELDS) {
-      const decision = grouped.get(field)!;
+    const packFact = await deps.productFact(productId, PACK_FIELD);
+    const hasDose =
+      grouped.get("dosing")?.kind === "ACCEPT" ||
+      (facts.get("dosing")?.value ?? null) !== null;
+    const decided: [string, AutoDecision][] = [
+      ...AUTO_ACCEPT_FIELDS.map(
+        (field) => [field, grouped.get(field)!] as [string, AutoDecision],
+      ),
+      [
+        PACK_FIELD,
+        packDecision(
+          autoAcceptDecision({
+            field: PACK_FIELD,
+            result: packResult,
+            identity,
+            fact: packFact,
+            sharedPages,
+            ownDose,
+          }),
+          hasDose,
+        ),
+      ],
+    ];
+    for (const [field, decision] of decided) {
       if (decision.kind === "SKIP") {
         out.push({ productId, field, kind: "SKIP", detail: decision.reason });
         continue;

@@ -89,8 +89,14 @@ export class ReefClubRateLimits {
    */
   readonly recommendationByAccount = new IpRateLimiter(30, 5_000, HOUR);
   readonly recommendationByAquarium = new IpRateLimiter(60, 5_000, HOUR);
+  /** The "mi lóg ki" reads (V3.4 S3): a read that costs a few queries, limited per account and per aquarium. */
+  readonly waterHintsByAccount = new IpRateLimiter(120, 10_000, HOUR);
+  readonly waterHintsByAquarium = new IpRateLimiter(240, 10_000, HOUR);
   readonly doseByAccount = new IpRateLimiter(120, 10_000, HOUR);
   readonly doseByAquarium = new IpRateLimiter(240, 10_000, HOUR);
+  /** Turning a run-out reminder on (a consent record per request) and the public unsubscribe by a mail's key. */
+  readonly runOutByAccount = new IpRateLimiter(60, 10_000, HOUR);
+  readonly runOutUnsubscribeByAddress = new IpRateLimiter(30, 1_000, MINUTE);
   /** Every shop-link redemption attempt, right or wrong. */
   readonly shopLinkByAddress = new IpRateLimiter(20, 1_000, MINUTE);
   /**

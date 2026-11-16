@@ -14,6 +14,7 @@ import type {
 import { createElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { answered } from "@/test/answered";
 import {
   lineState,
   PurchaseInvoiceEuEditorPage,
@@ -255,9 +256,12 @@ describe("PurchaseInvoiceEuEditorPage NAV bevételezés", () => {
     render(createElement(PurchaseInvoiceEuEditorPage));
     await screen.findByRole("textbox", { name: "Pénznem" });
 
-    expect(
-      screen.getByText("Nettó összeg").nextElementSibling?.textContent,
-    ).toMatch(/^10\s?000 Ft$/);
+    // the field is there before the invoice is: the sum comes with the answer
+    await waitFor(() =>
+      expect(
+        screen.getByText("Nettó összeg").nextElementSibling?.textContent,
+      ).toMatch(/^10\s?000 Ft$/),
+    );
   });
 
   it("a rögzítési kérésben is HUF pénznemet küld", async () => {
@@ -1577,11 +1581,18 @@ describe("PurchaseInvoiceEuEditorPage várható beérkezésből", () => {
   it("the save books the arrival and closes the kept run", async () => {
     render(createElement(PurchaseInvoiceEuEditorPage));
     fireEvent.click(await screen.findByRole("button", { name: "Elfogadom" }));
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "Számla rögzítése és készlet frissítése",
-      }),
+    const save = screen.getByRole("button", {
+      name: "Számla rögzítése és készlet frissítése",
+    });
+    // the form fills from a chain of answers (arrival, supplier, rate, suggestion): a save before the last one finds the
+    // form incomplete and sends nothing
+    await answered(
+      arrivalsApi.detail,
+      suppliersApiMock.detail,
+      purchasingApiMock.getExchangeRate,
+      purchasingApiMock.suggestLine,
     );
+    fireEvent.click(save);
 
     await waitFor(() => expect(purchasingApiMock.create).toHaveBeenCalled());
     const [, keres] = purchasingApiMock.create.mock.calls[0] ?? [];

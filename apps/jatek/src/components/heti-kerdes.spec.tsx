@@ -7,6 +7,7 @@ import { HAMIS_KERDES } from "../lib/jatek-api.ts";
 import {
   Gyik,
   Hero,
+  HelyesValaszok,
   KampanySav,
   Lepesek,
   Nyertesek,
@@ -64,6 +65,99 @@ describe("a heti kérdés szakasz", () => {
     assert.match(h, /Kipróbálható mintakérdés/);
   });
 
+  it("an open question with a prize shows its picture (from the page's own path), name and description instead of the gift box", () => {
+    const h = renderToStaticMarkup(
+      <HetiKerdesSzakasz
+        allapot={{
+          fajta: "nyitott",
+          proba: false,
+          kerdes: {
+            ...HAMIS_KERDES,
+            prize: {
+              name: "Aquaforest AF Nano Tank",
+              description: "Egy kis akvárium.",
+              hasImage: true,
+            },
+          },
+        }}
+      />,
+    );
+    assert.match(h, /src="\/api\/nyeremeny-kep\/proba-kerdes"/);
+    assert.match(h, /alt="Aquaforest AF Nano Tank"/);
+    assert.match(h, /<h3>Aquaforest AF Nano Tank<\/h3>/);
+    assert.match(h, /Egy kis akvárium\./);
+    assert.doesNotMatch(h, /jatek-gift-art/);
+    assert.doesNotMatch(h, /hamarosan kiderül/);
+  });
+
+  it("a prize without a picture keeps the gift box with its name; no prize at all says it is not known yet", () => {
+    const nevvel = renderToStaticMarkup(
+      <HetiKerdesSzakasz
+        allapot={{
+          fajta: "nyitott",
+          proba: false,
+          kerdes: {
+            ...HAMIS_KERDES,
+            prize: { name: "Pumpa", description: null, hasImage: false },
+          },
+        }}
+      />,
+    );
+    assert.match(nevvel, /jatek-gift-art/);
+    assert.match(nevvel, /<h3>Pumpa<\/h3>/);
+    assert.doesNotMatch(nevvel, /nyeremeny-kep/);
+    const nincs = renderToStaticMarkup(
+      <HetiKerdesSzakasz
+        allapot={{ fajta: "nyitott", kerdes: HAMIS_KERDES, proba: false }}
+      />,
+    );
+    assert.match(nincs, /hamarosan kiderül/);
+  });
+
+  it("with no open question and a next one: its prize picture and name instead of the gift box, 'Következő kérdés hamarosan' and the countdown to its opening", () => {
+    const h = renderToStaticMarkup(
+      <HetiKerdesSzakasz
+        allapot={{
+          fajta: "nincs",
+          kovetkezo: {
+            id: "q2",
+            week: "2026-W47",
+            opensAt: "2026-11-14T21:00:00.000Z",
+            prize: { name: "Pumpa", description: null, hasImage: true },
+          },
+        }}
+      />,
+    );
+    assert.match(h, /Most nincs nyitott kérdés/);
+    assert.match(h, /src="\/api\/nyeremeny-kep\/q2"/);
+    assert.match(h, /<h3>Pumpa<\/h3>/);
+    assert.match(h, /Következő kérdés hamarosan/);
+    assert.match(h, /data-testid="visszaszamlalo"/);
+    assert.match(h, /Visszaszámláló a következő kérdés megnyitásáig/);
+    assert.doesNotMatch(h, /jatek-gift-art/);
+    assert.doesNotMatch(h, /<form/);
+    assert.doesNotMatch(h, /VÁLASZADÁSI IDŐ/);
+  });
+
+  it("a next question without a prize still counts down, with the gift box and no invented name", () => {
+    const h = renderToStaticMarkup(
+      <HetiKerdesSzakasz
+        allapot={{
+          fajta: "nincs",
+          kovetkezo: {
+            id: "q2",
+            week: "2026-W47",
+            opensAt: "2026-11-14T21:00:00.000Z",
+            prize: null,
+          },
+        }}
+      />,
+    );
+    assert.match(h, /jatek-gift-art/);
+    assert.match(h, /Következő kérdés hamarosan/);
+    assert.match(h, /data-testid="visszaszamlalo"/);
+  });
+
   it("no open question and an unavailable api each say so, without a form", () => {
     const nincs = renderToStaticMarkup(
       <HetiKerdesSzakasz allapot={{ fajta: "nincs" }} />,
@@ -96,9 +190,95 @@ describe("a főoldal állandó szakaszai", () => {
     assert.match(h, /src="\/nano\.jpg"/);
   });
 
+  it("the start line and the first FAQ answer carry the two times: the live show at 21:00, the first question at 22:00 (Balázs, 2026-11-06)", () => {
+    assert.match(
+      h,
+      /Az élő adás 21:00-kor kezdődik, az első kérdés 22:00-kor nyílik\./,
+    );
+    assert.match(
+      h,
+      /2026\. november 7-én, szombaton\. Az Acropora YouTube élő adása 21:00-kor kezdődik, az első kérdés 22:00-kor nyílik\./,
+    );
+    assert.doesNotMatch(h, /a pontos időpont hamarosan|A pontos kezdési idő/);
+  });
+
   it("the prize card leads to the page's own prize page, in the same window", () => {
     assert.match(h, /<a href="\/fodij">Ismerd meg az akváriumot/);
     assert.doesNotMatch(h, /aquaforest\.eu/);
+  });
+
+  // WHAT TURNS THIS RED (Balázs, 2026-11-06 19:01 UTC): the second step asking only for the e-mail address, while the form asks
+  // for the name too.
+  it("the second step tells the player to give the name and the e-mail address", () => {
+    const lepesek = renderToStaticMarkup(<Lepesek />).replace(/<!-- -->/g, "");
+    assert.match(
+      lepesek,
+      /Add meg a nevedet és az e-mail címedet, fogadd el a játékszabályzatot/,
+    );
+    assert.doesNotMatch(lepesek, /Add meg az e-mail-címedet/);
+    // the grand prize line of the third step says "A játék fődíja" (Balázs, 2026-11-06 19:02 UTC)
+    assert.match(lepesek, /A játék fődíja az Aquaforest AF Nano Tank\./);
+    assert.doesNotMatch(lepesek, /kampány/i);
+  });
+
+  // WHAT TURNS THIS RED (Balázs, 2026-11-06 19:16 UTC, "legyen mindenhol játék"): the front page's prize label saying
+  // "kampány" again.
+  it("the front page names the prize as the game's, not the campaign's", () => {
+    const hero = renderToStaticMarkup(<Hero />).replace(/<!-- -->/g, "");
+    assert.match(hero, /A JÁTÉK FŐDÍJA/);
+    assert.doesNotMatch(hero, /KAMPÁNY/i);
+  });
+
+  it("the winners list shows the shortened names only, with the draw and the prize; with none yet it keeps the empty box", () => {
+    const lista = renderToStaticMarkup(
+      <Nyertesek
+        nyertesek={[
+          {
+            kind: "WEEKLY",
+            week: "2026-W45",
+            name: "Kovács P.",
+            emailMasked: "ko•••@example.hu",
+            prizeName: "Aquaforest AF Nano Tank",
+            drawnAt: "2026-11-14T20:00:00.000Z",
+          },
+          {
+            kind: "CHRISTMAS",
+            week: null,
+            name: "Nagy A.",
+            emailMasked: "n•••@example.hu",
+            prizeName: null,
+            drawnAt: "2026-12-26T21:00:00.000Z",
+          },
+        ]}
+      />,
+    );
+    assert.match(lista, /data-testid="nyertesek"/);
+    assert.match(lista, /Kovács P\./);
+    assert.match(lista, /ko•••@example\.hu/);
+    assert.match(lista, /45\. hét · Aquaforest AF Nano Tank/);
+    assert.match(lista, /Karácsonyi fődíj/);
+    assert.doesNotMatch(lista, /jatek-empty-winners|Még a rajt előtt/);
+    assert.match(renderToStaticMarkup(<Nyertesek />), /jatek-empty-winners/);
+  });
+
+  it("the closed weeks' correct answers are listed with the week and the question; with no closed week the section is not there", () => {
+    const lista = renderToStaticMarkup(
+      <HelyesValaszok
+        hetek={[
+          {
+            week: "2026-W44",
+            prompt: "Melyik a legismertebb zátonyépítő korall?",
+            answer: "Acropora",
+            closesAt: "2026-11-05T22:59:59.000Z",
+          },
+        ]}
+      />,
+    );
+    assert.match(lista, /data-testid="helyes-valaszok"/);
+    assert.match(lista, /44\. hét/);
+    assert.match(lista, /Melyik a legismertebb zátonyépítő korall\?/);
+    assert.match(lista, /Helyes válasz: <b>Acropora<\/b>/);
+    assert.equal(renderToStaticMarkup(<HelyesValaszok />), "");
   });
 
   it("have neither a prototype wording nor a newsletter option", () => {

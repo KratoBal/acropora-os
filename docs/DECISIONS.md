@@ -763,3 +763,214 @@ számlázásról szól. Nem érinti és nem módosítja: a webshop-rendelések
 read-only UNAS-tükrét (ADR-006, változatlan), a Számlázz.hu bejövő/pénzügyi
 adatkapcsolatot (M8.3, önálló, még nyitott, nem ehhez a munkához kell), és
 a NAV Online Számla egyeztetést (M9).
+
+## ADR-015 – A webshop-rendelés üzleti státuszának egyetlen forrása a webshop; az OS saját mezője UNAS és POS rendelések örökölt pillanatképe
+
+**Dátum:** 2026-11-15
+
+**Kontextus.** Az üzleti rendelésstátusz (a hét állapot: Feldolgozásra vár,
+Visszaigazolva, Készletezés alatt, Kiszállítás, Átvehető, Megrendelés
+lezárva, Sikertelenül lezárt rendelés) mindkét repóban megvan, külön
+modellel és külön migrációval (commerce: `Migration20260902120000`, OS:
+`20260903150000_order_business_status`; a kanban kártya a79f3456,
+2026-09-08). A kártya kérdése az volt, hogy az átálláskor egy rendelésnek
+nem lesz-e két állapota két helyen. A két állapotgép NEM egyezik:
+
+|                                                                                        | commerce (webshop) | OS (`SalesOrder.businessStatus`) |
+| -------------------------------------------------------------------------------------- | ------------------ | -------------------------------- |
+| a szállítás állapota                                                                   | `out_for_delivery` | `SHIPPING`                       |
+| Feldolgozásra vár -> Készletezés alatt közvetlenül                                     | engedett           | nem                              |
+| visszalépés (Visszaigazolva -> Feldolgozásra vár, Készletezés alatt -> Visszaigazolva) | nincs              | van                              |
+| a sikertelenül lezárt rendelés innen folytatható                                       | Készletezés alatt  | Feldolgozásra vár                |
+
+**Mérés a két `main` ágon (OS 2e12f2b15, commerce 4a78ff1d, 2026-11-15,
+forráskódból olvasva):**
+
+- A webshop (Medusa) rendelés **nem `SalesOrder` sor** az OS-ben:
+  `SalesOrder`-t csak az UNAS rendelés-szinkron, a POS-eladás és a demó-adat
+  CLI hoz létre, mind rögzített csatornával (`UNAS`, `POS`). A `MEDUSA`
+  csatornájú `SalesOrder`-t semmi nem készít.
+- A webshop rendelés státuszát az OS élőben a webshop admin végpontján olvassa
+  és váltja (`MedusaAdminClient.orderBusinessStatus`,
+  `transitionBusinessStatus`; `POST /admin/order-business-status/:id`), a
+  „ki nyomta meg" nyomot az `AuditLog` őrzi. A webshop csomag-státusz szinkronja
+  is ezt a végpontot használja.
+- Az OS saját `SalesOrder.businessStatus` mezeje a 2026-09-03-i migrációban
+  töltődött fel az UNAS szövegekből (soronként egy `MIGRATION` esemény). Az
+  egyetlen író, a `CarrierShipmentService`, regisztrált, de az alkalmazásban
+  semmi nem hívja. Az UNAS-szinkron és a POS új rendelése a mező alapértékét
+  (`PENDING_FULFILLMENT`) kapja.
+
+_Az adatbázis oldala NEM mért (2026-11-15), és az ok megnevezve:_ hogy a
+migráció napja (2026-09-03) után van-e `OrderBusinessStatusEvent` bármely
+forrásból, hogy van-e `MEDUSA` csatornájú `SalesOrder`, és hogy az UNAS-szinkron
+és a POS új rendelései valóban az alapértéken állnak-e, adaton nem mértük. A
+stage-en a lekérdezést a Coolify-feladat lefuttatta, de az API nem adja vissza a
+feladat kimenetét; az éles adatbázison a csak olvasó szerep (`fleet_ro`)
+„permission denied for table SalesOrder" hibát kapott (jogosultsági korlát,
+mérve 2026-11-15). A fenti állítások tehát a kódból következnek, nem az
+adatból, és az őrző-teszt is a forrást védi, nem az adatot. Ha az adat
+megmérhetővé válik, a három szám ide kerül.
+
+**Döntés.**
+
+1. **A webshop (Medusa) rendelés üzleti státuszának egyetlen forrása a
+   webshop** (`order_business_status`). Ez ma is így működik; az ADR kimondja.
+   Az OS ezt a webshop admin API-ján keresztül olvassa és váltja, és nem tart
+   róla második másolatot.
+2. **Az OS `SalesOrder.businessStatus` mezeje az OS által tárolt rendelések
+   (UNAS, POS) örökölt pillanatképe**, és ezen a körön belül marad. A két
+   rendeléshalmaz diszjunkt, ezért a két állapotgép nem ütközhet; az eltérésük
+   csak akkor számítana, ha valaki ugyanarra a rendelésre mindkettőbe írna.
+3. **A diszjunktságot forrás-őrző teszt védi**
+   (`apps/api/src/orders/order-business-status/order-status-source.spec.ts`):
+   minden `SalesOrder`-t létrehozó hely egy névvel felsorolt listán áll, és
+   egyik sem ír `MEDUSA` csatornát. Új létrehozási hely a teszten elbukik, és
+   addig nem megy át, amíg valaki nem dönt: UNAS/POS út (a listára kerül), vagy
+   webshop rendelés (akkor új döntés kell, mert két igazság keletkezne).
+4. A két szolgáltatás (`OrderBusinessStatusService`, `CarrierShipmentService`)
+   kommentje jelzi, hogy örökölt és csak UNAS/POS rendelésre való.
+
+**Nincs migráció és nincs viselkedés-változás.**
+
+**Amit ez NEM dönt el (külön, nagyobb kérdések):**
+
+- az OS mező törlése, vagy a két állapotgép összeolvasztása;
+- a ReefClub fogyás-emlékeztető (`reefclub-runout-reminder.service.ts`): csak
+  `SalesOrder` sorokat és azok `OrderBusinessStatusEvent` eseményeit nézi (a
+  „kilépett a boltból" napot a `SHIPPING`, `READY_FOR_PICKUP`, `CLOSED`
+  eseményekből veszi, POS-nál a lezárás idejéből), tehát a webshop
+  rendeléseket nem látja, és az UNAS rendelések is csak a migráció napjáig
+  adnak ilyen eseményt. Hogy a Medusa rendeléseket a webshop státusz-előzményéből
+  hogyan kapja meg, az külön döntés;
+- az UNAS lekapcsolás utáni sorsa az OS mezőnek.
+
+**Hatály.** A webshop-rendelések read-only UNAS-tükrét (ADR-006) és a webshop
+saját átmeneti szabályait (commerce `transitions.ts`) nem érinti.
+
+## ADR-016 – A vetítés önjavítása lassú frissítési forgással, nem elvárt-állapot összehasonlítással
+
+**Dátum:** 2026-11-15
+
+**Kontextus.** A Medusa-vetítő ütemező esedékessége időbélyeg-alapú
+(`decideProjectionDue`): egy termék akkor esedékes, ha a bemeneti sorainak
+legkésőbbi módosítása újabb az utolsó vetítésénél. Ami innen kimarad, az a
+bolt oldalán álló rossz érték: egy korábbi hibás írás vagy kézi átírás addig
+marad, amíg az OS-sor véletlenül meg nem mozdul. Mérve 2026-11-15-én a teszt
+Medusán: hat termék leírásában négy kérdőjeles futás (elveszett emoji) állt
+2026-10-07 óta, miközben a stage OS leírása mind a 13 érintett SKU-n tiszta
+volt (0 kérdőjel); egy kézi vetítés a hat azonosítóra mind a hatot kijavította
+(a mérés 22:45-kor: 0 futás az olvasott 1500 termék között).
+
+**Döntés.** Új esedékességi forrás (`refresh`), a körben utolsó: körönként
+legfeljebb R (alap 5, 1..50) olyan termék kerül a lista végére, amely nem
+esedékes, aktív, webshopos, nem kizárt, kötött és már vetített, a
+legrégebben vetítettek közül (`lastSyncedAt` növekvő). Az esedékes termék
+elsőbbséget élvez, a forgás csak a maradék keretet tölti. A kapcsoló
+(`MEDUSA_PROJECTION_REFRESH_ENABLED=true`) alapból KI; a jelentésben külön
+szám (`candidates.refresh`, `taken.refresh`). Egy termék, amelynek a kötés
+időbélyege a kiválasztás után sem lép (megállt vetítés), a sor végére kerül,
+hogy ne szorítsa ki a többit. Mivel a beragadt termék időbélyege nem lép,
+örökre a legrégebbiek között marad, ezért a lekérdezés ablaka a jegyzetben álló
+(kipróbált, még nem lépett) termékek számával szélesedik, és a jegyzetet minden
+kör a kötések mai `lastSyncedAt`-jével veti össze: a lépett vagy törölt termék
+kiesik, így az ablak a katalógus méreténél nem lehet szélesebb (barracuda
+észrevétele a #2623 review-ján: az ablak nélküli változat 4R beragadt termék
+fölött megállt, miközben a jelentés `taken.refresh = R`-t mutatott). A
+forgás beállítását az ütemező indulásakor is ellenőrizzük: egy elgépelt
+darabszám az indulást állítja meg, nem minden kört.
+
+**Elvetett változat: elvárt állapot összehasonlítása a bolt olvasásával.** Az
+elvárt leírást a futtató (`medusa-projection.runner.ts`) állítja össze a
+termékből (régi-bolt linkek átírása, termékismeret felülírás, összefűzés).
+Egy olvasó-összehasonlító ennek az összeszerelésnek a MÁSOLATA lenne, tehát
+eltérne tőle, és épp azt a hibát keltené, amit észlelni akar. A forgás ezt
+megkerüli: nem számol elvárt állapotot, hanem újravetít, és az újravetítés
+ugyanaz a kód, ami a rendes körben fut.
+
+**Következmények.** Körönként R idempotens írás a boltba (a katalógus
+~1900 termék: R=5 és 30 perces kör mellett kb. 8 nap alatt körbeér, ha egyéb
+esedékes nincs). Ha a forgás be van kapcsolva, a kör már nem lesz `SKIPPED`
+egészséges állapotban: a `SKIPPED` mostantól azt jelenti, hogy a forgás is
+üres. Az éles boltnál bekapcsolni KÜLÖN döntés, és az Balázsé; a kapcsoló
+ott kikapcsolva marad. Az eltérés-olvasó egy későbbi kártya, ha a forgás
+drága volna.
+
+## ADR-017 – Egy jelölt árva kötés nem esedékes, és nem teszi FAILED-dé a vetítő kört
+
+**Dátum:** 2026-11-16
+
+**Kontextus.** Az `orphaned-link` megállás azt jelenti, hogy az OS termék kötése egy Medusa termékre mutat, amely a boltban már nincs
+(az update HTTP 404-et ad). A vetítés szándékosan megáll: nem törli a kötést és nem hoz létre újat, mert egy 404 mögött rendszerint
+szándékos bolti törlés áll, amit egy csendes újralétrehozás visszacsinálna; a döntés emberé (`--forget-link`, csak a kötés sorát törli).
+A kötés a megállás helyén jelet kap (`medusaOrphan` a metaadatban). A stage-en 2026-11-16 07:44Z-kor egyetlen ilyen termék volt
+(`stopped {"orphaned-link": 1}`, `general` 41), a kör pedig FAILED volt. A megállt termék a kötés időbélyegének megállása miatt
+minden körben újra esedékes maradt, és a futtató minden megállt termékre növeli a `failed`-et és 1-gyel lép ki.
+
+**PONTOSÍTÁS (2026-11-16, mért adattal, acrobot 53800).** Az eredeti szöveg azt állította, hogy az árva kötés tette FAILED-dé a
+köröket. Ezt a 07:44Z-i mérés nem bizonyította: a `stopped` csak azt mutatta, hogy egy árva van, az ár-futás kudarcait nem
+olvastuk. A #2625 telepítése után (08:15:29Z, a teljes health) a kör továbbra is FAILED volt, miközben `stopped {}`,
+`orphanedLinks 1` és `priceFailures {"ambiguous-price": 1}` állt: a kört az ÁR-FEL buktatta (egy ismert ár-adat probléma, kártya
+550b80d1), az árva már nem buktat. Az árva kezelésének döntése változatlanul áll (egy megállás, ami embert kér, nem futási hiba),
+de nem ez oldotta meg a FAILED kört. A kör két felének kilépési kódja (`projectionExit`, `pricingExit`) és a termék-kudarcok
+fajtánként (`productFailures`) azért kerültek a `lastRound`-ba, hogy egy pillantásra látszódjon, melyik fél bukott.
+
+**Döntés** (acrobot 53748). (1) A futtató az `orphaned-link` megállást NEM számolja futási hibának (`stoppedProductIsRunFailure`); a sora
+tovább kimegy a hibakimenetre és a `lastRound.stopped`-be számít. (2) A jelölt árva kötések kimaradnak a general, az inaktivált és a
+forgás listából (és a tény-, akció- és márkaváltozás listájából): a 404 egy MÁSIK Medusa azonosítóra is 404 marad, tehát az újrapróba
+semmit nem old meg, és tömeges bolti törlésnél az árvák a batch keretét töltenék. (3) A jel nem tűnik el, csak nem buktat: a
+`lastRound.orphanedLinks` a jelölt árva kötések száma (`null`, ha a kötések olvasása elbukott: ilyenkor semmi nem marad ki). A kötések
+jelét a kód szűri, nem Prisma JSON-út szűrő, mert az helyi adatbázis nélkül nem mérhető.
+
+**Amit nem teszünk:** automatikus `--forget-link`. Az árva kötés megszüntetése emberi döntés marad; a szám azt mondja meg, mikor kell
+ránézni.
+
+**Következmény.** A FAILED kör mostantól a valódi futási hibát jelenti, árva kötés nélkül; a kézi `medusa-projection.cli` az árva
+termékre is 0-val lép ki, a MEGÁLLT sor (és benne a `--forget-link` útmutatás) viszont a hibakimeneten ott van. A futtató bekötése
+(`if (stoppedProductIsRunFailure(...)) failed += 1`) kód-olvasat, nem unit-tesztelt: a `runProjectionCli` teljes láncát (leképezés,
+Medusa-kliens, 404) helyben nem lehet kis dublákkal futtatni; a predikátum tesztelt.
+
+## ADR-018 – Díjbekérő, előleg és végszámla az ajánlat mérföldköveivel: mikor fizetett az előleg, mi kerül a végszámlára, mi törölhető
+
+**Dátum:** 2026-11-16 (PR-ek: #2638, #2639, #2640, #2641, #2642; kártyák: 00926d89, 2650d371, 6a75f15c, d0f56ac0)
+
+**Kontextus.** Az ajánlat mérföldkő-díjbekérője (`createMilestoneProforma`) a SZÁZALÉKOS rész: sávonként egy sor, "<címke> (<százalék>%), <ajánlatszám>". A
+díjbekérőből előleg, az előlegből végszámla-vázlat készül (`advanceFromProforma`, `finalFromAdvance`). Három hiba jött ki egy napon, Balázs kérdéseiből:
+(1) egy kifizetett díjbekérőből az előleg határidővel és a "nincs teendő" sor nélkül ment ki, mert a kérés nem küldte a `<fizetve>` jelölést; (2) egy 60
+százalékos előleg végszámlája a díjbekérő sorait kapta, tehát 60 százalékot, a Számlázz.hu levonta a 60 százalékos előleget, és a végszámla nulla lett;
+(3) egy vázlatot nem lehetett törölni.
+
+**Döntés.**
+
+1. **Az előleg akkor fizetett, ha a díjbekérőn lévő kifizetés legalább az előleg SAJÁT bruttóját fedezi** (`advancePaidByProforma`). A tényt a Számlázz.hu
+   feed tükörsora adja (`externalBillingDocument`: `paidAmount`, `grossAmount`, `currency`, `cancelled`), nem egy "van rajta valamennyi kifizetés" jelző
+   (`feedPaid`): a `fizetve=true` egy RENDEZETT számlát állít. Részkifizetés, más pénznem, sztornózott díjbekérő, hiányzó feed-sor és össze nem állítható
+   vázlat mind "nem fizetett": a számla úgy megy ki, ahogy eddig. Fizetett esetben a kérés `fizetve=true`-t küld (az XSD `fejlecTipus` sorrendjében), a
+   határidő a kiállítás napja, és az ablak összesítője (`dueDateFollowsIssueDate`) és az előnézet is ezt mutatja.
+2. **A végszámla tételei az ajánlat teljes tételei**, ha a díjbekérő egy ELFOGADOTT verzió 100 százaléknál kisebb mérföldkövéhez tartozik
+   (`QuotePaymentMilestone.proformaInvoiceId`, egyedi: egy mérföldkő, egy díjbekérő). A tételek az elfogadott, nem opcionális sorok és az elfogadó által kért
+   opciók, az ajánlat sorrendjében, termék- és variáns-kötés NÉLKÜL (a kötött sor a kiállításkor készletet mozgatna). Minden más díjbekérő (teljes
+   ellenértékű, 100 százalékos mérföldkő, mérföldkő nélküli kézi) a díjbekérő sorait kapja, mint eddig. A döntés tiszta függvény (`finalLinesSource`:
+   `PROFORMA`, `QUOTE`, `EMPTY`, `REFUSED`).
+3. **Több előleg-mérföldkő esetén a végszámla-vázlat ÜRESEN indul**, és a vázlat oldalán egy sáv mondja meg az okot (`finalInvoiceNotice`, kód
+   `MULTIPLE_ADVANCES`, olvasáskor számolva). Ok: a Számlázz.hu a végszámlán csak az EGY előleget vonja le; az ajánlat teljes tételeivel a másik előleg
+   része kétszer lenne kiszámlázva (30/30/40-nél 130 százalék). A kezelő írja be a tételeket: csak a még nem kiszámlázott részt. Az üres vázlat kapott
+   elsőbbséget a 409-es elutasítással szemben, mert a végszámla csak az előlegből készülhet (`FINAL_ONLY_FROM_ADVANCE`): egy elutasítás után SEMMILYEN
+   úton nem lenne végszámla. Ha a mérföldkő köthető, de az elfogadott verziónak nincs tétele, a készítés elutasít (409), nem esik vissza a százalékos sorra,
+   mert az a nulla végszámlát hozná vissza csendben. A sáv olvasáskor számolódik (a #2641 és a #2642 óta), ezért egy TELJES tételekkel készült vázlaton is megjelenik, ha egy másik mérföldkő utána kapott díjbekérőt: ez az az eset, ahol a túlszámlázás ténylegesen fennállhat, és csak a sáv véd ellene; a szöveg ezért nem állítja, hogy a tételek üresek.
+4. **Egy kimenő vázlat törölhető**, ha mind teljesül (`draftDeleteRefusal`): állapota `DRAFT` (az `ISSUING`, az `ISSUED` és az `ISSUE_FAILED` nem: az
+   utóbbinál már volt Számlázz.hu-hívás), nincs sorszáma, más bizonylat nem hivatkozik rá, és a betöltött `updatedAt` még egyezik. A törlés EGY
+   tranzakció feltételes törléssel; a mérföldkő, amelynek ez volt a díjbekérője, FELSZABADUL (a hivatkozása `Restrict`, nélküle a törlés el sem indulna), a
+   tételek és a levelezési rekordok vele mennek, az előleg- és végszámla-azonosító újra szabad, és egy `billing.draft_deleted` auditsor készül. A jog
+   `billing.create`, mint a vázlat mentéséé.
+
+**Amit nem teszünk.** Egy kézi díjbekérő hivatkozásában álló `AJ-` számból NEM találgatunk ajánlatot: az nem kötés, a díjbekérő a saját sorait kapja. Új írási út
+nem nyílik: a kiállítás a meglévő úton megy a Számlázz.hu-ra, csak a `fizetve` elemmel bővül; az élő boltba (webshop) ez nem ír.
+
+**Mérési korlátok (a döntés idején).** Nem mértük éles Számlázz.hu-hívással a `fizetve=true` sort a PDF-en, és az élő rendszeren nem olvastuk ki a
+mérföldkő és a díjbekérő kötését (a `fleet_ro` nem olvassa a `QuotePaymentMilestone` táblát). Ha nincs kötés, a végszámla a régi módon töltődik, és kézzel
+kell javítani. A `fizetve=true` ág a stage-en nem állítható elő álszámlázóval: az "előleg fizetve" tényét a feed írja, a kézi kifizetés-rögzítés a
+Számlázz.hu-ba ír (álszámlázóban semmibe), így a TESZT- sorszámú díjbekérőhöz nincs feed-sor. Az ág egységtesztekkel és a CI-vel fedett.
+
+**Következmény.** A díjbekérő, az előleg és a végszámla lánca ajánlatból végigmegy, és minden hibás kimenet (nulla végszámla, dupla számlázás) vagy
+elutasítás, vagy látható figyelmeztetés a vázlaton. A figyelmeztetés a vázlat oldalán áll, NEM a megjegyzés mezőben: azt a vevő számlája kinyomtatja.

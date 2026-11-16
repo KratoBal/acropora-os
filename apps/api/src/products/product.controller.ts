@@ -29,6 +29,7 @@ import { ProductListQueryDto } from "./dto/product-list-query.dto.js";
 import { SetVariantPriceDto } from "./dto/set-variant-price.dto.js";
 import { SetVariantSaleDto } from "./dto/set-variant-sale.dto.js";
 import { UpdateProductDto } from "./dto/update-product.dto.js";
+import { UpdateProductNamesDto } from "./dto/update-product-names.dto.js";
 import { ProductService } from "./product.service.js";
 
 @Controller("products")
@@ -60,6 +61,19 @@ export class ProductController {
   @RequirePermissions(PERMISSIONS.PRODUCTS_MANAGE)
   updateProduct(@Param("id") id: string, @Body() input: UpdateProductDto) {
     return this.products.updateProduct(id, input);
+  }
+
+  /**
+   * A nevek kozvetlen irasa (kartya 20b0dd47): a UNAS-gazdaju termeken is megy (a nevek Acropora-tulajdonuak).
+   */
+  @Patch(":id/names")
+  @RequirePermissions(PERMISSIONS.PRODUCTS_MANAGE)
+  updateProductNames(
+    @Param("id") id: string,
+    @Body() input: UpdateProductNamesDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.products.updateProductNames(id, input, user.id);
   }
 
   @Put(":id/variants/:variantId/price")

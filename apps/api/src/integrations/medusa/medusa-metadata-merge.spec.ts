@@ -116,6 +116,8 @@ describe("melyik kulcs a mienk", () => {
     assert.equal(isOwnedMetadataKey("seo_title"), true);
     assert.equal(isOwnedMetadataKey("unas_short_description"), true);
     assert.equal(isOwnedMetadataKey("unique_piece"), true);
+    // the next arrival of a product (V2.6 S3a): ours, so it is taken off the shop when no arrival qualifies any more
+    assert.equal(isOwnedMetadataKey("livestock_arrival"), true);
   });
 
   it("nem tart a magáénak idegen kulcsot", () => {
@@ -123,6 +125,8 @@ describe("melyik kulcs a mienk", () => {
     assert.equal(isOwnedMetadataKey("shopify_id"), false);
     // A reszszo-egyezes NEM eleg: az elotag a kulcs ELEJEN all.
     assert.equal(isOwnedMetadataKey("egyeb_seo_title"), false);
+    // a FULL key, not a prefix: a key that merely starts with it is a stranger's
+    assert.equal(isOwnedMetadataKey("livestock_arrival_note"), false);
   });
 });
 

@@ -56,6 +56,17 @@ describe("BillingDocumentPdfService", () => {
     ]);
   });
 
+  it("serves an issued TIG invoice's PDF from where the TIG issue stored it (an own row since #2421)", async () => {
+    const { pdfs, asked } = service({
+      ...ISSUED,
+      pdfStorageKey: "invoices/doc-1/invoice.pdf",
+    });
+    assert.equal((await pdfs.pdf("doc-1")).bytes, PDF);
+    assert.deepEqual(asked, [
+      { owner: "invoice", ownerId: "doc-1", documentId: "invoice.pdf" },
+    ]);
+  });
+
   it("refuses a draft with 409, without touching the store", async () => {
     const { pdfs, asked } = service({ ...ISSUED, status: "DRAFT" });
     await assert.rejects(pdfs.pdf("doc-1"), ConflictException);

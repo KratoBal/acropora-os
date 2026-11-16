@@ -15,11 +15,17 @@
 --
 -- HOW IT IS APPLIED. Not a Prisma migration: the role is per environment (its password is a secret
 -- of that environment), and a migration naming a role that does not exist would stop every
--- deployment. An operator applies it, after `prisma migrate deploy`, with a role that owns the
--- tables:
+-- deployment. The internal API applies it on every start, right after `prisma migrate deploy`,
+-- wherever the role exists (apps/api/docker-entrypoint-migrate.cjs, card 4f0ad1be), as one
+-- transaction; a failure leaves the rights as they were and is an ERROR line on the API's log.
+-- Creating the role stays a one-time manual step:
 --
 --   CREATE ROLE "reefclub_app" LOGIN PASSWORD '...';      -- once per environment, secret
---   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/database/sql/reefclub-role.sql
+--   psql "$DATABASE_URL" -1 -v ON_ERROR_STOP=1 -f packages/database/sql/reefclub-role.sql  -- by hand
+--
+-- BY HAND ALWAYS WITH -1 (--single-transaction; barracuda, #2437): without it psql commits each
+-- statement, and a run that stops halfway has already taken the role's rights away with the REVOKE
+-- below. The automatic run (`prisma db execute`) is one transaction by itself.
 --
 -- It is idempotent: it first takes every table right away from the role, then grants this list.
 -- A NEW TABLE OR COLUMN THE REEFCLUB PROCESS USES NEEDS A LINE HERE: the integration spec
@@ -28,6 +34,13 @@
 --
 -- Foreign-key actions (the account's final deletion cascading to its aquariums and their rows) run
 -- with the table owner's rights, so the cascade needs no DELETE right on the child tables.
+
+-- NO UNBOUNDED WAIT FOR A LOCK (barracuda, #2437). The row-level-security and policy statements
+-- below take ACCESS EXCLUSIVE locks on the aquarium tables, and the file runs at every API start.
+-- Behind a long query or an idle transaction on one of them it would wait, and every later read of
+-- that table would queue behind the wait. A lock not granted in 5 seconds stops the file with an
+-- error instead: one transaction, so nothing changes, and the next start tries again.
+SET lock_timeout = '5s';
 
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM "reefclub_app";
 GRANT USAGE ON SCHEMA public TO "reefclub_app";
@@ -58,11 +71,22 @@ GRANT EXECUTE ON FUNCTION "reefclub_redeem_link_code"(text, text) TO "reefclub_a
 GRANT SELECT, INSERT ON "ReefClubRecommendation" TO "reefclub_app";
 GRANT UPDATE ("status", "feedbackAt") ON "ReefClubRecommendation" TO "reefclub_app";
 GRANT SELECT, INSERT ON "ReefClubAdministeredDose" TO "reefclub_app";
+-- The per-product consent of the run-out reminder (V3.2, slice 2): the member turns it on (INSERT), off (the unsubscribe time) and
+-- on again (the same row's consent time, version and aquarium, and the unsubscribe time cleared). The unsubscribe key is computed from the row id and
+-- a secret, so no column holds it. The row is
+-- never deleted from here; the account's, the product's or the aquarium's deletion cascades with the owner's rights.
+GRANT SELECT, INSERT ON "ReefClubRunOutReminder" TO "reefclub_app";
+GRANT UPDATE ("aquariumId", "consentVersion", "consentAt", "unsubscribedAt", "updatedAt")
+  ON "ReefClubRunOutReminder" TO "reefclub_app";
 -- The projection of the product dose list (plan 6.2, slice 8, path B): the role may only READ it,
 -- and of the run record only what the staleness gate needs (not the error text). The OS (internal)
 -- process, the table owner, rebuilds both; the role has no INSERT, UPDATE or DELETE on them, so
 -- nothing the ReefClub process does can change a dose number it will then recommend from.
 GRANT SELECT ON "ReefClubDoseRow" TO "reefclub_app";
+-- The run-out reminder's product list (V3.2, slice 4): rebuilt with the dose list in the same run, READ only.
+GRANT SELECT ON "ReefClubRunOutProduct" TO "reefclub_app";
+-- The products the ReefClub may name to a customer for a measured deviation (V3.4 S2b): rebuilt with the dose list in the same run, READ only.
+GRANT SELECT ON "ReefClubCustomerCandidate" TO "reefclub_app";
 GRANT SELECT ("id", "status", "finishedAt", "rowCount") ON "ReefClubDoseProjectionRun" TO "reefclub_app";
 
 -- The customer: only what a shop link shows and checks (plan 2.1: never the phone or e-mail).
@@ -134,6 +158,7 @@ ALTER TABLE "ReefClubCustomerLink" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "ReefClubLinkCode" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "ReefClubRecommendation" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "ReefClubAdministeredDose" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "ReefClubRunOutReminder" ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Aquarium_all_roles" ON "Aquarium";
 CREATE POLICY "Aquarium_all_roles" ON "Aquarium" AS PERMISSIVE FOR ALL TO PUBLIC
@@ -158,6 +183,9 @@ CREATE POLICY "ReefClubRecommendation_all_roles" ON "ReefClubRecommendation" AS 
   FOR ALL TO PUBLIC USING (true) WITH CHECK (true);
 DROP POLICY IF EXISTS "ReefClubAdministeredDose_all_roles" ON "ReefClubAdministeredDose";
 CREATE POLICY "ReefClubAdministeredDose_all_roles" ON "ReefClubAdministeredDose" AS PERMISSIVE
+  FOR ALL TO PUBLIC USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "ReefClubRunOutReminder_all_roles" ON "ReefClubRunOutReminder";
+CREATE POLICY "ReefClubRunOutReminder_all_roles" ON "ReefClubRunOutReminder" AS PERMISSIVE
   FOR ALL TO PUBLIC USING (true) WITH CHECK (true);
 
 -- The aquarium: only a ReefClub one (it has an owner account) is created, changed or deleted.

@@ -74,11 +74,14 @@ function failedAtOf(metadata: unknown): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-/** Azok a termékek, amelyeknek az ára elbukott, és a visszalépési idő letelt. */
+/**
+ * Azok a termékek, amelyeknek az ára elbukott, és a visszalépési idő letelt. A `limit` nélkül mindet adja: az ütemező
+ * előbb kiszűri a nem árazhatókat (inaktivált, kötés nélküli), és csak utána vág, különben azok kiszorítanák a valódiakat.
+ */
 export async function priceRetryProducts(
   db: PriceSyncDatabase,
   now: Date,
-  limit: number,
+  limit = Number.POSITIVE_INFINITY,
 ): Promise<string[]> {
   const rows = await db.externalReference.findMany({
     where: { ...MEDUSA_PRICE_REFERENCE },
@@ -94,6 +97,118 @@ export async function priceRetryProducts(
     )
     .map((row) => row.entityId)
     .slice(0, limit);
+}
+
+/**
+ * A KÉTÉRTELMŰ ÁR ÜTKÖZŐ SORAINAK ALAKJA (550b80d1), azonosító nélkül. A stage-en az `ambiguous-price` a leggyakoribb
+ * ár-kudarc, és az nem látszik, hogy a második forint sor árlistás, szabályos (régió), mennyiségi, vagy egy sima
+ * kettőzés: ettől függ, hogy a vetítés számlálása téved-e, vagy a megállás véd. EZ CSAK MÉRÉS: hogy melyik sor a
+ * miénk, azt nem változtatja.
+ *
+ *   rows       az ütköző forint sorok száma
+ *   priceList  van `price_list_id`-je
+ *   rules      `rules_count` > 0
+ *   quantity   van `min_quantity` vagy `max_quantity`
+ *   plain      a három jel ismert, és egyik sem áll
+ *   unknown    a válasz egyik jelet sem hozta: a `*prices` alak nem adja, ezt kell tudni
+ *
+ * Egy sor több jelben is számíthat (árlistás ÉS szabályos), tehát a jelek összege nem a `rows`.
+ */
+export type PriceConflictShape = {
+  rows: number;
+  priceList: number;
+  rules: number;
+  quantity: number;
+  plain: number;
+  unknown: number;
+};
+
+export function priceConflictShape(
+  rows: readonly {
+    price_list_id?: string | null;
+    rules_count?: number | null;
+    min_quantity?: number | null;
+    max_quantity?: number | null;
+  }[],
+): PriceConflictShape {
+  const shape: PriceConflictShape = {
+    rows: rows.length,
+    priceList: 0,
+    rules: 0,
+    quantity: 0,
+    plain: 0,
+    unknown: 0,
+  };
+  for (const row of rows) {
+    if (
+      row.price_list_id === undefined &&
+      row.rules_count === undefined &&
+      row.min_quantity === undefined &&
+      row.max_quantity === undefined
+    ) {
+      shape.unknown += 1;
+      continue;
+    }
+    const list = row.price_list_id != null;
+    const rules = (row.rules_count ?? 0) > 0;
+    const quantity = row.min_quantity != null || row.max_quantity != null;
+    if (list) shape.priceList += 1;
+    if (rules) shape.rules += 1;
+    if (quantity) shape.quantity += 1;
+    if (!list && !rules && !quantity) shape.plain += 1;
+  }
+  return shape;
+}
+
+/** Két alak összege (a kör több kétértelmű változatáé). */
+export function addPriceConflictShape(
+  sum: PriceConflictShape | null,
+  next: PriceConflictShape,
+): PriceConflictShape {
+  if (!sum) return { ...next };
+  return {
+    rows: sum.rows + next.rows,
+    priceList: sum.priceList + next.priceList,
+    rules: sum.rules + next.rules,
+    quantity: sum.quantity + next.quantity,
+    plain: sum.plain + next.plain,
+    unknown: sum.unknown + next.unknown,
+  };
+}
+
+/**
+ * EGY ÁR-KUDARC FAJTÁJA (550b80d1), a health számára: csak a kód, a cikkszám és a részletek nélkül. A szövegek az
+ * ár-futás (`medusa-pricing.cli.ts`, `priceTargets`) és az ütemező kudarc-üzenetei; egy új, ismeretlen alak `other`.
+ *
+ *   "<sku>: MEGÁLLT (<ok>) <részlet>"          a feloldó vagy a vetítés megállt:      <ok>
+ *   "<sku>: <ok>"                              a vetítés megállt, vagy az előzmény:   <ok>
+ *   "<argumentum>: nincs aktív változata ..."  nincs aktív változat:                  no-active-variant
+ *   "sku:<x>: nincs ilyen cikkszámú ..."       nincs ilyen cikkszám:                  no-such-sku
+ *   "az ar-futas kivetellel allt le: <név>"    az ár-futás dobott:                    run-threw
+ *   "az ar-futas elbukott (kod <n>)"           termék nélküli bukás (pl. a bolt):     run-failed
+ */
+export function priceFailureKind(reason: string): string {
+  const megallt = /MEGÁLLT \(([a-z0-9-]+)\)/.exec(reason);
+  if (megallt) return megallt[1]!;
+  if (reason.includes("nincs aktív változata")) return "no-active-variant";
+  if (reason.includes("nincs ilyen cikkszámú")) return "no-such-sku";
+  if (reason.startsWith("az ar-futas kivetellel allt le")) return "run-threw";
+  if (reason.startsWith("az ar-futas elbukott")) return "run-failed";
+  const ok = /: ([a-z0-9]+(?:-[a-z0-9]+)+)$/.exec(reason);
+  return ok ? ok[1]! : "other";
+}
+
+/** A kör ár-kudarcai fajtánként: minden üzenet egyszer számít (egy termék több változata többször). */
+export function priceFailureCounts(
+  failures: ReadonlyMap<string, readonly string[]>,
+): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const reasons of failures.values())
+    for (const reason of reasons) {
+      const kind = priceFailureKind(reason);
+      counts[kind] = (counts[kind] ?? 0) + 1;
+    }
+  return counts;
 }
 
 /**

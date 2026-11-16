@@ -113,6 +113,7 @@ describe("doseProjectionHealth", () => {
       maxAgeHours: 26,
       ageHours: 30.5,
       rowCount: 12,
+      customerCandidates: { rows: 5, shopText: 4 },
       lastSuccess: {
         trigger: "SCHEDULED",
         startedAt: "2026-10-20T00:00:00.000Z",
@@ -131,6 +132,12 @@ describe("doseProjectionHealth", () => {
       ageHours: 30.5,
       rowCount: 12,
       failingSinceLastSuccess: true,
+      // the customer candidates: counts and the last rebuild's time (product data only), nothing of the failure
+      customerCandidates: {
+        rows: 5,
+        shopText: 4,
+        builtAt: "2026-10-20T00:00:01.000Z",
+      },
     });
   });
 

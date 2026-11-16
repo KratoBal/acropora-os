@@ -22,8 +22,10 @@ describe("Sutyerák NDJSON browser stream", () => {
     const text = new TextEncoder().encode('{"type":"text","delta":"árvíz"}\n');
     enqueue(text.slice(0, 25));
     enqueue(text.slice(25));
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(events).toEqual([{ type: "text", delta: "árvíz" }]);
+    // the first event arrives before the stream closes; how soon depends on the fetch's answer, not on one tick
+    await vi.waitFor(() =>
+      expect(events).toEqual([{ type: "text", delta: "árvíz" }]),
+    );
     enqueue(
       new TextEncoder().encode(
         '{"type":"done","answer":"árvíz","durationMs":1,"toolCalls":0}',

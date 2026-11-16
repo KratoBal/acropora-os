@@ -8,7 +8,13 @@ import { ProductBarcodeService } from "./product-barcode.service.js";
 import { ProductExtensionController } from "./product-extension.controller.js";
 import { ProductExtensionRepository } from "./product-extension.repository.js";
 import { ProductExtensionService } from "./product-extension.service.js";
+import { ProductHusbandryController } from "./product-husbandry.controller.js";
+import { ProductHusbandryRepository } from "./product-husbandry.repository.js";
+import { ProductHusbandryService } from "./product-husbandry.service.js";
 import { ProductShippingProfileBulkController } from "./product-shipping-profile-bulk.controller.js";
+import { ProductDiscontinuationController } from "./product-discontinuation.controller.js";
+import { ProductDiscontinuationRepository } from "./product-discontinuation.repository.js";
+import { ProductDiscontinuationService } from "./product-discontinuation.service.js";
 import { ProductShippingProfileController } from "./product-shipping-profile.controller.js";
 import { ShippingProfileFillController } from "./shipping-profile-fill.controller.js";
 import {
@@ -22,6 +28,11 @@ import {
   PrismaEnrichmentReader,
 } from "./enrichment/enrichment-read.repository.js";
 import { ProductEnrichmentQueueController } from "./product-enrichment-queue.controller.js";
+import { ProductEnrichmentRunsController } from "./product-enrichment-runs.controller.js";
+import {
+  ENRICHMENT_RUNS_READER,
+  PrismaEnrichmentRunsReader,
+} from "./enrichment/enrichment-runs.read.js";
 import { ProductEnrichmentReviewController } from "./product-enrichment-review.controller.js";
 import { ProductEnrichmentReviewService } from "./product-enrichment-review.service.js";
 import {
@@ -43,6 +54,16 @@ import {
   CATEGORY_BACKFILL_DB,
   CategoryRedirectBackfillService,
 } from "./redirect/category-redirect-backfill.service.js";
+import { ProductRedirectBackfillController } from "./redirect/product-redirect-backfill.controller.js";
+import { RedirectUndoController } from "./redirect/redirect-undo.controller.js";
+import {
+  REDIRECT_UNDO_DB,
+  RedirectUndoService,
+} from "./redirect/redirect-undo.service.js";
+import {
+  PRODUCT_BACKFILL_DB,
+  ProductRedirectBackfillService,
+} from "./redirect/product-redirect-backfill.service.js";
 import { UrlRedirectController } from "./redirect/url-redirect.controller.js";
 import {
   REDIRECT_TRANSACTOR,
@@ -57,30 +78,42 @@ import {
 } from "./slug/webshop-slug.service.js";
 import { DoseEffectsController } from "./dose-effects/dose-effects.controller.js";
 import { DoseEffectsService } from "./dose-effects/dose-effects.service.js";
+import { ManufacturerClaimsController } from "./manufacturer-claims/manufacturer-claims.controller.js";
+import { ManufacturerClaimsService } from "./manufacturer-claims/manufacturer-claims.service.js";
 import { DoseProjectionService } from "./dose-effects/dose-projection.service.js";
+import { CustomerCandidateSource } from "../aquariums/recommendation/customer-candidate-source.js";
 @Module({
   controllers: [
     ProductController,
     DoseEffectsController,
+    ManufacturerClaimsController,
     ProductBarcodeController,
     ProductExtensionController,
     ProductShippingProfileController,
+    ProductDiscontinuationController,
+    ProductHusbandryController,
     ProductShippingProfileBulkController,
     ShippingProfileFillController,
     CatalogOptionsController,
     ProductEnrichmentReviewController,
     ProductEnrichmentQueueController,
+    ProductEnrichmentRunsController,
     ProductKnowledgeController,
     AttributeController,
     ProductAttributeSetController,
     WebshopSlugController,
     UrlRedirectController,
     CategoryRedirectBackfillController,
+    ProductRedirectBackfillController,
+    RedirectUndoController,
   ],
   providers: [
     AttributeSetAdminService,
     DoseEffectsService,
+    ManufacturerClaimsService,
     DoseProjectionService,
+    // the dose projection also rebuilds the customer candidates (V3.4 S2b); the source has no dependencies of its own
+    CustomerCandidateSource,
     ProductRepository,
     ProductService,
     { provide: PRODUCT_ENVIRONMENT, useValue: process.env },
@@ -89,12 +122,17 @@ import { DoseProjectionService } from "./dose-effects/dose-projection.service.js
     ProductBarcodeService,
     ProductExtensionRepository,
     ProductShippingProfileRepository,
+    ProductDiscontinuationRepository,
+    ProductDiscontinuationService,
+    ProductHusbandryRepository,
+    ProductHusbandryService,
     ShippingProfileFillRepository,
     ShippingProfileFillService,
     ProductShippingProfileService,
     ProductExtensionService,
     ProductEnrichmentReviewService,
     { provide: ENRICHMENT_READER, useClass: PrismaEnrichmentReader },
+    { provide: ENRICHMENT_RUNS_READER, useClass: PrismaEnrichmentRunsReader },
     ProductKnowledgeService,
     { provide: KNOWLEDGE_STORE, useClass: PrismaKnowledgeStore },
     WebshopSlugService,
@@ -103,7 +141,16 @@ import { DoseProjectionService } from "./dose-effects/dose-projection.service.js
     { provide: REDIRECT_TRANSACTOR, useValue: prismaRedirectTransactor },
     CategoryRedirectBackfillService,
     { provide: CATEGORY_BACKFILL_DB, useValue: prisma },
+    ProductRedirectBackfillService,
+    { provide: PRODUCT_BACKFILL_DB, useValue: prisma },
+    RedirectUndoService,
+    { provide: REDIRECT_UNDO_DB, useValue: prisma },
   ],
-  exports: [ProductService, ProductExtensionService, ProductBarcodeRepository],
+  exports: [
+    ProductService,
+    ProductExtensionService,
+    ProductBarcodeRepository,
+    DoseProjectionService,
+  ],
 })
 export class ProductModule {}

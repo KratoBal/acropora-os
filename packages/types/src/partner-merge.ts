@@ -19,6 +19,7 @@ export const PARTNER_MERGE_REFERENCE_TABLES = [
   "Contract",
   "Quote",
   "PartnerOrder",
+  "Rental",
   "ReefClubCustomerLink",
   "ReefClubLinkCode",
   "User",

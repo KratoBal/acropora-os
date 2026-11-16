@@ -88,7 +88,9 @@ beforeEach(() => {
     ...item(),
     body: "a tétel szövege",
     comments: [],
+    history: [],
     blockers: { waitsOn: { on: "approver" }, waitsForImage: false },
+    claims: [],
   });
 });
 

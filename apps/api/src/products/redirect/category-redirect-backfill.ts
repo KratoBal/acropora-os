@@ -1,4 +1,7 @@
-import { categoryHandle } from "../../integrations/medusa/medusa-category-handle.js";
+import {
+  categoryHandle,
+  medusaDefaultHandle,
+} from "../../integrations/medusa/medusa-category-handle.js";
 import {
   categoryRowsFromOurTree,
   categoryTitle,
@@ -6,7 +9,7 @@ import {
   utkozoNevek,
 } from "../../integrations/medusa/medusa-category-tree.js";
 import { MemoryRedirectStore } from "./redirect-memory-store.js";
-import { normalizeRedirectPath } from "./redirect-path.js";
+import { normalizeRedirectPath, redirectPathLower } from "./redirect-path.js";
 import {
   RedirectError,
   redirectInvariantViolations,
@@ -120,18 +123,74 @@ export interface CategoryRedirectReport {
   repointed: number;
   /** Egy út, amihez már van MÁS célú szabály: nem írtuk felül. */
   conflicts: { source: string; existing: string; wanted: string }[];
+  /**
+   * `repoint` módban: a meglévő `UNAS_CATEGORY` szabály, aminek a célját a mai handle-re írtuk át (a kategória-átvétel
+   * (adopt) óta a régi `név---szülő` handle-alak 404-et ad). Kézi vagy más eredetű szabályhoz nem nyúl: az a `conflicts`-ban marad.
+   */
+  rewritten: {
+    source: string;
+    from: string;
+    to: string;
+    /** `manual-allowlist`: a szabály MANUAL eredetű volt, és a kérés kifejezett `repointManual` listáján állt (lásd `RepointOptions`). */
+    via?: "manual-allowlist";
+  }[];
+  /** A `repointManual` lista azon forrásai, amelyekre a terv nem írt át semmit (elírás, nincs szabály, nem MANUAL, nem oldódik fel): olvasható, nem néma. */
+  repointManualUnmatched: string[];
   refused: { source: string; kind: string; message: string }[];
   /** `/spl/` vagy `/sct/` út, amelynek azonosítója nem kategóriánk. */
   unknownId: string[];
-  /** Névszlugos út, amihez több kategória illik. */
-  ambiguous: { source: string; candidates: string[] }[];
+  /** Névszlugos út, amihez több kategória illik. A `fallback` a meglévő szabály régi kezelőjének ítélete (lásd `LegacyVerdict`). */
+  ambiguous: {
+    source: string;
+    candidates: string[];
+    fallback?: LegacyVerdict;
+    rule?: RuleOrigin;
+  }[];
   /** Nem kategória-szerű út (termék, blog, statikus lap): nem érintjük. */
   skipped: number;
+  /**
+   * A KIHAGYOTT UTAK SORONKÉNT (card f6cb0a51, a #2595 szárazfutása után): MIÉRT maradt ki, mi áll az úton a meglévő szabályok közt
+   * (cél, eredet, aktív-e), és mit mondott a régi kezelős tartalék. Egy szám nem mondja meg, melyik ágon akadt el a 21 kategória-célú út.
+   */
+  skippedDetails: SkippedDetail[];
   /** Két kategória ugyanazt a handle-t kapná: a cél nem egyedi, egyik sem íródik. */
   handleCollisions: string[];
   /** `medusa` képletnél: az út kategóriájához nincs (vagy kettő) Medusa-kategória, nincs szabály. */
   noMedusaCategory: string[];
   invariantViolations: RedirectRule[];
+}
+
+/** Miért nem döntött a meglévő szabály régi kezelője (vagy hogy döntött). */
+export type LegacyVerdict =
+  /** A tartalékot nem kérdeztük meg: az út a névtől függetlenül kimaradt (nem út, spg/spd lap, statikus lap). */
+  | "not-consulted"
+  | "no-rule"
+  | "rule-inactive"
+  | `rule-reason-${string}`
+  | "destination-not-category-path"
+  | "legacy-no-match"
+  | "legacy-multiple"
+  | "legacy-found";
+
+/**
+ * EGY MEGLÉVŐ SZABÁLY EREDETE, ahogy a riport kiírja (card f6cb0a51): a cél, az eredet-jelölő, az aktív-e, és KI és MIKOR hozta létre. A
+ * keletkezés ideje és szerzője mondja meg, hogy egy MANUAL szabály tömeges importból jött (egy szerző, egy időablak) vagy kézzel (szétszórva).
+ */
+export interface RuleOrigin {
+  destination: string;
+  reason: string;
+  isActive: boolean;
+  createdAt?: string;
+  createdById?: string | null;
+}
+
+export interface SkippedDetail {
+  source: string;
+  /** Az ok: nem út, spg/spd lap, statikus lap, vagy hogy a név nem talált kategóriát. */
+  why: "not-a-path" | "spg-spd-page" | "static-page" | "no-name-match";
+  /** A meglévő szabály ezen az úton (nincs: hiányzik). */
+  rule?: RuleOrigin;
+  fallback: LegacyVerdict;
 }
 
 interface Resolved {
@@ -239,9 +298,38 @@ export async function planCategoryRedirectBackfill(
   options: {
     form: CategoryHandleForm;
     medusa?: readonly MedusaCategoryRef[];
+    /** A meglévő `UNAS_CATEGORY` szabály célját átírja a mai handle-re (alapból hamis: felülírás nincs). */
+    repoint?: boolean;
+    /**
+     * KIFEJEZETT ENGEDÉLYLISTA a MANUAL szabályokra (card f6cb0a51): azok a pontos források, amelyek MANUAL eredetű szabályának célját a
+     * `repoint` is átírhatja. A MANUAL-kizárás általában áll (egy kézi szabály Balázsé lehet); a lista egy ember döntése, forrásonként,
+     * és CSAK `repoint` mellett él. Más eredetű (UNAS_PRODUCT, SLUG_CHANGE) szabályra a lista sem hat.
+     */
+    repointManual?: readonly string[];
   } = { form: "current" },
 ): Promise<{ store: MemoryRedirectStore; report: CategoryRedirectReport }> {
   const store = new MemoryRedirectStore(existing);
+  const manualAllowed = new Set<string>();
+  // az ÉRVÉNYTELEN lista-elem (üres, szóközt tartalmazó, vezérlőkarakteres) nem tűnhet el nyomtalanul: a jelentés változatlan alakban kiírja
+  const manualInvalid: string[] = [];
+  for (const raw of options.repointManual ?? []) {
+    const normalized = normalizeRedirectPath(raw);
+    if (normalized === null) manualInvalid.push(raw);
+    else manualAllowed.add(redirectPathLower(normalized));
+  }
+  /** Átírhatja-e a `repoint` ezt a meglévő szabályt: saját eredetű, vagy MANUAL és kifejezetten engedélyezett. */
+  const rewritable = (
+    rule: RedirectRule | undefined,
+    source: string,
+  ): rule is RedirectRule =>
+    options.repoint === true &&
+    rule?.isActive === true &&
+    (rule.reason === "UNAS_CATEGORY" ||
+      (rule.reason === "MANUAL" &&
+        manualAllowed.has(redirectPathLower(source))));
+  const existingBySource = new Map(
+    existing.map((r) => [redirectPathLower(r.sourcePath), r]),
+  );
   const report: CategoryRedirectReport = {
     paths: paths.length,
     categories: categories.length,
@@ -250,10 +338,13 @@ export async function planCategoryRedirectBackfill(
     unchanged: 0,
     repointed: 0,
     conflicts: [],
+    rewritten: [],
+    repointManualUnmatched: [],
     refused: [],
     unknownId: [],
     ambiguous: [],
     skipped: 0,
+    skippedDetails: [],
     handleCollisions: [],
     noMedusaCategory: [],
     invariantViolations: [],
@@ -291,6 +382,91 @@ export async function planCategoryRedirectBackfill(
     return out;
   };
 
+  /**
+   * A REGI KEZELO: a kategoria cime a szuloveles (`{nev} - {szulo}`), a Medusa sajat kebab-alakjaban. A meglevo UNAS_CATEGORY
+   * szabaly celja (`/hu/categories/<regi kezelo>`) ezt hordozza, tehat egy olyan utat is vissza lehet vele keresni, amelynek a neve
+   * nem egyezik a kategoriaeval (marka-alut: `/aramoltatok/aquamedic`; atnevezes: `aqualight` kontra `AquaLight`).
+   */
+  const byLegacyHandle = new Map<string, CategoryForRedirect[]>();
+  for (const c of categories) {
+    const parent = c.parentId ? byId.get(c.parentId) : undefined;
+    const key = medusaDefaultHandle(
+      legacyCategoryTitle(c.name, parent?.name ?? null),
+    );
+    byLegacyHandle.set(key, [...(byLegacyHandle.get(key) ?? []), c]);
+  }
+  /**
+   * A meglevo, SAJAT eredetu szabaly celjabol a kategoriak, amelyeknek a regi kezeloje az, ES az itelet, hogy miert (nem) talalt:
+   * a jelentes ebbol mondja meg, melyik agon akadt el egy ut.
+   */
+  const legacyLookup = (
+    source: string,
+  ): { categories: CategoryForRedirect[]; verdict: LegacyVerdict } => {
+    const rule = existingBySource.get(redirectPathLower(source));
+    if (!rule) return { categories: [], verdict: "no-rule" };
+    if (!rule.isActive) return { categories: [], verdict: "rule-inactive" };
+    if (
+      rule.reason !== "UNAS_CATEGORY" &&
+      !(
+        rule.reason === "MANUAL" &&
+        options.repoint === true &&
+        manualAllowed.has(redirectPathLower(source))
+      )
+    )
+      return {
+        categories: [],
+        verdict: `rule-reason-${rule.reason ?? "none"}`,
+      };
+    const match = /^\/hu\/categories\/(.+)$/.exec(rule.destinationPath);
+    if (!match)
+      return { categories: [], verdict: "destination-not-category-path" };
+    let handle = match[1]!;
+    try {
+      handle = decodeURIComponent(handle);
+    } catch {
+      // nem dekodolhato alak: a nyers szoveg marad, es valoszinuleg nem talal
+    }
+    const found = byLegacyHandle.get(handle.toLowerCase()) ?? [];
+    return {
+      categories: found,
+      verdict:
+        found.length === 0
+          ? "legacy-no-match"
+          : found.length > 1
+            ? "legacy-multiple"
+            : "legacy-found",
+    };
+  };
+  const viaExistingRule = (source: string): CategoryForRedirect[] =>
+    legacyLookup(source).categories;
+  /** A meglevo szabaly eredete a riporthoz (nincs szabaly: nincs mezo). */
+  const ruleOrigin = (source: string): { rule?: RuleOrigin } => {
+    const rule = existingBySource.get(redirectPathLower(source));
+    if (!rule) return {};
+    return {
+      rule: {
+        destination: rule.destinationPath,
+        reason: rule.reason ?? "none",
+        isActive: rule.isActive,
+        ...(rule.createdAt !== undefined
+          ? { createdAt: new Date(rule.createdAt).toISOString() }
+          : {}),
+        ...(rule.createdById !== undefined
+          ? { createdById: rule.createdById }
+          : {}),
+      },
+    };
+  };
+  /** Miert maradt ki egy ut: ugyanazok a feltetelek, mint a `resolve`-ban, sorrendben. */
+  const whySkipped = (source: string): SkippedDetail["why"] => {
+    const segs = source.split("/").filter(Boolean).map(szegmens);
+    if (segs.length === 0 || segs.some((x) => x === "")) return "not-a-path";
+    if (/^(spg|spd|sct|spl)$/i.test(source.split("/")[1] ?? ""))
+      return "spg-spd-page";
+    if (source.toLowerCase().includes(".php")) return "static-page";
+    return "no-name-match";
+  };
+
   const resolve = (
     source: string,
   ): Resolved | "unknown" | "no-medusa" | CategoryForRedirect[] | null => {
@@ -315,13 +491,19 @@ export async function planCategoryRedirectBackfill(
         .reverse()
         .every((s, i) => chain[i] === s);
     });
-    if (candidates.length === 0) return null;
-    if (candidates.length === 1) {
-      const c = candidates[0]!;
+    const pick = (c: CategoryForRedirect) => {
       const handle = handles.get(c.id);
-      return handle ? { id: c.id, handle } : "no-medusa";
-    }
-    return candidates;
+      return handle ? { id: c.id, handle } : ("no-medusa" as const);
+    };
+    if (candidates.length === 1) return pick(candidates[0]!);
+    // a NEV nem dont (nincs vagy tobb jelolt): a meglevo szabaly regi kezeloje dont, CSAK ha pontosan egy kategoriat jelol
+    const viaRule = viaExistingRule(source);
+    if (candidates.length === 0)
+      return viaRule.length === 1 ? pick(viaRule[0]!) : null;
+    const narrowed = candidates.filter((c) =>
+      viaRule.some((v) => v.id === c.id),
+    );
+    return narrowed.length === 1 ? pick(narrowed[0]!) : candidates;
   };
 
   // a sorrend rögzített: kétszer ugyanaz a lista ugyanazt a jelentést adja
@@ -336,6 +518,16 @@ export async function planCategoryRedirectBackfill(
     const found = resolve(source);
     if (found === null) {
       report.skipped += 1;
+      const why = whySkipped(source);
+      report.skippedDetails.push({
+        source,
+        why,
+        ...ruleOrigin(source),
+        fallback:
+          why === "no-name-match"
+            ? legacyLookup(source).verdict
+            : "not-consulted",
+      });
       continue;
     }
     if (found === "unknown") {
@@ -352,6 +544,8 @@ export async function planCategoryRedirectBackfill(
         candidates: found
           .map((c) => handles.get(c.id) ?? `(nincs Medusa: ${c.name})`)
           .sort(),
+        fallback: legacyLookup(source).verdict,
+        ...ruleOrigin(source),
       });
       continue;
     }
@@ -364,15 +558,29 @@ export async function planCategoryRedirectBackfill(
       continue;
     }
     const destination = `/hu/categories/${found.handle}`;
+    // csak a SAJAT eredetű (UNAS_CATEGORY) szabály írható át; a kézi vagy más eredetű marad, és a `conflicts`-ba kerül
+    const meglevo = existingBySource.get(redirectPathLower(source));
+    const atirhato = rewritable(meglevo, source);
     try {
       const eredmeny = await writeRedirect(store, {
         source,
         destination,
         reason: "UNAS_CATEGORY",
-        onExisting: "keep",
+        onExisting: atirhato ? "replace" : "keep",
+        // az átírás a KÉSZÍTŐT megőrzi (egy MANUAL szabály szerzője a riportban és a táblán is megmarad; eddig az írás nullázta)
+        ...(atirhato ? { createdById: meglevo!.createdById ?? null } : {}),
       });
       report.repointed += eredmeny.repointed;
       if (eredmeny.status === "unchanged") report.unchanged += 1;
+      else if (eredmeny.status === "updated" && meglevo)
+        report.rewritten.push({
+          source,
+          from: meglevo.destinationPath,
+          to: destination,
+          ...(meglevo.reason === "MANUAL"
+            ? { via: "manual-allowlist" as const }
+            : {}),
+        });
       else if (eredmeny.status === "conflict")
         report.conflicts.push({
           source,
@@ -392,8 +600,30 @@ export async function planCategoryRedirectBackfill(
       });
     }
   }
+  // a lista azon forrásai, amelyekre nem íródott át semmi: elírás, nincs szabály, nem MANUAL vagy nem oldódott fel
+  const rewrittenLower = new Set(
+    report.rewritten.map((r) => redirectPathLower(r.source)),
+  );
+  report.repointManualUnmatched = [
+    ...[...manualAllowed].filter((p) => !rewrittenLower.has(p)).sort(),
+    ...manualInvalid.map((raw) => `(ervenytelen ut) ${JSON.stringify(raw)}`),
+  ];
   report.invariantViolations = await redirectInvariantViolations(store);
   return { store, report };
+}
+
+/** A szabaly eredete egy sorban: eredet, aktiv-e, keszito es ido (ha az olvaso betoltotte). */
+function describeRuleOrigin(rule: RuleOrigin): string {
+  return [
+    rule.reason,
+    rule.isActive ? "" : "inaktiv",
+    rule.createdById !== undefined
+      ? `keszito: ${rule.createdById ?? "nincs"}`
+      : "",
+    rule.createdAt ? `letrehozva: ${rule.createdAt}` : "",
+  ]
+    .filter(Boolean)
+    .join(", ");
 }
 
 export function describeCategoryRedirectBackfill(
@@ -405,17 +635,29 @@ export function describeCategoryRedirectBackfill(
     `Utak: ${r.paths}; kategoria: ${r.categories}; nem kategoria-szeru (termek, blog, statikus lap): ${r.skipped}`,
     `Uj szabaly: ${r.created}; valtozatlan: ${r.unchanged}; atirt korabbi cel (lanc-osszevonas): ${r.repointed}`,
     `Ismeretlen UNAS-azonosito (nincs szabaly): ${r.unknownId.length}; ketertelmu (nincs szabaly): ${r.ambiguous.length}; nincs hozza Medusa-kategoria (nincs szabaly): ${r.noMedusaCategory.length}`,
-    `Elteroen mar meglevo (nem irtuk felul): ${r.conflicts.length}; elutasitva: ${r.refused.length}; kozos handle: ${r.handleCollisions.length}`,
+    `Elteroen mar meglevo (nem irtuk felul): ${r.conflicts.length}; atirt cel (repoint, sajat eredetu szabaly): ${r.rewritten.length}; elutasitva: ${r.refused.length}; kozos handle: ${r.handleCollisions.length}`,
     `Invarians (aktiv cel, ami forras): ${r.invariantViolations.length}`,
     ...r.createdRules.map((c) => `  uj: ${c.source} -> ${c.destination}`),
     ...r.unknownId.map((s) => `  ismeretlen azonosito: ${s}`),
     ...r.noMedusaCategory.map((s) => `  nincs Medusa-kategoria: ${s}`),
     ...r.ambiguous.map(
-      (a) => `  ketertelmu: ${a.source} -> ${a.candidates.join(" | ")}`,
+      (a) =>
+        `  ketertelmu: ${a.source} -> ${a.candidates.join(" | ")}${a.fallback ? ` (tartalek: ${a.fallback})` : ""}${a.rule ? `; szabaly: ${a.rule.destination} (${describeRuleOrigin(a.rule)})` : ""}`,
+    ),
+    ...r.skippedDetails.map(
+      (d) =>
+        `  kihagyva: ${d.source} [${d.why}] szabaly: ${d.rule ? `${d.rule.destination} (${describeRuleOrigin(d.rule)})` : "nincs"}; tartalek: ${d.fallback}`,
     ),
     ...r.conflicts.map(
       (c) =>
         `  elteroen meglevo: ${c.source} -> ${c.existing} (kellene: ${c.wanted})`,
+    ),
+    ...r.rewritten.map(
+      (c) =>
+        `  atirva: ${c.source}: ${c.from} -> ${c.to}${c.via ? " (MANUAL, kifejezett engedelylista)" : ""}`,
+    ),
+    ...r.repointManualUnmatched.map(
+      (u) => `  engedelylista, nem irt at semmit: ${u}`,
     ),
     ...r.refused.map(
       (x) => `  elutasitva: ${x.source} ${x.kind}: ${x.message}`,

@@ -465,6 +465,40 @@ describe("Ár-parancs: a kudarc termékenként jelződik", () => {
     ]);
   });
 
+  it("a kétértelmű ár ütköző sorainak alakja a jelzéssel együtt megy (550b80d1)", async () => {
+    const alak = {
+      rows: 2,
+      priceList: 1,
+      rules: 0,
+      quantity: 0,
+      plain: 1,
+      unknown: 0,
+    };
+    const jelzett: unknown[][] = [];
+    await priceTargets(
+      ["prod-1"],
+      {
+        resolve: async (argument) => ({
+          targets: [cel(argument, "SKU-1")],
+          errors: [],
+        }),
+        record: async () => "mirror",
+        project: async () => ({
+          action: "stopped" as const,
+          reason: "ambiguous-price" as const,
+          details: "ket forint ar",
+          conflict: alak,
+        }),
+      },
+      {
+        stdout: () => {},
+        stderr: () => {},
+        failed: (...args) => jelzett.push(args),
+      },
+    );
+    assert.deepEqual(jelzett, [["prod-1", "SKU-1: ambiguous-price", alak]]);
+  });
+
   /*
     AZ ELŐZMÉNY A BOLT ÍRÁSA UTÁN (T4.1-D3). MI PIROSÍT: a megállt változat
     előzmény-sort kap (a bolt nem mutatja az árat); a sikeres nem kap; vagy az

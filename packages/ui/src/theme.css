@@ -156,11 +156,26 @@
    * A szoveg legsotetebb arnyalata.
    *
    * EZ A MONDAT A TOKENRE IGAZ, DE AZ ERTEKRE NEM -- ES A KETTOT KONNYU
-   * OSSZEMOSNI. Merve 2026-09-15:
+   * OSSZEMOSNI. Merve 2026-09-15 (a szamok azota elavultak, lasd lent):
    *
    *     `text-ink`        44 hely, MIND szoveg
    *     `bg-ink`           0 hely
    *     ugyanez az ertek `dusk-950` neven:   9 szoveg + 8 HATTER
+   *
+   * UJRA MERVE 2026-11-12 (a szamok a forras-fajlokra, `apps/web/src`,
+   * `apps/partner/src`, `packages/ui/src`, `.ts` es `.tsx`):
+   *
+   *     `text-ink`        16 hely, MIND szoveg
+   *     `bg-ink`           0 hely
+   *     ugyanez az ertek `dusk-950` neven:   8 szoveg + 7 HATTER (6 `/40`
+   *                        fatyol, 1 tomor)
+   *
+   * A TENDENCIA IGAZ MARADT (a token csak szoveg, az ertek masodik szerepben
+   * hatter is), A SZAMOK NEM: az `app-shell` mobil-menu fatyla kikerult a
+   * nyolc hely koze, a `text-ink` helyeinek szama 44-rol 16-ra esett. EZ A
+   * SZAMOK ELAVULASANAK MASODIK ESETE UGYANEBBEN A BEKEZDESBEN: a szam nem
+   * tartozik ide, a MERES ELJARASA igen (lasd a kereseseket lent), es az,
+   * hogy a szamot mindig a mai napra kell ujra merni, mielott idezzuk.
    *
    * Vagyis a token maga csak szoveget szinez, es a fenti mondat rola all. Az
    * ERTEK viszont MASODIK szerepben is all, es az teljes egeszeben a MASIK
@@ -188,11 +203,13 @@
    * magyaraz. Ugyanaz a csapda, ami miatt a `removed-scale-names` orzo a
    * KODRA mer, nem a fajl szovegere.
    *
-   * A fajlok: `app-shell` (a mobil menu fatyla), `brand-editor-page`,
+   * A fajlok (2026-11-12): `brand-editor-page` (egyszer),
    * `brand-import-assistant-page` (ketszer), `unas-brand-review-page`
-   * (haromszor) es `user-editor-page`.
+   * (haromszor) es `user-editor-page` (egyszer). Az `app-shell` (a mobil
+   * menu fatyla) 2026-09-15-en meg ide tartozott, ma mar nem.
    *
-   * HETTO KOZULUK FATYOL, egy tomor felulet. A fatyol nem is "egy felulet
+   * A HETBOL HAT FATYOL (`bg-dusk-950/40`), EGY TOMOR FELULET. (2026-09-15-en
+   * a nyolc kozul hetto volt fatyol, egy tomor felulet.) A fatyol nem is "egy felulet
    * szine": sotetito reteg, aminek a LATSZO erteke a mogotte levotol fugg.
    * Ezert nem ugyanaz a dontes, mint a szoveg szine -- csak ugyanaz a szam.
    *

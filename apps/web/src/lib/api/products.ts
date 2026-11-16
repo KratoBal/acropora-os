@@ -13,9 +13,13 @@ import type {
   ProductQualityQueuePage,
   ProductExtensionDetail,
   ProductExtensionUpdateInput,
+  ProductHusbandry,
+  ProductHusbandryInput,
+  ProductDiscontinuation,
   ProductListApiQuery,
   ProductListResponse,
   ProductUpdateInput,
+  SetProductDiscontinuationInput,
 } from "@acropora/types";
 
 import { API_PREFIX } from "./api-prefix";
@@ -29,6 +33,7 @@ function productQueryString(query: ProductListApiQuery): string {
   if (query.active !== undefined) params.set("active", String(query.active));
   if (query.categoryId) params.set("categoryId", query.categoryId);
   if (query.shipping) params.set("shipping", query.shipping);
+  if (query.husbandry) params.set("husbandry", query.husbandry);
   if (query.brandId) params.set("brandId", query.brandId);
   if (query.listedOn) params.set("listedOn", query.listedOn);
   return params.toString();
@@ -193,6 +198,32 @@ export const productApi = {
       body: JSON.stringify({ productIds, changes }),
     });
   },
+  /** A véglegesen megszűnt jelölő (V4.2): `null`, ha senki nem jelölte meg. */
+  getDiscontinuation(token: string, productId: string) {
+    return apiRequest<ProductDiscontinuation | null>(
+      `/products/${encodeURIComponent(productId)}/discontinuation`,
+      token,
+    );
+  },
+  /** A teljes állapot: a hiányzó helyettesítő a régit is törli. */
+  setDiscontinuation(
+    token: string,
+    productId: string,
+    input: SetProductDiscontinuationInput,
+  ) {
+    return apiRequest<ProductDiscontinuation>(
+      `/products/${encodeURIComponent(productId)}/discontinuation`,
+      token,
+      { method: "PUT", body: JSON.stringify(input) },
+    );
+  },
+  removeDiscontinuation(token: string, productId: string) {
+    return apiRequest<void>(
+      `/products/${encodeURIComponent(productId)}/discontinuation`,
+      token,
+      { method: "DELETE" },
+    );
+  },
   /** A változat saját bruttó ára (T4.1-D3); csak OS-gazdájú terméknél, a szerver 409-cel utasítja el a többit. */
   setVariantPrice(
     token: string,
@@ -330,6 +361,44 @@ export const productApi = {
       `/products/${encodeURIComponent(id)}`,
       token,
       { method: "PATCH", body: JSON.stringify(input) },
+    );
+  },
+  /**
+   * A nevek kozvetlen irasa (kartya 20b0dd47): a UNAS-gazdaju termeken is megy (a nevek Acropora-tulajdonuak), a termek
+   * tobbi mezoje nem erintett. A valasz a frissitett reszletes nezet.
+   */
+  updateNames(
+    token: string,
+    id: string,
+    input: Pick<ProductUpdateInput, "magyarNev" | "angolNev" | "nemetNev">,
+  ) {
+    return apiRequest<ProductDetail>(
+      `/products/${encodeURIComponent(id)}/names`,
+      token,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      },
+    );
+  },
+  /** A tartasi blokk (V2.2, kartya d2fc06e7): a tenyek, az ellenorzes es a hianyzo kotelezo mezok. */
+  husbandry(token: string, id: string) {
+    return apiRequest<ProductHusbandry>(
+      `/products/${encodeURIComponent(id)}/husbandry`,
+      token,
+    );
+  },
+  /** A tartasi tenyek irasa; csak az adott kulcsok irodnak, `null` torol, `ellenorizve: true` ellenoriz. */
+  updateHusbandry(token: string, id: string, input: ProductHusbandryInput) {
+    return apiRequest<ProductHusbandry>(
+      `/products/${encodeURIComponent(id)}/husbandry`,
+      token,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      },
     );
   },
   categoryOptions(token: string) {

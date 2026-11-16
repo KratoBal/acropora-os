@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PilotContractsPage } from "./pilot-contracts-page";
 import { ApiError } from "@/lib/api/client";
+import { listedSelect } from "@/test/listed-option";
 
 /**
  * ÁTMÁSOLVA A RÉGI `contracts-page.component.test.tsx`-BŐL (2026-09-25,
@@ -77,9 +78,9 @@ describe("PilotContractsPage -- új szerződés tételének helyszíne", () => {
     assetsApi.list.mockReset().mockResolvedValue({ items: [] });
   });
 
-  function openFormAndPickCustomer() {
+  async function openFormAndPickCustomer() {
     fireEvent.click(screen.getByText("Új szerződés"));
-    fireEvent.change(screen.getByLabelText("Partner"), {
+    fireEvent.change(await listedSelect("Partner", "customer-1"), {
       target: { value: "customer-1" },
     });
   }
@@ -92,7 +93,7 @@ describe("PilotContractsPage -- új szerződés tételének helyszíne", () => {
     expect(screen.queryByText("Helyszínek betöltése…")).toBeNull();
     expect(worksheetsApi.departments).not.toHaveBeenCalled();
 
-    fireEvent.change(screen.getByLabelText("Partner"), {
+    fireEvent.change(await listedSelect("Partner", "customer-1"), {
       target: { value: "customer-1" },
     });
 
@@ -104,7 +105,7 @@ describe("PilotContractsPage -- új szerződés tételének helyszíne", () => {
   it("a kiválasztott helyszín a tétel többi adatával együtt megy a mentéskor", async () => {
     render(<PilotContractsPage />);
     await screen.findByText("Új szerződés");
-    openFormAndPickCustomer();
+    await openFormAndPickCustomer();
     await screen.findByRole("option", { name: "Cápasuli (CAP)" });
 
     fireEvent.change(screen.getByLabelText("Szerződésszám *"), {
@@ -175,9 +176,9 @@ describe("PilotContractsPage -- új szerződés, duplikált szerződésszám (40
     assetsApi.list.mockReset().mockResolvedValue({ items: [] });
   });
 
-  function fillMinimalForm() {
+  async function fillMinimalForm() {
     fireEvent.click(screen.getByText("Új szerződés"));
-    fireEvent.change(screen.getByLabelText("Partner"), {
+    fireEvent.change(await listedSelect("Partner", "customer-1"), {
       target: { value: "customer-1" },
     });
     fireEvent.change(screen.getByLabelText("Szerződésszám *"), {
@@ -213,7 +214,7 @@ describe("PilotContractsPage -- új szerződés, duplikált szerződésszám (40
 
     render(<PilotContractsPage />);
     await screen.findByText("Új szerződés");
-    fillMinimalForm();
+    await fillMinimalForm();
 
     fireEvent.click(screen.getByText("Szerződés mentése"));
 
@@ -243,7 +244,7 @@ describe("PilotContractsPage -- új szerződés, duplikált szerződésszám (40
 
       render(<PilotContractsPage />);
       await screen.findByText("Új szerződés");
-      fillMinimalForm();
+      await fillMinimalForm();
 
       fireEvent.click(screen.getByText("Szerződés mentése"));
 
@@ -270,7 +271,7 @@ describe("PilotContractsPage -- új szerződés, duplikált szerződésszám (40
 
     render(<PilotContractsPage />);
     await screen.findByText("Új szerződés");
-    fillMinimalForm();
+    await fillMinimalForm();
 
     fireEvent.click(screen.getByText("Szerződés mentése"));
 
@@ -284,7 +285,7 @@ describe("PilotContractsPage -- új szerződés, duplikált szerződésszám (40
     api.create.mockRejectedValueOnce(new ApiError("Első hiba.", 400));
     render(<PilotContractsPage />);
     await screen.findByText("Új szerződés");
-    fillMinimalForm();
+    await fillMinimalForm();
     fireEvent.click(screen.getByText("Szerződés mentése"));
     await screen.findByTestId("contract-save-error");
 
@@ -330,7 +331,7 @@ describe("PilotContractsPage -- új szerződés, tétel törlése", () => {
     render(<PilotContractsPage />);
     await screen.findByText("Új szerződés");
     fireEvent.click(screen.getByText("Új szerződés"));
-    fireEvent.change(screen.getByLabelText("Partner"), {
+    fireEvent.change(await listedSelect("Partner", "customer-1"), {
       target: { value: "customer-1" },
     });
     fireEvent.change(screen.getByLabelText("Szerződésszám *"), {
@@ -395,7 +396,7 @@ describe("PilotContractsPage -- javítási díjak", () => {
     render(<PilotContractsPage />);
     await screen.findByText("Új szerződés");
     fireEvent.click(screen.getByText("Új szerződés"));
-    fireEvent.change(screen.getByLabelText("Partner"), {
+    fireEvent.change(await listedSelect("Partner", "customer-1"), {
       target: { value: "customer-1" },
     });
     fireEvent.change(screen.getByLabelText("Szerződésszám *"), {
@@ -484,7 +485,7 @@ describe("PilotContractsPage -- beszerzési szerződés", () => {
     render(<PilotContractsPage />);
     await screen.findByText("Új szerződés");
     fireEvent.click(screen.getByText("Új szerződés"));
-    fireEvent.change(screen.getByLabelText("Partner"), {
+    fireEvent.change(await listedSelect("Partner", "customer-1"), {
       target: { value: "customer-1" },
     });
     fireEvent.click(screen.getByRole("radio", { name: "Beszerzés" }));
@@ -533,7 +534,7 @@ describe("PilotContractsPage -- beszerzési szerződés", () => {
     render(<PilotContractsPage />);
     await screen.findByText("Új szerződés");
     fireEvent.click(screen.getByText("Új szerződés"));
-    fireEvent.change(screen.getByLabelText("Partner"), {
+    fireEvent.change(await listedSelect("Partner", "customer-1"), {
       target: { value: "customer-1" },
     });
     fireEvent.click(screen.getByRole("radio", { name: "Beszerzés" }));

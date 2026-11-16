@@ -1,0 +1,379 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+
+import {
+  buildTeachingOutput,
+  parseTeachingSentInput,
+  teachingOutputFlags,
+  buildTeachingNarration,
+  buildTeachingPrintable,
+  buildTeachingSlides,
+  fillTeachingText,
+  TEACHING_OPEN_MARK,
+  teachingSentences,
+  type TeachingOutputSource,
+} from "./teaching-output.js";
+import type { TeachingNumber, TeachingPart } from "./teaching-source.js";
+
+/*
+  THE OUTPUTS (T5.2, spec v2, point 2). What turns these red: a number in an
+  output that is not the table's form (a typed value, the wrong form, the
+  written form in the narration); an open-question number without its mark; a
+  statement dropped to fit the slide frame instead of the over-frame flag; a
+  narration made from a missing or suggested note, or with a spoken form made
+  up; an output that does not carry its source version.
+*/
+
+const AT = "2026-11-15T08:00:00.000Z";
+
+const num = (
+  over: Partial<TeachingNumber> & { id: string },
+): TeachingNumber => ({
+  name: over.id,
+  context: null,
+  approx: false,
+  quantity: { value: { kind: "exact", value: 1 }, unit: "ml" },
+  pairs: [],
+  partKey: null,
+  display: "1 ml",
+  short: "1 ml",
+  spoken: null,
+  inflections: [],
+  state: "OK",
+  note: null,
+  ...over,
+});
+
+const part = (over: Partial<TeachingPart> & { key: string }): TeachingPart => ({
+  title: over.key,
+  text: "",
+  subparts: [],
+  checklist: [],
+  speakerNote: null,
+  ...over,
+});
+
+const SALT = num({
+  id: "celso",
+  name: "Célsótartalom",
+  display: "1,026 SG (kb. 35 PSU)",
+  short: "1,026 SG",
+  spoken: "egy egész huszonhat ezred",
+});
+
+const source = (
+  over: Partial<TeachingOutputSource> = {},
+): TeachingOutputSource => ({
+  title: "Az első hat hét",
+  version: 3,
+  subtitle: null,
+  author: "Akil, Modern Reef blog",
+  editor: "Acropora szerkesztőség",
+  audience: "INTERNAL",
+  publicBasis: null,
+  disclaimer: "A termékleírások a gyártó állításait adják vissza.",
+  parts: [],
+  numbers: [SALT],
+  ...over,
+});
+
+describe("fillTeachingText", () => {
+  it("puts the table's form in, written or spoken", () => {
+    const text = "Cél: {szám: celso}, röviden {szám: celso, rövid}.";
+    assert.equal(
+      fillTeachingText(text, [SALT], "written").text,
+      "Cél: 1,026 SG (kb. 35 PSU), röviden 1,026 SG.",
+    );
+    assert.equal(
+      fillTeachingText(text, [SALT], "spoken").text,
+      "Cél: egy egész huszonhat ezred, röviden egy egész huszonhat ezred.",
+    );
+  });
+
+  it("marks an open number in writing, and never makes up a spoken form", () => {
+    const open = num({
+      id: "ciklus",
+      display: "2-4 hét",
+      short: "2-4 hét",
+      state: "OPEN_QUESTION",
+    });
+    assert.equal(
+      fillTeachingText("{szám: ciklus}", [open], "written").text,
+      `2-4 hét ${TEACHING_OPEN_MARK}`,
+    );
+    const spoken = fillTeachingText("Kb. {szám: ciklus}.", [open], "spoken");
+    assert.equal(spoken.text, "Kb. {szám: ciklus}.");
+    assert.deepEqual(spoken.unresolved, ["ciklus"]);
+  });
+
+  it("uses an inflection's written and spoken form", () => {
+    const het = num({
+      id: "het",
+      inflections: [
+        { name: "hétig", written: "4 hétig", spoken: "négy hétig" },
+      ],
+    });
+    assert.equal(
+      fillTeachingText("kb. {szám: het, hétig}", [het], "written").text,
+      "kb. 4 hétig",
+    );
+    assert.equal(
+      fillTeachingText("kb. {szám: het, hétig}", [het], "spoken").text,
+      "kb. négy hétig",
+    );
+  });
+
+  it("marks a number open by the analysis (a conflict) too", () => {
+    assert.equal(
+      fillTeachingText(
+        "{szám: celso, rövid}",
+        [SALT],
+        "written",
+        new Set(["celso"]),
+      ).text,
+      `1,026 SG ${TEACHING_OPEN_MARK}`,
+    );
+  });
+});
+
+describe("teachingSentences", () => {
+  it("does not split at kb. or a decimal comma, splits before a capital", () => {
+    assert.deepEqual(
+      teachingSentences(
+        "Várj kb. 4 hetet. A só 1,026 SG legyen! Kész?\n\nÚj bekezdés",
+      ),
+      ["Várj kb. 4 hetet.", "A só 1,026 SG legyen!", "Kész?", "Új bekezdés"],
+    );
+  });
+});
+
+describe("buildTeachingPrintable", () => {
+  it("stamps the version and the source, fills the text, lists the part's numbers", () => {
+    const out = buildTeachingPrintable(
+      source({
+        parts: [
+          part({
+            key: "elso",
+            text: "Első bekezdés {szám: celso, rövid}.\n\nMásodik.",
+            checklist: ["Mérd: {szám: celso}"],
+          }),
+        ],
+      }),
+      AT,
+    );
+    assert.equal(out.stamp.sourceVersion, 3);
+    assert.equal(
+      out.stamp.footer,
+      `Akil, Modern Reef blog · 3. verzió · generálva ${AT}`,
+    );
+    assert.equal(
+      out.disclaimer,
+      "A termékleírások a gyártó állításait adják vissza.",
+    );
+    assert.deepEqual(out.parts[0]?.paragraphs, [
+      "Első bekezdés 1,026 SG.",
+      "Második.",
+    ]);
+    assert.deepEqual(out.parts[0]?.checklist, ["Mérd: 1,026 SG (kb. 35 PSU)"]);
+    assert.deepEqual(out.parts[0]?.numbers, [
+      {
+        numberId: "celso",
+        name: "Célsótartalom",
+        context: null,
+        value: "1,026 SG (kb. 35 PSU)",
+        open: false,
+      },
+    ]);
+  });
+});
+
+describe("buildTeachingSlides", () => {
+  const sentences = (n: number) =>
+    Array.from({ length: n }, (_, i) => `Állítás ${i + 1}.`).join(" ");
+
+  it("title first, closing last, checklist on its own slide, at most five points", () => {
+    const deck = buildTeachingSlides(
+      source({
+        parts: [
+          part({
+            key: "a",
+            title: "Indulás",
+            text: sentences(7),
+            checklist: ["x", "y"],
+          }),
+        ],
+      }),
+      AT,
+    );
+    assert.deepEqual(
+      deck.slides.map((s) => [s.kind, s.points.length]),
+      [
+        ["TITLE", 2],
+        ["CONTENT", 5],
+        ["CONTENT", 2],
+        ["CHECKLIST", 2],
+        ["CLOSING", 1],
+      ],
+    );
+    assert.equal(deck.slides[1]?.title, "Indulás (1/2)");
+    assert.deepEqual(deck.overFrame, []);
+  });
+
+  it("keeps every statement and flags the part over the frame (no sub-parts: 4 slides)", () => {
+    const deck = buildTeachingSlides(
+      source({ parts: [part({ key: "a", text: sentences(21) })] }),
+      AT,
+    );
+    const points = deck.slides
+      .filter((s) => s.kind === "CONTENT")
+      .flatMap((s) => s.points);
+    assert.equal(points.length, 21, "nothing dropped");
+    assert.deepEqual(deck.overFrame, [
+      { partKey: "a", subpartKey: null, slides: 5, limit: 4 },
+    ]);
+  });
+
+  it("a part with sub-parts: one slide each, at most two, and the frame follows the sub-parts (Akil part 4)", () => {
+    const deck = buildTeachingSlides(
+      source({
+        parts: [
+          part({
+            key: "negy",
+            title: "4. rész",
+            subparts: [
+              { key: "l1", title: "1. lépés", text: sentences(3) },
+              { key: "l2", title: "2. lépés", text: sentences(6) },
+              { key: "l3", title: "3. lépés", text: sentences(11) },
+            ],
+          }),
+        ],
+      }),
+      AT,
+    );
+    assert.deepEqual(
+      deck.slides.filter((s) => s.kind === "CONTENT").map((s) => s.subpartKey),
+      ["l1", "l2", "l2", "l3", "l3", "l3"],
+    );
+    assert.deepEqual(deck.overFrame, [
+      { partKey: "negy", subpartKey: "l3", slides: 3, limit: 2 },
+    ]);
+  });
+});
+
+describe("buildTeachingNarration", () => {
+  it("speaks the disclaimer at the opening, chapters by part, spoken forms", () => {
+    const out = buildTeachingNarration(
+      source({
+        parts: [
+          part({
+            key: "a",
+            title: "Indulás",
+            speakerNote: { text: "A cél {szám: celso}.", state: "SOURCE" },
+          }),
+          part({ key: "b", title: "Nincs jegyzet" }),
+          part({
+            key: "c",
+            title: "Javaslat",
+            speakerNote: { text: "Gépi szöveg.", state: "SUGGESTED" },
+          }),
+        ],
+      }),
+      AT,
+    );
+    assert.equal(
+      out.opening,
+      "Az első hat hét. Akil, Modern Reef blog. A termékleírások a gyártó állításait adják vissza.",
+    );
+    assert.deepEqual(
+      out.chapters.map((c) => [c.heading, c.text, c.missing]),
+      [
+        ["# 1. rész: Indulás", "A cél egy egész huszonhat ezred.", null],
+        ["# 2. rész: Nincs jegyzet", null, "NO_NOTE"],
+        ["# 3. rész: Javaslat", null, "SUGGESTED_NOTE"],
+      ],
+    );
+  });
+
+  it("a chapter whose number has no spoken form is not narrated, and names the number", () => {
+    const out = buildTeachingNarration(
+      source({
+        numbers: [num({ id: "adag" })],
+        parts: [
+          part({
+            key: "a",
+            speakerNote: { text: "Adag: {szám: adag}.", state: "SOURCE" },
+          }),
+        ],
+      }),
+      AT,
+    );
+    assert.equal(out.chapters[0]?.text, null);
+    assert.equal(out.chapters[0]?.missing, "NO_SPOKEN_FORM");
+    assert.deepEqual(out.chapters[0]?.unspeakable, ["adag"]);
+  });
+
+  it("names the open numbers a chapter speaks", () => {
+    const out = buildTeachingNarration(
+      source({
+        parts: [
+          part({
+            key: "a",
+            speakerNote: { text: "{szám: celso}", state: "SOURCE" },
+          }),
+        ],
+      }),
+      AT,
+      new Set(["celso"]),
+    );
+    assert.deepEqual(out.chapters[0]?.openNumbers, ["celso"]);
+  });
+});
+
+describe("output records", () => {
+  it("builds each kind, and reads the flags off the body", () => {
+    const src = source({
+      parts: [
+        part({
+          key: "a",
+          text: Array.from({ length: 21 }, (_, i) => `Állítás ${i}.`).join(" "),
+        }),
+      ],
+    });
+    assert.equal(buildTeachingOutput("PRINTABLE", src, AT).kind, "PRINTABLE");
+    assert.deepEqual(
+      teachingOutputFlags(buildTeachingOutput("SLIDES", src, AT)),
+      {
+        overFrame: 1,
+        chaptersWithoutNarration: 0,
+      },
+    );
+    assert.deepEqual(
+      teachingOutputFlags(buildTeachingOutput("NARRATION", src, AT)),
+      {
+        overFrame: 0,
+        chaptersWithoutNarration: 1,
+      },
+    );
+  });
+
+  it("parses where an output went, strictly", () => {
+    assert.deepEqual(
+      parseTeachingSentInput({ to: "  Hírlevél ", public: true }),
+      {
+        ok: true,
+        value: { to: "Hírlevél", public: true },
+      },
+    );
+    for (const bad of [
+      null,
+      [],
+      {},
+      { to: " ", public: false },
+      { to: "x" },
+      { to: "x", public: "igen" },
+      { to: "x", public: false, y: 1 },
+      { to: "x".repeat(301), public: false },
+    ])
+      assert.equal(parseTeachingSentInput(bad).ok, false, JSON.stringify(bad));
+  });
+});

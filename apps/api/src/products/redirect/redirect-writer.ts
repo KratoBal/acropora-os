@@ -12,6 +12,14 @@ export interface RedirectRule {
   sourcePath: string;
   destinationPath: string;
   isActive: boolean;
+  /** A szabály eredete, ha az olvasó betöltötte (a kategória-betöltő `repoint` módja csak az `UNAS_CATEGORY` szabályt írja át). */
+  reason?: RedirectReason;
+  /** Mikor és ki hozta létre, ha az olvasó betöltötte (a kategória-backfill riportja ebből mondja meg, hogy tömeges importból vagy kézzel jött). */
+  createdAt?: Date | string;
+  createdById?: string | null;
+  /** A szabály tárgya, ha az olvasó betöltötte (a visszavonáshoz: a régi érték visszaírható). */
+  entityType?: SlugEntityType | null;
+  entityId?: string | null;
 }
 
 export interface RedirectRuleData {

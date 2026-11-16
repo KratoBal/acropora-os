@@ -138,6 +138,7 @@ describe(
           description: row.description,
           unitNet: row.unitNet,
           quantity: row.quantity,
+          occasions: 1,
           vatRatePercent: row.vatRatePercent,
         })),
         document: {

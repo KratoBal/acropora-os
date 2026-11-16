@@ -45,6 +45,15 @@ import type {
   VariantOmnibusSyncReport,
 } from "./medusa-product-projection.service.js";
 import type { LowestPriceDatabase } from "../../products/price-history/lowest-price.reader.js";
+import { livestockArrivalMetadata } from "./medusa-livestock-arrival.js";
+import {
+  husbandryMetadata,
+  projectHusbandryEnabled,
+} from "./medusa-husbandry.js";
+import {
+  deriveLivestockKind,
+  liveAnimalKindSubtrees,
+} from "./medusa-livestock.policy.js";
 import { omnibusInputsFor } from "./medusa-variant-omnibus.js";
 import {
   betoltTiltoLista,
@@ -81,6 +90,7 @@ import {
 import { MedusaShippingOnCreate } from "./medusa-shipping-on-create.js";
 import {
   MedusaProductProjectionService,
+  stoppedProductIsRunFailure,
   type ProjectionPublicationReport,
 } from "./medusa-product-projection.service.js";
 import {
@@ -116,6 +126,13 @@ import {
   knowledgeRowsFor,
   projectKnowledgeEnabled,
 } from "./medusa-product-knowledge.service.js";
+import { PrismaWebshopSlugStore } from "../../products/slug/webshop-slug.repository.js";
+import { WebshopSlugService } from "../../products/slug/webshop-slug.service.js";
+import {
+  loadOldShopLinkRules,
+  rewriteOldShopLinks,
+  type OldShopLinkRules,
+} from "./medusa-description-links.js";
 import { copyProductImages } from "./product-image-copier.js";
 import { publishProductImages } from "./product-image-publisher.js";
 import {
@@ -521,7 +538,16 @@ export function csatornaBemenet(
 
 export async function runProjectionCli(
   productIds: string[],
-  out: { stdout(value: string): void; stderr(value: string): void } = {
+  out: {
+    stdout(value: string): void;
+    stderr(value: string): void;
+    /**
+     * A FUTAS KILEPESI KODJAT NOVELO TERMEK-KUDARCOK FAJTAJA (task t-20261116-vetito-felkodok, acrobot 53800): minden `failed += 1`
+     * helyen egy KOD (`sku-lookup`, `product-not-found`, `unknown-authority`, `stopped`, `knowledge-projection`, `brand-link`), termek-
+     * azonositoval, de a hivo csak a fajtat szamolja. Opcionalis: a CLI nem adja. A hibasor szovege valtozatlanul a `stderr`-re megy.
+     */
+    failed?(productId: string, kind: string): void;
+  } = {
     stdout: (value) => process.stdout.write(value),
     stderr: (value) => process.stderr.write(value),
   },
@@ -539,7 +565,50 @@ export async function runProjectionCli(
    * mai viselkedes valtozatlan.
    */
   fetchImpl?: typeof fetch,
+  /**
+   * A WEBSHOP-SLUG ELSŐ KÉPZÉSE (SEO D2, seo-d2-slug-bekotes): a termék meglévő
+   * slugját adja, vagy egyszer képez egyet a névből. Megadva ez fut; megadás
+   * nélkül a valódi szolgáltatás, de CSAK a valódi adatbázissal: egy átadott
+   * adatbázis-dupla mellé a futtató nem nyúl a globális adatbázishoz.
+   */
+  ensureWebshopSlug?: (productId: string) => Promise<string>,
+  /**
+   * A RÉGI BOLTRA MUTATÓ LEÍRÁS-LINKEK ÁTÍRÁSÁNAK SZABÁLYAI (card aaf002d3): kisbetűs forrás-út -> cél az aktív
+   * átirányítások közül. Megadva ez fut; megadás nélkül a valódi adatbázisból tölt, de CSAK a valódi adatbázissal
+   * (ugyanaz a rend, mint a webshop-slugnál: egy adatbázis-dupla mellé a futtató nem nyúl a globális adatbázishoz).
+   * Ha a betöltés elbukik, a linkek érintetlenek maradnak, és a kimenet kimondja.
+   */
+  loadLinkRules?: () => Promise<OldShopLinkRules>,
 ): Promise<number> {
+  const slugKepzes =
+    ensureWebshopSlug ??
+    (db === (prisma as unknown as ProjectionDatabase)
+      ? (productId: string) =>
+          new WebshopSlugService(new PrismaWebshopSlugStore()).webshopSlug(
+            productId,
+          )
+      : null);
+  const linkSzabalyok =
+    loadLinkRules ??
+    (db === (prisma as unknown as ProjectionDatabase)
+      ? () => loadOldShopLinkRules(prisma)
+      : null);
+  /** `undefined`: még nem töltöttük; `null`: nincs (nincs betöltő, vagy elbukott): a linkek érintetlenek. */
+  let linkSzabalyKeszlet: OldShopLinkRules | null | undefined;
+  const linkSzabalyokMost = async (): Promise<OldShopLinkRules | null> => {
+    if (linkSzabalyKeszlet !== undefined) return linkSzabalyKeszlet;
+    try {
+      linkSzabalyKeszlet = linkSzabalyok ? await linkSzabalyok() : null;
+    } catch {
+      linkSzabalyKeszlet = null;
+      out.stderr(
+        "A régi bolt linkjeinek szabályai nem töltődtek be: a leírás linkjei érintetlenek.\n",
+      );
+    }
+    return linkSzabalyKeszlet;
+  };
+  let linkAtirt = 0;
+  const linkNemLekepezett = new Set<string>();
   if (!productIds.length) {
     out.stderr("Adj meg legalább egy termékazonosítót.\n");
     return 1;
@@ -812,6 +881,20 @@ export async function runProjectionCli(
       );
     return wysiwygIds;
   };
+  /**
+   * AZ ELO ALLAT FAJTA-RESZFAI (V2.2 S3), FUTASONKENT EGYSZER, LUSTAN, a WYSIWYG reszfa mintajara: a tartasi blokk csak elo
+   * allatra megy ki, es a fajtat a kategoria-fa adja (nem a nev). A teljes fa kell hozza, ezert nem termekenkent kerdezzuk.
+   */
+  let fajtaReszfak: ReturnType<typeof liveAnimalKindSubtrees> | null = null;
+  const eloAllatFajtaReszfak = async () => {
+    if (!fajtaReszfak)
+      fajtaReszfak = liveAnimalKindSubtrees(
+        await db.category.findMany({
+          select: { id: true, name: true, parentId: true },
+        }),
+      );
+    return fajtaReszfak;
+  };
   for (const argument of targets) {
     let productId: string;
     if (argument.startsWith("sku:")) {
@@ -821,6 +904,7 @@ export async function runProjectionCli(
           `${describeSkuLookupFailure(argument.slice(4), lookup.reason)}\n`,
         );
         failed += 1;
+        out.failed?.(argument, "sku-lookup");
         continue;
       }
       productId = lookup.productId;
@@ -828,7 +912,7 @@ export async function runProjectionCli(
 
     megnezettTermek += 1;
 
-    const product = await db.product.findUnique({
+    const betoltott = await db.product.findUnique({
       where: { id: productId },
       select: {
         id: true,
@@ -857,11 +941,64 @@ export async function runProjectionCli(
          * `null` here, and its link is cleared rather than left as it was.
          */
         brand: { select: OS_BRAND_FOR_SHOP_SELECT },
+        /**
+         * AZ ERKEZESEK, AMIKRE A VEVO ELOJEGYEZHET (V2.6 S3a): csak a termekhez kotott, elojegyezheto, meg nem
+         * erkezett sorok; a szabaly (melyik a kovetkezo, mi megy ki) a `livestockArrivalMetadata`-ban all.
+         */
+        livestockArrivals: {
+          where: {
+            preorderable: true,
+            status: { in: ["ORDERED", "IN_TRANSIT"] },
+          },
+          select: { id: true, expectedOn: true, status: true },
+        },
+        /**
+         * A TARTASI BLOKK ELLENORZOTT TENYEI (V2.2 S3): a szabaly (csak elo allat, csak ellenorzott, csak a kitoltott tenyek)
+         * a `husbandryMetadata`-ban all. A forras tipusa es hivatkozasa, es az ellenorzo azonositoja szandekosan NEM kerul
+         * ide: azok nem hagyhatjak el az OS-t.
+         */
+        datasheet: {
+          select: {
+            careDifficulty: true,
+            minLiter: true,
+            medenceErettsegHonap: true,
+            elhelyezesZona: true,
+            reefSafe: true,
+            reefSafeIndok: true,
+            socialKeeping: true,
+            aggression: true,
+            korallevo: true,
+            gerinctelenevo: true,
+            feedingType: true,
+            etetesGyakorisag: true,
+            eloEleseg: true,
+            fenyIgeny: true,
+            aramlasIgeny: true,
+            meretMax: true,
+            meretDimenzio: true,
+            szarmazas: true,
+            kinekNem: true,
+            tempMinC: true,
+            tempMaxC: true,
+            salinityMinSg: true,
+            salinityMaxSg: true,
+            khMinDkh: true,
+            khMaxDkh: true,
+            lifespanYears: true,
+            stingOrVenom: true,
+            handlingWarning: true,
+            quarantineWeeks: true,
+            acclimatization: true,
+            breedsInTank: true,
+            ellenorizveAt: true,
+          },
+        },
+        // every variant with its flag: which ones go out is decided below (ca422e92)
         variants: {
-          where: { isActive: true },
           orderBy: [{ createdAt: "asc" }, { id: "asc" }],
           select: {
             id: true,
+            isActive: true,
             sku: true,
             manufacturerPartNumber: true,
             unit: true,
@@ -937,11 +1074,33 @@ export async function runProjectionCli(
       },
     });
 
-    if (!product) {
+    if (!betoltott) {
       out.stderr(`${argument}: nincs ilyen termék (${productId})\n`);
       failed += 1;
+      out.failed?.(productId, "product-not-found");
       continue;
     }
+
+    /**
+     * AZ INAKTÍV TERMÉK AKTÍV VÁLTOZAT NÉLKÜL IS KIMEGY (kártya ca422e92).
+     *
+     * A vetítés az aktív változatokkal dolgozik. Egy inaktivált terméknél
+     * viszont gyakran a változatai is inaktívak, és akkor cikkszám nélkül a
+     * vetítés `no-sku` okkal megállt: a bolt published vagy jelölő nélküli
+     * draft maradt, a kötés `lastSyncedAt`-je nem lépett, és az ütemező minden
+     * körben újra elővette volna. Ilyenkor a termék az ÖSSZES változatával megy,
+     * hogy a boltba a draft és a kifutott-jelölő kerüljön; a publikációs döntés
+     * bemenete ettől nem változik (`activeVariantCount` az aktívakat számolja).
+     * Aktív terméknél minden marad a régiben: az inaktív változat nem megy ki.
+     */
+    const aktivValtozatok = betoltott.variants.filter((v) => v.isActive);
+    const product = {
+      ...betoltott,
+      variants:
+        betoltott.isActive || aktivValtozatok.length
+          ? aktivValtozatok
+          : betoltott.variants,
+    };
 
     /**
      * Csak azt vetítjük ki, aminek a törzsadata a MIÉNK. Egy UNAS-gazdájú
@@ -953,6 +1112,7 @@ export async function runProjectionCli(
         `${productId}: a törzsadat gazdája ismeretlen (${product.catalogAuthority ?? "nincs megadva"}), kihagyva\n`,
       );
       failed += 1;
+      out.failed?.(productId, "unknown-authority");
       continue;
     }
 
@@ -979,6 +1139,47 @@ export async function runProjectionCli(
       out.stdout(`${productId}: a felvevő nem kérte a webshopba, kihagyva\n`);
       webshopbolKihagyott += 1;
       continue;
+    }
+
+    /*
+      A WEBSHOP-SLUG AZ ELSŐ VETÍTÉSKOR (SEO D2, seo-d2-slug-bekotes, 2026-11-09). A D2
+      szerint a slug az első kéréskor keletkezik, és a vetítés kéri, de a
+      `WebshopSlugService.webshopSlug()`-nak a backfill CLI-n kívül nem volt hívója: egy
+      kézzel felvitt vagy a backfill után létrejött termék slugot csak kézi CLI-futással
+      kapott, és addig a bolt a Medusa saját szabályával képzett handle-t a névből
+      (ékezettel, például `tengeri-só-25-kg-zsák`). Itt egyszer képződik, a terv
+      algoritmusával; a meglévőt nem írja át, és a név későbbi változása sem. Ha a
+      képzés elhasal, a vetítés a mai úton megy tovább: a slug a következő körben
+      képződik, a termék addig sem marad ki.
+    */
+    if (
+      slugKepzes &&
+      !product.channelListings.some(
+        (sor) => sor.channel === "WEBSHOP" && sor.slug,
+      )
+    ) {
+      try {
+        const slug = await slugKepzes(product.id);
+        product.channelListings = [
+          ...product.channelListings.filter((sor) => sor.channel !== "WEBSHOP"),
+          {
+            channel: "WEBSHOP",
+            slug,
+            seoRobots: null,
+            seoTitle: null,
+            seoDescription: null,
+            seoKeywords: null,
+            productUrl: null,
+          },
+        ];
+        out.stdout(`${productId}: webshop-slug képezve: ${slug}\n`);
+      } catch (error) {
+        out.stderr(
+          `${productId}: a webshop-slug nem képződött (${
+            error instanceof Error ? error.name : "UNKNOWN"
+          }), a vetítés a mai úton megy\n`,
+        );
+      }
     }
 
     /**
@@ -1465,13 +1666,29 @@ export async function runProjectionCli(
       product.variants,
       env,
     );
+    // a UNAS-leírás régi-bolt linkjei a Commerce-címre (a jóváhagyott termékismeret-szöveget nem érinti)
+    const linkSzabaly = await linkSzabalyokMost();
+    const rovidLink = linkSzabaly
+      ? rewriteOldShopLinks(product.description, linkSzabaly)
+      : null;
+    const hosszuLink = linkSzabaly
+      ? rewriteOldShopLinks(product.descriptionLong, linkSzabaly)
+      : null;
+    const termekLinkAtirt =
+      (rovidLink?.rewritten ?? 0) + (hosszuLink?.rewritten ?? 0);
+    const termekLinkNemLekepezett = [
+      ...(rovidLink?.unmapped ?? []),
+      ...(hosszuLink?.unmapped ?? []),
+    ];
+    linkAtirt += termekLinkAtirt;
+    for (const ut of termekLinkNemLekepezett) linkNemLekepezett.add(ut);
     const outcome = await service!.project(
       {
         id: product.id,
         name: product.name,
         knowledgeCopy: tudasSzoveg,
-        description: product.description,
-        descriptionLong: product.descriptionLong,
+        description: rovidLink ? rovidLink.text : product.description,
+        descriptionLong: hosszuLink ? hosszuLink.text : product.descriptionLong,
         primarySku: product.variants[0]?.sku ?? null,
         /**
          * MIND AZ AKTIV VALTOZAT, es nem csak az elso.
@@ -1496,6 +1713,18 @@ export async function runProjectionCli(
         // the WYSIWYG subtree lives in the UNAS tree (`Category`), so the
         // flag reads the UNAS rows on both paths: a store-tree id never
         // matches it, and a pilot product would silently lose the flag
+        livestockArrival: livestockArrivalMetadata(product.livestockArrivals),
+        // CSAK A KAPCSOLOVAL (`MEDUSA_PROJECT_HUSBANDRY`, alapbol KI): kikapcsolva a kulcs nem megy ki, es egy meglevo kulcsot az
+        // osszefesules levesz (V2.2 S3)
+        husbandry: projectHusbandryEnabled(env)
+          ? husbandryMetadata(
+              product.datasheet,
+              deriveLivestockKind(
+                product.categories.map((row) => row.categoryId),
+                await eloAllatFajtaReszfak(),
+              ),
+            )
+          : null,
         uniquePiece: isWysiwygProduct(
           product.categories.map((row) => row.categoryId),
           await wysiwygReszfa(),
@@ -1546,7 +1775,7 @@ export async function runProjectionCli(
           catalogAuthority: product.catalogAuthority,
           isActive: product.isActive,
           webshopSellable: product.webshopSellable,
-          activeVariantCount: product.variants.length,
+          activeVariantCount: aktivValtozatok.length,
           /*
             A CIKKSZAMOK A NEM-TERMEK KAPUHOZ KELLENEK. A lekerdezes mar
             hozza oket (`variants.select.sku`), tehat ez nem uj kor -- csak
@@ -1585,7 +1814,11 @@ export async function runProjectionCli(
       out.stderr(
         `${productId}: MEGÁLLT (${outcome.reason}) ${outcome.details}\n`,
       );
-      failed += 1;
+      // az `orphaned-link` ismert allapot, emberi dontest ker: nem teszi a futast hibassa (a sora kimegy, a kor `stopped`-jaba szamit)
+      if (stoppedProductIsRunFailure(outcome.reason)) {
+        failed += 1;
+        out.failed?.(productId, "stopped");
+      }
       continue;
     }
 
@@ -1627,6 +1860,13 @@ export async function runProjectionCli(
           ? `      nem került rá: ${kimaradt.join(", ")}\n`
           : "") +
         describeKepMasolas(masolas) +
+        (termekLinkAtirt || termekLinkNemLekepezett.length
+          ? `      régi-bolt link a leírásban: ${termekLinkAtirt} átírva` +
+            (termekLinkNemLekepezett.length
+              ? `, ${termekLinkNemLekepezett.length} nem leképezett (${termekLinkNemLekepezett.join(", ")})`
+              : "") +
+            "\n"
+          : "") +
         describeCimValtozas(outcome.cim) +
         (outcome.action !== "created" && outcome.barcodes
           ? describeVariantBarcodes(outcome.barcodes)
@@ -1681,6 +1921,7 @@ export async function runProjectionCli(
         })\n`,
       );
       failed += 1;
+      out.failed?.(productId, "knowledge-projection");
     }
 
     /**
@@ -1709,6 +1950,7 @@ export async function runProjectionCli(
         })\n`,
       );
       failed += 1;
+      out.failed?.(productId, "brand-link");
     }
   }
 
@@ -1763,6 +2005,15 @@ export async function runProjectionCli(
       `${tiltottVonalkod} vonalkód maradt ki a vetítési szűrő miatt. ` +
         `Ezek megmért, bizonyíthatóan téves értékek: a kód nem ezé a terméké. ` +
         `A javítás helye a forrás (UNAS); a szűrő addig tartja vissza.\n`,
+    );
+
+  if (linkAtirt || linkNemLekepezett.size)
+    out.stdout(
+      `Régi-bolt linkek a leírásokban: ${linkAtirt} átírva a Commerce-címre` +
+        (linkNemLekepezett.size
+          ? `, ${linkNemLekepezett.size} különböző út nem leképezett (érintetlen)`
+          : "") +
+        ".\n",
     );
 
   if (webshopbolKihagyott)

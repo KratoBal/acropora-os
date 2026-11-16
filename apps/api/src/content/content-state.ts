@@ -160,14 +160,29 @@ const ARTICLE_EXTRA: Partial<Record<ContentState, readonly ContentState[]>> = {
   SENT: ["AWAITING_REVISION"],
 };
 
-/** The moves from a state; an article has the correction move on top. */
+/**
+ * AN OKTATÓANYAG FORRÁSA NEM MEGY KI (T5.2, spec v2 3. pont): a jóváhagyása
+ * után a KIMENETEI mennek tovább, és a „kiment" állapotot kimenetenként kell
+ * rögzíteni. A forrás útja ezért a jóváhagyásnál (`READY_TO_SEND`) véget ér;
+ * ütemezés és kiküldés nincs.
+ */
+const TEACHING_SOURCE_NEVER: readonly ContentState[] = ["SCHEDULED", "SENT"];
+
+/**
+ * The moves from a state; an article has the correction move on top, a
+ * teaching source stops at its approval.
+ */
 export function allowedMoves(
   from: ContentState,
   channel?: ContentChannel,
 ): readonly ContentState[] {
-  return channel === "ARTICLE"
-    ? [...TRANSITIONS[from], ...(ARTICLE_EXTRA[from] ?? [])]
-    : TRANSITIONS[from];
+  if (channel === "ARTICLE")
+    return [...TRANSITIONS[from], ...(ARTICLE_EXTRA[from] ?? [])];
+  if (channel === "TEACHING_SOURCE")
+    return TRANSITIONS[from].filter(
+      (to) => !TEACHING_SOURCE_NEVER.includes(to),
+    );
+  return TRANSITIONS[from];
 }
 
 export function canMove(

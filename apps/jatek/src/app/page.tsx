@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import {
   Gyik,
   Hero,
+  HelyesValaszok,
   KampanySav,
   Lepesek,
   Nyertesek,
@@ -21,14 +22,17 @@ export const dynamic = "force-dynamic";
 export default async function KezdoLap() {
   const api = jatekApiKornyezetbol(process.env);
   const kerFejlec = await headers();
-  const eredmeny = await api.aktualis(
-    latogatoIp(kerFejlec.get("x-forwarded-for")),
-  );
+  const ip = latogatoIp(kerFejlec.get("x-forwarded-for"));
+  const [eredmeny, nyertesek, lezart] = await Promise.all([
+    api.aktualis(ip),
+    api.nyertesek(ip),
+    api.lezart(ip),
+  ]);
 
   const allapot: KerdesAllapot = !eredmeny.ok
     ? { fajta: "elerhetetlen" }
     : eredmeny.question === null
-      ? { fajta: "nincs" }
+      ? { fajta: "nincs", kovetkezo: eredmeny.next }
       : { fajta: "nyitott", kerdes: eredmeny.question, proba: api.hamis };
 
   return (
@@ -37,7 +41,8 @@ export default async function KezdoLap() {
       <KampanySav />
       <HetiKerdesSzakasz allapot={allapot} />
       <Lepesek />
-      <Nyertesek />
+      <Nyertesek nyertesek={nyertesek.ok ? nyertesek.winners : []} />
+      <HelyesValaszok hetek={lezart.ok ? lezart.weeks : []} />
       <Gyik />
     </OldalKeret>
   );

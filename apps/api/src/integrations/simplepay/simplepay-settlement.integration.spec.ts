@@ -38,9 +38,14 @@ describe(
     const laterInvoice = `${INVOICE_PREFIX}-2026/L${s5}`;
     const spId = (n: number) => `9${s5}${n}`;
 
-    const row = (n: number, merchantId: string, amount: number) =>
+    const row = (
+      n: number,
+      merchantId: string,
+      amount: number,
+      status = "COMPLETED",
+    ) =>
       [
-        "COMPLETED",
+        status,
         "Bankkártyás fizetés",
         spId(n),
         merchantId,
@@ -139,6 +144,12 @@ describe(
           }),
         },
         {
+          nev: "ExternalBillingDocument by test prefix",
+          darab: await prisma.externalBillingDocument.count({
+            where: { documentNumber: { startsWith: INVOICE_PREFIX } },
+          }),
+        },
+        {
           nev: "Invoice by test prefix",
           darab: await prisma.invoice.count({
             where: { invoiceNumber: { startsWith: INVOICE_PREFIX } },
@@ -156,6 +167,16 @@ describe(
     async function removeLeftovers() {
       await prisma.simplePayReport.deleteMany({
         where: { fileName: { startsWith: FILE_PREFIX } },
+      });
+      await prisma.externalBillingDocument.deleteMany({
+        where: { documentNumber: { startsWith: INVOICE_PREFIX } },
+      });
+      // a storno points at its invoice: it goes first
+      await prisma.invoice.deleteMany({
+        where: {
+          invoiceNumber: { startsWith: INVOICE_PREFIX },
+          referencedInvoiceId: { not: null },
+        },
       });
       await prisma.invoice.deleteMany({
         where: { invoiceNumber: { startsWith: INVOICE_PREFIX } },
@@ -310,6 +331,142 @@ describe(
           ),
         /SIMPLEPAY_LINE_CHANGED/,
       );
+    });
+
+    /*
+      AN ORDER WITH A REFUND, DECIDED AS A WHOLE ACROSS REPORTS (c03e9896).
+      The payment is in one week's report, the refund in the next, as
+      measured live. Only a database proves: the refund report reads the
+      earlier week's payment; the earlier week resolves on reprocess; the
+      feed's corrective and our own storno (the correction chain) settle it.
+    */
+    it("an order with a refund is decided by all its lines, from any report, with its invoices", async () => {
+      for (const [lead, total] of [
+        ["4", 5000], // full refund, never invoiced
+        ["3", 19968], // partial: paid 30958, refunded 10990, order reduced
+        ["2", 7007], // full refund over a live invoice of ours
+        ["1", 9000], // a refund the order does not show
+      ] as const)
+        await prisma.salesOrder.create({
+          data: {
+            orderNumber: order(lead),
+            channel: "UNAS",
+            totalGross: total,
+          },
+        });
+      const full = await prisma.salesOrder.findUniqueOrThrow({
+        where: { orderNumber: order("2") },
+      });
+      const live = await prisma.invoice.create({
+        data: {
+          direction: "OUTBOUND",
+          source: "MANUAL",
+          invoiceNumber: `${INVOICE_PREFIX}-2026/F${s5}`,
+          partnerName: "Kitalalt Vevo",
+          salesOrderId: full.id,
+          grossAmount: 7007,
+        },
+      });
+      const feed = (number: string, kindCode: string, gross: number) =>
+        prisma.externalBillingDocument.create({
+          data: {
+            externalId: number,
+            feedMessageId: number,
+            feedReceivedAt: new Date("2026-10-08T10:00:00.000Z"),
+            kindCode,
+            documentNumber: number,
+            electronic: true,
+            issueDate: new Date("2026-10-08T00:00:00.000Z"),
+            orderNumber: `47679-${key("3")}`,
+            currency: "HUF",
+            customerName: "Kitalalt Vevo",
+            netAmount: gross,
+            vatAmount: 0,
+            grossAmount: gross,
+            lines: [],
+          },
+        });
+      const partInvoice = `${INVOICE_PREFIX}-2026/P${s5}`;
+      const partCorrective = `${INVOICE_PREFIX}-2026/PH${s5}`;
+      await feed(partInvoice, "SZ", 30958);
+      // the corrective by its kind, not its sign: as an invoice this would bill 41 948
+      await feed(partCorrective, "HS", 10990);
+
+      const csvOf = (rows: string[]) =>
+        Buffer.from("\uFEFF" + [HEADER, ...rows].join("\r\n") + "\r\n", "utf8");
+      const ingest = (rows: string[], date: string) =>
+        service.ingest(csvOf(rows), `${FILE_PREFIX}report_${date}.csv`, {
+          actorUserId: null,
+          gmailMessageId: null,
+          mailBody: null,
+        });
+      const states = async (id: string) =>
+        (await service.reportDetail(id)).lines.map((line) => [
+          line.status,
+          line.errorCode ?? null,
+          line.invoiceNumbers,
+        ]);
+
+      // week 1: two payments, no refund yet, so each is judged by itself
+      const week1 = await ingest(
+        [row(11, `111T${key("4")}`, 5000), row(12, `111T${key("3")}`, 30958)],
+        "20261007",
+      );
+      assert.deepEqual(await states(week1.id), [
+        ["NEEDS_REVIEW", "ORDER_NOT_INVOICED", []],
+        ["NEEDS_REVIEW", "AMOUNT_MISMATCH", []],
+      ]);
+
+      // week 2: the refunds, two of them over week 1's payments
+      const week2 = await ingest(
+        [
+          row(13, `111T${key("4")}`, -5000, "REFUND"),
+          row(14, `111T${key("3")}`, -10990, "REFUND"),
+          row(15, `111T${key("2")}`, 7007),
+          row(16, `111T${key("2")}`, -7007, "REFUND"),
+          row(17, `111T${key("1")}`, 9000),
+          row(18, `111T${key("1")}`, -1000, "REFUND"),
+        ],
+        "20261014",
+      );
+      const notCancelled = ["NEEDS_REVIEW", "REFUND_INVOICE_NOT_CANCELLED", []];
+      const unexplained = ["NEEDS_REVIEW", "REFUND_AMOUNT_UNEXPLAINED", []];
+      assert.deepEqual(await states(week2.id), [
+        ["RESOLVED", null, []],
+        ["RESOLVED", null, [partInvoice, partCorrective]],
+        notCancelled,
+        notCancelled,
+        unexplained,
+        unexplained,
+      ]);
+
+      // week 1 resolves on reprocess, against the refund a week later
+      await service.reprocess(week1.id);
+      assert.deepEqual(await states(week1.id), [
+        ["RESOLVED", null, []],
+        ["RESOLVED", null, [partInvoice, partCorrective]],
+      ]);
+
+      // our own storno of the live invoice (the correction chain) settles the full refund
+      const storno = `${INVOICE_PREFIX}-2026/FS${s5}`;
+      await prisma.invoice.create({
+        data: {
+          direction: "OUTBOUND",
+          source: "MANUAL",
+          documentType: "STORNO",
+          invoiceNumber: storno,
+          partnerName: "Kitalalt Vevo",
+          salesOrderId: full.id,
+          referencedInvoiceId: live.id,
+          grossAmount: -7007,
+        },
+      });
+      await service.reprocess(week2.id);
+      const settled = ["RESOLVED", null, [live.invoiceNumber, storno]];
+      assert.deepEqual((await states(week2.id)).slice(2, 4), [
+        settled,
+        settled,
+      ]);
     });
   },
 );

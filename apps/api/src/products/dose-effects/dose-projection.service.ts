@@ -6,6 +6,11 @@ import {
 } from "@nestjs/common";
 import { prisma } from "@acropora/database";
 
+import {
+  CustomerCandidateSource,
+  shopTextAllowed,
+} from "../../aquariums/recommendation/customer-candidate-source.js";
+import { toProjectedCandidateRows } from "../../aquariums/recommendation/customer-candidate-projection.rules.js";
 import { DoseEffectsService } from "./dose-effects.service.js";
 import {
   type DoseProjectionStatus,
@@ -13,6 +18,10 @@ import {
   doseProjectionStatus,
   toProjectedRow,
 } from "./dose-projection.rules.js";
+import {
+  RUN_OUT_FACT_FIELDS,
+  toRunOutProducts,
+} from "./runout-projection.rules.js";
 
 /** Hourly: the purchasability and the JEV change outside the dose list too. */
 export const DOSE_PROJECTION_INTERVAL_MS = 60 * 60 * 1000;
@@ -45,6 +54,9 @@ export interface DoseProjectionOutcome {
  *   5  a scheduled job, and its failure is a run record the status endpoint
  *      shows; the staleness gate is the safety net, not the alarm.
  *
+ * The run-out reminder's product list (ReefClub V3.2, `ReefClubRunOutProduct`) is rebuilt in the same transaction and run,
+ * from the accepted product knowledge facts; the run's `rowCount` stays the dose list's.
+ *
  * A failed build changes NOTHING in the projection (the transaction rolls
  * back) and writes a FAILED record after it. Rebuilds run one after another
  * in this process; one waiting rebuild takes every request that comes while
@@ -57,8 +69,13 @@ export class DoseProjectionService implements OnModuleInit, OnModuleDestroy {
   private startup: NodeJS.Timeout | null = null;
   private tail: Promise<unknown> = Promise.resolve();
   private queued: Promise<DoseProjectionOutcome> | null = null;
+  /** The switch for the shop text, read at each build (a property, so a test sets it without touching the environment). */
+  shopTextSwitch: () => boolean = () => shopTextAllowed();
 
-  constructor(private readonly doseEffects: DoseEffectsService) {}
+  constructor(
+    private readonly doseEffects: DoseEffectsService,
+    private readonly customerCandidates: CustomerCandidateSource,
+  ) {}
 
   onModuleInit(): void {
     this.startup = setTimeout(() => {
@@ -120,6 +137,53 @@ export class DoseProjectionService implements OnModuleInit, OnModuleDestroy {
           await tx.reefClubDoseRow.createMany({
             data: rows.map((row) => ({ ...row, runId: run.id })),
           });
+          // THE RUN-OUT REMINDER'S PRODUCT LIST (V3.2, slice 4), in the same run: the accepted product-level facts it counts
+          // from, replaced whole like the dose list (`runout-projection.rules.ts`).
+          const facts = await tx.productKnowledgeFact.findMany({
+            where: {
+              scopeKey: "",
+              field: { in: [...RUN_OUT_FACT_FIELDS] },
+              value: { not: null },
+            },
+            select: {
+              productId: true,
+              field: true,
+              value: true,
+              status: true,
+              product: { select: { name: true, isActive: true } },
+            },
+          });
+          await tx.reefClubRunOutProduct.deleteMany({});
+          await tx.reefClubRunOutProduct.createMany({
+            data: toRunOutProducts(
+              facts.map((fact) => ({
+                productId: fact.productId,
+                productName: fact.product.name,
+                productActive: fact.product.isActive,
+                field: fact.field,
+                value: fact.value,
+                status: fact.status,
+              })),
+            ).map((row) => ({ ...row, runId: run.id })),
+          });
+          // THE CUSTOMER CANDIDATES (V3.4 S2b), in the same run: replaced whole like the lists above. THEIR FAILURE DOES NOT TAKE THE DOSE
+          // LIST WITH IT (the dose list is a live feature, this one is new): a failed build empties the table, and an empty table is "no
+          // recommendation", the safe direction, never a stale list.
+          let candidateRows: ReturnType<typeof toProjectedCandidateRows> = [];
+          try {
+            candidateRows = toProjectedCandidateRows(
+              await this.customerCandidates.candidatesByMove(),
+              { allowShopText: this.shopTextSwitch() },
+            );
+          } catch (error) {
+            this.logger.warn(
+              `A vevői jelöltek vetítése elbukott, a tábla üres marad: ${error instanceof Error ? error.name : "ismeretlen hiba"}`,
+            );
+          }
+          await tx.reefClubCustomerCandidate.deleteMany({});
+          await tx.reefClubCustomerCandidate.createMany({
+            data: candidateRows.map((row) => ({ ...row, runId: run.id })),
+          });
           await tx.reefClubDoseProjectionRun.deleteMany({
             where: {
               id: { not: run.id },
@@ -166,16 +230,27 @@ export class DoseProjectionService implements OnModuleInit, OnModuleDestroy {
 export async function readDoseProjectionStatus(
   now: Date = new Date(),
 ): Promise<DoseProjectionStatus> {
-  const [success, failure, rowCount] = await Promise.all([
-    prisma.reefClubDoseProjectionRun.findFirst({
-      where: { status: "SUCCEEDED" },
-      orderBy: { finishedAt: "desc" },
-    }),
-    prisma.reefClubDoseProjectionRun.findFirst({
-      where: { status: "FAILED" },
-      orderBy: { finishedAt: "desc" },
-    }),
-    prisma.reefClubDoseRow.count(),
-  ]);
-  return doseProjectionStatus({ success, failure, rowCount, now });
+  const [success, failure, rowCount, candidateRows, candidateShopText] =
+    await Promise.all([
+      prisma.reefClubDoseProjectionRun.findFirst({
+        where: { status: "SUCCEEDED" },
+        orderBy: { finishedAt: "desc" },
+      }),
+      prisma.reefClubDoseProjectionRun.findFirst({
+        where: { status: "FAILED" },
+        orderBy: { finishedAt: "desc" },
+      }),
+      prisma.reefClubDoseRow.count(),
+      prisma.reefClubCustomerCandidate.count(),
+      prisma.reefClubCustomerCandidate.count({
+        where: { referenceKind: "SHOP_TEXT" },
+      }),
+    ]);
+  return doseProjectionStatus({
+    success,
+    failure,
+    rowCount,
+    customerCandidates: { rows: candidateRows, shopText: candidateShopText },
+    now,
+  });
 }

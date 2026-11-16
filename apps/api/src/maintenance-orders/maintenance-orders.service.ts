@@ -20,6 +20,7 @@ import { WorksheetsService } from "../worksheets/worksheets.service.js";
 import {
   CreateContractJobDto,
   IssueMaintenanceOrderDto,
+  type IssueMaintenanceOrderLineDto,
   RevokeMaintenanceOrderDto,
   UploadCustomerFormDto,
 } from "./dto.js";
@@ -41,15 +42,24 @@ import { MaintenanceOrdersRepository } from "./maintenance-orders.repository.js"
  */
 function reservationConflict(
   year: number,
-  failed: { ok: false; exhausted: string[] } | { ok: false; busy: true },
+  failed:
+    | { ok: false; exhausted: string[]; short: string[] }
+    | { ok: false; busy: true },
 ): ConflictException {
-  return "busy" in failed
-    ? new ConflictException(
-        "A szerződés alkalomkeretét most egy másik művelet foglalja. Próbáld újra.",
-      )
-    : new ConflictException(
-        `A következő tételeknél ${year}-ban elfogyott az évi alkalomkeret: ${failed.exhausted.join(", ")}.`,
-      );
+  if ("busy" in failed)
+    return new ConflictException(
+      "A szerződés alkalomkeretét most egy másik művelet foglalja. Próbáld újra.",
+    );
+  const parts: string[] = [];
+  if (failed.exhausted.length)
+    parts.push(
+      `A következő tételeknél ${year}-ban elfogyott az évi alkalomkeret: ${failed.exhausted.join(", ")}.`,
+    );
+  if (failed.short.length)
+    parts.push(
+      `A következő tételeknél ${year}-ban nem fér bele a kért alkalom az évi keretbe: ${failed.short.join(", ")}.`,
+    );
+  return new ConflictException(parts.join(" "));
 }
 
 /**
@@ -70,6 +80,42 @@ function assertContinuable(
     throw new ConflictException(
       "Ez a kérés-azonosító egy másik szerződés karbantartási lapjához tartozik. Új lapot kezdj.",
     );
+}
+
+/**
+ * A KIÁLLÍTÁS TÉTELENKÉNTI DARAB- ÉS ALKALOMSZÁMA (Luca, 2026-11-13). A kérés `lines` mezője felülírja az eddigi
+ * alapot (a szerződés darabszáma, egy alkalom); ami nincs benne, az alap marad. Hibás kérés 400: egy sor, ami nem
+ * a kiválasztott tételé, vagy kétszer szerepel, vagy nulla darabot kér, olyasmit rendelne, amit a felhasználó nem
+ * látott.
+ */
+export function chosenOrderLines(
+  dto: { itemIds: string[]; lines?: IssueMaintenanceOrderLineDto[] },
+  items: readonly { id: string; quantity: Prisma.Decimal }[],
+): Map<string, { quantity: Prisma.Decimal; occasions: number }> {
+  const known = new Set(dto.itemIds);
+  const byItem = new Map<string, IssueMaintenanceOrderLineDto>();
+  for (const line of dto.lines ?? []) {
+    if (!known.has(line.itemId))
+      throw new BadRequestException(
+        "A darab- és alkalomszám olyan tételhez tartozik, amely nincs a kiválasztottak között.",
+      );
+    if (byItem.has(line.itemId))
+      throw new BadRequestException(
+        "Egy tételhez csak egyszer adható meg darab- és alkalomszám.",
+      );
+    byItem.set(line.itemId, line);
+  }
+  return new Map(
+    items.map((item) => {
+      const line = byItem.get(item.id);
+      const quantity = line?.quantity
+        ? new Prisma.Decimal(line.quantity.replace(",", "."))
+        : item.quantity;
+      if (!quantity.gt(0))
+        throw new BadRequestException("A darabszám nulla nem lehet.");
+      return [item.id, { quantity, occasions: line?.occasions ?? 1 }];
+    }),
+  );
 }
 
 @Injectable()
@@ -106,6 +152,7 @@ export class MaintenanceOrdersService {
    */
   async issue(dto: IssueMaintenanceOrderDto, actor: AuthenticatedUser) {
     const contract = await this.orderableContract(dto);
+    const chosen = chosenOrderLines(dto, contract.items);
 
     const now = new Date();
     const occasionYear = maintenanceOrderOccasionYear(now);
@@ -138,10 +185,10 @@ export class MaintenanceOrdersService {
         position: item.position,
         description: item.description,
         unitPricePerOccasion: item.unitNet,
-        quantity: item.quantity,
-        // EGY KIÁLLÍTÁS EGY-EGY ALKALMAT VISZ TÉTELENKÉNT -- a szerződés
-        // `occasionsPerYear`-je az ÉVES keret, nem ennek a lapnak a sora.
-        occasionsPerYear: 1,
+        quantity: chosen.get(item.id)!.quantity,
+        // A KIÁLLÍTÁS ALAPESETBEN EGY-EGY ALKALMAT VISZ TÉTELENKÉNT, de a felhasználó többet is kérhet
+        // (Luca, 2026-11-13) -- a szerződés `occasionsPerYear`-je az ÉVES keret, nem ennek a lapnak a sora.
+        occasionsPerYear: chosen.get(item.id)!.occasions,
         vatRatePercent: item.vatRatePercent,
       })),
       subject: contract.title,
@@ -192,6 +239,11 @@ export class MaintenanceOrdersService {
             contractItemId: item.id,
             description: item.description,
             occasionsPerYear: item.occasionsPerYear,
+            // A KIÁLLÍTÁS A KÉRT ÖSSZES ALKALMAT EGYSZERRE FOGLALJA, és az aláíráskor létrejövő EGY karbantartási
+            // lap / munkalap fedi mind az N alkalmat (acrobot, 2026-11-14 01:20: „egy munkalap a tétel teljes kért
+            // darab- és alkalomszámával"): az nem foglal külön (`occasionsUsed`: a megrendelőlapos lap sora nem
+            // számít). A szerződésből közvetlenül indított munkalap viszont új alkalom, és önmagát foglalja.
+            requested: chosen.get(item.id)!.occasions,
           })),
         },
         (tx) =>
@@ -205,7 +257,8 @@ export class MaintenanceOrdersService {
                 contractItemId: item.id,
                 description: item.description,
                 unitNet: item.unitNet,
-                quantity: item.quantity,
+                quantity: chosen.get(item.id)!.quantity,
+                occasions: chosen.get(item.id)!.occasions,
                 vatRatePercent: item.vatRatePercent,
               })),
               document: {
@@ -303,6 +356,8 @@ export class MaintenanceOrdersService {
       departmentId: item.contractItem.departmentId,
       description: item.description,
       quantity: item.quantity.toNumber(),
+      // az aláírás utáni munkalap a megrendelőlap teljes alkalomszámát viszi
+      occasions: item.occasions,
     }));
     const departmentId = await siteForContractItems(this.repository, items);
 
@@ -495,6 +550,8 @@ export class MaintenanceOrdersService {
                 description: item.description,
                 unitNet: item.unitNet,
                 quantity: item.quantity,
+                // a vevő saját lapja egy alkalmat vesz fel tételenként (mint eddig)
+                occasions: 1,
                 vatRatePercent: item.vatRatePercent,
               })),
               document: {
@@ -599,25 +656,106 @@ export class MaintenanceOrdersService {
       throw new BadRequestException(
         "A megadott tételek között olyan van, ami nem ehhez a szerződéshez tartozik, vagy már nem létezik.",
       );
+    // a kért darab- és alkalomszám (a hiányzó: a szerződés darabszáma, egy alkalom)
+    const chosen = chosenOrderLines(dto, contract.items);
+    const key = dto.clientOperationId?.trim() || randomUUID();
+    const title = dto.title?.trim() || contract.title;
 
-    const items = contract.items.map((item) => ({
+    if (!dto.separate || contract.items.length === 1)
+      return this.createOneContractJob(
+        contract,
+        contract.items,
+        chosen,
+        key,
+        title,
+        actor,
+      );
+
+    /*
+      TÉTELENKÉNT KÜLÖN LAP ÉS MUNKALAP (Luca, 2026-11-13): minden kijelölt tételből önálló lap, a saját
+      munkalapjával. ELŐBB MINDEN ELLENŐRZÉS MINDEN TÉTELRE, írás nélkül: a helyszín-szabály (a tételnek van
+      helyszíne) és a keret (egyszer, a kért alkalmakkal). Ha bármelyik tételen elbukik, nem jön létre az első lap
+      sem, ugyanúgy, mint az egy-lapos módban. Utána tételenként a megszokott út, saját kulccsal
+      (`<kulcs>-<tétel>`), tehát egy újrahívás ugyanazt a lapot kapja vissza, nem újat. A helyszínszabály
+      tételenként érvényes: a külön lapoknak nem kell közös helyszín.
+      A MARADÉK HATÁR, kimondva: egy PÁRHUZAMOS foglalás az előellenőrzés és a ciklus között még elvihet egy
+      alkalmat, és akkor az addig létrejött lapok megmaradnak (a hibás tétel lapja lemondva, lásd
+      `createOneContractJob`); az ugyanazzal a kulccsal küldött újrapróbálás onnan folytatja, a kész lapokat
+      visszakapja, nem újakat nyit.
+    */
+    for (const item of contract.items)
+      await siteForContractItems(this.repository, [
+        {
+          id: item.id,
+          departmentId: item.departmentId,
+          description: item.description,
+          quantity: chosen.get(item.id)!.quantity.toNumber(),
+        },
+      ]);
+    const nowYear = maintenanceOrderOccasionYear(new Date());
+    const existing = await this.repository.serviceJobContractItemState({
+      clientOperationId: `contract-job-${key}-${contract.items[0]!.id}`,
+    });
+    if (!existing || existing.itemCount === 0) {
+      const precheck = await this.repository.reserveOccasions(
+        {
+          contractId: contract.id,
+          year: nowYear,
+          items: contract.items.map((item) => ({
+            contractItemId: item.id,
+            description: item.description,
+            occasionsPerYear: item.occasionsPerYear,
+            requested: chosen.get(item.id)!.occasions,
+          })),
+        },
+        async () => null,
+      );
+      if (!precheck.ok) throw reservationConflict(nowYear, precheck);
+    }
+    const serviceJobIds: string[] = [];
+    for (const item of contract.items) {
+      const { serviceJobId } = await this.createOneContractJob(
+        contract,
+        [item],
+        chosen,
+        `${key}-${item.id}`,
+        `${title}: ${item.description}`,
+        actor,
+      );
+      serviceJobIds.push(serviceJobId);
+    }
+    return { serviceJobId: serviceJobIds[0]!, serviceJobIds };
+  }
+
+  /** EGY LAP A KIVÁLASZTOTT TÉTELEKBŐL: a korábbi `createJobFromContract` törzse, a kért darab- és alkalomszámmal. */
+  private async createOneContractJob(
+    contract: NonNullable<
+      Awaited<ReturnType<MaintenanceOrdersRepository["contractForIssuance"]>>
+    >,
+    contractItems: typeof contract.items,
+    chosen: ReturnType<typeof chosenOrderLines>,
+    key: string,
+    title: string,
+    actor: AuthenticatedUser,
+  ): Promise<{ serviceJobId: string; serviceJobIds: string[] }> {
+    const items = contractItems.map((item) => ({
       id: item.id,
       departmentId: item.departmentId,
       description: item.description,
-      quantity: item.quantity.toNumber(),
+      quantity: chosen.get(item.id)!.quantity.toNumber(),
+      occasions: chosen.get(item.id)!.occasions,
     }));
     const departmentId = await siteForContractItems(this.repository, items);
     const reservation = {
       contractId: contract.id,
-      items: contract.items.map((item) => ({
+      items: contractItems.map((item) => ({
         contractItemId: item.id,
         description: item.description,
         occasionsPerYear: item.occasionsPerYear,
+        requested: chosen.get(item.id)!.occasions,
       })),
     };
     const nowYear = maintenanceOrderOccasionYear(new Date());
-    const key = dto.clientOperationId?.trim() || randomUUID();
-
     /*
       A KULCS ALATTI LAP, MÉG A LÉTREHOZÁS ELŐTT (barracuda 31714, 31720).
       Lemondott lapot nem folytatunk, és egy másik szerződés lapja alá nem
@@ -646,7 +784,7 @@ export class MaintenanceOrdersService {
         worksheets: this.worksheets,
       },
       {
-        title: dto.title?.trim() || contract.title,
+        title,
         contract: { id: contract.id, customerId: contract.customer.id },
         departmentId,
         items,
@@ -667,7 +805,8 @@ export class MaintenanceOrdersService {
     // ugyanaz az ellenőrzés a létrehozás után is: egy párhuzamos kérés
     // ugyanazzal a kulccsal közben hozhatta létre a lapot
     assertContinuable(state, contract.id);
-    if (state.itemCount > 0) return { serviceJobId };
+    if (state.itemCount > 0)
+      return { serviceJobId, serviceJobIds: [serviceJobId] };
 
     const year = maintenanceOrderOccasionYear(state.createdAt);
     const reserved = await this.repository.reserveOccasions(
@@ -676,11 +815,12 @@ export class MaintenanceOrdersService {
         this.repository.insertServiceJobContractItems(
           tx,
           serviceJobId,
-          contract.items.map((item) => ({
+          contractItems.map((item) => ({
             contractItemId: item.id,
             description: item.description,
             unitNet: item.unitNet,
-            quantity: item.quantity,
+            quantity: chosen.get(item.id)!.quantity,
+            occasions: chosen.get(item.id)!.occasions,
             vatRatePercent: item.vatRatePercent,
           })),
         ),
@@ -697,6 +837,6 @@ export class MaintenanceOrdersService {
       );
       throw reservationConflict(year, reserved);
     }
-    return { serviceJobId };
+    return { serviceJobId, serviceJobIds: [serviceJobId] };
   }
 }

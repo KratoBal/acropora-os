@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { validateSync } from "class-validator";
 import { hasPermission, NAVIGATION_ENTRIES, USER_ROLES } from "@acropora/types";
 import type { AuthenticatedUser, Session } from "@acropora/types";
 
 import { AuthController } from "./auth.controller.js";
 import type { AuthService } from "./auth.service.js";
-import type { AuthenticatedRequest } from "./auth.types.js";
+import { ThemePreferenceDto, type AuthenticatedRequest } from "./auth.types.js";
 import {
   CSRF_COOKIE_NAME,
   type CookieOptions,
@@ -484,5 +485,36 @@ describe("AuthController", () => {
     assert.equal(idsFor("SALES").includes("nav-integration-mobile"), false);
     // A KONTROLL, hogy a SALES-nel nem egy ures valasz adja a hamisat:
     assert.ok(idsFor("SALES").length > 0);
+  });
+
+  /*
+    THE PERSON'S OWN THEME (Balázs, 2026-11-09, card 302951c0). WHAT TURNS THIS RED: the save written for anyone but
+    the signed-in person, or the stored value not handed back.
+  */
+  it("PUT /auth/me/theme saves the signed-in person's own theme and hands it back", async () => {
+    const calls: unknown[][] = [];
+    const controller = new AuthController({
+      setThemePreference: async (userId: string, preference: string) => {
+        calls.push([userId, preference]);
+        return preference;
+      },
+    } as unknown as AuthService);
+    const result = await controller.setThemePreference(testUser, {
+      preference: "light",
+    });
+    assert.deepEqual(calls, [["user-1", "light"]]);
+    assert.deepEqual(result, { themePreference: "light" });
+  });
+
+  it("the theme body takes only light, dark or system", () => {
+    const check = (preference: unknown) =>
+      validateSync(Object.assign(new ThemePreferenceDto(), { preference }))
+        .length;
+    assert.equal(check("light"), 0);
+    assert.equal(check("dark"), 0);
+    assert.equal(check("system"), 0);
+    assert.ok(check("blue") > 0);
+    assert.ok(check(undefined) > 0);
+    assert.ok(check("LIGHT") > 0);
   });
 });

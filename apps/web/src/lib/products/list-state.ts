@@ -1,5 +1,7 @@
 import {
+  isHusbandryFilterValue,
   isShippingFilterValue,
+  type HusbandryFilterValue,
   type ShippingFilterValue,
 } from "@acropora/types";
 
@@ -13,6 +15,8 @@ export interface ProductListUrlState {
   brandId: string;
   /** a82ed229: one shipping flag, or never looked at */
   shipping: ShippingFilterValue | "";
+  /** V2.2 S6: the live animals with a verified (or an unverified) husbandry block */
+  husbandry: HusbandryFilterValue | "";
   page: number;
   pageSize: (typeof PRODUCT_PAGE_SIZES)[number];
 }
@@ -23,6 +27,7 @@ export const DEFAULT_PRODUCT_LIST_STATE: ProductListUrlState = {
   categoryId: "",
   brandId: "",
   shipping: "",
+  husbandry: "",
   page: 1,
   pageSize: 25,
 };
@@ -46,6 +51,9 @@ export function parseProductListState(
     shipping: isShippingFilterValue(params.get("szallitas"))
       ? (params.get("szallitas") as ShippingFilterValue)
       : "",
+    husbandry: isHusbandryFilterValue(params.get("tartas"))
+      ? (params.get("tartas") as HusbandryFilterValue)
+      : "",
     page: positiveInteger(params.get("page"), 1),
     pageSize: PRODUCT_PAGE_SIZES.includes(
       size as (typeof PRODUCT_PAGE_SIZES)[number],
@@ -63,6 +71,7 @@ export function serializeProductListState(state: ProductListUrlState): string {
   if (state.categoryId) params.set("categoryId", state.categoryId);
   if (state.brandId) params.set("brandId", state.brandId);
   if (state.shipping) params.set("szallitas", state.shipping);
+  if (state.husbandry) params.set("tartas", state.husbandry);
   if (state.page > 1) params.set("page", String(state.page));
   if (state.pageSize !== 25) params.set("pageSize", String(state.pageSize));
   return params.toString();

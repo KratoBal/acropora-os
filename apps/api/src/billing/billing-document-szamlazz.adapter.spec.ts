@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 import { buildSzamlazzAgentInvoiceXml } from "../integrations/szamlazz/szamlazz-agent-xml.js";
 import {
+  adapterErrorSentence,
   BillingDocumentAdapterError,
   toSzamlazzAgentInput,
   type BillingDocumentForIssue,
@@ -335,5 +337,129 @@ describe("toSzamlazzAgentInput", () => {
       [["orszag", "sendEmail", "adoalany", "adoszamEU"], false],
       "ADAPTER-EU-BUYER",
     );
+  });
+});
+
+describe("adapterErrorSentence", () => {
+  it("names what to do when the payment terms are missing, and keeps the code in the text", () => {
+    const missing = new BillingDocumentAdapterError(
+      "BILLING_PAYMENT_TERMS_REQUIRED",
+    );
+    for (const action of ["issue", "preview"] as const) {
+      const sentence = adapterErrorSentence(missing, action);
+      assert.match(sentence, /fizetési határidő vagy a fizetési mód hiányzik/);
+      assert.match(sentence, /\(BILLING_PAYMENT_TERMS_REQUIRED\)/);
+    }
+    assert.match(
+      adapterErrorSentence(missing, "issue"),
+      /^A bizonylat nem küldhető a Számlázz\.hu-ra/,
+    );
+    assert.match(
+      adapterErrorSentence(missing, "preview"),
+      /^Az előnézet nem kérhető a Számlázz\.hu-tól/,
+    );
+  });
+
+  it("any other code keeps the plain sentence with the code", () => {
+    const other = new BillingDocumentAdapterError("BILLING_NO_LINES");
+    assert.equal(
+      adapterErrorSentence(other, "issue"),
+      "A bizonylat nem küldhető a Számlázz.hu-ra (BILLING_NO_LINES).",
+    );
+    assert.equal(
+      adapterErrorSentence(other, "preview"),
+      "Az előnézet nem kérhető a Számlázz.hu-tól (BILLING_NO_LINES).",
+    );
+  });
+
+  it("both services use it (a plain code in the message would bring the old text back)", () => {
+    const issue = readFileSync(
+      "src/billing/billing-document-issue.service.ts",
+      "utf8",
+    );
+    const preview = readFileSync(
+      "src/billing/billing-document-preview.service.ts",
+      "utf8",
+    );
+    assert.match(issue, /adapterErrorSentence\(error, "issue"\)/);
+    assert.match(preview, /adapterErrorSentence\(error, "preview"\)/);
+    assert.doesNotMatch(
+      issue,
+      /nem küldhető a Számlázz\.hu-ra \(\$\{error\.code\}\)/,
+    );
+    assert.doesNotMatch(
+      preview,
+      /nem kérhető a Számlázz\.hu-tól \(\$\{error\.code\}\)/,
+    );
+  });
+});
+
+/*
+  A KIFIZETETT DÍJBEKÉRŐBŐL KÉSZÜLŐ ELŐLEGSZÁMLA (kártya 00926d89): `fizetve=true` az XSD helyén, és a határidő a kiállítás napja.
+  MI PIROSÍT: ha a jelző kimarad vagy rossz helyre kerül (a Számlázz.hu a rossz sorrendet elutasítja); ha egy fizetetlen díjbekérő, egy
+  számla vagy díjbekérő-szám nélküli előleg is megkapná; ha a határidő a vázlaté marad; ha előnézetben a mai nap helyett a vázlaté állna.
+*/
+describe("an advance invoice from a paid proforma", () => {
+  const paidAdvance: Partial<BillingDocumentForIssue> = {
+    documentType: "ADVANCE_INVOICE",
+    proformaNumber: "D-CRPR-7",
+    proformaPaid: true,
+    issueDate: "2026-11-16",
+  };
+  const input = (
+    document: Partial<BillingDocumentForIssue>,
+    options: { previewOnly?: boolean; today?: string } = {},
+  ) =>
+    toSzamlazzAgentInput(
+      { ...base, ...document },
+      { agentKey: "test-key", previewOnly: false, ...options },
+    );
+
+  it("carries fizetve in its XSD place, after the document flag and before the preview mark", () => {
+    const xml = buildSzamlazzAgentInvoiceXml(
+      input(paidAdvance, { previewOnly: true }),
+    );
+    const header = children(xml, "fejlec");
+    assertXsdOrder(header, FEJLEC_ORDER, "paid advance fejlec");
+    assert.ok(
+      header.indexOf("elolegszamla") < header.indexOf("fizetve") &&
+        header.indexOf("fizetve") < header.indexOf("elonezetpdf"),
+      header.join(","),
+    );
+    assert.match(xml, /<fizetve>true<\/fizetve>/);
+  });
+
+  it("is due on its issue day, not on the draft's due date", () => {
+    assert.equal(input(paidAdvance).paymentDueDate, "2026-11-16");
+  });
+
+  it("without an issue date (the preview) it is due today", () => {
+    const { issueDate: _drop, ...noDate } = paidAdvance;
+    assert.equal(
+      input(noDate, { previewOnly: true, today: "2026-11-17" }).paymentDueDate,
+      "2026-11-17",
+    );
+  });
+
+  it("an unpaid proforma, an invoice, or an advance without a proforma number changes nothing", () => {
+    for (const document of [
+      { ...paidAdvance, proformaPaid: false },
+      { ...paidAdvance, proformaPaid: undefined },
+      { ...paidAdvance, documentType: "INVOICE" as const },
+      { ...paidAdvance, proformaNumber: null },
+    ]) {
+      const result = input(document);
+      assert.equal(result.paid, undefined, JSON.stringify(document));
+      assert.equal(
+        result.paymentDueDate,
+        "2026-10-08",
+        JSON.stringify(document),
+      );
+      assert.doesNotMatch(
+        buildSzamlazzAgentInvoiceXml(result),
+        /fizetve/,
+        JSON.stringify(document),
+      );
+    }
   });
 });

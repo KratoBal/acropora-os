@@ -8,6 +8,7 @@ import {
 import type { Session, UserRole } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { answered } from "@/test/answered";
 import type { PaidMarkRunView, PaidMarksStatus } from "@/lib/api/paid-marks";
 
 const api = vi.hoisted(() => ({
@@ -155,6 +156,8 @@ describe("PaidMarksPage", () => {
   it("starts the run only after the confirmation, then reads again", async () => {
     api.runNow.mockResolvedValue({ status: "started", sources: [] });
     render(<PaidMarksPage />);
+    // the run is offered before the page's state has arrived: the confirmation needs that state
+    await answered(api.latest, api.status);
     const button = await screen.findByRole("button", { name: "Futtatás most" });
     fireEvent.click(button);
     expect(api.runNow).not.toHaveBeenCalled();

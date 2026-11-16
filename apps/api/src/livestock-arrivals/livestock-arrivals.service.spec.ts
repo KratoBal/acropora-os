@@ -60,6 +60,7 @@ function setup(
     readAt: [] as string[],
     productChecks: [] as string[],
     productOptions: [] as (string | undefined)[],
+    followed: [] as Parameters<LivestockArrivalsService["followCalendar"]>[0][],
   };
   const repository = {
     list: async (filters: LivestockArrivalFilters) => {
@@ -93,6 +94,10 @@ function setup(
   };
   const service = new LivestockArrivalsService(repository as never);
   service.now = () => new Date("2026-11-05T23:30:00Z");
+  service.followCalendar = async (input) => {
+    calls.followed.push(input);
+    return { moved: 0, steppedBack: 0, told: 0 };
+  };
   return { service, calls };
 }
 
@@ -346,6 +351,45 @@ describe("productOptions", () => {
     assert.equal(options[0]!.kind, "CORAL");
     await service.productOptions(undefined);
     assert.deepEqual(calls.productOptions, ["zoa", undefined]);
+  });
+});
+
+describe("the content calendar follows the arrival (T5.5 S7)", () => {
+  it("a saved edit hands the arrival's new day to the calendar, with the editor", async () => {
+    const { service, calls } = setup();
+    await service.update("a1", { expectedOn: "2026-11-20" }, "u9");
+    assert.deepEqual(calls.followed, [
+      {
+        eventKey: "livestock:a1",
+        eventTitle: "Amphiprion ocellaris",
+        event: {
+          title: "Amphiprion ocellaris",
+          startsOn: "2026-11-20",
+          endsOn: "2026-11-20",
+        },
+        actorUserId: "u9",
+      },
+    ]);
+  });
+
+  it("a cancelled arrival tells the calendar it is gone", async () => {
+    const { service, calls } = setup();
+    await service.update("a1", { status: "CANCELLED" }, "u9");
+    assert.equal(calls.followed[0]!.event, null);
+  });
+
+  it("a cancelled arrival is said gone ONCE: a later save of it tells the calendar nothing (barracuda, #2610)", async () => {
+    const { service, calls } = setup(
+      stored({ status: "CANCELLED", preorderable: false }),
+    );
+    await service.update("a1", { note: "javított megjegyzés" }, "u9");
+    assert.deepEqual(calls.followed, []);
+  });
+
+  it("a refused edit tells the calendar nothing", async () => {
+    const { service, calls } = setup();
+    await assert.rejects(service.update("a1", { productId: "ghost" }, "u9"));
+    assert.deepEqual(calls.followed, []);
   });
 });
 

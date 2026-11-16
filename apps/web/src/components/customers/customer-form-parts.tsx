@@ -14,6 +14,26 @@ export interface AddressState {
   line2: string;
 }
 
+/**
+ * A FIZETÉSI HATÁRIDŐ MEZŐJE (Vevő adatlap és Új vevő; Balázs 2026-11-11 10:58 UTC): napban, egész, 0-365, ugyanaz a szabály, mint a
+ * Partnereknél (`supplier.dto.ts`). Üres = nincs saját érték (`null`): a számla a Partnerek oldalon beállított napot veszi, ha az sincs,
+ * 8 napot. A nulla érvényes (aznap esedékes), nem "nincs".
+ */
+export type PaymentDueDaysParse =
+  { ok: true; value: number | null } | { ok: false; error: string };
+
+export function parsePaymentDueDays(text: string): PaymentDueDaysParse {
+  const trimmed = text.trim();
+  if (trimmed === "") return { ok: true, value: null };
+  const value = Number(trimmed);
+  if (!/^\d+$/.test(trimmed) || !Number.isInteger(value) || value > 365)
+    return {
+      ok: false,
+      error: "A fizetési határidő 0 és 365 közötti egész szám lehet.",
+    };
+  return { ok: true, value };
+}
+
 export const emptyAddress = (): AddressState => ({
   country: "HU",
   postalCode: "",

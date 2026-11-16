@@ -72,7 +72,7 @@ describe("ProductAuthorityCard", () => {
         "product-1",
       ),
     );
-    expect(onTransferred).toHaveBeenCalled();
+    await waitFor(() => expect(onTransferred).toHaveBeenCalled());
   });
 
   /**

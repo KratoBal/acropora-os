@@ -3,10 +3,12 @@ import {
   ArrayMaxSize,
   IsArray,
   IsBoolean,
+  IsEmail,
   IsIn,
   IsOptional,
   IsString,
   MaxLength,
+  ValidateIf,
   ValidateNested,
 } from "class-validator";
 
@@ -50,6 +52,23 @@ export class GameQuestionDto {
 
   @IsString()
   closesAt!: string;
+
+  /** The week's prize (all optional; `null` or an empty text clears one, an absent key leaves it as it is). */
+  @ValidateIf((_object, value) => value !== undefined && value !== null)
+  @IsString()
+  @MaxLength(120)
+  prizeName?: string | null;
+
+  @ValidateIf((_object, value) => value !== undefined && value !== null)
+  @IsString()
+  @MaxLength(500)
+  prizeDescription?: string | null;
+
+  /** an id from the mail image store (`POST /game/prize-images` returns it) */
+  @ValidateIf((_object, value) => value !== undefined && value !== null)
+  @IsString()
+  @MaxLength(64)
+  prizeImageId?: string | null;
 }
 
 /** A person's decision on an answer: true, false, or null (back to the automatic one). */
@@ -67,4 +86,10 @@ export class GameDrawDto {
   @IsString()
   @MaxLength(64)
   questionId?: string;
+}
+
+export class GameTestMailDto {
+  @IsEmail()
+  @MaxLength(254)
+  email!: string;
 }

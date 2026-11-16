@@ -47,16 +47,24 @@ function hamisFetch(
 const BEMENET = {
   questionId: "q1",
   email: "j@example.com",
+  name: "Kovács Péter",
+  rulesAccepted: true as const,
+  consentGiven: true as const,
+  rulesVersion: "szabalyzat-1.0",
+  privacyVersion: "adatkezeles-1.0",
   answer: "a",
   website: "",
 };
 
 describe("a szerzodes utvonalai", () => {
-  it("are the three /jatek paths", () => {
+  it("are the six /jatek paths", () => {
     assert.deepEqual(UTVONALAK, {
       aktualis: "/jatek/aktualis",
       bekuldes: "/jatek/bekuldes",
       megerosites: "/jatek/megerosites",
+      nyertesek: "/jatek/nyertesek",
+      kep: "/jatek/nyeremeny-kep",
+      lezart: "/jatek/lezart",
     });
   });
 });
@@ -69,7 +77,11 @@ describe("httpJatekApi.aktualis", () => {
       "https://api.example/",
       a.fetchImpl,
     ).aktualis();
-    assert.deepEqual(eredmeny, { ok: true, question: HAMIS_KERDES });
+    assert.deepEqual(eredmeny, {
+      ok: true,
+      question: HAMIS_KERDES,
+      next: null,
+    });
     assert.equal(a.hivasok[0]!.url, "https://api.example/jatek/aktualis");
     assert.equal(a.hivasok[0]!.method, "GET");
     const nincs = hamisFetch({ status: 200, body: { question: null } });
@@ -78,8 +90,163 @@ describe("httpJatekApi.aktualis", () => {
       {
         ok: true,
         question: null,
+        next: null,
       },
     );
+  });
+
+  it("carries the week's prize on the question and the next question seen ahead; a malformed prize or next is dropped, never a reason to fail the page", async () => {
+    const premium = {
+      name: "Aquaforest AF Nano Tank",
+      description: "Egy kis akvárium.",
+      hasImage: true,
+    };
+    const a = hamisFetch({
+      status: 200,
+      body: {
+        question: { ...HAMIS_KERDES, prize: premium },
+        next: {
+          id: "q2",
+          week: "2026-W47",
+          opensAt: "2026-11-13T23:00:00.000Z",
+          prize: { name: "Pumpa", description: null, hasImage: false },
+        },
+      },
+    });
+    const r = await httpJatekApi("https://api.example", a.fetchImpl).aktualis();
+    assert.ok(r.ok && r.question);
+    assert.deepEqual(r.question.prize, premium);
+    assert.deepEqual(r.next, {
+      id: "q2",
+      week: "2026-W47",
+      opensAt: "2026-11-13T23:00:00.000Z",
+      prize: { name: "Pumpa", description: null, hasImage: false },
+    });
+    const rossz = hamisFetch({
+      status: 200,
+      body: {
+        question: { ...HAMIS_KERDES, prize: { name: "", hasImage: "igen" } },
+        next: { id: 5, opensAt: "nem idő" },
+      },
+    });
+    const m = await httpJatekApi(
+      "https://api.example",
+      rossz.fetchImpl,
+    ).aktualis();
+    assert.ok(m.ok && m.question);
+    assert.equal(m.question.prize, null);
+    assert.equal(m.next, null);
+    // no open question: the next one still comes through, so the page can count down to it
+    const csak = hamisFetch({
+      status: 200,
+      body: {
+        question: null,
+        next: {
+          id: "q2",
+          week: "2026-W47",
+          opensAt: "2026-11-13T23:00:00.000Z",
+          prize: null,
+        },
+      },
+    });
+    const c = await httpJatekApi(
+      "https://api.example",
+      csak.fetchImpl,
+    ).aktualis();
+    assert.ok(c.ok && c.question === null && c.next?.id === "q2");
+  });
+
+  it("lists the winners from GET /jatek/nyertesek and drops a row that is not a winner; a failed call is unavailable", async () => {
+    const jo = {
+      kind: "WEEKLY",
+      week: "2026-W45",
+      name: "Kovács P.",
+      emailMasked: "ko•••@example.hu",
+      prizeName: "Nano",
+      drawnAt: "2026-11-14T20:00:00.000Z",
+    };
+    const a = hamisFetch({
+      status: 200,
+      body: {
+        winners: [
+          jo,
+          { kind: "X", name: "x" },
+          { ...jo, name: "" },
+          { ...jo, emailMasked: "" },
+          { ...jo, emailMasked: "kovacs@example.hu" },
+        ],
+      },
+    });
+    const r = await httpJatekApi("https://api.example", a.fetchImpl).nyertesek(
+      "203.0.113.9",
+    );
+    assert.deepEqual(r, { ok: true, winners: [jo] });
+    assert.equal(a.hivasok[0]!.url, "https://api.example/jatek/nyertesek");
+    assert.equal(a.hivasok[0]!.headers[FEJLEC_IP], "203.0.113.9");
+    const rossz = hamisFetch({ status: 502, text: "<html>Bad Gateway</html>" });
+    const u = await httpJatekApi(
+      "https://api.example",
+      rossz.fetchImpl,
+    ).nyertesek();
+    assert.ok(!u.ok && u.code === "UNAVAILABLE");
+  });
+
+  it("lists the closed weeks with their answers from GET /jatek/lezart, drops a row without an answer; a failed call is unavailable", async () => {
+    const jo = {
+      week: "2026-W44",
+      prompt: "Melyik korall?",
+      answer: "Acropora",
+      closesAt: "2026-11-05T22:59:59.000Z",
+    };
+    const a = hamisFetch({
+      status: 200,
+      body: {
+        weeks: [jo, { ...jo, week: "2026-W43", answer: "  " }, { week: 1 }],
+      },
+    });
+    const r = await httpJatekApi("https://api.example", a.fetchImpl).lezart(
+      "203.0.113.9",
+    );
+    assert.deepEqual(r, { ok: true, weeks: [jo] });
+    assert.equal(a.hivasok[0]!.url, "https://api.example/jatek/lezart");
+    assert.equal(a.hivasok[0]!.headers[FEJLEC_IP], "203.0.113.9");
+    const rossz = hamisFetch({ status: 502, text: "<html>Bad Gateway</html>" });
+    const u = await httpJatekApi(
+      "https://api.example",
+      rossz.fetchImpl,
+    ).lezart();
+    assert.ok(!u.ok && u.code === "UNAVAILABLE");
+  });
+
+  it("fetches a prize picture by the question's id and passes only an image on", async () => {
+    const kep = async (type: string | null, status = 200) => {
+      const hivasok: string[] = [];
+      const fetchImpl = (async (url: string) => {
+        hivasok.push(url);
+        return new Response(new Uint8Array([1, 2, 3]), {
+          status,
+          headers: type ? { "Content-Type": type } : {},
+        });
+      }) as unknown as typeof fetch;
+      return {
+        hivasok,
+        r: await httpJatekApi("https://api.example", fetchImpl).kep("q 1"),
+      };
+    };
+    const jo = await kep("image/png");
+    assert.ok(jo.r.ok && jo.r.contentType === "image/png");
+    assert.equal(
+      jo.hivasok[0],
+      "https://api.example/jatek/nyeremeny-kep/q%201",
+    );
+    // a text/html page or an SVG is not accepted as a picture; a 404 is an error
+    for (const rossz of [
+      await kep("text/html"),
+      await kep("image/svg+xml"),
+      await kep(null),
+    ])
+      assert.equal(rossz.r.ok, false);
+    assert.equal((await kep("image/png", 404)).r.ok, false);
   });
 
   it("a malformed question, a gateway page and a dead connection are 'unavailable', never a question", async () => {
@@ -278,7 +445,11 @@ describe("a hamis api", () => {
     assert.deepEqual(await api.aktualis(), {
       ok: true,
       question: HAMIS_KERDES,
+      next: null,
     });
+    assert.deepEqual(await api.nyertesek(), { ok: true, winners: [] });
+    assert.deepEqual(await api.lezart(), { ok: true, weeks: [] });
+    assert.equal((await api.kep("proba-kerdes")).ok, false);
     assert.deepEqual(await api.bekuldes(BEMENET, null), {
       ok: false,
       status: 404,

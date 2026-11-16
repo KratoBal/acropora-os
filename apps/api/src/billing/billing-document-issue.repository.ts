@@ -53,6 +53,9 @@ export class BillingDocumentIssueRepository {
     id: string;
     invoiceNumber: string;
     issueDate: Date;
+    /** The confirmed dates (card 7ba97e0d): absent when nothing was confirmed, and the draft's stay. */
+    fulfillmentDate?: Date;
+    dueDate?: Date | null;
     buyer: BuyerSnapshot;
     lines: readonly SentLineAmounts[];
     totals: { netAmount: string; vatAmount: string; grossAmount: string };
@@ -67,6 +70,10 @@ export class BillingDocumentIssueRepository {
           status: "ISSUED",
           invoiceNumber: input.invoiceNumber,
           issueDate: input.issueDate,
+          ...(input.fulfillmentDate === undefined
+            ? {}
+            : { fulfillmentDate: input.fulfillmentDate }),
+          ...(input.dueDate === undefined ? {} : { dueDate: input.dueDate }),
           partnerName: input.buyer.name,
           partnerTaxNumber: input.buyer.taxNumber,
           buyerSnapshot: input.buyer as unknown as Prisma.InputJsonValue,

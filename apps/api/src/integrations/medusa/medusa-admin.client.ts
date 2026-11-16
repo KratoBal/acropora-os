@@ -36,6 +36,7 @@ import type { KnowledgeProjection } from "../../products/knowledge/knowledge.pol
 import type { MedusaShippingFlags } from "./medusa-shipping-attributes.policy.js";
 import type { MedusaBrandRecord } from "./medusa-brand-module.policy.js";
 import type { MedusaHomepageContentRecord } from "./medusa-homepage-projection.js";
+import type { MedusaLivestockArrival } from "./medusa-livestock-arrivals-projection.js";
 import type { MedusaLandingPageRecord } from "./medusa-landing-projection.js";
 
 export interface MedusaProductLookupRow {
@@ -61,6 +62,14 @@ export interface MedusaProductRow extends MedusaProductLookupRow {
 export interface MedusaShippingAttributeRow extends MedusaShippingFlags {
   id: string | null;
   product_id: string;
+}
+
+/**
+ * A bolt iras-torzsenek NEM tarolt kapcsoloi (commerce #724): `adopt_pickup_only_derived` a mar bekapcsolt `pickup_only`
+ * jelolojet engedi az OS-nek (az atnezett, egyszeri visszatoltes), a sorra nem kerul.
+ */
+export interface ShippingAttributesWriteOptions {
+  adopt_pickup_only_derived?: boolean;
 }
 
 export interface MedusaProductInput {
@@ -581,6 +590,11 @@ export interface MedusaOrderOverviewRow {
     changed_at: string | null;
   };
   shipping_method: string | null;
+  /**
+   * The id of the shipping option behind `shipping_method`. Absent from an older
+   * commerce answer; the pickup marker then falls back to the name.
+   */
+  shipping_option_id?: string | null;
   /** `type`: a GLS-pont fajtája (`parcel-shop` / `parcel-locker`), ha a webshop adja. */
   pickup_point: {
     id: string | null;
@@ -791,6 +805,8 @@ export interface MedusaOrderDetailRow {
   }[];
   shipping_methods: {
     name: string;
+    /** The option the method was created from (a stored order field); the store pickup is decided on it. */
+    shipping_option_id?: string | null;
     data: Record<string, unknown> | null;
     /**
      * SZÁMOLT MEZŐ, és kifejezett `fields` listával a webshop NEM adja
@@ -1275,10 +1291,20 @@ export interface MedusaAdminClient {
   fetchShippingAttributes(
     productId: string,
   ): Promise<MedusaShippingAttributeRow>;
-  /** A negy zaszlo kikuldese. EZ IR A BOLTI OLDALRA. */
+  /**
+   * A BOLT MINDEN SZALLITASI-JELLEMZO SORA (olvasas). A bolt route-ja `take: null`-lal minden sort ad (a bolt
+   * route-janak `take: null` javitasa elott csak egy lapot: ott a lista csonka, es a hivo nem tudhatja), a CLI ebbol keresi a boltban maradt
+   * elo allat fajtakat.
+   */
+  listShippingAttributes(): Promise<MedusaShippingAttributeRow[]>;
+  /**
+   * A zaszlok kikuldese. EZ IR A BOLTI OLDALRA. A bolt route-ja reszleges frissitest fogad (minden zaszlo opcionalis,
+   * a megadottak irodnak): a boltban maradt fajta letorlese csak a fajtat kuldi, hogy egy kozben kezzel atallitott
+   * masik zaszlot ne irjon vissza.
+   */
   setShippingAttributes(
     productId: string,
-    flags: MedusaShippingFlags,
+    flags: Partial<MedusaShippingFlags> & ShippingAttributesWriteOptions,
   ): Promise<MedusaShippingAttributeRow>;
   /**
    * A TERMEKISMERET A BOLT OLDALAN, OLVASASRA (#1431, a PR A / PR B
@@ -1342,6 +1368,13 @@ export interface MedusaAdminClient {
    * ugyanígy számolja, és csak eltérésnél küld.
    */
   fetchUrlRedirects(): Promise<MedusaUrlRedirectList>;
+  /**
+   * AZ ERKEZO ALLATOK LISTAJA a boltban (V2.6 S4b; a commerce `GET /admin/livestock-arrivals`, #719). Ures lista, ha a
+   * modul meg nincs telepitve (404): akkor az elso kor kuld, es a PUT mondja meg a hibat.
+   */
+  fetchLivestockArrivals(): Promise<MedusaLivestockArrival[]>;
+  /** A TELJES LISTA CSEREJE (`PUT`): ami nincs a torzsben, kikerul. EZ IR A BOLTI OLDALRA. */
+  replaceLivestockArrivals(arrivals: MedusaLivestockArrival[]): Promise<void>;
   /**
    * A TELJES LISTA CSERÉJE (`PUT`): ami nincs a törzsben, az eltűnik. EZ IR A
    * BOLTI OLDALRA.
@@ -1542,6 +1575,14 @@ export interface MedusaPriceRow {
   id: string;
   currency_code: string;
   amount: number;
+  /**
+   * A sor fajtájának jelei (550b80d1): árlista, szabály, mennyiségi sáv. Csak a kétértelmű ár MÉRÉSÉHEZ olvassuk
+   * (`priceConflictShape`), a döntéshez nem. A `?` szándékos: hogy a `*prices` alak hozza-e őket, épp az a mérés része.
+   */
+  price_list_id?: string | null;
+  rules_count?: number | null;
+  min_quantity?: number | null;
+  max_quantity?: number | null;
 }
 
 /** Egy változat az áraival. */
@@ -1798,6 +1839,7 @@ export const ORDER_DETAIL_FIELDS = [
   "items.metadata",
   "items.tax_lines.rate",
   "shipping_methods.name",
+  "shipping_methods.shipping_option_id",
   "shipping_methods.data",
   "shipping_methods.total",
   "shipping_methods.amount",
@@ -2561,9 +2603,16 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
     return body.shipping_attribute;
   }
 
+  async listShippingAttributes(): Promise<MedusaShippingAttributeRow[]> {
+    const body = await this.request<{
+      shipping_attributes: MedusaShippingAttributeRow[];
+    }>("/admin/shipping-attributes");
+    return body.shipping_attributes ?? [];
+  }
+
   async setShippingAttributes(
     productId: string,
-    flags: MedusaShippingFlags,
+    flags: Partial<MedusaShippingFlags> & ShippingAttributesWriteOptions,
   ): Promise<MedusaShippingAttributeRow> {
     const body = await this.request<{
       shipping_attribute: MedusaShippingAttributeRow;
@@ -2725,6 +2774,28 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
         body: JSON.stringify({ os_brand_id: osBrandId }),
       },
     );
+  }
+
+  async fetchLivestockArrivals(): Promise<MedusaLivestockArrival[]> {
+    try {
+      const body = await this.request<{
+        livestock_arrivals: MedusaLivestockArrival[];
+      }>("/admin/livestock-arrivals");
+      return body.livestock_arrivals ?? [];
+    } catch (error) {
+      if (error instanceof MedusaAdminHttpError && error.status === 404)
+        return [];
+      throw error;
+    }
+  }
+
+  async replaceLivestockArrivals(
+    arrivals: MedusaLivestockArrival[],
+  ): Promise<void> {
+    await this.request("/admin/livestock-arrivals", {
+      method: "PUT",
+      body: JSON.stringify({ arrivals }),
+    });
   }
 
   async fetchUrlRedirects(): Promise<MedusaUrlRedirectList> {

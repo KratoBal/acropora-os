@@ -152,6 +152,13 @@ export const PERMISSION_AREAS: readonly PermissionArea[] = [
     ],
   },
   {
+    key: "rentals",
+    label: "Eszközbérlés",
+    view: P.RENTALS_VIEW,
+    manage: P.RENTALS_MANAGE,
+    extras: [],
+  },
+  {
     key: "service",
     label: "Szerviz",
     view: P.SERVICE_VIEW,
@@ -175,6 +182,22 @@ export const PERMISSION_AREAS: readonly PermissionArea[] = [
     view: P.MORTALITY_VIEW,
     manage: P.MORTALITY_MANAGE,
     extras: [],
+  },
+  {
+    key: "operations-log",
+    label: "Üzemeltetési napló",
+    view: P.OPERATIONS_LOG_VIEW,
+    manage: P.OPERATIONS_LOG_TEMPLATES_MANAGE,
+    extras: [
+      {
+        permission: P.OPERATIONS_LOG_RECORD,
+        label: "Bejegyzés rögzítése",
+      },
+      {
+        permission: P.OPERATIONS_LOG_PARTNER_VIEW,
+        label: "Partner-nézet (a saját helyszínek)",
+      },
+    ],
   },
   {
     key: "aquariums",
@@ -204,7 +227,13 @@ export const PERMISSION_AREAS: readonly PermissionArea[] = [
     manage: P.GAME_MANAGE,
     extras: [],
   },
-  { key: "ai-test", label: "AI teszt", view: P.AI_TEST_VIEW, extras: [] },
+  {
+    key: "ai-test",
+    label: "AI teszt",
+    view: P.AI_TEST_VIEW,
+    manage: P.AI_SETTINGS_MANAGE,
+    extras: [],
+  },
   {
     key: "knowledge-research",
     label: "Kutatási tudástár",
@@ -228,6 +257,12 @@ export const PERMISSION_AREAS: readonly PermissionArea[] = [
     extras: [],
   },
   { key: "users", label: "Felhasználók", manage: P.USERS_MANAGE, extras: [] },
+  {
+    key: "attendance",
+    label: "Jelenléti ív",
+    manage: P.ATTENDANCE_MANAGE,
+    extras: [],
+  },
 ];
 
 export type PermissionLevel = "none" | "view" | "manage";

@@ -8,8 +8,10 @@ import {
 import {
   WEBSHOP_MAIL_KEYS,
   WEBSHOP_MAIL_SAMPLE_FACTS,
+  WEBSHOP_USAGE_GUIDE_LIMITS,
   hungarianDay,
   mailDay,
+  safeLegalUrls,
   safeOrderViewUrl,
   mailForint,
   parseWebshopMailFacts,
@@ -34,8 +36,8 @@ describe("the webshop events and their derivation", () => {
       webshop.map((e) => e.id).sort(),
       [...keys, ...keys.map((k) => `${k}_EN`)].sort(),
     );
-    // twelve templates, each with its English twin
-    assert.equal(webshop.length, 24);
+    // sixteen templates (the fifteenth: the withdrawal acknowledgement; the sixteenth: the stock alert's arrival), each with its English twin
+    assert.equal(webshop.length, 32);
   });
 
   /*
@@ -316,6 +318,238 @@ describe("the derived content", () => {
     assert.equal(kindsOf()[0], undefined);
     facts.orders[0]!.livestock_kinds = ["CORAL", "SHRIMP", 3, "FISH"];
     assert.deepEqual(kindsOf()[0], ["CORAL", "FISH"]);
+  });
+
+  /*
+    V3.3 (card 69b5f2ef, korall's spec): the shop sends the parcel's usage guides. WHAT TURNS THIS RED: a missing or odd list
+    refusing the mail (the deploy order is free); an entry without a name, or with nothing to show (no excerpt, no readable
+    dose, not a treatment), let through; a dose that is not the OS canonical form kept; more than two doses kept; a non-https
+    link written into an href; an excerpt over the limit not cut on a word.
+  */
+  it("usage guides: a missing or odd list leaves them out, bad entries are dropped, never a refused mail", () => {
+    const facts = JSON.parse(
+      JSON.stringify(WEBSHOP_MAIL_SAMPLE_FACTS["order-shipped"]),
+    ) as { shipped: { usage_guides?: unknown } };
+    const guidesOf = () => {
+      const parsed = parseWebshopMailFacts("order-shipped", facts);
+      assert.equal(parsed.ok, true);
+      const f = (parsed as { facts: WebshopMailFacts }).facts;
+      return f.template === "order-shipped" ? f.shipped.usage_guides : null;
+    };
+    assert.equal(guidesOf(), undefined);
+    facts.shipped.usage_guides = "Rázd fel";
+    assert.equal(guidesOf(), undefined);
+    facts.shipped.usage_guides = [
+      {
+        title: "KZ Amino",
+        excerpt: "  Rázd fel.\n Mérd ki.  ",
+        url: "https://shop.example/hu/termek/kz-amino",
+      },
+      { title: "", excerpt: "név nélkül" },
+      { title: "Nincs semmi" },
+      { title: "Nem kezelőszer", excerpt: "", fallback_scope: "true" },
+      { title: "Rossz link", excerpt: "Szöveg.", url: "javascript:alert(1)" },
+      {
+        title: "Csak adag",
+        dosing: [
+          "1 ml/100 L/day",
+          "5 ml / 100 liter naponta",
+          7,
+          "2 drop/100 L, 1-2/week",
+          "3 drop/100 L/week",
+        ],
+        url: "https://shop.example/hu/termek/b",
+      },
+      { title: "Csak rossz adag", dosing: ["1-2 ml/100 L/day"] },
+      { title: "Kezelőszer", fallback_scope: true },
+      7,
+    ];
+    assert.deepEqual(guidesOf(), [
+      {
+        title: "KZ Amino",
+        excerpt: "Rázd fel. Mérd ki.",
+        url: "https://shop.example/hu/termek/kz-amino",
+      },
+      { title: "Rossz link", excerpt: "Szöveg.", url: null },
+      {
+        title: "Csak adag",
+        excerpt: "",
+        dosing: ["1 ml/100 L/day", "2 drop/100 L, 1-2/week"],
+        url: "https://shop.example/hu/termek/b",
+      },
+      {
+        title: "Kezelőszer",
+        excerpt: "",
+        fallback_scope: true,
+        url: null,
+      },
+    ]);
+    facts.shipped.usage_guides = [
+      { title: "Hosszú", excerpt: "szó ".repeat(200) },
+    ];
+    const long = guidesOf()![0]!.excerpt;
+    assert.ok(
+      long.length <= WEBSHOP_USAGE_GUIDE_LIMITS.excerpt + 1,
+      String(long.length),
+    );
+    assert.match(long, /szó…$/);
+  });
+
+  /*
+    THE FOUR CASES AND THE FRAME (spec points 2, 4 and 6). WHAT TURNS THIS RED: case A without its dose line or with the
+    fallback sentence; case B without the fallback sentence in place of the dose; case C without the link or with the fallback;
+    case D drawn outside the treatments or without the fallback inside; the parcel's order not kept; the title, the intro or
+    the closing line missing, or the closing line drawn more than once; the HTML and the text version saying different things.
+  */
+  it("usage guides: the four cases, in the parcel's order, with the title, the intro and one closing line", () => {
+    const shipped = WEBSHOP_MAIL_SAMPLE_FACTS["order-shipped"];
+    if (shipped.template !== "order-shipped") throw new Error("sample");
+    const block = webshopMailContent({
+      ...shipped,
+      shipped: {
+        ...shipped.shipped,
+        usage_guides: [
+          {
+            title: "A <termék>",
+            excerpt: "Kalciumot pótol.",
+            dosing: ["0.5 ml/100 L/day"],
+            url: "https://shop.example/a",
+          },
+          {
+            title: "B termék",
+            excerpt: "Aminosavat ad.",
+            url: "https://shop.example/b",
+          },
+          {
+            title: "C termék",
+            excerpt: "",
+            dosing: ["2 drop/1000 L, 1-2/week"],
+            url: "https://shop.example/c",
+          },
+          {
+            title: "D kezelőszer",
+            excerpt: "",
+            fallback_scope: true,
+            url: null,
+          },
+          { title: "D berendezés", excerpt: "", url: "https://shop.example/d" },
+        ],
+      },
+    }).blocks.hasznalati_utmutato;
+    const fallback =
+      "Kövesd a csomagoláson található gyártói utasítást. Kérdés esetén keress minket.";
+    const closing =
+      "A pontos adagolás és a biztonsági tudnivalók a termék oldalán és a csomagoláson vannak. Ha kérdésed van, keress minket.";
+    assert.equal(
+      block?.text,
+      [
+        "Használati útmutató a rendelt termékeidhez",
+        "Röviden összefoglaltuk, hogyan használd a megrendelt termékeket. A teljes útmutató a termék oldalán van.",
+        "A <termék>\nKalciumot pótol.\nAdagolás (a gyártó szerint): 0,5 ml / 100 liter, naponta\nTeljes útmutató a termék oldalán: https://shop.example/a",
+        `B termék\nAminosavat ad.\n${fallback}\nTeljes útmutató a termék oldalán: https://shop.example/b`,
+        "C termék\nAdagolás (a gyártó szerint): 2 csepp / 1\u00a0000 liter, hetente 1-2 alkalommal\nTeljes útmutató a termék oldalán: https://shop.example/c",
+        `D kezelőszer\n${fallback}`,
+        closing,
+      ].join("\n\n"),
+    );
+    const html = block?.html ?? "";
+    assert.match(
+      html,
+      /<h2 [^>]*>Használati útmutató a rendelt termékeidhez<\/h2>/,
+    );
+    assert.match(
+      html,
+      /<strong>A &lt;termék&gt;<\/strong><br \/>Kalciumot pótol\.<br \/>Adagolás \(a gyártó szerint\): 0,5 ml \/ 100 liter, naponta<br \/><a href="https:\/\/shop\.example\/a">Teljes útmutató a termék oldalán<\/a>/,
+    );
+    assert.match(
+      html,
+      new RegExp(`<strong>D kezelőszer</strong><br />${fallback}</p>`),
+    );
+    assert.doesNotMatch(html, /D berendezés|shop\.example\/d/);
+    assert.equal(html.split(closing).length - 1, 1);
+    // the same products, in the same order, in both versions
+    const order = (text: string) =>
+      ["A ", "B termék", "C termék", "D kezelőszer"].map((n) =>
+        text.indexOf(n),
+      );
+    assert.deepEqual(
+      order(html.replace(/&lt;/g, "<")).map((i) => i >= 0),
+      [true, true, true, true],
+    );
+    assert.ok(
+      order(block!.text).every((i, n, all) => n === 0 || i > all[n - 1]!),
+    );
+    for (const id of ["WEBSHOP_ORDER_SHIPPED", "WEBSHOP_ORDER_SHIPPED_EN"]) {
+      const event = MAIL_TEMPLATE_EVENTS.find((e) => e.id === id);
+      assert.ok(event?.variables.includes("hasznalati_utmutato"), id);
+    }
+  });
+
+  /*
+    WHEN THERE IS NO SECTION AT ALL (spec points 1, 4 and 6). WHAT TURNS THIS RED: a block drawn with no guide (the mail would
+    change for every parcel); a parcel of treatments with neither excerpt nor dose getting a block of fallback sentences; an
+    English mail getting the Hungarian section.
+  */
+  it("usage guides: no section without a guide, with only treatments in case D, or in an English mail", () => {
+    const shipped = WEBSHOP_MAIL_SAMPLE_FACTS["order-shipped"];
+    if (shipped.template !== "order-shipped") throw new Error("sample");
+    const withGuides = (
+      usage_guides: NonNullable<typeof shipped.shipped.usage_guides>,
+      locale?: "hu" | "en",
+    ) =>
+      webshopMailContent({
+        ...shipped,
+        ...(locale ? { locale } : {}),
+        shipped: { ...shipped.shipped, usage_guides },
+      }).blocks.hasznalati_utmutato;
+    assert.equal(webshopMailContent(shipped).blocks.hasznalati_utmutato, null);
+    assert.equal(withGuides([]), null);
+    assert.equal(
+      withGuides([
+        { title: "D1", excerpt: "", fallback_scope: true, url: null },
+        { title: "D2", excerpt: "", fallback_scope: true, url: null },
+      ]),
+      null,
+    );
+    const one = [{ title: "A", excerpt: "Szöveg.", url: null }];
+    assert.notEqual(withGuides(one, "hu"), null);
+    assert.equal(withGuides(one, "en"), null);
+  });
+
+  /*
+    AT MOST EIGHT (spec point 4). WHAT TURNS THIS RED: the ninth product drawn; the "rest" line missing after eight, or drawn
+    with exactly eight; a product left out in case D counted towards the eight.
+  */
+  it("usage guides: at most eight products, then one line about the rest", () => {
+    const shipped = WEBSHOP_MAIL_SAMPLE_FACTS["order-shipped"];
+    if (shipped.template !== "order-shipped") throw new Error("sample");
+    const rest = "A többi termék útmutatója a termék oldalán van.";
+    const text = (n: number, leftOut = 0) =>
+      webshopMailContent({
+        ...shipped,
+        shipped: {
+          ...shipped.shipped,
+          usage_guides: [
+            ...Array.from({ length: leftOut }, (_, i) => ({
+              title: `Kimarad ${i + 1}`,
+              excerpt: "",
+              url: null,
+            })),
+            ...Array.from({ length: n }, (_, i) => ({
+              title: `Termék ${i + 1}`,
+              excerpt: "Szöveg.",
+              url: null,
+            })),
+          ],
+        },
+      }).blocks.hasznalati_utmutato?.text ?? "";
+    assert.match(text(9), /Termék 8\n/);
+    assert.doesNotMatch(text(9), /Termék 9/);
+    assert.match(text(9), new RegExp(rest));
+    assert.match(text(8), /Termék 8\n/);
+    assert.doesNotMatch(text(8), new RegExp(rest));
+    assert.match(text(8, 2), /Termék 8\n/);
+    assert.doesNotMatch(text(8, 2), new RegExp(rest));
   });
 
   it("the akklimatizacio value is declared for the order confirmation and its English twin", () => {
@@ -613,6 +847,110 @@ describe("the guest order page's address in the mail", () => {
       }).values.rendeles_megtekintes_mondat;
       assert.equal(v, "", String(nincs));
     }
+  });
+});
+
+/*
+  AZ ASZF ES AZ ADATKEZELESI TAJEKOZTATO CIME A VISSZAIGAZOLO LEVELBEN (acrobot 50140; a regi bolt PDF-et csatolt, az nalunk a Fogyasztobarat
+  domain-kotese miatt nem megy). MI PIROSIT: csak az egyik cim kerul a mondatba (a mondat mindkettot nevezi meg); a bolt barmilyen
+  szovege (http, szokoz, tag-jel) egy vevo levelebe jut; a mondat nyelve nem a level nyelve; a cim nelkuli level valamit mutat (a
+  bekezdes nem tunik el); a mas sablon (nem a visszaigazolas) is hordozza; a bolt a cimpar nelkul KUDARCOT kap (kiegeszito, sosem
+  utasitott el level).
+*/
+describe("the legal pages' addresses in the order confirmation", () => {
+  const ASZF = "https://shop.example/hu/jogi/aszf";
+  const AT = "https://shop.example/hu/jogi/adatkezeles";
+
+  it("is declared for the order confirmation and its English twin only", () => {
+    for (const id of ["WEBSHOP_ORDER_PLACED", "WEBSHOP_ORDER_PLACED_EN"]) {
+      const event = MAIL_TEMPLATE_EVENTS.find((e) => e.id === id);
+      assert.ok(event?.variables.includes("jogi_linkek_mondat"), id);
+    }
+    const confirmed = MAIL_TEMPLATE_EVENTS.find(
+      (e) => e.id === "WEBSHOP_ORDER_CONFIRMED",
+    );
+    assert.equal(confirmed?.variables.includes("jogi_linkek_mondat"), false);
+  });
+
+  it("only a pair of plain https addresses passes: one alone, or a bad one, is no sentence", () => {
+    assert.deepEqual(safeLegalUrls({ aszf: ASZF, adatkezeles: AT }), {
+      aszf: ASZF,
+      adatkezeles: AT,
+    });
+    for (const rossz of [
+      undefined,
+      null,
+      "",
+      42,
+      { aszf: ASZF },
+      { adatkezeles: AT },
+      { aszf: ASZF, adatkezeles: "http://shop.example/hu/jogi/adatkezeles" },
+      { aszf: "https://shop.example/<script>", adatkezeles: AT },
+      { aszf: "https://shop.example/ x", adatkezeles: AT },
+      { aszf: 7, adatkezeles: AT },
+    ])
+      assert.equal(safeLegalUrls(rossz), null, JSON.stringify(rossz));
+  });
+
+  it("the parser keeps a good pair, makes a bad or missing one null, and never refuses the mail for it", () => {
+    const sample = JSON.parse(
+      JSON.stringify(WEBSHOP_MAIL_SAMPLE_FACTS["order-placed"]),
+    ) as Record<string, unknown>;
+    const urls = (v: unknown) => {
+      const parsed = parseWebshopMailFacts("order-placed", {
+        ...sample,
+        legal_urls: v,
+      });
+      assert.equal(parsed.ok, true);
+      return (parsed as { facts: { legal_urls?: unknown } }).facts.legal_urls;
+    };
+    assert.deepEqual(urls({ aszf: ASZF, adatkezeles: AT }), {
+      aszf: ASZF,
+      adatkezeles: AT,
+    });
+    for (const rossz of [undefined, null, "x", { aszf: ASZF }, ["x"]])
+      assert.equal(urls(rossz), null, JSON.stringify(rossz));
+  });
+
+  /** The sentence for the sample confirmation with these extra facts (the key is not on the other templates' type). */
+  const sentence = (
+    extra: Record<string, unknown>,
+    template = "order-placed",
+  ) =>
+    webshopMailContent({
+      ...WEBSHOP_MAIL_SAMPLE_FACTS[
+        template as keyof typeof WEBSHOP_MAIL_SAMPLE_FACTS
+      ],
+      ...extra,
+    } as unknown as WebshopMailFacts).values.jogi_linkek_mondat;
+
+  it("the value is a sentence naming both pages in the mail's language, and empty without them", () => {
+    assert.equal(
+      sentence({ legal_urls: { aszf: ASZF, adatkezeles: AT } }),
+      `Az általános szerződési feltételeket (${ASZF}) és az adatkezelési tájékoztatót (${AT}) a webshopunkban olvashatod.`,
+    );
+    assert.equal(
+      sentence({
+        locale: "en",
+        legal_urls: {
+          aszf: "https://shop.example/en-hu/jogi/aszf",
+          adatkezeles: "https://shop.example/en-hu/jogi/adatkezeles",
+        },
+      }),
+      "You can read our terms and conditions (https://shop.example/en-hu/jogi/aszf) and our privacy notice (https://shop.example/en-hu/jogi/adatkezeles) in our webshop.",
+    );
+    for (const nincs of [undefined, null, { aszf: ASZF }])
+      assert.equal(sentence({ legal_urls: nincs }), "", JSON.stringify(nincs));
+  });
+
+  it("another template has no such value at all, even if its facts had the key", () => {
+    assert.equal(
+      sentence(
+        { legal_urls: { aszf: ASZF, adatkezeles: AT } },
+        "order-status-confirmed",
+      ),
+      undefined,
+    );
   });
 });
 

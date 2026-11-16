@@ -45,6 +45,7 @@ export {
   BILLING_NEW_DOCUMENT_TYPES,
   BILLING_EMAIL_STATUSES,
   BILLING_SOURCE_TYPES,
+  BILLING_DRAFT_SOURCE_TYPES,
   BILLING_STORNABLE_TYPES,
   INVOICE_FORMATS,
   INVOICE_FORMAT_LABELS,
@@ -93,6 +94,7 @@ export type {
 export type {
   BillingDocumentAdvanceLink,
   BillingDocumentDeductedAdvance,
+  BillingDocumentFinalInvoiceNotice,
   BillingDocumentFinalInvoiceLink,
   BillingRelatedDocument,
   BillingDocumentCancellation,
@@ -147,6 +149,11 @@ export type {
   BillingLineStockOutcome,
 } from "./billing-document-read.js";
 export { billingProductPrice } from "./billing-product-price.js";
+export type {
+  ProductDiscontinuation,
+  ProductDiscontinuationReplacement,
+  SetProductDiscontinuationInput,
+} from "./product-discontinuation.js";
 export {
   outgoingMissingPayments,
   FIZMODUNIFIED_MISSING_PAYMENTS,
@@ -223,6 +230,7 @@ export {
   SHOP_NAME,
   WEBSHOP_MAIL_KEYS,
   WEBSHOP_MAIL_LOCALES,
+  WEBSHOP_USAGE_GUIDE_LIMITS,
   WEBSHOP_MAIL_SAMPLE_FACTS,
   WEBSHOP_SPLIT_PAYMENTS,
   WEBSHOP_STATUS_TEMPLATES,
@@ -232,6 +240,7 @@ export {
   isWebshopMailTemplate,
   parseWebshopMailFacts,
   safeOrderViewUrl,
+  safeLegalUrls,
   webshopMailContent,
   webshopMailKey,
   webshopMailLocaleOf,
@@ -246,8 +255,10 @@ export {
   WEBSHOP_LEGAL_BLOCK_IDS,
   WEBSHOP_LEGAL_PLACEHOLDER_MARK,
   WEBSHOP_LEGAL_VERSIONS,
+  WEBSHOP_LEGAL_TEST_VERSION,
   webshopLegalIsComplete,
   webshopLegalPart,
+  webshopLegalSendRefusal,
 } from "./webshop-legal.js";
 export type {
   WebshopLegalBlock,
@@ -266,6 +277,10 @@ export type {
   WebshopLivestockKind,
 } from "./webshop-acclimation.js";
 export {
+  WEBSHOP_USAGE_GUIDE_TEXT,
+  webshopDoseLine,
+} from "./webshop-usage-guide.js";
+export {
   LIVESTOCK_ARRIVAL_KINDS,
   LIVESTOCK_ARRIVAL_KIND_LABELS,
   LIVESTOCK_ARRIVAL_LIMITS,
@@ -281,6 +296,12 @@ export type {
   LivestockArrivalProductOption,
   LivestockArrivalStatus,
 } from "./livestock-arrival.js";
+export {
+  ACCEPTED_UPLOAD_MIMETYPES,
+  uploadAccept,
+  UPLOADED_FILE_TYPES,
+} from "./upload-file-type.js";
+export type { UploadedFileKind } from "./upload-file-type.js";
 export type {
   WebshopMailRender,
   WebshopRenderSteps,
@@ -297,10 +318,12 @@ export type {
   WebshopMailOrder,
   WebshopMailTemplate,
   WebshopPaymentRole,
+  WebshopLegalUrls,
   WebshopPlacedOrder,
   WebshopRefundFacts,
   WebshopShippedFacts,
   WebshopSplitPayment,
+  WebshopUsageGuide,
   WebshopStuckMail,
   WebshopStuckMailList,
 } from "./webshop-mail.js";
@@ -388,6 +411,16 @@ export interface DoseProjectionHealth {
   ageHours: number | null;
   rowCount: number;
   failingSinceLastSuccess: boolean;
+  /**
+   * THE CUSTOMER CANDIDATES the projection holds (V3.4): how many rows, how many of them rest on a shop text (only the test ReefClub
+   * has any, behind the switch), and when the last successful rebuild (the one that built them) finished. Product data only, never a
+   * customer's: so the measurement of a deployment does not depend on a database role.
+   */
+  customerCandidates: {
+    rows: number;
+    shopText: number;
+    builtAt: string | null;
+  };
 }
 
 export interface HealthResponse {
@@ -450,6 +483,7 @@ export {
   ROLE_PERMISSIONS,
   USER_ROLES,
   ASSIGNABLE_ROLES,
+  THEME_PREFERENCES,
 } from "./auth.js";
 export { CATALOG_ACTION_KINDS } from "./catalog-actions.js";
 export type {
@@ -514,6 +548,7 @@ export type {
   PartnerMembership,
   Permission,
   Session,
+  ThemePreference,
   UserRole,
 } from "./auth.js";
 export type {
@@ -525,6 +560,8 @@ export type {
   AssetDeletionBlockers,
   AssetPhaseConnection,
   AssetDocumentSummary,
+  AssetDocumentOcr,
+  AssetDocumentOcrStop,
   AssetDocumentText,
   AssetDocumentType,
   AssetEventSummary,
@@ -592,14 +629,58 @@ export {
 export type {
   ContentChannel,
   ContentComment,
+  ContentClaimSummary,
   ContentDetail,
   ContentListItem,
   ContentListResponse,
   ContentMoveOption,
   ContentState,
+  ContentStateEvent,
   ContentViewerRole,
   ContentWaitingOnMeResponse,
 } from "./content-management.js";
+export {
+  CONTENT_CALENDAR_GAP_DAYS,
+  CONTENT_CALENDAR_SETTING_LIMITS,
+  CONTENT_TEMPLATE_ANCHORS,
+  CONTENT_TEMPLATE_EVENT_KINDS,
+  CONTENT_TEMPLATE_EVENT_KIND_LABELS,
+  CONTENT_TEMPLATE_LIMITS,
+  CONTENT_TEMPLATE_ONE_DAY_KINDS,
+  CALENDAR_EVENT_KINDS,
+  CALENDAR_EVENT_KIND_LABELS,
+  CALENDAR_EVENT_LIMITS,
+  CONTENT_CALENDAR_ENTRY_KINDS,
+  CONTENT_CALENDAR_MAX_DAYS,
+  CONTENT_CALENDAR_UNKNOWN,
+} from "./content-calendar.js";
+export type {
+  CalendarDay,
+  CalendarDayOrUnknown,
+  CalendarEvent,
+  CalendarEventKind,
+  CalendarEventResponsible,
+  CalendarEventResponsibleOption,
+  ContentCalendarContentEntry,
+  ContentCalendarEntry,
+  ContentCalendarEntryKind,
+  ContentCalendarEventEntry,
+  ContentTemplateAnchor,
+  ContentTemplateEventKind,
+  ContentTemplateRule,
+  ContentCalendarFeed,
+  ContentCalendarLivestockEntry,
+  ContentCalendarPurchaseEntry,
+  ContentCalendarSaleEntry,
+  ContentCalendarSaleSource,
+  ContentCalendarSlotsResult,
+  ContentCalendarGapEvent,
+  ContentCalendarGapSlot,
+  ContentCalendarGaps,
+  ContentCalendarSettings,
+  ContentCalendarSlotStatus,
+  LivestockArrivalCalendarState,
+} from "./content-calendar.js";
 export type {
   AquariumDetail,
   AquariumEquipment,
@@ -890,7 +971,11 @@ export type {
   SzamlazzConnectionCredentialInput,
   SzamlazzConnectionView,
 } from "./integrations/szamlazz-connection.js";
-export type { MaintenanceInvoiceSummary } from "./maintenance-invoice.js";
+export type {
+  MaintenanceInvoiceConfirmation,
+  MaintenanceInvoiceIssueResult,
+  MaintenanceInvoiceSummary,
+} from "./maintenance-invoice.js";
 export type {
   NavIncomingInvoiceAddress,
   NavIncomingInvoiceDetail,
@@ -1004,6 +1089,7 @@ export type {
   ElhelyezesiIgeny,
   UnasProductMirrorDetail,
   ProductListResponse,
+  ProductLivestockKind,
   ProductUpdateInput,
   ProductType,
   ProductVariantSummary,
@@ -1109,17 +1195,119 @@ export type {
   AssetCategory,
   AssetCategoryListResponse,
 } from "./asset-category.js";
+export {
+  OPERATIONS_FIELD_TYPE_LABELS,
+  OPERATIONS_FIELD_TYPES,
+  OPERATIONS_FREQUENCY_LABELS,
+  OPERATIONS_METER_ROLE_LABELS,
+  OPERATIONS_METER_ROLES,
+  OPERATIONS_TASK_FREQUENCIES,
+  OPERATIONS_TEMPLATE_LIMITS,
+  assignOperationsFieldKeys,
+  normalizeOperationsText,
+  operationsFieldErrors,
+  operationsFieldKeyOf,
+} from "./operations-log.js";
+export type {
+  OperationsMeterRole,
+  OperationsTaskFieldDto,
+  OperationsTaskFieldInput,
+  OperationsTaskFieldType,
+  OperationsTaskFrequency,
+  OperationsTaskTarget,
+  OperationsTaskTemplateDto,
+  OperationsTaskTemplateInput,
+  OperationsTaskTemplateListResponse,
+} from "./operations-log.js";
+export {
+  OPERATIONS_ENTRY_LIMITS,
+  operationsEntryErrors,
+  operationsEntryValueFilled,
+} from "./operations-log-entry.js";
+export type {
+  OperationsEntryValue,
+  OperationsLogEntryCreateResponse,
+  OperationsLogEntryDto,
+  OperationsLogEntryInput,
+  OperationsLogEntryListResponse,
+  OperationsLogEntryPersonDto,
+  OperationsLogEntryPhotoDto,
+  OperationsLogEntryServiceJobDto,
+  OperationsLogEntryValueDto,
+} from "./operations-log-entry.js";
+export {
+  OPERATIONS_REPORT_PARTNER_PERFORMER,
+  OPERATIONS_REPORT_TIME_ZONE,
+  budapestDayKey,
+  budapestMidnight,
+  buildOperationsReport,
+  isMonthKey,
+  lastDayOfMonth,
+  monthBounds,
+  mondayOf,
+} from "./operations-report.js";
+export type {
+  OperationsReport,
+  OperationsReportAssetBlock,
+  OperationsReportAudience,
+  OperationsReportEntryInput,
+  OperationsReportEntryRow,
+  OperationsReportMissed,
+  OperationsReportResponse,
+  OperationsReportScheduleInput,
+} from "./operations-report.js";
+export {
+  operationsDurationText,
+  operationsMeterSharedNote,
+  operationsMonthTitle,
+  operationsNumberText,
+  operationsPeriodText,
+  operationsSignedNumberText,
+} from "./operations-report-format.js";
 export { FAVORITE_LIMITS, isFavoriteHref } from "./favorite.js";
 export type { FavoriteListResponse } from "./favorite.js";
 export { normalizeAssetFunctionName } from "./asset-function.js";
 export {
   normalizeOptionalRentalText,
+  normalizeRentalSerialNumber,
   RENTAL_EQUIPMENT_LIMITS,
 } from "./rental-equipment.js";
 export type {
   RentalEquipment,
   RentalEquipmentListResponse,
 } from "./rental-equipment.js";
+export {
+  RENTAL_LIMITS,
+  RENTAL_STATUSES,
+  rentalFeeHuf,
+  rentalPeriodCount,
+  rentalSettlement,
+} from "./rental.js";
+export type {
+  Rental,
+  RentalCustomerMatchResponse,
+  RentalCustomerSummary,
+  RentalListResponse,
+  RentalReturnInput,
+  RentalReturnPreview,
+  RentalReturnRecord,
+  RentalSettlement,
+  RentalStatus,
+} from "./rental.js";
+export {
+  fillRentalContractTemplate,
+  RENTAL_CONTRACT_LIMITS,
+  RENTAL_CONTRACT_MISSING_VALUE,
+  RENTAL_CONTRACT_VARIABLES,
+  rentalContractBlocks,
+  unknownRentalContractVariables,
+} from "./rental-contract.js";
+export type {
+  RentalContractBlock,
+  RentalContractValues,
+  RentalContractVariable,
+  RentalSettings,
+} from "./rental-contract.js";
 export type {
   AssetFunction,
   AssetFunctionListResponse,
@@ -1180,18 +1368,23 @@ export {
   MISSING_INVOICE_TABS,
   INVOICE_COLLECTION_ITEM_SOURCES,
   INVOICE_COLLECTION_ITEM_VERDICTS,
+  INVOICE_COLLECTION_REASONS,
 } from "./missing-invoices.js";
 export type {
   BankStatementImportResult,
   InvoiceCollectionItemRow,
+  InvoiceCollectionReason,
   InvoiceCollectionItemSource,
   InvoiceCollectionItemVerdict,
   InvoiceCollectionItemsResponse,
+  InvoiceCollectionRunRow,
+  InvoiceCollectionRunsResponse,
   InvoiceCollectionSuggestion,
   InvoiceCollectionSuggestionDecision,
   InvoiceCollectionSuggestionsResponse,
   MissingInvoiceAction,
   MissingInvoiceCandidate,
+  MissingInvoiceCandidateDiagnosis,
   MissingInvoiceCategory,
   MissingInvoiceCategoryInput,
   MissingInvoiceCommentInput,
@@ -1293,6 +1486,7 @@ export type {
   DashboardMissingInvoicesWidgetData,
   DashboardWebshopOrdersWidgetData,
   DashboardMessagesWidgetData,
+  DashboardContentApprovalWidgetData,
   DashboardOverdueInvoicesWidgetData,
   DashboardServiceTicketsWidgetData,
   DashboardSettlementsWidgetData,
@@ -1360,6 +1554,7 @@ export type {
   ServiceDraftItem,
   ServiceDraftListResponse,
   ServiceDraftFilterState,
+  ServiceDraftIntakeState,
   ServiceDraftFilteredItem,
   ServiceDraftJevClass,
   ServiceDraftStatus,
@@ -1421,6 +1616,7 @@ export type { CashRegisterReceiptListResponse } from "./cash-registers.js";
 export {
   WEBSHOP_ORDER_CLOSED_STATUSES,
   WEBSHOP_ORDER_PAYMENT_STATE_LABELS,
+  WEBSHOP_INVOICE_DUE_DAYS,
   WEBSHOP_PROFORMA_DUE_DAYS,
   WEBSHOP_PROFORMA_MISSING_AFTER_DAYS,
   webshopProformaExpired,
@@ -1604,6 +1800,7 @@ export type {
   QuoteReorderInput,
   QuoteCostingLineDto,
   QuoteCostingDto,
+  QuoteVariantListPriceDto,
   QuoteSnippetDto,
   QuoteSnippetInput,
   QuoteSnippetPatch,
@@ -1743,6 +1940,99 @@ export type {
   ArticleRevisionSummary,
   ArticleTaxonOption,
 } from "./article.js";
+export {
+  analyzeTeachingSource,
+  findTeachingReferences,
+  parseTeachingSourceInput,
+  TEACHING_AUDIENCES,
+  TEACHING_KEY,
+  TEACHING_NOTE_STATES,
+  TEACHING_NUMBER_STATES,
+  TEACHING_SOURCE_LIMITS,
+} from "./teaching-source.js";
+export type {
+  TeachingAudience,
+  TeachingFormKey,
+  TeachingInflection,
+  TeachingLocation,
+  TeachingNoteState,
+  TeachingNumber,
+  TeachingNumberState,
+  TeachingOpenQuestion,
+  TeachingPart,
+  TeachingProblem,
+  TeachingProblemCode,
+  TeachingQuantity,
+  TeachingReference,
+  TeachingSourceAnalysis,
+  TeachingSourceDetail,
+  TeachingSourceDocument,
+  TeachingSourceEditorData,
+  TeachingSourceInput,
+  TeachingSourceListItem,
+  TeachingSourceParse,
+  TeachingSourceVersionSummary,
+  TeachingSpeakerNote,
+  TeachingSubpart,
+  TeachingTypedNumber,
+  TeachingValue,
+} from "./teaching-source.js";
+export {
+  buildTeachingNarration,
+  buildTeachingOutput,
+  buildTeachingPrintable,
+  buildTeachingSlides,
+  fillTeachingText,
+  parseTeachingSentInput,
+  TEACHING_OPEN_MARK,
+  TEACHING_OUTPUT_KINDS,
+  TEACHING_SENT_TO_MAX,
+  TEACHING_PART_SLIDES,
+  TEACHING_SLIDE_POINTS,
+  TEACHING_SUBPART_SLIDES,
+  teachingOutputFlags,
+  teachingOutputStamp,
+  teachingSentences,
+} from "./teaching-output.js";
+export type {
+  TeachingNarration,
+  TeachingNarrationChapter,
+  TeachingOutputBody,
+  TeachingOutputDetail,
+  TeachingOutputKind,
+  TeachingOutputSent,
+  TeachingOutputSource,
+  TeachingOutputSummary,
+  TeachingOutputStamp,
+  TeachingOverFrame,
+  TeachingPrintable,
+  TeachingPrintableNumberRow,
+  TeachingPrintablePart,
+  TeachingSlide,
+  TeachingSlideDeck,
+  TeachingSlideKind,
+} from "./teaching-output.js";
+export {
+  cleanEditedSlides,
+  compareTeachingDecks,
+  compareTeachingTexts,
+  parseTeachingEditDecision,
+  TEACHING_EDIT_NOTE_MAX,
+  TEACHING_TEXT_SENTENCES_MAX,
+  teachingDeckText,
+  teachingTextSentences,
+} from "./teaching-edit.js";
+export type {
+  TeachingDeckDiff,
+  TeachingEditDecision,
+  TeachingEditDiff,
+  TeachingTextDiff,
+  TeachingOutputEditDetail,
+  TeachingOutputEditSummary,
+  TeachingSlideChange,
+  TeachingSlideDiff,
+  TeachingSlideText,
+} from "./teaching-edit.js";
 export { parseSeoLandingInput, SEO_LANDING_LIMITS } from "./seo-landing.js";
 export type {
   SeoLandingAttributeFilter,
@@ -1810,6 +2100,8 @@ export type {
   PartnerMigrationApplyInput,
   PartnerMigrationApplyOutcome,
   PartnerMigrationApplyResult,
+  PartnerMigrationFill,
+  PartnerMigrationFillField,
   PartnerMigrationCustomer,
   PartnerMigrationPlan,
   PartnerMigrationRestoreInput,
@@ -1838,18 +2130,23 @@ export type {
   BankTransferRefusalValue,
 } from "./bank-transfer-pairing.js";
 export {
+  HUSBANDRY_FILTER_VALUES,
+  isHusbandryFilterValue,
   isShippingFilterValue,
   SHIPPING_FILTER_VALUES,
   SHIPPING_FLAG_KEYS,
   SHIPPING_FLAG_SHORT_LABELS,
 } from "./product-catalog.js";
 export type {
+  HusbandryFilterValue,
+  ProductListHusbandry,
   ShippingFilterValue,
   ShippingFlagKey,
 } from "./product-catalog.js";
 export {
   christmasCandidates,
   drawGameWinner,
+  drawGameWinnerInOrder,
   GAME_QUESTION_TYPES,
   isGameAnswerCorrect,
   normalizeGameAnswer,
@@ -1860,3 +2157,147 @@ export type {
   GameOption,
   GameQuestionType,
 } from "./game.js";
+export {
+  HUSBANDRY_DIFFICULTIES,
+  HUSBANDRY_DIFFICULTY_SCALE,
+  HUSBANDRY_MISSING_TEXT,
+} from "./product-husbandry.js";
+export type {
+  HusbandryAggression,
+  HusbandryDifficulty,
+  HusbandryFeeding,
+  HusbandryReefSafe,
+  HusbandrySizeDimension,
+  HusbandrySocialKeeping,
+  HusbandrySourcing,
+  HusbandryZone,
+  ProductHusbandry,
+  ProductHusbandryFacts,
+  ProductHusbandryField,
+  ProductHusbandryInput,
+} from "./product-husbandry.js";
+export {
+  AI_CHAT_SETTINGS_DEFAULTS,
+  AI_CHAT_SETTINGS_LIMITS,
+  checkAiChatSettings,
+} from "./ai-chat-settings.js";
+export type {
+  AiChatSettings,
+  AiChatSettingsCheck,
+  AiChatSettingsServiceView,
+} from "./ai-chat-settings.js";
+export {
+  AI_LINK_OWN_DOMAIN,
+  AI_LINK_SOURCE_CATEGORIES,
+  AI_LINK_SOURCE_LIMITS,
+  checkAiLinkSource,
+  normalizeAiLinkHost,
+} from "./ai-link-sources.js";
+export type {
+  AiLinkSource,
+  AiLinkSourceCategory,
+  AiLinkSourceCheck,
+  AiLinkSourceInput,
+  AiLinkSourceServiceEntry,
+} from "./ai-link-sources.js";
+export {
+  AI_CONTACT_CHANNELS,
+  AI_CONTACT_VALUE_MAX_LENGTH,
+  checkAiContactRequestInput,
+} from "./ai-contact-request.js";
+export type {
+  AiContactChannel,
+  AiContactRequestCheck,
+  AiContactRequestInput,
+  AiContactRequestReceipt,
+  AiContactRequestView,
+} from "./ai-contact-request.js";
+export type {
+  ReefClubWaterHintProduct,
+  ReefClubWaterHintRow,
+  ReefClubWaterHints,
+  ReefClubWaterHintsProductsState,
+  ReefClubWaterHintsState,
+  ReefClubWaterHintStatus,
+} from "./reefclub-water-hints.js";
+export {
+  checkBillingIssueDates,
+  isCardPayment,
+  proposedIssueDueDate,
+} from "./billing-issue-summary.js";
+export type {
+  BillingIssueConfirmation,
+  BillingIssueDatesCheck,
+  BillingIssueSummary,
+  WebshopInvoiceConfirmation,
+  WebshopInvoiceIssueResult,
+  WebshopInvoiceSummary,
+} from "./billing-issue-summary.js";
+export {
+  ATTENDANCE_DAY_KIND_LABELS,
+  ATTENDANCE_DAY_KINDS,
+  ATTENDANCE_WEEKDAYS,
+  ATTENDANCE_SELF_KINDS,
+  ATTENDANCE_SELF_TAKEN,
+  attendanceDayProblem,
+  attendanceRangeProblem,
+  attendanceSelfMarkProblem,
+  attendanceWeekProblem,
+  formatAttendanceClock,
+  isAttendanceDate,
+  isAttendanceEmployeeRole,
+  parseAttendanceClock,
+} from "./attendance.js";
+export type {
+  AttendanceDayEntry,
+  AttendanceDayInput,
+  AttendanceEmployee,
+  AttendanceEmployeeListResponse,
+  AttendanceDayKind,
+  AttendanceDayListResponse,
+  AttendanceSchedule,
+  AttendanceScheduleDay,
+  AttendanceScheduleListResponse,
+} from "./attendance.js";
+export {
+  addDays,
+  easterSunday,
+  HUNGARIAN_WORKDAY_SWAPS,
+  hungarianCalendarDay,
+  hungarianPublicHolidays,
+} from "./hungarian-work-calendar.js";
+export type {
+  HungarianCalendarDay,
+  WorkdaySwap,
+} from "./hungarian-work-calendar.js";
+export {
+  ATTENDANCE_SHEET_ROW_KINDS,
+  attendanceClock,
+  attendanceSheet,
+  isAttendanceMonth,
+  isoWeekday,
+  monthDays,
+  scheduleOn,
+} from "./attendance-sheet.js";
+export type {
+  AttendanceClock,
+  AttendanceSheet,
+  AttendanceSheetResponse,
+  AttendanceSheetRow,
+  AttendanceSheetRowKind,
+  AttendanceSignedCopy,
+} from "./attendance-sheet.js";
+export {
+  CONTENT_RESULT_FIELDS,
+  CONTENT_RESULT_FIELD_LABELS,
+  CONTENT_RESULT_LIMITS,
+  contentDaypart,
+  contentTrackingUrl,
+} from "./content-results.js";
+export type {
+  ContentDaypart,
+  ContentResultValues,
+  ContentResultWeek,
+  ContentResults,
+  ContentResultsSummary,
+} from "./content-results.js";

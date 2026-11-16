@@ -43,6 +43,7 @@ const response = (
       fileName: "Számla J55388 - 2026-10-22.pdf",
       verdict: "UNMATCHED",
       documentId: null,
+      reason: "NUMBER_NOT_CORROBORATED",
       createdAt: "2026-10-22T14:10:00.000Z",
     },
     {
@@ -52,6 +53,7 @@ const response = (
       fileName: "FX01071477.pdf",
       verdict: "STORED",
       documentId: "doc-2",
+      reason: null,
       createdAt: "2026-10-22T14:11:00.000Z",
     },
   ],
@@ -98,6 +100,7 @@ describe("CollectionItemsSection", () => {
             fileName: null,
             verdict: "NOT_INVOICE",
             documentId: null,
+            reason: null,
             createdAt: "2026-10-22T14:12:00.000Z",
           },
         ],
@@ -111,6 +114,21 @@ describe("CollectionItemsSection", () => {
     expect(within(row).getByText("Nem számla")).toBeInTheDocument();
     expect(within(row).getByText("balazs@ levelek")).toBeInTheDocument();
     expect(screen.queryByText("null")).toBeNull();
+  });
+
+  /*
+    AZ OK KIÍRÁSA (task os-hianyzo-szamlak-unpaid). MI PIROSÍT: ha az UNMATCHED sor mellett nem látszik, melyik feltétel bukott;
+    ha az ok nélküli (tárolt) sor is kap "Ok:" sort; ha a kód (NUMBER_NOT_CORROBORATED) szó szerint kiíródik a magyar mondat helyett.
+  */
+  it("says why a file stayed unmatched, in words, and nothing for a row without a reason", async () => {
+    render(<CollectionItemsSection token="token-1" />);
+    const unmatched = (await screen.findByText(/J55388/)).closest("tr")!;
+    expect(
+      within(unmatched).getByText(/az ismert szám áll benne, de az összeg/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/NUMBER_NOT_CORROBORATED/)).toBeNull();
+    const stored = screen.getByText(/FX01071477/).closest("tr")!;
+    expect(within(stored).queryByText(/^Ok:/)).toBeNull();
   });
 
   it("puts the count on each verdict filter, from the server's counts", async () => {

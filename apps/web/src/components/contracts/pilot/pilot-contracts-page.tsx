@@ -6,6 +6,7 @@ import {
   hasPermission,
   PERMISSIONS,
   type ContractKind,
+  uploadAccept,
 } from "@acropora/types";
 import type { WorksheetDepartmentSummary } from "@acropora/types";
 import Link from "next/link";
@@ -833,7 +834,7 @@ export function PilotContractsPage() {
                       <input
                         className="sr-only"
                         type="file"
-                        accept="application/pdf"
+                        accept={uploadAccept(["pdf"])}
                         disabled={uploading === contract.id}
                         onChange={(event) =>
                           void upload(contract.id, event.target.files?.[0])
@@ -846,9 +847,11 @@ export function PilotContractsPage() {
                   {contract.items.map((item) =>
                     contract.kind === "PURCHASE" ? (
                       <li key={item.id}>
-                        {item.position}. {item.description}: {item.quantity}{" "}
-                        {item.unitOfMeasure?.code ?? ""} × {money(item.unitNet)}{" "}
-                        Ft ={" "}
+                        <strong className="font-semibold">
+                          {item.position}. {item.description}
+                        </strong>
+                        : {item.quantity} {item.unitOfMeasure?.code ?? ""} ×{" "}
+                        {money(item.unitNet)} Ft ={" "}
                         {money(
                           String(Number(item.unitNet) * Number(item.quantity)),
                         )}{" "}
@@ -856,7 +859,10 @@ export function PilotContractsPage() {
                       </li>
                     ) : (
                       <li key={item.id}>
-                        {item.position}. {item.description} —{" "}
+                        <strong className="font-semibold">
+                          {item.position}. {item.description}
+                        </strong>{" "}
+                        —{" "}
                         {money(
                           String(
                             Number(item.unitNet) *

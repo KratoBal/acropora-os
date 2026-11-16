@@ -123,6 +123,62 @@ export function sameValue(
   return expected.trim() === actual.trim();
 }
 
+/**
+ * A JOGI FORMA NEM MAS NEV (kártya dbab22cd, harmadik kör, barracuda #2440): a szamlan nyomtatott "Anthropic, PBC" es a jovahagyott
+ * "Anthropic" ugyanaz a ceg, a `sameValue` mégis ROSSZ-nak itéli (pontos osszehasonlitas). Ez a fuggveny CSAK SZAMLALASRA van: az itelet nem
+ * valtozik (a rossz rossz marad), a jelentes viszont kulon mondja meg, hany rossz nev tér el csak a jogi formaban. Kisbetu, az irasjelek
+ * szokozre, a jogi forma-szavak elhagyva; egyik oldal sem lehet igy ures. A jogi forma-lista SZANDEKOSAN szuk (nem tartalmaz orszagot vagy
+ * agazatot: "OpenAI" es "OpenAI Ireland Limited" MAS nev, mert az "ireland" megmarad).
+ */
+const LEGAL_FORM_WORDS = new Set([
+  "inc",
+  "llc",
+  "ltd",
+  "limited",
+  "gmbh",
+  "ag",
+  "bv",
+  "sa",
+  "srl",
+  "sas",
+  "pbc",
+  "corp",
+  "corporation",
+  "co",
+  "plc",
+  "oy",
+  "ab",
+  "kft",
+  "zrt",
+  "nyrt",
+  "bt",
+  // a pontozott alakok ("B.V.", "S.r.l.") a pontok torlese utan betu-alakok; a kommandit tarsasag es a spanyol/olasz/cseh/belga alakok (barracuda, #2441)
+  "kg",
+  "nv",
+  "sl",
+  "se",
+  "spa",
+  "sro",
+]);
+
+export function sameNameWithoutLegalForm(
+  expected: string,
+  actual: string,
+): boolean {
+  const clean = (value: string) =>
+    value
+      .normalize("NFC")
+      .toLowerCase()
+      // a pontot ELŐBB toroljuk: "B.V." -> "bv", "S.r.l." -> "srl" (szokozre cserelve "b v" lenne, es egyik betu sincs a listan)
+      .replace(/\./g, "")
+      .replace(/[^\p{L}\p{N}]+/gu, " ")
+      .split(" ")
+      .filter((word) => word && !LEGAL_FORM_WORDS.has(word))
+      .join(" ");
+  const a = clean(expected);
+  return a !== "" && a === clean(actual);
+}
+
 // ---- egy minta olvasasa ----------------------------------------------------
 
 /** Az olvaso kimenete egy mintan, az adott modban. */
@@ -150,6 +206,11 @@ export interface FieldCounts {
   /** hol NEM volt elvart ertek (a mezo ures a jovahagyott soron), es mit olvasott az olvaso */
   blankExpected: number;
   extra: number;
+  /**
+   * A `wrong` RÉSZHALMAZA (nem uj itelet): a szallito neve, ami csak a jogi formaban ter el az elvarttol (`sameNameWithoutLegalForm`).
+   * Csak a `supplierName` mezon nonulla.
+   */
+  wrongLegalForm: number;
 }
 
 export type Group = "AUTO" | "MANUAL" | "ALL";
@@ -173,6 +234,7 @@ const emptyCounts = (): FieldCounts => ({
   empty: 0,
   blankExpected: 0,
   extra: 0,
+  wrongLegalForm: 0,
 });
 
 const emptyGroup = () =>
@@ -231,8 +293,16 @@ export function evaluate(
         }
         counts.expected += 1;
         if (verdict === "CORRECT") counts.correct += 1;
-        else if (verdict === "WRONG") counts.wrong += 1;
-        else counts.empty += 1;
+        else if (verdict === "WRONG") {
+          counts.wrong += 1;
+          if (
+            field === "supplierName" &&
+            expected !== null &&
+            actual !== null &&
+            sameNameWithoutLegalForm(expected, actual)
+          )
+            counts.wrongLegalForm += 1;
+        } else counts.empty += 1;
         allRight[group] = (allRight[group] ?? true) && verdict === "CORRECT";
       }
     }
@@ -331,6 +401,11 @@ export function formatReport(report: EvalReport): string {
       lines.push(
         `  ${field.padEnd(20)} ${show(p.correct)}  ${show(p.wrong)}  ${show(p.empty)}  ${show(p.precision)}     ${show(p.extra)}      (${p.expected})`,
       );
+      // a rossz nevek koze tartozik, de csak a jogi formaban eltero (darabszam, nev nelkul): nem uj itelet
+      if (counts[field].wrongLegalForm > 0)
+        lines.push(
+          `    ebbol a rossz kozul csak jogi formaban elter: ${counts[field].wrongLegalForm} db`,
+        );
     }
     const t = percentages(total(counts));
     const docs = report.documentsAllCorrect[group];

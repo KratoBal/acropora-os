@@ -59,6 +59,10 @@ describe("UpdateUserDto notificationRoles", () => {
    * erteket. Enelkul az elozo harom allitas egy olyan megvalositason is zold
    * lenne, amibol az `@IsIn` teljesen hianyzik.
    */
+  it("elfogadja az AI hibajegy-vázlat értesítési szerepét (kártya ec7b947b)", () => {
+    assert.deepEqual(notificationRoleMessages(["SERVICE_TICKET_AI_DRAFT"]), []);
+  });
+
   it("KONTROLL: egy ki nem mondott szerepet visszautasít", () => {
     const messages = notificationRoleMessages(["NEM_LETEZO_SZEREP"]);
     assert.ok(

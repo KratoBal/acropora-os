@@ -4,6 +4,8 @@ import { describe, it } from "node:test";
 import {
   normalizeRedirectPath,
   redirectPathLower,
+  storefrontCategoryPath,
+  webshopCategoryPath,
   webshopProductPath,
 } from "./redirect-path.js";
 
@@ -67,5 +69,16 @@ describe("normalizeRedirectPath", () => {
 
   it("a webshop-cím a G2 alakja", () => {
     assert.equal(webshopProductPath("pumpa"), "/hu/termek/pumpa");
+  });
+
+  it("a kirakat kategória-lapja /hu/categories/, és NEM a régi /hu/kategoria/ alak", () => {
+    assert.equal(
+      storefrontCategoryPath("szivattyuk"),
+      "/hu/categories/szivattyuk",
+    );
+    assert.notEqual(
+      storefrontCategoryPath("szivattyuk"),
+      webshopCategoryPath("szivattyuk"),
+    );
   });
 });

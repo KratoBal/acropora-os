@@ -28,6 +28,8 @@ async function deps(options: {
   /** Nyers bajtok EGY kephez, ha nem a JPEG-fejleces alapertelmezes kell. */
   nyersBajtok?: { n: number; bytes: Uint8Array };
   linkelt?: Record<string, string>;
+  /** A bolt ezt a hosztot adja a feltoltott fajlra (alapbol publikus). */
+  boltHoszt?: string;
   feltoltesDob?: boolean;
   feltoltesHttpHiba?: { status: number; body: string };
 }) {
@@ -90,7 +92,7 @@ async function deps(options: {
         });
         return {
           id: `fajl_${file.filename}`,
-          url: `https://bolt/${file.filename}`,
+          url: `${options.boltHoszt ?? "https://bolt.example"}/${file.filename}`,
         };
       },
     },
@@ -138,13 +140,16 @@ describe("a termékképek kivitele a kirakatba", () => {
 
     assert.equal(out.blockedBy, null);
     assert.equal(out.uploaded, 2);
-    assert.deepEqual(out.urls, ["https://bolt/1.jpg", "https://bolt/2.jpg"]);
+    assert.deepEqual(out.urls, [
+      "https://bolt.example/1.jpg",
+      "https://bolt.example/2.jpg",
+    ]);
   });
 
   it("amit a leképezés MÁR ismer, azt nem tölti fel újra", async () => {
     const f = await deps({
       tarolt: [1, 2],
-      linkelt: { [kep(1).url]: "https://bolt/regi-1.jpg" },
+      linkelt: { [kep(1).url]: "https://bolt.example/regi-1.jpg" },
     });
 
     const out = await publishProductImages(PROD, [kep(1), kep(2)], f.deps);
@@ -157,8 +162,8 @@ describe("a termékképek kivitele a kirakatba", () => {
     );
     // ES A SORREND ATTOL MEG A BEMENETE, nem a feltoltes sorrendje.
     assert.deepEqual(out.urls, [
-      "https://bolt/regi-1.jpg",
-      "https://bolt/2.jpg",
+      "https://bolt.example/regi-1.jpg",
+      "https://bolt.example/2.jpg",
     ]);
   });
 
@@ -346,5 +351,66 @@ describe("a feltoltes hibaja nem viszi ki a valasz torzset", () => {
 
     const reszletek = eredmeny.blockedBy?.details ?? "";
     assert.equal(reszletek.includes("a bolt nem valaszol"), true, reszletek);
+  });
+
+  /*
+    A BELSO BOLTI CIM (kartya 2d3f64d2). MI PIROSIT: egy belso vagy olvashatatlan tarolt cim ujrahasznalodik (kimegy,
+    es soha nem gyogyul); a publikus tarolt cim feleslegesen ujra feltoltodik; egy belso cimet ado feltoltes linkelodik
+    vagy kimegy a boltba; a megallas reszleges listat ad.
+  */
+  it("belső vagy olvashatatlan tárolt címet nem használ újra: újra feltölt, és a leképezést az új címre írja", async () => {
+    for (const regi of [
+      "http://localhost:9000/static/1788516704783-156161.jpg",
+      "http://medusa:9000/static/x.jpg",
+      "nem cím",
+    ]) {
+      const f = await deps({ tarolt: [1], linkelt: { [kep(1).url]: regi } });
+
+      const out = await publishProductImages(PROD, [kep(1)], f.deps);
+
+      assert.equal(out.blockedBy, null, regi);
+      assert.equal(out.reused, 0, regi);
+      assert.equal(out.uploaded, 1, regi);
+      assert.deepEqual(out.urls, ["https://bolt.example/1.jpg"], regi);
+      assert.equal(
+        f.linkelt.get(kep(1).url),
+        "https://bolt.example/1.jpg",
+        regi,
+      );
+    }
+  });
+
+  it("a publikus tárolt címet továbbra is újrahasználja, feltöltés nélkül", async () => {
+    const f = await deps({
+      tarolt: [1],
+      linkelt: {
+        [kep(1).url]: "https://commerce-stage.acropora.hu/static/1.jpg",
+      },
+    });
+
+    const out = await publishProductImages(PROD, [kep(1)], f.deps);
+
+    assert.equal(out.reused, 1);
+    assert.equal(f.feltoltott.length, 0);
+    assert.deepEqual(out.urls, [
+      "https://commerce-stage.acropora.hu/static/1.jpg",
+    ]);
+  });
+
+  it("ha a bolt belső címet ad a feltöltésre, megáll, nem linkel, és egyetlen URL-t sem ad", async () => {
+    const f = await deps({
+      tarolt: [1, 2],
+      boltHoszt: "http://localhost:9000/static",
+    });
+
+    const out = await publishProductImages(PROD, [kep(1), kep(2)], f.deps);
+
+    assert.deepEqual(out.urls, [], "részleges listát adott vissza");
+    assert.equal(out.blockedBy?.reason, "UPLOAD_FAILED");
+    assert.match(
+      out.blockedBy?.details ?? "",
+      /kívülről elérhetetlen címet adott.*http:\/\/localhost:9000/,
+    );
+    assert.equal(f.linkelt.size, 0, "a belső címet leképezésként elmentette");
   });
 });

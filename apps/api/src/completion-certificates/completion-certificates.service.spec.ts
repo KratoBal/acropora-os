@@ -28,7 +28,12 @@ function jobRow(
     itemCount: number;
     worksheetStatuses: Array<string | undefined>;
     // a megrendelőlap nélküli lap rögzített tételsorai (felmérés S5)
-    contractItems: Array<{ description: string; unitNet: string }>;
+    contractItems: Array<{
+      description: string;
+      unitNet: string;
+      quantity?: string;
+      occasions?: number;
+    }>;
     contractNumber: string | null;
   }> = {},
 ) {
@@ -64,6 +69,8 @@ function jobRow(
             items: Array.from({ length: itemCount }, (_, index) => ({
               description: `Tétel ${index + 1}`,
               unitNet: new Prisma.Decimal(700000),
+              quantity: new Prisma.Decimal(1),
+              occasions: 1,
               vatRatePercent: new Prisma.Decimal(27),
             })),
           },
@@ -74,6 +81,8 @@ function jobRow(
     contractItems: (overrides.contractItems ?? []).map((item) => ({
       description: item.description,
       unitNet: new Prisma.Decimal(item.unitNet),
+      quantity: new Prisma.Decimal(item.quantity ?? 1),
+      occasions: item.occasions ?? 1,
       vatRatePercent: new Prisma.Decimal(27),
     })),
     worksheets: (overrides.worksheetStatuses ?? ["SIGNED"]).map(
@@ -254,6 +263,39 @@ describe("CompletionCertificatesService.issue", () => {
         ["Cápasuli RO", "1", "650000", "27"],
         ["UV-lámpa csere", "1", "120000", "27"],
       ],
+    );
+  });
+
+  /*
+    A TÉTEL KÉRT DARAB- ÉS ALKALOMSZÁMA (Luca, 2026-11-13): a sor mennyisége az alkalom, az egységár az egy alkalomra
+    eső díj (egységár x darab), így a sor összege egységár x darab x alkalom, mint a megrendelőlapon. MI PIROSÍT:
+    ha a darabszám kimarad az összegből (a régi viselkedés); ha az alkalom nem a mennyiség.
+  */
+  it("a tétel darab- és alkalomszáma az összegben: 100 000 Ft x 2 db x 3 alkalom", async () => {
+    let captured: unknown;
+    const { service } = makeService({
+      serviceJobForIssuance: async () =>
+        jobRow({
+          hasOrder: false,
+          contractItems: [
+            {
+              description: "Cápasuli nagymedence",
+              unitNet: "100000",
+              quantity: "2",
+              occasions: 3,
+            },
+          ],
+        }),
+      issue: async (input: unknown) => {
+        captured = input;
+        return { id: "certificate-1" };
+      },
+    });
+    await service.issue({ serviceJobId: "job-1" }, ACTOR);
+    const items = (captured as { items: Array<Record<string, unknown>> }).items;
+    assert.deepEqual(
+      items.map((item) => [String(item.quantity), String(item.unitNet)]),
+      [["3", "200000"]],
     );
   });
 

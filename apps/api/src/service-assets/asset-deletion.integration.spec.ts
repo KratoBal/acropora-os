@@ -63,6 +63,7 @@ describe("Eszköz törlése", { skip: gate.mode === "skip" }, () => {
   let withServiceJob: string;
   let withWorksheetLine: string;
   let withChild: string;
+  let withTemplate: string;
 
   before(async () => {
     if (gate.mode === "refuse") throw new Error(gate.reason);
@@ -106,6 +107,7 @@ describe("Eszköz törlése", { skip: gate.mode === "skip" }, () => {
     withServiceJob = await asset("JOB");
     withWorksheetLine = await asset("LINE");
     withChild = await asset("PARENT");
+    withTemplate = await asset("TEMPLATE");
     await asset("CHILD", withChild);
 
     const job = await prisma.serviceJob.create({
@@ -118,6 +120,15 @@ describe("Eszköz törlése", { skip: gate.mode === "skip" }, () => {
     });
     await prisma.serviceJobAsset.create({
       data: { serviceJobId: job.id, assetId: withServiceJob },
+    });
+    // a KIVEZETETT sablon is akadály (task os-uzemeltetesi-naplo, barracuda #2497)
+    await prisma.operationsTaskTemplate.create({
+      data: {
+        name: `${PREFIX}${suffix}-sablon`,
+        frequency: "WEEKLY",
+        assetId: withTemplate,
+        isActive: false,
+      },
     });
     await prisma.worksheet.create({
       data: {
@@ -221,6 +232,10 @@ describe("Eszköz törlése", { skip: gate.mode === "skip" }, () => {
     await prisma.serviceJob.deleteMany({
       where: { jobNumber: { startsWith: PREFIX } },
     });
+    // az üzemeltetési napló sablonja `Restrict`-tel mutat az eszközre: az eszközök előtt kell menni
+    await prisma.operationsTaskTemplate.deleteMany({
+      where: { name: { startsWith: PREFIX } },
+    });
     // A gyerek ELOSZOR, mert a szulore mutato hivatkozas `SetNull`, de a
     // torlesi sorrend igy olvashato marad.
     await prisma.asset.deleteMany({
@@ -297,6 +312,16 @@ describe("Eszköz törlése", { skip: gate.mode === "skip" }, () => {
         error instanceof ConflictException && /alárendelt/.test(error.message),
     );
     assert.ok(await prisma.asset.findUnique({ where: { id: withChild } }));
+  });
+
+  it("üzemeltetési naplósablonhoz kötött eszköz (a kivezetetthez is) NEM törölhető: a válasz a mondat, nem 500", async () => {
+    await assert.rejects(
+      () => assets.remove(withTemplate),
+      (error: Error) =>
+        error instanceof ConflictException &&
+        /üzemeltetési naplósablon/.test(error.message),
+    );
+    assert.ok(await prisma.asset.findUnique({ where: { id: withTemplate } }));
   });
 
   it("nem létező eszköz törlése 404", async () => {

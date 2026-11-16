@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Button } from "@acropora/ui";
+import { Alert, PilotButton } from "@acropora/ui";
 import type { MaintenancePackageMailPreview } from "@acropora/types";
 import { useState } from "react";
 
@@ -118,14 +118,14 @@ export function MaintenancePackagePanel({
         <Alert variant="danger" title="Hiba" description={downloadError} />
       ) : null}
       <div className="flex flex-wrap items-center gap-2">
-        <Button
+        <PilotButton
           variant="secondary"
           disabled={downloading}
           onClick={() => void download()}
         >
           {downloading ? "Letöltés…" : "Csomag letöltése"}
-        </Button>
-        <Button onClick={openMailDialog}>Kiküldés</Button>
+        </PilotButton>
+        <PilotButton onClick={openMailDialog}>Kiküldés</PilotButton>
       </div>
 
       <MaintenancePackageMailDialog

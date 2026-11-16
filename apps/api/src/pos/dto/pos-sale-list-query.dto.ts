@@ -16,10 +16,10 @@ export class PosSaleListQueryDto {
   pageSize = 20;
 
   @IsOptional()
-  @IsISO8601()
+  @IsISO8601({ strict: true })
   createdFrom?: string;
 
   @IsOptional()
-  @IsISO8601()
+  @IsISO8601({ strict: true })
   createdTo?: string;
 }

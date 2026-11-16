@@ -6,6 +6,8 @@ import { ContentDetailPanel } from "./content-detail-panel";
 const api = vi.hoisted(() => ({ detail: vi.fn() }));
 
 vi.mock("@/lib/api/content", () => ({ contentApi: api }));
+// the results section has its own test (content-results-panel.component.test.tsx)
+vi.mock("./content-results-panel", () => ({ ContentResultsPanel: () => null }));
 vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({
     session: {
@@ -22,6 +24,7 @@ const detail = (overrides: Record<string, unknown> = {}) => ({
   state: "AWAITING_APPROVAL",
   body: "Az első bekezdés.\n\nA második bekezdés.",
   comments: [],
+  history: [],
   imageRequired: false,
   imageAttachedAt: null,
   authorId: null,
@@ -34,6 +37,7 @@ const detail = (overrides: Record<string, unknown> = {}) => ({
   updatedAt: new Date().toISOString(),
   moves: [],
   blockers: { waitsOn: { on: "approver" }, waitsForImage: false },
+  claims: [],
   ...overrides,
 });
 
@@ -130,5 +134,127 @@ describe("what a decision needs in front of it", () => {
     await waitFor(() =>
       expect(screen.getByText(/még nincs szöveg/)).toBeTruthy(),
     );
+  });
+});
+
+describe("the state log (T5.1)", () => {
+  /*
+    WHAT TURNS THIS RED. The log not shown, or shown newest first (the order it happened is the story); the actor missing
+    from the line; an item with no log shown as if it had never moved (the missing past must be SAID, not implied); a sent
+    item with no "where and when" line, or a not-sent one with it.
+  */
+  const event = (over: Record<string, unknown>) => ({
+    id: "e",
+    fromState: "DRAFTING",
+    toState: "AWAITING_REVIEW",
+    actorUserId: "u-1",
+    actorName: "Korall",
+    note: null,
+    createdAt: "2026-11-04T08:12:00.000Z",
+    ...over,
+  });
+
+  it("lists who moved the item from where to where, oldest first, with the note", async () => {
+    api.detail.mockResolvedValue(
+      detail({
+        history: [
+          event({ id: "e1", fromState: null, toState: "DRAFTING" }),
+          event({
+            id: "e2",
+            fromState: "AWAITING_REVIEW",
+            toState: "AWAITING_REVISION",
+            actorName: "Luca",
+            note: "az ár hiányzik",
+            createdAt: "2026-11-04T13:30:00.000Z",
+          }),
+        ],
+      }),
+    );
+    render(<ContentDetailPanel id="c1" />);
+
+    const first = await screen.findByText(
+      /Korall: létrehozta \(vázlat készül\)/,
+    );
+    const second = screen.getByText(
+      /Luca: lektorálásra vár → javításra vár, „az ár hiányzik”/,
+    );
+    expect(screen.getByText(/Ki, mikor, mit csinált \(2\)/)).toBeTruthy();
+    expect(
+      first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("says that a log is missing for an item from before the log, instead of showing nothing", async () => {
+    render(<ContentDetailPanel id="c1" />);
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(/napló bevezetése előtti időből nincs bejegyzés/),
+      ).toBeTruthy(),
+    );
+  });
+
+  it("a sent item says where and when, a not-sent one has no such line", async () => {
+    api.detail.mockResolvedValue(
+      detail({
+        state: "SENT",
+        channel: "FACEBOOK_POST",
+        history: [
+          event({
+            fromState: "READY_TO_SEND",
+            toState: "SENT",
+            createdAt: "2026-11-05T09:00:00.000Z",
+          }),
+        ],
+      }),
+    );
+    const { unmount } = render(<ContentDetailPanel id="c1" />);
+    await waitFor(() =>
+      expect(screen.getByText(/Kiment: .*Facebook poszt/)).toBeTruthy(),
+    );
+    unmount();
+
+    api.detail.mockResolvedValue(detail());
+    render(<ContentDetailPanel id="c1" />);
+    await waitFor(() =>
+      expect(screen.getByText(/Az első bekezdés/)).toBeTruthy(),
+    );
+    expect(screen.queryByText(/Kiment:/)).toBeNull();
+  });
+});
+
+describe("the manufacturer claims the item stands on (T5.3)", () => {
+  it("shows each claim with its marking, what it allows and why, before approval", async () => {
+    api.detail.mockResolvedValue(
+      detail({
+        claims: [
+          {
+            id: "a1",
+            productName: "Teszt adalék",
+            claimType: "DOSING",
+            claimText: "Napi 5 ml 100 literenként.",
+            status: "UNVERIFIED",
+            output: {
+              mode: "DRAFT_ONLY",
+              attribution: "a gyártó szerint",
+              reasons: ["UNVERIFIED"],
+            },
+          },
+        ],
+      }),
+    );
+    render(<ContentDetailPanel id="c1" />);
+    const row = await screen.findByTestId("content-claim-a1");
+    expect(row.textContent).toContain("Teszt adalék");
+    expect(row.textContent).toContain("Adagolás");
+    expect(row.textContent).toContain("Csak vázlatba");
+    expect(row.textContent).toContain("(a gyártó szerint)");
+    expect(row.textContent).toContain("még senki nem ellenőrizte");
+  });
+
+  it("no section when the item stands on no claim", async () => {
+    render(<ContentDetailPanel id="c1" />);
+    await screen.findByText("A szöveg");
+    expect(screen.queryByText(/Gyártói állítások/)).toBeNull();
   });
 });

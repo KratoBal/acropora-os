@@ -193,6 +193,14 @@ export const missingInvoicesApi = {
       { method: "DELETE" },
     );
   },
+  /** EGY fájl levétele a sorról (a terhelés többi kézi párosítása marad). */
+  unmatchOne(token: string, id: string, documentId: string) {
+    return apiRequest<MissingInvoiceItemDetail>(
+      `${base}/items/${encodeURIComponent(id)}/match/${encodeURIComponent(documentId)}`,
+      token,
+      { method: "DELETE" },
+    );
+  },
   comment(token: string, id: string, comment: string | null) {
     return apiRequest<MissingInvoiceItemDetail>(
       `${base}/items/${encodeURIComponent(id)}/comment`,

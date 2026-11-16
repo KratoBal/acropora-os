@@ -1,7 +1,7 @@
 "use client";
 
 import type { ConversationListItem } from "@acropora/types";
-import { Icon, Input, PageHeader, PilotButton } from "@acropora/ui";
+import { Icon, PageHeader, PilotButton, PilotInput } from "@acropora/ui";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 
@@ -127,9 +127,9 @@ export function MessagesPage() {
               size={16}
               className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-pilot-grey-500"
             />
-            <Input
+            <PilotInput
               value={filter}
-              onChange={(event) => setFilter(event.target.value)}
+              onChange={setFilter}
               placeholder="Keresés beszélgetésekben…"
               className="pl-9"
             />

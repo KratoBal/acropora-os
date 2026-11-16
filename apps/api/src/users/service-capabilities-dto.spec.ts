@@ -59,6 +59,10 @@ describe("UpdateUserDto serviceCapabilities", () => {
    * erteket. Enelkul a fenti allitasok egy olyan megvalositason is zoldek
    * lennenek, amibol az `@IsIn` teljesen hianyzik.
    */
+  it("elfogadja az E-mail AI figyelése képességet (kártya ec7b947b)", () => {
+    assert.deepEqual(serviceCapabilityMessages(["TICKET_MAIL_AI_WATCH"]), []);
+  });
+
   it("KONTROLL: egy ki nem mondott képességet visszautasít", () => {
     const messages = serviceCapabilityMessages(["NEM_LETEZO_KEPESSEG"]);
     assert.ok(

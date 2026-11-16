@@ -118,11 +118,11 @@ COPY --from=pruner /app/out/json/ .
 RUN --mount=type=cache,id=acropora-pnpm-store,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile
 
-# Bring in the real source and build. `turbo run build` has no explicit
-# --filter here on purpose: the pruned workspace already contains only
-# @acropora/api and the internal packages it depends on (database, types,
-# config), so an unfiltered build compiles exactly that set, in the correct
-# dependency order (turbo.json's "build" task depends on "^build").
+# Bring in the real source and build. The pruned workspace already contains
+# only @acropora/api and the internal packages it depends on (database, types,
+# config, ...), so the Turbo build below compiles exactly that set, in the
+# correct dependency order (turbo.json's "build" task depends on "^build"); the
+# API itself is built in a second, leaner step (see the build step below).
 COPY --from=pruner /app/out/full/ .
 
 # Generate the Prisma Client here, explicitly, OUTSIDE Turbo's task graph —
@@ -162,8 +162,32 @@ WORKDIR /app/packages/database
 RUN node --input-type=module -e "import { PrismaClient } from '@prisma/client'; const client = new PrismaClient(); await client.\$disconnect(); console.log('Prisma Client generated and loadable OK (builder stage, pre-turbo-build)');"
 WORKDIR /app
 
+# The build runs in two steps so the API compile can be lean on memory.
+#
+# 1. The internal packages (database, types, config, ...) go through Turbo as
+#    before; `^...` selects the API's dependencies and leaves the API itself out.
+#    These are small compiles that finish in well under 30 seconds.
+# 2. The API itself is emitted with `build:image` (`tsc -p tsconfig.image.json`):
+#    the same compile as `nest build` (the project has no Nest plugins, asset
+#    copying or path aliases), with `noCheck`, so it skips the full type-check
+#    pass. The API's program is ~3000 files (it type-checks against the
+#    workspace packages' sources and the generated Prisma types), and the
+#    type-check pass pushed `nest build` past a 2 GB heap on the stage builder
+#    (exit 137, six deploys in a row on 2026-11-15). The emitted JavaScript is
+#    identical (compared on a 105-file sample with decorator metadata); only the
+#    property order of some inferred types in the .d.ts files differs, and
+#    nothing consumes them. The type-check is not lost: it still runs in CI
+#    (`pnpm typecheck`, `pnpm build`), which gates every merge to main. The Node
+#    heap ceiling is raised as headroom only: a ceiling costs nothing when the
+#    compile stays below it.
+#
+# Why not `--concurrency`: the API build is the last task in the graph and runs
+# alone (every dependency has finished when it starts), so limiting Turbo's
+# parallelism does not change its peak memory.
 RUN --mount=type=cache,id=acropora-api-turbo-cache,target=/app/.turbo \
-    pnpm turbo run build
+    pnpm turbo run build --filter='@acropora/api^...'
+RUN NODE_OPTIONS=--max-old-space-size=3072 \
+    pnpm --filter @acropora/api run build:image
 
 # -----------------------------------------------------------------------------
 # 3. Deploy: produce a self-contained, portable production directory for
@@ -292,8 +316,10 @@ RUN node --input-type=module -e "import { PrismaClient } from '@prisma/client'; 
 # startup — see that file for the full reasoning, including why a plain
 # node_modules/.bin/prisma shell shim was tried and rejected (its
 # relative-path math breaks when invoked through that symlink).
+# reefclub-role.sql too: the entrypoint applies it after the migrations
+# (card 4f0ad1be), and a missing file must stop the build, not the start.
 WORKDIR /app/deploy
-RUN node -e "const { createRequire } = require('node:module'); const fs = require('node:fs'); const path = require('node:path'); const dbPkg = fs.realpathSync('node_modules/@acropora/database/package.json'); const req = createRequire(dbPkg); const cliEntry = req.resolve('prisma/build/index.js'); const schema = req.resolve('./prisma/schema.prisma'); const migrations = path.join(path.dirname(schema), 'migrations'); if (!fs.existsSync(cliEntry)) { throw new Error('prisma CLI entry missing: ' + cliEntry); } if (!fs.existsSync(schema)) { throw new Error('schema.prisma missing: ' + schema); } const migrationDirs = fs.existsSync(migrations) ? fs.readdirSync(migrations).filter((e) => fs.statSync(path.join(migrations, e)).isDirectory()) : []; if (migrationDirs.length === 0) { throw new Error('no migrations found under ' + migrations); } console.log('Prisma CLI, schema.prisma and ' + migrationDirs.length + ' migration(s) present in the deployed tree:'); console.log('  CLI:', cliEntry); console.log('  schema:', schema); console.log('  migrations:', migrations);"
+RUN node -e "const { createRequire } = require('node:module'); const fs = require('node:fs'); const path = require('node:path'); const dbPkg = fs.realpathSync('node_modules/@acropora/database/package.json'); const req = createRequire(dbPkg); const cliEntry = req.resolve('prisma/build/index.js'); const schema = req.resolve('./prisma/schema.prisma'); const migrations = path.join(path.dirname(schema), 'migrations'); if (!fs.existsSync(cliEntry)) { throw new Error('prisma CLI entry missing: ' + cliEntry); } if (!fs.existsSync(schema)) { throw new Error('schema.prisma missing: ' + schema); } const migrationDirs = fs.existsSync(migrations) ? fs.readdirSync(migrations).filter((e) => fs.statSync(path.join(migrations, e)).isDirectory()) : []; if (migrationDirs.length === 0) { throw new Error('no migrations found under ' + migrations); } const roleSql = path.join(path.dirname(path.dirname(schema)), 'sql', 'reefclub-role.sql'); if (!fs.existsSync(roleSql)) { throw new Error('reefclub-role.sql missing: ' + roleSql); } console.log('Prisma CLI, schema.prisma, ' + migrationDirs.length + ' migration(s) and reefclub-role.sql present in the deployed tree:'); console.log('  CLI:', cliEntry); console.log('  schema:', schema); console.log('  migrations:', migrations); console.log('  reefclub-role.sql:', roleSql);"
 
 # -----------------------------------------------------------------------------
 # 4. Runtime: minimal, non-root, only the deployed @acropora/api production

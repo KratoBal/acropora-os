@@ -12,8 +12,8 @@ type Nezet = "nappal" | "ejszaka" | "fenyero" | "rgb";
 const KEPEK: Record<Nezet, { src: string; alt: string; felirat: string }> = {
   nappal: {
     src: "/fodij/vilagitas-nappal.webp",
-    alt: "Világos nappali, benne egy kis tengervizes akvárium a fekete szekrényén, délutáni fényben.",
-    felirat: "Gyönyörű zátony nappal",
+    alt: "Világos nappali, benne egy kis tengeri akvárium a fekete szekrényén, délutáni fényben.",
+    felirat: "Gyönyörű fények nappal",
   },
   ejszaka: {
     src: "/fodij/vilagitas-ejszaka.webp",

@@ -2,8 +2,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  addPriceConflictShape,
   decidePriceRetry,
   PRICE_RETRY_AFTER_MS,
+  priceFailureCounts,
+  priceFailureKind,
+  priceConflictShape,
   priceRetryProducts,
   recordPriceAttempt,
 } from "./medusa-price-sync.js";
@@ -134,5 +138,81 @@ describe("priceRetryProducts és recordPriceAttempt", () => {
     assert.equal(kudarc!.create.lastSyncedAt, null);
     assert.equal(siker!.update.lastSyncedAt, MOST);
     assert.deepEqual(siker!.update.metadata, {});
+  });
+});
+
+/*
+  A KUDARC FAJTÁJA A HEALTHBE (550b80d1). MI PIROSIT: a fajta helyére cikkszám vagy részlet kerül (termék-adat a
+  health-ben), egy ismert alak `other`-be esik (a szám nem mondja meg az okot), vagy egy termék több változata egynek
+  számít.
+*/
+describe("priceFailureKind és priceFailureCounts", () => {
+  it("minden ismert alakból csak a fajta kódja marad", () => {
+    for (const [reason, kind] of [
+      [
+        "SKU-1: MEGÁLLT (own-price-missing) a saját ár üres",
+        "own-price-missing",
+      ],
+      ["SKU-1: tax-inclusive-not-set", "tax-inclusive-not-set"],
+      ["SKU-1: price-history-not-written", "price-history-not-written"],
+      [
+        "prod-1: nincs aktív változata (vagy nincs ilyen termék)",
+        "no-active-variant",
+      ],
+      ["sku:AB-1: nincs ilyen cikkszámú aktív változat", "no-such-sku"],
+      ["az ar-futas kivetellel allt le: TypeError", "run-threw"],
+      ["az ar-futas elbukott (kod 1)", "run-failed"],
+      ["valami egészen más", "other"],
+    ] as const)
+      assert.equal(priceFailureKind(reason), kind, reason);
+  });
+
+  it("üzenetenként számol, a termékeken át", () => {
+    assert.deepEqual(
+      priceFailureCounts(
+        new Map([
+          [
+            "p1",
+            [
+              "SKU-1: MEGÁLLT (own-price-missing) x",
+              "SKU-2: MEGÁLLT (own-price-missing) y",
+            ],
+          ],
+          ["p2", ["SKU-3: variant-not-found"]],
+        ]),
+      ),
+      { "own-price-missing": 2, "variant-not-found": 1 },
+    );
+  });
+});
+
+describe("priceConflictShape és addPriceConflictShape (550b80d1)", () => {
+  it("jelenként számol, egy sor több jelben is, a jel nélküli válasz unknown", () => {
+    assert.deepEqual(
+      priceConflictShape([
+        { price_list_id: null, rules_count: 0, min_quantity: null },
+        { price_list_id: "pl", rules_count: 2 },
+        { rules_count: 0, max_quantity: 10 },
+        {},
+      ]),
+      { rows: 4, priceList: 1, rules: 1, quantity: 1, plain: 1, unknown: 1 },
+    );
+  });
+
+  it("az összeg mezőnként ad össze, és az első alakot nem írja át", () => {
+    const elso = priceConflictShape([{ price_list_id: "pl" }]);
+    const osszeg = addPriceConflictShape(
+      addPriceConflictShape(null, elso),
+      priceConflictShape([{ rules_count: 1 }, {}]),
+    );
+    assert.deepEqual(osszeg, {
+      rows: 3,
+      priceList: 1,
+      rules: 1,
+      quantity: 0,
+      plain: 0,
+      unknown: 1,
+    });
+    assert.equal(elso.rows, 1);
   });
 });

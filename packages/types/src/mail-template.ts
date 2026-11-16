@@ -301,6 +301,11 @@ export const MAIL_TEMPLATE_VARIABLES: readonly MailTemplateVariable[] = [
       "A mondat a vendég rendelés-lapjáról (rendelésszámmal és e-mail-címmel nézhető meg a rendelés), a lap címével. Üres, ha a bolt nem küldte a lap címét.",
   },
   {
+    name: "jogi_linkek_mondat",
+    description:
+      "A mondat a bolt ÁSZF és adatkezelési tájékoztató oldalának címével. Üres, ha a bolt nem küldte a két címet (a Fogyasztóbarát-kapcsoló mögött küldi).",
+  },
+  {
     name: "akklimatizacio",
     description:
       "Az élő állatnak szóló akklimatizációs útmutató, fajtánként (hal, gerinctelen, korall). Üres, ha a rendelésben nincs élő állat, vagy ha a fajtához még nincs jóváhagyott szöveg.",
@@ -331,6 +336,69 @@ export const MAIL_TEMPLATE_VARIABLES: readonly MailTemplateVariable[] = [
     name: "ugy_azonosito",
     description:
       "A problémabejelentés azonosítója, amit a vevő a bejelentéskor kapott, például ordprb_01ABC.",
+  },
+  {
+    name: "nyilatkozat_azonosito",
+    description:
+      "Az elállási nyilatkozat azonosítója, amit a vevő a leadáskor kapott, például ordwd_01ABC.",
+  },
+  {
+    name: "nyilatkozat_neve",
+    description:
+      "A név, amellyel a vevő az elállási nyilatkozatot leadta (nem biztos, hogy egyezik a számlázási névvel).",
+  },
+  {
+    name: "nyilatkozat_idopont",
+    description: "A nap, amikor az elállási nyilatkozat beérkezett.",
+  },
+  {
+    name: "nyilatkozat_tetelek",
+    description:
+      "Blokk: az elállási nyilatkozatban megnevezett tételek listája, ahogy a rendelés mutatja őket. A rendszer állítja össze, külön bekezdésben áll; ha a címek nem ismertek, nem jelenik meg.",
+    kind: "block",
+  },
+  {
+    name: "hirlevel_megerosito_link",
+    description:
+      "A hírlevél-feliratkozás megerősítő linkje. Egyszer használható, a lejáratig.",
+    kind: "link",
+  },
+  {
+    name: "hirlevel_leiratkozo_link",
+    description: "A hírlevélről leiratkozó link. Nem jár le.",
+    kind: "link",
+  },
+  {
+    name: "ertesites_megerosito_link",
+    description:
+      "A „Szólj, ha jön hasonló” értesítés-kérés megerősítő linkje. Egyszer használható, a lejáratig.",
+    kind: "link",
+  },
+  {
+    name: "ertesites_leiratkozo_link",
+    description: "Az értesítés-kérésről leiratkozó link. Nem jár le.",
+    kind: "link",
+  },
+  {
+    name: "ertesites_targya",
+    description:
+      "Amire a vevő értesítést kért: egy faj (például Acropora abrolhosensis) vagy egy termék neve.",
+  },
+  {
+    name: "ertesites_termek_neve",
+    description:
+      "Az értesítés-kérés teljesülésekor: a most kapható darab neve, ahogy a webshop írja.",
+  },
+  {
+    name: "ertesites_termek_link",
+    description:
+      "Az értesítés-kérés teljesülésekor: a most kapható darab termékoldala a webshopban.",
+    kind: "link",
+  },
+  {
+    name: "megerosites_lejarat",
+    description:
+      "Az utolsó nap, amikor a megerősítő link még működik, például 2026. november 16.",
   },
   {
     name: "masodik_resz_szam",
@@ -392,6 +460,12 @@ export const MAIL_TEMPLATE_VARIABLES: readonly MailTemplateVariable[] = [
   {
     name: "csomag_tartalma",
     description: "Blokk: a csomagban lévő tételek, ár nélkül.",
+    kind: "block",
+  },
+  {
+    name: "hasznalati_utmutato",
+    description:
+      "Blokk: a csomag termékeinek használati útmutatója, termékenként a jóváhagyott útmutató „Mire való” része, a gyártói adagolás és a termékoldal linkje, legfeljebb 8 termék. Csak magyar rendelésnél, és csak ha az OS-ben be van kapcsolva (ACROPORA_WEBSHOP_MAIL_USAGE_GUIDES). Ha egyik terméknek sincs útmutatója vagy adagolása, nem jelenik meg.",
     kind: "block",
   },
   // #1582 P3: the quote mail's own variables
@@ -647,6 +721,7 @@ const HUNGARIAN_MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
       "ugyfel_neve",
       "rendeles_datum",
       "rendeles_megtekintes_mondat",
+      "jogi_linkek_mondat",
       "rendeles_szamok",
       "vegyes_kosar_mondat",
       "osszesen",
@@ -720,6 +795,7 @@ const HUNGARIAN_MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
       "szallitas_doboz",
       "fizetendo_doboz",
       "csomag_tartalma",
+      "hasznalati_utmutato",
     ],
   },
   {
@@ -751,6 +827,73 @@ const HUNGARIAN_MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
       "rendeles_datum",
       "rendeles_megtekintes_mondat",
       "ugy_azonosito",
+    ],
+  },
+  {
+    id: "WEBSHOP_WITHDRAWAL_RECEIVED",
+    group: "WEBSHOP",
+    name: "Elállási nyilatkozat megérkezett",
+    description:
+      "Amikor a vevő elállási nyilatkozatot ad le egy rendelésről: a beérkezés tartós adathordozón való visszaigazolása. A szöveg vázlat, Balázs döntésére vár.",
+    variables: [
+      "rendeles_szam",
+      "ugyfel_neve",
+      "rendeles_datum",
+      "rendeles_megtekintes_mondat",
+      "nyilatkozat_azonosito",
+      "nyilatkozat_neve",
+      "nyilatkozat_idopont",
+      "nyilatkozat_tetelek",
+    ],
+  },
+  {
+    id: "WEBSHOP_NEWSLETTER_CONFIRM",
+    group: "WEBSHOP",
+    name: "Hírlevél megerősítése",
+    description:
+      "Amikor valaki feliratkozik a webshop hírlevelére: a megerősítő link (kettős megerősítés) és a leiratkozó link.",
+    // rendeles_datum and rendeles_megtekintes_mondat are every webshop mail's; here they are always empty (no order)
+    variables: [
+      "ugyfel_neve",
+      "rendeles_datum",
+      "rendeles_megtekintes_mondat",
+      "hirlevel_megerosito_link",
+      "megerosites_lejarat",
+      "hirlevel_leiratkozo_link",
+    ],
+  },
+  {
+    id: "WEBSHOP_STOCK_ALERT_CONFIRM",
+    group: "WEBSHOP",
+    name: "Értesítés-kérés megerősítése",
+    description:
+      "Amikor valaki egy eladott egyedi darab lapján értesítést kér, ha hasonló érkezik („Szólj, ha jön hasonló”): a megerősítő link (kettős megerősítés) és a leiratkozó link.",
+    // ugyfel_neve, rendeles_datum and rendeles_megtekintes_mondat are every webshop mail's; here they are always empty (no name asked, no order)
+    variables: [
+      "ugyfel_neve",
+      "rendeles_datum",
+      "rendeles_megtekintes_mondat",
+      "ertesites_targya",
+      "ertesites_megerosito_link",
+      "megerosites_lejarat",
+      "ertesites_leiratkozo_link",
+    ],
+  },
+  {
+    id: "WEBSHOP_STOCK_ALERT_ARRIVAL",
+    group: "WEBSHOP",
+    name: "Értesítés: újra kapható",
+    description:
+      "Egyszer, amikor egy megerősített „Szólj, ha jön hasonló” értesítés-kérés tárgyából (faj vagy termék) új darab kapható a webshopban: a darab neve, a termékoldal és a leiratkozó link.",
+    // ugyfel_neve, rendeles_datum and rendeles_megtekintes_mondat are every webshop mail's; here they are always empty (no name asked, no order)
+    variables: [
+      "ugyfel_neve",
+      "rendeles_datum",
+      "rendeles_megtekintes_mondat",
+      "ertesites_targya",
+      "ertesites_termek_neve",
+      "ertesites_termek_link",
+      "ertesites_leiratkozo_link",
     ],
   },
   {

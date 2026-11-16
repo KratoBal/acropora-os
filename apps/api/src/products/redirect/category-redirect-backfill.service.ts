@@ -15,6 +15,7 @@ import {
   categoryRedirectPlanHash,
   planCategoryRedirectsFromDb,
 } from "./category-redirect-backfill.load.js";
+import { normalizeRedirectPath } from "./redirect-path.js";
 import { lockRedirectWrites } from "./redirect.repository.js";
 
 export const CATEGORY_BACKFILL_DB = Symbol("CATEGORY_BACKFILL_DB");
@@ -34,6 +35,8 @@ export interface CategoryRedirectBackfillResult {
   planHash: string;
   form: CategoryHandleForm;
   report: CategoryRedirectReport;
+  /** Az írás köteg-azonosítója (az AuditLog sora), a visszavonás ezt kéri; csak az írásnál van. */
+  batchId?: string;
 }
 
 type Db = Pick<
@@ -68,12 +71,28 @@ export class CategoryRedirectBackfillService {
         name: string;
         parent?: string | null;
       }[];
+      repoint?: boolean;
+      repointManual?: string[];
       apply?: boolean;
       planHash?: string;
     },
     userId: string,
   ): Promise<CategoryRedirectBackfillResult> {
     const { paths, form } = input;
+    const repoint = input.repoint === true;
+    const repointManual = input.repointManual ?? [];
+    if (repointManual.length > 0 && !repoint)
+      throw new BadRequestException(
+        "repointManual needs repoint: true (the list only widens what the repoint may rewrite)",
+      );
+    // a lista egy ember döntése: egy érvénytelen elemmel (elgépelés) nem fut, hibásan nem megy tovább
+    const invalidManual = repointManual.filter(
+      (p) => normalizeRedirectPath(p) === null,
+    );
+    if (invalidManual.length > 0)
+      throw new BadRequestException(
+        `repointManual has invalid paths: ${invalidManual.map((p) => JSON.stringify(p)).join(", ")}`,
+      );
     const medusa = input.medusaCategories?.map((m) => ({
       handle: m.handle,
       name: m.name,
@@ -89,6 +108,8 @@ export class CategoryRedirectBackfillService {
         paths,
         form,
         medusa,
+        repoint,
+        repointManual,
       );
       return {
         applied: false,
@@ -104,7 +125,14 @@ export class CategoryRedirectBackfillService {
     const planHash = input.planHash;
     return this.db.$transaction(async (tx: Prisma.TransactionClient) => {
       await lockRedirectWrites(tx);
-      const plan = await planCategoryRedirectsFromDb(tx, paths, form, medusa);
+      const plan = await planCategoryRedirectsFromDb(
+        tx,
+        paths,
+        form,
+        medusa,
+        repoint,
+        repointManual,
+      );
       if (categoryRedirectPlanHash(form, plan) !== planHash)
         throw new ConflictException(
           "the plan is not the one the dry run returned (the data, the list or the form changed): run the dry run again",
@@ -119,7 +147,8 @@ export class CategoryRedirectBackfillService {
       if (ujak.length) await tx.urlRedirect.createMany({ data: ujak });
       for (const m of modositasok)
         await tx.urlRedirect.update({ where: { id: m.id }, data: m.data });
-      await tx.auditLog.create({
+      const audit = await tx.auditLog.create({
+        select: { id: true },
         data: {
           userId,
           action: "seo.redirects.category-backfill",
@@ -127,13 +156,21 @@ export class CategoryRedirectBackfillService {
           metadata: {
             form,
             paths: paths.length,
+            repoint,
             created: ujak.length,
             updated: modositasok.length,
+            rewritten: report.rewritten.length,
+            // a MANUAL szabályok, amelyeknek a célját a kifejezett engedélylista alapján írtuk át (forrásonként, az utólagos olvasáshoz)
+            manualRewritten: report.rewritten
+              .filter((r) => r.via === "manual-allowlist")
+              .map((r) => r.source),
             planHash,
-          } as Prisma.InputJsonValue,
+            // a változások a régi állapottal együtt: a visszavonás (`POST /seo/redirects/undo`) ebből dolgozik
+            changes: store.changes(),
+          } as unknown as Prisma.InputJsonValue,
         },
       });
-      return { applied: true, planHash, form, report };
+      return { applied: true, planHash, form, report, batchId: audit.id };
     }, TRANSACTION_OPTIONS);
   }
 }

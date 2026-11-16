@@ -1,3 +1,4 @@
+import { Transform } from "class-transformer";
 import {
   IsBoolean,
   IsIn,
@@ -64,4 +65,31 @@ export class UpdateProductDto {
   @IsOptional()
   @IsIn(["GYENGE", "KOZEPES", "EROS", "NEM_ERTELMEZHETO"])
   aramlasIgeny?: "GYENGE" | "KOZEPES" | "EROS" | "NEM_ERTELMEZHETO" | null;
+
+  /**
+   * A nevek az adatlapon (kartya 20b0dd47): Acropora-tulajdonu, a UNAS-szinkronbol szandekosan hianyzik. A szoveg
+   * kerul (a szokozok levagva), az ures szoveg torli a nevet.
+   */
+  @IsOptional()
+  @Transform(trimmedName)
+  @IsString()
+  @MaxLength(200)
+  magyarNev?: string | null;
+
+  @IsOptional()
+  @Transform(trimmedName)
+  @IsString()
+  @MaxLength(200)
+  angolNev?: string | null;
+
+  @IsOptional()
+  @Transform(trimmedName)
+  @IsString()
+  @MaxLength(200)
+  nemetNev?: string | null;
+}
+
+/** A szoveg a szokozok nelkul; ami nem szoveg, valtozatlan (a validator utasitja el). */
+function trimmedName({ value }: { value: unknown }): unknown {
+  return typeof value === "string" ? value.trim() : value;
 }

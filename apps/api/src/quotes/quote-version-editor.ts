@@ -652,10 +652,23 @@ export class QuoteVersionEditor {
         vatRatePercent: patch.vatRatePercent ?? item.vatRatePercent.toString(),
         isOptional: patch.isOptional ?? item.isOptional,
       });
-      if (merged.source === "STANDALONE" && item.bomItems.length)
+      // BOM -> STANDALONE (Luca, t-20261116-bom-tetel-visszavaltas): the lines go only when the user confirmed it,
+      // in this same write; without it the refusal says both ways out instead of a dead end
+      const droppedBom =
+        merged.source === "STANDALONE" &&
+        item.bomItems.length > 0 &&
+        patch.dropBomItems === true
+          ? item.bomItems.length
+          : 0;
+      if (merged.source === "STANDALONE" && item.bomItems.length && !droppedBom)
         throw new ConflictException(
-          "Önálló tételnek nincs BOM-ja: előbb töröld a BOM-sorait.",
+          `Önálló tételnek nincs BOM-ja, ennek a tételnek pedig ${item.bomItems.length} BOM-sora van. ` +
+            "Törölheted őket a tétel „Belső BOM” gombjával, vagy a váltás megerősítésével a váltás maga törli őket.",
         );
+      if (droppedBom)
+        await tx.quoteBomItem.deleteMany({
+          where: { quoteItemId: itemId, versionId },
+        });
       if (merged.variantId && merged.variantId !== item.variantId)
         await this.activeVariant(tx, merged.variantId);
       // source and variant in ONE write: the identity CHECK sees them together
@@ -664,6 +677,7 @@ export class QuoteVersionEditor {
       await audit(tx, user.id, "quote.item_updated", "QuoteItem", itemId, {
         versionId,
         fields: Object.keys(patch).join(","),
+        ...(droppedBom ? { droppedBomItems: droppedBom } : {}),
       });
     });
   }

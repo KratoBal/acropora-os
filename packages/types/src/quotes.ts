@@ -369,7 +369,14 @@ export interface QuoteItemInput {
   isOptional?: boolean;
   position?: number;
 }
-export type QuoteItemPatch = Partial<Omit<QuoteItemInput, "position">>;
+export type QuoteItemPatch = Partial<Omit<QuoteItemInput, "position">> & {
+  /**
+   * BOM -> STANDALONE IN ONE STEP (Luca, task t-20261116-bom-tetel-visszavaltas): a standalone item has no BOM, so the
+   * switch was refused while the item had BOM lines. With this the switch deletes the item's BOM lines in the same
+   * write, after the user confirmed it on the screen. Only the draft's lines go; a published version keeps its own.
+   */
+  dropBomItems?: boolean;
+};
 
 export interface QuoteBomItemInput {
   kind: QuoteBomKindValue;
@@ -418,6 +425,19 @@ export interface QuoteCostingLineDto {
   marginAmount: string | null;
   marginPercent: string | null;
   warnings: string[];
+}
+/**
+ * A VÁLTOZAT MAI ELADÁSI ÁRA NETTÓBAN, egy tétel kitöltéséhez (Luca, 2026-11-13: a termék kiválasztása után
+ * a név és az ár nem töltődött ki, csak mentés és újranyitás után). Ugyanaz az ár, amit a javasolt egységár ad
+ * (`loadVariantListPrices`): a törzsadat gazdája dönt, a nettót a változat áfakulcsa adja. Ha nincs ár,
+ * `unitNetPrice` null és a `reason` megnevezi az okot, soha nem nulla.
+ */
+export interface QuoteVariantListPriceDto {
+  variantId: string;
+  unitNetPrice: string | null;
+  /** futó akciós ár */
+  sale: boolean;
+  reason: string | null;
 }
 export interface QuoteCostingDto {
   versionId: string;

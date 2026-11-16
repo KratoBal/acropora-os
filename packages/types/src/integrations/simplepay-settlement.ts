@@ -17,13 +17,26 @@ export type SimplePayResolutionSource = "ORDER_KEY" | "MANUAL";
  *                       sem dönt
  *   AMOUNT_MISMATCH     a rendelés megvan, de a végösszege nem a fizetett összeg
  *   ORDER_NOT_INVOICED  a rendelés megvan, számlája nincs
+ *
+ * A visszatérítéses rendelésé (c03e9896): ezeket a rendelés ÖSSZES SimplePay-sora
+ * dönti el (fizetések mínusz visszatérítések), nem egy sor a rendelés végösszegével.
+ *   REFUND_INVOICE_NOT_CANCELLED  teljes visszatérítés, de a rendelés számlája nincs
+ *                                 sztornózva
+ *   REFUND_INVOICE_NOT_CORRECTED  részleges visszatérítés, a rendelés végösszege a
+ *                                 csökkentett, de a számla (vagy a helyesbítője) nem
+ *                                 erről az összegről szól, vagy az összege nem ismert
+ *   REFUND_AMOUNT_UNEXPLAINED     a fizetett mínusz visszatérített összeg sem nulla,
+ *                                 sem a rendelés végösszege
  */
 export type SimplePayLineError =
   | "REFERENCE_UNKNOWN"
   | "ORDER_NOT_FOUND"
   | "ORDER_AMBIGUOUS"
   | "AMOUNT_MISMATCH"
-  | "ORDER_NOT_INVOICED";
+  | "ORDER_NOT_INVOICED"
+  | "REFUND_INVOICE_NOT_CANCELLED"
+  | "REFUND_INVOICE_NOT_CORRECTED"
+  | "REFUND_AMOUNT_UNEXPLAINED";
 
 export interface SimplePayTransactionLine {
   id: string;

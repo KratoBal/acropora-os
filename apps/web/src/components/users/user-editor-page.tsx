@@ -31,6 +31,7 @@ import { usersApi } from "@/lib/api/users";
 import { PartnerPicker } from "@/components/service-jobs/partner-picker";
 import { ROLE_LABELS, ROLE_OPTIONS } from "./role-labels";
 import { UserPermissionTable } from "./user-permission-table";
+import { UserAttendanceSchedule } from "./user-attendance-schedule";
 import { UserVisibleUnits } from "./user-visible-units";
 
 /**
@@ -554,6 +555,13 @@ export function UserEditorPage({ userId }: { userId?: string }) {
                 : "internal"
           }
         />
+      ) : null}
+      {/*
+        THE WEEKLY SCHEDULE (os-jelenleti-iv, S1b): only on an existing account, for the same reason as above (the versions
+        hang on the account's id). The section hides itself without attendance.manage or for a partner or machine account.
+      */}
+      {user ? (
+        <UserAttendanceSchedule userId={user.id} role={user.role} />
       ) : null}
       {/*
         A FELHASZNÁLÓNKÉNTI JOGOK (3. lépés): csak meglévő felhasználónál, mert

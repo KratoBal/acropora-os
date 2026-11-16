@@ -80,7 +80,7 @@ describe("A rögzített számla javítása (Luca, 2026-10-08)", () => {
       note: null,
       lines: [{ id: "l2", sourceDescription: "Második, pontosan" }],
     });
-    expect(onSaved).toHaveBeenCalled();
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
   });
 
   it("devizás számlán a kelte zárt, és nem is küldi", async () => {

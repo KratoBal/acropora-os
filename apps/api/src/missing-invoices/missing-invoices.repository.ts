@@ -17,6 +17,10 @@ import {
   reminderFileName,
 } from "./collection/invoice-text.js";
 import { supplierTaxBase } from "../billing/billing-duplicates.js";
+import {
+  identityTaxNumber,
+  invoiceIdentityKey as invoiceKey,
+} from "../billing/invoice-identity.js";
 import type { CandidateDocument, Payee } from "./missing-invoice-matching.js";
 import type { StoredReading } from "../billing/foreign-invoice/reading-values.js";
 
@@ -48,17 +52,144 @@ const navGross = (net: Prisma.Decimal | null, vat: Prisma.Decimal | null) =>
  * számlává vonódjon össze. Mérve 2026-09-30 a NAV bejövő exportján (Foxpost
  * 40 sor, GLS 18 sor) és egy augusztusi GLS e-számla XML-jén.
  */
-const FOXPOST_TAX_BASE = "32435119";
-const GLS_TAX_BASE = "12369410";
+export const FOXPOST_TAX_BASE = "32435119";
+export const GLS_TAX_BASE = "12369410";
 
-/** Egy számla azonossága: a száma, és a szállító adószám-törzse, vagy a neve. */
-function invoiceKey(
-  number: string,
-  taxNumber: string | null | undefined,
-  supplierName: string,
-): string {
-  const who = taxBase(taxNumber) || supplierName.trim().toLowerCase();
-  return `${number.replace(/\s/g, "").toLowerCase()}|${who}`;
+/**
+ * A BETÖLTŐ KIZÁRÁSAI, EGY HELYEN (task os-hianyzo-szamlak-unpaid, niceshops: egy tárolt számla nem jelent meg jelöltként,
+ * és a `DOCUMENT_NOT_LOADED` nem mondta meg, miért). A `candidates()` ciklusa és a jelölt-vizsgálat ugyanezt a függvényt
+ * hívja: ami kiesik, annak a KÓDJA is megmarad, nem csak a ténye.
+ *
+ * A SORREND az eredeti `continue`-ké: számlához csatolt, nem könyvelt beszerzés feltöltése; a begyűjtött másolat, ha ugyanez
+ * a fájl más úton is megvan; nincs dátum; nincs olvasat vagy az ablakon kívüli dátum; emlékeztető vagy más dokumentum
+ * fájlneve. A `COLLECTED_COPY_OF_OTHER_PATH` figyelmeztetése: a másik út dokumentuma is kieshet más okból (pl. egy nem
+ * könyvelt beszerzés feltöltése), és akkor a számla SEMMILYEN alakban nem marad jelölt.
+ */
+export type LoaderExclusionCode =
+  | "UPLOAD_OF_UNPOSTED_PURCHASE"
+  | "COLLECTED_COPY_OF_OTHER_PATH"
+  | "NO_DATE"
+  | "NO_READING"
+  | "OUT_OF_WINDOW"
+  | "REMINDER_FILE_NAME"
+  | "OTHER_DOCUMENT_FILE_NAME"
+  | "NOT_BOOKABLE_MARK";
+
+export interface LoaderExclusion {
+  code: LoaderExclusionCode;
+  detail: string | null;
+}
+
+export function loaderExclusion(input: {
+  origin: string;
+  sha256: string;
+  fileName: string;
+  /** a dokumentum egy beszerzési számlához van kötve, és az nincs könyvelve (POSTED) */
+  linkedToUnpostedPurchase: boolean;
+  /** egy KÖNYVELT beszerzési számlához kötött dokumentum */
+  linked: boolean;
+  /** a terheléshez feltöltött fájl (nem a számlához csatolt kép) */
+  upload: boolean;
+  /** az azonos tartalmú, NEM begyűjtött dokumentumok lenyomatai */
+  /** az azonos tartalmú, NEM begyűjtött, és maguk is jelölt-képes dokumentumok azonosítói, lenyomatonként */
+  otherContent: ReadonlyMap<string, readonly string[]>;
+  date: string | null;
+  hasResult: boolean;
+  hasReading: boolean;
+  from: string;
+  to: string;
+}): LoaderExclusion | null {
+  if (input.linkedToUnpostedPurchase && input.origin === "UPLOAD")
+    return { code: "UPLOAD_OF_UNPOSTED_PURCHASE", detail: null };
+  const otherPath = input.origin.startsWith("COLLECTED_")
+    ? input.otherContent.get(input.sha256)
+    : undefined;
+  if (otherPath && otherPath.length > 0)
+    return {
+      code: "COLLECTED_COPY_OF_OTHER_PATH",
+      detail: `another, non-collected document carries the same file and stays a candidate: ${otherPath.join(", ")}`,
+    };
+  if (!input.date) return { code: "NO_DATE", detail: null };
+  if (!input.upload) {
+    if (!input.linked && !input.hasResult && !input.hasReading)
+      return { code: "NO_READING", detail: null };
+    if (input.date < input.from || input.date > input.to)
+      return {
+        code: "OUT_OF_WINDOW",
+        detail: `${input.date} is outside ${input.from} .. ${input.to}`,
+      };
+    if (!input.linked) {
+      if (reminderFileName(input.fileName))
+        return { code: "REMINDER_FILE_NAME", detail: null };
+      if (otherDocumentFileName(input.fileName))
+        return { code: "OTHER_DOCUMENT_FILE_NAME", detail: null };
+    }
+  }
+  return null;
+}
+
+/**
+ * A MÁSIK ÚT DOKUMENTUMAI, AMELYEK JELÖLT-KÉPESEK, lenyomatonként: a begyűjtött másolat csak akkor esik ki, ha van ilyen.
+ * Egy nem begyűjtött dokumentum, ami maga esett ki (pl. egy nem könyvelt beszerzés feltöltése), nem tartja meg a számlát.
+ */
+export function survivingOtherPaths(
+  entries: readonly {
+    id: string;
+    sha256: string;
+    collected: boolean;
+    candidateCapable: boolean;
+  }[],
+): Map<string, string[]> {
+  const survivors = new Map<string, string[]>();
+  for (const entry of entries)
+    if (!entry.collected && entry.candidateCapable)
+      survivors.set(entry.sha256, [
+        ...(survivors.get(entry.sha256) ?? []),
+        entry.id,
+      ]);
+  return survivors;
+}
+
+/** A betöltő lekérdezésének feltételei: egy helyen, hogy a `where` és a magyarázata ne csússzon szét. */
+export const CANDIDATE_READ_STATUSES = ["READ", "LATE_CORRECTION"] as const;
+export const CANDIDATE_ORIGINS = [
+  "UPLOAD",
+  "COLLECTED_MAIL",
+  "COLLECTED_DRIVE",
+  "SZAMLAZZ_FEED",
+] as const;
+
+/**
+ * MIÉRT NEM JÖN BE A LEKÉRDEZÉSBEN egy dokumentum (a `where` magyarázata, négy mezőből): emberi döntésre vár (`reviewState`
+ * nem null: a Jev javaslata vagy a nem kötött fájl a Javasolt számlák lapon), vagy sem az olvasott-ág (státusz + fajta),
+ * sem az eredet nem teszi jelöltté. `null`: a lekérdezés beengedi (a kizárás később, a betöltőben történik).
+ */
+export function queryExclusion(row: {
+  reviewState: string | null;
+  status: string;
+  kind: string | null;
+  origin: string;
+}): {
+  code: "AWAITING_REVIEW" | "NOT_A_CANDIDATE_KIND";
+  detail: string;
+} | null {
+  if (row.reviewState !== null)
+    return {
+      code: "AWAITING_REVIEW",
+      detail: `reviewState=${row.reviewState}`,
+    };
+  const readBranch =
+    (CANDIDATE_READ_STATUSES as readonly string[]).includes(row.status) &&
+    row.kind !== null;
+  const originBranch = (CANDIDATE_ORIGINS as readonly string[]).includes(
+    row.origin,
+  );
+  if (!readBranch && !originBranch)
+    return {
+      code: "NOT_A_CANDIDATE_KIND",
+      detail: `status=${row.status}, kind=${row.kind ?? "null"}, origin=${row.origin}`,
+    };
+  return null;
 }
 
 /** Az ÁFA-csoport azonosítója 17-tel kezdődik; a NAV a csoportot adja szállítóként. */
@@ -143,8 +274,49 @@ export function withoutNotBookable(
     keys: ReadonlySet<string>;
   },
 ): CandidateDocument[] {
+  return splitNotBookable(documents, given, marked).kept;
+}
+
+/**
+ * UGYANAZ A SZŰRÉS, DE A KIESETTEKET IS ADJA, MEGNEVEZVE, MIÉRT (a jelölt-vizsgálat ebből tudja az okot: nincs második,
+ * szétcsúszó kizárási logika). `via`: `sourceDocumentId` (a „Nem könyvelendő” sor forrás-dokumentuma maga a dokumentum),
+ * `key` (a dokumentum számla-kulcsa jelölt), `sameKeyAsMarked` (egy másik, jelölt dokumentum kulcsát hordozza: pl. két
+ * azonos számú számla közül az egyik jelölt, és a másik is vele esik ki).
+ */
+/**
+ * A „NEM KÖNYVELENDŐ” SOR KULCSA, a dokumentum oldali számla-kulccsal egyezően (acrobot 49536, barracuda #2491): a külföldi
+ * szállító adószáma a bejövő rekordban a `supplierEuTaxNumber` mezőben áll, a `supplierTaxNumber` üres, ezért a kulcs a névre
+ * esett, a dokumentumé viszont az adószám-számjegyekre, és a jelölés nem ért el a dokumentumig.
+ */
+export function notBookableKeyOf(row: {
+  documentNumber: string;
+  supplierName: string;
+  supplierTaxNumber: string | null;
+  supplierEuTaxNumber: string | null;
+}): string {
+  return invoiceKey(
+    row.documentNumber,
+    identityTaxNumber(row.supplierTaxNumber, row.supplierEuTaxNumber),
+    row.supplierName,
+  );
+}
+
+export function splitNotBookable(
+  documents: readonly CandidateDocument[],
+  given: ReadonlyMap<string, string>,
+  marked: {
+    sourceDocumentIds: ReadonlySet<string>;
+    keys: ReadonlySet<string>;
+  },
+): {
+  kept: CandidateDocument[];
+  removed: {
+    document: CandidateDocument;
+    via: "sourceDocumentId" | "key" | "sameKeyAsMarked";
+  }[];
+} {
   if (marked.sourceDocumentIds.size === 0 && marked.keys.size === 0)
-    return [...documents];
+    return { kept: [...documents], removed: [] };
   const keys = alignVatGroupKeys(documents, given);
   const usable = (key: string | undefined): key is string =>
     !!key && !key.startsWith("|");
@@ -159,14 +331,23 @@ export function withoutNotBookable(
       .map((document) => keys.get(document.id))
       .filter(usable),
   );
-  return documents.filter(
-    (document) =>
-      !hit(document) &&
-      !(
-        usable(keys.get(document.id)) &&
-        excludedKeys.has(keys.get(document.id)!)
-      ),
-  );
+  const kept: CandidateDocument[] = [];
+  const removed: {
+    document: CandidateDocument;
+    via: "sourceDocumentId" | "key" | "sameKeyAsMarked";
+  }[] = [];
+  for (const document of documents) {
+    if (marked.sourceDocumentIds.has(document.id))
+      removed.push({ document, via: "sourceDocumentId" });
+    else if (hit(document)) removed.push({ document, via: "key" });
+    else if (
+      usable(keys.get(document.id)) &&
+      excludedKeys.has(keys.get(document.id)!)
+    )
+      removed.push({ document, via: "sameKeyAsMarked" });
+    else kept.push(document);
+  }
+  return { kept, removed };
 }
 
 /**
@@ -293,6 +474,8 @@ export interface PackageBillingRow {
   documentNumber: string;
   supplierName: string;
   supplierTaxNumber: string | null;
+  /** külföldi szállítónál itt áll az adószám: az azonosság ebből épül, ha a `supplierTaxNumber` üres */
+  supplierEuTaxNumber: string | null;
   sourceDocumentId: string | null;
   grossAmount: Prisma.Decimal;
   currency: string;
@@ -443,6 +626,58 @@ export class MissingInvoicesRepository {
     );
   }
 
+  /** Egy terhelés kézi párosításai, a dokumentum fájlnevével (ha az egy tárolt beszállítói dokumentum). */
+  async manualMatchRows(bankTransactionId: string): Promise<
+    {
+      documentId: string;
+      documentSource: string;
+      createdAt: Date;
+      fileName: string | null;
+    }[]
+  > {
+    const rows = await this.database.bankTransactionMatch.findMany({
+      where: { bankTransactionId },
+      orderBy: { createdAt: "asc" },
+      select: { documentId: true, documentSource: true, createdAt: true },
+    });
+    const files = await this.database.incomingSupplierDocument.findMany({
+      where: { id: { in: rows.map((row) => row.documentId) } },
+      select: { id: true, fileName: true },
+    });
+    const nameOf = new Map(files.map((file) => [file.id, file.fileName]));
+    return rows.map((row) => ({
+      ...row,
+      fileName: nameOf.get(row.documentId) ?? null,
+    }));
+  }
+
+  /** EGY dokumentum kézi párosításának levétele, auditnaplóval; a többi párosítás marad. Hány sor ment (0 vagy 1). */
+  async unpairOne(
+    bankTransactionId: string,
+    userId: string,
+    documentId: string,
+  ): Promise<number> {
+    let removed = 0;
+    await this.decide(
+      bankTransactionId,
+      userId,
+      "missing-invoices.unpaired",
+      { documentIds: [documentId], one: true },
+      async (transaction) => {
+        removed = (
+          await transaction.bankTransactionMatch.deleteMany({
+            where: { bankTransactionId, documentId },
+          })
+        ).count;
+        // nincs mit levenni: ne maradjon audit-sor egy meg nem történt lépésről
+        if (removed === 0) throw new NothingToUnpair();
+      },
+    ).catch((error: unknown) => {
+      if (!(error instanceof NothingToUnpair)) throw error;
+    });
+    return removed;
+  }
+
   unpair(bankTransactionId: string, userId: string, removed: string[]) {
     return this.decide(
       bankTransactionId,
@@ -584,8 +819,53 @@ export class MissingInvoicesRepository {
     return new Set(rows.map((row) => row.id));
   }
 
+  /**
+   * MILYEN AZONOSÍTÓ EZ (a jelölt-vizsgálathoz): tárolt dokumentum, bejövő számla SORA (és annak forrás-dokumentuma),
+   * vagy egyik sem. A csomagellenőrzés `unpaid` listájának `id`-ja a sor azonosítója, nem a dokumentumé; a kettő külön
+   * azonosító-tér, és a vizsgálat a tárolt dokumentumot kérdezi. Csak olvas, két egyedi kulcsra.
+   */
+  async idKind(
+    id: string,
+  ): Promise<
+    | { kind: "document" }
+    | { kind: "billingRow"; sourceDocumentId: string | null }
+    | { kind: "unknown" }
+  > {
+    const [document, row] = await Promise.all([
+      this.database.incomingSupplierDocument.findUnique({
+        where: { id },
+        select: { id: true },
+      }),
+      this.database.incomingBillingDocument.findUnique({
+        where: { id },
+        select: { sourceDocumentId: true },
+      }),
+    ]);
+    if (document) return { kind: "document" };
+    if (row)
+      return { kind: "billingRow", sourceDocumentId: row.sourceDocumentId };
+    return { kind: "unknown" };
+  }
+
   /** A jelöltek egy dátumablakban, mind a négy forrásból. */
   async candidates(from: string, to: string): Promise<CandidateDocument[]> {
+    return (await this.candidatesWithExclusions(from, to)).documents;
+  }
+
+  /**
+   * A JELÖLTEK ÉS AZ, AMI KIESETT, OKKAL (a jelölt-vizsgálathoz): a `documents` ugyanaz, mint a `candidates()` eredménye;
+   * az `excluded` azonosítónként megmondja, melyik betöltő-feltétel zárta ki a dokumentumot (`loaderExclusion`, és a
+   * „Nem könyvelendő” szűrő). A lekérdezés `where`-je által eleve nem betöltött dokumentumok nincsenek benne: azokat a
+   * `queryExclusion` magyarázza.
+   */
+  async candidatesWithExclusions(
+    from: string,
+    to: string,
+  ): Promise<{
+    documents: CandidateDocument[];
+    excluded: Map<string, LoaderExclusion>;
+  }> {
+    const excluded = new Map<string, LoaderExclusion>();
     const range = {
       gte: new Date(`${from}T00:00:00Z`),
       lte: new Date(`${to}T00:00:00Z`),
@@ -618,14 +898,12 @@ export class MissingInvoicesRepository {
           reviewState: null,
           OR: [
             {
-              status: { in: ["READ", "LATE_CORRECTION"] },
+              status: { in: [...CANDIDATE_READ_STATUSES] },
               kind: { not: null },
             },
-            { origin: "UPLOAD" },
-            // a begyűjtés csak azt tárolja, amit illesztő vagy NAV-szám ismer
-            { origin: { in: ["COLLECTED_MAIL", "COLLECTED_DRIVE"] } },
-            // a Számlázz.hu bejövő számla-továbbítása (acrobot 25686)
-            { origin: "SZAMLAZZ_FEED" },
+            // feltöltés; a begyűjtés (csak azt tárolja, amit illesztő vagy NAV-szám ismer); a Számlázz.hu bejövő
+            // számla-továbbítása (acrobot 25686): `CANDIDATE_ORIGINS`, a `queryExclusion` magyarázatával közösen
+            { origin: { in: [...CANDIDATE_ORIGINS] } },
           ],
         },
         select: {
@@ -772,9 +1050,6 @@ export class MissingInvoicesRepository {
       kulcs-névtérben ír (lásd `invoice-collection.repository.ts`).
     */
     const collected = (origin: string) => origin.startsWith("COLLECTED_");
-    const otherContent = new Set(
-      mailbox.filter((d) => !collected(d.origin)).map((d) => d.sha256),
-    );
     /*
       A BESZERZÉSI SZÁMLÁHOZ CSATOLT KÉP (acrobot 28111, kártya 5ec62e35): a
       fájl egy rögzített beszerzési számla eredetije, nem egy terheléshez
@@ -788,7 +1063,8 @@ export class MissingInvoicesRepository {
       if (invoice.purchaseInvoiceId && keys.has(invoice.id))
         navKeyByPurchase.set(invoice.purchaseInvoiceId, keys.get(invoice.id)!);
     const pdfIds = await this.pdfContentIds(mailbox.map((d) => d.id));
-    for (const document of mailbox) {
+    // egy dokumentum betöltési adatai: az eredmény, a könyvelt számla, az olvasat, a dátum (tiszta számolás, mellékhatás nélkül)
+    const prepare = (document: (typeof mailbox)[number]) => {
       const result =
         document.importResult as unknown as SupplierInvoiceImportResult | null;
       // A CANCELLED OR DRAFT INVOICE'S SCAN IS NOT A CANDIDATE AT ALL
@@ -800,13 +1076,9 @@ export class MissingInvoicesRepository {
       // falls back to standing on its own reading, so a mailbox PDF's debit
       // keeps its candidate (acrobot 28151).
       const posted = document.purchaseInvoice?.status === "POSTED";
-      if (document.purchaseInvoice && !posted && document.origin === "UPLOAD")
-        continue;
       const linked = posted ? document.purchaseInvoice : null;
       // a terheléshez feltöltött fájl; a számlához csatolt kép nem ilyen
       const upload = document.origin === "UPLOAD" && !linked;
-      const collectedCopy = collected(document.origin);
-      if (collectedCopy && otherContent.has(document.sha256)) continue;
       // az általános olvasó eredménye: csak a szám és a szállító adószáma
       const reading = result
         ? null
@@ -836,21 +1108,54 @@ export class MissingInvoicesRepository {
             : reading
               ? day(document.receivedAt ?? document.createdAt)
               : null));
-      if (!date) continue;
-      if (
-        !upload &&
-        ((!linked && !result && !reading) || date < from || date > to)
-      )
-        continue;
-      // a már eltárolt fizetési emlékeztető nem számla (acrobot 25664): az új
-      // begyűjtés már nem tárolja, a régieket itt hagyjuk ki
-      if (
-        !upload &&
-        !linked &&
-        (reminderFileName(document.fileName) ||
-          otherDocumentFileName(document.fileName))
-      )
-        continue;
+      return { result, posted, linked, upload, reading, card, date };
+    };
+    const exclusionOf = (
+      document: (typeof mailbox)[number],
+      p: ReturnType<typeof prepare>,
+      otherContent: ReadonlyMap<string, readonly string[]>,
+    ) =>
+      loaderExclusion({
+        origin: document.origin,
+        sha256: document.sha256,
+        fileName: document.fileName,
+        linkedToUnpostedPurchase: !!document.purchaseInvoice && !p.posted,
+        linked: !!p.linked,
+        upload: p.upload,
+        otherContent,
+        date: p.date,
+        hasResult: !!p.result,
+        hasReading: !!p.reading,
+        from,
+        to,
+      });
+    /*
+      A BEGYŰJTÖTT MÁSOLAT CSAK AKKOR KIESIK, HA A MÁSIK ÚT DOKUMENTUMA MARAD JELÖLT. Eddig akkor is kiesett, ha a másik
+      út dokumentuma maga esett ki más okból (pl. egy nem könyvelt beszerzés feltöltése): akkor a számla SEMMILYEN alakban
+      nem maradt jelölt (niceshops, 2026-11-12). A másik utak a begyűjtöttekre sosem hivatkoznak, ezért az ő kizárásuk
+      független a másolatoktól, és előre kiszámolható.
+    */
+    const survivors = survivingOtherPaths(
+      mailbox.map((document) => {
+        const p = prepare(document);
+        return {
+          id: document.id,
+          sha256: document.sha256,
+          collected: collected(document.origin),
+          candidateCapable:
+            !collected(document.origin) &&
+            !exclusionOf(document, p, new Map()) &&
+            !!p.date,
+        };
+      }),
+    );
+    for (const document of mailbox) {
+      const { result, linked, upload, reading, card, date } = prepare(document);
+      // minden kizárás egy helyen, okkal (`loaderExclusion`); a sorrendjük az eredeti `continue`-ké
+      const exclusion = exclusionOf(document, prepare(document), survivors);
+      if (exclusion) excluded.set(document.id, exclusion);
+      // a `NO_DATE` kizárás a típusnak is: innen a dátum biztosan van
+      if (exclusion || !date) continue;
       const foreign =
         (result?.supplier.country && result.supplier.country !== "HU") ||
         (result?.supplier.vatId && !result.supplier.vatId.startsWith("HU"));
@@ -1002,26 +1307,46 @@ export class MissingInvoicesRepository {
         sourceDocumentId: true,
         documentNumber: true,
         supplierTaxNumber: true,
+        supplierEuTaxNumber: true,
         supplierName: true,
       },
     });
-    return mergeSameInvoice(
-      withoutNotBookable(documents, keys, {
-        sourceDocumentIds: new Set(
-          notBookable.flatMap((row) => row.sourceDocumentId ?? []),
-        ),
-        keys: new Set(
-          notBookable.map((row) =>
-            invoiceKey(
-              row.documentNumber,
-              row.supplierTaxNumber,
-              row.supplierName,
-            ),
-          ),
-        ),
-      }),
-      keys,
-    );
+    const { kept, removed } = splitNotBookable(documents, keys, {
+      sourceDocumentIds: new Set(
+        notBookable.flatMap((row) => row.sourceDocumentId ?? []),
+      ),
+      keys: new Set(notBookable.map(notBookableKeyOf)),
+    });
+    for (const { document, via } of removed)
+      excluded.set(document.id, { code: "NOT_BOOKABLE_MARK", detail: via });
+    return { documents: mergeSameInvoice(kept, keys), excluded };
+  }
+
+  /**
+   * A DOKUMENTUMOK TARTALOM-LENYOMATA ÉS EREDETE (a jelölt-vizsgálathoz): az összevont jelölt tagjainak azonosítója, eredete
+   * és `sha256`-ja, tartalom és fájlnév NÉLKÜL. A közös fájl-lenyomat így tagonként látszik (melyik alias hozta).
+   */
+  async documentHashes(
+    ids: readonly string[],
+  ): Promise<{ id: string; origin: string; sha256: string }[]> {
+    if (ids.length === 0) return [];
+    return this.database.incomingSupplierDocument.findMany({
+      where: { id: { in: [...ids] } },
+      select: { id: true, origin: true, sha256: true },
+    });
+  }
+
+  /** Egy tárolt dokumentum, amennyi a betöltő lekérdezésének magyarázatához kell. Nincs ilyen azonosító: null. */
+  async queryFields(id: string): Promise<{
+    reviewState: string | null;
+    status: string;
+    kind: string | null;
+    origin: string;
+  } | null> {
+    return this.database.incomingSupplierDocument.findUnique({
+      where: { id },
+      select: { reviewState: true, status: true, kind: true, origin: true },
+    });
   }
 
   /**
@@ -1091,6 +1416,7 @@ export class MissingInvoicesRepository {
           documentNumber: true,
           supplierName: true,
           supplierTaxNumber: true,
+          supplierEuTaxNumber: true,
           sourceDocumentId: true,
           grossAmount: true,
           currency: true,
@@ -1117,6 +1443,66 @@ export class MissingInvoicesRepository {
         ...row,
         pdfIds: incomingPdfIds(row, { attached, collected }),
       })),
+    };
+  }
+
+  /**
+   * A LEVONÁSSAL RENDEZETT SZÁMLÁK (task os-hianyzo-szamlak-unpaid, 2026-11-11: a Foxpost FX és a GLS HU számlák a csomag-ellenőrzés
+   * "kifizetetlen" listáján álltak, holott az utánvét-elszámolásból vonódnak le, nem bankból; Balázs "összevisszaság" kérdése).
+   *
+   *  - FOXPOST: az elszámolás sora maga hordozza a levont számlát (`invoiceNumber`, `invoiceGrossAmount`), a beszedett utánvétet és az
+   *    utalt összeget. Levonásnak CSAK AKKOR számít, ha kijön a számtan: beszedett - számla = utalt (1 Ft tűréssel). Egy sor, aminek az
+   *    összege nem jön ki, vagy hiányzik valamelyik érték, nem bizonyít semmit.
+   *  - GLS: a Kompenzációs értesítő (`GlsCompensationLetter`) a beszámított GLS-számlákat sorolja (`references`). Egy számla VÉGLEGESEN
+   *    levont, ha egy olyan levél sorolja, ahol a maradvány 0 (a levélnek a parser is ellenőrzi a két összegét). A maradványos levél
+   *    számlái NEM kerülnek ide: egy későbbi levél számítja be a hátralékot, és a konzervatív hiba az, hogy fizetetlennek marad.
+   *
+   * A számok normalizáltak (szóköz nélkül, nagybetűvel); a hívó az adószám-törzset is ellenőrzi.
+   * A Foxpost-sor státusza COMPLETED vagy NEEDS_REVIEW (utóbbi: a sorok közül vár ember, a levonás számtana attól még kijön).
+   */
+  async settledByDeduction(): Promise<{
+    foxpost: ReadonlySet<string>;
+    gls: ReadonlySet<string>;
+  }> {
+    const [foxpost, gls] = await Promise.all([
+      this.database.foxpostSettlement.findMany({
+        where: {
+          invoiceNumber: { not: null },
+          // NEEDS_REVIEW IS INCLUDED ON PURPOSE (acrobot 2026-11-11, FX01082949): it means COD LINES wait for a person (an order that is not
+          // matched yet), not that the deduction is doubtful: the invoice, the collected sum and the transferred sum come from the settlement's
+          // own document, and the sum below is checked. PROCESSING (not read yet) and ERROR are not evidence.
+          status: { in: ["COMPLETED", "NEEDS_REVIEW"] },
+        },
+        select: {
+          invoiceNumber: true,
+          collectedAmount: true,
+          invoiceGrossAmount: true,
+          transferredAmount: true,
+        },
+      }),
+      this.database.glsCompensationLetter.findMany({
+        where: { remaining: 0 },
+        select: { references: true },
+      }),
+    ]);
+    const normal = (value: string) => value.replace(/\s+/g, "").toUpperCase();
+    return {
+      foxpost: new Set(
+        foxpost
+          .filter(
+            (row) =>
+              row.collectedAmount !== null &&
+              row.invoiceGrossAmount !== null &&
+              row.transferredAmount !== null &&
+              row.collectedAmount
+                .minus(row.invoiceGrossAmount)
+                .minus(row.transferredAmount)
+                .abs()
+                .lte(1),
+          )
+          .map((row) => normal(row.invoiceNumber!)),
+      ),
+      gls: new Set(gls.flatMap((letter) => letter.references.map(normal))),
     };
   }
 
@@ -1354,3 +1740,6 @@ export class MissingInvoicesRepository {
     });
   }
 }
+
+/** Belső jel: az egyenkénti levételnek nem volt mit levennie, a tranzakció (és az audit-sor) visszagördül. */
+class NothingToUnpair extends Error {}

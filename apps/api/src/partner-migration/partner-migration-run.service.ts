@@ -23,8 +23,9 @@ import {
   type RestoreOutcome,
 } from "./partner-migration.executor.js";
 import {
-  decideOperations,
+  decideWithFills,
   type BindChoices,
+  type FillFacts,
   type MigrationDecisions,
 } from "./partner-migration-run.js";
 import { PartnerMigrationPlanService } from "./partner-migration.service.js";
@@ -48,6 +49,81 @@ const REAL_STEPS: MigrationSteps = {
 export class PartnerMigrationRunRepository extends Repository {
   constructor() {
     super(prisma);
+  }
+
+  /**
+   * A KITÖLTÉS TÉNYEI (csak olvas): a partnerek értékei és a szóba jövő vevő-sorok jelenlegi értékei, meg hogy a partnerkódokat mely
+   * vevő-sorok viselik (a kód egyedi). A mag (`decideOperations`) ezekből dönti el, melyik üres mezőt tölti.
+   */
+  async fillFacts(
+    supplierIds: readonly string[],
+    customerIds: readonly string[],
+  ): Promise<FillFacts> {
+    const suppliers = supplierIds.length
+      ? await this.database.supplier.findMany({
+          where: { id: { in: [...supplierIds] } },
+          select: {
+            id: true,
+            paymentDueDays: true,
+            email: true,
+            worksheetPartnerCode: true,
+          },
+        })
+      : [];
+    const customers = customerIds.length
+      ? await this.database.customer.findMany({
+          where: { id: { in: [...customerIds] } },
+          select: {
+            id: true,
+            paymentDueDays: true,
+            billingEmail: true,
+            worksheetPartnerCode: true,
+          },
+        })
+      : [];
+    const codes = [
+      ...new Set(
+        suppliers.flatMap((row) =>
+          row.worksheetPartnerCode?.trim()
+            ? [row.worksheetPartnerCode.trim()]
+            : [],
+        ),
+      ),
+    ];
+    const holders = codes.length
+      ? await this.database.customer.findMany({
+          where: { worksheetPartnerCode: { in: codes } },
+          select: { id: true, worksheetPartnerCode: true },
+        })
+      : [];
+    const codeHolders = new Map<string, Set<string>>();
+    for (const row of holders) {
+      const code = row.worksheetPartnerCode!;
+      codeHolders.set(code, (codeHolders.get(code) ?? new Set()).add(row.id));
+    }
+    return {
+      suppliers: new Map(
+        suppliers.map((row) => [
+          row.id,
+          {
+            paymentDueDays: row.paymentDueDays,
+            email: row.email,
+            worksheetPartnerCode: row.worksheetPartnerCode,
+          },
+        ]),
+      ),
+      customers: new Map(
+        customers.map((row) => [
+          row.id,
+          {
+            paymentDueDays: row.paymentDueDays,
+            billingEmail: row.billingEmail,
+            worksheetPartnerCode: row.worksheetPartnerCode,
+          },
+        ]),
+      ),
+      codeHolders,
+    };
   }
 
   transaction<T>(work: (tx: Prisma.TransactionClient) => Promise<T>) {
@@ -113,13 +189,16 @@ const toPreview = (
       kind: op.kind,
       supplierId: op.supplierId,
       code: op.code,
-      ...(op.kind === "BIND" ? { customerId: op.customerId } : {}),
+      ...(op.kind === "BIND" || op.kind === "FILL"
+        ? { customerId: op.customerId, fills: op.fills }
+        : {}),
       ...(op.kind === "SKIP" ? { reason: op.reason } : {}),
     })),
     problems: decisions.problems,
     counts: {
       create: count("CREATE"),
       bind: count("BIND"),
+      fill: count("FILL"),
       skip: count("SKIP"),
     },
     fingerprint: decisions.fingerprint,
@@ -140,8 +219,14 @@ export class PartnerMigrationRunService {
 
   private target = (): string => describeTarget(process.env.DATABASE_URL);
 
+  /** A döntés két menetben (a mag `decideWithFills`-e): a lenyomat a kitöltés értékeivel együtt készül. */
   private async decide(binds: unknown): Promise<MigrationDecisions> {
-    return decideOperations(await this.plan.build(), cleanBinds(binds));
+    return decideWithFills(
+      await this.plan.build(),
+      cleanBinds(binds),
+      (supplierIds, customerIds) =>
+        this.repository.fillFacts(supplierIds, customerIds),
+    );
   }
 
   /** PRÓBA: semmi nem íródik. */

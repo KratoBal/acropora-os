@@ -13,7 +13,7 @@ import {
   Skeleton,
   PilotFileInput,
 } from "@acropora/ui";
-import { hasPermission, PERMISSIONS } from "@acropora/types";
+import { hasPermission, PERMISSIONS, uploadAccept } from "@acropora/types";
 import {
   useCallback,
   useEffect,
@@ -517,7 +517,7 @@ function ManualPdfUpload({
       <label className="text-[13px] font-semibold text-pilot-grey-700">
         Kézi PDF a kiolvasáshoz
         <PilotFileInput
-          accept="application/pdf"
+          accept={uploadAccept(["pdf"])}
           className="ml-2 text-[13px]"
           disabled={state.kind === "busy" || state.kind === "ok"}
           data-testid={`manual-pdf-${sourceId}`}

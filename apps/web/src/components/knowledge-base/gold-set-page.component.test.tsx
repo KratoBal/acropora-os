@@ -8,6 +8,7 @@ import {
 import type { Session, UserRole } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { answered } from "@/test/answered";
 import type { GoldRow, GoldSet, GoldSource } from "@/lib/api/knowledge-base";
 import { GoldSetPage } from "./gold-set-page";
 
@@ -244,6 +245,8 @@ describe("GoldSetPage", () => {
         locator: "Discussion",
       }),
     );
+    // the row to remove comes with the add's answer
+    await answered(api.addGoldMissed);
 
     fireEvent.click(screen.getByRole("button", { name: "Törlés" }));
     expect(api.removeGoldMissed).not.toHaveBeenCalled();

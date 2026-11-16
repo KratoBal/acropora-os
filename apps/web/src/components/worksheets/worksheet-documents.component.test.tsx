@@ -1,6 +1,7 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { answered } from "@/test/answered";
 import { WorksheetDocuments } from "./worksheet-documents";
 import { worksheetsApi } from "@/lib/api/worksheets";
 
@@ -84,6 +85,8 @@ describe("WorksheetDocuments", () => {
 
     render(<WorksheetDocuments worksheetId="ws-1" token="t" canView />);
 
+    await answered(api.documents);
+
     const kep = await screen.findByAltText("szivattyu.jpg");
     expect(kep.getAttribute("src")).toMatch(/^blob:/);
     expect(api.documents).toHaveBeenCalledWith("t", "ws-1", expect.anything());
@@ -103,6 +106,8 @@ describe("WorksheetDocuments", () => {
 
     render(<WorksheetDocuments worksheetId="ws-1" token="t" canView />);
 
+    await answered(api.documents);
+
     await screen.findByAltText("szivattyu.jpg");
     expect(screen.queryByRole("button", { name: "Törlés" })).toBeNull();
   });
@@ -115,6 +120,8 @@ describe("WorksheetDocuments", () => {
     api.documents.mockResolvedValue({ items: [] });
 
     render(<WorksheetDocuments worksheetId="ws-1" token="t" canView />);
+
+    await answered(api.documents);
 
     expect(
       await screen.findByText(/még nincs fénykép vagy fájl csatolva/),
@@ -135,6 +142,8 @@ describe("WorksheetDocuments", () => {
 
     render(<WorksheetDocuments worksheetId="ws-1" token="t" canView />);
 
+    await answered(api.documents);
+
     expect(await screen.findByText("A szerver nem érhető el.")).toBeTruthy();
     expect(
       screen.queryByText(/még nincs fénykép vagy fájl csatolva/),
@@ -148,6 +157,7 @@ describe("WorksheetDocuments", () => {
    */
   it("nem kérdez le semmit, ha a néző nem láthatja a lapot", async () => {
     render(<WorksheetDocuments worksheetId="ws-1" token="t" canView={false} />);
+    await answered(api.documents);
 
     await waitFor(() => expect(api.documents).not.toHaveBeenCalled());
     expect(screen.queryByText("Csatolmányok")).toBeNull();
@@ -175,6 +185,8 @@ describe("WorksheetDocuments", () => {
     });
 
     render(<WorksheetDocuments worksheetId="ws-1" token="t" canView />);
+
+    await answered(api.documents);
 
     /*
       A HELY A BIZONYITEK, NEM A LATHATOSAG -- ES EZT A KALIBRACIO KENYSZERITETTE
@@ -207,6 +219,8 @@ describe("WorksheetDocuments", () => {
     api.documents.mockResolvedValue({ items: [doku()] });
 
     render(<WorksheetDocuments worksheetId="ws-1" token="t" canView />);
+
+    await answered(api.documents);
 
     expect(await screen.findByText("A kiadott munkalap")).toBeTruthy();
     expect(

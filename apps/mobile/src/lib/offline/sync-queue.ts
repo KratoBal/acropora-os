@@ -117,6 +117,7 @@ export const SYNC_ENTITY_TYPES = [
   "service-job",
   "aquarium",
   "aquarium-measurement",
+  "operations-entry",
 ] as const;
 
 export type SyncEntityType = (typeof SYNC_ENTITY_TYPES)[number];
@@ -163,6 +164,11 @@ const FENYKEP_GAZDA: Record<SyncEntityType, boolean> = {
    * dokumentáció -- ugyanaz az indok, mint az akváriumnál.
    */
   "aquarium-measurement": false,
+  /**
+   * AZ ÜZEMELTETÉSI NAPLÓ BEJEGYZÉSÉHEZ TARTOZHAT KÉP, és ezért IGEN: a fénykép mező (a szűrő előtte-utána képe) a rögzítés
+   * lényege. A bejegyzés azonosítója a felmenetelkor keletkezik, a sorban álló képeket azt nélkül semmi nem tudná megcímezni.
+   */
+  "operations-entry": true,
 };
 
 export function canOwnPhotos(entityType: SyncEntityType): boolean {
@@ -408,4 +414,18 @@ export function aquariumMeasurementOperationId(input: {
   measuredAt: string;
 }): string {
   return `aquarium-measurement:${input.aquariumId}:${input.measuredAt}`;
+}
+
+/**
+ * AZ ÜZEMELTETÉSI NAPLÓ BEJEGYZÉSÉNEK IDEMPOTENCIA-KULCSA (task os-uzemeltetesi-naplo, S2c): az eszköz, a sablon és a KEZDÉS
+ * időpontja. A kezdés a „Kezdés” gomb pillanata (a telefon rögzíti), tehát ugyanaz a bejegyzés újraküldve ugyanazt a kulcsot adja,
+ * és két külön rögzítés (más kezdés) külön kulcsot kap. A szerver `clientOperationId` mintája `^[A-Za-z0-9_.:-]{8,128}$`: az ISO
+ * időpont `:` és `.` jelei és a cuid azonosítók beleférnek, a teljes kulcs legfeljebb ~100 karakter.
+ */
+export function operationsEntryOperationId(input: {
+  assetId: string;
+  templateId: string;
+  startedAt: string;
+}): string {
+  return `operations-entry:${input.assetId}:${input.templateId}:${input.startedAt}`;
 }

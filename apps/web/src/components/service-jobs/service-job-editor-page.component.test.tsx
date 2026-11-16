@@ -10,6 +10,8 @@ import type {
   WorksheetSelectablePartnerListResponse,
 } from "@acropora/types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { answered } from "@/test/answered";
+import { listedSelect } from "@/test/listed-option";
 
 import {
   savotMond,
@@ -226,8 +228,9 @@ describe("ServiceJobEditorPage", () => {
       expect(sheets.selectablePartners).toHaveBeenCalledTimes(1),
     );
     const valaszto = await screen.findByLabelText("Partner");
+    // the options come with the partners' answer, after the field
     expect(
-      within(valaszto).getByRole("option", {
+      await within(valaszto).findByRole("option", {
         name: "Fővárosi Állat- És Növénykert (FANK)",
       }),
     ).toBeTruthy();
@@ -261,10 +264,10 @@ describe("ServiceJobEditorPage", () => {
     fireEvent.change(screen.getByLabelText("Mi a baj?"), {
       target: { value: "A hármas medence szivattyúja nem indul" },
     });
-    fireEvent.change(await screen.findByLabelText("Partner"), {
+    fireEvent.change(await listedSelect("Partner", "vevo-1"), {
       target: { value: "vevo-1" },
     });
-    fireEvent.change(await screen.findByLabelText("Helyszín"), {
+    fireEvent.change(await listedSelect("Helyszín", "unit-1"), {
       target: { value: "unit-1" },
     });
     fireEvent.click(
@@ -328,6 +331,12 @@ describe("ServiceJobEditorPage", () => {
     render(<ServiceJobEditorPage />);
     await waitFor(() =>
       expect(sheets.selectablePartners).toHaveBeenCalledTimes(1),
+    );
+    // the delegation rows come with the assignable users' answer, not with the partners'
+    await answered(
+      sheets.selectablePartners,
+      sheets.departments,
+      sheets.assignableUsers,
     );
 
     // CSAK A NEVES FELIRATOK: az `Input` komponens sajat, ures `label` elemet is
@@ -394,7 +403,7 @@ describe("ServiceJobEditorPage", () => {
     fireEvent.change(screen.getByLabelText("Mi a baj?"), {
       target: { value: "A hármas medence szivattyúja nem indul" },
     });
-    fireEvent.change(await screen.findByLabelText("Partner"), {
+    fireEvent.change(await listedSelect("Partner", "vevo-1"), {
       target: { value: "vevo-1" },
     });
 
@@ -453,10 +462,10 @@ describe("ServiceJobEditorPage", () => {
     });
 
     render(<ServiceJobEditorPage />);
-    fireEvent.change(await screen.findByLabelText("Partner"), {
+    fireEvent.change(await listedSelect("Partner", "vevo-1"), {
       target: { value: "vevo-1" },
     });
-    fireEvent.change(await screen.findByLabelText("Helyszín"), {
+    fireEvent.change(await listedSelect("Helyszín", "unit-1"), {
       target: { value: "unit-1" },
     });
 
@@ -486,7 +495,7 @@ describe("ServiceJobEditorPage", () => {
       ],
     });
     render(<ServiceJobEditorPage />);
-    fireEvent.change(await screen.findByLabelText("Partner"), {
+    fireEvent.change(await listedSelect("Partner", "vevo-1"), {
       target: { value: "vevo-1" },
     });
 
@@ -544,7 +553,7 @@ describe("ServiceJobEditorPage", () => {
       ],
     });
     render(<ServiceJobEditorPage />);
-    fireEvent.change(await screen.findByLabelText("Partner"), {
+    fireEvent.change(await listedSelect("Partner", "vevo-1"), {
       target: { value: "vevo-1" },
     });
     const helyszin = await screen.findByLabelText("Helyszín");
@@ -552,7 +561,7 @@ describe("ServiceJobEditorPage", () => {
     expect((helyszin as HTMLSelectElement).value).toEqual("unit-1");
 
     fireEvent.click(screen.getByRole("button", { name: "Másik partner" }));
-    fireEvent.change(await screen.findByLabelText("Partner"), {
+    fireEvent.change(await listedSelect("Partner", "vevo-2"), {
       target: { value: "vevo-2" },
     });
 
@@ -585,10 +594,10 @@ describe("ServiceJobEditorPage", () => {
     fireEvent.change(await screen.findByLabelText("Mi a baj?"), {
       target: { value: "Nem indul a szivattyú" },
     });
-    fireEvent.change(await screen.findByLabelText("Partner"), {
+    fireEvent.change(await listedSelect("Partner", "vevo-1"), {
       target: { value: "vevo-1" },
     });
-    fireEvent.change(await screen.findByLabelText("Helyszín"), {
+    fireEvent.change(await listedSelect("Helyszín", "unit-1"), {
       target: { value: "unit-1" },
     });
     fireEvent.change(screen.getByLabelText("Fényképek és fájlok"), {
@@ -700,10 +709,10 @@ describe("ServiceJobEditorPage", () => {
     fireEvent.change(await screen.findByLabelText("Mi a baj?"), {
       target: { value: "Nem indul a szivattyú" },
     });
-    fireEvent.change(await screen.findByLabelText("Partner"), {
+    fireEvent.change(await listedSelect("Partner", "vevo-1"), {
       target: { value: "vevo-1" },
     });
-    fireEvent.change(await screen.findByLabelText("Helyszín"), {
+    fireEvent.change(await listedSelect("Helyszín", "unit-1"), {
       target: { value: "unit-1" },
     });
     fireEvent.click(await screen.findByLabelText("Éva"));
@@ -755,10 +764,10 @@ describe("ServiceJobEditorPage", () => {
     fireEvent.change(await screen.findByLabelText("Mi a baj?"), {
       target: { value: "Nem indul a szivattyú" },
     });
-    fireEvent.change(await screen.findByLabelText("Partner"), {
+    fireEvent.change(await listedSelect("Partner", "vevo-1"), {
       target: { value: "vevo-1" },
     });
-    fireEvent.change(await screen.findByLabelText("Helyszín"), {
+    fireEvent.change(await listedSelect("Helyszín", "unit-1"), {
       target: { value: "unit-1" },
     });
     fireEvent.click(
@@ -895,17 +904,17 @@ describe("ServiceJobEditorPage -- karbantartási lap szerződésből", () => {
     fireEvent.change(await screen.findByLabelText("Mi a baj?"), {
       target: { value: "Negyedéves karbantartás" },
     });
-    fireEvent.change(await screen.findByLabelText("Partner"), {
+    fireEvent.change(await listedSelect("Partner", "vevo-1"), {
       target: { value: "vevo-1" },
     });
-    fireEvent.change(await screen.findByLabelText("Szerződés"), {
+    fireEvent.change(await listedSelect("Szerződés", "contract-1"), {
       target: { value: "contract-1" },
     });
   };
 
   it("WEB-JOB-CONTRACT-LIST: csak a partner aktív karbantartási szerződéseit kínálja", async () => {
     render(<ServiceJobEditorPage kind="MAINTENANCE" />);
-    fireEvent.change(await screen.findByLabelText("Partner"), {
+    fireEvent.change(await listedSelect("Partner", "vevo-1"), {
       target: { value: "vevo-1" },
     });
     const select = (await screen.findByLabelText(
@@ -1078,11 +1087,11 @@ describe("ServiceJobEditorPage -- karbantartási lap szerződésből", () => {
     fireEvent.change(await screen.findByLabelText("Mi a baj?"), {
       target: { value: "Negyedéves karbantartás" },
     });
-    fireEvent.change(await screen.findByLabelText("Partner"), {
+    fireEvent.change(await listedSelect("Partner", "vevo-1"), {
       target: { value: "vevo-1" },
     });
     await screen.findByLabelText("Szerződés");
-    fireEvent.change(await screen.findByLabelText("Helyszín"), {
+    fireEvent.change(await listedSelect("Helyszín", "unit-1"), {
       target: { value: "unit-1" },
     });
     fireEvent.click(
@@ -1095,7 +1104,7 @@ describe("ServiceJobEditorPage -- karbantartási lap szerződésből", () => {
   it("WEB-JOB-CONTRACT-PERMISSION: partners.manage nélkül, és hibajegynél nincs szerződésválasztó", async () => {
     auth.session = sessionAs("SERVICE");
     const { unmount } = render(<ServiceJobEditorPage kind="MAINTENANCE" />);
-    fireEvent.change(await screen.findByLabelText("Partner"), {
+    fireEvent.change(await listedSelect("Partner", "vevo-1"), {
       target: { value: "vevo-1" },
     });
     await screen.findByLabelText("Helyszín");
@@ -1104,7 +1113,7 @@ describe("ServiceJobEditorPage -- karbantartási lap szerződésből", () => {
 
     auth.session = sessionAs("OWNER");
     render(<ServiceJobEditorPage />);
-    fireEvent.change(await screen.findByLabelText("Partner"), {
+    fireEvent.change(await listedSelect("Partner", "vevo-1"), {
       target: { value: "vevo-1" },
     });
     await screen.findByLabelText("Helyszín");

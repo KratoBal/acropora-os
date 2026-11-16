@@ -9,9 +9,25 @@ import type {
   ContentState,
   ContentViewerRole,
   ContentWaitingOnMeResponse,
+  TeachingOutputBody,
+  TeachingOutputDetail,
+  TeachingOutputEditDetail,
+  TeachingOutputEditSummary,
+  TeachingOutputKind,
+  TeachingOutputSummary,
+  TeachingSourceEditorData,
+  TeachingSourceInput,
+  TeachingSourceListItem,
 } from "@acropora/types";
 
-import { apiRequest } from "./client";
+import { API_PREFIX } from "./api-prefix";
+import { ApiError, apiAuthHeaders, apiRequest } from "./client";
+
+/** The file name the server gives in Content-Disposition, or the fallback. */
+function dispositionFilename(header: string | null, fallback: string): string {
+  const match = header?.match(/filename="([^"]+)"/);
+  return match?.[1] ?? fallback;
+}
 
 export const contentApi = {
   /**
@@ -222,6 +238,162 @@ export const contentApi = {
       `/content/${encodeURIComponent(id)}/article/images`,
       token,
       { method: "POST", body: form },
+    );
+  },
+
+  /** The teaching sources with their outputs' states (T5.2, the source list). */
+  teachingSources(token: string, signal?: AbortSignal) {
+    return apiRequest<TeachingSourceListItem[]>(
+      "/content/teaching-sources",
+      token,
+      { signal },
+    );
+  },
+
+  /**
+   * AN OKTATÓANYAG FORRÁSA (T5.2): the source, what its table and text say
+   * about each other, and whether it may change now.
+   */
+  teachingSource(token: string, id: string, signal?: AbortSignal) {
+    return apiRequest<TeachingSourceEditorData>(
+      `/content/${encodeURIComponent(id)}/teaching-source`,
+      token,
+      { signal },
+    );
+  },
+
+  saveTeachingSource(token: string, id: string, input: TeachingSourceInput) {
+    return apiRequest<TeachingSourceEditorData>(
+      `/content/${encodeURIComponent(id)}/teaching-source`,
+      token,
+      { method: "PUT", body: JSON.stringify(input) },
+    );
+  },
+
+  teachingOutputs(token: string, id: string, signal?: AbortSignal) {
+    return apiRequest<TeachingOutputSummary[]>(
+      `/content/${encodeURIComponent(id)}/teaching-source/outputs`,
+      token,
+      { signal },
+    );
+  },
+
+  /** An output built from the current source, not stored. */
+  teachingOutputPreview(
+    token: string,
+    id: string,
+    kind: TeachingOutputKind,
+    signal?: AbortSignal,
+  ) {
+    return apiRequest<TeachingOutputBody>(
+      `/content/${encodeURIComponent(id)}/teaching-source/outputs/preview?kind=${kind}`,
+      token,
+      { signal },
+    );
+  },
+
+  generateTeachingOutput(token: string, id: string, kind: TeachingOutputKind) {
+    return apiRequest<TeachingOutputDetail>(
+      `/content/${encodeURIComponent(id)}/teaching-source/outputs`,
+      token,
+      { method: "POST", body: JSON.stringify({ kind }) },
+    );
+  },
+
+  markTeachingOutputSent(
+    token: string,
+    id: string,
+    outputId: string,
+    input: { to: string; public: boolean },
+  ) {
+    return apiRequest<TeachingOutputDetail>(
+      `/content/${encodeURIComponent(id)}/teaching-source/outputs/${encodeURIComponent(outputId)}/sent`,
+      token,
+      { method: "POST", body: JSON.stringify(input) },
+    );
+  },
+
+  /** The output's file (PDF, PPTX or the narration as text), saved by the browser. */
+  async downloadTeachingOutput(
+    token: string,
+    id: string,
+    outputId: string,
+  ): Promise<void> {
+    const response = await fetch(
+      `${API_PREFIX}/content/${encodeURIComponent(id)}/teaching-source/outputs/${encodeURIComponent(outputId)}/file`,
+      { headers: apiAuthHeaders(token) },
+    );
+    if (!response.ok)
+      throw new ApiError("A kimenet letöltése nem sikerült.", response.status);
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = dispositionFilename(
+      response.headers.get("Content-Disposition"),
+      "oktatoanyag",
+    );
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    // delayed, as the other downloaders do: the download reads the URL
+    // asynchronously, and some browsers abort it on a synchronous revoke
+    // (barracuda on #2581)
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  },
+
+  /** The edited copies of an output (the "differs from the source" mark). */
+  teachingOutputEdits(
+    token: string,
+    id: string,
+    outputId: string,
+    signal?: AbortSignal,
+  ) {
+    return apiRequest<TeachingOutputEditSummary[]>(
+      `/content/${encodeURIComponent(id)}/teaching-source/outputs/${encodeURIComponent(outputId)}/edits`,
+      token,
+      { signal },
+    );
+  },
+
+  teachingOutputEdit(
+    token: string,
+    id: string,
+    outputId: string,
+    editId: string,
+  ) {
+    return apiRequest<TeachingOutputEditDetail>(
+      `/content/${encodeURIComponent(id)}/teaching-source/outputs/${encodeURIComponent(outputId)}/edits/${encodeURIComponent(editId)}`,
+      token,
+    );
+  },
+
+  uploadTeachingOutputEdit(
+    token: string,
+    id: string,
+    outputId: string,
+    file: File,
+  ) {
+    const form = new FormData();
+    form.append("file", file);
+    return apiRequest<TeachingOutputEditDetail>(
+      `/content/${encodeURIComponent(id)}/teaching-source/outputs/${encodeURIComponent(outputId)}/edits`,
+      token,
+      { method: "POST", body: form },
+    );
+  },
+
+  decideTeachingOutputEdit(
+    token: string,
+    id: string,
+    outputId: string,
+    editId: string,
+    decision: { toSource: boolean; note: string | null },
+  ) {
+    return apiRequest<TeachingOutputEditDetail>(
+      `/content/${encodeURIComponent(id)}/teaching-source/outputs/${encodeURIComponent(outputId)}/edits/${encodeURIComponent(editId)}/decision`,
+      token,
+      { method: "POST", body: JSON.stringify(decision) },
     );
   },
 };

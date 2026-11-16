@@ -391,3 +391,351 @@ describe("az élő állat fajtája a boltba", () => {
     assert.equal(f.kikuldott[0]?.livestock_kind, null);
   });
 });
+
+/*
+  A BOLTBAN MARADT FAJTA (kartya 4b30b373). MI PIROSIT: a proba-futas ir; a torles a tobbi zaszlot is kuldi (egy kozben
+  kezzel atallitott zaszlot visszairna, barracuda #2353); az OS-termek keresese nem a kotes-sorbol megy.
+*/
+describe("a boltban maradt fajta letörlése", () => {
+  const ROW = {
+    id: "sa_1",
+    product_id: "prod_medusa_9",
+    pickup_only: true,
+    foxpost_forbidden: false,
+    is_heavy: true,
+    is_frozen: false,
+    locker_unsuitable: false,
+    livestock_kind: "FISH" as const,
+  };
+
+  function kis() {
+    const kikuldott: {
+      productId: string;
+      flags: Partial<MedusaShippingFlags>;
+    }[] = [];
+    const medusa = {
+      setShippingAttributes: async (
+        productId: string,
+        flags: Partial<MedusaShippingFlags>,
+      ) => {
+        kikuldott.push({ productId, flags });
+        return { id: "sa_1", product_id: productId, ...flags };
+      },
+      listShippingAttributes: async () => [ROW],
+    } as unknown as MedusaAdminClient;
+    const links = {
+      findByMedusaProductId: async (id: string) =>
+        id === "prod_medusa_9"
+          ? { productId: "os-9", medusaProductId: id }
+          : null,
+    } as unknown as MedusaProductLinkRepository;
+    return {
+      service: new MedusaShippingAttributesService(links, medusa),
+      kikuldott,
+    };
+  }
+
+  it("proba-futasnal nem ir, es megmondja, mit kuldene", async () => {
+    const f = kis();
+    const outcome = await f.service.clearLeftoverKind(ROW, false);
+    assert.equal(outcome.action, "planned");
+    assert.match(outcome.flags, /élő állat: hal.*a fajta törlése/);
+    assert.deepEqual(f.kikuldott, []);
+  });
+
+  it("--apply-jal CSAK a fajtat kuldi (reszleges frissites), a tobbi zaszlot nem", async () => {
+    const f = kis();
+    const outcome = await f.service.clearLeftoverKind(ROW, true);
+    assert.equal(outcome.action, "applied");
+    assert.deepEqual(f.kikuldott, [
+      { productId: "prod_medusa_9", flags: { livestock_kind: null } },
+    ]);
+  });
+
+  it("az OS-termeket a kotes-sorbol keresi, es null-t ad, ha nincs", async () => {
+    const f = kis();
+    assert.equal(await f.service.osProductOfShop("prod_medusa_9"), "os-9");
+    assert.equal(await f.service.osProductOfShop("prod_ismeretlen"), null);
+    assert.deepEqual(await f.service.listShopShippingAttributes(), [ROW]);
+  });
+});
+
+/*
+  A SZARMAZTATAS JELOLOJE A SZOLGALTATASBAN (commerce #724, kartya c603774e). MI PIROSIT: a jelolo kimegy a boltba, amelyik nem
+  ismeri (a szigoru validator az egesz irast, az elo allat atvetelet is elutasitana); a profilban kimondott atvetel is
+  "levezetettnek" jelolodik (tudatos ertek, nem levezetett); egy jelolo nelkuli, mar igaz bolti sorra a kor ujra ir (minden
+  korben); a jelolt sor, amit mar nem mi vezetunk le, nem kapja le a jelolot; a torles iras elott nem olvassa ujra a sort, es
+  egy kozben kezzel atallitott erteket levesz; egy proba-futas ir.
+*/
+describe("a származtatott átvétel jelölője", () => {
+  const CSAK_ATVETEL: MedusaShippingFlags = {
+    pickup_only: true,
+    foxpost_forbidden: false,
+    is_heavy: false,
+    is_frozen: false,
+    locker_unsuitable: false,
+    livestock_kind: null,
+  };
+
+  it("a jelölőt ismerő boltba kimegy: a kategóriából levezetett átvétel jelölt, a profilban kimondott nem", async () => {
+    const levezetett = fakes({
+      current: {
+        ...CSUPA_HAMIS,
+        locker_unsuitable: false,
+        livestock_kind: null,
+        pickup_only_derived: false,
+      },
+    });
+    await levezetett.service.project("prod-os-1", null, true, true);
+    assert.equal(levezetett.kikuldott[0]?.pickup_only_derived, true);
+
+    const profilbol = fakes({
+      current: {
+        ...CSUPA_HAMIS,
+        locker_unsuitable: false,
+        livestock_kind: null,
+        pickup_only_derived: false,
+      },
+    });
+    await profilbol.service.project(
+      "prod-os-1",
+      {
+        pickupOnly: true,
+        foxpostForbidden: false,
+        isHeavy: false,
+        isFrozen: false,
+      },
+      true,
+      true,
+    );
+    assert.equal(profilbol.kikuldott[0]?.pickup_only, true);
+    assert.equal(profilbol.kikuldott[0]?.pickup_only_derived, false);
+  });
+
+  it("a régi bolt (nincs jelölő mező a válaszában) nem kapja meg a mezőt", async () => {
+    const f = fakes({
+      current: {
+        ...CSUPA_HAMIS,
+        locker_unsuitable: false,
+        livestock_kind: null,
+      },
+    });
+    await f.service.project("prod-os-1", null, true, true);
+    assert.equal(f.kikuldott.length, 1);
+    assert.equal("pickup_only_derived" in f.kikuldott[0]!, false);
+  });
+
+  it("a bolti sor már igaz, de jelölő nélküli (kézi vagy régi): a kör nem írja újra, és nem veszi át", async () => {
+    const f = fakes({
+      current: { ...CSAK_ATVETEL, pickup_only_derived: false },
+    });
+    const outcome = await f.service.project("prod-os-1", null, true, true);
+    assert.equal(outcome.action, "unchanged");
+    assert.deepEqual(f.kikuldott, []);
+  });
+
+  it("a jelölt sor, amit már a profil is kimond: a jelölő levétele megy, az átvétel marad", async () => {
+    const f = fakes({
+      current: { ...CSAK_ATVETEL, pickup_only_derived: true },
+    });
+    const outcome = await f.service.project(
+      "prod-os-1",
+      {
+        pickupOnly: true,
+        foxpostForbidden: false,
+        isHeavy: false,
+        isFrozen: false,
+      },
+      true,
+      true,
+    );
+    assert.equal(outcome.action, "applied");
+    assert.equal(f.kikuldott[0]?.pickup_only, true);
+    assert.equal(f.kikuldott[0]?.pickup_only_derived, false);
+  });
+
+  describe("a származtatott átvétel levétele", () => {
+    const ROW = {
+      id: "sa_1",
+      product_id: "prod_medusa_9",
+      pickup_only: true,
+      pickup_only_derived: true,
+      foxpost_forbidden: false,
+      is_heavy: true,
+      is_frozen: false,
+      locker_unsuitable: false,
+      livestock_kind: null,
+    };
+
+    function kis(friss: Partial<MedusaShippingFlags> | null) {
+      const kikuldott: {
+        productId: string;
+        flags: Partial<MedusaShippingFlags>;
+      }[] = [];
+      let olvasas = 0;
+      const medusa = {
+        fetchShippingAttributes: async (productId: string) => {
+          olvasas += 1;
+          return { ...ROW, ...friss, id: "sa_1", product_id: productId };
+        },
+        setShippingAttributes: async (
+          productId: string,
+          flags: Partial<MedusaShippingFlags>,
+        ) => {
+          kikuldott.push({ productId, flags });
+          return { id: "sa_1", product_id: productId, ...flags };
+        },
+      } as unknown as MedusaAdminClient;
+      return {
+        service: new MedusaShippingAttributesService(
+          {} as unknown as MedusaProductLinkRepository,
+          medusa,
+        ),
+        kikuldott,
+        olvasasok: () => olvasas,
+      };
+    }
+
+    it("CSAK az átvételt és a jelölőt küldi, a többi zászlót nem", async () => {
+      const f = kis(null);
+      const outcome = await f.service.clearLeftoverKind(ROW, true, {
+        kind: false,
+        pickup: true,
+      });
+      assert.equal(outcome.action, "applied");
+      assert.match(outcome.flags, /a származtatott bolti átvétel levétele/);
+      assert.deepEqual(f.kikuldott, [
+        {
+          productId: "prod_medusa_9",
+          flags: { pickup_only: false, pickup_only_derived: false },
+        },
+      ]);
+    });
+
+    it("fajtával együtt egy írásban megy a kettő; csak fajta kérésnél nem olvas újra, és az átvételhez nem nyúl", async () => {
+      const both = kis(null);
+      await both.service.clearLeftoverKind(
+        { ...ROW, livestock_kind: "FISH" },
+        true,
+        { kind: true, pickup: true },
+      );
+      assert.deepEqual(both.kikuldott[0]?.flags, {
+        livestock_kind: null,
+        pickup_only: false,
+        pickup_only_derived: false,
+      });
+      const csakFajta = kis(null);
+      await csakFajta.service.clearLeftoverKind(
+        { ...ROW, livestock_kind: "FISH" },
+        true,
+      );
+      assert.deepEqual(csakFajta.kikuldott[0]?.flags, { livestock_kind: null });
+      assert.equal(csakFajta.olvasasok(), 0);
+    });
+
+    it("iras elott ujra olvas: ha a sor kozben jelolo nelkuli lett (kezzel atallitva), nem nyul hozza", async () => {
+      const f = kis({ pickup_only_derived: false });
+      const outcome = await f.service.clearLeftoverKind(ROW, true, {
+        kind: false,
+        pickup: true,
+      });
+      assert.equal(outcome.action, "unchanged");
+      assert.deepEqual(f.kikuldott, []);
+      assert.equal(f.olvasasok(), 1);
+    });
+
+    it("ha kozben az atvetel mar nincs bekapcsolva, nem ir; a fajta torlese ilyenkor is megy", async () => {
+      const f = kis({ pickup_only: false });
+      const outcome = await f.service.clearLeftoverKind(
+        { ...ROW, livestock_kind: "FISH" },
+        true,
+        { kind: true, pickup: true },
+      );
+      assert.equal(outcome.action, "applied");
+      assert.deepEqual(f.kikuldott[0]?.flags, { livestock_kind: null });
+    });
+
+    it("proba-futasnal nem olvas es nem ir, es megmondja, mit kuldene", async () => {
+      const f = kis(null);
+      const outcome = await f.service.clearLeftoverKind(ROW, false, {
+        kind: false,
+        pickup: true,
+      });
+      assert.equal(outcome.action, "planned");
+      assert.deepEqual(f.kikuldott, []);
+      assert.equal(f.olvasasok(), 0);
+    });
+  });
+});
+
+/*
+  A MULTBELI ATVETEL ADOPTALASA A SZOLGALTATASBAN (kartya c603774e). MI PIROSIT: az adopt a tobbi zaszlot is kuldi (egy kozben
+  kezzel atallitott masik zaszlot visszairna); az adopt-kapcsolo nelkul megy (a bolt nem venne at); iras elott nem olvas ujra, es
+  egy mar jelolt vagy kikapcsolt sorra is ir; a proba-futas ir.
+*/
+describe("a bolti átvétel adoptálása", () => {
+  function kis(friss: Partial<MedusaShippingFlags>) {
+    const kikuldott: { productId: string; flags: unknown }[] = [];
+    const medusa = {
+      fetchShippingAttributes: async (productId: string) => ({
+        id: "sa_1",
+        product_id: productId,
+        ...CSUPA_HAMIS,
+        pickup_only: true,
+        pickup_only_derived: false,
+        ...friss,
+      }),
+      setShippingAttributes: async (productId: string, flags: unknown) => {
+        kikuldott.push({ productId, flags });
+        return { id: "sa_1", product_id: productId };
+      },
+    } as unknown as MedusaAdminClient;
+    return {
+      service: new MedusaShippingAttributesService(
+        {} as unknown as MedusaProductLinkRepository,
+        medusa,
+      ),
+      kikuldott,
+    };
+  }
+
+  it("CSAK a jelölőt és az adopt-kapcsolót küldi", async () => {
+    const f = kis({});
+    const outcome = await f.service.adoptPickupMark(
+      { product_id: "prod_1" },
+      true,
+    );
+    assert.equal(outcome.action, "applied");
+    assert.deepEqual(f.kikuldott, [
+      {
+        productId: "prod_1",
+        flags: { pickup_only_derived: true, adopt_pickup_only_derived: true },
+      },
+    ]);
+  });
+
+  it("iras elott ujra olvas: a mar jelolt vagy kikapcsolt sorra nem ir", async () => {
+    for (const friss of [
+      { pickup_only_derived: true },
+      { pickup_only: false },
+    ]) {
+      const f = kis(friss);
+      const outcome = await f.service.adoptPickupMark(
+        { product_id: "prod_1" },
+        true,
+      );
+      assert.equal(outcome.action, "unchanged");
+      assert.deepEqual(f.kikuldott, []);
+    }
+  });
+
+  it("proba-futasnal nem ir", async () => {
+    const f = kis({});
+    const outcome = await f.service.adoptPickupMark(
+      { product_id: "prod_1" },
+      false,
+    );
+    assert.equal(outcome.action, "planned");
+    assert.deepEqual(f.kikuldott, []);
+  });
+});

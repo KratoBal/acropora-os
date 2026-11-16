@@ -1,5 +1,6 @@
 "use client";
 
+import { uploadAccept } from "@acropora/types";
 import {
   Alert,
   PilotButton,
@@ -104,7 +105,7 @@ export function PurchaseInvoiceScans({
             </span>
             <PilotFileInput
               aria-label="Számlakép csatolása"
-              accept="application/pdf,image/jpeg,image/png"
+              accept={uploadAccept(["pdf", "jpeg", "png"])}
               disabled={busy}
               className="mt-1 block text-sm"
               onChange={(event) => {

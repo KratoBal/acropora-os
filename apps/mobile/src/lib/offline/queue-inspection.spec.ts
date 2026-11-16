@@ -427,3 +427,48 @@ describe("az elvetett sor nem a várakozók között van", () => {
     assert.equal(entry?.canRetry, false);
   });
 });
+
+describe("az üzemeltetési napló bejegyzés a soron", () => {
+  /*
+    MI PIROSIT: ha a bejegyzés eszközként („név nélkül") látszana a listán (a szerelő nem tudná, melyik rögzítése áll); ha a cím nem a
+    `queueTitle` mezőből jönne; ha a fajta neve más fajtáé lenne.
+  */
+  it("a fajta és a cím (sablon és eszköz) látszik", () => {
+    const out = describeQueueEntry(
+      sor({
+        entityType: "operations-entry",
+        payloadJson: JSON.stringify({
+          queueTitle: "Homokszűrő visszamosás: Szűrő 1",
+          templateId: "t1",
+        }),
+      }),
+    );
+    assert.equal(out.kind, "Üzemeltetési napló");
+    assert.equal(out.title, "Homokszűrő visszamosás: Szűrő 1");
+  });
+
+  it("a cím nélküli vagy olvashatatlan sor sem hazudik eszköznevet", () => {
+    for (const payloadJson of [
+      "{}",
+      "nem json",
+      JSON.stringify({ queueTitle: "  " }),
+    ])
+      assert.equal(
+        describeQueueEntry(sor({ entityType: "operations-entry", payloadJson }))
+          .title,
+        "olvashatatlan bejegyzés",
+      );
+  });
+
+  it("a javítás ma csak az irodából megy (a mondat megmondja, miért)", () => {
+    const [entry] = toQueueEntries([
+      sor({
+        entityType: "operations-entry",
+        state: "conflict",
+        payloadJson: JSON.stringify({ queueTitle: "x" }),
+      }),
+    ]);
+    assert.equal(entry?.canFix, false);
+    assert.match(entry?.fixHint ?? "", /üzemeltetési naplóbejegyzést/);
+  });
+});

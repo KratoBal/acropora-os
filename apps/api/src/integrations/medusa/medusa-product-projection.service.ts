@@ -51,6 +51,8 @@ import {
   DISCONTINUED_KEY,
   mergeProductMetadata,
   PRIMARY_CATEGORY_KEY,
+  LIVESTOCK_ARRIVAL_KEY,
+  HUSBANDRY_KEY,
   UNIQUE_PIECE_KEY,
 } from "./medusa-metadata-merge.js";
 import {
@@ -156,6 +158,16 @@ export interface ProjectableProduct {
    * termek lapjara "Eladva" feliratot tenne.
    */
   uniquePiece: boolean;
+  /**
+   * A TERMEK KOVETKEZO ELO ALLAT ERKEZESE (V2.6 S3a): a kulcs erteke, mar kesz szovegkent (`livestockArrivalMetadata`), vagy
+   * `null`/hianyzik, ha nincs olyan erkezes, amire a vevo elojegyezhet. A hiany veszi le a kulcsot az osszefesuleskor.
+   */
+  livestockArrival?: string | null;
+  /**
+   * A TARTASI BLOKK (V2.2 S3): a kulcs erteke, mar kesz szovegkent (`husbandryMetadata`), vagy `null`/hianyzik, ha nincs mit
+   * mondani (nem elo allat, nem ellenorzott, kikapcsolt kapcsolo). A hiany veszi le a kulcsot az osszefesuleskor.
+   */
+  husbandry?: string | null;
   /**
    * A GONDOZOTT "HASONLO" KAPCSOLATOK, MAR MEDUSA AZONOSITOKKAL.
    *
@@ -549,6 +561,19 @@ export type ProjectionStopReason =
   | "orphaned-link";
 
 /**
+ * A MEGALLT TERMEK HIBA-E A FUTASNAK (task t-20261116-arva-kotes, acrobot 53748). Az `orphaned-link` NEM: a kotes egy olyan bolti
+ * termekre mutat, ami nincs meg (HTTP 404), es ez egy ismert allapot, ami EMBERI dontest ker (`--forget-link`), nem futasi hiba. Ha az
+ * ilyen termek a futast `failed`-re (kilepesi kod 1, FAILED kor) tenne, egy egyetlen ilyen termek minden kort bukottnak mutatna, es
+ * elfedne a valodi hibakat (mert 2026-11-16-an a stage-en pontosan ez tortent: `stopped {"orphaned-link": 1}`). A sora tovabbra is
+ * kimegy a hibakimenetre es a `lastRound.stopped`-be szamit; a jelolt arvak szama a `lastRound.orphanedLinks`.
+ */
+export function stoppedProductIsRunFailure(
+  reason: ProjectionStopReason,
+): boolean {
+  return reason !== "orphaned-link";
+}
+
+/**
  * MIÉRT nincs átvihető cikkszám - és a szolgáltatás EZT MEG TUDJA MONDANI.
  *
  * Az első változatom azt írta, hogy „a terméknek nincs cikkszáma". Ezt innen
@@ -824,6 +849,12 @@ export class MedusaProductProjectionService {
        * OSSZEFESULES veszi le a kulcsot (`medusa-metadata-merge.ts`).
        */
       ...(product.uniquePiece ? { [UNIQUE_PIECE_KEY]: "true" } : {}),
+      // csak akkor kerul be, ha van; a hianya a "nincs ilyen erkezes", az osszefesules veszi le (V2.6 S3a)
+      ...(product.livestockArrival
+        ? { [LIVESTOCK_ARRIVAL_KEY]: product.livestockArrival }
+        : {}),
+      // csak akkor kerul be, ha van mit mondani; a hianya veszi le a kulcsot az osszefesuleskor (V2.2 S3)
+      ...(product.husbandry ? { [HUSBANDRY_KEY]: product.husbandry } : {}),
       ...(isDiscontinued(publication.reason, product.unasProductUrl)
         ? { [DISCONTINUED_KEY]: "true" }
         : {}),

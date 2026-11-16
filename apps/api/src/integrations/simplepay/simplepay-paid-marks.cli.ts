@@ -69,7 +69,9 @@ async function main(argv: readonly string[]): Promise<number> {
           (order) => decideSimplePayOrder(order),
         );
         const markable = new Set(
-          decisions.flatMap((d) => (d.markable ? [d.mark.invoiceNumber] : [])),
+          decisions.flatMap((d) =>
+            d.markable ? d.marks.map((mark) => mark.invoiceNumber) : [],
+          ),
         );
         const { marks, markedBefore } = simplePayMarksToWrite({
           decisions,
@@ -79,6 +81,12 @@ async function main(argv: readonly string[]): Promise<number> {
         for (const number of markedBefore)
           process.stdout.write(
             `  ${number}\tkimarad: korábban már kapott SimplePay-jelölést, nem írtam\n`,
+          );
+        for (const m of decisions.flatMap((d) =>
+          d.markable ? d.correctivesByHand : [],
+        ))
+          process.stdout.write(
+            `  ${m.invoiceNumber}\tkézi teendő: helyesbítő jelölése kézzel, ${m.amount} Ft, ${m.date}; nem írtam\n`,
           );
         return marks;
       },

@@ -227,6 +227,13 @@ const mainNavigationGroups: AppNavigationGroup[] = [
         entryId: "service-assets",
       },
       {
+        // Üzemeltetési napló, S4b (task os-uzemeltetesi-naplo): a havi kimutatás helyszínenként, PDF-letöltéssel
+        href: "/szerviz/uzemeltetesi-naplo",
+        label: "Üzemeltetési napló",
+        icon: "clipboard",
+        entryId: "operations-log",
+      },
+      {
         /**
          * A SOR VEGEN, mint a Beallitasokban volt: nem kulso rendszer kulcsa es
          * nem jogosultsag-kezeles, hanem sajat, uzemeltetesi tetel. A lathatosag
@@ -264,6 +271,13 @@ const mainNavigationGroups: AppNavigationGroup[] = [
         label: "Megrendelések",
         icon: "clipboard",
         entryId: "partner-orders",
+      },
+      {
+        // Eszközbérlés (task eszkozberles, S2): kiadás, és később a visszavétel
+        href: "/berles",
+        label: "Bérlés",
+        icon: "clipboard",
+        entryId: "rentals",
       },
       {
         href: "/partnerek",
@@ -556,6 +570,13 @@ const mainNavigationGroups: AppNavigationGroup[] = [
         entryId: "users",
       },
       {
+        // Jelenléti ív (os-jelenleti-iv, S2b): a saját jogán, a felhasználó-kezelés nélkül is
+        href: "/admin/jelenleti-iv",
+        label: "Jelenléti ív",
+        icon: "clipboard",
+        entryId: "attendance",
+      },
+      {
         subgroup: "Kapcsolatok",
         href: "/admin/integrations/nav",
         label: "NAV",
@@ -591,6 +612,14 @@ const mainNavigationGroups: AppNavigationGroup[] = [
         entryId: "asset-categories",
       },
       {
+        // Üzemeltetési napló, S1b (task os-uzemeltetesi-naplo): a rendszeres feladatok sablonjai
+        subgroup: "Törzsadatok",
+        href: "/beallitasok/uzemeltetesi-naplo-sablonok",
+        label: "Üzemeltetési napló sablonjai",
+        icon: "settings",
+        entryId: "operations-log-templates",
+      },
+      {
         // Balazs kerese, 2026-09-22 (kanban 68add892).
         subgroup: "Törzsadatok",
         href: "/beallitasok/eszkoz-funkciok",
@@ -605,6 +634,14 @@ const mainNavigationGroups: AppNavigationGroup[] = [
         label: "Bérelhető eszközök",
         icon: "settings",
         entryId: "rental-equipment",
+      },
+      {
+        // Eszközbérlés, S3: a szerződés szövege és a késedelmi számok
+        subgroup: "Törzsadatok",
+        href: "/beallitasok/berleti-szerzodes",
+        label: "Bérleti szerződés",
+        icon: "settings",
+        entryId: "rental-contract",
       },
       {
         // Egy partnertörzs, 1. lépés (acrobot 42536): a duplikátum-lista, csak olvas.

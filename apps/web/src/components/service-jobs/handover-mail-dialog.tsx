@@ -2,7 +2,13 @@
 
 import { useEffect, useState } from "react";
 
-import { Alert, Button, FormField, Input, Textarea } from "@acropora/ui";
+import {
+  Alert,
+  PilotButton,
+  PilotFormField,
+  PilotInput,
+  Textarea,
+} from "@acropora/ui";
 import type { ServiceJobHandoverMailPreview } from "@acropora/types";
 
 import { KIHAGYAS_OKA } from "./handover-mail-skip-reason";
@@ -109,6 +115,8 @@ export function HandoverMailDialog({
   if (!open) return null;
 
   const cimzettek = preview?.kind === "send" ? preview.recipients : [];
+  const portalLinkLine =
+    preview?.kind === "send" ? (preview.portalLinkLine ?? "") : "";
   const kuldheto = preview?.kind === "send" && vanSzoveg;
 
   return (
@@ -157,7 +165,7 @@ export function HandoverMailDialog({
 
         {preview?.kind === "send" ? (
           <>
-            <FormField label="Címzettek">
+            <PilotFormField label="Címzettek">
               {/*
                 A CIM IS LATSZIK, NEV SZERINT -- ez a spec szo szerinti resze.
                 A lista nem szerkesztheto: a kort a helyszin gazdaja hatarozza
@@ -171,22 +179,26 @@ export function HandoverMailDialog({
                   </li>
                 ))}
               </ul>
-            </FormField>
+            </PilotFormField>
 
-            <FormField label="Tárgy" htmlFor="handover-mail-subject">
-              <Input
+            <PilotFormField label="Tárgy" htmlFor="handover-mail-subject">
+              <PilotInput
                 id="handover-mail-subject"
                 value={subject}
                 maxLength={200}
                 disabled={busy}
-                onChange={(event) => setSubject(event.target.value)}
+                onChange={setSubject}
               />
-            </FormField>
+            </PilotFormField>
 
-            <FormField
+            <PilotFormField
               label="Üzenet"
               htmlFor="handover-mail-message"
-              description="Ez lesz a levél törzse, pontosan így. A rendszer semmit nem fűz hozzá."
+              help={
+                portalLinkLine
+                  ? "Ez a levél törzse, pontosan így. Alatta a rendszer egy sort ad hozzá, a hibajegy linkjével (lent látod)."
+                  : "Ez lesz a levél törzse, pontosan így. A rendszer semmit nem fűz hozzá."
+              }
             >
               <Textarea
                 id="handover-mail-message"
@@ -196,7 +208,23 @@ export function HandoverMailDialog({
                 disabled={busy}
                 onChange={(event) => setMessage(event.target.value)}
               />
-            </FormField>
+            </PilotFormField>
+
+            {/*
+              A SOR, AMIT A SZERVER FUZ A SZOVEG ALA (Balazs 2026-10-08: a portal-link bekerul az atadasi levelbe).
+              A kezelo LATJA, szo szerint, a kikuldes elott; a mondatot a szerver adja, a felulet nem epiti ujra.
+            */}
+            {portalLinkLine ? (
+              <p
+                className="rounded-md border border-pilot-grey-200 bg-pilot-grey-50 px-3 py-2 text-sm text-dusk-700"
+                data-testid="handover-mail-portal-line"
+              >
+                <span className="block text-xs text-dusk-500">
+                  A levél végére automatikusan bekerül:
+                </span>
+                {portalLinkLine}
+              </p>
+            ) : null}
           </>
         ) : null}
 
@@ -209,15 +237,15 @@ export function HandoverMailDialog({
         ) : null}
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button
+          <PilotButton
             disabled={!kuldheto || busy}
             onClick={() => onSend({ subject, message })}
           >
             {busy ? "Kiküldés…" : `Elküldés ${cimzettek.length} címzettnek`}
-          </Button>
-          <Button variant="secondary" disabled={busy} onClick={onCancel}>
+          </PilotButton>
+          <PilotButton variant="secondary" disabled={busy} onClick={onCancel}>
             Mégsem
-          </Button>
+          </PilotButton>
         </div>
         {preview?.kind === "send" ? (
           <p className="text-sm text-dusk-500">

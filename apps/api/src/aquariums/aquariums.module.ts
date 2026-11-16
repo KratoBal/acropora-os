@@ -9,6 +9,7 @@ import { AquariumMeasurementsRepository } from "./aquarium-measurements.reposito
 import { AquariumMeasurementsService } from "./aquarium-measurements.service.js";
 import { AquariumReefClubController } from "./aquarium-reefclub.controller.js";
 import { AquariumReefClubService } from "./aquarium-reefclub.service.js";
+import { ReefClubRunOutReminderService } from "./reefclub-runout-reminder.service.js";
 import { AquariumsController } from "./aquariums.controller.js";
 import { JevRecommendationCandidateSource } from "./recommendation/jev-candidate-source.js";
 import { AquariumsRepository } from "./aquariums.repository.js";
@@ -42,6 +43,7 @@ import {
     AquariumMeasurementsRepository,
     AquariumMeasurementsService,
     AquariumReefClubService,
+    ReefClubRunOutReminderService,
     {
       // null when the internal API has no REEFCLUB_SMTP_*: the service then keeps the shared sender
       provide: REEFCLUB_SHOP_MAIL_SENDER,

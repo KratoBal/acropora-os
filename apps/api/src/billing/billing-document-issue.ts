@@ -1,9 +1,15 @@
+import { createHash } from "node:crypto";
+
 import {
   EU_COUNTRY_NAMES_HU,
+  getDocumentCapabilities,
+  isCardPayment,
+  proposedIssueDueDate,
   szamlazzDocumentTotals,
   szamlazzLineAmounts,
   viesCountry,
   type BillingDocumentType,
+  type BillingIssueSummary,
   type InvoiceFormat,
 } from "@acropora/types";
 
@@ -239,7 +245,7 @@ export function buildIssueInput(row: BillingDocumentRow): IssueInput {
     // the community tax number goes in <adoszamEU>, never in <adoszam>
     euTaxNumber: euBuyer ? customer.euTaxNumber : null,
     // the invoice goes to the billing address, the ordering one only when there is none (Balázs, 2026-10-26)
-    email: customer.billingEmail?.trim() || customer.email,
+    email: customerSendAddress(customer),
   };
   const countryCode = EU_COUNTRY_NAMES_HU[address.country]
     ? address.country
@@ -300,4 +306,150 @@ export function buildIssueInput(row: BillingDocumentRow): IssueInput {
     },
     zeroForintLineIds,
   };
+}
+
+/** What the Számlázz.hu feed knows about a proforma's payment (`BillingDocumentsRepository.proformaPaymentFacts`). */
+export interface ProformaPaymentFacts {
+  paidAmount: Prisma.Decimal;
+  grossAmount: Prisma.Decimal;
+  currency: string;
+  cancelled: boolean;
+}
+
+/**
+ * IS THIS ADVANCE INVOICE FULLY COVERED BY ITS PROFORMA'S PAYMENT (card 00926d89, barracuda on #2638). `fizetve=true` states that the
+ * invoice is SETTLED, so "the proforma has a payment on it" is not enough: the feed's paid amount must reach the advance invoice's own
+ * gross (the totals the issue sends), in the same currency, and the proforma must not be cancelled. A part payment, another currency, a
+ * cancelled proforma, no feed row and an unbuildable draft are all "not paid": the invoice goes out as it always did.
+ */
+export function advancePaidByProforma(
+  row: BillingDocumentRow,
+  facts: ProformaPaymentFacts | null,
+): boolean {
+  if (row.documentType !== "ADVANCE_INVOICE" || facts === null) return false;
+  if (facts.cancelled) return false;
+  if (facts.currency.trim().toUpperCase() !== row.currency.trim().toUpperCase())
+    return false;
+  const input = buildIssueInput(row);
+  if (!input.ok) return false;
+  return facts.paidAmount.gte(new Prisma.Decimal(input.totals.grossAmount));
+}
+
+/**
+ * WHERE AN ISSUED INVOICE IS SENT: the buyer's billing e-mail, the ordering one only when there is none (Balázs,
+ * 2026-10-26). The billing editor's issue and the TIG invoice's window both take it from here.
+ */
+export function customerSendAddress(customer: {
+  billingEmail: string | null;
+  email: string | null;
+}): string | null {
+  return customer.billingEmail?.trim() || customer.email;
+}
+
+/**
+ * THE CONFIRMATION WINDOW'S VALUES (card 7ba97e0d), FROM THE SAME BUILDER AS THE ISSUE: `buildIssueInput` is what
+ * the issue sends to Számlázz.hu, so the window cannot show one thing while the invoice carries another. A draft
+ * that could not be issued is refused here with the same message the issue would give. The issue date proposed is
+ * today in Budapest (Számlázz.hu would take the day of the request); the other two dates are the draft's, except a
+ * due date before today: with `paymentDueDays` it is proposed from today (`proposedIssueDueDate`). Without them (the
+ * issue's own re-check, which reads only the fingerprint and the two flags) the draft's due date stays.
+ *
+ * `sendTo`: where a caller sends the document instead of the buyer's address (the webshop proforma goes to the order's
+ * e-mail). The window shows it, and the fingerprint covers IT, so a change of the address the window named stops the
+ * issue, and a change of the unused billing address does not (barracuda on #2429). Left out: the buyer's address.
+ */
+export function billingIssueSummary(
+  row: BillingDocumentRow,
+  today: string,
+  paymentDueDays?: number,
+  sendTo?: string | null,
+  /** The proforma this advance invoice is made from is PAID (the feed says so): the due date is the issue day (card 00926d89). */
+  proformaPaid?: boolean,
+):
+  | { ok: true; summary: BillingIssueSummary }
+  | { ok: false; code: string; message: string } {
+  const input = buildIssueInput(row);
+  if (!input.ok) return input;
+  const document = input.document;
+  const { showsPaymentFields } = getDocumentCapabilities(document.documentType);
+  const paymentMethod = showsPaymentFields ? document.paymentMethod : null;
+  const email =
+    (sendTo === undefined ? document.buyer.email : sendTo)?.trim() || null;
+  const advancePaid =
+    document.documentType === "ADVANCE_INVOICE" &&
+    document.proformaNumber !== null &&
+    proformaPaid === true;
+  return {
+    ok: true,
+    summary: {
+      buyerName: document.buyer.name,
+      buyerAddress: [
+        [document.buyer.zip, document.buyer.city].filter(Boolean).join(" "),
+        document.buyer.address,
+      ]
+        .filter(Boolean)
+        .join(", "),
+      buyerTaxNumber: document.buyer.taxNumber,
+      buyerEuTaxNumber: document.buyer.euTaxNumber,
+      buyerEmail: email,
+      issueDate: today,
+      fulfillmentDate: document.fulfillmentDate,
+      dueDate: !showsPaymentFields
+        ? null
+        : advancePaid
+          ? today
+          : paymentDueDays === undefined
+            ? document.dueDate
+            : proposedIssueDueDate(document.dueDate, today, paymentDueDays),
+      paymentMethod,
+      showsPaymentFields,
+      dueDateFollowsIssueDate:
+        showsPaymentFields && (isCardPayment(paymentMethod) || advancePaid),
+      fingerprint: issueFingerprint(
+        sendTo === undefined
+          ? document
+          : { ...document, buyer: { ...document.buyer, email } },
+      ),
+    },
+  };
+}
+
+/**
+ * THE SHOWN, NOT EDITABLE VALUES AS A DIGEST: what the buyer and the payment are. A change to the draft itself is
+ * caught by `expectedUpdatedAt`; this catches the one that does not touch the draft (the partner's name, address, e-mail or
+ * tax number edited while the window was open).
+ */
+export function issueFingerprint(
+  document: Pick<BillingDocumentForIssue, "documentType" | "paymentMethod"> & {
+    buyer: Pick<
+      BillingDocumentForIssue["buyer"],
+      | "name"
+      | "country"
+      | "zip"
+      | "city"
+      | "address"
+      | "taxNumber"
+      | "euTaxNumber"
+      | "email"
+    >;
+  },
+): string {
+  const { buyer } = document;
+  return createHash("sha256")
+    .update(
+      JSON.stringify([
+        document.documentType,
+        buyer.name,
+        buyer.country,
+        buyer.zip,
+        buyer.city,
+        buyer.address,
+        buyer.taxNumber,
+        buyer.euTaxNumber,
+        // the window shows where it sends (S2): a changed address stops the issue too
+        buyer.email,
+        document.paymentMethod,
+      ]),
+    )
+    .digest("hex");
 }

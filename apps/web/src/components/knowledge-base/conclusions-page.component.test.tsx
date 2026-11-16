@@ -8,6 +8,7 @@ import {
 import type { Session, UserRole } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { listedSelect } from "@/test/listed-option";
 import type { KnowledgeConclusion } from "@/lib/api/knowledge-base";
 import { ConclusionsPage } from "./conclusions-page";
 
@@ -103,7 +104,7 @@ describe("ConclusionsPage", () => {
       target: { value: "Mert." },
     });
     expect(save).toBeDisabled();
-    fireEvent.change(screen.getByLabelText("Állítás beszúrása"), {
+    fireEvent.change(await listedSelect("Állítás beszúrása", "c2"), {
       target: { value: "c2" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Hozzáad" }));

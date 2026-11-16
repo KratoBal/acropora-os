@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Input } from "@acropora/ui";
+import { PilotButton, PilotInput } from "@acropora/ui";
 import { useEffect, useRef, useState } from "react";
 
 import { formatDateTime } from "@/components/worksheets/worksheet-labels";
@@ -414,23 +414,21 @@ export function ServiceDocumentGallery<T extends ServiceDocumentGalleryItem>({
                       <label className="sr-only" htmlFor={`felirat-${item.id}`}>
                         Felirat
                       </label>
-                      <Input
+                      <PilotInput
                         id={`felirat-${item.id}`}
                         value={piszkozat}
                         maxLength={500}
-                        onChange={(event) => setPiszkozat(event.target.value)}
+                        onChange={setPiszkozat}
                         placeholder="Mit látunk a képen?"
                       />
                       <div className="flex flex-wrap gap-2">
-                        <Button
-                          size="sm"
+                        <PilotButton
                           disabled={mentes}
                           onClick={() => void feliratMentese(item)}
                         >
                           Mentés
-                        </Button>
-                        <Button
-                          size="sm"
+                        </PilotButton>
+                        <PilotButton
                           variant="secondary"
                           disabled={mentes}
                           onClick={() => {
@@ -439,7 +437,7 @@ export function ServiceDocumentGallery<T extends ServiceDocumentGalleryItem>({
                           }}
                         >
                           Mégse
-                        </Button>
+                        </PilotButton>
                       </div>
                       {feliratHiba ? (
                         <p className="text-xs text-rose-600">{feliratHiba}</p>
@@ -447,16 +445,14 @@ export function ServiceDocumentGallery<T extends ServiceDocumentGalleryItem>({
                     </div>
                   ) : (
                     <div className="flex flex-wrap gap-2">
-                      <Button
-                        size="sm"
+                      <PilotButton
                         variant="secondary"
                         onClick={() => onDownload(item)}
                       >
                         Letöltés
-                      </Button>
+                      </PilotButton>
                       {onSaveCaption ? (
-                        <Button
-                          size="sm"
+                        <PilotButton
                           variant="secondary"
                           onClick={() => {
                             setSzerkesztett(item.id);
@@ -465,16 +461,15 @@ export function ServiceDocumentGallery<T extends ServiceDocumentGalleryItem>({
                           }}
                         >
                           {item.caption ? "Felirat átírása" : "Felirat"}
-                        </Button>
+                        </PilotButton>
                       ) : null}
                       {onDelete ? (
-                        <Button
-                          size="sm"
+                        <PilotButton
                           variant="secondary"
                           onClick={() => onDelete(item)}
                         >
                           Törlés
-                        </Button>
+                        </PilotButton>
                       ) : null}
                     </div>
                   )}
@@ -503,21 +498,19 @@ export function ServiceDocumentGallery<T extends ServiceDocumentGalleryItem>({
                   </p>
                 </div>
                 <div className="flex gap-2">
-                  <Button
-                    size="sm"
+                  <PilotButton
                     variant="secondary"
                     onClick={() => onDownload(item)}
                   >
                     Letöltés
-                  </Button>
+                  </PilotButton>
                   {onDelete ? (
-                    <Button
-                      size="sm"
+                    <PilotButton
                       variant="secondary"
                       onClick={() => onDelete(item)}
                     >
                       Törlés
-                    </Button>
+                    </PilotButton>
                   ) : null}
                 </div>
               </li>
@@ -543,8 +536,7 @@ export function ServiceDocumentGallery<T extends ServiceDocumentGalleryItem>({
           />
           <div className="flex items-center gap-3">
             <p className="text-sm text-white">{nagyitott.fileName}</p>
-            <Button
-              size="sm"
+            <PilotButton
               variant="secondary"
               onClick={(event) => {
                 event.stopPropagation();
@@ -552,7 +544,7 @@ export function ServiceDocumentGallery<T extends ServiceDocumentGalleryItem>({
               }}
             >
               Bezárás
-            </Button>
+            </PilotButton>
           </div>
         </div>
       ) : null}

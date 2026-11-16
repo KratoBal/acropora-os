@@ -48,11 +48,25 @@ const planOf = (rows: PartnerMigrationRow[]): PartnerMigrationPlan => ({
   rows,
 });
 
-function setup(rows: PartnerMigrationRow[]) {
+const noFacts = {
+  suppliers: new Map(),
+  customers: new Map(),
+  codeHolders: new Map(),
+};
+
+function setup(
+  rows: PartnerMigrationRow[],
+  facts: unknown = noFacts,
+  askedFacts: { suppliers: string[]; customers: string[] }[] = [],
+) {
   let current = planOf(rows);
   const calls: string[] = [];
   const txMarker = { tx: true };
   const repository = {
+    fillFacts: async (suppliers: string[], customers: string[]) => {
+      askedFacts.push({ suppliers, customers });
+      return facts;
+    },
     transaction: async <T>(work: (tx: unknown) => Promise<T>) => {
       calls.push("begin");
       try {
@@ -118,12 +132,74 @@ describe("PartnerMigrationRunService.preview", () => {
       row({ supplierId: "s3", code: "P3", action: "SKIP_OWN" }),
     ]);
     const preview = await w.service.preview();
-    assert.deepEqual(preview.counts, { create: 1, bind: 1, skip: 1 });
+    assert.deepEqual(preview.counts, { create: 1, bind: 1, fill: 0, skip: 1 });
     assert.equal(preview.operations[1]!.customerId, "c9");
     assert.match(preview.operations[2]!.reason ?? "", /saját cég/);
     assert.match(preview.fingerprint, /^[0-9a-f]{64}$/);
     assert.equal(typeof preview.target, "string");
     assert.deepEqual(w.calls, []);
+  });
+
+  it("a linked partner with an empty row field is a FILL in the preview: the values are shown, counted, and part of the fingerprint", async () => {
+    const mirror = {
+      id: "m1",
+      customerNumber: "V-M",
+      displayName: "Tükör",
+      taxNumber: null,
+      euTaxNumber: null,
+      fromUnas: false,
+      references: 0,
+    };
+    const asked: { suppliers: string[]; customers: string[] }[] = [];
+    const facts = (days: number) => ({
+      suppliers: new Map([
+        [
+          "s1",
+          {
+            paymentDueDays: days,
+            email: "a@b.test",
+            worksheetPartnerCode: null,
+          },
+        ],
+      ]),
+      customers: new Map([
+        [
+          "m1",
+          {
+            paymentDueDays: null,
+            billingEmail: null,
+            worksheetPartnerCode: null,
+          },
+        ],
+      ]),
+      codeHolders: new Map(),
+    });
+    const linked = row({
+      supplierId: "s1",
+      action: "MARK_ONLY",
+      linkedCustomer: mirror,
+    });
+    const w = setup([linked], facts(15), asked);
+    const preview = await w.service.preview();
+    assert.deepEqual(preview.counts, { create: 0, bind: 0, fill: 1, skip: 0 });
+    assert.deepEqual(preview.operations[0], {
+      kind: "FILL",
+      supplierId: "s1",
+      code: "P1",
+      customerId: "m1",
+      fills: [
+        { field: "paymentDueDays", value: 15 },
+        { field: "billingEmail", value: "a@b.test" },
+      ],
+    });
+    assert.deepEqual(asked, [{ suppliers: ["s1"], customers: ["m1"] }]);
+    const other = await setup([linked], facts(30)).service.preview();
+    assert.notEqual(other.fingerprint, preview.fingerprint);
+    assert.deepEqual(w.calls, []);
+    // the write goes with the previewed fingerprint, and a changed value (the partner's days) makes it stale
+    const written = await w.service.apply(preview.fingerprint, undefined, "u1");
+    assert.deepEqual(w.calls, ["begin", "apply:1:u1", "end"]);
+    assert.equal(written.outcomes.length, 1);
   });
 });
 
@@ -170,6 +246,7 @@ describe("PartnerMigrationRunService.apply", () => {
     const failing = new PartnerMigrationRunService(
       { build: async () => planOf([row({})]) } as never,
       {
+        fillFacts: async () => noFacts,
         transaction: async (work: (tx: unknown) => Promise<unknown>) =>
           work({}),
       } as never,

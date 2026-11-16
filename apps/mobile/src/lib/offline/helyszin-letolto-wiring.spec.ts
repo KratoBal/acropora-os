@@ -264,4 +264,18 @@ describe("a teljes méretű képek gombja", () => {
   it("a teljes képek záró mondata kimondja a hiányt", () => {
     assert.match(kod(KEPERNYO), /HIÁNYOS/);
   });
+
+  /**
+   * AZ UZEMELTETESI NAPLO SABLONJAI (task os-uzemeltetesi-naplo, S2d). MI PIROSIT: ha a sablon-fuggvenyek feltetel nelkul kerulnek
+   * atadasra (a naplot nem rogzito szerelo is lekerne a sablonokat, es a vegpont 403-at adna: a zaro mondat hianyosnak mondana egy
+   * dolgot, amit o soha nem hasznal); ha a mentes a hibat elnyelo `remember` parra mutatna (a letolto "kesz"-t mondana egy ures masolatra);
+   * ha a jog nem a naplo-rogzites kepessegebol jonne.
+   */
+  it("a sablon-függvények csak a napló rögzítésének képességével kerülnek át, a hibát továbbadó mentővel", () => {
+    const forras = kod(KEPERNYO);
+    assert.match(forras, /getServiceCapabilities\(user\)\.operationsLogRecord/);
+    assert.match(forras, /\.\.\.\(sablonokKellenek\s*\?\s*\{/);
+    assert.match(forras, /storeOperationsTemplates\(/);
+    assert.equal(forras.includes("rememberOperationsTemplates"), false);
+  });
 });

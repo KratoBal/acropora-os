@@ -1,8 +1,9 @@
 import { pathToFileURL } from "node:url";
 
-import { type Prisma, prisma } from "@acropora/database";
+import { Prisma, prisma } from "@acropora/database";
 import { POS_MANUAL_LINE_SKU } from "@acropora/types";
 
+import { recordOwnPrice } from "../products/price-history/own-price-history.js";
 import { DEMO_PREFIX, demoPlan, type DemoPlan } from "./demo-data.plan.js";
 
 /**
@@ -28,6 +29,12 @@ import { DEMO_PREFIX, demoPlan, type DemoPlan } from "./demo-data.plan.js";
  *
  * IDEMPOTENT: a row whose business key exists is left alone, so a second `--apply` writes
  * nothing and says so. `--remove` deletes the `DEMO-` rows and nothing else.
+ *
+ * ONE LIMIT OF `--remove` (barracuda, #2481 review): the demo product's variant is referenced
+ * with Restrict by quote items, quote BOM lines and POS sale lines. The demo quotes and sales
+ * are deleted first, so only a row WITHOUT the prefix can stop it: if someone put the demo
+ * product on a real quote or sale on the stage, the whole `--remove` transaction fails and
+ * nothing is deleted. Take the product off that quote or sale, then run it again.
  */
 
 export interface DemoCounts {
@@ -35,6 +42,8 @@ export interface DemoCounts {
   quotes: number;
   posSales: number;
   incomingInvoices: number;
+  /** products with their own price history and a running own sale (the Omnibus demo) */
+  products: number;
 }
 
 export interface DemoStore {
@@ -74,7 +83,7 @@ export function hostOfDatabaseUrl(url: string | undefined): string | null {
 }
 
 const describe = (counts: DemoCounts) =>
-  `${counts.customers} ügyfél, ${counts.quotes} ajánlat, ${counts.posSales} POS eladás, ${counts.incomingInvoices} bejövő számla`;
+  `${counts.customers} ügyfél, ${counts.quotes} ajánlat, ${counts.posSales} POS eladás, ${counts.incomingInvoices} bejövő számla, ${counts.products} termék árelőzménnyel`;
 
 export async function runDemoData(
   argv: readonly string[],
@@ -105,6 +114,7 @@ export async function runDemoData(
         quotes: plan.quotes.length,
         posSales: plan.posSales.length,
         incomingInvoices: plan.incomingInvoices.length,
+        products: plan.products.length,
       })}.\n`,
     );
     for (const c of plan.customers)
@@ -113,6 +123,7 @@ export async function runDemoData(
     for (const p of plan.posSales) out.stdout(`  POS      ${p.orderNumber}\n`);
     for (const i of plan.incomingInvoices)
       out.stdout(`  számla   ${i.documentNumber}\n`);
+    for (const p of plan.products) out.stdout(`  termék   ${p.sku}\n`);
     out.stdout("Íráshoz: --apply --db-host <az adatbázis gépneve>.\n");
     return 0;
   }
@@ -152,7 +163,8 @@ export async function runDemoData(
     created.customers +
       created.quotes +
       created.posSales +
-      created.incomingInvoices ===
+      created.incomingInvoices +
+      created.products ===
     0;
   out.stdout(
     nothing
@@ -175,6 +187,7 @@ export function prismaDemoStore(db: typeof prisma): DemoStore {
           quotes: 0,
           posSales: 0,
           incomingInvoices: 0,
+          products: 0,
         };
 
         const customerIds = new Map<string, string>();
@@ -341,6 +354,66 @@ export function prismaDemoStore(db: typeof prisma): DemoStore {
           await tx.incomingBillingDocument.create({ data: invoice });
           counts.incomingInvoices++;
         }
+
+        const variantSkus = new Set(
+          (
+            await tx.productVariant.findMany({
+              where: { sku: prefix },
+              select: { sku: true },
+            })
+          ).map((v) => v.sku),
+        );
+        for (const product of plan.products) {
+          if (variantSkus.has(product.sku)) continue;
+          const sale = product.sale;
+          const latest = product.history[product.history.length - 1]!;
+          const created = await tx.product.create({
+            data: {
+              name: product.name,
+              type: "PHYSICAL",
+              origin: "LOCAL",
+              catalogAuthority: "ACROPORA",
+              // inert: neither a projection round nor a stock push may pick the demo product up
+              webshopSellable: false,
+              webshopExcluded: true,
+              variants: {
+                create: {
+                  sku: product.sku,
+                  unit: "db",
+                  vatRate: "27",
+                  sellingGrossPrice: String(latest.gross),
+                  sellingPriceCurrency: "HUF",
+                  sellingSaleGrossPrice: String(sale.gross),
+                  sellingSaleStartsAt: sale.startsAt,
+                  sellingSaleEndsAt: sale.endsAt,
+                },
+              },
+            },
+            select: { id: true, variants: { select: { id: true } } },
+          });
+          const variantId = created.variants[0]!.id;
+          // the same writer the price editor uses, oldest row first: a backdated history
+          // that reads like a real one (a row only where the price or the sale changed)
+          const rows = [
+            ...product.history.map((h) => ({
+              at: h.at,
+              gross: h.gross,
+              sale: null as number | null,
+            })),
+            { at: sale.startsAt, gross: latest.gross, sale: sale.gross },
+          ];
+          for (const row of rows)
+            await recordOwnPrice(tx, {
+              productId: created.id,
+              variantId,
+              currency: "HUF",
+              grossPrice: new Prisma.Decimal(row.gross),
+              saleGrossPrice:
+                row.sale === null ? null : new Prisma.Decimal(row.sale),
+              observedAt: row.at,
+            });
+          counts.products++;
+        }
         return counts;
       });
     },
@@ -377,6 +450,10 @@ export function prismaDemoStore(db: typeof prisma): DemoStore {
         const invoices = await tx.incomingBillingDocument.deleteMany({
           where: { externalId: prefix },
         });
+        // the variants and the history rows go with the product (onDelete: Cascade)
+        const products = await tx.product.deleteMany({
+          where: { variants: { some: { sku: prefix } } },
+        });
         const customers = await tx.customer.deleteMany({
           where: { customerNumber: prefix },
         });
@@ -385,6 +462,7 @@ export function prismaDemoStore(db: typeof prisma): DemoStore {
           quotes: quoteIds.length,
           posSales: sales.count,
           incomingInvoices: invoices.count,
+          products: products.count,
         };
       });
     },

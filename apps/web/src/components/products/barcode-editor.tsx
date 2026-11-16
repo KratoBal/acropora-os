@@ -1,6 +1,12 @@
 "use client";
 
-import { Alert, Badge, Button, ConfirmDialog, Input } from "@acropora/ui";
+import {
+  Alert,
+  ConfirmDialog,
+  PilotBadge,
+  PilotButton,
+  PilotInput,
+} from "@acropora/ui";
 import type { ProductBarcodeSummary } from "@acropora/types";
 import { useState } from "react";
 
@@ -94,10 +100,9 @@ export function BarcodeEditor({
             >
               <span className="font-mono text-dusk-700">{barcode.code}</span>
               {barcode.isPrimary ? (
-                <Badge variant="info">Elsődleges</Badge>
+                <PilotBadge variant="blue">Elsődleges</PilotBadge>
               ) : canManage ? (
-                <Button
-                  size="sm"
+                <PilotButton
                   variant="ghost"
                   disabled={busy}
                   onClick={() =>
@@ -112,18 +117,18 @@ export function BarcodeEditor({
                   }
                 >
                   Legyen elsődleges
-                </Button>
+                </PilotButton>
               ) : null}
               {canManage ? (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={busy}
-                  className="ml-auto text-rose-600"
-                  onClick={() => setPendingDelete(barcode)}
-                >
-                  Törlés
-                </Button>
+                <span className="ml-auto">
+                  <PilotButton
+                    variant="danger"
+                    disabled={busy}
+                    onClick={() => setPendingDelete(barcode)}
+                  >
+                    Törlés
+                  </PilotButton>
+                </span>
               ) : null}
             </li>
           ))}
@@ -145,20 +150,22 @@ export function BarcodeEditor({
             });
           }}
         >
-          <Input
-            aria-label="Új vonalkód"
-            value={code}
-            onChange={(event) => setCode(event.target.value)}
-            placeholder="Olvasd be vagy írd be a vonalkódot"
-            disabled={busy}
-          />
-          <Button
+          <div className="min-w-0 flex-1">
+            <PilotInput
+              aria-label="Új vonalkód"
+              value={code}
+              onChange={setCode}
+              placeholder="Olvasd be vagy írd be a vonalkódot"
+              disabled={busy}
+            />
+          </div>
+          <PilotButton
             type="submit"
             variant="secondary"
             disabled={busy || !code.trim()}
           >
             Hozzáadás
-          </Button>
+          </PilotButton>
         </form>
       ) : null}
 

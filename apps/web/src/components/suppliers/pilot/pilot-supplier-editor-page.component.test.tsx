@@ -565,13 +565,17 @@ describe("PilotSupplierEditorPage: what the parent picker offers", () => {
   it("offers only active units as a parent", async () => {
     render(<PilotSupplierEditorPage supplierId="supplier-1" />);
     const picker = await screen.findByLabelText("Szülő helyszín");
+    const offered = () =>
+      Array.from(
+        picker.querySelectorAll("option"),
+        (option) => option.textContent ?? "",
+      );
 
-    const offered = Array.from(
-      picker.querySelectorAll("option"),
-      (option) => option.textContent ?? "",
+    // the units come with their own answer, after the field
+    await waitFor(() =>
+      expect(offered().some((text) => text.includes("BIO"))).toBe(true),
     );
-    expect(offered.some((text) => text.includes("BIO"))).toBe(true);
-    expect(offered.some((text) => text.includes("REG"))).toBe(false);
+    expect(offered().some((text) => text.includes("REG"))).toBe(false);
   });
 
   /**

@@ -118,8 +118,22 @@ export interface MailSender {
    * `false` visszateresi erteket a hivo ELNYELHET anelkul, hogy barhol nyoma
    * maradna. Ugyanaz a tanulsag, mint az androidos kuldonel (7ef5402f):
    * a kuldes sikeret NE a visszateresi ertekbol allitsuk.
+   *
+   * A visszateresi ertek tehat NEM a siker jele, hanem a kiment level nyoma: a szolgaltato azonositoja, ha ad
+   * (a Gmail elkuldott peldanya, amit a jatek a torleshez megjegyez, kartya jatek-level-torles). Lehet ures is.
    */
-  send(mail: OutgoingMail): Promise<void>;
+  send(mail: OutgoingMail): Promise<MailSent | void>;
+}
+
+/** A kiment level nyoma a szolgaltatonal: a Gmail uzenet-azonositoja, ha a valasz megnevezte. */
+export interface MailSent {
+  readonly id?: string;
+  /**
+   * WHOSE ID IT IS (card jatek-level-torles, acrobot 44560): the game keeps an id only when it is a Gmail one, because it
+   * deletes it from the Gmail mailbox. An SMTP Message-ID handed to Gmail's batchDelete would be refused, and every
+   * later erasure run would fail on it.
+   */
+  readonly provider?: "gmail";
 }
 
 export const MAIL_SENDER = Symbol("MAIL_SENDER");

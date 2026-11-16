@@ -142,6 +142,8 @@ export interface CreateCustomerInput {
   email?: string;
   billingEmail?: string;
   phone?: string;
+  /** A fizetési határidő napokban (egész, 0-365); hiányzó: az alapérték (a Partnerek oldalon beállított, ha nincs, 8 nap). */
+  paymentDueDays?: number;
   marketingEmailConsent?: boolean;
   marketingSmsConsent?: boolean;
   addresses?: CreateCustomerAddressInput[];
@@ -172,6 +174,8 @@ export interface UpdateCustomerInput {
   email?: string | null;
   billingEmail?: string | null;
   phone?: string | null;
+  /** A fizetési határidő napokban (egész, 0-365); `null`: törli (az alapérték: a Partnerek oldalon beállított, ha nincs, 8 nap). */
+  paymentDueDays?: number | null;
   marketingEmailConsent?: boolean;
   marketingSmsConsent?: boolean;
   /** A megadott címek módosulnak vagy létrejönnek; a többi cím érintetlen marad. */

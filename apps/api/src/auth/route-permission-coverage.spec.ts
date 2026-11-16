@@ -29,7 +29,13 @@ import { describe, it } from "node:test";
  */
 
 const CONTROLLERS = [
+  // The agents' keys (card c5a8e6d6, 2026-11-10): secret-making, behind users.manage.
+  "src/tasks/service-token-admin.controller.ts",
   "src/service-assets/service-assets.controller.ts",
+  "src/operations-log/operations-log-entries.controller.ts",
+  "src/operations-log/operations-report.controller.ts",
+  "src/operations-log/operations-partner.controller.ts",
+  "src/operations-log/operations-log.controller.ts",
   "src/worksheets/worksheets.controller.ts",
   "src/suppliers/suppliers.controller.ts",
   /*
@@ -48,11 +54,15 @@ const CONTROLLERS = [
   "src/products/product-barcode.controller.ts",
   "src/products/product-extension.controller.ts",
   "src/products/product-shipping-profile.controller.ts",
+  // The husbandry block of a live animal (V2.2, card d2fc06e7): products.view / products.manage.
+  "src/products/product-husbandry.controller.ts",
   "src/products/catalog-options.controller.ts",
   // JEV product enrichment, read only (2026-10-02).
   "src/products/product-enrichment-review.controller.ts",
   // JEV catalogue queue (PD-013): read only, products.view.
   "src/products/product-enrichment-queue.controller.ts",
+  // JEV runs with every fetch's reason (#2532): read only, products.view.
+  "src/products/product-enrichment-runs.controller.ts",
   // Research knowledge base, source discovery (S2): knowledge.research.run.
   "src/knowledge-base/discovery/discovery-run.controller.ts",
   // Research knowledge base, claim extraction (S3): knowledge.research.run.
@@ -99,6 +109,22 @@ const CONTROLLERS = [
   "src/dashboard/dashboard.controller.ts",
   // The article images' public route (2026-10-26): one image by id, @Public.
   "src/content/article-image-public.controller.ts",
+  // The content calendar (T5.5): the feed behind content.view (S1), the hand-entered events' writes behind content.manage (S2).
+  "src/content/calendar/calendar-feed.controller.ts",
+  // The content's results (T5.5 S8): read behind content.view, a week written behind content.manage.
+  "src/content/results/content-results.controller.ts",
+  "src/content/calendar/calendar-event.controller.ts",
+  // The calendar's dependency template (S4): read behind content.view, written behind content.manage.
+  "src/content/calendar/content-template.controller.ts",
+  // Opening the calendar's content slots (S5): behind content.manage.
+  "src/content/calendar/calendar-slots.controller.ts",
+  // The calendar's gap signals and its one setting (S6): read behind content.view, the setting written behind content.manage.
+  "src/content/calendar/calendar-gaps.controller.ts",
+  // The projection queue's state (ca422e92, 2026-11-09): read-only numbers, behind inventory.view (#2340 review).
+  "src/integrations/medusa/medusa-projection-status.controller.ts",
+  // The attendance sheet (os-jelenleti-iv, S1): every route behind attendance.manage.
+  "src/attendance/attendance.controller.ts",
+  "src/attendance/attendance-employees.controller.ts",
 ];
 
 const ROUTE = new RegExp(

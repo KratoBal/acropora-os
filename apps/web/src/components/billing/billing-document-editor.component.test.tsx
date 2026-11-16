@@ -14,6 +14,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BillingDocumentEditor } from "./billing-document-editor";
+import { BILLING_LIST_PATH } from "./billing-document-table";
 import {
   readPosInvoiceHandoff,
   writePosInvoiceHandoff,
@@ -45,6 +46,7 @@ const api = vi.hoisted(() => ({
   update: vi.fn(),
   detail: vi.fn(),
   issue: vi.fn(),
+  issueSummary: vi.fn(),
   preview: vi.fn(),
   email: vi.fn(),
   pdf: vi.fn(),
@@ -52,8 +54,36 @@ const api = vi.hoisted(() => ({
   templateDraft: vi.fn(),
   storno: vi.fn(),
   stornoPdf: vi.fn(),
+  deleteDraft: vi.fn(),
 }));
 vi.mock("@/lib/api/billing-documents", () => ({ billingDocumentsApi: api }));
+
+/* the server's issue summary (card 7ba97e0d): what the confirmation window shows */
+const SUMMARY = {
+  buyerName: "Kitalált Vevő Kft.",
+  buyerAddress: "1011 Budapest, Fő utca 1.",
+  buyerTaxNumber: "12345678-2-42",
+  buyerEuTaxNumber: null,
+  issueDate: "2026-11-11",
+  fulfillmentDate: "2026-11-05",
+  dueDate: "2026-11-19",
+  paymentMethod: "Átutalás",
+  showsPaymentFields: true,
+  dueDateFollowsIssueDate: false,
+  fingerprint: "f".repeat(64),
+};
+const CONFIRMED = {
+  issueDate: SUMMARY.issueDate,
+  fulfillmentDate: SUMMARY.fulfillmentDate,
+  dueDate: SUMMARY.dueDate,
+  fingerprint: SUMMARY.fingerprint,
+};
+/** The confirmation window, once the summary is in (its buttons wait for it). */
+async function readyDialog() {
+  const dialog = await screen.findByRole("dialog");
+  await within(dialog).findByText(SUMMARY.buyerName);
+  return within(dialog);
+}
 /* a drawer nyitásakor a képtár töltődik; itt üres, hálózat nélkül */
 vi.mock("@/lib/api/mail-images", () => ({
   mailImagesApi: {
@@ -144,6 +174,7 @@ beforeEach(() => {
     .mockReset()
     .mockImplementation(async (_token, id, body) => detailFrom(body, id));
   api.issue.mockReset();
+  api.issueSummary.mockReset().mockResolvedValue(SUMMARY);
   api.preview.mockReset();
   api.email.mockReset();
   api.pdf.mockReset();
@@ -688,26 +719,48 @@ describe("BillingDocumentEditor", () => {
       ).toBeEnabled();
     });
 
-    it("shows the server's sentence and closes the empty tab when the preview fails", async () => {
+    it("shows the server's sentence under the preview's OWN title (the save succeeded) and closes the empty tab when the preview fails", async () => {
       api.preview.mockRejectedValue(
         new Error("Az előnézet ezen a szerveren nincs bekapcsolva."),
       );
       await readyDraft();
       fireEvent.click(screen.getByRole("button", { name: "Előnézet" }));
-      expect(await screen.findByRole("alert")).toHaveTextContent(
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent("Az előnézet nem készült el");
+      expect(alert).toHaveTextContent(
         "Az előnézet ezen a szerveren nincs bekapcsolva.",
       );
+      // the draft WAS saved: the box must not say that the save failed
+      expect(alert).not.toHaveTextContent("A mentés nem sikerült");
+      expect(api.create).toHaveBeenCalledTimes(1);
       expect(tab.close).toHaveBeenCalledTimes(1);
       expect(tab.location.href).toBe("");
     });
 
-    it("asks for no preview when the save fails", async () => {
-      api.create.mockRejectedValue(new Error("A mentés nem sikerült."));
+    it("the preview's error goes away with the next save, and a failed save keeps the save's title", async () => {
+      api.preview.mockRejectedValue(
+        new Error("A partnernek nincs számlázási címe."),
+      );
       await readyDraft();
       fireEvent.click(screen.getByRole("button", { name: "Előnézet" }));
-      expect(await screen.findByRole("alert")).toHaveTextContent(
-        "A mentés nem sikerült.",
+      expect(
+        await screen.findByText("Az előnézet nem készült el"),
+      ).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: /Vázlat mentése/ }));
+      await waitFor(() => expect(api.update).toHaveBeenCalledTimes(1));
+      await waitFor(() =>
+        expect(screen.queryByText("Az előnézet nem készült el")).toBeNull(),
       );
+    });
+
+    it("asks for no preview when the save fails, and the box says the SAVE failed", async () => {
+      api.create.mockRejectedValue(new Error("Az adatbázis nem érhető el."));
+      await readyDraft();
+      fireEvent.click(screen.getByRole("button", { name: "Előnézet" }));
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent("A mentés nem sikerült");
+      expect(alert).toHaveTextContent("Az adatbázis nem érhető el.");
+      expect(alert).not.toHaveTextContent("Az előnézet nem készült el");
       expect(api.preview).not.toHaveBeenCalled();
       expect(tab.close).toHaveBeenCalledTimes(1);
     });
@@ -739,6 +792,7 @@ describe("BillingDocumentEditor", () => {
       fireEvent.click(button);
       expect(api.issue).not.toHaveBeenCalled();
       const dialog = await screen.findByRole("dialog");
+      await within(dialog).findByText(SUMMARY.buyerName);
       // Balázs kérdése, betű szerint (hétfői lista M1)
       expect(dialog).toHaveTextContent("Biztos, hogy kiállítod a számlát?");
       expect(dialog).toHaveTextContent("valódi számla készül a Számlázz.hu-n");
@@ -755,6 +809,7 @@ describe("BillingDocumentEditor", () => {
         "token-1",
         created.id,
         "2026-09-30T10:05:00.000Z",
+        CONFIRMED,
       );
       expect(
         await screen.findByText("Kiállítva: AC-2026-000001"),
@@ -762,6 +817,188 @@ describe("BillingDocumentEditor", () => {
       expect(screen.getByText("Csak olvasható")).toBeInTheDocument();
       // A PAPÍR SZÁMLA LEVELE NEM KÖTELEZŐ: a kiállítás nem küld magától.
       expect(api.email).not.toHaveBeenCalled();
+    });
+
+    /*
+      A MEGERŐSÍTŐ ABLAK (kártya 7ba97e0d, Balázs 2026-11-11 11:12-11:20). MI PIROSÍT: ha az ablak nem a szerver
+      összesítőjét mutatja; ha a javított dátumok nem a kiállításba mennek; ha kártyás fizetésnél a határidő
+      külön állítható; ha a bejelölt „Elküldöm e-mailben” nem az ablakban álló címre küld, vagy a jelöletlen küld;
+      ha az e-számla kiküldése kikapcsolható; ha egy elutasított összesítő mellett kiállítható.
+    */
+    const issuedPaperInvoice = () =>
+      api.issue.mockImplementation(async (_token, id) => ({
+        ...detailFrom(api.create.mock.calls[0]![1], id),
+        status: "ISSUED",
+        emailStatus: "NOT_REQUIRED",
+        documentNumber: "AC-2026-000009",
+      }));
+
+    it("the window shows the server's summary, and the edited dates go into the issue", async () => {
+      issuedPaperInvoice();
+      await readyPaperInvoice();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Számla kiállítása" }),
+      );
+      const dialog = await readyDialog();
+      for (const text of [
+        SUMMARY.buyerAddress,
+        SUMMARY.buyerTaxNumber,
+        SUMMARY.paymentMethod,
+      ])
+        expect(screen.getByRole("dialog")).toHaveTextContent(text);
+      expect(api.issueSummary).toHaveBeenCalledWith(
+        "token-1",
+        api.create.mock.calls[0]![1].id,
+      );
+      fireEvent.change(dialog.getByLabelText("Számla kelte"), {
+        target: { value: "2026-11-10" },
+      });
+      fireEvent.change(dialog.getByLabelText("Teljesítés ideje"), {
+        target: { value: "2026-11-03" },
+      });
+      fireEvent.change(dialog.getByLabelText("Fizetési határidő"), {
+        target: { value: "2026-11-25" },
+      });
+      fireEvent.click(dialog.getByRole("button", { name: "Kiállítom" }));
+      await waitFor(() => expect(api.issue).toHaveBeenCalledTimes(1));
+      expect(api.issue.mock.calls[0]![3]).toEqual({
+        issueDate: "2026-11-10",
+        fulfillmentDate: "2026-11-03",
+        dueDate: "2026-11-25",
+        fingerprint: SUMMARY.fingerprint,
+      });
+    });
+
+    it("a date the rule refuses keeps the button off and says why", async () => {
+      await readyPaperInvoice();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Számla kiállítása" }),
+      );
+      const dialog = await readyDialog();
+      fireEvent.change(dialog.getByLabelText("Fizetési határidő"), {
+        target: { value: "2026-11-01" },
+      });
+      expect(dialog.getByRole("alert")).toHaveTextContent(
+        "A fizetési határidő nem lehet korábbi a számla kelténél.",
+      );
+      expect(dialog.getByRole("button", { name: "Kiállítom" })).toBeDisabled();
+    });
+
+    it("a card payment: the due date follows the issue date and cannot be set apart", async () => {
+      issuedPaperInvoice();
+      api.issueSummary.mockResolvedValue({
+        ...SUMMARY,
+        paymentMethod: "Bankkártya",
+        dueDateFollowsIssueDate: true,
+      });
+      await readyPaperInvoice();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Számla kiállítása" }),
+      );
+      const dialog = await readyDialog();
+      expect(dialog.getByLabelText("Fizetési határidő")).toBeDisabled();
+      fireEvent.change(dialog.getByLabelText("Számla kelte"), {
+        target: { value: "2026-11-09" },
+      });
+      // the locked field shows the issue date (in the field's display form)
+      expect(
+        (dialog.getByLabelText("Fizetési határidő") as HTMLInputElement).value,
+      ).toBe("2026. 11. 09.");
+      fireEvent.click(dialog.getByRole("button", { name: "Kiállítom" }));
+      await waitFor(() => expect(api.issue).toHaveBeenCalledTimes(1));
+      expect(api.issue.mock.calls[0]![3].dueDate).toBe("2026-11-09");
+    });
+
+    it('"Elküldöm e-mailben" checked: the issued invoice goes to the address the window shows; unchecked: it does not', async () => {
+      issuedPaperInvoice();
+      api.email.mockImplementation(async (_token, id) => ({
+        ...detailFrom(api.create.mock.calls[0]![1], id),
+        status: "ISSUED",
+        emailStatus: "SENT",
+        documentNumber: "AC-2026-000009",
+      }));
+      await readyPaperInvoice();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Számla kiállítása" }),
+      );
+      const dialog = await readyDialog();
+      expect(screen.getByRole("dialog")).toHaveTextContent(
+        "szamlazas@partner.hu",
+      );
+      const send = dialog.getByLabelText(
+        "Elküldöm e-mailben",
+      ) as HTMLInputElement;
+      expect([send.checked, send.disabled]).toEqual([false, false]);
+      fireEvent.click(send);
+      fireEvent.click(dialog.getByRole("button", { name: "Kiállítom" }));
+      await waitFor(() => expect(api.email).toHaveBeenCalledTimes(1));
+      expect(api.email.mock.calls[0]![2]).toMatchObject({
+        mode: "SEND",
+        to: ["szamlazas@partner.hu"],
+      });
+    });
+
+    it("an e-invoice: the sending is part of the issue and cannot be unchecked", async () => {
+      await readyEInvoice();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Kiállítás és kiküldés" }),
+      );
+      const dialog = await readyDialog();
+      const send = dialog.getByLabelText(
+        "Elküldöm e-mailben",
+      ) as HTMLInputElement;
+      expect([send.checked, send.disabled]).toEqual([true, true]);
+    });
+
+    it("a summary the server refuses shows its reason, and nothing is issued", async () => {
+      api.issueSummary.mockRejectedValue(
+        new Error(
+          "A partner számlázási címe hiányos (hiányzik: irányítószám).",
+        ),
+      );
+      await readyPaperInvoice();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Számla kiállítása" }),
+      );
+      const dialog = within(await screen.findByRole("dialog"));
+      expect(await dialog.findByRole("alert")).toHaveTextContent(
+        "A partner számlázási címe hiányos",
+      );
+      expect(dialog.getByRole("button", { name: "Kiállítom" })).toBeDisabled();
+      expect(api.issue).not.toHaveBeenCalled();
+    });
+
+    /*
+      A VEVO ADATA HIANYZIK (Luca, 2026-11-12, kartya 7dd76d60). MI PIROSIT: ha a szerver elutasitasa mellett nincs link a
+      vevo adatlapjara; ha a link nem a KIVALASZTOTT vevore mutat; ha egy rendben betoltott osszefoglalo mellett is ott
+      marad; ha a link ugyanabban a lapban nyilik meg (a vazlat elvesznel).
+    */
+    it("a refused summary links the chosen customer's page in a new tab, and a good one shows no link", async () => {
+      api.issueSummary.mockRejectedValueOnce(
+        new Error(
+          "A partner számlázási címe hiányos (hiányzik: irányítószám).",
+        ),
+      );
+      await readyPaperInvoice();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Számla kiállítása" }),
+      );
+      const dialog = within(await screen.findByRole("dialog"));
+      await dialog.findByRole("alert");
+      const link = dialog.getByRole("link", { name: "A vevő adatlapja" });
+      expect(link).toHaveAttribute("href", "/vevok/cust-1");
+      expect(link).toHaveAttribute("target", "_blank");
+      expect(api.issue).not.toHaveBeenCalled();
+
+      fireEvent.click(dialog.getByRole("button", { name: "Mégsem" }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Számla kiállítása" }),
+      );
+      const ready = within(await screen.findByRole("dialog"));
+      await ready.findByText(SUMMARY.buyerName);
+      expect(
+        ready.queryByRole("link", { name: "A vevő adatlapja" }),
+      ).toBeNull();
     });
 
     /*
@@ -786,6 +1023,7 @@ describe("BillingDocumentEditor", () => {
         screen.getByRole("button", { name: "Kiállítás és kiküldés" }),
       );
       const dialog = await screen.findByRole("dialog");
+      await within(dialog).findByText(SUMMARY.buyerName);
       // a címzett a kérdésben áll: aki megerősít, látja, hová megy a számla
       expect(dialog).toHaveTextContent(
         "Biztos, hogy kiállítod és kiküldöd a számlát a(z) szamlazas@partner.hu címre?",
@@ -1105,7 +1343,7 @@ describe("BillingDocumentEditor", () => {
         screen.getByRole("button", { name: "Számla kiállítása" }),
       );
       fireEvent.click(
-        within(await screen.findByRole("dialog")).getByRole("button", {
+        (await readyDialog()).getByRole("button", {
           name: "Kiállítom",
         }),
       );
@@ -1113,6 +1351,80 @@ describe("BillingDocumentEditor", () => {
         await screen.findByText("A valódi kiállítás ki van kapcsolva."),
       ).toBeInTheDocument();
       expect(screen.queryByText("Csak olvasható")).toBeNull();
+    });
+
+    /*
+      A MENTÉS IDŐBÉLYEGE A KIÁLLÍTÁS UTÁN (Luca díjbekérője, 2026-11-16). MI PIROSÍT: ha a kiállítás előtti mentés új időbélyegét
+      az állapot nem kapja meg (egy elbukott kiállítás után a "Vázlat mentése" és az előnézet a régit küldi, a szerver
+      "időközben más is mentette" ütközést ad; új bizonylatnál az újrapróba újra LÉTREHOZNA ugyanazzal az azonosítóval); ha az
+      elbukott kiállítási kísérlet után az aktuális időbélyeget nem olvassuk vissza.
+    */
+    it("after a refused issue the next save updates the draft with the timestamp of the save that the issue made", async () => {
+      api.create.mockImplementation(async (_token, body) => ({
+        ...detailFrom(body, body.id),
+        updatedAt: "2026-09-30T10:06:00.000Z",
+      }));
+      api.issue.mockRejectedValue(new Error("A kiállítás elutasítva."));
+      // the read back after the refusal fails: the save's own timestamp stays
+      api.detail.mockReset().mockRejectedValue(new Error("nem olvasható"));
+      await readyPaperInvoice();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Számla kiállítása" }),
+      );
+      fireEvent.click(
+        (await readyDialog()).getByRole("button", { name: "Kiállítom" }),
+      );
+      expect(
+        await screen.findByText("A kiállítás elutasítva."),
+      ).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Vázlat mentése" }));
+      await waitFor(() => expect(api.update).toHaveBeenCalledTimes(1));
+      // the document exists since the issue's own save: no second create
+      expect(api.create).toHaveBeenCalledTimes(1);
+      expect(api.update.mock.calls[0]![2].expectedUpdatedAt).toBe(
+        "2026-09-30T10:06:00.000Z",
+      );
+    });
+
+    it("after a refused issue the document is read back whole: the next save sends the server's content with its timestamp", async () => {
+      api.create.mockImplementation(async (_token, body) => ({
+        ...detailFrom(body, body.id),
+        updatedAt: "2026-09-30T10:06:00.000Z",
+      }));
+      api.issue.mockRejectedValue(new Error("A kiállítás elutasítva."));
+      await readyPaperInvoice();
+      // somebody else saved the document while the issue attempt ran: another note and due date, a newer timestamp
+      api.detail.mockReset().mockImplementationOnce(async (_token, id) => ({
+        ...detailFrom(
+          { ...api.create.mock.calls[0]![1], note: "Más megjegyzés" },
+          id,
+        ),
+        dueDate: "2026-12-24",
+        status: "ISSUE_FAILED",
+        updatedAt: "2026-09-30T10:09:00.000Z",
+      }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Számla kiállítása" }),
+      );
+      fireEvent.click(
+        (await readyDialog()).getByRole("button", { name: "Kiállítom" }),
+      );
+      expect(
+        await screen.findByText("A kiállítás elutasítva."),
+      ).toBeInTheDocument();
+      await waitFor(() => expect(api.detail).toHaveBeenCalledTimes(1));
+      expect(api.detail.mock.calls[0]![1]).toBe(
+        api.create.mock.calls[0]![1].id,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "Vázlat mentése" }));
+      await waitFor(() => expect(api.update).toHaveBeenCalledTimes(1));
+      const sent = api.update.mock.calls[0]![2];
+      // the server's content with the server's timestamp, not the old local content with a newer timestamp
+      expect(sent.expectedUpdatedAt).toBe("2026-09-30T10:09:00.000Z");
+      expect(sent.note).toBe("Más megjegyzés");
+      expect(sent.dueDate).toBe("2026-12-24");
     });
 
     /*
@@ -1134,7 +1446,7 @@ describe("BillingDocumentEditor", () => {
         screen.getByRole("button", { name: "Számla kiállítása" }),
       );
       fireEvent.click(
-        within(await screen.findByRole("dialog")).getByRole("button", {
+        (await readyDialog()).getByRole("button", {
           name: "Kiállítom",
         }),
       );
@@ -1774,6 +2086,70 @@ describe("BillingDocumentEditor", () => {
     ).toBeInTheDocument();
   });
 
+  /*
+    AZ ÜRESEN INDULT VÉGSZÁMLA-VÁZLAT MAGYARÁZATA (kártya 02fc4b7f, barracuda #2639). MI PIROSÍT: ha a kezelő nem látja, MIÉRT üres a vázlat és
+    mi kerüljön rá; ha a "TELJES ellenérték" mondat ilyenkor is áll (ellentmondana a magyarázatnak); ha magyarázat nélküli végszámlán megjelenne
+    a sáv; ha a sáv a számlán nyomtatott megjegyzés mezőbe kerülne.
+  */
+  it("a final draft that started empty for several advance milestones shows the band, and not the 'full price' sentence", async () => {
+    api.detail.mockReset().mockResolvedValue({
+      ...detailFrom(
+        {
+          documentType: "FINAL_INVOICE",
+          invoiceFormat: "ELECTRONIC",
+          currency: "HUF",
+          language: "hu",
+          lines: [],
+          note: null,
+        },
+        "fin-2",
+      ),
+      deductedAdvance: {
+        id: "adv-1",
+        number: "E-ELO-1",
+        grossAmount: "38100.0000",
+      },
+      finalInvoiceNotice: {
+        code: "MULTIPLE_ADVANCES",
+        message:
+          "Az ajánlatnak több előleg-mérföldköve van díjbekérővel. A végszámlára csak a még nem kiszámlázott rész kerüljön.",
+      },
+    });
+    render(<BillingDocumentEditor documentId="fin-2" />);
+    expect(
+      await screen.findByText("Több előleg-mérföldkő az ajánlaton"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/csak a még nem kiszámlázott rész kerüljön/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/A tételek a TELJES ellenérték/)).toBeNull();
+    expect(screen.getByText(/E-ELO-1 előleget/)).toBeInTheDocument();
+    // a magyarázat a felület sávja, NEM a számlán nyomtatott megjegyzés
+    expect(screen.queryByDisplayValue(/több előleg-mérföldkö/)).toBeNull();
+  });
+
+  it("a final draft without the notice keeps the 'full price' sentence and shows no band", async () => {
+    api.detail.mockReset().mockResolvedValue({
+      ...detailFrom(
+        {
+          documentType: "FINAL_INVOICE",
+          invoiceFormat: "ELECTRONIC",
+          currency: "HUF",
+          language: "hu",
+          lines: [],
+        },
+        "fin-3",
+      ),
+      deductedAdvance: { id: "adv-1", number: "E-ELO-1", grossAmount: null },
+      finalInvoiceNotice: null,
+    });
+    render(<BillingDocumentEditor documentId="fin-3" />);
+    expect(
+      await screen.findByText(/A tételek a TELJES ellenérték/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Több előleg-mérföldkő az ajánlaton")).toBeNull();
+  });
+
   it("an invoice's draft carries no final-invoice note", async () => {
     api.detail.mockReset().mockResolvedValue(
       detailFrom(
@@ -1824,5 +2200,65 @@ describe("BillingDocumentEditor", () => {
       expect(screen.queryByText(/Autokasszája/)).toBeNull();
       view.unmount();
     }
+  });
+  /*
+    A VÁZLAT TÖRLÉSE A SZERKESZTŐBEN (kártya 6a75f15c, Balázs kérdése). MI PIROSÍT: ha a gomb egy betöltött vázlaton hiányzik; ha egy
+    kiállított bizonylaton is megjelenne; ha a megerősítés után a kérés nem a betöltött azonosítóval és időbélyeggel menne; ha siker után
+    nem a bizonylatlistára lépne a lap.
+  */
+  it("a loaded draft can be deleted: the confirmed request carries its id and timestamp, then the list opens", async () => {
+    api.detail.mockReset().mockResolvedValue(
+      detailFrom(
+        {
+          documentType: "INVOICE",
+          invoiceFormat: "PAPER",
+          currency: "HUF",
+          language: "hu",
+          lines: [],
+        },
+        "draft-del",
+      ),
+    );
+    api.deleteDraft.mockReset().mockResolvedValue({ deleted: true });
+    navigation.replace.mockReset();
+    render(<BillingDocumentEditor documentId="draft-del" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Vázlat törlése" }),
+    );
+    expect(api.deleteDraft).not.toHaveBeenCalled();
+    const dialog = screen.getByRole("dialog", {
+      name: "Biztos, hogy törlöd ezt a vázlatot?",
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Törlöm" }));
+    await waitFor(() => expect(api.deleteDraft).toHaveBeenCalledTimes(1));
+    expect(api.deleteDraft).toHaveBeenCalledWith(
+      "token-1",
+      "draft-del",
+      "2026-09-30T10:05:00.000Z",
+    );
+    await waitFor(() =>
+      expect(navigation.replace).toHaveBeenCalledWith(BILLING_LIST_PATH),
+    );
+  });
+
+  it("an issued document is never offered the delete button", async () => {
+    api.detail.mockReset().mockResolvedValue({
+      ...detailFrom(
+        {
+          documentType: "INVOICE",
+          invoiceFormat: "PAPER",
+          currency: "HUF",
+          language: "hu",
+          lines: [],
+        },
+        "doc-issued-del",
+      ),
+      status: "ISSUED",
+      documentNumber: "AC-2026-000009",
+      pdf: { available: true },
+    });
+    render(<BillingDocumentEditor documentId="doc-issued-del" />);
+    await screen.findByText("Kiállítva: AC-2026-000009");
+    expect(screen.queryByRole("button", { name: "Vázlat törlése" })).toBeNull();
   });
 });

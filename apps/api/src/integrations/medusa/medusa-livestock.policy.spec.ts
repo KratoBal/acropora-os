@@ -7,6 +7,7 @@ import {
   LIVE_ANIMAL_ROOT_NAMES,
   liveAnimalKindSubtrees,
   liveAnimalSubtreeIds,
+  livestockKindFromRootNames,
 } from "./medusa-livestock.policy.js";
 
 const FA = [
@@ -128,5 +129,29 @@ describe("az élő állat fajtája a kategóriából", () => {
 
   it("ugyanazon fajta két besorolása egy fajta, nem ütközés", () => {
     assert.equal(deriveLivestockKind(["gy1", "gy1a1"], reszfak), "CORAL");
+  });
+});
+
+/*
+  A FAJTA GYOKER-NEVEKBOL (kartya 20b0dd47, a termek reszletes nezete). MI PIROSIT: a harom gyoker nem a sajat fajtajat
+  adja; egy ismeretlen gyoker (Technika) elo allatnak szamit; tobb gyoker alatt allo termek tippelt fajtat kap null
+  helyett; az ures lista nem null.
+*/
+describe("livestockKindFromRootNames", () => {
+  it("a harom gyoker a sajat fajtajat adja", () => {
+    assert.equal(livestockKindFromRootNames(["Korallok"]), "CORAL");
+    assert.equal(livestockKindFromRootNames(["Halak"]), "FISH");
+    assert.equal(livestockKindFromRootNames(["Gerinctelenek"]), "INVERTEBRATE");
+  });
+
+  it("ugyanaz a gyoker tobbszor is egy fajta", () => {
+    assert.equal(livestockKindFromRootNames(["Korallok", "Korallok"]), "CORAL");
+  });
+
+  it("tobb gyoker alatt allo termeknel null (nem tippeles), ismeretlen gyoker nem elo allat", () => {
+    assert.equal(livestockKindFromRootNames(["Korallok", "Halak"]), null);
+    assert.equal(livestockKindFromRootNames(["Technika"]), null);
+    assert.equal(livestockKindFromRootNames(["Technika", "Korallok"]), "CORAL");
+    assert.equal(livestockKindFromRootNames([]), null);
   });
 });

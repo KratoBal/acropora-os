@@ -1,13 +1,35 @@
-import { Transform } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsBoolean,
+  IsInt,
   IsOptional,
   IsString,
+  Matches,
+  Max,
   MaxLength,
+  Min,
   MinLength,
+  ValidateNested,
 } from "class-validator";
+
+/**
+ * EGY TÉTEL DARAB- ÉS ALKALOMSZÁMA A KIÁLLÍTÁSKOR (Luca, 2026-11-13: „pontosan hány db és hány alkalom számot
+ * szeretnék áthúzni a megrendelőbe"). Mindkettő elhagyható: ami hiányzik, az eddigi érték marad (a darabszám a
+ * szerződésé, az alkalom 1).
+ */
+export class IssueMaintenanceOrderLineDto {
+  @IsString() @MinLength(1) @MaxLength(64) itemId!: string;
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{1,12}([.,]\d{1,6})?$/, {
+    message: "A darabszám pozitív szám legyen (legfeljebb 6 tizedessel).",
+  })
+  quantity?: string;
+  @IsOptional() @IsInt() @Min(1) @Max(366) occasions?: number;
+}
 
 /**
  * A KIÁLLÍTÁS BEMENETE: MELYIK SZERZŐDÉS, ÉS MELYIK TÉTELEIBŐL.
@@ -27,6 +49,14 @@ export class IssueMaintenanceOrderDto {
   @ArrayMaxSize(200)
   @IsString({ each: true })
   itemIds!: string[];
+
+  /** tételenkénti darab- és alkalomszám; a hiányzó tétel az eddigi értékekkel megy */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(200)
+  @ValidateNested({ each: true })
+  @Type(() => IssueMaintenanceOrderLineDto)
+  lines?: IssueMaintenanceOrderLineDto[];
 }
 
 export class RevokeMaintenanceOrderDto {
@@ -51,6 +81,21 @@ export class CreateContractJobDto {
   @MaxLength(100)
   @IsOptional()
   clientOperationId?: string | null;
+
+  /** tételenkénti darab- és alkalomszám; a hiányzó tétel az eddigi értékekkel megy (a szerződés darabszáma, 1 alkalom) */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(200)
+  @ValidateNested({ each: true })
+  @Type(() => IssueMaintenanceOrderLineDto)
+  lines?: IssueMaintenanceOrderLineDto[];
+
+  /**
+   * TÉTELENKÉNT KÜLÖN LAP ÉS MUNKALAP (Luca, 2026-11-13: „a tételekből KÜLÖN KÜLÖN dokumentumban"): minden kijelölt
+   * tételből egy önálló karbantartási lap a saját munkalapjával, a tétel teljes kért darab- és alkalomszámával.
+   * Alapból (hamis) az eddigi: egy lap, tételenként egy munkalap.
+   */
+  @IsOptional() @IsBoolean() separate?: boolean;
 }
 
 /**

@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import { categoryHandle } from "../../integrations/medusa/medusa-category-handle.js";
 import {
   categoryHandles,
+  describeCategoryRedirectBackfill,
   normalizeMedusaCategories,
   planCategoryRedirectBackfill,
   type CategoryForRedirect,
@@ -108,6 +109,7 @@ describe("planCategoryRedirectBackfill", () => {
       {
         source: "/aquaforest",
         candidates: ["aquaforest-koralltapok", "aquaforest-szurok"],
+        fallback: "no-rule",
       },
     ]);
   });
@@ -420,5 +422,549 @@ describe("the medusa form: the shop's real handle", () => {
     ]);
     assert.deepEqual(normalizeMedusaCategories(mai), mai);
     assert.throws(() => normalizeMedusaCategories({ nincs: 1 }));
+  });
+});
+
+/**
+ * A `repoint` MÓD (kártya f6cb0a51, 2026-11-15): a kategória-átvétel (adopt) óta a teszt Medusa kategóriái a RÖVID handle-t
+ * viszik, a korábban írt kategória-szabályok célja viszont a régi `név---szülő` alak, és a 301 egy 404-re visz (mérve:
+ * 239 mintacímből 77). A betöltő `keep` módban ír, tehát az eltérő célú meglévő szabályt csak jelentette. MI PIROSIT:
+ * a `repoint` nélkül ír a meglévő szabályra; a `repoint` mellett nem írja át a saját eredetű szabályt; kézi vagy
+ * eredet nélküli (nem betöltött) szabályhoz nyúl; az átírás nem szerepel a jelentésben.
+ */
+describe("repoint: a meglévő UNAS_CATEGORY szabály célja a mai handle-re íródik", () => {
+  const regi = (reason: "UNAS_CATEGORY" | "MANUAL" | undefined) => [
+    {
+      id: "r1",
+      sourcePath: "/sct/111/Eledelek",
+      destinationPath: "/hu/categories/eledelek-termekek",
+      isActive: true,
+      ...(reason ? { reason } : {}),
+    },
+  ];
+  const futtat = (
+    existing: Parameters<typeof planCategoryRedirectBackfill>[2],
+    repoint?: boolean,
+  ) =>
+    planCategoryRedirectBackfill(["/sct/111/Eledelek"], fa, existing, {
+      form: "current",
+      repoint,
+    });
+
+  it("alapból (repoint nélkül) nem ír át: eltérő célú meglévő szabály, jelentés, nincs módosítás", async () => {
+    const { store, report } = await futtat(regi("UNAS_CATEGORY"));
+    assert.equal(report.conflicts.length, 1);
+    assert.equal(report.rewritten.length, 0);
+    assert.equal(store.updated().length, 0);
+  });
+
+  it("repoint mellett a saját eredetű szabály célja a mai handle, és a jelentésben áll", async () => {
+    const { store, report } = await futtat(regi("UNAS_CATEGORY"), true);
+    assert.equal(report.conflicts.length, 0);
+    assert.deepEqual(report.rewritten, [
+      {
+        source: "/sct/111/Eledelek",
+        from: "/hu/categories/eledelek-termekek",
+        to: "/hu/categories/eledelek",
+      },
+    ]);
+    const modositas = store.updated();
+    assert.equal(modositas.length, 1);
+    assert.equal(modositas[0]!.id, "r1");
+    assert.equal(modositas[0]!.data.destinationPath, "/hu/categories/eledelek");
+    assert.equal(store.created().length, 0);
+  });
+
+  it("kézi szabályhoz és eredet nélküli (nem betöltött) szabályhoz sem nyúl: konfliktus marad", async () => {
+    for (const reason of ["MANUAL", undefined] as const) {
+      const { store, report } = await futtat(regi(reason), true);
+      assert.equal(report.conflicts.length, 1, String(reason));
+      assert.equal(report.rewritten.length, 0, String(reason));
+      assert.equal(store.updated().length, 0, String(reason));
+    }
+  });
+
+  it("a már mai célú szabály változatlan, a jelentés szövege kiírja az átírást", async () => {
+    const mar = [
+      {
+        ...regi("UNAS_CATEGORY")[0]!,
+        destinationPath: "/hu/categories/eledelek",
+      },
+    ];
+    const egyezik = await futtat(mar, true);
+    assert.equal(egyezik.report.unchanged, 1);
+    assert.equal(egyezik.report.rewritten.length, 0);
+
+    const { report } = await futtat(regi("UNAS_CATEGORY"), true);
+    const szoveg = describeCategoryRedirectBackfill(report, "current");
+    assert.match(szoveg, /atirt cel \(repoint, sajat eredetu szabaly\): 1/);
+    assert.match(
+      szoveg,
+      /atirva: \/sct\/111\/Eledelek: \/hu\/categories\/eledelek-termekek -> \/hu\/categories\/eledelek/,
+    );
+  });
+});
+
+/*
+  A REGI KEZELO TARTALEKA (card f6cb0a51, a #2591 szarazfutasa utan). A tervezo a regi UNAS utat a kategoria NEVEBOL kepzett
+  szluggal keresi. Ez a kirakat mintaban 18 kategoria-celu utat nem talalt meg (marka-alutak: /aramoltatok/aquamedic, atnevezett nev:
+  aqualight kontra AquaLight) es 3 utat kettenek talalt (/ragasztok). MI PIROSIT: ha egy ilyen ut tovabbra is kimarad; ha a
+  tartalek kitalal egy kategoriat (nem pontosan egyet jelolo regi kezelo, kezi vagy eredet nelkuli szabaly); ha a nev ELSOBBSEGE
+  megszunik (egy nev szerint egyertelmu utat a szabaly celja ne irjon felul).
+*/
+describe("a meglévő szabály régi kezelője dönt, ha a név nem", () => {
+  const fa2: CategoryForRedirect[] = [
+    { id: "k-root", unasId: "1", name: "Termékek", parentId: null },
+    { id: "k-aram", unasId: "2", name: "Áramoltatók", parentId: "k-root" },
+    { id: "k-aql", unasId: "3", name: "AquaLight", parentId: "k-aram" },
+    {
+      id: "k-epit",
+      unasId: "4",
+      name: "Akvárium-építési eszközök",
+      parentId: "k-root",
+    },
+    {
+      id: "k-karb",
+      unasId: "5",
+      name: "Akvárium-karbantartás eszközök",
+      parentId: "k-root",
+    },
+    { id: "k-rag1", unasId: "6", name: "Ragasztók", parentId: "k-epit" },
+    { id: "k-rag2", unasId: "7", name: "Ragasztók", parentId: "k-karb" },
+  ];
+  const szabaly = (
+    sourcePath: string,
+    destinationPath: string,
+    reason: "UNAS_CATEGORY" | "MANUAL" = "UNAS_CATEGORY",
+  ) => ({
+    id: `r-${sourcePath}`,
+    sourcePath,
+    destinationPath,
+    isActive: true,
+    reason,
+  });
+  const futtat = (
+    paths: string[],
+    existing: Parameters<typeof planCategoryRedirectBackfill>[2],
+  ) =>
+    planCategoryRedirectBackfill(paths, fa2, existing, {
+      form: "current",
+      repoint: true,
+    });
+  const handleOf = (id: string) => categoryHandles(fa2, "current").get(id);
+
+  it("az átnevezett név (aqualight kontra AquaLight) a szabály régi kezelőjéből a kategóriára köt, és átíródik", async () => {
+    const { report } = await futtat(
+      ["/aramoltatok/aqualight"],
+      [
+        szabaly(
+          "/aramoltatok/aqualight",
+          "/hu/categories/aqua-light---áramoltatók",
+        ),
+      ],
+    );
+    assert.equal(report.skipped, 0);
+    assert.deepEqual(report.rewritten, [
+      {
+        source: "/aramoltatok/aqualight",
+        from: "/hu/categories/aqua-light---áramoltatók",
+        to: `/hu/categories/${handleOf("k-aql")}`,
+      },
+    ]);
+  });
+
+  it("a kétértelmű nevet (két Ragasztók) a régi kezelő szűkíti egyre; régi kezelő nélkül kétértelmű marad", async () => {
+    const dont = await futtat(
+      ["/ragasztok"],
+      [
+        szabaly(
+          "/ragasztok",
+          "/hu/categories/ragasztók---akvárium-építési-eszközök",
+        ),
+      ],
+    );
+    assert.equal(dont.report.ambiguous.length, 0);
+    assert.equal(
+      dont.report.rewritten[0]?.to,
+      `/hu/categories/${handleOf("k-rag1")}`,
+    );
+
+    const nincs = await futtat(["/ragasztok"], []);
+    assert.equal(nincs.report.ambiguous.length, 1);
+    assert.equal(nincs.report.rewritten.length, 0);
+  });
+
+  it("nem találgat: kézi szabály, ismeretlen régi kezelő és két kategóriát jelölő kezelő mellett az ut kimarad", async () => {
+    const kezi = await futtat(
+      ["/aramoltatok/aqualight"],
+      [
+        szabaly(
+          "/aramoltatok/aqualight",
+          "/hu/categories/aqua-light---áramoltatók",
+          "MANUAL",
+        ),
+      ],
+    );
+    assert.equal(kezi.report.skipped, 1);
+    assert.equal(kezi.report.rewritten.length, 0);
+
+    const ismeretlen = await futtat(
+      ["/aramoltatok/aqualight"],
+      [szabaly("/aramoltatok/aqualight", "/hu/categories/nincs-ilyen---semmi")],
+    );
+    assert.equal(ismeretlen.report.skipped, 1);
+    assert.equal(ismeretlen.report.rewritten.length, 0);
+  });
+
+  it("a név elsőbbséget élvez: egy név szerint egyértelmű utat a szabály célja nem írhat át másik kategóriára", async () => {
+    // /aramoltatok név szerint egy kategória (Áramoltatók); a szabály célja a RAGASZTÓK régi kezelője: a név dönt
+    const { report } = await futtat(
+      ["/aramoltatok"],
+      [
+        szabaly(
+          "/aramoltatok",
+          "/hu/categories/ragasztók---akvárium-építési-eszközök",
+        ),
+      ],
+    );
+    assert.equal(
+      report.rewritten[0]?.to,
+      `/hu/categories/${handleOf("k-aram")}`,
+    );
+  });
+});
+
+/*
+  A KIHAGYOTT UTAK SORONKENTI OKA (card f6cb0a51, a #2595 masodik szarazfutasa utan: a tartalek nem oldott fel semmit, es a riport csak
+  egy szamot adott a 53 kihagyott utrol). MI PIROSIT: ha a riportbol hianyzik az ok (nev, spg/spd lap, statikus lap), a meglevo
+  szabaly (cel, eredet, aktiv-e), vagy a tartalek itelete (nincs szabaly, inaktiv, mas eredet, nem kategoria-cel, nincs talalat);
+  ha a kihagyott ut kulonbozo okai ugyanazt az itelet kapnak; ha a szoveges riport nem listazza a sorokat.
+*/
+describe("a kihagyott utak soronkénti oka", () => {
+  const fa3: CategoryForRedirect[] = [
+    { id: "k-root", unasId: "1", name: "Termékek", parentId: null },
+    { id: "k-aram", unasId: "2", name: "Áramoltatók", parentId: "k-root" },
+  ];
+  const szabaly = (
+    sourcePath: string,
+    destinationPath: string,
+    over: { reason?: "UNAS_CATEGORY" | "MANUAL"; isActive?: boolean } = {},
+  ) => ({
+    id: `r-${sourcePath}`,
+    sourcePath,
+    destinationPath,
+    isActive: over.isActive ?? true,
+    reason: over.reason ?? ("UNAS_CATEGORY" as const),
+  });
+  const futtat = (
+    paths: string[],
+    existing: Parameters<typeof planCategoryRedirectBackfill>[2],
+  ) =>
+    planCategoryRedirectBackfill(paths, fa3, existing, {
+      form: "current",
+      repoint: true,
+    });
+  const detail = async (
+    source: string,
+    existing: Parameters<typeof planCategoryRedirectBackfill>[2],
+  ) => {
+    const { report } = await futtat([source], existing);
+    assert.equal(report.skipped, 1, source);
+    assert.equal(report.skippedDetails.length, 1, source);
+    return report.skippedDetails[0]!;
+  };
+
+  it("az ok: spg/spd lap, statikus lap, és a név, amely nem talált kategóriát", async () => {
+    assert.equal((await detail("/spg/1/blog", [])).why, "spg-spd-page");
+    assert.equal((await detail("/shop_help.php", [])).why, "static-page");
+    assert.equal((await detail("/ismeretlen-marka", [])).why, "no-name-match");
+  });
+
+  it("a tartalékot csak a névvel nem talált út kérdezi: spg/spd és statikus lapnál nem megkérdezett", async () => {
+    // a szabály létezik és érvényes, mégsem kérdezzük: az út a névtől függetlenül kimaradt
+    const rule = szabaly("/spg/1/blog", "/hu/categories/valami---szulo");
+    const spg = await detail("/spg/1/blog", [rule]);
+    assert.equal(spg.fallback, "not-consulted");
+    assert.equal(spg.rule?.destination, "/hu/categories/valami---szulo");
+    const php = await detail("/shop_help.php", []);
+    assert.equal(php.fallback, "not-consulted");
+  });
+
+  it("szabály nélkül: nincs szabály, és a tartalék ezt mondja", async () => {
+    const d = await detail("/ismeretlen-marka", []);
+    assert.equal(d.rule, undefined);
+    assert.equal(d.fallback, "no-rule");
+  });
+
+  it("a tartalék ítélete: inaktív, más eredet, nem kategória-cél, nincs találat", async () => {
+    const dest = "/hu/categories/nincs-ilyen---semmi";
+    const cases: [string, ReturnType<typeof szabaly>, string][] = [
+      ["/a", szabaly("/a", dest, { isActive: false }), "rule-inactive"],
+      ["/b", szabaly("/b", dest, { reason: "MANUAL" }), "rule-reason-MANUAL"],
+      [
+        "/c",
+        szabaly("/c", "/hu/kategoria/valami"),
+        "destination-not-category-path",
+      ],
+      ["/d", szabaly("/d", dest), "legacy-no-match"],
+    ];
+    for (const [source, rule, verdict] of cases) {
+      const d = await detail(source, [rule]);
+      assert.equal(d.fallback, verdict, source);
+      assert.deepEqual(d.rule, {
+        destination: rule.destinationPath,
+        reason: rule.reason,
+        isActive: rule.isActive,
+      });
+    }
+  });
+
+  it("a kétértelmű úton is áll az ítélet, és a szöveges riport soronként listázza a kihagyottat", async () => {
+    const fa4: CategoryForRedirect[] = [
+      { id: "k-root", unasId: "1", name: "Termékek", parentId: null },
+      { id: "k-a", unasId: "2", name: "A", parentId: "k-root" },
+      { id: "k-b", unasId: "3", name: "B", parentId: "k-root" },
+      { id: "k-r1", unasId: "4", name: "Ragasztók", parentId: "k-a" },
+      { id: "k-r2", unasId: "5", name: "Ragasztók", parentId: "k-b" },
+    ];
+    const { report } = await planCategoryRedirectBackfill(
+      ["/ragasztok", "/ismeretlen-marka"],
+      fa4,
+      [],
+      { form: "current", repoint: true },
+    );
+    assert.equal(report.ambiguous.length, 1);
+    assert.equal(report.ambiguous[0]!.fallback, "no-rule");
+    const szoveg = describeCategoryRedirectBackfill(report, "current");
+    assert.match(
+      szoveg,
+      /kihagyva: \/ismeretlen-marka \[no-name-match\] szabaly: nincs; tartalek: no-rule/,
+    );
+    assert.match(szoveg, /ketertelmu: \/ragasztok .*\(tartalek: no-rule\)/);
+  });
+});
+
+/*
+  A SZABALY ERETEDE A RIPORTBAN (card f6cb0a51, a #2597 harmadik szarazfutasa utan: a 21 kategoria-celu ut meglevo szabalya MANUAL, es a
+  riport nem mondta meg, ki es mikor hozta letre). MI PIROSIT: ha a keszito es a letrehozas ideje nem kerul a kihagyott es a ketertelmu
+  utak szabalyahoz; ha a Date nem ISO szovegkent jon vissza (a valasz JSON, a hash a szoveg); ha az olvaso altal be nem toltott mezo
+  `undefined`-kent szivarog a riportba; ha a szoveges riport nem irja ki a keszitot es az idot.
+*/
+describe("a meglévő szabály készítője és ideje a riportban", () => {
+  const fa5: CategoryForRedirect[] = [
+    { id: "k-root", unasId: "1", name: "Termékek", parentId: null },
+    { id: "k-a", unasId: "2", name: "A", parentId: "k-root" },
+    { id: "k-b", unasId: "3", name: "B", parentId: "k-root" },
+    { id: "k-r1", unasId: "4", name: "Ragasztók", parentId: "k-a" },
+    { id: "k-r2", unasId: "5", name: "Ragasztók", parentId: "k-b" },
+  ];
+  const at = new Date("2026-10-02T09:15:30.000Z");
+
+  it("a kihagyott és a kétértelmű út szabálya hordozza a készítőt és az időt (Date ISO szövegként)", async () => {
+    const { report } = await planCategoryRedirectBackfill(
+      ["/ismeretlen-marka", "/ragasztok"],
+      fa5,
+      [
+        {
+          id: "r1",
+          sourcePath: "/ismeretlen-marka",
+          destinationPath: "/hu/categories/x---y",
+          isActive: true,
+          reason: "MANUAL",
+          createdAt: at,
+          createdById: "u-import",
+        },
+        {
+          id: "r2",
+          sourcePath: "/ragasztok",
+          destinationPath: "/hu/categories/ragasztók---a",
+          isActive: true,
+          reason: "MANUAL",
+          createdAt: "2026-10-02T09:15:31.000Z",
+          createdById: null,
+        },
+      ],
+      { form: "current", repoint: true },
+    );
+    assert.deepEqual(report.skippedDetails[0]!.rule, {
+      destination: "/hu/categories/x---y",
+      reason: "MANUAL",
+      isActive: true,
+      createdAt: "2026-10-02T09:15:30.000Z",
+      createdById: "u-import",
+    });
+    assert.equal(report.ambiguous[0]!.rule?.createdById, null);
+    assert.equal(
+      report.ambiguous[0]!.rule?.createdAt,
+      "2026-10-02T09:15:31.000Z",
+    );
+    const szoveg = describeCategoryRedirectBackfill(report, "current");
+    assert.match(
+      szoveg,
+      /kihagyva: \/ismeretlen-marka .*\(MANUAL, keszito: u-import, letrehozva: 2026-10-02T09:15:30.000Z\)/,
+    );
+    assert.match(szoveg, /ketertelmu: \/ragasztok .*keszito: nincs/);
+  });
+
+  it("betöltetlen mező nem szivárog: az olvasó nélküli szabály nem kap createdAt és createdById kulcsot", async () => {
+    const { report } = await planCategoryRedirectBackfill(
+      ["/ismeretlen-marka"],
+      fa5,
+      [
+        {
+          id: "r1",
+          sourcePath: "/ismeretlen-marka",
+          destinationPath: "/hu/categories/x---y",
+          isActive: true,
+          reason: "MANUAL",
+        },
+      ],
+      { form: "current", repoint: true },
+    );
+    const rule = report.skippedDetails[0]!.rule!;
+    assert.equal("createdAt" in rule, false);
+    assert.equal("createdById" in rule, false);
+  });
+});
+
+/*
+  A KIFEJEZETT ENGEDELYLISTA A MANUAL SZABALYOKRA (card f6cb0a51, acrobot dontese 2026-11-15: a 21 MANUAL szabaly a flotta egyszeri
+  importja, nem Balazs kezi szabalya). MI PIROSIT: ha a lista nelkul a MANUAL szabaly atirodna (a kizaras nem all); ha a lista
+  `repoint` nelkul hatna; ha a listan NEM szereplo MANUAL szabaly is atirodna; ha a listan szereplo, de MANUAL-tol eltero eredetu szabaly
+  (UNAS_PRODUCT) atirodna; ha az atiras a keszitot nullazna; ha a lista egy elemere nem irt at semmit, es a riport ezt elhallgatja; ha a nev
+  elsobbsege megszunik.
+*/
+describe("a MANUAL szabály kifejezett engedélylistája", () => {
+  const fa6: CategoryForRedirect[] = [
+    { id: "k-root", unasId: "1", name: "Termékek", parentId: null },
+    { id: "k-aram", unasId: "2", name: "Áramoltatók", parentId: "k-root" },
+    { id: "k-aql", unasId: "3", name: "AquaLight", parentId: "k-aram" },
+    { id: "k-eled", unasId: "4", name: "Eledelek", parentId: "k-root" },
+    { id: "k-hal", unasId: "5", name: "Haltápok", parentId: "k-eled" },
+  ];
+  const rule = (
+    sourcePath: string,
+    destinationPath: string,
+    reason: "MANUAL" | "UNAS_CATEGORY" | "UNAS_PRODUCT" = "MANUAL",
+  ) => ({
+    id: `r-${sourcePath}`,
+    sourcePath,
+    destinationPath,
+    isActive: true,
+    reason,
+    createdAt: "2026-10-30T09:37:00.000Z",
+    createdById: "u-flotta",
+  });
+  const existing = [
+    rule("/aramoltatok/aqualight", "/hu/categories/aqua-light---áramoltatók"),
+    rule("/haltapok", "/hu/categories/haltápok---eledelek"),
+  ];
+  const run = (
+    paths: string[],
+    rules: typeof existing,
+    options: { repoint?: boolean; repointManual?: string[] } = {},
+  ) =>
+    planCategoryRedirectBackfill(paths, fa6, rules, {
+      form: "current",
+      ...options,
+    });
+  const handleOf = (id: string) => categoryHandles(fa6, "current").get(id);
+
+  it("lista nélkül a MANUAL szabály nem íródik át (a kizárás áll), és a jelentés megmondja, miért", async () => {
+    const { store, report } = await run(["/aramoltatok/aqualight"], existing, {
+      repoint: true,
+    });
+    assert.equal(store.updated().length, 0);
+    assert.equal(report.rewritten.length, 0);
+    assert.equal(report.skippedDetails[0]!.fallback, "rule-reason-MANUAL");
+  });
+
+  it("a listán szereplő MANUAL szabály célja átíródik, a készítője megmarad, és a jelentés jelöli", async () => {
+    const { store, report } = await run(["/aramoltatok/aqualight"], existing, {
+      repoint: true,
+      repointManual: ["/aramoltatok/aqualight"],
+    });
+    assert.deepEqual(report.rewritten, [
+      {
+        source: "/aramoltatok/aqualight",
+        from: "/hu/categories/aqua-light---áramoltatók",
+        to: `/hu/categories/${handleOf("k-aql")}`,
+        via: "manual-allowlist",
+      },
+    ]);
+    const modositas = store.updated();
+    assert.equal(modositas.length, 1);
+    assert.equal(modositas[0]!.data.createdById, "u-flotta");
+    assert.equal(modositas[0]!.data.reason, "UNAS_CATEGORY");
+    assert.deepEqual(report.repointManualUnmatched, []);
+    assert.match(
+      describeCategoryRedirectBackfill(report, "current"),
+      /atirva: \/aramoltatok\/aqualight: .* \(MANUAL, kifejezett engedelylista\)/,
+    );
+  });
+
+  it("a listán KÍVÜLI MANUAL szabály érintetlen, és a lista elírt eleme a jelentésben marad (nem néma)", async () => {
+    const { store, report } = await run(
+      ["/aramoltatok/aqualight", "/haltapok"],
+      existing,
+      {
+        repoint: true,
+        repointManual: ["/aramoltatok/aqualight", "/aramoltatok/elirt"],
+      },
+    );
+    assert.deepEqual(
+      report.rewritten.map((r) => r.source),
+      ["/aramoltatok/aqualight"],
+    );
+    assert.equal(store.updated().length, 1);
+    assert.deepEqual(report.repointManualUnmatched, ["/aramoltatok/elirt"]);
+    // a /haltapok név szerint feloldódik (Haltápok), a szabálya MANUAL és nincs a listán: marad
+    assert.equal(
+      report.conflicts.some((c) => c.source === "/haltapok") ||
+        report.skippedDetails.some((d) => d.source === "/haltapok"),
+      true,
+    );
+  });
+
+  it("az érvénytelen lista-elem (üres, szóközös) nem tűnik el: a jelentés változatlan alakban kiírja", async () => {
+    const { report } = await run(["/aramoltatok/aqualight"], existing, {
+      repoint: true,
+      repointManual: ["/aramoltatok/aqualight", "", "/elgepelt ut"],
+    });
+    assert.deepEqual(
+      report.rewritten.map((r) => r.source),
+      ["/aramoltatok/aqualight"],
+    );
+    assert.deepEqual(report.repointManualUnmatched, [
+      '(ervenytelen ut) ""',
+      '(ervenytelen ut) "/elgepelt ut"',
+    ]);
+    assert.match(
+      describeCategoryRedirectBackfill(report, "current"),
+      /engedelylista, nem irt at semmit: \(ervenytelen ut\) "\/elgepelt ut"/,
+    );
+  });
+
+  it("repoint nélkül a lista nem hat, és a MANUAL-tól eltérő eredetű szabályra a lista sem", async () => {
+    const nemRepoint = await run(["/aramoltatok/aqualight"], existing, {
+      repointManual: ["/aramoltatok/aqualight"],
+    });
+    assert.equal(nemRepoint.store.updated().length, 0);
+    assert.equal(nemRepoint.report.rewritten.length, 0);
+    const mas = await run(
+      ["/aramoltatok/aqualight"],
+      [
+        rule(
+          "/aramoltatok/aqualight",
+          "/hu/categories/aqua-light---áramoltatók",
+          "UNAS_PRODUCT",
+        ),
+      ],
+      { repoint: true, repointManual: ["/aramoltatok/aqualight"] },
+    );
+    assert.equal(mas.store.updated().length, 0);
+    assert.deepEqual(mas.report.repointManualUnmatched, [
+      "/aramoltatok/aqualight",
+    ]);
   });
 });

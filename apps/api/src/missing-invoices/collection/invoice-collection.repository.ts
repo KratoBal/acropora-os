@@ -80,6 +80,8 @@ export interface CollectedDocumentInput {
    * az újraolvasás később még összekötheti.
    */
   unassigned?: boolean;
+  /** Az UNMATCHED sor oka (`INVOICE_COLLECTION_REASONS`), a `unassigned` tároláskor a sorra kerül. */
+  reason?: string;
 }
 
 /** A dokumentum állapota, amíg a gyűjtő egy ember döntésére hagyja (`IncomingSupplierDocument.reviewState`). */
@@ -445,6 +447,7 @@ export class InvoiceCollectionRepository {
     fileName: string,
     verdict: Exclude<InvoiceCollectionVerdict, "STORED" | "SUGGESTED">,
     sha256: string | null,
+    reason: string | null = null,
   ): Promise<void> {
     const key = { source, externalId, fileName };
     const existing = await this.database.invoiceCollectionItem.findUnique({
@@ -459,8 +462,8 @@ export class InvoiceCollectionRepository {
       where: {
         source_externalId_fileName: { source, externalId, fileName },
       },
-      create: { source, externalId, fileName, verdict, sha256 },
-      update: { verdict, sha256 },
+      create: { source, externalId, fileName, verdict, sha256, reason },
+      update: { verdict, sha256, reason },
     });
   }
 
@@ -540,11 +543,13 @@ export class InvoiceCollectionRepository {
           verdict,
           sha256: input.sha256,
           documentId: document.id,
+          reason: verdict === "UNMATCHED" ? (input.reason ?? null) : null,
         },
         update: {
           verdict,
           sha256: input.sha256,
           documentId: document.id,
+          reason: verdict === "UNMATCHED" ? (input.reason ?? null) : null,
         },
       });
       return document.id;
@@ -564,6 +569,32 @@ export class InvoiceCollectionRepository {
       orderBy: { createdAt: "asc" },
       select: { id: true, reviewState: true },
     });
+  }
+
+  /**
+   * A MÉG NEM PÁROSODOTT DOKUMENTUM OLVASATA, FRISSEN (újraolvasás, kártya f7ece26b): amit az újraolvasás most sem
+   * köt, az `UNASSIGNED` marad, de a tárolt olvasata a MAI olvasóé lesz. Enélkül egy javított olvasó (a Hetzner
+   * „Total” sora, #2486) a már tárolt példányon soha nem hatna: a bruttó üres maradna, és a párosító nem vethetné
+   * össze a terheléssel. FELTÉTELES ÍRÁS, mint az előléptetés: csak `UNASSIGNED` dokumentumon hat, egy közben
+   * meghozott emberi döntést nem ír felül.
+   */
+  async refreshUnassignedReading(
+    id: string,
+    textReading: object,
+    payee: string,
+  ): Promise<void> {
+    await this.database.$transaction([
+      this.database.incomingSupplierDocument.updateMany({
+        where: { id, reviewState: UNASSIGNED },
+        data: { textReading: textReading as Prisma.InputJsonValue },
+      }),
+      // A KÉZI VEVŐ-JELÖLÉST NEM ÍRJA FELÜL (barracuda, #2489): a `payeeCheck`-be a Hiányzó számlák lapja is ír
+      // (`markPayee`, jelölővel és idővel); a mai olvasás csak ott állítja, ahol ember nem jelölt
+      this.database.incomingSupplierDocument.updateMany({
+        where: { id, reviewState: UNASSIGNED, payeeMarkedAt: null },
+        data: { payeeCheck: payee },
+      }),
+    ]);
   }
 
   /**
@@ -612,7 +643,10 @@ export class InvoiceCollectionRepository {
         });
       await transaction.invoiceCollectionItem.updateMany({
         where: { documentId: id },
-        data: { verdict: input.suggestion ? "SUGGESTED" : "STORED" },
+        data: {
+          verdict: input.suggestion ? "SUGGESTED" : "STORED",
+          reason: null,
+        },
       });
       return id;
     });

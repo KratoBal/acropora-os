@@ -21,6 +21,7 @@ export const COPY_BLOCK_LABEL: Record<ProductCopyBlock, string> = {
   body: "Leírás",
   seoTitle: "SEO cím",
   metaDescription: "Meta leírás",
+  usage: "Használati útmutató",
 };
 
 export const MANUAL_SOURCE_LABEL: Record<

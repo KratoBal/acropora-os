@@ -71,6 +71,17 @@ interface Par {
 
 const PAROK: readonly Par[] = [
   {
+    // the employee's own advance mark on the phone (os-jelenleti-iv, S3b): one field
+    mit: "saját jelenléti jelölés",
+    mobil: "../mobile/src/lib/api/attendance.ts",
+    mobilNev: "MarkMyAttendanceDayInput",
+    dto: "src/attendance/dto/attendance.dto.ts",
+    dtoNev: "SaveOwnAttendanceDayDto",
+    kontroll: ["kind"],
+    mobilMinimum: 1,
+    dtoMinimum: 1,
+  },
+  {
     mit: "hibajegy felvitele",
     mobil: "../mobile/src/lib/service-jobs/types.ts",
     mobilNev: "CreateServiceJobInput",
@@ -317,6 +328,19 @@ const PAROK: readonly Par[] = [
     mobilMinimum: 1,
     dtoMinimum: 1,
   },
+  {
+    /**
+     * AZ ÜZEMELTETÉSI NAPLÓ BEJEGYZÉSÉNEK RÖGZÍTÉSE (2026-11-13, task os-uzemeltetesi-naplo, S2c). A törzs NEVESÍTETT típussal megy
+     * (`CreateOperationsEntryInput`), tehát PÁR lett belőle itt. A telefon egy külön, import nélküli fájlban tartja a típust
+     * (`lib/operations-log/types.ts`), hogy a tiszta logika a hálózati kliens nélkül fordulhasson.
+     */
+    mit: "üzemeltetési napló bejegyzés rögzítése",
+    mobil: "../mobile/src/lib/operations-log/types.ts",
+    mobilNev: "CreateOperationsEntryInput",
+    dto: "src/operations-log/dto/operations-log-entry.dto.ts",
+    dtoNev: "CreateOperationsLogEntryDto",
+    kontroll: ["templateId", "templateFieldKeys"],
+  },
   /**
    * AZ ÜZENETEK A TELEFONON (2026-10-05, kártya 51d7aba0): a küldés, az új
    * beszélgetés és az olvasottnak jelölés. Mindhárom nevesített típussal megy.
@@ -543,7 +567,10 @@ const PAROK: readonly Par[] = [
 // 2026-10-05: 32 -> 34, az Üzenetek 4. fázisa: kapcsolás és tag felvétele, mindkettő párral
 // 2026-10-06: 34 -> 35, a Cápasuli piszkozat elfogadása a telefonon (kártya 49210cdd), párral;
 // az elvetésnek nincs törzse
-const IRAS_HIVASOK_MA = 35;
+// 2026-11-13: 35 -> 36, a saját jelenléti jelölés a telefonon (os-jelenleti-iv, S3b), párral; a törlésnek nincs törzse
+// 2026-11-13: 36 -> 37, az üzemeltetési napló bejegyzés rögzítése a telefonon (task os-uzemeltetesi-naplo, S2c), párral;
+// a kép feltöltése multipart (FormData), nem JSON-törzs, ide nem számít
+const IRAS_HIVASOK_MA = 37;
 
 describe("a mobil kérés-törzsei a szerver DTO-ihoz mérve", () => {
   it(`ma pontosan ${IRAS_HIVASOK_MA} JSON-törzset küld a telefon`, () => {

@@ -52,7 +52,7 @@ describe("megerősítő kérdések", () => {
     // Nulla találat itt zöld lenne, és azt állítaná, hogy minden rendben.
     expect(files.length).toBeGreaterThan(50);
     expect(files).toContain(
-      "src/components/service-assets/asset-detail-page.tsx",
+      "src/components/service-assets/pilot/pilot-asset-detail-page.tsx",
     );
   });
 

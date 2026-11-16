@@ -657,6 +657,40 @@ describe("a számla-begyűjtés tárolása", { skip: gate.mode === "skip" }, () 
     };
     assert.equal(await repository.promote(docA, tiedInput), docA);
     assert.equal(await repository.promote(docA, tiedInput), null);
+
+    // a friss olvasat (kártya f7ece26b) a még UNASSIGNED példányra ír, az előléptetettre nem
+    const readingOf = async (id: string) =>
+      await prisma.incomingSupplierDocument.findUniqueOrThrow({
+        where: { id },
+        select: { textReading: true, payeeCheck: true },
+      });
+    const fresh = { invoiceNumber: "B-1", gross: "7.04", currency: "EUR" };
+    await repository.refreshUnassignedReading(docB, fresh, "COMPANY");
+    assert.deepEqual(await readingOf(docB), {
+      textReading: fresh,
+      payeeCheck: "COMPANY",
+    });
+    // a kézi vevő-jelölés (markPayee) megmarad: az olvasat frissül, a jelölt vevő nem (barracuda, #2489)
+    const markedAt = new Date("2026-11-12T20:00:00Z");
+    await prisma.incomingSupplierDocument.update({
+      where: { id: docC },
+      data: { payeeCheck: "COMPANY", payeeMarkedAt: markedAt },
+    });
+    await repository.refreshUnassignedReading(docC, fresh, "NOT_COMPANY");
+    assert.deepEqual(
+      await prisma.incomingSupplierDocument.findUniqueOrThrow({
+        where: { id: docC },
+        select: { textReading: true, payeeCheck: true, payeeMarkedAt: true },
+      }),
+      { textReading: fresh, payeeCheck: "COMPANY", payeeMarkedAt: markedAt },
+    );
+    const promotedReading = await readingOf(docA);
+    await repository.refreshUnassignedReading(
+      docA,
+      { invoiceNumber: "NEM-IRHATO", gross: "1", currency: "EUR" },
+      "NOT_COMPANY",
+    );
+    assert.deepEqual(await readingOf(docA), promotedReading);
     assert.equal((await candidates()).includes(docA), true);
     assert.deepEqual(await item("collect-it-un-a"), {
       verdict: "STORED",
@@ -698,6 +732,86 @@ describe("a számla-begyűjtés tárolása", { skip: gate.mode === "skip" }, () 
     assert.deepEqual(await item("collect-it-un-c"), {
       verdict: "NOT_INVOICE",
       documentId: null,
+    });
+  });
+
+  /*
+    AZ UNMATCHED OKA AZ ADATBÁZISBAN (task os-hianyzo-szamlak-unpaid). MI PIROSÍT: az ok nem íródik a sorra; az újraolvasás nem írja
+    felül az új okkal; a tárolt (STORED) sor megtartja a régi, már nem igaz okot; az UNASSIGNED tárolás nem viszi a sorra az okot;
+    az előléptetés (`promote`) nem törli.
+  */
+  it("keeps the reason of an UNMATCHED row, rewrites it on a re-read, and clears it once the file is stored", async () => {
+    const row = (externalId: string, fileName: string) =>
+      prisma.invoiceCollectionItem.findUniqueOrThrow({
+        where: {
+          source_externalId_fileName: {
+            source: "INFO_MAIL",
+            externalId,
+            fileName,
+          },
+        },
+        select: { verdict: true, reason: true },
+      });
+    await repository.record(
+      "INFO_MAIL",
+      "collect-it-why1",
+      "W.pdf",
+      "UNMATCHED",
+      "collect-it-why-sha",
+      "NUMBER_NOT_KNOWN",
+    );
+    assert.deepEqual(await row("collect-it-why1", "W.pdf"), {
+      verdict: "UNMATCHED",
+      reason: "NUMBER_NOT_KNOWN",
+    });
+    await repository.record(
+      "INFO_MAIL",
+      "collect-it-why1",
+      "W.pdf",
+      "UNMATCHED",
+      "collect-it-why-sha",
+      "NUMBER_NOT_CORROBORATED",
+    );
+    assert.equal(
+      (await row("collect-it-why1", "W.pdf")).reason,
+      "NUMBER_NOT_CORROBORATED",
+    );
+    await repository.store(
+      doc("collect-it-why1", "W.pdf", "collect-it-why-sha"),
+    );
+    assert.deepEqual(await row("collect-it-why1", "W.pdf"), {
+      verdict: "STORED",
+      reason: null,
+    });
+
+    const unassigned = {
+      source: "INFO_MAIL" as const,
+      externalId: "collect-it-why2",
+      fileName: "W2.pdf",
+      sender: "invoice@szallito.example",
+      subject: "Ihre Rechnung",
+      receivedAt: new Date("2026-08-06T10:00:00Z"),
+      content: Buffer.from("%PDF-1.4 collect-it-why2"),
+      sha256: "collect-it-why2-sha",
+      read: false,
+      kind: "INVOICE" as const,
+      importResult: null,
+      textReading: { invoiceNumber: "RE67456", gross: "1063.00" },
+      payee: "NOT_COMPANY",
+    };
+    const documentId = await repository.store({
+      ...unassigned,
+      unassigned: true,
+      reason: "NO_NUMBER_READ",
+    });
+    assert.deepEqual(await row("collect-it-why2", "W2.pdf"), {
+      verdict: "UNMATCHED",
+      reason: "NO_NUMBER_READ",
+    });
+    assert.equal(await repository.promote(documentId, unassigned), documentId);
+    assert.deepEqual(await row("collect-it-why2", "W2.pdf"), {
+      verdict: "STORED",
+      reason: null,
     });
   });
 });

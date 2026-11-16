@@ -1,5 +1,8 @@
 import { Module } from "@nestjs/common";
 
+import { ServiceTokenAdminController } from "./service-token-admin.controller.js";
+import { ServiceTokenAdminRepository } from "./service-token-admin.repository.js";
+import { ServiceTokenAdminService } from "./service-token-admin.service.js";
 import { ServiceTokenGuard } from "./service-token.guard.js";
 import { ServiceTokenRepository } from "./service-token.repository.js";
 import { ServiceWorkController } from "./service-work.controller.js";
@@ -13,8 +16,15 @@ import { TasksRepository } from "./tasks.repository.js";
 import { TasksService } from "./tasks.service.js";
 
 @Module({
-  controllers: [TaskIngestController, TasksController, ServiceWorkController],
+  controllers: [
+    TaskIngestController,
+    TasksController,
+    ServiceWorkController,
+    ServiceTokenAdminController,
+  ],
   providers: [
+    ServiceTokenAdminRepository,
+    ServiceTokenAdminService,
     ServiceTokenGuard,
     ServiceTokenRepository,
     ServiceWorkRepository,

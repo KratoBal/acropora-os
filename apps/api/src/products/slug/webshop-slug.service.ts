@@ -75,7 +75,8 @@ const eloOldal = (slug: string) => async (redirects: RedirectStore) => {
 /**
  * A TERMÉK WEBSHOP-SLUGJA (SEO P0 PR 5; D1–D3, acrobot 27748).
  *
- * D2: a slug ELSŐ KÉRÉSKOR keletkezik (a backfill és a PR 7 vetítése hívja), nem a
+ * D2: a slug ELSŐ KÉRÉSKOR keletkezik (a backfill és a PR 7 vetítése hívja; a vetítésbe
+ * 2026-11-09-én került be, seo-d2-slug-bekotes, addig csak a backfill hívta), nem a
  * négy létrehozó úton; egyszer keletkezik, és a név változása nem változtatja.
  * D3: a forrás a név, a terv algoritmusával.
  */

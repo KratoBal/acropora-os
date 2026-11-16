@@ -6,9 +6,15 @@ import { Prisma } from "@acropora/database";
 import { candidateDocument } from "../testing/billing-documents.fixture.js";
 import type { CandidateDocument } from "./missing-invoice-matching.js";
 import {
+  CANDIDATE_ORIGINS,
+  loaderExclusion,
+  survivingOtherPaths,
   mergedSupplierTaxNumber,
   mergeSameInvoice,
   normalizeAccount,
+  queryExclusion,
+  notBookableKeyOf,
+  splitNotBookable,
   withoutNotBookable,
 } from "./missing-invoices.repository.js";
 
@@ -536,5 +542,252 @@ describe("mergedSupplierTaxNumber", () => {
     );
     assert.equal(merged.length, 1);
     assert.equal(merged[0]!.supplierTaxNumber, null);
+  });
+});
+
+/*
+  A BETÖLTŐ KIZÁRÁSAI OKKAL (niceshops, 2026-11-12). MI PIROSÍT: ha egy kizárás kód nélkül marad (a ciklus és a vizsgálat
+  szétcsúszik); ha az eredeti sorrend megváltozik (a begyűjtött másolat a dátum-ellenőrzés ELŐTT esik ki); ha egy átmenő
+  dokumentum kizárást kap; ha a `where` magyarázata mást mond, mint a `where`.
+*/
+describe("loaderExclusion: why a stored document is not a candidate", () => {
+  const base = {
+    origin: "COLLECTED_MAIL",
+    sha256: "aa",
+    fileName: "Rechnung.pdf",
+    linkedToUnpostedPurchase: false,
+    linked: false,
+    upload: false,
+    otherContent: new Map<string, readonly string[]>(),
+    date: "2026-11-05" as string | null,
+    hasResult: false,
+    hasReading: true,
+    from: "2025-09-01",
+    to: "2026-11-15",
+  };
+  const code = (patch: Partial<typeof base>) =>
+    loaderExclusion({ ...base, ...patch })?.code ?? null;
+
+  it("lets an ordinary document through", () => {
+    assert.equal(code({}), null);
+  });
+
+  it("names each exclusion", () => {
+    assert.equal(
+      code({ origin: "UPLOAD", upload: false, linkedToUnpostedPurchase: true }),
+      "UPLOAD_OF_UNPOSTED_PURCHASE",
+    );
+    assert.equal(
+      code({ otherContent: new Map([["aa", ["up-1"]]]) }),
+      "COLLECTED_COPY_OF_OTHER_PATH",
+    );
+    assert.equal(code({ date: null }), "NO_DATE");
+    assert.equal(code({ hasReading: false }), "NO_READING");
+    assert.equal(code({ date: "2024-01-01" }), "OUT_OF_WINDOW");
+    assert.equal(code({ date: "2026-12-01" }), "OUT_OF_WINDOW");
+    assert.equal(
+      code({ fileName: "Fizetési emlékeztető.pdf" }),
+      "REMINDER_FILE_NAME",
+    );
+  });
+
+  it("a collected copy is judged before the date: a copy of another path with no date is the copy, not NO_DATE", () => {
+    assert.equal(
+      code({ otherContent: new Map([["aa", ["up-1"]]]), date: null }),
+      "COLLECTED_COPY_OF_OTHER_PATH",
+    );
+  });
+
+  it("a mailbox document (not collected) with the same hash is not a copy; an upload is never windowed or file-name filtered", () => {
+    assert.equal(
+      code({ origin: "MAILBOX", otherContent: new Map([["aa", ["up-1"]]]) }),
+      null,
+    );
+    assert.equal(
+      code({
+        origin: "UPLOAD",
+        upload: true,
+        date: "2024-01-01",
+        hasReading: false,
+      }),
+      null,
+    );
+  });
+});
+
+describe("queryExclusion: why the query never loaded a document", () => {
+  it("a document waiting for a person is named with its state", () => {
+    assert.deepEqual(
+      queryExclusion({
+        reviewState: "SUGGESTED",
+        status: "READ",
+        kind: "INVOICE",
+        origin: "COLLECTED_MAIL",
+      }),
+      { code: "AWAITING_REVIEW", detail: "reviewState=SUGGESTED" },
+    );
+  });
+
+  it("a document that is neither read nor of a candidate origin is not a candidate kind", () => {
+    assert.equal(
+      queryExclusion({
+        reviewState: null,
+        status: "FAILED",
+        kind: null,
+        origin: "MAILBOX",
+      })?.code,
+      "NOT_A_CANDIDATE_KIND",
+    );
+  });
+
+  it("agrees with the query: a read, kinded mailbox document and every candidate origin pass", () => {
+    assert.equal(
+      queryExclusion({
+        reviewState: null,
+        status: "LATE_CORRECTION",
+        kind: "INVOICE",
+        origin: "MAILBOX",
+      }),
+      null,
+    );
+    for (const origin of CANDIDATE_ORIGINS)
+      assert.equal(
+        queryExclusion({
+          reviewState: null,
+          status: "FAILED",
+          kind: null,
+          origin,
+        }),
+        null,
+        origin,
+      );
+  });
+});
+
+describe("splitNotBookable: what the not-bookable mark removed, and why", () => {
+  it("names the way each document fell out: its own id, its key, or the key of a marked twin", () => {
+    const a = doc({ id: "a", number: "R-1" });
+    const b = doc({ id: "b", number: "R-1" });
+    const c = doc({ id: "c", number: "R-2" });
+    const keys = new Map([
+      ["a", "r-1|niceshops"],
+      ["b", "r-1|niceshops"],
+      ["c", "r-2|other"],
+    ]);
+    const { kept, removed } = splitNotBookable([a, b, c], keys, {
+      sourceDocumentIds: new Set(["a"]),
+      keys: new Set<string>(),
+    });
+    assert.deepEqual(
+      kept.map((d) => d.id),
+      ["c"],
+    );
+    assert.deepEqual(
+      removed.map((r) => [r.document.id, r.via]),
+      [
+        ["a", "sourceDocumentId"],
+        ["b", "sameKeyAsMarked"],
+      ],
+    );
+  });
+});
+
+/*
+  A „NEM KÖNYVELENDŐ” JELÖLÉS A KÜLFÖLDI SZÁLLÍTÓ SORÁN IS ELÉR A DOKUMENTUMIG (acrobot 49536, barracuda #2491): a bejövő rekord
+  adószáma a `supplierEuTaxNumber` mezőben áll, a `supplierTaxNumber` üres; a kulcs korábban a névre esett, a dokumentumé az
+  adószám-számjegyekre. MI PIROSÍT: ha az EU-számos jelölt sor kulcsa nem egyezik a dokumentuméval (a dokumentum a hiányzók között
+  marad); ha egy MÁS EU-számú sor is eltüntetné ugyanazt a dokumentumot; ha a magyar adószám nem nyerne az EU mező fölött.
+*/
+describe("notBookableKeyOf: the mark of a foreign supplier's row meets the document", () => {
+  const NUMBER = "R49010000026240667";
+  const marked = (over: Record<string, string | null> = {}) =>
+    notBookableKeyOf({
+      documentNumber: NUMBER,
+      supplierName: "niceshops GmbH",
+      supplierTaxNumber: null,
+      supplierEuTaxNumber: "ATU63964918",
+      ...over,
+    });
+  // a dokumentum oldali kulcs: számlaszám + az adószám számjegyei (mergeSameInvoice / invoiceKey)
+  const documentKey = "r49010000026240667|63964918";
+
+  it("a row whose tax number is only in the EU field has the document's key, and the mark removes the document", () => {
+    assert.equal(marked(), documentKey);
+    const upload = doc({ id: "upload", number: NUMBER });
+    const { kept, removed } = splitNotBookable(
+      [upload],
+      new Map([["upload", documentKey]]),
+      { sourceDocumentIds: new Set<string>(), keys: new Set([marked()]) },
+    );
+    assert.deepEqual(kept, []);
+    assert.deepEqual(
+      removed.map((r) => [r.document.id, r.via]),
+      [["upload", "key"]],
+    );
+  });
+
+  it("another EU number does not remove it, and the supplierTaxNumber wins when it gives digits", () => {
+    assert.notEqual(
+      marked({ supplierEuTaxNumber: "ATU11111111" }),
+      documentKey,
+    );
+    assert.equal(
+      marked({
+        supplierTaxNumber: "ATU63964918",
+        supplierEuTaxNumber: "ATU11111111",
+      }),
+      documentKey,
+    );
+    // no tax number in either field: the key falls to the name, as before
+    assert.equal(
+      marked({ supplierEuTaxNumber: null }),
+      `${NUMBER.toLowerCase()}|niceshops gmbh`,
+    );
+  });
+});
+
+/*
+  A BEGYŰJTÖTT MÁSOLAT CSAK AKKOR KIESIK, HA A MÁSIK ÚT DOKUMENTUMA JELÖLT MARAD (niceshops, 2026-11-12: a 338 018 Ft-os
+  számla gyűjtött példánya kiesett, mert egy nem gyűjtött dokumentum ugyanazt a fájlt hordozta, és az a dokumentum maga sem
+  volt jelölt, tehát a terhelésnek nem maradt jelölt). MI PIROSÍT: ha a másik út kiesett dokumentuma is eltünteti a másolatot;
+  ha a másik út jelölt-képes dokumentuma már NEM tünteti el (a duplikátum-védelem marad); ha a másik út azonosítója nem kerül
+  a kizárás okába.
+*/
+describe("collected copy and the other path", () => {
+  const entries = [
+    { id: "copy", sha256: "aa", collected: true, candidateCapable: true },
+    {
+      id: "other-dead",
+      sha256: "aa",
+      collected: false,
+      candidateCapable: false,
+    },
+    { id: "other-ok", sha256: "bb", collected: false, candidateCapable: true },
+    { id: "copy-2", sha256: "bb", collected: true, candidateCapable: true },
+  ];
+
+  it("only a candidate-capable document of another path counts; a collected one never does", () => {
+    assert.deepEqual([...survivingOtherPaths(entries)], [["bb", ["other-ok"]]]);
+  });
+
+  it("the copy of a file whose other-path document dropped out stays; the copy of a file whose other path stays a candidate falls out, naming it", () => {
+    const survivors = survivingOtherPaths(entries);
+    const base = {
+      origin: "COLLECTED_MAIL",
+      fileName: "Rechnung.pdf",
+      linkedToUnpostedPurchase: false,
+      linked: false,
+      upload: false,
+      otherContent: survivors,
+      date: "2026-11-05" as string | null,
+      hasResult: false,
+      hasReading: true,
+      from: "2025-09-01",
+      to: "2026-11-15",
+    };
+    assert.equal(loaderExclusion({ ...base, sha256: "aa" }), null);
+    const dropped = loaderExclusion({ ...base, sha256: "bb" });
+    assert.equal(dropped?.code, "COLLECTED_COPY_OF_OTHER_PATH");
+    assert.match(dropped?.detail ?? "", /other-ok/);
   });
 });

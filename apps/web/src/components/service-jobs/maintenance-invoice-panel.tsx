@@ -1,10 +1,11 @@
 "use client";
 
-import { Alert, Button, ConfirmDialog } from "@acropora/ui";
+import { Alert, PilotButton } from "@acropora/ui";
 import {
   formatMoney,
   hasPermission,
   PERMISSIONS,
+  type MaintenanceInvoiceIssueResult,
   type MaintenanceInvoiceSummary,
 } from "@acropora/types";
 import { useEffect, useState } from "react";
@@ -16,6 +17,10 @@ import {
 } from "@/components/service/service-detail-chrome";
 import { completionCertificatesApi } from "@/lib/api/completion-certificates";
 import { maintenanceInvoiceApi } from "@/lib/api/maintenance-invoice";
+import {
+  InvoiceMailNotice,
+  useMaintenanceInvoiceIssue,
+} from "./maintenance-invoice-issue-confirm";
 
 /**
  * "SZÁMLA" PANEL A KARBANTARTÁSI LAPON (ADR-014, 4. szelet), a
@@ -60,8 +65,7 @@ export function MaintenanceInvoicePanel({
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [downloading, setDownloading] = useState(false);
-  const [confirmIssue, setConfirmIssue] = useState(false);
-  const [issuing, setIssuing] = useState(false);
+  const [mail, setMail] = useState<MaintenanceInvoiceIssueResult["mail"]>(null);
 
   const load = async () => {
     try {
@@ -116,26 +120,21 @@ export function MaintenanceInvoicePanel({
     }
   };
 
-  const issue = async () => {
-    if (!invoice) return;
-    setIssuing(true);
-    setError(null);
-    try {
-      setInvoice(await maintenanceInvoiceApi.issue(token, invoice.id));
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "A számla kiállítása nem sikerült.",
-      );
+  // the issue goes through the confirmation window (card 7ba97e0d, S3)
+  const issuing = useMaintenanceInvoiceIssue({
+    token,
+    invoice,
+    onIssued: (result) => {
+      setInvoice(result.invoice);
+      setMail(result.mail);
+    },
+    onFailed: (message) => {
+      setError(message);
       // Az állapotot a szerver dönti el (visszaállt piszkozatra, vagy
       // ellenőrzésre vár): újraolvassuk, nem találgatunk.
-      await load();
-    } finally {
-      setIssuing(false);
-      setConfirmIssue(false);
-    }
-  };
+      void load();
+    },
+  });
 
   const downloadPdf = async () => {
     if (!invoice) return;
@@ -183,9 +182,9 @@ export function MaintenanceInvoicePanel({
           enélkül nem készíthető.
         </p>
       ) : invoice === null ? (
-        <Button disabled={creating} onClick={() => void createDraft()}>
+        <PilotButton disabled={creating} onClick={() => void createDraft()}>
           {creating ? "Piszkozat készítése…" : "Piszkozat készítése"}
-        </Button>
+        </PilotButton>
       ) : (
         <div className="space-y-3">
           <dl className="grid gap-2 text-sm">
@@ -212,7 +211,7 @@ export function MaintenanceInvoicePanel({
           ) : null}
           <div className="flex flex-wrap items-center gap-2">
             {invoice.status !== "ISSUING" ? (
-              <Button
+              <PilotButton
                 variant="secondary"
                 disabled={downloading}
                 onClick={() => void downloadPdf()}
@@ -222,19 +221,22 @@ export function MaintenanceInvoicePanel({
                   : invoice.status === "ISSUED"
                     ? "Számla letöltése"
                     : "Előnézet letöltése"}
-              </Button>
+              </PilotButton>
             ) : null}
             {invoice.status === "DRAFT" ? (
               <>
-                <Button
-                  disabled={!invoice.issueEnabled || !canIssue || issuing}
-                  onClick={() => setConfirmIssue(true)}
+                <PilotButton
+                  disabled={!invoice.issueEnabled || !canIssue || issuing.busy}
+                  onClick={() => {
+                    setError(null);
+                    void issuing.start();
+                  }}
                 >
-                  {issuing ? "Kiállítás…" : "Kiállítás"}
-                </Button>
+                  {issuing.busy ? "Kiállítás…" : "Kiállítás"}
+                </PilotButton>
                 {/*
                   LÁTHATÓ FELIRAT, NEM CSAK `title`: egy tiltott gomb
-                  `pointer-events: none` szabállyal jár (lásd a `Button`
+                  `pointer-events: none` szabállyal jár (lásd a `PilotButton`
                   stílusát), ami a böngésző hover-buborékát is megakadályozhatja.
                 */}
                 {!invoice.issueEnabled ? (
@@ -249,16 +251,8 @@ export function MaintenanceInvoicePanel({
               </>
             ) : null}
           </div>
-          <ConfirmDialog
-            open={confirmIssue}
-            title={`Kiállítod a számlát (${formatMoney(invoice.grossAmount, invoice.currency)})?`}
-            consequence="Valódi, a NAV-nak bejelentett számla készül a Számlázz.hu-n, pontosan a piszkozat tételeivel és összegével."
-            recovery="Nem vonható vissza: egy kiállított számla csak sztornó számlával javítható."
-            confirmLabel="Számla kiállítása"
-            busy={issuing}
-            onConfirm={() => void issue()}
-            onCancel={() => setConfirmIssue(false)}
-          />
+          <InvoiceMailNotice mail={mail} />
+          {issuing.dialog}
         </div>
       )}
     </ServicePanel>

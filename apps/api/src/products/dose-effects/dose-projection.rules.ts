@@ -87,6 +87,8 @@ export interface DoseProjectionStatus {
   /** Hours since the last successful build; null if none. */
   ageHours: number | null;
   rowCount: number;
+  /** The customer candidate rows of the projection and how many rest on a shop text (V3.4). */
+  customerCandidates: { rows: number; shopText: number };
   lastSuccess: {
     trigger: string;
     startedAt: string;
@@ -112,6 +114,11 @@ export function toDoseProjectionHealth(
     ageHours: status.ageHours,
     rowCount: status.rowCount,
     failingSinceLastSuccess: status.failingSinceLastSuccess,
+    customerCandidates: {
+      rows: status.customerCandidates.rows,
+      shopText: status.customerCandidates.shopText,
+      builtAt: status.lastSuccess?.finishedAt ?? null,
+    },
   };
 }
 
@@ -119,6 +126,7 @@ export function doseProjectionStatus(input: {
   success: ProjectionRunRecord | null;
   failure: ProjectionRunRecord | null;
   rowCount: number;
+  customerCandidates?: { rows: number; shopText: number };
   now: Date;
 }): DoseProjectionStatus {
   const { success, failure, rowCount, now } = input;
@@ -131,6 +139,7 @@ export function doseProjectionStatus(input: {
         ) / 100
       : null,
     rowCount,
+    customerCandidates: input.customerCandidates ?? { rows: 0, shopText: 0 },
     lastSuccess: success
       ? {
           trigger: success.trigger,

@@ -8,6 +8,7 @@ import type {
   StoredCheck,
 } from "./enrichment-run.js";
 import { brandSitesFromCategories } from "./enrichment-sources.js";
+import { nameSize } from "./pack-size-confirm.js";
 import { waterEffectsFromCategories } from "./water-effects-category.js";
 
 /**
@@ -193,6 +194,9 @@ export function productFactsFrom(product: {
 }): ProductFacts {
   const current: ProductFacts["current"] = {};
   if (product.name.trim()) current.title = product.name;
+  // the pack size our name states (S1a): only as our own value, a page confirms it (pack-size-confirm.ts)
+  const size = nameSize(product.name);
+  if (size) current.packSize = size.raw;
   if (product.brand?.name.trim()) current.brand = product.brand.name;
   if (product.variants.length === 1) {
     const variant = product.variants[0]!;
@@ -205,7 +209,10 @@ export function productFactsFrom(product: {
   }
   const chains = (product.categories ?? []).map((c) => lanc(c.category));
   const hatas = waterEffectsFromCategories(chains.map((chain) => ({ chain })));
-  const categoryBrandSites = brandSitesFromCategories(chains);
+  const categoryBrandSites = brandSitesFromCategories(
+    chains,
+    product.brand?.name,
+  );
   if (hatas) current.waterParameterEffects = hatas.raw;
   return {
     productId: product.id,

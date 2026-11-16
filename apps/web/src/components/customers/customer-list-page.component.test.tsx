@@ -197,6 +197,20 @@ describe("CustomerListPage paging", () => {
     expect(new URLSearchParams(target.split("?")[1]).get("page")).toBe("3");
   });
 
+  // T1.3, slice 16: the pilot search field hands the typed text, and it reaches the URL, back on the first page
+  it("puts the typed search into the URL, back on the first page", async () => {
+    render(<CustomerListPage />);
+    await screen.findByText("Fővárosi Állat- És Növénykert");
+    fireEvent.change(screen.getByLabelText("Vevő keresése"), {
+      target: { value: "kert" },
+    });
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalled());
+    const next = new URLSearchParams(
+      String(navigation.replace.mock.calls.at(-1)?.[0]).split("?")[1],
+    );
+    expect([next.get("search"), next.get("page")]).toEqual(["kert", "1"]);
+  });
+
   // MI PIROSÍT: ha a beszállító-szűrő üres listája nem mondja meg, miért üres (egy üres szűrő hibának látszik)
   it("says why the supplier filter is empty until the partners are linked to customer rows", async () => {
     const data = response(1);

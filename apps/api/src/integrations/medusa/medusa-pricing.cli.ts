@@ -15,6 +15,7 @@ import {
 import { MedusaConfigurationError } from "./medusa-admin.client.js";
 import { MedusaConnectionError } from "./medusa-connection.types.js";
 import { MedusaProductLinkRepository } from "./medusa-product-link.repository.js";
+import type { PriceConflictShape } from "./medusa-price-sync.js";
 import {
   MedusaPricingProjectionService,
   type PricingProjectionReport,
@@ -312,9 +313,14 @@ export async function runPricingCli(
     /**
      * TERMÉKENKÉNTI KUDARC, a hívónak (329f8a2e). Az ütemező ebből tudja, melyik
      * termék ára bukott el, és csak azt tartja esedékesen; a kilépési kód csak
-     * annyit mond, hogy VALAMI elbukott. A kézi parancs nem adja meg.
+     * annyit mond, hogy VALAMI elbukott. A kézi parancs nem adja meg. A `conflict` csak a kétértelmű árnál jön
+     * (550b80d1): az ütköző sorok alakja, azonosító nélkül.
      */
-    failed?(target: string, reason: string): void;
+    failed?(
+      target: string,
+      reason: string,
+      conflict?: PriceConflictShape,
+    ): void;
   } = {
     stdout: (value) => process.stdout.write(value),
     stderr: (value) => process.stderr.write(value),
@@ -380,7 +386,11 @@ export async function priceTargets(
   out: {
     stdout(value: string): void;
     stderr(value: string): void;
-    failed?(target: string, reason: string): void;
+    failed?(
+      target: string,
+      reason: string,
+      conflict?: PriceConflictShape,
+    ): void;
   },
 ): Promise<number> {
   let failed = 0;
@@ -403,7 +413,11 @@ export async function priceTargets(
         out.stderr(
           `${target.sku}: MEGÁLLT (${outcome.reason}) ${outcome.details}\n`,
         );
-        out.failed?.(argument, `${target.sku}: ${outcome.reason}`);
+        out.failed?.(
+          argument,
+          `${target.sku}: ${outcome.reason}`,
+          outcome.conflict,
+        );
         failed += 1;
         continue;
       }

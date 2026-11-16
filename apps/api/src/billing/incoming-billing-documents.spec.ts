@@ -14,6 +14,7 @@ import {
   bankMatchOf,
   filterIncoming,
   incomingListResponse,
+  pairingOfRow,
   incomingPaymentOf,
   mailboxOnlyPaidItems,
   pairingNumberKey,
@@ -24,6 +25,7 @@ import {
   toIncomingListItem,
 } from "./incoming-billing-documents.js";
 import { supplierTaxBase } from "./billing-duplicates.js";
+import { identityTaxNumber, invoiceIdentity } from "./invoice-identity.js";
 
 const D = (value: string | number) => new Prisma.Decimal(value);
 const day = (value: string) => new Date(`${value}T00:00:00Z`);
@@ -1030,6 +1032,235 @@ describe("mailboxOnlyPaidItems", () => {
         ]),
       ).length,
       1,
+    );
+  });
+});
+
+/*
+  A SZÁMLA AZONOSSÁGA A SOR PÁROSÍTÁSÁHOZ (niceshops, 2026-11-12, acrobot). A terhelés egy feltöltött dokumentumhoz
+  párosodott; a bejövő számla-rekord más entitás ugyanazzal a számlaszámmal és adószámmal. MI PIROSÍT: ha a rekord nem
+  találja a párosított dokumentumot az `inv:` azonosságon át; ha a saját (forrás-dokumentum szerinti) párosítása, amelynek
+  van terhelése, elveszti az elsőbbséget; ha egy másik számlaszám vagy másik adószám párosnak látszik.
+*/
+describe("pairingOfRow: the invoice identity as the second key", () => {
+  const NUMBER = "R49010000026240667";
+  const identity = invoiceIdentity(NUMBER, "ATU63964918", "niceshops GmbH");
+  const row = (over: Record<string, unknown> = {}) => ({
+    sourceDocumentId: "feed-1",
+    documentNumber: NUMBER,
+    supplierName: "niceshops GmbH",
+    supplierTaxNumber: "ATU63964918",
+    grossAmount: D(338018),
+    currency: "HUF",
+    ...over,
+  });
+  const upload = pairing({
+    document: candidate({
+      id: "upload",
+      identities: [identity],
+      gross: D(338018),
+      currency: "HUF",
+    }),
+  });
+  const byIdentity = new Map<string, DocumentPairing>([
+    ["upload", upload],
+    [identity, upload],
+  ]);
+
+  it("the identity is the shape the document carries: number without spaces and case, the digits of the tax number", () => {
+    assert.equal(identity, "inv:r49010000026240667|63964918");
+    assert.equal(
+      invoiceIdentity(" R4901 0000026240667", "ATU 63964918", "Más Név"),
+      identity,
+    );
+    // no tax number: the lower-case name is the key
+    assert.equal(
+      invoiceIdentity("SZ-1", null, " Korall Kft. "),
+      "inv:sz-1|korall kft.",
+    );
+  });
+
+  it("a row whose own source document is unknown finds the paired document by the identity; a bank match follows", () => {
+    assert.equal(pairingOfRow(row(), byIdentity), upload);
+    assert.deepEqual(
+      bankMatchOf(
+        { ...row(), kindCode: "SZ", grossAmount: D(338018) },
+        byIdentity,
+      ),
+      { state: "PAIRED", reason: null, debits: upload.debits },
+    );
+  });
+
+  it("the row's own pairing with a debit wins; an own pairing WITHOUT a debit gives way to the identity", () => {
+    const own = pairing({
+      document: candidate({ id: "feed-1" }),
+      debits: [{ bookingDate: "2026-09-01", amount: "1", currency: "HUF" }],
+    });
+    const map = new Map<string, DocumentPairing>([
+      ["feed-1", own],
+      [identity, upload],
+    ]);
+    assert.equal(pairingOfRow(row(), map), own);
+    const unpaidOwn = pairing({
+      document: candidate({ id: "feed-1" }),
+      debits: [],
+    });
+    assert.equal(
+      pairingOfRow(
+        row(),
+        new Map<string, DocumentPairing>([
+          ["feed-1", unpaidOwn],
+          [identity, upload],
+        ]),
+      ),
+      upload,
+    );
+    // nothing paired anywhere: the own (unpaired) pairing stays, as before
+    assert.equal(
+      pairingOfRow(row(), new Map([["feed-1", unpaidOwn]])),
+      unpaidOwn,
+    );
+  });
+
+  it("a foreign supplier's tax number in the EU field builds the identity when supplierTaxNumber is empty (acrobot 49527)", () => {
+    const euOnly = row({
+      supplierTaxNumber: null,
+      supplierEuTaxNumber: "ATU63964918",
+    });
+    assert.equal(pairingOfRow(euOnly, byIdentity), upload);
+    assert.equal(
+      bankMatchOf({ ...euOnly, kindCode: "SZ" }, byIdentity).state,
+      "PAIRED",
+    );
+    // the supplierTaxNumber wins when it gives digits; the EU field only fills the gap
+    assert.equal(
+      pairingOfRow(
+        row({
+          supplierTaxNumber: "ATU11111111",
+          supplierEuTaxNumber: "ATU63964918",
+        }),
+        byIdentity,
+      ),
+      undefined,
+    );
+    assert.equal(identityTaxNumber(null, "ATU63964918"), "ATU63964918");
+    assert.equal(identityTaxNumber("", "ATU63964918"), "ATU63964918");
+    assert.equal(
+      identityTaxNumber("ATU11111111", "ATU63964918"),
+      "ATU11111111",
+    );
+    assert.equal(identityTaxNumber("n/a", "ATU63964918"), "ATU63964918");
+    assert.equal(identityTaxNumber(null, null), null);
+    // another EU tax number, or none at all (the key falls to the name): not a pair
+    assert.equal(
+      pairingOfRow(
+        row({ supplierTaxNumber: null, supplierEuTaxNumber: "ATU11111111" }),
+        byIdentity,
+      ),
+      undefined,
+    );
+    assert.equal(
+      pairingOfRow(
+        row({ supplierTaxNumber: null, supplierEuTaxNumber: null }),
+        byIdentity,
+      ),
+      undefined,
+    );
+  });
+
+  it("another invoice number or another tax number is not a pair", () => {
+    assert.equal(
+      pairingOfRow(row({ documentNumber: "R49010000099999999" }), byIdentity),
+      undefined,
+    );
+    assert.equal(
+      pairingOfRow(row({ supplierTaxNumber: "ATU11111111" }), byIdentity),
+      undefined,
+    );
+  });
+
+  it("the identity does not look at the amount, so the PAID answer needs the same gross and currency (barracuda, #2490)", () => {
+    // the same number and tax number, another gross (a correction, a typo, a part payment): not the paid invoice
+    assert.equal(
+      pairingOfRow(row({ grossAmount: D(5000) }), byIdentity),
+      undefined,
+    );
+    assert.equal(
+      bankMatchOf(
+        { ...row({ grossAmount: D(5000) }), kindCode: "SZ" },
+        byIdentity,
+      ).state,
+      "UNPAIRED",
+    );
+    // within the forint tolerance it is the same invoice; beyond it, not
+    assert.equal(
+      pairingOfRow(row({ grossAmount: D("338018.6") }), byIdentity),
+      upload,
+    );
+    assert.equal(
+      pairingOfRow(row({ grossAmount: D("338019.5") }), byIdentity),
+      undefined,
+    );
+    // another currency never matches, and a row without an amount cannot be verified
+    assert.equal(pairingOfRow(row({ currency: "EUR" }), byIdentity), undefined);
+    assert.equal(
+      pairingOfRow(row({ grossAmount: undefined }), byIdentity),
+      undefined,
+    );
+    // a document that gives no gross cannot prove the amount by itself: the PAID debit's amount is compared instead
+    // (acrobot 49548, the uploaded niceshops document had a null gross), so a debit of ANOTHER amount is no match
+    const noGross = (debits: DocumentPairing["debits"]) =>
+      pairing({
+        document: candidate({
+          id: "upload",
+          identities: [identity],
+          gross: null,
+        }),
+        debits,
+      });
+    const debit = (amount: string, over: Record<string, unknown> = {}) => ({
+      bookingDate: "2026-08-05",
+      amount,
+      currency: "HUF",
+      ...over,
+    });
+    assert.equal(
+      pairingOfRow(row(), new Map([[identity, noGross([debit("12700")])]])),
+      undefined,
+    );
+    const paidByDebit = noGross([debit("338018")]);
+    assert.equal(
+      pairingOfRow(row(), new Map([[identity, paidByDebit]])),
+      paidByDebit,
+    );
+    // the same number and tax number with ANOTHER gross stays unpaid even through the debit
+    assert.equal(
+      pairingOfRow(
+        row({ grossAmount: D(5000) }),
+        new Map([[identity, paidByDebit]]),
+      ),
+      undefined,
+    );
+    // two debits add up; a debit converted from the row's currency counts with the original amount the bank reported
+    const split = noGross([debit("300000"), debit("38018")]);
+    assert.equal(pairingOfRow(row(), new Map([[identity, split]])), split);
+    const eur = noGross([
+      debit("130000", { original: { amount: "338.02", currency: "EUR" } }),
+    ]);
+    assert.equal(
+      pairingOfRow(
+        row({ grossAmount: D("338.02"), currency: "EUR" }),
+        new Map([[identity, eur]]),
+      ),
+      eur,
+    );
+    // a debit in another currency without an original amount in the row's currency cannot be compared
+    assert.equal(
+      pairingOfRow(
+        row({ grossAmount: D("338.02"), currency: "EUR" }),
+        new Map([[identity, noGross([debit("130000")])]]),
+      ),
+      undefined,
     );
   });
 });

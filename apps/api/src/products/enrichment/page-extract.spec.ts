@@ -46,6 +46,39 @@ describe("a lap strukturált adata (schema.org JSON-LD)", () => {
     );
   });
 
+  it("a kiszerelés a lap size-ából vagy a kiszerelés-nevű tulajdonságból jön; a tartalom (Inhalt) továbbra is volume", () => {
+    const fromSize = (size: unknown) =>
+      extractPageStatement(
+        productPage({ name: "Kitalált kalcium", size } as never),
+      ).values.find((v) => v.field === "packSize");
+    assert.equal(fromSize("500 ml")?.raw, "500 ml");
+    assert.match(fromSize("500 ml")!.excerpt, /^ld\+json Product\.size = /);
+    assert.equal(
+      fromSize({ "@type": "QuantitativeValue", value: 1, unitCode: "LTR" })
+        ?.raw,
+      "1 l",
+    );
+    const byProperty = extractPageStatement(
+      productPage({
+        name: "Kitalált magnézium",
+        additionalProperty: [
+          { "@type": "PropertyValue", name: "Kiszerelés", value: "250 ml" },
+          {
+            "@type": "PropertyValue",
+            name: "Inhalt",
+            value: 250,
+            unitText: "ml",
+          },
+        ],
+      }),
+    );
+    const byField = Object.fromEntries(
+      byProperty.values.map((v) => [v.field, v.raw]),
+    );
+    assert.equal(byField.packSize, "250 ml");
+    assert.equal(byField.volume, "250 ml");
+  });
+
   it("strukturált adat nélkül, termék nélkül vagy több termékkel nem vesz át semmit", () => {
     assert.equal(
       extractPageStatement("<html><p>EAN 5901234123457</p></html>").note,

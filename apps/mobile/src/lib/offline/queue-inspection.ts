@@ -187,6 +187,7 @@ const FAJTA_NEVE: Record<SyncEntityType, string> = {
   "service-job": "Hibajegy",
   aquarium: "Akvárium",
   "aquarium-measurement": "Vízmérés",
+  "operations-entry": "Üzemeltetési napló",
 };
 
 /**
@@ -268,6 +269,21 @@ function leirasFelvitelrol(row: SyncQueueRow): {
       title: payload
         ? `${payload.description} (${payload.quantity} ${payload.unit})`
         : "olvashatatlan tétel",
+    };
+  }
+  if (row.entityType === "operations-entry") {
+    /**
+     * A CÍM A SABLON NEVE ÉS AZ ESZKÖZ, a `queueTitle` mezőből: a payload a szervernek is megy, ezért ez a mező a küldés előtt
+     * leválik (`use-queue-drain.ts`). Egy csupasz sablonnév („Homokszűrő visszamosás") nem mondja meg, melyik eszköz, a napi
+     * rögzítésnél pedig több is állhat a sorban.
+     */
+    const payload = parse<{ queueTitle?: unknown }>(row.payloadJson);
+    return {
+      kind,
+      title:
+        typeof payload?.queueTitle === "string" && payload.queueTitle.trim()
+          ? payload.queueTitle
+          : "olvashatatlan bejegyzés",
     };
   }
   const payload = parse<AssetPayloadLike>(row.payloadJson);

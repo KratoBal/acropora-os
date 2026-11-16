@@ -22,13 +22,26 @@ import { paymentStateOf, type OutgoingMissingPayments } from "@acropora/types";
  *   4. HUF on both sides;
  *   5. only COMPLETED and REFUND lines (the two statuses measured live; any
  *      other is a question, not a guess);
- *   6. no REFUND line: a full refund is not a payment, and a partial one is
- *      Balázs's question (a corrective invoice, or a smaller payment);
- *   7. the COMPLETED lines add up to the invoice's gross, to the cent (a card
- *      charges the exact sum; no rounding as with cash).
+ *   6. a full refund is not a payment. A PARTIAL one (Balázs, 2026-11-12
+ *      10:25: handle it; the shape is acrobot's, 48818 and 48823, c03e9896)
+ *      is marked document by document, as the money moved:
+ *        - an invoice of the full sum with its correctives (JS, HS, not
+ *          cancelled) adding up to the refund: the invoice is marked with
+ *          the payments; each corrective's own refund (negative) is a task
+ *          BY HAND, never written (acrobot 48831: whether Számlázz.hu takes
+ *          a negative payment is not measured yet), unless it is paid
+ *          already;
+ *        - an invoice already of the reduced sum, no corrective: marked with
+ *          what stayed paid;
+ *        - anything else: CORRECTIVE_MISSING, nothing is marked (marking the
+ *          net on the full invoice would leave the refund open on it, and the
+ *          corrective unmarked: two false states in Számlázz.hu);
+ *   7. without a refund, the COMPLETED lines add up to the invoice's gross,
+ *      to the cent (a card charges the exact sum; no rounding as with cash).
  *
- * The mark is the gross, dated the day SimplePay settled the payment (the
- * latest COMPLETED line), and the note names the SimplePay transactions.
+ * A payment's mark is dated the day SimplePay settled it (the latest
+ * COMPLETED line), a corrective's the day of the latest refund; the note
+ * names the SimplePay transactions, the source reference too.
  */
 
 export interface SimplePaySettlementLineInput {
@@ -44,6 +57,11 @@ export interface SimplePaySettlementLineInput {
 /** One of our outgoing invoices on the order (Számlázz.hu's feed). */
 export interface CardInvoiceInput {
   readonly invoiceNumber: string;
+  /**
+   * A credit note or a corrective (JS, HS): it reduces the order's invoice,
+   * it is not a second invoice to pay.
+   */
+  readonly corrective: boolean;
   readonly grossAmount: Prisma.Decimal;
   readonly currency: string;
   readonly cancelled: boolean;
@@ -66,7 +84,7 @@ export type SimplePayOrderSkip =
   | "UNKNOWN_STATUS"
   | "NOT_SETTLED"
   | "REFUNDED"
-  | "PARTLY_REFUNDED"
+  | "CORRECTIVE_MISSING"
   | "AMOUNT_MISMATCH";
 
 export interface SimplePayPaidMark {
@@ -84,7 +102,16 @@ export type SimplePayOrderDecision =
   | {
       readonly orderKey: string;
       readonly markable: true;
-      readonly mark: SimplePayPaidMark;
+      /** What the writer may write: the invoice's own mark, never a negative one. */
+      readonly marks: readonly SimplePayPaidMark[];
+      /**
+       * A corrective's refund to mark by hand in Számlázz.hu (acrobot 48831),
+       * shaped as the mark it would be; empty when there is none or it is
+       * paid already.
+       */
+      readonly correctivesByHand: readonly SimplePayPaidMark[];
+      /** A partial refund the documents settle: a refund on this order is not news. */
+      readonly refundSettled: boolean;
     }
   | {
       readonly orderKey: string;
@@ -100,6 +127,11 @@ export type SimplePayOrderDecision =
 const ZERO = new Prisma.Decimal(0);
 const sum = (lines: readonly SimplePaySettlementLineInput[]) =>
   lines.reduce((total, line) => total.plus(line.amount.abs()), ZERO);
+const correctedBy = (invoices: readonly CardInvoiceInput[]) =>
+  invoices.reduce(
+    (total, invoice) => total.plus(invoice.grossAmount.abs()),
+    ZERO,
+  );
 
 export function decideSimplePayOrder(input: {
   readonly orderKey: string;
@@ -127,7 +159,11 @@ export function decideSimplePayOrder(input: {
   });
 
   const live = input.invoices.filter(
-    (invoice) => !invoice.cancelled && invoice.grossAmount.gt(0),
+    (invoice) =>
+      !invoice.corrective && !invoice.cancelled && invoice.grossAmount.gt(0),
+  );
+  const correctives = input.invoices.filter(
+    (invoice) => invoice.corrective && !invoice.cancelled,
   );
   if (input.invoices.length === 0) return skip("NO_INVOICE", null);
   if (live.length === 0)
@@ -157,28 +193,76 @@ export function decideSimplePayOrder(input: {
   if (completedLines.length + refundLines.length !== input.lines.length)
     return skip("UNKNOWN_STATUS", number);
   if (completedLines.length === 0) return skip("NOT_SETTLED", number);
-  if (refundLines.length > 0)
-    return skip(
-      refunded.gte(completed) ? "REFUNDED" : "PARTLY_REFUNDED",
-      number,
-    );
-  if (!completed.equals(invoice.grossAmount))
-    return skip("AMOUNT_MISMATCH", number);
-
-  const date = completedLines
-    .map((l) => l.transactionDate)
-    .reduce((a, b) => (a > b ? a : b));
+  const latest = (lines: readonly SimplePaySettlementLineInput[]) =>
+    lines.map((l) => l.transactionDate).reduce((a, b) => (a > b ? a : b));
+  const date = latest(completedLines);
   const ids = completedLines.map((l) => l.transactionId).sort();
-  return {
+  const refundIds = refundLines.map((l) => l.transactionId).sort();
+  const paymentMark = (amount: Prisma.Decimal): SimplePayPaidMark => ({
+    invoiceNumber: number,
+    date,
+    amount: amount.toFixed(0),
+    title: "bankkártya",
+    note: `SimplePay, ${date}, tranzakció: ${ids.join(", ")}${
+      refundIds.length ? `, visszatérítés: ${refundIds.join(", ")}` : ""
+    }`,
+    sourceRef: ids.join(","),
+  });
+  const marked = (
+    marks: readonly SimplePayPaidMark[],
+    refundSettled = false,
+    correctivesByHand: readonly SimplePayPaidMark[] = [],
+  ): SimplePayOrderDecision => ({
     orderKey: input.orderKey,
     markable: true,
-    mark: {
-      invoiceNumber: number,
-      date,
-      amount: invoice.grossAmount.toFixed(0),
-      title: "bankkártya",
-      note: `SimplePay, ${date}, tranzakció: ${ids.join(", ")}`,
-      sourceRef: ids.join(","),
-    },
-  };
+    marks,
+    correctivesByHand,
+    refundSettled,
+  });
+
+  if (refundLines.length === 0)
+    return completed.equals(invoice.grossAmount)
+      ? marked([paymentMark(completed)])
+      : skip("AMOUNT_MISMATCH", number);
+
+  const kept = completed.minus(refunded);
+  if (kept.lte(0)) return skip("REFUNDED", number);
+  // the invoice was issued for the reduced order: what stayed paid is its gross
+  if (correctives.length === 0 && invoice.grossAmount.equals(kept))
+    return marked([paymentMark(kept)], true);
+  // the invoice of the full sum, its correctives crediting the refund (their sign is not trusted)
+  if (
+    correctives.length === 0 ||
+    !invoice.grossAmount.equals(completed) ||
+    !correctedBy(correctives).equals(refunded)
+  )
+    return skip("CORRECTIVE_MISSING", number);
+  const open: CardInvoiceInput[] = [];
+  for (const corrective of correctives) {
+    if (corrective.paymentsKnown === null)
+      return skip("PAYMENTS_UNKNOWN", corrective.invoiceNumber);
+    if (corrective.currency.toUpperCase() !== "HUF")
+      return skip("FOREIGN_CURRENCY", corrective.invoiceNumber);
+    // marked by hand already, to its full sum: done; nothing yet: a task; anything between: a question
+    if (corrective.paidAmount.abs().equals(corrective.grossAmount.abs()))
+      continue;
+    if (!corrective.paidAmount.isZero())
+      return skip("PARTLY_PAID", corrective.invoiceNumber);
+    open.push(corrective);
+  }
+  const refundDate = latest(refundLines);
+  return marked(
+    [paymentMark(completed)],
+    true,
+    open
+      .sort((a, b) => a.invoiceNumber.localeCompare(b.invoiceNumber))
+      .map((corrective) => ({
+        invoiceNumber: corrective.invoiceNumber,
+        date: refundDate,
+        amount: corrective.grossAmount.abs().negated().toFixed(0),
+        title: "bankkártya" as const,
+        note: `SimplePay visszatérítés, ${refundDate}, tranzakció: ${refundIds.join(", ")}`,
+        sourceRef: refundIds.join(","),
+      })),
+  );
 }

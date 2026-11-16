@@ -90,6 +90,20 @@ describe("the rental equipment master", () => {
     ]);
   });
 
+  it("R1b: stores the serial without spaces, upper case, on create and update (barracuda, #2270)", async () => {
+    const { service, created, updated } = build();
+
+    await service.create({ ...body, serialNumber: " sn 123-a " });
+    await service.update("eq-1", { serialNumber: "Sn-9" });
+    await service.update("eq-1", { serialNumber: null });
+
+    assert.equal(created[0]?.serialNumber, "SN123-A");
+    assert.deepEqual(updated, [
+      { serialNumber: "SN-9" },
+      { serialNumber: null },
+    ]);
+  });
+
   it("R2: a name of only spaces is a 400, before the database", async () => {
     const { service, created } = build();
 

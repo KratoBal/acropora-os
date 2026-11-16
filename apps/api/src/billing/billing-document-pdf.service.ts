@@ -8,7 +8,7 @@ import {
 
 import { DOCUMENT_STORE } from "../service-assets/document-store/document-store.provider.js";
 import type { DocumentStore } from "../service-assets/document-store/document-store.js";
-import { ISSUED_PDF } from "./billing-document-issue.service.js";
+import { issuedPdfKey } from "./issued-pdf-key.js";
 import { BillingDocumentsRepository } from "./billing-documents.repository.js";
 
 /**
@@ -37,11 +37,7 @@ export class BillingDocumentPdfService {
       `A(z) ${row.invoiceNumber ?? row.id} bizonylat PDF-je nem érhető el nálunk; töltsd le a Számlázz.hu-ról.`,
     );
     if (!row.pdfStorageKey) throw missing;
-    const bytes = await this.documentStore.get({
-      owner: "invoice",
-      ownerId: row.id,
-      documentId: ISSUED_PDF,
-    });
+    const bytes = await this.documentStore.get(issuedPdfKey(row));
     if (!bytes) {
       // a sor szerint megvan, a tárolóban nincs: ez nálunk hiba, nem a hívóé
       this.logger.error(`A(z) ${row.id} bizonylat tárolt PDF-je hiányzik.`);

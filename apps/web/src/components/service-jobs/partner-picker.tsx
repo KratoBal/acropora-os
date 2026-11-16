@@ -1,6 +1,6 @@
 "use client";
 
-import { PilotSelect, Select } from "@acropora/ui";
+import { PilotSelect } from "@acropora/ui";
 import type { WorksheetSelectablePartner } from "@acropora/types";
 import { useEffect, useState } from "react";
 
@@ -71,11 +71,9 @@ export function PartnerPicker({
   onClear?: () => void;
   emptyLabel?: string;
   /**
-   * A KÉPERNYŐ STÍLUSA. A közös választót rajzolja mindkettő (nyíllal, a lap többi mezőjével
-   * egyező kerettel), nem natív `<select>`: a `pilot` a Pilot-oldalak mezőit követi, a `dusk`
-   * az űrlap-oldalakét. Az alapérték `dusk`: a meglévő hívók a közös form-mezőt kapják, a régi,
-   * kicsi natív select helyett (h-10, teljes szélességű, saját nyíl), tehát a kinézetük és a
-   * szélességük VÁLTOZIK (a felhasználó-szerkesztő és a két régi hibajegy-lap mezője).
+   * A KÉPERNYŐ STÍLUSA. 2026-11-09 óta (T1.3, kártya 0baba3b9) mindkettő a pilot választót rajzolja: a
+   * `pilot` a kifejezett nyilas alakot (a hívó méretezi), az alapérték `dusk` a teljes szélességű mezőt nyíllal
+   * (a felhasználó-szerkesztő és a karbantartás felvétele). A régi dusk `Select` nincs már a fájlban.
    */
   variant?: "dusk" | "pilot";
 }) {
@@ -129,22 +127,17 @@ export function PartnerPicker({
     </>
   );
 
-  if (variant === "pilot") {
-    // Without a `value` the select stays uncontrolled and starts on the empty option,
-    // the same as the old `defaultValue=""`.
-    return (
-      <PilotSelect chevron id={id} value={value} onChange={handleChange}>
-        {options}
-      </PilotSelect>
-    );
-  }
+  // Without a `value` the select stays uncontrolled and starts on the empty option, the same as the old
+  // `defaultValue=""`. Both variants are the pilot select (T1.3): the pilot one keeps its explicit arrow, the default
+  // one the full-width field with the arrow.
   return (
-    <Select
+    <PilotSelect
+      chevron={variant === "pilot" ? true : undefined}
       id={id}
-      {...(value === undefined ? { defaultValue: "" } : { value })}
-      onChange={(event) => handleChange(event.target.value)}
+      value={value}
+      onChange={handleChange}
     >
       {options}
-    </Select>
+    </PilotSelect>
   );
 }

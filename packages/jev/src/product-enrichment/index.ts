@@ -41,6 +41,14 @@ export {
   type QuantityResult,
 } from "./units.js";
 export {
+  addDays,
+  MAX_AQUARIUM_LITRES,
+  REMIND_DAYS_BEFORE,
+  runOutDates,
+  runOutDays,
+  type RunOutResult,
+} from "./run-out.js";
+export {
   FIELD_SPECS,
   RESTRICTED_CIRCULATION_GTIN,
   comparisonKey,

@@ -10,6 +10,7 @@ import {
 } from "./ai-chat.config.js";
 import {
   AiChatService,
+  LOCAL_PREFILTER_NOTE,
   PRODUCT_CONTEXT_NOTE,
   productContextSentence,
 } from "./ai-chat.service.js";
@@ -60,7 +61,7 @@ describe("AiChatService", () => {
     const { impl, calls } = recordingFetch(() => json(good));
     const service = new AiChatService(environment, impl);
 
-    const reply = await service.ask({ message: "Szia" });
+    const reply = await service.ask({ message: "Szia", userId: "user_7" });
 
     // What went out, not what was passed in: the token is this layer's whole
     // reason for existing, and it has to be on the outgoing request.
@@ -74,11 +75,45 @@ describe("AiChatService", () => {
     assert.equal(JSON.stringify(reply).includes(TOKEN), false);
   });
 
+  /*
+    A HÍVÓ KULCSA (kártya 7a5ea203). MI PIROSÍT: ha a kérdés vagy az értékelés x-client-key nélkül megy (akkor az AI a közös
+    tartalék kulcsra esik, és bármelyik OS-felhasználó folytathatja vagy értékelheti a másikét); ha két felhasználó ugyanazt a
+    kulcsot kapja; ha a kulcs nem a megadott felhasználóé.
+  */
+  it("asks and rates under the session user's own key, one key per user", async () => {
+    const { impl, calls } = recordingFetch(() => json(good));
+    const service = new AiChatService(environment, impl);
+    await service.ask({ message: "Szia", userId: "user_7" });
+    await service.ask({ message: "Szia", userId: "user_8" });
+    const keys = calls.map(
+      (call) => (call.init.headers as Record<string, string>)["x-client-key"],
+    );
+    assert.deepEqual(keys, ["os-user:user_7", "os-user:user_8"]);
+
+    const rating = recordingFetch(() =>
+      json({
+        axis: "accuracy",
+        rating: "correct",
+        ratedAt: "2026-08-26T20:00:00.000Z",
+      }),
+    );
+    await new AiChatService(environment, rating.impl).rate({
+      messageId: "b2c4d6e8-0a1b-4c3d-8e5f-9a7b6c5d4e3f",
+      axis: "accuracy",
+      rating: "correct",
+      ratedBy: "user_7",
+    });
+    assert.equal(
+      (rating.calls[0]?.init.headers as Record<string, string>)["x-client-key"],
+      "os-user:user_7",
+    );
+  });
+
   it("carries the fields the surface has to show", async () => {
     const { impl } = recordingFetch(() => json(good));
     const service = new AiChatService(environment, impl);
 
-    const reply = await service.ask({ message: "Szia" });
+    const reply = await service.ask({ message: "Szia", userId: "user_7" });
 
     assert.equal(reply.conversationId, "c-1");
     assert.equal(reply.model, "gpt-5.1");
@@ -94,6 +129,7 @@ describe("AiChatService", () => {
     const { impl } = recordingFetch(() => json(good));
     const reply = await new AiChatService(environment, impl).ask({
       message: "Szia",
+      userId: "user_7",
     });
 
     assert.equal(reply.productContext, PRODUCT_CONTEXT_NOTE);
@@ -110,6 +146,7 @@ describe("AiChatService", () => {
 
     const reply = await new AiChatService(environment, impl).ask({
       message: "Szia",
+      userId: "user_7",
     });
 
     assert.equal(reply.errorCode, "ai_provider_timeout");
@@ -121,7 +158,10 @@ describe("AiChatService", () => {
   it("says when it was never configured, instead of failing silently", async () => {
     const { impl, calls } = recordingFetch(() => json(good));
 
-    const reply = await new AiChatService({}, impl).ask({ message: "Szia" });
+    const reply = await new AiChatService({}, impl).ask({
+      message: "Szia",
+      userId: "user_7",
+    });
 
     assert.equal(reply.errorCode, "ai_not_configured");
     assert.equal(calls.length, 0);
@@ -139,13 +179,18 @@ describe("AiChatService", () => {
       (
         await new AiChatService(environment, timedOut.impl).ask({
           message: "x",
+          userId: "user_7",
         })
       ).errorCode,
       "ai_gateway_timeout",
     );
     assert.equal(
-      (await new AiChatService(environment, refused.impl).ask({ message: "x" }))
-        .errorCode,
+      (
+        await new AiChatService(environment, refused.impl).ask({
+          message: "x",
+          userId: "user_7",
+        })
+      ).errorCode,
       "ai_unreachable",
     );
   });
@@ -157,6 +202,7 @@ describe("AiChatService", () => {
 
     const reply = await new AiChatService(environment, impl).ask({
       message: "Szia",
+      userId: "user_7",
     });
 
     assert.equal(reply.errorCode, "ai_bad_response");
@@ -356,6 +402,28 @@ describe("a termékkontextus mondata", () => {
       false,
       "egy kimaradás nem mondhatja azt, hogy nincs ilyen termékünk",
     );
+  });
+
+  it("a helyi előszűrő válaszát NEM a modellismeretes mondattal mondja el, mert ott modell nem futott", () => {
+    const local = productContextSentence({
+      state: "not_asked",
+      hitCount: null,
+      projectionVersion: null,
+      descriptionSources: [],
+    });
+
+    assert.equal(local, LOCAL_PREFILTER_NOTE);
+    assert.notEqual(local, PRODUCT_CONTEXT_NOTE);
+    assert.match(local, /előszűrő/);
+    assert.equal(
+      /modellismeret/i.test(local),
+      false,
+      "egy helyi válasz nem 'modellismeret alapján adott'",
+    );
+    assert.equal(/\d/.test(local), false);
+    // A másik négy állapot mondata változatlan.
+    assert.notEqual(local, productContextSentence({ state: "empty" }));
+    assert.notEqual(local, productContextSentence({ state: "unavailable" }));
   });
 
   it("hiányos jelentésnél nem talál ki számot", () => {

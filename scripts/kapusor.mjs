@@ -34,6 +34,19 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
+/**
+ * `--changed`: a CI ELOTTI, OLCSO, RESZLEGES SZURO (T6.1). Nem fut le a negy kapu, csak a valtozott fajlok tipus-
+ * ellenorzese, es minden futas kimondja, hogy reszleges. A reszletek: `kapusor-changed.mjs`.
+ */
+if (process.argv.includes("--changed")) {
+  const { main } = await import("./kapusor-changed.mjs");
+  process.exit(
+    main(
+      process.argv.slice(2).filter((argumentum) => argumentum !== "--changed"),
+    ),
+  );
+}
+
 const NEM_LETEZO = "<NONEXISTENT>";
 
 /**

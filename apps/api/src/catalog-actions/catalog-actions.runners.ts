@@ -6,6 +6,18 @@ import {
 } from "../imports/unas/unas-brand-backfill.cli.js";
 import { runBrandLinkCli } from "../integrations/medusa/medusa-brand-link.cli.js";
 import {
+  brandFromNameDependencies,
+  runBrandFromNameCli,
+} from "../products/brand-from-name.cli.js";
+import {
+  BrandListInputError,
+  parseBrandListInput,
+} from "../products/brand-from-list.js";
+import {
+  brandFromListDependencies,
+  runBrandFromListAction,
+} from "../products/brand-from-list.run.js";
+import {
   categoryCliDependencies,
   runCategoryCli,
 } from "../integrations/medusa/medusa-category.cli.js";
@@ -16,15 +28,24 @@ export interface CatalogActionOutput {
   stderr(value: string): void;
 }
 
+/** The request body of a kind that takes a list is not usable; the message is for the person who wrote it. */
+export class CatalogActionInputError extends Error {}
+
 export interface CatalogActionRunner {
   kind: CatalogActionKind;
   title: string;
   description: string;
-  /** Runs the command once and returns its exit code. It may throw. */
+  /**
+   * Only for a kind that takes input (a list): turns the plan request's body into the input, or throws
+   * `CatalogActionInputError`. A kind without it takes no input and its plan ignores the body.
+   */
+  parseInput?(body: unknown): unknown;
+  /** Runs the command once and returns its exit code. It may throw. `input` is what `parseInput` returned. */
   run(
     apply: boolean,
     actorUserId: string,
     out: CatalogActionOutput,
+    input?: unknown,
   ): Promise<number>;
 }
 
@@ -76,6 +97,41 @@ export const CATALOG_ACTION_RUNNERS: readonly CatalogActionRunner[] = [
     description:
       "A teszt webshop kategóriái közül a régebbi, idegen azonosítójú, azonos nevű és szülőjű kategóriák megkapják a mi azonosítónkat, nevünket és webcímünket (a termék-hozzárendelésük megmarad); ami nincs meg, létrejön. A próba kimenete a régi azonosítót tételesen kiírja. A termékeket nem érinti.",
     run: (apply, _actorUserId, out) => runCategoriesAction(apply, out),
+  },
+  {
+    kind: "brand-from-name",
+    title: "Márka a termék nevéből (csak üres márkájú termékre)",
+    description:
+      "Ahol a terméknek nincs márkája, és a neve elején pontosan egy létező márka neve vagy aliasa áll (az első 1-4 egész szó), azt a márkát írja a termékre. Két illő márka esetén nem ír. A próba tételesen kiírja, mit írna. A végrehajtás felelőse a bejelentkezett felhasználó.",
+    run: (apply, actorUserId, out) =>
+      runBrandFromNameCli(
+        apply ? ["--apply", "--actor", actorUserId] : [],
+        out,
+        brandFromNameDependencies,
+      ),
+  },
+  {
+    kind: "brand-from-list",
+    title: "Márka egy kiválasztott listából (csak üres márkájú termékre)",
+    description:
+      "A kérés törzsében kapott [termék, márka] listából írja a márkát: létező márka azonosítójával, vagy egy új márka nevével (ha a név már márka vagy alias, azt találja meg, különben létrehozza). Csak üres márkájú terméket ír, csak a listán szereplőt. Az Acropora saját márkát nem írja. Egy hibás tétel az egész próbát megbuktatja. A végrehajtás a próba listáját írja. A próba tételesen kiírja, mit írna; a futás felelőse a bejelentkezett felhasználó.",
+    parseInput: (body) => {
+      try {
+        return parseBrandListInput(body);
+      } catch (error) {
+        if (error instanceof BrandListInputError)
+          throw new CatalogActionInputError(error.message);
+        throw error;
+      }
+    },
+    run: (apply, actorUserId, out, input) =>
+      runBrandFromListAction(
+        apply,
+        actorUserId,
+        input as ReturnType<typeof parseBrandListInput>,
+        out,
+        brandFromListDependencies,
+      ),
   },
 ];
 

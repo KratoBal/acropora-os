@@ -2,7 +2,6 @@
 
 import {
   Alert,
-  ConfirmDialog,
   PilotButton,
   PilotCallout,
   PilotPageHeader,
@@ -19,6 +18,8 @@ import {
   PERMISSIONS,
   type BillingDocumentDetail,
   type BillingDocumentType,
+  type BillingIssueConfirmation,
+  type BillingIssueSummary,
   type InvoiceFormat,
 } from "@acropora/types";
 import Link from "next/link";
@@ -38,6 +39,7 @@ import {
   type BillingEmailDraft,
 } from "./billing-document-email-drawer";
 import { BillingDocumentFields } from "./billing-document-fields";
+import { BillingIssueConfirmDialog } from "./billing-issue-confirm-dialog";
 import {
   BillingCancellationNotice,
   BillingStornoButton,
@@ -48,6 +50,7 @@ import {
 import { BillingDocumentLineEditor } from "./billing-document-line-editor";
 import { BillingDocumentSummary } from "./billing-document-summary";
 import { BILLING_LIST_PATH } from "./billing-document-table";
+import { BillingDraftDelete, deleteOffered } from "./billing-draft-delete";
 import { BillingDocumentTypeSelector } from "./billing-document-type-selector";
 import {
   billingPreview,
@@ -164,11 +167,16 @@ export function BillingDocumentEditor({
   /** Végszámlán a levonandó előleg (számlázási brief, 3. pont). */
   const [deductedAdvance, setDeductedAdvance] =
     useState<BillingDocumentDetail["deductedAdvance"]>(null);
+  /** Üresen indult végszámla-vázlaton a magyarázat (több előleg-mérföldkő; kártya 02fc4b7f). */
+  const [finalNotice, setFinalNotice] =
+    useState<BillingDocumentDetail["finalInvoiceNotice"]>(null);
   /** Díjbekérőből készült bizonylaton a díjbekérő (és hogy kifizették-e). */
   const [proforma, setProforma] =
     useState<BillingDocumentDetail["proforma"]>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // az előnézet SAJÁT hibája: a mentés sikerülhetett, az előnézet nem (Luca, 2026-11-16: a doboz címe tévesen azt mondta, a mentés bukott)
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -191,6 +199,17 @@ export function BillingDocumentEditor({
     enabled: canReadMailImages && drawerOpen,
   });
   const [confirmIssue, setConfirmIssue] = useState(false);
+  /*
+    A MEGERŐSÍTŐ ABLAK (kártya 7ba97e0d): a mentett vázlat, amit kiállítunk, a szerver összesítője róla, és hogy
+    kimegy-e e-mailben. A vázlat az ablak NYITÁSAKOR mentődik, így az összesítő azt mutatja, amit a kiállítás küld.
+  */
+  const [pending, setPending] = useState<{
+    detail: BillingDocumentDetail;
+    created: boolean;
+  } | null>(null);
+  const [summary, setSummary] = useState<BillingIssueSummary | null>(null);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [sendChecked, setSendChecked] = useState(false);
   const [issuing, setIssuing] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   /*
@@ -296,6 +315,7 @@ export function BillingDocumentEditor({
         setState(fromDetail(detail));
         setStatus(detail.status);
         setDeductedAdvance(detail.deductedAdvance ?? null);
+        setFinalNotice(detail.finalInvoiceNotice ?? null);
         setProforma(detail.proforma ?? null);
         setIssued(issuedOf(detail));
         setCancellation(detail.cancellation ?? null);
@@ -394,6 +414,7 @@ export function BillingDocumentEditor({
     if (missing.length > 0) return null;
     setSaving(true);
     setSaveError(null);
+    setPreviewError(null);
     try {
       const { detail, created } = await persist();
       // A TÁROLT ÁLLAPOT A MÉRVADÓ (a szerver számolt), a termék-sor alcíme
@@ -450,7 +471,8 @@ export function BillingDocumentEditor({
       else window.open(url, "_blank");
     } catch (cause) {
       tab?.close();
-      setSaveError(
+      // a mentés ekkor MÁR sikerült (a save() előbb lefutott): az előnézet hibája a saját címét kapja, nem a mentését
+      setPreviewError(
         cause instanceof Error
           ? cause.message
           : "Az előnézet nem készíthető el.",
@@ -461,19 +483,61 @@ export function BillingDocumentEditor({
   };
 
   /**
-   * A KIÁLLÍTÁS: előbb a mostani állapot mentése (a szerver azt állítja ki,
-   * amit lát), aztán a kiállítás a friss időbélyeggel. Siker után a bizonylat
-   * csak olvasható, a számot a Számlázz.hu adta.
+   * A MEGERŐSÍTÉS MEGNYITÁSA (kártya 7ba97e0d): előbb a mostani állapot mentése
+   * (a szerver azt állítja ki, amit lát), aztán a szerver összesítője a mentett
+   * vázlatról. Az ablak ezt mutatja; a kiállítás a megerősített dátumokkal megy.
    */
-  const issue = async () => {
+  const openIssueConfirm = async () => {
+    setSaveError(null);
+    setPreviewError(null);
+    setSummary(null);
+    setSummaryError(null);
+    setPending(null);
+    setSendChecked(delivery === "REQUIRED");
+    setConfirmIssue(true);
+    try {
+      const saved = await persist();
+      // A MENTÉS ÚJ IDŐBÉLYEGE AZ ÁLLAPOTBA IS (Luca díjbekérője, 2026-11-16): a mentés a sor `updatedAt`-ját léptette, és a
+      // következő mentés ezt kéri vissza. Ha az állapot a régit tartja, egy elbukott kiállítás után minden mentés és az
+      // előnézet is "időközben más is mentette" ütközést ad (és egy új bizonylat újrapróbája újra létrehozni próbálná).
+      setState((previous) =>
+        previous
+          ? { ...previous, savedUpdatedAt: saved.detail.updatedAt }
+          : previous,
+      );
+      setPending(saved);
+      setSummary(
+        await billingDocumentsApi.issueSummary(token, saved.detail.id),
+      );
+    } catch (cause) {
+      setSummaryError(
+        cause instanceof Error
+          ? cause.message
+          : "A számla adatai nem tölthetők be.",
+      );
+    }
+  };
+
+  /**
+   * A KIÁLLÍTÁS a megerősítő ablak dátumaival, a mentett vázlat időbélyegével.
+   * Siker után a bizonylat csak olvasható, a számot a Számlázz.hu adta. Ha az
+   * ablakban az „Elküldöm e-mailben” be volt jelölve, a levél az ablakban álló
+   * címre megy ki (Balázs, 2026-11-11 11:20).
+   */
+  const issue = async (
+    confirmation: BillingIssueConfirmation,
+    send: boolean,
+  ) => {
+    if (!pending) return;
     setIssuing(true);
     setSaveError(null);
     try {
-      const { detail: saved, created } = await persist();
+      const { detail: saved, created } = pending;
       const issued = await billingDocumentsApi.issue(
         token,
         saved.id,
         saved.updatedAt,
+        confirmation,
       );
       setState(fromDetail(issued));
       setStatus(issued.status);
@@ -481,8 +545,7 @@ export function BillingDocumentEditor({
       // A KIKÜLDÉS ELŐBB, AZ ÚTVÁLTÁS UTÁNA: az új számla útváltásakor a
       // szerkesztő újra felépül, és a régi példányban befejeződő küldés
       // eredménye elveszne (kártya 7976970f).
-      const result =
-        delivery === "REQUIRED" ? await sendAfterIssue(issued) : null;
+      const result = send ? await sendAfterIssue(issued) : null;
       if (result) setSent(result);
       if (created) {
         if (result)
@@ -497,9 +560,32 @@ export function BillingDocumentEditor({
       setSaveError(
         cause instanceof Error ? cause.message : "A kiállítás nem sikerült.",
       );
+      // a kiállítási kísérlet (foglalás, elutasítás) is lépteti a sor időbélyegét. A bizonylatot TELJESEN visszaolvassuk (tartalom,
+      // állapot és időbélyeg együtt, mint a betöltés): a kiállítás előtt minden el volt mentve, tehát nincs mit elveszíteni, és
+      // a következő mentés arra épül, ami a szerveren van. Csak az időbélyeg átvétele a 409 védelmet kerülné meg: ha közben más
+      // mentett, a mi régi tartalmunk csendben felülírná az övét (barracuda, #2633 review).
+      try {
+        const current = await billingDocumentsApi.detail(
+          token,
+          pending.detail.id,
+        );
+        setStatus(current.status);
+        setState((previous) => {
+          const next = fromDetail(current);
+          // a termék-sor alcíme csak a szerkesztőben él: sorrend szerint átvesszük, mint a mentés
+          next.lines = next.lines.map((line, index) => ({
+            ...line,
+            productLabel: previous?.lines[index]?.productLabel ?? null,
+          }));
+          return next;
+        });
+      } catch {
+        // az olvasás hibája nem rontja a kiállítás hibaüzenetét; a következő mentés a szerver ütközésével jelez
+      }
     } finally {
       setIssuing(false);
       setConfirmIssue(false);
+      setPending(null);
     }
   };
 
@@ -644,11 +730,22 @@ export function BillingDocumentEditor({
         />
       ) : null}
 
+      {state.documentType === "FINAL_INVOICE" && finalNotice && !issued ? (
+        <Alert
+          // a túlszámlázás kockázata: egy kiállított végszámla csak sztornóval javítható
+          variant="danger"
+          title="Több előleg-mérföldkő az ajánlaton"
+          description={finalNotice.message}
+        />
+      ) : null}
+
       {state.documentType === "FINAL_INVOICE" ? (
         <Alert
           variant="info"
           title="Végszámla"
-          description={`A tételek a TELJES ellenérték, nem a maradék. ${
+          description={`${
+            finalNotice ? "" : "A tételek a TELJES ellenérték, nem a maradék. "
+          }${
             deductedAdvance
               ? `A(z) ${deductedAdvance.number ?? "előlegszámla"} előleget${
                   deductedAdvance.grossAmount
@@ -776,6 +873,13 @@ export function BillingDocumentEditor({
           description={saveError}
         />
       ) : null}
+      {previewError ? (
+        <Alert
+          variant="danger"
+          title="Az előnézet nem készült el"
+          description={previewError}
+        />
+      ) : null}
 
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="flex min-w-0 flex-col gap-6">
@@ -848,7 +952,7 @@ export function BillingDocumentEditor({
               busy: previewing,
             }}
             issue={{
-              onClick: () => setConfirmIssue(true),
+              onClick: () => void openIssueConfirm(),
               disabledReason: issueDisabledReason,
               busy: issuing,
             }}
@@ -895,6 +999,20 @@ export function BillingDocumentEditor({
               </>
             }
           />
+          {deleteOffered({
+            documentId,
+            status,
+            savedUpdatedAt: state.savedUpdatedAt,
+            issued: issued !== null,
+            canManage,
+          }) ? (
+            <BillingDraftDelete
+              token={token}
+              id={state.id}
+              updatedAt={state.savedUpdatedAt ?? ""}
+              onDeleted={() => router.replace(BILLING_LIST_PATH)}
+            />
+          ) : null}
         </aside>
       </div>
 
@@ -928,15 +1046,26 @@ export function BillingDocumentEditor({
           }}
         />
       ) : null}
-      <ConfirmDialog
+      <BillingIssueConfirmDialog
         open={confirmIssue}
         title={issueConfirm.question}
         consequence={`A kiállítással valódi ${capabilities.label.toLowerCase()} készül a Számlázz.hu-n, saját számmal. A bizonylat ezután nem szerkeszthető.`}
-        recovery="Egy kiállított bizonylat nem vonható vissza; javítani csak sztornóval vagy helyesbítő bizonylattal lehet."
         confirmLabel={issueConfirm.confirmLabel}
+        summary={summary}
+        loadError={summaryError}
+        customerHref={
+          state.customer ? `/vevok/${state.customer.id}` : undefined
+        }
+        recipients={splitAddresses(emailDraft.to)}
+        delivery={delivery}
+        send={sendChecked}
+        onSendChange={setSendChecked}
         busy={issuing}
-        onConfirm={() => void issue()}
-        onCancel={() => setConfirmIssue(false)}
+        onConfirm={(confirmation, send) => void issue(confirmation, send)}
+        onCancel={() => {
+          setConfirmIssue(false);
+          setPending(null);
+        }}
       />
       {issued ? (
         <BillingStornoDialog

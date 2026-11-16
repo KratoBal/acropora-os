@@ -1,6 +1,7 @@
 import type { ProductEnrichmentFieldKey } from "@acropora/types";
 
 import { readDosing } from "./dosing-reader.js";
+import { extractMicrodataStatement } from "./microdata-extract.js";
 import { readWaterEffects } from "./water-effects-lexicon.js";
 
 /**
@@ -38,6 +39,12 @@ export const ENRICHED_FIELDS = [
   "dosingMode",
   "dosingGuidance",
   "dosingTests",
+  // a kiszerelés (ReefClub V3.2 kifogyási emlékeztető, kártya cd94ed11): a lap `size`-a vagy nevesített tulajdonsága
+  "packSize",
+  // az S1 kapu két szöveges kulcsa (T4.4 S1b, kártya 8639ac2a): a gyártói lapról és a márka impresszumáról, az AI
+  // kivonatával, szó szerinti horgonnyal (product-field-extraction.ts)
+  "application",
+  "manufacturerInfo",
 ] as const satisfies readonly ProductEnrichmentFieldKey[];
 export type EnrichedField = (typeof ENRICHED_FIELDS)[number];
 
@@ -56,6 +63,12 @@ export interface PageStatement {
    * both ways), so the run can say it; empty when there is nothing to say.
    */
   lexiconNotes?: string[];
+  /**
+   * The JSON-LD description states a dose, read or held back (`readDosing`'s
+   * `doseOnPage`). The visible page text leaves the script out, so a "no data"
+   * answer is checked against this too (barracuda, #2538). Only set when true.
+   */
+  descriptionDoseOnPage?: true;
   /** Why nothing was taken, when nothing was. */
   note:
     | "NO_STRUCTURED_DATA"
@@ -94,6 +107,10 @@ const PROPERTY_FIELD: readonly [RegExp, EnrichedField][] = [
   [/voltage|feszültség|spannung/i, "voltage"],
   [/^(volume|content|tartalom|inhalt|térfogat)$/i, "volume"],
   [/^(capacity|kapazität|űrtartalom|kapacitás)$/i, "capacity"],
+  [
+    /^(pack ?size|package size|packaging size|kiszerelés|packungsgröße|gebindegröße|füllmenge)$/i,
+    "packSize",
+  ],
 ];
 
 function isObject(value: Json): value is { [key: string]: Json } {
@@ -163,10 +180,21 @@ export function extractPageStatement(html: string): PageStatement {
       // a broken block states nothing
     }
   }
-  if (blocks.length === 0) return { values: [], note: "NO_STRUCTURED_DATA" };
+  // no JSON-LD Product: the page's schema.org microdata, if it has one
+  // (`microdata-extract.ts`; the Fauna Marin shop states its EAN only there)
+  if (blocks.length === 0)
+    return (
+      extractMicrodataStatement(html) ?? {
+        values: [],
+        note: "NO_STRUCTURED_DATA",
+      }
+    );
   const products: { [key: string]: Json }[] = [];
   for (const block of blocks) collectProducts(block, products);
-  if (products.length === 0) return { values: [], note: "NO_PRODUCT" };
+  if (products.length === 0)
+    return (
+      extractMicrodataStatement(html) ?? { values: [], note: "NO_PRODUCT" }
+    );
   // Several different products on one page (a listing, a bundle): nothing is
   // taken, because we cannot tell which one is ours.
   if (new Set(products.map(identity)).size > 1)
@@ -197,6 +225,8 @@ export function extractPageStatement(html: string): PageStatement {
   put("lengthMm", quantity(product.depth), "depth");
   put("widthMm", quantity(product.width), "width");
   put("heightMm", quantity(product.height), "height");
+  // schema.org `size`: a text ("500 ml") or a QuantitativeValue; a SizeSpecification's own `name` is not read (no unit of its own)
+  put("packSize", quantity(product.size), "size");
 
   const properties = Array.isArray(product.additionalProperty)
     ? product.additionalProperty
@@ -215,6 +245,7 @@ export function extractPageStatement(html: string): PageStatement {
   }
   // a leírás a szótárral: a kivonat a találat körüli szöveg, nem a leírás eleje
   const lexiconNotes: string[] = [];
+  let descriptionDoseOnPage = false;
   const description = text(product.description);
   if (description) {
     const reading = readWaterEffects(description);
@@ -230,10 +261,12 @@ export function extractPageStatement(html: string): PageStatement {
     const dose = readDosing(description);
     put("dosing", dose.raw, "description", dose.excerpt ?? undefined);
     lexiconNotes.push(...dose.notes);
+    descriptionDoseOnPage = dose.doseOnPage;
   }
   return {
     values: [...values.values()],
     ...(lexiconNotes.length ? { lexiconNotes } : {}),
+    ...(descriptionDoseOnPage ? { descriptionDoseOnPage: true as const } : {}),
     note: values.size ? null : "NO_VALUES",
   };
 }

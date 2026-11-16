@@ -5,6 +5,7 @@ import {
   dosingExtractorFromEnv,
   dosingStatement,
   extractorAnswerOf,
+  heldBackNotes,
   visiblePageText,
   type DosingExtractorAnswer,
 } from "./dosing-extraction.js";
@@ -102,6 +103,68 @@ describe("az AI adagolás-válasza az OS-ben", () => {
         "1 drop/100 L/day",
       ).values,
       [],
+    );
+  });
+
+  // card 85c38ab1, Fauna Marin Multi Elements A: the reader held a range dose back (raw null), the AI said NO_DATA,
+  // and NO_DATA became a value. WHAT TURNS THIS RED: NO_DATA as a value next to a dose sentence the reader refused.
+  it("nincs adat, miközben az olvasó adag-mondatot talált, de nem olvasta: emberhez megy, nem érték", () => {
+    for (const page of [
+      "Kitalált. Dose 2-5 ml per 100 l weekly.",
+      "Kitalált. Dose 1 ml per 100 l daily, or 5 ml per 100 l weekly.",
+      "Kitalált. Dose 1 ml per 100 l.",
+    ]) {
+      const r = dosingStatement(answer({ reason: "nincs" }), page);
+      assert.deepEqual(r.values, [], page);
+      assert.match(
+        r.notes[0]!,
+        /az AI szerint nincs adat, az olvasó adag-mondatot talált/,
+        page,
+      );
+    }
+    // acrobot 51082: the note also carries the reader's reason with the page's own sentence, for the person; the pack-size
+    // remark does not count, and there are at most three. WHAT TURNS THIS RED: the reason or the sentence missing.
+    const withReason = dosingStatement(
+      answer({ reason: "nincs" }),
+      "Kitalált. Dose 2-5 ml per 100 l weekly. A 500 ml bottle treats 10000 l.",
+    );
+    assert.equal(withReason.notes.length, 2);
+    assert.match(
+      withReason.notes[1]!,
+      /^adagolás: tartomány az adagban: .*2-5 ml per 100 l weekly/,
+    );
+    assert.equal(
+      heldBackNotes([
+        "adagolás: a",
+        "adagolás: kiszerelés-mondat, nem adag: x",
+        "adagolás: b",
+        "adagolás: c",
+        "adagolás: d",
+      ]).length,
+      3,
+    );
+    assert.equal(
+      heldBackNotes([`adagolás: ${"x".repeat(400)}`])[0]!.length,
+      300,
+    );
+    // the JSON-LD description's held-back dose counts the same (barracuda, #2538): the page text has no script
+    const described = dosingStatement(
+      answer({ reason: "nincs" }),
+      "Kitalált, adag nélkül.",
+      null,
+      true,
+    );
+    assert.deepEqual(described.values, []);
+    assert.match(described.notes[0]!, /adag-mondatot talált.*\(a leírásban\)/);
+    // the pack's reach is not a dose: NO_DATA stands
+    assert.deepEqual(
+      fields(
+        dosingStatement(
+          answer({ reason: "nincs" }),
+          "Kitalált. A 500 ml bottle treats 10000 l.",
+        ),
+      ),
+      [["dosingMode", "NO_DATA"]],
     );
   });
 
@@ -268,6 +331,33 @@ describe("az AI adagolás-válasza az OS-ben", () => {
         '<html><head><script>var x = "1 ml";</script><style>p{}</style></head><body><nav>Menü</nav><h1>Kitalált</h1><p>Napi&nbsp;1 csepp</p></body></html>',
       ),
       "Kitalált\nNapi 1 csepp",
+    );
+  });
+
+  // card 85c38ab1, Fauna Marin Dino M: the dose in a <header> under main > section > article. WHAT TURNS THIS RED: a content
+  // header or footer dropped; the page's own header or footer (no article, section, main or aside around it) kept.
+  it("a lap saját fejléce és lábléce kimarad, a tartalom fejléce megmarad", () => {
+    const page = [
+      '<body><header class="header-main"><section>Kosár 1 ml</section>Menü</header>',
+      "<main><section><article><header><p>Dose 1 ml per 100 l daily.</p></header>",
+      "<p>Leírás.</p><footer><p>Gyártó: Kitalált</p></footer></article></section>",
+      "<aside><header><p>Kapcsolódó</p></header></aside></main>",
+      "<footer>Impresszum</footer></body>",
+    ].join("");
+    assert.equal(
+      visiblePageText(page),
+      "Dose 1 ml per 100 l daily.\nLeírás.\nGyártó: Kitalált\nKapcsolódó",
+    );
+    // one that never closes stays, like before
+    assert.equal(visiblePageText("<header><p>Nyitva</p>"), "Nyitva");
+    // pilot-20, third run (card 8639ac2a): "&reg;" reached the AI undecoded, and its "®" anchor was found nowhere.
+    // WHAT TURNS THIS RED: a named or numeric entity left as written; a double decode ("&amp;reg;" becoming "®"); the
+    // soft hyphen kept inside a word.
+    assert.equal(
+      visiblePageText(
+        "<p>Tropic Marin&reg; All-For-Reef &amp;reg; 5&nbsp;ml &#174; &#xAE; Ger&shy;&auml;t &odblac; &ndash; 35&permil; &unknown;</p>",
+      ),
+      "Tropic Marin® All-For-Reef &reg; 5 ml ® ® Gerät ő – 35‰ &unknown;",
     );
   });
 });

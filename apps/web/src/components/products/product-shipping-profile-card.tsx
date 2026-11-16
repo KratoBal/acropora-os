@@ -2,7 +2,6 @@
 
 import {
   Alert,
-  Button,
   PilotDataGrid,
   PilotDataItem,
   PilotSection,
@@ -176,9 +175,9 @@ export function ProductShippingProfileCard({
       subtitle="A UNAS-ból töltődik; amit kézzel átírsz, azt a szinkron többé nem írja felül"
       action={
         canManage && !draft && loaded ? (
-          <Button variant="secondary" size="sm" onClick={szerkesztesKezdese}>
+          <PilotButton variant="secondary" onClick={szerkesztesKezdese}>
             {profile ? "Módosítás" : "Kitöltés"}
-          </Button>
+          </PilotButton>
         ) : undefined
       }
       bodyClassName="space-y-3 px-5 py-5"

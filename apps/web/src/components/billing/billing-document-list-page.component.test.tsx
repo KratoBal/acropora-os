@@ -430,12 +430,15 @@ describe("BillingDocumentListPage", () => {
     const select = (await screen.findByLabelText(
       "Fizetési mód",
     )) as HTMLSelectElement;
-    expect([...select.options].map((option) => option.value)).toEqual([
-      "",
-      "Átutalás",
-      "Bankkártya",
-      "Készpénz",
-    ]);
+    // the choices come with the list's answer, after the field
+    await waitFor(() =>
+      expect([...select.options].map((option) => option.value)).toEqual([
+        "",
+        "Átutalás",
+        "Bankkártya",
+        "Készpénz",
+      ]),
+    );
     fireEvent.change(select, { target: { value: "Készpénz" } });
     await waitFor(() =>
       expect(new URLSearchParams(urlNavigation.search).get("fizmod")).toBe(

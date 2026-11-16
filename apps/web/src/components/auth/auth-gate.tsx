@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect } from "react";
 
+import { loginPathFor } from "@/lib/auth/return-path";
+
 import { useAuth } from "./auth-provider";
 
 export function AuthGate({ children }: { children: ReactNode }) {
@@ -11,7 +13,11 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    if (!isLoading && !session) router.replace("/login");
+    // back to this page after signing in (acrobot 50078: the live draw opened in OBS landed on the dashboard)
+    if (!isLoading && !session)
+      router.replace(
+        loginPathFor(`${window.location.pathname}${window.location.search}`),
+      );
   }, [isLoading, router, session]);
 
   if (isLoading || !session) {

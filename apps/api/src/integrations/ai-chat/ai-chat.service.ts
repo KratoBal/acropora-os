@@ -57,8 +57,23 @@ export interface AiChatReply {
   httpStatus: number | null;
 }
 
+/**
+ * WHICH CALLER A CONVERSATION BELONGS TO, AS THE AI SERVICE SEES IT (card 7a5ea203). The AI service keeps a conversation and its
+ * ratings under the `x-client-key` header; without it every OS conversation fell back to one shared key, so any OS user could
+ * continue or rate another's. The key is the SESSION user's id, never a value of the request: the browser chooses nothing here.
+ */
+export const aiClientKeyFor = (userId: string): string => `os-user:${userId}`;
+
 export const PRODUCT_CONTEXT_NOTE =
   "Nincs termékkontextus, általános modellismeret alapján adott válasz.";
+
+/**
+ * Said for an answer the AI service's LOCAL PRE-FILTER gave (Acropora AI card f5b8f7ba, `state: "not_asked"`): no catalogue search
+ * was made and no model ran. The note above would be FALSE here ("általános modellismeret alapján adott válasz": no model was
+ * involved), on the one screen where a human judges the answer.
+ */
+export const LOCAL_PREFILTER_NOTE =
+  "Helyi előszűrő válasza: sem katalógus, sem modell nem futott.";
 
 /**
  * The AI's own report about the search behind this answer.
@@ -77,10 +92,11 @@ interface ProductContextReport {
 /**
  * One sentence for the surface, from what the AI reported.
  *
- * THE FOUR STATES STAY FOUR. "We looked and found nothing" is a claim about
- * our range, "the search could not run" is a claim about our systems, and the
- * AI service keeps them apart on purpose. Collapsing them here would undo that
- * at the last step - on the one screen where a human reads it.
+ * THE STATES STAY APART. "We looked and found nothing" is a claim about
+ * our range, "the search could not run" is a claim about our systems, "it was
+ * never asked" (a local pre-filter answer) is a claim about the answer itself,
+ * and the AI service keeps them apart on purpose. Collapsing them here would
+ * undo that at the last step - on the one screen where a human reads it.
  */
 export function productContextSentence(report: unknown): string {
   const seen = (
@@ -110,6 +126,10 @@ export function productContextSentence(report: unknown): string {
     return "A termékkeresés nem futott le ehhez a válaszhoz (üzemzavar), tehát a modell nem látta a katalógust.";
   }
 
+  if (seen.state === "not_asked") {
+    return LOCAL_PREFILTER_NOTE;
+  }
+
   return PRODUCT_CONTEXT_NOTE;
 }
 
@@ -133,6 +153,8 @@ export class AiChatService {
   async ask(input: {
     message: string;
     conversationId?: string;
+    /** The session user: the conversation is kept under this user's key at the AI service. */
+    userId: string;
   }): Promise<AiChatReply> {
     const startedAt = Date.now();
     const config: AiChatConfig | null = aiChatConfig(this.environment);
@@ -149,6 +171,7 @@ export class AiChatService {
         headers: {
           authorization: `Bearer ${config.token}`,
           "content-type": "application/json",
+          "x-client-key": aiClientKeyFor(input.userId),
         },
         body: JSON.stringify({
           message: input.message,
@@ -241,6 +264,8 @@ export class AiChatService {
           headers: {
             authorization: `Bearer ${config.token}`,
             "content-type": "application/json",
+            // the rater's key: an answer is ratable only in a conversation of the same caller
+            "x-client-key": aiClientKeyFor(input.ratedBy),
           },
           body: JSON.stringify({
             axis: input.axis,

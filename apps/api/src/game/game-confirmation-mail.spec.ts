@@ -10,6 +10,8 @@ import {
 import {
   closingForMail,
   CONFIRMATION_BUTTON,
+  CONFIRMATION_SUBJECT,
+  LEGACY_CONFIRMATION_SUBJECTS,
   renderConfirmationMail,
 } from "./game-confirmation-mail.js";
 
@@ -96,6 +98,33 @@ describe("the confirmation mail body", () => {
     assert.doesNotMatch(full.text, /<|&amp;|&lt;/);
   });
 
+  // WHAT TURNS THIS RED (Balázs, 2026-11-06 evening, exchange/jatek/szovegjavitas-balazs-2026-11-06.md, LEVEL): the subject or
+  // the two sentences reading as before ("A játékod akkor érvényes, ha megerősíted." / "A megerősítés a kérdés zárásáig
+  // érvényes:"); the test mail not using the same template (it calls the same function; the subject is the same constant).
+  it("carries Balázs's subject and the two rewritten sentences, and not the old ones", () => {
+    assert.equal(
+      CONFIRMATION_SUBJECT,
+      "Erősítsd meg a részvételed: Acropora karácsonyi nyereményjáték",
+    );
+    assert.ok(
+      LEGACY_CONFIRMATION_SUBJECTS.includes(
+        "Erősítsd meg a játékodat: Acropora karácsonyi nyereményjáték",
+      ),
+    );
+    const m = renderConfirmationMail({
+      link: LINK,
+      prompt: "Kérdés?",
+      closesAt: new Date("2026-11-13T22:59:59Z"),
+    });
+    for (const text of [m.html, m.text]) {
+      assert.match(text, /Kérünk, hogy erősítsd meg részvételed:/);
+      assert.match(text, /Megerősíteni eddig az időpontig tudsz:/);
+      assert.match(text, /\(budapesti idő\)/);
+      assert.doesNotMatch(text, /A játékod akkor érvényes/);
+      assert.doesNotMatch(text, /zárásáig érvényes/);
+    }
+  });
+
   it("escapes what it is given: a question or a label with markup does not become markup", () => {
     const m = renderConfirmationMail({
       link: LINK,
@@ -114,7 +143,10 @@ describe("the confirmation mail body", () => {
   it("without the details it still carries the link, and leaves the question, the choice line and the closing out", () => {
     const m = renderConfirmationMail({ link: LINK });
     assert.match(m.html, /data-cta=""/);
-    assert.doesNotMatch(m.html, /A heti kérdés|A beküldött válaszod|zárásáig/);
+    assert.doesNotMatch(
+      m.html,
+      /A heti kérdés|A beküldött válaszod|Megerősíteni eddig/,
+    );
     assert.ok(m.text.includes(LINK));
   });
 });

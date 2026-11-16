@@ -6,9 +6,19 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 
+import type { Prisma } from "@acropora/database";
 import type { ContentChannel } from "@acropora/types";
 
 import { ArticleStepError } from "./article.repository.js";
+import { TeachingSourceStepError } from "./teaching-source.repository.js";
+import { isApprovalOverdue } from "./content-approval-reminder.js";
+import { claimApprovalRefusal } from "./content-claim-links.js";
+import {
+  agentItemSummary,
+  agentItemView,
+  type AgentItemSummary,
+  type AgentItemView,
+} from "./content-agent-view.js";
 import { ContentRepository } from "./content.repository.js";
 import {
   ROLES_THIS_VIEW_CANNOT_COVER,
@@ -39,6 +49,13 @@ import { scheduleStanding, scheduleTargetFor } from "./content-schedule.js";
 @Injectable()
 export class ContentService {
   constructor(private readonly repository: ContentRepository) {}
+
+  /**
+   * A TEST SEAM, a no-op in the app: it runs inside the approval's transaction, after the claims
+   * were read and before the move. The integration spec puts a concurrent link or dispute here
+   * to force the order the row lock must handle (barracuda, #2445).
+   */
+  approvalClaimProbe: (contentId: string) => Promise<void> = async () => {};
 
   /**
    * MINDEN SORHOZ ODAKERÜL, MIT LEHET BELŐLE LÉPNI.
@@ -135,6 +152,58 @@ export class ContentService {
   }
 
   /**
+   * A JÓVÁHAGYÁSRA VÁRÓ TÉTELEK SZÁMA, a jóváhagyók kezdőlapjához és a Figyelmet igényel listához (T5.1 PR2, acrobot 45938).
+   *
+   * MINDEN ilyen tételt számol, nem a nézőét: a jóváhagyás az a lépés, amit EGY jóváhagyó sem hagyhat félre, és a „Rám vár"
+   * jóváhagyói nézete sem szűr szerzőre. Egy szám és egy link, és az értesítés CSAK az OS-ben van (Balázs, 2026-11-10 17:43
+   * UTC: levél vagy csatorna-üzenet nincs). AZ EMLÉKEZTETŐ: a tételek közül hány vár már legalább 48 órája (`overdue`), ugyanitt
+   * és a Figyelmet igényel listán látszik; a "2 nap" 48 óra, nem két naptári nap (egy este beérkezett tétel másnap este
+   * esedékes, nem másnap éjfélkor).
+   */
+  async awaitingApproval(
+    now: Date = new Date(),
+  ): Promise<{ total: number; overdue: number }> {
+    const since = await this.repository.awaitingApprovalSince();
+    return {
+      total: since.length,
+      overdue: since.filter((at) => isApprovalOverdue(at, now)).length,
+    };
+  }
+
+  /**
+   * A GÉPI ÁGENS SAJÁT BEADÁSAI (card c5a8e6d6): a hívó tételei, állapottal. CSAK a hívóéi: a szűrés a lekérdezésben áll, nem
+   * a válasz szűrésében, tehát más szerző tétele nem is kerül a memóriába.
+   */
+  async agentItems(authorId: string): Promise<AgentItemSummary[]> {
+    const items = await this.repository.list({ authorId });
+    return items.map((item) => agentItemSummary(item));
+  }
+
+  /**
+   * EGY BEADOTT TÉTEL VISSZAOLVASÁSA A SZERZŐNEK (card c5a8e6d6): szöveg, állapot, a jóváhagyási napló és a hozzászólások, amelyek
+   * közt ott van a jóváhagyó visszaküldési megjegyzése. Más szerző tétele: "nem található" (404), nem "tiltott": a létezése
+   * nem a hívó dolga. A nézet nevet ad, azonosítót nem (`content-agent-view.ts`).
+   */
+  async agentItem(contentId: string, agentId: string): Promise<AgentItemView> {
+    const item = await this.repository.detail(contentId);
+    if (!item || item.authorId !== agentId)
+      throw new NotFoundException("A tartalom nem található.");
+    const detail = await this.detail(contentId);
+    const names = await this.repository.userNames([
+      ...new Set(
+        item.comments.flatMap((comment) =>
+          comment.authorId ? [comment.authorId] : [],
+        ),
+      ),
+    ]);
+    return agentItemView(
+      { ...item, history: detail.history, comments: item.comments },
+      agentId,
+      names,
+    );
+  }
+
+  /**
    * A NAPTÁR NÉZET: a tervezett kiküldési dátum szerint, egy időszakra.
    *
    * A dátum nélküli tételek NEM szerepelnek benne, és ez szándékos: egy naptár,
@@ -189,14 +258,49 @@ export class ContentService {
           )
         : null;
 
+    // A NAPLÓ „KI" OSZLOPA NÉV, NEM AZONOSÍTÓ: egy lekérdezés az összes szereplőre. Az azonosító akkor is megmarad, ha a
+    // felhasználó már nincs meg, hogy a sor ne maradjon üres.
+    const { stateEvents, ...rest } = item;
+    const names = await this.repository.userNames([
+      ...new Set(
+        stateEvents.flatMap((event) =>
+          event.actorUserId ? [event.actorUserId] : [],
+        ),
+      ),
+    ]);
+    const history = stateEvents.map((event) => ({
+      id: event.id,
+      fromState: event.fromState,
+      toState: event.toState,
+      actorUserId: event.actorUserId,
+      actorName: event.actorUserId
+        ? (names.get(event.actorUserId) ?? null)
+        : null,
+      note: event.note,
+      createdAt: event.createdAt.toISOString(),
+    }));
+
     // A RÉSZLET IS MEGKAPJA A LÉPÉSEKET, ugyanabból a forrásból, mint a lista.
     // Ha csak a lista kapná meg, egy részletről nyíló cselekvés megint a
     // felület találgatásán állna.
+    // THE CLAIMS THE ITEM STANDS ON (T5.3), with what each allows: the approver sees an unchecked
+    // or disputed claim before approving, not from the refusal.
+    const claims = (await this.repository.claimsOf(id)).map((claim) => ({
+      id: claim.id,
+      productName: claim.productName,
+      claimType: claim.claimType,
+      claimText: claim.claimText,
+      status: claim.status,
+      output: claim.output,
+    }));
+
     return {
-      ...item,
+      ...rest,
+      history,
       blockers,
       schedule,
       moves: moveOptions(item.state, item.channel),
+      claims,
     };
   }
 
@@ -289,6 +393,26 @@ export class ContentService {
       );
     }
 
+    // THE MANUFACTURER CLAIMS (T5.3): approval goes only when every claim the item stands on may
+    // go out as it stands (`claimApprovalRefusal`). A draft may hold unchecked claims; the
+    // approver sees them on the item and here. The claims are read INSIDE the move's transaction,
+    // under the item's row lock (barracuda, #2445): a claim linked or dropped at the same moment
+    // either waits for this approval and then sees it, or is seen by it.
+    //
+    // Only the approval: SCHEDULED and SENT record what happened on Facebook, and refusing to
+    // record it would make our state lie. An approved item whose claim drops out is stepped back
+    // (`content-claim-stepback.ts`), and a scheduled one gets the comment.
+    const claimGate =
+      input.from === "AWAITING_APPROVAL" && input.to === "READY_TO_SEND"
+        ? async (tx: Prisma.TransactionClient) => {
+            const refusal = claimApprovalRefusal(
+              await this.repository.claimsOf(input.id, tx),
+            );
+            if (refusal) throw new ConflictException(refusal);
+            await this.approvalClaimProbe(input.id);
+          }
+        : undefined;
+
     let moved: boolean;
     try {
       moved = await this.repository.moveState({
@@ -296,6 +420,7 @@ export class ContentService {
         from: input.from,
         to: input.to,
         actorUserId: input.actorUserId,
+        gate: claimGate,
         ...(input.to === "DISCARDED"
           ? { discardReason: input.discardReason?.trim() ?? null }
           : {}),
@@ -320,7 +445,10 @@ export class ContentService {
     } catch (error) {
       // A CIKK LÉPÉSE NEM LEHETETT (nincs törzs, nincs jóváhagyott változat):
       // az állapot sem mozdult, mert ugyanaz a tranzakció.
-      if (error instanceof ArticleStepError)
+      if (
+        error instanceof ArticleStepError ||
+        error instanceof TeachingSourceStepError
+      )
         throw new ConflictException(error.message);
       throw error;
     }
@@ -363,7 +491,7 @@ export class ContentService {
    */
   async create(input: {
     title: string;
-    channel: "FACEBOOK_POST" | "FACEBOOK_AD" | "ARTICLE" | "OTHER";
+    channel: ContentChannel;
     authorId: string;
     body?: string;
     imageRequired?: boolean;
@@ -388,7 +516,7 @@ export class ContentService {
    */
   async createIdea(input: {
     title: string;
-    channel: "FACEBOOK_POST" | "FACEBOOK_AD" | "ARTICLE" | "OTHER";
+    channel: ContentChannel;
     authorId: string;
   }) {
     return this.beveszSorba(input, "IDEA");
@@ -427,7 +555,7 @@ export class ContentService {
    */
   async createForReview(input: {
     title: string;
-    channel: "FACEBOOK_POST" | "FACEBOOK_AD" | "ARTICLE" | "OTHER";
+    channel: ContentChannel;
     authorId: string;
     body?: string;
     imageRequired?: boolean;
@@ -439,7 +567,7 @@ export class ContentService {
   private async beveszSorba(
     input: {
       title: string;
-      channel: "FACEBOOK_POST" | "FACEBOOK_AD" | "ARTICLE" | "OTHER";
+      channel: ContentChannel;
       authorId: string;
       body?: string;
       imageRequired?: boolean;
@@ -509,7 +637,13 @@ export class ContentService {
       throw new BadRequestException("A cim nem lehet ures.");
 
     const item = await this.repository.detail(input.contentId);
-    if (!item) throw new NotFoundException("A tartalom nem található.");
+    /*
+      CSAK A SAJAT TETEL (barracuda a #2381 jovahagyasan): a gepi token azt a fiokot jelenti, amelyik a tetelt BEADTA. Egy masik
+      szerzo (egy ember) tetelet atirni nem szabad, akkor sem, ha az azonositot ismeri: a tetel "nem talalhato", ugyanaz a 404, amit a
+      visszaolvaso ad, es az ELSO ellenorzes, hogy a tetel allapota (409) se szivarogjon egy idegen tetelrol.
+    */
+    if (!item || item.authorId !== input.authorId)
+      throw new NotFoundException("A tartalom nem található.");
 
     if (!AGENT_REVISABLE_STATES.includes(item.state))
       throw new ConflictException(

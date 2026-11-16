@@ -27,7 +27,8 @@ import {
 import { cardPaymentOf } from "./webshop-order-card-payment.rules.js";
 import { lineEditRefusal } from "./webshop-order-lines.rules.js";
 import {
-  STORE_PICKUP_METHOD,
+  isStorePickupMethod,
+  storePickupOptionIdFrom,
   BANK_TRANSFER_PROVIDER_ID,
   isStale,
   orderPaymentProviderId,
@@ -140,6 +141,7 @@ type PickupPointData = {
 
 export function shippingOf(
   methods: MedusaOrderDetailRow["shipping_methods"],
+  pickupOptionId: string | null = storePickupOptionIdFrom(),
 ): WebshopOrderDetail["shipping"] {
   const method = methods[0];
   const data = (method?.data ?? {}) as {
@@ -152,7 +154,10 @@ export function shippingOf(
   const name = method?.name ?? null;
   return {
     method: name,
-    storePickup: name === STORE_PICKUP_METHOD,
+    storePickup: isStorePickupMethod(
+      { shippingOptionId: method?.shipping_option_id, name },
+      pickupOptionId,
+    ),
     carrier:
       foxpost || /foxpost/i.test(name ?? "")
         ? "FOXPOST"

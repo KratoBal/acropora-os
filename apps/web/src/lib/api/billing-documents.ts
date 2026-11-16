@@ -1,5 +1,7 @@
 import type {
   BillingDocumentDetail,
+  BillingIssueConfirmation,
+  BillingIssueSummary,
   BillingIssuingCheck,
   BillingIssuingResolveInput,
   BillingDocumentDraftInput,
@@ -185,6 +187,27 @@ export const billingDocumentsApi = {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ notBookable }),
+      },
+    );
+  },
+  /**
+   * A jóváhagyott postafiókos sor számának és keltének javítása (acrobot
+   * 49617): ha a szám elírás, és egy másik bent lévő számla számát viseli.
+   * Csak a `MAILBOX` eredetű soron; a válasz a frissített adatlap, 409, ha a
+   * szám ennél a szállítónál már egy másik soré.
+   */
+  correctIncomingNumber(
+    token: string,
+    id: string,
+    value: { documentNumber: string; issueDate: string },
+  ) {
+    return apiRequest<IncomingDocumentDetail>(
+      `/billing/incoming-documents/${encodeURIComponent(id)}/number`,
+      token,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(value),
       },
     );
   },
@@ -386,6 +409,17 @@ export const billingDocumentsApi = {
     });
   },
   /**
+   * EGY VÁZLAT TÖRLÉSE (kártya 6a75f15c): csak sorszám nélküli vázlat, amire nem hivatkozik másik bizonylat. Az `expectedUpdatedAt` a
+   * legutóbb betöltött állapot; ha közben mentették, 409 (a szerver mondata az okkal).
+   */
+  deleteDraft(token: string, id: string, expectedUpdatedAt: string) {
+    return apiRequest<{ deleted: true }>(
+      `/billing/documents/${encodeURIComponent(id)}?expectedUpdatedAt=${encodeURIComponent(expectedUpdatedAt)}`,
+      token,
+      { method: "DELETE" },
+    );
+  },
+  /**
    * DÍJBEKÉRŐBŐL ELŐLEGSZÁMLA (számlázási brief, 2. pont, #1670): kitöltött
    * előleg-vázlat, díjbekérőnként egy; a második hívás ugyanazt adja.
    */
@@ -449,15 +483,30 @@ export const billingDocumentsApi = {
    * létre; a szerver kapcsolója (`BILLING_ISSUE_ENABLED`) nélkül elutasítja,
    * hívás előtt. Az ütközés-őr ugyanaz, mint a mentésnél.
    */
-  issue(token: string, id: string, expectedUpdatedAt: string) {
+  issue(
+    token: string,
+    id: string,
+    expectedUpdatedAt: string,
+    confirmation: BillingIssueConfirmation,
+  ) {
     return apiRequest<BillingDocumentDetail>(
       `/billing/documents/${encodeURIComponent(id)}/issue`,
       token,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ expectedUpdatedAt }),
+        body: JSON.stringify({ expectedUpdatedAt, ...confirmation }),
       },
+    );
+  },
+  /**
+   * A KIÁLLÍTÁS MEGERŐSÍTŐ ABLAKÁNAK ADATAI (kártya 7ba97e0d): a vevő, a három
+   * dátum és a fizetési mód, ahogy a kiállítás küldené (ugyanabból az építőből).
+   */
+  issueSummary(token: string, id: string) {
+    return apiRequest<BillingIssueSummary>(
+      `/billing/documents/${encodeURIComponent(id)}/issue-summary`,
+      token,
     );
   },
   /**

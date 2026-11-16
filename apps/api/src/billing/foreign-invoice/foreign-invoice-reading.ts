@@ -78,16 +78,25 @@ const monthNames: [number, string[]][] = [
   [1, ["january", "jan", "januar", "januari", "janvier", "január"]],
   [
     2,
-    ["february", "feb", "februar", "februari", "février", "fevrier", "február"],
+    [
+      "february",
+      "feb",
+      "februar",
+      "februari",
+      "février",
+      "fevrier",
+      "február",
+      "febr",
+    ],
   ],
-  [3, ["march", "mar", "märz", "maerz", "maart", "mars", "március"]],
-  [4, ["april", "apr", "avril", "április"]],
-  [5, ["may", "mai", "mei", "május"]],
-  [6, ["june", "jun", "juni", "juin", "június"]],
-  [7, ["july", "jul", "juli", "juillet", "július"]],
+  [3, ["march", "mar", "märz", "maerz", "maart", "mars", "március", "márc"]],
+  [4, ["april", "apr", "avril", "április", "ápr"]],
+  [5, ["may", "mai", "mei", "május", "máj"]],
+  [6, ["june", "jun", "juni", "juin", "június", "jún"]],
+  [7, ["july", "jul", "juli", "juillet", "július", "júl"]],
   [8, ["august", "aug", "augustus", "août", "aout", "augusztus"]],
-  [9, ["september", "sep", "sept", "septembre", "szeptember"]],
-  [10, ["october", "oct", "oktober", "octobre", "október"]],
+  [9, ["september", "sep", "sept", "septembre", "szeptember", "szept"]],
+  [10, ["october", "oct", "oktober", "octobre", "október", "okt"]],
   [11, ["november", "nov", "novembre"]],
   [12, ["december", "dec", "dezember", "décembre", "decembre"]],
 ];
@@ -129,6 +138,18 @@ export function parseForeignDate(text: string): string | null {
       : validDate(Number(slashed[3]), a, b);
   }
 
+  // „14/09/26”: a kétjegyű év 20xx; ugyanaz a kétértelműségi szabály, mint a négyjegyűnél
+  const shortYear = /(?<![\d/])(\d{1,2})\/(\d{1,2})\/(\d{2})(?![\d/])/.exec(
+    text,
+  );
+  if (shortYear) {
+    const a = Number(shortYear[1]);
+    const b = Number(shortYear[2]);
+    const year = 2000 + Number(shortYear[3]);
+    if (a <= 12 && b <= 12 && a !== b) return null;
+    return a > 12 ? validDate(year, b, a) : validDate(year, a, b);
+  }
+
   const word = String.raw`([\p{L}]{3,10})\.?`;
   // „October 3, 2026” és „Oct 3 2026”
   const monthFirst = new RegExp(
@@ -166,7 +187,15 @@ export function parseForeignDate(text: string): string | null {
 // ---- címkék ---------------------------------------------------------------
 
 const ISSUE_LABEL =
-  /(invoice\s+date|date\s+of\s+issue|issue\s+date|date\s+issued|issued\s+on|rechnungsdatum|ausstellungsdatum|factuurdatum|date\s+de\s+(la\s+)?facture|date\s+d['’][ée]mission|sz[áa]mla\s+kelte|ki[áa]ll[íi]t[áa]s\s+d[áa]tuma)/iu;
+  /(invoice\s+date|date\s+of\s+issue|issue\s+date|date\s+issued|issued\s+on|rechnungsdatum|rechungsdatum|rech\.-?\s*datum|ausstellungsdatum|factuurdatum|date\s+de\s+(la\s+)?facture|date\s+d['’][ée]mission|sz[áa]mla\s+kelte|ki[áa]ll[íi]t[áa]s\s+d[áa]tuma)/iu;
+/**
+ * A CSUPASZ "Datum:" / "Dátum" CÍMKE (kártya dbab22cd, harmadik kör): sok külföldi számla csak ennyit ír a kelte elé. Csak a SOR ELEJÉN áll meg,
+ * így a "Lieferdatum", "Szállítási dátum" és társai nem illeszkednek; a címkézett dátumoknál érvényes szabály marad: ha több különböző dátum áll
+ * ilyen címke után, nem döntünk. A címke VÉGE HATÁR: utána csak a cella vége, egy cellahatár vagy egy szám állhat, így a "Datum der Lieferung",
+ * "Datum Lieferung", "Datumsangabe" és a "Dátum teljesítés" alak nem illeszkedik (barracuda, #2465). A KELTE A SZÁMLÁN NYOMTATOTT DÁTUM (acrobot döntése, 2026-11-12: a könyvelői csomag hónapja a számla kelte): a mért
+ * mintán a jóváhagyott érték néhányszor 1-6 nappal eltért a nyomtatottól, az érkezési vagy rögzítési dátum lehet; az nem olvasói hiba.
+ */
+const BARE_DATE_LABEL = /^\s*(?:datum|d[áa]tum)\s*:?(?=\s*(?:\||$|\d))/iu;
 const DUE_LABEL =
   /(due\s+date|date\s+due|payment\s+due|due\s+on|f[äa]lligkeitsdatum|f[äa]llig|zahlbar\s+bis|vervaldatum|uiterste\s+betaaldatum|date\s+d['’][ée]ch[ée]ance|[ée]ch[ée]ance|fizet[ée]si\s+hat[áa]rid[őo])/iu;
 const SUPPLY_LABEL =
@@ -175,11 +204,46 @@ const NET_LABEL =
   /(subtotal|sub-total|net\s+amount|total\s+excl(\.|uding|usive)?|amount\s+excl(\.|uding)?|nettobetrag|summe\s+netto|zwischensumme|netto|subtotaal|totaal\s+excl|montant\s+ht|total\s+ht|sous-total|nett[óo](\s+[öo]sszesen)?)/iu;
 const VAT_LABEL =
   /(\bvat\b|\btax\b|\bmwst\b|\bust\b|umsatzsteuer|mehrwertsteuer|\bbtw\b|\btva\b|[áa]fa\b)/iu;
-/** ezek a sorok nem ÁFA-ÖSSZEGET hordoznak: adószám, mentesség, nettó vagy bruttó végösszeg */
+/**
+ * ezek a sorok nem ÁFA-ÖSSZEGET hordoznak: adószám, mentesség, nettó vagy bruttó végösszeg. A magyar "ÁFA regisztrációs szám: | 0106 417" sor (kártya dbab22cd,
+ * harmadik kör, Digital Charging Solutions) "417"-et adott ÁFA-összegnek, két mintán is: a regisztrációs, azonosító és adószám szavak kizárják. A "VAT exemption, Article 262 ter-I of the
+ * General Tax Code" sor (francia számla) "262"-t adott: a mentesség és a cikkely szavai is kizárják.
+ */
 const NOT_VAT_AMOUNT =
-  /(number|\bno\b\.?|\bnr\b\.?|\bid\b|idnr|ust-?id|identification|nummer|registration|reg\.|excl|incl|zzgl|inkl|including|excluding|\bht\b|\bttc\b|subtotal|total\s+(amount|due)|amount\s+due)/iu;
+  /(number|\bno\b\.?|\bnr\b\.?|\bid\b|idnr|ust-?id|identification|nummer|registration|reg\.|regisztr[áa]ci[óo]s|azonos[íi]t[óo]|ad[óo]sz[áa]m|exempt|exon[ée]r|article|excl|incl|zzgl|inkl|including|excluding|\bht\b|\bttc\b|subtotal|total\s+(amount|due)|amount\s+due)/iu;
+/**
+ * A MAGYAR "Teljes bruttó összeg" / "Bruttó végösszeg" CÍMKE (kártya dbab22cd, harmadik kör): a sor ELEJÉN áll, így a "Bruttó egységár" és társai nem illeszkednek.
+ * A közös végösszeg-olvasó (labelledTotal, a begyűjtő is használja) ezt nem adja; itt, csak a külföldi számla olvasójában vesszük fel, és csak az ÜRES bruttót tölti.
+ */
+const GROSS_TOTAL_LABEL =
+  /^\s*(?:teljes\s+)?brutt[óo]\s+(?:v[ée]g)?[öo]sszeg\b/iu;
 const REVERSE_CHARGE =
-  /(reverse\s+charge|steuerschuldnerschaft\s+des\s+leistungsempf[äa]ngers|btw\s+verlegd|autoliquidation|ford[íi]tott\s+ad[óo]z[áa]s)/iu;
+  /(reverse\s+charge|steuerschuldnerschaft\s+des\s+leistungsempf[äa]ngers|btw\s+verlegd|autoliquidation|ford[íi]tott\s+ad[óo]z[áa]s|steuerfreie[,\s]+innergemeinschaftliche\s+lieferung|§\s*6a\s*ustg)/iu;
+
+/** A VÉGSŐ NETTÓ német címkéi (kártya dbab22cd, harmadik kör): "Gesamt netto: | 1.698,58 €". A sor ELEJÉN áll, így az "EP (netto)" fejléc és a "Summe netto" / "Versandkosten netto" részösszeg nem illeszkedik. */
+const TOTAL_NET_LABEL = /^\s*(?:gesamt|total|gesamtsumme)\s+netto\b/iu;
+const CHARGE_LINE =
+  /(?<![\p{L}])(shipping|freight|postage|delivery|handling|versand|versandkosten|fracht|porto|szállítás|szállítási)(?![\p{L}])/iu;
+
+/**
+ * A "SUBTOTAL" NEM MINDIG NETTÓ (kártya dbab22cd, harmadik kör; Euro Corals: "Subtotal | 2.141,19€", "Shipping | 169,90€", "Total | 2.311,09€"). Ha az ÖSSZEG, amit a nettó-címke adott, egy
+ * "subtotal" sor összege, és ez után (a következő 6 sorban) egy költség-sor (szállítás, fuvar, postaköltség) áll összeggel, a részösszeg a költségek NÉLKÜL értendő: nem a számla nettója. Ilyenkor a nettó
+ * üresen marad (a bruttóból kivont "ÁFA" is ezért nem születik), egy rossz szám rosszabb, mint egy üres.
+ */
+function subtotalExcludesCharges(
+  lines: readonly string[],
+  net: number,
+): boolean {
+  return lines.some((raw, index) => {
+    const line = raw.normalize("NFC");
+    if (!/^\s*(?:sub-?total|zwischensumme)(?![\p{L}])/iu.test(line))
+      return false;
+    if (!amountsIn(line).includes(net)) return false;
+    return lines
+      .slice(index + 1, index + 7)
+      .some((next) => CHARGE_LINE.test(next) && amountsIn(next).length > 0);
+  });
+}
 
 /** A címke utáni rész ugyanazon a soron, vagy (ha ott semmi) a következő sor. */
 function afterLabel(
@@ -251,7 +315,8 @@ function labelledAmount(
  * A NEGATÍV ÁFA KIZÁRÁSA A JÓVÁÍRÓ (mind a három összeg negatív) SZÁMLÁT IS ÜRESEN HAGYJA: biztonságos,
  * csak tudni kell róla a mérésnél (barracuda, #1795).
  */
-const TOTALS_LABEL = /^\s*(összesen|osszesen|mind[öo]sszesen|total)\b\s*:?/iu;
+const TOTALS_LABEL =
+  /^\s*(összesen|osszesen|mind[öo]sszesen|total|brutt[óo]\s+sz[áa]mla[ée]rt[ée]k\s+[öo]sszesen)\b\s*:?/iu;
 const NET_HEADER = /nett[óo]|netto/iu;
 const GROSS_HEADER = /brutt[óo]|brutto/iu;
 
@@ -274,6 +339,134 @@ export function totalsRow(
     });
     if (!header) return;
     found.set(`${net}|${vat}|${gross}`, { net, vat, gross });
+  });
+  return found.size === 1 ? [...found.values()][0]! : null;
+}
+
+/**
+ * AZ ÁFA-ÖSSZESÍTŐ TÁBLA (kártya dbab22cd, a második kör): a magyar közműszámlák (a vízmű, a csatornázás) a végösszeget egy külön
+ * táblában adják: egy fejléc (`ÁFA összesítő (Ft) | ÁFA % | Adóalap (Ft) | ÁFA (Ft) | Bruttó összeg (Ft)`) és alatta egy sor
+ * ÁFA-kulcsonként (`27 | 1 000 | 270 | 1 270`). A fejléc első cellája cím, a sorban nincs párja, ezért az oszlopokat a SOR VÉGÉRŐL
+ * számoljuk. A `totalsRow` ezt nem látja: nincs "Összesen" sor.
+ *
+ * A FELTÉTELEK EGYÜTT (mint a `totalsRow`-nál): a fejlécben pontosan egy adóalap/nettó, egy ÁFA-összeg (nem "ÁFA %") és egy bruttó
+ * cella áll ebben a sorrendben; a fejléc alatt legalább egy sor, amelynek e három cellájában PONTOSAN egy összeg van, és soronként
+ * nettó + ÁFA = bruttó (két fillér, nem negatív ÁFA); a sorok összege a végösszeg (több ÁFA-kulcs). Az első nem illeszkedő sor
+ * véget vet a táblának. Több, egymástól eltérő ilyen tábla vagy bármelyik feltétel hiánya: nem döntünk.
+ */
+const SUMMARY_NET = /^(ad[óo]alap|nett[óo]|netto)(?![\p{L}])/iu;
+// "ÁFA (Ft)" and "ÁFA", never "ÁFA %" or "Áfa(%)": the rate column is not the amount
+const SUMMARY_VAT = /^[áa]fa\s*(\((?!\s*%)[^)]*\))?$/iu;
+const SUMMARY_GROSS = /^brutt[óo](?![\p{L}])/iu;
+
+/**
+ * AZ ANGOL "EXCLUDING / INCLUDING" ÖSSZESÍTŐ TÁBLA (kártya dbab22cd, harmadik kör, bruttó-szelet: a francia számla angolul):
+ *   Total amount | TVA | Total amount | Total amount due
+ *   excluding tax (€) | (rate) % | VAT (€) | including all taxes (€)
+ *   Bank details | 485,40 € | 0,00 € | 485,40 €
+ * A fejléc KÉT sorban áll, az érték-sor első cellája egy odacsúszott másik oszlop címkéje. A feltételek együtt: a sor előtti HÁROM sor együtt egy "excluding" (excl.) és egy
+ * "including" (incl.) szót tartalmaz ebben a sorrendben, a sor PONTOSAN három összeget ad, nettó + ÁFA = bruttó (két fillér), a nettó pozitív, az ÁFA nem negatív és NEM nagyobb
+ * a nettónál (a (0, x, x) alakú tételsor nem összesítő). Egyedi találat kell: több eltérő: nem döntünk.
+ */
+const EXCLUDING = /excl(?:uding|\.)?\s*(?:all\s+)?(?:tax|vat)/iu;
+const INCLUDING = /incl(?:uding|\.)?\s*(?:all\s+)?(?:tax|vat)/iu;
+
+export function englishTotalsTable(
+  lines: readonly string[],
+): { net: number; vat: number; gross: number } | null {
+  const found = new Map<string, { net: number; vat: number; gross: number }>();
+  lines.forEach((raw, index) => {
+    const values = amountsIn(raw.normalize("NFC"));
+    if (values.length !== 3) return;
+    const [net, vat, gross] = values as [number, number, number];
+    if (net <= 0 || vat < 0 || vat > net || Math.abs(net + vat - gross) > 0.02)
+      return;
+    // a fejléc a sor előtti három sorban áll: az "excluding" szó sora, majd egy későbbi vagy ugyanaz a sor az "including" szóval
+    const window = lines.slice(Math.max(0, index - 3), index);
+    const exclAt = window.findIndex((line) => EXCLUDING.test(line));
+    if (exclAt < 0) return;
+    // az "including" szó az "excluding" UTÁN áll: ugyanabban a sorban a szó utáni részben, vagy egy későbbi sorban
+    const exclPos = window[exclAt]!.search(EXCLUDING);
+    const inclAt = window.findIndex((line, at) =>
+      at < exclAt
+        ? false
+        : INCLUDING.test(at === exclAt ? line.slice(exclPos + 1) : line),
+    );
+    if (inclAt < 0) return;
+    // a fejléc VÉGE és az érték-sor között nem áll újabb összeges sor: egy tételtábla fejléce alatt a több soros tétel egyik (mennyiség nélküli) sora így nem lesz összesítő (barracuda, #2474)
+    if (
+      window
+        .slice(inclAt + 1)
+        .some((line) => amountsIn(line.normalize("NFC")).length > 0)
+    )
+      return;
+    found.set(`${net}|${vat}|${gross}`, { net, vat, gross });
+  });
+  return found.size === 1 ? [...found.values()][0]! : null;
+}
+
+export function vatSummaryTable(
+  lines: readonly string[],
+): { net: number; vat: number; gross: number } | null {
+  const found = new Map<string, { net: number; vat: number; gross: number }>();
+  lines.forEach((raw, index) => {
+    const header = raw
+      .normalize("NFC")
+      .split("|")
+      .map((cell) => cell.trim());
+    const find = (pattern: RegExp) =>
+      header.flatMap((cell, at) => (pattern.test(cell) ? [at] : []));
+    const net = find(SUMMARY_NET);
+    const vat = find(SUMMARY_VAT);
+    const gross = find(SUMMARY_GROSS);
+    if (net.length !== 1 || vat.length !== 1 || gross.length !== 1) return;
+    if (!(net[0]! < vat[0]! && vat[0]! < gross[0]!)) return;
+    const fromEnd = [net[0]!, vat[0]!, gross[0]!].map(
+      (at) => header.length - at,
+    );
+    let sum = { net: 0, vat: 0, gross: 0 };
+    let rows = 0;
+    for (const next of lines.slice(index + 1)) {
+      const cells = next
+        .normalize("NFC")
+        .split("|")
+        .map((cell) => cell.trim());
+      if (cells.length < Math.max(...fromEnd)) break;
+      const amounts = fromEnd.map((back) => {
+        const values = amountsIn(cells[cells.length - back]!);
+        return values.length === 1 ? values[0]! : null;
+      });
+      /*
+        A KULCSONKÉNTI SOROK ALATTI "ÖSSZESEN" SOR NEM ÚJ SOR, HANEM ELLENŐRZÉS (barracuda, #2431): a végéről számolva ez is három összeg,
+        és nettó + ÁFA = bruttó, tehát hozzáadva a végösszeg DUPLÁZÓDNA (és ha nincs címkézett bruttó, a duplázott összeg ki is töltődne).
+        Az a sor, amelynek első nem üres cellája "Összesen"-féle, a futó összeggel vetődik össze: egyezik, a tábla itt véget ér; eltér
+        (vagy nincs előtte sor: akkor a nulla sorhoz képest eltér), a táblából semmi nem lesz.
+      */
+      const firstCell = cells.find((cell) => cell !== "") ?? "";
+      if (TOTALS_LABEL.test(firstCell)) {
+        const [tn = null, tv = null, tg = null] = amounts;
+        const agrees =
+          tn !== null &&
+          tv !== null &&
+          tg !== null &&
+          Math.abs(tn - sum.net) <= 0.02 &&
+          Math.abs(tv - sum.vat) <= 0.02 &&
+          Math.abs(tg - sum.gross) <= 0.02;
+        if (!agrees) rows = 0;
+        break;
+      }
+      if (amounts.some((value) => value === null)) break;
+      const [n, v, g] = amounts as [number, number, number];
+      if (v < 0 || Math.abs(n + v - g) > 0.02) {
+        rows = 0;
+        break;
+      }
+      sum = { net: sum.net + n, vat: sum.vat + v, gross: sum.gross + g };
+      rows += 1;
+    }
+    if (rows === 0) return;
+    const key = `${sum.net.toFixed(2)}|${sum.vat.toFixed(2)}|${sum.gross.toFixed(2)}`;
+    found.set(key, sum);
   });
   return found.size === 1 ? [...found.values()][0]! : null;
 }
@@ -403,8 +596,187 @@ function plausibleName(raw: string | undefined): string | null {
   return name;
 }
 
+/**
+ * A STRIPE-ALAPÚ ANGOL SZÁMLA (kártya dbab22cd, harmadik kör: Anthropic, Figma, OpenAI, Magic Patterns). A fejléc-sorban a
+ * SZÁLLÍTÓ az első cella, utána egy kezelő (`@figma`), majd a "Bill to" (és a "Ship to") cella:
+ *   Kitalált Eszköz, Inc. | @kitalalt | Bill to | Ship to
+ * A szerkezet azonosítja a szállítót, ezért jogi forma NÉLKÜL is név ("Magic Patterns", "Anthropic, PBC"). A cella a vevő nevét
+ * nem hordozhatja, nem lehet maga a "Bill to", és legfeljebb 80 karakter; a hívó EGYEDI találatot vár (két eltérő név: semmi).
+ */
+export function hostedInvoiceSupplier(lines: readonly string[]): string | null {
+  const found = new Set<string>();
+  const buyer = ACROPORA_COMPANY.name.toLowerCase().split(/\s+/)[0]!;
+  for (const line of lines) {
+    const cells = line
+      .normalize("NFC")
+      .split(" | ")
+      .map((cell) => cell.trim());
+    const billTo = cells.findIndex((cell) => /^bill\s+to$/i.test(cell));
+    if (billTo < 1) continue;
+    const name = cells[0]!.replace(/\s+/g, " ");
+    if (!name || name.length > 80 || name.startsWith("@")) continue;
+    if (/^(bill|ship)\s+to$/i.test(name)) continue;
+    // a "Supplier | Bill to" fejléc első cellája a CÍMKE, nem a név: a név az alatta álló sor (a fejléc-olvasó dolga)
+    if (SELLER_CELL_START.test(name) || BUYER_CELL_START.test(name)) continue;
+    if (name.toLowerCase().includes(buyer)) continue;
+    found.add(name);
+  }
+  return found.size === 1 ? [...found][0]! : null;
+}
+
+/**
+ * A CÍMKÉZETT SZÁMLASZÁM A NÉMET, FRANCIA ÉS MAGYAR CÍMKÉKKEL (kártya dbab22cd, harmadik kör): "Rechnung - Nr. 40142365", "Rechnungs Nr.: | RE67900",
+ * "Rech.-Nr. | R49010000026241578", "Invoice n°: | Billing address" + az ÉRTÉK A KÖVETKEZŐ SORBAN, "Számla száma" + a következő sor. A címke a számla
+ * SAJÁT számát nevezi meg (nem a rendelés-, szállítólevél- vagy ügyfélszámot), ezért a közös szöveg-olvasó előtt áll: az egy irányítószámot
+ * ("1200") is számlaszámnak vett. Az érték csak szám-szerű lehet (legalább egy számjegy, 4-25 betű, szám, per vagy kötőjel, szóköz nélkül): a
+ * szomszéd címke-cella ("Billing address") nem az. Csak EGYEDI találat kell; több különböző érték: semmi. A háromcellás Stripe-alak ("Invoice number |
+ * ELŐTAG | - | 0012") nem ez: azt a `hostedInvoiceNumber` adja a teljes alakban.
+ */
+const NUMBER_LABEL =
+  /^(rechnung(?:s)?[\s.-]*(?:nr|nummer)|rech\.[\s-]*nr|rechnungs-?nr|invoice\s*(?:n[°o]|no|nr|number)|facture\s*(?:n[°o]|no)|sz[áa]mla\s*(?:sz[áa]ma|sorsz[áa]ma))\.?\s*:?$/iu;
+const NUMBER_SHAPE = /^(?=.*\d)[A-Za-z0-9/-]{4,25}$/;
+/** egy dátum-alak (18/09/2026, 2026-09-18) vagy egy magyar adószám (12345678-2-42) nem számlaszám, akármelyik cellából jön */
+const NOT_A_NUMBER = /^(?:\d{1,4}[/-]\d{1,2}[/-]\d{1,4}|\d{8}-\d-\d{2})$/;
+const isInvoiceNumber = (value: string) =>
+  NUMBER_SHAPE.test(value) && !NOT_A_NUMBER.test(value);
+const NEIGHBOUR_LABEL =
+  /\b(address|adresse|adres|adress|c[íi]m|date|datum|d[áa]tum|page|seite|oldal|code|customer|kunde|client|n[°o])\b/iu;
+const INLINE_NUMBER =
+  /(?:^|[\s|])rechnung\s*-\s*nr\.?\s*:?\s*([A-Za-z0-9/-]{4,25})(?![A-Za-z0-9/-])/iu;
+
+export function labelledInvoiceNumber(lines: readonly string[]): string | null {
+  const found = new Set<string>();
+  const cellsOf = (line: string) =>
+    line
+      .normalize("NFC")
+      .replace(/\x00/g, " ")
+      .split(" | ")
+      .map((cell) => cell.trim());
+  lines.forEach((line, index) => {
+    const inline = INLINE_NUMBER.exec(line.normalize("NFC"));
+    if (inline && isInvoiceNumber(inline[1]!)) found.add(inline[1]!);
+    const cells = cellsOf(line);
+    cells.forEach((cell, column) => {
+      if (!NUMBER_LABEL.test(cell)) return;
+      const beside = cells[column + 1];
+      // a háromcellás Stripe-alak ("Invoice number | ELŐTAG | - | 0012"): a szám a teljes alak, azt a hostedInvoiceNumber adja, az előtag egymagában nem
+      if (
+        beside !== undefined &&
+        isInvoiceNumber(beside) &&
+        /^(?:|-|–)$/.test(cells[column + 2] ?? "x")
+      )
+        return;
+      if (beside !== undefined && isInvoiceNumber(beside)) {
+        found.add(beside);
+        return;
+      }
+      // az érték a következő sorban áll: csak ha a címke a sor utolsó cellája, vagy a szomszéd cella egy másik CÍMKE ("Billing address", "Page"):
+      // egy név vagy más érték mellől nem ugrunk a következő sorra (egy "Kitalált Név" alakra nem különböztethető meg a címkétől, ezért a címke-szavak listája áll)
+      if (
+        beside !== undefined &&
+        beside !== "" &&
+        !NEIGHBOUR_LABEL.test(beside)
+      )
+        return;
+      // a következő sorból a címkével AZONOS OSZLOP cellája az érték (egy fejléc-sor alatti értéksor: "Adószám | Számla száma" + "12345678-2-42 | KH99000123");
+      // más cellaszámú sorból semmi; kivétel az EGYCELLÁS következő sor (valódi mintán látott alak: a címke egy cellás sor végén áll, az érték egyedül a következő sorban)
+      const belowCells = lines[index + 1] ? cellsOf(lines[index + 1]!) : [];
+      const below =
+        belowCells.length === 1
+          ? belowCells[0]
+          : belowCells.length === cells.length
+            ? belowCells[column]
+            : undefined;
+      if (below !== undefined && isInvoiceNumber(below)) found.add(below);
+    });
+  });
+  return found.size === 1 ? [...found][0]! : null;
+}
+
+/**
+ * A STRIPE-SZÁMLA SZÁMA (kártya dbab22cd, harmadik kör): "Invoice number | OHCYTT2R | \x00 | 0012". A szövegréteg a kötőjelet NUL cellának
+ * adja, a számla száma a TELJES alak (`OHCYTT2R-0012`): az előtag az ügyfél számla-előtagja, minden számlánkon ugyanaz, tehát egymagában
+ * nem azonosít számlát (acrobot 2026-11-11). Csak ezt a háromcellás alakot olvassa; más számlaszám-alak a meglévő olvasóké.
+ */
+export function hostedInvoiceNumber(lines: readonly string[]): string | null {
+  const found = new Set<string>();
+  for (const line of lines) {
+    const cells = line
+      .normalize("NFC")
+      .split(" | ")
+      .map((cell) => cell.trim());
+    const label = cells.findIndex((cell) => /^invoice\s+number$/i.test(cell));
+    if (label < 0) continue;
+    const [prefix, dash, serial] = cells.slice(label + 1, label + 4);
+    if (
+      prefix !== undefined &&
+      serial !== undefined &&
+      /^[A-Z0-9]{6,12}$/.test(prefix) &&
+      /^(?:\x00|-|–)$/.test(dash ?? "") &&
+      /^\d{3,6}$/.test(serial)
+    )
+      found.add(`${prefix}-${serial}`);
+  }
+  return found.size === 1 ? [...found][0]! : null;
+}
+
+/**
+ * A KÜLFÖLDI (EU) ÁFA-SZÁM A "VAT" CÍMKÉS SORBÓL (kártya dbab22cd, harmadik kör: `IE VAT IE4143435AH`, `VAT Registration | EU VAT | \x00 | IE4276970QH`).
+ * A közös szöveg-olvasó (a begyűjtő is használja) az ilyen alakot nem adja; ezt itt, csak a külföldi számla olvasójában vesszük fel. A saját
+ * (HU) számunk nem EU_NOT_HU; egy EGYEDI, legalább egy számjegyet hordozó, 8-15 karakteres találat kell, különben semmi.
+ */
+export function vatLineEuNumber(lines: readonly string[]): string | null {
+  const found = new Set<string>();
+  for (const line of lines) {
+    if (!/(^|[^A-Za-z])VAT([^A-Za-z]|$)/.test(line)) continue;
+    for (const token of line.replace(/\x00/g, " ").split(/[\s|:]+/))
+      if (
+        token.length >= 8 &&
+        token.length <= 15 &&
+        /\d/.test(token) &&
+        EU_NOT_HU.test(token)
+      )
+        found.add(token);
+  }
+  return found.size === 1 ? [...found][0]! : null;
+}
+
+/**
+ * A KÜLDŐ CÍMSORA (a borítékablakos számla; kártya dbab22cd, harmadik kör: "Kitalált Kereskedő GmbH, Minta-Str. 9, 71000 Teststadt", "kitalalt · Minta Str. 43b · 55000
+ * Teststadt"). A számla elején egy sorban áll a küldő: NÉV, UTCA HÁZSZÁMMAL, IRÁNYÍTÓSZÁM VÁROS, vesszővel vagy " · "-tal elválasztva. A szerkezet azonosítja a küldőt, ezért
+ * jogi forma NÉLKÜL is név. Szigorú: pontosan ez a három tagú alak (a második tag számjegyet visz: házszám; a harmadik 4-5 jegyű irányítószámmal indul, "D-" előtaggal
+ * is), a név legfeljebb 60 karakter, nem a vevő (Acropora), nem szám-kezdetű, és a sor ELSŐ cellája (a " | " utáni rész nem számít); csak az első 15 sort nézi (az olvasó
+ * a fejlécet néha szám-sorok mögé teszi). Egyedi találatot vár: két eltérő név: semmi.
+ */
+const SENDER_ADDRESS_LINE =
+  /^(?<name>[^,·|0-9][^,·|]{1,58}?)\s*(?:,|·)\s*[^,·|]*\d[^,·|]*\s*(?:,|·)\s*(?:[A-Z]{1,2}-)?\d{4,5}\s+\p{L}/u;
+
+export function senderAddressLineName(lines: readonly string[]): string | null {
+  const buyer = ACROPORA_COMPANY.name.toLowerCase().split(/\s+/)[0]!;
+  const found = new Set<string>();
+  for (const line of lines.slice(0, 15)) {
+    const cell = line.normalize("NFC").split(" | ")[0]!.trim();
+    const name = SENDER_ADDRESS_LINE.exec(cell)
+      ?.groups?.["name"]?.replace(/\s+/g, " ")
+      .trim();
+    if (
+      !name ||
+      name.toLowerCase().includes(buyer) ||
+      /^(rechnung|invoice|facture|sz[áa]mla|datum|date|seite|page)(?![\p{L}])/iu.test(
+        name,
+      )
+    )
+      continue;
+    found.add(name);
+  }
+  return found.size === 1 ? [...found][0]! : null;
+}
+
 export function supplierNameFromText(lines: readonly string[]): string | null {
   const candidates = new Set<string>();
+  // a boríték-ablakos küldő-címsor (jogi forma nélkül is név): a többi forrással egy halmazban, tehát eltérő név esetén semmi
+  const addressLine = senderAddressLineName(lines);
+  if (addressLine) candidates.add(addressLine);
   const first = lines.find((line) => line.trim());
   const top = plausibleName(first?.split(" | ")[0]);
   if (top) candidates.add(top);
@@ -431,6 +803,9 @@ export function supplierNameFromText(lines: readonly string[]): string | null {
     const below = plausibleName(cell);
     if (below) candidates.add(below);
   });
+  // a Stripe-alapú angol számla fejléc-sora: "<szállító> | @kezelő | Bill to | Ship to"
+  const hosted = hostedInvoiceSupplier(lines);
+  if (hosted) candidates.add(hosted);
   // "Eladó neve: | Kitalált Kft.": a szállító-cimke cellája és a név ugyanabban a sorban
   for (const line of lines) {
     const cells = line
@@ -509,6 +884,9 @@ export function readForeignInvoice(input: ForeignReadingInput): ForeignReading {
   // 2. a PDF szövege
   if (hasText) {
     const text = readInvoiceText(lines);
+    // a címkézett számlaszám a közös szöveg-olvasó előtt áll (az egy irányítószámot is számlaszámnak vett); a Stripe-alak teljes számát semmi nem előzi meg
+    set("documentNumber", hostedInvoiceNumber(lines), "TEXT");
+    set("documentNumber", labelledInvoiceNumber(lines), "TEXT");
     set("documentNumber", text.invoiceNumber, "TEXT");
     if (text.supplierTaxNumber) {
       if (HU_TAX.test(text.supplierTaxNumber))
@@ -526,28 +904,40 @@ export function readForeignInvoice(input: ForeignReadingInput): ForeignReading {
     set("fulfillmentDate", table.fulfillmentDate, "TEXT");
     set("dueDate", table.dueDate, "TEXT");
     set("issueDate", labelledDate(lines, ISSUE_LABEL), "TEXT");
+    set("issueDate", labelledDate(lines, BARE_DATE_LABEL), "TEXT");
     set("dueDate", labelledDate(lines, DUE_LABEL), "TEXT");
     set("fulfillmentDate", labelledDate(lines, SUPPLY_LABEL), "TEXT");
     // a számlaszámot a cimkézett olvasás után csak az üres hely tölti
     set("documentNumber", table.documentNumber, "TEXT");
+
+    set("supplierEuTaxNumber", vatLineEuNumber(lines), "TEXT");
 
     const total = labelledTotal(lines);
     if (total) {
       set("grossAmount", decimal(Number(total.gross)), "TEXT");
       set("currency", total.currency, "TEXT");
     }
+    const hungarianGross = labelledAmount(lines, GROSS_TOTAL_LABEL);
+    if (hungarianGross !== null)
+      set("grossAmount", decimal(hungarianGross), "TEXT");
     set("currency", onlyCurrency(lines), "TEXT");
 
+    // a "Gesamt netto" / "Total netto" sor a végső nettó (a "Summe netto" és a "Versandkosten netto" sorral együtt a sima nettó-címke több eltérő összeget látna, és semmit nem adna)
+    const totalNet = labelledAmount(lines, TOTAL_NET_LABEL);
+    if (totalNet !== null) set("netAmount", decimal(totalNet), "TEXT");
     const net = labelledAmount(lines, NET_LABEL);
-    if (net !== null) set("netAmount", decimal(net), "TEXT");
+    if (net !== null && !subtotalExcludesCharges(lines, net))
+      set("netAmount", decimal(net), "TEXT");
     const vat = labelledAmount(lines, VAT_LABEL, NOT_VAT_AMOUNT);
     if (vat !== null) set("vatAmount", decimal(vat), "TEXT");
     else if (REVERSE_CHARGE.test(lines.join("\n")))
-      set("vatAmount", decimal(0), "TEXT");
+      // a 0 ÁFA NEM egy ÁFA-sorból jön, hanem a jelzésből (az egész szövegen egyetlen találat): külön forrás-érték, hogy az automatikus jóváhagyás lássa
+      set("vatAmount", decimal(0), "REVERSE_CHARGE");
     // a cimkézett olvasás után: ami már megvan, azt az összesítő sor nem írja felül, és ha egy már
     // meglévő érték ELTÉR az összesítő sortól (két táblázat, másik összeg), az sor semmit nem tölt:
     // a három mező nem mondhat ellent egymásnak (barracuda, #1795)
-    const totals = totalsRow(lines);
+    const totals =
+      totalsRow(lines) ?? vatSummaryTable(lines) ?? englishTotalsTable(lines);
     const agrees = (
       field: "netAmount" | "vatAmount" | "grossAmount",
       amount: number,
@@ -563,6 +953,29 @@ export function readForeignInvoice(input: ForeignReadingInput): ForeignReading {
       set("netAmount", decimal(totals.net), "TEXT");
       set("vatAmount", decimal(totals.vat), "TEXT");
       set("grossAmount", decimal(totals.gross), "TEXT");
+    } else if (
+      totals &&
+      values.netAmount !== null &&
+      values.vatAmount !== null &&
+      values.grossAmount !== null &&
+      agrees("grossAmount", totals.gross) &&
+      Math.abs(
+        Number(values.netAmount) +
+          Number(values.vatAmount) -
+          Number(values.grossAmount),
+      ) > 0.02
+    ) {
+      /*
+        A CÍMKÉZETT NETTÓ ÉS ÁFA BIZONYÍTHATÓAN ROSSZ, AZ ÖSSZESÍTŐ SOR NEM (kártya dbab22cd, második kör). A cimkézett olvasás a
+        nettót és az ÁFA-t egy MÁSIK szám mellől is felveheti (egy közműszámlán a "nettó" és az "ÁFA" szó több helyen áll); ha a
+        három érték nem ad ki bruttót, a 4. lépés mindkettőt üresre törölné. Az összesítő sor viszont a három feltételt (fejléc,
+        három összeg, nettó + ÁFA = bruttó) kielégíti, és a bruttója EGYEZIK a már kiolvasottal: ilyenkor a sor váltja a rossz párt.
+        Egy EGYMÁSNAK ELLENT NEM MONDÓ (kijön a bruttó) címkézett pár marad: azt a sor nem írja felül.
+      */
+      values.netAmount = decimal(totals.net);
+      values.vatAmount = decimal(totals.vat);
+      sources.netAmount = "TEXT";
+      sources.vatAmount = "TEXT";
     }
   } else {
     warnings.push(
@@ -616,6 +1029,35 @@ export function readForeignInvoice(input: ForeignReadingInput): ForeignReading {
         delete sources.vatAmount;
       }
     }
+  } else if (
+    net === null &&
+    vat === 0 &&
+    gross !== null &&
+    sources.grossAmount === "TEXT" &&
+    (sources.vatAmount === "TEXT" || sources.vatAmount === "REVERSE_CHARGE") &&
+    hasText &&
+    REVERSE_CHARGE.test(lines.join("\n"))
+  ) {
+    // FORDÍTOTT ADÓZÁS: az ÁFA bizonyíthatóan 0 (a számla maga mondja), és a bruttó a számláról jön: a nettó egyenlő vele. Számítás, nem találgatás
+    values.netAmount = decimal(gross - vat);
+    sources.netAmount = "REVERSE_CHARGE";
+    // a jel egyetlen szöveg-találat: a három összeg egymással mindig egyezik, tehát az ellenőrzés itt szerkezetileg zöld; ezért a figyelmeztetés látszatja a jelet
+    warnings.push(
+      `A nettó (${decimal(gross - vat)}) a fordított adózás jelzéséből számolt: a bruttóval egyenlő.${sources.vatAmount === "REVERSE_CHARGE" ? " Az ÁFA 0 is a jelzésből jön, nem egy ÁFA-sorból." : ""} Ellenőrizd a számlán.`,
+    );
+  } else if (
+    gross === null &&
+    net !== null &&
+    vat === 0 &&
+    sources.vatAmount === "REVERSE_CHARGE" &&
+    sources.netAmount === "TEXT"
+  ) {
+    // az ÁFA a jelből 0, a nettó a számláról jön: a bruttó egyenlő a nettóval. Számítás; ugyanaz a látszat-kockázat, mint a nettó levezetésénél, ezért ugyanúgy figyelmeztet és az automatikus jóváhagyást megállítja
+    values.grossAmount = decimal(net + vat);
+    sources.grossAmount = "REVERSE_CHARGE";
+    warnings.push(
+      `A bruttó (${decimal(net + vat)}) az ÁFA jelzéséből (0, nem egy ÁFA-sorból) és a nettóból számolt: a nettóval egyenlő. Ellenőrizd a számlán.`,
+    );
   } else if (net !== null && gross !== null && vat === null && !pairingGross) {
     // a hiányzó ÁFA a számlán olvasott bruttó és nettó különbsége: számítás,
     // nem találgatás. A párosítás bruttójából NEM (lásd fent); a fordított

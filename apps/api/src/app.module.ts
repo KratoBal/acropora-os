@@ -35,6 +35,9 @@ import { AiUserContextModule } from "./integrations/ai/ai-user-context.module.js
 import { AiProductSearchModule } from "./integrations/ai-product-search/ai-product-search.module.js";
 import { FavoritesModule } from "./favorites/favorites.module.js";
 import { NavigationCountersModule } from "./navigation/navigation-counters.module.js";
+import { AiChatSettingsModule } from "./integrations/ai-chat-settings/ai-chat-settings.module.js";
+import { CustomerCandidatesModule } from "./customer-candidates/customer-candidates.module.js";
+import { AiContactRequestsModule } from "./integrations/ai-contact-requests/ai-contact-requests.module.js";
 import { WebshopMailModule } from "./integrations/webshop-mail/webshop-mail.module.js";
 import { WebshopInvoiceModule } from "./integrations/webshop-invoice/webshop-invoice.module.js";
 import { MedusaModule } from "./integrations/medusa/medusa.module.js";
@@ -51,6 +54,8 @@ import { InventoryModule } from "./inventory/inventory.module.js";
 import { AssetCategoriesModule } from "./asset-categories/asset-categories.module.js";
 import { AssetFunctionsModule } from "./asset-functions/asset-functions.module.js";
 import { RentalEquipmentModule } from "./rental-equipment/rental-equipment.module.js";
+import { RentalsModule } from "./rentals/rentals.module.js";
+import { AttendanceModule } from "./attendance/attendance.module.js";
 import { UnitsModule } from "./units/units.module.js";
 import { UnasOrderSyncModule } from "./orders/unas-order-sync/unas-order-sync.module.js";
 import { CarrierShipmentModule } from "./orders/carrier-shipment/carrier-shipment.module.js";
@@ -80,6 +85,7 @@ import { KnowledgeBaseModule } from "./knowledge-base/knowledge-base.module.js";
 import { ServiceDraftsModule } from "./service-drafts/service-drafts.module.js";
 import { LivestockArrivalsModule } from "./livestock-arrivals/livestock-arrivals.module.js";
 import { MortalityModule } from "./mortality/mortality.module.js";
+import { OperationsLogModule } from "./operations-log/operations-log.module.js";
 
 @Module({
   imports: [
@@ -93,9 +99,12 @@ import { MortalityModule } from "./mortality/mortality.module.js";
     AssetCategoriesModule,
     AssetFunctionsModule,
     RentalEquipmentModule,
+    RentalsModule,
+    AttendanceModule,
     UnitsModule,
     AquariumsModule,
     MortalityModule,
+    OperationsLogModule,
     LivestockArrivalsModule,
     AuthModule,
     BrandsModule,
@@ -115,6 +124,9 @@ import { MortalityModule } from "./mortality/mortality.module.js";
     AiProductSearchModule,
     NavigationCountersModule,
     FavoritesModule,
+    AiChatSettingsModule,
+    AiContactRequestsModule,
+    CustomerCandidatesModule,
     WebshopMailModule,
     WebshopInvoiceModule,
     AiChatModule,

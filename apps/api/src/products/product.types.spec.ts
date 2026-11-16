@@ -4,6 +4,7 @@ import { Prisma } from "@acropora/database";
 
 import {
   categoryPath,
+  toProductDetail,
   toProductListItem,
   type ProductWithRelations,
 } from "./product.types.js";
@@ -206,5 +207,93 @@ describe("the primary category's path on the list", () => {
       categoryPath(loop as { name: string; parent: null }).length,
       8,
     );
+  });
+});
+
+/*
+  A NEVEK AZ ADATLAPON (kartya 20b0dd47, S2). MI PIROSIT: a reszletes nezet nem adja vissza a magyar, angol vagy nemet
+  nevet (az adatlap sorabol); egy nev egy masik mezo helyen jelenik meg (a ket nyelv felcserelese); adatlap nelkul nem
+  null, hanem hianyzo ertek (a "nincs kitoltve" jele a null).
+*/
+describe("toProductDetail: a nevek az adatlapon", () => {
+  it("a magyar, az angol es a nemet nevet a sajat mezojebe adja", () => {
+    const detail = toProductDetail(
+      baseProduct({
+        datasheet: {
+          fenyIgeny: null,
+          aramlasIgeny: null,
+          magyarNev: "Szarvkorall",
+          angolNev: "Staghorn coral",
+          nemetNev: "Hirschgeweihkoralle",
+        },
+      } as unknown as Partial<ProductWithRelations>),
+    );
+    assert.equal(detail.magyarNev, "Szarvkorall");
+    assert.equal(detail.angolNev, "Staghorn coral");
+    assert.equal(detail.nemetNev, "Hirschgeweihkoralle");
+  });
+
+  it("adatlap nelkul mindharom null (nincs kitoltve)", () => {
+    const detail = toProductDetail(baseProduct());
+    assert.equal(detail.magyarNev, null);
+    assert.equal(detail.angolNev, null);
+    assert.equal(detail.nemetNev, null);
+  });
+});
+
+/*
+  AZ ELO ALLAT FAJTAJA A RESZLETES NEZETEN (kartya 20b0dd47): a Nevek blokk csak a korallnal es a gerinctelennel jelenik meg.
+  MI PIROSIT: a fajta nem a kategoria-ut GYOKERENEK nevebol jon (egy level-kategoria neve szamit); egy masodlagos
+  besorolas gyokere elvesz; nem elo allat kategoria fajtat kap; kategoria nelkul nem null.
+*/
+describe("toProductDetail: az elo allat fajtaja", () => {
+  const node = (names: string[]) =>
+    names.reduceRight<{ name: string; parent: unknown } | null>(
+      (parent, name) => ({ name, parent }),
+      null,
+    );
+  const withCategories = (paths: string[][]) =>
+    toProductDetail(
+      baseProduct({
+        categories: paths.map((path, index) => ({
+          isPrimary: index === 0,
+          sortOrder: index,
+          category: { id: `c${index}`, ...node(path.slice().reverse()) },
+        })),
+      } as unknown as Partial<ProductWithRelations>),
+    ).livestockKind;
+
+  it("a kategoria-ut gyokerebol: SPS a Korallok alatt korall", () => {
+    assert.equal(withCategories([["Korallok", "SPS"]]), "CORAL");
+    assert.equal(
+      withCategories([["Gerinctelenek", "Rakok", "Garnela"]]),
+      "INVERTEBRATE",
+    );
+  });
+
+  it("egy levelnek adott 'Korallok' nev nem gyoker: csak a gyoker szamit", () => {
+    assert.equal(withCategories([["Technika", "Korallok"]]), null);
+  });
+
+  it("minden besorolas szamit: a masodlagos besorolas gyokere is", () => {
+    assert.equal(
+      withCategories([
+        ["Technika", "Szivattyu"],
+        ["Korallok", "LPS"],
+      ]),
+      "CORAL",
+    );
+    assert.equal(
+      withCategories([
+        ["Korallok", "LPS"],
+        ["Halak", "Doktorhal"],
+      ]),
+      null,
+    );
+  });
+
+  it("nem elo allat vagy kategoria nelkul null", () => {
+    assert.equal(withCategories([["Technika", "Szivattyu"]]), null);
+    assert.equal(withCategories([]), null);
   });
 });

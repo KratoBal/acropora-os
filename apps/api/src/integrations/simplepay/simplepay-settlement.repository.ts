@@ -12,10 +12,13 @@ import type {
   SimplePayTransactionLine,
 } from "@acropora/types";
 
+import { externalDocumentType } from "../../billing/billing-document-list.js";
 import type { SimplePayReport } from "./simplepay-report.parser.js";
 import type {
   SimplePayLineResolution,
   SimplePayOrderCandidate,
+  SimplePayOrderDocument,
+  SimplePayOrderLine,
 } from "./simplepay-resolution.js";
 
 export interface StoredSimplePaySource {
@@ -37,8 +40,34 @@ export interface SimplePayReportFacts {
 export interface UnresolvedSimplePayLine {
   id: string;
   reportId: string;
+  transactionStatus: string;
   orderKeySuffix: string | null;
   amount: Prisma.Decimal;
+}
+
+/**
+ * Számlázz.hu's document kinds, as an order's refund is settled: the storno
+ * (SS) cancels, the credit note (JS) and the corrective (HS) reduce. A
+ * proforma, an advance invoice or a delivery note does not bill the order.
+ */
+function feedDocumentKind(
+  kindCode: string,
+): SimplePayOrderDocument["kind"] | null {
+  const code = kindCode.toUpperCase();
+  if (code === "SS") return "STORNO";
+  if (code === "JS" || code === "HS") return "CORRECTION";
+  const type = externalDocumentType(code);
+  return type === "INVOICE" || type === "FINAL_INVOICE" ? "INVOICE" : null;
+}
+
+function ownDocumentKind(
+  documentType: string,
+): SimplePayOrderDocument["kind"] | null {
+  if (documentType === "STORNO") return "STORNO";
+  if (documentType === "CORRECTION") return "CORRECTION";
+  return documentType === "INVOICE" || documentType === "FINAL_INVOICE"
+    ? "INVOICE"
+    : null;
 }
 
 /**
@@ -167,8 +196,124 @@ export class SimplePaySettlementRepository {
   unresolvedLines(reportId: string): Promise<UnresolvedSimplePayLine[]> {
     return prisma.simplePayTransactionLine.findMany({
       where: { reportId, status: "NEEDS_REVIEW", manualApprovedAt: null },
-      select: { id: true, reportId: true, orderKeySuffix: true, amount: true },
+      select: {
+        id: true,
+        reportId: true,
+        transactionStatus: true,
+        orderKeySuffix: true,
+        amount: true,
+      },
     });
+  }
+
+  /**
+   * Order key end -> every SimplePay line of that order, from any report:
+   * a refund is decided against the payment, which is often a week earlier.
+   */
+  async orderLines(
+    suffixes: readonly string[],
+  ): Promise<Map<string, SimplePayOrderLine[]>> {
+    const unique = [...new Set(suffixes)];
+    const out = new Map<string, SimplePayOrderLine[]>();
+    if (unique.length === 0) return out;
+    const lines = await prisma.simplePayTransactionLine.findMany({
+      where: { orderKeySuffix: { in: unique } },
+      orderBy: [{ transactionDate: "asc" }, { simplePayTransactionId: "asc" }],
+      select: { orderKeySuffix: true, transactionStatus: true, amount: true },
+    });
+    for (const line of lines)
+      out.set(line.orderKeySuffix!, [
+        ...(out.get(line.orderKeySuffix!) ?? []),
+        {
+          transactionStatus: line.transactionStatus,
+          amount: Number(line.amount),
+        },
+      ]);
+    return out;
+  }
+
+  /**
+   * Order key end -> the order's outgoing documents: Számlázz.hu's feed (it
+   * knows the gross and whether a storno cancelled the invoice) and our own
+   * issued invoices (a storno issued here cancels through the correction
+   * chain). One number once; the feed's facts win, it is the issuer's record.
+   */
+  async orderDocuments(
+    suffixes: readonly string[],
+  ): Promise<Map<string, SimplePayOrderDocument[]>> {
+    const unique = [...new Set(suffixes)];
+    const out = new Map<string, SimplePayOrderDocument[]>();
+    if (unique.length === 0) return out;
+    const shop = UNAS_SHOP_ORDER_PREFIX.replace(/^UNAS-/, "");
+    const [feed, own] = await Promise.all([
+      prisma.externalBillingDocument.findMany({
+        where: {
+          source: "SZAMLAZZ",
+          orderNumber: { in: unique.map((suffix) => `${shop}${suffix}`) },
+        },
+        orderBy: { documentNumber: "asc" },
+        select: {
+          orderNumber: true,
+          documentNumber: true,
+          kindCode: true,
+          grossAmount: true,
+          cancelled: true,
+        },
+      }),
+      prisma.invoice.findMany({
+        where: {
+          direction: "OUTBOUND",
+          status: "ISSUED",
+          invoiceNumber: { not: null },
+          salesOrder: {
+            orderNumber: {
+              in: unique.map((suffix) => `${UNAS_SHOP_ORDER_PREFIX}${suffix}`),
+            },
+          },
+        },
+        orderBy: { createdAt: "asc" },
+        select: {
+          invoiceNumber: true,
+          documentType: true,
+          grossAmount: true,
+          salesOrder: { select: { orderNumber: true } },
+          correctionInvoices: {
+            where: { documentType: "STORNO", status: "ISSUED" },
+            select: { id: true },
+          },
+        },
+      }),
+    ]);
+    const add = (suffix: string, document: SimplePayOrderDocument) => {
+      const documents = out.get(suffix) ?? [];
+      if (documents.some((known) => known.number === document.number)) return;
+      out.set(suffix, [...documents, document]);
+    };
+    for (const document of feed) {
+      const kind = feedDocumentKind(document.kindCode);
+      if (kind && document.orderNumber)
+        add(document.orderNumber.slice(shop.length), {
+          number: document.documentNumber,
+          kind,
+          gross: Number(document.grossAmount),
+          cancelled: document.cancelled,
+        });
+    }
+    for (const invoice of own) {
+      const kind = ownDocumentKind(invoice.documentType);
+      if (kind && invoice.salesOrder)
+        add(
+          invoice.salesOrder.orderNumber.slice(UNAS_SHOP_ORDER_PREFIX.length),
+          {
+            number: invoice.invoiceNumber!,
+            kind,
+            gross:
+              invoice.grossAmount === null ? null : Number(invoice.grossAmount),
+            cancelled: invoice.correctionInvoices.length > 0,
+          },
+        );
+    }
+    return out;
   }
 
   /**

@@ -32,7 +32,7 @@ export interface SellableBackfillSummary {
  *
  * A ChannelListing sor a helyen marad: nem toroljuk, csak nem ONNAN dontunk.
  */
-function baseStatusFromPayload(
+export function baseStatusFromPayload(
   rawPayload: Record<string, unknown>,
 ): string | null {
   const statuses = rawPayload.Statuses;

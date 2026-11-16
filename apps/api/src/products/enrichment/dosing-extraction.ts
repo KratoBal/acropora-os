@@ -3,10 +3,8 @@ import {
   parseWaterParameterCodes,
 } from "@acropora/jev/product-enrichment";
 
-import {
-  AI_CHAT_TIMEOUT_MS,
-  aiChatConfig,
-} from "../../integrations/ai-chat/ai-chat.config.js";
+import { aiChatConfig } from "../../integrations/ai-chat/ai-chat.config.js";
+import { aiPost, type AiCallDeps } from "./ai-call.js";
 import { readDosing } from "./dosing-reader.js";
 import type { ExtractedValue } from "./page-extract.js";
 
@@ -25,7 +23,9 @@ import type { ExtractedValue } from "./page-extract.js";
  *   deterministic reader reads the same dose twice: on the excerpt, and on the
  *   WHOLE page (the model picks the excerpt, so on a page with three doses it
  *   could pick the clean one; barracuda, #1805). Anything else goes to a person;
- * - a NO_DATA does not stand next to a dose the reader found on the page;
+ * - a NO_DATA does not stand next to a dose the reader found on the page, nor
+ *   next to a dose sentence it held back (a range, two doses): the page states
+ *   a dose, only not one the machine can take;
  * - the parameters to measure are valid codes.
  * Anything that fails gives no value, only a note on the fetch.
  */
@@ -106,36 +106,21 @@ export class HttpDosingExtractor implements DosingExtractor {
     private readonly baseUrl: string,
     private readonly token: string,
     private readonly path: string,
+    private readonly deps: AiCallDeps = {},
   ) {}
 
   async extract(input: {
     productName: string;
     pageText: string;
   }): Promise<DosingExtractorAnswer> {
-    let response: Response;
-    try {
-      response = await fetch(
-        `${this.baseUrl}/${this.path.replace(/^\/+/, "")}`,
-        {
-          method: "POST",
-          headers: {
-            authorization: `Bearer ${this.token}`,
-            "content-type": "application/json",
-          },
-          body: JSON.stringify(input),
-          signal: AbortSignal.timeout(AI_CHAT_TIMEOUT_MS),
-        },
-      );
-    } catch (error) {
-      return {
-        kind: "UNAVAILABLE",
-        reason:
-          (error as Error)?.name === "TimeoutError" ? "timeout" : "unreachable",
-      };
-    }
-    if (!response.ok)
-      return { kind: "UNAVAILABLE", reason: `HTTP ${response.status}` };
-    return extractorAnswerOf(await response.json().catch(() => null));
+    const result = await aiPost(
+      `${this.baseUrl}/${this.path.replace(/^\/+/, "")}`,
+      this.token,
+      input,
+      this.deps,
+    );
+    if (!result.ok) return { kind: "UNAVAILABLE", reason: result.reason };
+    return extractorAnswerOf(result.body);
   }
 }
 
@@ -150,23 +135,153 @@ export function dosingExtractorFromEnv(
     : null;
 }
 
-/** A page's visible text: scripts, styles and navigation out, block tags as line breaks. */
-export function visiblePageText(html: string): string {
-  return html
-    .replace(
-      /<(script|style|noscript|svg|nav|header|footer|template)\b[\s\S]*?<\/\1>/gi,
-      " ",
+/** Sectioning and main content: a header or footer inside one belongs to the content. */
+const CONTENT_SCOPES = new Set(["article", "section", "main", "aside"]);
+
+/**
+ * THE PAGE'S OWN HEADER AND FOOTER OUT, A CONTENT HEADER KEPT (card 85c38ab1:
+ * Fauna Marin Dino M states its dose in a <header> under main > section >
+ * article; every header was dropped, the AI never saw the dose, and NO_DATA
+ * went through). As in HTML's banner and contentinfo rule, only a header or
+ * footer with no article, section, main or aside open around it is page
+ * chrome. One that never closes stays, like before.
+ */
+function withoutPageChrome(html: string): string {
+  const cuts: [number, number][] = [];
+  const open: string[] = [];
+  let chrome: { tag: string; start: number; depth: number } | null = null;
+  for (const m of html.matchAll(
+    /<(\/?)(article|section|main|aside|header|footer)\b[^>]*>/gi,
+  )) {
+    const tag = m[2]!.toLowerCase();
+    if (m[1]) {
+      const at = open.lastIndexOf(tag);
+      if (at >= 0) open.splice(at);
+      if (chrome && tag === chrome.tag && open.length === chrome.depth) {
+        cuts.push([chrome.start, m.index + m[0].length]);
+        chrome = null;
+      }
+      continue;
+    }
+    if (
+      !chrome &&
+      (tag === "header" || tag === "footer") &&
+      !open.some((t) => CONTENT_SCOPES.has(t))
     )
+      chrome = { tag, start: m.index, depth: open.length };
+    open.push(tag);
+  }
+  let out = "";
+  let from = 0;
+  for (const [start, end] of cuts) {
+    out += `${html.slice(from, start)} `;
+    from = end;
+  }
+  return out + html.slice(from);
+}
+
+/**
+ * THE PAGE'S CHARACTERS, NOT ITS ENTITIES (T4.4 pilot-20, third run, 2026-11-14, card 8639ac2a): only five entities were
+ * decoded, so a page writing "Tropic Marin&reg;" reached the AI as "&reg;", the model copied the anchor with "®", and the
+ * guard rightly found it nowhere on the page (ANCHOR_NOT_IN_PAGE at U+00AE; the Syn-Biotic dose fell the same way). Every
+ * numeric entity and the named ones these pages use are decoded, in ONE pass, so "&amp;reg;" stays the text "&reg;". The
+ * exact character, not an ASCII stand-in (unlike the product search's decoder): the reader and the guard compare it. A
+ * soft hyphen is invisible on the page, so it goes; an unknown name stays as written.
+ */
+const NAMED: Readonly<Record<string, string>> = {
+  nbsp: " ",
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  reg: "®",
+  trade: "™",
+  copy: "©",
+  deg: "°",
+  micro: "µ",
+  // the salinity of a sea salt (‰), seen on the Syn-Biotic page
+  permil: "‰",
+  sup2: "²",
+  sup3: "³",
+  times: "×",
+  plusmn: "±",
+  divide: "÷",
+  euro: "€",
+  middot: "·",
+  bull: "•",
+  hellip: "…",
+  ndash: "–",
+  mdash: "—",
+  shy: "",
+  lsquo: "‘",
+  rsquo: "’",
+  sbquo: "‚",
+  ldquo: "“",
+  rdquo: "”",
+  bdquo: "„",
+  laquo: "«",
+  lsaquo: "‹",
+  rsaquo: "›",
+  raquo: "»",
+  frac12: "½",
+  frac14: "¼",
+  frac34: "¾",
+  auml: "ä",
+  ouml: "ö",
+  uuml: "ü",
+  Auml: "Ä",
+  Ouml: "Ö",
+  Uuml: "Ü",
+  szlig: "ß",
+  aacute: "á",
+  eacute: "é",
+  iacute: "í",
+  oacute: "ó",
+  uacute: "ú",
+  odblac: "ő",
+  udblac: "ű",
+  Aacute: "Á",
+  Eacute: "É",
+  Iacute: "Í",
+  Oacute: "Ó",
+  Uacute: "Ú",
+  Odblac: "Ő",
+  Udblac: "Ű",
+  agrave: "à",
+  egrave: "è",
+  ccedil: "ç",
+  ntilde: "ñ",
+  oslash: "ø",
+  aring: "å",
+};
+const ENTITY = /&(#x[0-9a-f]+|#[0-9]+|[a-z][a-z0-9]*);/gi;
+function decodeEntity(whole: string, body: string): string {
+  if (body.startsWith("#")) {
+    const code =
+      body[1] === "x" || body[1] === "X"
+        ? Number.parseInt(body.slice(2), 16)
+        : Number.parseInt(body.slice(1), 10);
+    if (!Number.isFinite(code) || code < 1 || code > 0x10ffff) return whole;
+    return code === 0xad ? "" : String.fromCodePoint(code);
+  }
+  return NAMED[body] ?? whole;
+}
+
+/** A page's visible text: scripts, styles, navigation and the page's own header and footer out, block tags as line breaks. */
+export function visiblePageText(html: string): string {
+  return withoutPageChrome(
+    html.replace(
+      /<(script|style|noscript|svg|nav|template)\b[\s\S]*?<\/\1>/gi,
+      " ",
+    ),
+  )
     .replace(
       /<(br|p|div|li|h\d|tr|td|th|section|article|dd|dt)\b[^>]*>/gi,
       "\n",
     )
     .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#0?39;|&apos;/g, "'")
-    .replace(/&#8211;|&ndash;/g, "–")
+    .replace(ENTITY, decodeEntity)
     .split("\n")
     .map((line) => line.replace(/\s+/g, " ").trim())
     .filter(Boolean)
@@ -174,6 +289,19 @@ export function visiblePageText(html: string): string {
 }
 
 const squash = (value: string) => value.replace(/\s+/g, " ").trim();
+
+/** The reader's held-back reasons, without the pack-size remarks, at most three, each capped. */
+export const HELD_BACK_NOTES = { max: 3, length: 300 } as const;
+export function heldBackNotes(notes: readonly string[]): string[] {
+  return notes
+    .filter((note) => !note.startsWith("adagolás: kiszerelés-mondat"))
+    .slice(0, HELD_BACK_NOTES.max)
+    .map((note) =>
+      note.length > HELD_BACK_NOTES.length
+        ? `${note.slice(0, HELD_BACK_NOTES.length - 1)}…`
+        : note,
+    );
+}
 
 export interface DosingStatement {
   values: ExtractedValue[];
@@ -185,11 +313,15 @@ export interface DosingStatement {
  * The AI's answer, checked against this page, as the run's candidates.
  * `alreadyRead`: the dose the deterministic reader took from the page's JSON-LD
  * description (#1800), if any: a NO_DATA must not stand next to it.
+ * `descriptionDoseOnPage`: that description states a dose the reader read or
+ * held back; `pageText` leaves the script out, so it is passed apart
+ * (barracuda, #2538).
  */
 export function dosingStatement(
   answer: DosingExtractorAnswer,
   pageText: string,
   alreadyRead: string | null = null,
+  descriptionDoseOnPage = false,
 ): DosingStatement {
   if (answer.kind === "UNAVAILABLE")
     return {
@@ -231,6 +363,25 @@ export function dosingStatement(
       values: [],
       notes: [
         `adagolás (AI): az AI szerint ${answer.mode === "NO_DATA" ? "nincs adat" : "tesztfüggő"}, az olvasó ${found} adagot olvasott`,
+      ],
+    };
+  // "no data" next to a dose sentence the reader held back: the page states a
+  // dose, so a person reads it (Fauna Marin Multi Elements A, card 85c38ab1:
+  // a range dose, the AI said NO_DATA, and NO_DATA went through as a value)
+  // A TEST_DEPENDENT next to a held-back dose stays allowed on purpose: a range
+  // or an unread sentence is what a measured, adjusted dose looks like, and
+  // its guidance must still stand on the page (above).
+  if (
+    answer.mode === "NO_DATA" &&
+    (wholePage.doseOnPage || descriptionDoseOnPage)
+  )
+    return {
+      values: [],
+      notes: [
+        `adagolás (AI): az AI szerint nincs adat, az olvasó adag-mondatot talált, amit nem tudott gépi alakra hozni (${wholePage.doseOnPage ? "a lapon" : "a leírásban"})`,
+        // the reader's own reasons with the page's sentence, for the person who reads it next (acrobot 51082: this is the
+        // most frequent outcome of the bulk round); the description's reasons are on the fetch already (page-extract)
+        ...heldBackNotes(wholePage.notes),
       ],
     };
   if (answer.mode === "NO_DATA") {

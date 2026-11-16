@@ -165,7 +165,9 @@ describe("PilotWorksheetEditorPage", () => {
         }),
       ),
     );
-    expect(navigation.push).toHaveBeenCalledWith("/szerviz/munkalapok/ws-1");
+    await waitFor(() =>
+      expect(navigation.push).toHaveBeenCalledWith("/szerviz/munkalapok/ws-1"),
+    );
   });
 
   it("a Mégsem az adatlapra visz mentés nélkül", async () => {
