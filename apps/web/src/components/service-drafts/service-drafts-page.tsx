@@ -6,8 +6,11 @@ import { Alert, PageHeader, Skeleton, PAGE_GUTTER_X } from "@acropora/ui";
 import type {
   ServiceDraftItem,
   ServiceDraftListResponse,
+  ServiceDraftPlace,
+  ServiceDraftSource,
   ServiceDraftStatus,
   ServiceDraftSyncStatus,
+  TicketMailIntakeStatus,
 } from "@acropora/types";
 import { useAuth } from "@/components/auth/auth-provider";
 import {
@@ -92,6 +95,33 @@ export function draftFilterBadge(
   return null;
 }
 
+/**
+ * A TICKET@ VÁZLAT HONNAN-JELE A KÁRTYÁN (kártya ec7b947b, Balázs 2026-09-18: "ránézésre más és szűrhető"): a három bejövő ág ugyanabban a
+ * listában áll, és ez a jel különbözteti meg őket. Az AI nélküli (bekapcsolt feladó, az AI nem válaszolt) és az ismeretlen feladó
+ * kiemelt; a szabályalapú (Cápasuli) vázlaton nincs jel.
+ */
+export function draftIntakeBadge(
+  item: Pick<ServiceDraftItem, "intakeState">,
+): { label: string; variant: "teal" | "amber" | "grey" } | null {
+  switch (item.intakeState) {
+    case "AI_DRAFT":
+      return { label: "AI vázlat", variant: "teal" };
+    case "AI_UNAVAILABLE":
+      return { label: "AI nélkül", variant: "amber" };
+    case "WATCH_OFF":
+      return { label: "Figyelés kikapcsolva", variant: "grey" };
+    case "UNKNOWN_SENDER":
+      return { label: "Ismeretlen feladó", variant: "amber" };
+    default:
+      return null;
+  }
+}
+
+/** A kártya fejlécének forrás-szava. */
+export function draftSourceLabel(source: ServiceDraftSource): string {
+  return source === "TICKET_MAIL" ? "Ticket levél" : "Cápasuli";
+}
+
 /** A kiszűrés oka a "Kiszűrve" szakaszban. */
 export function jevClassLabel(jevClass: string | null): string {
   if (jevClass === "NOT_OURS") return "Nem nekünk szól";
@@ -102,12 +132,15 @@ export function jevClassLabel(jevClass: string | null): string {
 function DraftCard({
   item,
   data,
+  places,
   token,
   onDecide,
   busy,
 }: {
   item: ServiceDraftItem;
   data: ServiceDraftListResponse;
+  /** A ticket@ vázlat helyszín-készlete (minden aktív helyszín); a Cápasuli vázlat a `data.locations`-t kapja. */
+  places: readonly ServiceDraftPlace[] | undefined;
   token: string;
   onDecide: (
     item: ServiceDraftItem,
@@ -119,6 +152,8 @@ function DraftCard({
 }) {
   const [author, setAuthor] = useState(item.reporterPersonName ?? "");
   const [department, setDepartment] = useState(item.proposedDepartmentId ?? "");
+  const isTicket = item.source === "TICKET_MAIL";
+  const intakeBadge = draftIntakeBadge(item);
   return (
     <PilotCard>
       <article aria-label={item.title} className="space-y-4 p-6">
@@ -126,8 +161,25 @@ function DraftCard({
           {item.title}
         </h2>
         <p className="text-xs text-pilot-grey-600">
-          Cápasuli · {item.reportDate} · {item.mail.subject ?? "Napi jelentő"}
+          {draftSourceLabel(item.source)} · {item.reportDate} ·{" "}
+          {item.mail.subject ?? (isTicket ? "Tárgy nélkül" : "Napi jelentő")}
         </p>
+        {isTicket && (
+          <p className="break-all text-xs text-pilot-grey-600">
+            Feladó: {item.mail.fromAddress ?? "ismeretlen cím"}
+          </p>
+        )}
+        {intakeBadge && (
+          <PilotBadge variant={intakeBadge.variant}>
+            {intakeBadge.label}
+          </PilotBadge>
+        )}
+        {item.intakeState === "UNKNOWN_SENDER" && item.status === "PENDING" && (
+          <p className="text-xs text-pilot-grey-500">
+            A feladó nem ismert, vagy a címe nem igazolható: a helyszínt és a
+            szerzőt te adod meg.
+          </p>
+        )}
         {draftFilterBadge(item, data.filterEnabled) && (
           <PilotBadge
             variant={draftFilterBadge(item, data.filterEnabled)!.variant}
@@ -171,6 +223,12 @@ function DraftCard({
         ) : (
           <p className="text-xs text-pilot-grey-500">Nincs csatolmány</p>
         )}
+        {item.mail.droppedAttachments > 0 && (
+          <p className="text-xs text-pilot-amber-700">
+            {item.mail.droppedAttachments} csatolmány kimaradt (típus, méret
+            vagy darabszám miatt); a levélben megvan.
+          </p>
+        )}
         {item.status === "PENDING" && (
           <div className="max-w-sm">
             <label
@@ -187,11 +245,17 @@ function DraftCard({
               disabled={busy}
             >
               <option value="">Válassz helyszínt</option>
-              {data.locations.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.name}
-                </option>
-              ))}
+              {isTicket
+                ? (places ?? []).map((place) => (
+                    <option key={place.id} value={place.id}>
+                      {place.customerName} · {place.name}
+                    </option>
+                  ))
+                : data.locations.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.name}
+                    </option>
+                  ))}
             </PilotSelect>
           </div>
         )}
@@ -220,7 +284,9 @@ function DraftCard({
         ) : null}
         <details className="text-xs">
           <summary className="cursor-pointer font-medium text-pilot-aqua-700">
-            Teljes napi jelentő megnyitása
+            {isTicket
+              ? "Teljes levél megnyitása"
+              : "Teljes napi jelentő megnyitása"}
           </summary>
           <p className="mt-3 whitespace-pre-wrap break-words text-pilot-grey-600">
             {item.mail.originalText}
@@ -229,7 +295,7 @@ function DraftCard({
         {item.status === "PENDING" ? (
           <div className="flex flex-wrap gap-3">
             <PilotButton
-              disabled={busy || !department || !data.openedBy}
+              disabled={busy || !department || (!isTicket && !data.openedBy)}
               onClick={() => onDecide(item, "accept", department, author)}
               aria-label={`Elfogadom: ${item.title}`}
             >
@@ -272,6 +338,10 @@ export function ServiceDraftsPage() {
   const [status, setStatus] = useState<ServiceDraftStatus>("PENDING");
   const [data, setData] = useState<ServiceDraftListResponse>();
   const [sync, setSync] = useState<ServiceDraftSyncStatus>();
+  const [ticketSync, setTicketSync] = useState<TicketMailIntakeStatus>();
+  /** Forrás szerinti szűrés (kártya ec7b947b): minden vázlat, csak a ticket@ levelek, vagy csak a Cápasuli jelentők. */
+  const [source, setSource] = useState<ServiceDraftSource | "ALL">("ALL");
+  const [places, setPlaces] = useState<ServiceDraftPlace[]>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
@@ -292,6 +362,7 @@ export function ServiceDraftsPage() {
           status,
           cursor,
           signal,
+          source === "ALL" ? undefined : source,
         );
         if (signal?.aborted) return;
         setData((old) =>
@@ -308,7 +379,7 @@ export function ServiceDraftsPage() {
         if (!signal?.aborted) setLoading(false);
       }
     },
-    [admin, session, status],
+    [admin, session, status, source],
   );
   useEffect(() => {
     if (!admin || !session) return;
@@ -319,8 +390,27 @@ export function ServiceDraftsPage() {
       .status(session.token ?? "", abort.signal)
       .then(setSync)
       .catch(() => {});
+    void serviceDraftsApi
+      .ticketMailStatus(session.token ?? "", abort.signal)
+      .then(setTicketSync)
+      .catch(() => {});
     return () => abort.abort();
   }, [load, admin, session]);
+  // A ticket@ vázlat helyszín-készlete egyszer töltődik be, amint a listán van ilyen vázlat.
+  const hasTicketDraft = !!data?.items.some(
+    (item) => item.source === "TICKET_MAIL",
+  );
+  useEffect(() => {
+    if (!admin || !session || !hasTicketDraft || places) return;
+    const abort = new AbortController();
+    serviceDraftsApi
+      .places(session.token ?? "", abort.signal)
+      .then((result) => setPlaces(result.items))
+      .catch(() => {
+        if (!abort.signal.aborted) setError("A helyszínek nem tölthetők be.");
+      });
+    return () => abort.abort();
+  }, [admin, session, hasTicketDraft, places]);
   async function decide(
     item: ServiceDraftItem,
     decision: "accept" | "reject",
@@ -378,7 +468,7 @@ export function ServiceDraftsPage() {
       <PageHeader
         eyebrow="Szerviz"
         title="Piszkozatok"
-        description="A napi jelentőből kiemelt kérések. Hibajegy csak az elfogadás után jön létre."
+        description="A napi jelentőből és a ticket@ címre érkezett levelekből kiemelt kérések. Hibajegy csak az elfogadás után jön létre."
       />
       {sync && (
         <details className="text-xs text-pilot-grey-500">
@@ -402,6 +492,57 @@ export function ServiceDraftsPage() {
           {sync.lastError && <p role="alert">{sync.lastError}</p>}
         </details>
       )}
+      {ticketSync && (
+        <details className="text-xs text-pilot-grey-500">
+          <summary className="cursor-pointer">
+            Ticket postafiók feldolgozás:{" "}
+            {ticketSync.enabled
+              ? "bekapcsolva"
+              : ticketSync.switchReason === "UNRECOGNISED"
+                ? "ismeretlen kapcsolóérték"
+                : "kikapcsolva"}
+          </summary>
+          <p className="mt-2 break-words">
+            {ticketSync.mailbox} · {ticketSync.intervalMinutes} perc
+          </p>
+          {!ticketSync.configured && (
+            <p>A ticket postafiók olvasó hozzáférése nincs beállítva.</p>
+          )}
+          {ticketSync.lastRunAt && (
+            <p>
+              Utolsó futás:{" "}
+              {new Date(ticketSync.lastRunAt).toLocaleString("hu-HU")}
+            </p>
+          )}
+          {ticketSync.lastError && <p role="alert">{ticketSync.lastError}</p>}
+        </details>
+      )}
+      <div
+        role="tablist"
+        aria-label="Piszkozat forrása"
+        className="flex flex-wrap gap-3"
+      >
+        {(
+          [
+            ["ALL", "Minden forrás"],
+            ["TICKET_MAIL", "Ticket levelek"],
+            ["CAPASULI_DAILY_REPORT", "Cápasuli jelentők"],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            role="tab"
+            aria-selected={source === value}
+            onClick={() => {
+              setSource(value);
+              setNotice(undefined);
+            }}
+            className={`rounded-md px-3 py-2 text-xs ${source === value ? "bg-pilot-amber-50 text-pilot-amber-700" : "bg-pilot-grey-100 text-pilot-grey-600"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
       <div
         role="tablist"
         aria-label="Piszkozat állapota"
@@ -438,12 +579,15 @@ export function ServiceDraftsPage() {
           {notice}
         </Alert>
       )}
-      {data && status === "PENDING" && !data.openedBy && (
-        <Alert variant="info" title="Tájékoztatás">
-          Az elfogadáshoz állítsd be a Cápasuli helyszínét és
-          partnerfelhasználóját. A piszkozatokat addig is elvetheted.
-        </Alert>
-      )}
+      {data &&
+        status === "PENDING" &&
+        !data.openedBy &&
+        data.items.some((item) => item.source !== "TICKET_MAIL") && (
+          <Alert variant="info" title="Tájékoztatás">
+            Az elfogadáshoz állítsd be a Cápasuli helyszínét és
+            partnerfelhasználóját. A piszkozatokat addig is elvetheted.
+          </Alert>
+        )}
       {data?.openedBy && status === "PENDING" && (
         <p className="text-xs text-pilot-grey-500">
           A hibajegy nyitója: {data.openedBy.name}
@@ -454,6 +598,7 @@ export function ServiceDraftsPage() {
           key={item.id}
           item={item}
           data={data}
+          places={places}
           token={session!.token ?? ""}
           onDecide={(...args) => void decide(...args)}
           busy={!!busy}

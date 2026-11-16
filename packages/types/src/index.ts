@@ -1557,6 +1557,7 @@ export type {
   ServiceDraftIntakeState,
   ServiceDraftPlace,
   ServiceDraftSource,
+  TicketMailIntakeStatus,
   ServiceDraftFilteredItem,
   ServiceDraftJevClass,
   ServiceDraftStatus,
