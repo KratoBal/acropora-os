@@ -550,18 +550,25 @@ export function BillingDocumentEditor({
       setSaveError(
         cause instanceof Error ? cause.message : "A kiállítás nem sikerült.",
       );
-      // a kiállítási kísérlet (foglalás, elutasítás) is lépteti a sor időbélyegét: a következő mentés az aktuálisat kéri
+      // a kiállítási kísérlet (foglalás, elutasítás) is lépteti a sor időbélyegét. A bizonylatot TELJESEN visszaolvassuk (tartalom,
+      // állapot és időbélyeg együtt, mint a betöltés): a kiállítás előtt minden el volt mentve, tehát nincs mit elveszíteni, és
+      // a következő mentés arra épül, ami a szerveren van. Csak az időbélyeg átvétele a 409 védelmet kerülné meg: ha közben más
+      // mentett, a mi régi tartalmunk csendben felülírná az övét (barracuda, #2633 review).
       try {
         const current = await billingDocumentsApi.detail(
           token,
           pending.detail.id,
         );
         setStatus(current.status);
-        setState((previous) =>
-          previous
-            ? { ...previous, savedUpdatedAt: current.updatedAt }
-            : previous,
-        );
+        setState((previous) => {
+          const next = fromDetail(current);
+          // a termék-sor alcíme csak a szerkesztőben él: sorrend szerint átvesszük, mint a mentés
+          next.lines = next.lines.map((line, index) => ({
+            ...line,
+            productLabel: previous?.lines[index]?.productLabel ?? null,
+          }));
+          return next;
+        });
       } catch {
         // az olvasás hibája nem rontja a kiállítás hibaüzenetét; a következő mentés a szerver ütközésével jelez
       }

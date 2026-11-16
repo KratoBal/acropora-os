@@ -1363,25 +1363,23 @@ describe("BillingDocumentEditor", () => {
       );
     });
 
-    it("after a refused issue the current timestamp and status are read back, because the attempt moved the row", async () => {
+    it("after a refused issue the document is read back whole: the next save sends the server's content with its timestamp", async () => {
       api.create.mockImplementation(async (_token, body) => ({
         ...detailFrom(body, body.id),
         updatedAt: "2026-09-30T10:06:00.000Z",
       }));
       api.issue.mockRejectedValue(new Error("A kiállítás elutasítva."));
-      api.detail.mockReset().mockResolvedValueOnce({
+      await readyPaperInvoice();
+      // somebody else saved the document while the issue attempt ran: another note and due date, a newer timestamp
+      api.detail.mockReset().mockImplementationOnce(async (_token, id) => ({
         ...detailFrom(
-          {
-            documentType: "INVOICE",
-            invoiceFormat: "PAPER",
-            lines: [],
-          },
-          "x",
+          { ...api.create.mock.calls[0]![1], note: "Más megjegyzés" },
+          id,
         ),
+        dueDate: "2026-12-24",
         status: "ISSUE_FAILED",
         updatedAt: "2026-09-30T10:09:00.000Z",
-      });
-      await readyPaperInvoice();
+      }));
       fireEvent.click(
         screen.getByRole("button", { name: "Számla kiállítása" }),
       );
@@ -1398,9 +1396,11 @@ describe("BillingDocumentEditor", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "Vázlat mentése" }));
       await waitFor(() => expect(api.update).toHaveBeenCalledTimes(1));
-      expect(api.update.mock.calls[0]![2].expectedUpdatedAt).toBe(
-        "2026-09-30T10:09:00.000Z",
-      );
+      const sent = api.update.mock.calls[0]![2];
+      // the server's content with the server's timestamp, not the old local content with a newer timestamp
+      expect(sent.expectedUpdatedAt).toBe("2026-09-30T10:09:00.000Z");
+      expect(sent.note).toBe("Más megjegyzés");
+      expect(sent.dueDate).toBe("2026-12-24");
     });
 
     /*
