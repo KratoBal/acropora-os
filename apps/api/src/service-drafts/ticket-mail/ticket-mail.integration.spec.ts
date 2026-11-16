@@ -154,13 +154,20 @@ describe("Ticket mailbox intake store", { skip: gate.mode === "skip" }, () => {
       },
       content: draftContentOf(m),
     };
-    assert.deepEqual(await repository.record(input), {
-      recorded: true,
-      drafts: 1,
-    });
+    // the result also names the mail row (the push's target); a message already recorded names none
+    const filed = await repository.record(input);
+    assert.deepEqual(
+      { ...filed, mailId: typeof filed.mailId },
+      {
+        recorded: true,
+        drafts: 1,
+        mailId: "string",
+      },
+    );
     assert.deepEqual(await repository.record(input), {
       recorded: false,
       drafts: 0,
+      mailId: null,
     });
     assert.ok(await repository.hasMessage(mailbox, "msg-draft"));
     const drafts = await prisma.serviceTicketDraft.findMany({
