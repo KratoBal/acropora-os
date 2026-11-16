@@ -12,6 +12,10 @@ import { TicketMailGmailClient } from "./ticket-mail/ticket-mail-gmail.client.js
 import { TicketMailIntakeScheduler } from "./ticket-mail/ticket-mail-intake.scheduler.js";
 import { TicketMailIntakeService } from "./ticket-mail/ticket-mail-intake.service.js";
 import { TicketMailRepository } from "./ticket-mail/ticket-mail.repository.js";
+import {
+  TICKET_MAIL_AI_CLIENT,
+  ticketDraftClientFromEnv,
+} from "./ticket-mail/ticket-mail-ai.client.js";
 @Module({
   imports: [ServiceJobsModule, NotificationsModule],
   controllers: [ServiceDraftsController, TicketMailController],
@@ -25,6 +29,10 @@ import { TicketMailRepository } from "./ticket-mail/ticket-mail.repository.js";
     TicketMailRepository,
     TicketMailIntakeService,
     TicketMailIntakeScheduler,
+    {
+      provide: TICKET_MAIL_AI_CLIENT,
+      useFactory: () => ticketDraftClientFromEnv(process.env),
+    },
   ],
 })
 export class ServiceDraftsModule {}

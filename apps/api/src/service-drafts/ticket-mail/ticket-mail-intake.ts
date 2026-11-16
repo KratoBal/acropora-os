@@ -35,7 +35,8 @@ export type IntakeOutcome =
   | { kind: "CAPPED" }
   | {
       kind: "DRAFT";
-      intakeState: "AI_UNAVAILABLE" | "WATCH_OFF" | "UNKNOWN_SENDER";
+      intakeState:
+        "AI_DRAFT" | "AI_UNAVAILABLE" | "WATCH_OFF" | "UNKNOWN_SENDER";
       senderUserId: string | null;
       reporterPersonName: string | null;
       proposedDepartmentId: string | null;

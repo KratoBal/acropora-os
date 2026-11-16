@@ -187,6 +187,50 @@ describe("Ticket mailbox intake store", { skip: gate.mode === "skip" }, () => {
     assert.equal(draft.mail.skipReason, null);
   });
 
+  it("stores the AI's title, summary and model label on an AI draft, and nothing on an AI-less one", async () => {
+    // another address: the counting test below counts the anna address's mail, and this one must not join it
+    const m = message("msg-ai", {
+      from: `ai-${suffix}@example.test`,
+      fromAddress: `ai-${suffix}@example.test`,
+    });
+    await repository.record({
+      mailbox,
+      message: m,
+      authVerdict: "DMARC_PASS",
+      outcome: {
+        kind: "DRAFT",
+        intakeState: "AI_DRAFT",
+        senderUserId: userIds[0]!,
+        reporterPersonName: "anna",
+        proposedDepartmentId: null,
+      },
+      content: {
+        ...draftContentOf(m),
+        title: "A szűrő csöpög",
+        aiSummary: "A szűrő a hétvége óta csöpög.",
+        aiExtractedBy: "gpt-5.1 ticket-draft/v1",
+      },
+    });
+    const ai = await prisma.serviceTicketDraft.findFirstOrThrow({
+      where: { mailbox, mail: { messageId: "msg-ai" } },
+    });
+    assert.equal(ai.intakeState, "AI_DRAFT");
+    assert.equal(ai.title, "A szűrő csöpög");
+    assert.equal(ai.aiSummary, "A szűrő a hétvége óta csöpög.");
+    assert.equal(ai.aiExtractedBy, "gpt-5.1 ticket-draft/v1");
+    const plain = await prisma.serviceTicketDraft.findFirstOrThrow({
+      where: { mailbox, mail: { messageId: "msg-draft" } },
+    });
+    assert.equal(plain.aiSummary, null);
+    assert.equal(plain.aiExtractedBy, null);
+  });
+
+  it("lists the names of the users for the redaction, and only names", async () => {
+    const names = await repository.personNames();
+    assert.ok(names.includes("anna"));
+    assert.ok(names.every((name) => typeof name === "string"));
+  });
+
   it("a skipped or capped mail leaves a mail row with its reason and NO draft", async () => {
     for (const [id, outcome, reason] of [
       [

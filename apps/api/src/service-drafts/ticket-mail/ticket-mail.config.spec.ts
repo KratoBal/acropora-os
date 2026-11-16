@@ -85,6 +85,44 @@ describe("ticketMailConfig", () => {
     assert.equal(c.unknownSenderPerHour, 5);
     assert.equal(c.unknownTotalPerHour, 30);
     assert.equal(c.maxAttempts, 3);
+    assert.equal(c.aiEnabled, false);
+    assert.equal(c.aiSwitchReason, "NOT_SET");
+    assert.equal(c.aiPath, "/v1/ticket-drafts");
+    assert.equal(c.aiMaxPerRun, 10);
+    assert.equal(c.aiMaxFailures, 2);
+  });
+  it("the AI switch is its own, off by default, and an unknown value is off", () => {
+    assert.equal(
+      ticketMailConfig({ TICKET_MAIL_AI_ENABLED: "true" }).aiEnabled,
+      true,
+    );
+    assert.equal(
+      ticketMailConfig({ TICKET_MAIL_AI_ENABLED: "yes" }).aiEnabled,
+      false,
+    );
+    assert.equal(
+      ticketMailConfig({ TICKET_MAIL_AI_ENABLED: "yes" }).aiSwitchReason,
+      "UNRECOGNISED",
+    );
+    // the intake switch does not turn the AI on
+    assert.equal(
+      ticketMailConfig({ GMAIL_TICKET_INTAKE_ENABLED: "true" }).aiEnabled,
+      false,
+    );
+    const c = ticketMailConfig({
+      ACROPORA_AI_TICKET_DRAFT_PATH: "/v1/x",
+      TICKET_MAIL_AI_MAX_PER_RUN: "3",
+      TICKET_MAIL_AI_MAX_FAILURES: "5",
+    });
+    assert.deepEqual(
+      [c.aiPath, c.aiMaxPerRun, c.aiMaxFailures],
+      ["/v1/x", 3, 5],
+    );
+    const bad = ticketMailConfig({
+      TICKET_MAIL_AI_MAX_PER_RUN: "0",
+      TICKET_MAIL_AI_MAX_FAILURES: "99",
+    });
+    assert.deepEqual([bad.aiMaxPerRun, bad.aiMaxFailures], [10, 2]);
   });
   it("takes valid overrides and lower-cases the mailbox", () => {
     const c = ticketMailConfig({

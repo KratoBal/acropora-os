@@ -73,6 +73,8 @@ export interface ServiceDraftItem {
   }>;
   filterState: ServiceDraftFilterState;
   intakeState: ServiceDraftIntakeState;
+  /** Az AI rövid összefoglalója a redaktált levélből (csak megjelenítésre; a jegy leírása az eredeti szöveg); null: az AI nem futott. */
+  aiSummary: string | null;
   jevClass: string | null;
   jevConfidence: number | null;
   occurrence: number;

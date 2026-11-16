@@ -211,6 +211,20 @@ function DraftCard({
             ))}
           </div>
         )}
+        {item.aiSummary && (
+          <div className="space-y-1 rounded-md bg-pilot-aqua-50 p-3">
+            <p className="text-xs font-semibold text-pilot-aqua-700">
+              AI összefoglaló (csak segítség: a levél szövege alatta áll)
+            </p>
+            {/* SZÖVEGKÉNT, soha nem HTML: a modell válasza egy idegen levél alapján készült */}
+            <p className="whitespace-pre-wrap break-words text-sm text-pilot-grey-900">
+              {item.aiSummary}
+            </p>
+          </div>
+        )}
+        <p className="text-xs font-semibold text-pilot-grey-600">
+          {isTicket ? "A levél szövege" : "A kért javítás szövege"}
+        </p>
         <p className="whitespace-pre-wrap break-words text-sm text-pilot-grey-900">
           {item.originalProblem}
         </p>

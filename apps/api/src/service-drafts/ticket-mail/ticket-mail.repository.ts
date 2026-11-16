@@ -99,6 +99,22 @@ export class TicketMailRepository {
   }
 
   /**
+   * EVERY NAME WE KNOW THAT COULD APPEAR IN A MAIL, for the redaction before the AI call: each user's display, first and last name (the staff and
+   * the partner portal users), active or not. Names only, no addresses, no ids; the redaction turns the tokens into a pattern and discards them.
+   */
+  async personNames(): Promise<string[]> {
+    const users = await prisma.user.findMany({
+      select: { displayName: true, firstName: true, lastName: true },
+      take: 20_000,
+    });
+    return users.flatMap((user) => [
+      user.displayName,
+      user.firstName,
+      user.lastName,
+    ]);
+  }
+
+  /**
    * HOW MANY MAILS OF ALL UNKNOWN SENDERS TOGETHER were listed or capped since `since`: a draft of an unknown sender, or a mail recorded as
    * capped. The per-address count cannot see a flood from rotating addresses; this one protects the managers' list whoever writes.
    */
@@ -182,7 +198,11 @@ export class TicketMailRepository {
     message: TicketMailMessage;
     authVerdict: string;
     outcome: IntakeOutcome;
-    content: ReturnType<typeof draftContentOf>;
+    content: ReturnType<typeof draftContentOf> & {
+      /** The AI's short summary and the model that wrote it (S3b); absent when the AI did not run. */
+      aiSummary?: string;
+      aiExtractedBy?: string;
+    };
   }): Promise<RecordedMail> {
     const { mailbox, message, outcome, content } = input;
     return prisma.$transaction(
@@ -243,6 +263,8 @@ export class TicketMailRepository {
             proposedDepartmentId: outcome.proposedDepartmentId,
             intakeState: outcome.intakeState,
             senderUserId: outcome.senderUserId,
+            aiSummary: content.aiSummary ?? null,
+            aiExtractedBy: content.aiExtractedBy ?? null,
             attachments: {
               create: [...unique].map(([sha256, a]) => ({
                 fileName: withoutNul(a.fileName),

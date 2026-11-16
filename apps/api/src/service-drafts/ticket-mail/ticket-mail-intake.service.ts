@@ -1,8 +1,10 @@
 import {
   ConflictException,
   ForbiddenException,
+  Inject,
   Injectable,
   Logger,
+  Optional,
 } from "@nestjs/common";
 import type { AuthenticatedUser } from "@acropora/types";
 
@@ -21,9 +23,20 @@ import {
   announcesArrival,
   decideIntake,
   draftContentOf,
+  withoutNul,
 } from "./ticket-mail-intake.js";
-import { authenticationVerdict, skipReason } from "./ticket-mail-message.js";
+import {
+  authenticationVerdict,
+  cleanMailBody,
+  cleanSubject,
+  skipReason,
+} from "./ticket-mail-message.js";
 import { TicketMailRepository } from "./ticket-mail.repository.js";
+import {
+  TICKET_MAIL_AI_CLIENT,
+  type TicketDraftClient,
+} from "./ticket-mail-ai.client.js";
+import { hasReadableText, redactForAi } from "./ticket-mail-redact.js";
 
 export interface TicketMailRunSummary {
   /** The switch was off or the credentials missing: nothing was read. */
@@ -41,6 +54,11 @@ export interface TicketMailRunSummary {
   deferred: number;
   /** Messages that failed their last allowed run and were sealed as FAILED (recorded without text, no longer retried). */
   sealed: number;
+  /** The AI step: calls made, drafts the AI filled, answers it refused (or this side did), and calls that found it unavailable. */
+  aiCalls: number;
+  aiDrafts: number;
+  aiRefused: number;
+  aiUnavailable: number;
   /** How many managers the arrival push was sent to (0: nothing to announce, nobody ticked, or the push failed). */
   notified: number;
 }
@@ -54,6 +72,10 @@ const EMPTY: TicketMailRunSummary = {
   failed: 0,
   deferred: 0,
   sealed: 0,
+  aiCalls: 0,
+  aiDrafts: 0,
+  aiRefused: 0,
+  aiUnavailable: 0,
   notified: 0,
 };
 
@@ -94,6 +116,9 @@ export class TicketMailIntakeService {
     private readonly gmail: TicketMailGmailClient,
     private readonly notifications: NotificationsService,
     private readonly jobs: ServiceJobsRepository,
+    @Optional()
+    @Inject(TICKET_MAIL_AI_CLIENT)
+    private readonly ai: TicketDraftClient | null = null,
   ) {}
 
   /** The status for the admins: the switch and the settings, and the last run. */
@@ -115,6 +140,12 @@ export class TicketMailIntakeService {
       query: c.query,
       intervalMinutes: c.intervalMinutes,
       maxMessagesPerRun: c.maxMessagesPerRun,
+      ai: {
+        enabled: c.aiEnabled && this.ai !== null,
+        switchReason: c.aiSwitchReason,
+        configured: this.ai !== null,
+        maxPerRun: c.aiMaxPerRun,
+      },
       unknownSenderPerHour: c.unknownSenderPerHour,
       description: describeTicketMailIntake(c),
       running: this.running,
@@ -166,6 +197,9 @@ export class TicketMailIntakeService {
     try {
       const ids = await this.gmail.listMessageIds();
       let processed = 0;
+      // the AI step's budget for this run, and the names it redacts with (read once, only if the AI is going to be asked)
+      const budget = { calls: 0, failures: 0 };
+      let names: string[] | null = null;
       // Gmail lists newest first; file the oldest first, so the hourly guard and the order of the list follow the order of arrival.
       for (const id of [...ids].reverse()) {
         if (await this.store.hasMessage(c.user, id)) {
@@ -216,21 +250,80 @@ export class TicketMailIntakeService {
             recentUnknownTotal,
             unknownTotalPerHour: c.unknownTotalPerHour,
           });
+          // THE AI STEP, only for a verified, switched-on colleague's mail (the AI branch), never for an unknown or a switched-off sender: their text
+          // does not go to the model at all. It runs BEFORE the record, outside any transaction (a call waits for the network).
+          let finalOutcome = outcome;
+          let content: Parameters<
+            TicketMailRepository["record"]
+          >[0]["content"] = draftContentOf(message);
+          if (
+            outcome.kind === "DRAFT" &&
+            outcome.intakeState === "AI_UNAVAILABLE" &&
+            c.aiEnabled &&
+            this.ai &&
+            budget.calls < c.aiMaxPerRun &&
+            budget.failures < c.aiMaxFailures
+          ) {
+            // THE NAMES MUST BE READABLE (barracuda, #2650): without them the redaction cannot take the known names out, so a failed read means NO
+            // call (the draft stays AI_UNAVAILABLE, the run goes on), never a call with an empty list. Not counted against the breaker: the model
+            // was not asked.
+            names ??= await this.store.personNames().catch(() => null);
+            if (names === null) {
+              summary.aiUnavailable++;
+            } else {
+              const redacted = redactForAi({
+                subject: cleanSubject(withoutNul(message.subject)) ?? "",
+                text: cleanMailBody(withoutNul(message.text)).text,
+                knownNames: [
+                  ...names,
+                  message.fromDisplayName,
+                  sender?.displayName,
+                ],
+              });
+              // a mail that is only names and numbers once redacted is not worth a call
+              if (hasReadableText(`${redacted.subject} ${redacted.text}`)) {
+                budget.calls++;
+                summary.aiCalls++;
+                const answer = await this.ai
+                  .draft({ subject: redacted.subject, text: redacted.text })
+                  .catch(
+                    () => ({ kind: "UNAVAILABLE", reason: "error" }) as const,
+                  );
+                if (answer.kind === "DRAFT") {
+                  budget.failures = 0;
+                  summary.aiDrafts++;
+                  finalOutcome = { ...outcome, intakeState: "AI_DRAFT" };
+                  content = {
+                    ...content,
+                    title: answer.title,
+                    aiSummary: answer.summary,
+                    aiExtractedBy: answer.extractedBy,
+                  };
+                } else if (answer.kind === "REFUSED") {
+                  budget.failures = 0;
+                  summary.aiRefused++;
+                } else {
+                  budget.failures++;
+                  summary.aiUnavailable++;
+                }
+              }
+            }
+          }
           const recorded = await this.store.record({
             mailbox: c.user,
             message,
             authVerdict: verdict.reason,
-            outcome,
-            content: draftContentOf(message),
+            outcome: finalOutcome,
+            content,
           });
           if (!recorded.recorded) summary.alreadySeen++;
-          else if (outcome.kind === "SKIP") summary.skipped++;
-          else if (outcome.kind === "CAPPED") summary.capped++;
+          else if (finalOutcome.kind === "SKIP") summary.skipped++;
+          else if (finalOutcome.kind === "CAPPED") summary.capped++;
           else {
             summary.drafts += recorded.drafts;
             if (
-              outcome.kind === "DRAFT" &&
-              announcesArrival(outcome.intakeState)
+              finalOutcome.kind === "DRAFT" &&
+              announcesArrival(finalOutcome.intakeState)
             ) {
               announce.count += recorded.drafts;
               announce.mailId = recorded.mailId;
@@ -260,7 +353,7 @@ export class TicketMailIntakeService {
       summary.notified = await this.announce(announce);
       this.lastSummary = summary;
       this.logger.log(
-        `Ticket mailbox run: ${summary.drafts} drafts (${summary.notified} notified), ${summary.skipped} skipped, ${summary.capped} capped, ${summary.failed} failed (${summary.sealed} sealed), ${summary.deferred} deferred, ${summary.alreadySeen} already seen`,
+        `Ticket mailbox run: ${summary.drafts} drafts (${summary.notified} notified), ${summary.skipped} skipped, ${summary.capped} capped, ${summary.failed} failed (${summary.sealed} sealed), AI ${summary.aiDrafts}/${summary.aiCalls} (${summary.aiRefused} refused, ${summary.aiUnavailable} unavailable), ${summary.deferred} deferred, ${summary.alreadySeen} already seen`,
       );
       return summary;
     } catch (error) {
