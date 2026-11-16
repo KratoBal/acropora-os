@@ -9,6 +9,7 @@ import { prisma, Prisma } from "@acropora/database";
 import type { PartnerTaxHint } from "@acropora/types";
 
 import type { NormalizedBillingDraft } from "./billing-document-draft.js";
+import { quoteBasisFrom, type QuoteBasis } from "./billing-final-lines.js";
 import {
   loadRelatedBillingDocuments,
   type RelatedBillingDocuments,
@@ -311,6 +312,72 @@ export class BillingDocumentsRepository {
       select: { id: true },
     });
     return twin !== null;
+  }
+
+  /**
+   * AZ AJÁNLAT, AMELYNEK EZ A DÍJBEKÉRŐ A MÉRFÖLDKÖVE (kártya 2650d371): `null`, ha a díjbekérő nem egy mérföldkő díjbekérője (kézi, teljes
+   * ellenértékű, kötés nélküli), vagy a mérföldkő nem az ajánlat ELFOGADOTT verzióján van (akkor a kötés nem egyértelmű). Az
+   * elfogadott tételek ugyanazzal a szűréssel, mint a díjbekérőé (`createMilestoneProforma`): a nem opcionálisak és az elfogadó által
+   * kért opcionálisak, az ajánlat sorrendjében.
+   */
+  async quoteBasisOfProforma(
+    proformaInvoiceId: string,
+  ): Promise<QuoteBasis | null> {
+    const milestone = await this.database.quotePaymentMilestone.findFirst({
+      where: { proformaInvoiceId },
+      select: {
+        id: true,
+        percent: true,
+        versionId: true,
+        version: {
+          select: {
+            quoteId: true,
+            quote: { select: { quoteNumber: true, acceptedVersionId: true } },
+          },
+        },
+      },
+    });
+    if (!milestone) return null;
+    // a verzió MÁS mérföldkövei, amelyeknek már van díjbekérőjük: több előleg esetén a végszámla tételei nem az ajánlat teljes tételei
+    const otherProformaMilestones =
+      await this.database.quotePaymentMilestone.count({
+        where: {
+          versionId: milestone.versionId,
+          id: { not: milestone.id },
+          proformaInvoiceId: { not: null },
+        },
+      });
+    const acceptance = await this.database.quoteAcceptance.findFirst({
+      where: {
+        quoteId: milestone.version.quoteId,
+        quoteVersionId: milestone.versionId,
+        revokedAt: null,
+      },
+      select: { selectedOptionalItemIds: true },
+    });
+    const items = await this.database.quoteItem.findMany({
+      where: { versionId: milestone.versionId },
+      orderBy: [{ block: { position: "asc" } }, { position: "asc" }],
+      select: {
+        id: true,
+        isOptional: true,
+        name: true,
+        quantity: true,
+        unit: true,
+        unitNetPrice: true,
+        vatRatePercent: true,
+      },
+    });
+    return quoteBasisFrom(
+      {
+        percent: milestone.percent,
+        versionId: milestone.versionId,
+        quote: milestone.version.quote,
+        otherProformaMilestones,
+      },
+      acceptance?.selectedOptionalItemIds ?? [],
+      items,
+    );
   }
 
   /**

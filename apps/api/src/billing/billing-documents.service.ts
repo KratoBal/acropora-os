@@ -34,6 +34,11 @@ import {
   type BillingDocumentRow,
 } from "./billing-documents.repository.js";
 import { budapestDayKey } from "../dashboard/budapest-day.js";
+import {
+  finalLineOfQuoteItem,
+  finalLinesSource,
+  type FinalDraftLine,
+} from "./billing-final-lines.js";
 import type { BillingDocumentDraftDto } from "./dto/billing-document-draft.dto.js";
 
 /**
@@ -332,6 +337,21 @@ export class BillingDocumentsService {
     const proforma = advance.proformaInvoiceId
       ? await this.repository.find(advance.proformaInvoiceId)
       : null;
+    // A TÉTELEK (kártya 2650d371): egy ajánlat MÉRFÖLDKŐ-díjbekérője a százalékos rész, tehát a végszámla az ajánlat teljes
+    // tételeivel készül, különben a Számlázz.hu a levont előleg után nullát hagyna. A döntés a tiszta `finalLinesSource`-é (a több
+    // előleg-mérföldkős ajánlat üres vázlatot ad, kézi kitöltésre); minden más díjbekérőnél a díjbekérő tételei.
+    const source = finalLinesSource(
+      proforma ? await this.repository.quoteBasisOfProforma(proforma.id) : null,
+    );
+    if (source.kind === "REFUSED") throw new ConflictException(source.message);
+    const finalLines: ReturnType<typeof draftLinesOf> | FinalDraftLine[] =
+      source.kind === "QUOTE"
+        ? source.items.map(finalLineOfQuoteItem)
+        : source.kind === "EMPTY"
+          ? []
+          : proforma
+            ? draftLinesOf(proforma)
+            : [];
     const { draft, partner } = await this.prepare({
       id,
       documentType: "FINAL_INVOICE",
@@ -350,7 +370,7 @@ export class BillingDocumentsService {
       note: null,
       sourceType: advance.sourceType as BillingSourceType | null,
       sourceId: advance.sourceId,
-      lines: proforma ? draftLinesOf(proforma) : [],
+      lines: finalLines,
     });
     await this.repository.create({
       id,
