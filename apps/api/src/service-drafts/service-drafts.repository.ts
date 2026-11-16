@@ -19,6 +19,11 @@ import { extractCapasuliReports } from "./capasuli-extractor.js";
 import type { CapasuliGmailMessage } from "./capasuli-gmail.client.js";
 import { capasuliConfig } from "./capasuli-gmail.config.js";
 import { OUR_TECHNICAL_FAULT } from "./capasuli-filter.js";
+import {
+  ticketAttachmentDocumentType,
+  ticketJobOpener,
+} from "./ticket-mail/ticket-mail-accept.js";
+import { TICKET_MAIL_SOURCE } from "./ticket-mail/ticket-mail.repository.js";
 
 /** Egy tétel szűrési eredménye, ahogy a piszkozatra kerül. */
 export interface DraftFilter {
@@ -287,11 +292,14 @@ export class ServiceDraftsRepository {
                 openedById: null,
               };
             }
-            // A TICKET@ LEVELBOL KESZULT VAZLAT ELFOGADASA MEG NINCS BEKOTVE (kartya ec7b947b, S2c): ez az ut a Capasuli gyokeregyseget es a
-            // Capasuli partner-felhasznalot hasznalja, ami egy ticket@ vazlathoz hibas helyszint es nyitot adna. Hangos elutasitas, nem csendes rossz jegy.
-            if (draft.source !== "CAPASULI_DAILY_REPORT")
-              throw new ConflictException(
-                "Ennek a vázlatnak az elfogadása még nincs bekötve (ticket@ levélből készült).",
+            // A TICKET@ LEVELBOL KESZULT VAZLAT (kartya ec7b947b, S2c): mas helyszin-keszlet es mas nyito, mint a Capasulinal
+            if (draft.source === TICKET_MAIL_SOURCE)
+              return this.acceptTicketMailDraft(
+                tx,
+                draft,
+                actorId,
+                departmentId,
+                reporterPersonName,
               );
             const locations = await this.locations(c.departmentId, tx);
             const department = locations.find((d) => d.id === departmentId);
@@ -397,6 +405,107 @@ export class ServiceDraftsRepository {
         throw error;
       }
     throw new ConflictException("Próbáld újra a döntést.");
+  }
+  /**
+   * A TICKET@ VAZLAT ELFOGADASA, a hivo tranzakciojaban (a zarat es a sor-zarolast a `decide` mar megtette). A helyszin BARMELY aktiv helyszin
+   * (aktiv, nem archivalt ugyfelnel): a felado hozzarendelt helyszine csak javaslat, a kezelo valaszt. A jegyet az nyitja, aki a bejelentest
+   * kuldte (ismert felado, aktiv fiok), kulonben az elfogado kezelo. A jegy ugyanaz a `ServiceJob`, ugyanazzal a szamozassal es kulccsal
+   * (`service-draft:<id>`), mint a Capasuli vazlatnal: ketszeri elfogadas nem hoz masodik jegyet.
+   */
+  private async acceptTicketMailDraft(
+    tx: Prisma.TransactionClient,
+    draft: Prisma.ServiceTicketDraftGetPayload<{
+      include: { attachments: true };
+    }>,
+    actorId: string,
+    departmentId: string | undefined,
+    reporterPersonName: string | null | undefined,
+  ) {
+    const department = departmentId
+      ? await tx.worksheetDepartment.findFirst({
+          where: {
+            id: departmentId,
+            isActive: true,
+            customer: { isActive: true, archivedAt: null },
+          },
+          select: { id: true, customerId: true },
+        })
+      : null;
+    if (!department) throw new BadRequestException("Válassz aktív helyszínt.");
+    const sender = draft.senderUserId
+      ? await tx.user.findFirst({
+          where: { id: draft.senderUserId, isActive: true },
+          select: { id: true },
+        })
+      : null;
+    const openerId = ticketJobOpener({
+      senderUserId: draft.senderUserId,
+      senderActive: sender !== null,
+      actorUserId: actorId,
+    });
+    const year = new Date().getFullYear();
+    const last = await tx.serviceJob.findFirst({
+      where: { jobNumber: { startsWith: serviceJobNumberPrefix(year) } },
+      orderBy: { jobNumber: "desc" },
+      select: { jobNumber: true },
+    });
+    const reporter =
+      reporterPersonName === undefined
+        ? draft.reporterPersonName
+        : reporterPersonName?.trim() || null;
+    const job = await this.jobs.createInTransaction(
+      {
+        jobNumber: nextServiceJobNumber({
+          year,
+          lastNumber: last?.jobNumber ?? null,
+        }),
+        title: draft.title,
+        description: draft.originalProblem,
+        customerId: department.customerId,
+        departmentId: department.id,
+        actorUserId: openerId,
+        reporterPersonName: reporter,
+        assetIds: [],
+        assigneeIds: [],
+        kind: "REPAIR",
+        contractId: null,
+        clientOperationId: `service-draft:${draft.id}`,
+      },
+      tx,
+    );
+    for (const a of draft.attachments) {
+      const type = ticketAttachmentDocumentType(a.contentType);
+      if (!type) continue;
+      await tx.serviceJobDocument.create({
+        data: {
+          serviceJobId: job.id,
+          type,
+          fileName: a.fileName,
+          contentType: a.contentType,
+          sizeBytes: a.sizeBytes,
+          sha256: a.sha256,
+          content: a.content,
+          uploadedById: actorId,
+        },
+      });
+    }
+    await tx.serviceTicketDraft.update({
+      where: { id: draft.id },
+      data: {
+        status: "ACCEPTED",
+        decidedById: actorId,
+        decidedAt: new Date(),
+        acceptedServiceJobId: job.id,
+        proposedDepartmentId: department.id,
+        reporterPersonName: reporter,
+      },
+    });
+    return {
+      serviceJobId: job.id,
+      created: true,
+      title: draft.title,
+      openedById: openerId,
+    };
   }
   attachment(id: string) {
     return prisma.serviceDraftAttachment.findUnique({ where: { id } });

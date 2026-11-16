@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, describe, it } from "node:test";
 
-import { ConflictException } from "@nestjs/common";
+import { BadRequestException } from "@nestjs/common";
 import { prisma } from "@acropora/database";
 
 import { integrationDatabaseGate } from "../../common/integration-database.js";
@@ -243,15 +243,143 @@ describe("Ticket mailbox intake store", { skip: gate.mode === "skip" }, () => {
     );
   });
 
-  it("CONTROL: a ticket draft cannot be accepted through the Cápasuli path", async () => {
-    const draft = await prisma.serviceTicketDraft.findFirstOrThrow({
-      where: { mailbox, source: TICKET_MAIL_SOURCE },
+  /** A draft of its own for an acceptance test: the mail row and the draft, through the store. */
+  const draftFor = async (
+    id: string,
+    sender: { userId: string | null; name: string | null },
+    attachments: TicketMailMessage["attachments"] = [],
+  ) => {
+    const m = message(id, { attachments });
+    await repository.record({
+      mailbox,
+      message: m,
+      authVerdict: "DMARC_PASS",
+      outcome: {
+        kind: "DRAFT",
+        intakeState: sender.userId ? "AI_UNAVAILABLE" : "UNKNOWN_SENDER",
+        senderUserId: sender.userId,
+        reporterPersonName: sender.name,
+        proposedDepartmentId: null,
+      },
+      content: draftContentOf(m),
     });
-    const drafts = new ServiceDraftsRepository(new ServiceJobsRepository());
-    await assert.rejects(
-      drafts.decide(draft.id, userIds[0]!, "accept", departments[0]),
-      (error: unknown) => error instanceof ConflictException,
+    return prisma.serviceTicketDraft.findFirstOrThrow({
+      where: { mailbox, mail: { messageId: id } },
+    });
+  };
+  const drafts = new ServiceDraftsRepository(new ServiceJobsRepository());
+  const PDF = Buffer.from("%PDF-1.4 test");
+  const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 7]);
+
+  it("accepts a known sender's draft: their own ticket in the chosen place, the image as a photo, the PDF as another document, once", async () => {
+    const draft = await draftFor(
+      "msg-accept-known",
+      { userId: userIds[0]!, name: "anna" },
+      [
+        { fileName: "k.png", contentType: "image/png", buffer: PNG },
+        { fileName: "lap.pdf", contentType: "application/pdf", buffer: PDF },
+      ],
     );
+    const manager = userIds[4]!;
+    const first = await drafts.decide(
+      draft.id,
+      manager,
+      "accept",
+      departments[0],
+    );
+    assert.equal(first.created, true);
+    assert.equal(first.openedById, userIds[0]);
+    const job = await prisma.serviceJob.findUniqueOrThrow({
+      where: { id: first.serviceJobId! },
+      include: { documents: true },
+    });
+    assert.match(job.jobNumber, /^HJ-\d{4}-\d+$/);
+    assert.equal(job.departmentId, departments[0]);
+    assert.equal(job.customerId, customerId);
+    assert.equal(job.openedById, userIds[0]);
+    assert.equal(job.reporterPersonName, "anna");
+    assert.equal(job.title, "Szűrő hiba");
+    assert.deepEqual(job.documents.map((d) => [d.fileName, d.type]).sort(), [
+      ["k.png", "PHOTO"],
+      ["lap.pdf", "OTHER"],
+    ]);
+    const accepted = await prisma.serviceTicketDraft.findUniqueOrThrow({
+      where: { id: draft.id },
+    });
+    assert.equal(accepted.status, "ACCEPTED");
+    assert.equal(accepted.acceptedServiceJobId, job.id);
+    assert.equal(accepted.decidedById, manager);
+    const again = await drafts.decide(
+      draft.id,
+      manager,
+      "accept",
+      departments[1],
+    );
+    assert.equal(again.created, false);
+    assert.equal(again.serviceJobId, job.id);
+    assert.equal(
+      await prisma.serviceJob.count({
+        where: { clientOperationId: `service-draft:${draft.id}` },
+      }),
+      1,
+    );
+  });
+
+  it("an unknown sender's draft is opened by the accepting manager, with the manager's reporter name when given", async () => {
+    const draft = await draftFor("msg-accept-unknown", {
+      userId: null,
+      name: null,
+    });
+    const manager = userIds[4]!;
+    const result = await drafts.decide(
+      draft.id,
+      manager,
+      "accept",
+      departments[1],
+      undefined,
+      " Külső Béla ",
+    );
+    assert.equal(result.openedById, manager);
+    const job = await prisma.serviceJob.findUniqueOrThrow({
+      where: { id: result.serviceJobId! },
+    });
+    assert.equal(job.openedById, manager);
+    assert.equal(job.reporterPersonName, "Külső Béla");
+    assert.equal(job.departmentId, departments[1]);
+  });
+
+  it("CONTROL: a deactivated sender's draft is opened by the manager, not by the inactive account", async () => {
+    const inactive = await prisma.user.findFirstOrThrow({
+      where: { email: `inactive-${suffix}@example.test` },
+    });
+    const draft = await draftFor("msg-accept-inactive", {
+      userId: inactive.id,
+      name: "inactive",
+    });
+    const result = await drafts.decide(
+      draft.id,
+      userIds[4]!,
+      "accept",
+      departments[0],
+    );
+    assert.equal(result.openedById, userIds[4]);
+  });
+
+  it("CONTROL: a missing, unknown or inactive place is refused and nothing is created", async () => {
+    const inactiveDepartment = (
+      await prisma.worksheetDepartment.create({
+        data: { customerId, code: "TX", name: "Inaktív hely", isActive: false },
+      })
+    ).id;
+    const draft = await draftFor("msg-accept-bad-place", {
+      userId: null,
+      name: null,
+    });
+    for (const bad of [undefined, "no-such-department", inactiveDepartment])
+      await assert.rejects(
+        drafts.decide(draft.id, userIds[4]!, "accept", bad),
+        (error: unknown) => error instanceof BadRequestException,
+      );
     assert.equal(
       (
         await prisma.serviceTicketDraft.findUniqueOrThrow({
@@ -260,6 +388,28 @@ describe("Ticket mailbox intake store", { skip: gate.mode === "skip" }, () => {
       ).status,
       "PENDING",
     );
+    assert.equal(
+      await prisma.serviceJob.count({
+        where: { clientOperationId: `service-draft:${draft.id}` },
+      }),
+      0,
+    );
+  });
+
+  it("rejecting a ticket draft takes no ticket number", async () => {
+    const draft = await draftFor("msg-reject", { userId: null, name: null });
+    const result = await drafts.decide(
+      draft.id,
+      userIds[4]!,
+      "reject",
+      undefined,
+    );
+    assert.equal(result.serviceJobId, null);
+    const rejected = await prisma.serviceTicketDraft.findUniqueOrThrow({
+      where: { id: draft.id },
+    });
+    assert.equal(rejected.status, "REJECTED");
+    assert.equal(rejected.acceptedServiceJobId, null);
   });
 
   it("a mail with a NUL character in the subject, the text and a file name is recorded without it (barracuda, #2646)", async () => {
@@ -397,6 +547,7 @@ describe("Ticket mailbox intake store", { skip: gate.mode === "skip" }, () => {
         where: { userId: { in: userIds } },
       });
       await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+      await prisma.serviceJob.deleteMany({ where: { customerId } });
       await prisma.worksheetDepartment.deleteMany({ where: { customerId } });
       await prisma.customer.delete({ where: { id: customerId } });
     }
