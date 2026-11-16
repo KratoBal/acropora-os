@@ -9,6 +9,7 @@
  *   tax numbers, bank accounts, IBANs -> [SZÁM]
  *   phone numbers (HU and international) -> [TELEFON]
  *   any run of five or more digits (an order number, a serial, an id) -> [SZÁM]
+ *   the signature block after the closing (the text sent to the model ends at the closing word)
  *   a greeting or a closing followed by a name ("Szia Anna", "Üdvözlettel,\nKovács Anna") -> the name -> [NÉV]
  *   every NAME WE KNOW (the sender's, every user's first and last name, with the Hungarian endings: "Annának", "Kovácsékkal") -> [NÉV]
  *
@@ -22,6 +23,8 @@ export interface RedactionCounts {
   links: number;
   phones: number;
   numbers: number;
+  /** 1 when a signature block was cut from the text, else 0. */
+  signatures: number;
 }
 
 export interface RedactedMail {
@@ -73,6 +76,24 @@ const GREETING =
 const CLOSING =
   /((?<![\p{L}\p{N}])(?:Üdvözlettel|Üdv|Köszönettel|Köszönöm|Köszi|Tisztelettel|Barátsággal|Regards|Best\s+regards|Thanks)[,!.]?[ \t]*\r?\n+[ \t]*)(\p{Lu}[\p{L}.'-]*(?:[ \t]+\p{Lu}[\p{L}.'-]*){0,3})/gu;
 
+/**
+ * THE SIGNATURE BLOCK IS NOT SENT (barracuda, #2650): what follows the closing word ("Üdvözlettel,\nKovács Anna\nTechnikus\nAcropora Kft.\nFő utca 12.")
+ * is a name, a position, a company and an address, and none of it helps the draft. The text after the LAST closing is cut away when it is short (a
+ * signature is a few lines); a longer rest is the body of a mail that merely says thanks somewhere in the middle, and stays (its names are still
+ * redacted by the rules below). The reading copy of the mail, which a person sees, is never touched: this runs on the copy that goes to the model.
+ */
+export const SIGNATURE_MAX_CHARS = 600;
+function withoutSignature(value: string, counts: RedactionCounts): string {
+  let last: RegExpMatchArray | null = null;
+  for (const match of value.matchAll(CLOSING)) last = match;
+  if (!last || last.index === undefined) return value;
+  const cutAt = last.index + (last[1]?.trimEnd().length ?? 0);
+  const rest = value.length - cutAt;
+  if (rest > SIGNATURE_MAX_CHARS) return value;
+  counts.signatures++;
+  return value.slice(0, cutAt);
+}
+
 function redactText(
   value: string,
   pattern: RegExp | null,
@@ -112,6 +133,14 @@ function redactText(
     "[TELEFON]",
     "phones",
   );
+  // a domestic number WITHOUT the +36 or 06 prefix ("30/123-4567", "20 123 4567", "1/234-5678", "22/123-456"): an area or mobile code, then six or
+  // seven digits in the groups Hungarian numbers are written in. The groups are fixed (3+3, 3+4, 3+2+2), so a list of short numbers ("10 20 30 40")
+  // and a date or a time ("2026.11.16.", "2026-11-16", "14:30") are left alone: none of them has a code, a separator and a group of three digits.
+  count(
+    /(?<![\p{L}\p{N}.,:+/-])(?:1|[2-9]\d)(?:[ \t]?[/-][ \t]?|[ \t])\d{3}(?:[ \t-]?\d{3,4}|[ \t-]?\d{2}[ \t-]?\d{2})(?!\d)/gu,
+    "[TELEFON]",
+    "phones",
+  );
   count(/(?<![\d.,])\d{5,}(?!\d)/g, "[SZÁM]", "numbers");
   for (const re of [GREETING, CLOSING])
     text = text.replace(re, (_whole, lead: string) => {
@@ -143,11 +172,12 @@ export function redactForAi(input: {
     links: 0,
     phones: 0,
     numbers: 0,
+    signatures: 0,
   };
   const pattern = namePattern(nameTokens(input.knownNames));
   return {
     subject: redactText(input.subject, pattern, counts),
-    text: redactText(input.text, pattern, counts),
+    text: redactText(withoutSignature(input.text, counts), pattern, counts),
     counts,
   };
 }

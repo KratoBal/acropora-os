@@ -264,41 +264,48 @@ export class TicketMailIntakeService {
             budget.calls < c.aiMaxPerRun &&
             budget.failures < c.aiMaxFailures
           ) {
-            names ??= await this.store.personNames().catch(() => []);
-            const redacted = redactForAi({
-              subject: cleanSubject(withoutNul(message.subject)) ?? "",
-              text: cleanMailBody(withoutNul(message.text)).text,
-              knownNames: [
-                ...names,
-                message.fromDisplayName,
-                sender?.displayName,
-              ],
-            });
-            // a mail that is only names and numbers once redacted is not worth a call
-            if (hasReadableText(`${redacted.subject} ${redacted.text}`)) {
-              budget.calls++;
-              summary.aiCalls++;
-              const answer = await this.ai
-                .draft({ subject: redacted.subject, text: redacted.text })
-                .catch(
-                  () => ({ kind: "UNAVAILABLE", reason: "error" }) as const,
-                );
-              if (answer.kind === "DRAFT") {
-                budget.failures = 0;
-                summary.aiDrafts++;
-                finalOutcome = { ...outcome, intakeState: "AI_DRAFT" };
-                content = {
-                  ...content,
-                  title: answer.title,
-                  aiSummary: answer.summary,
-                  aiExtractedBy: answer.extractedBy,
-                };
-              } else if (answer.kind === "REFUSED") {
-                budget.failures = 0;
-                summary.aiRefused++;
-              } else {
-                budget.failures++;
-                summary.aiUnavailable++;
+            // THE NAMES MUST BE READABLE (barracuda, #2650): without them the redaction cannot take the known names out, so a failed read means NO
+            // call (the draft stays AI_UNAVAILABLE, the run goes on), never a call with an empty list. Not counted against the breaker: the model
+            // was not asked.
+            names ??= await this.store.personNames().catch(() => null);
+            if (names === null) {
+              summary.aiUnavailable++;
+            } else {
+              const redacted = redactForAi({
+                subject: cleanSubject(withoutNul(message.subject)) ?? "",
+                text: cleanMailBody(withoutNul(message.text)).text,
+                knownNames: [
+                  ...names,
+                  message.fromDisplayName,
+                  sender?.displayName,
+                ],
+              });
+              // a mail that is only names and numbers once redacted is not worth a call
+              if (hasReadableText(`${redacted.subject} ${redacted.text}`)) {
+                budget.calls++;
+                summary.aiCalls++;
+                const answer = await this.ai
+                  .draft({ subject: redacted.subject, text: redacted.text })
+                  .catch(
+                    () => ({ kind: "UNAVAILABLE", reason: "error" }) as const,
+                  );
+                if (answer.kind === "DRAFT") {
+                  budget.failures = 0;
+                  summary.aiDrafts++;
+                  finalOutcome = { ...outcome, intakeState: "AI_DRAFT" };
+                  content = {
+                    ...content,
+                    title: answer.title,
+                    aiSummary: answer.summary,
+                    aiExtractedBy: answer.extractedBy,
+                  };
+                } else if (answer.kind === "REFUSED") {
+                  budget.failures = 0;
+                  summary.aiRefused++;
+                } else {
+                  budget.failures++;
+                  summary.aiUnavailable++;
+                }
               }
             }
           }

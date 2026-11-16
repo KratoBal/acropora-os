@@ -86,6 +86,8 @@ function rig(options: {
   recentTotal?: number;
   /** every name the redaction knows (the users' names) */
   names?: string[];
+  /** reading the users' names fails (the redaction then has no known names) */
+  namesFail?: boolean;
   /** the AI client's answer for one call; absent: no AI client at all */
   ai?: (input: { subject: string; text: string }) => Promise<unknown>;
   /** a store that survives a service restart: pass the one a first rig made */
@@ -111,7 +113,10 @@ function rig(options: {
     },
     unknownCountSince: async () => options.recent ?? 0,
     unknownTotalSince: async () => options.recentTotal ?? 0,
-    personNames: async () => options.names ?? [],
+    personNames: async () => {
+      if (options.namesFail) throw new Error("db down SECRET");
+      return options.names ?? [];
+    },
     noteFailure: async (_m: string, id: string) => {
       const attempts = (state.attempts.get(id) ?? 0) + 1;
       state.attempts.set(id, attempts);
@@ -866,6 +871,28 @@ describe("TicketMailIntakeService.run: the AI step", () => {
     assert.equal(summary.failed, 0);
     assert.equal(summary.aiUnavailable, 1);
     assert.equal(recorded[0]!.outcome.intakeState, "AI_UNAVAILABLE");
+    assert.doesNotMatch(JSON.stringify(service.status(admin)), /SECRET/);
+  });
+
+  it("CONTROL: when the users' names cannot be read there is NO call, the draft is still made and the run goes on (barracuda, #2650)", async () => {
+    aiOn();
+    const { service, recorded, aiCalls } = rig({
+      ids: ["a", "b"],
+      messages: { a: mail("a"), b: mail("b") },
+      senders: { "anna@acropora.hu": colleague() },
+      namesFail: true,
+      ai: async () => filled,
+    });
+    const summary = await service.run();
+    assert.equal(aiCalls.length, 0);
+    assert.equal(summary.failed, 0);
+    assert.equal(summary.aiCalls, 0);
+    assert.equal(summary.aiUnavailable, 2);
+    assert.equal(summary.drafts, 2);
+    assert.deepEqual(
+      recorded.map((r) => r.outcome.kind === "DRAFT" && r.outcome.intakeState),
+      ["AI_UNAVAILABLE", "AI_UNAVAILABLE"],
+    );
     assert.doesNotMatch(JSON.stringify(service.status(admin)), /SECRET/);
   });
 

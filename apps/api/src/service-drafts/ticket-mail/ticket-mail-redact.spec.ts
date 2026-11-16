@@ -41,6 +41,32 @@ describe("redactForAi: contact data", () => {
       );
   });
 
+  it("replaces a domestic number written WITHOUT the +36 or 06 prefix (barracuda, #2650)", () => {
+    for (const phone of [
+      "30/123-4567",
+      "30 123 4567",
+      "20-123-45-67",
+      "1/234-5678",
+      "70/123 4567",
+      "22/123-456",
+      "31 123 45 67",
+    ])
+      assert.equal(
+        run(`Hívj: ${phone}, köszi`).text,
+        "Hívj: [TELEFON], köszi",
+        phone,
+      );
+    const inSentence = run("Hívj a 70/123 4567-en, és sürgős.");
+    assert.equal(inSentence.text, "Hívj a [TELEFON]-en, és sürgős.");
+    assert.equal(inSentence.counts.phones, 1);
+  });
+
+  it("CONTROL: dates, times, short numbers and number lists are NOT taken for a domestic number", () => {
+    const text =
+      "A 2026.11.16. 14:30 és a 2026-11-16 14:30 között; alkatrész: 10 20 30 40 50; 12 db, 3 darab, 2 szivattyú 400 W, 16:45-kor.";
+    assert.equal(run(text).text, text);
+  });
+
   it("replaces tax numbers, bank accounts and IBANs", () => {
     assert.equal(run("Adószám: 12345678-1-42").text, "Adószám: [SZÁM]");
     assert.equal(
@@ -132,11 +158,32 @@ describe("redactForAi: names", () => {
     );
   });
 
-  it("replaces the name under a closing", () => {
-    assert.equal(
-      run("A szűrő csöpög.\nÜdvözlettel,\nSzilágyi Dezső\nFőnök").text,
-      "A szűrő csöpög.\nÜdvözlettel,\n[NÉV]\nFőnök",
+  it("the name under a closing is redacted when the rest is a body, not a signature (a long rest stays)", () => {
+    const body = "A szűrő csöpög, és a nyomás is ingadozik. ".repeat(20);
+    const r = run(`Köszönöm,\nSzilágyi Dezső\n${body}`);
+    assert.match(r.text, /^Köszönöm,\n\[NÉV\]\nA szűrő csöpög/);
+    assert.equal(r.counts.signatures, 0);
+    assert.equal(r.counts.names, 1);
+  });
+
+  it("the signature block after the closing is NOT sent: no name, position, company or address (barracuda, #2650)", () => {
+    const r = run(
+      "A szűrő csöpög.\nÜdvözlettel,\nSzilágyi Dezső\nFőnök\nPélda Kft.\nFő utca 12.\n1234 Budapest",
     );
+    assert.equal(r.text, "A szűrő csöpög.\nÜdvözlettel,");
+    assert.equal(r.counts.signatures, 1);
+    assert.doesNotMatch(r.text, /Dezső|Főnök|Kft|utca|Budapest/);
+  });
+
+  it("CONTROL: a text with no closing is untouched by the cut, and the subject is never cut", () => {
+    const r = run(
+      "A szűrő csöpög.\nNagy Anna szerint a tömítés kopott.",
+      [],
+      "Hiba\nÜdv\nAnna",
+    );
+    assert.equal(r.counts.signatures, 0);
+    assert.match(r.text, /^A szűrő csöpög\./);
+    assert.match(r.subject, /^Hiba/);
   });
 
   it("the names of the subject and the sender's own display name are covered when passed", () => {
