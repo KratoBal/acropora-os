@@ -324,7 +324,7 @@ export function toDraftInput(
     customerId: state.customer?.id ?? "",
     fulfillmentDate: blank(state.fulfillmentDate),
     dueDate: showsPaymentFields ? blank(state.dueDate) : null,
-    paymentMethod: showsPaymentFields ? blank(state.paymentMethod) : null,
+    paymentMethod: showsPaymentFields ? paymentMethodShown(state) : null,
     currency: state.currency,
     language: state.language,
     reference: blank(state.reference),
@@ -345,6 +345,18 @@ export function toDraftInput(
       comment: blank(line.comment),
     })),
   };
+}
+
+/**
+ * A FIZETÉSI MÓD, AMIT A VÁLASZTÓ MUTAT, ÉS AMIT A MENTÉS KÜLD (Luca díjbekérője, 2026-11-16).
+ *
+ * A választónak négy valódi opciója van és üres nincs: üres állapot mellett a böngésző az ELSŐT (`Átutalás`) mutatja, az állapot
+ * viszont üres marad, és a mentés `null`-t küld. Az ajánlatból, projekt-átadáskor készült díjbekérő szándékosan `null` fizetési
+ * móddal indul (`quote-proforma.ts`), tehát a kezelő azt látta, hogy `Átutalás`, a kiállításnál mégis hiányzott. Itt egy helyen
+ * dől el: ami a választón látszik, az megy. Ami a listán kívüli, tárolt szöveg, azt változatlanul visszaküldjük.
+ */
+export function paymentMethodShown(state: EditorState): string {
+  return blank(state.paymentMethod) ?? PAYMENT_METHODS[0];
 }
 
 /**

@@ -26,6 +26,7 @@ import {
   BILLING_SZAMLAZZ_CLIENT,
 } from "./billing-document-issue.service.js";
 import {
+  adapterErrorSentence,
   BillingDocumentAdapterError,
   toSzamlazzAgentInput,
 } from "./billing-document-szamlazz.adapter.js";
@@ -138,9 +139,7 @@ export class BillingDocumentPreviewService {
       xml = this.buildXml(agentInput);
     } catch (error) {
       if (error instanceof BillingDocumentAdapterError)
-        throw new BadRequestException(
-          `Az előnézet nem kérhető a Számlázz.hu-tól (${error.code}).`,
-        );
+        throw new BadRequestException(adapterErrorSentence(error, "preview"));
       throw error;
     }
 

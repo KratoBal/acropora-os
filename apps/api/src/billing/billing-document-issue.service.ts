@@ -41,6 +41,7 @@ import {
 import { customerTaxNumberProblem } from "./buyer-tax-number.js";
 import { BillingDocumentIssueRepository } from "./billing-document-issue.repository.js";
 import {
+  adapterErrorSentence,
   BillingDocumentAdapterError,
   toSzamlazzAgentInput,
 } from "./billing-document-szamlazz.adapter.js";
@@ -307,9 +308,7 @@ export class BillingDocumentIssueService {
       );
     } catch (error) {
       if (error instanceof BillingDocumentAdapterError)
-        throw new BadRequestException(
-          `A bizonylat nem küldhető a Számlázz.hu-ra (${error.code}).`,
-        );
+        throw new BadRequestException(adapterErrorSentence(error, "issue"));
       throw error;
     }
 
