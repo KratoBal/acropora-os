@@ -44,21 +44,27 @@ export function storePickupOptionIdFrom(
  * IS THIS ORDER SHIPPING METHOD THE STORE PICKUP. One function for the list, the
  * detail, the parcel plan and the address rules, so they cannot disagree.
  *
- * The decision is the option id (`shipping_option_id`, copied to the order with
- * the name by the Medusa cart completion). The name stays as a fallback for the
- * rows that carry no id (an older commerce answer) and for an environment where
- * the id variable is not set. The fallback is the weaker rule: an admin rename
- * of the option makes it miss, which is why the id comes first.
+ * WHEN THE ID IS KNOWN ON BOTH SIDES (the variable is set and the row carries
+ * `shipping_option_id`, which the Medusa cart completion copies to the order
+ * together with the name), ONLY THE ID DECIDES. An admin rename of the pickup
+ * option then changes nothing, and another option renamed to "Bolti átvétel"
+ * does not become a pickup either (barracuda, #2637: that case would remove the
+ * parcel plan of a delivery order, which then never ships).
+ *
+ * The name decides only when one side of the id is missing: a row without an id
+ * (an older commerce answer, the list until the commerce overview carries it) or
+ * an environment where the variable is not set. That is the weaker rule.
+ * Known cost: if the pickup option were deleted and recreated (new id), old
+ * orders carrying the old id would read as deliveries once the variable names
+ * the new one.
  */
 export function isStorePickupMethod(
   method: { shippingOptionId?: string | null; name?: string | null },
   pickupOptionId: string | null = storePickupOptionIdFrom(),
 ): boolean {
-  if (
-    pickupOptionId !== null &&
-    (method.shippingOptionId ?? null) === pickupOptionId
-  )
-    return true;
+  const optionId = method.shippingOptionId ?? null;
+  if (pickupOptionId !== null && optionId !== null)
+    return optionId === pickupOptionId;
   return (method.name ?? null) === STORE_PICKUP_METHOD;
 }
 

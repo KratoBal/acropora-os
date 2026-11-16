@@ -548,15 +548,15 @@ describe("the store pickup marker follows the option id (task t-20261116-bolti-j
     );
   });
 
-  it("only the name matches: pickup, the fallback for rows without an id", () => {
+  it("one side of the id missing: the name decides, the fallback", () => {
     assert.equal(
       isStorePickupMethod({ name: "Bolti átvétel" }, PICKUP_ID),
       true,
     );
     assert.equal(
       isStorePickupMethod(
-        { shippingOptionId: "so_other", name: "Bolti átvétel" },
-        PICKUP_ID,
+        { shippingOptionId: "so_any", name: "Bolti átvétel" },
+        null,
       ),
       true,
     );
@@ -575,6 +575,14 @@ describe("the store pickup marker follows the option id (task t-20261116-bolti-j
       false,
     );
     assert.equal(isStorePickupMethod({}, PICKUP_ID), false);
+    // the id is known on both sides: another option renamed to the old name is NOT a pickup
+    assert.equal(
+      isStorePickupMethod(
+        { shippingOptionId: "so_other", name: "Bolti átvétel" },
+        PICKUP_ID,
+      ),
+      false,
+    );
   });
 
   it("a blank or missing variable is no id", () => {
@@ -602,6 +610,12 @@ describe("the store pickup marker follows the option id (task t-20261116-bolti-j
         shipping_option_id: "so_gls",
       });
       assert.equal(gls.shipping.storePickup, false);
+      const impostor = item({
+        id: "i",
+        shipping_method: "Bolti átvétel",
+        shipping_option_id: "so_gls",
+      });
+      assert.equal(impostor.shipping.storePickup, false);
     } finally {
       if (before === undefined) delete process.env.ACROPORA_SO_PICKUP;
       else process.env.ACROPORA_SO_PICKUP = before;

@@ -286,8 +286,9 @@ describe("the detail", () => {
         pick({ name: "Átvétel az üzletben", shipping_option_id: "so_pickup" }),
         pick({ name: "Bolti átvétel" }),
         pick({ name: "GLS csomagpont", shipping_option_id: "so_gls" }),
+        pick({ name: "Bolti átvétel", shipping_option_id: "so_gls" }),
       ],
-      [true, true, false],
+      [true, true, false, false],
     );
     assert.equal(shippingOf([], "so_pickup").storePickup, false);
   });
