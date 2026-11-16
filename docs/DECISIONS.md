@@ -929,3 +929,48 @@ ránézni.
 termékre is 0-val lép ki, a MEGÁLLT sor (és benne a `--forget-link` útmutatás) viszont a hibakimeneten ott van. A futtató bekötése
 (`if (stoppedProductIsRunFailure(...)) failed += 1`) kód-olvasat, nem unit-tesztelt: a `runProjectionCli` teljes láncát (leképezés,
 Medusa-kliens, 404) helyben nem lehet kis dublákkal futtatni; a predikátum tesztelt.
+
+## ADR-018 – Díjbekérő, előleg és végszámla az ajánlat mérföldköveivel: mikor fizetett az előleg, mi kerül a végszámlára, mi törölhető
+
+**Dátum:** 2026-11-16 (PR-ek: #2638, #2639, #2640, #2641, #2642; kártyák: 00926d89, 2650d371, 6a75f15c, d0f56ac0)
+
+**Kontextus.** Az ajánlat mérföldkő-díjbekérője (`createMilestoneProforma`) a SZÁZALÉKOS rész: sávonként egy sor, "<címke> (<százalék>%), <ajánlatszám>". A
+díjbekérőből előleg, az előlegből végszámla-vázlat készül (`advanceFromProforma`, `finalFromAdvance`). Három hiba jött ki egy napon, Balázs kérdéseiből:
+(1) egy kifizetett díjbekérőből az előleg határidővel és a "nincs teendő" sor nélkül ment ki, mert a kérés nem küldte a `<fizetve>` jelölést; (2) egy 60
+százalékos előleg végszámlája a díjbekérő sorait kapta, tehát 60 százalékot, a Számlázz.hu levonta a 60 százalékos előleget, és a végszámla nulla lett;
+(3) egy vázlatot nem lehetett törölni.
+
+**Döntés.**
+
+1. **Az előleg akkor fizetett, ha a díjbekérőn lévő kifizetés legalább az előleg SAJÁT bruttóját fedezi** (`advancePaidByProforma`). A tényt a Számlázz.hu
+   feed tükörsora adja (`externalBillingDocument`: `paidAmount`, `grossAmount`, `currency`, `cancelled`), nem egy "van rajta valamennyi kifizetés" jelző
+   (`feedPaid`): a `fizetve=true` egy RENDEZETT számlát állít. Részkifizetés, más pénznem, sztornózott díjbekérő, hiányzó feed-sor és össze nem állítható
+   vázlat mind "nem fizetett": a számla úgy megy ki, ahogy eddig. Fizetett esetben a kérés `fizetve=true`-t küld (az XSD `fejlecTipus` sorrendjében), a
+   határidő a kiállítás napja, és az ablak összesítője (`dueDateFollowsIssueDate`) és az előnézet is ezt mutatja.
+2. **A végszámla tételei az ajánlat teljes tételei**, ha a díjbekérő egy ELFOGADOTT verzió 100 százaléknál kisebb mérföldkövéhez tartozik
+   (`QuotePaymentMilestone.proformaInvoiceId`, egyedi: egy mérföldkő, egy díjbekérő). A tételek az elfogadott, nem opcionális sorok és az elfogadó által kért
+   opciók, az ajánlat sorrendjében, termék- és variáns-kötés NÉLKÜL (a kötött sor a kiállításkor készletet mozgatna). Minden más díjbekérő (teljes
+   ellenértékű, 100 százalékos mérföldkő, mérföldkő nélküli kézi) a díjbekérő sorait kapja, mint eddig. A döntés tiszta függvény (`finalLinesSource`:
+   `PROFORMA`, `QUOTE`, `EMPTY`, `REFUSED`).
+3. **Több előleg-mérföldkő esetén a végszámla-vázlat ÜRESEN indul**, és a vázlat oldalán egy sáv mondja meg az okot (`finalInvoiceNotice`, kód
+   `MULTIPLE_ADVANCES`, olvasáskor számolva). Ok: a Számlázz.hu a végszámlán csak az EGY előleget vonja le; az ajánlat teljes tételeivel a másik előleg
+   része kétszer lenne kiszámlázva (30/30/40-nél 130 százalék). A kezelő írja be a tételeket: csak a még nem kiszámlázott részt. Az üres vázlat kapott
+   elsőbbséget a 409-es elutasítással szemben, mert a végszámla csak az előlegből készülhet (`FINAL_ONLY_FROM_ADVANCE`): egy elutasítás után SEMMILYEN
+   úton nem lenne végszámla. Ha a mérföldkő köthető, de az elfogadott verziónak nincs tétele, a készítés elutasít (409), nem esik vissza a százalékos sorra,
+   mert az a nulla végszámlát hozná vissza csendben. A sáv olvasáskor számolódik (a #2641 és a #2642 óta), ezért egy TELJES tételekkel készült vázlaton is megjelenik, ha egy másik mérföldkő utána kapott díjbekérőt: ez az az eset, ahol a túlszámlázás ténylegesen fennállhat, és csak a sáv véd ellene; a szöveg ezért nem állítja, hogy a tételek üresek.
+4. **Egy kimenő vázlat törölhető**, ha mind teljesül (`draftDeleteRefusal`): állapota `DRAFT` (az `ISSUING`, az `ISSUED` és az `ISSUE_FAILED` nem: az
+   utóbbinál már volt Számlázz.hu-hívás), nincs sorszáma, más bizonylat nem hivatkozik rá, és a betöltött `updatedAt` még egyezik. A törlés EGY
+   tranzakció feltételes törléssel; a mérföldkő, amelynek ez volt a díjbekérője, FELSZABADUL (a hivatkozása `Restrict`, nélküle a törlés el sem indulna), a
+   tételek és a levelezési rekordok vele mennek, az előleg- és végszámla-azonosító újra szabad, és egy `billing.draft_deleted` auditsor készül. A jog
+   `billing.create`, mint a vázlat mentéséé.
+
+**Amit nem teszünk.** Egy kézi díjbekérő hivatkozásában álló `AJ-` számból NEM találgatunk ajánlatot: az nem kötés, a díjbekérő a saját sorait kapja. Új írási út
+nem nyílik: a kiállítás a meglévő úton megy a Számlázz.hu-ra, csak a `fizetve` elemmel bővül; az élő boltba (webshop) ez nem ír.
+
+**Mérési korlátok (a döntés idején).** Nem mértük éles Számlázz.hu-hívással a `fizetve=true` sort a PDF-en, és az élő rendszeren nem olvastuk ki a
+mérföldkő és a díjbekérő kötését (a `fleet_ro` nem olvassa a `QuotePaymentMilestone` táblát). Ha nincs kötés, a végszámla a régi módon töltődik, és kézzel
+kell javítani. A `fizetve=true` ág a stage-en nem állítható elő álszámlázóval: az "előleg fizetve" tényét a feed írja, a kézi kifizetés-rögzítés a
+Számlázz.hu-ba ír (álszámlázóban semmibe), így a TESZT- sorszámú díjbekérőhöz nincs feed-sor. Az ág egységtesztekkel és a CI-vel fedett.
+
+**Következmény.** A díjbekérő, az előleg és a végszámla lánca ajánlatból végigmegy, és minden hibás kimenet (nulla végszámla, dupla számlázás) vagy
+elutasítás, vagy látható figyelmeztetés a vázlaton. A figyelmeztetés a vázlat oldalán áll, NEM a megjegyzés mezőben: azt a vevő számlája kinyomtatja.
