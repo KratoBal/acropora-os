@@ -31,6 +31,12 @@ describe("parseSingleAddress", () => {
   it("reads a bare address", () => {
     assert.equal(parseSingleAddress("anna@acropora.hu"), "anna@acropora.hu");
   });
+  it("CONTROL: an address with a control character (a NUL, a tab inside) is no sender (barracuda, #2646)", () => {
+    assert.equal(parseSingleAddress("anna\u0000@acropora.hu"), null);
+    assert.equal(parseSingleAddress("<an\u0001na@acropora.hu>"), null);
+    assert.equal(parseSingleAddress("anna@acro\u007fpora.hu"), null);
+    assert.equal(parseSingleAddress("anna@acropora.hu"), "anna@acropora.hu");
+  });
   it("CONTROL: several addresses, none, or garbage is no sender", () => {
     assert.equal(parseSingleAddress("a@acropora.hu, b@acropora.hu"), null);
     assert.equal(parseSingleAddress("A <a@x.hu>, B <b@x.hu>"), null);
