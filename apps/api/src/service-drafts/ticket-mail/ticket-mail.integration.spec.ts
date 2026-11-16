@@ -412,9 +412,133 @@ describe("Ticket mailbox intake store", { skip: gate.mode === "skip" }, () => {
     assert.equal(rejected.acceptedServiceJobId, null);
   });
 
+  it("a mail with a NUL character in the subject, the text and a file name is recorded without it (barracuda, #2646)", async () => {
+    const png = Buffer.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 3,
+    ]);
+    const m = message("msg-nul", {
+      subject: "Hiba\u0000 a szűrőn",
+      text: "A szűrő\u0000 csöpög.",
+      attachments: [
+        { fileName: "k\u0000ep.png", contentType: "image/png", buffer: png },
+      ],
+    });
+    await repository.record({
+      mailbox,
+      message: m,
+      authVerdict: "NO_HEADER",
+      outcome: {
+        kind: "DRAFT",
+        intakeState: "UNKNOWN_SENDER",
+        senderUserId: null,
+        reporterPersonName: null,
+        proposedDepartmentId: null,
+      },
+      content: draftContentOf(m),
+    });
+    const draft = await prisma.serviceTicketDraft.findFirstOrThrow({
+      where: { mailbox, mail: { messageId: "msg-nul" } },
+      include: { mail: true, attachments: true },
+    });
+    assert.equal(draft.mail.subject, "Hiba a szűrőn");
+    assert.equal(draft.mail.originalText, "A szűrő csöpög.");
+    assert.equal(draft.title, "Hiba a szűrőn");
+    assert.equal(draft.originalProblem, "A szűrő csöpög.");
+    assert.equal(draft.attachments[0]!.fileName, "kep.png");
+  });
+
+  it("counts a failing message per attempt in the database, and seals it as FAILED without text", async () => {
+    assert.equal(
+      await repository.noteFailure(
+        mailbox,
+        "msg-poison",
+        "TICKET_MAIL_MESSAGE_FAILED",
+      ),
+      1,
+    );
+    assert.equal(
+      await repository.noteFailure(
+        mailbox,
+        "msg-poison",
+        "TICKET_MAIL_MESSAGE_FAILED",
+      ),
+      2,
+    );
+    assert.equal(
+      await repository.noteFailure(
+        mailbox,
+        "msg-poison",
+        "TICKET_MAIL_MESSAGE_FAILED",
+      ),
+      3,
+    );
+    assert.equal(await repository.hasMessage(mailbox, "msg-poison"), null);
+    await repository.sealFailed(
+      mailbox,
+      "msg-poison",
+      "TICKET_MAIL_MESSAGE_FAILED",
+    );
+    await repository.sealFailed(
+      mailbox,
+      "msg-poison",
+      "TICKET_MAIL_MESSAGE_FAILED",
+    );
+    assert.ok(await repository.hasMessage(mailbox, "msg-poison"));
+    const sealed = await prisma.serviceDraftMail.findUniqueOrThrow({
+      where: {
+        source_mailbox_messageId: {
+          source: TICKET_MAIL_SOURCE,
+          mailbox,
+          messageId: "msg-poison",
+        },
+      },
+      include: { drafts: true },
+    });
+    assert.equal(sealed.skipReason, "FAILED");
+    assert.equal(sealed.originalText, "");
+    assert.equal(sealed.drafts.length, 0);
+    assert.equal(
+      await prisma.serviceDraftMailFailure.count({
+        where: { mailbox, messageId: "msg-poison" },
+      }),
+      0,
+    );
+  });
+
+  it("counts the unknown senders of ALL addresses together: unknown drafts and capped mail, not a known colleague's and not a machine's", async () => {
+    const since = new Date(Date.now() - 60 * 60 * 1000);
+    const before = await repository.unknownTotalSince(mailbox, since);
+    for (const [id, address] of [
+      ["msg-total-1", `one-${suffix}@x.test`],
+      ["msg-total-2", `two-${suffix}@x.test`],
+    ] as const) {
+      const m = message(id, { from: address, fromAddress: address });
+      await repository.record({
+        mailbox,
+        message: m,
+        authVerdict: "NO_HEADER",
+        outcome: {
+          kind: "DRAFT",
+          intakeState: "UNKNOWN_SENDER",
+          senderUserId: null,
+          reporterPersonName: null,
+          proposedDepartmentId: null,
+        },
+        content: draftContentOf(m),
+      });
+    }
+    assert.equal(
+      await repository.unknownTotalSince(mailbox, since),
+      before + 2,
+    );
+    const old = new Date(Date.now() + 60 * 60 * 1000);
+    assert.equal(await repository.unknownTotalSince(mailbox, old), 0);
+  });
+
   after(async () => {
     await prisma.serviceTicketDraft.deleteMany({ where: { mailbox } });
     await prisma.serviceDraftMail.deleteMany({ where: { mailbox } });
+    await prisma.serviceDraftMailFailure.deleteMany({ where: { mailbox } });
     if (customerId) {
       await prisma.userWorksheetDepartment.deleteMany({
         where: { userId: { in: userIds } },

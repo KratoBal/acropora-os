@@ -1671,6 +1671,11 @@ export const ANONYMIZATION_REGISTER: Readonly<
     authVerdict: "business",
     skipReason: "business",
   },
+  ServiceDraftMailFailure: {
+    mailbox: "ownCompany",
+    messageId: "identifier",
+    lastCode: "business",
+  },
   ServiceTicketDraft: {
     source: "business",
     mailbox: "ownCompany",
