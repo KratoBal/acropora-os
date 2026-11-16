@@ -325,6 +325,21 @@ export type ProjectionRoundStatus = {
      */
     orphanedLinks: number | null;
     /**
+     * a KOR KET FELENEK KILEPESI KODJA (task t-20261116-vetito-felkodok, acrobot 53800): a kor `FAILED`, ha a termek-vetites VAGY az ar-
+     * futas nem 0-val lep ki; 2026-11-16-an a stage-en a `stopped` ures volt es a kor mégis FAILED, mert az ar-fel bukott (egy
+     * `ambiguous-price`). Igy egy pillantasra latszik, MELYIK fel. `projectionExit` null, ha nem futott termek-vetites a korben;
+     * `pricingExit` null, ha nem futott ar-futas.
+     */
+    projectionExit: number | null;
+    pricingExit: number | null;
+    /**
+     * a termek-vetites KILEPESI KODOT NOVELO termek-kudarcai fajtankent (ugyanabbol a feladatbol): a `stopped` csak a MEGÁLLT sorokat
+     * latja, ez a futtato MINDEN `failed` helyet (`stopped`, `product-not-found`, `unknown-authority`, `knowledge-projection`,
+     * `brand-link`, `sku-lookup`), strukturaltan, szoveg-elemzes nelkul. Az `orphaned-link` megallas nem kudarc, ezert nincs benne.
+     * Az ar-kudarcok a `priceFailures`-ben allnak, nem itt. null = nem futott termek-vetites.
+     */
+    productFailures: Record<string, number> | null;
+    /**
      * a kor `ambiguous-price` kudarcainak utkozo forint sorai alakonkent (550b80d1), azonosito nelkul: arlistas,
      * szabalyos, mennyisegi, sima, vagy a valasz nem hozta a jelet (`unknown`). null = nem volt ketertelmu ar.
      */
@@ -625,6 +640,7 @@ export class MedusaProjectionScheduler
             taken: kor.taken && { ...kor.taken },
             priceFailures: kor.priceFailures && { ...kor.priceFailures },
             stopped: kor.stopped && { ...kor.stopped },
+            productFailures: kor.productFailures && { ...kor.productFailures },
             priceConflictRows: kor.priceConflictRows && {
               ...kor.priceConflictRows,
             },
@@ -666,6 +682,9 @@ export class MedusaProjectionScheduler
       priceFailures: null,
       stopped: null,
       orphanedLinks: null,
+      projectionExit: null,
+      pricingExit: null,
+      productFailures: null,
       priceConflictRows: null,
       steps: { leftoverKind: null, arrivals: null },
     };
@@ -797,11 +816,24 @@ export class MedusaProjectionScheduler
         if (allapot.stopped) countStoppedLines(value, allapot.stopped);
         kimenet.stderr(value);
       },
+      // a futtato minden kilepesi kodot noveloe termek-kudarca fajtankent (csak a termek-vetites; az ar-futas a sajat `failed`-jet kapja)
+      failed: (_productId: string, kind: string) => {
+        if (!allapot.productFailures) return;
+        const kod = kind.toLowerCase().replace(/[^a-z0-9-]/g, "") || "unknown";
+        allapot.productFailures[kod] =
+          (Object.hasOwn(allapot.productFailures, kod)
+            ? allapot.productFailures[kod]!
+            : 0) + 1;
+      },
     };
-    if (esedekes.length) allapot.stopped = {};
+    if (esedekes.length) {
+      allapot.stopped = {};
+      allapot.productFailures = {};
+    }
     const kod = esedekes.length
       ? await this.runProjection(esedekes, termekKimenet)
       : 0;
+    allapot.projectionExit = esedekes.length ? kod : null;
     if (arUjra.length)
       this.naplo.log(
         `Medusa price projection: ${arUjra.length} termek ara ujraprobal ` +
@@ -878,6 +910,7 @@ export class MedusaProjectionScheduler
       hitelesítése): ekkor egyik ár sem ment ki, tehát mindegyik kudarc. Ha ezt
       sikerként rögzítenénk, épp az a hiba ismétlődne, amit ez a rész javít.
     */
+    allapot.pricingExit = arazhato.length ? arKod : null;
     if (arKod !== 0 && kudarc.size === 0)
       for (const id of arazhato)
         kudarc.set(id, [`az ar-futas elbukott (kod ${arKod})`]);

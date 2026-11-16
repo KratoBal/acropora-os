@@ -3071,3 +3071,122 @@ describe("a jelölt árva kötés nem esedékes, és nem buktat", () => {
       assert.equal(stoppedProductIsRunFailure(ok), true, ok);
   });
 });
+
+/**
+ * A KOR KET FELENEK KILEPESI KODJA ES A TERMEK-KUDARCOK FAJTANKENT (task t-20261116-vetito-felkodok, acrobot 53800). 2026-11-16-an a
+ * stage-en a `stopped` ures volt, a kor mégis FAILED (az ar-fel bukott: egy ambiguous-price). MI PIROSIT: a ket fel kodja nem
+ * latszik, vagy felcserelodik, vagy nem-futott felnel 0 all null helyett; az ar-futtato kudarcai a TERMEK-kudarcok koze keverednek
+ * (ugyanaz a hiba, mint az elso valtozat `stopped`-je); a fajta kulcsa szuretlen szoveg lehet; a `constructor` kulcs elrontja a
+ * szamlalot; a visszaadott allapot elo hivatkozas.
+ */
+describe("a kör két felének kilépési kódja és a termék-kudarcok fajtánként", () => {
+  const kor = (
+    projekcio: ProjectionRunner,
+    ar: ProjectionRunner,
+    kotesek: { entityId: string; lastSyncedAt?: Date | null }[] = [
+      { entityId: "prod-1" },
+    ],
+    lekepezesek: { entityId: string; lastSyncedAt: Date | null }[] = [],
+  ) => {
+    const { db } = adatbazis([termek()], lekepezesek, kotesek as never);
+    return new MedusaProjectionScheduler({
+      db,
+      runProjection: projekcio,
+      runPricing: ar,
+      environment: BEKAPCSOLVA,
+      logger: naplo().logger,
+    });
+  };
+  const kod =
+    (n: number): ProjectionRunner =>
+    async () =>
+      n;
+
+  it("a termek-fel bukik: projectionExit 1, pricingExit 0", async () => {
+    const scheduler = kor(kod(1), kod(0));
+
+    assert.equal(await scheduler.runOnce(), "FAILED");
+
+    const k = scheduler.allapot().lastRound!;
+    assert.equal(k.projectionExit, 1);
+    assert.equal(k.pricingExit, 0);
+  });
+
+  it("az ar-fel bukik (a termek-fel tiszta): projectionExit 0, pricingExit 1, es a termek-kudarcok ures", async () => {
+    const scheduler = kor(kod(0), kod(1));
+
+    assert.equal(await scheduler.runOnce(), "FAILED");
+
+    const k = scheduler.allapot().lastRound!;
+    assert.equal(k.projectionExit, 0);
+    assert.equal(k.pricingExit, 1);
+    assert.deepEqual(k.productFailures, {});
+  });
+
+  it("ami nem futott, az null (nem 0): minden termek naprakesz, nincs termek-vetites es ar-futas sem", async () => {
+    const scheduler = kor(
+      kod(1),
+      kod(1),
+      [{ entityId: "prod-1" }],
+      [{ entityId: "prod-1", lastSyncedAt: MOST }],
+    );
+
+    assert.equal(await scheduler.runOnce(), "SKIPPED");
+
+    const k = scheduler.allapot().lastRound!;
+    assert.equal(k.projectionExit, null);
+    assert.equal(k.pricingExit, null);
+    assert.equal(k.productFailures, null);
+  });
+
+  it("ha nem futott ar-futas (nincs kotott termek), a pricingExit null, a termek-fel kodja viszont megvan", async () => {
+    const scheduler = kor(kod(0), kod(1), []);
+
+    assert.equal(await scheduler.runOnce(), "APPLIED");
+
+    const k = scheduler.allapot().lastRound!;
+    assert.equal(k.projectionExit, 0);
+    assert.equal(k.pricingExit, null);
+  });
+
+  it("a termek-kudarcok fajtankent szamolnak, az ar-futtato kudarcai NEM kerulnek ide (azok a priceFailures-ben allnak)", async () => {
+    const scheduler = kor(
+      async (_ids, out) => {
+        out.failed?.("prod-1", "stopped");
+        out.failed?.("prod-1", "stopped");
+        out.failed?.("prod-1", "knowledge-projection");
+        return 1;
+      },
+      async (_ids, out) => {
+        out.failed?.("prod-1", "SKU-1: MEGÁLLT (ambiguous-price) x");
+        return 1;
+      },
+    );
+
+    await scheduler.runOnce();
+
+    const k = scheduler.allapot().lastRound!;
+    assert.deepEqual(k.productFailures, {
+      stopped: 2,
+      "knowledge-projection": 1,
+    });
+    assert.ok(k.priceFailures);
+    assert.equal(k.priceFailures!["ambiguous-price"], 1);
+  });
+
+  it("a fajta kulcsa szurt, az ures `unknown`, a `constructor` is szamolodik, es a visszaadott allapot masolat", async () => {
+    const scheduler = kor(async (_ids, out) => {
+      out.failed?.("p", "Bad Kind!");
+      out.failed?.("p", "");
+      out.failed?.("p", "constructor");
+      out.failed?.("p", "constructor");
+      return 1;
+    }, kod(0));
+    await scheduler.runOnce();
+
+    const elso = scheduler.allapot().lastRound!.productFailures!;
+    assert.deepEqual(elso, { badkind: 1, unknown: 1, constructor: 2 });
+    elso.badkind = 99;
+    assert.equal(scheduler.allapot().lastRound!.productFailures!.badkind, 1);
+  });
+});
