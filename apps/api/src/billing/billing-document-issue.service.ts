@@ -34,6 +34,7 @@ import { DOCUMENT_STORE } from "../service-assets/document-store/document-store.
 import type { DocumentStore } from "../service-assets/document-store/document-store.js";
 import { budapestDayKey } from "../dashboard/budapest-day.js";
 import {
+  advancePaidByProforma,
   billingIssueSummary,
   buildIssueInput,
   finalInvoiceIssueProblem,
@@ -46,7 +47,10 @@ import {
   toSzamlazzAgentInput,
 } from "./billing-document-szamlazz.adapter.js";
 import { BillingDocumentStockRepository } from "./billing-document-stock.repository.js";
-import { BillingDocumentsRepository } from "./billing-documents.repository.js";
+import {
+  BillingDocumentsRepository,
+  type BillingDocumentRow,
+} from "./billing-documents.repository.js";
 import {
   DEFAULT_PAYMENT_DAYS,
   toBillingDocumentDetail,
@@ -171,6 +175,20 @@ export class BillingDocumentIssueService {
   }
 
   /**
+   * IS THE PROFORMA THIS ADVANCE INVOICE IS MADE FROM PAID IN FULL (card 00926d89). Only an advance invoice with a proforma asks; the
+   * answer is the Számlázz.hu feed's payment compared with THIS invoice's gross (`advancePaidByProforma`): a part payment, another
+   * currency, a cancelled proforma or an unknown state is "not paid" and the invoice goes out as before.
+   */
+  private async proformaPaidOf(row: BillingDocumentRow): Promise<boolean> {
+    const number = row.proformaInvoice?.invoiceNumber;
+    if (row.documentType !== "ADVANCE_INVOICE" || !number) return false;
+    return advancePaidByProforma(
+      row,
+      await this.documents.proformaPaymentFacts(number),
+    );
+  }
+
+  /**
    * THE CONFIRMATION WINDOW'S VALUES (card 7ba97e0d), from the builder the issue uses. Only for a draft: an issued
    * or issuing document has nothing left to confirm.
    */
@@ -194,6 +212,7 @@ export class BillingDocumentIssueService {
       budapestDayKey(now),
       paymentDueDays,
       sendTo,
+      await this.proformaPaidOf(row),
     );
     if (!result.ok) throw new BadRequestException(result.message);
     return result.summary;
@@ -267,9 +286,17 @@ export class BillingDocumentIssueService {
     // WHAT THE WINDOW SHOWED IS WHAT THE INVOICE CARRIES (card 7ba97e0d): the same summary again, the shown values
     // compared by their digest, the three dates checked by the shared rule and put into the invoice
     const today = budapestDayKey(now);
+    // KIFIZETETT DÍJBEKÉRŐBŐL KÉSZÜLŐ ELŐLEG (kártya 00926d89): ugyanaz az olvasás az ablaknak és a kiállításnak
+    const proformaPaid = await this.proformaPaidOf(row);
     let issueDay: string | null = null;
     if (confirmation) {
-      const shown = billingIssueSummary(row, today, undefined, sendTo);
+      const shown = billingIssueSummary(
+        row,
+        today,
+        undefined,
+        sendTo,
+        proformaPaid,
+      );
       if (!shown.ok) throw new BadRequestException(shown.message);
       if (shown.summary.fingerprint !== confirmation.fingerprint)
         throw new ConflictException(
@@ -304,7 +331,10 @@ export class BillingDocumentIssueService {
     let xml: string;
     try {
       xml = buildSzamlazzAgentInvoiceXml(
-        toSzamlazzAgentInput(input.document, { agentKey, previewOnly: false }),
+        toSzamlazzAgentInput(
+          { ...input.document, proformaPaid },
+          { agentKey, previewOnly: false, today },
+        ),
       );
     } catch (error) {
       if (error instanceof BillingDocumentAdapterError)

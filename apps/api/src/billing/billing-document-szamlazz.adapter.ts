@@ -61,6 +61,11 @@ export interface BillingDocumentForIssue {
   reference: string | null;
   /** A díjbekérő Számlázz.hu-s száma, ha ebből készül. */
   proformaNumber: string | null;
+  /**
+   * A díjbekérő, amelyből ez készül, KI VAN FIZETVE (a Számlázz.hu feedje szerint). Csak az előlegszámlán számít: ott a kérésbe
+   * `fizetve=true` kerül és a fizetési határidő a kiállítás napja. Hiányzó vagy hamis: semmi nem változik.
+   */
+  proformaPaid?: boolean;
   /** Végszámlán a levont előlegszámla Számlázz.hu-s száma (kötelező). */
   advanceNumber: string | null;
   buyer: {
@@ -158,7 +163,12 @@ function orderedLines(
 
 export function toSzamlazzAgentInput(
   document: BillingDocumentForIssue,
-  options: { agentKey: string; previewOnly: boolean },
+  options: {
+    agentKey: string;
+    previewOnly: boolean;
+    /** yyyy-MM-dd, ma Budapesten: a kifizetett díjbekérőből készülő előleg határideje, ha a bizonylatnak még nincs kelte (előnézet). */
+    today?: string;
+  },
 ): SzamlazzAgentInvoiceInput {
   const format = resolveInvoiceFormat(
     document.documentType,
@@ -177,9 +187,18 @@ export function toSzamlazzAgentInput(
     throw new BillingDocumentAdapterError("BILLING_LANGUAGE_NOT_SUPPORTED");
 
   const { showsPaymentFields } = getDocumentCapabilities(document.documentType);
-  const dueDate = showsPaymentFields
+  // KIFIZETETT DÍJBEKÉRŐBŐL KÉSZÜLŐ ELŐLEGSZÁMLA (kártya 00926d89): fizetve=true, és a határidő a kiállítás napja (a megerősített kelte,
+  // előnézetben a mai nap). Más bizonylaton és fizetetlen díjbekérőn ez az ág nem fut.
+  const advancePaid =
+    document.documentType === "ADVANCE_INVOICE" &&
+    document.proformaNumber !== null &&
+    document.proformaPaid === true;
+  const baseDueDate = showsPaymentFields
     ? document.dueDate
     : (document.dueDate ?? document.fulfillmentDate);
+  const dueDate = advancePaid
+    ? (document.issueDate ?? options.today ?? baseDueDate)
+    : baseDueDate;
   const paymentMethod = showsPaymentFields
     ? document.paymentMethod
     : (document.paymentMethod ?? DELIVERY_NOTE_PAYMENT_METHOD);
@@ -195,6 +214,7 @@ export function toSzamlazzAgentInput(
     externalId: document.id,
     language,
     ...(document.issueDate ? { issueDate: document.issueDate } : {}),
+    ...(advancePaid ? { paid: true } : {}),
     fulfillmentDate: document.fulfillmentDate,
     paymentDueDate: dueDate,
     paymentMethod: paymentMethod.trim(),

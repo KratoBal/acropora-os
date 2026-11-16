@@ -17,6 +17,7 @@ import type { SzamlazzAgentResponse } from "../integrations/szamlazz/szamlazz-ag
 import type { SzamlazzCredentialProvider } from "../integrations/szamlazz/szamlazz-credential.provider.js";
 import { buildSzamlazzAgentInvoiceXml } from "../integrations/szamlazz/szamlazz-agent-xml.js";
 import type { BillingDocumentIssueRepository } from "./billing-document-issue.repository.js";
+import { budapestDayKey } from "../dashboard/budapest-day.js";
 import { BillingDocumentPreviewService } from "./billing-document-preview.service.js";
 import type {
   BillingDocumentRow,
@@ -104,6 +105,8 @@ function setup(
     /** Replaces the request builder (a test drops the preview marker with it). */
     buildXml?: typeof buildSzamlazzAgentInvoiceXml;
     strayFails?: boolean;
+    /** The feed's payment facts of the proforma (`proformaPaymentFacts`); the draft's gross is 1270; null: no feed row (the default). */
+    proformaFacts?: { paid: string; cancelled?: boolean } | null;
   } = {},
 ) {
   const calls = {
@@ -115,6 +118,15 @@ function setup(
   const documents = {
     find: async () => (options.found === undefined ? row() : options.found),
     partnerTaxHint: async () => null,
+    proformaPaymentFacts: async () =>
+      options.proformaFacts
+        ? {
+            paidAmount: d(options.proformaFacts.paid),
+            grossAmount: d("1270"),
+            currency: "HUF",
+            cancelled: options.proformaFacts.cancelled ?? false,
+          }
+        : null,
   } as unknown as BillingDocumentsRepository;
   const credentials = {
     resolve: async () => {
@@ -310,5 +322,44 @@ describe("BillingDocumentPreviewService", () => {
     assert.equal(calls.resolve, 0);
     assert.equal(bytes.subarray(0, 4).toString("latin1"), "%PDF");
     assert.match(bytes.toString("latin1"), /MINTA/);
+  });
+  /*
+    A KIFIZETETT DÍJBEKÉRŐBŐL KÉSZÜLŐ ELŐLEG ELŐNÉZETE (kártya 00926d89): ugyanazt mutatja, mint a kiállítás. MI PIROSÍT: ha az előnézet nem
+    kapja meg a `fizetve` jelzőt; ha a határidő a vázlaté marad a mai nap helyett; ha egy fizetetlen vagy ismeretlen állapotú díjbekérőn is
+    megjelenne a jelző.
+  */
+  const advance = (over: Record<string, unknown> = {}) =>
+    row("DRAFT", {
+      documentType: "ADVANCE_INVOICE",
+      proformaInvoice: { invoiceNumber: "D-CRPR-7" },
+      ...over,
+    });
+
+  it("an advance fully covered by its proforma's payment previews with fizetve and today as the due date", async () => {
+    const { service, calls } = setup({
+      found: advance(),
+      proformaFacts: { paid: "1270" },
+    });
+    const before = budapestDayKey(new Date());
+    await service.preview("doc-1");
+    const after = budapestDayKey(new Date());
+    const xml = calls.xml[0]!;
+    assert.match(xml, /<fizetve>true<\/fizetve>/);
+    const due = /<fizetesiHataridoDatum>([^<]+)</.exec(xml)?.[1];
+    assert.ok(due === before || due === after, `due ${due}`);
+  });
+
+  it("a part payment, a cancelled proforma or no feed row previews as before", async () => {
+    for (const proformaFacts of [
+      { paid: "1000" },
+      { paid: "1270", cancelled: true },
+      null,
+    ]) {
+      const { service, calls } = setup({ found: advance(), proformaFacts });
+      await service.preview("doc-1");
+      const xml = calls.xml[0]!;
+      assert.doesNotMatch(xml, /fizetve/, JSON.stringify(proformaFacts));
+      assert.match(xml, /<fizetesiHataridoDatum>2026-10-08</);
+    }
   });
 });

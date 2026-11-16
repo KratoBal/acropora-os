@@ -11,6 +11,7 @@ import {
 import { Prisma } from "@acropora/database";
 import type { AuthenticatedUser } from "@acropora/types";
 
+import { budapestDayKey } from "../dashboard/budapest-day.js";
 import type { SzamlazzAgentClient } from "../integrations/szamlazz/szamlazz-agent.client.js";
 import type { SzamlazzAgentResponse } from "../integrations/szamlazz/szamlazz-agent-xml.js";
 import type { SzamlazzCredentialProvider } from "../integrations/szamlazz/szamlazz-credential.provider.js";
@@ -116,6 +117,15 @@ function setup(
     paymentDueDays?: number | null;
     partnerHint?: { partnerName: string; taxNumber: string } | null;
     feedCancelled?: boolean;
+    /**
+     * What the Számlázz.hu feed knows about the proforma's payment (`proformaPaymentFacts`): the paid amount (the draft's gross is 1270),
+     * optionally another currency or a cancelled flag; null: no feed row (the default).
+     */
+    proformaFacts?: {
+      paid: string;
+      currency?: string;
+      cancelled?: boolean;
+    } | null;
     /** A foglalás UTÁN látszó előleg-sztornó (OS: ISSUING/ISSUED; feed). */
     stornoAfterClaim?: "OS" | "FEED";
     /** A forrás-szerződés tételei és a MÁSHOL számlázott sorai, a foglalás előtt / után. */
@@ -137,6 +147,7 @@ function setup(
     excluded: [] as string[][],
     xml: [] as string[],
     paymentDaysFor: [] as string[],
+    proformaFactsFor: [] as string[],
   };
   let current = {
     ...row(options.status, options.format),
@@ -148,6 +159,18 @@ function setup(
     customerPaymentDueDays: async (id: string) => {
       calls.paymentDaysFor.push(id);
       return options.paymentDueDays === undefined ? 30 : options.paymentDueDays;
+    },
+    proformaPaymentFacts: async (number: string) => {
+      calls.proformaFactsFor.push(number);
+      const facts = options.proformaFacts;
+      return facts
+        ? {
+            paidAmount: d(facts.paid),
+            grossAmount: d("1270"),
+            currency: facts.currency ?? "HUF",
+            cancelled: facts.cancelled ?? false,
+          }
+        : null;
     },
     feedTwinCancelled: async () =>
       (options.feedCancelled ?? false) ||
@@ -964,5 +987,109 @@ describe("the invoice confirmation (card 7ba97e0d)", () => {
       [null, "2026-09-30", "2026-10-08"],
     );
     assert.equal("fulfillmentDate" in (calls.issued[0] as object), false);
+  });
+  /*
+    A KIFIZETETT DÍJBEKÉRŐBŐL KÉSZÜLŐ ELŐLEGSZÁMLA (kártya 00926d89, Balázs kérése; barracuda #2638: a `fizetve` a TELJES kiegyenlítést
+    állítja). MI PIROSÍT: ha a jelző kimarad egy teljesen kifizetett díjbekérőből; ha RÉSZFIZETÉSNÉL, más pénznemnél, sztornózott vagy
+    ismeretlen állapotú díjbekérőnél is menne (a "van rajta fizetés" alak); ha a határidő a vázlaté marad; ha a nem előleg-bizonylat
+    (számla) egyáltalán megkérdezné a feedet; ha az ablak összesítője nem követné a kiállítás napját.
+  */
+  const advance = (over: Record<string, unknown> = {}) => ({
+    documentType: "ADVANCE_INVOICE",
+    proformaInvoice: { invoiceNumber: "D-CRPR-7" },
+    ...over,
+  });
+  const confirmed = (fingerprint: string) => ({
+    issueDate: "2026-11-10",
+    fulfillmentDate: "2026-11-10",
+    dueDate: "2026-12-31",
+    fingerprint,
+  });
+
+  it("an advance whose gross the proforma's payment REACHES (exact or more): fizetve, due on the confirmed issue date", async () => {
+    for (const paid of ["1270", "2000"]) {
+      const { service, calls } = setup({
+        over: advance(),
+        proformaFacts: { paid },
+      });
+      const summary = await service.summary("doc-1", NOW);
+      assert.equal(summary.dueDateFollowsIssueDate, true, paid);
+      assert.equal(summary.dueDate, summary.issueDate, paid);
+      await service.issue(
+        "doc-1",
+        "2026-09-30T10:00:00.000Z",
+        USER,
+        confirmed(summary.fingerprint),
+        NOW,
+      );
+      const xml = calls.xml[0]!;
+      assert.equal(tag(xml, "fizetve"), "true", paid);
+      assert.equal(tag(xml, "fizetesiHataridoDatum"), "2026-11-10", paid);
+      assert.equal(tag(xml, "elolegszamla"), "true", paid);
+      assert.deepEqual(calls.proformaFactsFor, ["D-CRPR-7", "D-CRPR-7"], paid);
+      assert.equal(
+        (calls.issued[0] as { dueDate: Date }).dueDate
+          .toISOString()
+          .slice(0, 10),
+        "2026-11-10",
+        paid,
+      );
+    }
+  });
+
+  it("a part payment, another currency, a cancelled proforma or no feed row: nothing changes (no fizetve, the draft's due date)", async () => {
+    const cases = [
+      { name: "part payment", facts: { paid: "1000" } },
+      { name: "one forint short", facts: { paid: "1269.99" } },
+      { name: "nothing paid", facts: { paid: "0" } },
+      { name: "other currency", facts: { paid: "1270", currency: "EUR" } },
+      { name: "cancelled", facts: { paid: "1270", cancelled: true } },
+      { name: "no feed row", facts: null },
+    ];
+    for (const { name, facts } of cases) {
+      const { service, calls } = setup({
+        over: advance(),
+        proformaFacts: facts,
+      });
+      const summary = await service.summary("doc-1", NOW);
+      assert.equal(summary.dueDateFollowsIssueDate, false, name);
+      await service.issue(
+        "doc-1",
+        "2026-09-30T10:00:00.000Z",
+        USER,
+        confirmed(summary.fingerprint),
+        NOW,
+      );
+      const xml = calls.xml[0]!;
+      assert.equal(tag(xml, "fizetve"), null, name);
+      assert.equal(tag(xml, "fizetesiHataridoDatum"), "2026-12-31", name);
+    }
+  });
+
+  it("an internal caller without a window: a fully paid advance is dated today all the same", async () => {
+    const { service, calls } = setup({
+      over: advance(),
+      proformaFacts: { paid: "1270" },
+    });
+    await service.issue(
+      "doc-1",
+      "2026-09-30T10:00:00.000Z",
+      USER,
+      undefined,
+      NOW,
+    );
+    const xml = calls.xml[0]!;
+    assert.equal(tag(xml, "fizetve"), "true");
+    assert.equal(tag(xml, "fizetesiHataridoDatum"), budapestDayKey(NOW));
+  });
+
+  it("an invoice (not an advance) never asks the feed and never carries fizetve", async () => {
+    const { service, calls } = setup({
+      over: { proformaInvoice: { invoiceNumber: "D-CRPR-7" } },
+      proformaFacts: { paid: "1270" },
+    });
+    await issue(service);
+    assert.deepEqual(calls.proformaFactsFor, []);
+    assert.equal(tag(calls.xml[0]!, "fizetve"), null);
   });
 });
