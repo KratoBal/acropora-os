@@ -22,8 +22,45 @@ import type { MedusaOrderOverviewRow } from "../../integrations/medusa/medusa-ad
  * sorából a lista sora, a számlálók, a szűrés, a rendezés és a lapozás.
  */
 
-/** A webshop szállítási módja a seed nevével (commerce `initial-data-seed.ts`). */
+/**
+ * A webshop szállítási módja a seed nevével (commerce `initial-data-seed.ts`).
+ * Csak TARTALÉK: a név a rendelés létrehozásakor a rendelésre másolódik, és egy
+ * admin átnevezheti az opciót, ezért a döntést az opció azonosítója hozza
+ * (`isStorePickupMethod`).
+ */
 export const STORE_PICKUP_METHOD = "Bolti átvétel";
+
+/** The shipping option id of the store pickup; the same variable the commerce role table reads. */
+export const STORE_PICKUP_OPTION_ENV = "ACROPORA_SO_PICKUP";
+
+/** The configured pickup option id, or null when the variable is missing or blank. */
+export function storePickupOptionIdFrom(
+  env: NodeJS.ProcessEnv = process.env,
+): string | null {
+  return env[STORE_PICKUP_OPTION_ENV]?.trim() || null;
+}
+
+/**
+ * IS THIS ORDER SHIPPING METHOD THE STORE PICKUP. One function for the list, the
+ * detail, the parcel plan and the address rules, so they cannot disagree.
+ *
+ * The decision is the option id (`shipping_option_id`, copied to the order with
+ * the name by the Medusa cart completion). The name stays as a fallback for the
+ * rows that carry no id (an older commerce answer) and for an environment where
+ * the id variable is not set. The fallback is the weaker rule: an admin rename
+ * of the option makes it miss, which is why the id comes first.
+ */
+export function isStorePickupMethod(
+  method: { shippingOptionId?: string | null; name?: string | null },
+  pickupOptionId: string | null = storePickupOptionIdFrom(),
+): boolean {
+  if (
+    pickupOptionId !== null &&
+    (method.shippingOptionId ?? null) === pickupOptionId
+  )
+    return true;
+  return (method.name ?? null) === STORE_PICKUP_METHOD;
+}
 
 /**
  * A FIZETÉSI SZOLGÁLTATÓ NEVE. Csak a biztosan ismert azonosítók kapnak nevet: a
@@ -237,7 +274,10 @@ export function toListItem(
   const code = isStatus(row.business_status.code)
     ? row.business_status.code
     : null;
-  const storePickup = row.shipping_method === STORE_PICKUP_METHOD;
+  const storePickup = isStorePickupMethod({
+    shippingOptionId: row.shipping_option_id,
+    name: row.shipping_method,
+  });
   return {
     id: row.id,
     displayId: row.display_id,

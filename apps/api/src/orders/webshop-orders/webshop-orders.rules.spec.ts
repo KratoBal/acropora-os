@@ -8,6 +8,8 @@ import {
   countersOf,
   inView,
   isStale,
+  isStorePickupMethod,
+  storePickupOptionIdFrom,
   factsOf,
   matchesSearch,
   orderPaymentProviderId,
@@ -525,5 +527,84 @@ describe("view, counters and sort", () => {
       sortItems(items, "createdAt", "asc").map((each) => each.id),
       ["old-stock", "new-stock", "pending"],
     );
+  });
+});
+
+describe("the store pickup marker follows the option id (task t-20261116-bolti-jelolo-id)", () => {
+  /*
+    MI PIROSÍT: az azonosító nem számít (csak a név); a név tartalékként
+    kiesik; a név hamisat mond egy azonosítóval jelölt opcióra; a beállítás
+    nélküli környezet nem a név-egyezésre esik vissza hibásan.
+  */
+  const PICKUP_ID = "so_pickup";
+
+  it("the id matches: pickup, whatever the name was renamed to", () => {
+    assert.equal(
+      isStorePickupMethod(
+        { shippingOptionId: PICKUP_ID, name: "Átvétel az üzletben" },
+        PICKUP_ID,
+      ),
+      true,
+    );
+  });
+
+  it("only the name matches: pickup, the fallback for rows without an id", () => {
+    assert.equal(
+      isStorePickupMethod({ name: "Bolti átvétel" }, PICKUP_ID),
+      true,
+    );
+    assert.equal(
+      isStorePickupMethod(
+        { shippingOptionId: "so_other", name: "Bolti átvétel" },
+        PICKUP_ID,
+      ),
+      true,
+    );
+    assert.equal(
+      isStorePickupMethod({ shippingOptionId: PICKUP_ID }, null),
+      false,
+    );
+  });
+
+  it("neither matches: not a pickup", () => {
+    assert.equal(
+      isStorePickupMethod(
+        { shippingOptionId: "so_gls", name: "GLS csomagpont" },
+        PICKUP_ID,
+      ),
+      false,
+    );
+    assert.equal(isStorePickupMethod({}, PICKUP_ID), false);
+  });
+
+  it("a blank or missing variable is no id", () => {
+    assert.equal(storePickupOptionIdFrom({}), null);
+    assert.equal(storePickupOptionIdFrom({ ACROPORA_SO_PICKUP: "  " }), null);
+    assert.equal(
+      storePickupOptionIdFrom({ ACROPORA_SO_PICKUP: " so_pickup " }),
+      "so_pickup",
+    );
+  });
+
+  it("the list row: a renamed pickup is a pickup and waits for no parcel", () => {
+    const before = process.env.ACROPORA_SO_PICKUP;
+    process.env.ACROPORA_SO_PICKUP = PICKUP_ID;
+    try {
+      const renamed = item({
+        id: "r",
+        shipping_method: "Átvétel az üzletben",
+        shipping_option_id: PICKUP_ID,
+      });
+      assert.equal(renamed.shipping.storePickup, true);
+      const gls = item({
+        id: "g",
+        shipping_method: "GLS csomagpont",
+        shipping_option_id: "so_gls",
+      });
+      assert.equal(gls.shipping.storePickup, false);
+    } finally {
+      if (before === undefined) delete process.env.ACROPORA_SO_PICKUP;
+      else process.env.ACROPORA_SO_PICKUP = before;
+    }
   });
 });
