@@ -171,6 +171,20 @@ export class BillingDocumentIssueService {
   }
 
   /**
+   * IS THE PROFORMA THIS ADVANCE INVOICE IS MADE FROM PAID (card 00926d89). Only an advance invoice with a proforma asks; the answer is
+   * the Számlázz.hu feed's (`feedPaid`: true only when a payment is on the proforma), so an unknown state (`null`) is "not paid" and the
+   * invoice goes out as before.
+   */
+  private async proformaPaidOf(row: {
+    documentType: string;
+    proformaInvoice?: { invoiceNumber: string | null } | null;
+  }): Promise<boolean> {
+    const number = row.proformaInvoice?.invoiceNumber;
+    if (row.documentType !== "ADVANCE_INVOICE" || !number) return false;
+    return (await this.documents.feedPaid(number)) === true;
+  }
+
+  /**
    * THE CONFIRMATION WINDOW'S VALUES (card 7ba97e0d), from the builder the issue uses. Only for a draft: an issued
    * or issuing document has nothing left to confirm.
    */
@@ -194,6 +208,7 @@ export class BillingDocumentIssueService {
       budapestDayKey(now),
       paymentDueDays,
       sendTo,
+      await this.proformaPaidOf(row),
     );
     if (!result.ok) throw new BadRequestException(result.message);
     return result.summary;
@@ -267,9 +282,17 @@ export class BillingDocumentIssueService {
     // WHAT THE WINDOW SHOWED IS WHAT THE INVOICE CARRIES (card 7ba97e0d): the same summary again, the shown values
     // compared by their digest, the three dates checked by the shared rule and put into the invoice
     const today = budapestDayKey(now);
+    // KIFIZETETT DÍJBEKÉRŐBŐL KÉSZÜLŐ ELŐLEG (kártya 00926d89): ugyanaz az olvasás az ablaknak és a kiállításnak
+    const proformaPaid = await this.proformaPaidOf(row);
     let issueDay: string | null = null;
     if (confirmation) {
-      const shown = billingIssueSummary(row, today, undefined, sendTo);
+      const shown = billingIssueSummary(
+        row,
+        today,
+        undefined,
+        sendTo,
+        proformaPaid,
+      );
       if (!shown.ok) throw new BadRequestException(shown.message);
       if (shown.summary.fingerprint !== confirmation.fingerprint)
         throw new ConflictException(
@@ -304,7 +327,10 @@ export class BillingDocumentIssueService {
     let xml: string;
     try {
       xml = buildSzamlazzAgentInvoiceXml(
-        toSzamlazzAgentInput(input.document, { agentKey, previewOnly: false }),
+        toSzamlazzAgentInput(
+          { ...input.document, proformaPaid },
+          { agentKey, previewOnly: false, today },
+        ),
       );
     } catch (error) {
       if (error instanceof BillingDocumentAdapterError)

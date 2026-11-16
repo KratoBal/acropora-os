@@ -105,6 +105,12 @@ export interface SzamlazzAgentInvoiceInput {
   paymentMethod: string;
   currency: string;
   comment?: string;
+  /**
+   * `fizetve` (XSD `fejlecTipus`: a `szamlaszamElotag` és `fizetendoKorrekcio` UTÁN, az `arresAfa` ELŐTT): a bizonylat már ki van fizetve,
+   * a Számlázz.hu a "kiegyenlítése megtörtént, pénzügyi rendezést nem igényel" sort nyomtatja rá. Csak akkor kerül a kérésbe, ha
+   * igaz: a hiánya a fizetetlen bizonylat.
+   */
+  paid?: boolean;
   /** A Számlázz.hu saját külső azonosítója (`rendelesSzam`) -- a teljesítési igazolás száma. */
   orderNumber?: string;
   /**
@@ -229,6 +235,8 @@ export function buildSzamlazzAgentInvoiceXml(
       : "") +
     (flag === "dijbekero" ? tag("dijbekero", true) : "") +
     (flag === "szallitolevel" ? tag("szallitolevel", true) : "") +
+    // XSD sorrend: a `szallitolevel`, (logoExtra, szamlaszamElotag, fizetendoKorrekcio: nem küldünk), `fizetve`, ..., `elonezetpdf`
+    (input.paid === true ? tag("fizetve", true) : "") +
     // elonezetpdf: lásd a fejlecTipus doc-commentjét a séma 128. sorában:
     // "bizonylat előnézeti pdf (bizonylat nem készül)". Csak akkor kerül a
     // kimenetbe, ha kifejezetten kértük -- a mező hiánya a valódi kiállítás.

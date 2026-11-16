@@ -336,6 +336,8 @@ export function billingIssueSummary(
   today: string,
   paymentDueDays?: number,
   sendTo?: string | null,
+  /** The proforma this advance invoice is made from is PAID (the feed says so): the due date is the issue day (card 00926d89). */
+  proformaPaid?: boolean,
 ):
   | { ok: true; summary: BillingIssueSummary }
   | { ok: false; code: string; message: string } {
@@ -346,6 +348,10 @@ export function billingIssueSummary(
   const paymentMethod = showsPaymentFields ? document.paymentMethod : null;
   const email =
     (sendTo === undefined ? document.buyer.email : sendTo)?.trim() || null;
+  const advancePaid =
+    document.documentType === "ADVANCE_INVOICE" &&
+    document.proformaNumber !== null &&
+    proformaPaid === true;
   return {
     ok: true,
     summary: {
@@ -363,13 +369,15 @@ export function billingIssueSummary(
       fulfillmentDate: document.fulfillmentDate,
       dueDate: !showsPaymentFields
         ? null
-        : paymentDueDays === undefined
-          ? document.dueDate
-          : proposedIssueDueDate(document.dueDate, today, paymentDueDays),
+        : advancePaid
+          ? today
+          : paymentDueDays === undefined
+            ? document.dueDate
+            : proposedIssueDueDate(document.dueDate, today, paymentDueDays),
       paymentMethod,
       showsPaymentFields,
       dueDateFollowsIssueDate:
-        showsPaymentFields && isCardPayment(paymentMethod),
+        showsPaymentFields && (isCardPayment(paymentMethod) || advancePaid),
       fingerprint: issueFingerprint(
         sendTo === undefined
           ? document

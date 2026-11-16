@@ -18,6 +18,7 @@ import { StubSzamlazzAgentClient } from "../integrations/szamlazz/szamlazz-agent
 import { buildSzamlazzAgentInvoiceXml } from "../integrations/szamlazz/szamlazz-agent-xml.js";
 import { SzamlazzConnectionError } from "../integrations/szamlazz/szamlazz-connection.types.js";
 import { SzamlazzCredentialProvider } from "../integrations/szamlazz/szamlazz-credential.provider.js";
+import { budapestDayKey } from "../dashboard/budapest-day.js";
 import { buildIssueInput } from "./billing-document-issue.js";
 import { customerTaxNumberProblem } from "./buyer-tax-number.js";
 import { BillingDocumentIssueRepository } from "./billing-document-issue.repository.js";
@@ -107,6 +108,12 @@ export class BillingDocumentPreviewService {
 
     const input = buildIssueInput(row);
     if (!input.ok) throw new BadRequestException(input.message);
+    // KIFIZETETT DÍJBEKÉRŐBŐL KÉSZÜLŐ ELŐLEG (kártya 00926d89): az előnézet ugyanazt mutatja, mint a kiállítás (fizetve, határidő a mai nap)
+    const proformaNumber = row.proformaInvoice?.invoiceNumber ?? null;
+    const proformaPaid =
+      row.documentType === "ADVANCE_INVOICE" && proformaNumber !== null
+        ? (await this.documents.feedPaid(proformaNumber)) === true
+        : false;
     const taxProblem =
       row.customer && customerTaxNumberProblem(row.customer)
         ? // the reason names a same-named partner's tax number: where to copy it from
@@ -133,8 +140,8 @@ export class BillingDocumentPreviewService {
     let xml: string;
     try {
       const { externalId: _unused, ...agentInput } = toSzamlazzAgentInput(
-        input.document,
-        { agentKey, previewOnly: true },
+        { ...input.document, proformaPaid },
+        { agentKey, previewOnly: true, today: budapestDayKey(new Date()) },
       );
       xml = this.buildXml(agentInput);
     } catch (error) {

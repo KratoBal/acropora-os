@@ -101,6 +101,24 @@ describe("buildSzamlazzAgentInvoiceXml", () => {
     assert.doesNotMatch(real, /elonezetpdf/);
   });
 
+  it("emits fizetve only when paid is true, between the document flag and the preview mark (XSD order)", () => {
+    const paid = buildSzamlazzAgentInvoiceXml({
+      ...baseInput,
+      documentType: "ADVANCE_INVOICE",
+      paid: true,
+    });
+    assert.match(
+      paid,
+      /<elolegszamla>true<\/elolegszamla><fizetve>true<\/fizetve><elonezetpdf>true<\/elonezetpdf>/,
+    );
+    for (const paidValue of [false, undefined]) {
+      assert.doesNotMatch(
+        buildSzamlazzAgentInvoiceXml({ ...baseInput, paid: paidValue }),
+        /fizetve/,
+      );
+    }
+  });
+
   it("always requests the structured XML response with the PDF included", () => {
     const xml = buildSzamlazzAgentInvoiceXml(baseInput);
     assert.match(xml, /<valaszVerzio>2<\/valaszVerzio>/);

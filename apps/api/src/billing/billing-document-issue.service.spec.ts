@@ -11,6 +11,7 @@ import {
 import { Prisma } from "@acropora/database";
 import type { AuthenticatedUser } from "@acropora/types";
 
+import { budapestDayKey } from "../dashboard/budapest-day.js";
 import type { SzamlazzAgentClient } from "../integrations/szamlazz/szamlazz-agent.client.js";
 import type { SzamlazzAgentResponse } from "../integrations/szamlazz/szamlazz-agent-xml.js";
 import type { SzamlazzCredentialProvider } from "../integrations/szamlazz/szamlazz-credential.provider.js";
@@ -116,6 +117,8 @@ function setup(
     paymentDueDays?: number | null;
     partnerHint?: { partnerName: string; taxNumber: string } | null;
     feedCancelled?: boolean;
+    /** What the Számlázz.hu feed says about the proforma's payment (`feedPaid`): true, false, null (unknown); default null. */
+    feedPaid?: boolean | null;
     /** A foglalás UTÁN látszó előleg-sztornó (OS: ISSUING/ISSUED; feed). */
     stornoAfterClaim?: "OS" | "FEED";
     /** A forrás-szerződés tételei és a MÁSHOL számlázott sorai, a foglalás előtt / után. */
@@ -137,6 +140,7 @@ function setup(
     excluded: [] as string[][],
     xml: [] as string[],
     paymentDaysFor: [] as string[],
+    feedPaidFor: [] as string[],
   };
   let current = {
     ...row(options.status, options.format),
@@ -148,6 +152,10 @@ function setup(
     customerPaymentDueDays: async (id: string) => {
       calls.paymentDaysFor.push(id);
       return options.paymentDueDays === undefined ? 30 : options.paymentDueDays;
+    },
+    feedPaid: async (number: string) => {
+      calls.feedPaidFor.push(number);
+      return options.feedPaid === undefined ? null : options.feedPaid;
     },
     feedTwinCancelled: async () =>
       (options.feedCancelled ?? false) ||
@@ -964,5 +972,91 @@ describe("the invoice confirmation (card 7ba97e0d)", () => {
       [null, "2026-09-30", "2026-10-08"],
     );
     assert.equal("fulfillmentDate" in (calls.issued[0] as object), false);
+  });
+  /*
+    A KIFIZETETT DÍJBEKÉRŐBŐL KÉSZÜLŐ ELŐLEGSZÁMLA (kártya 00926d89, Balázs kérése): a Számlázz.hu a `fizetve` jelzőjű számlára nyomtatja a
+    "kiegyenlítése megtörtént" sort, és a határidő a kiállítás napja. MI PIROSÍT: ha a jelző kimarad egy kifizetett díjbekérőből; ha egy
+    fizetetlen (vagy ismeretlen állapotú) díjbekérőből is menne; ha a határidő a vázlaté marad; ha a nem előleg-bizonylat (számla)
+    egyáltalán megkérdezné a feedet; ha az ablak összesítője nem követné a kiállítás napját.
+  */
+  const advance = (over: Record<string, unknown> = {}) => ({
+    documentType: "ADVANCE_INVOICE",
+    proformaInvoice: { invoiceNumber: "D-CRPR-7" },
+    ...over,
+  });
+
+  it("an advance from a PAID proforma: fizetve, and the due date is the confirmed issue date", async () => {
+    const { service, calls } = setup({ over: advance(), feedPaid: true });
+    const summary = await service.summary("doc-1", NOW);
+    assert.equal(summary.dueDateFollowsIssueDate, true);
+    assert.equal(summary.dueDate, summary.issueDate);
+    await service.issue(
+      "doc-1",
+      "2026-09-30T10:00:00.000Z",
+      USER,
+      {
+        issueDate: "2026-11-10",
+        fulfillmentDate: "2026-11-10",
+        dueDate: "2026-12-31",
+        fingerprint: summary.fingerprint,
+      },
+      NOW,
+    );
+    const xml = calls.xml[0]!;
+    assert.equal(tag(xml, "fizetve"), "true");
+    assert.equal(tag(xml, "fizetesiHataridoDatum"), "2026-11-10");
+    assert.equal(tag(xml, "elolegszamla"), "true");
+    assert.deepEqual(calls.feedPaidFor, ["D-CRPR-7", "D-CRPR-7"]);
+    assert.equal(
+      (calls.issued[0] as { dueDate: Date }).dueDate.toISOString().slice(0, 10),
+      "2026-11-10",
+    );
+  });
+
+  it("an advance from an UNPAID or unknown-state proforma: nothing changes", async () => {
+    for (const feedPaid of [false, null] as const) {
+      const { service, calls } = setup({ over: advance(), feedPaid });
+      const summary = await service.summary("doc-1", NOW);
+      assert.equal(summary.dueDateFollowsIssueDate, false);
+      await service.issue(
+        "doc-1",
+        "2026-09-30T10:00:00.000Z",
+        USER,
+        {
+          issueDate: "2026-11-10",
+          fulfillmentDate: "2026-11-10",
+          dueDate: "2026-12-31",
+          fingerprint: summary.fingerprint,
+        },
+        NOW,
+      );
+      const xml = calls.xml[0]!;
+      assert.equal(tag(xml, "fizetve"), null);
+      assert.equal(tag(xml, "fizetesiHataridoDatum"), "2026-12-31");
+    }
+  });
+
+  it("an internal caller without a window: a paid advance is dated today all the same", async () => {
+    const { service, calls } = setup({ over: advance(), feedPaid: true });
+    await service.issue(
+      "doc-1",
+      "2026-09-30T10:00:00.000Z",
+      USER,
+      undefined,
+      NOW,
+    );
+    const xml = calls.xml[0]!;
+    assert.equal(tag(xml, "fizetve"), "true");
+    assert.equal(tag(xml, "fizetesiHataridoDatum"), budapestDayKey(NOW));
+  });
+
+  it("an invoice (not an advance) never asks the feed and never carries fizetve", async () => {
+    const { service, calls } = setup({
+      over: { proformaInvoice: { invoiceNumber: "D-CRPR-7" } },
+      feedPaid: true,
+    });
+    await issue(service);
+    assert.deepEqual(calls.feedPaidFor, []);
+    assert.equal(tag(calls.xml[0]!, "fizetve"), null);
   });
 });
