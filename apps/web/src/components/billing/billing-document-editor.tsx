@@ -171,6 +171,8 @@ export function BillingDocumentEditor({
     useState<BillingDocumentDetail["proforma"]>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // az előnézet SAJÁT hibája: a mentés sikerülhetett, az előnézet nem (Luca, 2026-11-16: a doboz címe tévesen azt mondta, a mentés bukott)
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -407,6 +409,7 @@ export function BillingDocumentEditor({
     if (missing.length > 0) return null;
     setSaving(true);
     setSaveError(null);
+    setPreviewError(null);
     try {
       const { detail, created } = await persist();
       // A TÁROLT ÁLLAPOT A MÉRVADÓ (a szerver számolt), a termék-sor alcíme
@@ -463,7 +466,8 @@ export function BillingDocumentEditor({
       else window.open(url, "_blank");
     } catch (cause) {
       tab?.close();
-      setSaveError(
+      // a mentés ekkor MÁR sikerült (a save() előbb lefutott): az előnézet hibája a saját címét kapja, nem a mentését
+      setPreviewError(
         cause instanceof Error
           ? cause.message
           : "Az előnézet nem készíthető el.",
@@ -480,6 +484,7 @@ export function BillingDocumentEditor({
    */
   const openIssueConfirm = async () => {
     setSaveError(null);
+    setPreviewError(null);
     setSummary(null);
     setSummaryError(null);
     setPending(null);
@@ -850,6 +855,13 @@ export function BillingDocumentEditor({
           variant="danger"
           title="A mentés nem sikerült"
           description={saveError}
+        />
+      ) : null}
+      {previewError ? (
+        <Alert
+          variant="danger"
+          title="Az előnézet nem készült el"
+          description={previewError}
         />
       ) : null}
 
