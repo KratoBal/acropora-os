@@ -261,9 +261,14 @@ describe("a final invoice from an advance", () => {
     ellenértékű díjbekérő az ajánlat tételeit kapná; ha a kötött, de tétel nélküli ajánlatnál csendben a százalékos sor maradna.
   */
   describe("from the advance of a quote milestone's proforma (card 2650d371)", () => {
-    const basis = (percent: string, names: string[]): QuoteBasis => ({
+    const basis = (
+      percent: string,
+      names: string[],
+      otherProformaMilestones = 0,
+    ): QuoteBasis => ({
       quoteNumber: "AJ-2026-0015",
       percent: d(percent),
+      otherProformaMilestones,
       items: names.map((name) => ({
         name,
         quantity: d("1"),
@@ -321,6 +326,26 @@ describe("a final invoice from an advance", () => {
           JSON.stringify(Object.keys(quoteBasis)),
         );
       }
+    });
+
+    it("a quote with another proforma milestone: an empty draft, neither the percentage line nor the full items (barracuda, #2639)", async () => {
+      const s = withProforma({
+        "pro-1": basis("30", ["Akvárium", "Szűrő"], 1),
+      });
+      await s.service.finalFromAdvance(advanceIdFor("pro-1"), USER);
+      assert.equal(s.created.length, 1);
+      assert.deepEqual(linesOf(s), []);
+    });
+
+    it("a milestone with a proforma next to one with none yet (the closing part): the quote's full items", async () => {
+      const s = withProforma({
+        "pro-1": basis("60", ["Akvárium", "Szűrő"], 0),
+      });
+      await s.service.finalFromAdvance(advanceIdFor("pro-1"), USER);
+      assert.deepEqual(linesOf(s), [
+        ["Akvárium", "1000"],
+        ["Szűrő", "1000"],
+      ]);
     });
 
     it("a tied quote with no accepted items refuses, makes no draft and does not fall back to the percentage line", async () => {

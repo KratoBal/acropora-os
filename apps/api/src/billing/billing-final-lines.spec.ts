@@ -6,7 +6,7 @@ import { Prisma } from "@acropora/database";
 import {
   finalLineOfQuoteItem,
   quoteBasisFrom,
-  usesQuoteLines,
+  finalLinesSource,
   type MilestoneRow,
   type QuoteBasis,
   type QuoteItemRow,
@@ -24,6 +24,7 @@ const milestone = (over: Partial<MilestoneRow> = {}): MilestoneRow => ({
   percent: d("60"),
   versionId: "v2",
   quote: { quoteNumber: "AJ-2026-0015", acceptedVersionId: "v2" },
+  otherProformaMilestones: 0,
   ...over,
 });
 
@@ -63,6 +64,15 @@ describe("quoteBasisFrom", () => {
     );
   });
 
+  it("carries the number of the quote's other proforma milestones", () => {
+    const basis = quoteBasisFrom(
+      milestone({ otherProformaMilestones: 2 }),
+      [],
+      [item("a", "Akvárium")],
+    );
+    assert.equal(basis?.otherProformaMilestones, 2);
+  });
+
   it("a milestone on a version that is not the accepted one gives no basis", () => {
     assert.equal(
       quoteBasisFrom(
@@ -87,18 +97,59 @@ describe("quoteBasisFrom", () => {
   });
 });
 
-describe("usesQuoteLines", () => {
-  const basis = (percent: string): QuoteBasis => ({
+describe("finalLinesSource", () => {
+  const items = [
+    {
+      name: "Akvárium",
+      quantity: d("1"),
+      unit: "db",
+      unitNetPrice: d("1000"),
+      vatRatePercent: d("27"),
+    },
+  ];
+  const basis = (
+    percent: string,
+    over: Partial<QuoteBasis> = {},
+  ): QuoteBasis => ({
     quoteNumber: "AJ-2026-0015",
     percent: d(percent),
-    items: [],
+    items,
+    otherProformaMilestones: 0,
+    ...over,
   });
 
-  it("a milestone below 100 percent uses the quote's lines; 100 percent or no tie keeps the proforma's", () => {
-    assert.equal(usesQuoteLines(basis("60")), true);
-    assert.equal(usesQuoteLines(basis("99.99")), true);
-    assert.equal(usesQuoteLines(basis("100")), false);
-    assert.equal(usesQuoteLines(null), false);
+  it("a milestone below 100 percent with no other proforma milestone uses the quote's items", () => {
+    for (const percent of ["60", "99.99"]) {
+      const source = finalLinesSource(basis(percent));
+      assert.equal(source.kind, "QUOTE", percent);
+      if (source.kind === "QUOTE") assert.deepEqual(source.items, items);
+    }
+  });
+
+  it("100 percent or no tie keeps the proforma's items", () => {
+    assert.deepEqual(finalLinesSource(basis("100")), { kind: "PROFORMA" });
+    assert.deepEqual(finalLinesSource(null), { kind: "PROFORMA" });
+  });
+
+  it("another milestone of the quote that already has a proforma: an empty draft, neither the percentage line nor the full items", () => {
+    assert.deepEqual(
+      finalLinesSource(basis("30", { otherProformaMilestones: 1 })),
+      { kind: "EMPTY", reason: "MULTIPLE_ADVANCES" },
+    );
+    // the closing part with no proforma yet does not count (counted by the store, here it is 0)
+    assert.equal(
+      finalLinesSource(basis("30", { otherProformaMilestones: 0 })).kind,
+      "QUOTE",
+    );
+  });
+
+  it("a tied quote with no accepted items is refused, but the multiple-advance case is decided first", () => {
+    const source = finalLinesSource(basis("60", { items: [] }));
+    assert.equal(source.kind, "REFUSED");
+    assert.deepEqual(
+      finalLinesSource(basis("60", { items: [], otherProformaMilestones: 2 })),
+      { kind: "EMPTY", reason: "MULTIPLE_ADVANCES" },
+    );
   });
 });
 

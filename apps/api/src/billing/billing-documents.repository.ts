@@ -319,6 +319,7 @@ export class BillingDocumentsRepository {
     const milestone = await this.database.quotePaymentMilestone.findFirst({
       where: { proformaInvoiceId },
       select: {
+        id: true,
         percent: true,
         versionId: true,
         version: {
@@ -330,6 +331,15 @@ export class BillingDocumentsRepository {
       },
     });
     if (!milestone) return null;
+    // a verzió MÁS mérföldkövei, amelyeknek már van díjbekérőjük: több előleg esetén a végszámla tételei nem az ajánlat teljes tételei
+    const otherProformaMilestones =
+      await this.database.quotePaymentMilestone.count({
+        where: {
+          versionId: milestone.versionId,
+          id: { not: milestone.id },
+          proformaInvoiceId: { not: null },
+        },
+      });
     const acceptance = await this.database.quoteAcceptance.findFirst({
       where: {
         quoteId: milestone.version.quoteId,
@@ -356,6 +366,7 @@ export class BillingDocumentsRepository {
         percent: milestone.percent,
         versionId: milestone.versionId,
         quote: milestone.version.quote,
+        otherProformaMilestones,
       },
       acceptance?.selectedOptionalItemIds ?? [],
       items,

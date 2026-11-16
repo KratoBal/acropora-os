@@ -36,7 +36,7 @@ import {
 import { budapestDayKey } from "../dashboard/budapest-day.js";
 import {
   finalLineOfQuoteItem,
-  usesQuoteLines,
+  finalLinesSource,
   type FinalDraftLine,
 } from "./billing-final-lines.js";
 import type { BillingDocumentDraftDto } from "./dto/billing-document-draft.dto.js";
@@ -338,19 +338,20 @@ export class BillingDocumentsService {
       ? await this.repository.find(advance.proformaInvoiceId)
       : null;
     // A TÉTELEK (kártya 2650d371): egy ajánlat MÉRFÖLDKŐ-díjbekérője a százalékos rész, tehát a végszámla az ajánlat teljes
-    // tételeivel készül, különben a Számlázz.hu a levont előleg után nullát hagyna; minden más díjbekérőnél a díjbekérő tételei
-    const quoteBasis = proforma
-      ? await this.repository.quoteBasisOfProforma(proforma.id)
-      : null;
-    let finalLines: ReturnType<typeof draftLinesOf> | FinalDraftLine[] =
-      proforma ? draftLinesOf(proforma) : [];
-    if (usesQuoteLines(quoteBasis)) {
-      if (quoteBasis.items.length === 0)
-        throw new ConflictException(
-          `A(z) ${quoteBasis.quoteNumber} ajánlat elfogadott tételei nem találhatók, ezért a végszámla tételei nem állíthatók össze belőle.`,
-        );
-      finalLines = quoteBasis.items.map(finalLineOfQuoteItem);
-    }
+    // tételeivel készül, különben a Számlázz.hu a levont előleg után nullát hagyna. A döntés a tiszta `finalLinesSource`-é (a több
+    // előleg-mérföldkős ajánlat üres vázlatot ad, kézi kitöltésre); minden más díjbekérőnél a díjbekérő tételei.
+    const source = finalLinesSource(
+      proforma ? await this.repository.quoteBasisOfProforma(proforma.id) : null,
+    );
+    if (source.kind === "REFUSED") throw new ConflictException(source.message);
+    const finalLines: ReturnType<typeof draftLinesOf> | FinalDraftLine[] =
+      source.kind === "QUOTE"
+        ? source.items.map(finalLineOfQuoteItem)
+        : source.kind === "EMPTY"
+          ? []
+          : proforma
+            ? draftLinesOf(proforma)
+            : [];
     const { draft, partner } = await this.prepare({
       id,
       documentType: "FINAL_INVOICE",
