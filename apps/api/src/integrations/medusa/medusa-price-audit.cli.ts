@@ -47,6 +47,8 @@ export async function runPriceAuditCli(
   },
   credentials = storedCredentialProvider(),
   database: PricingCliDatabase = prisma,
+  /** A kivalasztott termekek azonositoi (a vegpont lapozasahoz); nem ir, nem olvas tobbet. */
+  onTargets: (productIds: readonly string[]) => void = () => undefined,
 ): Promise<number> {
   const audit = parseAuditArguments(args);
   if (audit.kind === "error") {
@@ -59,6 +61,7 @@ export async function runPriceAuditCli(
     return 1;
   }
   const productIds = await selectBatchTargets(parsed.selection, database);
+  onTargets(productIds);
 
   let client: Awaited<ReturnType<typeof medusaClientForProjection>>;
   try {

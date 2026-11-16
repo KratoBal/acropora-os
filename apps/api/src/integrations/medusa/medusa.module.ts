@@ -6,6 +6,8 @@ import { MedusaConnectionService } from "./medusa-connection.service.js";
 import { MedusaConnectionStartupValidator } from "./medusa-connection-startup.validator.js";
 import { MedusaCredentialCryptoService } from "./medusa-credential-crypto.service.js";
 import { MedusaCredentialProvider } from "./medusa-credential.provider.js";
+import { MedusaPriceAuditController } from "./medusa-price-audit.controller.js";
+import { MedusaPriceAuditService } from "./medusa-price-audit.service.js";
 import { MedusaPickupAdoptionController } from "./medusa-pickup-adoption.controller.js";
 import { MedusaPickupAdoptionService } from "./medusa-pickup-adoption.service.js";
 import { MedusaProjectionScheduler } from "./medusa-projection.scheduler.js";
@@ -35,6 +37,7 @@ import { MedusaInventoryScheduler } from "./medusa-inventory.scheduler.js";
     MedusaConnectionController,
     MedusaProjectionStatusController,
     MedusaPickupAdoptionController,
+    MedusaPriceAuditController,
   ],
   providers: [
     MedusaConnectionRepository,
@@ -45,6 +48,7 @@ import { MedusaInventoryScheduler } from "./medusa-inventory.scheduler.js";
     MedusaProjectionScheduler,
     MedusaInventoryScheduler,
     MedusaPickupAdoptionService,
+    MedusaPriceAuditService,
   ],
   exports: [
     MedusaConnectionService,
