@@ -53,6 +53,64 @@ describe("authenticationVerdict", () => {
       reason: "DMARC_NOT_PASS",
     });
   });
+  it("CONTROL (barracuda, #2649): the rule does not depend on the ORDER: a forged pass and a real fail are not verified in either order", () => {
+    const forged = "mx.google.com; dmarc=pass header.from=acropora.hu";
+    assert.equal(
+      authenticationVerdict([forged, FAIL], "anna@acropora.hu").verified,
+      false,
+    );
+    assert.equal(
+      authenticationVerdict([FAIL, forged], "anna@acropora.hu").verified,
+      false,
+    );
+    assert.equal(
+      authenticationVerdict([forged, FAIL], "anna@acropora.hu").reason,
+      "DMARC_NOT_PASS",
+    );
+  });
+  it("every Gmail header must agree: a real pass with a second header that names another domain is not verified", () => {
+    const other = "mx.google.com; dmarc=pass header.from=tamado.hu";
+    assert.equal(
+      authenticationVerdict([PASS, other], "anna@acropora.hu").reason,
+      "FROM_DOMAIN_MISMATCH",
+    );
+    assert.equal(
+      authenticationVerdict([other, PASS], "anna@acropora.hu").reason,
+      "FROM_DOMAIN_MISMATCH",
+    );
+  });
+  it("two agreeing Gmail headers are verified, and another system's well-formed header is ignored", () => {
+    assert.equal(
+      authenticationVerdict([PASS, PASS], "anna@acropora.hu").verified,
+      true,
+    );
+    const foreign = "mx.other.example; dmarc=fail header.from=acropora.hu";
+    assert.equal(
+      authenticationVerdict([foreign, PASS], "anna@acropora.hu").verified,
+      true,
+    );
+    assert.equal(
+      authenticationVerdict([foreign], "anna@acropora.hu").reason,
+      "FOREIGN_AUTHSERV",
+    );
+  });
+  it("CONTROL: a malformed header that starts as Gmail's is never believed, in either position; a malformed foreign one is ignored", () => {
+    const broken =
+      "mx.google.com; spf=pass (unclosed dmarc=pass header.from=acropora.hu";
+    assert.equal(
+      authenticationVerdict([PASS, broken], "anna@acropora.hu").reason,
+      "MALFORMED",
+    );
+    assert.equal(
+      authenticationVerdict([broken, PASS], "anna@acropora.hu").reason,
+      "MALFORMED",
+    );
+    assert.equal(
+      authenticationVerdict(["junk ( unbalanced", PASS], "anna@acropora.hu")
+        .verified,
+      true,
+    );
+  });
   it("CONTROL: only the topmost header counts: a passing header below an absent top is not read", () => {
     assert.equal(
       authenticationVerdict([], "anna@acropora.hu").reason,

@@ -117,18 +117,43 @@ function parseAuthenticationResults(header: string): {
 }
 
 /**
+ * THE VERDICT OF ONE `Authentication-Results` HEADER whose authserv-id is Gmail's: EXACTLY ONE `dmarc` result entry, with the result `pass`, and
+ * the `header.from` property standing in THAT entry and equal to the domain of the `From` address that is about to be trusted. Text another
+ * entry or a comment carries (the envelope sender, a dkim selector) is never read as a dmarc result.
+ */
+function gmailHeaderVerdict(
+  parsed: {
+    results: Array<{
+      method: string;
+      result: string;
+      props: Map<string, string>;
+    }>;
+  },
+  domain: string,
+): { verified: boolean; reason: AuthenticationReason } {
+  const dmarc = parsed.results.filter((entry) => entry.method === "dmarc");
+  if (dmarc.length > 1) return { verified: false, reason: "DMARC_AMBIGUOUS" };
+  if (dmarc.length === 0 || dmarc[0]!.result !== "pass")
+    return { verified: false, reason: "DMARC_NOT_PASS" };
+  if (dmarc[0]!.props.get("header.from") !== domain)
+    return { verified: false, reason: "FROM_DOMAIN_MISMATCH" };
+  return { verified: true, reason: "DMARC_PASS" };
+}
+
+/**
  * WHETHER THE `From` CAN BE BELIEVED. A `From` header is written by the sender, so on its own it says nothing about who sent the mail; a forged
  * mail "from" a switched-on colleague would otherwise be filed as theirs.
  *
- * The rule is narrow on purpose:
- * - ONLY THE TOPMOST `Authentication-Results` header counts. A sender can put its own header at the bottom of the message; the one our receiving
- *   server added is above it. A passing header lower down never rescues a failing one on top. (That Gmail's API lists the headers in message
- *   order, so the first is the topmost, is MEASURED on a real mail at the end of S2.)
- * - Its authserv-id must be Gmail's (`mx.google.com`): a header another system wrote is not our verdict.
- * - It is read as RFC 8601 reads it (`parseAuthenticationResults`): EXACTLY ONE `dmarc` result entry, with the result `pass`, and the
- *   `header.from` property standing in THAT entry and equal to the domain of the `From` address that is about to be trusted. Text another entry or
- *   a comment carries (the envelope sender, a dkim selector) is never read as a dmarc result. Zero or several dmarc entries, or a malformed
- *   header, is "not verified".
+ * THE RULE DOES NOT DEPEND ON THE ORDER OF THE HEADERS (barracuda, #2649). A sender can write an `Authentication-Results` header of its own into
+ * the mail, with Gmail's authserv-id, and which one the mail API lists first is not something to rest the rule on. So EVERY header whose
+ * authserv-id is `mx.google.com` is read, and ALL of them must say the same: `dmarc=pass` for the `From` domain (`gmailHeaderVerdict`). One header
+ * that fails, is ambiguous or names another domain makes the mail "not verified", wherever it stands. The most a sender can do with a forged
+ * header is therefore to spoil its own mail (an unknown sender), never to get one through. What stays outside this rule: if Gmail's own header
+ * were ever missing, a forged one alone would pass; Gmail always adds its own, and the test mail at the end of S2 measures that.
+ *
+ * - A header with another authserv-id is another system's and is ignored (it is not our verdict); at least one Gmail header is required.
+ * - A header that is malformed (an unbalanced comment, a stray parenthesis, an unclosed quote) and starts as Gmail's is never believed; a
+ *   malformed header that does not start as Gmail's cannot give a pass, and is ignored.
  *
  * Anything else is "not verified", and the caller treats the mail as from an unknown sender (no name, no place, no AI).
  */
@@ -137,19 +162,23 @@ export function authenticationVerdict(
   fromAddress: string | null,
 ): { verified: boolean; reason: AuthenticationReason } {
   if (!fromAddress) return { verified: false, reason: "NO_FROM" };
-  const top = results[0];
-  if (!top) return { verified: false, reason: "NO_HEADER" };
-  const parsed = parseAuthenticationResults(top);
-  if (!parsed) return { verified: false, reason: "MALFORMED" };
-  if (parsed.authservId !== "mx.google.com")
-    return { verified: false, reason: "FOREIGN_AUTHSERV" };
-  const dmarc = parsed.results.filter((entry) => entry.method === "dmarc");
-  if (dmarc.length > 1) return { verified: false, reason: "DMARC_AMBIGUOUS" };
-  if (dmarc.length === 0 || dmarc[0]!.result !== "pass")
-    return { verified: false, reason: "DMARC_NOT_PASS" };
+  if (results.length === 0) return { verified: false, reason: "NO_HEADER" };
   const domain = fromAddress.slice(fromAddress.lastIndexOf("@") + 1);
-  if (dmarc[0]!.props.get("header.from") !== domain)
-    return { verified: false, reason: "FROM_DOMAIN_MISMATCH" };
+  let gmailHeaders = 0;
+  for (const header of results) {
+    const parsed = parseAuthenticationResults(header);
+    if (!parsed) {
+      if (/^\s*mx\.google\.com\s*[;\s]/i.test(header))
+        return { verified: false, reason: "MALFORMED" };
+      continue;
+    }
+    if (parsed.authservId !== "mx.google.com") continue;
+    gmailHeaders++;
+    const verdict = gmailHeaderVerdict(parsed, domain);
+    if (!verdict.verified) return verdict;
+  }
+  if (gmailHeaders === 0)
+    return { verified: false, reason: "FOREIGN_AUTHSERV" };
   return { verified: true, reason: "DMARC_PASS" };
 }
 
