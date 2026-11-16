@@ -9,6 +9,7 @@ import {
 import type {
   AuthenticatedUser,
   BillingDocumentDetail,
+  BillingDocumentFinalInvoiceNotice,
   BillingDocumentStatus,
   BillingDocumentType,
   BillingEmailStatus,
@@ -35,6 +36,7 @@ import {
 } from "./billing-documents.repository.js";
 import { budapestDayKey } from "../dashboard/budapest-day.js";
 import {
+  finalInvoiceNoticeOf,
   finalLineOfQuoteItem,
   finalLinesSource,
   type FinalDraftLine,
@@ -51,6 +53,21 @@ import type { BillingDocumentDraftDto } from "./dto/billing-document-draft.dto.j
 @Injectable()
 export class BillingDocumentsService {
   constructor(private readonly repository: BillingDocumentsRepository) {}
+
+  /** A végszámla-vázlat magyarázata: az előlegének díjbekérője alapján, a `finalFromAdvance` döntésével. */
+  private async finalInvoiceNoticeOf(
+    row: BillingDocumentRow,
+  ): Promise<BillingDocumentFinalInvoiceNotice | null> {
+    const advanceId = row.referencedInvoice?.id;
+    if (!advanceId) return null;
+    const advance = await this.repository.find(advanceId);
+    if (!advance?.proformaInvoiceId) return null;
+    return finalInvoiceNoticeOf(
+      finalLinesSource(
+        await this.repository.quoteBasisOfProforma(advance.proformaInvoiceId),
+      ),
+    );
+  }
 
   async detail(id: string): Promise<BillingDocumentDetail> {
     const row = await this.repository.find(id);
@@ -79,10 +96,17 @@ export class BillingDocumentsService {
         ? await this.repository.finalInvoiceOf(id)
         : null;
     const related = await this.repository.related(id);
+    // A VÉGSZÁMLA-VÁZLAT ÜRES TÉTELEINEK MAGYARÁZATA (kártya 02fc4b7f): olvasáskor számítjuk, ugyanabból a döntésből, amelyből a vázlat tételei
+    // készültek (`finalLinesSource`); kiállított végszámlán nincs
+    const finalInvoiceNotice =
+      row.documentType === "FINAL_INVOICE" && row.status === "DRAFT"
+        ? await this.finalInvoiceNoticeOf(row)
+        : null;
     return {
       ...detail,
       relatedDocuments: related.documents,
       relatedDocumentsTruncated: related.truncated,
+      ...(row.documentType === "FINAL_INVOICE" ? { finalInvoiceNotice } : {}),
       ...(row.documentType === "ADVANCE_INVOICE"
         ? {
             finalInvoice: final

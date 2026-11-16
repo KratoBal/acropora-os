@@ -115,7 +115,7 @@ function setup(
         documentType: "FINAL_INVOICE",
         invoiceNumber: null,
         referencedInvoice: {
-          id: "adv-1",
+          id: (input.referencedInvoiceId as string | undefined) ?? "adv-1",
           documentType: "ADVANCE_INVOICE",
           invoiceNumber: "E-ELO-1",
           grossAmount: d("381"),
@@ -335,6 +335,63 @@ describe("a final invoice from an advance", () => {
       await s.service.finalFromAdvance(advanceIdFor("pro-1"), USER);
       assert.equal(s.created.length, 1);
       assert.deepEqual(linesOf(s), []);
+    });
+
+    it("the empty draft says why on the page: the detail carries the notice only for the multiple-advance case (card 02fc4b7f)", async () => {
+      const multiple = withProforma({
+        "pro-1": basis("30", ["Akvárium", "Szűrő"], 1),
+      });
+      const detail = await multiple.service.finalFromAdvance(
+        advanceIdFor("pro-1"),
+        USER,
+      );
+      assert.equal(detail.finalInvoiceNotice?.code, "MULTIPLE_ADVANCES");
+      assert.match(detail.finalInvoiceNotice!.message, /több előleg-mérföldkö/);
+      for (const quoteBasis of [
+        { "pro-1": basis("60", ["Akvárium"], 0) },
+        { "pro-1": basis("100", ["Akvárium"], 1) },
+        { "pro-1": null },
+      ]) {
+        const single = withProforma(quoteBasis);
+        const other = await single.service.finalFromAdvance(
+          advanceIdFor("pro-1"),
+          USER,
+        );
+        assert.equal(other.finalInvoiceNotice ?? null, null);
+      }
+    });
+
+    it("an issued final invoice carries no notice, even for the multiple-advance quote", async () => {
+      const finalId = finalIdFor(advanceIdFor("pro-1"));
+      const s = setup(
+        {
+          "pro-1": doc({
+            id: "pro-1",
+            documentType: "PROFORMA",
+            invoiceNumber: "D-CRPR-7",
+            lines: [line("a", "Előleg (30%), AJ-2026-0015", "300")],
+          }),
+          [advanceIdFor("pro-1")]: doc({
+            id: advanceIdFor("pro-1"),
+            proformaInvoiceId: "pro-1",
+          }),
+          [finalId]: doc({
+            id: finalId,
+            documentType: "FINAL_INVOICE",
+            status: "ISSUED",
+            invoiceNumber: "E-FIN-1",
+            referencedInvoice: {
+              id: advanceIdFor("pro-1"),
+              documentType: "ADVANCE_INVOICE",
+              invoiceNumber: "E-ELO-1",
+              grossAmount: d("381"),
+            },
+          }),
+        },
+        { quoteBasis: { "pro-1": basis("30", ["Akvárium"], 1) } },
+      );
+      const detail = await s.service.detail(finalId);
+      assert.equal(detail.finalInvoiceNotice ?? null, null);
     });
 
     it("a milestone with a proforma next to one with none yet (the closing part): the quote's full items", async () => {

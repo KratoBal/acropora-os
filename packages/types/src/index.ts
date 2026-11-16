@@ -94,6 +94,7 @@ export type {
 export type {
   BillingDocumentAdvanceLink,
   BillingDocumentDeductedAdvance,
+  BillingDocumentFinalInvoiceNotice,
   BillingDocumentFinalInvoiceLink,
   BillingRelatedDocument,
   BillingDocumentCancellation,

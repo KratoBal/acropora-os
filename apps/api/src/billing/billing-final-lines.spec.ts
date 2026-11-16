@@ -6,6 +6,7 @@ import { Prisma } from "@acropora/database";
 import {
   finalLineOfQuoteItem,
   quoteBasisFrom,
+  finalInvoiceNoticeOf,
   finalLinesSource,
   type MilestoneRow,
   type QuoteBasis,
@@ -150,6 +151,24 @@ describe("finalLinesSource", () => {
       finalLinesSource(basis("60", { items: [], otherProformaMilestones: 2 })),
       { kind: "EMPTY", reason: "MULTIPLE_ADVANCES" },
     );
+  });
+});
+
+describe("finalInvoiceNoticeOf", () => {
+  it("only the multiple-advance case has a notice, and it names the reason and what to put on the invoice", () => {
+    const notice = finalInvoiceNoticeOf({
+      kind: "EMPTY",
+      reason: "MULTIPLE_ADVANCES",
+    });
+    assert.equal(notice?.code, "MULTIPLE_ADVANCES");
+    assert.match(notice!.message, /több előleg-mérföldköve van díjbekérővel/);
+    assert.match(notice!.message, /még nem kiszámlázott rész/);
+    for (const source of [
+      { kind: "PROFORMA" as const },
+      { kind: "QUOTE" as const, items: [] },
+      { kind: "REFUSED" as const, message: "x" },
+    ])
+      assert.equal(finalInvoiceNoticeOf(source), null, source.kind);
   });
 });
 

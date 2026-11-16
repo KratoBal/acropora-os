@@ -167,6 +167,9 @@ export function BillingDocumentEditor({
   /** Végszámlán a levonandó előleg (számlázási brief, 3. pont). */
   const [deductedAdvance, setDeductedAdvance] =
     useState<BillingDocumentDetail["deductedAdvance"]>(null);
+  /** Üresen indult végszámla-vázlaton a magyarázat (több előleg-mérföldkő; kártya 02fc4b7f). */
+  const [finalNotice, setFinalNotice] =
+    useState<BillingDocumentDetail["finalInvoiceNotice"]>(null);
   /** Díjbekérőből készült bizonylaton a díjbekérő (és hogy kifizették-e). */
   const [proforma, setProforma] =
     useState<BillingDocumentDetail["proforma"]>(null);
@@ -312,6 +315,7 @@ export function BillingDocumentEditor({
         setState(fromDetail(detail));
         setStatus(detail.status);
         setDeductedAdvance(detail.deductedAdvance ?? null);
+        setFinalNotice(detail.finalInvoiceNotice ?? null);
         setProforma(detail.proforma ?? null);
         setIssued(issuedOf(detail));
         setCancellation(detail.cancellation ?? null);
@@ -726,11 +730,22 @@ export function BillingDocumentEditor({
         />
       ) : null}
 
+      {state.documentType === "FINAL_INVOICE" && finalNotice && !issued ? (
+        <Alert
+          // a túlszámlázás kockázata: egy kiállított végszámla csak sztornóval javítható
+          variant="danger"
+          title="Több előleg-mérföldkő az ajánlaton"
+          description={finalNotice.message}
+        />
+      ) : null}
+
       {state.documentType === "FINAL_INVOICE" ? (
         <Alert
           variant="info"
           title="Végszámla"
-          description={`A tételek a TELJES ellenérték, nem a maradék. ${
+          description={`${
+            finalNotice ? "" : "A tételek a TELJES ellenérték, nem a maradék. "
+          }${
             deductedAdvance
               ? `A(z) ${deductedAdvance.number ?? "előlegszámla"} előleget${
                   deductedAdvance.grossAmount

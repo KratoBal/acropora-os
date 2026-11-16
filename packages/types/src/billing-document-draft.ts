@@ -180,6 +180,12 @@ export interface BillingDocumentAdvanceLink {
  * előlegszámla, amelyet a Számlázz.hu levon (`elolegSzamlaszam`); a bruttó
  * összege a levonás mértéke, ahogy az előleg kiállításakor rögzült.
  */
+/** A végszámla-vázlat üres tételeinek magyarázata (`BillingDocumentDetail.finalInvoiceNotice`). */
+export interface BillingDocumentFinalInvoiceNotice {
+  code: "MULTIPLE_ADVANCES";
+  message: string;
+}
+
 export interface BillingDocumentDeductedAdvance {
   id: string;
   number: string | null;
@@ -273,6 +279,11 @@ export interface BillingDocumentDetail {
   advance?: BillingDocumentAdvanceLink | null;
   /** Végszámlán a levont előlegszámla; máshol `null`. */
   deductedAdvance?: BillingDocumentDeductedAdvance | null;
+  /**
+   * VÉGSZÁMLA-VÁZLATON A MAGYARÁZAT, ha a tételek azért indultak üresen, mert az ajánlatnak TÖBB előleg-mérföldköve van díjbekérővel (kártya 02fc4b7f,
+   * barracuda #2639). Olvasáskor számított, nem tárolt, és NEM a számlán nyomtatott megjegyzés; kiállítás után és máshol `null`.
+   */
+  finalInvoiceNotice?: BillingDocumentFinalInvoiceNotice | null;
   /** Előlegszámlán a belőle készült végszámla; máshol `null`. */
   finalInvoice?: BillingDocumentFinalInvoiceLink | null;
   /** A teljes lánc, ha a bizonylatnak van kapcsolódója; egyébként üres. */
