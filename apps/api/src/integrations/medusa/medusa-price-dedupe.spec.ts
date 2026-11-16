@@ -55,7 +55,7 @@ function fake(
     osAmount?: number | null;
     noOpWrite?: boolean;
     /** the write lands, but with another amount or another row id than asked */
-    writeAs?: "amount" | "id";
+    writeAs?: "amount" | "id" | "extra-row";
     throwOnWrite?: boolean;
     throwOnRead?: boolean;
     truncated?: boolean;
@@ -105,6 +105,16 @@ function fake(
         if (options.throwOnWrite) throw new RangeError("secret detail");
         if (options.noOpWrite) return;
         const variant = shop.variants.get(variantId)!;
+        if (options.writeAs === "extra-row") {
+          const keptRow = variant.prices.find(
+            (row) => row.id === prices[0]!.id,
+          )!;
+          variant.prices = [
+            keptRow,
+            ...variant.prices.filter((row) => row.id !== keptRow.id),
+          ];
+          return;
+        }
         variant.prices = prices.map((input) => {
           const previous = variant.prices.find((row) => row.id === input.id);
           if (options.writeAs === "id")
@@ -287,7 +297,7 @@ describe("a két forint ár javítása", () => {
     assert.equal(b[0]!.action, "failed");
     assert.match(b[0]!.detail, /^read-back-mismatch/);
 
-    for (const writeAs of ["amount", "id"] as const) {
+    for (const writeAs of ["amount", "id", "extra-row"] as const) {
       const wrong = fake(twoEqual(), { writeAs });
       const c = await dedupeProducts(["os_1"], wrong.deps, { apply: true });
       assert.equal(c[0]!.action, "failed", writeAs);
