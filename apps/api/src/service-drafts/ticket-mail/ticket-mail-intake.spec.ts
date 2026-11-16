@@ -7,6 +7,7 @@ import {
   draftContentOf,
   EMPTY_BODY_TEXT,
   NO_SUBJECT_TITLE,
+  withoutNul,
   type ResolvedSender,
 } from "./ticket-mail-intake.js";
 
@@ -32,6 +33,8 @@ const base = {
   sender: colleague(),
   recentFromSender: 0,
   unknownSenderPerHour: 5,
+  recentUnknownTotal: 0,
+  unknownTotalPerHour: 30,
 } as const;
 
 describe("decideIntake", () => {
@@ -117,9 +120,27 @@ describe("decideIntake", () => {
     );
   });
 
+  it("an unknown sender is capped by the mailbox-wide total too, however few mails their own address left", () => {
+    const unknown = {
+      ...base,
+      verified: false,
+      recentFromSender: 0,
+      unknownTotalPerHour: 30,
+    };
+    assert.equal(
+      decideIntake({ ...unknown, recentUnknownTotal: 29 }).kind,
+      "DRAFT",
+    );
+    assert.equal(
+      decideIntake({ ...unknown, recentUnknownTotal: 30 }).kind,
+      "CAPPED",
+    );
+  });
+
   it("CONTROL: a known colleague is never capped (the guard is for unknown senders)", () => {
     assert.equal(
-      decideIntake({ ...base, recentFromSender: 500 }).kind,
+      decideIntake({ ...base, recentFromSender: 500, recentUnknownTotal: 500 })
+        .kind,
       "DRAFT",
     );
   });
@@ -175,5 +196,25 @@ describe("announcesArrival", () => {
   it("CONTROL: a switched-off colleague's, an unknown sender's and a rule-based draft send nothing", () => {
     for (const state of ["WATCH_OFF", "UNKNOWN_SENDER", "RULE_DRAFT"] as const)
       assert.equal(announcesArrival(state), false, state);
+  });
+});
+
+describe("withoutNul (barracuda, #2646: PostgreSQL's text refuses 0x00)", () => {
+  it("removes every NUL character and nothing else", () => {
+    assert.equal(withoutNul("a\u0000b\u0000\u0000c"), "abc");
+    assert.equal(withoutNul("Szűrő csöpög\n"), "Szűrő csöpög\n");
+    assert.equal(withoutNul(null), null);
+  });
+  it("the draft's own fields carry no NUL, whichever field the sender put it in", () => {
+    const content = draftContentOf({
+      id: "gmail-nul",
+      subject: "Hiba\u0000 a szűrőn",
+      text: "A szűrő\u0000 csöpög.\u0000",
+      receivedAt: new Date("2026-11-16T12:00:00.000Z"),
+    });
+    assert.equal(content.title, "Hiba a szűrőn");
+    assert.equal(content.originalProblem, "A szűrő csöpög.");
+    for (const value of [content.title, content.originalProblem])
+      assert.equal(value.includes("\u0000"), false);
   });
 });

@@ -9,7 +9,10 @@ import type { AuthenticatedUser } from "@acropora/types";
 import { NotificationsService } from "../../notifications/notifications.service.js";
 import { ServiceJobsRepository } from "../../service-jobs/service-jobs.repository.js";
 
-import { TicketMailGmailClient } from "./ticket-mail-gmail.client.js";
+import {
+  TicketMailGmailClient,
+  TicketMailGmailError,
+} from "./ticket-mail-gmail.client.js";
 import {
   describeTicketMailIntake,
   ticketMailConfig,
@@ -36,6 +39,8 @@ export interface TicketMailRunSummary {
   failed: number;
   /** New messages left for the next run because of the per-run limit. */
   deferred: number;
+  /** Messages that failed their last allowed run and were sealed as FAILED (recorded without text, no longer retried). */
+  sealed: number;
   /** How many managers the arrival push was sent to (0: nothing to announce, nobody ticked, or the push failed). */
   notified: number;
 }
@@ -48,8 +53,19 @@ const EMPTY: TicketMailRunSummary = {
   capped: 0,
   failed: 0,
   deferred: 0,
+  sealed: 0,
   notified: 0,
 };
+
+/**
+ * WHETHER A FAILURE BELONGS TO THE MESSAGE: one the mail itself causes (a database refusal of its content, a parse failure, Gmail answering a 4xx
+ * for that one message) counts against it. A failure of the MAILBOX CONNECTION (the token, the rate limit, a timeout, the network, a 5xx) is not the
+ * message's: it ends the run without counting, or one outage would seal every message in the mailbox.
+ */
+function isMessageSpecific(error: unknown): boolean {
+  if (!(error instanceof TicketMailGmailError)) return true;
+  return /^TICKET_MAIL_GMAIL_HTTP_4\d\d$/.test(error.code);
+}
 
 /** The safe code of a failure for the log and the status: a fixed code only, never a message that could carry a token or a mail's text. */
 function safeCode(error: unknown, fallback: string): string {
@@ -178,20 +194,27 @@ export class TicketMailIntakeService {
               ? await this.store.resolveSender(message.fromAddress)
               : null;
           const known = verdict.verified && sender !== null;
+          const hourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+          const unknown = !skip && !known;
           const recentFromSender =
-            !skip && !known && message.fromAddress
+            unknown && message.fromAddress
               ? await this.store.unknownCountSince(
                   c.user,
                   message.fromAddress,
-                  new Date(now.getTime() - 60 * 60 * 1000),
+                  hourAgo,
                 )
               : 0;
+          const recentUnknownTotal = unknown
+            ? await this.store.unknownTotalSince(c.user, hourAgo)
+            : 0;
           const outcome = decideIntake({
             skip,
             verified: verdict.verified,
             sender,
             recentFromSender,
             unknownSenderPerHour: c.unknownSenderPerHour,
+            recentUnknownTotal,
+            unknownTotalPerHour: c.unknownTotalPerHour,
           });
           const recorded = await this.store.record({
             mailbox: c.user,
@@ -214,16 +237,30 @@ export class TicketMailIntakeService {
             }
           }
         } catch (error) {
-          // A message that cannot be read or recorded must not block the later ones: it stays unrecorded, and the next run retries it.
+          // A failure of the mailbox connection ends the run (not counted against any message); see `isMessageSpecific`.
+          if (!isMessageSpecific(error)) throw error;
+          // A message that cannot be read or recorded must not block the later ones: it stays unrecorded and the next run retries it, up to
+          // `maxAttempts` runs; then it is sealed as FAILED, so a poisoned mail cannot take a run's places for ever (barracuda, #2646).
           summary.failed++;
-          this.lastError = safeCode(error, "TICKET_MAIL_MESSAGE_FAILED");
-          this.logger.warn(this.lastError);
+          const code = safeCode(error, "TICKET_MAIL_MESSAGE_FAILED");
+          this.lastError = code;
+          this.logger.warn(code);
+          try {
+            const attempts = await this.store.noteFailure(c.user, id, code);
+            if (attempts >= c.maxAttempts) {
+              await this.store.sealFailed(c.user, id, code);
+              summary.sealed++;
+              this.logger.warn("TICKET_MAIL_MESSAGE_SEALED");
+            }
+          } catch {
+            this.logger.warn("TICKET_MAIL_FAILURE_NOTE_FAILED");
+          }
         }
       }
       summary.notified = await this.announce(announce);
       this.lastSummary = summary;
       this.logger.log(
-        `Ticket mailbox run: ${summary.drafts} drafts (${summary.notified} notified), ${summary.skipped} skipped, ${summary.capped} capped, ${summary.failed} failed, ${summary.deferred} deferred, ${summary.alreadySeen} already seen`,
+        `Ticket mailbox run: ${summary.drafts} drafts (${summary.notified} notified), ${summary.skipped} skipped, ${summary.capped} capped, ${summary.failed} failed (${summary.sealed} sealed), ${summary.deferred} deferred, ${summary.alreadySeen} already seen`,
       );
       return summary;
     } catch (error) {

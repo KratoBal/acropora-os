@@ -10015,6 +10015,21 @@ model ServiceDraftMail {
   @@index([source, fromAddress, createdAt])
 }
 
+/// A TICKET@ LEVEL, AMI NEM DOLGOZHATO FEL (kartya ec7b947b, S2b; barracuda, #2646): egy levelhez, amit a beolvasas nem tudott felvenni, itt all, hanyszor
+/// bukott el (`attempts`), es az utolso hibakod. A beolvasas K-szori bukas utan a levelet `ServiceDraftMail` sorral (`skipReason` FAILED) lezarja, es ez a sor
+/// torlodik: egy mergezett level igy nem foglalja tovabb egy futas helyeit. A szamlalo az adatbazisban van, egy ujrainditas nem nullazza.
+model ServiceDraftMailFailure {
+  id        String   @id @default(cuid())
+  mailbox   String
+  messageId String
+  attempts  Int      @default(1)
+  lastCode  String   @db.VarChar(60)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([mailbox, messageId])
+}
+
 model ServiceTicketDraft {
   id                   String                   @id @default(cuid())
   mailId               String

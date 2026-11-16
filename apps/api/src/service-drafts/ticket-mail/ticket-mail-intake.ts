@@ -50,6 +50,9 @@ export function decideIntake(input: {
   /** How many mails the same unknown address already left in the last hour (this run's included). */
   recentFromSender: number;
   unknownSenderPerHour: number;
+  /** How many unknown senders' mails, all addresses together, were listed or capped in the last hour (this run's included). */
+  recentUnknownTotal: number;
+  unknownTotalPerHour: number;
 }): IntakeOutcome {
   if (input.skip) return { kind: "SKIP", reason: input.skip };
   if (input.verified && input.sender) {
@@ -73,7 +76,10 @@ export function decideIntake(input: {
     };
   }
   // an unknown sender over the hourly guard is counted and recorded, not listed (the spam and loop guard of the plan)
-  if (input.recentFromSender >= input.unknownSenderPerHour)
+  if (
+    input.recentFromSender >= input.unknownSenderPerHour ||
+    input.recentUnknownTotal >= input.unknownTotalPerHour
+  )
     return { kind: "CAPPED" };
   return {
     kind: "DRAFT",
@@ -90,6 +96,16 @@ export function decideIntake(input: {
  */
 export function announcesArrival(state: ServiceDraftIntakeState): boolean {
   return state === "AI_DRAFT" || state === "AI_UNAVAILABLE";
+}
+
+/**
+ * A TEXT WITHOUT NUL: PostgreSQL's text type refuses a 0x00 character, and a sender can put one into a mail (a base64 text part, a subject, a
+ * file name), which would fail the whole transaction in every run (barracuda, #2646). Everything the intake stores as text goes through here.
+ */
+export function withoutNul(text: string): string;
+export function withoutNul(text: string | null): string | null;
+export function withoutNul(text: string | null): string | null {
+  return text === null ? null : text.replace(/\u0000/g, "");
 }
 
 export const NO_SUBJECT_TITLE = "Ticket levél (tárgy nélkül)";
@@ -111,13 +127,13 @@ export function draftContentOf(message: {
   reportDate: Date;
   fingerprint: string;
 } {
-  const body = cleanMailBody(message.text);
+  const body = cleanMailBody(withoutNul(message.text));
   const firstLine = body.text
     .split("\n")
     .map((line) => line.trim())
     .find(Boolean);
   const title =
-    cleanSubject(message.subject) ??
+    cleanSubject(withoutNul(message.subject)) ??
     (firstLine ? firstLine.slice(0, 120) : NO_SUBJECT_TITLE);
   const day = budapestDayKey(message.receivedAt ?? new Date());
   return {

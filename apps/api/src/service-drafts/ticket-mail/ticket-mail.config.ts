@@ -68,6 +68,18 @@ export function ticketMailConfig(env: NodeJS.ProcessEnv = process.env) {
       1,
       100,
     ),
+    /**
+     * ALL unknown senders together over this many messages in an hour: counted, not listed. The per-sender guard above counts by ADDRESS, so a
+     * flood from rotating addresses passes it (barracuda, #2646); this one protects the managers' list whoever writes.
+     */
+    unknownTotalPerHour: boundedInteger(
+      env.TICKET_MAIL_UNKNOWN_TOTAL_PER_HOUR,
+      30,
+      1,
+      1000,
+    ),
+    /** A message that fails this many runs is sealed as FAILED (recorded without its text) so it stops taking a run's places. */
+    maxAttempts: boundedInteger(env.TICKET_MAIL_MAX_ATTEMPTS, 3, 1, 10),
   };
 }
 

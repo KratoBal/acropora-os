@@ -4,10 +4,11 @@ import { Injectable } from "@nestjs/common";
 import { prisma } from "@acropora/database";
 
 import type { TicketMailMessage } from "./ticket-mail-gmail.client.js";
-import type {
-  IntakeOutcome,
-  ResolvedSender,
-  draftContentOf,
+import {
+  withoutNul,
+  type IntakeOutcome,
+  type ResolvedSender,
+  type draftContentOf,
 } from "./ticket-mail-intake.js";
 
 /** The `source` of every ticket@ draft and mail row; the Cápasuli rows keep theirs. */
@@ -98,6 +99,81 @@ export class TicketMailRepository {
   }
 
   /**
+   * HOW MANY MAILS OF ALL UNKNOWN SENDERS TOGETHER were listed or capped since `since`: a draft of an unknown sender, or a mail recorded as
+   * capped. The per-address count cannot see a flood from rotating addresses; this one protects the managers' list whoever writes.
+   */
+  unknownTotalSince(mailbox: string, since: Date) {
+    return prisma.serviceDraftMail.count({
+      where: {
+        source: TICKET_MAIL_SOURCE,
+        mailbox,
+        createdAt: { gte: since },
+        OR: [
+          { skipReason: "CAPPED" },
+          { drafts: { some: { intakeState: "UNKNOWN_SENDER" } } },
+        ],
+      },
+    });
+  }
+
+  /**
+   * A MESSAGE FAILED: its failure count goes up by one (the table is the database's, so a restart does not reset it), and the new count is
+   * returned. The caller seals it when the count reaches the limit.
+   */
+  async noteFailure(
+    mailbox: string,
+    messageId: string,
+    code: string,
+  ): Promise<number> {
+    const row = await prisma.serviceDraftMailFailure.upsert({
+      where: { mailbox_messageId: { mailbox, messageId } },
+      create: { mailbox, messageId, lastCode: code.slice(0, 60) },
+      update: { attempts: { increment: 1 }, lastCode: code.slice(0, 60) },
+      select: { attempts: true },
+    });
+    return row.attempts;
+  }
+
+  /**
+   * A POISONED MESSAGE, SEALED: a `ServiceDraftMail` row with `skipReason` FAILED and NO text (a message that cannot be stored is exactly the one
+   * whose text must not be written again), so the next run does not read it again and it no longer takes a run's places; the failure count row is
+   * removed. Nothing is listed: the mail stays in the mailbox, and the row says why it was left.
+   */
+  async sealFailed(
+    mailbox: string,
+    messageId: string,
+    code: string,
+  ): Promise<void> {
+    await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT 1 FROM pg_advisory_xact_lock(hashtext(${`service-drafts-ingest:${TICKET_MAIL_SOURCE}:${mailbox}`}))`;
+      const existing = await tx.serviceDraftMail.findUnique({
+        where: {
+          source_mailbox_messageId: {
+            source: TICKET_MAIL_SOURCE,
+            mailbox,
+            messageId,
+          },
+        },
+        select: { id: true },
+      });
+      if (!existing)
+        await tx.serviceDraftMail.create({
+          data: {
+            source: TICKET_MAIL_SOURCE,
+            mailbox,
+            messageId,
+            originalText: "",
+            authVerdict: code.slice(0, 40),
+            skipReason: "FAILED",
+          },
+        });
+      await tx.serviceDraftMailFailure.deleteMany({
+        where: { mailbox, messageId },
+      });
+    });
+  }
+
+  /**
    * ONE MESSAGE, ONE TRANSACTION: the mail row, and for a draft outcome the draft with its attachments. The lock and the existing-row check make a
    * second run (or two at once) a no-op for a message already recorded.
    */
@@ -128,9 +204,13 @@ export class TicketMailRepository {
             source: TICKET_MAIL_SOURCE,
             mailbox,
             messageId: message.id,
-            subject: message.subject,
+            // EVERY STORED TEXT WITHOUT NUL (barracuda, #2646): PostgreSQL's text refuses 0x00, and a sender can put one in
+            subject: withoutNul(message.subject),
             receivedAt: message.receivedAt,
-            originalText: message.text.slice(0, MAX_STORED_TEXT_CHARS),
+            originalText: withoutNul(message.text).slice(
+              0,
+              MAX_STORED_TEXT_CHARS,
+            ),
             fromAddress: message.fromAddress,
             authVerdict: input.authVerdict,
             skipReason:
@@ -165,7 +245,7 @@ export class TicketMailRepository {
             senderUserId: outcome.senderUserId,
             attachments: {
               create: [...unique].map(([sha256, a]) => ({
-                fileName: a.fileName,
+                fileName: withoutNul(a.fileName),
                 contentType: a.contentType,
                 content: new Uint8Array(a.buffer),
                 sizeBytes: a.buffer.length,

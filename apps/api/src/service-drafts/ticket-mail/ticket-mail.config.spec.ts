@@ -83,6 +83,8 @@ describe("ticketMailConfig", () => {
     assert.equal(c.intervalMinutes, 10);
     assert.equal(c.maxMessagesPerRun, 50);
     assert.equal(c.unknownSenderPerHour, 5);
+    assert.equal(c.unknownTotalPerHour, 30);
+    assert.equal(c.maxAttempts, 3);
   });
   it("takes valid overrides and lower-cases the mailbox", () => {
     const c = ticketMailConfig({
@@ -91,7 +93,11 @@ describe("ticketMailConfig", () => {
       TICKET_MAIL_INTERVAL_MINUTES: "30",
       TICKET_MAIL_MAX_PER_RUN: "10",
       TICKET_MAIL_UNKNOWN_SENDER_PER_HOUR: "2",
+      TICKET_MAIL_UNKNOWN_TOTAL_PER_HOUR: "7",
+      TICKET_MAIL_MAX_ATTEMPTS: "5",
     });
+    assert.equal(c.unknownTotalPerHour, 7);
+    assert.equal(c.maxAttempts, 5);
     assert.equal(c.user, "ticket@acropora.hu");
     assert.equal(c.query, "in:inbox");
     assert.equal(c.intervalMinutes, 30);
@@ -103,7 +109,11 @@ describe("ticketMailConfig", () => {
       TICKET_MAIL_INTERVAL_MINUTES: "1",
       TICKET_MAIL_MAX_PER_RUN: "100000",
       TICKET_MAIL_UNKNOWN_SENDER_PER_HOUR: "abc",
+      TICKET_MAIL_UNKNOWN_TOTAL_PER_HOUR: "0",
+      TICKET_MAIL_MAX_ATTEMPTS: "99",
     });
+    assert.equal(c.unknownTotalPerHour, 30);
+    assert.equal(c.maxAttempts, 3);
     assert.equal(c.intervalMinutes, 10);
     assert.equal(c.maxMessagesPerRun, 50);
     assert.equal(c.unknownSenderPerHour, 5);
