@@ -16,6 +16,9 @@ class DraftListQuery {
   @IsOptional() @IsIn(["PENDING", "ACCEPTED", "REJECTED"]) status?:
     "PENDING" | "ACCEPTED" | "REJECTED";
   @IsOptional() @IsString() @MaxLength(100) cursor?: string;
+  /** Forrás szerinti szűrés (kártya ec7b947b, S4): a ticket@ levelek vagy a Cápasuli napi jelentők. */
+  @IsOptional() @IsIn(["TICKET_MAIL", "CAPASULI_DAILY_REPORT"]) source?:
+    "TICKET_MAIL" | "CAPASULI_DAILY_REPORT";
 }
 export class AcceptDraftDto {
   @IsOptional() @IsString() @MaxLength(200) reporterPersonName?: string | null;
@@ -29,7 +32,11 @@ export class ServiceDraftsController {
     @CurrentUser() user: AuthenticatedUser,
     @Query() q: DraftListQuery,
   ) {
-    return this.service.list(user, q.status ?? "PENDING", q.cursor);
+    return this.service.list(user, q.status ?? "PENDING", q.cursor, q.source);
+  }
+  /** A ticket@ vázlat elfogadásához választható helyszínek (S4). */
+  @Get("places") places(@CurrentUser() user: AuthenticatedUser) {
+    return this.service.places(user);
   }
   @Get("sync-status") status(@CurrentUser() user: AuthenticatedUser) {
     return this.service.status(user);

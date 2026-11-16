@@ -1,3 +1,11 @@
+export type ServiceDraftSource = "CAPASULI_DAILY_REPORT" | "TICKET_MAIL";
+/** Egy helyszín a ticket@ vázlat elfogadásához: az ügyfél nevével (`GET /service/drafts/places`). */
+export interface ServiceDraftPlace {
+  id: string;
+  name: string;
+  customerId: string;
+  customerName: string;
+}
 export type ServiceDraftStatus = "PENDING" | "ACCEPTED" | "REJECTED";
 /**
  * A Jev-szűrés állapota (Cápasuli, Balázs 2026-10-05): UNFILTERED "nem szűrt",
@@ -29,7 +37,17 @@ export interface ServiceDraftItem {
   decidedById: string | null;
   decidedAt: string | null;
   acceptedServiceJobId: string | null;
-  mail: { originalText: string; subject: string | null; mailbox: string };
+  /** Honnan jött: a Cápasuli napi jelentő vagy a ticket@ postafiók (kártya ec7b947b). */
+  source: ServiceDraftSource;
+  mail: {
+    originalText: string;
+    subject: string | null;
+    mailbox: string;
+    /** A ticket@ levél feladójának címe (a `From` fejlécből; null: nincs vagy több cím), a Cápasuli soroknál null. */
+    fromAddress: string | null;
+    /** Hány csatolmány maradt ki (típus, méret vagy darabszám miatt). */
+    droppedAttachments: number;
+  };
   attachments: Array<{
     id: string;
     fileName: string;

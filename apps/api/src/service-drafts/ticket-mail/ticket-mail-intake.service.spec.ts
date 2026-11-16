@@ -71,10 +71,18 @@ function rig(options: {
   seen?: string[];
   senders?: Record<string, ResolvedSender | null>;
   recent?: number;
+  recipients?: Array<{ id: string }>;
+  pushFails?: boolean;
 }) {
   const recorded: Recorded[] = [];
   const lookups: string[] = [];
   const fetched: string[] = [];
+  const roles: string[] = [];
+  const pushes: Array<{
+    mailId: string;
+    userIds: readonly string[];
+    count: number;
+  }> = [];
   const store = {
     hasMessage: async (_m: string, id: string) =>
       (options.seen ?? []).includes(id) ? { id } : null,
@@ -85,7 +93,11 @@ function rig(options: {
     unknownCountSince: async () => options.recent ?? 0,
     record: async (input: Recorded) => {
       recorded.push(input);
-      return { recorded: true, drafts: input.outcome.kind === "DRAFT" ? 1 : 0 };
+      return {
+        recorded: true,
+        drafts: input.outcome.kind === "DRAFT" ? 1 : 0,
+        mailId: `mail-${input.message.id}`,
+      };
     },
   };
   const gmail = {
@@ -97,8 +109,25 @@ function rig(options: {
       return entry;
     },
   };
-  const service = new TicketMailIntakeService(store as never, gmail as never);
-  return { service, recorded, lookups, fetched };
+  const notifications = {
+    deliverTicketMailDraftsArrived: async (notice: (typeof pushes)[number]) => {
+      if (options.pushFails) throw new Error("push token SECRET");
+      pushes.push(notice);
+    },
+  };
+  const jobs = {
+    notificationRoleRecipients: async (role: string) => {
+      roles.push(role);
+      return options.recipients ?? [{ id: "manager-1" }];
+    },
+  };
+  const service = new TicketMailIntakeService(
+    store as never,
+    gmail as never,
+    notifications as never,
+    jobs as never,
+  );
+  return { service, recorded, lookups, fetched, pushes, roles };
 }
 
 const colleague = (
@@ -315,7 +344,7 @@ describe("TicketMailIntakeService.run", () => {
       hasMessage: async () => null,
       resolveSender: async () => null,
       unknownCountSince: async () => 0,
-      record: async () => ({ recorded: true, drafts: 0 }),
+      record: async () => ({ recorded: true, drafts: 0, mailId: null }),
     };
     const gmail = {
       listMessageIds: async () => {
@@ -324,11 +353,103 @@ describe("TicketMailIntakeService.run", () => {
       },
       getMessage: async () => mail("x"),
     };
-    const service = new TicketMailIntakeService(store as never, gmail as never);
+    const service = new TicketMailIntakeService(
+      store as never,
+      gmail as never,
+      { deliverTicketMailDraftsArrived: async () => undefined } as never,
+      { notificationRoleRecipients: async () => [] } as never,
+    );
     const first = service.run();
     await assert.rejects(service.run(), ConflictException);
     release();
     await first;
+  });
+});
+
+describe("TicketMailIntakeService.run: the arrival push", () => {
+  it("one push per run for the drafts of switched-on colleagues, to the role's holders, with the last mail as the target", async () => {
+    const { service, pushes, roles } = rig({
+      ids: ["b", "a"],
+      messages: { a: mail("a"), b: mail("b") },
+      senders: { "anna@acropora.hu": colleague() },
+      recipients: [{ id: "manager-1" }, { id: "manager-2" }],
+    });
+    const summary = await service.run();
+    assert.equal(pushes.length, 1);
+    assert.deepEqual(pushes[0], {
+      mailId: "mail-b",
+      userIds: ["manager-1", "manager-2"],
+      count: 2,
+    });
+    assert.equal(summary.notified, 2);
+    assert.deepEqual(roles, ["SERVICE_TICKET_AI_DRAFT"]);
+  });
+
+  it("CONTROL: a switched-off colleague's and an unknown sender's drafts send NO push", async () => {
+    const outsider = mail("o", {
+      from: "x@masik.hu",
+      fromAddress: "x@masik.hu",
+      headers: {
+        autoSubmitted: null,
+        precedence: null,
+        listId: null,
+        authenticationResults: [],
+      },
+    });
+    const { service, pushes } = rig({
+      ids: ["o", "a"],
+      messages: { a: mail("a"), o: outsider },
+      senders: { "anna@acropora.hu": colleague({ watching: false }) },
+    });
+    const summary = await service.run();
+    assert.equal(summary.drafts, 2);
+    assert.equal(pushes.length, 0);
+    assert.equal(summary.notified, 0);
+  });
+
+  it("CONTROL: a machine's mail and an old (already recorded) message send no push", async () => {
+    const auto = mail("m", {
+      headers: {
+        autoSubmitted: "auto-replied",
+        precedence: null,
+        listId: null,
+        authenticationResults: [PASS("acropora.hu")],
+      },
+    });
+    const { service, pushes } = rig({
+      ids: ["m", "a"],
+      messages: { m: auto, a: mail("a") },
+      seen: ["a"],
+      senders: { "anna@acropora.hu": colleague() },
+    });
+    await service.run();
+    assert.equal(pushes.length, 0);
+  });
+
+  it("CONTROL: a push that fails, or a role nobody holds, does not fail the run, and only a fixed code is logged", async () => {
+    const failing = rig({
+      ids: ["a"],
+      messages: { a: mail("a") },
+      senders: { "anna@acropora.hu": colleague() },
+      pushFails: true,
+    });
+    const summary = await failing.service.run();
+    assert.equal(summary.drafts, 1);
+    assert.equal(summary.notified, 0);
+    assert.doesNotMatch(
+      JSON.stringify(failing.service.status(admin)),
+      /SECRET/,
+    );
+    const nobody = rig({
+      ids: ["a"],
+      messages: { a: mail("a") },
+      senders: { "anna@acropora.hu": colleague() },
+      recipients: [],
+    });
+    const quiet = await nobody.service.run();
+    assert.equal(quiet.drafts, 1);
+    assert.equal(nobody.pushes.length, 0);
+    assert.equal(quiet.notified, 0);
   });
 });
 

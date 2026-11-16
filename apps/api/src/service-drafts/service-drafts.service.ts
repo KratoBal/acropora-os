@@ -48,15 +48,21 @@ export class ServiceDraftsService {
     user: AuthenticatedUser,
     status: "PENDING" | "ACCEPTED" | "REJECTED",
     cursor?: string,
+    source?: "TICKET_MAIL" | "CAPASULI_DAILY_REPORT",
   ) {
     requireDraftAdmin(user);
     return {
-      ...(await this.repository.list(status, cursor)),
+      ...(await this.repository.list(status, cursor, source)),
       ...(await this.repository.reviewSettings()),
       // a "nem szűrt" jel csak akkor mond valamit, ha a szűrés be van kapcsolva
       filterEnabled: this.jev.enabled(),
       filtered: status === "PENDING" ? await this.repository.filtered() : [],
     };
+  }
+  /** A ticket@ vázlat elfogadásához választható helyszínek (kártya ec7b947b, S4): minden aktív helyszín, az ügyfél nevével. */
+  async places(user: AuthenticatedUser) {
+    requireDraftAdmin(user);
+    return { items: await this.repository.places() };
   }
   /** "Mégis piszkozat": egy kiszűrt tétel vissza a listára (brief 4. pont). */
   async promote(id: string, user: AuthenticatedUser) {

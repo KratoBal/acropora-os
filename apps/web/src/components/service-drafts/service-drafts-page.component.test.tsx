@@ -32,10 +32,13 @@ function data(): ServiceDraftListResponse {
         decidedById: null,
         decidedAt: null,
         acceptedServiceJobId: null,
+        source: "CAPASULI_DAILY_REPORT",
         mail: {
           originalText: "Dolgozók: [NEV]\nTeljes napi jelentő",
           subject: "Napi jelentő",
           mailbox: "balazs@acropora.hu",
+          fromAddress: null,
+          droppedAttachments: 0,
         },
         attachments: [],
         filterState: "PASSED",

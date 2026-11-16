@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  announcesArrival,
   decideIntake,
   draftContentOf,
   EMPTY_BODY_TEXT,
@@ -163,5 +164,16 @@ describe("draftContentOf", () => {
     assert.match(a, /^[0-9a-f]{64}$/);
     assert.equal(draftContentOf(message({ id: "gmail-1" })).fingerprint, a);
     assert.notEqual(draftContentOf(message({ id: "gmail-2" })).fingerprint, a);
+  });
+});
+
+describe("announcesArrival", () => {
+  it("only the drafts of a switched-on colleague announce themselves", () => {
+    assert.equal(announcesArrival("AI_DRAFT"), true);
+    assert.equal(announcesArrival("AI_UNAVAILABLE"), true);
+  });
+  it("CONTROL: a switched-off colleague's, an unknown sender's and a rule-based draft send nothing", () => {
+    for (const state of ["WATCH_OFF", "UNKNOWN_SENDER", "RULE_DRAFT"] as const)
+      assert.equal(announcesArrival(state), false, state);
   });
 });

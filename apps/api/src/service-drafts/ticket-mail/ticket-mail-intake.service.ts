@@ -6,12 +6,19 @@ import {
 } from "@nestjs/common";
 import type { AuthenticatedUser } from "@acropora/types";
 
+import { NotificationsService } from "../../notifications/notifications.service.js";
+import { ServiceJobsRepository } from "../../service-jobs/service-jobs.repository.js";
+
 import { TicketMailGmailClient } from "./ticket-mail-gmail.client.js";
 import {
   describeTicketMailIntake,
   ticketMailConfig,
 } from "./ticket-mail.config.js";
-import { decideIntake, draftContentOf } from "./ticket-mail-intake.js";
+import {
+  announcesArrival,
+  decideIntake,
+  draftContentOf,
+} from "./ticket-mail-intake.js";
 import { authenticationVerdict, skipReason } from "./ticket-mail-message.js";
 import { TicketMailRepository } from "./ticket-mail.repository.js";
 
@@ -29,6 +36,8 @@ export interface TicketMailRunSummary {
   failed: number;
   /** New messages left for the next run because of the per-run limit. */
   deferred: number;
+  /** How many managers the arrival push was sent to (0: nothing to announce, nobody ticked, or the push failed). */
+  notified: number;
 }
 
 const EMPTY: TicketMailRunSummary = {
@@ -39,6 +48,7 @@ const EMPTY: TicketMailRunSummary = {
   capped: 0,
   failed: 0,
   deferred: 0,
+  notified: 0,
 };
 
 /** The safe code of a failure for the log and the status: a fixed code only, never a message that could carry a token or a mail's text. */
@@ -66,6 +76,8 @@ export class TicketMailIntakeService {
   constructor(
     private readonly store: TicketMailRepository,
     private readonly gmail: TicketMailGmailClient,
+    private readonly notifications: NotificationsService,
+    private readonly jobs: ServiceJobsRepository,
   ) {}
 
   /** The status for the admins: the switch and the settings, and the last run. */
@@ -96,6 +108,35 @@ export class TicketMailIntakeService {
     };
   }
 
+  /**
+   * ONE PUSH PER RUN to the managers who hold the `SERVICE_TICKET_AI_DRAFT` role, for the drafts of switched-on colleagues made in this run. A push
+   * that fails, or a role nobody holds, never fails the run (the drafts are filed; the list shows them either way): only a fixed code is logged.
+   */
+  private async announce(announce: {
+    count: number;
+    mailId: string | null;
+  }): Promise<number> {
+    if (announce.count === 0 || !announce.mailId) return 0;
+    try {
+      const recipients = await this.jobs.notificationRoleRecipients(
+        "SERVICE_TICKET_AI_DRAFT",
+      );
+      if (recipients.length === 0) {
+        this.logger.warn("TICKET_MAIL_NO_PUSH_RECIPIENTS");
+        return 0;
+      }
+      await this.notifications.deliverTicketMailDraftsArrived({
+        mailId: announce.mailId,
+        userIds: recipients.map((recipient) => recipient.id),
+        count: announce.count,
+      });
+      return recipients.length;
+    } catch {
+      this.logger.warn("TICKET_MAIL_PUSH_FAILED");
+      return 0;
+    }
+  }
+
   async run(now: Date = new Date()): Promise<TicketMailRunSummary> {
     if (this.running)
       throw new ConflictException("TICKET_MAIL_ALREADY_RUNNING");
@@ -107,6 +148,8 @@ export class TicketMailIntakeService {
     try {
       const ids = await this.gmail.listMessageIds();
       let processed = 0;
+      // the drafts of a SWITCHED-ON colleague (the AI branch, with or without the AI's answer) announce themselves; the others do not
+      const announce = { count: 0, mailId: null as string | null };
       // Gmail lists newest first; file the oldest first, so the hourly guard and the order of the list follow the order of arrival.
       for (const id of [...ids].reverse()) {
         if (await this.store.hasMessage(c.user, id)) {
@@ -160,7 +203,16 @@ export class TicketMailIntakeService {
           if (!recorded.recorded) summary.alreadySeen++;
           else if (outcome.kind === "SKIP") summary.skipped++;
           else if (outcome.kind === "CAPPED") summary.capped++;
-          else summary.drafts += recorded.drafts;
+          else {
+            summary.drafts += recorded.drafts;
+            if (
+              outcome.kind === "DRAFT" &&
+              announcesArrival(outcome.intakeState)
+            ) {
+              announce.count += recorded.drafts;
+              announce.mailId = recorded.mailId;
+            }
+          }
         } catch (error) {
           // A message that cannot be read or recorded must not block the later ones: it stays unrecorded, and the next run retries it.
           summary.failed++;
@@ -168,9 +220,10 @@ export class TicketMailIntakeService {
           this.logger.warn(this.lastError);
         }
       }
+      summary.notified = await this.announce(announce);
       this.lastSummary = summary;
       this.logger.log(
-        `Ticket mailbox run: ${summary.drafts} drafts, ${summary.skipped} skipped, ${summary.capped} capped, ${summary.failed} failed, ${summary.deferred} deferred, ${summary.alreadySeen} already seen`,
+        `Ticket mailbox run: ${summary.drafts} drafts (${summary.notified} notified), ${summary.skipped} skipped, ${summary.capped} capped, ${summary.failed} failed, ${summary.deferred} deferred, ${summary.alreadySeen} already seen`,
       );
       return summary;
     } catch (error) {

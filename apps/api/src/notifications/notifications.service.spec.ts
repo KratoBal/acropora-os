@@ -881,3 +881,48 @@ describe("a Cápasuli piszkozat értesítésének célpontja", () => {
     assert.equal(recorded.length, 1);
   });
 });
+
+/**
+ * A TICKET@ LEVELBOL KESZULT VAZLAT ERTESITESE (kartya ec7b947b, S4a). MI PIROSIT: ha a celpont nem a Piszkozatok lista a level azonositojaval; ha
+ * a cim a Capasuli piszkozatoke (a menedzser nem tudna, honnan jon); ha a szoveg nem a darabszamot mondja; ha a naplo-bejegyzes elmarad.
+ */
+describe("a ticket@ levélből készült vázlat értesítése", () => {
+  it("a Piszkozatok listára visz a levél azonosítójával, saját címmel és a darabszámmal, és naplózza", async () => {
+    const { sender: apns, sent } = sender();
+    const written = log();
+    const recorded: unknown[] = [];
+    const service = new NotificationsService(
+      tokens([
+        {
+          userId: "user-2",
+          token: "dd".repeat(32),
+          bundleId: "hu.acropora.os",
+        },
+      ]),
+      apns,
+      {
+        ...written.log,
+        recordServiceDraftsArrived: async (outcome: unknown) => {
+          recorded.push(outcome);
+        },
+      } as unknown as NotificationLogRepository,
+      fcmSender().sender,
+    );
+
+    await service.deliverTicketMailDraftsArrived({
+      mailId: "mail-9",
+      userIds: ["user-2"],
+      count: 2,
+    });
+
+    assert.equal(sent.length, 1);
+    assert.deepEqual(sent[0]?.data, {
+      targetType: "serviceDrafts",
+      targetId: "mail-9",
+    });
+    assert.match(String(sent[0]?.title), /ticket@/);
+    assert.doesNotMatch(String(sent[0]?.title), /Cápasuli/);
+    assert.match(String(sent[0]?.body), /^2 bejelentés/);
+    assert.equal(recorded.length, 1);
+  });
+});
