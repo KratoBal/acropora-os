@@ -14,8 +14,9 @@ export interface TicketMailHeaders {
   authenticationResults: string[];
 }
 
+// NO CONTROL CHARACTER (0x00-0x1f, 0x7f) in an address: a NUL in a stored address would fail the whole record (barracuda, #2646)
 const ADDRESS =
-  /^[^\s@<>,;"()[\]\\]+@[^\s@<>,;"()[\]\\]+\.[^\s@<>,;"()[\]\\]+$/;
+  /^[^\s@<>,;"()[\]\\\x00-\x1f\x7f]+@[^\s@<>,;"()[\]\\\x00-\x1f\x7f]+\.[^\s@<>,;"()[\]\\\x00-\x1f\x7f]+$/;
 
 /**
  * The ONE address of a `From` header, lower case, or null. A header with several addresses (or none) is no sender: a report is one person's,
