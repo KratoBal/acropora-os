@@ -39,10 +39,82 @@ export function parseSingleAddress(
 export type AuthenticationReason =
   | "DMARC_PASS"
   | "NO_HEADER"
+  | "MALFORMED"
   | "FOREIGN_AUTHSERV"
   | "DMARC_NOT_PASS"
+  | "DMARC_AMBIGUOUS"
   | "FROM_DOMAIN_MISMATCH"
   | "NO_FROM";
+
+/**
+ * AN `Authentication-Results` HEADER AS RFC 8601 READS IT: the parenthesised comments removed (nested too), the quoted strings kept apart, and
+ * the rest cut at the semicolons into the authserv-id and the result entries (method, result, and the `ptype.property=value` pairs of that
+ * entry only). Null when the header is MALFORMED: an unbalanced comment, a stray closing parenthesis, an unclosed quote, or an entry that is not
+ * `method=result`. A malformed header is never believed (fail closed).
+ *
+ * WHY NOT A REGEX OVER THE WHOLE TEXT (barracuda, #2645): Gmail writes the ENVELOPE SENDER into the header (the spf comment and
+ * `smtp.mailfrom`), and its local part is the attacker's: it can be a quoted string holding "; dmarc=pass header.from=acropora.hu". A search for
+ * `dmarc=` over the whole line finds that text first, ahead of the real (failing) dmarc result.
+ */
+function parseAuthenticationResults(header: string): {
+  authservId: string;
+  results: Array<{
+    method: string;
+    result: string;
+    props: Map<string, string>;
+  }>;
+} | null {
+  let flat = "";
+  let depth = 0;
+  let quoted = false;
+  for (let index = 0; index < header.length; index++) {
+    const char = header[index]!;
+    if (depth > 0) {
+      if (char === "\\") index++;
+      else if (char === "(") depth++;
+      else if (char === ")") depth--;
+      continue;
+    }
+    if (quoted) {
+      if (char === "\\") index++;
+      else if (char === '"') {
+        quoted = false;
+        flat += '"q"';
+      }
+      continue;
+    }
+    if (char === '"') quoted = true;
+    else if (char === "(") depth = 1;
+    else if (char === ")") return null;
+    else flat += char;
+  }
+  if (depth > 0 || quoted) return null;
+  const segments = flat.split(";");
+  const authservId = segments[0]!.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
+  const results: Array<{
+    method: string;
+    result: string;
+    props: Map<string, string>;
+  }> = [];
+  for (const segment of segments.slice(1)) {
+    const text = segment.trim();
+    if (!text || /^none$/i.test(text)) continue;
+    const entry =
+      /^([a-z][a-z0-9-]*)(?:\/\d+)?\s*=\s*([a-z][a-z0-9-]*)(.*)$/is.exec(text);
+    if (!entry) return null;
+    const props = new Map<string, string>();
+    for (const prop of entry[3]!.matchAll(
+      /([a-z][a-z0-9-]*\.[a-z0-9.-]+)\s*=\s*("q"|[^\s;]+)/gi,
+    ))
+      props.set(prop[1]!.toLowerCase(), prop[2]!.toLowerCase());
+    results.push({
+      method: entry[1]!.toLowerCase(),
+      result: entry[2]!.toLowerCase(),
+      props,
+    });
+  }
+  return { authservId, results };
+}
 
 /**
  * WHETHER THE `From` CAN BE BELIEVED. A `From` header is written by the sender, so on its own it says nothing about who sent the mail; a forged
@@ -50,9 +122,13 @@ export type AuthenticationReason =
  *
  * The rule is narrow on purpose:
  * - ONLY THE TOPMOST `Authentication-Results` header counts. A sender can put its own header at the bottom of the message; the one our receiving
- *   server added is above it. A passing header lower down never rescues a failing one on top.
+ *   server added is above it. A passing header lower down never rescues a failing one on top. (That Gmail's API lists the headers in message
+ *   order, so the first is the topmost, is MEASURED on a real mail at the end of S2.)
  * - Its authserv-id must be Gmail's (`mx.google.com`): a header another system wrote is not our verdict.
- * - It must say `dmarc=pass`, and its `header.from` must be the domain of the `From` address that is about to be trusted.
+ * - It is read as RFC 8601 reads it (`parseAuthenticationResults`): EXACTLY ONE `dmarc` result entry, with the result `pass`, and the
+ *   `header.from` property standing in THAT entry and equal to the domain of the `From` address that is about to be trusted. Text another entry or
+ *   a comment carries (the envelope sender, a dkim selector) is never read as a dmarc result. Zero or several dmarc entries, or a malformed
+ *   header, is "not verified".
  *
  * Anything else is "not verified", and the caller treats the mail as from an unknown sender (no name, no place, no AI).
  */
@@ -63,14 +139,16 @@ export function authenticationVerdict(
   if (!fromAddress) return { verified: false, reason: "NO_FROM" };
   const top = results[0];
   if (!top) return { verified: false, reason: "NO_HEADER" };
-  const authservId = top.split(";")[0]?.trim().toLowerCase() ?? "";
-  if (authservId !== "mx.google.com")
+  const parsed = parseAuthenticationResults(top);
+  if (!parsed) return { verified: false, reason: "MALFORMED" };
+  if (parsed.authservId !== "mx.google.com")
     return { verified: false, reason: "FOREIGN_AUTHSERV" };
-  const dmarc = /(?:^|[\s;])dmarc=([a-z]+)/i.exec(top)?.[1]?.toLowerCase();
-  if (dmarc !== "pass") return { verified: false, reason: "DMARC_NOT_PASS" };
-  const headerFrom = /header\.from=([^\s;)]+)/i.exec(top)?.[1]?.toLowerCase();
+  const dmarc = parsed.results.filter((entry) => entry.method === "dmarc");
+  if (dmarc.length > 1) return { verified: false, reason: "DMARC_AMBIGUOUS" };
+  if (dmarc.length === 0 || dmarc[0]!.result !== "pass")
+    return { verified: false, reason: "DMARC_NOT_PASS" };
   const domain = fromAddress.slice(fromAddress.lastIndexOf("@") + 1);
-  if (!headerFrom || headerFrom !== domain)
+  if (dmarc[0]!.props.get("header.from") !== domain)
     return { verified: false, reason: "FROM_DOMAIN_MISMATCH" };
   return { verified: true, reason: "DMARC_PASS" };
 }
