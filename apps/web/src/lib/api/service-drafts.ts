@@ -1,7 +1,10 @@
 import type {
   ServiceDraftListResponse,
+  ServiceDraftPlace,
+  ServiceDraftSource,
   ServiceDraftStatus,
   ServiceDraftSyncStatus,
+  TicketMailIntakeStatus,
 } from "@acropora/types";
 import { apiRequest, apiAuthHeaders, ApiError } from "./client";
 import { API_PREFIX } from "./api-prefix";
@@ -11,9 +14,26 @@ export const serviceDraftsApi = {
     status: ServiceDraftStatus,
     cursor?: string,
     signal?: AbortSignal,
+    source?: ServiceDraftSource,
   ) =>
     apiRequest<ServiceDraftListResponse>(
-      `/service/drafts?${new URLSearchParams({ status, ...(cursor ? { cursor } : {}) })}`,
+      `/service/drafts?${new URLSearchParams({ status, ...(cursor ? { cursor } : {}), ...(source ? { source } : {}) })}`,
+      token,
+      { signal },
+    ),
+  /** A ticket@ vázlat elfogadásához választható helyszínek (minden aktív helyszín, az ügyfél nevével). */
+  places: (token: string, signal?: AbortSignal) =>
+    apiRequest<{ items: ServiceDraftPlace[] }>(
+      "/service/drafts/places",
+      token,
+      {
+        signal,
+      },
+    ),
+  /** A ticket@ levelek beolvasásának állapota. */
+  ticketMailStatus: (token: string, signal?: AbortSignal) =>
+    apiRequest<TicketMailIntakeStatus>(
+      "/service/drafts/ticket-mail/status",
       token,
       { signal },
     ),

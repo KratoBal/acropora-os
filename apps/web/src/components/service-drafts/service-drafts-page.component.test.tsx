@@ -1,11 +1,17 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ServiceDraftListResponse, Session } from "@acropora/types";
-import { ServiceDraftsPage } from "./service-drafts-page";
+import {
+  ServiceDraftsPage,
+  draftIntakeBadge,
+  draftSourceLabel,
+} from "./service-drafts-page";
 vi.mock("next/font/local", () => ({ default: () => ({ className: "inter" }) }));
 const mock = vi.hoisted(() => ({
   list: vi.fn(),
   status: vi.fn(),
+  places: vi.fn(),
+  ticketMailStatus: vi.fn(),
   accept: vi.fn(),
   reject: vi.fn(),
   promote: vi.fn(),
@@ -90,6 +96,22 @@ beforeEach(() => {
     intervalMinutes: 60,
     lastRunAt: null,
     lastError: null,
+  });
+  mock.places.mockResolvedValue({ items: [] });
+  mock.ticketMailStatus.mockResolvedValue({
+    enabled: false,
+    switchReason: "NOT_SET",
+    configured: false,
+    mailbox: "ticket@acropora.hu",
+    query: "in:inbox",
+    intervalMinutes: 10,
+    maxMessagesPerRun: 50,
+    unknownSenderPerHour: 5,
+    description: "off",
+    running: false,
+    lastRunAt: null,
+    lastError: null,
+    lastSummary: null,
   });
   mock.accept.mockResolvedValue({ serviceJobId: "job" });
   mock.reject.mockResolvedValue({ serviceJobId: null });
@@ -193,6 +215,7 @@ describe("Service draft review", () => {
         "REJECTED",
         undefined,
         expect.any(AbortSignal),
+        undefined,
       ),
     );
   });
@@ -273,5 +296,204 @@ describe("Service draft review -- Jev filter", () => {
     await screen.findByText("Venturi szivattyú");
     expect(screen.queryByText("Nem szűrt")).toBeNull();
     expect(screen.queryByText(/Kiszűrve/)).toBeNull();
+  });
+});
+
+/**
+ * A TICKET@ LEVELBOL KESZULT VAZLAT A LISTAN (kartya ec7b947b, S4b): a harom bejovo ag ugyanabban a listaban all, es a kartyan ranezesre
+ * kulonbozik (a forras szava, a felado cime, az allapot-jelveny), forras szerint szurheto, es a helyszint az osszes aktiv helyszin kozul lehet valasztani.
+ * MI PIROSIT: ha a ticket vazlat Capasuli fejlecet kap; ha a felado cime vagy a jelveny hianyzik; ha az elfogadas a Capasuli partner-felhasznalo
+ * hianya miatt tiltott marad (ticket vazlatnal nem kell); ha a helyszin-lista a Capasuli helyszineket kinalja; ha a szuro nem a forrast kuldi.
+ */
+function ticketData(
+  over: Partial<ServiceDraftListResponse["items"][number]> = {},
+): ServiceDraftListResponse {
+  const base = data().items[0]!;
+  return {
+    ...data(),
+    openedBy: null,
+    items: [
+      {
+        ...base,
+        id: "ticket-draft",
+        title: "Szűrő csöpög",
+        originalProblem: "A 3-as medence szűrője csöpög.",
+        source: "TICKET_MAIL",
+        intakeState: "UNKNOWN_SENDER",
+        proposedDepartmentId: null,
+        reporterPersonName: null,
+        filterState: "UNFILTERED",
+        jevClass: null,
+        jevConfidence: null,
+        occurrence: 1,
+        earlier: [],
+        mail: {
+          originalText: "A 3-as medence szűrője csöpög.",
+          subject: "Szűrő hiba",
+          mailbox: "ticket@acropora.hu",
+          fromAddress: "kulso@masik.hu",
+          droppedAttachments: 2,
+        },
+        ...over,
+      },
+    ],
+  };
+}
+describe("Service draft review -- ticket mailbox drafts", () => {
+  it("shows the source, the sender address, the kind badge and the dropped attachments, not the Cápasuli header", async () => {
+    mock.list.mockResolvedValue(ticketData());
+    render(<ServiceDraftsPage />);
+    await screen.findByText("Szűrő csöpög");
+    expect(
+      screen.getByText(/Ticket levél · 2026-10-03 · Szűrő hiba/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Cápasuli · 2026-10-03/)).toBeNull();
+    expect(screen.getByText("Feladó: kulso@masik.hu")).toBeTruthy();
+    expect(screen.getByText("Ismeretlen feladó")).toBeTruthy();
+    expect(screen.getByText(/2 csatolmány kimaradt/)).toBeTruthy();
+    expect(screen.getByText("Teljes levél megnyitása")).toBeTruthy();
+  });
+
+  it("offers ALL active places with the customer's name, and accepts without a Cápasuli opener", async () => {
+    mock.list.mockResolvedValue(ticketData());
+    mock.places.mockResolvedValue({
+      items: [
+        {
+          id: "p1",
+          name: "Akvárium 1",
+          customerId: "c1",
+          customerName: "Állatkert Kft",
+        },
+        {
+          id: "p2",
+          name: "Recepció",
+          customerId: "c2",
+          customerName: "Hotel Zrt",
+        },
+      ],
+    });
+    render(<ServiceDraftsPage />);
+    const select = (await screen.findByLabelText(
+      "Helyszín",
+    )) as HTMLSelectElement;
+    await waitFor(() => expect(select.options.length).toBe(3));
+    expect(select.options[1]!.textContent).toBe("Állatkert Kft · Akvárium 1");
+    expect(screen.queryByText("Cápasuli")).toBeNull();
+    const accept = screen.getByRole("button", {
+      name: "Elfogadom: Szűrő csöpög",
+    });
+    expect((accept as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(select, { target: { value: "p2" } });
+    expect((accept as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(accept);
+    await waitFor(() =>
+      expect(mock.accept).toHaveBeenCalledWith(
+        "token",
+        "ticket-draft",
+        "p2",
+        "",
+      ),
+    );
+  });
+
+  it("preselects the place the draft proposes (the sender's one assigned place)", async () => {
+    mock.list.mockResolvedValue(
+      ticketData({
+        proposedDepartmentId: "p1",
+        reporterPersonName: "Kovács Anna",
+        intakeState: "AI_UNAVAILABLE",
+      }),
+    );
+    mock.places.mockResolvedValue({
+      items: [
+        {
+          id: "p1",
+          name: "Akvárium 1",
+          customerId: "c1",
+          customerName: "Állatkert Kft",
+        },
+      ],
+    });
+    render(<ServiceDraftsPage />);
+    const select = (await screen.findByLabelText(
+      "Helyszín",
+    )) as HTMLSelectElement;
+    await waitFor(() => expect(select.value).toBe("p1"));
+    expect(screen.getByText("AI nélkül")).toBeTruthy();
+    expect(
+      (screen.getByLabelText("Jelentő szerzője") as HTMLInputElement).value,
+    ).toBe("Kovács Anna");
+  });
+
+  it("the source filter sends the source to the list", async () => {
+    mock.list.mockResolvedValue(ticketData());
+    render(<ServiceDraftsPage />);
+    await screen.findByText("Szűrő csöpög");
+    expect(mock.list.mock.calls[0]![4]).toBeUndefined();
+    fireEvent.click(screen.getByRole("tab", { name: "Ticket levelek" }));
+    await waitFor(() =>
+      expect(mock.list.mock.calls.at(-1)![4]).toBe("TICKET_MAIL"),
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "Cápasuli jelentők" }));
+    await waitFor(() =>
+      expect(mock.list.mock.calls.at(-1)![4]).toBe("CAPASULI_DAILY_REPORT"),
+    );
+  });
+
+  it("CONTROL: the Cápasuli setup notice is not shown when the list holds only ticket drafts", async () => {
+    mock.list.mockResolvedValue(ticketData());
+    render(<ServiceDraftsPage />);
+    await screen.findByText("Szűrő csöpög");
+    expect(
+      screen.queryByText(/Az elfogadáshoz állítsd be a Cápasuli/),
+    ).toBeNull();
+  });
+
+  it("CONTROL: a Cápasuli draft keeps its own header, places and the notice without an opener", async () => {
+    const response = data();
+    response.openedBy = null;
+    mock.list.mockResolvedValue(response);
+    render(<ServiceDraftsPage />);
+    await screen.findByText("Venturi szivattyú");
+    expect(screen.getByText(/Cápasuli · 2026-10-03/)).toBeTruthy();
+    expect(
+      screen.getByText(/Az elfogadáshoz állítsd be a Cápasuli/),
+    ).toBeTruthy();
+    expect(mock.places).not.toHaveBeenCalled();
+  });
+
+  it("shows the ticket mailbox intake status for the admins", async () => {
+    mock.ticketMailStatus.mockResolvedValue({
+      ...(await mock.ticketMailStatus()),
+      enabled: true,
+      configured: true,
+      lastRunAt: "2026-11-16T22:00:00.000Z",
+      lastError: "TICKET_MAIL_MESSAGE_FAILED",
+    });
+    render(<ServiceDraftsPage />);
+    await screen.findByText(/Ticket postafiók feldolgozás: bekapcsolva/);
+    expect(screen.getByText("TICKET_MAIL_MESSAGE_FAILED")).toBeTruthy();
+  });
+});
+describe("draftIntakeBadge and draftSourceLabel", () => {
+  it("each kind has its own badge; a rule-based draft has none", () => {
+    expect(draftIntakeBadge({ intakeState: "AI_DRAFT" })).toEqual({
+      label: "AI vázlat",
+      variant: "teal",
+    });
+    expect(draftIntakeBadge({ intakeState: "AI_UNAVAILABLE" })?.label).toBe(
+      "AI nélkül",
+    );
+    expect(draftIntakeBadge({ intakeState: "WATCH_OFF" })?.label).toBe(
+      "Figyelés kikapcsolva",
+    );
+    expect(draftIntakeBadge({ intakeState: "UNKNOWN_SENDER" })?.label).toBe(
+      "Ismeretlen feladó",
+    );
+    expect(draftIntakeBadge({ intakeState: "RULE_DRAFT" })).toBeNull();
+  });
+  it("names the source", () => {
+    expect(draftSourceLabel("TICKET_MAIL")).toBe("Ticket levél");
+    expect(draftSourceLabel("CAPASULI_DAILY_REPORT")).toBe("Cápasuli");
   });
 });

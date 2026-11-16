@@ -1,3 +1,20 @@
+/** A ticket@ levelek beolvasásának állapota az adminoknak (`GET /service/drafts/ticket-mail/status`, kártya ec7b947b). */
+export interface TicketMailIntakeStatus {
+  enabled: boolean;
+  switchReason: string;
+  configured: boolean;
+  mailbox: string;
+  query: string;
+  intervalMinutes: number;
+  maxMessagesPerRun: number;
+  unknownSenderPerHour: number;
+  description: string;
+  running: boolean;
+  lastRunAt: string | null;
+  lastError: string | null;
+  /** Az utolsó futás számai (levelek, vázlatok, kihagyottak, lezártak, értesítettek), ha volt futás. */
+  lastSummary: Record<string, number | boolean> | null;
+}
 export type ServiceDraftSource = "CAPASULI_DAILY_REPORT" | "TICKET_MAIL";
 /** Egy helyszín a ticket@ vázlat elfogadásához: az ügyfél nevével (`GET /service/drafts/places`). */
 export interface ServiceDraftPlace {
