@@ -210,3 +210,54 @@ describe("AiTestPage értékelés", () => {
     expect(screen.queryByText("Elmentve: natural")).toBeNull();
   });
 });
+
+/*
+  A HIBA MONDATA (t-20261116-ai-kezelo-hatarido). Az AI határideje (ai_chat_deadline) eddig nem létezett: a kapcsolati háló
+  válasz nélkül bontott. MI PIROSÍT: a mondat hiányzik, a kód eltűnik mellőle, vagy egy ismeretlen kódhoz kitalált mondat kerül.
+*/
+describe("AiTestPage hibaüzenet", () => {
+  beforeEach(() => {
+    auth.session = session();
+    api.ask.mockReset();
+  });
+
+  it("a határidő kódja mellé érthető mondatot ír, és a kód is látszik", async () => {
+    render(<AiTestPage />);
+    await ask(
+      reply({
+        messageId: null,
+        answer: null,
+        errorCode: "ai_chat_deadline",
+        providerWaitedMs: 43_004,
+        httpStatus: 504,
+      }),
+    );
+
+    expect(
+      screen.getByText(
+        /Az AI nem készült el a válasszal a megengedett időn belül/,
+      ),
+    ).toBeTruthy();
+    expect(screen.getAllByText("ai_chat_deadline").length).toBeGreaterThan(0);
+  });
+
+  it("ismeretlen kódhoz nem talál ki mondatot, csak a kódot mutatja", async () => {
+    render(<AiTestPage />);
+    await ask(
+      reply({
+        messageId: null,
+        answer: null,
+        errorCode: "valami_uj_kod",
+        httpStatus: 500,
+      }),
+    );
+
+    const alert = screen
+      .getByText("Nem érkezett válasz")
+      .closest("[role=alert]")!;
+    expect(alert.textContent).toMatch(/Hibakód: valami_uj_kod/);
+    expect(alert.textContent).not.toMatch(
+      /Próbáld újra|nem érhető el|nincs beállítva/,
+    );
+  });
+});
