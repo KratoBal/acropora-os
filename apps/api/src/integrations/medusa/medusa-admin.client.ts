@@ -590,6 +590,11 @@ export interface MedusaOrderOverviewRow {
     changed_at: string | null;
   };
   shipping_method: string | null;
+  /**
+   * The id of the shipping option behind `shipping_method`. Absent from an older
+   * commerce answer; the pickup marker then falls back to the name.
+   */
+  shipping_option_id?: string | null;
   /** `type`: a GLS-pont fajtája (`parcel-shop` / `parcel-locker`), ha a webshop adja. */
   pickup_point: {
     id: string | null;
@@ -800,6 +805,8 @@ export interface MedusaOrderDetailRow {
   }[];
   shipping_methods: {
     name: string;
+    /** The option the method was created from (a stored order field); the store pickup is decided on it. */
+    shipping_option_id?: string | null;
     data: Record<string, unknown> | null;
     /**
      * SZÁMOLT MEZŐ, és kifejezett `fields` listával a webshop NEM adja
@@ -1832,6 +1839,7 @@ export const ORDER_DETAIL_FIELDS = [
   "items.metadata",
   "items.tax_lines.rate",
   "shipping_methods.name",
+  "shipping_methods.shipping_option_id",
   "shipping_methods.data",
   "shipping_methods.total",
   "shipping_methods.amount",
