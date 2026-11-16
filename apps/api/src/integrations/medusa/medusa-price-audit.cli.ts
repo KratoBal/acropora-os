@@ -2,7 +2,10 @@ import { pathToFileURL } from "node:url";
 
 import { prisma } from "@acropora/database";
 
-import { MedusaConfigurationError } from "./medusa-admin.client.js";
+import {
+  MedusaConfigurationError,
+  type MedusaAdminClient,
+} from "./medusa-admin.client.js";
 import { MedusaConnectionError } from "./medusa-connection.types.js";
 import { decidePricingProjection } from "./medusa-pricing.policy.js";
 import {
@@ -25,6 +28,46 @@ import {
   parseBatchArguments,
   selectBatchTargets,
 } from "./medusa-projection-batch.js";
+
+/**
+ * A kozos osszeallitas: az OS oldali celok (csak `findMany` olvasasok), a kotes, a Medusa olvasasa pontosan EGY metodussal. Az audit
+ * parancs es a javito vegpont ugyanezt hasznalja, hogy a ketto ne ertelmezze maskeppen az OS arat vagy a valtozat-illesztest.
+ */
+export function priceAuditDeps(
+  client: {
+    listVariantPrices: MedusaAdminClient["listVariantPrices"];
+  },
+  database: PricingCliDatabase,
+  links = new MedusaProductLinkRepository(),
+): PriceAuditDeps {
+  return {
+    resolve: async (osProductId) => {
+      const { targets, errors } = await resolvePricingTargets(
+        osProductId,
+        database,
+      );
+      return {
+        targets: targets.map((target) => {
+          const decision = decidePricingProjection(target.price);
+          return {
+            osProductId: target.osProductId,
+            sku: target.sku,
+            osAmount: decision.send ? decision.amount : null,
+          };
+        }),
+        errors,
+      };
+    },
+    findMedusaProductId: async (osProductId) =>
+      (await links.findByProductId(osProductId))?.medusaProductId ?? null,
+    // pontosan egy metodus: olvas
+    reader: {
+      listVariantPrices: (medusaProductId) =>
+        client.listVariantPrices(medusaProductId),
+    },
+    matchVariant,
+  };
+}
 
 /**
  * A KETTOS FORINT AR KIZAROLAG OLVASO MERESE (task t-20261116-ket-forint-ar, acrobot 53839), a parancssori fuggo resz.
@@ -77,35 +120,7 @@ export async function runPriceAuditCli(
     }
     throw error;
   }
-  const links = new MedusaProductLinkRepository();
-
-  const deps: PriceAuditDeps = {
-    resolve: async (osProductId) => {
-      const { targets, errors } = await resolvePricingTargets(
-        osProductId,
-        database,
-      );
-      return {
-        targets: targets.map((target) => {
-          const decision = decidePricingProjection(target.price);
-          return {
-            osProductId: target.osProductId,
-            sku: target.sku,
-            osAmount: decision.send ? decision.amount : null,
-          };
-        }),
-        errors,
-      };
-    },
-    findMedusaProductId: async (osProductId) =>
-      (await links.findByProductId(osProductId))?.medusaProductId ?? null,
-    // pontosan egy metodus: ir
-    reader: {
-      listVariantPrices: (medusaProductId) =>
-        client.listVariantPrices(medusaProductId),
-    },
-    matchVariant,
-  };
+  const deps = priceAuditDeps(client, database);
 
   await auditProducts(productIds, deps, out, { all: audit.all });
   return 0;
