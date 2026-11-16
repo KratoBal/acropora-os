@@ -3149,6 +3149,42 @@ describe("a kör két felének kilépési kódja és a termék-kudarcok fajtánk
     assert.equal(k.pricingExit, null);
   });
 
+  it("csak ar-ujraproba van (nincs esedekes termek): a termek-fel nem futott (projectionExit, productFailures null), az ar-fel igen (pricingExit 0)", async () => {
+    const ketOraja = new Date(MOST.getTime() - 2 * 60 * 60 * 1000);
+    const { db } = adatbazis(
+      [termek({ id: "prod-9" })],
+      [{ entityId: "prod-9", lastSyncedAt: new Date(MOST.getTime() + 1000) }],
+      [{ entityId: "prod-9", externalId: "prod_m9" }] as never,
+      [],
+      [
+        {
+          entityId: "prod-9",
+          lastSyncedAt: null,
+          metadata: { failedAt: ketOraja.toISOString() },
+        },
+      ],
+    );
+    const termekVetites = futtato(1);
+    const ar = arFuttato(0);
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: termekVetites.run,
+      runPricing: ar.run,
+      environment: BEKAPCSOLVA,
+      logger: naplo().logger,
+      now: () => MOST,
+    });
+
+    assert.equal(await scheduler.runOnce(), "APPLIED");
+
+    assert.deepEqual(termekVetites.kapott, []);
+    assert.deepEqual(ar.kapott, [["prod-9"]]);
+    const k = scheduler.allapot().lastRound!;
+    assert.equal(k.projectionExit, null);
+    assert.equal(k.productFailures, null);
+    assert.equal(k.pricingExit, 0);
+  });
+
   it("a termek-kudarcok fajtankent szamolnak, az ar-futtato kudarcai NEM kerulnek ide (azok a priceFailures-ben allnak)", async () => {
     const scheduler = kor(
       async (_ids, out) => {
